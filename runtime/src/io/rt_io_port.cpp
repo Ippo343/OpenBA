@@ -50,6 +50,11 @@ extern int RtIoSerializerRegister();    // serializer.cpp    (lane A)
 extern int RtIoCompressedStreamRegister();  // compressedstream.cpp (lane B)
 extern int RtIoPersistenceRegister();   // persistence.cpp   (lane C)
 extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
+// Wave 9 lane ENG, iteration 2. Its own switch, not folded into
+// BANISHED_RT_FILESYSTEM: this one is on the process's single boot path
+// (Engine::Startup step 3), so the integrator must be able to A/B it without
+// giving up lane D's five read-only accessors.
+extern int RtIoFileSystemStartupRegister();  // filesystem_startup.cpp (lane ENG)
 
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
@@ -61,5 +66,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_STREAM"))      n += RtIoCompressedStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSISTENCE")) n += RtIoPersistenceRegister();
     if (RtWaveEnabled("BANISHED_RT_FILESYSTEM"))  n += RtIoFileSystemRegister();
+    if (RtWaveEnabled("BANISHED_RT_FSSTARTUP"))   n += RtIoFileSystemStartupRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

@@ -325,3 +325,220 @@ predictions above the boot will not get that far this iteration.
   `…/scratchpad/laneGFX_rescued/` and were removed from my tree so they could not
   contaminate my audit denominators (they moved `rawdoor_audit` 481 → 483 while
   present). **Lane GFX should check whether its working copy is intact.**
+
+---
+---
+
+# Lane ENG, iteration 2 — the Timer regression, and two rows off the boot queue
+
+2026-09-08, on **`bd2fdd0`** (attempt 08's tip; the worktree was rebased onto it and
+`git log --oneline -1` confirms iteration 1 is merged in as `e86a5a7`). **Source only**;
+`-fsyntax-only` in BOTH the debug and the release (`-DBANISHED_STRIP_LOGS -include
+log_strip.h`) configurations, plus a real `-c` + `nm` on each new file. **No new Win32 API
+and no new import library** — `-lole32` from iteration 1 is still the only addition this
+lane has needed.
+
+Attempt 08 confirmed all four of iteration 1's predictions, including the exact next symbol.
+This iteration does three things: fixes the regression that port caused, closes the two rows
+the queue reached, and answers both of WAVE9.md's "(?) no writer found" rows.
+
+## 10. The `INT_DIVIDE_BY_ZERO` was a PORT/STORAGE SPLIT, not a missing call
+
+```
+Exception 0xC0000094 (INT_DIVIDE_BY_ZERO)   Runtime-x64.dll + 0xDD3F9
+1800dd3f7  CQO
+1800dd3f9  IDIV qword ptr [0x1801fe730]     ; Timer::_systemTicksPerSecond == 0
+```
+
+0x1800dd3f9 is inside `Engine::MainLoop::Run` (0x1800dd3c0 + 0x39), **held back** by Wave 8
+lane B and therefore still the DLL's body, reading the DLL's own `.data`.
+
+The coordinator's diagnosis was "your `Startup` does not call `Timer::PlatformStartup`". It
+does — `engine_lifecycle.cpp` calls `?Startup@Timer@System@@SA_NXZ`, whose ported body
+tail-calls `PlatformStartup`, and **all five of our copies were correct**. The mechanism is
+one step further along and it matters, because the fix is different:
+
+> **A ported function that OWNS storage instead of PUBLISHING it into the exported slot is
+> invisible until an UNPORTED consumer reads the copy it did not write.**
+
+Lane B3's `Timer` port deliberately owns its five statics (`timer.h` explains why, and it was
+the right call — the DLL's `_secondsPerTick` is zero until `Engine::Startup`, and a consumer
+that divided by it got a zero). Lane X's fourteen constructors are immune because each
+publishes through `RT_DATA_SLOT`. **The `Timer` is the only ported dependency of
+`Engine::Startup` that owns rather than publishes — which is exactly why it is the only one
+that broke.**
+
+Fix: `PublishTimerStatics()` in `runtime/src/system/timer.cpp`, called from both
+`RtSystem_Timer_PlatformStartup` and `RtSystem_Timer_Startup` (the second covers the
+QPF-failed arm, where the first returns early having published nothing). It mirrors all five
+values into the exported slots through `RT_DATA_SLOT` — the DLL's `.data` today, lane C2's
+mint at cutover, **where the same `IDIV` divides by the same zero**, so this was on the
+critical path in both worlds. It restores retail's own effect: the same five addresses, the
+same five values, at the same moment.
+
+It is fixed in `timer.cpp` rather than in my `Engine::Startup` on purpose — every future
+caller of `Timer::Startup` needs it, not just mine. Lane B3 owns that file; the change is one
+function and two call sites, all marked.
+
+### 10.1 The sweep the coordinator asked for — "does everything that used to happen still happen?"
+
+Every ported callee of `Engine::Startup`, checked for storage it owns rather than publishes:
+
+| callee | storage | verdict |
+|---|---|---|
+| `?Startup@MemoryAllocator@System@@` | writes the sub-object at `Engine+0` | not a global — ✓ |
+| `?MemAlloc@` / `?MemFree@` | `?_singleton@MemoryAllocator@` via `RT_DATA_SLOT` | publishes — ✓ |
+| `?Set@String@System@@`, `??1String@System@@` | none | ✓ |
+| **`?Startup@Timer@System@@`** | **five private statics** | **OWNED — the defect, fixed** |
+| lane X's 12 constructors | each `?_singleton@…` via `RT_DATA_SLOT` | publishes — ✓ |
+| `?Startup@Configuration@Audio@@` | writes only the object passed in (`audio.cpp:677`) | ✓ |
+| lane ENG's `Configuration` / `AchievementManager` ctors | `RT_DATA_SLOT` | publishes — ✓ |
+
+**One case in the whole set.** `rtalloc::g_largestRequestedSize` is ours alone (nothing in
+retail reads it) and `g_plat` is our platform seam, so neither shadows a DLL global.
+
+## 11. Both WAVE9.md "(?) no writer found" rows are answered
+
+Neither disposition is "dead, leave it zeroed". `tools/rt_mint_writer_audit.py` missed both
+for the same reason: the store is inside a function the scan had, but its *value* comes from
+an OS call or a helper, so it does not look like an initialiser.
+
+* **`?_systemInitialTick@Timer@System@@0_JA`** — writer is
+  `?PlatformStartup@Timer@System@@CA_NXZ` (0x1800ca860), the `QueryPerformanceCounter` at its
+  tail, alongside `_systemTicksPerSecond` (QPF) and `_systemSecondsPerTick` (1/QPF). Its only
+  DLL-internal caller is `Engine::Startup` (0x1800db9d2). **Load-bearing**, per §10.
+* **`?_errorString@Error@System@@`** (0x1801fc720, 0x2000 bytes) — writer is
+  `?SetText@Error@System@@SAXPEBD_N@Z` (0x1800c5fa0, ord 3982), and it **APPENDS**: it walks
+  to the current NUL (0x1800c5fd4-0x1800c5fe8), computes the room left out of 0x2000, and
+  concatenates through a copy helper at 0x1800c9020 — which is why a store scan attributed
+  nothing. `code/Game/Game/game_main.cpp:482` READS this buffer to report why `Engine::Startup`
+  failed, so zeroed storage is correct only until something calls `SetText`, and then our own
+  diagnostic goes quiet. **Disposition: port `SetText`** (54 instructions, one callee).
+  **NOT ported here** — it is only on `Engine::Startup`'s failure arm, so by the
+  control-flow-reach rule it buys nothing this iteration.
+
+WAVE9.md's table row and its "Open" paragraph are updated in this commit.
+
+## 12. Two rows off the boot queue, in control-flow-reach order
+
+| # | export | retail | ord | instrs | status |
+|--:|---|---|--:|--:|---|
+| 1 | `?SetCommandLine@Configuration@System@@QEAAXAEBVString@2@@Z` | 0x1800c47a0 | 3849 | 90 | **ported** |
+| — | (unexported) the config map's BST find | 0x18002ace0 | — | 50 | **ported**, by address |
+| 2 | `?Startup@FileSystem@IO@@QEAA_NXZ` | 0x1800abc50 | 4097 | 38 | **ported** |
+
+Both names checked against the export directory with pefile before a line was written.
+Kill switches: `BANISHED_RT_CONFIG=0`, `BANISHED_RT_FSSTARTUP=0` — each separate, because
+each sits on the process's single boot path.
+
+### 12.1 Row 1 closes CONDITIONALLY, and the condition is stated
+
+`SetCommandLine`'s three callees — `?ParseCommand@` (ord 3310, 109 instrs), `?ParseValue@`
+(ord 3311, 62) and the unexported insert at 0x18002a090 — are **not** ported, so by the
+triage rule this closes nothing. It closes anyway because **the loop body never runs on this
+project's boots**: `standalone/main.cpp:1930` passes `lpCmdLine ? lpCmdLine : ""`, no harness
+here passes an argument (every knob is an env var), and `String::Set(&tmp, "")` yields
+`data != null` with `length == 0`, so retail's own `JLE` at 0x1800c47d7 returns before
+`ParseCommand`. **Launch `reimpl-x64.exe` with ANY argument at cutover and the next fault is
+`?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z`.** The loop is written out
+faithfully regardless, so the DLL-present path (where all three resolve to the shipped DLL)
+is unchanged.
+
+The insert subtree was declined deliberately: 0x18002a090 → 0x18002a170 is a red-black insert
+calling a node allocator (0x18000f970) and a rebalance (0x18002a310), none exported. That is
+a Collection lane's work with a real oracle available, and the config map is the worst place
+in the engine to guess.
+
+The **find** (0x18002ace0) was ported instead, because unlike the insert it has **no callees
+at all** — 50 instructions, two inlined `strcmp`s, two pointer follows — and row 2 plus three
+sites in `SetupDirectories` call it. Its comparison is written out rather than delegated to
+`std::strcmp`, because the C library only specifies the SIGN and this code branches on
+`>= 0`: a libc returning an UNSIGNED-char difference takes the other branch on any byte
+`>= 0x80`, which a path or a mod name can contain.
+
+### 12.2 Row 2 closes and immediately exposes the next wall
+
+`FileSystem::Startup` is 38 instructions around two calls, and **porting it does not get past
+step 3**. It moves the fault to **`?SetupDirectories@FileSystem@IO@@QEAAXXZ`** (0x1800abd00,
+ord 4029) — **722 instructions with thirteen distinct callees**, of which
+`0x1800ad650`, `0x1800ab180`, `0x1800ac880`, `0x1800881b0`, `0x1800ace00`, `0x1800accc0`,
+`0x1800c5300`, `0x1800c5210`, `0x1800c5280`, `0x1800c9730`, `0x1800c6970` and `0x1800cab50`
+are unported. `?LoadPackages@FileSystem@IO@@QEAAXXZ` (0x1800ab460, ord 3209) is behind it.
+That is a lane, not a tail-end, and naming it precisely is the value this row bought.
+
+The literal at 0x1801556e8 is `onlypkg` (read with `read_memory`): the two gate bytes at
+`FileSystem+0x18/+0x19` are that command-line switch. On an empty command line `found` is
+false and neither gate is touched by this body beyond the unconditional `+0x18 = 1`.
+
+## 13. Audits — both denominators, base `bd2fdd0`
+
+| audit | BEFORE | AFTER |
+|---|---|---|
+| `rawdoor_audit.py` | **481** sites, 0 UNGUARDED-CALL, 34 DEFERRED-CALL | **481**, 0, 34 — *unchanged* |
+| `port_bypass_audit.py --by-name`, ADDRESS door | **198** sites, 0 reach a ported fn; ADDR-REG=33 DETOUR=3 NO-EXPORT=85 UNPORTED=77 | **200**, **0**; 33 / 3 / **87** / 77 |
+| … NAME door | **408** raw-door sites, **0** bypass | **408**, **0** |
+| … BY-NAME cross-check | **636** ported names, 397 statements, **0** missed | **638** (+2), 397, **0** |
+| `rt_data_door_audit.py` | PASS; 3 `RT_RAW_OK`; **5** UNCLASSIFIED | PASS; 3; **10** |
+| `runtime_census.py` TOTAL | 4632 / **848** called / **611** ported / 72.1 % | 4632 / **848** / **612** / **72.2 %** |
+| … ports with no caller | **67 exports, 65 addrs** | **69, 67** |
+
+**The two moves that need explaining, not waving away:**
+
+* **UNCLASSIFIED 5 → 10.** All five new rows are `PublishTimerStatics`' `RT_DATA_SLOT` reads
+  (`timer.cpp:138/140/142/144/146`). The tool buckets them `via (not a call)` because it
+  cannot see through the macro — the **same shape** as the five that were already there
+  (`allocator.cpp:649`, `audio.cpp:880`, `dialog.cpp:454`, `input_win.cpp:127`,
+  `dynamic_resources.cpp:168`), each of which is a singleton slot reached the same way. The
+  audit's actual verdict line is unchanged: **PASS, no minted DATA symbol is read through a
+  raw door.** `RT_DATA_SLOT` is the port-aware door; that is the whole point of the fix.
+* **`ported` moved by only +1 for 2 registrations.** That is §7.2's blind spot again: the
+  census's `called` column cannot see `RT_EXPORT_ONCE`, and both new names are reached from
+  `engine_lifecycle.cpp` through it, so they are ported-but-not-`called` and cannot be
+  counted. Two new "ports with no caller" rows (+2 exports, +2 addrs) are the same fact seen
+  from the other side; both ARE called, on every boot, from `Engine::Startup`.
+
+## 14. Falsifiable predictions for attempt 09
+
+**DLL-PRESENT first, because that is the regression:**
+
+**Q1.** The `INT_DIVIDE_BY_ZERO` at `Runtime-x64.dll + 0xDD3F9` is GONE with
+`BANISHED_RT_ENGINELIFE` default-on, and the gameplay cell reaches `GameMain returned 0`
+with exit 0 — the same result `BANISHED_RT_ENGINELIFE=0` gives today. If it still divides by
+zero, the publish did not reach the DLL's `.data` and `RT_DATA_SLOT` is resolving somewhere
+else; check with `BANISHED_RT_TIMER=0`, which removes the port and restores the DLL's own
+`Timer::Startup`.
+
+**Q2.** Two new `[RtDiff]` sites appear (`System::Configuration::SetCommandLine`,
+`IO::FileSystem::Startup`), each `calls=1 divergences=0`. `SetCommandLine`'s shadow reports
+`len=0` and an UNCHANGED map root — if `len` is not 0, something passed a command line and
+prediction Q4 applies instead.
+
+**DLL-LESS (`BANISHED_RT_NO_DLL=1 BANISHED_RT_MINT=1 BANISHED_RT_STRICT=1
+BANISHED_RT_ALLOC=1 BANISHED_AUTOQUIT=1`):**
+
+**Q3.** `?SetCommandLine@Configuration@System@@QEAAXAEBVString@2@@Z` and
+`?Startup@FileSystem@IO@@QEAA_NXZ` LEAVE the `[RtUnresolved]` list. Distance travelled moves
+again: past `Engine::Startup` steps 2 and 3.
+
+**Q4.** The next fault is **`[RtUnresolved] ?SetupDirectories@FileSystem@IO@@QEAAXXZ`**
+followed by an EXEC-of-0 whose return address symbolises inside **`RtIo_FileSystem_Startup`**
+(not `RtEngine_Engine_Startup` — the frame moves one level down, which is itself the check
+that row 2 landed). If instead the fault is inside `RtSystem_Configuration_SetCommandLine`,
+the command line was NOT empty and §12.1's condition failed; if it is
+`?_singleton@Configuration@System@@0PEAV12@EA` on `[RtUnresolved]` with no crash, the mint row
+predicted in iteration 1's P4 is still missing and `FileSystem::Startup` skipped its
+`onlypkg` lookup (harmless — `found` would have been false anyway).
+
+**Q5.** Four mint rows are still needed and nothing this lane did adds them:
+`?_singleton@Engine@1@0PEAV11@EA`, `?_singleton@Configuration@System@@0PEAV12@EA`,
+`?_hideDisplay@Error@System@@0_NA` (all from iteration 1's P4) and now
+`?_systemSecondsPerTick@Timer@System@@0NA` (0x1801fe740). Each shows once on `[RtUnresolved]`
+and its store is skipped. None is fatal on the path reached in attempt 09; the first two
+become fatal as soon as anything calls `Engine::Get()` or `Configuration::Get()`.
+
+## 15. What I could not verify, again
+
+No run of any kind. The `Timer` fix is reasoned from the disassembly and the crash address;
+**it is the first thing attempt 09 should read**, because a wrong `RT_DATA_SLOT` target
+would leave the DLL's `.data` zero and reproduce the identical crash. `Engine::Shutdown`
+remains `calls=0` and unverified (§5). `SetText` is identified, not ported.

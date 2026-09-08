@@ -895,7 +895,7 @@ census. **All 32 rows, enumerated, not sampled:**
 | **(a)** reproduced CRT ctor | 3 — `_firstTypeInfo`, `_loader`, `_rng` |
 | **(b)** a PORTED writer | 4 — `_frameIndex`, `AnimationManager`, `MainLoop`, `SaveLoad` |
 | **(c)** writer exists, NOT ported → **zero forever** | **23** |
-| **(?)** no writer found at all | **1** — `?_errorString`. ⚠️ **`?_systemInitialTick` IS SOLVED, 2026-09-08: the writer is `Timer::PlatformStartup`, reached from `Engine::Startup`.** It was found by a crash, not a search — lane ENG's ported `Engine::Startup` replaced the shipped one without calling `PlatformStartup`, so `_systemInitialTick` and `_systemTicksPerSecond` stayed at the mint's zero and `MainLoop::Run +0x39` (`IDIV [0x1801fe730]`) divided by zero. **Nothing could have found this writer until something ported `Engine::Startup` and then divided by the result** — a global written by nobody is invisible until something reads it in anger. Note the same `IDIV` runs against our own minted zero at cutover, so this was never a DLL-present-only defect. The general rule: **a port that replaces a shipped function must reproduce its SIDE EFFECTS, not just its return value**, including side effects nobody has attributed to it. |
+| **(?)** no writer found at all | **0** — both were found 2026-09-08, see below. ⚠️ **Both were found by a CRASH, not by a search, and the first one's mechanism is NOT what the integrator first recorded.** The initial reading was "the ported `Engine::Startup` replaced the shipped one without calling `Timer::PlatformStartup`". **Wrong: it does call it, and all five of our Timer values were correct.** `?Startup@Timer@System@@` resolves to lane B3's port, which by deliberate design **OWNS its own five statics rather than publishing them into the exported slot**, so the DLL's `0x1801fe730/738/740` stayed zero and `MainLoop::Run` — still the shipped body — divided by one of them. The rule is therefore sharper than "reproduce the side effects": **a ported function that OWNS storage instead of PUBLISHING it is invisible until an UNPORTED CONSUMER reads the copy it never wrote.** No instrument we have can see that — the mint, the census and every door would call lane B3's Timer correct, *because it is*; the defect lives only in the seam between a ported writer and an unported reader, and it vanishes once both sides are ported, which is precisely why it had to surface now. Fixed in `timer.cpp` (`PublishTimerStatics`, five `RT_DATA_SLOT` mirrors) rather than in `Engine::Startup`, so every future caller inherits it; the same `IDIV` reads our own minted zero at cutover, so this was never DLL-present-only. A bounded sweep of the same class over all seven ported callees of `Engine::Startup` found **exactly one** case. `?_errorString` ← `?SetText@Error@System@@` (0x1800c5fa0, ord 3982), which **APPENDS** — it walks to the NUL and concatenates, which is why a store scan attributed nothing to it; `game_main.cpp:482` reads that buffer to report why Startup failed, so leaving it zeroed silences our own diagnostic. |
 
 `Modification` and `MemoryAllocator` — found independently by two lanes from two directions —
 are two of the 23. The four (b) rows were verified **by reading our ports**, not by trusting
@@ -933,11 +933,42 @@ anyway. What the enumeration adds is that **the port must also write the singlet
 that forgets reproduces lane E3's silent skip exactly. This is the one place where a
 normally-complete port is still wrong.
 
-**Open:** the three `Timer` rows may already be covered (lane B3 ported `Timer` and owns that
-storage; they appear here because the DLL's `Timer::Startup`/`PlatformStartup` are not
-registered) — confirm with B3 rather than double-fixing. The two (?) rows need a **decision,
-not a port**: Ghidra also finds no write for `?_errorString`, so "dead after cutover, zeroed
-storage is correct" is the likely disposition and should be written down **as one**.
+**BOTH (?) ROWS ARE ANSWERED — 2026-09-08, lane ENG, and neither disposition is "dead".**
+They were found by disassembly, not by re-running the scan, which is why the scan missed them:
+in both cases the store is inside a function the scan had, but its *value* comes from an OS
+call, so it does not look like a constant initialiser.
+
+* **`?_systemInitialTick@Timer@System@@0_JA` (0x1801fe738)** — the writer is
+  **`?PlatformStartup@Timer@System@@CA_NXZ` (0x1800ca860)**, `QueryPerformanceCounter(&it)` at
+  its tail, together with `_systemTicksPerSecond` (QPF) and `_systemSecondsPerTick` (1/QPF).
+  Its ONLY caller in the shipped DLL is `Engine::Startup` (0x1800db9d2), by a direct internal
+  call. **Not dead — load-bearing:** `Engine::MainLoop::Run` divides by
+  `_systemTicksPerSecond` at 0x1800dd3f9, so a zero there is `INT_DIVIDE_BY_ZERO` on the first
+  frame. That is not hypothetical; lane ENG's `Engine::Startup` port caused exactly that
+  crash DLL-present, and the fix is in `runtime/src/system/timer.cpp`
+  (`PublishTimerStatics`).
+* **`?_errorString@Error@System@@` (0x1801fc720, 0x2000 bytes)** — the writer is
+  **`?SetText@Error@System@@SAXPEBD_N@Z` (0x1800c5fa0, ord 3982)**. It is an **APPEND**, not
+  an assignment: it walks to the current NUL (0x1800c5fd4-0x1800c5fe8), computes the
+  remaining room out of 0x2000, and concatenates. The scan found no write because the store
+  is inside a copy helper (0x1800c9020) reached with the buffer in a register. `SetText` has
+  many callers, including `Engine::Startup`'s allocator-failure arm, and
+  `code/Game/Game/game_main.cpp:482` READS this buffer to report why Startup failed — so
+  zeroed storage is right only until something calls `SetText`, and then it is our own
+  diagnostic that goes silent. **Disposition: port `SetText`** (54 instructions, one callee),
+  not "leave it zeroed".
+
+**And the three `Timer` rows are confirmed, not double-fixed.** Lane B3 does own that storage
+and that was the right call — what was missing is that owning it is not the same as
+*publishing* it. Generalised, because it is a class and not an incident: **a ported function
+that OWNS storage instead of PUBLISHING it into the exported slot is invisible until an
+UNPORTED consumer reads the copy it did not write.** Lane X's fourteen constructors are
+immune because each writes through `RT_DATA_SLOT`; the `Timer` was the only ported dependency
+of `Engine::Startup` that owns storage instead, which is exactly why it was the only one that
+broke. `PublishTimerStatics()` now mirrors all five values into the exported slots — the
+DLL's `.data` today, the mint at cutover, where the same `IDIV` would divide by the same
+zero. `?_systemSecondsPerTick@Timer@System@@0NA` (0x1801fe740) is **not** in
+`rt_data_mint_tables.inc` and needs a row.
 **REACHABILITY IS NOT YET RANKED** — a null singleton that nothing reads is not a crash, and
 which of the 23 are touched on the boot path is what decides whether this blocks lane G.
 

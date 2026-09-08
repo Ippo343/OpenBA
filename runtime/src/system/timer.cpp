@@ -94,6 +94,60 @@ double  g_systemSecondsPerTick = 0.0;
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// PUBLISH THE FIVE VALUES INTO THE EXPORTED DATA SLOTS
+// ---------------------------------------------------------------------------
+// Wave 9 lane ENG, iteration 2. Added after a DLL-PRESENT regression that this
+// file's own design created and that only became reachable once Engine::Startup
+// was ported:
+//
+//     Exception 0xC0000094 INT_DIVIDE_BY_ZERO at Runtime-x64.dll + 0xDD3F9
+//     1800dd3f7  CQO
+//     1800dd3f9  IDIV qword ptr [0x1801fe730]      ; _systemTicksPerSecond == 0
+//
+// 0x1800dd3f9 is inside `Engine::MainLoop::Run` (0x1800dd3c0 + 0x39), which is
+// HELD BACK (WAVE8_LANE_B.md: no oracle) and therefore still the DLL's body,
+// reading the DLL's own `.data`.
+//
+// THE MECHANISM IS THE PORT/STORAGE SPLIT, NOT A MISSING CALL. Retail's
+// `Engine::Startup` writes 0x1801fe720 and 0x1801fe728 itself and then calls
+// `PlatformStartup` (0x1800ca860), which writes 0x1801fe730/738/740. Lane ENG's
+// ported `Engine::Startup` DOES call `?Startup@Timer@System@@SA_NXZ` -- but that
+// name now resolves to the port below, which by lane B3's deliberate design owns
+// its OWN five statics. So all five of our copies were correct and all five of
+// the DLL's stayed zero, and the first thing to notice was an UNPORTED DLL
+// consumer dividing by one of them.
+//
+// Generalised, because it will happen again: **a ported function that OWNS
+// storage instead of PUBLISHING it is invisible until an unported consumer reads
+// the copy it did not write.** Lane X's fourteen constructors do not have this
+// problem because each publishes through `RT_DATA_SLOT`; the Timer is the only
+// ported dependency of `Engine::Startup` that owns storage instead, which is
+// exactly why it is the only one that broke.
+//
+// The fix restores retail's own effect: the same five addresses get the same
+// five values at the same moment. `RT_DATA_SLOT` is the port-aware door, so this
+// writes the DLL's `.data` today and lane C2's mint at cutover -- where the same
+// IDIV would divide by the same zero, so this is on the critical path either way.
+//
+// `?_systemSecondsPerTick@Timer@System@@0NA` (0x1801fe740) is NOT in
+// rt_data_mint_tables.inc; its slot resolves null at cutover and that store is
+// skipped. The other four are minted (lines 1552, 1571, 1572, 1573).
+namespace {
+void PublishTimerStatics() {
+    if (int64_t* p = RT_DATA_SLOT(int64_t*, "?_ticksPerSecond@Timer@System@@0_JA"))
+        *p = g_ticksPerSecond;
+    if (double* p = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA"))
+        *p = g_secondsPerTick;
+    if (int64_t* p = RT_DATA_SLOT(int64_t*, "?_systemTicksPerSecond@Timer@System@@0_JA"))
+        *p = g_systemTicksPerSecond;
+    if (int64_t* p = RT_DATA_SLOT(int64_t*, "?_systemInitialTick@Timer@System@@0_JA"))
+        *p = g_systemInitialTick;
+    if (double* p = RT_DATA_SLOT(double*, "?_systemSecondsPerTick@Timer@System@@0NA"))
+        *p = g_systemSecondsPerTick;
+}
+}  // namespace
+
 // ?PlatformStartup@Timer@System@@CA_NXZ  retail 0x1800ca860 (private static).
 //
 // Retail on the QPF-failed branch calls the DLL's error reporter
@@ -116,6 +170,10 @@ bool RtSystem_Timer_PlatformStartup() {
     g_systemSecondsPerTick = 1.0 / freqAsDouble;
 
     QueryPerformanceCounter(&g_systemInitialTick);
+    // See PublishTimerStatics above: retail's PlatformStartup writes the
+    // DLL's three QPC globals directly, and an unported DLL consumer
+    // (MainLoop::Run at 0x1800dd3f9) still reads them.
+    PublishTimerStatics();
     return true;
 }
 
@@ -127,7 +185,14 @@ bool RtSystem_Timer_PlatformStartup() {
 bool RtSystem_Timer_Startup() {
     g_ticksPerSecond = 1000000;
     g_secondsPerTick = 1.0 / static_cast<double>(1000000);
-    return RtSystem_Timer_PlatformStartup();
+    const bool ok = RtSystem_Timer_PlatformStartup();
+    // Retail's Engine::Startup stores these two into 0x1801fe720/728
+    // ITSELF, before it calls PlatformStartup, and does so whether or
+    // not that succeeds. Publishing again here covers the QPF-failed
+    // branch, where PlatformStartup returns early having published
+    // nothing.
+    PublishTimerStatics();
+    return ok;
 }
 
 // ?Shutdown@Timer@System@@SAXXZ          retail 0x1800ca7b0 — `RET`, no body.
