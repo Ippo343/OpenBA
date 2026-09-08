@@ -101,6 +101,7 @@
 // ============================================================================
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
@@ -237,6 +238,82 @@ MemFreeFn MemFreeStatic() {
     // with the allocator's arming path. See runtime/src/collection/array.cpp.
     static MemFreeFn fn = nullptr;
     if (!fn) fn = reinterpret_cast<MemFreeFn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
+    return fn;
+}
+
+// ----------------------------------------------------------------------------
+// WAVE 9 LANE UIW — the Collection::Array entry points ComboElement and
+// RadioElement reach.
+//
+// Called BY ADDRESS, exactly as retail does, and that lands on OUR ports rather
+// than the DLL because `ResolveAddr` consults the port registry first
+// (reference_resolveaddr_consults_port_registry_first.md). All five addresses
+// used below are registered in runtime/src/collection/array.cpp by this same
+// lane, so after cutover they resolve to our bodies instead of to null.
+//
+// SEVEN NEARLY-IDENTICAL FUNCTIONS INSTEAD OF ONE TEMPLATE, and the repetition
+// is the point. The first draft here was `ArraySetSizeFillAt<0x180034860>()`,
+// which is shorter, gives each address its own cache for free, and is WRONG for
+// this tree: `tools/port_bypass_audit.py` and `tools/runtime_census.py` scan the
+// SOURCE for the literal `ResolveAddr(Module::Runtime, 0x…)`, so a template
+// parameter makes every one of these call sites invisible to both. That is the
+// same blind spot that hid twelve live ports for a full wave
+// (reference_census_cannot_see_nonliteral_registrations.md), manufactured here
+// by a lane rather than inherited. Spelled out, each site is countable.
+//
+// One cache PER ADDRESS is also load-bearing: a single shared static would
+// resolve whichever address was asked for first and then hand that same pointer
+// to every other site — which would produce a combo box that appends sprites
+// into the string array and looks like it works.
+//
+// CACHE A HIT, RETRY A MISS (the RtResolveCached contract): at cutover these
+// arrive with the Collection port's init, and a caller that ran earlier would
+// otherwise freeze a null in for the life of the process.
+// ----------------------------------------------------------------------------
+using ArraySetSizeFillFn = void (*)(void*, int, const void*);
+using ArrayCleanupFn     = void (*)(void*);
+
+// ComboElement::_strings — Array<System::String>::SetSize(n, &fill)
+ArraySetSizeFillFn ArraySetSizeFill_180034860() {
+    static ArraySetSizeFillFn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<ArraySetSizeFillFn>(ResolveAddr(Module::Runtime, 0x180034860));
+    return fn;
+}
+// ComboElement::_sprites — Array<UI::Sprite>::SetSize(n, &fill), stride 0x10
+ArraySetSizeFillFn ArraySetSizeFill_18004bfc0() {
+    static ArraySetSizeFillFn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<ArraySetSizeFillFn>(ResolveAddr(Module::Runtime, 0x18004bfc0));
+    return fn;
+}
+// ComboElement::_userData — Array<void*>::SetSize(n, &fill)
+ArraySetSizeFillFn ArraySetSizeFill_180024fe0() {
+    static ArraySetSizeFillFn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<ArraySetSizeFillFn>(ResolveAddr(Module::Runtime, 0x180024fe0));
+    return fn;
+}
+// RadioElement::_checkBoxes — Array<InternalPtr<Element>>::SetSize(n, &fill)
+ArraySetSizeFillFn ArraySetSizeFill_180048fe0() {
+    static ArraySetSizeFillFn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<ArraySetSizeFillFn>(ResolveAddr(Module::Runtime, 0x180048fe0));
+    return fn;
+}
+// ComboElement::_strings — the String-array cleanup (destroy every element,
+// free the buffer, zero the header). NOT `~Array`: the elements are refcounted.
+ArrayCleanupFn ArrayCleanup_180010ab0() {
+    static ArrayCleanupFn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<ArrayCleanupFn>(ResolveAddr(Module::Runtime, 0x180010ab0));
+    return fn;
+}
+// ComboElement::_sprites — ~Array (J1)
+ArrayCleanupFn ArrayCleanup_180037310() {
+    static ArrayCleanupFn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<ArrayCleanupFn>(ResolveAddr(Module::Runtime, 0x180037310));
+    return fn;
+}
+// ComboElement::_userData — ~Array (J1)
+ArrayCleanupFn ArrayCleanup_180024aa0() {
+    static ArrayCleanupFn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<ArrayCleanupFn>(ResolveAddr(Module::Runtime, 0x180024aa0));
     return fn;
 }
 
@@ -502,6 +579,130 @@ void* RtUi_ComboElement_GetItemData(ComboElement* self, int index) {
 }
 
 // ============================================================================
+// ?AddItem@ComboElement@UI@@QEAAHAEBVSprite@2@AEBVString@System@@PEAX@Z
+//                                   retail 0x1800750b0   (WAVE 9 LANE UIW)
+// ============================================================================
+//
+// Wave 7 lane D held this back "for the allocator question", because its three
+// growth helpers reach `System::MemoryAllocator::Allocate` under its own
+// critical section. THAT QUESTION IS SETTLED: the allocator is ported (Wave 9
+// lane E) and registered by address as of attempt 14 (commit 309c015), and all
+// three helpers are now ports of ours registered at their own addresses
+// (runtime/src/collection/array.cpp, lane UIW's five J3 rows). So the row
+// closes rather than moving one frame deeper.
+//
+// THE BODY, 0x1800750b0..0x180075112, is eleven instructions of orchestration:
+//
+//     AddItem(this, Sprite const& sprite, String const& str, void* userData):
+//         0x180034860(&this->_strings,  _strings._size  + 1, &str);
+//         0x18004bfc0(&this->_sprites,  _sprites._size  + 1, &sprite);
+//         0x180024fe0(&this->_userData, _userData._size + 1, &userData);
+//         return this->_strings._size - 1;
+//
+// THE ARGUMENT SHUFFLE IS THE ONE THING TO GET RIGHT, and it is easy to read
+// backwards. `R8` is NEVER SET before the first call — retail relies on the
+// incoming `String const&` already being in it. `RDX` (the Sprite) is saved to
+// RBX at entry and becomes the SECOND call's R8. `R9` (userData) is spilled to
+// its home slot at entry and the THIRD call's R8 is the ADDRESS of that slot,
+// not the value: the element type is `void*` and the helper takes a POINTER to
+// the fill. Getting that last one wrong stores a stack address as the item's
+// user data and nothing complains until the caller reads it back.
+//
+// THE RETURN IS READ FROM MEMORY, not computed. `MOV EAX,[RDI+0xf0]; DEC EAX`
+// re-reads `_strings._size` AFTER all three appends, so it is the post-append
+// size minus one — which equals the index just written. Reproduced as a re-read
+// for the same reason lane N's `RemoveChildren` re-reads its base: if a growth
+// helper had failed to grow, retail would return the stale index and so does
+// this.
+//
+// NO ORACLE, and the reason is specific. A replay APPENDS A SECOND TIME to all
+// three arrays, reallocating them, and bumps the `System::String`'s refcount a
+// second time — the exact shape the file-level oracle note forbids. The shadow
+// below is NOT a comparison against retail; it is an INDEPENDENT check against
+// the SOURCE data (this function did not write the caller's `str`/`userData`),
+// which is the strongest thing available here.
+int RtUi_ComboElement_AddItem(ComboElement* self, const void* sprite,
+                              const void* str, void* userData) {
+    RT_DIFF_BEGIN("UI::ComboElement::AddItem [no oracle: appends + bumps a refcount]");
+
+    const int32_t before = self->_strings._size;
+
+    ArraySetSizeFill_180034860()(&self->_strings,  self->_strings._size  + 1, str);
+    ArraySetSizeFill_18004bfc0()(&self->_sprites,  self->_sprites._size  + 1, sprite);
+    ArraySetSizeFill_180024fe0()(&self->_userData, self->_userData._size + 1, &userData);
+
+    const int ours = self->_strings._size - 1;
+
+    if (rt_diff_on__) {
+        // Independent of this body's own rule: the three arrays must have grown
+        // in lockstep, the returned index must be the pre-call size, and the
+        // two elements whose SOURCE we still hold must have landed. The sprite
+        // is not checked — its 0x10 bytes are copied verbatim by the helper and
+        // comparing them here would only restate that helper's own contract.
+        const bool ok =
+            self->_strings._size  == before + 1 &&
+            self->_sprites._size  == before + 1 &&
+            self->_userData._size == before + 1 &&
+            ours == before &&
+            self->_userData._data[ours] == userData &&
+            self->_strings._data[ours] == *static_cast<void* const*>(str);
+        char oursDesc[128];
+        std::snprintf(oursDesc, sizeof(oursDesc),
+                      "idx=%d sizes=%d/%d/%d", ours, self->_strings._size,
+                      self->_sprites._size, self->_userData._size);
+        char theirsDesc[128];
+        std::snprintf(theirsDesc, sizeof(theirsDesc),
+                      "idx=%d sizes=%d/%d/%d", before, before + 1, before + 1, before + 1);
+        RT_DIFF_SHADOW(ok, oursDesc, theirsDesc);
+    }
+    return ours;
+}
+
+// ============================================================================
+// ?RemoveAllItems@ComboElement@UI@@QEAAXXZ  retail 0x180075120  (LANE UIW)
+// ============================================================================
+//
+//     RemoveAllItems(this):
+//         0x180010ab0(&this->_strings);    ; destroy every String, free, zero
+//         0x180037310(&this->_sprites);    ; ~Array
+//         0x180024aa0(&this->_userData);   ; ~Array
+//         this->_currentItem = -1;
+//
+// Lane D read the last store correctly as -1 and it is -1 (`MOV dword ptr
+// [RBX+0x118],0xffffffff`) — worth confirming explicitly, because the SIBLING
+// `SetCurrentItem` resets an out-of-range index to 0 rather than -1, and a
+// reader who assumes the two agree gets one of them wrong.
+//
+// **`_openDialog` (+0x120) IS NOT TOUCHED.** Removing every item while a combo
+// popup is open leaves the popup pointer dangling in retail. That looks like an
+// omission and it is not this port's business to repair it — CLAUDE.md's rule
+// on faithful crashes applies to faithful *leaks* for the same reason: the
+// caller may be relying on it, and inventing a close here would change what the
+// UI does.
+//
+// NO ORACLE: the function frees three buffers and releases every String
+// reference. A replay double-frees. The shadow is the post-condition retail
+// guarantees, which is weaker than a diff and labelled as one.
+void RtUi_ComboElement_RemoveAllItems(ComboElement* self) {
+    RT_DIFF_BEGIN("UI::ComboElement::RemoveAllItems [no oracle: frees three buffers]");
+
+    ArrayCleanup_180010ab0()(&self->_strings);
+    ArrayCleanup_180037310()(&self->_sprites);
+    ArrayCleanup_180024aa0()(&self->_userData);
+    self->_currentItem = -1;
+
+    if (rt_diff_on__) {
+        const bool ok =
+            self->_strings._data  == nullptr && self->_strings._size  == 0 &&
+            self->_sprites._data  == nullptr && self->_sprites._size  == 0 &&
+            self->_userData._data == nullptr && self->_userData._size == 0 &&
+            self->_currentItem == -1;
+        RT_DIFF_SHADOW(ok, ok ? "all three emptied, current=-1"
+                              : "NOT emptied", "all three emptied, current=-1");
+    }
+}
+
+// ============================================================================
 // NumberEditElement — 2/3 ported (SetValue held back — variadic
 // System::String::Format, WAVE7_LANE_D.md §3)
 // ============================================================================
@@ -716,6 +917,132 @@ void RtUi_RadioElement_SetActiveRadio(RadioElement* self, int index) {
 }
 
 // ============================================================================
+// ?FindCheckBoxes@RadioElement@UI@@  — BOTH overloads   (WAVE 9 LANE UIW)
+//   public  0x180047c00  ?FindCheckBoxes@RadioElement@UI@@QEAAXXZ
+//   private 0x1800d5750  ?FindCheckBoxes@RadioElement@UI@@AEAAXV?$InternalPtr@…
+// ============================================================================
+//
+// Wave 7 lane D held these back for the allocator plus "an InternalPtr
+// parameter and a recursive tree walk this lane did not fully verify against
+// Element::_children's exact iteration order". Both are answered: the growth
+// helper 0x180048fe0 is now ours (array.cpp, kSpec_Fill8Z — the SAME
+// instantiation `Element::AddChild` uses), and the iteration order is read out
+// of the disassembly below rather than inferred.
+//
+// THE PRIVATE ONE, 0x1800d5750..0x1800d5812:
+//
+//     FindCheckBoxes(this, InternalPtr<Element>* p):
+//         typeId = *(uint32*)0x1801fa9a8;          ; READ FIRST, before the vcall
+//         e = *p;
+//         if (typeId == e->vtbl[2](e)) {           ; Type(), a VIRTUAL call
+//             e2 = *p;                              ; RE-READ
+//             found = IsDerivedFrom(e2, *(uint32*)0x1801fa9a8) ? e2 : nullptr;
+//             0x180048fe0(&this->_checkBoxes, _checkBoxes._size + 1, &found);
+//         }
+//         for (i = 0; i < ((Element*)*p)->_children._size; ++i) {
+//             child = ((Element*)*p)->_children._data[i];
+//             if (!child) continue;
+//             InternalPtr<Element> tmp = child;     ; zeroed, then stored
+//             FindCheckBoxes(this, &tmp);           ; RECURSE
+//         }
+//
+// FOUR THINGS THAT ARE NOT TIDINESS:
+//
+//  1. **The type test is a VIRTUAL `Type()` call, not `IsDerivedFrom`** — and
+//     then `IsDerivedFrom` runs anyway, on the same object, against the same
+//     id, purely to decide whether the stored pointer is the element or NULL.
+//     That is not redundant: `Type()` is EXACT equality (this class), while
+//     `IsDerivedFrom` walks the base chain, so the second call can only ever
+//     say yes here. Retail does both and so does this. Lane D flagged the
+//     virtual call as "note the difference from every other type check in this
+//     lane" and was right to.
+//  2. **The global is read TWICE**, at 0x1800d575f and again at 0x1800d577b.
+//     Reproduced as two reads. It cannot change between them today, but a
+//     single cached read is a different instruction sequence for no gain.
+//  3. **`*p` is RE-READ at every use** — before the vcall, after it, before the
+//     loop, and again at the bottom of every iteration (0x1800d57ed
+//     `MOV RAX,[RSI]`). The loop BOUND is re-read with it. So a child whose
+//     recursion reparented the tree is seen by the next iteration. Caching `*p`
+//     in a local would be the obvious cleanup and would change behaviour under
+//     exactly the mutation this shape exists to survive.
+//  4. **NO NULL CHECK on `*p` or on its vtable.** A null element faults on the
+//     `MOV RAX,[RCX]` in retail too. Not guarded here — CLAUDE.md's rule.
+//
+// NO ORACLE. The function APPENDS to `_checkBoxes` and recurses over the whole
+// subtree; a replay appends every checkbox a second time and reallocates the
+// array out from under the first pass. The shadow records liveness plus the one
+// post-condition that is independent of this body's own rule: every entry it
+// left in `_checkBoxes` must be a pointer the tree actually contains — checked
+// as "non-null entries only", since a null entry is exactly what the
+// `IsDerivedFrom` arm above stores when it disagrees with `Type()`, and seeing
+// one would mean the two type tests disagreed, which is the interesting failure.
+
+// The cached checkbox type id, `dword ptr [0x1801fa9a8]` — a plain Runtime
+// .data global, read the same way SpinnerElement's `NumberEditElementTypeId`
+// above reads its own. Retail never lazily initialises it before reading, and
+// neither does this.
+uint32_t CheckBoxTypeId() {
+    static uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Runtime, 0x1801fa9a8));
+    return p ? *p : 0;
+}
+
+void RtUi_RadioElement_FindCheckBoxesPrivate(RadioElement* self, void** p) {
+    RT_DIFF_BEGIN("UI::RadioElement::FindCheckBoxes(InternalPtr) [no oracle: appends + recurses]");
+
+    const uint32_t typeId = CheckBoxTypeId();          // read BEFORE the vcall
+    void* e = *p;
+    void** vtbl = *reinterpret_cast<void***>(e);
+    const uint32_t actual =
+        reinterpret_cast<uint32_t (*)(void*)>(vtbl[2])(e);   // slot 2 == Type()
+
+    bool appended = false;
+    if (typeId == actual) {
+        void* e2 = *p;                                  // retail re-reads
+        void* found = IsDerivedFrom()(e2, CheckBoxTypeId()) ? e2 : nullptr;
+        ArraySetSizeFill_180048fe0()(&self->_checkBoxes,
+                                          self->_checkBoxes._size + 1, &found);
+        appended = true;
+    }
+
+    for (int32_t i = 0; i < reinterpret_cast<Element*>(*p)->_children._size; ++i) {
+        Element* child = reinterpret_cast<Element*>(*p)->_children._data[i];
+        if (child == nullptr) continue;
+        void* tmp = nullptr;                            // retail zeroes it first
+        tmp = child;
+        RtUi_RadioElement_FindCheckBoxesPrivate(self, &tmp);
+    }
+
+    if (rt_diff_on__) {
+        bool ok = true;
+        for (int32_t i = 0; i < self->_checkBoxes._size; ++i)
+            if (self->_checkBoxes._data[i] == nullptr) { ok = false; break; }
+        char oursDesc[96];
+        std::snprintf(oursDesc, sizeof(oursDesc), "%d checkboxes, %s",
+                      self->_checkBoxes._size, ok ? "none null" : "A NULL ENTRY");
+        RT_DIFF_SHADOW(ok, oursDesc, "no null entry");
+        RT_DIFF_WORK(appended);
+    }
+}
+
+// The public overload is six instructions: it puts `this` into a stack slot and
+// hands the ADDRESS of that slot to the private one. Note it starts the walk at
+// the RadioElement ITSELF, so a RadioElement that were somehow its own checkbox
+// type would add itself — retail does not special-case it and neither does this.
+//
+// This is the overload on the cutover residue list. It is also the one
+// `engine/funcs/engine_funcs.cpp:2855` names, after Wave 9 lane R corrected that
+// fallback from 0x1800d5750 (the PRIVATE 1-arg sibling, a real entry point that
+// would have run tree surgery with whatever the caller left in RDX) to
+// 0x180047c00. Both are registered below, each at its own address, so neither
+// door can pick up the other's body.
+void RtUi_RadioElement_FindCheckBoxes(RadioElement* self) {
+    RT_DIFF_BEGIN("UI::RadioElement::FindCheckBoxes()");
+    void* slot = self;
+    RtUi_RadioElement_FindCheckBoxesPrivate(self, &slot);
+    RT_DIFF_WORK(true);
+}
+
+// ============================================================================
 // ProgressElement — 2/3 ported (SetProgressTextParameter held back — WAVE7_LANE_D.md §3)
 // ============================================================================
 
@@ -782,6 +1109,18 @@ int RtUiWidgetsInRegister() {
     RegisterRuntimeAddr(0x180075180, (void*)&RtUi_ComboElement_GetItemCount);
     RegisterRuntimeExport(kComboGetItemData,    (void*)&RtUi_ComboElement_GetItemData);    ++count;
     RegisterRuntimeAddr(0x180075170, (void*)&RtUi_ComboElement_GetItemData);
+    // WAVE 9 LANE UIW: two of Wave 7 lane D's three ComboElement hold-backs.
+    // Both were held "for the allocator question" and that question is settled
+    // (Wave 9 lane E + attempt 14's by-address registration); their five
+    // Collection::Array helpers are ports of ours as of this same commit.
+    // `SetCurrentItem` stays held back — it needs UserInterface::CloseDialog,
+    // which belongs to another lane. See docs/runtime_port/WAVE9_LANE_UIW.md.
+    RegisterRuntimeExport("?AddItem@ComboElement@UI@@QEAAHAEBVSprite@2@AEBVString@System@@PEAX@Z",
+                          (void*)&RtUi_ComboElement_AddItem); ++count;
+    RegisterRuntimeAddr(0x1800750b0, (void*)&RtUi_ComboElement_AddItem);
+    RegisterRuntimeExport("?RemoveAllItems@ComboElement@UI@@QEAAXXZ",
+                          (void*)&RtUi_ComboElement_RemoveAllItems); ++count;
+    RegisterRuntimeAddr(0x180075120, (void*)&RtUi_ComboElement_RemoveAllItems);
 
     RegisterRuntimeExport(kNumEditGetValue,     (void*)&RtUi_NumberEditElement_GetValue);  ++count;
     RegisterRuntimeAddr(0x1800d4b50, (void*)&RtUi_NumberEditElement_GetValue);
@@ -798,6 +1137,17 @@ int RtUiWidgetsInRegister() {
 
     RegisterRuntimeExport(kRadioSetActiveRadio, (void*)&RtUi_RadioElement_SetActiveRadio); ++count;
     RegisterRuntimeAddr(0x1800d56f0, (void*)&RtUi_RadioElement_SetActiveRadio);
+    // WAVE 9 LANE UIW: BOTH FindCheckBoxes overloads, each under its own name
+    // AND its own address. Registering only one of an overload set is how
+    // engine_funcs.cpp came to name the private sibling for the public symbol
+    // (WAVE9_LANE_R.md row 1) — a real entry point that would have run tree
+    // surgery on whatever the caller left in RDX rather than faulting.
+    RegisterRuntimeExport("?FindCheckBoxes@RadioElement@UI@@QEAAXXZ",
+                          (void*)&RtUi_RadioElement_FindCheckBoxes); ++count;
+    RegisterRuntimeAddr(0x180047c00, (void*)&RtUi_RadioElement_FindCheckBoxes);
+    RegisterRuntimeExport("?FindCheckBoxes@RadioElement@UI@@AEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z",
+                          (void*)&RtUi_RadioElement_FindCheckBoxesPrivate); ++count;
+    RegisterRuntimeAddr(0x1800d5750, (void*)&RtUi_RadioElement_FindCheckBoxesPrivate);
 
     RegisterRuntimeExport(kProgressSetMax,      (void*)&RtUi_ProgressElement_SetMaximumValue); ++count;
     RegisterRuntimeAddr(0x180077ec0, (void*)&RtUi_ProgressElement_SetMaximumValue);

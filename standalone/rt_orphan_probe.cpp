@@ -463,6 +463,282 @@ bool PlatformChannelsAllSentinel(const SynthScene* ss) {
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// UI::GraphElement::AddGraph  —  ?AddGraph@GraphElement@UI@@QEAAXI@Z
+// retail 0x180040620.                                   (Wave 9 lane UIW)
+//
+// WHY IT IS HERE. Lane UIW ported it, and no unattended harness path reaches
+// it: its only caller in this tree is `code/Game/Dialog/townhallui.cpp:1060`,
+// which needs a built Town Hall clicked in the world. Both of the lane's diff
+// runs report `calls=0` for it, which is exactly the line
+// `reference_uncalled_port_is_not_verified.md` says reads as a pass and is not
+// one. So it is probed against the shipped body instead.
+//
+// A SYNTHETIC SUBJECT, NOT A FAKE. `AddGraph` reads and writes ONE field of the
+// object — the `Collection::Array<GraphSeries>` header at `this+0xF0` — and
+// touches nothing else. That is read out of the body, not assumed: the only
+// base-relative accesses in 0x180040620..0x18004068b are `[RCX+0xF8]` (the
+// size) and `LEA RBX,[RCX+0xF0]`. So a zeroed buffer with a valid Array header
+// at +0xF0 IS a GraphElement as far as this function can tell, and two of them
+// are two independent subjects — which is what makes ours-and-theirs safe here
+// when a replay on ONE object would merely append twice
+// (reference_synthetic_subject_beats_a_fake.md).
+//
+// WHAT IS COMPARED, AND WHAT MUST NOT BE:
+//   * size and capacity of the outer array — capacity is the real check, since
+//     it exercises the 1 -> 6 -> 21 growth treble against the shipped rule.
+//   * every element's colour dword at +0x00, and its nested point-array header
+//     at +0x08 (which AddGraph leaves empty, so {null,0,0} on both sides).
+//   * NOT the outer `_data` POINTER: two separate allocations, guaranteed to
+//     differ, and comparing it would fail 100% of runs.
+//   * NOT bytes +0x04..+0x07 of any element: NEITHER SIDE WRITES THEM. They
+//     hold whatever the allocator returned. Comparing them is the
+//     `reference_oracle_must_not_compare_unwritten_bytes.md` mistake that cost
+//     Wave 6 four false alarms, and here it would fire on almost every run.
+//
+// TWO CONTROLS, because a green comparison proves nothing without them
+// (reference_probe_needs_an_effectiveness_control.md):
+//   * EFFECTIVENESS: count how many of the appends actually grew the array and
+//     how many of those REALLOCATED. If the realloc count is zero the growth
+//     rule was never exercised and the pass is thin; it is printed either way.
+//   * NEGATIVE: after the comparisons pass, corrupt one colour in OUR object
+//     and re-run the comparator. If it still says equal, the comparator is
+//     broken and every pass above it is worthless.
+void ProbeGraphElementAddGraph() {
+    static const char* const kSubject = "UI::GraphElement::AddGraph";
+    static const char* const kName    = "?AddGraph@GraphElement@UI@@QEAAXI@Z";
+    static const char* const kClear   = "?RemoveGraphs@GraphElement@UI@@QEAAXXZ";
+
+    using AddGraphFn = void (*)(void*, uint32_t);
+    using ClearFn    = void (*)(void*);
+
+    AddGraphFn ours   = reinterpret_cast<AddGraphFn>(ResolveExport(kName));
+    AddGraphFn theirs = reinterpret_cast<AddGraphFn>(ResolveExportRaw(kName));
+    ClearFn    clear  = reinterpret_cast<ClearFn>(ResolveExportRaw(kClear));
+
+    if (!ours || !theirs || ours == theirs) {
+        // ours == theirs means the port is not registered and BOTH doors landed
+        // on the DLL: comparing a function with itself is a guaranteed pass and
+        // a lie. Refuse rather than report one.
+        fprintf(stderr, "[RtOrphan] SKIP %s (ours=%p theirs=%p clear=%p)\n",
+                kSubject, (void*)ours, (void*)theirs, (void*)clear);
+        return;
+    }
+
+    // 0x120 bytes: past +0xF8, with room to spare. Zeroed, so the Array header
+    // at +0xF0 starts {data=null, size=0, capacity=0} — a legitimately empty
+    // Collection::Array, which is what a freshly constructed GraphElement has.
+    alignas(16) uint8_t oursObj[0x120];
+    alignas(16) uint8_t theirsObj[0x120];
+    memset(oursObj, 0, sizeof(oursObj));
+    memset(theirsObj, 0, sizeof(theirsObj));
+
+    // Distinct, and deliberately including the two values a byte-copy bug is
+    // most likely to survive (0 and 0xffffffff) plus six that differ in every
+    // byte. A uniform population is not a verification
+    // (reference_uniform_population_is_not_a_verification.md) — 13 of 14 equal
+    // values once let a broken strcmp pass four waves of oracles.
+    static const uint32_t kColours[] = {
+        0x00000000u, 0xffffffffu, 0xdeadbeefu, 0x00ff00ffu,
+        0x12345678u, 0x87654321u, 0x0000ff00u, 0xa5a5a5a5u,
+    };
+    const int kN = (int)(sizeof(kColours) / sizeof(kColours[0]));
+
+    auto arrOf = [](uint8_t* o) { return o + 0xF0; };
+    auto dataOf = [&](uint8_t* o) { return *reinterpret_cast<uint8_t**>(arrOf(o)); };
+    auto sizeOf = [&](uint8_t* o) { return *reinterpret_cast<int32_t*>(arrOf(o) + 8); };
+    auto capOf  = [&](uint8_t* o) { return *reinterpret_cast<int32_t*>(arrOf(o) + 12); };
+
+    // The comparator, as a lambda so the negative control drives the SAME code
+    // the positive cases did — a control that re-implements the check proves
+    // nothing about the check (reference_recheck_must_match_its_own_proof.md).
+    auto compare = [&](char* detail, size_t detailN) -> bool {
+        if (sizeOf(oursObj) != sizeOf(theirsObj) || capOf(oursObj) != capOf(theirsObj)) {
+            snprintf(detail, detailN, "header ours={size=%d cap=%d} theirs={size=%d cap=%d}",
+                     sizeOf(oursObj), capOf(oursObj), sizeOf(theirsObj), capOf(theirsObj));
+            return false;
+        }
+        const int32_t n = sizeOf(oursObj);
+        const uint8_t* a = dataOf(oursObj);
+        const uint8_t* b = dataOf(theirsObj);
+        if ((a == nullptr) != (b == nullptr)) {
+            snprintf(detail, detailN, "one buffer is null: ours=%p theirs=%p", (void*)a, (void*)b);
+            return false;
+        }
+        for (int32_t i = 0; i < n; ++i) {
+            const uint8_t* ea = a + (size_t)i * 0x18;
+            const uint8_t* eb = b + (size_t)i * 0x18;
+            const uint32_t ca = *reinterpret_cast<const uint32_t*>(ea);
+            const uint32_t cb = *reinterpret_cast<const uint32_t*>(eb);
+            if (ca != cb) {
+                snprintf(detail, detailN, "elem %d colour ours=0x%08x theirs=0x%08x", i, ca, cb);
+                return false;
+            }
+            // +0x04..+0x07 SKIPPED — unwritten by both. See the banner.
+            // The nested point Array at +0x08: compare size and capacity, and
+            // that both data pointers are null (AddGraph appends an EMPTY
+            // series). Comparing the pointers themselves would be wrong for the
+            // same reason as the outer one; comparing them against null is not.
+            const void* pa = *reinterpret_cast<void* const*>(ea + 0x08);
+            const void* pb = *reinterpret_cast<void* const*>(eb + 0x08);
+            const int32_t sa = *reinterpret_cast<const int32_t*>(ea + 0x10);
+            const int32_t sb = *reinterpret_cast<const int32_t*>(eb + 0x10);
+            const int32_t ka = *reinterpret_cast<const int32_t*>(ea + 0x14);
+            const int32_t kb = *reinterpret_cast<const int32_t*>(eb + 0x14);
+            if ((pa == nullptr) != (pb == nullptr) || sa != sb || ka != kb) {
+                snprintf(detail, detailN,
+                         "elem %d points ours={%p,%d,%d} theirs={%p,%d,%d}",
+                         i, pa, sa, ka, pb, sb, kb);
+                return false;
+            }
+            // CONTENTS of the nested point array, when there are any. This is
+            // the only thing that exercises `Array<int32>::operator=`'s copy
+            // loop with n > 0 — the element-assign arm of kSpec_GraphSeries,
+            // which every append of an EMPTY series leaves untouched. See the
+            // point-seeding below for why the arrays are not empty.
+            if (sa > 0) {
+                if (memcmp(pa, pb, (size_t)sa * 4) != 0) {
+                    snprintf(detail, detailN,
+                             "elem %d point CONTENTS differ (%d int32)", i, sa);
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+
+    // POINT SEEDING — and this is not decoration, it is what makes the probe
+    // cover the element assign at all.
+    //
+    // The first version of this probe appended eight EMPTY series, and every
+    // series' nested point array stayed {null,0,0}. That meant
+    // `Array<int32>::operator=` — the assign arm of `kSpec_GraphSeries`, and a
+    // whole ported body of its own — ran only on its trivial path: it destroyed
+    // an empty destination and copied zero elements, on all three reallocs. The
+    // copy LOOP was never entered. The probe passed anyway, which is precisely
+    // the effectiveness-control failure `reference_probe_needs_an_effectiveness_
+    // control.md` describes: green comparisons where nothing did the work.
+    //
+    // So each new series is given a few points before the next append. The
+    // NEXT append's realloc then has to copy non-empty nested arrays forward,
+    // and the comparator checks their contents. The shipped `AddGraphPoint` is
+    // used on BOTH objects: it is not the subject here, and using our port on
+    // one side would make a difference in IT look like a difference in AddGraph.
+    using AddPointFn = void (*)(void*, int32_t, int32_t);
+    AddPointFn addPoint = reinterpret_cast<AddPointFn>(
+        ResolveExportRaw("?AddGraphPoint@GraphElement@UI@@QEAAXHH@Z"));
+
+    int grew = 0, realloced = 0, mismatches = 0, seeded = 0, copiedNonEmpty = 0;
+    for (int i = 0; i < kN; ++i) {
+        const uint8_t* before = dataOf(oursObj);
+        const int32_t  beforeSize = sizeOf(oursObj);
+
+        // How many of the existing series carry points that this append, if it
+        // reallocates, will have to copy forward. Counted BEFORE the call.
+        int nonEmptyBefore = 0;
+        for (int32_t k = 0; k < beforeSize; ++k) {
+            const uint8_t* e = dataOf(oursObj) + (size_t)k * 0x18;
+            if (*reinterpret_cast<const int32_t*>(e + 0x10) > 0) ++nonEmptyBefore;
+        }
+
+        ours(oursObj, kColours[i]);
+        theirs(theirsObj, kColours[i]);
+
+        if (sizeOf(oursObj) != beforeSize) ++grew;
+        if (dataOf(oursObj) != before) {
+            ++realloced;
+            copiedNonEmpty += nonEmptyBefore;
+        }
+
+        // Seed the series just appended, so the NEXT realloc has real data to
+        // copy. Three points, distinct across series and across positions.
+        if (addPoint && sizeOf(oursObj) > 0) {
+            const int32_t g = sizeOf(oursObj) - 1;
+            for (int p = 0; p < 3; ++p) {
+                const int32_t v = 0x1000 * (i + 1) + p;
+                addPoint(oursObj,   g, v);
+                addPoint(theirsObj, g, v);
+            }
+            ++seeded;
+        }
+
+        char detail[192];
+        if (!compare(detail, sizeof(detail))) {
+            char full[256];
+            snprintf(full, sizeof(full), "after append %d (colour 0x%08x): %s",
+                     i, kColours[i], detail);
+            Report(kSubject, "append", false, full);
+            ++mismatches;
+            break;                       // one report is enough; state is now suspect
+        }
+    }
+
+    // NEGATIVE CONTROL. Break ours on purpose and demand that the comparator
+    // notice. If this "passes", every green line above it is meaningless.
+    // TWO of them, one per thing the comparator checks: the colour (the outer
+    // element) and a POINT VALUE (the nested array's contents). One control
+    // over one field would leave the other check unproven, which is how a
+    // comparator ends up passing on a term it never evaluates
+    // (reference_shadow_predicate_must_name_its_failing_term.md).
+    bool negColour = false, negPoint = false;
+    char detail[192];
+    if (mismatches == 0 && sizeOf(oursObj) > 0 && dataOf(oursObj)) {
+        uint8_t* last = dataOf(oursObj) + (size_t)(sizeOf(oursObj) - 1) * 0x18;
+
+        const uint32_t saveC = *reinterpret_cast<uint32_t*>(last);
+        *reinterpret_cast<uint32_t*>(last) = ~saveC;
+        negColour = !compare(detail, sizeof(detail));
+        *reinterpret_cast<uint32_t*>(last) = saveC;
+        if (!negColour)
+            Report(kSubject, "negative-control-colour", false,
+                   "the comparator did NOT notice a corrupted colour");
+
+        int32_t* pts = *reinterpret_cast<int32_t**>(last + 0x08);
+        const int32_t nPts = *reinterpret_cast<int32_t*>(last + 0x10);
+        if (pts && nPts > 0) {
+            const int32_t saveP = pts[nPts - 1];
+            pts[nPts - 1] = ~saveP;
+            negPoint = !compare(detail, sizeof(detail));
+            pts[nPts - 1] = saveP;
+            if (!negPoint)
+                Report(kSubject, "negative-control-point", false,
+                       "the comparator did NOT notice a corrupted POINT value");
+        } else {
+            // No points means the contents check was never exercised and there
+            // is nothing to control. Say so rather than passing vacuously.
+            Report(kSubject, "negative-control-point", false,
+                   "no points on the last series — the contents check is UNCONTROLLED");
+        }
+    }
+    const bool negativeCaught = negColour && negPoint;
+
+    if (mismatches == 0 && negativeCaught) {
+        ++g_pass;
+        fprintf(stderr,
+                "[RtOrphan] pass %s %d appends, %d grew, %d REALLOCATED "
+                "(final size=%d cap=%d), %d series seeded with points, "
+                "%d NON-EMPTY nested arrays copied through a realloc, "
+                "negative control CAUGHT\n",
+                kSubject, kN, grew, realloced, sizeOf(oursObj), capOf(oursObj),
+                seeded, copiedNonEmpty);
+        // The number that matters for coverage is the last one. If
+        // `copiedNonEmpty` is 0 the element assign's copy loop never ran and
+        // this pass says nothing about `Array<int32>::operator=` — which is
+        // exactly the state the probe's first version was silently in.
+        if (copiedNonEmpty == 0)
+            fprintf(stderr, "[RtOrphan] WARN %s: 0 non-empty nested arrays were "
+                            "copied — the element assign's copy loop is UNCOVERED\n",
+                    kSubject);
+    }
+
+    // Give the two buffers back. The shipped RemoveGraphs is used for BOTH:
+    // this is teardown, not the thing under test, and driving our own port here
+    // would put a second registered body in the middle of the probe's own
+    // cleanup.
+    if (clear) { clear(oursObj); clear(theirsObj); }
+    fflush(stderr);
+}
+
 void ProbeAudioScene() {
     struct Fn { const char* name; const char* subject; };
     static const Fn kFns[] = {
@@ -1027,6 +1303,11 @@ extern "C" void RtOrphanProbeInGame(void* keyMap) {
     // It needs no live world of its own; it only needs the process to be past
     // that point.
     ProbeAudioScene();
+    // Wave 9 lane UIW. In the IN-GAME probe and not the boot one for exactly
+    // the reason ProbeAudioScene gives above: it allocates through
+    // System::MemoryAllocator, which Engine::Startup has not built yet when
+    // RtOrphanProbe() runs from Init(). It needs no world of its own.
+    ProbeGraphElementAddGraph();
     fprintf(stderr, "[RtOrphan] ==== running total: %d pass, %d fail ====\n", g_pass, g_fail);
     fflush(stderr);
 }
