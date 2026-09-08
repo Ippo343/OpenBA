@@ -2125,3 +2125,99 @@ inside that block.
 
 Unchanged: `LoadPackages` stops at the `ReadPackfile` call, and will until the
 transcription lands.
+
+---
+
+# Rung 4c-ii (part 3) — there are TWO string paths, not one, and a second false-green branch
+
+## 80. `this+0x40 / +0x48 / +0x50` are written TWICE, by two different code paths
+
+While mapping the string groups I found six of them, and the first three and the
+last three write **the same three fields**:
+
+| group | temp buffers | target |
+|---|---|---|
+| 1 | `[RBP+0x18b8]` len, `[RBP+0x860]` bytes | `this+0x40` |
+| 2 | same | `this+0x48` |
+| 3 | same | `this+0x50` |
+| 4 | `[RBP+0x18a0]` len, `[RBP+0x60]` bytes | `this+0x40` |
+| 5 | same | `this+0x48` |
+| 6 | same | `this+0x50` |
+
+Six groups, **three strings.** Groups 1-3 end with `JMP 0x1800b5b6c`
+(`1800b558e`/`1800b559a`), jumping clean over groups 4-6, whose entry point is
+`0x1800b559f`. It is an if/else, not a sequence — and had I transcribed it as a
+sequence, groups 1-3 would have been dead stores overwritten by 4-6.
+
+## 81. The selector is a FORMAT VERSION, and it is the second branch that can fake a green
+
+```
+1800b48ff  Read(&cms, 4, &version);        // into [RBP+0x18b0]
+...
+1800b4e0e  MOV R15D,[RBP+0x18b0]
+1800b4e15  CMP R15D,0x2
+1800b4e19  JG  0x1800b559f                 // version >  2  -> PATH B
+                                           // version <= 2  -> PATH A
+```
+
+* **PATH A (version <= 2)** — read `len`, read `len` bytes, **decode UTF-16LE and
+  re-encode to UTF-8** through the `[RBP+0x860]` buffer. This is the path with the
+  over-read documented in §76.
+* **PATH B (version > 2)** — read `len`, read the bytes **straight into
+  `[RBP+0x60]`**, no transcode at all.
+
+So `ReadPackfile` has **two** conditionals that a corpus of shipped `.pkg` files
+probably cannot cover on both sides:
+
+1. the compressed flag (§72), which gates the whole metadata block, and
+2. **this version check**, which gates *which* of two string implementations runs.
+
+The version one is the more likely to be one-sided: every shipped `.pkg` was
+produced by the same `Tools-x64.exe`, so they will almost certainly all carry the
+same format version and all take the same arm. **A green 4c run will therefore
+probably exercise one string path and not the other, and must say so rather than
+imply it covered both.**
+
+That is the integrator's standing item answered before the fact: the coverage gap
+is now identified, and the honest report after the transcription will name which
+arm the real files take and state the other as untested — rather than a green run
+being read as covering a path it never entered.
+
+## 82. Why this mattered before writing rather than after
+
+Nothing here required a run to discover, and none of it would have shown up as a
+failure. Transcribed as a sequence, groups 1-3 become dead stores and the port
+still *works* on every version-3+ packfile — which is to say, on all of them. It
+would have been correct on all available data and wrong in the source, and the
+only symptom would have appeared on an old packfile nobody has.
+
+That is the same shape as the `AdjustDelimiters` near-miss (§74) and the
+alignment near-miss (§51): a difference that is invisible to every test the
+corpus can run.
+
+## 83. State of the transcription
+
+Now fully mapped:
+
+* every callee ported;
+* the `Read` collapse proved legitimate twice;
+* every `Read` destination resolved (§75);
+* the UTF-16 path understood end to end, including retail's stack over-read and
+  what it means for the oracle (§76);
+* **both string paths and their selector identified (§80-81)**;
+* `Commit` proved dead (§70).
+
+Remaining to read: the entry-directory loop (`0x1800b5b6c`..`0x1800b601d`).
+Then it is writing, with both arms transcribed.
+
+## 84. Registered-but-uncalled: still FIVE, and §81 sharpens the prediction
+
+`0x180029510`, `0x180029630`, `0x180024d70`, `0x180024c10`, `0x1800298f0`.
+`0x180029630` (`Array<bool>::SetSize`, `this+0x98`) sits **before** the version
+branch but **inside** the compressed-flag block, so it is reached iff the
+metadata block runs at all. If it comes back unreached, the compressed flag — not
+the version — is the one that was one-sided.
+
+## 85. Next predicted fault site
+
+Unchanged: `LoadPackages` stops at the `ReadPackfile` call.
