@@ -348,8 +348,21 @@ extern "C" void RtVideo_Context_BindResources(void* self) {
     void* cd = Field<void*>(self, kContextData);
 
     // --- 0x00001 render buffer ---------------------------------------------
-    // 0x1800ef079 tests AL of the value loaded at entry; every later arm
-    // re-reads [RBX+0x10]. Both spellings kept as retail wrote them.
+    // TWO DELIBERATE DEPARTURES FROM THE LITERAL BYTES, both stated rather than
+    // hidden, and both covered by the 33-case oracle:
+    //
+    //   (a) 0x1800ef079 tests `AL` of the value loaded ONCE at entry
+    //       (0x1800ef066); every later arm re-reads `[RBX+0x10]`. This port
+    //       re-reads for the 0x1 arm too. The only instruction between the
+    //       entry load and that test is a register spill, so nothing can change
+    //       +0x10 in between and the two spellings cannot differ.
+    //   (b) retail reloads `[RBX+0x2160]` at each companion arm; `cd` is loaded
+    //       once here. No arm writes +0x2160 — the field is set by the ctor and
+    //       by ?PlatformConstruct@, neither of which this function reaches.
+    //
+    // Both are equivalences, not normalisations of observable behaviour: if
+    // either were wrong the call log would differ, because a stale `cd` would
+    // dispatch through the wrong table.
     if (Field<uint32_t>(self, kDirty) & 0x1u)
         reinterpret_cast<VoidVoidFn>(VSlot(cd, kSlotBindRenderBuffer))(cd);
 

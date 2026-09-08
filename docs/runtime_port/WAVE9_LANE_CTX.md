@@ -267,6 +267,22 @@ The two added doors are the probe's own `ResolveExportRaw` lookups, and both are
 **satisfied** (by this port), which is why the unsatisfied count did not move.
 That is the closure claim of §2, measured rather than asserted.
 
+### "The `Video::Context` cluster is closed" — measured, not asserted
+
+Grepping the post-change `unsatisfied_export_scan.py` output for `Video@@`
+returns **no `@Context@Video@@` method at all**. Fourteen rows survive and every
+one of them belongs to a *different* class that merely takes a `Context&` in its
+signature — `Graphics::Renderer::Draw`, `UI::UserInterface::Draw`,
+`Save::SaveLoad::Draw`, `Graphics::MaterialInstance::Setup`,
+`Graphics::FrameCopyImageBuffer::{Create,Generate}`,
+`UI::SpriteContext::SetScissor`, plus four `Video::Device` / `RenderBuffer` /
+`Configuration` lifecycle rows that belong to other lanes. The class itself is
+fully satisfied.
+
+The one remaining unsatisfied door *reached from inside* a `Video::Context` body
+is `?Inverse@Matrix@Math@@QEBA?AV12@XZ` at `runtime/src/video/context.cpp:352`
+— see §7 and §8.
+
 Both names were checked against the shipped export directory with `pefile`
 **before** any body was written: `?BindResources@Context@Video@@AEAAXXZ` at
 0x1800ef060 ordinal 1664, `?BindTextures@Context@Video@@AEAAXXZ` at 0x1800ef330
