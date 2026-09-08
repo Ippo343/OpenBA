@@ -451,36 +451,36 @@ void DestroyStringExt(void* ignoredThis, uint8_t* base, int count) {
 const ArraySpec kSpec_Bool = {                    // 0x180008b90  Array<bool>
     "Array<bool>", 1, 1, &Assign1,
     nullptr,   // NEW TAIL LEFT UNINITIALISED — retail's else arm is empty
-    nullptr, true, 0, 0 };
+    nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 const ArraySpec kSpec_I32 = {                     // 0x18002fea0  Array<int32>
     "Array<int32>", 4, 4, &Assign4,
     nullptr,   // NEW TAIL LEFT UNINITIALISED
-    nullptr, true, 0, 0 };
+    nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 const ArraySpec kSpec_U64Zero = {                 // 0x180008ff0  Array<Time>
-    "Array<Time>", 8, 8, &Assign8, &InitZero8, nullptr, true, 0, 0 };
+    "Array<Time>", 8, 8, &Assign8, &InitZero8, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 const ArraySpec kSpec_PtrZero = {                 // 0x180008d60, 0x1800764c0
-    "Array<InternalPtr>", 8, 8, &Assign8Z, &InitZero8, nullptr, true, 0, 0 };
+    "Array<InternalPtr>", 8, 8, &Assign8Z, &InitZero8, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 const ArraySpec kSpec_Transform = {               // 0x180059140  Array<Transform>
-    "Array<Transform>", 0x1c, 4, &Assign1c, &InitIdentityTransform, nullptr, true, 0, 0 };
+    "Array<Transform>", 0x1c, 4, &Assign1c, &InitIdentityTransform, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 const ArraySpec kSpec_I32Neg1 = {                 // 0x18007b960  Array<int>, fill -1
-    "Array<int32>(-1)", 4, 4, &Assign4, &InitNeg1, nullptr, true, 0, 0 };
+    "Array<int32>(-1)", 4, 4, &Assign4, &InitNeg1, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 const ArraySpec kSpec_Fill8 = {                   // 0x18001f990  Array<T*>
-    "Array<ptr>", 8, 8, &Assign8, nullptr, nullptr, true, 0, 0 };
+    "Array<ptr>", 8, 8, &Assign8, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 const ArraySpec kSpec_Fill8Z = {                  // 0x180076900, 0x18007a0d0
-    "Array<InternalPtr>(fill)", 8, 8, &Assign8Z, nullptr, nullptr, true, 0, 0 };
+    "Array<InternalPtr>(fill)", 8, 8, &Assign8Z, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 const ArraySpec kSpec_Fill4 = {                   // 0x180023830  Array<uint32>
-    "Array<uint32>", 4, 4, &Assign4, nullptr, nullptr, true, 0, 0 };
+    "Array<uint32>", 4, 4, &Assign4, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 const ArraySpec kSpec_Fill16 = {                  // 0x18004f790, 0x18004f8e0
-    "Array<callback16>", 0x10, 8, &Assign16, nullptr, nullptr, true, 0, 0 };
+    "Array<callback16>", 0x10, 8, &Assign16, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 // --- the non-trivial three --------------------------------------------------
 // *** OPEN, filed by Wave 9 lane D2 2026-09-07: this row's unwritten window is
@@ -497,18 +497,65 @@ const ArraySpec kSpec_Fill16 = {                  // 0x18004f790, 0x18004f8e0
 // with no way to run this probe, is how an oracle quietly stops comparing bytes
 // it should compare. It is lane Q's call whether to widen the field or add a
 // second window. See docs/runtime_port/WAVE9_LANE_D2.md.
+// ASSIGN-ARM WINDOW +0x34..+0x37, read out of 0x180004220 for this correction:
+// it refcount-assigns the two String pointers at +0x00 and +0x08, copies NINE
+// dwords at +0x10,+0x14,+0x18,+0x1c,+0x20,+0x24,+0x28,+0x2c,+0x30 -- and STOPS.
+// The element is 0x38 bytes, so +0x34..+0x37 is never written. That is exactly
+// runtime/types/ui/SpriteSheet.h's `_pad34`: retail's own copy-assign does not
+// copy the padding, which independently confirms the field IS padding.
+//
+// This spec has NO init arm (it is the three-argument form, so the new tail
+// goes through `assign` with `fill` too), which is why the init window is 0/0
+// and why the assign window must be excluded for EVERY element the loop
+// touched, not just the tail. Found by lane D2 while porting 0x1800059e0 and
+// filed as latent because the probe was seeding zeros -- see WAVE9_LANE_Q.md
+// 3.4b.
+//
+// SEED ZEROS +0x00..+0x0f: both String slots are dereferenced (`INC [RAX-4]`
+// in the assign, a refcount release in 0x1800059e0). Everything from +0x10 on
+// is plain scalars and IS seeded non-zero, which is what makes the +0x34 window
+// testable at all.
 const ArraySpec kSpec_Sprite38 = {                // 0x180004e30
-    "Array<SpriteEntry:0x38>", 0x38, 8, &Assign38Call, nullptr, &Destroy38, false, 0, 0 };
+    "Array<SpriteEntry:0x38>", 0x38, 8, &Assign38Call, nullptr, &Destroy38, false,
+    /*assign unwritten*/ 0x34, 0x38,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x10 };
 
-// The +0x2c..+0x2f window is the four bytes InitEffectSlot deliberately does
-// not write, carried in the spec so the probe skips them.
+// BOTH ARMS SKIP +0x2c..+0x2f, for two independent reasons -- which is a fact,
+// not an assumption. The init arm is InitEffectSlot above. The assign arm,
+// 0x180051650, was disassembled for this correction: dwords at +0x00,+0x04,
+// +0x08,+0x0c, qwords at +0x10,+0x18, dwords at +0x20,+0x24,+0x28 -- and then
+// it jumps straight to +0x30. +0x2c is skipped there too. It finishes by
+// zeroing +0x30 and +0x38 and calling 0x180050d30 on the sub-object at +0x30,
+// so the tail IS fully initialised before that call and has no window of its
+// own.
+//
+// SEED ZEROS +0x30..+0x3f: that sub-object goes to 0x180050d30 (lane D's J10,
+// unread by this lane) on the copy path and to the destroy-range 0x180052110
+// on the free path, and a garbage pointer there would be freed. +0x00..+0x2f is
+// plain scalars and IS seeded non-zero.
 const ArraySpec kSpec_EffectSlot = {              // 0x180051390
     "Array<EffectSlot:0x40>", 0x40, 8, &Assign40Call, &InitEffectSlot, &Destroy40,
-    false, 0x2c, 0x30 };
+    false,
+    /*assign unwritten*/ 0x2c, 0x30,
+    /*init   unwritten*/ 0x2c, 0x30,
+    /*seed zero       */ 0x30, 0x40 };
 
+// NO WINDOW EITHER ARM: AssignStringExt writes both qwords of the 0x10-byte
+// element (+0x00 via the refcounted path, +0x08 verbatim), so the assign covers
+// the whole stride, and there is no init arm. Checked against 0x180061480's
+// inlined loop rather than assumed, because the two specs above both turned out
+// to have one.
+//
+// SEED ZEROS +0x00..+0x07: the String slot is dereferenced by the assign's
+// `INC [RAX-4]` and by 0x180005930's release. +0x08, the ExternalPtr, is copied
+// verbatim and never dereferenced by either, so it IS seeded non-zero.
 const ArraySpec kSpec_StringExt = {               // 0x180061480
     "Array<{String*,ExternalPtr}>", 0x10, 8, &AssignStringExt, nullptr,
-    &DestroyStringExt, true, 0, 0 };
+    &DestroyStringExt, true,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x08 };
 
 // ============================================================================
 // Live instrumentation.

@@ -76,6 +76,7 @@
 // ============================================================================
 
 #include <cstdint>
+#include "../system/timer.h"
 #include <cstdio>
 #include <cstring>
 #include "../../funcs/rt_port.h"
@@ -159,9 +160,12 @@ uint8_t* PersistenceSingleton() {
     static uint8_t** p = RtDataExport<uint8_t*>("?_singleton@Persistence@IO@@0PEAV12@EA");
     return p ? *p : nullptr;
 }
+// Was a RAW-DOOR data read of the DLL's `?_secondsPerTick@Timer@System@@0NA`
+// (WAVE9_LANE_V.md §4 names this line); Wave 9 lane B3's System::Timer port
+// owns that storage now. Same constant 1e-6, and no longer the `: 0.0` fallback
+// that would have made the Time(0.0f) divide below a divide by zero.
 double SecondsPerTick() {
-    static double* p = RtDataExport<double>("?_secondsPerTick@Timer@System@@0NA");
-    return p ? *p : 0.0;
+    return RtSystem::TimerSecondsPerTick();
 }
 
 // `System::Time(0.0f)` as the two ctors inline it:

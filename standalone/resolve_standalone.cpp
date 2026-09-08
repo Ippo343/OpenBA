@@ -233,6 +233,24 @@ std::map<std::string, ResidueEntry>& RtResidue() {
     return m;
 }
 
+// ---- Unresolved-symbol census (the Wave 9 lane F null-resolve policy) ------
+// See the comment on RecordResolveMiss in resolve.h. Always on: the only cost
+// is on the path where a resolve returned NOTHING, which in a healthy pre-
+// cutover run never happens.
+std::map<std::string, ResidueEntry>& RtResolveMiss() {
+    static std::map<std::string, ResidueEntry> m;
+    return m;
+}
+
+bool RtFatalResolveEnabled() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = getenv("BANISHED_RT_FATAL_RESOLVE");
+        on = (e && *e && strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return on != 0;
+}
+
 } // namespace
 
 void RegisterRuntimeExport(const char* mangled_name, void* our_fn) {
@@ -316,6 +334,14 @@ void RuntimePortInit() {
     // point in the init order rather than in the middle of it.
     RtCollectionPortInit();   // Wave 9: Collection (lane Q)
     RtCollectionDestroyPortInit();  // Wave 9: Collection destroy half (lane D2)
+
+    // Wave 9 lane K: the 37 unnamed deleting destructors that are slot 0 of
+    // (almost) every vtable the mint below is about to fill. Last of the port
+    // inits, because it resolves each ~Class through the port registry and its
+    // probe runs at the end of it -- so every other wave's destructors must
+    // already be registered. Before RtDataMintInit(), which consumes the
+    // registrations it makes.
+    RtObjectDeletingDtorPortInit();  // Wave 9: deleting destructors (lane K)
 
     // Wave 9 lane C2: mint the exported DATA symbols (??_7 vtables,
     // BaseTypeInfo, singletons and the other .data statics -- the count is a
@@ -552,6 +578,49 @@ void DumpRuntimeResidue() {
     fflush(stderr);
 }
 
+// ---- The unresolved-symbol census -----------------------------------------
+// Wave 9 lane F. See resolve.h for the policy and why it is not fatal by
+// default.
+void RecordResolveMiss(const char* mangled_name, uint16_t ordinal, void* caller) {
+    char key[512];
+    if (mangled_name) snprintf(key, sizeof(key), "%s", mangled_name);
+    else              snprintf(key, sizeof(key), "ord:%u", (unsigned)ordinal);
+
+    ResidueEntry& e = RtResolveMiss()[key];
+    if (e.count == 0) {
+        e.firstCaller = caller;
+        // Name it AT RESOLVE TIME, once per distinct symbol. A pointer that is
+        // null here faults much later, in a body that has no idea which symbol
+        // it wanted, so the exit summary alone is not enough: a crash log has to
+        // be readable next to a line that says what was missing.
+        fprintf(stderr, "[RtUnresolved] %s  (asked by %p)\n", key, caller);
+        fflush(stderr);
+    }
+    e.count++;
+
+    if (RtFatalResolveEnabled()) {
+        fprintf(stderr, "[RtUnresolved] BANISHED_RT_FATAL_RESOLVE is set -- "
+                        "aborting on the first missing symbol.\n");
+        fflush(stderr);
+        abort();
+    }
+}
+
+void DumpUnresolvedSymbols() {
+    const std::map<std::string, ResidueEntry>& m = RtResolveMiss();
+    if (m.empty()) return;   // the healthy case: say nothing
+    fprintf(stderr, "[RtUnresolved] ==== %zu distinct symbols resolved to "
+                    "NOTHING this run ====\n", m.size());
+    for (std::map<std::string, ResidueEntry>::const_iterator it = m.begin();
+         it != m.end(); ++it) {
+        fprintf(stderr, "[RtUnresolved] %-8llu %-16p %s\n",
+                it->second.count, it->second.firstCaller, it->first.c_str());
+    }
+    fprintf(stderr, "[RtUnresolved] ==== end (each of these is a null function "
+                    "pointer waiting to be called) ====\n");
+    fflush(stderr);
+}
+
 // The bodies, with no residue recording. ResolveExport / ResolveOrdinal call
 // THESE on their fall-through path: recording there as well would file every
 // port-registry miss twice, once under its own name and once under "raw:",
@@ -618,8 +687,12 @@ void* ResolveExport(const char* mangled_name) {
         }
     }
     // Missed the port registry: this request is cutover residue.
-    RecordRuntimeResidue(mangled_name, 0, 0, _ReturnAddress());
-    return ResolveExportRawImpl(mangled_name);
+    void* caller = _ReturnAddress();
+    RecordRuntimeResidue(mangled_name, 0, 0, caller);
+    void* fn = ResolveExportRawImpl(mangled_name);
+    // Wave 9 lane F: nothing catches a null from here any more. Say so.
+    if (!fn) RecordResolveMiss(mangled_name, 0, caller);
+    return fn;
 }
 
 void* ResolveOrdinal(uint16_t ordinal) {
@@ -631,7 +704,10 @@ void* ResolveOrdinal(uint16_t ordinal) {
             return it->second;
         }
     }
-    RecordRuntimeResidue(nullptr, 0, ordinal, _ReturnAddress());
-    return ResolveOrdinalRawImpl(ordinal);
+    void* caller = _ReturnAddress();
+    RecordRuntimeResidue(nullptr, 0, ordinal, caller);
+    void* fn = ResolveOrdinalRawImpl(ordinal);
+    if (!fn) RecordResolveMiss(nullptr, ordinal, caller);
+    return fn;
 }
 

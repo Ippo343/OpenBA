@@ -60,29 +60,62 @@ def scan(img, va):
     shape is identical in all 37 and which carries both constants.
     """
     out = {}
-    blob = rd(img, va, 0x80)
-    # The one JZ rel32 (0F 84) in the prologue splits array from scalar.
-    j = blob.find(b"\x0f\x84")
-    if j < 0:
-        return {"err": "no JZ rel32 in the first 0x80 bytes"}
-    out["scalar"] = rel32_target(img, va + j, 6)
-    arr = blob[j + 6: out["scalar"] - va]
+    blob = rd(img, va, 0x100)
+    # `TEST DL,2` (F6 C2 02) then the JZ that splits array from scalar. The
+    # branch is rel8 in every one of the 37 (the array half is under 0x40
+    # bytes); rel32 is accepted so the check does not depend on that.
+    t = blob.find(b"\xf6\xc2\x02")
+    if t < 0:
+        return {"err": "no TEST DL,2 -- not the deleting-destructor shape"}
+    j = t + 3
+    if blob[j] == 0x74:
+        out["scalar"] = va + j + 2 + struct.unpack_from("<b", blob, j + 1)[0]
+        j += 2
+    elif blob[j:j + 2] == b"\x0f\x84":
+        out["scalar"] = rel32_target(img, va + j, 6)
+        j += 6
+    else:
+        return {"err": "TEST DL,2 is not followed by a JZ"}
+    arr = blob[j: out["scalar"] - va]
+
+    # EVERY field below is anchored to a preceding instruction rather than found
+    # by scanning for an opcode byte. A bare scan is wrong here and the first
+    # draft of this script proved it: `CALL 0x18007ec98` from 0x18004d8b0
+    # encodes as E8 BA 13 03 00, and the BA inside that displacement read as a
+    # second `MOV EDX,imm32`. Same trap as
+    # reference_ghidra_c_output_vs_disassembly.md one level down -- bytes are
+    # not instructions until something says where they start.
 
     # count = *(int32*)(this - 8)   ->  MOV R8D,[RCX-8] = 44 8B 41 F8
-    out["count_from_cookie"] = b"\x44\x8b\x41\xf8" in arr
+    p_cnt = arr.find(b"\x44\x8b\x41\xf8")
+    out["count_from_cookie"] = p_cnt >= 0
     # LEA R9,[rip+d]  ->  4C 8D 0D d32   (the per-element destructor)
     m = [i for i in range(len(arr) - 6) if arr[i:i + 3] == b"\x4c\x8d\x0d"]
     out["n_lea_r9"] = len(m)
-    out["dtor"] = rel32_target(img, va + j + 6 + m[0], 7) if len(m) == 1 else None
-    # MOV EDX,imm32  ->  BA imm32       (the element size)
-    m2 = [i for i in range(len(arr) - 4) if arr[i] == 0xBA]
-    out["n_mov_edx"] = len(m2)
-    out["size"] = struct.unpack_from("<I", arr, m2[0] + 1)[0] if len(m2) == 1 else None
-    # the CALL rel32 in the array branch: the iterator, then operator delete
-    out["calls"] = [rel32_target(img, va + j + 6 + i, 5)
-                    for i in range(len(arr) - 4) if arr[i] == 0xE8]
-    # LEA RCX,[RBX-8] before the free, LEA RAX,[RBX-8] as the return value
-    out["free_adjusts"] = b"\x48\x8d\x4b\xf8" in arr
+    out["dtor"] = rel32_target(img, va + j + m[0], 7) if len(m) == 1 else None
+    # MOV EDX,imm32 (the element size) sits immediately after whichever of those
+    # two the compiler emitted second -- the only difference between the three
+    # prologue variants.
+    p_edx = -1
+    if m and p_cnt >= 0:
+        p_edx = max(m[0] + 7, p_cnt + 4)
+    out["mov_edx_anchored"] = p_edx >= 0 and arr[p_edx] == 0xBA
+    out["size"] = struct.unpack_from("<I", arr, p_edx + 1) [0] if out["mov_edx_anchored"] else None
+    # ... and the CALL to the iterator after it, past the optional RDI spill
+    # (`MOV [RSP+0x30],RDI` = 48 89 7C 24 30) the no-unwind-frame variants
+    # emit there.
+    out["calls"] = []
+    if out["mov_edx_anchored"]:
+        q = p_edx + 5
+        if arr[q:q + 5] == b"\x48\x89\x7c\x24\x30":
+            q += 5
+        if arr[q] == 0xE8:
+            out["calls"].append(rel32_target(img, va + j + q, 5))
+    # LEA RCX,[RBX-8] then CALL operator delete; LEA RAX,[RBX-8] is the return.
+    p_free = arr.find(b"\x48\x8d\x4b\xf8")
+    out["free_adjusts"] = p_free >= 0
+    if p_free >= 0 and arr[p_free + 4] == 0xE8:
+        out["calls"].append(rel32_target(img, va + j + p_free + 4, 5))
     out["returns_adjusted"] = b"\x48\x8d\x43\xf8" in arr
     # TEST SIL,1 / TEST DL,1 -- the free is conditional on bit 0
     out["free_conditional"] = (b"\x40\xf6\xc6\x01" in arr) or (b"\xf6\xc2\x01" in arr)
@@ -99,6 +132,35 @@ def scan(img, va):
     if sb[0:3] == b"\x48\x8d\x05" and sb[7:10] == b"\x48\x89\x01":
         out["scalar_vtable"] = rel32_target(img, out["scalar"], 7)
     return out
+
+
+def is_memfree_shaped(img, va):
+    """True when `va` is the compiler's `operator delete`:
+
+        if (p) { Enter(alloc->cs); Free(_singleton, p); Leave(alloc->cs); }
+
+    A raw byte compare against 0x1800c7ad0 does NOT work and the first draft of
+    this script failed all 37 rows because of it: the four copies differ in the
+    RIP-relative displacements of `MOV RBX,[_singleton]` and the two IAT calls,
+    which is exactly the reason lane D had to hash MNEMONICS rather than bytes.
+    So this resolves each RIP operand to its absolute target and compares those.
+    """
+    b = rd(img, va, 0x5C)
+    if b[0:3] != b"\x48\x85\xc9" or b[3] not in (0x74, 0x0F):
+        return False
+    want_data = {0x1801FC718}                 # ?_singleton@MemoryAllocator@System@@
+    want_iat = {0x18014B390, 0x18014B388}     # Enter/LeaveCriticalSection
+    got_data, got_iat, got_call = set(), set(), set()
+    for i in range(len(b) - 6):
+        if b[i:i + 3] in (b"\x48\x8b\x1d", b"\x48\x8b\x0d"):
+            got_data.add(rel32_target(img, va + i, 7))
+        elif b[i:i + 2] == b"\xff\x15":
+            got_iat.add(rel32_target(img, va + i, 6))
+    for i in range(len(b) - 4):
+        if b[i] == 0xE8:
+            got_call.add(rel32_target(img, va + i, 5))
+    return (want_data <= got_data and want_iat <= got_iat
+            and 0x1800C6C00 in got_call)     # ?Free@MemoryAllocator@System@@
 
 
 def dtor_vtable(img, va):
@@ -142,9 +204,10 @@ def main():
             if r["size"] != size:
                 problems.append("elemSize: DLL says 0x%x, table says 0x%x"
                                 % (r["size"] or 0, size))
-            if r["n_lea_r9"] != 1 or r["n_mov_edx"] != 1:
-                problems.append("not the single-parameter shape (%d LEA R9, %d MOV EDX)"
-                                % (r["n_lea_r9"], r["n_mov_edx"]))
+            if r["n_lea_r9"] != 1 or not r["mov_edx_anchored"]:
+                problems.append("not the single-parameter shape (%d LEA R9, "
+                                "MOV EDX anchored=%s)"
+                                % (r["n_lea_r9"], r["mov_edx_anchored"]))
             if not r["count_from_cookie"]:
                 problems.append("count is not read from [this-8]")
             if EHVEC not in r["calls"]:
@@ -153,9 +216,10 @@ def main():
             for c in r["calls"]:
                 if c == EHVEC:
                     continue
-                if rd(img, c, 0x5C) != rd(img, MEMFREE_CANON, 0x5C):
-                    problems.append("array-branch free 0x%x is NOT byte-identical to "
-                                    "MemFree 0x%x" % (c, MEMFREE_CANON))
+                if not is_memfree_shaped(img, c):
+                    problems.append("array-branch free 0x%x is not the "
+                                    "operator delete shape MemFree 0x%x has"
+                                    % (c, MEMFREE_CANON))
             for f in ("free_adjusts", "returns_adjusted", "free_conditional"):
                 if not r[f]:
                     problems.append("array branch: %s is false" % f)

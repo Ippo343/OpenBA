@@ -43,12 +43,8 @@ static void EnsureTimerFns() {
     s_timerInit = true;
     s_StopTimer = reinterpret_cast<fn_StopTimer_t>(
         ResolveExport("?StopTimer@DialogInstance@UI@@QEAAXH@Z"));
-    if (!s_StopTimer)
-        s_StopTimer = reinterpret_cast<fn_StopTimer_t>(ResolveAddr(Module::Runtime, 0x180113730));
     s_StartTimer = reinterpret_cast<fn_StartTimer_t>(
         ResolveExport("?StartTimer@DialogInstance@UI@@QEAAXHVTime@System@@@Z"));
-    if (!s_StartTimer)
-        s_StartTimer = reinterpret_cast<fn_StartTimer_t>(ResolveAddr(Module::Runtime, 0x1801137c0));
     // Time::Time(float) - dispatch slot 0x140152b00 IS registered; guard anyway.
     uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_TimeCtor = reinterpret_cast<fn_TimeCtor_t>(*reinterpret_cast<void**>(slot));

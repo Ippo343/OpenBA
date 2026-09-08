@@ -34,12 +34,33 @@ struct ArraySpec {
     ElemInit    init;      // null => retail leaves the new tail untouched
     ElemDestroy destroy;   // null => trivially destructible T
     bool        byteCopy;  // true when `assign` is a pure byte copy
-    // Byte window WITHIN one element that retail's DEFAULT arm never writes.
-    // Equal (both 0) means there is none. Only 0x180051390's EffectSlot has one
-    // (+0x2c..+0x2f). An oracle must skip it on default-constructed elements:
-    // reference_oracle_must_not_compare_unwritten_bytes.md.
-    uint32_t    unwrittenLo;
-    uint32_t    unwrittenHi;
+
+    // ---- Written extents, PER ARM ------------------------------------------
+    // A written-extent constant belongs to a WRITER, not to a type
+    // (reference_never_written_needs_by_whom.md -- Wave 7 got this wrong in
+    // BOTH directions inside one hour). `assign` and `init` are two different
+    // code paths with two different written extents, and an element in
+    // [oldSize, newSize) takes `assign` when the caller passed a `fill` and
+    // `init` when it did not. So there are two windows, and the oracle has to
+    // know which arm produced the element it is looking at.
+    //
+    // Each pair is a half-open byte range WITHIN one element that the arm does
+    // NOT write. Equal (both 0) means the arm covers the whole stride.
+    // Comparing an unwritten byte fails 100% of cases and reads like a
+    // catastrophic port defect (reference_oracle_must_not_compare_unwritten_
+    // bytes.md, four such gaps in Wave 6).
+    uint32_t    assignUnwrittenLo, assignUnwrittenHi;
+    uint32_t    initUnwrittenLo,   initUnwrittenHi;
+
+    // ---- Probe seeding ------------------------------------------------------
+    // Half-open byte range within one element that the PROBE must leave ZERO,
+    // because the element operations DEREFERENCE it (a String pointer whose
+    // refcount at `str-4` gets bumped, or a sub-object handed to another
+    // helper). Everything outside this range is seeded with a varying non-zero
+    // pattern -- which is the whole point: all-zero elements are the one seed
+    // under which an unwritten-bytes bug is invisible, because both sides read
+    // zero there and agree by accident.
+    uint32_t    seedZeroLo, seedZeroHi;
 };
 
 // One diff site per REGISTERED ADDRESS. See array.cpp's "Live instrumentation".

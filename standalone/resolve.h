@@ -158,6 +158,54 @@ void RecordRuntimeResidue(const char* mangled_name, uintptr_t ghidra_addr,
                           uint16_t ordinal, void* caller);
 void DumpRuntimeResidue();
 
+// ---- The null-resolve policy (Wave 9 lane F) ------------------------------
+//
+// Until 2026-09-07 the tree carried 163 sites shaped
+//
+//     fn = ResolveExport("?Mangled@...");
+//     if (!fn) fn = ResolveAddr(Module::Runtime, 0x1800xxxxx);   // <- fallback
+//
+// Every one of those fallbacks was DEAD, because the primary always succeeded.
+// They could not survive cutover: with the DLL gone no ResolveExport can
+// succeed, so all 163 would have become the live path SIMULTANEOUSLY, each
+// jumping at an address in a module that is not mapped. They were deleted
+// rather than corrected -- a null is a better failure than a jump into the
+// middle of a function (WAVE9_LANE_D.md found five whose addresses were already
+// wrong, one of them a real entry point for the WRONG OVERLOAD, which would have
+// run and done tree surgery with garbage in RDX).
+//
+// Deleting them leaves the question they were pretending to answer: what SHOULD
+// happen when a resolve returns null? The answer this tree now gives is
+// NAME IT LOUDLY, AT RESOLVE TIME, AND KEEP GOING.
+//
+//   * Loudly, because the alternative is a null function pointer called much
+//     later from a body that has no idea which symbol it wanted -- this
+//     project's EXEC-of-0 crash logs, which name an address and nothing else.
+//     One `[RtUnresolved] <symbol>` line per distinct symbol at the moment of
+//     the miss puts the name in the log ABOVE the crash.
+//   * At resolve time, not at first call, because most of these are filled by
+//     EngineFuncsInit at boot and never checked again.
+//   * And KEEP GOING, not abort, for the reason that decides the whole policy:
+//     ON CUTOVER DAY EVERY UNPORTED SYMBOL MISSES. Aborting on the first one
+//     would print one name and teach nothing; running to the end prints the
+//     complete list of what is missing, which is exactly the work list lane G
+//     needs. `BANISHED_RT_FATAL_RESOLVE=1` opts into fail-fast for the narrower
+//     case of "this run should have resolved everything -- stop where it
+//     didn't".
+//
+// A miss is recorded ALWAYS, not under BANISHED_RT_STRICT: strict mode measures
+// requests that reach the DLL, which is a different question, and a symbol that
+// resolved to nothing is a defect in any run whether or not anyone is measuring.
+// The cost is one map insert on a path that in a healthy pre-cutover run is
+// never taken.
+//
+// This does NOT replace tools/export_name_audit.py, which catches a phantom
+// mangling from source before the process runs; it is the runtime half, and it
+// keeps working after cutover, when the export table the static audit reads is
+// gone (`reference_resolveexport_phantom_names.md`).
+void RecordResolveMiss(const char* mangled_name, uint16_t ordinal, void* caller);
+void DumpUnresolvedSymbols();
+
 // ---- Unregistered-address census (BANISHED_UNREG_CENSUS=1) ----------------
 // ResolveAddr's NOT IMPLEMENTED warning fires ONCE per address for the whole
 // process, so an address hit at boot AND again during a save load is only ever

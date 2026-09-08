@@ -158,6 +158,7 @@
 // ============================================================================
 
 #include <cstdint>
+#include "../system/timer.h"
 #include <cstddef>
 #include <cstdio>
 
@@ -212,10 +213,13 @@ void** VideoDeviceSingletonSlot() {
 }
 
 // System::Timer::_secondsPerTick — the divisor in the inlined SecondsToTicks.
+// Was a RAW-DOOR data read of the DLL's slot (WAVE9_LANE_V.md §4 names this
+// line). Wave 9 lane B3's System::Timer port owns the storage, so it comes
+// from us; the value is the compile-time constant 1e-6 either way, and ours is
+// never the zero the DLL's slot holds before Engine::Startup.
 const double* SecondsPerTick() {
-    static const double* p = reinterpret_cast<const double*>(
-        ResolveExportRaw("?_secondsPerTick@Timer@System@@0NA"));
-    return p;
+    static const double p = RtSystem::TimerSecondsPerTick();
+    return &p;
 }
 
 // The two clock constants, as the exact doubles retail loads. These are

@@ -95,9 +95,6 @@ void WaitForEngineLoader() {
     if (!s_resolved) {
         s_wait = reinterpret_cast<fn_WaitForFinish_t>(
             ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ"));
-        if (!s_wait)
-            s_wait = reinterpret_cast<fn_WaitForFinish_t>(
-                ResolveAddr(Module::Runtime, 0x1800ca5f0));
         s_resolved = true;
     }
     if (s_wait) {

@@ -1238,8 +1238,6 @@ static void RegisterDispatchSlots() {
     {
         uintptr_t goalSerialize =
             (uintptr_t)ResolveExport("?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z");
-        if (!goalSerialize)
-            goalSerialize = ResolveAddr(Module::Runtime, 0x18009ee20);
         RegisterDispatchSlot(0x140152840, goalSerialize);
     }
 
@@ -1723,10 +1721,6 @@ extern "C" void RegisterNoiseUIImageBufferVtable() {
     fn_ImgBuf_Dtor_StandaloneVt_t fnDtor =
         reinterpret_cast<fn_ImgBuf_Dtor_StandaloneVt_t>(
             ResolveExport("??1ImageBuffer@Video@@UEAA@XZ"));
-    if (!fnDtor) {
-        fnDtor = reinterpret_cast<fn_ImgBuf_Dtor_StandaloneVt_t>(
-            ResolveAddr(Module::Runtime, 0x1800f2610));
-    }
 
     // Resolve slot [9] = ImageBuffer::Create — vtable +0x48 in the layout.
     // Mangled name verified via Ghidra:

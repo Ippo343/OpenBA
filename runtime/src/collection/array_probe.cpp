@@ -70,19 +70,32 @@
 // COVERAGE, STATED PLAINLY
 // ---------------------------------------------------------------------------
 //   BANISHED_RT_ARRAY_PROBE=1        the 13 trivially-copyable instantiations.
-//   BANISHED_RT_ARRAY_PROBE=all      those plus the three non-trivial ones,
-//                                    with ALL-ZERO element contents only.
+//   BANISHED_RT_ARRAY_PROBE=all      those plus the three non-trivial ones.
 //   BANISHED_RT_ARRAY_PROBE=neg      =all plus the negative control.
 //
-// The three non-trivial instantiations (0x180004e30, 0x180051390, 0x180061480)
-// are opt-in because their element operations DEREFERENCE the element. Seeding
-// them with a byte pattern would hand `0x180004220` / `0x180051650` / the
-// inlined String assign a garbage pointer and fault. With zeroed elements those
-// helpers take their null paths, so the probe exercises the CONTAINER algebra
-// for those three but NOT their element semantics — in particular the
-// `INC dword ptr [RAX-4]` String refcount bump inside 0x180061480's assignment
-// is not reached. That gap is real and is listed in WAVE9_LANE_Q.md rather than
-// hidden behind a green line.
+// EVERY target is seeded with a varying NON-ZERO pattern, except each spec's own
+// `seedZeroLo/Hi` range — the bytes its element operations DEREFERENCE (a String
+// pointer whose refcount at `str-4` gets bumped, or the sub-object 0x180051650
+// hands to 0x180050d30). Seeding those with a byte pattern would hand a garbage
+// pointer to a refcount decrement and fault.
+//
+// The first version of this file zeroed the WHOLE element for those three
+// targets, and that was a real defect rather than a conservative choice:
+// **all-zero elements are the one seed under which an unwritten-bytes bug is
+// invisible**, because both sides read zero in the unwritten window and agree by
+// accident. It hid `kSpec_Sprite38`'s +0x34..+0x37 window until lane D2 read
+// 0x180004220. Narrowing the zeroed range to the pointer slots is what makes the
+// per-arm windows testable at all — see VerifyUnwritten() below, which checks
+// that an EXCLUDED byte really did survive.
+//
+// What is still NOT covered, and is in WAVE9_LANE_Q.md rather than hidden behind
+// a green line: the String slots stay null, so the `INC dword ptr [RAX-4]`
+// refcount bump inside 0x180061480's and 0x180004220's assignments is never
+// reached. Closing that needs a synthetic `str-8`/`str-4` block and a
+// count-afterwards assertion.
+//
+// The three are still opt-in (`=all`) because their element operations call into
+// the DLL, so a fault there is a different kind of event from a container bug.
 // ============================================================================
 
 #include <cstdint>
@@ -127,6 +140,8 @@ struct Totals {
     int ranCopyLoop  = 0;
     int ranFillLoop  = 0;
     int freed        = 0;
+    int windowChecks = 0;   // excluded windows actually VERIFIED as unwritten
+    int windowWrong  = 0;   // ... of which the arm turned out to write there
 };
 Totals g_t;
 int g_negFlagged = 0;       // mismatches the negative control produced
@@ -137,28 +152,72 @@ int g_negCases   = 0;
 // The buffer comes from rtcoll::MemAlloc so that whichever body frees it hands
 // the pointer back to the allocator that produced it.
 // ---------------------------------------------------------------------------
+// One deterministic seed byte for element `e`, byte offset `k`. Both subjects
+// get the identical seed, so anything that differs afterwards was written
+// differently -- or was not written at all by either side, which is what the
+// per-arm windows below are for.
+//
+// WHY NOT A CONSTANT 0xCD. The project idiom is 0xCD because "0xCD surviving in
+// theirs means retail never wrote there"
+// (reference_oracle_must_not_compare_unwritten_bytes.md), and 0xCD is this
+// pattern's base. But a CONSTANT fill cannot detect a copy that reads the wrong
+// element or the wrong offset -- every byte looks the same -- so the pattern
+// varies per (element, offset), and the "did retail write here" question is
+// answered by VerifyUnwritten() below, which checks that an excluded byte still
+// holds its seed. A varying pattern gets both properties.
+inline uint8_t SeedByte(size_t element, size_t k) {
+    return static_cast<uint8_t>(0xCDu + element * 31u + k * 7u);
+}
+
 struct Subject {
     ArrayHdr hdr;
-    void Build(int size, int capacity, uint32_t stride, int align,
-               uint8_t seedByte, bool zeroed) {
+    // `spec` supplies the per-element byte range that must stay ZERO because the
+    // element operations dereference it. EVERYTHING ELSE IS SEEDED NON-ZERO --
+    // all-zero elements are the one seed under which an unwritten-bytes bug is
+    // invisible, because both sides read zero there and agree by accident. That
+    // is exactly how kSpec_Sprite38's +0x34..+0x37 window stayed hidden until
+    // lane D2 read 0x180004220.
+    void Build(int size, int capacity, const ArraySpec* spec) {
+        const uint32_t stride = spec->stride;
         hdr._data     = nullptr;
         hdr._size     = size;
         hdr._capacity = capacity;
-        if (capacity > 0) {
-            const size_t bytes = static_cast<size_t>(capacity) * stride;
-            hdr._data = static_cast<uint8_t*>(
-                rtcoll::MemAlloc(static_cast<uint64_t>(bytes), align));
-            if (hdr._data) {
-                // Seed the FULL capacity, not just [0,size): a non-reallocating
-                // case must find the same bytes in both subjects everywhere it
-                // legitimately reads them.
-                if (zeroed) std::memset(hdr._data, 0, bytes);
-                else for (size_t i = 0; i < bytes; ++i)
-                         hdr._data[i] = static_cast<uint8_t>(seedByte + (i * 7u));
+        if (capacity <= 0) return;
+        const size_t bytes = static_cast<size_t>(capacity) * stride;
+        hdr._data = static_cast<uint8_t*>(
+            rtcoll::MemAlloc(static_cast<uint64_t>(bytes), spec->align));
+        if (!hdr._data) return;
+        // Seed the FULL capacity, not just [0,size): a non-reallocating case
+        // must find the same bytes in both subjects everywhere it legitimately
+        // reads them.
+        for (int e = 0; e < capacity; ++e) {
+            uint8_t* el = hdr._data + static_cast<size_t>(e) * stride;
+            for (uint32_t k = 0; k < stride; ++k) {
+                const bool mustBeZero = (spec->seedZeroLo != spec->seedZeroHi) &&
+                                        k >= spec->seedZeroLo && k < spec->seedZeroHi;
+                el[k] = mustBeZero ? 0u : SeedByte(static_cast<size_t>(e), k);
             }
         }
     }
 };
+
+// Which arm produced element `i`, given the pre-state and whether a fill was
+// passed. This is the whole point of splitting the windows: an element in
+// [oldSize, newSize) took `assign` when there was a fill and `init` when there
+// was not, and those two writers cover different bytes.
+enum Arm { kUntouched, kAssign, kInit, kNothing };
+
+Arm ArmFor(int i, int start, int oldSize, bool hasFill, const ArraySpec* spec) {
+    if (i < start)   return kUntouched;   // the loop never reached it
+    if (i < oldSize) return kAssign;      // carried over from the old buffer
+    if (hasFill)     return kAssign;      // new tail, assigned from *fill
+    if (spec->init)  return kInit;        // new tail, default-constructed
+    return kNothing;                      // retail's else arm is EMPTY
+}
+
+bool InWindow(uint32_t k, uint32_t lo, uint32_t hi) {
+    return lo != hi && k >= lo && k < hi;
+}
 
 // ---------------------------------------------------------------------------
 // The comparison. Returns true on agreement; fills `why` with the FIRST failing
@@ -166,13 +225,12 @@ struct Subject {
 // verdict that is a conjunction of N terms must name all N, or a failure prints
 // two strings that agree and says nothing).
 // ---------------------------------------------------------------------------
-// `tailWritten` says whether retail wrote elements [oldSize, newSize): true when
-// the call passed a `fill`, or when the spec has a default `init`. It is FALSE
-// for 0x180008b90 and 0x18002fea0, whose `else` arm is empty — for those the new
-// tail holds two DIFFERENT allocator fills and comparing it would fail every
-// case.
+// `start` is the first element the fill loop touched -- 0 after a realloc,
+// oldSize otherwise -- and `hasFill` says whether a three-argument call passed a
+// fill. Together with the spec they decide, PER ELEMENT, which arm wrote it and
+// therefore which of its bytes are legitimately comparable.
 bool Compare(const Subject& ours, const Subject& theirs, int newSize, int oldSize,
-             const ArraySpec* spec, bool tailWritten, char* why, size_t nwhy) {
+             int start, bool hasFill, const ArraySpec* spec, char* why, size_t nwhy) {
     if (ours.hdr._size != theirs.hdr._size) {
         std::snprintf(why, nwhy, "_size ours=%d theirs=%d",
                       ours.hdr._size, theirs.hdr._size);
@@ -192,24 +250,71 @@ bool Compare(const Subject& ours, const Subject& theirs, int newSize, int oldSiz
     if (!ours.hdr._data || newSize <= 0) return true;
 
     const uint32_t stride = spec->stride;
-    // How far the ELEMENT extent is legitimately comparable: every element up
-    // to newSize when the tail is written, otherwise only what was carried over.
-    const int cmpTo = tailWritten ? newSize
-                                  : (oldSize < newSize ? oldSize : newSize);
 
-    for (int i = 0; i < cmpTo; ++i) {
+    for (int i = 0; i < newSize; ++i) {
+        const Arm arm = ArmFor(i, start, oldSize, hasFill, spec);
+        // kNothing: retail's else arm is empty (0x180008b90, 0x18002fea0), so
+        // this element holds two DIFFERENT allocator fills after a realloc and
+        // nothing at all was written to it. Skip the whole element.
+        if (arm == kNothing) continue;
+
         const uint8_t* a = ours.hdr._data   + static_cast<int64_t>(i) * stride;
         const uint8_t* b = theirs.hdr._data + static_cast<int64_t>(i) * stride;
         for (uint32_t k = 0; k < stride; ++k) {
-            // 0x180051390's default element never writes +0x2c..+0x2f. Skip
-            // that window on elements the default arm produced.
-            if (spec->unwrittenLo != spec->unwrittenHi && i >= oldSize &&
-                k >= spec->unwrittenLo && k < spec->unwrittenHi)
+            if (arm == kAssign &&
+                InWindow(k, spec->assignUnwrittenLo, spec->assignUnwrittenHi))
+                continue;
+            if (arm == kInit &&
+                InWindow(k, spec->initUnwrittenLo, spec->initUnwrittenHi))
                 continue;
             if (a[k] != b[k]) {
                 std::snprintf(why, nwhy,
-                              "element[%d] byte +0x%x ours=0x%02x theirs=0x%02x",
-                              i, static_cast<unsigned>(k), a[k], b[k]);
+                    "element[%d] (%s arm) byte +0x%x ours=0x%02x theirs=0x%02x",
+                    i,
+                    arm == kAssign ? "assign" : (arm == kInit ? "init" : "untouched"),
+                    static_cast<unsigned>(k), a[k], b[k]);
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// The POSITIVE half of the unwritten-bytes claim.
+//
+// Compare() EXCLUDES the per-arm windows, and that is only correct if the arm
+// really does not write there. An exclusion that is WRONG hides a real defect
+// rather than a false one, which is the more dangerous direction and is not
+// something the disassembly alone can keep honest as the port changes.
+//
+// So: on NON-REALLOCATING cases, where the destination buffer IS the seeded
+// buffer, every excluded byte must still hold its seed afterwards. If it does
+// not, the arm wrote there, the window in the spec is a lie, and the probe says
+// so instead of quietly comparing four fewer bytes forever.
+//
+// Not checkable on a realloc: the destination is a fresh MemAlloc, so there is
+// no seed to survive.
+bool VerifyUnwritten(const Subject& ours, int newSize, int oldSize, int start,
+                     bool hasFill, const ArraySpec* spec, char* why, size_t nwhy) {
+    const uint32_t stride = spec->stride;
+    if (!ours.hdr._data) return true;
+    for (int i = 0; i < newSize; ++i) {
+        const Arm arm = ArmFor(i, start, oldSize, hasFill, spec);
+        uint32_t lo = 0, hi = 0;
+        if (arm == kAssign)    { lo = spec->assignUnwrittenLo; hi = spec->assignUnwrittenHi; }
+        else if (arm == kInit) { lo = spec->initUnwrittenLo;   hi = spec->initUnwrittenHi; }
+        else continue;
+        if (lo == hi) continue;
+        const uint8_t* a = ours.hdr._data + static_cast<int64_t>(i) * stride;
+        for (uint32_t k = lo; k < hi; ++k) {
+            const uint8_t want = SeedByte(static_cast<size_t>(i), k);
+            if (a[k] != want) {
+                std::snprintf(why, nwhy,
+                    "element[%d] (%s arm) byte +0x%x was EXCLUDED as unwritten but "
+                    "CHANGED 0x%02x -> 0x%02x: the window in the spec is WRONG",
+                    i, arm == kAssign ? "assign" : "init",
+                    static_cast<unsigned>(k), want, a[k]);
                 return false;
             }
         }
@@ -248,8 +353,13 @@ struct Target {
     int              arity;     // 1, 2 or 3 — see array.cpp; getting this wrong
                                 // reads a register the caller never set
     int              fixedN;    // arity 1 only (0x18007b960 folds n = 10000)
-    bool             zeroSeed;  // the element ops dereference: seed zeros only
 };
+// NOTE: there is no longer a per-target "seed zeros" flag. Which bytes must
+// stay zero is a property of the ELEMENT TYPE, so it lives in ArraySpec's
+// seedZeroLo/Hi and everything outside it is seeded non-zero for every target,
+// including the three non-trivial ones. The flag was a blunt instrument that
+// zeroed WHOLE elements, and an all-zero element is the one seed under which an
+// unwritten-bytes bug cannot be seen.
 
 // The three arities, reached through the shipped code.
 using Shipped1 = void (*)(void*);
@@ -303,13 +413,17 @@ void WrongSetSize(ArrayHdr* a, int newSize, const uint8_t* fill,
 
 void RunTarget(const Target& t, Mode mode) {
     const ArraySpec* spec = t.spec;
-    const uint32_t stride = spec->stride;
 
-    // The fill argument for the three-argument form. A distinguishable pattern
-    // for the byte-copy specs, zeros for the ones whose assignment dereferences.
+    // The fill argument for the three-argument form, seeded by the same rule as
+    // the element buffers: non-zero everywhere except the spec's dereferenced
+    // range. It uses element index 0xFF so a byte copied FROM the fill is
+    // distinguishable from one copied from the old buffer.
     uint8_t fill[0x40];
-    if (t.zeroSeed) std::memset(fill, 0, sizeof(fill));
-    else for (size_t i = 0; i < sizeof(fill); ++i) fill[i] = static_cast<uint8_t>(0xA0 + i);
+    for (uint32_t k = 0; k < sizeof(fill); ++k) {
+        const bool mustBeZero = (spec->seedZeroLo != spec->seedZeroHi) &&
+                                k >= spec->seedZeroLo && k < spec->seedZeroHi;
+        fill[k] = mustBeZero ? 0u : SeedByte(0xFFu, k);
+    }
 
     int cases = 0, work = 0, mism = 0;
 
@@ -322,8 +436,8 @@ void RunTarget(const Target& t, Mode mode) {
         if (t.arity == 1 && k.oldSize == n) continue;
 
         Subject ours, theirs;
-        ours  .Build(k.oldSize, k.capacity, stride, spec->align, 0x11, t.zeroSeed);
-        theirs.Build(k.oldSize, k.capacity, stride, spec->align, 0x11, t.zeroSeed);
+        ours  .Build(k.oldSize, k.capacity, spec);
+        theirs.Build(k.oldSize, k.capacity, spec);
         if (k.capacity > 0 && (!ours.hdr._data || !theirs.hdr._data)) continue;
 
         // Effectiveness bookkeeping, computed from the PRE state so it does not
@@ -353,15 +467,32 @@ void RunTarget(const Target& t, Mode mode) {
         // past kMaxSites = 1024, so bulk runtime registration is a bad habit
         // regardless.
         const uint8_t* fillArg = (t.arity == 3) ? fill : nullptr;
-        // Retail writes the new tail iff a fill was passed or the spec has a
-        // default `init`; see Compare().
-        const bool tailWritten = (fillArg != nullptr) || (spec->init != nullptr);
+        // `start`: the first element the fill loop touches. 0 when the body
+        // reallocated, oldSize otherwise -- computed from the PRE-state, so it
+        // does not depend on either implementation being right.
+        const int  start   = willAlloc ? 0 : k.oldSize;
+        const bool hasFill = (fillArg != nullptr);
+
         rtcoll::SetSizeCore(&ours.hdr, n, fillArg, spec, /*site=*/nullptr);
         RunShipped(t, &theirs.hdr, n, fill);
 
-        char why[192] = { 0 };
-        const bool ok = Compare(ours, theirs, n, k.oldSize, spec, tailWritten,
-                                why, sizeof(why));
+        char why[224] = { 0 };
+        bool ok = Compare(ours, theirs, n, k.oldSize, start, hasFill, spec,
+                          why, sizeof(why));
+
+        // The positive half: on a non-realloc, an EXCLUDED byte must still hold
+        // its seed. A wrong exclusion hides a real defect, which is the more
+        // dangerous direction, so it is checked rather than trusted.
+        if (ok && !willAlloc &&
+            (spec->assignUnwrittenLo != spec->assignUnwrittenHi ||
+             spec->initUnwrittenLo   != spec->initUnwrittenHi)) {
+            ++g_t.windowChecks;
+            if (!VerifyUnwritten(ours, n, k.oldSize, start, hasFill, spec,
+                                 why, sizeof(why))) {
+                ++g_t.windowWrong;
+                ok = false;
+            }
+        }
 
         ++cases;
         ++g_t.cases;
@@ -386,14 +517,14 @@ void RunTarget(const Target& t, Mode mode) {
         // ---- negative control -------------------------------------------
         if (mode == kNeg) {
             Subject wrong, ref;
-            wrong.Build(k.oldSize, k.capacity, stride, spec->align, 0x11, t.zeroSeed);
-            ref  .Build(k.oldSize, k.capacity, stride, spec->align, 0x11, t.zeroSeed);
+            wrong.Build(k.oldSize, k.capacity, spec);
+            ref  .Build(k.oldSize, k.capacity, spec);
             if (k.capacity == 0 || (wrong.hdr._data && ref.hdr._data)) {
                 WrongSetSize(&wrong.hdr, n, fillArg, spec);
                 RunShipped(t, &ref.hdr, n, fill);
                 char w2[192] = { 0 };
                 ++g_negCases;
-                if (!Compare(wrong, ref, n, k.oldSize, spec, tailWritten,
+                if (!Compare(wrong, ref, n, k.oldSize, start, hasFill, spec,
                              w2, sizeof(w2)))
                     ++g_negFlagged;
                 rtcoll::MemFree(wrong.hdr._data);
@@ -424,8 +555,11 @@ void RunDtor(uintptr_t addr) {
     int n = 0, work = 0, mism = 0;
     for (int c = 0; c < 3; ++c) {
         Subject ours, theirs;
-        ours  .Build(cases[c].size, cases[c].capacity, 8, 8, 0x33, false);
-        theirs.Build(cases[c].size, cases[c].capacity, 8, 8, 0x33, false);
+        // ~Array does not look at the elements at all, so any 8-byte spec will
+        // do to shape the buffer; kSpec_Fill8 has no zeroed range, so the whole
+        // buffer is seeded non-zero.
+        ours  .Build(cases[c].size, cases[c].capacity, &rtcoll::kSpec_Fill8);
+        theirs.Build(cases[c].size, cases[c].capacity, &rtcoll::kSpec_Fill8);
 
         rtcoll::ArrayDtorImpl(&ours.hdr);
 
@@ -459,26 +593,28 @@ const uintptr_t kJ1[] = {
 };
 
 const Target kJ3Trivial[] = {
-    { 0x180008b90, &rtcoll::kSpec_Bool,      2,     0, false },
-    { 0x180008d60, &rtcoll::kSpec_PtrZero,   2,     0, false },
-    { 0x180008ff0, &rtcoll::kSpec_U64Zero,   2,     0, false },
-    { 0x18002fea0, &rtcoll::kSpec_I32,       2,     0, false },
-    { 0x180059140, &rtcoll::kSpec_Transform, 2,     0, false },
-    { 0x1800764c0, &rtcoll::kSpec_PtrZero,   2,     0, false },
-    { 0x18007b960, &rtcoll::kSpec_I32Neg1,   1, 10000, false },
-    { 0x18001f990, &rtcoll::kSpec_Fill8,     3,     0, false },
-    { 0x180023830, &rtcoll::kSpec_Fill4,     3,     0, false },
-    { 0x18004f790, &rtcoll::kSpec_Fill16,    3,     0, false },
-    { 0x18004f8e0, &rtcoll::kSpec_Fill16,    3,     0, false },
-    { 0x180076900, &rtcoll::kSpec_Fill8Z,    3,     0, false },
-    { 0x18007a0d0, &rtcoll::kSpec_Fill8Z,    3,     0, false },
+    { 0x180008b90, &rtcoll::kSpec_Bool,      2,     0 },
+    { 0x180008d60, &rtcoll::kSpec_PtrZero,   2,     0 },
+    { 0x180008ff0, &rtcoll::kSpec_U64Zero,   2,     0 },
+    { 0x18002fea0, &rtcoll::kSpec_I32,       2,     0 },
+    { 0x180059140, &rtcoll::kSpec_Transform, 2,     0 },
+    { 0x1800764c0, &rtcoll::kSpec_PtrZero,   2,     0 },
+    { 0x18007b960, &rtcoll::kSpec_I32Neg1,   1, 10000 },
+    { 0x18001f990, &rtcoll::kSpec_Fill8,     3,     0 },
+    { 0x180023830, &rtcoll::kSpec_Fill4,     3,     0 },
+    { 0x18004f790, &rtcoll::kSpec_Fill16,    3,     0 },
+    { 0x18004f8e0, &rtcoll::kSpec_Fill16,    3,     0 },
+    { 0x180076900, &rtcoll::kSpec_Fill8Z,    3,     0 },
+    { 0x18007a0d0, &rtcoll::kSpec_Fill8Z,    3,     0 },
 };
 
-// Zero-seeded only. See the COVERAGE note in the banner.
+// Seeded exactly like the other thirteen except for each spec's own
+// dereferenced range (ArraySpec::seedZeroLo/Hi). See the COVERAGE note in the
+// banner for what that does and does not buy.
 const Target kJ3NonTrivial[] = {
-    { 0x180004e30, &rtcoll::kSpec_Sprite38,   3, 0, true },
-    { 0x180051390, &rtcoll::kSpec_EffectSlot, 2, 0, true },
-    { 0x180061480, &rtcoll::kSpec_StringExt,  3, 0, true },
+    { 0x180004e30, &rtcoll::kSpec_Sprite38,   3, 0 },
+    { 0x180051390, &rtcoll::kSpec_EffectSlot, 2, 0 },
+    { 0x180061480, &rtcoll::kSpec_StringExt,  3, 0 },
 };
 
 }  // namespace
@@ -516,6 +652,16 @@ void RtCollectionProbeRun() {
         std::fprintf(stderr,
             "[RtArrayProbe] *** EFFECTIVENESS CONTROL FAILED: every comparison "
             "was a no-op. This run proves NOTHING. ***\n");
+
+    std::fprintf(stderr,
+        "[RtArrayProbe] UNWRITTEN WINDOWS: %d excluded windows verified as "
+        "genuinely unwritten, %d turned out to be written\n",
+        g_t.windowChecks, g_t.windowWrong);
+    if (g_t.windowWrong)
+        std::fprintf(stderr,
+            "[RtArrayProbe] *** A window excluded by an ArraySpec IS written by "
+            "its arm. The spec is wrong, and every comparison of those bytes has "
+            "been silently skipped. Fix the spec, do not widen the window. ***\n");
 
     if (mode == kNeg) {
         std::fprintf(stderr,

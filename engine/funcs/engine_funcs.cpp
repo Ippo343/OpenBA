@@ -1546,11 +1546,6 @@ bool EngineFuncsInit() {
     // Input::Device::Update(Time const&)
     fn_InputDevice_Update = reinterpret_cast<fn_InputDevice_Update_t>(
         ResolveExport("?Update@Device@Input@@QEAAXAEBVTime@System@@@Z"));
-    if (!fn_InputDevice_Update) {
-        // Fallback: known RVA
-        fn_InputDevice_Update = reinterpret_cast<fn_InputDevice_Update_t>(
-            ResolveAddr(Module::Runtime, 0x1800e1490));
-    }
 
     // Audio::Device::Update — resolve by name
     fn_AudioDevice_Update = reinterpret_cast<fn_AudioDevice_Update_t>(
@@ -1583,37 +1578,27 @@ bool EngineFuncsInit() {
     // UI::UserInterface::Update(Time const&) -> int — resolve by name.
     // The export is QEAAH...: it RETURNS INT (the cursor id), not void.
     // We resolved it as QEAAX for a long time, a mangling the DLL does not
-    // contain, and only the ResolveAddr fallback below kept it non-null.
+    // contain, and only a ResolveAddr fallback kept it non-null. That fallback
+    // is GONE (Wave 9 lane F): the correct name below is now the only path.
     fn_UI_Update = reinterpret_cast<fn_UI_Update_t>(
         ResolveExport("?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z"));
-    if (!fn_UI_Update) {
-        fn_UI_Update = reinterpret_cast<fn_UI_Update_t>(
-            ResolveAddr(Module::Runtime, 0x1801213C0));
-    }
 
     // UI::UserInterface::Draw(Context&) — resolve by name
     fn_UI_Draw = reinterpret_cast<fn_UI_Draw_t>(
         ResolveExport("?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z"));
-    if (!fn_UI_Draw) {
-        fn_UI_Draw = reinterpret_cast<fn_UI_Draw_t>(
-            ResolveAddr(Module::Runtime, 0x180121890));
-    }
 
     // UI::UserInterface::CloseDialog(InternalPtr<DialogInstance>) — resolve by name.
     // The DLL exports the BY-VALUE spelling (`V?$InternalPtr@…`) only. We asked
     // for the by-reference one (`AEAV…`) for a long time; that name does not
-    // exist, ResolveExport returned NULL in silence, and only the address
-    // fallback below kept this non-null (Wave 7 lane C,
+    // exist, ResolveExport returned NULL in silence, and only an address
+    // fallback kept this non-null (Wave 7 lane C,
     // reference_resolveexport_phantom_names.md). Same ABI either way —
     // InternalPtr<T> has a non-trivial copy ctor, so MSVC x64 passes it by
     // address in both spellings — so the call has always reached the right
-    // function; the name was simply a phantom the fallback hid.
+    // function; the name was simply a phantom the fallback hid. That fallback
+    // is GONE (Wave 9 lane F): the corrected name below is the only path.
     fn_UI_CloseDialog = reinterpret_cast<fn_UI_CloseDialog_t>(
         ResolveExport("?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
-    if (!fn_UI_CloseDialog) {
-        fn_UI_CloseDialog = reinterpret_cast<fn_UI_CloseDialog_t>(
-            ResolveAddr(Module::Runtime, 0x180120F20));
-    }
 
     // Dynamic array push (generic helper at 0x18007a0d0)
     fn_DynArrayPush = reinterpret_cast<fn_DynArrayPush_t>(
@@ -1630,10 +1615,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Runtime, 0x1800f1820));
     fn_VideoCtx_Dtor = reinterpret_cast<fn_VideoCtx_Dtor_t>(
         ResolveExport("??1Context@Video@@QEAA@XZ"));
-    if (!fn_VideoCtx_Dtor) {
-        fn_VideoCtx_Dtor = reinterpret_cast<fn_VideoCtx_Dtor_t>(
-            ResolveAddr(Module::Runtime, 0x1800f16e0));
-    }
     fn_VideoCtx_Delete = reinterpret_cast<fn_VideoCtx_Delete_t>(
         ResolveAddr(Module::Runtime, 0x180018500));
 
@@ -1656,59 +1637,31 @@ bool EngineFuncsInit() {
     // --- String functions ---
     fn_String_Set = reinterpret_cast<fn_String_Set_t>(
         ResolveExport("?Set@String@System@@QEAAXPEBD@Z"));
-    if (!fn_String_Set) {
-        fn_String_Set = reinterpret_cast<fn_String_Set_t>(
-            ResolveAddr(Module::Runtime, 0x1800c95d0));
-    }
 
     fn_String_Format = reinterpret_cast<fn_String_Format_t>(
         ResolveExport("?Format@String@System@@SA?AV12@PEBDZZ"));
-    if (!fn_String_Format) {
-        fn_String_Format = reinterpret_cast<fn_String_Format_t>(
-            ResolveAddr(Module::Runtime, 0x1800c9730));
-    }
 
     fn_String_FormatIndexed = reinterpret_cast<fn_String_FormatIndexed_t>(
         ResolveExport("?FormatIndexed@String@System@@SA?AV12@PEBDZZ"));
 
     fn_String_Dtor = reinterpret_cast<fn_String_Dtor_t>(
         ResolveExport("??1String@System@@QEAA@XZ"));
-    if (!fn_String_Dtor) {
-        fn_String_Dtor = reinterpret_cast<fn_String_Dtor_t>(
-            ResolveAddr(Module::Runtime, 0x180006c80));
-    }
 
     // String::operator< — lexicographic comparison
     fn_String_LessThan = reinterpret_cast<fn_String_LessThan_t>(
         ResolveExport("??MString@System@@QEBA_NAEBV01@@Z"));
-    if (!fn_String_LessThan) {
-        fn_String_LessThan = reinterpret_cast<fn_String_LessThan_t>(
-            ResolveAddr(Module::Runtime, 0x180029360));
-    }
 
     // String::String() — default ctor
     fn_String_Ctor_Default = reinterpret_cast<fn_String_Ctor_Default_t>(
         ResolveExport("??0String@System@@QEAA@XZ"));
-    if (!fn_String_Ctor_Default) {
-        fn_String_Ctor_Default = reinterpret_cast<fn_String_Ctor_Default_t>(
-            ResolveAddr(Module::Runtime, 0x180006760));
-    }
 
     // String::String(const char*) — ctor from C string
     fn_String_Ctor_CStr = reinterpret_cast<fn_String_Ctor_CStr_t>(
         ResolveExport("??0String@System@@QEAA@PEBD@Z"));
-    if (!fn_String_Ctor_CStr) {
-        fn_String_Ctor_CStr = reinterpret_cast<fn_String_Ctor_CStr_t>(
-            ResolveAddr(Module::Runtime, 0x18000b630));
-    }
 
     // String::String(String const&) — copy ctor
     fn_String_Ctor_Copy = reinterpret_cast<fn_String_Ctor_Copy_t>(
         ResolveExport("??0String@System@@QEAA@AEBV01@@Z"));
-    if (!fn_String_Ctor_Copy) {
-        fn_String_Ctor_Copy = reinterpret_cast<fn_String_Ctor_Copy_t>(
-            ResolveAddr(Module::Runtime, 0x180006cb0));
-    }
 
     // --- ExternalFactory ---
     g_pExternalFactorySingleton = reinterpret_cast<void**>(
@@ -1716,31 +1669,15 @@ bool EngineFuncsInit() {
 
     fn_ExternalFactory_FindOrLoad = reinterpret_cast<fn_ExternalFactory_FindOrLoad_t>(
         ResolveExport("?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z"));
-    if (!fn_ExternalFactory_FindOrLoad) {
-        fn_ExternalFactory_FindOrLoad = reinterpret_cast<fn_ExternalFactory_FindOrLoad_t>(
-            ResolveAddr(Module::Runtime, 0x1800bf320));
-    }
 
     fn_ExternalFactory_Find = reinterpret_cast<fn_ExternalFactory_Find_t>(
         ResolveExport("?Find@ExternalFactory@Object@@QEBAPEBVExternal@2@AEBVFilename@System@@@Z"));
-    if (!fn_ExternalFactory_Find) {
-        fn_ExternalFactory_Find = reinterpret_cast<fn_ExternalFactory_Find_t>(
-            ResolveAddr(Module::Runtime, 0x1800bdeb0));
-    }
 
     fn_ExternalFactory_Clean = reinterpret_cast<fn_ExternalFactory_Clean_t>(
         ResolveExport("?Clean@ExternalFactory@Object@@QEAAXXZ"));
-    if (!fn_ExternalFactory_Clean) {
-        fn_ExternalFactory_Clean = reinterpret_cast<fn_ExternalFactory_Clean_t>(
-            ResolveAddr(Module::Runtime, 0x1800be310));
-    }
 
     fn_IsDerivedFrom = reinterpret_cast<fn_IsDerivedFrom_t>(
         ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-    if (!fn_IsDerivedFrom) {
-        fn_IsDerivedFrom = reinterpret_cast<fn_IsDerivedFrom_t>(
-            ResolveAddr(Module::Runtime, 0x1800c0390));
-    }
     // Null-safe trampoline: the Runtime impl derefs obj unguarded. Retail never
     // passes null (the dialog framework closes panels before their entity
     // dies), but standalone dialogs keep ticking after the weak-ref at +0x28
@@ -1758,17 +1695,9 @@ bool EngineFuncsInit() {
 
     fn_Filename_AdjustDelimiters = reinterpret_cast<fn_Filename_AdjustDelimiters_t>(
         ResolveExport("?AdjustDelimiters@Filename@System@@AEAAXXZ"));
-    if (!fn_Filename_AdjustDelimiters) {
-        fn_Filename_AdjustDelimiters = reinterpret_cast<fn_Filename_AdjustDelimiters_t>(
-            ResolveAddr(Module::Runtime, 0x1800c6970));
-    }
 
     fn_UpdateLoop_LoadResources = reinterpret_cast<fn_UpdateLoop_LoadResources_t>(
         ResolveExport("?LoadResources@UpdateLoop@Engine@@QEAAXXZ"));
-    if (!fn_UpdateLoop_LoadResources) {
-        fn_UpdateLoop_LoadResources = reinterpret_cast<fn_UpdateLoop_LoadResources_t>(
-            ResolveAddr(Module::Runtime, 0x1800DD7D0));
-    }
 
     fn_ListCleanup = reinterpret_cast<fn_ListCleanup_t>(
         ResolveAddr(Module::Runtime, 0x180010ab0));
@@ -1799,25 +1728,13 @@ bool EngineFuncsInit() {
 
     fn_Persistence_SetBool = reinterpret_cast<fn_Persistence_SetBool_t>(
         ResolveExport("?Set@Persistence@IO@@QEAAXPEBD0_N@Z"));
-    if (!fn_Persistence_SetBool) {
-        fn_Persistence_SetBool = reinterpret_cast<fn_Persistence_SetBool_t>(
-            ResolveAddr(Module::Runtime, 0x1800b8380));
-    }
 
     fn_Persistence_SetInt = reinterpret_cast<fn_Persistence_SetInt_t>(
         ResolveExport("?Set@Persistence@IO@@QEAAXPEBD0H@Z"));
-    if (!fn_Persistence_SetInt) {
-        fn_Persistence_SetInt = reinterpret_cast<fn_Persistence_SetInt_t>(
-            ResolveAddr(Module::Runtime, 0x1800b80c0));
-    }
 
     // --- Filename::GetPathFilename ---
     fn_Filename_GetPathFilename = reinterpret_cast<fn_Filename_GetPathFilename_t>(
         ResolveExport("?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z"));
-    if (!fn_Filename_GetPathFilename) {
-        fn_Filename_GetPathFilename = reinterpret_cast<fn_Filename_GetPathFilename_t>(
-            ResolveAddr(Module::Runtime, 0x1800c6740));
-    }
 
     // --- Array<Mod>::operator= (deep copy with CopyCtor per element) ---
     fn_ModArrayCopy = reinterpret_cast<fn_ModArrayCopy_t>(
@@ -1828,26 +1745,14 @@ bool EngineFuncsInit() {
     // UI::DialogController::~DialogController — virtual base dtor
     fn_DialogController_Dtor = reinterpret_cast<fn_DialogController_Dtor_t>(
         ResolveExport("??1DialogController@UI@@UEAA@XZ"));
-    if (!fn_DialogController_Dtor) {
-        fn_DialogController_Dtor = reinterpret_cast<fn_DialogController_Dtor_t>(
-            ResolveAddr(Module::Runtime, 0x1800cd2f0));
-    }
 
     // UI::DialogInstance::~DialogInstance — virtual base dtor
     fn_DialogInstance_Dtor = reinterpret_cast<fn_DialogInstance_Dtor_t>(
         ResolveExport("??1DialogInstance@UI@@UEAA@XZ"));
-    if (!fn_DialogInstance_Dtor) {
-        fn_DialogInstance_Dtor = reinterpret_cast<fn_DialogInstance_Dtor_t>(
-            ResolveAddr(Module::Runtime, 0x180114d40));
-    }
 
     // System::MemoryAllocator::MemFree — static, single arg
     fn_MemFreeStatic = reinterpret_cast<fn_MemFreeStatic_t>(
         ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    if (!fn_MemFreeStatic) {
-        fn_MemFreeStatic = reinterpret_cast<fn_MemFreeStatic_t>(
-            ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    }
     // fn_MemFree (singleton, ptr) is the two-arg shape the exe's MemFree call sites
     // were lifted with. It was declared but NEVER ASSIGNED, so it was null for the
     // life of the project: four callers guard it (and leak), and the ModDialog
@@ -1861,50 +1766,26 @@ bool EngineFuncsInit() {
     // UI::Element::FindElement — non-trivial return ABI
     fn_FindElement = reinterpret_cast<fn_FindElement_t>(
         ResolveExport("?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z"));
-    if (!fn_FindElement) {
-        fn_FindElement = reinterpret_cast<fn_FindElement_t>(
-            ResolveAddr(Module::Runtime, 0x180115650));
-    }
 
     // UI::TextElement::SetParameter
     fn_TextElement_SetParameter = reinterpret_cast<fn_TextElement_SetParameter_t>(
         ResolveExport("?SetParameter@TextElement@UI@@QEAAXHAEBVString@System@@@Z"));
-    if (!fn_TextElement_SetParameter) {
-        fn_TextElement_SetParameter = reinterpret_cast<fn_TextElement_SetParameter_t>(
-            ResolveAddr(Module::Runtime, 0x18011e9b0));
-    }
 
     // UI::Element::GetUserData
     fn_Element_GetUserData = reinterpret_cast<fn_Element_GetUserData_t>(
         ResolveExport("?GetUserData@Element@UI@@QEAAPEAVBase@Object@@XZ"));
-    if (!fn_Element_GetUserData) {
-        fn_Element_GetUserData = reinterpret_cast<fn_Element_GetUserData_t>(
-            ResolveAddr(Module::Runtime, 0x180115550));
-    }
 
     // Object::InternalBasePtr::InternalBasePtr(Internal*)
     fn_InternalBasePtr_Ctor = reinterpret_cast<fn_InternalBasePtr_Ctor_t>(
         ResolveExport("??0InternalBasePtr@Object@@QEAA@PEAVInternal@1@@Z"));
-    if (!fn_InternalBasePtr_Ctor) {
-        fn_InternalBasePtr_Ctor = reinterpret_cast<fn_InternalBasePtr_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x1800062a0));
-    }
 
     // Input::KeyMap::GetInputForId
     fn_KeyMap_GetInputForId = reinterpret_cast<fn_KeyMap_GetInputForId_t>(
         ResolveExport("?GetInputForId@KeyMap@Input@@QEBAHHH@Z"));
-    if (!fn_KeyMap_GetInputForId) {
-        fn_KeyMap_GetInputForId = reinterpret_cast<fn_KeyMap_GetInputForId_t>(
-            ResolveAddr(Module::Runtime, 0x1800a7930));
-    }
 
     // Input::KeyMap::GetDeviceForId
     fn_KeyMap_GetDeviceForId = reinterpret_cast<fn_KeyMap_GetDeviceForId_t>(
         ResolveExport("?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z"));
-    if (!fn_KeyMap_GetDeviceForId) {
-        fn_KeyMap_GetDeviceForId = reinterpret_cast<fn_KeyMap_GetDeviceForId_t>(
-            ResolveAddr(Module::Runtime, 0x1800a7970));
-    }
 
     // ================================================================
     // Phase A1: UI Widget Functions (Runtime DLL exports)
@@ -1913,232 +1794,121 @@ bool EngineFuncsInit() {
     // --- Element ---
     fn_Element_SetFlagsOnOff = reinterpret_cast<fn_Element_SetFlagsOnOff_t>(
         ResolveExport("?SetFlagsOnOff@Element@UI@@QEAAXII@Z"));
-    if (!fn_Element_SetFlagsOnOff)
-        fn_Element_SetFlagsOnOff = reinterpret_cast<fn_Element_SetFlagsOnOff_t>(
-            ResolveAddr(Module::Runtime, 0x180116160));
 
     fn_Element_SetElementId = reinterpret_cast<fn_Element_SetElementId_t>(
         ResolveExport("?SetElementId@Element@UI@@QEAAXH@Z"));
-    if (!fn_Element_SetElementId)
-        fn_Element_SetElementId = reinterpret_cast<fn_Element_SetElementId_t>(
-            ResolveAddr(Module::Runtime, 0x180115820));
 
     fn_Element_SetName = reinterpret_cast<fn_Element_SetName_t>(
         ResolveExport("?SetName@Element@UI@@QEAAXAEBVString@System@@@Z"));
-    if (!fn_Element_SetName)
-        fn_Element_SetName = reinterpret_cast<fn_Element_SetName_t>(
-            ResolveAddr(Module::Runtime, 0x1801154f0));
 
     fn_Element_SetToolTip = reinterpret_cast<fn_Element_SetToolTip_t>(
         ResolveExport("?SetToolTip@Element@UI@@QEAAXVString@2@@Z"));
-    if (!fn_Element_SetToolTip)
-        fn_Element_SetToolTip = reinterpret_cast<fn_Element_SetToolTip_t>(
-            ResolveAddr(Module::Runtime, 0x180035740));
 
     fn_Element_SetToolTipString = reinterpret_cast<fn_Element_SetToolTipString_t>(
         ResolveExport("?SetToolTipString@Element@UI@@QEAAXAEBVString@System@@@Z"));
-    if (!fn_Element_SetToolTipString)
-        fn_Element_SetToolTipString = reinterpret_cast<fn_Element_SetToolTipString_t>(
-            ResolveAddr(Module::Runtime, 0x1800356e0));
 
     fn_Element_Child = reinterpret_cast<fn_Element_Child_t>(
         ResolveExport("?Child@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@H@Z"));
-    if (!fn_Element_Child)
-        fn_Element_Child = reinterpret_cast<fn_Element_Child_t>(
-            ResolveAddr(Module::Runtime, 0x180035540));
 
     fn_Element_ChildCount = reinterpret_cast<fn_Element_ChildCount_t>(
         ResolveExport("?ChildCount@Element@UI@@QEBAHXZ"));
-    if (!fn_Element_ChildCount)
-        fn_Element_ChildCount = reinterpret_cast<fn_Element_ChildCount_t>(
-            ResolveAddr(Module::Runtime, 0x180035530));
 
     fn_Element_FindElementType = reinterpret_cast<fn_Element_FindElementType_t>(
         ResolveExport("?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z"));
-    if (!fn_Element_FindElementType)
-        fn_Element_FindElementType = reinterpret_cast<fn_Element_FindElementType_t>(
-            ResolveAddr(Module::Runtime, 0x180115760));
 
     fn_Element_RemoveChildren = reinterpret_cast<fn_Element_RemoveChildren_t>(
         ResolveExport("?RemoveChildren@Element@UI@@QEAAXXZ"));
-    if (!fn_Element_RemoveChildren)
-        fn_Element_RemoveChildren = reinterpret_cast<fn_Element_RemoveChildren_t>(
-            ResolveAddr(Module::Runtime, 0x180115570));
 
     fn_Element_AddChild = reinterpret_cast<fn_Element_AddChild_t>(
         ResolveExport("?AddChild@Element@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z"));
-    if (!fn_Element_AddChild)
-        fn_Element_AddChild = reinterpret_cast<fn_Element_AddChild_t>(
-            ResolveAddr(Module::Runtime, 0x180115df0));
 
     // --- DialogInstance ---
     fn_DialogInstance_FindElement = reinterpret_cast<fn_DialogInstance_FindElement_t>(
         ResolveExport("?FindElement@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z"));
-    if (!fn_DialogInstance_FindElement)
-        fn_DialogInstance_FindElement = reinterpret_cast<fn_DialogInstance_FindElement_t>(
-            ResolveAddr(Module::Runtime, 0x180114c70));
 
     fn_DialogInstance_GetController = reinterpret_cast<fn_DialogInstance_GetController_t>(
         ResolveExport("?GetController@DialogInstance@UI@@QEBA?AV?$InternalPtr@VDialogController@UI@@@Object@@I@Z"));
-    if (!fn_DialogInstance_GetController)
-        fn_DialogInstance_GetController = reinterpret_cast<fn_DialogInstance_GetController_t>(
-            ResolveAddr(Module::Runtime, 0x180113320));
 
     fn_DialogInstance_FindElementType = reinterpret_cast<fn_DialogInstance_FindElementType_t>(
         ResolveExport("?FindElementType@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z"));
-    if (!fn_DialogInstance_FindElementType)
-        fn_DialogInstance_FindElementType = reinterpret_cast<fn_DialogInstance_FindElementType_t>(
-            ResolveAddr(Module::Runtime, 0x1801140c0));
 
     fn_DialogInstance_SetFlagsOnOff = reinterpret_cast<fn_DialogInstance_SetFlagsOnOff_t>(
         ResolveExport("?SetFlagsOnOff@DialogInstance@UI@@QEAAXII@Z"));
-    if (!fn_DialogInstance_SetFlagsOnOff)
-        fn_DialogInstance_SetFlagsOnOff = reinterpret_cast<fn_DialogInstance_SetFlagsOnOff_t>(
-            ResolveAddr(Module::Runtime, 0x180114690));
 
     // --- ComboElement ---
     fn_ComboElement_AddItem = reinterpret_cast<fn_ComboElement_AddItem_t>(
         ResolveExport("?AddItem@ComboElement@UI@@QEAAHAEBVSprite@2@AEBVString@System@@PEAX@Z"));
-    if (!fn_ComboElement_AddItem)
-        fn_ComboElement_AddItem = reinterpret_cast<fn_ComboElement_AddItem_t>(
-            ResolveAddr(Module::Runtime, 0x1800750b0));
 
     fn_ComboElement_SetCurrentItem = reinterpret_cast<fn_ComboElement_SetCurrentItem_t>(
         ResolveExport("?SetCurrentItem@ComboElement@UI@@QEAAXH@Z"));
-    if (!fn_ComboElement_SetCurrentItem)
-        fn_ComboElement_SetCurrentItem = reinterpret_cast<fn_ComboElement_SetCurrentItem_t>(
-            ResolveAddr(Module::Runtime, 0x180112540));
 
     fn_ComboElement_GetItemCount = reinterpret_cast<fn_ComboElement_GetItemCount_t>(
         ResolveExport("?GetItemCount@ComboElement@UI@@QEBAHXZ"));
-    if (!fn_ComboElement_GetItemCount)
-        fn_ComboElement_GetItemCount = reinterpret_cast<fn_ComboElement_GetItemCount_t>(
-            ResolveAddr(Module::Runtime, 0x180075180));
 
     fn_ComboElement_GetCurrentItem = reinterpret_cast<fn_ComboElement_GetCurrentItem_t>(
         ResolveExport("?GetCurrentItem@ComboElement@UI@@QEBAHXZ"));
-    if (!fn_ComboElement_GetCurrentItem)
-        fn_ComboElement_GetCurrentItem = reinterpret_cast<fn_ComboElement_GetCurrentItem_t>(
-            ResolveAddr(Module::Runtime, 0x180075160));
 
     fn_ComboElement_GetItemData = reinterpret_cast<fn_ComboElement_GetItemData_t>(
         ResolveExport("?GetItemData@ComboElement@UI@@QEBAPEAXH@Z"));
-    if (!fn_ComboElement_GetItemData)
-        fn_ComboElement_GetItemData = reinterpret_cast<fn_ComboElement_GetItemData_t>(
-            ResolveAddr(Module::Runtime, 0x180075170));
 
     fn_ComboElement_RemoveAllItems = reinterpret_cast<fn_ComboElement_RemoveAllItems_t>(
         ResolveExport("?RemoveAllItems@ComboElement@UI@@QEAAXXZ"));
-    if (!fn_ComboElement_RemoveAllItems)
-        fn_ComboElement_RemoveAllItems = reinterpret_cast<fn_ComboElement_RemoveAllItems_t>(
-            ResolveAddr(Module::Runtime, 0x180075120));
 
     // --- ProgressElement ---
     fn_ProgressElement_SetProgressTextParameter = reinterpret_cast<fn_ProgressElement_SetProgressTextParameter_t>(
         ResolveExport("?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z"));
-    if (!fn_ProgressElement_SetProgressTextParameter)
-        fn_ProgressElement_SetProgressTextParameter = reinterpret_cast<fn_ProgressElement_SetProgressTextParameter_t>(
-            ResolveAddr(Module::Runtime, 0x180119b30));
 
     fn_ProgressElement_SetMaximumValue = reinterpret_cast<fn_ProgressElement_SetMaximumValue_t>(
         ResolveExport("?SetMaximumValue@ProgressElement@UI@@QEAAXM@Z"));
-    if (!fn_ProgressElement_SetMaximumValue)
-        fn_ProgressElement_SetMaximumValue = reinterpret_cast<fn_ProgressElement_SetMaximumValue_t>(
-            ResolveAddr(Module::Runtime, 0x180077ec0));
 
     fn_ProgressElement_SetCurrentValue = reinterpret_cast<fn_ProgressElement_SetCurrentValue_t>(
         ResolveExport("?SetCurrentValue@ProgressElement@UI@@QEAAXM@Z"));
-    if (!fn_ProgressElement_SetCurrentValue)
-        fn_ProgressElement_SetCurrentValue = reinterpret_cast<fn_ProgressElement_SetCurrentValue_t>(
-            ResolveAddr(Module::Runtime, 0x180077ed0));
 
     // --- TableElement ---
     fn_TableElement_SetSize = reinterpret_cast<fn_TableElement_SetSize_t>(
         ResolveExport("?SetSize@TableElement@UI@@QEAAXHH@Z"));
-    if (!fn_TableElement_SetSize)
-        fn_TableElement_SetSize = reinterpret_cast<fn_TableElement_SetSize_t>(
-            ResolveAddr(Module::Runtime, 0x18011db90));
 
     fn_TableElement_SetChild3 = reinterpret_cast<fn_TableElement_SetChild3_t>(
         ResolveExport("?SetChild@TableElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@HH@Z"));
-    if (!fn_TableElement_SetChild3)
-        fn_TableElement_SetChild3 = reinterpret_cast<fn_TableElement_SetChild3_t>(
-            ResolveAddr(Module::Runtime, 0x18011db50));
 
     fn_TableElement_SetChild2 = reinterpret_cast<fn_TableElement_SetChild2_t>(
         ResolveExport("?SetChild@TableElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@H@Z"));
-    if (!fn_TableElement_SetChild2)
-        fn_TableElement_SetChild2 = reinterpret_cast<fn_TableElement_SetChild2_t>(
-            ResolveAddr(Module::Runtime, 0x18011daa0));
 
     fn_TableElement_GetRowCount = reinterpret_cast<fn_TableElement_GetRowCount_t>(
         ResolveExport("?GetRowCount@TableElement@UI@@QEBAHXZ"));
-    if (!fn_TableElement_GetRowCount)
-        fn_TableElement_GetRowCount = reinterpret_cast<fn_TableElement_GetRowCount_t>(
-            ResolveAddr(Module::Runtime, 0x180079450));
 
     fn_TableElement_GetColumnCount = reinterpret_cast<fn_TableElement_GetColumnCount_t>(
         ResolveExport("?GetColumnCount@TableElement@UI@@QEBAHXZ"));
-    if (!fn_TableElement_GetColumnCount)
-        fn_TableElement_GetColumnCount = reinterpret_cast<fn_TableElement_GetColumnCount_t>(
-            ResolveAddr(Module::Runtime, 0x180079460));
 
     // --- NumberEditElement ---
     fn_NumberEditElement_SetValue = reinterpret_cast<fn_NumberEditElement_SetValue_t>(
         ResolveExport("?SetValue@NumberEditElement@UI@@QEAAXH@Z"));
-    if (!fn_NumberEditElement_SetValue)
-        fn_NumberEditElement_SetValue = reinterpret_cast<fn_NumberEditElement_SetValue_t>(
-            ResolveAddr(Module::Runtime, 0x1800d4bb0));
 
     fn_NumberEditElement_SetMinMax = reinterpret_cast<fn_NumberEditElement_SetMinMax_t>(
         ResolveExport("?SetMinMax@NumberEditElement@UI@@QEAAXHH@Z"));
-    if (!fn_NumberEditElement_SetMinMax)
-        fn_NumberEditElement_SetMinMax = reinterpret_cast<fn_NumberEditElement_SetMinMax_t>(
-            ResolveAddr(Module::Runtime, 0x1800d4b70));
 
     fn_NumberEditElement_GetValue = reinterpret_cast<fn_NumberEditElement_GetValue_t>(
         ResolveExport("?GetValue@NumberEditElement@UI@@QEBAHXZ"));
-    if (!fn_NumberEditElement_GetValue)
-        fn_NumberEditElement_GetValue = reinterpret_cast<fn_NumberEditElement_GetValue_t>(
-            ResolveAddr(Module::Runtime, 0x1800d4b50));
 
     // --- NumberElement ---
     fn_NumberElement_SetValueInt = reinterpret_cast<fn_NumberElement_SetValueInt_t>(
         ResolveExport("?SetValue@NumberElement@UI@@QEAAXH@Z"));
-    if (!fn_NumberElement_SetValueInt)
-        fn_NumberElement_SetValueInt = reinterpret_cast<fn_NumberElement_SetValueInt_t>(
-            ResolveAddr(Module::Runtime, 0x180118d50));
 
     fn_NumberElement_SetValueFloat = reinterpret_cast<fn_NumberElement_SetValueFloat_t>(
         ResolveExport("?SetValue@NumberElement@UI@@QEAAXM@Z"));
-    if (!fn_NumberElement_SetValueFloat)
-        fn_NumberElement_SetValueFloat = reinterpret_cast<fn_NumberElement_SetValueFloat_t>(
-            ResolveAddr(Module::Runtime, 0x180118db0));
 
     // --- SpinnerElement ---
     fn_SpinnerElement_SetElementId = reinterpret_cast<fn_SpinnerElement_SetElementId_t>(
         ResolveExport("?SetElementId@SpinnerElement@UI@@QEAAXH@Z"));
-    if (!fn_SpinnerElement_SetElementId)
-        fn_SpinnerElement_SetElementId = reinterpret_cast<fn_SpinnerElement_SetElementId_t>(
-            ResolveAddr(Module::Runtime, 0x1800d7e10));
 
     fn_SpinnerElement_SetValue = reinterpret_cast<fn_SpinnerElement_SetValue_t>(
         ResolveExport("?SetValue@SpinnerElement@UI@@QEAAXH@Z"));
-    if (!fn_SpinnerElement_SetValue)
-        fn_SpinnerElement_SetValue = reinterpret_cast<fn_SpinnerElement_SetValue_t>(
-            ResolveAddr(Module::Runtime, 0x1800d7dc0));
 
     fn_SpinnerElement_SetMinMax = reinterpret_cast<fn_SpinnerElement_SetMinMax_t>(
         ResolveExport("?SetMinMax@SpinnerElement@UI@@QEAAXHH@Z"));
-    if (!fn_SpinnerElement_SetMinMax)
-        fn_SpinnerElement_SetMinMax = reinterpret_cast<fn_SpinnerElement_SetMinMax_t>(
-            ResolveAddr(Module::Runtime, 0x1800d7d40));
 
     fn_SpinnerElement_GetValue = reinterpret_cast<fn_SpinnerElement_GetValue_t>(
         ResolveExport("?GetValue@SpinnerElement@UI@@QEBAHXZ"));
-    if (!fn_SpinnerElement_GetValue)
-        fn_SpinnerElement_GetValue = reinterpret_cast<fn_SpinnerElement_GetValue_t>(
-            ResolveAddr(Module::Runtime, 0x1800d7cf0));
 
     fn_SpinnerElement_GetMaxValue = reinterpret_cast<fn_SpinnerElement_GetMaxValue_t>(
         ResolveExport("?GetMaxValue@SpinnerElement@UI@@QEBAHXZ"));
@@ -2159,29 +1929,17 @@ bool EngineFuncsInit() {
     // --- ImageElement ---
     fn_ImageElement_SetSprite = reinterpret_cast<fn_ImageElement_SetSprite_t>(
         ResolveExport("?SetSprite@ImageElement@UI@@QEAAXVSprite@2@@Z"));
-    if (!fn_ImageElement_SetSprite)
-        fn_ImageElement_SetSprite = reinterpret_cast<fn_ImageElement_SetSprite_t>(
-            ResolveAddr(Module::Runtime, 0x180118600));
 
     fn_ImageElement_SetWidthHeight = reinterpret_cast<fn_ImageElement_SetWidthHeight_t>(
         ResolveExport("?SetWidthHeight@ImageElement@UI@@QEAAXHH@Z"));
-    if (!fn_ImageElement_SetWidthHeight)
-        fn_ImageElement_SetWidthHeight = reinterpret_cast<fn_ImageElement_SetWidthHeight_t>(
-            ResolveAddr(Module::Runtime, 0x180118260));
 
     // --- LabelElement ---
     fn_LabelElement_SetSprite = reinterpret_cast<fn_LabelElement_SetSprite_t>(
         ResolveExport("?SetSprite@LabelElement@UI@@QEAAXVSprite@2@@Z"));
-    if (!fn_LabelElement_SetSprite)
-        fn_LabelElement_SetSprite = reinterpret_cast<fn_LabelElement_SetSprite_t>(
-            ResolveAddr(Module::Runtime, 0x180042980));
 
     // --- TextElement ---
     fn_TextElement_SetText = reinterpret_cast<fn_TextElement_SetText_t>(
         ResolveExport("?SetText@TextElement@UI@@QEAAXVString@2@@Z"));
-    if (!fn_TextElement_SetText)
-        fn_TextElement_SetText = reinterpret_cast<fn_TextElement_SetText_t>(
-            ResolveAddr(Module::Runtime, 0x180042070));
 
     // --- UI::Dialog ---
     {
@@ -2393,52 +2151,28 @@ bool EngineFuncsInit() {
     // ================================================================
     fn_ImageBuffer_Ctor = reinterpret_cast<fn_ImageBuffer_Ctor_t>(
         ResolveExport("??0ImageBuffer@Video@@QEAA@XZ"));
-    if (!fn_ImageBuffer_Ctor)
-        fn_ImageBuffer_Ctor = reinterpret_cast<fn_ImageBuffer_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x1800f2580));
 
     fn_ImageBuffer_Dtor = reinterpret_cast<fn_ImageBuffer_Dtor_t>(
         ResolveExport("??1ImageBuffer@Video@@UEAA@XZ"));
-    if (!fn_ImageBuffer_Dtor)
-        fn_ImageBuffer_Dtor = reinterpret_cast<fn_ImageBuffer_Dtor_t>(
-            ResolveAddr(Module::Runtime, 0x1800f2610));
 
     fn_ImageBuffer_CopyToTexture = reinterpret_cast<fn_ImageBuffer_CopyToTexture_t>(
         ResolveExport("?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z"));
-    if (!fn_ImageBuffer_CopyToTexture)
-        fn_ImageBuffer_CopyToTexture = reinterpret_cast<fn_ImageBuffer_CopyToTexture_t>(
-            ResolveAddr(Module::Runtime, 0x1800f3380));
 
     fn_ImageBuffer_CopyFromTexture = reinterpret_cast<fn_ImageBuffer_CopyFromTexture_t>(
         ResolveExport("?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z"));
-    if (!fn_ImageBuffer_CopyFromTexture)
-        fn_ImageBuffer_CopyFromTexture = reinterpret_cast<fn_ImageBuffer_CopyFromTexture_t>(
-            ResolveAddr(Module::Runtime, 0x1800f33a0));
 
     // --- Phase F: Dialog/UI Runtime functions ---
     fn_ImageElement_SetRotation = reinterpret_cast<fn_ImageElement_SetRotation_t>(
         ResolveExport("?SetRotation@ImageElement@UI@@QEAAXM@Z"));
-    if (!fn_ImageElement_SetRotation)
-        fn_ImageElement_SetRotation = reinterpret_cast<fn_ImageElement_SetRotation_t>(
-            ResolveAddr(Module::Runtime, 0x1801182c0));
 
     fn_Time_AsSeconds = reinterpret_cast<fn_Time_AsSeconds_t>(
         ResolveExport("?AsSeconds@Time@System@@QEBAMXZ"));
-    if (!fn_Time_AsSeconds)
-        fn_Time_AsSeconds = reinterpret_cast<fn_Time_AsSeconds_t>(
-            ResolveAddr(Module::Runtime, 0x180007900));
 
     fn_SaveLoad_Dtor = reinterpret_cast<fn_SaveLoad_Dtor_t>(
         ResolveExport("??1SaveLoad@Save@@QEAA@XZ"));
-    if (!fn_SaveLoad_Dtor)
-        fn_SaveLoad_Dtor = reinterpret_cast<fn_SaveLoad_Dtor_t>(
-            ResolveAddr(Module::Runtime, 0x1800c3c90));
 
     fn_SaveLoad_GetOperation = reinterpret_cast<fn_SaveLoad_GetOperation_t>(
         ResolveExport("?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ"));
-    if (!fn_SaveLoad_GetOperation)
-        fn_SaveLoad_GetOperation = reinterpret_cast<fn_SaveLoad_GetOperation_t>(
-            ResolveAddr(Module::Runtime, 0x1800c3c80));
 
     // SaveLoad singleton: exe exref at 0x140151610 -> pointer to _singleton in Runtime
     {
@@ -2476,10 +2210,6 @@ bool EngineFuncsInit() {
         ResolveExport("?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z"));
     fn_SaveLoad_GetSaveState = reinterpret_cast<fn_SaveLoad_GetSaveState_t>(
         ResolveExport("?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ"));
-    if (!fn_SaveLoad_GetSaveState) {
-        fn_SaveLoad_GetSaveState = reinterpret_cast<fn_SaveLoad_GetSaveState_t>(
-            ResolveAddr(Module::Runtime, 0x1800c3b50));
-    }
 
     fn_Sprite_IsValid = reinterpret_cast<fn_Sprite_IsValid_t>(
         ResolveExport("?IsValid@Sprite@UI@@QEBA_NXZ"));
@@ -2505,21 +2235,16 @@ bool EngineFuncsInit() {
     // Wave 7 lane D phantom-name fix: `?SetText@EditElement@UI@@QEAAXVString@2@@Z`
     // is not in the shipped export table (reference_resolveexport_phantom_names.md);
     // ResolveExport always returned null here and the OLD fallback address
-    // (0x180042070) was UI::TextElement::SetText, not EditElement's — see the
+    // (0x180042070) was UI::TextElement::SetText, not EditElement's (that
+    // fallback is GONE, Wave 9 lane F) — see the
     // header comment above fn_EditElement_SetText_t for the full story. Resolve
     // the real by-reference EditElement::SetText directly; same raw ABI, so
     // spritecaptureui.cpp:100's call site is unaffected.
     fn_EditElement_SetText = reinterpret_cast<fn_EditElement_SetText_t>(
         ResolveExport("?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z"));
-    if (!fn_EditElement_SetText)
-        fn_EditElement_SetText = reinterpret_cast<fn_EditElement_SetText_t>(
-            ResolveAddr(Module::Runtime, 0x1800d0db0));
 
     fn_EditElement_SetText_SysStr = reinterpret_cast<fn_EditElement_SetText_SysStr_t>(
         ResolveExport("?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z"));
-    if (!fn_EditElement_SetText_SysStr)
-        fn_EditElement_SetText_SysStr = reinterpret_cast<fn_EditElement_SetText_SysStr_t>(
-            ResolveAddr(Module::Runtime, 0x1800d0db0));
 
     fn_Input_Device_Released = reinterpret_cast<fn_Input_Device_Released_t>(
         ResolveExport("?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z"));
@@ -2541,21 +2266,12 @@ bool EngineFuncsInit() {
 
     fn_ImageElement_GetSprite = reinterpret_cast<fn_ImageElement_GetSprite_t>(
         ResolveExport("?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ"));
-    if (!fn_ImageElement_GetSprite)
-        fn_ImageElement_GetSprite = reinterpret_cast<fn_ImageElement_GetSprite_t>(
-            ResolveAddr(Module::Runtime, 0x1801182a0));
 
     fn_LabelElement_GetSprite = reinterpret_cast<fn_LabelElement_GetSprite_t>(
         ResolveExport("?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ"));
-    if (!fn_LabelElement_GetSprite)
-        fn_LabelElement_GetSprite = reinterpret_cast<fn_LabelElement_GetSprite_t>(
-            ResolveAddr(Module::Runtime, 0x1800429d0));
 
     fn_SpriteSheet_GetSpriteIndexFromName = reinterpret_cast<fn_SpriteSheet_GetSpriteIndexFromName_t>(
         ResolveExport("?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"));
-    if (!fn_SpriteSheet_GetSpriteIndexFromName)
-        fn_SpriteSheet_GetSpriteIndexFromName = reinterpret_cast<fn_SpriteSheet_GetSpriteIndexFromName_t>(
-            ResolveAddr(Module::Runtime, 0x1800031f0));
 
     // SliderElement::SetParameter
     fn_SliderElement_SetParameter = reinterpret_cast<fn_SliderElement_SetParameter_t>(
@@ -2575,10 +2291,6 @@ bool EngineFuncsInit() {
     // address (the exe dispatch slot 0x140152078 holds the same export).
     fn_Audio_Scene_Update = reinterpret_cast<fn_Audio_Scene_Update_t>(
         ResolveExport("?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z"));
-    if (!fn_Audio_Scene_Update) {
-        fn_Audio_Scene_Update = reinterpret_cast<fn_Audio_Scene_Update_t>(
-            ResolveAddr(Module::Runtime, 0x1800df6c0));
-    }
 
     // ScenarioDialog helper — fn_ScenarioDialog_LoadSelected REMOVED, now reimplemented
     // New helpers for reimplemented ScenarioDialog_LoadSelected:
@@ -2602,18 +2314,12 @@ bool EngineFuncsInit() {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d38));
         if (d && *d) fn_Persistence_GetSavePath = reinterpret_cast<fn_Persistence_GetSavePath_t>(*d);
     }
-    if (!fn_Persistence_GetSavePath)   // verified entry, Runtime-x64.dll
-        fn_Persistence_GetSavePath = reinterpret_cast<fn_Persistence_GetSavePath_t>(
-            ResolveAddr(Module::Runtime, 0x180007ad0));
     fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(
         ResolveExport("?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ"));
     if (!fn_FileSystem_GetDataDirectory) {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d30));
         if (d && *d) fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(*d);
     }
-    if (!fn_FileSystem_GetDataDirectory)   // verified entry, Runtime-x64.dll
-        fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(
-            ResolveAddr(Module::Runtime, 0x180007bd0));
     // FileSystem singleton: exe dispatch at 0x140151d18 → pointer to Runtime singleton.
     // Original: MOV RAX,[0x140151d18]; MOV RCX,[RAX] (at 0x140077d5a)
     {
@@ -2639,21 +2345,12 @@ bool EngineFuncsInit() {
     // Achievement::GoalList / GoalInstance (Runtime DLL exports)
     fn_GoalList_GetGoal = reinterpret_cast<fn_GoalList_GetGoal_t>(
         ResolveExport("?GetGoal@GoalList@Achievement@@QEBA?AV?$InternalPtr@VGoalInstance@Achievement@@@Object@@H@Z"));
-    if (!fn_GoalList_GetGoal)
-        fn_GoalList_GetGoal = reinterpret_cast<fn_GoalList_GetGoal_t>(
-            ResolveAddr(Module::Runtime, 0x180001710));
 
     fn_GoalInstance_IsMet = reinterpret_cast<fn_GoalInstance_IsMet_t>(
         ResolveExport("?IsMet@GoalInstance@Achievement@@QEBA_NXZ"));
-    if (!fn_GoalInstance_IsMet)
-        fn_GoalInstance_IsMet = reinterpret_cast<fn_GoalInstance_IsMet_t>(
-            ResolveAddr(Module::Runtime, 0x18009eed0));
 
     fn_GoalInstance_HasFailed = reinterpret_cast<fn_GoalInstance_HasFailed_t>(
         ResolveExport("?HasFailed@GoalInstance@Achievement@@QEBA_NXZ"));
-    if (!fn_GoalInstance_HasFailed)
-        fn_GoalInstance_HasFailed = reinterpret_cast<fn_GoalInstance_HasFailed_t>(
-            ResolveAddr(Module::Runtime, 0x18009eec0));
 
     // AchievementManager singleton (double-indirect .rdata dispatch at 0x1401514f0)
     g_ppAchievementManager = reinterpret_cast<void***>(
@@ -2662,10 +2359,6 @@ bool EngineFuncsInit() {
     fn_AchievementManager_IsAchievementAwarded =
         reinterpret_cast<fn_AchievementManager_IsAchievementAwarded_t>(
             ResolveExport("?IsAchievementAwarded@AchievementManager@Achievement@@QEBA_NH@Z"));
-    if (!fn_AchievementManager_IsAchievementAwarded)
-        fn_AchievementManager_IsAchievementAwarded =
-            reinterpret_cast<fn_AchievementManager_IsAchievementAwarded_t>(
-                ResolveAddr(Module::Runtime, 0x1800079c0));
 
     // fn_FindComponent_Character — inline in engine_funcs.h (uses g_TypeId_ModelComponent_FC)
     // Input::KeyMap::Pressed — from exe dispatch table at 0x140151758
@@ -2711,10 +2404,6 @@ bool EngineFuncsInit() {
     // Resolve sub-functions needed by reimplementations:
     fn_Factory_CreateObject = reinterpret_cast<fn_Factory_CreateObject_t>(
         ResolveExport("?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z"));
-    if (!fn_Factory_CreateObject) {
-        fn_Factory_CreateObject = reinterpret_cast<fn_Factory_CreateObject_t>(
-            ResolveAddr(Module::Runtime, 0x1800c0ae0));
-    }
     g_TypeId_ToolController = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c6eb8));
     g_TypeId_ToolSetting = reinterpret_cast<uint32_t*>(
@@ -2762,14 +2451,8 @@ bool EngineFuncsInit() {
     }
     fn_AchievementManager_GetAchievementCount = reinterpret_cast<fn_AchievementManager_GetAchievementCount_t>(
         ResolveExport("?GetAchievementCount@AchievementManager@Achievement@@QEBAHXZ"));
-    if (!fn_AchievementManager_GetAchievementCount)
-        fn_AchievementManager_GetAchievementCount = reinterpret_cast<fn_AchievementManager_GetAchievementCount_t>(
-            ResolveAddr(Module::Runtime, 0x1800079b0));
     fn_AchievementManager_GetAchievement = reinterpret_cast<fn_AchievementManager_GetAchievement_t>(
         ResolveExport("?GetAchievement@AchievementManager@Achievement@@QEBA?AV?$ExternalPtr@VAchievement@1@@Object@@H@Z"));
-    if (!fn_AchievementManager_GetAchievement)
-        fn_AchievementManager_GetAchievement = reinterpret_cast<fn_AchievementManager_GetAchievement_t>(
-            ResolveAddr(Module::Runtime, 0x18009e8a0));
     // GoalDialog_ArrayPush, EventNotifyDialog_ArrayPush, ScenarioDialog_ArrayPush
     // now inline in their respective .cpp files
     fn_ExternalList_GetResourceCount = reinterpret_cast<fn_ExternalList_GetResourceCount_t>(
@@ -2800,22 +2483,10 @@ bool EngineFuncsInit() {
     // Phase F Wave 2B: ToolbarDialog
     fn_UI_AddDialog = reinterpret_cast<fn_UI_AddDialog_t>(
         ResolveExport("?AddDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
-    if (!fn_UI_AddDialog) {
-        fn_UI_AddDialog = reinterpret_cast<fn_UI_AddDialog_t>(
-            ResolveAddr(Module::Runtime, 0x180120ee0));
-    }
     fn_Element_GetPaddedSize = reinterpret_cast<fn_Element_GetPaddedSize_t>(
         ResolveExport("?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z"));
-    if (!fn_Element_GetPaddedSize) {
-        fn_Element_GetPaddedSize = reinterpret_cast<fn_Element_GetPaddedSize_t>(
-            ResolveAddr(Module::Runtime, 0x180115f10));
-    }
     fn_RadioElement_SetActiveRadio = reinterpret_cast<fn_RadioElement_SetActiveRadio_t>(
         ResolveExport("?SetActiveRadio@RadioElement@UI@@QEAAXH@Z"));
-    if (!fn_RadioElement_SetActiveRadio) {
-        fn_RadioElement_SetActiveRadio = reinterpret_cast<fn_RadioElement_SetActiveRadio_t>(
-            ResolveAddr(Module::Runtime, 0x1800d56f0));
-    }
     fn_ToolbarDialog_Ctor = reinterpret_cast<fn_ToolbarDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x1400b9910));
     // fn_Toolbar_ShowGroup — must call original (15+ direct callers share state)
@@ -2847,26 +2518,17 @@ bool EngineFuncsInit() {
     // Toolbar type ID at DAT_1401c6128 (filled by Toolbar_RegisterType at runtime)
     g_TypeId_ToolbarItem = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c6128));
-    // RadioElement::FindCheckBoxes
+    // RadioElement::FindCheckBoxes. NO FALLBACK (Wave 9 lane F deleted it, and
+    // the record of why has to survive the deletion): FindCheckBoxes is an
+    // OVERLOAD SET and the fallback named the wrong member of it until
+    // 2026-09-07 -- 0x1800d5750 is the PRIVATE 1-arg sibling, a genuine entry
+    // point that would NOT have faulted, just run radio-group tree surgery with
+    // whatever the caller left in RDX. The public 0-arg one is 0x180047c00.
+    // That is why "is the fallback address an entry point" was never a
+    // sufficient check (docs/runtime_port/WAVE9_LANE_D.md, and the docstring of
+    // tools/resolve_fallback_audit.py, which both keep the full story).
     fn_RadioElement_FindCheckBoxes = reinterpret_cast<fn_RadioElement_FindCheckBoxes_t>(
         ResolveExport("?FindCheckBoxes@RadioElement@UI@@QEAAXXZ"));
-    if (!fn_RadioElement_FindCheckBoxes) {
-        // 0x180047c00, NOT 0x1800d5750. FindCheckBoxes is an OVERLOAD SET and this
-        // fallback named the wrong member of it until 2026-09-07:
-        //   0x180047c00  ?FindCheckBoxes@RadioElement@UI@@QEAAXXZ          public, 0 args
-        //   0x1800d5750  ?FindCheckBoxes@RadioElement@UI@@AEAAXV?$InternalPtr@...  private, 1 arg
-        // The typedef here is void(*)(void* self) and the one caller
-        // (code/Game/Dialog/toolbardialog.cpp) passes only `self`, so the old
-        // address would NOT have faulted — it is a genuine entry point. It would
-        // have RUN the private sibling with whatever the caller happened to leave
-        // in RDX, read as an InternalPtr<Element>, and done radio-group tree
-        // surgery with it (reference_serialize_lazy_resolve_and_wrong_slot.md).
-        // That is why "is the fallback address an entry point" is not a sufficient
-        // check: it has to be the entry point of THIS EXACT MANGLED NAME, which is
-        // what tools/resolve_fallback_audit.py compares.
-        fn_RadioElement_FindCheckBoxes = reinterpret_cast<fn_RadioElement_FindCheckBoxes_t>(
-            ResolveAddr(Module::Runtime, 0x180047c00));
-    }
     // FUN_140100270: Find dialog by controller type
     fn_FindDialogByControllerType = reinterpret_cast<fn_FindDialogByControllerType_t>(
         ResolveAddr(Module::Exe, 0x140100270));
@@ -2926,20 +2588,13 @@ bool EngineFuncsInit() {
     // Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
     fn_KeyMap_GetValue = reinterpret_cast<fn_KeyMap_GetValue_t>(
         ResolveExport("?GetValue@KeyMap@Input@@QEBAFHH@Z"));
-    if (!fn_KeyMap_GetValue) {
-        fn_KeyMap_GetValue = reinterpret_cast<fn_KeyMap_GetValue_t>(
-            ResolveAddr(Module::Runtime, 0x1800a7b60));
-    }
     // The DLL exports the CONST spelling (`QEBA`) only; we asked for `QEAA`,
-    // which does not exist, so this resolved NULL and ran on the address
-    // fallback below (Wave 7 lane C). Const-ness has no ABI, so the call has
-    // always been correct — the name was a phantom the fallback hid.
+    // which does not exist, so this resolved NULL and ran on an address
+    // fallback (Wave 7 lane C, deleted by Wave 9 lane F). Const-ness has no
+    // ABI, so the call has always been correct — the name was a phantom the
+    // fallback hid.
     fn_UI_GetFirstContainedDialog = reinterpret_cast<fn_UI_GetFirstContainedDialog_t>(
         ResolveExport("?GetFirstContainedDialog@UserInterface@UI@@QEBA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z"));
-    if (!fn_UI_GetFirstContainedDialog) {
-        fn_UI_GetFirstContainedDialog = reinterpret_cast<fn_UI_GetFirstContainedDialog_t>(
-            ResolveAddr(Module::Runtime, 0x18011fb00));
-    }
     fn_EditTool_SelectEntity = reinterpret_cast<fn_EditTool_SelectEntity_t>(
         ResolveAddr(Module::Exe, 0x1400fd3b0));
     // fn_FindComponent_Residence — inline in engine_funcs.h (uses g_TypeId_StorageComponent_FC, same as Storage)
@@ -2985,47 +2640,25 @@ bool EngineFuncsInit() {
     // spells QEAA, and missing the AEBV reference qualifier on the trailing
     // Time param. That string does not exist in the shipped DLL (one of only
     // 3 phantoms left in the whole tree, tools/export_name_audit.py) and
-    // always resolved NULL; the fallback below (0x1800def60) is what every
-    // call actually reached, so this was never a functional gap. Fixed to the
-    // real, correctly-spelled export.
+    // always resolved NULL; a fallback (0x1800def60) is what every call
+    // actually reached, so this was never a functional gap. Fixed to the
+    // real, correctly-spelled export; the fallback is GONE (Wave 9 lane F).
     fn_Audio_Scene_PlayEffect = reinterpret_cast<fn_Audio_Scene_PlayEffect_t>(
         ResolveExport("?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z"));
-    if (!fn_Audio_Scene_PlayEffect) {
-        fn_Audio_Scene_PlayEffect = reinterpret_cast<fn_Audio_Scene_PlayEffect_t>(
-            ResolveAddr(Module::Runtime, 0x1800def60));
-    }
 
     // --- HelpUI support functions ---
     fn_StringTable_GetText = reinterpret_cast<fn_StringTable_GetText_t>(
         ResolveExport("?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z"));
-    if (!fn_StringTable_GetText)
-        fn_StringTable_GetText = reinterpret_cast<fn_StringTable_GetText_t>(
-            ResolveAddr(Module::Runtime, 0x180002550));
     fn_DocumentTextElement_GetLink = reinterpret_cast<fn_DocumentTextElement_GetLink_t>(
         ResolveExport("?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z"));
-    if (!fn_DocumentTextElement_GetLink)
-        fn_DocumentTextElement_GetLink = reinterpret_cast<fn_DocumentTextElement_GetLink_t>(
-            ResolveAddr(Module::Runtime, 0x18003c0c0));
     fn_DocumentTextElement_SetText_UIString = reinterpret_cast<fn_DocumentTextElement_SetText_UIString_t>(
         ResolveExport("?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z"));
-    if (!fn_DocumentTextElement_SetText_UIString)
-        fn_DocumentTextElement_SetText_UIString = reinterpret_cast<fn_DocumentTextElement_SetText_UIString_t>(
-            ResolveAddr(Module::Runtime, 0x18003bfd0));
     fn_DocumentTextElement_SetText = reinterpret_cast<fn_DocumentTextElement_SetText_t>(
         ResolveExport("?SetText@DocumentTextElement@UI@@QEAAXAEBVString@System@@@Z"));
-    if (!fn_DocumentTextElement_SetText)
-        fn_DocumentTextElement_SetText = reinterpret_cast<fn_DocumentTextElement_SetText_t>(
-            ResolveAddr(Module::Runtime, 0x18003c010));
     fn_ContainerElement_SetOffsets = reinterpret_cast<fn_ContainerElement_SetOffsets_t>(
         ResolveExport("?SetOffsets@ContainerElement@UI@@QEAAXHH@Z"));
-    if (!fn_ContainerElement_SetOffsets)
-        fn_ContainerElement_SetOffsets = reinterpret_cast<fn_ContainerElement_SetOffsets_t>(
-            ResolveAddr(Module::Runtime, 0x1800cc1e0));
     fn_UIString_Ctor_Index = reinterpret_cast<fn_UIString_Ctor_Index_t>(
         ResolveExport("??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@H@Z"));
-    if (!fn_UIString_Ctor_Index)
-        fn_UIString_Ctor_Index = reinterpret_cast<fn_UIString_Ctor_Index_t>(
-            ResolveAddr(Module::Runtime, 0x18011da20));
     fn_String_Equal = reinterpret_cast<fn_String_Equal_t>(
         ResolveExport("??8String@System@@QEBA_NAEBV01@@Z"));
     // HelpUI_ArrayResize now inline as HelpUI_ArrayResize_Impl in helpui.cpp
@@ -3096,10 +2729,6 @@ bool EngineFuncsInit() {
     // --- StorageUI support ---
     fn_ExternalFactory_FindNext = reinterpret_cast<fn_ExternalFactory_FindNext_t>(
         ResolveExport("?FindNext@ExternalFactory@Object@@QEBAPEBVExternal@2@IPEBV32@@Z"));
-    if (!fn_ExternalFactory_FindNext) {
-        fn_ExternalFactory_FindNext = reinterpret_cast<fn_ExternalFactory_FindNext_t>(
-            ResolveAddr(Module::Runtime, 0x1800be9d0));
-    }
     // fn_StorageUI_SortItems — reimplemented in storageui.cpp as StorageUI_SortItems()
 
     // --- MapUI helpers — REIMPLEMENTED in code/Game/Dialog/mapui.cpp ---
@@ -3150,23 +2779,15 @@ bool EngineFuncsInit() {
     // fn_TrackerComponent_Rebuild — inline in engine_funcs.h
 
     // --- ProfessionUI support ---
+    // NO FALLBACK. The one that used to sit here said 0x18006a3e0, which is
+    // mid-body of FUN_18006a390 (+0x50); GetPath is at 0x180006250. Corrected
+    // by Wave 9 lane R, then deleted by lane F -- with the DLL gone every
+    // fallback would fire at once into an unmapped module, so a null here is
+    // the better failure (RtResolveMiss records the name; see resolve.h).
     fn_External_GetPath = reinterpret_cast<fn_External_GetPath_t>(
         ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
-    if (!fn_External_GetPath) {
-        // 0x180006250, NOT 0x18006a3e0. The old address was mid-body of
-        // FUN_18006a390 (+0x50) — a jump into the middle of an unrelated function.
-        // ?GetPath@External@Object@@ really lives at 0x180006250 (15 instructions,
-        // verified against the shipped export directory). No port registers this
-        // name today, so the fallback is one phantom mangling away from live.
-        fn_External_GetPath = reinterpret_cast<fn_External_GetPath_t>(
-            ResolveAddr(Module::Runtime, 0x180006250));
-    }
     fn_Filename_GetPathIdentifier = reinterpret_cast<fn_Filename_GetPathIdentifier_t>(
         ResolveExport("?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ"));
-    if (!fn_Filename_GetPathIdentifier) {
-        fn_Filename_GetPathIdentifier = reinterpret_cast<fn_Filename_GetPathIdentifier_t>(
-            ResolveAddr(Module::Runtime, 0x1800c6610));
-    }
     // BSTRebalance — now static inline in professionui.cpp (BSTRebalance_Impl)
     // fn_ProfessionUI_HandleSpinner — reimplemented in professionui.cpp
     // fn_ProfessionUI_HandleButton — reimplemented in professionui.cpp
@@ -3174,31 +2795,15 @@ bool EngineFuncsInit() {
     // --- MainMenuDialog support ---
     fn_App_Quit = reinterpret_cast<fn_App_Quit_t>(
         ResolveExport("?Quit@Application@1@QEAAXXZ"));
-    if (!fn_App_Quit) {
-        fn_App_Quit = reinterpret_cast<fn_App_Quit_t>(
-            ResolveAddr(Module::Runtime, 0x18009f4d0));
-    }
 
     fn_Configuration_CurrentVersion = reinterpret_cast<fn_Configuration_CurrentVersion_t>(
         ResolveExport("?CurrentVersion@Configuration@System@@SA?AVString@2@XZ"));
-    if (!fn_Configuration_CurrentVersion) {
-        fn_Configuration_CurrentVersion = reinterpret_cast<fn_Configuration_CurrentVersion_t>(
-            ResolveAddr(Module::Runtime, 0x1800c4f40));
-    }
 
     fn_Configuration_CurrentBuildId = reinterpret_cast<fn_Configuration_CurrentBuildId_t>(
         ResolveExport("?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ"));
-    if (!fn_Configuration_CurrentBuildId) {
-        fn_Configuration_CurrentBuildId = reinterpret_cast<fn_Configuration_CurrentBuildId_t>(
-            ResolveAddr(Module::Runtime, 0x1800c4c60));
-    }
 
     fn_InternalBasePtr_CheckPtr = reinterpret_cast<fn_InternalBasePtr_CheckPtr_t>(
         ResolveExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ"));
-    if (!fn_InternalBasePtr_CheckPtr) {
-        fn_InternalBasePtr_CheckPtr = reinterpret_cast<fn_InternalBasePtr_CheckPtr_t>(
-            ResolveAddr(Module::Runtime, 0x1800c0290));
-    }
     {
         // See the g_checkPtrIsNop note in engine_funcs.h: only skip the call when the
         // resolved body really is a bare RET.
@@ -3251,16 +2856,8 @@ bool EngineFuncsInit() {
     g_pNewGameSettings = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3de0));
     fn_Random_Rand = reinterpret_cast<fn_Random_Rand_t>(
         ResolveExport("?Rand@Random@System@@QEAAII@Z"));
-    if (!fn_Random_Rand) {
-        fn_Random_Rand = reinterpret_cast<fn_Random_Rand_t>(
-            ResolveAddr(Module::Runtime, 0x1800c8040));
-    }
     fn_Random_RandFloat = reinterpret_cast<fn_Random_RandFloat_t>(
         ResolveExport("?RandFloat@Random@System@@QEAAMXZ"));
-    if (!fn_Random_RandFloat) {
-        fn_Random_RandFloat = reinterpret_cast<fn_Random_RandFloat_t>(
-            ResolveAddr(Module::Runtime, 0x1800c7d40));
-    }
     // fn_GenerateTownName — REIMPLEMENTED, now resolve inner helpers
     fn_NameDB_GenerateName = reinterpret_cast<fn_NameDB_GenerateName_t>(
         ResolveAddr(Module::Exe, 0x1400a4b30));
@@ -3292,19 +2889,12 @@ bool EngineFuncsInit() {
     // --- ToolUI support ---
     fn_DialogInstance_SetUpperLeft = reinterpret_cast<fn_DialogInstance_SetUpperLeft_t>(
         ResolveExport("?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z"));
-    if (!fn_DialogInstance_SetUpperLeft) {
-        fn_DialogInstance_SetUpperLeft = reinterpret_cast<fn_DialogInstance_SetUpperLeft_t>(
-            ResolveAddr(Module::Runtime, 0x180114a60));
-    }
     // By-VALUE spelling: the by-reference `AEAV…` name we used to ask for does
-    // not exist in the DLL and resolved NULL in silence, leaving this on the
-    // address fallback below (Wave 7 lane C). Same ABI, same target.
+    // not exist in the DLL and resolved NULL in silence, leaving this on an
+    // address fallback (Wave 7 lane C, deleted by Wave 9 lane F). Same ABI,
+    // same target.
     fn_UI_BringDialogToFront = reinterpret_cast<fn_UI_BringDialogToFront_t>(
         ResolveExport("?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
-    if (!fn_UI_BringDialogToFront) {
-        fn_UI_BringDialogToFront = reinterpret_cast<fn_UI_BringDialogToFront_t>(
-            ResolveAddr(Module::Runtime, 0x180120440));
-    }
     // fn_UIDesc_AddControllers — REIMPLEMENTED as UIDesc_AddControllers_Impl()
     g_TypeId_UIDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7f90));
@@ -3541,17 +3131,9 @@ bool EngineFuncsInit() {
     // / per-frame updates through the Runtime DLL.
     fn_DialogInstance_OnUpdateLayout = reinterpret_cast<fn_DialogInstance_OnUpdateLayout_t>(
         ResolveExport("?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ"));
-    if (!fn_DialogInstance_OnUpdateLayout) {
-        fn_DialogInstance_OnUpdateLayout = reinterpret_cast<fn_DialogInstance_OnUpdateLayout_t>(
-            ResolveAddr(Module::Runtime, 0x1801153a0));
-    }
 
     fn_DialogInstance_OnUpdate = reinterpret_cast<fn_DialogInstance_OnUpdate_t>(
         ResolveExport("?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z"));
-    if (!fn_DialogInstance_OnUpdate) {
-        fn_DialogInstance_OnUpdate = reinterpret_cast<fn_DialogInstance_OnUpdate_t>(
-            ResolveAddr(Module::Runtime, 0x180115400));
-    }
 
     // --- ModDialog helper functions ---
     // fn_ModDialog_RefreshDisplay — REPLACED with static impl in moddialog.cpp
@@ -3942,9 +3524,6 @@ bool EngineFuncsInit() {
         ResolveExport("?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ"));
     fn_Graphics_Particle_Ctor = reinterpret_cast<fn_Graphics_Particle_Ctor_t>(
         ResolveExport("??0Particle@Graphics@@QEAA@XZ"));
-    if (!fn_Graphics_Particle_Ctor)  // fallback: resolve by Runtime address (0x180103e80)
-        fn_Graphics_Particle_Ctor = reinterpret_cast<fn_Graphics_Particle_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x180103e80));
     fn_Graphics_Scene_Clean = reinterpret_cast<fn_Graphics_Scene_Clean_t>(
         ResolveExport("?Clean@Scene@Graphics@@QEAAXXZ"));
     printf("[EngineFuncs] MenuDLT static-mesh + particle helpers:\n"
@@ -4067,35 +3646,13 @@ bool EngineFuncsInit() {
     // fn_GameUpdateLoop_Ctor — REIMPLEMENTED, now resolve inner helpers
     fn_UpdateLoop_Ctor = reinterpret_cast<fn_UpdateLoop_Ctor_t>(
         ResolveExport("??0UpdateLoop@Engine@@QEAA@XZ"));
-    if (!fn_UpdateLoop_Ctor) {
-        // 0x1800ddd30, NOT 0x1800dcc00. The old address was a DEFECT found by
-        // Wave 8 lane A: 0x1800dcc00 is not a function entry at all, it is an
-        // address INSIDE the body of Engine::MainLoop::OnVideoError
-        // (0x1800dc5e0..0x1800dcd12). Latent, because the ResolveExport above
-        // has always succeeded — but a fallback that is only ever taken when
-        // something is already wrong is exactly where a wrong address hides.
-        fn_UpdateLoop_Ctor = reinterpret_cast<fn_UpdateLoop_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x1800ddd30));
-    }
     g_GameUpdateLoop_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015e2f0));
     fn_LoaderLoop_Ctor = reinterpret_cast<fn_LoaderLoop_Ctor_t>(
         ResolveExport("??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z"));
-    if (!fn_LoaderLoop_Ctor) {
-        fn_LoaderLoop_Ctor = reinterpret_cast<fn_LoaderLoop_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x1800dc1e0));
-    }
     fn_DialogLoaderLoopT_Ctor = reinterpret_cast<fn_DialogLoaderLoopT_Ctor_t>(
         ResolveExport("??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z"));
-    if (!fn_DialogLoaderLoopT_Ctor) {
-        fn_DialogLoaderLoopT_Ctor = reinterpret_cast<fn_DialogLoaderLoopT_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x1800db0d0));
-    }
     fn_Random_Default_Ctor = reinterpret_cast<fn_Random_Default_Ctor_t>(
         ResolveExport("??0Random@System@@QEAA@XZ"));
-    if (!fn_Random_Default_Ctor) {
-        fn_Random_Default_Ctor = reinterpret_cast<fn_Random_Default_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x1800c7f20));
-    }
     // Exe vtable pointers for subclasses of DialogLoaderLoopT and LoaderLoop
     g_GameLoadDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140158800));
     g_GameLoaderLoop_Vtable      = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401588d0));
@@ -4106,46 +3663,18 @@ bool EngineFuncsInit() {
     // Now resolve its inner dependencies:
     fn_DialogLoopT_Ctor = reinterpret_cast<fn_DialogLoopT_Ctor_t>(
         ResolveExport("??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z"));
-    if (!fn_DialogLoopT_Ctor) {
-        fn_DialogLoopT_Ctor = reinterpret_cast<fn_DialogLoopT_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x1800db3f0));
-    }
     fn_DialogLoopT_Update = reinterpret_cast<fn_DialogLoopT_Update_t>(
         ResolveExport("?Update@DialogLoopT@Engine@@UEAA_NAEBVTime@System@@@Z"));
-    if (!fn_DialogLoopT_Update) {
-        fn_DialogLoopT_Update = reinterpret_cast<fn_DialogLoopT_Update_t>(
-            ResolveAddr(Module::Runtime, 0x1800db270));
-    }
     fn_DialogLoopT_Startup = reinterpret_cast<fn_DialogLoopT_Startup_t>(
         ResolveExport("?Startup@DialogLoopT@Engine@@UEAAXXZ"));
-    if (!fn_DialogLoopT_Startup) {
-        fn_DialogLoopT_Startup = reinterpret_cast<fn_DialogLoopT_Startup_t>(
-            ResolveAddr(Module::Runtime, 0x1800db2f0));
-    }
     fn_DialogLoopT_Load = reinterpret_cast<fn_DialogLoopT_Load_t>(
         ResolveExport("?Load@DialogLoopT@Engine@@UEAAXXZ"));
-    if (!fn_DialogLoopT_Load) {
-        fn_DialogLoopT_Load = reinterpret_cast<fn_DialogLoopT_Load_t>(
-            ResolveAddr(Module::Runtime, 0x1800db140));
-    }
     fn_DialogLoaderLoopT_Startup = reinterpret_cast<fn_DialogLoaderLoopT_Startup_t>(
         ResolveExport("?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ"));
-    if (!fn_DialogLoaderLoopT_Startup) {
-        fn_DialogLoaderLoopT_Startup = reinterpret_cast<fn_DialogLoaderLoopT_Startup_t>(
-            ResolveAddr(Module::Runtime, 0x1800db000));
-    }
     fn_DialogLoaderLoopT_Load = reinterpret_cast<fn_DialogLoaderLoopT_Load_t>(
         ResolveExport("?Load@DialogLoaderLoopT@Engine@@UEAAXXZ"));
-    if (!fn_DialogLoaderLoopT_Load) {
-        fn_DialogLoaderLoopT_Load = reinterpret_cast<fn_DialogLoaderLoopT_Load_t>(
-            ResolveAddr(Module::Runtime, 0x1800dad50));
-    }
     fn_AudioScene_Ctor = reinterpret_cast<fn_AudioScene_Ctor_t>(
         ResolveExport("??0Scene@Audio@@QEAA@XZ"));
-    if (!fn_AudioScene_Ctor) {
-        fn_AudioScene_Ctor = reinterpret_cast<fn_AudioScene_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x1800e0160));
-    }
     g_MenuDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015ed00));
 
     // --- Engine globals (direct memory addresses) ---
@@ -4298,21 +3827,12 @@ bool EngineFuncsInit() {
     // --- SpriteCaptureUI support ---
     fn_Input_Device_GetValue = reinterpret_cast<fn_Input_Device_GetValue_t>(
         ResolveExport("?GetValue@Device@Input@@QEBAFW4InputDevice@12@HH@Z"));
-    if (!fn_Input_Device_GetValue)
-        fn_Input_Device_GetValue = reinterpret_cast<fn_Input_Device_GetValue_t>(
-            ResolveAddr(Module::Runtime, 0x1800e1660));
 
     fn_Input_Device_Pressed = reinterpret_cast<fn_Input_Device_Pressed_t>(
         ResolveExport("?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z"));
-    if (!fn_Input_Device_Pressed)
-        fn_Input_Device_Pressed = reinterpret_cast<fn_Input_Device_Pressed_t>(
-            ResolveAddr(Module::Runtime, 0x1800e16c0));
 
     fn_UI_EndSpriteCapture = reinterpret_cast<fn_UI_EndSpriteCapture_t>(
         ResolveExport("?EndSpriteCapture@UserInterface@UI@@QEAAXXZ"));
-    if (!fn_UI_EndSpriteCapture)
-        fn_UI_EndSpriteCapture = reinterpret_cast<fn_UI_EndSpriteCapture_t>(
-            ResolveAddr(Module::Runtime, 0x18011f4a0));
 
     // FileSystem singleton: exe exref at 0x140151d18 -> pointer to _singleton in Runtime
     {
@@ -4323,41 +3843,23 @@ bool EngineFuncsInit() {
 
     fn_FileSystem_GetSourceDirectory = reinterpret_cast<fn_FileSystem_GetSourceDirectory_t>(
         ResolveExport("?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ"));
-    if (!fn_FileSystem_GetSourceDirectory)
-        fn_FileSystem_GetSourceDirectory = reinterpret_cast<fn_FileSystem_GetSourceDirectory_t>(
-            ResolveAddr(Module::Runtime, 0x180007b90));
 
     fn_External_SaveText = reinterpret_cast<fn_External_SaveText_t>(
         ResolveExport("?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z"));
-    if (!fn_External_SaveText)
-        fn_External_SaveText = reinterpret_cast<fn_External_SaveText_t>(
-            ResolveAddr(Module::Runtime, 0x1800bb9d0));
 
     fn_Filename_CtorString = reinterpret_cast<fn_Filename_CtorString_t>(
         ResolveExport("??0Filename@System@@QEAA@AEBVString@1@@Z"));
-    if (!fn_Filename_CtorString)
-        fn_Filename_CtorString = reinterpret_cast<fn_Filename_CtorString_t>(
-            ResolveAddr(Module::Runtime, 0x18000c780));
 
     // Default ctor (no-arg). Mangled name verified via Ghidra Runtime DLL
     // 0x180006220 — body is 8-byte zero-init.
     fn_Filename_Ctor = reinterpret_cast<fn_Filename_Ctor_t>(
         ResolveExport("??0Filename@System@@QEAA@XZ"));
-    if (!fn_Filename_Ctor)
-        fn_Filename_Ctor = reinterpret_cast<fn_Filename_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x180006220));
 
     fn_Filename_CtorCStr = reinterpret_cast<fn_Filename_CtorCStr_t>(
         ResolveExport("??0Filename@System@@QEAA@PEBD@Z"));
-    if (!fn_Filename_CtorCStr)
-        fn_Filename_CtorCStr = reinterpret_cast<fn_Filename_CtorCStr_t>(
-            ResolveAddr(Module::Runtime, 0x180026cf0));
 
     fn_Filename_Dtor = reinterpret_cast<fn_Filename_Dtor_t>(
         ResolveExport("??1Filename@System@@QEAA@XZ"));
-    if (!fn_Filename_Dtor)
-        fn_Filename_Dtor = reinterpret_cast<fn_Filename_Dtor_t>(
-            ResolveAddr(Module::Runtime, 0x180006980));
 
     // String concat operator+ via dispatch table (non-trivial return ABI, free functions)
     // Dispatch at 0x140151a10 (ordinal 0x100) and 0x140151a08 (ordinal 0xff)
@@ -4420,7 +3922,10 @@ bool EngineFuncsInit() {
     fn_VideoDevice_Shutdown = reinterpret_cast<fn_VideoDevice_Shutdown_t>(
         ResolveExport("?Shutdown@Device@Video@@QEAAXXZ"));
 
-    // Engine::MainLoop
+    // Engine::MainLoop. NO FALLBACK: the one here read 0x1800dcc00, which is
+    // not a function entry at all but an address INSIDE OnVideoError's own body
+    // (0x1800dc5e0..0x1800dcd12) -- a Wave 8 lane A defect, corrected to
+    // 0x1800ddd30 and then deleted by Wave 9 lane F.
     fn_MainLoop_OnVideoError = reinterpret_cast<fn_MainLoop_OnVideoError_t>(
         ResolveExport("?OnVideoError@MainLoop@Engine@@QEAAXXZ"));
     fn_MainLoop_OnVideoRestart = reinterpret_cast<fn_MainLoop_OnVideoRestart_t>(
@@ -4483,22 +3988,10 @@ bool EngineFuncsInit() {
     // Runtime-x64.dll exports in Ghidra.
     fn_KeyMap_RegisterInput = reinterpret_cast<fn_KeyMap_RegisterInput_t>(
         ResolveExport("?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z"));
-    if (!fn_KeyMap_RegisterInput) {
-        fn_KeyMap_RegisterInput = reinterpret_cast<fn_KeyMap_RegisterInput_t>(
-            ResolveAddr(Module::Runtime, 0x1800a7e70));
-    }
     fn_KeyMap_ClearAll = reinterpret_cast<fn_KeyMap_ClearAll_t>(
         ResolveExport("?ClearAll@KeyMap@Input@@QEAAXXZ"));
-    if (!fn_KeyMap_ClearAll) {
-        fn_KeyMap_ClearAll = reinterpret_cast<fn_KeyMap_ClearAll_t>(
-            ResolveAddr(Module::Runtime, 0x1800a7d20));
-    }
     fn_KeyMap_Load = reinterpret_cast<fn_KeyMap_Load_t>(
         ResolveExport("?Load@KeyMap@Input@@QEAAXXZ"));
-    if (!fn_KeyMap_Load) {
-        fn_KeyMap_Load = reinterpret_cast<fn_KeyMap_Load_t>(
-            ResolveAddr(Module::Runtime, 0x1800a7190));
-    }
 
     // Dialog constructors — exe functions
     fn_OptionInputBindDialog_Ctor = reinterpret_cast<fn_OptionInputBindDialog_Ctor_t>(
@@ -4773,15 +4266,9 @@ bool EngineFuncsInit() {
     // --- Achievement Goal support ---
     fn_Goal_BaseDtor = reinterpret_cast<fn_Goal_BaseDtor_t>(
         ResolveExport("??1Goal@Achievement@@UEAA@XZ"));
-    if (!fn_Goal_BaseDtor)
-        fn_Goal_BaseDtor = reinterpret_cast<fn_Goal_BaseDtor_t>(
-            ResolveAddr(Module::Runtime, 0x18009edb0));
 
     fn_Goal_BaseCtor = reinterpret_cast<fn_Goal_BaseCtor_t>(
         ResolveExport("??0Goal@Achievement@@QEAA@XZ"));
-    if (!fn_Goal_BaseCtor)
-        fn_Goal_BaseCtor = reinterpret_cast<fn_Goal_BaseCtor_t>(
-            ResolveAddr(Module::Runtime, 0x18009ed50));
 
     // Goal::Serialize via dispatch slot 0x140152840
     {
@@ -4792,15 +4279,9 @@ bool EngineFuncsInit() {
 
     fn_GoalInstance_BaseDtor = reinterpret_cast<fn_GoalInstance_BaseDtor_t>(
         ResolveExport("??1GoalInstance@Achievement@@UEAA@XZ"));
-    if (!fn_GoalInstance_BaseDtor)
-        fn_GoalInstance_BaseDtor = reinterpret_cast<fn_GoalInstance_BaseDtor_t>(
-            ResolveAddr(Module::Runtime, 0x18009ef40));
 
     fn_GoalInstance_Persist = reinterpret_cast<fn_GoalInstance_Persist_t>(
         ResolveExport("?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z"));
-    if (!fn_GoalInstance_Persist)
-        fn_GoalInstance_Persist = reinterpret_cast<fn_GoalInstance_Persist_t>(
-            ResolveAddr(Module::Runtime, 0x18009ef70));
 
     fn_InternalBasePtr_Serialize = reinterpret_cast<fn_InternalBasePtr_Serialize_t>(
         ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));

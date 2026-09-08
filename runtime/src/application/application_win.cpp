@@ -28,36 +28,36 @@
 #include <cstdint>
 #include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
+#include "../system/timer.h"
 
 using RtApplication::Application;
 
 namespace {
 
-// System::Timer's four data exports, resolved by mangled name — the same
-// names and addresses engine_funcs.cpp already resolves via ResolveAddr at
-// fixed offsets (0x1801fe720/728/730/738); resolving by NAME here means this
-// port does not depend on that other init path having already run.
-int64_t* TicksPerSecond() {
-    static int64_t* p = RT_ORIGINAL_ONCE(int64_t*, "?_ticksPerSecond@Timer@System@@0_JA");
-    return p;
-}
-double* SecondsPerTick() {
-    static double* p = RT_ORIGINAL_ONCE(double*, "?_secondsPerTick@Timer@System@@0NA");
-    return p;
-}
-int64_t* SystemTicksPerSecond() {
-    static int64_t* p = RT_ORIGINAL_ONCE(int64_t*, "?_systemTicksPerSecond@Timer@System@@0_JA");
-    return p;
-}
-int64_t* SystemInitialTick() {
-    static int64_t* p = RT_ORIGINAL_ONCE(int64_t*, "?_systemInitialTick@Timer@System@@0_JA");
-    return p;
-}
-
-// The exact expression SleepThread inlines twice: convert a raw
-// QueryPerformanceCounter reading into engine ticks.
+// System::Timer's four data exports.
+//
+// These were four RAW-DOOR data reads (`RT_ORIGINAL_ONCE(double*, "?_secondsPerTick@…")`
+// and its three siblings) — WAVE9_LANE_V.md §4's DATA READ row for
+// `?_secondsPerTick@Timer@System@@0NA` names this file at :45. Wave 9 lane B3
+// ported System::Timer and the port OWNS the storage behind all five statics
+// (runtime/src/system/timer.h), so the reads come from us now and the row is
+// closed by a port rather than by lane C2 minting a value.
+//
+// Two behavioural notes, both improvements and both stated rather than assumed:
+//   * `_ticksPerSecond` and `_secondsPerTick` are compile-time constants
+//     (1000000 and 1e-6) — see timer.cpp's header for the disassembly.
+//   * the DLL's `_systemInitialTick`/`_systemTicksPerSecond` are ZERO until
+//     Engine::Startup runs, and QpcToEngineTicks below divided by the latter.
+//     Our accessors run PlatformStartup on first use, so that divide is now
+//     safe at every point in boot.
+//
+// The epoch consequence: SleepThread's engine-tick readings are now measured
+// from OUR PlatformStartup sample, not the DLL's. It only ever computes a
+// DIFFERENCE of two readings taken inside the same call (`elapsed`), so a
+// shifted origin cancels exactly.
 int64_t QpcToEngineTicks(int64_t qpc) {
-    return (qpc - *SystemInitialTick()) * (*TicksPerSecond()) / (*SystemTicksPerSecond());
+    return (qpc - RtSystem::TimerSystemInitialTick()) * RtSystem::TimerTicksPerSecond()
+           / RtSystem::TimerSystemTicksPerSecond();
 }
 
 }  // namespace
@@ -117,7 +117,7 @@ void RtApp_SleepThread(Application* /*self*/, int ms) {
     const int64_t startTicks = QpcToEngineTicks(t0.QuadPart);
 
     const double targetTicks =
-        (static_cast<double>(static_cast<float>(ms) / 1000.0f)) / (*SecondsPerTick());
+        (static_cast<double>(static_cast<float>(ms) / 1000.0f)) / RtSystem::TimerSecondsPerTick();
 
     LARGE_INTEGER t1;
     QueryPerformanceCounter(&t1);

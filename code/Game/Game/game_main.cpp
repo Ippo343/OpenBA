@@ -159,16 +159,8 @@ static void EnsureResolved() {
     // 0x1401B618E (Startup) and 0x1401B6170 (Shutdown).
     s_fn_Engine_Ctor = reinterpret_cast<fn_Engine_Ctor_t>(
         ResolveExport("??0Engine@0@QEAA@PEAX@Z"));
-    if (!s_fn_Engine_Ctor) {
-        s_fn_Engine_Ctor = reinterpret_cast<fn_Engine_Ctor_t>(
-            ResolveAddr(Module::Runtime, 0x1800dbf00));
-    }
     s_fn_Engine_Dtor = reinterpret_cast<fn_Engine_Dtor_t>(
         ResolveExport("??1Engine@0@QEAA@XZ"));
-    if (!s_fn_Engine_Dtor) {
-        s_fn_Engine_Dtor = reinterpret_cast<fn_Engine_Dtor_t>(
-            ResolveAddr(Module::Runtime, 0x1800dbec0));
-    }
     s_fn_Engine_Startup = reinterpret_cast<fn_Engine_Startup_t>(
         ResolveExport("?Startup@Engine@1@QEAAIPEBDII_N@Z"));
     s_fn_Engine_Shutdown = reinterpret_cast<fn_Engine_Shutdown_t>(

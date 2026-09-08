@@ -358,11 +358,19 @@ void StringAcquire(RtSystem::String* dst, const RtSystem::String* src) {
 // frame for the whole of the front end, and a bare RtOriginal is a
 // GetProcAddress under the loader lock on every call — 5.6 points of sim time
 // when Wave 2 did it in System::Time (reference_rtoriginal_is_getprocaddress.md).
+//
+// RT_EXPORT_ONCE since 2026-09-07 (Wave 9 lane R), and the reason is a good
+// advertisement for running the checker after every landing: both names were
+// UNPORTED when the paragraph above was written, so raw and non-raw reached the
+// same DLL body and the choice was purely about GetProcAddress cost. Another
+// lane has since PORTED both -- and at that instant these two lines became port
+// bypasses, with nothing in this file changing. RT_EXPORT_ONCE keeps the caching
+// the paragraph above argues for and reaches whichever implementation is armed.
 int64_t SecondsToTicks(float seconds) {
-    return RT_ORIGINAL_ONCE(SecondsToTicksFn, "?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
+    return RT_EXPORT_ONCE(SecondsToTicksFn, "?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
 }
 float TicksToSeconds(int64_t ticks) {
-    return RT_ORIGINAL_ONCE(TicksToSecondsFn, "?TicksToSeconds@Timer@System@@SAM_J@Z")(ticks);
+    return RT_EXPORT_ONCE(TicksToSecondsFn, "?TicksToSeconds@Timer@System@@SAM_J@Z")(ticks);
 }
 
 // ============================================================================

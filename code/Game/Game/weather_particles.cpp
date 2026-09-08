@@ -64,14 +64,8 @@ void EnsureResolved() {
         ResolveExport("?Identity@Transform@Math@@SA?AV12@XZ"));
     s_fnGeoBaseDtor = reinterpret_cast<fn_Geo_BaseDtor_t>(
         ResolveExport("??1Geometry@Graphics@@UEAA@XZ"));
-    if (!s_fnGeoBaseDtor)
-        s_fnGeoBaseDtor = reinterpret_cast<fn_Geo_BaseDtor_t>(
-            ResolveAddr(Module::Runtime, 0x1800a41c0));
     s_fnRandFloatTol = reinterpret_cast<fn_RandFloatTol_t>(
         ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ"));
-    if (!s_fnRandFloatTol)
-        s_fnRandFloatTol = reinterpret_cast<fn_RandFloatTol_t>(
-            ResolveAddr(Module::Runtime, 0x1800c8000));
 }
 
 inline uint8_t SettingsByte(int off) {

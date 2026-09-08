@@ -15,11 +15,16 @@ bucket.
 Measured, not asserted:
 
 ```
-tools/runtime_census.py, before lane Q:   internal  64 called, 0 ported
+tools/runtime_census.py, before lane Q:   internal  64 called,  0 ported
 tools/runtime_census.py, after lane Q:    internal  69 called, 27 ported (39.1%)
 TOTAL                                     827 -> 832 called, 545 ported
 tools/port_bypass_audit.py                ADDR-REGISTERED=27, 0 bypasses
 ```
+
+Those two lines were taken minutes apart on a shared tree, so only the `internal` bucket is
+attributable to this lane: **+27 ported, +5 called, all 27 of them registrations in
+`array.cpp`**. A later reading shows `internal 70 / 39` because lane D2 landed some of the
+destroy helpers §4 names; the extra 12 are theirs, not lane Q's.
 
 The `called` column going UP by 5 while 27 were retired is
 [the mechanism WAVE9.md describes](WAVE9.md) — a faithful port that calls DLL internals by
@@ -266,10 +271,15 @@ in the middle of using an Array.
 | Compared | Excluded, and why |
 |---|---|
 | `_size`, `_capacity` | `_data` — two independent allocations, two addresses |
-| element bytes `[0, newSize)` when the tail is written | `[newSize, capacity)` — never written by either side; capacity does not shrink |
-| | `[oldSize, newSize)` for `kSpec_Bool` and `kSpec_I32` — retail's `else` arm is empty |
-| | `+0x2c..+0x2f` of each **new** element for `kSpec_EffectSlot` |
+| element bytes `[0, newSize)`, **minus the window of whichever arm wrote each element** (§3.4b) | `[newSize, capacity)` — never written by either side; capacity does not shrink |
+| | `[oldSize, newSize)` for `kSpec_Bool` and `kSpec_I32` — retail's `else` arm is empty, so *no* arm wrote them |
+| | `+0x34..+0x37` of every element the loop touched for `kSpec_Sprite38` (**assign** arm) |
+| | `+0x2c..+0x2f` of every element the loop touched for `kSpec_EffectSlot` (**both** arms) |
 | | the return value — `SetSize` leaves `RAX` unspecified at the `RET` |
+
+Every exclusion in that right-hand column is itself checked by `VerifyUnwritten()` on
+non-reallocating cases — see §3.4b. An exclusion is a claim about the shipped body, and this
+lane makes the probe prove it rather than assert it.
 
 For `~Array`, the compared extent is the whole 16-byte header. The **free** is not visible to
 the comparator and is covered by pairing the run with `BANISHED_REDZONE=watch`.
@@ -361,6 +371,117 @@ traffic does not belong in a registry that reports on the *live* run.
 duration.* A harness that cries wild-write for a benign cause is worse than one that says
 nothing.
 
+## 3.4b Written extents belong to an ARM, not to a type — and the seed that hid it
+
+Fixed 2026-09-07, on a latent defect lane D2 found while porting the destroy helpers this
+cluster calls. **It had not bitten, and it would have** — the day anything seeded a non-zero
+element, four bytes neither side writes would have been compared and the probe would have
+reported a catastrophic-looking mismatch on a correct port.
+
+### The defect
+
+`0x180004220`, `kSpec_Sprite38`'s copy-assign, refcount-assigns the two `String` pointers at
+`+0x00`/`+0x08`, copies nine dwords at `+0x10 … +0x30`, **and stops**. The element is `0x38`
+bytes, so **`+0x34..+0x37` is never written**. The spec recorded no window.
+
+That offset is not arbitrary: it is exactly `runtime/types/ui/SpriteSheet.h`'s **`_pad34`**.
+Retail's own copy-assign does not copy the padding — which independently confirms the field
+really is padding, and is a nice corroboration of a header that Wave 7 lane F had to correct
+once already.
+
+### Why the field was in the wrong place, which is the general lesson
+
+The spec's window was documented as **the INIT arm's** extent, and this is **the ASSIGN arm**.
+Those are two different code paths with two different written extents — precisely
+`reference_never_written_needs_by_whom.md`, *a written-extent constant belongs to a WRITER,
+not to a type*. And `kSpec_Sprite38` has **no init arm at all**: it is the three-argument
+form, so the new tail goes through `assign` with `fill` too. Its window therefore had to be
+excluded for **every element the loop touched**, not just `[oldSize, newSize)`.
+
+`ArraySpec` now carries **two** windows, `assignUnwritten*` and `initUnwritten*`, and
+`Compare()` decides per element which arm produced it:
+
+| element | arm |
+|---|---|
+| `i < start` | untouched by the loop — compare in full (identical seed) |
+| `i < oldSize` | **assign**, from the old buffer |
+| `i >= oldSize`, a fill was passed | **assign**, from `*fill` |
+| `i >= oldSize`, spec has an `init` | **init** |
+| `i >= oldSize`, neither | **nothing written** — skip the whole element |
+
+### Re-reading all 16 turned up a second one
+
+Since the field was wrong, every spec's extent was re-derived rather than re-labelled.
+`0x180051650` (`kSpec_EffectSlot`'s assign) was disassembled for this: dwords at `+0x00`,
+`+0x04`, `+0x08`, `+0x0c`, qwords at `+0x10`, `+0x18`, dwords at `+0x20`, `+0x24`, `+0x28` —
+then straight to `+0x30`. **It skips `+0x2c..+0x2f` too.**
+
+So `EffectSlot`'s window is the same for both arms — but for two *independent* reasons, which
+is now a fact rather than an assumption. (It finishes by zeroing `+0x30`/`+0x38` and calling
+`0x180050d30` on the sub-object at `+0x30`, so the tail is fully initialised before that call
+and has no window of its own.)
+
+The other fourteen were checked and have none: every hand-written `assign` in the port covers
+its full stride (`Assign1c` is 7 dwords = `0x1c`, `AssignStringExt` writes both qwords of
+`0x10`), and every `init` except `InitEffectSlot` does too.
+
+| spec | assign unwritten | init unwritten | evidence |
+|---|---|---|---|
+| `kSpec_Sprite38` | **`+0x34..+0x37`** | — (no init arm) | `0x180004220` stops at `+0x33`; `SpriteInfo::_pad34` |
+| `kSpec_EffectSlot` | **`+0x2c..+0x2f`** | **`+0x2c..+0x2f`** | `0x180051650` and `InitEffectSlot`, read separately |
+| all 14 others | none | none | the arm covers the full stride |
+
+### The seed, and why all-zero was the problem
+
+The reason this stayed latent is that the probe seeded the three non-trivial targets with
+**all-zero elements** — the one seed under which an unwritten-bytes bug cannot be seen, because
+both sides read zero in the window and agree by accident.
+
+That blanket flag is gone. Which bytes must stay zero is a property of the **element type**, so
+it now lives in `ArraySpec::seedZeroLo/Hi` and covers only the slots the element operations
+actually dereference; everything else is seeded with a varying non-zero pattern based on `0xCD`:
+
+| spec | seeded zero | why | seeded non-zero |
+|---|---|---|---|
+| `kSpec_Sprite38` | `+0x00..+0x0f` | both `String*`, refcounted by the assign and released by `0x1800059e0` | `+0x10..+0x37` — which is what makes the `+0x34` window testable |
+| `kSpec_StringExt` | `+0x00..+0x07` | the `String*` | `+0x08`, the `ExternalPtr`, copied verbatim and never dereferenced |
+| `kSpec_EffectSlot` | `+0x30..+0x3f` | the sub-object goes to `0x180050d30` and to `0x180052110`'s free | `+0x00..+0x2f` |
+
+**A varying pattern, not a constant `0xCD`.** The idiom's value is that "`0xCD` surviving in
+theirs proves retail never wrote there", but a *constant* fill cannot detect a copy that reads
+the wrong element or the wrong offset — every byte looks the same. The pattern is
+`0xCD + element*31 + offset*7`, which keeps both properties, and the fill argument uses element
+index `0xFF` so a byte copied *from the fill* is distinguishable from one copied from the old
+buffer.
+
+### And the exclusions are now tested, not trusted
+
+An exclusion that is *wrong* hides a real defect rather than a false one — the more dangerous
+direction, and not something disassembly alone keeps honest as the port changes. So
+`VerifyUnwritten()` closes the loop: on **non-reallocating** cases, where the destination *is*
+the seeded buffer, every excluded byte must still hold its seed afterwards.
+
+```
+[RtArrayProbe] UNWRITTEN WINDOWS: <n> excluded windows verified as genuinely
+               unwritten, <m> turned out to be written
+[RtArrayProbe] *** A window excluded by an ArraySpec IS written by its arm. The spec
+               is wrong, and every comparison of those bytes has been silently
+               skipped. Fix the spec, do not widen the window. ***
+```
+
+Not checkable on a realloc: the destination is a fresh `MemAlloc`, so there is no seed to
+survive. **This also means the `+0x34` and `+0x2c` windows are only positively verified on the
+`grow-within-capacity` and `shrink` cases** — which is why those cases are in the matrix.
+
+### Two lane-D2 corrections to §4, accepted
+
+* `0x180052110` was filed here as *"PORT with the Audio holdbacks"*. **Wrong** — it is an
+  ordinary destroy-range body, `offs{0x30}`, stride `0x40`, calling nothing but the allocator,
+  and is not gated on Audio. Its sibling `0x180051650` genuinely is (it calls `0x180050d30`).
+  §4 is corrected.
+* *"The three String-releasing helpers are likely one body with three strides"* — right about
+  the two that matter, wrong that all three are one body. One of the three is a different body.
+
 ## 3.5 Live instrumentation — a coverage counter, stated as such
 
 Each of the 27 addresses owns its own `RtDiffSite`, so the `RtDiff` summary reports `calls=`
@@ -433,16 +554,20 @@ per address is whether the **registration** is exercised by a real caller — wh
    quit; if either is interrupted, those two lines are meaningless.
 2. **Nine of the eleven J1 addresses are teardown-only.** Q3 is not optional — without a world
    reload, `calls=` on the scene dtors reflects one exit path, not use.
-3. **The three non-trivial instantiations are probed with ALL-ZERO element contents only.**
-   Their element operations dereference the element, so a byte-pattern seed would hand
-   `0x180004220` / `0x180051650` / the inlined String assign a garbage pointer and fault. With
-   zeros those helpers take their null paths, so **the container algebra is verified for all
-   three and the element semantics are not.** In particular the
-   `INC dword ptr [RAX-4]` String refcount bump inside `0x180061480` is **not reached by the
-   probe**. It is covered only indirectly, by `runtime/src/ui/sprite.cpp`'s existing refcount
-   reasoning and by whether Q1/Q2 leak or double-free strings. Closing it properly means
-   seeding the probe with a synthetic `str-8`/`str-4` refcounted block and asserting the count
-   afterwards — specified here, not implemented, and it is this lane's largest single gap.
+3. **The three non-trivial instantiations have their POINTER SLOTS seeded zero** — narrowed
+   from "all-zero elements" in §3.4b, which is what let an unwritten-bytes window hide. Only
+   the bytes the element operations dereference stay zero now (`+0x00..+0x0f` for
+   `kSpec_Sprite38`, `+0x00..+0x07` for `kSpec_StringExt`, `+0x30..+0x3f` for
+   `kSpec_EffectSlot`); everything else is seeded non-zero, so **the container algebra and the
+   scalar half of the element semantics are both verified for all three.**
+
+   What remains uncovered is the **refcount** half: the `String` slots stay null, so the
+   `INC dword ptr [RAX-4]` bump inside `0x180061480`'s inlined assign and inside
+   `0x180004220` is **not reached by the probe**. It is covered only indirectly, by
+   `runtime/src/ui/sprite.cpp`'s existing refcount reasoning and by whether Q1/Q2 leak or
+   double-free strings. Closing it means seeding a synthetic `str-8`/`str-4` refcounted block
+   and asserting the count afterwards — specified, not implemented, and it is this lane's
+   largest single remaining gap.
 4. **The five new helper addresses are not verified by anything.** They are called by address
    and remain the DLL's, exactly as `ClearAll` and `RegisterInput` call `Collection::Set`
    internals. They are lane D rows now, not lane Q results.
@@ -457,15 +582,21 @@ Add to `wave9_internals.csv`:
 
 | address | ins | job | created by | disposition |
 |---|---|---|---|---|
-| `0x180004220` | — | element copy-assign, 0x38 `SpriteSheet` entry | lane Q `kSpec_Sprite38` | PORT with the SpriteSheet element type |
+| `0x180004220` | 30 | element copy-assign, 0x38 `SpriteSheet` entry. Refcounts two `String`s, copies nine dwords `+0x10..+0x30`, **leaves `+0x34..+0x37`** | lane Q `kSpec_Sprite38` | PORT with the SpriteSheet element type |
 | `0x1800059e0` | 62 | destroy-range, same element (releases two `String` refs each) | lane Q `kSpec_Sprite38` | PORT with `System::String` release |
-| `0x180051650` | — | element copy-assign, 0x40 `Audio::EffectSlot` | lane Q `kSpec_EffectSlot` | PORT with the Audio holdbacks |
-| `0x180052110` | — | destroy-range, same element | lane Q `kSpec_EffectSlot` | PORT with the Audio holdbacks |
+| `0x180051650` | 27 | element copy-assign, 0x40 `Audio::EffectSlot`. **Leaves `+0x2c..+0x2f`**, zeroes `+0x30`/`+0x38`, then calls `0x180050d30` (lane D's J10) on the sub-object | lane Q `kSpec_EffectSlot` | **PORT with the Audio holdbacks** — the J10 call is the gate |
+| `0x180052110` | — | destroy-range, same element | lane Q `kSpec_EffectSlot` | **PORT — ordinary destroy-range** (corrected, see below) |
 | `0x180005930` | 43 | destroy-range, 0x10 `{String*, ExternalPtr}` | lane Q `kSpec_StringExt` | PORT with `System::String` release |
 
-Three of the five are the same shape — a String-releasing destroy loop over a strided buffer —
-so they are likely one body with three strides, the same finding this lane made about J1. That
-is worth checking before porting them one at a time.
+**Two corrections from lane D2, accepted** (also in §3.4b):
+
+* `0x180052110`'s "PORT with the Audio holdbacks" was **wrong**. It is an ordinary
+  destroy-range body — `offs{0x30}`, stride `0x40`, calling nothing but the allocator — and is
+  not gated on Audio. Its sibling `0x180051650` genuinely is, because it calls `0x180050d30`.
+  Filing the pair together on the strength of the sibling was the error.
+* "Three of the five are the same shape, so they are **likely one body with three strides**"
+  was right about the two that matter and wrong that all three are one body: **one of the three
+  is a different body.** The J1 result does not generalise for free.
 
 ## Rows lane Q did NOT take, and why
 

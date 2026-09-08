@@ -3249,10 +3249,6 @@ void* GameUpdateLoop_Destroy(GameUpdateLoop* self, uint32_t flags) {
     if (!fn_UpdateLoop_Dtor) {
         fn_UpdateLoop_Dtor = reinterpret_cast<fn_UpdateLoop_Dtor_t>(
             ResolveExport("??1UpdateLoop@Engine@@UEAA@XZ"));
-        if (!fn_UpdateLoop_Dtor) {
-            fn_UpdateLoop_Dtor = reinterpret_cast<fn_UpdateLoop_Dtor_t>(
-                ResolveAddr(Module::Runtime, 0x1800DDDB0));
-        }
     }
 
     // Step 1: Reset vtable to GameUpdateLoop vtable

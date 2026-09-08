@@ -81,14 +81,8 @@ void EnsureResolved() {
     s_resolved = true;
     s_fn_FromYawPitch = reinterpret_cast<fn_FromYawPitch_t>(
         ResolveExport("?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z"));
-    if (!s_fn_FromYawPitch)
-        s_fn_FromYawPitch = reinterpret_cast<fn_FromYawPitch_t>(
-            ResolveAddr(Module::Runtime, 0x1800220b0));
     s_fn_Context_SetFog = reinterpret_cast<fn_Context_SetFog_t>(
         ResolveExport("?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z"));
-    if (!s_fn_Context_SetFog)
-        s_fn_Context_SetFog = reinterpret_cast<fn_Context_SetFog_t>(
-            ResolveAddr(Module::Runtime, 0x18001a360));
 }
 
 inline void UnpackColor(uint32_t c, float out[4]) {

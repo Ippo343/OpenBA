@@ -103,9 +103,6 @@ void EnsureSimResolved() {
     s_simResolved = true;
     s_fnRandFloatTol = reinterpret_cast<fn_RandFloatTol_t>(
         ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ"));
-    if (!s_fnRandFloatTol)
-        s_fnRandFloatTol = reinterpret_cast<fn_RandFloatTol_t>(
-            ResolveAddr(Module::Runtime, 0x1800c8000));
     s_fnRemoveGlobalObject = reinterpret_cast<fn_RemoveGlobalObject_t>(
         ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
     s_fnEntityCopyCtor = reinterpret_cast<fn_EntityCopyCtor_t>(

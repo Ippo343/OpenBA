@@ -316,11 +316,6 @@ RuntimeDeps& Deps() {
 
         d.baseDtor = reinterpret_cast<fn_RenderStateDataBaseDtor_t>(
             ResolveExport("??1RenderStateData@Video@@UEAA@XZ"));
-        if (!d.baseDtor) {
-            // Fallback: Video::RenderStateData::~RenderStateData, Runtime 0x1800f8d70.
-            d.baseDtor = reinterpret_cast<fn_RenderStateDataBaseDtor_t>(
-                ResolveAddr(Module::Runtime, 0x1800f8d70));
-        }
 
         d.memFree = reinterpret_cast<fn_MemFree_t>(
             ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
