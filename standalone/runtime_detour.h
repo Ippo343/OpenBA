@@ -73,10 +73,24 @@ struct RtDetour {
 //
 // Interpose a function inside Runtime-x64.dll.
 //
-// Overwrites `patchLen` bytes at `addr` with an absolute jump to `wrapper` and
-// returns an executable trampoline holding the displaced bytes followed by a
-// jump back to `addr + patchLen` — i.e. the original body, callable from the
-// wrapper.
+// TAKES A GHIDRA ADDRESS (base 0x180000000) AND RESOLVES IT WITH
+// `ResolveRuntimeRaw` ITSELF. That is not a convenience, it is the fix for a
+// defect this signature had for its whole life (Wave 9 lane FNHOOK): it used to
+// take an ALREADY-RESOLVED address, and all ten call sites in the tree resolved
+// it with `ResolveAddr(Module::Runtime, …)` — the door that consults the port
+// registry FIRST (reference_resolveaddr_consults_port_registry_first.md). Once a
+// port registered at a detour target, the installer aimed at OUR OWN GCC
+// prologue, the byte guard below refused it, and the instrument went silently
+// dead. Five of the ten targets were in that state when this was found. The
+// rule was already written down thirty lines up; the parameter type is what let
+// every caller break it, so the resolve now lives on this side of the boundary
+// where no caller can get it wrong.
+//
+// Overwrites `patchLen` bytes at the resolved address with an absolute jump to
+// `wrapper` and returns an executable trampoline holding the displaced bytes
+// followed by a jump back to `addr + patchLen` — i.e. the original body,
+// callable from the wrapper. Returns nullptr when the DLL is absent, which is
+// the cutover value and is why every caller must tolerate a null trampoline.
 //
 // `patchLen` must be >= 12 (the size of the absolute jump) AND must land on an
 // instruction boundary; the helper NOPs the remainder. Getting that boundary
@@ -91,7 +105,7 @@ struct RtDetour {
 //
 // Returns nullptr on failure. Implemented in standalone/filename_runtime_hook.cpp,
 // which is where the first six of these were written.
-void* RuntimeDetourInstall(uintptr_t addr, void* wrapper, int patchLen,
+void* RuntimeDetourInstall(uintptr_t ghidraAddr, void* wrapper, int patchLen,
                            const uint8_t* expected, int expectedLen,
                            const char* name);
 

@@ -1,0 +1,14 @@
+[FNHook] detoured Video::Device::InitializeInterfaces @00007ffcafbc79f0 (tramp=0000019714a30000, 17-byte patch)
+[FNHook] detoured Filename::~Filename @00007ffcafad6980 (tramp=0000019714df0000, 18-byte patch)
+[FNHook] detoured Filename::operator= @00007ffcafad6770 (tramp=0000019716db0000, 13-byte patch)
+[FNHook] detoured Filename::operator=(Filename) @00007ffcafad7d40 (tramp=0000019716dc0000, 20-byte patch)
+[FNHook] detoured Filename(String&) @00007ffcafad67d0 (tramp=0000019716dd0000, 19-byte patch)
+[FNHook] installed (abort=0 maxEvents=80 target-resolution=RAW) — watching Runtime-internal Filename refcount UAF
+[FNHook] detoured ExternalFactory::FindOrLoad @00007ffcafb8f320 (tramp=0000019716de0000, 14-byte patch)
+[FNHook] detoured External::Load @00007ffcafb8c620 (tramp=0000019716df0000, 18-byte patch)
+[ResLoad] serialized: FindOrLoad=0000019716de0000 External::Load=0000019716df0000 (recursive CS, target-resolution=RAW)
+[FNHook] detoured CompressedStream::Read @00007ffcafb7a780 (tramp=0000019716e00000, 15-byte patch)
+[ReadGuard] installed: Read=patched SetWindow=00007ffcafb79aa0 (BANISHED_READ_GUARD)
+[FNHook] census: ~Filename=0 operator=(String)=0 operator=(Filename)=0 Filename(String)=184642
+[ResLoad] census: FindOrLoad=22591 External::Load=5686
+[ReadGuard] census: Read=104069297

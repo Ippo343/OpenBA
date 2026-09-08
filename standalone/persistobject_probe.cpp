@@ -163,13 +163,11 @@ void* WrapPersistObject(void* self, void* stream, uint32_t gen,
 extern "C" void InstallPersistObjectProbe() {
     if (!TraceOn()) return;
     InitMaxLog();
-    uintptr_t addr = ResolveAddr(Module::Runtime, kPersistObject);
-    if (!addr) {
-        fprintf(stderr, "[Persist] could not resolve InternalFactory::PersistObject\n");
-        return;
-    }
+    // RuntimeDetourInstall takes the GHIDRA address and resolves it RAW itself
+    // (Wave 9 lane FNHOOK) — handing it a ResolveAddr result aims the patch at
+    // our own body the day 0x1800bff10 gets ported.
     g_origPersistObject = reinterpret_cast<PersistObjectFn>(
-        RuntimeDetourInstall(addr, reinterpret_cast<void*>(&WrapPersistObject),
+        RuntimeDetourInstall(kPersistObject, reinterpret_cast<void*>(&WrapPersistObject),
                              kPersistPatchLen, kPersistPrologue, kPersistPatchLen,
                              "Object::InternalFactory::PersistObject"));
     if (!g_origPersistObject)

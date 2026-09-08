@@ -138,15 +138,12 @@ void WrapInitializeInterfaces(void* device) {
 // Install the pre-fill. Call after Dx11SeamInstall() (so our vtables exist)
 // and before Engine::Startup (so we beat InitializeInterfaces).
 void InstallVideoInterfacePrefill() {
-    uintptr_t addr = ResolveAddr(Module::Runtime, kInitializeInterfaces);
-    if (!addr) {
-        fprintf(stderr, "[VideoInterface] could not resolve "
-                        "Video::Device::InitializeInterfaces\n");
-        return;
-    }
-
+    // RuntimeDetourInstall takes the GHIDRA address and resolves it RAW itself
+    // (Wave 9 lane FNHOOK) — handing it a ResolveAddr result aims the patch at
+    // our own body the day 0x1800f79f0 gets ported, and the byte guard then
+    // refuses silently.
     g_origInitializeInterfaces = reinterpret_cast<InitializeInterfacesFn>(
-        RuntimeDetourInstall(addr, reinterpret_cast<void*>(&WrapInitializeInterfaces),
+        RuntimeDetourInstall(kInitializeInterfaces, reinterpret_cast<void*>(&WrapInitializeInterfaces),
                              kInitializeInterfacesPatchLen,
                              kInitializeInterfacesPrologue,
                              kInitializeInterfacesPatchLen,
