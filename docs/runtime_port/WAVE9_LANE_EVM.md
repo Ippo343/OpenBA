@@ -189,7 +189,7 @@ reaches retail's SEH region under us. Recorded in `WAVE9.md` at `76636d0`.
    corpus cannot distinguish the transcribed comparator from a "corrected" one
    in the cases where they actually differ.
 3. **Take one lock window and run the five cells** in
-   `WAVE9_LANE_EVM_PREDICTIONS.md`. All predictions are registered as DELTAS and
+   `docs/runtime_port/evidence/lane_evm/EVM_PREDICTIONS.md`. All predictions are registered as DELTAS and
    were written before any measurement.
 4. Then, and only then, may any number in this lane be reported.
 
