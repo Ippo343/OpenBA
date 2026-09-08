@@ -313,3 +313,4 @@ extern "C" void RtAllocShadowReport(uint64_t* calls, uint64_t* divergences);
 // Harness health, NOT port correctness: replay-map overflow and frees that had
 // no mapped replica pointer. Either one non-zero invalidates the run.
 extern "C" void RtAllocShadowHealth(uint64_t* mapFull, uint64_t* freeUnmapped);
+extern "C" void RtAllocShadowCoverage(int* ranges, uint64_t* reserved);
