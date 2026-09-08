@@ -129,6 +129,72 @@ def scan(pe):
             imm = int.from_bytes(data[i + 4:i + 8], "little", signed=True)
             events.append((va, "stk", (data[i + 3], imm)))
 
+        # ---- patterns added for the PORT (the first version only had to make
+        # the table readable; the port needs every immediate that reaches a
+        # ConstantBuffer field, and inferring "a float4x4 is obviously 4" is
+        # precisely the retyping this file exists to avoid) ----
+
+        # MOV qword ptr [RBP-0x79],imm32 — the SIZE of an INLINED AddConstant's
+        # stack element. RBP is RSP+0xc9 here, so RBP-0x79 is RSP+0x50, which
+        # is element+0x10; the qword store also zeroes element+0x14 (offset).
+        elif b == 0x48 and data[i + 1] == 0xC7 and data[i + 2] == 0x45 \
+                and data[i + 3] == 0x87:
+            events.append((va, "size", int.from_bytes(data[i + 4:i + 8],
+                                                      "little", signed=True)))
+
+        # MOV qword/dword/word ptr [R15+disp32],imm — the scalar fields of an
+        # INLINED BeginConstants. R15 is `this` for the whole function.
+        elif b == 0x49 and data[i + 1] == 0xC7 and data[i + 2] == 0x87:
+            events.append((va, "q[r15]", (
+                int.from_bytes(data[i + 3:i + 7], "little"),
+                int.from_bytes(data[i + 7:i + 11], "little", signed=True))))
+        elif b == 0x41 and data[i + 1] == 0xC7 and data[i + 2] == 0x87:
+            events.append((va, "d[r15]", (
+                int.from_bytes(data[i + 3:i + 7], "little"),
+                int.from_bytes(data[i + 7:i + 11], "little", signed=True))))
+        elif b == 0x66 and data[i + 1] == 0x41 and data[i + 2] == 0xC7 \
+                and data[i + 3] == 0x87:
+            events.append((va, "w[r15]", (
+                int.from_bytes(data[i + 4:i + 8], "little"),
+                int.from_bytes(data[i + 8:i + 10], "little"))))
+
+        # The same three against RSI, which MSVC parks a buffer base in for the
+        # third buffer (LEA RSI,[R15+0x1f78]).
+        elif b == 0x48 and data[i + 1] == 0xC7 and data[i + 2] == 0x46:
+            events.append((va, "q[rsi]", (
+                data[i + 3],
+                int.from_bytes(data[i + 4:i + 8], "little", signed=True))))
+        elif b == 0x66 and data[i + 1] == 0xC7 and data[i + 2] == 0x46:
+            events.append((va, "w[rsi]", (
+                data[i + 3], int.from_bytes(data[i + 4:i + 6], "little"))))
+
+        # MOV byte ptr [RSP+disp8],imm8 — BeginConstants' two bool arguments.
+        elif b == 0xC6 and data[i + 1] == 0x44 and data[i + 2] == 0x24:
+            events.append((va, "stkb", (data[i + 3], data[i + 4])))
+
+        # MOV RCX,[R15+disp32] / MOV EAX,[R15+disp32] — the SLOT CHAIN. Each
+        # buffer's +0x14 is `previous.+0x14 + 1`, read from the PREVIOUS
+        # buffer's fields (or from its companion's vtable slot 3 when it has
+        # one), so these two reads are what say which buffer precedes which.
+        elif b == 0x49 and data[i + 1] == 0x8B and data[i + 2] == 0x8F:
+            events.append((va, "prev.companion",
+                           int.from_bytes(data[i + 3:i + 7], "little")))
+        elif b == 0x41 and data[i + 1] == 0x8B and data[i + 2] == 0x87:
+            events.append((va, "prev.slot",
+                           int.from_bytes(data[i + 3:i + 7], "little")))
+        # ADD R15,imm32 — MSVC rebases `this` for the last buffer.
+        elif b == 0x49 and data[i + 1] == 0x81 and data[i + 2] == 0xC7:
+            events.append((va, "this+=",
+                           int.from_bytes(data[i + 3:i + 7], "little")))
+
+        # LEA RCX/RSI/RBX,[R15+disp32] — which BUFFER the next call acts on.
+        # An entry-array LEA is buffer+0x28; a plain buffer LEA is the base.
+        elif b == 0x49 and data[i + 1] == 0x8D and data[i + 2] in (0x8F, 0xB7,
+                                                                  0x9F):
+            reg = {0x8F: "rcx", 0xB7: "rsi", 0x9F: "rbx"}[data[i + 2]]
+            events.append((va, "lea[r15]", (
+                reg, int.from_bytes(data[i + 3:i + 7], "little"))))
+
         # CALL rel32, kept only when it lands on one of the six.
         elif b == 0xE8:
             disp = int.from_bytes(data[i + 1:i + 5], "little", signed=True)
@@ -169,9 +235,15 @@ def build(events):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--events", action="store_true",
+                    help="print the raw event stream in address order")
     a = ap.parse_args()
 
     pe = pefile.PE(DLL)
+    if a.events:
+        for va, kind, val in scan(pe):
+            print("0x%x  %-9s %r" % (va, kind, val))
+        return
     rows = build(scan(pe))
 
     n_add = sum(1 for r in rows if r[0] == "AddConstant")

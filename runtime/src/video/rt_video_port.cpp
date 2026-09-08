@@ -32,6 +32,7 @@ extern int RtVideoContextLifecycleRegister();  // context_lifecycle.cpp (Wave 9 
 extern "C" void RtVideoContextLifecycleProbe();
 extern "C" void RtVideoDeviceStartupProbeArm(bool on);  // device_startup_probe.cpp
 extern "C" int  RtVideoShaderConstantsVerify();         // constant_buffer.cpp
+extern "C" void RtVideoAssignConstantsProbeArm(bool on);  // constant_buffer.cpp
 
 void RtVideoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_VIDEO")) {
@@ -67,6 +68,14 @@ void RtVideoPortInit() {
         extern int RtVideoConstantBufferRegister();
         n += RtVideoConstantBufferRegister();
         RtVideoShaderConstantsVerify();
+        // The AssignConstants oracle: ARMED here, RUN from the top of
+        // Video::Device::PlatformStartup. It drives the SHIPPED body once and
+        // ours once over two .bss Contexts, which allocates ~124 Strings and 14
+        // arrays (all released again) — and at THIS point in boot the
+        // MemoryAllocator singleton is constructed but not started, so running
+        // it here faults inside the DLL's MemAlloc. Measured, not assumed.
+        const char* ap = std::getenv("BANISHED_RT_ASSIGNCONST_PROBE");
+        RtVideoAssignConstantsProbeArm(ap && *ap && std::strcmp(ap, "0") != 0);
     }
     if (RtWaveEnabled("BANISHED_RT_VIDCTXLIFE")) {
         n += RtVideoContextLifecycleRegister();

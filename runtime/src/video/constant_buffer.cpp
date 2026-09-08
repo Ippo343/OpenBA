@@ -33,9 +33,9 @@
 //
 // THE ENTRY LAYOUT, pinned by three independent bodies
 // -----------------------------------------------------
-//   +0x00  System::String  type name  ("float4x4", "float3", …)
-//   +0x08  System::String  constant name ("worldToProjection", …)
-//   +0x10  int32           size in bytes
+//   +0x00  System::String  constant name ("worldToProjection", …)
+//   +0x08  System::String  type name     ("float4x4", "float3", …)
+//   +0x10  int32           size in float4 REGISTERS (a float4x4 is 4)
 //   +0x14  int32           offset, filled in by PlatformCreate/EndConstants
 // 0x18 bytes. `AddConstant` writes +0x00/+0x08/+0x10 and zeroes +0x14;
 // `PlatformCreate` walks +0x10/+0x14; `~ConstantBuffer` (phase 1) destroys the
@@ -43,7 +43,9 @@
 //
 // THE OBJECT: 0x48 bytes, and the fields these four touch
 // --------------------------------------------------------
-//   +0x00 / +0x08   two System::Strings (the buffer's prefix and its name)
+//   +0x00 / +0x08   two System::Strings — +0x00 is the PREFIX ("pc_"), +0x08
+//                   the buffer NAME ("PixelConstants"); see the note on
+//                   kPrefix/kName below, which this lane first got backwards
 //   +0x10 / +0x14   two int32 set by BeginConstants
 //   +0x18 / +0x19   two bools set by BeginConstants
 //   +0x1c           int32 running total size — AddConstant ADDS to it
@@ -92,24 +94,47 @@ void MemFree(void* p) {
 struct ArrayHdr { void* data; int32_t size; int32_t capacity; };
 static_assert(sizeof(ArrayHdr) == 0x10, "Collection::Array is 16 bytes");
 
+// Same labelling trap as the buffer's own two Strings, and settled the same
+// way — by the INLINED AddConstant in `?AssignConstants@`, which builds the
+// element in the open:
+//     String::Set(&t1, "float2") ; String::Set(&t2, "texelSize")
+//     elem+0x00 <- t2 ("texelSize")   elem+0x08 <- t1 ("float2")
+// so +0x00 is the CONSTANT NAME and +0x08 the TYPE NAME, and the out-of-line
+// `AddConstant(this, name, typeName, size)` takes them in that order (RDX to
+// +0x00, R8 to +0x08). The stores were always right; the labels were not.
 struct Entry {
-    void*   typeName;   // +0x00  System::String data pointer
-    void*   name;       // +0x08  System::String data pointer
-    int32_t size;       // +0x10
-    int32_t offset;     // +0x14
+    void*   name;       // +0x00  System::String data pointer ("texelSize")
+    void*   typeName;   // +0x08  System::String data pointer ("float2")
+    int32_t size;       // +0x10  in float4 REGISTERS — a float4x4 is 4, not 16
+    int32_t offset;     // +0x14  assigned later by EndConstants/PlatformCreate
 };
 static_assert(sizeof(Entry) == 0x18, "ConstantBuffer::Entry is 0x18 bytes");
 
 // Offsets into Video::ConstantBuffer (0x48 bytes; see the banner).
-// WHICH STRING LANDS WHERE, read off the argument order rather than guessed.
-// `BeginConstants(this, prefix, name, …)` stores `*prefix` at **+0x08**
-// (0x1800eed24/0x1800eed34) and `*name` at **+0x00** (0x1800eed6e). Confirmed
-// against the call site: AssignConstants passes ("pc_", "PixelConstants"), so
-// +0x00 holds the BUFFER NAME and +0x08 the PREFIX. Naming them the other way
-// round is a silent swap — both are Strings, both are released by the same
-// destructor, and nothing would ever complain.
-constexpr size_t kName     = 0x00;
-constexpr size_t kPrefix   = 0x08;
+//
+// WHICH STRING LANDS WHERE. The two fields are indistinguishable by shape —
+// both are refcounted System::Strings, both are released by the same
+// destructor — so getting the LABELS backwards costs nothing at run time and
+// misleads every later reader. This lane got them backwards once and the
+// correction came from `?AssignConstants@`, where MSVC INLINED the first
+// buffer's BeginConstants and so shows the literals landing at named offsets:
+//
+//   String::Set(&t1, "pc_")            ; String::Set(&t2, "PixelConstants")
+//   this+0x2e8 <- t2   ("PixelConstants")      <- written FIRST
+//   this+0x2e0 <- t1   ("pc_")
+//   zero this+0x2f0 (8) / +0x2f8 (2) / +0x300 (4) ; clear the array at +0x308
+//
+// Those last four fix the buffer base at 0x2e0 from four independent points
+// (0x2f0=+0x10, 0x2f8=+0x18, 0x300=+0x20, 0x308=+0x28). So:
+//
+//   +0x00 = PREFIX ("pc_")            written SECOND, from BeginConstants' R8
+//   +0x08 = NAME   ("PixelConstants") written FIRST,  from BeginConstants' RDX
+//
+// and the out-of-line signature is therefore `BeginConstants(this, name,
+// prefix, …)`, not (prefix, name). The stores themselves were always right —
+// arg2 to +0x08 and arg3 to +0x00 — this is a naming correction only.
+constexpr size_t kPrefix   = 0x00;
+constexpr size_t kName     = 0x08;
 constexpr size_t kInt10    = 0x10;
 constexpr size_t kInt14    = 0x14;
 constexpr size_t kBool18   = 0x18;
@@ -244,8 +269,8 @@ extern "C" void RtVideo_ConstEntryArraySetSize(void* arrv, int32_t newSize,
         Entry* dst = newData + i;
         if (dst == nullptr) continue;                     // retail's ADD/JZ
         const Entry* src = (i < oldSize) ? (oldData + i) : fill;
-        StringAdopt(&dst->typeName, src->typeName);
-        StringAdopt(&dst->name,     src->name);
+        StringAdopt(&dst->name,     src->name);       // +0x00 first, as retail
+        StringAdopt(&dst->typeName, src->typeName);   // +0x08
         dst->size   = src->size;
         dst->offset = src->offset;
     }
@@ -271,20 +296,20 @@ extern "C" void RtVideo_ConstEntryArraySetSize(void* arrv, int32_t newSize,
 // ARGUMENT ORDER, read off the stack slots rather than from the mangled name
 // alone (`…AEBVString@System@@0HH_N1H@Z` = String&, String&, int, int, bool,
 // bool, int):
-//   RCX  this          RDX  prefix        R8   name       R9D  int -> +0x10
+//   RCX  this          RDX  name          R8   prefix     R9D  int -> +0x10
 //   [RSP+0x50] int  -> +0x14      [RSP+0x58] bool -> +0x18
 //   [RSP+0x60] bool -> +0x19      [RSP+0x68] int  -> +0x20
 // Note +0x19 is written BEFORE +0x18 (0x1800eedba then 0x1800eedc9) — the
 // stack slots are read out of order. Harmless, and kept.
 // ============================================================================
 extern "C" void RtVideo_ConstantBuffer_BeginConstants(void* self,
-                                                      void* const* prefix,
                                                       void* const* name,
+                                                      void* const* prefix,
                                                       int32_t i10, int32_t i14,
                                                       bool b18, bool b19,
                                                       int32_t i20) {
-    StringAssign(&Field<void*>(self, kPrefix), prefix);  // 0x1800eed34 -> +0x08
-    StringAssign(&Field<void*>(self, kName),   name);    // 0x1800eed6e -> +0x00
+    StringAssign(&Field<void*>(self, kName),   name);    // 0x1800eed34 -> +0x08
+    StringAssign(&Field<void*>(self, kPrefix), prefix);  // 0x1800eed6e -> +0x00
 
     Field<int32_t>(self, kInt10) = i10;
     Field<int32_t>(self, kInt14) = i14;
@@ -302,9 +327,9 @@ extern "C" void RtVideo_ConstantBuffer_BeginConstants(void* self,
 // Append one declaration. Retail builds the element ON THE STACK, hands its
 // address to the resize as the fill value, then releases the two temporaries.
 //
-// **The temporaries are released in REVERSE order** (name at +0x30 first, then
-// the type name at +0x28), which is MSVC's destruction order for the two
-// locals. Kept.
+// **The temporaries are released in REVERSE order** (the TYPE name at +0x30
+// first, then the constant name at +0x28), which is MSVC's destruction order
+// for the two locals. Kept.
 //
 // **`totalSize += size` happens AFTER the resize** (0x1800eecf0), so a resize
 // that failed to allocate still advances the running total. Retail's; it is
@@ -314,20 +339,20 @@ extern "C" void RtVideo_ConstantBuffer_BeginConstants(void* self,
 // The stack element's `offset` field is explicitly zeroed (0x1800eec90).
 // ============================================================================
 extern "C" void RtVideo_ConstantBuffer_AddConstant(void* self,
-                                                   void* const* typeName,
                                                    void* const* name,
+                                                   void* const* typeName,
                                                    int32_t size) {
     Entry elem;
-    StringAdopt(&elem.typeName, *typeName);   // 0x1800eec66
-    StringAdopt(&elem.name,     *name);       // 0x1800eec7b
+    StringAdopt(&elem.name,     *name);       // 0x1800eec66 -> elem+0x00
+    StringAdopt(&elem.typeName, *typeName);   // 0x1800eec7b -> elem+0x08
     elem.size   = size;                       // 0x1800eec8b
     elem.offset = 0;                          // 0x1800eec90
 
     ArrayHdr* a = Entries(self);
     RtVideo_ConstEntryArraySetSize(a, a->size + 1, &elem);   // 0x1800eeca2
 
-    StringRelease(&elem.name);                // 0x1800eeca8 — reverse order
-    StringRelease(&elem.typeName);            // 0x1800eeccc
+    StringRelease(&elem.typeName);            // 0x1800eeca8 (+0x30) — reverse
+    StringRelease(&elem.name);                // 0x1800eeccc (+0x28)
 
     Field<int32_t>(self, kTotalSz) += size;   // 0x1800eecf0
 }
@@ -362,6 +387,13 @@ extern "C" void RtVideo_ConstantBuffer_AddConstant(void* self,
 // "nothing can move it" (lane PICK §5).
 // ============================================================================
 namespace {
+// Branch counters, incremented INSIDE the bodies under test. A probe that
+// counts what it observes from the outside can report green while three of four
+// branches were never entered (lane PKG2), so these live here and the probe
+// prints them.
+int g_endCompanion = 0;   // delegated to the backend companion
+int g_endArith     = 0;   // computed the offsets here
+
 void ComputeOffsets(void* self) {
     const int32_t n = Field<int32_t>(self, kEntries + 8);
     int32_t running = 0;
@@ -377,19 +409,23 @@ using CompanionFn1 = bool (*)(void*);
 
 extern "C" bool RtVideo_ConstantBuffer_PlatformCreate(void* self) {
     if (void* companion = Field<void*>(self, kCompanion)) {
+        ++g_endCompanion;
         void** vt = *reinterpret_cast<void***>(companion);
         return reinterpret_cast<CompanionFn1>(vt[1])(companion);   // tail JMP +0x08
     }
+    ++g_endArith;
     ComputeOffsets(self);
     return true;                                                   // MOV AL,1
 }
 
 extern "C" void RtVideo_ConstantBuffer_EndConstants(void* self, int32_t /*unread*/) {
     if (void* companion = Field<void*>(self, kCompanion)) {
+        ++g_endCompanion;
         void** vt = *reinterpret_cast<void***>(companion);
         (void)reinterpret_cast<CompanionFn1>(vt[1])(companion);
         return;
     }
+    ++g_endArith;
     ComputeOffsets(self);
 }
 
@@ -501,6 +537,570 @@ extern "C" int RtVideoShaderConstantsVerify() {
 }
 
 // ============================================================================
+// ?AssignConstants@Context@Video@@AEAAXXZ           retail 0x1800ef3d0, ord 1629
+// ============================================================================
+// The engine's whole shader constant-buffer LAYOUT, in one straight-line
+// function: seven ConstantBuffers embedded in Video::Context, 31 declarations
+// between them, 45 distinct string literals, 1,975 instructions and not a
+// single loop or conditional of its own.
+//
+// HOW THE TABLE BELOW WAS RECOVERED, AND WHY IT IS NOT A TRANSCRIPTION
+// --------------------------------------------------------------------
+// **Eleven of the thirty-one rows are INLINED.** MSVC inlined three whole
+// `BeginConstants` bodies (the two String assignments, the five scalar stores
+// and the entry-array clear appear in line, with only the array clear left as a
+// call to 0x18001cab0) and eight whole `AddConstant` bodies (the element built
+// on the stack and handed straight to 0x180053510). A port written from "the 20
+// AddConstant calls" would therefore have declared 20 of 31 constants and three
+// of seven buffers would have had no name at all — and nothing would have said
+// so, because the resulting Context is perfectly well-formed.
+//
+// So the table is machine-extracted, twice over, from the shipped bytes:
+//   * tools/extract_shader_constants.py lifts the 45 LITERALS with their RVAs
+//     (76 references, cross-checked against an independent count), and
+//     RtVideoShaderConstantsVerify() re-checks every one of them against the
+//     loaded DLL at startup.
+//   * tools/extract_assign_constants.py --events walks the same bytes for the
+//     STRUCTURE: every call to the six functions this table is built from, every
+//     `MOV R9D,imm` (an out-of-line size), every `MOV qword [RBP-0x79],imm` (an
+//     INLINED size), the BeginConstants scalars, the two bool stack arguments,
+//     and the `LEA rXX,[R15+disp]` that says which buffer each call acts on.
+//     Its AddConstant count is asserted at 20 so a scan that under-reads fails.
+// Only the arrangement below is written by hand, and every literal in it is a
+// named index into the lifted table rather than a retyped string.
+//
+// THE SLOT CHAIN, which is the one piece of real logic
+// -----------------------------------------------------
+// Each buffer's +0x14 is the register slot it binds to, and it is computed from
+// the PREVIOUS buffer:
+//     slot = prev->companion ? prev->companion->vtbl[3]()   // ask the backend
+//                            : prev->+0x14 + 1;             // else just next
+// with the chain running pc_ -> mc_, gc_ -> ic_ -> lc_ -> tc_ -> bc_. pc_ and
+// gc_ start their own chains at slot 0. During the ctor every companion is
+// still null, so the arithmetic branch is the live one; the virtual branch
+// matters only if AssignConstants is ever re-run after the device is up.
+//
+// THE BUFFER OFFSETS inside Video::Context are NOT in declaration order:
+//   +0x0298 mc_  +0x02e0 pc_  +0x1f78 gc_  +0x1fc0 ic_
+//   +0x2008 bc_  +0x2050 tc_  +0x2098 lc_
+// bc_'s is easy to get wrong: MSVC does `ADD R15,0x2008` and then passes R15
+// itself, which reads like `this` and would silently build the bone buffer over
+// the top of the Context header.
+//
+// TWO DELIBERATE DEVIATIONS, both from MSVC's temporary handling
+//   1. Retail keeps all 22 of lc_'s String temporaries alive at once and frees
+//      them in one run of 22 MemFrees at the end; we free each pair right after
+//      its call. Same refcounts, same final object — a different transient heap
+//      peak and free order, which nothing observes.
+//   2. The three inlined BeginConstants and eight inlined AddConstants are
+//      emitted here as calls to the ported out-of-line bodies. That is exact,
+//      not an approximation: the inlined code is the same body, and the only
+//      textual difference (`INC [buf+0x1c]` where the out-of-line does
+//      `ADD [buf+0x1c],size`) is the same operation at the sizes involved —
+//      checked, not assumed: the two inlined size-4 rows do emit
+//      `ADD dword [RSI+0x1c],4`.
+// ============================================================================
+namespace {
+
+using StringSetFn    = void  (*)(void** self, const char* text);
+using StringFormatFn = void** (*)(void** ret, const char* fmt, ...);
+
+// Build a fresh String temporary from one LIFTED literal.
+void StrSetLit(void** s, int litIndex) {
+    *s = nullptr;
+    RT_EXPORT_ONCE(StringSetFn, "?Set@String@System@@QEAAXPEBD@Z")(
+        s, RtVideoShaderConstantLiteral(litIndex));
+}
+
+// `slot = prev->companion ? prev->companion->vtbl[3]() : prev->+0x14 + 1`
+int32_t NextSlotAfter(void* prev, int* tookVirtual, int* tookArithmetic) {
+    void* companion = Field<void*>(prev, kCompanion);
+    if (!companion) {
+        if (tookArithmetic) ++*tookArithmetic;
+        return Field<int32_t>(prev, kInt14) + 1;
+    }
+    if (tookVirtual) ++*tookVirtual;
+    void** vt = *reinterpret_cast<void***>(companion);
+    return reinterpret_cast<int32_t (*)(void*)>(vt[3])(companion);
+}
+
+void BeginBuffer(void* buf, int prefixLit, int nameLit, int32_t i10,
+                 int32_t i14, bool b18, bool b19, int32_t i20) {
+    void* prefix = nullptr;
+    void* name   = nullptr;
+    StrSetLit(&prefix, prefixLit);          // retail Sets the PREFIX first
+    StrSetLit(&name,   nameLit);
+    RtVideo_ConstantBuffer_BeginConstants(buf, &name, &prefix,
+                                          i10, i14, b18, b19, i20);
+    StringRelease(&name);                   // …and releases the NAME first
+    StringRelease(&prefix);
+}
+
+void AddDecl(void* buf, int typeLit, int nameLit, int32_t size) {
+    void* type = nullptr;
+    void* name = nullptr;
+    StrSetLit(&type, typeLit);              // retail Sets the TYPE first
+    StrSetLit(&name, nameLit);
+    RtVideo_ConstantBuffer_AddConstant(buf, &name, &type, size);
+    StringRelease(&name);                   // …and releases the NAME first
+    StringRelease(&type);
+}
+
+struct DeclRow  { int16_t typeLit; int16_t nameLit; int32_t size; };
+struct BufRow {
+    uint32_t       bufOff;      // offset of this ConstantBuffer inside Context
+    int16_t        prefixLit;
+    int16_t        nameLit;
+    int32_t        i10;
+    int32_t        prevOff;     // -1: start a new chain at `i14`
+    int32_t        i14;
+    uint8_t        b18, b19;
+    int32_t        i20;
+    const DeclRow* decls;
+    int            ndecls;
+    uint8_t        platformCreate;   // 1: PlatformCreate, 0: EndConstants
+};
+
+// clang-format off
+const DeclRow kPixelDecls[] = {
+    { kLit_float2, kLit_texelSize,    1 },
+    { kLit_float4, kLit_fogColor,     1 },
+    { kLit_float3, kLit_lightColor,   1 },
+    { kLit_float3, kLit_ambientColor, 1 },
+    { kLit_float4, kLit_userPosition, 1 },
+};
+const DeclRow kMaterialDecls[] = {
+    { kLit_float4, kLit_materialConstant0, 1 },
+    { kLit_float4, kLit_materialConstant1, 1 },
+    { kLit_float4, kLit_materialConstant2, 1 },
+    { kLit_float4, kLit_materialConstant3, 1 },
+};
+const DeclRow kGlobalDecls[] = {
+    { kLit_float4x4, kLit_worldToProjection, 4 },   // INLINED in retail
+    { kLit_float4x4, kLit_worldToCamera,     4 },   // INLINED in retail
+    { kLit_float3,   kLit_cameraPosition,    1 },
+    { kLit_float4,   kLit_userPosition,      1 },
+    { kLit_float,    kLit_time,              1 },
+    { kLit_float2,   kLit_fog,               1 },
+    { kLit_float3,   kLit_fogColor,          1 },
+};
+const DeclRow kInstanceDecls[] = {
+    { kLit_float4, kLit_inverseScale, 1 },
+    { kLit_float4, kLit_color,        1 },
+};
+const DeclRow kLightDecls[] = {
+    { kLit_float3,   kLit_color,             1 },
+    { kLit_float3,   kLit_ambientColor,      1 },
+    { kLit_float3,   kLit_position,          1 },
+    { kLit_float4,   kLit_nearPlane,         1 },
+    { kLit_float4,   kLit_radius,            1 },
+    { kLit_float4,   kLit_texelSize,         1 },
+    { kLit_float4x4, kLit_textureProjection, 4 },
+    { kLit_float4x4, kLit_shadowProjection0, 4 },
+    { kLit_float4x4, kLit_shadowProjection1, 4 },
+    { kLit_float4x4, kLit_shadowProjection2, 4 },
+    { kLit_float4x4, kLit_shadowProjection3, 4 },
+};
+const DeclRow kBoneDecls[] = {
+    { kLit_float4x4, kLit_bones51, 204 },           // 51 float4x4 = 204 slots
+};
+
+constexpr uint32_t kOffMaterial = 0x0298;
+constexpr uint32_t kOffPixel    = 0x02e0;
+constexpr uint32_t kOffGlobal   = 0x1f78;
+constexpr uint32_t kOffInstance = 0x1fc0;
+constexpr uint32_t kOffBone     = 0x2008;
+constexpr uint32_t kOffTransform= 0x2050;
+constexpr uint32_t kOffLight    = 0x2098;
+
+// The five buffers whose constants are all plain literals, in retail's order.
+// tc_ and bc_ follow separately: tc_'s only constant is String::Format'ed and
+// it ends with EndConstants rather than PlatformCreate, and bc_ is the tail.
+const BufRow kBufRows[] = {
+  { kOffPixel,    kLit_pc_, kLit_PixelConstants,    0, -1,          0, 0, 0, 0,
+    kPixelDecls,    5,  0 },
+  { kOffMaterial, kLit_mc_, kLit_MaterialConstants, 1, kOffPixel,   0, 0, 0, 0,
+    kMaterialDecls, 4,  0 },
+  { kOffGlobal,   kLit_gc_, kLit_GlobalConstants,   2, -1,          0, 1, 0, 0,
+    kGlobalDecls,   7,  1 },
+  { kOffInstance, kLit_ic_, kLit_InstanceConstants, 3, kOffGlobal,  0, 1, 0, 0,
+    kInstanceDecls, 2,  1 },
+  { kOffLight,    kLit_lc_, kLit_LightConstants,    4, kOffInstance,0, 1, 0, 0,
+    kLightDecls,   11,  1 },
+};
+// clang-format on
+
+inline void* BufAt(void* ctx, uint32_t off) {
+    return static_cast<uint8_t*>(ctx) + off;
+}
+
+// Branch counters, measured INSIDE the function under test rather than inferred
+// from anything observed outside it.
+int g_slotVirtual   = 0;   // the companion vtable[3] branch
+int g_slotArith     = 0;   // the `prev+0x14 + 1` branch
+}  // namespace
+
+extern "C" void RtVideo_Context_AssignConstants(void* self) {
+    for (const BufRow& b : kBufRows) {
+        void* buf = BufAt(self, b.bufOff);
+        const int32_t slot = (b.prevOff < 0)
+            ? b.i14
+            : NextSlotAfter(BufAt(self, static_cast<uint32_t>(b.prevOff)),
+                            &g_slotVirtual, &g_slotArith);
+        BeginBuffer(buf, b.prefixLit, b.nameLit, b.i10, slot,
+                    b.b18 != 0, b.b19 != 0, b.i20);
+        for (int i = 0; i < b.ndecls; ++i)
+            AddDecl(buf, b.decls[i].typeLit, b.decls[i].nameLit,
+                    b.decls[i].size);
+        if (b.platformCreate)
+            RtVideo_ConstantBuffer_PlatformCreate(buf);
+        else
+            RtVideo_ConstantBuffer_EndConstants(buf, 0);
+    }
+
+    // ---- tc_ / TransformConstants -----------------------------------------
+    // The only buffer whose constant NAME is formatted rather than a literal,
+    // and the only one with b19 set and a non-zero +0x20 (0x40).
+    {
+        void* buf = BufAt(self, kOffTransform);
+        const int32_t slot = NextSlotAfter(BufAt(self, kOffLight),
+                                           &g_slotVirtual, &g_slotArith);
+        BeginBuffer(buf, kLit_tc_, kLit_TransformConstants, 5, slot,
+                    true, true, 0x40);
+
+        void* type = nullptr;
+        StrSetLit(&type, kLit_float4x4);
+        // Retail leaves this slot uninitialised and lets Format CONSTRUCT into
+        // it. A null is the empty String and is equivalent for a constructing
+        // Format; it is not equivalent for an assigning one, so do not "fix"
+        // this by pre-filling it with anything else.
+        void* name = nullptr;
+        RT_EXPORT_ONCE(StringFormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(
+            &name, RtVideoShaderConstantLiteral(kLit_transformFmt), 52);
+        RtVideo_ConstantBuffer_AddConstant(buf, &name, &type, 208);
+        StringRelease(&name);
+        StringRelease(&type);
+
+        RtVideo_ConstantBuffer_EndConstants(buf, 0);   // the arg is UNSET at the
+                                                       // retail call site, and
+                                                       // the callee overwrites
+                                                       // RDX before reading it
+    }
+
+    // ---- bc_ / BoneConstants, and the tail EndConstants --------------------
+    {
+        void* buf = BufAt(self, kOffBone);
+        const int32_t slot = NextSlotAfter(BufAt(self, kOffTransform),
+                                           &g_slotVirtual, &g_slotArith);
+        BeginBuffer(buf, kLit_bc_, kLit_BoneConstants, 6, slot, true, false, 0);
+        for (const DeclRow& d : kBoneDecls)
+            AddDecl(buf, d.typeLit, d.nameLit, d.size);
+        RtVideo_ConstantBuffer_EndConstants(buf, 0xcc0);   // retail's tail JMP
+    }
+}
+
+// ============================================================================
+// THE PROBE — a lockstep oracle for AssignConstants
+// ============================================================================
+// `AssignConstants` has no caller in our tree yet (the Context ctor is the next
+// link and is not ported), so a boot run would report calls=0 and prove nothing
+// — the failure mode this project has already been burned by twice. It is,
+// however, a PURE FUNCTION OF A ZEROED OBJECT: it takes no arguments, reads
+// nothing but the Context it is handed, and every companion pointer it consults
+// is null in a fresh one. So it can be driven directly.
+//
+// Two zeroed Contexts in .bss, ours built into one and the SHIPPED body into the
+// other, then compared FIELD BY FIELD — never with a memcmp, because the two
+// sides hold different heap pointers for equal strings and a byte compare would
+// fail 100% of the time for a reason that has nothing to do with the port
+// (reference_oracle_must_not_compare_unwritten_bytes.md).
+//
+// Compared per buffer: prefix TEXT, name TEXT, +0x10, +0x14 (the slot chain),
+// +0x18, +0x19, +0x1c (the running total), +0x20, the entry COUNT, and for
+// every entry its name text, type text, size and assigned offset.
+//
+// EFFECTIVENESS CONTROL, measured on THEIRS: how many buffers and entries the
+// shipped body actually produced. A green comparison over an empty object is
+// not a verification.
+// NEGATIVE CONTROL: one field of ours is corrupted afterwards and the same
+// comparator re-run; if it does not report the corruption, the comparator is
+// broken and the green above meant nothing.
+// BRANCH COUNTERS: printed from inside the bodies under test.
+// ============================================================================
+namespace {
+
+const char* Txt(void* s) { return s ? static_cast<const char*>(s) : "<null>"; }
+
+bool TxtEq(void* a, void* b) {
+    if (!a || !b) return a == b;
+    return std::strcmp(static_cast<const char*>(a),
+                       static_cast<const char*>(b)) == 0;
+}
+
+const uint32_t kProbeBufOffs[7] = { kOffPixel, kOffMaterial, kOffGlobal,
+                                    kOffInstance, kOffLight, kOffTransform,
+                                    kOffBone };
+
+int CompareContexts(void* ours, void* theirs, bool quiet) {
+    int bad = 0;
+    for (uint32_t off : kProbeBufOffs) {
+        void* o = BufAt(ours, off);
+        void* t = BufAt(theirs, off);
+#define VID2_CMP(expr, fmt, ...)                                              \
+        do { if (!(expr)) { ++bad; if (!quiet)                                \
+                std::printf("[AssignConst] *** buf+0x%04x " fmt "\n", off,    \
+                            __VA_ARGS__); } } while (0)
+        VID2_CMP(TxtEq(Field<void*>(o, kPrefix), Field<void*>(t, kPrefix)),
+                 "prefix ours=\"%s\" theirs=\"%s\" ***",
+                 Txt(Field<void*>(o, kPrefix)), Txt(Field<void*>(t, kPrefix)));
+        VID2_CMP(TxtEq(Field<void*>(o, kName), Field<void*>(t, kName)),
+                 "name ours=\"%s\" theirs=\"%s\" ***",
+                 Txt(Field<void*>(o, kName)), Txt(Field<void*>(t, kName)));
+        VID2_CMP(Field<int32_t>(o, kInt10) == Field<int32_t>(t, kInt10),
+                 "+0x10 ours=%d theirs=%d ***",
+                 Field<int32_t>(o, kInt10), Field<int32_t>(t, kInt10));
+        VID2_CMP(Field<int32_t>(o, kInt14) == Field<int32_t>(t, kInt14),
+                 "+0x14 slot ours=%d theirs=%d ***",
+                 Field<int32_t>(o, kInt14), Field<int32_t>(t, kInt14));
+        VID2_CMP(Field<uint8_t>(o, kBool18) == Field<uint8_t>(t, kBool18),
+                 "+0x18 ours=%d theirs=%d ***",
+                 Field<uint8_t>(o, kBool18), Field<uint8_t>(t, kBool18));
+        VID2_CMP(Field<uint8_t>(o, kBool19) == Field<uint8_t>(t, kBool19),
+                 "+0x19 ours=%d theirs=%d ***",
+                 Field<uint8_t>(o, kBool19), Field<uint8_t>(t, kBool19));
+        VID2_CMP(Field<int32_t>(o, kTotalSz) == Field<int32_t>(t, kTotalSz),
+                 "+0x1c total ours=%d theirs=%d ***",
+                 Field<int32_t>(o, kTotalSz), Field<int32_t>(t, kTotalSz));
+        VID2_CMP(Field<int32_t>(o, kInt20) == Field<int32_t>(t, kInt20),
+                 "+0x20 ours=%d theirs=%d ***",
+                 Field<int32_t>(o, kInt20), Field<int32_t>(t, kInt20));
+
+        const int32_t on = Entries(o)->size, tn = Entries(t)->size;
+        VID2_CMP(on == tn, "entry count ours=%d theirs=%d ***", on, tn);
+        if (on != tn) continue;
+        const Entry* oe = static_cast<const Entry*>(Entries(o)->data);
+        const Entry* te = static_cast<const Entry*>(Entries(t)->data);
+        for (int32_t i = 0; i < on; ++i) {
+            VID2_CMP(TxtEq(oe[i].name, te[i].name),
+                     "entry %d name ours=\"%s\" theirs=\"%s\" ***", i,
+                     Txt(oe[i].name), Txt(te[i].name));
+            VID2_CMP(TxtEq(oe[i].typeName, te[i].typeName),
+                     "entry %d type ours=\"%s\" theirs=\"%s\" ***", i,
+                     Txt(oe[i].typeName), Txt(te[i].typeName));
+            VID2_CMP(oe[i].size == te[i].size,
+                     "entry %d size ours=%d theirs=%d ***", i,
+                     oe[i].size, te[i].size);
+            VID2_CMP(oe[i].offset == te[i].offset,
+                     "entry %d offset ours=%d theirs=%d ***", i,
+                     oe[i].offset, te[i].offset);
+        }
+#undef VID2_CMP
+    }
+    return bad;
+}
+
+// Release everything one side allocated, so the probe does not leak ~124
+// Strings and 14 arrays into a live process.
+void TearDownContext(void* ctx) {
+    for (uint32_t off : kProbeBufOffs) {
+        void* b = BufAt(ctx, off);
+        ArrayHdr* a = Entries(b);
+        Entry* e = static_cast<Entry*>(a->data);
+        for (int32_t i = 0; i < a->size; ++i) {
+            StringRelease(&e[i].name);
+            StringRelease(&e[i].typeName);
+        }
+        if (a->data) MemFree(a->data);
+        a->data = nullptr; a->size = 0; a->capacity = 0;
+        StringRelease(&Field<void*>(b, kPrefix));
+        StringRelease(&Field<void*>(b, kName));
+    }
+}
+
+// 0x2200 covers every buffer this function touches (the highest is lc_ at
+// +0x2098, ending at +0x20e0). Static so the probe allocates nothing itself.
+alignas(16) uint8_t g_probeOurs[0x2200];
+alignas(16) uint8_t g_probeTheirs[0x2200];
+
+bool g_assignProbeArmed = false;
+
+// ---------------------------------------------------------------------------
+// PASS 2 — DRIVING the companion branches instead of waiting for them.
+//
+// Pass 1 above exercises a fresh Context, where every companion is null, so the
+// virtual halves of the slot chain and of EndConstants/PlatformCreate are never
+// entered: the branch counters read slot-virtual=0 end-companion=0 and the
+// green result covers half the function. Nothing in a boot run would ever enter
+// them either — a companion only exists once the backend has created one, and
+// AssignConstants runs before that.
+//
+// So the probe MAKES one. A four-slot fake vtable is enough: slot 1 is what
+// EndConstants/PlatformCreate tail-jump to, slot 3 is what the slot chain asks
+// for the next register index. Both sides get their own identical fakes, and
+// the fake's answer is derived from its own tag rather than from a call
+// counter, so it cannot depend on the order in which the two runs happen.
+// ---------------------------------------------------------------------------
+struct FakeCompanion {
+    void**  vtbl;
+    int32_t tag;
+    int32_t endCalls;
+    int32_t slotCalls;
+};
+
+bool FakeSlot1(void* self) {                       // EndConstants' delegate
+    ++static_cast<FakeCompanion*>(self)->endCalls;
+    return true;
+}
+int32_t FakeSlot3(void* self) {                    // "what slot do I bind to?"
+    FakeCompanion* f = static_cast<FakeCompanion*>(self);
+    ++f->slotCalls;
+    return f->tag * 10 + 3;                        // deterministic, order-free
+}
+void* g_fakeVtbl[4] = { nullptr, reinterpret_cast<void*>(&FakeSlot1),
+                        nullptr, reinterpret_cast<void*>(&FakeSlot3) };
+
+FakeCompanion g_fakeOurs[7];
+FakeCompanion g_fakeTheirs[7];
+
+void InstallFakes(void* ctx, FakeCompanion* fakes) {
+    for (int i = 0; i < 7; ++i) {
+        fakes[i].vtbl = g_fakeVtbl;
+        fakes[i].tag = i;
+        fakes[i].endCalls = 0;
+        fakes[i].slotCalls = 0;
+        Field<void*>(BufAt(ctx, kProbeBufOffs[i]), kCompanion) = &fakes[i];
+    }
+}
+
+}  // namespace
+
+extern "C" void RtVideoAssignConstantsProbeArm(bool on) { g_assignProbeArmed = on; }
+
+extern "C" void RtVideoAssignConstantsProbeMaybeRun() {
+    if (!g_assignProbeArmed) return;
+    g_assignProbeArmed = false;
+    using Fn = void (*)(void*);
+    const uintptr_t shipped = ResolveRuntimeRaw(0x1800ef3d0);
+    if (!shipped) {
+        std::printf("[AssignConst] SKIP -- the shipped body is not mapped "
+                    "(cutover); no oracle is possible without it\n");
+        return;
+    }
+
+    std::memset(g_probeOurs, 0, sizeof(g_probeOurs));
+    std::memset(g_probeTheirs, 0, sizeof(g_probeTheirs));
+
+    g_slotVirtual = g_slotArith = g_endCompanion = g_endArith = 0;
+    RtVideo_Context_AssignConstants(g_probeOurs);
+    const int slotVirt = g_slotVirtual, slotArith = g_slotArith;
+    const int endComp  = g_endCompanion, endArith = g_endArith;
+
+    reinterpret_cast<Fn>(shipped)(g_probeTheirs);
+
+    // Effectiveness, measured on THEIRS.
+    int buffersNamed = 0, entriesMade = 0, offsetsAssigned = 0;
+    for (uint32_t off : kProbeBufOffs) {
+        void* t = BufAt(g_probeTheirs, off);
+        if (Field<void*>(t, kName)) ++buffersNamed;
+        const int32_t n = Entries(t)->size;
+        entriesMade += n;
+        const Entry* e = static_cast<const Entry*>(Entries(t)->data);
+        for (int32_t i = 0; i < n; ++i)
+            if (e[i].offset != 0) ++offsetsAssigned;
+    }
+
+    const int bad = CompareContexts(g_probeOurs, g_probeTheirs, false);
+    std::printf("[AssignConst] buffers=7 entries=%d mismatches=%d\n",
+                entriesMade, bad);
+    std::printf("[AssignConst] effectiveness (all measured on THEIRS): "
+                "buffersNamed=%d entriesMade=%d offsetsAssigned=%d\n",
+                buffersNamed, entriesMade, offsetsAssigned);
+    std::printf("[AssignConst] branches taken INSIDE the ported bodies: "
+                "slot-virtual=%d slot-arith=%d end-companion=%d end-arith=%d\n",
+                slotVirt, slotArith, endComp, endArith);
+    if (slotVirt == 0)
+        std::printf("[AssignConst] pass 1 leaves the companion branches "
+                    "UNENTERED by construction (a fresh Context has none); "
+                    "pass 2 below drives them rather than waiting for them.\n");
+
+    // Negative control: break one field of ours and demand the comparator says
+    // so. Two of them, one scalar and one string, because a comparator can be
+    // right about one kind and blind to the other.
+    void* g = BufAt(g_probeOurs, kOffGlobal);
+    const int32_t saveSlot = Field<int32_t>(g, kInt14);
+    Field<int32_t>(g, kInt14) = saveSlot + 7;
+    const int caught1 = CompareContexts(g_probeOurs, g_probeTheirs, true);
+    Field<int32_t>(g, kInt14) = saveSlot;
+
+    Entry* ge = static_cast<Entry*>(Entries(g)->data);
+    void* saveName = ge ? ge[0].name : nullptr;
+    if (ge) ge[0].name = nullptr;
+    const int caught2 = CompareContexts(g_probeOurs, g_probeTheirs, true);
+    if (ge) ge[0].name = saveName;
+
+    std::printf("[AssignConst] negative-controls: scalar=%s string=%s\n",
+                caught1 > bad ? "CAUGHT" : "*** MISSED ***",
+                caught2 > bad ? "CAUGHT" : "*** MISSED ***");
+
+    TearDownContext(g_probeOurs);
+    TearDownContext(g_probeTheirs);
+
+    // ---- PASS 2: the same comparison with a FAKE COMPANION on every buffer,
+    // which is the only way these branches are ever entered.
+    std::memset(g_probeOurs, 0, sizeof(g_probeOurs));
+    std::memset(g_probeTheirs, 0, sizeof(g_probeTheirs));
+    InstallFakes(g_probeOurs, g_fakeOurs);
+    InstallFakes(g_probeTheirs, g_fakeTheirs);
+
+    g_slotVirtual = g_slotArith = g_endCompanion = g_endArith = 0;
+    RtVideo_Context_AssignConstants(g_probeOurs);
+    const int slotVirt2 = g_slotVirtual, slotArith2 = g_slotArith;
+    const int endComp2  = g_endCompanion, endArith2 = g_endArith;
+
+    reinterpret_cast<Fn>(shipped)(g_probeTheirs);
+
+    const int cmp2 = CompareContexts(g_probeOurs, g_probeTheirs, false);
+    int bad2 = cmp2;
+    for (int i = 0; i < 7; ++i) {
+        if (g_fakeOurs[i].endCalls != g_fakeTheirs[i].endCalls ||
+            g_fakeOurs[i].slotCalls != g_fakeTheirs[i].slotCalls) {
+            ++bad2;
+            std::printf("[AssignConst] *** fake companion %d: ours end=%d "
+                        "slot=%d, theirs end=%d slot=%d ***\n", i,
+                        g_fakeOurs[i].endCalls, g_fakeOurs[i].slotCalls,
+                        g_fakeTheirs[i].endCalls, g_fakeTheirs[i].slotCalls);
+        }
+    }
+    int endCallsTheirs = 0, slotCallsTheirs = 0;
+    for (int i = 0; i < 7; ++i) {
+        endCallsTheirs  += g_fakeTheirs[i].endCalls;
+        slotCallsTheirs += g_fakeTheirs[i].slotCalls;
+    }
+    std::printf("[AssignConst] pass2 (fake companion on all 7): mismatches=%d\n",
+                bad2);
+    std::printf("[AssignConst] pass2 effectiveness (on THEIRS): "
+                "companion-end-calls=%d companion-slot-calls=%d\n",
+                endCallsTheirs, slotCallsTheirs);
+    std::printf("[AssignConst] pass2 branches INSIDE the ported bodies: "
+                "slot-virtual=%d slot-arith=%d end-companion=%d end-arith=%d\n",
+                slotVirt2, slotArith2, endComp2, endArith2);
+
+    // Negative control for pass 2: the slot values now come from the fake, so
+    // corrupt ONE of them and demand the comparator says so. Without this, a
+    // comparator that had stopped looking at +0x14 would read green here.
+    void* g2 = BufAt(g_probeOurs, kOffTransform);
+    const int32_t save2 = Field<int32_t>(g2, kInt14);
+    Field<int32_t>(g2, kInt14) = save2 + 1;
+    const int caught3 = CompareContexts(g_probeOurs, g_probeTheirs, true);
+    Field<int32_t>(g2, kInt14) = save2;
+    std::printf("[AssignConst] pass2 negative-control (slot from the fake): "
+                "%s\n", caught3 > bad2 ? "CAUGHT" : "*** MISSED ***");
+
+    TearDownContext(g_probeOurs);
+    TearDownContext(g_probeTheirs);
+}
+
+// ============================================================================
 // Registration
 //
 // All four mangled names checked against the shipped export directory with
@@ -530,6 +1130,10 @@ int RtVideoConstantBufferRegister() {
     RegisterRuntimeAddr(0x1800eec40, (void*)&RtVideo_ConstantBuffer_AddConstant);
     RegisterRuntimeAddr(0x1800eebf0, (void*)&RtVideo_ConstantBuffer_EndConstants);
     RegisterRuntimeAddr(0x1800ef010, (void*)&RtVideo_ConstantBuffer_PlatformCreate);
+
+    RegisterRuntimeExport("?AssignConstants@Context@Video@@AEAAXXZ",
+                          (void*)&RtVideo_Context_AssignConstants); ++n;
+    RegisterRuntimeAddr(0x1800ef3d0, (void*)&RtVideo_Context_AssignConstants);
 
     RegisterRuntimeAddr(0x180053510, (void*)&RtVideo_ConstEntryArraySetSize);
     // Phase 1's two, now that they have callers outside context_lifecycle.cpp.
