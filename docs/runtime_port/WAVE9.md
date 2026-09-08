@@ -1566,6 +1566,75 @@ Two of the 43 are the handoff's lead #1: `?Startup@Device@Video@@` and `?Shutdow
 one-instruction JMP thunks onto `PlatformStartup`/`PlatformShutdown`, so one port closes
 both rows plus the unsatisfied call in our own `Engine::Startup`.
 
+### The ADDRESS-door census: 62 doors no name-based instrument can see
+
+Attempt 13's wall was the first that was not a missing name, so it implied a census
+nobody had run: every `ResolveAddr(Module::Runtime, 0x...)` in `runtime/`, `code/`,
+`engine/`, `standalone/` and `dx11/`, minus every address anything registers.
+
+| | |
+|---|---|
+| by-address call sites | 172 |
+| literal `RegisterRuntimeAddr(0x...)` | 508 |
+| mint-registered (table-driven) | 507 |
+| **unregistered** | **62** |
+
+**The first run of this scan said 94, and it was wrong in the same way as everything else
+this wave.** It counted registrations by grepping a LITERAL `RegisterRuntimeAddr(0x...)`,
+and the mint does not spell its addresses at the call site — it walks three generated
+tables and registers each row through a variable (`rt_data_mint.cpp:578/583/588`). All
+507 minted addresses were invisible, so 32 registered doors were reported unregistered.
+Corrected in `4ef55b6`. That is the FOURTH time this project has paid for the same
+defect (Wave 4 lane D's `kName*` constants, the dx11 resolver, the macro doors, now the
+mint tables), which is enough to promote it to a rule:
+
+> **An instrument that greps for a literal is blind to the same fact spelled through a
+> variable, and the blindness never announces itself.**
+
+**This is a WATCH LIST, not a defect list.** An unregistered door is only fatal if it is
+REACHED with the DLL absent. `standalone/allocator_lock.cpp` prints "could not resolve"
+and stands down, which is correct and was never the wall. Each row needs the call site
+read — the same triage the unregistered dispatch slots got.
+
+Concentrations, and how they were routed:
+
+| n | file | routed to |
+|---|---|---|
+| 22 | `engine/funcs/engine_funcs.cpp` | split below |
+| 7 | `runtime/src/graphics/scene.cpp` | lane GFX2 |
+| 5 | `runtime/src/input/input.cpp` | lane SYS2 (owns `?Update@Device@Input@@`) |
+| 5 | `runtime/src/picking/scene.cpp` | unrouted |
+| 4 | `runtime/src/io/filesystem_packages.cpp` | **lane PKG2 — the wall's own file** |
+| 4 | `standalone/filename_runtime_hook.cpp` | lane SYS2 (owns `?FindOrLoad@`) |
+
+The four in `filesystem_packages.cpp` — `0x18007eefc`, `0x180008340` (a tree free),
+`0x1800264a0` (a sort), `0x180025a80` (a BST insert) — sit inside `LoadPackages`, which
+is where attempt 14 dies. They are the likeliest rungs after `??0PackageFile@IO@@`, and
+they are Collection internals: an AVL rebalance written blind silently corrupts a tree.
+
+The 22 in `engine_funcs.cpp` are not one thing. Reading each site split them cleanly:
+
+- **Video Context lifecycle (2)** — `fn_VideoCtx_Ctor` `0x1800f1820`, `fn_VideoCtx_Delete`
+  `0x180018500`. The neighbouring `fn_VideoCtx_Dtor` goes by NAME
+  (`??1Context@Video@@`), so the lifecycle reaches the DLL through two different doors
+  and **all three are null at cutover**. Independent corroboration that the
+  `CreateVideoContext` cluster is the right scope. → lane VID.
+- **Dialog lifecycle (4)** — `fn_DialogInstance_Ctor` `0x180114870`, `fn_TabElement_AddTab`,
+  `fn_DialogInstance_AddControllerTab`, `fn_DialogInstance_AddController6`. The
+  DialogInstance **constructor** goes by address, so it never appeared on any name-based
+  list even though the dtor did. A dialog built through a null ctor fails exactly as
+  attempt 14 does: an all-zero object whose first virtual call jumps to 0. → lane UIC.
+- **The mods cluster (11)** — `ModEntry` copy-ctor/assign/dtor, `fn_Map_Insert`,
+  `fn_ModArrayCopy`, and `Modification` GetCount/GetMod/Swap/Enable/RefreshList/SaveList.
+  The mods menu is a live default-on feature, so this is running surface, not
+  speculative. → **lane MOD**, dispatched off this finding alone.
+- **`fn_ParseCommand` / `fn_ParseValue`** (`0x1800c4a00`, `0x1800c4930`) — consistent with
+  the standing note that `?ParseCommand@` goes live the moment anything passes a
+  non-empty command line. Unrouted, low priority while nothing does.
+- **`g_pLoader` data (2)** (`0x1801fe7c0`, `0x1801fe7e0`) and `0x18006f330` — unrouted.
+  The two `g_pLoader` slots are DATA the mint does not cover; check them before the next
+  cutover attempt.
+
 ### The `dirAlias` finding — a local that is written, passed, released and NEVER READ
 
 Lane FIND found that `FindFiles`' `dirAlias` at `[RSP+0x58]` is built, handed to
