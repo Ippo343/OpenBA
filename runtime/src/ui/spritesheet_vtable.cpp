@@ -176,6 +176,40 @@ extern "C" uint32_t RtUi_SpriteSheet_TypeId() {
 
 // ---- slot 1  ?TypeName@SpriteSheet@UI@@UEBAPEBDXZ  0x180002e50 -------------
 //   MOV RAX,qword ptr [0x1801fadd8] / RET     — typeInfo + 8, RCX unread.
+//
+// ⚠ THIS ORACLE REPORTS ONE PERMANENT DIVERGENCE, BY DESIGN. READ THIS BEFORE
+//   TREATING IT AS A REGRESSION.  (WAVE 10C lane TIDENT)
+//
+//     [RtDiff] UI::SpriteSheet::TypeName  calls=1 worked=1 divergences=1
+//     [RtDiff] DIVERGENCE ... ours=00007ff60aa4612c theirs=00007ffcab5e4578
+//
+// RT_DIFF_SCALAR below compares the returned `const char*` AS A POINTER.
+// `?_typeInfo@SpriteSheet@UI@@` is a PROMOTED minted row, so `SheetTypeInfo()`
+// resolves to OUR node, whose `name` is a string literal in our image; the
+// shipped export returns the DLL's. Same characters, different object. It is
+// the string twin of the "Construct divergence is the vtable identity"
+// paragraph in standalone/reg_mint_promoted.cpp, and it went unnamed for two
+// waves because the only string screen anywhere was a strcmp.
+//
+// MEASURED, not argued (2026-09-09, debug, DLL present, under game_dir_lock):
+//   promoted ON   UI::SpriteSheet::TypeName  calls=1 divergences=1
+//   promoted OFF  UI::SpriteSheet::TypeName  calls=1 divergences=0
+//   both halves   IO::PackageFile::TypeName  calls=4 divergences=0
+// `calls=1` on BOTH sides, so what moved is the VALUE and not the coverage;
+// PackageFile is the same code shape on an UNPROMOTED row and does not move,
+// which is what rules out "the oracle is broken".
+//
+// AND IT IS HARMLESS, measured in the shipped binaries rather than assumed:
+// nothing anywhere consumes a BaseTypeInfo::name BY POINTER. In Runtime-x64.dll
+// the only static readers of any node's +0x08 are the 103 ?TypeName@ accessors,
+// none of which is called anywhere in the DLL; Factory::Startup CRCs the string
+// and Factory::GetTypeName has no caller in the DLL and is not imported by the
+// exe. In Application-x64.exe all 525 references to the 42 imported
+// ?_typeInfo@ slots read the dword at +0x00 and NOT ONE reads +0x08. The full
+// census with addresses is docs/runtime_port/WAVE10C_LANE_TIDENT.md.
+//
+// The comparison is deliberately LEFT AS A POINTER. Relaxing it to strcmp would
+// silence the one screen in the tree that can still see identity change.
 extern "C" const char* RtUi_SpriteSheet_TypeName(const void* self) {
     RT_DIFF_BEGIN("UI::SpriteSheet::TypeName");
     (void)self;

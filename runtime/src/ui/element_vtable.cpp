@@ -373,6 +373,29 @@ extern "C" uint32_t RtUi_Element_Type(const void* self) {
 // would compare equal under every strcmp and be a DIFFERENT POINTER from the
 // one Factory::Startup CRC'd and from the one every other reader sees. A port
 // whose only failure mode is pointer identity fails silently and late.
+//
+// WAVE 10C lane TIDENT — TWO CORRECTIONS TO THAT PARAGRAPH, both measured.
+//
+//  1. Reading the field does NOT avoid the pointer difference it warns about.
+//     `?_typeInfo@Element@UI@@` is a PROMOTED minted row, so `ElementTypeInfo()`
+//     resolves to OUR node and `ours` is a literal in OUR image just the same.
+//     The RT_DIFF_SCALAR below compares pointers, so it WILL report a
+//     divergence the first time this body is dispatched — see the measured twin
+//     at UI::SpriteSheet::TypeName (spritesheet_vtable.cpp), which does exactly
+//     that: divergences=1 with the row promoted, 0 with it off, calls=1 in both.
+//     Today this site reports NOTHING (only the `[bytes]` pin does), i.e.
+//     calls=0 — reference_uncalled_port_is_not_verified.md — so the red line is
+//     ahead of whoever next drives an Element through slot 1, not behind them.
+//  2. "Fails silently and late" is not what the pointer difference does, and
+//     the reason is now a census rather than a worry: NOTHING in either shipped
+//     binary consumes a BaseTypeInfo::name by pointer. All 525 exe references
+//     to the imported `?_typeInfo@` slots read the dword at +0x00; the DLL's
+//     only static readers of +0x08 are the 103 `?TypeName@` accessors, and not
+//     one of them is called anywhere in the DLL. Addresses:
+//     docs/runtime_port/WAVE10C_LANE_TIDENT.md.
+//
+// Reading the field is still the right body — it is what the two instructions
+// do — but it is right because it is FAITHFUL, not because it dodges identity.
 extern "C" const char* RtUi_Element_TypeName(const void* self) {
     RT_DIFF_BEGIN("UI::Element::TypeName");
     (void)self;
