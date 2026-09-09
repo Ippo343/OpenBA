@@ -241,12 +241,20 @@ IsDerivedFromFn IsDerivedFrom() {
 // The static 17-argument overload the member GetAlignedPosition forwards to.
 // It is exported, and it is NOT in this lane's 23 — it stays the DLL's.
 //   ?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z
+// WAVE 10: THIS IS NOW OURS. The note above used to end "it stays the DLL's",
+// which was true of Wave 7 lane A's scope and had quietly become the reason a
+// pure integer leaf sat unported while the member that calls it was verified.
+// The body is below; this door still goes through ResolveExport, which consults
+// the port registry FIRST, so the member automatically reaches our static.
+const char* const kGetAlignedStatic =
+    "?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z";
+
 using GetAlignedStaticFn = void (*)(int alignment, int, int, int, int, int, int,
                                     int leftPad, int rightPad, int topPad, int bottomPad,
                                     int*, int*, int*, int*, bool, bool);
 GetAlignedStaticFn GetAlignedStatic() {
-    static GetAlignedStaticFn fn = reinterpret_cast<GetAlignedStaticFn>(ResolveExport(
-        "?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z"));
+    static GetAlignedStaticFn fn =
+        reinterpret_cast<GetAlignedStaticFn>(ResolveExport(kGetAlignedStatic));
     return fn;
 }
 
@@ -746,6 +754,144 @@ void* RtUi_Element_FindElementType(Element* self, void** ret, uint32_t typeId) {
         RT_DIFF_SCALAR(static_cast<const void*>(*ret), static_cast<const void*>(theirs));
     }
     return ret;
+}
+
+// ---- ?GetAlignedPosition@ (STATIC, 17 args)  0x1801158e0 -------------------
+//
+// WAVE 10. Wave 7 lane A ported the MEMBER overload and left this one to the
+// DLL ("It is exported, and it is NOT in this lane's 23 -- it stays the DLL's"),
+// which made it a real dependency of our own port rather than an absent one.
+// It is a pure integer leaf: no calls, no allocation, no globals, four out
+// parameters. Nothing about it was ever hard; it was simply out of scope.
+//
+// It places a box of size (*outW x *outH) inside a container of size
+// (containerW x containerH), honouring four pads and a 3x3 alignment, and
+// optionally STRETCHES the box to the available space first.
+//
+// THE ALIGNMENT ENUM IS A ROW-MAJOR 3x3, and this is read off the jump table at
+// 0x180115a14 rather than guessed. The X axis switches on `alignment - 1` with
+// `JA -> default` for anything above 7, and the eight table entries cycle
+// center / right / left; the Y axis is a compare chain (<3 top, 3..5 middle,
+// 6..8 bottom, >8 top). Cross-multiplying the two gives exactly:
+//
+//        0 TopLeft      1 TopCenter      2 TopRight
+//        3 MiddleLeft   4 MiddleCenter   5 MiddleRight
+//        6 BottomLeft   7 BottomCenter   8 BottomRight
+//
+// and ANY value outside 0..8 lands on left/top, because it misses both the
+// jump table's range check and the Y chain's. That agreement between two
+// independently-encoded dispatches is what makes the mapping trustworthy.
+//
+// TWO FAITHFULNESS TRAPS, both of which a tidied port gets wrong:
+//
+//  * The centring halves are `SAR reg,1` -- an ARITHMETIC SHIFT, which rounds
+//    toward negative infinity. `/ 2` rounds toward zero, so for a negative
+//    available size the two differ by one pixel. `>>` on a signed int is the
+//    faithful spelling (GCC guarantees arithmetic shift; C++20 mandates it).
+//
+//  * `*outW` / `*outH` are IN/OUT. They are read as the box's size, may be
+//    OVERWRITTEN by the stretch, and are then read AGAIN by the placement --
+//    which therefore sees the stretched value. The order is load-bearing.
+// `useDivide` exists ONLY for element_aligned_probe.cpp's negative control: it
+// swaps the arithmetic shift for a division, which is identical for
+// non-negative values and off by one for odd negatives. It is the mistake a
+// tidied port makes, and the probe uses it to prove it can SEE that mistake.
+// Every real caller passes false.
+void RtUi_Element_GetAlignedPositionStatic_Body(
+        int alignment, int x, int y, int containerW, int containerH,
+        int offsetX, int offsetY,
+        int leftPad, int rightPad, int topPad, int bottomPad,
+        int* outX, int* outY, int* outW, int* outH,
+        bool stretchX, bool stretchY, bool useDivide = false) {
+    // SAR, not divide -- see the banner. `half()` keeps the two spellings in
+    // one place so the control cannot drift from the real arithmetic.
+    auto half = [useDivide](int v) { return useDivide ? (v / 2) : (v >> 1); };
+    // Cursor = origin + offset, then pulled back inside the container if the
+    // box would overhang. Retail compares against the CURRENT *outW/*outH.
+    int curX = x + offsetX;
+    int curY = y + offsetY;
+
+    if (containerW < *outW + curX) curX = containerW - *outW;
+    if (containerH < *outH + curY) curY = containerH - *outH;
+
+    curX += leftPad;
+    curY += topPad;
+
+    // Space left between the cursor and the far pad.
+    const int availW = (containerW - rightPad)  - curX;
+    const int availH = (containerH - bottomPad) - curY;
+
+    // The stretch, BEFORE the placement reads the size back.
+    if (stretchX) *outW = availW;
+    if (stretchY) *outH = availH;
+
+    // ---- X: center for 1/4/7, right for 2/5/8, left otherwise -------------
+    switch (alignment) {
+    case 1: case 4: case 7:
+        *outX = (half(availW) - half(*outW)) + curX;
+        break;
+    case 2: case 5: case 8:
+        *outX = (containerW - rightPad) - *outW;
+        break;
+    default:
+        *outX = curX;
+        break;
+    }
+
+    // ---- Y: middle for 3..5, bottom for 6..8, top otherwise ---------------
+    if (alignment >= 3 && alignment <= 5) {
+        *outY = (half(availH) - half(*outH)) + curY;
+    } else if (alignment >= 6 && alignment <= 8) {
+        *outY = (containerH - bottomPad) - *outH;
+    } else {
+        *outY = curY;
+    }
+}
+
+// ORACLE -- outputs only, and the inputs must be SNAPSHOT first.
+//
+// This is a pure function, so a straight A/B is available: run ours into the
+// real outputs, run retail into scratch ints, compare all four. The one thing
+// that would quietly break it is that `outW`/`outH` are IN/OUT -- by the time
+// ours returns it has already overwritten the size retail needs as its INPUT.
+// Handing retail the post-state would make a CORRECT port read as a divergence
+// on every stretched call, which is exactly
+// reference_oracle_must_snapshot_aliased_inputs.md. So the in-values are
+// captured before ours runs and replayed into retail's scratch.
+void RtUi_Element_GetAlignedPositionStatic(
+        int alignment, int x, int y, int containerW, int containerH,
+        int offsetX, int offsetY,
+        int leftPad, int rightPad, int topPad, int bottomPad,
+        int* outX, int* outY, int* outW, int* outH,
+        bool stretchX, bool stretchY) {
+    RT_DIFF_BEGIN("UI::Element::GetAlignedPosition[static]");
+
+    // Snapshot BEFORE ours runs -- see the oracle note above.
+    const int inW = outW ? *outW : 0;
+    const int inH = outH ? *outH : 0;
+
+    RtUi_Element_GetAlignedPositionStatic_Body(
+        alignment, x, y, containerW, containerH, offsetX, offsetY,
+        leftPad, rightPad, topPad, bottomPad,
+        outX, outY, outW, outH, stretchX, stretchY);
+
+    if (rt_diff_on__) {
+        int tx = 0, ty = 0, tw = inW, th = inH;
+        RT_ORIGINAL_ONCE(GetAlignedStaticFn, kGetAlignedStatic)(
+            alignment, x, y, containerW, containerH, offsetX, offsetY,
+            leftPad, rightPad, topPad, bottomPad,
+            &tx, &ty, &tw, &th, stretchX, stretchY);
+
+        const bool eq = (*outX == tx && *outY == ty && *outW == tw && *outH == th);
+        // A stretch or a re-centre is what makes a call informative; a call that
+        // only copies the cursor through exercises almost nothing.
+        RT_DIFF_WORK(stretchX || stretchY || (alignment >= 1 && alignment <= 8));
+        char ours[96], theirs[96];
+        std::snprintf(ours,   sizeof(ours),   "x=%d y=%d w=%d h=%d",
+                      *outX, *outY, *outW, *outH);
+        std::snprintf(theirs, sizeof(theirs), "x=%d y=%d w=%d h=%d", tx, ty, tw, th);
+        RT_DIFF_SHADOW(eq, ours, theirs);
+    }
 }
 
 // ---- ?GetAlignedPosition@ (member)  0x180115ff0 ----------------------------
@@ -1740,6 +1886,19 @@ int RtUiElementRegister() {
 
     RegisterRuntimeExport("?GetAlignedPosition@Element@UI@@QEAAXHHHHHHAEAH000_N1@Z", (void*)&RtUi_Element_GetAlignedPosition); ++count;
     RegisterRuntimeAddr(0x180115ff0, (void*)&RtUi_Element_GetAlignedPosition);
+    // WAVE 10: the STATIC 17-argument overload the member forwards to. Name AND
+    // address, the standing convention -- lane B3 registered a port by name only
+    // and left the tree's one address-door bypass (see the RemoveChildren note
+    // in widgets_layout.cpp).
+    RegisterRuntimeExport(kGetAlignedStatic, (void*)&RtUi_Element_GetAlignedPositionStatic); ++count;
+    RegisterRuntimeAddr(0x1801158e0, (void*)&RtUi_Element_GetAlignedPositionStatic);
+    // The input sweep that actually verifies the static overload. It exists
+    // because the port reported calls=0 in a menu run AND in a 16.9M-call
+    // in-game run: nothing our tree runs reaches it, and a clean board from a
+    // port with no callers is not evidence. The function is PURE, so the sweep
+    // feeds both implementations the same inputs rather than waiting for the
+    // game to produce any. BANISHED_RT_ALIGNED_PROBE=1.
+    { extern void RtUiElementAlignedProbe(); RtUiElementAlignedProbe(); }
 
     RegisterRuntimeExport("?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z", (void*)&RtUi_Element_GetPaddedSize); ++count;
     RegisterRuntimeAddr(0x180115f10, (void*)&RtUi_Element_GetPaddedSize);
