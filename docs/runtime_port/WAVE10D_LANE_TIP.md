@@ -16,14 +16,60 @@ would not finish UI.
 
 | row | retail VA | size | port | entries this wave | verdict |
 |---|---|---|---|---|---|
-| `??2ToolTipDialog@UI@@SAPEAX_K@Z` | `0x18004cfd0` | 19 instr (0x63 B) | `RtUi_ToolTipDialog_OperatorNew` | **0** | ported, NOT verified — no route (MOUSE) |
-| `?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ` | `0x1800356a0` | 13 instr (0x38 B) | `RtUi_Element_GetToolTipString` | **0** | ported, NOT verified — no route (MOUSE) |
-| `?SetText@ToolTipDialog@UI@@QEAAXAEBVString@System@@@Z` | `0x1800dab00` | 61 instr (0x140 B) | `RtUi_ToolTipDialog_SetText` | **0** | ported, NOT verified — no route (MOUSE) |
+| `??2ToolTipDialog@UI@@SAPEAX_K@Z` | `0x18004cfd0` | **23** instr (0x63 B) | `RtUi_ToolTipDialog_OperatorNew` | **0** | ported, NOT verified — no route (MOUSE) |
+| `?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ` | `0x1800356a0` | **15** instr (0x38 B) | `RtUi_Element_GetToolTipString` | **0** | ported, NOT verified — no route (MOUSE) |
+| `?SetText@ToolTipDialog@UI@@QEAAXAEBVString@System@@@Z` | `0x1800dab00` | **90** instr (0x140 B) | `RtUi_ToolTipDialog_SetText` | **0** | ported, NOT verified — no route (MOUSE) |
 | `??_7ToolTipDialog@UI@@6B@` slot 1 `?TypeName@` | `0x18004cfc0` | 2 instr | `RtUi_ToolTipDialog_TypeName` | **0** | ported, NOT verified — no route (MOUSE) |
 | `??_7ToolTipDialog@UI@@6B@` slot 2 `?Type@` | `0x18004cfa0` | 2 instr | `RtUi_ToolTipDialog_Type` | **0** | ported, NOT verified — no route (MOUSE) |
-| `??_7ToolTipDialog@UI@@6B@` slot 0 (vector deleting dtor) | `0x18004d270` | 24 instr | `deleting_dtor.cpp` row 39 | n/a (family body) | ported, verifier green |
+| `??_7ToolTipDialog@UI@@6B@` slot 0 (vector deleting dtor) | `0x18004d270` | **33** instr | `deleting_dtor.cpp` row 39 | n/a (family body) | ported, verifier green |
 | `??_7ToolTipDialog@UI@@6B@` (the DATA row itself) | `0x180157880` | 10 slots | **not a mint row yet** | — | blocked on the wave-close regeneration + a promotion |
 
+
+> **THE `size` COLUMN WAS WRONG IN FOUR OF FOUR CHECKED CELLS. Corrected by the
+> integrator at merge (2026-09-09), raised by lane TIP against its own doc.**
+>
+> | address | doc said | actual |
+> |---|---|---|
+> | `0x18004cfd0` operator new | 19 | **23** |
+> | `0x1800356a0` GetToolTipString | 13 | **15** |
+> | `0x1800dab00` SetText | 61 | **90** |
+> | `0x18004d270` vector deleting dtor | 24 | **33** |
+>
+> All four re-derived by lane TIP from Ghidra pagination totals, then **verified
+> independently by the integrator** with `objdump` on the shipped DLL, counting
+> instructions to the first `ret` (the integrator's first counter was itself
+> broken — it read `GetToolTipString` as 1 — and was fixed before its output was
+> believed).
+>
+> **The BYTE sizes in the same cells (0x63, 0x38, 0x140) are all CORRECT.** That
+> is exactly why the row read as authoritative: half of each cell was computed
+> and half was guessed, and nothing in the presentation distinguished them.
+>
+> **One of the four is not a slip.** The `19` was taken from
+> `runtime/src/video/context_ctor.cpp`'s banner, which says the
+> ImageBuffer/RenderBuffer operator news "are the same nineteen instructions" —
+> prose from another file, about other addresses, reported as a measurement of
+> `0x18004cfd0`, a function this lane had disassembled itself and which has 23.
+> That is a resemblance error committed in the size column of the document
+> describing a check whose whole point was that `operator new` had to be
+> **checked by body** because a sibling in the family uses a different alignment.
+> `reference_position_only_diffs_hide_one_body`'s closing clause is "a lane's size
+> ESTIMATE is not a measurement".
+>
+> **How it surfaced is worth as much as the fix.** Lane MOUSE and lane TIP had a
+> two-instruction discrepancy, and MOUSE offered a reconciliation — "one body
+> counted with and without the two SEH scope-state stores" — which would have made
+> *both* of them right. It was false, and TIP nearly accepted it. TIP had also
+> said "my count excludes nothing deliberately", and the reconciliation required
+> that it had excluded two things: **both statements could not hold, and the
+> contradiction was the tell.** A generous reconciliation that lets everyone be
+> correct is a hypothesis, not a finding.
+>
+> **NO CODE IS AFFECTED.** The ports were written from the listings, not the
+> counts, and the listings were right. The addresses, byte sizes, the §2 slot
+> table, the §3 arm analysis and both §7 warrants stand — §7b's evidence is
+> measured shadow output and §7a's gate is a threshold, not a count.
+> The two `2 instr` cells (`TypeName`/`Type`) were counted and are correct.
 All five function bodies live in `runtime/src/ui/tooltipdialog.cpp` behind
 `BANISHED_RT_UITOOLTIPDLG`. The dtor row is in
 `runtime/src/object/deleting_dtor.cpp` behind `BANISHED_RT_DELDTOR`.
