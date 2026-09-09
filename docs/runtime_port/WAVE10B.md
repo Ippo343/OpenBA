@@ -1,5 +1,19 @@
 # Wave 10B — the last six UI census rows
 
+> ## ✅ CLOSED 2026-09-09 at `b311ca7` — **UI 170 / 179 = 95.0%**, four of the
+> ## five UI vtables now READY, three of them PROMOTED
+> Five lanes, all merged. Integration verified on the merged tip that no lane
+> ever built: autostart to gameplay, clean `[Shutdown] done`, **0-byte crash
+> log, no aborts, `[RtResolve]` no misses**; debug green and release green from
+> a genuine `make clean` (a `make standalone` after a debug build says "Nothing
+> to be done" and proves nothing — shared object dir, per lane ELEM).
+>
+> **The headline percentage went DOWN, 96.5% → 95.0%, and that is the wave
+> working.** `called` moved 170 → 179 because four faithful ports pulled in nine
+> callees retail itself calls, and every one was resolved BY NAME rather than
+> through a silent address door. `ported` moved 164 → 170. Read the set, never
+> the ratio (`reference_diff_the_set_not_the_count`).
+
 **Opened 2026-09-09 on `wave10/base` @ `453e26d`.** Wave 10 closed the UI census
 at 96.5% (170 called / 164 ported). This wave is the remainder, and the
 remainder is now small enough to name completely.
@@ -146,6 +160,51 @@ cancelled to zero and would have read as a wasted afternoon.
 Round-2 candidates, deliberately NOT dispatched: whatever lane MINT's
 regeneration adds to the board, and whatever nested-pump work lane SHOW's route
 unlocks.
+
+## Close — the five UI vtables, from a live shadow run on the merged tip
+
+```
+READY    ??_7SpriteSheet@UI@@6B@        slots= 9 ported= 9 TRAP= 0            [PROMOTED]
+READY    ??_7DialogInstance@UI@@6B@     slots=10 ported=10 TRAP= 0            [PROMOTED]
+READY    ??_7Element@UI@@6B@            slots=12 ported=11 TRAP= 0 purecall=1 [PROMOTED]
+READY    ??_7DialogController@UI@@6B@   slots=11 ported=11 TRAP= 0            -- held back
+BLOCKED  ??_7Dialog@UI@@6B@             slots= 9 ported= 1 TRAP= 8
+```
+
+The 27 abort traps lane UIDATA counted across four vtables are down to 8, all of
+them on the one vtable that did not exist as a row when this wave opened.
+
+**`??_7DialogController` is the interesting row: green and deliberately not
+promoted.** Lane DLGV ported all nine slots and gate (a) passes — but its
+nine-way ATTENDANCE counter printed *"none of the nine bodies was entered"* in
+BOTH halves of BOTH A/B pairs, including the pair that opened an in-game
+residence panel. Every `DialogController` subclass in `code/Game/Dialog/` carries
+its own exe-side vtable, so nothing reachable constructs an object holding the
+Runtime base table. A run where registering the row changes nothing and our
+bodies run zero times cannot tell a safe promotion from an unexercised one. The
+instrument stays in the tree and prints every run, so the moment a route makes
+that total non-zero the row expires without anyone rediscovering the question.
+
+### What is honestly open
+
+* **`?Serialize@SpriteSheet@`** — ported, `calls=0`, cause identified (the
+  boot-time sheet is built by the DLL's `ExternalFactory` and dispatches slot 5
+  off the DLL's table). The promotion rests on an effectiveness control instead.
+* **`Element::Persist` and `Element::Update`** — ported, pinned to shipped
+  bytes, **not differentially verified**; neither is replayable and `Update` was
+  never entered. Lane ELEM names this as its biggest hole rather than
+  footnoting it.
+* **`DialogInstance::OnOpened`** — live (attendance 0→2 and 0→3) but all five
+  entries took the `noBuffer` early exit, so the settings-reading half is
+  unexercised.
+* **The nine `DialogController` bodies** — ported and registered, entered zero
+  times.
+* **`??_7Dialog`'s eight traps** — the next lane's scope.
+* **`?_typeInfo@DialogController@`** — one promotion away, and lane DLGV
+  declined it for a reason that applies to the ten already-promoted typeinfo
+  rows too: promoting it makes `?TypeName@` return our node's `name` POINTER,
+  and the shadow compares content, not identity. Worth settling before the next
+  typeinfo promotion, not after.
 
 ## The risk that is specific to this wave
 
