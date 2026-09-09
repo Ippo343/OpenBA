@@ -1,5 +1,16 @@
 # Wave 10 — driving the UI namespace census to 100%
 
+> ## ✅ CLOSED 2026-09-09 at `730c544` — **UI 170 / 164 = 96.5%** (from 82.3%)
+> TOTAL 1083 / 869 = 80.2%. Twelve lanes, all merged.
+> Integration verified on the tip: reached gameplay (37,506 component draws),
+> clean shutdown, **0-byte crash log, 0 aborts, `[RtResolve] 0 misses`**;
+> debug, release AND perf targets all build clean.
+>
+> **Read the caveat with the number** (lane DLG2): a per-namespace census is a
+> **LOWER BOUND** on residue. UI read 22→20 with nothing entering while the FULL
+> census read 228→228, because two unexported callees entered as
+> `addr/internal` and `--namespace UI` cannot see an unexported callee at all.
+
 **Opened 2026-09-08 on `wave10/base` @ 3318690.** This is the tracking doc for
 the UI census push. It is deliberately a DECOMPOSITION, not a to-do list: the
 headline number ("UI is 29 short") is not 29 pieces of UI work, and anyone who
@@ -209,3 +220,57 @@ to read GREEN, or to read confidently WRONG — never to fall silent. That is wh
 this wave scored effectiveness counts and negative controls separately from
 verdicts, and why `calls=`/`rounds=`/`armed=` were read alongside
 `divergences=` every time.
+
+
+---
+
+## 6. Wave close — what the 96.5% does and does not mean
+
+**Does:** 164 of the 170 UI functions our tree resolves are now our own code,
+each behind a kill switch, and the tree builds and plays on all three targets.
+
+**Does not:** it is not a claim that all 164 are differentially verified against
+retail. Three rows are explicitly **ported, not verified**, and say so in their
+lane docs rather than in a footnote:
+
+* `CloseDialog` — `armed=0`; no harness route both reaches the body and exits
+  cleanly. `entries=0` was the finding, not a footnote.
+* the two `AddController`s and the `DialogInstance` ctor — 40 shipped-byte pins
+  and a live boot each, which is a pre-flight on the transcription, **not** a
+  post-state comparison against retail.
+
+**Still open, named:**
+
+* `?ShowDialog@UserInterface@` — the only remaining code row. Expires when a
+  harness callback can be placed in `MainLoop+0x90`, which the nested pump walks
+  every frame.
+* The four minted UI vtables — `??_7SpriteSheet` is **one slot** away (slot 5,
+  `?Serialize@SpriteSheet@`); `??_7Dialog` is not in the mint tables at all.
+* `0x180039280` / `0x180039360` — array dtors that are **NOT** the J1 family, as
+  lane DLG2 proved against lane UI3's recipe. Porting them as J1 entries would
+  have leaked under a false byte-identity claim.
+* `autostart.cpp` checks `BANISHED_AUTOQUIT` before `BANISHED_AUTOSTART` and
+  returns early, so "get in-game" and "quit cleanly" are mutually exclusive.
+  Fixing that converts a whole class of UI-mutator coverage from a capability
+  into a measurement.
+* The mods click list **published in CLAUDE.md** crashes on an install with zero
+  `.pkm` (`ModDialog_ToggleMod_Impl+0x43`, READ of `0xd0`). It is also the only
+  live route to `??0Dialog`, so it caps that row's coverage.
+
+## 7. The allocator, in one place
+
+`BANISHED_RT_ALLOC` **arms** with the DLL present (lane ALLOC) — but arming is
+still **not recommended on one lane's authority**, and it stayed unset in every
+cell of every lane this wave. The two pillars under that GO were each knocked
+down and rebuilt:
+
+| pillar | knocked down by | restored by |
+|---|---|---|
+| redzone pass condition | `watch` crashed at teardown | REDZONE — instrument proved CAPABLE by injection, 41,349 walks / 0 violations |
+| shadow gate | SHADOWRE — red in all 7 cells | SHADOWBISECT — cause was ONE C++ call; 26,516,271 ops / 0 divergences |
+
+**The finding that outlives the allocator:** on one path, *"the allocator port is
+off by default"* was **false**. An unarmed run was mutating retail's arena with
+our ported free logic, by a route no kill switch reached and no counter
+reported. A kill switch gates the REGISTRATION door; a body that calls the port
+by C++ name never consults it.
