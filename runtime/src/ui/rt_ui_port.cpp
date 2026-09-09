@@ -35,6 +35,12 @@ extern int RtUiSpriteRegister();      // sprite.cpp          (lane F)
 // round-trip can be turned off without disturbing the rest of the UI port.
 extern int RtUiDialogSettingsRegister();   // dialog_settings.cpp (lane ENC-2)
 
+// Wave 10 lane EXTPTR: ?Serialize@ElementDescription@, the row lanes B, UIW2
+// and UIW2-again declined. Own file and own switch (BANISHED_RT_ELEMDESCSER),
+// because it lands on the UIDescription parse path of every .rsc in the game
+// and must be A/B-able without turning the rest of UI::Dialog off.
+extern int RtUiElementDescriptionSerializeRegister();  // elementdescription_serialize.cpp
+
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
         printf("[RtPort] BANISHED_RT_UI=0 -- UI namespace port disabled\n");
@@ -48,5 +54,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_UIWIDGETSLAY")) n += RtUiWidgetsLayRegister();
     if (RtWaveEnabled("BANISHED_RT_UISPRITE"))     n += RtUiSpriteRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGSETTINGS")) n += RtUiDialogSettingsRegister();
+    if (RtWaveEnabled("BANISHED_RT_ELEMDESCSER")) n += RtUiElementDescriptionSerializeRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }
