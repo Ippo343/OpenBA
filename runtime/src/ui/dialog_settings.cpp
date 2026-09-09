@@ -136,6 +136,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
@@ -337,7 +338,34 @@ extern "C" void RtUi_DialogInstance_OnClosed(DialogInstance* self) {
 // DOES add two by-name callees the write half does not use: the MemoryStream
 // constructor and destructor exports, which retail inlined here. Both are
 // resolved BY NAME through RT_EXPORT_ONCE, so neither is an address door.
+// ---------------------------------------------------------------------------
+// ATTENDANCE COUNTER for OnOpened — the EFFECTIVENESS CONTROL for the
+// ??_7DialogInstance@UI@@6B@ promotion, and NOT a verification of anything.
+// Without it, "the candidate boot reached the same place as the control" cannot
+// distinguish a safe promotion from one that was never exercised. Counts
+// ENTRIES, on every build; deliberately not an RtDiff site, because an RtDiff
+// site's `calls` moves only from inside a comparison and would print 0 for a
+// body that ran (reference_calls_zero_can_mean_always_took_the_uncovered_branch).
+// The three sub-counters split the body's three exits, so an entry that always
+// bailed on the magic cannot read as full coverage.
+namespace {
+struct OpenCounts {
+    unsigned long long entries = 0, noBuffer = 0, badMagic = 0, records = 0;
+    ~OpenCounts() {
+        if (entries == 0) {
+            printf("[DlgSettings] ATTENDANCE: OnOpened was not entered in this run.\n");
+            return;
+        }
+        printf("[DlgSettings] ATTENDANCE (entries, not comparisons): "
+               "OnOpened entries=%llu noBuffer=%llu badMagic=%llu records=%llu\n",
+               entries, noBuffer, badMagic, records);
+    }
+};
+OpenCounts g_openCounts;
+}  // namespace
+
 extern "C" void RtUi_DialogInstance_OnOpened(DialogInstance* self) {
+    ++g_openCounts.entries;
     // 1. Every controller is told the dialog opened, BEFORE any settings are
     //    read. Bound re-read each iteration — see the header.
     for (int32_t i = 0; i < self->_controllers._size; ++i) {
@@ -346,7 +374,7 @@ extern "C" void RtUi_DialogInstance_OnOpened(DialogInstance* self) {
     }
 
     // 2. No settings buffer, nothing to restore.
-    if (self->_userData == nullptr) return;
+    if (self->_userData == nullptr) { ++g_openCounts.noBuffer; return; }
 
     RtIo::MemoryStream ms;
     RT_EXPORT_ONCE(MsCtorFn, "??0MemoryStream@IO@@QEAA@XZ")(&ms);
@@ -366,6 +394,7 @@ extern "C" void RtUi_DialogInstance_OnOpened(DialogInstance* self) {
         ms.cursor += 4;
     }
     if (magic != 0xdeadbeefu) {
+        ++g_openCounts.badMagic;
         RT_EXPORT_ONCE(MsDtorFn, "??1MemoryStream@IO@@UEAA@XZ")(&ms);
         return;
     }
@@ -382,6 +411,7 @@ extern "C" void RtUi_DialogInstance_OnOpened(DialogInstance* self) {
     reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarInt))(rw, &count, nullptr);
 
     for (int32_t k = 0; k < count; ++k) {
+        ++g_openCounts.records;
         uint32_t id = 0;
         reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarUInt))(rw, &id, nullptr);
 

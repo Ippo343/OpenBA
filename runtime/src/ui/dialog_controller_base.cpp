@@ -121,12 +121,53 @@
 // ============================================================================
 
 #include <cstdint>
+#include <cstdio>
 
 #include "../../funcs/rt_port.h"
 
 namespace RtUi {
 
 namespace {
+
+// ---------------------------------------------------------------------------
+// ATTENDANCE COUNTERS — the EFFECTIVENESS CONTROL for the promotion A/B, and
+// NOT a verification of anything.
+// ---------------------------------------------------------------------------
+// Nine of these bodies read nothing and write nothing, so an A/B of the boot
+// with and without `??_7DialogController@UI@@6B@` registered is IDENTICAL
+// whether our slots ran a thousand times or never once. Without a counter, "the
+// candidate run reached the same place as the control" cannot tell a safe
+// promotion from a promotion that was never exercised — the same shape as
+// reference_probe_needs_an_effectiveness_control.md, and the same reason
+// runtime/src/io/encoding.cpp carries its own ATTENDANCE block.
+//
+// These count ENTRIES, unconditionally, on every build. They are deliberately
+// NOT RtDiff sites: an RtDiff site increments `calls` only from inside a
+// comparison, so a body that ran but never compared prints `calls=0`, which
+// reads as "never ran" and means the opposite
+// (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
+struct CtrlCounts {
+    unsigned long long typeName = 0, type = 0, onCreated = 0, onOpened = 0,
+                       onClosed = 0, onUpdateLayout = 0, onUpdate = 0,
+                       onElementEvent = 0, onSerializeSettings = 0;
+    ~CtrlCounts() {
+        const unsigned long long total = typeName + type + onCreated + onOpened +
+                                         onClosed + onUpdateLayout + onUpdate +
+                                         onElementEvent + onSerializeSettings;
+        if (total == 0) {
+            printf("[DlgCtrl] ATTENDANCE: none of the nine bodies was entered "
+                   "in this run.\n");
+            return;
+        }
+        printf("[DlgCtrl] ATTENDANCE (entries, not comparisons): total=%llu "
+               "TypeName=%llu Type=%llu OnCreated=%llu OnOpened=%llu "
+               "OnClosed=%llu OnUpdateLayout=%llu OnUpdate=%llu "
+               "OnElementEvent=%llu OnSerializeSettings=%llu\n",
+               total, typeName, type, onCreated, onOpened, onClosed,
+               onUpdateLayout, onUpdate, onElementEvent, onSerializeSettings);
+    }
+};
+CtrlCounts g_counts;
 
 // `Object::BaseTypeInfo` layout (runtime/types/object/TypeInfo.h): +0x00 typeId
 // (uint32), +0x04 an unused word, +0x08 `const char* name`. Spelled as constants
@@ -149,6 +190,7 @@ inline const uint8_t* DialogControllerTypeInfo() {
 //     MOV EAX,dword ptr [0x1801f9e48] / RET
 // ---------------------------------------------------------------------------
 extern "C" uint32_t RtUiDialogController_Type(const void* /*self*/) {
+    ++RtUi::g_counts.type;
     return *reinterpret_cast<const uint32_t*>(
         DialogControllerTypeInfo() + kBaseTypeInfoTypeId);
 }
@@ -158,6 +200,7 @@ extern "C" uint32_t RtUiDialogController_Type(const void* /*self*/) {
 //     MOV RAX,qword ptr [0x1801f9e50] / RET      (= _typeInfo + 0x08)
 // ---------------------------------------------------------------------------
 extern "C" const char* RtUiDialogController_TypeName(const void* /*self*/) {
+    ++RtUi::g_counts.typeName;
     return *reinterpret_cast<const char* const*>(
         DialogControllerTypeInfo() + kBaseTypeInfoName);
 }
@@ -169,24 +212,29 @@ extern "C" const char* RtUiDialogController_TypeName(const void* /*self*/) {
 
 // slot  4 — ?OnCreated@DialogController@UI@@UEAAXXZ             0x1800cd2b0
 extern "C" void RtUiDialogController_OnCreated(void* /*self*/) {
+    ++RtUi::g_counts.onCreated;
 }
 
 // slot  5 — ?OnOpened@DialogController@UI@@UEAAXXZ              0x1800cd2a0
 extern "C" void RtUiDialogController_OnOpened(void* /*self*/) {
+    ++RtUi::g_counts.onOpened;
 }
 
 // slot  6 — ?OnClosed@DialogController@UI@@UEAAXXZ              0x1800cd290
 extern "C" void RtUiDialogController_OnClosed(void* /*self*/) {
+    ++RtUi::g_counts.onClosed;
 }
 
 // slot  7 — ?OnUpdateLayout@DialogController@UI@@UEAAXXZ        0x1800cd280
 extern "C" void RtUiDialogController_OnUpdateLayout(void* /*self*/) {
+    ++RtUi::g_counts.onUpdateLayout;
 }
 
 // slot  8 — ?OnUpdate@DialogController@UI@@UEAAXAEBVTime@System@@@Z  0x1800cd270
 //     `const System::Time&` — one reference argument, never read.
 extern "C" void RtUiDialogController_OnUpdate(void* /*self*/,
                                               const void* /*time*/) {
+    ++RtUi::g_counts.onUpdate;
 }
 
 // slot  9 — ?OnElementEvent@DialogController@UI@@UEAAX
@@ -198,6 +246,7 @@ extern "C" void RtUiDialogController_OnElementEvent(void* /*self*/,
                                                     int /*c*/, int /*d*/,
                                                     int /*e*/,
                                                     void* /*userData*/) {
+    ++RtUi::g_counts.onElementEvent;
 }
 
 // slot 10 — ?OnSerializeSettings@DialogController@UI@@UEAAXAEAVStream@IO@@@Z
@@ -209,6 +258,7 @@ extern "C" void RtUiDialogController_OnElementEvent(void* /*self*/,
 //     settings record can be EMPTY and still framed.
 extern "C" void RtUiDialogController_OnSerializeSettings(void* /*self*/,
                                                           void* /*stream*/) {
+    ++RtUi::g_counts.onSerializeSettings;
 }
 
 }  // namespace RtUi
