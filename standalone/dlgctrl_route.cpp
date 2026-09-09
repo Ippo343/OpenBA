@@ -183,19 +183,19 @@ struct RouteReport {
         if (!g_armed) return;   // silent when unset — the standing rule
         const unsigned long long total =
             g_dispatch[0] + g_dispatch[1] + g_dispatch[2];
-        std::printf("[DlgCtrlRoute] %s: tables patched=%d (skipped=%d) "
+        printf("[DlgCtrlRoute] %s: tables patched=%d (skipped=%d) "
                     "slots patched=%d\n",
                     g_patchMode ? "PATCH" : "PROBE (no patch installed)",
                     g_patchedTables, g_skippedTables, g_patchedSlots);
         if (!g_patchMode) return;
         if (total == 0) {
-            std::printf("[DlgCtrlRoute] dispatches=0 -- NOT ONE patched slot was "
+            printf("[DlgCtrlRoute] dispatches=0 -- NOT ONE patched slot was "
                         "called. The controller lists are empty on every route "
                         "this run drove; the stub substitution is not what was "
                         "keeping the nine bodies unentered.\n");
             return;
         }
-        std::printf("[DlgCtrlRoute] dispatches=%llu OnOpened=%llu OnClosed=%llu "
+        printf("[DlgCtrlRoute] dispatches=%llu OnOpened=%llu OnClosed=%llu "
                     "OnSerializeSettings=%llu\n",
                     total, g_dispatch[0], g_dispatch[1], g_dispatch[2]);
     }
@@ -242,14 +242,14 @@ void Visit(const char* typeName, const char* parentName,
 
     void* obj = factory();
     if (!obj) {
-        std::printf("[DlgCtrlRoute] %-24s factory returned null -- skipped\n",
+        printf("[DlgCtrlRoute] %-24s factory returned null -- skipped\n",
                     typeName);
         ++g_skippedTables;
         return;
     }
     void** vt = *reinterpret_cast<void***>(obj);
     if (!vt) {
-        std::printf("[DlgCtrlRoute] %-24s null vptr -- skipped\n", typeName);
+        printf("[DlgCtrlRoute] %-24s null vptr -- skipped\n", typeName);
         ++g_skippedTables;
         return;
     }
@@ -266,7 +266,7 @@ void Visit(const char* typeName, const char* parentName,
     // a clear majority the "mode" is not evidence of anything, and patching on
     // it would be inventing an inheritance. Reported, not silently skipped.
     if (best * 2 <= kScanSlots) {
-        std::printf("[DlgCtrlRoute] %-24s stub mode=%p count=%d/%d -- NO clear "
+        printf("[DlgCtrlRoute] %-24s stub mode=%p count=%d/%d -- NO clear "
                     "majority, table does not follow the fill idiom; skipped\n",
                     typeName, stub, best, kScanSlots);
         ++g_skippedTables;
@@ -286,7 +286,7 @@ void Visit(const char* typeName, const char* parentName,
         ++hits;
         if (g_patchMode) vt[kSpecs[s].index] = kThunk[s];
     }
-    std::printf("[DlgCtrlRoute] %-24s stub=%p (%d/%d slots) %s -> %s %d slot(s)\n",
+    printf("[DlgCtrlRoute] %-24s stub=%p (%d/%d slots) %s -> %s %d slot(s)\n",
                 typeName, stub, best, kScanSlots, detail,
                 g_patchMode ? "patched" : "would patch", hits);
     if (hits) { ++g_patchedTables; g_patchedSlots += hits; }
@@ -314,12 +314,12 @@ void DlgCtrlRoute_Arm() {
         g_target[s] = reinterpret_cast<void*>(
             ResolveAddr(Module::Runtime, kSpecs[s].dllAddr));
         const uintptr_t raw = ResolveAddr(Module::Runtime, kSpecs[s].dllAddr);
-        std::printf("[DlgCtrlRoute] target %-20s dll=0x%llx -> %p%s\n",
+        printf("[DlgCtrlRoute] target %-20s dll=0x%llx -> %p%s\n",
                     kSpecs[s].name,
                     (unsigned long long)kSpecs[s].dllAddr, g_target[s],
                     raw ? "" : "  <== NULL, route cannot work");
     }
 
     ::Object::ForEachRegistration(&Visit, nullptr);
-    std::fflush(stdout);
+    fflush(stdout);
 }

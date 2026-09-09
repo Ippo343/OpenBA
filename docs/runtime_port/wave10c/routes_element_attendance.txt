@@ -1,0 +1,1 @@
+[Element] ATTENDANCE (entries, not comparisons): Update=541 Persist=0
