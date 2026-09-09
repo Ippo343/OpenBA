@@ -97,9 +97,39 @@ bool InstallDetour(uintptr_t targetAddr, void* detourFunc, RtDetour* info, size_
     // (0x1801213c0, routed to the byte-copy installer by lane UI1 for exactly
     // this reason), and Engine::Startup (0x1800db8a0), whose trampoline IS
     // called by rt_alloc_swap.cpp's shadow driver and which this corrects.
-    memcpy(info->trampoline, info->original, prologueSize);
+    // DIAGNOSTIC CONTROL, off by default (Wave 10, lane SHADOWRE).
+    // `BANISHED_RT_DETOUR_LEGACY_RSPADD=1` puts the removed `ADD RAX,8` back,
+    // ONLY in this blind-copy path. It exists so the allocator-shadow numbers
+    // taken through the corrupting installer (lanes E2/E3) can be reproduced
+    // and A/B'd against the fixed one on ONE binary, one env var apart —
+    // otherwise "the numbers moved" cannot be attributed to the installer
+    // rather than to the eight waves of tree changes in between. It is a
+    // control, not an option: it reinstates a defect proved by Test 2b.
     uint8_t* dst = (uint8_t*)info->trampoline;
     size_t dstOff = prologueSize;
+    {
+        const char* leg = getenv("BANISHED_RT_DETOUR_LEGACY_RSPADD");
+        if (leg && leg[0] && leg[0] != '0') {
+            const uint8_t* src = info->original;
+            size_t srcOff = 0; dstOff = 0;
+            while (srcOff < prologueSize) {
+                if (srcOff + 3 <= prologueSize && src[srcOff] == 0x48 &&
+                    src[srcOff+1] == 0x8B && src[srcOff+2] == 0xC4) {
+                    dst[dstOff++] = 0x48; dst[dstOff++] = 0x8B; dst[dstOff++] = 0xC4;
+                    srcOff += 3;
+                    dst[dstOff++] = 0x48; dst[dstOff++] = 0x83;
+                    dst[dstOff++] = 0xC0; dst[dstOff++] = 0x08;
+                    fprintf(stderr, "[RtDetour] LEGACY CONTROL: re-inserted the WRONG "
+                                    "ADD RAX,8 at trampoline offset %zu (0x%llx)\n",
+                            dstOff - 4, (unsigned long long)targetAddr);
+                } else {
+                    dst[dstOff++] = src[srcOff++];
+                }
+            }
+        } else {
+            memcpy(info->trampoline, info->original, prologueSize);
+        }
+    }
 
     // Append jump back to (target + prologueSize).
     // IMPORTANT: Use R10 (not RAX) for the jump. The copied prologue may set RAX

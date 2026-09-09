@@ -1,0 +1,220 @@
+================ cell s1 ================
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtSelfTest] ==== Runtime port seam acceptance test ====
+[RtSelfTest] pass: subject is deterministic under snapshot replay
+[RtSelfTest] pass: registry precedence: ResolveExport sees the port, Raw does not
+[RtSelfTest] pass: detour: wrapper entered, trampoline reproduces the original exactly
+[RtSelfTest] pass: detour removal restores the DLL byte for byte
+[RtSelfTest] ---- Test 2b: RSP-capture prologue through a CALLed trampoline ----
+[RtSelfTest]   undetoured: rbx=1111111111111111 rsi=2222222222222222 rdi=3333333333333333 rax=42
+[RtSelfTest] pass: 2b baseline: the synthetic subject preserves rbx/rsi/rdi undetoured
+[RtSelfTest]   detoured  : rbx=1111111111111111 rsi=2222222222222222 rdi=3333333333333333 rax=42
+[RtSelfTest] pass: 2b: RSP-capture prologue survives a CALLed trampoline with rbx/rsi/rdi intact
+[RtSelfTest] pass: 2b: removal restores the synthetic subject byte for byte
+[RtSelfTest] pass: diff harness exercised — expect exactly one divergence, in selftest::diverge
+[RtSelfTest] pass: null port registered for System::Random::Rand — the rest of this run routes through it
+[RtSelfTest] ==== done; registry now 895 exports / 895 addrs, 2 hits so far ====
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] armed (min=512MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 000000f2097ff5e0 (min=512MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] grow=0 — the arena-growth path did NOT run in this cell. Whatever `divergences` says, this run is not evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).
+[RtAllocShadow] SUMMARY armed=1 observed=1897188 divergences=314542 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+[RtSelfTest] null port System::Random::Rand handled 16044175 calls this run
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #961002  ours=r0+0x3dd5400 live=339357 free=114 bytes=69824032 bin=4 nr=1 res=536870912  theirs=r0+0x3dd5400 live=339355 free=115 bytes=69823960 bin=4 nr=1 res=536870912
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #961003  ours=r0+0x2867370 live=339358 free=114 bytes=69824096 bin=4 nr=1 res=536870912  theirs=r0+0x4290c98 live=339356 free=114 bytes=69824032 bin=4 nr=1 res=536870912
+---- per-site rows ----
+[RtDiff]   System::MemoryAllocator::Allocate [shadow]       calls=1014495    worked=?          divergences=53494
+[RtDiff]   System::MemoryAllocator::Free [shadow]           calls=882693     worked=?          divergences=261048
+
+================ cell s3 ================
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] armed (min=512MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 00000010539ff380 (min=512MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] grow=0 — the arena-growth path did NOT run in this cell. Whatever `divergences` says, this run is not evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).
+[RtAllocShadow] SUMMARY armed=1 observed=6387168 divergences=1009626 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Free [shadow]  call #2547711  ours=live=282121 free=75 bytes=73789896 bin=4 nr=1 res=536870912  theirs=live=282120 free=76 bytes=73789864 bin=4 nr=1 res=536870912
+[RtDiff] DIVERGENCE System::MemoryAllocator::Free [shadow]  call #2547712  ours=live=282120 free=76 bytes=73774888 bin=4 nr=1 res=536870912  theirs=live=282119 free=77 bytes=73774856 bin=4 nr=1 res=536870912
+---- per-site rows ----
+[RtDiff]   System::MemoryAllocator::Allocate [shadow]       calls=3263472    worked=?          divergences=433640
+[RtDiff]   System::MemoryAllocator::Free [shadow]           calls=3123696    worked=?          divergences=575986
+
+================ cell s4 ================
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] NEGATIVE CONTROL ACTIVE (size) — this run is REQUIRED to go red; a clean result here invalidates every other run.
+[RtAllocShadow] armed (min=512MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 0000007d34dfef80 (min=512MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] grow=0 — the arena-growth path did NOT run in this cell. Whatever `divergences` says, this run is not evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).
+[RtAllocShadow] SUMMARY armed=1 observed=1901417 divergences=1600420 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #60485  ours=r0+0x19ce70 live=20970 free=101 bytes=2193480 bin=4 nr=1 res=536870912  theirs=r0+0x19ce70 live=20970 free=101 bytes=2193472 bin=4 nr=1 res=536870912
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #60486  ours=r0+0x19ced0 live=20971 free=101 bytes=2193576 bin=4 nr=1 res=536870912  theirs=r0+0x19cec8 live=20971 free=101 bytes=2193568 bin=4 nr=1 res=536870912
+---- per-site rows ----
+[RtDiff]   System::MemoryAllocator::Allocate [shadow]       calls=1017192    worked=?          divergences=849900
+[RtDiff]   System::MemoryAllocator::Free [shadow]           calls=884225     worked=?          divergences=750520
+
+================ cell g1 ================
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAllocShadow] Engine::Startup ENTRY (min=16MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] armed (min=16MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 00000031a07feff0 (min=16MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=5 theirs=5  reserved ours=80MB theirs=80MB
+[RtAllocShadow] GROWTH grow=4 tableCopy=2 crossRange=665971
+[RtAllocShadow] SUMMARY armed=1 observed=1902194 divergences=303091 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #972074  ours=r4+0x2428a0 live=345044 free=151 bytes=71686712 bin=14 nr=5 res=83886088  theirs=r4+0x2428a0 live=345042 free=152 bytes=71686640 bin=14 nr=5 res=83886088
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #972075  ours=r1+0xfd6b08 live=345045 free=150 bytes=71686776 bin=14 nr=5 res=83886088  theirs=r1+0xfd6b08 live=345043 free=151 bytes=71686704 bin=14 nr=5 res=83886088
+---- per-site rows ----
+[RtDiff]   System::MemoryAllocator::Allocate [shadow]       calls=1021199    worked=?          divergences=49126
+[RtDiff]   System::MemoryAllocator::Free [shadow]           calls=880995     worked=?          divergences=253965
+
+================ cell g2 ================
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAllocShadow] Engine::Startup ENTRY (min=16MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] armed (min=16MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 000000a76d9ff0c0 (min=16MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=5 theirs=5  reserved ours=80MB theirs=80MB
+[RtAllocShadow] GROWTH grow=4 tableCopy=2 crossRange=2849403
+[RtAllocShadow] SUMMARY armed=1 observed=6383003 divergences=1011106 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Free [shadow]  call #2544881  ours=live=282136 free=76 bytes=73994632 bin=4 nr=5 res=83886088  theirs=live=282135 free=77 bytes=73994600 bin=4 nr=5 res=83886088
+[RtDiff] DIVERGENCE System::MemoryAllocator::Free [shadow]  call #2544882  ours=live=282135 free=77 bytes=73979624 bin=4 nr=5 res=83886088  theirs=live=282134 free=78 bytes=73979592 bin=4 nr=5 res=83886088
+---- per-site rows ----
+[RtDiff]   System::MemoryAllocator::Allocate [shadow]       calls=3261398    worked=?          divergences=434381
+[RtDiff]   System::MemoryAllocator::Free [shadow]           calls=3121605    worked=?          divergences=576725
+
+================ cell g4 ================
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAllocShadow] Engine::Startup ENTRY (min=16MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] NEGATIVE CONTROL ACTIVE (grow) — this run is REQUIRED to go red; a clean result here invalidates every other run.
+[RtAllocShadow] armed (min=16MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 000000ce2c5ff5e0 (min=16MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=5 theirs=5  reserved ours=80MB theirs=80MB
+[RtAllocShadow] GROWTH grow=4 tableCopy=2 crossRange=646230
+[RtAllocShadow] SUMMARY armed=1 observed=1875285 divergences=1392426 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #263933  ours=r1+0x0 live=45006 free=560 bytes=25408344 bin=4 nr=2 res=33558528  theirs=r1+0x0 live=45006 free=559 bytes=25408344 bin=4 nr=2 res=33554440
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #263934  ours=r0+0x83d630 live=45007 free=560 bytes=29602656 bin=4 nr=2 res=33558528  theirs=r0+0x83d630 live=45007 free=559 bytes=29602656 bin=4 nr=2 res=33554440
+---- per-site rows ----
+[RtDiff]   System::MemoryAllocator::Allocate [shadow]       calls=1003536    worked=?          divergences=739604
+[RtDiff]   System::MemoryAllocator::Free [shadow]           calls=871749     worked=?          divergences=652822
+
+================ cell s1fix ================
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtSelfTest] ==== Runtime port seam acceptance test ====
+[RtSelfTest] pass: subject is deterministic under snapshot replay
+[RtSelfTest] pass: registry precedence: ResolveExport sees the port, Raw does not
+[RtSelfTest] pass: detour: wrapper entered, trampoline reproduces the original exactly
+[RtSelfTest] pass: detour removal restores the DLL byte for byte
+[RtSelfTest] ---- Test 2b: RSP-capture prologue through a CALLed trampoline ----
+[RtSelfTest]   undetoured: rbx=1111111111111111 rsi=2222222222222222 rdi=3333333333333333 rax=42
+[RtSelfTest] pass: 2b baseline: the synthetic subject preserves rbx/rsi/rdi undetoured
+[RtSelfTest]   detoured  : rbx=1111111111111111 rsi=2222222222222222 rdi=3333333333333333 rax=42
+[RtSelfTest] pass: 2b: RSP-capture prologue survives a CALLed trampoline with rbx/rsi/rdi intact
+[RtSelfTest] pass: 2b: removal restores the synthetic subject byte for byte
+[RtSelfTest] pass: diff harness exercised — expect exactly one divergence, in selftest::diverge
+[RtSelfTest] pass: null port registered for System::Random::Rand — the rest of this run routes through it
+[RtSelfTest] ==== done; registry now 895 exports / 895 addrs, 2 hits so far ====
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] armed (min=512MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 000000a858fff4e0 (min=512MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] grow=0 — the arena-growth path did NOT run in this cell. Whatever `divergences` says, this run is not evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).
+[RtAllocShadow] SUMMARY armed=1 observed=1931087 divergences=321076 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+[RtSelfTest] null port System::Random::Rand handled 16044851 calls this run
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #981569  ours=r0+0x42fb138 live=353126 free=170 bytes=72065880 bin=4 nr=1 res=536870912  theirs=r0+0x42fb138 live=353124 free=171 bytes=72065808 bin=4 nr=1 res=536870912
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #981570  ours=r0+0x42e8118 live=353127 free=170 bytes=72065944 bin=4 nr=1 res=536870912  theirs=r0+0x44ac0e0 live=353125 free=170 bytes=72065880 bin=4 nr=1 res=536870912
+---- per-site rows ----
+[RtDiff]   System::MemoryAllocator::Allocate [shadow]       calls=1035650    worked=?          divergences=54082
+[RtDiff]   System::MemoryAllocator::Free [shadow]           calls=895437     worked=?          divergences=266994
+
+================ cell s1leg ================
+[RtDetour] LEGACY CONTROL: re-inserted the WRONG ADD RAX,8 at trampoline offset 3 (0x7ffcab56b8a0)
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtSelfTest] ==== Runtime port seam acceptance test ====
+[RtSelfTest] pass: subject is deterministic under snapshot replay
+[RtSelfTest] pass: registry precedence: ResolveExport sees the port, Raw does not
+[RtSelfTest] pass: detour: wrapper entered, trampoline reproduces the original exactly
+[RtSelfTest] pass: detour removal restores the DLL byte for byte
+[RtSelfTest] ---- Test 2b: RSP-capture prologue through a CALLed trampoline ----
+[RtSelfTest]   undetoured: rbx=1111111111111111 rsi=2222222222222222 rdi=3333333333333333 rax=42
+[RtSelfTest] pass: 2b baseline: the synthetic subject preserves rbx/rsi/rdi undetoured
+[RtDetour] LEGACY CONTROL: re-inserted the WRONG ADD RAX,8 at trampoline offset 3 (0x1971d490000)
+[RtSelfTest]   detoured  : rbx=000001971d23cbe8 rsi=1111111111111111 rdi=2222222222222222 rax=42
+[RtSelfTest] FAIL: 2b: the CALLed trampoline CORRUPTED callee-saved registers
+[RtSelfTest]   mechanism: the three saved registers came back shifted by exactly one 8-byte slot (rsi holds rbx's value, rdi holds rsi's). That is an RAX displaced by +8 against an RSP-derived restore base.
+[RtSelfTest] pass: 2b: removal restores the synthetic subject byte for byte
+[RtSelfTest] pass: diff harness exercised — expect exactly one divergence, in selftest::diverge
+[RtSelfTest] pass: null port registered for System::Random::Rand — the rest of this run routes through it
+[RtSelfTest] ==== done; registry now 895 exports / 895 addrs, 2 hits so far ====
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] armed (min=512MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 0000000eea7ff560 (min=512MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] grow=0 — the arena-growth path did NOT run in this cell. Whatever `divergences` says, this run is not evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).
+[RtAllocShadow] SUMMARY armed=1 observed=1915496 divergences=313451 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+[RtSelfTest] null port System::Random::Rand handled 16044454 calls this run
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #976384  ours=r0+0x1cfe528 live=350722 free=159 bytes=71530472 bin=4 nr=1 res=536870912  theirs=r0+0x1cfe528 live=350720 free=160 bytes=71530400 bin=4 nr=1 res=536870912
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #976385  ours=r0+0x423f818 live=350723 free=159 bytes=71530536 bin=4 nr=1 res=536870912  theirs=r0+0x4442ef8 live=350721 free=159 bytes=71530472 bin=4 nr=1 res=536870912
+---- per-site rows ----
+[RtDiff]   System::MemoryAllocator::Allocate [shadow]       calls=1027861    worked=?          divergences=51478
+[RtDiff]   System::MemoryAllocator::Free [shadow]           calls=887635     worked=?          divergences=261973
+
+================ cell s1port0 ================
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] armed (min=512MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 00000002909ff040 (min=512MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] grow=0 — the arena-growth path did NOT run in this cell. Whatever `divergences` says, this run is not evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).
+[RtAllocShadow] SUMMARY armed=1 observed=1789828 divergences=0 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+---- per-site rows ----
+[RtDiff]   System::MemoryAllocator::Allocate [shadow]       calls=957409     worked=?          divergences=0
+[RtDiff]   System::MemoryAllocator::Free [shadow]           calls=832419     worked=?          divergences=0
+
+================ cell s2 ================
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] armed (min=512MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 0000008f235ff1b0 (min=512MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] grow=0 — the arena-growth path did NOT run in this cell. Whatever `divergences` says, this run is not evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).
+[RtAllocShadow] SUMMARY armed=1 observed=4481681 divergences=2673750 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #1085137  ours=r0+0x4745570 live=362342 free=94 bytes=74737904 bin=4 nr=1 res=536870912  theirs=r0+0x4745570 live=362340 free=96 bytes=74737840 bin=4 nr=1 res=536870912
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #1085138  ours=r0+0x1559788 live=362343 free=94 bytes=74737968 bin=4 nr=1 res=536870912  theirs=r0+0x1559788 live=362341 free=96 bytes=74737904 bin=4 nr=1 res=536870912
+---- per-site rows ----
+[RtDiff]   System::MemoryAllocator::Allocate [shadow]       calls=2310549    worked=?          divergences=1225413
+[RtDiff]   System::MemoryAllocator::Free [shadow]           calls=2171132    worked=?          divergences=1448337
+
+================ cell g3 ================
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAllocShadow] Engine::Startup ENTRY (min=16MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] armed (min=16MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 0000002cf05ff2a0 (min=16MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=5 theirs=5  reserved ours=80MB theirs=80MB
+[RtAllocShadow] GROWTH grow=4 tableCopy=2 crossRange=1975242
+[RtAllocShadow] SUMMARY armed=1 observed=4521770 divergences=2713855 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #1085131  ours=r3+0x7003e8 live=362346 free=85 bytes=74738256 bin=4 nr=5 res=83886088  theirs=r3+0x7003e8 live=362344 free=87 bytes=74738192 bin=4 nr=5 res=83886088
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #1085132  ours=r3+0x700458 live=362347 free=84 bytes=74738320 bin=4 nr=5 res=83886088  theirs=r3+0x700458 live=362345 free=86 bytes=74738256 bin=4 nr=5 res=83886088
+---- per-site rows ----
+[RtDiff]   System::MemoryAllocator::Allocate [shadow]       calls=2330665    worked=?          divergences=1245535
+[RtDiff]   System::MemoryAllocator::Free [shadow]           calls=2191105    worked=?          divergences=1468320
+
