@@ -211,8 +211,15 @@ cmd_run() {
         echo "[gamelock] run: ABORTING, the lock was never granted to '$who'." >&2
         return 1
     fi
+    # Release on INT/TERM/HUP as well as on the normal path. Without this, a
+    # lane killed mid-run leaves the lock held until break_if_stale expires it,
+    # and from every other lane's side that is indistinguishable from a lane
+    # legitimately holding it for a very long time -- which is what tonight's
+    # 1000-second holds looked like from the outside.
+    trap 'cmd_release "$who" >/dev/null 2>&1; trap - INT TERM HUP; kill -INT $$' INT TERM HUP
     "$@"
     local rc=$?
+    trap - INT TERM HUP
     cmd_release "$who"
     return $rc
 }
