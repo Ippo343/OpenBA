@@ -1,0 +1,197 @@
+// ============================================================================
+// runtime/src/ui/userinterface_standalone.cpp — Wave 10C lane UIF6
+// ============================================================================
+//
+// The two PRIVATE STATIC members that entered the UI census last wave when lane
+// SHOW landed ?ShowDialog@UserInterface@UI@@ and resolved its two installed
+// callbacks BY NAME instead of by address:
+//
+//   0x180120310  ?UpdateStandAloneUI@UserInterface@UI@@CAXAEBVTime@System@@PEAX@Z
+//   0x1801203f0  ?DrawStandAloneUI@UserInterface@UI@@CAXAEAVContext@Video@@PEAX@Z
+//
+// They mangle `CAXA...` -- `C` is PRIVATE STATIC -- and this DLL exports its
+// private members, so a name door exists and was used
+// (reference_aeaa_is_private_not_unexported.md). Reaching them by address when
+// a name exists is how silent address doors accumulate.
+//
+// WHAT THEY ARE. `ShowDialog` builds a NESTED UI::UserInterface for a modal
+// dialog and appends these two callbacks to Engine::MainLoop's callback arrays:
+// {DrawStandAloneUI, nestedUI} onto MainLoop+0x80 and {UpdateStandAloneUI,
+// nestedUI} onto MainLoop+0x90. MainLoop::Frame then drives the nested UI
+// without knowing it is nested. runtime/src/ui/userinterface_showdialog.cpp
+// documents that machinery in full and is the required reading for this file --
+// including the retail quirk lane SHOW found, that `Frame` takes the callback
+// *fn* from +0x90 but its *context* from +0x80 at the same index.
+//
+// Kill switch: BANISHED_RT_UISTANDALONE=0 leaves both on the DLL.
+//
+// Both were confirmed ABSENT from the tree before a line was written, by
+// ADDRESS and by MANGLED NAME across code/, runtime/, engine/ and standalone/.
+// Every hit was a CONSUMER: the two ResolveExport calls in
+// userinterface_showdialog.cpp:189-190 that install them, and the two address
+// constants in standalone/modal_driver.cpp:115-116 that the harness uses to
+// RECOGNISE the installed entries. Neither is a definition.
+//
+// ---------------------------------------------------------------------------
+// NO ADDRESS DOORS AT ALL IN THIS FILE
+// ---------------------------------------------------------------------------
+// Every callee of both bodies has an exported name, checked against the shipped
+// export table with pefile rather than assumed:
+//   0x1801213c0  ?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z   (PORTED, lane UI1)
+//   0x180121890  ?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z   (PORTED, lane UIDRAW)
+//   0x1800c7f20  ??0Random@System@@QEAA@XZ
+//   0x1800df6c0  ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@
+//                    AEBVVector3@Math@@M@Z
+//   0x1801fe728  ?_secondsPerTick@Timer@System@@0NA                   (DATA)
+// Resolving Update and Draw by NAME rather than by address matters: both are
+// already ported, and a name door reaches the PORT while an address door would
+// have to be checked separately.
+// ============================================================================
+
+#include <cstdint>
+#include <cstdio>
+
+#include "../../funcs/rt_port.h"
+#include "../../types/system/Value.h"
+
+namespace {
+
+// ---------------------------------------------------------------------------
+// Callee signatures.
+//
+// `System::Time` is 8 bytes and is passed BY VALUE IN A REGISTER, not by hidden
+// reference: 0x180120394 loads `MOV RDX,[RDI]` -- the VALUE behind the incoming
+// `const Time&` -- and hands that straight to Audio::Scene::Update. So the two
+// `VTime@System@@` by-value parameters are spelled int64_t here.
+// ---------------------------------------------------------------------------
+using UiUpdateFn   = int   (*)(void* ui, const void* time);
+using UiDrawFn     = void  (*)(void* ui, void* videoContext);
+using RandomCtorFn = void* (*)(void* self);
+using SceneUpdateFn = bool (*)(void* scene, int64_t time, int64_t elapsed,
+                               void* random, const float* listenerPos, float volume);
+
+// --- entry counters, printed unconditionally (see userinterface_hover.cpp) ---
+uint64_t g_updEntries   = 0;
+uint64_t g_updWithScene = 0;   // took the audio arm
+uint64_t g_drawEntries  = 0;
+
+struct StandAloneSummary {
+    ~StandAloneSummary() {
+        printf("[RtPort] UI::UserInterface::UpdateStandAloneUI  entries=%llu withAudioScene=%llu\n",
+                    (unsigned long long)g_updEntries, (unsigned long long)g_updWithScene);
+        printf("[RtPort] UI::UserInterface::DrawStandAloneUI  entries=%llu\n",
+                    (unsigned long long)g_drawEntries);
+        fflush(stdout);
+    }
+};
+StandAloneSummary g_standAloneSummary;
+
+constexpr uintptr_t kUI_AudioScene = 0x90;   // UserInterface::_audioScene
+
+}  // namespace
+
+// ============================================================================
+// ?UpdateStandAloneUI@UserInterface@UI@@CAXAEBVTime@System@@PEAX@Z
+//                                                          retail 0x180120310
+// ============================================================================
+// Ticks the nested UI, then ticks its audio scene with a FRESHLY SEEDED RNG.
+//
+// THE 0xa10-BYTE STACK FRAME IS THE TELL. Retail INLINES the whole of
+// `System::Random`'s default constructor here -- `index = 0`, `mt[0] =
+// (uint)_time64(NULL)`, then 623 rounds of the MT19937 init recurrence
+// `mt[i] = 0x6c078965 * (mt[i-1] ^ (mt[i-1] >> 30)) + i`. That is 2500 bytes of
+// PRNG state built on the stack every single tick, purely to hand
+// Audio::Scene::Update something to draw from.
+//
+// THIS PORT CALLS THE EXPORTED CTOR INSTEAD OF RE-INLINING IT, and the
+// equivalence was PROVEN, not assumed. ??0Random@System@@QEAA@XZ (0x1800c7f20)
+// disassembles to the same three steps in the same order, including the same
+// callee for the seed -- both reach 0x18007fb9c (`(uint)_time64(NULL)`) -- and
+// the same 623-iteration count (the export counts down R8D=0x26f; the inline
+// counts up to `R8D < 0x270` from 1, which is the same 623 writes to
+// mt[1..623]). Re-inlining a recurrence we can call by name is how transcription
+// defects get minted; runtime/types/system/Value.h already pins the layout.
+//
+// The `0.0 / _secondsPerTick` is retail's, kept as a division rather than folded
+// to the 0 it always evaluates to, for the same reason as in EndHover: it tracks
+// the constant Engine::Startup installs. It is the `elapsed` Time argument.
+//
+// The fifth argument is a zeroed 12-byte Math::Vector3 (the listener position),
+// and the sixth a 0.0f volume -- 0x1801203a7 and 0x1801203b8 write exactly
+// those, and the export's own signature (`AEBVVector3@Math@@M`) names both.
+// ============================================================================
+extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui) {
+    ++g_updEntries;
+
+    // 0x180120329 -- note the argument SWAP: retail is a static taking
+    // (time, ui) and Update is a member taking (this=ui, time).
+    RT_EXPORT_ONCE(UiUpdateFn,
+        "?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z")(ui, time);
+
+    // 0x180120336..0x180120386 -- the inlined System::Random default ctor.
+    ::Random rng;   // runtime/types/system/Value.h -- global namespace, unlike RtSystem::String
+    RT_EXPORT_ONCE(RandomCtorFn, "??0Random@System@@QEAA@XZ")(&rng);
+
+    void* const scene = *reinterpret_cast<void* const*>(
+        reinterpret_cast<const uint8_t*>(ui) + kUI_AudioScene);       // 0x180120388
+    if (scene) {                                                       // 0x18012038f
+        ++g_updWithScene;
+        const float listener[3] = { 0.0f, 0.0f, 0.0f };                // 0x1801203a7
+        const double* const spt = RT_EXPORT_ONCE(const double*,
+                                                 "?_secondsPerTick@Timer@System@@0NA");
+        const int64_t elapsed = static_cast<int64_t>(0.0 / *spt);      // 0x1801203b0
+        RT_EXPORT_ONCE(SceneUpdateFn,
+            "?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z")
+            (scene, *reinterpret_cast<const int64_t*>(time), elapsed,
+             &rng, listener, 0.0f);                                    // 0x1801203d0
+    }
+}
+
+// ============================================================================
+// ?DrawStandAloneUI@UserInterface@UI@@CAXAEAVContext@Video@@PEAX@Z
+//                                                          retail 0x1801203f0
+// ============================================================================
+// FOURTEEN BYTES. The entire function is an argument swap and a tail jump:
+//
+//   1801203f0  48 8b c2   MOV RAX,RDX      ; RAX = ui        (param 2)
+//   1801203f3  48 8b d1   MOV RDX,RCX      ; RDX = context   (param 1)
+//   1801203f6  48 8b c8   MOV RCX,RAX      ; RCX = ui        (the `this`)
+//   1801203f9  e9 92140000 JMP 0x180121890 ; UI::UserInterface::Draw
+//
+// It exists only to adapt MainLoop's (context, userData) callback shape to
+// Draw's (this, context) member shape.
+//
+// NOTE FOR ANYONE RE-DERIVING THIS: Ghidra has NO FUNCTION at 0x1801203f0 --
+// `decompile_function` and `disassemble_function` both refuse it, and
+// `read_memory` fails on the range even though `disassemble_bytes` reports
+// success. These bytes were read straight out of the shipped PE and
+// disassembled with objdump instead. A lane that trusted the MCP error and
+// recorded "no such function" would have been wrong.
+// ============================================================================
+extern "C" void RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* ui) {
+    ++g_drawEntries;
+    RT_EXPORT_ONCE(UiDrawFn,
+        "?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z")(ui, videoContext);
+}
+
+// ============================================================================
+// REGISTRATION — both doors for both rows (see userinterface_hover.cpp).
+// ============================================================================
+int RtUiStandAloneRegister() {
+    if (!RtWaveEnabled("BANISHED_RT_UISTANDALONE")) {
+        printf("[RtPort] BANISHED_RT_UISTANDALONE=0 -- Update/DrawStandAloneUI "
+                    "left on the DLL\n");
+        return 0;
+    }
+    int n = 0;
+
+    RegisterRuntimeExport("?UpdateStandAloneUI@UserInterface@UI@@CAXAEBVTime@System@@PEAX@Z",
+                          (void*)&RtUi_UserInterface_UpdateStandAloneUI);
+    RegisterRuntimeAddr(0x180120310, (void*)&RtUi_UserInterface_UpdateStandAloneUI);  ++n;
+
+    RegisterRuntimeExport("?DrawStandAloneUI@UserInterface@UI@@CAXAEAVContext@Video@@PEAX@Z",
+                          (void*)&RtUi_UserInterface_DrawStandAloneUI);
+    RegisterRuntimeAddr(0x1801203f0, (void*)&RtUi_UserInterface_DrawStandAloneUI);    ++n;
+
+    return n;
+}

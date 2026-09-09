@@ -99,6 +99,20 @@ extern int RtUiDialogControllerRegister(); // dialog_controller_base.cpp (DLGV)
 // destructor and is row 38 of the family in runtime/src/object/deleting_dtor.cpp,
 // under BANISHED_RT_DELDTOR. Turning THAT off re-traps slot 0.
 extern int RtUiDialogVtableRegister();     // dialog_vtable.cpp   (lane DLG8)
+// Wave 10C lane UIF6: the four ORDINARY-MEMBER callees that entered the census
+// when lanes ELEM and CLOSEDLG resolved them by NAME (IsInsideClipRegion,
+// EndDragDrop, EndHover, BeginToolTip). This file owns TWO switches, not one:
+// BANISHED_RT_UIHOVER for the three small non-allocating rows and
+// BANISHED_RT_UITOOLTIP for BeginToolTip, which is a different risk class --
+// it allocates a ToolTipDialog, runs the DLL's DialogInstance ctor on it and
+// stamps a vtable. Both are checked INSIDE the register function so the two can
+// be bisected apart. Called unconditionally for that reason.
+extern int RtUiHoverRegister();            // userinterface_hover.cpp (lane UIF6)
+// Wave 10C lane UIF6: the two PRIVATE STATIC callbacks ShowDialog installs into
+// MainLoop+0x80/+0x90, which entered the census when lane SHOW resolved them by
+// NAME. Own switch (BANISHED_RT_UISTANDALONE) because they only run while a
+// modal nested UI is up -- an A/B of them must not disturb the normal frame.
+extern int RtUiStandAloneRegister();       // userinterface_standalone.cpp (UIF6)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -123,5 +137,7 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_ELEMVTABLE")) n += RtUiElementVtableRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGCTRL"))    n += RtUiDialogControllerRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGVTABLE")) n += RtUiDialogVtableRegister();
+    n += RtUiHoverRegister();          // owns BANISHED_RT_UIHOVER + _UITOOLTIP
+    n += RtUiStandAloneRegister();     // owns BANISHED_RT_UISTANDALONE
     printf("[RtPort] UI: %d exports registered\n", n);
 }

@@ -1,0 +1,42 @@
+=== Wave 10C lane UIF6 -- raw counter evidence, both cells, final debug binary
+=== tip fdea2b6 + the modal_driver fix; taken 2026-09-09 under game_dir_lock lane-UIF6
+
+--- CELL A_utility (BANISHED_AUTOSTART=1 TOOL_HARNESS=utility UIF6_SWEEP=1) rc=0
+[UIF6/sweep] IsInsideClipRegion: cases=1014  divergences=0  (effectiveness: 205 cases returned true, so the comparison is not trivially satisfied)
+[UIF6/sweep] negative control (right edge made EXCLUSIVE): caught=37 of 1014. A zero here would mean the sweep cannot discriminate and the divergences=0 above is worthless.
+[UIF6/sweep] VERDICT: PASS -- port agrees with the shipped export on every case, and the control proves the sweep would have caught a defect
+[RtPort] UI: 192 exports registered
+[Shutdown] done
+[RtPort] UI::UserInterface::CloseDialog  entries=0
+[RtPort] UI::UserInterface::IsInsideClipRegion  entries=1014 inside=205
+[RtPort] UI::UserInterface::EndDragDrop  entries=0 destroyedElement=0
+[RtPort] UI::DialogInstance::EndHover  entries=0 pushedEvent0x11=0
+[RtPort] UI::UserInterface::BeginToolTip  entries=0 rejected=0 closedPrev=0 nonEmptyString=0 allocFailed=0
+[RtPort] UI::UserInterface::UpdateStandAloneUI  entries=0 withAudioScene=0
+[RtPort] UI::UserInterface::DrawStandAloneUI  entries=0
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+[RtResolveEarly] 0 registry-aware resolves happened before RuntimePortInit() finished. The early-snapshot port-bypass class is NOT LIVE on this path.
+
+--- CELL B_modal (BANISHED_AUTOQUIT=1 MODAL_DRIVER=2 MODAL_DRIVER_TEST=1) rc=0
+[RtPort] UI: 192 exports registered
+[Shutdown] done
+[RtPort] UI::UserInterface::CloseDialog  entries=8
+[RtPort] UI::UserInterface::IsInsideClipRegion  entries=0 inside=0
+[RtPort] UI::UserInterface::EndDragDrop  entries=0 destroyedElement=0
+[RtPort] UI::DialogInstance::EndHover  entries=0 pushedEvent0x11=0
+[RtPort] UI::UserInterface::BeginToolTip  entries=0 rejected=0 closedPrev=0 nonEmptyString=0 allocFailed=0
+[RtPort] UI::UserInterface::UpdateStandAloneUI  entries=12 withAudioScene=12
+[RtPort] UI::UserInterface::DrawStandAloneUI  entries=28
+[ModalDriver] ARMED (BANISHED_MODAL_DRIVER="2") - will answer any modal with result 2 after 3 nested tick(s)
+[ModalDriver] armed on MainLoop=000001b6000d96b8  draw[1] update[1]  (callback 00007ff71cc94363 paired with no-op 00007ff71cc9421b)
+[ModalDriver] dismissing modal dialog=000001b601669a30 nestedUi=000001b60166c780 flags=0x20 (DeleteOnClose=0) with result 2
+[RtPort] UI::UserInterface::CloseDialog ENTERED (first call) -- the port is LIVE on this route
+[ModalDriver] dismissing modal dialog=000001b60166ca38 nestedUi=000001b60166c4b8 flags=0x20 (DeleteOnClose=0) with result 2
+[ModalDriver] dismissing modal dialog=000001b60166ca38 nestedUi=000001b60166c4b8 flags=0x20 (DeleteOnClose=0) with result 2
+[ModalDriver] dismissing modal dialog=000001b60166ca38 nestedUi=000001b60166c4b8 flags=0x20 (DeleteOnClose=0) with result 2
+[ModalDriver] dismissing modal dialog=000001b60166ca38 nestedUi=000001b60166c4b8 flags=0x20 (DeleteOnClose=0) with result 2
+[ModalDriver] dismissing modal dialog=000001b60166ca38 nestedUi=000001b60166c4b8 flags=0x20 (DeleteOnClose=0) with result 2
+[ModalDriver] dismissing modal dialog=000001b60166ca38 nestedUi=000001b60166c4b8 flags=0x20 (DeleteOnClose=0) with result 2
+[ModalDriver] dismissing modal dialog=000001b60166ca38 nestedUi=000001b60166c4b8 flags=0x80000020 (DeleteOnClose=0) with result 2
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+[RtResolveEarly] 0 registry-aware resolves happened before RuntimePortInit() finished. The early-snapshot port-bypass class is NOT LIVE on this path.

@@ -100,8 +100,23 @@
 //   0x8c  _upperLeftY        ?SetUpperLeft@ delta base                  0x180114a60
 //   0x90  _timerHandle       ctor sets the qword to -1; no ported body
 //                            reads it. NAME IS A GUESS, flagged.        0x180114870
-//   0x98  _closing           ctor sets the byte to 0. NAME IS A GUESS.  0x180114870
-//   0xa0  _opaqueA0          ctor zeroes it; nothing in this lane reads it
+//   0x98  _hovering          ctor sets the byte to 0.                    0x180114870
+//                            NAME PROVEN 2026-09-09 (Wave 10C lane UIF6), not a
+//                            guess any more: ?IsHovering@DialogInstance@UI@@QEBA_NXZ
+//                            (0x1800455a0) is the whole function
+//                              MOVZX EAX, byte ptr [RCX+0x98] / RET
+//                            -- a one-line exported accessor, which this tree
+//                            treats as the strongest class of field evidence
+//                            (UserInterface.h "FIELD EVIDENCE"). ?EndHover@
+//                            (0x180113d10) clears the same byte and emits UI
+//                            event 0x11, and UI::Element::Update gates the
+//                            tooltip BEGIN/MOVE arm on it being non-zero
+//                            (runtime/src/ui/element_vtable.cpp:735).
+//   0xa0  _hoverTime         ctor zeroes it; ?EndHover@ (0x180113d10) rewrites it
+//                            unconditionally with (int64)(0.0 / _secondsPerTick),
+//                            i.e. a System::Time tick count, NOT a pointer. Retyped
+//                            from void* by Wave 10C lane UIF6; same 8 bytes, same
+//                            zero store, so no layout change.
 //   0xa8  _userData          ctor param 5 (void*)                       0x180114870
 //   0xb0  _userFlags         ctor param 6 (int)                         0x180114870
 //
@@ -224,9 +239,11 @@ struct DialogInstance {
     int32_t  _upperLeftX;                // +0x88
     int32_t  _upperLeftY;                // +0x8c
     int64_t  _timerHandle;               // +0x90  ctor: -1. NAME IS A GUESS.
-    uint8_t  _closing;                   // +0x98  ctor: 0.  NAME IS A GUESS.
+    uint8_t  _hovering;                  // +0x98  ctor: 0.  PROVEN by ?IsHovering@
+                                         //        (0x1800455a0), a one-line accessor.
     uint8_t  _hole99[7];                 // +0x99  NOT written by the ctor
-    void*    _opaqueA0;                  // +0xa0
+    int64_t  _hoverTime;                 // +0xa0  System::Time ticks; ?EndHover@ writes
+                                         //        (int64)(0.0 / _secondsPerTick) here.
     void*    _userData;                  // +0xa8  ctor param 5
     int32_t  _userFlags;                 // +0xb0  ctor param 6
     int32_t  _holeB4;                    // +0xb4  NOT written by the ctor
@@ -247,8 +264,8 @@ static_assert(offsetof(DialogInstance, _controllers) == 0x78, "DialogInstance::_
 static_assert(offsetof(DialogInstance, _upperLeftX)  == 0x88, "DialogInstance::_upperLeftX @ +0x88");
 static_assert(offsetof(DialogInstance, _upperLeftY)  == 0x8c, "DialogInstance::_upperLeftY @ +0x8c");
 static_assert(offsetof(DialogInstance, _timerHandle) == 0x90, "DialogInstance +0x90 (ctor writes -1)");
-static_assert(offsetof(DialogInstance, _closing)     == 0x98, "DialogInstance +0x98 (ctor writes a 0 byte)");
-static_assert(offsetof(DialogInstance, _opaqueA0)    == 0xa0, "DialogInstance +0xa0");
+static_assert(offsetof(DialogInstance, _hovering)    == 0x98, "DialogInstance::_hovering @ +0x98 (IsHovering 0x1800455a0)");
+static_assert(offsetof(DialogInstance, _hoverTime)   == 0xa0, "DialogInstance::_hoverTime @ +0xa0 (EndHover 0x180113d10)");
 static_assert(offsetof(DialogInstance, _userData)    == 0xa8, "DialogInstance::_userData @ +0xa8");
 static_assert(offsetof(DialogInstance, _userFlags)   == 0xb0, "DialogInstance::_userFlags @ +0xb0");
 static_assert(sizeof(DialogInstance) == 0xb8,
