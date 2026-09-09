@@ -1,0 +1,74 @@
+# Predictive-oracle runs -- lane UIDRAW
+# exe md5 59de98f69ccd94ee1e21d72ad4795dcc, deployed md5 verified identical before each launch
+
+=== run A ===
+[UiDetour] DETOUR INSTALLED at 0x180121890 (13-byte patch) -- Engine::MainLoop's frame now runs the ported UI::UserInterface::Draw.
+[RtPredict] ON — ported bodies run as PREDICTORS and write nothing; the DLL does the real work and we compare. This is a verification mode, not a shipping one: our ports are not live while it is set.
+[RtPredict] ==== 2 site(s) ====
+[RtPredict]   UI::UserInterface::Update                      rounds=243     predictions=1704     changed=90       wrong=0 unpredicted=0
+[RtPredict]                                                  excluded=27819 byte(s), 1534 suppressed indirect call(s) — their effects are NOT verified here
+[RtPredict]                                                  NOT COMPARED: 168 superseded (an intermediate write, not a post-state claim), 243 unverifiable (inside an Exclude region)
+[RtPredict]   UI::UserInterface::Draw                        rounds=361     predictions=1088     changed=4        wrong=0 unpredicted=0
+[RtPredict]                                                  excluded=1444 byte(s), 3766 suppressed indirect call(s) — their effects are NOT verified here
+[RtPredict]                                                  NOT COMPARED: 0 superseded (an intermediate write, not a post-state claim), 1 unverifiable (inside an Exclude region)
+[RtPredict] ==== 0 site(s) with findings; 0 UNPROVEN (changed=0) ====
+[RtPredict] ==== negative control NOT run. Re-run with BANISHED_RT_PREDICT_SELFTEST=1: a clean board from a comparison that cannot go red is not a result. ====
+(none, 0 bytes)
+  ('had no compared' lines for Draw: 0
+  )
+
+=== run B ===
+[UiDetour] DETOUR INSTALLED at 0x180121890 (13-byte patch) -- Engine::MainLoop's frame now runs the ported UI::UserInterface::Draw.
+[RtPredict] ON — ported bodies run as PREDICTORS and write nothing; the DLL does the real work and we compare. This is a verification mode, not a shipping one: our ports are not live while it is set.
+[RtPredict] SELF-TEST ARMED — one prediction per site is corrupted by one bit. EVERY site must report a mismatch. A site that stays green here cannot express a failure, and its clean runs were never evidence.
+[RtPredict] MISMATCH UI::UserInterface::Update  _addDialogs._data = 0 @000001b108d73fd0 (8 bytes)  pre=0x1b109452448 ours=0x1 theirs=0x0   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::UserInterface::Draw  Context::_color.x = 1.0f @000001b108d2f610 (4 bytes)  pre=0x0 ours=0x3f800001 theirs=0x3f800000   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::UserInterface::Update  _fadeAmount += @000001b108d7409c (4 bytes)  pre=0x3f6eef1c ours=0x3f5dde39 theirs=0x3f5dde38   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::UserInterface::Update  _fadeAmount += @000001b108d7409c (4 bytes)  pre=0x3f5dde38 ours=0x3f4ccd55 theirs=0x3f4ccd54   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] ==== 2 site(s) ====
+[RtPredict]   UI::UserInterface::Update                      rounds=243     predictions=1704     changed=90       wrong=78 unpredicted=0
+[RtPredict]                                                  excluded=27819 byte(s), 1534 suppressed indirect call(s) — their effects are NOT verified here
+[RtPredict]                                                  NOT COMPARED: 168 superseded (an intermediate write, not a post-state claim), 243 unverifiable (inside an Exclude region)
+[RtPredict]                                                  self-test caught (the comparison can go red)
+[RtPredict]   UI::UserInterface::Draw                        rounds=350     predictions=1055     changed=4        wrong=1 unpredicted=0
+[RtPredict]                                                  excluded=1400 byte(s), 3670 suppressed indirect call(s) — their effects are NOT verified here
+[RtPredict]                                                  NOT COMPARED: 0 superseded (an intermediate write, not a post-state claim), 1 unverifiable (inside an Exclude region)
+[RtPredict]                                                  self-test caught (the comparison can go red)
+[RtPredict] ==== 2 site(s) with findings; 0 UNPROVEN (changed=0) ====
+[RtPredict] ==== SELF-TEST: 0 site(s) could NOT demonstrate a failure. A run is evidence only for the sites that could. ====
+(none, 0 bytes)
+  ('had no compared' lines for Draw: 349
+  )
+
+=== run C ===
+[UiDetour] DETOUR INSTALLED at 0x180121890 (13-byte patch) -- Engine::MainLoop's frame now runs the ported UI::UserInterface::Draw.
+(none, 0 bytes)
+  ('had no compared' lines for Draw: 0
+  )
+
+=== run D ===
+[UiDetour] DETOUR INSTALLED at 0x180121890 (13-byte patch) -- Engine::MainLoop's frame now runs the ported UI::UserInterface::Draw.
+(none, 0 bytes)
+  ('had no compared' lines for Draw: 0
+  )
+
+=== run E ===
+[UiDetour] DETOUR INSTALLED at 0x180121890 (13-byte patch) -- Engine::MainLoop's frame now runs the ported UI::UserInterface::Draw.
+[RtPredict] ON — ported bodies run as PREDICTORS and write nothing; the DLL does the real work and we compare. This is a verification mode, not a shipping one: our ports are not live while it is set.
+[RtPredict] ==== 2 site(s) ====
+[RtPredict]   UI::UserInterface::Update                      rounds=1636    predictions=11459    changed=166      wrong=0 unpredicted=0
+[RtPredict]                                                  excluded=187930 byte(s), 11924 suppressed indirect call(s) — their effects are NOT verified here
+[RtPredict]                                                  NOT COMPARED: 1501 superseded (an intermediate write, not a post-state claim), 1636 unverifiable (inside an Exclude region)
+[RtPredict]   UI::UserInterface::Draw                        rounds=2875    predictions=8630     changed=4        wrong=0 unpredicted=0
+[RtPredict]                                                  excluded=11500 byte(s), 29928 suppressed indirect call(s) — their effects are NOT verified here
+[RtPredict]                                                  NOT COMPARED: 0 superseded (an intermediate write, not a post-state claim), 1 unverifiable (inside an Exclude region)
+[RtPredict] ==== 0 site(s) with findings; 0 UNPROVEN (changed=0) ====
+[RtPredict] ==== negative control NOT run. Re-run with BANISHED_RT_PREDICT_SELFTEST=1: a clean board from a comparison that cannot go red is not a result. ====
+(none, 0 bytes)
+  ('had no compared' lines for Draw: 0
+  )
+
+=== run F ===
+(none, 0 bytes)
+  ('had no compared' lines for Draw: 0
+  )

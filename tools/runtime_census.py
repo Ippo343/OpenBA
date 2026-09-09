@@ -209,6 +209,60 @@ RE_DETOUR_ADDR = re.compile(r'InstallRuntimeDetour(?:Checked)?\s*\(\s*"([^"]*)"\
 RE_DETOUR_NONLITERAL = re.compile(
     r'InstallRuntimeDetour(?:Checked)?\s*\(\s*"([^"]*)"\s*,\s*(?!0x)([A-Za-z_][A-Za-z0-9_:]*)')
 
+# BLIND SPOT SEVEN, found by lane UIDRAW (Wave 10). Everything above matches the
+# `InstallRuntimeDetour*` FRONT DOORS only. The tree has a SECOND installer --
+# `RuntimeDetourInstall`, the deliberately dumb byte-copy one -- and the census
+# could not see a single one of its call sites.
+#
+# That is not a random gap, which is why it is worth a paragraph. The front doors
+# route through `InstallDetour`, whose automatic `MOV RAX,RSP -> ADD RAX,8`
+# correction ("Bug Class 3") is WRONG for a prologue that saves registers
+# RAX-relative and restores them RSP-relative. So `RuntimeDetourInstall` is
+# exactly the installer the HARDEST subjects are required to use --
+# `UI::UserInterface::Update` (lane UI1) and `UI::UserInterface::Draw` (lane
+# UIDRAW) both are -- and the column was therefore blind precisely where a
+# detour is most delicate. UI printed `detour 2` while four `[port]` detours
+# were installed and logging.
+#
+# The argument order is INVERTED relative to the front doors (address first,
+# label last), which is why a copy of the patterns above would not have worked.
+# The label still decides port-vs-instrument through _add_detour, so the two
+# unlabelled instrument users of this installer (persistobject_probe.cpp,
+# video_interface.cpp) stay instruments.
+RE_DETOUR_BYTECOPY = re.compile(
+    r'RuntimeDetourInstall\s*\(\s*(0x[0-9a-fA-F]+|[A-Za-z_][A-Za-z0-9_:]*)\s*,')
+RE_LAST_STRING = re.compile(r'"([^"]*)"')
+
+
+def bytecopy_detour_calls(text):
+    """(target, label) for every `RuntimeDetourInstall(target, ..., "label")`.
+
+    Parenthesis-MATCHED rather than regex-terminated. The first version of this
+    ended the argument list at the first `)` a non-greedy `[^;]*?` could reach,
+    which is the one inside `static_cast<int>(kUiDrawPrologue)` -- so it found
+    the call, found no label, and filed it as an unlabelled instrument. A silent
+    downgrade, in the exact column the function was added to fix.
+    """
+    out = []
+    for m in RE_DETOUR_BYTECOPY.finditer(text):
+        i, depth, n = m.end(), 1, len(text)   # just past the first comma
+        while i < n and depth:
+            c = text[i]
+            if c == '"':                          # skip a string literal whole
+                i += 1
+                while i < n and text[i] != '"':
+                    i += 2 if text[i] == '\\' else 1
+            elif c == '(':
+                depth += 1
+            elif c == ')':
+                depth -= 1
+                if not depth:
+                    break
+            i += 1
+        labels = RE_LAST_STRING.findall(text[m.end():i])
+        out.append((m.group(1), labels[-1] if labels else ""))
+    return out
+
 # A file-scope `constexpr uintptr_t kX = 0x...;` (or const/static uintptr_t).
 # Mirrors RE_NAME_CONST, which resolves the same shape for mangled names.
 RE_ADDR_CONST = re.compile(
@@ -749,6 +803,18 @@ def scan():
                             addr_consts[ident], rel)
             else:
                 nonliteral_detours.setdefault(rel, []).append(ident)
+
+        # The byte-copy installer (blind spot seven). Address FIRST, label LAST,
+        # so the label is the last string literal in the argument list.
+        for target, label in bytecopy_detour_calls(text):
+            if target.startswith("0x"):
+                _add_detour(detoured, instrument_detours, label,
+                            int(target, 16), rel)
+            elif target in addr_consts:
+                _add_detour(detoured, instrument_detours, label,
+                            addr_consts[target], rel)
+            else:
+                nonliteral_detours.setdefault(rel, []).append(target)
 
     return dict(
         nonliteral_regs=nonliteral_regs,

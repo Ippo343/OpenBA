@@ -50,6 +50,11 @@ extern int RtUiFrameRegister();            // userinterface_frame.cpp (lane UI1)
 // they sit on the construction path of every dialog in the game and because the
 // blocker they cleared -- the allocator -- is still opt-in for its own port.
 extern int RtUiDialogCreateRegister();     // dialog_create.cpp   (lane UI3)
+// Wave 10 lane UIDRAW: ?Draw@UserInterface@UI@@, the other half of the frame
+// pair. Its own switch (BANISHED_RT_UIDRAW) for the same reason as UI1's: it is
+// the second body that can be given a code detour into the DLL, and a bisect
+// must be able to isolate the DRAW half from the UPDATE half.
+extern int RtUiDrawRegister();             // userinterface_draw.cpp (lane UIDRAW)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -67,5 +72,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_ELEMDESCSER")) n += RtUiElementDescriptionSerializeRegister();
     if (RtWaveEnabled("BANISHED_RT_UIFRAME"))     n += RtUiFrameRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGCREATE"))  n += RtUiDialogCreateRegister();
+    if (RtWaveEnabled("BANISHED_RT_UIDRAW"))      n += RtUiDrawRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }
