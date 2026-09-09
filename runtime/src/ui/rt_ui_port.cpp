@@ -66,6 +66,13 @@ extern int RtUiCloseDialogRegister();      // userinterface_close.cpp (lane CLOS
 // because the dtor frees and because a bisect must be able to separate it from
 // lane UI3's own switch, which is what put the calls there.
 extern int RtUiDialogCtorDtorRegister();   // dialog_ctor_dtor.cpp (lane DLG2)
+// Wave 10B lane SHOW: ?ShowDialog@UserInterface@UI@@, the last UI CODE row.
+// Own switch (BANISHED_RT_UISHOW) because it is the only body in the namespace
+// that re-enters Engine::MainLoop::Frame and mutates MainLoop's callback
+// arrays, and because its instrument -- the twin-subject differential in
+// standalone/modal_driver.cpp -- needs to A/B exactly this one symbol with
+// everything else held fixed.
+extern int RtUiShowDialogRegister();       // userinterface_showdialog.cpp (lane SHOW)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -86,5 +93,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_UIDRAW"))      n += RtUiDrawRegister();
     if (RtWaveEnabled("BANISHED_RT_UICLOSE"))    n += RtUiCloseDialogRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGCTOR"))    n += RtUiDialogCtorDtorRegister();
+    if (RtWaveEnabled("BANISHED_RT_UISHOW"))     n += RtUiShowDialogRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }
