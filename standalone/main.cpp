@@ -33,6 +33,7 @@
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
 #include "Object/internal_factory_audit.h"   // ObjAudit::ReportLeaks from the crash handler
+#include "Dialog/dialog_controller_vtable.h" // Wave 10D: inherited base slots
 
 // Wave 9 lane N's work-scheduler probe tally (code/Game/Action/action_base_complete.cpp).
 // Declared here rather than in a header: it has exactly one caller, the crash handler.
@@ -1750,6 +1751,22 @@ static bool Init() {
     printf("[Standalone] Initializing address registry...\n");
     AddressRegistryInit();
     StallDebug::Mark("AddressRegistryInit");
+
+    // 3a. Wave 10D lane VTFID — make our UI::DialogController subclass vtables
+    //     hold the INHERITED base entry in the slots the subclass does not
+    //     override, which is what retail's derived tables hold. Our tables put
+    //     a file-local no-op there instead, which made the ported base bodies
+    //     unreachable for a reason that was ours.
+    //
+    //     Placed HERE and not earlier: the tables are built by static
+    //     initialisers, before ResolveInit() has loaded Runtime-x64.dll and
+    //     before RuntimePortInit() (1730) registered the ported bodies, so the
+    //     fill has to happen after both or it fills nulls. It is before
+    //     Object::InvokeAllRegistrations and long before any dialog is
+    //     constructed, and it patches the tables rather than any object, so
+    //     construction order does not matter.
+    UIDialogControllerVtable::Apply();
+    StallDebug::Mark("UIDialogControllerVtable::Apply");
 
     // 4. Resolve engine function pointers from Runtime DLL
     printf("[Standalone] Resolving engine functions...\n");

@@ -380,6 +380,7 @@ int PastureUI_Slot13(PastureUI* self) {
 #include "Object/factory_registration.h"
 #include <cstdlib>
 #include <cstdio>
+#include "dialog_controller_vtable.h"
 
 namespace pastureui_sa {
 
@@ -467,6 +468,12 @@ struct Init {
         g_vt[13] = reinterpret_cast<void*>(&PastureUI_Slot13);
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's PastureUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "PastureUI", &StubNop);
 
 // PastureUI object size 0x40 (header comment; +0x30 combo IBP, +0x38 slider IBP).
 void Zero(void* p) {

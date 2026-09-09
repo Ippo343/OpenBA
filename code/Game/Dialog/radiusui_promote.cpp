@@ -45,6 +45,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include "dialog_controller_vtable.h"
 
 namespace radiusui_sa {
 
@@ -100,6 +101,12 @@ struct Init {
         g_vt[6] = reinterpret_cast<void*>(&W_Slot6);
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's RadiusUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "RadiusUI", &StubNop);
 
 // RadiusUI object size 0x38. Factory_RadiusUI (0x140013590) alloc's 0x38/8, runs the
 // DialogController base ctor, installs the vtable and — critically — seeds

@@ -361,6 +361,7 @@ void EventLogUI_Slot9(EventLogUI* self, void* param2, int msg, int id) {
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include "dialog_controller_vtable.h"
 
 namespace eventlogui_sa {
 
@@ -420,6 +421,12 @@ struct Init {
         g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's EventLogUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "EventLogUI", &StubNop);
 
 void Zero(void* p) { for (size_t o = 0; o < (size_t)0x80; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
 void* Factory() {

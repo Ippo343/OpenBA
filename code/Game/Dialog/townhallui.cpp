@@ -2470,6 +2470,7 @@ void TownHallUI_OnRemove(TownHallUI* self, void* param2, int msg, int id) {
 // standalone/reg_townhallui.cpp, so EngineFuncsInit resolves them in SA.
 #include "Object/factory_registration.h"
 #include <cstddef>
+#include "dialog_controller_vtable.h"
 
 namespace townhallui_sa {
 
@@ -2793,6 +2794,12 @@ struct Init {
         g_vt[10] = reinterpret_cast<void*>(&W_Update);
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's TownHallUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "TownHallUI", &StubNop);
 
 void Zero(void* p) {
     for (size_t o = 0; o < static_cast<size_t>(0x1E8); o += 8)

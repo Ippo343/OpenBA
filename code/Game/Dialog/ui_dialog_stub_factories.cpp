@@ -41,6 +41,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include "dialog_controller_vtable.h"
 
 namespace {
 
@@ -147,6 +148,12 @@ namespace uistub_BuildRequirementUI {
         BuildRequirementUI_Slot4(reinterpret_cast<BuildRequirementUI*>(self));
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's BuildRequirementUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "BuildRequirementUI", &StubNop);
     struct Slot4Wire { Slot4Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); } } g_s4;
     void Zero(void* p){ for(size_t o=0;o<(size_t)0x60;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
     void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x60,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
@@ -190,6 +197,12 @@ namespace uistub_HotKeyToolTipUI {
         Game::HotKeyToolTipUI_Slot4(self);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's HotKeyToolTipUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "HotKeyToolTipUI", &StubNop);
     struct Slot4Wire { Slot4Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); } } g_s4;
     void Zero(void* p){ for(size_t o=0;o<(size_t)0x30;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
     void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x30,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
@@ -290,6 +303,12 @@ namespace uistub_AttendanceUI {
         AttendanceUI_Slot7(reinterpret_cast<AttendanceUI*>(self));
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's AttendanceUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "AttendanceUI", &StubNop);
     // ⚠ Declared AFTER g_init: StubVtableInit re-fills every slot with StubNop, so a
     // slot written before it runs is erased (project_next_stub_controller_sweep).
     struct SlotWire { SlotWire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
@@ -352,6 +371,12 @@ namespace uistub_CemeteryUI {
         CemeteryUI_Slot7(reinterpret_cast<CemeteryUI*>(self));
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's CemeteryUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "CemeteryUI", &StubNop);
     // Declared AFTER g_init on purpose: StubVtableInit re-fills every slot with StubNop,
     // so a slot written before it runs is erased (project_next_stub_controller_sweep).
     struct SlotWire { SlotWire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
@@ -430,6 +455,12 @@ namespace uistub_ConsumeProduceUI {
         ConsumeProduceUI_Slot9(reinterpret_cast<ConsumeProduceUI*>(self), p2, p3, p4);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's ConsumeProduceUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "ConsumeProduceUI", &StubNop);
     // Declared AFTER g_init on purpose: StubVtableInit re-fills every slot with StubNop,
     // so a slot written before it runs is erased (project_next_stub_controller_sweep).
     struct SlotWire { SlotWire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
@@ -602,6 +633,12 @@ namespace uistub_HelpUI {
         HelpUI_Slot9(reinterpret_cast<HelpUI*>(self), p2, msg, id, p5, p6, linkIndex);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's HelpUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "HelpUI", &StubNop);
     struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
                           g_vt[7]=reinterpret_cast<void*>(&Slot7);
                           g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
@@ -712,6 +749,12 @@ namespace uistub_ImmigrationUI {
         ImmigrationUI_Slot9(reinterpret_cast<ImmigrationUI*>(self), p2, msg, id, p5, p6);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's ImmigrationUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "ImmigrationUI", &StubNop);
     struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); g_vt[7]=reinterpret_cast<void*>(&Slot7); g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
     void Zero(void* p){ for(size_t o=0;o<(size_t)0x50;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
     void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x50,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; Trace("created", p); return p; }
@@ -768,6 +811,12 @@ namespace uistub_MapUI {
         if (self) MapUI_Slot9(reinterpret_cast<MapUI*>(self), p2, msg, id, cx, cy);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's MapUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "MapUI", &StubNop);
     struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
     void Zero(void* p){ for(size_t o=0;o<(size_t)0x50;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
     void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x50,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
@@ -777,6 +826,24 @@ REGISTER_TYPE(MapUI, "UI::DialogController",
               &uistub_MapUI::Factory, &uistub_MapUI::InPlace);
 UI_DIALOG_STUB(ModBrowseUI,         "UI::DialogController", 0x30);
 UI_DIALOG_STUB(NoiseUI,             "UI::DialogController", 0x70);
+
+// Wave 10D lane VTFID: the same inherited-slot fix as the hand-written blocks.
+// These three go through the UI_DIALOG_STUB macro, whose body is shared with the
+// UI::DialogInstance and UI::DialogControllerConfig types further down; those
+// have a DIFFERENT base and a different vtable, so the registration is written
+// out here per type rather than folded into the macro, where it would register
+// twenty tables whose base this fix knows nothing about.
+namespace {
+struct StubMacroDlgCtrlReg {
+    StubMacroDlgCtrlReg() {
+        void* stub = reinterpret_cast<void*>(&StubNop);
+        ::UIDialogControllerVtable::Register(uistub_ModBrowseUI::g_vt,
+                                             kStubVtableSlots, "ModBrowseUI", stub);
+        ::UIDialogControllerVtable::Register(uistub_NoiseUI::g_vt,
+                                             kStubVtableSlots, "NoiseUI", stub);
+    }
+} g_stubMacroDlgCtrlReg;
+}  // namespace
 // ---- PageToggleUI: PROMOTED to the real reimpl (production-statistics button) --
 // PageToggleUI drives the `checkProduction` CheckElement that Dialog/Production.rsc
 // inserts into a workplace dialog's title bar (userTitle0). It is the ONLY thing
@@ -857,6 +924,12 @@ namespace uistub_PageToggleUI {
         PageToggleUI_Slot9(reinterpret_cast<PageToggleUI*>(self), p2, msg, id);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's PageToggleUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "PageToggleUI", &StubNop);
     struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); g_vt[7]=reinterpret_cast<void*>(&Slot7); g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
     void Zero(void* p){ for(size_t o=0;o<(size_t)0x48;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
     void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x48,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
@@ -933,6 +1006,12 @@ namespace uistub_ProductionUI {
         ProductionUI_Slot7(reinterpret_cast<ProductionUI*>(self));
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's ProductionUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "ProductionUI", &StubNop);
     struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); g_vt[7]=reinterpret_cast<void*>(&Slot7); } } g_wire;
     void Zero(void* p){ for(size_t o=0;o<(size_t)0x50;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
     void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x50,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
@@ -1041,6 +1120,12 @@ namespace uistub_ProfessionUI {
         ProfessionUI_Slot9(reinterpret_cast<ProfessionUI*>(self), p2, msg, id);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's ProfessionUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "ProfessionUI", &StubNop);
     struct Wire { Wire(){ g_vt[5]=reinterpret_cast<void*>(&Slot5);
                           g_vt[8]=reinterpret_cast<void*>(&Slot8);
                           g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
@@ -1135,6 +1220,12 @@ namespace uistub_ResourceLimitUI {
     void Slot7(void* self){ if(!self) return; int idx=IdxFor(self); ResourceLimitUI_Sync_SA(reinterpret_cast<ResourceLimitUI*>(self), idx); }
     void Slot9(void* self, void* p2, int msg, int id, int, int){ if(!self) return; int idx=IdxFor(self); Trace("Slot9",self,idx); ResourceLimitUI_Write_SA(reinterpret_cast<ResourceLimitUI*>(self), p2, msg, id, idx); }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's ResourceLimitUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "ResourceLimitUI", &StubNop);
     struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); g_vt[7]=reinterpret_cast<void*>(&Slot7); g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
     void Zero(void* p){ for(size_t o=0;o<(size_t)0x40;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
     void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x40,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
@@ -1143,6 +1234,17 @@ namespace uistub_ResourceLimitUI {
 REGISTER_TYPE(ResourceLimitUI, "UI::DialogController",
               &uistub_ResourceLimitUI::Factory, &uistub_ResourceLimitUI::InPlace);
 UI_DIALOG_STUB(SpriteCaptureUI,     "UI::DialogController", 0x70);
+
+// Wave 10D lane VTFID — see the ModBrowseUI/NoiseUI note above.
+namespace {
+struct SpriteCaptureDlgCtrlReg {
+    SpriteCaptureDlgCtrlReg() {
+        ::UIDialogControllerVtable::Register(uistub_SpriteCaptureUI::g_vt,
+                                             kStubVtableSlots, "SpriteCaptureUI",
+                                             reinterpret_cast<void*>(&StubNop));
+    }
+} g_spriteCaptureDlgCtrlReg;
+}  // namespace
 // ---- StatusBarUI: PROMOTED to real SA vtable (statusbarui.cpp) — the toolbar
 //      "town status" utility dialog (group 4, next to Map) now renders the town
 //      name title + population/resources/weather/hearts/stars instead of zeros ----
@@ -1188,6 +1290,12 @@ namespace uistub_TitleDescToolTipUI {
         ::TitleDescToolTipUI_Serialize(reinterpret_cast<TitleDescToolTipUI*>(self));
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's TitleDescToolTipUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "TitleDescToolTipUI", &StubNop);
     // MUST be declared AFTER g_init: same TU, same namespace, both dynamic
     // initializers, so declaration order is guaranteed. Reversed, g_init's blanket
     // StubNop fill would run second and silently un-wire idx4 — the promotion would
@@ -1282,6 +1390,12 @@ namespace uistub_ToolUI {
         if (self) ToolUI_Slot9(reinterpret_cast<ToolUI*>(self), p2, msg, id, mx, my);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's ToolUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "ToolUI", &StubNop);
     struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
                           g_vt[8]=reinterpret_cast<void*>(&Slot8);
                           g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
@@ -1453,6 +1567,12 @@ namespace uistub_TradeUI {
         TradeUI_Update(reinterpret_cast<TradeUI*>(self), stream, p3, p4);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's TradeUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "TradeUI", &StubNop);
     struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
                           g_vt[5]=reinterpret_cast<void*>(&Slot5);
                           g_vt[6]=reinterpret_cast<void*>(&Slot6);
@@ -1560,6 +1680,12 @@ namespace uistub_BuildUI {
         BuildUI_Slot9(reinterpret_cast<BuildUI*>(self), p2, p3, p4);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+
+// Wave 10D lane VTFID: retail's BuildUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "BuildUI", &StubNop);
     struct SlotWire { SlotWire(){
         g_vt[4]=reinterpret_cast<void*>(&Slot4);
         g_vt[7]=reinterpret_cast<void*>(&Slot7);

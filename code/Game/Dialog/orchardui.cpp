@@ -266,6 +266,7 @@ int OrchardUI_Slot13(OrchardUI* self) {
 #include "Object/factory_registration.h"
 #include <cstdlib>
 #include <cstdio>
+#include "dialog_controller_vtable.h"
 
 namespace orchardui_sa {
 
@@ -347,6 +348,12 @@ struct Init {
         g_vt[13] = reinterpret_cast<void*>(&OrchardUI_Slot13);
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's OrchardUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "OrchardUI", &StubNop);
 
 // OrchardUI object size 0x48 (+0x30 combo IBP, +0x38 yield IBP, +0x40 spare).
 void Zero(void* p) {

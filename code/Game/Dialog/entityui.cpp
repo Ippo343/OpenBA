@@ -861,6 +861,7 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
 #include <cstddef>
 #include <cstdlib>
 #include <cstdio>
+#include "dialog_controller_vtable.h"
 
 namespace entityui_sa {
 
@@ -992,6 +993,12 @@ struct Init {
         g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's EntityUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "EntityUI", &StubNop);
 
 void Zero(void* p) { for (size_t o = 0; o < (size_t)0x48; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
 void* Factory() {

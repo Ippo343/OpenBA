@@ -130,6 +130,7 @@ void StorageCapacityUI_Startup(StorageCapacityUI* self) {
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include "dialog_controller_vtable.h"
 
 namespace storagecapacityui_sa {
 
@@ -221,6 +222,12 @@ struct Init {
         g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's StorageCapacityUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "StorageCapacityUI", &StubNop);
 
 void Zero(void* p) {
     for (size_t o = 0; o < static_cast<size_t>(0x38); o += 8)

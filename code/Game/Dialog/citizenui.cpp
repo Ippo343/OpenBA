@@ -743,6 +743,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 #include <cstddef>
 #include <cstdlib>
 #include <cstdio>
+#include "dialog_controller_vtable.h"
 
 namespace citizenui_sa {
 
@@ -856,6 +857,12 @@ struct Init {
         g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's CitizenUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "CitizenUI", &StubNop);
 
 void Zero(void* p) { for (size_t o = 0; o < (size_t)0xE8; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
 void* Factory() {
