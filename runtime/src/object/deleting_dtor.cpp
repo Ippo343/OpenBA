@@ -335,6 +335,45 @@ static const DelDtorSpec kSpecs[] = {
     // port changes; the banner's "per-translation-unit copies" is just an
     // incomplete description of the set.
     RT_DELDTOR(0x180038b20, 0x180112e40, 0x088, "UI::Dialog"),
+    // ---- WAVE 10D lane TIP --------------------------------------------------
+    // Slot 0 of `??_7ToolTipDialog@UI@@6B@` (0x180157880), the only one of that
+    // vtable's three CODE slots that is not a UI body — the other two,
+    // ?TypeName@ and ?Type@, are in runtime/src/ui/tooltipdialog.cpp. Slots 3..9
+    // needed nothing: compared BY ADDRESS against `??_7DialogInstance@UI@@6B@`
+    // (0x180156d70), all seven are that vtable's own targets and it is already
+    // 10/10 and PROMOTED.
+    //
+    // The two constants come out of the shipped bytes at 0x18004d270:
+    //     LEA R9,[0x1800dac70]   ~ToolTipDialog (EXPORTED as
+    //                            ??1ToolTipDialog@UI@@UEAA@XZ, and NOT yet
+    //                            ported -- so ResolveAddr hands back the DLL's,
+    //                            and this row makes that address newly `called`:
+    //                            reference_porting_can_grow_the_cutover_surface)
+    //     MOV EDX,0xc0           sizeof(UI::ToolTipDialog), and the SAME 0xc0
+    //                            BeginToolTip passes to operator new
+    //                            (runtime/types/ui/DialogInstance.h:273 records
+    //                            that number from the other end)
+    // tools/rt_deleting_dtor_verify.py re-derives both from the DLL, which is
+    // why this row lives here rather than as a 39th hand-written copy in
+    // runtime/src/ui/tooltipdialog.cpp.
+    //
+    // A K1 "call the dtor" row: 0x1800dac70 disassembles to `LEA
+    // RAX,[0x180157880]; MOV [RCX],RAX; JMP 0x180114d40` — a vtable restamp and
+    // a tail call to ~DialogInstance — and the deleting dtor's SCALAR branch
+    // inlines exactly those three instructions, so calling ~Class in both
+    // branches is this family's documented, deliberate departure and nothing
+    // more.
+    //
+    // NOT added to kProbeSubjects: ~DialogInstance destroys members, so running
+    // this on a fabricated object would be a manufactured crash, not a
+    // measurement.
+    //
+    // APPENDED rather than inserted in address order (it would sort between
+    // UI::DialogController and UI::DialogInstance) for the same reason the
+    // UI::Dialog row above is appended: kProbeSubjects is a list of TABLE
+    // INDICES and a mid-table insert silently re-points all twelve
+    // Video::*Data probe subjects at the wrong rows.
+    RT_DELDTOR(0x18004d270, 0x1800dac70, 0x0c0, "UI::ToolTipDialog"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -615,6 +654,10 @@ void* RtDelDtor_DeviceData(void* self, unsigned flags) {
 void* RtDelDtor_Dialog(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 37);
 }
+// UI::ToolTipDialog        ~ToolTipDialog = 0x1800dac70  (NOT ported)  [Wave 10D]
+void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 38);
+}
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36 };
 const int* ProbeSubjects(int* count) {
@@ -684,9 +727,14 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180058a90, (void*)&RtDelDtor_ContextData);
     RegisterRuntimeAddr(0x180058b10, (void*)&RtDelDtor_DeviceData);
     RegisterRuntimeAddr(0x180038b20, (void*)&RtDelDtor_Dialog);   // Wave 10C DLG8
+    RegisterRuntimeAddr(0x18004d270, (void*)&RtDelDtor_ToolTipDialog);  // Wave 10D TIP
 
-    printf("[RtDelDtor] 38 deleting destructors registered "
-                "(one body, 38 rows); ~Class resolves lazily\n");
+    // The count is taken from kSpecCount rather than typed, so a row added
+    // without touching this line cannot make the log say the wrong number --
+    // which the hard-coded "38" here would have done for Wave 10D's row.
+    printf("[RtDelDtor] %d deleting destructors registered "
+                "(one body, %d rows); ~Class resolves lazily\n",
+                rtdtor::kSpecCount, rtdtor::kSpecCount);
 
     // The byte-comparing half of the oracle. It allocates nothing and runs
     // here rather than on first call, because nothing calls these before

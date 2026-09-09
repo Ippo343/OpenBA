@@ -200,9 +200,30 @@ def main():
     print("rows in deleting_dtor.cpp: %d" % len(rows))
     bad = 0
     # 37 as surveyed by Wave 9 lane K, plus UI::Dialog (0x180038b20) added by
-    # Wave 10C lane DLG8 when it closed ??_7Dialog@UI@@6B@.
-    if len(rows) != 38:
-        print("*** expected 38 rows, found %d" % len(rows))
+    # Wave 10C lane DLG8 when it closed ??_7Dialog@UI@@6B@, plus
+    # UI::ToolTipDialog (0x18004d270) added by Wave 10D lane TIP for the same
+    # reason on ??_7ToolTipDialog@UI@@6B@.
+    #
+    # The expected count is READ FROM deleting_dtor_internal.h rather than typed
+    # here. A typed number is a third place to update and it had already gone
+    # stale once by the time lane TIP added a row; reading kSpecCount turns this
+    # from a reminder into a real cross-check that the table, the site array and
+    # this verifier all agree. If the constant cannot be found, that is itself a
+    # problem and is reported as one rather than silently skipped.
+    want = None
+    try:
+        hdr = open(os.path.join(os.path.dirname(SRC), "deleting_dtor_internal.h"),
+                   encoding="utf-8", errors="replace").read()
+        m = re.search(r"constexpr\s+int\s+kSpecCount\s*=\s*(\d+)\s*;", hdr)
+        if m:
+            want = int(m.group(1))
+    except OSError:
+        want = None
+    if want is None:
+        print("*** could not read kSpecCount from deleting_dtor_internal.h")
+        bad += 1
+    elif len(rows) != want:
+        print("*** kSpecCount says %d rows, deleting_dtor.cpp has %d" % (want, len(rows)))
         bad += 1
     k1 = k2 = 0
     for addr, dtor, size, name in rows:

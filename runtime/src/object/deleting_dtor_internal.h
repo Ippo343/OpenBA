@@ -49,10 +49,12 @@ struct DelDtorSpec {
 };
 
 // 37 as surveyed by Wave 9 lane K; the 38th (UI::Dialog, 0x180038b20) was added
-// by Wave 10C lane DLG8 when it closed `??_7Dialog@UI@@6B@`. Prose in
-// deleting_dtor.cpp that says "37" is describing lane K's original survey and
-// stays true of it; the TABLE is the authority and this constant tracks it.
-constexpr int kSpecCount = 38;
+// by Wave 10C lane DLG8 when it closed `??_7Dialog@UI@@6B@`, and the 39th
+// (UI::ToolTipDialog, 0x18004d270) by Wave 10D lane TIP for the same reason on
+// `??_7ToolTipDialog@UI@@6B@`. Prose in deleting_dtor.cpp that says "37" is
+// describing lane K's original survey and stays true of it; the TABLE is the
+// authority and this constant tracks it.
+constexpr int kSpecCount = 39;
 
 // *** A Site MUST HAVE STATIC STORAGE DURATION. *** RtDiffRegister keeps the
 // POINTER and rt_diff.cpp re-reads it at summary time, so a stack Site dangles
