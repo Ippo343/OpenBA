@@ -192,6 +192,62 @@ injector are the same path seen from two ends. MOUSE owns the harness and builds
 the route; TIP ports the bodies and may legitimately report "verified once
 MOUSE's injector lands". They must not both build an injector.
 
+## The wave-close sequence (integrator-owned)
+
+Lane TIP froze its branch at `71cbf1d` rather than merging MOUSE and
+re-measuring — correct, per
+`reference_lane_edits_after_report_invalidate_the_measurement`. The combined
+measurement belongs to whoever holds both branches, i.e. the integrator. Order:
+
+1. merge TIP + VTFID + MOUSE;
+2. regenerate `standalone/rt_data_mint_tables.inc` **once**;
+3. confirm the new `??_7ToolTipDialog` row reads `READY / TRAP= 0`. **If it does
+   not, DO NOT promote** — re-derive the slot table in `WAVE10D_LANE_TIP.md` §2
+   rather than working around it;
+4. run the one combined cell (below);
+5. apply warrants 7a and 7b from `docs/runtime_port/WAVE10D_LANE_TIP.md`.
+
+Warrant **7b** (`?_typeInfo@ToolTipDialog@`) does not depend on the run — its
+evidence is already measured and shows the row character-for-character identical
+to three that ship promoted.
+
+Warrant **7a** (`??_7ToolTipDialog@`) does, and the discriminating counter is
+named in advance: `operatorNew`. A ToolTipDialog cannot be built without that
+vtable being stamped onto it, so a non-zero `operatorNew` proves DISPATCH rather
+than mere readiness. Predicted on MOUSE's measured `BeginToolTip entries=2
+rejected=0`:
+
+```
+[RtPort] UI::ToolTipDialog ATTENDANCE
+    operatorNew=2 bytes=192   GetToolTipString=2   SetText=2   TypeName=0 Type=0
+```
+
+`bytes=192` discriminates (proves the caller is `BeginToolTip` and not something
+else); `GetToolTipString=2`, not 4, proves the empty-string arm and matches
+MOUSE's `nonEmptyString=0` from the other end; `TypeName`/`Type` staying 0 is
+expected — they exist for the vtable's `TRAP=0`, not for this route.
+
+**And the abort condition is stated in advance rather than rationalised after:**
+if `operatorNew` is zero while MOUSE's `BeginToolTip` reads `entries=2`, that is
+a genuine finding — the DLL's `BeginToolTip` ran and ours did not — and warrant
+7a must NOT be applied.
+
+### A confound MOUSE found that weakens earlier evidence, including Wave 10C's
+
+MOUSE repaired `HKCU\…\Banished` `GameUIScale` from **0 to 100**. With
+`UIScale=0` the in-game clip region is `(0,0)-(-1,-1)` and **nothing can hover at
+all**.
+
+That means every `entries=0` reading taken on the hover path before this fix had
+**two sufficient causes** — "no injector" and "degenerate clip region" — and did
+not discriminate between them. Lane TIP says so about its own three runs rather
+than letting its verdict stand on the stronger reading. It also retroactively
+weakens Wave 10C lane UIF6's attribution that `EndDragDrop`/`EndHover`/
+`BeginToolTip` read `entries=0` *because an unattended run has no mouse*: that
+conclusion was under-determined, though UIF6's separate evidence (the same file's
+`IsInsideClipRegion` entering 1014 times behind the same registration path) still
+rules out a dead registration.
+
 ## Standing rules
 
 As `WAVE10C.md`, plus:
