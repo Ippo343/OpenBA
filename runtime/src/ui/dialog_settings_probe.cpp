@@ -239,7 +239,7 @@ void RtUi_DialogSettingsProbe() {
     SaveFn theirClose = reinterpret_cast<SaveFn>(
         ResolveExportRaw("?OnClosed@DialogInstance@UI@@UEAAXXZ"));
     if (!theirSave || !theirClose) {
-        std::printf("[DlgSettings] probe SKIPPED: no shipped bodies to diff "
+        printf("[DlgSettings] probe SKIPPED: no shipped bodies to diff "
                     "against (expected once the DLL is gone).\n");
         return;
     }
@@ -344,7 +344,7 @@ void RtUi_DialogSettingsProbe() {
     RT_DIFF_SHADOW(pass, da, db);
     RT_DIFF_WORK(r.runs > 0);
 
-    std::printf("[DlgSettings] subject probe: %s -- %s\n", da, db);
+    printf("[DlgSettings] subject probe: %s -- %s\n", da, db);
 }
 
 }  // namespace RtUi

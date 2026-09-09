@@ -1986,7 +1986,7 @@ int RtUiDialogRegister() {
     // docs/runtime_port/WAVE9_LANE_UID.md is gated on finding this string in
     // THAT RUN'S OWN log, not on "I rebuilt" and not on a timestamp -- lanes
     // in this wave have measured the wrong exe more than once.
-    std::printf("[RtPort]   WAVE9 LANE UID ARMED -- ~DialogInstance (0x180114d40) + "
+    printf("[RtPort]   WAVE9 LANE UID ARMED -- ~DialogInstance (0x180114d40) + "
                 "LinkedList::Clear (0x1800325f0) + the Array<8>::SetSize address door "
                 "(0x18002fca0). Shape oracles report under BANISHED_RT_DIFF=1; read "
                 "the [negative control] line first.\n");
