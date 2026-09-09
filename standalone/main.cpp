@@ -1949,6 +1949,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // storage symbols the process actually populates is ground truth that
     // disappears with the DLL.
     { extern void RtDataMintShadowReport(const char*); RtDataMintShadowReport("exit"); }
+    // WAVE 10 LANE UI4: says so out loud when its deferred probe never fired,
+    // so a silent log cannot be mistaken for a passing one. No-op otherwise.
+    { extern void RtUiSpriteCaptureProbeReport(); RtUiSpriteCaptureProbeReport(); }
     RtDiffSummary();
     // Wave 10: the PREDICTIVE shadow oracle (BANISHED_RT_PREDICT=1). Prints
     // beside [RtDiff] and is silent when off. Read its `changed=` column
