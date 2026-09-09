@@ -1,3 +1,24 @@
+!!! SUPERSEDED 2026-09-08 -- KEPT AS THE WAVE-10 SCOPING SNAPSHOT, NOT AS A
+!!! CURRENT COUNT. Three columns below are now known to be WRONG, and the tool
+!!! that produced them has been fixed (commit "runtime_census.py -- four
+!!! counting defects, three of which HID REAL WORK"):
+!!!
+!!!   * `detour` UNDERSTATED. A detoured port has retail's own callers by
+!!!     construction, but `detour` was a subset of `called`, so a port reached
+!!!     only through the patch was absent from the table AND listed as a
+!!!     suspected vestigial resolve. The two Object::ExternalFactory detours had
+!!!     been invisible here since Wave 9.
+!!!   * `detour` also OVERSTATED, separately: `probe:Audio::Device::Stop` is a
+!!!     detour to a RECORDER. An instrument is not a port.
+!!!   * The "3 NON-LITERAL name" warning below points at standalone/rt_data_mint.cpp
+!!!     and says the numbers UNDERSTATE what is registered. Both halves are wrong
+!!!     there: the mint is gated behind BANISHED_RT_MINT=1 (so not live), and a
+!!!     ??_7 vtable has no body to port (so not a function). 197 minted DATA
+!!!     slots, 193 of them named -- they cannot move these columns either way.
+!!!
+!!! Current numbers: run tools/runtime_census.py. At the time of writing,
+!!! UI 161/131 detour 1, TOTAL 1064/827 detour 5.
+
 Runtime-x64.dll port census
 ==============================================================================
 namespace         total   called   ported   detour  called covered
