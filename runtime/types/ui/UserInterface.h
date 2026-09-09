@@ -226,6 +226,14 @@ struct UserInterface {
     uint32_t          _dragDropId;                               // +0x070
     uint32_t          _pad74;                                    // +0x074 never written
     void*             _dragDropData;                             // +0x078
+    // TWO READINGS, BOTH CORRECT (Wave 10E lane DRAG). The two sites that
+    // CLEAR this -- userinterface_hover.cpp:291 and userinterface_frame.cpp:539
+    // -- zero the whole qword, so `void*` is the right shape for them and the
+    // declaration stays. But the WRITER, BeginDragDrop (0x18011f5f0), fills it
+    // as a PAIR OF int32 GRAB OFFSETS: +0x080 = x - element->_layoutLeft and
+    // +0x084 = y - element->_layoutTop, i.e. where inside the dragged element
+    // the cursor took hold. The pair covers all eight bytes, so a qword clear
+    // zeroes both halves and the two readings never disagree.
     void*             _dragDropUserData;                         // +0x080
     uint8_t           _dragDropActive;                           // +0x088
     uint8_t           _pad89[7];                                 // +0x089 never written

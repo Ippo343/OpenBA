@@ -559,10 +559,63 @@ void StartDrag(UI::UserInterface* ui, const Target& t) {
     // established the read-only reading above.
     void* dlgLocal  = t.dlg;
     void* elemLocal = t.elem;
-    fn(ui, &dlgLocal, &elemLocal, t.cx, t.cy, 0x4D4F5553u /*'MOUS'*/, nullptr);
+
+    // ---- Wave 10E lane DRAG: BANISHED_MOUSE_DRAGSKEW=dx,dy -----------------
+    // FindTarget always aims at the element CENTRE, so the grab offsets it
+    // produces are width/2 and height/2 -- and on the toolbar button this lane
+    // uses as its subject that is 20 and 20. A SQUARE subject makes the field
+    // oracle blind to the one defect it was built for: transposing the +0x80
+    // and +0x84 stores leaves 20,20 as 20,20
+    // (reference_uniform_population_is_not_a_verification.md).
+    //
+    // This shifts the drag's aim point by a deliberately ASYMMETRIC delta so
+    // that grabX != grabY and the comparison has something to compare. It
+    // applies to the BeginDragDrop arguments only, identically in every cell,
+    // so it changes what the oracle can SEE and not what either side computes.
+    int32_t dragX = t.cx, dragY = t.cy;
+    if (const char* sk = std::getenv("BANISHED_MOUSE_DRAGSKEW")) {
+        int dx = 0, dy = 0;
+        if (sscanf(sk, "%d,%d", &dx, &dy) == 2) { dragX += dx; dragY += dy; }
+    }
+    fn(ui, &dlgLocal, &elemLocal, dragX, dragY, 0x4D4F5553u /*'MOUS'*/, nullptr);
     ++g_s.dragStarted;
     printf("[MouseInject] BeginDragDrop(dlg=%p, x=%d, y=%d) -> _dragDropDialog=%p\n",
            (void*)t.dlg, (int)t.cx, (int)t.cy, ui->_dragDropDialog);
+
+    // ---- Wave 10E lane DRAG: the FIELD DUMP that makes this an oracle -------
+    // Added by lane DRAG, after lane MOUSE published. This code is OUTSIDE the
+    // BANISHED_RT_UIDRAGSTART switch, so it reads back the same five fields
+    // whether the DLL's BeginDragDrop or ours just wrote them. Running the
+    // identical script with the switch on and off therefore compares OURS
+    // against THEIRS on every field the function writes -- not a self-check
+    // (reference_shadow_marker_is_not_an_oracle.md): neither side is asked for
+    // its own verdict, both are asked for their bytes.
+    //
+    // The two POINTERS are printed as a match against the argument rather than
+    // raw, because the heap address differs between processes and an absolute
+    // pointer could not be compared across the two cells. `id` and the two grab
+    // offsets ARE absolute and MUST be identical across the switch: same seed,
+    // same target, same injected coordinates.
+    //
+    // The grab offsets are the reason this dump exists. +0x80 and +0x84 are two
+    // int32s written from two nearly identical instructions, and TRANSPOSING
+    // them is a defect that every other screen this lane has is blind to --
+    // the downstream rows only ever read +0x60.
+    {
+        const uint8_t* S    = reinterpret_cast<const uint8_t*>(ui);
+        const uint32_t fId  = *reinterpret_cast<const uint32_t*>(S + 0x70);
+        const void*    fDat = *reinterpret_cast<void* const*>(S + 0x78);
+        const int32_t  fGx  = *reinterpret_cast<const int32_t*>(S + 0x80);
+        const int32_t  fGy  = *reinterpret_cast<const int32_t*>(S + 0x84);
+        // In the RELEASE build standalone/log_strip.h #defines printf away, so
+        // these four become unused. Silenced rather than left to warn.
+        (void)fId; (void)fDat; (void)fGx; (void)fGy;
+        printf("[MouseInject/DRAGFIELDS] dlgMatchesArg=%d id=0x%08X dataIsNull=%d "
+               "grabX=%d grabY=%d  (argX=%d argY=%d layoutLeft=%d layoutTop=%d)\n",
+               (int)(ui->_dragDropDialog == t.dlg), (unsigned)fId, (int)(fDat == nullptr),
+               (int)fGx, (int)fGy, (int)dragX, (int)dragY,
+               (int)(dragX - fGx), (int)(dragY - fGy));
+    }
     fflush(stdout);
 }
 
