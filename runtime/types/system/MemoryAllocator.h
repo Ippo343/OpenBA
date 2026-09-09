@@ -375,3 +375,12 @@ extern "C" void RtAllocShadowCoverage(int* ranges, uint64_t* reserved);
 // and how many comparisons landed outside range 0. See WAVE9_LANE_E3.md.
 extern "C" void RtAllocShadowGrowth(uint64_t* grow, uint64_t* tableCopy,
                                     uint64_t* crossRange);
+// Wave 10 lane SHADOWBISECT — unobserved-mutation ("gap") detector. Pre/post-op
+// hooks called from the allocator-lock wrappers inside the critical section;
+// a non-zero gap count means the real arena was mutated by a route that does
+// not pass through the patched Allocate/Free entry.
+extern "C" void RtAllocShadowPreOp(const rt::system::MemoryAllocator* theirSelf);
+extern "C" void RtAllocShadowPostOp(const rt::system::MemoryAllocator* theirSelf);
+extern "C" void RtAllocShadowGaps(uint64_t* checks, uint64_t* gaps, int64_t* dAlloc,
+                                  int64_t* dFreeTag, int64_t* dBytes,
+                                  uint64_t* ctlInjected);

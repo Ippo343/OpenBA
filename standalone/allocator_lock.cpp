@@ -45,6 +45,14 @@ extern "C" void RedzoneAlloc_TeardownOp(const char* what);   // redzone_alloc.cp
 extern "C" {
 void (*g_allocShadowOnAlloc)(void* self, uint64_t size, uintptr_t align, void* result) = nullptr;
 void (*g_allocShadowOnFree)(void* self, void* ptr) = nullptr;
+// Wave 10 lane SHADOWBISECT — unobserved-mutation detector. PreOp runs inside
+// the critical section BEFORE the real body, PostOp at the very end of the
+// wrapper. Everything between a PostOp and the next PreOp is serialized by this
+// same critical section, so any movement of the real allocator's counters
+// across that window came in by a route that did not pass through these two
+// wrappers. See runtime/src/system/allocator.cpp.
+void (*g_allocShadowPreOp)(void* self) = nullptr;
+void (*g_allocShadowPostOp)(void* self) = nullptr;
 }
 
 // Saved state for AllocatorLockRetireForPort(). The port's atomic swap must
@@ -256,6 +264,7 @@ void* AllocateLocked(void* self, uintptr_t size, uintptr_t align) {
         reinterpret_cast<LPCRITICAL_SECTION>(reinterpret_cast<uint8_t*>(self) + 0x640);
     EnterCriticalSection(cs);
     RedzoneAlloc_TeardownOp("teardown-alloc");
+    if (g_allocShadowPreOp) g_allocShadowPreOp(self);
     void* r = g_origAllocate(self, size, align);
     if (g_allocShadowOnAlloc) g_allocShadowOnAlloc(self, size, align, r);
     if (StatsOn()) {
@@ -268,6 +277,7 @@ void* AllocateLocked(void* self, uintptr_t size, uintptr_t align) {
         }
         StatsMaybeReport();
     }
+    if (g_allocShadowPostOp) g_allocShadowPostOp(self);
     LeaveCriticalSection(cs);
     return r;
 }
@@ -305,8 +315,10 @@ void FreeLocked(void* self, void* ptr) {
     EnterCriticalSection(cs);
     RedzoneAlloc_TeardownOp("teardown-free");
     if (StatsOn()) StatsRecordFree(ptr);
+    if (g_allocShadowPreOp) g_allocShadowPreOp(self);
     g_origFreeBody(self, ptr);
     if (g_allocShadowOnFree) g_allocShadowOnFree(self, ptr);
+    if (g_allocShadowPostOp) g_allocShadowPostOp(self);
     LeaveCriticalSection(cs);
 }
 
