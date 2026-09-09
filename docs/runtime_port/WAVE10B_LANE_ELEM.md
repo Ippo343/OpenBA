@@ -219,12 +219,34 @@ the `called` and `detour` columns moved for reasons that are not this lane's.
 
 ## 6. Stated plainly: what is ported and not verified
 
-1. **`?Update@Element@UI@`** — no replay oracle is possible, and no run entered
-   it. Byte pin green, `calls=0`. The most valuable follow-up in this lane's
-   scope is a harness route that puts the mouse over a live element built
-   through our ctor and drives `DialogInstance::Update` across it.
+> **CORRECTED 2026-09-09 by Wave 10C lane ROUTES, at lane ELEM's request** —
+> items 1 and 2 below said `calls=0`. **There was no site that could have
+> printed anything else.** `Update` and `Persist` carry no `RT_DIFF_BEGIN`
+> (deliberately: neither is replayable), so the only site with that stem is the
+> registration-time byte pin `"UI::Element::Update[bytes]"`, and `RtDiffReport`
+> increments `site->calls`, so under `BANISHED_RT_DIFF` it prints `calls=1` for
+> the boot hash check whether the body ran a million times or never. The two
+> rows were **UNMEASURED, not measured-zero** — a field read for something it is
+> structurally incapable of carrying
+> (`reference_diagnostic_field_cannot_express_the_answer`). Items 3-4's `calls=0`
+> IS a real measurement; those sites registered and reported.
+>
+> Lane ROUTES added a plain entries counter
+> (`[Element] ATTENDANCE`, runtime/src/ui/element_vtable.cpp) and measured it:
+>
+> ```
+> [Element] ATTENDANCE (entries, not comparisons): Update=541 Persist=0
+> ```
+>
+> **`Update` was live all along** — 541 entries on one
+> `BANISHED_TOOL_HARNESS=utility` run. `Persist=0` is now a real zero.
+> Neither is differentially verified; that part of items 1-2 stands.
+
+1. **`?Update@Element@UI@`** — no replay oracle is possible. Byte pin green.
+   ~~`calls=0`~~ → **entered 541 times** (see the correction above); still
+   **ported, not differentially verified**.
 2. **`?Persist@Element@UI@`** — no replay oracle possible (encoding scope);
-   byte pin green; `calls=0`.
+   byte pin green; ~~`calls=0`~~ → **entries=0, now genuinely measured**.
 3. **`?TypeName@`, `?Enable@`, `?Contains@`, `?SetColor@`, `?GetBorder@`** — full
    oracles are written and would fire, but nothing entered them
    (`calls=0`). They are transcriptions plus a byte pin today.

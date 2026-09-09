@@ -153,6 +153,18 @@ bool IsDerivedFromOrTrust(void* obj, uint32_t typeId);
 // unregistered ids.
 bool IsTypeDerivedFromByName(uint32_t typeId, const char* ancestorName);
 
+// Enumerate every static REGISTER_TYPE entry, in registration order. Diagnostics
+// and route code only -- this is the raw pending list `InvokeAllRegistrations`
+// walks, so it is valid from CRT-init onwards, but `storage` only carries a real
+// typeId after Object::Factory::Startup.
+//
+// Added by Wave 10C lane ROUTES for standalone/dlgctrl_route.cpp, which needs to
+// find the registrations whose PARENT is "UI::DialogController". It is a plain
+// read-only walk with a callback; nothing here allocates or calls the DLL.
+typedef void (*RegistrationVisitFn)(const char* typeName, const char* parentName,
+                                    FactoryFn factory, void* ctx);
+void ForEachRegistration(RegistrationVisitFn fn, void* ctx);
+
 }  // namespace Object
 
 // Convenience macros. Expand to a static-init FactoryRegistration object.

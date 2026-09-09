@@ -647,7 +647,50 @@ extern "C" bool RtUi_Element_Contains(const Element* self, int32_t x, int32_t y,
 // itself the side effect. What is measured is the shipped-byte pin below; the
 // per-slot table and WAVE10B_LANE_ELEM.md both say `ported, not differentially
 // verified` for this row rather than letting a green pin read as more.
+// ---------------------------------------------------------------------------
+// ATTENDANCE COUNTERS for Persist and Update -- Wave 10C lane ROUTES
+// ---------------------------------------------------------------------------
+// ADDED BECAUSE THE READING THAT WAS BEING QUOTED COULD NOT EXPRESS THE ANSWER.
+// WAVE10B_LANE_ELEM.md records "Update ... calls=0" as evidence that Update was
+// never entered. There is no RtDiff site named "UI::Element::Update" anywhere in
+// this tree -- the only site with that stem is the SHIPPED-BYTE PIN below,
+// "UI::Element::Update[bytes]", and RtDiffReport increments site->calls
+// (runtime/funcs/rt_diff.cpp:84), so under BANISHED_RT_DIFF that row prints
+// calls=1 for the one-off boot hash check whether or not the body ever ran.
+// A run in which Update executed ten thousand times and a run in which it never
+// executed printed IDENTICAL text. That is a field being read for something it
+// is structurally incapable of carrying
+// (reference_diagnostic_field_cannot_express_the_answer.md), and no route work
+// is measurable until it is fixed.
+//
+// These count ENTRIES, unconditionally, on every build -- the
+// runtime/src/io/encoding.cpp / dialog_controller_base.cpp idiom. They are
+// deliberately NOT RtDiff sites: an RtDiff site's `calls` moves only from inside
+// a comparison, so a body that ran but never compared prints calls=0, which
+// reads as "never ran" and means the opposite
+// (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
+//
+// NEITHER COUNTER IS A VERIFICATION. Both bodies remain PORTED, NOT
+// DIFFERENTIALLY VERIFIED for the reasons their own headers give (neither is
+// replayable). A non-zero count here says only that the port is on a live path.
+namespace {
+struct ElemCounts {
+    unsigned long long update = 0, persist = 0;
+    ~ElemCounts() {
+        if (update == 0 && persist == 0) {
+            printf("[Element] ATTENDANCE: neither Update nor Persist was entered "
+                   "in this run.\n");
+            return;
+        }
+        printf("[Element] ATTENDANCE (entries, not comparisons): Update=%llu "
+               "Persist=%llu\n", update, persist);
+    }
+};
+ElemCounts g_elemCounts;
+}  // namespace
+
 extern "C" void RtUi_Element_Persist(void* self, void* stream) {
+    ++g_elemCounts.persist;
     (void)self;
     struct Scope { void* stream; void* node; };
     Scope scope;
@@ -710,6 +753,7 @@ extern "C" void RtUi_Element_Persist(void* self, void* stream) {
 // Recorded as PORTED, NOT DIFFERENTIALLY VERIFIED.
 extern "C" void RtUi_Element_Update(Element* self, const void* time, void* ui,
                                     void** dlgPtr, const UpdateState* state) {
+    ++g_elemCounts.update;
     // ---- 1. children ------------------------------------------------------
     for (int32_t i = 0; i < self->_children._size; ++i) {
         Element* child = self->_children._data[i];

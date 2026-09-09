@@ -1,0 +1,17 @@
+[SheetSer] replaying the WRITE path on the boot-time sheet 000001a73f4646e0 (port=00007ff72d27e5f3 retail=00007ffcab5ad730)  [SIDE-SWAP CONTROL: retail is `ours`, the port is `theirs`]
+[SheetSer] replays=1 swap=1 verdict=MATCH (read the [RtSaveTrace] line above for the emission COUNTS on both sides -- a pass over ZERO emissions is not a verification, and a clean factor of two is a re-entrancy artefact, not a divergence)
+[DlgCtrl] ATTENDANCE (entries, not comparisons): total=51 TypeName=0 Type=0 OnCreated=0 OnOpened=27 OnClosed=24 OnUpdateLayout=0 OnUpdate=0 OnElementEvent=0 OnSerializeSettings=0
+[DlgSettings] ATTENDANCE (entries, not comparisons): OnOpened entries=5 noBuffer=5 badMagic=0 records=0
+[Element] ATTENDANCE: neither Update nor Persist was entered in this run.
+[DlgCtrlRoute] dispatches=51 OnOpened=27 OnClosed=24 OnSerializeSettings=0
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001a73f4a3f48 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001a73f4a3f48 =====
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001a73f471c40 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001a73f471c40 =====
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001a73f471c40 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001a73f471c40 =====
+[RtSaveTrace] pass UI::SpriteSheet::Serialize: 7151 emissions identical
+[RtSaveTrace] pass UI::SpriteSheet::Serialize[swapped]: 7151 emissions identical
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001a740a1fec8 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001a740a1fec8 =====
+[RtSaveTrace] ==== 24 compared, 0 diverged ====

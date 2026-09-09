@@ -1,0 +1,43 @@
+[RtMint] promoted 14 minted DATA row(s) -- live on every run
+[DlgCtrlRoute] target OnOpened             dll=0x1800cd2a0 -> 00007ff6bd7d14aa
+[DlgCtrlRoute] target OnClosed             dll=0x1800cd290 -> 00007ff6bd7d14c7
+[DlgCtrlRoute] target OnSerializeSettings  dll=0x1800cd250 -> 00007ff6bd7d154b
+[DlgCtrlRoute] CitizenUI                stub=00007ff6bd593e11 (17/24 slots) OnOpened=stub OnClosed=OVERRIDDEN OnSerializeSettings=stub -> patched 2 slot(s)
+[DlgCtrlRoute] ControlUI                stub=00007ff6bd5956ad (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] DestroyUI                stub=00007ff6bd59dc86 (18/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] EntityUI                 stub=00007ff6bd5a145d (17/24 slots) OnOpened=stub OnClosed=OVERRIDDEN OnSerializeSettings=stub -> patched 2 slot(s)
+[DlgCtrlRoute] EventLogUI               stub=00007ff6bd5a2825 (19/24 slots) OnOpened=OVERRIDDEN OnClosed=stub OnSerializeSettings=stub -> patched 2 slot(s)
+[DlgCtrlRoute] RadiusUI                 stub=00007ff6bd5c5fd0 (20/24 slots) OnOpened=OVERRIDDEN OnClosed=OVERRIDDEN OnSerializeSettings=stub -> patched 1 slot(s)
+[DlgCtrlRoute] ResidenceUI              stub=00007ff6bd5c78c2 (18/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] StatusBarUI              stub=00007ff6bd5d12a3 (17/24 slots) OnOpened=OVERRIDDEN OnClosed=stub OnSerializeSettings=stub -> patched 2 slot(s)
+[DlgCtrlRoute] StatusIconUI             stub=00007ff6bd5d2640 (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] StorageCapacityUI        stub=00007ff6bd5d311a (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] StorageUI                stub=00007ff6bd5d4f4b (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] TownHallUI               stub=00007ff6bd5e6186 (17/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=OVERRIDDEN -> patched 2 slot(s)
+[DlgCtrlRoute] BuildUI                  stub=00007ff6bd5f3d20 (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] TradeUI                  stub=00007ff6bd5f3d20 (15/24 slots) OnOpened=OVERRIDDEN OnClosed=OVERRIDDEN OnSerializeSettings=OVERRIDDEN -> patched 0 slot(s)
+[DlgCtrlRoute] ToolUI                   stub=00007ff6bd5f3d20 (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] TitleDescToolTipUI       stub=00007ff6bd5f3d20 (21/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] SpriteCaptureUI          stub=00007ff6bd5f3d20 (22/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] ResourceLimitUI          stub=00007ff6bd5f3d20 (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] ProfessionUI             stub=00007ff6bd5f3d20 (19/24 slots) OnOpened=OVERRIDDEN OnClosed=stub OnSerializeSettings=stub -> patched 2 slot(s)
+[DlgCtrlRoute] ProductionUI             stub=00007ff6bd5f3d20 (20/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] PageToggleUI             stub=00007ff6bd5f3d20 (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] NoiseUI                  stub=00007ff6bd5f3d20 (22/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] ModBrowseUI              stub=00007ff6bd5f3d20 (22/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] MapUI                    stub=00007ff6bd5f3d20 (20/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] ImmigrationUI            stub=00007ff6bd5f3d20 (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] HelpUI                   stub=00007ff6bd5f3d20 (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] ConsumeProduceUI         stub=00007ff6bd5f3d20 (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] CemeteryUI               stub=00007ff6bd5f3d20 (20/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] AttendanceUI             stub=00007ff6bd5f3d20 (20/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] HotKeyToolTipUI          stub=00007ff6bd5f3d20 (21/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] BuildRequirementUI       stub=00007ff6bd5f3d20 (21/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] UpgradeUI                stub=00007ff6bd5fb098 (19/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] WorkPlaceUI              stub=00007ff6bd5fd360 (18/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrlRoute] SelectResourceUI         factory returned null -- skipped
+[DlgCtrlRoute] TutorialUI               stub=00007ff6bd6b930e (18/24 slots) OnOpened=stub OnClosed=stub OnSerializeSettings=stub -> patched 3 slot(s)
+[DlgCtrl] ATTENDANCE (entries, not comparisons): total=17 TypeName=0 Type=0 OnCreated=0 OnOpened=9 OnClosed=8 OnUpdateLayout=0 OnUpdate=0 OnElementEvent=0 OnSerializeSettings=0
+[DlgSettings] ATTENDANCE (entries, not comparisons): OnOpened entries=3 noBuffer=3 badMagic=0 records=0
+[DlgCtrlRoute] PATCH: tables patched=33 (skipped=1) slots patched=91
+[DlgCtrlRoute] dispatches=17 OnOpened=9 OnClosed=8 OnSerializeSettings=0

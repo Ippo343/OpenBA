@@ -1,0 +1,4 @@
+[SheetSer] replaying the WRITE path on the boot-time sheet 0000028a849646e0 (ours=00007ff6d076e5f3 theirs=00007ffcab5ad730)
+[SheetSer] replays=1 verdict=DIVERGED (read the [RtSaveTrace] line above for the emission count -- a pass over ZERO emissions is not a verification)
+[RtSaveTrace] pass UI::SpriteSheet::Serialize: 7151 emissions identical
+[RtSaveTrace] DIVERGE UI::SpriteSheet::Serialize: same prefix but ours emitted 7151 and theirs 14302 — a length difference IS the desync

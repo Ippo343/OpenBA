@@ -1188,6 +1188,125 @@ void FirePinPanel(void* entityUI) {
 // range-guard printf, a crash in standalone_crash.log, or a clean run (= evidence
 // the crash needs something else, e.g. births growing a household past the row
 // table, which open A still blocks).
+// ============================================================================
+// WAVE 10C lane ROUTES - a route to ?OnOpened@DialogInstance@UI@@'s SETTINGS half
+// ============================================================================
+// OFF BY DEFAULT: BANISHED_DLGSETTINGS_ROUTE=<bytes> (1 = the 256-byte default).
+// Silent when unset.
+//
+// THE DEBT. `?OnOpened@DialogInstance@UI@@` is ported and LIVE - lane DLGV moved
+// its ATTENDANCE counter 0 -> 2 and 0 -> 3 - but every one of those five entries
+// reported `noBuffer`, i.e. `_userData` was null, so the body took its
+// second-line early exit and `badMagic=0 records=0`. The MemoryStream, the
+// 0xDEADBEEF magic, the Serializer and the whole per-record loop have never run.
+//
+// WHAT ACTUALLY POPULATES `_userData` - read, not guessed. `_userData` (+0xa8)
+// and `_userFlags` (+0xb0) are pure ctor arguments
+// (runtime/src/ui/dialog_create.cpp:781). Of the sixteen exe-side
+// `fn_DialogInstance_Ctor` call sites, FIFTEEN pass `nullptr, 0`. Exactly one
+// passes a real buffer - code/Game/Dialog/edittool_select.cpp:233:
+//
+//     ctrlCount = *(uint32_t*)(uiCompIBP + 0x30);
+//     ctrlData  = *(void**)  (uiCompIBP + 0x28);
+//     fn_DialogInstance_Ctor(dlg, ui, extRes, &nullParent, entityPtr,
+//                            ctrlData, (int)ctrlCount);
+//
+// So `_userData` is the SELECTED ENTITY'S UIComponent settings buffer -
+// UIComponent+0x28..+0x37 is a growable byte array (data@0x28, count@0x30,
+// cap@0x34) that code/Game/Component/uicomponent.cpp:127 already identifies as
+// real, serialized state. That is why `housepanel` gave DLGV entries but never a
+// buffer: the EditTool route is the right one, and the buffer on the other end
+// of it is empty because nothing in our standalone ever grows it.
+//
+// THE SUBJECT IS BUILT THE WAY THE GUARD READS IT, not faked. This route does
+// not stub `_userData` or hand OnOpened a synthetic DialogInstance: it allocates
+// a real buffer through the game's own allocator and publishes it into the field
+// the select path actually reads (reference_synthetic_subject_beats_a_fake, and
+// reference_port_must_reproduce_side_effects - a value that is not published
+// into the slot the consumer reads is invisible). Everything downstream is the
+// unmodified live path.
+//
+// THE THREE-SELECT SEQUENCE, and why each step is needed:
+//   select(A)  buffer is freshly ZEROED, so magic != 0xDEADBEEF -> OnOpened
+//              takes the badMagic exit. That already moves noBuffer -> badMagic
+//              and is the first time MemoryStream + the magic read execute.
+//   select(B)  closing A runs OnClosed -> SaveSettings, which WRITES the magic
+//              and one framed record per controller into A's buffer, dispatching
+//              each controller's OnSerializeSettings (+0x50).
+//   select(A)  reopens A over a buffer that now has a valid magic and a real
+//              record count -> the Serializer, the count read and the per-record
+//              loop finally run, and `records` goes non-zero.
+//
+// Read `records=` and `badMagic=` separately from `entries=`. `entries` moving is
+// not coverage: it is exactly the reading that was already green while the half
+// this route exists for had never executed once.
+static void DlgSettings_InstallBuffer(void* entity, int idx) {
+    if (!entity || !fn_MemAlloc || !g_pMemAllocSingleton) return;
+    const char* e = std::getenv("BANISHED_DLGSETTINGS_ROUTE");
+    if (!e || !*e || std::strcmp(e, "0") == 0) return;
+    int bytes = std::atoi(e);
+    if (bytes <= 1) bytes = 256;
+
+    // The same walk code/Game/Dialog/edittool_select.cpp:93 does. It lives in an
+    // ANONYMOUS namespace there, so it cannot be linked against; the loop is
+    // repeated here rather than de-anonymising a file this lane does not own.
+    // Entity+0x30 is the component-IBP array, +0x38 the count; a component's
+    // type id is its vtable slot +0x10.
+    const uint32_t tidUIComp = ::Object::ResolveTypeIdByNameLazy("UIComponent");
+    uint64_t uiCompIBP = 0;
+    if (tidUIComp) {
+        const uint64_t ent = reinterpret_cast<uint64_t>(entity);
+        const int count = *reinterpret_cast<int32_t*>(ent + 0x38);
+        for (int i = 0; i < count; ++i) {
+            void* comp = *reinterpret_cast<void**>(
+                *reinterpret_cast<uintptr_t*>(ent + 0x30) + static_cast<int64_t>(i) * 8);
+            if (!comp) continue;
+            const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
+                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            if (tid == tidUIComp) { uiCompIBP = reinterpret_cast<uint64_t>(comp); break; }
+        }
+    }
+    if (uiCompIBP == 0) {
+        // A CONTROL on this instrument, not just its verdict. "No UIComponent"
+        // and "my type-id lookup is wrong" produce the identical null, and the
+        // second would indict a sound conclusion. So dump what the entity DOES
+        // carry, by NAME, alongside the id we searched for: if the list is
+        // populated with real names and none is UIComponent, the finding is the
+        // entity's; if the list is empty or every name is null, the finding is
+        // the instrument's.
+        const uint64_t ent = reinterpret_cast<uint64_t>(entity);
+        const int count = tidUIComp ? *reinterpret_cast<int32_t*>(ent + 0x38) : -1;
+        fprintf(stderr, "[DlgSettings:route] house[%d] NO UIComponent. searched tid=0x%08x "
+                "components=%d:", idx, tidUIComp, count);
+        for (int i = 0; i < count; ++i) {
+            void* comp = *reinterpret_cast<void**>(
+                *reinterpret_cast<uintptr_t*>(ent + 0x30) + static_cast<int64_t>(i) * 8);
+            if (!comp) { fprintf(stderr, " <null>"); continue; }
+            const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
+                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            const char* nm = ::Object::GetTypeNameById(tid);
+            fprintf(stderr, " %s(0x%08x)", nm ? nm : "?", tid);
+        }
+        fprintf(stderr, "\n");
+        return;
+    }
+    uint8_t* c = reinterpret_cast<uint8_t*>(uiCompIBP);
+    void* existing = *reinterpret_cast<void**>(c + 0x28);
+    if (existing) {
+        fprintf(stderr, "[DlgSettings:route] house[%d] ALREADY has a buffer %p count=%u -- left alone\n",
+                idx, existing, *reinterpret_cast<uint32_t*>(c + 0x30));
+        return;
+    }
+    void* buf = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(bytes), 8);
+    if (!buf) { fprintf(stderr, "[DlgSettings:route] house[%d] MemAlloc failed\n", idx); return; }
+    std::memset(buf, 0, static_cast<size_t>(bytes));
+    *reinterpret_cast<void**>(c + 0x28)    = buf;
+    *reinterpret_cast<uint32_t*>(c + 0x30) = static_cast<uint32_t>(bytes);
+    *reinterpret_cast<uint32_t*>(c + 0x34) = static_cast<uint32_t>(bytes);
+    fprintf(stderr, "[DlgSettings:route] house[%d] UIComponent=%p settings buffer=%p bytes=%d "
+            "(zeroed -- first open must report badMagic)\n", idx, (void*)c, buf, bytes);
+}
+
 void FireHousePanel(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[HousePanel] ERROR: entityUI null\n"); return; }
 
@@ -1203,7 +1322,11 @@ void FireHousePanel(void* entityUI) {
     for (int i = 0; i < houses && !opened; ++i) {
         if (want >= 0 && i != want) continue;
         house = StartTown_GetFoundingHouseEntity(i);
-        if (house) { opened = EditTool_HarnessSelectEntity(tool, house); pickedIdx = i; }
+        if (house) {
+            DlgSettings_InstallBuffer(house, i);   // no-op unless the route is armed
+            opened = EditTool_HarnessSelectEntity(tool, house);
+            pickedIdx = i;
+        }
     }
     if (!opened || !house) {
         fprintf(stderr, "[HousePanel] no house info dialog opened (houses=%d want=%d)\n", houses, want);
@@ -1213,6 +1336,37 @@ void FireHousePanel(void* entityUI) {
     fprintf(stderr, "[HousePanel] OPEN house[%d]=%p dialog=%p — panel stays open; Slot7 now "
            "repopulates rows every frame while the death harness drains the roster\n",
            pickedIdx, house, dialog);
+
+    // Wave 10C lane ROUTES: the close-and-reopen leg. No-op unless
+    // BANISHED_DLGSETTINGS_ROUTE is set.
+    {
+        const char* re = std::getenv("BANISHED_DLGSETTINGS_ROUTE");
+        if (re && *re && std::strcmp(re, "0") != 0) {
+            void* other = nullptr;
+            for (int i = 0; i < houses; ++i) {
+                if (i == pickedIdx) continue;
+                other = StartTown_GetFoundingHouseEntity(i);
+                if (other) { DlgSettings_InstallBuffer(other, i); break; }
+            }
+            if (!other) {
+                fprintf(stderr, "[DlgSettings:route] only one founding house (%d) -- cannot close "
+                        "A by selecting B, so SaveSettings never runs and records stays 0\n", houses);
+                return;
+            }
+            if (!EditTool_HarnessSelectEntity(tool, other)) {
+                fprintf(stderr, "[DlgSettings:route] select(B) FAILED -- A never closed\n");
+                return;
+            }
+            fprintf(stderr, "[DlgSettings:route] select(B) ok -- A closed, SaveSettings should have "
+                    "written its buffer\n");
+            if (!EditTool_HarnessSelectEntity(tool, house)) {
+                fprintf(stderr, "[DlgSettings:route] re-select(A) FAILED\n");
+                return;
+            }
+            fprintf(stderr, "[DlgSettings:route] re-select(A) ok -- OnOpened should now reach the "
+                    "record loop (expect records>0)\n");
+        }
+    }
 }
 
 // ============================================================
