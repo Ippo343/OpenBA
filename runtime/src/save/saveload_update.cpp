@@ -66,6 +66,8 @@
 
 #include "saveload_internal.h"
 #include "../../types/io/Persistence.h"
+#include "../../types/io/Modification.h"   // UpdateLoad reorders the mod list
+#include "../system/string.h"              // RtString_ReleaseInline
 #include "../../funcs/rt_predict.h"
 #include "resolve.h"   // ResolveAddr / Module -- the port-aware address door
 
@@ -484,6 +486,446 @@ void UpdateLoadFromFileBody(SaveLoad* self, RtSink& out, RtPredictRound* round) 
 }
 
 // ============================================================================
+// THE MOD-ENTRY LIFECYCLE TRIPLE — three unexported internals, called by
+// address, and ALREADY PORTED BY ANOTHER LANE.
+// ----------------------------------------------------------------------------
+// UpdateLoad's state 1 moves an IO::Mod record from index k to index k-1 with
+// the copy-construct / assign / assign / destroy dance MSVC emits for
+// `std::swap` on a class with a user-declared copy assignment:
+//
+//     Mod tmp;  Mod::Mod(&tmp, &mods[k]);      // 0x1800101e0
+//     mods[k] = mods[k-1];                     // 0x180026ef0
+//     mods[k-1] = tmp;                         // 0x180026ef0
+//     tmp.~Mod();                              // 0x180011460
+//
+// NONE of the three is exported — checked with pefile against the shipped
+// table, not inferred from Ghidra's `FUN_` prefix, because a source grep
+// cannot tell an unexported internal from an export nobody has ported yet
+// (reference_grep_cannot_tell_internal_from_unported_export.md).
+//
+// ALL THREE ARE ALREADY WRITTEN. `runtime/src/io/modification.cpp` (Wave 9
+// lane MOD) ports them as RtIo_Mod_CopyCtor_1800101e0 / _Assign_180026ef0 /
+// _Dtor_180011460 and registers all three with RegisterRuntimeAddr. So these
+// doors go through the port-aware ResolveAddr, which consults the port
+// registry FIRST (reference_resolveaddr_consults_port_registry_first.md), and
+// this lane gets lane MOD's bodies without writing a line of Mod lifecycle
+// code or declaring a cross-lane symbol. Grepping for the port before planning
+// to write it is what this project's own
+// reference_grep_for_the_port_before_writing_it.md asks for, and it saved the
+// whole IO::Mod deep-copy surface here.
+//
+// WHY NOT CALL ?Swap@Modification@IO@@QEAAXHH@Z, WHICH IS THE SAME FIVE LINES
+// AND IS ALSO PORTED. Because retail's UpdateLoad does not call it — it
+// INLINES the triple, including the dirty-flag store, and Swap is a separate
+// exported body at 0x1800aeb20 that this function never reaches. Routing
+// through it would be a normalisation, and it would also nest lane MOD's own
+// RT_DIFF shadow site inside this file's predictive round.
+// ----------------------------------------------------------------------------
+using ModCopyCtorFn = void* (*)(void* dst, const void* src);
+using ModAssignFn   = void* (*)(void* dst, const void* src);
+using ModDtorFn     = void  (*)(void* self);
+
+ModCopyCtorFn ModEntryCopyCtor() {
+    static ModCopyCtorFn fn =
+        reinterpret_cast<ModCopyCtorFn>(ResolveAddr(Module::Runtime, 0x1800101e0));
+    return fn;
+}
+ModAssignFn ModEntryAssign() {
+    static ModAssignFn fn =
+        reinterpret_cast<ModAssignFn>(ResolveAddr(Module::Runtime, 0x180026ef0));
+    return fn;
+}
+ModDtorFn ModEntryDtor() {
+    static ModDtorFn fn =
+        reinterpret_cast<ModDtorFn>(ResolveAddr(Module::Runtime, 0x180011460));
+    return fn;
+}
+
+// ============================================================================
+// Save::SaveLoad::UpdateLoad()          retail 0x1800c2690   ordinal 4520
+// ----------------------------------------------------------------------------
+// The "load the row the user picked" path, as distinct from UpdateLoadFromFile's
+// "load the file the user named". Three states, and the middle one is the
+// largest single body in this file:
+//
+//   state 0  ask Persistence for the save-game info of `saves[_selectedIndex]`,
+//            go to 1. Byte for byte UpdateLoadFromFile's state 0 with ONE
+//            operand changed: the String is `saves[sel].name` (+0x38 off the
+//            row) rather than `_saveName`.
+//
+//   state 1  REBUILD THE GAME'S MOD CONFIGURATION FROM THE SAVE, then start
+//            the load. In order:
+//              a. disable every installed mod (`mods[i].enabled = 0` for all i)
+//                 and mark the list dirty;
+//              b. for each ModInfo the save recorded, walking DOWNWARD from
+//                 modsSize-1 to 0: build `GetDataDirectory() + modInfo.path`,
+//                 AdjustDelimiters it, find the installed mod whose Filename at
+//                 Mod+0x58 matches case-insensitively, enable it, and BUBBLE it
+//                 down to index 0 one swap at a time;
+//              c. allocate a SavedState{_id=1,_size=0,_data=null}, publish it at
+//                 `_saveState`, have it build the SaveBlock it wants filled, and
+//                 hand `GetSaveFilename(saves[sel].name)` + that block to the
+//                 worker thread.
+//            Go to 2.
+//
+//   state 2  gated on `_minOperationTime < _elapsed` — the minimum spinner
+//            time. Clears operation, timer and progress and puts
+//            `_selectedIndex` back to -1.
+//
+// WHY (b) WALKS DOWNWARD AND STILL PRODUCES THE SAVE'S ORDER. Each hit is
+// bubbled all the way to index 0, so the LAST mod processed ends up first.
+// Processing the save's list back to front therefore leaves the installed list
+// in exactly the save's recorded order, mod 0 at index 0. Reversing the loop
+// "because descending looks like a typo" would reverse the load order of every
+// modded save.
+//
+// ----------------------------------------------------------------------------
+// FOUR THINGS THE DISASSEMBLY SAYS AND THE DECOMPILED C DOES NOT.
+//
+// 1. *** GetSaveFilename TAKES THREE ARGUMENTS HERE AND GHIDRA PRINTS TWO. ***
+//    Exactly the hazard that cost the sibling bodies in this file a debugging
+//    session, in a different function, on the same callee. Ghidra emits
+//
+//        IO::Persistence::GetSaveFilename(IO::Persistence::_singleton,
+//                                         (String *)&local_res8);
+//
+//    The bytes say otherwise — R8 is loaded eleven instructions before the CALL
+//    and is still live at it:
+//
+//        1800c29ab  MOVSXD RCX,dword ptr [R13 + 0x48]   ; _selectedIndex
+//        1800c29af  IMUL   RCX,RCX,0x58
+//        1800c29b3  MOV    R8,qword ptr [R13 + 0x50]    ; _savesData
+//        1800c29b7  ADD    R8,0x38                      ; ...+ SaveInfo.name
+//        1800c29bb  ADD    R8,RCX                       <-- ARG 3, set here
+//        1800c29be  MOV    RBX,qword ptr [0x1801fc6b8]
+//        1800c29c5  TEST   byte ptr [RBX + 0x18],0x1
+//        1800c29c9  JNZ    0x1800c2a1a
+//        1800c29cb  LEA    RDX,[RBP + 0x67]             ; hidden return slot
+//        1800c29cf  MOV    RCX,RBX
+//        1800c29d2  CALL   0x1800b7c80
+//
+//    Note also that R8 is computed BEFORE the `TEST`/`JNZ` that can skip the
+//    call entirely — which is why a reader scanning only the guarded block
+//    finds no third argument at all.
+//
+// 2. THE HIDDEN RETURN SLOT. `GetSaveFilename`, `GetDataDirectory`,
+//    `System::operator+` and `SavedState::SetupLoad` all return a class BY
+//    VALUE. For the three MEMBER functions the slot is RDX and the real
+//    arguments shift right by one; for the FREE function `operator+` the slot
+//    is the FIRST argument in RCX and lhs/rhs follow in RDX/R8. A typedef that
+//    omits the slot is a wild write that still returns the right answer, so it
+//    survives testing (reference_hidden_retslot_wild_write.md). Every one of
+//    the four was read register by register out of the disassembly.
+//
+// 3. `MOVSXD RCX,dword ptr [R13 + 0x48]` — the selected index is SIGN-extended
+//    at all three of its uses in this body. Ghidra's C prints it as a zero
+//    extension (reference_ghidra_c_output_vs_disassembly.md), which would turn
+//    this class's live -1/-2/-4 sentinels into four-billion-element strides.
+//    `SaveInfoAt` does the sign extension; this body uses it.
+//
+// 4. RETAIL RE-READS `_selectedIndex`, `_savesData` and `Modification::mods`
+//    INSIDE the loops rather than hoisting them (0x1800c2771, 0x1800c27d0,
+//    0x1800c28db, 0x1800c28ec, 0x1800c2901). Transcribed as re-reads: the mod
+//    triple runs arbitrary code, including allocation, and hoisting would be a
+//    guess about what it cannot do.
+//
+// ----------------------------------------------------------------------------
+// ONE DELIBERATE DEVIATION FROM THE INSTRUCTION STREAM, stated because it is
+// the only one. Retail INLINES the allocator lock here rather than calling the
+// composed static:
+//
+//     1800c2944  MOV RBX,[0x1801fc718] ; ADD RBX,0x640
+//     1800c2959  CALL EnterCriticalSection
+//     1800c2970  CALL ?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z (0x10, 4)
+//     1800c297b  CALL LeaveCriticalSection
+//
+// That is instruction for instruction `?MemAlloc@MemoryAllocator@System@@`
+// (0x1800c7a50), which this file already owns as `RtSaveDetail::MemAlloc`, so
+// the port calls that. Same lock, same singleton, same order; only the inlining
+// differs. `runtime/src/io/modification.cpp` made the identical ruling for the
+// identical sequence eleven times over, and its reasoning applies unchanged.
+// Worth knowing that UpdateLoadFromFile, four hundred bytes away, CALLS MemAlloc
+// where UpdateLoad inlines it — the two bodies really do differ here, and the
+// difference is the compiler's, not a mis-read.
+//
+// ----------------------------------------------------------------------------
+// ORACLE: PREDICTIVE — and this is the body in this file where the predictor's
+// reach has to be stated most carefully, because state 1 has a region it
+// genuinely cannot cover and a green board that hid that would be worse than
+// no board at all.
+//
+//   VERIFIED, on every run
+//     * `_progress`, in all three states, and state 2's four-field tail
+//       (operation / elapsed / progress / selectedIndex) — the same shape as
+//       UpdateLoadFromFile's, and the pre-values differ from the predicted ones
+//       on every real load, so `changed=` is non-zero rather than vacuous.
+//     * `IO::Modification::_dirty` (+0x00), which is OUTSIDE the mods array and
+//       therefore outside the exclusion below.
+//     * Every `mods[i].enabled` write, in the common case — see the next block
+//       for exactly when that stops being true.
+//     * The identity, order and argument values of every suppressed call:
+//       BeginGetSaveGameInfo, the mod-triple swaps, MemAlloc, SetupLoad,
+//       GetSaveFilename and the worker enqueue.
+//
+//   NOT VERIFIED, and declared with Exclude() so `excluded=`/`unverifiable=`
+//   count the hole instead of a silent pass
+//     * `_saveState`, for UpdateLoadFromFile's reason: its value is whatever
+//       the allocator hands back and no predictor can know that address.
+//     * THE WHOLE `Mod` ARRAY, but ONLY ONCE A BUBBLE ACTUALLY HAPPENS.
+//       This is the sharp one. A predicting body writes nothing, so it cannot
+//       reorder the array — and every iteration after the first reorder then
+//       searches an array that retail has already permuted. Our predicted
+//       indices would be right about a list that no longer exists, and the
+//       compare would report divergences that are artefacts of the harness
+//       rather than defects in the port. So the moment the body performs its
+//       first swap, it declares the array out of model. Before that point the
+//       predictions are sound and ARE compared, which is why the exclusion is
+//       lazy rather than unconditional: a save recording no mods, or recording
+//       only mods already at index 0, is verified end to end.
+//
+//   RUN FOR REAL EVEN IN PREDICT MODE — and this needs saying, because "the
+//   predicting body writes nothing" is the whole contract:
+//     GetDataDirectory, System::operator+, Filename::AdjustDelimiters and
+//     _stricmp. All four are balanced allocate-and-release temporaries or pure
+//     reads: every String this body creates is released before the iteration
+//     ends, so when the DLL runs afterwards there is nothing of ours for it to
+//     see. Suppressing them instead would leave `work.data` null and the
+//     search would compare nothing, which is the failure mode
+//     reference_uniform_population_is_not_a_verification.md is about — a scan
+//     that "matches" because every subject is empty.
+// ============================================================================
+void UpdateLoadBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
+    const uint32_t progress = out.ReadU32(&self->_progress);
+
+    if (progress == 0) {
+        uint8_t* persistence = RtSaveDetail::PersistenceSingleton();
+        SaveInfo* row = SaveInfoAt(self, out, self->_selectedIndex);
+        BeginGetInfoFn begin = RT_EXPORT_ONCE(BeginGetInfoFn,
+            "?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z");
+        // `MOV R8D,0x2` — spelled as a plain immediate here, where
+        // UpdateLoadFromFile reuses a zeroed register with `LEA R8D,[RAX+0x2]`.
+        // Same 2.
+        if (out.Call("IO::Persistence::BeginGetSaveGameInfo", (const void*)begin,
+                     reinterpret_cast<int64_t>(persistence),
+                     reinterpret_cast<int64_t>(&row->name), 2)) {
+            begin(persistence, &row->name, 2);
+        }
+        out.U32(&self->_progress, 1, "_progress = 1");
+        return;
+    }
+
+    if (progress == 1) {
+        RtIO::Modification* mods =
+            reinterpret_cast<RtIO::Modification*>(RtSaveDetail::ModificationSingleton());
+
+        // (a) Disable everything, then mark the list dirty. The dirty store is
+        // AFTER the loop (0x1800c2728), not before it, and it is a BYTE store
+        // — `MOV byte ptr [R14],0x1` — matching IO::Modification::Enable's.
+        {
+            // BOTH the base and the COUNT are re-read every iteration
+            // (0x1800c2710 `MOV RAX,[R14+8]`, 0x1800c2722 `CMP EDX,[R14+0x10]`).
+            // Nothing in the loop can change either, so hoisting would be
+            // equivalent — and would still be a claim about the callee-free
+            // loop that the next reader has to re-derive. Transcribed.
+            for (int32_t i = 0; i < mods->count; ++i) {
+                RtIO::Mod* entry = reinterpret_cast<RtIO::Mod*>(
+                    static_cast<uint8_t*>(out.ReadPtr(&mods->mods))
+                    + static_cast<int64_t>(i) * 0x80);
+                out.U8(&entry->enabled, 0, "mods[i].enabled = 0");
+            }
+        }
+        out.U8(&mods->dirty, 1, "Modification::_dirty = 1");
+
+        // (b) Re-order. `EBX = saves[sel].modsSize - 1` is computed ONCE, here,
+        // and the `JS` at 0x1800c2741 skips the whole loop when the save
+        // recorded no mods at all — which is every unmodded save, and the case
+        // in which this body's predictions are verified end to end.
+        bool modsExcluded = false;
+        const SaveInfo* pickedRow = SaveInfoAt(self, out, self->_selectedIndex);
+        for (int32_t m = pickedRow->modsSize - 1; m >= 0; --m) {
+            // full = GetDataDirectory() + modInfo.path, then AdjustDelimiters.
+            // The same four-step idiom Save::SaveLoad::CheckMod carries
+            // (runtime/src/save/saveload.cpp), against the same two Strings —
+            // ModInfo+0x08 (the package PATH), never ModInfo+0x00 (the display
+            // name). Retail re-reads _selectedIndex and _savesData here rather
+            // than reusing what it computed above; transcribed.
+            String dataDir{};
+            RT_EXPORT_ONCE(RtSaveDetail::GetDataDirectoryFn,
+                "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
+                    RtSaveDetail::FileSystemSingleton(), &dataDir);
+
+            SaveInfo* row = SaveInfoAt(self, out, self->_selectedIndex);
+            const RtSave::ModInfo* mi = row->modsData + m;
+
+            String joined{};
+            RT_EXPORT_ONCE(RtSaveDetail::ConcatFn, "??HSystem@@YA?AVString@0@AEBV10@0@Z")(
+                &joined, &dataDir, reinterpret_cast<const String*>(&mi->path));
+
+            // Retail adopts the concatenation's buffer into a FRESH slot (with
+            // an AddRef) and adjusts THAT, leaving `joined` untouched — which
+            // is why three separate Strings are released below and not two.
+            String work{};
+            if (joined.data != nullptr) {
+                work.data = joined.data;
+                *reinterpret_cast<int*>(work.data - 4) += 1;
+            }
+            RT_EXPORT_ONCE(RtSaveDetail::AdjustDelimsFn,
+                "?AdjustDelimiters@Filename@System@@AEAAXXZ")(&work);
+
+            // Linear scan of IO::Modification: length first (read from the
+            // String allocation header at data[-8], with a null String counting
+            // as length 0 rather than faulting), then _stricmp.
+            int32_t found = -1;
+            {
+                // Same re-read pair as the clear loop above (0x1800c27d0 /
+                // 0x1800c280f).
+                for (int32_t j = 0; j < mods->count; ++j) {
+                    const char* entryName = reinterpret_cast<const RtIO::Mod*>(
+                        static_cast<uint8_t*>(out.ReadPtr(&mods->mods))
+                        + static_cast<int64_t>(j) * 0x80)->file.data;
+                    const int lenEntry = entryName ? *reinterpret_cast<const int*>(entryName - 8) : 0;
+                    const int lenWork  = work.data ? *reinterpret_cast<const int*>(work.data - 8) : 0;
+                    if (lenEntry == lenWork && _stricmp(entryName, work.data) == 0) {
+                        found = j;
+                        break;
+                    }
+                }
+            }
+
+            // Release order is work, joined, dataDir (0x1800c281c / 0x1800c2845 /
+            // 0x1800c286e). NOTE this is NOT CheckMod's order, which releases
+            // work, dataDir, joined. Both are transcribed as written rather than
+            // regularised; the refcounts are independent, so the difference is
+            // invisible — right up until someone "unifies" them and gets one
+            // of the two wrong.
+            RtSystem::RtString_ReleaseInline(&work);
+            RtSystem::RtString_ReleaseInline(&joined);
+            RtSystem::RtString_ReleaseInline(&dataDir);
+
+            if (found < 0) continue;
+
+            out.U8(&mods->dirty, 1, "Modification::_dirty = 1 (hit)");
+            {
+                RtIO::Mod* hit = reinterpret_cast<RtIO::Mod*>(
+                    static_cast<uint8_t*>(out.ReadPtr(&mods->mods))
+                    + static_cast<int64_t>(found) * 0x80);
+                out.U8(&hit->enabled, 1, "mods[found].enabled = 1");
+            }
+
+            // Bubble `found` down to index 0. Retail's inner test is
+            // `if (k != k-1)`, which is never false; it is the inlined remains
+            // of Modification::Swap's `a == b` early-out and is transcribed as
+            // the unconditional body it compiles to.
+            if (found >= 1 && round != nullptr && !modsExcluded) {
+                // The predictor's blind spot opens exactly HERE — see the
+                // banner. Declared at the first swap, not up front, so the
+                // unmodded and already-ordered cases stay fully compared.
+                round->Exclude(mods->mods, static_cast<size_t>(mods->count) * 0x80,
+                               "a predicting body cannot reorder, so every later "
+                               "search reads a list retail has already permuted");
+                modsExcluded = true;
+            }
+            for (int32_t k = found; k >= 1; --k) {
+                out.U8(&mods->dirty, 1, "Modification::_dirty = 1 (swap)");
+
+                uint8_t* base = static_cast<uint8_t*>(out.ReadPtr(&mods->mods));
+                void* a = base + static_cast<int64_t>(k) * 0x80;
+                void* b = base + static_cast<int64_t>(k - 1) * 0x80;
+
+                // One Call record for the whole four-call dance: the operands
+                // are what a reader of the trace needs, and the four are
+                // all-or-nothing — suppressing the copy ctor but running the
+                // assigns would destroy the array.
+                if (out.Call("IO::Mod swap [0x1800101e0/0x180026ef0/0x180011460]",
+                             (const void*)ModEntryCopyCtor(),
+                             reinterpret_cast<int64_t>(a),
+                             reinterpret_cast<int64_t>(b))) {
+                    alignas(8) uint8_t tmp[0x80];
+                    ModEntryCopyCtor()(tmp, a);
+                    ModEntryAssign()(a, b);
+                    ModEntryAssign()(b, tmp);
+                    ModEntryDtor()(tmp);
+                }
+            }
+        }
+
+        // (c) Allocate the SavedState the load will fill, publish it, and hand
+        // the job to the worker. Identical to UpdateLoadFromFile's state 1 from
+        // here on except for the String GetSaveFilename is given.
+        SavedState* fresh = nullptr;
+        if (out.Call("System::MemoryAllocator::MemAlloc", (const void*)&MemAlloc, 0x10, 4)) {
+            fresh = static_cast<SavedState*>(MemAlloc(0x10, 4));
+            if (fresh != nullptr) {
+                // `MOV qword ptr [RDI],0x1` is _id=1 AND _size=0 in one store;
+                // `MOV qword ptr [RDI+8],R15` (R15 == 0) is _data=null.
+                fresh->_id   = 1;
+                fresh->_size = 0;
+                fresh->_data = nullptr;
+            }
+            // 0x1800c299a is AFTER the null merge at 0x1800c2997, so a failed
+            // allocation publishes a NULL _saveState and SetupLoad is then
+            // called on it. Retail's OOM path, reproduced: a guard here would
+            // skip behaviour rather than restore it.
+            self->_saveState = fresh;
+        } else if (round != nullptr) {
+            round->Exclude(&self->_saveState, sizeof(void*),
+                           "the address MemAlloc returns is not predictable");
+        }
+
+        RtIo::SaveBlock block{};
+        SetupLoadFn setup = RT_EXPORT_ONCE(SetupLoadFn,
+            "?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ");
+        if (out.Call("Save::SavedState::SetupLoad", (const void*)setup,
+                     reinterpret_cast<int64_t>(fresh),
+                     reinterpret_cast<int64_t>(&block))) {
+            setup(fresh, &block);
+        }
+
+        SaveInfo* nameRow = SaveInfoAt(self, out, self->_selectedIndex);
+        uint8_t* persistence = RtSaveDetail::PersistenceSingleton();
+        if ((persistence[0x18] & 1) == 0) {
+            const char* filename = nullptr;
+            GetSaveFilenameFn getName = RT_EXPORT_ONCE(GetSaveFilenameFn,
+                "?GetSaveFilename@Persistence@IO@@AEBA?AVFilename@System@@AEBVString@4@@Z");
+            // THREE arguments. See note 1 in the banner.
+            if (out.Call("IO::Persistence::GetSaveFilename", (const void*)getName,
+                         reinterpret_cast<int64_t>(persistence),
+                         reinterpret_cast<int64_t>(&filename),
+                         reinterpret_cast<int64_t>(&nameRow->name))) {
+                getName(persistence, &filename, &nameRow->name);
+            }
+            WorkerEnqueueFn enqueue = WorkerBeginLoad();
+            if (out.Call("IO::Persistence worker enqueue [load, 0x1800b7460]",
+                         (const void*)enqueue,
+                         reinterpret_cast<int64_t>(persistence + 0x10),
+                         reinterpret_cast<int64_t>(&filename), 1,
+                         reinterpret_cast<int64_t>(&block))) {
+                enqueue(persistence + 0x10, &filename, 1, &block);
+            }
+            ReleaseStringSlotSink(&filename, out, "GetSaveFilename temporary");
+        }
+
+        out.U32(&self->_progress, 2, "_progress = 2");
+        return;
+    }
+
+    if (progress == 2) {
+        // The minimum-operation-time gate, which UpdateDelete and
+        // UpdateLoadFromFile do NOT have: `MOV RAX,[RCX+0x10]` /
+        // `CMP [RCX+8],RAX` / `JLE`, i.e. proceed only while
+        // _elapsed > _minOperationTime.
+        if (self->_elapsed <= self->_minOperationTime) return;
+
+        // Store order at 0x1800c2a36..0x1800c2a51: operation, elapsed, progress,
+        // selectedIndex — UpdateLoadFromFile's order, not UpdateDelete's.
+        out.U32(&self->_operation, 0, "_operation = kOpNone");
+        out.U64(&self->_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
+        out.U32(&self->_progress, 0, "_progress = 0");
+        out.U32(&self->_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
+    }
+}
+
+// ============================================================================
 // Save::SaveLoad::UpdateSave()          retail 0x1800c2a80   ordinal 4526
 // ----------------------------------------------------------------------------
 //   state 0  arm the screenshot capture: set the capture flag BYTE, and read
@@ -840,6 +1282,29 @@ void RtSave_SaveLoad_UpdateLoadFromFile(SaveLoad* self) {
     UpdateLoadFromFileBody(self, live, nullptr);
 }
 
+// UpdateLoad watches TWO objects, which none of its siblings do: the SaveLoad
+// itself and the IO::Modification HEADER. The header, not the mods array — the
+// array is heap memory whose extent changes with the mod count, and the body
+// declares it out of model the moment it can no longer predict it (see the
+// banner). Watching 0x18 covers _dirty (+0x00), _mods (+0x08) and _count
+// (+0x10): the flag this body writes, plus the two fields it must NOT.
+void RtSave_SaveLoad_UpdateLoad(SaveLoad* self) {
+    RT_PREDICT_SITE("Save::SaveLoad::UpdateLoad");
+    if (RT_PREDICT_ON) {
+        RT_PREDICT_ROUND(round) {
+            round.Watch(self, sizeof(SaveLoad), "Save::SaveLoad");
+            if (uint8_t* mods = RtSaveDetail::ModificationSingleton())
+                round.Watch(mods, 0x18, "IO::Modification header");
+            UpdateLoadBody(self, round.sink(), &round);
+            using Fn = void (*)(SaveLoad*);
+            RT_ORIGINAL_ONCE(Fn, "?UpdateLoad@SaveLoad@Save@@QEAAXXZ")(self);
+        }
+        return;
+    }
+    RtSink live;
+    UpdateLoadBody(self, live, nullptr);
+}
+
 void RtSave_SaveLoad_UpdateSave(SaveLoad* self) {
     RT_PREDICT_SITE("Save::SaveLoad::UpdateSave");
     if (RT_PREDICT_ON) {
@@ -875,6 +1340,9 @@ int RtSaveLoadUpdateRegister() {
     RegisterRuntimeExport("?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ",
                           (void*)&RtSave_SaveLoad_UpdateLoadFromFile); ++n;
     RegisterRuntimeAddr(0x1800c2560, (void*)&RtSave_SaveLoad_UpdateLoadFromFile);
+    RegisterRuntimeExport("?UpdateLoad@SaveLoad@Save@@QEAAXXZ",
+                          (void*)&RtSave_SaveLoad_UpdateLoad); ++n;
+    RegisterRuntimeAddr(0x1800c2690, (void*)&RtSave_SaveLoad_UpdateLoad);
     RegisterRuntimeExport("?UpdateSave@SaveLoad@Save@@QEAAXXZ",
                           (void*)&RtSave_SaveLoad_UpdateSave); ++n;
     RegisterRuntimeAddr(0x1800c2a80, (void*)&RtSave_SaveLoad_UpdateSave);
