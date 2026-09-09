@@ -118,6 +118,7 @@ extern const ArraySpec kSpec_StringExt;   // 0x180061480   NON-TRIVIAL
 // but unlike the three above, every element operation they use is PORTED rather
 // than called by address into the DLL — see array.cpp's registration note.
 extern const ArraySpec kSpec_StringRef;   // 0x180034860   NON-TRIVIAL
+extern const ArraySpec kSpec_StringRefZ;  // 0x180029a80  tail ZEROED
 extern const ArraySpec kSpec_GraphSeries; // 0x1800417d0   NON-TRIVIAL
 
 // Wave 9 lane DESTROY. Declared here so array_destroy_probe.cpp can drive

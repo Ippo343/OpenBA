@@ -1003,6 +1003,43 @@ const ArraySpec kSpec_StringRef = {               // 0x180034860
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x00, 0x08 };
 
+// --- WAVE 10 LANE UIORACLE -------------------------------------------------
+//
+// 0x180029a80, the TWO-ARGUMENT sibling of 0x180034860 -- the one
+// array_destroy.cpp's Wave 9 note predicted would arrive: "It will get a
+// SECOND caller the day 0x180029a80 (the two-argument sibling,
+// `TextElement::SetParameterCount`'s) lands." That day is this commit.
+//
+// IT IS *NOT* kSpec_StringRef, AND THE DIFFERENCE IS THE ONE FIELD THE
+// TWO-ARGUMENT FORM EVEN HAS. kSpec_StringRef's `init` is null, which this
+// file's ArraySpec comment defines as "retail leaves the new tail untouched"
+// -- true of 0x180034860, whose only caller passes a fill so the tail always
+// takes the ASSIGN arm and there is no else arm to describe. 0x180029a80 has
+// one, and it is not empty:
+//
+//     180029b2a  MOV qword ptr [RDX],R10      ; R10 == 0 -- the `else` arm
+//
+// so the tail is ZEROED. Reusing kSpec_StringRef here -- which was the first
+// draft, on the "same element type, same destroy, same assign" argument --
+// would have left every newly grown System::String slot holding whatever the
+// fresh MemAlloc block contained, and the next SetParameterCount's destroy arm
+// would have decremented a refcount through that garbage. Similarity is
+// corroboration, not evidence (kSpec_U64ZeroA4's note, same trap, different
+// field).
+//
+// Everything else is read from the same disassembly and agrees with
+// kSpec_StringRef: stride 8 (`SHL RCX,0x3` at 180029ad3), align 8 (`MOV EDX,0x8`
+// at 180029ad7), assign = zero-then-copy-with-addref (180029b11..180029b20),
+// destroy = 0x180011010 (kD_Str_08, already ported and registered in
+// array_destroy.cpp) on BOTH the realloc arm (180029b40) and the shrink arm
+// (180029b8f).
+const ArraySpec kSpec_StringRefZ = {              // 0x180029a80
+    "Array<System::String>(zero tail)", 8, 8, &AssignStringRef, &InitZero8,
+    &DestroyStringRange, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x08 };
+
 // ASSIGN WINDOW +0x04..+0x07: the colour is ONE dword and the nested Array
 // starts at +0x08, so four bytes of every element are never written by anybody.
 // There is no init arm (the only caller, GraphElement::AddGraph, passes a fill).
@@ -1395,6 +1432,8 @@ J3_ENTRY2(18002fea0, kSpec_I32)         // Object/UI:   Array<int32>, tail UNINI
 J3_ENTRY2(180059140, kSpec_Transform)   // Picking:     Array<Transform>, 4x unrolled in retail
 J3_ENTRY2(1800764c0, kSpec_PtrZero)     // UI:          Array<InternalPtr<Element>>
 J3_ENTRY2(180051390, kSpec_EffectSlot)  // Audio:       Array<EffectSlot>  [NON-TRIVIAL]
+// WAVE 10 LANE UIORACLE — TextElement::_parameters (+0xc8) [NON-TRIVIAL]
+J3_ENTRY2(180029a80, kSpec_StringRefZ)  // UI:          Array<System::String>, tail ZEROED
 // WAVE 9 LANE PKG2 rung 4b, 2026-09-08 — two more two-argument instantiations,
 // both reached from IO::ReadPackfile (the packfile entry directory). The
 // integrator's guess that these would be a REGISTRATION rather than a port was
@@ -1654,6 +1693,9 @@ void RtCollectionPortInit() {
     // `ComboElement::AddItem`, `RemoveAllItems` and `GraphElement::AddGraph`
     // calling a null address after cutover, which is a worse failure than the
     // one the switch exists to make cheap to bisect.
+    // WAVE 10 LANE UIORACLE — the two-argument Array<System::String>, the one
+    // caller of which is ?SetParameterCount@TextElement@UI@@ (ported this wave).
+    RegisterRuntimeAddr(0x180029a80, (void*)&RtColl_ArraySetSize_180029a80);
     RegisterRuntimeAddr(0x180034860, (void*)&RtColl_ArraySetSizeFill_180034860);
     RegisterRuntimeAddr(0x1800417d0, (void*)&RtColl_ArraySetSizeFill_1800417d0);
 

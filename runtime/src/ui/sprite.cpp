@@ -601,19 +601,57 @@ int RtUi_StringTable_GetCount(const void* selfRaw) {
 // StringTable::GetText(int) const — retail 0x180002550. Bounds-checked both
 // ways (unlike Sprite/SpriteSheet's UV accessors); returns an empty String on
 // out-of-range, a NEW OWNED reference on a hit.
+// *** WAVE 10 LANE UIORACLE — A REAL PORT DEFECT, FIXED HERE. THE LOADS WERE
+// HOISTED ABOVE THE GUARDS. ***
+//
+// The first draft read `data` (this+0x20) and `count` (this+0x28) at the top and
+// then tested `index >= 0 && index < count`. Retail does NOT: its very first
+// instruction pair after the prologue is
+//
+//     180002569  MOV dword ptr [RSP],R9D
+//     18000256c  TEST R8D,R8D
+//     18000256e  JNS  0x180002573          ; index >= 0 ?
+//     180002570  MOV  qword ptr [RDX],R9   ; else *ret = 0
+//     180002573  ...                       ; RET -- `this` NEVER DEREFERENCED
+//
+// so on a NEGATIVE index retail returns an empty String **without touching
+// `this` at all**, and only then does it read this+0x28 and this+0x20.
+//
+// That is not a hypothetical difference. A `UI::String` that names no text is
+// `{table = nullptr, id = -1}`, and `UI::String::operator System::String`
+// (0x180035020) forwards it here verbatim (`MOV R8D,[RCX+8]; MOV RCX,[RCX]`).
+// Retail's guard order makes that harmless; the hoisted loads made it an
+// ACCESS_VIOLATION reading 0x20.
+//
+// FOUND BY: porting TextElement::CacheText (Wave 10 lane UIORACLE) — the first
+// caller in the tree to route a never-assigned UI::String through this port
+// rather than through the DLL's own copy. A four-cell A/B on the trading-post
+// panel route isolated it: default CRASHES, `BANISHED_RT_UIWIDGETSLAY=0`
+// (CacheText back on the DLL) clean, `BANISHED_RT_UISPRITE=0` (this body back
+// on the DLL) clean, `BANISHED_RT_UI=0` clean. Two independent switches, each
+// removing exactly one half of the pair, each making it go away.
+//
+// AND THIS IS NOT THE "don't fix a faithful crash with a null check" case
+// (CLAUDE.md). No guard is being ADDED: retail's guards are being put back in
+// retail's ORDER. The upstream null is not a defect to hunt — it is the normal
+// representation of "no text", and retail is built to tolerate it here.
 void* RtUi_StringTable_GetText_Index(const void* selfRaw, void* retval, int index) {
     RT_DIFF_BEGIN("UI::StringTable::GetText(int)");
-    const auto* base  = static_cast<const uint8_t*>(selfRaw);
-    const auto* data  = *reinterpret_cast<StringTableTextEntry* const*>(base + StringTableOffsets::kData);
-    const int   count = *reinterpret_cast<const int32_t*>(base + StringTableOffsets::kCount);
+    const auto* base = static_cast<const uint8_t*>(selfRaw);
 
     auto* ret = static_cast<RtSystem::String*>(retval);
     ret->data = nullptr;
-    if (index >= 0 && index < count) {
-        char* text = data[index].text;
-        if (text) {
-            RtSystem::StringRefCount(text) += 1;
-            ret->data = text;
+    if (index >= 0) {                                            // 0x18000256c
+        const int count = *reinterpret_cast<const int32_t*>(     // 0x180002573
+            base + StringTableOffsets::kCount);
+        if (index < count) {
+            const auto* data = *reinterpret_cast<StringTableTextEntry* const*>(
+                base + StringTableOffsets::kData);               // 0x180002585
+            char* text = data[index].text;
+            if (text) {
+                RtSystem::StringRefCount(text) += 1;
+                ret->data = text;
+            }
         }
     }
 

@@ -338,6 +338,45 @@ cmd_verify() {
     echo "[gamelock] verified: still held by $who"
 }
 
+# The safe path, made the easy one. Acquire, run, release -- with the acquire's
+# exit status checked HERE, where no caller's pipe can discard it. Anything the
+# caller wants to pipe is this command's output, not the acquire's.
+#
+#   tools/game_dir_lock.sh run lane-FOO 900 -- make sa-run
+#
+cmd_run() {
+    local who="${1:?lane name required}" timeout="${2:-900}"
+    shift 2
+    [ "${1:-}" = "--" ] && shift
+    [ $# -gt 0 ] || { echo "[gamelock] run: no command given" >&2; return 2; }
+
+    if ! cmd_acquire "$who" "$timeout"; then
+        echo "[gamelock] run: ABORTING, the lock was never granted to '$who'." >&2
+        return 1
+    fi
+    "$@"
+    local rc=$?
+    cmd_release "$who"
+    return $rc
+}
+
+# Returns 0 only if the lock is held BY YOU, right now. Cheap enough to call
+# immediately before a launch: it answers "is the exe about to run still mine?"
+# in the one way a discarded exit code cannot fake.
+cmd_verify() {
+    local who="${1:?lane name required}" owner
+    if [ ! -d "$LOCK" ]; then
+        echo "[gamelock] VERIFY FAILED: no lock is held at all (expected '$who')." >&2
+        return 1
+    fi
+    owner=$(lock_owner)
+    if [ "$owner" != "$who" ]; then
+        echo "[gamelock] VERIFY FAILED: held by '$owner', not '$who'." >&2
+        return 1
+    fi
+    echo "[gamelock] verified: still held by $who"
+}
+
 case "${1:-}" in
     acquire) shift; cmd_acquire "$@" ;;
     run)     shift; cmd_run "$@" ;;

@@ -2939,8 +2939,24 @@ bool EngineFuncsInit() {
     // fn_UIDesc_AddControllers — REIMPLEMENTED as UIDesc_AddControllers_Impl()
     g_TypeId_UIDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7f90));
-    // TabElement::AddTab — dispatch table at 0x1401529c8
-    {
+    // TabElement::AddTab.
+    //
+    // *** ResolveExport FIRST, THE DISPATCH SLOT ONLY AS A FALLBACK. WAVE 10
+    // LANE UIORACLE — THIS ORDER WAS THE OTHER WAY ROUND AND IT WAS A LIVE
+    // PORT BYPASS. *** Slot 0x1401529c8 is a PE import slot, so `*dispatch` is
+    // the RAW address inside Runtime-x64.dll and the port registry is never
+    // consulted (reference_bypassed_port_needs_a_source_checker.md). With
+    // AddTab ported this wave, the exe's ONLY caller
+    // (UIDesc_AddControllers_Impl, code/Game/Dialog/toolui.cpp) was still
+    // running the DLL's copy — and the symptom was not a crash but a SILENCE:
+    // the predictive oracle reported the site with ZERO ROUNDS, which reads
+    // exactly like "no route exists" (reference_uncalled_port_is_not_verified.md).
+    // RuntimePortInit() runs BEFORE EngineFuncsInit (standalone/main.cpp §2c
+    // says so in as many words), so ResolveExport here reaches the port.
+    fn_TabElement_AddTab = reinterpret_cast<fn_TabElement_AddTab_t>(
+        ResolveExport("?AddTab@TabElement@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@"
+                      "V?$ExternalPtr@VElementDescription@UI@@@4@0@Z"));
+    if (!fn_TabElement_AddTab) {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529c8));
         if (dispatch) fn_TabElement_AddTab = reinterpret_cast<fn_TabElement_AddTab_t>(*dispatch);
     }
