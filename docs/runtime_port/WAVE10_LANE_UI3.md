@@ -301,6 +301,31 @@ degrades to `PinPresent`, which puts the value *inside* the pattern and asserts 
 instruction occurs exactly once. That is weaker, it says so in its own message, and it is
 not dressed up as the stronger check.
 
+#### The pins are pre-flighted OFFLINE, and that is not ceremony
+
+`tools/ui3_pin_preflight.py` reads `Runtime-x64.dll` straight off disk and runs the same
+search over the same four bodies — no game directory, no lock, no launch:
+
+```
+40 pins, 0 FAILED
+
+-- NEGATIVE CONTROL (read this before the 40 lines above) --
+   REJECTED   control: wrong value (off by one)
+   REJECTED   control: absent pattern
+   REJECTED   control: ambiguous pattern
+   the checker DISCRIMINATES (3/3 rejected) -- the pins above mean something
+```
+
+The reason this exists: **a NOT-UNIQUE pin reports as a FAILURE OF THE PORT**, so shipping
+one costs an evening debugging the instrument instead of the code. It had already paid for
+itself twice by hand before it was written — the `_ui` pin matched **seven** instructions
+and the `Dialog::_rootDescription` pin matched **two**. The script makes that repeatable
+instead of a habit.
+
+It duplicates the **search**, not the oracle: the in-process `PinDisp` still runs against
+the loaded DLL. And it exits **2**, not 0, if its own control fails, so a broken instrument
+cannot report success.
+
 **What this oracle can and cannot do**, stated so a green board is not over-read: it
 catches the entire *transcription* surface — every wrong offset, wrong immediate, wrong
 callee, wrong vtable slot. It **cannot** catch a control-flow error. It is a complement to
