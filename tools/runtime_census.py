@@ -78,6 +78,24 @@ def concat_literal(text, pos):
 
 RE_EXPORT = re.compile(r'ResolveExport(?:Raw)?\s*\(\s*(?=")')
 
+# A ResolveExport whose argument is a NAMED CONSTANT rather than a literal --
+# the SIXTH blind spot, and the first one this script found by being used
+# rather than by an incident.
+#
+# Wave 10 hit it while porting the static GetAlignedPosition overload. The port
+# spelled the mangled name once as `const char* const kGetAlignedStatic = ...`
+# and used it at BOTH the ResolveExport site and the RegisterRuntimeExport site
+# -- which is the practice the RE_NAME_CONST comment explicitly ENCOURAGES,
+# because it stops the door and the registration drifting apart. The
+# registration side resolved it. The CALL side did not, so the function fell out
+# of `called` entirely, and since `ported` is a subset of `called` the freshly
+# landed port read as a REGRESSION: UI called 161->160, ported flat.
+#
+# So the same `name_consts` table both sides already needed is now applied to
+# both sides, and an unresolvable identifier is reported instead of dropped.
+RE_EXPORT_NONLITERAL = re.compile(
+    r'ResolveExport(?:Raw)?\s*\(\s*(?!")([A-Za-z_][A-Za-z0-9_:]*)\s*\)')
+
 # THE MACRO DOORS -- the fifth blind spot, and the most expensive one this
 # script has had. `called` matched a LITERAL `ResolveExport(` only, so the two
 # macros in runtime/funcs/rt_port.h were invisible:
@@ -161,8 +179,14 @@ RE_REG_EXPORT_NONLITERAL = re.compile(
 # of punishing them. Only same-file, single-literal definitions are resolved;
 # anything else still raises the NON-LITERAL warning above, because a name this
 # script cannot follow is a name it must not silently drop.
+#
+# BOTH SPELLINGS. `const char* const kX` and `constexpr const char* kX` are the
+# same idiom and the tree uses both -- runtime/types/ui/ElementDescription.h and
+# code/Game/Dialog/mod_dialog_vtables.cpp use the constexpr form. Matching only
+# the first meant a file could name a symbol once, correctly, and still be
+# invisible to this script.
 RE_NAME_CONST = re.compile(
-    r'\b(?:static\s+)?const\s+char\s*\*\s*const\s+'
+    r'\b(?:(?:static\s+)?const\s+char\s*\*\s*const|constexpr\s+const\s+char\s*\*)\s+'
     r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?=")')
 RE_REG_ORDINAL = re.compile(r'RegisterRuntimeOrdinal\s*\(\s*(\d+)')
 RE_REG_ADDR = re.compile(r'RegisterRuntimeAddr\s*\(\s*(0x[0-9a-fA-F]+)')
@@ -578,6 +602,7 @@ def scan():
     gated_exports, gated_addrs = {}, {}
     detoured = {}
     nonliteral_regs = {}   # file -> [identifier, ...] the census cannot resolve
+    nonliteral_calls = {}  # same, for ResolveExport CALL sites
     nonliteral_detours = {}  # same, for InstallRuntimeDetour* targets
     instrument_detours = {}  # probe:/selftest:/[allocshadow] -- NOT ports
 
@@ -592,10 +617,28 @@ def scan():
         # pattern used to produce a phantom port row -- see strip_comments().
         text = strip_comments(text)
 
+        # Same-file `const char* const kX = "?Mangled@..."` table. Built HERE,
+        # before the call scans, because BOTH the call side and the
+        # registration side need it -- see RE_EXPORT_NONLITERAL.
+        name_consts = {}
+        for m in RE_NAME_CONST.finditer(text):
+            lit = concat_literal(text, m.end())
+            if lit:
+                name_consts[m.group(1)] = lit
+
         for m in RE_EXPORT.finditer(text):
             name = concat_literal(text, m.end())
             if name:
                 called_exports.setdefault(name, set()).add(rel)
+        for m in RE_EXPORT_NONLITERAL.finditer(text):
+            ident = m.group(1)
+            if ident in name_consts:
+                called_exports.setdefault(name_consts[ident], set()).add(rel)
+            elif ident not in ("mangled", "name", "sym", "symbol", "mangledName"):
+                # Those are PARAMETER names in the declarations and definitions
+                # of ResolveExport and of InstallRuntimeDetourExport, forwarding
+                # a caller's string -- not call sites naming a symbol.
+                nonliteral_calls.setdefault(rel, []).append(ident)
         # The macro doors (RT_EXPORT_ONCE / RT_DATA_SLOT / RtResolveCached).
         # These are live cutover dependencies exactly as ResolveExport is; see
         # RE_MACRO_DOOR above for what their invisibility cost.
@@ -631,13 +674,6 @@ def scan():
         # this census exists to prevent -- see GATED_OFF_FILES.
         gated = rel in GATED_OFF_FILES
 
-        # Same-file `const char* const kX = "?Mangled@..."` table, so a
-        # registration passing kX is counted rather than warned about.
-        name_consts = {}
-        for m in RE_NAME_CONST.finditer(text):
-            lit = concat_literal(text, m.end())
-            if lit:
-                name_consts[m.group(1)] = lit
 
         for m in RE_REG_EXPORT.finditer(text):
             name = concat_literal(text, m.end())
@@ -716,6 +752,7 @@ def scan():
 
     return dict(
         nonliteral_regs=nonliteral_regs,
+        nonliteral_calls=nonliteral_calls,
         nonliteral_detours=nonliteral_detours,
         instrument_detours=instrument_detours,
         gated_exports=gated_exports, gated_addrs=gated_addrs,
@@ -917,6 +954,16 @@ def main():
         print("  (Wave 4 lane D hit this: 6 ports registered through kName* constants")
         print("   reported as IO 30/41 when 36 were registered. Nothing warned.)")
         print()
+    nlc = d.get("nonliteral_calls") or {}
+    if nlc:
+        total = sum(len(v) for v in nlc.values())
+        print()
+        print("*** WARNING: %d ResolveExport call(s) pass an identifier this script"
+              % total)
+        print("*** cannot follow, so `called` -- and therefore `ported` -- UNDERSTATE.")
+        for f in sorted(nlc):
+            print("  %-44s %s" % (f, ", ".join(sorted(set(nlc[f])))))
+
     inst = d.get("instrument_detours") or {}
     if inst:
         print()
