@@ -384,6 +384,13 @@ and the same reason.
 tools/game_dir_lock.sh run lane-UI3 2400 -- docs/runtime_port/wave10_lane_ui3/run_ui3.sh
 ```
 
+**The measured binary is FROZEN at commit `0036201`, debug exe md5
+`e7f948d327ce1aafa4553877ddff02e2`.** No source is edited after this point, because a lane
+that keeps improving after it starts measuring invalidates its own numbers and the
+integrator's build (`reference_lane_edits_after_report_invalidate_the_measurement.md`).
+`run_ui3.sh` re-derives and prints both md5s at every launch anyway, so the log says which
+binary produced each number rather than this doc asserting it.
+
 | # | label | configuration | what it establishes |
 |---|---|---|---|
 | 1 | `default` | `BANISHED_RT_DIFF=1 BANISHED_AUTOSTART=1`, `BANISHED_RT_ALLOC` **unset** | the ports are correct in the **default** configuration — the run the §0 claim stands or falls on |
