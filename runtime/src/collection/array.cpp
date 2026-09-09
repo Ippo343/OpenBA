@@ -1469,6 +1469,32 @@ J3_ENTRY3(18005fb00, kSpec_Node18)      // Graphics: Array<Scene::Node>
 // (0x18011c890, ported in runtime/src/ui/spritecontext.cpp), which appends one
 // element by passing `size + 1` and a pointer to the record.
 J3_ENTRY3(180078520, kSpec_SpriteDraw)  // UI:          Array<SpriteDraw> append
+// WAVE 10 LANE UI3 — the two grow helpers the four allocating DialogInstance
+// bodies tail-call (runtime/src/ui/dialog_create.cpp). Registered HERE, beside
+// the specs they reuse, for exactly the reason lane GFX3 and lane UIF each gave
+// for theirs: a private second copy of SetSizeCore in the UI tree is the drift
+// this parameterisation exists to prevent.
+//
+// NEITHER IS NEW CODE. Each is BYTE-IDENTICAL to a body this file already
+// registers, and that is a MEASUREMENT: both listings were compared
+// instruction-for-instruction with the leading address stripped and every
+// INTERNAL branch target rewritten as a body-relative delta, so every operand
+// naming anything outside the body had to match ABSOLUTELY
+// (reference_position_only_diffs_hide_one_body.md).
+//
+//   0x180076250 vs 0x18005fb00 (kSpec_Node18, stride 0x18)  -> 0 differences
+//   0x180076370 vs 0x180076900 (kSpec_Fill8Z, stride 8)     -> 0 differences
+//
+// and all five relocatable operands in each resolve to the same absolutes
+// (0x1800c7a50, 0x1801fc718, 0x18014b390, 0x1800c6c00, 0x18014b388).
+//
+// THE INSTRUMENT WAS CONTROLLED. The same comparison run between the stride-8
+// body and the stride-0x18 body reports 62 differing instructions, so it is not
+// structurally incapable of saying "different"
+// (reference_diagnostic_field_cannot_express_the_answer.md). The two listings,
+// the script and both runs are in docs/runtime_port/WAVE10_LANE_UI3.md §2.
+J3_ENTRY3(180076250, kSpec_Node18)      // UI:          DialogInstance::_timers append
+J3_ENTRY3(180076370, kSpec_Fill8Z)      // UI:          DialogInstance::_controllers append
 
 #undef J3_ENTRY3
 
@@ -1636,6 +1662,11 @@ void RtCollectionPortInit() {
     // WAVE 9 LANE UIF — Array<UI::SpriteDraw>: append (3-arg) and clear (0-arg).
     RegisterRuntimeAddr(0x180078520, (void*)&RtColl_ArraySetSizeFill_180078520);
     RegisterRuntimeAddr(0x1800783d0, (void*)&RtColl_ArraySetSize_1800783d0);
+    // WAVE 10 LANE UI3 — the two DialogInstance grow helpers. Both are
+    // byte-identical to a body already registered above; the measurement and
+    // its negative control are in the J3 table's note.
+    RegisterRuntimeAddr(0x180076250, (void*)&RtColl_ArraySetSizeFill_180076250);
+    RegisterRuntimeAddr(0x180076370, (void*)&RtColl_ArraySetSizeFill_180076370);
     // 0x180011010, 0x180010ab0 and 0x1800419b0 are NOT registered here: all
     // three belong to runtime/src/collection/array_destroy.cpp, which already
     // registered 0x180010ab0 and, in this same commit, registers the other two

@@ -35,6 +35,12 @@ extern int RtUiSpriteRegister();      // sprite.cpp          (lane F)
 // round-trip can be turned off without disturbing the rest of the UI port.
 extern int RtUiDialogSettingsRegister();   // dialog_settings.cpp (lane ENC-2)
 
+// Wave 10 lane UI3: the four ALLOCATING DialogInstance rows Wave 7 lane B held
+// back (ctor, both AddController overloads, StartTimer). Own switch because
+// they sit on the construction path of every dialog in the game and because the
+// blocker they cleared -- the allocator -- is still opt-in for its own port.
+extern int RtUiDialogCreateRegister();     // dialog_create.cpp   (lane UI3)
+
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
         printf("[RtPort] BANISHED_RT_UI=0 -- UI namespace port disabled\n");
@@ -48,5 +54,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_UIWIDGETSLAY")) n += RtUiWidgetsLayRegister();
     if (RtWaveEnabled("BANISHED_RT_UISPRITE"))     n += RtUiSpriteRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGSETTINGS")) n += RtUiDialogSettingsRegister();
+    if (RtWaveEnabled("BANISHED_RT_DLGCREATE"))  n += RtUiDialogCreateRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }
