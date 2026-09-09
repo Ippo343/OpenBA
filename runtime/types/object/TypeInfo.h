@@ -233,4 +233,17 @@ struct Factory {
 };
 static_assert(offsetof(Factory, root) == 0x00, "Factory::root");
 
+// ============================================================
+// The type-id hash, as ONE function.
+//
+// `BaseTypeInfo::typeId` is CRC-32 (reflected, poly 0xEDB88320) of the type's
+// `name` widened to UTF-16LE -- retail's private
+// ?GetTypeFromNameCRC@Factory@Object@@AEBAIPEBD@Z. Defined in
+// runtime/src/object/type_system.cpp, where Factory::Startup's own
+// `info->typeId = TypeNameCRC(info->name)` lives; declared here so
+// standalone/rt_data_mint.cpp can stamp a minted node with the SAME value
+// instead of leaving it at the ctor sentinel.
+// ============================================================
+uint32_t TypeIdFromName(const char* name);
+
 } // namespace RtObject

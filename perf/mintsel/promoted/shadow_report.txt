@@ -1,0 +1,736 @@
+[RtMintShadow] ---- per-vtable readiness ----
+[RtMintShadow] READY = every non-purecall slot is our port, so registering
+[RtMintShadow] this row hands callers a table with no abort-trap in it.
+[RtMintShadow]   BLOCKED  (unexported @0x1801554a8)                            slots= 5 ported= 2 TRAP= 3 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81e0
+[RtMintShadow]              TRAP slot  1  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81d0
+[RtMintShadow]              TRAP slot  2  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81c0
+[RtMintShadow]   BLOCKED  (unexported @0x180155860)                            slots= 2 ported= 1 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800b7260
+[RtMintShadow]   BLOCKED  (unexported @0x180157c60)                            slots= 7 ported= 0 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050200
+[RtMintShadow]              TRAP slot  1  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501f0
+[RtMintShadow]              TRAP slot  2  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501c0
+[RtMintShadow]              TRAP slot  3  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050210
+[RtMintShadow]              TRAP slot  4  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501d0
+[RtMintShadow]              TRAP slot  5  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050220
+[RtMintShadow]              TRAP slot  6  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050230
+[RtMintShadow]   BLOCKED  ??_7Achievement@0@6B@                                slots= 9 ported= 3 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@Achievement@1@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Achievement@1@UEBAIXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@Achievement@1@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@Achievement@1@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@Achievement@1@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7AchievementInstance@Achievement@@6B@             slots= 4 ported= 1 TRAP= 3 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@AchievementInstance@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@AchievementInstance@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?Persist@AchievementInstance@Achievement@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7AnimationEvent@Graphics@@6B@                     slots= 9 ported= 2 TRAP= 2 purecall= 5
+[RtMintShadow]              TRAP slot  1  ?TypeName@AnimationEvent@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@AnimationEvent@Graphics@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7Base@Object@@6B@                                 slots= 3 ported= 1 TRAP= 1 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Type@Base@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7BinaryReader@IO@@6B@                             slots=26 ported=25 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023a10
+[RtMintShadow]   READY    ??_7BinaryWriter@IO@@6B@                             slots=26 ported=26 TRAP= 0 purecall= 0
+[RtMintShadow]   BLOCKED  ??_7CompiledExternal@Object@@6B@                     slots= 8 ported= 2 TRAP= 2 purecall= 4
+[RtMintShadow]              TRAP slot  1  ?TypeName@CompiledExternal@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@CompiledExternal@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7CompressedMemoryStream@IO@@6B@                   slots= 9 ported= 3 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]              TRAP slot  2  ?Write@CompressedStream@IO@@UEAA_NHPEBX@Z
+[RtMintShadow]              TRAP slot  4  ?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z
+[RtMintShadow]              TRAP slot  5  ?GetCurrentPos@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  6  ?GetSize@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  8  ?PreCommit@CompressedMemoryStream@IO@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7CompressedStream@IO@@6B@                         slots= 9 ported= 1 TRAP= 8 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023fd0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]              TRAP slot  2  ?Write@CompressedStream@IO@@UEAA_NHPEBX@Z
+[RtMintShadow]              TRAP slot  4  ?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z
+[RtMintShadow]              TRAP slot  5  ?GetCurrentPos@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  6  ?GetSize@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  7  ?Close@CompressedStream@IO@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?PreCommit@CompressedStream@IO@@UEAAXXZ
+[RtMintShadow]   READY    ??_7ConstantBufferData@Video@@6B@                    slots= 4 ported= 1 TRAP= 0 purecall= 3
+[RtMintShadow]   READY    ??_7ContextData@Video@@6B@                           slots=20 ported= 1 TRAP= 0 purecall=19
+[RtMintShadow]   READY    ??_7DeviceData@Video@@6B@                            slots=20 ported= 1 TRAP= 0 purecall=19
+[RtMintShadow]   BLOCKED  ??_7DialogController@UI@@6B@                         slots=11 ported= 2 TRAP= 9 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@DialogController@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@DialogController@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?OnCreated@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  5  ?OnOpened@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?OnClosed@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?OnUpdateLayout@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?OnUpdate@DialogController@UI@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  9  ?OnElementEvent@DialogController@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z
+[RtMintShadow]              TRAP slot 10  ?OnSerializeSettings@DialogController@UI@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7DialogInstance@UI@@6B@                           slots=10 ported= 8 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  2  ?Type@DialogInstance@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?OnOpened@DialogInstance@UI@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7DialogLoaderLoopT@Engine@@6B@                    slots=13 ported= 3 TRAP= 9 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Shutdown@DialogLoaderLoopT@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  3  ?Update@DialogLoaderLoopT@Engine@@UEAA_NAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  4  ?Draw@DialogLoaderLoopT@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7DialogLoopT@Engine@@6B@                          slots=13 ported= 4 TRAP= 8 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Shutdown@DialogLoopT@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  4  ?Draw@DialogLoopT@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7EdgeMesh@Graphics@@6B@                           slots= 9 ported= 0 TRAP= 9 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800134b0
+[RtMintShadow]              TRAP slot  1  ?TypeName@EdgeMesh@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@EdgeMesh@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@EdgeMesh@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  4  ?Compile@EdgeMesh@Graphics@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z
+[RtMintShadow]              TRAP slot  5  ?Serialize@EdgeMesh@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@EdgeMesh@Graphics@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7EdgeMeshInstance@Graphics@@6B@                   slots= 9 ported= 4 TRAP= 5 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800175d0
+[RtMintShadow]              TRAP slot  1  ?Update@EdgeMeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@EdgeMeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@EdgeMeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]   BLOCKED  ??_7Element@UI@@6B@                                  slots=12 ported= 3 TRAP= 8 purecall= 1
+[RtMintShadow]              TRAP slot  1  ?TypeName@Element@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Element@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?Persist@Element@UI@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  7  ?Update@Element@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@12@@Z
+[RtMintShadow]              TRAP slot  8  ?Enable@Element@UI@@UEAAX_N@Z
+[RtMintShadow]              TRAP slot  9  ?Contains@Element@UI@@UEBA_NHHPEAVUserInterface@2@@Z
+[RtMintShadow]              TRAP slot 10  ?SetColor@Element@UI@@UEAAXI@Z
+[RtMintShadow]              TRAP slot 11  ?GetBorder@Element@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7ElementDescription@UI@@6B@                       slots= 9 ported= 3 TRAP= 3 purecall= 3
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180035350
+[RtMintShadow]              TRAP slot  1  ?TypeName@ElementDescription@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@ElementDescription@UI@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7External@Object@@6B@                             slots= 8 ported= 2 TRAP= 2 purecall= 4
+[RtMintShadow]              TRAP slot  1  ?TypeName@External@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@External@Object@@UEBAIXZ
+[RtMintShadow]   READY    ??_7Geometry@Graphics@@6B@                           slots= 9 ported= 6 TRAP= 0 purecall= 3
+[RtMintShadow]   BLOCKED  ??_7Goal@Achievement@@6B@                            slots=10 ported= 4 TRAP= 3 purecall= 3
+[RtMintShadow]              TRAP slot  1  ?TypeName@Goal@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Goal@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@Goal@Achievement@@UEBAHXZ
+[RtMintShadow]   BLOCKED  ??_7GoalInstance@Achievement@@6B@                    slots= 7 ported= 3 TRAP= 4 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@GoalInstance@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@GoalInstance@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?Startup@GoalInstance@Achievement@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?CheckGoalState@GoalInstance@Achievement@@UEBA?AW4GoalState@Goal@2@XZ
+[RtMintShadow]   BLOCKED  ??_7ImageBuffer@Video@@6B@                           slots=10 ported= 3 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@ImageBuffer@Video@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@ImageBuffer@Video@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@ImageBuffer@Video@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@ImageBuffer@Video@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@ImageBuffer@Video@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   READY    ??_7ImageBufferData@Video@@6B@                       slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   READY    ??_7IndexBufferData@Video@@6B@                       slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   BLOCKED  ??_7Internal@Object@@6B@                             slots= 4 ported= 2 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@Internal@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Internal@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7Light@Graphics@@6B@                              slots=11 ported= 5 TRAP= 1 purecall= 5
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180058dd0
+[RtMintShadow]   BLOCKED  ??_7Loader@Engine@@6B@                               slots= 2 ported= 1 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  ?Run@Loader@Engine@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7LoaderLoop@Engine@@6B@                           slots=12 ported= 1 TRAP=11 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?Startup@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  2  ?Shutdown@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  3  ?Update@LoaderLoop@Engine@@UEAA_NAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  4  ?Draw@LoaderLoop@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?Load@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7MaterialInstance@Graphics@@6B@                   slots= 9 ported= 2 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@MaterialInstance@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@MaterialInstance@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@MaterialInstance@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@MaterialInstance@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@MaterialInstance@Graphics@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7MemoryStream@IO@@6B@                             slots= 8 ported= 6 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800242a0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]   BLOCKED  ??_7MeshInstance@Graphics@@6B@                       slots= 9 ported= 2 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180017330
+[RtMintShadow]              TRAP slot  1  ?Update@MeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@MeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  5  ?GetSubTransform@MeshInstance@Graphics@@UEBA?AVTransform@Math@@H@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  7  ?SetSharedInstanceData@MeshInstance@Graphics@@UEBAHAEAVContext@Video@@HM@Z
+[RtMintShadow]   BLOCKED  ??_7PackageFile@IO@@6B@                              slots= 9 ported= 5 TRAP= 4 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800259d0
+[RtMintShadow]              TRAP slot  5  ?Serialize@PackageFile@IO@@UEAA_NAEAVStream@2@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@PackageFile@IO@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7Particle@Graphics@@6B@                           slots= 9 ported= 2 TRAP= 4 purecall= 3
+[RtMintShadow]              TRAP slot  1  ?TypeName@Particle@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Particle@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@Particle@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@Particle@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7ParticleInstance@Graphics@@6B@                   slots=10 ported= 5 TRAP= 4 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@ParticleInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  9  ?SetParticle@ParticleInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@@Object@@@Z
+[RtMintShadow]   BLOCKED  ??_7ParticleSystemInstance@Graphics@@6B@             slots=10 ported= 5 TRAP= 5 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?Update@ParticleSystemInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@ParticleInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  9  ?SetParticle@ParticleSystemInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@@Object@@@Z
+[RtMintShadow]   READY    ??_7PixelProgramData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7ReaderWriter@IO@@6B@                             slots=36 ported= 2 TRAP= 4 purecall=30
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023bd0
+[RtMintShadow]              TRAP slot 31  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81e0
+[RtMintShadow]              TRAP slot 32  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81d0
+[RtMintShadow]              TRAP slot 33  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81c0
+[RtMintShadow]   READY    ??_7RenderBufferData@Video@@6B@                      slots= 4 ported= 1 TRAP= 0 purecall= 3
+[RtMintShadow]   READY    ??_7RenderStateData@Video@@6B@                       slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7SpriteSheet@UI@@6B@                              slots= 9 ported= 8 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  5  ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7Stream@IO@@6B@                                   slots= 7 ported= 1 TRAP= 1 purecall= 5
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]   BLOCKED  ??_7SunLight@Graphics@@6B@                           slots=11 ported= 5 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180064620
+[RtMintShadow]              TRAP slot  1  ?Update@SunLight@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@SunLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  9  ?DrawShadowMap@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z
+[RtMintShadow]              TRAP slot 10  ?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z
+[RtMintShadow]   READY    ??_7Thread@System@@6B@                               slots= 2 ported= 1 TRAP= 0 purecall= 1
+[RtMintShadow]   BLOCKED  ??_7UpdateLoop@Engine@@6B@                           slots=12 ported= 1 TRAP= 6 purecall= 5
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   READY    ??_7VertexBufferData@Video@@6B@                      slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   READY    ??_7VertexLayoutData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   READY    ??_7VertexProgramData@Video@@6B@                     slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   READY    ??_7VideoProgramData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7Visitor@IO@@6B@                                  slots=26 ported=25 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x18002b710
+
+[RtMintShadow] ---- per-typeinfo readiness ----
+[RtMintShadow] READY = every string field and the typeId AGREE with the
+[RtMintShadow] loaded DLL this run. fac=trap is reported, not hidden: it
+[RtMintShadow] is unreachable for a dword reader but not for a tree walk.
+[RtMintShadow]   BLOCKED  ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A          id=0x96f8b310 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A id=0x709f0d32 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@AnimatedImageDescription@UI@@0VBaseTypeInfo@Object@@A id=0x94ee6491 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@AnimatedImageElement@UI@@0VBaseTypeInfo@Object@@A id=0x3271975d idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A id=0x5bf7aee4 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A id=0x99a746df idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A                 id=0xac325696 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@BorderDescription@UI@@0VBaseTypeInfo@Object@@A  id=0xa86bf867 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A      id=0xe6faeb54 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ButtonDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x78fd8f20 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A      id=0x5310bda4 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A       id=0xf49dae05 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xa59314b7 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A       id=0x1039fdd3 idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@ClipRegionDescription@UI@@0VBaseTypeInfo@Object@@A id=0xb3f27e13 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A  id=0x352b9ada idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@CollisionMesh@Collision2D@@0VBaseTypeInfo@Object@@A id=0x99753590 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ComboDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x93056daf idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ComboDialog@UI@@0VBaseTypeInfo@Object@@A        id=0x4c55fddf idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A       id=0xd358ef47 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A     id=0xae5b8f65 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A id=0x6b46c172 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A   id=0xcd48b14b idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Cursor@UI@@0VBaseTypeInfo@Object@@A             id=0x31c7f810 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A             id=0x4fcc106b idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A   id=0xf2c192b8 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A id=0xb77e0eb9 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A     id=0xbe12e2eb idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@DocumentTextDescription@UI@@0VBaseTypeInfo@Object@@A id=0xec3779bb idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A id=0x11416aad idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A     id=0x78e68d30 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@EditDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xc9022aa3 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A        id=0x006931e0 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A id=0x42f6a818 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ExtensionCompiler@Object@@0VBaseTypeInfo@2@A    id=0x5704555c idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A             id=0xe771f47f idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ExternalCompiler@Object@@0VBaseTypeInfo@2@A     id=0xe732827d idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A         id=0xb9f9bd84 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A               id=0xe3d8954e idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0x741792d4 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0xa1af3cd9 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A      id=0xf50a1ddf idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A id=0x9c8c89cc idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GraphDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xe28e0152 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A       id=0xe4db189c idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A id=0xe61c2ffe idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GroupDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x8a72943e idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GroupElement@UI@@0VBaseTypeInfo@Object@@A       id=0x8ced93cd idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A     id=0x84e6f2dd idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ImageDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xfdd24e9a idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A       id=0x35413056 idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A             id=0xde23506d idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@LabelDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xf0cbd6ea idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A       id=0x4f8656b9 idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x4f976fb7 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@LayoutElement@UI@@0VBaseTypeInfo@Object@@A      id=0x21465073 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A    id=0x2de80b80 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A        id=0x2475ec1a idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A     id=0x418398a4 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A id=0x2ebeed54 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@NumberDescription@UI@@0VBaseTypeInfo@Object@@A  id=0xfb8de193 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@NumberEditDescription@UI@@0VBaseTypeInfo@Object@@A id=0x745a1bb8 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A  id=0x25a24564 idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A      id=0x1c54106e idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A        id=0x3c81c678 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PageDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xe7d69af7 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PageElement@UI@@0VBaseTypeInfo@Object@@A        id=0x98ffe1f8 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A     id=0x2a5dc6da idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A id=0xf00915c5 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A   id=0x9c2301f9 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A    id=0xd91ccdf1 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A id=0x3bc4d9a5 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ProgressDescription@UI@@0VBaseTypeInfo@Object@@A id=0xb1403226 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A    id=0x4c63b522 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@RadioDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x65d6876c idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@RadioElement@UI@@0VBaseTypeInfo@Object@@A       id=0xe3cf1747 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0x6ab5f8fc idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A     id=0x779102e5 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@RibbonDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x35c17fb8 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A      id=0x82c11d31 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ScrollDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x9bdfebbb idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A      id=0x1c6afffa idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@ShaderProgram@Video@@0VBaseTypeInfo@Object@@A   id=0x5648ad42 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SliderDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x6c7bbf56 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A      id=0xda677e92 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A     id=0x15b34526 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A     id=0x58171cb6 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A id=0xeca6998f idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A     id=0x26681eb1 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A      id=0xd56baba8 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A        id=0x1821d6a5 idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A        id=0xc03519e4 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A   id=0x20b1860c idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A     id=0x2bcb883f idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A         id=0x7e8fcdd2 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xef9a5ee5 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A       id=0xc7980309 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xc974f55b idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A        id=0x1a20cede idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A      id=0x175c6265 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A    id=0x48b28673 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A   id=0x2515acc5 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A    id=0x7319bd9d idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   typeinfo rows: 0 READY, 104 BLOCKED (of 104; only the UI rows and the BLOCKED ones are listed)
+
+[RtMintShadow] ---- summary (phase=init) ----
+[RtMintShadow] vtables            : 55, 527 slots
+[RtMintShadow] ground truth       : 527 slot comparisons vs the live DLL, 0 MISMATCH
+[RtMintShadow] minted from OUR    : 203 slots, 0 MISMATCH   <-- the only number that measures the port
+[RtMintShadow] minted as traps    : 324 (148 purecall by design, 176 not yet ported)
+[RtMintShadow] complete vtables   : 15 of 55
+[RtMintShadow] slot-count suspects: 0
+[RtMintShadow] BaseTypeInfo       : 624 field comparisons, 0 MISMATCH, 104 typeId not-yet-comparable (DLL still at the ctor sentinel); next: NOT compared, built from our init order
+[RtMintShadow] storage            : 38 symbols, 3 written by the DLL, 35 still zero, 3 of ours written (contents NOT compared: BSS)
+[RtMintShadow] constructed statics: 0 of 3 built (shape compared on 0, 0 SHAPE MISMATCH, 0 SHAPE-INFO)   [BANISHED_RT_MINT_CTOR=1 to build them]
+[RtMintShadow] symbols absent from the DLL: 0
+[RtMintShadow] carried by ADDRESS   : 4 row(s) with no exported name -- the export-location cross-check does not apply to them and was not counted as a pass
+[RtMintShadow] effectiveness: 203 of 379 non-purecall slots carry our own
+[RtMintShadow] code; the remaining 176 are lane B's worklist.
+[RtMintShadow] ==== clean: 0 problem(s) ====
+[RtMintShadow] ---- per-vtable readiness ----
+[RtMintShadow] READY = every non-purecall slot is our port, so registering
+[RtMintShadow] this row hands callers a table with no abort-trap in it.
+[RtMintShadow]   BLOCKED  (unexported @0x1801554a8)                            slots= 5 ported= 2 TRAP= 3 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81e0
+[RtMintShadow]              TRAP slot  1  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81d0
+[RtMintShadow]              TRAP slot  2  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81c0
+[RtMintShadow]   BLOCKED  (unexported @0x180155860)                            slots= 2 ported= 1 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800b7260
+[RtMintShadow]   BLOCKED  (unexported @0x180157c60)                            slots= 7 ported= 0 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050200
+[RtMintShadow]              TRAP slot  1  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501f0
+[RtMintShadow]              TRAP slot  2  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501c0
+[RtMintShadow]              TRAP slot  3  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050210
+[RtMintShadow]              TRAP slot  4  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501d0
+[RtMintShadow]              TRAP slot  5  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050220
+[RtMintShadow]              TRAP slot  6  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050230
+[RtMintShadow]   BLOCKED  ??_7Achievement@0@6B@                                slots= 9 ported= 3 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@Achievement@1@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Achievement@1@UEBAIXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@Achievement@1@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@Achievement@1@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@Achievement@1@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7AchievementInstance@Achievement@@6B@             slots= 4 ported= 1 TRAP= 3 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@AchievementInstance@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@AchievementInstance@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?Persist@AchievementInstance@Achievement@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7AnimationEvent@Graphics@@6B@                     slots= 9 ported= 2 TRAP= 2 purecall= 5
+[RtMintShadow]              TRAP slot  1  ?TypeName@AnimationEvent@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@AnimationEvent@Graphics@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7Base@Object@@6B@                                 slots= 3 ported= 1 TRAP= 1 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Type@Base@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7BinaryReader@IO@@6B@                             slots=26 ported=25 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023a10
+[RtMintShadow]   READY    ??_7BinaryWriter@IO@@6B@                             slots=26 ported=26 TRAP= 0 purecall= 0
+[RtMintShadow]   BLOCKED  ??_7CompiledExternal@Object@@6B@                     slots= 8 ported= 2 TRAP= 2 purecall= 4
+[RtMintShadow]              TRAP slot  1  ?TypeName@CompiledExternal@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@CompiledExternal@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7CompressedMemoryStream@IO@@6B@                   slots= 9 ported= 3 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]              TRAP slot  2  ?Write@CompressedStream@IO@@UEAA_NHPEBX@Z
+[RtMintShadow]              TRAP slot  4  ?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z
+[RtMintShadow]              TRAP slot  5  ?GetCurrentPos@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  6  ?GetSize@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  8  ?PreCommit@CompressedMemoryStream@IO@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7CompressedStream@IO@@6B@                         slots= 9 ported= 1 TRAP= 8 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023fd0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]              TRAP slot  2  ?Write@CompressedStream@IO@@UEAA_NHPEBX@Z
+[RtMintShadow]              TRAP slot  4  ?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z
+[RtMintShadow]              TRAP slot  5  ?GetCurrentPos@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  6  ?GetSize@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  7  ?Close@CompressedStream@IO@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?PreCommit@CompressedStream@IO@@UEAAXXZ
+[RtMintShadow]   READY    ??_7ConstantBufferData@Video@@6B@                    slots= 4 ported= 1 TRAP= 0 purecall= 3
+[RtMintShadow]   READY    ??_7ContextData@Video@@6B@                           slots=20 ported= 1 TRAP= 0 purecall=19
+[RtMintShadow]   READY    ??_7DeviceData@Video@@6B@                            slots=20 ported= 1 TRAP= 0 purecall=19
+[RtMintShadow]   BLOCKED  ??_7DialogController@UI@@6B@                         slots=11 ported= 2 TRAP= 9 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@DialogController@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@DialogController@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?OnCreated@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  5  ?OnOpened@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?OnClosed@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?OnUpdateLayout@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?OnUpdate@DialogController@UI@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  9  ?OnElementEvent@DialogController@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z
+[RtMintShadow]              TRAP slot 10  ?OnSerializeSettings@DialogController@UI@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7DialogInstance@UI@@6B@                           slots=10 ported= 8 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  2  ?Type@DialogInstance@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?OnOpened@DialogInstance@UI@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7DialogLoaderLoopT@Engine@@6B@                    slots=13 ported= 3 TRAP= 9 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Shutdown@DialogLoaderLoopT@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  3  ?Update@DialogLoaderLoopT@Engine@@UEAA_NAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  4  ?Draw@DialogLoaderLoopT@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7DialogLoopT@Engine@@6B@                          slots=13 ported= 4 TRAP= 8 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Shutdown@DialogLoopT@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  4  ?Draw@DialogLoopT@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7EdgeMesh@Graphics@@6B@                           slots= 9 ported= 0 TRAP= 9 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800134b0
+[RtMintShadow]              TRAP slot  1  ?TypeName@EdgeMesh@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@EdgeMesh@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@EdgeMesh@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  4  ?Compile@EdgeMesh@Graphics@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z
+[RtMintShadow]              TRAP slot  5  ?Serialize@EdgeMesh@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@EdgeMesh@Graphics@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7EdgeMeshInstance@Graphics@@6B@                   slots= 9 ported= 4 TRAP= 5 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800175d0
+[RtMintShadow]              TRAP slot  1  ?Update@EdgeMeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@EdgeMeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@EdgeMeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]   BLOCKED  ??_7Element@UI@@6B@                                  slots=12 ported= 3 TRAP= 8 purecall= 1
+[RtMintShadow]              TRAP slot  1  ?TypeName@Element@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Element@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?Persist@Element@UI@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  7  ?Update@Element@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@12@@Z
+[RtMintShadow]              TRAP slot  8  ?Enable@Element@UI@@UEAAX_N@Z
+[RtMintShadow]              TRAP slot  9  ?Contains@Element@UI@@UEBA_NHHPEAVUserInterface@2@@Z
+[RtMintShadow]              TRAP slot 10  ?SetColor@Element@UI@@UEAAXI@Z
+[RtMintShadow]              TRAP slot 11  ?GetBorder@Element@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7ElementDescription@UI@@6B@                       slots= 9 ported= 3 TRAP= 3 purecall= 3
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180035350
+[RtMintShadow]              TRAP slot  1  ?TypeName@ElementDescription@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@ElementDescription@UI@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7External@Object@@6B@                             slots= 8 ported= 2 TRAP= 2 purecall= 4
+[RtMintShadow]              TRAP slot  1  ?TypeName@External@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@External@Object@@UEBAIXZ
+[RtMintShadow]   READY    ??_7Geometry@Graphics@@6B@                           slots= 9 ported= 6 TRAP= 0 purecall= 3
+[RtMintShadow]   BLOCKED  ??_7Goal@Achievement@@6B@                            slots=10 ported= 4 TRAP= 3 purecall= 3
+[RtMintShadow]              TRAP slot  1  ?TypeName@Goal@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Goal@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@Goal@Achievement@@UEBAHXZ
+[RtMintShadow]   BLOCKED  ??_7GoalInstance@Achievement@@6B@                    slots= 7 ported= 3 TRAP= 4 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@GoalInstance@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@GoalInstance@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?Startup@GoalInstance@Achievement@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?CheckGoalState@GoalInstance@Achievement@@UEBA?AW4GoalState@Goal@2@XZ
+[RtMintShadow]   BLOCKED  ??_7ImageBuffer@Video@@6B@                           slots=10 ported= 3 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@ImageBuffer@Video@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@ImageBuffer@Video@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@ImageBuffer@Video@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@ImageBuffer@Video@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@ImageBuffer@Video@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   READY    ??_7ImageBufferData@Video@@6B@                       slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   READY    ??_7IndexBufferData@Video@@6B@                       slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   BLOCKED  ??_7Internal@Object@@6B@                             slots= 4 ported= 2 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@Internal@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Internal@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7Light@Graphics@@6B@                              slots=11 ported= 5 TRAP= 1 purecall= 5
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180058dd0
+[RtMintShadow]   BLOCKED  ??_7Loader@Engine@@6B@                               slots= 2 ported= 1 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  ?Run@Loader@Engine@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7LoaderLoop@Engine@@6B@                           slots=12 ported= 1 TRAP=11 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?Startup@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  2  ?Shutdown@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  3  ?Update@LoaderLoop@Engine@@UEAA_NAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  4  ?Draw@LoaderLoop@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?Load@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7MaterialInstance@Graphics@@6B@                   slots= 9 ported= 2 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@MaterialInstance@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@MaterialInstance@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@MaterialInstance@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@MaterialInstance@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@MaterialInstance@Graphics@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7MemoryStream@IO@@6B@                             slots= 8 ported= 6 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800242a0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]   BLOCKED  ??_7MeshInstance@Graphics@@6B@                       slots= 9 ported= 2 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180017330
+[RtMintShadow]              TRAP slot  1  ?Update@MeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@MeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  5  ?GetSubTransform@MeshInstance@Graphics@@UEBA?AVTransform@Math@@H@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  7  ?SetSharedInstanceData@MeshInstance@Graphics@@UEBAHAEAVContext@Video@@HM@Z
+[RtMintShadow]   BLOCKED  ??_7PackageFile@IO@@6B@                              slots= 9 ported= 5 TRAP= 4 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800259d0
+[RtMintShadow]              TRAP slot  5  ?Serialize@PackageFile@IO@@UEAA_NAEAVStream@2@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@PackageFile@IO@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7Particle@Graphics@@6B@                           slots= 9 ported= 2 TRAP= 4 purecall= 3
+[RtMintShadow]              TRAP slot  1  ?TypeName@Particle@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Particle@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@Particle@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@Particle@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7ParticleInstance@Graphics@@6B@                   slots=10 ported= 5 TRAP= 4 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@ParticleInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  9  ?SetParticle@ParticleInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@@Object@@@Z
+[RtMintShadow]   BLOCKED  ??_7ParticleSystemInstance@Graphics@@6B@             slots=10 ported= 5 TRAP= 5 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?Update@ParticleSystemInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@ParticleInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  9  ?SetParticle@ParticleSystemInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@@Object@@@Z
+[RtMintShadow]   READY    ??_7PixelProgramData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7ReaderWriter@IO@@6B@                             slots=36 ported= 2 TRAP= 4 purecall=30
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023bd0
+[RtMintShadow]              TRAP slot 31  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81e0
+[RtMintShadow]              TRAP slot 32  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81d0
+[RtMintShadow]              TRAP slot 33  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81c0
+[RtMintShadow]   READY    ??_7RenderBufferData@Video@@6B@                      slots= 4 ported= 1 TRAP= 0 purecall= 3
+[RtMintShadow]   READY    ??_7RenderStateData@Video@@6B@                       slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7SpriteSheet@UI@@6B@                              slots= 9 ported= 8 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  5  ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7Stream@IO@@6B@                                   slots= 7 ported= 1 TRAP= 1 purecall= 5
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]   BLOCKED  ??_7SunLight@Graphics@@6B@                           slots=11 ported= 5 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180064620
+[RtMintShadow]              TRAP slot  1  ?Update@SunLight@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@SunLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  9  ?DrawShadowMap@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z
+[RtMintShadow]              TRAP slot 10  ?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z
+[RtMintShadow]   READY    ??_7Thread@System@@6B@                               slots= 2 ported= 1 TRAP= 0 purecall= 1
+[RtMintShadow]   BLOCKED  ??_7UpdateLoop@Engine@@6B@                           slots=12 ported= 1 TRAP= 6 purecall= 5
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   READY    ??_7VertexBufferData@Video@@6B@                      slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   READY    ??_7VertexLayoutData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   READY    ??_7VertexProgramData@Video@@6B@                     slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   READY    ??_7VideoProgramData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7Visitor@IO@@6B@                                  slots=26 ported=25 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x18002b710
+
+[RtMintShadow] ---- per-typeinfo readiness ----
+[RtMintShadow] READY = every string field and the typeId AGREE with the
+[RtMintShadow] loaded DLL this run. fac=trap is reported, not hidden: it
+[RtMintShadow] is unreachable for a dword reader but not for a tree walk.
+[RtMintShadow]   READY    ?_typeInfo@AnimatedImageDescription@UI@@0VBaseTypeInfo@Object@@A id=0x94ee6491 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@AnimatedImageElement@UI@@0VBaseTypeInfo@Object@@A id=0x3271975d idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@BorderDescription@UI@@0VBaseTypeInfo@Object@@A  id=0xa86bf867 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A      id=0xe6faeb54 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ButtonDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x78fd8f20 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A      id=0x5310bda4 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A       id=0xf49dae05 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xa59314b7 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A       id=0x1039fdd3 idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@ClipRegionDescription@UI@@0VBaseTypeInfo@Object@@A id=0xb3f27e13 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A  id=0x352b9ada idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@ComboDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x93056daf idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ComboDialog@UI@@0VBaseTypeInfo@Object@@A        id=0x4c55fddf idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A       id=0xd358ef47 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A id=0x6b46c172 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A   id=0xcd48b14b idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@Cursor@UI@@0VBaseTypeInfo@Object@@A             id=0x31c7f810 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A             id=0x4fcc106b idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A   id=0xf2c192b8 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A id=0xb77e0eb9 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A     id=0xbe12e2eb idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@DocumentTextDescription@UI@@0VBaseTypeInfo@Object@@A id=0xec3779bb idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A id=0x11416aad idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@EditDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xc9022aa3 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A        id=0x006931e0 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A id=0x42f6a818 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A               id=0xe3d8954e idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@GraphDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xe28e0152 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A       id=0xe4db189c idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@GroupDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x8a72943e idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@GroupElement@UI@@0VBaseTypeInfo@Object@@A       id=0x8ced93cd idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ImageDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xfdd24e9a idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A       id=0x35413056 idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@LabelDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xf0cbd6ea idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A       id=0x4f8656b9 idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x4f976fb7 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@LayoutElement@UI@@0VBaseTypeInfo@Object@@A      id=0x21465073 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A    id=0x2de80b80 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A        id=0x2475ec1a idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@NumberDescription@UI@@0VBaseTypeInfo@Object@@A  id=0xfb8de193 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@NumberEditDescription@UI@@0VBaseTypeInfo@Object@@A id=0x745a1bb8 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A  id=0x25a24564 idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A      id=0x1c54106e idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@PageDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xe7d69af7 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@PageElement@UI@@0VBaseTypeInfo@Object@@A        id=0x98ffe1f8 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ProgressDescription@UI@@0VBaseTypeInfo@Object@@A id=0xb1403226 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A    id=0x4c63b522 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@RadioDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x65d6876c idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@RadioElement@UI@@0VBaseTypeInfo@Object@@A       id=0xe3cf1747 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@RibbonDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x35c17fb8 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A      id=0x82c11d31 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ScrollDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x9bdfebbb idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A      id=0x1c6afffa idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@SliderDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x6c7bbf56 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A      id=0xda677e92 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A id=0xeca6998f idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A     id=0x26681eb1 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A      id=0xd56baba8 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A        id=0x1821d6a5 idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A        id=0xc03519e4 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A     id=0x2bcb883f idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A         id=0x7e8fcdd2 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xef9a5ee5 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A       id=0xc7980309 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xc974f55b idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A        id=0x1a20cede idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A      id=0x175c6265 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   typeinfo rows: 104 READY, 0 BLOCKED (of 104; only the UI rows and the BLOCKED ones are listed)
+
+[RtMintShadow] ---- summary (phase=exit) ----
+[RtMintShadow] vtables            : 55, 527 slots
+[RtMintShadow] ground truth       : 527 slot comparisons vs the live DLL, 0 MISMATCH
+[RtMintShadow] minted from OUR    : 203 slots, 0 MISMATCH   <-- the only number that measures the port
+[RtMintShadow] minted as traps    : 324 (148 purecall by design, 176 not yet ported)
+[RtMintShadow] complete vtables   : 15 of 55
+[RtMintShadow] slot-count suspects: 0
+[RtMintShadow] BaseTypeInfo       : 624 field comparisons, 0 MISMATCH, 0 typeId not-yet-comparable (DLL still at the ctor sentinel); next: NOT compared, built from our init order
+[RtMintShadow] storage            : 38 symbols, 29 written by the DLL, 9 still zero, 3 of ours written (contents NOT compared: BSS)
+[RtMintShadow] constructed statics: 0 of 3 built (shape compared on 0, 0 SHAPE MISMATCH, 0 SHAPE-INFO)   [BANISHED_RT_MINT_CTOR=1 to build them]
+[RtMintShadow] symbols absent from the DLL: 0
+[RtMintShadow] carried by ADDRESS   : 4 row(s) with no exported name -- the export-location cross-check does not apply to them and was not counted as a pass
+[RtMintShadow] effectiveness: 203 of 379 non-purecall slots carry our own
+[RtMintShadow] code; the remaining 176 are lane B's worklist.
+[RtMintShadow] ==== clean: 0 problem(s) ====

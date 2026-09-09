@@ -440,6 +440,25 @@ GATED_OFF_BLOCKS = {
 MINT_FILE   = "standalone/rt_data_mint.cpp"
 MINT_TABLES = "standalone/rt_data_mint_tables.inc"
 
+# Wave 10 lane MINTSEL made registration PER-ROW, and this file is the list of
+# rows registered unconditionally on every run. Those rows are ordinary ports
+# and are already counted as such by the main scan above: the file spells each
+# symbol as a literal at its RegisterRuntimeExport call site precisely so that
+# no tool change is needed to see them. It is read here only to keep the mint's
+# own summary line honest about how many rows are still unregistered.
+MINT_PROMOTED_FILE = "standalone/reg_mint_promoted.cpp"
+
+
+def mint_promoted_count(repo):
+    """Minted rows promoted to unconditional registration."""
+    path = os.path.join(repo, MINT_PROMOTED_FILE.replace("/", os.sep))
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError:
+        return 0
+    return len(set(re.findall(r'RtMintPromotionStorage\(\s*"([^"]+)"', text)))
+
 
 # The three tables whose rows ARE the minted symbols. Everything else in the
 # .inc that looks like a mangled name is a vtable SLOT TARGET -- the function
@@ -926,18 +945,36 @@ def main():
     # The mint is a THIRD gating shape and it used to be reported as a port
     # shortfall, which was wrong twice over -- see MINT_FILE.
     nmint, nmint_named = mint_symbol_count(REPO)
+    npromoted = mint_promoted_count(REPO)
     if nmint:
         print()
-        print("%d DATA slot(s) are MINTED but not registered (%d carry an exported "
-              "name; the other %d are UNEXPORTED and known only by address):"
+        print("%d DATA slot(s) are MINTED (%d carry an exported name; the other %d "
+              "are UNEXPORTED and known only by address):"
               % (nmint, nmint_named, nmint - nmint_named))
         print("  %-40s (vtables + BaseTypeInfo + .data statics, from %s)"
               % (MINT_FILE, MINT_TABLES))
-        print("  Gated behind BANISHED_RT_MINT=1, so by this script's own rule they")
-        print("  are NOT ports. They are also not FUNCTIONS: a ??_7 vtable and a")
-        print("  ?_typeInfo@ have no body to reimplement, which is the premise of")
-        print("  standalone/rt_data_mint.h. They therefore cannot move the columns")
-        print("  above at all, in either direction -- do not read this as a shortfall.")
+        print("  %d PROMOTED, i.e. registered on every run with no env var (%s)."
+              % (npromoted, MINT_PROMOTED_FILE))
+        print("  %d still registered only under BANISHED_RT_MINT=1, so by this "
+              "script's own" % (nmint - npromoted))
+        print("  rule those are NOT ports.")
+        print()
+        print("  ACCOUNTING, corrected 2026-09-09 (Wave 10 lane MINTSEL). This note")
+        print("  used to end 'they therefore cannot move the columns above at all,")
+        print("  in either direction'. That was wrong in both directions:")
+        print("    * A minted row ALWAYS moved the *called* side. MINT_FILE is")
+        print("      excluded from the ported scan but not the called scan, so an")
+        print("      unregistered minted row that our tree resolves has always")
+        print("      appeared under --unported. That is the correct accounting --")
+        print("      the call really is unsatisfied by our code -- but the note")
+        print("      denied it, and lane UIDATA spent a lane discovering that the")
+        print("      13 UI rows it was sent after were of exactly that shape.")
+        print("    * A PROMOTED row now moves the *ported* side too, and is counted")
+        print("      by the ordinary scan above rather than here: reg_mint_promoted.cpp")
+        print("      spells each symbol as a literal at its RegisterRuntimeExport")
+        print("      call site so that no special case in this script is needed.")
+        print("  What remains true is that a minted row has no BODY to reimplement,")
+        print("  so it is not a shortfall in the function port.")
     nl = d.get("nonliteral_regs") or {}
     if nl:
         total = sum(len(v) for v in nl.values())

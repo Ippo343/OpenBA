@@ -42,3 +42,52 @@ void RtDataMintInit();
 // stops being possible at cutover, which is why it exists now.
 // `phase` is a label for the report ("init", "exit", ...).
 void RtDataMintShadowReport(const char* phase);
+
+// ============================================================================
+// PER-ROW SELECTIVITY — Wave 10 lane MINTSEL
+// ============================================================================
+//
+// BANISHED_RT_MINT=1 is one switch over all 197 rows and it does NOT boot with
+// the DLL present: it publishes our zeroed
+// ?_singleton@MemoryAllocator@System@@ over the DLL's live one and dies in
+// EnterCriticalSection on a null self. That blocker lives in the 38 STORAGE
+// rows. It says nothing about any vtable or any BaseTypeInfo, and before this
+// API there was no way to say so with a measurement, because a single row
+// could not be registered on its own.
+//
+// Three doors now, in increasing order of commitment:
+//
+//   RtMintRegisterRow(sym)        one row, both doors (name + address).
+//   BANISHED_RT_MINT_ROWS=<csv>   the same, from the environment, for
+//                                 MEASURING a candidate in a real boot.
+//                                 `Foo*` is a prefix; a token matching no row
+//                                 aborts rather than silently registering
+//                                 nothing (which would read as "safe").
+//   reg_mint_promoted.cpp         rows registered on EVERY run because they
+//                                 were measured safe. Those are ports.
+// ============================================================================
+
+// Register one minted row through both doors. False if `symbol` is not a
+// minted row at all. Valid only after RtDataMintInit() has laid the storage
+// out — which is why the promoted rows are registered from inside it.
+bool RtMintRegisterRow(const char* symbol);
+
+// The minted storage / the DLL VA for one row, or nullptr / 0 when the symbol
+// is not minted. reg_mint_promoted.cpp uses both to fail fast on a symbol that
+// the generator has since dropped or moved.
+void*              RtMintRowStorage(const char* symbol);
+unsigned long long RtMintRowDllVa(const char* symbol);
+
+// The CHECKING half of a promotion: proves `symbol` is a minted row and that
+// `expectVa` is the VA the generated table carries, records it as promoted,
+// and returns the minted storage. Aborts on either failure. The two
+// Register* calls are made by reg_mint_promoted.cpp itself, with the symbol
+// spelled as a LITERAL, so tools/runtime_census.py can see the port.
+void* RtMintPromotionStorage(const char* symbol, unsigned long long expectVa);
+
+// True once RtMintPromotionStorage has accepted this symbol.
+bool RtMintRowIsPromoted(const char* symbol);
+
+// Defined in standalone/reg_mint_promoted.cpp. Returns the number of rows
+// promoted. Called by RtDataMintInit().
+int RtMintRegisterPromotedRows();
