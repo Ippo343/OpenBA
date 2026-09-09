@@ -973,7 +973,7 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
     }
 
     if (CensusWanted()) {
-        std::printf("[PKG3] ReadPackfile \"%.60s\" -> %d | calls=%lld early=%lld "
+        printf("[PKG3] ReadPackfile \"%.60s\" -> %d | calls=%lld early=%lld "
                     "| compressed=%lld plain=%lld | v2block=%lld "
                     "| meta: utf16=%lld raw=%lld | names: utf16=%lld raw=%lld "
                     "| entries=%lld | strings=%lld nondet=%lld | commit=%lld\n",
@@ -1019,7 +1019,7 @@ int RtIoPackageFileReadRegister() {
     // A LANE-OWNED IDENTITY MARKER, for the same reason package_file.cpp has
     // one: tools/pkg2_run.sh gates on a banner the RUN wrote, and a banner that
     // keys on a shared total moves whenever any other lane lands in IO.
-    std::printf("[RtPort]   IO::PackageFile::ReadPackfile (lane PKG3): "
+    printf("[RtPort]   IO::PackageFile::ReadPackfile (lane PKG3): "
                 "%d exports registered\n", n);
     return n;
 }

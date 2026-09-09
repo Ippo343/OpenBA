@@ -141,7 +141,7 @@ extern "C" void RtLaneEvmSortProbe() {
     SortRateFn theirRate = reinterpret_cast<SortRateFn>(ResolveRuntimeRaw(0x180057630));
     SortModeFn theirMode = reinterpret_cast<SortModeFn>(ResolveRuntimeRaw(0x180057910));
     if (!theirRate || !theirMode) {
-        std::printf("[EvmProbe] sort probe SKIPPED: shipped bodies did not resolve "
+        printf("[EvmProbe] sort probe SKIPPED: shipped bodies did not resolve "
                     "(rate=%p mode=%p)\n", (void*)theirRate, (void*)theirMode);
         return;
     }
@@ -289,14 +289,14 @@ extern "C" void RtLaneEvmSortProbe() {
     const bool modePathsHit = m.calls && m.smallCalls && m.medianSwaps &&
                               m.partitions && m.pushes && m.pops && m.deepSwaps;
 
-    std::printf("[EvmProbe] sorts%s rate: cases=%d differing=%d discriminating=%d | "
+    printf("[EvmProbe] sorts%s rate: cases=%d differing=%d discriminating=%d | "
                 "mode: cases=%d differing=%d discriminating=%d | "
                 "deep: cases=%d differing=%d %s\n",
                 neg ? " NEGATIVE-CONTROL" : "",
                 rateCases, rateDiff, rateDiscriminating,
                 modeCases, modeDiff, modeDiscriminating,
                 deepCases, deepDiff, detail);
-    std::printf("[EvmProbe]   rate branches: calls=%llu small=%llu smallSwaps=%llu median=%llu "
+    printf("[EvmProbe]   rate branches: calls=%llu small=%llu smallSwaps=%llu median=%llu "
                 "part=%llu partSwaps=%llu fixups=%llu eqA=%llu eqB=%llu push=%llu pop=%llu%s\n",
                 (unsigned long long)r.calls, (unsigned long long)r.smallCalls,
                 (unsigned long long)r.smallSwaps, (unsigned long long)r.medianSwaps,
@@ -305,7 +305,7 @@ extern "C" void RtLaneEvmSortProbe() {
                 (unsigned long long)r.eqRunB, (unsigned long long)r.pushes,
                 (unsigned long long)r.pops,
                 ratePathsHit ? "" : "   *** A STRUCTURAL PATH WAS NEVER REACHED — the corpus is the problem ***");
-    std::printf("[EvmProbe]   mode branches: calls=%llu small=%llu smallSwaps=%llu median=%llu "
+    printf("[EvmProbe]   mode branches: calls=%llu small=%llu smallSwaps=%llu median=%llu "
                 "part=%llu partSwaps=%llu fixups=%llu eqA=%llu eqB=%llu push=%llu pop=%llu deep=%llu%s\n",
                 (unsigned long long)m.calls, (unsigned long long)m.smallCalls,
                 (unsigned long long)m.smallSwaps, (unsigned long long)m.medianSwaps,

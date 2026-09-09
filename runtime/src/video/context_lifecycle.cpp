@@ -543,7 +543,7 @@ extern "C" void RtVideoContextLifecycleProbe() {
     Fn theirs = reinterpret_cast<Fn>(
         ResolveExportRaw("?ClearResources@Context@Video@@QEAAXXZ"));
     if (!theirs) {
-        std::printf("[CtxClear] SKIP -- the shipped ?ClearResources@Context@Video@@ is not "
+        printf("[CtxClear] SKIP -- the shipped ?ClearResources@Context@Video@@ is not "
                     "reachable (cutover, or the DLL is absent). No comparison was made.\n");
         return;
     }
@@ -579,7 +579,7 @@ extern "C" void RtVideoContextLifecycleProbe() {
         if (!SameSnapshot(before, st)) ++theirsCleared;
         if (!SameSnapshot(so, st)) {
             if (mismatches < 4) {
-                std::printf("[CtxClear] MISMATCH seed=%u  ours dirty=%08x/%08x/%08x  "
+                printf("[CtxClear] MISMATCH seed=%u  ours dirty=%08x/%08x/%08x  "
                             "theirs=%08x/%08x/%08x\n", seed,
                             so.dirty, so.imageDirty, so.vertexDirty,
                             st.dirty, st.imageDirty, st.vertexDirty);
@@ -621,22 +621,22 @@ extern "C" void RtVideoContextLifecycleProbe() {
         negativeCaught = !SameSnapshot(so, st);
     }
 
-    std::printf("[CtxClear] cases=%d mismatches=%d cleared=%d theirsCleared=%d "
+    printf("[CtxClear] cases=%d mismatches=%d cleared=%d theirsCleared=%d "
                 "(effectiveness) negative-control=%s\n",
                 cases, mismatches, cleared, theirsCleared,
                 negativeCaught ? "CAUGHT" : "*** MISSED ***");
     if (cleared == 0)
-        std::printf("[CtxClear] *** cleared=0: every case was a no-op, this sweep "
+        printf("[CtxClear] *** cleared=0: every case was a no-op, this sweep "
                     "verified NOTHING ***\n");
     if (cleared != theirsCleared)
-        std::printf("[CtxClear] *** cleared != theirsCleared: the two bodies disagree "
+        printf("[CtxClear] *** cleared != theirsCleared: the two bodies disagree "
                     "about WHEN to act, not just about the result ***\n");
     if (cleared == cases)
-        std::printf("[CtxClear] *** cleared == cases: seed 0 builds an all-null Context "
+        printf("[CtxClear] *** cleared == cases: seed 0 builds an all-null Context "
                     "that neither body can change, so this figure is an artefact -- "
                     "check Capture's memset ***\n");
     if (!negativeCaught)
-        std::printf("[CtxClear] *** the negative control was NOT caught: the comparison "
+        printf("[CtxClear] *** the negative control was NOT caught: the comparison "
                     "does not read the dirty masks, so the sweep above is void ***\n");
 }
 

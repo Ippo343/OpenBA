@@ -790,7 +790,7 @@ int RunCase(const Case& c, BindFn ours, BindFn theirs, int defect, bool quiet,
         if (!quiet) {
             size_t off = 0;
             while (off < kContextSize && g_ours[off] == g_theirs[off]) ++off;
-            std::printf("[CtxBind] *** %s: state differs first at +0x%04zx "
+            printf("[CtxBind] *** %s: state differs first at +0x%04zx "
                         "ours=0x%02x theirs=0x%02x ***\n",
                         c.name, off, g_ours[off], g_theirs[off]);
         }
@@ -800,7 +800,7 @@ int RunCase(const Case& c, BindFn ours, BindFn theirs, int defect, bool quiet,
     if (ourN != theirN) {
         ++bad;
         if (!quiet)
-            std::printf("[CtxBind] *** %s: call COUNT ours=%d theirs=%d ***\n",
+            printf("[CtxBind] *** %s: call COUNT ours=%d theirs=%d ***\n",
                         c.name, ourN, theirN);
     } else {
         for (int i = 0; i < ourN; ++i) {
@@ -809,7 +809,7 @@ int RunCase(const Case& c, BindFn ours, BindFn theirs, int defect, bool quiet,
             if (!quiet) {
                 const CallRec& a = ourRec[i];
                 const CallRec& b = g_rec[i];
-                std::printf("[CtxBind] *** %s: call %d differs -- "
+                printf("[CtxBind] *** %s: call %d differs -- "
                             "ours tag=%d slot=+0x%02x n=%d a=%llx,%llx,%llx,%llx,%llx | "
                             "theirs tag=%d slot=+0x%02x n=%d a=%llx,%llx,%llx,%llx,%llx ***\n",
                             c.name, i,
@@ -875,7 +875,7 @@ extern "C" void RtVideoContextBindProbe() {
     BindFn theirsTex = reinterpret_cast<BindFn>(
         ResolveExportRaw("?BindTextures@Context@Video@@AEAAXXZ"));
     if (!theirsRes || !theirsTex) {
-        std::printf("[CtxBind] SKIP -- the shipped ?BindResources@ / ?BindTextures@ "
+        printf("[CtxBind] SKIP -- the shipped ?BindResources@ / ?BindTextures@ "
                     "are not reachable (cutover, or the DLL is absent). "
                     "No comparison was made.\n");
         return;
@@ -886,7 +886,7 @@ extern "C" void RtVideoContextBindProbe() {
     // unit's, so a stale object file says so; the two counts are derived from
     // the source below, so a case table or an upload row that was edited after
     // the last build cannot hide behind a number quoted from memory.
-    std::printf("[LaneCTX] identity: context_bind.cpp built %s %s, "
+    printf("[LaneCTX] identity: context_bind.cpp built %s %s, "
                 "cases=%d, constant-buffer uploads=5, fake slots=%d\n",
                 __DATE__, __TIME__, kNCases, kFakeSlots);
 
@@ -902,15 +902,15 @@ extern "C" void RtVideoContextBindProbe() {
         if (calls > 0) ++casesThatDidWork;
         slotsOurs |= so; slotsTheirs |= st;
     }
-    std::printf("[CtxBind] BindResources: cases=%d mismatches=%d\n",
+    printf("[CtxBind] BindResources: cases=%d mismatches=%d\n",
                 kNCases, mismatches);
     // EFFECTIVENESS, counted INSIDE the function: how many backend calls the
     // SHIPPED body made, and how many cases made any at all. "0 mismatches"
     // over 0 calls has measured nothing.
-    std::printf("[CtxBind] effectiveness: shipped-body backend calls=%d across "
+    printf("[CtxBind] effectiveness: shipped-body backend calls=%d across "
                 "%d/%d cases that did work\n",
                 shippedCalls, casesThatDidWork, kNCases);
-    std::printf("[CtxBind] vtable slot INDEXES observed: ours=0x%016llx "
+    printf("[CtxBind] vtable slot INDEXES observed: ours=0x%016llx "
                 "theirs=0x%016llx %s\n",
                 (unsigned long long)slotsOurs, (unsigned long long)slotsTheirs,
                 slotsOurs == slotsTheirs ? "MATCH" : "*** DIFFER ***");
@@ -931,7 +931,7 @@ extern "C" void RtVideoContextBindProbe() {
             calls += n;
             if (n > 0) ++worked;
         }
-        std::printf("[CtxBind] BindTextures: cases=4 mismatches=%d "
+        printf("[CtxBind] BindTextures: cases=4 mismatches=%d "
                     "(shipped-body calls=%d across %d/4 cases that did work)\n",
                     bad, calls, worked);
         mismatches += bad;
@@ -952,12 +952,12 @@ extern "C" void RtVideoContextBindProbe() {
     for (const NC& n : kNC) {
         const int bad = RunCase(ncAll, &RtVideo_Context_BindResources, theirsRes,
                                 n.id, true, nullptr, nullptr, nullptr);
-        std::printf("[CtxBind] negative-control %d (%s): %s\n",
+        printf("[CtxBind] negative-control %d (%s): %s\n",
                     n.id, n.what, bad ? "CAUGHT" : "*** UNCAUGHT ***");
         if (!bad) ++mismatches;
     }
 
-    std::printf("[CtxBind] TOTAL mismatches=%d\n", mismatches);
+    printf("[CtxBind] TOTAL mismatches=%d\n", mismatches);
 }
 
 // ============================================================================

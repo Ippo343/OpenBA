@@ -230,7 +230,7 @@ void RtObjectExternalSetProbeRun() {
     auto theirErase  = reinterpret_cast<EraseFn> (ResolveRuntimeRaw(0x18002cf60));
     auto theirFind   = reinterpret_cast<FindFn>  (ResolveRuntimeRaw(0x18002dd70));
     if (!theirInsert || !theirErase || !theirFind) {
-        std::printf("[ResSet] SKIP -- the shipped 0x18002ca00/cf60/dd70 are not "
+        printf("[ResSet] SKIP -- the shipped 0x18002ca00/cf60/dd70 are not "
                     "reachable (cutover, or Runtime-x64.dll is absent). "
                     "NO COMPARISON WAS MADE.\n");
         std::fflush(stdout);
@@ -505,11 +505,11 @@ void RtObjectExternalSetProbeRun() {
     }
 
     // ---- verdict -----------------------------------------------------------
-    std::printf("[ResSet] LOCKSTEP PROBE -- %d steps, %d shape/payload mismatches, "
+    printf("[ResSet] LOCKSTEP PROBE -- %d steps, %d shape/payload mismatches, "
                 "%d parent-linkage failures\n", steps, mismatches, parentFails);
-    std::printf("[ResSet]   find: hits=%d misses=%d disagreements=%d\n",
+    printf("[ResSet]   find: hits=%d misses=%d disagreements=%d\n",
                 findHits, findMisses, findDisagree);
-    std::printf("[ResSet]   effectiveness (branches taken INSIDE the ported bodies): "
+    printf("[ResSet]   effectiveness (branches taken INSIDE the ported bodies): "
                 "root=%llu L=%llu R=%llu eq=%llu | cmp </=/> = %llu/%llu/%llu | "
                 "nullKey search/node = %llu/%llu | rot L/R = %llu/%llu  pre L/R = %llu/%llu | "
                 "retraceIters=%llu | erase 0/1/2 = %llu/%llu/%llu  predSplice=%llu rootSplice=%llu\n",
@@ -520,24 +520,24 @@ void RtObjectExternalSetProbeRun() {
                 DELTA(retraceIters),
                 DELTA(erase0Child), DELTA(erase1Child), DELTA(erase2Child),
                 DELTA(erasePredSplice), DELTA(eraseRootSplice));
-    std::printf("[ResSet]   negative controls: %d of %d FIRED%s%s\n",
+    printf("[ResSet]   negative controls: %d of %d FIRED%s%s\n",
                 fired, nControls, missed ? "  *** MISSED: " : "",
                 missed ? missedNames : "");
     if (nZero) {
-        std::printf("[ResSet]   *** UNDERPOWERED -- %d branch(es) the script is "
+        printf("[ResSet]   *** UNDERPOWERED -- %d branch(es) the script is "
                     "designed to drive were NEVER TAKEN: %s\n"
                     "[ResSet]   A green run that never reached a branch says NOTHING "
                     "about that branch.\n", nZero, zeroes);
     }
     if (firstBad[0])
-        std::printf("[ResSet]   first divergence: %s\n", firstBad);
+        printf("[ResSet]   first divergence: %s\n", firstBad);
 
     if (mismatches == 0 && parentFails == 0 && findDisagree == 0 && nZero == 0 &&
         missed == 0) {
-        std::printf("[ResSet]   VERDICT: PASS -- %d lockstep steps, every watched "
+        printf("[ResSet]   VERDICT: PASS -- %d lockstep steps, every watched "
                     "branch taken, every negative control fired.\n", steps);
     } else {
-        std::printf("[ResSet]   VERDICT: NOT A PASS -- see the lines above.\n");
+        printf("[ResSet]   VERDICT: NOT A PASS -- see the lines above.\n");
     }
     std::fflush(stdout);
 #undef DELTA

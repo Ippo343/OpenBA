@@ -152,7 +152,7 @@ void RtIo_BinaryWriterProbe() {
 
     void* vtblMemStream = ResolveExportRaw("??_7MemoryStream@IO@@6B@");
     if (vtblMemStream == nullptr) {
-        std::printf("[BinWriter] probe SKIPPED: no shipped DLL to diff against "
+        printf("[BinWriter] probe SKIPPED: no shipped DLL to diff against "
                     "(expected once the DLL is gone).\n");
         return;
     }
@@ -170,7 +170,7 @@ void RtIo_BinaryWriterProbe() {
     SerUIntFn theirSerUInt = reinterpret_cast<SerUIntFn>(
         ResolveExportRaw("?Serialize@BinaryWriter@IO@@UEAAXAEAIPEBD@Z"));
     if (!theirSerInt || !theirSerUInt) {
-        std::printf("[BinWriter] probe SKIPPED: a shipped Serialize did not "
+        printf("[BinWriter] probe SKIPPED: a shipped Serialize did not "
                     "resolve.\n");
         return;
     }
@@ -279,7 +279,7 @@ void RtIo_BinaryWriterProbe() {
     RT_DIFF_SHADOW(pass, sa, sb);
     RT_DIFF_WORK(r.cases > 0);
 
-    std::printf("[BinWriter] record probe: %s -- %s\n", sa, sb);
+    printf("[BinWriter] record probe: %s -- %s\n", sa, sb);
 }
 
 }  // namespace RtIo

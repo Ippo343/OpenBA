@@ -643,7 +643,7 @@ void FactoryStartupRun(FactorySet* self) {
     if (!setInsert) {
         // At cutover this is where the row that is NOT closed announces
         // itself, by name, instead of as EXEC-of-0 with no context.
-        std::printf("[RtPort] Object::Factory::Startup: Collection::Set insert "
+        printf("[RtPort] Object::Factory::Startup: Collection::Set insert "
                     "0x180030140 is UNPORTED and the DLL is absent -- the type "
                     "tree cannot be built\n");
         return;
@@ -702,13 +702,13 @@ void FactoryStartupRun(FactorySet* self) {
             }
             if (!q) {
                 ++missing;
-                std::printf("[RtTypeSurvey] MISSING PARENT: type \"%s\" "
+                printf("[RtTypeSurvey] MISSING PARENT: type \"%s\" "
                             "(id 0x%08X) names parent \"%s\" (id 0x%08X)\n",
                             bi->name ? bi->name : "(null)",
                             n2->value.typeId, bi->parentName, pid);
             }
         }
-        std::printf("[RtTypeSurvey build LANETYPE-A2] %d nodes in tree, %d with a parentName, "
+        printf("[RtTypeSurvey build LANETYPE-A2] %d nodes in tree, %d with a parentName, "
                     "%d parentName(s) UNRESOLVED%s\n",
                     chain, withParent, missing,
                     withParent == 0 ? "  (NO PARENTS RESOLVED -- this survey "
@@ -746,7 +746,7 @@ void FactoryStartupRun(FactorySet* self) {
         // name is the entire cost of the faithful LEA, and one printf buys it
         // back without altering a single subsequent instruction's inputs.
         if (!p) {
-            std::printf("[RtPort] Factory::Startup: type \"%s\" (id 0x%08X) names "
+            printf("[RtPort] Factory::Startup: type \"%s\" (id 0x%08X) names "
                         "parent \"%s\" (id 0x%08X), which is NOT in the type "
                         "chain. The faithful LEA below yields (TypeRecord*)8 "
                         "and the next read faults at 0x28 -- as retail does.\n",
@@ -897,7 +897,7 @@ int CompareTrees(FactorySet* theirs, FactorySet* ours, ProbeStats* st, bool verb
             if (verbose && st->mismatches <= 20) {
                 const char* nm = (a->value.info && a->value.info->name)
                                      ? a->value.info->name : "(unnamed)";
-                std::printf("[FactoryStartupProbe] MISMATCH %-24s field=%s "
+                printf("[FactoryStartupProbe] MISMATCH %-24s field=%s "
                             "theirs.key=0x%08X ours.key=0x%08X\n",
                             nm, why, a->key, b->key);
             }
@@ -911,7 +911,7 @@ int CompareTrees(FactorySet* theirs, FactorySet* ours, ProbeStats* st, bool verb
     if (a || b) {
         ++st->mismatches;
         if (verbose)
-            std::printf("[FactoryStartupProbe] MISMATCH node counts differ "
+            printf("[FactoryStartupProbe] MISMATCH node counts differ "
                         "(theirs %s, ours %s past the shorter walk)\n",
                         a ? "longer" : "equal", b ? "longer" : "equal");
     }
@@ -942,7 +942,7 @@ bool g_probeRan   = false;
 // Two distinct names sharing a CRC is a hash collision; the same name twice is
 // a type registered twice, which is a different (and more interesting) fact.
 void ReportKeyCollisions(int chain, int nodes) {
-    std::printf("[FactoryStartupProbe] chain=%d nodes=%d — the Set holds one "
+    printf("[FactoryStartupProbe] chain=%d nodes=%d — the Set holds one "
                 "node per KEY, so %d entr%s share a key with an earlier one. "
                 "Pass 1 inserted all %d; retail's identical loop into its "
                 "identical Set produces the same %d. Naming the collisions:\n",
@@ -956,7 +956,7 @@ void ReportKeyCollisions(int chain, int nodes) {
             const char* an = a->name ? a->name : "(unnamed)";
             const char* bn = b->name ? b->name : "(unnamed)";
             const bool sameName = a->name && b->name && strcmp(an, bn) == 0;
-            std::printf("[FactoryStartupProbe]   key 0x%08X  %-28s  %-28s  %s\n",
+            printf("[FactoryStartupProbe]   key 0x%08X  %-28s  %-28s  %s\n",
                         TypeNameCRC(a->name), bn, an,
                         sameName ? "SAME NAME — this type is registered TWICE"
                                  : "distinct names — a CRC COLLISION, and one "
@@ -966,7 +966,7 @@ void ReportKeyCollisions(int chain, int nodes) {
         }
     }
     if (reported == 0)
-        std::printf("[FactoryStartupProbe]   none found — so the shortfall is "
+        printf("[FactoryStartupProbe]   none found — so the shortfall is "
                     "NOT a duplicate key, and pass 1 really did lose an insert. "
                     "That IS a defect; do not dismiss it.\n");
 }
@@ -997,7 +997,7 @@ void FactoryStartupProbe() {
     typedef bool (*StartupFn)(void*);
     StartupFn orig = RtOriginal<StartupFn>("?Startup@Factory@Object@@QEAA_NXZ");
     if (!orig) {
-        std::printf("[FactoryStartupProbe] NO ORACLE — the shipped DLL is not "
+        printf("[FactoryStartupProbe] NO ORACLE — the shipped DLL is not "
                     "loaded (this is expected at cutover). chain=%d\n", chain);
         return;
     }
@@ -1011,7 +1011,7 @@ void FactoryStartupProbe() {
     ProbeStats st;
     const int mism = CompareTrees(&theirs, &ours, &st, /*verbose=*/true);
 
-    std::printf("[FactoryStartupProbe] chain=%d nodes=%d theirs.count=%u "
+    printf("[FactoryStartupProbe] chain=%d nodes=%d theirs.count=%u "
                 "ours.count=%u withParent=%d bogusParent=%d withChildren=%d "
                 "childEntries=%d grownArrays=%d mismatches=%d\n",
                 chain, st.nodes, theirs.count, ours.count, st.withParent,
@@ -1023,15 +1023,15 @@ void FactoryStartupProbe() {
     // where zero did any work read exactly like a pass. Say so out loud when
     // an arm never ran, rather than letting `mismatches=0` speak for it.
     if (st.nodes == 0)
-        std::printf("[FactoryStartupProbe] VACUOUS: nodes=0 — pass 1 inserted "
+        printf("[FactoryStartupProbe] VACUOUS: nodes=0 — pass 1 inserted "
                     "nothing, so every comparison below is empty\n");
     else if (st.nodes != chain)
         ReportKeyCollisions(chain, st.nodes);
     if (st.withParent == 0)
-        std::printf("[FactoryStartupProbe] VACUOUS: pass 2's parent arm never "
+        printf("[FactoryStartupProbe] VACUOUS: pass 2's parent arm never "
                     "ran — every comparison below it is untested\n");
     if (st.grownArrays == 0)
-        std::printf("[FactoryStartupProbe] WEAK: no children array ever grew "
+        printf("[FactoryStartupProbe] WEAK: no children array ever grew "
                     "past its first element, so the capacity*3 rule is "
                     "UNTESTED by this run\n");
 
@@ -1056,7 +1056,7 @@ void FactoryStartupProbe() {
             const int hit2 = CompareTrees(&theirs, &ours, &nc2, /*verbose=*/false);
             n->value.children[0] = savedChild;
 
-            std::printf("[FactoryStartupProbe] negative controls: "
+            printf("[FactoryStartupProbe] negative controls: "
                         "capacity-perturbation detected=%s, "
                         "child-perturbation detected=%s%s\n",
                         hit1 > 0 ? "YES" : "NO", hit2 > 0 ? "YES" : "NO",
@@ -1067,7 +1067,7 @@ void FactoryStartupProbe() {
         }
     }
 
-    std::printf("[FactoryStartupProbe] VERDICT: %s\n",
+    printf("[FactoryStartupProbe] VERDICT: %s\n",
                 mism == 0 ? "0 mismatches" : "DIVERGED — see the rows above");
 }
 

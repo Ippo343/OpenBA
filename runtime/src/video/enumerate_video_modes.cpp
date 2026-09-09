@@ -204,7 +204,7 @@ extern "C" bool RtVideo_Device_EnumerateVideoModes(Device* self) {
         // worked=0 means no interface slot was usable and the sort pass had
         // nothing to walk, which is a real outcome and must not read as success.
         RT_DIFF_WORK(enumerated > 0);
-        std::printf("[EVM] EnumerateVideoModes %s\n", a);
+        printf("[EVM] EnumerateVideoModes %s\n", a);
 
         // Both probes need a live allocator and allocate, so they cannot run
         // from a *PortInit; this is the first point in the boot that has one and

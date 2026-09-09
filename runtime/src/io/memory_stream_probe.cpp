@@ -99,7 +99,7 @@ void RtIo_MemoryStreamProbe() {
     PosFn   theirPos  = reinterpret_cast<PosFn>(ResolveAddr(Module::Runtime, 0x1800ae9c0));
     PosFn   theirSize = reinterpret_cast<PosFn>(ResolveAddr(Module::Runtime, 0x1800ae9d0));
     if (!theirRead || !theirWrite || !theirSeek || !theirPos || !theirSize) {
-        std::printf("[MemStream] probe SKIPPED: no shipped bodies to diff against "
+        printf("[MemStream] probe SKIPPED: no shipped bodies to diff against "
                     "(expected once the DLL is gone).\n");
         return;
     }
@@ -187,7 +187,7 @@ void RtIo_MemoryStreamProbe() {
     RT_DIFF_SHADOW(pass, sa, sb);
     RT_DIFF_WORK(r.calls > 0);
 
-    std::printf("[MemStream] lockstep probe: %lld calls (copied=%lld refused=%lld "
+    printf("[MemStream] lockstep probe: %lld calls (copied=%lld refused=%lld "
                 "seeks=%lld getters=%lld) -- %s\n",
                 (long long)r.calls, (long long)r.copied, (long long)r.refused,
                 (long long)r.seeks, (long long)r.getters, sb);

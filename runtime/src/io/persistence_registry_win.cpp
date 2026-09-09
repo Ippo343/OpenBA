@@ -533,7 +533,7 @@ extern "C" void RtIo_Persistence_ReadSettings(Persistence* self) {
         // The effectiveness control, printed BEFORE the comparison so it is
         // legible even when the comparison agrees. See the ORACLE banner: a
         // digest over a two-entry map is not a verification.
-        std::printf("[BOOT2 ReadSettings] entries=%u count_field=%d first=\"%s\"\n",
+        printf("[BOOT2 ReadSettings] entries=%u count_field=%d first=\"%s\"\n",
                     ours, self->settingsMapCount,
                     firstKey ? firstKey : "(none)");
 
@@ -1085,7 +1085,7 @@ int CompareRecorders(const RegRecorder& o, const RegRecorder& t) {
             (a.kind != 0 || std::wcscmp(a.data, b.data) == 0))
             continue;
         if (bad < 3)
-            std::printf("[WriteSettings] EMISSION %d DIFFERS: ours[kind=%d "
+            printf("[WriteSettings] EMISSION %d DIFFERS: ours[kind=%d "
                         "type=%u cb=%u name=\"%ls\" data=\"%ls\"] "
                         "theirs[kind=%d type=%u cb=%u name=\"%ls\" data=\"%ls\"]\n",
                         i, a.kind, a.type, a.cb, a.name, a.data,
@@ -1093,7 +1093,7 @@ int CompareRecorders(const RegRecorder& o, const RegRecorder& t) {
         ++bad;
     }
     if (o.n != t.n) {
-        std::printf("[WriteSettings] EMISSION COUNT DIFFERS: ours=%d theirs=%d\n",
+        printf("[WriteSettings] EMISSION COUNT DIFFERS: ours=%d theirs=%d\n",
                     o.n, t.n);
         ++bad;
     }
@@ -1107,7 +1107,7 @@ void MaybeRunProbe(const Persistence* self) {
     using WriteFn = void (*)(const Persistence*);
     WriteFn theirs = reinterpret_cast<WriteFn>(ResolveRuntimeRaw(0x1800b88e0));
     if (!theirs) {
-        std::printf("[WriteSettings] SKIP -- the shipped 0x1800b88e0 is not "
+        printf("[WriteSettings] SKIP -- the shipped 0x1800b88e0 is not "
                     "reachable (cutover, or the DLL is absent). "
                     "NO COMPARISON WAS MADE.\n");
         return;
@@ -1172,7 +1172,7 @@ void MaybeRunProbe(const Persistence* self) {
     if (!okS || !okD) {
         RestoreSlot(0x18014b018, savedSet);
         RestoreSlot(0x18014b008, savedDel);
-        std::printf("[WriteSettings] SKIP -- could not swap the ADVAPI32 IAT "
+        printf("[WriteSettings] SKIP -- could not swap the ADVAPI32 IAT "
                     "slots (set=%d del=%d). Running the shipped body without "
                     "them would WRITE TO THE PLAYER'S REGISTRY, so no "
                     "comparison was made.\n", okS ? 1 : 0, okD ? 1 : 0);
@@ -1210,27 +1210,27 @@ void MaybeRunProbe(const Persistence* self) {
     if (seeded) RegDeleteValueW(seedKey, kSeedName);
     if (seedKey) RegCloseKey(seedKey);
 
-    std::printf("[WriteSettings] negative-control name/data swap: %s\n",
+    printf("[WriteSettings] negative-control name/data swap: %s\n",
                 negCaught ? "CAUGHT" : "*** MISSED ***");
     if (!negCaught)
-        std::printf("[WriteSettings] *** the negative control was MISSED: the "
+        printf("[WriteSettings] *** the negative control was MISSED: the "
                     "emission comparison cannot see a swapped name and value, "
                     "so the green line above is void ***\n");
 
-    std::printf("[WriteSettings] corpus: stale-name seed %s\n",
+    printf("[WriteSettings] corpus: stale-name seed %s\n",
                 seeded ? "PLANTED and removed" : "*** NOT PLANTED ***");
-    std::printf("[WriteSettings] emissions ours=%d theirs=%d mismatches=%d "
+    printf("[WriteSettings] emissions ours=%d theirs=%d mismatches=%d "
                 "dropped(ours=%d theirs=%d)\n"
                 "[WriteSettings] effectiveness (inside our body): "
                 "RegSetValueExW=%ld staleNamesFound=%ld RegDeleteKeyW=%ld\n",
                 ours.n, theirsRec.n, bad, ours.dropped, theirsRec.dropped,
                 dSet, dStale, dDel);
     if (dSet == 0)
-        std::printf("[WriteSettings] *** RegSetValueExW=0: the settings map was "
+        printf("[WriteSettings] *** RegSetValueExW=0: the settings map was "
                     "EMPTY, so phase 1 emitted nothing and this run verified "
                     "only that both sides emit nothing ***\n");
     if (dStale == 0)
-        std::printf("[WriteSettings] *** staleNamesFound=0: every enumerated "
+        printf("[WriteSettings] *** staleNamesFound=0: every enumerated "
                     "value was in the map, so phase 2's array append and its "
                     "delete pass never ran. The corpus, not the port, is what "
                     "is untested here ***\n");

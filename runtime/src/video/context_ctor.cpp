@@ -473,7 +473,7 @@ int CompareCtx(void* a, void* b, bool quiet, bool companionsAreFakes) {
     int bad = 0;
 #define VID2_C(cond, fmt, ...)                                                \
     do { if (!(cond)) { ++bad; if (!quiet)                                    \
-            std::printf("[CtxCtor] *** " fmt "\n", __VA_ARGS__); } } while (0)
+            printf("[CtxCtor] *** " fmt "\n", __VA_ARGS__); } } while (0)
 
     // The whole zero-filled field map, compared as bytes EXCEPT the seven
     // ConstantBuffers (whose +0x19..+0x1b are never written) and the seven
@@ -550,7 +550,7 @@ extern "C" void RtVideoContextCtorProbeMaybeRun() {
     using CtorFn = void* (*)(void*, void*, int32_t, int32_t, int32_t, void*);
     const uintptr_t shipped = ResolveRuntimeRaw(0x1800f1820);
     if (!shipped) {
-        std::printf("[CtxCtor] SKIP -- the shipped ctor is not mapped "
+        printf("[CtxCtor] SKIP -- the shipped ctor is not mapped "
                     "(cutover); no oracle is possible without it\n");
         return;
     }
@@ -576,9 +576,9 @@ extern "C" void RtVideoContextCtorProbeMaybeRun() {
     int aNullCompanions = 0;
     for (size_t off : kBufOffs)
         if (Field<void*>(g_ctxTheirs, off + 0x40) == nullptr) ++aNullCompanions;
-    std::printf("[CtxCtor] A (no device, sizes 0, caller render buffer): "
+    printf("[CtxCtor] A (no device, sizes 0, caller render buffer): "
                 "mismatches=%d\n", badA);
-    std::printf("[CtxCtor] A effectiveness (on THEIRS): "
+    printf("[CtxCtor] A effectiveness (on THEIRS): "
                 "null-companion buffers=%d/7 renderBuffer=%p colour=%p depth=%p\n",
                 aNullCompanions, Field<void*>(g_ctxTheirs, 0x2138),
                 Field<void*>(g_ctxTheirs, 0x2140),
@@ -591,7 +591,7 @@ extern "C" void RtVideoContextCtorProbeMaybeRun() {
     Field<int32_t>(g_ctxOurs, 0x1f78 + 0x14) ^= 1;
     const int cA2 = CompareCtx(g_ctxOurs, g_ctxTheirs, true, false);
     Field<int32_t>(g_ctxOurs, 0x1f78 + 0x14) ^= 1;
-    std::printf("[CtxCtor] A negative-controls: matrix-tail=%s buffer-scalar=%s\n",
+    printf("[CtxCtor] A negative-controls: matrix-tail=%s buffer-scalar=%s\n",
                 cA1 > badA ? "CAUGHT" : "*** MISSED ***",
                 cA2 > badA ? "CAUGHT" : "*** MISSED ***");
 
@@ -614,7 +614,7 @@ extern "C" void RtVideoContextCtorProbeMaybeRun() {
     // is restored afterwards.
     void* realDevice = savedSingleton;
     if (!realDevice) {
-        std::printf("[CtxCtor] B SKIP -- no Video::Device singleton yet, so the "
+        printf("[CtxCtor] B SKIP -- no Video::Device singleton yet, so the "
                     "real device lock PlatformConstruct needs does not exist\n");
         *slot = savedSingleton;
         return;
@@ -644,26 +644,26 @@ extern "C" void RtVideoContextCtorProbeMaybeRun() {
     const uint64_t theirFactorySlots = g_factorySlotHits;
 
     const int badB = CompareCtx(g_ctxOurs, g_ctxTheirs, false, true);
-    std::printf("[CtxCtor] B (live shape 0x800000/0x400000/0x100000, "
+    printf("[CtxCtor] B (live shape 0x800000/0x400000/0x100000, "
                 "no render buffer): mismatches=%d\n", badB);
-    std::printf("[CtxCtor] B effectiveness: companions minted ours=%d "
+    printf("[CtxCtor] B effectiveness: companions minted ours=%d "
                 "theirs=%d (7 constant buffers + the Context + the six that "
                 "the three PlatformConstructs and the two ImageBuffers mint "
                 "through the same factory = 14)\n",
                 ourMade, theirMade);
-    std::printf("[CtxCtor] B companion slots called: ours=0x%016llx theirs=0x%016llx %s\n",
+    printf("[CtxCtor] B companion slots called: ours=0x%016llx theirs=0x%016llx %s\n",
                 (unsigned long long)ourSlots, (unsigned long long)theirSlots,
                 ourSlots == theirSlots ? "" : "*** DIFFER ***");
-    std::printf("[CtxCtor] B factory   slots called: ours=0x%016llx theirs=0x%016llx %s\n",
+    printf("[CtxCtor] B factory   slots called: ours=0x%016llx theirs=0x%016llx %s\n",
                 (unsigned long long)ourFactorySlots, (unsigned long long)theirFactorySlots,
                 ourFactorySlots == theirFactorySlots ? "" : "*** DIFFER ***");
     if (ourMade != theirMade)
-        std::printf("[CtxCtor] *** companion count differs -- a buffer was "
+        printf("[CtxCtor] *** companion count differs -- a buffer was "
                     "constructed on one side and not the other ***\n");
 
     Field<void*>(g_ctxOurs, 0x2140) = nullptr;
     const int cB1 = CompareCtx(g_ctxOurs, g_ctxTheirs, true, true);
-    std::printf("[CtxCtor] B negative-control (default colour image): %s\n",
+    printf("[CtxCtor] B negative-control (default colour image): %s\n",
                 cB1 > badB ? "CAUGHT" : "*** MISSED ***");
 
     // Tear both down through the ported destructor, so the probe does not leak
@@ -673,7 +673,7 @@ extern "C" void RtVideoContextCtorProbeMaybeRun() {
 
     Field<void*>(realDevice, 0x100) = savedFactory;
     *slot = savedSingleton;
-    std::printf("[CtxCtor] Device singleton and its +0x100 factory restored "
+    printf("[CtxCtor] Device singleton and its +0x100 factory restored "
                 "(%p / %p)\n", savedSingleton, savedFactory);
 }
 

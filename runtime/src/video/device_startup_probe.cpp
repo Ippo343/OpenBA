@@ -249,7 +249,7 @@ extern "C" void RtVideoDeviceStartupProbeMaybeRun() {
     Fn theirs = reinterpret_cast<Fn>(
         ResolveExportRaw("?ValidateConfiguration@Device@Video@@QEAA_NXZ"));
     if (!theirs) {
-        std::printf("[VidCfg] SKIP -- the shipped "
+        printf("[VidCfg] SKIP -- the shipped "
                     "?ValidateConfiguration@Device@Video@@QEAA_NXZ is not reachable "
                     "(cutover, or the DLL is absent). No comparison was made.\n");
         g_running = false;
@@ -259,7 +259,7 @@ extern "C" void RtVideoDeviceStartupProbeMaybeRun() {
     Configuration** slot =
         RT_DATA_SLOT(Configuration**, "?_singleton@Configuration@Video@@0PEAV12@EA");
     if (!slot) {
-        std::printf("[VidCfg] SKIP -- Video::Configuration::_singleton slot is null.\n");
+        printf("[VidCfg] SKIP -- Video::Configuration::_singleton slot is null.\n");
         g_running = false;
         return;
     }
@@ -288,7 +288,7 @@ extern "C" void RtVideoDeviceStartupProbeMaybeRun() {
         const bool same = SameConfig(cfgOurs, cfgTheirs) && SameDevice(devOurs, devTheirs);
         if (!same) {
             if (mismatches < 4) {
-                std::printf("[VidCfg] MISMATCH %-26s ret=%d/%d\n"
+                printf("[VidCfg] MISMATCH %-26s ret=%d/%d\n"
                             "[VidCfg]   ours   if=%d ad=%d %dx%d @%d/%d ms=%d flt=%d "
                             "sh=%d sd=%d rf=%d | mode=%d rr=%d modes=%d/%d ms=%d/%d aniso=%d\n"
                             "[VidCfg]   theirs if=%d ad=%d %dx%d @%d/%d ms=%d flt=%d "
@@ -355,7 +355,7 @@ extern "C" void RtVideoDeviceStartupProbeMaybeRun() {
 
     *slot = saved;      // restore on EVERY path, including the failures above
 
-    std::printf("[VidCfg] cases=%d mismatches=%d return-value-mismatches=%d\n"
+    printf("[VidCfg] cases=%d mismatches=%d return-value-mismatches=%d\n"
                 "[VidCfg] effectiveness (all measured on THEIRS): defaultRes=%d "
                 "msReset=%d filterClamp=%d detailClamp=%d refreshFallback=%d "
                 "indexClamp=%d\n"
@@ -367,10 +367,10 @@ extern "C" void RtVideoDeviceStartupProbeMaybeRun() {
 
     if (!hitDefaultResolution || !hitMsReset || !hitFilterClamp ||
         !hitDetailClamp || !hitRefreshFallback || !hitIndexClamp)
-        std::printf("[VidCfg] *** at least one branch counter is ZERO: the sweep did "
+        printf("[VidCfg] *** at least one branch counter is ZERO: the sweep did "
                     "not reach that branch and says NOTHING about it ***\n");
     if (!negativeCaught)
-        std::printf("[VidCfg] *** the negative control was NOT caught: the comparator "
+        printf("[VidCfg] *** the negative control was NOT caught: the comparator "
                     "cannot see a wrong clamp, so the green cases are void ***\n");
 
     g_running = false;

@@ -320,7 +320,7 @@ void RtIo_SerializeFamilyProbe() {
     // would compare ours to ours and always agree
     // (reference_resolveaddr_consults_port_registry_first.md).
     if (ResolveExportRaw("?Serialize@BinaryReader@IO@@UEAAXAEAHPEBD@Z") == nullptr) {
-        std::printf("[SerialFam] probe SKIPPED: no shipped DLL to diff against "
+        printf("[SerialFam] probe SKIPPED: no shipped DLL to diff against "
                     "(expected once the DLL is gone).\n");
         return;
     }
@@ -673,7 +673,7 @@ void RtIo_SerializeFamilyProbe() {
     RT_DIFF_SHADOW(pass, ours, theirs);
     RT_DIFF_WORK(r.cases > 0);
 
-    std::printf("[SerialFam] family probe: %s -- %s\n", ours, theirs);
+    printf("[SerialFam] family probe: %s -- %s\n", ours, theirs);
 }
 
 }  // namespace RtIo

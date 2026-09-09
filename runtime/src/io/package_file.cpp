@@ -468,7 +468,7 @@ extern "C" PackageFileView* RtIo_PackageFile_Ctor(PackageFileView* self) {
             int theirsChanged = 0;
             for (size_t i = 0; i < sizeof theirs; ++i)
                 if (theirs[i] != 0xCD) ++theirsChanged;
-            std::printf("[PKG2] ctor effectiveness: ours wrote %d/%d bytes, "
+            printf("[PKG2] ctor effectiveness: ours wrote %d/%d bytes, "
                         "theirs wrote %d/%d (the %d untouched are +0x78,+0x7c,"
                         "+0x90,+0xad..af,+0xc4,+0xd4)\n",
                         changed, static_cast<int>(sizeof mine),
@@ -732,7 +732,7 @@ extern "C" uint32_t RtIo_PackageFile_GetFileOffset(const PackageFileView* self, 
 void RtIo_PackageFile_SweepProbe(const FileSystem* fs) {
     if (!RtDiffEnabled()) return;
     if (fs == nullptr || fs->packfiles == nullptr) {
-        std::printf("[PKG2] sweep: no packfiles to sweep (fs=%p)\n",
+        printf("[PKG2] sweep: no packfiles to sweep (fs=%p)\n",
                     static_cast<const void*>(fs));
         return;
     }
@@ -803,7 +803,7 @@ void RtIo_PackageFile_SweepProbe(const FileSystem* fs) {
     // "at least 2" rather than an exact count: the point is only to separate a
     // genuinely varied row from a one-value row, and carrying a set per
     // accessor would cost more than the finding is worth.
-    std::printf("[PKG2] sweep: %d packages, %lld entries; per-entry accessors got "
+    printf("[PKG2] sweep: %d packages, %lld entries; per-entry accessors got "
                 "%lld calls each. Distinct values across packages: version=%s "
                 "platform=%s priority=%s\n",
                 packs, static_cast<long long>(entryCalls),

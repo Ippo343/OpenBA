@@ -173,7 +173,7 @@ void RtIo_FileSystemOpenFileProbe(const FileSystem* cfs) {
 
     FileSystem* const fs = const_cast<FileSystem*>(cfs);
     if (fs == nullptr || fs->packfiles == nullptr || fs->packfileCount <= 0) {
-        std::printf("[OpenFile] probe SKIPPED: no mounted packages\n");
+        printf("[OpenFile] probe SKIPPED: no mounted packages\n");
         RT_DIFF_SHADOW(false, "no packages", "a mounted FileSystem is required");
         return;
     }
@@ -246,11 +246,11 @@ void RtIo_FileSystemOpenFileProbe(const FileSystem* cfs) {
     RT_DIFF_SHADOW(pass, a, b);
     RT_DIFF_WORK(r.opens > 0);
 
-    std::printf("[OpenFile] lockstep probe: %lld opens (packed=%lld loose=%lld miss=%lld), "
+    printf("[OpenFile] lockstep probe: %lld opens (packed=%lld loose=%lld miss=%lld), "
                 "%lld reads, %lld bytes -- %s\n",
                 (long long)r.opens, (long long)r.packed, (long long)r.loose,
                 (long long)r.missing, (long long)r.reads, (long long)r.bytes, b);
-    std::printf("[OpenFile] NOT compared, and deliberately: winHandle (two opens of one "
+    printf("[OpenFile] NOT compared, and deliberately: winHandle (two opens of one "
                 "file differ by construction -- validity is compared instead) and +0x04 "
                 "(retail's own uninitialised stack, copied out by OpenFile).\n");
 }
@@ -319,7 +319,7 @@ void RtIo_FileInfoAssignProbe() {
     if (!theirs) {
         // At cutover there is no shipped body to diff against. Say so rather
         // than reporting a pass over zero comparisons.
-        std::printf("[Assign] probe SKIPPED: no shipped body at 0x18000c200 "
+        printf("[Assign] probe SKIPPED: no shipped body at 0x18000c200 "
                     "(this is expected once the DLL is gone).\n");
         return;
     }
@@ -412,7 +412,7 @@ void RtIo_FileInfoAssignProbe() {
     RT_DIFF_SHADOW(pass, a, b);
     RT_DIFF_WORK(cases > 0);
 
-    std::printf("[Assign] operator= probe: %d cases (freeing=%d sharing=%d "
+    printf("[Assign] operator= probe: %d cases (freeing=%d sharing=%d "
                 "shortCircuit=%d nullSrc=%d) -- %s\n",
                 cases, freed, shared, shortCircuit, nulled, b);
 }

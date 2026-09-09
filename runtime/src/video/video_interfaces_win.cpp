@@ -335,7 +335,7 @@ extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
         // A run reporting skipped=0 means the fill did not take and the loop
         // went and loaded the real VideoDX11-x64.dll.
         RT_DIFF_WORK(skipped >= 1);
-        std::printf("[EVM] InitializeInterfaces %s\n", a);
+        printf("[EVM] InitializeInterfaces %s\n", a);
     }
 }
 
@@ -366,7 +366,7 @@ extern "C" void RtLaneEvmGetDllProbe() {
     Fn theirsFn = RtOriginal<Fn>(
         "?GetDLLForInterface@Device@Video@@QEBA?AVString@System@@H@Z");
     if (!theirsFn) {
-        std::printf("[EvmProbe] GetDLLForInterface SKIPPED: shipped body did not resolve\n");
+        printf("[EvmProbe] GetDLLForInterface SKIPPED: shipped body did not resolve\n");
         return;
     }
     const bool neg = EnvOn("BANISHED_EVM_NEGCTL");
@@ -401,7 +401,7 @@ extern "C" void RtLaneEvmGetDllProbe() {
         RtSystem::RtString_ReleaseInline(&ours);
         RtSystem::RtString_ReleaseInline(&theirs);
     }
-    std::printf("[EvmProbe] GetDLLForInterface%s cases=%d named=%d differing=%d %s\n",
+    printf("[EvmProbe] GetDLLForInterface%s cases=%d named=%d differing=%d %s\n",
                 neg ? " NEGATIVE-CONTROL" : "", cases, named, differing, detail);
 }
 
@@ -418,6 +418,6 @@ int RtVideoInterfacesRegister() {
                           (void*)&RtVideo_Device_InitializeInterfaces); ++n;
     RegisterRuntimeAddr(0x1800f79f0, (void*)&RtVideo_Device_InitializeInterfaces);
 
-    std::printf("[LaneEVM] rev=EVM-r1 interfaces registered=%d\n", n);
+    printf("[LaneEVM] rev=EVM-r1 interfaces registered=%d\n", n);
     return n;
 }

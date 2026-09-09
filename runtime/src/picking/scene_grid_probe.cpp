@@ -285,7 +285,7 @@ int g_negComparisons = 0;
 // ---------------------------------------------------------------------------
 bool Fail(const char* step, const char* term, long long a, long long b) {
     ++g_t.mismatches;
-    std::printf("[PickGridProbe] MISMATCH step=%s term=%s ours=%lld theirs=%lld\n",
+    printf("[PickGridProbe] MISMATCH step=%s term=%s ours=%lld theirs=%lld\n",
                 step, term, a, b);
     return false;
 }
@@ -445,7 +445,7 @@ bool CompareFloats(const char* what, const float* a, const float* b, int n) {
         std::memcpy(&ub, b + i, 4);
         if (ua != ub) {
             ++g_floatMismatches;
-            std::printf("[PickGridProbe] MISMATCH step=%s term=[%d] "
+            printf("[PickGridProbe] MISMATCH step=%s term=[%d] "
                         "ours=%.9g (0x%08x) theirs=%.9g (0x%08x)\n",
                         what, i, (double)a[i], ua, (double)b[i], ub);
             return false;
@@ -637,7 +637,7 @@ int BadBoxTransformSweep(const Dll& dll) {
             if (!same) ++flagged;
         }
     }
-    std::printf("[PickGridProbe] float negative control: %d/%d cases differ "
+    printf("[PickGridProbe] float negative control: %d/%d cases differ "
                 "from the shipped body%s\n", flagged, cases,
                 flagged == 0
                     ? "  *** no cancelling case in the sweep; the zero-tolerance "
@@ -934,7 +934,7 @@ void RtPickingGridProbe() {
 
     const Dll dll = ResolveDll();
     if (!dll.ok) {
-        std::printf("[PickGridProbe] SKIPPED -- the shipped bodies did not resolve "
+        printf("[PickGridProbe] SKIPPED -- the shipped bodies did not resolve "
                     "(Runtime-x64.dll absent?). This probe is a DLL-PRESENT "
                     "instrument by construction.\n");
         return;
@@ -1003,14 +1003,14 @@ void RtPickingGridProbe() {
     }
 
     // ---- the report -----------------------------------------------------
-    std::printf("[PickGridProbe] comparisons=%d mismatches=%d  "
+    printf("[PickGridProbe] comparisons=%d mismatches=%d  "
                 "floatCases=%d floatMismatches=%d\n",
                 g_t.comparisons, g_t.mismatches, g_floatCases, g_floatMismatches);
-    std::printf("[PickGridProbe] work: adds=%d multiCellAdds=%d removes=%d "
+    printf("[PickGridProbe] work: adds=%d multiCellAdds=%d removes=%d "
                 "unthreads=%d reindexMoved=%d reindexNoop=%d cellsFreed=%d\n",
                 g_t.adds, g_t.entriesMultiCell, g_t.removes, g_t.unthreads,
                 g_t.reindexMoved, g_t.reindexNoop, g_t.cellsFreed);
-    std::printf("[PickGridProbe] work: entryFreeReuse=%d linkFreeReuse=%d "
+    printf("[PickGridProbe] work: entryFreeReuse=%d linkFreeReuse=%d "
                 "cellFreeReuse=%d maxLinkChain=%d iterSteps=%d iterHits=%d\n",
                 g_t.entryFreeReuse, g_t.linkFreeReuse, g_t.cellFreeReuse,
                 g_t.maxLinkChain, g_t.iterSteps, g_t.iterHits);
@@ -1030,14 +1030,14 @@ void RtPickingGridProbe() {
     };
     for (const auto& g : gaps)
         if (g.v == 0)
-            std::printf("[PickGridProbe] GAP: %s ran ZERO times -- this run "
+            printf("[PickGridProbe] GAP: %s ran ZERO times -- this run "
                         "verified nothing about that path\n", g.name);
     if (g_t.maxLinkChain < 2)
-        std::printf("[PickGridProbe] GAP: no cell ever held more than one link -- "
+        printf("[PickGridProbe] GAP: no cell ever held more than one link -- "
                     "the middle-of-list unlink was never exercised\n");
 
     if (mode == kNeg) {
-        std::printf("[PickGridProbe] negative control: %d/%d flagged%s\n",
+        printf("[PickGridProbe] negative control: %d/%d flagged%s\n",
                     g_negMismatches, g_negComparisons,
                     g_negMismatches == 0
                         ? "  *** THE COMPARATOR CANNOT FAIL; the green result "
@@ -1045,7 +1045,7 @@ void RtPickingGridProbe() {
                         : "  (comparator proven able to fail)");
     }
 
-    std::printf("[PickGridProbe] %s\n",
+    printf("[PickGridProbe] %s\n",
                 (g_t.mismatches == 0 && g_floatMismatches == 0)
                     ? "PASS -- every ported grid body agreed with the shipped one"
                     : "FAIL -- see the MISMATCH lines above");

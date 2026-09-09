@@ -345,7 +345,7 @@ extern "C" int RtSystem_Compression_Decompress(const void* src, uint32_t srcLen,
         // stopped running cannot look like one that keeps passing.
         static int64_t skipped = 0;
         if (++skipped == 1)
-            std::printf("[PKG2/Compression] oracle SKIPPED for dstCap=%u > %u scratch\n",
+            printf("[PKG2/Compression] oracle SKIPPED for dstCap=%u > %u scratch\n",
                         dstCap, (unsigned)kOracleScratch);
     }
     return ours;
@@ -397,7 +397,7 @@ void RtSystem_CompressionProbe() {
     const uint8_t* const decompressFn = reinterpret_cast<const uint8_t*>(
         RtOriginal<DecompressFn>("?Decompress@Compression@System@@SAHPEBXIPEAXI@Z"));
     if (decompressFn == nullptr) {
-        std::printf("[PKG2/Compression] probe SKIPPED: cannot locate the DLL's Decompress\n");
+        printf("[PKG2/Compression] probe SKIPPED: cannot locate the DLL's Decompress\n");
         return;
     }
     const uint8_t* const image = decompressFn - 0xC4660;
@@ -496,11 +496,11 @@ void RtSystem_CompressionProbe() {
     const bool allCovered = counts.literalRun && counts.matchShort &&
                             counts.matchExtended && counts.failLiteral &&
                             counts.failMatchDst && counts.failMatchSrc;
-    std::printf("[PKG2/Compression] probe: %lld cases, round-trip ok=%lld bad=%lld "
+    printf("[PKG2/Compression] probe: %lld cases, round-trip ok=%lld bad=%lld "
                 "(compressor declined %lld)\n",
                 (long long)cases, (long long)roundTripOk, (long long)roundTripBad,
                 (long long)declined);
-    std::printf("[PKG2/Compression] branch coverage: literal=%lld matchShort=%lld "
+    printf("[PKG2/Compression] branch coverage: literal=%lld matchShort=%lld "
                 "matchExtended=%lld | failLiteral=%lld failMatchDst=%lld "
                 "failMatchSrc=%lld -- %s\n",
                 (long long)counts.literalRun, (long long)counts.matchShort,
@@ -512,7 +512,7 @@ void RtSystem_CompressionProbe() {
     // verified term: the read cursor is a local this function discards, so there
     // is nothing on the DLL's side to compare it against. See the note at the
     // return site for why that is sound here and why it will not be at rung 2.
-    std::printf("[PKG2/Compression] read-cursor exits (ours only, NOT compared -- "
+    printf("[PKG2/Compression] read-cursor exits (ours only, NOT compared -- "
                 "sp is a local): exact=%lld overshoot=%lld\n",
                 (long long)counts.exitExact, (long long)counts.exitOvershoot);
 }

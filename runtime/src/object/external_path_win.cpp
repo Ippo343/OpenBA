@@ -692,7 +692,7 @@ bool RunOneSelfTestCase(const ExternalFactory* factory, const char* text,
         (ours.data == nullptr || std::strcmp(ours.data, mirror.data) == 0);
 
     if (!equal && ctl == 0) {
-        std::printf("[ResPath]   MISMATCH on \"%s\" append=%d: ours=\"%s\" theirs=\"%s\"\n",
+        printf("[ResPath]   MISMATCH on \"%s\" append=%d: ours=\"%s\" theirs=\"%s\"\n",
                     text, appendIdentifier ? 1 : 0,
                     ours.data ? ours.data : "(null)",
                     mirror.data ? mirror.data : "(null)");
@@ -735,12 +735,12 @@ typedef void (*PopPathFn)(ExternalFactory*);
 
 void RunSelfTest(const ExternalFactory* factory, const Filename* livePath) {
     if (!factory) {
-        std::printf("[ResPath] SELFTEST SKIPPED -- no ExternalFactory; "
+        printf("[ResPath] SELFTEST SKIPPED -- no ExternalFactory; "
                     "NO COMPARISON WAS MADE\n");
         return;
     }
     if (!RtResPathTrampoline()) {
-        std::printf("[ResPath] SELFTEST SKIPPED -- no detour trampoline, so the "
+        printf("[ResPath] SELFTEST SKIPPED -- no detour trampoline, so the "
                     "original body is unreachable; NO COMPARISON WAS MADE\n");
         return;
     }
@@ -838,7 +838,7 @@ void RunSelfTest(const ExternalFactory* factory, const Filename* livePath) {
     const uint64_t pkgHitsPhase2 = pkgHitsTotal - pkgHitsPhase1;
     g_inSelfTest = false;
 
-    std::printf("[ResPath] SELFTEST phase2 (synthetic path stack via retail PushPath): "
+    printf("[ResPath] SELFTEST phase2 (synthetic path stack via retail PushPath): "
                 "%s, %d cases, depth %d -> %d -> %d%s | pushed \"%s\" | "
                 "packfile hits phase1/phase2 = %llu/%llu\n",
                 phase2Ran ? "RAN" : "DID NOT RUN", phase2Cases,
@@ -850,7 +850,7 @@ void RunSelfTest(const ExternalFactory* factory, const Filename* livePath) {
                 (unsigned long long)pkgHitsPhase2);
     // The script's own branch coverage, printed BEFORE the restore so it is
     // visible and separate from the game's.
-    std::printf("[ResPath] SELFTEST branch coverage (script only): "
+    printf("[ResPath] SELFTEST branch coverage (script only): "
                 "calls=%llu earlyOutEmpty=%llu pkgHit=%llu "
                 "ident def/present=%llu/%llu fname stack/present=%llu/%llu "
                 "attrProbe=%llu retry=%llu ext nodot=%llu emptyAfterDot=%llu "
@@ -871,18 +871,18 @@ void RunSelfTest(const ExternalFactory* factory, const Filename* livePath) {
                 (unsigned long long)(g_pc.extColonTrim      - saved.extColonTrim));
     g_pc = saved;
 
-    std::printf("[ResPath] SELFTEST -- %d real comparisons, %d mismatches\n",
+    printf("[ResPath] SELFTEST -- %d real comparisons, %d mismatches\n",
                 compared, mismatches);
     int fired = 0;
     for (int c = 1; c <= 6; ++c) if (ctlFired[c] > 0) ++fired;
-    std::printf("[ResPath]   negative controls: %d of 6 FIRED "
+    printf("[ResPath]   negative controls: %d of 6 FIRED "
                 "(ctl1 candidate '_'->'-': %d, ctl2 answer '.'->'!': %d, "
                 "ctl3 found-branch dir/stackDir swap: %d, ctl4 drop ':'+ident: %d, "
                 "ctl5 answer dir/file swap: %d, ctl6 default ident 'resources': %d)\n",
                 fired, ctlFired[1], ctlFired[2], ctlFired[3], ctlFired[4],
                 ctlFired[5], ctlFired[6]);
     if (fired != 6)
-        std::printf("[ResPath]   *** %d control(s) did NOT fire, and they are NOT "
+        printf("[ResPath]   *** %d control(s) did NOT fire, and they are NOT "
                     "reshaped until they do. What is MEASURED: phase 2 reached the "
                     "found branch %llu times, so that branch DOES execute -- what is "
                     "not demonstrated is an input on which either perturbation changes "
@@ -895,14 +895,14 @@ void RunSelfTest(const ExternalFactory* factory, const Filename* livePath) {
                     "differentially verified by this script. The 22.6k live "
                     "comparisons cover it; this script does not.\n",
                     6 - fired, (unsigned long long)pkgHitsPhase2);
-    std::printf("[ResPath]   VERDICT: %s\n",
+    printf("[ResPath]   VERDICT: %s\n",
                 (mismatches == 0 && fired >= 4 && compared > 0)
                     ? "PASS on the reachable controls; see the line above for the rest"
                     : "NOT A PASS -- see the lines above.");
 }
 
 void DumpCounters() {
-    std::printf("[ResPath] counters: expand=%llu empty=%llu | ident def/present=%llu/%llu "
+    printf("[ResPath] counters: expand=%llu empty=%llu | ident def/present=%llu/%llu "
                 "| fname stack/present=%llu/%llu | stack empty/nonempty=%llu/%llu\n",
                 (unsigned long long)g_pc.expandCalls,
                 (unsigned long long)g_pc.expandEmptyPath,
@@ -912,7 +912,7 @@ void DumpCounters() {
                 (unsigned long long)g_pc.filenamePresent,
                 (unsigned long long)g_pc.stackEmpty,
                 (unsigned long long)g_pc.stackNonEmpty);
-    std::printf("[ResPath] counters: hit pkg=%llu attrProbe/hit=%llu/%llu retry=%llu "
+    printf("[ResPath] counters: hit pkg=%llu attrProbe/hit=%llu/%llu retry=%llu "
                 "notFound=%llu | tail ident/none=%llu/%llu\n",
                 (unsigned long long)g_pc.hitPackfile,
                 (unsigned long long)g_pc.attrProbeEntered,
@@ -921,7 +921,7 @@ void DumpCounters() {
                 (unsigned long long)g_pc.notFound,
                 (unsigned long long)g_pc.appendedIdentifier,
                 (unsigned long long)g_pc.noIdentifierTail);
-    std::printf("[ResPath] counters: ext calls=%llu ok=%llu nodata=%llu nodot=%llu "
+    printf("[ResPath] counters: ext calls=%llu ok=%llu nodata=%llu nodot=%llu "
                 "emptyAfterDot=%llu colonTrim=%llu\n",
                 (unsigned long long)g_pc.extCalls,
                 (unsigned long long)g_pc.extOk,
@@ -977,7 +977,7 @@ int RtObjectExternalPathRegister() {
     if (const char* e = std::getenv("BANISHED_RT_RESPATH_NEGCTL"))
         g_negCtl = std::atoi(e);
 
-    std::printf("[ResPath] registered %d doors + 4 addresses (detour=%s negctl=%d)\n",
+    printf("[ResPath] registered %d doors + 4 addresses (detour=%s negctl=%d)\n",
                 n, detoured ? "ON" : "off", g_negCtl);
     std::fflush(stdout);
 

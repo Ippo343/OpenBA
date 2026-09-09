@@ -166,7 +166,7 @@ extern "C" void RtCollectionSetAvlProbeMaybeRun() {
 
     Shipped sh = ProbeLoadShippedBodies();
     if (!sh.ok()) {
-        std::printf("[SetAvl] SKIP -- the shipped Application::*MessageCallback "
+        printf("[SetAvl] SKIP -- the shipped Application::*MessageCallback "
                     "exports are not reachable (cutover, or the DLL is absent). "
                     "No comparison was made.\n");
         g_running = false;
@@ -196,7 +196,7 @@ extern "C" void RtCollectionSetAvlProbeMaybeRun() {
                           SetOf(&S.ours)->count == SetOf(&S.theirs)->count;
         if (!same) {
             if (mismatches < 3) {
-                std::printf("[SetAvl] MISMATCH after %s(%u) step=%d\n"
+                printf("[SetAvl] MISMATCH after %s(%u) step=%d\n"
                             "[SetAvl]   ours   count=%d %s\n"
                             "[SetAvl]   theirs count=%d %s\n",
                             what, arg, steps,
@@ -335,7 +335,7 @@ extern "C" void RtCollectionSetAvlProbeMaybeRun() {
         neg2 = std::strcmp(a, b) != 0;
     }
 
-    std::printf("[SetAvl] steps=%d mismatches=%d parent-linkage-bad=%d\n"
+    printf("[SetAvl] steps=%d mismatches=%d parent-linkage-bad=%d\n"
                 "[SetAvl] effectiveness: depthAfter24Ascending=%d (a spine would be 24) "
                 "rootChanged=%d erases=%d finalCount=%d dupCount=%d\n"
                 "[SetAvl] negative-controls: signed-descent=%s  shape-sensitivity=%s\n",
@@ -346,12 +346,12 @@ extern "C" void RtCollectionSetAvlProbeMaybeRun() {
                 neg2 ? "CAUGHT" : "*** MISSED ***");
 
     if (depthAfterAscending >= 24)
-        std::printf("[SetAvl] *** depth == the insert count: NO ROTATION EVER RAN, "
+        printf("[SetAvl] *** depth == the insert count: NO ROTATION EVER RAN, "
                     "so this sweep verified only the descent ***\n");
     if (rootChanged == 0)
-        std::printf("[SetAvl] *** rootChanged=0: nothing restructured the tree ***\n");
+        printf("[SetAvl] *** rootChanged=0: nothing restructured the tree ***\n");
     if (!neg1 || !neg2)
-        std::printf("[SetAvl] *** a negative control was MISSED: the comparison is "
+        printf("[SetAvl] *** a negative control was MISSED: the comparison is "
                     "not sensitive to the thing it is supposed to catch, so the "
                     "green steps above are void ***\n");
 

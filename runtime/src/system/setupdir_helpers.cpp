@@ -206,6 +206,6 @@ int RtSystemSetupDirHelpersRegister() {
     RegisterRuntimeAddr(0x1800c5210, (void*)&RtSystem_Configuration_GetPlatformName);
     RegisterRuntimeAddr(0x1800c5280, (void*)&RtSystem_Configuration_GetBuildName);
 
-    std::printf("[RtPort]   Wave9 lane FS helpers: %d exports registered\n", n);
+    printf("[RtPort]   Wave9 lane FS helpers: %d exports registered\n", n);
     return n;
 }

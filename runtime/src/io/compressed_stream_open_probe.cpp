@@ -115,7 +115,7 @@ void RtIo_CompressedStreamOpenProbe() {
     CsCtorFn  csCtor    = reinterpret_cast<CsCtorFn>(ResolveAddr(Module::Runtime, 0x1800aa3d0));
     MsCtorFn  msCtor    = reinterpret_cast<MsCtorFn>(ResolveAddr(Module::Runtime, 0x1800ae710));
     if (!theirSWC || !theirOpen || !theirRel || !csCtor || !msCtor) {
-        std::printf("[CSOpen] probe SKIPPED: no shipped bodies to diff against "
+        printf("[CSOpen] probe SKIPPED: no shipped bodies to diff against "
                     "(expected once the DLL is gone).\n");
         return;
     }
@@ -264,11 +264,11 @@ void RtIo_CompressedStreamOpenProbe() {
     RT_DIFF_SHADOW(pass, sa, sb);
     RT_DIFF_WORK(r.opens > 0);
 
-    std::printf("[CSOpen] lockstep probe: windows=%lld opens=%lld (accepted=%lld rejected=%lld) "
+    printf("[CSOpen] lockstep probe: windows=%lld opens=%lld (accepted=%lld rejected=%lld) "
                 "releases=%lld -- %s\n",
                 (long long)r.windows, (long long)r.opens, (long long)r.accepted,
                 (long long)r.rejected, (long long)r.releases, sb);
-    std::printf("[CSOpen] NOT compared, and deliberately: Window +0x0c..+0x0f (never written by "
+    printf("[CSOpen] NOT compared, and deliberately: Window +0x0c..+0x0f (never written by "
                 "the tail init at 0x180024c10 -- exclusion derived from that disassembly, not "
                 "from a failing run) and the window buffer POINTER (two independent 32KB "
                 "allocations); both buffers are checked non-null and zeroed instead.\n");

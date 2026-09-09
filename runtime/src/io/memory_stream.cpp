@@ -202,7 +202,7 @@ int RtIoMemoryStreamRegister() {
                           (void*)&RtIo_MemoryStream_Close); ++n;
     RegisterRuntimeAddr(0x1800ae9e0, (void*)&RtIo_MemoryStream_Close);
 
-    std::printf("[RtPort]   IO::MemoryStream virtuals (lane PKG2 rung 4b-ii): "
+    printf("[RtPort]   IO::MemoryStream virtuals (lane PKG2 rung 4b-ii): "
                 "%d exports registered\n", n);
 
     // THE CTOR AND DTOR ARE NOT HERE BECAUSE LANE W ALREADY PORTED THEM, not
