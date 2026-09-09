@@ -135,18 +135,18 @@ uint64_t g_tipAllocFailed    = 0;
 
 struct HoverSummary {
     ~HoverSummary() {
-        std::printf("[RtPort] UI::UserInterface::IsInsideClipRegion  entries=%llu inside=%llu\n",
+        printf("[RtPort] UI::UserInterface::IsInsideClipRegion  entries=%llu inside=%llu\n",
                     (unsigned long long)g_clipEntries, (unsigned long long)g_clipInside);
-        std::printf("[RtPort] UI::UserInterface::EndDragDrop  entries=%llu destroyedElement=%llu\n",
+        printf("[RtPort] UI::UserInterface::EndDragDrop  entries=%llu destroyedElement=%llu\n",
                     (unsigned long long)g_endDragEntries, (unsigned long long)g_endDragDestroyed);
-        std::printf("[RtPort] UI::DialogInstance::EndHover  entries=%llu pushedEvent0x11=%llu\n",
+        printf("[RtPort] UI::DialogInstance::EndHover  entries=%llu pushedEvent0x11=%llu\n",
                     (unsigned long long)g_endHoverEntries, (unsigned long long)g_endHoverPushed);
-        std::printf("[RtPort] UI::UserInterface::BeginToolTip  entries=%llu rejected=%llu "
+        printf("[RtPort] UI::UserInterface::BeginToolTip  entries=%llu rejected=%llu "
                     "closedPrev=%llu nonEmptyString=%llu allocFailed=%llu\n",
                     (unsigned long long)g_tipEntries, (unsigned long long)g_tipRejected,
                     (unsigned long long)g_tipClosedPrev, (unsigned long long)g_tipNonEmpty,
                     (unsigned long long)g_tipAllocFailed);
-        std::fflush(stdout);
+        fflush(stdout);
     }
 };
 HoverSummary g_hoverSummary;
@@ -482,6 +482,123 @@ extern "C" void RtUi_UserInterface_BeginToolTip(UserInterface* self,
 // registered under only one is dead code under the other
 // (reference_count_the_doors_not_the_calls.md).
 // ============================================================================
+// ---------------------------------------------------------------------------
+// THE INPUT SWEEP — how ?IsInsideClipRegion@ is actually verified
+// ---------------------------------------------------------------------------
+// The other three rows in this file are mouse-driven and an unattended run has
+// no mouse, so they cannot be exercised by booting. IsInsideClipRegion is
+// different: it is PURE -- twelve instructions, no calls, no writes, reads four
+// ints of its argument -- and for a pure function an INPUT SWEEP against the
+// shipped export beats waiting for a caller
+// (project_pure_functions_verify_by_sweep.md). OURS predicts, THEIRS runs for
+// real, and the two are compared; that is a true differential, unlike an
+// RT_DIFF_SHADOW self-check (reference_shadow_marker_is_not_an_oracle.md).
+//
+// THEIRS is reached with RtOriginal, NEVER ResolveExport: once we register, the
+// latter hands back our own function and the oracle compares ours to ours.
+//
+// THE CONTROL. A sweep that reports 0 divergences proves nothing unless a
+// KNOWN-WRONG body would have been caught, and the control must be a plausible
+// transcription defect on a subject the comparison actually covers
+// (reference_control_must_pick_a_compared_subject.md,
+// reference_probe_needs_an_effectiveness_control.md). The one used here flips
+// the RIGHT edge from inclusive (`x > right` rejects) to exclusive (`x >= right`
+// rejects) -- exactly the mistake a reader of `JG` would make -- and it is only
+// visible on cases that land EXACTLY on a boundary, which is why the case grid
+// is built around the edges rather than sampled at random.
+//
+// Enable with BANISHED_UIF6_SWEEP=1. Off by default: it calls into the DLL and
+// a shipping run has no reason to.
+// ---------------------------------------------------------------------------
+namespace {
+
+using ClipFn = bool (*)(const void* self, int32_t x, int32_t y);
+
+// The deliberately wrong twin. `x > right` becomes `x >= right`.
+bool ClipControlExclusiveRight(const UserInterface* self, int32_t x, int32_t y) {
+    const UI::ClipRegion& c = self->_clipRegion;
+    if (x < c.left)   return false;
+    if (x >= c.right) return false;      // THE INJECTED DEFECT
+    if (y < c.top)    return false;
+    if (y > c.bottom) return false;
+    return true;
+}
+
+void RunClipSweep() {
+    ClipFn theirs = RtOriginal<ClipFn>("?IsInsideClipRegion@UserInterface@UI@@QEBA_NHH@Z");
+    if (!theirs) {
+        printf("[UIF6/sweep] SKIPPED -- the DLL export did not resolve "
+                    "(cutover, or a wrong name). NOT a pass.\n");
+        return;
+    }
+
+    // A full UserInterface, so the callee reads a real +0xfc..+0x10b.
+    alignas(8) uint8_t buf[sizeof(UserInterface)];
+    UserInterface* self = reinterpret_cast<UserInterface*>(buf);
+
+    struct Rect { int32_t l, t, r, b; };
+    static const Rect kRects[] = {
+        {   0,   0, 1279,  719 },   // a normal screen-sized region
+        {   0,   0,    0,    0 },   // degenerate: a single pixel
+        {  10,  20,   30,   40 },   // small, offset
+        { -50, -60,   50,   60 },   // straddles the origin
+        { 100, 100,   50,   50 },   // INVERTED (right < left): admits nothing
+        {  -5,  -5,   -1,   -1 },   // wholly negative
+    };
+    static const int32_t kOffsets[] = { -2, -1, 0, 1, 2 };
+
+    uint64_t cases = 0, mismatches = 0, caught = 0, trueCases = 0;
+
+    for (const Rect& r : kRects) {
+        std::memset(buf, 0xAB, sizeof(buf));    // poison: nothing else may be read
+        self->_clipRegion.left   = r.l;
+        self->_clipRegion.top    = r.t;
+        self->_clipRegion.right  = r.r;
+        self->_clipRegion.bottom = r.b;
+
+        // Probe AROUND every edge, plus the centre and far-away points, so the
+        // inclusive/exclusive boundary is covered from both sides.
+        int32_t xs[16], ys[16];
+        int nx = 0, ny = 0;
+        for (int32_t d : kOffsets) { xs[nx++] = r.l + d; xs[nx++] = r.r + d; }
+        xs[nx++] = (r.l + r.r) / 2;  xs[nx++] = 0x7ffffff;  xs[nx++] = -0x7ffffff;
+        for (int32_t d : kOffsets) { ys[ny++] = r.t + d; ys[ny++] = r.b + d; }
+        ys[ny++] = (r.t + r.b) / 2;  ys[ny++] = 0x7ffffff;  ys[ny++] = -0x7ffffff;
+
+        for (int i = 0; i < nx; ++i) {
+            for (int j = 0; j < ny; ++j) {
+                const bool a = RtUi_UserInterface_IsInsideClipRegion(self, xs[i], ys[j]);
+                const bool b = theirs(self, xs[i], ys[j]);
+                const bool c = ClipControlExclusiveRight(self, xs[i], ys[j]);
+                ++cases;
+                if (a != b) ++mismatches;
+                if (c != b) ++caught;
+                if (b) ++trueCases;
+            }
+        }
+    }
+
+    // The sweep's own entry counter is inflated by these calls; say so rather
+    // than let a reader attribute them to gameplay.
+    printf("[UIF6/sweep] IsInsideClipRegion: cases=%llu  divergences=%llu  "
+                "(effectiveness: %llu cases returned true, so the comparison is "
+                "not trivially satisfied)\n",
+                (unsigned long long)cases, (unsigned long long)mismatches,
+                (unsigned long long)trueCases);
+    printf("[UIF6/sweep] negative control (right edge made EXCLUSIVE): "
+                "caught=%llu of %llu. A zero here would mean the sweep cannot "
+                "discriminate and the divergences=0 above is worthless.\n",
+                (unsigned long long)caught, (unsigned long long)cases);
+    printf("[UIF6/sweep] VERDICT: %s\n",
+                (mismatches == 0 && caught > 0)
+                    ? "PASS -- port agrees with the shipped export on every case, "
+                      "and the control proves the sweep would have caught a defect"
+                    : "FAIL -- read the two lines above");
+    fflush(stdout);
+}
+
+}  // namespace
+
 int RtUiHoverRegister() {
     int n = 0;
 
@@ -498,7 +615,7 @@ int RtUiHoverRegister() {
                               (void*)&RtUi_DialogInstance_EndHover);
         RegisterRuntimeAddr(0x180113d10, (void*)&RtUi_DialogInstance_EndHover);           ++n;
     } else {
-        std::printf("[RtPort] BANISHED_RT_UIHOVER=0 -- IsInsideClipRegion/EndDragDrop/"
+        printf("[RtPort] BANISHED_RT_UIHOVER=0 -- IsInsideClipRegion/EndDragDrop/"
                     "EndHover left on the DLL\n");
     }
 
@@ -509,7 +626,11 @@ int RtUiHoverRegister() {
                               (void*)&RtUi_UserInterface_BeginToolTip);
         RegisterRuntimeAddr(0x180120860, (void*)&RtUi_UserInterface_BeginToolTip);        ++n;
     } else {
-        std::printf("[RtPort] BANISHED_RT_UITOOLTIP=0 -- BeginToolTip left on the DLL\n");
+        printf("[RtPort] BANISHED_RT_UITOOLTIP=0 -- BeginToolTip left on the DLL\n");
+    }
+
+    if (const char* s = std::getenv("BANISHED_UIF6_SWEEP")) {
+        if (std::strcmp(s, "0") != 0) RunClipSweep();
     }
 
     return n;

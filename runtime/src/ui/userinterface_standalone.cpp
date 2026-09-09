@@ -77,11 +77,11 @@ uint64_t g_drawEntries  = 0;
 
 struct StandAloneSummary {
     ~StandAloneSummary() {
-        std::printf("[RtPort] UI::UserInterface::UpdateStandAloneUI  entries=%llu withAudioScene=%llu\n",
+        printf("[RtPort] UI::UserInterface::UpdateStandAloneUI  entries=%llu withAudioScene=%llu\n",
                     (unsigned long long)g_updEntries, (unsigned long long)g_updWithScene);
-        std::printf("[RtPort] UI::UserInterface::DrawStandAloneUI  entries=%llu\n",
+        printf("[RtPort] UI::UserInterface::DrawStandAloneUI  entries=%llu\n",
                     (unsigned long long)g_drawEntries);
-        std::fflush(stdout);
+        fflush(stdout);
     }
 };
 StandAloneSummary g_standAloneSummary;
@@ -179,7 +179,7 @@ extern "C" void RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* ui
 // ============================================================================
 int RtUiStandAloneRegister() {
     if (!RtWaveEnabled("BANISHED_RT_UISTANDALONE")) {
-        std::printf("[RtPort] BANISHED_RT_UISTANDALONE=0 -- Update/DrawStandAloneUI "
+        printf("[RtPort] BANISHED_RT_UISTANDALONE=0 -- Update/DrawStandAloneUI "
                     "left on the DLL\n");
         return 0;
     }

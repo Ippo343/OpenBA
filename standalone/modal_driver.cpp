@@ -211,10 +211,32 @@ void* FindModalDialog() {
     int    count = *reinterpret_cast<int*>(base + kML_UpdCount);
     if (!arr || count <= 0) return nullptr;
 
-    void* wanted = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, kUpdateStandAloneUI));
+    // MATCH EITHER POINTER, and note WHY there are two.
+    //
+    // This used to be a single `ResolveAddr(Module::Runtime, ...)` lookup, and
+    // the comment above -- "works identically whether the ShowDialog that
+    // registered it was the shipped DLL's or ours" -- held only while NOTHING
+    // was registered at 0x180120310. ResolveAddr consults the PORT REGISTRY
+    // FIRST (reference_resolveaddr_consults_port_registry_first.md), so the
+    // moment Wave 10C lane UIF6 registered its UpdateStandAloneUI port at that
+    // address, `wanted` became OUR function pointer while the DLL's own
+    // ShowDialog kept installing the DLL's. Nothing matched, FindModalDialog
+    // returned null forever, and the driver never dismissed the modal: the
+    // BANISHED_MODAL_DRIVER_TEST run HUNG to its timeout with no error line --
+    // an instrument confidently reporting nothing, about the wrong thing.
+    //
+    // The signature this function wants is "either implementation of
+    // UpdateStandAloneUI", so it must name both doors explicitly:
+    //   * the RAW DLL address, which is what the DLL's ShowDialog installs;
+    //   * the registry address, which is what OUR ShowDialog port installs.
+    // A null from either (the DLL is absent at cutover; nothing registered)
+    // simply never matches, which is the correct degenerate behaviour.
+    void* wantedPort = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, kUpdateStandAloneUI));
+    void* wantedRaw  = reinterpret_cast<void*>(ResolveRuntimeRaw(kUpdateStandAloneUI));
 
     for (int i = 0; i < count; ++i) {
-        if (arr[i].fn != wanted) continue;
+        void* const fn = arr[i].fn;
+        if ((!wantedPort || fn != wantedPort) && (!wantedRaw || fn != wantedRaw)) continue;
         void* nestedUi = arr[i].ctx;
         if (!nestedUi) continue;
         // nestedUI->_dialogs head at +0x00; node->dialog at +0x00.

@@ -1,0 +1,15 @@
+Called but not ported (7):
+  export   UI           ??2ToolTipDialog@UI@@SAPEAX_K@Z
+           runtime/src/ui/userinterface_hover.cpp
+  export   UI           ??_7Dialog@UI@@6B@
+           runtime/src/ui/dialog.cpp, runtime/src/ui/dialog_ctor_dtor.cpp
+  export   UI           ??_7DialogController@UI@@6B@
+           runtime/src/ui/dialog.cpp
+  export   UI           ??_7ToolTipDialog@UI@@6B@
+           runtime/src/ui/userinterface_hover.cpp
+  export   UI           ?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ
+           runtime/src/ui/userinterface_hover.cpp
+  export   UI           ?SetText@ToolTipDialog@UI@@QEAAXAEBVString@System@@@Z
+           runtime/src/ui/userinterface_hover.cpp
+  export   UI           ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A
+           runtime/src/ui/dialog_controller_base.cpp
