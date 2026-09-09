@@ -1,0 +1,65 @@
+PREDICTED vtable walls: 102 in 26 modules
+OBSERVED residue      : 25 in 15 modules
+
+=== MODULES ===  (* = also in the observed residue: reached on the boot path)
+module                                          walls observed
+ Graphics::EdgeMesh                                 8        0
+ UI::SpriteSheet                                    8        0
+*Graphics::MaterialInstance                         7        1
+ Graphics::ParticleInstance                         7        0
+ UI::DialogController                               7        0
+ Video::ImageBuffer                                 7        0
+ Engine::LoaderLoop                                 6        0
+*Graphics::MeshInstance                             6        1
+ Achievement::Achievement                           5        0
+ Graphics::SunLight                                 5        0
+ Graphics::Particle                                 4        0
+ UI::Element                                        4        0
+ Achievement::AchievementInstance                   3        0
+ Achievement::Goal                                  3        0
+ Graphics::EdgeMeshInstance                         3        0
+*UI::ElementDescription                             3        2
+ Achievement::GoalInstance                          2        0
+ Engine::DialogLoopT                                2        0
+ Graphics::AnimationEvent                           2        0
+ Graphics::ParticleSystemInstance                   2        0
+ Object::CompiledExternal                           2        0
+*Object::External                                   2        1
+ Engine::DialogLoaderLoopT                          1        0
+ IO::CompressedStream                               1        0
+ Object::Base                                       1        0
+ UI::DialogInstance                                 1        0
+
+=== OBSERVED but NOT predicted as vtable walls (11 modules) ===
+These are name doors, not minted slots -- (A) structurally cannot see them.
+  Application::Application                     1
+      ?GetInstance@Application@1@QEBAPEAUHINSTANCE__@@XZ
+  Audio::Scene                                 1
+      ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z
+  Engine::UpdateLoop                           1
+      ?LoadResources@UpdateLoop@Engine@@QEAAXXZ
+  Graphics::AnimationManager                   1
+      ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z
+  Graphics::Renderer                           1
+      ?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z
+  Object::ExternalFactory                      1
+      ?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z
+  System::Debug                                1
+      ?_disableHandler@Debug@System@@0_NA
+  UI::UserInterface                            4
+      ?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+      ?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z
+      ?ShowDialog@UserInterface@UI@@QEAAHV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+      ?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z
+  Video::Device                                2
+      ?AdjustDisplay@Device@Video@@QEAAXXZ
+      ?GetDisplayMode@Device@Video@@QEBA?AVDisplayMode@12@H@Z
+  Video::Device::Adapter                       4
+      ??0Adapter@Device@Video@@QEAA@AEBU012@@Z
+      ??0Adapter@Device@Video@@QEAA@XZ
+      ??1Adapter@Device@Video@@QEAA@XZ
+      ?FindOrAddMode@Adapter@Device@Video@@QEAAXAEBVDisplayMode@23@AEBVRefreshRate@23@@Z
+  Video::Device::GraphicsInterface             3
+      ??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z
+      ??0GraphicsInterface@Device@Video@@QEAA@XZ
+      ??1GraphicsInterface@Device@Video@@QEAA@XZ
