@@ -11,6 +11,7 @@
 
 #include "resolve.h"
 #include "rt_diff.h"
+#include "rt_predict.h"
 #include "engine_funcs.h"
 #include "runtime_funcs.h"
 #include "dx11_funcs.h"
@@ -1949,6 +1950,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // disappears with the DLL.
     { extern void RtDataMintShadowReport(const char*); RtDataMintShadowReport("exit"); }
     RtDiffSummary();
+    // Wave 10: the PREDICTIVE shadow oracle (BANISHED_RT_PREDICT=1). Prints
+    // beside [RtDiff] and is silent when off. Read its `changed=` column
+    // before its `wrong=` one: changed=0 is a green board over a path the
+    // DLL was never required to walk.
+    RtPredict::Summary();
     // Wave 9 lane FLUSH: UI::SpriteContext::Flush's per-branch counts. A
     // `divergences=0` with no idea WHICH branches ran is the shape lane UIF's
     // own section 11.3 mis-read, so the branch split is printed next to it.

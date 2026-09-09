@@ -26,6 +26,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../funcs/rt_predict.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/TableElement.h"
 #include "../../types/ui/ImageElement.h"
@@ -103,11 +104,9 @@ void RtTextElementCacheText(void* self) {
 }
 
 // ?UpdateContainers@TabElement@UI@@AEAAXXZ (0x1800d9710) -- private but
-// exported. Recomputes which child page is visible; not reversed by this lane.
-void RtTabElementUpdateContainers(void* self) {
-    using Fn = void (*)(void*);
-    RT_EXPORT_ONCE(Fn, "?UpdateContainers@TabElement@UI@@AEAAXXZ")(self);
-}
+// exported. Recomputes which tab container is visible. PORTED in Wave 10; the
+// body and its oracle argument are at TabElement_UpdateContainers below.
+void RtTabElementUpdateContainers(void* self);
 
 // ??4String@System@@QEAAAEAV01@AEBV01@@Z -- System::String::operator=.
 void RtStringAssign(void* self, const void* other) {
@@ -645,6 +644,174 @@ void DocumentTextElement_SetText_StringRef(void* self, const void* strRef) {
 namespace TAE = UI::TabElementOffsets;
 namespace PGE = UI::PageElementOffsets;
 
+
+// ---- ?UpdateContainers@TabElement@UI@@AEAAXXZ  0x1800d9710 -----------------
+//
+// WAVE 10. Lane E declined this in Wave 7 ("visibility recomputation, not
+// reversed by this lane") and lane V2 confirmed it a REAL DEPENDENCY. It is
+// ported here as the first subject of the PREDICTIVE shadow oracle
+// (runtime/funcs/rt_predict.h), because it is precisely the shape the replay
+// oracle cannot check and the shape lane C described when it wrote that a
+// shadow oracle over the post-state "is the obvious next step".
+//
+// WHY THE REPLAY ORACLE CANNOT DO IT -- two independent reasons:
+//
+//  1. The mutated state is a GRAPH. The dirty bit propagates from each child
+//     up its _parent (+0x98) chain, through objects that are not inside any
+//     copyable extent of `this`. There is no scratch to run retail against --
+//     the same rock SetUpperLeft was held back on (WAVE7_LANE_B.md sec2b).
+//
+//  2. The propagation is GUARDED BY "did bit 0 actually change" (0x1800d9760
+//     and 0x1800d97cc). Under replay our body has already flipped it, so
+//     retail's guard is false and it never walks the chain -- the compare goes
+//     green having tested nothing. Lane C named this exact shape on
+//     EnableCursor: "the object compare would pass while the only thing that
+//     can go wrong went untested."
+//
+// Under BANISHED_RT_PREDICT=1 this body writes NOTHING; retail runs on
+// pristine state, its guard fires exactly as in a normal frame, and we compare
+// what it left against what we predicted.
+//
+// ---- Layout facts, all from the disassembly at 0x1800d9710 ----------------
+//
+//   this+0xc0   int32   tab count            (loop bound, 0x1800d971f/0x1800d97ed)
+//   this+0xf8   int32   active tab index     (0x1800d9750)
+//   this+0xa0   ptr     Element::_children._data
+//   this+0xc4   int32   inset used by the resize call (0x1800d9786)
+//   this+0xfc   int32   a second inset, doubled (0x1800d979b, LEA +RDX*2)
+//   this+0x68/0x6c/0x70/0x74  int32  the element's own x/y/w/h
+//   child+0x34  uint32  Element::_flags   (bit 0 = hidden; 0x8000000 = dirty)
+//   child+0x98  ptr     Element::_parent
+//
+// THE ADDRESSING IS FAITHFUL, AND ITS MEANING IS NOT ESTABLISHED HERE.
+// Retail indexes the children array at BYTE offset 0x20 + i*0x10 (RSI starts
+// at 0x20 at 0x1800d9730 and adds 0x10 at 0x1800d97e9), i.e. _data[4 + 2*i]
+// for an Array<Element*>. Why the containers start at index 4 and sit two
+// apart is AddTab's business (0x1800da130, still held back) and is NOT
+// claimed here. The port reproduces the addressing, not an interpretation of
+// it -- and if the addressing is wrong, the oracle's `unpredicted=` column is
+// what says so, because retail's real writes would then land where we
+// predicted nothing.
+//
+// One ordering detail a "tidied" port would drop: in the propagate branch
+// retail RE-READS child+0x34 after storing the new flag word, so the child
+// ends at (nf | 0x8000000), not (old | 0x8000000). The predictor gets this
+// right only because it reads back through the sink (RtSink::ReadU32).
+
+static void TabElement_UpdateContainers_Body(void* self, RtSink& out) {
+    const int32_t tabCount = *reinterpret_cast<int32_t*>(B(self, 0xc0));
+    if (tabCount <= 0) return;
+
+    const int32_t active = *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab));
+    uint8_t* const data  = *reinterpret_cast<uint8_t**>(B(self, TAE::kChildrenData));
+
+    for (int32_t i = 0; i < tabCount; i++) {
+        uint8_t* const child =
+            *reinterpret_cast<uint8_t**>(data + 0x20 + static_cast<size_t>(i) * 0x10);
+
+        const uint32_t old = out.ReadU32(child + 0x34);
+        const uint32_t nf  = (i == active) ? (old & 0xfffffffeu)   // show
+                                           : (old | 1u);           // hide
+        out.U32(child + 0x34, nf, "child._flags");
+
+        // Guarded dirty propagation, starting AT THE CHILD (0x1800d9770 ORs
+        // [RCX+0x34] before RCX walks to +0x98).
+        if (((nf ^ old) & 1u) != 0) {
+            for (uint8_t* p = child; p != nullptr;
+                 p = *reinterpret_cast<uint8_t**>(p + 0x98)) {
+                out.U32(p + 0x34, out.ReadU32(p + 0x34) | 0x8000000u,
+                        "ancestor._flags |= dirty");
+            }
+        }
+
+        // The active tab's container is resized to fill the tab body. This is
+        // an indirect call through the child's own vtable slot +0x28; in
+        // predict mode RtSink::Call suppresses it and the caller declares the
+        // footprint it would have written with Exclude().
+        if (i == active) {
+            const int32_t pad = *reinterpret_cast<int32_t*>(B(self, 0xc4));
+            const int32_t a1  = pad + *reinterpret_cast<int32_t*>(B(self, 0x68));
+            const int32_t a2  = *reinterpret_cast<int32_t*>(B(self, 0xfc))
+                              + pad * 2
+                              + *reinterpret_cast<int32_t*>(B(self, 0x6c));
+            const int32_t a3  = *reinterpret_cast<int32_t*>(B(self, 0x70)) - pad;
+            const int32_t a4  = *reinterpret_cast<int32_t*>(B(self, 0x74)) - pad;
+
+            using SetBoundsFn = void (*)(void*, int32_t, int32_t, int32_t, int32_t);
+            SetBoundsFn slot = *reinterpret_cast<SetBoundsFn*>(
+                *reinterpret_cast<uint8_t**>(child) + 0x28);
+            if (out.Call("Element::vtbl+0x28 (resize container)",
+                         reinterpret_cast<const void*>(slot), a1, a2, a3, a4)) {
+                slot(child, a1, a2, a3, a4);
+            }
+        }
+    }
+}
+
+void RtTabElementUpdateContainers(void* self) {
+    RT_PREDICT_SITE("UI::TabElement::UpdateContainers");
+
+    if (RT_PREDICT_ON) {
+        RT_PREDICT_ROUND(round) {
+            // Coverage: watch every object the body may write, so a retail
+            // write we did NOT predict is reported instead of ignored.
+            // Predictions alone are only a lower bound.
+            const int32_t tabCount = *reinterpret_cast<int32_t*>(B(self, 0xc0));
+            uint8_t* const data =
+                *reinterpret_cast<uint8_t**>(B(self, TAE::kChildrenData));
+            const int32_t active =
+                *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab));
+
+            for (int32_t i = 0; i < tabCount && i < 32; i++) {
+                uint8_t* c = *reinterpret_cast<uint8_t**>(
+                    data + 0x20 + static_cast<size_t>(i) * 0x10);
+                if (!c) continue;
+                for (uint8_t* p = c; p; p = *reinterpret_cast<uint8_t**>(p + 0x98))
+                    round.Watch(p + 0x34, sizeof(uint32_t), "element._flags");
+
+                // The suppressed vtable call writes the container's geometry.
+                // Declaring it keeps the hole VISIBLE (it prints as excluded=)
+                // rather than letting "not reported" read as "verified".
+                if (i == active) {
+                    round.Exclude(c + 0x60, 0x40,
+                                  "Element::vtbl+0x28 resize -- callee not ported, "
+                                  "so its writes are not predicted");
+                    // AND the active child's OWN FLAG WORD. Found by the first
+                    // real run of this oracle, which reported it as a mismatch:
+                    // pre=0x8000001, ours=0x8000000, retail=0x0. Bit 27 is
+                    // kElementFlagNeedsSizeCalc (Element.h), which the resize
+                    // callee CLEARS once it has recalculated. Our body predicts
+                    // the state at its own last write, which is correct; retail's
+                    // final state is the state after a callee we suppressed.
+                    //
+                    // So this location is not ours to predict WHILE THE CALLEE IS
+                    // SUPPRESSED, and it is excluded rather than fudged. It stops
+                    // being excluded the day vtable slot +0x28 is ported -- and
+                    // until then it prints in the `unverifiable=` column, so the
+                    // hole is counted rather than silent.
+                    //
+                    // NOTE THE ASYMMETRY, because it is the useful part: only the
+                    // ACTIVE child is affected. Every inactive child's flag word,
+                    // and every ancestor's, stays fully compared -- which is where
+                    // the guarded dirty walk this port exists to reproduce lives.
+                    round.Exclude(c + 0x34, sizeof(uint32_t),
+                                  "resize callee (vtbl+0x28) clears NeedsSizeCalc "
+                                  "here; suppressed in predict mode");
+                }
+            }
+
+            TabElement_UpdateContainers_Body(self, round.sink());   // predicts
+            using OrigFn = void (*)(void*);
+            RT_ORIGINAL_ONCE(OrigFn,
+                "?UpdateContainers@TabElement@UI@@AEAAXXZ")(self);  // authority
+        }
+        return;
+    }
+
+    RtSink live;
+    TabElement_UpdateContainers_Body(self, live);
+}
+
 void TabElement_SetActiveTab(void* self, int32_t tab) {
     RT_DIFF_BEGIN("UI::TabElement::SetActiveTab");
     int32_t pristine = 0;
@@ -1025,6 +1192,13 @@ int RtUiWidgetsLayRegister() {
     RegisterRuntimeExport("?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z", (void*)&DocumentTextElement_SetText_UiString); ++n;
 
     RegisterRuntimeExport("?SetActiveTab@TabElement@UI@@QEAAXH@Z", (void*)&TabElement_SetActiveTab); ++n;
+    // WAVE 10: UpdateContainers is no longer a forwarder. Registered under BOTH
+    // its name and its address -- the convention that exists because lane B3
+    // registered Element::RemoveChildren by name only and left the tree's one
+    // address-door bypass (see the note further down this function).
+    RegisterRuntimeExport("?UpdateContainers@TabElement@UI@@AEAAXXZ",
+                          (void*)&RtTabElementUpdateContainers); ++n;
+    RegisterRuntimeAddr(0x1800d9710, (void*)&RtTabElementUpdateContainers);
     // ?AddTab@TabElement@UI@@... -- HELD BACK (WAVE7_LANE_E.md sec2).
 
     RegisterRuntimeExport("?GetActivePage@PageElement@UI@@QEBAHXZ", (void*)&PageElement_GetActivePage); ++n;

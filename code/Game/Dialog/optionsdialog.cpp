@@ -816,9 +816,35 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         FIND_ELEMENT(self->tabOptions,"tabOptions");
         if (self->tabOptions) {
             int lastTab = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[7] : 0;
-            // Clamp to valid range — options dialog has 4 tabs (0-3)
-            if (lastTab < 0 || lastTab > 3) lastTab = 0;
-            fn_TabElement_SetActiveTab(self->tabOptions, lastTab);
+            // HARNESS KNOB (Wave 10). BANISHED_OPTIONS_TAB=<n> overrides the
+            // restored tab. This is the only unattended route that reaches OUR
+            // ?SetActiveTab@TabElement@UI@@ -- and through it the newly ported
+            // UpdateContainers -- because a real tab CLICK is handled inside
+            // the DLL and, with no detour installed, never leaves it. The
+            // element, the dialog and the call are all the real ones; only the
+            // tab index is chosen by the harness. Same shape as
+            // BANISHED_CAMERA_PIN: a knob on a real path, not a fake subject.
+            // A COMMA-SEPARATED LIST drives one SetActiveTab per entry, in
+            // order. One switch is barely an exercise -- the predictive
+            // oracle's `changed=` column reported exactly 1 changing
+            // prediction for a single switch, which is a technically-proven
+            // site over an almost-unexercised path. A sequence walks every
+            // tab, so both the show and the hide branch and the guarded dirty
+            // walk all run repeatedly.
+            const char* seq = std::getenv("BANISHED_OPTIONS_TAB");
+            if (seq && *seq) {
+                for (const char* p = seq; *p; ) {
+                    int t = atoi(p);
+                    if (t < 0 || t > 3) t = 0;
+                    fn_TabElement_SetActiveTab(self->tabOptions, t);
+                    while (*p && *p != ',') ++p;
+                    if (*p == ',') ++p;
+                }
+            } else {
+                // Clamp to valid range — options dialog has 4 tabs (0-3)
+                if (lastTab < 0 || lastTab > 3) lastTab = 0;
+                fn_TabElement_SetActiveTab(self->tabOptions, lastTab);
+            }
         }
     }
 }
