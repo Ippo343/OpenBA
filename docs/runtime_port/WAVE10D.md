@@ -1,0 +1,110 @@
+# Wave 10D — finish UI
+
+**Opened 2026-09-09 on `wave10/base` @ `190e91c`.** Three lanes, and the scope is
+deliberately narrow: **the last seven UI rows and nothing else.** Opening the
+next namespace is explicitly OUT of scope this wave.
+
+## Housekeeping fixed before this wave: the worktree seeding bug
+
+Every agent worktree in this repo was being created at **`origin/HEAD` →
+`origin/main` → `965361d`, a commit from 24 July** — 605 commits and six weeks
+behind. Not intermittent: **35 of 41 `worktree-agent-*` branches sat at exactly
+that commit**, across waves 9, 10, 10B and 10C. It only became visible in 10C
+because lanes were told to verify their base with `merge-base --is-ancestor`.
+
+Root cause was simply that nothing had been pushed since July, so "the remote's
+default branch" was a stale tree. Fixed by fast-forwarding (no rewrite):
+
+```
+origin/main         965361d -> 190e91c   (605 commits)
+origin/wave10/base  7358732 -> 190e91c   (40 commits)
+```
+
+**No integrity damage:** all nine lane branches from waves 10B and 10C descend
+correctly from their intended base — every lane caught it and re-cut its branch.
+The lanes paid time, not correctness.
+
+**The hazard it would have caused, stated so it is not forgotten:** a lane that
+did NOT check would not merely write code against a July tree, it would
+**measure** against one. "Grep for the port before writing it" against a
+393-commit-old checkout returns nothing and reads as *not ported yet*, so the
+lane re-ports what already exists; a census "before" snapshot taken there is
+meaningless. That is `reference_half_registered_port_reads_as_absent` with a much
+larger blast radius. Lanes still verify their base — the check costs one command
+and it is the only thing that made this visible.
+
+## The board
+
+UI is at **177 / 184 = 96.2%**. Seven rows left, and only four of them are
+missing a port at all — the other three are ported, `TRAP=0`, and held back for
+reasons this project derived and re-derived across two waves.
+
+### The seven remaining UI rows, and what each actually needs
+
+```
+??2ToolTipDialog@UI@@SAPEAX_K@Z            \
+??_7ToolTipDialog@UI@@6B@                   |  BeginToolTip's callees,
+?GetToolTipString@Element@UI@@              |  entered in Wave 10C
+?SetText@ToolTipDialog@UI@@                /
+??_7Dialog@UI@@6B@                  ported 9/9, TRAP=0, held on DISPATCH
+??_7DialogController@UI@@6B@        ported 11/11, TRAP=0, held on CONSUMER
+?_typeInfo@DialogController@UI@@    a port with no caller
+```
+
+## Lanes
+
+| lane | scope |
+|---|---|
+| **TIP** | the four `ToolTipDialog` rows — closes 4 of the 7 |
+| **VTFID** | the 27 subclass vtables' inherited slots (ROUTES handed this over) |
+| **MOUSE** | a harness mouse/hover injector — closes a whole CLASS of `entries=0` |
+| **OBJ** | decompose the `Object` namespace gap and port what is cheap |
+
+### VTFID — the fidelity fix lane ROUTES scoped but did not take
+
+All 27 standalone `DialogController` subclass vtables replace retail's
+**inherited** base slots with a file-local `StubNop`. Retail's derived vtables
+*copy* the base entry for every virtual the subclass does not override —
+`destroyui.cpp:547` says exactly that about retail's own table. Making our 27
+reproduce that is a pure fidelity fix, and ROUTES already proved it
+behaviour-preserving for slots 5/6/10 (attendance 0 → 17 → 51). It is also the
+most likely thing to give `??_7DialogController` and `??_7Dialog` a real
+dispatch, which is the only thing keeping either row unpromoted.
+
+### MOUSE — a capability, not a row
+
+`EndDragDrop`, `EndHover` and `BeginToolTip` all read `entries=0` for one shared
+reason: they are **mouse-driven**, and an unattended run has no mouse. Lane UIF6
+checked there is no injector in `standalone/` and correctly **rejected a detour**
+— a detour changes *who* reaches the body, not whether the game hovers. An
+injector closes those three, unblocks hover/drag/tooltip work for every future
+UI lane, and converts a standing excuse into a measurement. Same shape as lane
+SHOW's `MainLoop+0x90` route, which is the template.
+
+### Out of scope, named so it is not drifted into
+
+Opening `Object` (57.1%, the lowest-completion namespace), `Video` (gap 40) or
+`Graphics` (gap 31) is **the next wave's job, not this one's**. A lane that finds
+itself porting outside `UI` should stop and report the scope rather than take it.
+
+### The one dependency between lanes
+
+`BeginToolTip` **allocates a ToolTipDialog** — so TIP's four rows and MOUSE's
+injector are the same path seen from two ends. MOUSE owns the harness and builds
+the route; TIP ports the bodies and may legitimately report "verified once
+MOUSE's injector lands". They must not both build an injector.
+
+## Standing rules
+
+As `WAVE10C.md`, plus:
+
+* **Verify your base.** `git merge-base --is-ancestor <base> HEAD` before any
+  work. The seeding bug is fixed at the source but the check stays.
+* A green readiness screen is not a route; attendance counters are the separate
+  instrument.
+* **Test a gate before trusting it**: does the quantity it measures actually VARY
+  with the thing being gated? Wave 10C's DialogController gate did not, and
+  finding the route was what exposed it.
+* The release check must be a real one — `make standalone` after a debug build
+  says "Nothing to be done" and proves nothing.
+* The modal self-test writes to `standalone_error.log`, **not** the debug log.
