@@ -106,6 +106,13 @@ void DumpSlot3Inventory() {
     std::fflush(stderr);
 }
 
+void ForEachRegistration(RegistrationVisitFn fn, void* ctx) {
+    if (!fn) return;
+    for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
+        fn(r->typeName, r->parentName, r->factoryFn, ctx);
+    }
+}
+
 const char* GetTypeNameById(uint32_t typeId) {
     if (typeId == 0 || typeId == 0xFFFFFFFFu) return nullptr;
     for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {

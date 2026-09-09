@@ -1,0 +1,3 @@
+[RtMint] promoted 14 minted DATA row(s) -- live on every run
+[DlgCtrl] ATTENDANCE: none of the nine bodies was entered in this run.
+[DlgSettings] ATTENDANCE (entries, not comparisons): OnOpened entries=3 noBuffer=3 badMagic=0 records=0

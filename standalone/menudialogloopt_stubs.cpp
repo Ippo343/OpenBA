@@ -39,6 +39,7 @@
 #include "modal_driver.h"
 #include "common.h"
 #include "Object/factory_registration.h"   // DumpSlot3Inventory (BANISHED_DUMP_SLOT3)
+void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"
 #include "Game/uifade.h"
@@ -394,6 +395,11 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // so factory-cached type ids are real (pre-Startup they cache 0xFFFFFFFF).
     { static bool s_dumped = false;
       if (!s_dumped) { s_dumped = true; ::Object::DumpSlot3Inventory(); } }
+    // Wave 10C lane ROUTES: install the DialogController inherited-slot route
+    // (BANISHED_DLGCTRL_ROUTE=1|probe, else a silent no-op). Same placement
+    // rationale as the line above -- Object::Factory::Startup has run, and no
+    // dialog has been opened yet.
+    DlgCtrlRoute_Arm();
     // Per-frame heap-integrity check (no-op unless BANISHED_REDZONE set). Catches
     // free-list poisoning that surfaces during the steady-state menu loop, where
     // our alloc/free are rare so the alloc/free auto-scan rarely fires.
