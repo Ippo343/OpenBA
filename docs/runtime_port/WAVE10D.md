@@ -64,6 +64,65 @@ capability**.
 | **VTFID** | the 27 subclass vtables' inherited slots — all three held rows are downstream of this |
 | **MOUSE** | a harness mouse/hover injector — the only route that reaches any of it |
 
+### VTFID — ✅ DONE: 166 slots across 38 tables, attendance 0 → 1699
+
+> **The brief's count was wrong and the lane corrected it: 38 tables, not 27.**
+> 27 was the number of FILES carrying the `StubNop` idiom; there are 39
+> `DialogController` subclasses and 38 standalone vtables (`SelectResourceUI` has
+> none). **166 of 418 compared slots changed** — every slot where retail inherits
+> and we held a file-local no-op. Zero remain.
+>
+> **Two earlier designs of the CHECK were wrong, silently**, and the lane recorded
+> both in the tool's docstring rather than discarding them:
+> * chasing Factory functions and taking the longest `.rdata` run **merged**
+>   adjacent tables and **collided** CitizenUI onto DestroyUI — and 3 of the 6
+>   vtable addresses this tree had recorded *by hand* came back wrong;
+> * a structural scan found 38 against a CSV closure of 38 — and the **set diff
+>   was one-in one-out** (gained DebugUI, whose CSV parent omits the `UI::`
+>   namespace; lost TradeUI, which inherits only slot 3). **The counts agreeing
+>   proved nothing** — `reference_diff_the_set_not_the_count`, again.
+>
+> The design that worked locates each table by its **own slot-1 `TypeName` stub**,
+> so tables name themselves and no threshold is needed. All 39 located; every
+> hand-recorded address agrees.
+>
+> **And the rule is real but NOT uniform: no two classes share a mask.** Applying
+> `destroyui.cpp`'s 3/5/6/8/10 to all 38 — exactly what this brief's hypothesis
+> invited — would have been wrong for **30 of them**. Third wave running in which
+> "the obvious template" was wrong.
+>
+> Overrides are protected **by construction**: a slot is filled only if it still
+> holds that file's own stub pointer. The lane predicted `176 inherited = 166 to
+> fill + 10 to keep` BEFORE running; the run reports `filled=166 keptOverride=10
+> unresolved=0 unknown=0`. That arithmetic caught a silent-failure class the
+> compiler nearly missed (`tutorial_dialog_vtables.cpp` calls its no-op `Nop`).
+>
+> A/B on one binary, md5-identical halves: `[DlgCtrl] ATTENDANCE` **0 → 1699**
+> with no route switch. The control reproduces lane ROUTES' reading exactly
+> (`OnOpened=9 OnClosed=8`); `OnUpdateLayout=841 OnUpdate=841` are new.
+>
+> **The three rows: one promoted, two closed for good.**
+> * `?_typeInfo@DialogController@` — **PROMOTED**, with what varies named: the
+>   `[TidStatic]` node pointer moves `DLL+0x1f9e48` → our image, id
+>   byte-identical, and the negative control *in the same line pair* is that
+>   unarmed `GroupElement`'s node does **not** move. The lane explicitly does NOT
+>   attribute this to its own fix — it prints identically with the fix off, so the
+>   row is downstream of something else. Refusing a flattering attribution it
+>   could easily have claimed.
+> * `??_7DialogController@UI@@6B@` — **stays off, and the blocker is now
+>   PERMANENT rather than pending.** The recorded gate is satisfied (1699) and
+>   satisfying it changed nothing, exactly as ROUTES predicted. The new fact: its
+>   only consumer is reachable only through slot 0, and **not one of the 39 retail
+>   subclass vtables inherits slot 0** — retail itself never dispatches the base
+>   destructor from a subclass. **No future lane should hunt that route.**
+> * `??_7Dialog@UI@@6B@` — stays off; DLG8's finding stands.
+>
+> Also flagged: the "Nothing to be done" hazard is **symmetric** —
+> `make standalone-debug` straight after `make standalone` leaves the *release*
+> binary sitting at the debug path.
+
+The original framing:
+
 ### VTFID — the fidelity fix lane ROUTES scoped but did not take
 
 All 27 standalone `DialogController` subclass vtables replace retail's
