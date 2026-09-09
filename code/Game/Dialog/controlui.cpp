@@ -253,6 +253,7 @@ void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4) 
 #include "resolve.h"
 #include <cstdio>
 #include <cstdlib>
+#include "dialog_controller_vtable.h"
 
 namespace controlui_sa {
 
@@ -388,6 +389,12 @@ struct Init {
         // idx8 left inherited/no-op on purpose — see the note above W_Slot9.
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's ControlUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "ControlUI", &StubNop);
 
 // ControlUI object size 0x40 (+0x30 element IBP, +0x38 target component).
 void Zero(void* p) {

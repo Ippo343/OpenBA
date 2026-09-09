@@ -59,3 +59,7 @@ standalone/build-og/
 # command in the header of tools/libm_probe/sweep.cpp)
 tools/libm_probe/*.exe
 tools/libm_probe/full_sweep.txt
+
+# Per-lane run-log snapshots taken by tools/game_dir_lock.sh --snapshot.
+# Evidence for a lane report, not source; the lane doc quotes what matters.
+lane_*_logs/

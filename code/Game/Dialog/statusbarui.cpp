@@ -726,6 +726,7 @@ void StatusBarUI_OnRemove(StatusBarUI* self, void* param2, int eventType, int ev
 // the town name String at gw+0x28 (title parameter).
 #include "Object/factory_registration.h"
 #include <cstddef>
+#include "dialog_controller_vtable.h"
 
 namespace statusbarui_sa {
 
@@ -924,6 +925,12 @@ struct Init {
         g_vt[9] = reinterpret_cast<void*>(&W_OnEvent);
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's StatusBarUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "StatusBarUI", &StubNop);
 
 void Zero(void* p) {
     for (size_t o = 0; o < static_cast<size_t>(0x1D0); o += 8)

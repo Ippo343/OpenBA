@@ -266,6 +266,7 @@ void StatusIconUI_Startup(StatusIconUI* self) {
 #include <cstddef>
 #include <cstdlib>
 #include <cstdio>
+#include "dialog_controller_vtable.h"
 
 // By-name StatusIconComponent finder (forward-declared at the top of this file). The exe
 // finder Entity_FindComponent_MeshInstance (0x140002f90) compares each component's GetTypeId
@@ -380,6 +381,12 @@ struct Init {
         g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's StatusIconUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "StatusIconUI", &StubNop);
 
 void Zero(void* p) { for (size_t o = 0; o < (size_t)0x40; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
 void* Factory() {

@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
+#include "dialog_controller_vtable.h"
 
 namespace {
 
@@ -251,6 +252,12 @@ struct Init {
         g_vt[13] = reinterpret_cast<void*>(&CropUI_Slot13);
     }
 } g_init;
+
+// Wave 10D lane VTFID: retail's CropUI vtable INHERITS the base
+// entry in the slots it does not override; ours held a file-local
+// no-op. Fill exactly those slots (mask read from the exe), and only
+// where this file has not deliberately overridden them.
+DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "CropUI", &StubNop);
 
 // CropUI object size 0x60 (engine/types/ui/Panels.h).
 void Zero(void* p) {
