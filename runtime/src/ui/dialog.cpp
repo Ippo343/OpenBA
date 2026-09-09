@@ -202,6 +202,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "dialog_vptr_trip.h"   // WAVE 10E lane FINAL
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/ElementDescription.h"
@@ -2079,7 +2080,10 @@ void DialogTempCtor(uint8_t* p) {
     *reinterpret_cast<uint64_t*>(p + 0x08) = 0;
     *reinterpret_cast<uint64_t*>(p + 0x10) = 0;
     *reinterpret_cast<uint64_t*>(p + 0x18) = 0;
-    *reinterpret_cast<void**>(p + 0x00) = vtDlg;
+    // WAVE 10E lane FINAL: the stamp is the row's ONLY consumer here, so it is
+    // the only place an instrument can ask whether anything ever dispatches
+    // through it. Off (the default) `TableOrReal` returns `vtDlg` untouched.
+    *reinterpret_cast<void**>(p + 0x00) = RtUiDlgTrip::TableOrReal(vtDlg);
     *reinterpret_cast<uint64_t*>(p + 0x20) = 0;   // the inline's 16-byte MOVDQA
     *reinterpret_cast<uint64_t*>(p + 0x28) = 0;   // covers these two together
     *reinterpret_cast<int32_t*>(p + 0x30)  = -1;
@@ -2094,6 +2098,8 @@ void DialogTempCtor(uint8_t* p) {
     *reinterpret_cast<uint64_t*>(p + 0x70) = 0;
     *reinterpret_cast<uint64_t*>(p + 0x78) = 0;
     *reinterpret_cast<uint64_t*>(p + 0x80) = 0;
+
+    RtUiDlgTrip::AfterStamp(p);   // no-op unless BANISHED_DLG_VPTR_TRIP=2
 }
 
 void EdCreateInstanceBody(const ElementDescription* self, void** elemPtr) {

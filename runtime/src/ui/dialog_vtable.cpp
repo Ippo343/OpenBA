@@ -212,6 +212,7 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Dialog.h"
 #include "../io/save_trace.h"
+#include "dialog_vptr_trip.h"   // WAVE 10E lane FINAL
 
 // Forward-declared rather than pulled in from standalone/resolve.h, for the
 // reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
@@ -307,7 +308,9 @@ void ConstructInPlace(uint8_t* self) {
     qword(self, 0x08) = nullptr;            // 180038785 (via LEA RAX,[RCX+8])
     qword(self, 0x10) = nullptr;
     qword(self, 0x18) = nullptr;
-    qword(self, 0x00) = DialogVtable();     // 180038790
+    // WAVE 10E lane FINAL: fourth and last consumer of the row in the tree.
+    // Off by default (dialog_vptr_trip.h).
+    qword(self, 0x00) = RtUiDlgTrip::TableOrReal(DialogVtable());  // 180038790
     qword(self, 0x20) = nullptr;            // _spriteSheet
     qword(self, 0x28) = nullptr;            // _spriteName
     dword(self, 0x30) = 0xFFFFFFFFu;        // 1800387a2  _backgroundColor

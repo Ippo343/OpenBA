@@ -113,11 +113,21 @@
 // shadow's `BaseTypeInfo` field comparison already compares that very static's
 // typeId against the loaded DLL's own node on every run.
 //
-// What IS measured, and is in the lane doc: the promotion A/B. Registering
-// `??_7DialogController@UI@@6B@` is not passive — our ported constructors stamp
-// that table into real objects, so the DLL's own dispatch runs these nine
-// bodies. The boot that reaches gameplay with the row registered, matched
-// against the same boot without it, is this lane's evidence.
+// What IS measured, and is in the lane doc: the promotion A/B. The boot that
+// reaches gameplay with the row registered, matched against the same boot
+// without it, is this lane's evidence.
+//
+// *** CORRECTED, WAVE 10E LANE FINAL. *** This paragraph used to claim "our
+// ported constructors stamp that table into real objects, so the DLL's own
+// dispatch runs these nine bodies". THAT IS FALSE and it kept a route hunt
+// alive for two waves. A complete grep of the symbol over code/, runtime/,
+// engine/ and standalone/ finds exactly ONE live read — `RtUiDialogController_
+// Dtor` (runtime/src/ui/dialog.cpp) — plus one deliberate `ResolveExportRaw`
+// ORACLE read in the same file. No constructor anywhere stamps it. See
+// docs/runtime_port/WAVE10E_LANE_FINAL.md for the four independent proofs that
+// the row is permanently unpromotable, including the one that does not depend
+// on reachability at all: the single consumer's stamp is overwritten, unread,
+// by the first statement of `??1Internal@Object@@`.
 // ============================================================================
 
 #include <cstdint>
