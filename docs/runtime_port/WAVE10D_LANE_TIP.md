@@ -152,11 +152,49 @@ is exactly why Wave 10D has a lane MOUSE building one. **This lane did not build
 a second injector.**
 
 Verdict, stated plainly: **ported, NOT verified. Verified once MOUSE's injector
-lands** — at which point the counters to read are `operatorNew` (expect one
-entry per tooltip shown), `GetToolTipString` (expect **two** per tooltip, retail
-calls it twice), `SetText` (one), and within `SetText`, `found` > 0 whenever the
-tooltip template contains a `textToolTip` element. `TypeName`/`Type` move only
-if something reflects on the object.
+lands** — at which point the counters to read are RATIOS against `operatorNew`,
+not absolute counts. Every absolute scales with the injector script (MOUSE's
+`tooltip_det` is two hover episodes and reads 2; its `drag_det` is one and reads
+1), so an absolute prediction turns a script change into a false divergence:
+
+```
+GetToolTipString / operatorNew == 1   on the EMPTY-string arm
+                               == 2   on the non-empty arm (retail asks once to
+                                      test emptiness, releases, and asks again
+                                      only when non-empty)
+SetText          / operatorNew == 1
+bytes            / operatorNew == 192 (0xc0)
+```
+
+and within `SetText`, `found` > 0 whenever the tooltip template contains a
+`textToolTip` element. `TypeName`/`Type` move only if something reflects on the
+object, and 0 there is expected on this route.
+
+> **CORRECTED BY THE INTEGRATOR AT MERGE (2026-09-09).** This paragraph
+> previously read *"`GetToolTipString` (expect **two** per tooltip, retail calls
+> it twice)"*. That holds only on the NON-EMPTY arm. MOUSE's measured cell
+> (`#time`) takes the EMPTY arm — its own `nonEmptyString=0` — where the correct
+> value is ONE per tooltip. Anyone running the close cell against the old
+> prediction would have seen 1 where the doc promised 2 and reported a CORRECT
+> port as broken: the precise harm of a wrong number in a warrant. Found by lane
+> MOUSE's review, raised by lane TIP, and applied here rather than by TIP so that
+> a reported lane's branch does not move
+> (`reference_lane_edits_after_report_invalidate_the_measurement`). The
+> ratios-not-counts framing is MOUSE's.
+>
+> §7a's promotion gate is unaffected and stands as written: it is
+> "`operatorNew` non-zero", a THRESHOLD rather than a count, so it is
+> script-independent.
+>
+> Related retraction, recorded by lane TIP against itself: its claim that
+> "`SetText` = 2 regardless — `BeginToolTip` calls it on both arms" was stated in
+> a tone implying verification it had not done. It never disassembled
+> `BeginToolTip`; it read lane UIF6's transcription at
+> `runtime/src/ui/userinterface_hover.cpp:444-446`, whose annotation carries two
+> call addresses (`0x1801209ac` / `0x1801209d6`) showing the compiler duplicated
+> the tail into each arm. Good evidence and consistent — but UIF6's single
+> reading, not independent corroboration, and MOUSE was right to refuse to count
+> it twice.
 
 Each counter ships with a named effectiveness control beside it (`nonNull`,
 `rootHit`, `found`, `wrote`, `bytes`) so a counter that moves without the body
