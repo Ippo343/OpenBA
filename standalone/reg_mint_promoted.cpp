@@ -473,6 +473,79 @@ int RtMintRegisterPromotedRows() {
     RegisterRuntimeExport("??_7DialogInstance@UI@@6B@", st);
     RegisterRuntimeAddr(0x180156d70ull, st); ++n;
 
+    // ========================================================================
+    // ??_7ToolTipDialog@UI@@6B@  —  WAVE 10D, warrant 7a
+    // ========================================================================
+    //
+    // The row did not EXIST when Wave 10D opened. Lane TIP ported the three
+    // slots that are ToolTipDialog's own (0 vector-deleting-dtor, 1 TypeName,
+    // 2 Type) and PROVED BY ADDRESS that slots 3..9 are byte-identical to
+    // ??_7DialogInstance@UI@@6B@'s targets — already ours, since that row is
+    // 10/10 and promoted. Extent pinned independently by the adjacent export:
+    // 0x180157880 + 10*8 == ??_7DialogLoaderLoopT@Engine@@6B@.
+    //
+    // The integrator regenerated rt_data_mint_tables.inc ONCE at wave close;
+    // the vtable SET diff was exactly one entrant, this row.
+    //
+    // GATE (a) — shadow, live boot, DLL present:
+    //     READY  ??_7ToolTipDialog@UI@@6B@  slots=10 ported=10 TRAP= 0
+    //
+    // GATE (b) — DISPATCH, not readiness. This is the distinction that has kept
+    // ??_7Dialog and ??_7DialogController green-and-unpromoted for two waves,
+    // so it was named IN ADVANCE with an abort condition rather than judged
+    // afterwards: a ToolTipDialog cannot be constructed without this vtable
+    // being stamped onto it, so `operatorNew` non-zero proves the table is
+    // really dispatched. TIP wrote: "if operatorNew is zero while MOUSE's
+    // BeginToolTip reads entries=2, that is a genuine finding — the DLL's
+    // BeginToolTip ran and ours did not — and this warrant must NOT be applied."
+    //
+    // Measured on the merged tip via lane MOUSE's injector
+    // (BANISHED_MOUSE_INJECT=hover,hover,off,hover,off MOUSE_TARGET=#time
+    // RT_UIHOVER_DETOUR=1), one cell, exit 0, 0-byte crash log:
+    //
+    //   [RtPort] UI::ToolTipDialog ATTENDANCE: total=6 operatorNew=2 (bytes=192)
+    //            GetToolTipString=2 (nonNull=0) SetText=2 (rootHit=0 found=2
+    //            wrote=2) TypeName=0 Type=0
+    //   [RtPort] UI::UserInterface::BeginToolTip  entries=2 rejected=0
+    //            closedPrev=0 nonEmptyString=0 allocFailed=0
+    //
+    // Read as RATIOS against operatorNew, never as absolute counts — every
+    // absolute scales with the injector script, so an absolute prediction turns
+    // a script change into a false divergence:
+    //     operatorNew        == BeginToolTip entries   (2 == 2)  -> DISPATCHED
+    //     bytes/operatorNew  == 192 (0xc0)   discriminates the caller
+    //     GetToolTipString/operatorNew == 1  -> the EMPTY arm, which
+    //         cross-checks BeginToolTip's own nonEmptyString=0 from the far end
+    //     SetText/operatorNew == 1, with effectiveness controls found=2 wrote=2
+    //     TypeName/Type == 0 — expected; they exist for TRAP=0, not this route
+    //
+    // NOT CLAIMED: the non-empty arm. `#time` has an empty +0x58
+    // _toolTipString, so retail falls back to the string-table arm
+    // (+0x48/+0x50 through 0x180035020) and GetToolTipString is called ONCE.
+    // The tooltip is fully populated — what is empty is the +0x58 override, not
+    // the tooltip. Covering the other arm needs an element some controller has
+    // called ?SetToolTipString@Element@UI@@ on; see WAVE10D_LANE_MOUSE.md §9.
+    st = RtMintPromotionStorage("??_7ToolTipDialog@UI@@6B@", 0x180157880ull);
+    RegisterRuntimeExport("??_7ToolTipDialog@UI@@6B@", st);
+    RegisterRuntimeAddr(0x180157880ull, st); ++n;
+
+    // ---- ?_typeInfo@ToolTipDialog@  —  WAVE 10D, warrant 7b ----------------
+    //
+    // Does not depend on the run. Its evidence is measured shadow output
+    // showing the row character-for-character the same shape as rows that
+    // already ship promoted: `idcmp=yes strs=0 ptr=2 fac=2traps`.
+    // Its live consumers are the two slots lane TIP ported — ?TypeName@ and
+    // ?Type@ read this BaseTypeInfo at +0x00 and +0x08 — which is this file's
+    // own "these have live consumers; that is the whole difference" rule.
+    // The pointer-identity question that hung over every typeinfo promotion was
+    // retired in Wave 10C by lane TIDENT: BaseTypeInfo::name is CONTENT-ONLY in
+    // both shipped binaries (525 exe references to the imported ?_typeInfo@
+    // slots all read +0x00; not one reads +0x08, and the DLL's 103 ?TypeName@
+    // accessors are never called).
+    st = RtMintPromotionStorage("?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A", 0x1801fa4a0ull);
+    RegisterRuntimeExport("?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801fa4a0ull, st); ++n;
+
     // ------------------------------------------------------------------------
     // NOT PROMOTED, and why. Each of these was measured this run, not assumed.
     //
