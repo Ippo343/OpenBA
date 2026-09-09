@@ -46,6 +46,17 @@
 #
 #   tools/game_dir_lock.sh run lane-FOO 900 -- make sa-run
 #
+# READ YOUR LOGS FROM A SNAPSHOT, NOT FROM THE GAME DIR:
+#
+#   tools/game_dir_lock.sh run lane-FOO 900 --snapshot ./mylogs -- make sa-run
+#
+# The lock covers deploy+run. It does NOT cover the window in which you sit and
+# ANALYSE, and standalone_*.log is overwritten by whoever runs next. On
+# 2026-09-09 three consecutive reads of "the" debug log were three different
+# processes, and another lane's verification-mode banner was read as a
+# default-on regression in the merged tree. `--snapshot` copies the logs while
+# the lock is still held, so what you analyse is what you ran.
+#
 # DEFEATED BY A PIPE -- this cost a real clobber on 2026-09-08. `acquire`
 # returns 1 on timeout correctly, but in a pipeline the exit status is the LAST
 # command's:
@@ -299,8 +310,9 @@ cmd_status() {
 #   tools/game_dir_lock.sh run lane-FOO 900 -- make sa-run
 #
 cmd_run() {
-    local who="${1:?lane name required}" timeout="${2:-900}"
+    local who="${1:?lane name required}" timeout="${2:-900}" snapdir=""
     shift 2
+    if [ "${1:-}" = "--snapshot" ]; then snapdir="${2:?--snapshot needs a directory}"; shift 2; fi
     [ "${1:-}" = "--" ] && shift
     [ $# -gt 0 ] || { echo "[gamelock] run: no command given" >&2; return 2; }
 
@@ -317,6 +329,22 @@ cmd_run() {
     "$@"
     local rc=$?
     trap - INT TERM HUP
+    # Snapshot the logs BEFORE releasing. The lock protects the deploy+run
+    # window; it says nothing about the ANALYSIS window, and reading
+    # standalone_*.log after the release reads whichever lane ran next. That
+    # fooled a whole analysis on 2026-09-09: three reads of "the" debug log were
+    # three different processes, and another lane's verification-mode banner was
+    # misread as a default-on regression in the merged tree. The tell -- object
+    # pointers differing across reads -- was in the output and was walked past
+    # twice.
+    if [ -n "$snapdir" ]; then
+        mkdir -p "$snapdir" 2>/dev/null
+        local f
+        for f in standalone_debug.log standalone_error.log standalone_crash.log                  standalone_boot_state.txt; do
+            [ -f "$GAME/$f" ] && cp "$GAME/$f" "$snapdir/$f" 2>/dev/null
+        done
+        echo "[gamelock] logs snapshotted to $snapdir (taken BEFORE release, so they are yours)"
+    fi
     cmd_release "$who"
     return $rc
 }
@@ -338,44 +366,6 @@ cmd_verify() {
     echo "[gamelock] verified: still held by $who"
 }
 
-# The safe path, made the easy one. Acquire, run, release -- with the acquire's
-# exit status checked HERE, where no caller's pipe can discard it. Anything the
-# caller wants to pipe is this command's output, not the acquire's.
-#
-#   tools/game_dir_lock.sh run lane-FOO 900 -- make sa-run
-#
-cmd_run() {
-    local who="${1:?lane name required}" timeout="${2:-900}"
-    shift 2
-    [ "${1:-}" = "--" ] && shift
-    [ $# -gt 0 ] || { echo "[gamelock] run: no command given" >&2; return 2; }
-
-    if ! cmd_acquire "$who" "$timeout"; then
-        echo "[gamelock] run: ABORTING, the lock was never granted to '$who'." >&2
-        return 1
-    fi
-    "$@"
-    local rc=$?
-    cmd_release "$who"
-    return $rc
-}
-
-# Returns 0 only if the lock is held BY YOU, right now. Cheap enough to call
-# immediately before a launch: it answers "is the exe about to run still mine?"
-# in the one way a discarded exit code cannot fake.
-cmd_verify() {
-    local who="${1:?lane name required}" owner
-    if [ ! -d "$LOCK" ]; then
-        echo "[gamelock] VERIFY FAILED: no lock is held at all (expected '$who')." >&2
-        return 1
-    fi
-    owner=$(lock_owner)
-    if [ "$owner" != "$who" ]; then
-        echo "[gamelock] VERIFY FAILED: held by '$owner', not '$who'." >&2
-        return 1
-    fi
-    echo "[gamelock] verified: still held by $who"
-}
 
 case "${1:-}" in
     acquire) shift; cmd_acquire "$@" ;;
