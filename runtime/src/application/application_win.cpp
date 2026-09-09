@@ -32,6 +32,10 @@
 
 using RtApplication::Application;
 
+// Wave 12 lane B's synthetic-subject probe (application_lifecycle_probe.cpp).
+// A no-op unless BANISHED_RT_APPB_PROBE armed it.
+extern "C" void RtApp_LifecycleProbeMaybeRun();
+
 namespace {
 
 // System::Timer's four data exports.
@@ -79,6 +83,14 @@ int64_t QpcToEngineTicks(int64_t qpc) {
 bool RtApp_PlatformUpdate(Application* self) {
     RT_DIFF_BEGIN("Application::Application::PlatformUpdate [no oracle: pumps the live message queue]");
     RT_DIFF_SHADOW(true, "pumped", "not diffable");
+
+    // Wave 12 lane B's lifecycle probe, self-scheduled here for the same reason
+    // set_avl_probe.cpp self-schedules on the first RegisterMessageCallback: it
+    // ALLOCATES, and at RuntimePortInit() time System::MemoryAllocator has been
+    // constructed but not started. The first frame is provably past that. A
+    // single load-and-branch when the probe is not armed, which is every run
+    // that has not set BANISHED_RT_APPB_PROBE.
+    RtApp_LifecycleProbeMaybeRun();
 
     if (self->_quitRequested) PostQuitMessage(0);
 
@@ -143,4 +155,69 @@ void RtApp_YieldToThreads(Application* /*self*/) {
     RT_DIFF_BEGIN("Application::Application::YieldToThreads [no oracle: yields the calling thread]");
     RT_DIFF_SHADOW(true, "yielded", "not diffable");
     SwitchToThread();
+}
+
+// ============================================================================
+// Application::Application::PlatformConstruct(void* platformHandle)
+// ?PlatformConstruct@Application@1@AEAAXPEAX@Z  retail 0x18009fbe0   ord 3331
+// ============================================================================
+// WAVE 12 LANE B. Four instructions, and the only body in this file that makes
+// no Win32 call at all — it is here because it is the `Platform*` seam by
+// retail's own architecture (a `_posix` twin would have a different one), not
+// because it needs <windows.h>.
+//
+//   18009fbe0: MOV  QWORD PTR [RCX],0x0        ; _windowHandle   = null
+//   18009fbe7: MOV  QWORD PTR [RCX+0x8],RDX    ; _platformHandle = arg
+//   18009fbeb: MOV  WORD  PTR [RCX+0x10],0x100 ; ONE 16-bit store: +0x10 = 0x00,
+//                                              ;                   +0x11 = 0x01
+//   18009fbf1: RET
+//
+// IT IS THE CONSTRUCTOR'S TAIL, LIFTED. `??0Application@0@QEAA@PEAX@Z`
+// (0x18009f590, ported in runtime/src/engine/singleton_ctors.cpp) ends with
+// exactly these three stores in exactly this order — MSVC inlined the call.
+// That is why `calls=` for this site is zero on every run today: nothing in our
+// tree calls it, because retail's own only caller inlined it. The probe in
+// application_lifecycle_probe.cpp is what executes it, and unlike the other
+// four rows of this lane it gets a FULL BYTE-DIFF oracle, because the body is
+// three stores and no side effects.
+//
+// The 16-bit store is reproduced as a 16-bit store rather than as two byte
+// assignments. Single-threaded the two are indistinguishable, but this object
+// is read from the window procedure, which USER32 can re-enter, and "the two
+// bytes become visible together" is a property of the instruction retail chose.
+// `std::memcpy` rather than a cast-and-assign: `_stateLow` and `_running` are
+// two distinct `uint8_t` members and writing one `uint16_t` across them through
+// a reinterpret_cast is undefined behaviour GCC is entitled to reorder.
+// ============================================================================
+extern "C" void RtApp_PlatformConstruct(Application* self, void* platformHandle) {
+    RT_DIFF_BEGIN("Application::Application::PlatformConstruct");
+
+    if (rt_diff_on__) {
+        // A real scratch-copy diff: three stores, no side effects, no
+        // allocation. Both scratches are pre-filled with 0xCD so a byte NEITHER
+        // side writes (+0x12..+0x2f) stays 0xCD in both and compares equal —
+        // the symmetric fill singleton_ctors.cpp uses, and the inverse of the
+        // Wave 6 trap (reference_oracle_must_not_compare_unwritten_bytes.md).
+        using Fn = void (*)(Application*, void*);
+        alignas(8) uint8_t ours[sizeof(Application)];
+        alignas(8) uint8_t theirs[sizeof(Application)];
+        std::memset(ours,   0xCD, sizeof(ours));
+        std::memset(theirs, 0xCD, sizeof(theirs));
+
+        Application* o = reinterpret_cast<Application*>(ours);
+        o->_windowHandle   = nullptr;
+        o->_platformHandle = platformHandle;
+        const uint16_t stateWord = 0x0100;
+        std::memcpy(&o->_stateLow, &stateWord, sizeof(stateWord));
+
+        RT_ORIGINAL_ONCE(Fn, "?PlatformConstruct@Application@1@AEAAXPEAX@Z")(
+            reinterpret_cast<Application*>(theirs), platformHandle);
+        RT_DIFF_BYTES(ours, theirs, sizeof(Application));
+        RT_DIFF_WORK(true);
+    }
+
+    self->_windowHandle   = nullptr;                 // 0x18009fbe0
+    self->_platformHandle = platformHandle;          // 0x18009fbe7
+    const uint16_t stateWord = 0x0100;               // 0x18009fbeb
+    std::memcpy(&self->_stateLow, &stateWord, sizeof(stateWord));
 }

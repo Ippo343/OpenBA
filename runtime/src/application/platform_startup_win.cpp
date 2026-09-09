@@ -499,6 +499,102 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
 }
 
 // ============================================================================
+// Application::Application::PlatformShutdown()
+// ?PlatformShutdown@Application@1@AEAAXXZ      retail 0x18009fd70   ord 3393
+//                                              (AEAA == PRIVATE, and the export
+//                                              directory lists it — private is
+//                                              not unexported in this DLL)
+// ============================================================================
+// WAVE 12 LANE B. It lives HERE rather than in application_win.cpp for one
+// reason: it is the exact inverse of the function above and it consumes the
+// SAME `kClassName` literal. Two copies of "Banished" in two translation units
+// is a divergence waiting to happen, and nothing would catch it — the class
+// name is what ties RegisterClassW to UnregisterClassW, and a mismatch simply
+// leaves the class registered forever with no error either side would report.
+//
+//   if (this->_windowHandle) DestroyWindow(this->_windowHandle);   // 0x18009fd8a
+//   WideString className("Banished");                              // 0x18009fd9c
+//   UnregisterClassW(className, this->_platformHandle);            // 0x18009fda9
+//   <inline WideString release>                                    // 0x18009fdb0
+//
+// The two import slots were read out of the shipped import directory with
+// pefile rather than named from the call shape: 0x18014b5e0 is
+// USER32!DestroyWindow and 0x18014b5d8 is USER32!UnregisterClassW.
+//
+// FOUR DETAILS THAT ARE RETAIL'S, NOT TIDYING:
+//  1. **`this->_windowHandle` is NOT nulled afterwards.** DestroyWindow is
+//     called and the field keeps the now-dead HWND. `Engine::Shutdown`
+//     (engine_lifecycle.cpp:901) calls this and then destroys and frees the
+//     Application a few lines later, so nothing reads it again — but a port
+//     that "helpfully" nulled it would differ from retail on a path no oracle
+//     covers.
+//  2. **Neither Win32 return value is tested.** A failed DestroyWindow and a
+//     failed UnregisterClassW are both ignored.
+//  3. **The class name is rebuilt from the char literal every call**, through
+//     `??0WideString@System@@QEAA@PEBD@Z` (0x1800cb110), i.e. it allocates and
+//     releases a UTF-16 buffer purely to pass a string USER32 will only read.
+//     Reproduced; it is one allocation on the shutdown path.
+//  4. **The release is INLINE in retail** (0x18009fdb0..0x18009fde1) and is
+//     byte-for-byte `??1WideString@System@@QEAA@XZ` (0x18000a730), asymmetry
+//     included — the refcount-still-positive branch nulls the local, the
+//     refcount-hit-zero branch stores `data - 8` into the local and frees it.
+//     Calling our own ported dtor is the faithful spelling, exactly as
+//     PlatformStartup does above.
+//
+// ORACLE: NONE IS POSSIBLE AT THE CALL SITE, and the reason is the same
+// structural one PlatformStartup records, one step worse. Both effects are
+// one-shot and destructive: a replay's DestroyWindow gets an invalid handle and
+// its UnregisterClassW finds no class, so the second run measures the failure
+// of the first run's success. The comparison would be green and meaningless.
+//
+// What it IS verified by: it has a LIVE ROUTE. `Engine::Shutdown` calls it by
+// name through RT_EXPORT_ONCE, so `calls=` is non-zero on any clean exit, and
+// the two Win32 results are logged under the diff harness so a run can show
+// that the window really was destroyed and the class really was unregistered.
+// That is an EXECUTION record, not a comparison, and is labelled as one.
+// ============================================================================
+extern "C" void RtApp_PlatformShutdown(Application* self) {
+    RT_DIFF_BEGIN("Application::Application::PlatformShutdown "
+                  "[NO ORACLE POSSIBLE: DestroyWindow/UnregisterClassW are "
+                  "one-shot, so a replay measures the first run's success as a "
+                  "failure. This site records EXECUTION, not a comparison]");
+
+    BOOL destroyed = FALSE;
+    DWORD destroyErr = 0;
+    if (self->_windowHandle) {                                   // 0x18009fd82/85
+        destroyed = DestroyWindow(static_cast<HWND>(self->_windowHandle));
+        if (!destroyed) destroyErr = GetLastError();             // 0x18009fd8a
+    }
+
+    WideString className;
+    RtSystem::RtSystem_WideString_CtorFromChars(&className, kClassName);  // 0x18009fd9c
+
+    const BOOL unregistered =                                    // 0x18009fda9
+        UnregisterClassW(className.data,
+                         static_cast<HINSTANCE>(self->_platformHandle));
+    const DWORD unregisterErr = unregistered ? 0 : GetLastError();
+
+    RtSystem::RtSystem_WideString_Dtor(&className);              // 0x18009fdb0..fde1
+
+    if (rt_diff_on__) {
+        char a[192];
+        std::snprintf(a, sizeof(a),
+                      "hwnd=%p destroyed=%d(err=%lu) unregistered=%d(err=%lu) "
+                      "hinstance=%p class=\"%s\"",
+                      self->_windowHandle, static_cast<int>(destroyed),
+                      static_cast<unsigned long>(destroyErr),
+                      static_cast<int>(unregistered),
+                      static_cast<unsigned long>(unregisterErr),
+                      self->_platformHandle, kClassName);
+        RT_DIFF_SHADOW(true, a, "no oracle: one-shot Win32 teardown");
+        // Effectiveness: a run in which the window handle was already null and
+        // the class was not ours proves nothing about this body.
+        RT_DIFF_WORK(self->_windowHandle != nullptr);
+        printf("[AppShutdown] %s\n", a);
+    }
+}
+
+// ============================================================================
 // The three that are two instructions, and the one that is seven
 // ============================================================================
 // All four are quoted in full because they are short enough that a summary

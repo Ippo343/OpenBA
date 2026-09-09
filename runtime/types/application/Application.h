@@ -47,10 +47,40 @@
 
 namespace RtApplication {
 
-// Only the two bytes this lane's functions read or write are named. Every
-// other range is an unnamed, unproven gap — PLAN §6 step 8: say what is not
-// known rather than guess. No sizeof() assertion: the object's true extent
-// past +0x28 was never observed by any function this lane ported.
+// ============================================================================
+// WAVE 12 LANE B — THE CLASS EXTENT IS SETTLED. IT IS 0x30 BYTES.
+// ----------------------------------------------------------------------------
+// The comment above (and application.cpp's `RtApp_Quit` banner, corrected at
+// its source per PLAN §6 step 8) said the object was only known to be "AT LEAST
+// 0x29 bytes", because Wave 8 lane E did not own the constructor and so never
+// saw an allocation. It is 0x30, from retail's own allocation site:
+//
+//   Engine::Startup, 0x1800dbbb3:  MemAlloc(0x30, 4)  -> the Application
+//                                  then ??0Application@0@QEAA@PEAX@Z on it
+//
+// (transcribed in runtime/src/engine/engine_lifecycle.cpp at the "0x1800dbbb3:
+// Engine::Application" comment). An MSVC `new` passes sizeof, so 0x30 IS the
+// size. Two further facts agree rather than merely fail to contradict:
+//   * the last byte any of the eight ported members touches is +0x28, and the
+//     class contains pointers, so alignof is 8 and 0x29 rounds to exactly 0x30;
+//   * `??0Application@0@QEAA@AEBV00@@Z` (the copy constructor, 0x18000a0d0) and
+//     `??4Application@0@` (operator=, 0x18000a160) both stop copying at +0x28.
+// So the `static_assert(sizeof(...) == 0x30)` below is a real check, not a
+// restatement of the field list.
+//
+// +0x10 AND +0x11 ARE TWO SEPARATE ONE-BYTE MEMBERS, also new from this lane.
+// The constructor writes them with ONE 16-bit store (`MOV WORD PTR [RCX+0x10],
+// 0x100`), which on its own is equally consistent with a single `uint16_t`
+// field. The copy constructor settles it: 0x18000a0ff and 0x18000a106 copy them
+// as two independent MOVZX/MOV BYTE pairs. A `uint16_t` member would have been
+// copied as one word.
+//
+// STILL UNPROVEN, and deliberately left unnamed: +0x12..+0x17 and +0x24. No
+// ported body reads or writes either range — and note that the copy constructor
+// and operator= do not copy them EITHER, so those six bytes of a copied
+// Application keep whatever the destination held. PLAN §6 step 8: say what is
+// not known rather than guess.
+// ============================================================================
 struct Application {
     // +0x00  THE MAIN WINDOW HANDLE. Named by Wave 9 lane VID2:
     // `?PlatformStartup@Device@Video@@AEAA_NXZ` opens with
@@ -73,7 +103,12 @@ struct Application {
     // Declared `void*` rather than `HINSTANCE`: PLAN §4.1 decision 1 keeps
     // <windows.h> out of every header under runtime/.
     void*   _platformHandle;   // +0x08
-    uint8_t _stateLow;         // +0x10  low byte of the ctor's word store (0x00). Not read.
+    // +0x10  Low byte of the ctor's 0x0100 word store, so 0x00. Proven to be a
+    // member in its own right rather than the low half of a uint16_t by the
+    // copy constructor, which copies it and +0x11 as two separate byte moves
+    // (0x18000a0ff, 0x18000a106). No ported body READS it; the name stays
+    // descriptive rather than inventing a meaning.
+    uint8_t _stateLow;         // +0x10
     uint8_t _running;          // +0x11  IsPaused: this[0x11] == 0 means PAUSED. Ctor sets 1.
     uint8_t _unknown12[0x06];  // +0x12..+0x17  unproven.
 
@@ -102,5 +137,9 @@ static_assert(offsetof(Application, _running)              == 0x11, "Application
 static_assert(offsetof(Application, _messageCallbackRoot)  == 0x18, "Application._messageCallbackRoot @ 0x18");
 static_assert(offsetof(Application, _messageCallbackCount) == 0x20, "Application._messageCallbackCount @ 0x20");
 static_assert(offsetof(Application, _quitRequested)        == 0x28, "Application._quitRequested @ 0x28");
+// Wave 12 lane B. Pinned by retail's own allocation at Engine::Startup
+// 0x1800dbbb3 (`MemAlloc(0x30, 4)`), not by this struct's field list.
+static_assert(sizeof(Application) == 0x30,
+              "Application is 0x30 bytes -- Engine::Startup 0x1800dbbb3 allocates 0x30");
 
 }  // namespace RtApplication
