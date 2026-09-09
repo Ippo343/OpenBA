@@ -165,14 +165,50 @@ run_in_progress() {
 #     `[ -d "$LOCK" ] || return 0` and so only ran when the lock was HELD;
 #   * a lane's `acquire` could never grab (run_in_progress was true), fell
 #     through to the generic wait, and printed `waiting for '(unknown)'`,
-#     because with no lock directory `lock_owner` has nothing to read;
-#   * the lane read that as lock contention, reported itself "queued behind"
-#     another lane that in fact held nothing, and waited 15 minutes.
+#     because with no lock directory `lock_owner` has nothing to read.
 #
 # Every individual component was working. The instrument's fault was reporting
 # a TRUE statement ("free") that answered a different question from the one
 # being asked ("can I use the directory?"). Those are two questions and this
 # script now answers both, separately and by name.
+#
+# ---------------------------------------------------------------------------
+# CORRECTION, 2026-09-09, AND IT IS THE INTEGRATOR'S OWN ERROR.
+#
+# This block originally continued: "the lane read that as lock contention,
+# reported itself 'queued behind' another lane that in fact held nothing, and
+# waited 15 minutes." THAT SENTENCE WAS FALSE, and the lane it described said
+# so with evidence.
+#
+# The orphan was real and was demonstrated: a `cp` failed with "Device or
+# resource busy" while `status` said free, and killing the stranded process
+# fixed it. What was NOT established is that the orphan caused the OTHER lane's
+# 15-minute wait. It did not. That lane's `acquire` printed
+# `queued behind 'updateload'` and then `waiting for 'updateload'` -- both
+# naming a real lane -- and this script can only produce those two strings when
+# a live TICKET is ahead of you (line ~280) and when the lock is genuinely HELD
+# (line ~323). In the orphan case there is no lock directory, so `lock_owner`
+# has nothing to read and the string would have been `(unknown)`. The message
+# the lane actually saw is therefore proof of ordinary, correct FIFO queueing
+# behind a lane that really did hold the lock and really was running.
+#
+# So two conditions were conflated: the integrator's orphan (which blocked the
+# INTEGRATOR'S deploy) and a genuine queue (which delayed the other lane). The
+# fix below stands on its own evidence and is unaffected -- the silent-orphan
+# gap is real whatever caused any particular wait -- but the attribution was
+# wrong, and it was wrong in the most seductive direction: an explanation
+# offered for SOMEONE ELSE'S anomaly that made the explainer the sole cause,
+# tidily accounted for both lanes, and stopped the search. That is exactly
+# `reference_a_reconciliation_retires_the_flag.md`. The tell was available at
+# the time and was not looked at: the lane quoted a message naming a lane, and
+# the orphan branch cannot produce a name.
+#
+# DIAGNOSTIC RULE THIS LEAVES BEHIND: the two conditions have DIFFERENT
+# symptoms and must not be merged. An orphan fails a `cp` with "Device or
+# resource busy" while `status` reads free, and never reaches a queue. A real
+# queue never reaches a `cp` at all. Ask which one happened before explaining
+# either.
+# ---------------------------------------------------------------------------
 #
 # It still does NOT kill anything. A live exe nobody locked is either an orphan
 # or a lane running unlocked, and from here those are indistinguishable --
