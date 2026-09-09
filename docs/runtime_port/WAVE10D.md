@@ -41,24 +41,28 @@ reasons this project derived and re-derived across two waves.
 
 ### The seven remaining UI rows, and what each actually needs
 
-```
-??2ToolTipDialog@UI@@SAPEAX_K@Z            \
-??_7ToolTipDialog@UI@@6B@                   |  BeginToolTip's callees,
-?GetToolTipString@Element@UI@@              |  entered in Wave 10C
-?SetText@ToolTipDialog@UI@@                /
-??_7Dialog@UI@@6B@                  ported 9/9, TRAP=0, held on DISPATCH
-??_7DialogController@UI@@6B@        ported 11/11, TRAP=0, held on CONSUMER
-?_typeInfo@DialogController@UI@@    a port with no caller
-```
+| row | state | what it needs | lane |
+|---|---|---|---|
+| `??2ToolTipDialog@UI@@SAPEAX_K@Z` | unported | a port | **TIP** |
+| `??_7ToolTipDialog@UI@@6B@` | unported | a port (+ a mint row?) | **TIP** |
+| `?GetToolTipString@Element@UI@@` | unported | a port | **TIP** |
+| `?SetText@ToolTipDialog@UI@@` | unported | a port | **TIP** |
+| `??_7Dialog@UI@@6B@` | ported 9/9, `TRAP=0` | a DISPATCH | **VTFID** |
+| `??_7DialogController@UI@@6B@` | ported 11/11, `TRAP=0` | a CONSUMER | **VTFID** |
+| `?_typeInfo@DialogController@UI@@` | minted, READY | a CALLER | **VTFID** |
+
+All four unported rows entered the census in Wave 10C as `BeginToolTip`'s
+callees. All three held rows are downstream of the same fact about our 27
+subclass vtables. So the seven rows are really **two problems and one
+capability**.
 
 ## Lanes
 
 | lane | scope |
 |---|---|
-| **TIP** | the four `ToolTipDialog` rows — closes 4 of the 7 |
-| **VTFID** | the 27 subclass vtables' inherited slots (ROUTES handed this over) |
-| **MOUSE** | a harness mouse/hover injector — closes a whole CLASS of `entries=0` |
-| **OBJ** | decompose the `Object` namespace gap and port what is cheap |
+| **TIP** | the four `ToolTipDialog` rows — the only actual porting left in UI |
+| **VTFID** | the 27 subclass vtables' inherited slots — all three held rows are downstream of this |
+| **MOUSE** | a harness mouse/hover injector — the only route that reaches any of it |
 
 ### VTFID — the fidelity fix lane ROUTES scoped but did not take
 
