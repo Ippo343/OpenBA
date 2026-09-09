@@ -1,0 +1,248 @@
+Wave 10B lane ELEM -- extracted evidence from four locked runs, 2026-09-09
+
+Common env on all four:
+  BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=900 BANISHED_PAUSEMENU_QUIT=120
+  BANISHED_RT_MINT_SHADOW=1 BANISHED_RT_DIFF=1
+  BANISHED_TOOL_HARNESS=utility BANISHED_UTILITY_TEMPLATE=Template\UtilityMap.rsc
+
+The minimap harness route is what makes these runs meaningful: it is the only
+route this lane found that CONSTRUCTS a UI::Element through our ??0Element port
+(FrustumOutlineElement, code/Game/Component/frustumoutlineelement.cpp), and that
+object then keeps the base Element vtable for its whole life. A menu-only A/B of
+this row is a no-op and would have been a promotion with no caller.
+
+Full logs were snapshotted under tools/game_dir_lock.sh; only the lines that
+carry the verdict are committed here.
+
+==============================================================================
+R3 CONTROL   (harness minimap, no mint rows)
+==============================================================================
+[RtMint] promoted 10 minted DATA row(s) -- live on every run
+[RtMintShadow] INFO ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x8d4a19a7, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow]   READY    ??_7Element@UI@@6B@                                  slots=12 ported=11 TRAP= 0 purecall= 1
+[RtMintShadow]   BLOCKED  ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=NO  strs=0 fac=2traps
+[Shutdown] done
+[RtMintShadow]   READY    ??_7Element@UI@@6B@                                  slots=12 ported=11 TRAP= 0 purecall= 1
+[RtMintShadow]   READY    ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=yes strs=0 fac=2traps
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #1  ours=control: _timers._size off by one = 0x71 (port)  theirs=control: _timers._size off by one = 0x70 (shipped, at body+0x15)
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #2  ours=control: absent pattern = 0 (port)  theirs=pattern NOT FOUND in the shipped body
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #3  ours=control: ambiguous pattern = 0 (port)  theirs=pattern NOT UNIQUE in the shipped body
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #1  ours=control: +0x30 immediate claimed to be 0 = 0  theirs=shipped +0x4d = -1
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #2  ours=control: absent pattern = 0  theirs=pattern occurs 0 times, need exactly 1
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #3  ours=control: ambiguous pattern = 0  theirs=pattern occurs 28 times, need exactly 1
+[RtDiff] DIVERGENCE Object::Factory::Startup [probe, not diffable]  call #1  ours=chain=416 nodes=415 badCrc=0  theirs=EXPECTED (no DLL run): nodes==chain==416, badCrc==0
+[ElemTid] Element (base)                   slot=0000000140151660 typeInfo=00007ffca5f3ab30 id=2370443687
+[RtDiff] DIVERGENCE UI::SpriteSheet::TypeName  call #1  ours=00007ff6c22a0854  theirs=00007ffca5e94578
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #2  ours=case 1 (second append (growth arm)): element 0 ours={2000,2000,1} theirs={1000,1000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #3  ours=case 2 (id ALREADY PRESENT -- retail appends a duplicate anyway): element 0 ours={2000,2000,1} theirs={3000,3000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #4  ours=case 3 (third): element 0 ours={4000,4000,1} theirs={3000,3000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::ElementDescription::CreateInstance  call #6  ours=+0x10: 58 22 2f 90 15 02 00 00  theirs=+0x10: 48 74 21 90 15 02 00 00
+[RtDiff]   UI::Element::ComputeLayout[thunk]                calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Draw[thunk]                         calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::TypeName[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Type[bytes]                         calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Persist[bytes]                      calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Update[bytes]                       calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Enable[bytes]                       calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Contains[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::SetColor[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::GetBorder[bytes]                    calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::FindElement                         calls=81         worked=?          divergences=0
+[RtDiff]   UI::Element::SetElementId                        calls=42         worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::ctor                     calls=5          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::CreateInstance [twin synthetic] calls=7          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::CreateInstance           calls=6          worked=4          divergences=1
+[RtDiff]   UI::ElementDescription::GetFileVersion           calls=2          worked=?          divergences=0
+[RtDiff]   UI::Element::SetName                             calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetUserData                         calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetToolTip                          calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetFlagsOnOff                       calls=13         worked=?          divergences=0
+[RtDiff]   UI::Element::ChildCount                          calls=70         worked=?          divergences=0
+[RtDiff]   UI::Element::Child                               calls=77         worked=?          divergences=0
+[RtDiff]   UI::Element::SetPadding                          calls=1022       worked=?          divergences=0
+[RtDiff]   UI::Element::ctor                                calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::AdjustUpperLeft                     calls=14         worked=1          divergences=0
+[RtDiff]   UI::Element::GetAlignedPosition                  calls=963        worked=?          divergences=0
+[RtDiff]   UI::Element::GetAlignedPosition[static]          calls=963        worked=963        divergences=0
+[RtDiff]   UI::ElementDescription::~ElementDescription      calls=0          worked=0          divergences=0
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+crash log size = 0 bytes
+
+==============================================================================
+R4 ARMED     (+ BANISHED_RT_MINT_ROWS=??_7Element@UI@@6B@)
+==============================================================================
+[RtMint] promoted 10 minted DATA row(s) -- live on every run
+[RtMint] ROW ON (env): vtable   ??_7Element@UI@@6B@
+[RtMint] BANISHED_RT_MINT_ROWS registered 1 row(s) selectively
+[RtMintShadow] INFO ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x8d4a19a7, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow]   READY    ??_7Element@UI@@6B@                                  slots=12 ported=11 TRAP= 0 purecall= 1
+[RtMintShadow]   BLOCKED  ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=NO  strs=0 fac=2traps
+[Shutdown] done
+[RtMintShadow]   READY    ??_7Element@UI@@6B@                                  slots=12 ported=11 TRAP= 0 purecall= 1
+[RtMintShadow]   READY    ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=yes strs=0 fac=2traps
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #1  ours=control: _timers._size off by one = 0x71 (port)  theirs=control: _timers._size off by one = 0x70 (shipped, at body+0x15)
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #2  ours=control: absent pattern = 0 (port)  theirs=pattern NOT FOUND in the shipped body
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #3  ours=control: ambiguous pattern = 0 (port)  theirs=pattern NOT UNIQUE in the shipped body
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #1  ours=control: +0x30 immediate claimed to be 0 = 0  theirs=shipped +0x4d = -1
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #2  ours=control: absent pattern = 0  theirs=pattern occurs 0 times, need exactly 1
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #3  ours=control: ambiguous pattern = 0  theirs=pattern occurs 28 times, need exactly 1
+[RtDiff] DIVERGENCE Object::Factory::Startup [probe, not diffable]  call #1  ours=chain=416 nodes=415 badCrc=0  theirs=EXPECTED (no DLL run): nodes==chain==416, badCrc==0
+[ElemTid] Element (base)                   slot=0000000140151660 typeInfo=00007ffcab68ab30 id=2370443687
+[RtDiff] DIVERGENCE UI::SpriteSheet::TypeName  call #1  ours=00007ff619ff0854  theirs=00007ffcab5e4578
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #2  ours=case 1 (second append (growth arm)): element 0 ours={2000,2000,1} theirs={1000,1000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #3  ours=case 2 (id ALREADY PRESENT -- retail appends a duplicate anyway): element 0 ours={2000,2000,1} theirs={3000,3000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #4  ours=case 3 (third): element 0 ours={4000,4000,1} theirs={3000,3000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::Element::ctor  call #1  ours=+0x0: c0 c7 63 1a f6 7f 00 00  theirs=+0x0: 60 61 5e ab fc 7f 00 00
+[RtDiff] DIVERGENCE UI::ElementDescription::CreateInstance  call #6  ours=+0x10: 38 46 da b1 d3 02 00 00  theirs=+0x10: d0 3b 36 b2 d3 02 00 00
+[RtDiff]   UI::Element::ComputeLayout[thunk]                calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Draw[thunk]                         calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::TypeName[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Type[bytes]                         calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Persist[bytes]                      calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Update[bytes]                       calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Enable[bytes]                       calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Contains[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::SetColor[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::GetBorder[bytes]                    calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::FindElement                         calls=81         worked=?          divergences=0
+[RtDiff]   UI::Element::SetElementId                        calls=42         worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::ctor                     calls=5          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::CreateInstance [twin synthetic] calls=7          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::CreateInstance           calls=6          worked=4          divergences=1
+[RtDiff]   UI::ElementDescription::GetFileVersion           calls=2          worked=?          divergences=0
+[RtDiff]   UI::Element::SetName                             calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetUserData                         calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetToolTip                          calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetFlagsOnOff                       calls=13         worked=?          divergences=0
+[RtDiff]   UI::Element::ChildCount                          calls=70         worked=?          divergences=0
+[RtDiff]   UI::Element::Child                               calls=77         worked=?          divergences=0
+[RtDiff]   UI::Element::SetPadding                          calls=1022       worked=?          divergences=0
+[RtDiff]   UI::Element::ctor                                calls=1          worked=?          divergences=1
+[RtDiff]   UI::Element::AdjustUpperLeft                     calls=14         worked=1          divergences=0
+[RtDiff]   UI::Element::Type                                calls=1          worked=1          divergences=0
+[RtDiff]   UI::Element::GetAlignedPosition                  calls=963        worked=?          divergences=0
+[RtDiff]   UI::Element::GetAlignedPosition[static]          calls=963        worked=963        divergences=0
+[RtDiff]   UI::Element::~Element                            calls=0          worked=0          divergences=0
+[RtDiff]   UI::Element::RemoveChildren [no oracle: destroys its children] calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element                                      calls=1          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::~ElementDescription      calls=0          worked=0          divergences=0
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+crash log size = 0 bytes
+
+==============================================================================
+R5 PROMOTED  (vtable on reg_mint_promoted.cpp's list, no env)
+==============================================================================
+[RtMint] promoted 11 minted DATA row(s) -- live on every run
+[RtMintShadow] INFO ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x8d4a19a7, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow]   READY    ??_7Element@UI@@6B@                                  slots=12 ported=11 TRAP= 0 purecall= 1  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=NO  strs=0 fac=2traps
+[Shutdown] done
+[RtMintShadow]   READY    ??_7Element@UI@@6B@                                  slots=12 ported=11 TRAP= 0 purecall= 1  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=yes strs=0 fac=2traps
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #1  ours=control: _timers._size off by one = 0x71 (port)  theirs=control: _timers._size off by one = 0x70 (shipped, at body+0x15)
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #2  ours=control: absent pattern = 0 (port)  theirs=pattern NOT FOUND in the shipped body
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #3  ours=control: ambiguous pattern = 0 (port)  theirs=pattern NOT UNIQUE in the shipped body
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #1  ours=control: +0x30 immediate claimed to be 0 = 0  theirs=shipped +0x4d = -1
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #2  ours=control: absent pattern = 0  theirs=pattern occurs 0 times, need exactly 1
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #3  ours=control: ambiguous pattern = 0  theirs=pattern occurs 28 times, need exactly 1
+[RtDiff] DIVERGENCE Object::Factory::Startup [probe, not diffable]  call #1  ours=chain=416 nodes=415 badCrc=0  theirs=EXPECTED (no DLL run): nodes==chain==416, badCrc==0
+[ElemTid] Element (base)                   slot=0000000140151660 typeInfo=00007ffcab1cab30 id=2370443687
+[RtDiff] DIVERGENCE UI::SpriteSheet::TypeName  call #1  ours=00007ff7a82e0894  theirs=00007ffcab124578
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #2  ours=case 1 (second append (growth arm)): element 0 ours={2000,2000,1} theirs={1000,1000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #3  ours=case 2 (id ALREADY PRESENT -- retail appends a duplicate anyway): element 0 ours={2000,2000,1} theirs={3000,3000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #4  ours=case 3 (third): element 0 ours={4000,4000,1} theirs={3000,3000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::ElementDescription::CreateInstance  call #6  ours=+0x10: 20 78 42 ba fb 01 00 00  theirs=+0x10: e0 7c ec b8 fb 01 00 00
+[RtDiff]   UI::Element::ComputeLayout[thunk]                calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Draw[thunk]                         calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::TypeName[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Type[bytes]                         calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Persist[bytes]                      calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Update[bytes]                       calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Enable[bytes]                       calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Contains[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::SetColor[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::GetBorder[bytes]                    calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::FindElement                         calls=82         worked=?          divergences=0
+[RtDiff]   UI::Element::SetElementId                        calls=42         worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::ctor                     calls=5          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::CreateInstance [twin synthetic] calls=7          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::CreateInstance           calls=6          worked=4          divergences=1
+[RtDiff]   UI::ElementDescription::GetFileVersion           calls=2          worked=?          divergences=0
+[RtDiff]   UI::Element::SetName                             calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetUserData                         calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetToolTip                          calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetFlagsOnOff                       calls=13         worked=?          divergences=0
+[RtDiff]   UI::Element::ChildCount                          calls=70         worked=?          divergences=0
+[RtDiff]   UI::Element::Child                               calls=77         worked=?          divergences=0
+[RtDiff]   UI::Element::SetPadding                          calls=1022       worked=?          divergences=0
+[RtDiff]   UI::Element::ctor                                calls=2          worked=?          divergences=0
+[RtDiff]   UI::Element::AdjustUpperLeft                     calls=14         worked=1          divergences=0
+[RtDiff]   UI::Element::Type                                calls=1          worked=1          divergences=0
+[RtDiff]   UI::Element::GetAlignedPosition                  calls=963        worked=?          divergences=0
+[RtDiff]   UI::Element::GetAlignedPosition[static]          calls=963        worked=963        divergences=0
+[RtDiff]   UI::Element::~Element                            calls=0          worked=0          divergences=0
+[RtDiff]   UI::Element::RemoveChildren [no oracle: destroys its children] calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element                                      calls=1          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::~ElementDescription      calls=0          worked=0          divergences=0
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+crash log size = 0 bytes
+
+==============================================================================
+R6 PROMOTED  (+ BANISHED_RT_MINT_ROWS=?_typeInfo@Element@UI@@...)
+==============================================================================
+[RtMint] promoted 11 minted DATA row(s) -- live on every run
+[RtMint] ROW ON (env): typeinfo ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A
+[RtMint] BANISHED_RT_MINT_ROWS registered 1 row(s) selectively
+[RtMintShadow] INFO ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x8d4a19a7, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow]   READY    ??_7Element@UI@@6B@                                  slots=12 ported=11 TRAP= 0 purecall= 1  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=NO  strs=0 fac=2traps
+[Shutdown] done
+[RtMintShadow]   READY    ??_7Element@UI@@6B@                                  slots=12 ported=11 TRAP= 0 purecall= 1  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=yes strs=0 fac=2traps
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #1  ours=control: _timers._size off by one = 0x71 (port)  theirs=control: _timers._size off by one = 0x70 (shipped, at body+0x15)
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #2  ours=control: absent pattern = 0 (port)  theirs=pattern NOT FOUND in the shipped body
+[RtDiff] DIVERGENCE UI3 pin negative control (sink)  call #3  ours=control: ambiguous pattern = 0 (port)  theirs=pattern NOT UNIQUE in the shipped body
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #1  ours=control: +0x30 immediate claimed to be 0 = 0  theirs=shipped +0x4d = -1
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #2  ours=control: absent pattern = 0  theirs=pattern occurs 0 times, need exactly 1
+[RtDiff] DIVERGENCE DLG2 pin negative control (sink)  call #3  ours=control: ambiguous pattern = 0  theirs=pattern occurs 28 times, need exactly 1
+[RtDiff] DIVERGENCE Object::Factory::Startup [probe, not diffable]  call #1  ours=chain=416 nodes=415 badCrc=0  theirs=EXPECTED (no DLL run): nodes==chain==416, badCrc==0
+[ElemTid] Element (base)                   slot=0000000140151660 typeInfo=00007ff7ac54d9d8 id=2370443687
+[RtDiff] DIVERGENCE UI::SpriteSheet::TypeName  call #1  ours=00007ff7abf00894  theirs=00007ffcab5e4578
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #2  ours=case 1 (second append (growth arm)): element 0 ours={2000,2000,1} theirs={1000,1000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #3  ours=case 2 (id ALREADY PRESENT -- retail appends a duplicate anyway): element 0 ours={2000,2000,1} theirs={3000,3000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::DialogInstance::StartTimer[negative control]  call #4  ours=case 3 (third): element 0 ours={4000,4000,1} theirs={3000,3000,1}  theirs=shipped 0x1801137c0 on an identical private subject
+[RtDiff] DIVERGENCE UI::ElementDescription::CreateInstance  call #6  ours=+0x10: 10 f5 c1 03 13 02 00 00  theirs=+0x10: b8 7b a0 03 13 02 00 00
+[RtDiff]   UI::Element::ComputeLayout[thunk]                calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Draw[thunk]                         calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::TypeName[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Type[bytes]                         calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Persist[bytes]                      calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Update[bytes]                       calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Enable[bytes]                       calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::Contains[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::SetColor[bytes]                     calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::GetBorder[bytes]                    calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element::FindElement                         calls=82         worked=?          divergences=0
+[RtDiff]   UI::Element::SetElementId                        calls=42         worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::ctor                     calls=5          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::CreateInstance [twin synthetic] calls=7          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::CreateInstance           calls=6          worked=4          divergences=1
+[RtDiff]   UI::ElementDescription::GetFileVersion           calls=2          worked=?          divergences=0
+[RtDiff]   UI::Element::SetName                             calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetUserData                         calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetToolTip                          calls=10         worked=?          divergences=0
+[RtDiff]   UI::Element::SetFlagsOnOff                       calls=13         worked=?          divergences=0
+[RtDiff]   UI::Element::ChildCount                          calls=70         worked=?          divergences=0
+[RtDiff]   UI::Element::Child                               calls=77         worked=?          divergences=0
+[RtDiff]   UI::Element::SetPadding                          calls=1022       worked=?          divergences=0
+[RtDiff]   UI::Element::ctor                                calls=2          worked=?          divergences=0
+[RtDiff]   UI::Element::AdjustUpperLeft                     calls=14         worked=1          divergences=0
+[RtDiff]   UI::Element::Type                                calls=1          worked=1          divergences=0
+[RtDiff]   UI::Element::GetAlignedPosition                  calls=963        worked=?          divergences=0
+[RtDiff]   UI::Element::GetAlignedPosition[static]          calls=963        worked=963        divergences=0
+[RtDiff]   UI::Element::~Element                            calls=0          worked=0          divergences=0
+[RtDiff]   UI::Element::RemoveChildren [no oracle: destroys its children] calls=1          worked=?          divergences=0
+[RtDiff]   UI::Element                                      calls=1          worked=?          divergences=0
+[RtDiff]   UI::ElementDescription::~ElementDescription      calls=0          worked=0          divergences=0
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+crash log size = 0 bytes

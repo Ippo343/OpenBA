@@ -543,8 +543,27 @@ void* RtUi_Element_Ctor(Element* self) {
     // empty child array), so it cleans up the handle and nothing else.
     //
     // Excluded from the comparison, with the reason for each:
+    //   +0x00        the VTABLE POINTER. WAVE 10B LANE ELEM. Both ctors write
+    //                it and they write DIFFERENT VALUES ON PURPOSE the moment
+    //                `??_7Element@UI@@6B@` is a promoted mint row: ours writes
+    //                the table our tree publishes, theirs writes the DLL's.
+    //                That disagreement IS the promotion, so comparing the field
+    //                reports a permanent divergence for a correct port — the
+    //                shape reference_oracle_must_not_compare_unwritten_bytes.md
+    //                warns about, one step over (a field both sides write, that
+    //                they are *required* to write differently).
+    //                Measured, not predicted: with BANISHED_RT_MINT_ROWS=
+    //                ??_7Element@UI@@6B@ this site reported exactly one
+    //                DIVERGENCE, at +0x0, ours=<exe .data> theirs=<Runtime
+    //                .rdata>, and nothing else in the run changed.
+    //                NOTHING IS LOST BY EXCLUDING IT: the field is checked
+    //                immediately below by its own predicate. That check is a
+    //                SELF-CHECK, not an oracle — it asks "did the ctor write
+    //                the table this tree publishes", which is the invariant —
+    //                and it still catches the two ways this field actually
+    //                breaks (a null resolve, and a stale cached pointer).
     //   +0x08, +0x0c  the handle index/id — necessarily different for two
-    //                 distinct live objects; that they differ is correct.
+    //                distinct live objects; that they differ is correct.
     //   +0x54, +0x60, +0x64, +0x7c, +0x8c  never written by either ctor.
     if (rt_diff_on__ && g_replayDepth == 0) {
         ++g_replayDepth;
@@ -560,6 +579,7 @@ void* RtUi_Element_Ctor(Element* self) {
             std::memcpy(a, self, kElementSize);
             std::memcpy(b, g_replayScratch, kElementSize);
             static const struct { size_t off, len; } kSkip[] = {
+                { 0x00, 8 },   // _vtable — see the block above
                 { 0x08, 8 },   // _handleIndex + _handleId
                 { 0x54, 4 },   // UI::String tail padding
                 { 0x60, 8 },   // _layoutWidth + _layoutHeight
@@ -574,6 +594,18 @@ void* RtUi_Element_Ctor(Element* self) {
             theirDtor(g_replayScratch);
         }
         --g_replayDepth;
+
+        // The compensating check for the +0x00 exclusion above. SELF-CHECK, and
+        // labelled one: it does not consult the DLL, so it cannot tell us that
+        // the table we publish is the right table — only that the ctor wrote
+        // the one this tree resolves, which is the invariant the byte compare
+        // can no longer express. A null here is the failure that used to show
+        // up as a divergence and would otherwise go silent.
+        char ours[64], theirs[64];
+        std::snprintf(ours,   sizeof(ours),   "_vtable=%p", self->_vtable);
+        std::snprintf(theirs, sizeof(theirs), "ElementVTable()=%p", ElementVTable());
+        RT_DIFF_SHADOW(self->_vtable != nullptr && self->_vtable == ElementVTable(),
+                       ours, theirs);
     }
     return self;
 }
