@@ -614,7 +614,20 @@ void CallRetailCloseDialog(UserInterface* self, void** dlgPtr) {
 
 extern "C" void RtUi_UserInterface_CloseDialog(UserInterface* self, void** dlgPtr) {
     RT_PREDICT_SITE("UI::UserInterface::CloseDialog");
-    ++g_entries;
+
+    // THE PROBE GATE. `g_entries` is printed by a static destructor, so it only
+    // reaches the log when the process EXITS CLEANLY — and the only unattended
+    // route that reaches this body in-game (the pause menu's Resume button)
+    // leaves the game running afterwards and has to be killed. A killed run
+    // would then report nothing at all, which reads exactly like entries=0.
+    // Lane UI3 needed the same thing for the same reason. One line, on the
+    // first entry only, to stderr, which survives an abnormal exit.
+    if (g_entries++ == 0) {
+        std::fprintf(stderr,
+            "[RtPort] UI::UserInterface::CloseDialog ENTERED (first call) -- the "
+            "port is LIVE on this route\n");
+        std::fflush(stderr);
+    }
 
     if (RT_PREDICT_ON) {
         uint8_t* const S   = reinterpret_cast<uint8_t*>(self);
