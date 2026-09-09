@@ -884,6 +884,38 @@ def scan():
     )
 
 
+
+# ---------------------------------------------------------------------------
+# UNPROMOTABLE rows (Wave 10E lane FINAL's proposal, accepted by the integrator)
+#
+# A `??_7` / `?_typeInfo@` row can be PORTED IN FULL and still never promotable,
+# because nothing could ever dispatch through it. Such a row is not unfinished
+# work, but it sits in "Called but not ported" looking identical to a function
+# nobody has written -- and two waves of route-hunting is what that cost.
+#
+# THIS FUNCTION CHANGES NO COUNT. `total`, `called`, `ported`, `detour` and
+# `called covered` keep exactly their previous arithmetic, so every cross-wave
+# comparison stays valid. It only adds a per-row TAG and a derived `ceiling`.
+#
+# The source of truth is standalone/reg_mint_promoted.cpp, NOT a heuristic here:
+# a row is unpromotable because a lane PROVED it and wrote the proof down.
+# ---------------------------------------------------------------------------
+def load_unpromotable(root):
+    """Parse RT_UNPROMOTABLE: lines out of standalone/reg_mint_promoted.cpp."""
+    path = os.path.join(root, "standalone", "reg_mint_promoted.cpp")
+    out = {}
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                m = re.search(r"RT_UNPROMOTABLE:\s*(\?\S+)\s*\|\s*([^|]+?)\s*\|"
+                              r"\s*([^|]+?)\s*\|\s*(.+?)\s*$", line)
+                if m:
+                    out[m.group(1)] = (m.group(2), m.group(3), m.group(4))
+    except OSError:
+        pass
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1003,8 +1035,15 @@ def main():
 
     print("Runtime-x64.dll port census")
     print("=" * 78)
-    print("%-14s %8s %8s %8s %8s  %s" %
-          ("namespace", "total", "called", "ported", "detour", "called covered"))
+    unprom = load_unpromotable(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    unprom_per_ns = {}
+    for _k, _key, _ns, _p, _d, _f in rows:
+        if _key in unprom and not _p:
+            unprom_per_ns[_ns] = unprom_per_ns.get(_ns, 0) + 1
+
+    print("%-14s %8s %8s %8s %8s  %s  %s" %
+          ("namespace", "total", "called", "ported", "detour", "called covered",
+           "ceiling"))
     print("-" * 78)
 
     order = sorted(per_ns, key=lambda n: (-per_ns[n]["called"], n))
@@ -1013,8 +1052,15 @@ def main():
         b = per_ns[ns]
         total = TOTAL_FUNCTIONS.get(ns, "")
         pct = (100.0 * b["ported"] / b["called"]) if b["called"] else 0.0
-        print("%-14s %8s %8d %8d %8d  %5.1f%%" %
-              (ns, total, b["called"], b["ported"], b["detoured"], pct))
+        nu = unprom_per_ns.get(ns, 0)
+        if nu:
+            ceil_n = b["called"] - nu
+            cpct = (100.0 * ceil_n / b["called"]) if b["called"] else 0.0
+            ceil = "  %5.1f%%%s" % (cpct, "  AT CEILING" if b["ported"] >= ceil_n else "")
+        else:
+            ceil = ""
+        print("%-14s %8s %8d %8d %8d  %5.1f%%%s" %
+              (ns, total, b["called"], b["ported"], b["detoured"], pct, ceil))
         tot_called += b["called"]
         tot_ported += b["ported"]
         tot_detour += b["detoured"]
@@ -1153,9 +1199,28 @@ def main():
         if args.namespace:
             sel = [r for r in sel if r[2] == args.namespace]
         print("Called but not ported (%d):" % len(sel))
+        unprom = load_unpromotable(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        n_unprom = 0
         for kind, key, ns, _ported, _detoured, files in sorted(sel, key=lambda r: (r[2], r[1])):
-            print("  %-8s %-12s %s" % (kind, ns, key))
+            tag = ""
+            if key in unprom:
+                slots, doc, expiry = unprom[key]
+                tag = "   [PORTED %s · UNPROMOTABLE · %s]" % (slots, doc)
+                n_unprom += 1
+            print("  %-8s %-12s %s%s" % (kind, ns, key, tag))
             print("           %s" % ", ".join(files[:4]) + (" …" if len(files) > 4 else ""))
+            if key in unprom:
+                print("           expires: %s" % unprom[key][2])
+        if n_unprom:
+            print()
+            print("  %d of the %d above are PORTED IN FULL and cannot be promoted -- a lane"
+                  % (n_unprom, len(sel)))
+            print("  proved no route could ever dispatch through them. They are not unfinished")
+            print("  work and they do not move any count above. An UNPROMOTABLE tag is a")
+            print("  WRITTEN VERDICT from the named lane doc (source of truth:")
+            print("  standalone/reg_mint_promoted.cpp), never a heuristic, and a row loses it")
+            print("  the moment its stated expiry condition is met.")
 
     if args.csv:
         with open(args.csv, "w", newline="", encoding="utf-8") as fh:

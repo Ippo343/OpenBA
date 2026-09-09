@@ -546,6 +546,52 @@ int RtMintRegisterPromotedRows() {
     RegisterRuntimeExport("?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A", st);
     RegisterRuntimeAddr(0x1801fa4a0ull, st); ++n;
 
+    // ========================================================================
+    // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted
+    // ========================================================================
+    //
+    // These are NOT unfinished work, and they are not the same thing as the
+    // "NOT PROMOTED, and why" list below — that list is rows a future lane
+    // could still move. A row appears HERE only when a lane has PROVED that no
+    // promotion could change behaviour on any route that could ever exist.
+    //
+    // This block is the SOURCE OF TRUTH for tools/runtime_census.py's
+    // UNPROMOTABLE tag. The script parses the `RT_UNPROMOTABLE:` lines below by
+    // literal text. It changes no count in the census: it tags the row and
+    // derives a per-namespace ceiling. A tag is a WRITTEN VERDICT from a named
+    // lane doc, never a heuristic, and a row loses it the moment the stated
+    // expiry condition is met.
+    //
+    // FORMAT (one per line, parsed):
+    //   RT_UNPROMOTABLE: <symbol> | <slots ported> | <doc §> | <expiry>
+    //
+    // RT_UNPROMOTABLE: ??_7DialogController@UI@@6B@ | 11/11 | WAVE10E_LANE_FINAL.md §2 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7Dialog@UI@@6B@ | 9/9 | WAVE10E_LANE_FINAL.md §3 | either Dialog factory ported+registered
+    //
+    // WHY EACH, in one line — the proofs are in the lane doc:
+    //
+    //  ??_7DialogController@UI@@6B@ — its single consumer stamps the pointer
+    //      and then calls ??1Internal@Object@@, WHOSE FIRST STATEMENT
+    //      OVERWRITES THE SAME QWORD. The value is written and overwritten
+    //      UNREAD. No route could ever observe a different table.
+    //      EXPIRY: none. No future lane should hunt a route.
+    //
+    //  ??_7Dialog@UI@@6B@ — complete consumer set is 4 stamps / 0 reads, all
+    //      onto stack temporaries destroyed by a DIRECT ??1Dialog call. The
+    //      Dialogs the framework dispatches on are built by
+    //      ?CreateNewObject@Dialog@UI@@ (0x180038530) and
+    //      ?CreateInPlaceObject@Dialog@UI@@ (0x180038610), both UNPORTED, so
+    //      retail's factory stamps its own table through an unredirectable
+    //      in-DLL LEA.
+    //      EXPIRY: the moment either factory is ported and registered. One grep
+    //      to check; [DlgTrip] foreignDispatch > 0 to confirm.
+    //
+    // AND THE FACT THAT SETTLES THE EXE HALF OF BOTH: Application-x64.exe
+    // imports 899 symbols, 833 of them from Runtime-x64.dll, and ZERO ??_7.
+    // No exe code can ever consume a Runtime vtable row — in our build or in
+    // retail's. That is a property of the shipped binary, not of our porting.
+    // ========================================================================
+
     // ------------------------------------------------------------------------
     // NOT PROMOTED, and why. Each of these was measured this run, not assumed.
     //
