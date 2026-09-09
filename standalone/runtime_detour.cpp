@@ -11,10 +11,13 @@
 //     rel32, Jcc, RIP-relative ModR/M) point at the wrong place once copied to
 //     a trampoline hundreds of MB away. HDE64 decodes and re-encodes them.
 //   Bug Class 3 — MOV RAX,RSP / MOV R11,RSP capture RSP for absolute stack
-//     addressing. Reached through a CALL, the captured value is 8 low (the
-//     pushed return address), so the trampoline inserts ADD reg,8. The
-//     RSP-safe variant instead requires the detour to tail-JMP in, which is
-//     what `allocator_lock.cpp` does for MemoryAllocator::Free by hand.
+//     addressing. This installer USED TO insert ADD reg,8 after such an
+//     instruction. THAT CORRECTION WAS ITSELF THE BUG and was removed in
+//     Wave 10 (lane FREEPRO) after a register-level control caught it
+//     rotating three callee-saved registers by one slot; the frame argument
+//     and the evidence are in the long comment on the copy loop below, and in
+//     docs/runtime_port/WAVE10_LANE_FREEPRO.md. A CALLed trampoline sees the
+//     same frame SHAPE retail's entry sees, so nothing needs shifting.
 //   Bug Class 8 — SEH-cookie functions whose prologue cannot be displaced
 //     without desyncing .pdata/.xdata unwind. Detour the vtable slot instead.
 //
@@ -59,45 +62,44 @@ bool InstallDetour(uintptr_t targetAddr, void* detourFunc, RtDetour* info, size_
     info->trampoline = VirtualAlloc(NULL, RT_TRAMPOLINE_BUFFER_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!info->trampoline) return false;
 
-    // Copy prologue bytes to trampoline WITH RSP capture correction (Bug Class 3).
+    // Copy prologue bytes to the trampoline VERBATIM.
     //
-    // The CALL into the trampoline shifts RSP by 8. For most instructions this
-    // is harmless (Bug Class 4 stores are internally consistent), but
-    // MOV RAX,RSP (48 8B C4) and MOV R11,RSP (4C 8B DC) capture RSP into a
-    // register used for ABSOLUTE stack addressing. We fix this by inserting
-    // ADD RAX,8 or ADD R11,8 immediately after each such instruction.
-    uint8_t* src = info->original;
+    // BUG CLASS 3 WAS ITSELF THE BUG — corrected Wave 10, lane FREEPRO, with a
+    // register-level control (`standalone/rt_selftest.cpp` Test 2b).
+    //
+    // This loop used to insert `ADD RAX,8` after a copied `MOV RAX,RSP` (and
+    // `ADD R11,8` after `MOV R11,RSP`), on the reasoning that "the CALL into the
+    // trampoline shifts RSP by 8, so the captured value is 8 low". Follow the
+    // frames and that reasoning does not survive:
+    //
+    //   retail:      caller RSP = C at the CALL; the CALL pushes the return
+    //                address, so entry RSP = E = C-8 and `MOV RAX,RSP` gives
+    //                RAX = E. The caller's 32-byte home space is at [E+8].
+    //   trampoline:  our wrapper's RSP = C' at ITS call; entry RSP = R = C'-8
+    //                and `MOV RAX,RSP` gives RAX = R. OUR home space is at
+    //                [R+8].
+    //
+    // The two are the SAME SHAPE with E := R. Nothing is shifted, so nothing
+    // needs correcting — and a JMP-reached trampoline (InstallDetourRSPSafe)
+    // needs no correction either, because there RSP is caller-level already.
+    // There is no configuration in which the +8 was right.
+    //
+    // What it actually did: these functions SAVE nonvolatiles through the
+    // captured RAX and RESTORE them through an RSP-derived base. Moving only
+    // RAX desynchronises the pair by one 8-byte slot, so the saved registers
+    // come back rotated (RSI receives RBX's value, RDI receives RSI's, RBX
+    // receives an unwritten home slot) and the last store lands just past the
+    // 32-byte home space, in the wrapper's own frame.
+    //
+    // Three detour subjects in the tree have an RSP capture in the displaced
+    // prologue: MemoryAllocator::Free (0x1800c6c00, trampoline never called —
+    // rt_alloc_swap.cpp REPLACES the body), UI::UserInterface::Update
+    // (0x1801213c0, routed to the byte-copy installer by lane UI1 for exactly
+    // this reason), and Engine::Startup (0x1800db8a0), whose trampoline IS
+    // called by rt_alloc_swap.cpp's shadow driver and which this corrects.
+    memcpy(info->trampoline, info->original, prologueSize);
     uint8_t* dst = (uint8_t*)info->trampoline;
-    size_t srcOff = 0;
-    size_t dstOff = 0;
-
-    while (srcOff < prologueSize) {
-        // Check for MOV RAX,RSP: 48 8B C4
-        if (srcOff + 3 <= prologueSize &&
-            src[srcOff] == 0x48 && src[srcOff+1] == 0x8B && src[srcOff+2] == 0xC4) {
-            dst[dstOff++] = 0x48; dst[dstOff++] = 0x8B; dst[dstOff++] = 0xC4;
-            srcOff += 3;
-            // Insert ADD RAX,8 (48 83 C0 08) to compensate for CALL's RSP push
-            dst[dstOff++] = 0x48; dst[dstOff++] = 0x83; dst[dstOff++] = 0xC0; dst[dstOff++] = 0x08;
-#ifdef _DEBUG
-            printf("[RtDetour] RSP correction: inserted ADD RAX,8 at trampoline offset %zu\n", dstOff - 4);
-#endif
-        }
-        // Check for MOV R11,RSP: 4C 8B DC
-        else if (srcOff + 3 <= prologueSize &&
-                 src[srcOff] == 0x4C && src[srcOff+1] == 0x8B && src[srcOff+2] == 0xDC) {
-            dst[dstOff++] = 0x4C; dst[dstOff++] = 0x8B; dst[dstOff++] = 0xDC;
-            srcOff += 3;
-            // Insert ADD R11,8 (49 83 C3 08) to compensate for CALL's RSP push
-            dst[dstOff++] = 0x49; dst[dstOff++] = 0x83; dst[dstOff++] = 0xC3; dst[dstOff++] = 0x08;
-#ifdef _DEBUG
-            printf("[RtDetour] RSP correction: inserted ADD R11,8 at trampoline offset %zu\n", dstOff - 4);
-#endif
-        }
-        else {
-            dst[dstOff++] = src[srcOff++];
-        }
-    }
+    size_t dstOff = prologueSize;
 
     // Append jump back to (target + prologueSize).
     // IMPORTANT: Use R10 (not RAX) for the jump. The copied prologue may set RAX
@@ -425,28 +427,12 @@ emit_abs_jmp:
 
         newPos += copySize;
 
-        // Bug Class 3 fix: if the instruction we just copied is MOV RAX,RSP or
-        // MOV R11,RSP, insert a correction (ADD RAX,8 or ADD R11,8) to compensate
-        // for the CALL-induced RSP shift when entering the trampoline.
-        if (instrLen == 3) {
-            const uint8_t* origBytes = (const uint8_t*)oldInst;
-            if (origBytes[0] == 0x48 && origBytes[1] == 0x8B && origBytes[2] == 0xC4) {
-                // MOV RAX,RSP -> insert ADD RAX,8
-                trampBuf[newPos++] = 0x48; trampBuf[newPos++] = 0x83;
-                trampBuf[newPos++] = 0xC0; trampBuf[newPos++] = 0x08;
-#ifdef _DEBUG
-                printf("[RtDetour] RSP correction: inserted ADD RAX,8\n");
-#endif
-            }
-            else if (origBytes[0] == 0x4C && origBytes[1] == 0x8B && origBytes[2] == 0xDC) {
-                // MOV R11,RSP -> insert ADD R11,8
-                trampBuf[newPos++] = 0x49; trampBuf[newPos++] = 0x83;
-                trampBuf[newPos++] = 0xC3; trampBuf[newPos++] = 0x08;
-#ifdef _DEBUG
-                printf("[RtDetour] RSP correction: inserted ADD R11,8\n");
-#endif
-            }
-        }
+        // NO RSP-capture "correction" here either. The +8 that used to be
+        // inserted after a copied MOV RAX,RSP / MOV R11,RSP was wrong in every
+        // configuration — see the long comment in InstallDetour above for the
+        // frame argument and for the one-slot register rotation it produced.
+        // MemoryAllocator::Free (0x1800c6c00) reaches THIS path, because the
+        // Jcc rel32 at +3 makes HasRelativeInstructions pick the relocator.
 
         oldPos += instrLen;
     }
