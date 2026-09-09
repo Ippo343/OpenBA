@@ -217,6 +217,49 @@ int RtMintRegisterPromotedRows() {
     RegisterRuntimeExport("?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A", st);
     RegisterRuntimeAddr(0x1801faee8ull, st); ++n;
 
+    // ------------------------------------------------------------------------
+    // WAVE 10D lane VTFID — `?_typeInfo@DialogController@UI@@` (DLL 0x1801f9e48)
+    //
+    // Lane TIDENT left this READY-but-held with an expiry condition stated in
+    // full: "it expires the moment `[TidStatic]` prints on any route … the
+    // observable is the NODE POINTER on that line moving out of the DLL's data
+    // into our image". Both halves of that condition are now measured.
+    //
+    //  1. THE CONSUMER IS LIVE. On wave10/base @190e91c, route
+    //     BANISHED_AUTOSTART=1 BANISHED_LIVE_TOOLS=1
+    //     BANISHED_TOOL_HARNESS=housepanel + pause-menu quit, `[TidStatic]`
+    //     prints for this row. TIDENT recorded zero lines on five routes
+    //     including housepanel, so the consumer became reachable between that
+    //     tip and this one — NOT through this wave's vtable fidelity fix: the
+    //     line prints identically with BANISHED_DLGCTRL_VT=0, so the fix is
+    //     not what varies and is not offered as the warrant.
+    //
+    //  2. SOMETHING VARIES WITH THE ROW, and it is the thing TIDENT named.
+    //     Same binary, same seed, same route, one variable:
+    //        row off:  node=00007ffcab689e48  id=0xf2c192b8
+    //        row on:   node=00007ff672f2d638  id=0xf2c192b8
+    //     Runtime-x64.dll based at 0x7ffcab490000 that run, so the OFF node is
+    //     DLL+0x1f9e48 — exactly the documented 0x1801f9e48 — and the ON node
+    //     is in our image. The id is byte-identical, which is the correct
+    //     outcome and is why the pointer, not the value, is the observable.
+    //
+    //  3. THE NEGATIVE CONTROL IS IN THE SAME LINE PAIR. `[TidStatic]` also
+    //     prints `?_typeInfo@GroupElement@UI@@`, which is NOT armed: its node
+    //     stays 00007ffcab68abd8 in both halves. So the pointer move follows
+    //     the ARMED ROW and not the run, the route, or the environment — the
+    //     distinction a single moving pointer could not make on its own.
+    //
+    // What this does NOT license: the row's own base bodies stay unentered
+    // (`[DlgCtrl] ATTENDANCE … TypeName=0 Type=0`), and that is not a gap in
+    // the evidence — retail OVERRIDES vtable slots 1 and 2 in all 39
+    // DialogController subclasses (tools/dlgctrl_vtable_audit.py; no mask has
+    // bit 1 or 2 set), so no subclass dispatch can ever reach them. This row's
+    // consumer reaches the static a different way, by direct read in
+    // TypeIdOfStatic().
+    st = RtMintPromotionStorage("?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A", 0x1801f9e48ull);
+    RegisterRuntimeExport("?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801f9e48ull, st); ++n;
+
     // =================================================================    // THE FIRST PROMOTED `??_7` VTABLES  —  WAVE 10B lanes SS and ELEM
     // (both landed the same day from separate worktrees, so each lane doc
     // calls itself "the first"; the integrator merged SS then ELEM.)
@@ -547,14 +590,45 @@ int RtMintRegisterPromotedRows() {
     //      are entered zero times cannot distinguish a safe promotion from an
     //      unexercised one. That is this file's own "WHY NOT ALL 104" rule
     //      (a port with no caller, that no run can verify), applied to a row
-    //      whose readiness number says go. It expires the moment any route
-    //      makes `[DlgCtrl] ATTENDANCE` print a non-zero total — the instrument
-    //      is already in the tree and prints on every run, so nobody has to
-    //      rediscover the question.
+    //      whose readiness number says go.
+    //
+    //      *** WAVE 10D lane VTFID — THE STATED EXPIRY WAS THE WRONG TEST, AND
+    //      THE ROW'S BLOCKER IS NOW A PERMANENT FACT, NOT A MISSING ROUTE. ***
+    //
+    //      The expiry above ("the moment any route makes `[DlgCtrl]
+    //      ATTENDANCE` print a non-zero total") is now SATISFIED — this wave's
+    //      vtable fidelity fix takes it to `total=1699` on an ordinary run with
+    //      no switch. It changed nothing about this row, exactly as lane ROUTES
+    //      predicted when it retired the same gate: that counter measures the
+    //      nine BODIES, which are registered unconditionally, so it never
+    //      varied with the row at all.
+    //
+    //      Measured on the fixed tree — same binary, same seed, same route, one
+    //      variable (`BANISHED_RT_MINT_ROWS=??_7DialogController@UI@@6B@`) —
+    //      the normalised log diff is the two `[RtMint] ROW ON` lines the armed
+    //      half prints, plus the splash/camera/town-name jitter that differs in
+    //      every pair. Nothing varies with the row.
+    //
+    //      And now the reason is a BINARY FACT rather than a state of our tree.
+    //      This row's only consumer is the ported base destructor
+    //      `??1DialogController` (runtime/src/ui/dialog.cpp:1227), reachable
+    //      only through vtable SLOT 0. tools/dlgctrl_vtable_audit.py reads all
+    //      39 retail subclass vtables out of Application-x64.exe: **not one of
+    //      them inherits slot 0** — every subclass overrides its own deleting
+    //      destructor, as C++ requires. So retail itself never dispatches the
+    //      base destructor from a subclass, and no amount of extra fidelity in
+    //      our tables can ever reach it. Exercising this row needs a bare
+    //      `UI::DialogController` instance, which nothing constructs.
+    //
+    //      That is a stronger statement than the one it replaces: not "no
+    //      subclass currently calls it" but "retail's own tables make it
+    //      unreachable by dispatch". Do not spend another lane hunting a route.
     //
     //      The nine BODIES are ported and registered under both doors
     //      regardless, so `runtime_census.py --namespace UI` moves for them;
-    //      only the DATA row waits.
+    //      only the DATA row waits — and after Wave 10D seven of the nine are
+    //      also EXERCISED (`OnOpened=9 OnClosed=8 OnUpdateLayout=841
+    //      OnUpdate=841`), which the row's status does not depend on.
     //
     //  ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A  (0x1801f9e48)
     //      READY on the shadow — `idcmp=yes strs=0 ptr=2 fac=2traps` — and
