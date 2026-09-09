@@ -588,9 +588,13 @@ void RtUiDialogInstance_AddController6(void* self, uint32_t typeId, void* dataSo
         const char* const want = *reinterpret_cast<const char* const*>(nameString);
         bool useRoot = false;
         if (want && *reinterpret_cast<const int32_t*>(want - 8) != 0) {
-            const char* const have = insertion
-                ? *reinterpret_cast<const char* const*>(B(insertion, EL::kName))
-                : nullptr;
+            // 0x1801134cb `MOV RCX,[RDI+0x10]` — UNGUARDED on `insertion`.
+            // `insertion` is `this->_root`, which the ctor already dereferences
+            // unguarded at +0x90, so retail's assumption holds by construction.
+            // No guard added: it would not restore the behaviour, it would skip
+            // it (CLAUDE.md).
+            const char* const have =
+                *reinterpret_cast<const char* const*>(B(insertion, EL::kName));
             const int32_t haveLen =
                 have ? *reinterpret_cast<const int32_t*>(have - 8) : 0;
             if (haveLen == *reinterpret_cast<const int32_t*>(want - 8)) {
@@ -606,8 +610,9 @@ void RtUiDialogInstance_AddController6(void* self, uint32_t typeId, void* dataSo
 
         // ---- phase 1b: otherwise scan the root's DIRECT children ------------
         if (!useRoot) {
-            const int32_t n = insertion
-                ? *reinterpret_cast<const int32_t*>(B(insertion, EL::kChildrenSize)) : 0;
+            // 0x1801134f5 `MOV R14D,[RDI+0xa8]` — unguarded, same argument.
+            const int32_t n =
+                *reinterpret_cast<const int32_t*>(B(insertion, EL::kChildrenSize));
             void* hit = nullptr;
             if (n > 0) {
                 void** kids = *reinterpret_cast<void***>(B(insertion, EL::kChildrenData));
