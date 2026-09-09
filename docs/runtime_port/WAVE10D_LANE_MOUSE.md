@@ -480,6 +480,34 @@ and a 0-byte crash log. Three arms are still uncovered and named above.
 puts `BeginToolTip` through `??2ToolTipDialog@UI@@SAPEAX_K@Z`, the
 `DialogInstance` ctor, `??_7ToolTipDialog@UI@@6B@` and `SetText` **twice per
 run**, with `rejected=0`. Your four rows are all on that path. Note
-`nonEmptyString=0` today: the toolbar tooltip takes the **empty-string arm**, so
-`SetText`'s non-empty path needs a different target — the probe dump lists every
-tooltip-capable element with its `tipTbl`/`tipIdx`, which is where to pick one.
+Note `nonEmptyString=0` today: `#time` has an EMPTY `+0x58 _toolTipString`, so
+retail falls back to the string-table arm (`+0x48`/`+0x50` resolved through
+`0x180035020`) — **the tooltip is fully populated, just not through the arm that
+calls `GetToolTipString` twice.** What is empty is the `+0x58` override, not the
+tooltip.
+
+To cover the other arm, pick an element whose `+0x58` is non-empty, i.e. one that
+some controller has called `?SetToolTipString@Element@UI@@` (`0x1800356e0`) on.
+**The probe dump CANNOT tell you which those are: it prints `tipTbl`/`tipIdx`
+(`+0x48`) and not `+0x58`.** Adding `+0x58` to the dump line is the one-line fix.
+
+> **CORRECTED BY THE INTEGRATOR AT MERGE (2026-09-09), on lane MOUSE's own
+> report.** This paragraph previously said the probe dump's `tipTbl`/`tipIdx` was
+> "where to pick one". **That guidance was backwards**: `tipTbl`/`tipIdx` IS the
+> `+0x48` pair, and `+0x48` is the data the EMPTY arm uses — so selecting on it
+> steers the next lane toward the arm it already has. Verified from the shipped
+> bytes three times over (lane MOUSE by objdump, the integrator independently,
+> and consistent with lane TIP's reading of `userinterface_hover.cpp`):
+> `?GetToolTipString@Element@UI@@` at `0x1800356a0` is fifteen instructions that
+> read `[rcx+0x58]` and **nothing else** — it never touches `+0x48`.
+>
+> The original phrasing "takes the empty-string arm" is also kept out of the
+> replacement: it is true about the BRANCH but invites reading it as "no tooltip
+> text appeared", which is false. `nonEmptyString=0` means the `+0x58` override
+> was empty, nothing more.
+>
+> Applied here rather than by lane MOUSE so that a reported lane's branch does not
+> move (`reference_lane_edits_after_report_invalidate_the_measurement`) — the same
+> mechanism used for lane TIP's §4 defect. Different harms, same class: TIP's
+> wrong number could make a CORRECT run read as a divergence; this one sends the
+> next lane to the wrong search key.
