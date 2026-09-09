@@ -326,6 +326,26 @@ have reported *exactly the same empty log as batch 1's genuinely-zero runs*.
 `calls=`, `rounds=` and `entries=` are all incapable of separating those two
 cases; only a line written at the moment of the call can.
 
+| run | configuration | `ENTERED` | note |
+|---|---|---|---|
+| P | predict + detour, in-game Resume | **yes** | `pausesGame` 1 → 0 |
+| Q | P + `BANISHED_RT_PREDICT_SELFTEST=1` | **yes** | detour installed, logged |
+| R | P + `BANISHED_RT_ALLOC=1` | — | **invalidated by this lane's own cleanup**: killed while clearing batch 2's leftovers, `boot_state exit=4` (STALE). Not evidence either way |
+| S | **default config** — port registered, no oracle, no detour | **yes** | `pausesGame` 1 → 0 |
+
+**Run S is the strongest single result in this document.** In the configuration
+that actually ships — no predictor, no detour, our body live — the ported
+`CloseDialog` ran for real on the Resume click and the dialog was really removed:
+`PausesGame` goes 1 → 0, and that is the *engine's own* answer, the one
+`GameUpdateLoop::Update` reads to decide whether to tick the world. It is a
+behavioural check on the port's effect, not a self-check on our belief about it.
+
+It is also, deliberately, a coarse one. It says the body closed the dialog; it
+says nothing about the parent-list unlinks, the array compaction or the sound
+tail. That is what §5e's predictive counters are for.
+
+### 5e. Batch 4 — the predictive oracle on a route that exits cleanly
+
 ---
 
 ## 5d. The offline pin — a pre-flight on the INSTRUMENT, not on behaviour
