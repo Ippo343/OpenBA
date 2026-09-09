@@ -310,6 +310,31 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180058a10, 0x1800f8e10, 0x010, "Video::ImageBufferData"),   // probe subject
     RT_DELDTOR(0x180058a90, 0x1800f8e30, 0x010, "Video::ContextData"),   // probe subject
     RT_DELDTOR(0x180058b10, 0x1800f8cf0, 0x010, "Video::DeviceData"),   // probe subject
+    // ---- WAVE 10C lane DLG8 -------------------------------------------------
+    // Slot 0 of `??_7Dialog@UI@@6B@`, the last of that vtable's eight abort
+    // traps and the only one that is not a UI body. It is this family's shape
+    // exactly — a K1 "call the dtor" row — and the two constants come out of the
+    // shipped bytes at 0x180038b20:
+    //     LEA R9,[0x180112e40]   ~Dialog  (EXPORTED as ??1Dialog@UI@@UEAA@XZ,
+    //                                      and PORTED by lane DLG2, so
+    //                                      ResolveAddr hands back OUR body)
+    //     MOV EDX,0x88           sizeof(UI::Dialog)
+    // tools/rt_deleting_dtor_verify.py re-derives both from the DLL, which is
+    // the whole reason this row lives here rather than as a 38th hand-written
+    // copy in runtime/src/ui/dialog_vtable.cpp.
+    //
+    // APPENDED rather than inserted in address order (it would sort between
+    // UI::Element and UI::DialogController): kProbeSubjects below is a list of
+    // TABLE INDICES, and inserting mid-table would silently re-point all twelve
+    // Video::*Data probe subjects at the wrong rows.
+    //
+    // Its scalar-branch `operator delete` is 0x1800384d0, which — unlike the ten
+    // this file's banner lists — is EXPORTED, as `??3Dialog@UI@@SAXPEAX@Z`, a
+    // class-scoped operator delete. Disassembled: byte-identical to the other
+    // ten and to ?MemFree@MemoryAllocator@System@@SAXPEAX@Z. Nothing about the
+    // port changes; the banner's "per-translation-unit copies" is just an
+    // incomplete description of the set.
+    RT_DELDTOR(0x180038b20, 0x180112e40, 0x088, "UI::Dialog"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -586,6 +611,10 @@ void* RtDelDtor_ContextData(void* self, unsigned flags) {
 void* RtDelDtor_DeviceData(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 36);
 }
+// UI::Dialog               ~Dialog = 0x180112e40  (PORTED, lane DLG2)  [Wave 10C]
+void* RtDelDtor_Dialog(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 37);
+}
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36 };
 const int* ProbeSubjects(int* count) {
@@ -654,9 +683,10 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180058a10, (void*)&RtDelDtor_ImageBufferData);
     RegisterRuntimeAddr(0x180058a90, (void*)&RtDelDtor_ContextData);
     RegisterRuntimeAddr(0x180058b10, (void*)&RtDelDtor_DeviceData);
+    RegisterRuntimeAddr(0x180038b20, (void*)&RtDelDtor_Dialog);   // Wave 10C DLG8
 
-    printf("[RtDelDtor] 37 deleting destructors registered "
-                "(one body, 37 rows); ~Class resolves lazily\n");
+    printf("[RtDelDtor] 38 deleting destructors registered "
+                "(one body, 38 rows); ~Class resolves lazily\n");
 
     // The byte-comparing half of the oracle. It allocates nothing and runs
     // here rather than on first call, because nothing calls these before

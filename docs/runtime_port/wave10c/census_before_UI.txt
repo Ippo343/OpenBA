@@ -1,0 +1,9 @@
+export   UI           ??_7Dialog@UI@@6B@
+export   UI           ??_7DialogController@UI@@6B@
+export   UI           ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A
+export   UI           ?BeginToolTip@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@V?$InternalPtr@VElement@UI@@@4@HH@Z
+export   UI           ?DrawStandAloneUI@UserInterface@UI@@CAXAEAVContext@Video@@PEAX@Z
+export   UI           ?EndDragDrop@UserInterface@UI@@QEAAXXZ
+export   UI           ?EndHover@DialogInstance@UI@@QEAAXPEAVUserInterface@2@@Z
+export   UI           ?IsInsideClipRegion@UserInterface@UI@@QEBA_NHH@Z
+export   UI           ?UpdateStandAloneUI@UserInterface@UI@@CAXAEBVTime@System@@PEAX@Z

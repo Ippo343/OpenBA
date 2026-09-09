@@ -1,0 +1,5 @@
+[RtDelDtor] 38 deleting destructors registered (one body, 38 rows); ~Class resolves lazily
+[RtMint] ROW ON (env): vtable   ??_7Dialog@UI@@6B@
+[RtPort]   [DLG2 diff] rounds=6 divergences=3  effectiveness=340 bytes changed (excluded=0 in the +0x44 hole)  hole screen: 3 checked / 0 failed  NEGCTRL=0
+[Shutdown] done
+[DlgVtbl] ATTENDANCE: none of the seven bodies was entered in this run.

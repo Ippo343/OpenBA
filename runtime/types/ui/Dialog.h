@@ -139,7 +139,24 @@ struct Dialog {
     uint8_t  _base[0x20];              // +0x00  opaque; see the note above
     void*    _spriteSheet;             // +0x20  UI::SpriteSheet*
     char*    _spriteName;              // +0x28  System::String
-    uint8_t  _unknown30[0x08];         // +0x30  never read in this lane
+    // +0x30 / +0x34 — WAVE 10C LANE DLG8. Both were `_unknown30[8]`. Each is
+    // now named off its OWN EXPORTED ACCESSOR, not off a guess:
+    //   0x1800388a0  ?GetBackgroundColor@Dialog@UI@@QEBAIXZ
+    //                MOV EAX,dword ptr [RCX + 0x30] / RET
+    //   0x180038910  ?GetDrawLevel@Dialog@UI@@QEBAHXZ
+    //                MOV EAX,dword ptr [RCX + 0x34] / RET
+    // and `?Serialize@Dialog@UI@@` (0x1801130c0) independently records +0x30
+    // through rw_vtbl::kScalarUInt and +0x34 through kScalarInt, which agrees
+    // with both accessors' return types (I vs H in the mangling).
+    //
+    // *** THE CTOR SEEDS +0x30 TO 0xFFFFFFFF, NOT 0. *** 0x180112dfd (and its
+    // inlined twin at 0x1800387a2 inside `?Construct@`) is
+    // `MOV dword ptr [RCX+0x30],0xffffffff`. A port that zero-filled this
+    // qword the way UI::SpriteSheet's constructor zero-fills its equivalent
+    // would leave every Dialog with a transparent-black background colour and
+    // nothing would crash.
+    uint32_t _backgroundColor;         // +0x30  ctor = 0xFFFFFFFF
+    int32_t  _drawLevel;               // +0x34  ctor = 0; serialised LAST
     void*    _rootDescription;         // +0x38  Object::External* (has a +0x40 virtual)
     uint32_t _defaultFlags;            // +0x40
     uint32_t _unknown44;               // +0x44
@@ -150,14 +167,24 @@ struct Dialog {
     int32_t  _namedTemplateCount;      // +0x60
     int32_t  _namedTemplateCapacity;   // +0x64  Array<> shape; not read here
     void**   _templates;               // +0x68  ExternalPtr<ElementDescription>[]
-    uint8_t  _unknown70[0x08];         // +0x70  presumed size/capacity, unproven
+    // +0x70 — WAVE 10C LANE DLG8. `_unknown70`'s "presumed size/capacity,
+    // unproven" is now proven for the first half: `?Serialize@` reads
+    // `[RSI+0x70]` at 0x1801131c2 as the element count it records and then
+    // passes to `Array<ExternalPtr<ElementDescription>>::SetSize` for +0x68.
+    // The capacity half is still only the family shape and keeps that spelling.
+    int32_t  _templateCount;           // +0x70  Serialize 0x1801131c2
+    int32_t  _templateCapacity;        // +0x74  Array<> shape; never read
     void**   _references;              // +0x78  ExternalPtr<Object::External>[]
-    // +0x80 — WAVE 10 LANE DLG2. The default ctor `??0Dialog@UI@@QEAA@XZ`
-    // (0x180112db0) ends with `MOV qword ptr [RCX+0x80],RDX` at 0x180112e2a, so
-    // there IS a qword here and the class is at least 0x88 bytes. Nothing in
-    // this tree READS it, so it keeps the "unknown" spelling every other
-    // unproven field in this struct uses rather than acquiring a made-up name.
-    uint8_t  _unknown80[0x08];         // +0x80  ctor zeroes it; never read
+    // +0x80 — WAVE 10 LANE DLG2 found the ctor's store here and recorded
+    // "ctor zeroes it; never read". WAVE 10C LANE DLG8: IT IS READ. `?Serialize@`
+    // loads `[RSI+0x80]` at 0x180113293 as the element count for the +0x78
+    // array, records it, and on the read path hands it to that array's SetSize
+    // (0x18002f070). So +0x78/+0x80 is the same {data,count} pair as the three
+    // arrays above — which is what makes `?GetReference@`'s unchecked index an
+    // unchecked index into a KNOWN-length array rather than into an anonymous
+    // pointer.
+    int32_t  _referenceCount;          // +0x80  Serialize 0x180113293
+    int32_t  _referenceCapacity;       // +0x84  Array<> shape; never read
 };
 
 static_assert(offsetof(Dialog, _spriteSheet)         == 0x20, "Dialog::_spriteSheet @ +0x20");
@@ -171,15 +198,40 @@ static_assert(offsetof(Dialog, _namedTemplateCount)  == 0x60, "Dialog::_namedTem
 static_assert(offsetof(Dialog, _templates)           == 0x68, "Dialog::_templates @ +0x68 (GetTemplate)");
 static_assert(offsetof(Dialog, _references)          == 0x78, "Dialog::_references @ +0x78 (GetReference)");
 
-static_assert(offsetof(Dialog, _unknown80)          == 0x80, "Dialog +0x80 (ctor 0x180112e2a)");
+static_assert(offsetof(Dialog, _backgroundColor)    == 0x30, "Dialog::_backgroundColor @ +0x30 (?GetBackgroundColor@ 0x1800388a0)");
+static_assert(offsetof(Dialog, _drawLevel)          == 0x34, "Dialog::_drawLevel @ +0x34 (?GetDrawLevel@ 0x180038910)");
+static_assert(offsetof(Dialog, _templateCount)      == 0x70, "Dialog::_templateCount @ +0x70 (Serialize 0x1801131c2)");
+static_assert(offsetof(Dialog, _referenceCount)     == 0x80, "Dialog::_referenceCount @ +0x80 (Serialize 0x180113293)");
 
-// STILL NO sizeof ASSERT, deliberately. Lane DLG2's ctor proves the class is at
-// least 0x88 bytes — that is where the last store lands — but a ctor's WRITTEN
-// EXTENT is a LOWER BOUND on a class size, never the size itself: trailing
-// members a default ctor leaves alone are invisible to it. Nothing in this tree
-// allocates a `UI::Dialog` (retail's are stack temporaries inside the DLL and
-// heap objects the DLL's own factory makes), so any number here would still be
-// a guess dressed up as a fact.
+// THE sizeof ASSERT, AND WHY IT IS NOW ALLOWED — WAVE 10C LANE DLG8.
+//
+// This header carried an explicit REFUSAL to assert a size, and the refusal was
+// correct as written: lane DLG2's evidence was the default ctor's last store at
+// +0x80, and a constructor's WRITTEN EXTENT is a LOWER BOUND on a class size,
+// never the size itself — trailing members a ctor leaves alone are invisible to
+// it. A written extent belongs to a WRITER, and "never written" is meaningless
+// without "by whom" (reference_never_written_needs_by_whom.md).
+//
+// The new evidence is a DIFFERENT KIND of witness, not a bigger pile of the
+// same kind. `??_EDialog@UI@@` — slot 0 of `??_7Dialog@UI@@6B@`, at
+// 0x180038b20 — passes MSVC's `eh vector destructor iterator` the stride it
+// must walk a `Dialog[]` with:
+//
+//     180038b3f   MOV EDX,0x88
+//
+// That is `sizeof(UI::Dialog)` by definition: it is what the compiler itself
+// believes the distance between two adjacent Dialog objects is. It is a
+// measurement, and it happens to agree with DLG2's lower bound exactly, which
+// is the interesting part — there are no trailing members.
+//
+// Re-derived from the shipped DLL, independently of this comment, by
+// tools/rt_deleting_dtor_verify.py (row "UI::Dialog": `size=0x88`), and that
+// script has a negative control that perturbs a row and must report exactly one
+// problem.
+static_assert(sizeof(Dialog) == 0x88,
+              "sizeof(UI::Dialog) is 0x88 -- the array stride the vector "
+              "deleting destructor at 0x180038b20 passes to the eh vector "
+              "iterator (MOV EDX,0x88 at 0x180038b3f)");
 //
 // The ONE FOUR-BYTE HOLE: +0x44..+0x47. 0x180112e0b is a DWORD store to +0x40
 // and the next store is a QWORD at +0x48, so retail never writes +0x44 in the
