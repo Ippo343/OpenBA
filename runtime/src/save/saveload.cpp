@@ -194,8 +194,11 @@ static void SaveLoad_CtorLogic(SaveLoad* self) {
     self->_elapsed          = 0;
     self->_minOperationTime = ZeroTime();
     self->_string20         = nullptr;
-    self->field28           = 0;
-    self->_buffer30         = nullptr;
+    // One qword store of 0 at +0x28 in retail, which is _id AND _size together,
+    // then the pointer at +0x30 — see the embedded-SavedState note in the header.
+    self->_embeddedState._id   = 0;
+    self->_embeddedState._size = 0;
+    self->_embeddedState._data = nullptr;
     self->field38           = 0;
     self->_selectedIndex    = -1;
     self->_savesData        = nullptr;

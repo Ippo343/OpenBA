@@ -65,7 +65,9 @@
 #include <cstring>
 
 #include "saveload_internal.h"
+#include "../../types/io/Persistence.h"
 #include "../../funcs/rt_predict.h"
+#include "resolve.h"   // ResolveAddr / Module -- the port-aware address door
 
 using RtSave::SaveLoad;
 using RtSave::SavedState;
@@ -89,6 +91,7 @@ void RtVideoDeviceLock(void** deviceSingleton);
 void RtVideoDeviceUnlock(void** deviceSingleton);
 
 namespace {
+
 
 // ---- dependencies, all of them REAL exports in the shipped table -----------
 // Checked with pefile against C:\GOG Games\Banished\Runtime-x64.dll before
@@ -310,6 +313,474 @@ void OnVideoRestartBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
     }
 }
 
+
+// ============================================================================
+// THE SAVE/LOAD WORKER ENQUEUE — two unexported internals, called by address.
+// ----------------------------------------------------------------------------
+// 0x1800b7460 (load) and 0x1800b75c0 (save) are the same shape: copy the
+// filename into the Persistence worker's own String slot, reset its counters,
+// resize its per-slot pointer array, match each SaveBlock's id against the
+// worker's slot table, then ResetEvent/SetEvent to hand the job to the thread.
+// Neither is exported under ANY name — checked against the shipped export
+// table, not inferred from Ghidra's FUN_ prefix, because a source grep alone
+// cannot tell an unexported internal from an export nobody has ported yet
+// (reference_grep_cannot_tell_internal_from_unported_export.md).
+//
+// So they are ADDRESS doors, and they go through the port-aware ResolveAddr,
+// not through the raw image: ResolveAddr(Module::Runtime, a) consults the port
+// registry FIRST (reference_resolveaddr_consults_port_registry_first.md), so
+// the day either one is ported this file picks it up with no edit here.
+//
+// Their first argument is `persistence + 0x10`, NOT the Persistence itself.
+// That sub-object is the worker; passing the container would write the queue
+// state 0x10 bytes early, over fields nothing in this project models.
+// ----------------------------------------------------------------------------
+using WorkerEnqueueFn = void (*)(void* worker, const char** name, int count,
+                                 const RtIo::SaveBlock* blocks);
+
+WorkerEnqueueFn WorkerBeginLoad() {
+    static WorkerEnqueueFn fn =
+        reinterpret_cast<WorkerEnqueueFn>(ResolveAddr(Module::Runtime, 0x1800b7460));
+    return fn;
+}
+WorkerEnqueueFn WorkerBeginSave() {
+    static WorkerEnqueueFn fn =
+        reinterpret_cast<WorkerEnqueueFn>(ResolveAddr(Module::Runtime, 0x1800b75c0));
+    return fn;
+}
+
+// ---- the rest of the exported dependency set --------------------------------
+using BeginGetInfoFn  = bool     (*)(void* persistence, const char** name, int what);
+using SetupLoadFn     = RtIo::SaveBlock* (*)(SavedState* self, RtIo::SaveBlock* ret);
+using SaveMetaDataFn  = void     (*)(SaveLoad* self, void* pixels, int w, int h,
+                                     const char** nameByValue, int mode);
+using StringAssignFn  = const char** (*)(const char** self, const char* const* src);
+using NameGetterFn    = const char** (*)(const SaveLoad* self, const char** ret);
+
+// EVERY ONE of these returns a class BY VALUE, so the real ABI carries a
+// HIDDEN RETURN SLOT in RDX and the caller's arguments shift right by one.
+// Ghidra's C output hides it — it prints `GetSaveFilename(_singleton, &tmp)`
+// for what the disassembly shows as three registers
+// (0x1800c25e6: `LEA R8,[RBX+0x70]` is the NAME; `LEA RDX,[RSP+0x50]` is the
+// slot). A typedef that omits the slot is a wild write that still returns the
+// right answer, which is why it survives testing
+// (reference_hidden_retslot_wild_write.md). Confirmed register by register in
+// the disassembly of both call sites before these lines were written.
+using GetSaveFilenameFn = const char** (*)(void* persistence, const char** ret,
+                                           const char* const* name);
+
+// ============================================================================
+// Save::SaveLoad::UpdateLoadFromFile()  retail 0x1800c2560   ordinal 4521
+// ----------------------------------------------------------------------------
+// The "load the file the user named" path, as distinct from UpdateLoad's "load
+// the row the user picked". Three states:
+//
+//   state 0  ask Persistence for the save-game info of `_saveName`, go to 1.
+//   state 1  allocate a fresh SavedState{_id=1,_size=0,_data=null}, publish it
+//            at `_saveState`, have it build the SaveBlock it wants filled, and
+//            hand filename + block to the worker. Go to 2.
+//   state 2  finish: clear operation, reset the timer, clear progress, put
+//            `_selectedIndex` back to -1.
+//
+// LIKE UpdateDelete AND UNLIKE ITS OTHER THREE SIBLINGS, state 2 has NO
+// `_minOperationTime` gate — 0x1800c264c is a bare `CMP EAX,0x2` and there is
+// no time compare anywhere in the body. Two of the five skip the minimum
+// spinner time and three enforce it; that split is retail's, and it is
+// transcribed rather than regularised.
+//
+// THE ALLOCATION IS STORED EVEN WHEN IT FAILS. `MOV qword ptr [RBX+0x40],RAX`
+// at 0x1800c25c8 sits AFTER the `TEST RAX,RAX / JZ` merge point, so a failed
+// MemAlloc publishes a NULL `_saveState` and SetupLoad is then called on it.
+// That is retail's behaviour on an OOM path and this port reproduces it: the
+// project's standing rule is that an unguarded deref is load-bearing and a
+// guard skips behaviour rather than restoring it.
+//
+// ORACLE: PREDICTIVE. One location is deliberately EXCLUDED rather than
+// predicted — `_saveState`, because its value is whatever the allocator hands
+// back and no predictor can know the address retail's MemAlloc will return.
+// Excluding it keeps the coverage control honest: the byte really is not
+// covered, and `excluded=` says so rather than a silent pass.
+// ============================================================================
+void UpdateLoadFromFileBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
+    const uint32_t progress = out.ReadU32(&self->_progress);
+
+    if (progress == 0) {
+        uint8_t* persistence = PersistenceSingleton();
+        BeginGetInfoFn begin = RT_EXPORT_ONCE(BeginGetInfoFn,
+            "?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z");
+        // `LEA R8D,[RAX+0x2]` with RAX known zero on this path — the constant
+        // is 2, spelled that way by the compiler to reuse a zeroed register.
+        if (out.Call("IO::Persistence::BeginGetSaveGameInfo", (const void*)begin,
+                     reinterpret_cast<int64_t>(persistence),
+                     reinterpret_cast<int64_t>(&self->_saveName), 2)) {
+            begin(persistence, &self->_saveName, 2);
+        }
+        out.U32(&self->_progress, 1, "_progress = 1");
+        return;
+    }
+
+    if (progress == 1) {
+        // `LEA ECX,[RAX+0xf]` with RAX == 1 on this path: the size is 0x10.
+        SavedState* fresh = nullptr;
+        if (out.Call("System::MemoryAllocator::MemAlloc", (const void*)&MemAlloc, 0x10, 4)) {
+            fresh = static_cast<SavedState*>(MemAlloc(0x10, 4));
+            if (fresh != nullptr) {
+                // Retail writes the first TWO fields as one qword store of 1:
+                // `MOV qword ptr [RAX],0x1` is _id=1 AND _size=0 together.
+                fresh->_id   = 1;
+                fresh->_size = 0;
+                fresh->_data = nullptr;
+            }
+            self->_saveState = fresh;
+        } else if (round != nullptr) {
+            round->Exclude(&self->_saveState, sizeof(void*),
+                           "the address MemAlloc returns is not predictable");
+        }
+
+        RtIo::SaveBlock block{};
+        SetupLoadFn setup = RT_EXPORT_ONCE(SetupLoadFn,
+            "?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ");
+        if (out.Call("Save::SavedState::SetupLoad", (const void*)setup,
+                     reinterpret_cast<int64_t>(fresh),
+                     reinterpret_cast<int64_t>(&block))) {
+            setup(fresh, &block);
+        }
+
+        uint8_t* persistence = PersistenceSingleton();
+        if ((persistence[0x18] & 1) == 0) {
+            const char* filename = nullptr;
+            GetSaveFilenameFn getName = RT_EXPORT_ONCE(GetSaveFilenameFn,
+                "?GetSaveFilename@Persistence@IO@@AEBA?AVFilename@System@@AEBVString@4@@Z");
+            if (out.Call("IO::Persistence::GetSaveFilename", (const void*)getName,
+                         reinterpret_cast<int64_t>(persistence),
+                         reinterpret_cast<int64_t>(&filename),
+                         reinterpret_cast<int64_t>(&self->_saveName))) {
+                getName(persistence, &filename, &self->_saveName);
+            }
+            WorkerEnqueueFn enqueue = WorkerBeginLoad();
+            if (out.Call("IO::Persistence worker enqueue [load, 0x1800b7460]",
+                         (const void*)enqueue,
+                         reinterpret_cast<int64_t>(persistence + 0x10),
+                         reinterpret_cast<int64_t>(&filename), 1,
+                         reinterpret_cast<int64_t>(&block))) {
+                enqueue(persistence + 0x10, &filename, 1, &block);
+            }
+            ReleaseStringSlotSink(&filename, out, "GetSaveFilename temporary");
+        }
+
+        out.U32(&self->_progress, 2, "_progress = 2");
+        return;
+    }
+
+    if (progress == 2) {
+        // Retail's store order at 0x1800c2651..0x1800c2672: operation, elapsed,
+        // progress, selectedIndex — note this is NOT UpdateDelete's order,
+        // which puts elapsed last. Both are transcribed as written.
+        out.U32(&self->_operation, 0, "_operation = kOpNone");
+        out.U64(&self->_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
+        out.U32(&self->_progress, 0, "_progress = 0");
+        out.U32(&self->_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
+    }
+}
+
+// ============================================================================
+// Save::SaveLoad::UpdateSave()          retail 0x1800c2a80   ordinal 4526
+// ----------------------------------------------------------------------------
+//   state 0  arm the screenshot capture: set the capture flag BYTE, and read
+//            the save sprite's width and height out of its SpriteSheet. Go to 1.
+//   state 1  the real work — write the metadata header, free the captured
+//            pixels, allocate the SavedState the game state will serialise
+//            into, tell the update loop to serialise (a VIRTUAL call, which is
+//            where the whole game's Serialize chain hangs off), settle on the
+//            save's display name, build the TWO SaveBlocks, and enqueue.
+//   state 2  gated on `_minOperationTime < _elapsed` — the minimum spinner
+//            time. Destroys the SavedState, frees the embedded one's buffer,
+//            and resets the state machine.
+//
+// THREE THINGS WORTH THE READER'S ATTENTION.
+//
+// 1. `_selectedIndex == -4` IS A SENTINEL, not an index. It means "this is an
+//    autosave", and it selects GetAutoSaveName over the picked row's name. The
+//    comparison is done on the SIGN-EXTENDED index (`MOVSXD RAX,[RBX+0x48]`
+//    then `CMP EAX,-0x4`), which is why the header's `_selectedIndex` must
+//    stay signed.
+//
+// 2. THE NAME FALLBACK IS A THREE-WAY, and the middle arm is easy to miss: for
+//    a normal index, retail uses the existing row's name ONLY IF that row's
+//    metadata is loaded (`SaveInfo+0x40 >= 0`); otherwise it GENERATES a new
+//    name. Collapsing that to "use the row's name" would silently write an
+//    empty display name over every save made into a row the list had not
+//    finished reading.
+//
+// 3. THE `String` PASSED TO SaveMetaData IS BY VALUE, and this port does NOT
+//    release it. The caller retains it (`INC dword ptr [RAX-0x4]`) and then
+//    never drops it, which reads exactly like a leak until you notice the
+//    parameter is `VString@System@@` — by value — in the mangled name, so MSVC
+//    makes the CALLEE destroy it. Releasing it here would double-free the
+//    save name on every save.
+//
+// ORACLE: PREDICTIVE, with `_saveState` excluded for the same allocator reason
+// as UpdateLoadFromFile, and the serialise call suppressed — running the game's
+// entire Serialize chain twice is exactly the "not idempotent" case that rules
+// FULL DIFF out for this file.
+// ============================================================================
+void UpdateSaveBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
+    const uint32_t progress = out.ReadU32(&self->_progress);
+
+    if (progress == 0) {
+        // A BYTE store (`MOV byte ptr [RBX+0x7c],1`), matching the ctor's byte
+        // store of 0 into the same field — the upper three bytes of
+        // _captureFlags are never written by anything in this class.
+        out.U8(&self->_captureFlags, 1, "_captureFlags low byte = 1");
+
+        // `MOV RCX,[RBX+0x60]` (the sheet) then `MOV RAX,[RCX+0x20]` (its entry
+        // array), indexed by the sprite index at +0x68 with stride 0x38.
+        // Retail loads the index as a QWORD and truncates: `MOV RAX,[RBX+0x68]`
+        // then uses EAX. The pad dword at +0x6c rides along in that load and is
+        // discarded, so a 32-bit read here is equivalent and is what is written.
+        const int32_t spriteIndex = self->_saveSprite.index;
+        uint32_t w = 0, h = 0;
+        if (spriteIndex >= 0) {
+            uint8_t* sheet   = static_cast<uint8_t*>(self->_saveSprite.sheet);
+            uint8_t* entries = *reinterpret_cast<uint8_t**>(sheet + 0x20);
+            uint8_t* entry   = entries + static_cast<int64_t>(spriteIndex) * 0x38;
+            w = *reinterpret_cast<const uint32_t*>(entry + 0x1c);
+            h = *reinterpret_cast<const uint32_t*>(entry + 0x20);
+        }
+        out.U32(&self->_captureWidth,  w, "_captureWidth = sprite.w");
+        out.U32(&self->_captureHeight, h, "_captureHeight = sprite.h");
+        out.U32(&self->_progress, 1, "_progress = 1");
+        return;
+    }
+
+    if (progress == 1) {
+        // The capture has not landed yet — retail simply returns and retries
+        // next tick. This is the handshake with Draw(), which is the function
+        // that fills _capturePixels and which this project holds back.
+        void* pixels = out.ReadPtr(&self->_capturePixels);
+        if (pixels == nullptr) return;
+
+        // The by-value String argument: retained here, destroyed by the callee.
+        const char* nameCopy = nullptr;
+        RetainIntoSink(&nameCopy, self->_saveName, out, "SaveMetaData name (by value)");
+
+        SaveMetaDataFn saveMeta = RT_EXPORT_ONCE(SaveMetaDataFn,
+            "?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z");
+        if (out.Call("Save::SaveLoad::SaveMetaData", (const void*)saveMeta,
+                     reinterpret_cast<int64_t>(self),
+                     reinterpret_cast<int64_t>(pixels),
+                     self->_captureWidth, self->_captureHeight)) {
+            saveMeta(self, pixels, self->_captureWidth, self->_captureHeight,
+                     &nameCopy, self->_saveNameMode);
+        }
+
+        if (out.Call("System::MemoryAllocator::MemFree", (const void*)&MemFree,
+                     reinterpret_cast<int64_t>(pixels))) {
+            MemFree(pixels);
+        }
+        out.Ptr(&self->_capturePixels, nullptr, "_capturePixels = null");
+
+        SavedState* fresh = nullptr;
+        if (out.Call("System::MemoryAllocator::MemAlloc", (const void*)&MemAlloc, 0x10, 4)) {
+            fresh = static_cast<SavedState*>(MemAlloc(0x10, 4));
+            if (fresh != nullptr) {
+                fresh->_id   = 1;
+                fresh->_size = 0;
+                fresh->_data = nullptr;
+            }
+            self->_saveState = fresh;
+        } else if (round != nullptr) {
+            round->Exclude(&self->_saveState, sizeof(void*),
+                           "the address MemAlloc returns is not predictable");
+        }
+
+        // MainLoop::_singleton->_updateLoop->vtable[7] — the call that serialises
+        // the entire game state, and the single most expensive thing this file
+        // suppresses in predict mode.
+        //
+        // *** IT TAKES FOUR ARGUMENTS, AND GHIDRA SAYS TWO. *** This cost this
+        // lane a debugging session and is the most useful thing in this file.
+        // The decompiler prints
+        //
+        //     (**(code **)(**(longlong **)(MainLoop::_singleton + 0x20) + 0x38))
+        //               (*(longlong **)(... + 0x20), 1);
+        //
+        // because it has typed the vtable slot as `void(void*, bool)`. The
+        // disassembly says otherwise — R8 is loaded with the fresh SavedState
+        // and is STILL LIVE at the call, twelve instructions later:
+        //
+        //     1800c2b6f  CALL   MemAlloc(0x10)
+        //     1800c2b74  MOV    R8,RAX          <-- arg 3, set here
+        //     1800c2b8d  MOV    R8,RDI          <-- ...or 0 on the failure arm
+        //     1800c2b90  MOV    qword ptr [RBX+0x40],R8
+        //     1800c2b9b  MOV    RCX,qword ptr [RAX+0x20]
+        //     1800c2ba2  MOV    DL,0x1
+        //     1800c2ba4  CALL   qword ptr [RAX+0x38]
+        //
+        // The real signature is SaveRestore(self, save, savedState, outParam) —
+        // which this project's OWN `standalone/gameupdateloop_stubs.cpp` has
+        // spelled out in a comment since the 2026-08-27 save/load wave,
+        // naming UpdateSave as its caller. Reading that comment would have been
+        // faster than reading the bytes; both say the same thing, and the
+        // decompiler's C is the only source that disagrees
+        // (reference_ghidra_c_output_vs_disassembly.md).
+        //
+        // Passing two arguments is not a cosmetic error: `savedState` then
+        // arrives as whatever happened to be in R8, and the callee's
+        // `SavedState::Store` does `if (_data) MemFree(_data)` on it. The
+        // observed symptom was an ACCESS_VIOLATION inside the allocator, from a
+        // stack that ran UpdateSaveBody -> GUL_SaveRestore -> Store -> MemFree.
+        //
+        // ARGUMENT 4 IS GENUINELY UNDEFINED IN RETAIL. R9 last held the capture
+        // height, for the SaveMetaData call four calls earlier, and nothing
+        // reloads it — so retail hands the callee a dead register. It gets away
+        // with that because the SAVE path never reads outParam (only the load
+        // path does, at gameupdateloop_load.cpp:1596, which passes a real
+        // pointer). C++ has no way to spell "whatever is in R9", and
+        // manufacturing garbage to be faithful to garbage would be worse than
+        // useless, so this passes nullptr and says so here.
+        using SaveRestoreFn = void (*)(void* self, char save, void* savedState, int* outParam);
+        uint8_t** mainLoopSlot = RtDataExport<uint8_t*>("?_singleton@MainLoop@Engine@@1PEAV12@EA");
+        if (mainLoopSlot != nullptr && *mainLoopSlot != nullptr) {
+            void*  loop = *reinterpret_cast<void**>(*mainLoopSlot + 0x20);
+            void** vtbl = *reinterpret_cast<void***>(loop);
+            SaveRestoreFn saveRestore = reinterpret_cast<SaveRestoreFn>(vtbl[7]);
+            // `fresh`, not a re-read of _saveState: retail passes the REGISTER,
+            // which on the allocation-failure arm is 0 and equals what it just
+            // stored. The two are the same value; this spells the register.
+            if (out.Call("Engine::UpdateLoop::SaveRestore [vtbl+0x38]", (const void*)saveRestore,
+                         reinterpret_cast<int64_t>(loop), 1,
+                         reinterpret_cast<int64_t>(fresh), 0)) {
+                saveRestore(loop, 1, fresh, nullptr);
+            } else if (round != nullptr) {
+                round->Exclude(loop, 0x40, "the game's whole Serialize chain");
+            }
+        }
+
+        StringAssignFn assign =
+            RT_EXPORT_ONCE(StringAssignFn, "??4String@System@@QEAAAEAV01@AEBV01@@Z");
+        const int32_t sel = self->_selectedIndex;
+        if (sel == -4) {
+            const char* generated = nullptr;
+            NameGetterFn getAuto = RT_EXPORT_ONCE(NameGetterFn,
+                "?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ");
+            if (out.Call("Save::SaveLoad::GetAutoSaveName", (const void*)getAuto,
+                         reinterpret_cast<int64_t>(self),
+                         reinterpret_cast<int64_t>(&generated))) {
+                getAuto(self, &generated);
+                if (out.Call("System::String::operator=", (const void*)assign,
+                             reinterpret_cast<int64_t>(&self->_string20),
+                             reinterpret_cast<int64_t>(&generated))) {
+                    assign(&self->_string20, &generated);
+                }
+                ReleaseStringSlotSink(&generated, out, "GetAutoSaveName temporary");
+            }
+        } else {
+            const SaveInfo* row = SaveInfoAt(self, out, sel);
+            if (row->metaLoaded >= 0) {
+                if (out.Call("System::String::operator=", (const void*)assign,
+                             reinterpret_cast<int64_t>(&self->_string20),
+                             reinterpret_cast<int64_t>(&row->name))) {
+                    assign(&self->_string20, &row->name);
+                }
+            } else {
+                const char* generated = nullptr;
+                NameGetterFn gen = RT_EXPORT_ONCE(NameGetterFn,
+                    "?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ");
+                if (out.Call("Save::SaveLoad::GenerateSaveName", (const void*)gen,
+                             reinterpret_cast<int64_t>(self),
+                             reinterpret_cast<int64_t>(&generated))) {
+                    gen(self, &generated);
+                    if (out.Call("System::String::operator=", (const void*)assign,
+                                 reinterpret_cast<int64_t>(&self->_string20),
+                                 reinterpret_cast<int64_t>(&generated))) {
+                        assign(&self->_string20, &generated);
+                    }
+                    ReleaseStringSlotSink(&generated, out, "GenerateSaveName temporary");
+                }
+            }
+        }
+
+        // TWO blocks. Entry 0 is the SavedState EMBEDDED in this object at
+        // +0x28; entry 1 is the heap one at _saveState. Note the field order
+        // differs from SavedState's own — see the SaveBlock banner in
+        // runtime/types/io/Persistence.h.
+        RtIo::SaveBlock blocks[2];
+        const SavedState* embedded = &self->_embeddedState;
+        blocks[0].data = embedded->_data;
+        blocks[0].size = embedded->_size;
+        blocks[0].id   = embedded->_id;
+        const SavedState* heap = static_cast<const SavedState*>(out.ReadPtr(&self->_saveState));
+        blocks[1].data = heap->_data;
+        blocks[1].size = heap->_size;
+        blocks[1].id   = heap->_id;
+
+        uint8_t* persistence = PersistenceSingleton();
+        if ((persistence[0x18] & 1) == 0) {
+            const char* filename = nullptr;
+            GetSaveFilenameFn getName = RT_EXPORT_ONCE(GetSaveFilenameFn,
+                "?GetSaveFilename@Persistence@IO@@AEBA?AVFilename@System@@AEBVString@4@@Z");
+            if (out.Call("IO::Persistence::GetSaveFilename", (const void*)getName,
+                         reinterpret_cast<int64_t>(persistence),
+                         reinterpret_cast<int64_t>(&filename),
+                         reinterpret_cast<int64_t>(&self->_string20))) {
+                getName(persistence, &filename, &self->_string20);
+            }
+            WorkerEnqueueFn enqueue = WorkerBeginSave();
+            if (out.Call("IO::Persistence worker enqueue [save, 0x1800b75c0]",
+                         (const void*)enqueue,
+                         reinterpret_cast<int64_t>(persistence + 0x10),
+                         reinterpret_cast<int64_t>(&filename), 2,
+                         reinterpret_cast<int64_t>(blocks))) {
+                enqueue(persistence + 0x10, &filename, 2, blocks);
+            }
+            ReleaseStringSlotSink(&filename, out, "GetSaveFilename temporary");
+        }
+
+        out.U32(&self->_progress, 2, "_progress = 2");
+        return;
+    }
+
+    if (progress == 2) {
+        // THE MINIMUM-OPERATION-TIME GATE, which UpdateDelete and
+        // UpdateLoadFromFile do not have: `CMP [RBX+0x8],[RBX+0x10]` / `JLE`,
+        // i.e. proceed only while _elapsed > _minOperationTime. It exists so a
+        // fast save still shows its spinner for a readable moment.
+        if (self->_elapsed <= self->_minOperationTime) return;
+
+        // FUN_180032320 — `if (p->_data) MemFree(p->_data); MemFree(p);`, the
+        // inlined `delete` of a SavedState. Spelled out rather than called by
+        // address: both halves are MemFree, which this file already owns, so
+        // there is nothing here an address door would buy.
+        SavedState* heap = static_cast<SavedState*>(out.ReadPtr(&self->_saveState));
+        if (heap != nullptr) {
+            if (heap->_data != nullptr &&
+                out.Call("System::MemoryAllocator::MemFree", (const void*)&MemFree,
+                         reinterpret_cast<int64_t>(heap->_data))) {
+                MemFree(heap->_data);
+            }
+            if (out.Call("System::MemoryAllocator::MemFree", (const void*)&MemFree,
+                         reinterpret_cast<int64_t>(heap))) {
+                MemFree(heap);
+            }
+        }
+
+        void* embeddedData = out.ReadPtr(&self->_embeddedState._data);
+        if (embeddedData != nullptr &&
+            out.Call("System::MemoryAllocator::MemFree", (const void*)&MemFree,
+                     reinterpret_cast<int64_t>(embeddedData))) {
+            MemFree(embeddedData);
+        }
+        out.Ptr(&self->_embeddedState._data, nullptr, "_embeddedState._data = null");
+        out.U32(&self->_embeddedState._size, 0, "_embeddedState._size = 0");
+
+        out.U32(&self->_operation, 0, "_operation = kOpNone");
+        out.U64(&self->_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
+        out.U32(&self->_progress, 0, "_progress = 0");
+        out.U32(&self->_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
+    }
+}
+
 }  // namespace
 
 // ============================================================================
@@ -353,6 +824,37 @@ void RtSave_SaveLoad_OnVideoRestart(SaveLoad* self) {
     OnVideoRestartBody(self, live, nullptr);
 }
 
+
+void RtSave_SaveLoad_UpdateLoadFromFile(SaveLoad* self) {
+    RT_PREDICT_SITE("Save::SaveLoad::UpdateLoadFromFile");
+    if (RT_PREDICT_ON) {
+        RT_PREDICT_ROUND(round) {
+            round.Watch(self, sizeof(SaveLoad), "Save::SaveLoad");
+            UpdateLoadFromFileBody(self, round.sink(), &round);
+            using Fn = void (*)(SaveLoad*);
+            RT_ORIGINAL_ONCE(Fn, "?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ")(self);
+        }
+        return;
+    }
+    RtSink live;
+    UpdateLoadFromFileBody(self, live, nullptr);
+}
+
+void RtSave_SaveLoad_UpdateSave(SaveLoad* self) {
+    RT_PREDICT_SITE("Save::SaveLoad::UpdateSave");
+    if (RT_PREDICT_ON) {
+        RT_PREDICT_ROUND(round) {
+            round.Watch(self, sizeof(SaveLoad), "Save::SaveLoad");
+            UpdateSaveBody(self, round.sink(), &round);
+            using Fn = void (*)(SaveLoad*);
+            RT_ORIGINAL_ONCE(Fn, "?UpdateSave@SaveLoad@Save@@QEAAXXZ")(self);
+        }
+        return;
+    }
+    RtSink live;
+    UpdateSaveBody(self, live, nullptr);
+}
+
 // ============================================================================
 // Registration. Both doors, for the reason saveload.cpp's own registration
 // block states: a name door alone is one typo away from resolving NULL in
@@ -370,5 +872,11 @@ int RtSaveLoadUpdateRegister() {
     RegisterRuntimeExport("?OnVideoRestart@SaveLoad@Save@@QEAAXXZ",
                           (void*)&RtSave_SaveLoad_OnVideoRestart); ++n;
     RegisterRuntimeAddr(0x1800c0f10, (void*)&RtSave_SaveLoad_OnVideoRestart);
+    RegisterRuntimeExport("?UpdateLoadFromFile@SaveLoad@Save@@QEAAXXZ",
+                          (void*)&RtSave_SaveLoad_UpdateLoadFromFile); ++n;
+    RegisterRuntimeAddr(0x1800c2560, (void*)&RtSave_SaveLoad_UpdateLoadFromFile);
+    RegisterRuntimeExport("?UpdateSave@SaveLoad@Save@@QEAAXXZ",
+                          (void*)&RtSave_SaveLoad_UpdateSave); ++n;
+    RegisterRuntimeAddr(0x1800c2a80, (void*)&RtSave_SaveLoad_UpdateSave);
     return n;
 }

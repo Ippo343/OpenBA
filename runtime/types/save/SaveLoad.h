@@ -179,6 +179,31 @@ static_assert(offsetof(SaveInfo, modsCapacity) == 0x54, "SaveInfo.modsCapacity @
 static_assert(sizeof(SaveInfo) == 0x58, "sizeof(Save::SaveLoad::SaveInfo) == 0x58");
 
 // ============================================================================
+// Save::SavedState — 0x10 bytes. A detached copy of a MemoryStream's bytes.
+// ----------------------------------------------------------------------------
+// +0x00  uint32 _id     ?SetId@SavedState@Save@@QEAAXI@Z (0x1800c0e90) and the
+//                       one-argument ctor ??0SavedState@Save@@QEAA@I@Z
+//                       (0x1800c0ec0) are the only writers. This lane ports
+//                       neither; the field has to exist for the layout.
+// +0x04  uint32 _size   ?Store@ (0x1800c0da0) writes it from the stream's
+//                       GetCurrentPos; ?Retrieve@ (0x1800c0e50) reads it as
+//                       both the Open() length and the memcpy count.
+// +0x08  void*  _data   the owned copy. Freed by ~SavedState (0x1800c0ea0) and
+//                       by Store before it re-allocates.
+//
+// SIZE: ??0SavedState@Save@@QEAA@XZ (0x1800c0ee0) is exactly two qword zero
+// stores, at +0x00 and +0x08, and nothing in the class touches +0x10 or beyond.
+// ============================================================================
+struct SavedState {
+    uint32_t _id;      // +0x00
+    uint32_t _size;    // +0x04
+    void*    _data;    // +0x08
+};
+static_assert(offsetof(SavedState, _size) == 0x04, "SavedState._size @ 0x04");
+static_assert(offsetof(SavedState, _data) == 0x08, "SavedState._data @ 0x08");
+static_assert(sizeof(SavedState) == 0x10, "sizeof(Save::SavedState) == 0x10");
+
+// ============================================================================
 // Save::SaveLoad — 0x90 bytes.
 // ----------------------------------------------------------------------------
 // SIZE. ??0SaveLoad@Save@@QEAA@XZ (0x1800c3d30) writes its last qword at +0x88,
@@ -210,8 +235,25 @@ struct SaveLoad {
     uint32_t    _progress;         // +0x18  zeroed by SetOperation; NOT zeroed by the ctor
     uint32_t    pad1c;             // +0x1c
     const char* _string20;         // +0x20  System::String; ~SaveLoad releases it with the refcount idiom
-    uint64_t    field28;           // +0x28
-    void*       _buffer30;         // +0x30  heap block; ~SaveLoad frees it through the locked MemFree
+    // WAVE 13 CORRECTION. These ten bytes used to be modelled as `uint64_t
+    // field28` plus `void* _buffer30`, which is the right WIDTH and the wrong
+    // THING. They are an entire Save::SavedState embedded by value, and three
+    // independent readings say so:
+    //
+    //   * ?UpdateList@SaveLoad state 3 (0x1800c2455) calls
+    //     ?SetupLoad@SavedState@Save@@ with `this + 0x28` as the SavedState.
+    //   * ?UpdateSave@SaveLoad (0x1800c2c60) builds SaveBlock entry 0 out of
+    //     it with exactly the three loads it uses for the HEAP SavedState at
+    //     +0x40 — qword at +0x30, dword at +0x2c, dword at +0x28 — which lines
+    //     up field for field with SavedState{_id@+0, _size@+4, _data@+8}.
+    //   * ~SaveLoad frees +0x30 through the same locked MemFree that
+    //     ~SavedState uses on its own _data.
+    //
+    // The old names were not WRONG about any byte; they just could not express
+    // that the save path serialises into TWO SavedStates, one owned inline and
+    // one on the heap, and that the pair is what a SaveBlock array is built
+    // from. `field28` in particular read as padding.
+    SavedState  _embeddedState;    // +0x28 .. +0x37
     uint32_t    field38;           // +0x38
     uint32_t    pad3c;             // +0x3c  NOT written by the ctor
     void*       _saveState;        // +0x40  SavedState*; GetSaveState. NOT written by the ctor
@@ -232,7 +274,9 @@ static_assert(offsetof(SaveLoad, _elapsed)          == 0x08, "SaveLoad._elapsed 
 static_assert(offsetof(SaveLoad, _minOperationTime) == 0x10, "SaveLoad._minOperationTime @ 0x10");
 static_assert(offsetof(SaveLoad, _progress)         == 0x18, "SaveLoad._progress @ 0x18");
 static_assert(offsetof(SaveLoad, _string20)         == 0x20, "SaveLoad._string20 @ 0x20");
-static_assert(offsetof(SaveLoad, _buffer30)         == 0x30, "SaveLoad._buffer30 @ 0x30");
+static_assert(offsetof(SaveLoad, _embeddedState)    == 0x28, "SaveLoad._embeddedState @ 0x28");
+static_assert(offsetof(SaveLoad, _embeddedState._data) == 0x30,
+              "the embedded SavedState puts its _data at SaveLoad+0x30 — the old _buffer30");
 static_assert(offsetof(SaveLoad, _saveState)        == 0x40, "SaveLoad._saveState @ 0x40");
 static_assert(offsetof(SaveLoad, _selectedIndex)    == 0x48, "SaveLoad._selectedIndex @ 0x48");
 static_assert(offsetof(SaveLoad, _savesData)        == 0x50, "SaveLoad._savesData @ 0x50");
@@ -244,30 +288,5 @@ static_assert(offsetof(SaveLoad, _captureFlags)     == 0x7c, "SaveLoad._captureF
 static_assert(offsetof(SaveLoad, _captureWidth)     == 0x80, "SaveLoad._captureWidth @ 0x80");
 static_assert(offsetof(SaveLoad, _capturePixels)    == 0x88, "SaveLoad._capturePixels @ 0x88");
 static_assert(sizeof(SaveLoad) == 0x90, "sizeof(Save::SaveLoad) == 0x90");
-
-// ============================================================================
-// Save::SavedState — 0x10 bytes. A detached copy of a MemoryStream's bytes.
-// ----------------------------------------------------------------------------
-// +0x00  uint32 _id     ?SetId@SavedState@Save@@QEAAXI@Z (0x1800c0e90) and the
-//                       one-argument ctor ??0SavedState@Save@@QEAA@I@Z
-//                       (0x1800c0ec0) are the only writers. This lane ports
-//                       neither; the field has to exist for the layout.
-// +0x04  uint32 _size   ?Store@ (0x1800c0da0) writes it from the stream's
-//                       GetCurrentPos; ?Retrieve@ (0x1800c0e50) reads it as
-//                       both the Open() length and the memcpy count.
-// +0x08  void*  _data   the owned copy. Freed by ~SavedState (0x1800c0ea0) and
-//                       by Store before it re-allocates.
-//
-// SIZE: ??0SavedState@Save@@QEAA@XZ (0x1800c0ee0) is exactly two qword zero
-// stores, at +0x00 and +0x08, and nothing in the class touches +0x10 or beyond.
-// ============================================================================
-struct SavedState {
-    uint32_t _id;      // +0x00
-    uint32_t _size;    // +0x04
-    void*    _data;    // +0x08
-};
-static_assert(offsetof(SavedState, _size) == 0x04, "SavedState._size @ 0x04");
-static_assert(offsetof(SavedState, _data) == 0x08, "SavedState._data @ 0x08");
-static_assert(sizeof(SavedState) == 0x10, "sizeof(Save::SavedState) == 0x10");
 
 }  // namespace RtSave

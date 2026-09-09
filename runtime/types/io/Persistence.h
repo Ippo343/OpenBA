@@ -94,4 +94,33 @@ struct SettingsMapNode {
 };
 static_assert(sizeof(SettingsMapNode) == 0x10, "SettingsMapNode prefix must be exactly key+value, 0x10 bytes");
 
+// ============================================================================
+// IO::Persistence::SaveBlock — 0x10 bytes. One buffer handed to the save/load
+// worker thread. Added by Wave 13, pinned by THREE independent readers rather
+// than by one writer:
+//
+//   * ?UpdateSave@SaveLoad (0x1800c2c60..0x1800c2c88) builds an array of TWO
+//     of them, entry 0 from the SavedState embedded in SaveLoad at +0x28 and
+//     entry 1 from the heap SavedState at +0x40. The three loads per entry are
+//     qword `data`, then dword `size`, then dword `id`, at +0x00/+0x08/+0x0c.
+//   * ?UpdateLoadFromFile@SaveLoad (0x1800c25cc) takes ONE straight from
+//     ?SetupLoad@SavedState@Save@@, whose mangled return type spells this
+//     struct's full name — which is where the name here comes from, not a guess.
+//   * The unexported worker-enqueue at 0x1800b7460 walks the array the caller
+//     passes with `param_4 += 2` on an 8-byte pointer (stride 0x10) and matches
+//     `*(int*)((char*)param_4 + 0xc)` against a per-slot id, which pins BOTH
+//     the stride and the fact that +0x0c is the id and not part of the size.
+//
+// The field ORDER is deliberately data/size/id and not the SavedState order
+// (id/size/data): these two structs are NOT the same layout, and UpdateSave's
+// six loads per entry are what says so.
+struct SaveBlock {
+    void*    data;   // +0x00
+    uint32_t size;   // +0x08
+    uint32_t id;     // +0x0c
+};
+static_assert(offsetof(SaveBlock, size) == 0x08, "SaveBlock.size @ 0x08");
+static_assert(offsetof(SaveBlock, id)   == 0x0c, "SaveBlock.id @ 0x0c");
+static_assert(sizeof(SaveBlock) == 0x10, "sizeof(IO::Persistence::SaveBlock) == 0x10");
+
 }  // namespace RtIo

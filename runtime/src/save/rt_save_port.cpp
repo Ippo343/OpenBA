@@ -3,6 +3,13 @@
 // ============================================================================
 //   BANISHED_RT_SAVE=0       leave the whole Save namespace on the DLL
 //   BANISHED_RT_SAVELOAD=0   ... just Save::SaveLoad + Save::SavedState
+//   BANISHED_RT_SAVELOAD_UPDATE=0  ... just Wave 13's six state machines,
+//                            leaving Wave 5's 16 exports ported. This split
+//                            is not decoration: it is the A/B that localised
+//                            Wave 13's first defect to this file in one run,
+//                            by showing the save completing in 61 frames with
+//                            Wave 5 on and Wave 13 off -- the same 61 frames
+//                            the all-DLL control took.
 // ============================================================================
 
 #include <cstdio>
@@ -19,7 +26,7 @@ void RtSavePortInit() {
     int n = 0;
     if (RtWaveEnabled("BANISHED_RT_SAVELOAD")) {
         n += RtSaveLoadRegister();
-        n += RtSaveLoadUpdateRegister();
+        if (RtWaveEnabled("BANISHED_RT_SAVELOAD_UPDATE")) n += RtSaveLoadUpdateRegister();
     }
     printf("[RtPort] Save: %d exports registered\n", n);
 }
