@@ -209,7 +209,7 @@ GetToolTipString / operatorNew == 1   on the EMPTY-string arm
                                       test emptiness, releases, and asks again
                                       only when non-empty)
 SetText          / operatorNew == 1
-bytes            / operatorNew == 192 (0xc0)
+bytes                          == 192 (0xc0)  <- CONSTANT, not a ratio
 ```
 
 and within `SetText`, `found` > 0 whenever the tooltip template contains a

@@ -268,11 +268,18 @@ script change into a false divergence:
 GetToolTipString / operatorNew == 1   on the EMPTY-string arm
                                == 2   on the non-empty arm
 SetText          / operatorNew == 1
-bytes            / operatorNew == 192 (0xc0)
+bytes                          == 192 (0xc0)  <- CONSTANT, not a ratio
 ```
 
-`bytes/operatorNew == 192` discriminates: it proves the caller is `BeginToolTip`
-and not something else. The empty-arm ratio of 1 cross-checks MOUSE's
+`bytes == 0xc0` discriminates: it proves the caller is `BeginToolTip` and not
+something else. **It is a CONSTANT, not a ratio** — corrected by Wave 10E lane
+VERIFY. Its writer (`tooltipdialog.cpp:257`) is `g_newBytes = bytes;`, an
+assignment, so the counter holds the last allocation size however many times
+`operatorNew` ran. The ratio form originally published here was **already false
+on the measurement it was accepted against**: that run reads `operatorNew=2
+bytes=192`, so the quotient is 96, not 192. The integrator matched the literal
+"192" against "bytes=192" without performing the division the predicate itself
+specified. The empty-arm ratio of 1 cross-checks MOUSE's
 `nonEmptyString=0` from the other end. `TypeName`/`Type` staying 0 is expected —
 they exist for the vtable's `TRAP=0`, not for this route.
 

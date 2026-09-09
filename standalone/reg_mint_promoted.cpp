@@ -513,7 +513,7 @@ int RtMintRegisterPromotedRows() {
     // absolute scales with the injector script, so an absolute prediction turns
     // a script change into a false divergence:
     //     operatorNew        == BeginToolTip entries   (2 == 2)  -> DISPATCHED
-    //     bytes/operatorNew  == 192 (0xc0)   discriminates the caller
+    //     bytes              == 0xc0 (192)  CONSTANT, not a ratio -- see below
     //     GetToolTipString/operatorNew == 1  -> the EMPTY arm, which
     //         cross-checks BeginToolTip's own nonEmptyString=0 from the far end
     //     SetText/operatorNew == 1, with effectiveness controls found=2 wrote=2
