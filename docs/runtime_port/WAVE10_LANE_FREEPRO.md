@@ -309,11 +309,38 @@ And the generalisable one, which is what actually cost the time here:
 
 ## 8. Runs
 
+All in-game cells ran through `tools/game_dir_lock.sh run lane-FREEPRO ... --
+tools/freepro_cell.sh`, which re-`verify`s ownership and **md5s the deployed exe
+against our own build immediately before launch**, refusing to run on a mismatch.
+Both cells reported `md5 built = md5 deployed = bf3ea3d634c6b3a266c6dc56f56324b9`
+and ownership still held after the run, so neither is measuring another lane's
+binary.
+
 | # | purpose | result |
 |---|---|---|
 | A | micro-harness, installer as merged (`6d8f44a`), subjects A and B | **CORRUPTING** on both |
 | B | micro-harness, installer after the fix, subjects A and B | **CLEAN** on both |
-| C | full debug exe, `BANISHED_RT_SELFTEST=1` + armed `BANISHED_RT_ALLOC=1`, autostart | see below |
+| C | full debug exe, `BANISHED_RT_SELFTEST=1` + armed `BANISHED_RT_ALLOC=1`, boot to menu | Test 2b **pass** in situ; swap installed; exit 0, empty crash log |
+| D | full debug exe, armed `BANISHED_RT_ALLOC=1`, autostart into gameplay, pause-menu quit at frame 721 | world built, played 721 frames, exit 0, empty crash log |
 
-Run C is the in-game confirmation that Test 2b passes in situ and that the armed
-allocator path is unaffected by the installer change.
+Cell C's own log confirms the fix is live and that `Free` still takes the
+relocating path: `grep -c "RSP correction"` = **0**, while
+`[RtDetour] Detected relative instructions at …6c00, using relocating installer`
+is still present. Cell C also shows the armed swap taking both detours
+(`ATOMIC SWAP INSTALLED`).
+
+Cell C quits from the menu (`BANISHED_AUTOQUIT` clicks Quit after N *menu*
+frames), so it is a boot-and-menu exercise, not a gameplay one — cell D is the
+gameplay half, and both are needed: C is where Test 2b's verdict is read, D is
+where the armed allocator actually carries a world.
+
+**What these cells do NOT establish.** They are functional checks, not a
+re-measurement of lane ALLOC's stress town, and they cannot show the installer
+change improved anything on the armed path — by §2 that path never called the
+affected trampolines, so cells C and D are expected to be indistinguishable from
+the same runs before the fix. The evidence that the fix *does* something is cell
+A vs cell B, at register level. The evidence that it *breaks* nothing is C and D.
+`Engine::Startup`'s shadow driver (`BANISHED_RT_ALLOC_SHADOW`) is the path that
+was actually corrupting and it is **not re-measured here** — its previous
+measurements (lane E2/E3) were taken with three rotated callee-saved registers
+and should be re-read before being trusted.
