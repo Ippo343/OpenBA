@@ -41,33 +41,62 @@
 // why sprite.cpp's argument for scratch replicas does not need to be repeated.
 //
 // ---------------------------------------------------------------------------
-// HELD BACK: ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z (0x18011d730)
+// SLOT 5 IS NOW PORTED — and the recorded blocker was WRONG IN TWO WAYS
 // ---------------------------------------------------------------------------
-// It is not held back for lack of a caller or lack of a decompile. The body is
-// 60 instructions and reads clearly: it fetches the stream's Encoding through
-// `stream+0x10`, picks `vt+0x18` or `vt+0x20` by `stream+0x08`, then drives
-// FIVE calls through the Encoding vtable at +0xa0 (four of them) and +0x78,
-// serialises the two Strings at +0x38/+0x40 and the SpriteInfo array at +0x20.
+// The paragraph that used to sit here said `?Serialize@SpriteSheet@UI@@` was
+// held back because it "drives four calls through the ENCODING vtable at +0xa0
+// and one at +0x78", offsets that could not be named from the profile build.
+// Wave 10B lane SS re-derived that from the shipped disassembly rather than
+// inheriting it, and BOTH halves of the claim are false:
 //
-// The blocker is those vtable OFFSETS. reference_encoding_vtable_offsets_
-// differ_between_builds.md records that IO::Encoding's slots sit at DIFFERENT
-// offsets in the retail DLL than in the profile DLL (+0x78/+0x98/+0xa0 vs
-// +0x90/+0xb0/+0xb8) — so the +0xa0 and +0x78 read off retail here cannot be
-// named from the profile build's symbols, which is where every other Encoding
-// slot in this tree got its name. Porting it means first pinning retail's
-// Encoding vtable slot-by-slot, which is an IO-family job with its own
-// evidence trail, not a SpriteSheet one.
+//   1. THOSE ARE NOT ENCODING SLOTS. Read the `this` register at each call:
+//      `MOV RCX,qword ptr [RSP + 0x30]` (0x18011d793, 0x18011d7a8, 0x18011d7bd,
+//      0x18011d7d6) loads the local at RSP+0x30, which is the SERIALIZER's
+//      +0x08 field — the `IO::ReaderWriter*` the encoding's factory slot just
+//      returned. The Encoding itself is touched ONCE in this whole body, at
+//      0x18011d755, to pick +0x18 or +0x20. +0x78 and +0xa0 are ReaderWriter
+//      slots, not Encoding slots.
 //
-// WHAT WOULD EXPIRE IT: a slot map for retail's `??_7Encoding@IO@@6B@` that
-// names +0x78 and +0xa0. runtime/src/io/encoding.cpp is where that would land.
+//   2. THE MAP ALREADY EXISTED. `rt::io::rw_vtbl` in
+//      runtime/types/io/Serializer.h has carried all 26 RETAIL ReaderWriter
+//      slot offsets since Wave 4, pinned twice against the shipped bytes
+//      (each Serializer forwarder's own tail-jump displacement, AND the
+//      contents of ??_7BinaryReader@IO@@6B@ / ??_7BinaryWriter@IO@@6B@). It
+//      names +0x78 `kScalarBool` and +0xa0 `kScalarInt`, and its banner
+//      already carries the standing warning against the profile build's
+//      +0x90/+0xb8. Nothing had to be produced to expire this holdback.
+//
+// So the holdback was a MISATTRIBUTION (ReaderWriter slots called Encoding
+// slots) on top of a search that never reached the file holding the answer.
+// Recorded here rather than deleted, per PLAN §6 step 8, so the wrong claim is
+// recognisable if it is met again — the same paragraph is repeated in
+// WAVE10_LANE_UI4.md §6 and WAVE10_UI_CENSUS.md §6, which are another lane's
+// documents and were not edited here.
+//
+// A THIRD independent confirmation of the same offsets fell out of the port:
+// the per-entry helper at 0x180078ad0 drives each SpriteInfo through +0xa0 for
+// its five ints and +0x80 for its four floats — and +0x80 is
+// `rw_vtbl::kScalarFloat`, so a slot this body never uses itself still lands
+// exactly where Wave 4's map puts it.
 // ============================================================================
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/io/Serializer.h"
 #include "../../types/ui/SpriteSheet.h"
+#include "../io/save_trace.h"
+
+// Forward-declared rather than pulled in from standalone/resolve.h, for the
+// reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
+// must stay platform-neutral. Byte-identical to resolve.h's declaration; the
+// same pair already appears in runtime/src/ui/elementdescription_serialize.cpp
+// and runtime/src/achievement/goal_serialize.cpp.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
@@ -260,6 +289,274 @@ extern "C" void* RtUi_SpriteSheet_Reconstruct(void* self) {
 }
 
 // ============================================================================
+// slot 5  ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z   0x18011d730
+// ============================================================================
+//
+// TRANSCRIPTION, instruction by instruction (retail 0x18011d730..0x18011d845):
+//
+//   18011d744  MOV RBX,RCX                  this
+//   18011d747  MOV [RSP+0x28],RDX           IO::Serializer local: .stream  = &stream
+//   18011d74c  MOV [RSP+0x30],0                                   .readerWriter = null
+//   18011d755  MOV RCX,[RDX+0x10]           encoding = stream->encoding
+//   18011d75f  CMP [RDX+0x8],R8D            direction == 0 ?
+//   18011d76a  CALL [RAX+0x18]  / +0x20     CreateReader / CreateWriter (enc, &ser, 0)
+//   18011d772  MOV [RSP+0x30],RAX           ser.readerWriter = rw
+//     ^ this is the IO::Serializer CONSTRUCTOR, inlined, with version = 0.
+//       It is NOT a call to ??0Serializer@IO@@ — MSVC inlined it here, and the
+//       shape is identical to the one elementdescription_serialize.cpp calls
+//       MakeCodec(). Constructing it MOVES THE STREAM CURSOR by 12 bytes
+//       (runtime/types/io/Serializer.h), which is why this body is not
+//       replayable against the real stream and why the oracle below uses
+//       synthetic sinks instead.
+//
+//   18011d780  CALL 0x1800c9930  (RBX+0x40) String::Serialize  m_groupName    <- FIRST
+//   18011d78e  CALL 0x1800c9930  (RBX+0x38) String::Serialize  m_textureName  <- SECOND
+//     ^ the ORDER IS +0x40 THEN +0x38, i.e. the two strings come off the wire
+//       in the opposite order to their addresses. Getting this backwards would
+//       not crash: it would swap two String records of usually-different length
+//       and desync every subsequent record. Transcribed from the LEA operands,
+//       not from field order.
+//
+//   18011d7a2  CALL [RAX+0xa0]   (RBX+0x48, null) int   m_field48
+//   18011d7b7  CALL [RAX+0xa0]   (RBX+0x4c, null) int   m_field4C
+//   18011d7cc  CALL [RAX+0x78]   (RBX+0x50, null) bool  m_field50
+//     ^ RCX for all three is reloaded from [RSP+0x30] each time — the
+//       ReaderWriter, not the Encoding. See the banner.
+//
+//   18011d7cf  MOV EAX,[RBX+0x28] / MOV [RSP+0x50],EAX   count = m_spriteCount
+//   18011d7e6  CALL [RAX+0xa0]   (&count, null)          int count
+//     ^ a STACK COPY is serialised, never the field. On the read path the
+//       count arrives here and m_spriteCount is updated by SetSize below, not
+//       by this record.
+//
+//   18011d7ec  MOV RAX,[RSP+0x28] / CMP [RAX+0x8],0 / JNZ
+//   18011d7ff  CALL 0x180078950  (&m_sprites, count)   Array<SpriteInfo>::SetSize
+//     ^ READ PATH ONLY. Third argument is absent; retail passes two.
+//
+//   18011d804  MOV R8,[RBX+0x20]                        RE-READ after SetSize
+//   18011d811  CALL 0x180078ad0  (&ser, count, data)    per-entry serialize
+//     ^ the data pointer is loaded AFTER SetSize, which reallocates. Hoisting
+//       that load above the branch would hand the helper a freed block on the
+//       read path.
+//
+//   18011d81f  CALL 0x180014520  (RBX+0x30, &ser)       ExternalPtr<T>::Serialize
+//   18011d825  if (rw) rw->vtable[0](rw, 1)             inlined Serializer dtor
+//   18011d839  MOV AL,1                                 unconditional `true`
+//
+// ---------------------------------------------------------------------------
+// THREE ADDRESS DOORS, AND WHAT EACH ONE COSTS
+// ---------------------------------------------------------------------------
+// Four callees; one is exported and ported, three are unexported internals
+// reached BY ADDRESS through ResolveAddr(Module::Runtime, …). That door
+// consults the port registry FIRST
+// (reference_resolveaddr_consults_port_registry_first.md), so each becomes our
+// body the moment somebody registers it, and is the DLL's until then. It also
+// GROWS the cutover surface by three
+// (reference_porting_can_grow_the_cutover_surface.md), which is stated in the
+// lane doc rather than left for a later census to discover:
+//
+//   0x1800c9930  ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z
+//                EXPORTED and already ported — runtime/src/system/string.cpp
+//                registers both doors. Reached by address here because that is
+//                what the shipped instruction is, and it lands on our port.
+//
+//   0x180078950  Array<UI::SpriteSheet::SpriteInfo>::SetSize, stride 0x38.
+//                UNPORTED. It calls System::MemoryAllocator::MemAlloc/Free, so
+//                it is squarely inside the class-B allocator family and is NOT
+//                this lane's row. Same shape as the fourteen kSpec_* rows in
+//                runtime/src/collection/array.cpp and as lane UI4's recorded
+//                0x18004bde0 (stride 0x28) — a one-row follow-on for the
+//                collection family.
+//
+//   0x180078ad0  the per-SpriteInfo record walker (name, group, x, y, width,
+//                height, reserved, u0, v0, u1, v1). UNPORTED, pure, no
+//                allocation of its own beyond String::Serialize's. Cheap to
+//                port later; deliberately not taken here because it is a
+//                second body and this lane's promotion gate needs one.
+//
+//   0x180014520  ExternalPtr<Graphics::MaterialInstance>::Serialize — one of
+//                the twenty-five instantiations lane EXTPTR measured and
+//                tabulated (WAVE10_LANE_EXTPTR.md:79). Lane EXTPTR registered
+//                four of the twenty-five and deliberately left the Graphics
+//                ones alone; registering it here would be exactly the
+//                duplicate-registration trap that lane refused, so it stays
+//                the DLL's. THIS ALSO NAMES SpriteSheet+0x30: it is not an
+//                anonymous qword, it is the sheet's MaterialInstance handle.
+//
+// ---------------------------------------------------------------------------
+// ORACLE
+// ---------------------------------------------------------------------------
+// `RtSaveTrace::Compare` in the WRITING direction against two synthetic sinks,
+// the same instrument elementdescription_serialize.cpp uses and for the same
+// reason: on the write path a Serialize is a pure read of the object, so ours
+// and theirs can both run provided they emit into DIFFERENT sinks
+// (reference_write_path_serialize_is_replayable.md). No `stopAfter`: nothing on
+// this body's write path stores into the object — SetSize is guarded to the
+// reading side by retail's own branch, and the ExternalPtr write arm touches
+// only its own locals.
+//
+// Read the report's `calls=` column and not only `divergences=`: a body with no
+// caller reports clean (reference_uncalled_port_is_not_verified.md), and until
+// `??_7SpriteSheet@UI@@6B@` is promoted this port genuinely has no caller —
+// which is the whole point of the promotion this lane exists to make.
+// ============================================================================
+
+namespace {
+
+using rt::io::ReaderWriter;
+using rt::io::Serializer;
+using rt::io::Stream;
+
+using SerMemberFn    = void (*)(void*, Serializer*);
+using StreamMemberFn = void (*)(void*, Stream*);
+
+SerMemberFn ByAddr(uintptr_t addr) {
+    return reinterpret_cast<SerMemberFn>(ResolveAddr(Module::Runtime, addr));
+}
+
+// ?Serialize@String@System@@ — exported, ported, reached by address because the
+// shipped instruction is `CALL 0x1800c9930`.
+SerMemberFn StringSerialize() {
+    static SerMemberFn f = ByAddr(0x1800c9930);
+    return f;
+}
+// Array<SpriteInfo>::SetSize(array, newCount) — two arguments, not a member of
+// the SerMemberFn family, so it gets its own type.
+using ArraySetSizeFn = void (*)(void*, uint32_t);
+ArraySetSizeFn ArraySetSize() {
+    static ArraySetSizeFn f = reinterpret_cast<ArraySetSizeFn>(
+        ResolveAddr(Module::Runtime, 0x180078950));
+    return f;
+}
+// (serializer, count, entries)
+using EntriesSerializeFn = void (*)(Serializer*, uint32_t, void*);
+EntriesSerializeFn EntriesSerialize() {
+    static EntriesSerializeFn f = reinterpret_cast<EntriesSerializeFn>(
+        ResolveAddr(Module::Runtime, 0x180078ad0));
+    return f;
+}
+SerMemberFn MaterialPtrSerialize() {
+    static SerMemberFn f = ByAddr(0x180014520);
+    return f;
+}
+
+// The inlined ctor at 0x18011d747..0x18011d772, and the inlined dtor at
+// 0x18011d825. Deliberately spelled out here rather than shared with
+// elementdescription_serialize.cpp's identical pair: they are two separate
+// INLINED copies in the DLL, and keeping them two means a correction to one
+// cannot silently change the other's meaning — the same argument this file's
+// ConstructInPlace already makes.
+ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
+    ser->stream = stream;
+    ser->readerWriter = nullptr;
+
+    rt::io::Encoding* enc = stream->encoding;
+    const int slot = (stream->direction == rt::io::kDirectionReading)
+                         ? rt::io::encoding_vtbl::kCreateReader
+                         : rt::io::encoding_vtbl::kCreateWriter;
+    using FactoryFn = ReaderWriter* (*)(rt::io::Encoding*, Serializer*, int);
+    ReaderWriter* rw =
+        reinterpret_cast<FactoryFn>(enc->vtable[slot / 8])(enc, ser, 0);
+    ser->readerWriter = rw;
+    return rw;
+}
+
+void DestroyCodec(ReaderWriter* rw) {
+    if (!rw) return;
+    using DtorFn = void (*)(ReaderWriter*, int);
+    reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+}
+
+void RecInt(ReaderWriter* rw, int32_t* v) {
+    using Fn = void (*)(ReaderWriter*, int32_t*, const char*);
+    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, v, nullptr);
+}
+
+void RecBool(ReaderWriter* rw, uint8_t* v) {
+    using Fn = void (*)(ReaderWriter*, uint8_t*, const char*);
+    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarBool / 8])(rw, v, nullptr);
+}
+
+// ---- probe scaffolding (same contract as elementdescription_serialize.cpp) --
+Stream* StreamOf(void* serializer) {
+    return static_cast<Serializer*>(serializer)->stream;
+}
+
+bool g_probing = false;
+struct ProbeGuard {
+    ProbeGuard()  { g_probing = true;  }
+    ~ProbeGuard() { g_probing = false; }
+};
+
+const char* const kSerializeMangled =
+    "?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z";
+
+// `Compare` defends against `ours == theirs` by comparing function pointers,
+// and the lambda adapters below defeat that check — so the equivalent check is
+// made on the thing that matters: does the registry hand OUR body back?
+bool PortIsLive(const void* ours) {
+    void* viaRegistry = ResolveExport(kSerializeMangled);
+    if (viaRegistry == ours) return true;
+    std::fprintf(stderr,
+                 "[RtSaveTrace] FAIL %s: the port is NOT registered (registry -> %p, "
+                 "ours %p), so this comparison would prove nothing\n",
+                 kSerializeMangled, viaRegistry, ours);
+    return false;
+}
+
+// No detour is installed on this row, so the RAW export address IS retail's
+// body. (If one is ever added, this must become a trampoline lookup or
+// RT_ORIGINAL_ONCE will recurse into the patched prologue —
+// reference_detour_machinery_exists_wave7_zero_is_stale.md.)
+StreamMemberFn RetailBody() {
+    return RT_ORIGINAL_ONCE(StreamMemberFn, kSerializeMangled);
+}
+
+}  // namespace
+
+extern "C" bool RtUi_SpriteSheet_Serialize(SpriteSheet* self, Stream* stream) {
+    static int probes = 0;
+    if (RtSaveTrace::Enabled() && !g_probing && probes < 16) {
+        ++probes;
+        ProbeGuard guard__;
+        StreamMemberFn theirs = RetailBody();
+        if (theirs && PortIsLive((const void*)&RtUi_SpriteSheet_Serialize)) {
+            RtSaveTrace::Compare(
+                "UI::SpriteSheet::Serialize", self,
+                [](void* obj, void* ser) {
+                    RtUi_SpriteSheet_Serialize(static_cast<SpriteSheet*>(obj),
+                                               StreamOf(ser));
+                },
+                [](void* obj, void* ser) { RetailBody()(obj, StreamOf(ser)); });
+        }
+    }
+
+    Serializer ser;
+    ReaderWriter* rw = MakeCodec(stream, &ser);
+
+    StringSerialize()(&self->m_groupName,   &ser);   // +0x40 FIRST — see banner
+    StringSerialize()(&self->m_textureName, &ser);   // +0x38 second
+
+    RecInt (rw, &self->m_field48);   // +0x48
+    RecInt (rw, &self->m_field4C);   // +0x4c
+    RecBool(rw, &self->m_field50);   // +0x50
+
+    int32_t count = self->m_spriteCount;   // +0x28, into the RSP+0x50 temporary
+    RecInt(rw, &count);
+
+    if (ser.stream->direction == rt::io::kDirectionReading)
+        ArraySetSize()(&self->m_sprites, static_cast<uint32_t>(count));
+
+    // Re-read AFTER SetSize: it reallocates.
+    EntriesSerialize()(&ser, static_cast<uint32_t>(count), self->m_sprites);
+
+    MaterialPtrSerialize()(&self->m_field30, &ser);  // +0x30
+
+    DestroyCodec(rw);
+    return true;
+}
+
+// ============================================================================
 // Registration — called from RtUiSpriteCaptureRegister(), under the same
 // BANISHED_RT_UISPRITECAP switch, because the two halves of lane UI4 are
 // verified by the same run and an A/B that could split them would be a third
@@ -292,6 +589,10 @@ int RtUiSpriteSheetVtableRegister() {
     RegisterRuntimeExport("?Reconstruct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ",
                           (void*)&RtUi_SpriteSheet_Reconstruct); ++n;
     RegisterRuntimeAddr(0x180003080, (void*)&RtUi_SpriteSheet_Reconstruct);
+    // WAVE 10B lane SS — the ninth slot, and the one that was keeping
+    // ??_7SpriteSheet@UI@@6B@ out of standalone/reg_mint_promoted.cpp.
+    RegisterRuntimeExport(kSerializeMangled, (void*)&RtUi_SpriteSheet_Serialize); ++n;
+    RegisterRuntimeAddr(0x18011d730, (void*)&RtUi_SpriteSheet_Serialize);
     // BOTH doors on every row, for the reason the mint itself gives: a minted
     // vtable slot is filled by NAME, but 30-odd sites in this tree reach
     // exported code by ADDRESS, and a name-only registration leaves those

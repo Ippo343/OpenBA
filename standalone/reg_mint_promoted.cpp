@@ -173,21 +173,81 @@ int RtMintRegisterPromotedRows() {
     RegisterRuntimeExport("?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A", st);
     RegisterRuntimeAddr(0x1801faee8ull, st); ++n;
 
+    // ========================================================================
+    // THE FIRST PROMOTED `??_7` VTABLE  —  WAVE 10B lane SS
+    // ========================================================================
+    //
+    // `??_7SpriteSheet@UI@@6B@` (DLL 0x180154590, 9 slots). The paragraph that
+    // used to sit at the bottom of this file said it was one trap away; lane SS
+    // ported that trap (slot 5, `?Serialize@SpriteSheet@UI@@`, retail
+    // 0x18011d730 — runtime/src/ui/spritesheet_vtable.cpp) and this row is what
+    // the port was for.
+    //
+    // THE WARRANT — three measurements, debug build, DLL present,
+    // BANISHED_AUTOQUIT=300, all under tools/game_dir_lock.sh (lane SS,
+    // 2026-09-09; logs in the lane's snapshot dirs, doc
+    // docs/runtime_port/WAVE10B_LANE_SS.md):
+    //
+    //  1. GATE (a) — `BANISHED_RT_MINT_SHADOW=1` reports, on both of the two
+    //     readiness passes in the run:
+    //        READY  ??_7SpriteSheet@UI@@6B@   slots= 9 ported= 9 TRAP= 0 purecall= 0
+    //     The baseline at wave10/base @7358732 read `ported= 8 TRAP= 1` on the
+    //     same instrument, so the screen moved for a reason and is not stuck.
+    //
+    //  2. GATE (b) — the A/B. `BANISHED_RT_MINT_ROWS=??_7SpriteSheet@UI@@6B@`
+    //     against the same boot without it: both exit 0, no crash log, both end
+    //     on the same two closing lines, and the normalised log diff is the two
+    //     expected `[RtMint] ROW ON` lines plus splash-frame and camera-anim
+    //     jitter. `Dialog/SpriteSheet.rsc` loads in both and both find
+    //     `Sprite("SaveLoadEmpty")` at index 211.
+    //
+    //  3. THE EFFECTIVENESS CONTROL — because "the boot still works" is also
+    //     what a promotion that did NOTHING would report
+    //     (reference_probe_needs_an_effectiveness_control.md). With
+    //     BANISHED_RT_DIFF=1 added to both halves, the promoted run and only
+    //     the promoted run shows:
+    //        * `UI::SpriteSheet::Construct  divergences=1`, and the divergence
+    //          is the eight bytes at +0x00 — `ours` is an address in OUR image,
+    //          `theirs` the DLL's 0x180154590+ASLR. That IS the promotion: our
+    //          Construct now stamps the minted table.
+    //        * a `UI::SpriteSheet` site (the deleting destructor,
+    //          runtime/src/object/deleting_dtor.cpp) with `calls=2
+    //          divergences=0`, which does not appear in the control at all —
+    //          i.e. real dispatch went through slot 0 of the minted table and
+    //          came back clean.
+    //     So the row is live, it changes what runs, and what runs agrees.
+    //
+    // WHAT THIS WARRANT DOES **NOT** CLAIM. Slot 5 itself was never entered on
+    // any of the four boots: the sheet that is actually deserialised at boot is
+    // built by the DLL's own ExternalFactory and dispatches slot 5 off the
+    // DLL's table. `?Serialize@SpriteSheet@UI@@` is therefore **PORTED, NOT
+    // VERIFIED** — its write-path oracle (RtSaveTrace, wired in
+    // spritesheet_vtable.cpp) reported no entry, which is the `calls=0` column
+    // and not a pass (reference_uncalled_port_is_not_verified.md). Promoting is
+    // still the right call and this is why: TRAP=0 means the slot can no longer
+    // abort(), the other eight slots ARE exercised and clean, and leaving the
+    // row unpromoted would not verify slot 5 either — it would only keep the
+    // eight measured ones unreachable too.
+    //
+    // The `Construct` divergence above is expected and permanent for any
+    // promoted vtable: it is the vtable identity, nothing else. Stated here so
+    // a later reader does not find that red line and read it as a regression.
+    st = RtMintPromotionStorage("??_7SpriteSheet@UI@@6B@", 0x180154590ull);
+    RegisterRuntimeExport("??_7SpriteSheet@UI@@6B@", st);
+    RegisterRuntimeAddr(0x180154590ull, st); ++n;
+
     // ------------------------------------------------------------------------
     // NOT PROMOTED, and why. Each of these was measured this run, not assumed.
     //
-    //  ??_7SpriteSheet@UI@@6B@        9 slots, 8 ported, 1 TRAP.
-    //      Lane UI4 took it from 1/8 to 8/1 and it is the CLOSEST UI vtable in
-    //      the mint, but one trap is disqualifying: our ctors stamp this table
-    //      into every SpriteSheet, so the DLL's own dispatch reaches the trap
-    //      and abort()s. The surviving slot is named by the readiness table
-    //      every run; today it is
-    //          slot 5  ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z
-    //      Expires when that one body is ported and registered.
     //  ??_7DialogInstance@UI@@6B@     10 slots, 8 ported, 2 TRAP.
     //  ??_7Element@UI@@6B@            12 slots, 3 ported, 8 TRAP, 1 purecall.
     //  ??_7DialogController@UI@@6B@   11 slots, 2 ported, 9 TRAP.
-    //      Same rule, further away. 20 trap slots between the four.
+    //      Same rule, and the rule is the one SpriteSheet has now cleared: our
+    //      ctors stamp the promoted table, so the DLL's own dispatch reaches
+    //      any surviving trap and abort()s. 19 trap slots between these three,
+    //      each named by the readiness table on every BANISHED_RT_MINT_SHADOW
+    //      run. (It was 27 across four vtables when lane UIDATA counted; lane
+    //      UI4 closed seven of SpriteSheet's eight and lane SS the ninth.)
     //  ??_7Dialog@UI@@6B@             9 slots, 1 ported, 8 TRAP.
     //      MINTED as of Wave 10B lane MINT (2026-09-09) — 0x1801562a0,
     //      sizeProof "tail-not-a-pointer", and its 9 slots are among the
