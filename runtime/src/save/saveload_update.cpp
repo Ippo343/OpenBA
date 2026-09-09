@@ -1026,6 +1026,42 @@ using LoadMetaDataFn = void (*)(SaveLoad* self, const char** description,
 //     * the pixel block state 4's failure arm allocates: MemAlloc's return
 //       address is not predictable, exactly as in UpdateLoadFromFile.
 //
+// THE WORKER-THREAD RACE, and why both Exclude()s below are UNCONDITIONAL.
+// States 3 and 4 both branch on `persistence[0x48] == 1`, and that word is
+// written by the save/load WORKER THREAD. A predicting round runs OUR body and
+// then the DLL's, microseconds apart, and the worker can flip the flag in
+// between — so the two halves can take DIFFERENT ARMS. That is not a defect in
+// either body; it is what the oracle's own design (theirs runs for real,
+// afterwards, on pristine state) costs on a body whose control flow depends on
+// another thread. An Exclude placed inside the arm we happen to take is
+// therefore unarmed in precisely the case that needs it, and a conditional one
+// in state 4 would be worse than noisy: a round where we took the failure arm
+// and the DLL took the success arm would report our `field44 = 0` as a MISMATCH
+// and indict a correct port.
+//
+// *** AN OPEN FINDING, LEFT OPEN ON PURPOSE. *** Every predicting run of this
+// site reports the same thing and it is NOT explained yet:
+//
+//     UNPREDICTED WRITE Save::SaveLoad::UpdateList  9 byte(s) ...
+//     first at Save::SaveLoad [state 4 meta] +44
+//
+// i.e. during a STATE 4 round, nine bytes from SaveLoad+0x2c (decimal 44) —
+// the embedded SavedState's `_size` and `_data` — change, and this body neither
+// predicts nor excludes them. What is established: it is state 4, not state 3
+// (the state was put into the Watch LABEL precisely because two successive
+// guesses about which state it was were both wrong, and `excluded=` staying
+// flat across a build that added Exclude()s is what exposed the second one).
+// What is NOT established: the writer. `?LoadMetaData@SaveLoad@Save@@`
+// (0x1800c1b30) only READS +0x2c/+0x30 — `MOV EDX,[R14+0x2c]` and
+// `MOV RDX,[R14+0x30]` at 0x1800c1b88/0x1800c1b99, opening a MemoryStream over
+// the loaded buffer — and its tail stores to neither.
+//
+// It is deliberately NOT excluded. An Exclude is a CLAIM that the body knows
+// what writes those bytes and has decided not to model them; declaring one here
+// would silence a real signal behind a sentence that is not true yet. The count
+// stays in `unpredicted=` where the next lane can see it. This is the half of
+// the oracle that catches what we do not know about, and it caught something.
+//
 // ONE CALL IS DELIBERATELY *NOT* SUPPRESSED IN PREDICT MODE, and skipping it
 // would be a bug rather than caution: `~SaveInfo` on the stack template at the
 // bottom of state 1's loop. GetSaveInfo has just RETAINED a String into that
@@ -1107,6 +1143,26 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
             }
             // The worker handshake, in retail's order: request code first, then
             // the result word, then the two events.
+            //
+            // THE SECOND PREDICTION IS KNOWN-FLAKY, and it is left in with its
+            // eyes open. `+0x48` is the word the WORKER THREAD writes when it
+            // finishes, so between retail's store of 0 and Verify()'s read the
+            // worker can have already put 1 back. Observed exactly once, in the
+            // self-test run:
+            //
+            //     MISMATCH ... Persistence+0x48 = 0 (result: pending)
+            //     pre=0x1 ours=0x0 theirs=0x1
+            //
+            // — note the ABSENCE of the "[SELF-TEST: corrupted on purpose]"
+            // tag, which is what says this one was real rather than the
+            // control. It is the same worker-thread race the banner names for
+            // states 3 and 4, showing up a third time, and it is a race in the
+            // OBSERVATION, not a disagreement about what retail stores: both
+            // bodies store 0 here. Forty-five uncorrupted rounds across two runs
+            // reported wrong=0, so it is rare. Excluding it would trade a rare
+            // false red for a permanent blind spot on the one handshake this
+            // state exists to perform; a reader who sees it go red on exactly
+            // this label should suspect the worker before suspecting the port.
             out.U32(persistence + 0x4c, 4, "Persistence+0x4c = 4 (request: list saves)");
             out.U32(persistence + 0x48, 0, "Persistence+0x48 = 0 (result: pending)");
 
@@ -1318,6 +1374,21 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
 
     // ---- state 3 -----------------------------------------------------------
     if (progress == 3) {
+        if (round != nullptr) {
+            // UNCONDITIONAL, and the word matters — see THE WORKER-THREAD RACE
+            // in the banner. `persistence[0x48]` is written by the save/load
+            // WORKER THREAD, so our predicting pass and the DLL's real pass read
+            // two different values of it and can take DIFFERENT ARMS: we skip,
+            // they run, and ?SetupLoad@SavedState@Save@@ (0x1800c0c60 — it frees
+            // `_data`, looks the save's byte count up in Persistence's slot
+            // table at +0x60/+0x68, then stores that count at `this+4` and a
+            // fresh allocation at `this+8`) writes into watched state that an
+            // arm-local Exclude would not have covered.
+            round->Exclude(&self->_embeddedState, sizeof(SavedState),
+                           "Save::SavedState::SetupLoad rewrites the embedded "
+                           "state's _size and _data — and the guard deciding "
+                           "whether it runs at all is a worker-thread race");
+        }
         // The guard is INSIDE the state; the transition is not. See point 2.
         if ((persistence[0x18] & 1) == 0 &&
             *reinterpret_cast<const int32_t*>(persistence + 0x48) == 1) {
@@ -1352,6 +1423,19 @@ void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
     if (progress == 4) {
         const int32_t at  = static_cast<int32_t>(out.ReadU32(&self->field38));
         SaveInfo*     row = SaveInfoAt(self, out, at);
+
+        if (round != nullptr) {
+            // UNCONDITIONAL for the same worker-thread race as state 3: the two
+            // arms below write the SAME row with DIFFERENT values, and which arm
+            // runs is decided by a flag another thread owns. Excluding only
+            // inside the arm we happen to take would let a round where we took
+            // the failure arm and the DLL took the success arm report our
+            // `field44 = 0` as a MISMATCH against retail's real value — a
+            // confident, wrong finding about a correct port.
+            round->Exclude(row, 0x58,
+                           "state 4 writes the row from LoadMetaData out-params "
+                           "we suppress, and the arm is a worker-thread race");
+        }
 
         if ((persistence[0x18] & 1) == 0 &&
             *reinterpret_cast<const int32_t*>(persistence + 0x48) == 1) {
@@ -1581,7 +1665,22 @@ void RtSave_SaveLoad_UpdateList(SaveLoad* self) {
     RT_PREDICT_SITE("Save::SaveLoad::UpdateList");
     if (RT_PREDICT_ON) {
         RT_PREDICT_ROUND(round) {
-            round.Watch(self, sizeof(SaveLoad), "Save::SaveLoad");
+            // The watch label carries the STATE, because "9 bytes changed
+            // inside Save::SaveLoad that you did not predict" is not actionable
+            // without knowing which of six state machines was running. The first
+            // two attempts at explaining this site's unpredicted writes both
+            // guessed the state wrong; naming it in the label settled it in one
+            // run. `Exclude` counts stayed flat across a build that added two
+            // unconditional Exclude()s, which is what proved the guess wrong —
+            // a quantity that does not move with the thing it measures.
+            static const char* const kStateLabel[7] = {
+                "Save::SaveLoad [state 0 clear]",  "Save::SaveLoad [state 1 build]",
+                "Save::SaveLoad [state 2 scan]",   "Save::SaveLoad [state 3 beginload]",
+                "Save::SaveLoad [state 4 meta]",   "Save::SaveLoad [state 5 finish]",
+                "Save::SaveLoad [state ?]",
+            };
+            const uint32_t st = self->_progress;
+            round.Watch(self, sizeof(SaveLoad), kStateLabel[st < 6 ? st : 6]);
             UpdateListBody(self, round.sink(), &round);
             using Fn = void (*)(SaveLoad*);
             RT_ORIGINAL_ONCE(Fn, "?UpdateList@SaveLoad@Save@@QEAAXXZ")(self);
