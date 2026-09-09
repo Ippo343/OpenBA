@@ -113,6 +113,17 @@ extern int RtUiHoverRegister();            // userinterface_hover.cpp (lane UIF6
 // NAME. Own switch (BANISHED_RT_UISTANDALONE) because they only run while a
 // modal nested UI is up -- an A/B of them must not disturb the normal frame.
 extern int RtUiStandAloneRegister();       // userinterface_standalone.cpp (UIF6)
+// Wave 10D lane TIP: the three `UI::ToolTipDialog` census rows lane UIF6's
+// BeginToolTip created (class operator new, Element::GetToolTipString,
+// ToolTipDialog::SetText), plus vtable slots 1 and 2 (TypeName/Type) so that
+// `??_7ToolTipDialog@UI@@6B@` reads TRAP=0 the moment tools/rt_mint_gen.py is
+// re-run. Slot 0 is the vector deleting destructor and is row 39 of the family
+// in runtime/src/object/deleting_dtor.cpp, under BANISHED_RT_DELDTOR.
+// Own switch (BANISHED_RT_UITOOLTIPDLG) rather than UIF6's
+// BANISHED_RT_UITOOLTIP, because that one owns BeginToolTip, which ALLOCATES
+// the object these five bodies operate on -- an A/B that can only move both
+// ends of the same path at once cannot say which end a difference came from.
+extern int RtUiToolTipDialogRegister();    // tooltipdialog.cpp   (lane TIP)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -139,5 +150,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_DLGVTABLE")) n += RtUiDialogVtableRegister();
     n += RtUiHoverRegister();          // owns BANISHED_RT_UIHOVER + _UITOOLTIP
     n += RtUiStandAloneRegister();     // owns BANISHED_RT_UISTANDALONE
+    n += RtUiToolTipDialogRegister();  // owns BANISHED_RT_UITOOLTIPDLG
     printf("[RtPort] UI: %d exports registered\n", n);
 }
