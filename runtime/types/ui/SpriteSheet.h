@@ -171,7 +171,20 @@ struct SpriteSheet {
     int32_t     m_spriteCount;      // +0x28  Collection::Array<SpriteInfo>._size
     int32_t     m_spriteCapacity;   // +0x2C  Collection::Array<SpriteInfo>._capacity
 
-    uint64_t    m_field30;          // +0x30  unknown (copied in copy ctor, not re-read this wave)
+    uint64_t    m_field30;          // +0x30  Object::ExternalPtr<Graphics::MaterialInstance>
+                                    //        IDENTIFIED Wave 10B lane SS: Serialize
+                                    //        (0x18011d730) hands &this+0x30 to
+                                    //        `CALL 0x180014520`, which is one of the
+                                    //        twenty-five ExternalPtr<T>::Serialize
+                                    //        instantiations lane EXTPTR measured and
+                                    //        tabulated — WAVE10_LANE_EXTPTR.md:79 names
+                                    //        that copy's type id as
+                                    //        Graphics::MaterialInstance. So this is the
+                                    //        sheet's material handle, not an anonymous
+                                    //        qword. Left as uint64_t rather than renamed:
+                                    //        nothing in the tree reads it yet, and a
+                                    //        rename would be a change with no evidence
+                                    //        behind its NAME beyond the type id.
 
     char*       m_textureName;      // +0x38  System::String data ptr (refcounted, texture name?)
     char*       m_groupName;        // +0x40  System::String data ptr (refcounted, group/atlas name?)
