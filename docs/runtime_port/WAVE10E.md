@@ -20,8 +20,8 @@ commit the wave doc BEFORE dispatching, or dispatch on the doc's own commit.
 | row | state | what it needs | lane |
 |---|---|---|---|
 | `?BeginDragDrop@UserInterface@UI@@` | ✅ **PORTED AND VERIFIED** | — | **DRAG** |
-| `??_7Dialog@UI@@6B@` | ported 9/9, `TRAP=0` | a DISPATCH, or a verdict | **FINAL** |
-| `??_7DialogController@UI@@6B@` | ported 11/11, `TRAP=0` | a verdict — its blocker is already proven permanent | **FINAL** |
+| `??_7Dialog@UI@@6B@` | ✅ verdict: **UNPROMOTABLE TODAY**, expiry named | — | **FINAL** |
+| `??_7DialogController@UI@@6B@` | ✅ verdict: **PERMANENTLY UNPROMOTABLE** | — | **FINAL** |
 
 `BeginDragDrop` is the only genuine port left in the namespace. Lane MOUSE
 already published its full 15-instruction listing and field map (`+0x60` dialog,
@@ -88,7 +88,9 @@ So the honest possibilities are:
 
 1. a dispatch route exists for `??_7Dialog` and nobody has found it;
 2. no route exists, both rows are **permanently unpromotable**, and UI's ceiling
-   on this metric is 185/186 — in which case that should be recorded with proof
+   on this metric is 184/186 *(this doc originally said 185/186 — the integrator's
+   arithmetic error, caught by lane FINAL: it is 186 called minus TWO
+   unpromotable rows, not one)* — in which case that should be recorded with proof
    and the census taught to say so, rather than the wave quietly stopping at
    98.4% and leaving two rows that look like unfinished work;
 3. the rows should be promoted anyway for cutover completeness — which would
@@ -98,6 +100,59 @@ So the honest possibilities are:
 **Lane FINAL may return any of the three, including (2).** A proven ceiling is a
 better deliverable than a forced 100%, and this project has repeatedly caught
 itself when a number was chased instead of derived.
+
+### ✅ VERDICT: outcome (2), both rows. Nothing promoted. **UI is AT its ceiling.**
+
+**`??_7DialogController@UI@@6B@` — PERMANENTLY UNPROMOTABLE.** Its single
+consumer stamps the pointer and then immediately calls `??1Internal@Object@@`,
+**whose first statement overwrites the same qword.** The value is written and
+overwritten *unread*, so a promotion could not change behaviour on any route that
+could ever exist. **Expiry: none. No future lane should hunt a route.**
+
+**`??_7Dialog@UI@@6B@` — unpromotable today, expiry mechanical.** Complete
+consumer set: 4 stamps / 0 reads, all onto stack temporaries destroyed by a direct
+`??1Dialog` call. The Dialogs the framework actually dispatches on are built by
+`?CreateNewObject@Dialog@UI@@` (`0x180038530`) and `?CreateInPlaceObject@Dialog@UI@@`
+(`0x180038610`), **both unported**, so retail's factory stamps its own table
+through an unredirectable in-DLL `LEA`. **Expires the moment either export is
+ported and registered** — one grep to check, `[DlgTrip] foreignDispatch > 0` to
+confirm.
+
+**One fact settles the exe half of both rows:** `Application-x64.exe` imports 899
+symbols and **zero `??_7*`**. No exe code can ever consume a Runtime vtable row.
+
+**Three published numbers corrected, one of them mine:**
+
+1. **This document's ceiling of 185/186 was wrong — it is 184/186 = 98.9%**, being
+   186 called minus **two** unpromotable rows. With lane DRAG merged, **the UI
+   namespace is at its ceiling and is finished.**
+2. `dialog_controller_base.cpp:117`'s *"our ported constructors stamp that table
+   into real objects"* is **FALSE** — no constructor stamps it. **That sentence
+   kept the route hunt alive for two waves.** Corrected in place.
+3. DLG8's *"every dialog the game builds"* is overstated: the live stamp count is
+   **0** on a bare `AUTOSTART` run, and its `divergences=0→3` reproduces here from
+   a *different* cause — which shows it was a control on "`+0x00` changed", not on
+   the row.
+
+**The instrument DLG8 never had.** `runtime/src/ui/dialog_vptr_trip.{h,cpp}`
+(off by default) stamps a 9-entry forwarding tripwire in place of the row's value,
+closing DLG8's two structural blind spots (slot 0 lives in `deleting_dtor.cpp`;
+slot 4 is the shared `External::Compile`) and adding a **positive control**:
+housepanel `stamped=16`, tutorial `stamped=2`, control CAUGHT in both,
+`foreignDispatch=0` in both. The bare-autostart run reads `stamped=0` and **the
+instrument itself prints "this run's zero proves nothing"** — recorded as
+uninformative rather than banked as a third zero.
+
+Slot-0 inheritance re-derived over the full **39** (VTFID's table covers 38;
+`SelectResourceUI` has no standalone table): **0 inherit slot 0, 1 or 2.**
+Reproduction is checked in as `tools/dlgctrl_slot0_check.py` — whose first draft
+printed a wrong denominator, caught and fixed before publishing, and recorded.
+
+**The census was left alone.** The representation proposal (an explicit
+`UNPROMOTABLE` list, a per-row tag in the "called but not ported" listing, and a
+derived `ceiling` column) is written with before/after output and left to the
+integrator, with every existing column keeping its present arithmetic so
+cross-wave comparisons stay valid.
 
 ## Lane VERIFY — finishing means verified, not merely ported
 
