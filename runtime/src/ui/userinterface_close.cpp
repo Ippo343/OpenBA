@@ -1,0 +1,695 @@
+// ============================================================================
+// runtime/src/ui/userinterface_close.cpp — Wave 10 lane CLOSEDLG
+//
+//   ?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+//   0x180120f20   ordinal 1725
+// ============================================================================
+//
+// WHAT THIS ROW WAS BLOCKED ON, AND WHAT IT IS ACTUALLY BLOCKED ON
+//
+// Recorded blocker through Waves 7-9: "allocator NO-GO". Lane UI1 retired that
+// (docs/runtime_port/WAVE10_LANE_UI1.md §1b): the NO-GO is a verdict on
+// REPLACING the allocator arena, not on a ported body CALLING the shipped one,
+// and this function's allocator use is two inlined `MemFree`s plus a
+// `DynArrayPush`, all of which have exported doors. UI1 also retired the
+// recursion objection — `RtPredictRound`'s state is a stack of `kMaxDepth`
+// slots, not a single slot.
+//
+// The blocker UI1 said would survive is ORACLE COVERAGE, and it does survive,
+// but it is SMALLER than UI1 predicted. UI1 wrote:
+//
+//     "a predictive round over CloseDialog would compare a handful of scalars
+//      on `this` (+0x38/+0x40 tooltip clear, +0x30 array shrink) against a very
+//      large Exclude set."
+//
+// Two of the five effects UI1 listed as unreachable are in fact FULLY
+// PREDICTABLE and are compared here:
+//
+//   * **the unlinks in another object's list** (UI1's item 4). `parent+0x38`,
+//     `parent+0x40` and `parent+0x48`, plus the two neighbour-node fixups
+//     `prev->next` and `next->prev`, are computed from pointers this body can
+//     read and are left in memory retail does not free. UI1 called this "a
+//     graph whose extent must be enumerated before Watch can see it" — so this
+//     body ENUMERATES IT, by calling `Watch` from inside itself once it has
+//     walked to the node. That is sound precisely because a predicting body
+//     writes nothing: the snapshot is still taken before the DLL runs.
+//
+//   * **the `_addDialogs` compaction** — the shift loop at 0x180121337 writes
+//     the array's own storage, which is not inside `this` at all. It is watched
+//     and compared element by element.
+//
+// The three that genuinely are not expressible, each declared with `Exclude`
+// naming the callee that owns it:
+//
+//   1. the two `MemFree(node)` calls — the node's post-state belongs to the
+//      allocator, so the `node->prev = 0` / `node->next = 0` stores retail
+//      makes just before freeing are recorded for read-back and NOT compared
+//      (they land in an Exclude region and count as `unverifiable`);
+//   2. the `DynArrayPush` onto `_removedDialogs` (+0x18/+0x20) — the pushed
+//      element lands at an address the allocator chose;
+//   3. the `OnClosed` vtable release, `EndDragDrop`, `UpdateEvents` and
+//      `Array<UI::Event>::SetSize` — four suppressed calls whose footprints on
+//      `this` are `_events` (+0x48) and the drag-drop block (+0x60).
+//
+// ---------------------------------------------------------------------------
+// THE ARMING PREDICATE, AND WHY A ROUND THAT IS NOT ARMED IS COUNTED
+// ---------------------------------------------------------------------------
+// `CloseDialog` recurses into itself twice — once per child dialog
+// (0x180120f6b) and once for the tooltip (0x180120fa6). The child loop's
+// TERMINATION CONDITION is the very count the recursive call decrements:
+//
+//     while (*(int*)(dlg + 0x48) > 0) { ... CloseDialog(child) ... }
+//
+// In predict mode a suppressed call decrements nothing, so that loop would spin
+// forever. So the round is ARMED only on calls where neither recursion is
+// entered — `dlg` has no children and the tooltip arm's condition is false.
+// Everything else is handed straight to the DLL and COUNTED.
+//
+// The count is printed at exit as `indeterminate=N`. It has to be, or the
+// coverage claim is a lie by omission: a green board over the armable subset,
+// reported without the size of the unarmed subset, is exactly the
+// partial-oracle-reading-as-full failure this project keeps hitting. `rounds=`
+// alone cannot express it — an unarmed call never constructs a round.
+//
+// ---------------------------------------------------------------------------
+// FACTS THE DECOMPILED C DROPS OR GETS WRONG
+// ---------------------------------------------------------------------------
+// Read off 0x180120f20..0x1801213b6, not off Ghidra's C
+// (reference_ghidra_c_output_vs_disassembly.md):
+//
+//  1. **A dead compare with a LIVE load**, 0x180120f8a:
+//         MOV RAX,[RCX+0x30] ; CMP RAX,RAX ; JNZ
+//     `CMP RAX,RAX` is never unequal, so the branch is unreachable — but the
+//     LOAD still happens and still faults on a bad `_toolTipDialog`. The same
+//     shape UI1 found in `Update`. Reproduced as a `volatile` read; dropping it
+//     would make our body survive a pointer retail dies on.
+//
+//  2. **The `_dialogs` path pushes the NODE, not the InternalPtr**, 0x18012115f:
+//     `MOV R8,RBX` where RBX is the list node. `*node` is the dialog, so the
+//     eight bytes copied are the same either way — but the pointer handed to
+//     the helper is not the caller's `InternalPtr`, and the `_addDialogs` path
+//     three hundred bytes later DOES hand it the caller's (`MOV R8,R9`,
+//     0x18012139f). Ghidra prints both as `local_res10`.
+//
+//  3. **A dead store inside the compaction**, 0x18012134b:
+//         MOV [RCX],RBP        ; RBP is 0
+//         MOV RAX,[RCX+8] ; MOV [RCX],RAX
+//     The slot is zeroed and then immediately overwritten with its successor.
+//     Both stores are reproduced; the predictor supersedes the first on range
+//     overlap (UI1's `RangesOverlap` fix) and compares only the second.
+//
+//  4. **`TEST RCX,RCX` on `base + i*8`**, 0x180121346 — a null test on an
+//     address that can only be null if the array base is exactly `-i*8`. Dead,
+//     and kept.
+//
+//  5. **The tail is `Play(1)` inlined.** 0x180121167 reads `this+0xa0`, which
+//     is `_sounds[1]` (the array starts at +0x98), then reproduces
+//     `?Play@UserInterface@UI@@QEAAXH@Z` (0x1801223d0) instruction for
+//     instruction — including `0.0 / _secondsPerTick`, which is NOT folded to
+//     zero here for the reason userinterface.cpp gives at the real `Play`: were
+//     that slot ever 0.0, retail computes NaN and `CVTTSD2SI` yields INT64_MIN.
+//     Reached ONLY from the `_dialogs` path; the `_addDialogs` path returns
+//     without it (0x1801213a7).
+//
+//  6. **`EDI` is 1 at the sound tail**, set at 0x18012111a, and it is what is
+//     stored into the channel's `+0x08`. The `_addDialogs` path reuses EDI as
+//     the array index and never reaches the tail, so there is no conflict.
+//
+//  7. **The vtable slot is `+0x28` = index 5 = `?OnClosed@DialogInstance@UI@@`**
+//     (0x180115330), read out of `standalone/rt_data_mint_tables.inc`'s minted
+//     copy of `??_7DialogInstance@UI@@6B@` rather than guessed from the name.
+//     It is the mirror of `AddDialog`'s slot 4 `OnOpened`. It is NOT a refcount
+//     release, so the dialog is still alive when this body reads `d+0x28`
+//     afterwards.
+//
+//  8. **The two unlink blocks are the SAME code twice**, at 0x180121074 and
+//     0x180121270, differing only in which register holds the dialog. Written
+//     once here as `UnlinkFromParent`. Ghidra's C rotated the first one into a
+//     `while` with the loop head below the return, which is why it reads as two
+//     unrelated fragments.
+//
+// ---------------------------------------------------------------------------
+// FIELD NAMES NEAR THIS CLASS
+// ---------------------------------------------------------------------------
+// `runtime/types/ui/Dialog.h` names `DialogControllerConfigEntry`'s two
+// `ExternalPtr` fields BACKWARDS and its own warning comment carries the error.
+// Nothing in this file touches that struct, and every offset below is written
+// as a raw byte offset with the retail address that proves it, deliberately —
+// pin to addresses, never to field names, anywhere near this class.
+//
+// ---------------------------------------------------------------------------
+// GATES
+// ---------------------------------------------------------------------------
+//   BANISHED_RT_UICLOSE=0          fall back to the DLL (wave switch, default ON)
+//   BANISHED_RT_UICLOSE_DETOUR=1   patch 0x180120f20 so the DLL's OWN callers
+//                                  reach the port (OPT-IN, per runtime_detour.h)
+//   BANISHED_RT_PREDICT=1          run the predictive oracle
+//   BANISHED_RT_PREDICT_SELFTEST=1 the negative control
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+#include "../../funcs/rt_port.h"
+#include "../../funcs/rt_predict.h"
+#include "../../types/ui/UserInterface.h"
+
+// Same file-scope declaration userinterface.cpp, dialog.cpp and
+// userinterface_frame.cpp use: the address door lives in standalone/, and
+// pulling its header into a runtime/src file would invert the dependency the
+// whole tree is arranged around.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
+extern "C" void RtUi_UserInterface_CloseDialog(UI::UserInterface* self, void** dlgPtr);
+
+namespace {
+
+using UI::UserInterface;
+
+inline const double* TimerSecondsPerTick() {
+    return RT_DATA_SLOT(const double*, "?_secondsPerTick@Timer@System@@0NA");
+}
+
+// ---- the callees ------------------------------------------------------------
+// Four of the six are EXPORTED, verified against the shipped export directory
+// with pefile rather than inferred — `AEAA` means PRIVATE, not unexported
+// (reference_aeaa_is_private_not_unexported.md), and `EndDragDrop` is a plain
+// `QEAA` name that three earlier lane docs listed among "unsatisfied callees"
+// without ever running the export table.
+const char* const kEndDragDrop  = "?EndDragDrop@UserInterface@UI@@QEAAXXZ";
+const char* const kUpdateEvents = "?UpdateEvents@UserInterface@UI@@QEAAXXZ";
+const char* const kMemFree      = "?MemFree@MemoryAllocator@System@@SAXPEAX@Z";
+const char* const kCloseDialog  =
+    "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z";
+
+// THE TWO ADDRESS DOORS, DECLARED RATHER THAN HIDDEN.
+//
+// Neither is in the export table (checked with pefile). A by-address call is a
+// CUTOVER OBLIGATION, not a free choice
+// (reference_by_address_door_dies_at_cutover.md), so both are recorded in
+// docs/runtime_port/WAVE10_LANE_CLOSEDLG.md rather than left for a residue run
+// to rediscover. NEITHER IS NEW DEBT: 0x180033690 is already lane UI1's
+// declared door (userinterface_frame.cpp) and 0x18007a0d0 is already
+// `AddDialog`'s (userinterface.cpp). Both reach the DLL through
+// `ResolveAddr(Module::Runtime, …)`, which consults the port registry FIRST, so
+// the day anyone ports either helper we get theirs
+// (reference_resolveaddr_consults_port_registry_first.md).
+constexpr uintptr_t kEventsSetSizeAddr = 0x180033690;  // Array<UI::Event>::SetSize
+constexpr uintptr_t kDynArrayPushAddr  = 0x18007a0d0;  // the generic 8-byte push
+
+using CloseFn   = void  (*)(void*, void*);
+using VoidFn    = void  (*)(void*);
+using FreeFn    = void  (*)(void*);
+using SetSizeFn = void  (*)(void*, int32_t, const void*);
+using PushFn    = void  (*)(void*, int32_t, const void*);
+
+// A list node: value, prev, next. The same 0x18-byte shape lane UI1 proved from
+// the drain's own stores, and the same one both unlink blocks here walk.
+struct Node { void* value; Node* prev; Node* next; };
+static_assert(sizeof(Node) == 0x18, "LinkedList node is value/prev/next");
+
+// One queued UI event, 0x30 bytes. Built on the stack at RSP+0x28 by the
+// drag-drop cancel push (0x180121011..0x180121034).
+//
+// `pad24` is NEVER written by retail — the record is a raw stack frame there,
+// so those four bytes are whatever was in the frame. Zeroing them here is
+// UNOBSERVABLE and is stated rather than assumed: lane UI1 read the grow helper
+// at 0x180033690 and it copies +0x00, +0x08, +0x10, +0x14, +0x18, +0x1c and
+// +0x20/+0x28 field by field, never +0x24.
+struct EventRecord {
+    void*    dialog;    // +0x00 = _dragDropDialog
+    void*    z08;       // +0x08 = 0
+    int32_t  id;        // +0x10 = 0xd
+    int32_t  m1;        // +0x14 = -1
+    void*    z18;       // +0x18 = 0
+    uint32_t dragId;    // +0x20 = _dragDropId   (this+0x70)
+    uint32_t pad24;     // +0x24 never written by retail, never copied
+    void*    dragData;  // +0x28 = _dragDropData (this+0x78)
+};
+static_assert(sizeof(EventRecord) == 0x30, "UI::Event stride");
+
+// Calls the round could not be armed for. See the banner: this number is part
+// of the coverage claim, not a footnote to it.
+uint64_t g_indeterminate = 0;
+uint64_t g_armed         = 0;
+
+// THE INVOCATION COUNTER — the evidence that the ported body RAN AT ALL.
+//
+// It is separate from every oracle counter on purpose. `calls=` on an
+// `RtPredictSite` counts SUPPRESSED INDIRECT CALLS, and `rounds=` counts rounds
+// the oracle armed; NEITHER can distinguish "the port ran and the oracle was
+// quiet" from "the port was never reached and something upstream still holds
+// the DLL's pointer". `fn_UI_CloseDialog` is resolved ONCE, in
+// `engine/funcs/engine_funcs.cpp:1606`, through `ResolveExport` — and whether
+// that lands on the port or on the DLL depends entirely on whether `RtPortInit`
+// has already run at that moment. No oracle counter can express that question
+// (reference_diagnostic_field_cannot_express_the_answer.md,
+// reference_uncalled_port_is_not_verified.md), and lane UI3 needed a separate
+// `ProbeGate()` for exactly the same reason.
+//
+// So this counts every entry into the wrapper, in EVERY configuration, and is
+// printed unconditionally. A zero here means the row is registered and DEAD,
+// whatever else the board says.
+uint64_t g_entries = 0;
+
+struct CloseDlgSummary {
+    ~CloseDlgSummary() {
+        printf("[RtPort] UI::UserInterface::CloseDialog  entries=%llu\n",
+               (unsigned long long)g_entries);
+        if (!RtPredict::Enabled()) { std::fflush(stdout); return; }
+        printf("[RtPredict] UI::UserInterface::CloseDialog  armed=%llu  "
+               "indeterminate=%llu (recursive: child dialogs or the tooltip arm; "
+               "handed straight to the DLL, NOT verified)\n",
+               (unsigned long long)g_armed,
+               (unsigned long long)g_indeterminate);
+        std::fflush(stdout);
+    }
+};
+CloseDlgSummary g_closeDlgSummary;
+
+// ---------------------------------------------------------------------------
+// The shared unlink — 0x180121074..0x180121109 and 0x180121270..0x180121307
+// ---------------------------------------------------------------------------
+// Removes `dlg` from its parent's child list and frees the node. Both call
+// sites in retail are the same instructions with a different register holding
+// the dialog, so they are one function here.
+//
+// `round` is null in live mode. In predict mode it is used to enumerate the
+// graph this body is about to write into — the parent's list header and the two
+// neighbour nodes — which is the thing UI1 said had to happen before `Watch`
+// could see any of it.
+void UnlinkFromParent(uint8_t* dlg, RtSink& out, RtPredictRound* round) {
+    uint8_t* par = *reinterpret_cast<uint8_t**>(dlg + 0x28);
+    if (!par) return;                                   // 0x18012105e / 0x180121255
+
+    Node* head = *reinterpret_cast<Node**>(par + 0x38);
+    if (!head) return;                                  // 0x18012106e / 0x180121265
+
+    for (Node* n = head; n; n = n->next) {              // +0x10 is `next`
+        if (n->value != reinterpret_cast<void*>(dlg)) continue;
+
+        if (round) {
+            // ENUMERATED, not guessed: the extent is known only now, after the
+            // walk. Safe to snapshot here because a predicting body has written
+            // nothing yet — the DLL has not run.
+            round->Watch(par + 0x38, 0x18, "parent DialogInstance list head/tail/count");
+            if (n->prev) round->Watch(n->prev, sizeof(Node), "neighbour node (prev)");
+            if (n->next) round->Watch(n->next, sizeof(Node), "neighbour node (next)");
+            // The node itself is handed back to the allocator two instructions
+            // after these stores, so its post-state is the allocator's, not
+            // retail's. Recorded for read-back, never compared.
+            round->Exclude(n, sizeof(Node),
+                           "the unlinked node is MemFree'd by retail: its "
+                           "post-state belongs to the allocator");
+        }
+
+        if (n == head)                                              // 0x180121088
+            out.Ptr(par + 0x38, n->next, "parent list head = node->next");
+        if (n == *reinterpret_cast<Node**>(par + 0x40))             // 0x180121095
+            out.Ptr(par + 0x40, n->prev, "parent list tail = node->prev");
+        if (n->prev)                                                // 0x1801210a3
+            out.Ptr(&n->prev->next, n->next, "node->prev->next = node->next");
+        if (n->next)                                                // 0x1801210b4
+            out.Ptr(&n->next->prev, n->prev, "node->next->prev = node->prev");
+
+        out.Ptr(&n->prev, nullptr, "node->prev = 0");               // 0x1801210c7
+        out.Ptr(&n->next, nullptr, "node->next = 0");               // 0x1801210cb
+        out.U32(par + 0x48, out.ReadU32(par + 0x48) - 1,            // 0x1801210cf
+                "parent list count--");
+
+        // Retail inlines EnterCriticalSection / MemoryAllocator::Free /
+        // LeaveCriticalSection here (0x1801210d2..0x180121108). That sequence is
+        // byte-for-byte the body of the exported static `MemFree`, which is why
+        // calling it reproduces the lock discipline exactly with no windows.h in
+        // a runtime/src file. Lane UI1 §1b decompiled and compared the two.
+        FreeFn mfree = RT_EXPORT_ONCE(FreeFn, kMemFree);
+        if (out.Call("MemFree(unlinked node)", (const void*)mfree,
+                     reinterpret_cast<int64_t>(n)))
+            mfree(n);
+        return;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The shared "append to _removedDialogs unless it is already there"
+// 0x180121115..0x180121165 and 0x180121361..0x1801213a5
+// ---------------------------------------------------------------------------
+// Note the loop: retail does NOT break on a hit. It walks the whole array
+// setting a flag with `CMOVZ`, then tests once. A port that broke early would
+// be faster and would read the same, which is precisely why it is written the
+// long way here.
+//
+// `src` differs between the two call sites and is not an accident — see fact 2
+// in the banner.
+void PushRemovedUnlessPresent(UserInterface* self, void** dlgPtr, const void* src,
+                              RtSink& out) {
+    uint8_t* const S = reinterpret_cast<uint8_t*>(self);
+
+    int32_t n = *reinterpret_cast<int32_t*>(S + 0x20);
+    if (n > 0) {
+        void** p     = *reinterpret_cast<void***>(S + 0x18);
+        void*  want  = *dlgPtr;
+        bool   found = false;
+        for (int64_t c = n; c != 0; --c, ++p)
+            if (*p == want) found = true;                   // CMOVZ, no break
+        if (found) return;
+    }
+
+    PushFn push = reinterpret_cast<PushFn>(ResolveAddr(Module::Runtime, kDynArrayPushAddr));
+    if (out.Call("DynArrayPush(_removedDialogs)", (const void*)push,
+                 reinterpret_cast<int64_t>(S + 0x18),
+                 *reinterpret_cast<int32_t*>(S + 0x20) + 1,
+                 reinterpret_cast<int64_t>(src)))
+        push(S + 0x18, *reinterpret_cast<int32_t*>(S + 0x20) + 1, src);
+}
+
+// ---------------------------------------------------------------------------
+// The body. ONE body, two modes — the rt_predict.h contract.
+// ---------------------------------------------------------------------------
+void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out,
+                     RtPredictRound* round) {
+    uint8_t* const S   = reinterpret_cast<uint8_t*>(self);
+    uint8_t* const dlg = *reinterpret_cast<uint8_t**>(dlgPtr);   // RBX at 0x180120f43
+
+    // ---- Block A, 0x180120f46..0x180120f74 -------------------------------
+    // Close every child dialog first. The loop's bound is the count the
+    // recursive call decrements — see the banner on why a predicting round is
+    // never armed when this is entered. `dlg+0x10` is the child's owning
+    // UserInterface, which is not necessarily `self`.
+    while (*reinterpret_cast<int32_t*>(dlg + 0x48) > 0) {
+        void*  head  = *reinterpret_cast<void**>(dlg + 0x38);
+        void*  child = *reinterpret_cast<void**>(head);
+        void*  tmp   = child;                                     // the by-value InternalPtr
+        RtUi_UserInterface_CloseDialog(
+            *reinterpret_cast<UserInterface**>(dlg + 0x10), &tmp);
+    }
+
+    // ---- Block B, 0x180120f76..0x180120fb1 -------------------------------
+    // If the dialog being closed OWNS the current tooltip, close the tooltip.
+    void* tip = *reinterpret_cast<void**>(S + 0x40);
+    if (tip && *dlgPtr == *reinterpret_cast<void**>(S + 0x38)) {
+        // 0x180120f8a  MOV RAX,[RCX+0x30] / CMP RAX,RAX / JNZ — see fact 1.
+        // The compare is unreachable; the LOAD is not, and it faults on a bad
+        // `_toolTipDialog` exactly as retail does.
+        volatile uint64_t deadLoad = *reinterpret_cast<uint64_t*>(
+            static_cast<uint8_t*>(tip) + 0x30);
+        (void)deadLoad;
+
+        void* tmp = tip;
+        RtUi_UserInterface_CloseDialog(self, &tmp);               // 0x180120fa6
+        out.Ptr(S + 0x40, nullptr, "_toolTipDialog = 0 (tooltip arm)");
+        out.Ptr(S + 0x38, nullptr, "_toolTipOwner = 0 (tooltip arm)");
+    }
+
+    // ---- Block C, 0x180120fb3..0x180120fd4 -------------------------------
+    // Already queued for removal? Then there is nothing left to do.
+    {
+        int32_t n = *reinterpret_cast<int32_t*>(S + 0x20);
+        if (n > 0) {
+            void** p    = *reinterpret_cast<void***>(S + 0x18);
+            void*  want = *dlgPtr;
+            for (int32_t i = 0; i < n; ++i, ++p)
+                if (*p == want) return;                           // 0x180120fc6
+        }
+    }
+
+    // ---- Block D, 0x180120fd6..0x180120ff1 -------------------------------
+    // Find the dialog in the live `_dialogs` list (an intrusive list at +0x00).
+    Node* node = *reinterpret_cast<Node**>(S);
+    while (node && node->value != *dlgPtr) node = node->next;
+
+    if (node) {
+        // ---- Block E, 0x180120ff8..0x180121051 ---------------------------
+        void*  d    = node->value;
+        void** vtbl = *reinterpret_cast<void***>(d);
+        if (out.Call("DialogInstance::OnClosed (vtable +0x28, slot 5)", vtbl[5],
+                     reinterpret_cast<int64_t>(d)))
+            reinterpret_cast<VoidFn>(vtbl[5])(d);
+
+        // If this dialog owns the in-flight drag, queue a cancel event and end it.
+        void* drag = *reinterpret_cast<void**>(S + 0x60);
+        if (node->value == drag) {
+            EventRecord ev;
+            ev.dialog   = drag;                                            // 0x180121011
+            ev.z08      = nullptr;                                         // 0x180121016
+            ev.id       = 0xd;                                             // 0x18012101b
+            ev.m1       = -1;                                              // 0x180121023
+            ev.z18      = nullptr;                                         // 0x18012102b
+            ev.dragId   = *reinterpret_cast<uint32_t*>(S + 0x70);          // 0x180121030
+            ev.pad24    = 0;   // never written by retail, never copied
+            ev.dragData = *reinterpret_cast<void**>(S + 0x78);             // 0x180121034
+
+            SetSizeFn setSize = reinterpret_cast<SetSizeFn>(
+                ResolveAddr(Module::Runtime, kEventsSetSizeAddr));
+            if (out.Call("Array<UI::Event>::SetSize (drag cancel, id 0xd)",
+                         (const void*)setSize,
+                         reinterpret_cast<int64_t>(S + 0x48),
+                         *reinterpret_cast<int32_t*>(S + 0x50) + 1))
+                setSize(S + 0x48, *reinterpret_cast<int32_t*>(S + 0x50) + 1, &ev);
+
+            VoidFn endDrag = RT_EXPORT_ONCE(VoidFn, kEndDragDrop);
+            if (out.Call("EndDragDrop", (const void*)endDrag,
+                         reinterpret_cast<int64_t>(self)))
+                endDrag(self);
+        }
+
+        // ---- Block F, 0x180121054..0x18012110b -----------------------------
+        // Retail RE-LOADS the dialog out of the node here (0x180121054), after
+        // OnClosed has run. Reproduced rather than reused from above.
+        UnlinkFromParent(*reinterpret_cast<uint8_t**>(node), out, round);
+
+        // ---- 0x18012110d..0x180121165 --------------------------------------
+        VoidFn updEvents = RT_EXPORT_ONCE(VoidFn, kUpdateEvents);
+        if (out.Call("UpdateEvents", (const void*)updEvents,
+                     reinterpret_cast<int64_t>(self)))
+            updEvents(self);
+
+        // FACT 2: the source is the NODE, not the caller's InternalPtr.
+        PushRemovedUnlessPresent(self, dlgPtr, node, out);
+
+        // ---- Block H, 0x180121167..0x1801211f1 -----------------------------
+        // `Play(1)` inlined: `this+0xa0` is `_sounds[1]` (the array is at +0x98).
+        void* sound = *reinterpret_cast<void**>(S + 0xa0);
+        if (!sound) return;
+        uint8_t* scene = *reinterpret_cast<uint8_t**>(S + 0x90);
+        if (!scene) return;
+        uint8_t* table = *reinterpret_cast<uint8_t**>(scene + 0x10);
+
+        // NOT folded to zero — see fact 5 and the same note at the real `Play`.
+        const double  secondsPerTick = *TimerSecondsPerTick();
+        const int64_t ticks = static_cast<int64_t>(0.0 / secondsPerTick);
+
+        int32_t index = 0;
+        for (int64_t guard = 0;
+             *reinterpret_cast<const int32_t*>(table + static_cast<int64_t>(index) * 0x70 + 0x68) != 0;
+             ) {
+            ++index;
+            if (++guard >= 0x100) return;        // full table: retail drops the sound
+        }
+        if (index < 0) return;                   // 0x1801211be, dead: index starts at 0
+
+        uint8_t* slot = table + static_cast<int64_t>(index) * 0x70;
+
+        if (round) {
+            round->Watch(slot,      0x70, "audio channel slot");
+            round->Watch(scene + 8, 4,    "audio scene counter");
+        }
+        out.Ptr(slot + 0x00, sound, "audio slot: the sound");             // 0x1801211d0
+        out.U32(slot + 0x08, 1,     "audio slot: state = 1");             // 0x1801211d3
+        out.U64(slot + 0x10, static_cast<uint64_t>(ticks),                // 0x1801211d6
+                "audio slot: start tick");
+        const uint32_t counter = out.ReadU32(scene + 0x08) + 1;           // 0x1801211da
+        out.U32(scene + 0x08, counter, "audio scene counter++");
+        out.U32(slot + 0x68,                                              // 0x1801211ee
+                static_cast<uint32_t>(index * 2) | (counter << 9),
+                "audio slot: handle = index*2 | counter<<9");
+        return;
+    }
+
+    // ---- Block G, 0x1801211f6..0x180121227 -------------------------------
+    // Not live yet — look for it in `_addDialogs`, the queue AddDialog pushes to.
+    int32_t count = *reinterpret_cast<int32_t*>(S + 0x30);
+    if (count <= 0) return;
+
+    uint8_t* base   = *reinterpret_cast<uint8_t**>(S + 0x28);
+    void*    target = *dlgPtr;
+    int32_t  i      = 0;
+    {
+        void** p = reinterpret_cast<void**>(base);
+        while (*p != target) {
+            ++i; ++p;
+            if (i >= count) return;                                    // 0x180121220
+        }
+    }
+
+    // ---- Block J, 0x180121229..0x1801213a5 -------------------------------
+    int64_t off = static_cast<int64_t>(i) * 8;                         // RBX, MOVSXD
+
+    if (round)
+        round->Watch(base, static_cast<size_t>(count) * 8, "_addDialogs storage");
+
+    {
+        void*  d    = *reinterpret_cast<void**>(base + off);
+        void** vtbl = *reinterpret_cast<void***>(d);
+        if (out.Call("DialogInstance::OnClosed (vtable +0x28, slot 5)", vtbl[5],
+                     reinterpret_cast<int64_t>(d)))
+            reinterpret_cast<VoidFn>(vtbl[5])(d);
+    }
+
+    // The array base is RE-LOADED after the virtual (0x180121246): OnClosed can
+    // reallocate the queue. Reproduced.
+    uint8_t* base2 = *reinterpret_cast<uint8_t**>(S + 0x28);
+    UnlinkFromParent(*reinterpret_cast<uint8_t**>(base2 + off), out, round);
+
+    VoidFn updEvents = RT_EXPORT_ONCE(VoidFn, kUpdateEvents);
+    if (out.Call("UpdateEvents", (const void*)updEvents,
+                 reinterpret_cast<int64_t>(self)))
+        updEvents(self);                                               // 0x180121314
+
+    // 0x180121319 — note this compares against +0x40 and clears BOTH, where
+    // block B compared against +0x38. Not a typo in either place.
+    if (*dlgPtr == *reinterpret_cast<void**>(S + 0x40)) {
+        out.Ptr(S + 0x40, nullptr, "_toolTipDialog = 0");
+        out.Ptr(S + 0x38, nullptr, "_toolTipOwner = 0");
+    }
+
+    // ---- the compaction, 0x180121332..0x18012135c ------------------------
+    if (i < *reinterpret_cast<int32_t*>(S + 0x30)) {
+        do {
+            ++i;
+            if (i < *reinterpret_cast<int32_t*>(S + 0x30)) {
+                uint8_t* b = *reinterpret_cast<uint8_t**>(S + 0x28);
+                uint8_t* c = b + off;
+                if (c != nullptr) {                                    // fact 4, dead, kept
+                    // fact 3: the dead zero-store, then the real shift.
+                    out.Ptr(c, nullptr, "_addDialogs[k] = 0 (dead store)");
+                    out.Ptr(c, out.ReadPtr(c + 8), "_addDialogs[k] = _addDialogs[k+1]");
+                }
+            }
+            off += 8;
+        } while (i < *reinterpret_cast<int32_t*>(S + 0x30));
+    }
+    out.U32(S + 0x30, out.ReadU32(S + 0x30) - 1, "_addDialogs._size--");  // 0x18012135e
+
+    // FACT 2 again, the other way: here the source IS the caller's InternalPtr.
+    PushRemovedUnlessPresent(self, dlgPtr, dlgPtr, out);
+    // and the sound tail is NOT reached on this path — 0x1801213a2 falls into
+    // the epilogue at 0x1801213a7.
+}
+
+// The detour is OPT-IN, not a kill switch: `RtWaveEnabled` is default-ON and
+// that is the wrong default for a code patch into the shipped DLL.
+inline bool DetourOptedIn() {
+    const char* e = std::getenv("BANISHED_RT_UICLOSE_DETOUR");
+    return e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
+}
+
+} // namespace
+
+// ---------------------------------------------------------------------------
+// The detour seam
+// ---------------------------------------------------------------------------
+extern "C" bool  RtUiCloseDialogInstallDetour(void* ourFn);
+extern "C" void* RtUiCloseDialogTrampoline();
+
+namespace {
+
+// Retail's body, through whichever door is correct RIGHT NOW.
+//
+// WITH THE DETOUR IN, THE RAW EXPORT IS NOT RETAIL — it is a jump back into us,
+// so `RT_ORIGINAL_ONCE` here would not diverge, it would RECURSE until the stack
+// died (reference_detour_machinery_exists_wave7_zero_is_stale.md). A null
+// trampoline means "no detour", never "no original".
+void CallRetailCloseDialog(UserInterface* self, void** dlgPtr) {
+    if (void* tramp = RtUiCloseDialogTrampoline())
+        return reinterpret_cast<CloseFn>(tramp)(self, dlgPtr);
+    RT_ORIGINAL_ONCE(CloseFn, kCloseDialog)(self, dlgPtr);
+}
+
+} // namespace
+
+extern "C" void RtUi_UserInterface_CloseDialog(UserInterface* self, void** dlgPtr) {
+    RT_PREDICT_SITE("UI::UserInterface::CloseDialog");
+    ++g_entries;
+
+    if (RT_PREDICT_ON) {
+        uint8_t* const S   = reinterpret_cast<uint8_t*>(self);
+        uint8_t* const dlg = *reinterpret_cast<uint8_t**>(dlgPtr);
+
+        // THE ARMING PREDICATE. Both recursions must be provably not entered,
+        // because a suppressed recursive call decrements nothing and the child
+        // loop's bound IS what the recursion decrements. Read from the same
+        // words the body reads, with nothing in between.
+        const bool hasChildren = *reinterpret_cast<int32_t*>(dlg + 0x48) > 0;
+        const bool tipArm =
+            (*reinterpret_cast<void**>(S + 0x40) != nullptr) &&
+            (*dlgPtr == *reinterpret_cast<void**>(S + 0x38));
+
+        if (hasChildren || tipArm) {
+            ++g_indeterminate;                 // counted, printed, and NOT verified
+            CallRetailCloseDialog(self, dlgPtr);
+            return;
+        }
+        ++g_armed;
+
+        RT_PREDICT_ROUND(round) {
+            // COVERAGE CONTROL: watch the whole object, so any byte retail
+            // changes that we neither predicted nor excluded is REPORTED.
+            // Predictions on their own are only a lower bound. The graph
+            // outside `this` — the parent's list header, the neighbour nodes,
+            // the `_addDialogs` storage and the audio channel — is watched from
+            // INSIDE the body, once the walk has found it.
+            round.Watch(self, 0x128, "UI::UserInterface");
+
+            // The declared holes. Each names the suppressed callee that owns it.
+            round.Exclude(S + 0x000, 0x18,
+                          "_dialogs: the suppressed OnClosed and UpdateEvents "
+                          "can unlink here; this body never writes it");
+            round.Exclude(S + 0x018, 0x10,
+                          "_removedDialogs: the suppressed DynArrayPush appends "
+                          "at an address the allocator chose");
+            round.Exclude(S + 0x048, 0x10,
+                          "_events: the suppressed UpdateEvents drains it and the "
+                          "suppressed Array<UI::Event>::SetSize grows it");
+
+            // Tighter than an unconditional exclude: with no drag in flight
+            // nothing in this block is written by anybody, so it stays under
+            // comparison and a stray write there would be reported.
+            if (*reinterpret_cast<void**>(S + 0x60) != nullptr) {
+                round.Exclude(S + 0x060, 0x2a,
+                              "drag-drop block: written by the suppressed "
+                              "EndDragDrop on the drag-cancel arm");
+            }
+
+            CloseDialogBody(self, dlgPtr, round.sink(), &round);  // predicts, writes nothing
+            CallRetailCloseDialog(self, dlgPtr);                  // the authority runs for real
+        }
+        return;
+    }
+
+    RtSink live;
+    CloseDialogBody(self, dlgPtr, live, nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// Registration
+// ---------------------------------------------------------------------------
+int RtUiCloseDialogRegister() {
+    int count = 0;
+
+    // Registered under BOTH the mangled name and the address. WAVE7.md §3's
+    // rule: a port registered under the name only can be dead at a call site
+    // that reaches the DLL through the address fallback, while reporting a
+    // clean-looking oracle over nothing.
+    RegisterRuntimeExport(kCloseDialog, (void*)&RtUi_UserInterface_CloseDialog); ++count;
+    RegisterRuntimeAddr(0x180120f20, (void*)&RtUi_UserInterface_CloseDialog);
+
+    if (DetourOptedIn())
+        RtUiCloseDialogInstallDetour((void*)&RtUi_UserInterface_CloseDialog);
+
+    return count;
+}
