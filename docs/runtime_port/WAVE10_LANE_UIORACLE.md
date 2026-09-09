@@ -398,3 +398,53 @@ invisible, and the only difference is source formatting. This is the multi-line-
 blind spot `reference_census_three_blind_spots.md` recorded for `runtime_census.py`,
 alive in a second tool. **Anyone reading `2 UNGUARDED-CALL` as "there are two" is
 reading a number the instrument cannot produce correctly.**
+
+---
+
+## 7. TWO COORDINATOR ITEMS, ANSWERED
+
+### 7a. The `Dialog.h` `ExternalPtr` field swap — THIS LANE IS NOT AFFECTED, and it has an independent third witness
+
+Lane UI3 found `runtime/types/ui/Dialog.h:92-93` naming
+`DialogControllerConfigEntry`'s two `ExternalPtr` fields backwards (`_config` at
+`+0x08`, `_elementDesc` at `+0x10`; `0x180114A13` / `0x180114A1C` say the opposite), and
+the header's own warning comment carries the error, so reading the comment confirms the
+wrong answer.
+
+`AddTab` takes two `ExternalPtr<ElementDescription>` arguments, so the question is fair.
+**Neither new file includes `Dialog.h`,** and neither reads those fields by name or by
+offset: `AddTab` takes both descriptions as opaque pointers and calls the `ExternalPtr`'s
+own vtable slot `+0x40` on each, exactly as retail does (`0x1800DA1E5`, `0x1800DA235`).
+
+More usefully, **`AddTab`'s only caller is an independent third witness that lane UI3 is
+right.** `UIDesc_AddControllers_Impl` (`code/Game/Dialog/toolui.cpp:38-46`) was derived
+from the exe call site, not from `Dialog.h`, and its entry table reads:
+
+```
+//   +0x08: ExternalPtr<ElementDescription> elementDesc
+//   +0x10: ExternalPtr<DialogControllerConfig> config
+//   +0x18: ExternalPtr<ElementDescription> tabDesc
+```
+
+— `+0x08` is the DESCRIPTION, which is lane UI3's reading and the opposite of
+`Dialog.h`'s. Two derivations from two different call sites agree; the header is the
+outlier. (The argument order into `AddTab` is `R8 = entry+0x18` (tabDesc, becomes the
+tab) and `R9 = entry+0x08` (elementDesc, becomes the content page handed to
+`AddController`), which is consistent with what each half is used for downstream.)
+
+### 7b. Lock discipline and exe provenance
+
+`tools/game_dir_lock.sh acquire` was called **bare with its status checked** in every run
+script this lane used (`acquire … || exit 1`), never through a pipe, so the discarded-exit-
+code defect the coordinator describes did not apply here. The AddTab run additionally uses
+the hardened script (`f9a9a9c`, cherry-picked onto this branch) with `verify lane-UIORACLE`
+immediately before each launch, and `set -o pipefail`.
+
+**Exe provenance.** Runs A–E printed the md5 of *our build* at deploy time
+(`f2357c54…` for A–C, `bd5f19e5…` for D–E) but not of the *deployed copy* immediately
+before launch. None of them spans 23:00–23:01, the window the coordinator flagged (A–C
+22:24–22:30, D–E 22:31–22:36). Independently of the md5, those runs cannot have measured
+another lane's binary: `[RtPredict] UI::TextElement::CacheText` and the `[UiOracle]`
+summary line exist **only** in this lane's build, and both are present in every one of
+their logs. The AddTab run compares `mine` against the **deployed** md5 before and after
+each launch and prints all three.
