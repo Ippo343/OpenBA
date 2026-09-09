@@ -1,0 +1,2 @@
+[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=000001dbe5420000, wrapper=00007ff6b24a03e4)
+[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=000001dbe5430000, wrapper=00007ff6b24a058e)

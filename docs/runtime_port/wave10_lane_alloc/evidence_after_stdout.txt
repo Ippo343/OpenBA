@@ -1,0 +1,1 @@
+[RtAlloc] ARMED (atomic swap taken, Runtime-x64.dll present) -- 27 exports registered; the DLL's own Allocate/Free now JMP to our composed stubs.

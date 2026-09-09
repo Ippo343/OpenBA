@@ -40,3 +40,16 @@ bool InstallFreeLock();
 // Boot-time only: it does not synchronise with threads that may be inside the
 // wrappers. Call it before Engine::Startup creates the loader thread.
 bool AllocatorLockRetireForPort();
+
+// Put both patches BACK after a retire that did not lead to an armed port.
+//
+// Wave 10 lane ALLOC. RtSystemAllocatorRegister() now retires the lock BEFORE
+// its prologue guard runs (that ordering is the whole reason BANISHED_RT_ALLOC=1
+// could never arm with the DLL present). Every refusal downstream of that retire
+// -- a foreign patch on the prologues, a detour that would not install -- would
+// otherwise leave the process running retail's own UNLOCKED Allocate against a
+// Free that no longer takes the critical section: the free-list race, reached by
+// way of a SAFETY guard. This calls InstallAllocatorLock() + InstallFreeLock()
+// again; both re-validate retail's bytes, which the retire has just restored.
+// Returns true only if both re-installed.
+bool AllocatorLockRestoreAfterRefusal();

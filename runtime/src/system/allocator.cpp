@@ -1147,6 +1147,8 @@ const char* FindPatchedPrologue() {
 
 RtAllocDetourInstaller g_installDetours = nullptr;
 RtAllocCutoverArmer    g_armCutover     = nullptr;
+RtAllocLockRetirer     g_retireLock     = nullptr;
+RtAllocLockRestorer    g_restoreLock    = nullptr;
 
 // Which member of the platform seam is still null. Returns nullptr when the
 // table is complete. Naming it matters: `g_platInstalled` is one bool over ten
@@ -1187,6 +1189,12 @@ extern "C" void RtSystemAllocatorSetDetourInstaller(RtAllocDetourInstaller fn) {
 
 extern "C" void RtSystemAllocatorSetCutoverArmer(RtAllocCutoverArmer fn) {
     g_armCutover = fn;
+}
+
+extern "C" void RtSystemAllocatorSetLockRetirer(RtAllocLockRetirer retire,
+                                                RtAllocLockRestorer restore) {
+    g_retireLock  = retire;
+    g_restoreLock = restore;
 }
 
 int RtSystemAllocatorRegister() {
@@ -1250,29 +1258,48 @@ int RtSystemAllocatorRegister() {
         return n;
     }
 
-    // HARD REFUSE if anything already owns these two prologues. Proceeding would
-    // silently drop the allocator lock; see the comment on FindPatchedPrologue.
-    if (const char* patched = FindPatchedPrologue()) {
-        printf("[RtPort] MemoryAllocator: REFUSING to arm -- %s is already "
-                    "patched. standalone/allocator_lock.cpp is default-on and holds "
-                    "these two prologues; detouring over it would leave the ported "
-                    "allocator running WITHOUT the critical section that Runtime's "
-                    "own direct calls to Free rely on. Retire that patch first "
-                    "(docs/runtime_port/WAVE2_ALLOCATOR.md section 4).\n", patched);
-        return 0;
-    }
-
+    // The installer check comes FIRST, before anything is retired. A build with
+    // no installer must refuse having touched nothing at all -- retiring the lock
+    // and then discovering we cannot detour would leave retail's unlocked bytes
+    // in place for the whole run.
     if (g_installDetours == nullptr) {
         printf("[RtPort] MemoryAllocator: no detour installer -- registering the exports "
                     "alone would let us allocate while the DLL frees. REFUSING. "
                     "See docs/runtime_port/WAVE2_ALLOCATOR.md\n");
         return 0;
     }
+
+    // ---- RETIRE FIRST, THEN GUARD (Wave 10 lane ALLOC) ----------------------
+    //
+    // See the seam comment in runtime/types/system/MemoryAllocator.h. Until this
+    // ran in the right order, BANISHED_RT_ALLOC=1 with the DLL present ALWAYS
+    // died on the prologue guard, because main.cpp installs the allocator lock
+    // before RuntimePortInit() and the retire step lived inside the installer,
+    // downstream of the guard. The guard's intent is "refuse a FOREIGN patch";
+    // ours is not foreign, so hand it back before asking the question.
+    const bool retired = (g_retireLock != nullptr) && g_retireLock();
+
+    // HARD REFUSE if anything STILL owns these two prologues -- now that ours is
+    // gone, anything left really is foreign. Proceeding would silently drop the
+    // allocator lock; see the comment on FindPatchedPrologue.
+    if (const char* patched = FindPatchedPrologue()) {
+        printf("[RtPort] MemoryAllocator: REFUSING to arm -- %s is already "
+                    "patched by something that is NOT the allocator lock (ours was "
+                    "retired first and this survived it). Detouring over a foreign "
+                    "patch would leave the ported allocator running WITHOUT the "
+                    "critical section that Runtime's own direct calls to Free rely "
+                    "on (docs/runtime_port/WAVE2_ALLOCATOR.md section 4).\n", patched);
+        if (retired && g_restoreLock) g_restoreLock();
+        return 0;
+    }
+
     // Atomic swap: the DLL's own callers first, then ours. If the detours do
-    // not take, register nothing at all.
+    // not take, register nothing at all -- and put the lock back, because the
+    // process is about to keep running on retail's UNLOCKED Allocate/Free.
     if (!g_installDetours(reinterpret_cast<void*>(&rtalloc::Allocate),
                           reinterpret_cast<void*>(&rtalloc::Free))) {
         printf("[RtPort] MemoryAllocator: detour install FAILED -- registering nothing\n");
+        if (retired && g_restoreLock) g_restoreLock();
         return 0;
     }
 

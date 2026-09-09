@@ -1702,6 +1702,20 @@ static bool Init() {
     //     DLL-absent boot hit, with MemAlloc/MemFree left unresolved.
     RtSystemAllocatorSetCutoverArmer(&RtAllocSwapArmCutover);
 
+    //     ...and the LOCK-RETIRE seam (Wave 10 lane ALLOC). WAVE9.md records this
+    //     as already done; it was not, and the ordering deadlock it describes was
+    //     still live and MEASURED on 2026-09-08 with the DLL present:
+    //       [RtPort] MemoryAllocator: REFUSING to arm -- MemoryAllocator::Allocate
+    //                (0x1800c6e60) is already patched. ...
+    //     InstallAllocatorLock() above owns the two prologues by the time
+    //     RuntimePortInit() runs, and the retire step lived INSIDE the detour
+    //     installer, which the guard gates. Handing the retire (and its undo)
+    //     across the seam lets RtSystemAllocatorRegister() retire first and guard
+    //     second, so a surviving patch is genuinely foreign. Inert unless
+    //     BANISHED_RT_ALLOC arms the port.
+    RtSystemAllocatorSetLockRetirer(&AllocatorLockRetireForPort,
+                                    &AllocatorLockRestoreAfterRefusal);
+
     //     Observe-only shadow oracle for the same port: runs our body into a
     //     private replica arena beside retail's real work and compares, without
     //     taking the heap. No-op unless BANISHED_RT_DIFF=1 and
