@@ -195,6 +195,9 @@ struct Config {
     int32_t     coordX       = 0;
     int32_t     coordY       = 0;
     bool        wantTipCapable = true;   // `tip`/`auto` vs `any`
+    // WAVE 10E lane VERIFY -- BANISHED_MOUSE_TIPSTR. Empty == unset == silent.
+    char        tipStr[128]  = {};
+    bool        haveTipStr   = false;
 };
 
 Config g_cfg;
@@ -239,6 +242,13 @@ void ReadConfig() {
     if (const char* f = std::getenv("BANISHED_MOUSE_START"))
         if (int v = std::atoi(f)) g_cfg.startFrame = v;
     g_cfg.trace = std::getenv("BANISHED_MOUSE_TRACE") != nullptr;
+
+    if (const char* ts = std::getenv("BANISHED_MOUSE_TIPSTR")) {
+        if (*ts && std::strcmp(ts, "0") != 0) {
+            std::snprintf(g_cfg.tipStr, sizeof(g_cfg.tipStr), "%s", ts);
+            g_cfg.haveTipStr = true;
+        }
+    }
 
     if (const char* c = std::getenv("BANISHED_MOUSE_CONTROL")) {
         if (!std::strcmp(c, "nowrite"))        g_cfg.control = Control::NoWrite;
@@ -425,6 +435,20 @@ void Walk(UI::Element* e, RtUI::DialogInstance* dlg, Scan& sc, int depth) {
                    (int)e->_layoutRight, (int)e->_layoutBottom,
                    e->_toolTipDialog, e->_toolTip.table, (int)e->_toolTip.index,
                    tip ? "<TIP-CAPABLE>" : "");
+            // WAVE 10E lane VERIFY -- the one-line fix lane MOUSE named in its
+            // §9. `tipTbl`/`tipIdx` above IS the +0x48 pair, and +0x48 is the
+            // data the EMPTY arm uses; the arm that calls GetToolTipString
+            // TWICE is selected by +0x58 `_toolTipString` and by nothing else
+            // (?GetToolTipString@Element@UI@@ 0x1800356a0 reads [rcx+0x58] and
+            // touches no other field). Printing +0x48 alone therefore steers a
+            // reader toward the arm we already have, so +0x58 is printed here
+            // NEXT TO it, with its length, so "no element has an override" is a
+            // MEASUREMENT rather than an inference from the static call graph.
+            printf("[MouseInject/probe] %*s    tipStr(+0x58)=%p [%s]\n",
+                   depth * 2, "", e->_toolTipString,
+                   e->_toolTipString
+                       ? static_cast<const char*>(e->_toolTipString)
+                       : "null -> EMPTY arm");
         }
 
         bool candidate = false;
@@ -510,6 +534,101 @@ bool FindTarget(UI::UserInterface* ui, Target* out, bool dump) {
         }
     }
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// WAVE 10E lane VERIFY — BANISHED_MOUSE_TIPSTR: the ONLY way to reach
+// BeginToolTip's non-empty arm, and why a harness has to be the one to do it.
+// ---------------------------------------------------------------------------
+// `?BeginToolTip@UserInterface@UI@@` branches on whether the element's +0x58
+// `_toolTipString` is a non-empty System::String. The EMPTY arm asks
+// `GetToolTipString` ONCE (to test emptiness) and then falls back to the
+// `.rsc` `tipTbl`/`tipIdx` pair at +0x48; the NON-EMPTY arm asks a SECOND time
+// and feeds that string to `SetText`. Lane MOUSE's cell covered only the first.
+//
+// +0x58 IS NEVER WRITTEN BY THE SHIPPED GAME. The only writer is
+// `?SetToolTipString@Element@UI@@` (0x1800356e0), and a two-part screen says
+// nothing calls it:
+//
+//   * inside Runtime-x64.dll — Ghidra reports THREE xrefs to 0x1800356e0 and
+//     all three are DATA (two export-directory entries plus the entry-point
+//     reference). Zero CALL xrefs.
+//   * from Application-x64.exe — the import directory (read with pefile) has
+//     exactly ONE `*ToolTip*` entry, `?SetToolTip@Element@UI@@` at
+//     0x140151ce8, which is the +0x48 setter. `SetToolTipString` is absent.
+//
+// THAT SCREEN HAS A POSITIVE CONTROL, so "DATA-only" is not being read for
+// more than it can carry. `?SetToolTip@` (0x180035740) is ALSO DATA-only in
+// the DLL and yet is demonstrably live, because it is in the exe's import
+// table — so the DLL half alone is blind to exe callers and the two halves are
+// both needed. And `?GetToolTipString@` (0x1800356a0), on the same class in
+// the same file, reports two UNCONDITIONAL_CALL xrefs (0x180120948 and
+// 0x18012099f, both inside BeginToolTip) — so the xref instrument does report
+// calls when calls exist. SetToolTipString has neither kind.
+//
+// So the non-empty arm is DEAD CODE in the shipped game, and there is no
+// element to "find". This switch does not fake the arm: it calls the real
+// exported `SetToolTipString` with a real refcounted `System::String`, on the
+// live element the injector is about to hover, and then lets retail's own
+// BeginToolTip decide which arm to take from the field it actually reads. It
+// is a harness-created route and is labelled as one in the report; what it
+// verifies is the ported bodies on that arm, not that gameplay reaches it.
+//
+// Off by default: unset (or `0`, or empty) writes nothing and prints nothing.
+using StringCtorCStrFn = void* (*)(void* self, const char* s);
+using StringDtorFn     = void  (*)(void* self);
+using SetTipStringFn   = void  (*)(void* elem, void* const* str);
+
+// Applied ONCE per (element) so a 20-frame hold does not re-release and
+// re-acquire the same string 20 times — SetToolTipString's release arm is real
+// and a repeat would be exercising the harness, not the subject.
+void ApplyToolTipString(UI::Element* elem) {
+    if (!g_cfg.haveTipStr || !elem) return;
+
+    static UI::Element* applied = nullptr;
+    if (applied == elem) return;
+
+    static SetTipStringFn   setFn  = nullptr;
+    static StringCtorCStrFn ctorFn = nullptr;
+    static StringDtorFn     dtorFn = nullptr;
+    static bool tried = false;
+    if (!tried) {
+        tried  = true;
+        setFn  = reinterpret_cast<SetTipStringFn>(ResolveExport(
+            "?SetToolTipString@Element@UI@@QEAAXAEBVString@System@@@Z"));
+        ctorFn = reinterpret_cast<StringCtorCStrFn>(
+            ResolveExport("??0String@System@@QEAA@PEBD@Z"));
+        dtorFn = reinterpret_cast<StringDtorFn>(
+            ResolveExport("??1String@System@@QEAA@XZ"));
+    }
+    if (!setFn || !ctorFn || !dtorFn) {
+        fprintf(stderr, "[MouseInject/tipstr] set=%p ctor=%p dtor=%p -- one did "
+                        "not resolve, +0x58 left alone\n",
+                (void*)setFn, (void*)ctorFn, (void*)dtorFn);
+        return;
+    }
+
+    void* const before = elem->_toolTipString;
+    void* str = nullptr;                       // System::String is one pointer
+    ctorFn(&str, g_cfg.tipStr);
+    if (!str) {
+        fprintf(stderr, "[MouseInject/tipstr] String ctor produced null -- "
+                        "+0x58 left alone\n");
+        return;
+    }
+    setFn(elem, &str);
+    // Our local reference is released; the element now holds the only one.
+    dtorFn(&str);
+    applied = elem;
+
+    printf("[MouseInject/tipstr] elem=%p name=%s  +0x58 %p -> %p [%s]  "
+           "(BeginToolTip must now take the NON-EMPTY arm)\n",
+           (void*)elem,
+           elem->_name ? static_cast<const char*>(elem->_name) : "(null)",
+           before, elem->_toolTipString,
+           elem->_toolTipString ? static_cast<const char*>(elem->_toolTipString)
+                                : "?");
+    fflush(stdout);
 }
 
 // ---------------------------------------------------------------------------
@@ -660,6 +779,10 @@ void PreUpdate(void* uiRaw) {
         g_lastTarget = t.elem;
         g_lastDlg    = t.dlg;
         wantX = t.cx; wantY = t.cy;
+        // WAVE 10E lane VERIFY: publish the +0x58 override BEFORE the hover
+        // that will open the tooltip. No-op unless BANISHED_MOUSE_TIPSTR is
+        // set, and applied once per element.
+        ApplyToolTipString(t.elem);
     }
 
     if (step == Step::Off) {

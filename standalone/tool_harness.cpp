@@ -1369,6 +1369,115 @@ void FireHousePanel(void* entityUI) {
     }
 }
 
+// ============================================================================
+// WAVE 10E lane VERIFY — BANISHED_TOOL_HARNESS=uicompcensus
+// ============================================================================
+// WHAT QUESTION THIS ANSWERS, and why it is a census rather than a guess.
+//
+// `?OnOpened@DialogInstance@UI@@`'s settings half has never executed: five
+// entries, all `noBuffer`. Lane ROUTES established the mechanism and its own
+// route (BANISHED_DLGSETTINGS_ROUTE) but could not fire it, because the
+// founding houses it had a driver for carry no UIComponent — it dumped all 19
+// of their components by name to prove that was the entity's fact and not the
+// instrument's.
+//
+// `_userData` is a DialogInstance CTOR ARGUMENT, and exactly one of the sixteen
+// exe-side ctor call sites passes anything but `nullptr, 0`:
+// code/Game/Dialog/edittool_select.cpp:233, which passes the SELECTED ENTITY'S
+// UIComponent buffer (+0x28) and count (+0x30). So the first gate is not
+// "controllers" at all — it is "does the entity have a UIComponent". Nothing
+// downstream can run for an entity that has none.
+//
+// Guessing which building type has one costs a run per guess. This walks the
+// WHOLE EntityList once and reports, per entity, whether a UIComponent is
+// present and what its buffer looks like. It answers the question for every
+// type the world contains, in one run, instead of one type per run.
+//
+// IT CARRIES ITS OWN CONTROL, for the reason lane ROUTES gave: "no UIComponent
+// found" and "my type-id lookup is wrong" produce the identical answer, and the
+// second would indict a sound conclusion. So the summary prints the type id it
+// searched for AND the total number of components it walked. A run that walked
+// thousands of components and matched none is the entity's finding; a run whose
+// searched id is 0, or that walked no components at all, is the instrument's.
+//
+// Off by default; prints nothing unless selected.
+static void FireUIComponentCensus() {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
+        fprintf(stderr, "[UICompCensus] no GameWorld singleton\n");
+        return;
+    }
+    void* gw = *g_pGameWorldSingleton;
+    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
+    int       en  = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
+
+    const uint32_t tidUIComp = ::Object::ResolveTypeIdByNameLazy("UIComponent");
+
+    int entities = 0, compsWalked = 0, withUI = 0, withBuffer = 0, shown = 0;
+    int maxShow = 40;
+    if (const char* m = std::getenv("BANISHED_UICOMP_CENSUS_SHOW")) {
+        int v = std::atoi(m); if (v >= 0) maxShow = v;
+    }
+
+    for (int i = 0; i < en && arr; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* ent = *slot;
+        if (!ent) continue;
+        ++entities;
+
+        const int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
+        const uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+        void* uiComp = nullptr;
+        const char* firstName = nullptr;
+        for (int c = 0; c < cN && cA; ++c) {
+            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
+            void* comp = *cs;
+            if (!comp) continue;
+            ++compsWalked;
+            const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
+                *reinterpret_cast<uintptr_t*>(
+                    *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            if (!firstName) firstName = ::Object::GetTypeNameById(tid);
+            if (tidUIComp && tid == tidUIComp) { uiComp = comp; break; }
+        }
+        if (!uiComp) continue;
+        ++withUI;
+
+        uint8_t* u = static_cast<uint8_t*>(uiComp);
+        void* buf   = *reinterpret_cast<void**>(u + 0x28);
+        uint32_t n  = *reinterpret_cast<uint32_t*>(u + 0x30);
+        uint32_t cap= *reinterpret_cast<uint32_t*>(u + 0x34);
+        if (buf && n) ++withBuffer;
+        if (shown < maxShow) {
+            ++shown;
+            fprintf(stderr, "[UICompCensus] entity[%d]=%p first=%s components=%d "
+                    "UIComponent=%p buffer=%p count=%u cap=%u\n",
+                    i, ent, firstName ? firstName : "?", cN, uiComp, buf, n, cap);
+        }
+    }
+
+    fprintf(stderr, "[UICompCensus] SUMMARY entities=%d componentsWalked=%d "
+            "searchedTypeId=0x%08x withUIComponent=%d withNonEmptyBuffer=%d\n",
+            entities, compsWalked, tidUIComp, withUI, withBuffer);
+    if (tidUIComp == 0)
+        fprintf(stderr, "[UICompCensus]   *** INSTRUMENT FAULT: the UIComponent "
+                        "type id resolved to 0, so a zero above is this census's "
+                        "finding and not the world's. ***\n");
+    else if (compsWalked == 0)
+        fprintf(stderr, "[UICompCensus]   *** INSTRUMENT FAULT: no component was "
+                        "walked at all (entities=%d). A zero above says nothing "
+                        "about the world. ***\n", entities);
+    else if (withUI == 0)
+        fprintf(stderr, "[UICompCensus]   FINDING: %d components across %d "
+                        "entities and NOT ONE UIComponent. On this world no "
+                        "DialogInstance can be built with a non-null _userData, "
+                        "so OnOpened's settings half is unreachable here.\n",
+                compsWalked, entities);
+}
+
 // ============================================================
 // Pasture-panel-open ("pasturepanel") — open the FIRST world pasture's info
 // dialog via EditTool select, exactly like clicking it. Exercises the promoted
@@ -2894,6 +3003,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     } else if (std::strcmp(s_toolName, "pinpanel") == 0) {
         s_pin_fireFrame = frameNum;
         FirePinPanel(entityUI);
+    } else if (std::strcmp(s_toolName, "uicompcensus") == 0) {
+        FireUIComponentCensus();          // WAVE 10E lane VERIFY
     } else if (std::strcmp(s_toolName, "housepanel") == 0) {
         FireHousePanel(entityUI);
     } else if (std::strcmp(s_toolName, "pasturepanel") == 0) {
