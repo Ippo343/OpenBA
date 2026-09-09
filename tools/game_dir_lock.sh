@@ -193,6 +193,39 @@ cmd_status() {
     local n
     n=$(ls "$GAME"/WinData/*.pkm 2>/dev/null | wc -l)
     echo "[gamelock] mounted .pkm mods: $n  (changes the INPUT of every run; not covered by this lock)"
+
+    # ---- Idle advisory -------------------------------------------------------
+    #
+    # The third variant of the clobber class, raised by lane UI3 on 2026-09-08:
+    # `verify` catches "I never got it" and the stdout refusal catches "I misread
+    # the grant", but neither catches "a lane holds it and is no longer using
+    # it". A queued lane then stares at a 30-minute hold with no way to tell a
+    # dead holder from one legitimately analysing between launches -- and
+    # guessing wrong IS the clobber this script exists to prevent.
+    #
+    # So this prints FACTS and refuses to draw the conclusion. It deliberately
+    # does NOT auto-break: holding the lock across several launches with analysis
+    # gaps between them is correct usage and looks identical from outside.
+    [ -d "$LOCK" ] || return 0
+    local proc idle newest
+    proc=$(tasklist 2>/dev/null | grep -c -i 'reimpl-x64\.exe')
+    newest=0
+    for f in standalone_debug.log standalone_error.log standalone_crash.log reimpl-x64.exe; do
+        [ -f "$GAME/$f" ] || continue
+        local m; m=$(date -r "$GAME/$f" +%s 2>/dev/null) || continue
+        [ "$m" -gt "$newest" ] && newest=$m
+    done
+    if [ "$newest" -gt 0 ]; then
+        idle=$(( $(now) - newest ))
+        echo "[gamelock] holder activity: reimpl-x64.exe processes=$proc, last game-dir write ${idle}s ago"
+        if [ "$proc" -eq 0 ] && [ "$idle" -ge 300 ]; then
+            echo "[gamelock] ADVISORY: no running exe and no write for ${idle}s. That is CONSISTENT WITH"
+            echo "[gamelock]   (a) the holder analysing between launches -- correct usage, do not disturb -- or"
+            echo "[gamelock]   (b) a holder that has finished or died. These look IDENTICAL from here."
+            echo "[gamelock]   Do NOT break the lock on this line. ASK the holder ('$(lock_owner)'), and"
+            echo "[gamelock]   escalate to a human with these numbers rather than with a guess."
+        fi
+    fi
 }
 
 # The safe path, made the easy one. Acquire, run, release -- with the acquire's
@@ -211,8 +244,15 @@ cmd_run() {
         echo "[gamelock] run: ABORTING, the lock was never granted to '$who'." >&2
         return 1
     fi
+    # Release on INT/TERM/HUP as well as on the normal path. Without this, a
+    # lane killed mid-run leaves the lock held until break_if_stale expires it,
+    # and from every other lane's side that is indistinguishable from a lane
+    # legitimately holding it for a very long time -- which is what tonight's
+    # 1000-second holds looked like from the outside.
+    trap 'cmd_release "$who" >/dev/null 2>&1; trap - INT TERM HUP; kill -INT $$' INT TERM HUP
     "$@"
     local rc=$?
+    trap - INT TERM HUP
     cmd_release "$who"
     return $rc
 }
