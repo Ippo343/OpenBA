@@ -92,6 +92,24 @@ case "$cell" in
         BANISHED_BUILD_DEMO_HOUSE=1 BANISHED_BUILD_DEMO_PASTURE=1 \
         BANISHED_BUILD_DEMO_ORCHARD=1 BANISHED_BUILD_DEMO_TRADINGPOST=1 ;;
 
+  # ---- OnOpened's settings half: the census names the subject, then the
+  #      three-select round trip drives badMagic and the record loop.
+  dlgsettings)
+    run_cell dlgsettings $INGAME \
+        BANISHED_LIVE_TOOLS=1 BANISHED_TOOL_HARNESS=dlgsettings \
+        BANISHED_DLGSETTINGS_ROUTE=256 \
+        BANISHED_BUILD_DEMO_HOUSE=1 BANISHED_BUILD_DEMO_PASTURE=1 \
+        BANISHED_BUILD_DEMO_ORCHARD=1 BANISHED_BUILD_DEMO_TRADINGPOST=1 ;;
+
+  # ---- the single-variable control for the cell above: the SAME three selects
+  #      on the SAME subject, with the buffer install turned OFF. If `records`
+  #      does not collapse here, the number above was not bought by the route.
+  dlgsettings_ctl)
+    run_cell dlgsettings_ctl $INGAME \
+        BANISHED_LIVE_TOOLS=1 BANISHED_TOOL_HARNESS=dlgsettings \
+        BANISHED_BUILD_DEMO_HOUSE=1 BANISHED_BUILD_DEMO_PASTURE=1 \
+        BANISHED_BUILD_DEMO_ORCHARD=1 BANISHED_BUILD_DEMO_TRADINGPOST=1 ;;
+
   *) echo "unknown cell '$cell'" ;;
 esac
 done
