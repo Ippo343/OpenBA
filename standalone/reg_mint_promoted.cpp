@@ -188,11 +188,34 @@ int RtMintRegisterPromotedRows() {
     //  ??_7Element@UI@@6B@            12 slots, 3 ported, 8 TRAP, 1 purecall.
     //  ??_7DialogController@UI@@6B@   11 slots, 2 ported, 9 TRAP.
     //      Same rule, further away. 20 trap slots between the four.
-    //  ??_7Dialog@UI@@6B@             NOT MINTED AT ALL — it is not a row in
-    //      standalone/rt_data_mint_tables.inc, so there is nothing to promote.
-    //      It became a census row when runtime/src/ui/dialog.cpp started
-    //      resolving it, after the tables were last generated. Expires by
-    //      re-running tools/rt_mint_gen.py, which is the generator's lane.
+    //  ??_7Dialog@UI@@6B@             9 slots, 1 ported, 8 TRAP.
+    //      MINTED as of Wave 10B lane MINT (2026-09-09) — 0x1801562a0,
+    //      sizeProof "tail-not-a-pointer", and its 9 slots are among the
+    //      536 the shadow's ground-truth screen compares against the live
+    //      DLL with 0 MISMATCH. So it is a row now, and the reason it is
+    //      still not promoted is the ordinary one: eight trap slots.
+    //          slot 0  (unexported; known by address only) DLL 0x180038b20
+    //          slot 1  ?TypeName@Dialog@UI@@UEBAPEBDXZ
+    //          slot 2  ?Type@Dialog@UI@@UEBAIXZ
+    //          slot 3  ?GetFileVersion@Dialog@UI@@UEBAHXZ
+    //          slot 5  ?Serialize@Dialog@UI@@UEAA_NAEAVStream@IO@@@Z
+    //          slot 6  ?Reconstruct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ
+    //          slot 7  ?Destruct@Dialog@UI@@UEAAXXZ
+    //          slot 8  ?Construct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ
+    //      The one ported slot is 4, ?Compile@External@Object@@. It is the
+    //      FURTHEST of the five UI vtables from promotion, not the closest.
+    //
+    //      THE OLD NOTE HERE SAID "NOT MINTED AT ALL … expires by re-running
+    //      tools/rt_mint_gen.py". Both halves were misleading and cost a lane
+    //      a dispatch. The generator did not merely need re-running: it was
+    //      REFUSING to emit, on one unrelated missing size
+    //      (?_disableHandler@Debug@System@@0_NA, now pinned at 1 in its
+    //      EXTRA_SIZES with the DLL-side proof recorded). And re-running it was
+    //      never going to "expire" this entry the way the note implied — a mint
+    //      is not a promotion. Minting Dialog moved it from "no row exists" to
+    //      "a row exists with 8 traps"; it did not move the census, which still
+    //      lists ??_7Dialog@UI@@6B@ as called-but-not-ported and will until
+    //      those eight bodies are ported and registered.
     // ------------------------------------------------------------------------
 
     printf("[RtMint] promoted %d minted DATA row(s) -- live on every run\n", n);
