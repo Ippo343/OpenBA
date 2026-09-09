@@ -169,6 +169,27 @@ RE_REG_ADDR = re.compile(r'RegisterRuntimeAddr\s*\(\s*(0x[0-9a-fA-F]+)')
 
 # --- detours (a port that also took over the DLL's own internal callers) -----
 RE_DETOUR_ADDR = re.compile(r'InstallRuntimeDetour(?:Checked)?\s*\(\s*"([^"]*)"\s*,\s*(0x[0-9a-fA-F]+)')
+
+# The SAME blind spot as RE_REG_EXPORT_NONLITERAL, one column over, and it bit
+# immediately: Wave 10's first UI detour passes its target as
+# `constexpr uintptr_t kUpdateContainersAddr = 0x1800d9710;` and RE_DETOUR_ADDR
+# -- which demands a literal -- could not see it. The detour was installed, the
+# audit tool confirmed it, the process logged it, and this census still printed
+# `detour 0` for UI.
+#
+# A tool that already documents a blind spot for one column and then repeats it
+# in the next is the shape of reference_literal_grep_blind_to_variables.md, so
+# both halves of the cure are here: same-file `constexpr uintptr_t kX = 0x...;`
+# definitions are RESOLVED, and anything still unresolved is reported LOUDLY
+# rather than dropped.
+RE_DETOUR_NONLITERAL = re.compile(
+    r'InstallRuntimeDetour(?:Checked)?\s*\(\s*"([^"]*)"\s*,\s*(?!0x)([A-Za-z_][A-Za-z0-9_:]*)')
+
+# A file-scope `constexpr uintptr_t kX = 0x...;` (or const/static uintptr_t).
+# Mirrors RE_NAME_CONST, which resolves the same shape for mangled names.
+RE_ADDR_CONST = re.compile(
+    r'\b(?:static\s+)?(?:constexpr|const)\s+(?:uintptr_t|unsigned\s+long\s+long|uint64_t)\s+'
+    r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(0x[0-9a-fA-F]+)')
 RE_DETOUR_EXPORT = re.compile(r'InstallRuntimeDetourExport\s*\(\s*"([^"]*)"\s*,\s*"([^"]+)"')
 
 # Function counts per namespace, from the live Ghidra census recorded in
@@ -372,6 +393,95 @@ GATED_OFF_BLOCKS = {
     "runtime/src/object/internal.cpp": ("table", "shadow", "checkPtr"),
 }
 
+# The MINT is a third gating shape and the first two could not describe it.
+#
+# standalone/rt_data_mint.cpp registers the exported DATA symbols -- ??_7
+# vtables, ?_typeInfo@ BaseTypeInfo, and the .data statics -- by LOOPING over
+# the generated tables in rt_data_mint_tables.inc, so the names reach
+# RegisterRuntimeExport as `v.symbol` / `t.symbol` / `s.symbol`.
+#
+# BEFORE THIS, THE CENSUS REPORTED THEM UNDER THE NON-LITERAL WARNING, whose
+# text is "These ports are LIVE in the process but INVISIBLE to this census, so
+# every number above UNDERSTATES what is actually registered." **Both halves of
+# that were wrong here.** They are not live -- RegisterMintedData() runs only
+# under BANISHED_RT_MINT=1, and this script's own rule is that "a gated
+# registration is not a port". And they are not an understated PORT count at
+# all: a vtable and a BaseTypeInfo have no body to reimplement, which is the
+# whole premise of rt_data_mint.h. The warning was pointing a reader at a
+# shortfall that does not exist while saying nothing about the 197 real data
+# symbols that are genuinely not live yet.
+#
+# So the mint gets its own line, counted from the generated table where every
+# symbol IS a literal, and it is kept OUT of the non-literal warning.
+MINT_FILE   = "standalone/rt_data_mint.cpp"
+MINT_TABLES = "standalone/rt_data_mint_tables.inc"
+
+
+# The three tables whose rows ARE the minted symbols. Everything else in the
+# .inc that looks like a mangled name is a vtable SLOT TARGET -- the function
+# each slot points at -- and those are ordinary members, not minted data. A
+# first cut at this counted every mangled string in the file and reported 637
+# where the truth is 197; the generated header says "55 vtables, 104
+# BaseTypeInfo, 38 storage symbols" and disagreeing with it by 3x is exactly the
+# kind of number that gets quoted once and then believed.
+MINT_TABLE_ARRAYS = ("kMintVtables", "kMintTypeInfos", "kMintStorage")
+
+
+def mint_symbol_count(repo):
+    """Minted exported-data symbols, counted from the generated tables.
+
+    Counted from the .inc rather than the .cpp because that is where the names
+    are; the .cpp only walks them. Only rows INSIDE the three symbol tables are
+    counted -- see MINT_TABLE_ARRAYS."""
+    path = os.path.join(repo, MINT_TABLES.replace("/", os.sep))
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError:
+        return 0
+
+    total, named = 0, 0
+    for arr in MINT_TABLE_ARRAYS:
+        m = re.search(r'\b' + arr + r'\s*\[\s*\]\s*=\s*\{', text)
+        if not m:
+            continue
+        # Brace-match the initialiser so a row count cannot run off the end of
+        # the table into the next one.
+        i, depth = m.end() - 1, 0
+        while i < len(text):
+            if text[i] == '{':
+                depth += 1
+            elif text[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        body = text[m.end():i]
+        # Rows are `{ ... }` at the table's own nesting level. A row whose first
+        # field is a STRING carries an exported name; a row whose first field is
+        # `nullptr` is an UNEXPORTED slot the mint knows only by address.
+        #
+        # Both are real and they are not interchangeable, so both are returned.
+        # Counting only the named ones gave 193 against the generated header's
+        # 197 -- right direction, wrong amount, which is the shape that reads as
+        # success and hides four rows. The four are the nullptr-symbol slots.
+        total += len(re.findall(r'\{\s*(?:"|nullptr)', body))
+        named += len(re.findall(r'\{\s*"', body))
+    return total, named
+
+
+def _add_detour(ports, instruments, label, key, rel):
+    """File a detour under `ports` or `instruments` according to its label.
+
+    A label is trusted only when it carries the `[port]` marker the tree uses
+    for a real takeover. Anything else -- including an UNLABELLED one -- is an
+    instrument, because the safe default here is to under-credit: a probe
+    counted as a port silently inflates the headline number, while a port
+    counted as a probe shows up as a missing row somebody chases.
+    """
+    bucket = ports if label.endswith("[port]") else instruments
+    bucket.setdefault(key, set()).add(rel)
+
 
 def gated_block_spans(text, gate_vars):
     """Byte spans of every `if (<gate>) { ... }` body, brace-matched.
@@ -468,6 +578,8 @@ def scan():
     gated_exports, gated_addrs = {}, {}
     detoured = {}
     nonliteral_regs = {}   # file -> [identifier, ...] the census cannot resolve
+    nonliteral_detours = {}  # same, for InstallRuntimeDetour* targets
+    instrument_detours = {}  # probe:/selftest:/[allocshadow] -- NOT ports
 
     for path in iter_sources():
         rel = os.path.relpath(path, REPO).replace(os.sep, "/")
@@ -538,6 +650,12 @@ def scan():
             # resolve_standalone.cpp), not a call passing a constant.
             if m.group(1) == "const":
                 continue
+            # The MINT is gated DATA, not an unseen port -- see MINT_FILE. It
+            # gets its own reported line; leaving it here made the warning claim
+            # the port numbers were understated, which was false in both
+            # directions (not live, and not functions).
+            if rel == MINT_FILE:
+                continue
             # rt_selftest.cpp deliberately registers a FAKE name and one real
             # one to prove the seam works end to end. It is a self-test, not a
             # port, and counting it would be wrong -- so it is excluded rather
@@ -558,13 +676,48 @@ def scan():
             g = gated or in_gated_block(m.start())
             (gated_addrs if g else ported_addrs).setdefault(int(m.group(1), 16), set()).add(rel)
 
+        # NOT EVERY DETOUR IS A PORT DETOUR, and counting them together
+        # credited two instruments as ports.
+        #
+        # The tree already distinguishes them by label, and consistently:
+        #   "...[port]"          a reimplementation taking over retail's callers
+        #   "probe:..."          a recorder installed to observe a call
+        #   "selftest:..."       a deliberate fake proving the seam works
+        #   "...[allocshadow]"   an allocator-shadow instrument
+        #
+        # Only the first is what the `detour` column means ("of those PORTED,
+        # ALSO patched so the DLL's own callers come to us"). Before this,
+        # `probe:Audio::Device::Stop` -- a detour to a RECORDER, which is a test
+        # fake by construction -- counted as a detour, and once detour targets
+        # started conferring `ported` it would have counted as a port too. An
+        # instrument is not a port, and a census that says otherwise is the
+        # thing this file exists to prevent.
         for m in RE_DETOUR_ADDR.finditer(text):
-            detoured.setdefault(int(m.group(2), 16), set()).add(rel)
+            _add_detour(detoured, instrument_detours, m.group(1),
+                        int(m.group(2), 16), rel)
         for m in RE_DETOUR_EXPORT.finditer(text):
-            detoured.setdefault(m.group(2), set()).add(rel)
+            _add_detour(detoured, instrument_detours, m.group(1),
+                        m.group(2), rel)
+
+        # Detour targets spelled as a same-file constant. Resolved rather than
+        # punished, exactly as RE_NAME_CONST does for mangled names -- naming
+        # the address once and using it at both the install site and the byte
+        # guard is good practice, and a census that could not follow it printed
+        # `detour 0` for a detour that was demonstrably installed.
+        addr_consts = {mm.group(1): int(mm.group(2), 16)
+                       for mm in RE_ADDR_CONST.finditer(text)}
+        for m in RE_DETOUR_NONLITERAL.finditer(text):
+            ident = m.group(2)
+            if ident in addr_consts:
+                _add_detour(detoured, instrument_detours, m.group(1),
+                            addr_consts[ident], rel)
+            else:
+                nonliteral_detours.setdefault(rel, []).append(ident)
 
     return dict(
         nonliteral_regs=nonliteral_regs,
+        nonliteral_detours=nonliteral_detours,
+        instrument_detours=instrument_detours,
         gated_exports=gated_exports, gated_addrs=gated_addrs,
         called_exports=called_exports, called_addrs=called_addrs,
         called_ordinals=called_ordinals, ported_exports=ported_exports,
@@ -625,6 +778,33 @@ def main():
         else:
             add_entity("addr", "0x%x" % addr, "internal", ported, detoured, files)
 
+    # A DETOURED PORT IS NEVER CALLER-LESS, and before this it was invisible
+    # twice over: absent from the namespace table and listed as a suspected
+    # vestigial resolve.
+    #
+    # `called` counts functions our tree resolves through a door
+    # (ResolveExport / ResolveAddr / an ordinal). A detour creates callers a
+    # different way -- it patches the DLL, so RETAIL'S OWN internal callers
+    # arrive at our body -- and those callers are the entire point of
+    # installing one. Wave 10's UI::TabElement::UpdateContainers is the case
+    # that exposed it: ported, registered under both doors, detoured, verified
+    # against the DLL, exercised in a live run... and printed as `detour 0`
+    # with the function itself sitting in the "ports with no caller" list,
+    # because our tree calls it as a direct C++ call rather than through a
+    # resolve door.
+    #
+    # So a detour target is folded in here as called + ported + detoured. This
+    # is not crediting unrun code: the detour is what makes it run.
+    for dkey, dfiles in d["detoured"].items():
+        if isinstance(dkey, int):
+            name = addr_to_name.get(dkey)
+            if name:
+                add_entity("export", name, namespace_of(name), True, True, dfiles)
+            else:
+                add_entity("addr", "0x%x" % dkey, "internal", True, True, dfiles)
+        else:
+            add_entity("export", dkey, namespace_of(dkey), True, True, dfiles)
+
     rows = [(k, key, ns, p, det, sorted(f)) for k, key, ns, p, det, f in merged.values()]
     for ordn, files in d["called_ordinals"].items():
         # An ordinal carries no name, so no namespace can be inferred from it —
@@ -642,10 +822,18 @@ def main():
     # exists to catch reference_uncalled_port_is_not_verified.md.
     name_of_called_addr = {addr_to_name[a] for a in d["called_addrs"] if a in addr_to_name}
     called_export_names = set(d["called_exports"]) | name_of_called_addr
+    # Detoured names/addresses have retail's callers, so they are not orphans.
+    detoured_names = {k for k in d["detoured"] if not isinstance(k, int)}
+    detoured_names |= {addr_to_name[k] for k in d["detoured"]
+                       if isinstance(k, int) and k in addr_to_name}
+    detoured_addrs = {k for k in d["detoured"] if isinstance(k, int)}
+    detoured_addrs |= {a for a, nm in addr_to_name.items() if nm in detoured_names}
+    called_export_names |= detoured_names
     orphan_exports = sorted(set(d["ported_exports"]) - called_export_names)
 
     addr_of_called_name = {a for a, nm in addr_to_name.items() if nm in d["called_exports"]}
     called_addr_set = set(d["called_addrs"]) | addr_of_called_name
+    called_addr_set |= detoured_addrs
     orphan_addrs = sorted(set(d["ported_addrs"]) - called_addr_set)
 
     per_ns = collections.defaultdict(lambda: {"called": 0, "ported": 0, "detoured": 0})
@@ -697,6 +885,22 @@ def main():
                 print("  %-40s %d  (opt-in; inside if(%s))"
                       % (f, n, ") / if(".join(gates)))
         print("  A gated registration is not a port. Arm it, measure it, then move it.")
+
+    # The mint is a THIRD gating shape and it used to be reported as a port
+    # shortfall, which was wrong twice over -- see MINT_FILE.
+    nmint, nmint_named = mint_symbol_count(REPO)
+    if nmint:
+        print()
+        print("%d DATA slot(s) are MINTED but not registered (%d carry an exported "
+              "name; the other %d are UNEXPORTED and known only by address):"
+              % (nmint, nmint_named, nmint - nmint_named))
+        print("  %-40s (vtables + BaseTypeInfo + .data statics, from %s)"
+              % (MINT_FILE, MINT_TABLES))
+        print("  Gated behind BANISHED_RT_MINT=1, so by this script's own rule they")
+        print("  are NOT ports. They are also not FUNCTIONS: a ??_7 vtable and a")
+        print("  ?_typeInfo@ have no body to reimplement, which is the premise of")
+        print("  standalone/rt_data_mint.h. They therefore cannot move the columns")
+        print("  above at all, in either direction -- do not read this as a shortfall.")
     nl = d.get("nonliteral_regs") or {}
     if nl:
         total = sum(len(v) for v in nl.values())
@@ -713,6 +917,28 @@ def main():
         print("  (Wave 4 lane D hit this: 6 ports registered through kName* constants")
         print("   reported as IO 30/41 when 36 were registered. Nothing warned.)")
         print()
+    inst = d.get("instrument_detours") or {}
+    if inst:
+        print()
+        print("%d detour(s) are INSTRUMENTS, not ports, and are excluded above:" % len(inst))
+        for k in sorted(inst, key=lambda x: (isinstance(x, str), str(x))):
+            shown = ("0x%x" % k) if isinstance(k, int) else k
+            print("  %-44s %s" % (shown, ", ".join(sorted(inst[k]))))
+        print("  A `probe:` recorder, a `selftest:` fake and an `[allocshadow]` shadow")
+        print("  all patch the DLL, and none of them is a reimplementation. Only a")
+        print("  label ending in `[port]` counts toward the detour column.")
+
+    nld = d.get("nonliteral_detours") or {}
+    if nld:
+        total = sum(len(v) for v in nld.values())
+        print()
+        print("*** WARNING: %d detour target(s) are neither a literal address nor a"
+              % total)
+        print("*** same-file `constexpr uintptr_t kX = 0x...;` this script can follow.")
+        print("*** The detour column UNDERSTATES by at least that much.")
+        for f in sorted(nld):
+            print("  %-44s %s" % (f, ", ".join(sorted(set(nld[f])))))
+
     print("ported = of those, taken over by a RegisterRuntime* call")
     print("detour = of those, ALSO patched in the DLL so its own internal callers "
           "come to us")
