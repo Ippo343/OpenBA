@@ -53,7 +53,8 @@
 #include <cstring>
 
 // ============================================================================
-// THE TEN UI `?_typeInfo@` ROWS
+// THE TEN UI `?_typeInfo@` ROWS  (an ELEVENTH, Element, was added below by
+// Wave 10B lane ELEM once it acquired a live consumer; see its own warrant)
 // ============================================================================
 //
 // These are the ten `?_typeInfo@…@UI@@` symbols that
@@ -173,6 +174,102 @@ int RtMintRegisterPromotedRows() {
     RegisterRuntimeExport("?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A", st);
     RegisterRuntimeAddr(0x1801faee8ull, st); ++n;
 
+    // ---- the ELEVENTH `?_typeInfo@` row  (Wave 10B lane ELEM) --------------
+    //
+    // Not promoted with the ten above for the reason that block's closing
+    // paragraph gives — "these ten have live consumers; that is the whole
+    // difference" — and `?_typeInfo@Element@UI@@` had none. It has one now:
+    // runtime/src/ui/element_vtable.cpp's `?Type@Element@UI@@` and
+    // `?TypeName@Element@UI@@` are the two shipped vtable slots that read this
+    // BaseTypeInfo at +0x00 and +0x08, and they are ports as of this branch.
+    //
+    // MEASURED THE SAME WAY THE TEN WERE, and end to end rather than by
+    // analogy. Control = the run above with only the vtable promoted; armed =
+    // the same run plus `BANISHED_RT_MINT_ROWS=?_typeInfo@Element@UI@@…`.
+    // `standalone/reg_element_typeids.cpp` is a live consumer that logs both
+    // halves of what it publishes into the exe's `.rdata`, and across the A/B:
+    //
+    //   control  [ElemTid] Element (base)  slot=0x140151660
+    //                        typeInfo=00007ffcab1cab30  id=2370443687
+    //   armed    [ElemTid] Element (base)  slot=0x140151660
+    //                        typeInfo=00007ff7ac54d9d8  id=2370443687
+    //
+    // The pointer moves out of the DLL's data into our minted storage and the
+    // id — the ONE field anybody reads — is byte-identical (0x8D4A19A7, the
+    // TypeNameCRC our MintTypeInfos() computes). The shadow's own field
+    // comparison agrees independently: `READY … id=0x8d4a19a7 idcmp=yes`.
+    // And the strongest form of it: with the row armed, `UI::Element::Type
+    // calls=1 worked=1 divergences=0` — OUR body read OUR storage and still
+    // matched the shipped export reading the DLL's.
+    // 0-byte crash log, `[RtResolve] 0 misses`, clean `[Shutdown] done`, and a
+    // divergence set identical to the control's twelve named entries.
+    //
+    // The `fac=2traps` caveat the ten carry applies here unchanged: this node's
+    // factoryFn / inPlaceFactoryFn are named abort traps, unreachable because a
+    // minted node is in no `Object::Factory` tree.
+    st = RtMintPromotionStorage("?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A", 0x1801fab30ull);
+    RegisterRuntimeExport("?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801fab30ull, st); ++n;
+
+    // ========================================================================
+    // THE FIRST PROMOTED VTABLE — ??_7Element@UI@@6B@   (Wave 10B lane ELEM)
+    // ========================================================================
+    //
+    // WHAT CHANGED. At the wave-10B baseline this row read `slots=12 ported=3
+    // TRAP=8 purecall=1` and is listed two paragraphs below as NOT PROMOTED for
+    // exactly that reason. runtime/src/ui/element_vtable.cpp ported the eight,
+    // and the readiness table now reads, on a live boot:
+    //
+    //     READY  ??_7Element@UI@@6B@   slots=12 ported=11 TRAP= 0 purecall= 1
+    //
+    // THE MEASUREMENT (2026-09-09, debug build, DLL present, under
+    // tools/game_dir_lock.sh, four runs; logs in docs/runtime_port/wave10b/).
+    // The A/B is `BANISHED_TOOL_HARNESS=utility
+    // BANISHED_UTILITY_TEMPLATE=Template\UtilityMap.rsc` on top of autostart —
+    // the minimap route, because that is the one that actually CONSTRUCTS an
+    // Element through our `??0Element` port. Control = the same run without
+    // BANISHED_RT_MINT_ROWS; both sides had BANISHED_RT_DIFF=1 so only the row
+    // differs.
+    //
+    //  * THE EFFECTIVENESS CONTROL FIRST, because the answer is not "nothing
+    //    changed". A menu-only A/B of this row IS a no-op — logs identical bar
+    //    two `[RtMint] ROW ON` lines — and promoting on that would have been a
+    //    port with no caller (reference_uncalled_port_is_not_verified.md, in
+    //    vtable form). On the minimap route the row is demonstrably LIVE:
+    //      - `UI::Element::ctor calls=1` on both sides: our ported ctor builds
+    //        the FrustumOutlineElement that code/Game/Component/
+    //        frustumoutlineelement.cpp creates, and that object then KEEPS the
+    //        base Element vtable for its whole life. It is the reader.
+    //      - armed only: `UI::Element::Type calls=1 worked=1 divergences=0` —
+    //        our minted slot 2 was DISPATCHED INTO and agreed with the DLL.
+    //      - armed only: our minted slot 0 ran too, at teardown —
+    //        `UI::Element::RemoveChildren calls=1`, `Collection::Array<8>::
+    //        SetSize calls=1`, `~Array calls=1`. In the control that object was
+    //        destroyed by the DLL's deleting destructor instead.
+    //  * SAME PLACE REACHED: both runs `[Shutdown] done`, 0-byte crash log,
+    //    `[RtResolve] 0 misses`, identical 21 lines of harness/MapProbe output.
+    //  * THE WHOLE DIVERGENCE DELTA IS ONE LINE, and it is the promotion
+    //    itself: `UI::Element::ctor call #1 ours=+0x0 <exe .data> theirs=+0x0
+    //    <Runtime .rdata>` — the vtable pointer. The other twelve divergence
+    //    lines are byte-identical between the two runs and are the tree's
+    //    existing named negative controls. element.cpp's ctor oracle now
+    //    excludes +0x00 with that argument written out, and checks the field
+    //    with its own (labelled) self-check instead.
+    //
+    // WHAT IS STILL NOT MEASURED, PLAINLY. Only slots 0 and 2 were dispatched
+    // in the verifying run. Slots 3, 7, 8, 9, 10, 11 are ported and READY but
+    // were not entered by any route this lane found, so their oracles report
+    // calls=0 — and slot 4 is `_purecall` in Element itself, which is why
+    // frustumoutlineelement.cpp builds a patched COPY of this table rather than
+    // using it directly. Promoting is still right: a READY row's whole claim is
+    // "no abort trap in the table", and that claim is what the shadow measures
+    // and what the boot confirms. It is NOT a claim that all eleven bodies are
+    // differentially verified, and docs/runtime_port/WAVE10B_LANE_ELEM.md says
+    // which are and which are not, per slot.
+    st = RtMintPromotionStorage("??_7Element@UI@@6B@", 0x180156160ull);
+    RegisterRuntimeExport("??_7Element@UI@@6B@", st);
+    RegisterRuntimeAddr(0x180156160ull, st); ++n;
+
     // ------------------------------------------------------------------------
     // NOT PROMOTED, and why. Each of these was measured this run, not assumed.
     //
@@ -185,9 +282,16 @@ int RtMintRegisterPromotedRows() {
     //          slot 5  ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z
     //      Expires when that one body is ported and registered.
     //  ??_7DialogInstance@UI@@6B@     10 slots, 8 ported, 2 TRAP.
-    //  ??_7Element@UI@@6B@            12 slots, 3 ported, 8 TRAP, 1 purecall.
     //  ??_7DialogController@UI@@6B@   11 slots, 2 ported, 9 TRAP.
-    //      Same rule, further away. 20 trap slots between the four.
+    //      Same rule, further away. 11 trap slots between the two.
+    //      ⚠ THESE COUNTS ARE THE WAVE-10 BASELINE'S. Wave 10B is running
+    //      lanes on both of them concurrently with lane ELEM; re-read the
+    //      readiness table from a live BANISHED_RT_MINT_SHADOW=1 run rather
+    //      than trusting this line, which is exactly how the `??_7Element@`
+    //      entry that used to sit here went stale.
+    //  ??_7Element@UI@@6B@            PROMOTED 2026-09-09 by lane ELEM; the
+    //      warrant is above. It was `12 slots, 3 ported, 8 TRAP, 1 purecall`
+    //      when this paragraph was written.
     //  ??_7Dialog@UI@@6B@             NOT MINTED AT ALL — it is not a row in
     //      standalone/rt_data_mint_tables.inc, so there is nothing to promote.
     //      It became a census row when runtime/src/ui/dialog.cpp started
