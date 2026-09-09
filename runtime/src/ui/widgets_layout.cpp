@@ -748,6 +748,28 @@ static void TabElement_UpdateContainers_Body(void* self, RtSink& out) {
     }
 }
 
+// The detour seam. standalone/ui_detour.cpp patches 0x1800d9710 so the DLL's
+// OWN callers -- including a real tab click, which is handled inside the DLL --
+// reach this port. Opt-in; see that file for why, and for the prologue table.
+extern "C" bool  RtUiUpdateContainersInstallDetour(void* ourFn);
+extern "C" void* RtUiUpdateContainersTrampoline();
+
+// Retail's body, whichever door is currently correct.
+//
+// WITH A DETOUR INSTALLED THE RAW EXPORT IS NO LONGER RETAIL -- it is a jump
+// back into us. RT_ORIGINAL_ONCE resolves through ResolveExportRaw, i.e. exactly
+// that patched address, so an oracle using it here would not diverge, it would
+// recurse until the stack died. The trampoline is the only correct "theirs" once
+// the detour is in, and the raw export is the only correct one before it.
+static void CallRetailUpdateContainers(void* self) {
+    using Fn = void (*)(void*);
+    if (void* tramp = RtUiUpdateContainersTrampoline()) {
+        reinterpret_cast<Fn>(tramp)(self);
+        return;
+    }
+    RT_ORIGINAL_ONCE(Fn, "?UpdateContainers@TabElement@UI@@AEAAXXZ")(self);
+}
+
 void RtTabElementUpdateContainers(void* self) {
     RT_PREDICT_SITE("UI::TabElement::UpdateContainers");
 
@@ -801,9 +823,7 @@ void RtTabElementUpdateContainers(void* self) {
             }
 
             TabElement_UpdateContainers_Body(self, round.sink());   // predicts
-            using OrigFn = void (*)(void*);
-            RT_ORIGINAL_ONCE(OrigFn,
-                "?UpdateContainers@TabElement@UI@@AEAAXXZ")(self);  // authority
+            CallRetailUpdateContainers(self);                      // authority
         }
         return;
     }
@@ -1199,6 +1219,16 @@ int RtUiWidgetsLayRegister() {
     RegisterRuntimeExport("?UpdateContainers@TabElement@UI@@AEAAXXZ",
                           (void*)&RtTabElementUpdateContainers); ++n;
     RegisterRuntimeAddr(0x1800d9710, (void*)&RtTabElementUpdateContainers);
+    // The live-coverage seam. OPT-IN, and it must be explicitly SET rather than
+    // merely left unset -- runtime_detour.h: "Every detour gets an env kill
+    // switch at its call site. Nothing goes default-on unproven." With it off,
+    // this port keeps only its three exe callers and the DLL keeps its own copy
+    // for everything else, which is a split brain we are choosing knowingly
+    // rather than one we failed to notice.
+    if (std::getenv("BANISHED_RT_UITAB_DETOUR") != nullptr &&
+        RtWaveEnabled("BANISHED_RT_UITAB_DETOUR")) {
+        RtUiUpdateContainersInstallDetour((void*)&RtTabElementUpdateContainers);
+    }
     // ?AddTab@TabElement@UI@@... -- HELD BACK (WAVE7_LANE_E.md sec2).
 
     RegisterRuntimeExport("?GetActivePage@PageElement@UI@@QEBAHXZ", (void*)&PageElement_GetActivePage); ++n;
