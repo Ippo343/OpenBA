@@ -1,28 +1,32 @@
-> # ⛔ VERDICT QUALIFIED 2026-09-09 — DO NOT ARM ON THIS GO
+> # ⚠️ VERDICT QUALIFIED 2026-09-08, SHADOW PILLAR RESTORED 2026-09-09
 >
-> Lane SHADOWRE re-took the allocator shadow gate this GO leans on and it
-> **DOES NOT HOLD on today's tree**: 314,542 / 2,673,750 / 1,009,626
-> divergences on the three cells Wave 9 lane E2/E3 recorded as ZERO, plus three
-> arena-growth cells that were 0/0/0 and are now 303,091 / 1,011,106 /
-> 2,713,855. See `WAVE10_LANE_SHADOWRE.md`.
+> **The sequence, because the intermediate states matter to anyone reading this GO:**
 >
-> **What still stands:** the ARMING evidence below (27 exports, atomic swap,
-> 901,685 allocs / 540,750 frees through our own bodies) and lane REDZONE's
-> re-established pass condition (41,349 walks, 0 violations, armed, with the
-> instrument proved capable by injection). Those measured that arming WORKS and
-> that the redzone watchdog can SEE.
+> 1. This lane returned GO on two pillars: arming works, and a redzone stress
+>    run reported zero violations.
+> 2. Lane REDZONE found `watch` crashing, and proved the instrument CAPABLE by
+>    injection (1 injected, 1 caught) rather than by survival. Pass condition
+>    re-established: 41,349 walks, 0 violations, armed. **Pillar holds.**
+> 3. Lane SHADOWRE re-took Wave 9's allocator shadow gate: RED in all seven
+>    cells (314,542 / 2,673,750 / 1,009,626 where Wave 9 read zero).
+>    **Pillar gone; this GO was marked DO NOT ARM.**
+> 4. Lane SHADOWBISECT found the cause: **one C++ call.**
+>    `FreeLockedIgnoringSelf` called `rtalloc::MemFree` directly instead of
+>    resolving `0x1800c7ad0` through the door, so our ported free logic ran
+>    against **retail's arena** -- never touching `0x1800c6c00`, where the
+>    shadow's observer lives. Fixed. Grid re-taken: **26,516,271 operations,
+>    ZERO divergences, zero gaps.** **Pillar restored.**
 >
-> **What does not:** the claim that the ported allocator agrees with retail
-> operation-for-operation. That pillar was measured on a tree that no longer
-> exists.
+> **The finding that outlives this row:** on that path, *"the allocator port is
+> off"* was **not true**. An unarmed, default run was already mutating retail's
+> arena with our code, by a route no kill switch reached and no counter
+> reported. It survived only because the port is byte-faithful and the wrapper
+> takes the same lock. Whenever "X is off by default" is load-bearing, check the
+> paths that reach X *without* consulting the switch.
 >
-> It is not the allocator: the identical cell with `BANISHED_RT_PORT=0` reads
-> `observed=1,789,828 divergences=0`. Something ELSE in the port reaches the
-> real `Free` by a route that skips `allocator_lock`'s patched entry — which is
-> invisible on the armed path, where there is no replica to notice it.
->
-> `BANISHED_RT_ALLOC` is opt-in and off by default, so no shipped configuration
-> changes. Do not flip it until the red is bisected.
+> **Arming is still not recommended on this lane's authority alone.**
+> `BANISHED_RT_ALLOC` was unset in every cell of every lane above, remains
+> opt-in and off by default, and no shipped configuration has changed.
 
 # Wave 10, lane ALLOC — `BANISHED_RT_ALLOC=1` with Runtime-x64.dll PRESENT
 
