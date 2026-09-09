@@ -198,6 +198,9 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // prologue (reference_resolveaddr_consults_port_registry_first.md).
 uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
+// Wave 10 lane DLG2 (runtime/src/ui/dialog_ctor_dtor.cpp). See ProbeGate below.
+extern "C" void RtUiDialogCtorDtorProbeNow();
+
 using RtUI::Dialog;
 using RtUI::DialogController;
 using RtUI::DialogInstance;
@@ -264,6 +267,15 @@ inline void ProbeGate() {
     if (!g_probePending) return;
     g_probePending = false;      // clear FIRST — the probe calls back in here
     RunStartTimerDifferential();
+    // Wave 10 lane DLG2 piggybacks here, and the coupling is deliberate rather
+    // than tidy. `??0Dialog@UI@@`/`??1Dialog@UI@@` are reached ONLY from
+    // `RtUiDialogInstance_AddController6` below, and only on the `if (desc)`
+    // branch — which a 20-second autostart boot does not take, so DLG2's own
+    // gate never fired and its differential silently never ran. THIS gate does
+    // fire, and it fires late enough that the DLL's allocator is up (which is
+    // the whole reason DLG2's probe is armed rather than run at registration).
+    // It is a no-op when lane DLG2 is switched off or has already probed.
+    RtUiDialogCtorDtorProbeNow();
 }
 
 // ---- Byte cursor -----------------------------------------------------------
@@ -813,12 +825,15 @@ void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
     // the `ExternalPtr<ElementDescription>`, so entry+0x10 is the CONFIG and
     // entry+0x08 is the DESCRIPTION.
     //
-    // `runtime/types/ui/Dialog.h` names them the other way round — `_config` at
-    // +0x08 and `_elementDesc` at +0x10 — and its own comment above the struct
-    // warns about "a transcription slip" here while itself carrying one. THE
-    // NAMES ARE NOT LOAD-BEARING; the two `MOV`s above are. This lane does not
-    // rename another lane's fields, so the swap is made HERE, once, in the open.
-    // (Recorded in WAVE10_LANE_UI3.md §4 for whoever fixes the header.)
+    // *** 2026-09-08, lane DLG2: THE HEADER IS NOW CORRECT AND THIS CALL SITE
+    //     NO LONGER COMPENSATES. *** `runtime/types/ui/Dialog.h` used to name
+    //     `_config` at +0x08 and `_elementDesc` at +0x10, so this loop passed
+    //     them crossed over to get the right bytes into the right registers.
+    //     The header now names them the way the two `MOV`s above prove, and the
+    //     arguments below read straight. THE BYTES DID NOT CHANGE; only the
+    //     spelling did. The three PIN lines at the bottom of this file check
+    //     exactly this mapping against the shipped stream, so a re-swap in
+    //     either place fails loudly rather than silently.
     for (int32_t i = 0; i < dlg->_controllerCount; ++i) {
         const RtUI::DialogControllerConfigEntry& e = dlg->_controllerConfigs[i];
         using Fn = void (*)(void*, uint32_t, void*, void* /*arg4: config*/,
@@ -826,8 +841,8 @@ void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
         static Fn fn = nullptr;
         if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180113470));
         fn(self, e._typeId, d->_dataSource,
-           e._elementDesc,   // entry+0x10 -> R9  -> ExternalPtr<DialogControllerConfig>
-           e._config,        // entry+0x08 -> a5  -> ExternalPtr<ElementDescription>
+           e._config,        // entry+0x10 -> R9  -> ExternalPtr<DialogControllerConfig>
+           e._elementDesc,   // entry+0x08 -> a5  -> ExternalPtr<ElementDescription>
            &e._name);        // entry+0x18 -> a6  -> const String&
     }
 
@@ -1117,10 +1132,11 @@ void VerifyCtorShape(RtDiffSite* site) {
         "DialogControllerConfigEntry stride"); }
 
     // ---- THE ARGUMENT MAPPING THAT THIS PORT GOT WRONG ONCE ----------------
-    // These three pins exist because the field NAMES in Dialog.h are the
+    // These three pins exist because the field NAMES in Dialog.h were the
     // opposite of the parameters they feed, and the first draft of the loop
-    // above trusted the names. They pin the mapping to the shipped bytes so it
-    // cannot silently regress:
+    // above trusted the names. Lane DLG2 has since fixed the header, so the
+    // names and the offsets now agree — and these pins are what will catch it
+    // if anyone swaps either back. They pin the mapping to the shipped bytes:
     //   LEA RAX,[R9+0x18]   -> arg 6, the String
     //   MOV RAX,[R9+0x08]   -> arg 5, ExternalPtr<ElementDescription>
     //   MOV R9,[R9+0x10]    -> arg 4, ExternalPtr<DialogControllerConfig>
@@ -1128,11 +1144,11 @@ void VerifyCtorShape(RtDiffSite* site) {
         offsetof(RtUI::DialogControllerConfigEntry, _name),
         "config entry +0x18 -> arg6 (String)"); }
     { static const uint8_t p[] = { 0x49, 0x8b, 0x41 }; PinDisp(c, p, 3, 1,
-        offsetof(RtUI::DialogControllerConfigEntry, _config),
-        "config entry -> arg5 (ElementDescription); Dialog.h calls it _config"); }
-    { static const uint8_t p[] = { 0x4d, 0x8b, 0x49 }; PinDisp(c, p, 3, 1,
         offsetof(RtUI::DialogControllerConfigEntry, _elementDesc),
-        "config entry -> arg4 (DialogControllerConfig); Dialog.h calls it _elementDesc"); }
+        "config entry +0x08 -> arg5 (ElementDescription)"); }
+    { static const uint8_t p[] = { 0x4d, 0x8b, 0x49 }; PinDisp(c, p, 3, 1,
+        offsetof(RtUI::DialogControllerConfigEntry, _config),
+        "config entry +0x10 -> arg4 (DialogControllerConfig)"); }
     // and the 6-arg AddController it forwards to
     { static const uint8_t p[] = { 0x48, 0x8b, 0xce }; PinCall(c, p, 3,
         0x180114870, 0x180113470, "AddController(6)"); }

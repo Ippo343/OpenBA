@@ -81,18 +81,46 @@ namespace RtUI {
 //     AddController(inst, entry[0x00], inst->_dataSource,
 //                   entry[0x10], entry[0x08], &entry[0x18]);
 //
-// and whose cursor advances by 0x20 per iteration. The argument order is not a
-// transcription slip: the config ExternalPtr at +0x08 is passed AFTER the
-// element-description ExternalPtr at +0x10, because the six-argument
-// `AddController` overload takes (typeId, dataSource, config, elementDesc,
-// name) and MSVC's mangled name spells that order.
+// and whose cursor advances by 0x20 per iteration.
+//
+// *** THESE TWO FIELDS WERE NAMED BACKWARDS UNTIL 2026-09-08 (lane DLG2). ***
+// The header shipped `_config` at +0x08 and `_elementDesc` at +0x10, with a
+// comment above it rationalising the swap as "the config is passed AFTER the
+// description". That comment was the error, not a caveat about it — and lane
+// UI3 had to work around it at its own call site rather than fix it here. THE
+// SHIPPED BYTES SETTLE IT:
+//
+//     180114a07  MOV EDX,[R9]           -> arg 1, the type id
+//     180114a0a  LEA RAX,[R9+0x18]
+//     180114a0e  MOV [RSP+0x28],RAX     -> arg 6 (5th after `this`), String&
+//     180114a13  MOV RAX,[R9+0x08]
+//     180114a17  MOV [RSP+0x20],RAX     -> arg 5  *** entry+0x08 ***
+//     180114a1c  MOV R9,[R9+0x10]       -> arg 4  *** entry+0x10 ***
+//     180114a20  MOV R8,[RSI+0x30]      -> arg 3, the data source
+//     180114a27  CALL 0x180113470
+//
+// and the callee's own mangled name gives the parameter order:
+//   ?AddController@DialogInstance@UI@@QEAAX I PEAVBase@Object@@
+//        V?$ExternalPtr@VDialogControllerConfig@UI@@@4@     <- arg 4
+//        V?$ExternalPtr@VElementDescription@UI@@@4@         <- arg 5
+//        AEBVString@System@@@Z                              <- arg 6
+//
+// arg 4 is the CONFIG and it comes from entry+0x10; arg 5 is the
+// ELEMENT DESCRIPTION and it comes from entry+0x08. Both are read as 8-byte
+// VALUES (`MOV RAX,[R9+8]`), which is also what makes `ExternalPtr<T>` an
+// 8-byte register-passed type here. Do not re-swap these on the strength of
+// the reading order in the source; pin to 0x180114a13 / 0x180114a1c.
 struct DialogControllerConfigEntry {
     uint32_t _typeId;        // +0x00
     uint32_t _pad04;         // +0x04  never read
-    void*    _config;        // +0x08  ExternalPtr<DialogControllerConfig>
-    void*    _elementDesc;   // +0x10  ExternalPtr<ElementDescription>
+    void*    _elementDesc;   // +0x08  ExternalPtr<ElementDescription>  -> arg 5
+    void*    _config;        // +0x10  ExternalPtr<DialogControllerConfig> -> arg 4
     char*    _name;          // +0x18  System::String (refcounted char*)
 };
+static_assert(offsetof(DialogControllerConfigEntry, _elementDesc) == 0x08,
+              "config entry: the DESCRIPTION is at +0x08 (0x180114a13 -> arg 5)");
+static_assert(offsetof(DialogControllerConfigEntry, _config) == 0x10,
+              "config entry: the CONFIG is at +0x10 (0x180114a1c -> arg 4)");
 static_assert(sizeof(DialogControllerConfigEntry) == 0x20,
               "Dialog::_controllerConfigs stride is 0x20 (ctor 0x180114870 loop)");
 
@@ -124,6 +152,12 @@ struct Dialog {
     void**   _templates;               // +0x68  ExternalPtr<ElementDescription>[]
     uint8_t  _unknown70[0x08];         // +0x70  presumed size/capacity, unproven
     void**   _references;              // +0x78  ExternalPtr<Object::External>[]
+    // +0x80 — WAVE 10 LANE DLG2. The default ctor `??0Dialog@UI@@QEAA@XZ`
+    // (0x180112db0) ends with `MOV qword ptr [RCX+0x80],RDX` at 0x180112e2a, so
+    // there IS a qword here and the class is at least 0x88 bytes. Nothing in
+    // this tree READS it, so it keeps the "unknown" spelling every other
+    // unproven field in this struct uses rather than acquiring a made-up name.
+    uint8_t  _unknown80[0x08];         // +0x80  ctor zeroes it; never read
 };
 
 static_assert(offsetof(Dialog, _spriteSheet)         == 0x20, "Dialog::_spriteSheet @ +0x20");
@@ -137,8 +171,20 @@ static_assert(offsetof(Dialog, _namedTemplateCount)  == 0x60, "Dialog::_namedTem
 static_assert(offsetof(Dialog, _templates)           == 0x68, "Dialog::_templates @ +0x68 (GetTemplate)");
 static_assert(offsetof(Dialog, _references)          == 0x78, "Dialog::_references @ +0x78 (GetReference)");
 
-// NO sizeof ASSERT, deliberately: nothing in this lane allocates a Dialog and
-// nothing reads past +0x7f, so any number here would be a guess dressed up as
-// a fact.
+static_assert(offsetof(Dialog, _unknown80)          == 0x80, "Dialog +0x80 (ctor 0x180112e2a)");
+
+// STILL NO sizeof ASSERT, deliberately. Lane DLG2's ctor proves the class is at
+// least 0x88 bytes — that is where the last store lands — but a ctor's WRITTEN
+// EXTENT is a LOWER BOUND on a class size, never the size itself: trailing
+// members a default ctor leaves alone are invisible to it. Nothing in this tree
+// allocates a `UI::Dialog` (retail's are stack temporaries inside the DLL and
+// heap objects the DLL's own factory makes), so any number here would still be
+// a guess dressed up as a fact.
+//
+// The ONE FOUR-BYTE HOLE: +0x44..+0x47. 0x180112e0b is a DWORD store to +0x40
+// and the next store is a QWORD at +0x48, so retail never writes +0x44 in the
+// ctor. `runtime/src/ui/dialog_ctor_dtor.cpp`'s oracle excludes those four
+// bytes from its compare and says so; a port that zeroed +0x40 as a qword
+// would be writing over caller stack retail leaves alone.
 
 }  // namespace RtUI

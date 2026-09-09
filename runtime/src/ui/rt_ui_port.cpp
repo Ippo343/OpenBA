@@ -50,6 +50,12 @@ extern int RtUiFrameRegister();            // userinterface_frame.cpp (lane UI1)
 // they sit on the construction path of every dialog in the game and because the
 // blocker they cleared -- the allocator -- is still opt-in for its own port.
 extern int RtUiDialogCreateRegister();     // dialog_create.cpp   (lane UI3)
+// Wave 10 lane DLG2: ??0Dialog@UI@@ and ??1Dialog@UI@@, the two rows that
+// ENTERED the census when UI3 replaced retail's INLINED UI::Dialog temporary
+// with a call to the out-of-line exports. Own switch (BANISHED_RT_DLGCTOR)
+// because the dtor frees and because a bisect must be able to separate it from
+// lane UI3's own switch, which is what put the calls there.
+extern int RtUiDialogCtorDtorRegister();   // dialog_ctor_dtor.cpp (lane DLG2)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -67,5 +73,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_ELEMDESCSER")) n += RtUiElementDescriptionSerializeRegister();
     if (RtWaveEnabled("BANISHED_RT_UIFRAME"))     n += RtUiFrameRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGCREATE"))  n += RtUiDialogCreateRegister();
+    if (RtWaveEnabled("BANISHED_RT_DLGCTOR"))    n += RtUiDialogCtorDtorRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }
