@@ -122,20 +122,56 @@ static_assert(sizeof(ModInfo) == 0x20, "sizeof(Save::SaveLoad::ModInfo) == 0x20"
 //                    CheckMod ([R9+RAX+0x48]); _size by saveloaddialog.cpp:1088
 //                    reading the mod count at +0x50.
 //
-// +0x10..0x37 and +0x40..0x47 are NOT modelled. They are written by
-// ?UpdateList@SaveLoad (0x1800c1ea0) and ?LoadMetaData@SaveLoad (0x1800c1b30),
-// neither of which this lane ports or needed to read. Naming them from a guess
-// is exactly the kind of comment PLAN §6 step 8 exists to prevent.
+// WAVE 13 CLOSES MOST OF THAT HOLE. The note here used to end: "+0x10..0x37
+// and +0x40..0x47 are NOT modelled. They are written by ?UpdateList
+// (0x1800c1ea0) and ?LoadMetaData (0x1800c1b30), neither of which this lane
+// ports or needed to read." Wave 13 ports UpdateList and OnVideoRestart, so
+// five of those bytes are now pinned BY A READER, which is a stronger pin than
+// a writer gives — a writer only shows the width, a reader shows the use:
+//
+//   +0x10  String   the description/metadata text. ?UpdateList state 4
+//                   (0x1800c2455) refcount-assigns LoadMetaData's out-param
+//                   into it, and the failure arm assigns the empty string.
+//   +0x18  ImageBuffer*  ?OnVideoRestart (0x1800c0f44) loads it and calls
+//                   ?Recreate@ImageBuffer@Video@@ on it.
+//   +0x20  int32    thumbnail width  } OnVideoRestart passes them as the 3rd
+//   +0x24  int32    thumbnail height } and 4th arguments of the upload call
+//                   (MOV R8D,[+0x20]; MOV R9D,[+0x24] at 0x1800c0f92/0f8d).
+//   +0x28  void*    the thumbnail pixel block (MOV RDX,[+0x28]).
+//   +0x40  int32    the "metadata loaded" sentinel. NEGATIVE means not loaded:
+//                   OnVideoRestart skips such a row (JL at 0x1800c0f53),
+//                   UpdateList state 2 scans FORWARD past them looking for the
+//                   next row to load, and UpdateSave treats a negative one as
+//                   "this slot has no name yet" and generates one.
+//   +0x44  int32    written by UpdateList state 4 from LoadMetaData's sixth
+//                   out-param, and zeroed on the failure arm.
+//
+// +0x2c..+0x37 remain unmodelled: no body this project has ported either reads
+// or writes them. Naming them from a guess is exactly the kind of comment
+// PLAN §6 step 8 exists to prevent.
 // ============================================================================
 struct SaveInfo {
     Sprite      thumbnail;       // +0x00
-    uint8_t     unknown10[0x28]; // +0x10 .. +0x37  UpdateList/LoadMetaData; NOT modelled
+    const char* description;     // +0x10  System::String  (UpdateList state 4)
+    void*       imageBuffer;     // +0x18  Video::ImageBuffer*  (OnVideoRestart)
+    int32_t     thumbWidth;      // +0x20  upload arg 3
+    int32_t     thumbHeight;     // +0x24  upload arg 4
+    void*       thumbPixels;     // +0x28  upload arg 2
+    uint8_t     unknown30[0x08]; // +0x30 .. +0x37  NOT modelled — no ported body touches it
     const char* name;            // +0x38  System::String
-    uint8_t     unknown40[0x08]; // +0x40 .. +0x47  NOT modelled
+    int32_t     metaLoaded;      // +0x40  < 0 == metadata not loaded yet
+    int32_t     field44;         // +0x44  LoadMetaData out-param 6
     ModInfo*    modsData;        // +0x48  Collection::Array<ModInfo>::_data
     int32_t     modsSize;        // +0x50  ::_size
     int32_t     modsCapacity;    // +0x54  ::_capacity
 };
+static_assert(offsetof(SaveInfo, description) == 0x10, "SaveInfo.description @ 0x10");
+static_assert(offsetof(SaveInfo, imageBuffer) == 0x18, "SaveInfo.imageBuffer @ 0x18");
+static_assert(offsetof(SaveInfo, thumbWidth)  == 0x20, "SaveInfo.thumbWidth @ 0x20");
+static_assert(offsetof(SaveInfo, thumbHeight) == 0x24, "SaveInfo.thumbHeight @ 0x24");
+static_assert(offsetof(SaveInfo, thumbPixels) == 0x28, "SaveInfo.thumbPixels @ 0x28");
+static_assert(offsetof(SaveInfo, metaLoaded)  == 0x40, "SaveInfo.metaLoaded @ 0x40");
+static_assert(offsetof(SaveInfo, field44)     == 0x44, "SaveInfo.field44 @ 0x44");
 static_assert(offsetof(SaveInfo, name)         == 0x38, "SaveInfo.name @ 0x38");
 static_assert(offsetof(SaveInfo, modsData)     == 0x48, "SaveInfo.modsData @ 0x48");
 static_assert(offsetof(SaveInfo, modsSize)     == 0x50, "SaveInfo.modsSize @ 0x50");

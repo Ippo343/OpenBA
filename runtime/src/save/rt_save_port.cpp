@@ -8,7 +8,8 @@
 #include <cstdio>
 #include "../../funcs/rt_port.h"
 
-extern int RtSaveLoadRegister();      // saveload.cpp (lane C)
+extern int RtSaveLoadRegister();       // saveload.cpp (Wave 5 lane C)
+extern int RtSaveLoadUpdateRegister(); // saveload_update.cpp (Wave 13)
 
 void RtSavePortInit() {
     if (!RtWaveEnabled("BANISHED_RT_SAVE")) {
@@ -16,6 +17,9 @@ void RtSavePortInit() {
         return;
     }
     int n = 0;
-    if (RtWaveEnabled("BANISHED_RT_SAVELOAD")) n += RtSaveLoadRegister();
+    if (RtWaveEnabled("BANISHED_RT_SAVELOAD")) {
+        n += RtSaveLoadRegister();
+        n += RtSaveLoadUpdateRegister();
+    }
     printf("[RtPort] Save: %d exports registered\n", n);
 }

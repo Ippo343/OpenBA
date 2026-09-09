@@ -84,6 +84,7 @@
 #include "../../types/save/SaveLoad.h"
 #include "../../types/io/Stream.h"
 #include "../system/string.h"   // RtSystem::String (Wave 2, lane String)
+#include "saveload_internal.h"
 
 using RtSave::SaveLoad;
 using RtSave::SavedState;
@@ -114,109 +115,31 @@ namespace {
 //      `static` and not a bare RtOriginal call.
 // ----------------------------------------------------------------------------
 
-using MemAllocFn         = void* (*)(uint64_t size, int align);
-using MemFreeFn          = void  (*)(void* p);
-using GetDataDirectoryFn = String* (*)(const void* fs, String* ret);
-using ConcatFn           = String* (*)(String* ret, const String* lhs, const String* rhs);
-using AdjustDelimsFn     = void  (*)(String* self);
-using MemStreamOpenFn    = bool  (*)(MemoryStream* self, int size);
-using SaveLoadVoidFn     = void  (*)(SaveLoad* self);
-
-// WAVE 9 LANE V2, 2026-09-07 — reason 1 above is WITHDRAWN for these two, and
-// reason 2 is preserved. "A lane's job is to be correct standing alone against
-// the DLL" was the right rule for eight waves and stops being available at
-// cutover: with Runtime-x64.dll absent, ResolveExportRaw returns NULL and a
-// raw-door call on a live path is a null call, not a fallback. MemAlloc and
-// MemFree are not oracles here — they are the allocation this file performs —
-// so they are REAL DEPENDENCIES and go through the port registry.
-// RT_EXPORT_ONCE keeps reason 2's per-call-site caching exactly
-// (reference_rtoriginal_is_getprocaddress.md), and it puts this file on the
-// same heap as the ~20 code/ sites that already resolve these two names with
-// ResolveExport, which is what WAVE9.md sec3 means by "a heap cannot be
-// half-ours".
-void* MemAlloc(uint64_t size, int align) {
-    return RT_EXPORT_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(size, align);
-}
-void MemFree(void* p) {
-    RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
-}
-
-// ---- DLL data symbols ------------------------------------------------------
-// All five are real exports in the shipped table (verified with pefile against
-// C:\GOG Games\Banished\Runtime-x64.dll, not taken from Ghidra's guess at a
-// name). ResolveExportRaw is GetProcAddress, which resolves data exports just
-// as it resolves code exports; each is cached in a function-local static.
-//
-// Note the mangling of Modification's: `2PEAV12@EA`, a PUBLIC static member,
-// where the other four are `0PEAV12@EA` (private). Spelling either one the
-// other way produces a name the DLL does not contain, which resolves to NULL
-// in silence — the phantom-name family this project has now been bitten by
-// twice (reference_resolveexport_phantom_names.md).
-// ResolveExport, not ResolveExportRaw: see the note above. Both are the same
-// GetProcAddress while the DLL is loaded (which is what makes "GetProcAddress
-// resolves data exports" observable here at all), but only ResolveExport
-// consults the Wave 9 port registry, where these singletons' storage lives
-// after cutover. Audited by tools/rt_data_door_audit.py.
-template <typename T>
-T* RtDataExport(const char* mangled) {
-    return reinterpret_cast<T*>(ResolveExport(mangled));
-}
-
-SaveLoad** SaveLoadSingletonSlot() {
-    static SaveLoad** p = RtDataExport<SaveLoad*>("?_singleton@SaveLoad@Save@@0PEAV12@EA");
-    return p;
-}
-void* FileSystemSingleton() {
-    static void** p = RtDataExport<void*>("?_singleton@FileSystem@IO@@0PEAV12@EA");
-    return p ? *p : nullptr;
-}
-uint8_t* ModificationSingleton() {
-    static uint8_t** p = RtDataExport<uint8_t*>("?_singleton@Modification@IO@@2PEAV12@EA");
-    return p ? *p : nullptr;
-}
-uint8_t* PersistenceSingleton() {
-    static uint8_t** p = RtDataExport<uint8_t*>("?_singleton@Persistence@IO@@0PEAV12@EA");
-    return p ? *p : nullptr;
-}
-// Was a RAW-DOOR data read of the DLL's `?_secondsPerTick@Timer@System@@0NA`
-// (WAVE9_LANE_V.md §4 names this line); Wave 9 lane B3's System::Timer port
-// owns that storage now. Same constant 1e-6, and no longer the `: 0.0` fallback
-// that would have made the Time(0.0f) divide below a divide by zero.
-double SecondsPerTick() {
-    return RtSystem::TimerSecondsPerTick();
-}
-
-// `System::Time(0.0f)` as the two ctors inline it:
-//     XORPS XMM0,XMM0 ; DIVSD XMM0,[Timer::_secondsPerTick] ; CVTTSD2SI RAX,XMM0
-// Written out rather than folded to 0 because that is what the instructions
-// say. It IS 0 for every non-zero divisor, so the CVTTSD2SI-of-NaN case (which
-// would be UB in C++ and INT64_MIN in hardware) is not reachable while the
-// Timer has been initialised — and if it has not been, retail is equally broken.
-int64_t ZeroTime() {
-    const double q = 0.0 / SecondsPerTick();
-    return static_cast<int64_t>(q);
-}
-
-// ---- the System::String refcount idiom, transcribed ------------------------
-// Retail inlines this at ~200 sites. Note the shape carefully, because it is
-// NOT the obvious one: when the refcount reaches zero it rewinds the member
-// itself by 8 and frees THAT, and when it does not reach zero it stores 0 into
-// the member. Both branches are dead stores here because every caller
-// overwrites the member immediately afterwards — but they are what the bytes
-// do, and this project has already lost a day to a String destructor applied
-// to something that was not a String
-// (reference_load_wild_write_high_dword_7fc.md, Wave 4 lane H).
-void ReleaseStringSlot(const char** slot) {
-    const char* p = *slot;
-    if (p == nullptr) return;
-    *reinterpret_cast<int*>(const_cast<char*>(p) - 4) -= 1;
-    if (*reinterpret_cast<int*>(const_cast<char*>(p) - 4) == 0) {
-        *slot = p - 8;
-        MemFree(const_cast<char*>(*slot));
-    } else {
-        *slot = nullptr;
-    }
-}
+// ----------------------------------------------------------------------------
+// Dependencies. Wave 13 moved every definition that used to sit here into
+// `saveload_internal.h`, unchanged, because `saveload_update.cpp` needs the
+// same ones and two copies of `ReleaseStringSlot` would be two places to
+// "fix" a transcribed idiom whose two dead stores look like mistakes. The
+// comments explaining each one moved with it; nothing about the behaviour of
+// this file changed.
+// ----------------------------------------------------------------------------
+using RtSaveDetail::MemAllocFn;
+using RtSaveDetail::MemFreeFn;
+using RtSaveDetail::GetDataDirectoryFn;
+using RtSaveDetail::ConcatFn;
+using RtSaveDetail::AdjustDelimsFn;
+using RtSaveDetail::MemStreamOpenFn;
+using RtSaveDetail::SaveLoadVoidFn;
+using RtSaveDetail::MemAlloc;
+using RtSaveDetail::MemFree;
+using RtSaveDetail::RtDataExport;
+using RtSaveDetail::SaveLoadSingletonSlot;
+using RtSaveDetail::FileSystemSingleton;
+using RtSaveDetail::ModificationSingleton;
+using RtSaveDetail::PersistenceSingleton;
+using RtSaveDetail::SecondsPerTick;
+using RtSaveDetail::ZeroTime;
+using RtSaveDetail::ReleaseStringSlot;
 
 // ---- ~SaveLoad reachability counter (Wave 9 lane SYS2) ---------------------
 // ~SaveLoad has no oracle (see its banner), so the ONE thing that CAN be
