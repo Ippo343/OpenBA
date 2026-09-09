@@ -345,6 +345,8 @@ namespace RtIo { void RtIo_EncodingProbe(); }        // lane ENC (encoding_probe
 namespace RtIo { void RtIo_BinaryWriterProbe(); }    // lane ENC-2 (binary_writer_probe.cpp)
 namespace RtIo { void RtIo_SerializeFamilyProbe(); }  // lane SERIAL (serialize_family_probe.cpp)
 namespace RtUi { void RtUi_DialogSettingsProbe(); }   // lane ENC-2 (dialog_settings_probe.cpp)
+void RtUiElementUpdateProbe();                        // WAVE 10E lane VERIFY (element_update_probe.cpp)
+void RtUiElementPersistProbe();                       // WAVE 10E lane VERIFY (element_persist_probe.cpp)
 // Lane PKG2 iteration 2's codec probe. Declared here for the same reason and
 // called from the same place — see the call site at the tail of LoadPackages.
 namespace RtSystem { void RtSystem_CompressionProbe(); }
@@ -975,6 +977,20 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         // because it needs the BinaryWriter tail above it to be real.
         RtUi::RtUi_DialogSettingsProbe();
     }
+
+    // WAVE 10E lane VERIFY -- two synthetic-subject differentials, placed HERE
+    // for the same allocator reason as the IO probes above (this is the first
+    // point on the boot path where the heap is provably live: the loops above
+    // allocated a 0xF0 PackageFile per package to get this far).
+    //
+    // OUTSIDE the `rt_diff_on__` guard, deliberately. Each has its OWN env
+    // switch and is silent and inert without it, so the guard would only add a
+    // second, undocumented condition -- and a probe that prints nothing because
+    // an UNRELATED switch was not also set reads exactly like a probe that ran
+    // and found nothing. That cost this lane one run: the first attempt sat
+    // inside the guard and both cells reported no output at all.
+    RtUiElementUpdateProbe();    // ?Update@Element@UI@@   (element_update_probe.cpp)
+    RtUiElementPersistProbe();   // ?Persist@Element@UI@@  (element_persist_probe.cpp)
 }
 
 }  // namespace RtIO

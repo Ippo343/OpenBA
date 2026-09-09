@@ -1369,6 +1369,245 @@ void FireHousePanel(void* entityUI) {
     }
 }
 
+// ============================================================================
+// WAVE 10E lane VERIFY — BANISHED_TOOL_HARNESS=uicompcensus
+// ============================================================================
+// WHAT QUESTION THIS ANSWERS, and why it is a census rather than a guess.
+//
+// `?OnOpened@DialogInstance@UI@@`'s settings half has never executed: five
+// entries, all `noBuffer`. Lane ROUTES established the mechanism and its own
+// route (BANISHED_DLGSETTINGS_ROUTE) but could not fire it, because the
+// founding houses it had a driver for carry no UIComponent — it dumped all 19
+// of their components by name to prove that was the entity's fact and not the
+// instrument's.
+//
+// `_userData` is a DialogInstance CTOR ARGUMENT, and exactly one of the sixteen
+// exe-side ctor call sites passes anything but `nullptr, 0`:
+// code/Game/Dialog/edittool_select.cpp:233, which passes the SELECTED ENTITY'S
+// UIComponent buffer (+0x28) and count (+0x30). So the first gate is not
+// "controllers" at all — it is "does the entity have a UIComponent". Nothing
+// downstream can run for an entity that has none.
+//
+// Guessing which building type has one costs a run per guess. This walks the
+// WHOLE EntityList once and reports, per entity, whether a UIComponent is
+// present and what its buffer looks like. It answers the question for every
+// type the world contains, in one run, instead of one type per run.
+//
+// IT CARRIES ITS OWN CONTROL, for the reason lane ROUTES gave: "no UIComponent
+// found" and "my type-id lookup is wrong" produce the identical answer, and the
+// second would indict a sound conclusion. So the summary prints the type id it
+// searched for AND the total number of components it walked. A run that walked
+// thousands of components and matched none is the entity's finding; a run whose
+// searched id is 0, or that walked no components at all, is the instrument's.
+//
+// Off by default; prints nothing unless selected.
+static void FireUIComponentCensus() {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
+        fprintf(stderr, "[UICompCensus] no GameWorld singleton\n");
+        return;
+    }
+    void* gw = *g_pGameWorldSingleton;
+    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
+    int       en  = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
+
+    const uint32_t tidUIComp = ::Object::ResolveTypeIdByNameLazy("UIComponent");
+
+    int entities = 0, compsWalked = 0, withUI = 0, withBuffer = 0, shown = 0;
+    int maxShow = 40;
+    if (const char* m = std::getenv("BANISHED_UICOMP_CENSUS_SHOW")) {
+        int v = std::atoi(m); if (v >= 0) maxShow = v;
+    }
+
+    for (int i = 0; i < en && arr; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* ent = *slot;
+        if (!ent) continue;
+        ++entities;
+
+        const int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
+        const uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+        void* uiComp = nullptr;
+        const char* firstName = nullptr;
+        for (int c = 0; c < cN && cA; ++c) {
+            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
+            void* comp = *cs;
+            if (!comp) continue;
+            ++compsWalked;
+            const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
+                *reinterpret_cast<uintptr_t*>(
+                    *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            if (!firstName) firstName = ::Object::GetTypeNameById(tid);
+            if (tidUIComp && tid == tidUIComp) { uiComp = comp; break; }
+        }
+        if (!uiComp) continue;
+        ++withUI;
+
+        uint8_t* u = static_cast<uint8_t*>(uiComp);
+        void* buf   = *reinterpret_cast<void**>(u + 0x28);
+        uint32_t n  = *reinterpret_cast<uint32_t*>(u + 0x30);
+        uint32_t cap= *reinterpret_cast<uint32_t*>(u + 0x34);
+        if (buf && n) ++withBuffer;
+        if (shown < maxShow) {
+            ++shown;
+            fprintf(stderr, "[UICompCensus] entity[%d]=%p first=%s components=%d "
+                    "UIComponent=%p buffer=%p count=%u cap=%u\n",
+                    i, ent, firstName ? firstName : "?", cN, uiComp, buf, n, cap);
+        }
+    }
+
+    fprintf(stderr, "[UICompCensus] SUMMARY entities=%d componentsWalked=%d "
+            "searchedTypeId=0x%08x withUIComponent=%d withNonEmptyBuffer=%d\n",
+            entities, compsWalked, tidUIComp, withUI, withBuffer);
+    if (tidUIComp == 0)
+        fprintf(stderr, "[UICompCensus]   *** INSTRUMENT FAULT: the UIComponent "
+                        "type id resolved to 0, so a zero above is this census's "
+                        "finding and not the world's. ***\n");
+    else if (compsWalked == 0)
+        fprintf(stderr, "[UICompCensus]   *** INSTRUMENT FAULT: no component was "
+                        "walked at all (entities=%d). A zero above says nothing "
+                        "about the world. ***\n", entities);
+    else if (withUI == 0)
+        fprintf(stderr, "[UICompCensus]   FINDING: %d components across %d "
+                        "entities and NOT ONE UIComponent. On this world no "
+                        "DialogInstance can be built with a non-null _userData, "
+                        "so OnOpened's settings half is unreachable here.\n",
+                compsWalked, entities);
+}
+
+// ============================================================================
+// WAVE 10E lane VERIFY — BANISHED_TOOL_HARNESS=dlgsettings
+// ============================================================================
+// The route lane ROUTES built and could not fire, pointed at the entity the
+// census above actually found instead of at the founding houses.
+//
+// The census answered the open question: on a live world of 23175 entities and
+// 101865 components, EXACTLY ONE entity carries a UIComponent — and its
+// settings buffer is null, which is precisely the case
+// DlgSettings_InstallBuffer exists to fill. Founding houses were the wrong
+// subject, not the wrong idea.
+//
+// The three selects and what each is for are lane ROUTES's, unchanged:
+//   select(A)  buffer freshly ZEROED -> magic != 0xDEADBEEF -> the badMagic
+//              exit. First time the MemoryStream and the magic read execute.
+//   select(B)  closing A runs OnClosed -> SaveSettings, which WRITES the magic
+//              and one framed record per controller into A's buffer.
+//   select(A)  reopens over a valid magic -> the Serializer, the count read and
+//              the per-record loop.
+//
+// B MUST BE AN ENTITY THAT ITSELF OPENS A DIALOG, and that is not a detail:
+// EditTool's select returns early when the entity has no UIDescription
+// (edittool_select.cpp:209), and an early return never reaches the close of the
+// previous panel. A founding house is used, because FireHousePanel already
+// proves a founding house opens one.
+//
+// Read `badMagic=` and `records=` SEPARATELY from `entries=`. `entries` moving
+// is not coverage: it was already non-zero while the half this route exists for
+// had never executed once.
+static void FireDlgSettingsRoute(void* entityUI) {
+    void* tool = EditTool_HarnessAcquire(entityUI);
+    if (!tool) {
+        fprintf(stderr, "[DlgSettings:route] EditTool activation FAILED "
+                        "(set BANISHED_LIVE_TOOLS=1)\n");
+        return;
+    }
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    void* gw = *g_pGameWorldSingleton;
+    uintptr_t entityList = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(gw) + 0xe8);
+    uintptr_t arr = entityList ? *reinterpret_cast<uintptr_t*>(entityList + 0x08) : 0;
+    int       en  = entityList ? *reinterpret_cast<int32_t*>(entityList + 0x10) : 0;
+    const uint32_t tidUIComp = ::Object::ResolveTypeIdByNameLazy("UIComponent");
+
+    void* A = nullptr; int aIdx = -1;
+    for (int i = 0; i < en && arr && !A; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* ent = *slot;
+        if (!ent) continue;
+        const int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ent) + 0x38);
+        const uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(ent) + 0x30);
+        for (int c = 0; c < cN && cA; ++c) {
+            void** cs = reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cs);
+            void* comp = *cs;
+            if (!comp) continue;
+            const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
+                *reinterpret_cast<uintptr_t*>(
+                    *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            if (tidUIComp && tid == tidUIComp) { A = ent; aIdx = i; break; }
+        }
+    }
+    if (!A) {
+        fprintf(stderr, "[DlgSettings:route] no entity with a UIComponent in "
+                        "this world (searched tid=0x%08x over %d entities) -- "
+                        "the route has no subject here\n", tidUIComp, en);
+        return;
+    }
+    fprintf(stderr, "[DlgSettings:route] subject A = entity[%d]=%p\n", aIdx, A);
+
+    DlgSettings_InstallBuffer(A, aIdx);      // no-op unless the route is armed
+
+    if (!EditTool_HarnessSelectEntity(tool, A)) {
+        fprintf(stderr, "[DlgSettings:route] select(A) FAILED -- A has a "
+                        "UIComponent but EditTool would not open a panel on it\n");
+        return;
+    }
+    fprintf(stderr, "[DlgSettings:route] select(A) ok -- expect one OnOpened "
+                    "with a buffer and badMagic (the buffer is zeroed)\n");
+
+    void* B = nullptr;
+    const int houses = StartTown_GetFoundingHouseCount();
+    for (int i = 0; i < houses && !B; ++i) {
+        void* h = StartTown_GetFoundingHouseEntity(i);
+        if (h && h != A) B = h;
+    }
+    if (!B) {
+        fprintf(stderr, "[DlgSettings:route] no founding house to select as B "
+                        "-- A never closes, so SaveSettings never runs\n");
+        return;
+    }
+    if (!EditTool_HarnessSelectEntity(tool, B)) {
+        fprintf(stderr, "[DlgSettings:route] select(B) FAILED -- A never closed\n");
+        return;
+    }
+    fprintf(stderr, "[DlgSettings:route] select(B) ok -- A closed, SaveSettings "
+                    "should have written its buffer\n");
+
+    if (!EditTool_HarnessSelectEntity(tool, A)) {
+        fprintf(stderr, "[DlgSettings:route] re-select(A) FAILED\n");
+        return;
+    }
+    // The buffer's first dword IS the magic SaveSettings stored directly, so it
+    // is readable here without guessing: printing it separates "SaveSettings
+    // never ran" from "OnOpened did not read it".
+    {
+        const uint32_t tid2 = tidUIComp;
+        (void)tid2;
+        const int       cN = *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(A) + 0x38);
+        const uintptr_t cA = *reinterpret_cast<uintptr_t*>(static_cast<uint8_t*>(A) + 0x30);
+        for (int c = 0; c < cN && cA; ++c) {
+            void* comp = *reinterpret_cast<void**>(cA + static_cast<uintptr_t>(c) * 8);
+            if (!comp) continue;
+            const uint32_t tid = reinterpret_cast<uint32_t (*)(void*)>(
+                *reinterpret_cast<uintptr_t*>(
+                    *reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            if (tid != tidUIComp) continue;
+            uint8_t* u = static_cast<uint8_t*>(comp);
+            void* buf = *reinterpret_cast<void**>(u + 0x28);
+            fprintf(stderr, "[DlgSettings:route] after close, A's buffer=%p "
+                    "head=%08x (0xdeadbeef means SaveSettings wrote it)\n",
+                    buf, buf ? *reinterpret_cast<uint32_t*>(buf) : 0u);
+            break;
+        }
+    }
+    fprintf(stderr, "[DlgSettings:route] re-select(A) ok -- read badMagic= and "
+                    "records= off the [DlgSettings] ATTENDANCE line, not entries=\n");
+}
+
 // ============================================================
 // Pasture-panel-open ("pasturepanel") — open the FIRST world pasture's info
 // dialog via EditTool select, exactly like clicking it. Exercises the promoted
@@ -2894,6 +3133,11 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     } else if (std::strcmp(s_toolName, "pinpanel") == 0) {
         s_pin_fireFrame = frameNum;
         FirePinPanel(entityUI);
+    } else if (std::strcmp(s_toolName, "uicompcensus") == 0) {
+        FireUIComponentCensus();          // WAVE 10E lane VERIFY
+    } else if (std::strcmp(s_toolName, "dlgsettings") == 0) {
+        FireUIComponentCensus();          // the census first, so the subject is named
+        FireDlgSettingsRoute(entityUI);   // WAVE 10E lane VERIFY
     } else if (std::strcmp(s_toolName, "housepanel") == 0) {
         FireHousePanel(entityUI);
     } else if (std::strcmp(s_toolName, "pasturepanel") == 0) {

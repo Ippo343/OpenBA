@@ -621,8 +621,12 @@ extern "C" bool RtUi_Element_Contains(const Element* self, int32_t x, int32_t y,
 //   scope.stream = &stream;                        [rsp+0x20]
 //   scope.node   = nullptr;                        [rsp+0x28]
 //   Encoding* enc = stream[+0x10];
-//   node = (stream[+0x08] == 0) ? enc->vt[+0x18](enc, &scope)
-//                               : enc->vt[+0x20](enc, &scope);
+//   node = (stream[+0x08] == 0) ? enc->vt[+0x18](enc, &scope, 0)
+//                               : enc->vt[+0x20](enc, &scope, 0);
+//     ^ THREE arguments. The 0 is retail's `XOR R8D,R8D` at 0x180116889, and
+//       it is the codec VERSION. This transcription originally showed two and
+//       the port matched it; see the body for what that cost and how it was
+//       caught.
 //   scope.node = node;
 //   if (node) node->vt[0](node, 1);                [deleting destructor]
 //
@@ -702,10 +706,28 @@ extern "C" void RtUi_Element_Persist(void* self, void* stream) {
     void* const* const encVt = *reinterpret_cast<void* const* const*>(enc);
     const int32_t mode = *reinterpret_cast<const int32_t*>(s + 0x08);
 
-    using ScopeFn = void* (*)(void*, void*);
+    // THE THIRD ARGUMENT IS NOT OPTIONAL, and leaving it off was a real defect
+    // that survived from Wave 10B until the differential in
+    // runtime/src/ui/element_persist_probe.cpp (Wave 10E lane VERIFY) ran.
+    //
+    // The two slots are `IO::Encoding::CreateReader` (0x1800a8120, +0x18) and
+    // `IO::Encoding::CreateWriter` (0x1800a8080, +0x20), and both are
+    // `(Encoding*, Serializer*, int32_t version)` — runtime/src/io/encoding.cpp
+    // :285 ports them with that signature, and goal_serialize.cpp:156 already
+    // spelled the call `enc->vtable[+0x18](enc, &ser, 0)`.
+    //
+    // The shipped body passes the 0: `XOR R8D,R8D` at 0x180116889 sets up the
+    // `CMP dword ptr [RDX+0x8],R8D` on the line after AND leaves R8D = 0 across
+    // the call at 0x180116897 / 0x18011689c. A two-argument typedef leaves R8
+    // holding whatever the caller left, the codec writes it into the record as
+    // the version, and the emitted bytes diverge from retail's in exactly that
+    // dword — measured, not argued: ours `aa aa aa aa 04 00 00 00 80 80 07 ab
+    // bb bb bb bb`, retail's `aa aa aa aa 04 00 00 00 00 00 00 00 bb bb bb bb`,
+    // reproducibly, on both the read and the write slot.
+    using ScopeFn = void* (*)(void*, void*, int32_t);
     ScopeFn open = reinterpret_cast<ScopeFn>(
         encVt[(mode == 0 ? 0x18 : 0x20) / sizeof(void*)]);
-    void* const node = open(enc, &scope);
+    void* const node = open(enc, &scope, 0);
 
     scope.node = node;
     if (node) {
@@ -999,6 +1021,13 @@ int RtUiElementVtableRegister() {
     PinShippedBody(&pinContains,  kContains,  0x101, 0x16caaae869a71b59ull);
     PinShippedBody(&pinSetColor,  kSetColor,  0x004, 0x12e6cae42d470c22ull);
     PinShippedBody(&pinGetBorder, kGetBorder, 0x00e, 0x1d241bd73ce5cd0cull);
+
+    // WAVE 10E lane VERIFY — the synthetic-subject differential for slot 7 is
+    // in element_update_probe.cpp. It is NOT invoked from here: it pushes real
+    // records through the DLL's own Array<UI::Event>::SetSize, so it ALLOCATES,
+    // and a *Register runs while the allocator singleton at 0x1801fc718 is
+    // still null. It is invoked from the same place the four IO probes are,
+    // for the same stated reason (filesystem_packages.cpp:955).
 
     return n;
 }
