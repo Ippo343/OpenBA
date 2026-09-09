@@ -563,12 +563,41 @@ int RtMintRegisterPromotedRows() {
     // expiry condition is met.
     //
     // FORMAT (one per line, parsed):
-    //   RT_UNPROMOTABLE: <symbol> | <slots ported> | <doc §> | <expiry>
+    //   RT_UNPROMOTABLE: <symbol> | <slots ported> | <doc §> | <expiry> [| <class>]
+    //
+    // <class> is OPTIONAL and defaults to NO-OP, so every line written before
+    // Wave 12 keeps its exact meaning. There are TWO reasons a row cannot be
+    // promoted and they are near-opposites, so they must not share one word:
+    //
+    //   NO-OP    Ported in full, and a lane proved no route could EVER dispatch
+    //            through it. Promoting would change nothing. "Done."
+    //   HARMFUL  Promoting would change behaviour FOR THE WORSE. NOT done --
+    //            deliberately left on the DLL, and a future lane that promotes
+    //            it would introduce a defect. The expiry for these is normally
+    //            NONE, EVER, and the note must say what breaks.
     //
     // RT_UNPROMOTABLE: ??_7DialogController@UI@@6B@ | 11/11 | WAVE10E_LANE_FINAL.md §2 | NONE, EVER
     // RT_UNPROMOTABLE: ??_7Dialog@UI@@6B@ | 9/9 | WAVE10E_LANE_FINAL.md §3 | either Dialog factory ported+registered
+    // RT_UNPROMOTABLE: ?_singleton@Application@1@0PEAV11@EA | n/a (scalar ptr) | WAVE12_APPLICATION.md §ceiling | NONE, EVER | HARMFUL
     //
     // WHY EACH, in one line — the proofs are in the lane doc:
+    //
+    //  ?_singleton@Application@1@0PEAV11@EA — HARMFUL, not no-op. This is a
+    //      mutable pointer, not a vtable, and Ghidra get_xrefs_to(0x1801fc678)
+    //      reports 26 in-DLL RIP-relative references to it: 2 WRITE (the
+    //      Application ctor 0x18009f5b8 and a Startup 0x1800dbbe2) and 24 READ
+    //      across Application, UI and Input (WindowProc, Get, EnableCursor,
+    //      Input::PlatformStartup / PlatformShutdown / PlatformUpdate /
+    //      PlatformGetKeyboardState / PlatformGetMouseState, two Update bodies).
+    //      WE INTERCEPT ONLY AT DOORS AND A RIP-RELATIVE MOV IS NOT ONE, so
+    //      minting our own storage would SPLIT THE BRAIN -- our readers on our
+    //      copy, those 26 sites on theirs, the ctor publishing into one of the
+    //      two. The correct arrangement is the current one: RtApp_Get resolves
+    //      the EXPORTED NAME through RT_DATA_SLOT and therefore reads the very
+    //      slot retail writes (swept 6/6 against the shipped ?Get@ by
+    //      rt_orphan_probe, which refuses to run under BANISHED_RT_MINT=1 and
+    //      reports SPLIT instead).
+    //      EXPIRY: none. A future lane that promotes this introduces a defect.
     //
     //  ??_7DialogController@UI@@6B@ — its single consumer stamps the pointer
     //      and then calls ??1Internal@Object@@, WHOSE FIRST STATEMENT

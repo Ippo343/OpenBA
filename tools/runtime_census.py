@@ -1048,10 +1048,28 @@ def load_unpromotable(root):
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
             for line in fh:
+                # The 5th field (REASON CLASS) is optional and defaults to
+                # NO-OP, so every pre-existing 4-field line keeps its exact
+                # meaning. It exists because Wave 12 hit a row that is
+                # unpromotable for the OPPOSITE reason and the two must not
+                # share one word:
+                #
+                #   NO-OP    promotion could not change behaviour on any route
+                #            that could ever exist (the Wave 10E vtable rows:
+                #            the value is stamped and overwritten unread).
+                #   HARMFUL  promotion WOULD change behaviour, for the worse.
+                #            Application::_singleton is read by 26 in-DLL
+                #            RIP-relative sites that are not doors, so minting
+                #            our own storage splits the brain.
+                #
+                # Collapsing these into one tag would have made "unpromotable"
+                # mean both "harmless to promote" and "dangerous to promote",
+                # which is the sort of conflation this project keeps paying for.
                 m = re.search(r"RT_UNPROMOTABLE:\s*(\?\S+)\s*\|\s*([^|]+?)\s*\|"
-                              r"\s*([^|]+?)\s*\|\s*(.+?)\s*$", line)
+                              r"\s*([^|]+?)\s*\|\s*([^|]+?)\s*(?:\|\s*(\S+)\s*)?$", line)
                 if m:
-                    out[m.group(1)] = (m.group(2), m.group(3), m.group(4))
+                    out[m.group(1)] = (m.group(2), m.group(3), m.group(4),
+                                       (m.group(5) or "NO-OP"))
     except OSError:
         pass
     return out
@@ -1386,8 +1404,14 @@ def main():
         for kind, key, ns, _ported, _detoured, files in sorted(sel, key=lambda r: (r[2], r[1])):
             tag = ""
             if key in unprom:
-                slots, doc, expiry = unprom[key]
-                tag = "   [PORTED %s · UNPROMOTABLE · %s]" % (slots, doc)
+                slots, doc, expiry, cls = unprom[key]
+                # "PORTED" is only true of the NO-OP class. A HARMFUL row is
+                # deliberately NOT ported -- printing PORTED beside it would
+                # assert the opposite of the verdict it carries.
+                if cls == "HARMFUL":
+                    tag = "   [ON THE DLL BY DESIGN · UNPROMOTABLE(HARMFUL) · %s]" % doc
+                else:
+                    tag = "   [PORTED %s · UNPROMOTABLE(%s) · %s]" % (slots, cls, doc)
                 n_unprom += 1
             print("  %-8s %-12s %s%s" % (kind, ns, key, tag))
             print("           %s" % ", ".join(files[:4]) + (" …" if len(files) > 4 else ""))
@@ -1395,10 +1419,14 @@ def main():
                 print("           expires: %s" % unprom[key][2])
         if n_unprom:
             print()
-            print("  %d of the %d above are PORTED IN FULL and cannot be promoted -- a lane"
+            print("  %d of the %d above cannot be promoted, and the REASON CLASS matters:"
                   % (n_unprom, len(sel)))
-            print("  proved no route could ever dispatch through them. They are not unfinished")
-            print("  work and they do not move any count above. An UNPROMOTABLE tag is a")
+            print("    NO-OP   -- ported in full; a lane proved no route could EVER dispatch")
+            print("               through them, so promoting would change nothing.")
+            print("    HARMFUL -- promoting would change behaviour FOR THE WORSE. These are")
+            print("               not \"done\"; they are deliberately left on the DLL, and a")
+            print("               future lane that promotes one would introduce a defect.")
+            print("  Neither moves any count above. An UNPROMOTABLE tag is a")
             print("  WRITTEN VERDICT from the named lane doc (source of truth:")
             print("  standalone/reg_mint_promoted.cpp), never a heuristic, and a row loses it")
             print("  the moment its stated expiry condition is met.")
