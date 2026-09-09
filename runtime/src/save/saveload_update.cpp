@@ -64,6 +64,8 @@
 #include <cstdio>
 #include <cstring>
 
+#include <windows.h>   // ResetEvent / SetEvent -- UpdateList state 0 calls both
+
 #include "saveload_internal.h"
 #include "../../types/io/Persistence.h"
 #include "../../funcs/rt_predict.h"
@@ -677,7 +679,7 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
             }
         } else {
             const SaveInfo* row = SaveInfoAt(self, out, sel);
-            if (row->metaLoaded >= 0) {
+            if (row->saveIndex >= 0) {
                 if (out.Call("System::String::operator=", (const void*)assign,
                              reinterpret_cast<int64_t>(&self->_string20),
                              reinterpret_cast<int64_t>(&row->name))) {
@@ -781,6 +783,726 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
     }
 }
 
+// ============================================================================
+// THE UpdateList DEPENDENCY SET — five unexported internals and one CRT entry.
+// ----------------------------------------------------------------------------
+// Every address below was checked against the SHIPPED export table with pefile
+// before it was called by address, because a source grep cannot tell an
+// unexported internal from an export nobody has ported yet
+// (reference_grep_cannot_tell_internal_from_unported_export.md). Result: five
+// of these are genuinely absent from all 4,800+ exports, and everything else
+// UpdateList calls turned out to be a plain named export and is resolved by
+// name below.
+//
+// THREE OF THEM ARE ALREADY OURS. `runtime/src/save/saveload.cpp` has ported
+// and registered 0x1800329c0 (Array<SaveInfo>::~Array), 0x1800c3f40 (~SaveInfo)
+// and 0x1800331f0 (Array<ModInfo>::~Array) since Wave 5. Re-porting them here
+// would not merely duplicate work: a duplicate RegisterRuntimeAddr is
+// last-binding-wins, so it silently turns one of the two bodies into dead code
+// (reference_grep_for_the_port_before_writing_it.md). They are called through
+// `ResolveAddr(Module::Runtime, addr)`, which consults the port registry FIRST
+// (reference_resolveaddr_consults_port_registry_first.md), so these calls
+// already land in our code today with no edit here.
+// ============================================================================
+
+// 0x1800329c0 — Collection::Array<SaveInfo>::~Array. PORTED (saveload.cpp).
+using ArrayDtorFn = void (*)(void* array);
+
+// 0x1800c3f40 — Save::SaveLoad::~SaveInfo, one element. PORTED (saveload.cpp).
+using SaveInfoDtorFn = void (*)(SaveInfo* row);
+
+// 0x1800332d0 — Collection::Array<SaveInfo>::SetSize(newSize, const T& fill).
+// NOT ported. Decompiled to confirm the signature rather than inferred from the
+// call site: it compares `newSize` against `_size` (+0x08), grows `_capacity`
+// (+0x0c) — with the "grew by exactly one from non-empty" case jumping straight
+// to 3x, which is why a list of N saves does not realloc N times — reallocates
+// at stride 0x58, copy-assigns each element with FUN_180032f70, and destroys
+// the tail with the same ~SaveInfo above. UpdateList only ever calls it with
+// `_size + 1`, i.e. as push_back.
+using ArraySetSizeFn = void (*)(void* array, int newSize, const SaveInfo* fill);
+
+// 0x1800c3de0 — SaveInfo::SetThumbnail(row, pixels, w, h). NOT ported, and NOT
+// a small function: it allocates a Video::ImageBuffer, publishes it at row+0x18,
+// calls its vtable slot 9 to create the surface, and then uploads `pixels`
+// through the ImageBufferData vtable slot 5 under the Video::Device lock before
+// storing pixels/w/h at row+0x28/+0x20/+0x24. Those three stores are the
+// independent confirmation that OnVideoRestart's upload arguments and this
+// header's thumbWidth/thumbHeight/thumbPixels names line up.
+using SetThumbnailFn = void (*)(SaveInfo* row, void* pixels, int w, int h);
+
+// 0x18002ac40 — destroys the Array at Persistence+0x80 and zeroes {data,size}.
+// NOT ported. Called only from state 0, immediately before the worker is
+// signalled: it drops the cached save list so the worker thread refills it.
+using ClearArrayFn = void (*)(void* array);
+
+// 0x18007f050 — the DLL's own statically linked CRT `qsort`. Called by address
+// rather than through <cstdlib>'s: for a comparator that is not a total order
+// (see below) the ORDER OF EQUAL ELEMENTS is an artefact of the sort algorithm,
+// and ucrt's qsort is not the one that shipped. The resulting row order is what
+// the save list shows the player, so it is observable.
+using QsortFn = void (*)(void* base, size_t count, size_t size,
+                         int (*cmp)(const void*, const void*));
+
+// 0x1800c3db0 — the comparator, passed to qsort as DATA. Ghidra never made a
+// function of it (it is 22 bytes ending in a bare RET and the decompiler
+// reports "no function at that address"), so it is read out of the image:
+//
+//     83 79 40 00  CMP dword ptr [RCX+0x40],0x0
+//     7c 16        JL  .greater                  ; a.saveIndex < 0 -> return 1
+//     83 7a 40 00  CMP dword ptr [RDX+0x40],0x0
+//     7c 10        JL  .greater                  ; b.saveIndex < 0 -> return 1
+//     48 8b 41 30  MOV RAX,[RCX+0x30]            ; a.sortKey
+//     48 8b 4a 30  MOV RCX,[RDX+0x30]            ; b.sortKey
+//     48 3b c8     CMP RCX,RAX                   ; UNSIGNED
+//     77 03        JA  .greater
+//     1b c0        SBB EAX,EAX                   ; b<a -> -1, b==a -> 0
+//     c3           RET
+//   .greater: b8 01 00 00 00 / c3                ; return 1
+//
+// i.e. DESCENDING by the unsigned 64-bit sortKey. Note it is NOT a total order:
+// a row with a negative saveIndex compares GREATER in both positions, so a
+// blank row and any other row are "both after each other". Retail gets away
+// with that because the only such row is the "new save" slot, and state 1
+// deliberately sorts the range that EXCLUDES it — which is what the base+0x58 /
+// count-1 shift below is for. Reproducing the shift is not an optimisation; it
+// is what keeps an inconsistent comparator out of the sort.
+using ComparatorFn = int (*)(const void*, const void*);
+
+ArrayDtorFn ArraySaveInfoDtorFn() {
+    static ArrayDtorFn f =
+        reinterpret_cast<ArrayDtorFn>(ResolveAddr(Module::Runtime, 0x1800329c0));
+    return f;
+}
+SaveInfoDtorFn SaveInfoDtor() {
+    static SaveInfoDtorFn f =
+        reinterpret_cast<SaveInfoDtorFn>(ResolveAddr(Module::Runtime, 0x1800c3f40));
+    return f;
+}
+ArraySetSizeFn ArraySaveInfoSetSize() {
+    static ArraySetSizeFn f =
+        reinterpret_cast<ArraySetSizeFn>(ResolveAddr(Module::Runtime, 0x1800332d0));
+    return f;
+}
+SetThumbnailFn SaveInfoSetThumbnail() {
+    static SetThumbnailFn f =
+        reinterpret_cast<SetThumbnailFn>(ResolveAddr(Module::Runtime, 0x1800c3de0));
+    return f;
+}
+ClearArrayFn PersistenceClearSaveList() {
+    static ClearArrayFn f =
+        reinterpret_cast<ClearArrayFn>(ResolveAddr(Module::Runtime, 0x18002ac40));
+    return f;
+}
+QsortFn RetailQsort() {
+    static QsortFn f = reinterpret_cast<QsortFn>(ResolveAddr(Module::Runtime, 0x18007f050));
+    return f;
+}
+ComparatorFn SaveInfoComparator() {
+    static ComparatorFn f =
+        reinterpret_cast<ComparatorFn>(ResolveAddr(Module::Runtime, 0x1800c3db0));
+    return f;
+}
+
+// ---- the exported half ------------------------------------------------------
+using GetSaveCountFn = int  (*)(const void* persistence);
+using StrCompareFn   = int  (*)(const char* a, const char* b);
+using StringSetFn    = void (*)(const char** self, const char* literal);
+using BeginLoadFn    = bool (*)(void* persistence, const char** name, int what,
+                                const RtIo::SaveBlock* block);
+
+// GetSaveInfo returns `IO::Persistence::SaveGameInfo` BY VALUE — `?A` in
+// `?GetSaveInfo@Persistence@IO@@QEBA?AUSaveGameInfo@12@H@Z` — so RDX is the
+// hidden return slot and the index lands in R8D, exactly as
+// 0x1800c1fe3 (`MOV R8D,R12D` / `LEA RDX,[RBP-0x61]` / `MOV RCX,R14`) has it.
+using GetSaveInfoFn = RtIo::SaveGameInfo* (*)(const void* persistence,
+                                              RtIo::SaveGameInfo* ret, int index);
+
+// LoadMetaData does NOT have a hidden slot: it returns void (`QEAAX...`). Seven
+// arguments, three of them past the register four, and this is the call site
+// where reading Ghidra's C instead of the bytes would have cost the most —
+// its rendering drops nothing here only because the decompiler happened to
+// recover the prototype. The stack triple is written at 0x1800c22a0/0x22a9/
+// 0x22b2 as [RSP+0x30]=&row.modsData, [RSP+0x28]=&field44Out, [RSP+0x20]=&h.
+using LoadMetaDataFn = void (*)(SaveLoad* self, const char** description,
+                                void** pixels, int* w, int* h, int* field44,
+                                void* modsArray);
+
+// ============================================================================
+// Save::SaveLoad::UpdateList()          retail 0x1800c1ea0   ordinal 4519
+// ----------------------------------------------------------------------------
+// The biggest body in the class — 1,706 bytes, six states — and the one that
+// builds the array everything else in this file indexes into. It has two jobs
+// and does them in sequence: states 0-1 BUILD the row array from
+// IO::Persistence's save list, states 2-4 then walk it and load one row's
+// metadata per tick.
+//
+//   state 0  destroy the existing Array<SaveInfo>; if Persistence is usable,
+//            drop its cached list and kick the worker thread. -> 1
+//   state 1  build every row (see below), sort, hand the placeholder sprite to
+//            the rows that have no thumbnail, reset the cursor. -> 2
+//   state 2  scan forward from the cursor for the next row backed by a real
+//            save; none left -> 5, otherwise ask Persistence for its info -> 3
+//   state 3  once the worker is idle, build a SaveBlock from the EMBEDDED
+//            SavedState and start the load. -> 4 (unconditionally)
+//   state 4  success: LoadMetaData fills description/thumbnail/mods.
+//            failure: empty description, and a BLACK thumbnail allocated at the
+//            placeholder sprite's size. Either way, cursor += 1 -> 2
+//   state 5  gated on `_minOperationTime < _elapsed`; reset the machine.
+//
+// FIVE THINGS A READER WOULD OTHERWISE "FIX".
+//
+// 1. THE ONE-PASS-PER-TICK SHAPE IS THE POINT. States 2-4 load exactly one
+//    row's metadata per call and go back to 2. A save list of forty entries
+//    therefore takes ~120 frames to fill in. Collapsing the cycle into a loop
+//    would read as an obvious win and would block the frame on disk I/O for as
+//    long as the whole list takes.
+//
+// 2. STATE 3 ADVANCES EVEN WHEN IT DOES NOTHING. Its two-part guard
+//    (`!(persistence[0x18] & 1) && persistence[0x48] == 1`) sits INSIDE the
+//    state, and `_progress = 4` is written outside it (0x1800c2251). So a tick
+//    that arrives while the worker is busy skips the load and still advances,
+//    and state 4's identical guard is what turns that into the "no metadata"
+//    arm. The two guards are not redundant; they are how a busy worker degrades
+//    to a blank row instead of stalling.
+//
+// 3. THE BLANK "NEW SAVE" ROW LEAVES TWO FIELDS UNINITIALISED, AND SO DO WE.
+//    Retail's stack template writes +0x00, +0x08, +0x10, +0x18, +0x28, +0x30,
+//    +0x38, +0x40, +0x44, +0x48, +0x50 — and never +0x0c, +0x20, +0x24 or
+//    +0x2c. Those bytes are copied into the array as whatever was on the stack.
+//    Zeroing them would be a normalisation of retail's bytes, so this port
+//    leaves the local uninitialised and assigns exactly the fields retail
+//    assigns. Nothing reads +0x20/+0x24 unless +0x18 is non-null, and
+//    SetThumbnail always writes all three together, which is why retail can
+//    afford it.
+//
+// 4. THE AUTOSAVE ROW IS SKIPPED ONLY IN "NEW SAVE" MODE. The whole
+//    length-then-StrCompare dance at 0x1800c2077..0x1800c20ba runs only when
+//    `_selectedIndex == -2`, i.e. the save dialog opened with a "new save"
+//    slot; in load mode the autosave is a perfectly good row and is listed. The
+//    comparison itself is retail's cheap String equality: compare the LENGTH
+//    words at data[-8] first, and only call StrCompare when they match. An
+//    empty name short-circuits to "equal" without calling StrCompare at all.
+//
+// 5. STATE 4's FAILURE ARM ALLOCATES A BLACK IMAGE, AND RECOMPUTES ITS SIZE
+//    THREE TIMES. Retail reloads `_saveSprite.index` and re-reads the sheet
+//    entry before the MemAlloc, before the memset, and again before the
+//    SetThumbnail call (0x1800c2404, 0x1800c245a, 0x1800c24ad). It is
+//    transcribed as three calls to one helper rather than folded to one, for
+//    the same reason OnVideoRestart's re-read of `_savesData` after Recreate is
+//    transcribed: the reload is what retail relies on across a call that can
+//    run arbitrary code, and folding it is a change of behaviour dressed as a
+//    cleanup.
+//
+// ----------------------------------------------------------------------------
+// ORACLE: PREDICTIVE, AND THIS BODY IS WHERE THE PREDICTOR'S LIMITS BITE
+// HARDEST — said here in full rather than left for a reader to infer from a
+// green board, because this is the largest body in the file and the one whose
+// coverage is thinnest.
+//
+//   VERIFIED, and these are real, changing predictions on every real pass:
+//     * the STATE MACHINE itself — every `_progress` transition, in every
+//       state, including state 2's two-way exit and state 5's time gate;
+//     * the cursor `field38`, both its reset in state 1 and every increment
+//       state 2 and state 4 make;
+//     * the worker handshake words at Persistence+0x48/+0x4c in state 0;
+//     * state 5's four-field reset, including the `System::Time(0.0f)`
+//       conversion, in retail's store order;
+//     * the identity and every argument of EVERY suppressed call — which is
+//       what pins the qsort base/count SHIFT, LoadMetaData's seventh argument,
+//       and BeginGetSaveGameInfo's `2`. (Deliberately not spelled as a count:
+//       a hard number in a comment goes stale the first time a branch moves,
+//       and then reads as a measurement.)
+//
+//   NOT VERIFIED, each declared with Exclude() so `excluded=` counts it:
+//     * the row array's contents and its {data,size,capacity} triple. Every
+//       write into it goes through ArraySetSize, qsort, LoadMetaData or
+//       SetThumbnail, all four of which are suppressed in predict mode.
+//     * state 4's `description` and `field44`. Their predicted values are
+//       LoadMetaData's out-params, and LoadMetaData is suppressed, so our
+//       prediction would be "whatever the zeroed locals hold" — a guaranteed
+//       false failure, not a check. The row is excluded on that arm and the
+//       predictions are recorded for read-back only (the oracle counts those
+//       as `unverifiable`, which is the honest bucket).
+//     * the pixel block state 4's failure arm allocates: MemAlloc's return
+//       address is not predictable, exactly as in UpdateLoadFromFile.
+//
+// ONE CALL IS DELIBERATELY *NOT* SUPPRESSED IN PREDICT MODE, and skipping it
+// would be a bug rather than caution: `~SaveInfo` on the stack template at the
+// bottom of state 1's loop. GetSaveInfo has just RETAINED a String into that
+// template; if the append is suppressed and the destructor is too, every
+// iteration leaks one save name. The destructor's entire footprint is our own
+// stack local, so running it in predict mode changes nothing the round watches.
+// The three const getters (GetSaveCount, GetSaveInfo, GetAutoSaveName) run for
+// the same reason: they are `QEBA`, they balance their own refcounts, and
+// suppressing them would leave the skip test with nothing to compare.
+// ============================================================================
+
+// Retail's `_saveSprite` -> SpriteSheet entry dimension read, which state 4's
+// failure arm performs THREE times. `MOVSXD R8,[RDI+0x68]` then, only when the
+// index is non-negative, `[sheet->entries + index*0x38 + 0x1c]` for the width
+// and `+0x20` for the height — the same stride and the same two offsets
+// UpdateSave's state 0 uses on the same sprite.
+void SaveSpriteDims(const SaveLoad* self, int32_t* w, int32_t* h) {
+    const int32_t index = self->_saveSprite.index;
+    if (index < 0) { *w = 0; *h = 0; return; }
+    uint8_t* sheet   = static_cast<uint8_t*>(self->_saveSprite.sheet);
+    uint8_t* entries = *reinterpret_cast<uint8_t**>(sheet + 0x20);
+    uint8_t* entry   = entries + static_cast<int64_t>(index) * 0x38;
+    *w = *reinterpret_cast<const int32_t*>(entry + 0x1c);
+    *h = *reinterpret_cast<const int32_t*>(entry + 0x20);
+}
+
+// The stack template states 1 builds and appends. `saveIndex` is the only
+// field that differs between the blank row and a real one, which is why it is
+// the parameter: -1 for the "new save" slot (0x1800c1f55/0x1800c1f65), the
+// Persistence loop counter for a real save (0x1800c1fdf).
+//
+// `row` is deliberately left uninitialised by the caller — see point 3 of the
+// banner. This function assigns exactly the eleven fields retail assigns.
+void InitSaveInfoTemplate(SaveInfo* row, int32_t saveIndex) {
+    row->thumbnail.sheet = nullptr;   // +0x00 qword 0
+    row->thumbnail.index = -1;        // +0x08 dword -1  (+0x0c NOT written)
+    row->description     = nullptr;   // +0x10
+    row->imageBuffer     = nullptr;   // +0x18   (+0x20, +0x24 NOT written)
+    row->thumbPixels     = nullptr;   // +0x28   (+0x2c NOT written)
+    row->sortKey         = 0;         // +0x30
+    row->name            = nullptr;   // +0x38
+    row->saveIndex       = saveIndex; // +0x40
+    row->field44         = -1;        // +0x44
+    row->modsData        = nullptr;   // +0x48
+    row->modsSize        = 0;         // +0x50
+    row->modsCapacity    = 0;         // +0x54
+}
+
+void UpdateListBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
+    // Retail loads the Persistence singleton ONCE, at 0x1800c1ec9, before it
+    // looks at `_progress` — so every state below shares this one read even
+    // though Ghidra's C re-materialises `IO::Persistence::_singleton` inside
+    // states 3 and 4.
+    uint8_t* const persistence = PersistenceSingleton();
+    const uint32_t progress = out.ReadU32(&self->_progress);
+
+    // ---- state 0 -----------------------------------------------------------
+    if (progress == 0) {
+        if (round != nullptr) {
+            round->Exclude(&self->_savesData, 0x10,
+                           "Array<SaveInfo>{data,size,capacity} — ~Array is suppressed");
+        }
+        ArrayDtorFn arrayDtor = ArraySaveInfoDtorFn();
+        if (out.Call("Collection::Array<SaveInfo>::~Array [0x1800329c0]",
+                     (const void*)arrayDtor,
+                     reinterpret_cast<int64_t>(&self->_savesData))) {
+            arrayDtor(&self->_savesData);
+        }
+
+        if ((persistence[0x18] & 1) == 0) {
+            ClearArrayFn clear = PersistenceClearSaveList();
+            if (out.Call("IO::Persistence save-list ~Array [0x18002ac40]",
+                         (const void*)clear,
+                         reinterpret_cast<int64_t>(persistence + 0x80))) {
+                clear(persistence + 0x80);
+            } else if (round != nullptr) {
+                round->Exclude(persistence + 0x80, 0x10,
+                               "the cached save list the worker refills");
+            }
+            // The worker handshake, in retail's order: request code first, then
+            // the result word, then the two events.
+            out.U32(persistence + 0x4c, 4, "Persistence+0x4c = 4 (request: list saves)");
+            out.U32(persistence + 0x48, 0, "Persistence+0x48 = 0 (result: pending)");
+
+            HANDLE done  = *reinterpret_cast<HANDLE*>(persistence + 0x38);
+            HANDLE start = *reinterpret_cast<HANDLE*>(persistence + 0x28);
+            if (out.Call("ResetEvent(Persistence+0x38)", (const void*)&ResetEvent,
+                         reinterpret_cast<int64_t>(done))) {
+                ResetEvent(done);
+            }
+            if (out.Call("SetEvent(Persistence+0x28)", (const void*)&SetEvent,
+                         reinterpret_cast<int64_t>(start))) {
+                SetEvent(start);
+            }
+        }
+
+        out.U32(&self->_progress, 1, "_progress = 1");
+        return;
+    }
+
+    // ---- state 1 -----------------------------------------------------------
+    if (progress == 1) {
+        if (round != nullptr) {
+            round->Exclude(&self->_savesData, 0x10,
+                           "Array<SaveInfo>{data,size,capacity} — SetSize/qsort are suppressed");
+        }
+        ArraySetSizeFn setSize   = ArraySaveInfoSetSize();
+        SaveInfoDtorFn rowDtor   = SaveInfoDtor();
+
+        // The "new save" slot, pushed FIRST so it lands at index 0 — which is
+        // what makes the sort's base+0x58 shift below able to exclude it.
+        if (self->_selectedIndex == -2) {
+            SaveInfo blank;                       // deliberately uninitialised
+            InitSaveInfoTemplate(&blank, -1);
+            if (out.Call("Collection::Array<SaveInfo>::SetSize [0x1800332d0] (blank row)",
+                         (const void*)setSize,
+                         reinterpret_cast<int64_t>(&self->_savesData),
+                         self->_savesSize + 1,
+                         reinterpret_cast<int64_t>(&blank))) {
+                setSize(&self->_savesData, self->_savesSize + 1, &blank);
+            }
+            // Not suppressed: see the banner. Its footprint is this stack local.
+            rowDtor(&blank);
+        }
+
+        GetSaveCountFn getCount = RT_EXPORT_ONCE(GetSaveCountFn,
+            "?GetSaveCount@Persistence@IO@@QEBAHXZ");
+        GetSaveInfoFn  getInfo  = RT_EXPORT_ONCE(GetSaveInfoFn,
+            "?GetSaveInfo@Persistence@IO@@QEBA?AUSaveGameInfo@12@H@Z");
+        StrCompareFn   strCmp   = RT_EXPORT_ONCE(StrCompareFn,
+            "?StrCompare@String@System@@SAHPEBD0@Z");
+
+        if (getCount(persistence) > 0) {
+            int32_t i = 0;
+            do {
+                SaveInfo row;                     // deliberately uninitialised
+                InitSaveInfoTemplate(&row, i);
+
+                // The by-value SaveGameInfo. Its String is retained into the
+                // template and the temporary is then destroyed — which is the
+                // release at 0x1800c203b, not a spare drop of the row's name.
+                //
+                // *** THESE THREE REFCOUNTS GO THROUGH THE *LIVE* HELPERS, NOT
+                // THE SINK, AND THAT IS DELIBERATE. *** Everything else in this
+                // file routes String bookkeeping through `out` so a predicting
+                // round can see it. Here that would be wrong twice over:
+                //
+                //   * The slots are STACK LOCALS of this function. A prediction
+                //     is compared against whatever that address holds AFTER the
+                //     DLL has run on its own frame — i.e. against unrelated
+                //     bytes. Every such prediction is a guaranteed false
+                //     MISMATCH, which is the "confident wrong finding" failure
+                //     mode this project has been bitten by before.
+                //   * The reference being counted is one THIS BODY CREATED, in
+                //     both modes: GetSaveInfo really ran and really retained.
+                //     Recording the release instead of performing it leaks one
+                //     save name per row per predicting round.
+                //
+                // The rule this settles: predict mode suppresses writes to the
+                // STATE UNDER TEST. It must not suppress the lifetime
+                // management of temporaries our own body created — which is the
+                // same reason `rowDtor` below runs unconditionally.
+                RtIo::SaveGameInfo info{};
+                getInfo(persistence, &info, i);
+                row.sortKey = info.sortKey;
+                if (row.name != info.name.data) {
+                    RtSaveDetail::ReleaseStringSlot(&row.name);
+                    RtSaveDetail::RetainInto(&row.name, info.name.data);
+                }
+                const char* infoName = info.name.data;
+                RtSaveDetail::ReleaseStringSlot(&infoName);
+
+                // Skip the autosave row, but ONLY in "new save" mode.
+                bool skip = false;
+                if (self->_selectedIndex == -2) {
+                    const char* autoName = nullptr;
+                    NameGetterFn getAuto = RT_EXPORT_ONCE(NameGetterFn,
+                        "?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ");
+                    getAuto(self, &autoName);
+
+                    // The length words at data[-8], zero for a null String.
+                    const uint32_t lenRow  = row.name  ? RtSystem::StringLength(
+                                                 const_cast<char*>(row.name))  : 0;
+                    const uint32_t lenAuto = autoName ? RtSystem::StringLength(
+                                                 const_cast<char*>(autoName)) : 0;
+                    if (lenRow == lenAuto) {
+                        // An empty (or null) name short-circuits to "equal" and
+                        // StrCompare is never called — 0x1800c20a3..0x1800c20ac.
+                        skip = (row.name == nullptr) || (lenRow == 0) ||
+                               (strCmp(row.name, autoName) == 0);
+                    }
+                    RtSaveDetail::ReleaseStringSlot(&autoName);   // live: see above
+                }
+
+                if (!skip) {
+                    if (out.Call("Collection::Array<SaveInfo>::SetSize [0x1800332d0]",
+                                 (const void*)setSize,
+                                 reinterpret_cast<int64_t>(&self->_savesData),
+                                 self->_savesSize + 1,
+                                 reinterpret_cast<int64_t>(&row))) {
+                        setSize(&self->_savesData, self->_savesSize + 1, &row);
+                    }
+                }
+                rowDtor(&row);
+
+                ++i;
+                // Retail re-asks Persistence for the count EVERY iteration
+                // (0x1800c2117) rather than hoisting it: the worker thread owns
+                // that list and may still be appending to it.
+            } while (i < getCount(persistence));
+        }
+
+        // The sort. When a blank row is present it is at index 0 and is
+        // EXCLUDED from the range — see the comparator's note above.
+        {
+            uint8_t* base  = static_cast<uint8_t*>(out.ReadPtr(&self->_savesData));
+            int32_t  count = self->_savesSize;
+            if (self->_selectedIndex == -2) {
+                count -= 1;
+                base  += 0x58;
+            }
+            QsortFn      sortFn = RetailQsort();
+            ComparatorFn cmp    = SaveInfoComparator();
+            if (out.Call("qsort(saves, count, 0x58, cmp@0x1800c3db0)",
+                         (const void*)sortFn,
+                         reinterpret_cast<int64_t>(base), count, 0x58,
+                         reinterpret_cast<int64_t>(cmp))) {
+                sortFn(base, static_cast<size_t>(static_cast<int64_t>(count)), 0x58, cmp);
+            }
+        }
+
+        // Every row with no backing save inherits the placeholder sprite — the
+        // two qwords SetSaveSprite wrote at +0x60/+0x68. Retail RE-READS
+        // `_savesData` on every iteration (0x1800c2160); transcribed.
+        for (int32_t i = 0; i < self->_savesSize; ++i) {
+            uint8_t* row = static_cast<uint8_t*>(out.ReadPtr(&self->_savesData))
+                         + static_cast<int64_t>(i) * 0x58;
+            if (*reinterpret_cast<const int32_t*>(row + 0x40) < 0) {
+                out.U64(row + 0x00,
+                        *reinterpret_cast<const uint64_t*>(&self->_saveSprite.sheet),
+                        "row.thumbnail.sheet = _saveSprite.sheet");
+                out.U64(row + 0x08,
+                        *reinterpret_cast<const uint64_t*>(&self->_saveSprite.index),
+                        "row.thumbnail.index = _saveSprite.index");
+            }
+        }
+
+        out.U32(&self->field38, 0, "field38 = 0 (metadata cursor)");
+        out.U32(&self->_progress, 2, "_progress = 2");
+        return;
+    }
+
+    // ---- state 2 -----------------------------------------------------------
+    if (progress == 2) {
+        const int32_t count = self->_savesSize;
+        if (static_cast<int32_t>(out.ReadU32(&self->field38)) < count) {
+            uint8_t* base = static_cast<uint8_t*>(out.ReadPtr(&self->_savesData));
+            for (;;) {
+                const int32_t at = static_cast<int32_t>(out.ReadU32(&self->field38));
+                // saveIndex >= 0 -> a real save, stop here and load it.
+                // saveIndex <  0 -> the blank "new save" row; step over it.
+                if (*reinterpret_cast<const int32_t*>(
+                        base + static_cast<int64_t>(at) * 0x58 + 0x40) >= 0) break;
+                const int32_t next = at + 1;
+                out.U32(&self->field38, static_cast<uint32_t>(next),
+                        "field38 += 1 (skipping a row with no save)");
+                if (next >= count) break;
+            }
+        }
+
+        const int32_t at = static_cast<int32_t>(out.ReadU32(&self->field38));
+        if (at == count) {
+            out.U32(&self->_progress, 5, "_progress = 5 (list complete)");
+            return;
+        }
+
+        SaveInfo* row = SaveInfoAt(self, out, at);
+        BeginGetInfoFn begin = RT_EXPORT_ONCE(BeginGetInfoFn,
+            "?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z");
+        // `MOV R8D,0x2` — the same `2` UpdateLoadFromFile passes, spelled there
+        // as `LEA R8D,[RAX+0x2]` off a zeroed register.
+        if (out.Call("IO::Persistence::BeginGetSaveGameInfo", (const void*)begin,
+                     reinterpret_cast<int64_t>(persistence),
+                     reinterpret_cast<int64_t>(&row->name), 2)) {
+            begin(persistence, &row->name, 2);
+        }
+        out.U32(&self->_progress, 3, "_progress = 3");
+        return;
+    }
+
+    // ---- state 3 -----------------------------------------------------------
+    if (progress == 3) {
+        // The guard is INSIDE the state; the transition is not. See point 2.
+        if ((persistence[0x18] & 1) == 0 &&
+            *reinterpret_cast<const int32_t*>(persistence + 0x48) == 1) {
+            RtIo::SaveBlock block{};
+            SetupLoadFn setup = RT_EXPORT_ONCE(SetupLoadFn,
+                "?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ");
+            // `ADD RCX,0x28` — the EMBEDDED SavedState, not the heap one at
+            // +0x40 that UpdateSave allocates. Hidden return slot in RDX.
+            if (out.Call("Save::SavedState::SetupLoad [embedded, this+0x28]",
+                         (const void*)setup,
+                         reinterpret_cast<int64_t>(&self->_embeddedState),
+                         reinterpret_cast<int64_t>(&block))) {
+                setup(&self->_embeddedState, &block);
+            }
+
+            SaveInfo* row = SaveInfoAt(self, out,
+                                        static_cast<int32_t>(out.ReadU32(&self->field38)));
+            BeginLoadFn beginLoad = RT_EXPORT_ONCE(BeginLoadFn,
+                "?BeginLoad@Persistence@IO@@QEAA_NAEBVString@System@@HPEBUSaveBlock@12@@Z");
+            if (out.Call("IO::Persistence::BeginLoad", (const void*)beginLoad,
+                         reinterpret_cast<int64_t>(persistence),
+                         reinterpret_cast<int64_t>(&row->name), 1,
+                         reinterpret_cast<int64_t>(&block))) {
+                beginLoad(persistence, &row->name, 1, &block);
+            }
+        }
+        out.U32(&self->_progress, 4, "_progress = 4");
+        return;
+    }
+
+    // ---- state 4 -----------------------------------------------------------
+    if (progress == 4) {
+        const int32_t at  = static_cast<int32_t>(out.ReadU32(&self->field38));
+        SaveInfo*     row = SaveInfoAt(self, out, at);
+
+        if ((persistence[0x18] & 1) == 0 &&
+            *reinterpret_cast<const int32_t*>(persistence + 0x48) == 1) {
+            // --- the metadata arrived ---
+            const char* description = nullptr;
+            void*       pixels      = nullptr;
+            int         w = 0, h = 0, field44 = 0;
+
+            LoadMetaDataFn loadMeta = RT_EXPORT_ONCE(LoadMetaDataFn,
+                "?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$Array@UModInfo@SaveLoad@Save@@@Collection@@@Z");
+            if (out.Call("Save::SaveLoad::LoadMetaData (+3 stack args: &h, &field44, &row.mods)",
+                         (const void*)loadMeta,
+                         reinterpret_cast<int64_t>(self),
+                         reinterpret_cast<int64_t>(&description),
+                         reinterpret_cast<int64_t>(&pixels),
+                         reinterpret_cast<int64_t>(&w))) {
+                loadMeta(self, &description, &pixels, &w, &h, &field44, &row->modsData);
+            } else if (round != nullptr) {
+                // Everything below this point on this arm derives from
+                // LoadMetaData's out-params, which the suppressed call never
+                // filled. Predicting from zeroed locals would be a guaranteed
+                // false failure rather than a check — so the whole row is
+                // declared out of model and the predictions that follow are
+                // recorded for read-back only.
+                round->Exclude(row, 0x58,
+                               "state 4 success arm: every value is a suppressed "
+                               "LoadMetaData out-param");
+            }
+
+            SetThumbnailFn setThumb = SaveInfoSetThumbnail();
+            if (out.Call("SaveInfo::SetThumbnail [0x1800c3de0]", (const void*)setThumb,
+                         reinterpret_cast<int64_t>(row),
+                         reinterpret_cast<int64_t>(pixels), w, h)) {
+                setThumb(row, pixels, w, h);
+            }
+
+            // Retail RE-READS field38 and _savesData here (0x1800c22e8) rather
+            // than reusing `row`: SetThumbnail can run arbitrary code.
+            SaveInfo* row2 = SaveInfoAt(self, out,
+                                         static_cast<int32_t>(out.ReadU32(&self->field38)));
+            if (row2->description != description) {
+                ReleaseStringSlotSink(&row2->description, out, "row.description release");
+                RetainIntoSink(&row2->description, description, out,
+                               "row.description = LoadMetaData out-param 1");
+            }
+            SaveInfo* row3 = SaveInfoAt(self, out,
+                                         static_cast<int32_t>(out.ReadU32(&self->field38)));
+            out.U32(&row3->field44, static_cast<uint32_t>(field44),
+                    "row.field44 = LoadMetaData out-param 6");
+
+            // The by-value String LoadMetaData filled is ours to drop.
+            ReleaseStringSlotSink(&description, out, "LoadMetaData description temporary");
+        } else {
+            // --- no metadata: empty description and a black thumbnail ---
+            const char* empty = nullptr;
+            StringSetFn strSet = RT_EXPORT_ONCE(StringSetFn,
+                "?Set@String@System@@QEAAXPEBD@Z");
+            // `LEA RDX,[0x1801551f0]` — the DLL's own "" literal. Our "" is a
+            // different pointer with the same contents, and Set copies the
+            // characters, so the resulting String is identical.
+            if (out.Call("System::String::Set(\"\")", (const void*)strSet,
+                         reinterpret_cast<int64_t>(&empty),
+                         reinterpret_cast<int64_t>(""))) {
+                strSet(&empty, "");
+            }
+
+            SaveInfo* row2 = SaveInfoAt(self, out,
+                                         static_cast<int32_t>(out.ReadU32(&self->field38)));
+            if (round != nullptr) {
+                // String::Set is suppressed above, so `empty` is still null and
+                // the value we are about to predict for row.description is null
+                // — while retail leaves a real, freshly allocated empty String.
+                // That is not a defect to report, it is a consequence of the
+                // suppression, so the slot is declared out of model rather than
+                // compared. The refcount write on the OLD description is left
+                // comparable: both sides decrement the same word by one.
+                round->Exclude(&row2->description, sizeof(void*),
+                               "row.description — System::String::Set is suppressed");
+            }
+            if (row2->description != empty) {
+                ReleaseStringSlotSink(&row2->description, out, "row.description release");
+                RetainIntoSink(&row2->description, empty, out, "row.description = \"\"");
+            }
+            ReleaseStringSlotSink(&empty, out, "empty-String temporary");
+
+            SaveInfo* row3 = SaveInfoAt(self, out,
+                                         static_cast<int32_t>(out.ReadU32(&self->field38)));
+            out.U32(&row3->field44, 0, "row.field44 = 0");
+
+            // Three independent reads of the sprite dimensions — see point 5.
+            int32_t w1 = 0, h1 = 0;
+            SaveSpriteDims(self, &w1, &h1);
+            // `IMUL EAX,R9D` then `MOVSXD RCX,EAX` then `SHL RCX,2`: the
+            // product is computed in 32 bits and SIGN-extended before scaling.
+            const int64_t bytes = static_cast<int64_t>(static_cast<int32_t>(h1 * w1)) << 2;
+            void* pixels = nullptr;
+            if (out.Call("System::MemoryAllocator::MemAlloc (black thumbnail)",
+                         (const void*)&MemAlloc, bytes, 4)) {
+                pixels = MemAlloc(static_cast<uint64_t>(bytes), 4);
+            }
+
+            int32_t w2 = 0, h2 = 0;
+            SaveSpriteDims(self, &w2, &h2);
+            const int64_t bytes2 = static_cast<int64_t>(static_cast<int32_t>(h2 * w2)) << 2;
+            if (pixels != nullptr) {
+                // 0x1800881b0 is the DLL's own memset, called with (p, 0, n).
+                // Spelled as memset rather than resolved by address for the
+                // reason UpdateSave spells FUN_180032320 out: there is nothing
+                // an address door would buy over the identical operation.
+                std::memset(pixels, 0, static_cast<size_t>(bytes2));
+            }
+
+            int32_t w3 = 0, h3 = 0;
+            SaveSpriteDims(self, &w3, &h3);
+            SaveInfo* row4 = SaveInfoAt(self, out,
+                                         static_cast<int32_t>(out.ReadU32(&self->field38)));
+            SetThumbnailFn setThumb = SaveInfoSetThumbnail();
+            if (out.Call("SaveInfo::SetThumbnail [0x1800c3de0] (black)",
+                         (const void*)setThumb,
+                         reinterpret_cast<int64_t>(row4),
+                         reinterpret_cast<int64_t>(pixels), w3, h3)) {
+                setThumb(row4, pixels, w3, h3);
+            } else if (round != nullptr) {
+                round->Exclude(reinterpret_cast<uint8_t*>(row4) + 0x18, 0x18,
+                               "SetThumbnail writes imageBuffer/w/h/pixels; the "
+                               "MemAlloc address is not predictable either");
+            }
+        }
+
+        out.U32(&self->field38, out.ReadU32(&self->field38) + 1,
+                "field38 += 1 (next row)");
+        out.U32(&self->_progress, 2, "_progress = 2");
+        return;
+    }
+
+    // ---- state 5 -----------------------------------------------------------
+    if (progress == 5) {
+        // The minimum-operation-time gate, the same one UpdateSave has and
+        // UpdateDelete/UpdateLoadFromFile do not: `CMP [RCX+8],RAX / JLE`.
+        if (self->_elapsed <= self->_minOperationTime) return;
+
+        // Retail's store order at 0x1800c2519..0x1800c2532 — operation,
+        // elapsed, progress, selectedIndex. Same as UpdateLoadFromFile's,
+        // NOT UpdateDelete's.
+        out.U32(&self->_operation, 0, "_operation = kOpNone");
+        out.U64(&self->_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
+        out.U32(&self->_progress, 0, "_progress = 0");
+        out.U32(&self->_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
+    }
+}
+
 }  // namespace
 
 // ============================================================================
@@ -855,6 +1577,21 @@ void RtSave_SaveLoad_UpdateSave(SaveLoad* self) {
     UpdateSaveBody(self, live, nullptr);
 }
 
+void RtSave_SaveLoad_UpdateList(SaveLoad* self) {
+    RT_PREDICT_SITE("Save::SaveLoad::UpdateList");
+    if (RT_PREDICT_ON) {
+        RT_PREDICT_ROUND(round) {
+            round.Watch(self, sizeof(SaveLoad), "Save::SaveLoad");
+            UpdateListBody(self, round.sink(), &round);
+            using Fn = void (*)(SaveLoad*);
+            RT_ORIGINAL_ONCE(Fn, "?UpdateList@SaveLoad@Save@@QEAAXXZ")(self);
+        }
+        return;
+    }
+    RtSink live;
+    UpdateListBody(self, live, nullptr);
+}
+
 // ============================================================================
 // Registration. Both doors, for the reason saveload.cpp's own registration
 // block states: a name door alone is one typo away from resolving NULL in
@@ -878,5 +1615,8 @@ int RtSaveLoadUpdateRegister() {
     RegisterRuntimeExport("?UpdateSave@SaveLoad@Save@@QEAAXXZ",
                           (void*)&RtSave_SaveLoad_UpdateSave); ++n;
     RegisterRuntimeAddr(0x1800c2a80, (void*)&RtSave_SaveLoad_UpdateSave);
+    RegisterRuntimeExport("?UpdateList@SaveLoad@Save@@QEAAXXZ",
+                          (void*)&RtSave_SaveLoad_UpdateList); ++n;
+    RegisterRuntimeAddr(0x1800c1ea0, (void*)&RtSave_SaveLoad_UpdateList);
     return n;
 }

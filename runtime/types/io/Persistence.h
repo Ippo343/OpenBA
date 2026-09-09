@@ -123,4 +123,34 @@ static_assert(offsetof(SaveBlock, size) == 0x08, "SaveBlock.size @ 0x08");
 static_assert(offsetof(SaveBlock, id)   == 0x0c, "SaveBlock.id @ 0x0c");
 static_assert(sizeof(SaveBlock) == 0x10, "sizeof(IO::Persistence::SaveBlock) == 0x10");
 
+// ============================================================================
+// IO::Persistence::SaveGameInfo — 0x10 bytes, RETURNED BY VALUE.
+// ----------------------------------------------------------------------------
+// The NAME is not a guess: `?GetSaveInfo@Persistence@IO@@QEBA?AUSaveGameInfo@12@H@Z`
+// (retail 0x1800b7bd0, ordinal 2888) spells it in full, and `?A` says the
+// return is by value — so the real ABI is
+// `GetSaveInfo(this, SaveGameInfo* hiddenSlot, int index)` with the index in
+// R8D, which is what 0x1800c1fe3..0x1800c1fed does register for register.
+// A typedef that omits that slot is a wild write that still returns the right
+// answer (reference_hidden_retslot_wild_write.md).
+//
+// BOTH FIELDS ARE PINNED BY ONE READER, ?UpdateList@SaveLoad@Save@@ state 1:
+//   +0x00  1800c1ff5  MOV RCX,[RAX]    -> copied into SaveInfo+0x30, which the
+//                     qsort comparator at 0x1800c3db0 then compares UNSIGNED
+//                     and orders descending. Named `sortKey` for what it is
+//                     used as; see the SaveInfo banner in ../save/SaveLoad.h.
+//   +0x08  1800c202b  MOV RAX,[R15+8]  -> refcount-assigned into SaveInfo+0x38,
+//                     the display name. That it is a System::String is settled
+//                     by the caller destroying it with the refcount idiom at
+//                     0x1800c203b once it has copied it out.
+// Nothing reads past +0x10, and the caller's by-value temporary destructor
+// touches only +0x08, so 0x10 is the whole struct.
+// ============================================================================
+struct SaveGameInfo {
+    uint64_t         sortKey;  // +0x00
+    RtSystem::String name;     // +0x08
+};
+static_assert(offsetof(SaveGameInfo, name) == 0x08, "SaveGameInfo.name @ 0x08");
+static_assert(sizeof(SaveGameInfo) == 0x10, "sizeof(IO::Persistence::SaveGameInfo) == 0x10");
+
 }  // namespace RtIo
