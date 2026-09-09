@@ -1,5 +1,20 @@
 # Wave 10C — the nine remaining UI rows, and the debts behind them
 
+> ## ✅ CLOSED 2026-09-09 — **UI 177 / 184 = 96.2%** (from 95.0%), and all five UI vtables at `TRAP= 0`
+> Four lanes, all merged. Integration verified on the merged tip that no lane
+> ever built: clean boot, `[Shutdown] done`, **0-byte crash log**, the modal
+> twin-subject self-test still `round0 mismatches=0, controls caught=3/3 → PASS`,
+> and every new `BANISHED_*` switch silent when unset. Debug green; release green
+> from a genuine `make clean` first.
+>
+> **The 27 abort traps lane UIDATA counted are ZERO.** Three vtables promoted;
+> two green and deliberately unpromoted, each for a *separately derived* reason.
+>
+> Seven UI rows remain — one is `??_7Dialog`, one `??_7DialogController`, one
+> `?_typeInfo@DialogController@`, and **four are `BeginToolTip`'s callees**, which
+> entered this wave as the honest price of resolving by name.
+
+
 **Opened 2026-09-09 on `wave10/base` @ `e868337`**, straight off Wave 10B's
 close. Four lanes.
 
@@ -184,6 +199,56 @@ in retail, in the exe and in our tree, classified as a POINTER consumer or a
 CONTENT consumer. One pointer consumer changes the verdict for all twelve rows;
 zero retires the question permanently. Either way the screen gets a
 pointer-identity check with a **negative control proving it can fail**.
+
+### ROUTES — ✅ three debts closed, one named, and a GATE THAT WAS NEVER A CONTROL
+
+| debt | before | after | verdict |
+|---|---|---|---|
+| `??_7DialogController` attendance | 0 | **17 → 51** | route FOUND; row still not promoted |
+| `?Update@Element@` | *no counter existed* | **541** | was LIVE all along; still no replay oracle |
+| `?Persist@Element@` | unmeasured | **0** | a real zero now |
+| `?OnOpened@` settings half | `noBuffer 3/3` | `noBuffer 5/5` | no route; blocker named exactly |
+| `?Serialize@SpriteSheet@` | `calls=0` | **7151 emissions, 24 compared, 0 diverged** | **VERIFIED** |
+
+**The recorded reason for holding `??_7DialogController` was wrong twice over.**
+Lane DLGV's diagnosis — "nothing constructs an object holding the RUNTIME BASE
+table" — is true, but does not imply the conclusion: a derived vtable **copies**
+the base entry for every virtual it does not override, and `destroyui.cpp:547`
+says exactly that about retail's own table, three files away. The real cause was
+**ours**: all 27 standalone subclass vtables replace those inherited entries with
+a file-local `StubNop`. Wiring slots 5/6/10 back took attendance to 17, then 51.
+
+**And satisfying the gate revealed the gate was never a control for the row.**
+That attendance counter measures the nine *bodies*, which are registered
+unconditionally — body entry never depended on the row at all. The row's only
+consumer is `dialog.cpp:1227` inside the ported base destructor, which no
+subclass in `code/Game/Dialog/` ever calls. A/B with the row armed: attendance
+identical at 17, whole-log frequency diff exactly two non-timing lines, both
+`[RtMint] ROW ON`. So the row stays off — for a **third** reason, correctly
+derived this time. Same family as
+`reference_control_must_pick_a_compared_subject`.
+
+**Two published `calls=0` readings meant OPPOSITE things.** Element's was the
+*absence of a site* — the only matching site is a byte pin whose `calls` counts
+the boot hash check. SpriteSheet's was real: the same run's oracle made 22
+comparisons on other bodies. `WAVE10B_LANE_ELEM.md` §6 corrected in place, at
+lane ELEM's own request. A fifth distinct cause of `calls=0`, on top of the four
+already recorded.
+
+**The SpriteSheet oracle's first reading was an artefact**: `theirs = 14302` is
+exactly `2 × 7151`. A side-swap control showed the doubling follows the
+*arrangement*, not the port — the ported body carries its own probe block and
+re-enters the oracle when placed on the `ours` side. Swapped is now the default;
+`=naive` reproduces the artefact on demand.
+
+**Scope handed on, not taken** (the lane was told not to port): make the 27
+subclass vtables reproduce retail's inherited slots by default (provably
+behaviour-preserving for 5/6/10), and find an entity whose `.rsc` UIDescription
+declares controllers — `uidescription.cpp:206` gates the UIComponent on
+`+0x20 > 0`, and founding houses declare none, proven by a component dump naming
+all 19.
+
+The original framing:
 
 ### ROUTES — a body nobody enters reads exactly like a body that is absent
 
