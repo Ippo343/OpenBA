@@ -566,7 +566,7 @@ void* Ctor_VideoConfiguration(void* self) {
 //   MOV qword ptr [0x1801fc678],RCX   ; _singleton  <-- BEFORE the next three
 //   MOV qword [RCX],R8                ; +0x00
 //   MOV qword [RCX+0x8],RDX           ; +0x08 = the ctor's argument
-//   MOV word  [RCX+0x10],0x100        ; _stateLow = 0, _running = 1
+//   MOV word  [RCX+0x10],0x100        ; _cursorEnabled = 0, _running = 1
 //
 // THE SINGLETON STORE IS NOT LAST. It sits between the +0x28 store and the
 // +0x00 store, and the order is preserved here rather than tidied to the end,

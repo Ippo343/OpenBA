@@ -19,6 +19,8 @@ void RtApp_Quit(Application* self);
 bool RtApp_PlatformUpdate(Application* self);
 void RtApp_SleepThread(Application* self, int ms);
 void RtApp_YieldToThreads(Application* self);
+void RtApp_EnableCursor(Application* self, bool enabled);
+bool RtApp_LaunchProcess(Application* self, const char* cmd, bool wait);
 
 void RtApplicationPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_APP")) {
@@ -41,6 +43,13 @@ void RtApplicationPortInit() {
 
     RegisterRuntimeExport("?YieldToThreads@Application@1@QEAAXXZ", (void*)&RtApp_YieldToThreads); ++n;
     RegisterRuntimeAddr(0x18009f920, (void*)&RtApp_YieldToThreads);
+
+    // Wave 12 lane C.
+    RegisterRuntimeExport("?EnableCursor@Application@1@QEAAX_N@Z", (void*)&RtApp_EnableCursor); ++n;
+    RegisterRuntimeAddr(0x18009f800, (void*)&RtApp_EnableCursor);
+
+    RegisterRuntimeExport("?LaunchProcess@Application@1@QEAA_NPEBD_N@Z", (void*)&RtApp_LaunchProcess); ++n;
+    RegisterRuntimeAddr(0x18009f5e0, (void*)&RtApp_LaunchProcess);
 
     // ?_singleton@Application@1@0PEAV11@EA @ 0x1801fc678 — a DATA export, not
     // a function; the seam maps names to functions, so it cannot be
