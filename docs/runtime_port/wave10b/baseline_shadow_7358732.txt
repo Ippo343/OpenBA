@@ -1,0 +1,1680 @@
+[Standalone] Banished Reimplementation - Standalone EXE
+[Standalone] Build: Sep  9 2026 00:50:23
+[StartupInfo] dwFlags=0x00000100 USESHOWWINDOW=0 wShowWindow=0 (SW_HIDE)
+[VideoReg AT-BOOT]   VideoSettings      = "false" (type 1)
+[VideoReg AT-BOOT]   VideoInterface     = "1" (type 1)
+[VideoReg AT-BOOT]   VideoFullscreen    = "false" (type 1)
+[VideoReg AT-BOOT]   VideoWidth         = "2560" (type 1)
+[VideoReg AT-BOOT]   VideoHeight        = "1440" (type 1)
+[VideoReg AT-BOOT]   VideoWindowX       = "2497" (type 1)
+[VideoReg AT-BOOT]   VideoWindowY       = "27" (type 1)
+[VideoReg AT-BOOT]   VideoWindowWidth   = "2560" (type 1)
+[VideoReg AT-BOOT]   VideoWindowHeight  = "1377" (type 1)
+[Standalone] Resolving DLLs...
+[Resolve-Standalone] Standalone-EXE: base=0x7ff6868d0000 preferred=0x140000000 delta=+0
+[Resolve-Standalone] Runtime-x64.dll: base=0x7ffca5d40000 preferred=0x180000000 delta=+140716648169472
+[Resolve-Standalone] VideoDX11-x64.dll: not loaded
+[Resolve-Standalone] Address registry: 4 entries
+[Standalone] Hooked Runtime-x64.dll!user32!MessageBoxW (real=00007ffcf93892a0)
+[WinTrace] hooked Runtime!user32!SetWindowPos (real=00007ffcf93459c0)
+[WinTrace] hooked Runtime!user32!ShowWindow (real=00007ffcf9345a20)
+[RtMathPortInit] Lane 1 (Scalar/Vector2/Vector3/Vector4): 32 exports registered
+[RtMathPortInit] Wave 9 lane P: 2 exports registered (Quaternion::Lerp, Transform::AsTransform3)
+[RtMathPortInit] Wave 9 lane GFXR: 1 exports registered (Matrix::Inverse)
+[RtVolume] 12 exports registered (Box x5, Rectangle x1, Frustum x6)
+[RtPort]   System::String: 22 exports registered
+[RtPort]   System::Filename: 11 exports registered
+[RtPort] System: 87 exports registered
+[RtPort]   Object::Internal: 8 exports registered
+[RtPort]   External: 12 exports (Clean/FindOrLoad/SerializeReferenceTable/SaveText deliberately NOT ported -- see docs/runtime_port/WAVE3_LANE_C.md)
+[ResSet] registered 13 doors (12 Set bodies + Clean by name and address, resource-tree-instantiation=0x18002xxx, probe=off)
+[ResPath] registered 4 doors + 4 addresses (detour=off negctl=0)
+[ResFind] registered 1 door + 1 address (detour=off negctl=0)
+[RtIO/Serializer] 22 exports registered, all 22 retail bodies verified (ReaderWriter vtable slots match the DLL's own tail-jumps)
+[RtPort]   IO::CompressedMemoryStream: 10 exports registered (SAVE PATH ONLY -- a plain autostart session never reaches them; needs a save or a load, see WAVE4_LANE_B.md)
+[RtPort] IO::Persistence: 5/7 exports registered here; ReadSettings + WriteSettings + Registry::Registry are registered by persistence_registry_win.cpp
+[RtPort]   IO::FileSystem/Modification: 6 exports registered
+[RtPort]   IO::FileSystem find/exists: 3 exports registered
+[RtPort]   IO::FileSystem open/read (lane PKG2 rung 3): 4 exports registered
+[RtPort]   IO::Modification (lane MOD): 5 exports + 14 addresses
+[RtPort]   IO::Modification::RefreshList (lane MOD2): 3 exports + 8 addresses
+[RtPort] IO: 186 exports registered
+[RtPort] Achievement::Goal: 13/15 exports registered here (+2 in goal_serialize.cpp: Goal::Serialize, GoalInstance::Persist)
+[RtPort]   Achievement::AchievementManager/Instance/Achievement: 21/23 exports registered (AchievementManager::Persist and Achievement::Serialize held back -- both construct an IO::Serializer, which has no runnable oracle; see WAVE5_LANE_B.md)
+[RtPort] Achievement: 36 exports registered
+[RtPort] Save: 16 exports registered
+[RtPort] Picking: 9 exports + 19 grid addresses registered
+[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C): 29 exports registered
+[LaneEVM] mode/refresh sort addresses registered=5
+[RtPort] Video: 133 exports registered
+[RtPort] Graphics::SunLight (lane GFX2): 3 exports registered
+[RtPort] Graphics: 67 exports + 6 grid addresses registered
+[RtPort] Wave 9 lane GFXD: 4 exports + 11 addresses registered
+[RtPort]   WAVE9 LANE UID ARMED -- ~DialogInstance (0x180114d40) + LinkedList::Clear (0x1800325f0) + the Array<8>::SetSize address door (0x18002fca0). Shape oracles report under BANISHED_RT_DIFF=1; read the [negative control] line first.
+[RtPort] UI widgets(layout): 27 exports registered
+[RtPort] UI: 165 exports registered
+[RtPort]   Engine loop family (lane A): 12 exports registered (LoadResources held back -- no oracle, see WAVE8_LANE_A.md)
+[RtPort]   Engine::Engine + MainLoop (lane B): 3 exports registered (2 held back: both detour-required, plus _singleton which is DATA -- see WAVE8_LANE_B.md; Run is NO LONGER among them, see lane ADDR below)
+[RtPort]   MainLoop::Run + Update (lane ADDR): 2 exports registered (Run closes the ADDRESS door at game_main.cpp:176 and opens two NAME doors -- Input::Device::Update and MainLoop::Frame; Run has NO ORACLE by construction -- see WAVE9_LANE_ADDR.md)
+[RtPort]   Engine lifecycle (lane ENG): 8 exports registered (ctor/dtor/Startup/Shutdown + 4 helpers; Shutdown is UNVERIFIED, calls=0 by construction -- see WAVE9_LANE_ENG.md)
+[RtPort]   MainLoop device-lost pair (lane VIDL): 2 exports registered (OnVideoError + OnVideoRestart, plus Array<VideoResource>::SetSize 0x18004f620 and elem-destroy 0x180034440 by ADDRESS; OnVideoRestart OPENS THREE NAME DOORS -- Load@External, GetCompiledPath@ExternalFactory, OnVideoRestart@SaveLoad -- see WAVE9_LANE_VIDL.md §2)
+[RtPort] Engine: 27 exports registered
+[RtPort] Audio: 22 exports registered (WAVE8_LANE_C.md for Wave 8's set, audio.cpp's header for the four that moved in Wave 8.5 and for Wave 9 lane W's FindFree3DEffect; the held-back set is listed in audio.cpp, not counted here)
+[RtPort] Input: 31 exports registered (lane INPUT: +2 KeyMap doors, +5 Set<E24> AVL addresses; lane ENGIO: +4 Device::Update bodies)
+[RtPort] Application: 17 exports registered
+[RtPort] Utility: 2 exports registered
+[RtPort]   Collection::Set AVL: 4 addresses registered
+[RtPort]   Collection::Set Clear: 3 addresses registered
+[RtPort]   Collection keyed Set/Map + sort (lane COLL): 24 + 3 + 2 addresses registered
+[RtPort]   Collection::Array destroy (lane DESTROY): 0x180026b50 registered, built Sep  8 2026 23:56:43
+[RtDelDtor] 37 deleting destructors registered (one body, 37 rows); ~Class resolves lazily
+[RtPort] Wave9 lane X (singleton ctors): 15 exports registered
+[RtPort] runtime registry: 913 exports, 917 addrs, 2 ordinals
+[RtMint] seeded 2 storage row(s) with a known constant value
+[RtMint] promoted 10 minted DATA row(s) -- live on every run
+[RtMint] minted 55 vtables (527 slots: 203 ported, 176 unported-trap, 148 purecall-trap), 104 BaseTypeInfo, 38 storage symbols (11328 bytes)
+[RtMint] 15 of 55 vtables are COMPLETE (every non-purecall slot is our port); registration is off (set BANISHED_RT_MINT=1 to go live)
+
+[RtMintShadow] ==== phase=init  DLL=present (oracle live) ====
+[RtMintShadow] INFO ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A.typeId: minted 0x96f8b310, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A.typeId: minted 0x709f0d32, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@AnimatedImageDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x94ee6491, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@AnimatedImageElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x3271975d, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A.typeId: minted 0x5bf7aee4, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A.typeId: minted 0x99a746df, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A.typeId: minted 0xac325696, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@BorderDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xa86bf867, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xe6faeb54, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ButtonDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x78fd8f20, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x5310bda4, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xf49dae05, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xa59314b7, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x1039fdd3, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ClipRegionDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xb3f27e13, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x352b9ada, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@CollisionMesh@Collision2D@@0VBaseTypeInfo@Object@@A.typeId: minted 0x99753590, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ComboDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x93056daf, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ComboDialog@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x4c55fddf, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xd358ef47, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A.typeId: minted 0xae5b8f65, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x6b46c172, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xcd48b14b, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@Cursor@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x31c7f810, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x4fcc106b, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xf2c192b8, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xb77e0eb9, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xbe12e2eb, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@DocumentTextDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xec3779bb, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x11416aad, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A.typeId: minted 0x78e68d30, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@EditDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xc9022aa3, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x006931e0, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x8d4a19a7, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x42f6a818, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ExtensionCompiler@Object@@0VBaseTypeInfo@2@A.typeId: minted 0x5704555c, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A.typeId: minted 0xe771f47f, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ExternalCompiler@Object@@0VBaseTypeInfo@2@A.typeId: minted 0xe732827d, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A.typeId: minted 0xb9f9bd84, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xe3d8954e, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A.typeId: minted 0x741792d4, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A.typeId: minted 0xa1af3cd9, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A.typeId: minted 0xf50a1ddf, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A.typeId: minted 0x9c8c89cc, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@GraphDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xe28e0152, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xe4db189c, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A.typeId: minted 0xe61c2ffe, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@GroupDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x8a72943e, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@GroupElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x8ced93cd, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A.typeId: minted 0x84e6f2dd, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ImageDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xfdd24e9a, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x35413056, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A.typeId: minted 0xde23506d, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@LabelDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xf0cbd6ea, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x4f8656b9, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x4f976fb7, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@LayoutElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x21465073, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x2de80b80, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x2475ec1a, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A.typeId: minted 0x418398a4, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A.typeId: minted 0x2ebeed54, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@NumberDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xfb8de193, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@NumberEditDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x745a1bb8, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x25a24564, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x1c54106e, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A.typeId: minted 0x3c81c678, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@PageDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xe7d69af7, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@PageElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x98ffe1f8, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A.typeId: minted 0x2a5dc6da, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A.typeId: minted 0xf00915c5, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A.typeId: minted 0x9c2301f9, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A.typeId: minted 0xd91ccdf1, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A.typeId: minted 0x3bc4d9a5, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ProgressDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xb1403226, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x4c63b522, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@RadioDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x65d6876c, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@RadioElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xe3cf1747, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A.typeId: minted 0x6ab5f8fc, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A.typeId: minted 0x779102e5, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@RibbonDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x35c17fb8, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x82c11d31, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ScrollDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x9bdfebbb, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x1c6afffa, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ShaderProgram@Video@@0VBaseTypeInfo@Object@@A.typeId: minted 0x5648ad42, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@SliderDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x6c7bbf56, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xda677e92, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A.typeId: minted 0x15b34526, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A.typeId: minted 0x58171cb6, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xeca6998f, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x26681eb1, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xd56baba8, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x1821d6a5, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xc03519e4, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A.typeId: minted 0x20b1860c, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x2bcb883f, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x7e8fcdd2, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xef9a5ee5, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xc7980309, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0xc974f55b, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x1a20cede, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A.typeId: minted 0x175c6265, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A.typeId: minted 0x48b28673, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A.typeId: minted 0x2515acc5, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] INFO ?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A.typeId: minted 0x7319bd9d, DLL still holds the ctor sentinel at phase=init (its Factory::Startup has not run) -- NOT compared
+[RtMintShadow] storage (unexported @0x1801fc6d0)                             8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (IO::Modification's loaded-DLL HMODULE slot, UNEXPORTED - code/Game/Game/game_main.cpp FreeLibrary's it at shutdown)
+[RtMintShadow] storage ?_errorString@Error@System@@0PADA                    8192 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (char[0x2000] -- the error text BUFFER; PAD in the mangling is MSVC's array-as-pointer encoding, see ?SetText@ 0x1800c5fa0)
+[RtMintShadow] storage ?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA           8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (IndexBuffer* -- head of the live-index-buffer list)
+[RtMintShadow] storage ?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA          8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (VertexBuffer* -- head of the live-vertex-buffer list)
+[RtMintShadow] storage ?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA    8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (RenderBuffer* -- head of the live-render-buffer list)
+[RtMintShadow] storage ?_firstSurface@ImageBuffer@Video@@0PEAV12@EA          8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (ImageBuffer* -- head of the live-surface list (Video_ImageBuffer_PlatformConstruct))
+[RtMintShadow] storage ?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA       8 bytes  DLL=WRITTEN  minted=written  ctor=0x1801477b0 (+103 more)  (BaseTypeInfo* — head of the reflection chain)
+[RtMintShadow] storage ?_frameIndex@ParticleInstance@Graphics@@1HA           4 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (int)
+[RtMintShadow] storage ?_hideDisplay@Error@System@@0_NA                      1 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (bool -- suppresses the Error message box)
+[RtMintShadow]   FIRST-NONZERO ?_loader@LoaderLoop@Engine@@1VLoader@2@A: DLL byte +0x0 = 08 7a e9 a5 fc 7f 00 00
+[RtMintShadow] storage ?_loader@LoaderLoop@Engine@@1VLoader@2@A             56 bytes  DLL=WRITTEN  minted=zero  ctor=0x180148fe0  (Engine::Loader OBJECT, CONSTRUCTED at load — reproduced by ConstructLoader())
+[RtMintShadow]   FIRST-NONZERO ?_rng@Particle@Graphics@@1VRandom@System@@A: DLL byte +0x4 = 70 50 a1 6a 96 35 c8 44
+[RtMintShadow] storage ?_rng@Particle@Graphics@@1VRandom@System@@A          2500 bytes  DLL=WRITTEN  minted=zero  ctor=0x180149650  (System::Random OBJECT (MT19937), SEEDED FROM time() at load by 0x180149650)
+[RtMintShadow] storage ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA         1 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (bool)
+[RtMintShadow] storage ?_secondsPerTick@Timer@System@@0NA                    8 bytes  DLL=still zero  minted=written  ctor=none (plain BSS)  (double)
+[RtMintShadow] storage ?_singleton@AchievementManager@Achievement@@0PEAV12@EA  8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@AnimationManager@Graphics@@0PEAV12@EA     8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Application@1@0PEAV11@EA                  8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Configuration@Audio@@0PEAV12@EA           8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Configuration@Input@@0PEAV12@EA           8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Configuration@System@@0PEAV12@EA          8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Configuration@Video@@0PEAV12@EA           8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Device@Audio@@0PEAV12@EA                  8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Device@Input@@0PEAV12@EA                  8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Device@Video@@0PEAV12@EA                  8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Engine@1@0PEAV11@EA                       8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@ExternalFactory@Object@@0PEAV12@EA        8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Factory@Object@@0PEAV12@EA                8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@FileSystem@IO@@0PEAV12@EA                 8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@InternalFactory@Object@@0PEAV12@EA        8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@MainLoop@Engine@@1PEAV12@EA               8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@MemoryAllocator@System@@0PEAV12@EA        8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Modification@IO@@2PEAV12@EA               8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Persistence@IO@@0PEAV12@EA                8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@SaveLoad@Save@@0PEAV12@EA                 8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_stopApplication@Error@System@@0_NA                  1 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (bool -- Display() aborts the process when this is set)
+[RtMintShadow] storage ?_systemInitialTick@Timer@System@@0_JA                8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (int64)
+[RtMintShadow] storage ?_systemSecondsPerTick@Timer@System@@0NA              8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (double -- the QPF reciprocal; sibling of ?_secondsPerTick above)
+[RtMintShadow] storage ?_systemTicksPerSecond@Timer@System@@0_JA             8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (int64)
+[RtMintShadow] storage ?_ticksPerSecond@Timer@System@@0_JA                   8 bytes  DLL=still zero  minted=written  ctor=none (plain BSS)  (int64)
+
+[RtMintShadow] ---- per-vtable readiness ----
+[RtMintShadow] READY = every non-purecall slot is our port, so registering
+[RtMintShadow] this row hands callers a table with no abort-trap in it.
+[RtMintShadow]   BLOCKED  (unexported @0x1801554a8)                            slots= 5 ported= 2 TRAP= 3 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81e0
+[RtMintShadow]              TRAP slot  1  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81d0
+[RtMintShadow]              TRAP slot  2  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81c0
+[RtMintShadow]   BLOCKED  (unexported @0x180155860)                            slots= 2 ported= 1 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800b7260
+[RtMintShadow]   BLOCKED  (unexported @0x180157c60)                            slots= 7 ported= 0 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050200
+[RtMintShadow]              TRAP slot  1  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501f0
+[RtMintShadow]              TRAP slot  2  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501c0
+[RtMintShadow]              TRAP slot  3  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050210
+[RtMintShadow]              TRAP slot  4  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501d0
+[RtMintShadow]              TRAP slot  5  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050220
+[RtMintShadow]              TRAP slot  6  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050230
+[RtMintShadow]   BLOCKED  ??_7Achievement@0@6B@                                slots= 9 ported= 3 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@Achievement@1@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Achievement@1@UEBAIXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@Achievement@1@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@Achievement@1@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@Achievement@1@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7AchievementInstance@Achievement@@6B@             slots= 4 ported= 1 TRAP= 3 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@AchievementInstance@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@AchievementInstance@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?Persist@AchievementInstance@Achievement@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7AnimationEvent@Graphics@@6B@                     slots= 9 ported= 2 TRAP= 2 purecall= 5
+[RtMintShadow]              TRAP slot  1  ?TypeName@AnimationEvent@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@AnimationEvent@Graphics@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7Base@Object@@6B@                                 slots= 3 ported= 1 TRAP= 1 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Type@Base@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7BinaryReader@IO@@6B@                             slots=26 ported=25 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023a10
+[RtMintShadow]   READY    ??_7BinaryWriter@IO@@6B@                             slots=26 ported=26 TRAP= 0 purecall= 0
+[RtMintShadow]   BLOCKED  ??_7CompiledExternal@Object@@6B@                     slots= 8 ported= 2 TRAP= 2 purecall= 4
+[RtMintShadow]              TRAP slot  1  ?TypeName@CompiledExternal@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@CompiledExternal@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7CompressedMemoryStream@IO@@6B@                   slots= 9 ported= 3 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]              TRAP slot  2  ?Write@CompressedStream@IO@@UEAA_NHPEBX@Z
+[RtMintShadow]              TRAP slot  4  ?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z
+[RtMintShadow]              TRAP slot  5  ?GetCurrentPos@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  6  ?GetSize@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  8  ?PreCommit@CompressedMemoryStream@IO@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7CompressedStream@IO@@6B@                         slots= 9 ported= 1 TRAP= 8 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023fd0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]              TRAP slot  2  ?Write@CompressedStream@IO@@UEAA_NHPEBX@Z
+[RtMintShadow]              TRAP slot  4  ?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z
+[RtMintShadow]              TRAP slot  5  ?GetCurrentPos@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  6  ?GetSize@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  7  ?Close@CompressedStream@IO@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?PreCommit@CompressedStream@IO@@UEAAXXZ
+[RtMintShadow]   READY    ??_7ConstantBufferData@Video@@6B@                    slots= 4 ported= 1 TRAP= 0 purecall= 3
+[RtMintShadow]   READY    ??_7ContextData@Video@@6B@                           slots=20 ported= 1 TRAP= 0 purecall=19
+[RtMintShadow]   READY    ??_7DeviceData@Video@@6B@                            slots=20 ported= 1 TRAP= 0 purecall=19
+[RtMintShadow]   BLOCKED  ??_7DialogController@UI@@6B@                         slots=11 ported= 2 TRAP= 9 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@DialogController@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@DialogController@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?OnCreated@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  5  ?OnOpened@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?OnClosed@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?OnUpdateLayout@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?OnUpdate@DialogController@UI@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  9  ?OnElementEvent@DialogController@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z
+[RtMintShadow]              TRAP slot 10  ?OnSerializeSettings@DialogController@UI@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7DialogInstance@UI@@6B@                           slots=10 ported= 8 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  2  ?Type@DialogInstance@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?OnOpened@DialogInstance@UI@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7DialogLoaderLoopT@Engine@@6B@                    slots=13 ported= 3 TRAP= 9 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Shutdown@DialogLoaderLoopT@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  3  ?Update@DialogLoaderLoopT@Engine@@UEAA_NAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  4  ?Draw@DialogLoaderLoopT@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7DialogLoopT@Engine@@6B@                          slots=13 ported= 4 TRAP= 8 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Shutdown@DialogLoopT@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  4  ?Draw@DialogLoopT@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7EdgeMesh@Graphics@@6B@                           slots= 9 ported= 0 TRAP= 9 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800134b0
+[RtMintShadow]              TRAP slot  1  ?TypeName@EdgeMesh@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@EdgeMesh@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@EdgeMesh@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  4  ?Compile@EdgeMesh@Graphics@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z
+[RtMintShadow]              TRAP slot  5  ?Serialize@EdgeMesh@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@EdgeMesh@Graphics@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7EdgeMeshInstance@Graphics@@6B@                   slots= 9 ported= 4 TRAP= 5 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800175d0
+[RtMintShadow]              TRAP slot  1  ?Update@EdgeMeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@EdgeMeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@EdgeMeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]   BLOCKED  ??_7Element@UI@@6B@                                  slots=12 ported= 3 TRAP= 8 purecall= 1
+[RtMintShadow]              TRAP slot  1  ?TypeName@Element@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Element@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?Persist@Element@UI@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  7  ?Update@Element@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@12@@Z
+[RtMintShadow]              TRAP slot  8  ?Enable@Element@UI@@UEAAX_N@Z
+[RtMintShadow]              TRAP slot  9  ?Contains@Element@UI@@UEBA_NHHPEAVUserInterface@2@@Z
+[RtMintShadow]              TRAP slot 10  ?SetColor@Element@UI@@UEAAXI@Z
+[RtMintShadow]              TRAP slot 11  ?GetBorder@Element@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7ElementDescription@UI@@6B@                       slots= 9 ported= 3 TRAP= 3 purecall= 3
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180035350
+[RtMintShadow]              TRAP slot  1  ?TypeName@ElementDescription@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@ElementDescription@UI@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7External@Object@@6B@                             slots= 8 ported= 2 TRAP= 2 purecall= 4
+[RtMintShadow]              TRAP slot  1  ?TypeName@External@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@External@Object@@UEBAIXZ
+[RtMintShadow]   READY    ??_7Geometry@Graphics@@6B@                           slots= 9 ported= 6 TRAP= 0 purecall= 3
+[RtMintShadow]   BLOCKED  ??_7Goal@Achievement@@6B@                            slots=10 ported= 4 TRAP= 3 purecall= 3
+[RtMintShadow]              TRAP slot  1  ?TypeName@Goal@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Goal@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@Goal@Achievement@@UEBAHXZ
+[RtMintShadow]   BLOCKED  ??_7GoalInstance@Achievement@@6B@                    slots= 7 ported= 3 TRAP= 4 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@GoalInstance@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@GoalInstance@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?Startup@GoalInstance@Achievement@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?CheckGoalState@GoalInstance@Achievement@@UEBA?AW4GoalState@Goal@2@XZ
+[RtMintShadow]   BLOCKED  ??_7ImageBuffer@Video@@6B@                           slots=10 ported= 3 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@ImageBuffer@Video@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@ImageBuffer@Video@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@ImageBuffer@Video@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@ImageBuffer@Video@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@ImageBuffer@Video@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   READY    ??_7ImageBufferData@Video@@6B@                       slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   READY    ??_7IndexBufferData@Video@@6B@                       slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   BLOCKED  ??_7Internal@Object@@6B@                             slots= 4 ported= 2 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@Internal@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Internal@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7Light@Graphics@@6B@                              slots=11 ported= 5 TRAP= 1 purecall= 5
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180058dd0
+[RtMintShadow]   BLOCKED  ??_7Loader@Engine@@6B@                               slots= 2 ported= 1 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  ?Run@Loader@Engine@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7LoaderLoop@Engine@@6B@                           slots=12 ported= 1 TRAP=11 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?Startup@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  2  ?Shutdown@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  3  ?Update@LoaderLoop@Engine@@UEAA_NAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  4  ?Draw@LoaderLoop@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?Load@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7MaterialInstance@Graphics@@6B@                   slots= 9 ported= 2 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@MaterialInstance@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@MaterialInstance@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@MaterialInstance@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@MaterialInstance@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@MaterialInstance@Graphics@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7MemoryStream@IO@@6B@                             slots= 8 ported= 6 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800242a0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]   BLOCKED  ??_7MeshInstance@Graphics@@6B@                       slots= 9 ported= 2 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180017330
+[RtMintShadow]              TRAP slot  1  ?Update@MeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@MeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  5  ?GetSubTransform@MeshInstance@Graphics@@UEBA?AVTransform@Math@@H@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  7  ?SetSharedInstanceData@MeshInstance@Graphics@@UEBAHAEAVContext@Video@@HM@Z
+[RtMintShadow]   BLOCKED  ??_7PackageFile@IO@@6B@                              slots= 9 ported= 5 TRAP= 4 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800259d0
+[RtMintShadow]              TRAP slot  5  ?Serialize@PackageFile@IO@@UEAA_NAEAVStream@2@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@PackageFile@IO@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7Particle@Graphics@@6B@                           slots= 9 ported= 2 TRAP= 4 purecall= 3
+[RtMintShadow]              TRAP slot  1  ?TypeName@Particle@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Particle@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@Particle@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@Particle@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7ParticleInstance@Graphics@@6B@                   slots=10 ported= 5 TRAP= 4 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@ParticleInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  9  ?SetParticle@ParticleInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@@Object@@@Z
+[RtMintShadow]   BLOCKED  ??_7ParticleSystemInstance@Graphics@@6B@             slots=10 ported= 5 TRAP= 5 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?Update@ParticleSystemInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@ParticleInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  9  ?SetParticle@ParticleSystemInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@@Object@@@Z
+[RtMintShadow]   READY    ??_7PixelProgramData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7ReaderWriter@IO@@6B@                             slots=36 ported= 2 TRAP= 4 purecall=30
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023bd0
+[RtMintShadow]              TRAP slot 31  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81e0
+[RtMintShadow]              TRAP slot 32  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81d0
+[RtMintShadow]              TRAP slot 33  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81c0
+[RtMintShadow]   READY    ??_7RenderBufferData@Video@@6B@                      slots= 4 ported= 1 TRAP= 0 purecall= 3
+[RtMintShadow]   READY    ??_7RenderStateData@Video@@6B@                       slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7SpriteSheet@UI@@6B@                              slots= 9 ported= 8 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  5  ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7Stream@IO@@6B@                                   slots= 7 ported= 1 TRAP= 1 purecall= 5
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]   BLOCKED  ??_7SunLight@Graphics@@6B@                           slots=11 ported= 5 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180064620
+[RtMintShadow]              TRAP slot  1  ?Update@SunLight@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@SunLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  9  ?DrawShadowMap@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z
+[RtMintShadow]              TRAP slot 10  ?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z
+[RtMintShadow]   READY    ??_7Thread@System@@6B@                               slots= 2 ported= 1 TRAP= 0 purecall= 1
+[RtMintShadow]   BLOCKED  ??_7UpdateLoop@Engine@@6B@                           slots=12 ported= 1 TRAP= 6 purecall= 5
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   READY    ??_7VertexBufferData@Video@@6B@                      slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   READY    ??_7VertexLayoutData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   READY    ??_7VertexProgramData@Video@@6B@                     slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   READY    ??_7VideoProgramData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7Visitor@IO@@6B@                                  slots=26 ported=25 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x18002b710
+
+[RtMintShadow] ---- per-typeinfo readiness ----
+[RtMintShadow] READY = every string field and the typeId AGREE with the
+[RtMintShadow] loaded DLL this run. fac=trap is reported, not hidden: it
+[RtMintShadow] is unreachable for a dword reader but not for a tree walk.
+[RtMintShadow]   BLOCKED  ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A          id=0x96f8b310 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A id=0x709f0d32 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@AnimatedImageDescription@UI@@0VBaseTypeInfo@Object@@A id=0x94ee6491 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@AnimatedImageElement@UI@@0VBaseTypeInfo@Object@@A id=0x3271975d idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A id=0x5bf7aee4 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A id=0x99a746df idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Base@Object@@0VBaseTypeInfo@2@A                 id=0xac325696 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@BorderDescription@UI@@0VBaseTypeInfo@Object@@A  id=0xa86bf867 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A      id=0xe6faeb54 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ButtonDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x78fd8f20 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A      id=0x5310bda4 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A       id=0xf49dae05 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xa59314b7 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A       id=0x1039fdd3 idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@ClipRegionDescription@UI@@0VBaseTypeInfo@Object@@A id=0xb3f27e13 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A  id=0x352b9ada idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@CollisionMesh@Collision2D@@0VBaseTypeInfo@Object@@A id=0x99753590 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ComboDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x93056daf idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ComboDialog@UI@@0VBaseTypeInfo@Object@@A        id=0x4c55fddf idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A       id=0xd358ef47 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A     id=0xae5b8f65 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A id=0x6b46c172 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A   id=0xcd48b14b idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Cursor@UI@@0VBaseTypeInfo@Object@@A             id=0x31c7f810 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A             id=0x4fcc106b idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A   id=0xf2c192b8 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A id=0xb77e0eb9 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A     id=0xbe12e2eb idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@DocumentTextDescription@UI@@0VBaseTypeInfo@Object@@A id=0xec3779bb idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A id=0x11416aad idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A     id=0x78e68d30 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@EditDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xc9022aa3 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A        id=0x006931e0 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A id=0x42f6a818 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ExtensionCompiler@Object@@0VBaseTypeInfo@2@A    id=0x5704555c idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A             id=0xe771f47f idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ExternalCompiler@Object@@0VBaseTypeInfo@2@A     id=0xe732827d idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A         id=0xb9f9bd84 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A               id=0xe3d8954e idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0x741792d4 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0xa1af3cd9 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A      id=0xf50a1ddf idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A id=0x9c8c89cc idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GraphDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xe28e0152 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A       id=0xe4db189c idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A id=0xe61c2ffe idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GroupDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x8a72943e idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@GroupElement@UI@@0VBaseTypeInfo@Object@@A       id=0x8ced93cd idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A     id=0x84e6f2dd idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ImageDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xfdd24e9a idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A       id=0x35413056 idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A             id=0xde23506d idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@LabelDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xf0cbd6ea idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A       id=0x4f8656b9 idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x4f976fb7 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@LayoutElement@UI@@0VBaseTypeInfo@Object@@A      id=0x21465073 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A    id=0x2de80b80 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A        id=0x2475ec1a idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A     id=0x418398a4 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A id=0x2ebeed54 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@NumberDescription@UI@@0VBaseTypeInfo@Object@@A  id=0xfb8de193 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@NumberEditDescription@UI@@0VBaseTypeInfo@Object@@A id=0x745a1bb8 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A  id=0x25a24564 idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A      id=0x1c54106e idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A        id=0x3c81c678 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PageDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xe7d69af7 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PageElement@UI@@0VBaseTypeInfo@Object@@A        id=0x98ffe1f8 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A     id=0x2a5dc6da idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ParticleSystem@Graphics@@0VBaseTypeInfo@Object@@A id=0xf00915c5 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PickingMesh@Picking@@0VBaseTypeInfo@Object@@A   id=0x9c2301f9 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A    id=0xd91ccdf1 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@PointList@Pathfinding@@0VBaseTypeInfo@Object@@A id=0x3bc4d9a5 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ProgressDescription@UI@@0VBaseTypeInfo@Object@@A id=0xb1403226 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A    id=0x4c63b522 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@RadioDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x65d6876c idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@RadioElement@UI@@0VBaseTypeInfo@Object@@A       id=0xe3cf1747 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0x6ab5f8fc idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A     id=0x779102e5 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@RibbonDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x35c17fb8 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A      id=0x82c11d31 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ScrollDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x9bdfebbb idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A      id=0x1c6afffa idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@ShaderProgram@Video@@0VBaseTypeInfo@Object@@A   id=0x5648ad42 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SliderDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x6c7bbf56 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A      id=0xda677e92 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A     id=0x15b34526 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A     id=0x58171cb6 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A id=0xeca6998f idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A     id=0x26681eb1 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A      id=0xd56baba8 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A        id=0x1821d6a5 idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A        id=0xc03519e4 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@Surface@Collision2D@@0VBaseTypeInfo@Object@@A   id=0x20b1860c idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A     id=0x2bcb883f idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A         id=0x7e8fcdd2 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xef9a5ee5 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A       id=0xc7980309 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xc974f55b idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A        id=0x1a20cede idcmp=NO  strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   BLOCKED  ?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A      id=0x175c6265 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A    id=0x48b28673 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A   id=0x2515acc5 idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   BLOCKED  ?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A    id=0x7319bd9d idcmp=NO  strs=0 fac=2traps
+[RtMintShadow]   typeinfo rows: 0 READY, 104 BLOCKED (of 104; only the UI rows and the BLOCKED ones are listed)
+
+[RtMintShadow] ---- summary (phase=init) ----
+[RtMintShadow] vtables            : 55, 527 slots
+[RtMintShadow] ground truth       : 527 slot comparisons vs the live DLL, 0 MISMATCH
+[RtMintShadow] minted from OUR    : 203 slots, 0 MISMATCH   <-- the only number that measures the port
+[RtMintShadow] minted as traps    : 324 (148 purecall by design, 176 not yet ported)
+[RtMintShadow] complete vtables   : 15 of 55
+[RtMintShadow] slot-count suspects: 0
+[RtMintShadow] BaseTypeInfo       : 624 field comparisons, 0 MISMATCH, 104 typeId not-yet-comparable (DLL still at the ctor sentinel); next: NOT compared, built from our init order
+[RtMintShadow] storage            : 38 symbols, 3 written by the DLL, 35 still zero, 3 of ours written (contents NOT compared: BSS)
+[RtMintShadow] constructed statics: 0 of 3 built (shape compared on 0, 0 SHAPE MISMATCH, 0 SHAPE-INFO)   [BANISHED_RT_MINT_CTOR=1 to build them]
+[RtMintShadow] symbols absent from the DLL: 0
+[RtMintShadow] carried by ADDRESS   : 4 row(s) with no exported name -- the export-location cross-check does not apply to them and was not counted as a pass
+[RtMintShadow] effectiveness: 203 of 379 non-purecall slots carry our own
+[RtMintShadow] code; the remaining 176 are lane B's worklist.
+[RtMintShadow] ==== clean: 0 problem(s) ====
+
+[Standalone] Initializing address registry...
+[AddressRegistry] 1618 addresses registered
+[Standalone] Resolving engine functions...
+[EngineFuncs] Player/Tool APIs resolved:
+  SceneAddObject            = 00007ff686bc0d02
+  SceneRemoveObject         = 00007ff686bc1034
+  Transform_FromYawPitch    = 00007ff686bfb33f
+  Geometry_SetTransform     = 00007ff686bbe5d1
+  MeshInstance_UpdateHier   = 00007ff686bb7f8f
+  TileRender                = 00007ff686b12720
+  TileValidityCheck         = 00007ff686b082e0
+  FencedPlacementParams     = 00007ff686b0446d
+  HighlightRemove           = 00007ff686972610
+[EngineFuncs] MenuDLT static-mesh + particle helpers:
+  Scene::AddObject              = 00007ff686bc0d02
+  GraphicsMesh::GetMaterialList = 00007ff686bb7666
+  MeshInstance::SetMatInstance  = 00007ff686bb8587
+  ParticleSystemInstance::Ctor  = 00007ff686bb662d
+  ParticleInstance::IncrementInstanceIndex = 00007ff686bb6513
+  Particle::Ctor                = 00007ff686bb5f18
+[EngineFuncs] Timer globals:
+  _ticksPerSecond       @ 00007ffca5f3e720 = 0
+  _secondsPerTick       @ 00007ffca5f3e728 = 0.000000
+  _systemTicksPerSecond @ 00007ffca5f3e730 = 0
+  _systemInitialTick    @ 00007ffca5f3e738 = 0
+[EngineFuncs] Functions:
+  Input::Device::Update     = 00007ff686bce742
+  Audio::Device::Update     = 00007ff686b920ee
+  Audio::FreeChannel        = 00007ff686b91f3b
+  App::PlatformUpdate       = 00007ff686b8c9ce
+  VideoCtx::ClearResources  = 00007ff686c89590
+  VideoCtx::Reset           = 00007ff686c648c1
+  Loader::Load              = 00007ff686baf2da
+  App::SleepThread          = 00007ff686b8cad4
+  UI::Update                = 00007ff686c521a4
+  UI::Draw                  = 00007ff686c50ac4
+  UI::CloseDialog           = 00007ff686c4eaaa
+  DynArrayPush              = 00007ff686b94453
+  String::Set               = 00007ff686c22745
+  String::Format            = 00007ff686c231f5
+  String::~String           = 00007ff686c226bd
+  String::String()          = 00007ff686c22637
+  String::String(cstr)      = 00007ff686c22650
+  String::String(copy)      = 00007ff686c22685
+  PostDrawPush              = 00007ff686b94353
+  PostUpdatePush            = 00007ff686b94393
+  VideoCtx::Ctor            = 00007ff686c87e90
+  VideoCtx::Dtor            = 00007ff686c8a400
+  VideoCtx::Delete          = 00007ff686c8a140
+  MemAlloc                  = 00007ffca5e06e60
+  MemAllocSingleton         = 0000000000000000
+  VideoDevice::_singleton   = 00007ffca5f3e7a8 -> 0000000000000000
+  ExtFactory::_singleton    = 00007ffca5f3c6c8 -> 0000000000000000
+  ExtFactory::FindOrLoad    = 00007ffca5dff320
+  ExtFactory::Clean         = 00007ff686c07efc
+  IsDerivedFrom             = 00007ff686b7a3dc
+  ExternalTypeId            = 00007ff687498700 -> 0x4fcc106b
+  Filename::AdjustDelimiters= 00007ff686c20ba6
+  UpdateLoop::LoadResources = 00007ffca5e1d7d0
+  ListCleanup               = 00007ff686b955ac
+  ModEntry::CopyCtor        = 00007ff686be1839
+  ModEntry::Assign          = 00007ff686be1a3f
+  ModEntry::Dtor            = 00007ff686be1c14
+  Map::Find                 = 00007ff686c1ef74
+  Map::Insert               = 00007ff686b9ba7a
+  ParseCommand              = 00007ff686c1f9ab
+  ParseValue                = 00007ff686c1f617
+  Persistence::_singleton   = 00007ffca5f3c6b8 -> 0000000000000000
+  Persistence::SetBool      = 00007ff686bead8f
+  Persistence::SetInt       = 00007ff686beab31
+  Filename::GetPathFilename = 00007ff686c20ed5
+  ModArrayCopy              = 00007ff686be1def
+[EngineFuncs] UI infrastructure:
+  DialogController::~Dtor   = 00007ff686c2aaf7
+  MemFreeStatic             = 00007ffca5e07ad0
+  FindElement               = 00007ff686c35e81
+  TextElement::SetParameter = 00007ff686c57bf6
+  Element::GetUserData      = 00007ff686c3711f
+  InternalBasePtr::Ctor     = 00007ff686c0a88d
+  KeyMap::GetInputForId     = 00007ff686bcbce3
+  KeyMap::GetDeviceForId    = 00007ff686bcbb3d
+[EngineFuncs] Phase A1 — UI Widget Functions:
+  Elem::SetFlagsOnOff       = 00007ff686c375a1
+  Elem::SetElementId        = 00007ff686c37441
+  Elem::SetName             = 00007ff686c376a3
+  Elem::SetToolTip          = 00007ff686c37d71
+  Elem::Child               = 00007ff686c35939
+  Elem::ChildCount          = 00007ff686c35ad5
+  Elem::FindElementType     = 00007ff686c360ed
+  DI::FindElement           = 00007ff686c29eb5
+  DI::GetController         = 00007ff686c29d07
+  DI::FindElementType       = 00007ff686c29ff9
+  DI::SetFlagsOnOff         = 00007ff686c2a13b
+  Combo::AddItem            = 00007ff686c53b24
+  Combo::SetCurrentItem     = 00007ff686c55122
+  Combo::GetItemCount       = 00007ff686c538df
+  Combo::GetCurrentItem     = 00007ff686c53781
+  Combo::RemoveAllItems     = 00007ff686c53dda
+  Progress::SetTextParam    = 00007ff686c54cfc
+  Progress::SetMaxValue     = 00007ff686c548f3
+  Progress::SetCurValue     = 00007ff686c54a5f
+  Table::SetSize            = 00007ff686c56a6d
+  Table::SetChild(3)        = 00007ff686c56981
+  NumEdit::SetValue         = 00007ff686c529a5
+  NumElem::SetValue(int)    = 00007ff686c540f1
+  Spinner::SetElementId     = 00007ff686c531b7
+  Image::SetSprite          = 00007ff686c57155
+  Label::SetSprite          = 00007ff686c5797f
+  Text::SetText             = 00007ff686c57c85
+[EngineFuncs] Phase A2 — Type IDs:
+  ComponentDescription      = 00007ff68749686c -> 0x0
+  DestroyComponent          = 00007ff687496518 -> 0x0
+  MeshInstanceComponent     = 00007ff6874964c4 -> 0x0
+[EngineFuncs] Phase A3 — Singletons:
+  GameWorld                 = 00007ff6873dde88 -> 0000000000000000
+  KeyMap (container)        = 00007ff6873dde80 -> 0000000000000000
+  KeyMap (object exref)     = 000001da0544c070 -> 00007ff686d88560
+  EngineSingleton           = 00007ffca5f3e750 -> 0000000000000000
+[EngineFuncs] Phase A4 -- FindComponent type IDs (C++ reimpl):
+  MapComponent              = 00007ff6874964b4 -> 0x0
+  CemeteryComponent         = 00007ff687496844 -> 0x0
+[EngineFuncs] Video::ImageBuffer:
+  ImageBuffer::Ctor         = 00007ff686c5b208
+  ImageBuffer::Dtor         = 00007ff686c5b382
+  ImageBuffer::CopyToTex    = 00007ff686c5c1f9
+  ImageBuffer::CopyFromTex  = 00007ff686c5c29d
+[EngineFuncs] Globals:
+  _loader                   = 00007ffca5f3e7b8
+  _loader.m_flags           = 00007ffca5f3e7c0 -> 0x0
+  _loader.m_completionEvent = 00007ffca5f3e7e0 -> 00000000000002d4
+  App::_singleton           = 00007ffca5f3c678 -> 0000000000000000
+[EngineFuncs] Phase H: Factory::GetTypeIdFromName + IsA + Factory singleton resolved
+[EngineFuncs] Phase H: FindDialogByName_Impl, Game_TriggerDisasterByType_Impl, Game_SpawnResources_Impl now available as inline replacements
+[EngineFuncs] Phase I: Work class helpers resolved
+[EngineFuncs] Phase I+J: All work class + BuildStructure helpers resolved
+[EngineFuncs] Achievement Goal support resolved
+  Goal::~Goal         = 00007ff686b8a7f5
+  Goal::Goal()        = 00007ff686b8a6fd
+  Goal::Serialize     = 00007ff686b8c189
+  GoalInst::~GoalInst = 00007ff686b8aaf1
+  GoalInst::Persist   = 00007ff686b8c3f1
+  IBP::Serialize      = 00007ff686c0ad33
+  IsRunning           = 00007ff686baf00b
+[EngineFuncs] Phase K: Tutorial goal helpers resolved
+  FindUIElementByPath   = 00007ff686b1632b
+  ObjectInternal::Ctor  = 00007ffca5dffd10
+  TutorialTreeInsert    = 00007ff686b1b68a
+  TutorialStepExecute   = 00007ff686b1d162
+  TypeId_FTGoal         = 00007ff687496880
+  SingletonExref_151a80 = 000001da0544ba70
+  TutInstVtable         = 0000000000000000
+[EngineFuncs] Phase L: ComponentEntity deps resolved
+  TypeId_ComponentBase  = 00007ff6874963a4
+  ExeArrayResizeFill    = 00007ff686b7ade5
+[EngineFuncs] Phase L2: CitizenBehavior deps resolved
+  CountResources = 00007ff686a615de
+  CollectStats   = 00007ff686a621e4
+[EngineFuncs] EntityList deps resolved:
+  IBPTreeInsert       = 00007ff686b7378b
+  IBPTreeRemove       = 00007ff686b7393d
+  Time::Serialize     = 00007ff686c26165
+  BucketTreeSerialize = 00007ff686a879d5
+[EngineFuncs] Path sub-functions resolved
+  NotificationEvent = 00007ff686a72acc
+[EngineFuncs] CitizenBehavior Find deps resolved
+  PathDistance       = 00007ff686b76cbe
+  AssignHousing      = 00007ff68695e02c
+[EngineFuncs] M3.5 Path B session 2 (0x60B struct lifecycle) resolved
+  Struct60B_Resize        = 00007ff686aa69de
+  Struct60B_CopyCtor      = 00007ff686aa6a03
+  Struct60B_DtorRange     = 00007ff686aa6a29
+  Struct60B_SubCopyS14    = 00007ff686aa6a5a
+  Struct60B_SubCopyS02    = 00007ff686aa6a98
+[EngineFuncs] M3.5 Path B session 5 (geometry resize helpers) resolved
+  Array_Resize_Stride02       = 00007ff686aa595b
+  Array_Resize_Stride16A      = 00007ff686aa598c
+  Array_Resize_ArrayOfArrays  = 00007ff686aa5c29
+  Array_Resize_Stride16B      = 00007ff686aa59bd
+  Array_Resize_Stride04       = 00007ff686aa59ee
+[EngineFuncs] M3.5 MenuScene::Serialize helpers resolved
+  Geometry_Init           = 00007ff686aa02e0
+  Graphics_Geometry_Ctor  = 00007ff686bbdbe7
+  Video_VertexBuffer_Ctor = 00007ff686c5e7f1
+  Video_IndexBuffer_Ctor  = 00007ff686c5e756
+  Transform_SerializeWrap = 00007ff686aa0572
+  Math_Transform_Serial   = 00007ff686bfbd78
+  Math_Vector3_Serial     = 00007ff686bfdc93
+  Math_Vector4_Serial     = 00007ff686bfdd97
+  System_Color_Serial     = 00007ff686c261ba
+  Serializer_Float        = 00007ff686bf698b
+  Array_Resize_S20/S08/S14= 00007ff686aa0a09 / 00007ff686aa0a3a / 00007ff686aa0c5b
+  Array_Serialize_S20     = 00007ff686aa0ee1
+  ExtArr GraphicsMesh/Part= 00007ff686aa1764 / 00007ff686aa17db
+  ExtPtr Mesh/Weather     = 00007ff686aa1f32 / 00007ff686aa1fa1
+  Serializer_GetEncoding  = 00007ff686bf7e07
+  Serializer_Serialize_U  = 00007ff686bf6801
+  EFactory_IsRefModeEn    = 00007ff686c02a79
+  EFactory_GetReferenceId = 00007ff686c02d93
+  EFactory_GetPathForRef  = 00007ff686c02eba
+  Filename_AssignOp       = 00007ff686c2092f
+  TypeInfo Mesh/Particle  = 000001da0543d980 / 000001da0543d920
+  TypeId Weather          = 00007ff686d88e38
+  ExtPtr_Typed_7140       = 00007ff686aa2842
+  TypeInfo MaterialInst   = 000001da0543d720
+[EngineFuncs] M3.5 Path B session 4 (0x60B + typed-array serialize) resolved
+  Struct60B_Serialize             = 00007ff686aa78a1
+  Array_Serialize_Ext_MatInstance = 00007ff686aa78d1
+[EngineFuncs] M3.5 Path B session 6 (heightmap mesh build) resolved
+  TradeWork_sub_c1e0      = 00007ff686aa4a10
+  TradeWork_FUN_ac880     = 00007ff686aa4a2f
+  TradeWork_helper_e270   = 00007ff686aa4a74
+  Geometry_ChunkUpdate    = 00007ff686aa4aaf
+[EngineFuncs] M3.5 Path B session 7 (image-buffer upload) resolved
+  TradeWork_sub_c780      = 00007ff686aa5468
+[EngineFuncs] M3.5 Path B session 8 (Geometry::Serialize) resolved
+  TradeWork_impl_04d0     = 00007ff686a8f53b
+  TradeWork_impl_f1a0     = 00007ff686a8f562
+  Ser slot SerInt_AC8     = 00007ff686bf6677
+  Ser slot SerByte_410    = 00007ff686bf61d9
+  Ser slot SerFloat_A60   = 00007ff686bf698b
+  Ser slot SerUShortArr   = 00007ff686bf7321
+  Ser slot SerSizedRaw_3F8= 00007ff686bf7185
+  Ser slot SerSizedRaw_400= 00007ff686bf6fe9
+  Ser slot SerByteArr_618 = 00007ff686bf7991
+[EngineFuncs] M3.5 Geometry vtable draw primitives resolved
+  Renderer_GetCullCamera   = 00007ff686bbc3b4
+  Renderer_AddDrawItem     = 00007ff686bc7552
+  Renderer_GetShader       = 00007ff686bbc49f
+  Camera_GetFrustum        = 00007ff686bbc0ce
+  Frustum_Contains         = 00007ff686c940a8
+  Frustum_MulTransform3    = 00007ff686c93f8c
+  Geometry_GetTransform    = 00007ff686bbf996
+  Transform_Inverse        = 00007ff686bfa104
+  Transform_AsMatrix       = 00007ff686bf9caf
+  Transform3_Copy_Ctor     = 00007ff686bf926c
+  Vector3_FromFloats_Ctor  = 00007ff686bfd06a
+  InterpState_Trans_Lerp   = 00007ff686bc72d8
+  Context_SetTransform     = 00007ff686c64475
+  Context_SetColor         = 00007ff686c63575
+  Context_SetVertexBuffer  = 00007ff686c63ffb
+  Context_SetImageBuffer   = 00007ff686c63e6d
+  Context_BeginIndexedVtx  = 00007ff686c652ba
+  Context_EndIndexedVtx    = 00007ff686c65300
+  Context_DrawIndexed      = 00007ff686c6519a
+  Geometry_UpdateAttached  = 00007ff686bbedc0
+  Geometry_GetSubTransform = 00007ff686bbfc01
+  Geometry_GetInstanceTr   = 00007ff686bbfe72
+  Geometry_SetSharedInst   = 00007ff686bc023a
+  Geometry_Clean           = 00007ff686bbf15c
+[Dx11Funcs] VideoDX11-x64.dll not loaded — nothing resolved
+[Probe BEFORE InvokeAllRegistrations] _firstTypeInfo @ 0x7ffca5f3c6e0, head=00007ffca5f3af20
+[Probe BEFORE InvokeAllRegistrations]   #0   name=PickingMesh                      parent=External
+[Probe BEFORE InvokeAllRegistrations]   #1   name=TextElement                      parent=Element
+[Probe BEFORE InvokeAllRegistrations]   #2   name=TextDescription                  parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #2 TextDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations]   #3   name=TableElement                     parent=Element
+[Probe BEFORE InvokeAllRegistrations]   #4   name=TableDescription                 parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #14 ImageDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #16 GroupDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #19 ElementDescription parent=External
+[Probe BEFORE InvokeAllRegistrations] FOUND #21 Dialog parent=External
+[Probe BEFORE InvokeAllRegistrations] FOUND #57 RibbonDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #85 AnimatedImageDescription parent=ImageDescription
+[Probe BEFORE InvokeAllRegistrations] Total: 104 entries, 7 Loading.rsc target descs found
+[Standalone] Invoking factory registrations...
+[FactoryReg] Registered 312 types into Runtime _firstTypeInfo
+[Probe AFTER InvokeAllRegistrations] _firstTypeInfo @ 0x7ffca5f3c6e0, head=00007ff686fe79c0
+[Probe AFTER InvokeAllRegistrations]   #0   name=TradeWork                        parent=Work
+[Probe AFTER InvokeAllRegistrations]   #1   name=TendArea                         parent=Work
+[Probe AFTER InvokeAllRegistrations]   #2   name=PlantOrchard                     parent=Work
+[Probe AFTER InvokeAllRegistrations]   #3   name=PlantArea                        parent=Work
+[Probe AFTER InvokeAllRegistrations]   #4   name=Pickup                           parent=Work
+[Probe AFTER InvokeAllRegistrations] FOUND #314 TextDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #326 ImageDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #328 GroupDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #331 ElementDescription parent=External
+[Probe AFTER InvokeAllRegistrations] FOUND #333 Dialog parent=External
+[Probe AFTER InvokeAllRegistrations] FOUND #369 RibbonDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #397 AnimatedImageDescription parent=ImageDescription
+[Probe AFTER InvokeAllRegistrations] Total: 416 entries, 7 Loading.rsc target descs found
+[Standalone] Window-message hook installed (focus diag)
+[Standalone] Init complete.
+
+[Standalone] === INIT SUCCESS ===
+[AddressRegistry] 1618 addresses registered
+[Standalone] Coverage: 1618 / 582 exe addresses registered (278.0%)
+
+[Standalone] === ENTERING GameMain ===
+[GameMain] Engine ctor          = 00007ff686bab06d
+[GameMain] Engine dtor          = 00007ff686bab4e9
+[GameMain] Engine::Startup      = 00007ff686babc82
+[GameMain] Engine::Shutdown     = 00007ff686bacdbd
+[GameMain] Constructing Engine (storage=00000059b07ff670)...
+[GameMain] Engine constructed.
+[GameMain] Engine::Startup(cmdLine=000001da053b59e6, 512, 0, false)...
+[Standalone] Swapped window class background brush from 0000000000000006 to BLACK_BRUSH (0000000000900011) on engine hwnd=00000000007b1462
+[WndMsg] WM_GETMINMAXINFO     hwnd=00000000007b1462 w=0 l=59b07fe6e0
+[WndMsg] WM_SIZE               hwnd=00000000008912fc type=0 0x0
+[VideoInterface] DX11 slot pre-filled on Device 000001da07768308: module=00007ff6868d0000 GetDeviceName=00007ff686c9e3c2 CreateDeviceData=00007ff686c9e283 — Runtime will not LoadLibrary VideoDX11-x64.dll
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000008912fc 0,0 0x0 flags=0x13
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000008912fc w=0 l=59b07fef50
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000007b1462 2497,27 2576x1416 flags=0x30
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000007b1462 w=0 l=59b07fef50
+[WndMsg] WM_GETMINMAXINFO     hwnd=00000000007b1462 w=0 l=59b07fead0
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=00000000008912fc w=0 l=59b07fef50
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=00000000007b1462 w=0 l=59b07fef50
+[WndMsg] WM_SIZE               hwnd=00000000007b1462 type=0 2560x1377
+[GameMain] Engine::Startup returned 1
+[GameMain] Post-Startup _firstTypeInfo: 416 entries, 416 have non-FF typeId
+[GameMain]   typeId=0x4C6DC97E name=TradeWork
+[GameMain]   typeId=0x32010680 name=TendArea
+[GameMain]   typeId=0x071AE7EA name=PlantOrchard
+[GameMain]   typeId=0x91867ABF name=PlantArea
+[GameMain]   typeId=0x25D5C240 name=Pickup
+[GameMain]   typeId=0xD94735D5 name=PastureWork
+[GameMain]   typeId=0xB1EBC2E8 name=MarketWork
+[GameMain]   typeId=0x75232D30 name=LocationWork
+[GameMain]   typeId=0x00A5F817 name=HuntWork
+[GameMain]   typeId=0xD7F30414 name=HerbalistWork
+[GameMain] MainLoop ctor      = 00007ff686baa4a5
+[GameMain] MainLoop dtor      = 00007ff686baa8e5
+[GameMain] MemAlloc/Free      = 00007ffca5e06e60 / 00007ffca5e07ad0
+[GameMain] MemAllocSingleton (fresh) = 00000059b07ff670
+
+[Standalone] === Running factory self-tests ===
+
+[SelfTest StatGoal] start
+[SelfTest StatGoal]   refreshed g_pMemAllocSingleton = 00000059b07ff670
+[SelfTest StatGoal]   found entry @ 00007ff686fde220 (factoryFn=00007ff686ae043e, parent=Goal)
+[SelfTest StatGoal]   factory returned 000001da07769630
+[SelfTest StatGoal]   vtable OK (00007ff686d78680)
+[SelfTest StatGoal] PASS (sizeof=128, 9 fields verified)
+
+[VideoProbe] Configuration::_singleton = 000001da077667b8
+[VideoProbe]   +0x04 interface = 1 (VideoDX11)
+[VideoProbe]   +0x08 adapter   = 0
+[VideoProbe]   +0x0c width     = 2560
+[VideoProbe]   +0x10 height    = 1440
+[VideoProbe]   +0x00 settings  = 1  (true => launcher dialog next boot)
+[VideoProbe]   +0x14 windowX   = 2497
+[VideoProbe]   +0x18 windowY   = 27
+[VideoProbe]   +0x1c windowW   = 2560
+[VideoProbe]   +0x20 windowH   = 1377
+[VideoProbe]   +0x40 fullscreen= 0  +0x41 vsync=0  +0x42 skipShow=1
+[VideoProbe] Device::_singleton        = 000001da07768308
+[VideoProbe]   +0x48  interface count = 2
+[VideoProbe]   +0xf8  active idx  = 1
+[VideoProbe]   +0x100 active DeviceData = 000001da077693e0
+[VideoProbe]   slot0 DX9:  HMOD=00007ffce5c70000 GetName=00007ffce5c71230 Create=00007ffce5c711c0
+[VideoProbe]   slot1 DX11: HMOD=00007ff6868d0000 GetName=00007ff686c9e3c2 Create=00007ff686c9e283
+[VideoProbe]   slot2 GL:   HMOD=0000000000000000
+[VideoProbe]   active DeviceData vtable = 00007ff6873dba08
+[VideoProbe]   active vtable lives in: reimpl-x64.exe
+[SwapProbe AFTER_ENGINE_STARTUP] sc=000001da28cc6e90 vt=00007ffcf5d0a000
+[SwapProbe AFTER_ENGINE_STARTUP]   GetFullscreenState hr=0x00000000 fs=0 output=0000000000000000
+[SwapProbe AFTER_ENGINE_STARTUP]   GetDesc hr=0x00000000 Windowed=1 2560x1377 fmt=87 BufferCount=2 SwapEffect=0 Flags=0x2
+[SwapProbe AFTER_ENGINE_STARTUP]   hwnd=00000000007b1462 visible=0 iconic=0 client=2560x1377 window=2497,27 2576x1416
+[Standalone] Boot mode: borderless/windowed
+[GameMain] MainLoop alloc = 000001da077696b8
+[GameMain] MainLoop constructed.
+[GameMain] Game alloc      = 000001da0776a378
+[GameMain] Game_Ctor done; KeyMap singleton -> 000001da0776a378
+[GameMain] InputConfig=000001da0775ce40  -> KeyMap=000001da0776ad98
+[InputBindings] Populating KeyMap 000001da0776ad98 with 50 default bindings...
+[InputBindings] Done — 50 bindings + Load applied.
+[InputBindings] StringTable typeId = 3224705508
+[InputBindings]   'Dialog/StringTable.rsc:gameKeys' -> 000001da07771c50
+[InputBindings]   'Dialog/StringTable.rsc:keyNames' -> 000001da07771d88
+[InputBindings]   'Dialog/StringTable.rsc:globalNames' -> 000001da07774590
+[InputBindings] Game container input tables: gameKeys=000001da07771c50 keyNames=000001da07771d88 globalNames=000001da07774590
+[SpriteSheetLoad] Dialog/SpriteSheet.rsc -> 000001da077746e0 (KeyMap+0xa0)
+[SpriteSheetLoad] Sprite("White") -> sheet=000001da077746e0 idx=0 (KeyMap+0xa8)
+[SpriteSheetLoad] Sprite("SaveLoadEmpty") -> sheet=000001da077746e0 idx=211 (KeyMap+0xb8)
+[GameMain] Settings alloc  = 000001da07774778
+[GameMain] MenuDLT alloc = 000001da077b3340 (vtable=00007ff686d88aa0)
+[GameMain] MenuDLT ctor done, vtable=00007ff686d88aa0
+[GameMain] LoadingDLT alloc = 000001da07781c40 (vtable=00007ff686d8cec0)
+[GameMain] LoadingDLT ctor done, vtable=00007ff686d8cec0, next=000001da077b3340, delay=0.50s
+[GameMain] ShiningRockDLT alloc = 000001da077b3f48 (vtable=00007ff686d8cec0)
+[GameMain] ShiningRockDLT ctor done, vtable=00007ff686d8cec0, next=000001da07781c40, delay=2.00s
+[GameMain] pre-loading ShiningRock.rsc
+[GameMain] pre-loading Loading.rsc
+[GameMain] arming ChunkedSceneLoader for MenuDLT (runs behind the splash, not during boot)
+[GameMain] InnerLL alloc = 000001da077b6c30
+[GameMain] InnerLL ctor done, vtable=00007ff686d88940, next=000001da077b3f48
+[GameMain] OuterLL alloc = 000001da07782b60
+[GameMain] OuterLL ctor done, vtable=00007ff686d889a0, next=000001da077b6c30
+[GameMain] Calling MainLoop::Run with OuterLL top loop = 000001da07782b60...
+[OuterLL::Startup] self=000001da07782b60 next=000001da077b6c30 loader=00007ffca5f3e7b8 fn=00007ff686baf2da
+[OuterLL::Startup] Loader::Load returned
+[EngineLoader] waiting for loader thread to finish (sync)...
+[FactoryReg] ResolveTypeIdByNameLazy("StringTable") = 0xc03519e4
+[Profession] InitFuncs: SerCtor=00007ff686bf7f9d SerDtor=00007ff686bf850f SerInt=00007ff686bf6677 SerBool=00007ff686bf5ec5 SerFloat=00007ff686bf698b
+[Profession] InitFuncs: StrSer=00007ff686c23f85 StrDtor=00007ff686c226bd ExtPtrSer=00007ff686aa1fe4 ExtPtrSer2=00007ff686aa1fe4
+[FactoryReg] ResolveTypeIdByNameLazy("Tutorial") = 0x12e38b5a
+[FactoryReg] ResolveTypeIdByNameLazy("TutorialStep") = 0xc9f8e694
+[FactoryReg] ResolveTypeIdByNameLazy("TutorialSetup") = 0x7de7ba1b
+[FactoryReg] ResolveTypeIdByNameLazy("Dialog") = 0x4fcc106b
+[TutorialSetupRestrictPlayer] SerializeInt=00007ff686bf6677 StringSerialize=00007ff686c23f85
+[FactoryReg] ResolveTypeIdByNameLazy("TutorialGoal") = 0x310de117
+[FactoryReg] ResolveTypeIdByNameLazy("TutorialImage") = 0x00305aa7
+[FactoryReg] ResolveTypeIdByNameLazy("ElementDescription") = 0x42f6a818
+[FactoryReg] ResolveTypeIdByNameLazy("Toolbar") = 0xc9dd0172
+[FactoryReg] ResolveTypeIdByNameLazy("MapGenerator") = 0xca06d4fd
+[FactoryReg] ResolveTypeIdByNameLazy("TerrainGenerator") = 0xefc2f724
+[FactoryReg] ResolveTypeIdByNameLazy("ClimateGenerator") = 0x14c14555
+[TutorialSetupCamera] SerializeInt=00007ff686bf6677
+[InnerLL::Load] self=000001da077b6c30 (skipping PlacementTool init)
+[EngineLoader] loader thread finished
+[OuterLL::Update] self=000001da07782b60 time=000001da07769700 next=000001da077b6c30 mainLoop=000001da077696b8 -> transition
+[OuterLL::Shutdown] self=000001da07782b60
+[OuterLL::Destroy] self=000001da07782b60 flags=1
+[InnerLL::Startup] self=000001da077b6c30 next=000001da077b3f48 loader=00007ffca5f3e7b8 fn=00007ff686baf2da
+[InnerLL::Startup] Loader::Load returned
+[EngineLoader] waiting for loader thread to finish (sync)...
+[SplashDLT::Load] self=000001da077b3f48 m_dialogExternal(before)=000001da07797fc0
+[SplashDLT::Load] m_dialogExternal(after)=000001da07797fc0
+[EngineLoader] loader thread finished
+[InnerLL::Update] self=000001da077b6c30 time=000001da07769700 next=000001da077b3f48 mainLoop=000001da077696b8 -> transition
+[InnerLL::Update] self=000001da077b6c30 time=000001da07769700 next=000001da077b3f48 mainLoop=000001da077696b8 -> transition
+[InnerLL::Shutdown] self=000001da077b6c30
+[InnerLL::Destroy] self=000001da077b6c30 flags=1
+[SplashDLT::Startup] self=000001da077b3f48 next=000001da07781c40 m_dialogExternal(before)=000001da07797fc0
+[SplashDLT::Startup] invoking DialogLoaderLoopT::Startup (creates dialog + pushes to UI; Runtime Loader::Load is kicked but ignored)
+[SplashDLT::CreateDialog] self=000001da077b3f48 retPtr=00000059b07ff390 rsc=000001da07797fc0 -> LoaderDialog_FromSplashDLT
+[SplashDLT::Startup] DialogLoaderLoopT::Startup returned, m_dialogInstance=000001da07e92378
+[UIFade::EnsureFadeSprite] ui=000001da077b3fa8 sheet=000001da077746e0 idx=0 (KeyMap+0xa8 src=000001da077746e0,0)
+[UIFade::TriggerReveal] ui=000001da077b3fa8 color=0xff000000 alpha=1.000 rate=-1.000
+[SplashDLT::Update] self=000001da077b3f48 first-tick dt=16666 (16.67ms)
+[SplashDLT::Load] self=000001da07781c40 m_dialogExternal(before)=000001da07782828
+[SplashDLT::Load] m_dialogExternal(after)=000001da07782828
+[SplashDLT::Draw] self=000001da077b3f48 frameAlpha=0.000000 -> DialogLoaderLoopT_Draw_Impl
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.933 rate=-1.000 sheet=000001da077746e0 idx=0
+[SplashDLT::Draw] self=000001da077b3f48 frameAlpha=0.223509 -> DialogLoaderLoopT_Draw_Impl
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.867 rate=-1.000 sheet=000001da077746e0 idx=0
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000008912fc 0,0 0x0 flags=0x13
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000008912fc w=0 l=59b07ff410
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000007b1462 0,0 0x0 flags=0x43
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000007b1462 w=0 l=59b07ff410
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000008912fc 0,0 0x0 flags=0x13
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000008912fc w=0 l=59b07ff410
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000007b1462 0,0 0x0 flags=0x3
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000007b1462 w=0 l=59b07ff410
+[WndMsg] WM_ACTIVATEAPP       hwnd=00000000008912fc w=1 l=81a8
+[WndMsg] WM_ACTIVATEAPP       hwnd=00000000007b1462 w=1 l=81a8
+[WndMsg] WM_NCACTIVATE        hwnd=00000000007b1462 w=1 l=0
+[WndMsg] WM_ACTIVATE          hwnd=00000000007b1462 w=1 l=0
+[WndMsg] WM_SIZE               hwnd=00000000016d083a type=0 0x0
+[WndMsg] WM_GETMINMAXINFO     hwnd=00000000004e13cc w=0 l=59b07fdf90
+[WndMsg] WM_SIZE               hwnd=0000000001af1460 type=0 0x0
+[WndMsg] WM_SETFOCUS          hwnd=00000000007b1462 w=0 l=0
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=00000000007b1462 w=0 l=59b07ff410
+[WndMsg] WM_SIZE               hwnd=00000000007b1462 type=0 2560x1377
+[WndMsg] WM_GETMINMAXINFO     hwnd=00000000007b1462 w=0 l=59b07ff1a0
+[SplashDLT::Draw] self=000001da077b3f48 frameAlpha=0.411136 -> DialogLoaderLoopT_Draw_Impl
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.733 rate=-1.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.600 rate=-1.000 sheet=000001da077746e0 idx=0
+[SplashDLT::Update] self=000001da077b3f48 reveal-alpha=0.47 -> running deferred ChunkedSceneLoader init
+[MenuScene::Factory] allocated 000001da07e92d90 (size=0x208)
+[MenuScene::Slot5_Serialize] standalone Geometry-deserialize path (self=000001da07e92d90 stream=00000059b07feff0)
+[sub_c1e0] entry self=000001da07e92fa0 gridSize=768 chunkSize=32 chunksPerSide=24 vertsPerSide=33 vertsPerChunk=1089 totalVbSize=10036224 (0x992400) createOk=1
+[sub_c1e0] VB after Create: q0=ffffff0000992400 q1=000001da07842d30 q2=000001da07e93100 q3=000001da0773b440
+[sub_c1e0] VertexBufferData @000001da07842d30: vtable=00007ff6873dbd50 q1=000001da07e930a0 q2=000001da29437bf8
+[sub_c1e0] chunk(0,0) scratch v0: x=-384 y=-384 h=1737 w3=255 uvU=0 uvV=0 n_xyzpad=8b 81 fe 00  Set->1  byteOff=0 byteSz=17424
+[sub_c1e0] cell loop complete; first Set returned 1
+[sub_c1e0] IB Set returned 1 (idxBytes=12288 quadsPerChunk=1024)
+[sub_c780] post-ctor img=000001da07e4fd20:
+    +0x00..0x18 vtbl=00007ffca5e94fc0 q1=0000000000000000 q2=0000000000000000 q3=0000000000000000
+    +0x20..0x40 (params)= 0000000000000000 0000000200000000 0000000000000000 0000000000000000
+    +0x40..0x60 = 0000000100000000 0000000000000000 000001da0776a1e0 000001da07e4fb08
+    +0x60 (ImageBufferData) = 000001da07ea9858
+[sub_c780] post-Create img=000001da07e4fd20 createOk=1 width=768:
+    +0x20..0x40 (params)= 0000030000000300 0000000200000000 0000000000000005 0000000100000001
+    +0x40..0x60 = 0000000200000001 0000000000000000 000001da0776a1e0 000001da07e4fb08
+    +0x60 (ImageBufferData) = 000001da07ea9858
+[sub_c780] CopyToTexture(img=000001da07e4fd20, bytes=000001da0823e378, w=768, h=768)
+    first 16 bytes: 29 05 ee 00 2c a4 c7 00  30 ff 9f 00 34 ff 99 00
+[sub_c780] DONE img=000001da07e4fd20 — final +0x60=000001da07ea9858
+[MenuScene::Slot5_Serialize] camera Transform deserialized: pos=(0.12, -0.22, 0.85) qrot=(0.462, -92.775, 73.243, 14.377) +0x1c=(-70.70,58.89,0.00) +0x28=-16323.04 +0x2c=-28.64 +0x30=30.00
+[MenuScene::Slot5_Serialize] particles deserialized: count58=123 (elem array) count68=2 (resource exrefs)
+[MenuScene::Slot5_Serialize] atmosphere deserialized: amb=0xff595966 sun=0xffcbb799 sky=0xffbfbfdd fogStart=90.00 fogEnd=225.00 fogDensity=0.950 sunInt=120.00 ambInt=61.64 vec4_at_1b4=(0.000,0.000,0.000,0.000) (arr30 count=15533 arr40 count=105)
+[MenuDLT::LoadScene] loaded MenuScene variant 6 at 000001da07e92d90
+[MenuDLT::LoadSceneA1] OK: renderer=000001da086021d8 gScene=000001da08602230 sunLight=000001da07e92808 transform=000001da07e929c8 mainMesh=000001da07e92ae0 sceneGeom=000001da07e92fa0 staticMeshCount=15533
+[MenuDLT::PhaseB] MenuScene+0x38=15533 (arr30 elems) +0x48=105 (arr40 GraphicsMesh count)
+[SplashDLT::Update] self=000001da077b3f48 reveal-alpha=0.47 -> kicking deferred load of next=000001da07781c40 (gameLoop=0, threaded=0)
+[SplashDLT::Load] self=000001da07781c40 m_dialogExternal(before)=000001da07782828
+[SplashDLT::Load] m_dialogExternal(after)=000001da07782828
+[SplashDLT::Update] self=000001da077b3f48 tick=1 elapsed=133328 delay=2000000
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.467 rate=-1.000 sheet=000001da077746e0 idx=0
+[SplashDLT::Update] self=000001da077b3f48 tick=2 elapsed=149994 delay=2000000
+[SplashDLT::Update] self=000001da077b3f48 tick=3 elapsed=166660 delay=2000000
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.200 rate=-1.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[MenuDLT::PhaseB] static meshes: added=15533/15533 wired=15533 skipped(badIdx)=0 (18014 material slots)
+[MenuDLT::PhaseC] particles: added=123/123
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[SplashDLT::Update] self=000001da077b3f48 tick=50 elapsed=949962 delay=2000000
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[SplashDLT::Update] self=000001da077b3f48 tick=100 elapsed=1783262 delay=2000000
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::TriggerFadeIn] ui=000001da077b3fa8 color=0xff000000 alpha=0.000 rate=1.000
+[SplashDLT::Update] self=000001da077b3f48 kicked fade-out-to-black, waiting for alpha=1
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.333 rate=1.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da077b3fa8 alpha=0.800 rate=1.000 sheet=000001da077746e0 idx=0
+[SplashDLT::Update] self=000001da077b3f48 elapsed=2266576 delay=2000000 fade-alpha=1.000 -> transition next=000001da07781c40
+[SplashDLT::Shutdown] self=000001da077b3f48
+[SplashDLT::Destroy] self=000001da077b3f48 flags=1
+[SplashDLT::Startup] self=000001da07781c40 next=000001da077b3340 m_dialogExternal(before)=000001da07782828
+[SplashDLT::Startup] invoking DialogLoaderLoopT::Startup (creates dialog + pushes to UI; Runtime Loader::Load is kicked but ignored)
+[SplashDLT::CreateDialog] self=000001da07781c40 retPtr=00000059b07ff390 rsc=000001da07782828 -> LoaderDialog_FromSplashDLT
+[SplashDLT::Startup] DialogLoaderLoopT::Startup returned, m_dialogInstance=000001da077b3f48
+[UIFade::EnsureFadeSprite] ui=000001da07781ca0 sheet=000001da077746e0 idx=0 (KeyMap+0xa8 src=000001da077746e0,0)
+[UIFade::TriggerReveal] ui=000001da07781ca0 color=0xff000000 alpha=1.000 rate=-1.000
+[SplashDLT::Update] self=000001da07781c40 first-tick dt=16666 (16.67ms)
+[MenuDLT::Load] self=000001da077b3340 m_dialogExternal(before)=0000000000000000
+[MenuDLT::Load] m_dialogExternal(after)=000001da08cb7410 (PhaseA deferred to Startup)
+[MenuDLT::LoadMusic] Audio/Music/Menu.rsc -> 000001da08d0fb58 (self+0xb88)
+[SplashDLT::Update] self=000001da07781c40 reveal-alpha=0.47 -> kicking deferred load of next=000001da077b3340 (gameLoop=0, threaded=0)
+[MenuDLT::Load] self=000001da077b3340 m_dialogExternal(before)=000001da08cb7410
+[MenuDLT::Load] m_dialogExternal(after)=000001da08cb7410 (PhaseA deferred to Startup)
+[MenuDLT::LoadMusic] Audio/Music/Menu.rsc -> 000001da08d0fb58 (self+0xb88)
+[UIFade::SplashDLT::Draw] ui=000001da07781ca0 alpha=0.467 rate=-1.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da07781ca0 alpha=0.000 rate=-1.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da07781ca0 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::SplashDLT::Draw] ui=000001da07781ca0 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::TriggerFadeIn] ui=000001da07781ca0 color=0xff000000 alpha=0.000 rate=1.000
+[SplashDLT::Update] self=000001da07781c40 kicked fade-out-to-black, waiting for alpha=1
+[UIFade::SplashDLT::Draw] ui=000001da07781ca0 alpha=0.467 rate=1.000 sheet=000001da077746e0 idx=0
+[SplashDLT::Update] self=000001da07781c40 elapsed=766636 delay=500000 fade-alpha=1.000 -> transition next=000001da077b3340
+[SplashDLT::Shutdown] self=000001da07781c40
+[SplashDLT::Destroy] self=000001da07781c40 flags=1
+[MenuDLT::Startup] menu SaveLoad created at +0xb70 = 000001da07781c40
+[MenuDLT::Startup] self=000001da077b3340 remainder=2035962414552 m_dialogExternal=000001da08cb7410
+[MenuDLT::Startup] scene already populated by Loading splash ChunkedSceneLoader (menuScene=000001da07e92d90) — skipping LoadScene_PhaseA
+[MenuDLT::CreateDialog] self=000001da077b3340 retPtr=00000059b07ff3d0 rsc=000001da08cb7410 -> MainMenuDialog_FromMenuDLT
+[MainMenuDialog::Setup] self=000001da07781cd8 assigning button element IDs
+[Setup]   buttonNew            -> id= 0 (elem=000001da07782170)
+[Setup]   buttonResume         -> NOT FOUND
+[Setup]   buttonLoad           -> id= 2 (elem=000001da08caf3f0)
+[Setup]   buttonSave           -> NOT FOUND
+[Setup]   buttonOptions        -> id= 4 (elem=000001da08cb35e0)
+[Setup]   buttonMenu           -> NOT FOUND
+[Setup]   buttonQuit           -> id= 6 (elem=000001da08cb5ee0)
+[Setup]   buttonAchievement    -> id= 8 (elem=000001da08cb1d00)
+[Setup]   buttonScenario       -> NOT FOUND
+[Setup]   buttonGoal           -> NOT FOUND
+[Setup]   buttonMap            -> NOT FOUND
+[Setup]   buttonTutorial       -> id=12 (elem=000001da08cb0880)
+[Setup]   buttonMod            -> id= 7 (elem=000001da08cb4a60)
+[BuildId] childDI=000001da08d01218 textElem=000001da08d017d0
+[BuildId] child dialog attached, version + build id set
+[MenuDLT::Startup] DialogLoopT::Startup returned, m_dialogInstance=000001da07781cd8
+[CursorLoad] Cursor/Arrow.rsc:cursor          -> 000001da0783f2a8 (KeyMap+0x28)
+[CursorLoad] Cursor/Hand.rsc:cursor           -> 000001da078422e0 (KeyMap+0x30)
+[CursorLoad] Cursor/Hourglass.rsc:cursor      -> 000001da07842148 (KeyMap+0x38)
+[CursorLoad] Cursor/Move.rsc:cursor           -> 000001da07842928 (KeyMap+0x40)
+[CursorLoad] Cursor/Query.rsc:cursor          -> 000001da07812b28 (KeyMap+0x48)
+[CursorLoad] Cursor/Place.rsc:cursor          -> 000001da0783f2e0 (KeyMap+0x50)
+[UISoundLoad] Audio/UI/AlertEffect.rsc           -> 000001da07e9f648 (KeyMap+0x58)
+[UISoundLoad] Audio/UI/ButtonDownEffect.rsc      -> 000001da07e9f698 (KeyMap+0x60)
+[UISoundLoad] Audio/UI/ButtonUpEffect.rsc        -> 000001da07ea02d8 (KeyMap+0x68)
+[UISoundLoad] Audio/UI/BeginDragEffect.rsc       -> 000001da07ea1730 (KeyMap+0x70)
+[UISoundLoad] Audio/UI/EndDragEffect.rsc         -> 000001da0783bab8 (KeyMap+0x78)
+[UISoundLoad] Audio/UI/PlacementMoveEffect.rsc   -> 000001da0783c5f8 (KeyMap+0x80)
+[UISoundLoad] Audio/UI/PlacementThunkEffect.rsc  -> 000001da0783c730 (KeyMap+0x88)
+[UISoundLoad] Audio/UI/PlacementErrorEffect.rsc  -> 000001da0783d260 (KeyMap+0x90)
+[UISoundLoad] Audio/UI/WarningEffect.rsc         -> 000001da0783bb08 (KeyMap+0x98)
+[MenuDLT::Startup] UI::SetCursor(ui=000001da077b3380, arrow=000001da0783f2a8)
+[MenuDLT::Startup] UI::EnableCursor(true) called on ui=000001da077b3380
+[UIFade::EnsureFadeSprite] ui=000001da077b3380 sheet=000001da077746e0 idx=0 (KeyMap+0xa8 src=000001da077746e0,0)
+[UIFade::TriggerReveal] ui=000001da077b3380 color=0xff000000 alpha=1.000 rate=-1.000
+[MenuDLT::StartMusic] PlayEffect(scene=000001da077b3e70 music=000001da08d0fb58 chan=2) -> handle=1024
+[MenuDLT::BindUISounds] ui=000001da077b3380 beginDrag=000001da07ea1730 endDrag=000001da0783bab8 btnDown=000001da07e9f698 btnUp=000001da07ea02d8 alert=000001da07e9f648
+[MenuDLT::Update] self=000001da077b3340 time=000001da07769700 tick=1 -> UpdateCamera + DialogLoopT::Update
+[MenuDLT::UpdateCamera] frame=1 animYaw=0.187 yaw=-16321.043 pitch=-28.636 dist=30.000 target=(-70.70,58.89,0.00) eye=(-93.26,72.46,14.38) camPos=(0.12,-0.22,0.84)
+[MenuDLT::TickAudioScene] Audio::Scene::Update(scene=000001da077b3e70) tick=1
+[MenuDLT::TickAudio] tick=0 audioDevice=000001da0776cd60 time=000001da07769700 -> Audio::Device::Update
+[MenuDLT::Draw] self=000001da077b3340 frameAlpha=0.031681 mainLoop=000001da077696b8 ctx=000001da0776f208 ui=000001da077b3380 menuScene=000001da07e92d90
+[MenuDLT::Draw] fps=0.0 (cap=216.0)
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.933 rate=-1.000 sheet=000001da077746e0 idx=0
+[GeomDraw_CollectDraw] first call self=000001da07e92fa0 renderer=000001da086021d8
+[GeomDraw_ItemDraw] first call self=000001da07e92fa0 ctx=000001da0776f208 alpha=0.031681 key=0x18c
+[MenuDLT::Update] self=000001da077b3340 time=000001da07769700 tick=2 -> UpdateCamera + DialogLoopT::Update
+[MenuDLT::UpdateCamera] frame=2 animYaw=0.375 yaw=-16321.043 pitch=-28.636 dist=30.000 target=(-70.70,58.89,0.00) eye=(-93.26,72.46,14.38) camPos=(0.12,-0.22,0.84)
+[MenuDLT::TickAudioScene] Audio::Scene::Update(scene=000001da077b3e70) tick=2
+[MenuDLT::TickAudio] tick=1 audioDevice=000001da0776cd60 time=000001da07769700 -> Audio::Device::Update
+[MenuDLT::Draw] self=000001da077b3340 frameAlpha=0.917737 mainLoop=000001da077696b8 ctx=000001da0776f208 ui=000001da077b3380 menuScene=000001da07e92d90
+[MenuDLT::Draw] fps=0.0 (cap=216.0)
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.867 rate=-1.000 sheet=000001da077746e0 idx=0
+[MenuDLT::Update] self=000001da077b3340 time=000001da07769700 tick=3 -> UpdateCamera + DialogLoopT::Update
+[MenuDLT::UpdateCamera] frame=3 animYaw=0.562 yaw=-16321.043 pitch=-28.636 dist=30.000 target=(-70.70,58.89,0.00) eye=(-93.26,72.46,14.38) camPos=(0.12,-0.22,0.84)
+[MenuDLT::TickAudioScene] Audio::Scene::Update(scene=000001da077b3e70) tick=3
+[MenuDLT::TickAudio] tick=2 audioDevice=000001da0776cd60 time=000001da07769700 -> Audio::Device::Update
+[MenuDLT::Draw] self=000001da077b3340 frameAlpha=0.346334 mainLoop=000001da077696b8 ctx=000001da0776f208 ui=000001da077b3380 menuScene=000001da07e92d90
+[MenuDLT::Draw] fps=0.0 (cap=216.0)
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.800 rate=-1.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.800 rate=-1.000 sheet=000001da077746e0 idx=0
+[MenuDLT::Update] self=000001da077b3340 time=000001da07769700 tick=4 -> UpdateCamera + DialogLoopT::Update
+[MenuDLT::UpdateCamera] frame=4 animYaw=0.750 yaw=-16321.043 pitch=-28.636 dist=30.000 target=(-70.70,58.89,0.00) eye=(-93.26,72.46,14.38) camPos=(0.12,-0.22,0.84)
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.733 rate=-1.000 sheet=000001da077746e0 idx=0
+[MenuDLT::UpdateCamera] frame=5 animYaw=0.937 yaw=-16321.043 pitch=-28.636 dist=30.000 target=(-70.70,58.89,0.00) eye=(-93.26,72.46,14.38) camPos=(0.12,-0.22,0.84)
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.067 rate=-1.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[MenuDLT::Draw] self=000001da077b3340 frameAlpha=0.768211 mainLoop=000001da077696b8 ctx=000001da0776f208 ui=000001da077b3380 menuScene=000001da07e92d90
+[MenuDLT::Draw] fps=140.4 (cap=216.0)
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[MenuDLT::Draw] self=000001da077b3340 frameAlpha=0.475699 mainLoop=000001da077696b8 ctx=000001da0776f208 ui=000001da077b3380 menuScene=000001da07e92d90
+[MenuDLT::Draw] fps=140.0 (cap=216.0)
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[MenuDLT::Draw] self=000001da077b3340 frameAlpha=0.183187 mainLoop=000001da077696b8 ctx=000001da0776f208 ui=000001da077b3380 menuScene=000001da07e92d90
+[MenuDLT::Draw] fps=140.0 (cap=216.0)
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[UIFade::MenuDLT::Draw] ui=000001da077b3380 alpha=0.000 rate=0.000 sheet=000001da077746e0 idx=0
+[MenuDLT::Update] self=000001da077b3340 time=000001da07769700 tick=300 -> UpdateCamera + DialogLoopT::Update
+[MainMenuDialog::OnCommand] self=000001da07781cd8 msg=0x12 id=6
+[MainMenuDialog::OnCommand] Quit: fn_App_Quit=00007ff686b8c895 g_pAppSingleton=00007ffca5f3c678 *g=000001da07766048
+[MainMenuDialog::OnCommand] -> App::Quit
+[MenuDLT::Shutdown] self=000001da077b3340
+[MenuDLT::Destroy] self=000001da077b3340 flags=1
+[GameMain] MainLoop::Run returned (top loop destroyed by Run; inner loops leak — Update stub returns false on first tick before transitioning)
+[GameMain] Settings freed.
+[GameMain] Game freed.
+[GameMain] MainLoop destroyed + freed.
+[Shutdown] partial Engine::Shutdown (steps 1-13)
+[Shutdown] window on entry: iconic=0 showCmd=1 client=2560x1377
+[Shutdown] VideoSettings <- false (clean run) (engine+0x6f0=1)
+[Shutdown] window before Video::Configuration::Save: iconic=0 showCmd=1 client=2560x1377
+[Shutdown] Video::Configuration to persist: window 2560x1377 at 2497,27 fullscreen=0 mode 2560x1440
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000007b1462 0,0 0x0 flags=0x97
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000007b1462 w=0 l=59b07ff3d0
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=00000000007b1462 w=0 l=59b07ff3d0
+[WndMsg] WM_NCACTIVATE        hwnd=00000000007b1462 w=0 l=0
+[WndMsg] WM_ACTIVATE          hwnd=00000000007b1462 w=0 l=0
+[WndMsg] WM_ACTIVATEAPP       hwnd=0000000001af1460 w=0 l=81a8
+[WndMsg] WM_ACTIVATEAPP       hwnd=00000000008912fc w=0 l=81a8
+[WndMsg] WM_ACTIVATEAPP       hwnd=00000000007b1462 w=0 l=81a8
+[WndMsg] WM_KILLFOCUS         hwnd=00000000007b1462 w=0 l=0
+[Shutdown] Persistence::WriteSettings done
+[Shutdown] done
+[GameMain] Destroying Engine...
+[GameMain] Engine destroyed.
+[Standalone] === GameMain returned 0 ===
+
+[RtMintShadow] ==== phase=exit  DLL=present (oracle live) ====
+[RtMintShadow] storage (unexported @0x1801fc6d0)                             8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (IO::Modification's loaded-DLL HMODULE slot, UNEXPORTED - code/Game/Game/game_main.cpp FreeLibrary's it at shutdown)
+[RtMintShadow] storage ?_errorString@Error@System@@0PADA                    8192 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (char[0x2000] -- the error text BUFFER; PAD in the mangling is MSVC's array-as-pointer encoding, see ?SetText@ 0x1800c5fa0)
+[RtMintShadow] storage ?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA           8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (IndexBuffer* -- head of the live-index-buffer list)
+[RtMintShadow] storage ?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA          8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (VertexBuffer* -- head of the live-vertex-buffer list)
+[RtMintShadow] storage ?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA    8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (RenderBuffer* -- head of the live-render-buffer list)
+[RtMintShadow] storage ?_firstSurface@ImageBuffer@Video@@0PEAV12@EA          8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (ImageBuffer* -- head of the live-surface list (Video_ImageBuffer_PlatformConstruct))
+[RtMintShadow] storage ?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA       8 bytes  DLL=WRITTEN  minted=written  ctor=0x1801477b0 (+103 more)  (BaseTypeInfo* — head of the reflection chain)
+[RtMintShadow] storage ?_frameIndex@ParticleInstance@Graphics@@1HA           4 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (int)
+[RtMintShadow] storage ?_hideDisplay@Error@System@@0_NA                      1 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (bool -- suppresses the Error message box)
+[RtMintShadow]   FIRST-NONZERO ?_loader@LoaderLoop@Engine@@1VLoader@2@A: DLL byte +0x0 = 08 7a e9 a5 fc 7f 00 00
+[RtMintShadow] storage ?_loader@LoaderLoop@Engine@@1VLoader@2@A             56 bytes  DLL=WRITTEN  minted=zero  ctor=0x180148fe0  (Engine::Loader OBJECT, CONSTRUCTED at load — reproduced by ConstructLoader())
+[RtMintShadow]   FIRST-NONZERO ?_rng@Particle@Graphics@@1VRandom@System@@A: DLL byte +0x0 = 2b 02 00 00 1e 7d 11 d5
+[RtMintShadow] storage ?_rng@Particle@Graphics@@1VRandom@System@@A          2500 bytes  DLL=WRITTEN  minted=zero  ctor=0x180149650  (System::Random OBJECT (MT19937), SEEDED FROM time() at load by 0x180149650)
+[RtMintShadow] storage ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA         1 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (bool)
+[RtMintShadow] storage ?_secondsPerTick@Timer@System@@0NA                    8 bytes  DLL=WRITTEN  minted=written  ctor=none (plain BSS)  (double)
+[RtMintShadow] storage ?_singleton@AchievementManager@Achievement@@0PEAV12@EA  8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@AnimationManager@Graphics@@0PEAV12@EA     8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Application@1@0PEAV11@EA                  8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Configuration@Audio@@0PEAV12@EA           8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Configuration@Input@@0PEAV12@EA           8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Configuration@System@@0PEAV12@EA          8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Configuration@Video@@0PEAV12@EA           8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Device@Audio@@0PEAV12@EA                  8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Device@Input@@0PEAV12@EA                  8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Device@Video@@0PEAV12@EA                  8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Engine@1@0PEAV11@EA                       8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@ExternalFactory@Object@@0PEAV12@EA        8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Factory@Object@@0PEAV12@EA                8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@FileSystem@IO@@0PEAV12@EA                 8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@InternalFactory@Object@@0PEAV12@EA        8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@MainLoop@Engine@@1PEAV12@EA               8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@MemoryAllocator@System@@0PEAV12@EA        8 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Modification@IO@@2PEAV12@EA               8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@Persistence@IO@@0PEAV12@EA                8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_singleton@SaveLoad@Save@@0PEAV12@EA                 8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (singleton pointer)
+[RtMintShadow] storage ?_stopApplication@Error@System@@0_NA                  1 bytes  DLL=still zero  minted=zero  ctor=none (plain BSS)  (bool -- Display() aborts the process when this is set)
+[RtMintShadow] storage ?_systemInitialTick@Timer@System@@0_JA                8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (int64)
+[RtMintShadow] storage ?_systemSecondsPerTick@Timer@System@@0NA              8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (double -- the QPF reciprocal; sibling of ?_secondsPerTick above)
+[RtMintShadow] storage ?_systemTicksPerSecond@Timer@System@@0_JA             8 bytes  DLL=WRITTEN  minted=zero  ctor=none (plain BSS)  (int64)
+[RtMintShadow] storage ?_ticksPerSecond@Timer@System@@0_JA                   8 bytes  DLL=WRITTEN  minted=written  ctor=none (plain BSS)  (int64)
+
+[RtMintShadow] ---- per-vtable readiness ----
+[RtMintShadow] READY = every non-purecall slot is our port, so registering
+[RtMintShadow] this row hands callers a table with no abort-trap in it.
+[RtMintShadow]   BLOCKED  (unexported @0x1801554a8)                            slots= 5 ported= 2 TRAP= 3 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81e0
+[RtMintShadow]              TRAP slot  1  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81d0
+[RtMintShadow]              TRAP slot  2  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81c0
+[RtMintShadow]   BLOCKED  (unexported @0x180155860)                            slots= 2 ported= 1 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800b7260
+[RtMintShadow]   BLOCKED  (unexported @0x180157c60)                            slots= 7 ported= 0 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050200
+[RtMintShadow]              TRAP slot  1  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501f0
+[RtMintShadow]              TRAP slot  2  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501c0
+[RtMintShadow]              TRAP slot  3  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050210
+[RtMintShadow]              TRAP slot  4  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800501d0
+[RtMintShadow]              TRAP slot  5  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050220
+[RtMintShadow]              TRAP slot  6  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180050230
+[RtMintShadow]   BLOCKED  ??_7Achievement@0@6B@                                slots= 9 ported= 3 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@Achievement@1@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Achievement@1@UEBAIXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@Achievement@1@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@Achievement@1@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@Achievement@1@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7AchievementInstance@Achievement@@6B@             slots= 4 ported= 1 TRAP= 3 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@AchievementInstance@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@AchievementInstance@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?Persist@AchievementInstance@Achievement@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7AnimationEvent@Graphics@@6B@                     slots= 9 ported= 2 TRAP= 2 purecall= 5
+[RtMintShadow]              TRAP slot  1  ?TypeName@AnimationEvent@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@AnimationEvent@Graphics@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7Base@Object@@6B@                                 slots= 3 ported= 1 TRAP= 1 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Type@Base@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7BinaryReader@IO@@6B@                             slots=26 ported=25 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023a10
+[RtMintShadow]   READY    ??_7BinaryWriter@IO@@6B@                             slots=26 ported=26 TRAP= 0 purecall= 0
+[RtMintShadow]   BLOCKED  ??_7CompiledExternal@Object@@6B@                     slots= 8 ported= 2 TRAP= 2 purecall= 4
+[RtMintShadow]              TRAP slot  1  ?TypeName@CompiledExternal@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@CompiledExternal@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7CompressedMemoryStream@IO@@6B@                   slots= 9 ported= 3 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]              TRAP slot  2  ?Write@CompressedStream@IO@@UEAA_NHPEBX@Z
+[RtMintShadow]              TRAP slot  4  ?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z
+[RtMintShadow]              TRAP slot  5  ?GetCurrentPos@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  6  ?GetSize@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  8  ?PreCommit@CompressedMemoryStream@IO@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7CompressedStream@IO@@6B@                         slots= 9 ported= 1 TRAP= 8 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023fd0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]              TRAP slot  2  ?Write@CompressedStream@IO@@UEAA_NHPEBX@Z
+[RtMintShadow]              TRAP slot  4  ?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z
+[RtMintShadow]              TRAP slot  5  ?GetCurrentPos@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  6  ?GetSize@CompressedStream@IO@@UEBAIXZ
+[RtMintShadow]              TRAP slot  7  ?Close@CompressedStream@IO@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?PreCommit@CompressedStream@IO@@UEAAXXZ
+[RtMintShadow]   READY    ??_7ConstantBufferData@Video@@6B@                    slots= 4 ported= 1 TRAP= 0 purecall= 3
+[RtMintShadow]   READY    ??_7ContextData@Video@@6B@                           slots=20 ported= 1 TRAP= 0 purecall=19
+[RtMintShadow]   READY    ??_7DeviceData@Video@@6B@                            slots=20 ported= 1 TRAP= 0 purecall=19
+[RtMintShadow]   BLOCKED  ??_7DialogController@UI@@6B@                         slots=11 ported= 2 TRAP= 9 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@DialogController@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@DialogController@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?OnCreated@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  5  ?OnOpened@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?OnClosed@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?OnUpdateLayout@DialogController@UI@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?OnUpdate@DialogController@UI@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  9  ?OnElementEvent@DialogController@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z
+[RtMintShadow]              TRAP slot 10  ?OnSerializeSettings@DialogController@UI@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7DialogInstance@UI@@6B@                           slots=10 ported= 8 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  2  ?Type@DialogInstance@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?OnOpened@DialogInstance@UI@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7DialogLoaderLoopT@Engine@@6B@                    slots=13 ported= 3 TRAP= 9 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Shutdown@DialogLoaderLoopT@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  3  ?Update@DialogLoaderLoopT@Engine@@UEAA_NAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  4  ?Draw@DialogLoaderLoopT@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7DialogLoopT@Engine@@6B@                          slots=13 ported= 4 TRAP= 8 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Shutdown@DialogLoopT@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  4  ?Draw@DialogLoopT@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7EdgeMesh@Graphics@@6B@                           slots= 9 ported= 0 TRAP= 9 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800134b0
+[RtMintShadow]              TRAP slot  1  ?TypeName@EdgeMesh@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@EdgeMesh@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@EdgeMesh@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  4  ?Compile@EdgeMesh@Graphics@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z
+[RtMintShadow]              TRAP slot  5  ?Serialize@EdgeMesh@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@EdgeMesh@Graphics@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7EdgeMeshInstance@Graphics@@6B@                   slots= 9 ported= 4 TRAP= 5 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800175d0
+[RtMintShadow]              TRAP slot  1  ?Update@EdgeMeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@EdgeMeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@EdgeMeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]   BLOCKED  ??_7Element@UI@@6B@                                  slots=12 ported= 3 TRAP= 8 purecall= 1
+[RtMintShadow]              TRAP slot  1  ?TypeName@Element@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Element@UI@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?Persist@Element@UI@@UEAAXAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  7  ?Update@Element@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@12@@Z
+[RtMintShadow]              TRAP slot  8  ?Enable@Element@UI@@UEAAX_N@Z
+[RtMintShadow]              TRAP slot  9  ?Contains@Element@UI@@UEBA_NHHPEAVUserInterface@2@@Z
+[RtMintShadow]              TRAP slot 10  ?SetColor@Element@UI@@UEAAXI@Z
+[RtMintShadow]              TRAP slot 11  ?GetBorder@Element@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7ElementDescription@UI@@6B@                       slots= 9 ported= 3 TRAP= 3 purecall= 3
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180035350
+[RtMintShadow]              TRAP slot  1  ?TypeName@ElementDescription@UI@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@ElementDescription@UI@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7External@Object@@6B@                             slots= 8 ported= 2 TRAP= 2 purecall= 4
+[RtMintShadow]              TRAP slot  1  ?TypeName@External@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@External@Object@@UEBAIXZ
+[RtMintShadow]   READY    ??_7Geometry@Graphics@@6B@                           slots= 9 ported= 6 TRAP= 0 purecall= 3
+[RtMintShadow]   BLOCKED  ??_7Goal@Achievement@@6B@                            slots=10 ported= 4 TRAP= 3 purecall= 3
+[RtMintShadow]              TRAP slot  1  ?TypeName@Goal@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Goal@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@Goal@Achievement@@UEBAHXZ
+[RtMintShadow]   BLOCKED  ??_7GoalInstance@Achievement@@6B@                    slots= 7 ported= 3 TRAP= 4 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@GoalInstance@Achievement@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@GoalInstance@Achievement@@UEBAIXZ
+[RtMintShadow]              TRAP slot  4  ?Startup@GoalInstance@Achievement@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?CheckGoalState@GoalInstance@Achievement@@UEBA?AW4GoalState@Goal@2@XZ
+[RtMintShadow]   BLOCKED  ??_7ImageBuffer@Video@@6B@                           slots=10 ported= 3 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@ImageBuffer@Video@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@ImageBuffer@Video@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@ImageBuffer@Video@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@ImageBuffer@Video@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@ImageBuffer@Video@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@ImageBuffer@Video@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   READY    ??_7ImageBufferData@Video@@6B@                       slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   READY    ??_7IndexBufferData@Video@@6B@                       slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   BLOCKED  ??_7Internal@Object@@6B@                             slots= 4 ported= 2 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@Internal@Object@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Internal@Object@@UEBAIXZ
+[RtMintShadow]   BLOCKED  ??_7Light@Graphics@@6B@                              slots=11 ported= 5 TRAP= 1 purecall= 5
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180058dd0
+[RtMintShadow]   BLOCKED  ??_7Loader@Engine@@6B@                               slots= 2 ported= 1 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  ?Run@Loader@Engine@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7LoaderLoop@Engine@@6B@                           slots=12 ported= 1 TRAP=11 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?Startup@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  2  ?Shutdown@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  3  ?Update@LoaderLoop@Engine@@UEAA_NAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  4  ?Draw@LoaderLoop@Engine@@UEAAXM@Z
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  6  ?Load@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@LoaderLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   BLOCKED  ??_7MaterialInstance@Graphics@@6B@                   slots= 9 ported= 2 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?TypeName@MaterialInstance@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@MaterialInstance@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@MaterialInstance@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@MaterialInstance@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@MaterialInstance@Graphics@@UEAAXXZ
+[RtMintShadow]              TRAP slot  8  ?Construct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]   BLOCKED  ??_7MemoryStream@IO@@6B@                             slots= 8 ported= 6 TRAP= 2 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800242a0
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]   BLOCKED  ??_7MeshInstance@Graphics@@6B@                       slots= 9 ported= 2 TRAP= 7 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180017330
+[RtMintShadow]              TRAP slot  1  ?Update@MeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@MeshInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  5  ?GetSubTransform@MeshInstance@Graphics@@UEBA?AVTransform@Math@@H@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  7  ?SetSharedInstanceData@MeshInstance@Graphics@@UEBAHAEAVContext@Video@@HM@Z
+[RtMintShadow]   BLOCKED  ??_7PackageFile@IO@@6B@                              slots= 9 ported= 5 TRAP= 4 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800259d0
+[RtMintShadow]              TRAP slot  5  ?Serialize@PackageFile@IO@@UEAA_NAEAVStream@2@@Z
+[RtMintShadow]              TRAP slot  6  ?Reconstruct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ
+[RtMintShadow]              TRAP slot  7  ?Destruct@PackageFile@IO@@UEAAXXZ
+[RtMintShadow]   BLOCKED  ??_7Particle@Graphics@@6B@                           slots= 9 ported= 2 TRAP= 4 purecall= 3
+[RtMintShadow]              TRAP slot  1  ?TypeName@Particle@Graphics@@UEBAPEBDXZ
+[RtMintShadow]              TRAP slot  2  ?Type@Particle@Graphics@@UEBAIXZ
+[RtMintShadow]              TRAP slot  3  ?GetFileVersion@Particle@Graphics@@UEBAHXZ
+[RtMintShadow]              TRAP slot  5  ?Serialize@Particle@Graphics@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7ParticleInstance@Graphics@@6B@                   slots=10 ported= 5 TRAP= 4 purecall= 1
+[RtMintShadow]              TRAP slot  2  ?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@ParticleInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  9  ?SetParticle@ParticleInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@@Object@@@Z
+[RtMintShadow]   BLOCKED  ??_7ParticleSystemInstance@Graphics@@6B@             slots=10 ported= 5 TRAP= 5 purecall= 0
+[RtMintShadow]              TRAP slot  1  ?Update@ParticleSystemInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@ParticleInstance@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@ParticleInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  6  ?GetInstanceTransform@ParticleInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+[RtMintShadow]              TRAP slot  9  ?SetParticle@ParticleSystemInstance@Graphics@@UEAAXV?$ExternalPtr@VParticle@Graphics@@@Object@@@Z
+[RtMintShadow]   READY    ??_7PixelProgramData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7ReaderWriter@IO@@6B@                             slots=36 ported= 2 TRAP= 4 purecall=30
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180023bd0
+[RtMintShadow]              TRAP slot 31  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81e0
+[RtMintShadow]              TRAP slot 32  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81d0
+[RtMintShadow]              TRAP slot 33  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x1800a81c0
+[RtMintShadow]   READY    ??_7RenderBufferData@Video@@6B@                      slots= 4 ported= 1 TRAP= 0 purecall= 3
+[RtMintShadow]   READY    ??_7RenderStateData@Video@@6B@                       slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7SpriteSheet@UI@@6B@                              slots= 9 ported= 8 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  5  ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z
+[RtMintShadow]   BLOCKED  ??_7Stream@IO@@6B@                                   slots= 7 ported= 1 TRAP= 1 purecall= 5
+[RtMintShadow]              TRAP slot  1  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ
+[RtMintShadow]   BLOCKED  ??_7SunLight@Graphics@@6B@                           slots=11 ported= 5 TRAP= 6 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x180064620
+[RtMintShadow]              TRAP slot  1  ?Update@SunLight@Graphics@@UEAAXAEBVTime@System@@@Z
+[RtMintShadow]              TRAP slot  2  ?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z
+[RtMintShadow]              TRAP slot  3  ?AddDrawItems@SunLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+[RtMintShadow]              TRAP slot  9  ?DrawShadowMap@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z
+[RtMintShadow]              TRAP slot 10  ?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z
+[RtMintShadow]   READY    ??_7Thread@System@@6B@                               slots= 2 ported= 1 TRAP= 0 purecall= 1
+[RtMintShadow]   BLOCKED  ??_7UpdateLoop@Engine@@6B@                           slots=12 ported= 1 TRAP= 6 purecall= 5
+[RtMintShadow]              TRAP slot  5  ?DrawFailed@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  7  ?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z
+[RtMintShadow]              TRAP slot  8  ?OnVideoError@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot  9  ?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ
+[RtMintShadow]              TRAP slot 10  ?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ
+[RtMintShadow]              TRAP slot 11  ?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ
+[RtMintShadow]   READY    ??_7VertexBufferData@Video@@6B@                      slots= 7 ported= 1 TRAP= 0 purecall= 6
+[RtMintShadow]   READY    ??_7VertexLayoutData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   READY    ??_7VertexProgramData@Video@@6B@                     slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   READY    ??_7VideoProgramData@Video@@6B@                      slots= 3 ported= 1 TRAP= 0 purecall= 2
+[RtMintShadow]   BLOCKED  ??_7Visitor@IO@@6B@                                  slots=26 ported=25 TRAP= 1 purecall= 0
+[RtMintShadow]              TRAP slot  0  (unexported; known by address only)
+[RtMintShadow]                            DLL 0x18002b710
+
+[RtMintShadow] ---- per-typeinfo readiness ----
+[RtMintShadow] READY = every string field and the typeId AGREE with the
+[RtMintShadow] loaded DLL this run. fac=trap is reported, not hidden: it
+[RtMintShadow] is unreachable for a dword reader but not for a tree walk.
+[RtMintShadow]   READY    ?_typeInfo@AnimatedImageDescription@UI@@0VBaseTypeInfo@Object@@A id=0x94ee6491 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@AnimatedImageElement@UI@@0VBaseTypeInfo@Object@@A id=0x3271975d idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@BorderDescription@UI@@0VBaseTypeInfo@Object@@A  id=0xa86bf867 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A      id=0xe6faeb54 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ButtonDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x78fd8f20 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A      id=0x5310bda4 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@CharacterSet@UI@@0VBaseTypeInfo@Object@@A       id=0xf49dae05 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xa59314b7 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A       id=0x1039fdd3 idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@ClipRegionDescription@UI@@0VBaseTypeInfo@Object@@A id=0xb3f27e13 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A  id=0x352b9ada idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@ComboDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x93056daf idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ComboDialog@UI@@0VBaseTypeInfo@Object@@A        id=0x4c55fddf idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A       id=0xd358ef47 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A id=0x6b46c172 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A   id=0xcd48b14b idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@Cursor@UI@@0VBaseTypeInfo@Object@@A             id=0x31c7f810 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A             id=0x4fcc106b idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A   id=0xf2c192b8 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A id=0xb77e0eb9 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A     id=0xbe12e2eb idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@DocumentTextDescription@UI@@0VBaseTypeInfo@Object@@A id=0xec3779bb idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A id=0x11416aad idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@EditDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xc9022aa3 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A        id=0x006931e0 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A id=0x42f6a818 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A               id=0xe3d8954e idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@GraphDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xe28e0152 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A       id=0xe4db189c idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@GroupDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x8a72943e idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@GroupElement@UI@@0VBaseTypeInfo@Object@@A       id=0x8ced93cd idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ImageDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xfdd24e9a idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A       id=0x35413056 idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@LabelDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xf0cbd6ea idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A       id=0x4f8656b9 idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x4f976fb7 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@LayoutElement@UI@@0VBaseTypeInfo@Object@@A      id=0x21465073 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A    id=0x2de80b80 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A        id=0x2475ec1a idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@NumberDescription@UI@@0VBaseTypeInfo@Object@@A  id=0xfb8de193 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@NumberEditDescription@UI@@0VBaseTypeInfo@Object@@A id=0x745a1bb8 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A  id=0x25a24564 idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A      id=0x1c54106e idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@PageDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xe7d69af7 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@PageElement@UI@@0VBaseTypeInfo@Object@@A        id=0x98ffe1f8 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ProgressDescription@UI@@0VBaseTypeInfo@Object@@A id=0xb1403226 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A    id=0x4c63b522 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@RadioDescription@UI@@0VBaseTypeInfo@Object@@A   id=0x65d6876c idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@RadioElement@UI@@0VBaseTypeInfo@Object@@A       id=0xe3cf1747 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@RibbonDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x35c17fb8 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A      id=0x82c11d31 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ScrollDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x9bdfebbb idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A      id=0x1c6afffa idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@SliderDescription@UI@@0VBaseTypeInfo@Object@@A  id=0x6c7bbf56 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A      id=0xda677e92 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A id=0xeca6998f idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A     id=0x26681eb1 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A      id=0xd56baba8 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A        id=0x1821d6a5 idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A        id=0xc03519e4 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A     id=0x2bcb883f idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A         id=0x7e8fcdd2 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A   id=0xef9a5ee5 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A       id=0xc7980309 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A    id=0xc974f55b idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   READY    ?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A        id=0x1a20cede idcmp=yes strs=0 fac=2traps  [PROMOTED]
+[RtMintShadow]   READY    ?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A      id=0x175c6265 idcmp=yes strs=0 fac=2traps
+[RtMintShadow]   typeinfo rows: 104 READY, 0 BLOCKED (of 104; only the UI rows and the BLOCKED ones are listed)
+
+[RtMintShadow] ---- summary (phase=exit) ----
+[RtMintShadow] vtables            : 55, 527 slots
+[RtMintShadow] ground truth       : 527 slot comparisons vs the live DLL, 0 MISMATCH
+[RtMintShadow] minted from OUR    : 203 slots, 0 MISMATCH   <-- the only number that measures the port
+[RtMintShadow] minted as traps    : 324 (148 purecall by design, 176 not yet ported)
+[RtMintShadow] complete vtables   : 15 of 55
+[RtMintShadow] slot-count suspects: 0
+[RtMintShadow] BaseTypeInfo       : 624 field comparisons, 0 MISMATCH, 0 typeId not-yet-comparable (DLL still at the ctor sentinel); next: NOT compared, built from our init order
+[RtMintShadow] storage            : 38 symbols, 30 written by the DLL, 8 still zero, 3 of ours written (contents NOT compared: BSS)
+[RtMintShadow] constructed statics: 0 of 3 built (shape compared on 0, 0 SHAPE MISMATCH, 0 SHAPE-INFO)   [BANISHED_RT_MINT_CTOR=1 to build them]
+[RtMintShadow] symbols absent from the DLL: 0
+[RtMintShadow] carried by ADDRESS   : 4 row(s) with no exported name -- the export-location cross-check does not apply to them and was not counted as a pass
+[RtMintShadow] effectiveness: 203 of 379 non-purecall slots carry our own
+[RtMintShadow] code; the remaining 176 are lane B's worklist.
+[RtMintShadow] ==== clean: 0 problem(s) ====
+
+[RtEngineLife] ctor=1 startup=1 (failAt=0) dtor=1 shutdown=0 (phase1 steps=0)
+[RtEngineLife] Engine::Shutdown ran 0 times -- STRUCTURAL, not a regression: game_main.cpp calls ShutdownEngineStaged() instead. That port is UNVERIFIED.
+[ResFind] counters: calls=0 hits=0 misses=0 | ident def/present=0/0 | pointer disagreements=0
+[ResPath] counters: expand=0 empty=0 | ident def/present=0/0 | fname stack/present=0/0 | stack empty/nonempty=0/0
+[ResPath] counters: hit pkg=0 attrProbe/hit=0/0 retry=0 notFound=0 | tail ident/none=0/0
+[ResPath] counters: ext calls=0 ok=0 nodata=0 nodot=0 emptyAfterDot=0 colonTrim=0
+[RtPort] UI::UserInterface::CloseDialog  entries=0
