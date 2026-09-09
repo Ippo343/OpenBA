@@ -40,6 +40,11 @@ extern int RtUiDialogSettingsRegister();   // dialog_settings.cpp (lane ENC-2)
 // because it lands on the UIDescription parse path of every .rsc in the game
 // and must be A/B-able without turning the rest of UI::Dialog off.
 extern int RtUiElementDescriptionSerializeRegister();  // elementdescription_serialize.cpp
+// Wave 10 lane UI1: ?Update@UserInterface@UI@@, the class's frame half. Its own
+// switch (BANISHED_RT_UIFRAME) because it is the first UI body that can be given
+// a code detour into the DLL, and a bisect must be able to isolate it from the
+// rest of lane C's UserInterface port.
+extern int RtUiFrameRegister();            // userinterface_frame.cpp (lane UI1)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -55,5 +60,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_UISPRITE"))     n += RtUiSpriteRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGSETTINGS")) n += RtUiDialogSettingsRegister();
     if (RtWaveEnabled("BANISHED_RT_ELEMDESCSER")) n += RtUiElementDescriptionSerializeRegister();
+    if (RtWaveEnabled("BANISHED_RT_UIFRAME"))     n += RtUiFrameRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }

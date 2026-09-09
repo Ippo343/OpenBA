@@ -99,6 +99,51 @@ struct Prediction {
     bool        corrupted;   // this one was bit-flipped by the self-test
 };
 
+// Does a LATER prediction `b` make an EARLIER prediction `a` uncomparable?
+//
+// It does whenever their byte ranges OVERLAP AT ALL — not only when the address
+// and width match exactly, which is what this test used to require.
+//
+// WHY THE EXACT-MATCH RULE WAS WRONG (Wave 10 lane UI1, found by the first run
+// of the UI::UserInterface::Update oracle, which reported three mismatches that
+// were not defects). Retail's fade teardown writes two DIFFERENT WIDTHS to
+// overlapping addresses inside one call:
+//
+//     0x1801215ae  MOVSS dword[RSI+0xf4], XMM1   ; _fadeAmount = f
+//     ...
+//     0x1801215d7  MOV   qword[RSI+0xf0], 0      ; _fadeVelocity AND _fadeAmount
+//
+// The second store COVERS the first. The port predicts both, faithfully, and
+// its final claim about +0xf4 is 0 — which is exactly what the DLL leaves. But
+// the earlier 4-byte prediction at +0xf4 has neither the same address nor the
+// same size as the later 8-byte one at +0xf0, so the old rule did not see it as
+// superseded, compared an INTERMEDIATE value against final memory, and printed
+// `pre=0x38281000 ours=0xbd887221 theirs=0x0` three times. That is the
+// manufactured-mismatch failure this check exists to prevent, arriving through
+// the one door the check did not cover.
+//
+// THE DIRECTION OF THE RISK, stated because it matters: this rule can only move
+// a prediction from COMPARED to NOT COMPARED, so a bug in it hides defects
+// rather than inventing them. Two things keep that honest. First, every
+// suppressed prediction is counted and printed as `superseded=`, so the hole is
+// visible. Second — and this is what makes the widened rule safe rather than
+// merely convenient — the LATER, WIDER prediction is itself compared, so the
+// post-state of those bytes is still under the oracle. In the case above the
+// 8-byte prediction at +0xf0 passed; nothing stopped being verified, only the
+// intermediate stopped being misread as a post-state claim.
+//
+// A PARTIAL overlap (the later write covers only some of the earlier bytes)
+// leaves the earlier prediction's full-width value uncomparable too, and is
+// treated the same way. It has no instance in the tree today; if one appears it
+// will show up as `superseded` rather than as a false red, which is the correct
+// side to fail on.
+inline bool RangesOverlap(const void* aAddr, size_t aSize,
+                          const void* bAddr, size_t bSize) {
+    const uint8_t* a0 = static_cast<const uint8_t*>(aAddr);
+    const uint8_t* b0 = static_cast<const uint8_t*>(bAddr);
+    return a0 < b0 + bSize && b0 < a0 + aSize;
+}
+
 struct WatchRegion {
     const uint8_t* base;
     size_t         size;
@@ -335,7 +380,7 @@ void RtPredictRound::Verify() {
             if (InAnyExclude(r, static_cast<const uint8_t*>(p.addr))) continue;
             bool superseded = false;
             for (size_t j = i + 1; j < r->predCount; j++)
-                if (r->preds[j].addr == p.addr && r->preds[j].size == p.size) {
+                if (RangesOverlap(p.addr, p.size, r->preds[j].addr, r->preds[j].size)) {
                     superseded = true; break;
                 }
             if (superseded) continue;
@@ -369,9 +414,15 @@ void RtPredictRound::Verify() {
         // UpdateContainers writes child+0x34 twice -- once directly, once as
         // the first step of the dirty walk -- and the first real run of this
         // oracle reported BOTH as divergences. Neither was one.
+        //
+        // OVERLAP, NOT EXACT MATCH — see RangesOverlap above. A later write of a
+        // DIFFERENT WIDTH that covers this location supersedes it just as
+        // completely as an identical one, and requiring an exact match is what
+        // made UI::UserInterface::Update's fade teardown report three
+        // mismatches that were not defects.
         bool superseded = false;
         for (size_t j = i + 1; j < r->predCount; j++) {
-            if (r->preds[j].addr == p.addr && r->preds[j].size == p.size) {
+            if (RangesOverlap(p.addr, p.size, r->preds[j].addr, r->preds[j].size)) {
                 superseded = true; break;
             }
         }
