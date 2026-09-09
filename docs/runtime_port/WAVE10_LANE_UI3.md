@@ -353,17 +353,36 @@ and the same reason.
 
 ## 7. Runs
 
-See §8 for the exact status at hand-off. All runs go through
-`tools/game_dir_lock.sh acquire lane-UI3`; several lanes share the one
-`C:/GOG Games/Banished`.
+`docs/runtime_port/wave10_lane_ui3/run_ui3.sh`, invoked as
 
-Configuration matrix required by the brief:
+```
+tools/game_dir_lock.sh run lane-UI3 2400 -- docs/runtime_port/wave10_lane_ui3/run_ui3.sh
+```
 
-| # | configuration | what it establishes |
-|---|---|---|
-| 1 | `BANISHED_RT_DIFF=1 BANISHED_AUTOSTART=1`, `BANISHED_RT_ALLOC` **unset** | the ports are correct in the **default** configuration, and the oracles report |
-| 2 | same **+ `BANISHED_RT_ALLOC=1`** | the ports are correct with the ported allocator armed |
-| 3 | `BANISHED_RT_DLGCREATE=0` | the kill switch puts all four back on the DLL |
+| # | label | configuration | what it establishes |
+|---|---|---|---|
+| 1 | `default` | `BANISHED_RT_DIFF=1 BANISHED_AUTOSTART=1`, `BANISHED_RT_ALLOC` **unset** | the ports are correct in the **default** configuration — the run the §0 claim stands or falls on |
+| 2 | `armed` | same **+ `BANISHED_RT_ALLOC=1`** | the ports are correct with the ported allocator armed |
+| 3 | `killswitch` | `BANISHED_RT_DLGCREATE=0` | **the attribution control.** If the switch does nothing, a clean run 1 says nothing about what was live |
+
+### Two run-hygiene rules this lane follows, and why they are not boilerplate
+
+**All three launches share ONE lock hold.** Three separate `run` invocations would give up
+the lock between them, and another lane deploying in a gap would make runs 2 and 3 measure
+a different binary from run 1.
+
+**`verify` and the md5 are asked before every launch, and they are different questions.**
+`verify lane-UI3` says *we still hold the lock*; `md5sum` on the deployed exe says *the
+bytes in the game directory are still our build*. Both have failed in this project. A
+mismatch **aborts** rather than being caveated.
+
+> **Lock-pipeline audit (integrator advisory, 2026-09-08 23:0x).** This lane did use the
+> unsafe `game_dir_lock.sh acquire … | tail` form twice, and it did produce the misleading
+> `exit code 0` on a run that had actually printed `TIMEOUT`. **No clobber resulted**,
+> because the printed text was read rather than the status, and because this lane had
+> deployed and launched nothing at that point. Everything from that point on goes through
+> `run` / `verify` on the hardened script (`wave10/base` `f9a9a9c`), which is taken into
+> this branch.
 
 ---
 
