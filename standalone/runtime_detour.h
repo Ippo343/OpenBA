@@ -115,11 +115,31 @@ void* RuntimeDetourInstall(uintptr_t ghidraAddr, void* wrapper, int patchLen,
 // build a trampoline holding the displaced prologue.
 //
 // `prologueSize` is how many bytes to displace: at least 12 (the jump) and it
-// MUST end on an instruction boundary. The installer auto-detects two hazards:
-//   * MOV RAX,RSP / MOV R11,RSP in the prologue (an RSP capture that the
-//     CALL into the trampoline would shift by 8) — corrected with ADD reg,8.
+// MUST end on an instruction boundary. The installer auto-detects one hazard:
 //   * PC-relative instructions (CALL/JMP rel, Jcc, RIP-relative ModR/M) —
 //     re-encoded against the trampoline's address via HDE64.
+//
+// It does NOT touch an RSP capture (MOV RAX,RSP / MOV R11,RSP), and must not:
+// a trampoline entered by CALL sees the same frame SHAPE as retail's own entry
+// (return address at [RSP], the caller's 32-byte home space at [RSP+8]), so the
+// captured value needs no adjustment. This installer used to add 8 and that was
+// a live defect — see runtime_detour.cpp's Bug Class 3 note and
+// docs/runtime_port/WAVE10_LANE_FREEPRO.md.
+//
+// WHICH INSTALLER TO USE (the rule, so it does not get re-derived):
+//   * `InstallDetour` / `InstallRuntimeDetour*` — the default. Relocates
+//     PC-relative bytes, so it is the ONLY option when the displaced prologue
+//     contains a CALL/JMP/Jcc rel or a RIP-relative operand.
+//   * `RuntimeDetourInstall` (the byte-copy installer) — when you have read the
+//     prologue and want the strictest guard: it copies verbatim, inserts
+//     nothing, and refuses on any byte mismatch. Requires that no displaced
+//     byte is PC-relative.
+//   * `InstallDetourRSPSafe` — only when your detour tail-JMPs into the
+//     trampoline instead of CALLing it.
+//   * `InstallDetourVTableAt` — when the prologue cannot be displaced at all
+//     (SEH-cookie functions, Bug Class 8).
+// An RSP capture in the prologue is NOT by itself a reason to prefer one over
+// another; all of them now reproduce it correctly.
 bool InstallDetour(uintptr_t targetAddr, void* detourFunc, RtDetour* info,
                    size_t prologueSize = 12);
 
