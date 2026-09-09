@@ -1,0 +1,127 @@
+# Census four-cell matrix -- lane UIDRAW
+# rows are the summary table; see WAVE10_LANE_UIDRAW.md section 5
+
+=== basetree_basetool ===
+Runtime-x64.dll port census
+==============================================================================
+namespace         total   called   ported   detour  called covered
+------------------------------------------------------------------------------
+UI                 1625      166      140        2   84.3%
+Video               573      148      108        0   73.0%
+internal                     127      112        0   88.2%
+IO                  407      104       83        0   79.8%
+Graphics            599       97       66        0   68.0%
+System              262       97       75        2   77.3%
+Math                228       64       64        0  100.0%
+Object              191       56       32        2   57.1%
+Achievement         118       52       36        0   69.2%
+Engine              108       33       23        0   69.7%
+Audio               137       30       23        0   76.7%
+Input                63       29       25        0   86.2%
+Save                 37       24       16        0   66.7%
+Application          26       13        9        0   69.2%
+Volume               64       13       13        0  100.0%
+Picking              49        9        9        0  100.0%
+ordinal                        6        2        0   33.3%
+Utility              16        2        2        0  100.0%
+------------------------------------------------------------------------------
+TOTAL              4632     1070      838        6   78.3%
+
+
+=== mytree_basetool ===
+Runtime-x64.dll port census
+==============================================================================
+namespace         total   called   ported   detour  called covered
+------------------------------------------------------------------------------
+UI                 1625      166      141        2   84.9%
+Video               573      148      108        0   73.0%
+internal                     127      112        0   88.2%
+IO                  407      104       83        0   79.8%
+Graphics            599       97       66        0   68.0%
+System              262       97       75        2   77.3%
+Math                228       64       64        0  100.0%
+Object              191       56       32        2   57.1%
+Achievement         118       52       36        0   69.2%
+Engine              108       33       23        0   69.7%
+Audio               137       30       23        0   76.7%
+Input                63       29       25        0   86.2%
+Save                 37       24       16        0   66.7%
+Application          26       13        9        0   69.2%
+Volume               64       13       13        0  100.0%
+Picking              49        9        9        0  100.0%
+ordinal                        6        2        0   33.3%
+Utility              16        2        2        0  100.0%
+------------------------------------------------------------------------------
+TOTAL              4632     1070      839        6   78.4%
+
+
+=== basetree_mytool ===
+Runtime-x64.dll port census
+==============================================================================
+namespace         total   called   ported   detour  called covered
+------------------------------------------------------------------------------
+UI                 1625      166      140        3   84.3%
+Video               573      148      108        0   73.0%
+internal                     127      112        0   88.2%
+IO                  407      104       83        0   79.8%
+Graphics            599       97       66        0   68.0%
+System              262       97       75        2   77.3%
+Math                228       64       64        0  100.0%
+Object              191       56       32        2   57.1%
+Achievement         118       52       36        0   69.2%
+Engine              108       33       23        0   69.7%
+Audio               137       30       23        0   76.7%
+Input                63       29       25        0   86.2%
+Save                 37       24       16        0   66.7%
+Application          26       13        9        0   69.2%
+Volume               64       13       13        0  100.0%
+Picking              49        9        9        0  100.0%
+ordinal                        6        2        0   33.3%
+Utility              16        2        2        0  100.0%
+------------------------------------------------------------------------------
+TOTAL              4632     1070      838        7   78.3%
+
+
+=== mytree_mytool ===
+Runtime-x64.dll port census
+==============================================================================
+namespace         total   called   ported   detour  called covered
+------------------------------------------------------------------------------
+UI                 1625      166      141        4   84.9%
+Video               573      148      108        0   73.0%
+internal                     127      112        0   88.2%
+IO                  407      104       83        0   79.8%
+Graphics            599       97       66        0   68.0%
+System              262       97       75        2   77.3%
+Math                228       64       64        0  100.0%
+Object              191       56       32        2   57.1%
+Achievement         118       52       36        0   69.2%
+Engine              108       33       23        0   69.7%
+Audio               137       30       23        0   76.7%
+Input                63       29       25        0   86.2%
+Save                 37       24       16        0   66.7%
+Application          26       13        9        0   69.2%
+Volume               64       13       13        0  100.0%
+Picking              49        9        9        0  100.0%
+ordinal                        6        2        0   33.3%
+Utility              16        2        2        0  100.0%
+------------------------------------------------------------------------------
+TOTAL              4632     1070      839        8   78.4%
+
+
+=== CONTROL: tool effect alone (base tree, base tool -> my tool) ===
+2c2
+< UI                 1625      166      140        2   84.3%
+---
+> UI                 1625      166      140        3   84.3%
+
+=== CONTROL: unported set under the tool change (base tree) ===
+13a14
+>   0x1800bff10                                  standalone/persistobject_probe.cpp
+14a16
+>   0x1800f79f0                                  standalone/video_interface.cpp
+
+=== PORT set-diff (my tool, base tree -> my tree) ===
+531,532d530
+<   export   UI           ?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z
+<            engine/funcs/engine_funcs.cpp
