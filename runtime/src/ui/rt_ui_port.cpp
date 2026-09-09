@@ -88,6 +88,17 @@ extern int RtUiElementVtableRegister();    // element_vtable.cpp  (lane ELEM)
 // promotion has to be able to turn the bodies off independently of lane B's
 // DialogInstance port.
 extern int RtUiDialogControllerRegister(); // dialog_controller_base.cpp (DLGV)
+// Wave 10C lane DLG8: the seven remaining CODE slots of ??_7Dialog@UI@@6B@
+// (TypeName, Type, GetFileVersion, Serialize, Reconstruct, Destruct, Construct),
+// plus the ?TypeId@Dialog@ static twin. Own switch (BANISHED_RT_DLGVTABLE)
+// rather than lane B's BANISHED_RT_UIDIALOG, because registering these is what
+// unlocks promoting that minted vtable in standalone/reg_mint_promoted.cpp, and
+// the A/B behind the promotion must be able to move exactly this group with
+// lane B's 20-odd already-verified Dialog/DialogInstance bodies held fixed.
+// NOTE the eighth slot is NOT here: slot 0 is the unexported vector deleting
+// destructor and is row 38 of the family in runtime/src/object/deleting_dtor.cpp,
+// under BANISHED_RT_DELDTOR. Turning THAT off re-traps slot 0.
+extern int RtUiDialogVtableRegister();     // dialog_vtable.cpp   (lane DLG8)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -111,5 +122,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_UISHOW"))     n += RtUiShowDialogRegister();
     if (RtWaveEnabled("BANISHED_RT_ELEMVTABLE")) n += RtUiElementVtableRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGCTRL"))    n += RtUiDialogControllerRegister();
+    if (RtWaveEnabled("BANISHED_RT_DLGVTABLE")) n += RtUiDialogVtableRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }

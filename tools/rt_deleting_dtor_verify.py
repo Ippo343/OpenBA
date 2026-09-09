@@ -199,8 +199,10 @@ def main():
         print("this run MUST report exactly 1 problem.")
     print("rows in deleting_dtor.cpp: %d" % len(rows))
     bad = 0
-    if len(rows) != 37:
-        print("*** expected 37 rows, found %d" % len(rows))
+    # 37 as surveyed by Wave 9 lane K, plus UI::Dialog (0x180038b20) added by
+    # Wave 10C lane DLG8 when it closed ??_7Dialog@UI@@6B@.
+    if len(rows) != 38:
+        print("*** expected 38 rows, found %d" % len(rows))
         bad += 1
     k1 = k2 = 0
     for addr, dtor, size, name in rows:
