@@ -193,6 +193,7 @@
 
 #include "../../funcs/rt_diff.h"
 #include "../../funcs/rt_port.h"
+#include "dialog_vptr_trip.h"   // WAVE 10E lane FINAL
 #include "../../types/ui/Dialog.h"
 
 // ---- ResolveExport / ResolveAddr / ResolveRuntimeRaw -----------------------
@@ -343,7 +344,11 @@ void* DialogCtorBody(void* self) {
     F<uint64_t>(p, 0x10) = z;               // 180112de3
     F<uint64_t>(p, 0x18) = z;               // 180112de7
 
-    F<void*>(p, 0x00) = VtDialog();         // 180112deb
+    // WAVE 10E lane FINAL — off by default; see dialog_vptr_trip.h. Under
+    // BANISHED_DLG_VPTR_TRIP this stamps a forwarding tripwire table instead,
+    // which of course makes the +0x00 byte oracle below diverge: the probe is
+    // deliberately NOT run together with BANISHED_RT_DIFF.
+    F<void*>(p, 0x00) = RtUiDlgTrip::TableOrReal(VtDialog());   // 180112deb
 
     F<uint64_t>(p, 0x20) = z;               // 180112df5
     F<uint64_t>(p, 0x28) = z;               // 180112df9
@@ -367,6 +372,7 @@ void* DialogCtorBody(void* self) {
     F<uint64_t>(p, 0x78) = z;               // 180112e26
     F<uint64_t>(p, 0x80) = z;               // 180112e2a
 
+    RtUiDlgTrip::AfterStamp(p);             // no-op unless the probe is armed
     return self;                            // 180112e31  MOV RAX,RCX
 }
 
@@ -377,7 +383,10 @@ void* DialogDtorBody(void* self) {
     uint8_t* p = static_cast<uint8_t*>(self);
     const int ctl = NegCtrl();
 
-    F<void*>(p, 0x00) = VtDialog();                         // 180112e56
+    // WAVE 10E lane FINAL: the dtor's re-stamp is a consumer of the row too,
+    // so it gets the tripwire as well — a dispatch DURING teardown would be a
+    // route just as much as one during use.
+    F<void*>(p, 0x00) = RtUiDlgTrip::TableOrReal(VtDialog());  // 180112e56
 
     // *** THE FOUR ADDRESSES ARE SPELLED AS LITERALS AT FOUR SEPARATE
     //     `ResolveAddr` CALL SITES, ON PURPOSE. *** The first draft routed all

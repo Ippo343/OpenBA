@@ -1,0 +1,73 @@
+Wave 10E lane FINAL -- the readings behind WAVE10E_LANE_FINAL.md sections 2-4.
+Deployed exe md5 on both sides of every run: 9f524716f86487249b94aa7419b6d7e1
+Full snapshots live in the lane worktree's lane_final_logs/ (gitignored).
+
+=== r1_trip2_gameplay ===
+-- standalone_crash.log bytes: 0
+-- counters --
+[DlgCtrl] ATTENDANCE: none of the nine bodies was entered in this run.
+[DlgTrip] mode=2 stamped=0 control=0 totalDispatch=0 foreignDispatch=0
+[DlgTrip] NO SLOT OF ??_7Dialog@UI@@6B@ WAS DISPATCHED in this run (all nine counted).
+[DlgTrip] POSITIVE CONTROL: fired=0 observed-in-slot3=0 -- NOT CAUGHT (this run's zero proves nothing)
+[DlgVtbl] ATTENDANCE: none of the seven bodies was entered in this run.
+[Element] ATTENDANCE: neither Update nor Persist was entered in this run.
+
+=== r2_trip2_housepanel ===
+-- standalone_crash.log bytes: 0
+-- counters --
+[DlgTrip] ARMED mode=2 real=00007ffcab1262a0 trip=00007ff7d8a54340
+[DlgCtrl] ATTENDANCE (entries, not comparisons): total=2299 TypeName=0 Type=0 OnCreated=0 OnOpened=9 OnClosed=8 OnUpdateLayout=1141 OnUpdate=1141 OnElementEvent=0 OnSerializeSettings=0
+[DlgTrip] mode=2 stamped=16 control=1 totalDispatch=1 foreignDispatch=0
+[DlgTrip]   slot3_GetFileVersion       = 1
+[DlgTrip] POSITIVE CONTROL: fired=1 observed-in-slot3=1 -- CAUGHT (the instrument discriminates)
+[DlgVtbl] ATTENDANCE: none of the seven bodies was entered in this run.
+[Element] ATTENDANCE: neither Update nor Persist was entered in this run.
+[HousePanel] OPEN house[0]=00000195029f6d50 dialog=0000019503cdfff0 — panel stays open; Slot7 now repopulates rows every frame while the death harness drains the roster
+
+=== r3_trip2_mods ===
+-- standalone_crash.log bytes: 2101
+
+=== STANDALONE CRASH ===
+Exception: 0xC0000005 (ACCESS_VIOLATION)
+Address:   00007ff6581a4575
+RAX=00000000000000D0 RCX=000001DF3EE10280 RDX=0000000000000080 RBX=000001DF3EEE96B8
+RBP=0000006681DFF0A0 RSI=0000000000000040 RDI=000001DF3EEE9700 R8 =00007FF658374589
+R9 =00000000000003E9 R10=0000000000000000 R11=0000006681DFEE80 R12=0000000000000000
+RIP=00007FF6581A4575 RSP=0000006681DFF060
+-- counters --
+[DlgTrip] ARMED mode=2 real=00007ffcab5e62a0 trip=00007ff658b44340
+
+=== r4_ctrl_mods ===
+-- standalone_crash.log bytes: 2101
+
+=== STANDALONE CRASH ===
+Exception: 0xC0000005 (ACCESS_VIOLATION)
+Address:   00007ff627254575
+RAX=00000000000000D0 RCX=0000020000000280 RDX=0000000000000080 RBX=00000200000D96B8
+RBP=000000535E1FEF40 RSI=0000000000000040 RDI=00000200000D9700 R8 =00007FF627424589
+R9 =00000000000003E9 R10=0000000000000000 R11=000000535E1FED20 R12=0000000000000000
+RIP=00007FF627254575 RSP=000000535E1FEF00
+-- counters --
+
+=== r5_trip2_tutorial ===
+-- standalone_crash.log bytes: 0
+-- counters --
+[DlgTrip] ARMED mode=2 real=00007ffcab1262a0 trip=00007ff6d8954340
+[DlgCtrl] ATTENDANCE (entries, not comparisons): total=2509 TypeName=0 Type=0 OnCreated=0 OnOpened=2 OnClosed=0 OnUpdateLayout=1322 OnUpdate=1185 OnElementEvent=0 OnSerializeSettings=0
+[DlgTrip] mode=2 stamped=2 control=1 totalDispatch=1 foreignDispatch=0
+[DlgTrip]   slot3_GetFileVersion       = 1
+[DlgTrip] POSITIVE CONTROL: fired=1 observed-in-slot3=1 -- CAUGHT (the instrument discriminates)
+[DlgVtbl] ATTENDANCE: none of the seven bodies was entered in this run.
+[Element] ATTENDANCE: neither Update nor Persist was entered in this run.
+
+=== r6_trip1_autostart_rtdiff ===
+-- standalone_crash.log bytes: 0
+-- counters --
+[DlgTrip] ARMED mode=1 real=00007ffcab1262a0 trip=00007ff7299e4340
+[RtPort]   [DLG2 diff] rounds=6 divergences=3  effectiveness=340 bytes changed (excluded=0 in the +0x44 hole)  hole screen: 3 checked / 0 failed  NEGCTRL=0
+[DlgCtrl] ATTENDANCE: none of the nine bodies was entered in this run.
+[DlgTrip] mode=1 stamped=13 control=0 totalDispatch=0 foreignDispatch=0
+[DlgTrip] NO SLOT OF ??_7Dialog@UI@@6B@ WAS DISPATCHED in this run (all nine counted).
+[DlgVtbl] ATTENDANCE: none of the seven bodies was entered in this run.
+[Element] ATTENDANCE: neither Update nor Persist was entered in this run.
+
