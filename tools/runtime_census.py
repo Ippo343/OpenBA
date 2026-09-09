@@ -270,6 +270,42 @@ RE_ADDR_CONST = re.compile(
     r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(0x[0-9a-fA-F]+)')
 RE_DETOUR_EXPORT = re.compile(r'InstallRuntimeDetourExport\s*\(\s*"([^"]*)"\s*,\s*"([^"]+)"')
 
+# BLIND SPOT SEVEN (Wave 10 lane CLOSEDLG) -- THE OTHER INSTALLER.
+#
+# All three regexes above match `InstallRuntimeDetour*`, the relocating front
+# doors. The tree has a SECOND installer, `RuntimeDetourInstall` -- the older
+# byte-copy one runtime_detour.h calls "deliberately dumb" -- and NOTHING here
+# matched it, so every detour installed through it was invisible. Not
+# "unresolved and reported": invisible. `nonliteral_detours` came back EMPTY
+# while four subjects were detoured, because an unmatched call site is not an
+# unresolved one.
+#
+# That is not a marginal installer. Lane UI1 established that it is the CORRECT
+# one for any prologue ending in `MOV RAX,RSP`, because the front doors apply an
+# `ADD RAX,8` trampoline fixup ("Bug Class 3") that desynchronises an
+# RAX-relative save from an RSP-relative restore. So the census was blind to
+# exactly the installer the hardest subjects are obliged to use, and two PORT
+# detours were missing from the board:
+#
+#     0x1801213c0  UI::UserInterface::Update[port]      (lane UI1, five runs)
+#     0x180120f20  UI::UserInterface::CloseDialog[port] (lane CLOSEDLG)
+#
+# The argument order differs -- `RuntimeDetourInstall(addr, wrapper, len, bytes,
+# len, "label")` puts the label LAST -- which is why a copy of the pattern above
+# would not have worked. The negative lookahead rejects the DEFINITION in
+# standalone/filename_runtime_hook.cpp, whose first parameter is a declaration
+# (`uintptr_t addr`) rather than an argument; without it the scanner reads a
+# function signature as a call site.
+#
+# The port/instrument split needs no new rule: `_add_detour` already treats an
+# UNLABELLED detour as an instrument, which is the right answer for the two
+# other users of this installer (`persistobject_probe.cpp` and
+# `video_interface.cpp`, both wrappers, neither carrying `[port]`).
+RE_DETOUR_INSTALL = re.compile(
+    r'\bRuntimeDetourInstall\s*\(\s*'
+    r'(?!(?:const\s+|unsigned\s+)?[A-Za-z_]\w*\s*\*?\s+[A-Za-z_]\w*\s*[,)])'  # not a declaration
+    r'(0x[0-9a-fA-F]+|[A-Za-z_][A-Za-z0-9_]*)\s*,[^;{}]*?"([^"]*)"\s*\)')
+
 # Function counts per namespace, from the live Ghidra census recorded in
 # docs/runtime_port/PLAN.md §3.1. Update both together.
 TOTAL_FUNCTIONS = {

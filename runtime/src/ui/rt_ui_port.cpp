@@ -55,6 +55,11 @@ extern int RtUiDialogCreateRegister();     // dialog_create.cpp   (lane UI3)
 // the second body that can be given a code detour into the DLL, and a bisect
 // must be able to isolate the DRAW half from the UPDATE half.
 extern int RtUiDrawRegister();             // userinterface_draw.cpp (lane UIDRAW)
+// Wave 10 lane CLOSEDLG: ?CloseDialog@UserInterface@UI@@, the last of lane C's
+// four UserInterface rows that had a live route. Own switch because its oracle
+// is deliberately PARTIAL (see the file banner) and a bisect must be able to
+// isolate it from lane UI1's Update, which calls it.
+extern int RtUiCloseDialogRegister();      // userinterface_close.cpp (lane CLOSEDLG)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -73,5 +78,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_UIFRAME"))     n += RtUiFrameRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGCREATE"))  n += RtUiDialogCreateRegister();
     if (RtWaveEnabled("BANISHED_RT_UIDRAW"))      n += RtUiDrawRegister();
+    if (RtWaveEnabled("BANISHED_RT_UICLOSE"))    n += RtUiCloseDialogRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }
