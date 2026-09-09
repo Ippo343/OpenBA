@@ -173,6 +173,18 @@ bool InstallRuntimeDetourExport(const char* label, const char* mangledName, void
 // target match `expected`. The allocator lock does this by hand; pass the bytes
 // here and any DLL version drift is caught at install time instead of at the
 // first call. Pass nullptr/0 to skip.
+
+// TWO EXTENTS, AND THEY ARE NOT THE SAME PARAMETER.
+// `prologueSize` is what InstallDetour SPLICES; `expectedCount` is what this
+// function MEMCMPs. Nothing here relates them, so a correct byte array paired
+// with a wrong `prologueSize` PASSES the guard and still splices at the wrong
+// extent. Pass the same expression for both unless you can say why not.
+//
+// AND THE MEMCMP CANNOT SPEAK TO INSTRUCTION BOUNDARIES AT ALL. If someone
+// transcribes N bytes ending mid-instruction, the guard passes — those bytes
+// ARE what is at that address. Byte-correctness and boundary-correctness are
+// orthogonal, and this check is SILENT on the second rather than weak at it.
+// Only a clean run speaks to boundaries.
 bool InstallRuntimeDetourChecked(const char* label, uintptr_t ghidraAddr, void* ourFn,
                                  RtDetour* info, size_t prologueSize,
                                  const uint8_t* expected, size_t count);

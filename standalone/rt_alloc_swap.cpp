@@ -285,6 +285,18 @@ extern "C" bool RtAllocSwapInstall(void* ourAllocate, void* ourFree) {
         0x48,0x85,0xD2, 0x0F,0x84,0x4F,0x02,0x00,0x00, 0x48,0x8B,0xC4
     };
 
+    // The SPLICE extent (the `13`/`12` below) and the MEMCMP extent
+    // (`sizeof(k*Prologue)`) are two INDEPENDENT parameters of
+    // InstallRuntimeDetourChecked, and nothing in the API relates them. They
+    // agree here by hand, in the file that patches the allocator; extending
+    // either array by a byte would desynchronise the check from the patch
+    // SILENTLY, and the guard would then validate an extent it does not splice.
+    // Pin them so that stops being possible. (Found by Wave 10D lane TIP off a
+    // point of lane MOUSE's; the API-level fix — one overload deriving both
+    // from the array — belongs to whoever owns the detour machinery.)
+    static_assert(sizeof(kAllocPrologue) == 13, "splice extent and memcmp extent must agree");
+    static_assert(sizeof(kFreePrologue)  == 12, "splice extent and memcmp extent must agree");
+
     // No trampolines are used: our body REPLACES retail's, it does not wrap it.
     if (!InstallRuntimeDetourChecked("MemoryAllocator::Allocate[port]", 0x1800c6e60,
                                      reinterpret_cast<void*>(&SwapAllocate),
