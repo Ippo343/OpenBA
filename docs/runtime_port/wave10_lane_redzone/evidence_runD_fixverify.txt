@@ -1,0 +1,4 @@
+28:[REDZONE] WATCH-ONLY mode: no shim, watchdog=1ms
+32:[REDZONE-HEAP] watchdog thread started (interval=1ms)
+5171:[ReadGuard] census: Read=0
+5172:[REDZONE-HEAP] watchdog stopped at exit (acknowledged) after 52122 completed heap walks

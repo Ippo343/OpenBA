@@ -1,0 +1,8 @@
+2:[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=000001e549420000, wrapper=00007ff71cc25984)
+3:[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=000001e54b3e0000, wrapper=00007ff71cc25b2e)
+28:[REDZONE] WATCH-ONLY mode: no shim, watchdog=1ms
+30:[REDZONE-HEAP] watchdog thread started (interval=1ms)
+5094:[PauseMenu] dispatching OnCommand(msg=0x12, id=6)
+5167:[FNHook] census: ~Filename=0 operator=(String)=0 operator=(Filename)=0 Filename(String)=0
+5168:[ResLoad] census: FindOrLoad=23713 External::Load=5686
+5169:[ReadGuard] census: Read=0

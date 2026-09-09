@@ -1,0 +1,30 @@
+2:[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=00000236fd210000, wrapper=00007ff7b19f5984)
+3:[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=00000236fd220000, wrapper=00007ff7b19f5b2e)
+5:[AllocLock] patches RETIRED for the ported allocator (Allocate=1 Free=1)
+8:[RtAllocSwap] ATOMIC SWAP INSTALLED — every Allocate/Free in the process now runs our port under the allocator CS
+9:[RtAllocSwap] ?Allocate@/?Free@ registrations repointed at the composed (locked) stubs
+33:[REDZONE] WATCH-ONLY mode: no shim, watchdog=1ms
+34:[REDZONE-SELFTEST] armed: will clobber one boundary tag at t=100000ms
+35:[REDZONE-HEAP] watchdog thread started (interval=1ms)
+5124:[REDZONE-SELFTEST] INJECTED at t=100000ms: block @0000023680000fd8 tag 000000000000000e -> 0000000000000000 (walk must now report a violation)
+5125:[REDZONE-HEAP] ==== corruption at checkpoint 'watchdog' (seq=0) ====
+5126:[REDZONE-HEAP] range 0: bad block @0000023680000fd8 tag=0x0000000000000000 size=0 (0x0)
+5127:[REDZONE-HEAP] preceding block @0000023680000fa0 raw: tag=000000000000000e user[0]=0000023680008e28 user[1]=0000002a00000000 user[2]=0000023680000f70
+5128:[REDZONE-HEAP]   preceding user vtable[user+0] = 0x0000023680008e28 (not in a module)
+5129:[REDZONE-HEAP] preceding block NOT in our table (Runtime-allocated, or freed-stale)
+5130:[REDZONE-HEAP] most-recent 8 live allocations (temporal suspects):
+5131:[REDZONE-HEAP] MAIN thread tid=22460 stack at detection:
+5132:[REDZONE-HEAP]   #0  reimpl-x64.exe     + 0x197681  
+5133:[REDZONE-HEAP]   #1  reimpl-x64.exe     + 0x1976DA  
+5134:[REDZONE-HEAP]   #2  reimpl-x64.exe     + 0x197C6A  
+5135:[REDZONE-HEAP]   #3  reimpl-x64.exe     + 0x197D21  
+5136:[REDZONE-HEAP]   #4  reimpl-x64.exe     + 0x198441  
+5137:[REDZONE-HEAP]   #5  reimpl-x64.exe     + 0x1AAC80  
+5138:[REDZONE-HEAP]   #6  Runtime-x64.dll    + 0xDD08A   
+5139:[REDZONE-HEAP]   #7  Runtime-x64.dll    + 0xDD293   
+5140:[REDZONE-HEAP]   #8  reimpl-x64.exe     + 0x2DF40B  
+5141:[REDZONE-HEAP]   #9  reimpl-x64.exe     + 0x1A7CD7  
+5142:[REDZONE-HEAP]   #10 reimpl-x64.exe     + 0x3DE25C  
+5143:[REDZONE-HEAP]   #11 reimpl-x64.exe     + 0x12EE    
+5144:[REDZONE-HEAP]   #12 reimpl-x64.exe     + 0x13E6    
+5145:[REDZONE-HEAP]   #13 KERNEL32.DLL       + 0x17374   
