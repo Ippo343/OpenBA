@@ -6,11 +6,20 @@ UI stands at **183 / 186 = 98.4%**. This wave intends to be the last UI wave —
 but *finishing* is not the same as *reaching 100%*, and one of the three lanes
 exists to say which of those is actually available.
 
+## Integrator error, recorded: the lanes cannot see this document
+
+All three lanes were dispatched with base `c22d952`, but this file was committed
+at `fca68db`, **after** it. So none of them can read the wave doc they were told
+to read. Lane DRAG hit it, said so plainly rather than inventing context, and
+worked from `WAVE10D.md` + `WAVE10D_LANE_MOUSE.md` §6 instead. No harm — the
+per-lane briefs are self-contained — but the ordering was mine to get right:
+commit the wave doc BEFORE dispatching, or dispatch on the doc's own commit.
+
 ## The three rows
 
 | row | state | what it needs | lane |
 |---|---|---|---|
-| `?BeginDragDrop@UserInterface@UI@@` | unported | a port | **DRAG** |
+| `?BeginDragDrop@UserInterface@UI@@` | ✅ **PORTED AND VERIFIED** | — | **DRAG** |
 | `??_7Dialog@UI@@6B@` | ported 9/9, `TRAP=0` | a DISPATCH, or a verdict | **FINAL** |
 | `??_7DialogController@UI@@6B@` | ported 11/11, `TRAP=0` | a verdict — its blocker is already proven permanent | **FINAL** |
 
@@ -19,6 +28,44 @@ already published its full 15-instruction listing and field map (`+0x60` dialog,
 `+0x70` id, `+0x78` data, `+0x80`/`+0x84` grab offsets) and its tail-JMP target
 `?Play@UserInterface@UI@@` **is already ported**, so it should pull in little or
 nothing new.
+
+### DRAG — ✅ done, and the first A/B was worthless
+
+UI **183/186 → 184/186 (98.9%)**. Nothing entered the census: rows 1107 → 1107,
+ENTERED none, LEFT none, exactly one ported cell moved. `?Play@` was already ours
+and pulled in nothing, as predicted.
+
+**The lane caught its own useless control before reporting.** The drag subject is
+a 40×40 button aimed at centre, so `grabX == grabY == 20` — and a
+**transposition** of the two `int32` stores would have been completely invisible.
+The first A/B agreed and proved nothing. `BANISHED_MOUSE_DRAGSKEW` broke the
+symmetry:
+
+| cell | who ran | grabX | grabY |
+|---|---|---|---|
+| `skew_on` | OURS | 23 | 13 |
+| `skew_off` | DLL | 23 | 13 |
+| `skew_swap` | control | **13** | **23** ← caught |
+
+The readback sits OUTSIDE the switch, so neither side reports its own verdict —
+the `reference_shadow_marker_is_not_an_oracle` shape avoided by construction.
+
+Two things carried forward:
+
+* **MOUSE's published instruction count was wrong again** — 15, not 11 — and DRAG
+  counted it with an instrument twice rather than by eye. Same shape as every
+  Wave 10D count defect: the analysis right, the number summarising it wrong.
+* **MOUSE's open question is answered and bounded.** No instruction in
+  `BeginDragDrop` touches `+0x68`, and a scan of the WHOLE `UserInterface` range
+  for stores to `+0x68` finds five instructions at four sites, **all writing
+  zero**. No `UserInterface` member sets `_dragDropElement` non-null, so
+  `EndDragDrop`'s destroy arm is unreachable as a **property of the class**, not
+  as a gap in the injector. That closes a question rather than parking it.
+* A census blind spot recorded rather than worked around: DRAG's `Play` call site
+  uses the named constant `kPlay`, which `runtime_census.py` cannot see — nor can
+  it see `userinterface_frame.cpp`'s. Harmless only because that row is already
+  called-and-ported. Its own *registration* is spelled as a literal for exactly
+  this reason.
 
 ## The question lane FINAL exists to answer
 
