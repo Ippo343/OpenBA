@@ -129,20 +129,83 @@ run_in_progress() {
     return 1
 }
 
+# ---- FIFO ticketing ---------------------------------------------------------
+#
+# `acquire` used to be a poll-and-grab spin, which is NOT a queue: whoever
+# happened to poll in the window after a release won, and a lane that had been
+# waiting 29 minutes had no priority over one that arrived a second ago. Lane
+# UI3 lost a slot that way on 2026-09-08 after waiting an hour. More timeout
+# does not fix that -- it is unfairness, not impatience.
+#
+# So a waiter takes a TICKET (its lane name, containing the epoch it first
+# asked) and may only attempt the grab when it is at the head. A waiter TOUCHES
+# its ticket every poll, so a lane that dies while queued stops refreshing and
+# its ticket is ignored after TICKET_STALE seconds -- otherwise one dead waiter
+# would deadlock every other lane, which is worse than the unfairness it fixes.
+#
+# Lanes running an older copy of this script take no ticket and still grab as
+# before. That is the pre-existing behaviour, not a regression.
+QUEUE="$GAME/.gamedir_queue"
+TICKET_STALE=60
+
+ticket_take() {
+    local who="$1"
+    mkdir -p "$QUEUE" 2>/dev/null
+    [ -f "$QUEUE/$who" ] || printf '%s' "$(now)" > "$QUEUE/$who"
+}
+ticket_touch() { touch "$QUEUE/$1" 2>/dev/null; }
+ticket_drop()  { rm -f "$QUEUE/$1" 2>/dev/null; }
+
+# Echo the lane name at the head of the queue: the LIVE ticket (refreshed within
+# TICKET_STALE) with the earliest first-asked epoch. Empty if nobody is queued.
+ticket_head() {
+    local best="" best_at="" f name asked age
+    [ -d "$QUEUE" ] || return 0
+    for f in "$QUEUE"/*; do
+        [ -f "$f" ] || continue
+        name=$(basename "$f")
+        age=$(( $(now) - $(date -r "$f" +%s 2>/dev/null || echo 0) ))
+        [ "$age" -gt "$TICKET_STALE" ] && continue      # waiter died or left
+        asked=$(cat "$f" 2>/dev/null || echo 0)
+        if [ -z "$best_at" ] || [ "$asked" -lt "$best_at" ]; then
+            best_at=$asked; best=$name
+        fi
+    done
+    printf '%s' "$best"
+}
+
 cmd_acquire() {
-    local who="${1:?lane name required}" timeout="${2:-900}" waited=0
+    local who="${1:?lane name required}" timeout="${2:-900}" waited=0 head
     mkdir -p "$GAME" 2>/dev/null
+    ticket_take "$who"
     while :; do
+        ticket_touch "$who"
+        # Wait your turn. An empty head means nobody else is queued.
+        head=$(ticket_head)
+        if [ -n "$head" ] && [ "$head" != "$who" ]; then
+            if [ "$waited" -ge "$timeout" ]; then
+                echo "[gamelock] DENIED -- TIMEOUT after ${timeout}s; queued behind '$head'."
+                echo "[gamelock] TIMEOUT after ${timeout}s; queued behind '$head'." >&2
+                ticket_drop "$who"
+                return 1
+            fi
+            [ $(( waited % 30 )) -eq 0 ] &&
+                echo "[gamelock] queued behind '$head' (${waited}s/${timeout}s)..." >&2
+            sleep 5; waited=$(( waited + 5 ))
+            continue
+        fi
         # Take the lock only if nobody is mid-run. A lane that crashed without
         # releasing leaves no open handle, so this does not deadlock on it.
         if ! run_in_progress && mkdir "$LOCK" 2>/dev/null; then
             printf '%s' "$who"     > "$LOCK/owner"
             printf '%s' "$(now)"   > "$LOCK/started"
+            ticket_drop "$who"
             echo "[gamelock] ACQUIRED by $who"
             echo "[gamelock] GRANT $who"
             return 0
         fi
         if [ "$(lock_owner)" = "$who" ]; then
+            ticket_drop "$who"
             echo "[gamelock] already held by $who (re-entrant, not re-acquired)"
             return 0
         fi
@@ -155,6 +218,7 @@ cmd_acquire() {
             echo "[gamelock] Do NOT deploy anyway -- that is the clobber this prevents."
             echo "[gamelock] TIMEOUT after ${timeout}s; '$(lock_owner)' still holds it." >&2
             echo "[gamelock] Do NOT deploy anyway -- that is the clobber this prevents." >&2
+            ticket_drop "$who"
             return 1
         fi
         [ $(( waited % 30 )) -eq 0 ] &&
