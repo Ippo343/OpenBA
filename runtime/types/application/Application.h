@@ -73,13 +73,18 @@ struct Application {
     // Declared `void*` rather than `HINSTANCE`: PLAN §4.1 decision 1 keeps
     // <windows.h> out of every header under runtime/.
     void*   _platformHandle;   // +0x08
-    // +0x10  THE CURSOR-ENABLED FLAG. Was `_stateLow`, "low byte of the ctor's
-    // word store (0x00). Not read." -- Wave 12 lane A names it and corrects
-    // that comment: it IS read, by
-    // `?IsCursorEnabled@Application@1@QEAA_NXZ` (0x18000a0c0), which is
-    // exactly `movzx eax,byte [rcx+0x10]; ret`. The ctor's word store
-    // (`MOV word ptr [RCX+0x10],0x100`) writes this byte 0x00 and _running
-    // (+0x11) 0x01 in the same instruction, so cursor-enabled starts false.
+    // +0x10  THE CURSOR-ENABLED FLAG. Was `_stateLow`, commented "low byte of
+    // the ctor's word store (0x00). Not read." BOTH halves of that were
+    // wrong about the read, and Wave 12 found it twice independently:
+    //   * lane A from `?IsCursorEnabled@Application@1@QEAA_NXZ` (0x18000a0c0),
+    //     which is exactly `movzx eax,byte [rcx+0x10]; ret`;
+    //   * lane C from `?EnableCursor@Application@1@QEAAX_N@Z` (0x18009f800),
+    //     which reads this byte before writing it (`CMP BYTE PTR [RCX+0x10],DL`)
+    //     and early-outs when the value is unchanged.
+    // The ctor's word store (`MOV word ptr [RCX+0x10],0x100`) writes this byte
+    // 0x00 and _running (+0x11) 0x01 in the same instruction, so cursor-enabled
+    // starts FALSE. Corrected at its source per PLAN.md §6 step 8, not only in
+    // a wave doc.
     uint8_t _cursorEnabled;    // +0x10
     uint8_t _running;          // +0x11  IsPaused: this[0x11] == 0 means PAUSED. Ctor sets 1.
     uint8_t _unknown12[0x06];  // +0x12..+0x17  unproven.
