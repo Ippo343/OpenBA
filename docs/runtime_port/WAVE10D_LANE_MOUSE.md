@@ -20,10 +20,28 @@ The route is the deliverable; the counters are its receipt.
 > mouse-position/click injector in `standalone/` — none exists today.
 
 **The "none exists today" half re-verified exactly.** Nothing in the tree writes
-the `Input::Device` singleton's mouse bytes; `tool_harness.cpp` says so about
-itself in eight separate comments ("DragTool_OnKey's drag needs a live OS cursor
-over the map, which the harness has none of"), and every existing "click" is a
-dialog-vtable dispatch with a numeric element id and a **null element pointer**.
+the `Input::Device` singleton's mouse bytes — a search over every offset the
+gather reads (`0x109c`, `0x10b4`, `0x10fc`, `0x10fe`, `0x10ff`, `0x1116/7`,
+`0x112c/e/f`, `0x11bc`) across `standalone/`, `code/`, `runtime/` and `engine/`
+returns **READS only** — and `tool_harness.cpp` says so about itself in its own
+comments ("DragTool_OnKey's drag needs a live OS cursor over the map, which the
+harness has none of", `:344`). Every existing "click" is a dialog-vtable dispatch
+with a numeric element id and a **null element pointer**.
+
+> **STRUCK BY THE INTEGRATOR AT MERGE (2026-09-09), on lane MOUSE's own report.**
+> This passage previously claimed `tool_harness.cpp` says so "in **eight separate
+> comments**". That number was not the lane's own measurement — it was lifted from
+> a survey subagent's report and written as first-hand. It does not reproduce:
+> `grep -ci cursor` returns 11 lines, of which **six** actually assert the harness
+> has no cursor (`:46`, `:344-345`, `:756`, `:797`, `:908-909`, `:2265`), two
+> merely mention one in passing (`:200`, `:719`) — and one of the eight locations
+> the survey cited, `:2290`, **does not contain the word at all**. Verified
+> independently by the integrator.
+>
+> It is **struck rather than recounted to six**, on the lane's own reasoning: the
+> number was never load-bearing, and a hedged recount is a worse sentence than
+> naming the check that actually carried the conclusion. The offset search above
+> is that check, and unlike a comment count it is exact.
 `BANISHED_MOUSE*` / `HOVER*` / `CURSOR*` / `DRAG*` were all free names. The
 obligation to grep before building was met and this time the grep found nothing
 (`reference_grep_the_harness_before_writing_unverifiable.md` cuts both ways).
@@ -332,7 +350,8 @@ The first attempt passed `nullptr` as `BeginDragDrop`'s `InternalPtr<Element>`,
 to avoid arming `EndDragDrop`'s "destroy the drag element" arm. It crashed
 inside retail at `0x18011f60e`, `SUB R9D,[RAX+0x68]` with RAX null. **The crash
 is the finding**, and it was not papered over with a null check (CLAUDE.md): it
-sent the lane to read the body, which is eleven instructions and fully legible:
+sent the lane to read the body, which is **fifteen** instructions and fully
+legible:
 
 ```
 +0x60 = *dlgPtr      +0x70 = id      +0x78 = data

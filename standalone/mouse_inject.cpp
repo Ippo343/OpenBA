@@ -541,7 +541,7 @@ void StartDrag(UI::UserInterface* ui, const Target& t) {
     // element_vtable.cpp:747 and userinterface_hover.cpp pass them.
     //
     // THE ELEMENT ARGUMENT IS READ-ONLY, AND THAT WAS MEASURED, NOT ASSUMED.
-    // BeginDragDrop (0x18011f5f0) is eleven instructions and it is entirely
+    // BeginDragDrop (0x18011f5f0) is fifteen instructions and it is entirely
     // legible:
     //     +0x60 = *dlgPtr        +0x70 = id        +0x78 = data
     //     +0x80 = x - elem->_layoutLeft (+0x68)     <- a GRAB OFFSET
