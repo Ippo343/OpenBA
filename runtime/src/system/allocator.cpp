@@ -74,6 +74,14 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/system/MemoryAllocator.h"
 
+// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
+// — same reasoning array.cpp and linkedlist.cpp give (resolve.h drags in
+// <windows.h>, whose <wingdi.h> declares a function called `Rectangle`). Must
+// stay byte-identical to resolve.h's declaration; the linker checks the two
+// against each other.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
 using rt::system::MemoryAllocator;
 using rt::system::MemoryRange;
 using rt::system::RtSysMemPlatform;
@@ -808,6 +816,43 @@ uint64_t g_shadowGrow       = 0;
 uint64_t g_shadowTableCopy  = 0;
 uint64_t g_shadowCrossRange = 0;
 
+// ---------------------------------------------------------------------------
+// Wave 10 lane SHADOWBISECT — the UNOBSERVED-MUTATION ("gap") detector.
+// ---------------------------------------------------------------------------
+// SHADOWRE's signature (ours live HIGHER, freeTagCount LOWER, allocatedBytes
+// HIGHER by a multiple of 32, free_unmapped==0, geometry AGREEING on the first
+// divergent call) admits one reading: the REAL arena performed operations the
+// shadow never observed. That is a hypothesis about a route, and the way to
+// test it directly is to ask the real allocator's own counters whether they
+// moved while we were not looking.
+//
+// Both shadow hooks run POST-op, inside the allocator critical section. So:
+//   * at the END of every observed op we snapshot the real allocator's five
+//     tuple counters (RtAllocShadowPostOp);
+//   * at the START of the next wrapper entry, still inside the same critical
+//     section and BEFORE the real body runs (RtAllocShadowPreOp), we compare.
+// Everything between those two points is serialized by the CS, so ANY
+// difference is a mutation of the real arena that did not come through
+// AllocateLocked/FreeLocked — i.e. exactly the bypassing route the hypothesis
+// names. If no gap is ever seen, the hypothesis is DEAD and the signature needs
+// another explanation.
+//
+// The detector is independent of the divergence comparison: it reads the real
+// allocator only, never the replica.
+bool     g_gapValid      = false;
+uint64_t g_gapChecks     = 0;    // how many times the comparison actually ran
+uint64_t g_gapCount      = 0;    // how many found the real arena moved
+int64_t  g_gapDAlloc     = 0;    // summed deltas over all gaps
+int64_t  g_gapDFreeTag   = 0;
+int64_t  g_gapDBytes     = 0;
+int64_t  g_gapDRanges    = 0;
+int64_t  g_gapDReserved  = 0;
+int      g_gapPrinted    = 0;
+bool     g_gapCtl        = false;   // negative control on the detector itself
+uint64_t g_gapCtlInjected = 0;
+struct GapSnap { int32_t alloc, freeTag, ranges; int64_t bytes; uint64_t reserved; };
+GapSnap g_gapSnap = {};
+
 // LINEAR PROBING WITH BACKWARD-SHIFT DELETION (Knuth 6.4 algorithm R).
 //
 // Wave 9 lane E2. The first version emptied a slot by writing nullptr, which is
@@ -942,6 +987,14 @@ extern "C" bool RtAllocShadowStartup(uint64_t minRangeMB, uint64_t maxTotalMB) {
                         "REQUIRED to go red; a clean result here invalidates every "
                         "other run.\n", nc);
     }
+    if (const char* gc = getenv("BANISHED_RT_ALLOC_SHADOW_GAPCTL")) {
+        if (gc[0] && gc[0] != '0') {
+            g_gapCtl = true;
+            fprintf(stderr, "[RtAllocShadow] GAP DETECTOR NEGATIVE CONTROL ACTIVE — every "
+                            "100,000th post-op snapshot is perturbed by +1 allocCount; the "
+                            "gap count MUST track the injected count.\n");
+        }
+    }
     g_plat.lockInit(g_shadow.lock);
     g_shadow.pageSize = 0;
 
@@ -1045,6 +1098,65 @@ extern "C" void RtAllocShadowFree(void* theirs, const MemoryAllocator* theirSelf
                   (long long)theirSelf->allocatedBytes, theirSelf->minBin,
                   theirSelf->rangeCount, (unsigned long long)theirSelf->totalReserved);
     RT_DIFF_SHADOW(equal, a, b);
+}
+
+// ---------------------------------------------------------------------------
+// Gap detector: pre-op comparison and post-op snapshot (lane SHADOWBISECT).
+// Both are called from AllocateLocked/FreeLocked INSIDE the allocator critical
+// section, with self already filtered to the observed allocator.
+// ---------------------------------------------------------------------------
+extern "C" void RtAllocShadowPreOp(const MemoryAllocator* theirSelf) {
+    if (!g_shadowArmed || !theirSelf) return;
+    if (!g_gapValid) return;
+    g_gapChecks++;
+    const int64_t dA = (int64_t)theirSelf->allocCount     - (int64_t)g_gapSnap.alloc;
+    const int64_t dF = (int64_t)theirSelf->freeTagCount   - (int64_t)g_gapSnap.freeTag;
+    const int64_t dB = (int64_t)theirSelf->allocatedBytes - g_gapSnap.bytes;
+    const int64_t dR = (int64_t)theirSelf->rangeCount     - (int64_t)g_gapSnap.ranges;
+    const int64_t dV = (int64_t)theirSelf->totalReserved  - (int64_t)g_gapSnap.reserved;
+    if (dA == 0 && dF == 0 && dB == 0 && dR == 0 && dV == 0) return;
+
+    g_gapCount++;
+    g_gapDAlloc += dA; g_gapDFreeTag += dF; g_gapDBytes += dB;
+    g_gapDRanges += dR; g_gapDReserved += dV;
+    if (g_gapPrinted < 12) {
+        g_gapPrinted++;
+        fprintf(stderr, "[RtAllocShadow] GAP #%llu at observed-op %llu: the real arena moved "
+                        "with no hook entry between: dAllocCount=%lld dFreeTagCount=%lld "
+                        "dAllocatedBytes=%lld dRangeCount=%lld dReserved=%lld\n",
+                (unsigned long long)g_gapCount, (unsigned long long)g_shadowCalls,
+                (long long)dA, (long long)dF, (long long)dB, (long long)dR, (long long)dV);
+        std::fflush(stderr);
+    }
+}
+
+extern "C" void RtAllocShadowPostOp(const MemoryAllocator* theirSelf) {
+    if (!g_shadowArmed || !theirSelf) return;
+    g_gapSnap.alloc    = theirSelf->allocCount;
+    g_gapSnap.freeTag  = theirSelf->freeTagCount;
+    g_gapSnap.bytes    = theirSelf->allocatedBytes;
+    g_gapSnap.ranges   = theirSelf->rangeCount;
+    g_gapSnap.reserved = theirSelf->totalReserved;
+    // NEGATIVE CONTROL on the detector, not on the port. It perturbs the
+    // SNAPSHOT -- which is one of the two operands the pre-op comparison reads
+    // -- so a detector that cannot see this cannot see a real gap either.
+    // Expected catches = floor(postops / 100000); reported beside the count.
+    if (g_gapCtl && (g_shadowCalls % 100000) == 99999) {
+        g_gapSnap.alloc += 1;
+        g_gapCtlInjected++;
+    }
+    g_gapValid = true;
+}
+
+extern "C" void RtAllocShadowGaps(uint64_t* checks, uint64_t* gaps, int64_t* dAlloc,
+                                  int64_t* dFreeTag, int64_t* dBytes,
+                                  uint64_t* ctlInjected) {
+    if (checks) *checks = g_gapChecks;
+    if (gaps) *gaps = g_gapCount;
+    if (dAlloc) *dAlloc = g_gapDAlloc;
+    if (dFreeTag) *dFreeTag = g_gapDFreeTag;
+    if (dBytes) *dBytes = g_gapDBytes;
+    if (ctlInjected) *ctlInjected = g_gapCtlInjected;
 }
 
 extern "C" void RtAllocShadowReport(uint64_t* calls, uint64_t* divergences) {
@@ -1439,8 +1551,73 @@ int RegisterAllocatorExports(void* allocateEntry, void* freeEntry) {
 //
 // The shim costs one instruction of shuffle and makes the ABI difference
 // explicit instead of load-bearing-and-invisible.
+// WAVE 10 LANE SHADOWBISECT — this body used to call `rtalloc::MemFree(p)`
+// DIRECTLY, and that one C++ call is what made the allocator shadow read red in
+// all seven of lane SHADOWRE's cells.
+//
+// `rtalloc::MemFree` is `Get(); lockEnter; rtalloc::Free(self, p); lockLeave` —
+// OUR ported free logic, run against whatever `_singleton` names. With the DLL
+// present and `BANISHED_RT_ALLOC` unarmed, `_singleton` is RETAIL's arena. So a
+// registration that is unconditional and default-on was running the ported Free
+// on the shipped allocator's heap, never entering the DLL's `Free`
+// (0x1800c6c00) — which is where standalone/allocator_lock.cpp's patch, and
+// therefore every observer that rides on it, lives.
+//
+// Two consequences, and the second is the serious one:
+//   * MEASUREMENT: the shadow never saw those frees, so its replica kept blocks
+//     retail had released — `ours live` higher, `freeTagCount` lower, `bytes`
+//     higher by a multiple of 32 (the 0x18-payload LinkedList node), and
+//     `free_unmapped` clean because the Free never reached the hook at all.
+//     That is SHADOWRE's signature, exactly, and the divergence count is
+//     precisely the number of comparisons after the first such free.
+//   * SUBJECT: "the allocator port is off" was not true on this path. An
+//     unarmed run was already mutating retail's arena with our code, by a route
+//     no kill switch could reach and no counter reported.
+//
+// The fix is the rule this file's own neighbours already state
+// (runtime/src/collection/linkedlist.cpp:153, runtime/src/graphics/
+// scene_grid.cpp:181): reach the heap through the ONE door
+// `RegisterAllocatorAddresses()` arms, never by binding to our body directly.
+// Retail's 0x180009c30 IS `Enter; Free(_singleton, p); Leave`, i.e. byte for
+// byte `?MemFree@` at 0x1800c7ad0, so resolving that address is also the
+// FAITHFUL port and not a workaround:
+//   * unarmed, DLL present — the door hands back retail's MemFree, which calls
+//     retail's Free through its patched entry: observed, and identical to what
+//     retail's own 0x180009c30 would have done;
+//   * armed / at cutover — `RegisterAllocatorAddresses()` has registered
+//     0x1800c7ad0 -> `rtalloc::MemFree`, so the door hands back exactly the
+//     body this code used to call directly. Behaviour there is unchanged.
+//
+// RETRIES A NULL rather than caching one, for the reason linkedlist.cpp gives:
+// this registration is unconditional and can run before the allocator's arming
+// path supplies the address, and a caller that ran first would otherwise freeze
+// a null in for the life of the process.
+//
+// DIAGNOSTIC CONTROL, default off. `BANISHED_RT_ALLOC_LEGACY_DIRECTFREE=1`
+// reinstates the direct call, so the attribution is a ONE-BINARY, ONE-ENV-VAR
+// A/B rather than a comparison of two builds. It is a control, not an option:
+// it puts back a defect this comment describes.
+bool LegacyDirectFree() {
+    static int v = -1;
+    if (v < 0) {
+        const char* e = getenv("BANISHED_RT_ALLOC_LEGACY_DIRECTFREE");
+        v = (e && e[0] && e[0] != '0') ? 1 : 0;
+        if (v) {
+            fprintf(stderr, "[RtAlloc] LEGACY CONTROL: 0x180009c30 calls rtalloc::MemFree "
+                            "DIRECTLY again — the ported Free runs on RETAIL's arena and "
+                            "the allocator shadow cannot observe it.\n");
+            std::fflush(stderr);
+        }
+    }
+    return v != 0;
+}
+
 void FreeLockedIgnoringSelf(void* /*ignoredThis*/, void* p) {
-    rtalloc::MemFree(p);
+    if (LegacyDirectFree()) { rtalloc::MemFree(p); return; }
+    using Fn = void (*)(void*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
+    if (fn) fn(p);
 }
 
 // ============================================================================

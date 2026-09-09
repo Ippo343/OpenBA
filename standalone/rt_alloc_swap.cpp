@@ -99,6 +99,8 @@ extern "C" void AllocStats_RecordAlloc(void* p, uint64_t size, void* caller);
 extern "C" void AllocStats_RecordFree(void* p);
 extern "C" void (*g_allocShadowOnAlloc)(void* self, uint64_t size, uintptr_t align, void* result);
 extern "C" void (*g_allocShadowOnFree)(void* self, void* ptr);
+extern "C" void (*g_allocShadowPreOp)(void* self);
+extern "C" void (*g_allocShadowPostOp)(void* self);
 
 namespace {
 
@@ -228,6 +230,17 @@ void ShadowOnAlloc(void* self, uint64_t size, uintptr_t align, void* result) {
     if (self != g_shadowSelf) { if (g_shadowSelf) g_shadowOther++; else g_shadowSkipped++; return; }
     RtAllocShadowAlloc(size, static_cast<int>(align), result,
                        static_cast<const MemoryAllocator*>(self));
+}
+
+// Wave 10 lane SHADOWBISECT. Filtered to the replicated allocator exactly as
+// the two observation hooks are; the detector reads only the REAL allocator.
+void ShadowPreOp(void* self) {
+    if (self != g_shadowSelf) return;
+    RtAllocShadowPreOp(static_cast<const MemoryAllocator*>(self));
+}
+void ShadowPostOp(void* self) {
+    if (self != g_shadowSelf) return;
+    RtAllocShadowPostOp(static_cast<const MemoryAllocator*>(self));
 }
 
 void ShadowOnFree(void* self, void* ptr) {
@@ -403,6 +416,8 @@ extern "C" bool RtAllocShadowInstall() {
 
     g_allocShadowOnAlloc = &ShadowOnAlloc;
     g_allocShadowOnFree  = &ShadowOnFree;
+    g_allocShadowPreOp   = &ShadowPreOp;
+    g_allocShadowPostOp  = &ShadowPostOp;
     g_shadowOn = true;
     fprintf(stderr, "[RtAllocShadow] observe-only driver armed; waiting for "
                     "Engine::Startup (which INLINES MemoryAllocator::Startup)\n");
@@ -454,6 +469,29 @@ extern "C" void RtAllocShadowSummary() {
             fprintf(stderr, "[RtAllocShadow] tableCopy=0 — a second range was created but "
                             "ExpandMemoryRangeTable's copy-and-release branch never ran. "
                             "That needs a THIRD range; shrink BANISHED_ARENA_MB further.\n");
+    }
+    // Wave 10 lane SHADOWBISECT -- the DIRECT test of SHADOWRE's named hypothesis.
+    // gaps>0 means the real arena was mutated between two consecutive wrapper
+    // entries, i.e. by a route that skips the patched Allocate/Free prologues.
+    // gaps==0 with checks>0 KILLS that hypothesis (checks==0 would mean the
+    // detector never ran and the cell says nothing either way).
+    {
+        uint64_t gchecks = 0, gaps = 0, ctl = 0;
+        int64_t dA = 0, dF = 0, dB = 0;
+        RtAllocShadowGaps(&gchecks, &gaps, &dA, &dF, &dB, &ctl);
+        fprintf(stderr, "[RtAllocShadow] GAPS checks=%llu gaps=%llu "
+                        "sum_dAllocCount=%lld sum_dFreeTagCount=%lld sum_dAllocatedBytes=%lld "
+                        "ctl_injected=%llu\n",
+                (unsigned long long)gchecks, (unsigned long long)gaps,
+                (long long)dA, (long long)dF, (long long)dB,
+                (unsigned long long)ctl);
+        if (gchecks == 0)
+            fprintf(stderr, "[RtAllocShadow] GAP DETECTOR NEVER RAN (checks=0) -- this cell is "
+                            "silent on the bypassing-free hypothesis.\n");
+        else if (gaps == 0)
+            fprintf(stderr, "[RtAllocShadow] gaps=0 over %llu checks -- NOTHING mutated the real "
+                            "arena outside the two patched entries in this cell.\n",
+                    (unsigned long long)gchecks);
     }
     fprintf(stderr,
             "[RtAllocShadow] SUMMARY armed=%d observed=%llu divergences=%llu "

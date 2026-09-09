@@ -1,0 +1,137 @@
+================ cell b1 ================
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] GAPS checks=1893169 gaps=6753 sum_dAllocCount=-6760 sum_dFreeTagCount=-6 sum_dAllocatedBytes=-386520 ctl_injected=0
+[RtAllocShadow] SUMMARY armed=1 observed=1893170 divergences=310834 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #958765  ours=r0+0x3e20eb8 live=335193 free=135 bytes=69454464 bin=4 nr=1 res=536870912  theirs=r0+0x3e20eb8 live=335191 free=136 bytes=69454392 bin=4 nr=1 res=536870912
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #958766  ours=r0+0x3e23c58 live=335194 free=135 bytes=69454528 bin=4 nr=1 res=536870912  theirs=r0+0x422a6e0 live=335192 free=135 bytes=69454464 bin=4 nr=1 res=536870912
+---- first gaps ----
+[RtAllocShadow] GAP #1 at observed-op 1582336: the real arena moved with no hook entry between: dAllocCount=-2 dFreeTagCount=1 dAllocatedBytes=-72 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #2 at observed-op 1582388: the real arena moved with no hook entry between: dAllocCount=-2 dFreeTagCount=0 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #3 at observed-op 1870933: the real arena moved with no hook entry between: dAllocCount=-3 dFreeTagCount=3 dAllocatedBytes=-96 dRangeCount=0 dReserved=0
+================ cell b1ctl ================
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] GAP DETECTOR NEGATIVE CONTROL ACTIVE — every 100,000th post-op snapshot is perturbed by +1 allocCount; the gap count MUST track the injected count.
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] GAPS checks=1915074 gaps=6773 sum_dAllocCount=-6780 sum_dFreeTagCount=15 sum_dAllocatedBytes=-386600 ctl_injected=19
+[RtAllocShadow] SUMMARY armed=1 observed=1915075 divergences=317979 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #971001  ours=r0+0x40f8538 live=344905 free=145 bytes=70997240 bin=4 nr=1 res=536870912  theirs=r0+0x40f8538 live=344903 free=146 bytes=70997168 bin=4 nr=1 res=536870912
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #971002  ours=r0+0x40f85a8 live=344906 free=145 bytes=70997304 bin=4 nr=1 res=536870912  theirs=r0+0x43afee0 live=344904 free=145 bytes=70997240 bin=4 nr=1 res=536870912
+---- first gaps ----
+[RtAllocShadow] GAP #1 at observed-op 99999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #2 at observed-op 199999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #3 at observed-op 299999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+================ cell b1port0 ================
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] GAPS checks=1793634 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 1793634 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=1793635 divergences=0 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+---- first gaps ----
+================ cell f1 ================
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] GAPS checks=1918806 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 1918806 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=1918807 divergences=0 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+---- first gaps ----
+================ cell f1leg ================
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAlloc] LEGACY CONTROL: 0x180009c30 calls rtalloc::MemFree DIRECTLY again — the ported Free runs on RETAIL's arena and the allocator shadow cannot observe it.
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] GAPS checks=1924343 gaps=6761 sum_dAllocCount=-6768 sum_dFreeTagCount=4 sum_dAllocatedBytes=-386928 ctl_injected=0
+[RtAllocShadow] SUMMARY armed=1 observed=1924344 divergences=315990 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #979876  ours=r0+0x3f82158 live=351397 free=125 bytes=71877576 bin=4 nr=1 res=536870912  theirs=r0+0x3f82158 live=351395 free=126 bytes=71877504 bin=4 nr=1 res=536870912
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #979877  ours=r0+0x3f821c8 live=351398 free=125 bytes=71877640 bin=4 nr=1 res=536870912  theirs=r0+0x4479750 live=351396 free=125 bytes=71877576 bin=4 nr=1 res=536870912
+---- first gaps ----
+[RtAllocShadow] GAP #1 at observed-op 1608354: the real arena moved with no hook entry between: dAllocCount=-2 dFreeTagCount=1 dAllocatedBytes=-72 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #2 at observed-op 1608406: the real arena moved with no hook entry between: dAllocCount=-2 dFreeTagCount=0 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #3 at observed-op 1626461: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=1 dAllocatedBytes=-32 dRangeCount=0 dReserved=0
+================ cell s2 ================
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] GAPS checks=4514877 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 4514877 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=4514878 divergences=0 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+---- first gaps ----
+================ cell s3 ================
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] GAPS checks=6407613 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 6407613 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=6407614 divergences=0 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+---- first gaps ----
+================ cell g1 ================
+[RtAllocShadow] Engine::Startup ENTRY (min=16MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] COVERAGE ranges ours=5 theirs=5  reserved ours=80MB theirs=80MB
+[RtAllocShadow] GROWTH grow=4 tableCopy=2 crossRange=672266
+[RtAllocShadow] GAPS checks=1919911 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 1919911 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=1919912 divergences=0 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+---- first gaps ----
+================ cell g2 ================
+[RtAllocShadow] Engine::Startup ENTRY (min=16MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] COVERAGE ranges ours=5 theirs=5  reserved ours=80MB theirs=80MB
+[RtAllocShadow] GROWTH grow=4 tableCopy=2 crossRange=2855146
+[RtAllocShadow] GAPS checks=6386471 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 6386471 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=6386472 divergences=0 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+---- first gaps ----
+================ cell g3 ================
+[RtAllocShadow] Engine::Startup ENTRY (min=16MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] COVERAGE ranges ours=5 theirs=5  reserved ours=80MB theirs=80MB
+[RtAllocShadow] GROWTH grow=4 tableCopy=2 crossRange=1965382
+[RtAllocShadow] GAPS checks=4498460 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 4498460 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=4498461 divergences=0 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+---- first gaps ----
+================ cell s4 ================
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] NEGATIVE CONTROL ACTIVE (size) — this run is REQUIRED to go red; a clean result here invalidates every other run.
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] GAPS checks=1927619 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 1927619 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=1927620 divergences=1610913 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #60485  ours=r0+0x19ce70 live=20970 free=101 bytes=2193480 bin=4 nr=1 res=536870912  theirs=r0+0x19ce70 live=20970 free=101 bytes=2193472 bin=4 nr=1 res=536870912
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #60486  ours=r0+0x19ced0 live=20971 free=101 bytes=2193576 bin=4 nr=1 res=536870912  theirs=r0+0x19cec8 live=20971 free=101 bytes=2193568 bin=4 nr=1 res=536870912
+---- first gaps ----
+================ cell g4 ================
+[RtAllocShadow] Engine::Startup ENTRY (min=16MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] NEGATIVE CONTROL ACTIVE (grow) — this run is REQUIRED to go red; a clean result here invalidates every other run.
+[RtAllocShadow] COVERAGE ranges ours=5 theirs=5  reserved ours=80MB theirs=80MB
+[RtAllocShadow] GROWTH grow=4 tableCopy=2 crossRange=665182
+[RtAllocShadow] GAPS checks=1905867 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 1905867 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=1905868 divergences=1423009 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #263933  ours=r1+0x0 live=45006 free=560 bytes=25408344 bin=4 nr=2 res=33558528  theirs=r1+0x0 live=45006 free=559 bytes=25408344 bin=4 nr=2 res=33554440
+[RtDiff] DIVERGENCE System::MemoryAllocator::Allocate [shadow]  call #263934  ours=r0+0x83d630 live=45007 free=560 bytes=29602656 bin=4 nr=2 res=33558528  theirs=r0+0x83d630 live=45007 free=559 bytes=29602656 bin=4 nr=2 res=33554440
+---- first gaps ----
+================ cell bis_sys0 ================
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] GAPS checks=1905274 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 1905274 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=1905275 divergences=0 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+---- first allocator divergence ----
+---- first gaps ----
