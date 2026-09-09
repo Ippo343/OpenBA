@@ -37,6 +37,10 @@ extern int RtObjectExternalRegister();     // external.cpp      (lane C)
 extern int RtObjectExternalSetRegister();  // external_set.cpp  (Wave 9 lane RES)
 extern int RtObjectExternalPathRegister(); // external_path_win.cpp (Wave 9 lane RRES)
 extern int RtObjectExternalFindRegister(); // external_find.cpp     (Wave 9 lane RRES)
+// Wave 10 lane EXTPTR: Object::ExternalPtr<T>::Serialize — ONE 748-byte body at
+// 25 unexported addresses, of which 4 are registered. It is what unblocks
+// ?Serialize@ElementDescription@UI@@ (runtime/src/ui/elementdescription_serialize.cpp).
+extern int RtObjectExternalPtrSerializeRegister();  // external_ptr_serialize.cpp
 
 void RtObjectPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
@@ -63,5 +67,12 @@ void RtObjectPortInit() {
     // above without turning the whole class off.
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_RESFIND"))
         n += RtObjectExternalFindRegister();
+    // Wave 10 lane EXTPTR. Nested under BANISHED_RT_EXTERNAL because it is the
+    // ExternalPtr half of the same class, with its own switch so the four
+    // address doors can be A/B'd on their own: BANISHED_RT_EXTPTR=0 leaves all
+    // four ExternalPtr<T>::Serialize instantiations on the DLL, which is also
+    // the way to A/B ?Serialize@ElementDescription@ against its callees.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTPTR"))
+        n += RtObjectExternalPtrSerializeRegister();
     printf("[RtPort] Object: %d exports registered\n", n);
 }

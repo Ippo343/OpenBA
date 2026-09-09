@@ -1,0 +1,313 @@
+// ============================================================================
+// runtime/src/ui/elementdescription_serialize.cpp — Wave 10, lane EXTPTR
+//   `?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z`
+//   retail 0x180116b00, ordinal 3687, 57 instructions.
+// ============================================================================
+//
+// THE ROW THIS WAVE EXISTS TO CLOSE. Wave 7 lane B declined it, Wave 9 lane
+// UIW2 declined it twice, and `docs/runtime_port/WAVE10_EXTPTR_SERIALIZE.md`
+// answered the last blocker: its three unported callees at +0x48/+0x50/+0x58
+// are ONE body. That body is now
+// `runtime/src/object/external_ptr_serialize.cpp`, registered at all three
+// addresses, and this file is what it unblocks.
+//
+// It lives in its own file rather than in `dialog.cpp` for the reason
+// `rt_object_port.cpp` states at the top: one lane, one file, so two lanes
+// never edit the same source. Four UI lanes are live in this wave.
+//
+// ---------------------------------------------------------------------------
+// SHAPE
+// ---------------------------------------------------------------------------
+// VIRTUAL (`UEAA`). RCX = this, RDX = an `IO::Stream&` — NOT a Serializer. The
+// body builds a 16-byte `IO::Serializer` in its own frame ([RSP+0x28] = the
+// Stream*, [RSP+0x30] = the codec) and asks the stream's `Encoding` for a
+// reader or a writer depending on `Stream+0x08`:
+//
+//     Serializer ser{ &stream, nullptr };
+//     Encoding* enc = stream.encoding;                  // [stream+0x10]
+//     ser.readerWriter = stream.direction == 0          // [stream+0x08]
+//         ? enc->vtable[+0x18](enc, &ser, 0)            // CreateReader
+//         : enc->vtable[+0x20](enc, &ser, 0);           // CreateWriter
+//
+// The third argument is the save-format VERSION and it is ZERO: `XOR R8D,R8D`
+// at 0x180116b24 is what the direction test compares against, and R8D is never
+// reloaded before the factory call. Serializer.h records that this argument is
+// NOT ignored — BinaryWriter writes it into the file — so it is worth spelling
+// out. The epilogue is `if (rw) rw->vtable[0](rw, 1)`, the scalar DELETING
+// destructor; skipping it leaks 0x30 bytes per call.
+//
+// It always returns `true` (`MOV AL,1`); there is no failure path.
+//
+// ---------------------------------------------------------------------------
+// THE FOURTEEN RECORDS, IN RETAIL'S ORDER — WHICH IS NOT DECLARATION ORDER
+// ---------------------------------------------------------------------------
+// Getting the ORDER or the COUNT wrong here is the silent save-desync this
+// project has paid for repeatedly, so the sequence is transcribed field by
+// field from the listing and not from the header's field order:
+//
+//   +0x20 _x            int    slot +0xA0
+//   +0x24 _y            int    slot +0xA0
+//   +0x28 _width        int    slot +0xA0
+//   +0x2c _height       int    slot +0xA0
+//   +0x30 _minWidth     int    slot +0xA0
+//   +0x34 _minHeight    int    slot +0xA0
+//   +0x40 _elementType  uint   slot +0x98
+//   +0x44 _flags        uint   slot +0x98
+//   +0x3c _id           uint   slot +0x98   <-- declared int32_t; retail
+//                                               serialises it through the
+//                                               UNSIGNED slot. Transcribed as
+//                                               retail has it: the two slots
+//                                               are different vtable entries
+//                                               and a reader picks by slot.
+//   +0x38 _tabOrder     int    slot +0xA0   <-- and it comes AFTER +0x3c/+0x40
+//   +0x48 ExternalPtr<UI::ElementDescription>   CALL 0x180038f90
+//   +0x50 ExternalPtr<UI::Dialog>               CALL 0x180076610
+//   +0x58 ExternalPtr<UI::StringTable>          CALL 0x1800042a0
+//   +0x60 System::String                        CALL String::Serialize
+//
+// The +0x98 / +0xA0 slot numbers are RETAIL's. In Runtime-x64-profile.dll the
+// same two live at +0xb0 and +0xb8, and copying them off a profile decompile
+// would emit the wrong record type into every save
+// ([[reference_encoding_vtable_offsets_differ_between_builds]]). They come from
+// `rt::io::rw_vtbl`, which Wave 4 pinned twice against the shipped bytes.
+//
+// The third argument at every slot call is the record's NAME and retail passes
+// NULL (`XOR R8D,R8D` before each one).
+//
+// ---------------------------------------------------------------------------
+// BLAST RADIUS, AND HOW IT IS CHECKED
+// ---------------------------------------------------------------------------
+// This is not a leaf in a save file. It is the `UIDescription` parse path of
+// EVERY `.rsc` in the game, and the neighbouring registration in
+// `standalone/address_registry.cpp` carries the scar: a previously closed
+// defect on the sibling slot 0x1401516b0 "silently SKIPPED the per-element Type
+// read -> stream drift -> bogus String length -> CompressedStream::Read
+// zero-progress spin on Dialog\StandardDialog.rsc". A related slot-8 defect
+// "doubled every loaded entity's roster and made FindComponent return the empty
+// duplicate — invisible in a screenshot."
+//
+// Registering the NAME here also re-points the exe's own `.rdata` import slot
+// `0x1401518c8` (`standalone/address_registry.cpp:1109` binds that slot BY NAME
+// through `ResolveExport`, and `RuntimePortInit()` runs before
+// `AddressRegistryInit()`), so the blast radius is not limited to our `fn_*`
+// pointers. `engine/funcs/engine_funcs.cpp:4063` reads the same slot.
+//
+// So the verification is not a screenshot. It is (a) the emission oracle below,
+// which compares our record sequence against retail's, and (b) a full boot,
+// which is what actually drives `.rsc` parsing.
+//
+// ---------------------------------------------------------------------------
+// ORACLE
+// ---------------------------------------------------------------------------
+// `RtSaveTrace::Compare` in the WRITING direction against two synthetic sinks,
+// in situ on the first 16 real calls — the same instrument
+// `runtime/src/achievement/goal_serialize.cpp` uses, and this file follows its
+// shape deliberately.
+//
+// NO PREFIX STOP. The recipe warned to cap the prefix with `stopAfter` before
+// `GetReferenceId` in case it registers a new id. Re-measured rather than
+// inherited (0x1800bf100): that body is `QEBA`, builds a Filename, descends the
+// map at `this+0x10`, returns `[node+0x14]` and releases two Strings. No
+// insert, no counter, no store. Nothing on this write path mutates anything a
+// second call would see, so the whole body replays and the oracle covers all
+// fourteen records rather than a prefix of them.
+//
+// The one thing to read in its report is the `calls=` column, not just
+// `divergences=`: a body with no callers reports clean
+// ([[reference_uncalled_port_is_not_verified]]).
+// ============================================================================
+
+#include <cstdint>
+#include <cstdio>
+
+#include "../../funcs/rt_port.h"
+#include "../../types/io/Serializer.h"
+#include "../../types/ui/ElementDescription.h"
+#include "../io/save_trace.h"
+
+using RtUI::ElementDescription;
+using rt::io::Encoding;
+using rt::io::ReaderWriter;
+using rt::io::Serializer;
+using rt::io::Stream;
+
+// Forward-declared rather than pulled in from standalone/resolve.h, for the
+// reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
+// must stay platform-neutral. Byte-identical to resolve.h's declaration; the
+// same pair already appears in runtime/src/achievement/goal_serialize.cpp.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
+namespace {
+
+// The three unexported ExternalPtr<T>::Serialize instantiations this body
+// dispatches. Asked for BY ADDRESS because that is the only door they have —
+// and it is the door `runtime/src/object/external_ptr_serialize.cpp` registers,
+// so these resolve to OUR body rather than the DLL's.
+using PtrSerializeFn = void (*)(void*, Serializer*);
+
+PtrSerializeFn PtrSerialize(uintptr_t addr) {
+    return reinterpret_cast<PtrSerializeFn>(ResolveAddr(Module::Runtime, addr));
+}
+
+using StringSerializeFn = void (*)(void*, Serializer*);
+StringSerializeFn StringSerialize() {
+    static StringSerializeFn f = reinterpret_cast<StringSerializeFn>(
+        ResolveAddr(Module::Runtime, 0x1800c9930));
+    return f;
+}
+
+// The prologue and epilogue, transcribed from 0x180116b20 and 0x180116c4d.
+ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
+    ser->stream = stream;
+    ser->readerWriter = nullptr;
+
+    Encoding* enc = stream->encoding;
+    const int slot = (stream->direction == rt::io::kDirectionReading)
+                         ? rt::io::encoding_vtbl::kCreateReader
+                         : rt::io::encoding_vtbl::kCreateWriter;
+    using FactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
+    ReaderWriter* rw =
+        reinterpret_cast<FactoryFn>(enc->vtable[slot / 8])(enc, ser, 0);
+    ser->readerWriter = rw;
+    return rw;
+}
+
+void DestroyCodec(ReaderWriter* rw) {
+    if (!rw) return;
+    using DtorFn = void (*)(ReaderWriter*, int);
+    reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
+}
+
+void RecInt(ReaderWriter* rw, int32_t* v) {
+    using Fn = void (*)(ReaderWriter*, int32_t*, const char*);
+    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, v, nullptr);
+}
+
+void RecUInt(ReaderWriter* rw, void* v) {
+    using Fn = void (*)(ReaderWriter*, void*, const char*);
+    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, v, nullptr);
+}
+
+// ---- probe scaffolding (same contract as goal_serialize.cpp) ---------------
+using StreamMemberFn = void (*)(void*, Stream*);
+
+Stream* StreamOf(void* serializer) {
+    return static_cast<Serializer*>(serializer)->stream;
+}
+
+// `Compare` defends against `ours == theirs` by comparing the two function
+// pointers; the adapters below defeat that check, so the equivalent check is
+// made here on the thing that matters — whether the registry hands OUR body
+// back for this name.
+bool PortIsLive(const char* mangled, const void* ours) {
+    void* viaRegistry = ResolveExport(mangled);
+    if (viaRegistry == ours) return true;
+    std::fprintf(stderr,
+                 "[RtSaveTrace] FAIL %s: the port is NOT registered (registry -> %p, "
+                 "ours %p), so this comparison would prove nothing\n",
+                 mangled, viaRegistry, ours);
+    return false;
+}
+
+// `Compare` calls `ours`, which is this very body, and it is not reentrant.
+bool g_probing = false;
+struct ProbeGuard {
+    ProbeGuard() { g_probing = true; }
+    ~ProbeGuard() { g_probing = false; }
+};
+
+const char* const kMangled =
+    "?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z";
+
+}  // namespace
+
+// ---- the detour seam (standalone/elementdesc_detour.cpp) -------------------
+//
+// Declared here rather than included, for rt_port.h's reason: the detour header
+// needs <windows.h> and runtime/src/ must stay platform-neutral.
+extern "C" bool  RtUiElementDescSerializeInstallDetour(void* ourFn);
+extern "C" void* RtUiElementDescSerializeTrampoline();
+
+namespace {
+
+// RETAIL's body, for the oracle. Once the detour is installed the RAW export
+// address is OUR function, so `ResolveExportRaw` there would recurse to a stack
+// overflow — the trampoline is the only door to retail's real body, and null
+// from it means no detour, in which case the raw export IS retail's body.
+// ([[reference_detour_machinery_exists_wave7_zero_is_stale]] is this trap.)
+StreamMemberFn RetailBody() {
+    if (void* tramp = RtUiElementDescSerializeTrampoline())
+        return reinterpret_cast<StreamMemberFn>(tramp);
+    return reinterpret_cast<StreamMemberFn>(ResolveExportRaw(kMangled));
+}
+
+}  // namespace
+
+// ============================================================================
+// bool UI::ElementDescription::Serialize(IO::Stream&)
+// ============================================================================
+bool RtUi_ElementDescription_Serialize(ElementDescription* self, Stream* stream) {
+    static int probes = 0;
+    if (RtSaveTrace::Enabled() && !g_probing && probes < 16) {
+        ++probes;
+        ProbeGuard guard__;
+        StreamMemberFn theirs = RetailBody();
+        // With the detour installed, `PortIsLive` is not the check that matters
+        // (the registry answer is unchanged) but it still catches the case the
+        // comparison would be vacuous in, so it is kept.
+        if (theirs && PortIsLive(kMangled, (const void*)&RtUi_ElementDescription_Serialize)) {
+            RtSaveTrace::Compare(
+                "UI::ElementDescription::Serialize", self,
+                [](void* obj, void* ser) {
+                    RtUi_ElementDescription_Serialize(
+                        static_cast<ElementDescription*>(obj), StreamOf(ser));
+                },
+                [](void* obj, void* ser) { RetailBody()(obj, StreamOf(ser)); });
+        }
+    }
+
+    Serializer ser;
+    ReaderWriter* rw = MakeCodec(stream, &ser);
+
+    RecInt(rw, &self->_x);           // +0x20
+    RecInt(rw, &self->_y);           // +0x24
+    RecInt(rw, &self->_width);       // +0x28
+    RecInt(rw, &self->_height);      // +0x2c
+    RecInt(rw, &self->_minWidth);    // +0x30
+    RecInt(rw, &self->_minHeight);   // +0x34
+
+    RecUInt(rw, &self->_elementType);  // +0x40
+    RecUInt(rw, &self->_flags);        // +0x44
+    RecUInt(rw, &self->_id);           // +0x3c — unsigned slot, see the banner
+
+    RecInt(rw, &self->_tabOrder);      // +0x38
+
+    PtrSerialize(0x180038f90)(&self->_childDesc,   &ser);   // +0x48
+    PtrSerialize(0x180076610)(&self->_userData,    &ser);   // +0x50
+    PtrSerialize(0x1800042a0)(&self->_stringTable, &ser);   // +0x58
+    StringSerialize()(&self->_textName, &ser);              // +0x60
+
+    DestroyCodec(rw);
+    return true;
+}
+
+// ---- Registration ----------------------------------------------------------
+//
+// BY NAME and BY ADDRESS. The name is what `standalone/address_registry.cpp:1109`
+// and `engine/funcs/engine_funcs.cpp:4063` reach for (both through the exe
+// import slot 0x1401518c8 — see the blast-radius block above); the address is
+// registered so a vtable slot read out of the DLL and called back through the
+// address registry lands here too.
+int RtUiElementDescriptionSerializeRegister() {
+    int n = 0;
+    RegisterRuntimeExport(kMangled, (void*)&RtUi_ElementDescription_Serialize); ++n;
+    RegisterRuntimeAddr(0x180116b00, (void*)&RtUi_ElementDescription_Serialize);
+
+    // OPT-IN, and it is a no-op unless BANISHED_RT_ELEMDESCSER_DETOUR is set.
+    // Without it the port has exactly two call sites in the whole tree and
+    // neither fires on a boot, i.e. it is a registered dead port. See the
+    // banner of standalone/elementdesc_detour.cpp.
+    RtUiElementDescSerializeInstallDetour((void*)&RtUi_ElementDescription_Serialize);
+    return n;
+}
