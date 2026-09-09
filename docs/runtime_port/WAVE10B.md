@@ -11,12 +11,12 @@ returns exactly **six rows**:
 
 | row | kind | lane |
 |---|---|---|
-| `??_7SpriteSheet@UI@@6B@` | minted vtable, 1 trap | **SS** |
+| `??_7SpriteSheet@UI@@6B@` | minted vtable, 1 trap | **SS** ✅ PROMOTED |
 | `??_7DialogInstance@UI@@6B@` | minted vtable, 2 traps | **DLGV** |
 | `??_7DialogController@UI@@6B@` | minted vtable, 9 traps | **DLGV** |
 | `??_7Element@UI@@6B@` | minted vtable, 8 traps | **ELEM** |
 | `??_7Dialog@UI@@6B@` | minted 2026-09-09, 8 traps | **MINT** ✅ |
-| `?ShowDialog@UserInterface@UI@@…` | the only CODE row | **SHOW** |
+| `?ShowDialog@UserInterface@UI@@…` | the only CODE row | **SHOW** ✅ ported+verified |
 
 Five vtables and one function. Every vtable row is a `??_7` whose promotion is
 blocked by named abort-trap slots, and the trap list is a LIVE reading from
@@ -102,6 +102,36 @@ Regression on the other four lanes: CLEAN. The whole 56-row readiness table
 diffs against the archived baseline with exactly one hunk, the added Dialog
 line; all ten promoted rows cleared `RtMintPromotionStorage`'s aborting VA check
 on a live boot (536/536 slots, 624/624 BaseTypeInfo fields).
+
+## The integrator's census, at the merge tip — READ THE SET, NOT THE COUNT
+
+After merging MINT, SS and SHOW the UI count reads **6 → 6**, which looks like
+nothing happened. The SET moved by four:
+
+```
+LEFT     ??_7SpriteSheet@UI@@6B@                       (lane SS, promoted)
+LEFT     ?ShowDialog@UserInterface@UI@@…               (lane SHOW, ported+verified)
+ENTERED  ?DrawStandAloneUI@UserInterface@UI@@CAXA…     (lane SHOW's own port)
+ENTERED  ?UpdateStandAloneUI@UserInterface@UI@@CAXA…   (lane SHOW's own port)
+```
+
+The two entrants are **correct and deliberate**, not a defect:
+`runtime/src/ui/userinterface_showdialog.cpp` resolves both static callbacks by
+NAME, having checked the shipped export directory rather than assuming — they
+mangle `CAXA…` (private static), and this DLL exports its private members
+(`reference_aeaa_is_private_not_unexported`). Reaching them by address when a
+name exists is how silent address doors accumulate. So a faithful port GREW the
+cutover surface, exactly as
+`reference_porting_can_grow_the_cutover_surface` predicts, and the two new rows
+are the honest price of not opening two address doors.
+
+**Discrepancy recorded rather than smoothed:** lane SHOW reported its own
+set-diff as `6 → 5, ENTERED: none`. At the merge tip both entrants are present
+and they come from that lane's own file. The tip is the measurement of record;
+the lane's reading was most likely taken before the resolve block reached its
+final form. This is precisely why the wave rule is to diff the SET
+(`reference_diff_the_set_not_the_count`) — on the count alone, four moves
+cancelled to zero and would have read as a wasted afternoon.
 
 ## Lanes (dispatched 2026-09-09)
 
