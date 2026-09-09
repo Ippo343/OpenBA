@@ -46,7 +46,7 @@
 //     (*) WAVE 9 LANE UIF. `none` is the literal oracle disposition, not a gap
 //         nobody noticed: a replay would double-release a refcounted String and
 //         run ~External twice. See the body's header near the bottom of this file.
-//   | ?CreateInstance@ElementDescription@   | 0x180115ad0 | 2004 | NO     | —      |
+//   | ?CreateInstance@ElementDescription@   | 0x180115ad0 | 2004 | W10-UIF| replay+twin |
 //   | ?GetFileVersion@ElementDescription@   | 0x180116af0 | 2624 | yes    | replay |
 //   | ?Serialize@ElementDescription@        | 0x180116b00 | 3687 | NO     | —      |
 //
@@ -205,6 +205,7 @@
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/ElementDescription.h"
+#include "../../types/ui/StringTable.h"   // WAVE 10 LANE UIF — the twin's table
 // ⚠ WAVE 9 LANE Z — `runtime/types/object/TypeInfo.h` IS NOT INCLUDABLE HERE,
 // and the reason is a real defect in another lane's header rather than anything
 // about this file. `runtime/types/object/External.h` opens `namespace RtObject
@@ -240,6 +241,9 @@ using RtUI::DialogNamedTemplate;   // WAVE 9 LANE UIC (?CreateElement@Dialog@)
 // the two against each other. (Precedent: runtime/src/video/context.cpp and
 // runtime/src/achievement/achievement_manager.cpp declare the same prototype.)
 void* ResolveExport(const char* mangled_name);
+
+// WAVE 10 LANE UIF negative-control knob; defined in runtime/src/ui/userinterface.cpp.
+extern "C" int RtUiUifNegCtrl();
 
 // ResolveAddr, same reasoning and the same "must stay byte-identical to
 // resolve.h's" contract. WAVE 9 LANE UIC needs it for one unexported-by-us edge
@@ -293,6 +297,10 @@ const char* const kCreateElement =
     "?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@"
     "V?$ExternalPtr@VElementDescription@UI@@@4@@Z";
 const char* const kSetUpperLeft  = "?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z";
+// WAVE 10 LANE UIF. Oracle lookup only — the REGISTRATION at the bottom of this
+// file repeats the literal, for the census reason the block above gives.
+const char* const kEdCreateInstance =
+    "?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z";
 
 // The Element helpers the two Find* forwarders tail into. Neither is in this
 // lane's scope; both are exported and both are resolved through the SEAM
@@ -375,6 +383,15 @@ constexpr size_t kReplayTimerBytes = 8192;
 alignas(16) uint8_t g_replayTimers[kReplayTimerBytes];
 uint8_t g_fpOurs[kDialogInstanceCtorExtent + kReplayTimerBytes];
 uint8_t g_fpTheirs[kDialogInstanceCtorExtent + kReplayTimerBytes];
+
+// WAVE 10 LANE UIF. Defined near the bottom of this file. It is triggered from
+// the FIRST `??0ElementDescription` and NOT from `RtUiDialogRegister()`, for the
+// reason runtime/src/ui/userinterface.cpp measured the hard way: registration
+// runs before `Engine::Startup` creates `System::MemoryAllocator::_singleton`,
+// and any oracle that allocates its own subjects faults there with
+// `WRITE of 0x648` (retail's `EnterCriticalSection(_singleton + 0x640)` on a
+// null singleton).
+void VerifyElementDescriptionCreateInstanceTwin();
 
 inline DialogInstance* ReplaySnapshot(bool on, const DialogInstance* live) {
     if (!on) return nullptr;
@@ -1388,6 +1405,15 @@ void* RtUiElementDescription_Ctor(ElementDescription* self) {
     if (rt_diff_on__) {
         RT_ORIGINAL_ONCE(CtorFn, kEdCtor)(scratch);
         RT_DIFF_BYTES(self, scratch, sizeof(ElementDescription));
+
+        // WAVE 10 LANE UIF: `?CreateInstance@ElementDescription` has no live
+        // caller on any route this harness can drive (see its twin's banner),
+        // so its oracle is triggered from here — the earliest live call site in
+        // the class that is guaranteed to be past allocator startup. The flag
+        // is set BEFORE the call because the twin constructs descriptions of
+        // its own and would otherwise re-enter.
+        static bool edTwinDone = false;
+        if (!edTwinDone) { edTwinDone = true; VerifyElementDescriptionCreateInstanceTwin(); }
     }
     return self;   // MOV RAX,RCX — a ctor returns `this`
 }
@@ -1874,6 +1900,603 @@ void RtUiDialogInstance_SetUpperLeft(DialogInstance* self, int32_t x, int32_t y,
 //
 // The names are repeated as literals here on purpose; see the note on the
 // constants above.
+// ============================================================================
+// WAVE 10 LANE UIF
+// ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z
+//                                                 0x180115ad0  ord 2004
+// ============================================================================
+//
+// "Stamp this serialized description onto that live element." It is the second
+// half of `?CreateElement@Dialog@` (ported above by Wave 9 lane UIC): that one
+// picks WHICH description wins, this one applies it.
+//
+// WHY IT WAS BLOCKED AND WHY IT IS NOT NOW. Wave 7 lane B held it in the
+// "everything else that allocates" group at the top of this file. It does not,
+// in fact, allocate anything of its own — but it FREES, twice, through the
+// inlined `System::String` release, and every free in this project sat behind
+// the Wave 2 allocator NO-GO. Wave 10 lane ALLOC retired that gate
+// (docs/runtime_port/WAVE10_LANE_ALLOC.md): `BANISHED_RT_ALLOC=1` arms with the
+// DLL present, so "our body frees what the DLL's unported code allocated" is
+// one heap either way. This body does not need the flag; it frees through
+// whichever `MemFree` is live.
+//
+// ---------------------------------------------------------------------------
+// ABI. `QEBAX` returning void: RCX = `this` (const), RDX = the `InternalPtr<
+// UI::Element>` argument. `InternalPtr<T>` is an 8-byte class with a
+// non-trivial copy constructor, so MSVC x64 passes it BY ADDRESS even though
+// the mangled name spells it by value — and the body proves it, dereferencing
+// RDX eleven times (`MOV RBX,[RDI]` at 0x180115b15 and ten re-reads). So the
+// second parameter is `void** elemPtr`, NOT `void* elem`.
+// reference_hidden_retval_and_int_pointer_args.md is the family this belongs to.
+//
+// THE BODY, from the disassembly at 0x180115ad0 (0x31a bytes):
+//
+//   1. `elem->_name = this->GetPath().GetPathIdentifer();` through retail's
+//      inlined String assign-with-refcount, then release both temporaries in
+//      the order ident-then-path.
+//   2. Eleven scalar copies from the description onto the element. Note that
+//      `_flags` is OR-ed (0x180115bec `OR [RCX+0x34],EAX`), never assigned —
+//      a description with no flags cannot CLEAR a flag the element already has
+//      — and that `_id` (+0x3c) and `_tabOrder` (+0x38) CROSS OVER into
+//      element +0x38 and +0x3c respectively. Both are retail behaviour, not
+//      transcription slips, and both are the kind of thing a byte oracle
+//      catches and a reading does not.
+//   3. `_stringTable` -> `elem->_toolTip` (a `UIString` at +0x48: the table at
+//      +0x48 and its index at +0x50), with the index taken from
+//      `StringTable::GetIndexFromName` or -1.
+//   4. `elem->_description = this` (+0xb8).
+//   5. A `UI::Dialog` TEMPORARY on the stack, constructed and destroyed purely
+//      to be the context argument of one virtual call: if `_childDesc` (+0x48)
+//      is non-null, `elem->_border = *childDesc->vtbl[+0x40](childDesc, &slot,
+//      &tempDialog)`, else `elem->_border = nullptr`.
+//   6. A flags cascade guarded on four conditions — see the DEAD CODE note.
+//
+// ---------------------------------------------------------------------------
+// THREE FACTS THAT ONLY THE DISASSEMBLY SHOWS
+// (reference_ghidra_c_output_vs_disassembly.md)
+// ---------------------------------------------------------------------------
+//
+// (a) THE INLINED `UI::Dialog` TEMPORARY IS THE EXPORTED CTOR/DTOR, INSTRUCTION
+//     FOR INSTRUCTION. Retail inlined `??0Dialog@UI@@QEAA@XZ` (0x180112db0) and
+//     `??1Dialog@UI@@UEAA@XZ` (0x180112e40) here. Both were disassembled and
+//     compared against the inline before this port was written:
+//       * the ctor is 3 vtable stores (Base 0x180154788, External 0x1801547a0,
+//         Dialog 0x1801562a0) and 17 zero/constant stores out to +0x80, with
+//         +0x30 = -1. The inline differs in ONE respect and it is not a
+//         behavioural one: the inline writes +0x20/+0x28 as a single 16-byte
+//         `XORPS/MOVDQA`, the out-of-line as two QWORDs. Same 16 bytes.
+//       * the dtor is the four array destructors at +0x78/+0x68/+0x58/+0x48
+//         (0x180009460, 0x180039440, 0x180039360, 0x180039280), the String
+//         release at +0x28, and a tail-JMP to `~External` (0x1800bc950) — which
+//         is exactly the tail of the inline, `~External` included.
+//     So the port TRANSCRIBES the ctor (it is only constant stores, and doing
+//     so adds NO callee at all) and CALLS the exported dtor. That is the same
+//     out-of-line substitution `??1DialogInstance@` already makes for `MemFree`
+//     in this file. It grows the cutover surface by exactly ONE named row,
+//     `??1Dialog@UI@@UEAA@XZ` — reference_porting_can_grow_the_cutover_surface
+//     .md says to say so rather than let a later census discover it.
+//
+// (b) `elem->_toolTip._index` IS WRITTEN AS A QWORD OVER AN UNINITIALISED
+//     UPPER HALF. Retail stores the int32 index into a stack slot
+//     (`MOV [RBP+0x1f],EAX`) and then reads EIGHT bytes back out of it
+//     (`MOV RAX,[RBP+0x1f]; MOV [RCX+0x50],RAX`), so element +0x54..+0x57 —
+//     the `UIString` pad — receives whatever was on retail's stack. That is
+//     INDETERMINATE and cannot be reproduced. The port writes the DWORD only,
+//     and the oracle EXCLUDES +0x54..+0x57 from its compare. This is a stated
+//     deviation, not an accident, and it is the one place this body is not
+//     byte-faithful.
+//
+// (c) THE FLAGS CASCADE IS DEAD CODE IN THE SHIPPED BINARY, and the port keeps
+//     it anyway. The guard is
+//         MOV EDX,[RCX+0x34] ; MOV EAX,EDX ; OR EAX,0x90000
+//         MOV [RCX+0x34],EAX ; XOR EDX,EAX ; TEST DL,0x1 ; JZ over
+//     `0x90000` touches bits 16 and 19 only, so `(old ^ (old|0x90000))` is
+//     always ZERO in its low byte and the `JZ` is always taken. The parent walk
+//     that follows (`OR [RCX+0x34],0x8000000` up the +0x98 chain) can never
+//     execute. It is transcribed rather than deleted, because "provably
+//     unreachable in this build" is a claim the port should not bake in.
+//
+// ---------------------------------------------------------------------------
+// THE WIDER BLAST RADIUS — read this before registering
+// ---------------------------------------------------------------------------
+// This is one of the six names in this file whose registration also re-points
+// an EXE PE-import slot: `standalone/address_registry.cpp:1115` binds
+// 0x1401518d0 with `RegisterDispatchSlot(slot, ResolveExport(name))`, and
+// `RuntimePortInit()` runs BEFORE `AddressRegistryInit()`. So registering this
+// puts our body on the element-stamping path of every dialog the game builds,
+// not merely on our own `fn_*` pointers. That is precisely the row the census
+// asked for — it is *sourced* from address_registry.cpp — but it is why this
+// one gets a REPLAY oracle rather than a shape check.
+//
+// EVERY CALLEE IS SATISFIED:
+//   * 0x180006250 `?GetPath@External@Object@@`        — ported (external.cpp)
+//   * 0x1800c6610 `?GetPathIdentifer@Filename@System@@` — ported (filename.cpp)
+//   * 0x1800c7ad0 `MemFree`                            — ported, lane Q
+//   * 0x180002470 `?GetIndexFromName@StringTable@UI@@`  — see sprite.cpp:571
+//   * 0x180112e40 `??1Dialog@UI@@UEAA@XZ`              — NOT ported; new row
+//   * `_childDesc`'s vtable slot 8                     — PURE on the base
+//     (standalone/rt_data_mint_tables.inc, `RT_MINT_PURECALL`), so it is only
+//     ever reached on a concrete derived description and porting this body
+//     introduces no new cutover symbol for it — the same argument
+//     `?CreateElement@Dialog@` already makes for the identical slot.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// `??1Dialog@UI@@UEAA@XZ` 0x180112e40 — see fact (a). `UEAA`, the VIRTUAL
+// spelling, is the one the export table carries (checked with pefile;
+// reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+inline void DialogDtor(void* self) {
+    RT_EXPORT_ONCE(VoidPtrFn, "??1Dialog@UI@@UEAA@XZ")(self);
+}
+
+// `?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z` 0x180002470.
+using GetIndexFromNameFn = int32_t (*)(const void* table, const void* str);
+
+// The retail-inlined `??0Dialog@UI@@QEAA@XZ`, transcribed. Constant stores
+// only, so it adds no callee; the three vtables come out of the DLL's own
+// export table rather than being minted (the `??_7Geometry@Graphics@@6B@` lever
+// — a ported ctor must never put a second vtable in play).
+constexpr size_t kDialogTempSize = 0x88;
+
+void DialogTempCtor(uint8_t* p) {
+    static void* const vtBase = ResolveExport("??_7Base@Object@@6B@");
+    static void* const vtExt  = ResolveExport("??_7External@Object@@6B@");
+    static void* const vtDlg  = ResolveExport("??_7Dialog@UI@@6B@");
+
+    *reinterpret_cast<void**>(p + 0x00) = vtBase;
+    *reinterpret_cast<void**>(p + 0x00) = vtExt;
+    *reinterpret_cast<uint64_t*>(p + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;
+    *reinterpret_cast<void**>(p + 0x00) = vtDlg;
+    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;   // the inline's 16-byte MOVDQA
+    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;   // covers these two together
+    *reinterpret_cast<int32_t*>(p + 0x30)  = -1;
+    *reinterpret_cast<int32_t*>(p + 0x34)  = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x38) = 0;
+    *reinterpret_cast<int32_t*>(p + 0x40)  = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x68) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x78) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x80) = 0;
+}
+
+void EdCreateInstanceBody(const ElementDescription* self, void** elemPtr) {
+    const uint8_t* d = reinterpret_cast<const uint8_t*>(self);
+
+    // ---- 1. elem->_name = this->GetPath().GetPathIdentifer() --------------
+    using GetPathFn  = void* (*)(const void* self, void* out);
+    using GetIdentFn = void* (*)(void* self, void* out);
+    static GetPathFn  getPath  = reinterpret_cast<GetPathFn>(
+        ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
+    static GetIdentFn getIdent = reinterpret_cast<GetIdentFn>(
+        ResolveExport("?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ"));
+
+    void*  pathTmp  = nullptr;   // System::Filename — its first qword IS a String
+    char*  identTmp = nullptr;
+    char** idSlot   = nullptr;
+    if (getPath && getIdent) {
+        void* fn = getPath(self, &pathTmp);
+        idSlot = static_cast<char**>(getIdent(fn, &identTmp));
+    }
+
+    uint8_t* elem = static_cast<uint8_t*>(*elemPtr);
+    char*    want = idSlot ? *idSlot : nullptr;
+    char*    old  = *reinterpret_cast<char**>(elem + 0x10);
+    if (old != want) {
+        if (old) {
+            if (--RtSystem::StringRefCount(old) == 0) {
+                // Retail's asymmetry: the FREEING branch leaves the FIELD
+                // holding `data - 8` and frees that; the sharing branch nulls it.
+                *reinterpret_cast<char**>(elem + 0x10) = old - 8;
+                MemFreeStatic(*reinterpret_cast<char**>(elem + 0x10));
+            } else {
+                *reinterpret_cast<char**>(elem + 0x10) = nullptr;
+            }
+        }
+        *reinterpret_cast<char**>(elem + 0x10) = want;
+        if (want) ++RtSystem::StringRefCount(want);
+    }
+
+    ReleaseStringLocal(identTmp);
+    ReleaseStringLocal(*reinterpret_cast<char**>(&pathTmp));
+
+    // ---- 2. the eleven scalar copies --------------------------------------
+    // `*elemPtr` is RE-READ before every store, exactly as retail does. Nothing
+    // in between can change it, but the re-read is what the shipped bytes do
+    // and transcribing it costs nothing.
+    #define ED_ELEM  (static_cast<uint8_t*>(*elemPtr))
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x30) = *reinterpret_cast<const int32_t*>(d + 0x40); // _elementType -> _alignment
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x18) = *reinterpret_cast<const int32_t*>(d + 0x20);
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x1c) = *reinterpret_cast<const int32_t*>(d + 0x24);
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x20) = *reinterpret_cast<const int32_t*>(d + 0x28);
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x24) = *reinterpret_cast<const int32_t*>(d + 0x2c);
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x28) = *reinterpret_cast<const int32_t*>(d + 0x30);
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x2c) = *reinterpret_cast<const int32_t*>(d + 0x34);
+    *reinterpret_cast<uint32_t*>(ED_ELEM + 0x34) |= *reinterpret_cast<const uint32_t*>(d + 0x44); // OR, never assign
+    // NEGATIVE CONTROL 2 (`BANISHED_UIF_NEGCTRL=2`, declared in
+    // runtime/src/ui/userinterface.cpp): drop the crossover, which is exactly
+    // the kind of transcription slip a byte oracle exists to catch.
+    if (RtUiUifNegCtrl() == 2) {
+        *reinterpret_cast<int32_t*>(ED_ELEM + 0x38) = *reinterpret_cast<const int32_t*>(d + 0x38);
+        *reinterpret_cast<int32_t*>(ED_ELEM + 0x3c) = *reinterpret_cast<const int32_t*>(d + 0x3c);
+    } else {
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x38) = *reinterpret_cast<const int32_t*>(d + 0x3c);    // _id      -> +0x38
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x3c) = *reinterpret_cast<const int32_t*>(d + 0x38);    // _tabOrder-> +0x3c
+    }
+    *reinterpret_cast<uint64_t*>(ED_ELEM + 0x40) = *reinterpret_cast<const uint64_t*>(d + 0x50);
+
+    // ---- 3. the tool-tip UIString -----------------------------------------
+    void*   table = *reinterpret_cast<void* const*>(d + 0x58);
+    int32_t index = -1;
+    if (table) {
+        static GetIndexFromNameFn gifn = reinterpret_cast<GetIndexFromNameFn>(
+            ResolveExport("?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z"));
+        if (gifn) index = gifn(table, d + 0x60);
+    }
+    elem = ED_ELEM;
+    *reinterpret_cast<void**>(elem + 0x48)  = table;
+    // Fact (b): retail writes a QWORD here whose upper half is uninitialised
+    // stack. The port writes the DWORD only and the oracle excludes +0x54.
+    *reinterpret_cast<int32_t*>(elem + 0x50) = index;
+
+    // ---- 4. elem->_description = this -------------------------------------
+    *reinterpret_cast<const void**>(ED_ELEM + 0xb8) = self;
+
+    // ---- 5. the UI::Dialog temporary and the one virtual call -------------
+    alignas(16) uint8_t tempDialog[kDialogTempSize];
+    DialogTempCtor(tempDialog);
+
+    void*  slot = nullptr;
+    void** ret  = &slot;
+    if (void* child = *reinterpret_cast<void* const*>(d + 0x48)) {
+        using ChildFn = void** (*)(void* self, void** out, void* dialog);
+        ChildFn f = reinterpret_cast<ChildFn>(
+            (*reinterpret_cast<void***>(child))[8]);   // vtable +0x40
+        ret = f(child, &slot, tempDialog);
+    } else {
+        slot = nullptr;
+        ret  = &slot;
+    }
+    *reinterpret_cast<void**>(ED_ELEM + 0xb0) = *ret;
+
+    // ---- 6. the flags cascade (fact (c): the inner walk is unreachable) ---
+    elem = ED_ELEM;
+    if (*reinterpret_cast<void* const*>(elem + 0x40) != nullptr &&
+        *reinterpret_cast<void* const*>(elem + 0x48) != nullptr &&
+        *reinterpret_cast<const int32_t*>(elem + 0x50) >= 0 &&
+        (*reinterpret_cast<const uint32_t*>(elem + 0x34) & 0x800000u) == 0) {
+        const uint32_t before = *reinterpret_cast<uint32_t*>(elem + 0x34);
+        const uint32_t after  = before | 0x90000u;
+        *reinterpret_cast<uint32_t*>(elem + 0x34) = after;
+        if ((static_cast<uint8_t>(before ^ after) & 1u) != 0) {
+            uint8_t* w = elem;
+            do {
+                *reinterpret_cast<uint32_t*>(w + 0x34) |= 0x8000000u;
+                w = *reinterpret_cast<uint8_t**>(w + 0x98);
+            } while (w != nullptr);
+        }
+    }
+
+    #undef ED_ELEM
+
+    // ---- the temporary's destructor ---------------------------------------
+    DialogDtor(tempDialog);           // ~Dialog: see fact (a)
+}
+
+// ---- the replay oracle's storage ------------------------------------------
+// A live 0xC0-byte Element snapshot plus the two masked copies the compare is
+// made on. File scope for the same one-thread reason the rest of this file
+// gives; CreateInstance is called from the dialog build, on MainLoop's thread.
+alignas(16) uint8_t g_edCiScratch[0xC0];
+alignas(16) uint8_t g_edCiOurs[0xC0];
+alignas(16) uint8_t g_edCiTheirs[0xC0];
+
+// The population counters the diff message reports, so a green result cannot be
+// read as coverage it does not have
+// (reference_probe_needs_an_effectiveness_control.md).
+uint64_t g_edCiWithChild = 0;      // NOT replayed — see the oracle note
+uint64_t g_edCiNoChild   = 0;      // replayed
+uint64_t g_edCiWithTable = 0;      // reached StringTable::GetIndexFromName
+
+} // namespace
+
+// ORACLE: REPLAY, on the ELEMENT, with two things spelled out that a bare
+// "replay" label would hide.
+//
+//  (i) IT IS SKIPPED WHEN `_childDesc` IS NON-NULL, and the count of skipped
+//      calls is REPORTED. Slot 8 of a concrete description CREATES an element;
+//      replaying it would build a second one, leak it, and then report a
+//      "divergence" that is nothing but two different fresh addresses in
+//      `elem->_border`. A replay that manufactures a divergence is worse than
+//      no replay, and a replay whose uncovered fraction is invisible is the
+//      reference_uncalled_port_is_not_verified.md failure one level up. So the
+//      split is printed on every report: `nochild=N child=M table=K`.
+//  (ii) THE STRING REFCOUNTS ARE COMPENSATED, because both bodies run the same
+//      assign against the SAME two String buffers. Ours does (-1 old, +1 new)
+//      on the live element; the DLL's does (-1 old, +1 new) on the scratch copy,
+//      which holds the SAME pointers. Left alone that is a double release of
+//      `old` — and the first of the two could free it out from under the
+//      second. So the oracle takes a reference on `old` BEFORE either body runs
+//      (making the net effect on it exactly -1 across the pair, with the free,
+//      if any, happening at the very end) and drops one reference on the NEW
+//      buffer afterwards. Both are undone before the caller sees anything.
+//
+// +0x54..+0x57 is excluded from the compare — fact (b) above. Both copies are
+// built from the same live snapshot, so every other byte neither body writes is
+// equal by construction rather than by luck
+// (reference_oracle_must_not_compare_unwritten_bytes.md).
+extern "C" void RtUiElementDescription_CreateInstance(const ElementDescription* self,
+                                                      void** elemPtr) {
+    RT_DIFF_BEGIN("UI::ElementDescription::CreateInstance");
+
+    const uint8_t* d     = reinterpret_cast<const uint8_t*>(self);
+    const bool hasChild  = (*reinterpret_cast<void* const*>(d + 0x48) != nullptr);
+    const bool hasTable  = (*reinterpret_cast<void* const*>(d + 0x58) != nullptr);
+    if (rt_diff_on__) {
+        if (hasChild) ++g_edCiWithChild; else ++g_edCiNoChild;
+        if (hasTable) ++g_edCiWithTable;
+    }
+
+    const bool replay = rt_diff_on__ && !hasChild && *elemPtr != nullptr;
+
+    char* preRef = nullptr;
+    if (replay) {
+        uint8_t* live = static_cast<uint8_t*>(*elemPtr);
+        std::memcpy(g_edCiScratch, live, sizeof(g_edCiScratch));
+        preRef = *reinterpret_cast<char**>(live + 0x10);
+        if (preRef) ++RtSystem::StringRefCount(preRef);   // note (ii)
+    }
+
+    EdCreateInstanceBody(self, elemPtr);
+
+    if (replay) {
+        void* scratchPtr = g_edCiScratch;
+        using Fn = void (*)(const ElementDescription*, void**);
+        RT_ORIGINAL_ONCE(Fn, kEdCreateInstance)(self, &scratchPtr);
+
+        std::memcpy(g_edCiOurs,   *elemPtr,      sizeof(g_edCiOurs));
+        std::memcpy(g_edCiTheirs, g_edCiScratch, sizeof(g_edCiTheirs));
+        std::memset(g_edCiOurs   + 0x54, 0, 4);   // fact (b), indeterminate
+        std::memset(g_edCiTheirs + 0x54, 0, 4);
+
+        char ours[192], them[192];
+        std::snprintf(ours, sizeof(ours),
+                      "population nochild=%llu child=%llu table=%llu",
+                      (unsigned long long)g_edCiNoChild,
+                      (unsigned long long)g_edCiWithChild,
+                      (unsigned long long)g_edCiWithTable);
+        std::snprintf(them, sizeof(them), "%s", ours);
+        RtDiffReport(&rt_diff_site__, true, ours, them);
+        RtDiffReportBytes(&rt_diff_site__, g_edCiOurs, g_edCiTheirs,
+                          sizeof(g_edCiOurs));
+
+        // Undo note (ii): one reference back off the NEW buffer (both bodies
+        // took one), and the pre-reference on `old` has already been consumed
+        // by the DLL's own release.
+        if (char* nw = *reinterpret_cast<char**>(
+                static_cast<uint8_t*>(*elemPtr) + 0x10)) {
+            if (--RtSystem::StringRefCount(nw) == 0) {
+                MemFreeStatic(nw - 8);
+            }
+        }
+    }
+    RT_DIFF_WORK(true);
+}
+
+// ============================================================================
+// THE TWIN-SYNTHETIC ORACLE for ?CreateInstance@ElementDescription
+// ============================================================================
+// THIS EXISTS BECAUSE THE REPLAY ORACLE ABOVE HAS NO POPULATION. Measured, not
+// assumed: a `BANISHED_RT_DIFF=1 BANISHED_AUTOSTART=1` run to the pause menu
+// registers 542 diff sites and `UI::ElementDescription::CreateInstance` is not
+// among them — the body was never entered once. That is
+// reference_uncalled_port_is_not_verified.md exactly, and a `divergences=0`
+// from an absent site is not evidence of anything.
+//
+// THE REASON IS STRUCTURAL, not a gap in the harness. Grepping the tree for the
+// row's callers finds exactly ONE:
+//   code/Game/Component/frustumoutlinedescription.cpp:116 — the exe's
+//   `FrustumOutlineDescription::CreateInstance` override calling its base
+//   through `fn_ElementDescription_CreateInstance`, which reads exe PE-import
+//   slot 0x1401518d0. A FrustumOutlineDescription is not instantiated on any
+//   route this harness can drive. Ghidra reports NO xrefs to 0x180115ad0 at
+//   all — every other caller is a virtual dispatch inside the DLL, which our
+//   registration cannot reach anyway.
+// So there is no run to wait for. The subject has to be built.
+//
+// THE SUBJECTS. One `UI::ElementDescription` per case, built with our own
+// ported constructor on real allocator memory, and TWO zeroed 0xC0-byte
+// `UI::Element`s — ours runs on A, the SHIPPED body on B, and all 0xC0 bytes
+// are compared. Three cases, chosen so each covers a branch the others do not:
+//
+//   case 0  childDesc = null, stringTable = null, userData = null
+//           -> the null-child arm; index = -1; the flags cascade's guard
+//              short-circuits on its FIRST condition (elem+0x40 == 0)
+//   case 1  childDesc = a SYNTHETIC description whose fake vtable slot 8 is a
+//           recorder that writes a known sentinel into the out slot
+//           -> the virtual arm, and `elem->_border` must equal that sentinel
+//   case 2  stringTable = a SYNTHETIC UI::StringTable holding one entry whose
+//           name is a synthetic System::String, `_textName` = that same String,
+//           `_userData` non-null
+//           -> `GetIndexFromName` returns 0, so ALL FOUR guard conditions pass
+//              and `elem->_flags |= 0x90000` actually happens
+//
+// Every case also pre-sets both elements' `_name` to the SAME synthetic String
+// with a refcount of 8, so the String-assign's RELEASE arm runs on both sides
+// (4 releases across the six runs, none of them reaching zero).
+//
+// WHAT THIS ORACLE DOES NOT COVER, stated rather than implied:
+//   * the String-assign's FREEING arm. It cannot be covered by a twin: at
+//     refcount 1 the first body frees the buffer and the second would decrement
+//     freed memory, and giving each side its own buffer makes the post-state
+//     differ by POINTER VALUE and manufactures a divergence
+//     (reference_control_must_pick_a_compared_subject.md). The freeing arm is
+//     three instructions and is the same inline `ReleaseStringLocal` this file
+//     already carries at four other sites.
+//   * the case where `GetPath()` yields a non-empty path. These descriptions
+//     have no path, so `want` is null on both sides. What that costs is the
+//     ASSIGN arm (elem+0x10 = new + incref); the RELEASE arm above is covered.
+//   * the flags cascade's inner parent walk — provably unreachable, fact (c).
+namespace {
+
+struct EdTwinCase {
+    const char* name;
+    void*  desc;
+    void*  elemA;
+    void*  elemB;
+};
+
+// The sentinel the fake child description hands back through the out slot.
+void* const kEdTwinBorder = reinterpret_cast<void*>(static_cast<uintptr_t>(0xB07DE5));
+
+
+// Fake `_childDesc` vtable slot 8 (+0x40): retail's shape is
+// `InternalPtr<Element> slot8(void* out, const Dialog* ctx) const`, returning
+// the out slot in RAX.
+void** EdTwinChildSlot8(void* /*self*/, void** out, void* /*dialog*/) {
+    *out = kEdTwinBorder;
+    return out;
+}
+void* g_edTwinChildVtbl[9] = { nullptr, nullptr, nullptr, nullptr, nullptr,
+                               nullptr, nullptr, nullptr,
+                               reinterpret_cast<void*>(&EdTwinChildSlot8) };
+
+inline void* EdMemAlloc(size_t n, int align) {
+    using Fn = void* (*)(size_t, int);
+    return RT_EXPORT_ONCE(Fn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(n, align);
+}
+
+// A `System::String`: length dword at [p-8], refcount dword at [p-4], bytes at
+// p. runtime/types/system/String.h.
+char* EdMakeString(const char* text, int32_t refs) {
+    const size_t len = std::strlen(text);
+    uint8_t* base = static_cast<uint8_t*>(EdMemAlloc(len + 9, 8));
+    if (!base) return nullptr;
+    *reinterpret_cast<int32_t*>(base + 0) = static_cast<int32_t>(len);
+    *reinterpret_cast<int32_t*>(base + 4) = refs;
+    std::memcpy(base + 8, text, len + 1);
+    return reinterpret_cast<char*>(base + 8);
+}
+
+void VerifyElementDescriptionCreateInstanceTwin() {
+    if (!RtDiffEnabled()) return;
+    static RtDiffSite site = { "UI::ElementDescription::CreateInstance [twin synthetic]" };
+    RtDiffRegister(&site);
+
+    using Fn = void (*)(const ElementDescription*, void**);
+    // RT_RAW_OK: the ORACLE half must reach the SHIPPED body, never our own
+    // registration (WAVE9_LANE_FNHOOK.md's self-comparing detours).
+    Fn theirs = reinterpret_cast<Fn>(ResolveExportRaw(kEdCreateInstance));
+    if (!theirs) {
+        RtDiffReport(&site, false, "twin subjects built",
+                     "shipped ?CreateInstance@ElementDescription not resolvable");
+        return;
+    }
+
+    // The shared name String: refcount 8 so all six release-arm executions stay
+    // in the SHARING branch and nothing is freed under either body.
+    char* shared = EdMakeString("uif_twin", 8);
+
+    // The synthetic StringTable for case 2: {..., data @ +0x20, count @ +0x28}.
+    uint8_t* table = static_cast<uint8_t*>(EdMemAlloc(0x30, 8));
+    char*    key   = EdMakeString("uif_key", 8);
+    StringTableTextEntry* entries =
+        static_cast<StringTableTextEntry*>(EdMemAlloc(sizeof(StringTableTextEntry), 8));
+    bool built = shared && table && key && entries;
+    if (built) {
+        std::memset(table, 0, 0x30);
+        entries[0].name = key;
+        entries[0].text = nullptr;
+        *reinterpret_cast<void**>(table + StringTableOffsets::kData)   = entries;
+        *reinterpret_cast<int32_t*>(table + StringTableOffsets::kCount) = 1;
+    }
+
+    // The fake child description: one qword, its vtable.
+    void** child = static_cast<void**>(EdMemAlloc(8, 8));
+    if (child) *child = g_edTwinChildVtbl;
+    built = built && child;
+
+    int cases = 0, mismatched = 0, borderOk = 0, cascadeRan = 0;
+
+    for (int c = 0; built && c < 3; ++c) {
+        ElementDescription* desc =
+            static_cast<ElementDescription*>(EdMemAlloc(sizeof(ElementDescription), 8));
+        uint8_t* a = static_cast<uint8_t*>(EdMemAlloc(0xC0, 16));
+        uint8_t* b = static_cast<uint8_t*>(EdMemAlloc(0xC0, 16));
+        if (!desc || !a || !b) break;
+
+        RtUiElementDescription_Ctor(desc);        // our own ported ctor
+        uint8_t* d = reinterpret_cast<uint8_t*>(desc);
+        // Distinct, recognisable scalars so a swapped field is visible.
+        *reinterpret_cast<int32_t*>(d + 0x20) = 0x11;   // _x
+        *reinterpret_cast<int32_t*>(d + 0x24) = 0x22;
+        *reinterpret_cast<int32_t*>(d + 0x28) = 0x33;
+        *reinterpret_cast<int32_t*>(d + 0x2c) = 0x44;
+        *reinterpret_cast<int32_t*>(d + 0x30) = 0x55;
+        *reinterpret_cast<int32_t*>(d + 0x34) = 0x66;
+        *reinterpret_cast<int32_t*>(d + 0x38) = 0x77;   // _tabOrder -> elem+0x3c
+        *reinterpret_cast<int32_t*>(d + 0x3c) = 0x88;   // _id       -> elem+0x38
+        *reinterpret_cast<uint32_t*>(d + 0x40) = 0x99;  // _elementType
+        *reinterpret_cast<uint32_t*>(d + 0x44) = 0x0000a000u;   // _flags, OR-ed
+        if (c == 1) *reinterpret_cast<void**>(d + 0x48) = child;
+        if (c == 2) {
+            *reinterpret_cast<void**>(d + 0x50) = reinterpret_cast<void*>(0x1234);
+            *reinterpret_cast<void**>(d + 0x58) = table;
+            *reinterpret_cast<char**>(d + 0x60) = key;
+        }
+
+        std::memset(a, 0, 0xC0);
+        std::memset(b, 0, 0xC0);
+        *reinterpret_cast<char**>(a + 0x10) = shared;   // the release arm
+        *reinterpret_cast<char**>(b + 0x10) = shared;
+
+        void* pa = a;
+        void* pb = b;
+        RtUiElementDescription_CreateInstance(desc, &pa);
+        theirs(desc, &pb);
+
+        // +0x54..+0x57 is the UIString pad retail fills from uninitialised
+        // stack — fact (b). Zeroed on both sides before the compare.
+        std::memset(a + 0x54, 0, 4);
+        std::memset(b + 0x54, 0, 4);
+        if (std::memcmp(a, b, 0xC0) != 0) ++mismatched;
+        if (c == 1 && *reinterpret_cast<void**>(a + 0xb0) == kEdTwinBorder) ++borderOk;
+        if (c == 2 && (*reinterpret_cast<uint32_t*>(a + 0x34) & 0x90000u) == 0x90000u)
+            ++cascadeRan;
+        ++cases;
+
+        char ours[160], them[160];
+        std::snprintf(ours, sizeof(ours), "case %d (%s)", c,
+                      c == 0 ? "no child, no table"
+                             : (c == 1 ? "child virtual" : "table + cascade"));
+        std::snprintf(them, sizeof(them), "%s", ours);
+        RtDiffReport(&site, true, ours, them);
+        RtDiffReportBytes(&site, a, b, 0xC0);
+    }
+
+    // The EFFECTIVENESS CONTROL. A green byte compare over three cases that all
+    // took the same arm would read identically to a real pass, so the two facts
+    // that distinguish the arms are asserted by name:
+    //   border=1  the child virtual actually ran and its sentinel arrived
+    //   cascade=1 all four guard conditions passed and the flags OR happened
+    char ours[224], them[224];
+    std::snprintf(ours, sizeof(ours),
+                  "cases=3 border=1 cascade=1 mismatched=0");
+    std::snprintf(them, sizeof(them),
+                  "cases=%d border=%d cascade=%d mismatched=%d",
+                  cases, borderOk, cascadeRan, mismatched);
+    RtDiffReport(&site, cases == 3 && borderOk == 1 && cascadeRan == 1 &&
+                        mismatched == 0, ours, them);
+}
+
+} // namespace
+
 int RtUiDialogRegister() {
     int n = 0;
 
@@ -2007,6 +2630,15 @@ int RtUiDialogRegister() {
     RegisterRuntimeExport("?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z",
                           (void*)&RtUiDialogInstance_SetUpperLeft);
     RegisterRuntimeAddr(0x180114a60, (void*)&RtUiDialogInstance_SetUpperLeft);         ++n;
+
+    // ---- Wave 10 lane UIF --------------------------------------------------
+    // Registering this ALSO re-points exe PE-import slot 0x1401518d0 (see "THE
+    // WIDER BLAST RADIUS" at the body). Name checked against the shipped export
+    // directory with pefile: 0x115ad0 / ordinal 2004.
+    RegisterRuntimeExport(
+        "?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z",
+        (void*)&RtUiElementDescription_CreateInstance);
+    RegisterRuntimeAddr(0x180115ad0, (void*)&RtUiElementDescription_CreateInstance);   ++n;
 
     // ---- the shape oracle, run once, here ----------------------------------
     // These four cannot be replayed (running them twice would tick every
