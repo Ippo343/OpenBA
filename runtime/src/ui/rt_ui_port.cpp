@@ -60,6 +60,12 @@ extern int RtUiDrawRegister();             // userinterface_draw.cpp (lane UIDRA
 // is deliberately PARTIAL (see the file banner) and a bisect must be able to
 // isolate it from lane UI1's Update, which calls it.
 extern int RtUiCloseDialogRegister();      // userinterface_close.cpp (lane CLOSEDLG)
+// Wave 10 lane DLG2: ??0Dialog@UI@@ and ??1Dialog@UI@@, the two rows that
+// ENTERED the census when UI3 replaced retail's INLINED UI::Dialog temporary
+// with a call to the out-of-line exports. Own switch (BANISHED_RT_DLGCTOR)
+// because the dtor frees and because a bisect must be able to separate it from
+// lane UI3's own switch, which is what put the calls there.
+extern int RtUiDialogCtorDtorRegister();   // dialog_ctor_dtor.cpp (lane DLG2)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -79,5 +85,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_DLGCREATE"))  n += RtUiDialogCreateRegister();
     if (RtWaveEnabled("BANISHED_RT_UIDRAW"))      n += RtUiDrawRegister();
     if (RtWaveEnabled("BANISHED_RT_UICLOSE"))    n += RtUiCloseDialogRegister();
+    if (RtWaveEnabled("BANISHED_RT_DLGCTOR"))    n += RtUiDialogCtorDtorRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }
