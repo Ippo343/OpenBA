@@ -1,5 +1,22 @@
 # Wave 10E — the last three UI rows, and an honest verdict on the number
 
+> ## ✅ CLOSED 2026-09-09 — **UI 186 / 188 = 98.9%, AT ITS PROVEN CEILING. The namespace is finished.**
+> Three lanes, all merged. The two remaining rows are proved unpromotable, not
+> unfinished: `??_7DialogController` permanently (its consumer's write is
+> overwritten *unread* by `??1Internal`'s first statement), `??_7Dialog` until
+> either `Dialog` factory is ported (expiry named and mechanical).
+> Debug green; release green from a genuine `make clean` (8,191,421 bytes).
+> Boot to gameplay, `[Shutdown] done`, 0-byte crash log.
+>
+> **The wave found a real correctness defect**, in the one row that had no oracle:
+> `?Persist@Element@UI@@` passed TWO arguments to the encoding factory where both
+> slots take `(Encoding*, Serializer*, int version)`. `R8` carried **caller
+> garbage** and the codec wrote it into the record as the version — reproducibly,
+> on both slots — against retail's `XOR R8D,R8D`. **A byte pin and an entry
+> counter are both structurally blind to it**; only building an oracle for a body
+> with no gameplay route exposed it. Every other encoding call site in the tree
+> already passed three.
+
 **Opened 2026-09-09 on `wave10/base` @ `c22d952`.** Three lanes.
 
 UI stands at **183 / 186 = 98.4%**. This wave intends to be the last UI wave —
