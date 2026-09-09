@@ -222,10 +222,30 @@ rejected=0`:
     operatorNew=2 bytes=192   GetToolTipString=2   SetText=2   TypeName=0 Type=0
 ```
 
-`bytes=192` discriminates (proves the caller is `BeginToolTip` and not something
-else); `GetToolTipString=2`, not 4, proves the empty-string arm and matches
-MOUSE's `nonEmptyString=0` from the other end; `TypeName`/`Type` staying 0 is
-expected — they exist for the vtable's `TRAP=0`, not for this route.
+**Read these as RATIOS against `operatorNew`, not as absolute counts** — every
+absolute scales with the injector script, so an absolute prediction turns a
+script change into a false divergence:
+
+```
+GetToolTipString / operatorNew == 1   on the EMPTY-string arm
+                               == 2   on the non-empty arm
+SetText          / operatorNew == 1
+bytes            / operatorNew == 192 (0xc0)
+```
+
+`bytes/operatorNew == 192` discriminates: it proves the caller is `BeginToolTip`
+and not something else. The empty-arm ratio of 1 cross-checks MOUSE's
+`nonEmptyString=0` from the other end. `TypeName`/`Type` staying 0 is expected —
+they exist for the vtable's `TRAP=0`, not for this route.
+
+**Lane TIP's committed warrant originally predicted `GetToolTipString` = TWO per
+tooltip**, which holds only on the non-empty arm. MOUSE's cell takes the EMPTY
+arm, so a correct run would have read 1 against a doc promising 2 and **a correct
+port would have been reported as broken.** Found by MOUSE's review, raised by
+TIP, and fixed by the integrator at merge rather than by TIP — so a reported
+lane's branch does not move. The ratios-not-counts framing is MOUSE's, and it is
+the more durable fix: it removes a whole class of script-dependent false
+divergence rather than correcting one number.
 
 **And the abort condition is stated in advance rather than rationalised after:**
 if `operatorNew` is zero while MOUSE's `BeginToolTip` reads `entries=2`, that is
