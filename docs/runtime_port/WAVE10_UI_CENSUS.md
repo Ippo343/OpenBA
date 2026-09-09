@@ -144,3 +144,68 @@ Round 2 is class B's eight bodies, and is scheduled ONLY on lane ALLOC's verdict
 * The `RT_DIFF_SHADOW` sites are SELF-CHECKS, not oracles. The predictive oracle
   is `runtime/funcs/rt_predict.h`.
 * No lane edits after it reports.
+
+---
+
+## 4. Progress log (2026-09-08 → 09)
+
+| after | UI called/ported | % | what moved |
+|---|---|---|---|
+| baseline | 164 / 135 | 82.3% | — |
+| EXTPTR | 164 / 136 | 82.9% | `Serialize@ElementDescription`; family found to be 25 bodies, not 3 |
+| UI4 | 166 / 141* | — | `AddSprite`+`AddScissor`; SpriteSheet vtable 1/8 → 8/1 |
+| UI1 | — | — | `UserInterface::Update` ported + detoured |
+| UIF | 169 / 144 | 85.2% | `~UserInterface`, `SaveAllSettings`, `CreateInstance` |
+| UI3 | 170 / 148 | 87.1% | the four `DialogInstance` rows |
+| UIDRAW | 170 / 149 | 87.6% | `UserInterface::Draw`; census blind spot **7** (detour column read 2, truth was 4) |
+| UIORACLE | 170 / 151 | **88.8%** | `AddTab`, `CacheText`, `SetParameterCount`, `Array<String>::SetSize` |
+
+\* intermediate readings taken before later merges; the tool also gained fixes
+mid-wave, so read the SET diffs in the lane docs, not this column alone.
+
+**90% needs `ported ≥ 153` at `called = 170`.** Remaining gap is 19 rows:
+2 code (`??0Dialog`, `??1Dialog` — lane DLG2), 1 code (`CloseDialog` — lane
+CLOSEDLG), 1 code (`ShowDialog` — no route, see below), 15 data (lane MINTSEL).
+
+### What is genuinely still blocked
+
+* **`ShowDialog`** — lane UI1 established that `BANISHED_MODAL_ANSWER` is **not
+  a route, it is a bypass**: both call sites skip `fn_UI_ShowDialog` entirely.
+  A predictive oracle exists but would compare one flag bit. **What would expire
+  it:** `ShowDialog` registers `UpdateStandAloneUI` into `MainLoop+0x90`, which
+  the nested pump walks every frame — a harness callback in that array reaches
+  inside the loop no driver can currently touch.
+* **The 15 data rows** — see §1 class A. Not a switch anyone may flip; blocked
+  on per-row selectivity (buildable), the `_typeInfo` CRC (a silent wrong value
+  that live default-on code reads), and the remaining vtable abort traps.
+
+## 5. Instrument work this wave — the part that is not a row count
+
+Six defects were found IN THE INSTRUMENTS, several of which were producing
+confident green readings over nothing:
+
+1. **census blind spot 7** — detour patterns matched only `InstallRuntimeDetour*`
+   front doors, so `RuntimeDetourInstall`, the installer the hardest prologues
+   are REQUIRED to use, was invisible.
+2. **`AddTab` was dead on arrival** — `engine_funcs.cpp` resolved it from a PE
+   import slot FIRST, bypassing the port registry. Only `rounds=0` said so.
+3. **`InstallDetour`'s `ADD RAX,8`** — wrong in every configuration, live and
+   corrupting on `Engine::Startup`, whose trampoline the allocator shadow driver
+   calls. The old self-test was structurally blind to it.
+4. **`BANISHED_REDZONE=watch`** crashed at teardown; and `BANISHED_REDZONE=1`
+   walks NOTHING unless `BANISHED_REDZONE_WATCH` is also set, so a bare-shim
+   "0 violations" is vacuous.
+5. **the allocator shadow gate** — Wave 9's zero-divergence result does not
+   reproduce; all seven cells red. See `WAVE10_LANE_SHADOWRE.md`.
+6. **`rt_predict.cpp` superseded on exact address+size**, so an overlapping
+   different-width write produced false divergences.
+
+Plus two in a lane's own probe (an effectiveness counter reading freed memory;
+a verdict counting its control's collateral), and a pin pattern that matched
+seven instructions and would have reported NOT-UNIQUE about a correct body.
+
+**The pattern worth carrying:** in every case the instrument's failure mode was
+to read GREEN, or to read confidently WRONG — never to fall silent. That is why
+this wave scored effectiveness counts and negative controls separately from
+verdicts, and why `calls=`/`rounds=`/`armed=` were read alongside
+`divergences=` every time.
