@@ -73,6 +73,26 @@ close-out added two — see §2's table — and the census text was updated with
 left to be absorbed into "more of the same", which is the whole point of the line.)
 ## 2. CLOSED — the ports with no caller in our tree (8, and 10 after §14)
 
+> **SUPERSEDED AS THE SOURCE OF TRUTH, 2026-09-09 (Wave 12).** This table is
+> now a historical record. The authoritative per-row triage is the
+> `ORPHAN_VERDICTS` dict in `tools/runtime_census.py`, which prints a verdict
+> beside every caller-less row, prints anything absent from it as
+> **UNTRIAGED**, and — the part prose could not do — reports a verdict whose
+> key is no longer caller-less as **STALE**.
+>
+> That mattered on the check's first run: `??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z`,
+> the first row below and the exact port
+> `reference_uncalled_port_is_not_verified.md` was written about, is **no longer
+> caller-less** — `mesh.cpp:261` resolves it with `RT_EXPORT_ONCE` (registry-
+> consulting) and `RtQuatMul()` is called at `mesh.cpp:629` and `:816`. Its
+> verdict has been retired and a stale source comment in `mesh.cpp` claiming it
+> "keeps its zero-caller status" was corrected.
+>
+> Why this table rotted is worth keeping: the census printed **"All 10 of these
+> have a WRITTEN VERDICT"** while the list above it had grown past 500 rows, so
+> a reader who trusted the sentence believed every printed row was accounted
+> for. A sentence cannot be checked against data; a dict can.
+
 `tools/runtime_census.py` has ended with this list since Wave 1, and
 `reference_uncalled_port_is_not_verified.md` exists because a wrong
 `Quaternion::operator*` hid in it for a whole wave. Each now has a verdict.

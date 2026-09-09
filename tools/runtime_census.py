@@ -32,12 +32,153 @@ import csv
 import os
 import re
 import sys
+import textwrap
 
 # Set from --allow-degraded in main(); see load_export_addrs().
 ALLOW_DEGRADED = False
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCAN_DIRS = ["code", "engine", "runtime", "standalone", "dx11"]
+
+# ===========================================================================
+# ORPHAN_VERDICTS — the per-row triage of "ports with no caller in our tree"
+# ===========================================================================
+# This list exists because reference_uncalled_port_is_not_verified.md: a port
+# with zero callers reports `calls=0 divergences=0` and reads as green. A WRONG
+# Quaternion::operator* hid in exactly that state for a whole wave.
+#
+# UNTIL 2026-09-09 THE TRIAGE WAS PROSE, and prose rotted in the specific way
+# prose does: the paragraph opened "All 10 of these have a WRITTEN VERDICT"
+# while the list above it had grown past 500 rows, so a reader who trusted the
+# sentence believed every printed row was accounted for. The count was stale
+# for several waves and nothing could detect that, because a sentence cannot be
+# checked against data.
+#
+# It is now a dict keyed by SYMBOL (a mangled export name) or by ADDRESS (an
+# int), which has three properties prose did not:
+#
+#   1. A row either has a verdict or prints as UNTRIAGED. There is no third
+#      state in which prose implies coverage it does not have.
+#   2. STALENESS IS DETECTED. A verdict whose key is no longer in the orphan
+#      list is reported as STALE at the bottom of the section -- that is the
+#      self-check the old paragraph could not have. A key leaves this list when
+#      the port gains a caller, which is good news, but a verdict left behind
+#      claiming to describe a caller-less port is then wrong.
+#   3. Adding a wave's triage is a data edit, not a prose rewrite.
+#
+# STATUS values, ordered from strongest evidence to weakest:
+#
+#   VERIFIED    Swept against the SHIPPED DLL by an oracle or probe: ours and
+#               theirs ran on the same inputs and the results were compared.
+#   EXERCISED   The BODY runs, via a direct C++ call from a sibling port,
+#               exactly as retail calls it. Only the export REGISTRATION is
+#               idle. The body's own diff site is the oracle.
+#   STRUCTURAL  Verified WITHOUT executing -- e.g. decoding the DLL's own
+#               tail-jump and asserting it targets what our port targets.
+#               Weaker than VERIFIED and deliberately labelled differently.
+#   PARTIAL     Some branches verified against the DLL, with a NAMED residue
+#               that is not. The residue belongs in `note`, not rounded away.
+#   NO_ORACLE   No comparison is possible and the reason is recorded. This is
+#               a verdict, not an excuse -- it must say WHY, and a row whose
+#               reason is merely "hard" does not qualify.
+#   UNTRIAGED   Default for anything absent from this table.
+#
+# Each value is (STATUS, wave, note). Keep `note` to one line: it is printed.
+ORPHAN_VERDICTS = {
+    # GRADUATED -- do not re-add. Listed here so the next reader knows these
+    # left the table on purpose rather than by accident:
+    #
+    #   ??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z (Quaternion::operator*)
+    #     Retired 2026-09-09, on the FIRST run of this table's stale-verdict
+    #     self-check, which flagged it immediately. It is no longer caller-less:
+    #     runtime/src/graphics/mesh.cpp:261 resolves it with RT_EXPORT_ONCE --
+    #     which consults the port registry, unlike RT_ORIGINAL_ONCE -- and
+    #     RtQuatMul() is called at mesh.cpp:629 and :816. So the Wave 1 port
+    #     that reference_uncalled_port_is_not_verified.md was written about is
+    #     finally exercised, and a verdict describing it as caller-less would
+    #     now be wrong. The stale source comment that still claimed otherwise
+    #     (mesh.cpp, "keeps its zero-caller status ... still on the census
+    #     orphan list") was corrected at the same time.
+    #
+    # --- Wave 8.5, docs/runtime_port/WAVE8_5.md section 2 -------------------
+    "??0Quaternion@Math@@QEAA@AEBVVector3@1@00@Z": (
+        "EXERCISED", "8.5", "called from RtMath_Transform_FromDirection (transform.cpp:770)"),
+    "?FromDirection@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z": (
+        "EXERCISED", "8.5",
+        "called from transform.cpp:798; Wave 1 found a reassociated float sum through it"),
+    "?Serialize@Serializer@IO@@QEAAXHPEACPEBD@Z": (
+        "STRUCTURAL", "8.5",
+        "schar[] member of the 18-member forwarder family; deliberately dead, "
+        "RtIoSerializerRegister decodes the DLL tail-jump and asserts the vtable slot"),
+    "?Serialize@Serializer@IO@@QEAAXHPEADPEBD@Z": (
+        "STRUCTURAL", "8.5", "char[] member of the same family; same structural check"),
+    "?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z": (
+        "STRUCTURAL", "8.5", "short[] member of the same family; same structural check"),
+    "?Normalize@Vector2@Math@@QEBA?AV12@AEAVScalar@2@@Z": (
+        "VERIFIED", "8.5",
+        "rt_orphan_probe: 10 cases (zero vector, unit axes, denormals, "
+        "overflow-to-inf, -0.0), buffers poisoned 0xCD on both sides"),
+    "??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z": (
+        "STRUCTURAL", "8.5",
+        "cannot be probed (a valid source's copy would run Geometry::~Geometry "
+        "over an attach array); verified by disassembly comparison"),
+    "?PauseEffect@Scene@Audio@@QEAAXI@Z": (
+        "EXERCISED", "8.5",
+        "Scene::Pause calls it as retail does (not inlined); also swept by ProbeAudioScene"),
+    "?StopEffect@Scene@Audio@@QEAAXI@Z": (
+        "EXERCISED", "8.5", "called from Scene::StopEffect3D; also swept by ProbeAudioScene"),
+
+    # --- Wave 12, docs/runtime_port/WAVE12_APPLICATION.md ------------------
+    # These eleven are caller-less for ONE shared reason worth stating once:
+    # our tree calls the Platform* siblings directly, so the public wrappers
+    # and the accessors never get a call site. That is not vestigiality.
+    # Evidence for every row: docs/runtime_port/wave12_evidence/run_*.txt.
+    "?Get@Application@1@SAPEAV11@XZ": (
+        "VERIFIED", "12",
+        "6 sentinels written into the DLL's own _singleton slot 0x1801fc678, "
+        "all agreed, slot restored; refuses to run under BANISHED_RT_MINT=1"),
+    "?GetWindow@Application@1@QEBAPEAUHWND__@@XZ": (
+        "VERIFIED", "12", "part of the 216-state x 5-reader sweep (1081 comparisons)"),
+    "?IsCursorEnabled@Application@1@QEAA_NXZ": (
+        "VERIFIED", "12",
+        "216-state sweep; FOUND A REAL DEFECT -- returned a normalised bool where "
+        "retail returns the raw byte (144 divergences), now uint8_t both sides"),
+    "?PlatformIsPaused@Application@1@AEAA_NXZ": (
+        "VERIFIED", "12",
+        "216-state sweep; also proved DISTINCT from the identical-bodied IsPaused"),
+    "?PlatformDestruct@Application@1@AEAAXXZ": (
+        "VERIFIED", "12",
+        "retail body is `ret 0x0`; 4 fill patterns x 0x100 bytes bracketed on BOTH "
+        "sides, neither wrote a byte -- verified to do NOTHING, which is the whole row"),
+    "?Update@Application@1@QEAA_NXZ": (
+        "STRUCTURAL", "12",
+        "NOT executed (it pumps a message loop): retail's jmp target decoded AND our "
+        "compiled body scanned for the call to our own PlatformUpdate"),
+    "?Startup@Application@1@QEAA_NXZ": (
+        "STRUCTURAL", "12", "same two-sided jmp/body check, target PlatformStartup"),
+    "?Shutdown@Application@1@QEAAXXZ": (
+        "STRUCTURAL", "12",
+        "same two-sided check, target PlatformShutdown; this screen is what proves the "
+        "integration seam was re-pointed and lane B's body is not bypassed"),
+    "?EnableCursor@Application@1@QEAAX_N@Z": (
+        "VERIFIED", "12",
+        "30 rounds through rt_predict.h's PREDICTING oracle (a replay would fire a "
+        "second live cursor change): 20 changed, 0 wrong, self-test control 20/20"),
+    "?LaunchProcess@Application@1@QEAA_NPEBD_N@Z": (
+        "PARTIAL", "12",
+        "5 wait=true CreateProcessW FAILURE cases across retail's 0x104 clamp; the "
+        "ShellExecute arm, the success path, the leaked hThread and the actual command "
+        "line are UNVERIFIED and not probeable without spawning a real process"),
+    "?WindowProc@Application@1@CA_JPEAUHWND__@@I_K_J@Z": (
+        "UNTRIAGED", "12",
+        "explicitly left untriaged by Wave 12 rather than assumed fine along with "
+        "its ten neighbours"),
+}
+
+# Printed in this order, strongest evidence first. UNTRIAGED is last on
+# purpose: it is the actionable bucket and should be the reader's last word.
+ORPHAN_STATUS_ORDER = ["VERIFIED", "EXERCISED", "STRUCTURAL", "PARTIAL",
+                       "NO_ORACLE", "UNTRIAGED"]
 SKIP_DIR_NAMES = {"build", "build-og", "build-perf", "obj", ".git", "__pycache__", ".venv"}
 SOURCE_EXT = (".cpp", ".h", ".hpp", ".c")
 
@@ -1177,39 +1318,61 @@ def main():
 
     if orphan_exports or orphan_addrs:
         print()
-        print("Ports with no caller in our tree (%d exports, %d addresses) — check "
-              "each is not\na vestigial resolve:" % (len(orphan_exports), len(orphan_addrs)))
+        print("Ports with no caller in our tree (%d exports, %d addresses) -- each row"
+              "\ncarries a verdict below, or prints as UNTRIAGED:"
+              % (len(orphan_exports), len(orphan_addrs)))
+
+        # Bucket every orphan by its verdict. A row absent from
+        # ORPHAN_VERDICTS is UNTRIAGED -- there is deliberately no state in
+        # which a missing verdict reads as coverage.
+        buckets = collections.defaultdict(list)
         for n in orphan_exports:
-            print("  export  %s" % n)
+            st, wave, note = ORPHAN_VERDICTS.get(n, ("UNTRIAGED", "", ""))
+            buckets[st].append(("export", n, wave, note))
         for a in orphan_addrs:
-            print("  addr    0x%x" % a)
-        # WAVE 12 CORRECTION. The paragraph below opens "All 10 of these" and
-        # names a 2026-09-07 verdict table. That count is STALE and has been for
-        # several waves -- the list above prints its own length two lines up, and
-        # it is far more than 10, so the sentence describes a subset while
-        # reading as if it covered everything printed. Left in place because its
-        # CONTENT is still correct about the rows it actually covers; the count
-        # is the part not to trust. Whoever next needs this accurate should make
-        # the verdict table a data structure keyed by symbol rather than prose.
-        print(chr(32)*2 + chr(39)*0 + "TRIAGE IS PER-WAVE PROSE, NOT A PER-ROW LOOKUP -- and the ALL-10 line below")
-        print("  is a STALE COUNT (this list is longer; see the length printed above).")
-        print("  Wave 12 (2026-09-09) triaged its ELEVEN Application rows -- Get, GetWindow,")
-        print("  IsCursorEnabled, PlatformIsPaused, PlatformDestruct, Update, Startup,")
-        print("  Shutdown, EnableCursor, LaunchProcess, WindowProc. They have no caller")
-        print("  because our tree calls the Platform* siblings directly, NOT because they")
-        print("  are vestigial. Verdicts and evidence: docs/runtime_port/WAVE12_APPLICATION.md")
-        print("  and docs/runtime_port/wave12_evidence/run_*.txt. Nine are swept against the")
-        print("  shipped DLL or verified structurally by standalone/rt_orphan_probe.cpp;")
-        print("  LaunchProcess is PARTIAL (failure path only) and WindowProc is untriaged.")
-        print("  All 10 of these have a WRITTEN VERDICT as of 2026-09-07 -- see the")
-        print("  'ports with no caller' table in docs/runtime_port/WAVE8_5.md section 2. FIVE are")
-        print("  exercised by a direct C++ call from a sibling port (the two Quaternion")
-        print("  members and Transform::FromDirection; Audio::Scene::PauseEffect and")
-        print("  ::StopEffect, called by Scene::Pause and Scene::StopEffect3D exactly as")
-        print("  retail calls them, and swept by ProbeAudioScene). Three are deliberately")
-        print("  dead members of the IO::Serializer forwarder family (verified structurally")
-        print("  at registration), and two are verified by standalone/rt_orphan_probe.cpp")
-        print("  and by disassembly. A NEW name appearing here has NOT been triaged.")
+            st, wave, note = ORPHAN_VERDICTS.get(a, ("UNTRIAGED", "", ""))
+            buckets[st].append(("addr", "0x%x" % a, wave, note))
+
+        total = sum(len(v) for v in buckets.values())
+        tally = "  ".join("%s=%d" % (s, len(buckets[s]))
+                          for s in ORPHAN_STATUS_ORDER if buckets[s])
+        print("  %d rows: %s" % (total, tally))
+
+        for st in ORPHAN_STATUS_ORDER:
+            rows_ = buckets.get(st)
+            if not rows_:
+                continue
+            print()
+            if st == "UNTRIAGED":
+                # The actionable bucket. Named in full, because the whole point
+                # of this section is that an untriaged caller-less port is
+                # indistinguishable from a verified one until somebody looks.
+                print("  ---- UNTRIAGED (%d) -- no verdict recorded. A caller-less port with no"
+                      % len(rows_))
+                print("       verdict is NOT evidence of anything; it is work nobody has done.")
+                for kind, key, _w, _n in rows_:
+                    print("    %-7s %s" % (kind, key))
+                continue
+            print("  ---- %s (%d)" % (st, len(rows_)))
+            for kind, key, wave, note in rows_:
+                print("    %-7s %s   [wave %s]" % (kind, key, wave))
+                if note:
+                    for line in textwrap.wrap(note, 84):
+                        print("            %s" % line)
+
+        # SELF-CHECK the old prose could not have had: a verdict whose key is
+        # no longer caller-less. That happens when the port gains a caller --
+        # good news -- but the verdict left behind still claims to describe a
+        # caller-less port, so it is now wrong and must be retired.
+        live = set(orphan_exports) | set(orphan_addrs)
+        stale = [k for k in ORPHAN_VERDICTS if k not in live]
+        if stale:
+            print()
+            print("  *** %d STALE VERDICT(S): the key is no longer caller-less, so the verdict"
+                  % len(stale))
+            print("  *** describes a port that now HAS a caller. Retire or rewrite each:")
+            for k in sorted(stale, key=str):
+                print("        %s" % (("0x%x" % k) if isinstance(k, int) else k))
 
     if args.unported:
         print()

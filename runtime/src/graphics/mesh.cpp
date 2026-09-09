@@ -721,17 +721,27 @@ static void RtGraphics_MeshInstance_RootAnimationOffset(const void* self, void* 
 // Quaternion::operator* — retail emits a direct `CALL 0x18001e280` here, so
 // calling the DLL's body is the faithful thing.
 //
-// AND IT LEAVES A WAVE 1 PORT STILL UNEXERCISED, deliberately. RT_ORIGINAL_ONCE
-// goes through ResolveExportRaw, which is GetProcAddress and therefore always
-// the DLL — it does NOT consult the runtime registry. So Wave 1's port of
-// `??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z` keeps its zero-caller status (it is
-// still on the census orphan list, and reference_uncalled_port_is_not_verified
-// .md records a WRONG Quaternion::operator* surviving all of Wave 1 exactly
-// that way). Switching this call to ResolveExport would flip it and finally
-// exercise it — but it would also fold a neighbouring lane's correctness into
-// this lane's diff site, so a divergence reported here would no longer be
-// evidence about this lane. That trade is the wave lead's to make, not lane E's;
-// it is written up as an opportunity in WAVE6_LANE_E.md.
+// THE PARAGRAPH THAT USED TO BE HERE IS NOW FALSE, and Wave 12 corrected it at
+// its source. It read: "AND IT LEAVES A WAVE 1 PORT STILL UNEXERCISED,
+// deliberately ... So Wave 1's port of `??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z`
+// keeps its zero-caller status (it is still on the census orphan list) ...
+// Switching this call to ResolveExport would flip it and finally exercise it --
+// but that trade is the wave lead's to make, not lane E's."
+//
+// The trade WAS made, and the comment outlived it. `RtQuatMul()` at line 261 now
+// resolves with RT_EXPORT_ONCE, which DOES consult the port registry (unlike
+// RT_ORIGINAL_ONCE / ResolveExportRaw, which is GetProcAddress and is always the
+// DLL), and it is called at lines 629 and 816. So the Wave 1 port that
+// reference_uncalled_port_is_not_verified.md was written about IS exercised now,
+// and it is NO LONGER on the census orphan list.
+//
+// This was found by the stale-verdict self-check added to tools/runtime_census.py
+// in Wave 12, on that check's first run: it reported the row's old "caller-less"
+// verdict as STALE, and following that back surfaced this comment. Kept as a
+// record of the old claim so a reader who meets it quoted elsewhere recognises
+// it -- and note the one part still true: routing a neighbouring lane's port
+// into this lane's call site does fold that lane's correctness into any
+// divergence reported here.
 //
 // ORACLE: FULL, by REPLAY. UpdateHierarchy is a pure function of (Geometry::
 // _transform, mesh nodes) into _nodes — running it twice yields the same array,
