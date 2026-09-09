@@ -399,22 +399,67 @@ int RtMintRegisterPromotedRows() {
     //      than trusting this line. That is exactly how the ??_7Element and
     //      ??_7SpriteSheet entries that used to sit here went stale, and how
     //      the ??_7Dialog one below cost a lane a whole dispatch.
-    //  ??_7Dialog@UI@@6B@             9 slots, 1 ported, 8 TRAP.
-    //      MINTED as of Wave 10B lane MINT (2026-09-09) — 0x1801562a0,
-    //      sizeProof "tail-not-a-pointer", and its 9 slots are among the
-    //      536 the shadow's ground-truth screen compares against the live
-    //      DLL with 0 MISMATCH. So it is a row now, and the reason it is
-    //      still not promoted is the ordinary one: eight trap slots.
-    //          slot 0  (unexported; known by address only) DLL 0x180038b20
-    //          slot 1  ?TypeName@Dialog@UI@@UEBAPEBDXZ
-    //          slot 2  ?Type@Dialog@UI@@UEBAIXZ
-    //          slot 3  ?GetFileVersion@Dialog@UI@@UEBAHXZ
-    //          slot 5  ?Serialize@Dialog@UI@@UEAA_NAEAVStream@IO@@@Z
-    //          slot 6  ?Reconstruct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ
-    //          slot 7  ?Destruct@Dialog@UI@@UEAAXXZ
-    //          slot 8  ?Construct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ
-    //      The one ported slot is 4, ?Compile@External@Object@@. It is the
-    //      FURTHEST of the five UI vtables from promotion, not the closest.
+    //  ??_7Dialog@UI@@6B@   9 slots, **9 ported, TRAP = 0** as of Wave 10C lane
+    //      DLG8 — and still NOT PROMOTED, for DialogController's reason below
+    //      and measured the same way. This is now the SECOND green-screen
+    //      refusal in this file, which makes it a pattern rather than an
+    //      exception, so read the two together.
+    //
+    //      The eight traps this paragraph used to list are closed:
+    //      runtime/src/ui/dialog_vtable.cpp has the seven code slots (1,2,3,5,
+    //      6,7,8) behind BANISHED_RT_DLGVTABLE, and slot 0 — the unexported
+    //      vector deleting destructor at 0x180038b20 — is a 38th row of the
+    //      family table in runtime/src/object/deleting_dtor.cpp, under
+    //      BANISHED_RT_DELDTOR. **THE SWITCH COUPLING IS REAL**:
+    //      BANISHED_RT_DELDTOR=0 re-traps slot 0 and makes this row unsafe.
+    //      That is not new — ??_7SpriteSheet@UI@@6B@, promoted last wave, has
+    //      exactly the same dependency on exactly the same switch.
+    //
+    //      Gate (a) PASSES, on a live boot (lane_dlg8_logs/shadow2):
+    //          READY  ??_7Dialog@UI@@6B@  slots= 9 ported= 9 TRAP= 0 purecall= 0
+    //
+    //      **Gate (b) says the row is LIVE FOR THE STAMP AND DEAD FOR THE
+    //      DISPATCH**, which is a distinction lane DLGV's row could not draw
+    //      and this one can. Three A/B routes, each `BANISHED_RT_MINT_ROWS=
+    //      ??_7Dialog@UI@@6B@` against the identical boot without it, all three
+    //      reaching `[Shutdown] done` with a 0-byte crash log:
+    //
+    //        * THE EFFECTIVENESS CONTROL FIRES, and it is not a no-op. Lane
+    //          DLG2's ctor differential moves `divergences=0 -> 3` the moment
+    //          the row is armed: our ported `??0Dialog` stamps the MINTED table
+    //          where retail's stamps the DLL's, so +0x00 differs. The row
+    //          genuinely reaches live objects — `DialogTempCtor`
+    //          (runtime/src/ui/dialog.cpp) stamps `ResolveExport(
+    //          "??_7Dialog@UI@@6B@")` on the element path of every dialog the
+    //          game builds, and lane DLG2 already measured that path as firing
+    //          in every run.
+    //        * AND NOTHING EVER DISPATCHES IT. dialog_vtable.cpp's seven-way
+    //          ATTENDANCE counter prints, in EVERY half of every pair —
+    //          autostart-to-gameplay, autostart with BANISHED_RT_DIFF, and the
+    //          front-end Mods route that builds and tears down the whole main
+    //          menu:
+    //              [DlgVtbl] ATTENDANCE: none of the seven bodies was entered
+    //          The temp Dialog is destroyed by a DIRECT call to our ported
+    //          `??1Dialog`, never through slot 0, and no DLL body makes a
+    //          virtual call on it.
+    //
+    //      So promoting would put a different pointer in every Dialog's +0x00
+    //      and buy nothing measurable, while making DLG2's oracle carry three
+    //      permanent divergences. A run in which our bodies are entered zero
+    //      times cannot distinguish a safe promotion from an unexercised one —
+    //      this file's own "WHY NOT ALL 104" rule.
+    //
+    //      **THE CENSUS AGREES, INDEPENDENTLY.** Of the eight names this lane
+    //      registered, exactly ONE entered the census (`?Serialize@Dialog@UI@@`,
+    //      ported=1) — the other seven are reached only through
+    //      `RT_ORIGINAL_ONCE`, which is a DIFF-ONLY door that disappears at
+    //      cutover and which the called-scan correctly does not count. Two
+    //      instruments, different mechanisms, same answer: nothing in this tree
+    //      calls these for real yet.
+    //
+    //      It expires the moment `[DlgVtbl] ATTENDANCE` prints a non-zero
+    //      total. The instrument is in the tree and prints on every run, so
+    //      nobody has to rediscover the question.
     //
     //      THE OLD NOTE HERE SAID "NOT MINTED AT ALL … expires by re-running
     //      tools/rt_mint_gen.py". Both halves were misleading and cost a lane

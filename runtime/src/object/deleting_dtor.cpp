@@ -686,7 +686,7 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180038b20, (void*)&RtDelDtor_Dialog);   // Wave 10C DLG8
 
     printf("[RtDelDtor] 38 deleting destructors registered "
-                "(one body, 37 rows); ~Class resolves lazily\n");
+                "(one body, 38 rows); ~Class resolves lazily\n");
 
     // The byte-comparing half of the oracle. It allocates nothing and runs
     // here rather than on first call, because nothing calls these before
