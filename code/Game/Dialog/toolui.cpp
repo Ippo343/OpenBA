@@ -53,6 +53,31 @@ extern void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 //   +0x30: void* entries array pointer
 //   +0x38: int entry count
 
+// WAVE 10 LANE UIORACLE — see the census note inside the loop below.
+uint64_t g_uidescEntries = 0, g_uidescFound = 0, g_uidescTab = 0;
+
+extern "C" void UIDescTabCensusDump() {
+    if (!std::getenv("BANISHED_UIDESC_CENSUS")) return;
+    fprintf(stderr,
+        "[UIDescCensus] controller entries seen=%llu  named-element found=%llu  "
+        "TAB PATH (calls AddTab)=%llu%s\n",
+        (unsigned long long)g_uidescEntries,
+        (unsigned long long)g_uidescFound,
+        (unsigned long long)g_uidescTab,
+        g_uidescEntries == 0
+            ? "   <- UIDesc_AddControllers_Impl NEVER RAN on this route"
+            : (g_uidescTab == 0
+                 ? "   <- ran, but this route builds NO tabs: AddTab is unreachable here"
+                 : ""));
+    fflush(stderr);
+}
+
+// Registered at static-init, NOT on first entry to the function below. That
+// distinction is the whole point: an atexit armed by the first call could never
+// print the "NEVER RAN" case, which is exactly the case worth reporting.
+namespace { struct UIDescCensusReg { UIDescCensusReg() { std::atexit(&UIDescTabCensusDump); } };
+            UIDescCensusReg g_uidescCensusReg; }
+
 void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSource) {
     uintptr_t desc = (uintptr_t)uiDesc;
     int count = *(int*)(desc + 0x38);
@@ -73,7 +98,23 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
         fflush(stdout);
     }
 
+    // WAVE 10 LANE UIORACLE — a REACHABILITY census, not a trace.
+    //
+    // `?AddTab@TabElement@UI@@` is ported and registered, and this loop is its
+    // ONLY caller in the process (the DLL never calls its own AddTab — four
+    // xrefs, not one a CALL). Its predictive oracle nevertheless reported
+    // rounds=0 on every route driven, and `rounds=0` reads identically to "no
+    // route exists" and to "the port is dead"
+    // (reference_uncalled_port_is_not_verified.md). These three counters
+    // separate those: they say how many controller entries this loop saw, how
+    // many named an element at all, and how many took the TAB path. A route
+    // that reports entries>0 and tab==0 has been MEASURED not to build tabs;
+    // one that reports entries==0 never ran this function at all.
+    //
+    // Free when off; dumped by UIDescTabCensusDump() under BANISHED_UIDESC_CENSUS.
+    extern uint64_t g_uidescEntries, g_uidescFound, g_uidescTab;
     for (int i = 0; i < count; i++) {
+        ++g_uidescEntries;
         uintptr_t entry = entries + (uintptr_t)i * 0x28;
 
         // Look up the named element in the dialog
@@ -83,6 +124,8 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
         void* foundElement = nullptr;
         void* nameStr = (void*)(entry + 0x20);
         fn_DialogInstance_FindElement(dialogInst, &foundElement, nameStr);
+
+        if (foundElement != nullptr) ++g_uidescFound;
 
         if (foundElement == nullptr) {
             // No matching element found — use 6-arg AddController (non-tab path)
@@ -119,6 +162,7 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
         }
 
         // Element is a TabElement — cast via IsDerivedFrom and use tab path
+        ++g_uidescTab;
         fn_InternalBasePtr_CheckPtr(&foundElement);
         bool derived = fn_IsDerivedFrom(foundElement, *g_TypeId_TabElement);
         void* tabElement = derived ? foundElement : nullptr;

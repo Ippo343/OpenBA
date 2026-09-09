@@ -304,8 +304,11 @@ independently would be comparing one buffer with itself —
 
 ### 2e. RESULTS
 
-*(run F/G — trading-post panel route, `BANISHED_TOOL_HARNESS=tradepanel
-BANISHED_BUILD_DEMO_TRADINGPOST=1`; see §5 for status.)*
+**See section 8** for the measured route, the numbers and the firing negative control.
+The short version: three routes reported `rounds=0`, a three-counter reachability census
+showed WHICH of the four causes that was, and the HOUSE PANEL route is the one that
+builds tabs -- 2 rounds, 22 predictions, changed=2, wrong=0, **unpredicted=0**, with the
+self-test naming `TabElement._tabCount` as its failing term.
 
 ---
 
@@ -361,7 +364,10 @@ Registration is **name AND address** for all three new bodies.
 ## 5. STATUS / WHAT THE NEXT LANE SHOULD PICK UP
 
 1. `CacheText` — **verified, both branches, both controls firing.** Done.
-2. `AddTab` — **ported, registered, bypass closed.** §2e records the oracle run.
+2. `AddTab` — **verified on the house-panel route**, negative control firing. Done.
+2b. **The reachability census (`BANISHED_UIDESC_CENSUS=1`) is reusable** and should be:
+   it turns any future `rounds=0` on a UI controller port into a measured statement
+   about which of the four causes applies.
 3. **Optional and not done:** a `[port]` detour on `0x18011EC10` to bring the DLL's ten
    internal `CacheText` callers to the port. It would raise the oracle's round count by
    orders of magnitude and close a knowingly-chosen split brain. `ui_detour.cpp` is the
@@ -448,3 +454,117 @@ another lane's binary: `[RtPredict] UI::TextElement::CacheText` and the `[UiOrac
 summary line exist **only** in this lane's build, and both are present in every one of
 their logs. The AddTab run compares `mine` against the **deployed** md5 before and after
 each launch and prints all three.
+
+---
+
+## 8. FINAL RESULTS — BOTH SITES VERIFIED, BOTH CONTROLS FIRING
+
+Everything below is from the exe `e6975e65ffbfce042a095530f8b40802`, whose md5 was
+compared against the **deployed** copy immediately before *and* after every launch
+(printed in every cell). Lock acquired bare with its status checked, and
+`game_dir_lock.sh verify lane-UIORACLE` re-run before each launch.
+
+### 8a. `?AddTab@TabElement@UI@@…` — the route was FOUND, not given up on
+
+Three routes reported `rounds=0`, which reads identically to *"the port is dead"* and to
+*"no route exists"*. Rather than write "unverifiable", this lane **measured which**, with
+a three-counter census in `AddTab`'s only caller
+(`UIDesc_AddControllers_Impl`, `BANISHED_UIDESC_CENSUS=1`) — armed at **static init**, not
+on first entry, because an `atexit` armed by the first call can never print the "never
+ran" case, which is the case worth reporting:
+
+| route | controller entries seen | element found | **took the TAB path** | verdict |
+|---|---|---|---|---|
+| autostart gameplay | 0 | 0 | 0 | `UIDesc_AddControllers_Impl` never ran |
+| Options dialog + `BANISHED_OPTIONS_TAB` | 0 | 0 | 0 | never ran — the Options tabs are **not** built by `AddTab` |
+| trading-post panel | 7 | 7 | **0** | ran, and this panel builds no tabs |
+| **house panel** (`BANISHED_TOOL_HARNESS=housepanel BANISHED_BUILD_DEMO_HOUSE=1`) | 7 | 7 | **2** | **the route** |
+
+So the earlier zeroes were not a dead port and not a missing route: they were three
+routes that provably do not build tabs, and one that does.
+
+**RESULTS on the house-panel route:**
+
+| cell | rounds | predictions | changed | **wrong** | unpredicted | superseded | excluded | suppressed calls |
+|---|---|---|---|---|---|---|---|---|
+| `tabClean` | 2 | 22 | **2** | **0** | **0** | 10 | 32 B | 6 |
+| `tabControl` (self-test) | 2 | 22 | 2 | **2** | 0 | 10 | 32 B | 6 |
+
+* `superseded=10` is the **second dirty walk** showing up exactly where the port
+  documents it — retail runs the walk twice, unconditionally, and the second run's
+  predictions land on addresses the first already predicted. That column is the design
+  working, not a wart.
+* `excluded=32 B` is 2 rounds × the 16-byte children Array header — the append half,
+  held out because `ElementDescription::CreateInstance` is unported. `6 suppressed
+  indirect call(s)` = 2 rounds × (2 `CreateInstance` + 1 `UpdateContainers`).
+* **`unpredicted=0`** is the load-bearing one: every byte retail changed inside the
+  watched regions (`this->_flags`, every ancestor's `_flags`, `this+0xC0`) was covered by
+  a prediction. Predictions alone are a lower bound; this is the column that turns the
+  round into an oracle.
+* **The negative control fired and NAMED ITS TERM:** *"0 site(s) could NOT demonstrate a
+  failure"*, `wrong=2`, with
+  `TabElement._tabCount … pre=0x0 ours=0x0 theirs=0x1` and
+  `… pre=0x1 ours=0x3 theirs=0x2`. A verdict computed over N terms whose message names
+  none of them is the defect `reference_shadow_predicate_must_name_its_failing_term.md`
+  was written about; this one names them.
+
+### 8b. `?CacheText@TextElement@UI@@AEAAXXZ` — 27,198 and 45,666 rounds, clean
+
+| route / cell | rounds | predictions | changed | **wrong** | unpredicted | content oracle |
+|---|---|---|---|---|---|---|
+| trade panel, `cellK` | 27,198 | 15,434 | 279 | **0** | **0** | `WRONG=0 interned=12043 formatted=15155 changed=174` |
+| trade panel, `cellL` (self-test) | 27,198 | 15,434 | 279 | 151 | 0 | `WRONG=0 selftest=26946/27198 missed 0 na-mismatch 0 (n/a 252)` |
+| house panel, `tabClean` | 45,666 | 30,316 | 25 | **0** | **0** | `WRONG=0 interned=15375 formatted=30291 changed=51` |
+| house panel, `tabControl` (self-test) | 47,124 | 30,315 | 24 | 17 | 0 | `WRONG=0 selftest=31984/47124 missed 0 na-mismatch 0` |
+| autostart gameplay, `cellJ` | 14 | 19 | 11 | **0** | **0** | `WRONG=0 interned=6 formatted=8 changed=14/14` |
+
+Both branches are exercised in volume on every route (`interned` and `formatted` are both
+non-zero everywhere), `wrong=0` and `unpredicted=0` throughout, and **`missed=0`** — no
+round was corrupted on purpose and still agreed.
+
+### 8c. THE TWO DEFECTS IN THIS LANE'S OWN INSTRUMENT, found at volume
+
+Both were caught because the clean and control cells were compared **column by column**
+rather than read as two independent green boards.
+
+1. **The effectiveness counter read freed memory.** `changed` compared against `pre` —
+   the buffer retail is about to RELEASE, and on the freeing arm hands to `MemFree`. Two
+   runs of the *identical, deterministic* 27,198-round route reported `changed=4384` and
+   `changed=7540`. A counter that disagrees with itself across a control pair is
+   measuring the allocator, not the port. The pre **text** is now snapshotted before the
+   round; the same two cells now report `changed=174` and `changed=174`.
+2. **The verdict counted the control's own collateral.** On a self-test run, a round whose
+   predicted text was empty had nothing to corrupt, and a mismatch there fell through to
+   `WRONG` — reporting `WRONG=4` on the control run against `WRONG=0` on the identical
+   clean run, i.e. **attributing to the port a difference only the control had.** Now
+   split into `missed` (corrupted and still agreed — the control failing) and
+   `na-mismatch` (armed, not applicable). Both are 0.
+
+### 8d. A REAL PORT DEFECT IN A THIRD FILE, exposed by this port and fixed here
+
+`RtUi_StringTable_GetText_Index` (`runtime/src/ui/sprite.cpp`, retail `0x180002550`) read
+`data` (`this+0x20`) and `count` (`this+0x28`) **above** its `index >= 0 && index < count`
+test. Retail's first act is the sign test, and on a negative index it returns an empty
+String **without dereferencing `this` at all** (`0x18000256C TEST R8D,R8D / JNS / MOV
+[RDX],R9`). A `UI::String` that names no text is `{table = nullptr, id = -1}`, and
+`UI::String::operator System::String` forwards it here verbatim — so retail's guard
+**order** is what makes the ordinary "no text" value harmless, and the hoisted loads made
+it an `ACCESS_VIOLATION` reading `0x20`.
+
+This is **not** the "don't fix a faithful crash with a null check" case. No guard is
+added; retail's guards are restored to retail's order, and the upstream null is not a
+defect to hunt — it is the representation of "no text".
+
+**The four-cell A/B that pinned it** (same exe md5 in every cell, trading-post route):
+
+| cell | switches | result |
+|---|---|---|
+| 1 | default | **CRASH** `+0x36807E` |
+| 2 | `BANISHED_RT_UIWIDGETSLAY=0` (CacheText back on the DLL) | clean |
+| 3 | `BANISHED_RT_UISPRITE=0` (this body back on the DLL) | clean |
+| 4 | `BANISHED_RT_UI=0` | clean |
+
+Two independent switches, each removing exactly one half of the pair, each making it go
+away — so the fault needed both ports live and was not a property of the route. Porting
+`CacheText` made our tree the first caller to route a never-assigned `UI::String` through
+that port instead of through the DLL's own copy.
