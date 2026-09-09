@@ -124,6 +124,15 @@ extern int RtUiStandAloneRegister();       // userinterface_standalone.cpp (UIF6
 // the object these five bodies operate on -- an A/B that can only move both
 // ends of the same path at once cannot say which end a difference came from.
 extern int RtUiToolTipDialogRegister();    // tooltipdialog.cpp   (lane TIP)
+// Wave 10E lane DRAG: `?BeginDragDrop@UserInterface@UI@@`, the LAST genuine
+// port in the UI namespace. It entered the census in Wave 10D when lane MOUSE's
+// injector resolved it by NAME rather than through a silent address door.
+// Fifteen straight-line instructions, no branches, tail-JMP to the
+// already-ported Play. Own switch (BANISHED_RT_UIDRAGSTART) rather than lane
+// UIF6's BANISHED_RT_UIHOVER, which owns EndDragDrop: they are the two halves
+// of one drag, and a switch that moved both at once could not say which half a
+// regression came from.
+extern int RtUiDragStartRegister();        // userinterface_dragstart.cpp (DRAG)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -151,5 +160,6 @@ void RtUiPortInit() {
     n += RtUiHoverRegister();          // owns BANISHED_RT_UIHOVER + _UITOOLTIP
     n += RtUiStandAloneRegister();     // owns BANISHED_RT_UISTANDALONE
     n += RtUiToolTipDialogRegister();  // owns BANISHED_RT_UITOOLTIPDLG
+    n += RtUiDragStartRegister();      // owns BANISHED_RT_UIDRAGSTART
     printf("[RtPort] UI: %d exports registered\n", n);
 }
