@@ -124,3 +124,35 @@ is counted in the 26. Recorded here so a later reader does not mistake them for 
 * `0x18009fe90` - a large body on a DIFFERENT object shape (`[rcx]` is a byte flag, `[rcx+8]`
   a handle closed via `0x18014b0a0`); not an Application member.
 * `0x18009f420` - starts before the block; its epilogue is what precedes `Quit`.
+
+## The `_singleton` ceiling is REAL, and the recorded reason for it was wrong
+
+`runtime/src/application/rt_application_port.cpp` justifies leaving
+`?_singleton@Application@1@0PEAV11@EA` (`0x1801fc678`) unported with: *"a DATA export,
+not a function; the seam maps names to functions, so it cannot be redirected before
+cutover."* **That reason is stale.** Wave 10 built exactly the machinery it says does not
+exist: `standalone/rt_data_mint.cpp` + `reg_mint_promoted.cpp` mint storage for DATA
+exports and register them by name, and 17 such rows are promoted and default-on today.
+So "we cannot" is false — the honest question is "should we", and the answer is no.
+
+Ghidra `get_xrefs_to(0x1801fc678)`, run 2026-09-09:
+**26 in-DLL RIP-relative references**, 2 WRITE and 24 READ, spread across at least four
+namespaces — `Application::Application` (ctor, WRITE `0x18009f5b8`), `Startup`
+(WRITE `0x1800dbbe2`), `WindowProc`, `Get`, `EnableCursor` (`0x18012258d`),
+`Input::PlatformStartup` / `PlatformShutdown` / `PlatformUpdate` /
+`PlatformGetKeyboardState` / `PlatformGetMouseState`, and two `Update` bodies.
+
+**We intercept only at DOORS, and a RIP-relative MOV is not a door.** Minting our own
+storage for this slot would therefore SPLIT THE BRAIN: our readers would see our copy
+while those 26 DLL sites kept using theirs, and the ctor would publish into one of the
+two. That is strictly worse than the status quo.
+
+The status quo is correct and already verified in shape: lane A`s `Get` resolves the
+EXPORTED NAME through `RT_DATA_SLOT`, i.e. it reads the very slot retail writes, and it
+carries a real oracle (`RT_DIFF_SCALAR` against the shipped `?Get@`) rather than a
+self-check. Nothing is split today.
+
+**Conclusion:** `_singleton` is the Application namespace ceiling on the census`
+called side, giving a ceiling of **12/13 = 92.3%** there, while the FUNCTION port can
+still reach 26/26. It is a ceiling for an evidenced structural reason, not for lack of
+work — and the reason on record until today was the wrong one.
