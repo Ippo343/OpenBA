@@ -883,6 +883,7 @@ void VerifyPinControls() {
     const int afterAmbiguous = c.failed;
 
     const bool ok = (afterWrongValue == 1) && (afterAbsent == 2) && (afterAmbiguous == 3);
+    (void)ok;   // its only reader is the printf below, which -DBANISHED_STRIP_LOGS removes
     printf("[RtPort]   [DLG2 pin control] decoder %s "
            "(wrong-value caught=%d, absent caught=%d, ambiguous caught=%d of 3)\n",
            ok ? "DISCRIMINATES -- the [pins] line above means something"
