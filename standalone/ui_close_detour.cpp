@@ -14,13 +14,30 @@
 //
 // WHY THIS SUBJECT WANTS A DETOUR
 //
-// `CloseDialog` has many exe-side callers (30-odd `fn_UI_CloseDialog` sites in
-// `code/Game/Dialog/`), all of which `RegisterRuntimeExport` already reaches.
-// But it also has callers INSIDE the DLL that an export registration cannot
-// touch — `UserInterface::Update`'s tooltip arm, `ComboElement::SetCurrentItem`,
-// `~UserInterface`, and **CloseDialog itself**, which recurses through a direct
-// `CALL 0x180120f20` at two sites. With the detour in, retail's own recursion
-// re-enters the port, which is the correct composition rather than a hazard.
+// `CloseDialog` has 42 exe-side callers across 24 files (`fn_UI_CloseDialog` in
+// `code/Game/`), all of which `RegisterRuntimeExport` already reaches. But it
+// also has callers INSIDE the DLL that an export registration cannot touch.
+//
+// THIS LIST IS READ OUT OF THE XREF TABLE, NOT INFERRED. An earlier draft of
+// this comment named `~UserInterface`, which does NOT call it — the teardown
+// caller is `Engine::Shutdown`. The thirteen internal call sites:
+//
+//   0x180120f6b, 0x180120fa6  CloseDialog itself (the child loop and the tooltip arm)
+//   0x1801214bd               UserInterface::Update          (its tooltip arm)
+//   0x1800dafd6, 0x1800db2d6  Engine::Shutdown               <- the clean-exit path
+//   0x1801141a5               DialogInstance::CloseChildren
+//   0x1801208de, 0x180120acd  UserInterface::BeginToolTip / EndToolTip
+//   0x1801124ca               ~ComboElement
+//   0x180112569               ComboElement::SetCurrentItem
+//   0x18011650c               Element::Update
+//   0x180111bb7, 0x180111c9d  OnElementEvent / OnUpdate
+//   0x180112c38               CreateInstance
+//
+// `Engine::Shutdown` is the one that matters for an unattended run: it is on the
+// clean-exit path, so a menu run that quits with a dialog still open reaches
+// this body through the detour AND still runs its static destructors. With the
+// detour in, retail's own recursion also re-enters the port, which is the
+// correct composition rather than a hazard.
 //
 // ---------------------------------------------------------------------------
 // THE PROLOGUE, AND WHY THE INSTALLER CHOICE IS EASY HERE
@@ -114,10 +131,16 @@ extern "C" bool RtUiCloseDialogInstallDetour(void* ourFn) {
         return false;
     }
 
+    // The caller list here is READ OUT OF THE XREF TABLE. An earlier version of
+    // this line named `~UserInterface`, which does not call it; the teardown
+    // caller is `Engine::Shutdown`. A diagnostic that names the wrong function
+    // is worse than one that names none.
     std::fprintf(stderr,
-        "[UiDetour] DETOUR INSTALLED at 0x180120f20 -- the DLL's own CloseDialog "
-        "callers (Update's tooltip arm, ComboElement::SetCurrentItem, "
-        "~UserInterface, and CloseDialog's own recursion) now run the port.\n");
+        "[UiDetour] DETOUR INSTALLED at 0x180120f20 -- the DLL's own 13 internal "
+        "CloseDialog call sites (Engine::Shutdown x2, UserInterface::Update's "
+        "tooltip arm, Begin/EndToolTip, DialogInstance::CloseChildren, "
+        "ComboElement x2, Element::Update, and CloseDialog's own recursion x2) "
+        "now run the port.\n");
     std::fflush(stderr);
     return true;
 }

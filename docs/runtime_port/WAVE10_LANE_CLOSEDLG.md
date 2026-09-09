@@ -7,13 +7,29 @@ One row:
 `?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z`,
 retail `0x180120f20`, ordinal 1725.
 
-**Deliverable, stated up front so nothing below reads as more than it is: a
-byte-faithful port, plus an oracle that covers roughly half the function's
-observable effects and REFUSES to run on the other half. Both halves are
-counted.** The lane brief said to expect "port with a mostly-excluded oracle,
-not port and verify". The oracle turned out better than that — two of the five
-effects lane UI1 listed as unreachable are in fact compared — but it is still
-partial, and the partition is the point of this document.
+## Verdict, up front
+
+**PORTED. NOT VERIFIED by the predictive oracle — `armed=0` in every
+configuration that exited cleanly, because no available route both reaches this
+body and exits cleanly.** That is not "clean", it is **unrun**, and §5e says so
+at length rather than letting a `wrong=0` stand in for a result.
+
+What *is* established:
+
+* the body runs for real in the **default shipping configuration** and the
+  dialog really closes — the engine's own `PausesGame` goes 1 → 0 (§5c-2, run S);
+* the transcription matches the shipped DLL at **23 of 23** cited addresses,
+  under a control that catches **23 of 23** corruptions (§5d);
+* the patched DLL is **stable** across menu, in-game, detour-installed and
+  allocator-gated runs — clean exits, 0-byte crash logs;
+* the census row is **closed**: one row left, nothing entered (§8a).
+
+The lane brief predicted "port with a mostly-excluded oracle, not port and
+verify". The oracle's *design* turned out better than that — two of the five
+effects lane UI1 listed as unreachable are expressible, and §4 says which. Its
+*execution* turned out worse: it never got a subject. Both facts are here
+because reporting only the first would be the exact failure this brief warned
+about.
 
 ---
 
@@ -344,7 +360,99 @@ It is also, deliberately, a coarse one. It says the body closed the dialog; it
 says nothing about the parent-list unlinks, the array compaction or the sound
 tail. That is what §5e's predictive counters are for.
 
-### 5e. Batch 4 — the predictive oracle on a route that exits cleanly
+### 5e. Batches 4–6 — the predictive oracle is UNRUN, and that is the verdict
+
+**Say it first, unqualified: `armed=0` in every configuration that exited
+cleanly. The predictive oracle over `CloseDialog` never compared a single
+prediction against the DLL. This row is PORTED and NOT VERIFIED by that
+instrument.**
+
+Not "clean". Not "no divergences". **Unrun.** A `wrong=0` from a round that never
+armed is the emptiest possible green, and it is the one this lane was warned
+about.
+
+The obstruction is a scheduling coincidence, and it took three more batches to
+pin down: **no route both reaches this body and exits cleanly.**
+
+| batch | route | reaches the body? | exits cleanly? | counters |
+|---|---|---|---|---|
+| 1 | menu `AUTOQUIT`; in-game `AUTOSTART` + pause-Quit; ± detour; ± allocator | **no** (`entries=0`) | yes | `armed=0`, meaningless |
+| 2 | mods menu (`AUTOMENU_BUTTON=7`) | — | — | **discarded**, §5c |
+| 3 | in-game pause-menu **Resume** | **YES** | **no** — Resume resumes; must be killed | none |
+| 4 | mods menu, retried on a clean footing | **no** — it **crashes first** | no | none |
+| 5 | menu `AUTOQUIT` **+ detour** (`Engine::Shutdown` calls `CloseDialog` twice) | **no** — both arms are guarded and did not fire | yes | `armed=0` |
+| 6 | pause-Resume **+ `BANISHED_STRESS`** (self-quits) | **YES** (`ENTERED` logged) | **no** — a -O0 build cannot reach the frame budget inside a sane lock hold | none |
+
+Two of those rows are findings rather than failures:
+
+* **Batch 4's mods route crashes before it can close anything**, and the crash is
+  **not in this port**. Symbolised against our own build: `ModDialog_ToggleMod_Impl
+  +0x43`, reached from `ModDialog_Slot8 +0xde`, faulting on a READ of `0xd0`. The
+  harness token `1001` toggles mod index 1 in an install with **zero `.pkm`
+  mounted**. The published example click list in CLAUDE.md assumes mods exist.
+* **Batch 5 was a reasoned attempt, not a guess.** `Engine::Shutdown` really does
+  call `CloseDialog` twice (`0x1800dafd6`, `0x1800db2d6`) and really is on the
+  clean-exit path — that is read out of the xref table below. Both arms are
+  simply guarded on state a quitting menu does not have.
+
+#### What the xref table settled on the way past
+
+Running `get_xrefs_to 0x180120f20` produced the DLL's **thirteen** internal call
+sites, and corrected a claim this lane had already written down without checking:
+
+```
+0x180120f6b, 0x180120fa6   CloseDialog itself (child loop, tooltip arm)
+0x1801214bd                UserInterface::Update (tooltip arm)
+0x1800dafd6, 0x1800db2d6   Engine::Shutdown          <- the clean-exit path
+0x1801141a5                DialogInstance::CloseChildren
+0x1801208de, 0x180120acd   BeginToolTip / EndToolTip
+0x1801124ca, 0x180112569   ~ComboElement / ComboElement::SetCurrentItem
+0x18011650c                Element::Update
+0x180111bb7, 0x180111c9d   OnElementEvent / OnUpdate
+0x180112c38                CreateInstance
+```
+
+`standalone/ui_close_detour.cpp` had asserted `~UserInterface` was a caller, in
+both its banner **and in the line it prints at runtime**. It is not one. A
+diagnostic that names the wrong function is worse than one that names none, so
+both were corrected against the table.
+
+#### What IS verified, stated exactly
+
+1. **The port runs, for real, in the configuration that ships, and its effect is
+   correct at the level this route can see** — run S, §5c-2: `PausesGame` 1 → 0
+   after our body handled the Resume close. That is the engine's own answer, not
+   ours.
+2. **The transcription is right at 23 cited addresses**, and the check that says
+   so can go red (23/23 under the corrupting control) — §5d. Offline; a
+   pre-flight on the instrument, not a post-state comparison.
+3. **The patched DLL is stable**: clean exits and 0-byte crash logs across menu,
+   full in-game, detour-installed and `BANISHED_RT_ALLOC=1` configurations.
+4. **The registration is live and reached** — `EngineFuncsDump` resolves
+   `UI::CloseDialog` into our image, and `RuntimePortInit()` runs before
+   `EngineFuncsInit()`.
+
+#### What is NOT verified, stated exactly
+
+**Every one of the eight side effects in §4** — the unlinks, the compaction, the
+array shrink, the tooltip clear, the sound tail, and the four suppressed-callee
+holes alike. §4 describes an instrument that was built, self-tested for
+armability, and never got a subject. The only claim this lane makes about
+`CloseDialog`'s writes is that they are transcribed from the right bytes and that
+the body's gross effect (the dialog closes) is right.
+
+#### What would close it — one piece of harness, precisely specified
+
+A driver that **opens a dialog in the front-end menu and then quits**, or one
+that clicks **pause-menu Resume and then quits**. Both halves already exist and
+have never been wired together: `autostart.cpp`'s `AUTOQUIT` phase clicks
+MainMenuDialog Quit, and `pausemenu_harness.cpp` clicks Resume — but
+`autostart.cpp` checks `BANISHED_AUTOQUIT` *before* `BANISHED_AUTOSTART` and
+returns early, so the two are mutually exclusive today. Making `AUTOQUIT`
+composable with an in-game phase — or adding a `BANISHED_PAUSEMENU_CLICKS` token
+that dispatches to the **pause dialog** rather than to `ModDialog_LastOpened()`
+— turns every number in §4 from a capability into a measurement, on a run that
+takes seconds.
 
 ---
 
@@ -471,14 +579,23 @@ reads a function signature as a call site; with it, that file produces no entry.
   deltas are in §8b; the `called`/`ported` columns are untouched.
 * **To lane UI1.** Your `Update` detour was never on the census board. It is now.
   Nothing about the detour changed — only the tool that counts it.
-* **To whoever writes the next harness.** The unattended drivers cannot dismiss a
-  dialog on the main path, which is why §5b happened. The routes that CAN are
-  `BANISHED_AUTOMENU_BUTTON=7` + `BANISHED_AUTOMENU_CLICKS=…,d0,…,101,…`
-  (ModDetailsDialog and ModDialog both close through `fn_UI_CloseDialog`) and
-  `BANISHED_PAUSEMENU_BUTTON=1` (Resume → `mainmenudialog.cpp:993`). The second
-  does not quit afterwards, so it needs a kill and therefore a probe that does
-  not depend on static destructors. Worth writing down in CLAUDE.md's harness
-  list: "which env var closes a dialog" is a question three lanes will now ask.
+* **To whoever writes the next harness — this is the blocking item.** §5e
+  specifies it exactly: `autostart.cpp` checks `BANISHED_AUTOQUIT` *before*
+  `BANISHED_AUTOSTART` and returns early, so "get in-game" and "quit cleanly" are
+  mutually exclusive today. Either make them composable, or add a
+  `BANISHED_PAUSEMENU_CLICKS` token that dispatches to the **pause dialog**
+  instead of to `ModDialog_LastOpened()`. Either one turns §4 from a capability
+  list into a measurement, for this row and for every future UI mutator, on a run
+  that takes seconds. Worth adding to CLAUDE.md's harness list: "which env var
+  closes a dialog, and which of those also quits" is a question the next three
+  lanes will ask.
+* **To whoever maintains the mods harness.** The click list published in
+  CLAUDE.md (`BANISHED_AUTOMENU_CLICKS=1001,5001,d0,4001,101,m6`) **crashes on an
+  install with zero `.pkm` mounted**: token `1001` reaches
+  `ModDialog_ToggleMod_Impl` for mod index 1, which does not exist, and faults on
+  a READ of `0xd0`. Either the example needs a "requires mods installed" note or
+  the toggle path needs a bounds check — but note the latter is a `code/Game/`
+  reimplementation, so check what retail does before adding a guard.
 * **To anyone porting `UpdateEvents`, `EndDragDrop` or
   `Array<UI::Event>::SetSize`.** Each one you land converts an `Exclude` in this
   lane's oracle into a comparison. §4's table is the priority order: `UpdateEvents`
