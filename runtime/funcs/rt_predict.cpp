@@ -168,6 +168,12 @@ struct RoundState {
     Prediction    preds[kMaxPredictions];
     size_t        predCount;
     bool          predOverflow;
+    // Added 2026-09-09. The prediction and watch pools already flagged their
+    // overflow; the call and exclude pools silently dropped records, which is
+    // the same class of defect as a reporting cap manufacturing a calls=0
+    // signal (reference_truncated_tool_output_manufactures_calls_zero.md).
+    bool          callOverflow;
+    bool          excludeOverflow;
 
     WatchRegion   watches[kMaxWatches];
     size_t        watchCount;
@@ -198,6 +204,7 @@ RoundState* AcquireRound() {
             RoundState* r = &g_rounds[i];
             r->inUse = true;
             r->predCount = 0;      r->predOverflow  = false;
+            r->callOverflow = false; r->excludeOverflow = false;
             r->watchCount = 0;     r->watchOverflow = false;
             r->excludeCount = 0;
             r->callCount = 0;
@@ -321,7 +328,7 @@ void RtPredictRound::NoteCall(const char* label, const void* target,
     if (!active_) return;
     RoundState* r = static_cast<RoundState*>(state_);
     site_->calls++;
-    if (r->callCount >= kMaxCalls) return;
+    if (r->callCount >= kMaxCalls) { r->callOverflow = true; return; }
     CallRecord& c = r->calls[r->callCount++];
     c.label  = label ? label : "(unlabelled)";
     c.target = target;
@@ -347,7 +354,7 @@ void RtPredictRound::Watch(const void* base, size_t n, const char* label) {
 void RtPredictRound::Exclude(const void* base, size_t n, const char* why) {
     if (!active_ || !base || n == 0) return;
     RoundState* r = static_cast<RoundState*>(state_);
-    if (r->excludeCount >= kMaxExcludes) return;
+    if (r->excludeCount >= kMaxExcludes) { r->excludeOverflow = true; return; }
     ExcludeRegion& e = r->excludes[r->excludeCount++];
     e.base = static_cast<const uint8_t*>(base);
     e.size = n;
@@ -509,6 +516,28 @@ void RtPredictRound::Verify() {
     if (r->predOverflow) {
         fprintf(stderr, "[RtPredict] %s: prediction pool overflowed (>%zu) — "
                         "THE TAIL OF THIS ROUND IS UNVERIFIED\n", name, kMaxPredictions);
+        fflush(stderr);
+    }
+    if (r->callOverflow) {
+        // The suppression still HAPPENED (RtSink::Call returns false regardless);
+        // only the RECORD is lost. That is the dangerous direction: for a body
+        // whose oracle IS the argument trace -- OnVideoRestart says so in as many
+        // words -- a truncated trace reads exactly like a complete one.
+        fprintf(stderr, "[RtPredict] %s: call pool overflowed (>%zu suppressed calls) — "
+                        "THE CALL TRACE FOR THIS ROUND IS INCOMPLETE; a body whose "
+                        "evidence is the trace is UNVERIFIED past that point\n",
+                name, kMaxCalls);
+        fflush(stderr);
+    }
+    if (r->excludeOverflow) {
+        // Opposite direction, and loud rather than silent once flagged: a dropped
+        // Exclude means the region is NOT declared out of model, so its changed
+        // bytes surface as `unpredicted`. That is a FALSE ALARM, and without this
+        // line someone would go looking for a port defect that is not there.
+        fprintf(stderr, "[RtPredict] %s: exclude pool overflowed (>%zu regions) — "
+                        "later Exclude() calls were DROPPED, so any `unpredicted` "
+                        "below may be a HARNESS ARTEFACT, not a port defect\n",
+                name, kMaxExcludes);
         fflush(stderr);
     }
     if (r->watchOverflow) {
