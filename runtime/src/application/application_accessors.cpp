@@ -104,12 +104,29 @@ void* RtApp_GetWindow(const Application* self) {
 // what proves that byte is read at all; see the header comment this lane
 // corrected).
 // ============================================================================
-bool RtApp_IsCursorEnabled(Application* self) {
+// RETURNS THE RAW BYTE, NOT A NORMALISED BOOL. Retail is `movzx eax,byte
+// [rcx+0x10]; ret` -- whatever byte is stored reaches the caller in AL
+// unchanged. This body first returned `(_cursorEnabled != 0)`, which C++
+// normalises to 1, so a stored 2 became 1. Wave 12 lane VERIFY's orphan probe
+// measured that as 144 raw-AL divergences over a 216-state sweep.
+//
+// The reason it survived lane A's own review is worth keeping: the oracle
+// below USED TO DECLARE `Fn` as returning `bool` and to hold `theirs` in a
+// `bool`, so the C++ conversion normalised BOTH sides before the comparison.
+// The instrument was structurally incapable of expressing the defect it was
+// pointed at -- it could not have failed. `uint8_t` on both sides is what
+// makes this a real comparison.
+//
+// No live state can hold a value above 1 today (the ctor's word store writes
+// 0x00 and `EnableCursor` stores a C++ bool), so this was not a live bug. It
+// is fixed anyway: faithful-first is the project rule, and "unreachable
+// today" is a property of our own current callers, not of the retail body.
+uint8_t RtApp_IsCursorEnabled(Application* self) {
     RT_DIFF_BEGIN("Application::Application::IsCursorEnabled");
-    const bool ours = (self->_cursorEnabled != 0);
+    const uint8_t ours = self->_cursorEnabled;
     if (rt_diff_on__) {
-        using Fn = bool (*)(Application*);
-        const bool theirs = RT_ORIGINAL_ONCE(Fn, "?IsCursorEnabled@Application@1@QEAA_NXZ")(self);
+        using Fn = uint8_t (*)(Application*);
+        const uint8_t theirs = RT_ORIGINAL_ONCE(Fn, "?IsCursorEnabled@Application@1@QEAA_NXZ")(self);
         RT_DIFF_SCALAR(ours, theirs);
     }
     return ours;

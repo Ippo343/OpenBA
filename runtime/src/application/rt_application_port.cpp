@@ -29,7 +29,7 @@ bool RtApp_LaunchProcess(Application* self, const char* cmd, bool wait);
 Application* RtApp_Get();
 void* RtApp_GetInstance(const Application* self);
 void* RtApp_GetWindow(const Application* self);
-bool RtApp_IsCursorEnabled(Application* self);
+uint8_t RtApp_IsCursorEnabled(Application* self);   // RAW BYTE, not a normalised bool -- see its banner
 bool RtApp_PlatformIsPaused(const Application* self);
 void RtApp_PlatformDestruct(Application* self);
 
