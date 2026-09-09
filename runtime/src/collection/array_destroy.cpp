@@ -939,6 +939,6 @@ void RtCollectionDestroyPortInit() {
     // falsely on a good run and silently pass on a bad one where two changes
     // cancelled. The address is what this lane landed, so the address is what
     // the gate keys on.
-    std::printf("[RtPort]   Collection::Array destroy (lane DESTROY): "
+    printf("[RtPort]   Collection::Array destroy (lane DESTROY): "
                 "0x180026b50 registered, built " __DATE__ " " __TIME__ "\n");
 }

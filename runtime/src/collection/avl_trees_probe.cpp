@@ -99,7 +99,7 @@ int g_steps = 0, g_mismatches = 0, g_parentBad = 0, g_gaps = 0;
 
 void Fail(const char* what, const char* detail) {
     if (g_mismatches < 6)
-        std::printf("[AvlColl] MISMATCH %s: %s\n", what, detail);
+        printf("[AvlColl] MISMATCH %s: %s\n", what, detail);
     ++g_mismatches;
 }
 
@@ -258,7 +258,7 @@ void RtCollectionAvlProbeRun() {
     Assign2Fn      shPtrA = reinterpret_cast<Assign2Fn>   (ResolveRuntimeRaw(0x180009350));
 
     if (!shType || !shMap || !shFn || !shSort) {
-        std::printf("[AvlColl] SKIP -- the shipped bodies are not reachable "
+        printf("[AvlColl] SKIP -- the shipped bodies are not reachable "
                     "(cutover, or the DLL is absent). NO COMPARISON WAS MADE.\n");
         return;
     }
@@ -347,7 +347,7 @@ void RtCollectionAvlProbeRun() {
                               k, g_steps, ours.count, theirs.count);
                 Fail("SECTION1", buf);
                 if (g_mismatches <= 2)
-                    std::printf("[AvlColl]   ours   %s\n[AvlColl]   theirs %s\n", fa, fb);
+                    printf("[AvlColl]   ours   %s\n[AvlColl]   theirs %s\n", fa, fb);
             }
             if (!Parents50(ours.root, nullptr)) ++g_parentBad;
             ++g_steps;
@@ -368,11 +368,11 @@ void RtCollectionAvlProbeRun() {
             Fail("SECTION1", "a duplicate key did not return the existing node");
         ++g_steps;
 
-        std::printf("[AvlColl] S1 type-tree: steps=%d depthAfter24Ascending=%d "
+        printf("[AvlColl] S1 type-tree: steps=%d depthAfter24Ascending=%d "
                     "(a spine would be 24) rootMoved=%d finalCount=%d\n",
                     g_steps, depthAfter24, rootMoved, ours.count);
         if (depthAfter24 >= 24) {
-            std::printf("[AvlColl] *** GAP: depth == the insert count, NO ROTATION "
+            printf("[AvlColl] *** GAP: depth == the insert count, NO ROTATION "
                         "EVER RAN, so section 1 verified only the descent ***\n");
             ++g_gaps;
         }
@@ -429,7 +429,7 @@ void RtCollectionAvlProbeRun() {
                               kKeys[i], g_steps, ours.count, theirs.count);
                 Fail("SECTION2", buf);
                 if (g_mismatches <= 3)
-                    std::printf("[AvlColl]   ours   %s\n[AvlColl]   theirs %s\n", fa, fb);
+                    printf("[AvlColl]   ours   %s\n[AvlColl]   theirs %s\n", fa, fb);
             }
             if (!Parents30(ours.root, nullptr)) ++g_parentBad;
             ++g_steps;
@@ -474,7 +474,7 @@ void RtCollectionAvlProbeRun() {
             ++g_steps;
         }
 
-        std::printf("[AvlColl] S2 string-map: depth=%d rootMoved=%d finalCount=%d\n",
+        printf("[AvlColl] S2 string-map: depth=%d rootMoved=%d finalCount=%d\n",
                     lastDepth, rootMoved, ours.count);
     }
 
@@ -531,13 +531,13 @@ void RtCollectionAvlProbeRun() {
                               kPaths[i], g_steps, ours.count, theirs.count);
                 Fail("SECTION3", buf);
                 if (g_mismatches <= 4)
-                    std::printf("[AvlColl]   ours   %s\n[AvlColl]   theirs %s\n", fa, fb);
+                    printf("[AvlColl]   ours   %s\n[AvlColl]   theirs %s\n", fa, fb);
             }
             if (!Parents30(ours.root, nullptr)) ++g_parentBad;
             ++g_steps;
         }
 
-        std::printf("[AvlColl] S3 packfile-index: depth=%d rootMoved=%d finalCount=%d\n",
+        printf("[AvlColl] S3 packfile-index: depth=%d rootMoved=%d finalCount=%d\n",
                     Depth30(ours.root), rootMoved, ours.count);
 
         // ---- SECTION 3b: the recursive subtree free -----------------------
@@ -567,7 +567,7 @@ void RtCollectionAvlProbeRun() {
                                   static_cast<unsigned long long>(visited), expect);
                     Fail("SECTION3b", buf);
                 }
-                std::printf("[AvlColl] S3b subtree-free: visited=%llu expected=%d "
+                printf("[AvlColl] S3b subtree-free: visited=%llu expected=%d "
                             "(NOT a lockstep replay -- see the comment)\n",
                             static_cast<unsigned long long>(visited), expect);
                 ours.root = nullptr;  ours.count = 0;
@@ -675,7 +675,7 @@ void RtCollectionAvlProbeRun() {
         }
 
         const rtsort::SortCounters& sc = rtsort::g_sc;
-        std::printf("[AvlColl] S4 sort: cases=%d permutationDiffs=%d\n"
+        printf("[AvlColl] S4 sort: cases=%d permutationDiffs=%d\n"
                     "[AvlColl] S4 effectiveness (branches INSIDE the body): "
                     "smallPasses=%llu smallSwaps=%llu medianSwaps=%llu\n"
                     "[AvlColl] S4                 partitions=%llu partSwaps=%llu "
@@ -692,18 +692,18 @@ void RtCollectionAvlProbeRun() {
                     (unsigned long long)(sc.pushes - sc0.pushes),
                     (unsigned long long)(sc.pops   - sc0.pops));
         if (sc.partitions == sc0.partitions) {
-            std::printf("[AvlColl] *** GAP: partitions=0 -- the corpus never left the "
+            printf("[AvlColl] *** GAP: partitions=0 -- the corpus never left the "
                         "<=8 small-range path, so the whole median-of-3 and partition "
                         "transcription is UNVERIFIED ***\n");
             ++g_gaps;
         }
         if (sc.eqRunA == sc0.eqRunA && sc.eqRunB == sc0.eqRunB) {
-            std::printf("[AvlColl] *** GAP: neither equal-run walk ran -- the tie "
+            printf("[AvlColl] *** GAP: neither equal-run walk ran -- the tie "
                         "handling that decides package precedence is UNVERIFIED ***\n");
             ++g_gaps;
         }
         if (sc.pushes == sc0.pushes) {
-            std::printf("[AvlColl] *** GAP: the pending-range stack was never used ***\n");
+            printf("[AvlColl] *** GAP: the pending-range stack was never used ***\n");
             ++g_gaps;
         }
 
@@ -781,7 +781,7 @@ void RtCollectionAvlProbeRun() {
             for (int i = 0; i < n; ++i) if (ao[i] != at[i]) negB = true;
         }
 
-        std::printf("[AvlColl] S4 negative-controls: tie-rule=%s stable-sort=%s\n",
+        printf("[AvlColl] S4 negative-controls: tie-rule=%s stable-sort=%s\n",
                     negA ? "CAUGHT" : "*** MISSED ***",
                     negB ? "CAUGHT" : "*** MISSED (a stable sort agrees -- the tie "
                                       "population is too weak to falsify) ***");
@@ -861,16 +861,16 @@ void RtCollectionAvlProbeRun() {
             // The measured hole must STILL be 0xCD on BOTH sides. If retail
             // wrote it, the exclusion above is wrong and must be removed.
             if (o[0x2c] != 0xCD || t[0x2c] != 0xCD) {
-                std::printf("[AvlColl] *** the +0x2c..+0x2f hole was WRITTEN "
+                printf("[AvlColl] *** the +0x2c..+0x2f hole was WRITTEN "
                             "(ours=%02x theirs=%02x) -- the oracle's exclusion is "
                             "wrong and must be removed ***\n", o[0x2c], t[0x2c]);
                 ++g_gaps;
             }
             ++cmp;
         }
-        std::printf("[AvlColl] S5 element-assigns: comparisons=%d bad=%d\n", cmp, bad);
+        printf("[AvlColl] S5 element-assigns: comparisons=%d bad=%d\n", cmp, bad);
     } else {
-        std::printf("[AvlColl] S5 SKIPPED -- a shipped assign body was unreachable\n");
+        printf("[AvlColl] S5 SKIPPED -- a shipped assign body was unreachable\n");
         ++g_gaps;
     }
 
@@ -945,7 +945,7 @@ void RtCollectionAvlProbeRun() {
     // The report.
     // =====================================================================
     const rtavl::ProbeCounters& c = rtavl::g_pc;
-    std::printf("[AvlColl] steps=%d mismatches=%d parent-linkage-bad=%d gaps=%d\n"
+    printf("[AvlColl] steps=%d mismatches=%d parent-linkage-bad=%d gaps=%d\n"
                 "[AvlColl] effectiveness (branches INSIDE the ported bodies):\n"
                 "[AvlColl]   50-node: rotL=%llu rotR=%llu preRotL=%llu preRotR=%llu "
                 "retraceIters=%llu\n"
@@ -986,30 +986,30 @@ void RtCollectionAvlProbeRun() {
     // Each of these is a branch whose absence makes some part of the sweep
     // vacuous. They are printed as GAPs, not swallowed.
     if (c.rot50L == pc0.rot50L || c.rot50R == pc0.rot50R) {
-        std::printf("[AvlColl] *** GAP: a rotation direction never ran ***\n"); ++g_gaps;
+        printf("[AvlColl] *** GAP: a rotation direction never ran ***\n"); ++g_gaps;
     }
     if (c.preRot50L == pc0.preRot50L || c.preRot50R == pc0.preRot50R) {
-        std::printf("[AvlColl] *** GAP: a PRE-rotation never ran -- the double-rotation "
+        printf("[AvlColl] *** GAP: a PRE-rotation never ran -- the double-rotation "
                     "predicates are UNVERIFIED ***\n"); ++g_gaps;
     }
     if (c.strcmpLt == pc0.strcmpLt || c.strcmpGt == pc0.strcmpGt ||
         c.strcmpEq == pc0.strcmpEq) {
-        std::printf("[AvlColl] *** GAP: the signed strcmp did not produce all three "
+        printf("[AvlColl] *** GAP: the signed strcmp did not produce all three "
                     "signs -- exactly the uniform-population failure ***\n"); ++g_gaps;
     }
     if (c.icmpEq == pc0.icmpEq) {
-        std::printf("[AvlColl] *** GAP: _stricmp never returned 0, so the "
+        printf("[AvlColl] *** GAP: _stricmp never returned 0, so the "
                     "case-insensitive tie path is UNVERIFIED ***\n"); ++g_gaps;
     }
     if (c.nullSearchKey == pc0.nullSearchKey && c.nullNodeKey == pc0.nullNodeKey) {
-        std::printf("[AvlColl] *** GAP: neither asymmetric null arm ran ***\n"); ++g_gaps;
+        printf("[AvlColl] *** GAP: neither asymmetric null arm ran ***\n"); ++g_gaps;
     }
     if (!neg1 || !neg2) {
-        std::printf("[AvlColl] *** A NEGATIVE CONTROL WAS MISSED: the comparison is not "
+        printf("[AvlColl] *** A NEGATIVE CONTROL WAS MISSED: the comparison is not "
                     "sensitive to the thing it exists to catch, so the green steps "
                     "above are VOID ***\n");
     }
-    std::printf("[AvlColl] VERDICT: %s (mismatches=%d gaps=%d)\n",
+    printf("[AvlColl] VERDICT: %s (mismatches=%d gaps=%d)\n",
                 (g_mismatches == 0 && g_parentBad == 0 && g_gaps == 0 && neg1 && neg2)
                     ? "PASS" : "REVIEW",
                 g_mismatches, g_gaps);

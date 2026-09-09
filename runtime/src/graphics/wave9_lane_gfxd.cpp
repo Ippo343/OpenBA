@@ -656,17 +656,17 @@ void Cmp(const char* what, const void* ours, const void* theirs, const void* see
     g_changed += changed;
     if (s && expect == Changes && changed == 0) {
         ++g_vacuous;
-        std::printf("[GfxdProbe] VACUOUS: %s wrote 0 comparable bytes -- "
+        printf("[GfxdProbe] VACUOUS: %s wrote 0 comparable bytes -- "
                     "this comparison proves nothing\n", what);
     }
     if (s && expect == Untouched && changed != 0) {
         ++g_bad;
-        std::printf("[GfxdProbe] UNEXPECTED WRITE: %s changed %d bytes it must "
+        printf("[GfxdProbe] UNEXPECTED WRITE: %s changed %d bytes it must "
                     "not touch\n", what, changed);
     }
     if (!ok) {
         ++g_bad;
-        std::printf("[GfxdProbe] MISMATCH: %s at +0x%zx ours=0x%02x theirs=0x%02x\n",
+        printf("[GfxdProbe] MISMATCH: %s at +0x%zx ours=0x%02x theirs=0x%02x\n",
                     what, firstBad, o[firstBad], t[firstBad]);
     }
 }
@@ -681,7 +681,7 @@ void Neg(const char* what, const void* ours, const void* theirs, size_t n,
     ++g_neg;
     for (size_t i = 0; i < n; ++i)
         if (!InHole(i, holes, nHoles) && o[i] != t[i]) { ++g_negFired; return; }
-    std::printf("[GfxdProbe] NEGATIVE CONTROL DID NOT FIRE: %s\n", what);
+    printf("[GfxdProbe] NEGATIVE CONTROL DID NOT FIRE: %s\n", what);
 }
 
 // The other half of the kHoleArrayHdr exclusion: assert each side kept the
@@ -694,7 +694,7 @@ void PointersHeld(const char* what, const void* post, const void* pre,
     for (int i = 0; i < n; ++i) {
         if (std::memcmp(a + slots[i], b + slots[i], 8) != 0) {
             ++g_bad;
-            std::printf("[GfxdProbe] BUFFER RELEASED: %s reallocated or freed "
+            printf("[GfxdProbe] BUFFER RELEASED: %s reallocated or freed "
                         "the buffer at +0x%zx -- retail reuses it\n",
                         what, slots[i]);
             return;
@@ -1077,7 +1077,7 @@ void Phase2() {
             Cmp("SceneEntry assign inner contents", pa, pb, nullptr, 4 * 4);
         } else {
             ++g_skipped;
-            std::printf("[GfxdProbe] SKIP: inner buffer null on one side "
+            printf("[GfxdProbe] SKIP: inner buffer null on one side "
                         "(ours=%p theirs=%p)\n",
                         static_cast<void*>(pa), static_cast<void*>(pb));
         }
@@ -1136,7 +1136,7 @@ void Phase2() {
                 kHoleEntAssign, 2);
         } else {
             ++g_skipped;
-            std::printf("[GfxdProbe] SKIP: AddScene produced a null buffer\n");
+            printf("[GfxdProbe] SKIP: AddScene produced a null buffer\n");
         }
 
         // Release both scene arrays through the shipped ~Array<SceneEntry>
@@ -1149,15 +1149,15 @@ void Phase2() {
 }
 
 void Report(const char* phase) {
-    std::printf("[GfxdProbe] %s: comparisons=%d mismatches=%d vacuous=%d "
+    printf("[GfxdProbe] %s: comparisons=%d mismatches=%d vacuous=%d "
                 "changedBytes=%ld negControls=%d fired=%d skipped=%d\n",
                 phase, g_cmp, g_bad, g_vacuous, g_changed, g_neg, g_negFired,
                 g_skipped);
     if (g_neg != g_negFired)
-        std::printf("[GfxdProbe] %s: *** %d NEGATIVE CONTROL(S) DID NOT FIRE -- "
+        printf("[GfxdProbe] %s: *** %d NEGATIVE CONTROL(S) DID NOT FIRE -- "
                     "the comparison is not discriminating and the PASS above "
                     "cannot be believed ***\n", phase, g_neg - g_negFired);
-    std::printf("[GfxdProbe] %s: %s\n", phase,
+    printf("[GfxdProbe] %s: %s\n", phase,
                 (g_bad == 0 && g_vacuous == 0 && g_neg == g_negFired)
                     ? "PASS" : "REVIEW");
 }
@@ -1177,7 +1177,7 @@ void ProbeRunPhase1() {
     if (!ProbeArmed()) return;
     ResolveShipped();
     if (!g_dll.complete) {
-        std::printf("[GfxdProbe] SKIPPED -- one or more shipped bodies did not "
+        printf("[GfxdProbe] SKIPPED -- one or more shipped bodies did not "
                     "resolve; NOT reporting a clean run over zero comparisons\n");
         return;
     }

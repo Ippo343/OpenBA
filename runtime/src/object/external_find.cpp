@@ -252,7 +252,7 @@ External* RtObject_ExternalFactory_Find(ExternalFactory* self, const Filename* p
 namespace {
 
 void DumpFindCounters() {
-    std::printf("[ResFind] counters: calls=%llu hits=%llu misses=%llu "
+    printf("[ResFind] counters: calls=%llu hits=%llu misses=%llu "
                 "| ident def/present=%llu/%llu | pointer disagreements=%llu\n",
                 (unsigned long long)g_fc.calls,
                 (unsigned long long)g_fc.hits,
@@ -295,7 +295,7 @@ int RtObjectExternalFindRegister() {
     if (const char* e = std::getenv("BANISHED_RT_RESFIND_NEGCTL"))
         g_negCtl = std::atoi(e);
 
-    std::printf("[ResFind] registered %d door + 1 address (detour=%s negctl=%d)\n",
+    printf("[ResFind] registered %d door + 1 address (detour=%s negctl=%d)\n",
                 n, detoured ? "ON" : "off", g_negCtl);
     std::fflush(stdout);
 

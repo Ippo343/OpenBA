@@ -309,7 +309,7 @@ ConfigResult RunConfig(uint8_t* image, int32_t imageLen, int32_t windows,
     const char* stepB = nullptr;
     if (!OpenReader(cmsOurs, image, imageLen, windows, &stepA) ||
         !OpenReader(cmsTheirs, image, imageLen, windows, &stepB)) {
-        std::printf("[CSRead] cfg(windows=%d) SKIPPED: reader open failed at '%s'/'%s'\n",
+        printf("[CSRead] cfg(windows=%d) SKIPPED: reader open failed at '%s'/'%s'\n",
                     windows, stepA ? stepA : "(ok)", stepB ? stepB : "(ok)");
         r.bad = { "reader open", 0 };
         return r;
@@ -321,7 +321,7 @@ ConfigResult RunConfig(uint8_t* image, int32_t imageLen, int32_t windows,
     ReadFn ours   = &RtIo_CompressedStream_Read;
     ReadFn theirs = RtOriginal<ReadFn>(kCsRead);          // RT_RAW_OK: harness-only
     if (theirs == nullptr) {
-        std::printf("[CSRead] cfg(windows=%d) SKIPPED: cannot resolve the shipped Read\n",
+        printf("[CSRead] cfg(windows=%d) SKIPPED: cannot resolve the shipped Read\n",
                     windows);
         r.bad = { "resolve shipped Read", 0 };
         return r;
@@ -455,7 +455,7 @@ void RtIo_CompressedStreamReadProbe() {
     std::memset(cmsWriter, 0, sizeof cmsWriter);
     if (!BuildImage(cmsWriter, content, kContent, image,
                     static_cast<int32_t>(sizeof image), &imageLen, &step)) {
-        std::printf("[CSRead] probe SKIPPED: image build failed at '%s'\n", step);
+        printf("[CSRead] probe SKIPPED: image build failed at '%s'\n", step);
         RT_DIFF_SHADOW(false, step ? step : "?",
                        "a compressed image is required before anything can be compared");
         return;
@@ -497,7 +497,7 @@ void RtIo_CompressedStreamReadProbe() {
     RT_DIFF_SHADOW(pass, a, b);
     RT_DIFF_WORK(c1.reads + c4.reads + cR.reads > 0);
 
-    std::printf("[CSRead] lockstep probe: image=%d bytes; cfg w=1 %lld reads, "
+    printf("[CSRead] lockstep probe: image=%d bytes; cfg w=1 %lld reads, "
                 "w=4 %lld reads, w=4+revisit %lld reads (%lld bytes total) -- %s\n",
                 imageLen, (long long)c1.reads, (long long)c4.reads, (long long)cR.reads,
                 (long long)(c1.bytes + c4.bytes + cR.bytes),
@@ -509,14 +509,14 @@ void RtIo_CompressedStreamReadProbe() {
     // first counted changes of `activeWindow`, which is 0 forever on a
     // single-window stream, and the second counted "reads that did not refill",
     // which is dominated by the FAST PATH and says nothing about the scan.
-    std::printf("[CSRead] SetWindow branches: fastPath=%lld scanHit=%lld readMiss=%lld "
+    printf("[CSRead] SetWindow branches: fastPath=%lld scanHit=%lld readMiss=%lld "
                 "inMemory=%lld growDelegated=%lld -- %s\n",
                 (long long)sw.fastPath, (long long)sw.scanHit, (long long)sw.readMiss,
                 (long long)sw.inMemory, (long long)sw.growDelegated,
                 lruExercised
                     ? "the three READ-PATH branches are all exercised"
                     : "*** A READ-PATH BRANCH READS ZERO -- NOT a full verification ***");
-    std::printf("[CSRead] note: inMemory and growDelegated are WRITE-side branches, so a "
+    printf("[CSRead] note: inMemory and growDelegated are WRITE-side branches, so a "
                 "read-only probe leaving them at 0 is expected; growDelegated>0 would mean "
                 "a run took the UNPORTED grow path (a cutover blocker). "
                 "Per-config refills: w1=%lld w4=%lld w4+revisit=%lld\n",

@@ -636,6 +636,6 @@ int RtSystemWideStringRegister() {
     // code/, engine/, runtime/, standalone/ or dx11/ names any of them; the
     // census's caller column is the check, and it lists exactly the four
     // dx11 rows plus this lane's three, all of which are now closed.
-    std::printf("[RtPort]   System::WideString: %d exports registered\n", n);
+    printf("[RtPort]   System::WideString: %d exports registered\n", n);
     return n;
 }

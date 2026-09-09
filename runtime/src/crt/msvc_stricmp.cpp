@@ -208,12 +208,12 @@ int StrICmp(const char* a, const char* b) {
 void CheckLocaleFlag() {
     const uintptr_t p = ResolveRuntimeRaw(0x1801fba28);
     if (!p) {
-        std::printf("[RtCrt] _stricmp locale flag: NOT CHECKED (the DLL is not "
+        printf("[RtCrt] _stricmp locale flag: NOT CHECKED (the DLL is not "
                     "mapped). The static argument stands on its own.\n");
         return;
     }
     const int v = *reinterpret_cast<const int*>(p);
-    std::printf("[RtCrt] _stricmp locale flag [0x1801fba28] = %d %s\n", v,
+    printf("[RtCrt] _stricmp locale flag [0x1801fba28] = %d %s\n", v,
                 v == 0 ? "(as measured -- the _stricmp_l arm is dead)"
                        : "*** NON-ZERO: the locale arm IS reachable and is NOT "
                          "ported ***");

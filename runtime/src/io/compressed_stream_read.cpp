@@ -365,7 +365,7 @@ extern "C" bool RtIo_CompressedStream_SetWindow(CompressedStream* self, int32_t 
         // is idempotent (same value), and nothing else has been written on this
         // path yet.
         if (++g_swBranch.growDelegated == 1)
-            std::printf("[CSRead] GROW path delegated to the DLL (blk=%d >= headerSize=%d)"
+            printf("[CSRead] GROW path delegated to the DLL (blk=%d >= headerSize=%d)"
                         " -- NOT PORTED, a cutover blocker; see compressed_stream_read.cpp\n",
                         blk, self->headerSize);
         RT_DIFF_WORK(true);

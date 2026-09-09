@@ -196,7 +196,7 @@ int RtIoCompressedStreamOpenRegister() {
                           (void*)&RtIo_CompressedStream_Open); ++n;
     RegisterRuntimeAddr(0x1800aa560, (void*)&RtIo_CompressedStream_Open);
 
-    std::printf("[RtPort]   IO::CompressedStream SetWindowCount/Open "
+    printf("[RtPort]   IO::CompressedStream SetWindowCount/Open "
                 "(lane PKG2 rung 4b-iii): %d exports registered\n", n);
     return n;
 }

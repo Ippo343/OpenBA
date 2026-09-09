@@ -220,7 +220,7 @@ extern "C" bool RtAudio_Device_PlatformStartup(void* self) {
                 // Effectiveness: an all-false outcome (no XAudio2 on this
                 // machine) makes the three comparisons agree trivially.
                 RT_DIFF_WORK(tEngine || haveEngine);
-                std::printf("[PlatOracle] Audio::Device::PlatformStartup ours=%s theirs=%s\n", a, b);
+                printf("[PlatOracle] Audio::Device::PlatformStartup ours=%s theirs=%s\n", a, b);
 
                 if (*txa) {
                     using ReleaseFn = unsigned long (STDMETHODCALLTYPE*)(void*);

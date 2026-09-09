@@ -508,7 +508,7 @@ extern "C" int RtVideoShaderConstantsVerify() {
     const uintptr_t probeVa = 0x1800c95d0;                 // ?Set@String@System@@
     const uintptr_t loaded = ResolveRuntimeRaw(probeVa);
     if (!loaded) {
-        std::printf("[ShaderLit] SKIP -- Runtime-x64.dll is not mapped (cutover). "
+        printf("[ShaderLit] SKIP -- Runtime-x64.dll is not mapped (cutover). "
                     "%d lifted literals go UNCHECKED, which is expected: with no "
                     "DLL our copy is the only copy.\n", kShaderConstantLiteralCount);
         return 0;
@@ -521,16 +521,16 @@ extern "C" int RtVideoShaderConstantsVerify() {
         const char* dll = reinterpret_cast<const char*>(base + L.rva);
         if (std::memcmp(dll, L.text, static_cast<size_t>(L.length) + 1) != 0) {
             if (bad < 5)
-                std::printf("[ShaderLit] *** MISMATCH rva=0x%08x ours=\"%s\" "
+                printf("[ShaderLit] *** MISMATCH rva=0x%08x ours=\"%s\" "
                             "dll=\"%.32s\" ***\n", L.rva, L.text, dll);
             ++bad;
         }
     }
-    std::printf("[ShaderLit] %d lifted literals checked against the loaded "
+    printf("[ShaderLit] %d lifted literals checked against the loaded "
                 "Runtime-x64.dll, %d mismatches\n",
                 kShaderConstantLiteralCount, bad);
     if (bad)
-        std::printf("[ShaderLit] *** a shader-constant NAME differs from the DLL. "
+        printf("[ShaderLit] *** a shader-constant NAME differs from the DLL. "
                     "Do NOT hand-fix it: re-run "
                     "tools/extract_shader_constants.py --emit ***\n");
     return bad;
@@ -848,7 +848,7 @@ int CompareContexts(void* ours, void* theirs, bool quiet) {
         void* t = BufAt(theirs, off);
 #define VID2_CMP(expr, fmt, ...)                                              \
         do { if (!(expr)) { ++bad; if (!quiet)                                \
-                std::printf("[AssignConst] *** buf+0x%04x " fmt "\n", off,    \
+                printf("[AssignConst] *** buf+0x%04x " fmt "\n", off,    \
                             __VA_ARGS__); } } while (0)
         VID2_CMP(TxtEq(Field<void*>(o, kPrefix), Field<void*>(t, kPrefix)),
                  "prefix ours=\"%s\" theirs=\"%s\" ***",
@@ -982,7 +982,7 @@ extern "C" void RtVideoAssignConstantsProbeMaybeRun() {
     using Fn = void (*)(void*);
     const uintptr_t shipped = ResolveRuntimeRaw(0x1800ef3d0);
     if (!shipped) {
-        std::printf("[AssignConst] SKIP -- the shipped body is not mapped "
+        printf("[AssignConst] SKIP -- the shipped body is not mapped "
                     "(cutover); no oracle is possible without it\n");
         return;
     }
@@ -1010,16 +1010,16 @@ extern "C" void RtVideoAssignConstantsProbeMaybeRun() {
     }
 
     const int bad = CompareContexts(g_probeOurs, g_probeTheirs, false);
-    std::printf("[AssignConst] buffers=7 entries=%d mismatches=%d\n",
+    printf("[AssignConst] buffers=7 entries=%d mismatches=%d\n",
                 entriesMade, bad);
-    std::printf("[AssignConst] effectiveness (all measured on THEIRS): "
+    printf("[AssignConst] effectiveness (all measured on THEIRS): "
                 "buffersNamed=%d entriesMade=%d offsetsAssigned=%d\n",
                 buffersNamed, entriesMade, offsetsAssigned);
-    std::printf("[AssignConst] branches taken INSIDE the ported bodies: "
+    printf("[AssignConst] branches taken INSIDE the ported bodies: "
                 "slot-virtual=%d slot-arith=%d end-companion=%d end-arith=%d\n",
                 slotVirt, slotArith, endComp, endArith);
     if (slotVirt == 0)
-        std::printf("[AssignConst] pass 1 leaves the companion branches "
+        printf("[AssignConst] pass 1 leaves the companion branches "
                     "UNENTERED by construction (a fresh Context has none); "
                     "pass 2 below drives them rather than waiting for them.\n");
 
@@ -1038,7 +1038,7 @@ extern "C" void RtVideoAssignConstantsProbeMaybeRun() {
     const int caught2 = CompareContexts(g_probeOurs, g_probeTheirs, true);
     if (ge) ge[0].name = saveName;
 
-    std::printf("[AssignConst] negative-controls: scalar=%s string=%s\n",
+    printf("[AssignConst] negative-controls: scalar=%s string=%s\n",
                 caught1 > bad ? "CAUGHT" : "*** MISSED ***",
                 caught2 > bad ? "CAUGHT" : "*** MISSED ***");
 
@@ -1065,7 +1065,7 @@ extern "C" void RtVideoAssignConstantsProbeMaybeRun() {
         if (g_fakeOurs[i].endCalls != g_fakeTheirs[i].endCalls ||
             g_fakeOurs[i].slotCalls != g_fakeTheirs[i].slotCalls) {
             ++bad2;
-            std::printf("[AssignConst] *** fake companion %d: ours end=%d "
+            printf("[AssignConst] *** fake companion %d: ours end=%d "
                         "slot=%d, theirs end=%d slot=%d ***\n", i,
                         g_fakeOurs[i].endCalls, g_fakeOurs[i].slotCalls,
                         g_fakeTheirs[i].endCalls, g_fakeTheirs[i].slotCalls);
@@ -1076,12 +1076,12 @@ extern "C" void RtVideoAssignConstantsProbeMaybeRun() {
         endCallsTheirs  += g_fakeTheirs[i].endCalls;
         slotCallsTheirs += g_fakeTheirs[i].slotCalls;
     }
-    std::printf("[AssignConst] pass2 (fake companion on all 7): mismatches=%d\n",
+    printf("[AssignConst] pass2 (fake companion on all 7): mismatches=%d\n",
                 bad2);
-    std::printf("[AssignConst] pass2 effectiveness (on THEIRS): "
+    printf("[AssignConst] pass2 effectiveness (on THEIRS): "
                 "companion-end-calls=%d companion-slot-calls=%d\n",
                 endCallsTheirs, slotCallsTheirs);
-    std::printf("[AssignConst] pass2 branches INSIDE the ported bodies: "
+    printf("[AssignConst] pass2 branches INSIDE the ported bodies: "
                 "slot-virtual=%d slot-arith=%d end-companion=%d end-arith=%d\n",
                 slotVirt2, slotArith2, endComp2, endArith2);
 
@@ -1093,7 +1093,7 @@ extern "C" void RtVideoAssignConstantsProbeMaybeRun() {
     Field<int32_t>(g2, kInt14) = save2 + 1;
     const int caught3 = CompareContexts(g_probeOurs, g_probeTheirs, true);
     Field<int32_t>(g2, kInt14) = save2;
-    std::printf("[AssignConst] pass2 negative-control (slot from the fake): "
+    printf("[AssignConst] pass2 negative-control (slot from the fake): "
                 "%s\n", caught3 > bad2 ? "CAUGHT" : "*** MISSED ***");
 
     TearDownContext(g_probeOurs);

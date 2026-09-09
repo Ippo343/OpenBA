@@ -839,7 +839,7 @@ int RtVideoDeviceStartupRegister() {
     // finding this exact string in the run's own log — an md5 check before and
     // after is necessary but not sufficient, because it cannot see a swap that
     // happened and was undone.
-    std::printf("[LaneVID2] identity: device_startup.cpp built " __DATE__ " " __TIME__ "\n");
+    printf("[LaneVID2] identity: device_startup.cpp built " __DATE__ " " __TIME__ "\n");
 
     RegisterRuntimeExport("?PlatformStartup@Device@Video@@AEAA_NXZ",
                           (void*)&RtVideo_Device_PlatformStartup); ++n;

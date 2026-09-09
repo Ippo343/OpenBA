@@ -195,7 +195,7 @@ int RtIoCompressedStreamReleaseRegister() {
                           (void*)&RtIo_CompressedStream_Dtor); ++n;
     RegisterRuntimeAddr(0x1800aa650, (void*)&RtIo_CompressedStream_Dtor);
 
-    std::printf("[RtPort]   IO::CompressedStream Release/dtor (lane PKG2 rung 4b-iii, "
+    printf("[RtPort]   IO::CompressedStream Release/dtor (lane PKG2 rung 4b-iii, "
                 "lane W's rows): %d exports registered\n", n);
     return n;
 }

@@ -237,7 +237,7 @@ bool Same(const Result& x, const Result& y) {
 void Report(const char* what, const Result& o, const Result& t, int* mismatches) {
     const bool ok = Same(o, t);
     if (!ok) ++*mismatches;
-    std::printf("[SetClear] %-10s %s  ours[blocks=%d bytes=%lld root0=%d count=%d]"
+    printf("[SetClear] %-10s %s  ours[blocks=%d bytes=%lld root0=%d count=%d]"
                 "  theirs[blocks=%d bytes=%lld root0=%d count=%d]\n",
                 what, ok ? "OK  " : "DIFF", o.blocks, (long long)o.bytes, o.rootZero, o.count,
                 t.blocks, (long long)t.bytes, t.rootZero, t.count);
@@ -254,13 +254,13 @@ extern "C" void RtCollectionSetClearProbeMaybeRun() {
 
     ClearFn theirs = reinterpret_cast<ClearFn>(ResolveRuntimeRaw(0x18000f7d0));
     if (!theirs) {
-        std::printf("[SetClear] SKIP -- the shipped 0x18000f7d0 is not reachable "
+        printf("[SetClear] SKIP -- the shipped 0x18000f7d0 is not reachable "
                     "(cutover, or the DLL is absent). NO COMPARISON WAS MADE.\n");
         g_running = false;
         return;
     }
     if (!AllocatorSingleton()) {
-        std::printf("[SetClear] SKIP -- MemoryAllocator::_singleton is null, so the "
+        printf("[SetClear] SKIP -- MemoryAllocator::_singleton is null, so the "
                     "counters this oracle compares do not exist yet. "
                     "NO COMPARISON WAS MADE.\n");
         g_running = false;
@@ -290,7 +290,7 @@ extern "C" void RtCollectionSetClearProbeMaybeRun() {
     // blocks. If this reads OK the comparison is not measuring what it claims.
     Result on = RunOne(&BuildBalanced7, &ClearSkippingRight);
     const bool caught = !Same(on, tb);
-    std::printf("[SetClear] negative-control skip-right: %s "
+    printf("[SetClear] negative-control skip-right: %s "
                 "(blocks=%d vs retail %d)\n",
                 caught ? "CAUGHT" : "*** MISSED ***", on.blocks, tb.blocks);
 
@@ -299,20 +299,20 @@ extern "C" void RtCollectionSetClearProbeMaybeRun() {
     const long dNull   = rtsetclear::g_subtreeNull  - n0;
     const long dFreed  = rtsetclear::g_strFreed     - f0;
     const long dShared = rtsetclear::g_strShared    - s0;
-    std::printf("[SetClear] comparisons=3 mismatches=%d\n"
+    printf("[SetClear] comparisons=3 mismatches=%d\n"
                 "[SetClear] effectiveness (inside our bodies): recurse=%ld "
                 "null-child=%ld strRelease-freed=%ld strRelease-shared=%ld\n",
                 mismatches, dEnter, dNull, dFreed, dShared);
 
     if (dEnter == 0)
-        std::printf("[SetClear] *** recurse=0: the recursive helper never ran, so "
+        printf("[SetClear] *** recurse=0: the recursive helper never ran, so "
                     "only the root arm was tested ***\n");
     if (dShared == 0)
-        std::printf("[SetClear] *** strRelease-shared=0: every string release took "
+        printf("[SetClear] *** strRelease-shared=0: every string release took "
                     "the SAME arm, which is the uniform-population failure "
                     "(reference_uniform_population_is_not_a_verification.md) ***\n");
     if (!caught)
-        std::printf("[SetClear] *** the negative control was MISSED: the allocator "
+        printf("[SetClear] *** the negative control was MISSED: the allocator "
                     "deltas are not sensitive to a skipped subtree, so the green "
                     "lines above are void ***\n");
 

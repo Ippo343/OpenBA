@@ -214,7 +214,7 @@ int g_negFlagged = 0, g_negRuns = 0;
 
 bool Fail(const char* step, const char* term, long long a, long long b) {
     ++g_t.mismatches;
-    std::printf("[GfxGridProbe] MISMATCH step=%s term=%s ours=%lld theirs=%lld\n",
+    printf("[GfxGridProbe] MISMATCH step=%s term=%s ours=%lld theirs=%lld\n",
                 step, term, a, b);
     return false;
 }
@@ -647,7 +647,7 @@ void RtGraphicsGridProbe() {
 
     const Dll dll = ResolveDll();
     if (!dll.ok) {
-        std::printf("[GfxGridProbe] SKIPPED -- the shipped bodies did not resolve "
+        printf("[GfxGridProbe] SKIPPED -- the shipped bodies did not resolve "
                     "(Runtime-x64.dll absent?). This probe is a DLL-PRESENT "
                     "instrument by construction.\n");
         return;
@@ -713,7 +713,7 @@ void RtGraphicsGridProbe() {
             const bool clean = RunScript(bad, ref, dll, n.ops, false, "neg:");
             ++g_negRuns;
             if (!clean) ++g_negFlagged;
-            else std::printf("[GfxGridProbe] NEGATIVE CONTROL NOT FLAGGED: %s\n", n.name);
+            else printf("[GfxGridProbe] NEGATIVE CONTROL NOT FLAGGED: %s\n", n.name);
             g_t.mismatches = before;      // a control's failure is not the port's
             Destroy(bad); Destroy(ref);
         }
@@ -725,7 +725,7 @@ void RtGraphicsGridProbe() {
         const int nbReclaim = nb.Reclaimed();
         ++g_negRuns;
         if (!post || nbReclaim != reclaimTheirs) ++g_negFlagged;
-        else std::printf("[GfxGridProbe] NEGATIVE CONTROL NOT FLAGGED: "
+        else printf("[GfxGridProbe] NEGATIVE CONTROL NOT FLAGGED: "
                          "N6 freeGlobals frees only the first node -- the "
                          "post-state and the reclamation count BOTH agree with "
                          "a correct walk, so THIS ORACLE CANNOT FAIL and the "
@@ -736,15 +736,15 @@ void RtGraphicsGridProbe() {
     // ---- the report -------------------------------------------------------
     for (int L = 0; L < 8; ++L) if (g_t.levelMask & (1u << L)) ++g_t.levelsSeen;
 
-    std::printf("[GfxGridProbe] comparisons=%d mismatches=%d\n",
+    printf("[GfxGridProbe] comparisons=%d mismatches=%d\n",
                 g_t.comparisons, g_t.mismatches);
-    std::printf("[GfxGridProbe] work: addAppend=%d addReuse=%d threadEmpty=%d "
+    printf("[GfxGridProbe] work: addAppend=%d addReuse=%d threadEmpty=%d "
                 "threadRing=%d\n",
                 g_t.addAppend, g_t.addReuse, g_t.threadEmpty, g_t.threadRing);
-    std::printf("[GfxGridProbe] work: unthreadHead=%d unthreadMiddle=%d "
+    printf("[GfxGridProbe] work: unthreadHead=%d unthreadMiddle=%d "
                 "unthreadEmptied=%d\n",
                 g_t.unthreadHead, g_t.unthreadMid, g_t.unthreadEmpt);
-    std::printf("[GfxGridProbe] work: reindexFirst=%d reindexMoved=%d "
+    printf("[GfxGridProbe] work: reindexFirst=%d reindexMoved=%d "
                 "reindexNoop=%d levels=%d maxRing=%d\n",
                 g_t.reindexFirst, g_t.reindexMoved, g_t.reindexNoop,
                 g_t.levelsSeen, g_t.maxChain);
@@ -752,7 +752,7 @@ void RtGraphicsGridProbe() {
     // one verdict for both and said "post-state MISMATCH" when it was the
     // reclamation count that differed — a verdict is only as good as its
     // message (reference_shadow_predicate_must_name_its_failing_term.md).
-    std::printf("[GfxGridProbe] freeGlobals: post-state %s, reclamation %s "
+    printf("[GfxGridProbe] freeGlobals: post-state %s, reclamation %s "
                 "(blocks reclaimed ours=%d theirs=%d)\n",
                 fgPost ? "clean" : "MISMATCH", fgReclaim ? "agrees" : "MISMATCH",
                 reclaimOurs, reclaimTheirs);
@@ -770,24 +770,24 @@ void RtGraphicsGridProbe() {
     };
     for (const auto& g : gaps)
         if (g.v == 0)
-            std::printf("[GfxGridProbe] GAP: %s ran ZERO times -- this run "
+            printf("[GfxGridProbe] GAP: %s ran ZERO times -- this run "
                         "verified nothing about that path\n", g.name);
     if (g_t.maxChain < 3)
-        std::printf("[GfxGridProbe] GAP: no cell ever held three nodes -- the "
+        printf("[GfxGridProbe] GAP: no cell ever held three nodes -- the "
                     "MIDDLE-of-ring unthread was never exercised\n");
     if (g_t.levelsSeen < 2)
-        std::printf("[GfxGridProbe] GAP: every object landed on ONE quadtree "
+        printf("[GfxGridProbe] GAP: every object landed on ONE quadtree "
                     "level -- the level and offset arithmetic is unverified\n");
 
     if (mode == kNeg)
-        std::printf("[GfxGridProbe] negative controls: %d/%d flagged%s\n",
+        printf("[GfxGridProbe] negative controls: %d/%d flagged%s\n",
                     g_negFlagged, g_negRuns,
                     g_negFlagged == g_negRuns
                         ? "  (every body's comparator proven able to fail)"
                         : "  *** SOME COMPARATOR CANNOT FAIL -- see the lines "
                           "above; the green result is worthless for those ***");
 
-    std::printf("[GfxGridProbe] %s\n",
+    printf("[GfxGridProbe] %s\n",
                 (g_t.mismatches == 0 && gridOk && fgOk)
                     ? "PASS -- every ported grid body agreed with the shipped one"
                     : "FAIL -- see the MISMATCH lines above");

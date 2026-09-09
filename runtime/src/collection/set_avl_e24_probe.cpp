@@ -166,7 +166,7 @@ extern "C" void RtCollectionSetAvlE24ProbeMaybeRun() {
     auto theirClear = reinterpret_cast<ClearAllFn>(
         ResolveExportRaw("?ClearAll@KeyMap@Input@@QEAAXXZ"));
     if (!theirReg || !theirClear) {
-        std::printf("[SetAvl24] SKIP -- the shipped KeyMap::RegisterInput/ClearAll "
+        printf("[SetAvl24] SKIP -- the shipped KeyMap::RegisterInput/ClearAll "
                     "exports are not reachable (cutover, or the DLL is absent). "
                     "NO COMPARISON WAS MADE.\n");
         g_running = false;
@@ -190,7 +190,7 @@ extern "C" void RtCollectionSetAvlE24ProbeMaybeRun() {
                           SetOf(&ours)->count == SetOf(&theirs)->count;
         if (!same) {
             if (mismatches < 3)
-                std::printf("[SetAvl24] MISMATCH after insert(%u) step=%d\n"
+                printf("[SetAvl24] MISMATCH after insert(%u) step=%d\n"
                             "[SetAvl24]   ours   count=%d %s\n"
                             "[SetAvl24]   theirs count=%d %s\n",
                             id, steps, SetOf(&ours)->count, fo,
@@ -336,12 +336,12 @@ extern "C" void RtCollectionSetAvlE24ProbeMaybeRun() {
         }
     }
 
-    std::printf("[SetAvl24] dtor(0x180053440): ran=%s bindings=%d -> %s "
+    printf("[SetAvl24] dtor(0x180053440): ran=%s bindings=%d -> %s "
                 "(NO ours-vs-theirs comparison exists: the body frees the tree)\n",
                 dtorRan ? "yes" : "NO -- MemAlloc failed", dtorBindings,
                 dtorRan ? (dtorOk ? "OK" : "*** BAD ***") : "*** NOT EXERCISED ***");
 
-    std::printf("[SetAvl24] steps=%d mismatches=%d parent-linkage-bad=%d\n"
+    printf("[SetAvl24] steps=%d mismatches=%d parent-linkage-bad=%d\n"
                 "[SetAvl24] effectiveness: depthAfter%dAscending=%d (a spine would be %d) "
                 "rootChanged=%d idsAbove0x7F=%d finalCount=%d dupCount=%d\n"
                 "[SetAvl24] destroy: nodes=%d visited=%u expected=%d -> %s "
@@ -358,15 +358,15 @@ extern "C" void RtCollectionSetAvlE24ProbeMaybeRun() {
                 negVisitCaught ? "CAUGHT" : "*** MISSED ***");
 
     if (depthAfterAscending >= (int)(sizeof(kAscending) / sizeof(kAscending[0])))
-        std::printf("[SetAvl24] *** depth == the insert count: NO ROTATION EVER RAN, "
+        printf("[SetAvl24] *** depth == the insert count: NO ROTATION EVER RAN, "
                     "so this sweep verified only the descent ***\n");
     if (rootChanged == 0)
-        std::printf("[SetAvl24] *** rootChanged=0: nothing restructured the tree ***\n");
+        printf("[SetAvl24] *** rootChanged=0: nothing restructured the tree ***\n");
     if (aboveSignBit == 0)
-        std::printf("[SetAvl24] *** no id above 0x7F was inserted: a SIGNED byte "
+        printf("[SetAvl24] *** no id above 0x7F was inserted: a SIGNED byte "
                     "descent would have passed this sweep ***\n");
     if (!negCaught || !negVisitCaught)
-        std::printf("[SetAvl24] *** a negative control was MISSED: the comparison is "
+        printf("[SetAvl24] *** a negative control was MISSED: the comparison is "
                     "not sensitive to the thing it is supposed to catch, so the "
                     "green steps above are void ***\n");
 

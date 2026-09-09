@@ -480,9 +480,9 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
             // Effectiveness: a comparison in which every compared field was
             // zero on both sides proves nothing.
             RT_DIFF_WORK(nonTrivial >= 3);
-            std::printf("[PlatOracle] compared=%d differing=%d nonTrivial=%d %s\n",
+            printf("[PlatOracle] compared=%d differing=%d nonTrivial=%d %s\n",
                         compared, differing, nonTrivial, detail);
-            std::printf("[PlatOracle]   hbrBackground readback: GetClassInfoW ours=%p theirs=%p "
+            printf("[PlatOracle]   hbrBackground readback: GetClassInfoW ours=%p theirs=%p "
                         "| GetClassLongPtrW ours=0x%llX theirs=0x%llX\n",
                         (void*)ours.wc.hbrBackground, (void*)theirs.wc.hbrBackground,
                         (unsigned long long)ours.classBrushFromWindow,
@@ -657,14 +657,14 @@ void IdentifySystemBrush(void* theirsBrush, void* oursBrush, void* platformHandl
             readBack = got.hbrBackground;
         UnregisterClassW(L"BanishedPlatProbe", static_cast<HINSTANCE>(platformHandle));
     }
-    std::printf("[PlatOracle]   theirs=%p is %s ; GetSysColorBrush(COLOR_WINDOW=5)=%p ; "
+    printf("[PlatOracle]   theirs=%p is %s ; GetSysColorBrush(COLOR_WINDOW=5)=%p ; "
                 "third class from OUR module with the same constant 6 reads back %p (registered=%d) ; ours=%p\n",
                 theirsBrush,
                 matched >= 0 ? "GetSysColorBrush(index below)" : "NOT any system colour brush",
                 reinterpret_cast<void*>(GetSysColorBrush(COLOR_WINDOW)),
                 readBack, registered ? 1 : 0, oursBrush);
     if (matched >= 0)
-        std::printf("[PlatOracle]   matched system colour index = %d\n", matched);
+        printf("[PlatOracle]   matched system colour index = %d\n", matched);
 }
 
 // ---------------------------------------------------------------------------
@@ -727,17 +727,17 @@ extern "C" void RtLanePlatWindowProcProbe(void* hwndOpaque) {
     using Fn = int64_t (*)(HWND, UINT, WPARAM, LPARAM);
     Fn theirs = RtOriginal<Fn>("?WindowProc@Application@1@CA_JPEAUHWND__@@I_K_J@Z");
     if (!theirs) {
-        std::printf("[PlatProbe] WindowProc probe SKIPPED: shipped body did not resolve\n");
+        printf("[PlatProbe] WindowProc probe SKIPPED: shipped body did not resolve\n");
         return;
     }
     HWND hwnd = static_cast<HWND>(hwndOpaque);
     if (!hwnd || !IsWindow(hwnd)) {
-        std::printf("[PlatProbe] WindowProc probe SKIPPED: no live window\n");
+        printf("[PlatProbe] WindowProc probe SKIPPED: no live window\n");
         return;
     }
     Application** slot = AppSingletonSlot();
     if (!slot) {
-        std::printf("[PlatProbe] WindowProc probe SKIPPED: no Application singleton slot\n");
+        printf("[PlatProbe] WindowProc probe SKIPPED: no Application singleton slot\n");
         return;
     }
 
@@ -803,7 +803,7 @@ extern "C" void RtLanePlatWindowProcProbe(void* hwndOpaque) {
 
     int branches = 0;
     for (unsigned b = branchMask; b; b >>= 1) branches += (b & 1u);
-    std::printf("[PlatProbe] WindowProc%s cases=%d differing=%d branches=%d %s\n",
+    printf("[PlatProbe] WindowProc%s cases=%d differing=%d branches=%d %s\n",
                 neg ? " NEGATIVE-CONTROL" : "", cases_n, differing, branches, detail);
 }
 
@@ -858,7 +858,7 @@ int RtApplicationPlatformStartupRegister() {
     // THE BUILD IDENTITY LINE. Every measurement this lane reports is gated on
     // finding this exact string in that run's OWN log — not on "I rebuilt",
     // not on a file timestamp. Bump the revision when the bodies change.
-    std::printf("[LanePLAT] rev=PLAT-r5 registered=%d\n", n);
+    printf("[LanePLAT] rev=PLAT-r5 registered=%d\n", n);
 
     return n;
 }

@@ -351,16 +351,16 @@ void RtInput_KeyMap_Save(void* selfPtr) {
         // run the numbers that make the pass meaningful are invisible — the
         // "if a control is only visible when the test fails, it is not a
         // control" hazard (WAVE9.md, instrument #7). Printed unconditionally.
-        std::printf("[KeyMapSave] oracle: keys=%d readable=%d diffs=%d "
+        printf("[KeyMapSave] oracle: keys=%d readable=%d diffs=%d "
                     "vs-recorded=%d overflow=%d neg-control=%s -> %s\n",
                     emitted, readable, diffs, oursVsRecorded, g_emitOverflow,
                     negCaught ? "CAUGHT" : "*** MISSED ***",
                     ok ? "PASS" : "*** FAIL ***");
         if (emitted == 0)
-            std::printf("[KeyMapSave] *** the KeyMap emitted NOTHING: no binding "
+            printf("[KeyMapSave] *** the KeyMap emitted NOTHING: no binding "
                         "is exclusive, so this call compared zero settings ***\n");
     } else if (rt_diff_on__) {
-        std::printf("[KeyMapSave] oracle SKIPPED -- the shipped ?Save@KeyMap@Input@@ "
+        printf("[KeyMapSave] oracle SKIPPED -- the shipped ?Save@KeyMap@Input@@ "
                     "is not reachable, so NOTHING was compared.\n");
     }
     g_recording = false;

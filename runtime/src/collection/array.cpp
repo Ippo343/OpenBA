@@ -1673,7 +1673,7 @@ void RtCollectionPortInit() {
         // call into Application::RegisterMessageCallback.
         const char* p = std::getenv("BANISHED_RT_SETAVL_PROBE");
         RtCollectionSetAvlProbeArm(p && *p && std::strcmp(p, "0") != 0);
-        std::printf("[RtPort]   Collection::Set AVL: %d addresses registered\n", setAvl);
+        printf("[RtPort]   Collection::Set AVL: %d addresses registered\n", setAvl);
     }
 
     // Wave 9 lane SAVE2: Collection::Set<Pair<String,String>>::Clear and its
@@ -1689,7 +1689,7 @@ void RtCollectionPortInit() {
         // self-schedules on the first real call into Clear.
         const char* pc = std::getenv("BANISHED_RT_SETCLEAR_PROBE");
         RtCollectionSetClearProbeArm(pc && *pc && std::strcmp(pc, "0") != 0);
-        std::printf("[RtPort]   Collection::Set Clear: %d addresses registered\n", setClear);
+        printf("[RtPort]   Collection::Set Clear: %d addresses registered\n", setClear);
     }
 
     // Wave 9 lane COLL: the keyed Collection::Set/Map INSERT side (the three
@@ -1716,7 +1716,7 @@ void RtCollectionPortInit() {
         RtCrtStrICmpCheckLocaleFlag();
         const char* p = std::getenv("BANISHED_RT_AVLTREES_PROBE");
         RtCollectionAvlProbeArm(p && *p && std::strcmp(p, "0") != 0);
-        std::printf("[RtPort]   Collection keyed Set/Map + sort (lane COLL): "
+        printf("[RtPort]   Collection keyed Set/Map + sort (lane COLL): "
                     "%d + %d + %d addresses registered\n", avl, sort, icmp);
     }
 

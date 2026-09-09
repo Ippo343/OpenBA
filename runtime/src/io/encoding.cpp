@@ -211,11 +211,11 @@ struct EncCounts {
     unsigned long long ctorReader   = 0, ctorWriter   = 0;
     ~EncCounts() {
         if ((createReader | createWriter | ctorReader | ctorWriter) == 0) {
-            std::printf("[Encoding] ATTENDANCE: none of the four bodies was "
+            printf("[Encoding] ATTENDANCE: none of the four bodies was "
                         "entered in this run.\n");
             return;
         }
-        std::printf("[Encoding] ATTENDANCE (entries, not comparisons): "
+        printf("[Encoding] ATTENDANCE (entries, not comparisons): "
                     "CreateReader=%llu CreateWriter=%llu "
                     "BinaryReader::ctor=%llu BinaryWriter::ctor=%llu\n",
                     createReader, createWriter, ctorReader, ctorWriter);

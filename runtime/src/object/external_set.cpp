@@ -886,7 +886,7 @@ void RtObject_ExternalFactory_Clean(ExternalFactory* self) {
     // printf costs nothing. `visited` is the whole tree; `evicted` is what it
     // destroyed; `arrayGrow` is the one branch of `ArrayResize` this path
     // reaches, and it is the ONLY live coverage that body gets.
-    std::printf("[ResSet] Clean: visited=%llu evicted=%llu bitCleared=%llu "
+    printf("[ResSet] Clean: visited=%llu evicted=%llu bitCleared=%llu "
                 "arrayGrow=%llu cleanBit=%d generation=%d\n",
                 (unsigned long long)g_rc.cleanVisited,
                 (unsigned long long)g_rc.cleanEvicted,
@@ -945,7 +945,7 @@ int RtObjectExternalSetRegister() {
     // only THIS build emits, read out of the run's own log — not on "I
     // rebuilt", not on a timestamp. Lanes have measured the wrong exe
     // repeatedly. Nothing else in the tree prints "ResSet".
-    std::printf("[ResSet] registered %d doors (12 Set bodies + Clean by name and "
+    printf("[ResSet] registered %d doors (12 Set bodies + Clean by name and "
                 "address, resource-tree-instantiation=0x18002xxx, probe=%s)\n",
                 n, RtObjectExternalSetProbeArmed() ? "ARMED" : "off");
     return n;

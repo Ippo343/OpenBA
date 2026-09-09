@@ -445,7 +445,7 @@ extern "C" void RtLanePlatInputFormatProbe() {
     const auto* theirMouse = reinterpret_cast<const DIDATAFORMAT*>(
         ResolveAddr(Module::Runtime, 0x18014be30));
     if (!theirKbd || !theirMouse) {
-        std::printf("[PlatProbe] DIDATAFORMAT probe SKIPPED: the shipped blobs did not resolve\n");
+        printf("[PlatProbe] DIDATAFORMAT probe SKIPPED: the shipped blobs did not resolve\n");
         return;
     }
 
@@ -459,7 +459,7 @@ extern "C" void RtLanePlatInputFormatProbe() {
     int negFields = 0;
     const int negBad = CompareFormat(&c_dfDIKeyboard, theirMouse, &negFields);
 
-    std::printf("[PlatProbe] DIDATAFORMAT keyboard_mismatch=%d mouse_mismatch=%d "
+    printf("[PlatProbe] DIDATAFORMAT keyboard_mismatch=%d mouse_mismatch=%d "
                 "fields=%d | NEGATIVE-CONTROL(kbd vs mouse) mismatch=%d %s\n",
                 badKbd, badMouse, fields, negBad,
                 negBad > 0 ? "(fired, as it must)" : "(DID NOT FIRE — comparator is broken)");

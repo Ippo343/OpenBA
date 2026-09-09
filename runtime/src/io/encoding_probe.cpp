@@ -232,7 +232,7 @@ void RtIo_EncodingProbe() {
     // satisfying it" trap inverted, and it is why the raw DLL base is used.
     void* dllBase = ResolveExportRaw("??_7MemoryStream@IO@@6B@");
     if (dllBase == nullptr) {
-        std::printf("[Encoding] probe SKIPPED: no shipped DLL to diff against "
+        printf("[Encoding] probe SKIPPED: no shipped DLL to diff against "
                     "(expected once the DLL is gone).\n");
         return;
     }
@@ -251,7 +251,7 @@ void RtIo_EncodingProbe() {
     MemFreeFn memFree = RT_EXPORT_ONCE(MemFreeFn,
         "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
     if (memFree == nullptr) {
-        std::printf("[Encoding] probe SKIPPED: MemFree absent.\n");
+        printf("[Encoding] probe SKIPPED: MemFree absent.\n");
         return;
     }
 
@@ -263,7 +263,7 @@ void RtIo_EncodingProbe() {
     const void* ourWrVtbl    = ResolveExport("??_7BinaryWriter@IO@@6B@");
     const void* theirWrVtbl  = ResolveExportRaw("??_7BinaryWriter@IO@@6B@");
     if (!ourRdVtbl || !theirRdVtbl || !ourWrVtbl || !theirWrVtbl) {
-        std::printf("[Encoding] probe SKIPPED: a BinaryReader/Writer vtable did "
+        printf("[Encoding] probe SKIPPED: a BinaryReader/Writer vtable did "
                     "not resolve.\n");
         return;
     }
@@ -407,7 +407,7 @@ void RtIo_EncodingProbe() {
     RT_DIFF_SHADOW(pass, sa, sb);
     RT_DIFF_WORK(r.cases > 0);
 
-    std::printf("[Encoding] lockstep probe: %s -- %s\n", sa, sb);
+    printf("[Encoding] lockstep probe: %s -- %s\n", sa, sb);
 }
 
 }  // namespace RtIo
