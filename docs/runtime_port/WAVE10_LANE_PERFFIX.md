@@ -155,6 +155,17 @@ apply the identical one-line-per-site normalization to these 2 files. I
 messaged the active UI lanes about this directly rather than silently leaving
 it for merge time to discover.
 
+**Update**: lane UIF applied the fix to their 3 sites on `wave10/lane-uif`
+(commit `bbe90d7`) shortly after this report. UIF also correctly flagged that
+my "only thing standing between the tree and a clean perf build" framing was
+branch-relative, not a statement about `wave10/base`: on UIF's branch
+(base + UIF's own lane), `standalone-perf` still fails at the ~267 other
+`std::printf` sites this lane (PERFFIX) fixed — `array.cpp`, `array_destroy.cpp`,
+etc. are unfixed there. **Neither lane's branch alone yields a green perf
+build; the integrator needs BOTH `wave10/lane-perffix` and `wave10/lane-uif`
+merged together** for `mingw32-make standalone-perf` (and release `standalone`)
+to build clean.
+
 ## Sanity run — not attempted
 
 `tools/game_dir_lock.sh status` showed the shared `C:/GOG Games/Banished`
