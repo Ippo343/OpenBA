@@ -66,6 +66,13 @@ extern int RtUiCloseDialogRegister();      // userinterface_close.cpp (lane CLOS
 // because the dtor frees and because a bisect must be able to separate it from
 // lane UI3's own switch, which is what put the calls there.
 extern int RtUiDialogCtorDtorRegister();   // dialog_ctor_dtor.cpp (lane DLG2)
+// Wave 10B lane DLGV: all NINE remaining slots of ??_7DialogController@UI@@6B@
+// (seven empty base virtuals plus the TypeName/Type pair). Own switch
+// (BANISHED_RT_DLGCTRL) because registering them is what unlocks promoting that
+// minted vtable in standalone/reg_mint_promoted.cpp, and the A/B behind that
+// promotion has to be able to turn the bodies off independently of lane B's
+// DialogInstance port.
+extern int RtUiDialogControllerRegister(); // dialog_controller_base.cpp (DLGV)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -86,5 +93,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_UIDRAW"))      n += RtUiDrawRegister();
     if (RtWaveEnabled("BANISHED_RT_UICLOSE"))    n += RtUiCloseDialogRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGCTOR"))    n += RtUiDialogCtorDtorRegister();
+    if (RtWaveEnabled("BANISHED_RT_DLGCTRL"))    n += RtUiDialogControllerRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }
