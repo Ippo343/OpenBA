@@ -968,6 +968,41 @@ void RtDataMintShadowReport(const char* phase) {
         if (kMintStorage[i].ctorInit) ++ctorOwed;
 
     // ---- the summary, with its effectiveness control ----------------------
+    // ---- PER-VTABLE READINESS (Wave 10 lane UIDATA) -----------------------
+    //
+    // The aggregate "195 of 379 non-purecall slots carry our own code" answers
+    // a wave-wide question. It cannot answer the question a lane actually asks,
+    // which is about ONE row: "is ??_7Element@UI@@6B@ safe to register today?"
+    // Registration is per-symbol in principle (RegisterMintedData walks rows),
+    // so the blocker is per-row too, and an aggregate hides which rows are
+    // clean. This loop names them.
+    //
+    // It is also the LIVE answer to a question a source grep gets wrong. Lane
+    // UIDATA first counted these four UI vtables' trap slots by grepping the
+    // tree for `RegisterRuntimeExport("<slot name>")`, which is the literal-
+    // grep screen this project has been burned by repeatedly
+    // (reference_literal_grep_blind_to_variables.md): a registration whose
+    // name arrives through a variable is invisible to it. This loop asks the
+    // PORT REGISTRY itself, through the same OurPort() the mint fills with, so
+    // it sees every door. The two agreed on all four UI rows — which is a
+    // result, not an assumption, and is only a result because both were run.
+    printf("\n[RtMintShadow] ---- per-vtable readiness ----\n");
+    printf("[RtMintShadow] READY = every non-purecall slot is our port, so registering\n"
+           "[RtMintShadow] this row hands callers a table with no abort-trap in it.\n");
+    for (int vi = 0; vi < kVtableCount; ++vi) {
+        const RtMintVtable& v = kMintVtables[vi];
+        char rbuf[64];
+        int rPort = 0, rTrap = 0, rPure = 0;
+        for (int i = 0; i < v.slotCount; ++i) {
+            if (v.slots[i].kind == RT_MINT_PURECALL) { ++rPure; continue; }
+            if (OurPort(v.slots[i])) ++rPort; else ++rTrap;
+        }
+        printf("[RtMintShadow]   %-8s %-52s slots=%2d ported=%2d TRAP=%2d purecall=%2d\n",
+               rTrap ? "BLOCKED" : "READY",
+               SymLabel(v.symbol, v.dllVa, rbuf, sizeof(rbuf)),
+               v.slotCount, rPort, rTrap, rPure);
+    }
+
     printf("\n[RtMintShadow] ---- summary (phase=%s) ----\n", phase);
     printf("[RtMintShadow] vtables            : %d, %d slots\n", kVtableCount, g_counts.slots);
     printf("[RtMintShadow] ground truth       : %d slot comparisons vs the live DLL, "
