@@ -271,9 +271,27 @@ binary. The attribution does not rest on comparing two builds.
 
 ### The bisect's terminal cell, for completeness
 
-`bis_sys0` — legacy control ON (defect live) + `BANISHED_RT_SYSTEM=0`, the only
-switch that reaches the registration. See §7 for its numbers. It is **confounded
-by construction** and is reported as the bisect's floor, not as evidence.
+`bis_sys0` — legacy control requested (`LEGACY_DIRECTFREE=1`) **and**
+`BANISHED_RT_SYSTEM=0`, the only switch that reaches the registration:
+
+```
+[RtAllocShadow] GAPS checks=1905274 gaps=0 sum_dAllocCount=0 ...
+[RtAllocShadow] SUMMARY armed=1 observed=1905275 divergences=0
+                skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+```
+
+Green — and **`grep -c "LEGACY CONTROL"` on that log is `0`, against `1` in
+`f1leg`.** The control's banner prints on the first entry into
+`FreeLockedIgnoringSelf`, so its absence is proof that the body **was never
+called at all**: `RtSystemPortInit` returned before registering `0x180009c30`, so
+`ResolveAddr` handed every caller the DLL's own wrapper instead.
+
+That is the trap the brief names, caught in the act. This cell did not disable
+the *cause* inside our body; it **removed our body from the call path entirely**,
+along with 87 unrelated exports. A lane that had run the bisect to this point and
+stopped would have a green cell, a true-but-useless conclusion ("it is somewhere
+in System"), and no way to tell which of those two things it had done. It is
+reported as the bisect's floor, not as evidence.
 
 ---
 
@@ -360,6 +378,7 @@ Regenerate the extracts with `tools/shadowbisect_extract.sh <label> …`.
 | `g3` | 2 | 1 | 4,498,461 | 4,498,460 | 0 | 0 | all 0 |
 | `s4` | 2 | 1 | 1,927,620 | 1,927,619 | 0 | 1,610,913 (**required**) | all 0 |
 | `g4` | 2 | 1 | 1,905,868 | 1,905,867 | 0 | 1,423,009 (**required**) | all 0 |
+| `bis_sys0` | 2 | 1 | 1,905,275 | 1,905,274 | 0 | 0 (**confounded**, §4) | all 0 |
 
 Functional check, incidentally: `s2`/`g3` are 1500-frame stress runs and
 `s3`/`g2` are full save-loads, all `rc=0` with the fix in. The fix is not only
