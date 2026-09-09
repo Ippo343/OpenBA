@@ -1,0 +1,7 @@
+[SaveTest] armed (trigger frame 400): singleton export=00007ffcab68c6f0 g_pSaveLoadSingleton=00007ffcab68c6f0 GetOperation=00007ff757fce903
+[SaveTest] pre-save — save dir listing:
+[SaveTest] frame 400: invoking retail autosave handler (SetOperation(4,-4))
+[SaveTest] handler returned; GetOperation()=4 (4=save expected; 0=trigger was refused)
+[SaveTest] frame 461: operation 4 -> 0
+[SaveTest] frame 461: SAVE OPERATION COMPLETE (61 frames elapsed)
+[SaveTest] post-save — save dir listing:
