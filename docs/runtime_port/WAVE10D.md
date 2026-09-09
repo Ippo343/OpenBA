@@ -1,5 +1,27 @@
 # Wave 10D — finish UI
 
+> ## ✅ CLOSED 2026-09-09 — **UI 183 / 186 = 98.4%** (from 96.2%), seven rows down to three
+> Three lanes, all merged, plus the integrator's single wave-close regeneration
+> and both promotions. Release green from a genuine `make clean`; the close cell
+> exits 0 with a 0-byte crash log.
+>
+> **`??_7ToolTipDialog@UI@@6B@` and `?_typeInfo@ToolTipDialog@UI@@` are PROMOTED**
+> — 17 minted DATA rows now live on every run. The vtable's gate was DISPATCH,
+> not readiness, named with an abort condition **in advance**: `operatorNew`
+> non-zero, because a ToolTipDialog cannot be constructed without that table
+> stamped onto it. Measured `operatorNew=2` against `BeginToolTip entries=2`,
+> `bytes=192`, `GetToolTipString/operatorNew == 1`, `SetText/operatorNew == 1`
+> with `found=2 wrote=2` — then re-measured unchanged with the promotion applied.
+>
+> **The three that remain:**
+> * `??_7Dialog@UI@@6B@` — green, live for the stamp, dead for the dispatch.
+> * `??_7DialogController@UI@@6B@` — green, and its blocker is **permanent**: not
+>   one of the 39 retail subclass vtables inherits slot 0, so retail itself never
+>   dispatches the base destructor from a subclass. No future lane should hunt it.
+> * `?BeginDragDrop@UserInterface@UI@@` — **entered this wave** from lane MOUSE's
+>   injector, resolved by name rather than through an address door. The same
+>   honest price the wave has paid four times now.
+
 **Opened 2026-09-09 on `wave10/base` @ `190e91c`.** Three lanes, and the scope is
 deliberately narrow: **the last seven UI rows and nothing else.** Opening the
 next namespace is explicitly OUT of scope this wave.
@@ -133,6 +155,22 @@ reproduce that is a pure fidelity fix, and ROUTES already proved it
 behaviour-preserving for slots 5/6/10 (attendance 0 → 17 → 51). It is also the
 most likely thing to give `??_7DialogController` and `??_7Dialog` a real
 dispatch, which is the only thing keeping either row unpromoted.
+
+### MOUSE — ✅ DONE, and it found the confound
+
+> The injector lands as `standalone/mouse_inject.{h,cpp}` + `ui_hover_detour.*`,
+> off by default. It moved all three counters and is the route that verified lane
+> TIP's four rows from the other end.
+>
+> **The finding with the widest blast radius is a registry repair:**
+> `GameUIScale` was **0**, and with `UIScale=0` the in-game clip region is
+> `(0,0)-(-1,-1)` — **nothing can hover at all.** Every `entries=0` taken on the
+> hover path before this fix therefore had TWO sufficient causes, "no injector"
+> and "degenerate clip region", and discriminated between neither. That weakens
+> Wave 10C lane UIF6's "an unattended run has no mouse" attribution, which this
+> integrator reported as settled. UIF6's separate evidence (the same file's
+> `IsInsideClipRegion` entering 1014 times) still rules out a dead registration,
+> so the conclusion survives — its reasoning was under-determined.
 
 ### MOUSE — a capability, not a row
 
