@@ -225,6 +225,43 @@ Every deploy went through `tools/game_dir_lock.sh run lane-DLG2`, with `verify`
 immediately before each launch and the build/deployed md5 quoted on both sides
 (`ca64f6e35bbabf74323c7989da06f56e` for the final binary).
 
+### 5d-bis. The Mods-menu run CRASHES, and it is not this lane — A/B'd, not argued
+
+The `live_menu` run (the only route that reaches `??0Dialog`) ends in an
+ACCESS_VIOLATION. It is reported here rather than left in a log, because a lane
+that lands a port on the dialog path and quietly ships past a crash on that path
+is the exact shape a later bisect will blame it for.
+
+Symbolised against the build (`nm`, image base 0x140000000):
+
+```
+#0  ModDialog_ToggleMod_Impl(ModDialog*, int) +0x43
+#1  ModDialog_Slot8(...) +0xde
+#2  ModDialog_VOnElementEvent(...) +0x7b
+#3  AutoStart::TickMenu(void*) +0x619
+#4  Stub_Update(UpdateLoop*, void*) +0x108
+#5  Runtime-x64.dll + 0xDD08A
+```
+
+**No `UI::Dialog` frame anywhere.** It is exe-side: `code/Game/Dialog/moddialog.cpp:556`
+calls `fn_Modification_GetMod(modSingleton, index)` and dereferences the result
+unguarded, and this machine has **0 `.pkm` mods mounted** (the game-dir lock's own
+status line says so), so the harness click feed `1001,…` selects a mod that is not
+there.
+
+**The A/B is the evidence, not the reading.** The identical click feed was re-run
+with `BANISHED_RT_DLGCTOR=0`, i.e. with both of this lane's registrations absent —
+confirmed by the run's empty `=== DLG2 ===` section, no pin line and no diff line:
+
+| run | `RT_DLGCTOR` | exception | fault | module offset | crash log |
+|---|---|---|---|---|---|
+| live | ON | `0xC0000005` | READ of `0xd0`, `RAX=0xD0` | `+0x143FC5` | 2101 bytes |
+| control | **0** | `0xC0000005` | READ of `0xd0`, `RAX=0xD0` | `+0x143FC5` | 2101 bytes |
+
+Byte-identical failure with the lane switched off. **PRE-EXISTING, and owned by
+whoever owns `moddialog.cpp` / the AutoStart mod click feed, not by this lane.**
+Both binaries md5 `eb8ab79891b8bb788af959268d90b783`, quoted on both sides.
+
 ### 5e. THE PROBE HAD NO ROUTE, AND THE FIRST RUN PROVED IT
 
 On the first measured boot the differential **never executed**. Its gate fired on
@@ -386,6 +423,11 @@ string literal, never a named constant
    this tree exports (§6). Lane UIF's call.
 4. **A namespace census is a lower bound on residue** (§7a.2). Not this lane's tool
    to fix, but every lane reading one should know.
+5. **The Mods-menu click feed crashes with 0 mods mounted** (§5d-bis) — exe-side
+   `ModDialog_ToggleMod_Impl` dereferences a null from `fn_Modification_GetMod`.
+   A/B'd to a pre-existing defect, but it is the only harness route that reaches
+   `??0Dialog` live, so it caps how far this lane's live coverage can go and it
+   will bite the next lane that needs that route.
 
 ---
 
