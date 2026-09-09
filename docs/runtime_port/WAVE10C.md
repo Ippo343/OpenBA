@@ -79,6 +79,57 @@ Lane UIF6 is the follow-through on six of those nine. Its own ports may pull in
 more, and that is an acceptable outcome stated in advance rather than discovered
 at the merge.
 
+> **✅ DONE (lane UIF6, merged).** All six LEFT. Full census 196 → 194, UI 9 → 7.
+> Four entered, all of them `BeginToolTip`'s callees — the honest price of not
+> opening four address doors — and **no new address doors**.
+>
+> | symbol | addr | entries | verdict |
+> |---|---|---|---|
+> | `IsInsideClipRegion` | `0x180120830` | **1014** | **VERIFIED**, sweep, 0 divergences |
+> | `DrawStandAloneUI` | `0x1801203f0` | 28 | live, not differentially verified |
+> | `UpdateStandAloneUI` | `0x180120310` | 12 | live, not differentially verified |
+> | `EndDragDrop` | `0x180120af0` | 0 | ported, NOT verified |
+> | `EndHover` | `0x180113d10` | 0 | ported, NOT verified |
+> | `BeginToolTip` | `0x180120860` | 0 | ported, NOT verified |
+>
+> The three zeros are **mouse-driven**, and an unattended run has no mouse. The
+> lane ruled out the alternatives instead of assuming: `[RtResolveEarly] 0`,
+> `[RtResolve] 0 misses`, and `IsInsideClipRegion` — same file, same registration
+> path — entered 1014 times. It also **rejected a detour**, on the grounds that a
+> detour changes *who* reaches the body, not whether the game hovers.
+>
+> `IsInsideClipRegion` is pure, so it was swept against the shipped export rather
+> than waiting for a caller (`project_pure_functions_verify_by_sweep`): 1014
+> cases, 0 divergences, both controls scored SEPARATELY — effectiveness (205
+> cases return true) and discrimination (an inclusive→exclusive right-edge defect
+> caught on 37 cases).
+
+### The regression lane UIF6 caused, found and fixed — read this before touching `modal_driver.cpp`
+
+Its first modal cell **hung to its timeout with no error line**.
+`standalone/modal_driver.cpp` identified the DLL-installed callback through
+`ResolveAddr(Module::Runtime, 0x180120310)` — **which consults the port registry
+first** (`reference_resolveaddr_consults_port_registry_first`). UIF6's own
+address-door registration therefore made it resolve to OUR function while the
+DLL's `ShowDialog` kept installing the DLL's; nothing matched, and the modal was
+never dismissed. The file's comment claimed detection worked either way — true
+only while nothing was registered at that address. Fixed by matching **both**
+doors (`ResolveRuntimeRaw` + registry).
+
+**Keeping these ports while reverting `modal_driver.cpp` re-hangs the modal
+test.** Verified on the integrator's merged tip (DLG8 + TIDENT + UIF6):
+`round0 mismatches=0, controls caught=3/3 → PASS`, dismissed on both subjects.
+
+**Note for readers of that test:** its output goes to `standalone_error.log`, not
+`standalone_debug.log`. Grepping the debug log for `[ModalDriver]` returns
+nothing and looks exactly like "the driver never armed".
+
+### Two header facts corrected
+
+`DialogInstance+0x98` is `_hovering`, **not** `_closing` — the header said "NAME
+IS A GUESS", and `?IsHovering@` (`0x1800455a0`) is the entire function
+`MOVZX EAX,[RCX+0x98] / RET`. `+0xa0` is a `System::Time`, not a `void*`.
+
 ## The two lanes that are not porting lanes
 
 Half this wave is spent on things already shipped, because two of Wave 10B's
