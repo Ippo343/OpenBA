@@ -693,6 +693,55 @@ ModDtorFn ModEntryDtor() {
 //     search would compare nothing, which is the failure mode
 //     reference_uniform_population_is_not_a_verification.md is about — a scan
 //     that "matches" because every subject is empty.
+//
+// ----------------------------------------------------------------------------
+// RUN EVIDENCE, 2026-09-09, three runs on the BANISHED_AUTOLOAD=Auto route
+// (menu -> Load -> select "Auto" -> Load click -> SetOperation(2), i.e. the
+// retail load path, not a synthetic driver).
+//
+//   1. ORACLE ON  (BANISHED_RT_PREDICT=1)
+//        Save::SaveLoad::UpdateLoad  rounds=90  predictions=7  changed=7
+//                                    wrong=0  unpredicted=0
+//                                    excluded=8 byte(s), 5 suppressed call(s)
+//      Read it field by field, because each column answers a different
+//      objection this project has been burned by:
+//        changed=7 of 7 — EVERY prediction differed from its pre-value, so not
+//          one of them could be satisfied by the DLL doing nothing. There is no
+//          vacuous green here (reference_probe_needs_an_effectiveness_control).
+//        unpredicted=0 — the coverage control. Across the watched SaveLoad
+//          (0x90) and IO::Modification header (0x18), the DLL changed NO byte
+//          this body failed to predict. Predictions alone are a lower bound;
+//          this is the half that can catch what we do not know about.
+//        excluded=8 — exactly `_saveState`, and NOTHING ELSE. That single
+//          number is also the proof that the lazy Mod-array exclusion never
+//          fired, i.e. this run took the no-mods path.
+//        rounds=90 — the body was entered 90 times, 88 of them in state 2
+//          under the min-time gate; the 7 predictions are state 0's progress,
+//          state 1's dirty + progress, and state 2's four-field tail.
+//
+//   2. NEGATIVE CONTROL  (+ BANISHED_RT_PREDICT_SELFTEST=1)
+//        wrong=3, and the site reports "self-test caught (the comparison can go
+//        red)". The two named catches are `_progress = 1` and
+//        `Modification::_dirty = 1`. A clean board from a comparison that
+//        CANNOT go red is not a result, and two of the five sites in that run
+//        could not demonstrate a failure — this one could.
+//
+//   3. ORACLE OFF — the port actually driving the load. Predict mode hands the
+//      frame to the DLL, so run 1 never executed this body for real. Run 3 did:
+//      rc=0, empty crash log, and `[TownCensus] LOAD exit` shows the world
+//      restored (19 citizens, 36 herd, 6 residences) from the job THIS body
+//      enqueued.
+//
+// WHAT THOSE THREE RUNS DO NOT COVER, said plainly. The machine had ZERO .pkm
+// mounted and "Auto" records ZERO ModInfo entries, so `Modification::count` was
+// 0 and `saves[sel].modsSize` was 0. State 1's ENTIRE mod half — the clear
+// loop, the path build, the case-insensitive search and the bubble — was
+// COMPILED AND REGISTERED BUT NEVER EXECUTED. Exercising it needs two separate
+// things and neither is free: mods mounted in WinData (for the clear loop and
+// the search), and a save RECORDED while they were mounted (for the reorder;
+// the recorded list is what the loop walks). The second one also collides with
+// reference_mods_off_breaks_save_loading.md, so it wants its own lane and its
+// own copy of the game directory, not a corner of this one.
 // ============================================================================
 void UpdateLoadBody(SaveLoad* self, RtSink& out, RtPredictRound* round) {
     const uint32_t progress = out.ReadU32(&self->_progress);
