@@ -1,0 +1,9 @@
+[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=0000025fcd0b0000, wrapper=00007ff6ffd60464)
+[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=0000025fcd0c0000, wrapper=00007ff6ffd6060e)
+[AllocLock] patches RETIRED for the ported allocator (Allocate=1 Free=1)
+[RtDetour] MemoryAllocator::Allocate[port]: 00007ffca06e6e60 -> 00007ff6ffd9b5d4 (trampoline 0000025fcd0d0000, 13 bytes displaced)
+[RtDetour] MemoryAllocator::Free[port]: 00007ffca06e6c00 -> 00007ff6ffd9b66d (trampoline 0000025fcd0e0000, 12 bytes displaced)
+[RtAllocSwap] ATOMIC SWAP INSTALLED — every Allocate/Free in the process now runs our port under the allocator CS
+[RtAllocSwap] ?Allocate@/?Free@ registrations repointed at the composed (locked) stubs
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+[RtResolveEarly] 0 registry-aware resolves happened before RuntimePortInit() finished. The early-snapshot port-bypass class is NOT LIVE on this path.

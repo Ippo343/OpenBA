@@ -1,0 +1,29 @@
+EFFECTIVENESS CONTROL -- lane ALLOC, 2026-09-08
+run: tools/rt_run.sh alloc_stats -- BANISHED_RT_ALLOC=1 BANISHED_ALLOC_STATS=1
+     BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=60
+exe: 8f035b2c986848a928b954715ac828d9  (2026-09-08 22:06:19), Runtime-x64.dll PRESENT
+rc=0 after 30s.
+
+Transcribed from that run's C:/GOG Games/Banished/standalone_error.log before the
+following control run overwrote it; the full log was not archived, the two arming
+lines below were re-read from the same run and match 5a exactly.
+
+  [RtAlloc] ARMED (atomic swap taken, Runtime-x64.dll present) -- 27 exports registered; the DLL's own Allocate/Free now JMP to our composed stubs.
+  [AllocLock] patches RETIRED for the ported allocator (Allocate=1 Free=1)
+
+Last six [ALLOCSTATS] periodic reports:
+
+  [ALLOCSTATS] live=99 MB (peak 100 MB) totalAllocated=491 MB  allocs=885521 frees=531752 untracked_frees=39 tableFull=1753
+  [ALLOCSTATS] live=99 MB (peak 100 MB) totalAllocated=595 MB  allocs=888210 frees=533436 untracked_frees=39 tableFull=2758
+  [ALLOCSTATS] live=99 MB (peak 100 MB) totalAllocated=700 MB  allocs=890930 frees=535133 untracked_frees=39 tableFull=3756
+  [ALLOCSTATS] live=100 MB (peak 100 MB) totalAllocated=805 MB  allocs=894223 frees=536835 untracked_frees=39 tableFull=4686
+  [ALLOCSTATS] live=100 MB (peak 100 MB) totalAllocated=911 MB  allocs=897312 frees=538547 untracked_frees=39 tableFull=5610
+  [ALLOCSTATS] live=100 MB (peak 100 MB) totalAllocated=1016 MB  allocs=901685 frees=540750 untracked_frees=39 tableFull=6454
+
+WHY THIS IS THE CONTROL AND NOT DECORATION
+AllocStats_RecordAlloc / AllocStats_RecordFree are called from exactly two places:
+allocator_lock.cpp's AllocateLocked/FreeLocked wrappers, and rt_alloc_swap.cpp's
+SwapAllocate/SwapFree. The "patches RETIRED" line above says the wrappers are gone
+for this run, so all 901,685 allocations and 540,750 frees were executed by
+rtalloc::Allocate / rtalloc::Free -- the ported bodies. An armed port reporting
+calls=0 reads green and means nothing; this run rules that out.

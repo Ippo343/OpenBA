@@ -1,0 +1,53 @@
+STRESS RUN  C:/code/GIT/untitled_rev_eng_project/.claude/worktrees/agent-a4dc88fea6f958618/perf/results/20260908_220925_wave10_laneALLOC_redzone/standalone_stress.csv
+  banished stress run 2026-09-08 22:09:58 build=Sep  8 2026 22:03:11
+  citizens=800 sets=3 speed=10 frames=3000 interval=600 seed=31337 map=medium opt=off
+  3000 sim frames in 63s wall, 5 rows (3 steady after 2 warm-up)
+
+  frame    t(s) spd    fps  frame  upd/f  /iter   draw  entities  cit  work home busy  hunger  wsMB
+     600     10  10   90.5   11.1   10.1   1.01   2.94     23457  802     0  800  787    2.80   192
+    1200     23  10   38.4   26.0   18.8   1.88   3.29     23572  802   215  800  794    5.50   204
+    1800     34  10   75.1   13.3   12.0   1.20   3.12     23587  802   215  800  785    8.30   200
+    2400     51  10   42.4   23.6   22.6   2.26   3.23     23636  802   215  800  790    4.90   203
+    3000     63  10   54.5   18.3   15.3   1.53   3.21     23705  802   215  800  783    4.10   206
+
+STEADY STATE
+  sim       1.67 ms per 60Hz iteration   update 16.7 ms/frame (p95 79.0, worst window 22.6) at speed 10
+  phases    EntityList 16.1  CitizenList 0.17  Animation 0.05  PairCache 0.03  Weather 0.04  PostSim 0.14  (ms/frame)
+  render    draw 3.19 ms CPU   frame 18.4 ms (p95 84.4)   57.3 fps (min window 42.4)
+  world     entities 23457 -> 23705   citizens 802 -> 802   employed 215  housed 800  busy 783  hunger 4.10
+  memory    working set 192 -> 207 MB   private 604 -> 614 MB (10.8 MB/min)
+
+COMPONENT UPDATE PROFILE (last window)
+   world#1 frame=3000 window=600 frames  component Update total 4.04 ms/frame
+     EntityList_Update phases ms/frame: drain 4.882  preUpdate 0.004  treeWalk 5.889 (14744 nodes/frame)  buckets 4.068 (300 visits, 300 ticked /frame)
+     CitizenAIComponent                    1.765 ms/frame  43.66%  calls/frame=   150.0  11.7682 us/call
+     AmbientEnvironmentComponent           1.319 ms/frame  32.62%  calls/frame=    79.9  16.5140 us/call
+     CharacterComponent                    0.472 ms/frame  11.68%  calls/frame=   150.3  3.1418 us/call
+     StorageDisplayComponent               0.282 ms/frame   6.97%  calls/frame=     0.5  595.5750 us/call
+     CitizenComponent                      0.131 ms/frame   3.25%  calls/frame=   150.0  0.8761 us/call
+     StateMachineComponent                 0.034 ms/frame   0.83%  calls/frame=    41.6  0.8097 us/call
+     SpawnComponent                        0.017 ms/frame   0.43%  calls/frame=    15.6  1.1209 us/call
+     GrowthComponent                       0.007 ms/frame   0.18%  calls/frame=    16.3  0.4370 us/call
+     AnimalComponent                       0.006 ms/frame   0.14%  calls/frame=     0.3  19.2159 us/call
+     FireComponent                         0.004 ms/frame   0.10%  calls/frame=    38.3  0.1062 us/call
+     PopulationComponent                   0.004 ms/frame   0.09%  calls/frame=     0.1  27.0952 us/call
+
+VS BASELINE  perf/baselines/current.csv
+  banished stress run 2026-09-05 01:43:35 build=Sep  5 2026 00:04:55
+  citizens=800 sets=3 speed=10 frames=6000 interval=600 seed=31337 map=medium opt=on
+  metric                   baseline        now    delta
+  sim ms / iteration           0.19       1.67  +766.4%  REGRESSION
+  update ms / frame            1.92       16.7  +765.9%  REGRESSION
+  update ms p95                2.40       79.0 +3187.1%  REGRESSION
+  draw ms / frame              1.38       3.19  +131.4%  REGRESSION
+  frame ms                     7.21       18.4  +155.5%  REGRESSION
+  fps                           139       57.3   -58.7%  REGRESSION
+    EntityList ms              1.59       16.1  +912.9%  REGRESSION
+    CitizenList ms             0.16       0.17    +5.6%
+    Animation ms               0.04       0.05   +27.0%  REGRESSION
+    PairCache ms               0.00       0.03 +1500.0%  REGRESSION
+    PostSim ms                 0.07       0.14  +104.6%  REGRESSION
+  private MB (end)              595        614    +3.0%
+  private MB / min             4.30       10.8  +150.4%  REGRESSION
+  11 regression(s) over threshold
+  PLAN 5% gate (sim ms/iter): +766.4%  FAIL

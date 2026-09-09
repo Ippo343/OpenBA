@@ -522,3 +522,19 @@ bool InstallFreeLock() {
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// Wave 10 lane ALLOC — put the patches back after a retire that led nowhere.
+// See the header comment for why a refusal AFTER the retire is the dangerous
+// case: it is the free-list race arrived at by way of a safety guard.
+// ---------------------------------------------------------------------------
+bool AllocatorLockRestoreAfterRefusal() {
+    const bool a = InstallAllocatorLock();
+    const bool f = InstallFreeLock();
+    fprintf(stderr, "[AllocLock] patches RE-INSTALLED after the ported allocator "
+            "refused to arm (Allocate=%d Free=%d). The process keeps retail's "
+            "Allocate/Free, locked, exactly as an unarmed run does.\n",
+            a ? 1 : 0, f ? 1 : 0);
+    fflush(stderr);
+    return a && f;
+}
+
