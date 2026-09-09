@@ -36,6 +36,7 @@
 #include "stall_debug.h"
 #include "redzone_alloc.h"
 #include "frame_limiter.h"
+#include "modal_driver.h"
 #include "common.h"
 #include "Object/factory_registration.h"   // DumpSlot3Inventory (BANISHED_DUMP_SLOT3)
 #include "UpdateLoop.h"
@@ -432,6 +433,23 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // is processed in the same frame, and its queued next-loop is picked up by
     // the Stage C poll on a subsequent tick.
     AutoStart::TickMenu(self);
+
+    // Wave 10B lane SHOW: arm the MainLoop+0x90 nested-pump callback (no-op
+    // unless BANISHED_MODAL_DRIVER is set). Armed here because this is the
+    // earliest per-frame tick at which Engine::MainLoop::_singleton is live;
+    // once appended the callback stays in MainLoop's array for the life of the
+    // process, so a single arming covers in-game modals too. See
+    // standalone/modal_driver.cpp.
+    if (ModalDriver::Enabled()) {
+        ModalDriver::Poll();
+        // BANISHED_MODAL_DRIVER_TEST: the twin-subject differential needs the
+        // menu's own UserInterface (MenuDLT +0x38 = DialogInstance, +0x10 = UI).
+        void* menuDlg = *reinterpret_cast<void**>(
+            reinterpret_cast<uintptr_t>(self) + 0x38);
+        if (menuDlg)
+            ModalDriver::RunSelfTest(*reinterpret_cast<void**>(
+                reinterpret_cast<uintptr_t>(menuDlg) + 0x10));
+    }
 
     // Clamp the first tick's dt to ~16ms. Stub_Startup blocks for ~540ms while
     // LoadScene_PhaseA runs synchronously on the main thread; the first

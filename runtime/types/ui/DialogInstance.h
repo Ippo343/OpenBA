@@ -65,7 +65,18 @@
 //   0x18  _dialog            ctor param 2 (Dialog const*)               0x180114870
 //   0x20  _flags             ctor seeds it from _dialog->+0x40;
 //                            ?SetFlagsOnOff@ is `(_flags|on) & ~off`    0x180114690
-//   0x24  _flags2            ctor zeroes it; no ported body reads it    0x180114870
+//   0x24  _flags2            *** MISNAMED. This is the modal RESULT code. ***
+//                            Wave 10B lane SHOW: `?GetResult@DialogInstance@UI@@QEBAHXZ`
+//                            (0x1800455c0) is `MOV EAX,[RCX+0x24]; RET` and
+//                            `?SetDialogResult@DialogInstance@UI@@QEAAXH@Z`
+//                            (0x1800455d0) is `MOV [RCX+0x24],EDX; RET`. It is
+//                            also the value `?ShowDialog@UserInterface@UI@@`
+//                            RETURNS (0x1801202e5), and every MessageDialog
+//                            button writes it (code/Game/Dialog/messagedialog.cpp
+//                            Slot10..13 -> 1/0/2/3). The identifier is left
+//                            alone only to avoid churning another lane's
+//                            dialog_create.cpp mid-wave; rename to `_result`.
+//                            ctor zeroes it                             0x180114870
 //   0x28  _parent            ctor param 3, an InternalPtr<DialogInstance>
 //                            passed BY VALUE, so the ctor takes *param  0x180114870
 //   0x30  _dataSource        ctor param 4 (Object::Base*); the ctor
@@ -200,7 +211,7 @@ struct DialogInstance {
     void*    _ui;                        // +0x10  UI::UserInterface*
     void*    _dialog;                    // +0x18  const UI::Dialog*
     uint32_t _flags;                     // +0x20
-    uint32_t _flags2;                    // +0x24
+    uint32_t _flags2;                    // +0x24  the modal RESULT -- see above
     void*    _parent;                    // +0x28  DialogInstance*
     void*    _dataSource;                // +0x30  Object::Base*
     Collection::LinkedList<RtObject::InternalBasePtr> _children;  // +0x38..0x4f
