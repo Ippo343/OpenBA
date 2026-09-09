@@ -164,6 +164,18 @@ hide a blind screen — `reference_union_control_hides_a_blind_screen.md`):
 rounds. Nothing here is a green board built out of predictions the DLL could satisfy by
 doing nothing.
 
+> **A DEFECT IN THIS LANE'S OWN INSTRUMENT, FOUND AND FIXED BEFORE IT WAS REPORTED
+> ON.** In runs A–E the content oracle registered its verdict with `RtDiffReport`
+> only — and the `[RtDiff]` summary prints under `BANISHED_RT_DIFF`, which is a
+> *different switch* from the `BANISHED_RT_PREDICT` this oracle runs under. So every
+> column of the instrument printed except the one that says whether it **failed**: a
+> board that could not have expressed a failure
+> (`reference_diagnostic_field_cannot_express_the_answer.md`). Runs A–E's content-oracle
+> rows above are therefore evidence of **coverage and effectiveness**, and their
+> zero-divergence status rests on the indirect argument that under self-test the same
+> comparison went red 13/13. The counter is ours now and prints unconditionally
+> (`WRONG=`); the numbers below are the ones taken with it.
+
 > **A caveat stated rather than buried.** 14 rounds is what *our tree* drives, not what
 > the process does. `CacheText` has **ten DLL-internal callers** (`get_xrefs_to
 > 0x18011EC10`), all direct `rel32`, so without a detour they keep running the DLL's
@@ -356,3 +368,33 @@ Registration is **name AND address** for all three new bodies.
    template.
 4. `?CreateInstance@ElementDescription@UI@@…` is the single named thing standing between
    `AddTab`'s oracle and full coverage.
+
+---
+
+## 6. AUDIT RESULTS, INCLUDING TWO BLIND SPOTS THIS LANE MEASURED IN THE AUDITORS
+
+| tool | result |
+|---|---|
+| `tools/port_bypass_audit.py` | **no new bypass.** All 5 findings (3 address, 2 name) pre-date this lane and are in `spritecontext_probe.cpp`, `platform_startup_win.cpp` and `widgets_layout.cpp`. |
+| `tools/addr_door_audit.py` | **no new UNREGISTERED address door.** Both address doors this lane uses (`0x180029A80`, `0x180076900`) are registered; the 16 unregistered are elsewhere. |
+| `tools/unsatisfied_export_scan.py` | 114 unsatisfied of 883. Entered: `??0Dialog@UI@@QEAA@XZ`, `??1Dialog@UI@@UEAA@XZ` — **the same two the census names**, from two independent instruments. |
+| `tools/rawdoor_audit.py` | 692 sites, **2** `UNGUARDED-CALL` — see below. |
+
+**Blind spot 1 — the auditor's guard vocabulary does not include the predict gate.**
+`rawdoor_audit.py` flags `textelement_cachetext.cpp:505` (`RT_ORIGINAL_ONCE(CacheText)`)
+as `UNGUARDED-CALL`. It is not reachable outside `BANISHED_RT_PREDICT`: the function
+returns before it when `RT_PREDICT_ON` is false. The auditor recognises `rt_diff_on__`
+as a guard and not `rt_predict_on__`. Note that it flags **`widgets_layout.cpp:770`**
+— Wave 10's own `UpdateContainers` oracle door, identical in shape — for the same
+reason, so this is a property of the auditor, not of either port. Left as-is rather than
+reshaped to please a checker; the fix belongs in the checker.
+
+**Blind spot 2 — and this one is the interesting half.** `AddTab`'s oracle door is
+`RT_ORIGINAL_ONCE` on the *same* raw-export mechanism, on the same live path, in the
+same commit. **`rawdoor_audit.py` does not see it at all** — because the mangled name is
+long enough that it is written as a **multi-line concatenated string literal**, and the
+scanner matches a literal on one line. Two doors of identical shape: one flagged, one
+invisible, and the only difference is source formatting. This is the multi-line-literal
+blind spot `reference_census_three_blind_spots.md` recorded for `runtime_census.py`,
+alive in a second tool. **Anyone reading `2 UNGUARDED-CALL` as "there are two" is
+reading a number the instrument cannot produce correctly.**

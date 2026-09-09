@@ -351,7 +351,16 @@ RtDiffSite g_textSite = { "UI::TextElement::CacheText [text content vs DLL]" };
 
 struct TextControl {
     uint64_t rounds = 0;
-    uint64_t changed = 0;         // predicted text != the text already cached
+    // *** THE VERDICT, AND IT WAS INVISIBLE IN THE FIRST DRAFT. *** The
+    // divergence was registered with RtDiffReport only, and the [RtDiff]
+    // summary prints under BANISHED_RT_DIFF -- a DIFFERENT switch from the
+    // BANISHED_RT_PREDICT this oracle runs under. So on a predict-only run
+    // every column of this instrument printed except the one that says whether
+    // it FAILED: a board that could not express a failure
+    // (reference_diagnostic_field_cannot_express_the_answer.md). Counted here
+    // and printed unconditionally now.
+    uint64_t wrong = 0;
+    uint64_t changed = 0;        // predicted text != the text already cached
     uint64_t selfTestSeen = 0;
     uint64_t selfTestCaught = 0;
     uint64_t selfTestNotApplicable = 0;
@@ -363,9 +372,10 @@ struct TextControl {
 void TextSummary() {
     std::fprintf(stderr,
         "[UiOracle] TextElement::CacheText content oracle: rounds=%llu "
-        "interned=%llu formatted=%llu changed=%llu/%llu selftest=%llu/%llu "
-        "(n/a %llu)%s\n",
+        "WRONG=%llu interned=%llu formatted=%llu changed=%llu/%llu "
+        "selftest=%llu/%llu (n/a %llu)%s\n",
         (unsigned long long)g_text.rounds,
+        (unsigned long long)g_text.wrong,
         (unsigned long long)g_text.interned,
         (unsigned long long)g_text.formatted,
         (unsigned long long)g_text.changed, (unsigned long long)g_text.rounds,
@@ -524,6 +534,8 @@ extern "C" void RtUi_TextElement_CacheText(void* self) {
                                               : std::strcmp(theirs, g_ourText) == 0);
     if (RtPredict::SelfTestArmed() && g_ourText[0] != '\0' && !equal)
         g_text.selfTestCaught++;
+    else if (!equal)
+        g_text.wrong++;      // a REAL divergence: not a corrupted subject
 
     char oursDesc[160], theirsDesc[160];
     std::snprintf(oursDesc, sizeof(oursDesc), "%s\"%.100s\"",
