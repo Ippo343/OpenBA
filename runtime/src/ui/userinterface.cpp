@@ -11,7 +11,7 @@
 //   | Export (short form)         | Retail      | Ord  | Ported | Oracle    |
 //   |-----------------------------|-------------|------|--------|-----------|
 //   | ??0UserInterface (ctor)     | 0x180120de0 |  471 | yes    | twin      |
-//   | ??1UserInterface (dtor)     | 0x180120b90 |  705 | NO     | —         |
+//   | ??1UserInterface (dtor)     | 0x180120b90 |  705 | W10-UIF| twin      |
 //   | ?AddDialog@                 | 0x180120ee0 | 1546 | W9-Z   | none      |
 //   | ?BringDialogToFront@ (V)    | 0x180120440 | 1672 | NO     | —         |
 //   | ?CloseDialog@ (V)           | 0x180120f20 | 1725 | NO     | —         |
@@ -23,7 +23,7 @@
 //   | ?GetFirstDialog@            | 0x180031150 | 2670 | yes    | replay    |
 //   | ?PausesGame@                | 0x18011fa10 | 3317 | yes    | replay    |
 //   | ?Play@                      | 0x1801223d0 | 3418 | W9-Z   | none      |
-//   | ?SaveAllSettings@           | 0x1801204b0 | 3608 | NO     | —         |
+//   | ?SaveAllSettings@           | 0x1801204b0 | 3608 | W10-UIF| replay+twin|
 //   | ?SetCursor@                 | 0x1801225f0 | 3865 | W9-Z   | none      |
 //
 // `W9-Z` = ported by Wave 9 lane Z as a NO-ORACLE port, for the cutover. See
@@ -225,9 +225,12 @@
 // CRITICAL_SECTION or talks to a device.
 // ============================================================================
 
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "io/Stream.h"          // WAVE 10 LANE UIF — SaveAllSettings' MemoryStream
 #include "ui/UserInterface.h"
 
 // ----------------------------------------------------------------------------
@@ -287,6 +290,8 @@ const char* const kGetFirstCont    =
 const char* const kPausesGame      = "?PausesGame@UserInterface@UI@@QEBA_NXZ";
 const char* const kSetFade         = "?SetFullscreenFade@UserInterface@UI@@QEAAX_NI0@Z";
 const char* const kSetFadeSprite   = "?SetFullscreenFadeSprite@UserInterface@UI@@QEAAXVSprite@2@@Z";
+// WAVE 10 LANE UIF. Oracle lookup only; the registration repeats the literal.
+const char* const kSaveAllSettings = "?SaveAllSettings@UserInterface@UI@@QEAAXXZ";
 
 // ============================================================================
 // The replay oracle
@@ -338,6 +343,25 @@ inline UserInterface* ReplaySnapshot(bool on, const UserInterface* live) {
 // comparison happens beside it and touches nothing the caller owns.
 alignas(16) uint8_t g_ctorOurs[kUiSize];
 alignas(16) uint8_t g_ctorTheirs[kUiSize];
+
+// WAVE 10 LANE UIF. Defined at the bottom of this file; forward-declared here
+// because it is TRIGGERED FROM THE CONSTRUCTOR and not from registration.
+//
+// ⚠ THIS PLACEMENT IS LOAD-BEARING AND IT WAS MEASURED, NOT GUESSED. The first
+// version of this lane called it from `RtUiManagerRegister()` and the process
+// died there, every time:
+//
+//     Exception 0xC0000005  Fault: WRITE of 0x0000000000000648
+//     RCX=0000000000000640   [REDZONE-DUMP] no allocator singleton
+//
+// `RuntimePortInit()` runs long before `Engine::Startup` creates the allocator,
+// so `System::MemoryAllocator::_singleton` is still NULL and retail's
+// `EnterCriticalSection(_singleton + 0x640)` writes to address 0x648. Any
+// oracle that needs the HEAP must therefore run from a live call site, not from
+// a registration function. The constructor is the earliest one this class has,
+// and every `UI::UserInterface` in the process goes through it.
+void VerifyUserInterfaceDtorTwin();
+void VerifySaveAllSettingsTwin();   // same trigger, same reason
 
 } // namespace
 
@@ -411,6 +435,16 @@ extern "C" void* RtUi_UserInterface_Ctor(UserInterface* self) {
             RtDiffReport(&rt_diff_site__, false,
                          "ours returns this", "theirs did NOT return this");
         RT_DIFF_BYTES(g_ctorOurs, g_ctorTheirs, kUiSize);
+
+        // WAVE 10 LANE UIF: the destructor's twin-synthetic oracle, run ONCE
+        // from the first constructed UserInterface. See the forward
+        // declaration above for why it cannot run at registration time.
+        static bool twinDone = false;
+        if (!twinDone) {
+            twinDone = true;
+            VerifyUserInterfaceDtorTwin();
+            VerifySaveAllSettingsTwin();
+        }
     }
     return self;
 }
@@ -1046,6 +1080,991 @@ extern "C" void RtUi_UserInterface_BringDialogToFront(UserInterface* self,
     RT_DIFF_WORK(true);
 }
 
+// ============================================================================
+// WAVE 10 LANE UIF — ??1UserInterface@UI@@QEAA@XZ   0x180120b90  ord 705
+// ============================================================================
+//
+// WHY THIS ROW IS OPEN NOW AND WAS NOT BEFORE. Wave 7 lane C held it back with
+// three reasons, quoted at the top of this file: "Win32 in a non-_win file, the
+// Wave 2 allocator (NO-GO), and no oracle: a destructor runs once." All three
+// are answered rather than waived:
+//
+//   * WIN32. Retail INLINES `EnterCriticalSection` / `MemoryAllocator::Free`
+//     (0x1800c6c00) / `LeaveCriticalSection` at all four of this body's frees.
+//     The port calls the exported STATIC `?MemFree@MemoryAllocator@System@@
+//     SAXPEAX@Z` (0x1800c7ad0), which is the out-of-line spelling of exactly
+//     that inline — the same substitution `??1DialogInstance@` already makes in
+//     runtime/src/ui/dialog.cpp, and it keeps <windows.h> out of this file
+//     (PLAN §4.1 decision 1) while taking the SAME critical section.
+//   * THE ALLOCATOR NO-GO. Opened by Wave 10 lane ALLOC
+//     (docs/runtime_port/WAVE10_LANE_ALLOC.md): `BANISHED_RT_ALLOC=1` now arms
+//     with Runtime-x64.dll PRESENT, 27 exports registered and the atomic swap
+//     taken, so there is ONE heap whether or not the flag is set. Note what
+//     this port actually needs from that: it does NOT need the flag. It frees
+//     through whichever `MemFree` is live, and the blocks it frees were
+//     allocated through the same one. The flag is a variable this lane's runs
+//     sweep, not a dependency this body has.
+//   * "A DESTRUCTOR RUNS ONCE" — true, and it rules out a REPLAY. It does not
+//     rule out an oracle. See the twin-synthetic oracle below, which builds two
+//     byte-identical synthetic subjects out of the real allocator, runs OUR
+//     body on one and the SHIPPED body on the other, and compares both the
+//     0x128-byte object and the ORDERED LOG of destructor dispatches.
+//
+// LANE ALLOC'S ONE STILL-STANDING CAVEAT DOES NOT REACH THIS ROW. Its §6 says
+// "do NOT arm `Shutdown`/`~MemoryAllocator` into lane N's open teardown crash".
+// That is the ALLOCATOR'S OWN teardown pair. `~UserInterface` is a client of the
+// allocator, not part of it: it takes the allocator's lock and returns blocks,
+// which the allocator has been doing for 900k operations per 30 s run under the
+// armed configuration (lane ALLOC §5b). Nothing here arms `Shutdown`.
+//
+// ---------------------------------------------------------------------------
+// THE BODY, from the disassembly at 0x180120b90 (0x243 bytes, tail-JMP at
+// 0x180120dd2). Four phases:
+//
+//   1. For each of the `_removedDialogs[i]` (i < _removedDialogs._size):
+//        find the `_dialogs` node whose element is that dialog; unlink it from
+//        head/tail/prev/next, null the node's own two links, `--_count`, and
+//        FREE THE NODE. Then re-read `_removedDialogs._data` (retail re-loads
+//        it at 0x180120c74, AFTER the free) and, unless the dialog's flag bit 5
+//        is set, run its deleting destructor and null the array slot.
+//   2. Walk whatever is LEFT of `_dialogs` and run each remaining dialog's
+//        deleting destructor, nulling the node's element. THE NODES ARE NOT
+//        FREED HERE — phase 4 does that.
+//   3. Free `_events._data` (+0x48), then `_addDialogs._data` (+0x28), then
+//        `_removedDialogs._data` (+0x18), zeroing each pointer AND the qword
+//        that follows it (size+capacity together) in that order.
+//   4. TAIL-JMP to `Collection::LinkedList<8>::Clear` (0x1800325f0), which
+//        frees the surviving nodes and zeroes head/tail/count.
+//
+// TWO TRANSCRIPTION TRAPS, both taken from the DISASSEMBLY and not from the
+// decompiled C (reference_ghidra_c_output_vs_disassembly.md):
+//
+//   (a) THE FLAG WORD IS READ BEFORE THE NULL TEST, in both loops:
+//           180120c78  MOV RAX,[RBX+R14]        ; the dialog
+//           180120c7c  MOV ECX,[RAX+0x20]       ; <-- deref
+//           180120c8c  TEST RAX,RAX             ; <-- null test, AFTER
+//       This is an unguarded deref that retail relies on. It is reproduced in
+//       that order. CLAUDE.md's rule applies: a null there is an upstream bug,
+//       and a guard would not restore the behaviour, it would skip it.
+//   (b) `_removedDialogs._data` IS RE-READ after the node free (0x180120c74),
+//       so a body that caches it across the free is wrong in exactly the way a
+//       reallocating allocator would expose. The port re-reads.
+//
+// EVERY CALLEE IS SATISFIED, so this row CLOSES rather than moving one frame
+// deeper:
+//   * 0x1800c7ad0 `MemFree`                — ported, Wave 9 lane Q
+//   * 0x1800325f0 `LinkedList<8>::Clear`   — ported, runtime/src/collection/
+//                                            linkedlist.cpp:334
+//   * vtable slot 0 of each dialog         — the deleting destructor, which is
+//                                            the DLL's (or the mint's) and is
+//                                            not ours to satisfy either way.
+// ---------------------------------------------------------------------------
+
+// The negative-control knob itself, at file scope so both this file and
+// runtime/src/ui/dialog.cpp read ONE value. `std::getenv` is cached
+// process-wide (standalone/env_cache.h), and the result is cached again here.
+extern "C" int RtUiUifNegCtrl() {
+    static int v = -1;
+    if (v < 0) {
+        const char* e = std::getenv("BANISHED_UIF_NEGCTRL");
+        v = (e && e[0]) ? std::atoi(e) : 0;
+    }
+    return v;
+}
+
+namespace {
+
+// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` 0x1800c7ad0 — retail's four
+// inlined lock+Free sequences, out of line. Reached through the PORT-AWARE door
+// so that lane E's port of it is what runs when it is registered.
+using UiVoidPtrFn = void (*)(void*);
+inline void UiMemFree(void* p) {
+    RT_EXPORT_ONCE(UiVoidPtrFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+}
+
+// 0x1800325f0 — `Collection::LinkedList<T=8>::Clear`. UNEXPORTED, so the
+// address door is the only one; port-aware, so `BANISHED_RT_LINKEDLIST=0` still
+// routes it to the DLL exactly as runtime/src/ui/dialog.cpp's copy does.
+inline void UiListClear(void* list) {
+    static UiVoidPtrFn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<UiVoidPtrFn>(
+        ResolveAddr(Module::Runtime, 0x1800325f0));
+    if (fn) fn(list);
+}
+
+// Slot 0 of any Object::Base-derived vtable is the scalar deleting destructor;
+// retail calls it with EDX = 1 ("destruct AND free").
+using UiDeletingDtorFn = void (*)(void* self, int flags);
+inline UiDeletingDtorFn UiDeletingDtorOf(void* obj) {
+    return reinterpret_cast<UiDeletingDtorFn>((*reinterpret_cast<void***>(obj))[0]);
+}
+
+// ---- the NEGATIVE CONTROL knob ---------------------------------------------
+// `BANISHED_UIF_NEGCTRL=<n>` deliberately breaks ONE thing in one of this
+// lane's three ports, so that the three twin oracles can be shown to CATCH a
+// defect rather than merely to report zero. A green oracle that has never
+// failed is an untested instrument, and this project has paid for that twice
+// (reference_probe_needs_an_effectiveness_control.md, and
+// reference_control_must_pick_a_compared_subject.md on choosing a subject the
+// comparison actually looks at — each of the three below is chosen inside the
+// compared extent, not beside it).
+//
+//   1  ~UserInterface        ignore the dialog's flag bit 5, so the dialog a
+//                            nested ShowDialog UI owns is destroyed anyway.
+//                            Must show up in the twin's ORDERED LOG.
+//   2  CreateInstance        (runtime/src/ui/dialog.cpp) drop the _id/_tabOrder
+//                            crossover. Must show up in the BYTE compare.
+//   3  SaveAllSettings       skip the cursor advance past the 0xdeadbeef magic.
+//                            Must show up in the SETTINGS BUFFER compare.
+//
+// Unset (the normal case) every one of these is a compile-time-visible no-op
+// branch on a value read once.
+// Defined below at file scope so runtime/src/ui/dialog.cpp's CreateInstance can
+// use the same knob for control 2.
+inline int UifNegCtrl() { return RtUiUifNegCtrl(); }
+
+// The body, factored out so the twin oracle can run OUR implementation on a
+// synthetic subject without re-entering the diff wrapper.
+void UiDtorBody(UserInterface* self) {
+    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+
+    // ---- phase 1 ----------------------------------------------------------
+    if (*reinterpret_cast<int32_t*>(p + 0x20) > 0) {
+        int32_t  i   = 0;
+        uint64_t off = 0;
+        do {
+            uint8_t* removed = *reinterpret_cast<uint8_t**>(p + 0x18);
+            uint8_t* head    = *reinterpret_cast<uint8_t**>(p + 0x00);
+            uint8_t* node    = head;
+            if (node) {
+                void* want = *reinterpret_cast<void**>(removed + off);
+                for (;;) {
+                    if (*reinterpret_cast<void**>(node) == want) {
+                        if (node == head)
+                            *reinterpret_cast<void**>(p + 0x00) =
+                                *reinterpret_cast<void**>(node + 0x10);
+                        if (node == *reinterpret_cast<uint8_t**>(p + 0x08))
+                            *reinterpret_cast<void**>(p + 0x08) =
+                                *reinterpret_cast<void**>(node + 0x08);
+                        if (uint8_t* prev = *reinterpret_cast<uint8_t**>(node + 0x08))
+                            *reinterpret_cast<void**>(prev + 0x10) =
+                                *reinterpret_cast<void**>(node + 0x10);
+                        if (uint8_t* next = *reinterpret_cast<uint8_t**>(node + 0x10))
+                            *reinterpret_cast<void**>(next + 0x08) =
+                                *reinterpret_cast<void**>(node + 0x08);
+                        *reinterpret_cast<void**>(node + 0x08) = nullptr;
+                        *reinterpret_cast<void**>(node + 0x10) = nullptr;
+                        --*reinterpret_cast<int32_t*>(p + 0x10);
+                        UiMemFree(node);
+                        break;
+                    }
+                    node = *reinterpret_cast<uint8_t**>(node + 0x10);
+                    if (!node) break;
+                }
+            }
+
+            // RE-READ, at 0x180120c74, after the free. See trap (b).
+            uint8_t* rd  = *reinterpret_cast<uint8_t**>(p + 0x18);
+            uint8_t* dlg = *reinterpret_cast<uint8_t**>(rd + off);
+            // Trap (a): the flag word is read BEFORE the null test, as retail
+            // does. Kept in that order deliberately.
+            const uint32_t flags = *reinterpret_cast<uint32_t*>(dlg + 0x20);
+            if (((~static_cast<uint8_t>(flags >> 5)) & 1) != 0 && dlg != nullptr) {
+                UiDeletingDtorOf(dlg)(dlg, 1);
+                *reinterpret_cast<void**>(rd + off) = nullptr;
+            }
+
+            ++i;
+            off += 8;
+        } while (i < *reinterpret_cast<int32_t*>(p + 0x20));
+    }
+
+    // ---- phase 2 ----------------------------------------------------------
+    for (uint8_t* node = *reinterpret_cast<uint8_t**>(p + 0x00); node;
+         node = *reinterpret_cast<uint8_t**>(node + 0x10)) {
+        uint8_t* dlg = *reinterpret_cast<uint8_t**>(node);
+        const uint32_t flags = *reinterpret_cast<uint32_t*>(dlg + 0x20);
+        if (((~static_cast<uint8_t>(flags >> 5)) & 1) != 0 && dlg != nullptr) {
+            UiDeletingDtorOf(dlg)(dlg, 1);
+            *reinterpret_cast<void**>(node) = nullptr;
+        }
+    }
+    if (UifNegCtrl() == 1) {
+        // NEGATIVE CONTROL 1 — destroy the bit-5 dialogs phase 1 deliberately
+        // skipped. The twin's ordered log must change.
+        for (int i = 0; i < *reinterpret_cast<int32_t*>(p + 0x20); ++i) {
+            uint8_t** rd = *reinterpret_cast<uint8_t***>(p + 0x18);
+            if (rd && rd[i]) UiDeletingDtorOf(rd[i])(rd[i], 1);
+        }
+    }
+
+    // ---- phase 3 ----------------------------------------------------------
+    // Retail's order is events, addDialogs, removedDialogs, and each pair of
+    // stores is two QWORDs — the second covers `_size` AND `_capacity`.
+    if (void* ev = *reinterpret_cast<void**>(p + 0x48)) UiMemFree(ev);
+    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;
+
+    if (void* ad = *reinterpret_cast<void**>(p + 0x28)) UiMemFree(ad);
+    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;
+
+    if (void* rm = *reinterpret_cast<void**>(p + 0x18)) UiMemFree(rm);
+    *reinterpret_cast<uint64_t*>(p + 0x18) = 0;
+    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;
+
+    // ---- phase 4: the tail JMP -------------------------------------------
+    UiListClear(p);
+}
+
+} // namespace
+
+extern "C" void RtUi_UserInterface_Dtor(UserInterface* self) {
+    RT_DIFF_BEGIN("UI::UserInterface::~UserInterface [liveness]");
+    // `worked` is the only thing a LIVE call can report: there is no comparison
+    // to make against a destructor that runs once, so `calls=` stays 0 here on
+    // purpose and the CORRECTNESS evidence is the twin oracle below, which runs
+    // from RtUiManagerRegister. reference_calls_zero_can_mean_always_took_the_
+    // uncovered_branch.md: this is the "no comparison exists" cause of calls=0,
+    // and it is named here rather than left for a reader to guess.
+    const bool didWork = (*reinterpret_cast<int32_t*>(
+                              reinterpret_cast<uint8_t*>(self) + 0x20) > 0) ||
+                         (*reinterpret_cast<void**>(self) != nullptr);
+    UiDtorBody(self);
+    RT_DIFF_WORK(didWork);
+}
+
+// ============================================================================
+// THE TWIN-SYNTHETIC ORACLE for ??1UserInterface
+// ============================================================================
+// reference_synthetic_subject_beats_a_fake.md. A destructor cannot be replayed,
+// but it CAN be run twice on two subjects that are identical by construction —
+// and unlike the ctor's twin oracle above, this one needs a whole object GRAPH,
+// not just 0x128 poisoned bytes. So the harness builds one:
+//
+//   * 5 synthetic dialogs, 0x28 bytes each, out of the REAL allocator
+//     (`?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z`), so the frees this body
+//     performs are frees the live allocator accepts. Each carries a one-entry
+//     fake vtable whose slot 0 is a RECORDER, not a destructor: it appends
+//     `d<idx>(<edx>)` to the current side's log and returns. That is what makes
+//     the dispatch sequence comparable at all — a real deleting destructor
+//     would free the subject and leave nothing to compare.
+//   * a 4-node `_dialogs` list over d0..d3, and a `_removedDialogs` array of
+//     [d1, d0, d4, d3].
+//
+// The population is chosen to hit every branch in the body ONCE, which is the
+// effectiveness control this instrument needs (reference_probe_needs_an_
+// effectiveness_control.md — a green comparison over a population that never
+// entered the interesting branch is not a verification):
+//
+//   d1  a MIDDLE node          -> both `prev` and `next` relink arms
+//   d0  the HEAD node          -> the `node == head` arm
+//   d4  NOT IN THE LIST        -> the search falls off the end, AND its flag
+//                                 bit 5 is SET, so its destructor must NOT run
+//   d3  the TAIL node          -> the `node == tail` arm
+//   d2  left in the list       -> phase 2 runs, and `*node = 0` is compared
+//
+// so the expected log is exactly `d1(1) d0(1) d3(1) d2(1) ` and a port that
+// destroyed d4, or that visited the list in the wrong order, or that took the
+// head/tail arms wrongly, produces a different string. That expected string is
+// asserted as well as compared, so "both sides did nothing" cannot read green.
+//
+// WHAT THE COMPARISON COVERS: all 0x128 bytes of the object (both sides start
+// from the SAME 0x5A poison, so the ~200 bytes neither implementation touches
+// are equal by construction rather than by luck —
+// reference_oracle_must_not_compare_unwritten_bytes.md), plus the ordered
+// destructor-dispatch log.
+//
+// WHAT IT DOES NOT COVER, stated rather than left implicit: the IDENTITY of the
+// blocks handed to `MemFree`. Each side frees its OWN nodes and arrays, at
+// different addresses, so the freed pointers are not comparable between sides.
+// A wrong pointer passed to `MemFree` is caught by a DIFFERENT instrument —
+// `BANISHED_REDZONE=watch` over a stress town — and docs/runtime_port/
+// WAVE10_LANE_UIF.md records that run rather than letting this site imply it.
+namespace {
+
+struct UiTwinSide {
+    UserInterface* ui;
+    void*          dlg[5];
+    char           log[160];
+    int            logLen;
+};
+
+UiTwinSide* g_uiTwinCur = nullptr;
+
+// The fake vtable's slot 0. Signature is retail's deleting-destructor ABI.
+void UiTwinRecordDtor(void* self, int flags) {
+    UiTwinSide* s = g_uiTwinCur;
+    if (!s) return;
+    int idx = -1;
+    for (int i = 0; i < 5; ++i) if (s->dlg[i] == self) idx = i;
+    if (s->logLen < static_cast<int>(sizeof(s->log)) - 16) {
+        s->logLen += std::snprintf(s->log + s->logLen,
+                                   sizeof(s->log) - s->logLen,
+                                   "d%d(%d) ", idx, flags);
+    }
+}
+
+void* g_uiTwinVtbl[1] = { reinterpret_cast<void*>(&UiTwinRecordDtor) };
+
+inline void* UiMemAlloc(size_t n, int align) {
+    using Fn = void* (*)(size_t, int);
+    return RT_EXPORT_ONCE(Fn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(n, align);
+}
+
+bool UiTwinBuild(UiTwinSide& s) {
+    s.logLen = 0;
+    s.log[0] = '\0';
+    s.ui = static_cast<UserInterface*>(UiMemAlloc(kUiSize, 16));
+    if (!s.ui) return false;
+    // The SAME poison on both sides: every byte this body never writes must
+    // compare equal by construction.
+    std::memset(s.ui, 0x5A, kUiSize);
+    uint8_t* p = reinterpret_cast<uint8_t*>(s.ui);
+
+    for (int i = 0; i < 5; ++i) {
+        uint8_t* d = static_cast<uint8_t*>(UiMemAlloc(0x28, 8));
+        if (!d) return false;
+        std::memset(d, 0, 0x28);
+        *reinterpret_cast<void**>(d) = g_uiTwinVtbl;
+        // d4 is the one whose bit 5 is SET — "a nested ShowDialog UI owns it",
+        // so its destructor must NOT run.
+        *reinterpret_cast<uint32_t*>(d + 0x20) = (i == 4) ? (1u << 5) : 0u;
+        s.dlg[i] = d;
+    }
+
+    uint8_t* n[4];
+    for (int i = 0; i < 4; ++i) {
+        n[i] = static_cast<uint8_t*>(UiMemAlloc(0x18, 8));
+        if (!n[i]) return false;
+        std::memset(n[i], 0, 0x18);
+        *reinterpret_cast<void**>(n[i]) = s.dlg[i];
+    }
+    for (int i = 0; i < 4; ++i) {
+        *reinterpret_cast<void**>(n[i] + 0x08) = (i > 0) ? n[i - 1] : nullptr;
+        *reinterpret_cast<void**>(n[i] + 0x10) = (i < 3) ? n[i + 1] : nullptr;
+    }
+    *reinterpret_cast<void**>(p + 0x00)    = n[0];   // _dialogs._head
+    *reinterpret_cast<void**>(p + 0x08)    = n[3];   // _dialogs._tail
+    *reinterpret_cast<int32_t*>(p + 0x10)  = 4;      // _dialogs._count
+    *reinterpret_cast<uint32_t*>(p + 0x14) = 0;      // the pad, identical both sides
+
+    void** rem = static_cast<void**>(UiMemAlloc(4 * 8, 8));
+    if (!rem) return false;
+    rem[0] = s.dlg[1];  rem[1] = s.dlg[0];  rem[2] = s.dlg[4];  rem[3] = s.dlg[3];
+    *reinterpret_cast<void**>(p + 0x18)   = rem;
+    *reinterpret_cast<int32_t*>(p + 0x20) = 4;
+    *reinterpret_cast<int32_t*>(p + 0x24) = 4;
+
+    void** add = static_cast<void**>(UiMemAlloc(8, 8));
+    if (!add) return false;
+    add[0] = nullptr;
+    *reinterpret_cast<void**>(p + 0x28)   = add;
+    *reinterpret_cast<int32_t*>(p + 0x30) = 0;
+    *reinterpret_cast<int32_t*>(p + 0x34) = 1;
+
+    void* ev = UiMemAlloc(0x30, 16);
+    if (!ev) return false;
+    std::memset(ev, 0, 0x30);
+    *reinterpret_cast<void**>(p + 0x48)   = ev;
+    *reinterpret_cast<int32_t*>(p + 0x50) = 0;
+    *reinterpret_cast<int32_t*>(p + 0x54) = 1;
+
+    // Everything from +0x38 up (bar the +0x48 array just written) is left as
+    // poison: this body never reads or writes it, and both sides hold the same
+    // bytes, so it is part of the COMPARED extent rather than excluded from it.
+    return true;
+}
+
+void VerifyUserInterfaceDtorTwin() {
+    if (!RtDiffEnabled()) return;
+    static RtDiffSite site = { "UI::UserInterface::~UserInterface [twin synthetic]" };
+    RtDiffRegister(&site);
+
+    UiTwinSide a{}, b{};
+    if (!UiTwinBuild(a) || !UiTwinBuild(b)) {
+        RtDiffReport(&site, false, "twin subjects built",
+                     "allocator refused a synthetic block");
+        return;
+    }
+
+    // RT_RAW_OK: the ORACLE half must reach the SHIPPED body, never our own
+    // registration — WAVE9_LANE_FNHOOK.md's thirteen self-comparing detours.
+    using Fn = void (*)(UserInterface*);
+    Fn theirs = reinterpret_cast<Fn>(ResolveExportRaw("??1UserInterface@UI@@QEAA@XZ"));
+    if (!theirs) {
+        RtDiffReport(&site, false, "twin subjects built",
+                     "shipped ??1UserInterface not resolvable");
+        return;
+    }
+
+    g_uiTwinCur = &a;  UiDtorBody(a.ui);
+    g_uiTwinCur = &b;  theirs(b.ui);
+    g_uiTwinCur = nullptr;
+
+    const bool logEq      = (std::strcmp(a.log, b.log) == 0);
+    const bool ranBranches = (std::strcmp(a.log, "d1(1) d0(1) d3(1) d2(1) ") == 0);
+
+    char ours[256], them[256];
+    std::snprintf(ours, sizeof(ours),
+                  "log=[%s] expected=[d1(1) d0(1) d3(1) d2(1) ]", a.log);
+    std::snprintf(them, sizeof(them), "log=[%s]", b.log);
+    RtDiffReport(&site, logEq && ranBranches, ours, them);
+
+    RtDiffReportBytes(&site, a.ui, b.ui, kUiSize);
+
+    // The subjects' own storage: the nodes and the three arrays were freed by
+    // the bodies under test; the dialogs were not (the recorder is not a
+    // destructor) and neither were the two UserInterface objects.
+    for (int i = 0; i < 5; ++i) { UiMemFree(a.dlg[i]); UiMemFree(b.dlg[i]); }
+    UiMemFree(a.ui);
+    UiMemFree(b.ui);
+}
+
+} // namespace
+
+// ============================================================================
+// WAVE 10 LANE UIF — ?SaveAllSettings@UserInterface@UI@@QEAAXXZ
+//                                                 0x1801204b0  ord 3608
+// ============================================================================
+//
+// "Serialize every open dialog's settings into that dialog's OWN settings
+// buffer." It is a PURE SIDE EFFECT: it returns void, it touches no field of
+// the UserInterface, and everything it does lands in memory somebody else owns.
+// reference_port_must_reproduce_side_effects.md is the whole risk here, and it
+// is why the oracle below diffs the BUFFERS and not the object.
+//
+// WHY IT WAS BLOCKED AND WHY IT IS NOT NOW. Wave 7 lane C's one-line reason was
+// "Builds an IO::MemoryStream and serialises every dialog's settings.
+// Allocates, frees, and writes persisted state." Two of those three are the
+// allocator NO-GO, retired by Wave 10 lane ALLOC. The third — "writes persisted
+// state" — turned out to be the thing that MAKES it verifiable rather than the
+// thing that blocks it: nothing here reaches a file. `SaveAllSettings` writes
+// into `DialogInstance::_userData` (+0xa8), a caller-owned byte buffer whose
+// length is `+0xb0`. A buffer can be snapshotted, restored and re-written; a
+// file handle cannot. reference_write_path_serialize_is_replayable.md, for the
+// fifth time in this project.
+//
+// ---------------------------------------------------------------------------
+// THE TWO FIELDS AT +0xa8/+0xb0 ARE NOT WHAT DialogInstance.h CALLS THEM
+// ---------------------------------------------------------------------------
+// runtime/types/ui/DialogInstance.h names them `_userData` (void*) and
+// `_userFlags` (int) — correctly, from the CONSTRUCTOR, where they are
+// parameters 5 and 6. This body reads them as `(settingsBuffer, byteCount)`:
+//
+//     1801204f8  CMP qword ptr [R14 + 0xa8],0x0   ; skip the dialog if null
+//     1801205ae  MOV EAX,dword ptr [R14 + 0xb0]   ; -> MemoryStream::size
+//     1801205b5  MOV RDX,qword ptr [R14 + 0xa8]   ; -> MemoryStream::data
+//     1801205d4  MOV dword ptr [RDX],0xdeadbeef   ; a MAGIC written INTO it
+//
+// Both readings are of the same two words. This port does not rename lane B's
+// fields — it reads them at their offsets and records here what this caller
+// means by them, which is the honest form when two callers disagree.
+//
+// ---------------------------------------------------------------------------
+// THE BODY, from the disassembly at 0x1801204b0 (0x2fb bytes). Per dialog in
+// `_dialogs`, skipping any whose +0xa8 is null:
+//
+//   1. Construct an `IO::MemoryStream` ON THE STACK, inlined. Its layout is
+//      already recovered and static_assert'ed in runtime/types/io/Stream.h and
+//      every offset this body uses agrees with it field for field:
+//        vptr = ??_7Stream@IO@@6B@ (0x1801549a0); direction = 0; encoding = 0;
+//        vptr = ??_7MemoryStream@IO@@6B@ (0x1801555b0); data = 0; ownsData = 0;
+//        cursor:size = 0 (one qword covering +0x24 and +0x28).
+//   2. Allocate an 8-byte `IO::Encoding` (`Allocate(_singleton, 8, 4)` under the
+//      allocator's critical section) and stamp the SHARED, UNEXPORTED encoding
+//      vtable 0x1801554a8 into it. If the allocation fails retail carries on
+//      with a NULL encoding — reproduced. The old `stream.encoding` is freed
+//      first (always null here; the store order is retail's).
+//   3. `data = dialog->+0xa8; size = dialog->+0xb0; cursor = 0; direction = 1`.
+//      Then, IF `size >= 4`, write the literal `0xdeadbeef` at buffer offset 0
+//      and advance `cursor` to 4. The magic is the settings blob's header.
+//   4. Build a stack `IO::Serializer` {&stream, nullptr} and ask the encoding
+//      for a ReaderWriter: slot +0x20 (`CreateWriter`) when `direction != 0`,
+//      slot +0x18 (`CreateReader`) otherwise. `direction` is 1 by step 3, so
+//      the reader arm is DEAD in this function — transcribed anyway, because
+//      the branch is in the shipped bytes (0x1801205f4).
+//   5. `dialog->vtbl[+0x48](dialog, &stream)` — the dialog's own
+//      OnSerializeSettings, taking the raw Stream.
+//   6. `count = dialog->+0x80` (the `_controllers` array size), serialized
+//      through `rw->vtbl[+0xa0]` (`ScalarInt`, runtime/types/io/Serializer.h's
+//      `rw_vtbl` table). Then for each controller in `dialog->+0x78`:
+//        id = ctl->vtbl[+0x10](ctl);        rw->vtbl[+0x98](rw, &id, nullptr);
+//        a SECOND, throw-away ReaderWriter over the SAME stream;
+//        ctl->vtbl[+0x50](ctl, &stream);    then delete that ReaderWriter.
+//      The controller pointer is RE-READ from +0x78 after the ReaderWriter is
+//      created (0x1801206a1), not cached across it — transcribed.
+//   7. Delete the top-level ReaderWriter, then run the inlined
+//      `~MemoryStream`: `if (ownsData && data) MemFree(data)` — DEAD here,
+//      `ownsData` is never set — and `if (encoding) MemFree(encoding)`.
+//
+// EVERY CALLEE IS SATISFIED — the admission test:
+//   * `MemAlloc`/`MemFree` (0x1800c7a50 / 0x1800c7ad0)  — ported, lane Q, and
+//     they are the out-of-line spelling of retail's four inlined
+//     lock+Allocate/Free sequences (the same substitution `??1DialogInstance@`
+//     makes in runtime/src/ui/dialog.cpp).
+//   * `??_7Stream@IO@@6B@` / `??_7MemoryStream@IO@@6B@` — both EXPORTED data
+//     rows, taken out of the DLL's own table rather than minted.
+//   * the shared encoding vtable 0x1801554a8 — UNEXPORTED, so the address door
+//     is the only one, exactly as runtime/src/io/compressedstream.cpp:800
+//     already reaches it; lane C2 mints that row by address.
+//   * encoding slots +0x18/+0x20 (`CreateReader`/`CreateWriter`, 0x1800a8120 /
+//     0x1800a8080) — both PORTED in runtime/src/io/encoding.cpp.
+//   * the dialog's +0x48 and each controller's +0x10/+0x50/+0x00 — virtuals on
+//     objects we do not own, unchanged by this port either way.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// The two EXPORTED IO vtables, through the never-caches-a-null data door.
+inline const void* VtblIoStream() {
+    return RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");          // 0x1801549a0
+}
+inline const void* VtblIoMemoryStream() {
+    return RT_DATA_SLOT(const void*, "??_7MemoryStream@IO@@6B@");    // 0x1801555b0
+}
+// The shared IO::Encoding vtable. UNEXPORTED — the address door is the only
+// one, and it is PORT-AWARE, so lane C2's mint satisfies it at cutover.
+inline void* VtblIoEncoding() {
+    static void* v = nullptr;
+    if (!v) v = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801554a8ull));
+    return v;
+}
+
+inline void* UiMemAllocA(size_t n, int align) {
+    using Fn = void* (*)(size_t, int);
+    return RT_EXPORT_ONCE(Fn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(n, align);
+}
+
+// `IO::Serializer` — {Stream*, ReaderWriter*}, 0x10 bytes
+// (runtime/types/io/Serializer.h). Built on the stack twice per controller.
+struct UiSerializer { void* stream; void* rw; };
+
+using UiCreateRwFn   = void* (*)(void* enc, UiSerializer* out, const char* name);
+using UiScalarFn     = void  (*)(void* rw, void* value, const char* name);
+using UiStreamVFn    = void  (*)(void* self, void* stream);
+using UiGetIdFn      = int32_t (*)(void* self);
+using UiDelDtorFn    = void  (*)(void* self, int flags);
+
+void UiSaveAllSettingsBody(UserInterface* self) {
+    uint8_t* node = *reinterpret_cast<uint8_t**>(self);   // _dialogs._head
+    if (!node) return;
+
+    const void* vtStream = VtblIoStream();
+    const void* vtMem    = VtblIoMemoryStream();
+    void*       vtEnc    = VtblIoEncoding();
+
+    do {
+        uint8_t* dlg = *reinterpret_cast<uint8_t**>(node);
+        if (*reinterpret_cast<void**>(dlg + 0xa8) != nullptr) {
+            // ---- 1. the inlined IO::MemoryStream ---------------------------
+            RtIo::MemoryStream st;
+            st.base.vptr     = vtStream;
+            st.base.direction = 0;
+            st.base.encoding = nullptr;
+            st.base.vptr     = vtMem;
+            st.data          = nullptr;
+            st.ownsData      = 0;
+            st.cursor        = 0;      // the one qword at +0x24 covers both
+            st.size          = 0;
+
+            // ---- 2. the 8-byte IO::Encoding -------------------------------
+            void* enc = UiMemAllocA(8, 4);
+            if (enc) *reinterpret_cast<void**>(enc) = vtEnc;
+            // Retail frees the PREVIOUS encoding before installing this one.
+            // It is always null at this point; the store order is retail's.
+            if (void* oldEnc = st.base.encoding) UiMemFree(oldEnc);
+            st.base.encoding = enc;
+
+            // ---- 3. point the stream at the dialog's settings buffer ------
+            const int32_t size = *reinterpret_cast<int32_t*>(dlg + 0xb0);
+            void*         buf  = *reinterpret_cast<void**>(dlg + 0xa8);
+            st.data      = buf;
+            st.size      = static_cast<uint32_t>(size);
+            st.cursor    = 0;
+            st.base.direction = 1;
+            if (size >= 4) {
+                *reinterpret_cast<uint32_t*>(buf) = 0xdeadbeefu;
+                // NEGATIVE CONTROL 3 — skip the cursor advance, so everything
+                // the writer emits lands 4 bytes early, over the magic.
+                if (UifNegCtrl() != 3) st.cursor += 4;
+            }
+
+            // ---- 4. the top-level ReaderWriter ----------------------------
+            UiSerializer ser{ &st, nullptr };
+            void* rw = nullptr;
+            if (enc) {
+                void** encVt = *reinterpret_cast<void***>(enc);
+                UiCreateRwFn make = reinterpret_cast<UiCreateRwFn>(
+                    st.base.direction != 0 ? encVt[4]    // +0x20 CreateWriter
+                                           : encVt[3]);  // +0x18 CreateReader
+                rw = make(enc, &ser, nullptr);
+            }
+            ser.rw = rw;
+
+            // ---- 5. the dialog's own OnSerializeSettings ------------------
+            reinterpret_cast<UiStreamVFn>(
+                (*reinterpret_cast<void***>(dlg))[9])(dlg, &st);   // +0x48
+
+            // ---- 6. the controller loop -----------------------------------
+            int32_t count = *reinterpret_cast<int32_t*>(dlg + 0x80);
+            if (rw) {
+                reinterpret_cast<UiScalarFn>(
+                    (*reinterpret_cast<void***>(rw))[20])(rw, &count, nullptr); // +0xa0
+            }
+            for (int32_t i = 0; i < count; ++i) {
+                uint8_t* arr = *reinterpret_cast<uint8_t**>(dlg + 0x78);
+                void*    ctl = *reinterpret_cast<void**>(arr + i * 8);
+                int32_t  id  = reinterpret_cast<UiGetIdFn>(
+                                   (*reinterpret_cast<void***>(ctl))[2])(ctl);  // +0x10
+                if (rw) {
+                    reinterpret_cast<UiScalarFn>(
+                        (*reinterpret_cast<void***>(rw))[19])(rw, &id, nullptr); // +0x98
+                }
+
+                UiSerializer ser2{ &st, nullptr };
+                void* rw2 = nullptr;
+                if (enc) {
+                    void** encVt = *reinterpret_cast<void***>(enc);
+                    UiCreateRwFn make2 = reinterpret_cast<UiCreateRwFn>(
+                        st.base.direction != 0 ? encVt[4] : encVt[3]);
+                    rw2 = make2(enc, &ser2, nullptr);
+                }
+                ser2.rw = rw2;
+
+                // RE-READ at 0x1801206a1, not cached across the CreateWriter.
+                arr = *reinterpret_cast<uint8_t**>(dlg + 0x78);
+                ctl = *reinterpret_cast<void**>(arr + i * 8);
+                reinterpret_cast<UiStreamVFn>(
+                    (*reinterpret_cast<void***>(ctl))[10])(ctl, &st);   // +0x50
+
+                if (rw2) {
+                    reinterpret_cast<UiDelDtorFn>(
+                        (*reinterpret_cast<void***>(rw2))[0])(rw2, 1);
+                }
+            }
+
+            // ---- 7. teardown ----------------------------------------------
+            if (rw) {
+                reinterpret_cast<UiDelDtorFn>(
+                    (*reinterpret_cast<void***>(rw))[0])(rw, 1);
+            }
+            st.base.vptr = vtMem;
+            if (st.ownsData != 0 && st.data) UiMemFree(st.data);   // dead: never owns
+            st.base.vptr = vtStream;
+            if (st.base.encoding) UiMemFree(st.base.encoding);
+        }
+        node = *reinterpret_cast<uint8_t**>(node + 0x10);
+    } while (node);
+}
+
+// ---- the buffer-replay oracle's storage ------------------------------------
+// Three parallel copies of every dialog settings buffer this call touches:
+// the ORIGINAL (to restore), OURS (the result of our body) and, implicitly,
+// the live buffers after the DLL's body runs. 64 KB is generous — a dialog's
+// settings blob is tens of bytes — and a call whose total exceeds it is NOT
+// DIFFED rather than reported as a divergence, because "the oracle's buffer was
+// too small" is not a fact about the port (WAVE7_LANE_B.md §4 says so, so that
+// a low `calls=` is not read as a stall).
+constexpr size_t kSasBufBytes = 64 * 1024;
+constexpr int    kSasMaxBufs  = 64;
+uint8_t  g_sasOrig[kSasBufBytes];
+uint8_t  g_sasOurs[kSasBufBytes];
+uint8_t* g_sasPtr[kSasMaxBufs];
+uint32_t g_sasLen[kSasMaxBufs];
+uint32_t g_sasOff[kSasMaxBufs];
+
+} // namespace
+
+// ORACLE: REPLAY ON THE SIDE EFFECT, which for this body is the only thing
+// there is to compare — it returns void and writes nothing to `this`.
+//
+//   snapshot every dialog's settings buffer -> run OURS -> copy the result out
+//   -> RESTORE the snapshot -> run the SHIPPED body -> compare our copy against
+//   what the shipped body left.
+//
+// This is sound for the reason reference_write_path_serialize_is_replayable.md
+// records: on the WRITE path a Serialize consumes state and produces bytes, so
+// running it twice from the SAME starting bytes must produce the SAME bytes.
+// Both runs also allocate and free their own Encoding and ReaderWriters, which
+// balances.
+//
+// THE EFFECTIVENESS CONTROL IS REPORTED, NOT ASSUMED. The diff message carries
+// `dialogs=N bytes=B`, so a green result over a UI where every dialog had a
+// null +0xa8 — which is the common case at the main menu — reads as
+// `dialogs=0 bytes=0` and is visibly NOT a verification
+// (reference_probe_needs_an_effectiveness_control.md, and
+// reference_uncalled_port_is_not_verified.md one level in: `calls=` counts this
+// function, `bytes=` counts whether it had anything to say).
+extern "C" void RtUi_UserInterface_SaveAllSettings(UserInterface* self) {
+    RT_DIFF_BEGIN("UI::UserInterface::SaveAllSettings");
+
+    int      nBufs = 0;
+    uint32_t total = 0;
+    bool     fits  = true;
+
+    if (rt_diff_on__) {
+        for (uint8_t* node = *reinterpret_cast<uint8_t**>(self); node;
+             node = *reinterpret_cast<uint8_t**>(node + 0x10)) {
+            uint8_t* dlg = *reinterpret_cast<uint8_t**>(node);
+            uint8_t* buf = *reinterpret_cast<uint8_t**>(dlg + 0xa8);
+            if (!buf) continue;
+            const int32_t len = *reinterpret_cast<int32_t*>(dlg + 0xb0);
+            if (len <= 0) continue;
+            if (nBufs >= kSasMaxBufs ||
+                total + static_cast<uint32_t>(len) > kSasBufBytes) { fits = false; break; }
+            g_sasPtr[nBufs] = buf;
+            g_sasLen[nBufs] = static_cast<uint32_t>(len);
+            g_sasOff[nBufs] = total;
+            std::memcpy(g_sasOrig + total, buf, static_cast<size_t>(len));
+            total += static_cast<uint32_t>(len);
+            ++nBufs;
+        }
+    }
+
+    const bool replay = rt_diff_on__ && fits && nBufs > 0;
+
+    UiSaveAllSettingsBody(self);
+
+    if (replay) {
+        for (int i = 0; i < nBufs; ++i)
+            std::memcpy(g_sasOurs + g_sasOff[i], g_sasPtr[i], g_sasLen[i]);
+        for (int i = 0; i < nBufs; ++i)
+            std::memcpy(g_sasPtr[i], g_sasOrig + g_sasOff[i], g_sasLen[i]);
+
+        // RT_RAW_OK: the ORACLE half must reach the SHIPPED body and never our
+        // own registration.
+        using Fn = void (*)(UserInterface*);
+        Fn theirs = RT_ORIGINAL_ONCE(Fn, kSaveAllSettings);
+        if (theirs) {
+            theirs(self);
+            char ours[128], them[128];
+            std::snprintf(ours, sizeof(ours), "dialogs=%d bytes=%u", nBufs, total);
+            std::snprintf(them, sizeof(them), "dialogs=%d bytes=%u", nBufs, total);
+            RtDiffReport(&rt_diff_site__, true, ours, them);
+            for (int i = 0; i < nBufs; ++i) {
+                RtDiffReportBytes(&rt_diff_site__, g_sasOurs + g_sasOff[i],
+                                  g_sasPtr[i], g_sasLen[i]);
+            }
+        }
+    } else if (rt_diff_on__) {
+        char ours[128], them[128];
+        std::snprintf(ours, sizeof(ours), "dialogs=%d bytes=%u", nBufs, total);
+        std::snprintf(them, sizeof(them), "%s", fits ? "NOT DIFFED (no settings buffer)"
+                                                     : "NOT DIFFED (oracle buffer too small)");
+        RtDiffNoteWork(&rt_diff_site__, nBufs > 0);
+        (void)ours; (void)them;
+    }
+    RT_DIFF_WORK(nBufs > 0);
+}
+
+// ============================================================================
+// THE TWIN-SYNTHETIC ORACLE for ?SaveAllSettings
+// ============================================================================
+// THE REPLAY ORACLE ABOVE IS LIVE BUT HAS NO POPULATION, and this is a measured
+// fact, not a guess. A `BANISHED_RT_DIFF=1 BANISHED_AUTOSTART=1
+// BANISHED_SAVE_TEST=900` run that really saved (`[SaveTest] frame 900:
+// invoking retail autosave handler` … `frame 961: operation 4 -> 0`) reports
+//
+//     UI::UserInterface::SaveAllSettings   calls=0   worked=0   divergences=0
+//
+// The site IS registered, so the body ran — `worked=0` says every call found
+// `dialogs=0`: not one dialog in the live list had a non-null settings buffer
+// at +0xa8, so the whole loop was skipped. That is precisely the state
+// reference_calls_zero_can_mean_always_took_the_uncovered_branch.md describes,
+// and it is why `worked=` is reported here at all.
+//
+// So the interesting half is built instead. Two identical synthetic
+// `UserInterface`s, each with two synthetic dialogs that DO have settings
+// buffers and two controllers apiece; ours runs on one, the SHIPPED body on the
+// other, and the comparison is the SETTINGS BUFFERS plus an ordered call log.
+//
+// WHAT THAT ACTUALLY EXERCISES — all of it, and none of it is stubbed out:
+//   * the inlined `IO::MemoryStream` construction and both vtable stores
+//   * the 8-byte `IO::Encoding` allocation and its unexported vtable
+//   * the `0xdeadbeef` magic and the cursor advance to 4
+//   * `CreateWriter` through encoding slot +0x20, once at the top and once per
+//     controller, and the throw-away ReaderWriter deletes
+//   * `ScalarInt` (+0xa0) for the controller count and `ScalarUInt` (+0x98)
+//     for each controller id — REAL `IO::BinaryWriter` calls writing REAL bytes
+//     into the buffer, which is what the compare then reads
+//   * the inlined `~MemoryStream` and the encoding free
+// Only the DIALOG's own `+0x48` and the CONTROLLERS' `+0x50` are synthetic, and
+// they are recorders rather than stubs: they append to the log, so their ORDER
+// and their ARGUMENTS are compared too.
+namespace {
+
+struct SasTwinSide {
+    uint8_t* ui;
+    uint8_t* dlg[2];
+    uint8_t* buf[2];
+    uint8_t* ctl[4];
+    char     log[192];
+    int      logLen;
+};
+
+SasTwinSide* g_sasTwinCur = nullptr;
+
+void SasTwinNote(const char* what, int idx) {
+    SasTwinSide* s = g_sasTwinCur;
+    if (!s || s->logLen >= static_cast<int>(sizeof(s->log)) - 12) return;
+    s->logLen += std::snprintf(s->log + s->logLen, sizeof(s->log) - s->logLen,
+                               "%s%d ", what, idx);
+}
+
+// Dialog vtable slot 9 (+0x48) — OnSerializeSettings(Stream&).
+void SasTwinDialogSerialize(void* self, void* /*stream*/) {
+    SasTwinSide* s = g_sasTwinCur;
+    int idx = -1;
+    if (s) for (int i = 0; i < 2; ++i) if (s->dlg[i] == self) idx = i;
+    SasTwinNote("D", idx);
+}
+// Controller vtable slot 2 (+0x10) — the id getter.
+int32_t SasTwinCtlGetId(void* self) {
+    SasTwinSide* s = g_sasTwinCur;
+    int idx = -1;
+    if (s) for (int i = 0; i < 4; ++i) if (s->ctl[i] == self) idx = i;
+    return 0x1000 + idx;
+}
+// Controller vtable slot 10 (+0x50) — OnSerializeSettings(Stream&).
+void SasTwinCtlSerialize(void* self, void* /*stream*/) {
+    SasTwinSide* s = g_sasTwinCur;
+    int idx = -1;
+    if (s) for (int i = 0; i < 4; ++i) if (s->ctl[i] == self) idx = i;
+    SasTwinNote("C", idx);
+}
+
+void* g_sasTwinVtbl[11] = {
+    nullptr, nullptr,
+    reinterpret_cast<void*>(&SasTwinCtlGetId),        // [2]  +0x10
+    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+    reinterpret_cast<void*>(&SasTwinDialogSerialize), // [9]  +0x48
+    reinterpret_cast<void*>(&SasTwinCtlSerialize),    // [10] +0x50
+};
+
+constexpr uint32_t kSasTwinBufBytes = 256;
+
+bool SasTwinBuild(SasTwinSide& s) {
+    s.logLen = 0; s.log[0] = '\0';
+    s.ui = static_cast<uint8_t*>(UiMemAlloc(kUiSize, 16));
+    if (!s.ui) return false;
+    std::memset(s.ui, 0, kUiSize);
+
+    uint8_t* prev = nullptr;
+    for (int i = 0; i < 2; ++i) {
+        uint8_t* d = static_cast<uint8_t*>(UiMemAlloc(0xb8, 8));
+        uint8_t* b = static_cast<uint8_t*>(UiMemAlloc(kSasTwinBufBytes, 8));
+        void**   arr = static_cast<void**>(UiMemAlloc(2 * 8, 8));
+        if (!d || !b || !arr) return false;
+        std::memset(d, 0, 0xb8);
+        // The buffer starts from a FIXED pattern on both sides, so any byte the
+        // serializer does not overwrite compares equal by construction
+        // (reference_oracle_must_not_compare_unwritten_bytes.md).
+        std::memset(b, 0xC3, kSasTwinBufBytes);
+        *reinterpret_cast<void**>(d) = g_sasTwinVtbl;
+        for (int k = 0; k < 2; ++k) {
+            uint8_t* c = static_cast<uint8_t*>(UiMemAlloc(0x20, 8));
+            if (!c) return false;
+            std::memset(c, 0, 0x20);
+            *reinterpret_cast<void**>(c) = g_sasTwinVtbl;
+            s.ctl[i * 2 + k] = c;
+            arr[k] = c;
+        }
+        *reinterpret_cast<void**>(d + 0x78)   = arr;     // _controllers._data
+        *reinterpret_cast<int32_t*>(d + 0x80) = 2;       // _controllers._size
+        *reinterpret_cast<void**>(d + 0xa8)   = b;       // the settings buffer
+        *reinterpret_cast<int32_t*>(d + 0xb0) = static_cast<int32_t>(kSasTwinBufBytes);
+        s.dlg[i] = d;
+        s.buf[i] = b;
+
+        uint8_t* node = static_cast<uint8_t*>(UiMemAlloc(0x18, 8));
+        if (!node) return false;
+        std::memset(node, 0, 0x18);
+        *reinterpret_cast<void**>(node) = d;
+        if (prev) *reinterpret_cast<void**>(prev + 0x10) = node;
+        else      *reinterpret_cast<void**>(s.ui)        = node;
+        *reinterpret_cast<void**>(node + 0x08) = prev;
+        prev = node;
+    }
+    *reinterpret_cast<void**>(s.ui + 0x08)   = prev;
+    *reinterpret_cast<int32_t*>(s.ui + 0x10) = 2;
+    return true;
+}
+
+void SasTwinFree(SasTwinSide& s) {
+    for (int i = 0; i < 2; ++i) {
+        if (!s.dlg[i]) continue;
+        UiMemFree(*reinterpret_cast<void**>(s.dlg[i] + 0x78));
+        UiMemFree(s.buf[i]);
+        UiMemFree(s.dlg[i]);
+    }
+    for (int i = 0; i < 4; ++i) if (s.ctl[i]) UiMemFree(s.ctl[i]);
+    if (s.ui) {
+        for (uint8_t* n = *reinterpret_cast<uint8_t**>(s.ui); n; ) {
+            uint8_t* next = *reinterpret_cast<uint8_t**>(n + 0x10);
+            UiMemFree(n);
+            n = next;
+        }
+        UiMemFree(s.ui);
+    }
+}
+
+void VerifySaveAllSettingsTwin() {
+    if (!RtDiffEnabled()) return;
+    static RtDiffSite site = { "UI::UserInterface::SaveAllSettings [twin synthetic]" };
+    RtDiffRegister(&site);
+
+    SasTwinSide a{}, b{};
+    if (!SasTwinBuild(a) || !SasTwinBuild(b)) {
+        RtDiffReport(&site, false, "twin subjects built",
+                     "allocator refused a synthetic block");
+        SasTwinFree(a); SasTwinFree(b);
+        return;
+    }
+
+    // RT_RAW_OK: the ORACLE half must reach the SHIPPED body.
+    using Fn = void (*)(UserInterface*);
+    Fn theirs = reinterpret_cast<Fn>(
+        ResolveExportRaw("?SaveAllSettings@UserInterface@UI@@QEAAXXZ"));
+    if (!theirs) {
+        RtDiffReport(&site, false, "twin subjects built",
+                     "shipped ?SaveAllSettings not resolvable");
+        SasTwinFree(a); SasTwinFree(b);
+        return;
+    }
+
+    g_sasTwinCur = &a;  UiSaveAllSettingsBody(reinterpret_cast<UserInterface*>(a.ui));
+    g_sasTwinCur = &b;  theirs(reinterpret_cast<UserInterface*>(b.ui));
+    g_sasTwinCur = nullptr;
+
+    // (1) the ordered call log, with the EXPECTED string asserted so that "both
+    // sides did nothing" cannot read green.
+    const bool logEq  = (std::strcmp(a.log, b.log) == 0);
+    const bool ranAll = (std::strcmp(a.log, "D0 C0 C1 D1 C2 C3 ") == 0);
+    char ours[256], them[256];
+    std::snprintf(ours, sizeof(ours), "log=[%s] expected=[D0 C0 C1 D1 C2 C3 ]", a.log);
+    std::snprintf(them, sizeof(them), "log=[%s]", b.log);
+    RtDiffReport(&site, logEq && ranAll, ours, them);
+
+    // (2) the SIDE EFFECT — the settings buffers, which is the whole point of
+    // this function (reference_port_must_reproduce_side_effects.md).
+    for (int i = 0; i < 2; ++i)
+        RtDiffReportBytes(&site, a.buf[i], b.buf[i], kSasTwinBufBytes);
+
+    // (3) the EFFECTIVENESS CONTROL: the magic proves the writer actually wrote
+    // into the buffer rather than both sides leaving the 0xC3 fill alone.
+    const uint32_t magicA = *reinterpret_cast<uint32_t*>(a.buf[0]);
+    char cOurs[96], cThem[96];
+    std::snprintf(cOurs, sizeof(cOurs), "buffer[0] magic=0xdeadbeef");
+    std::snprintf(cThem, sizeof(cThem), "buffer[0] magic=0x%08x", magicA);
+    RtDiffReport(&site, magicA == 0xdeadbeefu, cOurs, cThem);
+
+    SasTwinFree(a);
+    SasTwinFree(b);
+}
+
+} // namespace
+
 int RtUiManagerRegister() {
     int count = 0;
 
@@ -1109,6 +2128,24 @@ int RtUiManagerRegister() {
     RegisterRuntimeExport("?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z",
                           (void*)&RtUi_UserInterface_BringDialogToFront); ++count;
     RegisterRuntimeAddr(0x180120440, (void*)&RtUi_UserInterface_BringDialogToFront);
+
+    // ---- Wave 10 lane UIF --------------------------------------------------
+    // `QEAA` is the NON-VIRTUAL spelling and it is the right one here: this
+    // class has NO vtable (see runtime/types/ui/UserInterface.h) and the export
+    // directory carries `??1UserInterface@UI@@QEAA@XZ` at 0x120b90 / ord 705,
+    // checked with pefile before this line was written. `UEAA` would resolve
+    // NULL in silence (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+    RegisterRuntimeExport("??1UserInterface@UI@@QEAA@XZ",
+                          (void*)&RtUi_UserInterface_Dtor); ++count;
+    RegisterRuntimeAddr(0x180120b90, (void*)&RtUi_UserInterface_Dtor);
+
+    RegisterRuntimeExport("?SaveAllSettings@UserInterface@UI@@QEAAXXZ",
+                          (void*)&RtUi_UserInterface_SaveAllSettings); ++count;
+    RegisterRuntimeAddr(0x1801204b0, (void*)&RtUi_UserInterface_SaveAllSettings);
+
+    // The twin-synthetic oracle is NOT called here — it needs the allocator,
+    // which does not exist yet at registration time. It is triggered from the
+    // first `RtUi_UserInterface_Ctor`; see the note at its forward declaration.
 
     return count;
 }
