@@ -869,6 +869,36 @@ extern "C" const char* RtUiDialogInstance_TypeName(const void* /*self*/) {
         DialogInstanceTypeInfo() + kBaseTypeInfoName);
 }
 
+// ---- ?Type@DialogInstance@UI@@UEBAIXZ  0x1800453e0 ------------------------
+// WAVE 10B LANE DLGV. The corroborating slot the note above cites, now ported
+// rather than only quoted:
+//
+//     1800453e0  MOV EAX,dword ptr [0x1801faac0]
+//     1800453e6  RET
+//
+// The SAME `?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A` object
+// `TypeName` reads at +0x08, read here at +0x00 for the type id. It goes through
+// the same `DialogInstanceTypeInfo()` slot, so there is one resolution site for
+// the pair and no address door.
+//
+// The ⚠ note above is now STALE in its one factual claim and is left standing
+// because its REASONING is not: `?_typeInfo@DialogInstance@UI@@` was added to
+// standalone/rt_data_mint_tables.inc and lane MINTSEL then PROMOTED it, so this
+// symbol resolves to our own minted storage on every run. That storage's typeId
+// is no longer the 0xFFFFFFFF ctor sentinel — MintTypeInfos() computes it with
+// the same `TypeNameCRC(name)` line `Factory::Startup` uses, and the mint
+// shadow compares all 104 against the loaded DLL's own nodes with 0 mismatches.
+// So this body reads a value that has been checked against retail's, which is a
+// stronger position than the null-deref this comment used to describe, and a
+// weaker one than reading the DLL's static directly would be. Stated rather than
+// hidden: the id is verified by the shadow's field comparison, not by an oracle
+// on this body.
+constexpr int kBaseTypeInfoTypeId = 0x00;
+extern "C" uint32_t RtUiDialogInstance_Type(const void* /*self*/) {
+    return *reinterpret_cast<const uint32_t*>(
+        DialogInstanceTypeInfo() + kBaseTypeInfoTypeId);
+}
+
 // ---- ?OnClosed@DialogInstance@UI@@UEAAXXZ  0x180115330  ord 3269
 //
 // PORTED — Wave 9 lane ENC-2, in runtime/src/ui/dialog_settings.cpp alongside
@@ -2588,6 +2618,15 @@ int RtUiDialogRegister() {
     RegisterRuntimeExport("?TypeName@DialogInstance@UI@@UEBAPEBDXZ",
                           (void*)&RtUiDialogInstance_TypeName);
     RegisterRuntimeAddr(0x180045400, (void*)&RtUiDialogInstance_TypeName);             ++n;
+
+    // ---- Wave 10B lane DLGV: the fourth DialogInstance vtable slot ---------
+    // Same two doors, same reasons: the name is what the exe-side dialog vtable
+    // builders in code/Game/Dialog/ and code/Game/Player/tool_base_toolui.cpp
+    // ask for (all three already name `?Type@DialogInstance@UI@@UEBAIXZ`), and
+    // the address is what the minted `??_7DialogInstance@UI@@6B@` looks up.
+    RegisterRuntimeExport("?Type@DialogInstance@UI@@UEBAIXZ",
+                          (void*)&RtUiDialogInstance_Type);
+    RegisterRuntimeAddr(0x1800453e0, (void*)&RtUiDialogInstance_Type);                 ++n;
 
     // ---- Wave 9 lane UID: the teardown half of the dialog lifecycle -------
     // Registered under BOTH doors, which is the convention lane UIF's

@@ -53,8 +53,9 @@
 #include <cstring>
 
 // ============================================================================
-// THE TEN UI `?_typeInfo@` ROWS  (an ELEVENTH, Element, was added below by
-// Wave 10B lane ELEM once it acquired a live consumer; see its own warrant)
+// THE TEN UI `?_typeInfo@` ROWS, PLUS AN ELEVENTH (Element) AND THREE `??_7`
+// VTABLES — the vtables and the eleventh typeinfo were added by Wave 10B lanes
+// SS, ELEM and DLGV, each with its own warrant below.
 // ============================================================================
 //
 // These are the ten `?_typeInfo@…@UI@@` symbols that
@@ -334,16 +335,62 @@ int RtMintRegisterPromotedRows() {
     st = RtMintPromotionStorage("??_7Element@UI@@6B@", 0x180156160ull);
     RegisterRuntimeExport("??_7Element@UI@@6B@", st);
     RegisterRuntimeAddr(0x180156160ull, st); ++n;
+    // ========================================================================
+    // THE FIRST MINTED **VTABLE** ROW  —  Wave 10B lane DLGV
+    // ========================================================================
+    //
+    // `??_7DialogInstance@UI@@6B@` (DLL 0x180156d70, 10 slots). Until this wave
+    // it read `8 ported, 2 TRAP` in the paragraph below. Lane DLGV ported both
+    // traps — `?Type@` (runtime/src/ui/dialog.cpp) and `?OnOpened@`
+    // (runtime/src/ui/dialog_settings.cpp) — and the row is now
+    //
+    //     READY  ??_7DialogInstance@UI@@6B@   slots=10 ported=10 TRAP= 0
+    //
+    // THE MEASUREMENT (2026-09-09, debug build, DLL present, under
+    // tools/game_dir_lock.sh; logs in lane_dlgv_logs/ and the lane doc)
+    //
+    //  * Gate (a): the shadow readiness screen reports READY / TRAP=0 on a live
+    //    boot. That screen asks the port registry through the same OurPort()
+    //    the mint fills with, so it sees registrations whose name arrives in a
+    //    variable.
+    //  * Gate (b): TWO A/B pairs, each `BANISHED_RT_MINT_ROWS=<this row>`
+    //    against the identical boot without it — autostart to gameplay, then a
+    //    pause-menu Quit. Both halves of both pairs reached gameplay, quit
+    //    cleanly and left a **0-byte crash log**. A whole-log frequency diff of
+    //    the first pair finds exactly THREE differing lines, all three of them
+    //    the `[RtMint] ROW ON (env)` lines the candidate half prints; everything
+    //    else that moves is splash-loader tick and fade frame counts.
+    //  * **The effectiveness control, which is the part that makes (b) mean
+    //    anything.** Registering this row is not passive — our ported ctors
+    //    stamp the table, so the DLL's own dispatch runs our slots. But our
+    //    `?OnOpened@` writes nothing observable, so an A/B alone cannot tell a
+    //    SAFE promotion from one that was never exercised. dialog_settings.cpp
+    //    therefore carries an ATTENDANCE counter, and it moves:
+    //
+    //        control    [DlgSettings] ATTENDANCE: OnOpened was not entered
+    //        candidate  [DlgSettings] ATTENDANCE ... entries=2 (pair 1)
+    //        candidate  [DlgSettings] ATTENDANCE ... entries=3 (pair 2, with an
+    //                                 in-game residence panel open)
+    //
+    //    0 -> 2 and 0 -> 3 on two independent routes. Our body really is what
+    //    the DLL dispatches once the row is registered.
+    //
+    // PORTED, LIVE, AND ONLY PARTLY COVERED — stated rather than footnoted.
+    // Every one of those five entries reported `noBuffer`: `_userData` was null,
+    // so the body took its second-line early exit and `badMagic=0 records=0`.
+    // The controller loop ran (over an empty list) and the settings-reading half
+    // of `?OnOpened@` — MemoryStream, the magic, the Serializer, the per-record
+    // loop — has NOT been exercised by any route this lane found. That is the
+    // `calls=0`-inverts-the-conclusion shape caught early rather than late
+    // (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md), and
+    // the sub-counters exist precisely so the gap is visible in every run's log.
+    st = RtMintPromotionStorage("??_7DialogInstance@UI@@6B@", 0x180156d70ull);
+    RegisterRuntimeExport("??_7DialogInstance@UI@@6B@", st);
+    RegisterRuntimeAddr(0x180156d70ull, st); ++n;
 
     // ------------------------------------------------------------------------
     // NOT PROMOTED, and why. Each of these was measured this run, not assumed.
     //
-    //  ??_7DialogInstance@UI@@6B@     10 slots, 8 ported, 2 TRAP.
-    //  ??_7DialogController@UI@@6B@   11 slots, 2 ported, 9 TRAP.
-    //      Same rule, and the rule is the one SpriteSheet and Element have
-    //      now cleared: our ctors stamp the promoted table, so the DLL's own
-    //      dispatch reaches any surviving trap and abort()s. 11 trap slots
-    //      between these two.
     //      WARNING THESE COUNTS GO STALE FAST. They were 27 across four
     //      vtables when lane UIDATA counted; lane UI4 closed seven of
     //      SpriteSheet's eight, lane SS the ninth, and lane ELEM all eight of
@@ -380,6 +427,47 @@ int RtMintRegisterPromotedRows() {
     //      "a row exists with 8 traps"; it did not move the census, which still
     //      lists ??_7Dialog@UI@@6B@ as called-but-not-ported and will until
     //      those eight bodies are ported and registered.
+    //  ??_7DialogController@UI@@6B@   11 slots, 11 ported, **TRAP = 0**, and
+    //      still NOT PROMOTED. This row is the one place in this file where the
+    //      readiness screen is GREEN and the answer is still no, so the reason
+    //      is worth stating exactly.
+    //
+    //      Lane DLGV ported all nine remaining slots
+    //      (runtime/src/ui/dialog_controller_base.cpp — seven of them are
+    //      genuinely `RET 0`, checked byte-wise AND one disassembly at a time),
+    //      so gate (a) passes: the shadow reports
+    //          READY  ??_7DialogController@UI@@6B@  slots=11 ported=11 TRAP= 0
+    //
+    //      **Gate (b) is UNINFORMATIVE, on two different routes.** That file
+    //      carries a nine-way ATTENDANCE counter for exactly this question, and
+    //      on both A/B pairs it printed, in BOTH halves,
+    //
+    //          [DlgCtrl] ATTENDANCE: none of the nine bodies was entered
+    //
+    //      — including the pair whose candidate half opened an in-game
+    //      RESIDENCE INFO PANEL and left it open
+    //      (BANISHED_TOOL_HARNESS=housepanel; the log line
+    //      `[HousePanel] OPEN house[0]=... dialog=...` is in that run). The
+    //      panel's DialogInstance really did reach our `?OnOpened@` — its
+    //      entries counter went 2 -> 3 — and its `_controllers` list was empty,
+    //      so not one controller virtual was dispatched. Every DialogController
+    //      SUBCLASS in code/Game/Dialog/ (DestroyUI, CitizenUI, MapUI, BuildUI,
+    //      CropUI, DebugUI, TutorialUI, …) has its own exe-side vtable; nothing
+    //      this lane could drive constructs an object carrying the RUNTIME
+    //      BASE table.
+    //
+    //      A run in which registering the row changes nothing and our bodies
+    //      are entered zero times cannot distinguish a safe promotion from an
+    //      unexercised one. That is this file's own "WHY NOT ALL 104" rule
+    //      (a port with no caller, that no run can verify), applied to a row
+    //      whose readiness number says go. It expires the moment any route
+    //      makes `[DlgCtrl] ATTENDANCE` print a non-zero total — the instrument
+    //      is already in the tree and prints on every run, so nobody has to
+    //      rediscover the question.
+    //
+    //      The nine BODIES are ported and registered under both doors
+    //      regardless, so `runtime_census.py --namespace UI` moves for them;
+    //      only the DATA row waits.
     // ------------------------------------------------------------------------
 
     printf("[RtMint] promoted %d minted DATA row(s) -- live on every run\n", n);

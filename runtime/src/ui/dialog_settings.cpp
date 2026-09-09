@@ -136,6 +136,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
@@ -171,6 +172,12 @@ inline void* VSlot(void* obj, int off) {
 constexpr int kDlgVtblOnSerializeSettings = 0x48;
 // DialogController vtable, confirmed against ??_7DialogController@UI@@6B@.
 constexpr int kCtrlVtblType                = 0x10;
+// +0x28 is ?OnOpened@DialogController@UI@@UEAAXXZ (0x1800cd2a0), named the same
+// way +0x30 and +0x50 were: by reading ??_7DialogController@UI@@6B@ byte-wise
+// and resolving the slot against the EXPORT TABLE, not by a caller. Wave 10B
+// lane DLGV ported that body (runtime/src/ui/dialog_controller_base.cpp) and
+// this is the one call site in the tree that dispatches it.
+constexpr int kCtrlVtblOnOpened            = 0x28;
 constexpr int kCtrlVtblOnClosed            = 0x30;
 constexpr int kCtrlVtblOnSerializeSettings = 0x50;
 // IO::ReaderWriter vtable (runtime/types/io/Serializer.h, rw_vtbl).
@@ -256,6 +263,192 @@ extern "C" void RtUi_DialogInstance_OnClosed(DialogInstance* self) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// ?OnOpened@DialogInstance@UI@@UEAAXXZ   0x180114fb0     WAVE 10B LANE DLGV
+// ---------------------------------------------------------------------------
+// The READ half of the round-trip whose WRITE half is SaveSettings/OnClosed
+// above, and the second of the two abort traps that kept
+// `??_7DialogInstance@UI@@6B@` off the promoted list. It lives here rather than
+// in dialog.cpp because it is the same round-trip, reusing every constant this
+// file already pinned.
+//
+// It is NOT `LoadSettings(); for each controller OnOpened()` — the symmetry
+// OnClosed has. `?LoadSettings@DialogInstance@UI@@` (0x180114450) exists at its
+// own address and OnOpened does not call it: retail INLINES a second, subtly
+// different copy of the load, and the controller loop runs FIRST rather than
+// last. Both facts are read off the body, not inferred from the write half.
+//
+// FOUR THINGS THE DECOMPILED C WOULD HAVE FLATTENED
+//
+//  * **~MemoryStream and MemoryStream::MemoryStream are INLINED here**, unlike
+//    in SaveSettings where the ctor is a real CALL. That is a compilation
+//    difference, not a behavioural one, and it was verified rather than assumed:
+//    `??0MemoryStream@IO@@QEAA@XZ` (0x1800ae710) is instruction-for-instruction
+//    the prologue at 0x180115019..0x180115094 — the same two vtable stamps
+//    (0x1801549a0 then 0x1801555b0), the same field zeroing, the same
+//    lock / MemAlloc(size=8, align=4) / unlock, the same `0x1801554a8` stamped
+//    into the 8 bytes it gets (the IO::Encoding vtable), and the same release of
+//    any previous +0x10. `??1MemoryStream@IO@@UEAA@XZ` (0x1800ae890) is likewise
+//    exactly the teardown at both of this body's two exits. So this port CALLS
+//    the two exported bodies, as SaveSettings does, and the inlining is not
+//    reproduced. The two free forms retail uses — an out-of-line
+//    `CALL 0x180006a10` on the early-exit path and an inlined lock/MemFree on
+//    the main one — were each disassembled and are the SAME function twice
+//    (0x180006a10 and 0x1800c7ad0 are byte-identical COMDAT copies of
+//    `if (p) { lock; MemFree(alloc, p); unlock }`).
+//
+//  * **The controller loop's bound is RE-READ every iteration** (`CMP EDI,
+//    [RSI+0x80]`), like OnClosed's and unlike SaveSettings's snapshot. The inner
+//    search loop over controllers is re-read too. Neither is unified here.
+//
+//  * **When `_userFlags < 4` retail reads UNINITIALIZED STACK for the magic.**
+//    `MOV EAX,dword ptr [RBP + 0x40]` at 0x180115102 — and RBP+0x40 is the
+//    CALLER'S first home slot, which nothing in this function has written at
+//    that point. The comparison against 0xDEADBEEF then decides the exit. This
+//    is the one place the port is deliberately NOT byte-faithful: reading an
+//    uninitialized local is undefined behaviour in C++ and the compiler is
+//    entitled to do anything with it, so the local is initialized to a value
+//    that is not the magic and the bail-out is taken. The difference is
+//    observable only if a caller happened to leave exactly 0xDEADBEEF in its own
+//    shadow space, in which case retail would go on to build a reader over a
+//    buffer shorter than its own 12-byte header. Stated here rather than
+//    silently "cleaned up", because a reader who diffs this against the
+//    disassembly will otherwise think a branch was dropped.
+//
+//  * **The per-controller Serializer's factory branch is LIVE here**, where in
+//    SaveSettings it is dead. Retail emits `CMP [RBP-0x30],0 / JNZ` around
+//    CreateReader (+0x18) vs CreateWriter (+0x20) and `direction` really is 0 on
+//    this path, so the READER arm is the one that wins — the mirror image of the
+//    write half, from the same inlined ctor. This port goes through the exported
+//    `??0Serializer@IO@@QEAA@AEAVStream@1@H@Z` for both serializers, which keeps
+//    the factory-slot choice in one place exactly as SaveSettings does.
+//
+// AND ONE THING WORTH NAMING: the `if (found < 0)` arm calls ReaderWriter slot
+// +0x10, which runtime/types/io/Serializer.h already pins as `kSkip`
+// (`?Skip@Serializer@IO@@`). So a settings record whose controller type id is no
+// longer present in this dialog is SKIPPED, not misapplied — which is what makes
+// the per-controller framing SaveSettings emits load-bearing rather than
+// decorative. The write half's header explains why the framing exists; this is
+// the reader that consumes it.
+//
+// NOT NEW CUTOVER SURFACE, with one exception that is. Everything this body
+// dispatches — the dialog's own +0x48, the controllers' +0x10 / +0x50, the
+// ReaderWriter's +0x00 / +0x10 / +0x98 / +0xa0 — is already dispatched by the
+// write half three functions above, so porting this adds no vtable surface. It
+// DOES add two by-name callees the write half does not use: the MemoryStream
+// constructor and destructor exports, which retail inlined here. Both are
+// resolved BY NAME through RT_EXPORT_ONCE, so neither is an address door.
+// ---------------------------------------------------------------------------
+// ATTENDANCE COUNTER for OnOpened — the EFFECTIVENESS CONTROL for the
+// ??_7DialogInstance@UI@@6B@ promotion, and NOT a verification of anything.
+// Without it, "the candidate boot reached the same place as the control" cannot
+// distinguish a safe promotion from one that was never exercised. Counts
+// ENTRIES, on every build; deliberately not an RtDiff site, because an RtDiff
+// site's `calls` moves only from inside a comparison and would print 0 for a
+// body that ran (reference_calls_zero_can_mean_always_took_the_uncovered_branch).
+// The three sub-counters split the body's three exits, so an entry that always
+// bailed on the magic cannot read as full coverage.
+namespace {
+struct OpenCounts {
+    unsigned long long entries = 0, noBuffer = 0, badMagic = 0, records = 0;
+    ~OpenCounts() {
+        if (entries == 0) {
+            printf("[DlgSettings] ATTENDANCE: OnOpened was not entered in this run.\n");
+            return;
+        }
+        printf("[DlgSettings] ATTENDANCE (entries, not comparisons): "
+               "OnOpened entries=%llu noBuffer=%llu badMagic=%llu records=%llu\n",
+               entries, noBuffer, badMagic, records);
+    }
+};
+OpenCounts g_openCounts;
+}  // namespace
+
+extern "C" void RtUi_DialogInstance_OnOpened(DialogInstance* self) {
+    ++g_openCounts.entries;
+    // 1. Every controller is told the dialog opened, BEFORE any settings are
+    //    read. Bound re-read each iteration — see the header.
+    for (int32_t i = 0; i < self->_controllers._size; ++i) {
+        void* c = self->_controllers._data[i];
+        reinterpret_cast<VoidVFn>(VSlot(c, kCtrlVtblOnOpened))(c);
+    }
+
+    // 2. No settings buffer, nothing to restore.
+    if (self->_userData == nullptr) { ++g_openCounts.noBuffer; return; }
+
+    RtIo::MemoryStream ms;
+    RT_EXPORT_ONCE(MsCtorFn, "??0MemoryStream@IO@@QEAA@XZ")(&ms);
+
+    const int32_t size = self->_userFlags;      // a BYTE LENGTH — see the header
+    void* const   buf  = self->_userData;
+    ms.data           = buf;
+    ms.size           = static_cast<uint32_t>(size);
+    ms.cursor         = 0;
+    ms.base.direction = 0;                      // READING
+
+    // The head magic SaveSettings stored directly into the buffer, read back
+    // the same way. See the header for what retail does when size < 4.
+    uint32_t magic = 0;
+    if (size >= 4) {
+        magic = *reinterpret_cast<const uint32_t*>(buf);
+        ms.cursor += 4;
+    }
+    if (magic != 0xdeadbeefu) {
+        ++g_openCounts.badMagic;
+        RT_EXPORT_ONCE(MsDtorFn, "??1MemoryStream@IO@@UEAA@XZ")(&ms);
+        return;
+    }
+
+    rt::io::Serializer ser;
+    RT_EXPORT_ONCE(SerCtorFn, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z")(&ser, &ms, 0);
+    void* rw = ser.readerWriter;
+
+    // The dialog's own OnSerializeSettings gets the STREAM, not the serializer —
+    // the same asymmetry as the write half.
+    reinterpret_cast<StreamVFn>(VSlot(self, kDlgVtblOnSerializeSettings))(self, &ms);
+
+    int32_t count = 0;
+    reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarInt))(rw, &count, nullptr);
+
+    for (int32_t k = 0; k < count; ++k) {
+        ++g_openCounts.records;
+        uint32_t id = 0;
+        reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarUInt))(rw, &id, nullptr);
+
+        // Find the controller this record belongs to, by type id. Bound re-read.
+        int64_t found = -1;
+        for (int32_t j = 0; j < self->_controllers._size; ++j) {
+            void* c = self->_controllers._data[j];
+            if (reinterpret_cast<U32VFn>(VSlot(c, kCtrlVtblType))(c) == id) {
+                found = j;
+                break;
+            }
+        }
+
+        // The record's own framed Serializer, exactly as the writer emitted it.
+        rt::io::Serializer ser2;
+        RT_EXPORT_ONCE(SerCtorFn, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z")(&ser2, &ms, 0);
+        void* rw2 = ser2.readerWriter;
+
+        if (found < 0) {
+            // No such controller any more: Skip() past the record rather than
+            // feeding it to the wrong one.
+            reinterpret_cast<VoidVFn>(VSlot(rw2, rt::io::rw_vtbl::kSkip))(rw2);
+        } else {
+            void* c = self->_controllers._data[found];
+            reinterpret_cast<StreamVFn>(VSlot(c, kCtrlVtblOnSerializeSettings))(c, &ms);
+        }
+
+        if (rw2 != nullptr)
+            reinterpret_cast<DelDtorVFn>(VSlot(rw2, kRwDeletingDtor))(rw2, 1u);
+    }
+
+    if (rw != nullptr)
+        reinterpret_cast<DelDtorVFn>(VSlot(rw, kRwDeletingDtor))(rw, 1u);
+
+    RT_EXPORT_ONCE(MsDtorFn, "??1MemoryStream@IO@@UEAA@XZ")(&ms);
+}
+
 }  // namespace RtUi
 
 // ============================================================================
@@ -272,6 +465,14 @@ int RtUiDialogSettingsRegister() {
     RegisterRuntimeExport("?OnClosed@DialogInstance@UI@@UEAAXXZ",
                           (void*)&RtUi_DialogInstance_OnClosed); ++n;
     RegisterRuntimeAddr(0x180115330, (void*)&RtUi_DialogInstance_OnClosed);
+
+    // Wave 10B lane DLGV — the read half. Both doors, for the same two reasons
+    // the write half needs both: engine/funcs and the exe-side dialog vtable
+    // builders ask by NAME, and the minted `??_7DialogInstance@UI@@6B@` fills
+    // its slot 4 by ADDRESS through RtPortLookupAddr.
+    RegisterRuntimeExport("?OnOpened@DialogInstance@UI@@UEAAXXZ",
+                          (void*)&RtUi_DialogInstance_OnOpened); ++n;
+    RegisterRuntimeAddr(0x180114fb0, (void*)&RtUi_DialogInstance_OnOpened);
 
     return n;
 }
