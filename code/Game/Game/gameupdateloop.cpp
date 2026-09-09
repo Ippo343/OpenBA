@@ -74,6 +74,7 @@ static bool LiveToolsEnabled() {
 #include "renderdoc_integration.h"
 #include "scene_watch.h"
 #include "citizen_vitals.h"
+#include "mouse_inject.h"                 // BANISHED_MOUSE_INJECT hover/drag route (standalone/)
 #include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
 
 // Runtime type-id lookup (body in code/Game/Object/factory_registration.cpp) —
@@ -1541,7 +1542,12 @@ post_simulation:
     // (the export is ...QEAAH...). The local cast below is now redundant.
     TRACE("[GameUpdateLoop::Update] calling UI::UserInterface::Update...\n");
     typedef int (*fn_UI_Update_RetInt_t)(void* self, void* time);
+    // Wave 10D lane MOUSE: the ONLY seam at which a synthetic cursor can be
+    // placed -- after this frame's input poll, before the UI decodes it. Both
+    // calls are a cached-getenv no-op unless BANISHED_MOUSE_INJECT is set.
+    MouseInject::PreUpdate(self->m_userInterface);
     int uiCursor = ((fn_UI_Update_RetInt_t)fn_UI_Update)(self->m_userInterface, time);
+    MouseInject::PostUpdate(self->m_userInterface);
     TRACE("[GameUpdateLoop::Update] UI::UserInterface::Update done (cursor=%d)\n", uiCursor);
 
     // Step 10: EntityUI / player tool update

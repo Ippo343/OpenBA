@@ -1,0 +1,66 @@
+== rt_run[det_only] exe stamp: 2026-09-09 11:38:50.856442600 -0400
+== rt_run[det_only] exited rc=0 after 35s
+-- crash log --
+(none)
+-- runtime port lines --
+C:/GOG Games/Banished/standalone_error.log:[RtDetour] UI::UserInterface::EndDragDrop: 00007ffcab5b0af0 -> 00007ff66d1baf0d (trampoline 000001e26a910000, 14 bytes displaced)
+C:/GOG Games/Banished/standalone_error.log:[RtDetour] UI::DialogInstance::EndHover: 00007ffcab5a3d10 -> 00007ff66d1bb04d (trampoline 000001e27f250000, 13 bytes displaced)
+C:/GOG Games/Banished/standalone_error.log:[RtDetour] UI::UserInterface::BeginToolTip: 00007ffcab5b0860 -> 00007ff66d1bb2af (trampoline 000001e27f260000, 18 bytes displaced)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   System::String: 22 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   System::Filename: 11 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   System::WideString: 8 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Wave9 lane FS helpers: 3 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] System: 87 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Object::Internal: 8 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   External: 12 exports (Clean/FindOrLoad/SerializeReferenceTable/SaveText deliberately NOT ported -- see docs/runtime_port/WAVE3_LANE_C.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Object: 49 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::CompressedMemoryStream: 10 exports registered (SAVE PATH ONLY -- a plain autostart session never reaches them; needs a save or a load, see WAVE4_LANE_B.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] IO::Persistence: 5/7 exports registered here; ReadSettings + WriteSettings + Registry::Registry are registered by persistence_registry_win.cpp
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::FileSystem/Modification: 6 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::FileSystem find/exists: 3 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::PackageFile (lane PKG2): 21 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::CompressedStream read path (lane PKG2): 4 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::FileSystem open/read (lane PKG2 rung 3): 4 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::MemoryStream virtuals (lane PKG2 rung 4b-ii): 6 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::CompressedStream Release/dtor (lane PKG2 rung 4b-iii, lane W's rows): 2 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::CompressedStream SetWindowCount/Open (lane PKG2 rung 4b-iii): 2 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::PackageFile::ReadPackfile (lane PKG3): 1 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::Modification (lane MOD): 5 exports + 14 addresses
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   IO::Modification::RefreshList (lane MOD2): 3 exports + 8 addresses
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] IO: 186 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Achievement::Goal: 13/15 exports registered here (+2 in goal_serialize.cpp: Goal::Serialize, GoalInstance::Persist)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Achievement::AchievementManager/Instance/Achievement: 21/23 exports registered (AchievementManager::Persist and Achievement::Serialize held back -- both construct an IO::Serializer, which has no runnable oracle; see WAVE5_LANE_B.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Achievement: 36 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Save: 16 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Picking: 9 exports + 19 grid addresses registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C): 29 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Video: 133 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Graphics::SunLight (lane GFX2): 3 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Graphics: 67 exports + 6 grid addresses registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Wave 9 lane GFXD: 4 exports + 11 addresses registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   WAVE9 LANE UID ARMED -- ~DialogInstance (0x180114d40) + LinkedList::Clear (0x1800325f0) + the Array<8>::SetSize address door (0x18002fca0). Shape oracles report under BANISHED_RT_DIFF=1; read the [negative control] line first.
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI widgets(layout): 27 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI: 200 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Engine loop family (lane A): 12 exports registered (LoadResources held back -- no oracle, see WAVE8_LANE_A.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Engine::Engine + MainLoop (lane B): 3 exports registered (2 held back: both detour-required, plus _singleton which is DATA -- see WAVE8_LANE_B.md; Run is NO LONGER among them, see lane ADDR below)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   MainLoop::Run + Update (lane ADDR): 2 exports registered (Run closes the ADDRESS door at game_main.cpp:176 and opens two NAME doors -- Input::Device::Update and MainLoop::Frame; Run has NO ORACLE by construction -- see WAVE9_LANE_ADDR.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Engine lifecycle (lane ENG): 8 exports registered (ctor/dtor/Startup/Shutdown + 4 helpers; Shutdown is UNVERIFIED, calls=0 by construction -- see WAVE9_LANE_ENG.md)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   MainLoop device-lost pair (lane VIDL): 2 exports registered (OnVideoError + OnVideoRestart, plus Array<VideoResource>::SetSize 0x18004f620 and elem-destroy 0x180034440 by ADDRESS; OnVideoRestart OPENS THREE NAME DOORS -- Load@External, GetCompiledPath@ExternalFactory, OnVideoRestart@SaveLoad -- see WAVE9_LANE_VIDL.md §2)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Engine: 27 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Audio: 22 exports registered (WAVE8_LANE_C.md for Wave 8's set, audio.cpp's header for the four that moved in Wave 8.5 and for Wave 9 lane W's FindFree3DEffect; the held-back set is listed in audio.cpp, not counted here)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Input: 31 exports registered (lane INPUT: +2 KeyMap doors, +5 Set<E24> AVL addresses; lane ENGIO: +4 Device::Update bodies)
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Application: 17 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Utility: 2 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Collection::Set AVL: 4 addresses registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Collection::Set Clear: 3 addresses registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Collection keyed Set/Map + sort (lane COLL): 24 + 3 + 2 addresses registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort]   Collection::Array destroy (lane DESTROY): 0x180026b50 registered, built Sep  9 2026 11:16:16
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] Wave9 lane X (singleton ctors): 15 exports registered
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] runtime registry: 948 exports, 953 addrs, 2 ordinals
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI::UserInterface::CloseDialog  entries=0
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI::UserInterface::IsInsideClipRegion  entries=0 inside=0
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI::UserInterface::EndDragDrop  entries=0 destroyedElement=0
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI::DialogInstance::EndHover  entries=0 pushedEvent0x11=0
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI::UserInterface::BeginToolTip  entries=0 rejected=0 closedPrev=0 nonEmptyString=0 allocFailed=0
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI::UserInterface::UpdateStandAloneUI  entries=0 withAudioScene=0
+C:/GOG Games/Banished/standalone_debug.log:[RtPort] UI::UserInterface::DrawStandAloneUI  entries=0
