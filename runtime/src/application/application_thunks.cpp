@@ -18,12 +18,17 @@
 // forwards to THEM, not to the DLL, so calling Update()/Startup() runs our own
 // body exactly once.
 //
-// PlatformShutdown (0x18009fd70) is lane B's function and is NOT present in
-// this worktree. TEMPORARY SEAM: Shutdown() below forwards through
-// RT_ORIGINAL_ONCE to the shipped DLL body instead. THE INTEGRATOR MUST
-// RE-POINT THIS to lane B's RtApp_PlatformShutdown once it lands (declare it
-// extern and swap the RT_ORIGINAL_ONCE call for a direct call, matching how
-// Update/Startup call their siblings below).
+// PlatformShutdown (0x18009fd70) landed with Wave 12 lane B
+// (platform_startup_win.cpp:556). Lane A had to leave a TEMPORARY SEAM here
+// that forwarded through RT_ORIGINAL_ONCE into the shipped DLL body, because
+// lane B's row was not in lane A's worktree. THE INTEGRATOR RE-POINTED IT at
+// the merge: Shutdown() now calls our own RtApp_PlatformShutdown, exactly as
+// Update/Startup call their siblings.
+//
+// This mattered. Leaving the seam in place would have shipped lane B's
+// PlatformShutdown REGISTERED BUT BYPASSED on this path -- a port that exists,
+// reports as ported, and never runs, which is one of the failure modes this
+// project has already paid for.
 // ============================================================================
 
 #include "../../funcs/rt_port.h"
@@ -38,6 +43,7 @@ using RtApplication::Application;
 // find them.
 bool RtApp_PlatformUpdate(Application* self);
 extern "C" bool RtApp_PlatformStartup(Application* self);
+extern "C" void RtApp_PlatformShutdown(Application* self);
 
 // ============================================================================
 // Application::Application::Update()    retail 0x18009f4f0   jmp -> PlatformUpdate
@@ -59,17 +65,17 @@ bool RtApp_Update(Application* self) {
 // Application::Application::Shutdown()   retail 0x18009f500   jmp -> PlatformShutdown
 // ?Shutdown@Application@1@QEAAXXZ
 // ----------------------------------------------------------------------------
-// TEMPORARY SEAM — see file banner. PlatformShutdown is not yet ported in
-// this tree, so this forwards to the shipped DLL body via RT_ORIGINAL_ONCE.
-// That means this thunk always IS the retail body; there is nothing of ours
-// to diff against it.
+// Same shape as Update: PlatformShutdown (platform_startup_win.cpp:556)
+// carries its own site, so this wrapper forwards without diffing again. The
+// RT_DIFF_SHADOW below is an ATTENDANCE MARKER, not a comparison -- it reports
+// equal=true without ever consulting the DLL, so its `divergences=0` proves
+// nothing and only its `calls=` is meaningful.
 // ============================================================================
 void RtApp_Shutdown(Application* self) {
-    RT_DIFF_BEGIN("Application::Application::Shutdown [tail-call thunk -> PlatformShutdown, TEMPORARY SEAM]");
-    RT_DIFF_SHADOW(true, "delegated to the shipped PlatformShutdown (lane B body not yet in this tree)",
-                    "not diffable: this call IS the shipped body");
-    using Fn = void (*)(Application*);
-    RT_ORIGINAL_ONCE(Fn, "?PlatformShutdown@Application@1@AEAAXXZ")(self);
+    RT_DIFF_BEGIN("Application::Application::Shutdown [tail-call thunk -> PlatformShutdown]");
+    RT_DIFF_SHADOW(true, "delegated to our PlatformShutdown (diffed at its own site)",
+                    "attendance marker only: nothing compared here");
+    RtApp_PlatformShutdown(self);
 }
 
 // ============================================================================

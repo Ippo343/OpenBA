@@ -6,8 +6,11 @@
 // ============================================================================
 
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
+#include "../collection/set_avl.h"
 
 using RtApplication::Application;
 
@@ -34,6 +37,23 @@ void RtApp_PlatformDestruct(Application* self);
 bool RtApp_Update(Application* self);
 void RtApp_Shutdown(Application* self);
 bool RtApp_Startup(Application* self);
+
+extern "C" void RtApp_PlatformConstruct(Application* self, void* platformHandle);
+
+// platform_startup_win.cpp (Win32 platform seam; lives beside PlatformStartup
+// because the two share the `kClassName` literal — see its banner)
+extern "C" void RtApp_PlatformShutdown(Application* self);
+
+// application_lifecycle.cpp (no Win32) — Wave 12 lane B
+extern "C" void          RtApp_Dtor(Application* self);
+extern "C" Application*  RtApp_CopyCtor(Application* self, const Application* other);
+extern "C" Application*  RtApp_Assign(Application* self, const Application* other);
+extern "C" void          RtApp_SetDestroyTree(void* self, rtsetavl::Node* n);
+extern "C" rtsetavl::Node* RtApp_SetCloneTree(void* self, const rtsetavl::Node* src);
+extern "C" void          RtApp_SetClear(rtsetavl::Set* set);
+
+// application_lifecycle_probe.cpp — Wave 12 lane B's oracle
+extern "C" void RtApp_LifecycleProbeArm(bool on);
 
 void RtApplicationPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_APP")) {
@@ -91,6 +111,70 @@ void RtApplicationPortInit() {
 
     RegisterRuntimeExport("?LaunchProcess@Application@1@QEAA_NPEBD_N@Z", (void*)&RtApp_LaunchProcess); ++n;
     RegisterRuntimeAddr(0x18009f5e0, (void*)&RtApp_LaunchProcess);
+
+    // ---- Wave 12 lane B: the lifecycle family -----------------------------
+    //
+    // Every mangled name below was read out of the SHIPPED Runtime-x64.dll
+    // export directory with pefile before the bodies were written, and the
+    // ordinals are quoted so a future reader can re-check without re-deriving
+    // (reference_resolveexport_phantom_names.md). Literals, never named
+    // constants (reference_census_cannot_see_nonliteral_registrations.md).
+    //
+    // `AEAA` on the two Platform* rows means PRIVATE, not unexported — this DLL
+    // exports its private members, and the export table is what settled it
+    // rather than the spelling (reference_aeaa_means_private_not_unexported.md).
+    //
+    // BOTH DOORS for all five, per the project rule: the name door flips our
+    // ~1,180 call sites, the address door catches anything that still resolves
+    // by address (the exe's dispatch slots and dx11's import table both do).
+
+    RegisterRuntimeExport("??1Application@0@QEAA@XZ",                  // ord 530
+                          (void*)&RtApp_Dtor); ++n;
+    RegisterRuntimeAddr(0x18009f520, (void*)&RtApp_Dtor);
+
+    RegisterRuntimeExport("?PlatformShutdown@Application@1@AEAAXXZ",   // ord 3393
+                          (void*)&RtApp_PlatformShutdown); ++n;
+    RegisterRuntimeAddr(0x18009fd70, (void*)&RtApp_PlatformShutdown);
+
+    RegisterRuntimeExport("?PlatformConstruct@Application@1@AEAAXPEAX@Z",  // ord 3331
+                          (void*)&RtApp_PlatformConstruct); ++n;
+    RegisterRuntimeAddr(0x18009fbe0, (void*)&RtApp_PlatformConstruct);
+
+    RegisterRuntimeExport("??0Application@0@QEAA@AEBV00@@Z",           // ord 48
+                          (void*)&RtApp_CopyCtor); ++n;
+    RegisterRuntimeAddr(0x18000a0d0, (void*)&RtApp_CopyCtor);
+
+    RegisterRuntimeExport("??4Application@0@QEAAAEAV00@AEBV00@@Z",     // ord 1050
+                          (void*)&RtApp_Assign); ++n;
+    RegisterRuntimeAddr(0x18000a160, (void*)&RtApp_Assign);
+
+    // The three `Collection::Set` helpers the five bodies above are built out
+    // of. ADDRESS DOORS ONLY, and that is a MEASUREMENT, not an assumption: the
+    // pefile sweep over the shipped export directory returns nothing at any of
+    // these three addresses, so `RegisterRuntimeExport` has no name to register
+    // them under. Said explicitly rather than left implied (lane PICK §3).
+    //
+    // They are registered because retail reaches all three by direct near CALL
+    // from bodies we replace wholesale, so anything left going by address —
+    // another DLL body we have not ported, or a future port of `Set::Assign`
+    // at 0x18000a4a0, which calls two of the three — arrives here.
+    //
+    // 0x180009c30 (the allocator-lock Free wrapper these three end in) is
+    // DELIBERATELY NOT registered here: runtime/src/system/allocator.cpp is its
+    // single owner and registers it unconditionally. Wave 9 found it registered
+    // three times, with last-binding-wins deciding which body survived; adding
+    // a fourth would reopen exactly that hazard.
+    RegisterRuntimeAddr(0x18000a4f0, (void*)&RtApp_SetDestroyTree);
+    RegisterRuntimeAddr(0x18000a530, (void*)&RtApp_SetCloneTree);
+    RegisterRuntimeAddr(0x18000a440, (void*)&RtApp_SetClear);
+
+    // Lane B's oracle. Opt-in, and it ALLOCATES, so it cannot run here — it is
+    // self-scheduled from the first Application::PlatformUpdate, by which point
+    // System::MemoryAllocator has been started. See its banner.
+    {
+        const char* p = std::getenv("BANISHED_RT_APPB_PROBE");
+        RtApp_LifecycleProbeArm(p && *p && std::strcmp(p, "0") != 0);
+    }
 
     // ?_singleton@Application@1@0PEAV11@EA @ 0x1801fc678 — a DATA export, not
     // a function; the seam maps names to functions, so it cannot be
