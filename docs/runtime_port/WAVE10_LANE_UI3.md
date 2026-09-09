@@ -357,6 +357,20 @@ Said out loud rather than left to be inferred from silence:
 
 ---
 
+### ⚠ TWO `[RtDiff]` SITES IN THIS LANE ARE *SUPPOSED* TO SHOW DIVERGENCES
+
+Read this before reading the summary, or two working controls will be reported as two
+defects:
+
+| site | expected | meaning |
+|---|---|---|
+| `UI3 pin negative control (sink)` | **3 divergences** | the three deliberately broken pins. **3 is PASS; 0 is FAIL** — 0 means the pin decoder cannot reject anything and the four `[shape]` sites prove nothing. |
+| `UI::DialogInstance::StartTimer[negative control]` | **> 0 divergences** | the deliberately corrupted StartTimer. **0 is FAIL** — it means the differential cannot see a defect it was handed. |
+
+Everything else in this lane must be **0 divergences**. Both control sites also print a
+one-line verdict in plain English next to the `[RtPort]` lines, which is the line to quote
+rather than the raw counts.
+
 ## 6. Verification status, per row — **read this before the verdict**
 
 | row | ported | registered | shape pins (b) | differential (a) | live exercise |
