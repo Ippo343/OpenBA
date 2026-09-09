@@ -1425,9 +1425,15 @@ void ProbeApplicationThunks() {
         { "?Startup@Application@1@QEAA_NXZ",
           "?PlatformStartup@Application@1@AEAA_NXZ",
           "Application::Startup",  true  },
+        // ROUND 2: lane B landed `RtApp_PlatformShutdown`
+        // (platform_startup_win.cpp) and the integrator re-pointed
+        // `RtApp_Shutdown` to call it DIRECTLY instead of forwarding through
+        // RT_ORIGINAL_ONCE. So this row is no longer the weak one — it now
+        // gets the same scan Update and Startup get, and the previous
+        // "[structural, WEAKER]" name-only check is retired.
         { "?Shutdown@Application@1@QEAAXXZ",
           "?PlatformShutdown@Application@1@AEAAXXZ",
-          "Application::Shutdown", false },
+          "Application::Shutdown", true },
     };
 
     int bad3a = 0, bad3b = 0, done3a = 0, done3b = 0;
