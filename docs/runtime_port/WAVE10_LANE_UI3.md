@@ -213,11 +213,37 @@ which is what `DialogInstance.h` means by calling the second one "the reload".
    four bytes per element — comparing them would fail 100 % of cases and read as a
    catastrophic port defect (`reference_oracle_must_not_compare_unwritten_bytes.md`).
 
-One argument-order trap worth repeating because `Dialog.h` already flags it: in the ctor's
-controller loop the **ElementDescription `ExternalPtr` at entry+0x08 goes to the FIFTH
-parameter and the config `ExternalPtr` at entry+0x10 to the FOURTH.** The field order and
-the argument order are not the same order. `0x180114a0e` / `0x180114a17` / `0x180114a1c`
-settle it.
+### And one defect this port actually committed, found before the first run
+
+**`runtime/types/ui/Dialog.h` NAMES `DialogControllerConfigEntry`'s two `ExternalPtr`
+FIELDS THE WRONG WAY ROUND, and the first draft of the ctor's controller loop trusted the
+names.** The header calls +0x08 `_config` and +0x10 `_elementDesc`. The shipped bytes say
+the opposite about where they go:
+
+```
+180114a13  MOV RAX,[R9+0x08]  ->  180114a17  MOV [RSP+0x20],RAX   = ARGUMENT 5
+180114a1c  MOV R9,[R9+0x10]                                       = ARGUMENT 4
+```
+
+Argument 4 is the `ExternalPtr<DialogControllerConfig>` and argument 5 is the
+`ExternalPtr<ElementDescription>`. So **+0x10 is the config and +0x08 is the
+description** — the reverse of the field names.
+
+`Dialog.h`'s own note above the struct warns that this is "a transcription slip" **while
+itself carrying one**, which is why the warning did not prevent the mistake: it says *the
+config ExternalPtr at +0x08 is passed after the element-description ExternalPtr at +0x10*,
+which describes the argument order correctly and the field identities backwards. A reader
+who takes the field names as the fact and the comment as confirmation gets it wrong twice
+and feels checked.
+
+**The port swaps them at the call site, in the open, with the two `MOV`s quoted**, rather
+than renaming another lane's fields. And the mapping is now pinned to the shipped bytes by
+three entries in the ctor's `[shape]` table, added *because* of this — so it cannot
+silently regress and the next reader is told which of the two sources is load-bearing.
+
+**For whoever owns `Dialog.h`:** `_config` and `_elementDesc` should swap names, and the
+comment above the struct should be rewritten to name the fields by OFFSET rather than by
+role. Not done here; it is a different lane's header and it has other readers.
 
 ---
 

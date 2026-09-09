@@ -796,17 +796,34 @@ void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
     }
 
     // ---- run the dialog's controller table -------------------------------
-    // Stride 0x20 (`ADD RDI,0x20`), and the argument ORDER IS NOT THE FIELD
-    // ORDER: the ElementDescription ExternalPtr at entry+0x08 goes to the FIFTH
-    // parameter and the config ExternalPtr at entry+0x10 to the FOURTH.
-    // Dialog.h flags this as a transcription trap; the disassembly
-    // (0x180114a0e/0x180114a17/0x180114a1c) is what settles it.
+    // Stride 0x20 (`ADD RDI,0x20`).
+    //
+    // *** THE ARGUMENT MAPPING IS THE OPPOSITE OF THE FIELD NAMES, AND THIS
+    //     PORT HAD IT BACKWARDS UNTIL THE DISASSEMBLY WAS RE-READ. ***
+    //
+    //     0x180114a13  MOV RAX,[R9+0x08]  ->  0x180114a17  [RSP+0x20]  = ARG 5
+    //     0x180114a1c  MOV R9,[R9+0x10]                                = ARG 4
+    //
+    // Argument 4 is the `ExternalPtr<DialogControllerConfig>` and argument 5 is
+    // the `ExternalPtr<ElementDescription>`, so entry+0x10 is the CONFIG and
+    // entry+0x08 is the DESCRIPTION.
+    //
+    // `runtime/types/ui/Dialog.h` names them the other way round — `_config` at
+    // +0x08 and `_elementDesc` at +0x10 — and its own comment above the struct
+    // warns about "a transcription slip" here while itself carrying one. THE
+    // NAMES ARE NOT LOAD-BEARING; the two `MOV`s above are. This lane does not
+    // rename another lane's fields, so the swap is made HERE, once, in the open.
+    // (Recorded in WAVE10_LANE_UI3.md §4 for whoever fixes the header.)
     for (int32_t i = 0; i < dlg->_controllerCount; ++i) {
         const RtUI::DialogControllerConfigEntry& e = dlg->_controllerConfigs[i];
-        using Fn = void (*)(void*, uint32_t, void*, void*, void*, const void*);
+        using Fn = void (*)(void*, uint32_t, void*, void* /*arg4: config*/,
+                            void* /*arg5: description*/, const void*);
         static Fn fn = nullptr;
         if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180113470));
-        fn(self, e._typeId, d->_dataSource, e._config, e._elementDesc, &e._name);
+        fn(self, e._typeId, d->_dataSource,
+           e._elementDesc,   // entry+0x10 -> R9  -> ExternalPtr<DialogControllerConfig>
+           e._config,        // entry+0x08 -> a5  -> ExternalPtr<ElementDescription>
+           &e._name);        // entry+0x18 -> a6  -> const String&
     }
 
     return self;   // 0x180114a37 `MOV RAX,RSI`
@@ -1093,6 +1110,24 @@ void VerifyCtorShape(RtDiffSite* site) {
     { static const uint8_t p[] = { 0x48, 0x83, 0xc7 }; PinDisp(c, p, 3, 1,
         static_cast<int64_t>(sizeof(RtUI::DialogControllerConfigEntry)),
         "DialogControllerConfigEntry stride"); }
+
+    // ---- THE ARGUMENT MAPPING THAT THIS PORT GOT WRONG ONCE ----------------
+    // These three pins exist because the field NAMES in Dialog.h are the
+    // opposite of the parameters they feed, and the first draft of the loop
+    // above trusted the names. They pin the mapping to the shipped bytes so it
+    // cannot silently regress:
+    //   LEA RAX,[R9+0x18]   -> arg 6, the String
+    //   MOV RAX,[R9+0x08]   -> arg 5, ExternalPtr<ElementDescription>
+    //   MOV R9,[R9+0x10]    -> arg 4, ExternalPtr<DialogControllerConfig>
+    { static const uint8_t p[] = { 0x49, 0x8d, 0x41 }; PinDisp(c, p, 3, 1,
+        offsetof(RtUI::DialogControllerConfigEntry, _name),
+        "config entry +0x18 -> arg6 (String)"); }
+    { static const uint8_t p[] = { 0x49, 0x8b, 0x41 }; PinDisp(c, p, 3, 1,
+        offsetof(RtUI::DialogControllerConfigEntry, _config),
+        "config entry -> arg5 (ElementDescription); Dialog.h calls it _config"); }
+    { static const uint8_t p[] = { 0x4d, 0x8b, 0x49 }; PinDisp(c, p, 3, 1,
+        offsetof(RtUI::DialogControllerConfigEntry, _elementDesc),
+        "config entry -> arg4 (DialogControllerConfig); Dialog.h calls it _elementDesc"); }
     // and the 6-arg AddController it forwards to
     { static const uint8_t p[] = { 0x48, 0x8b, 0xce }; PinCall(c, p, 3,
         0x180114870, 0x180113470, "AddController(6)"); }
