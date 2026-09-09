@@ -42,6 +42,8 @@
 #include "../engine/types/common.h"
 #include "../runtime/types/math/Math.h"
 #include "../runtime/types/audio/Audio.h"
+#include "../runtime/types/application/Application.h"
+#include "../runtime/src/collection/set_avl.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -59,14 +61,30 @@ bool Enabled() {
 int g_pass = 0;
 int g_fail = 0;
 
+// Set while a NEGATIVE CONTROL is being driven through the same comparator the
+// real cases used. A control's failure is the desired outcome, so it must not
+// be counted as a probe failure — the first run of the Application section
+// finished "16 pass, 2 fail" where both "failures" were controls working
+// exactly as designed, which is a headline number that lies in the safe
+// direction and would still have to be explained by every later reader.
+bool g_inControl = false;
+
 void Report(const char* subject, const char* caseName, bool ok, const char* detail) {
     if (ok) {
         ++g_pass;
+    } else if (g_inControl) {
+        fprintf(stderr, "[RtOrphan] CONTROL-CAUGHT %s [%s]: %s\n", subject, caseName, detail);
     } else {
         ++g_fail;
         fprintf(stderr, "[RtOrphan] FAIL %s [%s]: %s\n", subject, caseName, detail);
     }
 }
+
+// RAII so an early return cannot leave the flag set and silence a real failure.
+struct ControlScope {
+    ControlScope()  { g_inControl = true;  }
+    ~ControlScope() { g_inControl = false; }
+};
 
 // ---------------------------------------------------------------------------
 // Math::Vector2::Normalize(Scalar&) const   —  ?Normalize@Vector2@Math@@QEBA?AV12@AEAVScalar@2@@Z
@@ -987,6 +1005,923 @@ void ProbeAudioScene() {
     }
 }
 
+// ============================================================================
+// WAVE 12 — Application::Application, the ten rows with NO CALLER in this tree
+// ============================================================================
+//
+// Lanes A and C landed eleven Application rows. A source grep over
+// `code/ engine/ runtime/ standalone/ dx11/` (excluding the port directory
+// itself) finds a caller for exactly ONE of them —
+// `?GetInstance@` from `dx11/src/devicedata.cpp:270`. The other ten are
+// reached by nothing:
+//
+//   ?Get@  ?GetWindow@  ?IsCursorEnabled@  ?PlatformIsPaused@
+//   ?PlatformDestruct@  ?Update@  ?Shutdown@  ?Startup@
+//   ?EnableCursor@  ?LaunchProcess@
+//
+// So in any `BANISHED_RT_DIFF=1` run all ten print `calls=0 divergences=0`,
+// which is the line `reference_uncalled_port_is_not_verified.md` exists to
+// refuse. This section gives each one the strongest oracle its shape admits,
+// and says which kind that is.
+//
+// THREE KINDS OF LINE, NEVER MIXED. Every line this section prints is tagged,
+// because the trap here is that all three read the same when you skim:
+//
+//   [live-diff]   OUR registered body and the SHIPPED DLL body were both
+//                 executed on equivalent state and the results compared.
+//                 This is the only kind that is an oracle.
+//   [structural]  Nothing was executed. Bytes in the DLL (or in our own
+//                 compiled body) were decoded and compared against what the
+//                 port claims. Real evidence, different claim.
+//   [attendance]  A body ran; nothing was compared. Printed only to say so.
+//
+// AND A WARNING ABOUT `calls=`. `RtDiffReport` (runtime/funcs/rt_diff.cpp:84)
+// increments `site->calls` on EVERY report, including one made from here. So
+// after this probe runs, the `[RtDiff]` summary shows non-zero `calls=` for
+// these rows and THE PROBE IS THE ONLY CALLER. A `calls=` number on an
+// Application row in a probe run is not evidence of a gameplay route.
+//
+// WHAT THE ELEVEN LOOK LIKE IN A DIFF RUN TODAY, audited by this lane:
+//   * real comparison against the DLL (RT_DIFF_SCALAR / RT_DIFF_BYTES):
+//     Get, GetInstance, GetWindow, IsCursorEnabled, PlatformIsPaused
+//     (and the pre-existing IsPaused, Quit). Sound instruments with no caller.
+//   * ATTENDANCE ONLY — `RT_DIFF_SHADOW(true, …)`, a literal `true`, so not
+//     even a self-check with a predicate; the DLL is never consulted and no
+//     term is evaluated: Update, Shutdown, Startup, PlatformDestruct,
+//     LaunchProcess (and the pre-existing PlatformUpdate, SleepThread,
+//     YieldToThreads). Their `divergences=0` compares nothing at all.
+//   * `EnableCursor` carries lane C's PREDICTING oracle (rt_predict.h), which
+//     is a genuine oracle — but it is gated on `BANISHED_RT_PREDICT=1` AND on
+//     something calling `RtApp_EnableCursor`. Nothing does. See screen 4.
+// ============================================================================
+
+using RtApplication::Application;
+
+typedef void*        (*AppPtrFn)   (const Application*);
+typedef uint8_t      (*AppByteFn)  (const Application*);   // raw AL, see screen 1
+typedef Application* (*AppGetFn)   ();
+typedef void         (*AppVoidFn)  (Application*);
+typedef void         (*AppCursorFn)(Application*, bool);
+typedef bool         (*AppLaunchFn)(Application*, const char*, bool);
+
+// Per-SCREEN negative-control bookkeeping. Deliberately not a union across
+// screens: a union reads 3/3 while hiding that one screen caught 1 of 3
+// (reference_union_control_hides_a_blind_screen.md).
+enum AppScreen { kScrReaders = 0, kScrDestruct, kScrThunkRetail, kScrThunkOurs,
+                 kScrGet, kScrCursor, kScrLaunch, kAppScreenCount };
+const char* const kAppScreenName[kAppScreenCount] = {
+    "S1 readers (live-diff)", "S2 PlatformDestruct (live-diff, negative claim)",
+    "S3a thunks: retail jump target (structural)",
+    "S3b thunks: our body calls the sibling (structural)",
+    "S4 Get / _singleton sweep (live-diff)",
+    "S5 EnableCursor two-object (live-diff)",
+    "S6 LaunchProcess failure path (live-diff, partial)",
+};
+int g_appCtlRun[kAppScreenCount]    = {0};
+int g_appCtlCaught[kAppScreenCount] = {0};
+
+void AppControl(AppScreen s, bool caught, const char* what) {
+    ++g_appCtlRun[s];
+    if (caught) ++g_appCtlCaught[s];
+    else
+        fprintf(stderr, "[RtOrphan][App] CONTROL NOT CAUGHT on %s: %s — every "
+                        "green line on this screen is worthless\n",
+                kAppScreenName[s], what);
+}
+
+// Resolve both doors for one export. `ours == theirs` means the port is not
+// registered and both doors landed on the DLL, so any comparison would be the
+// DLL against itself and a guaranteed vacuous pass
+// (reference_resolveaddr_consults_port_registry_first.md).
+bool AppPair(const char* name, const char* subject, void** ours, void** theirs) {
+    *ours   = ResolveExport(name);
+    *theirs = ResolveExportRaw(name);
+    if (!*ours || !*theirs) {
+        fprintf(stderr, "[RtOrphan][App] SKIP %s: ours=%p theirs=%p\n",
+                subject, *ours, *theirs);
+        ++g_fail;
+        return false;
+    }
+    if (*ours == *theirs) {
+        fprintf(stderr, "[RtOrphan][App] FAIL %s: port NOT registered (both doors "
+                        "returned %p) — a comparison here would be the DLL against "
+                        "itself\n", subject, *ours);
+        ++g_fail;
+        return false;
+    }
+    return true;
+}
+
+// A synthetic Application, plus a guard band. The guard band is not padding:
+// screen 2's claim is that PlatformDestruct writes NOTHING, and "nothing"
+// has to include bytes past the struct this lane's header describes.
+struct AppSubject {
+    alignas(16) uint8_t bytes[0x100];
+    Application* app() { return reinterpret_cast<Application*>(bytes); }
+};
+
+// ---------------------------------------------------------------------------
+// SCREEN 1 — the five pure field readers, swept.
+//
+//   ?GetWindow@         MOV RAX,[RCX]          (+0x00)
+//   ?GetInstance@       MOV RAX,[RCX+0x8]      (+0x08)
+//   ?IsCursorEnabled@   MOVZX EAX,byte [RCX+0x10]
+//   ?PlatformIsPaused@  XOR EAX,EAX / CMP byte [RCX+0x11],AL / SETE AL
+//   ?IsPaused@          byte-identical to PlatformIsPaused (already ported)
+//
+// All five disassemblies above were re-read from the shipped DLL by this lane
+// with objdump, not taken from the lane docs.
+//
+// WHY THE BOOL RETURNS ARE TYPED `uint8_t` HERE AND NOT `bool`. Retail's
+// `IsCursorEnabled` is a MOVZX of the raw byte: for a stored byte of 2 it
+// returns 2 in AL. Our port returns `(_cursorEnabled != 0)`, which GCC
+// normalises to 1. Comparing through `bool` would coerce both to `true` and
+// hide the difference; comparing the raw AL byte is what a caller that does
+// `movzx eax,al; cmp eax,1` would see. The sweep therefore includes bytes
+// 2, 0x7f, 0x80 and 0xff on purpose, and the report distinguishes a
+// BOOL-EQUIVALENT difference (both non-zero) from a truth-value one. A
+// uniform 0/1 population would have proved nothing here
+// (reference_uniform_population_is_not_a_verification.md).
+//
+// PROBED ON A SYNTHETIC OBJECT, NOT THE LIVE SINGLETON. These five only read
+// `[this+0x00..0x11]`, so a buffer with those bytes set IS an Application as
+// far as they can tell (reference_synthetic_subject_beats_a_fake.md) — and a
+// synthetic one can be swept over values the live object never holds.
+//
+// THE NEGATIVE CONTROL is a stand-in reader that takes the byte from +0x11
+// instead of +0x10 and is fed through the SAME comparison loop the real cases
+// used — a control that re-implements the check proves nothing about the check
+// (reference_recheck_must_match_its_own_proof.md).
+// ---------------------------------------------------------------------------
+uint8_t AppBadIsCursorEnabled(const Application* self) {   // control only
+    return self->_running;      // WRONG offset on purpose
+}
+
+void ProbeApplicationReaders() {
+    void* getWindowOurs;   void* getWindowTheirs;
+    void* getInstOurs;     void* getInstTheirs;
+    void* cursorOurs;      void* cursorTheirs;
+    void* platPausedOurs;  void* platPausedTheirs;
+    void* pausedOurs;      void* pausedTheirs;
+
+    if (!AppPair("?GetWindow@Application@1@QEBAPEAUHWND__@@XZ",
+                 "Application::GetWindow", &getWindowOurs, &getWindowTheirs)) return;
+    if (!AppPair("?GetInstance@Application@1@QEBAPEAUHINSTANCE__@@XZ",
+                 "Application::GetInstance", &getInstOurs, &getInstTheirs)) return;
+    if (!AppPair("?IsCursorEnabled@Application@1@QEAA_NXZ",
+                 "Application::IsCursorEnabled", &cursorOurs, &cursorTheirs)) return;
+    if (!AppPair("?PlatformIsPaused@Application@1@AEAA_NXZ",
+                 "Application::PlatformIsPaused", &platPausedOurs, &platPausedTheirs)) return;
+    if (!AppPair("?IsPaused@Application@1@QEAA_NXZ",
+                 "Application::IsPaused", &pausedOurs, &pausedTheirs)) return;
+
+    // CROSSED-REGISTRATION CHECK. `IsPaused` (0x18009f4e0) and
+    // `PlatformIsPaused` (0x18009fe80) are byte-identical bodies at two
+    // addresses under two export names. Two distinct ports register them. If a
+    // wave ever wired one name to the other's body nothing behavioural would
+    // change — and nothing would notice. So assert the pointers DIFFER, both
+    // on our side and on the DLL's.
+    if (platPausedOurs == pausedOurs)
+        fprintf(stderr, "[RtOrphan][App] WARN [structural] IsPaused and "
+                        "PlatformIsPaused resolve to the SAME body on OUR side "
+                        "(%p) — the two registrations are crossed or aliased\n",
+                pausedOurs);
+    else
+        fprintf(stderr, "[RtOrphan][App] pass [structural] IsPaused (%p) and "
+                        "PlatformIsPaused (%p) are DISTINCT ported bodies; the DLL's "
+                        "two are distinct too (%p / %p)\n",
+                pausedOurs, platPausedOurs, pausedTheirs, platPausedTheirs);
+
+    static const uint64_t kHandles[] = {
+        0x0000000000000000ull, 0xffffffffffffffffull, 0x00000000deadbeefull,
+        0x12345678abcdef01ull, 0x0000000000000001ull, 0x8000000000000000ull,
+    };
+    static const uint8_t kBytes[] = { 0x00, 0x01, 0x02, 0x7f, 0x80, 0xff };
+    const int nH = (int)(sizeof(kHandles) / sizeof(kHandles[0]));
+    const int nB = (int)(sizeof(kBytes) / sizeof(kBytes[0]));
+
+    int cases = 0, cmps = 0, bad = 0, boolEquiv = 0;
+
+    // The comparison, as one lambda so the negative control drives the same
+    // code the real cases did.
+    auto cmpByte = [&](const char* subject, uint8_t stored, uint8_t o, uint8_t t) {
+        ++cmps;
+        if (o == t) return;
+        if (o != 0 && t != 0) {
+            ++boolEquiv;
+            if (boolEquiv <= 2)
+                fprintf(stderr, "[RtOrphan][App] NOTE [live-diff] %s: stored byte "
+                        "0x%02x -> ours AL=0x%02x theirs AL=0x%02x. Both non-zero, so "
+                        "every `bool` caller agrees; the RAW byte does not.\n",
+                        subject, stored, o, t);
+            return;
+        }
+        ++bad;
+        char detail[160];
+        snprintf(detail, sizeof(detail), "stored byte 0x%02x: ours AL=0x%02x theirs AL=0x%02x",
+                 stored, o, t);
+        Report(subject, "reader-sweep", false, detail);
+    };
+    auto cmpPtr = [&](const char* subject, uint64_t stored, void* o, void* t) {
+        ++cmps;
+        if (o == t) return;
+        ++bad;
+        char detail[160];
+        snprintf(detail, sizeof(detail), "stored 0x%llx: ours=%p theirs=%p",
+                 (unsigned long long)stored, o, t);
+        Report(subject, "reader-sweep", false, detail);
+    };
+
+    AppSubject s;
+    for (int h = 0; h < nH; ++h) {
+        for (int cb = 0; cb < nB; ++cb) {
+            for (int rb = 0; rb < nB; ++rb) {
+                memset(s.bytes, 0xA5, sizeof(s.bytes));     // poison the rest
+                Application* a = s.app();
+                a->_windowHandle   = (void*)(uintptr_t)kHandles[h];
+                a->_platformHandle = (void*)(uintptr_t)kHandles[(h + 3) % nH];
+                a->_cursorEnabled  = kBytes[cb];
+                a->_running        = kBytes[rb];
+                ++cases;
+
+                cmpPtr("Application::GetWindow", kHandles[h],
+                       reinterpret_cast<AppPtrFn>(getWindowOurs)(a),
+                       reinterpret_cast<AppPtrFn>(getWindowTheirs)(a));
+                cmpPtr("Application::GetInstance", kHandles[(h + 3) % nH],
+                       reinterpret_cast<AppPtrFn>(getInstOurs)(a),
+                       reinterpret_cast<AppPtrFn>(getInstTheirs)(a));
+                cmpByte("Application::IsCursorEnabled", kBytes[cb],
+                        reinterpret_cast<AppByteFn>(cursorOurs)(a),
+                        reinterpret_cast<AppByteFn>(cursorTheirs)(a));
+                cmpByte("Application::PlatformIsPaused", kBytes[rb],
+                        reinterpret_cast<AppByteFn>(platPausedOurs)(a),
+                        reinterpret_cast<AppByteFn>(platPausedTheirs)(a));
+                cmpByte("Application::IsPaused", kBytes[rb],
+                        reinterpret_cast<AppByteFn>(pausedOurs)(a),
+                        reinterpret_cast<AppByteFn>(pausedTheirs)(a));
+            }
+        }
+    }
+
+    // NEGATIVE CONTROL — one case, same comparator, deliberately wrong reader.
+    // Its subject (the returned byte) is inside the set this screen compares
+    // (reference_control_must_pick_a_compared_subject.md).
+    {
+        ControlScope cs;
+        memset(s.bytes, 0, sizeof(s.bytes));
+        Application* a = s.app();
+        a->_cursorEnabled = 0x01;
+        a->_running       = 0x00;        // so +0x11 gives a DIFFERENT answer
+        const uint8_t o = AppBadIsCursorEnabled(a);
+        const uint8_t t = reinterpret_cast<AppByteFn>(cursorTheirs)(a);
+        const int badBefore = bad;
+        cmpByte("Application::IsCursorEnabled [CONTROL]", a->_cursorEnabled, o, t);
+        AppControl(kScrReaders, bad > badBefore, "reader taking the byte from +0x11");
+        bad = badBefore;                 // the control's own miss is not a failure
+    }
+
+    if (bad == 0) {
+        ++g_pass;
+        fprintf(stderr, "[RtOrphan][App] pass [live-diff] readers: %d states x 5 "
+                        "readers = %d comparisons against the shipped DLL, 0 truth-value "
+                        "divergences, %d raw-AL-only differences\n", cases, cmps, boolEquiv);
+    } else {
+        ++g_fail;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SCREEN 2 — `?PlatformDestruct@` is literally `ret 0x0` (0x18009fc00,
+// re-read with objdump by this lane). There is no output to compare, so the
+// only verifiable claim is a NEGATIVE one: our body writes nothing, anywhere.
+//
+// "VERIFIED" FOR THIS ROW MEANS "VERIFIED TO DO NOTHING". That is all there is
+// to verify, and it is stated rather than dressed up: the probe brackets a
+// memcmp of the whole 0x100-byte subject (struct plus guard band) around the
+// call, on both sides, over several fill patterns.
+//
+// The negative control is a stand-in that writes one byte, because a bracket
+// that cannot fail would report "writes nothing" for a body that writes
+// everything.
+// ---------------------------------------------------------------------------
+void AppDestructThatWrites(Application* self) {            // control only
+    self->_quitRequested ^= 0x01;
+}
+
+void ProbeApplicationPlatformDestruct() {
+    void* ours; void* theirs;
+    if (!AppPair("?PlatformDestruct@Application@1@AEAAXXZ",
+                 "Application::PlatformDestruct", &ours, &theirs)) return;
+
+    static const uint8_t kFills[] = { 0x00, 0xff, 0xa5, 0x5a };
+    int cases = 0, bad = 0;
+
+    AppSubject a, b;
+    alignas(16) uint8_t snapA[0x100], snapB[0x100];
+
+    auto bracket = [&](AppVoidFn fn, uint8_t fill) -> bool {
+        memset(a.bytes, fill, sizeof(a.bytes));
+        memcpy(snapA, a.bytes, sizeof(snapA));
+        fn(a.app());
+        return memcmp(snapA, a.bytes, sizeof(snapA)) == 0;
+    };
+
+    for (uint8_t fill : kFills) {
+        ++cases;
+        if (!bracket(reinterpret_cast<AppVoidFn>(ours), fill)) {
+            ++bad;
+            Report("Application::PlatformDestruct", "ours wrote something", false,
+                   "our body modified the object; retail's is `ret 0x0`");
+        }
+        // And the DLL's, for the same 0x100 bytes — this is what makes the
+        // claim a comparison and not just an assertion about our own code.
+        memset(b.bytes, fill, sizeof(b.bytes));
+        memcpy(snapB, b.bytes, sizeof(snapB));
+        reinterpret_cast<AppVoidFn>(theirs)(b.app());
+        if (memcmp(snapB, b.bytes, sizeof(snapB)) != 0) {
+            ++bad;
+            Report("Application::PlatformDestruct", "theirs wrote something", false,
+                   "the SHIPPED body modified the object — the premise is wrong, "
+                   "not the port");
+        }
+    }
+
+    {
+        const bool caught = !bracket(&AppDestructThatWrites, 0x00);
+        AppControl(kScrDestruct, caught, "stand-in that flips one byte at +0x28");
+    }
+
+    if (bad == 0) {
+        ++g_pass;
+        fprintf(stderr, "[RtOrphan][App] pass [live-diff] PlatformDestruct: %d fill "
+                        "patterns x 0x100 bytes bracketed on BOTH sides — neither body "
+                        "wrote anything. VERIFIED TO DO NOTHING, which is the whole of "
+                        "this row's behaviour\n", cases);
+    } else {
+        ++g_fail;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SCREEN 3 — the three tail-call thunks, verified STRUCTURALLY.
+//
+// `?Update@` / `?Shutdown@` / `?Startup@` are each one `jmp rel32`. They are
+// NOT executed here and must not be: Startup and Update pump message loops and
+// Shutdown tears the platform down. Instead the DLL's own bytes are decoded —
+// the technique the file banner above credits to `RtIoSerializerRegister`,
+// which verifies the 18-member `IO::Serializer` forwarder family at
+// registration by decoding the DLL's tail-jump and checking the target.
+//
+// TWO SEPARATE CLAIMS, and a lane that checks only the first has proved the
+// wrong thing:
+//   3a  RETAIL's jump target is the sibling the port names.
+//   3b  OUR compiled body actually calls that sibling's PORT.
+// (3a alone would pass even if our thunk forwarded somewhere else entirely.)
+//
+// 3b is a byte scan of our own compiled body for a direct `call`/`jmp rel32`
+// whose target is the sibling's entry point. Its control is the discriminating
+// one: the same scanner must NOT find a call to PlatformUpdate inside
+// RtApp_Shutdown. A scanner that says yes to everything would pass 3b for free.
+//
+// SHUTDOWN IS DIFFERENT AND THE DIFFERENCE IS REPORTED, NOT PAPERED OVER.
+// `RtApp_Shutdown` forwards through `RT_ORIGINAL_ONCE("?PlatformShutdown@…")`
+// because lane B's body is not in this tree (application_thunks.cpp says so).
+// There is no direct call to scan for, so 3b for Shutdown is a NAME check:
+// the export name our body forwards to resolves to the address retail's jump
+// targets. That is strictly weaker than the other two and is labelled so.
+// ---------------------------------------------------------------------------
+bool AppDecodeJmpRel32(const void* at, const void** target) {
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(at);
+    if (p[0] != 0xE9) return false;
+    int32_t rel;
+    memcpy(&rel, p + 1, 4);
+    *target = p + 5 + rel;
+    return true;
+}
+
+// Scan a compiled body for a direct E8/E9 rel32 to `target`.
+bool AppBodyCallsTarget(const void* fn, const void* target, size_t window) {
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(fn);
+    for (size_t i = 0; i + 5 <= window; ++i) {
+        if (p[i] != 0xE8 && p[i] != 0xE9) continue;
+        int32_t rel;
+        memcpy(&rel, p + i + 1, 4);
+        if (p + i + 5 + rel == reinterpret_cast<const uint8_t*>(target)) return true;
+    }
+    return false;
+}
+
+void ProbeApplicationThunks() {
+    struct Row {
+        const char* thunk;
+        const char* sibling;
+        const char* subject;
+        bool        oursCallsSiblingDirectly;   // false = Shutdown's name seam
+    };
+    static const Row kRows[] = {
+        { "?Update@Application@1@QEAA_NXZ",
+          "?PlatformUpdate@Application@1@AEAA_NXZ",
+          "Application::Update",   true  },
+        { "?Startup@Application@1@QEAA_NXZ",
+          "?PlatformStartup@Application@1@AEAA_NXZ",
+          "Application::Startup",  true  },
+        // ROUND 2: lane B landed `RtApp_PlatformShutdown`
+        // (platform_startup_win.cpp) and the integrator re-pointed
+        // `RtApp_Shutdown` to call it DIRECTLY instead of forwarding through
+        // RT_ORIGINAL_ONCE. So this row is no longer the weak one — it now
+        // gets the same scan Update and Startup get, and the previous
+        // "[structural, WEAKER]" name-only check is retired.
+        { "?Shutdown@Application@1@QEAAXXZ",
+          "?PlatformShutdown@Application@1@AEAAXXZ",
+          "Application::Shutdown", true },
+    };
+
+    int bad3a = 0, bad3b = 0, done3a = 0, done3b = 0;
+    const void* retailTarget[3] = { nullptr, nullptr, nullptr };
+    void* oursThunk[3] = { nullptr, nullptr, nullptr };
+    void* oursSibling[3] = { nullptr, nullptr, nullptr };
+
+    for (int i = 0; i < 3; ++i) {
+        const Row& r = kRows[i];
+        void* ours; void* theirs;
+        if (!AppPair(r.thunk, r.subject, &ours, &theirs)) continue;
+        oursThunk[i] = ours;
+
+        // ---- 3a: decode retail's own jmp rel32.
+        const void* tgt = nullptr;
+        if (!AppDecodeJmpRel32(theirs, &tgt)) {
+            ++bad3a;
+            Report(r.subject, "3a decode", false,
+                   "the shipped body does not begin with a jmp rel32 — the port's "
+                   "whole premise is wrong");
+            continue;
+        }
+        retailTarget[i] = tgt;
+        void* siblingTheirs = ResolveExportRaw(r.sibling);
+        ++done3a;
+        if (tgt != siblingTheirs) {
+            ++bad3a;
+            char detail[192];
+            snprintf(detail, sizeof(detail),
+                     "retail jumps to %p, but %s is at %p", tgt, r.sibling, siblingTheirs);
+            Report(r.subject, "3a retail jump target", false, detail);
+        } else {
+            fprintf(stderr, "[RtOrphan][App] pass [structural] %s: shipped body is "
+                            "`jmp %p` and that IS %s\n", r.subject, tgt, r.sibling);
+        }
+
+        // ---- 3b: does OUR body reach that sibling?
+        ++done3b;
+        if (r.oursCallsSiblingDirectly) {
+            // The sibling's PORT, not the DLL's body: ResolveExport consults the
+            // port registry first, so this is our own compiled function.
+            void* sib = ResolveExport(r.sibling);
+            oursSibling[i] = sib;
+            if (sib && sib == ResolveExportRaw(r.sibling)) {
+                ++bad3b;
+                Report(r.subject, "3b", false,
+                       "the SIBLING is not ported in this tree, so a 'forwards to our "
+                       "sibling' claim cannot be checked");
+            } else if (!sib || !AppBodyCallsTarget(oursThunk[i], sib, 0x400)) {
+                ++bad3b;
+                char detail[192];
+                snprintf(detail, sizeof(detail),
+                         "no direct call/jmp to %s (%p) in the first 0x400 bytes of our "
+                         "body at %p", r.sibling, sib, oursThunk[i]);
+                Report(r.subject, "3b our body calls the sibling", false, detail);
+            } else {
+                fprintf(stderr, "[RtOrphan][App] pass [structural] %s: our compiled "
+                                "body contains a direct call to our own %s (%p)\n",
+                        r.subject, r.sibling, sib);
+            }
+        } else {
+            // Shutdown: the seam is a NAME, resolved at run time. All that can
+            // be checked is that the name lands where retail's jump lands.
+            void* byName = ResolveExportRaw(r.sibling);
+            if (byName != tgt) {
+                ++bad3b;
+                Report(r.subject, "3b name seam", false,
+                       "the export name our body forwards to does not resolve to "
+                       "retail's jump target");
+            } else {
+                fprintf(stderr, "[RtOrphan][App] pass [structural, WEAKER] %s: the "
+                                "export name our body forwards to ('%s') resolves to "
+                                "%p, retail's own jump target. This does NOT prove our "
+                                "body forwards to it — lane B's sibling is absent from "
+                                "this tree, so there is no ported callee to scan for\n",
+                        r.subject, r.sibling, byName);
+            }
+        }
+    }
+
+    // ---- CONTROL 3a: the same decoder and comparator, wrong expected target.
+    if (retailTarget[0]) {
+        void* wrong = ResolveExportRaw("?PlatformStartup@Application@1@AEAA_NXZ");
+        AppControl(kScrThunkRetail, retailTarget[0] != wrong,
+                   "Update's jump target compared against PlatformStartup");
+    }
+    // ---- CONTROL 3b: the same scanner, a call that is NOT there. This is the
+    // discriminating control — a scanner that returns true for anything would
+    // have passed 3b above for free.
+    if (oursThunk[2] && oursSibling[0]) {
+        const bool caught = !AppBodyCallsTarget(oursThunk[2], oursSibling[0], 0x400);
+        AppControl(kScrThunkOurs, caught,
+                   "scanning RtApp_Shutdown for a call to RtApp_PlatformUpdate");
+    }
+
+    if (bad3a == 0 && done3a == 3) ++g_pass; else ++g_fail;
+    if (bad3b == 0 && done3b == 3) ++g_pass; else ++g_fail;
+    fprintf(stderr, "[RtOrphan][App] thunks: 3a %d/%d rows, 3b %d/%d rows "
+                    "(NOTHING was executed — no message loop was pumped and nothing "
+                    "was torn down)\n", done3a - bad3a, done3a, done3b - bad3b, done3b);
+}
+
+// ---------------------------------------------------------------------------
+// SCREEN 4 — `?Get@` (static; returns `_singleton`).
+//
+//   18000a2f0: MOV RAX,[RIP+0x1f2381]   # 0x1801fc678
+//   18000a2f7: RET
+//
+// Our port reads the same symbol through `RT_DATA_SLOT`. THAT IS ONLY THE SAME
+// SLOT WHILE THE MINT ROW IS OFF. `standalone/rt_data_mint_tables.inc:2159`
+// carries a minted row for `?_singleton@Application@1@0PEAV11@EA` at
+// 0x1801fc678; it is not in `reg_mint_promoted.cpp`, so in an ordinary run it
+// is unregistered and `RT_DATA_SLOT` falls through to the DLL's own slot. But
+// under `BANISHED_RT_MINT=1` (or `BANISHED_RT_MINT_ROWS` naming it) our reader
+// would read OUR storage while retail's `Get` reads the DLL's — a split brain,
+// and every sweep case would "diverge" for a reason that is not a port defect.
+//
+// So the probe checks the two doors resolve to the SAME ADDRESS first, and
+// refuses to sweep (reporting SPLIT, not FAIL) when they do not. Checking the
+// premise before the comparison is the whole point of the check.
+//
+// THE SWEEP WRITES THE SINGLETON. It saves the slot, writes sentinels, calls
+// both bodies, compares, and restores — verifying the restore. It runs at boot
+// from `RtOrphanProbe()`, before `Engine::Startup` builds any thread, so there
+// is no concurrent reader of that slot.
+// ---------------------------------------------------------------------------
+void ProbeApplicationGet() {
+    void* ours; void* theirs;
+    if (!AppPair("?Get@Application@1@SAPEAV11@XZ", "Application::Get", &ours, &theirs))
+        return;
+
+    const char* kSlot = "?_singleton@Application@1@0PEAV11@EA";
+    void** oursSlot   = reinterpret_cast<void**>(ResolveExport(kSlot));
+    void** theirsSlot = reinterpret_cast<void**>(ResolveExportRaw(kSlot));
+    if (!theirsSlot) {
+        fprintf(stderr, "[RtOrphan][App] SKIP Application::Get: the DLL has no "
+                        "'%s' data export\n", kSlot);
+        ++g_fail;
+        return;
+    }
+    if (oursSlot != theirsSlot) {
+        fprintf(stderr, "[RtOrphan][App] SPLIT Application::Get: our door resolves "
+                        "'%s' to %p, the DLL's slot is %p. The minted row is ACTIVE, so "
+                        "our Get and retail's Get read DIFFERENT storage and no sweep "
+                        "here could distinguish a port defect from that split. Not "
+                        "swept, and NOT counted as a pass.\n",
+                kSlot, (void*)oursSlot, (void*)theirsSlot);
+        return;
+    }
+
+    static const uint64_t kVals[] = {
+        0x0000000000000000ull, 0xffffffffffffffffull, 0x00000000deadbeefull,
+        0x0000000180000000ull, 0x0000000000000008ull, 0x7fffffffffffffffull,
+    };
+    void* const saved = *theirsSlot;
+    int cmps = 0, bad = 0;
+
+    auto cmpGot = [&](uint64_t wrote, void* o, void* t) {
+        ++cmps;
+        if (o == t) return;
+        ++bad;
+        char detail[160];
+        snprintf(detail, sizeof(detail), "slot=0x%llx ours=%p theirs=%p",
+                 (unsigned long long)wrote, o, t);
+        Report("Application::Get", "singleton-sweep", false, detail);
+    };
+
+    for (uint64_t v : kVals) {
+        *theirsSlot = (void*)(uintptr_t)v;
+        void* o = reinterpret_cast<AppGetFn>(ours)();
+        void* t = reinterpret_cast<AppGetFn>(theirs)();
+        cmpGot(v, o, t);
+        if ((uint64_t)(uintptr_t)t != v) {
+            ++bad;
+            Report("Application::Get", "premise", false,
+                   "the SHIPPED Get did not return the value written into the slot — "
+                   "this is not the slot retail reads");
+        }
+    }
+
+    // NEGATIVE CONTROL, through the same comparator, on the value it compares.
+    {
+        ControlScope cs;
+        const int badBefore = bad;
+        cmpGot(0, (void*)0x1, (void*)0x2);
+        AppControl(kScrGet, bad > badBefore, "two deliberately unequal Get results");
+        bad = badBefore;
+    }
+
+    *theirsSlot = saved;
+    const bool restored = (*theirsSlot == saved);
+    if (!restored) { ++bad; Report("Application::Get", "restore", false,
+                                   "failed to restore the singleton slot"); }
+
+    if (bad == 0) {
+        ++g_pass;
+        fprintf(stderr, "[RtOrphan][App] pass [live-diff] Application::Get: %d sentinel "
+                        "values written into the DLL's own 0x1801fc678 slot, ours and the "
+                        "shipped body agreed on every one; slot restored to %p\n",
+                cmps - 1, saved);
+    } else {
+        ++g_fail;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SCREEN 5 — `?EnableCursor@` on TWO INDEPENDENT SYNTHETIC APPLICATIONS.
+//
+// Lane C gave this row rt_predict.h's PREDICTING oracle, and the reason it
+// gave is right: a replay on ONE object cannot work, because our body has
+// already flipped the flag by the time retail's runs, so retail takes the
+// early-out at 0x18009f803 and the tree walk — the only thing that can go
+// wrong — is never executed.
+//
+// CAN THAT ORACLE EVER FIRE? NO, as the tree stands. It is gated on
+// `RT_PREDICT_ON` (BANISHED_RT_PREDICT=1) *and* on somebody calling
+// `RtApp_EnableCursor`. Nothing in `code/ engine/ runtime/ standalone/ dx11/`
+// does. So the predicting oracle is presently unreachable, exactly the way the
+// row's `calls=0` is unreachable. This probe is the missing driver, and it
+// serves both modes:
+//
+//   BANISHED_RT_PREDICT unset  ->  the probe runs its OWN live diff, below.
+//   BANISHED_RT_PREDICT=1      ->  calling ours enters lane C's predicting
+//                                  round, which calls the DLL itself. The
+//                                  probe MUST NOT then compare A against B:
+//                                  both objects would have been mutated by the
+//                                  DLL and the comparison would be retail
+//                                  against retail — a vacuous pass. It detects
+//                                  the mode, drives the rounds anyway (so the
+//                                  oracle fires and prints its own verdict),
+//                                  and says that rt_predict.h owns the verdict.
+//
+// THE LIVE DIFF: two independent synthetic Applications with their own
+// synthetic AVL nodes. Retail's descent (re-read at 0x18009f811..824) is
+// `key > 0x20 -> left(+0x18)`, `key < 0x20 -> right(+0x20)`, equal ->
+// tail-jmp `[node+0x8]` with (rcx=[this], edx=0x20, r8=0, r9=0). The trees
+// below make the target reachable at the root, only through a LEFT step, only
+// through a RIGHT step, and not at all.
+//
+// The callback is OURS — a recorder. That is not a Device-style fake: the one
+// thing EnableCursor asks of the world is "call this pointer with these four
+// arguments", so recording the call IS the observation
+// (the shape ProbeAudioScene's Device::Stop recorder uses).
+// ---------------------------------------------------------------------------
+typedef int (*AppCursorCbFn)(void*, unsigned, uint64_t, int64_t);
+
+struct AppCbCall { void* hwnd; unsigned msg; uint64_t w; int64_t l; };
+AppCbCall g_appCbLog[2][8];
+int       g_appCbCount[2] = {0, 0};
+int       g_appCbSide     = -1;
+
+int AppProbeCursorCallback(void* hwnd, unsigned msg, uint64_t w, int64_t l) {
+    const int s = g_appCbSide;
+    if (s >= 0) {
+        if (g_appCbCount[s] < 8) g_appCbLog[s][g_appCbCount[s]] = { hwnd, msg, w, l };
+        ++g_appCbCount[s];
+    }
+    return 0x5A5A;
+}
+
+void AppSeedNode(rtsetavl::Node* n, unsigned key, AppCursorCbFn cb) {
+    memset(n, 0, sizeof(*n));
+    memcpy(n->element + 0, &key, sizeof(key));
+    memcpy(n->element + 8, &cb, sizeof(cb));
+}
+
+// Build one of five tree shapes into `nodes[3]`; returns the root.
+rtsetavl::Node* AppBuildCursorTree(int shape, rtsetavl::Node* nodes) {
+    const unsigned kTarget = 0x20;
+    switch (shape) {
+        case 0:                                        // empty
+            return nullptr;
+        case 1:                                        // hit at the root
+            AppSeedNode(&nodes[0], kTarget, &AppProbeCursorCallback);
+            return &nodes[0];
+        case 2:                                        // one LEFT step (key > 0x20)
+            AppSeedNode(&nodes[0], 0x0030, &AppProbeCursorCallback);
+            AppSeedNode(&nodes[1], kTarget, &AppProbeCursorCallback);
+            nodes[0].left = &nodes[1];
+            return &nodes[0];
+        case 3:                                        // one RIGHT step (key < 0x20)
+            AppSeedNode(&nodes[0], 0x0010, &AppProbeCursorCallback);
+            AppSeedNode(&nodes[1], kTarget, &AppProbeCursorCallback);
+            nodes[0].right = &nodes[1];
+            return &nodes[0];
+        default:                                       // miss, both compares taken
+            AppSeedNode(&nodes[0], 0x0030, &AppProbeCursorCallback);
+            AppSeedNode(&nodes[1], 0x0010, &AppProbeCursorCallback);
+            nodes[0].left = &nodes[1];
+            return &nodes[0];
+    }
+}
+
+void ProbeApplicationEnableCursor() {
+    void* ours; void* theirs;
+    if (!AppPair("?EnableCursor@Application@1@QEAAX_N@Z",
+                 "Application::EnableCursor", &ours, &theirs)) return;
+
+    const char* predictEnv = getenv("BANISHED_RT_PREDICT");
+    const bool predicting = predictEnv && *predictEnv && strcmp(predictEnv, "0") != 0;
+
+    static const uint8_t kPrev[]  = { 0x00, 0x01, 0x02 };
+    static const bool    kArg[]   = { false, true };
+    const int kShapes = 5;
+
+    int cases = 0, bad = 0, dispatched = 0, flipped = 0;
+
+    AppSubject A, B;
+    rtsetavl::Node nodesA[3], nodesB[3];
+    alignas(16) uint8_t snapNodesA[sizeof(nodesA)], snapNodesB[sizeof(nodesB)];
+
+    // The comparator: everything the two objects can be compared on, plus the
+    // recorded dispatch. `_messageCallbackRoot` is EXCLUDED and the exclusion
+    // is not a convenience — the two sides own SEPARATE node arrays, so the two
+    // root pointers can never be equal. Its immutability is checked instead, by
+    // the node-array snapshots.
+    auto compare = [&](char* detail, size_t n) -> bool {
+        const Application* a = reinterpret_cast<const Application*>(A.bytes);
+        const Application* b = reinterpret_cast<const Application*>(B.bytes);
+        if (a->_cursorEnabled != b->_cursorEnabled) {
+            snprintf(detail, n, "_cursorEnabled ours=0x%02x theirs=0x%02x",
+                     a->_cursorEnabled, b->_cursorEnabled);
+            return false;
+        }
+        if (a->_windowHandle != b->_windowHandle || a->_platformHandle != b->_platformHandle ||
+            a->_running != b->_running || a->_quitRequested != b->_quitRequested ||
+            a->_messageCallbackCount != b->_messageCallbackCount) {
+            snprintf(detail, n, "a field OUTSIDE _cursorEnabled diverged");
+            return false;
+        }
+        if (memcmp(A.bytes + 0x30, B.bytes + 0x30, sizeof(A.bytes) - 0x30) != 0) {
+            snprintf(detail, n, "a byte in the guard band past the struct diverged");
+            return false;
+        }
+        if (memcmp(snapNodesA, nodesA, sizeof(nodesA)) != 0 ||
+            memcmp(snapNodesB, nodesB, sizeof(nodesB)) != 0) {
+            snprintf(detail, n, "the callback tree was MODIFIED; EnableCursor only reads it");
+            return false;
+        }
+        if (g_appCbCount[0] != g_appCbCount[1]) {
+            snprintf(detail, n, "callback fired %d times by ours, %d by theirs",
+                     g_appCbCount[0], g_appCbCount[1]);
+            return false;
+        }
+        for (int k = 0; k < g_appCbCount[0] && k < 8; ++k) {
+            const AppCbCall& x = g_appCbLog[0][k];
+            const AppCbCall& y = g_appCbLog[1][k];
+            if (x.hwnd != y.hwnd || x.msg != y.msg || x.w != y.w || x.l != y.l) {
+                snprintf(detail, n,
+                         "dispatch #%d ours=(%p,0x%x,%llu,%lld) theirs=(%p,0x%x,%llu,%lld)",
+                         k, x.hwnd, x.msg, (unsigned long long)x.w, (long long)x.l,
+                         y.hwnd, y.msg, (unsigned long long)y.w, (long long)y.l);
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // One case, as a lambda, so the negative controls can RE-RUN a case of
+    // their choosing and then corrupt it. The first version of this screen let
+    // the controls inherit whatever state the LAST sweep case happened to
+    // leave, and the last case is a tree MISS — so the dispatch control fired
+    // on a case with no dispatch to corrupt and honestly reported itself
+    // UNCONTROLLED (1/2). A control has to pick its subject from the set the
+    // probe actually compares
+    // (reference_control_must_pick_a_compared_subject.md), and that means
+    // choosing the case, not accepting one.
+    auto runCase = [&](uint8_t prev, bool arg, int shape) -> bool {
+        memset(A.bytes, 0, sizeof(A.bytes));
+        memset(B.bytes, 0, sizeof(B.bytes));
+        Application* a = A.app();
+        Application* b = B.app();
+        a->_windowHandle = b->_windowHandle = (void*)(uintptr_t)0xBADC0FFEE0DDF00Dull;
+        a->_running      = b->_running      = 1;
+        a->_cursorEnabled = b->_cursorEnabled = prev;
+        a->_messageCallbackRoot = AppBuildCursorTree(shape, nodesA);
+        b->_messageCallbackRoot = AppBuildCursorTree(shape, nodesB);
+        memcpy(snapNodesA, nodesA, sizeof(nodesA));
+        memcpy(snapNodesB, nodesB, sizeof(nodesB));
+        g_appCbCount[0] = g_appCbCount[1] = 0;
+
+        g_appCbSide = 0;
+        reinterpret_cast<AppCursorFn>(ours)(a, arg);
+        if (predicting) {
+            // Lane C's predicting round already ran the DLL on `a`. Do NOT run
+            // it again on `b`, and do NOT compare: that would be retail against
+            // retail.
+            g_appCbSide = -1;
+            return true;
+        }
+        g_appCbSide = 1;
+        reinterpret_cast<AppCursorFn>(theirs)(b, arg);
+        g_appCbSide = -1;
+
+        if (g_appCbCount[0] > 0) ++dispatched;
+        if (a->_cursorEnabled != prev) ++flipped;
+
+        char detail[224];
+        if (compare(detail, sizeof(detail))) return true;
+        ++bad;
+        char full[320];
+        snprintf(full, sizeof(full), "prev=0x%02x arg=%d shape=%d: %s",
+                 prev, (int)arg, shape, detail);
+        Report("Application::EnableCursor", "two-object", false, full);
+        return false;
+    };
+
+    for (uint8_t prev : kPrev) {
+        for (bool arg : kArg) {
+            for (int shape = 0; shape < kShapes; ++shape) {
+                ++cases;
+                if (!runCase(prev, arg, shape)) goto sweepDone;
+            }
+        }
+    }
+sweepDone:;
+
+    if (predicting) {
+        fprintf(stderr, "[RtOrphan][App] Application::EnableCursor: BANISHED_RT_PREDICT "
+                        "is set, so this probe DROVE lane C's predicting oracle %d times "
+                        "and made no comparison of its own (comparing here would be "
+                        "retail against retail). The verdict is rt_predict.h's — read its "
+                        "[RtPredict] lines, including changed=N/M\n", cases);
+        return;
+    }
+
+    // TWO NEGATIVE CONTROLS, one per thing this comparator actually checks:
+    // the flag byte and the recorded dispatch. One control over one term leaves
+    // the other unproven (reference_shadow_predicate_must_name_its_failing_term.md).
+    if (bad == 0) {
+        char detail[224];
+        // Re-run a case chosen for the controls: prev=0, arg=true, shape=1 is
+        // the one that BOTH flips the flag AND dispatches the callback, so
+        // both terms the comparator checks have something to corrupt.
+        const int savedDispatched = dispatched, savedFlipped = flipped;
+        runCase(0x00, true, 1);
+        dispatched = savedDispatched;   // the control re-run is not a sweep case
+        flipped    = savedFlipped;
+        Application* a = A.app();
+        const uint8_t saveFlag = a->_cursorEnabled;
+        a->_cursorEnabled = (uint8_t)(saveFlag ^ 0xFF);
+        AppControl(kScrCursor, !compare(detail, sizeof(detail)),
+                   "corrupted _cursorEnabled on our object");
+        a->_cursorEnabled = saveFlag;
+
+        if (g_appCbCount[0] > 0) {
+            const unsigned saveMsg = g_appCbLog[0][0].msg;
+            g_appCbLog[0][0].msg = saveMsg + 1;
+            AppControl(kScrCursor, !compare(detail, sizeof(detail)),
+                       "corrupted the recorded dispatch message on our side");
+            g_appCbLog[0][0].msg = saveMsg;
+        } else {
+            AppControl(kScrCursor, false,
+                       "no dispatch was recorded on the last case, so the dispatch "
+                       "comparison is UNCONTROLLED");
+        }
+    }
+
+    if (bad == 0) {
+        ++g_pass;
+        fprintf(stderr, "[RtOrphan][App] pass [live-diff] EnableCursor: %d cases "
+                        "(3 prior flag bytes x 2 args x 5 tree shapes) on two INDEPENDENT "
+                        "synthetic Applications, 0 divergences; %d cases actually flipped "
+                        "the flag and %d actually DISPATCHED a WM_SETCURSOR callback\n",
+                cases, flipped, dispatched);
+        if (dispatched == 0)
+            fprintf(stderr, "[RtOrphan][App] WARN EnableCursor: 0 cases dispatched — the "
+                            "tree walk, the only thing that can go wrong here, was NOT "
+                            "exercised and this pass is thin\n");
+    } else {
+        ++g_fail;
+    }
+}
+
+void ProbeApplication() {
+    fprintf(stderr, "[RtOrphan][App] ==== Wave 12: Application rows with no caller ====\n");
+    ProbeApplicationReaders();
+    ProbeApplicationPlatformDestruct();
+    ProbeApplicationThunks();
+    ProbeApplicationGet();
+    ProbeApplicationEnableCursor();
+    for (int i = 0; i < kAppScreenCount; ++i)
+        if (g_appCtlRun[i])
+            fprintf(stderr, "[RtOrphan][App] negative control %s: %d/%d caught\n",
+                    kAppScreenName[i], g_appCtlCaught[i], g_appCtlRun[i]);
+    fflush(stderr);
+}
+
 } // namespace
 
 void RtOrphanProbe() {
@@ -994,6 +1929,7 @@ void RtOrphanProbe() {
 
     fprintf(stderr, "[RtOrphan] ==== probing ports with no caller in our tree ====\n");
     ProbeVector2NormalizeWithMag();
+    ProbeApplication();
     fprintf(stderr, "[RtOrphan] ==== %d pass, %d fail ====\n", g_pass, g_fail);
     fflush(stderr);
 }
@@ -1286,6 +2222,111 @@ void ProbeUpdateLoopIsRunning() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// SCREEN 6 — `?LaunchProcess@` — the FAILURE path of the `wait == true` arm,
+// and nothing else.
+//
+// THE WAVE BRIEF SAID "no oracle possible" AND THAT IS TRUE OF MOST OF THIS
+// FUNCTION, but not of all of it. The two arms are:
+//
+//   wait == false   ShellExecuteW(NULL, L"open", cmd, …, SW_SHOWDEFAULT)
+//   wait == true    CreateProcessW(…) ; WaitForSingleObject ; CloseHandle
+//
+// NOT PROBED, and the reasons are structural, not awkward:
+//   * the whole `wait == false` arm. ShellExecuteW on a bad path can raise a
+//     shell error dialog, and on a good one it opens a real document. Running
+//     it twice does it twice. No.
+//   * the `wait == true` SUCCESS path. It would spawn two real child
+//     processes and block on both.
+//
+// PROBED: `wait == true` where `CreateProcessW` FAILS. Nothing is spawned,
+// nothing is waited on, no handle is opened — the function allocates a
+// WideString, calls CreateProcessW, gets FALSE, frees, and returns false. That
+// is safe to run on both sides, and it is where the ONE piece of arithmetic in
+// this function lives: retail's MAX_PATH-shaped 0x104 clamp
+// (`CMP EBX,R14D` / `MOV R14D,0x104` at 0x18009f703/0x18009f709) and the
+// force-terminate of a truncated command. The sweep straddles that boundary at
+// 0x103 / 0x104 / 0x105 characters, which a single short command would not.
+//
+// WHAT THIS SCREEN CANNOT SEE: the ShellExecute arm at all, the success path,
+// the leaked `pi.hThread`, and the exact command line CreateProcessW received
+// (only the boolean outcome is observable from here — a port that truncated at
+// the wrong offset but still produced a non-existent path would return the
+// same `false`). Said plainly rather than folded into a pass.
+//
+// RUNS IN-GAME, not at boot: both sides construct a `System::WideString`,
+// which allocates through `System::MemoryAllocator` — the same reason
+// ProbeAudioScene lives here.
+// ---------------------------------------------------------------------------
+void ProbeApplicationLaunchProcess() {
+    const char* kName = "?LaunchProcess@Application@1@QEAA_NPEBD_N@Z";
+    void* ours   = ResolveExport(kName);
+    void* theirs = ResolveExportRaw(kName);
+    if (!ours || !theirs || ours == theirs) {
+        fprintf(stderr, "[RtOrphan][App] SKIP Application::LaunchProcess: ours=%p "
+                        "theirs=%p%s\n", ours, theirs,
+                (ours && ours == theirs) ? " (port NOT registered)" : "");
+        ++g_fail;
+        return;
+    }
+
+    // A name that cannot resolve to an executable, padded to the length the
+    // case wants. `.exe` is kept on the front so the failure is
+    // ERROR_FILE_NOT_FOUND rather than a parse quirk.
+    static const int kLens[] = { 40, 0x103, 0x104, 0x105, 0x180 };
+    int cases = 0, bad = 0, control = 0, controlCaught = 0;
+
+    auto cmpBool = [&](int len, bool o, bool t) {
+        if (o == t) return;
+        ++bad;
+        char detail[128];
+        snprintf(detail, sizeof(detail), "len=%d ours=%d theirs=%d", len, (int)o, (int)t);
+        Report("Application::LaunchProcess", "createprocess-failure", false, detail);
+    };
+
+    char cmd[0x200];
+    for (int len : kLens) {
+        if (len >= (int)sizeof(cmd)) continue;
+        memset(cmd, 'q', (size_t)len);
+        cmd[len] = '\0';
+        memcpy(cmd, "__rt_orphan_probe_no_such_binary__", 34);   // never a real file
+        ++cases;
+
+        const bool o = reinterpret_cast<AppLaunchFn>(ours)(nullptr, cmd, true);
+        const bool t = reinterpret_cast<AppLaunchFn>(theirs)(nullptr, cmd, true);
+        cmpBool(len, o, t);
+        if (o || t) {
+            ++bad;
+            Report("Application::LaunchProcess", "premise", false,
+                   "a side returned TRUE — a real process was created and waited on; "
+                   "this case is not the failure path and the screen is UNSOUND");
+        }
+    }
+
+    // NEGATIVE CONTROL, through the same comparator, on the value it compares.
+    {
+        ControlScope cs;
+        const int badBefore = bad;
+        cmpBool(-1, false, true);
+        ++control;
+        if (bad > badBefore) ++controlCaught;
+        bad = badBefore;
+    }
+    fprintf(stderr, "[RtOrphan][App] negative control %s: %d/%d caught\n",
+            kAppScreenName[kScrLaunch], controlCaught, control);
+
+    if (bad == 0) {
+        ++g_pass;
+        fprintf(stderr, "[RtOrphan][App] pass [live-diff, PARTIAL] LaunchProcess: %d "
+                        "wait=true FAILURE cases (command lengths straddling retail's "
+                        "0x104 clamp), ours and the shipped body agreed on every one and "
+                        "neither spawned anything. The ShellExecute arm and the SUCCESS "
+                        "path remain UNVERIFIED and cannot be probed\n", cases);
+    } else {
+        ++g_fail;
+    }
+}
+
 }  // namespace
 
 extern "C" void RtOrphanProbeInGame(void* keyMap) {
@@ -1308,6 +2349,9 @@ extern "C" void RtOrphanProbeInGame(void* keyMap) {
     // System::MemoryAllocator, which Engine::Startup has not built yet when
     // RtOrphanProbe() runs from Init(). It needs no world of its own.
     ProbeGraphElementAddGraph();
+    // Wave 12 lane VERIFY. In the in-game probe for the same reason: both
+    // sides construct a System::WideString through System::MemoryAllocator.
+    ProbeApplicationLaunchProcess();
     fprintf(stderr, "[RtOrphan] ==== running total: %d pass, %d fail ====\n", g_pass, g_fail);
     fflush(stderr);
 }

@@ -1,0 +1,222 @@
+
+C:/GOG Games/Banished/Runtime-x64.dll:     file format pei-x86-64
+
+
+Disassembly of section .text:
+
+000000018000a0c0 <.text+0x90c0>:
+   18000a0c0:	0f b6 41 10          	movzx  eax,BYTE PTR [rcx+0x10]
+   18000a0c4:	c3                   	ret
+   18000a0c5:	cc                   	int3
+   18000a0c6:	cc                   	int3
+   18000a0c7:	cc                   	int3
+   18000a0c8:	cc                   	int3
+   18000a0c9:	cc                   	int3
+   18000a0ca:	cc                   	int3
+   18000a0cb:	cc                   	int3
+   18000a0cc:	cc                   	int3
+   18000a0cd:	cc                   	int3
+   18000a0ce:	cc                   	int3
+   18000a0cf:	cc                   	int3
+   18000a0d0:	48 89 4c 24 08       	mov    QWORD PTR [rsp+0x8],rcx
+   18000a0d5:	56                   	push   rsi
+   18000a0d6:	57                   	push   rdi
+   18000a0d7:	41 56                	push   r14
+   18000a0d9:	48 83 ec 30          	sub    rsp,0x30
+   18000a0dd:	48 c7 44 24 20 fe ff 	mov    QWORD PTR [rsp+0x20],0xfffffffffffffffe
+   18000a0e4:	ff ff 
+   18000a0e6:	48 89 5c 24 60       	mov    QWORD PTR [rsp+0x60],rbx
+   18000a0eb:	48 8b f2             	mov    rsi,rdx
+   18000a0ee:	48 8b d9             	mov    rbx,rcx
+   18000a0f1:	48 8b 02             	mov    rax,QWORD PTR [rdx]
+   18000a0f4:	48 89 01             	mov    QWORD PTR [rcx],rax
+   18000a0f7:	48 8b 42 08          	mov    rax,QWORD PTR [rdx+0x8]
+   18000a0fb:	48 89 41 08          	mov    QWORD PTR [rcx+0x8],rax
+   18000a0ff:	0f b6 42 10          	movzx  eax,BYTE PTR [rdx+0x10]
+   18000a103:	88 41 10             	mov    BYTE PTR [rcx+0x10],al
+   18000a106:	0f b6 42 11          	movzx  eax,BYTE PTR [rdx+0x11]
+   18000a10a:	88 41 11             	mov    BYTE PTR [rcx+0x11],al
+   18000a10d:	4c 8d 72 18          	lea    r14,[rdx+0x18]
+   18000a111:	48 8d 79 18          	lea    rdi,[rcx+0x18]
+   18000a115:	48 89 7c 24 58       	mov    QWORD PTR [rsp+0x58],rdi
+   18000a11a:	33 c0                	xor    eax,eax
+   18000a11c:	48 89 07             	mov    QWORD PTR [rdi],rax
+   18000a11f:	89 47 08             	mov    DWORD PTR [rdi+0x8],eax
+   18000a122:	4c 3b f7             	cmp    r14,rdi
+   18000a125:	74 1a                	je     0x18000a141
+   18000a127:	49 8b 16             	mov    rdx,QWORD PTR [r14]
+   18000a12a:	48 85 d2             	test   rdx,rdx
+   18000a12d:	74 0b                	je     0x18000a13a
+   18000a12f:	48 8b cf             	mov    rcx,rdi
+   18000a132:	e8 f9 03 00 00       	call   0x18000a530
+   18000a137:	48 89 07             	mov    QWORD PTR [rdi],rax
+   18000a13a:	41 8b 46 08          	mov    eax,DWORD PTR [r14+0x8]
+   18000a13e:	89 47 08             	mov    DWORD PTR [rdi+0x8],eax
+   18000a141:	0f b6 46 28          	movzx  eax,BYTE PTR [rsi+0x28]
+   18000a145:	88 43 28             	mov    BYTE PTR [rbx+0x28],al
+   18000a148:	48 8b c3             	mov    rax,rbx
+   18000a14b:	48 8b 5c 24 60       	mov    rbx,QWORD PTR [rsp+0x60]
+   18000a150:	48 83 c4 30          	add    rsp,0x30
+   18000a154:	41 5e                	pop    r14
+   18000a156:	5f                   	pop    rdi
+   18000a157:	5e                   	pop    rsi
+   18000a158:	c3                   	ret
+   18000a159:	cc                   	int3
+   18000a15a:	cc                   	int3
+   18000a15b:	cc                   	int3
+   18000a15c:	cc                   	int3
+   18000a15d:	cc                   	int3
+   18000a15e:	cc                   	int3
+   18000a15f:	cc                   	int3
+   18000a160:	48 89 5c 24 08       	mov    QWORD PTR [rsp+0x8],rbx
+   18000a165:	48 89 74 24 10       	mov    QWORD PTR [rsp+0x10],rsi
+   18000a16a:	48 89 7c 24 18       	mov    QWORD PTR [rsp+0x18],rdi
+   18000a16f:	41 56                	push   r14
+   18000a171:	48 83 ec 20          	sub    rsp,0x20
+   18000a175:	48 8b 02             	mov    rax,QWORD PTR [rdx]
+   18000a178:	4c 8d 72 18          	lea    r14,[rdx+0x18]
+   18000a17c:	48 8d 59 18          	lea    rbx,[rcx+0x18]
+   18000a180:	48 89 01             	mov    QWORD PTR [rcx],rax
+   18000a183:	48 8b 42 08          	mov    rax,QWORD PTR [rdx+0x8]
+   18000a187:	48 8b f2             	mov    rsi,rdx
+   18000a18a:	48 89 41 08          	mov    QWORD PTR [rcx+0x8],rax
+   18000a18e:	0f b6 42 10          	movzx  eax,BYTE PTR [rdx+0x10]
+   18000a192:	48 8b f9             	mov    rdi,rcx
+   18000a195:	88 41 10             	mov    BYTE PTR [rcx+0x10],al
+   18000a198:	0f b6 42 11          	movzx  eax,BYTE PTR [rdx+0x11]
+   18000a19c:	88 41 11             	mov    BYTE PTR [rcx+0x11],al
+   18000a19f:	4c 3b f3             	cmp    r14,rbx
+   18000a1a2:	74 28                	je     0x18000a1cc
+   18000a1a4:	48 83 3b 00          	cmp    QWORD PTR [rbx],0x0
+   18000a1a8:	74 08                	je     0x18000a1b2
+   18000a1aa:	48 8b cb             	mov    rcx,rbx
+   18000a1ad:	e8 8e 02 00 00       	call   0x18000a440
+   18000a1b2:	49 8b 16             	mov    rdx,QWORD PTR [r14]
+   18000a1b5:	48 85 d2             	test   rdx,rdx
+   18000a1b8:	74 0b                	je     0x18000a1c5
+   18000a1ba:	48 8b cb             	mov    rcx,rbx
+   18000a1bd:	e8 6e 03 00 00       	call   0x18000a530
+   18000a1c2:	48 89 03             	mov    QWORD PTR [rbx],rax
+   18000a1c5:	41 8b 46 08          	mov    eax,DWORD PTR [r14+0x8]
+   18000a1c9:	89 43 08             	mov    DWORD PTR [rbx+0x8],eax
+   18000a1cc:	0f b6 46 28          	movzx  eax,BYTE PTR [rsi+0x28]
+   18000a1d0:	48 8b 5c 24 30       	mov    rbx,QWORD PTR [rsp+0x30]
+   18000a1d5:	48 8b 74 24 38       	mov    rsi,QWORD PTR [rsp+0x38]
+   18000a1da:	88 47 28             	mov    BYTE PTR [rdi+0x28],al
+   18000a1dd:	48 8b c7             	mov    rax,rdi
+   18000a1e0:	48 8b 7c 24 40       	mov    rdi,QWORD PTR [rsp+0x40]
+   18000a1e5:	48 83 c4 20          	add    rsp,0x20
+   18000a1e9:	41 5e                	pop    r14
+   18000a1eb:	c3                   	ret
+   18000a1ec:	cc                   	int3
+   18000a1ed:	cc                   	int3
+   18000a1ee:	cc                   	int3
+   18000a1ef:	cc                   	int3
+   18000a1f0:	48 89 4c 24 08       	mov    QWORD PTR [rsp+0x8],rcx
+   18000a1f5:	57                   	push   rdi
+   18000a1f6:	48 83 ec 30          	sub    rsp,0x30
+   18000a1fa:	48 c7 44 24 20 fe ff 	mov    QWORD PTR [rsp+0x20],0xfffffffffffffffe
+   18000a201:	ff ff 
+   18000a203:	48 89 5c 24 48       	mov    QWORD PTR [rsp+0x48],rbx
+   18000a208:	48 8b fa             	mov    rdi,rdx
+   18000a20b:	48 8b d9             	mov    rbx,rcx
+   18000a20e:	33 c0                	xor    eax,eax
+   18000a210:	48 89 01             	mov    QWORD PTR [rcx],rax
+   18000a213:	89 41 08             	mov    DWORD PTR [rcx+0x8],eax
+   18000a216:	48 3b d1             	cmp    rdx,rcx
+   18000a219:	74 16                	je     0x18000a231
+   18000a21b:	48 8b 12             	mov    rdx,QWORD PTR [rdx]
+   18000a21e:	48 85 d2             	test   rdx,rdx
+   18000a221:	74 08                	je     0x18000a22b
+   18000a223:	e8 08 03 00 00       	call   0x18000a530
+   18000a228:	48 89 03             	mov    QWORD PTR [rbx],rax
+   18000a22b:	8b 47 08             	mov    eax,DWORD PTR [rdi+0x8]
+   18000a22e:	89 43 08             	mov    DWORD PTR [rbx+0x8],eax
+   18000a231:	48 8b c3             	mov    rax,rbx
+   18000a234:	48 8b 5c 24 48       	mov    rbx,QWORD PTR [rsp+0x48]
+   18000a239:	48 83 c4 30          	add    rsp,0x30
+   18000a23d:	5f                   	pop    rdi
+   18000a23e:	c3                   	ret
+   18000a23f:	cc                   	int3
+   18000a240:	48 89 4c 24 08       	mov    QWORD PTR [rsp+0x8],rcx
+   18000a245:	57                   	push   rdi
+   18000a246:	48 83 ec 30          	sub    rsp,0x30
+   18000a24a:	48 c7 44 24 20 fe ff 	mov    QWORD PTR [rsp+0x20],0xfffffffffffffffe
+   18000a251:	ff ff 
+   18000a253:	48 89 5c 24 48       	mov    QWORD PTR [rsp+0x48],rbx
+   18000a258:	48 8b d9             	mov    rbx,rcx
+   18000a25b:	48 8b 39             	mov    rdi,QWORD PTR [rcx]
+   18000a25e:	48 85 ff             	test   rdi,rdi
+   18000a261:	74 27                	je     0x18000a28a
+   18000a263:	48 8b 57 18          	mov    rdx,QWORD PTR [rdi+0x18]
+   18000a267:	e8 84 02 00 00       	call   0x18000a4f0
+   18000a26c:	48 8b 57 20          	mov    rdx,QWORD PTR [rdi+0x20]
+   18000a270:	48 8b cb             	mov    rcx,rbx
+   18000a273:	e8 78 02 00 00       	call   0x18000a4f0
+   18000a278:	48 8b d7             	mov    rdx,rdi
+   18000a27b:	e8 b0 f9 ff ff       	call   0x180009c30
+   18000a280:	33 c0                	xor    eax,eax
+   18000a282:	48 89 03             	mov    QWORD PTR [rbx],rax
+   18000a285:	89 43 08             	mov    DWORD PTR [rbx+0x8],eax
+   18000a288:	eb 08                	jmp    0x18000a292
+   18000a28a:	33 c0                	xor    eax,eax
+   18000a28c:	48 89 01             	mov    QWORD PTR [rcx],rax
+   18000a28f:	89 41 08             	mov    DWORD PTR [rcx+0x8],eax
+   18000a292:	48 8b 5c 24 48       	mov    rbx,QWORD PTR [rsp+0x48]
+   18000a297:	48 83 c4 30          	add    rsp,0x30
+   18000a29b:	5f                   	pop    rdi
+   18000a29c:	c3                   	ret
+   18000a29d:	cc                   	int3
+   18000a29e:	cc                   	int3
+   18000a29f:	cc                   	int3
+   18000a2a0:	48 89 5c 24 08       	mov    QWORD PTR [rsp+0x8],rbx
+   18000a2a5:	57                   	push   rdi
+   18000a2a6:	48 83 ec 20          	sub    rsp,0x20
+   18000a2aa:	48 8b fa             	mov    rdi,rdx
+   18000a2ad:	48 8b d9             	mov    rbx,rcx
+   18000a2b0:	48 3b d1             	cmp    rdx,rcx
+   18000a2b3:	74 24                	je     0x18000a2d9
+   18000a2b5:	48 83 39 00          	cmp    QWORD PTR [rcx],0x0
+   18000a2b9:	74 05                	je     0x18000a2c0
+   18000a2bb:	e8 80 01 00 00       	call   0x18000a440
+   18000a2c0:	48 8b 17             	mov    rdx,QWORD PTR [rdi]
+   18000a2c3:	48 85 d2             	test   rdx,rdx
+   18000a2c6:	74 0b                	je     0x18000a2d3
+   18000a2c8:	48 8b cb             	mov    rcx,rbx
+   18000a2cb:	e8 60 02 00 00       	call   0x18000a530
+   18000a2d0:	48 89 03             	mov    QWORD PTR [rbx],rax
+   18000a2d3:	8b 47 08             	mov    eax,DWORD PTR [rdi+0x8]
+   18000a2d6:	89 43 08             	mov    DWORD PTR [rbx+0x8],eax
+   18000a2d9:	48 8b c3             	mov    rax,rbx
+   18000a2dc:	48 8b 5c 24 30       	mov    rbx,QWORD PTR [rsp+0x30]
+   18000a2e1:	48 83 c4 20          	add    rsp,0x20
+   18000a2e5:	5f                   	pop    rdi
+   18000a2e6:	c3                   	ret
+   18000a2e7:	cc                   	int3
+   18000a2e8:	cc                   	int3
+   18000a2e9:	cc                   	int3
+   18000a2ea:	cc                   	int3
+   18000a2eb:	cc                   	int3
+   18000a2ec:	cc                   	int3
+   18000a2ed:	cc                   	int3
+   18000a2ee:	cc                   	int3
+   18000a2ef:	cc                   	int3
+   18000a2f0:	48 8b 05 81 23 1f 00 	mov    rax,QWORD PTR [rip+0x1f2381]        # 0x1801fc678
+   18000a2f7:	c3                   	ret
+   18000a2f8:	cc                   	int3
+   18000a2f9:	cc                   	int3
+   18000a2fa:	cc                   	int3
+   18000a2fb:	cc                   	int3
+   18000a2fc:	cc                   	int3
+   18000a2fd:	cc                   	int3
+   18000a2fe:	cc                   	int3
+   18000a2ff:	cc                   	int3
+   18000a300:	48 89 4c 24 08       	mov    QWORD PTR [rsp+0x8],rcx
+   18000a305:	48 83 ec 18          	sub    rsp,0x18
+   18000a309:	48 c7 04 24 fe ff ff 	mov    QWORD PTR [rsp],0xfffffffffffffffe
+   18000a310:	ff 
+   18000a311:	33 c0                	xor    eax,eax
+   18000a313:	48 89 01             	mov    QWORD PTR [rcx],rax
+   18000a316:	89 41 08             	mov    DWORD PTR [rcx+0x8],eax
+   18000a319:	48 8b c1             	mov    rax,rcx
+   18000a31c:	48 83 c4 18          	add    rsp,0x18

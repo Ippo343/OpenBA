@@ -1,0 +1,86 @@
+### RUN: selftest
+
+--- [RtOrphan] Application section (stderr)
+[RtOrphan] ==== probing ports with no caller in our tree ====
+[RtOrphan][App] ==== Wave 12: Application rows with no caller ====
+[RtOrphan][App] pass [structural] IsPaused (00007ff73035db75) and PlatformIsPaused (00007ff73035e467) are DISTINCT ported bodies; the DLL's two are distinct too (00007ffcab52f4e0 / 00007ffcab52fe80)
+[RtOrphan] CONTROL-CAUGHT Application::IsCursorEnabled [CONTROL] [reader-sweep]: stored byte 0x01: ours AL=0x00 theirs AL=0x01
+[RtOrphan][App] pass [live-diff] readers: 216 states x 5 readers = 1081 comparisons against the shipped DLL, 0 truth-value divergences, 0 raw-AL-only differences
+[RtOrphan][App] pass [live-diff] PlatformDestruct: 4 fill patterns x 0x100 bytes bracketed on BOTH sides — neither body wrote anything. VERIFIED TO DO NOTHING, which is the whole of this row's behaviour
+[RtOrphan][App] pass [structural] Application::Update: shipped body is `jmp 00007ffcab52fdf0` and that IS ?PlatformUpdate@Application@1@AEAA_NXZ
+[RtOrphan][App] pass [structural] Application::Update: our compiled body contains a direct call to our own ?PlatformUpdate@Application@1@AEAA_NXZ (00007ff73036018e)
+[RtOrphan][App] pass [structural] Application::Startup: shipped body is `jmp 00007ffcab52fc10` and that IS ?PlatformStartup@Application@1@AEAA_NXZ
+[RtOrphan][App] pass [structural] Application::Startup: our compiled body contains a direct call to our own ?PlatformStartup@Application@1@AEAA_NXZ (00007ff7303613b2)
+[RtOrphan][App] pass [structural] Application::Shutdown: shipped body is `jmp 00007ffcab52fd70` and that IS ?PlatformShutdown@Application@1@AEAAXXZ
+[RtOrphan][App] pass [structural] Application::Shutdown: our compiled body contains a direct call to our own ?PlatformShutdown@Application@1@AEAAXXZ (00007ff730361c6d)
+[RtOrphan][App] thunks: 3a 3/3 rows, 3b 3/3 rows (NOTHING was executed — no message loop was pumped and nothing was torn down)
+[RtOrphan] CONTROL-CAUGHT Application::Get [singleton-sweep]: slot=0x0 ours=0000000000000001 theirs=0000000000000002
+[RtOrphan][App] pass [live-diff] Application::Get: 6 sentinel values written into the DLL's own 0x1801fc678 slot, ours and the shipped body agreed on every one; slot restored to 0000000000000000
+[RtOrphan][App] Application::EnableCursor: BANISHED_RT_PREDICT is set, so this probe DROVE lane C's predicting oracle 30 times and made no comparison of its own (comparing here would be retail against retail). The verdict is rt_predict.h's — read its [RtPredict] lines, including changed=N/M
+[RtOrphan][App] negative control S1 readers (live-diff): 1/1 caught
+[RtOrphan][App] negative control S2 PlatformDestruct (live-diff, negative claim): 1/1 caught
+[RtOrphan][App] negative control S3a thunks: retail jump target (structural): 1/1 caught
+[RtOrphan][App] negative control S3b thunks: our body calls the sibling (structural): 1/1 caught
+[RtOrphan][App] negative control S4 Get / _singleton sweep (live-diff): 1/1 caught
+[RtOrphan] ==== 15 pass, 0 fail ====
+[RtOrphan] ==== in-game probe (Input::Device, Input::KeyMap, UpdateLoop, Audio::Scene) ====
+[RtOrphan] pass Input::Device joystick 216 comparisons
+[RtOrphan] pass Input::Device keyboard 315 comparisons
+[RtOrphan] pass Input::Device mouse    39 comparisons
+[RtOrphan] pass Input::KeyMap::GetDeviceForId       512 comparisons
+[RtOrphan] pass Input::KeyMap::GetInputForId        512 comparisons
+[RtOrphan] pass Input::KeyMap::GetIdForDeviceInput  315 comparisons
+[RtOrphan] pass Engine::UpdateLoop::IsRunning 5 cases (true branch REACHED)
+[RtOrphan] pass Audio::Scene teardown family: 520 comparisons (264 phase 1 null-channel, 256 phase 2 recorded-device), 0 mismatches, 3469 Device::Stop calls matched pairwise; 216 cases CHANGED the scene (Pause 80, PauseEffect 30, StopEffect 60, StopEffect3D 38, StopAll 8)
+[RtOrphan] pass UI::GraphElement::AddGraph 8 appends, 8 grew, 3 REALLOCATED (final size=8 cap=21), 8 series seeded with points, 7 NON-EMPTY nested arrays copied through a realloc, negative control CAUGHT
+[RtOrphan] CONTROL-CAUGHT Application::LaunchProcess [createprocess-failure]: len=-1 ours=0 theirs=1
+[RtOrphan][App] negative control S6 LaunchProcess failure path (live-diff, partial): 1/1 caught
+[RtOrphan][App] pass [live-diff, PARTIAL] LaunchProcess: 5 wait=true FAILURE cases (command lengths straddling retail's 0x104 clamp), ours and the shipped body agreed on every one and neither spawned anything. The ShellExecute arm and the SUCCESS path remain UNVERIFIED and cannot be probed
+[RtOrphan] ==== running total: 25 pass, 0 fail ====
+
+--- [RtDiff] Application sites (stderr)
+[RtDiff]   Application::Application::GetWindow              calls=216        worked=?          divergences=0
+[RtDiff]   Application::Application::GetInstance            calls=219        worked=?          divergences=0
+[RtDiff]   Application::Application::IsCursorEnabled        calls=216        worked=?          divergences=0
+[RtDiff]   Application::Application::PlatformIsPaused       calls=216        worked=?          divergences=0
+[RtDiff]   Application::Application::IsPaused               calls=216        worked=?          divergences=0
+[RtDiff]   Application::Application::PlatformDestruct [retail body is empty] calls=4          worked=?          divergences=0
+[RtDiff]   Application::Application::Get                    calls=6          worked=?          divergences=0
+[RtDiff]   Application::Application::PlatformStartup [no oracle on the live path; see BANISHED_PLAT_ORACLE] calls=1          worked=1          divergences=0
+[RtDiff]   Application::Application::PlatformUpdate [no oracle: pumps the live message queue] calls=1          worked=?          divergences=0
+[RtDiff]   Application::Application::PlatformConstruct      calls=1          worked=1          divergences=0
+[RtDiff]   Application::Application::Application(const Application&) [no call-site oracle: it allocates, so two runs differ at +0x18 by construction -- see application_lifecycle_probe.cpp] calls=2          worked=2          divergences=0
+[RtDiff]   Application::Application::operator= [no call-site oracle: it allocates and frees -- see application_lifecycle_probe.cpp] calls=1          worked=1          divergences=0
+[RtDiff]   Application::Application::~Application [SELF-CHECK ONLY: freed-node count vs tree size; the DLL is not consulted -- see application_lifecycle_probe.cpp] calls=1          worked=1          divergences=0
+[RtDiff]   Application::Application::LaunchProcess [no oracle: spawns a real process / opens a real shell document] calls=5          worked=?          divergences=0
+[RtDiff]   Application::Application::Quit                   calls=1          worked=?          divergences=0
+[RtDiff]   Application::Application::PlatformShutdown [NO ORACLE POSSIBLE: DestroyWindow/UnregisterClassW are one-shot, so a replay measures the first run's success as a failure. This site records EXECUTION, not a comparison] calls=1          worked=1          divergences=0
+
+--- [RtPredict] Application (stderr)
+[RtPredict] SELF-TEST ARMED — one prediction per site is corrupted by one bit. EVERY site must report a mismatch. A site that stays green here cannot express a failure, and its clean runs were never evidence.
+[RtPredict] SELF-TEST: Application::Application::EnableCursor had no compared, changing prediction in this round -- control not applicable here
+    ... [3927 further identical "control not applicable" SELF-TEST lines elided; they are for OTHER namespaces' sites, not Application]
+[RtPredict] MISMATCH Application::Application::EnableCursor  Application._cursorEnabled @000000e5bbbffb10 (1 bytes)  pre=0x0 ours=0x0 theirs=0x1   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH Application::Application::EnableCursor  Application._cursorEnabled @000000e5bbbffb10 (1 bytes)  pre=0x0 ours=0x0 theirs=0x1   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH Application::Application::EnableCursor  Application._cursorEnabled @000000e5bbbffb10 (1 bytes)  pre=0x0 ours=0x0 theirs=0x1   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::UserInterface::Update  _addDialogs._data = 0 @000002a9911652b0 (8 bytes)  pre=0x2a991039f90 ours=0x1 theirs=0x0   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::UserInterface::Draw  Context::_color.x = 1.0f @000002a991120490 (4 bytes)  pre=0x0 ours=0x3f800001 theirs=0x3f800000   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::UserInterface::Update  _fadeAmount += @000002a99116537c (4 bytes)  pre=0x3f6eef1c ours=0x3f5dde39 theirs=0x3f5dde38   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::UserInterface::Update  _fadeAmount += @000002a99116537c (4 bytes)  pre=0x3f5dde38 ours=0x3f4ccd55 theirs=0x3f4ccd54   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::TextElement::CacheText  TextElement::_cachedText @000002a9925f4bd0 (8 bytes)  pre=0x0 ours=0x2a991aec4b9 theirs=0x2a991aec4b8   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::TextElement::CacheText  old cached text: refcount @000002a9911f178c (4 bytes)  pre=0x3 ours=0x3 theirs=0x2   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::TextElement::CacheText  old cached text: refcount @000002a991173514 (4 bytes)  pre=0x2 ours=0x0 theirs=0x1   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::UserInterface::Draw  Context::_color.w = 1.0f @000002a99112049c (4 bytes)  pre=0x0 ours=0x3f800001 theirs=0x3f800000   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict] MISMATCH UI::UserInterface::Draw  Context::_color.w = 1.0f @000002a99112049c (4 bytes)  pre=0x3a5a71d2 ours=0x3f800001 theirs=0x3f800000   [SELF-TEST: this one was corrupted on purpose — catching it is the control passing]
+[RtPredict]   Application::Application::EnableCursor         rounds=30      predictions=20       changed=20       wrong=20 unpredicted=0
+[RtPredict] ==== SELF-TEST: 0 site(s) could NOT demonstrate a failure. A run is evidence only for the sites that could. ====
+
+--- [AppLifecycle] lane B probe (stdout)
+[AppLifecycle] PlatformConstruct: full 0x30-byte diff EQUAL
+[AppLifecycle] copy-ctor: bytes=EQUAL(equal) shape=EQUAL parents=OK count=EQUAL deep=OK nodes=39
+[AppLifecycle] operator=: bytes=EQUAL(equal) shape=EQUAL parents=OK allocCount delta ours=+27 theirs=+27 expected=+27 
+[AppLifecycle] ~Application: nodes=39  allocCount released ours=39 theirs=39  our own free-counter=39  object bytes=EQUAL 
+[AppLifecycle] nodes-per-subject=39 failures=0
+[AppLifecycle] negative-controls: root-only-destroy=CAUGHT (broken delta=1 vs real 39)  shape-sensitivity=CAUGHT
+
+--- crash log size: 0 bytes

@@ -50,15 +50,18 @@ bool RtApp_IsPaused(const Application* self) {
 // ----------------------------------------------------------------------------
 // `this[0x28] = 1`. One byte store.
 //
-// ORACLE: SCRATCH-COPY DIFF, restricted to the first sizeof(Application)
-// (0x29) bytes of the live object rather than the whole object. That is
-// deliberate, not a shortcut: this lane does not port the constructor and so
-// does not know the class's true extent — only that it is AT LEAST 0x29
-// bytes, because Quit itself (and the ctor, per the header comment) touches
-// +0x28 on the real, live object every time it runs. Copying exactly the
-// prefix this lane's own struct describes is therefore provably in-bounds; a
-// full-object copy would not be, since no function this lane ported ever
-// proved a larger size.
+// ORACLE: SCRATCH-COPY DIFF over sizeof(Application).
+//
+// CORRECTED BY WAVE 12 LANE B (PLAN §6 step 8). This comment used to say the
+// copy was "restricted to the first 0x29 bytes ... this lane does not port the
+// constructor and so does not know the class's true extent — only that it is AT
+// LEAST 0x29 bytes". That caveat is now stale in both halves: the extent IS
+// known — 0x30, from retail's own allocation at Engine::Startup 0x1800dbbb3
+// (`MemAlloc(0x30, 4)`), asserted in the header — and the constructor IS ported
+// (runtime/src/engine/singleton_ctors.cpp:576). Nothing about the code below
+// changes: `sizeof(Application)` was already 0x30 to the compiler, because the
+// struct's alignment is 8, so the copy was always a full-object copy and always
+// in bounds. Only the reasoning was wrong.
 // ============================================================================
 void RtApp_Quit(Application* self) {
     RT_DIFF_BEGIN("Application::Application::Quit");

@@ -1,0 +1,45 @@
+### RUN: menu
+
+--- [RtOrphan] Application section (stderr)
+[RtOrphan] ==== probing ports with no caller in our tree ====
+[RtOrphan][App] ==== Wave 12: Application rows with no caller ====
+[RtOrphan][App] pass [structural] IsPaused (00007ff73035db75) and PlatformIsPaused (00007ff73035e467) are DISTINCT ported bodies; the DLL's two are distinct too (00007ffcab52f4e0 / 00007ffcab52fe80)
+[RtOrphan] CONTROL-CAUGHT Application::IsCursorEnabled [CONTROL] [reader-sweep]: stored byte 0x01: ours AL=0x00 theirs AL=0x01
+[RtOrphan][App] pass [live-diff] readers: 216 states x 5 readers = 1081 comparisons against the shipped DLL, 0 truth-value divergences, 0 raw-AL-only differences
+[RtOrphan][App] pass [live-diff] PlatformDestruct: 4 fill patterns x 0x100 bytes bracketed on BOTH sides — neither body wrote anything. VERIFIED TO DO NOTHING, which is the whole of this row's behaviour
+[RtOrphan][App] pass [structural] Application::Update: shipped body is `jmp 00007ffcab52fdf0` and that IS ?PlatformUpdate@Application@1@AEAA_NXZ
+[RtOrphan][App] pass [structural] Application::Update: our compiled body contains a direct call to our own ?PlatformUpdate@Application@1@AEAA_NXZ (00007ff73036018e)
+[RtOrphan][App] pass [structural] Application::Startup: shipped body is `jmp 00007ffcab52fc10` and that IS ?PlatformStartup@Application@1@AEAA_NXZ
+[RtOrphan][App] pass [structural] Application::Startup: our compiled body contains a direct call to our own ?PlatformStartup@Application@1@AEAA_NXZ (00007ff7303613b2)
+[RtOrphan][App] pass [structural] Application::Shutdown: shipped body is `jmp 00007ffcab52fd70` and that IS ?PlatformShutdown@Application@1@AEAAXXZ
+[RtOrphan][App] pass [structural] Application::Shutdown: our compiled body contains a direct call to our own ?PlatformShutdown@Application@1@AEAAXXZ (00007ff730361c6d)
+[RtOrphan][App] thunks: 3a 3/3 rows, 3b 3/3 rows (NOTHING was executed — no message loop was pumped and nothing was torn down)
+[RtOrphan] CONTROL-CAUGHT Application::Get [singleton-sweep]: slot=0x0 ours=0000000000000001 theirs=0000000000000002
+[RtOrphan][App] pass [live-diff] Application::Get: 6 sentinel values written into the DLL's own 0x1801fc678 slot, ours and the shipped body agreed on every one; slot restored to 0000000000000000
+[RtOrphan][App] pass [live-diff] EnableCursor: 30 cases (3 prior flag bytes x 2 args x 5 tree shapes) on two INDEPENDENT synthetic Applications, 0 divergences; 20 cases actually flipped the flag and 12 actually DISPATCHED a WM_SETCURSOR callback
+[RtOrphan][App] negative control S1 readers (live-diff): 1/1 caught
+[RtOrphan][App] negative control S2 PlatformDestruct (live-diff, negative claim): 1/1 caught
+[RtOrphan][App] negative control S3a thunks: retail jump target (structural): 1/1 caught
+[RtOrphan][App] negative control S3b thunks: our body calls the sibling (structural): 1/1 caught
+[RtOrphan][App] negative control S4 Get / _singleton sweep (live-diff): 1/1 caught
+[RtOrphan][App] negative control S5 EnableCursor two-object (live-diff): 2/2 caught
+[RtOrphan] ==== 16 pass, 0 fail ====
+
+--- [RtDiff] Application sites (stderr)
+[RtDiff]   Application::Application::GetWindow              calls=216        worked=?          divergences=0
+[RtDiff]   Application::Application::GetInstance            calls=217        worked=?          divergences=0
+[RtDiff]   Application::Application::IsCursorEnabled        calls=216        worked=?          divergences=0
+[RtDiff]   Application::Application::PlatformIsPaused       calls=216        worked=?          divergences=0
+[RtDiff]   Application::Application::IsPaused               calls=216        worked=?          divergences=0
+[RtDiff]   Application::Application::PlatformDestruct [retail body is empty] calls=4          worked=?          divergences=0
+[RtDiff]   Application::Application::Get                    calls=6          worked=?          divergences=0
+[RtDiff]   Application::Application::PlatformStartup [no oracle on the live path; see BANISHED_PLAT_ORACLE] calls=1          worked=1          divergences=0
+[RtDiff]   Application::Application::PlatformUpdate [no oracle: pumps the live message queue] calls=1          worked=?          divergences=0
+[RtDiff]   Application::Application::Quit                   calls=1          worked=?          divergences=0
+[RtDiff]   Application::Application::PlatformShutdown [NO ORACLE POSSIBLE: DestroyWindow/UnregisterClassW are one-shot, so a replay measures the first run's success as a failure. This site records EXECUTION, not a comparison] calls=1          worked=1          divergences=0
+
+--- [RtPredict] Application (stderr)
+
+--- [AppLifecycle] lane B probe (stdout)
+
+--- crash log size: 0 bytes
