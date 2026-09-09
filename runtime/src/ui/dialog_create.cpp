@@ -1054,8 +1054,11 @@ void VerifyCtorShape(RtDiffSite* site) {
     if (!body) return;
     PinCtx c = { body, 0x1e3, site, 0, 0 };
 
-    // `MOV qword ptr [RSI+0x10],RBX` -> _ui
-    { static const uint8_t p[] = { 0x48, 0x89, 0x5e }; PinDisp(c, p, 3, 1,
+    // `MOV qword ptr [RSI+0x10],RBX` -> _ui.
+    // `48 89 5e ..` is `MOV [RSI+disp8],RBX` and the ctor has SEVEN of them
+    // (+0x10, +0x28, +0x38, +0x40, +0x68, +0x70, +0x78), so the pattern is
+    // anchored on the vtable stamp `MOV qword ptr [RSI],RAX` in front of it.
+    { static const uint8_t p[] = { 0x48, 0x89, 0x06, 0x48, 0x89, 0x5e }; PinDisp(c, p, 6, 1,
         offsetof(DialogInstance, _ui), "DialogInstance::_ui"); }
     // `MOV EAX,dword ptr [RBP+0x40]` -> Dialog::_defaultFlags
     { static const uint8_t p[] = { 0x8b, 0x45 }; PinDisp(c, p, 2, 1,
