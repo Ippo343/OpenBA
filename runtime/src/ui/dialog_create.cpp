@@ -776,8 +776,8 @@ void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
     d->_upperLeftX = 0;                            // +0x88
     d->_upperLeftY = 0;                            // +0x8c
     d->_timerHandle = -1;                          // +0x90  a QWORD -1
-    d->_closing     = 0;                           // +0x98  a single BYTE
-    d->_opaqueA0    = nullptr;                     // +0xa0   (+0x99.. left alone)
+    d->_hovering    = 0;                           // +0x98  a single BYTE
+    d->_hoverTime   = 0;                           // +0xa0   (+0x99.. left alone)
     d->_userData    = userData;                    // +0xa8
     d->_userFlags   = userFlags;                   // +0xb0   (+0xb4 left alone)
 
