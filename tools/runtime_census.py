@@ -1183,6 +1183,24 @@ def main():
             print("  export  %s" % n)
         for a in orphan_addrs:
             print("  addr    0x%x" % a)
+        # WAVE 12 CORRECTION. The paragraph below opens "All 10 of these" and
+        # names a 2026-09-07 verdict table. That count is STALE and has been for
+        # several waves -- the list above prints its own length two lines up, and
+        # it is far more than 10, so the sentence describes a subset while
+        # reading as if it covered everything printed. Left in place because its
+        # CONTENT is still correct about the rows it actually covers; the count
+        # is the part not to trust. Whoever next needs this accurate should make
+        # the verdict table a data structure keyed by symbol rather than prose.
+        print(chr(32)*2 + chr(39)*0 + "TRIAGE IS PER-WAVE PROSE, NOT A PER-ROW LOOKUP -- and the ALL-10 line below")
+        print("  is a STALE COUNT (this list is longer; see the length printed above).")
+        print("  Wave 12 (2026-09-09) triaged its ELEVEN Application rows -- Get, GetWindow,")
+        print("  IsCursorEnabled, PlatformIsPaused, PlatformDestruct, Update, Startup,")
+        print("  Shutdown, EnableCursor, LaunchProcess, WindowProc. They have no caller")
+        print("  because our tree calls the Platform* siblings directly, NOT because they")
+        print("  are vestigial. Verdicts and evidence: docs/runtime_port/WAVE12_APPLICATION.md")
+        print("  and docs/runtime_port/wave12_evidence/run_*.txt. Nine are swept against the")
+        print("  shipped DLL or verified structurally by standalone/rt_orphan_probe.cpp;")
+        print("  LaunchProcess is PARTIAL (failure path only) and WindowProc is untriaged.")
         print("  All 10 of these have a WRITTEN VERDICT as of 2026-09-07 -- see the")
         print("  'ports with no caller' table in docs/runtime_port/WAVE8_5.md section 2. FIVE are")
         print("  exercised by a direct C++ call from a sibling port (the two Quaternion")
