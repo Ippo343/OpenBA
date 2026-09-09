@@ -31,6 +31,48 @@
 //      the A/B.
 //   3. The warrant is written next to the row, naming what was measured.
 //
+// THE POINTER-IDENTITY QUESTION IS RETIRED — for all twelve rows, permanently.
+// (WAVE 10C lane TIDENT; full census with addresses in
+// docs/runtime_port/WAVE10C_LANE_TIDENT.md.)
+//
+// Lane DLGV declined to promote `?_typeInfo@DialogController@` because doing so
+// makes `?TypeName@DialogController@` hand out OUR node's `name` POINTER, and
+// noted the objection applied equally to the eleven rows below that were
+// already live default-on — the screen that green-lit them, `strs=`, is a
+// strcmp and is structurally incapable of expressing an identity answer. It is:
+// `strs=0` is a true statement about the characters and says nothing about the
+// object. That was the right thing to flag.
+//
+// It was answered from the binaries, not by argument:
+//
+//   * Runtime-x64.dll — 104 `?_typeInfo@` statics; the ONLY static reads of any
+//     node's `+0x08` are 103 `?TypeName@` accessors, and ZERO of those 103 is
+//     CALLED anywhere in the DLL (309 refs, all vtable slots + export entries).
+//     `Factory::Startup` (0x1800c0630) CRCs the string — content.
+//     `Factory::GetTypeName` (0x1800c0a60) has no caller in the DLL at all.
+//   * Application-x64.exe — 525 references to the 42 imported `?_typeInfo@`
+//     slots. Every consuming instruction reads the DWORD AT +0x00, the typeId.
+//     NOT ONE reads +0x08. The exe does not import `?GetTypeName@Factory@`; it
+//     imports `?GetTypeIdFromName@…@QEBAIPEBD_N@Z` (name -> CRC, content) and
+//     `?IsDerivedFrom@Base@Object@@QEBA_NI@Z` (by id).
+//
+// Zero pointer-identity consumers, in either binary. So the eleven rows below
+// are SAFE AS SHIPPED and none is backed out; the question does not have to be
+// re-asked per row.
+//
+// WHAT DID CHANGE. The difference is REAL, it is LIVE TODAY, and until this
+// wave nothing in the tree said so: `UI::SpriteSheet::TypeName` compares the
+// returned pointer and reports `calls=1 divergences=1`, which goes to 0 with
+// `BANISHED_RT_MINT_PROMOTED=0` (calls=1 in both halves, so the VALUE moved and
+// not the coverage), while the same code shape on the unpromoted
+// `IO::PackageFile::TypeName` reads calls=4 divergences=0 in both. That is the
+// string twin of the "Construct divergence is the vtable identity" paragraph
+// further down, and it is now written beside the body in
+// runtime/src/ui/spritesheet_vtable.cpp so the red line is not read as a
+// regression. The shadow report also grew a `ptr=` column beside `strs=`,
+// scored SEPARATELY and never folded into READY, with
+// `BANISHED_RT_MINT_PTRALIAS=<n>` as its effectiveness control.
+//
 // WHY THE SYMBOL IS SPELLED TWICE PER ROW
 //
 // `RtMintPromotionStorage(sym, va)` does the checking — is it really a minted
@@ -468,6 +510,37 @@ int RtMintRegisterPromotedRows() {
     //      The nine BODIES are ported and registered under both doors
     //      regardless, so `runtime_census.py --namespace UI` moves for them;
     //      only the DATA row waits.
+    //
+    //  ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A  (0x1801f9e48)
+    //      READY on the shadow — `idcmp=yes strs=0 ptr=2 fac=2traps` — and
+    //      still NOT PROMOTED. WAVE 10C lane TIDENT examined it and the verdict
+    //      changed REASON, which is the part worth recording:
+    //
+    //      * DLGV's stated blocker — pointer identity — is RETIRED, and not
+    //        only for this row (see the header). It was never the reason to
+    //        hold this one back.
+    //      * The reason it is held back is gate (b), and it is the same
+    //        "a port with no caller" rule as the 94 rows above: this row's ONE
+    //        consumer in the tree is `TypeIdOfStatic(...)` in
+    //        runtime/src/ui/dialog_create.cpp, reached from
+    //        `RtUiDialogInstance_AddControllerTab` (0x1801133b0), and it is
+    //        NEVER ENTERED. That file now carries a `[TidStatic]` attendance
+    //        line printing the node pointer and the id it reads, and across
+    //        FIVE routes — autostart+quit, and BANISHED_TOOL_HARNESS in
+    //        housepanel / pinpanel / tradepanel — it printed ZERO lines, in
+    //        both halves of the armed/unarmed A/B. Same root as the
+    //        `[DlgCtrl] ATTENDANCE: none of the nine bodies was entered` above:
+    //        nothing drivable constructs a controller through the runtime base
+    //        path.
+    //
+    //      So arming it is measurably a no-op, and an A/B in which nothing is
+    //      entered cannot distinguish a safe promotion from an unexercised one.
+    //      It expires the moment `[TidStatic]` prints on any route — the
+    //      instrument is in the tree and prints on every run, so nobody has to
+    //      rediscover the question. NOTE that when it does, the id will be
+    //      IDENTICAL either way (idcmp=yes); the observable is the NODE POINTER
+    //      on that line moving out of the DLL's data into our image, which is
+    //      why the line prints the pointer and not just the value.
     // ------------------------------------------------------------------------
 
     printf("[RtMint] promoted %d minted DATA row(s) -- live on every run\n", n);
