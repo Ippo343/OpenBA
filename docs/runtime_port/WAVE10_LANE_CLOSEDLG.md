@@ -157,6 +157,13 @@ The lane brief asked for this table explicitly. "Covered" means: our body
 predicts a value for that location, and after the DLL has run for real the
 prediction is compared against what the DLL left.
 
+**Read this table as a statement about the INSTRUMENT, not as a result.** It says
+which effects the oracle is *capable* of comparing. Whether it actually compared
+any of them on a given run is a separate question, answered by `armed=` and
+`changed=` in §5 — and §5 is where this lane's difficulty turned out to live. A
+coverage table quoted without the run counters beside it is exactly the shape of
+claim this project keeps having to retract.
+
 | # | side effect | retail | covered? | how / why not |
 |---|---|---|---|---|
 | 1 | `MemFree(node)` — `_dialogs` path | `0x1801210fc` | **NO** | the node is handed back to the allocator; its post-state is the allocator's, not retail's. `Exclude`d, so the `node->prev = 0` / `node->next = 0` stores retail makes two instructions earlier are recorded for read-back and counted `unverifiable`, never compared |
@@ -255,9 +262,69 @@ shipping configuration, the registration resolves, the detour installs and the
 patched DLL runs a full in-game session to a clean exit with a 0-byte crash log,
 under the allocator gate as well as without it.
 
-### 5c. Batch 2 — a route that actually dismisses dialogs
+### 5c. Batch 2 — DISCARDED, and why it is written down anyway
 
-*(see below)*
+Batch 2 took the mods-menu click route (`BANISHED_AUTOMENU_BUTTON=7` with
+`…,d0,…,101,…`), which reaches `fn_UI_CloseDialog` at `moddialog.cpp:754` and
+`moddetailsdialog.cpp:424`. **Every run in it is invalid and none of its numbers
+appear in this document.**
+
+What happened: the advisory lock was **stale-reaped** and granted to this lane
+while the previous holder's `reimpl-x64.exe` was **still running**. That process
+held `standalone_{debug,error,crash}.log` open, so every launch printed
+
+```
+rm: cannot remove '…/standalone_debug.log': Device or resource busy
+exe exit=3
+```
+
+and died within 3–17 seconds. The lock's `verify` said "still held by
+lane-CLOSEDLG" the whole time, and `boot_state.sh --wait` said `RUNNING`, because
+neither instrument can see a *foreign* process — they only see the lock file and
+*a* running exe. Two green instruments over seven dead runs. The batch then ran
+past its own hold and the last two runs failed `verify` outright.
+
+This is worth recording because it is a new shape of the clobber the lock exists
+to prevent: **the lock's stale reaper and the previous holder's process lifetime
+are not coupled.** Reaping a lock does not reap the game. The lane after the
+reap gets a lock it genuinely holds, over a directory somebody else is still
+using.
+
+Batch 3 therefore checks the thing the lock cannot: it waits for zero
+`reimpl-x64.exe` processes before each run, and **aborts the run if the log
+files are still busy** rather than launching into them. That check is the
+difference between the discarded batch and a measurement.
+
+### 5c-2. Batch 3 — the route, found
+
+Build md5 `2d348a3e221d0bbab958bd42773436a7`, deployed and md5-matched before
+each launch, pre-flight clean.
+
+`BANISHED_PAUSEMENU_BUTTON=1` is **Resume**, and `MainMenuDialog::OnCommand`'s
+`kButton_Resume` arm calls `fn_UI_CloseDialog` directly
+(`code/Game/Dialog/mainmenudialog.cpp:993`). Run P, in predict mode with the
+detour installed:
+
+```
+[PauseMenu] frame 601 - opening (… pausesGame=0)
+[PauseMenu] frame 661 - dispatching OnCommand(msg=0x12, id=1)
+[RtPort] UI::UserInterface::CloseDialog ENTERED (first call) -- the port is LIVE on this route
+[PauseMenu] OnCommand returned
+[PauseMenu] frame 781 - 120 frames after the id=1 click: pausesGame=0
+```
+
+**The port is reached, and the dialog really closed** — `PausesGame` flips from
+1 to 0, which is the engine's own answer, read by `GameUpdateLoop::Update` to
+decide whether to tick the world. Run Q reproduced it with the detour installed
+and the self-test armed.
+
+**This route cannot produce oracle counters, and that is why the probe gate
+exists.** Resume resumes the game; nothing quits afterwards, so the run must be
+killed, and `entries=`/`armed=` are printed by a static destructor that a killed
+process never runs. Without the one-shot `ENTERED` line to stderr this run would
+have reported *exactly the same empty log as batch 1's genuinely-zero runs*.
+`calls=`, `rounds=` and `entries=` are all incapable of separating those two
+cases; only a line written at the moment of the call can.
 
 ---
 
