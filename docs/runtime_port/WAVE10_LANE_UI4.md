@@ -402,6 +402,32 @@ stream's `IO::Encoding` from `stream+0x10`, picks `vt+0x18` or `vt+0x20` by
 and one at **+0x78**, serialising the two Strings at +0x38/+0x40 and the
 `SpriteInfo` array at +0x20.
 
+> **CLOSED 2026-09-09 by Wave 10B lane SS — and this diagnosis was wrong
+> twice.** The body is ported, registered, and `??_7SpriteSheet@UI@@6B@` is
+> promoted. See `docs/runtime_port/WAVE10B_LANE_SS.md`.
+>
+> 1. **They are not Encoding slots.** RCX at each of the four `+0xa0` calls and
+>    the one `+0x78` call is reloaded from `[RSP+0x30]` — the Serializer's
+>    `readerWriter` field, not the Encoding. The Encoding is touched exactly
+>    once in the whole body, at `0x18011d755`, to pick `+0x18`/`+0x20`.
+> 2. **The map already existed, for the right class.** `rt::io::rw_vtbl` in
+>    `runtime/types/io/Serializer.h` has named all 26 retail `ReaderWriter`
+>    slots since Wave 4: `+0x78` = `kScalarBool`, `+0xa0` = `kScalarInt`. Lane
+>    SS re-derived both from `??_7BinaryWriter@IO@@6B@` rather than trusting
+>    the header (`+0x78` → `0x1800a8f30 Serialize(bool*)`, `+0xa0` →
+>    `0x1800a8fd0 Serialize(int*)`), with a third accidental confirmation from
+>    the per-entry helper `0x180078ad0` using `+0x80` = `kScalarFloat`.
+>
+> The retail `??_7Encoding@IO@@6B@` slot map was produced anyway and is in §2 of
+> the lane SS doc — vtable `0x1801554a8`, 5 slots. Note slot 0 is a
+> constant-`true` predicate, **not** a destructor.
+
+The paragraph below is kept as written, because the shape of the error is the
+point: a real recorded fact (`reference_encoding_vtable_offsets_differ_between_builds`
+is true about `IO::Encoding`) was applied to a vtable the body never calls, and
+that produced a confident blocker on a body that needed no new information at
+all.
+
 **The blocker is those two vtable offsets.**
 `reference_encoding_vtable_offsets_differ_between_builds.md` records that
 `IO::Encoding`'s slots sit at different offsets in retail than in the profile

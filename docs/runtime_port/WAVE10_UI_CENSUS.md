@@ -246,6 +246,14 @@ lane docs rather than in a footnote:
   every frame.
 * The four minted UI vtables — `??_7SpriteSheet` is **one slot** away (slot 5,
   `?Serialize@SpriteSheet@`); `??_7Dialog` is not in the mint tables at all.
+  **Both halves of that line were overtaken on 2026-09-09 by Wave 10B, and both
+  of the blockers behind them were wrong.** `??_7SpriteSheet` is PROMOTED (lane
+  SS: the `+0x78`/`+0xa0` calls are `IO::ReaderWriter` slots, not `IO::Encoding`
+  ones, and they had been named in `runtime/types/io/Serializer.h` since Wave 4).
+  `??_7Dialog` is now minted (lane MINT) and reads 1 ported / 8 TRAP, which makes
+  it the FURTHEST of the five UI vtables from promotion rather than a
+  regeneration away — and `tools/rt_mint_gen.py` was REFUSING to emit, so
+  "re-run the generator" silently did nothing. See `WAVE10B.md`.
 * `0x180039280` / `0x180039360` — array dtors that are **NOT** the J1 family, as
   lane DLG2 proved against lane UI3's recipe. Porting them as J1 entries would
   have leaked under a false byte-identity claim.
