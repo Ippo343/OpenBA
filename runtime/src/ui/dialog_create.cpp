@@ -984,7 +984,7 @@ void VerifyStartTimerShape(RtDiffSite* site) {
     { static const uint8_t p[] = { 0x89, 0x5c, 0x24, 0x30 }; PinCall(c, p, 4,
         0x1801137c0, 0x180076250, "Array<0x18>::SetSize"); }
 
-    std::printf("[RtPort]   StartTimer[shape]: %d pins, %d failed\n", c.checked, c.failed);
+    printf("[RtPort]   StartTimer[shape]: %d pins, %d failed\n", c.checked, c.failed);
 }
 
 void VerifyAddControllerTabShape(RtDiffSite* site) {
@@ -1027,7 +1027,7 @@ void VerifyAddControllerTabShape(RtDiffSite* site) {
     { static const uint8_t p[] = { 0x4c, 0x8d, 0x44, 0x24, 0x40, 0xff, 0xc2 };
       PinCall(c, p, 7, 0x1801133b0, 0x180076370, "Array<ptr>::SetSize"); }
 
-    std::printf("[RtPort]   AddController(tab)[shape]: %d pins, %d failed\n",
+    printf("[RtPort]   AddController(tab)[shape]: %d pins, %d failed\n",
                 c.checked, c.failed);
 }
 
@@ -1066,7 +1066,7 @@ void VerifyAddController6Shape(RtDiffSite* site) {
     { static const uint8_t p[] = { 0x4c, 0x8d, 0x44, 0x24, 0x30 }; PinCall(c, p, 5,
         0x180113470, 0x180076900, "Array<ptr>::SetSize"); }
 
-    std::printf("[RtPort]   AddController(6)[shape]: %d pins, %d failed\n",
+    printf("[RtPort]   AddController(6)[shape]: %d pins, %d failed\n",
                 c.checked, c.failed);
 }
 
@@ -1137,7 +1137,7 @@ void VerifyCtorShape(RtDiffSite* site) {
     { static const uint8_t p[] = { 0x48, 0x8b, 0xce }; PinCall(c, p, 3,
         0x180114870, 0x180113470, "AddController(6)"); }
 
-    std::printf("[RtPort]   ??0DialogInstance[shape]: %d pins, %d failed\n",
+    printf("[RtPort]   ??0DialogInstance[shape]: %d pins, %d failed\n",
                 c.checked, c.failed);
 }
 
@@ -1153,7 +1153,7 @@ void VerifyCtorShape(RtDiffSite* site) {
 void VerifyPinControls() {
     const uint8_t* body = reinterpret_cast<const uint8_t*>(ResolveRuntimeRaw(0x1801137c0));
     if (!body) {
-        std::printf("[RtPort]   [negative control] SKIPPED -- the shipped StartTimer "
+        printf("[RtPort]   [negative control] SKIPPED -- the shipped StartTimer "
                     "body is not readable, so the four [shape] lines above are "
                     "UNCONTROLLED and prove nothing.\n");
         return;
@@ -1176,7 +1176,7 @@ void VerifyPinControls() {
     const int afterAmbiguous = c.failed;
 
     const bool ok = (afterWrongValue == 1) && (afterAbsent == 2) && (afterAmbiguous == 3);
-    std::printf("[RtPort]   [negative control] pin decoder %s "
+    printf("[RtPort]   [negative control] pin decoder %s "
                 "(wrong-value caught=%d, absent caught=%d, ambiguous caught=%d of 3)\n",
                 ok ? "DISCRIMINATES -- the [shape] lines above mean something"
                    : "*** FAILED TO REJECT *** -- IGNORE the [shape] lines above",
@@ -1281,7 +1281,7 @@ void RunStartTimerDifferential() {
     // (reference_resolveaddr_consults_port_registry_first.md).
     Fn theirs = reinterpret_cast<Fn>(ResolveRuntimeRaw(0x1801137c0));
     if (!theirs) {
-        std::printf("[RtPort]   StartTimer[diff] SKIPPED -- no shipped body to diff "
+        printf("[RtPort]   StartTimer[diff] SKIPPED -- no shipped body to diff "
                     "against; the port is UNVERIFIED, not verified-clean.\n");
         return;
     }
@@ -1329,12 +1329,12 @@ void RunStartTimerDifferential() {
             RtDiffReport(control ? &ctrl : &site, eq, oursDesc, theirsDesc);
         }
         if (!control) {
-            std::printf("[RtPort]   StartTimer[diff]: %zu cases against the shipped body, "
+            printf("[RtPort]   StartTimer[diff]: %zu cases against the shipped body, "
                         "%d caught, %d bytes EXCLUDED (element +0x14..0x17, written by "
                         "neither side)\n",
                         sizeof(kCases) / sizeof(kCases[0]), caught, excluded);
         } else {
-            std::printf("[RtPort]   [negative control] the corrupted StartTimer was caught "
+            printf("[RtPort]   [negative control] the corrupted StartTimer was caught "
                         "in %d of %zu cases -- %s\n", caught,
                         sizeof(kCases) / sizeof(kCases[0]),
                         caught > 0 ? "the differential DISCRIMINATES"
@@ -1407,7 +1407,7 @@ int RtUiDialogCreateRegister() {
         // ARMED, not run: the differential allocates, and the DLL's allocator
         // has not been STARTED at this point in the boot. See ProbeGate().
         g_probePending = true;
-        std::printf("[RtPort]   StartTimer[diff] ARMED -- it runs on the first call "
+        printf("[RtPort]   StartTimer[diff] ARMED -- it runs on the first call "
                     "into one of these four ports, not here.\n");
     }
 
