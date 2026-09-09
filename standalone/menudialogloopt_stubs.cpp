@@ -37,6 +37,7 @@
 #include "redzone_alloc.h"
 #include "frame_limiter.h"
 #include "modal_driver.h"
+#include "mouse_inject.h"
 #include "common.h"
 #include "Object/factory_registration.h"   // DumpSlot3Inventory (BANISHED_DUMP_SLOT3)
 void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
@@ -554,7 +555,20 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         printf("[MenuDLT::Update] fn_DialogLoopT_Update is NULL, returning false\n");
         return false;
     }
+    // Wave 10D lane MOUSE: the menu half of the cursor route. The menu UI is
+    // MenuDLT+0x38 (DialogInstance) -> +0x10 (UserInterface), the same walk
+    // ModalDriver::RunSelfTest uses above. No-op unless BANISHED_MOUSE_INJECT.
+    void* menuUI = nullptr;
+    if (MouseInject::Enabled()) {
+        void* menuDlg = *reinterpret_cast<void**>(
+            reinterpret_cast<uintptr_t>(self) + 0x38);
+        if (menuDlg)
+            menuUI = *reinterpret_cast<void**>(
+                reinterpret_cast<uintptr_t>(menuDlg) + 0x10);
+        MouseInject::PreUpdate(menuUI);
+    }
     bool result = fn_DialogLoopT_Update(self, time);
+    if (menuUI) MouseInject::PostUpdate(menuUI);
 
     // Restore the original dt so MainLoop's frame accounting stays correct.
     if (clamped) {
