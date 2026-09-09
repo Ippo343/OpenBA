@@ -235,8 +235,8 @@ here:
   arrived. They did not, because there were none.
 * **It is "nothing dismisses a dialog on this route."** Run C reached the world
   (`[PauseMenu] frame 601 - opening`, `frame 661 - dispatching OnCommand id=6`),
-  so the run is not short. But the ~30 exe-side `fn_UI_CloseDialog` call sites in
-  `code/Game/Dialog/` all sit on *dismiss* actions, and `Update`'s own tooltip
+  so the run is not short. But the **42 exe-side `fn_UI_CloseDialog` call sites
+  across 24 files** in `code/Game/` all sit on *dismiss* actions, and `Update`'s own tooltip
   arm needs a tooltip, which needs a mouse hover that an unattended run never
   performs. Menu → New Game → world → Quit closes nothing.
 
