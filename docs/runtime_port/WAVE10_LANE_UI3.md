@@ -375,10 +375,15 @@ rather than the raw counts.
 
 | row | ported | registered | shape pins (b) | differential (a) | live exercise |
 |---|---|---|---|---|---|
-| `?StartTimer@` | ✅ | ✅ | ✅ | ✅ **9 cases + negative control** | see §7 |
-| `?AddController@ (…IntPtr<Element>)` | ✅ | ✅ | ✅ | ⛔ none | see §7 |
-| `?AddController@ (…ExtPtr<ED>, String&)` | ✅ | ✅ | ✅ | ⛔ none | see §7 |
-| `??0DialogInstance` | ✅ | ✅ | ✅ | ⛔ none | see §7 |
+| `?StartTimer@` | ✅ | ✅ | ✅ 6/6 | ✅ **9 cases, 0 div, control 8/9** | ✅ (probe entry) |
+| `?AddController@ (…IntPtr<Element>)` | ✅ | ✅ | ✅ 10/10 | ⛔ none | ✅ (via the ctor's table) |
+| `?AddController@ (…ExtPtr<ED>, String&)` | ✅ | ✅ | ✅ 10/10 | ⛔ none | ✅ (via the ctor's table) |
+| `??0DialogInstance` | ✅ | ✅ | ✅ 14/14 | ⛔ none | ✅ **built the boot's first dialog** |
+
+"live exercise" means *this body demonstrably ran in a real boot that then completed
+cleanly* — see §7's effectiveness control. It is **not** a differential: it says the port
+did not crash the game and carried the whole dialog-construction path, not that its
+post-state matches retail's byte for byte.
 
 The three ⛔ rows are the honest result of the constraint that defeated the replay oracle
 in the first place: running any of them twice constructs two controllers or two Element
@@ -410,6 +415,62 @@ binary produced each number rather than this doc asserting it.
 | 1 | `default` | `BANISHED_RT_DIFF=1 BANISHED_AUTOSTART=1`, `BANISHED_RT_ALLOC` **unset** | the ports are correct in the **default** configuration — the run the §0 claim stands or falls on |
 | 2 | `armed` | same **+ `BANISHED_RT_ALLOC=1`** | the ports are correct with the ported allocator armed |
 | 3 | `killswitch` | `BANISHED_RT_DLGCREATE=0` | **the attribution control.** If the switch does nothing, a clean run 1 says nothing about what was live |
+
+### RESULTS — all three ran, 2026-09-08 23:18–23:20
+
+Build md5 `e7f948d327ce1aafa4553877ddff02e2`; **deployed md5 re-derived and printed
+identically before each of the three launches**. `rc=0` (clean self-quit) for all three.
+**All three `standalone_crash.log` files are 0 bytes.** `[RtResolve] 0 misses` in both
+armed and default. Logs archived as `docs/runtime_port/wave10_lane_ui3/{default,armed,killswitch}_{debug,error}.log`.
+
+| `[RtDiff]` site | default | armed | killswitch |
+|---|---|---|---|
+| `StartTimer[shape]` | calls=6 div=**0** | calls=6 div=**0** | *absent* |
+| `AddController(tab)[shape]` | calls=10 div=**0** | calls=10 div=**0** | *absent* |
+| `AddController(6)[shape]` | calls=10 div=**0** | calls=10 div=**0** | *absent* |
+| `DialogInstance[shape]` | calls=14 div=**0** | calls=14 div=**0** | *absent* |
+| `UI3 pin negative control (sink)` | calls=3 div=**3** ✅ | calls=3 div=**3** ✅ | *absent* |
+| `StartTimer[synthetic diff]` | calls=9 div=**0** | calls=9 div=**0** | *absent* |
+| `StartTimer[negative control]` | calls=9 div=**8** ✅ | calls=9 div=**8** ✅ | *absent* |
+
+6+10+10+14 = **40 pins, 0 failed** — the same 40 the offline pre-flight decoded, now
+decoded from the DLL **as loaded in the process**. Both negative controls fired.
+
+**The kill switch is total**: `grep -c` for *any* UI3 site in the killswitch logs returns
+**0**, and that run still built the same three dialogs and self-quit `rc=0` on the DLL's
+own bodies. So the clean default run is attributable to these ports rather than to the
+harness.
+
+#### The effectiveness control: the ports were REACHED, and by the first dialog of the boot
+
+`calls=` on a `[shape]` site counts **pins, not invocations** — it cannot answer "did the
+port run?", and reading `calls=14` as fourteen constructions is exactly the misreading this
+doc warns about. The answer comes from somewhere else, and it is unambiguous:
+
+```
+line  83  [RtPort]   StartTimer[diff] ARMED -- it runs on the first call into one of these four ports, not here.
+line 611  [SplashDLT::CreateDialog] self=… -> LoaderDialog_FromSplashDLT
+line 612  [RtPort]   StartTimer[diff]: 9 cases against the shipped body, 0 caught, …
+```
+
+`ProbeGate()` exists in exactly two functions — `RtUiDialogInstance_Ctor` and
+`RtUiDialogInstance_StartTimer` — and it fired **529 lines after registration, inside the
+first `DialogInstance` construction of the boot.** Our ported `??0DialogInstance` is the
+body that built the game's first real dialog, and it then built the splash loader, the main
+menu and the new-game dialog, each of which ran the 6-arg `AddController` over its whole
+controller table and the 4-arg once per controller. Not `calls=0`
+(`reference_uncalled_port_is_not_verified.md`).
+
+#### Why the StartTimer control is 8 of 9 and that is CORRECT
+
+The corrupted body inverts the id comparison **inside the search loop**. Case 0 appends
+into an **empty** array, so the loop runs zero iterations and the injected defect is
+**structurally unreachable** there — both bodies then append identically. The log confirms
+it: the first divergence is `call #2`, i.e. case 1, and cases 1–8 all diverge.
+
+That is not a partial failure. 9 of 9 would have meant the harness was reporting a
+difference in a case where the defect cannot express itself, which would have been a
+finding about the instrument.
 
 ### Two run-hygiene rules this lane follows, and why they are not boilerplate
 
