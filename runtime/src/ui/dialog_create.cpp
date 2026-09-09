@@ -396,10 +396,35 @@ void DialogDtor(void* self) {
 // members and both of these ARE in the export table
 // (reference_aeaa_is_private_not_unexported.md), so they are resolved BY NAME
 // and there is no address door here to justify.
+//
+// WAVE 10C lane TIDENT -- the ATTENDANCE line, and why a promotion needs it.
+//
+// `ResolveExport` consults the PORT REGISTRY FIRST
+// (reference_resolveaddr_consults_port_registry_first.md), so once a
+// `?_typeInfo@` row is promoted this helper reads OUR minted node instead of
+// the DLL's. The value it takes out is the typeId, and our node's typeId is the
+// same CRC the DLL's holds -- so a promotion is, correctly, invisible in
+// behaviour. That is exactly what makes an A/B on it UNINFORMATIVE: a run in
+// which nothing changes cannot tell a safe promotion from one that was never
+// exercised (this file's own "WHY NOT ALL 104" rule, in reg_mint_promoted.cpp).
+//
+// This line resolves that, the way lane ELEM's `[ElemTid]` line did: it prints
+// WHICH NODE was read, not just what came out. Across an A/B the pointer must
+// move out of the DLL's data into our image while the id stays byte-identical
+// -- and if the line never prints at all, the row has no live consumer on that
+// route and must not be promoted.
 uint32_t TypeIdOfStatic(const char* mangled, uint32_t* cache) {
     if (*cache) return *cache;
-    if (const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveExport(mangled)))
+    if (const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveExport(mangled))) {
         *cache = *p;
+        // The RAW pointer, deliberately unclassified. A "(ours)/(theirs)"
+        // verdict here would need an image-range test this TU does not have,
+        // and inventing one is how a lane ships a label that means nothing.
+        // The A/B does the classifying, exactly as lane ELEM's [ElemTid] line
+        // did: our image and the DLL sit in visibly different ranges.
+        printf("[TidStatic] %s  node=%p id=0x%08x\n",
+               mangled, (const void*)p, *cache);
+    }
     return *cache;
 }
 uint32_t g_tidDialogController = 0;   // ?_typeInfo@DialogController@UI@@  0x1801f9e48

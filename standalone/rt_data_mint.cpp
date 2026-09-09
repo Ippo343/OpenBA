@@ -309,7 +309,22 @@ static void MintVtables() {
     }
 }
 
+// WAVE 10C lane TIDENT. How many minted rows should have their `name` aliased
+// to the DLL's own pointer, as the ptr= screen's effectiveness control. Read
+// once, from BANISHED_RT_MINT_PTRALIAS; 0 (the default) is off.
+static int g_ptrAliasRows = 0;
+
 static void MintTypeInfos() {
+    {
+        const char* e = getenv("BANISHED_RT_MINT_PTRALIAS");
+        g_ptrAliasRows = e ? atoi(e) : 0;
+        if (g_ptrAliasRows > 0)
+            printf("[RtMint] BANISHED_RT_MINT_PTRALIAS=%d -- aliasing the first "
+                   "%d rows' name pointer to the DLL's, to prove the ptr= screen "
+                   "is not stuck at \"differs\"\n",
+                   g_ptrAliasRows, g_ptrAliasRows);
+    }
+    int aliasApplied = 0;
     // Fields first. `next` is left for the chain pass below — it is the one
     // field the harvest could NOT read (it is 0x0 on disk for all 14 because
     // the chain is built by running constructors), so it is the one field that
@@ -350,6 +365,27 @@ static void MintTypeInfos() {
         bti->typeId        = t.name ? RtObject::TypeIdFromName(t.name) : 0xFFFFFFFFu;
         bti->_pad04        = 0;
         bti->name          = t.name;
+        // WAVE 10C lane TIDENT -- the ptr= screen's EFFECTIVENESS CONTROL.
+        //
+        // `t.name` is a string literal in OUR image, so `bti->name` is by
+        // construction a DIFFERENT POINTER from the DLL node's `name`, for all
+        // 104 rows. A screen that reports "differs" for every row cannot tell
+        // "it read the value" from "it is stuck on yes" -- so the control has
+        // to drive it the OTHER way. BANISHED_RT_MINT_PTRALIAS=<n> re-points
+        // the first n rows' `name` at the DLL's own pointer; the ptr= screen
+        // must then report those n rows as IDENTICAL and the rest as differing.
+        // Default off, and it names itself in the log when it is on.
+        if (g_ptrAliasRows > 0 && aliasApplied < g_ptrAliasRows) {
+            RtObject::BaseTypeInfo* d =
+                (RtObject::BaseTypeInfo*)DllExport(t.symbol);
+            if (d && d->name) {
+                bti->name = d->name;
+                ++aliasApplied;
+                printf("[RtMint] PTRALIAS %s: name -> the DLL's own pointer %p "
+                       "(effectiveness control; content unchanged)\n",
+                       t.symbol, (const void*)d->name);
+            }
+        }
         bti->parentName    = StripParent(t.parent);
         bti->fileExtension = t.ext;
 
@@ -365,6 +401,14 @@ static void MintTypeInfos() {
 
         bti->next = nullptr;
     }
+    // The control must announce when it did NOT fire, or a run in which
+    // DllExport came back null would read as "the screen did not move" and be
+    // scored as the screen's failure rather than the control's.
+    if (g_ptrAliasRows > 0)
+        printf("[RtMint] PTRALIAS: %d of %d requested row(s) aliased%s\n",
+               aliasApplied, g_ptrAliasRows,
+               aliasApplied == 0 ? "  <-- CONTROL DID NOT FIRE; the ptr= count "
+                                   "below is NOT evidence either way" : "");
 
     // The chain. Factory::Startup (0x1800c0630) walks it once, CRCs each
     // name, and resolves each type's PARENT by name — so a walk that reaches a
@@ -1319,11 +1363,13 @@ void RtDataMintShadowReport(const char* phase) {
            "[RtMintShadow] loaded DLL this run. fac=trap is reported, not hidden: it\n"
            "[RtMintShadow] is unreachable for a dword reader but not for a tree walk.\n");
     int tiReady = 0, tiBlocked = 0;
+    int tiPtrFields = 0, tiPtrDiff = 0, tiPtrDiffPromoted = 0;
     for (int i = 0; i < kTypeInfoCount; ++i) {
         const RtMintTypeInfo& t = kMintTypeInfos[i];
         RtObject::BaseTypeInfo* dll  = (RtObject::BaseTypeInfo*)DllExport(t.symbol);
         RtObject::BaseTypeInfo* mine = t.storage;
         int    strBad = 0;
+        int    ptrDiff = 0;                     // lane TIDENT: identity, not content
         bool   idCompared = false, idOk = false;
         if (dll) {
             const char* a[3] = { mine->name, mine->parentName, mine->fileExtension };
@@ -1332,7 +1378,16 @@ void RtDataMintShadowReport(const char* phase) {
                 bool same = (a[k] == nullptr && b[k] == nullptr) ||
                             (a[k] && b[k] && strcmp(a[k], b[k]) == 0);
                 if (!same) ++strBad;
+                // SCORED SEPARATELY from strBad, and never folded into it or
+                // into `ready`. strs= answers "does the string SAY the same
+                // thing"; ptr= answers "is it the SAME OBJECT". A screen that
+                // only ever computed strcmp is structurally incapable of
+                // expressing the second answer, whatever value it prints.
+                if (a[k] != b[k]) ++ptrDiff;
             }
+            tiPtrFields += 3;
+            tiPtrDiff   += ptrDiff;
+            if (ptrDiff && RtMintRowIsPromoted(t.symbol)) ++tiPtrDiffPromoted;
             if (dll->typeId != 0xFFFFFFFFu) {
                 idCompared = true;
                 idOk = (mine->typeId == dll->typeId);
@@ -1347,16 +1402,57 @@ void RtDataMintShadowReport(const char* phase) {
         // green would bury the four lines a reader needs.
         const bool isUi = t.symbol && strstr(t.symbol, "@UI@@") != nullptr;
         if (!ready || isUi)
-            printf("[RtMintShadow]   %-8s %-58s id=0x%08x idcmp=%-3s strs=%d fac=%s%s\n",
+            printf("[RtMintShadow]   %-8s %-58s id=0x%08x idcmp=%-3s strs=%d ptr=%d "
+                   "fac=%s%s\n",
                    ready ? "READY" : "BLOCKED",
                    t.symbol ? t.symbol : "(unexported)",
-                   mine->typeId, idCompared ? "yes" : "NO", strBad,
+                   mine->typeId, idCompared ? "yes" : "NO", strBad, ptrDiff,
                    facTrap == 0 ? "ported" : facTrap == 1 ? "1trap" : "2traps",
                    RtMintRowIsPromoted(t.symbol) ? "  [PROMOTED]" : "");
     }
     printf("[RtMintShadow]   typeinfo rows: %d READY, %d BLOCKED (of %d; only the "
            "UI rows and the BLOCKED ones are listed)\n", tiReady, tiBlocked,
            kTypeInfoCount);
+
+    // ---- ptr=  the POINTER-IDENTITY screen (WAVE 10C lane TIDENT) ---------
+    //
+    // WHY THIS EXISTS. Until this wave the only string screen was `strs=`, a
+    // strcmp. Lane DLGV declined to promote ?_typeInfo@DialogController@ on the
+    // ground that promoting it makes ?TypeName@DialogController@ hand out OUR
+    // node's `name` POINTER instead of the DLL's -- and observed that the
+    // instrument which had green-lit eleven already-live rows compares CONTENT,
+    // so it could not have seen that failure mode had it mattered. It could
+    // not: `strs=0` is a true statement about the characters and says nothing
+    // whatever about identity. That is the shape of
+    // reference_diagnostic_field_cannot_express_the_answer.md, so the field is
+    // now separate, computed separately, and never folded into `ready`.
+    //
+    // WHAT IT REPORTS, AND WHY A NON-ZERO ptr= IS NOT A DEFECT. `bti->name` is
+    // a string literal in our own image, so ptr= is 3-of-3 or 2-of-3 for
+    // essentially every row and always will be. It is reported because the
+    // question "does anything compare these pointers?" is answerable, was
+    // answered, and the answer belongs beside the number:
+    // docs/runtime_port/WAVE10C_LANE_TIDENT.md is a census of every consumer of
+    // BaseTypeInfo::name in BOTH shipped binaries, and every one is a CONTENT
+    // consumer. In Runtime-x64.dll the only static readers of any node's +0x08
+    // are the 103 ?TypeName@ accessors themselves, none of which is CALLED
+    // anywhere in the DLL; Factory::Startup CRCs the string, and
+    // Factory::GetTypeName has no caller inside the DLL and is not imported by
+    // the exe at all. In Application-x64.exe all 525 references to the 42
+    // imported ?_typeInfo@ slots read the dword at +0x00 (the typeId) and NOT
+    // ONE reads +0x08.
+    //
+    // So ptr= is a standing statement of a known, measured, benign difference,
+    // in a column that CAN say otherwise -- not a pass hiding behind a metric
+    // that could only ever have said one thing.
+    printf("[RtMintShadow]   ptr= (identity, scored SEPARATELY from strs=): "
+           "%d of %d string fields hold a DIFFERENT POINTER than the DLL's node; "
+           "%d PROMOTED row(s) hand out at least one\n",
+           tiPtrDiff, tiPtrFields, tiPtrDiffPromoted);
+    printf("[RtMintShadow]   ^ EXPECTED, and measured to be harmless: every "
+           "consumer of BaseTypeInfo::name in both shipped binaries compares "
+           "CONTENT (see WAVE10C_LANE_TIDENT.md). Control: "
+           "BANISHED_RT_MINT_PTRALIAS=<n> must drive this count DOWN by n.\n");
 
     printf("\n[RtMintShadow] ---- summary (phase=%s) ----\n", phase);
     printf("[RtMintShadow] vtables            : %d, %d slots\n", kVtableCount, g_counts.slots);
