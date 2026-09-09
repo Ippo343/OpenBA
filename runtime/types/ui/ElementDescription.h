@@ -66,7 +66,10 @@
 //                                   elem+0x34 (never assigns — see below)
 //   0x48  _childDesc      External* CreateInstance calls its vtable +0x40 and
 //                                   stores the result in elem+0xb0
-//   0x50  _userData       uint64    CreateInstance -> elem+0x40 (qword copy)
+//   0x50  _userData       ExternalPtr<UI::Dialog>  -- NOT a uint64; see the
+//                                   note on the field below. CreateInstance's
+//                                   plain qword copy to elem+0x40 still looks
+//                                   right because an ExternalPtr is 8 bytes.
 //   0x58  _stringTable    StringTable*  CreateInstance: null -> index -1, else
 //                                   StringTable::GetIndexFromName(_stringTable,
 //                                   _textName); stored to elem+0x48
@@ -113,9 +116,31 @@ struct ElementDescription {
     int32_t  _id;                      // +0x3c  ctor: -1
     uint32_t _elementType;             // +0x40  ctor: 3
     uint32_t _flags;                   // +0x44
-    void*    _childDesc;               // +0x48  Object::External* (child desc)
-    uint64_t _userData;                // +0x50
-    void*    _stringTable;             // +0x58  UI::StringTable*
+    // +0x48 / +0x50 / +0x58 ARE ALL `Object::ExternalPtr<T>`, NOT the scalars
+    // the names suggest. Wave 9 lane UIW2 deduced that `_userData` could not be
+    // a plain integer (Serialize hands it to a 215-instruction
+    // ExternalPtr<T>::Serialize, not to a scalar slot) and asked whoever took
+    // the row to correct the types. WAVE 10 MEASURED WHICH T EACH ONE IS.
+    //
+    // ?Serialize@ElementDescription@ (0x180116b00) dispatches these three
+    // fields to three different addresses, and all three turned out to be ONE
+    // 748-byte body parameterised by a single BaseTypeInfo* it reads twice:
+    //
+    //   +0x48  CALL 0x180038f90  reads ?_typeInfo@ElementDescription@UI@@
+    //   +0x50  CALL 0x180076610  reads ?_typeInfo@Dialog@UI@@
+    //   +0x58  CALL 0x1800042a0  reads ?_typeInfo@StringTable@UI@@
+    //
+    // (215 instructions each, 193 identical bytes, 20 differing only by
+    // position, 2 genuinely different -- both the same type-id load. Method and
+    // numbers in docs/runtime_port/WAVE10_EXTPTR_SERIALIZE.md.)
+    //
+    // So +0x50 is an ExternalPtr<UI::Dialog> -- the name `_userData` is wrong
+    // and is kept only because call sites already use it. The OFFSETS were
+    // always right; the TYPES were under-specified, and a port that treats
+    // +0x50 as a plain integer emits the wrong thing into every saved layout.
+    void*    _childDesc;               // +0x48  ExternalPtr<UI::ElementDescription>
+    uint64_t _userData;                // +0x50  ExternalPtr<UI::Dialog>  (misnamed)
+    void*    _stringTable;             // +0x58  ExternalPtr<UI::StringTable>
     char*    _textName;                // +0x60  System::String (refcounted char*)
 };
 
