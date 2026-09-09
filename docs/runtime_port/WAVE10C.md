@@ -18,6 +18,54 @@ they fall into three groups that need three different kinds of work:
 Aggregate at the open: `UI 1625 / called 179 / ported 170 / 95.0%`,
 `TOTAL 875 / 1094 = 80.0%`.
 
+## ✅ ALL FIVE UI VTABLES ARE NOW `TRAP= 0` (2026-09-09, after lane DLG8)
+
+```
+READY  ??_7Dialog@UI@@6B@            slots= 9 ported= 9 TRAP= 0            -- held back
+READY  ??_7DialogController@UI@@6B@  slots=11 ported=11 TRAP= 0            -- held back
+READY  ??_7DialogInstance@UI@@6B@    slots=10 ported=10 TRAP= 0 [PROMOTED]
+READY  ??_7Element@UI@@6B@           slots=12 ported=11 TRAP= 0 [PROMOTED]  (1 purecall)
+READY  ??_7SpriteSheet@UI@@6B@       slots= 9 ported= 9 TRAP= 0 [PROMOTED]
+```
+
+The 27 abort traps lane UIDATA counted across four vtables are **zero**, on all
+five. Every remaining question about these rows is now about ROUTES, not ports.
+
+**Two rows are green and deliberately unpromoted, for two DIFFERENT reasons, and
+the difference is the useful part:**
+
+* `??_7DialogController` — dead for the stamp *and* the dispatch. Nothing
+  reachable constructs an object carrying the Runtime base table at all.
+* `??_7Dialog` — **live for the stamp, dead for the dispatch.** Lane DLG8's
+  effectiveness control FIRES: arming the row moves lane DLG2's independent ctor
+  differential `divergences=0 → 3`, because `DialogTempCtor` stamps
+  `??_7Dialog@UI@@6B@` on the element path of every dialog the game builds. So
+  the row really does reach live objects — and the seven-way attendance counter
+  still prints `none of the seven bodies was entered` in every half of every
+  pair, because the temp Dialog is destroyed by a DIRECT call to our ported
+  `??1Dialog`, never through slot 0.
+
+  Promoting it would put a different pointer in every Dialog's `+0x00`, buy
+  nothing measurable, and leave DLG2's oracle carrying three permanent
+  divergences. **A row can be live and still not worth promoting**, and only two
+  instruments read together can tell that from "safe".
+
+### The recipe broke in four places — which is why the check goes first
+
+Lane DLG8 was told to port the CHECK before the code, because `??_7Dialog` has
+the same slot SHAPE as `??_7SpriteSheet` and lane SS's file was the obvious
+template. Copying `ConstructInPlace` would have:
+
+* set `+0x30` to `0` instead of `0xFFFFFFFF` — a transparent-black background on
+  every dialog in the game, **with no crash to find it by**;
+* zero-filled the `+0x44` hole retail leaves alone;
+* used the wrong oracle window;
+* substituted an unrelated `Serialize`.
+
+Same shape as `reference_a_written_recipe_can_be_wrong`, second occurrence in two
+waves, and the second time the "obvious template" was a sibling lane's *correct*
+code.
+
 ## Why six of the nine rows are NEW, and why that is not a setback
 
 Wave 10B's `called` column moved 170 → 179. Nothing regressed: four faithful
