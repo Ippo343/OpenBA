@@ -15,7 +15,7 @@ returns exactly **six rows**:
 | `??_7DialogInstance@UI@@6B@` | minted vtable, 2 traps | **DLGV** |
 | `??_7DialogController@UI@@6B@` | minted vtable, 9 traps | **DLGV** |
 | `??_7Element@UI@@6B@` | minted vtable, 8 traps | **ELEM** |
-| `??_7Dialog@UI@@6B@` | **not minted at all** | **MINT** |
+| `??_7Dialog@UI@@6B@` | minted 2026-09-09, 8 traps | **MINT** ✅ |
 | `?ShowDialog@UserInterface@UI@@…` | the only CODE row | **SHOW** |
 
 Five vtables and one function. Every vtable row is a `??_7` whose promotion is
@@ -39,7 +39,9 @@ SpriteSheet and DialogInstance figures moved during the wave). Reading them as
 current would have scoped two lanes wrong. Lanes are dispatched off the live
 table, not off the doc.
 
-## One prescription checked before dispatch, and it was wrong
+## One prescription checked before dispatch — and my own reading of it was wrong too
+
+**CLOSED by lane MINT at `2f8e970`.**
 
 Both `WAVE10_UI_CENSUS.md` and `standalone/reg_mint_promoted.cpp` say
 `??_7Dialog@UI@@6B@` "expires by re-running `tools/rt_mint_gen.py`". It does
@@ -56,10 +58,50 @@ REFUSING TO GENERATE — verification failed:
 It writes nothing, so "I re-ran the generator and the file did not change" is
 the failure presenting as a no-op. That is the same shape as
 `reference_a_prescription_read_as_a_completion`: a remedy written as if it were
-a step, which nobody ran until a lane was scoped on it. Lane MINT owns opening
-that gate properly — the +50 chain closure is 50 rows nothing in this tree
-names, and minting them as ports would be
-`reference_uncalled_port_is_not_verified` at scale.
+a step, which nobody ran until a lane was scoped on it.
+
+**But there was ONE refusal, not three, and the wave doc got that wrong because
+I read a merged stream.** `rt_mint_gen.py 2>&1` merges a BUFFERED stdout into an
+UNBUFFERED stderr, so two ordinary progress lines (`+4 vtable closure`, `+50
+chain closure`) sorted underneath the `REFUSING` banner and read as items in its
+error list. In the source those two are `print()`; only the size complaint is
+`errors.append()`. **The tell was inside the output I already had: the banner
+sorted ABOVE the lines it appeared to introduce, and a summary cannot precede
+its own items.** `2>/dev/null` on the same command shows stderr carrying exactly
+one entry.
+
+There was no ~54-row expansion either. All 54 closure rows were ALREADY in the
+committed `.inc` (typeinfo count 104 before, 104 after); the generator
+re-derives and re-prints them every run. The two judgement calls the lane was
+asked to adjudicate had been made and shipped by Wave 9 lanes Z and TYPE, so it
+adjudicated nothing — the right answer.
+
+The one real blocker was `?_disableHandler@Debug@System@@0_NA`'s missing size,
+pinned at **1** from the DLL rather than from the mangling (this tree has been
+burned by `?_errorString@…0PADA`, whose `PAD` says "pointer" and whose real size
+is `0x2000`), with a **discriminating control**: the same width scan over the
+real 8-byte `?_exceptionCallback@` three bytes below reports qword, so `width=1`
+is a reading and not a scanner that only ever says 1.
+
+### What minting `??_7Dialog` actually bought — a planning correction
+
+```
+BLOCKED  ??_7Dialog@UI@@6B@   slots= 9 ported= 1 TRAP= 8 purecall= 0
+```
+
+**`??_7Dialog` is the FURTHEST of the five UI vtables from promotion, not the
+closest.** It sits behind SpriteSheet (1 trap), DialogInstance (2) and Element
+(8, but 3 already ported), roughly level with DialogController (9). The census
+set-diff is EMPTY — six rows before, six after — which is the correct result:
+**minting is not porting**, and a row with eight traps is deliberately
+unpromoted. Contrary to the dispatch's expectation, minting did not grow the
+surface, because the new row's only dependency was storage rather than a
+newly-referenced export.
+
+Regression on the other four lanes: CLEAN. The whole 56-row readiness table
+diffs against the archived baseline with exactly one hunk, the added Dialog
+line; all ten promoted rows cleared `RtMintPromotionStorage`'s aborting VA check
+on a live boot (536/536 slots, 624/624 BaseTypeInfo fields).
 
 ## Lanes (dispatched 2026-09-09)
 
