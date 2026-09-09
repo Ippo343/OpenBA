@@ -184,6 +184,24 @@ const char* const kNameBaseTypeInfoCtor =
 } // namespace
 
 // ============================================================================
+// Wave 10 lane MINTSEL: the ONE exported spelling of the type-id hash.
+//
+// `TypeNameCRC` above is the faithful transcription of retail's private
+// ?GetTypeFromNameCRC@Factory@Object@@AEBAIPEBD@Z, and it stays in the
+// anonymous namespace where it was written. This thin wrapper exists because
+// standalone/rt_data_mint.cpp needs THE SAME hash to stamp a minted
+// BaseTypeInfo's `typeId` with the value Factory::Startup would stamp -- and
+// the one thing that must NOT happen is a second, independently written copy
+// of a CRC that agrees on today's names and diverges on tomorrow's.
+//
+// Startup's own line is `info->typeId = TypeNameCRC(info->name)`
+// (this file, in FactoryStartupRun); a minted node calling this wrapper with
+// the same `name` is that line, moved earlier. It is not a new claim about
+// retail: it is the existing claim, called from one more place.
+// ============================================================================
+uint32_t TypeIdFromName(const char* name) { return TypeNameCRC(name); }
+
+// ============================================================================
 // ?IsA@Base@Object@@QEBA_NI@Z            retail 0x1800491c0 / profile 0x1800828f0
 //
 //     bool Base::IsA(unsigned int typeId) const
