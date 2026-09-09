@@ -66,6 +66,14 @@ extern int RtUiCloseDialogRegister();      // userinterface_close.cpp (lane CLOS
 // because the dtor frees and because a bisect must be able to separate it from
 // lane UI3's own switch, which is what put the calls there.
 extern int RtUiDialogCtorDtorRegister();   // dialog_ctor_dtor.cpp (lane DLG2)
+// Wave 10B lane ELEM: the eight remaining slots of ??_7Element@UI@@6B@
+// (TypeName, Type, Persist, Update, Enable, Contains, SetColor, GetBorder).
+// Own switch (BANISHED_RT_ELEMVTABLE) rather than sharing lane A's
+// BANISHED_RT_UIELEMENT, because ?Update@Element@ is dispatched by the DLL's
+// own UserInterface::Update for every element every frame: an A/B of THAT must
+// not also turn off the 21 already-verified lane-A bodies it shares a file
+// family with.
+extern int RtUiElementVtableRegister();    // element_vtable.cpp  (lane ELEM)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -86,5 +94,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_UIDRAW"))      n += RtUiDrawRegister();
     if (RtWaveEnabled("BANISHED_RT_UICLOSE"))    n += RtUiCloseDialogRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGCTOR"))    n += RtUiDialogCtorDtorRegister();
+    if (RtWaveEnabled("BANISHED_RT_ELEMVTABLE")) n += RtUiElementVtableRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }
