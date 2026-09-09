@@ -1,0 +1,550 @@
+# Regenerated 2026-09-08 with runtime_census.py AFTER six counting fixes.
+# Supersedes census.txt in this directory, which is kept as the scoping snapshot.
+#
+# What moved, and why -- every cell explained, nothing else changed:
+#   UI      160/130 d0 -> 164/135 d1   this wave's two ports + its detour, plus
+#                                      three ports recovered by the constexpr fix
+#   Object   54/30  d0 ->  56/32  d2   Wave 9's two ExternalFactory detours,
+#                                      invisible in this table since they landed
+#   Audio    30/23  d1 ->  30/23  d0   a `probe:` recorder is an instrument, not
+#                                      a port (this number went DOWN, correctly)
+#   TOTAL  1061/824 d3 -> 1067/831 d5
+#
+# The six fixes, in commit order:
+#   1 a DETOURED port has retail's callers by construction, so it counts
+#   2 a detour target spelled as a named constant was silently dropped
+#   3 probe:/selftest:/[allocshadow] detours are instruments, excluded
+#   4 the mint is gated DATA, not an understated port count
+#   5 ResolveExport(kNamedConstant) was not seen as a call
+#   6 RE_NAME_CONST missed the `constexpr const char*` spelling
+#
+# Read the WARNING blocks below: they are the honest report of what this tool
+# still cannot follow, not a to-do list.
+
+Runtime-x64.dll port census
+==============================================================================
+namespace         total   called   ported   detour  called covered
+------------------------------------------------------------------------------
+UI                 1625      164      135        1   82.3%
+Video               573      148      108        0   73.0%
+internal                     126      110        0   87.3%
+IO                  407      104       83        0   79.8%
+Graphics            599       97       66        0   68.0%
+System              262       97       75        2   77.3%
+Math                228       64       64        0  100.0%
+Object              191       56       32        2   57.1%
+Achievement         118       52       36        0   69.2%
+Engine              108       33       23        0   69.7%
+Audio               137       30       23        0   76.7%
+Input                63       29       25        0   86.2%
+Save                 37       24       16        0   66.7%
+Application          26       13        9        0   69.2%
+Volume               64       13       13        0  100.0%
+Picking              49        9        9        0  100.0%
+ordinal                        6        2        0   33.3%
+Utility              16        2        2        0  100.0%
+------------------------------------------------------------------------------
+TOTAL              4632     1067      831        5   77.9%
+
+total  = functions in the DLL (PLAN.md §3.1 Ghidra census; blank for non-namespaced internals)
+called = distinct functions our tree resolves today
+
+40 registration(s) are present in the source but NOT counted above:
+  runtime/src/system/allocator.cpp         26  (opt-in; its Register function returns 0 unless armed)
+  runtime/src/system/allocator_win.cpp     6  (opt-in; its Register function returns 0 unless armed)
+  runtime/src/object/internal.cpp          8  (opt-in; inside if(table) / if(shadow) / if(checkPtr))
+  A gated registration is not a port. Arm it, measure it, then move it.
+
+197 DATA slot(s) are MINTED but not registered (193 carry an exported name; the other 4 are UNEXPORTED and known only by address):
+  standalone/rt_data_mint.cpp              (vtables + BaseTypeInfo + .data statics, from standalone/rt_data_mint_tables.inc)
+  Gated behind BANISHED_RT_MINT=1, so by this script's own rule they
+  are NOT ports. They are also not FUNCTIONS: a ??_7 vtable and a
+  ?_typeInfo@ have no body to reimplement, which is the premise of
+  standalone/rt_data_mint.h. They therefore cannot move the columns
+  above at all, in either direction -- do not read this as a shortfall.
+
+*** WARNING: 13 ResolveExport call(s) pass an identifier this script
+*** cannot follow, so `called` -- and therefore `ported` -- UNDERSTATE.
+  runtime/src/ui/dialog.cpp                    RtUI::kVtblBase, RtUI::kVtblElementDescription, RtUI::kVtblExternal
+  standalone/rt_orphan_probe.cpp               kGetValue, kPressed, kReleased
+  standalone/rt_selftest.cpp                   kFake
+
+2 detour(s) are INSTRUMENTS, not ports, and are excluded above:
+  0x1800db8a0                                  standalone/rt_alloc_swap.cpp
+  ?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z standalone/rt_orphan_probe.cpp
+  A `probe:` recorder, a `selftest:` fake and an `[allocshadow]` shadow
+  all patch the DLL, and none of them is a reimplementation. Only a
+  label ending in `[port]` counts toward the detour column.
+ported = of those, taken over by a RegisterRuntime* call
+detour = of those, ALSO patched in the DLL so its own internal callers come to us
+
+Ports with no caller in our tree (172 exports, 287 addresses) — check each is not
+a vestigial resolve:
+  export  ??0AchievementManager@Achievement@@QEAA@XZ
+  export  ??0BinaryReader@IO@@QEAA@AEAVSerializer@1@H@Z
+  export  ??0BinaryWriter@IO@@QEAA@AEAVSerializer@1@H@Z
+  export  ??0Configuration@System@@QEAA@XZ
+  export  ??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z
+  export  ??0Quaternion@Math@@QEAA@AEBVVector3@1@00@Z
+  export  ??0WideString@System@@QEAA@PEBD@Z
+  export  ??1BinaryWriter@IO@@UEAA@XZ
+  export  ??1ConstantBuffer@Video@@QEAA@XZ
+  export  ??1SunLight@Graphics@@UEAA@XZ
+  export  ??2Device@Video@@SAPEAX_K@Z
+  export  ??3Device@Video@@SAXPEAX@Z
+  export  ??3RenderBuffer@Video@@SAXPEAX@Z
+  export  ??4Timer@System@@QEAAAEAV01@AEBV01@@Z
+  export  ??9String@System@@QEBA_NAEBV01@@Z
+  export  ?AddConstant@ConstantBuffer@Video@@QEAAXAEBVString@System@@0H@Z
+  export  ?BeginConstants@ConstantBuffer@Video@@QEAAXAEBVString@System@@0HH_N1H@Z
+  export  ?CacheText@NumberElement@UI@@AEAAXXZ
+  export  ?CanOverride@PackageFile@IO@@QEBA_NXZ
+  export  ?Close@MemoryStream@IO@@UEAAXXZ
+  export  ?Compile@PackageFile@IO@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z
+  export  ?Construct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ
+  export  ?CreateVideoInterface@Device@Video@@QEAA_NH@Z
+  export  ?CurrentTime@Timer@System@@SAMXZ
+  export  ?CurrentTimeTicks@Timer@System@@SA_JXZ
+  export  ?DecompressFromSource@CompressedStream@IO@@AEAA_NH@Z
+  export  ?EndConstants@ConstantBuffer@Video@@QEAAXH@Z
+  export  ?FindCheckBoxes@RadioElement@UI@@AEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z
+  export  ?FormatParamCount@String@System@@SAHPEBD@Z
+  export  ?FormatParamList@String@System@@SA?AV12@AEBV12@PEBV12@@Z
+  export  ?FromDirection@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z
+  export  ?GetAvailableWindow@CompressedStream@IO@@AEAAHXZ
+  export  ?GetBuildName@Configuration@System@@QEAA?AVString@2@W4Build@12@@Z
+  export  ?GetCRC@PackageFile@IO@@QEBAIXZ
+  export  ?GetDLLForInterface@Device@Video@@QEBA?AVString@System@@H@Z
+  export  ?GetDefaultResolution@Device@Video@@QEBAHAEBUAdapter@12@@Z
+  export  ?GetFileCount@PackageFile@IO@@QEBAHXZ
+  export  ?GetFileInfo@PackageFile@IO@@QEBA?AUFileInfo@FileSystem@2@XZ
+  export  ?GetFileOffset@PackageFile@IO@@QEBAIH@Z
+  export  ?GetFileSize@PackageFile@IO@@QEBAIH@Z
+  export  ?GetFileVersion@PackageFile@IO@@UEBAHXZ
+  export  ?GetIconData@PackageFile@IO@@QEBA?BV?$Array@I@Collection@@XZ
+  export  ?GetIconHeight@PackageFile@IO@@QEBAHXZ
+  export  ?GetIconWidth@PackageFile@IO@@QEBAHXZ
+  export  ?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z
+  export  ?GetPathDirectory@Filename@System@@QEBA?AV12@XZ
+  export  ?GetPathExtension@Filename@System@@QEBA?AV12@XZ
+  export  ?GetPathStackDirectory@ExternalFactory@Object@@QEBA?AVFilename@System@@XZ
+  export  ?GetPathStackFilename@ExternalFactory@Object@@QEBA?AVFilename@System@@XZ
+  export  ?GetPlatform@PackageFile@IO@@QEBAHXZ
+  export  ?GetPlatformName@Configuration@System@@QEAA?AVString@2@W4Platform@12@@Z
+  export  ?GetPreviewData@PackageFile@IO@@QEBA?BV?$Array@E@Collection@@XZ
+  export  ?GetPriority@PackageFile@IO@@QEBAHXZ
+  export  ?GetRootDirectory@FileSystem@IO@@QEAA?AVFilename@System@@XZ
+  export  ?GetTicks@Timer@System@@CA_KXZ
+  export  ?GetUserVersion@PackageFile@IO@@QEBAHXZ
+  export  ?GetVersion@BinaryReader@IO@@UEBAHXZ
+  export  ?GetVersion@BinaryWriter@IO@@UEBAHXZ
+  export  ?GetVersion@PackageFile@IO@@QEBAHXZ
+  export  ?GetVersion@Visitor@IO@@UEBAHXZ
+  export  ?InitializeInterfaces@Device@Video@@QEAAXXZ
+  export  ?Lerp@Transform@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z
+  export  ?MoveWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z
+  export  ?Normalize@Vector2@Math@@QEBA?AV12@AEAVScalar@2@@Z
+  export  ?OnCompleted@Thread@System@@UEAAXXZ
+  export  ?OnFocusMessage@Device@Input@@CAHPEAUHWND__@@I_K_J@Z
+  export  ?OnLostFocusMessage@Device@Input@@CAHPEAUHWND__@@I_K_J@Z
+  export  ?OnMouseWheelMessage@Device@Input@@CAHPEAUHWND__@@I_K_J@Z
+  export  ?PauseEffect@Scene@Audio@@QEAAXI@Z
+  export  ?PlatformConstruct@ImageBuffer@Video@@AEAAXXZ
+  export  ?PlatformCreate@ConstantBuffer@Video@@AEAA_NXZ
+  export  ?PlatformDestruct@ImageBuffer@Video@@AEAAXXZ
+  export  ?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ
+  export  ?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ
+  export  ?PlatformOpenFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z
+  export  ?PlatformShutdown@Timer@System@@CAXXZ
+  export  ?PlatformStartup@AchievementManager@Achievement@@AEAA_NXZ
+  export  ?PlatformStartup@Engine@1@QEAA_NXZ
+  export  ?PlatformStartup@ExternalFactory@Object@@AEAA_NXZ
+  export  ?PlatformStartup@Timer@System@@CA_NXZ
+  export  ?Read@CompressedStream@IO@@UEAA_NHPEAX@Z
+  export  ?Recreate@RenderBuffer@Video@@QEAAXXZ
+  export  ?RecreateDynamic@ImageBuffer@Video@@SAXXZ
+  export  ?RecreateDynamic@IndexBuffer@Video@@SAXXZ
+  export  ?RecreateDynamic@RenderBuffer@Video@@SAXXZ
+  export  ?RecreateDynamic@VertexBuffer@Video@@SAXXZ
+  export  ?ReleaseDynamic@ImageBuffer@Video@@SAXXZ
+  export  ?ReleaseDynamic@IndexBuffer@Video@@SAXXZ
+  export  ?ReleaseDynamic@RenderBuffer@Video@@SAXXZ
+  export  ?ReleaseDynamic@VertexBuffer@Video@@SAXXZ
+  export  ?RenderTextures@MaterialInstance@Graphics@@QEBAXAEAVRenderer@2@AEBVScene@2@AEBVCamera@2@H@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXAEACPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXAEADPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXAEAEPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXAEAFPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXAEAGPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXAEAIPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXAEAMPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXAEA_JPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXAEA_KPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXAEA_NPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXHPEACPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXHPEADPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXHPEAEPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXHPEAFPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXHPEAGPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXHPEAHPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXHPEAIPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXHPEAMPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXHPEA_JPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXHPEA_KPEBD@Z
+  export  ?Serialize@BinaryReader@IO@@UEAAXHPEA_NPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXAEACPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXAEADPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXAEAEPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXAEAFPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXAEAGPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXAEAMPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXAEA_JPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXAEA_KPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXAEA_NPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXHPEACPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXHPEADPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXHPEAEPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXHPEAFPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXHPEAGPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXHPEAIPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXHPEAMPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXHPEA_JPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXHPEA_KPEBD@Z
+  export  ?Serialize@BinaryWriter@IO@@UEAAXHPEA_NPEBD@Z
+  export  ?Serialize@Serializer@IO@@QEAAXHPEACPEBD@Z
+  export  ?Serialize@Serializer@IO@@QEAAXHPEADPEBD@Z
+  export  ?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXAEACPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXAEADPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXAEAEPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXAEAFPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXAEAGPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXAEAHPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXAEAIPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXAEAMPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXAEA_JPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXAEA_KPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXAEA_NPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXHPEACPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXHPEADPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXHPEAEPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXHPEAFPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXHPEAGPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXHPEAHPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXHPEAIPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXHPEAMPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXHPEA_JPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXHPEA_KPEBD@Z
+  export  ?Serialize@Visitor@IO@@UEAAXHPEA_NPEBD@Z
+  export  ?SerializeBytes@BinaryReader@IO@@UEAAXHPEAXPEBD@Z
+  export  ?SerializeBytes@BinaryWriter@IO@@UEAAXHPEAXPEBD@Z
+  export  ?SerializeBytes@Visitor@IO@@UEAAXHPEAXPEBD@Z
+  export  ?SetLength@WideString@System@@AEAAXH@Z
+  export  ?Shutdown@Timer@System@@SAXXZ
+  export  ?SizeWindow@Device@Video@@SAHPEAUHWND__@@I_K_J@Z
+  export  ?Skip@BinaryReader@IO@@UEAAXXZ
+  export  ?Skip@BinaryWriter@IO@@UEAAXXZ
+  export  ?Skip@Visitor@IO@@UEAAXXZ
+  export  ?StopEffect@Scene@Audio@@QEAAXI@Z
+  export  ?StrAppend@String@System@@SAPEADPEADHPEBD@Z
+  export  ?Type@PackageFile@IO@@UEBAIXZ
+  export  ?TypeId@PackageFile@IO@@SAIXZ
+  export  ?TypeName@PackageFile@IO@@UEBAPEBDXZ
+  export  ?Update@MainLoop@Engine@@QEAA_NAEBVTime@System@@@Z
+  export  ?WindowProc@Application@1@CA_JPEAUHWND__@@I_K_J@Z
+  addr    0x180001680
+  addr    0x180001a90
+  addr    0x180001d70
+  addr    0x1800020c0
+  addr    0x180002d60
+  addr    0x1800037b0
+  addr    0x180006440
+  addr    0x1800065b0
+  addr    0x180006640
+  addr    0x180008440
+  addr    0x180008520
+  addr    0x1800087c0
+  addr    0x180008840
+  addr    0x180008b00
+  addr    0x1800091f0
+  addr    0x180009460
+  addr    0x180009560
+  addr    0x1800098d0
+  addr    0x180009af0
+  addr    0x18000aba0
+  addr    0x18000adc0
+  addr    0x18000b040
+  addr    0x18000b170
+  addr    0x18000b7e0
+  addr    0x18000c110
+  addr    0x18000c610
+  addr    0x18000c9b0
+  addr    0x18000ca30
+  addr    0x18000f890
+  addr    0x18000f970
+  addr    0x18000fa90
+  addr    0x18000fb00
+  addr    0x18000fbf0
+  addr    0x18000fcd0
+  addr    0x180010470
+  addr    0x1800104f0
+  addr    0x180010570
+  addr    0x180010830
+  addr    0x180010b80
+  addr    0x180010cf0
+  addr    0x180011110
+  addr    0x1800111a0
+  addr    0x180011220
+  addr    0x1800112a0
+  addr    0x180011800
+  addr    0x180015e90
+  addr    0x18001b360
+  addr    0x18001c100
+  addr    0x18001cab0
+  addr    0x18001ce90
+  addr    0x18001cfc0
+  addr    0x18001d690
+  addr    0x18001ed20
+  addr    0x18001f360
+  addr    0x180020160
+  addr    0x180020310
+  addr    0x180020ce0
+  addr    0x180023570
+  addr    0x1800236a0
+  addr    0x180023930
+  addr    0x180023ab0
+  addr    0x180023b50
+  addr    0x1800244a0
+  addr    0x1800248e0
+  addr    0x1800249c0
+  addr    0x180024c10
+  addr    0x180024d70
+  addr    0x180025130
+  addr    0x180025140
+  addr    0x180025150
+  addr    0x1800252f0
+  addr    0x1800253d0
+  addr    0x1800253e0
+  addr    0x1800253f0
+  addr    0x180025400
+  addr    0x180025440
+  addr    0x1800254a0
+  addr    0x1800254c0
+  addr    0x1800254e0
+  addr    0x1800254f0
+  addr    0x180025500
+  addr    0x180025510
+  addr    0x180025520
+  addr    0x180025530
+  addr    0x180025580
+  addr    0x180025c70
+  addr    0x180026080
+  addr    0x1800261b0
+  addr    0x1800274c0
+  addr    0x180027e20
+  addr    0x180027f50
+  addr    0x180028610
+  addr    0x180029510
+  addr    0x180029630
+  addr    0x18002a170
+  addr    0x18002a590
+  addr    0x18002a6c0
+  addr    0x18002b670
+  addr    0x18002ce60
+  addr    0x18002d370
+  addr    0x18002d860
+  addr    0x18002d990
+  addr    0x18002dff0
+  addr    0x18002e3d0
+  addr    0x18002e6e0
+  addr    0x18002e740
+  addr    0x18002ee40
+  addr    0x180030380
+  addr    0x180030540
+  addr    0x1800307b0
+  addr    0x1800308e0
+  addr    0x180031900
+  addr    0x1800329c0
+  addr    0x1800331f0
+  addr    0x180034440
+  addr    0x180035c10
+  addr    0x180039440
+  addr    0x18003b800
+  addr    0x18003ffe0
+  addr    0x1800458c0
+  addr    0x18004d4f0
+  addr    0x18004d670
+  addr    0x18004d8b0
+  addr    0x18004f620
+  addr    0x180050270
+  addr    0x180053510
+  addr    0x180053730
+  addr    0x180053840
+  addr    0x1800538b0
+  addr    0x180053920
+  addr    0x180057fa0
+  addr    0x180058120
+  addr    0x1800584c0
+  addr    0x180058590
+  addr    0x180058610
+  addr    0x180058690
+  addr    0x180058710
+  addr    0x180058790
+  addr    0x180058810
+  addr    0x180058890
+  addr    0x180058910
+  addr    0x180058990
+  addr    0x180058a10
+  addr    0x180058a90
+  addr    0x180058b10
+  addr    0x180072730
+  addr    0x180072b30
+  addr    0x180072d10
+  addr    0x180072e70
+  addr    0x1800735c0
+  addr    0x1800738c0
+  addr    0x180074100
+  addr    0x18007b210
+  addr    0x18007b590
+  addr    0x18007bc30
+  addr    0x18007eec0
+  addr    0x18007f034
+  addr    0x18009eb00
+  addr    0x18009eb70
+  addr    0x18009f930
+  addr    0x1800a2100
+  addr    0x1800a8080
+  addr    0x1800a8120
+  addr    0x1800a8340
+  addr    0x1800a83f0
+  addr    0x1800a8410
+  addr    0x1800a8460
+  addr    0x1800a84b0
+  addr    0x1800a8510
+  addr    0x1800a8570
+  addr    0x1800a85d0
+  addr    0x1800a8630
+  addr    0x1800a8690
+  addr    0x1800a86f0
+  addr    0x1800a8750
+  addr    0x1800a87b0
+  addr    0x1800a8810
+  addr    0x1800a8830
+  addr    0x1800a8850
+  addr    0x1800a8870
+  addr    0x1800a8890
+  addr    0x1800a88b0
+  addr    0x1800a88f0
+  addr    0x1800a8910
+  addr    0x1800a8930
+  addr    0x1800a8950
+  addr    0x1800a8970
+  addr    0x1800a8980
+  addr    0x1800a8a30
+  addr    0x1800a8b00
+  addr    0x1800a8b10
+  addr    0x1800a8b60
+  addr    0x1800a8bb0
+  addr    0x1800a8c10
+  addr    0x1800a8c70
+  addr    0x1800a8cd0
+  addr    0x1800a8d90
+  addr    0x1800a8df0
+  addr    0x1800a8e50
+  addr    0x1800a8eb0
+  addr    0x1800a8f10
+  addr    0x1800a8f30
+  addr    0x1800a8f50
+  addr    0x1800a8f70
+  addr    0x1800a8f90
+  addr    0x1800a8ff0
+  addr    0x1800a9010
+  addr    0x1800a9030
+  addr    0x1800a9050
+  addr    0x1800a9070
+  addr    0x1800a96b0
+  addr    0x1800a9980
+  addr    0x1800aa780
+  addr    0x1800ad650
+  addr    0x1800adce0
+  addr    0x1800ae9e0
+  addr    0x1800b6080
+  addr    0x1800b6090
+  addr    0x1800bacc0
+  addr    0x1800bacd0
+  addr    0x1800bace0
+  addr    0x1800bacf0
+  addr    0x1800bad00
+  addr    0x1800bad10
+  addr    0x1800bad20
+  addr    0x1800bad30
+  addr    0x1800bad40
+  addr    0x1800bad50
+  addr    0x1800bad60
+  addr    0x1800bad70
+  addr    0x1800bad80
+  addr    0x1800bad90
+  addr    0x1800bada0
+  addr    0x1800badb0
+  addr    0x1800badc0
+  addr    0x1800badd0
+  addr    0x1800bade0
+  addr    0x1800badf0
+  addr    0x1800bae00
+  addr    0x1800bae10
+  addr    0x1800bae20
+  addr    0x1800bae30
+  addr    0x1800bcf60
+  addr    0x1800bcfd0
+  addr    0x1800bf6c0
+  addr    0x1800c3f40
+  addr    0x1800c51b0
+  addr    0x1800c5210
+  addr    0x1800c5280
+  addr    0x1800c64f0
+  addr    0x1800c6880
+  addr    0x1800c9020
+  addr    0x1800ca9b0
+  addr    0x1800cb110
+  addr    0x1800d5750
+  addr    0x1800dd070
+  addr    0x1800e17a0
+  addr    0x1800e17d0
+  addr    0x1800e1800
+  addr    0x1800eebf0
+  addr    0x1800eec40
+  addr    0x1800eed10
+  addr    0x1800eeee0
+  addr    0x1800ef010
+  addr    0x1800f2d90
+  addr    0x1800f2e80
+  addr    0x1800f2f40
+  addr    0x1800f3020
+  addr    0x1800f3500
+  addr    0x1800f35d0
+  addr    0x1800f3760
+  addr    0x1800f4030
+  addr    0x1800f40c0
+  addr    0x1800f4170
+  addr    0x1800f5660
+  addr    0x1800f5730
+  addr    0x1800f58c0
+  addr    0x1800f7540
+  addr    0x1800f7930
+  addr    0x1800f79f0
+  addr    0x1800f7b20
+  addr    0x1800f7d20
+  addr    0x1800f7d90
+  addr    0x180102df0
+  addr    0x180108160
+  addr    0x180112180
+  addr    0x1801189f0
+  All 10 of these have a WRITTEN VERDICT as of 2026-09-07 -- see the
+  'ports with no caller' table in docs/runtime_port/WAVE8_5.md section 2. FIVE are
+  exercised by a direct C++ call from a sibling port (the two Quaternion
+  members and Transform::FromDirection; Audio::Scene::PauseEffect and
+  ::StopEffect, called by Scene::Pause and Scene::StopEffect3D exactly as
+  retail calls them, and swept by ProbeAudioScene). Three are deliberately
+  dead members of the IO::Serializer forwarder family (verified structurally
+  at registration), and two are verified by standalone/rt_orphan_probe.cpp
+  and by disassembly. A NEW name appearing here has NOT been triaged.

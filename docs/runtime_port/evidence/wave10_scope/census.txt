@@ -16,8 +16,9 @@
 !!!     ??_7 vtable has no body to port (so not a function). 197 minted DATA
 !!!     slots, 193 of them named -- they cannot move these columns either way.
 !!!
-!!! Current numbers: run tools/runtime_census.py. At the time of writing,
-!!! UI 161/131 detour 1, TOTAL 1064/827 detour 5.
+!!! REGENERATED with the fixed tool alongside this file:
+!!!   docs/runtime_port/evidence/wave10_scope/census_20260908_corrected.txt
+!!! UI 164/135 detour 1 (82.3%), TOTAL 1067/831 detour 5 (77.9%).
 
 Runtime-x64.dll port census
 ==============================================================================
