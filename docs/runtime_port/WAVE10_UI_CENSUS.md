@@ -40,10 +40,39 @@ and `?_typeInfo@` of `CheckElement`, `ClipRegionElement`, `Dialog`,
 `ScrollElement`, `TextElement`.
 
 All 13 are ALREADY minted in `standalone/rt_data_mint_tables.inc`. They have no
-body to reimplement. They are gated behind `BANISHED_RT_MINT=1`, and by
-`runtime_census.py`'s own rule a gated registration is not a port — so they sit
-in the gap permanently without ever being UI work. **Moving them is a CUTOVER
-decision, not a porting one.**
+body to reimplement.
+
+**ANSWERED 2026-09-08 by lane UIDATA — the verdict is NO for all 13, and the
+reason REFRAMES the class.** It is not a cutover decision after all; it is
+blocked on concrete UI porting work, and the global `BANISHED_RT_MINT=1` switch
+was never a route to it (that switch does not even boot with the DLL present —
+it publishes our zeroed `?_singleton@MemoryAllocator@System@@` over the DLL's
+live one and dies in `EnterCriticalSection` on a null self; that blocker lives
+in the 38 storage rows and is not a UI fact).
+
+* **The 4 vtables are blocked on 27 ABORT TRAPS** across 42 non-purecall slots
+  — `DialogController` 9, `Element` 8, `SpriteSheet` 8, `DialogInstance` 2.
+  Registering a vtable is NOT passive: our ported ctors *stamp* these tables, so
+  the DLL's own `UserInterface::Update` would dispatch into `abort()`.
+  **So class A converts into 27 named UI function ports** — real, scopeable UI
+  work, which is the opposite of the "no UI work can move these" reading.
+* **The 9 typeinfos fail SILENTLY, which is worse.** Our minted `typeId` is the
+  ctor sentinel `0xFFFFFFFF` against the DLL's real CRC, and stays so because
+  our nodes sit on `g_mintTypeInfoHead`, a chain only the mint knows. Readers
+  take exactly that dword. `reg_element_typeids.cpp` is default-on and already a
+  live consumer of six of the nine, and its header records that the DLL route
+  was chosen precisely so no window holds `0xFFFFFFFF`. Registering
+  `?_firstTypeInfo@` does not rescue it — the DLL reads its own head
+  RIP-relative, so the split brain just moves.
+
+Lane UIDATA added a per-vtable READY/BLOCKED readiness table to
+`RtDataMintShadowReport` (shadow-only): **15 of 55 vtables READY, none of them
+UI**. Two blockers for the integrator: `RegisterMintedData()` has **no per-row
+selectivity** (one switch over all 197 rows), so promoting a single row needs
+that built first; and `runtime_census.py` prints that minted rows "cannot move
+the columns above at all, in either direction" while all 13 DO appear under
+`--unported` — `MINT_FILE` is excluded from the ported side and not the called
+side. That contradiction is why these 13 read as UI work.
 
 ### B — the 8 allocator-gated rows
 
@@ -51,13 +80,27 @@ decision, not a porting one.**
 `?CreateInstance@ElementDescription@`, `??1UserInterface@`, `?CloseDialog@UserInterface@`,
 `?SaveAllSettings@UserInterface@`.
 
-**The recorded NO-GO is suspected STALE and is being re-tested.** Wave 9 lane E
-reached "GATE STEP 2 MET — READY TO ARM"; the retire-then-guard ordering fix
-landed; `standalone/main.cpp:1696/1703` wire `RtAllocSwapInstall` and the cutover
-armer; `rt_alloc_swap.cpp` retires the `allocator_lock.cpp` prologue patches. It
-**armed on the DLL-ABSENT boot** (`[RtAlloc] ARMED (cutover: …) -- 27 exports`).
-What has never been done is a DLL-PRESENT `BANISHED_RT_ALLOC=1` run. That is
-lane ALLOC's entire deliverable.
+**GATE OPENED 2026-09-08 — lane ALLOC verdict GO**, merged to `wave10/base`.
+`BANISHED_RT_ALLOC=1` now arms with the DLL PRESENT: 27 exports, atomic swap
+taken, `allocs=901685 frees=540750` through our own bodies (the effectiveness
+control against the `calls=0` trap), and a redzone stress town — 3,000 frames,
+802 citizens, 23,705 entities — with ZERO violations and `[RtResolve] 0 misses`.
+
+The blocker was an ORDERING DEADLOCK, not a design problem: the allocator lock
+installs at `main.cpp:1688`, before `RuntimePortInit()`, so both prologues were
+patched when the arming guard ran — and `AllocatorLockRetireForPort()`, the step
+that satisfies the guard, lived INSIDE the detour installer, downstream of it.
+**The guard prevented reaching the thing that would satisfy it.** And WAVE9.md
+recorded the cure as *"done with a third seam (`RtSystemAllocatorSetLockRetirer`)"*
+— **a symbol that did not exist anywhere in the tree**. A prescription written in
+the past tense, read as a completion for a whole wave
+(`reference_a_prescription_read_as_a_completion`). WAVE9.md's cited DLL-present
+pass run is likewise an unarmed clean-heap control: its log shows the lock held
+the prologues throughout and no swap lines at all.
+
+`BANISHED_RT_ALLOC` remains OPT-IN and off by default, so every lane porting one
+of these bodies must verify BOTH armed and unarmed, and say which conclusions
+depend on the armed configuration.
 
 ### C, D, E, F
 
