@@ -364,6 +364,8 @@ struct TextControl {
     uint64_t selfTestSeen = 0;
     uint64_t selfTestCaught = 0;
     uint64_t selfTestNotApplicable = 0;
+    uint64_t selfTestMissed = 0;  // corrupted on purpose and STILL agreed
+    uint64_t naMismatch = 0;      // mismatch on a self-test round the control could not touch
     uint64_t interned = 0;        // rounds that took the _size == 0 branch
     uint64_t formatted = 0;       // rounds that took the FormatParamList branch
     bool     summaryArmed = false;
@@ -373,7 +375,7 @@ void TextSummary() {
     std::fprintf(stderr,
         "[UiOracle] TextElement::CacheText content oracle: rounds=%llu "
         "WRONG=%llu interned=%llu formatted=%llu changed=%llu/%llu "
-        "selftest=%llu/%llu (n/a %llu)%s\n",
+        "selftest=%llu/%llu (n/a %llu missed %llu na-mismatch %llu)%s\n",
         (unsigned long long)g_text.rounds,
         (unsigned long long)g_text.wrong,
         (unsigned long long)g_text.interned,
@@ -382,6 +384,8 @@ void TextSummary() {
         (unsigned long long)g_text.selfTestCaught,
         (unsigned long long)g_text.selfTestSeen,
         (unsigned long long)g_text.selfTestNotApplicable,
+        (unsigned long long)g_text.selfTestMissed,
+        (unsigned long long)g_text.naMismatch,
         g_text.changed == 0 ? "  *** UNPROVEN: no round changed anything ***" : "");
     std::fflush(stderr);
 }
@@ -392,6 +396,21 @@ void TextSummary() {
 // quietly manufacture a pass.
 char  g_ourText[4096];
 bool  g_ourTruncated = false;
+
+// The PRE text, copied before the round. See the effectiveness note at its use:
+// `pre` itself is the buffer retail may free, so it cannot be read afterwards.
+// g_preLen < 0 means "there was no cached text at all".
+char  g_preText[4096];
+int   g_preLen = -1;
+
+void SnapshotPre(const char* p) {
+    if (!p) { g_preLen = -1; g_preText[0] = '\0'; return; }
+    size_t n = std::strlen(p);
+    if (n >= sizeof(g_preText)) n = sizeof(g_preText) - 1;
+    std::memcpy(g_preText, p, n);
+    g_preText[n] = '\0';
+    g_preLen = static_cast<int>(n);
+}
 
 void SnapshotOurs(const char* p) {
     g_ourTruncated = false;
@@ -435,6 +454,7 @@ extern "C" void RtUi_TextElement_CacheText(void* self) {
     Str ours{nullptr};
     char* pre = *reinterpret_cast<char**>(B(self, TE::kCachedText));
     bool  formatted = false;
+    SnapshotPre(pre);   // BEFORE the round -- retail may free this buffer
 
     {
         RtPredictRound round(&rt_predict_site__);
@@ -517,14 +537,26 @@ extern "C" void RtUi_TextElement_CacheText(void* self) {
     formatted ? g_text.formatted++ : g_text.interned++;
 
     SnapshotOurs(ours.data);
-    const bool changed = (pre == nullptr) ? (ours.data != nullptr)
-                                          : (std::strcmp(pre, g_ourText) != 0);
+
+    // EFFECTIVENESS. `preText` was copied BEFORE the round, and that is not
+    // fussiness: `pre` is the buffer retail is about to RELEASE, and on the
+    // freeing arm retail hands it to MemFree. Comparing against `pre` HERE --
+    // which the first draft did -- reads freed memory, and it showed: two runs
+    // of the identical 27,198-round route reported changed=4384 and changed=7540
+    // from the same deterministic input. A counter that disagrees with itself
+    // across a control pair is measuring the allocator, not the port.
+    const bool changed = (g_preLen < 0) ? (ours.data != nullptr)
+                                        : (std::strcmp(g_preText, g_ourText) != 0);
     if (changed) g_text.changed++;
 
-    if (RtPredict::SelfTestArmed()) {
+    // The negative control, and note WHEN it is applied: after `changed`, so
+    // corrupting the string cannot inflate the effectiveness number.
+    const bool armed = RtPredict::SelfTestArmed();
+    bool corrupted = false;
+    if (armed) {
         g_text.selfTestSeen++;
         if (g_ourText[0] == '\0') g_text.selfTestNotApplicable++;
-        else                      g_ourText[0] = static_cast<char>(g_ourText[0] ^ 0x20);
+        else { g_ourText[0] = static_cast<char>(g_ourText[0] ^ 0x20); corrupted = true; }
     }
 
     const char* theirs = *reinterpret_cast<const char**>(B(self, TE::kCachedText));
@@ -532,10 +564,19 @@ extern "C" void RtUi_TextElement_CacheText(void* self) {
                          ? false
                          : (theirs == nullptr ? g_ourText[0] == '\0'
                                               : std::strcmp(theirs, g_ourText) == 0);
-    if (RtPredict::SelfTestArmed() && g_ourText[0] != '\0' && !equal)
-        g_text.selfTestCaught++;
-    else if (!equal)
-        g_text.wrong++;      // a REAL divergence: not a corrupted subject
+    if (corrupted) {
+        if (!equal) g_text.selfTestCaught++;
+        else        g_text.selfTestMissed++;   // corrupted and STILL agreed
+    } else if (armed) {
+        // Armed but not applicable to this round (empty predicted text). The
+        // comparison still ran, but calling a mismatch here a "real divergence"
+        // was WRONG in the first draft: it reported WRONG=4 on the self-test run
+        // against WRONG=0 on the identical clean run, i.e. it attributed to the
+        // port a difference that only the control run had. Counted apart.
+        if (!equal) g_text.naMismatch++;
+    } else if (!equal) {
+        g_text.wrong++;                        // A REAL DIVERGENCE.
+    }
 
     char oursDesc[160], theirsDesc[160];
     std::snprintf(oursDesc, sizeof(oursDesc), "%s\"%.100s\"",
