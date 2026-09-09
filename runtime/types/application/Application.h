@@ -73,7 +73,14 @@ struct Application {
     // Declared `void*` rather than `HINSTANCE`: PLAN §4.1 decision 1 keeps
     // <windows.h> out of every header under runtime/.
     void*   _platformHandle;   // +0x08
-    uint8_t _stateLow;         // +0x10  low byte of the ctor's word store (0x00). Not read.
+    // +0x10  THE CURSOR-ENABLED FLAG. Was `_stateLow`, "low byte of the ctor's
+    // word store (0x00). Not read." -- Wave 12 lane A names it and corrects
+    // that comment: it IS read, by
+    // `?IsCursorEnabled@Application@1@QEAA_NXZ` (0x18000a0c0), which is
+    // exactly `movzx eax,byte [rcx+0x10]; ret`. The ctor's word store
+    // (`MOV word ptr [RCX+0x10],0x100`) writes this byte 0x00 and _running
+    // (+0x11) 0x01 in the same instruction, so cursor-enabled starts false.
+    uint8_t _cursorEnabled;    // +0x10
     uint8_t _running;          // +0x11  IsPaused: this[0x11] == 0 means PAUSED. Ctor sets 1.
     uint8_t _unknown12[0x06];  // +0x12..+0x17  unproven.
 
@@ -98,6 +105,7 @@ struct Application {
 };
 static_assert(offsetof(Application, _windowHandle)         == 0x00, "Application._windowHandle @ 0x00");
 static_assert(offsetof(Application, _platformHandle)       == 0x08, "Application._platformHandle @ 0x08");
+static_assert(offsetof(Application, _cursorEnabled)        == 0x10, "Application._cursorEnabled @ 0x10");
 static_assert(offsetof(Application, _running)              == 0x11, "Application._running @ 0x11");
 static_assert(offsetof(Application, _messageCallbackRoot)  == 0x18, "Application._messageCallbackRoot @ 0x18");
 static_assert(offsetof(Application, _messageCallbackCount) == 0x20, "Application._messageCallbackCount @ 0x20");
