@@ -1,0 +1,9 @@
+2:[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=000001d8a2ea0000, wrapper=00007ff691e85984)
+3:[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=000001d8a5200000, wrapper=00007ff691e85b2e)
+5:[AllocLock] patches RETIRED for the ported allocator (Allocate=1 Free=1)
+8:[RtAllocSwap] ATOMIC SWAP INSTALLED — every Allocate/Free in the process now runs our port under the allocator CS
+9:[RtAllocSwap] ?Allocate@/?Free@ registrations repointed at the composed (locked) stubs
+33:[REDZONE] WATCH-ONLY mode: no shim, watchdog=1ms
+34:[REDZONE-HEAP] watchdog thread started (interval=1ms)
+5176:[ReadGuard] census: Read=0
+5177:[REDZONE-HEAP] watchdog stopped at exit (acknowledged) after 41349 completed heap walks

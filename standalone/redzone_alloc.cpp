@@ -270,8 +270,31 @@ void ShimFree(void* ptr) {
 } // namespace
 
 static DWORD WINAPI RedzoneWatchdog(LPVOID);
+static DWORD WINAPI RedzoneSelfTest(LPVOID);   // negative control — see below
+static void   RedzoneStopWatchdog();           // atexit stop — see below
+static volatile LONG g_watchStop   = 0;
+static HANDLE        g_watchThread = nullptr;
+// Completed whole-heap walks. Printed at exit because "0 violations" is worth
+// nothing without it: it separates "the heap was clean" from "the walk never
+// ran", which are the two readings a silent instrument cannot tell apart.
+static volatile LONG g_watchWalks  = 0;
 static DWORD  g_mainTid    = 0;      // thread that ran Install (= the sim thread)
 static HANDLE g_mainThread = nullptr;
+
+// Start the watchdog (and the optional self-test injector) exactly once, from
+// either install path, so the stop handler can never be skipped for one of them.
+static void RedzoneStartWatchdog() {
+    g_watchThread = CreateThread(nullptr, 0, &RedzoneWatchdog, nullptr, 0, nullptr);
+    atexit(&RedzoneStopWatchdog);
+    if (const char* st = getenv("BANISHED_REDZONE_SELFTEST")) {
+        int ms = atoi(st);
+        if (ms > 0) {
+            printf("[REDZONE-SELFTEST] armed: will clobber one boundary tag at t=%dms\n", ms);
+            fflush(stdout);
+            CreateThread(nullptr, 0, &RedzoneSelfTest, (LPVOID)(intptr_t)ms, 0, nullptr);
+        }
+    }
+}
 
 void RedzoneAlloc_Install() {
     const char* env = getenv("BANISHED_REDZONE");
@@ -294,7 +317,7 @@ void RedzoneAlloc_Install() {
         g_enabled = true;
         printf("[REDZONE] WATCH-ONLY mode: no shim, watchdog=%dms\n", g_watchIntervalMs);
         fflush(stdout);
-        CreateThread(nullptr, 0, &RedzoneWatchdog, nullptr, 0, nullptr);
+        RedzoneStartWatchdog();
         return;
     }
     if (!fn_MemAlloc || !fn_MemFreeStatic) {
@@ -346,7 +369,7 @@ void RedzoneAlloc_Install() {
     fflush(stdout);
 
     if (g_watchIntervalMs >= 0) {
-        CreateThread(nullptr, 0, &RedzoneWatchdog, nullptr, 0, nullptr);
+        RedzoneStartWatchdog();
     }
 }
 
@@ -1029,11 +1052,107 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
     fflush(stdout);
 }
 
+// ---------------------------------------------------------------------------
+// NEGATIVE CONTROL — BANISHED_REDZONE_SELFTEST=<ms>
+//
+// "Zero violations" is only evidence if a violation could have been reported.
+// This deliberately clobbers ONE engine boundary tag — the exact qword the
+// watchdog's walk reads — <ms> milliseconds into the run, and then does NOT
+// check anything itself: the detection has to come from the watchdog thread,
+// so a pass proves the thread is alive AND that the walk can express a
+// failure. A run that ends without a [REDZONE-HEAP] corruption report after
+// this injector announced a successful write is a BLIND instrument.
+//
+// The injector prints the block address and the tag before/after, so its own
+// failure (no ranges, unreadable memory) is distinguishable from the
+// watchdog's failure to notice. Without that, "no detection" would have two
+// causes and could not discriminate them.
+static DWORD WINAPI RedzoneSelfTest(LPVOID param) {
+    const int delayMs = (int)(intptr_t)param;
+    Sleep((DWORD)delayMs);
+    if (!g_pMemAllocSingleton) {
+        printf("[REDZONE-SELFTEST] NO INJECTION — g_pMemAllocSingleton is null\n");
+        fflush(stdout);
+        return 0;
+    }
+    uint8_t* alloc    = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
+    uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
+    int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
+    if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) {
+        printf("[REDZONE-SELFTEST] NO INJECTION — ranges=%p cnt=%d\n", (void*)ranges, rangeCnt);
+        fflush(stdout);
+        return 0;
+    }
+    CRITICAL_SECTION* cs = reinterpret_cast<CRITICAL_SECTION*>(alloc + 0x640);
+    EnterCriticalSection(cs);
+    uint8_t* victim = nullptr;
+    uint64_t before = 0;
+    {
+        uint8_t* rng   = ranges + 0x00;                       // range 0
+        uint8_t* start = *reinterpret_cast<uint8_t**>(rng + 0x00);
+        uint8_t* end   = *reinterpret_cast<uint8_t**>(rng + 0x08);
+        uint8_t* p     = start;
+        // Walk in a little way so the victim is a settled interior block rather
+        // than the range header, then zero its size field: blkBytes becomes 0,
+        // which is the "< 8" case the walker flags. This is the same shape as
+        // the real zeroed-tag corruption the watchdog exists to catch.
+        for (int i = 0; p && start && end && p < end && i < 64; ++i) {
+            if (!ReadablePtr(p, 8)) break;
+            uint64_t t = *reinterpret_cast<uint64_t*>(p);
+            size_t   b = (size_t)(t & 0x1ffffffffffULL) * 4;
+            if (b < 8 || p + b > end) break;
+            victim = p; before = t;
+            p += b;
+        }
+        if (victim) *reinterpret_cast<uint64_t*>(victim) = 0;
+    }
+    LeaveCriticalSection(cs);
+    if (victim) {
+        printf("[REDZONE-SELFTEST] INJECTED at t=%dms: block @%p tag %016llx -> 0000000000000000 "
+               "(walk must now report a violation)\n",
+               delayMs, (void*)victim, (unsigned long long)before);
+    } else {
+        printf("[REDZONE-SELFTEST] NO INJECTION — no walkable block found in range 0\n");
+    }
+    fflush(stdout);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Watchdog lifetime.
+//
+// The watchdog used to be a `for(;;)` with no way to stop it. That is a
+// SHUTDOWN RACE, and it is what made `BANISHED_REDZONE=watch` segfault at the
+// very end of every stress run (lane REDZONE, 2026-09-08): the sim finishes,
+// the atexit handlers print their censuses, and then the CRT tears the process
+// down — unloading Runtime-x64.dll and destroying the engine allocator —
+// while this thread is still dereferencing g_pMemAllocSingleton and entering
+// a CRITICAL_SECTION inside memory that has just gone away.
+//
+// The stop is registered with atexit() from Install(). atexit runs LIFO and
+// Install() is called very early in WinMain, so this handler runs LAST — after
+// every other census. That deliberately keeps the watchdog live through the
+// whole world-teardown cascade (which is precisely what the 800x10 teardown
+// hunt uses it for) and only silences it once nothing is left to watch.
+static void RedzoneStopWatchdog() {
+    if (!g_watchThread) return;
+    InterlockedExchange(&g_watchStop, 1);
+    // Bounded: a hung walk must never wedge process exit. 2s is ~2000 polls at
+    // the 1ms default, so a live thread always acknowledges long before this.
+    DWORD w = WaitForSingleObject(g_watchThread, 2000);
+    printf("[REDZONE-HEAP] watchdog stopped at exit (%s) after %ld completed heap walks\n",
+           w == WAIT_OBJECT_0 ? "acknowledged" : "TIMED OUT — still walking",
+           (long)g_watchWalks);
+    fflush(stdout);
+    CloseHandle(g_watchThread);
+    g_watchThread = nullptr;
+}
+
 static DWORD WINAPI RedzoneWatchdog(LPVOID) {
     int interval = g_watchIntervalMs > 0 ? g_watchIntervalMs : 2;  // default 2ms
     printf("[REDZONE-HEAP] watchdog thread started (interval=%dms)\n", interval);
     fflush(stdout);
-    for (;;) {
+    while (!InterlockedCompareExchange(&g_watchStop, 0, 0)) {
         // Single-pass detect + report + abort. NO confirmation: the corrupted
         // free block is typically REUSED by the very Allocate that then crashes,
         // so a second confirmation pass would no longer see it (it raced away) —
@@ -1042,6 +1161,7 @@ static DWORD WINAPI RedzoneWatchdog(LPVOID) {
         // zeroed tag), which is not a transient mid-Allocate state, so abort-on-
         // first-sight is safe enough.
         RedzoneAlloc_HeapCheck("watchdog");  // aborts on detection
+        ++g_watchWalks;
         Sleep((DWORD)interval);
     }
     return 0;
