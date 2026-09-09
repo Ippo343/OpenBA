@@ -156,3 +156,81 @@ self-check. Nothing is split today.
 called side, giving a ceiling of **12/13 = 92.3%** there, while the FUNCTION port can
 still reach 26/26. It is a ceiling for an evidenced structural reason, not for lack of
 work — and the reason on record until today was the wrong one.
+
+---
+
+# WAVE 12 CLOSED 2026-09-09 — Application at 26/26 functions, census AT CEILING
+
+## Final numbers (measured on the integration tip, not reported by a lane)
+
+| measure | before | after |
+|---|---|---|
+| Application function exports registered | 10 / 26 | **26 / 26** |
+| Census `Application` | 26 / 13 called / 9 ported = 69.2% | 26 / 16 called / **15** ported = **93.8%** |
+| Runtime TOTAL | 80.3% | **80.7%** |
+
+26/26 was checked by enumerating the DLL export table with `pefile` and regexing each
+mangled name against the whole source tree -- NOT by counting call sites, which is the
+check that has read a half-registered port as absent before.
+
+`called` grew 13 -> 16 during the wave. That is not drift: lane B`s faithful bodies
+resolve retail internals by name, the recorded "porting can grow the cutover surface"
+effect. It moved the ceiling from 12/13 = 92.3% to 15/16 = 93.8%, and the namespace is
+AT that ceiling -- the only unported called row is the `_singleton` DATA export.
+
+## Three integration runs, evidence in `wave12_evidence/`
+
+| run | gates | result |
+|---|---|---|
+| menu + autoquit | `RT_DIFF`, `RT_ORPHAN_PROBE` | exit 0, crash log EMPTY, `16 pass, 0 fail` |
+| in-game | + `RT_APPB_PROBE`, `RT_PREDICT` | exit 0, crash log EMPTY, `25 pass, 0 fail` |
+| in-game | + `RT_PREDICT_SELFTEST` | negative control fires: `changed=20 wrong=20` |
+
+The third run exists because the second printed, in the tool`s own words, *"negative
+control NOT run ... a clean board from a comparison that cannot go red is not a result"*.
+It was right to say so and the run was cheap.
+
+## The two findings worth more than the row count
+
+**1. A real defect: `IsCursorEnabled` returned a normalised bool, retail returns the raw
+byte.** 144 raw-AL divergences over a 216-state sweep. Fixed (both sides `uint8_t`),
+reconfirmed at 216/216 with 0 raw-AL differences. NOT a live bug -- no reachable state
+holds a value above 1 today -- but faithful-first is the rule, and "unreachable today" is
+a property of our callers, not of the retail body.
+
+**2. Why it survived: the port`s own oracle could not have failed.** It declared
+`using Fn = bool (*)(Application*)` and held `theirs` in a `const bool`, so the C++
+conversion normalised BOTH sides before `RT_DIFF_SCALAR` ever saw them. The instrument
+was structurally incapable of expressing the defect it was aimed at. **This is a SHAPE,
+not a one-off: it can sit under any bool-returning port in this tree.** The test to
+apply is the one from `reference_diagnostic_field_cannot_express_the_answer.md` -- could
+this check report a different answer if the answer were different?
+
+## What is verified, and what is honestly not
+
+VERIFIED against the shipped DLL: `Get` (6 sentinels through the real slot),
+`GetWindow`, `GetInstance`, `IsCursorEnabled`, `PlatformIsPaused`, `IsPaused`
+(216 states x 5 readers = 1081 comparisons), `PlatformDestruct` (verified to do
+NOTHING, which is the whole row), `EnableCursor` (30 rounds through the predicting
+oracle, 20 changed, 0 wrong, control 20/20), `PlatformConstruct` (full 0x30-byte diff,
+`calls=1 worked=1`), the destructor / copy ctor / `operator=` (39-node tree: released
+ours=39 theirs=39, `operator=` delta +27/+27, control catches a root-only free as 1).
+
+STRUCTURALLY verified, nothing executed: `Update`, `Startup`, `Shutdown` -- retail`s
+`jmp` target decoded AND our compiled body scanned for the call to our own sibling.
+No message loop was pumped and nothing was torn down.
+
+NOT VERIFIED, and it cannot be: `PlatformShutdown` (DestroyWindow / UnregisterClassW
+are one-shot, so a replay measures the first run`s success as a failure -- its site
+records EXECUTION, not a comparison) and `LaunchProcess` beyond 5 `CreateProcessW`
+FAILURE cases straddling the 0x104 clamp. **The ShellExecute arm, the success path, the
+leaked `hThread` and the actual command line remain unverified and are not probeable
+without spawning a real process.** Said plainly rather than rounded up.
+
+## The seam that would have silently un-ported a body
+
+Lane A could not call `PlatformShutdown` (lane B`s row, absent from lane A`s worktree),
+so its `Shutdown` thunk forwarded through `RT_ORIGINAL_ONCE` into the shipped DLL.
+Merging alone would have shipped lane B`s `PlatformShutdown` REGISTERED BUT BYPASSED on
+that path. Re-pointed at integration; the orphan probe`s S3b screen now proves our body
+calls OUR sibling, and its negative control confirms that screen can fail.
