@@ -140,6 +140,37 @@ EXTRA_SIZES = {
     # 0x1800c6026 and 0x1800c603b) and READ by ?Display@ at 0x1800c63d1.
     "?_stopApplication@Error@System@@0_NA":
         (1, "bool -- Display() aborts the process when this is set"),
+    # Wave 10B lane MINT, 2026-09-09. The last symbol standing between this
+    # generator and a run: the ONLY entry in its `errors` list. It is the fourth
+    # member of the packed crash-handler byte run at 0x1801fc708..0x1801fc70b,
+    # alongside _hideDisplay and _stopApplication directly above.
+    #
+    # PINNED FROM THE DLL, NOT FROM THE MANGLING. `_NA` does decode as bool, but
+    # this project has been burned by trusting a mangled suffix before
+    # (?_errorString@Error@System@@0PADA is PAD and is NOT 8 bytes, see above),
+    # so the suffix is corroboration here and never the proof. Two independent
+    # DLL-side measurements, plus a control that shows the instrument can say
+    # something other than 1:
+    #
+    #  1. ADJACENT-EXPORT GAP = 1. ?_disableHandler@ is ordinal-exported at
+    #     0x1801fc708 and the very next exported symbol, ?_hideDisplay@Error@,
+    #     starts at 0x1801fc709. The object cannot be larger than one byte
+    #     without overlapping a symbol that is itself pinned at 1. This is the
+    #     same "adjacent-export" evidence the vtable sizeProof rule treats as
+    #     EXACT.
+    #  2. EVERY ACCESS IN .text IS BYTE-WIDTH. All five rip-relative references
+    #     to 0x1801fc708 are 8-bit operand forms -- cmp byte ptr at 0x1800c5b6f,
+    #     and mov byte ptr imm8 at 0x1800c5b9b, 0x1800c5bee, 0x1800f8671 and
+    #     0x1800f8697. No dword or qword form references it at all.
+    #  3. CONTROL: the same scan over 0x1801fc700 (?_exceptionCallback@Debug@,
+    #     a genuine 8-byte function pointer three bytes below) reports qword
+    #     accesses, so a width scan that returns 1 for the subject is a
+    #     discriminating result and not a scanner that only ever says 1.
+    #
+    # Set by Debug::SetExceptionCallback/handler-install paths and tested by the
+    # top-level handler before it dispatches; a bool, one byte, unambiguously.
+    "?_disableHandler@Debug@System@@0_NA":
+        (1, "bool -- suppresses the Debug top-level exception handler; gap-to-next-export=1 AND all 5 .text accesses are byte-width"),
     # Lane VID established this one exists after WAVE6_LANE_B.md §2.4 said it had
     # no export: it is ordinal 4787 at 0x1801fe790, and lane C2 minted its three
     # siblings (_firstSurface / the two _firstBuffer heads, above) and skipped it.
