@@ -37,6 +37,13 @@
 #   tools/game_dir_lock.sh acquire <lane-name> [timeout-seconds]   # default 900
 #   tools/game_dir_lock.sh release <lane-name>
 #   tools/game_dir_lock.sh status
+#   tools/game_dir_lock.sh orphans   # is the dir usable? names an UNLOCKED run
+#
+# "IS THE LOCK FREE?" AND "CAN I USE THE DIRECTORY?" ARE DIFFERENT QUESTIONS.
+# A process that outlives its run keeps reimpl-x64.exe and standalone_*.log
+# open, so deploys fail with "Device or resource busy" while the lock correctly
+# reads free. If a deploy fails that way, do NOT wait for the lock -- run
+# `orphans`. See the UNLOCKED RUNS AND ORPHANS block below.
 #
 #   # the whole point -- deploy and run under ONE lock, so nothing can land
 #   # between the copy and the launch:
@@ -127,6 +134,10 @@ break_if_stale() {
 # because it IS the action.
 run_in_progress() {
     local f
+    # Test seam: GAMELOCK_FAKE_RUN=1 forces the "a run is live" answer so the
+    # messages below can be exercised without stranding a real process on the
+    # shared game directory. Never set in normal use.
+    [ "${GAMELOCK_FAKE_RUN:-0}" = "1" ] && return 0
     for f in standalone_debug.log standalone_error.log; do
         [ -f "$GAME/$f" ] || continue
         # Try to move it aside and back: same open-handle test as a delete, but
@@ -138,6 +149,71 @@ run_in_progress() {
         fi
     done
     return 1
+}
+
+# ---- UNLOCKED RUNS AND ORPHANS ----------------------------------------------
+#
+# THE FOURTH VARIANT OF THE CLOBBER CLASS, 2026-09-09. `run_in_progress` has
+# always been correct and has always gated the grab. What was missing is that
+# NOTHING TOLD ANYONE ABOUT IT. The failure ran like this:
+#
+#   * the integrator's own run finished and reported completion, but its
+#     process lingered ~50 minutes holding standalone_*.log and reimpl-x64.exe
+#     open;
+#   * `status` printed "free" -- TRUE, nobody held the lock -- and said nothing
+#     about the live process, because its process advisory sat behind
+#     `[ -d "$LOCK" ] || return 0` and so only ran when the lock was HELD;
+#   * a lane's `acquire` could never grab (run_in_progress was true), fell
+#     through to the generic wait, and printed `waiting for '(unknown)'`,
+#     because with no lock directory `lock_owner` has nothing to read;
+#   * the lane read that as lock contention, reported itself "queued behind"
+#     another lane that in fact held nothing, and waited 15 minutes.
+#
+# Every individual component was working. The instrument's fault was reporting
+# a TRUE statement ("free") that answered a different question from the one
+# being asked ("can I use the directory?"). Those are two questions and this
+# script now answers both, separately and by name.
+#
+# It still does NOT kill anything. A live exe nobody locked is either an orphan
+# or a lane running unlocked, and from here those are indistinguishable --
+# killing the second one destroys a real measurement. Facts, then a human.
+
+# PIDs of every running reimpl-x64.exe, space separated. Empty if none.
+live_exe_pids() {
+    tasklist 2>/dev/null | grep -i 'reimpl-x64\.exe' | awk '{print $2}' | tr '\n' ' '
+}
+
+# Seconds since the game dir was last written, or -1 if it never was. Used to
+# age a suspected orphan: a live run writes its logs continuously.
+game_dir_idle() {
+    local newest=0 f m
+    for f in standalone_debug.log standalone_error.log standalone_crash.log reimpl-x64.exe; do
+        [ -f "$GAME/$f" ] || continue
+        m=$(date -r "$GAME/$f" +%s 2>/dev/null) || continue
+        [ "$m" -gt "$newest" ] && newest=$m
+    done
+    [ "$newest" -eq 0 ] && { printf '%s' -1; return; }
+    printf '%s' "$(( $(now) - newest ))"
+}
+
+# Print the facts about a live run that NO LANE HAS LOCKED. Callers decide what
+# it means; this deliberately draws no conclusion and kills nothing.
+report_unlocked_run() {
+    local pids idle
+    pids=$(live_exe_pids); idle=$(game_dir_idle)
+    echo "[gamelock] UNLOCKED RUN: the game dir is IN USE but NO LANE HOLDS THE LOCK." >&2
+    echo "[gamelock]   reimpl-x64.exe pid(s): ${pids:-<none visible>}" >&2
+    echo "[gamelock]   last game-dir write: ${idle}s ago" >&2
+    echo "[gamelock]   deployed exe: $(md5sum "$GAME/reimpl-x64.exe" 2>/dev/null | cut -c1-32)" >&2
+    echo "[gamelock]   This is NOT lock contention -- nobody is holding the lock, so" >&2
+    echo "[gamelock]   waiting will not clear it. It is one of exactly two things:" >&2
+    echo "[gamelock]     (a) an ORPHAN: a finished run whose process outlived it. Windows" >&2
+    echo "[gamelock]         keeps the exe and logs open for the life of the process, so" >&2
+    echo "[gamelock]         every deploy fails with 'Device or resource busy'." >&2
+    echo "[gamelock]     (b) somebody RUNNING UNLOCKED, mid-measurement." >&2
+    echo "[gamelock]   THEY LOOK IDENTICAL FROM HERE. Do NOT kill a process you did not" >&2
+    echo "[gamelock]   start -- killing (b) destroys a real run. If it is yours, kill it;" >&2
+    echo "[gamelock]   otherwise ASK, and escalate with these numbers, not with a guess." >&2
 }
 
 # ---- FIFO ticketing ---------------------------------------------------------
@@ -221,6 +297,17 @@ cmd_acquire() {
             return 0
         fi
         break_if_stale && continue
+        # THE CASE THAT USED TO PRINT `waiting for '(unknown)'`: no lock
+        # directory exists, so nobody holds it, yet the grab above was refused
+        # -- which can only mean run_in_progress() said a run is live. Waiting
+        # cannot help, so say so immediately and once, rather than spinning to
+        # timeout against a phantom holder.
+        if [ ! -d "$LOCK" ] && run_in_progress; then
+            echo "[gamelock] DENIED -- the game dir is in use by an UNLOCKED run." >&2
+            report_unlocked_run
+            ticket_drop "$who"
+            return 1
+        fi
         if [ "$waited" -ge "$timeout" ]; then
             # Printed on BOTH streams on purpose. A caller that pipes this
             # command loses the exit status (see the DEFEATED BY A PIPE note in
@@ -251,13 +338,49 @@ cmd_release() {
         echo "[gamelock] REFUSING: lock is held by '$owner', not '$who'." >&2
         return 1
     fi
+    # The orphan is BORN HERE. On 2026-09-09 a run reported completion, its
+    # holder released, and its process lived another 50 minutes holding the exe
+    # open -- blocking every later deploy while the lock read "free". Releasing
+    # while your own run is still live is always a mistake, and this is the last
+    # moment anyone can cheaply notice. It warns rather than refuses: a lane that
+    # cannot kill its process must still be able to give the lock back.
+    if run_in_progress; then
+        echo "[gamelock] WARNING: releasing while a run is STILL LIVE." >&2
+        echo "[gamelock]   reimpl-x64.exe pid(s): $(live_exe_pids)" >&2
+        echo "[gamelock]   Your process outliving your run is what creates an ORPHAN:" >&2
+        echo "[gamelock]   the next lane's deploy fails with 'Device or resource busy'" >&2
+        echo "[gamelock]   while this lock reads free, and it has no way to tell why." >&2
+        echo "[gamelock]   Kill it before you walk away. Note BANISHED_KILL_AT_FRAME" >&2
+        echo "[gamelock]   reports completion WITHOUT guaranteeing the process exited." >&2
+    fi
     rm -rf "$LOCK"
     echo "[gamelock] released by $who"
+}
+
+cmd_orphans() {
+    if ! run_in_progress; then
+        echo "[gamelock] no live run: the game dir is writable."
+        local pids; pids=$(live_exe_pids)
+        [ -n "$pids" ] && echo "[gamelock] (note: reimpl-x64.exe pid(s) $pids exist but hold no game-dir handle)"
+        return 0
+    fi
+    if [ -d "$LOCK" ]; then
+        echo "[gamelock] a run is live and '$(lock_owner)' holds the lock -- NORMAL. Leave it alone."
+        return 0
+    fi
+    report_unlocked_run
+    return 1
 }
 
 cmd_status() {
     if [ -d "$LOCK" ]; then
         echo "[gamelock] HELD by '$(lock_owner)' for $(( $(now) - $(lock_started) ))s"
+    elif run_in_progress; then
+        # "free" alone was TRUE here and cost a lane 15 minutes on 2026-09-09,
+        # because the honest answer to "is the lock free?" is not the answer to
+        # "can I use the directory?". Both are printed, in that order.
+        echo "[gamelock] free -- BUT THE GAME DIR IS IN USE (see below); a deploy will FAIL"
+        report_unlocked_run
     else
         echo "[gamelock] free"
     fi
@@ -373,5 +496,6 @@ case "${1:-}" in
     verify)  shift; cmd_verify "$@" ;;
     release) shift; cmd_release "$@" ;;
     status)  cmd_status ;;
+    orphans) cmd_orphans ;;
     *)       usage ;;
 esac
