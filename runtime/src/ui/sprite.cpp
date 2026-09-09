@@ -201,6 +201,14 @@ void* RtUi_Sprite_DefaultCtor(void* retval) {
 // data pointer is the first and only field, per String.h).
 void* RtUi_Sprite_CtorByName(void* retval, uint64_t spriteSheetPtr, const void* spriteName) {
     RT_DIFF_BEGIN("UI::Sprite::Sprite(sheet,name)");
+    // WAVE 10 LANE UI4's probe trigger — the EARLIEST live site in this file,
+    // measured: it fires while the front-end dialogs are built, so it works in
+    // a menu-only cell as well as in-game. (The first attempt hung the trigger
+    // on GetUVs, which is per-frame IN GAME only, and a BANISHED_AUTOQUIT run
+    // never gets there — AUTOQUIT drives menu -> Quit INSTEAD of menu -> New
+    // Game, so it overrides AUTOSTART. GetUVs keeps its trigger too; whichever
+    // fires first wins.) One bool test, and only when the diff harness is on.
+    if (rt_diff_on__) { extern void RtUiSpriteCaptureProbe(); RtUiSpriteCaptureProbe(); }
     auto* self = static_cast<Sprite*>(retval);
     auto* sheet = reinterpret_cast<SpriteSheet*>(spriteSheetPtr);
     self->spriteSheet = sheet;
@@ -373,11 +381,62 @@ int RtUi_SpriteSheet_GetSpriteIndexFromName(const void* selfRaw, const void* nam
     return ours;
 }
 
+// SpriteSheet::GetSpriteNameFromIndex(int) const — retail 0x1800032d0.
+//
+// WAVE 10 LANE UI4. Not part of Wave 7's SpriteSheet set; it is here because
+// this lane's port of SpriteCapture::AddSprite CALLS it, and porting AddSprite
+// therefore turned a symbol nothing in the tree referenced into a NEW unported
+// census row. That growth is the documented shape of
+// reference_porting_can_grow_the_cutover_surface.md — the answer is to close
+// the callee, not to route around it.
+//
+// Eighteen instructions, and NO bounds check of any kind: the index is scaled
+// straight into `m_sprites` by `IMUL RAX,RAX,0x38`. Same faithfulness call as
+// GetUVs below, and CLAUDE.md's rule — do not add a guard retail lacks.
+//
+// The return is a System::String BY VALUE, so the ABI is
+// (this, hidden-return-slot, index) with the slot handed back in RAX. Getting
+// that arity wrong is reference_hidden_retslot_wild_write.md's failure mode.
+void* RtUi_SpriteSheet_GetSpriteNameFromIndex(const void* selfRaw, void* retval, int index) {
+    RT_DIFF_BEGIN("UI::SpriteSheet::GetSpriteNameFromIndex()");
+    const auto* self = static_cast<const SpriteSheet*>(selfRaw);
+
+    auto* ret = static_cast<RtSystem::String*>(retval);
+    ret->data = nullptr;                       // 0x1800032f4, before the load
+    char* name = self->m_sprites[index].name;
+    if (name) {
+        ret->data = name;
+        RtSystem::StringRefCount(name) += 1;   // 0x180003302
+    }
+
+    if (rt_diff_on__) {
+        // Replay into a private slot. The second call legitimately bumps the
+        // same live String again — "return an owned reference" — and
+        // ReleaseStringRef undoes exactly that bump, so the net effect is
+        // zero, unlike a one-way leak. Identical to the three replay* rows in
+        // this file's banner.
+        using Fn = void* (*)(const void*, void*, int);
+        RtSystem::String scratch{};
+        RT_ORIGINAL_ONCE(Fn,
+            "?GetSpriteNameFromIndex@SpriteSheet@UI@@QEBA?AVString@System@@H@Z")(
+                selfRaw, &scratch, index);
+        RT_DIFF_BYTES(&ret->data, &scratch.data, sizeof(char*));
+        ReleaseStringRef(scratch.data);
+    }
+    return retval;                             // retail returns the slot in RAX
+}
+
 // SpriteSheet::GetUVs(int, float&, float&, float&, float&) const — retail
 // 0x180003330. NO upper-bound check (only `index < 0` is guarded), matching
 // retail exactly — CLAUDE.md: do not add a guard retail lacks.
 void RtUi_SpriteSheet_GetUVs(const void* selfRaw, int index, float* u0, float* v0, float* u1, float* v1) {
     RT_DIFF_BEGIN("UI::SpriteSheet::GetUVs()");
+    // WAVE 10 LANE UI4's probe trigger. This is a live per-frame call site
+    // (the status-icon geometry builder), which is what makes it a point past
+    // Engine::Startup — the MemoryAllocator singleton the SpriteCapture probe
+    // needs does not exist at registration time. Costs one bool test, and only
+    // when the diff harness is on; see runtime/src/ui/spritecapture_probe.cpp.
+    if (rt_diff_on__) { extern void RtUiSpriteCaptureProbe(); RtUiSpriteCaptureProbe(); }
     const auto* self = static_cast<const SpriteSheet*>(selfRaw);
     float ou0 = 0.0f, ov0 = 0.0f, ou1 = 0.0f, ov1 = 0.0f;
     if (index >= 0) {
@@ -762,6 +821,10 @@ int RtUiSpriteRegister() {
     RegisterRuntimeExport("?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z",
                           (void*)&RtUi_SpriteSheet_GetSpriteIndexFromName); ++n;
     RegisterRuntimeExport("?GetUVs@SpriteSheet@UI@@QEBAXHAEAM000@Z", (void*)&RtUi_SpriteSheet_GetUVs); ++n;
+    // WAVE 10 LANE UI4 — the callee this wave's SpriteCapture::AddSprite opened.
+    RegisterRuntimeExport("?GetSpriteNameFromIndex@SpriteSheet@UI@@QEBA?AVString@System@@H@Z",
+                          (void*)&RtUi_SpriteSheet_GetSpriteNameFromIndex); ++n;
+    RegisterRuntimeAddr(0x1800032d0, (void*)&RtUi_SpriteSheet_GetSpriteNameFromIndex);
     RegisterRuntimeExport("?SetSpriteInfo@SpriteSheet@UI@@QEAAXHHHMMMM@Z", (void*)&RtUi_SpriteSheet_SetSpriteInfo); ++n;
     RegisterRuntimeExport("?AddSpriteInfo@SpriteSheet@UI@@QEAAXAEBVString@System@@0HHHH@Z",
                           (void*)&RtUi_SpriteSheet_AddSpriteInfo); ++n;
@@ -779,6 +842,14 @@ int RtUiSpriteRegister() {
     // the three exports, and docs/runtime_port/WAVE9_LANE_UIF2.md for the
     // cutover cost of the address door it leaves open.
     n += RtUiSpriteContextRegister();
+
+    // WAVE 10 LANE UI4 -- UI::SpriteCapture::AddSprite / AddScissor, the two
+    // rows the wave-9 census recorded UNREACHABLE. Registered from here for
+    // the same reason SpriteContext is: rt_ui_port.cpp says not to edit it to
+    // add a lane, and SpriteCapture is the far side of the same capture path.
+    // Its own kill switch is BANISHED_RT_UISPRITECAP.
+    extern int RtUiSpriteCaptureRegister();
+    n += RtUiSpriteCaptureRegister();
 
     RegisterRuntimeExport("?GetCount@StringTable@UI@@QEBAHXZ", (void*)&RtUi_StringTable_GetCount); ++n;
     RegisterRuntimeExport("?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z",

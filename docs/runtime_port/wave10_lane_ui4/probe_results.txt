@@ -1,0 +1,76 @@
+WAVE 10 LANE UI4 — SpriteCapture probe results
+Build: standalone-debug, deployed under tools/game_dir_lock.sh acquire lane-UI4
+Command: BANISHED_RT_DIFF=1 BANISHED_RT_SPRITECAP_PROBE=1 BANISHED_AUTOQUIT=1 ./reimpl-x64.exe
+
+--- GREEN RUN -----------------------------------------------------------------
+[SpriteCapProbe] ARMED -- fires on the first live SpriteSheet::GetUVs
+[SpriteCapProbe] LEDGER idx=0  before=1 afterOURS=2 afterTHEIRS=3
+[SpriteCapProbe] refcount ledger OK: 1 -> 3 (+1 owned by each side's stored entry, as expected)
+[SpriteCapProbe] cases=18 failed=0  entries compared=21 sprites compared=21
+
+  18 cases, 0 failures. EFFECTIVENESS: 21 entries and 21 sprites were actually
+  compared -- the comparisons looked at something, which is the claim a green
+  probe cannot make on its own.
+
+  The LEDGER line is the one that changed this lane's conclusions. It is
+  attributed per implementation on purpose: +1 from ours and +1 from theirs,
+  SYMMETRICALLY. That symmetry is what proved the two agree on refcount
+  behaviour as well as on bytes, and it is what falsified this lane's first
+  theory (that the entry array copied bitwise and retail left a dangling
+  pointer). The disassembly of the element copier at 0x18004be97..0x18004bed0
+  then confirmed the ledger: `INC dword ptr [RAX-0x4]` at 0x18004beac --
+  the array element COPY-CONSTRUCTS the String and owns its reference.
+
+--- NEGATIVE CONTROL ----------------------------------------------------------
+Same command plus BANISHED_RT_SPRITECAP_NEGCTL=1, which XORs one bit of
+CaptureEntry::color in the LAST entry our body appended -- a field the
+comparison provably reads.
+
+[SpriteCapProbe] ARMED -- fires on the first live SpriteSheet::GetUVs
+[SpriteCapProbe] DIVERGE AddSprite(index=-1, new sheet)     field=entry.color
+[SpriteCapProbe] DIVERGE AddSprite(dedup + second sheet)    field=entry.color
+[SpriteCapProbe] LEDGER idx=0  before=1 afterOURS=2 afterTHEIRS=3
+[SpriteCapProbe] DIVERGE AddSprite(named sprite)            field=entry.color
+[SpriteCapProbe] DIVERGE AddSprite(unnamed sprite)          field=entry.color
+[SpriteCapProbe] refcount ledger OK: 1 -> 3 (+1 owned by each side's stored entry, as expected)
+[SpriteCapProbe] cases=18 failed=4  entries compared=17 sprites compared=21  [NEGATIVE CONTROL ARMED -- 4 failures expected]
+
+  4 caught out of 4 AddSprite cases, and the reported field is the corrupted
+  one in every case. The 14 AddScissor cases are correctly NOT affected -- the
+  control only corrupts what AddSprite appended, so their staying green is the
+  control's own specificity check rather than a miss.
+
+  `entries compared` drops 21 -> 17 because SubjectsAgree returns at the first
+  mismatching entry; the four cases stop early. That is expected and is why
+  the green run's 21 is the number to read for effectiveness.
+
+--- WHAT THIS DOES NOT COVER --------------------------------------------------
+No LIVE call. Both bodies are reachable only through SpriteContext's two
+capture branches, which need UserInterface::BeginSpriteCapture to have been
+called -- the exe does that only from SpriteCaptureUI::OnEvent (0x1400792b0),
+a dev tool with no harness route. `calls=` for the two [RtDiff] sites therefore
+counts the probe's own entries and nothing else, and that is stated rather than
+left for a reader to discover.
+[SpriteCapProbe] ARMED -- fires on the first live SpriteSheet::GetUVs
+[SpriteCapProbe] LEDGER idx=0  before=1 afterOURS=2 afterTHEIRS=3
+[SpriteCapProbe] SpriteSheet vtable: 5 slots driven WITH their replay oracle (Type/TypeId/TypeName/GetFileVersion/Compile/Construct), Reconstruct+Destruct EXERCISED not compared; Construct returned this, Reconstruct == Construct
+[SpriteCapProbe] refcount ledger OK: 1 -> 3 (+1 owned by each side's stored entry, as expected)
+[SpriteCapProbe] cases=18 failed=0  entries compared=21 sprites compared=21
+[RtDiff]   UI::SpriteCapture::AddScissor                    calls=0          worked=14         divergences=0
+[RtDiff]   UI::SpriteCapture::AddSprite                     calls=0          worked=7          divergences=0
+[RtDiff]   UI::SpriteSheet::GetSpriteNameFromIndex()        calls=2          worked=?          divergences=0
+[RtDiff]   UI::SpriteSheet::Type                            calls=1          worked=1          divergences=0
+[RtDiff]   UI::SpriteSheet::TypeId                          calls=1          worked=1          divergences=0
+[RtDiff]   UI::SpriteSheet::TypeName                        calls=1          worked=1          divergences=0
+[RtDiff]   UI::SpriteSheet::GetFileVersion                  calls=1          worked=1          divergences=0
+[RtDiff]   UI::SpriteSheet::Compile                         calls=1          worked=1          divergences=0
+[RtDiff]   UI::SpriteSheet::Construct                       calls=3          worked=1          divergences=0
+[RtDiff]   UI::SpriteSheet::Reconstruct                     calls=0          worked=1          divergences=0
+[RtDiff]   UI::SpriteSheet::Destruct                        calls=0          worked=1          divergences=0
+
+--- FINAL RUN (with the SpriteSheet vtable slots driven) ---
+See above block; the [RtDiff] lines are read per site in
+docs/runtime_port/WAVE10_LANE_UI4.md "calls= read honestly, per site".
+NOTE: this run was taken during the lock incident recorded in section 5a of
+that document -- the deployed exe was md5-verified as this lane build both
+before and after, so the numbers are about the right binary.
