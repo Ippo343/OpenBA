@@ -1,3 +1,29 @@
+> # ⛔ VERDICT QUALIFIED 2026-09-09 — DO NOT ARM ON THIS GO
+>
+> Lane SHADOWRE re-took the allocator shadow gate this GO leans on and it
+> **DOES NOT HOLD on today's tree**: 314,542 / 2,673,750 / 1,009,626
+> divergences on the three cells Wave 9 lane E2/E3 recorded as ZERO, plus three
+> arena-growth cells that were 0/0/0 and are now 303,091 / 1,011,106 /
+> 2,713,855. See `WAVE10_LANE_SHADOWRE.md`.
+>
+> **What still stands:** the ARMING evidence below (27 exports, atomic swap,
+> 901,685 allocs / 540,750 frees through our own bodies) and lane REDZONE's
+> re-established pass condition (41,349 walks, 0 violations, armed, with the
+> instrument proved capable by injection). Those measured that arming WORKS and
+> that the redzone watchdog can SEE.
+>
+> **What does not:** the claim that the ported allocator agrees with retail
+> operation-for-operation. That pillar was measured on a tree that no longer
+> exists.
+>
+> It is not the allocator: the identical cell with `BANISHED_RT_PORT=0` reads
+> `observed=1,789,828 divergences=0`. Something ELSE in the port reaches the
+> real `Free` by a route that skips `allocator_lock`'s patched entry — which is
+> invisible on the armed path, where there is no replica to notice it.
+>
+> `BANISHED_RT_ALLOC` is opt-in and off by default, so no shipped configuration
+> changes. Do not flip it until the red is bisected.
+
 # Wave 10, lane ALLOC — `BANISHED_RT_ALLOC=1` with Runtime-x64.dll PRESENT
 
 **VERDICT: GO.** The port now arms with the DLL present, and it did not before this lane.
