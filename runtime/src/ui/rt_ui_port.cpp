@@ -35,6 +35,12 @@ extern int RtUiSpriteRegister();      // sprite.cpp          (lane F)
 // round-trip can be turned off without disturbing the rest of the UI port.
 extern int RtUiDialogSettingsRegister();   // dialog_settings.cpp (lane ENC-2)
 
+// Wave 10 lane UI1: ?Update@UserInterface@UI@@, the class's frame half. Its own
+// switch (BANISHED_RT_UIFRAME) because it is the first UI body that can be given
+// a code detour into the DLL, and a bisect must be able to isolate it from the
+// rest of lane C's UserInterface port.
+extern int RtUiFrameRegister();            // userinterface_frame.cpp (lane UI1)
+
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
         printf("[RtPort] BANISHED_RT_UI=0 -- UI namespace port disabled\n");
@@ -48,5 +54,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_UIWIDGETSLAY")) n += RtUiWidgetsLayRegister();
     if (RtWaveEnabled("BANISHED_RT_UISPRITE"))     n += RtUiSpriteRegister();
     if (RtWaveEnabled("BANISHED_RT_DLGSETTINGS")) n += RtUiDialogSettingsRegister();
+    if (RtWaveEnabled("BANISHED_RT_UIFRAME"))     n += RtUiFrameRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }
