@@ -36,7 +36,41 @@ at the merge.
 Half this wave is spent on things already shipped, because two of Wave 10B's
 findings say the instruments under them are weaker than the row counts suggest.
 
-### TIDENT — eleven live promotions rest on a screen that may not be able to fail
+### TIDENT — ✅ ANSWERED: CONTENT-ONLY. The eleven live rows are safe as shipped.
+
+> **Verdict (lane TIDENT, merged):** ZERO pointer-identity consumers of
+> `BaseTypeInfo::name` in either shipped binary. In `Runtime-x64.dll` the only
+> static reads of any node's `+0x08` are 103 `?TypeName@` accessors — and not one
+> of those 103 is *called* anywhere in the DLL; `Factory::GetTypeName` has no
+> caller at all. In `Application-x64.exe` all **525** references to the 42
+> imported `?_typeInfo@` slots read the dword at `+0x00` (typeId) and **not one
+> reads `+0x08`**; the exe does not even import `GetTypeName` — it imports
+> `GetTypeIdFromName` and `IsDerivedFrom`. **The question is retired for all
+> twelve rows and none should be backed out.**
+>
+> The instrument was blind exactly as charged, and the two screens were scored
+> SEPARATELY: under an injected 5-row alias the pre-existing `strs=` content
+> screen did not move at all (624 comparisons, 0 mismatch, both halves) while the
+> new `ptr=` screen moved by exactly 5. The control had to run *toward* identity —
+> `name` is our own literal, so "the pointer differs" is true by construction, and
+> a screen that always says "differs" proves nothing.
+>
+> **The finding worth more than the row:** the tree already had three
+> pointer-identity screens and nobody read them as such.
+> `UI::SpriteSheet::TypeName` has been reporting `calls=1 divergences=1` — `ours`
+> in our image, `theirs` in the DLL — live since that row was promoted last wave.
+> The A/B moves it `1 → 0` at `calls=1` in **both** halves (the value moved, not
+> the coverage), and a same-shape unpromoted sibling sits at `calls=4 div=0` in
+> both, ruling out a broken oracle. Harmless per the audit, now documented beside
+> the body, and the comparison deliberately left as a pointer.
+>
+> `?_typeInfo@DialogController@` is still **not promoted** — but for a different
+> reason than lane DLGV gave. Its only consumer is `TypeIdOfStatic` in
+> `dialog_create.cpp`, and the new `[TidStatic]` attendance line printed zero
+> across five routes. A port with no caller. The observable to watch is named.
+
+The original framing, kept because the reasoning is the reusable part:
+
 
 Lane DLGV declined `?_typeInfo@DialogController@` because promoting it makes
 `?TypeName@DialogController@` return **our node's `name` pointer**, and the mint
