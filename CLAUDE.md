@@ -17,7 +17,18 @@ reimplemented are stubbed or registered individually via the address registry (s
 
 **Next phase (2026-09-06): port Runtime-x64.dll.** Review, facts, wave order, risks and the
 per-function recipe are in **[docs/runtime_port/PLAN.md](docs/runtime_port/PLAN.md)**. Read it
-before any runtime work. `Runtime-x64-profile.dll` (ToolKit, debug strings + 5,182 exports) is
+before any runtime work.
+
+**Status 2026-09-09 — the UI namespace is FINISHED at its proven ceiling, 186/188 = 98.9%.**
+Waves 10B–10E closed it; the two remaining rows are *proved unpromotable*, not
+unfinished (`tools/runtime_census.py` now tags them and prints a `ceiling`
+column). **The next wave is the OBJECT CREATION PATH — read
+[docs/runtime_port/WAVE11_KICKOFF.md](docs/runtime_port/WAVE11_KICKOFF.md) before
+scoping it.** Headline: 202 `?Create*Object@` exports in the DLL, **zero ported**,
+and all 104 minted `BaseTypeInfo` factory pointers are still abort traps.
+Two facts that save a lane a day: **we intercept only at doors** — an in-DLL
+`rel32` call or RIP-relative `LEA` stamp is not one — and **the exe imports 833
+Runtime symbols and zero `??_7`**, so it never consumed a vtable row in any build. `Runtime-x64-profile.dll` (ToolKit, debug strings + 5,182 exports) is
 imported into the Ghidra project and is the primary source for naming Runtime internals.
 
 ## Target Binaries
