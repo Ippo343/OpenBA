@@ -138,17 +138,56 @@ static_assert(sizeof(ModInfo) == 0x20, "sizeof(Save::SaveLoad::ModInfo) == 0x20"
 //   +0x24  int32    thumbnail height } and 4th arguments of the upload call
 //                   (MOV R8D,[+0x20]; MOV R9D,[+0x24] at 0x1800c0f92/0f8d).
 //   +0x28  void*    the thumbnail pixel block (MOV RDX,[+0x28]).
-//   +0x40  int32    the "metadata loaded" sentinel. NEGATIVE means not loaded:
-//                   OnVideoRestart skips such a row (JL at 0x1800c0f53),
-//                   UpdateList state 2 scans FORWARD past them looking for the
-//                   next row to load, and UpdateSave treats a negative one as
-//                   "this slot has no name yet" and generates one.
+//   +0x40  int32    see the correction below.
 //   +0x44  int32    written by UpdateList state 4 from LoadMetaData's sixth
 //                   out-param, and zeroed on the failure arm.
 //
-// +0x2c..+0x37 remain unmodelled: no body this project has ported either reads
-// or writes them. Naming them from a guess is exactly the kind of comment
-// PLAN §6 step 8 exists to prevent.
+// ----------------------------------------------------------------------------
+// *** WAVE 13 CORRECTION, MADE BY THE UpdateList LANE: +0x40 IS NOT A FLAG. ***
+//
+// This header shipped it as `metaLoaded`, "< 0 == metadata not loaded yet",
+// inferred from THREE READERS that all test its SIGN (OnVideoRestart's JL at
+// 0x1800c0f53, UpdateList state 2's JGE at 0x1800c21bb, UpdateSave's JL). Every
+// one of those readings is still correct about the sign. They were all read
+// WITHOUT the writer, and the writer says what the value IS:
+//
+//     1800c1fcf  MOV qword ptr [RBP + -0x9],-0x1     ; +0x40 = -1, +0x44 = -1
+//     1800c1fdf  MOV dword ptr [RBP + -0x9],R12D     ; +0x40 = R12D
+//
+// R12D is UpdateList state 1's LOOP COUNTER — the index into
+// IO::Persistence's save list that this row was built from. The row pushed for
+// the "new save" slot (state 1's `_selectedIndex == -2` prologue, 0x1800c1f55)
+// gets -1 there instead, and it is the only row that ever does.
+//
+// So +0x40 is **the Persistence save index this row came from, or -1 for the
+// blank "new save" row**, and every sign test in the DLL means "is this a real
+// save on disk". `metaLoaded` was never wrong about a branch and was wrong
+// about the field: it reads as a flag the metadata loader sets, and nothing
+// sets it — state 4 writes +0x44 and NEVER touches +0x40.
+//
+// The value stops being usable as an index the moment state 1's qsort reorders
+// the array, and nothing in the DLL uses it as one afterwards; state 2 scans by
+// ARRAY position and asks Persistence by NAME. That is why a wrong name here
+// was survivable, and it is also why it is worth fixing before a lane reads
+// `metaLoaded` as "the metadata is in" and skips a load.
+//
+// +0x30 IS PINNED TOO, by a writer and a reader:
+//   * UpdateList state 1 (0x1800c1ff5) copies the first qword of the
+//     `IO::Persistence::SaveGameInfo` that `GetSaveInfo(i)` returns by value
+//     into it — see RtIo::SaveGameInfo in ../io/Persistence.h.
+//   * The qsort comparator at 0x1800c3db0 (a bare 22-byte thunk Ghidra never
+//     made a function of) compares exactly this qword, UNSIGNED, and orders
+//     DESCENDING, with any row whose +0x40 is negative forced to compare
+//     greater in both positions.
+// A descending unsigned 64-bit key on a save file is a timestamp in all but the
+// proof, and the proof is not here — no body this project has ported converts
+// it — so it is named `sortKey` after what it demonstrably IS, not after what
+// it probably means.
+//
+// AND THAT CLOSES THE HOLE ENTIRELY. The note this replaces said
+// "+0x2c..+0x37 are NOT modelled", which quietly overstated it by four
+// bytes: +0x28 is a POINTER, so it owns +0x28..+0x2f and there was never a
+// +0x2c to model. With +0x30 pinned, SaveInfo has no unmodelled byte left.
 // ============================================================================
 struct SaveInfo {
     Sprite      thumbnail;       // +0x00
@@ -157,9 +196,9 @@ struct SaveInfo {
     int32_t     thumbWidth;      // +0x20  upload arg 3
     int32_t     thumbHeight;     // +0x24  upload arg 4
     void*       thumbPixels;     // +0x28  upload arg 2
-    uint8_t     unknown30[0x08]; // +0x30 .. +0x37  NOT modelled — no ported body touches it
+    uint64_t    sortKey;         // +0x30  SaveGameInfo+0x00; qsort key, DESCENDING
     const char* name;            // +0x38  System::String
-    int32_t     metaLoaded;      // +0x40  < 0 == metadata not loaded yet
+    int32_t     saveIndex;       // +0x40  Persistence save index; -1 == the blank row
     int32_t     field44;         // +0x44  LoadMetaData out-param 6
     ModInfo*    modsData;        // +0x48  Collection::Array<ModInfo>::_data
     int32_t     modsSize;        // +0x50  ::_size
@@ -170,7 +209,8 @@ static_assert(offsetof(SaveInfo, imageBuffer) == 0x18, "SaveInfo.imageBuffer @ 0
 static_assert(offsetof(SaveInfo, thumbWidth)  == 0x20, "SaveInfo.thumbWidth @ 0x20");
 static_assert(offsetof(SaveInfo, thumbHeight) == 0x24, "SaveInfo.thumbHeight @ 0x24");
 static_assert(offsetof(SaveInfo, thumbPixels) == 0x28, "SaveInfo.thumbPixels @ 0x28");
-static_assert(offsetof(SaveInfo, metaLoaded)  == 0x40, "SaveInfo.metaLoaded @ 0x40");
+static_assert(offsetof(SaveInfo, sortKey)     == 0x30, "SaveInfo.sortKey @ 0x30");
+static_assert(offsetof(SaveInfo, saveIndex)   == 0x40, "SaveInfo.saveIndex @ 0x40");
 static_assert(offsetof(SaveInfo, field44)     == 0x44, "SaveInfo.field44 @ 0x44");
 static_assert(offsetof(SaveInfo, name)         == 0x38, "SaveInfo.name @ 0x38");
 static_assert(offsetof(SaveInfo, modsData)     == 0x48, "SaveInfo.modsData @ 0x48");
