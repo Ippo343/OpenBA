@@ -45,6 +45,11 @@ extern int RtUiElementDescriptionSerializeRegister();  // elementdescription_ser
 // a code detour into the DLL, and a bisect must be able to isolate it from the
 // rest of lane C's UserInterface port.
 extern int RtUiFrameRegister();            // userinterface_frame.cpp (lane UI1)
+// Wave 10 lane UI3: the four ALLOCATING DialogInstance rows Wave 7 lane B held
+// back (ctor, both AddController overloads, StartTimer). Own switch because
+// they sit on the construction path of every dialog in the game and because the
+// blocker they cleared -- the allocator -- is still opt-in for its own port.
+extern int RtUiDialogCreateRegister();     // dialog_create.cpp   (lane UI3)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -61,5 +66,6 @@ void RtUiPortInit() {
     if (RtWaveEnabled("BANISHED_RT_DLGSETTINGS")) n += RtUiDialogSettingsRegister();
     if (RtWaveEnabled("BANISHED_RT_ELEMDESCSER")) n += RtUiElementDescriptionSerializeRegister();
     if (RtWaveEnabled("BANISHED_RT_UIFRAME"))     n += RtUiFrameRegister();
+    if (RtWaveEnabled("BANISHED_RT_DLGCREATE"))  n += RtUiDialogCreateRegister();
     printf("[RtPort] UI: %d exports registered\n", n);
 }
