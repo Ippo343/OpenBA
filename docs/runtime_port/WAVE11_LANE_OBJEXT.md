@@ -30,6 +30,19 @@ ENTERED (new gap row):
 
 `24 - 4 + 1 = 21`. The arithmetic is checked, not asserted.
 
+**A LATER READING OF THE SAME NAMESPACE SAYS 38/59 = 64.4%, AND THAT NUMBER IS
+NOT THIS LANE'S RESULT.** Re-measured after the probe rewrites, the census reads
+`+2 called / +2 ported` against the figures above -- but the UNPORTED SET is
+byte-identical, still the same 21 rows. So no row changed state: two rows that
+are BOTH called and ported entered the tree's call graph because the PROBE
+started calling them, which lifts numerator and denominator together. That is
+instrument traffic, not port progress, and I did not pin which two.
+
+The number to trust is the SET-DIFF, which is unaffected. Recorded because a
+percentage that moves while nothing changes state is exactly the shape that
+reads as progress -- and because this lane's instrument is now large enough to
+move the metric it is measured by.
+
 `called` grew by exactly **one**, not three, and the reason is the useful part of
 this lane's result — see §4.
 
@@ -351,9 +364,76 @@ score on the union of two screens hides that one of them caught 1 of 3
 
 ---
 
-## 7. Run results
+## 7. Run results — MEASURED
 
-_TO BE FILLED FROM THE MEASURED RUN._
+Exe under test `e2b6cd3913fe29c17bee3cf981aba32b`, deployed under a held
+`tools/game_dir_lock.sh` and md5-verified against the build before any run
+(`tools/objext_run.sh` refuses to measure otherwise). Logs in
+`lane_objext_logs/`.
+
+### 7.1 Stability
+
+| run | ports | probe | crash log |
+|---|---|---|---|
+| A | ON | off | **empty** |
+| C | ON | on  | **empty** |
+| B | OFF (kill switch) | off | **empty** |
+
+Run A exists specifically so that "the port is stable and my instrument was
+not" is a measurement rather than an argument — see §10.
+
+### 7.2 `GetCompiledPath` — the input sweep
+
+14 inputs (13 synthetic + the live path the self-test rides in on), each run
+ours-vs-theirs against the shipped export, every control scored separately:
+
+```
+SWEEP ctl=0 compared=14 mismatches=0   PASS              disagree 0
+SWEEP ctl=1 compared=14 mismatches=14  control CAUGHT    disagree 0
+SWEEP ctl=2 compared=14 mismatches=14  control CAUGHT    disagree 0
+SWEEP ctl=3 compared=14 mismatches=8   control CAUGHT    disagree 0
+SWEEP ctl=4 compared=14 mismatches=4   control CAUGHT    disagree 0
+SWEEP ctl=5 compared=14 mismatches=12  control CAUGHT    disagree 0
+```
+
+`disagree 0` on every control is the strong result here, and it is a claim
+about the MODEL, not the port: the predicted mask is computed by the three
+predicates in §11 and reproduces all 14 cells of all five controls. See §10.4
+for why that number is worth more than the `mismatches=0` beside it.
+
+### 7.3 `PushPath` / `PopPath` — live singleton, and the container bodies
+
+```
+PART2 ctl=0 compared=1 mismatches=0 att=0  PASS
+PART2 ctl=1 compared=1 mismatches=1 att=1  control CAUGHT
+PART2 ctl=2 compared=1 mismatches=1 att=1  control CAUGHT
+PART2 offset cross-check (+0x30/+0x38 via retail's own accessors): 3 checked, 0 disagreed
+
+PART1 ctl=0 compared=8 mismatches=0 att=0  PASS
+PART1 ctl=2 compared=8 mismatches=8 att=6  control CAUGHT
+PART1 ctl=3 compared=8 mismatches=4 att=1  control CAUGHT
+PART1 ctl=4 compared=8 mismatches=8 att=1  control CAUGHT
+```
+
+`att=` is the control's attendance at the perturbation site it NAMES (§10.3).
+Every active control has a non-zero one, so none of these catches is banked on
+an unrelated mechanism. `ctl=0` has `att=0` correctly — it perturbs nothing.
+
+The **offset cross-check is the answer to the singleton hazard**: the element
+`PushPath` pushed onto the live factory was read back both directly through our
+`_pathStack` offsets and through retail's own `GetPathStackDirectory` /
+`GetPathStackFilename`, and the two agreed on every trial. That is the only
+independent evidence available that our `static_assert`s describe the object
+retail actually built, and it is why part 2 does not use a fake factory.
+
+### 7.4 What is NOT covered
+
+* `FindOrLoad` has no whole-body oracle — §6.3, and that is a property of the
+  function, not a gap in effort.
+* `PART1 ctl=1` does not exist: control 1 perturbs `PushPath`, which part 1
+  does not drive. `PART2 ctl=3/ctl=4` likewise do not exist. The control table
+  in the probe states which screen each control can reach, and that table is
+  itself a claim that was WRONG once — see §10.3.
 
 ---
 
@@ -456,7 +536,7 @@ Two consequences worth stating rather than leaving implicit:
 
 ---
 
-## 10. Two instruments that would have lied, caught before the run
+## 10. Four instrument defects, and the one cause underneath them
 
 Both were written by this lane, both were found by this lane, and both would
 have produced a **green line with no comparison behind it**. Recorded here
@@ -513,18 +593,158 @@ an observable, comparable divergence — not undefined behaviour. "Did this
 perturbation change a value the comparator reads?" is the question; "is this
 perturbation a real defect?" is not sufficient.
 
-### 10.3 The pattern
+### 10.3 A control that CAUGHT — for a mechanism that could not apply
 
-Both defects share a shape with the third thing this lane checked (§6.2's
-`ResolveRuntimeRaw`-not-`ResolveAddr`): **an instrument can be wrong in a way
-that makes it silent or vacuous rather than wrong-looking.** Each of the three
-has a one-line test that would have caught it:
+`ctl=4` meant "grow by two". Part 2 drives `PushPath`, which always grows by
+exactly one, so the control **cannot reach part 2 at all**. It nonetheless
+reported `control CAUGHT` there.
+
+It caught because a **stale second implementation** of the same control was
+still live in `external_path_stack.cpp:375`, passing `fill = nullptr` — the
+control's ORIGINAL meaning, retired in the probe and in two comment blocks and
+left behind in the body. So the element `PushPath` pushed was uninitialised and
+the readback differed for a reason unrelated to the control's stated meaning.
+That same stale line took the run down in `ucrtbase` a moment later, during
+part 1's `ctl=4`.
+
+**The green cell was withdrawn.** Both it and the probe's control table — which
+claimed `ctl 4 -> PART 1 and PART 2` — were wrong, and the table's "which
+screen can this control reach" column is itself a claim that has to be checked.
+
+> **A control that catches must be shown to catch VIA THE MECHANISM IT NAMES,
+> not merely to catch.** A control passing for the wrong reason is worse than
+> one failing, because it reads as coverage.
+
+This is now mechanical rather than a matter of noticing. Each control
+increments an **attendance counter at the perturbation site it names**, and a
+catch with `att=0` prints as `CAUGHT BUT NOT VIA ITS OWN MECHANISM (attendance
+0) -- NOT BANKED` instead of being credited. On the validation run every active
+control had a non-zero attendance (§7.3).
+
+### 10.4 A prior that contradicted its own derivation
+
+Covered in §12. Its fix — making the prior an executable model rather than a
+hand-written string — is the only one of these four that could have been caught
+**without a run**, and the `disagree` column it produces is worth more than the
+`mismatches` column beside it: `mismatches=0` says the port matches retail on
+these inputs, while `disagree=0` says the MODEL of why each input is or is not
+sensitive is also right. The second is the one that would notice if the sweep
+were quietly testing nothing.
+
+### 10.5 The pattern
+
+**Three control defects in ONE instrument is an architecture signal, not three
+slips.** The common cause is that **a control's meaning was expressible in more
+than one place** — the probe, two comment blocks, and the body at
+`external_path_stack.cpp:375` — so it could be changed in three and left stale
+in the fourth, silently. More care does not fix that; structure does. Both
+fixes are now in:
+
+* each control is **one parameter consumed by the single implementation** of the
+  operation it perturbs, so there is no second path to drift;
+* each control **attends at the site it names**, so a stale implementation
+  fails loudly (`att=0`, NOT BANKED) instead of catching for the wrong reason.
+
+The wider shape, which §6.2's `ResolveRuntimeRaw`-not-`ResolveAddr` check shares:
+**an instrument can be wrong in a way that makes it silent or vacuous rather
+than wrong-looking.** Each defect has a one-line test:
 
 | defect | the test |
 |---|---|
 | probe on an uncalled body | does the body it hangs off run? *count it, don't assume* |
 | control that dereferences uninitialised memory | does the perturbed value get **read** by the comparator, and is it **valid**? |
+| control that catches for the wrong reason | did the branch the control NAMES actually execute? |
+| prior that contradicts its derivation | derive the prior, never transcribe it |
 | oracle resolving through the port registry | does "theirs" reach the DLL, or has it come back to us? |
 
-All three are answerable before a run, and all three are cheaper to answer than
-one contended launch of the game.
+All five are answerable before a run. Four of them were not, here, and each cost
+a launch of a contended game directory.
+
+---
+
+## 11. Two facts about callees, and the rule that produced both
+
+### 11.1 `GetPathFilename`'s flag does not mean "strip the extension"
+
+`?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z` (0x1800c6740). The backward
+scan for `'.'` runs unconditionally and `length = dotIndex - 1` strips the
+extension **whether or not the flag is set**. The flag is read in exactly one
+place:
+
+```c
+if (dotIndex < 1) {              // no '.' at all, or one at index 0
+    if (stripExt) { *retval = 0; return retval; }   // EMPTY
+}                                // else: keep the whole leaf
+```
+
+So it means **"yield an EMPTY filename when the path has no extension"**. For
+any path that has one, the flag is dead.
+
+**How it was found, and why the route matters.** `ctl=4` caught on 1 of 6
+inputs where the then-current model predicted 4-5. The available dispositions
+were to caveat the ratio as thin coverage, or to enlarge the input set until it
+went away. Both would have been wrong, and the second **provably** so: the
+enlargement actually attempted first added five extension-BEARING paths, and
+`ctl=4` can only bite on extension-less ones, so it would have moved nothing
+while looking like diligence. That is the concrete argument against "enlarge
+until the anomaly resolves" as a method.
+
+The fact is confirmed by **two independent routes**, which is a better warrant
+than either alone:
+
+1. this lane's derivation from the disassembly, tested by the requirement that
+   ONE fact explain all five of the first sweep's ratios exactly — 6/6, 6/6,
+   4/6, 1/6, 5/6 — which it does;
+2. `runtime/src/system/filename.cpp:282-288`, the tree's own port of that
+   function, which had already written it down.
+
+**The systemic finding is worth more than either.** This tree re-declares
+callees locally by house style, to avoid dragging in headers. **A local
+re-declaration carries the signature and drops every caveat attached to the real
+port.** Here it did not merely fail to help: `external_path_win.cpp` declared
+the parameter `bool stripExtension`, a confident-sounding wrong name two call
+sites from code whose behaviour depends on the caveat being false.
+
+> **Before deriving a callee's semantics from disassembly, grep for OUR port of
+> that callee. A local re-declaration is a signature, not a source of truth.**
+
+### 11.2 `GetPathIdentifer` returns the WHOLE path for a bare name
+
+Found by applying that rule immediately to the other callees this lane uses —
+`runtime/src/system/filename.cpp:366-370`:
+
+> Returns everything after the last `':'`. If there is no `':'` at all the whole
+> path comes back UNLESS a `'.'`, `'/'` or `'\'` was seen on the way, in which
+> case the result is empty.
+
+I had assumed "no `':'` means empty". True for every input in the set except
+`"Solo"` — no `':'`, no `'.'`, no `'/'` — whose identifier is the whole string.
+
+This was **sealed as a prediction before the run**
+(`WAVE11_LANE_OBJEXT_SEALED_PREDICTION.md`, committed `f25669e`): the claim was
+that the instrument would flag exactly one disagreement, at `ctl=5` index 10,
+and none elsewhere. It flagged exactly that.
+
+## 12. The unsealed disagreement, and what it cost
+
+The same run also flagged `ctl=3` index 13, which was **not** sealed.
+
+`"I meant to write X"` after seeing X is unfalsifiable, so the claim needs
+evidence that predates the run. It has some: the comment beside that mask
+enumerates its insensitive set as `(1,8 empty dir; 4,11,12 empty fname; 10
+both)` — **six** indices — while the mask carries **seven** dots. The mask
+contradicted its own stated derivation before anything ran, and index 13 is the
+extra dot.
+
+Verdict: **model right, transcription wrong.** Not upgraded to a held
+prediction.
+
+The fix is not more care. The prior is now an **executable model** (§11's three
+predicates) rather than six hand-written strings, so a transcription slip is not
+expressible, and the model computes the live path's prediction too instead of
+relying on a guess about what game paths look like. On the validation run it
+reproduced all 14 cells of all five controls — `disagree 0` throughout,
+including index 13 and index 10, the two cells the hand-written masks got wrong.
+
+That is the only instrument defect in this lane that could have been caught
+**without a run**, and it is now caught without one by construction.

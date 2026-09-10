@@ -137,6 +137,21 @@ int g_negCtl = 0;
 // moment that is provably safe because the caller is itself mid-Array.
 bool g_probePending = false;
 
+// ---------------------------------------------------------------------------
+// CONTROL ATTENDANCE — the fix for "a control that catches for the wrong
+// reason". PART 2 reported ctl=4 as CAUGHT when `PushPath` cannot express it
+// at all; it caught because a STALE second implementation of the same control
+// was still live somewhere else and corrupted the element. The green cell had
+// to be withdrawn by hand, after the run, by noticing the mechanism could not
+// have applied.
+//
+// A counter at each perturbation site makes that mechanical: the control is
+// only credited when the branch NAMED BY the control actually executed. A
+// control that catches with attendance 0 caught for some other reason, and the
+// probe says so instead of banking it.
+// ---------------------------------------------------------------------------
+uint64_t g_ctlAttendance[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
 
 PathStackCounters g_psc = {};
 
@@ -197,6 +212,7 @@ void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const Filename* pa
     RtSystem_Filename_GetPathFilename(path, &fname, true);
 
     String t1{nullptr}, t2{nullptr};                             // -0x40 / +0x38
+    if (g_negCtl == 1) ++g_ctlAttendance[1];   // control 1 attends HERE
     RtSystem_String_ConcatCStr(&t1, AsStr(&fname), g_negCtl == 1 ? "-" : kDot);
     RtSystem_String_Concat(&t2, &t1, AsStr(&ext));
 
@@ -325,6 +341,7 @@ namespace rtcoll {
 // and freshly-vacated-by-destroy memory nowhere. It must NOT release `dst`.
 static void AssignPathStackEntry(uint8_t* dst, const uint8_t* src) {
     if (RtObject::g_negCtl == 2) {
+        ++RtObject::g_ctlAttendance[2];   // control 2 attends HERE
         // control 2: swap the two halves.
         RtSystem::RtSystem_Filename_CtorCopy(reinterpret_cast<RtSystem::Filename*>(dst),
                                    reinterpret_cast<const RtSystem::Filename*>(src + 8));
@@ -372,7 +389,17 @@ Site g_pathstack_18002e220 = {
 extern "C" void RtObject_PathStackSetSize_18002e220(void* a, int n, const void* fill) {
     ++RtObject::g_psc.setSizeCalls;
     rtcoll::SetSizeCore(static_cast<rtcoll::ArrayHdr*>(a), n,
-                        RtObject::g_negCtl == 4 ? nullptr : static_cast<const uint8_t*>(fill),
+                        // NO ctl==4 BRANCH HERE. There used to be one, passing
+                        // `nullptr` as the fill, and retiring it is what this
+                        // line records. Control 4's meaning was changed to
+                        // "grow by two" in the probe and in two comment blocks
+                        // and NOT here, so the control had two live
+                        // implementations and ran both: it grew by two AND left
+                        // the tail uninitialised, which is the very corruption
+                        // the rewrite was for. It took the run down in
+                        // ucrtbase reading a garbage `char*`.
+                        // See WAVE11_LANE_OBJEXT.md §10.
+                        static_cast<const uint8_t*>(fill),
                         &rtcoll::kSpec_PathStack, &rtcoll::g_pathstack_18002e220);
 }
 
@@ -414,7 +441,10 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(void* arrVoid, int index) {
     // probe's part 2 with it. A negative control has to survive being wrong:
     // it must produce an observable, COMPARABLE divergence, not undefined
     // behaviour. See WAVE11_LANE_OBJEXT.md §10.
-    if (RtObject::g_negCtl == 3 && index + 1 < a->_size) index = index + 1;
+    if (RtObject::g_negCtl == 3 && index + 1 < a->_size) {
+        ++RtObject::g_ctlAttendance[3];
+        index = index + 1;
+    }
 
     if (index < a->_size) {
         int32_t i = index;

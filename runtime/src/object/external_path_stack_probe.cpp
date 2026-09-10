@@ -68,7 +68,15 @@
 //   ctl 1  "-" not "." joining the entry filename   -> PART 2 only
 //   ctl 2  entry halves stored in the wrong order   -> PART 1 and PART 2
 //   ctl 3  RemoveAt removes index+1, not index      -> PART 1 only
-//   ctl 4  SetSize grows by 2 instead of 1          -> PART 1 and PART 2
+//   ctl 4  SetSize grows by 2 instead of 1          -> PART 1 ONLY
+//
+// That last row said "PART 1 and PART 2" and was WRONG: PART 2 goes through
+// PushPath, which always grows by exactly one, so ctl 4 cannot reach it. The
+// table asserted a reach it did not have, and the screen then reported the
+// control as CAUGHT anyway -- for an unrelated reason (a stale second
+// implementation left the tail uninitialised). Both errors are recorded in
+// WAVE11_LANE_OBJEXT.md §10; the lesson is that the "which screen can this
+// control reach" column is itself a claim that has to be checked.
 //
 // ctl 4 is NOT "ignore the fill", which is what a first draft used. With
 // `fill == nullptr` and no `init` arm, retail leaves the new tail
@@ -202,6 +210,7 @@ Score RunContainerPass(int ctl) {
     Arr theirs{nullptr, 0, 0};
 
     const int grow = (ctl == 4) ? 2 : 1;
+    if (ctl == 4) ++RtObject::g_ctlAttendance[4];   // control 4 attends HERE
 
     for (int i = 0; i < kScriptN; ++i) {
         PathStackEntry eo, et;
@@ -360,6 +369,7 @@ void RtObjectPathStackProbeRun(ExternalFactory* live) {
     // NO trace in the effectiveness counters, or they stop measuring the game
     // and start measuring the probe.
     const RtObject::PathStackCounters saved = RtObject::g_psc;
+    for (int c = 0; c < 8; ++c) RtObject::g_ctlAttendance[c] = 0;
 
     // ---- PART 2 -------------------------------------------------------------
     if (live == nullptr) {
@@ -370,17 +380,45 @@ void RtObjectPathStackProbeRun(ExternalFactory* live) {
                     "not resolve; NO COMPARISON WAS MADE\n");
     } else {
         int xChecks = 0, xFails = 0;
-        const int ctls2[] = { 0, 1, 2, 4 };
-        for (int i = 0; i < 4; ++i) {
+        // ctl 4 IS NOT IN THIS LIST, and its removal is a RETRACTION.
+        //
+        // PART 2 drives `PushPath`, which always calls SetSize with
+        // `size + 1`. "Grow by two" is a perturbation of the probe's OWN call
+        // in PART 1 and cannot reach PushPath at all, so ctl 4 is inert here.
+        //
+        // It nonetheless reported `control CAUGHT` on the run that measured
+        // this screen -- and that result is WITHDRAWN. It caught because the
+        // stale `fill == nullptr` implementation was still live in
+        // external_path_stack.cpp, so the element PushPath pushed was
+        // UNINITIALISED and the readback differed from retail's for a reason
+        // that has nothing to do with the control's stated meaning. A control
+        // that passes for the wrong reason is worse than one that fails: it
+        // reads as coverage.
+        //
+        // PART 2's real controls are 1 and 2, both of which do reach PushPath.
+        const int ctls2[] = { 0, 1, 2 };
+        for (int i = 0; i < 3; ++i) {
             const Score s = RunLivePushPop(live, ctls2[i],
                                            "Template/Building/House.rsc",
                                            &xChecks, &xFails);
             const bool isCtl = ctls2[i] != 0;
-            std::printf("[PathStack] PART2 ctl=%d compared=%d mismatches=%d  %s\n",
-                        ctls2[i], s.compared, s.mismatches,
-                        !isCtl ? (s.mismatches == 0 ? "PASS" : "*** PORT DEFECT ***")
-                               : (s.mismatches  > 0 ? "control CAUGHT"
-                                                    : "*** control NOT CAUGHT ***"));
+            // ATTENDANCE IS LOAD-BEARING ON THIS SCREEN SPECIFICALLY. PART 2 is
+            // where a control reported CAUGHT for a mechanism that could not
+            // have applied, and the cell had to be withdrawn by hand after the
+            // run. `att` is incremented at the perturbation site the control
+            // NAMES, so a catch with att=0 is refused instead of banked.
+            const int ctlId2 = ctls2[i];
+            const unsigned long long att2 =
+                (unsigned long long)RtObject::g_ctlAttendance[ctlId2];
+            const char* verdict2;
+            if (!isCtl)                 verdict2 = (s.mismatches == 0) ? "PASS"
+                                                                      : "*** PORT DEFECT ***";
+            else if (s.mismatches == 0) verdict2 = "*** control NOT CAUGHT ***";
+            else if (att2 == 0)         verdict2 = "*** CAUGHT BUT NOT VIA ITS OWN MECHANISM"
+                                                   " (attendance 0) -- NOT BANKED ***";
+            else                        verdict2 = "control CAUGHT";
+            std::printf("[PathStack] PART2 ctl=%d compared=%d mismatches=%d att=%llu  %s\n",
+                        ctlId2, s.compared, s.mismatches, att2, verdict2);
             if (s.mismatches && ctls2[i] == 0) {
                 std::printf("[PathStack] PART2   ours = %s\n", g_lastOurs);
                 std::printf("[PathStack] PART2 theirs = %s\n", g_lastTheirs);
@@ -396,11 +434,17 @@ void RtObjectPathStackProbeRun(ExternalFactory* live) {
     for (int i = 0; i < 4; ++i) {
         const Score s = RunContainerPass(ctls1[i]);
         const bool isCtl = ctls1[i] != 0;
-        std::printf("[PathStack] PART1 ctl=%d compared=%d mismatches=%d  %s\n",
-                    ctls1[i], s.compared, s.mismatches,
-                    !isCtl ? (s.mismatches == 0 ? "PASS" : "*** PORT DEFECT ***")
-                           : (s.mismatches  > 0 ? "control CAUGHT"
-                                                : "*** control NOT CAUGHT ***"));
+        const int ctlId = ctls1[i];
+        const unsigned long long att =
+            (unsigned long long)RtObject::g_ctlAttendance[ctlId];
+        const char* verdict;
+        if (!isCtl)                verdict = (s.mismatches == 0) ? "PASS" : "*** PORT DEFECT ***";
+        else if (s.mismatches == 0) verdict = "*** control NOT CAUGHT ***";
+        else if (att == 0)          verdict = "*** CAUGHT BUT NOT VIA ITS OWN MECHANISM"
+                                              " (attendance 0) -- NOT BANKED ***";
+        else                        verdict = "control CAUGHT";
+        std::printf("[PathStack] PART1 ctl=%d compared=%d mismatches=%d att=%llu  %s\n",
+                    ctlId, s.compared, s.mismatches, att, verdict);
         if (s.compared == 0)
             std::printf("[PathStack] PART1 ctl=%d MADE NO COMPARISONS -- "
                         "this is not a pass\n", ctls1[i]);

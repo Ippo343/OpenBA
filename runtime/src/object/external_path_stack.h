@@ -50,6 +50,11 @@ extern PathStackCounters g_psc;
 // (external_path_win.cpp:170 states the same reason for the same shape.)
 extern int g_negCtl;
 
+// Per-control attendance: incremented at the perturbation site the control
+// NAMES. A control that reports CAUGHT with attendance 0 caught for some other
+// reason and must not be banked -- see external_path_stack.cpp.
+extern uint64_t g_ctlAttendance[8];
+
 // Runs the probe once, on the first call. Driven from `FindOrLoad`, not from
 // PushPath -- see the comment above the definition for the measured reason.
 void PathStackProbeGate(ExternalFactory* live);

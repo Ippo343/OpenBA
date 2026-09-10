@@ -267,23 +267,70 @@ const char* const kSweepPaths[] = {
 // `bool stripExtension`, AND THAT NAME IS WRONG. *** It is another lane's file
 // so it is not renamed here; it is reported in WAVE11_LANE_OBJEXT.md §11.
 //
-// One char per input index: 'X' = this control should change the result,
-// '.' = it should not. Index kSweepN is the live path, predicted from the fact
-// that every resource path the game feeds this function carries an extension.
-const char* const kPredicted[6] = {
-    /* ctl 0  no perturbation                     */ "..............",
-    /* ctl 1  "-" not "_"      always concatenated*/ "XXXXXXXXXXXXXX",
-    /* ctl 2  ".CRS" not ".crs" always concatenated*/ "XXXXXXXXXXXXXX",
-    /* ctl 3  dir<->fname swapped: dead iff either term is EMPTY
-              (1,8 empty dir; 4,11,12 empty fname; 10 both)          */
-                                                     "X.XX.XXX.X....",
-    /* ctl 4  stripExt flipped: dead unless the path has NO extension
-              (only 4,10,11,12)                                      */
-                                                     "....X.....XXX.",
-    /* ctl 5  ext substituted for ident: dead iff ext == ident, i.e. both
-              empty (4,10,11)                                        */
-                                                     "XXXX.XXXXX..XX",
-};
+// THE PRIOR IS A MODEL, NOT A STRING.
+//
+// It used to be six hand-written mask literals. One of them contradicted its
+// own derivation: the comment beside it enumerated SIX insensitive indices and
+// the mask carried SEVEN dots, and the extra dot was the very index that later
+// "disagreed" with the run. The honest verdict there was `model right,
+// transcription wrong` -- but "I meant to write X" after seeing X is
+// unfalsifiable, and the only reason it was defensible at all is that the
+// contradiction predated the run and could be pointed at.
+//
+// A hand-written mask cannot be made trustworthy by being more careful with it.
+// So the mask is now COMPUTED from the input string by the predicates below,
+// which ARE the model. There is one hand-written artefact instead of two that
+// can disagree, a transcription slip is not expressible, and any disagreement
+// the run reports is necessarily a MODEL error -- which is the only kind worth
+// reading.
+//
+// It also extends to the live path for free: index kSweepN is predicted by
+// running the same predicates over whatever string the game actually passed,
+// rather than by my guess about what game paths look like.
+//
+// The predicates are the three facts this lane established about the callees,
+// each traced to where it was established:
+//
+//   HasExt   -- GetPathFilename (0x1800c6740) strips the extension whether or
+//               not its flag is set; the flag ONLY decides what happens when
+//               there is no extension, where `true` yields an EMPTY filename.
+//               Corroborated by runtime/src/system/filename.cpp:282-288.
+//   HasIdent -- GetPathIdentifer (0x1800c6610) returns everything after the
+//               last ':'; with no ':' it returns the WHOLE path unless a '.',
+//               '/' or '\\' was seen, in which case empty.
+//               (runtime/src/system/filename.cpp:366-370.)
+//   HasDir   -- GetPathDirectory yields empty when there is no separator.
+inline bool HasDirTerm(const char* p) {
+    return std::strchr(p, '/') != nullptr || std::strchr(p, 0x5C) != nullptr;
+}
+inline bool HasExt(const char* p) {
+    const char* d = std::strrchr(p, '.');
+    return d != nullptr && (d - p) >= 1;   // retail's `dotIndex < 1` test
+}
+inline bool HasIdent(const char* p) {
+    const char* c = std::strrchr(p, ':');
+    if (c != nullptr) return c[1] != 0;
+    return std::strchr(p, '.') == nullptr && !HasDirTerm(p);
+}
+
+// 'X' = this control should change the result for this input, '.' = it should
+// not. Derived, never transcribed.
+char PredictSensitivity(int ctl, const char* p) {
+    switch (ctl) {
+        case 0: return '.';                                  // no perturbation
+        case 1: return 'X';    // the "_" literal is always concatenated
+        case 2: return 'X';    // the ".crs" literal is always concatenated
+        // dir <-> fname swap is a no-op when EITHER term is empty. The filename
+        // term is empty exactly when the path has no extension, by HasExt above.
+        case 3: return (HasDirTerm(p) && HasExt(p)) ? 'X' : '.';
+        // flipping GetPathFilename's flag is dead unless there is no extension.
+        case 4: return HasExt(p) ? '.' : 'X';
+        // substituting the extension for the identifier is a no-op only when
+        // both are empty.
+        case 5: return (HasExt(p) || HasIdent(p)) ? 'X' : '.';
+        default: return '?';
+    }
+}
 
 const int kSweepN = (int)(sizeof(kSweepPaths) / sizeof(kSweepPaths[0]));
 
@@ -351,7 +398,16 @@ void RunCompiledSweep(const Filename* livePath) {
         // disagreement here is the interesting output of this whole screen: it
         // means the model of what the function does is wrong somewhere, and it
         // names the input that proves it.
-        const char* pred = kPredicted[ctl];
+        // The predicted mask, COMPUTED over the same inputs in the same order.
+        char predbuf[32];
+        for (int m = 0; m <= kSweepN && m < 30; ++m) {
+            const char* txt = (m == kSweepN)
+                ? ((livePath && livePath->data) ? livePath->data : nullptr)
+                : kSweepPaths[m];
+            predbuf[m] = txt ? PredictSensitivity(ctl, txt) : '-';
+        }
+        predbuf[kSweepN + 1] = 0;
+        const char* pred = predbuf;
         char diff[32];
         int disagreements = 0;
         int d = 0;
