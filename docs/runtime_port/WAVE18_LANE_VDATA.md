@@ -292,6 +292,35 @@ binary. Every subsequent run in this lane used the self-releasing
 `game_dir_lock.sh run` form, which has no exit code to discard and cannot be held
 unnoticed.
 
+### 1.6 A third self-inflicted defect, and it is the same one twice
+
+The commit that added §1.5 was written with `git commit -m "…"` in double quotes,
+with backticks around the offending shell snippet. **The backticks ran command
+substitution.** Git received a message in which the quoted snippet had been
+*executed* and replaced by its output, and `$?` had been expanded — so the
+committed text read `ACQUIRE_EXIT=127` and "`0` really was acquire's status".
+Neither is true. The message describing a command-substitution hazard was
+silently rewritten by command substitution, and it made two confident factual
+claims that were artefacts of its own corruption.
+
+`reference_heredoc_eats_backslashes.md` already states the rule — **use `Write`
+plus `git commit -F`, never inline shell quoting** — and I had read it. The
+commit was amended (`a22f0b0`) and the amendment says so in its own body.
+
+Three things make this worth a section rather than a blush:
+
+* **It is the same failure as §1.5, one layer up.** In §1.5 a wrapper meant to
+  make a status *more* visible discarded it; here a quoting style meant to make a
+  snippet *more* readable executed it. Both times the visible text looked right.
+* **It would have been permanent.** A commit message is not re-run, so nothing
+  would ever have contradicted `ACQUIRE_EXIT=127`. The next reader would have
+  inherited a fabricated number attached to a real lesson — which is precisely
+  the failure mode §5.1 is about.
+* **It was caught by one line of incidental stderr**: `bash: line 41: acquire:
+  command not found`, printed beside a successful commit. Had the snippet been a
+  valid command, it would have run silently and the corruption would have been
+  invisible. That is luck, not method, and the method is the rule I skipped.
+
 ---
 
 ## 2. The census effect of Part A — and it is NOT what I predicted
