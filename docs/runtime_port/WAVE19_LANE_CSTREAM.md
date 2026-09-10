@@ -20,7 +20,11 @@ and 2 added as rows to the existing `runtime/src/object/deleting_dtor.cpp`
 family. They cover **all 27 vtable slots of this lane's three rows** except the
 three already in the tree, plus the lane's three CODE rows.
 
-The identity moved by **+3**, not +12, and **§7 explains exactly why** — nine of
+All three of this lane's vtable rows went **BLOCKED -> READY, 9/9, TRAP=0**, and
+**20 trap slots were cleared** — 14 in my own rows plus one each in
+`??_7Stream@` and `??_7MemoryStream@`, which are NOT mine, and four more that
+phase 0c could not count at all. The identity moved by **+3**, not +12, and
+**§7 explains exactly why** — nine of
 the fourteen fill MINTED VTABLE SLOTS, and the census's `called` column does not
 model a minted slot as a call. That is not a defect in the work and it is not a
 defect in the census; it is a statement about what the identity measures, and it
@@ -392,9 +396,161 @@ is labelled as such here and in the source.
 
 ### 5.4 Measured results
 
-*(Filled in from the run under `tools/game_dir_lock.sh run lane-CSTREAM` —
-see §5.5 for the run configuration. If this section is empty in a version you
-are reading, the numbers were not yet taken and NOTHING in §5.2 is evidence.)*
+Run archived in `docs/runtime_port/wave19_cstream/run_gameplay/` — full
+`standalone_debug.log`, `standalone_error.log`, a **0-byte** `standalone_crash.log`,
+`exit_rc.txt` (`rc=0`) and `exe_md5.txt` (the md5 of my build and of the
+deployed exe, identical, plus the `lane CSTREAM` marker count in the DEPLOYED
+binary). Route: `BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1
+BANISHED_RT_MINT_SHADOW=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120` —
+the full gameplay route, **not** the AUTOQUIT one, so the exit-phase readiness
+table exists.
+
+#### The oracle
+
+```
+CONTROL (a wrong Write clamp must be caught): 12 of 12 applicable -- GREEN
+SCREEN A (our bytes == retail's bytes):       12 of 12 cases
+SCREEN B (retail's reader recovers our image):12 of 12 cases;
+                                              retail's Open ACCEPTED 12,
+                                              Read+compare AGREED 12
+PURE READERS (ours == the DLL's):              4 of 4
+EFFECTIVENESS: 42 blocks written by us, 33 COMPRESSED, 9 STORED; 0 skipped
+```
+
+**The control read non-zero on every applicable case before any green was
+believed** — that is the precondition, and the probe is written to say "NO GREEN
+BELOW IS TRUSTED" and print the numbers anyway if it had not.
+
+**The effectiveness counters say the screens measured something rather than
+nothing.** 42 blocks with **both** kinds present means the
+`compressedSize > uncompressedSize` → STORED rule was genuinely exercised; a
+corpus of only-compressible data would have left that branch dark and the probe
+warns when either count is zero. 12 cases = 4 corpora × 3 window counts (1, 2 and
+4 windows), which also means the eviction path was driven, not just the
+single-window case.
+
+#### Attendance — read `worked=`, not `calls=`
+
+Driver counters:
+
+```
+Create=24  Write=282  Commit=24  PreCommit(base)=1  PreCommit(mem)=24
+Close=24   GetSize=1  GetCurrentPos=1  SetCurrentPos=1  GetSource=1
+```
+
+`PreCommit(mem)=24` is the load-bearing one: **`?Commit`'s virtual dispatch
+through `[RAX+0x40]` landed on OUR `?PreCommit@CompressedMemoryStream` 24 times.**
+That counter exists because the alternative — stamping the DLL's vtable — would
+have left that body unentered with every screen still green.
+
+The RT_DIFF harness's own table, which sees the two bodies the driver cannot:
+
+```
+IO::CompressedStream::Create            calls=0  worked=24   divergences=0
+IO::CompressedStream::Write             calls=0  worked=282  divergences=0
+IO::CompressedStream::Close             calls=0  worked=24   divergences=0
+IO::CompressedStream::Commit            calls=0  worked=24   divergences=0
+IO::CompressedStream::CompressWindow    calls=0  worked=44   divergences=0
+IO::CompressedMemoryStream::PreCommit   calls=0  worked=24   divergences=0
+IO::CompressedStream::GetCurrentPos     calls=0  worked=1    divergences=0
+IO::CompressedStream::GetSize           calls=0  worked=1    divergences=0
+IO::CompressedStream::SetCurrentPos     calls=0  worked=1    divergences=0
+IO::Stream::GetSource                   calls=0  worked=1    divergences=0
+IO::CompressedStream::PreCommit         calls=0  worked=0    divergences=0
+IO::CompressedFileStream::Close         -- NO ROW AT ALL --
+```
+
+**Three of those lines mean something other than what they look like, and all
+three are traps this project has already paid for:**
+
+* **`calls=0` on every row is BY CONSTRUCTION and says nothing.** These bodies
+  carry `RT_DIFF_BEGIN`/`RT_DIFF_WORK` and no in-body oracle, so the harness
+  never runs a shipped body alongside them; `calls=` counts that, and there is
+  nothing to count. The attendance is `worked=`
+  (`reference_uncalled_port_is_not_verified.md` is about a genuinely uncalled
+  port; this is the other shape,
+  `reference_calls_zero_can_mean_always_took_the_uncovered_branch.md`).
+* **`?PreCommit@CompressedStream` reads `worked=0` and DID run.** It is a
+  one-instruction no-op, so its body passes `RT_DIFF_WORK(false)` — truthfully.
+  Its attendance is the driver's `PreCommit(base)=1`. A reader taking
+  `calls=0 worked=0` as "never entered" would be wrong, which is why both
+  numbers are printed side by side.
+* **`?Close@CompressedFileStream` has NO ROW, and that IS the evidence it never
+  ran.** `RT_DIFF_BEGIN` registers a site lazily on first entry, so an absent row
+  is a stronger negative than a zero. It is the one body here with no attendance
+  of any kind, and §8 says so.
+* `CompressWindow worked=44` against `Commit worked=24`: Commit flushes every
+  resident window that holds anything, so 44 flushes across 24 commits is the
+  multi-window corpora doing what they were chosen to do.
+
+#### The readiness screen — what the identity cannot see
+
+`BANISHED_RT_MINT_SHADOW=1`, **exit phase**, DLL present, default flags. The
+whole screen with its denominators:
+
+```
+vtables            : 62, 598 slots
+ground truth       : 598 slot comparisons vs the live DLL, 0 MISMATCH
+minted from OUR    : 282 slots, 0 MISMATCH
+complete vtables   : 30 of 62
+effectiveness      : 282 of 450 non-purecall slots carry our own
+==== clean: 0 problem(s) ====        (printed at BOTH phase=init and phase=exit)
+```
+
+This lane's three rows, and the two rows it changed that are **not** its own:
+
+| row | phase 0c @ `ebbec6e` | this run | |
+|---|---|---|---|
+| `??_7CompressedStream@IO@@6B@` | 9 / 1 / **TRAP=8** BLOCKED | 9 / 9 / **TRAP=0** | **READY** |
+| `??_7CompressedMemoryStream@IO@@6B@` | 9 / 3 / **TRAP=6** BLOCKED | 9 / 9 / **TRAP=0** | **READY** |
+| `??_7CompressedFileStream@IO@@6B@` | **unminted — UNMEASURED** | 9 / 9 / **TRAP=0** | **READY** |
+| `??_7Stream@IO@@6B@` | 7 / 1 / **TRAP=1** BLOCKED | 7 / 2 / **TRAP=0** (5 purecall) | **READY** — not my row |
+| `??_7MemoryStream@IO@@6B@` | 8 / 6 / **TRAP=2** BLOCKED | 8 / 7 / **TRAP=1** | still BLOCKED — not my row |
+
+`??_7MemoryStream@`'s one remaining trap is **slot 0, `DLL 0x1800242a0`,
+unexported** — the deleting-destructor thunk, which is `deleting_dtor.cpp`'s
+pattern and one table row for whoever owns that class. It is **not** claimed
+here.
+
+**20 trap slots cleared: 14 in my own three rows, 1 in `??_7Stream@`, 1 in
+`??_7MemoryStream@`** (the two `?GetSource@` closures), and 4 more inside my rows
+that phase 0c could not count because `??_7CompressedFileStream@` was unminted.
+
+**Independent corroboration, from an aggregate that was not used to build that
+table.** Phase 0c reported `256` slots minted from our own code and `26 of 57`
+complete vtables. This run reports **282** and **30 of 62**. `282 − 256 = 26`,
+which is exactly this lane's 24 slots across its three rows plus the two
+`?GetSource@` slots in `??_7Stream@` and `??_7MemoryStream@`; and `30 − 26 = 4`
+is exactly the three rows that went READY plus `??_7Stream@`. Two aggregates and
+the row table agree, and none of them was derived from the others.
+
+**A control phase 0c published that this lane FALSIFIES, and it matters for
+anyone re-using that reasoning.** Phase 0c's control C3 found the `init` and
+`exit` readiness tables identical across all 57 rows and concluded "**the phase
+boundary is not a control for this screen**". That was true then and is **false
+now**: `RtDataMintInit()` runs inside `RuntimePortInit()` *before*
+`RtIoPortInit()` registers this lane's twelve bodies, so an init-phase table
+cannot see them. In this run both phases happen to agree — the registrations land
+before the first report — but the reasoning behind C3's conclusion no longer
+holds, and a lane registering later would be invisible at init.
+
+I hit that in practice, in the way that costs a wrong conclusion: an earlier
+read showed `?GetSource@` still trapping in three rows, and it came from a
+**stale log another lane had already overwritten** while my run's data was gone
+from the game directory. That is why this run archives its logs **inside the
+locked section**, and why `exe_md5.txt` records the md5 of the deployed binary
+rather than the built one.
+
+#### One stale line in the archived log
+
+The archived `[CSWrite] NOT COVERED HERE:` line names `?Close@CompressedStream`
+as not covered. **That wording is wrong** — it predates routing both sides of the
+oracle through `?Close` rather than straight to `?Commit`, and the `ATTENDANCE`
+line in the same report reads `Close=24`. The source is corrected; **no measured
+number changes**, and the archived log deliberately still carries the old text
+rather than being regenerated to look tidy. A "not covered" claim sitting beside
+a non-zero counter for the same body is believed because it sounds more
+specific, which is the only reason this is worth a paragraph.
 
 ### 5.5 Run configuration, and what the route does and does not reach
 
@@ -464,10 +620,20 @@ this lane as having done a fifth of its work.
 
 * **It does not claim the writer is cutover-clean.** §6. The `?SetWindow` GROW
   branch is still the DLL's and every new block takes it.
-* **It does not claim any row is PROMOTED.** A green readiness row means "safe
-  to stamp", not that anything dispatches it
+* **It does not claim any row is PROMOTED.** Three rows are now READY with
+  TRAP=0, and READY means "safe to stamp", **not** that anything dispatches it
   (`reference_a_green_readiness_screen_is_not_a_route.md`). Promotion is the
-  integrator's call and no row here was promoted.
+  integrator's call and **no row here was promoted**.
+* **It does not claim `??_7Stream@IO@@6B@` or `??_7MemoryStream@IO@@6B@`.** They
+  moved because `?GetSource@` is their slot 1 too. `??_7Stream@` is now READY;
+  `??_7MemoryStream@` still carries one trap — **slot 0, `DLL 0x1800242a0`,
+  unexported**, the deleting-destructor thunk, which is one `deleting_dtor.cpp`
+  table row for whoever owns that class and is NOT claimed here.
+* **It does not claim the oracle covers block LAYOUT, only that screen B would.**
+  See §5.3: the shipped control is a payload corruption. Screen B's `?Open`
+  validates `4 + n*8 + sum(block sizes) == size` exactly, which WOULD catch a
+  wrong `sourceOffset` — but that is an argument from reading `?Open`'s
+  disassembly, and no control demonstrated it.
 * **It does not claim `?Close@CompressedFileStream` is verified.** It is ported
   and registered; the oracle does not reach it, because it needs a real file and
   lane FILE's `?CloseFile`. Its *body* is five branches transcribed from the
@@ -526,5 +692,9 @@ So `BANISHED_RT_CSWRITE=1` (the default) means **every save this build writes is
 compressed by our `?Commit`, `?CompressWindow` and `?Write`.** That is the point
 of the lane, and it is also its whole risk. The kill switch exists for exactly
 this, and the oracle in §5 exists to make the default defensible rather than
-hopeful. **If §5.4 is empty, this file's own recommendation is to run with
-`BANISHED_RT_CSWRITE=0` until it is not.**
+hopeful. This file's own recommendation was to run with `BANISHED_RT_CSWRITE=0` until
+§5.4 had numbers in it. **It now does** — control 12 of 12 GREEN, screen A 12 of
+12, screen B 12 of 12 with retail's `?Open` accepting all twelve of our images
+and its `?Read` recovering the original bytes from all twelve — so the default-ON
+switch is defensible rather than hopeful. The switch stays, because the blast
+radius has not changed.

@@ -631,11 +631,26 @@ void RtIo_CompressedStreamWriteProbe() {
            (long long)g_at.close, (long long)g_at.getSize,
            (long long)g_at.getCurrentPos, (long long)g_at.setCurrentPos,
            (long long)g_at.getSource);
+    // NOTE ON THE PREVIOUS WORDING OF THIS LINE. It used to name
+    // ?Close@CompressedStream as NOT COVERED. That was written before both sides
+    // of BuildImage were routed through ?Close instead of straight to ?Commit,
+    // and it was STALE from that moment: the ATTENDANCE line above reads
+    // Close=24 in the very same report. A "not covered" claim sitting beside a
+    // non-zero counter for the same body is exactly the kind of thing a reader
+    // believes because it sounds more specific. Corrected here; NO measured
+    // number changes, and the archived log in
+    // docs/runtime_port/wave19_cstream/run_gameplay/ still carries the old text.
     printf("[CSWrite] NOT COVERED HERE: ?Close@CompressedFileStream (needs a real "
-           "file and lane FILE's ?CloseFile), ?Close@CompressedStream (reached "
-           "only through a stream this probe closes via Commit directly), and the "
-           "SetWindow GROW branch, which is the DLL's on BOTH sides by "
-           "construction and can be neither blamed nor cleared here\n");
+           "file and lane FILE's ?CloseFile -- it gets NO RtDiff row at all, which "
+           "is the honest signal that it was never entered), and the SetWindow "
+           "GROW branch, which is the DLL's on BOTH sides by construction and can "
+           "be neither blamed nor cleared here.\n");
+    printf("[CSWrite] READ THE RtDiff TABLE AS `worked=`, NOT `calls=`: these "
+           "bodies carry RT_DIFF_BEGIN/RT_DIFF_WORK and no in-body oracle, so "
+           "calls=0 is BY CONSTRUCTION and says nothing at all. "
+           "?PreCommit@CompressedStream further reports worked=0 because it is a "
+           "no-op that passes false -- its attendance is the PreCommit(base) "
+           "counter above, not that row.\n");
 
     RT_DIFF_SHADOW(controlGreen && aCases > 0 && aPass == aCases && bPass == bCases,
                    "writer artefact matches retail and retail reads it back",
