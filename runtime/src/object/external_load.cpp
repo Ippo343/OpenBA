@@ -103,6 +103,7 @@
 #include "../../types/io/Stream.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
+#include "factory_dispatch_probe.h"   // WAVE 11 follow-up 5 (lane TINFO)
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -347,6 +348,10 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
                         reinterpret_cast<const uint8_t*>(n) + 0x10);
                 const BaseTypeInfo* info = *infoSlot;
 
+                // WAVE 11 follow-up 5 (lane TINFO): record WHICH BaseTypeInfo
+                // this dispatch goes through, BEFORE the call, so a promoted
+                // row's abort trap would be counted and not merely fatal.
+                RtFactoryDispatchObserve(RT_FACTORY_DISPATCH_EXTERNAL_LOAD, info);
                 obj = static_cast<External*>(
                           reinterpret_cast<FactoryFn>(info->factoryFn)());   // 1800bc742
                 ++g_lc.created;

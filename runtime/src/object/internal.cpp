@@ -53,8 +53,22 @@
 //     Do not arm this tier and promote those rows in the same build without
 //     first making these two accessors resolve RAW (theirs when the DLL is
 //     present) and fall back to the registry only when it is absent.
-//     That change is not made here because it also decides what cutover sees,
-//     which belongs to whoever owns the mint, not to this file.
+//
+//     *** THAT CHANGE IS NOW MADE, HERE. *** (Wave 11 follow-up 5, lane TINFO,
+//     2026-09-10.) `VtblInternal()` / `VtblBase()` below pin to the DLL's own
+//     table while the DLL is present and fall back to the registry only when it
+//     is not — so the second bullet above is UNCONDITIONALLY true again, and it
+//     stays true whatever the mint registers. The long note beside those two
+//     functions has the measurement that showed the hazard was live (123,149
+//     objects carrying the minted table in one armed run) and the kill switch
+//     that reproduces it.
+//
+//     ⚠ SCOPE. The advisor amendment names these two accessors, and they are
+//     the two this class uses. They are NOT the only stampers of
+//     `??_7Base@Object@@6B@` in the tree — TWELVE other files reach that symbol
+//     through a registry-first door (`ResolveExport` / `RT_DATA_SLOT` /
+//     `RtVtable`) and would split the same way if that row were ever promoted.
+//     See docs/runtime_port/WAVE11F_LANE_TINFO.md for the list.
 //
 // What is left is therefore an ordinary faithfulness question — does our body
 // compute the same indices and the same array growth as theirs — and that is
@@ -214,14 +228,73 @@ InternalFactory* Factory() {
 // An exported ??_7 symbol's ADDRESS *is* the vtable (slot 0 first), so these
 // are used as values, not dereferenced. Verified against the .rdata dump in
 // Internal.h: 0x180154720 holds 0x180006440, the scalar deleting destructor.
+//
+// ============================================================================
+// CONDITION (b) — WAVE 11 follow-up 5, lane TINFO. THE SPLIT-VPTR FIX.
+// ============================================================================
+//
+// This is the change the banner at the top of this file described and declined
+// to make, and the advisor adjudication in docs/runtime_port/WAVE11.md made
+// binding on whoever promotes `??_7Internal@Object@@6B@`:
+//
+//     may be promoted only when BOTH hold: (a) [ObjTI] ATTENDANCE entries>0,
+//     and (b) VtblInternal()/VtblBase() pin to the RAW DLL symbol while the
+//     DLL is present, falling back to the registry only when it is absent.
+//
+// WHY IT MATTERS, MEASURED RATHER THAN ARGUED. `ResolveExport` is registry-
+// first, so with the minted row registered these two returned OUR table while
+// the DLL's own in-DLL `rel32` callers — which we do not intercept — kept
+// stamping 0x180154720. Lane TINFO ran exactly that: `??_7Internal@Object@@6B@`
+// armed with the TABLE tier armed, `[RtInternalTable] ctorRuns=123149`. That is
+// 123,149 live objects carrying a DIFFERENT vtable from the ones the DLL built,
+// on one class, which is PLAN.md §4.3 risk 3 verbatim.
+//
+// WHAT PINNING COSTS, AND WHY IT IS NOTHING. Every slot of both tables is one
+// of our ported bodies either way (`READY slots=4 ported=4 TRAP=0 purecall=0`);
+// what changes is WHICH POINTER the object carries, and the only correct answer
+// while the DLL is present is the DLL's, because that is the answer every
+// object we did not build already has. At cutover there is no DLL, `RtRawVtable`
+// comes back null, and the registry answer — the minted table — is the only one
+// there is. So the same code is right on both sides of cutover.
+//
+// KILL SWITCH: `BANISHED_RT_INTERNAL_VTBL_RAW=0` restores the old registry-first
+// behaviour. It exists so the A/B that demonstrates the split is runnable with
+// ONE variable, and it is the half you must NOT ship: with it set and the minted
+// row registered, this class has two vtables.
+namespace {
+bool VtblPinRaw() {
+    static const int on = [] {
+        const char* e = std::getenv("BANISHED_RT_INTERNAL_VTBL_RAW");
+        return (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) ? 0 : 1;
+    }();
+    return on != 0;
+}
+
+// The DLL's own copy, or nullptr when the DLL is not present (cutover).
+void* RawVtable(const char* symbol) {
+    // RT_RAW_OK: pinning the DLL's table IS the point — see the block above.
+    return VtblPinRaw() ? ResolveExportRaw(symbol) : nullptr;
+}
+}  // namespace
+
 void* VtblInternal() {
-    if (!g_vtblInternal) g_vtblInternal = ResolveExport("??_7Internal@Object@@6B@");
+    if (!g_vtblInternal) {
+        g_vtblInternal = RawVtable("??_7Internal@Object@@6B@");
+        if (!g_vtblInternal) g_vtblInternal = ResolveExport("??_7Internal@Object@@6B@");
+    }
     return g_vtblInternal;
 }
 void* VtblBase() {
-    if (!g_vtblBase) g_vtblBase = ResolveExport("??_7Base@Object@@6B@");
+    if (!g_vtblBase) {
+        g_vtblBase = RawVtable("??_7Base@Object@@6B@");
+        if (!g_vtblBase) g_vtblBase = ResolveExport("??_7Base@Object@@6B@");
+    }
     return g_vtblBase;
 }
+
+// Whether the pin is armed. Read by the exit screen below, which lives at
+// global scope with the other read-outs.
+bool VtblPinIsArmed() { return VtblPinRaw(); }
 
 // ============================================================
 // Collection::Array<T> bodies, as retail instantiates them
@@ -936,6 +1009,49 @@ void RtObject_InternalFactory_ResetPersistState_Shadow(InternalFactory* self, vo
 // at exit. Prints unconditionally, including 0/0, and says which of the two
 // zeroes it is: "the tier was never armed" and "the tier was armed and never
 // entered" are opposite findings and a silent log cannot tell them apart.
+// ============================================================================
+// WAVE 11 FOLLOW-UP 5, lane TINFO — THE SCREEN THAT MAKES CONDITION (b)
+// CHECKABLE FROM A LOG
+// ============================================================================
+// Printed once at exit beside the attendance counters. Per symbol: the pointer
+// our constructor actually stamps, the DLL's own, the registry's — so "the
+// split is closed" is a line in a log and not a claim about a code path.
+//
+// It is a GATE and not a tally, by this project's own test: the quantity VARIES
+// with the thing it gates. With `??_7Internal@Object@@6B@` registered,
+// `BANISHED_RT_INTERNAL_VTBL_RAW=0` makes both rows read `MINTED (SPLIT)` and
+// the default makes them read `DLL`.
+// Both symbols are spelled as LITERALS at every resolve call below rather than
+// travelling through a loop variable: tools/port_bypass_audit.py cannot classify
+// a name that arrives in a variable and files it as UNRESOLVED-NAME, which is
+// residue a later lane has to re-derive. Two symbols, so the duplication is
+// three lines.
+static void RtInternalVtblPinRow(const char* sym, void* stamped, void* raw, void* port) {
+    using namespace RtObject;
+    const char* verdict;
+    if (!raw)                  verdict = "no DLL (cutover): the registry's table is the only one";
+    else if (stamped == raw)   verdict = "DLL -- no split; condition (b) HOLDS";
+    else if (stamped == port)  verdict = "MINTED (SPLIT: the DLL's own callers stamp a different table)";
+    else                       verdict = "NEITHER -- unexpected, investigate";
+    printf("[RtInternalVtbl] %-26s stamped=%p dll=%p registry=%p  -> %s%s\n",
+           sym, stamped, raw, port, verdict,
+           VtblPinIsArmed() ? "" : "  [BANISHED_RT_INTERNAL_VTBL_RAW=0]");
+}
+
+void RtObjectInternalVtblPin() {
+    using namespace RtObject;
+    // `stamped` comes through the same accessors the CONSTRUCTOR uses, so the
+    // report cannot drift from the behaviour it describes.
+    RtInternalVtblPinRow("??_7Internal@Object@@6B@", VtblInternal(),
+                         // RT_RAW_OK: the raw-vs-registry comparison IS the screen.
+                         ResolveExportRaw("??_7Internal@Object@@6B@"),
+                         ResolveExport("??_7Internal@Object@@6B@"));
+    RtInternalVtblPinRow("??_7Base@Object@@6B@", VtblBase(),
+                         // RT_RAW_OK: as above.
+                         ResolveExportRaw("??_7Base@Object@@6B@"),
+                         ResolveExport("??_7Base@Object@@6B@"));
+}
+
 void RtObjectInternalAttendance() {
     using namespace RtObject;
     const bool armed = RuntimeExportIsRegistered("??0Internal@Object@@QEAA@XZ");

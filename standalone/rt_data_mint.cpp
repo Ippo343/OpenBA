@@ -724,7 +724,26 @@ static bool FindMintRow(const char* symbol, RtMintRow* out) {
 // Register ONE row through both doors. `?_loader@` carries two interior
 // offsets that an exact-match address registry cannot cover, so they travel
 // with their row rather than living in a second loop that could be forgotten.
+// WAVE 11 FOLLOW-UP 5 (lane TINFO). Every row registered outside
+// reg_mint_promoted.cpp is ARMED FOR MEASUREMENT, and the readiness report
+// prints it for the same reason it prints a promoted one. The bookkeeping lives
+// HERE, at the one choke point both callers go through -- putting it in
+// RtMintRegisterRow missed the BANISHED_RT_MINT_ROWS loop, which calls this
+// function directly, so the first armed run printed no line at all.
+static const char* g_armedRows[64];
+static int         g_armedRowCount = 0;
+
+bool RtMintRowIsArmed(const char* symbol) {
+    if (!symbol) return false;
+    for (int i = 0; i < g_armedRowCount; ++i)
+        if (strcmp(g_armedRows[i], symbol) == 0) return true;
+    return false;
+}
+
 static int RegisterOneMintRow(const RtMintRow& r) {
+    if (r.symbol && !RtMintRowIsArmed(r.symbol) &&
+        g_armedRowCount < (int)(sizeof(g_armedRows) / sizeof(g_armedRows[0])))
+        g_armedRows[g_armedRowCount++] = r.symbol;
     int doors = 0;
     if (r.symbol) { RegisterRuntimeExport(r.symbol, r.storage); ++doors; }
     RegisterRuntimeAddr((uintptr_t)r.dllVa, r.storage); ++doors;
@@ -1315,7 +1334,8 @@ void RtDataMintShadowReport(const char* phase) {
                rTrap ? "BLOCKED" : "READY",
                SymLabel(v.symbol, v.dllVa, rbuf, sizeof(rbuf)),
                v.slotCount, rPort, rTrap, rPure,
-               RtMintRowIsPromoted(v.symbol) ? "  [PROMOTED]" : "");
+               RtMintRowIsPromoted(v.symbol) ? "  [PROMOTED]"
+                   : RtMintRowIsArmed(v.symbol) ? "  [ARMED for measurement]" : "");
         // NAME the trapped slots. "BLOCKED, 1 TRAP" is a number; the lane that
         // has to expire the blocker needs the symbol. Deliberately from the
         // LIVE registry (OurPort) and the generated table, never from a source
@@ -1401,14 +1421,18 @@ void RtDataMintShadowReport(const char* phase) {
         // Only the UI rows and anything not READY are printed: 104 rows of
         // green would bury the four lines a reader needs.
         const bool isUi = t.symbol && strstr(t.symbol, "@UI@@") != nullptr;
-        if (!ready || isUi)
+        // ...and any row PROMOTED or ARMED for measurement this run: a
+        // candidate whose whole purpose is to be read on this screen printed no
+        // line at all the moment it went READY (WAVE 11 follow-up 5, lane TINFO).
+        if (!ready || isUi || RtMintRowIsPromoted(t.symbol) || RtMintRowIsArmed(t.symbol))
             printf("[RtMintShadow]   %-8s %-58s id=0x%08x idcmp=%-3s strs=%d ptr=%d "
                    "fac=%s%s\n",
                    ready ? "READY" : "BLOCKED",
                    t.symbol ? t.symbol : "(unexported)",
                    mine->typeId, idCompared ? "yes" : "NO", strBad, ptrDiff,
                    facTrap == 0 ? "ported" : facTrap == 1 ? "1trap" : "2traps",
-                   RtMintRowIsPromoted(t.symbol) ? "  [PROMOTED]" : "");
+                   RtMintRowIsPromoted(t.symbol) ? "  [PROMOTED]"
+                       : RtMintRowIsArmed(t.symbol) ? "  [ARMED for measurement]" : "");
     }
     printf("[RtMintShadow]   typeinfo rows: %d READY, %d BLOCKED (of %d; only the "
            "UI rows and the BLOCKED ones are listed)\n", tiReady, tiBlocked,
@@ -1494,4 +1518,39 @@ void RtDataMintShadowReport(const char* phase) {
     printf("[RtMintShadow] ==== %s: %d problem(s) ====\n\n",
            bad ? "FAIL" : "clean", bad);
     fflush(stdout);
+}
+
+// ============================================================================
+// WAVE 11 FOLLOW-UP 5 (lane TINFO) — "is this BaseTypeInfo one of OURS?"
+// ============================================================================
+//
+// Follow-up 2 made the 104 minted factory abort traps REACHABLE in principle:
+// our ported `?Load@External@Object@@` creates objects through
+// `BaseTypeInfo::factoryFn` (+0x20), and a promoted row whose factory is not
+// ported carries `RtMintTiTrapStub_*`, which aborts.
+//
+// Whether a promotion actually puts a minted node in front of one of those
+// dispatch sites is a question about POINTERS, not about names: every dispatch
+// site in this tree reaches `info` by walking `?_singleton@Factory@Object@@`'s
+// AVL tree and reading `TypeNode+0x10`. This predicate is what lets
+// runtime/src/object/factory_dispatch_probe.cpp answer it by measurement
+// instead of by argument — it says whether a given `BaseTypeInfo*` lies inside
+// the minted storage array at all.
+//
+// It is an ADDRESS-RANGE test on our own static array, so it is exact, cheap,
+// and independent of whether the row is registered — which matters, because
+// the question is asked on runs where nothing is promoted.
+bool RtMintIsMintedTypeInfo(const void* p) {
+    const unsigned char* q  = (const unsigned char*)p;
+    const unsigned char* lo = (const unsigned char*)&kTypeInfoStorage[0];
+    const unsigned char* hi = lo + sizeof(kTypeInfoStorage);
+    return q >= lo && q < hi;
+}
+
+// The probe's POSITIVE CONTROL for the predicate above: a pointer that MUST
+// test true. Without it, a screen reporting "0 minted nodes dispatched" cannot
+// be told apart from a predicate that is stuck on `false`.
+const void* RtMintTypeInfoStorageProbe(int index) {
+    if (index < 0 || index >= kTypeInfoCount) return nullptr;
+    return &kTypeInfoStorage[index];
 }
