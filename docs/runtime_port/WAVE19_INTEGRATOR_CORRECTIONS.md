@@ -59,12 +59,40 @@ Re-run against the unfiltered listing with two controls:
   `Filename@System@@` mentions, so `System` is genuinely in the instrument's
   subject and a zero is a real absence, not a filtered one.
 
-## C3. Ghidra MCP is DOWN on this tip
+## C3. RETRACTED — Ghidra MCP is UP, on port 8089
 
-`127.0.0.1:8080` refuses the connection; `capstone` is not in the project venv.
-`objdump` **is** present at `C:/msys64/ucrt64/bin/objdump`, and `pefile` is in the
-venv. This does not block phase 0a — §3.0a demands the answer come **from the
-shipped bytes** anyway, which is what `objdump` gives.
+**This entry originally read "Ghidra MCP is DOWN on this tip" and that was
+false.** It is retained rather than deleted because the way it was wrong is the
+subject of §6 and of `reference_a_screen_that_cannot_name_its_subject.md`.
+
+**What I did:** probed `127.0.0.1:8080`, got `WinError 10061` (actively
+refused), and reported the bridge dead. **The bridge does not serve 8080.** The
+configured port is **8089** — `.mcp.json:9` and `bridge_mcp_ghidra.py:23` both
+say so, and I had both files available. I probed a port nothing serves and read
+its silence as a verdict about a subject I had never contacted.
+
+**Measured:** `127.0.0.1:8089` responds, with **Runtime-x64.dll already open** —
+base `0x180000000`, **15,290 functions**, 69,917 symbols. A `javaw` (pid 10268,
+started 08:54) owns the listener.
+
+The user caught this, not the process. Nothing in my own checks would have: a
+refused connection is exactly what a down bridge and a wrong port both look like
+from outside — the "no difference found" / "I measured nothing" confusion §6.6
+names, in its network form. **The available control was free and I skipped it:
+read the configured port before probing one.**
+
+**Blast radius:** all three phase-0 lanes were briefed "Ghidra is DOWN", lane
+NOOP most damagingly, since its entire cell is disassembly. All three have been
+sent a correction. No lane had reported when it went out.
+
+**What does NOT change:** §3.0a still requires the answer come from the SHIPPED
+BYTES. Ghidra's decompiled C drops dereferences, prints MOVSXD as a zero
+extension, and drops whole arguments at a mistyped vtable call
+(`reference_ghidra_c_output_vs_disassembly.md`) — so disassembly, not C, and
+`objdump` stays the independent second route for the two-route enumeration that
+§3.0a's precedent requires. Also standing:
+`mcp__ghidra-mcp__get_function_metrics` **ignores its `address=` parameter** and
+silently falls back to a name lookup.
 
 ## C4. Repo hygiene at dispatch
 
