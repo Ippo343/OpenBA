@@ -907,6 +907,133 @@ int RtMintRegisterPromotedRows() {
     RegisterRuntimeAddr(0x1801f99e8ull, st); ++n;
 
     // ========================================================================
+    // WAVE 19 LANE IOBASE — four IO vtables, unblocked by ONE tranche of bodies
+    // ========================================================================
+    //
+    // WHAT CHANGED, as a set-diff against phase 0c's re-measurement at
+    // `ebbec6e` (WAVE19_PHASE0C_TRAPS.md §4.1), NOT against CEIL's inherited
+    // table:
+    //
+    //   ??_7BinaryReader@IO@@6B@    26/25 TRAP=1  ->  26/26 TRAP=0  READY
+    //   ??_7Visitor@IO@@6B@         26/25 TRAP=1  ->  26/26 TRAP=0  READY
+    //   ??_7MemoryStream@IO@@6B@     8/ 6 TRAP=2  ->   8/ 8 TRAP=0  READY
+    //   ??_7VisitorStream@IO@@6B@    UNMINTED     ->   7/ 7 TRAP=0  READY
+    //
+    // and, not promoted here, two more rows the same tranche moved:
+    //   ??_7Stream@IO@@6B@           7/ 1 TRAP=1  ->   7/ 2 TRAP=0  READY
+    //       — READY and STILL UNPROMOTABLE(NO-OP). Phase 0a proved from the
+    //         shipped bytes that nothing dispatches while that table is
+    //         installed, and READY does not touch that: a green readiness row
+    //         says SAFE TO STAMP, not that anything dispatches it
+    //         (reference_a_green_readiness_screen_is_not_a_route.md). The tag
+    //         stands and this lane deliberately does not promote it.
+    //   ??_7CompressedMemoryStream@ 9/3 TRAP=6 -> 9/4 TRAP=5, and
+    //   ??_7CompressedStream@       9/1 TRAP=8 -> 9/2 TRAP=7
+    //       — lane CSTREAM's rows, moved by ?GetSource@Stream@IO@@ landing in
+    //         slot 1 of both. Not this lane's to promote.
+    //
+    // The bodies are runtime/src/io/iobase_vtables.cpp: each row's slot-0
+    // vector deleting destructor (all four unexported, registered by address —
+    // which is the door the mint slot itself uses), plus
+    // `?GetSource@Stream@IO@@` and the five VisitorStream stream methods.
+    //
+    // WHY THESE FOUR AND NOT ALL SIX: the two above are excluded on their own
+    // grounds, stated rather than left implicit.
+    //
+    // ATTENDANCE, and where it is honest and where it is not. Measured with
+    // `BANISHED_W17_ATTEND=1` on the gameplay route in the same run as the
+    // readiness table (docs/runtime_port/wave19_iobase/run1/):
+    //
+    //   ??_7MemoryStream@IO@@6B@    ATTENDED  post=1
+    //   ??_7VisitorStream@IO@@6B@   ATTENDED  post=2
+    //   ??_7BinaryReader@IO@@6B@    never     post=0
+    //   ??_7Visitor@IO@@6B@         NOT IN THE INSTRUMENT'S 62-ROW SUBJECT
+    //
+    // So two of the four are demonstrably live on the route this promotion was
+    // measured on; one is demonstrably not; and for one the instrument has no
+    // opinion at all, which is UNMEASURED and not a green cell. `post` counts
+    // door opens, not dispatches, and `post==1` is not "ran once" — it is
+    // "the symbol's door opened at least once after AddressRegistryInit".
+    //
+    // Promoting the two unattended rows is still right, and for the reason
+    // lane SS gave for SpriteSheet slot 5 and lane VRES repeated for
+    // ImageBuffer: TRAP=0 means no slot in the row can `abort()` any more, and
+    // leaving a row unpromoted does not verify it — it only keeps the slots
+    // unreachable. BinaryReader in particular is the READ half of the
+    // save/load codec pair whose WRITE half (`??_7BinaryWriter@`) has been
+    // READY and unpromoted since Wave 17; see WAVE19_LANE_IOBASE.md for the
+    // route question, which is answered there and is NOT answered by this
+    // comment.
+    st = RtMintPromotionStorage("??_7BinaryReader@IO@@6B@", 0x1801552e0ull);
+    RegisterRuntimeExport("??_7BinaryReader@IO@@6B@", st);
+    RegisterRuntimeAddr(0x1801552e0ull, st); ++n;
+
+    st = RtMintPromotionStorage("??_7Visitor@IO@@6B@", 0x1801558b0ull);
+    RegisterRuntimeExport("??_7Visitor@IO@@6B@", st);
+    RegisterRuntimeAddr(0x1801558b0ull, st); ++n;
+
+    st = RtMintPromotionStorage("??_7MemoryStream@IO@@6B@", 0x1801555b0ull);
+    RegisterRuntimeExport("??_7MemoryStream@IO@@6B@", st);
+    RegisterRuntimeAddr(0x1801555b0ull, st); ++n;
+
+    st = RtMintPromotionStorage("??_7VisitorStream@IO@@6B@", 0x180155a20ull);
+    RegisterRuntimeExport("??_7VisitorStream@IO@@6B@", st);
+    RegisterRuntimeAddr(0x180155a20ull, st); ++n;
+
+    // ---- ??_7BinaryWriter@IO@@6B@ — the row that was READY since Wave 17 ----
+    //
+    // This one is NOT unblocked by this lane's bodies: it has read 26/26 TRAP=0
+    // since WAVE17_LANE_CEIL and phase 0c CONFIRMED it at `ebbec6e`. It has sat
+    // unpromoted because nobody could show a route that dispatches it. Promoted
+    // here, and the warrant is DELIBERATELY WEAKER than the four above — it
+    // rests on TRAP=0 plus a door argument, NOT on a dispatch observation, and
+    // that distinction is the point of writing it down.
+    //
+    // ATTENDANCE, on every route this lane could drive
+    // (docs/runtime_port/wave19_iobase/, `BANISHED_W17_ATTEND=1`, control
+    // `?_singleton@MainLoop@Engine@@` GREEN on all four so the zeros are
+    // findings and not a dead instrument):
+    //
+    //   run1  gameplay                                post=0
+    //   run2  gameplay + a COMPLETED in-game save      post=0
+    //         ([SaveTest] frame 961: SAVE OPERATION COMPLETE), and
+    //         `[Encoding] ATTENDANCE: none of the four bodies was entered`
+    //   run4  same with BANISHED_RT_IOBASE=0           post=0
+    //   run5  BANISHED_TOOL_HARNESS=dlgsettings        UNMEASURED, NOT post=0:
+    //         the route did not fire. Its own line says why — "no entity with
+    //         a UIComponent in this world (searched tid=0x988e1422 over 23002
+    //         entities) -- the route has no subject here". An unmeasured cell
+    //         is not a green cell.
+    //   the MODS route was NOT ATTEMPTED: CLAUDE.md records it crashing in
+    //   ModDialog_ToggleMod_Impl+0x43 and this lane did not re-test that.
+    //
+    // The strongest measured statement is therefore: **a full, successful
+    // in-game save does not open this door.** That is worth more than it looks
+    // — it settles that the save path does not run an IO::Encoding BinaryWriter
+    // codec, which is what one would have assumed.
+    //
+    // WHY IT IS NOT THE PERMANENTLY-UNPROMOTABLE SHAPE. A minted row can be
+    // ported in full and never promotable, because we intercept only at DOORS
+    // and an in-DLL rel32 call or RIP-relative LEA stamp is not one
+    // (reference_a_ported_row_can_be_permanently_unpromotable.md). That is NOT
+    // this row. All three bodies that install this table are OURS and all three
+    // stamp it through a NAME door:
+    //   ??0BinaryWriter  -> RtIo_BinaryWriter_Ctor,        encoding.cpp:259
+    //   ??1BinaryWriter  -> RtIo_BinaryWriter_Dtor,        binary_writer.cpp:187
+    //   slot-0 deleting  -> RtIo_BinaryWriter_DeletingDtor, binary_writer.cpp:222
+    // each reaching `VtblBinaryWriter()` == `ResolveExport("??_7BinaryWriter@…")`.
+    // So ANY route that constructs a BinaryWriter arrives at whichever table
+    // this promotion selects. The row is attendable in principle; what is
+    // missing is a driver, not an interception point.
+    //
+    // If nothing ever dispatches it, promoting changes nothing. If something
+    // does, it changes from the DLL's table to one with no traps in it. Neither
+    // outcome is a regression, and leaving it unpromoted would not verify it.
+    st = RtMintPromotionStorage("??_7BinaryWriter@IO@@6B@", 0x180155210ull);
+    RegisterRuntimeExport("??_7BinaryWriter@IO@@6B@", st);
+    RegisterRuntimeAddr(0x180155210ull, st); ++n;
+
+    // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted
     // ========================================================================
     //
