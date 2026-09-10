@@ -647,9 +647,27 @@ int RtMintRegisterPromotedRows() {
     // ctor on a private object and checks where the pointer landed. The A/B is
     // the `arrangement=` line: DLL-SLOT without this row, MINTED with it, and
     // the publish check passes in BOTH halves — which is the point. The quantity
-    // varies with the thing the gate gates. With the row NOT registered, as it
-    // is here, the probe reports DLL-SLOT — the true statement about this build.
-    // (No registration triple follows on purpose. See the head of this block.)
+    // varies with the thing the gate gates. WITH the row registered, as it now
+    // is, the probe reports MINTED — the true statement about this build.
+    //
+    // PROMOTED 2026-09-09, AFTER the wave, by explicit decision. The deferral
+    // above was correct FOR THE WAVE and its reasoning is left standing rather
+    // than deleted: promoting mid-wave would have made six sibling lanes carry
+    // a configuration resting on one lane's static proof. That objection is
+    // spent — every lane has reported, merged and stopped running, so a defect
+    // here now lands on the integrator and bisects onto one commit.
+    //
+    // What is STILL not measured is the DLL-ABSENT boot. Promotion is the
+    // arrangement cutover needs and this makes the tree carry it early, which
+    // is a real (small) risk taken deliberately for a real gain: it is a LIVE
+    // detector for the ordering regression described above, and the Save
+    // namespace reaches its ceiling of 29/30. If the DLL-absent boot ever finds
+    // this wrong, the fix is to delete the three lines below, not to re-derive
+    // the enumeration.
+    st = RtMintPromotionStorage("?_singleton@SaveLoad@Save@@0PEAV12@EA",
+                                0x1801fc6f0ull);
+    RegisterRuntimeExport("?_singleton@SaveLoad@Save@@0PEAV12@EA", st);
+    RegisterRuntimeAddr(0x1801fc6f0ull, st); ++n;
 
     // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted

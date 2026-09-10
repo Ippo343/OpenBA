@@ -1,8 +1,9 @@
 # WAVE 14 — Save::SaveLoad's last seven rows
 
-**Status: ALL SEVEN LANES MERGED, BUILT AND RUN.** Integration branch
-`wave14/trial`, base `64d3948`. Integration regression: **24 consecutive saves,
-zero divergences on any Wave 14 port.**
+**Status: CLOSED AT THE CEILING. Save 29/30 = 96.7%.** Integration branch
+`wave14/trial` merged to `wave10/base`. Integration regression: **24 saves with
+the row deferred, 21 more with it promoted, zero divergences on any Wave 14
+port in either.**
 
 Scope was the seven rows the census reported as called-but-not-ported in the
 `Save` namespace after Wave 13 closed at 22/29 = 75.9%. Six were function
@@ -86,10 +87,32 @@ At 28/30 the two rows left are NOT unfinished work. Both are decisions:
                                             retail's own RIP-relative read as an
                                             oracle.
 
-So **Save's true ceiling is 29/30 = 96.7%**, reachable by promoting one data row
-at cutover, and 30/30 is not reachable at all. 93.3% is one deliberate deferral
-below ceiling — which is a different statement from "two rows to go", and the
-distinction is the one Wave 10 had to invent the `ceiling` column to express.
+So **Save's true ceiling is 29/30 = 96.7%**, and 30/30 is not reachable at all.
+
+**THE CEILING WAS TAKEN after the wave closed**, by explicit decision, once the
+objection that justified deferring it had expired. The deferral was correct FOR
+THE WAVE: promoting mid-wave would have made six sibling lanes carry a
+configuration resting on one lane's static proof. With every lane reported,
+merged and stopped, a defect here lands on the integrator and bisects onto one
+commit — so the objection is spent, and the reasoning is left standing in
+`reg_mint_promoted.cpp` rather than deleted.
+
+Measured with the row promoted, on the merged tree:
+
+  * `[SaveTest] singleton export=00007ff6df219f70 g_pSaveLoadSingleton=00007ff6df219f70`
+    — an EXE-range address, i.e. OUR minted storage. The unpromoted run read
+    `00007ffcab3fc6f0`, a DLL-range address. **The exe-side door followed the
+    promotion**, and that value comes from import slot 0x140151610, not from a
+    probe.
+  * **21 consecutive saves, 61 frames each**, empty crash log, and ZERO
+    divergences on any Wave 14 site. The only divergences are the same six
+    pre-existing sites as every other run.
+  * Evidence: `docs/runtime_port/wave14/ceiling_run_error.log`.
+
+**Still not measured: the DLL-ABSENT boot.** That is the configuration in which
+promotion actually matters, and it remains untested. If it ever finds this
+wrong, the fix is to delete three lines in `reg_mint_promoted.cpp` — not to
+re-derive the enumeration.
 
 ## Per-lane accounting, unsmoothed
 
