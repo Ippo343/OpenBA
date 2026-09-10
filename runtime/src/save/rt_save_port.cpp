@@ -4,8 +4,8 @@
 //   BANISHED_RT_SAVE=0       leave the whole Save namespace on the DLL
 //   BANISHED_RT_SAVELOAD=0   ... just Save::SaveLoad + Save::SavedState
 //   BANISHED_RT_SETUPLOAD=0  ... just Wave 14 Save::SavedState::SetupLoad
-//   BANISHED_RT_SAVEMETADATA=0     ... just Wave 14's SaveMetaData.
-//   BANISHED_RT_LOADMETADATA=0     ... just Wave 14's LoadMetaData
+//   BANISHED_RT_SAVE_METADATA=0     ... just Wave 14's SaveMetaData.
+//   BANISHED_RT_LOAD_METADATA=0     ... just Wave 14's LoadMetaData
 //   BANISHED_RT_SAVELOAD_UPDATE=0  ... just Wave 13's six state machines,
 //                            leaving Wave 5's 16 exports ported. This split
 //                            is not decoration: it is the A/B that localised
@@ -39,12 +39,12 @@ void RtSavePortInit() {
         // switch exists so a crash anywhere on the save path can be A/B'd
         // against this one registration without taking Wave 13 out with it.
         if (RtWaveEnabled("BANISHED_RT_SETUPLOAD")) n += RtSaveSetupLoadRegister();
-        if (RtWaveEnabled("BANISHED_RT_SAVEMETADATA"))  n += RtSaveSaveMetaDataRegister();
+        if (RtWaveEnabled("BANISHED_RT_SAVE_METADATA"))  n += RtSaveSaveMetaDataRegister();
         // Wave 14 lane LOADMETA. Own kill switch: LoadMetaData is the callee
         // UpdateList state 4 suppresses under the predictive oracle, so leaving
         // it on the DLL while Wave 13 stays ported is a real A/B, not a
         // hypothetical one.
-        if (RtWaveEnabled("BANISHED_RT_LOADMETADATA"))  n += RtSaveLoadMetaDataRegister();
+        if (RtWaveEnabled("BANISHED_RT_LOAD_METADATA"))  n += RtSaveLoadMetaDataRegister();
     }
     printf("[RtPort] Save: %d exports registered\n", n);
 }
