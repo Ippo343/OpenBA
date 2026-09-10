@@ -694,15 +694,27 @@ MINT_TABLES = "standalone/rt_data_mint_tables.inc"
 MINT_PROMOTED_FILE = "standalone/reg_mint_promoted.cpp"
 
 
-def mint_promoted_count(repo):
-    """Minted rows promoted to unconditional registration."""
+def mint_promoted_symbols(repo):
+    """Minted rows promoted to unconditional registration, as a SET of symbols.
+
+    Returns None -- not an empty set -- when the file cannot be read, so a
+    caller can distinguish "nothing is promoted" from "I could not look". The
+    vtable fold-in below depends on that distinction: an unreadable file would
+    otherwise silently demote every promoted row and read as a clean zero.
+    """
     path = os.path.join(repo, MINT_PROMOTED_FILE.replace("/", os.sep))
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
             text = fh.read()
     except OSError:
-        return 0
-    return len(set(re.findall(r'RtMintPromotionStorage\(\s*"([^"]+)"', text)))
+        return None
+    return set(re.findall(r'RtMintPromotionStorage\(\s*"([^"]+)"', strip_comments(text)))
+
+
+def mint_promoted_count(repo):
+    """Minted rows promoted to unconditional registration."""
+    syms = mint_promoted_symbols(repo)
+    return 0 if syms is None else len(syms)
 
 
 # The three tables whose rows ARE the minted symbols. Everything else in the
@@ -726,7 +738,11 @@ def mint_symbol_count(repo):
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
             text = fh.read()
     except OSError:
-        return 0
+        # (0, 0), not 0: every caller unpacks two values, and returning a bare
+        # int made the census CRASH instead of reporting an unreadable table.
+        # Found by exercising this instrument's own "I MEASURED NOTHING" path,
+        # which is why that path is worth having.
+        return 0, 0
 
     total, named = 0, 0
     for arr in MINT_TABLE_ARRAYS:
@@ -756,6 +772,180 @@ def mint_symbol_count(repo):
         total += len(re.findall(r'\{\s*(?:"|nullptr)', body))
         named += len(re.findall(r'\{\s*"', body))
     return total, named
+
+
+# ===========================================================================
+# THE MINTED-VTABLE SLOT DOOR -- blind spot EIGHT (Wave 20 Phase 0a)
+# ===========================================================================
+# THE BUG. This script builds its row set by ITERATING `called_exports` and
+# `called_addrs`. `ported` is therefore exactly |called INTERSECT registered|,
+# and a REGISTRATION WITH NO CALL DOOR NEVER BECOMES A ROW AT ALL. A body whose
+# only route into execution is a MINTED VTABLE SLOT has no ResolveExport, no
+# RT_EXPORT_ONCE, no RT_DATA_SLOT and no ResolveAddr anywhere in the tree --
+# the mint reaches it by asking the PORT REGISTRY for it by name, inside a loop
+# over the generated tables (rt_data_mint.cpp OurPort()/MintVtables()). So the
+# work that makes a vtable row true was invisible to the number this project
+# treats as its authority. MEASURED: lane CSTREAM (Wave 19) registered twelve
+# exports and `ported` moved +3; the other nine were vtable slot bodies.
+#
+# THE PRECEDENT, and it is twelve lines from where this is used. Wave 10 hit
+# the identical root cause with UI::TabElement::UpdateContainers and folded
+# DETOUR TARGETS into the row set as called+ported+detoured. Its justification,
+# quoted verbatim from main() below:
+#
+#     "`called` counts functions our tree resolves through a door
+#      (ResolveExport / ResolveAddr / an ordinal). A detour creates callers a
+#      different way -- it patches the DLL, so RETAIL'S OWN internal callers
+#      arrive at our body -- and those callers are the entire point of
+#      installing one. [...] So a detour target is folded in here as called +
+#      ported + detoured. This is not crediting unrun code: the detour is what
+#      makes it run."
+#
+# A MINTED VTABLE CREATES CALLERS THE SAME THIRD WAY. It publishes OUR table
+# under the DLL's exported `??_7` symbol, so every object constructed against
+# that symbol dispatches its virtual calls into whatever the mint put in the
+# slots -- our port if RtPortLookupExport found one, a per-slot trap stub if it
+# did not. Same argument, same place in the file.
+#
+# ---------------------------------------------------------------------------
+# THE RULING: ONLY A **PROMOTED** ROW'S SLOTS ARE FOLDED IN. Both numbers are
+# printed, because both are wanted and they mean different things.
+# ---------------------------------------------------------------------------
+# WHY. `MintVtables()` fills the static kVTableN arrays on every run, but
+# FILLING A TABLE IS NOT PUBLISHING IT. The `RegisterRuntimeExport("??_7X@",
+# table)` that makes `RT_DATA_SLOT("??_7X@")` hand our table to a constructor
+# happens in exactly two places:
+#
+#   * `RegisterMintedData()` -- gated behind BANISHED_RT_MINT=1, which by this
+#     script's own oldest rule (GATED_OFF_FILES: "a gated registration is not
+#     a port") is NOT live. It is also not merely off-by-default: with the DLL
+#     present it publishes our zeroed MemoryAllocator singleton and dies.
+#   * `RtMintRegisterPromotedRows()` (standalone/reg_mint_promoted.cpp) --
+#     unconditional, with BANISHED_RT_MINT_PROMOTED=0 as a kill switch. That is
+#     the ordinary default-on shape this project already counts as a port.
+#
+# WHICH PROMOTION COUNT THIS IS -- there are TWO SUBJECTS and they are not the
+# same question (integrator correction C2, Wave 20):
+#
+#   STATIC   what reg_mint_promoted.cpp REGISTERS IN SOURCE. Derived here on
+#            every run by mint_promoted_symbols(), never cited from a document.
+#            This is the subject the census measures, because the census is a
+#            source scan and cannot observe a process.
+#   RUNTIME  what a PARTICULAR RUN registered. Differs whenever
+#            BANISHED_RT_MINT_PROMOTED=0 is set (reg_mint_promoted.cpp:173
+#            returns 0 before registering anything) -- in which case the STATIC
+#            count is an OVERSTATEMENT of that run and every folded row is
+#            dispatching to the DLL instead. The census cannot see an env var
+#            and does not pretend to; the header says which subject it means.
+#
+# DO NOT HARD-CODE OR CITE A PROMOTED COUNT ANYWHERE. The figure carried by
+# WAVE19_CLOSED.md §7.5a and WAVE20_GUIDE.md §2 ("5 of 62") was itself already
+# stale when written: lane IOBASE promoted five IO vtables in 9f2edbc on the
+# last day of Wave 19, making it 10. A count that corrected another count and
+# then went stale in the same wave is the strongest possible argument for
+# deriving this one at run time, which is what happens here.
+#
+# For an UNPROMOTED row, `RT_DATA_SLOT` falls through to the DLL, our objects
+# get RETAIL'S table, and RETAIL'S BODIES RUN. Wave 19 measured this directly:
+# lane FILE's ten bodies read TRAP=0 with ATTENDANCE ZERO on every one. Folding
+# those slots in as `ported` would encode WAVE20_GUIDE.md §5 item 2 -- "reading
+# TRAP=0 as progress-in-play" -- into the tool, and the identity would then
+# credit a row for being READY rather than for being a route. READY is not a
+# route. So an unpromoted row's slot bodies are reported on their own line, as
+# the PROMOTION BACKLOG, and move no column.
+#
+# WHAT THE FOLD-IN DOES AND DOES NOT CLAIM. It claims a DISPATCH ROUTE EXISTS
+# on every ordinary run: our table is published under the symbol the DLL
+# exports, and the slot holds our body rather than a trap. It does NOT claim
+# ATTENDANCE -- whether any constructor in a given run actually asks for that
+# symbol is a separate question and nothing here observes a call. That is
+# exactly the tier the detour fold-in has carried since Wave 10, and it is
+# written down here rather than left to be inferred.
+#
+# CONSEQUENCE THE COMMISSIONING NOTE DID NOT ANTICIPATE, stated so nobody has
+# to rediscover it. Lane CSTREAM's nine invisible bodies are slots of
+# ??_7CompressedStream@ / ??_7CompressedFileStream@ / ??_7CompressedMemoryStream@,
+# and all three are UNPROMOTED. Under this ruling they STILL do not move
+# `ported` -- but they are no longer invisible: they are counted, by name, on
+# the PROMOTION BACKLOG line. That is the honest answer rather than the
+# flattering one. The lesson of Wave 19 §7.5 is that those bodies do not run,
+# and a census that said they did would be repeating the error, not fixing it.
+# The backlog line is what a DATA lane should now be scored on, and promoting
+# the row is what converts it into `ported`.
+#
+# UNPORTED SLOTS OF A PROMOTED ROW ARE FOLDED IN AS `called` AND NOT `ported`,
+# which is the honest reading and not a rounding: the published table holds a
+# TRAP in that slot, so a dispatch through it aborts. That is precisely the
+# state `called but not ported` exists to name.
+#
+# PURECALL slots are skipped: there is no body to port.
+
+RE_MINT_VSLOT_ARRAY = re.compile(
+    r'static\s+const\s+RtMintVSlot\s+(kVSlots\d+)\s*\[\s*\]\s*=\s*\{')
+RE_MINT_VSLOT_ROW = re.compile(
+    r'\{\s*(?:"([^"]*)"|nullptr)\s*,\s*(0x[0-9a-fA-F]+)ull\s*,\s*(RT_MINT_\w+)\s*\}')
+# A kMintVtables row: { symbol|nullptr, dllVa, slotCount, kVSlotsN, ... }
+RE_MINT_VTABLE_ROW = re.compile(
+    r'\{\s*(?:"([^"]*)"|nullptr)\s*,\s*(0x[0-9a-fA-F]+)ull\s*,\s*(\d+)\s*,\s*'
+    r'(kVSlots\d+)\s*,')
+
+
+def load_mint_vtables(repo):
+    """[(vtableSymbol|None, dllVa, [(slotName|None, slotVa, kind), ...]), ...].
+
+    Parsed from the GENERATED table, which is where the names are, exactly as
+    mint_symbol_count() does. Returns None -- not [] -- when the file cannot be
+    read, so "I could not look" stays distinguishable from "there is nothing
+    there"; the caller prints the difference.
+    """
+    path = os.path.join(repo, MINT_TABLES.replace("/", os.sep))
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError:
+        return None
+
+    # slot arrays first: name -> rows, brace-matched so one array cannot bleed
+    # into the next.
+    slots_by_array = {}
+    for m in RE_MINT_VSLOT_ARRAY.finditer(text):
+        i, depth = m.end() - 1, 0
+        while i < len(text):
+            if text[i] == '{':
+                depth += 1
+            elif text[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        body = text[m.end():i]
+        slots_by_array[m.group(1)] = [
+            (r.group(1) or None, int(r.group(2), 16), r.group(3))
+            for r in RE_MINT_VSLOT_ROW.finditer(body)]
+
+    m = re.search(r'\bkMintVtables\s*\[\s*\]\s*=\s*\{', text)
+    if not m:
+        return []
+    i, depth = m.end() - 1, 0
+    while i < len(text):
+        if text[i] == '{':
+            depth += 1
+        elif text[i] == '}':
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    tbody = text[m.end():i]
+
+    out = []
+    for r in RE_MINT_VTABLE_ROW.finditer(tbody):
+        sym, va, count, arr = r.group(1) or None, int(r.group(2), 16), \
+            int(r.group(3)), r.group(4)
+        # slotCount is the generator's own proven extent; the array may be
+        # longer only through a generator bug, so truncate to the count rather
+        # than trusting whichever is bigger.
+        out.append((sym, va, slots_by_array.get(arr, [])[:count]))
+    return out
 
 
 def _add_detour(ports, instruments, label, key, rel):
@@ -869,8 +1059,10 @@ def scan():
     nonliteral_calls = {}  # same, for ResolveExport CALL sites
     nonliteral_detours = {}  # same, for InstallRuntimeDetour* targets
     instrument_detours = {}  # probe:/selftest:/[allocshadow] -- NOT ports
+    nfiles = 0               # the SUBJECT's size: what this scan actually read
 
     for path in iter_sources():
+        nfiles += 1
         rel = os.path.relpath(path, REPO).replace(os.sep, "/")
         try:
             text = open(path, encoding="utf-8", errors="replace").read()
@@ -1027,6 +1219,7 @@ def scan():
                 nonliteral_detours.setdefault(rel, []).append(target)
 
     return dict(
+        nfiles=nfiles,
         nonliteral_regs=nonliteral_regs,
         nonliteral_calls=nonliteral_calls,
         nonliteral_detours=nonliteral_detours,
@@ -1168,6 +1361,100 @@ def main():
         else:
             add_entity("export", dkey, namespace_of(dkey), True, True, dfiles)
 
+    # ---- THE MINTED-VTABLE SLOT FOLD-IN (blind spot EIGHT, Wave 20 Phase 0a)
+    # Modelled on the detour fold-in directly above, and ruled on at length at
+    # RE_MINT_VSLOT_ARRAY. Summary of the ruling, restated here so a reader of
+    # main() does not have to go looking: a PROMOTED vtable row publishes our
+    # table unconditionally, so its slots are a live dispatch route and are
+    # folded in as called (+ ported iff the body is registered); an UNPROMOTED
+    # row is registered only under BANISHED_RT_MINT=1, which this script has
+    # always refused to count, so its slots move nothing and are reported as the
+    # PROMOTION BACKLOG instead.
+    #
+    # The snapshot is taken BEFORE the fold so the fold's effect can be printed
+    # as a SET-DIFF -- which rows became visible, and which flipped to ported --
+    # rather than as a percentage delta that says nothing about what moved.
+    prefold_keys = set(merged)
+    prefold_ported = {k for k, v in merged.items() if v[3]}
+
+    mint_vtables = load_mint_vtables(REPO)
+    promoted_syms = mint_promoted_symbols(REPO)
+    vt_fold = {
+        "readable": mint_vtables is not None and promoted_syms is not None,
+        "vtables": 0, "promoted_vtables": 0,
+        "applicable": set(),      # registered slot bodies of PROMOTED rows
+        "folded_called": set(),   # every slot key folded into the row set
+        "folded_names": set(),    # ... as export names (for the orphan screen)
+        "folded_addrs": set(),    # ... as raw VAs   (for the orphan screen)
+        "backlog": {},            # symbol -> set of registered slot bodies
+        "backlog_rows": 0,
+        "backlog_slots": {},      # symbol -> non-purecall slot count
+        "backlog_complete": [],   # unpromoted vtables with EVERY slot ours
+    }
+    if vt_fold["readable"]:
+        promoted_vt = {s for s in promoted_syms if s.startswith("??_7")}
+        vt_fold["vtables"] = len(mint_vtables)
+        for sym, _vva, slots in mint_vtables:
+            # An address-keyed (unexported) vtable row cannot be promoted:
+            # every RtMintPromotionStorage call names a symbol.
+            is_promoted = bool(sym) and sym in promoted_vt
+            if is_promoted:
+                vt_fold["promoted_vtables"] += 1
+            src = "mint-vtable:%s" % (sym or "unexported")
+            row_key = sym or ("0x%x" % _vva)
+            n_slots = n_ours = 0
+            for sname, sva, kind in slots:
+                if kind == "RT_MINT_PURECALL":
+                    continue        # no body to port
+                # The mint's OWN lookup order: name first, then address.
+                registered = (sname in d["ported_exports"]) if sname else False
+                registered = registered or (sva in d["ported_addrs"])
+                n_slots += 1
+                if registered:
+                    n_ours += 1
+                if not is_promoted:
+                    if registered:
+                        vt_fold["backlog"].setdefault(row_key, set()).add(
+                            sname or ("0x%x" % sva))
+                    continue
+                name = sname or addr_to_name.get(sva)
+                if name:
+                    add_entity("export", name, namespace_of(name),
+                               registered or (name in d["ported_exports"]),
+                               name in d["detoured"], [src])
+                    key = name
+                    vt_fold["folded_names"].add(name)
+                    vt_fold["folded_addrs"].add(sva)
+                else:
+                    key = "0x%x" % sva
+                    add_entity("addr", key, "internal", registered,
+                               sva in d["detoured"], [src])
+                    vt_fold["folded_addrs"].add(sva)
+                vt_fold["folded_called"].add(key)
+                if registered:
+                    vt_fold["applicable"].add(key)
+            if not is_promoted and n_slots:
+                vt_fold["backlog_slots"][row_key] = n_slots
+                # COMPLETE = every non-purecall slot has a registered body, so
+                # promoting the row would put NO trap into a live table. This is
+                # the static half of the readiness question and nothing more: it
+                # does NOT decide promotability, which turns on whether we own
+                # the function that STAMPS the table (WAVE20_GUIDE.md §2), and
+                # that is not a question a source scan can answer.
+                if n_ours == n_slots:
+                    vt_fold["backlog_complete"].append(row_key)
+        vt_fold["backlog_rows"] = sum(len(v) for v in vt_fold["backlog"].values())
+
+    # The fold's EFFECT, computed here so the header above the table can quote
+    # it. (Code order is the fix, not the wording: a headline cannot carry a
+    # number the code has not computed yet.)
+    vt_fold["newly_visible"] = sorted(set(merged) - prefold_keys)
+    vt_fold["newly_ported"] = sorted({k for k, v in merged.items() if v[3]}
+                                     - prefold_ported
+                                     - set(vt_fold["newly_visible"]))
+    vt_fold["control"] = vt_fold["applicable"] & (set(vt_fold["newly_visible"])
+                                                  | set(vt_fold["newly_ported"]))
+
     rows = [(k, key, ns, p, det, sorted(f)) for k, key, ns, p, det, f in merged.values()]
     for ordn, files in d["called_ordinals"].items():
         # An ordinal carries no name, so no namespace can be inferred from it —
@@ -1192,11 +1479,20 @@ def main():
     detoured_addrs = {k for k in d["detoured"] if isinstance(k, int)}
     detoured_addrs |= {a for a, nm in addr_to_name.items() if nm in detoured_names}
     called_export_names |= detoured_names
+    # A body in a PROMOTED minted vtable slot has callers for the same reason a
+    # detoured one does -- something other than a resolve door dispatches it --
+    # so it must leave this list too. Omitting this was an inconsistency in the
+    # first cut of the fold-in: the row entered the table as `called` and stayed
+    # in "ports with no caller", which is the two halves of one tool disagreeing.
+    called_export_names |= vt_fold["folded_names"]
     orphan_exports = sorted(set(d["ported_exports"]) - called_export_names)
 
     addr_of_called_name = {a for a, nm in addr_to_name.items() if nm in d["called_exports"]}
     called_addr_set = set(d["called_addrs"]) | addr_of_called_name
     called_addr_set |= detoured_addrs
+    called_addr_set |= vt_fold["folded_addrs"]
+    called_addr_set |= {a for a, nm in addr_to_name.items()
+                        if nm in vt_fold["folded_names"]}
     orphan_addrs = sorted(set(d["ported_addrs"]) - called_addr_set)
 
     per_ns = collections.defaultdict(lambda: {"called": 0, "ported": 0, "detoured": 0})
@@ -1206,7 +1502,53 @@ def main():
         b["ported"] += 1 if ported else 0
         b["detoured"] += 1 if detoured else 0
 
+    # ---- SUBJECT AND DENOMINATOR, BEFORE ANY FINDING ----------------------
+    # WAVE19_CLOSED.md §7.1 / WAVE20_GUIDE.md §4.1: an instrument that names its
+    # subject only AFTER its findings has not named it, and a green without its
+    # denominator is not a measurement. Six instruments in one wave printed a
+    # verdict without stating what they had examined.
+    #
+    # Everything printed here is COMPUTED ABOVE this line. That ordering is the
+    # actual fix, not the wording: a headline cannot carry a number the code has
+    # not computed yet, and two Wave 19 tools were repaired exactly this way.
+    n_prefold = len(prefold_keys)
     print("Runtime-x64.dll port census")
+    print("=" * 78)
+    print("SUBJECT")
+    print("  tree root      %s" % REPO)
+    print("                 (derived from THIS script's path -- run the script")
+    print("                  inside the tree you mean to measure)")
+    print("  scanned        %d source files under %s"
+          % (d["nfiles"], "/, ".join(SCAN_DIRS) + "/"))
+    print("  DLL read       %s%s"
+          % (RUNTIME_DLL,
+             "" if addr_to_name else "   [NOT READ -- degraded, see stderr]"))
+    print("  export map     %d named exports (address -> name)" % len(addr_to_name))
+    print("PARAMETERS  (a check with a free parameter can be aimed; these are it)")
+    print("  --namespace    %s" % (args.namespace or "(none: every namespace)"))
+    print("  --unported     %s" % ("on" if args.unported else "off"))
+    print("  --csv          %s" % (args.csv or "(none)"))
+    print("  --allow-degraded %s" % ("ON -- numbers UNDERSTATE" if ALLOW_DEGRADED
+                                     else "off"))
+    print("POPULATION  (the denominator every percentage below is taken against)")
+    print("  %d rows from resolve doors + detour targets" % n_prefold)
+    if not vt_fold["readable"]:
+        print("  ** MINTED-VTABLE SLOTS: MEASURED NOTHING. %s could not be read,"
+              % MINT_TABLES)
+        print("  ** so no slot-body row is folded in and `ported` UNDERSTATES by an")
+        print("  ** unknown amount. This is not a zero; it is a refusal to answer.")
+    else:
+        print("  %d minted-vtable slot rows folded in, from the %d PROMOTED"
+              % (len(vt_fold["folded_called"]), vt_fold["promoted_vtables"]))
+        print("    vtable(s) of %d minted; %d of those %d were NOT previously"
+              % (vt_fold["vtables"], len(vt_fold["newly_visible"]),
+                 len(vt_fold["folded_called"])))
+        print("    visible, the rest already had a resolve door. The other %d"
+              % (vt_fold["vtables"] - vt_fold["promoted_vtables"]))
+        print("    vtables are registered only under BANISHED_RT_MINT=1 and move")
+        print("    NO column -- see PROMOTION BACKLOG below.")
+    print("  = %d rows total, of which %d are ordinal rows"
+          % (len(rows), len(d["called_ordinals"])))
     print("=" * 78)
     unprom = load_unpromotable(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     unprom_per_ns = {}
@@ -1245,7 +1587,92 @@ def main():
     print()
     print("total  = functions in the DLL (PLAN.md §3.1 Ghidra census; blank for "
           "non-namespaced internals)")
-    print("called = distinct functions our tree resolves today")
+    print("called = distinct functions our tree resolves today, OR that retail's")
+    print("         own callers reach through a detour or a PROMOTED minted vtable")
+
+    # ---- THE VTABLE FOLD-IN, REPORTED AS A SET-DIFF -----------------------
+    # Never as a percentage delta: a percentage cannot say WHICH rows moved,
+    # and this census has `called` in both halves of its own ceiling identity,
+    # so a delta is uninterpretable by construction.
+    print()
+    print("MINTED-VTABLE SLOT FOLD-IN  (Wave 20 Phase 0a; precedent: the detour")
+    print("fold-in, same file, same argument -- see RE_MINT_VSLOT_ARRAY)")
+    if not vt_fold["readable"]:
+        print("  *** MEASURED NOTHING. The generated table and/or %s could not be"
+              % MINT_PROMOTED_FILE)
+        print("  *** read. Treat every `ported` figure above as an UNDERSTATEMENT of")
+        print("  *** unknown size, and do not scope a lane on it.")
+    else:
+        newly_visible = vt_fold["newly_visible"]
+        newly_ported = vt_fold["newly_ported"]
+        applicable = vt_fold["applicable"]
+        control = vt_fold["control"]
+        print("  subject     %d minted vtables (denominator from %s;"
+              % (vt_fold["vtables"], MINT_TABLES))
+        print("              re-derive it with rt_mint_gen.py --check), of which")
+        print("              %d are PROMOTED. Both figures are DERIVED on this run"
+              % vt_fold["promoted_vtables"])
+        print("              from the files named -- neither is cited from a doc.")
+        print("  which       promotion count is STATIC: what %s"
+              % MINT_PROMOTED_FILE)
+        print("              registers IN SOURCE. A run with")
+        print("              BANISHED_RT_MINT_PROMOTED=0 registers NONE of them, and")
+        print("              for that run this whole fold-in is an OVERSTATEMENT.")
+        print("              A source scan cannot see an env var; it does not try.")
+        print("  ruling      an UNPROMOTED row's slots move NO column: its table is")
+        print("              published only under BANISHED_RT_MINT=1, RT_DATA_SLOT")
+        print("              falls through to the DLL, and RETAIL'S bodies run.")
+        print("              READY is not a route (WAVE20_GUIDE.md §5 item 2).")
+        print("  tier        a folded row has a DISPATCH ROUTE, not ATTENDANCE.")
+        print("              Nothing here observes a call. Same tier the detour")
+        print("              fold-in has carried since Wave 10.")
+        print()
+        print("  POSITIVE CONTROL -- this MUST be non-zero or the fold-in did nothing:")
+        print("    %d of %d applicable rows moved."
+              % (len(control), len(applicable)))
+        print("    applicable = a slot body of a PROMOTED vtable that IS registered")
+        print("    (%d such bodies). A slot of an unpromoted table, a PURECALL slot"
+              % len(applicable))
+        print("    and an unregistered slot are NOT applicable and are not scored.")
+        if not applicable:
+            print("    *** ZERO APPLICABLE CASES: this control cannot pass or fail.")
+        elif not control:
+            print("    *** CONTROL READ ZERO. Every applicable body was already")
+            print("    *** visible through another door, or the fold is broken.")
+        print()
+        print("  SET-DIFF vs the row set before the fold (%d rows):" % n_prefold)
+        print("    +%d rows NEWLY VISIBLE (a registration with no call door --"
+              % len(newly_visible))
+        print("       exactly the rows the old census could not build):")
+        for k in newly_visible:
+            mark = "  PORTED" if merged[k][3] else "  unported (slot holds a TRAP)"
+            print("       %-62s %s" % (k, mark))
+        print("    +%d rows already visible that FLIPPED to ported:" % len(newly_ported))
+        for k in newly_ported:
+            print("       %s" % k)
+        if not newly_visible and not newly_ported:
+            print("       (none -- every promoted slot body already had a door)")
+        print()
+        print("  PROMOTION BACKLOG -- registered bodies whose ONLY dispatch route is")
+        print("  a vtable that is NOT promoted. These are NOT counted above, and")
+        print("  they are the measure of Wave 20 Candidate A:")
+        print("    %d bodies across %d unpromoted vtable(s), of which %d are"
+              % (vt_fold["backlog_rows"], len(vt_fold["backlog"]),
+                 len(vt_fold["backlog_complete"])))
+        print("    COMPLETE (every non-purecall slot registered). COMPLETE is the")
+        print("    STATIC half of readiness ONLY: it says promoting would put no")
+        print("    trap in a live table. It does NOT say the row is promotable --")
+        print("    that turns on owning the function that STAMPS the table, which")
+        print("    no source scan can answer (WAVE20_GUIDE.md §2).")
+        print("      %-52s %5s %5s  %s" % ("vtable", "ours", "slots", "complete"))
+        for sym in sorted(set(vt_fold["backlog"]) | set(vt_fold["backlog_slots"])):
+            print("      %-52s %5d %5d  %s"
+                  % (sym, len(vt_fold["backlog"].get(sym, ())),
+                     vt_fold["backlog_slots"].get(sym, 0),
+                     "COMPLETE" if sym in vt_fold["backlog_complete"] else ""))
+        if not vt_fold["backlog_slots"]:
+            print("      (none)")
+
     ng = len(d["gated_exports"]) + len(d["gated_addrs"])
     if ng:
         print()
