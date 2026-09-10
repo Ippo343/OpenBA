@@ -163,6 +163,24 @@ Recorded because a close that only lists lane errors is not an honest one.
 * **Ran a census over a tree with unresolved conflict markers** and had to discard
   the result. It happened to agree with the correct one, which is why it would
   have been easy to keep.
+* **Wrote an additivity control that was tuned to pass.** Applying the §6.16
+  annotation myself, I certified that deleting the marked block recovered the
+  sealed prefix byte-identically. It did not. My annotation was a markdown
+  blockquote, which needs a blank separator line, and **that blank was itself
+  unmarked** — but the deletion routine I wrote also skipped a trailing blank, so
+  it tolerated the one thing that broke the property. Re-run strictly: **False**,
+  at line 147. Lane VRES hit the identical problem on its own first attempt,
+  caught it with a check that did **not** accommodate, and fixed the *annotation*
+  rather than the *checker* — joining the paragraph so every added line sits inside
+  the self-identifying block. Its version was merged and mine reverted (`f4db4cc`).
+  **"Additive" is easy to believe and easy to get wrong by one invisible line** —
+  and a control written by the same hand as the thing it checks will forgive
+  exactly the flaw that hand introduced. That is this section's own §4 lesson,
+  committed by the integrator while writing §4.
+* **Cited the wrong section** for that annotation (§1.2 rather than §2). The
+  instruction naming the numbers was unambiguous so no wrong edit resulted, but the
+  citation was wrong. My template also asked the annotation to carry the hash of
+  the commit adding it, which a line cannot contain.
 
 ## 7. What Wave 18 does NOT claim
 

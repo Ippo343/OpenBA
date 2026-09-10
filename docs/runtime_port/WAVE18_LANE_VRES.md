@@ -143,6 +143,13 @@ control exists to exclude.**
 **How it was checked:** the LEAK control, which produces `blocks released:
 ours=5 theirs=9` on case 2 and `ours=3 theirs=21` on case 3. The correct body
 produces equal counts on both.
+**[POST-REPORT ANNOTATION, added 2026-09-10 — additive; every character above
+and below it is unchanged from `024a06a`. These two figures are evidence that
+the allocator-count instrument WORKS. They are NOT evidence that a byte
+comparison would have caught anything: a memory comparator can NEVER see this
+leak, because each level frees the level below's buffer, so a skipped recursion
+leaves the outer buffer byte-identical. See "Addendum to the SEALED §1.2" in the
+post-report section below.]**
 
 **The two arrays the brief warned about are not conflated.** `??1Device` never
 reads `dllSlots` at +0xB0 — no `FreeLibrary`, no clear. It destroys the +0x40
@@ -524,15 +531,35 @@ The cause is named, not unknown: its only caller is
 autostart route takes one. Verified by cases 9–11 against the shipped body
 instead.
 
-## Addendum to the SEALED §1.2 — filed here rather than inline
+## Addendum to the SEALED section — and the ruling that put a pointer inline
 
 The advisor asked that the comparator's **structural blindness** be stated next
 to the LEAK control's `ours=5 theirs=9` and `ours=3 theirs=21`, because those
-numbers are what a reader will otherwise take as the whole proof. Those numbers
-live in the sealed §1.2, and editing them in place is the thing the boundary
-forbids — so the statement is filed here and says where it belongs. If the
-integrator would rather have it inline, that is a one-line marked edit to sealed
-material and it is the advisor's call, not this lane's.
+numbers are what a reader will otherwise take as the whole proof. This lane
+filed it here and asked whether it should go inline, on the reading that
+touching sealed text at all was forbidden.
+
+**The advisor ruled: inline, as a marked additive line — and the reasoning
+corrects this lane's model of the seal.** Sealing forbids ALTERING what was
+measured; it does not forbid ANNOTATING it. The seal protects the measurement —
+what was known and claimed at the moment of reporting. A caveat on how to read
+evidence already present is not a new measurement, and a caveat filed only where
+the misreading does not happen is not doing its job.
+
+So a marked, dated, additive annotation now sits immediately after those numbers
+in §2. It adds nothing else, deletes nothing, rewords nothing and renumbers
+nothing: **deleting the block that opens `**[POST-REPORT ANNOTATION` and closes
+`]**` reconstructs `024a06a` byte for byte**, which is checked mechanically
+rather than asserted. That is the audit property, and it is what distinguishes a
+marked annotation from the silent rewrite the rule was actually aimed at.
+
+One small departure from the ruling's template, stated rather than glossed: it
+asks for `added <commit>, <date>` and the annotation carries only the date. The
+hash of the commit that adds a line cannot be contained in that line. The
+commit is identifiable in the log as the one whose message names this
+annotation.
+
+The substance follows.
 
 **A memory comparator STRUCTURALLY CANNOT see this leak.** Each of the three
 destroy levels frees the buffer the level below it walked, so a body that
