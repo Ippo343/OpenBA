@@ -197,6 +197,13 @@ putting unpromoted slots in a **backlog** rather than the columns: *when an inst
 cannot see something, it says so in the direction that costs you, not the one that
 flatters you.*
 
+### 5.6 A number you cannot measure gets a `?` and an expiry, not a guess
+
+`??_7ReaderWriter@`'s tag read `2/36`. The **36** is corrected to 26 by three independent
+sources. The **2** was counted over the wrong extent and may have lived in the ten slots
+belonging to other tables — so it is now written **`?` with an expiry clause.**
+**Refusing to invent the numerator is the harder call and the right one.**
+
 ### 5.7 AN EXPIRY CLAUSE NEEDS AN ADDRESSEE, not just a condition
 
 **Wave 19's standing answer was "require an expiry clause on every stated blocker at seal
@@ -252,12 +259,50 @@ handed cannot speak about the cases it was not, and the difference is invisible 
 outside unless someone writes the denominator down* — arriving one final time, at the
 level of the close's own self-verification.
 
-### 5.6 A number you cannot measure gets a `?` and an expiry, not a guess
+### 5.9 THE UNIT OF CORRECTION IS THE CLAIM, NOT THE SENTENCE THAT CARRIES IT
 
-`??_7ReaderWriter@`'s tag read `2/36`. The **36** is corrected to 26 by three independent
-sources. The **2** was counted over the wrong extent and may have lived in the ten slots
-belonging to other tables — so it is now written **`?` with an expiry clause.**
-**Refusing to invent the numerator is the harder call and the right one.**
+**Separated from §5.8 at lane DOORS' insistence, because it is a different mechanism and
+will recur without its own name.**
+
+The sentence I deleted was **two claims sharing a semicolon**:
+
+```
+"a new tag must declare its convention  ;  <tool> is the place to enforce it"
+ ^ DOCTRINE, true, still stands           ^ PRESCRIPTION read as a COMPLETION, false
+```
+
+Deleting the sentence **retracted both.** A correction aimed at a compound statement
+takes out the true half with the false one.
+
+> **A fix that REMOVES TEXT must say WHICH CLAIM it is retracting.**
+
+And note the precise limit this puts on §5.8, which DOORS drew and I did not: *"read the
+artefact first" would SURFACE such a deletion, but it would not have told you the
+deletion was HALF-WRONG.* The two rules compose — one finds the removal, the other asks
+whether the removal was correctly scoped. **Neither substitutes for the other.**
+
+### 5.10 THE DENOMINATOR FAILURE APPEARED AT EVERY LEVEL — and nothing was checking for it
+
+Counting a section written in an earlier commit into *"3 sections checked"* is the same
+defect as `slot-count suspects: 0` printed while over-counting a row by ten, and as a
+green scored on the union of two screens. **Tallied across this wave it occurred at
+FOUR levels:**
+
+| level | instance |
+|---|---|
+| the instrument | the census's `ported` was `\|called ∩ registered\|` with no visible denominator |
+| the lane | a readiness screen ranking three rows identically at 9/9/TRAP=0 |
+| the close | "23 complete tables" vs 26, same definition, different instrument (C5) |
+| **the close's own self-verification** | **"3 sections checked" including one not in the commit** |
+
+DOORS' reading, which is the right one:
+
+> **That it appeared last in the act of SCORING THE SCORING is not a coincidence so much
+> as evidence that NOTHING IN THE STRUCTURE WAS CHECKING DENOMINATORS EXCEPT BY HAND.**
+
+Every denominator caught this wave was caught by a person asking. **That is a structural
+gap, not a run of bad luck** — and it is the one finding here that names something the
+process does not yet have. **Wave 21 item 13.**
 
 ---
 
@@ -367,6 +412,12 @@ wave.**
 11. **IMPLEMENT the `RT_UNPROMOTABLE` convention-declaration check** (§6.1). It does not
     exist; the doctrine is prose today. *Re-derive:* run
     `unpromotable_slot_check.py` and observe that it accepts either convention silently.
+13. **NOTHING CHECKS DENOMINATORS BUT A PERSON ASKING** (§5.10). The failure occurred at
+    four levels this wave, ending inside the close's own self-verification. Whether this
+    is mechanisable is an open question and the honest first step is to find out — a
+    screen that flags a quoted count with no visible population would be the cheapest
+    probe. **This is the one Wave 21 input that names something the process does not
+    have, rather than work it has not done.**
 12. **`??_7ReaderWriter@`'s `?` numerator NEEDS AN ADDRESSEE.** Its expiry says *"the
     next lane that counts ported slots on this row"* — and **if nothing ever routes a
     lane there, the clause never fires and the `?` becomes permanent.** A better failure
