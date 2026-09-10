@@ -61,6 +61,11 @@ extern int RtObjectExternalPathStackRegister();     // external_path_stack.cpp
 // Wave 11 lane OBJEXT. ExternalFactory::GetCompiledPath and ::FindOrLoad --
 // one six-term concatenation MSVC emitted twice.
 extern int RtObjectExternalCompiledRegister();      // external_compiled.cpp
+// Wave 11 follow-up 2 lane IOSTREAM. ExternalFactory::Add -- the row OBJEXT
+// OPENED when it ported FindOrLoad, which calls Add unconditionally on both
+// branches. Blocked until now on the IO::VisitorStream LAYOUT (not, as the
+// holdback said, on its constructor: that is exported).
+extern int RtObjectExternalAddRegister();           // external_add.cpp
 
 void RtObjectPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
@@ -126,5 +131,11 @@ void RtObjectPortInit() {
         n += RtObjectExternalPathStackRegister();
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_COMPILED"))
         n += RtObjectExternalCompiledRegister();
+    // Wave 11 follow-up 2 lane IOSTREAM. Nested under BANISHED_RT_EXTERNAL for
+    // the same reason as its four neighbours -- it is ExternalFactory state --
+    // with its own switch because it is the one body in the class that drives a
+    // stack-constructed IO stream, and BANISHED_RT_EXTADD=0 A/Bs exactly that.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTADD"))
+        n += RtObjectExternalAddRegister();
     printf("[RtPort] Object: %d exports registered\n", n);
 }
