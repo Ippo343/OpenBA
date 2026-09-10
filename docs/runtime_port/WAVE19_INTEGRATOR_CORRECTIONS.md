@@ -695,3 +695,129 @@ exists but the Save/Load id is unknown; (1) opening the dialog alone unlocks
 `GetSaveCount` and `BeginGetSaveGameList`, while (2) a real `.sav` is what unlocks
 `GetSaveInfo`, `GetSaveFilename`, `BeginLoad` and `BeginDelete` **on real data**.
 Keep mod state constant across any save/load comparison.
+
+## C24. TextFileStream vtable is 10 slots, not 20 — the sizing defect, second instance, in a number I passed on
+
+I gave lane FILE `??_7TextFileStream@ 20 slots / 0 ported / 20 TRAP` **in the same
+message that warned it the `adjacent-export` sizing was unreliable** — and did not
+apply my own warning to the number I was sending. **Fourth figure this wave to
+decay in transmission through me** (after 27/20, the name-grep counts, and "sole
+trap in four rows").
+
+**Measured: 10 slots.** An unexported table sits at **`0x1801559d0`**, exactly 10
+slots in. Lane FILE settled it by **three routes, none of them adjacency**:
+
+1. **The CONSTRUCTOR NAMES THE ADDRESS** — `??0TextFileStream` at `0x1800ba431`
+   is `LEA RAX,[0x1801559d0]`.
+2. The byte dump shows ten coherent method pointers ending at
+   `?Create@TextFileStream@`, then a different class's descending group.
+3. `runtime/types/io/FileStream.h` has said 10 since Wave 11.
+
+Route 1 is the strongest evidence for a slot extent produced this wave, because it
+is **the WRITER, not a reader**
+(`reference_a_writer_beats_readers_agreeing_on_a_sign.md`).
+
+### The generalisation, which is worth more than the correction
+
+Lane FILE identified the mechanism and reported it to lane MINT directly:
+
+> **Every concrete IO stream ctor heap-allocates an 8-byte Encoding and stamps an
+> UNEXPORTED vtable into it.**
+
+So `adjacent-export` sizing will keep **over-sizing rows across this entire
+family**. That is now **two confirmed instances** — ReaderWriter 36→31 and
+TextFileStream 20→10 — **plus a mechanism that predicts more**, which is a
+different epistemic standing from two coincidences.
+
+**This settles the Wave 20 prerequisite: size `rt_mint_gen.py` rows by NEXT STAMPED
+ADDRESS, not next export.** Lane TRAPS proposed it; lane FILE supplied the
+mechanism that makes it necessary rather than tidy.
+
+FILE also **re-derived the other two rows from the bytes** as instructed: both
+correct at **8**, with BinaryFileStream slots 1–7 **byte-identical** to
+FileStream's. My claim held, and I would rather have it checked than trusted.
+
+## C25. Lane FILE re-scoped its DATA rows by FUNCTION and handed one back
+
+Three rows are **17 distinct bodies, not 36 slots**:
+
+| row | slots | bodies it ADDS |
+|---|---|---|
+| `??_7BinaryFileStream@` | 8 | slot 0 (`0x180023d80`, unexported) + 7 shared base = **8** |
+| `??_7FileStream@` | 8 | slot 0 (`0x18000c090`, unexported) **only — 1**; the other 7 are the same bodies |
+| `??_7TextFileStream@` | 10 | slot 0 (`0x18002ba90`) + 7 own; slots 1 and 7 are FileStream's = **8** |
+
+**9 bodies clear BOTH FileStream rows completely.** The scope-by-function
+discipline both phase-0 cells converged on, applied a third time and paying out
+again.
+
+**TAKING** the 9-body union. **HANDING BACK** `??_7TextFileStream@` — and the
+stated reason is the part worth recording: **not size (it is 8 bodies), but
+CONNECTEDNESS TO THE HEADLINE.** It is off the screenshot path, and closing
+unfinished business beats opening a third front. Held as a scoped follow-up: **10
+slots, 8 bodies, driver is SaveText.**
+
+FILE also committed **not to read FileStream's 7 free traps as a promotion** —
+nine stampers including `Engine::Run` stay on retail's side. **TRAP=0 IS NOT A
+PROMOTION**, held even though it makes the lane's own numbers look worse.
+
+## C26. SaveText is the highest-leverage item left — it unlocks THREE things across two lanes
+
+Lane FILE asked whether to do its two PORTED-NOT-VERIFIED rows before the DATA
+work. **Answered YES**, and not merely for consistency with what I had said:
+
+1. FILE's row 7 (`??0TextFileStream@`), attendance 0 today.
+2. **Lane IOBASE reports `?SaveText@External@Object@@` STAMPS TWO of the five
+   minted vtables** — their `post=0` is explained by SaveText not running on the
+   gameplay route, NOT by a missing interception point. A SaveText harness
+   converts two IOBASE rows from unmeasured-attendance to measured.
+3. `??_7TextFileStream@`, the handed-back row — SaveText is its natural driver.
+
+**No lane could have seen this from inside itself.** It is the clearest case this
+wave for the integrator seat existing at all, and the counterweight to that seat's
+four transmission failures.
+
+FILE was told to **grep `standalone/` and the `BANISHED_*` list before building
+one.** That rule has paid out repeatedly this wave: IOBASE found
+`BANISHED_TOOL_HARNESS=dlgsettings` that way and correctly recorded UNMEASURED
+when it did not fire; PERSIST's entire save-route gap was a driver it had already
+found and not run. **Assume the harness exists until a grep says otherwise.**
+
+Row 8 (`??1FileSystem@`) is an engine-lifecycle dtor and may need a different
+answer. If it has no driver it stays PORTED-NOT-VERIFIED **with a written
+expiry** — and read the callee before writing the holdback, since PERSIST wrote
+one for `??1Persistence@` and retired it with a single `objdump`.
+
+## C27. file_stream_probe.cpp — found independently by TWO lanes, built by neither
+
+Lane IOBASE names "no differential oracle in this lane" as its largest gap and
+identifies `runtime/src/io/file_stream_probe.cpp` as a ready-made skeleton. Lane
+FILE found the same file from its assigned grep, and adds what IOBASE did not
+measure: it **already drives these exact classes and carries five negative
+controls** (`BANISHED_RT_IOSTREAM_NEGCTL=1..5`).
+
+**The caveat both lanes must carry: today BOTH its sides go through raw doors, so
+it compares retail with retail** — the shape that left a Wave 5 `Goal::Serialize`
+probe dark for five waves. It needs an ours-side pass before it can verify
+anything.
+
+**Two lanes found the same asset and neither built it.** FILE was told to announce
+loudly if it builds the ours-side for rows 7/8, because it likely closes IOBASE's
+largest named gap at the same time.
+
+## C28. Prose ABOUT a generated artefact is also a measurement with a timestamp
+
+`runtime/src/io/file_stream.cpp`'s header states all three vtables "appear ZERO
+times by VA in `standalone/rt_data_mint_tables.inc`". **True at `20aa588`, false
+now** — all three are minted, verified by VA at 2 hits each. FILE's own report
+§5 and §8 inherit it.
+
+Phase 0b established that **a generated artefact is a measurement with a
+timestamp**. FILE has now shown the rule extends one step further: **prose
+DESCRIBING a generated artefact is too**, and it decays silently because nothing
+regenerates a comment.
+
+FILE will annotate rather than rewrite, per §6.16. **It was instructed to state in
+the annotation that the claim was TRUE WHEN WRITTEN** — that is the entire point
+of the timestamp rule, and a reader who sees only "this was wrong" learns the
+wrong lesson.
