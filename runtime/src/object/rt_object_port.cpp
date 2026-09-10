@@ -61,6 +61,17 @@ extern int RtObjectExternalPathStackRegister();     // external_path_stack.cpp
 // Wave 11 lane OBJEXT. ExternalFactory::GetCompiledPath and ::FindOrLoad --
 // one six-term concatenation MSVC emitted twice.
 extern int RtObjectExternalCompiledRegister();      // external_compiled.cpp
+// Wave 11 follow-up 2 lane IOSTREAM. ExternalFactory::Add -- the row OBJEXT
+// OPENED when it ported FindOrLoad, which calls Add unconditionally on both
+// branches. Blocked until now on the IO::VisitorStream LAYOUT (not, as the
+// holdback said, on its constructor: that is exported).
+extern int RtObjectExternalAddRegister();           // external_add.cpp
+// Wave 11 follow-up 2 lane IOSTREAM. External::SaveText -- the TextFileStream
+// half of the same blocker: exported ctor, missing LAYOUT.
+extern int RtObjectExternalSaveTextRegister();      // external_savetext_win.cpp
+// Wave 11 follow-up 2 lane IOSTREAM. External::Load -- the CompressedFileStream
+// half, and a full deserialisation driver rather than a stream wrapper.
+extern int RtObjectExternalLoadRegister();          // external_load.cpp
 
 void RtObjectPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
@@ -126,5 +137,22 @@ void RtObjectPortInit() {
         n += RtObjectExternalPathStackRegister();
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_COMPILED"))
         n += RtObjectExternalCompiledRegister();
+    // Wave 11 follow-up 2 lane IOSTREAM. Nested under BANISHED_RT_EXTERNAL for
+    // the same reason as its four neighbours -- it is ExternalFactory state --
+    // with its own switch because it is the one body in the class that drives a
+    // stack-constructed IO stream, and BANISHED_RT_EXTADD=0 A/Bs exactly that.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTADD"))
+        n += RtObjectExternalAddRegister();
+    // Same nest, its own switch. SaveText is the only body in the class that
+    // WRITES a file, so BANISHED_RT_SAVETEXT=0 A/Bs the write path alone --
+    // which is also how its byte-comparison oracle gets its "theirs" side.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_SAVETEXT"))
+        n += RtObjectExternalSaveTextRegister();
+    // Same nest, its own switch. Load is the only body in the class that
+    // CREATES objects (through BaseTypeInfo::factoryFn) and the only one on the
+    // resource read path, so BANISHED_RT_EXTLOAD=0 is the A/B that matters most
+    // in this group.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTLOAD"))
+        n += RtObjectExternalLoadRegister();
     printf("[RtPort] Object: %d exports registered\n", n);
 }
