@@ -126,7 +126,8 @@
 //
 //   MINTED IS NOT PROMOTED, and this is where a reader of the above will go
 //   wrong. None of these tables is promoted: a run reports
-//   `[RtMint] promoted 31` of 62 minted rows, so ??_7Stream@ prints
+//   only **5 of 62** minted VTABLES are registered on a default run, so
+//   ??_7Stream@ prints
 //   READY / TRAP=0 on the readiness screen and is STILL AN OPEN DOOR that this
 //   lane's own cutover screen catches
 //   (reference_a_green_readiness_screen_is_not_a_route.md).

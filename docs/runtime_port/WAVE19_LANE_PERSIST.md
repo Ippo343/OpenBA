@@ -538,11 +538,11 @@ while `Get-Process` still listed it.
 
 ## T6. What this tranche still does NOT claim
 
-1. **`BeginDelete@` and `??1Persistence@` have no live-route exercise.** Both
+1. *[ANNOTATED — true but misleading, see §T7.2]* **`BeginDelete@` and `??1Persistence@` have no live-route exercise.** Both
    are verified by the synthesised oracle only.
 2. **`BeginLoad@` and `BeginGetSaveGameInfo@` ran live but were never COMPARED
    live.** Their live evidence is "the body was entered", nothing more.
-3. **The dtor's per-element destroy pass (`0x18002afc0`) was NOT exercised** —
+3. *[ANNOTATED — the stated reason is FALSE, see §T7.1]* **The dtor's per-element destroy pass (`0x18002afc0`) was NOT exercised** —
    both dtor cases seed `saveCount = 0` deliberately, because a fabricated
    non-zero count would drive it over elements that are not there.
 4. **The `Save0` crash is NOT diagnosed**, only bounded. Format-mismatch is the
@@ -554,3 +554,84 @@ while `Get-Process` still listed it.
    boot-probe fault in another wave's code should not be able to take out this
    lane's oracle, which is exactly what happened when
    `BANISHED_RT_ORPHAN_PROBE=1` died at boot here.
+
+## T7. ANNOTATION — decomposing my own §T6, and two premises that are false
+
+Added after §T6 was written, at lane CSTREAM's prompting. **No measurement
+changed and nothing was reopened**; this annotates two claims of §T6 that do not
+survive their own premises.
+
+**The rule being applied** (lane CSTREAM's, refined jointly): an impossibility
+claim is unfalsifiable by any enumerator, but it is a *conclusion resting on a
+premise*, and the premise is usually an ordinary existence claim a screen CAN
+reach. **So when you write a blocker, write its premise as a separate, checkable
+line.** That is what makes "a stated blocker is a claim with a timestamp"
+actionable — otherwise it tells you to re-check a blocker and hands you nothing
+to re-check. It is also exactly what retired §7.1: the integrator's question
+("is the blocker the thread, or the absence of an instance you may destroy?")
+did nothing but force the premise out of the conclusion, after which one
+`objdump` finished it.
+
+### T7.1 §T6.3 is WRONG — the per-element destroy pass IS exercisable
+
+§T6.3 says the dtor's per-element pass (`0x18002afc0`) was not exercised because
+*"a fabricated non-zero count would drive it over elements that are not there."*
+
+Decomposed, the premise is "I cannot supply well-formed `SaveGameInfo`
+elements". **That is false, and it is falsified by this lane's own probe file.**
+`RunReaderSweep` already constructs three valid `SaveGameInfo` entries with real
+engine-allocated Strings, in the same translation unit. And the body is an
+ordinary refcount release over the array:
+
+```
+18002afc0  test r8d,r8d ; jle <ret>          ; count == 0 -> no-op
+18002afec  lea  rbx,[rdx+8]                  ; -> the `name` String at elem+0x08
+18002b009  mov  rax,[rbx] ; test ; je next
+18002b011  dec  dword [rax-4] ; jz -> free   ; the documented String release idiom
+           ... stride 0x10 per element
+```
+
+So seeding `saveCount = 3` with the entries the file already knows how to build
+would exercise it. **The claim that the case is unreachable is false; the true
+statement is that I did not do it.** Cost is small — the elements exist, the
+release idiom is the one `RtString_ReleaseInline` already implements — and the
+value is real, because the pass frees Strings and a port that mis-walked the
+stride would corrupt the heap rather than fail a comparison.
+
+**Not done here** (the wave is closing and a new probe case would land
+unreviewed), and recorded as the honest reason rather than dressed as a
+limitation. This is the next thing to do to this file.
+
+### T7.2 §T6.1 is TRUE AS WRITTEN and MISLEADING IN EFFECT
+
+§T6.1 says `?BeginDelete@` has no live-route exercise, and §1/§T2 attribute that
+to "needs a Delete click". Literally accurate. But it reads as *no route
+exists*, and decomposed the premise is "there is no driver for a
+SaveLoadDialog button", which is **false**: `standalone/autostart.cpp` already
+has the whole mechanism —
+
+```
+autostart.cpp:44   constexpr int kSLD_LoadClick = 2;   // SaveLoadDialog OnEvent 0x12/2 = buttonLoad
+autostart.cpp:435  InjectClick(dlg, kMsg_ButtonClick, kSLD_LoadClick);
+```
+
+What is missing is **one constant**, the Delete button's event id, not a driver.
+That is `reference_grep_the_harness_before_declaring_no_route.md` — the same
+trap that took a body from unverified to 1202/1202 once someone grepped
+`standalone/`. I did grep the harness, found `kSLD_LoadClick`, and still wrote
+the blocker in a form that implies unreachability.
+
+**Corrected statement:** `?BeginDelete@` is unexercised because nobody has
+supplied the Delete event id to an injector that already exists.
+
+### T7.3 What this says about the method
+
+Two for two on the first two claims I pointed decomposition at, and both were
+mine. Lane CSTREAM scored 1 of 3 on the same exercise against their own sealed
+report. That is a high enough hit rate on a cheap check that **decomposing every
+impossibility-shaped claim before sealing** looks worth making routine, and it is
+the only mechanism either lane could name that reaches this class at all — a
+wide screen cannot, because no enumerator lists the possible.
+
+The residue neither mechanism reaches is a **number quoted from a stale
+document**, which was never anyone's subject. One cell, not a category.

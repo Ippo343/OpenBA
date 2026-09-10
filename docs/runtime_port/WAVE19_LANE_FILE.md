@@ -323,7 +323,7 @@ was wrong.
 **`??_7Stream@` is the one worth pausing on, because a readiness screen says the
 opposite.** Phase 0c reports it `slots=7 ported=1 TRAP=1 purecall=5`, and this
 run's own readiness table says `READY … TRAP=0`. It is still an OPEN door,
-because **`[RtMint] promoted 31 minted DATA row(s)` out of 62 minted** — READY is
+because only **5 of 62 minted VTABLES** are registered on a default run [CORRECTED — see §T11] — READY is
 not PROMOTED, and only a promoted row is registered.
 `reference_a_green_readiness_screen_is_not_a_route.md` is exactly this, and it
 would have been easy to read the READY line as a shut door.
@@ -436,7 +436,8 @@ differs. Every number in this document comes from a run that printed
   them. 0x1801559d0 (the text Encoding table) is unexported and unminted and is
   a fourth.
 * **Whoever owns promotion**: `??_7Stream@IO@@6B@` is READY with TRAP=0 and is
-  *not promoted*, so it is an open door. 31 of 62 minted rows are promoted.
+  *not promoted*, so it is an open door. Only 5 of 62 minted vtables are
+  promoted [CORRECTED — see §T11].
 * **Lane PERSIST / whoever next**: `?SetObject@TextFileStream@IO@@` is newly in
   `called` and unported. It is row 7's only remaining door.
 * **The integrator**: the census cannot see 4 of this lane's 12 bodies (§2.1).
@@ -533,7 +534,7 @@ The first measured run after the tranche:
 **Ten registered bodies at TRAP=0 and not one of them entered.** The cause is
 measured, not guessed, and this lane's own cutover board prints it two lines
 above: the name doors for both tables read **NO**. The tables are MINTED but
-**NOT PROMOTED** (`[RtMint] promoted 31` of 62 minted rows), so
+**NOT PROMOTED** (only 5 of 62 minted vtables are, [CORRECTED — see §T11]), so
 `RT_DATA_SLOT("??_7FileStream@IO@@6B@")` inside our own constructors falls
 through to the DLL, our objects get RETAIL's table, and retail's slot bodies run.
 
@@ -703,7 +704,8 @@ every FileStream it can see is stack-constructed or embedded in a
 ## T9. What this tranche does NOT claim
 
 * **NOT that either row is PROMOTED.** They are minted and at TRAP=0. `[RtMint]
-  promoted 31` of 62 — **minted is not promoted**, and until promotion nothing
+  promoted 31` is a MIXED count; only **5 of 62 vtables** are promoted
+  [CORRECTED — see §T11] — **minted is not promoted**, and until promotion nothing
   in play dispatches these bodies (§T3). `??_7BinaryFileStream@` is now fully
   owned (both stampers ours) and is *ready for* promotion; that is a different
   statement from being promoted, and the decision is not this lane's.
@@ -756,3 +758,202 @@ every FileStream it can see is stack-constructed or embedded in a
 `2ab06ae` (the copy constructor), plus the oracle and this addendum.**
 Evidence: `docs/runtime_port/wave19_lane_file/tranche_main_{debug,error}.log`,
 `tranche_neg1.txt`, `tranche_neg2.txt`.
+
+## T11. CORRECTION — "31 of 62 promoted" was MY error, and it is the same defect I was asked to diagnose
+
+The integrator asked whether the `31 of 62` figure came from the readiness
+screen with its denominator attached, or whether a lane had to derive it —
+"because if a lane has to derive it, that is an instrument defect."
+
+**A lane had to derive it, the instrument defect is real, and I fell into it.**
+The screen prints two lines with DIFFERENT SUBJECTS:
+
+```
+[RtMint] promoted 31 minted DATA row(s) -- live on every run
+[RtMint] minted 62 vtables (598 slots: ...), 104 BaseTypeInfo, 39 storage symbols
+```
+
+`promoted 31` carries **no denominator and does not name its kinds**. I paired
+it with the `62` on the adjacent line. **"DATA row" spans three kinds**, and
+counting them in `standalone/reg_mint_promoted.cpp` gives:
+
+| kind | promoted | minted |
+|---|---|---|
+| `??_7` vtables | **5** | 62 |
+| `?_typeInfo@` | 25 | 104 |
+| `?_singleton@` / storage | ~1 | 39 |
+
+**The correct statement is `5 of 62` minted VTABLES, not 31 of 62.** The five
+are `??_7{SpriteSheet,Element,DialogInstance,ToolTipDialog}@UI@@6B@` and
+`??_7ImageBuffer@Video@@6B@`. Wherever this report said 31 of 62 it now says 5
+of 62 and points here; the wrong figure also went to the integrator in two
+messages and is corrected there.
+
+**And the corrected number makes the point far stronger.** The same run prints
+
+```
+[RtMint] 28 of 62 vtables are COMPLETE (every non-purecall slot is our port)
+```
+
+so **28 vtables are minted and complete, and 5 are registered. Twenty-three
+complete tables are sitting unregistered**, my two among them. That is the
+systemic figure, and no single line of the screen's output states it.
+
+**Why it slipped**: `promoted 31` reads as a count of the thing the surrounding
+lines are about, which is vtables. This is `reference_a_screen_that_cannot_name_its_subject.md`
+in its quietest form — the line is not wrong, it simply does not say what it
+counted, and the adjacent line supplies a plausible denominator for a different
+population. The fix is one word: `promoted 31 minted DATA row(s) (5 vtables,
+25 typeInfo, 1 storage)`.
+
+## T12. THE `??_7Stream@IO@@6B@` QUESTION — confirmed, with a refinement that inverts the conclusion
+
+The integrator asked whether a row can be **permanently unpromotable (NO-OP)
+AND still an open cutover door**, and asked for the mechanism rather than the
+inference.
+
+**Confirmed. And the refinement matters: the two facts are not merely
+compatible, they are about different objects.**
+
+### The mechanism, from source
+
+**Eight sites in six files resolve `??_7Stream@IO@@6B@`, and every one of them
+is a WRITE of the address into an object's vptr. Not one dispatches through the
+table:**
+
+```
+runtime/src/io/compressedstream.cpp:166        static const void* v = ResolveExport("??_7Stream@IO@@6B@");
+runtime/src/io/file_stream.cpp:242,364,919     self->base.vptr = RT_DATA_SLOT(...)
+runtime/src/object/external_add.cpp:366        vs.base.vptr    = RT_DATA_SLOT(...)
+runtime/src/object/external_load.cpp:476       cfs.base.base.vptr = RT_DATA_SLOT(...)
+runtime/src/object/external_savetext_win.cpp:373  ts.base.base.vptr = RT_DATA_SLOT(...)
+runtime/src/save/saveload_meta.cpp:611,649     ... = RT_VTABLE_ONCE("??_7Stream@IO@@6B@")
+runtime/src/ui/userinterface.cpp:1621          return RT_DATA_SLOT(...)
+```
+
+Corroborated live rather than only from source: the strict run records
+`[RtResidue] 5 … ??_7Stream@IO@@6B@` — five resolves that actually reached the
+DLL.
+
+So phase 0a's finding (**nothing ever DISPATCHES through this table**) and this
+lane's OPEN verdict (**several things need its ADDRESS to stamp**) are both true
+and independent. A destructor that stamps `??_7Stream@` on the way down is
+reproducing retail's store; it does not care what is in the table.
+
+### The refinement: it is REGISTRATION that satisfies the door, not promotion of CONTENT
+
+`RtDataMintInit` (`standalone/rt_data_mint.cpp:909`) separates two things that
+the word "promote" runs together:
+
+* **Minting** lays out our storage — a copy of the table with our ported slots
+  substituted and traps elsewhere. Every row is minted.
+* **Registering** publishes that storage under the symbol and address.
+  `RegisterMintedData()` does it for ALL rows but is gated on
+  `BANISHED_RT_MINT`; the default path calls `RtMintRegisterPromotedRows()`,
+  which publishes only the measured-safe subset.
+
+An unpromoted row's storage EXISTS and is not published, so `RT_DATA_SLOT` misses
+the registry and falls through to the DLL. **With the DLL gone, all eight sites
+above stamp NULL.**
+
+**So `UNPROMOTABLE(NO-OP)` correctly says "no PORT work remains" and must NOT be
+read as "satisfied at cutover".** The integrator's inference is right.
+
+**And the inversion, which is the part worth acting on:** the reason promotion is
+a measured, one-row-at-a-time decision is the risk that a *wrong slot* gets
+dispatched. **For a proven NO-OP row that risk does not exist** — nothing
+dispatches through it, so the storage's contents are irrelevant and could hold
+retail's pointers verbatim. **A NO-OP row is therefore the SAFEST possible
+promotion, not one to skip.** Phase 0a's proof is exactly the warrant that makes
+registering it cheap.
+
+The same shape covers 3 of this lane's 7 open doors: `??_7Stream@`,
+`??_7FileStream@`, `??_7BinaryFileStream@` are open for lack of REGISTRATION,
+not for lack of ports.
+
+**What this lane did NOT verify**: that promoting `??_7Stream@` is safe, or that
+phase 0a's NO-OP proof is sound. Neither is this lane's; the answer above is the
+mechanism only. Note also that the door screen alone proves only that the symbol
+is ABSENT FROM THE REGISTRY — it is a registry query, not a live resolve. The
+residue census is what proves something actually asks.
+
+## T13. ROW 7 CLOSED — and the harness was in the tree
+
+The integrator asked whether a save-text harness exists or whether this lane
+simply did not look. **The honest first answer was "did not look". The second
+answer, after looking, is that it exists** —
+`runtime/src/object/external_savetext_probe.cpp`, armed by
+**`BANISHED_RT_SAVETEXT_PROBE=1`** from `external_add.cpp:277`, with three
+negative controls. `reference_grep_the_harness_before_declaring_no_route.md`
+paid out again, against this lane.
+
+Measured on that route:
+
+```
+[SaveTextProbe] VERDICT ctl=0 checked=13 failed=0 bytes=42 serCalls=1/1  PASS
+[ExtSaveText] calls=1 typeFound=1 createFailed=0 serialized=1 serializeTrue=1
+[FileCutover] attendance  ??0TextFileStream=1
+```
+
+**Row 7 (`??0TextFileStream@`) is EXERCISED and sits on an oracle-verified
+path**: 13 checks, 0 failures, 42 bytes byte-compared. Attendance 1 is the
+oracle's OURS pass — the THEIRS pass calls the shipped constructor in-DLL, which
+is not a door and does not reach our counter, so 1 is the expected figure and
+not a shortfall.
+
+**Precisely what this does and does not claim.** It is not a dedicated oracle on
+the constructor: it is an ENCLOSING oracle whose ours-side runs through our
+constructor and whose 42 compared bytes are what the resulting stream wrote.
+That is materially stronger than attendance alone and materially weaker than the
+slot oracle in §T4. Row 7 is recorded **PORTED, EXERCISED, COVERED BY AN
+ENCLOSING ORACLE** — not "verified" in §T4's sense.
+
+**A fact from that probe worth carrying wave-wide**: the retail TEXT encoding's
+two serializer factories are STUBS — `0x1801559d0+0x18 -> 0x1800b9a80` and
+`+0x20 -> 0x1800b9a70`, both `XOR EAX,EAX ; RET`. **Text I/O is stripped from
+the shipped build** (it is a Tools-x64.exe path), which is why `??0TextFileStream@`
+can never be attended on any gameplay route in this DLL, and why the probe's
+subject has to be synthetic. That is a fact about retail, established by running
+retail.
+
+## T14. ROW 8 — a written expiry, from the callee, not from a guess
+
+`??1FileSystem@IO@@QEAA@XZ` reads attendance **0 on every run in this document**,
+including the SaveText route. Before writing a holdback I read the caller, as
+lane PERSIST's retired `??1Persistence@` blocker requires.
+
+**Its sole caller in this tree is `RtEngine_Engine_Shutdown`**
+(`runtime/src/engine/engine_lifecycle.cpp:1005`, inside the teardown chain that
+also destroys Factory, InternalFactory, ExternalFactory, Modification and
+Persistence). And that file **already records, with evidence, that its own
+`calls=` is structurally zero** (`engine_lifecycle.cpp:183`):
+
+> `Engine::Shutdown`'s `calls=` is ZERO and will stay zero. `game_main.cpp`
+> resolves `?Shutdown@Engine@1@QEAAXXZ` only to satisfy its own null guard
+> (line 426) and then calls its own `ShutdownEngineStaged()` instead (line 924).
+> Nothing in this project calls the real one.
+
+So row 8's blocker is **not "no driver found"** — it is that its only caller is
+deliberately never called, by this project's own design. That is a stronger and
+more useful statement than a failed search, and it came from the callee.
+
+**WRITTEN EXPIRY, in the Wave 18 form:**
+
+* **What would verify it**: any run in which `RtEngine_Engine_Shutdown` actually
+  executes. Its five sibling destructor calls would be exercised at the same
+  time, so this expiry is shared with `??1Modification@` and `??1Persistence@`.
+* **What would have to change for that to be possible**: `game_main.cpp:924`
+  would have to call the real `Engine::Shutdown` instead of
+  `ShutdownEngineStaged()`. That is a deliberate harness decision, not an
+  accident, so this expiry is a REQUEST TO ANOTHER LANE, not a waiting game.
+* **The cheaper route that does not need any of that, and which this lane did
+  NOT build**: a direct two-subject oracle in the shape of §T4's `CaseCopyCtor`
+  — build two identical `IO::FileSystem` images, run ours on one and the shipped
+  body on the other, compare the bytes and the freed blocks. It is possible
+  today. **Its weakness is stated rather than discovered later**: the subject
+  would be hand-built, so it would test our construction of a FileSystem as much
+  as retail's destruction of one, and the packfile-index tree at +0x40 is the
+  part most likely to be built wrong. That is why it is offered as a scoped
+  follow-up rather than done in a hurry at the end of a lane.
+
+Row 8 stays **PORTED, NOT VERIFIED**, with the above as its expiry.

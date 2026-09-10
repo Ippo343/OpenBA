@@ -15,7 +15,8 @@
 // That is not a contradiction, it is the whole lesson
 // (`reference_a_green_readiness_screen_is_not_a_route.md`), and the cause is
 // measured rather than guessed: the two tables are MINTED but NOT PROMOTED
-// (`[RtMint] promoted 31` of 62 minted rows), so this lane's own cutover board
+// (only 5 of 62 minted VTABLES are registered on a default run -- NOT the 31
+// this file first said, which counts a mix of kinds), so this lane's own board
 // reads their name doors `NO`. `RT_DATA_SLOT("??_7FileStream@IO@@6B@")` inside
 // our own constructors therefore falls through to the DLL, our objects get
 // RETAIL's table, and retail's slot bodies run. Ten registered bodies, nothing
