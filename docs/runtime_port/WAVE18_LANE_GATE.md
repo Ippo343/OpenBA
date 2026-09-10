@@ -137,19 +137,49 @@ diff distinguishes them.
 
 ---
 
-## 3. GFXIF's pre-registered prediction, scored in two separate halves
+## 3. GFXIF's pre-registered prediction — scored under kickoff §6.15
 
-### Half 1 — "the wall MOVES OFF `DeviceData::EnumerateInterfaces`" — **CORRECT**
+Scored under the rule fixed in `WAVE18_KICKOFF.md` §6.15 **before this data
+existed**, not under the reading GFXIF proposed at close. Three separate lines,
+not merged into a verdict:
 
-Measured directly, with a positive control, on the counter GFXIF correctly said
-its own A/B runs could not supply.
+    H1  "the wall MOVES OFF DeviceData::EnumerateInterfaces"  ....  TRUE
+    H2  "it does not follow that the boot completes"          ....  TRUE
+    DISTANCE TRAVELLED  ...  +2 named Engine::Startup steps (neither half's)
 
-| line, emitted by unchanged code | attempt 24 | attempt 25 |
+### H1 — **TRUE**: it died in a DIFFERENT function
+
+§6.15 makes "inside `EnumerateInterfaces` vs. after it" load-bearing, so it is
+established from the symbolized fault address **by address RANGE**, not by the
+nearest preceding symbol in a log line, and not from any crash-log summary field:
+
+| | range in this exe | contains the fault? |
 |---|---|---|
-| `[Dx11] FAILED to resolve Runtime import` | 9 | **0** |
-| `[Dx11] devicedata import UNRESOLVED` | 9 | **0** |
-| `[Dx11] devicedata Imports field #N is null` | 9 | **0** |
-| `[Dx11Seam] FORWARD TO ORIGINAL: DeviceData slot 1` | 1 | **0** |
+| frame #1, the return address of the null call — `+0x2DEEF9`, VA `0x1402DEEF9` | — | — |
+| `RtEngine_Engine_Startup` | `[0x1402DE782, 0x1402DF472)` | **YES**, at `+0x777` |
+| `VideoDX11::(anonymous namespace)::DeviceData_EnumerateInterfaces(DeviceData*)` | `[0x1403F632A, 0x1403F6E3C)`, size `0xB12` | **NO** — over 1 MB away, no overlap |
+
+**No ambiguity to report, and I checked for the two shapes §6.15 says it cannot
+pre-decide.** Not an inlined callee: `EnumerateInterfaces` has its own non-empty
+range in this binary, so it was not inlined into anything. Not a tail-called
+helper: the complete stack is `#1 RtEngine_Engine_Startup ← #2 Game::RunGameMain
+← #3 WinMain ← KERNEL32 ← ntdll`, with **no DX11 frame at any depth**. The rule
+decides this case cleanly.
+
+**Corroborating measurement, with denominators** — per the standing instruction
+that a zero is only quotable beside its denominator:
+
+| line, emitted by unchanged code | attempt 24 | attempt 25 | denominator |
+|---|---|---|---|
+| `[Dx11] FAILED to resolve Runtime import` | 9 | **0** | 50 table entries |
+| `[Dx11] devicedata import UNRESOLVED` | 9 | **0** | 50 table entries |
+| `[Dx11] devicedata Imports field #N is null` | 9 | **0** | 50 `Imports` pointer fields |
+| `[Dx11Seam] FORWARD TO ORIGINAL: DeviceData slot 1` | 1 | **0** | 1 possible |
+
+So: **50/50 imports resolved and 50/50 struct fields non-null**, where attempt 24
+had 9 unresolved and 9 null. `g_imOk` is an AND over the whole table, so 50/50 is
+the condition `EnumerateInterfaces` needs to run its real body instead of
+forwarding to an absent original.
 
 **Positive control for a screen whose whole result is a zero.** A zero from an
 instrument is worth nothing until the instrument is shown to be live, so:
@@ -163,21 +193,31 @@ to make (§4, "What this run CANNOT say"), and it was right to refuse it: with t
 DLL present, `ResolveExport` falls through and the table fills either way. With
 the DLL absent it cannot, and it did.
 
-### Half 2 — "it does NOT follow that the boot completes" — **CORRECT**
+### H2 — **TRUE**, scored on one question only: did the boot complete?
 
-The boot did not complete. It died two `Engine::Startup` steps later, at exit 3.
+**It did not.** Exit code 3, `attempt25_boot_state.txt` reads `STATE=BOOTING`,
+`[BootState] RUNNING` never printed. That is the whole of H2's evidence, and per
+§6.15 it is independent of H1 and of where the fault landed.
 
-**The reasoning offered for half 2 is nevertheless refuted in the specific, and it
-matters that the two are scored apart.** GFXIF's stated reason was that
+**Separately — and this is not part of either score — the REASONING GFXIF offered
+for H2 is refuted in the specific.** Its stated reason was that
 "`EnumerateInterfaces` is a long body and the next null is as likely *inside* it
-as after it." Measured: the next null is neither inside `EnumerateInterfaces` nor
-anywhere in `Video`. `EnumerateInterfaces` ran to completion on our nine bodies,
-`EnumerateVideoModes` returned, `Input::Configuration` started, and the fault came
-from `Engine::Startup` itself.
+as after it." The next null is neither inside `EnumerateInterfaces` nor anywhere
+in `Video`. A right prediction reached through a mechanism that did not occur is
+still a right prediction; recording the two apart is the only way the difference
+stays visible.
 
-A right prediction reached through a mechanism that did not occur is a right
-prediction — and separating the claim from its reasoning is the only way to see
-that the reasoning was not what carried it.
+### DISTANCE TRAVELLED — reported separately, belongs to neither half
+
+**+2 named `Engine::Startup` steps**, as detailed in §1: `EnumerateVideoModes`
+(line 678) and the `Input::Configuration` ctor + `Startup` (`g_startupFailAt = 9`)
+both now complete, and the fault is at line 710.
+
+Under §6.15 this line costs nothing to report honestly, which is its point: had
+the fault landed deeper *inside* `EnumerateInterfaces`, this line would still have
+recorded real progress with H1 scored FALSE. It did not have to do that work here,
+but the rule was not stretched to reach TRUE either — H1 is TRUE on the range
+evidence alone.
 
 ---
 
@@ -386,6 +426,37 @@ as work to be done ("Until that lands, do not run this procedure"). It landed �
 reader following the runbook top-to-bottom today is told to stop before starting.
 Worth one edit by whoever next touches that file; recorded rather than fixed
 because this lane changes no code.
+
+### 5.6 The DX11 import table is **50** entries, not 40
+
+`WAVE18_LANE_GFXIF.md` §3 describes `GetImports()` as resolving "a **40-entry**
+table", and `WAVE18_KICKOFF.md` §6.1 repeats the figure. Counted in
+`dx11/src/devicedata.cpp`: the table has **50** `{ &g_im.field, "<mangled>", iat }`
+entries, and `struct Imports` has **50** pointer fields — which is also what the
+second loop scans, and is consistent with attempt 24 naming a null at field #28.
+
+No conclusion moves: `g_imOk` is an AND over the whole table whatever its length,
+so the mechanism GFXIF described is exactly right. But it is the denominator of
+this lane's headline zero, and a zero reported without its denominator is the
+failure §7b was written about. Sixth instance this wave of a file miscounting its
+own subject; recorded, not fixed, because this lane changes no code.
+
+### 5.7 Both my screens were run FROM the tree they measure — checked, not assumed
+
+GFXIF §7b's lesson (a scanner that derives its root from its own path must be run
+from the tree it is meant to measure; one of this project's scanners measured the
+wrong checkout twice) applies directly to §4's screens, so it was verified rather
+than presumed: `tools/runtime_census.py:40` and
+`tools/unsatisfied_export_scan.py:53` both compute
+`REPO = dirname(dirname(abspath(__file__)))`. Both were invoked as
+`tools/<script>.py` with the cwd set to `C:/code/GIT/wt-w18-gate`, so `__file__`
+resolved inside this worktree and `REPO` is this worktree.
+
+One wrinkle worth naming because it looks like the failure and is not: the
+interpreter used was the **main checkout's** venv
+(`untitled_rev_eng_project/tools/ghidra_mcp/.venv`), because a worktree does not
+carry an untracked venv. That is irrelevant to `REPO`, which is derived from the
+script path and not from the interpreter's. The script path is what was checked.
 
 ---
 
