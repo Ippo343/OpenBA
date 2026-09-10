@@ -670,6 +670,68 @@ int RtMintRegisterPromotedRows() {
     RegisterRuntimeAddr(0x1801fc6f0ull, st); ++n;
 
     // ========================================================================
+    // WAVE 11 LANE OBJDATA — the two Object `?_typeInfo@` rows
+    // ========================================================================
+    //
+    // Both are READY on the exit-phase shadow, in the run where the DLL's own
+    // Factory::Startup HAS executed, so the typeId is compared and not skipped:
+    //     BaseTypeInfo : 624 field comparisons, 0 MISMATCH,
+    //                    0 typeId not-yet-comparable
+    //     typeinfo rows: 104 READY, 0 BLOCKED
+    // (At phase=init the same two read `idcmp=NO` — that is the DLL still
+    // holding the ctor sentinel, not a mismatch, and reading the init snapshot
+    // as the verdict would have blocked both rows for nothing.)
+    //
+    // ORDERING, which is the failure mode this pair could have had. Both rows
+    // have an EAGER consumer that resolves the node ONCE and republishes the
+    // pointer: standalone/reg_unreg_lane1.cpp:128 does
+    // `RegisterDispatchSlot(0x140152870, ResolveExport("?_typeInfo@External@…"))`,
+    // filling an exe import slot. A promotion landing AFTER that call would
+    // leave the exe's readers on the DLL's node and ours on the minted one.
+    // It does not: `RuntimePortInit()` (standalone/main.cpp:1734) contains both
+    // RtDataMintInit and this function, and `AddressRegistryInit()` — which
+    // calls RegisterUnregLane1Batch — is at :1755, twenty-one lines later. The
+    // exe slot therefore receives OUR node. Checked, not assumed, and it is the
+    // same ordering argument the SaveLoad row above turns on.
+    //
+    // `?_typeInfo@ExternalList@Object@@` — GATE (b) IS SATISFIED BY A ROUTE
+    // THAT ACTUALLY RUNS, which is what separates this row from the three
+    // `?_typeInfo@` rows this file still holds back. Its consumer is the retail
+    // type gate in code/Game/Game/gameupdateloop_load.cpp:281 and :355, which
+    // reads the node's typeId and feeds it to `IsDerivedFrom`. A/B on the
+    // autostart route, one variable
+    // (`BANISHED_RT_MINT_ROWS=?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A`):
+    //     armed    [GUL::DiseaseList] isExternalList=1 diseases=12
+    //              [GUL::Help]        isExternalList=1 topics=66
+    //     control  [GUL::DiseaseList] isExternalList=1 diseases=12
+    //              [GUL::Help]        isExternalList=1 topics=66
+    // Same verdict and same counts on both sides; only the per-run heap
+    // addresses differ. The gate is exercised AND the promotion is neutral,
+    // which is the pair of facts `??_7DialogController@UI@@6B@` could never
+    // produce because nothing entered its consumer at all.
+    //
+    // `?_typeInfo@External@Object@@` — its exercised consumer is the eager
+    // RegisterDispatchSlot above, which runs unconditionally on every boot, plus
+    // `TypeIdExternal()` in runtime/src/engine/mainloop_video.cpp:333. Both read
+    // the typeId dword, and `idcmp=yes` says that dword is the DLL's own value.
+    // STATED PLAINLY BECAUSE IT IS THE WEAKER HALF OF THIS PAIR: the three
+    // accessors in runtime/src/object/object_typeinfo_accessors.cpp that also
+    // read this node were entered ZERO times in both halves of the A/B, so they
+    // are NOT part of this row's warrant.
+    //
+    // Boot measured with both rows armed: `[Shutdown] done`, 0-byte crash log,
+    // and no `[RtDiff]` site anywhere reporting a non-zero divergence count.
+    st = RtMintPromotionStorage("?_typeInfo@External@Object@@0VBaseTypeInfo@2@A",
+                                0x1801f9b38ull);
+    RegisterRuntimeExport("?_typeInfo@External@Object@@0VBaseTypeInfo@2@A", st);
+    RegisterRuntimeAddr(0x1801f9b38ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A",
+                                0x1801f9be0ull);
+    RegisterRuntimeExport("?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A", st);
+    RegisterRuntimeAddr(0x1801f9be0ull, st); ++n;
+
+    // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted
     // ========================================================================
     //
@@ -702,6 +764,13 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ??_7DialogController@UI@@6B@ | 11/11 | WAVE10E_LANE_FINAL.md §2 | NONE, EVER
     // RT_UNPROMOTABLE: ??_7Dialog@UI@@6B@ | 9/9 | WAVE10E_LANE_FINAL.md §3 | either Dialog factory ported+registered
     // RT_UNPROMOTABLE: ?_singleton@Application@1@0PEAV11@EA | n/a (scalar ptr) | WAVE12_APPLICATION.md §ceiling | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ??_7Base@Object@@6B@ | 2/2 (1 purecall) | WAVE11_LANE_OBJDATA.md §2 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7External@Object@@6B@ | 4/4 (4 purecall) | WAVE11_LANE_OBJDATA.md §2 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7CompiledExternal@Object@@6B@ | 4/4 (4 purecall) | WAVE11_LANE_OBJDATA.md §2 | NONE, EVER
+    // RT_UNPROMOTABLE: ?_singleton@Factory@Object@@0PEAV12@EA | n/a (scalar ptr) | WAVE11_LANE_OBJDATA.md §3 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_singleton@ExternalFactory@Object@@0PEAV12@EA | n/a (scalar ptr) | WAVE11_LANE_OBJDATA.md §3 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_singleton@InternalFactory@Object@@0PEAV12@EA | n/a (scalar ptr) | WAVE11_LANE_OBJDATA.md §3 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA | n/a (chain head) | WAVE11_LANE_OBJDATA.md §4 | NONE, EVER | HARMFUL
     //
     // WHY EACH, in one line — the proofs are in the lane doc:
     //
@@ -737,6 +806,42 @@ int RtMintRegisterPromotedRows() {
     //      in-DLL LEA.
     //      EXPIRY: the moment either factory is ported and registered. One grep
     //      to check; [DlgTrip] foreignDispatch > 0 to confirm.
+    //
+    //  ??_7Base@Object@@6B@, ??_7External@Object@@6B@,
+    //  ??_7CompiledExternal@Object@@6B@ — NO-OP, and the proof is C++'s, not
+    //      this tree's. Each of the three carries PURECALL slots (1, 4 and 4 of
+    //      them), so each class is ABSTRACT and no leaf instance of it can
+    //      exist; a base table is therefore only ever the live +0x00 for the
+    //      instant between the base constructor and the derived one, and no
+    //      virtual call is made in that window. Two measurements close it:
+    //        * Each of the seven `?Type@`/`?TypeName@` bodies in
+    //          runtime/src/object/object_typeinfo_accessors.cpp appears in
+    //          EXACTLY ONE vtable in the whole of Runtime-x64.dll — its own base
+    //          row. Every derived class overrides both, as it must to carry its
+    //          own typeId, so no derived table can dispatch into these rows.
+    //        * No qword in ANY of the four shipped binaries holds any of these
+    //          three table addresses. The only writer of one is an in-DLL
+    //          RIP-relative LEA, which is not a door.
+    //      Gate (a) passes on all three (`slots=3 ported=2 TRAP=0 purecall=1`
+    //      and `slots=8 ported=4 TRAP=0 purecall=4` twice) since lane OBJDATA
+    //      ported the seven accessors; gate (b) reports
+    //      `[ObjTI] ATTENDANCE … entries=0` in BOTH halves of the A/B.
+    //      EXPIRY: none. Do not spend a lane hunting a route to an abstract
+    //      class's own vtable.
+    //
+    //  ??_7Internal@Object@@6B@ — READY (`slots=4 ported=4 TRAP=0 purecall=0`)
+    //      and NOT PROMOTED, and it is deliberately NOT tagged UNPROMOTABLE
+    //      alongside its three siblings above, because the fact that settles
+    //      them does not hold for it: it has ZERO purecall slots, so
+    //      `Object::Internal` is CONCRETE and a bare instance of it genuinely
+    //      could carry this table at dispatch time. Nothing on the routes this
+    //      lane drove constructs one — `[ObjTI] ATTENDANCE ??_7Internal@Object@@6B@
+    //      entries=0` in both halves — and a run in which our bodies are entered
+    //      zero times cannot tell a safe promotion from an unexercised one.
+    //      EXPIRY: the moment `[ObjTI] ATTENDANCE ??_7Internal@Object@@6B@`
+    //      prints `entries>0`. The instrument runs on every boot with no switch
+    //      and prints the table each entering object carried, so whoever sees it
+    //      move also learns whether the row itself was dispatched.
     //
     // AND THE FACT THAT SETTLES THE EXE HALF OF BOTH: Application-x64.exe
     // imports 899 symbols, 833 of them from Runtime-x64.dll, and ZERO ??_7.
@@ -900,6 +1005,77 @@ int RtMintRegisterPromotedRows() {
     //      only the DATA row waits — and after Wave 10D seven of the nine are
     //      also EXERCISED (`OnOpened=9 OnClosed=8 OnUpdateLayout=841
     //      OnUpdate=841`), which the row's status does not depend on.
+    //
+    //  ?_singleton@Factory@Object@@, ?_singleton@ExternalFactory@Object@@ and
+    //  ?_singleton@InternalFactory@Object@@ — HARMFUL, all three, and the
+    //      reason is NOT the one the Wave 15 phase-2 reference table predicts.
+    //      That table (docs/runtime_port/wave15/rt_singleton_refs.csv) asks "of
+    //      this row's in-DLL references, how many are READS in bodies we have
+    //      NOT ported?", and on that screen the three look completely different:
+    //          ExternalFactory  151 refs, 143 unported/unknown-owner reads
+    //          Factory           20 refs,  13 unported/unknown-owner reads
+    //          InternalFactory    6 refs,   1 unported read
+    //      — and that ONE unported InternalFactory reader is
+    //      `?Get@InternalFactory@Object@@SAPEAV12@XZ`, which this lane then
+    //      proved DEAD by three independent routes (Ghidra xrefs: export table
+    //      only; a rel32/jmp scan of every byte of .text: zero call sites; a
+    //      whole-image qword scan: zero pointer-valued references; and it is not
+    //      among the 899 / 163 / 146 named imports of the exe, DX11 or DX9).
+    //      Five refs ported-and-registered plus one dead reader is EXACTLY the
+    //      shape that made `?_singleton@SaveLoad@Save@@` safe, and on that
+    //      screen alone InternalFactory should have been promoted.
+    //
+    //      IT IS UNSAFE ANYWAY, and one line of this file's own exit-phase
+    //      shadow says why:
+    //          storage ?_singleton@InternalFactory@Object@@  DLL=WRITTEN  minted=zero
+    //          storage ?_singleton@Factory@Object@@          DLL=WRITTEN  minted=zero
+    //          storage ?_singleton@ExternalFactory@Object@@  DLL=WRITTEN  minted=zero
+    //          storage ?_singleton@SaveLoad@Save@@           DLL=still zero minted=zero
+    //      The three Object factories ARE constructed on every boot, and the
+    //      constructor that does it is reached by an in-DLL rel32 from
+    //      Engine::Startup, which is not a door. Our ported ctors publish
+    //      through RT_DATA_SLOT and would follow a promotion, but they never
+    //      RUN, so the minted storage stays zero for the entire process.
+    //      Promoting any of the three hands every one of our readers a NULL
+    //      factory pointer while the live factory sits in the DLL's slot — the
+    //      `?_singleton@MemoryAllocator@System@@` failure mode that makes the
+    //      global BANISHED_RT_MINT=1 switch fatal, reached by a different road.
+    //      SaveLoad is safe precisely because its DLL slot is ALSO still zero:
+    //      nothing constructs one on this route, so promoting it moved nothing.
+    //
+    //      THE GENERAL LESSON, because it is not written down anywhere else:
+    //      the reference-ownership table is NECESSARY AND NOT SUFFICIENT. It
+    //      answers "who READS this slot", and a storage row also has to answer
+    //      "does anything ever WRITE OUR copy". A row whose only writer is an
+    //      in-DLL call to a ctor we have ported but nothing invokes is unsafe no
+    //      matter how its reads are distributed. Read the `minted=` column of
+    //      the exit-phase shadow BEFORE the reference CSV.
+    //      EXPIRY: none by promotion. The condition that would change it is a
+    //      route that makes OUR ctor run — at which point `minted=written`
+    //      appears in that shadow line and the question can be re-asked.
+    //
+    //  ?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA (0x1801fc6e0) — HARMFUL,
+    //      and the highest-risk row in lane OBJDATA's ten. This is the head of
+    //      the reflection chain, and unlike the three factories above BOTH
+    //      copies are written on every run (`DLL=WRITTEN  minted=written`) —
+    //      which is worse, not better, because the two heads then hold DIFFERENT
+    //      chains. A decoder-independent disp32 scan of .text finds its
+    //      references cluster in one shape: ~104 read/write PAIRS at
+    //      0x180147xxx-0x18014axxx on a regular stride (the inlined
+    //      `??0BaseTypeInfo@Object@@` in one static initialiser per type, each
+    //      linking itself onto the head), the out-of-line ctor itself at
+    //      0x180006320, and `Factory::Startup`'s own read at 0x1800c065e. Every
+    //      one of those is an unredirectable RIP-relative access to the DLL's
+    //      cell. Our side already writes ours: `[FactoryReg] Registered 312
+    //      types into Runtime _firstTypeInfo` and `[GameMain] Post-Startup
+    //      _firstTypeInfo: 416 entries`. Today those are the SAME cell, because
+    //      the row is unpromoted and our resolver hands us the DLL's — which is
+    //      the arrangement that keeps one chain with 416 entries in it.
+    //      Promoting splits it into our 312 and their 104, with retail's
+    //      Startup walking the half that does not contain the exe's types.
+    //      EXPIRY: none before cutover. At cutover there is no second chain and
+    //      the row becomes the only head, which is a different question from
+    //      this one.
     //
     //  ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A  (0x1801f9e48)
     //      READY on the shadow — `idcmp=yes strs=0 ptr=2 fac=2traps` — and

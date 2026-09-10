@@ -40,6 +40,12 @@
 #include "mouse_inject.h"
 #include "common.h"
 #include "Object/factory_registration.h"   // DumpSlot3Inventory (BANISHED_DUMP_SLOT3)
+
+// WAVE 11 LANE OBJLIFE — the synthesised factory-dtor oracle, called from
+// Stub_Draw. Declared at FILE SCOPE on purpose: a block-scope `extern` inside
+// Stub_Draw is declared in the enclosing ANONYMOUS namespace, which links
+// against a symbol that does not exist rather than the real one.
+void RtObjectFactoryDtorsProbe();
 void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 void SpriteSheetSerializeProbe_Run();     // standalone/spritesheet_serialize_probe.cpp
 #include "UpdateLoop.h"
@@ -647,6 +653,16 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
         if (draws == 10) RenderDocIntegration::TriggerCapture();
         RenderDocIntegration::OnFrame();
     }
+
+    // WAVE 11 LANE OBJLIFE — the synthesised factory-dtor oracle's REAL call
+    // site. It needs the DLL's MemoryAllocator singleton live, and that is true
+    // only BETWEEN engine startup and engine shutdown: at RuntimePortInit the
+    // singleton does not exist yet (a MemAlloc there faults on it), and by the
+    // exit summary it has been torn down again. A drawn frame is inside that
+    // window by construction. Self-guarded and one-shot, so this is a single
+    // predictable branch per frame and a no-op unless
+    // BANISHED_RT_FACTORYDTOR_PROBE is set.
+    ::RtObjectFactoryDtorsProbe();
 }
 
 void Stub_DrawFailed(UpdateLoop* self) {

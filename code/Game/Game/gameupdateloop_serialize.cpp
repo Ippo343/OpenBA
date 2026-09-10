@@ -109,6 +109,10 @@ static void**                   s_ppIntFactory = nullptr;   // InternalFactory::
 static void**                   s_ppAchMgr = nullptr;       // AchievementManager::_singleton cell
 static const uint32_t*          s_pAchInstTypeId = nullptr; // AchievementInstance BaseTypeInfo (typeId at +0)
 
+// WAVE 11 lane OBJINT — runtime/src/object/internalfactory_persist_probe.cpp.
+// A no-op unless BANISHED_RT_PERSIST_AB is set. See its one call site below.
+extern "C" void RtObjectPersistABRun();
+
 // ------------------------------------------------------------
 // Exe helpers already ported+registered (called via the registry)
 // ------------------------------------------------------------
@@ -1023,6 +1027,18 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
             }
         }
     }
+    // WAVE 11 lane OBJINT — the synthetic-subject A/B for the two
+    // InternalFactory persist-state rows fires HERE, once, immediately before
+    // their own real call site. Not at registration time: it allocates through
+    // `System::MemAlloc`, and the DLL's allocator is not started when
+    // `RtObjectPortInit` runs (the same reason Wave 10 lane DLG2's differential
+    // is armed at registration but does not RUN until its first live call).
+    // This site is guaranteed to be after `Engine::Startup` and is where the
+    // rows themselves execute. Off unless BANISHED_RT_PERSIST_AB is set; the
+    // whole call compiles to a `getenv` on a cached table otherwise.
+    { static bool s_persistABDone = false;
+      if (!s_persistABDone) { s_persistABDone = true; RtObjectPersistABRun(); } }
+
     s_fn_ResetPersist(intFactory, stream);
     HdrTrace(stream, ser, "after-resetpersist");
 

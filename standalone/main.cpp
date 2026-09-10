@@ -1982,6 +1982,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // storage symbols the process actually populates is ground truth that
     // disappears with the DLL.
     { extern void RtDataMintShadowReport(const char*); RtDataMintShadowReport("exit"); }
+    // WAVE 11 LANE OBJDATA: gate (b) for the four ??_7…@Object@@6B@ minted rows
+    // — entries, and which table each entering object carried. Called HERE and
+    // not from a static destructor because it asks the PORT REGISTRY which door
+    // a symbol resolves to, and by static-destructor time the registry is torn
+    // down and every row reads "unregistered" (its own screen0 caught that).
+    { extern void RtObjectTypeInfoAccessorsReport();
+      RtObjectTypeInfoAccessorsReport(); }
     // WAVE 10 LANE UI4: says so out loud when its deferred probe never fired,
     // so a silent log cannot be mistaken for a passing one. No-op otherwise.
     { extern void RtUiSpriteCaptureProbeReport(); RtUiSpriteCaptureProbeReport(); }
@@ -1989,6 +1996,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // four different causes and they invert the conclusion, so bodyCalls is
     // printed beside it (runtime/src/save/saveload_meta.cpp).
     RtSaveMetaSummary();
+    // WAVE 11 LANE OBJLIFE: attendance for Object::Internal's TABLE tier. One
+    // line, ALWAYS, including zero -- a tier that is armed and never entered
+    // looks exactly like a tier that is armed and correct if nothing counts
+    // entries, and "it booted fine" is not a measurement of a body that never
+    // ran (reference_a_green_readiness_screen_is_not_a_route).
+    { extern void RtObjectInternalAttendance(); RtObjectInternalAttendance(); }
+    // WAVE 11 LANE OBJLIFE: the synthesised factory-dtor oracle's safety net.
+    // It normally reports from RtObjectPortInit; if the DLL allocator was not
+    // readable that early it defers to here rather than reporting a vacuous
+    // screen 2. Self-guarded, so this is a no-op when it already ran and when
+    // BANISHED_RT_FACTORYDTOR_PROBE is unset.
+    { extern void RtObjectFactoryDtorsProbe(); RtObjectFactoryDtorsProbe(); }
     RtDiffSummary();
     // Wave 10: the PREDICTIVE shadow oracle (BANISHED_RT_PREDICT=1). Prints
     // beside [RtDiff] and is silent when off. Read its `changed=` column
