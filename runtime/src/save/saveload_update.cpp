@@ -355,7 +355,12 @@ WorkerEnqueueFn WorkerBeginSave() {
 
 // ---- the rest of the exported dependency set --------------------------------
 using BeginGetInfoFn  = bool     (*)(void* persistence, const char** name, int what);
-using SetupLoadFn     = RtIo::SaveBlock* (*)(SavedState* self, RtIo::SaveBlock* ret);
+// SetupLoadFn moved to saveload_internal.h in Wave 14 — the port of
+// ?SetupLoad@SavedState@Save@@ needs the same shape, and this one was
+// unreachable from another file inside this anonymous namespace. One
+// definition; see the comment there for why drift in THIS shape is a wild
+// write rather than a compile error.
+using RtSaveDetail::SetupLoadFn;
 using SaveMetaDataFn  = void     (*)(SaveLoad* self, void* pixels, int w, int h,
                                      const char** nameByValue, int mode);
 using StringAssignFn  = const char** (*)(const char** self, const char* const* src);
