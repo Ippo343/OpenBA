@@ -213,6 +213,45 @@ it, not only the condition under which it lapses** — and if the answer is "who
 happens to pass by", it belongs in the next wave's input list, which is the only thing
 anyone is guaranteed to read. Hence §8 items 11 and 12.
 
+### 5.8 A CONFIRMATORY check cannot score what the account never mentioned
+
+**The wave's last finding, and it is about the wave's own closing verification.**
+
+Lane DOORS observed that this document's account of commit `97607dd9` was *prose
+describing an artefact* — the very decay class the wave spent itself on — and said a
+later reader should **open the commit, not cite the exchange.** The integrator did, and
+the check found **1 of 3 asserted claims had drifted** (`"correctable"` for `"readable"`,
+in the one block that must be unambiguous).
+
+**DOORS then bounded that result against its own interest, and the bound is the finding:**
+
+> **The check could only score the sections the ACCOUNT NAMED.** A section the account
+> never mentioned, or a claim it omitted, is **outside the denominator entirely.** So the
+> honest result is *"of what was asserted, one third had drifted"* — **NOT** *"the commit
+> has one defect."*
+
+**The stronger check reads the commit FIRST and diffs it against the account.** It was
+then run, and it found **two things the confirmatory version structurally could not:**
+
+1. **The fix DELETED a real requirement, and the account never said so.** The original
+   §6.1 sentence was *"a new tag must **declare its convention**; `unpromotable_slot_check.py`
+   is the place to enforce it."* Only the second half was misleading — but **both halves
+   were removed**, silently dropping the forward-looking doctrine along with the false
+   claim about tooling. **Restored above.** Deleting a true clause because it sits beside
+   a false one is its own defect, and no confirmatory check could see it: the account
+   mentioned no deletion, so there was nothing to confirm.
+2. **§6.4 was not part of that commit at all.** It was counted in "3 sections checked"
+   while having been written earlier — so the **denominator itself was muddled**, in the
+   act of scoring a denominator.
+
+> **A confirmatory check inherits the account's blind spots. Reading the artefact first
+> is the only version whose denominator is the ARTEFACT rather than the CLAIM.**
+
+This is the same asymmetry the wave hit repeatedly — *a screen scored on the cases it was
+handed cannot speak about the cases it was not, and the difference is invisible from
+outside unless someone writes the denominator down* — arriving one final time, at the
+level of the close's own self-verification.
+
 ### 5.6 A number you cannot measure gets a `?` and an expiry, not a guess
 
 `??_7ReaderWriter@`'s tag read `2/36`. The **36** is corrected to 26 by three independent
@@ -231,8 +270,9 @@ claims**, and normalising rewrites eighteen written verdicts by a hand that meas
 none of them. It would also **destroy the evidence that a split ever existed**, and
 convert a **known, declared inconsistency into an invisible, assumed one** — strictly
 worse, because the invisible kind cannot be checked. The parameter is **printed beside
-the verdict** instead. Normalise a tag only when the lane that owns it re-measures it,
-one at a time.
+the verdict** instead. **Going forward a new tag must DECLARE ITS CONVENTION** — that
+requirement stands as doctrine whether or not a tool checks it. Normalise a tag only when
+the lane that owns it re-measures it, one at a time.
 
 > **THE ENFORCEMENT IS NOT IMPLEMENTED. This sentence originally read
 > "`unpromotable_slot_check.py` is the place to enforce it", which is a PRESCRIPTION and
