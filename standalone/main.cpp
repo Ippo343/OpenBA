@@ -1756,6 +1756,15 @@ static bool Init() {
     printf("[Standalone] Initializing address registry...\n");
     AddressRegistryInit();
     StallDebug::Mark("AddressRegistryInit");
+    // WAVE 17 LANE CEIL — end of the REGISTRATION phase for door attendance.
+    // Placed here and not at the end of RuntimePortInit because
+    // reg_unreg_lane3.cpp, reached from AddressRegistryInit above, resolves
+    // four ?_typeInfo@…@Graphics@@ rows BY NAME to fill dispatch slots. Those
+    // are registrations, not consumers running; counting them as attendance
+    // would hand four rows a route they do not have. That those four now read
+    // init>0 while everything else reads init=0 is this boundary's own control:
+    // the quantity VARIES with the thing the boundary separates.
+    { extern void Wave17DoorAttendMarkInitDone(); Wave17DoorAttendMarkInitDone(); }
 
     // 3a. Wave 10D lane VTFID — make our UI::DialogController subclass vtables
     //     hold the INHERITED base entry in the slots the subclass does not
@@ -1984,6 +1993,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // storage symbols the process actually populates is ground truth that
     // disappears with the DLL.
     { extern void RtDataMintShadowReport(const char*); RtDataMintShadowReport("exit"); }
+    // WAVE 17 LANE CEIL: door attendance for the 62 Video/IO/Graphics DATA rows
+    // (BANISHED_W17_ATTEND=1). Placed HERE, beside the mint shadow report and
+    // NOT in a static destructor, for the reason the paragraph above gives —
+    // an instrument outside its subject's live window prints a plausible zero.
+    { extern void Wave17DoorAttendReport(); Wave17DoorAttendReport(); }
     // WAVE 11 LANE OBJDATA: gate (b) for the four ??_7…@Object@@6B@ minted rows
     // — entries, and which table each entering object carried. Called HERE and
     // not from a static destructor because it asks the PORT REGISTRY which door

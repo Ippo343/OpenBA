@@ -775,6 +775,42 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A | n/a (BaseTypeInfo) | WAVE11F_LANE_TINFO.md §3 | NONE while the DLL is present
     // RT_UNPROMOTABLE: ?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A | n/a (BaseTypeInfo) | WAVE11F_LANE_TINFO.md §3 | NONE while the DLL is present
     //
+    // ---- WAVE 17 LANE CEIL: Video / IO / Graphics ------------------------
+    //
+    // The twelve Video companion-base vtables. ONE mechanism, measured the
+    // same way for all twelve, and it is the `??_7DialogController@UI@@6B@`
+    // shape: the stamp is overwritten, or freed, UNREAD.
+    //
+    // RT_UNPROMOTABLE: ??_7ConstantBufferData@Video@@6B@ | 1/1 (3 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7ContextData@Video@@6B@ | 1/1 (19 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7DeviceData@Video@@6B@ | 1/1 (19 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7ImageBufferData@Video@@6B@ | 1/1 (6 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7IndexBufferData@Video@@6B@ | 1/1 (6 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7PixelProgramData@Video@@6B@ | 1/1 (2 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7RenderBufferData@Video@@6B@ | 1/1 (3 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7RenderStateData@Video@@6B@ | 1/1 (2 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7VertexBufferData@Video@@6B@ | 1/1 (6 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7VertexLayoutData@Video@@6B@ | 1/1 (2 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7VertexProgramData@Video@@6B@ | 1/1 (2 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7VideoProgramData@Video@@6B@ | 1/1 (2 purecall) | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER
+    //
+    // The thirteen mutable-storage rows. NOT no-ops: promoting any of them
+    // would split the brain exactly as `?_singleton@Application@1@` would.
+    //
+    // RT_UNPROMOTABLE: ?_singleton@Configuration@Video@@0PEAV12@EA | n/a (scalar ptr) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_singleton@Device@Video@@0PEAV12@EA | n/a (scalar ptr) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_firstSurface@ImageBuffer@Video@@0PEAV12@EA | n/a (list head) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA | n/a (list head) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA | n/a (list head) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA | n/a (list head) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_singleton@FileSystem@IO@@0PEAV12@EA | n/a (scalar ptr) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_singleton@Modification@IO@@2PEAV12@EA | n/a (scalar ptr) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_singleton@Persistence@IO@@0PEAV12@EA | n/a (scalar ptr) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_singleton@AnimationManager@Graphics@@0PEAV12@EA | n/a (scalar ptr) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_frameIndex@ParticleInstance@Graphics@@1HA | n/a (int counter) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_rng@Particle@Graphics@@1VRandom@System@@A | n/a (RNG state) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA | n/a (bool flag) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    //
     // WHY EACH, in one line — the proofs are in the lane doc:
     //
     //  ?_singleton@Application@1@0PEAV11@EA — HARMFUL, not no-op. This is a
