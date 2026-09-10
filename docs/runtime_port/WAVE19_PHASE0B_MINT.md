@@ -621,3 +621,112 @@ CHANGED exactly 2**; typeinfo 0/0/0; storage 0/0/0; PARSEFAIL 0. Slot total
   the file is a candidate, and there are 31 of them.
 * **B.1's corrected trap counts are arithmetic on the new extents**, not a fresh
   readiness run — that needs the lock.
+
+---
+
+# ANNEXE C — CORRECTION TO ANNEXE B (2026-09-10, post-report tranche 3)
+
+Annexe B shipped `??_7ReaderWriter@` at **31**. **It is 26.** Lane IOBASE derived
+26 independently, the integrator settled it from the bytes, and I have now
+verified it myself. Annexes A and B stay sealed; this states what B got wrong.
+
+## C.1 The .rdata there is FOUR tables, not two
+
+| | VA | slots |
+|---|---|---|
+| `??_7ReaderWriter@IO@@6B@` | `0x1801553b0` | **26** |
+| unexported, all `_purecall` | `0x180155480` | 5 |
+| unexported `IO::Encoding` (already minted by address) | `0x1801554a8` | 5 |
+| `??_7BinaryFileStream@IO@@6B@` | `0x1801554d0` | 8 |
+
+36 swallows **both** intervening tables; B's 31 swallows **one**. Each has its
+own leaf constructor, and the two sit adjacent with a clean boundary — verified
+here byte for byte:
+
+```
+180023df6  c3                    RET            <- previous function ends
+180023df7  cc cc cc cc cc cc cc  int3 padding   <- clean function boundary
+180023e00  48 8d 05 a1 16 13 00  LEA RAX,[0x1801554a8]
+180023e07  48 89 01 48 8b c1 c3  MOV [RCX],RAX; MOV RAX,RCX; RET
+180023e10  48 8d 05 69 16 13 00  LEA RAX,[0x180155480]
+180023e17  48 89 01 48 8b c1 c3  MOV [RCX],RAX; MOV RAX,RCX; RET
+```
+
+## C.2 I dismissed a TRUE finding from my own scan, on two generic bad grounds
+
+B.3 called the hit at `0x180155480` a **decoding artefact**. It is a genuine,
+`ret`/`int3`-aligned leaf constructor. Both reasons I gave were wrong in ways
+worth naming:
+
+1. **Ghidra reported "No references found to address: 0x180155480" and I read
+   that as ABSENT.** It means **NOT ANALYSED** — `0x180023e10` is undefined
+   bytes in the project's database. A silence read as a negative
+   (`reference_a_screen_that_cannot_name_its_subject.md`), which is the defect
+   this whole wave has been cataloguing, committed while cataloguing it.
+2. **"It sits mid-run of `_purecall` INSIDE ReaderWriter"** assumes
+   ReaderWriter's extent — the very thing in dispute. Circular. Both intervening
+   tables *and* ReaderWriter end in `_purecall`, so **the bytes cannot settle
+   this at all**; only the constructors can.
+
+## C.3 The scan scored 2 of 2, and the rule I justified with the false positive still stands — on a different argument
+
+**B.3's central empirical claim is withdrawn.** The `.text` LEA scan did not
+produce a false positive: it reported `0x180155480` correctly and **I overruled
+it by hand.** The scan has a better record on this DLL than the hand-check that
+overruled it.
+
+The `VTABLE_EXTENT` comment in `rt_mint_gen.py` cited that non-existent false
+positive as measured evidence for "hand-checked, not automatic". It has been
+rewritten. **The rule still stands, but on the asymmetry alone:** an over-sized
+row is a visible surplus; an under-sized row loses slots with **no symptom** —
+so a bound that DELETES slots must carry a named constructor a human checked.
+That argument never depended on the scan being wrong, and I should have rested
+it there in the first place.
+
+> A rule justified by a measured false positive that never happened is a rule
+> resting on nothing. State the asymmetry, not the anecdote.
+
+## C.4 The sweep — `tools/mint_extent_audit.py`
+
+Annexe B left "31 other `adjacent-export` rows could each be swallowing an
+unminted table" as an open risk; the integrator recorded it as the wave's
+largest known unknown. **This tool is the screen for it.** It decodes every
+RIP-relative LEA in `.text` and reports targets landing strictly inside a minted
+row's extent, printing per site whether the LEA is at a `ret`/`int3` boundary
+and the three bytes after it (`48 89 01` = `MOV [RCX],RAX`, the ctor stamp
+shape), so each candidate is settled by hand. **It never edits an extent.**
+Three positive controls print before any verdict and it refuses to report if any
+is red.
+
+| run | result |
+|---|---|
+| against `f30bf61^` (pre-fix) | **4 candidates**: ReaderWriter at both 26 and 31, TextFileStream at both 10 and 15 — including a **third** unexported table at `0x1801559f8` that neither lane FILE nor I had found. 10 and 26 are the tight bounds. |
+| against this tip | **CLEAN across all 62 rows**, of which **31** still carry an `adjacent-export` proof — the at-risk denominator, printed. |
+
+**Clean is not proof, and the tool says so in its own output:** a table stamped
+other than by a plain RIP-relative LEA is invisible to it.
+
+## C.5 Corrected numbers
+
+`??_7TextFileStream@` **10 slots / 10 TRAP** (B.1 stands). `??_7ReaderWriter@`
+**26**, so it is **25 of 26 purecall** — B.1 said 30 of 31, and A/B's chain of
+"this strengthens phase 0a" holds either way but the figure to quote is 25/26.
+Slot total **598 → 583 → 578**. The five rows of this cell are unchanged by C:
+**42 slots, 1 ported, 41 traps, 31 distinct bodies.**
+
+A build error that review did not catch: a multi-line proof string is emitted
+**both** as a `//` comment header and as a C string literal, and a raw newline
+breaks each differently — escaping in `cstr()` alone fixed the literal and left
+the comment broken. Collapsed to one line at the source. Found by compiling,
+which is why compiling happens without the lock.
+
+## C.6 Still open
+
+* **The shadow re-run remains OPEN.** The unlocked run is cleared (it was lane
+  PERSIST's crashed `Save0`; the integrator terminated it), but lane FILE holds
+  the lock and the serialised order is CSTREAM → FILE → **MINT** → PERSIST.
+  Until that run, §4.1's clean shadow describes the **original** extents.
+* **C.4's clean sweep is a screen, not a proof** — see its stated blind spot.
+* **Nothing here changes** the root cause (staleness), the population set-diff,
+  the stamper/promotion analysis in A.3, or the identity (`83 >= 122 − 3 = 119`,
+  36 short, moved by zero).
