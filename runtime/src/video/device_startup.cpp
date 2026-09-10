@@ -622,6 +622,7 @@ extern "C" bool RtVideo_Device_CreateVideoInterface(Device* self, int32_t index)
 extern "C" void RtVideoDeviceStartupProbeMaybeRun();
 extern "C" void RtVideoAssignConstantsProbeMaybeRun();   // constant_buffer.cpp
 extern "C" void RtVideoContextCtorProbeMaybeRun();       // context_ctor.cpp
+extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun();   // device_enum_types_probe.cpp
 
 extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
     // Self-scheduled probe (lane Q's pattern, and the same reason): it
@@ -639,6 +640,10 @@ extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
     // redzone dump -- a defect in the PROBE's placement, not in the port.
     RtVideoAssignConstantsProbeMaybeRun();
     RtVideoContextCtorProbeMaybeRun();
+    // Wave 18 lane GFXIF. Rides the same hook for the same reason: it allocates
+    // Strings and grows arrays, and at RuntimePortInit() time the allocator
+    // singleton is constructed but not STARTED.
+    RtVideoDeviceEnumTypesProbeMaybeRun();
 
     // 0x1800f8266: the HWND comes from Application::_singleton[0].
     self->windowHandle = *reinterpret_cast<void**>(*AppSlot());
