@@ -1,0 +1,8 @@
+1127-[RtOrphan] CONTROL-CAUGHT Application::LaunchProcess [createprocess-failure]: len=-1 ours=0 theirs=1
+1128-[RtOrphan][App] negative control S6 LaunchProcess failure path (live-diff, partial): 1/1 caught
+1129-[RtOrphan][App] pass [live-diff, PARTIAL] LaunchProcess: 5 wait=true FAILURE cases (command lengths straddling retail's 0x104 clamp), ours and the shipped body agreed on every one and neither spawned anything. The ShellExecute arm and the SUCCESS path remain UNVERIFIED and cannot be probed
+1130:[RtDiff] site[538] @00007ff69ade1760 = Save::SaveLoad::GenerateSaveName
+1131:[RtOrphan] CONTROL-CAUGHT Save::SaveLoad::GenerateSaveName [control-wrong-expectation]: expected mismatch: real answer is "Save1"
+1132-[RtOrphan] ==== running total: 33 pass, 0 fail ====
+1133-[RtDiff] site[539] @00007ff69adddca0 = Input::KeyMap::GetValue
+1134-[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401517a8

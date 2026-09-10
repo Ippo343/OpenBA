@@ -1,7 +1,8 @@
 # WAVE 14 — Save::SaveLoad's last seven rows
 
-**Status: ALL SEVEN LANES MERGED. Build links. One port unverified (GENNAME).**
-Integration branch `wave14/trial`, base `64d3948`.
+**Status: ALL SEVEN LANES MERGED, BUILT AND RUN.** Integration branch
+`wave14/trial`, base `64d3948`. Integration regression: **24 consecutive saves,
+zero divergences on any Wave 14 port.**
 
 Scope was the seven rows the census reported as called-but-not-ported in the
 `Save` namespace after Wave 13 closed at 22/29 = 75.9%. Six were function
@@ -24,6 +25,50 @@ Succeeding moves the denominator — the Wave 10B effect, twice in this wave.
 as a literal in order to use retail's own RIP-relative read as an oracle. That
 is a real dependency and the census is right to count it. It is also a row that
 can never be ported — see the wart below.
+
+## Integration test — run by the integrator on the merged tree
+
+Deployed md5 `36a18f23…` verified against the integration build before the run,
+so this measures OUR tree and not a lane's leftover.
+
+    BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1
+    BANISHED_SAVE_TEST=400 BANISHED_SAVE_TEST_REPEAT=250
+
+* **24 consecutive saves completed, every one in 61 frames** — the same 61 that
+  Wave 13's all-DLL control recorded and that lane DRAW measured independently.
+* **ZERO divergences on any Wave 14 site.** `Save::SaveLoad::Draw` (4 sites) and
+  `Save::SaveLoad::GetAutoSaveName` registered and ran; no `DIVERGENCE` line
+  names any of the six ported functions.
+* The run's only divergences are the SAME SIX SITES lane DRAW predicted as
+  pre-existing: `UI3 pin` and `DLG2 pin` negative controls,
+  `UI::DialogInstance::StartTimer[negative control]`, `UI::SpriteSheet::TypeName`,
+  `UI::SpriteSheet::Construct`, and `Object::Factory::Startup [probe, not
+  diffable]`. DRAW's cross-site control claim is therefore CONFIRMED
+  INDEPENDENTLY on the merged tree, by a different run than the one it made the
+  claim from.
+* Crash log: empty. Evidence: `docs/runtime_port/wave14/integration_run_error.log`.
+
+### A crash that IS real, and is NOT in the ports
+
+Running the same tree with `BANISHED_RT_ORPHAN_PROBE=1` ACCESS_VIOLATIONs in the
+allocator:
+
+    Fault: WRITE of 0x648      (RCX=0x640)
+    ntdll!…  <-  Runtime-x64.dll+0xC7A8A  <-  reimpl+0x364417
+    stack:  RtSystem_String_Format -> RtSystem_String_Set -> RtString_SetLength
+
+It faults immediately after `[RtDiff] site[60] = Save::SaveLoad::GenerateSaveName`,
+i.e. inside GENNAME's probe, on the `String::Format` path GenerateSaveName uses.
+`null + 0x640` is the signature `rt_resolve_cache.cpp` §5 documents for a missing
+`?_singleton@MemoryAllocator`, and the log carries `[REDZONE-DUMP] no allocator
+singleton`.
+
+**A/B, run by the integrator:** the SAME binary with the probe DISABLED completes
+24 saves with no crash at all. So the fault is in the ORPHAN-PROBE path, not in
+any of the seven ported bodies, and not in normal operation. Note also that in
+GENNAME's own (orphaned) run the same probe ran as site[538], late, and did not
+fault; on the integration tree it runs as site[60], early — so a PROBE-ORDERING
+dependency is the leading hypothesis and it is NOT established. Left open.
 
 ## What the remaining two rows are — Save's real ceiling
 
@@ -56,7 +101,7 @@ distinction is the one Wave 10 had to invent the `ceiling` column to express.
 | LOADMETA | `?LoadMetaData@SaveLoad@Save@@` 0x1800c1b30 | `76cf7e4` | +1 | write path never ran; S7 side-effect screen |
 | SINGLETON | `?_singleton@SaveLoad@Save@@0PEAV12@EA` | `94d8d15` | **0** | **net −2.6 points alone** |
 | DRAW | `?Draw@SaveLoad@Save@@` 0x1800c2eb0 | `63b5e0a` | +1 | 352,256 px bytes byte-identical |
-| GENNAME | `?GenerateSaveName@SaveLoad@Save@@` 0x1800c1250 | `f4c07d7` | +1 | **UNVERIFIED — never got a run** |
+| GENNAME | `?GenerateSaveName@SaveLoad@Save@@` 0x1800c1250 | `f4c07d7` | +1 | **control fired, clean case NEVER RECORDED** |
 
 SINGLETON's branch alone reads 29/22/75.9% → 30/22/73.3%: zero ported, and the
 percentage FALLS. The lane disclosed this itself. It kept its oracle and paid
