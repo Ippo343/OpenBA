@@ -339,6 +339,7 @@ void RtIo_FileInfoAssignProbe();
 // qualification: the two names differ by one character's case and the linker is
 // the only thing that notices.
 namespace RtIo { void RtIo_CompressedStreamReadProbe(); }
+namespace RtIo { void RtIo_CompressedStreamWriteProbe(); }
 namespace RtIo { void RtIo_MemoryStreamProbe(); }   // rung 4b-ii (memory_stream_probe.cpp)
 namespace RtIo { void RtIo_CompressedStreamOpenProbe(); }  // rung 4b-iii
 namespace RtIo { void RtIo_EncodingProbe(); }        // lane ENC (encoding_probe.cpp)
@@ -948,6 +949,15 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         // null. This is the first point on the boot path where the heap is
         // provably live.
         RtIo::RtIo_CompressedStreamReadProbe();
+
+        // Wave 19 lane CSTREAM's writer oracle. Same placement and the same
+        // reason as the read probe directly above: it builds several
+        // CompressedMemoryStreams, which ALLOCATE, so it cannot run from a
+        // *PortInit where the allocator singleton at 0x1801fc718 is still null.
+        // It must also run AFTER RtIoPortInit has registered the write path,
+        // which it does -- this call site is on the package-mount path, long
+        // after registration.
+        RtIo::RtIo_CompressedStreamWriteProbe();
 
         // Rung 3's probe. It needs the packfile INDEX populated, which is what
         // the loops above just built -- this is the earliest point in the
