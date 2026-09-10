@@ -84,8 +84,11 @@
 //                                     contract, verbatim). Requires
 //                                     BANISHED_RT_DIFF=1 to report.
 //
-//   BANISHED_RT_INTERNAL_TABLE=1      TIER 2 — the real ports of the four
-//                                     table mutators take over. (
+//   BANISHED_RT_INTERNAL_TABLE=0      TIER 2 IS DEFAULT-ON as of Wave 11
+//                                     follow-up lane ARM (2026-09-09); this is
+//                                     its KILL SWITCH. The real ports of the
+//                                     table mutators drive the live handle
+//                                     table on every ordinary run. (
 //                                     InternalBasePtr::Serialize LEFT this tier
 //                                     in Wave 9: lane S verified it, and
 //                                     gated-because-unverified is not the same
@@ -944,7 +947,9 @@ void RtObjectInternalAttendance() {
                           "nothing came through it; do NOT read this run as "
                           "evidence the port works"
                         : "not registered on this run (shadow tier, or "
-                          "BANISHED_RT_INTERNAL_TABLE unset) -- expected zero")
+                          "BANISHED_RT_INTERNAL_TABLE=0) -- expected zero. NOTE the "
+                          "tier is DEFAULT-ON since Wave 11 follow-up lane ARM, so on "
+                          "a plain run this reading is a REGRESSION, not the default")
                : "our ported bodies drove the LIVE handle table this many times");
     // The persist-state pair is reported SEPARATELY from the ctor/dtor pair on
     // purpose: they live only on the save/load path, so zero here with a large
@@ -1001,10 +1006,45 @@ int RtObjectInternalRegister() {
     // What is owed now is a LIVE TIER-2 LOAD RUN — this tier armed, a save
     // loaded, our `ResetPersistState` driving the real handle table with the
     // DLL present. Lane OBJINT did not have that run and does not claim it.
-    const bool noDll = RtOptIn("BANISHED_RT_NO_DLL");
-    const bool table = RtOptIn("BANISHED_RT_INTERNAL_TABLE") || noDll;
+    // WAVE 11 FOLLOW-UP #1, 2026-09-09 (lane ARM) — THE TIER IS NOW DEFAULT-ON.
+    //
+    // Until today the gate was `RtOptIn("BANISHED_RT_INTERNAL_TABLE") || noDll`
+    // — opt-IN, which by this project's rule means these rows were NOT ports:
+    // a body nothing registers on a default run is indistinguishable from an
+    // absent one (reference_half_registered_port_reads_as_absent.md).
+    //
+    // What changed is not the evidence — it is the SEQUENCING constraint the
+    // Wave 11 advisor named. The evidence was already sufficient
+    // (WAVE11_LANE_OBJLIFE.md §4.1, WAVE11.md "ADVISOR VERDICT"): a PREDICTIVE
+    // oracle (ours predicts, theirs runs) at calls=126764/126758 divergences=0,
+    // an attendance counter that discriminates three ways (unregistered /
+    // registered-but-never-entered / entered=122030), and an undesigned
+    // cross-check where ctor and dtor differ by exactly 6 in two independent
+    // runs with different totals. The advisor's only objection was that arming
+    // inside a three-lane merge would confound that wave's integration
+    // measurement. This lane IS the isolated change it asked for, with its own
+    // before/after against the perf baseline — see WAVE11F_LANE_ARM.md.
+    //
+    // The switch is now a KILL switch: BANISHED_RT_INTERNAL_TABLE=0 (or
+    // "false") leaves the tier unregistered and every call goes to the DLL
+    // exactly as before. Verified by running it, not by reading this comment.
+    //
+    // THE SHADOW TIER STILL WORKS. The two tiers claim the same doors and are
+    // mutually exclusive, so a naive default-on would have made
+    // BANISHED_RT_INTERNAL_SHADOW=1 refuse everything and silently delete the
+    // oracle that produced the evidence above. So: an explicit arm still
+    // CONFLICTS with shadow and is refused loudly; the DEFAULT arm simply
+    // yields to it.
+    //
+    // `noDll` still forces the tier on regardless of the kill switch: with
+    // Runtime-x64.dll absent there is no DLL body to fall through to, and an
+    // unregistered `??0Internal` is a null call on the first object built.
+    const bool noDll       = RtOptIn("BANISHED_RT_NO_DLL");
+    const bool tableForced = RtOptIn("BANISHED_RT_INTERNAL_TABLE");
+    const bool tableKilled = !RtWaveEnabled("BANISHED_RT_INTERNAL_TABLE");
+    const bool table = noDll || (!tableKilled && (tableForced || !shadow));
 
-    if (shadow && table) {
+    if (shadow && (tableForced || noDll)) {
         printf("[RtPort]   Object::Internal: REFUSED — BANISHED_RT_INTERNAL_SHADOW is mutually "
                "exclusive with the table tier%s (shadow needs the DLL to own the table, and to "
                "BE there). Nothing registered.\n",
@@ -1195,9 +1235,16 @@ int RtObjectInternalRegister() {
                "2026-09-08. ResetPersistState is VERIFIED (Wave 11 lane OBJINT: shadow "
                "calls=1 divergences=0, plus a synthetic A/B green on emissions and "
                "post-state) but this is its FIRST LIVE ARMING — watch the load path.\n",
-               noDll ? "BANISHED_RT_NO_DLL (there is no other implementation)"
-                     : "BANISHED_RT_INTERNAL_TABLE");
+               noDll        ? "BANISHED_RT_NO_DLL (there is no other implementation)"
+               : tableForced ? "BANISHED_RT_INTERNAL_TABLE explicitly"
+                             : "DEFAULT (default-on since Wave 11 follow-up lane ARM; "
+                               "BANISHED_RT_INTERNAL_TABLE=0 is the kill switch)");
     }
+
+    if (tableKilled && !noDll)
+        printf("[RtPort]   Object::Internal: table tier KILLED by "
+               "BANISHED_RT_INTERNAL_TABLE=0 — the three tier rows are unregistered and every "
+               "call goes to the DLL.\n");
 
     printf("[RtPort]   Object::Internal: %d exports registered%s\n", n,
            table ? " (INCLUDING the table tier)" : "");

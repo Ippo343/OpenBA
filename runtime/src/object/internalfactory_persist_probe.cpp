@@ -286,8 +286,8 @@ void ResetTheirs(void* obj, void* ser) {
 // the other direction). What it does have is a SIDE EFFECT and three fields,
 // and both are compared here.
 bool RunClearAB() {
-    if (!BuildSubject()) { std::printf("[PersistAB] Clear: subject alloc FAILED\n"); return false; }
-    if (!TheirClear())   { std::printf("[PersistAB] Clear: shipped export NOT RESOLVED — "
+    if (!BuildSubject()) { printf("[PersistAB] Clear: subject alloc FAILED\n"); return false; }
+    if (!TheirClear())   { printf("[PersistAB] Clear: shipped export NOT RESOLVED — "
                                        "no oracle, and this run proves nothing\n"); return false; }
 
     bool ok = true;
@@ -299,7 +299,7 @@ bool RunClearAB() {
         // Give the subject a real block, from the allocator whose counters we
         // are about to read, so a free is visible as a -1 on `blocks`.
         void* blk = MemAllocLocked(kIntArrBytes, 4);
-        if (!blk) { std::printf("[PersistAB] Clear: MemAlloc FAILED — no subject\n"); return false; }
+        if (!blk) { printf("[PersistAB] Clear: MemAlloc FAILED — no subject\n"); return false; }
         g_subject->persistIds._data     = static_cast<int32_t*>(blk);
         g_subject->persistIds._size     = 16;
         g_subject->persistIds._capacity = 16;
@@ -326,7 +326,7 @@ bool RunClearAB() {
                              d[0].blocks == d[1].blocks && d[0].bytes == d[1].bytes;
     ok = fieldsEqual && zeroed && freeMatches;
 
-    std::printf("[PersistAB] ClearPersistState: fields ours{size=%d cap=%d} "
+    printf("[PersistAB] ClearPersistState: fields ours{size=%d cap=%d} "
                 "theirs{size=%d cap=%d} | allocator delta ours{blocks=%d bytes=%lld} "
                 "theirs{blocks=%d bytes=%lld} | %s\n",
                 p[0].pSize, p[0].pCap, p[1].pSize, p[1].pCap,
@@ -334,7 +334,7 @@ bool RunClearAB() {
                 d[1].blocks, (long long)d[1].bytes,
                 ok ? "IDENTICAL" : "*** DIVERGED ***");
     if (!d[0].valid || !d[1].valid)
-        std::printf("[PersistAB] ClearPersistState: allocator counters UNREADABLE — "
+        printf("[PersistAB] ClearPersistState: allocator counters UNREADABLE — "
                     "the free half of this comparison did not run.\n");
     return ok;
 }
@@ -343,11 +343,11 @@ bool RunClearAB() {
 // A/B 2 — ResetPersistState
 // ============================================================================
 bool RunResetAB() {
-    if (!BuildSubject()) { std::printf("[PersistAB] Reset: subject alloc FAILED\n"); return false; }
-    if (!TheirReset())   { std::printf("[PersistAB] Reset: shipped export NOT RESOLVED — "
+    if (!BuildSubject()) { printf("[PersistAB] Reset: subject alloc FAILED\n"); return false; }
+    if (!TheirReset())   { printf("[PersistAB] Reset: shipped export NOT RESOLVED — "
                                        "no oracle, and this run proves nothing\n"); return false; }
     if (!RtSaveTrace::Enabled()) {
-        std::printf("[PersistAB] Reset: BANISHED_RT_SAVE_TRACE is OFF, so the EMISSION "
+        printf("[PersistAB] Reset: BANISHED_RT_SAVE_TRACE is OFF, so the EMISSION "
                     "half did not run. Set it to get the stream-sequence reading.\n");
         return false;
     }
@@ -364,7 +364,7 @@ bool RunResetAB() {
                       g_post[0].oCap  == g_post[1].oCap  &&
                       g_post[0].allMinusOne == g_post[1].allMinusOne;
 
-    std::printf("[PersistAB] ResetPersistState: emissions %s | post-state "
+    printf("[PersistAB] ResetPersistState: emissions %s | post-state "
                 "ours{pSize=%d pCap=%d oSize=%d oCap=%d fill-1=%d} "
                 "theirs{pSize=%d pCap=%d oSize=%d oCap=%d fill-1=%d} | %s\n",
                 emissionsEqual ? "IDENTICAL" : "*** DIVERGED ***",
@@ -388,7 +388,7 @@ extern "C" void RtObjectPersistABRun() {
     const char* v = std::getenv("BANISHED_RT_PERSIST_AB");
     if (!v || v[0] == '\0' || v[0] == '0') return;
 
-    std::printf("[PersistAB] ARMED — synthetic-subject A/B for the two "
+    printf("[PersistAB] ARMED — synthetic-subject A/B for the two "
                 "InternalFactory persist-state rows. The live SHADOW in "
                 "internal.cpp is a separate screen; read both.\n");
 
@@ -397,21 +397,21 @@ extern "C" void RtObjectPersistABRun() {
         // invalidates the measurement that follows rather than sitting beside it.
         int caught = 0;
         g_negCtrl = 1; if (!RunClearAB()) ++caught;
-        std::printf("[PersistAB] CONTROL 1 (ClearPersistState with the MemFree removed): %s "
+        printf("[PersistAB] CONTROL 1 (ClearPersistState with the MemFree removed): %s "
                     "-- and ONLY the allocator-counter check can see it.\n",
                     caught >= 1 ? "CAUGHT" : "*** NOT CAUGHT ***");
         g_negCtrl = 3; const bool c3 = !RunResetAB();
-        std::printf("[PersistAB] CONTROL 3 (ResetPersistState filling 0 instead of -1): %s\n",
+        printf("[PersistAB] CONTROL 3 (ResetPersistState filling 0 instead of -1): %s\n",
                     c3 ? "CAUGHT" : "*** NOT CAUGHT ***");
         g_negCtrl = 0;
         if (caught < 1 || !c3)
-            std::printf("[PersistAB] *** A CONTROL DID NOT FIRE — the green readings below "
+            printf("[PersistAB] *** A CONTROL DID NOT FIRE — the green readings below "
                         "prove NOTHING.\n");
     }
 
     const bool a = RunClearAB();
     const bool b = RunResetAB();
-    std::printf("[PersistAB] VERDICT: ClearPersistState=%s ResetPersistState=%s\n",
+    printf("[PersistAB] VERDICT: ClearPersistState=%s ResetPersistState=%s\n",
                 a ? "MATCHES SHIPPED" : "see above",
                 b ? "MATCHES SHIPPED" : "see above");
 }

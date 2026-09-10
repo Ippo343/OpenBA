@@ -353,7 +353,7 @@ void RtObjectPathStackProbeRun(ExternalFactory* live) {
 
     if (TheirSetSize() == nullptr || TheirRemoveLast() == nullptr ||
         TheirRemoveAt() == nullptr) {
-        std::printf("[PathStack] PROBE SKIPPED -- a shipped container body did "
+        printf("[PathStack] PROBE SKIPPED -- a shipped container body did "
                     "not resolve; NO COMPARISON WAS MADE\n");
         return;
     }
@@ -373,10 +373,10 @@ void RtObjectPathStackProbeRun(ExternalFactory* live) {
 
     // ---- PART 2 -------------------------------------------------------------
     if (live == nullptr) {
-        std::printf("[PathStack] PART2 SKIPPED -- no live ExternalFactory; "
+        printf("[PathStack] PART2 SKIPPED -- no live ExternalFactory; "
                     "NO COMPARISON OF PushPath/PopPath WAS MADE\n");
     } else if (TheirPush() == nullptr || TheirPop() == nullptr) {
-        std::printf("[PathStack] PART2 SKIPPED -- shipped PushPath/PopPath did "
+        printf("[PathStack] PART2 SKIPPED -- shipped PushPath/PopPath did "
                     "not resolve; NO COMPARISON WAS MADE\n");
     } else {
         int xChecks = 0, xFails = 0;
@@ -417,14 +417,14 @@ void RtObjectPathStackProbeRun(ExternalFactory* live) {
             else if (att2 == 0)         verdict2 = "*** CAUGHT BUT NOT VIA ITS OWN MECHANISM"
                                                    " (attendance 0) -- NOT BANKED ***";
             else                        verdict2 = "control CAUGHT";
-            std::printf("[PathStack] PART2 ctl=%d compared=%d mismatches=%d att=%llu  %s\n",
+            printf("[PathStack] PART2 ctl=%d compared=%d mismatches=%d att=%llu  %s\n",
                         ctlId2, s.compared, s.mismatches, att2, verdict2);
             if (s.mismatches && ctls2[i] == 0) {
-                std::printf("[PathStack] PART2   ours = %s\n", g_lastOurs);
-                std::printf("[PathStack] PART2 theirs = %s\n", g_lastTheirs);
+                printf("[PathStack] PART2   ours = %s\n", g_lastOurs);
+                printf("[PathStack] PART2 theirs = %s\n", g_lastTheirs);
             }
         }
-        std::printf("[PathStack] PART2 offset cross-check (+0x30/+0x38 read by "
+        printf("[PathStack] PART2 offset cross-check (+0x30/+0x38 read by "
                     "retail's own accessors on the live object): %d checked, "
                     "%d disagreed\n", xChecks, xFails);
     }
@@ -443,14 +443,14 @@ void RtObjectPathStackProbeRun(ExternalFactory* live) {
         else if (att == 0)          verdict = "*** CAUGHT BUT NOT VIA ITS OWN MECHANISM"
                                               " (attendance 0) -- NOT BANKED ***";
         else                        verdict = "control CAUGHT";
-        std::printf("[PathStack] PART1 ctl=%d compared=%d mismatches=%d att=%llu  %s\n",
+        printf("[PathStack] PART1 ctl=%d compared=%d mismatches=%d att=%llu  %s\n",
                     ctlId, s.compared, s.mismatches, att, verdict);
         if (s.compared == 0)
-            std::printf("[PathStack] PART1 ctl=%d MADE NO COMPARISONS -- "
+            printf("[PathStack] PART1 ctl=%d MADE NO COMPARISONS -- "
                         "this is not a pass\n", ctls1[i]);
         if (s.mismatches && ctls1[i] == 0) {
-            std::printf("[PathStack] PART1   ours = %s\n", g_lastOurs);
-            std::printf("[PathStack] PART1 theirs = %s\n", g_lastTheirs);
+            printf("[PathStack] PART1   ours = %s\n", g_lastOurs);
+            printf("[PathStack] PART1 theirs = %s\n", g_lastTheirs);
         }
     }
 
