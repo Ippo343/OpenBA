@@ -19,17 +19,29 @@ reimplemented are stubbed or registered individually via the address registry (s
 per-function recipe are in **[docs/runtime_port/PLAN.md](docs/runtime_port/PLAN.md)**. Read it
 before any runtime work.
 
-**Status 2026-09-09 — the UI namespace is FINISHED at its proven ceiling, 186/188 = 98.9%.**
-Waves 10B–10E closed it; the two remaining rows are *proved unpromotable*, not
-unfinished (`tools/runtime_census.py` now tags them and prints a `ceiling`
-column). **The next wave is the OBJECT CREATION PATH — read
-[docs/runtime_port/WAVE11_KICKOFF.md](docs/runtime_port/WAVE11_KICKOFF.md) before
-scoping it.** Headline: 202 `?Create*Object@` exports in the DLL, **zero ported**,
-and all 104 minted `BaseTypeInfo` factory pointers are still abort traps.
-Two facts that save a lane a day: **we intercept only at doors** — an in-DLL
-`rel32` call or RIP-relative `LEA` stamp is not one — and **the exe imports 833
-Runtime symbols and zero `??_7`**, so it never consumed a vtable row in any build. `Runtime-x64-profile.dll` (ToolKit, debug strings + 5,182 exports) is
-imported into the Ghidra project and is the primary source for naming Runtime internals.
+**Status 2026-09-10 — WAVE 18 CLOSED: Video is AT CEILING and the boot wall MOVED.**
+Video went 72.7% -> **88.2% (152 called / 134 ported)**, satisfying the ceiling
+IDENTITY `ported >= called - unpromotable` (134 >= 152 - 18); TOTAL 80.6% ->
+**82.6%**. Graphics got +4 rows pre-paid from the next wave. Read
+**[docs/runtime_port/WAVE18_CLOSED.md](docs/runtime_port/WAVE18_CLOSED.md)** before
+any runtime work — §4 (six instruments that could not state their own subject) and
+§7 (what the wave does NOT claim) are the load-bearing sections.
+
+**Score a namespace on the IDENTITY, never the percentage.** `ceiling = (called -
+unpromotable) / called` has `called` in BOTH halves, so any lane opening a door
+moves it: closing seven trap slots sent Video's ported% DOWN and its printed
+ceiling UP with zero triage change.
+
+**The cutover boot wall moved** off `DeviceData::EnumerateInterfaces` (where
+attempts 23 and 24 both died) to **`?PlatformConfigure@Engine@1@`** (`0x1800a1670`,
+EXEC-of-0 at `RtEngine_Engine_Startup+0x777`). That is the Win32 launcher dialog
+already described under "Launcher Dialog" below, and `HarnessGuardUnattendedBoot()`
+already has a seam on it — a softer wall than the last one.
+
+**NEXT: IO and Graphics, NOT Video.** Corroborated three independent ways. Real
+remaining work is **IO 34 > Graphics 29 > Video 0**, and their data rows are
+BLOCKED on unported vtable slots — ordinary port work, not a ceiling. Wave 19
+scoping items are listed in WAVE18_CLOSED.md §8.
 
 ## Target Binaries
 
