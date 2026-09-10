@@ -950,3 +950,38 @@ precondition recorded under follow-up 2.
   *mechanism* was wrong (it predicted the exported name would enter `called`; it
   was the unexported address). Scoring a prediction partly wrong when the
   headline matched is worth more than a clean-looking hit.
+
+## Follow-up 4 CLOSED — the game-dir lock (`wave11f/lock`)
+
+All three defects reproduced against the pre-fix code before being fixed, and
+**scored separately** rather than as an aggregate.
+
+| defect | verdict |
+|---|---|
+| empty-ticket starvation in `ticket_head` | **real, fixed** — digits-guard on both the `cat` and `date -r` reads. Reproduction on the OLD file returned the wrong lane. This cost Wave 11 two 900s windows |
+| timeout sends the longest waiter to the BACK | **real, fixed** — `ticket_drop` removed from both TIMEOUT branches; liveness still keyed on `mtime`/`ticket_touch`, plus a 20-min `ticket_sweep_garbage` so abandoned tickets cannot accumulate |
+| exit-code trap | **already >half-mitigated by Wave 10** — the residue was naming/discoverability, closed with an `assert-held` alias and a usage header leading with a copy-pasteable gating idiom |
+
+**Verified by the integrator, not taken on report:** selftest 4/4 per defect; a
+full cycle on a scratch `BANISHED_GAME_DIR` returning 0/0/1/0/1; and a smoke test
+on the **real** game directory, since follow-up 5 depends on this tool.
+
+### A false finding the integrator nearly acted on
+
+The lane reported `tools/objext_run.sh:28` *"calls acquire with NO check at all"*.
+**It checks, correctly, on the very next line** (`rc=$?` … `exit 9`), and did so
+at the lane's own base commit — the branch never touched the file. The mechanism
+is a **one-line window**: the line was found by grepping for `acquire` and judged
+without reading line 29.
+
+This is the known class where **a checker with too small a window manufactures
+confident wrong findings**, and its false positives cluster on exactly the code
+that *mentions* the thing being looked for. **The integrator nearly edited a
+shared script on the strength of it**; the only thing that prevented it was
+reading the surrounding lines before touching anything. No edit was made.
+
+Two things the lane did right that made this recoverable: it **stayed in file
+scope** and flagged the caller instead of editing outside its subject — had it
+edited, the false finding would have landed as a change; and it reported defect 3
+as **already mostly fixed** rather than claiming a fresh save, which is a
+correction to the brief that is easy to quietly not make.
