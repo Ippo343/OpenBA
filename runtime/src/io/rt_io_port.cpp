@@ -22,6 +22,8 @@
 //   BANISHED_RT_REGREAD=0       ... just ReadSettings + Registry() (lane BOOT2)
 //   BANISHED_RT_FSDIRS=0        ... just SetupDirectories + friends (lane FS)
 //   BANISHED_RT_PKG=0           ... just LoadPackages + friends     (lane PKG)
+//   BANISHED_RT_IOBASE=0        ... just the IOBASE slot-0 dtors,
+//                                   GetSource and VisitorStream   (lane IOBASE)
 //
 // THREE WARNINGS THIS WAVE INHERITS, each already paid for once:
 //
@@ -163,6 +165,14 @@ extern int RtIoBinaryWriterRegister();      // binary_writer.cpp (lane ENC-2)
 // A/B that could only move both together could not attribute anything.
 extern int RtIoSerializeFamilyRegister();   // serialize_family.cpp (lane SERIAL)
 
+// Wave 19 lane IOBASE, tranche 1: the four IO vector deleting destructors that
+// are slot 0 of their rows, the three out-of-line destructors they inline,
+// ?GetSource@Stream@IO@@ (slot 1 of SIX minted rows), and the whole
+// IO::VisitorStream null-sink family. Its own switch because it is the first
+// lane to make four minted DATA rows PROMOTABLE at once, so a boot regression
+// must be attributable to exactly it and not to the promotions that follow.
+extern int RtIoBaseVtablesRegister();       // iobase_vtables.cpp (lane IOBASE)
+
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
         printf("[RtPort] BANISHED_RT_IO=0 -- IO namespace port disabled\n");
@@ -190,5 +200,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_ENCODING"))    n += RtIoEncodingRegister();
     if (RtWaveEnabled("BANISHED_RT_BINWRITER"))   n += RtIoBinaryWriterRegister();
     if (RtWaveEnabled("BANISHED_RT_SERIALFAM"))   n += RtIoSerializeFamilyRegister();
+    if (RtWaveEnabled("BANISHED_RT_IOBASE"))      n += RtIoBaseVtablesRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
