@@ -229,13 +229,26 @@ exactly one of them (the other three were already `called` through other files):
 | `?Create@MemoryStream@IO@@QEAA_NH@Z` | `0x1800ae7f0` | `?PreCommit@CMS` tail-jumps into it | **NEW in `called`** |
 | `?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z` | `0x1800accc0` | `?Close@CFS` tail-jumps into it | already called — **LANE FILE'S ROW**, closes itself when they register |
 | `??0Compression@System@@QEAA@XZ` | `0x1800c41a0` | `?Create@CS` constructs one | already called (probe-only door in `compression.cpp`); this is its first **LIVE** caller |
+| `?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z` | `0x1800c4230` | `?CompressWindow` calls it | **NEW in `called`** — and **I MISSED IT**, see below |
 | `??1CompressedFileStream@IO@@UEAA@XZ` | `0x1800a9330` | the new deleting-dtor row calls it | already called |
+
+**The fifth row is a correction, and the instrument caught it rather than the
+prose.** The source banner listed four doors; the whole-tree set-diff showed
+**two** symbols entering `called`, and only one of them
+(`?Create@MemoryStream@`) was on my list. `?Compress@Compression@System@@` is
+named twice already in `compression.cpp`, but both are probe-only and the census
+does not count those, so this file is its first LIVE caller in exactly the sense
+the `??0Compression` row claims. Recorded as a correction rather than folded in
+silently: "I listed the doors I opened" is a claim a reader will trust, and it
+was 4 of 5.
 
 ### 4.1 Set-diff of `called but not ported`, measured both sides
 
 Taken from the census's **"Called but not ported"** section specifically, on a
 clean `git archive` of `HEAD~1` for the before side, run from inside each tree
 (the scanners walk cwd, not the script — `reference_scanner_walks_cwd_not_script.md`).
+
+IO alone (`--namespace IO`):
 
 ```
 before: 39 rows      after: 37 rows
@@ -246,8 +259,28 @@ LEFT   (closed by this lane)          ENTERED (newly called, still unported)
   ?Create@CompressedStream@IO@@
 ```
 
-Exactly the lane's three CODE rows out, exactly one door in — the one predicted
-in the banner before it was measured.
+**A namespace-filtered diff cannot see a door this lane opened into another
+namespace**, and this lane opened two — which is the same shape as correction
+C2's own retracted check, where a `--namespace IO` listing was used to answer a
+question about `System` symbols it could never contain
+(`reference_a_screen_that_cannot_name_its_subject.md`). So the diff was re-run
+UNFILTERED, over the whole tree:
+
+```
+before: 160 rows     after: 159 rows
+
+LEFT   (closed by this lane)          ENTERED (newly called, still unported)
+  ?Commit@CompressedStream@IO@@         ?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z
+  ?CompressWindow@CompressedStream@IO@@ ?Create@MemoryStream@IO@@QEAA_NH@Z
+  ?Create@CompressedStream@IO@@
+```
+
+Whole-tree totals agree with the per-symbol diff: `called` 1175 → **1177** (+2,
+the two entering), `ported` 971 → **974** (+3, the three leaving). Three
+independent routes close.
+
+Exactly the lane's three CODE rows out, and two doors in — **one of which the
+source banner failed to predict** (§4, `?Compress@`).
 
 **A note on how nearly I got this wrong.** My first extraction grepped every
 `@IO@@` name out of the WHOLE `--unported` report, which also contains the

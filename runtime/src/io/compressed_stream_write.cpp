@@ -106,6 +106,15 @@
 //       compression.cpp ports the DECODER and deliberately not the encoder, and
 //       already reaches this ctor through a probe-only door; this is its first
 //       LIVE caller.
+//   ?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z  0x1800c4230  NOT PORTED.
+//       ?CompressWindow calls it. **THIS ONE WAS MISSED when the list above was
+//       first written**, and the census caught it, not the prose: a whole-tree
+//       set-diff of "called but not ported" showed TWO symbols entering, and only
+//       one of them was predicted here. compression.cpp names it twice already,
+//       but both of those are probe-only and the census does not count them, so
+//       this file is its first LIVE caller in exactly the same sense as the ctor
+//       one line up. Recorded as a correction rather than folded in silently,
+//       because "I listed the doors I opened" is a claim a reader will trust.
 //
 // ---------------------------------------------------------------------------
 // 4. A CORRECTION TO runtime/types/io/Stream.h's PROSE
