@@ -45,6 +45,7 @@
 
 #include "../../types/object/TypeInfo.h"
 #include "../../funcs/rt_port.h"
+#include "factory_dispatch_probe.h"   // WAVE 11 follow-up 5 (lane TINFO)
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -349,6 +350,8 @@ void* RtObject_Factory_CreateObject(const void* factory, uint32_t typeId) {
         RtDiffReport(&rt_diff_site__, oursName == theirs, a, b);
     }
 
+    // WAVE 11 follow-up 5 (lane TINFO) -- see factory_dispatch_probe.h.
+    RtFactoryDispatchObserve(RT_FACTORY_DISPATCH_FACTORY_CREATE, info);
     return reinterpret_cast<void* (*)()>(info->factoryFn)();
 }
 

@@ -34,6 +34,8 @@
 #include "Object/factory_registration.h"
 #include "Object/internal_factory_audit.h"   // ObjAudit::ReportLeaks from the crash handler
 #include "Dialog/dialog_controller_vtable.h" // Wave 10D: inherited base slots
+// WAVE 11 follow-up 5 (lane TINFO): the BaseTypeInfo::factoryFn dispatch census.
+#include "../runtime/src/object/factory_dispatch_probe.h"
 
 // Wave 9 lane N's work-scheduler probe tally (code/Game/Action/action_base_complete.cpp).
 // Declared here rather than in a header: it has exactly one caller, the crash handler.
@@ -1987,6 +1989,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // not from a static destructor because it asks the PORT REGISTRY which door
     // a symbol resolves to, and by static-destructor time the registry is torn
     // down and every row reads "unregistered" (its own screen0 caught that).
+    // WAVE 11 FOLLOW-UP 5 (lane TINFO): every BaseTypeInfo::factoryFn dispatch
+    // this run, classified by WHOSE node it went through. Follow-up 2 made the
+    // 104 minted factory abort traps reachable in principle; this says whether
+    // any of them is reachable in fact. Always printed, including zero, and it
+    // carries its own two controls -- read them before trusting the zero.
+    RtFactoryDispatchReport();
     { extern void RtObjectTypeInfoAccessorsReport();
       RtObjectTypeInfoAccessorsReport(); }
     // WAVE 10 LANE UI4: says so out loud when its deferred probe never fired,
@@ -2002,6 +2010,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // entries, and "it booted fine" is not a measurement of a body that never
     // ran (reference_a_green_readiness_screen_is_not_a_route).
     { extern void RtObjectInternalAttendance(); RtObjectInternalAttendance(); }
+    // WAVE 11 FOLLOW-UP 5 (lane TINFO): which vtable our Internal ctor stamps.
+    // Condition (b) of the WAVE11.md advisor amendment, as a log line.
+    { extern void RtObjectInternalVtblPin(); RtObjectInternalVtblPin(); }
     // WAVE 11 LANE OBJLIFE: the synthesised factory-dtor oracle's safety net.
     // It normally reports from RtObjectPortInit; if the DLL allocator was not
     // readable that early it defers to here rather than reporting a vacuous

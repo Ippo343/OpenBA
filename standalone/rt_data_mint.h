@@ -88,6 +88,26 @@ void* RtMintPromotionStorage(const char* symbol, unsigned long long expectVa);
 // True once RtMintPromotionStorage has accepted this symbol.
 bool RtMintRowIsPromoted(const char* symbol);
 
+// True once RtMintRegisterRow has registered this symbol — i.e. it was ARMED
+// for measurement (BANISHED_RT_MINT_ROWS or a direct call) rather than promoted.
+// The readiness report prints armed rows for the same reason it prints promoted
+// ones: a candidate that goes READY would otherwise print no line at all.
+bool RtMintRowIsArmed(const char* symbol);
+
 // Defined in standalone/reg_mint_promoted.cpp. Returns the number of rows
 // promoted. Called by RtDataMintInit().
 int RtMintRegisterPromotedRows();
+
+// ============================================================================
+// WAVE 11 FOLLOW-UP 5 (lane TINFO) — the minted-node predicate
+// ============================================================================
+// True when `p` points into the minted BaseTypeInfo storage array. Used by
+// runtime/src/object/factory_dispatch_probe.cpp to answer, by measurement,
+// whether promoting a `?_typeInfo@` row can ever put one of our nodes (and so
+// one of the 104 factory abort traps) in front of a live `factoryFn` dispatch.
+// Exact address-range test; valid before and after any promotion.
+bool RtMintIsMintedTypeInfo(const void* p);
+
+// The predicate's positive control: `&kTypeInfoStorage[index]`, a pointer that
+// MUST test true. nullptr when `index` is out of range.
+const void* RtMintTypeInfoStorageProbe(int index);

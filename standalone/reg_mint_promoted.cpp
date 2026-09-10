@@ -771,6 +771,9 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_singleton@ExternalFactory@Object@@0PEAV12@EA | n/a (scalar ptr) | WAVE11_LANE_OBJDATA.md §3 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_singleton@InternalFactory@Object@@0PEAV12@EA | n/a (scalar ptr) | WAVE11_LANE_OBJDATA.md §3 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA | n/a (chain head) | WAVE11_LANE_OBJDATA.md §4 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ??_7Internal@Object@@6B@ | 4/4 (0 purecall) | WAVE11F_LANE_TINFO.md §2 | NONE while the DLL is present
+    // RT_UNPROMOTABLE: ?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A | n/a (BaseTypeInfo) | WAVE11F_LANE_TINFO.md §3 | NONE while the DLL is present
+    // RT_UNPROMOTABLE: ?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A | n/a (BaseTypeInfo) | WAVE11F_LANE_TINFO.md §3 | NONE while the DLL is present
     //
     // WHY EACH, in one line — the proofs are in the lane doc:
     //
@@ -830,18 +833,83 @@ int RtMintRegisterPromotedRows() {
     //      class's own vtable.
     //
     //  ??_7Internal@Object@@6B@ — READY (`slots=4 ported=4 TRAP=0 purecall=0`)
-    //      and NOT PROMOTED, and it is deliberately NOT tagged UNPROMOTABLE
-    //      alongside its three siblings above, because the fact that settles
-    //      them does not hold for it: it has ZERO purecall slots, so
-    //      `Object::Internal` is CONCRETE and a bare instance of it genuinely
-    //      could carry this table at dispatch time. Nothing on the routes this
-    //      lane drove constructs one — `[ObjTI] ATTENDANCE ??_7Internal@Object@@6B@
-    //      entries=0` in both halves — and a run in which our bodies are entered
-    //      zero times cannot tell a safe promotion from an unexercised one.
-    //      EXPIRY: the moment `[ObjTI] ATTENDANCE ??_7Internal@Object@@6B@`
-    //      prints `entries>0`. The instrument runs on every boot with no switch
-    //      and prints the table each entering object carried, so whoever sees it
-    //      move also learns whether the row itself was dispatched.
+    //      and NOT PROMOTED. It is NOW TAGGED, which reverses lane OBJDATA's
+    //      deliberate decision to leave it untagged; the reversal is WAVE 11
+    //      follow-up 5 (lane TINFO) and it rests on a measurement OBJDATA could
+    //      not make, not on a re-reading of OBJDATA's evidence.
+    //
+    //      OBJDATA was right that the purecall argument does not settle this
+    //      row: `Object::Internal` is CONCRETE, so a bare instance genuinely
+    //      could carry this table. Its expiry was therefore left LIVE —
+    //      "the moment `[ObjTI] ATTENDANCE … entries>0`" — and the advisor then
+    //      AMENDED it to require gate (b) as well (WAVE11.md §ADVISOR
+    //      ADJUDICATION), because `VtblInternal()` was registry-first and a
+    //      promotion would have split the class's vptr.
+    //
+    //      GATE (b) IS NOW IMPLEMENTED (runtime/src/object/internal.cpp:
+    //      `VtblInternal`/`VtblBase` pin the DLL's table while the DLL is
+    //      present and fall back to the registry only when it is absent), and
+    //      implementing it is what settles this row — because THE TWO
+    //      CONDITIONS ARE MUTUALLY EXCLUSIVE. The only thing that could ever
+    //      have made `entries>0` on a DLL-present run is our own ctor stamping
+    //      the MINTED table; gate (b) is precisely the change that stops it
+    //      doing so. Measured both ways, one variable, with the row armed:
+    //
+    //        BANISHED_RT_INTERNAL_VTBL_RAW=0  stamped=MINTED (SPLIT), ctorRuns=124395
+    //        default (pin armed)              stamped=DLL, no split,  ctorRuns=124680
+    //
+    //      and `[ObjTI] ATTENDANCE ??_7Internal@Object@@6B@ entries=0` in BOTH
+    //      halves — including the half where 124,395 live objects really did
+    //      carry the minted table. So nothing dispatches slots 2/3 of this
+    //      table on any route this project can drive, split or not. The ObjTI
+    //      control was armed for that run and screen0/screen1/screen2 all read
+    //      GREEN, with screen2 discriminating `d_mint=2` on the armed row — so
+    //      the zero is the instrument's answer and not its silence.
+    //
+    //      EXPIRY: NONE while Runtime-x64.dll is present. At cutover the DLL is
+    //      gone, `VtblInternal` falls through to the registry by design, and the
+    //      minted table is the only one there is — but cutover registers every
+    //      minted row anyway, so it is not a promotion and this tag does not
+    //      stand in its way.
+    //
+    //  ?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A,
+    //  ?_typeInfo@Internal@Object@@0VBaseTypeInfo@2@A — NO-OP, and it is the
+    //      SAME mechanism as the row above, one level up. Lane TINFO measured
+    //      two independent things:
+    //
+    //        1. FOLLOW-UP 2'S BLOCKER IS CLEARED FOR THESE TWO ROWS. Both carry
+    //           abort-trap factory pointers, and follow-up 2 made those
+    //           reachable in principle by porting `?Load@External@Object@@`.
+    //           runtime/src/object/factory_dispatch_probe.cpp instruments ALL
+    //           THREE `BaseTypeInfo::factoryFn` dispatch sites in this tree
+    //           (External::Load, Factory::CreateObject, DialogInstance::
+    //           AddControllerTab) and reports, over a full autostart→gameplay
+    //           run: 0 of 102,454 dispatches through a minted node, and the two
+    //           subject types created through a factory pointer ZERO times —
+    //           on a cap-immune counter, with the predicate control and the
+    //           liveness control both GREEN. The reason is structural and the
+    //           mint's own banner already stated it: every dispatch site reads
+    //           `info` out of `?_singleton@Factory@Object@@`'s AVL tree, and
+    //           the minted nodes hang off `g_mintTypeInfoHead`, a private chain
+    //           no `Factory::Startup` walks.
+    //
+    //        2. AND THERE IS STILL NO ROUTE. The ONLY consumers of either
+    //           symbol in the whole tree are the two accessors in
+    //           runtime/src/object/object_typeinfo_accessors.cpp (checked by
+    //           grep on the mangled name; neither symbol is among the exe's 42
+    //           imported `?_typeInfo@` slots, checked with pefile). Those
+    //           accessors are reachable only through the four
+    //           `??_7…@Object@@6B@` vtables, and every one of those four is now
+    //           proved routeless — three by C++ (abstract), the fourth by the
+    //           measurement above. `[ObjTI] ATTENDANCE` reads `entries=0` for
+    //           both rows on every route driven, including a `BANISHED_AUTOLOAD`
+    //           run and a run with both rows armed.
+    //
+    //      So promoting either would be SAFE and would change NOTHING, which is
+    //      the definition of the NO-OP class.
+    //      EXPIRY: NONE while the DLL is present. It moves only if some future
+    //      port acquires a by-name reader of one of these nodes — which is a
+    //      grep, not a hunt.
     //
     // AND THE FACT THAT SETTLES THE EXE HALF OF BOTH: Application-x64.exe
     // imports 899 symbols, 833 of them from Runtime-x64.dll, and ZERO ??_7.
