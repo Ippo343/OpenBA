@@ -19,13 +19,24 @@ reimplemented are stubbed or registered individually via the address registry (s
 per-function recipe are in **[docs/runtime_port/PLAN.md](docs/runtime_port/PLAN.md)**. Read it
 before any runtime work.
 
-**Status 2026-09-10 — WAVE 18 CLOSED: Video is AT CEILING and the boot wall MOVED.**
-Video went 72.7% -> **88.2% (152 called / 134 ported)**, satisfying the ceiling
-IDENTITY `ported >= called - unpromotable` (134 >= 152 - 18); TOTAL 80.6% ->
-**82.6%**. Graphics got +4 rows pre-paid from the next wave. Read
-**[docs/runtime_port/WAVE18_CLOSED.md](docs/runtime_port/WAVE18_CLOSED.md)** before
-any runtime work — §4 (six instruments that could not state their own subject) and
-§7 (what the wave does NOT claim) are the load-bearing sections.
+**Status 2026-09-10 — WAVE 20 CLOSED (`cac74539`): an INSTRUMENTS wave.** All three
+known-broken tools fixed, the 31-row vtable-extent question closed in **both** error
+directions, and `??_7BinaryFileStream@` promoted — **attendance 0 -> 18,906**, which
+converts four of Wave 19's ten TRAP=0/attendance-0 bodies into bodies that actually run.
+IO 133/116 -> **216 called / 200 ported**; TOTAL **1311/1124 (85.7%)**.
+
+**DO NOT read 85.7% as 84.3% plus work.** The census was fixed mid-wave and +111 of that
+movement is rows that always existed and were invisible to the old tool. **Six symbols
+entered `ported`.** Read `docs/runtime_port/WAVE20_CLOSED.md` §2 (what it does NOT claim)
+and §4 before quoting any figure.
+
+**§4 is the finding that outlives the wave:** three items the previous handover named as
+*cheap* or *highest-leverage* were stale — one already promoted, one ported nine waves
+earlier, one "safest" only because it was pointless — while every **measured** section
+held. **A cheap-wins list is the stalest section of a handover and the first one acted
+on.** Wave 21 inputs are in §8, each with its own re-derivation command.
+
+**NEXT: Graphics (99 called / 70 ported, ceiling 96.0%) is the largest untouched gap.**
 
 **Score a namespace on the IDENTITY, never the percentage.** `ceiling = (called -
 unpromotable) / called` has `called` in BOTH halves, so any lane opening a door
