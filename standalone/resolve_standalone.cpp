@@ -762,6 +762,52 @@ void* RtPortLookupAddr(uintptr_t ghidra_addr) {
     return it == reg.end() ? nullptr : it->second;
 }
 
+// ---- Export-table walk (Wave 20 lane DOORS) --------------------------------
+//
+// See the comment in resolve.h. Parses the loaded module's PE export directory
+// directly rather than going through any resolver, so that a screen wanting a
+// subject can take one from the BINARY. Named exports only: an ordinal-only
+// export has no name to hand back and is skipped, which is stated here because
+// the count returned is the screen's denominator.
+int RtEnumRuntimeExports(bool (*visit)(const char* name, void* addr,
+                                       uintptr_t ghidraAddr, void* ctx),
+                         void* ctx) {
+    if (!visit) return 0;
+    HMODULE h = g_modules[static_cast<int>(Module::Runtime)].handle;
+    if (!h) return 0;
+
+    const auto* base = reinterpret_cast<const unsigned char*>(h);
+    const auto* dos  = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
+    const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
+    const IMAGE_DATA_DIRECTORY& dd =
+        nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (!dd.VirtualAddress || !dd.Size) return 0;
+
+    const auto* ex = reinterpret_cast<const IMAGE_EXPORT_DIRECTORY*>(base + dd.VirtualAddress);
+    const auto* nameRvas = reinterpret_cast<const uint32_t*>(base + ex->AddressOfNames);
+    const auto* ordinals = reinterpret_cast<const uint16_t*>(base + ex->AddressOfNameOrdinals);
+    const auto* funcRvas = reinterpret_cast<const uint32_t*>(base + ex->AddressOfFunctions);
+
+    int seen = 0;
+    for (uint32_t i = 0; i < ex->NumberOfNames; ++i) {
+        const char* name = reinterpret_cast<const char*>(base + nameRvas[i]);
+        const uint16_t ord = ordinals[i];
+        void* addr = (ord < ex->NumberOfFunctions)
+                   ? const_cast<unsigned char*>(base + funcRvas[ord])
+                   : nullptr;
+        const uintptr_t ghidra =
+            addr ? (reinterpret_cast<uintptr_t>(addr) -
+                    reinterpret_cast<uintptr_t>(base) +
+                    static_cast<uintptr_t>(nt->OptionalHeader.ImageBase))
+                 : 0;
+        ++seen;
+        if (!visit(name, addr, ghidra, ctx)) break;
+    }
+    return seen;
+}
+
 void* ResolveExportRaw(const char* mangled_name) {
     RecordRawResidue(mangled_name, 0, 0, _ReturnAddress());
     return ResolveExportRawImpl(mangled_name);

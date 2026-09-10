@@ -102,6 +102,29 @@ void RegisterRuntimeOrdinal(uint16_t ordinal, void* our_fn);
 void* RtPortLookupExport(const char* mangled_name);
 void* RtPortLookupAddr(uintptr_t ghidra_addr);
 
+// ---- Walk Runtime-x64.dll's OWN export directory (Wave 20 lane DOORS) -------
+//
+// Every named export in the shipped module, in export-table order, with the
+// address GetProcAddress would return. Returns the number of names visited (0
+// when the module is not loaded); `visit` returning false stops the walk early.
+//
+// It exists so a screen can DERIVE a subject from the binary instead of naming
+// one in source. A hard-coded symbol literal is a free parameter that both
+// decays (a lane ports it) and can be aimed wrong, and this project has now
+// paid for both — see runtime/src/io/file_stream_cutover_probe.cpp's control
+// block. The export table is an artefact of the DLL, so a subject selected
+// from it cannot go stale while the DLL is the same file.
+//
+// The callback is handed BOTH the loaded address and the GHIDRA address that
+// export sits at (`loaded - actualBase + OptionalHeader.ImageBase`), so a
+// caller can check a hard-coded address against the shipped binary rather than
+// against whatever our own registry was told.
+//
+// NOT a resolver: it deliberately records no residue and consults no registry.
+int RtEnumRuntimeExports(bool (*visit)(const char* name, void* addr,
+                                       uintptr_t ghidraAddr, void* ctx),
+                         void* ctx);
+
 // Original-DLL resolution, bypassing the port registry. Always the shipped code.
 void*     ResolveExportRaw(const char* mangled_name);
 void*     ResolveOrdinalRaw(uint16_t ordinal);
