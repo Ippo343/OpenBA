@@ -925,7 +925,7 @@ void* DeletingDtorCommon(void* self, unsigned flags, void (*dtor)(void*),
                          const char* which) {
     if (flags & 2) {                                      // 18000c09f / 180023da2
         ++g_fss.dtorArrayAbort;
-        std::printf("[RtPort] FATAL: %s deleting destructor reached its "
+        printf("[RtPort] FATAL: %s deleting destructor reached its "
                     "delete[] arm. Retail would call the CRT vector-destructor "
                     "iterator at 0x18007ec98, which is unexported and unported, "
                     "so this arm is a declared divergence (see the header note). "

@@ -116,7 +116,7 @@ int      g_compares = 0;   // EFFECTIVENESS: pairwise value comparisons made
 
 void Fail(const char* what, const char* detail) {
     ++g_bad;
-    std::printf("[FSSlots] MISMATCH %-22s %s\n", what, detail);
+    printf("[FSSlots] MISMATCH %-22s %s\n", what, detail);
 }
 
 void CmpU(const char* what, uint64_t ours, uint64_t theirs) {
@@ -416,8 +416,8 @@ void RunFileStreamSlotsProbe() {
 
     g_cases = g_bad = g_compares = 0; g_bytesCompared = 0; g_att = 0;
 
-    std::printf("[FSSlots] ==== ten slot bodies, ours vs the shipped ones ====\n");
-    std::printf("[FSSlots] subject: two BinaryFileStreams built by RETAIL's ctor and "
+    printf("[FSSlots] ==== ten slot bodies, ours vs the shipped ones ====\n");
+    printf("[FSSlots] subject: two BinaryFileStreams built by RETAIL's ctor and "
                 "Create, driven through identical operations, one side entirely "
                 "through OUR bodies and one entirely through the shipped ones "
                 "(ResolveRuntimeRaw). ctl=%d\n", g_ctl);
@@ -427,7 +427,7 @@ void RunFileStreamSlotsProbe() {
 
     // EFFECTIVENESS GUARD. A run that compared nothing reads exactly like a run
     // that found no difference (WAVE19_IO.md §6.6), so say which this was.
-    std::printf("[FSSlots] cases=%d mismatches=%d comparisons=%d file-bytes-compared=%ld "
+    printf("[FSSlots] cases=%d mismatches=%d comparisons=%d file-bytes-compared=%ld "
                 "controlFired=%llu\n",
                 g_cases, g_bad, g_compares, g_bytesCompared,
                 (unsigned long long)g_att);
@@ -439,7 +439,7 @@ void RunFileStreamSlotsProbe() {
     // opposite. A fired-and-caught control is reported first, and the
     // effectiveness note follows as a qualifier rather than a verdict.
     if (g_ctl != 0 && g_att > 0 && g_bad > 0) {
-        std::printf("[FSSlots] control %d CAUGHT (%d mismatch(es)) -- the screen can "
+        printf("[FSSlots] control %d CAUGHT (%d mismatch(es)) -- the screen can "
                     "see a wrong body.%s\n", g_ctl, g_bad,
                     g_bytesCompared == 0
                         ? "  (It diverged enough that the two files differed in SIZE, "
@@ -447,20 +447,20 @@ void RunFileStreamSlotsProbe() {
                           "comparisons alone.)"
                         : "");
     } else if (g_compares == 0 || g_bytesCompared == 0) {
-        std::printf("[FSSlots] *** THIS RUN PROVES NOTHING: %s. ***\n",
+        printf("[FSSlots] *** THIS RUN PROVES NOTHING: %s. ***\n",
                     g_compares == 0 ? "no value comparison was made"
                                     : "no file bytes were compared");
     } else if (g_ctl != 0 && g_att == 0) {
-        std::printf("[FSSlots] *** CONTROL %d NEVER FIRED -- it is not a control on "
+        printf("[FSSlots] *** CONTROL %d NEVER FIRED -- it is not a control on "
                     "this run and a clean board below means nothing. ***\n", g_ctl);
     } else if (g_bad == 0 && g_ctl == 0) {
-        std::printf("[FSSlots] VERDICT: ours matches the shipped bodies on every "
+        printf("[FSSlots] VERDICT: ours matches the shipped bodies on every "
                     "comparison above.\n");
     } else if (g_bad == 0 && g_ctl != 0) {
-        std::printf("[FSSlots] *** CONTROL %d FIRED AND WAS NOT CAUGHT -- the screen "
+        printf("[FSSlots] *** CONTROL %d FIRED AND WAS NOT CAUGHT -- the screen "
                     "is blind to it. ***\n", g_ctl);
     } else if (g_ctl != 0) {
-        std::printf("[FSSlots] control %d CAUGHT (%d mismatch(es)) -- the screen can "
+        printf("[FSSlots] control %d CAUGHT (%d mismatch(es)) -- the screen can "
                     "see a wrong body.\n", g_ctl, g_bad);
     }
 }
