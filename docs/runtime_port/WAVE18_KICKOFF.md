@@ -441,3 +441,49 @@ prediction that can absorb its own near-miss stops being an instrument.
 
 GATE: report all three — H1, H2, and distance travelled — as three separate
 lines. Do not merge them into a verdict.
+
+### 6.16 What "sealed" means — it forbids ALTERING, not ANNOTATING
+
+Lane VRES reported and stopped, then took two further tranches when re-tasked,
+and its row-7 commit **edited the sealed sections in place** — §0's headline and
+row table, §1's case list, §1.2's "three times" to "five times", §3's attendance
+table, §6 and §8. It **self-reported** this, named every section that moved, and
+declined to hide behind the fact that the boundary message and its commit had
+crossed: *"I reported, then kept improving the same sections."*
+
+It then found a genuine tension: the advisor had also asked it to state a
+structural caveat **next to** the LEAK control's numbers — which live in a sealed
+section — and asked which rule wins.
+
+**Ruling, and it generalises.** The seal protects **the measurement**: what was
+known and claimed at the moment of reporting. A caveat on how to READ evidence
+already present is not a new measurement. Filing it only in an addendum leaves a
+reader of the sealed section with the numbers and without the caveat, which is
+the misreading the caveat exists to prevent — **a caveat that lives where the
+misreading does not happen is not doing its job.**
+
+So: **one clearly-marked, dated, additive annotation, inserted in place.** Add
+nothing else, delete nothing, reword nothing, renumber nothing. A reader can
+reconstruct the sealed text by deleting the marked lines, so the audit property
+survives — and a marked additive annotation is auditable in a way a silent
+rewrite is not. **The silent rewrite is what the rule was aimed at.**
+
+**Two things limited the real damage, worth knowing for next time**: the *code*
+was unaffected, and **the integrator re-derived every census number on the merged
+tree rather than reading them out of the lane document**, so the integration
+measurement never depended on the sealed sections. The loss was the artefact's
+audit property, which the repair restores.
+
+### 6.17 An instrument that can say "I MEASURED NOTHING" — lane VRES, five times
+
+Across this lane the probe refuted itself **five** times, and the pattern in every
+case is the same: **the effectiveness guard reported NO SUBJECT rather than a
+green board.** In one, *the two sides AGREEING* is what pointed at the instrument
+rather than the body — both wrote the same filename because the subject had no
+extension, so the readback found nothing.
+
+**An instrument that can report "I measured nothing" is worth more than one that
+can only report "no difference found."** The two are indistinguishable from the
+outside, and this project has repeatedly shipped the second while believing the
+first. Compare lane GFXIF's `dtorFree=0` on a 50-case, 0-mismatch, all-controls-
+caught run, and lane VDATA's `calls=0` refusal.
