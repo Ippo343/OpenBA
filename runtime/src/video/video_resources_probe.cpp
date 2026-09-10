@@ -166,6 +166,8 @@ void RtVideoProbe_DestroyInterfaceRange(GraphicsInterface* base, int count);
 void Video_Device_Dtor(Device* self);
 struct ImageBuffer;
 void Video_ImageBuffer_Recreate(::ImageBuffer* self);
+bool Video_ImageBuffer_SaveImageToFile(const void* path, int width, int height,
+                                       uint32_t* pixels);
 
 namespace {
 
@@ -174,6 +176,7 @@ namespace {
 // ---------------------------------------------------------------------------
 int g_cases = 0, g_mismatch = 0;
 int g_freed = 0, g_decremented = 0, g_reachedZero = 0, g_survived = 0;
+long g_savedBytes = 0;
 
 // The negative-control selector. `kNegNone` is a normal run.
 enum Neg { kNegNone = 0, kNegLeak, kNegNoStr, kNegShift, kNegNoZero, kNegCOUNT };
@@ -893,6 +896,194 @@ void CaseRecreate(uint32_t flags, int wantSlot, const char* caseName) {
 }
 
 // ---------------------------------------------------------------------------
+// Case 9 - ?SaveImageToFile@ImageBuffer@Video@@, ours vs the shipped body,
+//          compared by BYTE-COMPARING THE TWO FILES THEY WROTE.
+//
+// The Wave 6 holdback said a file-I/O side effect is "not diffable by the
+// RT_DIFF pure/idempotent-replay patterns" and that "running ours and theirs
+// back to back would write the file twice". Both halves are true and neither is
+// a blocker: writing the file twice is the POINT, to two different paths, and
+// the comparison is then the strongest one in this file - every byte the
+// function exists to produce, including both headers, the row ORDER, the
+// 32bpp-to-24bpp packing and the zero padding at the end of every row.
+//
+// The subject is synthesised so the comparison is deterministic: two real
+// screenshots would compare two different FRAMES. Three sizes are driven,
+// chosen for their padding:
+//     5 x 3   rowBytes 16, 3*5 = 15 data bytes -> ONE pad byte per row
+//     4 x 2   rowBytes 12, 3*4 = 12            -> NO padding at all
+//     1 x 1   rowBytes  4, 3*1 =  3            -> one pad byte, single row
+// A run of only the middle case would never exercise the padding, and padding
+// written per-row rather than once is a real defect this shape catches.
+//
+// The paths go through IO::FileSystem::GetSaveDirectory, the same machinery the
+// real caller uses, so nothing here invents a directory.
+//
+// EFFECTIVENESS: both files must be readable, equal in size, NON-EMPTY and the
+// size the BMP layout requires, or the case reports that it proves nothing.
+// Two zero-byte files compare equal.
+// ---------------------------------------------------------------------------
+using GetSaveDirFn  = void* (*)(const void* fs, void* ret);
+using StrPlusCStrFn = void* (*)(void* ret, const void* a, const char* b);
+using FnCtorStrFn   = void* (*)(void* self, const void* str);
+using FnDtorFn      = void  (*)(void* self);
+using SaveImgFn     = bool  (*)(const void* path, int w, int h, uint32_t* px);
+
+// Reads a whole file. Returns the byte count, or -1 when it could not be
+// opened; `out` is filled up to `cap`.
+long ReadWholeFile(const char* path, uint8_t* out, long cap) {
+    std::FILE* f = std::fopen(path, "rb");
+    if (!f) return -1;
+    const long n = static_cast<long>(std::fread(out, 1, static_cast<size_t>(cap), f));
+    std::fclose(f);
+    return n;
+}
+
+void CaseSaveImage(int width, int height, const char* tag) {
+    ++g_cases;
+    char caseName[64];
+    std::snprintf(caseName, sizeof(caseName), "case9/SaveImage %s", tag);
+
+    void** fsSlot = RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
+    void* fs = fsSlot ? *fsSlot : nullptr;
+    if (!fs) { Fail(caseName, "IO::FileSystem singleton is null"); return; }
+
+    auto getDir  = RT_EXPORT_ONCE(GetSaveDirFn,
+        "?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ");
+    auto plusC   = RT_EXPORT_ONCE(StrPlusCStrFn, "??HSystem@@YA?AVString@0@AEBV10@PEBD@Z");
+    auto fnCtor  = RT_EXPORT_ONCE(FnCtorStrFn, "??0Filename@System@@QEAA@AEBVString@1@@Z");
+    auto fnDtor  = RT_EXPORT_ONCE(FnDtorFn, "??1Filename@System@@QEAA@XZ");
+    auto strDtor = RT_EXPORT_ONCE(FnDtorFn, "??1String@System@@QEAA@XZ");
+    if (!getDir || !plusC || !fnCtor || !fnDtor || !strDtor) {
+        Fail(caseName, "a String/Filename primitive did not resolve");
+        return;
+    }
+
+    // "<saveDir>vres_<tag>_<side>.bmp" per side.
+    //
+    // *** THE SUBJECT MUST CARRY AN EXTENSION, AND THE FIRST VERSION OF THIS
+    // CASE DID NOT. *** SaveImageToFile does not APPEND ".bmp", it SUBSTITUTES
+    // it: it takes GetPathFilename(path, true), which returns the base name
+    // with its extension REMOVED and returns EMPTY when the path has none
+    // (0x1800c67a0: if no `.` was found and the bool is set, the result is
+    // null), then builds directory + name + ".bmp". Handed an extensionless
+    // path, both sides therefore write a file literally named ".bmp" in the
+    // directory, both write it to the SAME name, and the readback of
+    // "vres_..._ours.bmp" finds nothing.
+    //
+    // That is exactly what happened on this case's first run, and it is worth
+    // recording which way the evidence pointed: the two sides AGREED (same
+    // return value, same output name), so the probe was wrong and the port was
+    // faithful. The effectiveness guard below is what said so instead of
+    // printing a green comparison of two files that did not exist.
+    //
+    // The real caller's paths always end in "<N>.bmp", so this now matches it.
+    char* saveDir = nullptr;
+    getDir(fs, &saveDir);
+    char stemO[64], stemT[64];
+    std::snprintf(stemO, sizeof(stemO), "vres_%s_ours.bmp", tag);
+    std::snprintf(stemT, sizeof(stemT), "vres_%s_theirs.bmp", tag);
+
+    // The reconstruction below is `saveDir + stem`, so saveDir has to end in a
+    // separator. Checked rather than assumed: if it does not, the readback path
+    // would be wrong and the case would report a defect that is its own.
+    const size_t dirLen = saveDir ? std::strlen(saveDir) : 0;
+    if (dirLen == 0 || (saveDir[dirLen - 1] != '\\' && saveDir[dirLen - 1] != '/')) {
+        Fail(caseName, "GetSaveDirectory did not end in a separator -- the readback "
+                       "path this case builds would not be the one it wrote");
+        return;
+    }
+
+    char* joinedO = nullptr; char* joinedT = nullptr;
+    char* pathO = nullptr;   char* pathT = nullptr;
+    plusC(&joinedO, &saveDir, stemO);
+    plusC(&joinedT, &saveDir, stemT);
+    fnCtor(&pathO, &joinedO);
+    fnCtor(&pathT, &joinedT);
+
+    // A varying, non-uniform pixel pattern: all four bytes of every pixel
+    // differ, so a body that copied the wrong three of them, or copied them in
+    // the wrong order, cannot agree by accident
+    // (reference_uniform_population_is_not_a_verification.md).
+    const int32_t n = width * height;
+    uint32_t* px = static_cast<uint32_t*>(rtcoll::MemAlloc(
+        static_cast<uint64_t>(n) * 4, 4));
+    for (int32_t i = 0; i < n; ++i)
+        px[i] = 0x01020304u * static_cast<uint32_t>(i + 1) + 0x0d0c0b0au;
+
+    const bool okOurs = Video_ImageBuffer_SaveImageToFile(&pathO, width, height, px);
+
+    SaveImgFn shipped = reinterpret_cast<SaveImgFn>(ResolveRuntimeRaw(0x1800f2840));
+    if (!shipped) Fail(caseName, "shipped 0x1800f2840 did not resolve");
+    const bool okTheirs = shipped ? shipped(&pathT, width, height, px) : false;
+
+    rtcoll::MemFree(px);
+
+    if (okOurs != okTheirs) {
+        char msg[96];
+        std::snprintf(msg, sizeof(msg), "return value: ours=%d theirs=%d",
+                      okOurs ? 1 : 0, okTheirs ? 1 : 0);
+        Fail(caseName, msg);
+    }
+
+    if (shipped && saveDir) {
+        char fileO[512], fileT[512];
+        // The stems already carry the .bmp; the first version of this line appended
+        // a SECOND one and read back "…_ours.bmp.bmp".
+        std::snprintf(fileO, sizeof(fileO), "%s%s", saveDir, stemO);
+        std::snprintf(fileT, sizeof(fileT), "%s%s", saveDir, stemT);
+
+        static uint8_t bufO[65536], bufT[65536];
+        const long nO = ReadWholeFile(fileO, bufO, sizeof(bufO));
+        const long nT = ReadWholeFile(fileT, bufT, sizeof(bufT));
+        const long want = 0x36 + static_cast<long>(((3 * (width + 1)) & ~3) * height);
+
+        if (nO < 0 || nT < 0) {
+            char msg[224];
+            std::snprintf(msg, sizeof(msg),
+                          "could not read back one of the files (ours=%ld theirs=%ld) "
+                          "-- this case PROVES NOTHING; path was %s", nO, nT, fileO);
+            Fail(caseName, msg);
+        } else if (nO != nT) {
+            char msg[128];
+            std::snprintf(msg, sizeof(msg), "file SIZE: ours=%ld theirs=%ld (expected %ld)",
+                          nO, nT, want);
+            Fail(caseName, msg);
+        } else if (nO == 0) {
+            Fail(caseName, "both files are EMPTY -- they compare equal and prove nothing");
+        } else if (nO != want) {
+            char msg[144];
+            std::snprintf(msg, sizeof(msg),
+                          "both sides wrote %ld bytes but the BMP layout requires %ld",
+                          nO, want);
+            Fail(caseName, msg);
+        } else {
+            for (long b = 0; b < nO; ++b) {
+                if (bufO[b] != bufT[b]) {
+                    char msg[176];
+                    std::snprintf(msg, sizeof(msg),
+                                  "file byte +0x%lx of %ld: ours=%02x theirs=%02x (%s)",
+                                  b, nO, bufO[b], bufT[b],
+                                  b < 14 ? "BITMAPFILEHEADER"
+                                         : (b < 0x36 ? "BITMAPINFOHEADER" : "pixel data"));
+                    Fail(caseName, msg);
+                    break;
+                }
+            }
+            g_savedBytes += nO;
+        }
+        std::remove(fileO);
+        std::remove(fileT);
+    }
+
+    fnDtor(&pathT);
+    fnDtor(&pathO);
+    strDtor(&joinedT);
+    strDtor(&joinedO);
+    fnDtor(&saveDir);
+}
+
+// ---------------------------------------------------------------------------
 // Driver
 // ---------------------------------------------------------------------------
 bool g_armed = false, g_ran = false;
@@ -900,6 +1091,7 @@ bool g_armed = false, g_ran = false;
 void RunOne() {
     g_cases = g_mismatch = 0;
     g_freed = g_decremented = g_reachedZero = g_survived = 0;
+    g_savedBytes = 0;
     CaseModes();
     CaseAdapters();
     CaseInterfaces();
@@ -916,11 +1108,15 @@ void RunOne() {
         CaseRecreate(0x00000000u, 3, "case6/Recreate no bits -> slot 3");
         CaseRecreate(0x00000020u, 2, "case7/Recreate bit 5 -> slot 2");
         CaseRecreate(0x00000030u, 1, "case8/Recreate bits 4+5 -> slot 1");
+        // Three padding shapes; see the note above CaseSaveImage.
+        CaseSaveImage(5, 3, "5x3");
+        CaseSaveImage(4, 2, "4x2");
+        CaseSaveImage(1, 1, "1x1");
     }
     printf("[VresProbe] mode=%-6s cases=%d mismatches=%d | work: freed=%d "
-                "refcount-- =%d reached0=%d survived=%d\n",
+                "refcount-- =%d reached0=%d survived=%d bmp-bytes-compared=%ld\n",
                 kNegName[g_neg], g_cases, g_mismatch,
-                g_freed, g_decremented, g_reachedZero, g_survived);
+                g_freed, g_decremented, g_reachedZero, g_survived, g_savedBytes);
     if (g_freed == 0 && g_decremented == 0)
         printf("[VresProbe] *** THIS RUN PROVES NOTHING: no block was freed and no "
                     "refcount was decremented. ***\n");

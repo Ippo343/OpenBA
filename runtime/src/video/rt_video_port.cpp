@@ -19,6 +19,10 @@
 //   BANISHED_RT_VIDRES=0     ... just the Video resource lifecycle: RenderBuffer
 //                            ctor/dtor/Bind, ImageBuffer::Recreate, and the
 //                            Configuration/Device dtors  (Wave 18 lane VRES)
+//   BANISHED_RT_VIDSAVEIMG=0 ... just ImageBuffer::SaveImageToFile, which is
+//                            the one VRES row with unported IO dependencies
+//   BANISHED_RT_VRES_PROBE=1 runs lane VRES's replay oracle (=neg adds the
+//                            four negative controls)
 //
 // Each lane owns exactly one .cpp and exposes one Register function returning
 // the number of RegisterRuntime* calls it made. A lane with nothing landed yet
@@ -158,6 +162,11 @@ void RtVideoPortInit() {
         // ~40 blocks and at THIS point in boot the MemoryAllocator singleton is
         // constructed but not started. `=neg` additionally runs the four
         // negative controls. See video_resources_probe.cpp.
+        // Wave 18 lane VRES row 7. Separate from the six above because it is
+        // the only row that depends on unported IO exports, so an A/B that
+        // needs the rest of the lane on and this one off has a switch for it.
+        extern int RtVideoSaveImageRegister();
+        if (RtWaveEnabled("BANISHED_RT_VIDSAVEIMG")) n += RtVideoSaveImageRegister();
         extern void RtVideoResourcesProbeArm(bool on);
         const char* vp = std::getenv("BANISHED_RT_VRES_PROBE");
         RtVideoResourcesProbeArm(vp && *vp && std::strcmp(vp, "0") != 0);

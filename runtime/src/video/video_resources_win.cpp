@@ -46,3 +46,20 @@ extern "C" void RtVideoProbeInitDeviceLock(void* device) {
         reinterpret_cast<CRITICAL_SECTION*>(static_cast<uint8_t*>(device) + kDeviceLock),
         5000);
 }
+
+// ============================================================================
+// The three WriteFile calls in ?SaveImageToFile@ImageBuffer@Video@@
+// ============================================================================
+//
+// Retail's shape at 0x1800f2a33 / 0x1800f2a5a / 0x1800f2af7 is identical three
+// times: zero a DWORD, `WriteFile(handle, buf, len, &written, NULL)`, then add
+// `written` to the stream's cursor. It NEVER looks at WriteFile's BOOL — a
+// failed write contributes whatever the pre-zeroed out-parameter holds, which
+// is zero. That is reproduced here rather than turned into an error path: a
+// port that returned early on failure would stop writing rows retail keeps
+// writing.
+extern "C" uint32_t RtVideoWriteFileRaw(void* handle, const void* buf, uint32_t bytes) {
+    DWORD written = 0;
+    WriteFile(reinterpret_cast<HANDLE>(handle), buf, bytes, &written, nullptr);
+    return static_cast<uint32_t>(written);
+}

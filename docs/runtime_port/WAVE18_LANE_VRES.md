@@ -2,13 +2,21 @@
 
 Worktree `C:/code/GIT/wt-w18-vres`, branch `wave18/vres`, cut from `d12e8be`.
 Every number below was measured on this branch, debug build, DLL present, under
-`tools/game_dir_lock.sh acquire vres` — held for the whole run batch, released
-promptly, `assert-held vres` gating every deploy, never piped.
+`tools/game_dir_lock.sh acquire vres`, `assert-held vres` gating every deploy,
+never piped. See §8 on lock hygiene: the first hold was an iterate-under-lock
+cycle and the advisor was right to call it out; every acquire after that was one
+deploy and one run, with fixes made and rebuilt with the lock RELEASED.
 
 ## 0. Headline
 
-**6 of 7 rows ported, registered by NAME and by ADDRESS, and verified against
-the shipped bodies. The 7th is BLOCKED with a named expiry condition.**
+**ALL 7 rows ported, registered by NAME and by ADDRESS, and verified against
+the shipped bodies.**
+
+Row 7 was first recorded BLOCKED and deferred to the IO wave; **the advisor
+overrode that and the row was taken.** §6 keeps the deferral case as written,
+records the override, and adds the cutover fact the advisor asked for — because
+that fact is the strongest argument for the deferral and it is still true after
+the port.
 
 | # | symbol | retail | ported | reg name | reg addr | verdict |
 |---|---|---|---|---|---|---|
@@ -18,12 +26,15 @@ the shipped bodies. The 7th is BLOCKED with a named expiry condition.**
 | 4 | `?Recreate@ImageBuffer@Video@@QEAAXXZ` | 0x1800f33f0 | yes | yes | yes | **VERIFIED by synthesised oracle** (live calls=0, no route) |
 | 5 | `??1Configuration@Video@@QEAA@XZ` | 0x1800f6f80 | yes | yes | yes | **PORTED, NOT VERIFIED** (live calls=0, no route) |
 | 6 | `??1Device@Video@@QEAA@XZ` | 0x1800f7290 | yes | yes | yes | **VERIFIED by replay** (live calls=0, no route) |
-| 7 | `?SaveImageToFile@ImageBuffer@Video@@SA_N…` | 0x1800f2840 | no | — | — | **BLOCKED** — §6 |
+| 7 | `?SaveImageToFile@ImageBuffer@Video@@SA_N…` | 0x1800f2840 | yes | yes | yes | **VERIFIED by file byte-compare** (live calls=0, no route) |
 
 Files: `runtime/src/video/video_resources.cpp` (six bodies),
-`video_resources_win.cpp` (the one Win32 call), `video_resources_probe.cpp` (the
-oracle). Kill switch `BANISHED_RT_VIDRES=0`. Probe `BANISHED_RT_VRES_PROBE=1`
-(or `=neg` for the negative controls).
+`save_image_to_file.cpp` (row 7), `video_resources_win.cpp` (the two Win32
+calls), `video_resources_probe.cpp` (the oracle). Kill switches
+`BANISHED_RT_VIDRES` and, for row 7 alone, `BANISHED_RT_VIDSAVEIMG` — separate
+because row 7 is the only row with unported IO dependencies, so an A/B that
+needs the rest of the lane on and this one off has a switch for it. Probe
+`BANISHED_RT_VRES_PROBE=1` (or `=neg` for the negative controls).
 
 Every address and ordinal was read out of the shipped export directory with
 pefile **before** any body was written
@@ -47,7 +58,7 @@ agreed). It self-schedules from the first `?Bind@RenderBuffer@`, not from init,
 because it allocates ~40 blocks and `RtVideoPortInit()` runs when the DLL's
 `MemoryAllocator` is constructed but not started.
 
-Eight cases:
+Eleven cases:
 
 * **1–3** drive the three element-destroy helpers `??1Device` reaches —
   0x180010cf0 (per `DisplayMode`), 0x180010da0 (per `Adapter`), 0x180010f00 (per
@@ -59,11 +70,20 @@ Eight cases:
   `type == 0`) and `DeleteCriticalSection`.
 * **6–8** drive `?Recreate@ImageBuffer` against a fake `DeviceData` and a fake
   companion with recording stubs, one case per flag arm.
+* **9–11** drive `?SaveImageToFile@ImageBuffer` — ours writes one BMP, the
+  shipped body writes another from the same pixels, and the two FILES are
+  byte-compared. Three sizes, chosen for their padding: 5x3 (one pad byte per
+  row), 4x2 (no padding at all), 1x1 (one pad byte, single row). A run of only
+  the middle size would never exercise padding, and padding written per-row
+  instead of once is a real defect this shape catches.
 
-**Final run: `cases=8 mismatches=0`**, effectiveness `freed=12 refcount--=4
+**Final run: `cases=11 mismatches=0`, `bmp-bytes-compared=238`**, effectiveness `freed=12 refcount--=4
 reached0=2 survived=2`, `RC=0`, 0-byte crash log. Both arms of the String
 release are driven (one name at refcount 1 that must be freed, one at 2 that
-must survive), which is the asymmetry a raw memcmp cannot see.
+must survive), which is the asymmetry a raw memcmp cannot see. All three BMPs
+match byte for byte — 102, 78 and 58 bytes, each exactly the size the layout
+requires — and the same three files were also compared OUTSIDE the process with
+`cmp`, which reported IDENTICAL for all three.
 
 ### 1.1 Controls, scored separately
 
@@ -84,7 +104,7 @@ and the run is clean (`RC=0`, empty crash log). The quantity varies with the
 thing the gate gates, so it is a gate and not a decoration
 (`reference_the_gate_was_never_a_control.md`).
 
-### 1.2 The probe refuted itself three times before it was trusted
+### 1.2 The probe refuted itself FIVE times before it was trusted
 
 Recorded because two of the three produced **confident wrong answers**, not
 errors.
@@ -114,6 +134,22 @@ errors.
    element buffer for the two 0x18-stride specs and corrupted the allocator's
    next tag, which the probe also caught, as a WRITE fault inside `MemAlloc` two
    cases later. It shifts backward now.
+4. **Case 9's first subject had no file extension, and the port was right.**
+   `SaveImageToFile` does not APPEND `.bmp`, it SUBSTITUTES it: it takes
+   `GetPathFilename(path, true)`, which returns the base name with its extension
+   REMOVED and returns EMPTY when there is no `.` at all, then builds
+   `directory + basename + ".bmp"`. Handed extensionless paths, both sides wrote
+   a file literally named `.bmp`, both to the SAME name, and the readback found
+   nothing. **The two sides AGREED — same return value, same output name — which
+   is how the evidence pointed at the probe rather than at the body.** The
+   effectiveness guard is what said "this case PROVES NOTHING" instead of
+   printing a green comparison of two files that did not exist. The behaviour is
+   now recorded in `save_image_to_file.cpp`, because a caller that builds a path
+   without an extension gets a silently wrong filename and a `true` return.
+5. **Then the readback path appended a second `.bmp`** and read
+   `…_ours.bmp.bmp`. The same guard caught it the same way. Both are one-line
+   bugs in the instrument, and both would have read as port defects if the guard
+   had not been there to say the comparison had no subject.
 
 ## 2. What each destructor DESTROYS vs merely FREES
 
@@ -181,6 +217,7 @@ Video::RenderBuffer::RenderBuffer                       calls=1
 Video::RenderBuffer::~RenderBuffer                      calls=1
 Video::RenderBuffer::Bind [-> RenderBufferData slot 2]  calls=5568
 Video::ImageBuffer::Recreate                            calls=0
+Video::ImageBuffer::SaveImageToFile                     calls=0
 Video::Configuration::~Configuration                    calls=0
 Video::Device::~Device                                  calls=0   (2 with the probe on; both are the probe's)
 ```
@@ -200,10 +237,23 @@ Video::Device::~Device                                  calls=0   (2 with the pr
 * **`?Recreate@ImageBuffer`.** Its only caller is
   `saveload_update.cpp`'s `OnVideoRestart`, the device-lost recovery path, which
   no harness route drives.
+* **`?SaveImageToFile@ImageBuffer`.** Its only caller is
+  `w2_takescreenshot.cpp:270`, which runs on a user-initiated screenshot. No
+  autostart route takes one.
 
 **"No gameplay route" is not "no oracle"**
 (`reference_no_route_is_not_no_oracle.md`). `??1Device` is verified by cases 1–5
 and `?Recreate` by cases 6–8, both against the shipped body.
+**The oracle's SUBJECT and CONTROL for the uncalled rows, stated explicitly**,
+because a registered-but-uncalled row is where a reader is most tempted to
+accept a green on trust:
+
+| row | the oracle's SUBJECT | its CONTROL |
+|---|---|---|
+| `??1Device` | the post-state of the three element buffers, plus the count of blocks the body released (`MemoryAllocator::_allocCount`), plus the whole 0x108-byte Device on the empty-array cases | LEAK / NOSTR / SHIFT / NOZERO, four wrong bodies through the same comparator, each scored separately, each catching via the mechanism it names |
+| `?Recreate` | which `DeviceData` and companion vtable slots were dispatched, with what arguments, plus the `+0x60` store and the other 0x60 bytes of the ImageBuffer | the per-case check that the SHIPPED body took the slot the case is about — three cases observe three different slots through the same instrument |
+| `?SaveImageToFile` | every byte of the two files the two bodies wrote | the effectiveness guard, which twice refused a green board by reporting NO SUBJECT (§1.2 items 4–5), plus the exact-size assertion |
+
 `??1Configuration` is the one row this lane records as **PORTED, NOT VERIFIED**:
 its entire body is a single store to a slot the probe would have to redirect to
 observe, so an oracle for it would be testing the redirection. It is two
@@ -262,12 +312,101 @@ registered, so both stay UNPROMOTABLE-HARMFUL exactly as CEIL classified them.
 
 ## 6. Row 7 — `?SaveImageToFile@ImageBuffer@Video@@SA_N…` (0x1800f2840, ord 3609)
 
-**Class: BLOCKED.** Not NO-OP and not HARMFUL — promoting it would matter and
-would work; it is unported for scope and dependency reasons, both nameable.
+**PORTED AND VERIFIED.** `runtime/src/video/save_image_to_file.cpp`, registered
+by name and by address behind `BANISHED_RT_VIDSAVEIMG`.
 
-`runtime/src/video/buffers.cpp:1415` holds it back with three reasons. **Two of
-them do not survive a re-check, which is why this section exists rather than a
-one-line "inherited".**
+This lane first recorded it BLOCKED and recommended deferring it to the IO wave.
+**The advisor overrode that and the row was taken.** The deferral case is kept
+below rather than deleted, because one part of it is a fact about CUTOVER that
+survives the port and that a reader could otherwise infer the opposite of.
+
+### 6.0 PORTING IT DOES NOT CLOSE THE SCREENSHOT'S CUTOVER HOLE
+
+The ported body reaches four IO functions nothing in this tree has ported,
+through `RT_EXPORT_ONCE` — and `ResolveExport` falls through to the raw DLL
+implementation for an unported symbol. With the DLL absent those four resolve to
+null and the screenshot path dies exactly as it did before this file existed.
+**Porting moved the hole from "no implementation" to "an implementation with
+four unresolved dependencies"; it did not close it.** Do not read a ported row 7
+as a working screenshot at cutover.
+
+The four, named here and in the file's banner so the **Wave 19 IO brief inherits
+them rather than rediscovering them**:
+
+| address | ord | symbol |
+|---|---|---|
+| 0x1800ae430 | 2130 | `?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z` |
+| 0x1800a8200 | 55 | `??0BinaryFileStream@IO@@QEAA@XZ` |
+| 0x1800aa8f0 | 1876 | `?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z` |
+| 0x1800accc0 | 1726 | `?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z` |
+
+plus `??1BinaryFileStream@IO@@UEAA@XZ` (0x180023c80, ord 532). The census's
+`called` column grows by these; that is **deferred work being surfaced, not
+invented work** — the screenshot path needs those four no matter who calls them.
+
+### 6.1 The evidence
+
+Ours and the shipped body each write a BMP from the same synthetic pixels; the
+two files are byte-compared. Three sizes, 102 / 78 / 58 bytes, each exactly
+`0x36 + rowBytes * height`, **all three identical** — in-process (case 9) and
+again outside the process with `cmp`. That covers both headers, the bottom-up
+row ORDER, the 32bpp-to-24bpp packing and the zero padding at the end of every
+row.
+
+The Wave 6 note called this row "not diffable" because "running ours and theirs
+back to back would write the file twice". True, and not a blocker: writing it
+twice is the point, to two different paths.
+
+### 6.2 Two things the port records that the disassembly settles and a signature would not
+
+* **It SUBSTITUTES the extension, it does not append one.**
+  `GetPathFilename(path, true)` returns the base name with its extension
+  removed, and EMPTY when the path has no `.` — so `…\shot.png` becomes
+  `…\shot.bmp` and `…\shot` becomes a file literally named `.bmp`, with a
+  `true` return. Found by the oracle, on both sides.
+* **Four callees return a class BY VALUE, so each has a hidden return slot**,
+  and the slot's register differs between the members (RCX = `this`,
+  RDX = the slot) and the free `System::operator+` overloads (RCX = the slot).
+  Omitting it from a typedef is a wild write that still returns the right
+  answer.
+
+### 6.3 What the deferral case got right and wrong
+
+It was **wrong** that the work was a wall. The layout that would have been the
+expensive part was already in the tree: `runtime/types/io/FileStream.h` has
+pinned `IO::FileStream` and `IO::BinaryFileStream` completely since Wave 11 lane
+IOSTREAM — sizeof 0x50, `filename` at +0x18, `FileInfo` at +0x20, the Win32
+handle at +0x38, the byte cursor at +0x2c. Nothing here re-derived a layout.
+That is a fourth instance this wave of the same lesson: **re-check a holdback's
+stated blocker before inheriting it** — and this lane inherited a *scoping*
+judgement from its own earlier reading without re-checking it either.
+
+It was **right** about the cutover consequence (§6.0), which the advisor
+strengthened: that is the argument the deferral should have led with.
+
+### 6.4 The destructor: ported by calling the exported one, after checking
+
+Retail INLINES `~BinaryFileStream` into this function's epilogue. The port calls
+the exported `??1BinaryFileStream@IO@@UEAA@XZ` instead — **and the two were
+compared instruction by instruction before the substitution**, because assuming
+an exported body matches an inlined one is how a prior lane nearly shipped a
+leak under a byte-identity claim. `??1BinaryFileStream` is five instructions and
+tail-jumps to `??1FileStream@IO@@UEAA@XZ`, which does, in order: stamp
+`??_7FileStream`; `CloseFile` if the handle is not -1; `~FileInfo(this+0x20)`,
+releasing the Strings at FileInfo +0x28 then +0x20; release `filename` at +0x18;
+stamp `??_7Stream`; free the Encoding at +0x10 through a body that is
+`if (p) { Enter; Free; Leave; }`. The inlined copy does the same six steps in
+the same order on the same offsets.
+
+### 6.5 The old verdict, kept for the record
+
+`runtime/src/video/buffers.cpp:1415` held it back with three reasons. **None of
+the three survives a re-check, and the note DISAGREED WITH ITSELF inside one
+comment block** — its opening line says *"One caller
+(code/Game/Game/w2_takescreenshot.cpp, the screenshot path)"* and its closing
+paragraph says *"w2_takescreenshot.cpp calls a different, already-ported capture
+path."* Both halves sat in the same comment for four waves. "Grep the call site"
+is the cheap lesson; **"the note already refuted itself" is the cheaper one.**
 
 * Reason 1, *"file I/O side effect — not diffable"*: **not a real blocker.** Two
   subjects, two paths, byte-compare the two files. That is the same
@@ -307,17 +446,10 @@ concatenation, `FileSystem::CreatePath`, `BinaryFileStream`/`FileStream::Create`
 a hand-assembled 24-bit BMP header, and a `WriteFile` loop writing rows
 back-to-front.
 
-**Expiry condition, concrete:** port it **with the IO wave**, once those four
-`IO::FileSystem` / `IO::FileStream` exports land — at which point it is one
-transcription with no unported dependency, and the oracle is
-run-ours-to-path-A, run-theirs-to-path-B, `memcmp` the two files.
-
-**This is a scope call and it is flagged, not absorbed.** It was reported to the
-advisor when it was made. Porting it here would have added four IO name doors
-that the IO wave is about to own, growing the cutover surface
-(`reference_porting_can_grow_the_cutover_surface.md`) for a row that runs once
-per user-initiated screenshot, while adding no coverage to the Video resource
-lifecycle this lane was scoped around.
+**What happened instead:** the row was ported here, and the four IO doors are
+named in §6.0 for Wave 19 to own. The oracle turned out to be exactly the one
+the deferral predicted — run-ours-to-path-A, run-theirs-to-path-B, compare the
+two files — and it is green.
 
 ## 7. What is NOT covered, stated rather than left to a green board
 
@@ -337,6 +469,13 @@ lifecycle this lane was scoped around.
   Reproduced from the disassembly; checkable, if at all, with
   `BANISHED_REDZONE=watch`.
 * **`??1Configuration@Video@@`** — see §3.
+* **`?SaveImageToFile`'s negative control.** Cases 9–11 have no wrong-body
+  control. What stands in for one is the effectiveness guard that refused two
+  separate green boards (§1.2 items 4 and 5) — it demonstrably reports NO
+  SUBJECT rather than NO DIFFERENCE — plus the size assertion, which requires
+  each file to be exactly `0x36 + rowBytes * height` and so cannot be satisfied
+  by two identically-truncated files. That is weaker than a wrong-body control
+  and is counted as such.
 * **`?Recreate@ImageBuffer`'s negative control.** Cases 6–8 have no wrong-body
   control of their own. What stands in for one is the per-case effectiveness
   check that **the shipped body took the slot the case is about**: three cases
@@ -349,5 +488,14 @@ lifecycle this lane was scoped around.
 
 `standalone-debug` and `standalone-perf` both build clean; `make check-log-strip`
 exits 0 (it caught eight qualified `std::printf` in the probe, now unqualified).
+
+**Lock hygiene.** The advisor's norm — compile and fix WITHOUT the lock, acquire
+only for a binary you intend to measure, release before fixing — was adopted
+part-way through this lane, after a first hold that was a
+build-deploy-run-fix-redeploy cycle rather than a run batch. Every acquire after
+that point was a single deploy and a single run, with the two instrument bugs in
+§1.2 items 4–5 diagnosed and rebuilt with the lock RELEASED. One of them was
+diagnosed without a run at all, by reading the shipped `GetPathFilename` and by
+`cmp`-ing the files the previous run had already left on disk.
 
 Worktree `C:/code/GIT/wt-w18-vres`, branch `wave18/vres`.
