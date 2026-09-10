@@ -1,0 +1,123 @@
+rows parsed from standalone\rt_data_mint_tables.inc: 20
+Runtime-x64.dll .text 0x180001000 + 1349120 bytes
+route SCAN     : 2865 candidates (superset, form-free)
+route SWEEP    : 2865 refs, 417795 instruction starts, 51 undecodable bytes
+route BACKWARD : 2865 refs confirmed, 0 candidates unconfirmed, 0 with no sweep-boundary agreement
+                 of those: 0 rejected as interior bytes of a decoded instruction, 0 emitted as UNKNOWN-FORM
+BACKWARD vs SWEEP: 0 only-BACKWARD, 0 only-SWEEP
+absolute 8-byte pointers to a slot, all sections: 0
+screen R1 (census)     : 1143 keys, 914 registered
+screen R2 (own scan)   : 1006 registered names, 1012 registered addrs, 364 mangled names mentioned anywhere
+   R2 BLIND SPOT x4: NON-LITERAL registration NOT resolved in standalone/rt_data_mint.cpp
+   R2 BLIND SPOT x1: NON-LITERAL registration NOT resolved in runtime/funcs/rt_port.h
+   R2 BLIND SPOT x1: NON-LITERAL registration NOT resolved in standalone/resolve.h
+   R2 BLIND SPOT x1: NON-LITERAL registration NOT resolved in standalone/resolve_standalone.cpp
+   R2 BLIND SPOT x1: NON-LITERAL registration NOT resolved in standalone/rt_selftest.cpp
+
+wrote docs\runtime_port\wave15\rt_singleton_refs.csv and docs\runtime_port\wave15\rt_singleton_refs_memoryallocator.csv
+
+FIRST MEASUREMENT of these rows. The kickoff's per-row column is a
+calibrated upper-bound scan and is NOT a measurement; these are.
+
+symbol                                               total  READ WRITE  RMW  LEA  UNK  reads-in-UNPORTED / unknown-owner
+------------------------------------------------------------------------------------------------------------------------
+MemoryAllocator@System                                2188  2185     3    0    0    0  1787 / 0  [OUT OF SCOPE]
+Device@Video                                           165   163     2    0    0    0  60 / 23
+ExternalFactory@Object                                 151   149     2    0    0    0  14 / 127
+FileSystem@IO                                           91    89     2    0    0    0  55 / 22
+Configuration@Video                                     63    56     7    0    0    0  12 / 21
+Application@1                                           26    24     2    0    0    0  9 / 0
+Configuration@Input                                     24    17     7    0    0    0  7 / 5
+Persistence@IO                                          24    23     1    0    0    0  4 / 0
+Factory@Object                                          20    18     2    0    0    0  11 / 2
+MainLoop@Engine                                         20    19     1    0    0    0  11 / 0
+AnimationManager@Graphics                               19    17     2    0    0    0  14 / 1
+Device@Input                                            17    16     1    0    0    0  7 / 0
+Modification@IO                                         11     6     5    0    0    0  2 / 1
+Configuration@Audio                                      9     2     7    0    0    0  2 / 1
+Device@Audio                                             8     7     1    0    0    0  4 / 0
+AchievementManager@Achievement                           6     1     5    0    0    0  0 / 1
+Configuration@System                                     6     4     2    0    0    0  2 / 0
+Engine@1                                                 6     4     2    0    0    0  4 / 0
+InternalFactory@Object                                   6     5     1    0    0    0  1 / 0
+SaveLoad@Save                                            5     3     2    0    0    0  1 / 0
+
+=== CONTROL 1 -- SaveLoad ground truth (5 refs at 5 known VAs) ===
+   0x1800c3d9b WRITE ??0SaveLoad@Save@@QEAA@XZ                     PORTED+REGISTERED   screens=R1R2
+   0x1800c3ca6 WRITE ??1SaveLoad@Save@@QEAA@XZ                     PORTED+REGISTERED   screens=R1R2
+   0x1800dc3e9 READ  ?OnVideoRestart@MainLoop@Engine@@QEAAXXZ      PORTED+REGISTERED   screens=R1R2
+   0x1800dcc1d READ  ?OnVideoError@MainLoop@Engine@@QEAAXXZ        PORTED+REGISTERED   screens=R1R2
+   0x180030d40 READ  ?Get@SaveLoad@Save@@SAPEAV12@XZ               UNPORTED            screens=none
+   imm32 quirk: 0x1800c3ca6 trailing immediate bytes = 4 (mov qword ptr [rip + 0x138a3f], 0)
+   NEGATIVE CONTROL: candidate generation restricted to trailing imm=0 finds 4 of the 5 (MISSES the imm32 ref) -- this reproduces the historical 4-vs-5 disagreement, so the quirk handling is load-bearing and not decoration
+   CONTROL 1: GREEN
+
+=== CONTROL 2 -- Application ground truth (26 refs, 24 reads in unported bodies) ===
+   total 26 (truth 26)
+   WRITE 2 at ['0x18009f5b8', '0x1800dbbe2'] (truth ['0x18009f5b8', '0x1800dbbe2'])
+   READ  24, of which owner_port_state=UNPORTED: 9 (truth 24)
+      reads by owner_port_state: PORTED+REGISTERED    15
+      reads by owner_port_state: UNPORTED             9
+   read owners NOT classified UNPORTED, with their state:
+      0x18000a2f0 ?Get@Application@1@SAPEAV11@XZ                PORTED+REGISTERED screens=R2
+      0x18009f94a ?WindowProc@Application@1@CA_JPEAUHWND__@@I_K_J@Z PORTED+REGISTERED screens=R2
+      0x1800e195e ?PlatformStartup@Device@Input@@AEAA_NXZ       PORTED+REGISTERED screens=R1R2
+      0x1800e1a1a ?PlatformStartup@Device@Input@@AEAA_NXZ       PORTED+REGISTERED screens=R1R2
+      0x1800e1a75 ?PlatformStartup@Device@Input@@AEAA_NXZ       PORTED+REGISTERED screens=R1R2
+      0x1800e1a8d ?PlatformStartup@Device@Input@@AEAA_NXZ       PORTED+REGISTERED screens=R1R2
+      0x1800e1aa5 ?PlatformStartup@Device@Input@@AEAA_NXZ       PORTED+REGISTERED screens=R1R2
+      0x1800e1ae1 ?PlatformStartup@Device@Input@@AEAA_NXZ       PORTED+REGISTERED screens=R1R2
+      0x1800e214e ?PlatformUpdate@Device@Input@@AEAAXXZ         PORTED+REGISTERED screens=R1R2
+      0x1800f8266 ?PlatformStartup@Device@Video@@AEAA_NXZ       PORTED+REGISTERED screens=R1R2
+      0x1800f83a5 ?PlatformStartup@Device@Video@@AEAA_NXZ       PORTED+REGISTERED screens=R1R2
+      0x1800f83bd ?PlatformStartup@Device@Video@@AEAA_NXZ       PORTED+REGISTERED screens=R1R2
+      0x1800f83f6 ?PlatformShutdown@Device@Video@@AEAAXXZ       PORTED+REGISTERED screens=R1R2
+      0x1800f842f ?PlatformShutdown@Device@Video@@AEAAXXZ       PORTED+REGISTERED screens=R1R2
+      0x18012258d ?EnableCursor@UserInterface@UI@@QEAAX_N@Z     PORTED+REGISTERED screens=R1R2
+   CONTROL 2 count/kind: GREEN
+   CONTROL 2 classification split: RED -- see mechanism in the report
+
+=== CONTROL 3 -- Ghidra get_xrefs_to, a route that CAN disagree ===
+   AchievementManager@Achievement@@0PEAV12@EA         mine    6  ghidra    6
+        1 ref(s) sit in an UNEXPORTED internal (Ghidra names a FUN_ function there): attribution withheld, owner_port_state=UNKNOWN-OWNER
+   AnimationManager@Graphics@@0PEAV12@EA              mine   19  ghidra   19
+        1 ref(s) sit in an UNEXPORTED internal (Ghidra names a FUN_ function there): attribution withheld, owner_port_state=UNKNOWN-OWNER
+   Application@1@0PEAV11@EA                           mine   26  ghidra   26
+   Configuration@Audio@@0PEAV12@EA                    mine    9  ghidra    9
+        1 ref(s) sit in an UNEXPORTED internal (Ghidra names a FUN_ function there): attribution withheld, owner_port_state=UNKNOWN-OWNER
+   Configuration@Input@@0PEAV12@EA                    mine   24  ghidra   23  <-- DISAGREES
+        only MINE   0x18000dd50
+        4 ref(s) sit in an UNEXPORTED internal (Ghidra names a FUN_ function there): attribution withheld, owner_port_state=UNKNOWN-OWNER
+   Configuration@System@@0PEAV12@EA                   mine    6  ghidra    6
+   Configuration@Video@@0PEAV12@EA                    mine   63  ghidra   62  <-- DISAGREES
+        only MINE   0x18000f050
+        20 ref(s) sit in an UNEXPORTED internal (Ghidra names a FUN_ function there): attribution withheld, owner_port_state=UNKNOWN-OWNER
+   Device@Audio@@0PEAV12@EA                           mine    8  ghidra    8
+   Device@Input@@0PEAV12@EA                           mine   17  ghidra   17
+   Device@Video@@0PEAV12@EA                           mine  165  ghidra  165
+        23 ref(s) sit in an UNEXPORTED internal (Ghidra names a FUN_ function there): attribution withheld, owner_port_state=UNKNOWN-OWNER
+   Engine@1@0PEAV11@EA                                mine    6  ghidra    6
+   ExternalFactory@Object@@0PEAV12@EA                 mine  151  ghidra  151
+        127 ref(s) sit in an UNEXPORTED internal (Ghidra names a FUN_ function there): attribution withheld, owner_port_state=UNKNOWN-OWNER
+   Factory@Object@@0PEAV12@EA                         mine   20  ghidra   20
+        2 ref(s) sit in an UNEXPORTED internal (Ghidra names a FUN_ function there): attribution withheld, owner_port_state=UNKNOWN-OWNER
+   FileSystem@IO@@0PEAV12@EA                          mine   91  ghidra   87  <-- DISAGREES
+        only MINE   0x1800293b0
+        only MINE   0x1800293bd
+        only MINE   0x1800293e0
+        only MINE   0x1800293ef
+        18 ref(s) sit in an UNEXPORTED internal (Ghidra names a FUN_ function there): attribution withheld, owner_port_state=UNKNOWN-OWNER
+   InternalFactory@Object@@0PEAV12@EA                 mine    6  ghidra    6
+   MainLoop@Engine@@1PEAV12@EA                        mine   20  ghidra   20
+   Modification@IO@@2PEAV12@EA                        mine   11  ghidra   11
+        1 ref(s) sit in an UNEXPORTED internal (Ghidra names a FUN_ function there): attribution withheld, owner_port_state=UNKNOWN-OWNER
+   Persistence@IO@@0PEAV12@EA                         mine   24  ghidra   24
+   SaveLoad@Save@@0PEAV12@EA                          mine    5  ghidra    5
+   CONTROL 3: DISAGREEMENTS above, causes in the report
+   (excluded from every row: the export-directory DATA ref in .rdata and the entry-point sweep, which are not .text references)
+
+SUMMARY
+   control 1 SaveLoad          : GREEN
+   control 2 count/kind        : GREEN
+   control 2 classification    : RED
+   control 3 Ghidra            : differences reported
