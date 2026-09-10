@@ -112,3 +112,76 @@ documented "WRITE to +0x648 of a null singleton" fault.
 orphan probe, so it bites only an armed run. **NOT merged** — a wave-14 fix is
 not Wave 19's to land silently. Flagged for a decision.
 (`reference_lane_closed_is_not_lane_merged.md`.)
+
+## C5. I misread my OWN output to match a prediction (confirmation bias)
+
+Twice — in the tasking message to lane MINT and in the lane TRAPS merge commit
+`20aa588`, which is now permanent in the repo — I wrote that the §0b name-grep
+counts "reproduce on this tip at precisely the predicted **4, 2, 2, 0, 0**."
+
+**My own command output, in the same session, said 4, 2, 0, 2, 0.**
+`??_7FileStream@` reads **0** and `??_7TextFileStream@` reads **2**; the plan has
+them the other way round. I did not mis-run the check — the check was right and I
+read its result as agreeing with the number I was expecting.
+
+Caught by lane MINT, not by me, and not by any instrument. There was no screen to
+fail here: the failure was in reading a correct output. That is the residue §6
+cannot reach, and it is worth recording precisely because every mechanical control
+in this wave was working.
+
+**Substance unaffected** — five rows unminted by VA either way, and every non-zero
+name hit is an `adjacent-export:` label (MINT confirms: 8 hits, all eight labels).
+**What is affected is the standing of a "reproduced" claim.** A prediction I said
+was "sharp and falsifiable" was in fact PARTLY FALSIFIED by my own evidence, and I
+announced it as confirmed.
+
+The plan's §0b should read **4, 2, 0, 2, 0**.
+
+## C6. My harvest-gap hypothesis was WRONG — the file was STALE, not the generator
+
+I gave lane MINT a hypothesis (anchors consumed as coordinates and discarded as
+subjects), flagged as a hypothesis, with an explicit request to refute it. **It
+refuted it**, and the real cause is simpler and cheaper:
+
+`standalone/rt_data_mint_tables.inc` was last regenerated at **`4f037fd`** (Wave
+10D). `tools/rt_mint_gen.py` has not changed since `7bf01e4`, which **precedes**
+that. The four consumers that put these five vtables into the census's `called`
+set all landed **after** it (Wave 11f lane IOSTREAM). **Running the generator
+UNMODIFIED mints all five.**
+
+The generator was *correct* at `4f037fd` — at that commit the only occurrences of
+those names were one comment and its own labels, and it already strips comments
+and `SCAN_SKIP`s its own `.inc`. The memory I pointed MINT at
+(`reference_mint_population_rule_blind_to_its_own_output.md`) is **not** this
+defect; its two closure rules are present and firing.
+
+**The generalisable lesson:** a GENERATED artefact in the tree is a measurement
+with a TIMESTAMP, exactly like a stated blocker. Nobody asked when the `.inc` was
+last produced. Both my hypothesis and the plan's ("a harvest gap; fixing the
+generator is cheaper than five rows") assumed the *code* was wrong because the
+*output* was wrong.
+
+MINT added `tools/rt_mint_gen.py --check` (exit 3, names entered/left rows),
+because **the real defect had no detector at all** — and that checker's own
+positive control caught a regex flaw that review had missed.
+
+## C7. §0b's thesis is only HALF right — the five rows are still port work
+
+**Do not let the mint fix read as a worklist reduction.** MINT minted all five and
+the identity moved by **zero**: `83 >= 122 - 3`, still 36 short at that point.
+`called`, `ported` and `unpromotable` are all unchanged and the census still lists
+all five as unported.
+
+Measured: **52 slots, 1 ported, 51 traps, 0 purecall — all five BLOCKED.** 41
+distinct bodies, 12 unexported.
+
+So §0b converted these rows from **unmeasured** to **measured and blocked**. That
+is real progress — phase 0c could not scope them at all before, and the readiness
+screen now covers 13 IO rows instead of 9 — but it is not the "not port work at
+all" the plan hoped for.
+
+**The genuine saving is elsewhere, and it is large**: the eight `IO::FileStream`
+base slots are traps in **three** of the five rows, so **one body of work clears
+8 + 8 + 7 = 23 trap slots.** That compounds with phase 0c's finding that IO's 8
+blocked rows carry 27 trap slots across only 20 distinct functions. **Both cells
+independently found the same shape: scope FUNCTIONS, not slots.**
