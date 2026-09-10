@@ -74,7 +74,17 @@ struct ImageBuffer {
     int32_t     addressV;           // +0x3C  address mode index, zeroed in ctor
     int32_t     addressW;           // +0x40  address mode index, zeroed in ctor
     int32_t     filter;             // +0x44  filter mode index (0=POINT,1=LINEAR,2=ANISOTROPIC), init 1 in ctor
-    void*       pixelData;          // +0x48  refcounted pixel buffer (refcount at ptr-4, frees at 0)
+    // +0x48 — NAME CORRECTION, Wave 18 lane VDATA. This field is a
+    // **System::String**, not a pixel buffer. `?Serialize@ImageBuffer@Video@@`
+    // (0x1800f280d) hands `this+0x48` straight to
+    // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`, which only
+    // accepts a String. The two descriptions cover the same eight bytes — a
+    // System::String IS one pointer to a refcounted payload whose count sits at
+    // -4, which is why the destructor in buffers.cpp is correct as written and
+    // needs no change — but the NAME sends a reader looking for pixels in what
+    // is really the source path/name. Left spelled `pixelData` so no other
+    // lane's file has to move in this wave; rename it when Video is quiet.
+    void*       pixelData;          // +0x48  System::String (refcount at ptr-4, frees at 0)
     uint64_t    field50;            // +0x50  unknown (copied in copy ctor; not touched by any Lane C export)
     uint64_t    field58;            // +0x58  unknown (copied in copy ctor; not touched by any Lane C export)
     void*       platformData;       // +0x60  Video::ImageBufferData* (platform-specific, set by PlatformConstruct)
