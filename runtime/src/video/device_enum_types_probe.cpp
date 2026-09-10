@@ -301,6 +301,9 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
         }
 
         if (at.modeCount > modesBefore) ++hitModeAdded; else ++hitModeFound;
+        // The growth rule's amortising branch: capacity strictly above size
+        // means SetSize took `capacity = n * 3`, which needs old != 0.
+        if (at.modeCapacity > at.modeCount) ++hitArrayGrew;
         for (int32_t i = 0; i < at.modeCount; ++i)
             if (at.modeData[i].width == kSteps[s].w &&
                 at.modeData[i].height == kSteps[s].h) {
@@ -416,7 +419,12 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
                             go.adapterCount, go.adapterCapacity,
                             gt.adapterCount, gt.adapterCapacity);
             }
-            if (gt.adapterCapacity > adapters) ++hitArrayGrew;
+            // (The tripling branch is NOT reachable from a copy ctor: the
+            // destination always starts empty, so `old == 0` and the
+            // `n == old + 1 && old != 0` guard is false by construction. It is
+            // counted at the FindOrAddMode site instead, which is where it can
+            // actually fire. A counter its subject structurally cannot move is
+            // not a weak counter, it is a broken one.)
 
             // Destroy: ours and theirs. The POST-STATE is the subject — retail
             // leaves the name slot pointing at the freed base on the free path
@@ -438,6 +446,117 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
             else                                                  ++hitDtorNull;
 
             theirGiDtor(&src);
+        }
+    }
+
+    // ---- 5. THE DESTRUCTOR'S FREE PATH, on uniquely-owned strings ---------
+    // The first pass at this population scored dtorFree=0 and the zero-counter
+    // guard caught it. The cause was the POPULATION, not the port: every
+    // subject there was copy-constructed from ONE shared source, so the source
+    // held a reference the whole time and the refcount could never fall to
+    // zero. Two dtors on a source with refcount 1 leave it at 1, not 0.
+    //
+    // Here each side is given its OWN string with refcount 1, so both dtors
+    // take the free path -- the path that decrements to zero, rewinds the
+    // pointer by 8, frees, and leaves the slot pointing at the freed base.
+    // That last part is the one-instruction difference NC3 is aimed at, and
+    // without these cases nothing but the control ever ran it.
+    for (int adapters = 0; adapters <= 2; ++adapters) {
+        GraphicsInterface go, gt;
+        theirGiCtor(&go);
+        theirGiCtor(&gt);
+        go.name = MakeString("uniquely owned", 1);
+        gt.name = MakeString("uniquely owned", 1);
+
+        // Give each its own adapter block too, so the array teardown runs on
+        // the free path as well as the String.
+        for (int pass = 0; pass < 2; ++pass) {
+            GraphicsInterface* g = pass ? &gt : &go;
+            if (adapters == 0) continue;
+            g->adapterData = static_cast<Adapter*>(
+                MemAlloc(static_cast<uint64_t>(adapters) * 0x38, 8));
+            g->adapterCount = adapters;
+            g->adapterCapacity = adapters;
+            for (int i = 0; i < adapters; ++i) {
+                theirAdapterCtor(&g->adapterData[i]);
+                g->adapterData[i].name = MakeString("owned adapter", 1);
+                DisplayMode m; std::memset(&m, 0, sizeof(m));
+                m.width = 800; m.height = 600;
+                RefreshRate r; r.numerator = 60; r.denominator = 1;
+                theirFind(&g->adapterData[i], &m, &r);
+            }
+        }
+
+        // THE PREDICATE HERE COMPARES THE TRANSFORMATION, NOT THE VALUE — and
+        // that is not a convenience, it is the only correct predicate.
+        //
+        // The first version of this block asked `go.name == gt.name` and
+        // reported three mismatches. The port was right and the ORACLE was
+        // wrong: each side owns a SEPARATE allocation here (that is the whole
+        // point of the case), so the two slots can never hold the same value.
+        // A pointer-identity test between two independent allocations is the
+        // same defect as memcmp-ing bytes neither side writes — it fails 100%
+        // of calls and reads like a catastrophic port defect.
+        //
+        // What retail actually does on the free path is `slot -= 8` and free.
+        // So the checkable claim is that EACH side's slot ends at ITS OWN
+        // original pointer minus 8, which is well-defined across two
+        // allocations and is exactly the behaviour NC3's slip destroys.
+        void* ourNameBefore   = go.name;
+        void* theirNameBefore = gt.name;
+        RtVideo_GraphicsInterface_Dtor(&go);
+        theirGiDtor(&gt);
+        ++cases;
+
+        void* ourExpected   = static_cast<uint8_t*>(ourNameBefore) - 8;
+        void* theirExpected = static_cast<uint8_t*>(theirNameBefore) - 8;
+        const bool oursOk   = (go.name == ourExpected);
+        const bool theirsOk = (gt.name == theirExpected);
+        if (oursOk != theirsOk || go.adapterData != gt.adapterData ||
+            go.adapterCount != gt.adapterCount ||
+            go.adapterCapacity != gt.adapterCapacity) {
+            ++mismatches;
+            std::printf("[VidEnum] MISMATCH dtor FREE path adapters=%d "
+                        "(ours slot rewound=%d, theirs slot rewound=%d)\n",
+                        adapters, oursOk ? 1 : 0, theirsOk ? 1 : 0);
+        }
+        // Classified on THEIRS, like every other counter here. `theirsOk` means
+        // the shipped dtor took the free path and left the rewound pointer.
+        if (theirsOk)                          ++hitDtorFree;
+        else if (theirNameBefore != nullptr)   ++hitDtorShared;
+        else                                   ++hitDtorNull;
+    }
+
+    // ---- 6. GetDisplayMode over a mode with an EMPTY refresh list ----------
+    // Also structurally unreachable through FindOrAddMode, which always adds a
+    // rate. Built by hand so the nested-array assignment is exercised with
+    // nothing to copy -- the n == 0 early shape of the growth rule.
+    {
+        DisplayMode bare[2];
+        std::memset(bare, 0, sizeof(bare));
+        bare[0].width = 1024; bare[0].height = 768;
+        bare[1].width = 1600; bare[1].height = 900;
+
+        Device dOurs, dTheirs;
+        std::memset(&dOurs, 0, sizeof(dOurs));
+        std::memset(&dTheirs, 0, sizeof(dTheirs));
+        dOurs.modeData = bare;   dOurs.modeCount = 2;
+        dTheirs.modeData = bare; dTheirs.modeCount = 2;
+
+        for (int32_t i = 0; i < 2; ++i) {
+            DisplayMode mo, mt;
+            std::memset(&mo, 0x5A, sizeof(mo));
+            std::memset(&mt, 0x5A, sizeof(mt));
+            void* ro = RtVideo_Device_GetDisplayMode(&dOurs, &mo, i);
+            void* rt = theirGetMode(&dTheirs, &mt, i);
+            ++cases;
+            if (ro != &mo || rt != &mt || !SameMode(mo, mt)) {
+                ++mismatches;
+                std::printf("[VidEnum] MISMATCH GetDisplayMode empty-refresh i=%d\n", i);
+            }
+            if (mt.refreshCount == 0) ++hitEmptyRefresh;
+            theirModeDtor(&mo);
+            theirModeDtor(&mt);
         }
     }
 
@@ -488,19 +607,39 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
     // The slip: "tidying" the free path by nulling the slot, which is the
     // single most tempting edit in this cluster and the one a byte-faithful
     // port must not make.
+    //
+    // THIS CONTROL WAS A FALSE GREEN IN ITS FIRST FORM AND IS RECORDED AS SUCH.
+    // It read `nc3 = (go.name != gt.name)` — but the two subjects own SEPARATE
+    // allocations, so those two pointers differ whether the slip is applied or
+    // not. It scored CAUGHT on a run where it could not have scored anything
+    // else, which is a control catching by a mechanism other than the one it
+    // names. It now uses the SAME transformation predicate the live free-path
+    // cases use, and it is verified below to read NOT-caught without the slip.
     {
         GraphicsInterface go, gt;
         theirGiCtor(&go);
         theirGiCtor(&gt);
         go.name = MakeString("x", 1);
         gt.name = MakeString("x", 1);
+        void* ourBefore   = go.name;
+        void* theirBefore = gt.name;
         RtVideo_GraphicsInterface_Dtor(&go);
         theirGiDtor(&gt);
-        // Retail leaves the slot pointing at the freed base here. Apply the
-        // slip to OUR result and ask the SAME predicate the live cases use
-        // whether it rejects it.
+
+        const bool theirsOk  = (gt.name == static_cast<uint8_t*>(theirBefore) - 8);
+        // Without the slip the predicate must AGREE (both rewound). If this
+        // reads true the control is inert and its CAUGHT below means nothing.
+        const bool cleanAgree =
+            ((go.name == static_cast<uint8_t*>(ourBefore) - 8) == theirsOk);
+
         go.name = nullptr;                                 // the slip
-        nc3 = (go.name != gt.name);
+        const bool slippedAgree =
+            ((go.name == static_cast<uint8_t*>(ourBefore) - 8) == theirsOk);
+
+        nc3 = cleanAgree && !slippedAgree;   // agreed clean, rejected slipped
+        if (!cleanAgree)
+            std::printf("[VidEnum] *** NC3 is INERT: its predicate already "
+                        "disagreed before the slip was applied ***\n");
     }
 
     // NC4 -> the copy-ctor scalar compare.
@@ -537,8 +676,9 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
                 nc3 ? "CAUGHT" : "*** MISSED ***",
                 nc4 ? "CAUGHT" : "*** MISSED ***");
 
-    if (!hitDtorFree || !hitDtorShared || !hitModeAdded || !hitModeFound ||
-        !hitRefreshAdded || !hitRefreshFound)
+    if (!hitDtorFree || !hitDtorShared || !hitDtorNull || !hitModeAdded ||
+        !hitModeFound || !hitRefreshAdded || !hitRefreshFound ||
+        !hitArrayGrew || !hitEmptyAdapters || !hitEmptyRefresh)
         std::printf("[VidEnum] *** at least one branch counter is ZERO: the sweep "
                     "did not reach that branch and says NOTHING about it ***\n");
     if (!nc1 || !nc2 || !nc3 || !nc4)

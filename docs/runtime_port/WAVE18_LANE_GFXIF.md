@@ -38,14 +38,14 @@ brief. All nine matched the brief's table.
 
 | # | symbol | retail | ported | reg. by name | reg. by addr | verdict |
 |---|---|---|---|---|---|---|
-| 1 | `??0GraphicsInterface@Device@Video@@QEAA@XZ` | `0x18000cd90` | yes | yes | yes | **VERIFIED** — oracle §4 |
-| 2 | `??0GraphicsInterface@…@AEBU012@@Z` | `0x18000ce10` | yes | yes | yes | **VERIFIED** — oracle §4 |
-| 3 | `??1GraphicsInterface@Device@Video@@QEAA@XZ` | `0x18000cdc0` | yes | yes | yes | **VERIFIED** — oracle §4 |
-| 4 | `??0Adapter@Device@Video@@QEAA@XZ` | `0x1800f7100` | yes | yes | yes | **VERIFIED** — oracle §4 |
-| 5 | `??0Adapter@Device@Video@@QEAA@AEBU012@@Z` | `0x18000cc70` | yes | yes | yes | **VERIFIED** — oracle §4 |
-| 6 | `??1Adapter@Device@Video@@QEAA@XZ` | `0x18000cc10` | yes | yes | yes | **VERIFIED** — oracle §4 |
-| 7 | `?FindOrAddMode@Adapter@Device@Video@@…` | `0x1800f7020` | yes | yes | yes | **VERIFIED** — oracle §4 |
-| 8 | `?GetDisplayMode@Device@Video@@QEBA?AV…@H@Z` | `0x18000d3e0` | yes | yes | yes | **VERIFIED** — oracle §4 |
+| 1 | `??0GraphicsInterface@Device@Video@@QEAA@XZ` | `0x18000cd90` | yes | yes | yes | **VERIFIED** — 55/55, §4 |
+| 2 | `??0GraphicsInterface@…@AEBU012@@Z` | `0x18000ce10` | yes | yes | yes | **VERIFIED** — 55/55, §4 |
+| 3 | `??1GraphicsInterface@Device@Video@@QEAA@XZ` | `0x18000cdc0` | yes | yes | yes | **VERIFIED** — 55/55, §4 |
+| 4 | `??0Adapter@Device@Video@@QEAA@XZ` | `0x1800f7100` | yes | yes | yes | **VERIFIED** — 55/55, §4 |
+| 5 | `??0Adapter@Device@Video@@QEAA@AEBU012@@Z` | `0x18000cc70` | yes | yes | yes | **VERIFIED** — 55/55, §4 |
+| 6 | `??1Adapter@Device@Video@@QEAA@XZ` | `0x18000cc10` | yes | yes | yes | **VERIFIED** — 55/55, §4 |
+| 7 | `?FindOrAddMode@Adapter@Device@Video@@…` | `0x1800f7020` | yes | yes | yes | **VERIFIED** — 55/55, §4 |
+| 8 | `?GetDisplayMode@Device@Video@@QEBA?AV…@H@Z` | `0x18000d3e0` | yes | yes | yes | **VERIFIED** — 55/55, §4 |
 | 9 | `?AdjustDisplay@Device@Video@@QEAAXXZ` | `0x1800f7e20` | yes | yes | yes | **PORTED, NOT BYTE-VERIFIED** — §5 |
 
 Files:
@@ -138,13 +138,99 @@ and `Dx11ResolveRuntimeImport` (`dx11/src/dx11_backend_access.cpp:9`) tries
   * NC3 → the dtor post-state compare on the **free path** (nulls the slot)
   * NC4 → the copy-ctor scalar compare (drops `+0x30`)
 
-> **Run status: the oracle is written, built and armed, but had not been RUN at
-> the time this lane reported** — `tools/game_dir_lock.sh acquire gfxif` was
-> blocked behind lane VRES for the whole reporting window (see §7). The verdicts
-> in §2 marked VERIFIED are **pending that run**. Anyone merging this branch
-> should run it first; the numbers it prints, not this sentence, are the
-> evidence. This is stated plainly rather than smoothed over, because a
-> registration is not a verdict and an unrun probe is not an oracle.
+### The run — `BANISHED_RT_VIDENUMTYPES_PROBE=1`, debug build, `BANISHED_AUTOQUIT=1`
+
+```
+[VidEnum] cases=55 mismatches=0
+[VidEnum] effectiveness (ALL measured on THEIRS): dtorFree=3 dtorShared=8
+          dtorNull=4 modeAdded=3 modeFound=5 refreshAdded=6 refreshFound=2
+          arrayGrew=5 emptyAdapters=3 emptyRefresh=2
+[VidEnum] negative controls (scored separately): NC1-ctor=CAUGHT
+          NC2-findoraddmode=CAUGHT NC3-dtor-freepath=CAUGHT NC4-copyctor=CAUGHT
+```
+
+**55 cases, 0 mismatches, all ten effectiveness counters non-zero, all four
+controls caught, and neither the zero-counter warning nor the NC3-inert warning
+printed.** That is the verdict rows 1–8 rest on.
+
+It took three runs to get there, and the first two are the interesting part.
+
+#### Run 1 — `dtorFree=0`: the guard caught my own population, not the port
+
+Run 1 read `cases=50 mismatches=0` with every control CAUGHT — and printed
+*"at least one branch counter is ZERO"*. `dtorFree` was 0: the destructor's free
+path, the one-instruction difference the whole cluster turns on, **had never
+run.** Without the counter this would have read as a clean sweep.
+
+The cause was the population, not the port. Every subject was copy-constructed
+from ONE shared source, so the source held a reference for the lifetime of the
+case and the refcount could never fall to zero — source rc 1, plus two copies,
+minus two dtors, leaves 1. Fixed by giving each side a string it owns outright.
+
+#### Run 2 — three mismatches, and the ORACLE was wrong, not the port
+
+With the free path finally running, run 2 reported three mismatches:
+
+```
+[VidEnum] MISMATCH dtor FREE path adapters=0 (ours name=...c098, theirs name=...c0e8)
+```
+
+Those two pointers are **two separate allocations** — which is the entire point
+of the case. Retail's free path does `slot -= 8` and frees, so each side ends
+pointing at *its own* freed base, and a pointer-identity test between them can
+never pass. That is the same defect as `memcmp`-ing bytes neither side writes:
+it fails 100% of calls and reads like a catastrophic port defect.
+
+The predicate now compares the **transformation** rather than the value — each
+side's slot must equal its own original pointer minus 8 — which is well-defined
+across two allocations. Run 3 is green on that predicate.
+
+#### NC3 was a FALSE GREEN in runs 1 and 2, and is recorded as one
+
+`nc3` read `(go.name != gt.name)`. Those two pointers differ whether the slip is
+applied or not, so NC3 **scored CAUGHT on runs where it could not have scored
+anything else** — a control catching by a mechanism other than the one it names,
+which is exactly what a separately-scored control is supposed to prevent and did
+not. It now requires **both** halves: agree without the slip, disagree with it,
+and it prints `NC3 is INERT` if the clean half fails. Its CAUGHT in run 3 means
+something; its CAUGHT in runs 1 and 2 did not.
+
+Two of the three counters that made this visible (`arrayGrew`, `emptyRefresh`)
+were also **ill-posed** in run 1 and were re-pointed rather than excused:
+`arrayGrew` was measured on the copy ctor, whose destination always starts empty
+— so `old == 0` and the growth rule's `n == old + 1 && old != 0` tripling guard
+is false *by construction*. It is now measured at `FindOrAddMode`'s `SetSize`,
+where it can fire, and reads 5. A counter its subject structurally cannot move
+is not a weak counter, it is a broken one.
+
+### The kill switch is a real control
+
+A gate whose quantity does not vary with the gated thing was never a control, so
+this was measured rather than assumed — same binary, one env var apart:
+
+| run | `[RtPort] Video: N exports registered` |
+|---|---|
+| default (switch on) | **142** |
+| `BANISHED_RT_VIDENUMTYPES=0` | **133** |
+
+Exactly 9. The switch gates what it claims to gate.
+
+### What this run CANNOT say, stated so nobody reads it as reassurance
+
+Both A/B runs report **zero** `[Dx11] devicedata import UNRESOLVED` lines. That
+is not evidence the wall moved. **The shipped DLL is present in these runs**, so
+`ResolveExport` falls through to it for anything unported and the import table
+fills either way. The wall exists only when the DLL is absent. That counter is
+structurally incapable of varying with the thing of interest here — it is lane
+GATE's measurement, not this lane's, and quoting these two zeros as progress
+would be the same error as quoting the ret-slot audit's green (§7b).
+
+What the boot DOES establish: the run booted clean (empty crash log), the DX11
+seam reports `84/84 slots ours`, and `Dx11ResolveRuntimeImport` is
+`ResolveExport`-first — so `DeviceData::EnumerateInterfaces` drove the **real
+DXGI enumeration through our nine bodies** and produced a working video device.
+That is integration evidence, and it is separate from the oracle's correctness
+evidence above.
 
 ---
 
@@ -293,35 +379,27 @@ how a blind screen gets quoted as a green one.
 
 ---
 
-## 8. Blocked, and what it cost
+## 8. The lock, and what it cost
 
 `tools/game_dir_lock.sh acquire gfxif` (never piped; own exit status checked)
-was **blocked behind lane VRES for the entire reporting window** — 900s timeout
-reached, holder still active. Three lanes contending for one game directory is,
-as the kickoff predicted, this wave's real throughput ceiling.
+was blocked behind lane VRES for **~830 seconds**, granted at 780s into its own
+900s window, and **released promptly** once the run batch finished. Three lanes
+contending for one game directory is, as the kickoff predicted, this wave's real
+throughput ceiling — but the reading, disassembly and porting were all done
+first, so the lock was held only for the runs.
 
-Consequence, stated without softening: **everything in this lane is build-
-verified and census-verified; nothing is run-verified.** Both
-`standalone-debug` and `standalone-perf` build clean with no warnings from
-either new file, and `make check-log-strip` passes. The oracle and the boot are
-the two things still owed, and they need the lock, not more porting.
+Everything owed is done: both builds clean, `make check-log-strip` passes, the
+oracle is run and green, the kill switch is measured.
 
-**Recommended order for whoever gets the lock next:**
-1. `BANISHED_RT_VIDENUMTYPES_PROBE=1` with `BANISHED_AUTOQUIT` — read
-   `cases=`, `mismatches=`, every effectiveness counter, and all four NC lines.
-   **A zero effectiveness counter voids the branch it names; a MISSED control
-   voids the screen it names.**
-2. An A/B on `BANISHED_RT_VIDENUMTYPES=0` to confirm the switch actually
-   gates — a gate whose quantity does not vary with the gated thing was never
-   a control.
-3. Only then lane GATE's cutover boot, with a **set diff** against attempt 24's
-   17, never a count.
+**What is still owed, and it is not this lane's:** lane GATE's cutover boot.
 
-**Prediction, pre-registered here so GATE can score it:** the wall moves off
-`DeviceData::EnumerateInterfaces`. It does **not** follow that the boot
-completes — `EnumerateInterfaces` is a long body and the next null is as likely
-to be inside it as after it. And per attempt 24's own warning, whatever residue
-GATE records is a **lower bound**, not the next wave's work list.
+**Prediction, pre-registered so GATE can score it rather than rationalise it:**
+the wall moves off `DeviceData::EnumerateInterfaces`. It does **not** follow that
+the boot completes — `EnumerateInterfaces` is a long body and the next null is as
+likely to be inside it as after it. And per attempt 24's own warning, whatever
+residue GATE records is a **lower bound**, never the work list. GATE should
+report by **set diff** against attempt 24's 17, never by count: Wave 10 saw
+residue grow 17 → 25 and correctly called the growth progress.
 
 ---
 
