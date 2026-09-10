@@ -84,6 +84,7 @@ namespace RtIO {
 void RtIoFileStreamCounters(unsigned long long* out);            // 7 slots
 void RtIoFileSystemCreateFileCounters(unsigned long long* out);  // 10 slots
 void RtIoFileStreamSlotCounters(unsigned long long* out);        // 14 slots
+void RtIoBfsPromoteCounters(unsigned long long* out);            // 6 slots
 }
 
 namespace {
@@ -267,6 +268,35 @@ void Run() {
            "Open=%llu (true=%llu)  deletingDtor=%llu  arrayArmAbort=%llu  copyCtor=%llu\n",
            sl[0], sl[1], sl[2], sl[3], sl[4], sl[5], sl[6], sl[7], sl[8],
            sl[9], sl[10], sl[11], sl[12], sl[13]);
+
+    // ---- WAVE 20 LANE PROMOTE: the ??_7BinaryFileStream@ promotion ---------
+    // Two claims, printed on two lines, deliberately not merged.
+    //
+    //  EFFECT      what our two stampers actually installed. `stamps` is the
+    //              denominator and it MUST read non-zero or the A/B measured
+    //              nothing: with no BinaryFileStream constructed, both halves
+    //              of the kill-switch comparison are vacuously equal.
+    //  ATTENDANCE  what dispatched through it. `viaMintBFS` is the attendance
+    //              number for the PROMOTED row; `viaDllBFS` and `other` are the
+    //              two ways an entry to these shared bodies can arrive without
+    //              being attendance for it, and they are printed rather than
+    //              folded away so the tiers stay separable.
+    unsigned long long bp[6] = {0};
+    RtIO::RtIoBfsPromoteCounters(bp);
+    printf("[BfsPromote] EFFECT      stamps=%llu  stampedMinted=%llu  "
+           "(promoted <=> the two are EQUAL and non-zero; kill switch <=> "
+           "stampedMinted=0 with stamps UNCHANGED)\n", bp[0], bp[1]);
+    printf("[BfsPromote] ATTENDANCE  slotEntries=%llu  viaMintBFS=%llu  "
+           "viaDllBFS=%llu  other=%llu\n", bp[2], bp[3], bp[4], bp[5]);
+    if (bp[0] == 0)
+        printf("[BfsPromote] *** I MEASURED NOTHING: no BinaryFileStream was "
+               "constructed on this route, so neither the EFFECT nor the "
+               "ATTENDANCE line above is evidence of anything. ***\n");
+    else if (bp[2] == 0)
+        printf("[BfsPromote] attendance is ZERO with stamps=%llu: the table was "
+               "installed and never dispatched. That is a finding, not a dead "
+               "instrument -- the EFFECT line above is its liveness control.\n",
+               bp[0]);
 
     unsigned long long entered = 0;
     for (int i = 0; i < 7; ++i)  entered += fs[i];

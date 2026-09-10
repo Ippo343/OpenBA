@@ -1034,6 +1034,82 @@ int RtMintRegisterPromotedRows() {
     RegisterRuntimeAddr(0x180155210ull, st); ++n;
 
     // ========================================================================
+    // WAVE 20 LANE PROMOTE — ??_7BinaryFileStream@IO@@6B@, and it is the ONLY
+    // row of seven candidates that passes the §5.1 stamper gate
+    // ========================================================================
+    //
+    // THE GATE, restated because it is the whole decision: a row is promotable
+    // insofar as WE OWN THE FUNCTION THAT STAMPS IT (WAVE19_CLOSED.md §5.1).
+    // Every stamp is an in-DLL RIP-relative LEA followed by a store, which is
+    // NOT a door, so TRAP=0 says nothing at all about who installs the table.
+    //
+    // THE STAMPER CENSUS WAS ENUMERATED FROM THE BINARY, not read off our own
+    // port list. `tools/mint_stamper_census.py` (new this lane; it BORROWS lane
+    // EXTENT's writer channel rather than rebuilding one) groups every
+    // rip-relative-LEA-then-store of each table address by the `.pdata`-bounded
+    // function containing it, and joins that against a literal registration
+    // scan of runtime/ engine/ code/ standalone/ dx11/ WITH COMMENTS STRIPPED.
+    // Run on this tree, decoder control 3 of 3, ownership controls both green:
+    //
+    //   row                              stampers  ours-capable  retail  unattr
+    //   ??_7BinaryFileStream@IO@@6B@            2          2         0       0   <- promoted here
+    //   ??_7FileStream@IO@@6B@                 17          6        11       0
+    //   ??_7CompressedStream@IO@@6B@            9          5         4       0
+    //   ??_7CompressedMemoryStream@IO@@6B@      7          5         2       0
+    //   ??_7CompressedFileStream@IO@@6B@        8          1         7       0
+    //   ??_7ReaderWriter@IO@@6B@               20          7        10       3
+    //   ??_7Stream@IO@@6B@                     50         22        25       3
+    //
+    // The two stampers of THIS row, with the instruction and the function each
+    // sits in — both are ported and registered by name AND by address in
+    // runtime/src/io/file_stream.cpp:
+    //
+    //   0x1800a8270  mov %rax,(%rdi)   ??0BinaryFileStream@IO@@QEAA@XZ +0x70
+    //   0x180023cfe  mov %rax,(%rbx)   ??0BinaryFileStream@IO@@QEAA@AEBV01@@Z +0x5e
+    //
+    // That agrees with lane FILE's independent `get_xrefs_to` count (file_stream.cpp
+    // header, "briefed as ONE stamper, measured TWO"). TWO DERIVATIONS BY
+    // DIFFERENT MEANS, and the briefed number was wrong — on the briefed claim
+    // the row would have been declared owned with the copy constructor's stamp
+    // still in the DLL.
+    //
+    // `ours-capable` is what the tool prints and it is an UPPER BOUND: a
+    // registration is a DOOR, not a guarantee that every caller uses it. For
+    // this row the bound is tight in the only way that matters — both stampers
+    // are EXPORTS registered under their own mangled names, so any caller that
+    // resolves either by name or by address reaches our body, and the A/B below
+    // MEASURES the result rather than inferring it.
+    //
+    // THE SLOTS: 8 of 8 registered, 0 purecall, TRAP=0 (census PROMOTION
+    // BACKLOG on this tree reads `??_7BinaryFileStream@IO@@6B@  8  8  COMPLETE`).
+    // Slot 0 is the unexported deleting-dtor thunk at 0x180023d80, registered by
+    // ADDRESS; slots 1..7 are the seven exported FileStream methods.
+    //
+    // A/B AND ATTENDANCE. `BANISHED_RT_PROMOTE_BFS=0` turns THIS ROW off and
+    // nothing else — a per-row switch, not the file-wide
+    // BANISHED_RT_MINT_PROMOTED=0, so the comparison has ONE variable. Both
+    // halves are printed by file_stream_cutover_probe.cpp
+    // (BANISHED_RT_FILE_CUTOVER=1) as `[BfsPromote]`, with `stamps` as the
+    // denominator and an explicit "I MEASURED NOTHING" line when it is zero.
+    // The measured numbers are in docs/runtime_port/WAVE20_LANE_PROMOTE.md.
+    //
+    // WHAT THIS DOES NOT CLAIM. Attendance is not verification: the bodies'
+    // oracle is runtime/src/io/file_stream_slots_probe.cpp and it is a separate
+    // tier. This promotion says our table is installed and dispatched; that
+    // probe says the bodies agree with retail's.
+    {
+        const char* off = getenv("BANISHED_RT_PROMOTE_BFS");
+        if (off && strcmp(off, "0") == 0) {
+            printf("[RtMint] BANISHED_RT_PROMOTE_BFS=0 -- "
+                   "??_7BinaryFileStream@IO@@6B@ left on the DLL (A/B control)\n");
+        } else {
+            st = RtMintPromotionStorage("??_7BinaryFileStream@IO@@6B@", 0x1801554d0ull);
+            RegisterRuntimeExport("??_7BinaryFileStream@IO@@6B@", st);
+            RegisterRuntimeAddr(0x1801554d0ull, st); ++n;
+        }
+    }
+
+    // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted
     // ========================================================================
     //

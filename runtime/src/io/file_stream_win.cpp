@@ -71,6 +71,14 @@ using RtIo::FileStream;
 uint64_t g_fsWrite = 0, g_fsWriteFull = 0;
 uint64_t g_fsSeek = 0, g_fsSeekPlatform = 0;
 
+// Wave 20 lane PROMOTE. Defined in file_stream.cpp beside the other five slot
+// bodies: it records WHICH TABLE the dispatched object was carrying, which is
+// the only way to tell a ??_7BinaryFileStream@ dispatch (the promoted row) from
+// a ??_7FileStream@ one, the two tables' slots 1..7 being byte-identical.
+// Declared here rather than in a header because neither file publishes one and
+// this lane does not add one for two call sites.
+void NoteSlotDispatch(const void* vptr);
+
 // ============================================================================
 // IO::FileStream::Write(int, const void*)                retail 0x1800aab90
 // ============================================================================
@@ -92,6 +100,7 @@ uint64_t g_fsSeek = 0, g_fsSeekPlatform = 0;
 extern "C" bool RtIo_FileStream_Write(FileStream* self, int32_t len, const void* buf) {
     RT_DIFF_BEGIN("IO::FileStream::Write");
     ++g_fsWrite;
+    NoteSlotDispatch(self->base.vptr);
 
     DWORD written = 0;                                          // 1800aabb8
     ::WriteFile(reinterpret_cast<HANDLE>(self->file.winHandle), // 1800aaba5: [RCX+0x38]
@@ -128,6 +137,7 @@ extern "C" bool RtIo_FileStream_Write(FileStream* self, int32_t len, const void*
 extern "C" bool RtIo_FileStream_SetCurrentPos(FileStream* self, int32_t pos) {
     RT_DIFF_BEGIN("IO::FileStream::SetCurrentPos");
     ++g_fsSeek;
+    NoteSlotDispatch(self->base.vptr);
 
     self->file.cursor = pos;                             // 1800aac1c — BEFORE the branch
 
