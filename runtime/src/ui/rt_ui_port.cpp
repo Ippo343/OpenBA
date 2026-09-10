@@ -133,6 +133,14 @@ extern int RtUiToolTipDialogRegister();    // tooltipdialog.cpp   (lane TIP)
 // of one drag, and a switch that moved both at once could not say which half a
 // regression came from.
 extern int RtUiDragStartRegister();        // userinterface_dragstart.cpp (DRAG)
+// WAVE 11 lane OBJINT: `?CreateNewObject@Dialog@UI@@` and
+// `?CreateInPlaceObject@Dialog@UI@@` -- the object-creation-path PROBE, not a
+// row. It owns its own switch INSIDE its register function
+// (BANISHED_RT_DLGFACTORY, opt-in and unset by default) and is called
+// unconditionally for that reason, exactly like the four lanes above it. Read
+// the file banner before arming it: it exists to TEST the published
+// `??_7Dialog@UI@@6B@` expiry, and it predicts that the expiry is WRONG.
+extern int RtUiDialogFactoryRegister();    // dialog_factory.cpp (lane OBJINT)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -161,5 +169,6 @@ void RtUiPortInit() {
     n += RtUiStandAloneRegister();     // owns BANISHED_RT_UISTANDALONE
     n += RtUiToolTipDialogRegister();  // owns BANISHED_RT_UITOOLTIPDLG
     n += RtUiDragStartRegister();      // owns BANISHED_RT_UIDRAGSTART
+    n += RtUiDialogFactoryRegister();  // owns BANISHED_RT_DLGFACTORY (lane OBJINT)
     printf("[RtPort] UI: %d exports registered\n", n);
 }
