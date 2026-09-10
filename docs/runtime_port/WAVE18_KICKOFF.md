@@ -402,3 +402,42 @@ buffer, so a body that skips the recursion leaves the outer buffer byte-identica
 Same shape as an oracle comparing bytes neither side writes. What sees it is
 `_allocCount`: the LEAK control reads `ours=5 theirs=9` and `ours=3 theirs=21`
 where a correct body reads equal. Four controls, scored separately, all green.
+
+### 6.15 SCORING RULE for GFXIF's prediction — fixed BEFORE the data arrives
+
+Lane GFXIF, closing, proposed how an ambiguous GATE outcome should be read:
+*"If GATE finds the next null inside `EnumerateInterfaces` rather than after it,
+that's the second half holding, not the first half failing."*
+
+**I am not adopting that reading, and the reason is procedural rather than
+technical.** It is a rule for interpreting a result, offered by the party whose
+prediction it scores, after the prediction and before the measurement. It may
+well be the right reading — but this project has already paid for *a comfortable
+reconciliation that made both lanes right, retired the flag, and stopped the
+search* (`reference_a_reconciliation_retires_the_flag.md`). The defence against
+that is to **fix the rule while the outcome is still unknown**, which is what
+this section does.
+
+**The rule, by the plain words of the prediction as pre-registered:**
+
+| GATE observes | H1 "the wall MOVES OFF `DeviceData::EnumerateInterfaces`" |
+|---|---|
+| dies in a **different function** | **TRUE** |
+| dies **inside `EnumerateInterfaces`**, different site or fault kind | **FALSE** — the wall did not move off that function |
+| dies at the **identical site** | **FALSE**, and no movement at all |
+
+**H2 — "it does not follow that the boot completes" — is scored on one question
+only: did the boot complete?** It is independent of H1 and of where the fault
+landed. H2 can hold while H1 fails; that is not a contradiction, it is what
+"separable halves" means.
+
+**And this is the part that makes the strict reading cheap rather than punitive:
+distance travelled is reported SEPARATELY and is not part of either half.** The
+runbook already names it as the progress metric — *"the distance travelled per
+attempt is the progress metric"*. So a fault that moves deeper inside
+`EnumerateInterfaces` is recorded as **real progress on the distance metric with
+H1 scored FALSE**, and nothing is lost by refusing to stretch H1 to cover it. A
+prediction that can absorb its own near-miss stops being an instrument.
+
+GATE: report all three — H1, H2, and distance travelled — as three separate
+lines. Do not merge them into a verdict.
