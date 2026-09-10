@@ -267,6 +267,10 @@ before it is overwritten or released.**
 
 ---
 
+> **§5 IS SUPERSEDED BY §10.** The Ghidra bridge was up on port **8089**, not the
+> 8080 the brief probed. §10 is a **post-report tranche**: it closes §5's open
+> discrepancy exactly, and corrects one screen of §2. **No verdict changed.**
+
 ## 5. Where a measured number disagrees with an inherited one
 
 WAVE17_LANE_CEIL.md §2.5 records `??_7Stream@IO@@6B@` as **118 DATA references**
@@ -371,3 +375,98 @@ objdump -d "C:/GOG Games/Banished/Runtime-x64.dll" > rt.dis
 
 Run them with the project venv interpreter
 (`tools/ghidra_mcp/.venv/Scripts/python.exe`), which has `pefile`.
+
+---
+
+# 10. POST-REPORT TRANCHE — Ghidra was up on 8089
+
+Added **after** this lane reported and after commit `9638954`. Everything above
+§10 is unchanged. **Neither verdict moved**, and nothing here is load-bearing for
+them — §10 closes §5's open discrepancy and corrects one screen of §2.
+
+The brief said the Ghidra MCP bridge was down. It was not: the integrator had
+probed **8080**, which nothing serves, while the bridge runs on **8089** with
+`Runtime-x64.dll` already open (base `0x180000000`, 15,290 functions). That is
+`reference_a_screen_that_cannot_name_its_subject.md` on the tooling itself.
+Ghidra was used here **only for xrefs**, never for decompiled C
+(`reference_ghidra_c_output_vs_disassembly.md`), and it is a genuine third route:
+`get_xrefs_to` and a raw `disp32` sweep of `.text` share no premise.
+
+## 10.1 §5 is CLOSED — CEIL's 118 and this lane's 56 count different things, and reconcile EXACTLY
+
+`get_xrefs_to` lists **both** the `LEA` **and** every `MOV` that stores the LEA'd
+value, as separate references. So Ghidra's total is not a reference count in this
+lane's sense; it is `1 (export address table) + LEAs + stores`:
+
+| row | EAT | LEAs (this lane) | stores (this lane) | predicted | Ghidra returns |
+|---|---|---|---|---|---|
+| `??_7Stream@IO@@6B@` | 1 | 56 | 61 | **118** | **118 DATA** (+1 `[EXTERNAL]` for the export) |
+| `??_7ReaderWriter@IO@@6B@` | 1 | 20 | 20 | **41** | **41 DATA** (+1 `[EXTERNAL]`) |
+
+**CEIL's inherited 118 reproduces to the unit**, and so does the 41 this lane had
+never seen a figure for. §5's guess ("close to 2 x 56 + 6, suggests double
+counting") was the right shape and the wrong arithmetic; the real decomposition is
+above. §5's caveat that the discrepancy "does not affect the verdicts" stands, but
+it is no longer a discrepancy.
+
+The store counts are the ones from the **per-function** screen (§3), 58 + 3 leaf
+for Stream and 17 + 3 leaf for ReaderWriter. A boundary-free variant of the same
+count returns **63** for Stream, because without `.pdata` boundaries a register
+holding the table can appear to survive into the next function. Ghidra's 118
+independently selects **61**, i.e. the per-function screen, as the correct one.
+Ghidra's list also contains all six leaf-function stores by address
+(`180023c57`, `1800b912f`, `1800b9157`, `18000c6d7`, `1800b99d7`, `1800b9a47`),
+confirming the §3.4 hand-reconciliation rather than resting on it.
+
+Ghidra additionally names the containing function for every site and adds **no
+site this lane did not already have**, and **no reference of any other kind** —
+which is the §4 leg-3 claim, now corroborated by a third, independent route.
+
+## 10.2 A CORRECTION to §2's dword screen — it was blind, and could not say so
+
+Ghidra reported one `.rdata` reference per row that §2's scan did not:
+`0x1801b217c` and `0x1801b21cc`. **`cross.py`'s dword half compared against
+`VA & 0xffffffff` = `0x801549a0`. A 32-bit reference in a PE is an RVA —
+`0x001549a0`.** The screen could not match an RVA-form reference in any image and
+never announced the blindness — `reference_literal_grep_blind_to_variables.md` in
+a different costume.
+
+Corrected in `docs/runtime_port/wave19_phase0a/cross_rva.py`, which tries **both**
+forms and labels which one matched. Result across all four shipped images:
+
+| image | RVA-form references |
+|---|---|
+| Runtime-x64.dll | `0x1801b217c`, `0x1801b21cc` — **both inside the export address table**; plus `0x1800a7364`, a `.text` false positive (§10.3) |
+| Application-x64.exe | none |
+| VideoDX11-x64.dll | none |
+| VideoDX9-x64.dll | none |
+
+**This does not move either verdict.** The two real hits are each row's own export
+directory entry — the very door `ResolveExport` reads, expected for an exported
+data symbol, and the same thing lane OBJDATA reported for `??_7Base@Object@@6B@`
+("Ghidra returns only the export-address table"). The **qword** half of §2, which
+is the half that matters for a 64-bit pointer-valued reference, was correct and is
+unchanged: zero hits in any image.
+
+## 10.3 One false positive, kept visible
+
+`cross_rva.py` also flags `0x1800a7364` in `.text` as an RVA-form match for
+ReaderWriter. It is not a reference:
+
+```
+1800a7361:  48 8b 3d b0 53 15 00   mov 0x1553b0(%rip),%rdi   # 0x1801fc718
+```
+
+`0x1553b0` there is a `disp32` whose target is `0x1801fc718`; the bytes merely
+coincide with ReaderWriter's RVA. Ghidra does not list it. A byte-window scan over
+`.text` cannot tell an instruction field from a stored constant, which is why the
+value scan is meant for data sections — stated here rather than dropped.
+
+## 10.4 What §10 still does NOT claim
+
+* No Ghidra decompiled C was read, and no verdict rests on a Ghidra answer.
+* `get_function_metrics` was **not** used at all
+  (`reference_ghidra_mcp_address_param_silently_ignored.md`: it ignores `address=`).
+* §6's limits all stand unchanged, including that the window screen is not
+  CFG-aware and that the trap/ported counts remain `[INHERITED]` for cell 0c.
+* §7's identity is unchanged: `83 >= 122 - 5 = 117`, worklist 36 -> 34.
