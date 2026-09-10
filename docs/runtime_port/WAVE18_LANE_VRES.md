@@ -144,23 +144,6 @@ control exists to exclude.**
 ours=5 theirs=9` on case 2 and `ours=3 theirs=21` on case 3. The correct body
 produces equal counts on both.
 
-> **[POST-REPORT ANNOTATION — added by the integrator, 2026-09-10, kickoff §6.16.
-> Additive only: nothing above or below was altered, reworded or renumbered, and
-> the sealed text is recovered by deleting this block.]**
->
-> These two figures are evidence that **the allocator-count instrument works.**
-> They are **not** evidence that a byte comparison would have caught anything.
-> **A memory comparator can NEVER see this leak**, because each level frees the
-> level below's buffer, so a body that skips the recursion leaves the outer
-> buffer byte-identical — the same shape as an oracle comparing bytes neither
-> side writes. That is why the lane switched to `MemoryAllocator::_allocCount`
-> (`+0x638`), which is **symmetric by construction** rather than merely
-> correct-looking. A reader who takes `5 vs 9` and `3 vs 21` as the whole proof
-> has the wrong model. Full statement in the post-report tranche below.
->
-> Filed inline rather than only below the divider because a caveat that lives
-> where the misreading does not happen is not doing its job.
-
 **The two arrays the brief warned about are not conflated.** `??1Device` never
 reads `dllSlots` at +0xB0 — no `FreeLibrary`, no clear. It destroys the +0x40
 `Array<GraphicsInterface>` and ignores the +0xB0 plugin-slot array entirely.
