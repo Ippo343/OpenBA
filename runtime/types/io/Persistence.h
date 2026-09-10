@@ -87,9 +87,26 @@ struct Persistence {
     // straight away.
     void*            workerVtable;      // +0x10 — 0x180155860
     uint32_t         flags;             // +0x18 — bit 0 == unavailable
-    uint8_t          _pad1c[0x0c];      // +0x1C — NOT pinned
+    uint8_t          _pad1c[0x04];      // +0x1C — NOT pinned
+    // +0x20 and +0x30 were `_pad` until the WAVE 19 lane PERSIST post-report
+    // tranche, and what pinned them is the WORKER DESTRUCTOR, 0x1800b7740 —
+    // the one function this lane held ??1Persistence@ back on without ever
+    // reading. Its tail is four CloseHandle calls on consecutive fields, which
+    // is what says all four of these are HANDLEs and not three plus a spare:
+    //     1800b77b6  SetEvent            ( [worker+0x20] )  == this+0x30
+    //     1800b77c3  WaitForSingleObject ( [worker+0x10], INFINITE ) == this+0x20
+    //     1800b77cd  CloseHandle ( [worker+0x10] )          == this+0x20
+    //     1800b77d7  CloseHandle ( [worker+0x18] )          == this+0x28
+    //     1800b77e1  CloseHandle ( [worker+0x20] )          == this+0x30
+    //     1800b77f0  CloseHandle ( [worker+0x28] )  (tail)  == this+0x38
+    // The WaitForSingleObject target is the one that is waited on and closed
+    // FIRST, which is the thread itself; the other three are the events the
+    // issue path already named. Import names read out of the DLL's own import
+    // directory (0x18014b3c0 WaitForSingleObject, 0x18014b3b8 CloseHandle),
+    // not guessed from the call shape.
+    void*            threadHandle;      // +0x20 — HANDLE, WaitForSingleObject(INFINITE)
     void*            workEvent;         // +0x28 — HANDLE, SetEvent  (wake worker)
-    uint8_t          _pad30[0x08];      // +0x30 — NOT pinned
+    void*            readyEvent;        // +0x30 — HANDLE, SetEvent  (in the dtor only)
     void*            doneEvent;         // +0x38 — HANDLE, ResetEvent(before issue)
     RtSystem::String pendingFilename;   // +0x40 — request filename
     int32_t          status;            // +0x48 — ?GetStatus@ (0x1800b7c40) reads this
@@ -116,7 +133,9 @@ struct Persistence {
 static_assert(offsetof(Persistence, settingsMapCount) == 0x08,
               "Set<Pair<String,String>>::_count must sit at +0x08 (Map_Clear, retail 0x18000f7d0)");
 static_assert(offsetof(Persistence, flags)           == 0x18, "flags @ 0x18");
+static_assert(offsetof(Persistence, threadHandle)    == 0x20, "threadHandle @ 0x20 (~worker 0x1800b77c3)");
 static_assert(offsetof(Persistence, workEvent)       == 0x28, "workEvent @ 0x28");
+static_assert(offsetof(Persistence, readyEvent)      == 0x30, "readyEvent @ 0x30 (~worker 0x1800b77b6)");
 static_assert(offsetof(Persistence, doneEvent)       == 0x38, "doneEvent @ 0x38");
 static_assert(offsetof(Persistence, pendingFilename) == 0x40, "pendingFilename @ 0x40");
 static_assert(offsetof(Persistence, status)          == 0x48, "status @ 0x48");

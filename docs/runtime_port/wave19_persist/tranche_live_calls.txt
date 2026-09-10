@@ -1,0 +1,17 @@
+[RtDiff]   IO::Persistence::Startup                         calls=1          worked=1          divergences=0
+[RtDiff]   IO::Persistence::ReadSettings                    calls=1          worked=1          divergences=0
+[RtDiff]   IO::Persistence::Get(int&)                       calls=29         worked=?          divergences=0
+[RtDiff]   IO::Persistence::Get(bool&)                      calls=12         worked=?          divergences=0
+[RtDiff]   IO::Persistence::GetSaveCount                    calls=14         worked=?          divergences=0
+[RtDiff]   IO::Persistence::GetSaveInfo                     calls=13         worked=?          divergences=0
+[RtDiff]   IO::Persistence::BeginGetSaveGameInfo            calls=0          worked=?          divergences=0
+[RtDiff]   IO::Persistence::GetSaveFilename                 calls=28         worked=?          divergences=0
+[RtDiff]   IO::Persistence::BeginLoad                       calls=0          worked=?          divergences=0
+[RtDiff]   IO::Persistence::Set(int)                        calls=120        worked=?          divergences=0
+[RtDiff]   IO::Persistence::Set(bool)                       calls=12         worked=?          divergences=0
+[RtDiff]   IO::Persistence::WriteSettings                   calls=1          worked=?          divergences=0
+[RtDiff] site[433] @00007ff622a44960 = IO::Persistence::GetSaveCount
+[RtDiff] site[434] @00007ff622a449a0 = IO::Persistence::GetSaveInfo
+[RtDiff] site[435] @00007ff622a44be0 = IO::Persistence::BeginGetSaveGameInfo
+[RtDiff] site[436] @00007ff622a449e0 = IO::Persistence::GetSaveFilename
+[RtDiff] site[437] @00007ff622a44a60 = IO::Persistence::BeginLoad

@@ -148,14 +148,9 @@ def main():
 
     # SUBJECT SET, always printed. The previous version's one-line output could
     # not distinguish "nothing is wrong" from "nothing was looked at".
-    print(f"subject: {len(files)} file(s) under {'/, '.join(ROOTS)}/ "
-          f"({len(tdefs)} fn_*_t typedefs collected)")
-    print(f"{len(bad)} suspicious of {checked} by-value-returning exports "
-          f"checked, {len(unresolved)} unchecked (enum returns excluded)")
-    # COVERAGE, measured rather than asserted. The count above is a numerator
-    # over the doors this scanner can see; this is the denominator. A screen
-    # that states its blind spot in prose but never sizes it lets a reader treat
-    # a partial green as a whole one.
+    # COVERAGE is computed BEFORE the headline is printed, because the headline
+    # has to carry it. This block used to sit AFTER the headline, which is what
+    # made the headline quotable on its own -- see the note below.
     RE_ANY = re.compile(r'"(\?[^"]*@@(?:QEBA|QEAA|SA|IEAA|IEBA|MEAA|UEAA|AEBA'
                         r'|AEAA)\?A[VU][^"]*)"')
     present = set()
@@ -166,6 +161,29 @@ def main():
             for fn, tname, mg in RE_ASSIGN.findall(text)
             if RE_BYVAL.search(mg) and tname in tdefs}
     missed = len(present - seen)
+
+    print(f"subject: {len(files)} file(s) under {'/, '.join(ROOTS)}/ "
+          f"({len(tdefs)} fn_*_t typedefs collected)")
+    # THE HEADLINE CARRIES ITS OWN QUALIFIER, DELIBERATELY.
+    #
+    # This line used to read "<n> suspicious of <checked> by-value-returning
+    # exports checked, <u> unchecked (enum returns excluded)" and the UNAUDITED
+    # count lived two lines below it. Both numbers were correct and the pair was
+    # reconcilable -- "unchecked" means a door was matched but its arity could
+    # not be read, "UNAUDITED" means no readable door was reached at all -- but
+    # side by side they read as contradictory, and worse, the headline could be
+    # lifted on its own as "0 suspicious, 0 unchecked" and reported as a clean
+    # sweep of a subject that was 58% invisible.
+    #
+    # That is WAVE19_IO.md 6.1: quote a green WITH its denominator; "N
+    # suspicious" alone is quotable out of context, "N of M, K unaudited" is
+    # not. This tool was ALREADY a good citizen -- it sized its own blind spot
+    # and named the doors it cannot read, which is more than most -- so this
+    # closes a QUOTABILITY gap, not a measurement one. Nothing about what is
+    # measured changed. Do not split these back onto separate lines.
+    print(f"{len(bad)} suspicious of {checked} by-value-returning exports "
+          f"checked ({len(unresolved)} unchecked, enum returns excluded); "
+          f"{missed} of {len(present)} distinct names UNAUDITED")
     print(f"COVERAGE: {len(present & seen)} of {len(present)} distinct "
           f"by-value-returning mangled names in the tree reach a door this "
           f"scanner can read; {missed} do NOT and are UNAUDITED.")

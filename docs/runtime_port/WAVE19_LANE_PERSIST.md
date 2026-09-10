@@ -34,7 +34,7 @@ made one impossible. **One finding, not three.**
 | `?BeginDelete@Persistence@IO@@QEAA_NAEBVString@System@@@Z` | `0x1800b7ab0` | 1638 | yes | name + addr | whole-object, 2 issue + 2 refusal |
 | `?BeginLoad@Persistence@IO@@QEAA_NAEBVString@System@@HPEBUSaveBlock@12@@Z` | `0x1800b7970` | 1647 | yes | name + addr | whole-object, 1 issue + 1 refusal |
 | `?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z` | `0x1800b7870` | 1642 | yes | name + addr | whole-object, 2 issue + 2 refusal, both controls |
-| `??1Persistence@IO@@QEAA@XZ` | `0x1800b7fb0` | 647 | yes | name + addr | **NOT VERIFIED** — §7 |
+| `??1Persistence@IO@@QEAA@XZ` | `0x1800b7fb0` | 647 | yes | name + addr | **NOT VERIFIED** — §7 · *[annotation: RETIRED — now VERIFIED, see §T1]* |
 
 Every address was checked against the shipped export table with `pefile` before
 a line was written, so none is a phantom.
@@ -317,3 +317,240 @@ This lane worked around it rather than fixing it: the probe has its own call
 site in `code/Game/Game/camera_input.cpp` and its own env var, so a wave-14
 holdback does not become a wave-19 blocker. **The C4 decision is still open**,
 and this is a second, independent reason to take it.
+
+---
+---
+
+# POST-REPORT TRANCHE (2026-09-10)
+
+**Everything above this line is SEALED and unaltered.** This tranche annotates
+it; where it supersedes a sealed claim it says so explicitly and leaves the
+original standing so the correction stays legible.
+
+## T0. The sealed claims this tranche RETIRES
+
+| sealed claim | status now |
+|---|---|
+| §7.1 `??1Persistence@` PORTED, NOT VERIFIED — "0x1800b7740 joins and closes a REAL thread, so the scratch route is not available" | **RETIRED. The claim was FALSE and I never read the function.** §T1 |
+| §5 "no live gameplay route on that harness reaches these six at all" | **RETIRED.** The route exists; I never ran it. §T2 |
+| §5 "the machine has NO SAVE GAMES AT ALL" | **FALSE.** 13 saves, in `Documents/Banished/Save`, not the game dir. §T2 |
+| §7.6 `abi_retslot_audit` "is GREEN and BLIND to this lane's two by-value rows" | **STANDS**; the tool's headline now carries its own denominator. §T4 |
+
+## T1. `??1Persistence@` is VERIFIED. The blocker was mine, and it was false.
+
+The holdback said `0x1800b7740` *"joins and closes a REAL thread, so handing it
+a fabricated worker is not a controlled experiment, it is a crash with extra
+steps."* I inferred that from the worker being `System::Thread`-derived and
+**never disassembled it**. One `objdump` retired it:
+
+```
+stamp vtable 0x180155860
+0x18002ac40(worker+0x70)  ; clear saves        (= Pers+0x80)
+0x180024aa0(worker+0x60)  ; clear              (= Pers+0x70)
+0x18002a930(worker+0x50)  ; clear              (= Pers+0x60)
+release String at worker+0x30                  (= Pers+0x40)
+stamp base vtable 0x180155f20
+SetEvent            ( [worker+0x20] )          (= Pers+0x30)
+WaitForSingleObject ( [worker+0x10], INFINITE) (= Pers+0x20)
+CloseHandle ( [+0x10] ) ( [+0x18] ) ( [+0x20] ) ( [+0x28] )   ; tail
+```
+
+The join is on a handle **at an offset the caller owns**. Seed four
+already-signalled events of our own and the scratch route applies unchanged.
+**What had to change for that to become possible: nothing.** It was possible
+when I wrote the holdback.
+
+That is `reference_holdback_blockers_are_stale_check_them_first.md` with the
+sharpest possible provenance: **the stale claim was my own, written the same
+session, and one command retired it.** Four for four were stale in Wave 18;
+this is five for five, and the fifth was mine.
+
+### Result — the fifth screen, with its denominators
+
+```
+~Persistence whole-object (handles/Strings by predicate)
+        control 2 of 2 caught | 2 agreed, 0 diverged, 0 inert, of 2 applicable
+
+  ~Persistence rc=2 -> agree (shipped side wrote 36 of 152 bytes; arm=0 expected=0; arrays cleared=1)
+  ~Persistence rc=1 -> agree (shipped side wrote 26 of 152 bytes; arm=5 expected=5; arrays cleared=1)
+  CTRL-DTOR    rc=2 -> caught (firstDiff=16 handles=1 arms=0 clearedA=0 clearedB=1)
+  CTRL-DTOR    rc=1 -> caught (firstDiff=16 handles=1 arms=0 clearedA=0 clearedB=1)
+```
+
+Both String-release arms were exercised, **and each case reports the arm the
+shipped side actually took against the arm its refcount predicts** — `arm=0
+expected=0` (sharing, both fields nulled) and `arm=5 expected=5` (freeing, both
+left holding `buf - 8`). The second case is the one worth having: retail
+deliberately leaves a dangling pointer there, and a port that "tidied" it to
+null would pass rc=2 and fail rc=1. Without the split it passes silently.
+
+CTRL-DTOR is caught at `firstDiff=16` = `+0x10`, the worker vtable the mutant
+never stamps — a real comparable divergence through the mechanism the control
+names, not UB.
+
+**This screen is far more effective than the Begin\* one**: its subjects write
+**36 and 26** of 152 bytes, against at most 8 for the issue path.
+
+`+0x20 threadHandle` and `+0x30 readyEvent` are now pinned fields in
+`Persistence.h`; the four consecutive `CloseHandle` calls are what say all four
+are HANDLEs rather than three plus a spare. Import names were read from the
+DLL's own import directory, not guessed from call shape.
+
+## T2. The live route EXISTS. My negative claim was wrong, and HOW it was wrong matters more.
+
+`BANISHED_AUTOLOAD=Auto`, probe OFF, `BANISHED_RT_DIFF=1`, exit 0, **0-byte
+crash log**. Evidence: `wave19_persist/tranche_live_calls.txt`.
+
+| row | site registered (= body entered) | `calls=` | divergences |
+|---|---|---|---|
+| `?GetSaveFilename@` | yes | **28** | **0** |
+| `?GetSaveCount@` | yes | **14** | **0** |
+| `?GetSaveInfo@` | yes | **13** | **0** |
+| `?BeginLoad@` | yes | 0 | — |
+| `?BeginGetSaveGameInfo@` | yes | 0 | — |
+| `?BeginDelete@` | **no** | — | — |
+| `??1Persistence@` | **no** | — | — |
+
+Run total: `609 sites, 20,060,624 calls, 30 divergences in 7 sites` — **none of
+the seven divergent sites is one of mine.**
+
+### The three-way tally, because two-way would overstate it
+
+* **3 LIVE-VERIFIED with an actual comparison** — `GetSaveFilename`,
+  `GetSaveCount`, `GetSaveInfo`: 0 divergences over 55 calls against the shipped
+  DLL, on 13 real saves.
+* **2 LIVE-EXERCISED BUT NEVER COMPARED** — `BeginLoad`,
+  `BeginGetSaveGameInfo`. Both registered a site, which happens on body ENTRY,
+  so both ran; `calls=0` because neither has an oracle arm (an issue is not
+  replayable in place). **"Live-exercised" is weaker than "verified" and reads
+  almost the same**, so it gets its own row rather than being folded in.
+* **2 NOT REACHED on this route** — `BeginDelete` (needs a Delete click),
+  `??1Persistence@`.
+
+All seven remain independently covered by the synthesised oracle (§4, §T1).
+
+### What went wrong, stated so it is checkable
+
+I had **found, quoted and cited** `BANISHED_AUTOLOAD` at
+`standalone/autostart.cpp:147`. I reasoned correctly that the missing thing was
+the dialog route. Then I ran `ls` on `C:/GOG Games/Banished/Save` — a directory
+I had **guessed** — found nothing, and wrote a negative claim from it. The saves
+live in `C:/Users/USPC/Documents/Banished/Save`; there are 13, three predating
+this session.
+
+> **A negative claim asserted from an observation cheaper than the experiment
+> that would settle it is not a result.**
+
+The `ls` felt like evidence *because* it was cheap; it was cheap because it was
+not the experiment. There was also a tell in my own prose: **§5 said the route
+"never opened a save/load dialog" — a statement about THE DRIVER I CHOSE —
+inside a section whose conclusion was about THE GAME.** The subject slipped
+between premise and conclusion: `reference_a_screen_that_cannot_name_its_subject.md`
+in prose rather than in an instrument, where no linter will catch it.
+
+I also predicted `BeginGetSaveGameInfo` would NOT be reached, reasoning from the
+disassembly's command codes (3 vs the list scan's 4) rather than from the
+caller. The load route reaches it. **Read the caller.**
+
+## T3. Not this lane's, found on the way
+
+* **`?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ` has TWO DISTINCT BODIES.**
+  `video/buffers.cpp:1308` (`void`, C++ linkage, Wave 9 lane GFX2) and
+  `video/context_lifecycle.cpp:296` (`extern "C"`, Wave 9 lane VID2). Different
+  linkage, so both link. Both register the NAME and the address `0x1800f4400`,
+  and `RtVideoContextLifecycleRegister()` runs after `RtVideoBuffersRegister()`,
+  so VID2 wins both doors — no split brain, but **GFX2's body is fully shadowed
+  DEAD CODE that the census counts as ported.** The inverse of
+  `reference_half_registered_port_reads_as_absent.md`: there a real port read as
+  absent; here a dead body reads as a live port. Confirmed independently by
+  `tools/dup_runtime_export.py`.
+* **`0x1800e0c80` is a duplicate ADDRESS** across `input/input.cpp:~733` and
+  `input/input_config_startup.cpp:~220` — same cross-file shape. Found by the
+  integrator's tool, not mine: I scanned names only; addresses never occurred
+  to me.
+
+## T4. Instrument work
+
+`tools/abi_retslot_audit.py` (**separate commit `1ad9e8e`**, revertible alone).
+Its headline read `0 suspicious of 61 ... 0 unchecked` with the UNAUDITED count
+two lines below, so it was quotable alone as a clean sweep of a subject that is
+58% invisible. It now reads `... (0 unchecked, enum returns excluded); 77 of 133
+distinct names UNAUDITED`. **The fix was code ORDER, not wording** — the
+coverage figures were computed *after* the headline printed, so no rewording
+could have carried them. The tool was already a good citizen; this closes a
+QUOTABILITY gap, not a measurement one.
+
+### My own throwaway duplicate scan was the weaker instrument — three blind spots
+
+Written because `tools/dup_runtime_export.py` was not yet on any ref I could
+fetch. Set-diffed against the real tool once it was: **7 in common, 1 in mine
+only, and mine was the FALSE POSITIVE.**
+
+1. **line-based matching** — missed 3 of my own 7 registrations, whose literals
+   sit on a continuation line. Caught only by a control requiring all 7 to read 1.
+2. **no comment stripper** — reported `<lit>` and `<literal>`, which are prose.
+3. **adjacent string-literal concatenation** — `dialog_create.cpp:1420` splits a
+   mangled name across three literals; my regex took the first, matched the same
+   truncated prefix from two different overloads, and manufactured a duplicate.
+   The tell was in the output and I nearly missed it: the name ended `@Object@@`
+   with **no `@Z`**.
+
+(3) is the **inflating** kind, which manufactures work. Use the integrator's
+numbers, not mine.
+
+**And I ran the real tool wrong the first time:** its `--root` defaults to the
+parent of the script's own directory; I ran it from a `/tmp` copy, so it scanned
+68,287 files under `AppData\Local`, counted every agent's scratchpad copy of the
+repo as a duplicate of every other, and reported **1029 of 1066 names
+duplicated**. WAVE19_IO.md §6.1 says to run an instrument in the tree you are
+measuring *because several derive their root from the script path*. I had quoted
+that section an hour earlier.
+
+## T5. The orphan, and two harness defects it exposed
+
+My `BANISHED_AUTOLOAD=Save0` run crashed (`READ of 0` in subsystem
+deserialization, after `[fn_ExeArrayResize] ABSURD newCount=2129744266` — an
+absurd count read from the stream is what a FORMAT MISMATCH looks like, which
+supports the stale-save reading over a port defect; `Auto.sav` from today loads
+clean on the same binary and the same mod state, which is the control).
+
+**The crashed process did not exit.** It sat 24 minutes holding the exe and both
+logs, blocking every lane's deploy. `taskkill /PID|/T|/IM /F` and
+`Stop-Process -Force` all refused it — *"no running instance of the task"* —
+while `Get-Process` still listed it.
+
+* **A crashed run is not a finished run, and the VEH handler writing a crash log
+  is not the process exiting.** Every run script in this lane now ends with an
+  unconditional `taskkill /IM reimpl-x64.exe /F`.
+* **`tools/boot_state.sh` reported `RUNNING` off a stale state file for the
+  whole outage** — it checks pid liveness, never file freshness. My run script
+  printed `BOOTSTATE_RC=0` for an already-crashed process and I read it as
+  healthy. NOT fixed; check the state file's mtime yourself.
+* **I held the lock ~20 minutes while running nothing**, and told the integrator
+  I was "queued, not holding" — because I read my run's stdout and inferred the
+  LOCK's state from it. The same premise/conclusion subject slip as §T2, from
+  the same seat, within the hour. **Naming a failure mode does not inoculate you
+  against it.**
+* When I later told lane CSTREAM the directory was free, my file test covered
+  **only `reimpl-x64.exe`**, not the two logs — a partial test presented as a
+  whole-directory verdict. The answer was right for a reason my test did not
+  establish (the process was gone by then, and handles die with the process).
+
+## T6. What this tranche still does NOT claim
+
+1. **`BeginDelete@` and `??1Persistence@` have no live-route exercise.** Both
+   are verified by the synthesised oracle only.
+2. **`BeginLoad@` and `BeginGetSaveGameInfo@` ran live but were never COMPARED
+   live.** Their live evidence is "the body was entered", nothing more.
+3. **The dtor's per-element destroy pass (`0x18002afc0`) was NOT exercised** —
+   both dtor cases seed `saveCount = 0` deliberately, because a fabricated
+   non-zero count would drive it over elements that are not there.
+4. **The `Save0` crash is NOT diagnosed**, only bounded. Format-mismatch is the
+   supported reading; I did not confirm the mod provenance of that save.
+5. **The C4 workaround is KEPT, and my earlier reason for keeping it was wrong.**
+   I said `e983724` "is on `wave10/base`, not my `wave19/base`" — the integrator
+   force-updates `wave19/base` to `wave10/base` after every merge, so the fix
+   was there and my base was simply old. **The real reason to keep it**: a
+   boot-probe fault in another wave's code should not be able to take out this
+   lane's oracle, which is exactly what happened when
+   `BANISHED_RT_ORPHAN_PROBE=1` died at boot here.
