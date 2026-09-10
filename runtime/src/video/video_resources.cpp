@@ -123,6 +123,10 @@ using RtVideo::RenderBuffer;
 // the +0x60 offset is stated once on this side where the static_assert lives.
 extern "C" void RtVideoDeleteDeviceLock(void* device);
 
+// video_resources_probe.cpp — armed at init, RUN from the first Bind.
+void RtVideoResourcesProbeArm(bool on);
+void RtVideoResourcesProbeRun();
+
 namespace {
 
 using VoidThisFn = void (*)(void*);
@@ -254,6 +258,16 @@ void DestroyInterfaceRange(GraphicsInterface* base, int count) {
 // ---------------------------------------------------------------------------
 RtDiffSite g_siteDeviceDtor = { "Video::Device::~Device", 0, 0, false, false };
 RtDiffSite g_siteConfigDtor = { "Video::Configuration::~Configuration", 0, 0, false, false };
+// One site per registered row, so the report can carry a MEASURED calls= for
+// each rather than one number for the file. Four of the six have a live route
+// in this tree and two do not; only a per-row counter can say which is which,
+// and `calls=0` has four causes that invert the conclusion
+// (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
+RtDiffSite g_siteRbCtor = { "Video::RenderBuffer::RenderBuffer", 0, 0, false, false };
+RtDiffSite g_siteRbDtor = { "Video::RenderBuffer::~RenderBuffer", 0, 0, false, false };
+RtDiffSite g_siteRbBind = { "Video::RenderBuffer::Bind [trampoline into RenderBufferData slot 2]",
+                            0, 0, false, false };
+RtDiffSite g_siteRecreate = { "Video::ImageBuffer::Recreate", 0, 0, false, false };
 
 void ReportLine(RtDiffSite* site, const char* text) {
     if (!RtDiffEnabled()) return;
@@ -261,7 +275,32 @@ void ReportLine(RtDiffSite* site, const char* text) {
     RtDiffReport(site, true, text, text);
 }
 
+// The probe's self-schedule gate; see Video_RenderBuffer_Bind for why the first
+// Bind is the moment and RtVideoPortInit() is not.
+bool g_probeRunning = false;
+inline void ProbeGate() {
+    if (g_probeRunning) return;
+    g_probeRunning = true;
+    RtVideoResourcesProbeRun();
+}
+
 }  // namespace
+
+// ---------------------------------------------------------------------------
+// The probe's door onto the two nested walkers.
+//
+// video_resources_probe.cpp drives THESE bodies, not a copy of them — the rule
+// array_destroy_internal.h states, and the reason that header exists: a probe
+// that re-derived the body would be testing a copy of the port rather than the
+// port. The wrappers exist only because the bodies are in an anonymous
+// namespace; they add nothing.
+// ---------------------------------------------------------------------------
+void RtVideoProbe_DestroyAdapterRange(Adapter* base, int count) {
+    DestroyAdapterRange(base, count);
+}
+void RtVideoProbe_DestroyInterfaceRange(GraphicsInterface* base, int count) {
+    DestroyInterfaceRange(base, count);
+}
 
 // ============================================================================
 // ??0RenderBuffer@Video@@QEAA@XZ — 0x1800f3ee0, ordinal 346
@@ -288,6 +327,7 @@ RenderBuffer* Video_RenderBuffer_Ctor(RenderBuffer* self) {
     self->width  = 0;                                  // MOV [RCX+0x10],RAX,
     self->height = 0;                                  //   one store, two fields
     RT_EXPORT_ONCE(VoidThisFn, "?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ")(self);
+    ReportLine(&g_siteRbCtor, "three qwords zeroed, PlatformConstruct called");
     return self;                                       // MOV RAX,RBX
 }
 
@@ -309,6 +349,7 @@ RenderBuffer* Video_RenderBuffer_Ctor(RenderBuffer* self) {
 // a three-branch counter; this row adds no new memory operation of its own.
 void Video_RenderBuffer_Dtor(RenderBuffer* self) {
     RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ")(self);
+    ReportLine(&g_siteRbDtor, "tail-call alias for PlatformDestruct");
 }
 
 // ============================================================================
@@ -328,9 +369,19 @@ void Video_RenderBuffer_Dtor(RenderBuffer* self) {
 // here. A null there means PlatformConstruct never ran on this object, which is
 // an upstream defect to find, not one to paper over.
 void Video_RenderBuffer_Bind(const RenderBuffer* self, void* context) {
+    // The probe self-schedules here rather than at init, for the reason
+    // array_internal.h's "Probe scheduling" note gives: RtVideoPortInit() runs
+    // immediately after ResolveInit()'s LoadLibrary, when the DLL's
+    // MemoryAllocator is CONSTRUCTED BUT NOT STARTED, and the probe allocates
+    // ~40 blocks. Bind is a provably safe moment — it is called once per
+    // render target bind, long after Engine::Startup, and the DX11 backend is
+    // already up because it is the caller.
+    ProbeGate();
+
     void*  pd  = self->platformData;
     void** vt  = *reinterpret_cast<void***>(pd);
     reinterpret_cast<void (*)(void*, void*)>(vt[2])(pd, context);
+    ReportLine(&g_siteRbBind, "dispatched RenderBufferData slot 2");
 }
 
 // ============================================================================
@@ -373,9 +424,18 @@ void Video_ImageBuffer_Recreate(::ImageBuffer* self) {
 
     const uint32_t f = self->flags;
     void** vt = *reinterpret_cast<void***>(pd);
-    if ((f >> 4) & 1u) { reinterpret_cast<void (*)(void*)>(vt[1])(pd); return; }
-    if ((f >> 5) & 1u) { reinterpret_cast<void (*)(void*)>(vt[2])(pd); return; }
+    if ((f >> 4) & 1u) {
+        reinterpret_cast<void (*)(void*)>(vt[1])(pd);
+        ReportLine(&g_siteRecreate, "flags bit 4 set -> slot 1");
+        return;
+    }
+    if ((f >> 5) & 1u) {
+        reinterpret_cast<void (*)(void*)>(vt[2])(pd);
+        ReportLine(&g_siteRecreate, "flags bit 5 set -> slot 2");
+        return;
+    }
     reinterpret_cast<void (*)(void*, void*)>(vt[3])(pd, nullptr);
+    ReportLine(&g_siteRecreate, "flags bit 4/5 clear -> slot 3 with a null second argument");
 }
 
 // ============================================================================

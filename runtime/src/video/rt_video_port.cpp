@@ -154,6 +154,13 @@ void RtVideoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_VIDRES")) {
         extern int RtVideoResourcesRegister();
         n += RtVideoResourcesRegister();
+        // ARMED here, RUN from the first ?Bind@RenderBuffer@ — it allocates
+        // ~40 blocks and at THIS point in boot the MemoryAllocator singleton is
+        // constructed but not started. `=neg` additionally runs the four
+        // negative controls. See video_resources_probe.cpp.
+        extern void RtVideoResourcesProbeArm(bool on);
+        const char* vp = std::getenv("BANISHED_RT_VRES_PROBE");
+        RtVideoResourcesProbeArm(vp && *vp && std::strcmp(vp, "0") != 0);
     }
 
     printf("[RtPort] Video: %d exports registered\n", n);
