@@ -1,0 +1,164 @@
+SUBJECT   inc : C:\code\GIT\wave20\extent\standalone\rt_data_mint_tables.inc
+          dll : C:\GOG Games\Banished\Runtime-x64.dll
+TREE ROOT     : C:\code\GIT\wave20\extent
+PARAMETERS    : --dll=C:\GOG Games\Banished\Runtime-x64.dll
+                --inc=C:\code\GIT\wave20\extent\standalone\rt_data_mint_tables.inc
+                --objdump=C:\msys64\ucrt64\bin\objdump.EXE   --control=ON
+
+STAMP-TARGET DECODE (denominators)
+  DISASM  objdump instructions parsed ..........  417832
+          of which lea reg,[rip+d32] ...........    3188
+          of which movabs reg,imm64 ............     146
+          -> distinct addresses NAMED ..........    1193
+  BYTES   linear scan + data qwords, distinct ..    1849
+          named by BYTES but not by DISASM .....     718  (weak-only)
+  .pdata function ranges for attribution .......    6045
+CONTROL 0x180155480 FOUND     the all-purecall table, leaf ctor 0x180023e10
+CONTROL 0x1801554a8 FOUND     the IO::Encoding EXTRA_VTABLES_BY_ADDR mints, leaf ctor 0x180023e00
+CONTROL 0x1801559d0 FOUND     the TextFileStream Encoding, stamped by ??0TextFileStream 0x1800ba431
+DECODER CONTROL: 3 of 3 found
+
+ROW SET: 62 vtable rows in rt_data_mint_tables.inc
+  carrying an UNCORRECTED adjacent-export proof (the shape at risk) : 31
+  already corrected to a ctor-stamped-neighbour proof ..............: 2
+  sized by tail-not-a-pointer .....................................: 29
+
+CONTROL MODE: 2 of 2 regression rows restored to their wrong pre-correction sizes
+
+ROW                                         SLOT DERIV adj  VERDICT / writer
+------------------------------------------------------------------------------------------------------------
+??_7SpriteSheet@UI@@6B@                        9     9   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=10 slots only; the 9 still rests on tail-not-a-pointer)
+      8 writer site(s), first 0x180002fc6 `mov    %rax,(%rdi)` [?CreateNewObject@SpriteSheet@UI@@SAPEAVBase@Object@@XZ+0x86]
+??_7MaterialInstance@Graphics@@6B@             9     9   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=10 slots only; the 9 still rests on tail-not-a-pointer)
+      10 writer site(s), first 0x180002986 `mov    %rax,(%rdi)` [?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ+0x86]
+??_7GoalInstance@Achievement@@6B@              7     7 adj  CORROBORATED-EXACT  next named table start is 0x1801546b0 = exactly this row's end
+      6 writer site(s), first 0x180001fb5 `mov    %rax,(%rdi)` [?CreateNewObject@GoalInstance@Achievement@@SAPEAVBase@Object@@XZ+0x65]
+??_7Goal@Achievement@@6B@                     10    10 adj  CORROBORATED-EXACT  next named table start is 0x180154700 = exactly this row's end
+      5 writer site(s), first 0x180001c3c `mov    %rax,(%rdi)` [??0Goal@Achievement@@QEAA@AEBV01@@Z+0x5c]
+??_7AchievementInstance@Achievement@@6B@       4     4 adj  CORROBORATED-EXACT  next named table start is 0x180154720 = exactly this row's end
+      7 writer site(s), first 0x180001915 `mov    %rax,(%rdi)` [?CreateNewObject@AchievementInstance@Achievement@@SAPEAVBase@Object@@XZ+0x65]
+??_7Internal@Object@@6B@                       4     4 adj  CORROBORATED-EXACT  next named table start is 0x180154740 = exactly this row's end
+      9 writer site(s), first 0x180001998 `mov    %rax,(%rcx)` [??0AchievementInstance@Achievement@@QEAA@AEBV01@@Z+0x28]
+??_7Achievement@0@6B@                          9     9 adj  CORROBORATED-EXACT  next named table start is 0x180154788 = exactly this row's end
+      7 writer site(s), first 0x1800011b6 `mov    %rax,(%rdi)` [?CreateNewObject@Achievement@1@SAPEAVBase@Object@@XZ+0x86]
+??_7Base@Object@@6B@                           3     3 adj  CORROBORATED-EXACT  next named table start is 0x1801547a0 = exactly this row's end
+      219 writer site(s), first 0x18000118c `mov    %rax,(%rdi)` [?CreateNewObject@Achievement@1@SAPEAVBase@Object@@XZ+0x5c]
+??_7External@Object@@6B@                       8     8   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=9 slots only; the 8 still rests on tail-not-a-pointer)
+      196 writer site(s), first 0x180001196 `mov    %rax,(%rdi)` [?CreateNewObject@Achievement@1@SAPEAVBase@Object@@XZ+0x66]
+??_7FileStream@IO@@6B@                         8     8 adj  CORROBORATED-EXACT  next named table start is 0x1801549a0 = exactly this row's end
+      20 writer site(s), first 0x18000bf9e `mov    %rax,(%rcx)` [??0FileStream@IO@@QEAA@AEBV01@@Z+0x2e]
+??_7Stream@IO@@6B@                             7     7   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=8 slots only; the 7 still rests on tail-not-a-pointer)
+      56 writer site(s), first 0x18000bf86 `mov    %rax,(%rcx)` [??0FileStream@IO@@QEAA@AEBV01@@Z+0x16]
+??_7CompiledExternal@Object@@6B@               8     8   .  CORROBORATED-EXACT  next named table start is 0x180154a70 = exactly this row's end
+      26 writer site(s), first 0x18000b757 `mov    %rax,(%rdi)` [??0CompiledExternal@Object@@QEAA@AEBV01@@Z+0x57]
+??_7AnimationEvent@Graphics@@6B@               9     9   .  CORROBORATED-EXACT  next named table start is 0x180154c38 = exactly this row's end
+      5 writer site(s), first 0x180011777 `mov    %rax,(%rdi)` [??0AnimationEvent@Graphics@@QEAA@AEBV01@@Z+0x57]
+??_7EdgeMesh@Graphics@@6B@                     9     9   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=10 slots only; the 9 still rests on tail-not-a-pointer)
+      3 writer site(s), first 0x180012fcc `mov    %rax,(%rdi)` [??0EdgeMesh@Graphics@@QEAA@AEBV01@@Z+0x5c]
+??_7EdgeMeshInstance@Graphics@@6B@             9     9   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=10 slots only; the 9 still rests on tail-not-a-pointer)
+      2 writer site(s), first 0x180017514 `mov    %rax,(%rdi)` [??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z+0x24]
+??_7MeshInstance@Graphics@@6B@                 9     9   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=10 slots only; the 9 still rests on tail-not-a-pointer)
+      2 writer site(s), first 0x1800170e9 `mov    %rax,(%rdi)` [??0MeshInstance@Graphics@@QEAA@AEBV01@@Z+0x29]
+??_7Geometry@Graphics@@6B@                     9     9   .  CORROBORATED-EXACT  next named table start is 0x180154ea8 = exactly this row's end
+      3 writer site(s), first 0x180015b7e `mov    %rax,(%rcx)` [??0Geometry@Graphics@@QEAA@AEBV01@@Z+0x1e]
+??_7ImageBuffer@Video@@6B@                    10    10   .  CORROBORATED-EXACT  next named table start is 0x180155010 = exactly this row's end
+      3 writer site(s), first 0x18001eba4 `mov    %rax,(%rbx)` [??0ImageBuffer@Video@@QEAA@AEBV01@@Z+0x24]
+??_7ParticleSystemInstance@Graphics@@6B@      10    10 adj  CORROBORATED-EXACT  next named table start is 0x180155090 = exactly this row's end
+      3 writer site(s), first 0x180020c26 `mov    %rax,(%rdi)` [??0ParticleSystemInstance@Graphics@@QEAA@AEBV01@@Z+0x56]
+??_7ParticleInstance@Graphics@@6B@            10    10 adj  CORROBORATED-EXACT  next named table start is 0x180155130 = exactly this row's end
+      8 writer site(s), first 0x180020224 `mov    %rax,(%rdi)` [??0ParticleInstance@Graphics@@QEAA@AEBV01@@Z+0x24]
+??_7Particle@Graphics@@6B@                     9     9   .  CORROBORATED-EXACT  next named table start is 0x180155178 = exactly this row's end
+      4 writer site(s), first 0x18002008c `mov    %rax,(%rdi)` [??0Particle@Graphics@@QEAA@AEBV01@@Z+0x5c]
+??_7BinaryWriter@IO@@6B@                      26    26 adj  CORROBORATED-EXACT  next named table start is 0x1801552e0 = exactly this row's end
+      3 writer site(s), first 0x180023af2 `mov    %rax,(%rcx)` [??0BinaryWriter@IO@@QEAA@AEBV01@@Z+0x32]
+??_7BinaryReader@IO@@6B@                      26    26 adj  CORROBORATED-EXACT  next named table start is 0x1801553b0 = exactly this row's end
+      5 writer site(s), first 0x180023972 `mov    %rax,(%rcx)` [??0BinaryReader@IO@@QEAA@AEBV01@@Z+0x32]
+??_7ReaderWriter@IO@@6B@                      36    26   .  OVER-SIZED-BY-10  interior stamped start 0x180155480
+      LEA at 0x180023e10  next insn `mov    %rax,(%rcx)`  <- the ctor stamp shape   [(no .pdata; leaf) HINT nearest export ??4BinaryFileStream@IO@@QEAAAEAV01@AEBV01@@Z]
+(by address)                                   5     5 adj  CORROBORATED-EXACT  next named table start is 0x1801554d0 = exactly this row's end
+      7 writer site(s), first 0x180023e00 `mov    %rax,(%rcx)` [(no .pdata; leaf) HINT nearest export ??4BinaryFileStream@IO@@QEAAAEAV01@AEBV01@@Z]
+??_7BinaryFileStream@IO@@6B@                   8     8 adj  CORROBORATED-EXACT  next named table start is 0x180155510 = exactly this row's end
+      2 writer site(s), first 0x180023cfe `mov    %rax,(%rbx)` [??0BinaryFileStream@IO@@QEAA@AEBV01@@Z+0x5e]
+??_7CompressedMemoryStream@IO@@6B@             9     9   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=10 slots only; the 9 still rests on tail-not-a-pointer)
+      10 writer site(s), first 0x180024384 `mov    %rax,(%rdi)` [??0CompressedMemoryStream@IO@@QEAA@AEBV01@@Z+0x24]
+??_7MemoryStream@IO@@6B@                       8     8 adj  CORROBORATED-EXACT  next named table start is 0x1801555f0 = exactly this row's end
+      16 writer site(s), first 0x1800241c9 `mov    %rax,(%rcx)` [??0MemoryStream@IO@@QEAA@AEBV01@@Z+0x29]
+??_7CompressedFileStream@IO@@6B@               9     9   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=10 slots only; the 9 still rests on tail-not-a-pointer)
+      8 writer site(s), first 0x180024074 `mov    %rax,(%rdi)` [??0CompressedFileStream@IO@@QEAA@AEBV01@@Z+0x24]
+??_7CompressedStream@IO@@6B@                   9     9   .  CORROBORATED-EXACT  next named table start is 0x180155688 = exactly this row's end
+      9 writer site(s), first 0x180023e9b `mov    %rax,(%rcx)` [??0CompressedStream@IO@@QEAA@AEBV01@@Z+0x3b]
+??_7PackageFile@IO@@6B@                        9     9   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=10 slots only; the 9 still rests on tail-not-a-pointer)
+      4 writer site(s), first 0x18002562c `mov    %rax,(%rbx)` [??0PackageFile@IO@@QEAA@AEBV01@@Z+0x5c]
+(by address)                                   2     2   .  CORROBORATED-EXACT  next named table start is 0x180155870 = exactly this row's end
+      3 writer site(s), first 0x1800b7756 `mov    %rax,(%rcx)` [FUN_1800b7740+0x16]
+??_7Visitor@IO@@6B@                           26    26 adj  CORROBORATED-EXACT  next named table start is 0x180155980 = exactly this row's end
+      7 writer site(s), first 0x18002b6b2 `mov    %rax,(%rcx)` [??0Visitor@IO@@QEAA@AEBV01@@Z+0x32]
+??_7TextFileStream@IO@@6B@                    20    10   .  OVER-SIZED-BY-10  interior stamped start 0x1801559d0
+      LEA at 0x18002beb0  next insn `mov    %rax,(%rcx)`  <- the ctor stamp shape   [(no .pdata; leaf) HINT nearest export ??4TextFileStream@IO@@QEAAAEAV01@AEBV01@@Z]
+      LEA at 0x1800ba431  next insn `mov    %rax,(%rsi)`  <- the ctor stamp shape   [??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z+0xf1]
+      LEA at 0x1800ba60c  next insn `mov    %rax,(%rsi)`  <- the ctor stamp shape   [??0TextFileStream@IO@@QEAA@XZ+0xdc]
+??_7VisitorStream@IO@@6B@                      7     7   .  CORROBORATED-EXACT  next named table start is 0x180155a58 = exactly this row's end
+      6 writer site(s), first 0x18002bee9 `mov    %rax,(%rcx)` [??0VisitorStream@IO@@QEAA@AEBV01@@Z+0x29]
+??_7UpdateLoop@Engine@@6B@                    12    12   .  CORROBORATED-EXACT  next named table start is 0x180155c00 = exactly this row's end
+      8 writer site(s), first 0x1800317ee `mov    %rax,(%rcx)` [??0UpdateLoop@Engine@@QEAA@AEBV01@@Z+0x1e]
+??_7Thread@System@@6B@                         2     2   .  CORROBORATED-EXACT  next named table start is 0x180155f30 = exactly this row's end
+      6 writer site(s), first 0x18004d346 `mov    %rax,(%rcx)` [??1Loader@Engine@@QEAA@XZ+0x16]
+??_7Element@UI@@6B@                           12    12 adj  CORROBORATED-EXACT  next named table start is 0x1801561c0 = exactly this row's end
+      3 writer site(s), first 0x180035903 `mov    %rax,(%rcx)` [??0Element@UI@@QEAA@AEBV01@@Z+0x43]
+??_7ElementDescription@UI@@6B@                 9     9   .  CORROBORATED-EXACT  next named table start is 0x180156208 = exactly this row's end
+      82 writer site(s), first 0x18003517c `mov    %rax,(%rdi)` [??0ElementDescription@UI@@QEAA@AEBV01@@Z+0x5c]
+??_7Dialog@UI@@6B@                             9     9   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=10 slots only; the 9 still rests on tail-not-a-pointer)
+      12 writer site(s), first 0x1800385b6 `mov    %rax,(%rdi)` [?CreateNewObject@Dialog@UI@@SAPEAVBase@Object@@XZ+0x86]
+??_7DialogController@UI@@6B@                  11    11   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=12 slots only; the 11 still rests on tail-not-a-pointer)
+      5 writer site(s), first 0x18003b741 `mov    %rax,(%rcx)` [??0DialogController@UI@@QEAA@AEBV01@@Z+0x31]
+??_7DialogInstance@UI@@6B@                    10    10 adj  CORROBORATED-EXACT  next named table start is 0x180156dc0 = exactly this row's end
+      5 writer site(s), first 0x180045673 `mov    %rax,(%rcx)` [??0DialogInstance@UI@@QEAA@AEBV01@@Z+0x43]
+??_7ToolTipDialog@UI@@6B@                     10    10 adj  CORROBORATED-EXACT  next named table start is 0x1801578d0 = exactly this row's end
+      9 writer site(s), first 0x18004d117 `mov    %rax,(%rdi)` [?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ+0x67]
+??_7DialogLoaderLoopT@Engine@@6B@             13    13   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=14 slots only; the 13 still rests on tail-not-a-pointer)
+      4 writer site(s), first 0x18004d594 `mov    %rax,(%rbx)` [??0DialogLoaderLoopT@Engine@@QEAA@AEBV01@@Z+0x24]
+??_7LoaderLoop@Engine@@6B@                    12    12 adj  CORROBORATED-EXACT  next named table start is 0x1801579a0 = exactly this row's end
+      3 writer site(s), first 0x18004d3f3 `mov    %rax,(%rdi)` [??0LoaderLoop@Engine@@QEAA@AEBV01@@Z+0x53]
+??_7DialogLoopT@Engine@@6B@                   13    13 adj  CORROBORATED-EXACT  next named table start is 0x180157a08 = exactly this row's end
+      3 writer site(s), first 0x18004d828 `mov    %rax,(%rbx)` [??0DialogLoopT@Engine@@QEAA@AEBV01@@Z+0x58]
+??_7Loader@Engine@@6B@                         2     2   .  CORROBORATED-EXACT  next named table start is 0x180157a18 = exactly this row's end
+      2 writer site(s), first 0x1800dc111 `mov    %rax,(%rbx)` [??0Loader@Engine@@QEAA@XZ+0x21]
+(by address)                                   7     7   .  CORROBORATED-EXACT  next named table start is 0x180157c98 = exactly this row's end
+      2 writer site(s), first 0x1800501a0 `mov    %rax,(%rcx)` [(no .pdata; leaf) HINT nearest export ??4VideoProgram@Video@@QEAAAEAV01@AEBV01@@Z]
+??_7RenderBufferData@Video@@6B@                4     4 adj  CORROBORATED-EXACT  next named table start is 0x180158a48 = exactly this row's end
+      5 writer site(s), first 0x180054fd6 `mov    %rax,(%rcx)` [FUN_180054fd0+0x6]
+??_7VideoProgramData@Video@@6B@                3     3 adj  CORROBORATED-EXACT  next named table start is 0x180158a60 = exactly this row's end
+      5 writer site(s), first 0x180055b46 `mov    %rax,(%rcx)` [FUN_180055b40+0x6]
+??_7RenderStateData@Video@@6B@                 3     3 adj  CORROBORATED-EXACT  next named table start is 0x180158a78 = exactly this row's end
+      5 writer site(s), first 0x180055c96 `mov    %rax,(%rcx)` [FUN_180055c90+0x6]
+??_7PixelProgramData@Video@@6B@                3     3 adj  CORROBORATED-EXACT  next named table start is 0x180158a90 = exactly this row's end
+      5 writer site(s), first 0x180054fa6 `mov    %rax,(%rcx)` [FUN_180054fa0+0x6]
+??_7VertexProgramData@Video@@6B@               3     3 adj  CORROBORATED-EXACT  next named table start is 0x180158aa8 = exactly this row's end
+      5 writer site(s), first 0x180057296 `mov    %rax,(%rcx)` [FUN_180057290+0x6]
+??_7VertexLayoutData@Video@@6B@                3     3 adj  CORROBORATED-EXACT  next named table start is 0x180158ac0 = exactly this row's end
+      5 writer site(s), first 0x1800564e6 `mov    %rax,(%rcx)` [FUN_1800564e0+0x6]
+??_7VertexBufferData@Video@@6B@                7     7 adj  CORROBORATED-EXACT  next named table start is 0x180158af8 = exactly this row's end
+      5 writer site(s), first 0x180055fa6 `mov    %rax,(%rcx)` [FUN_180055fa0+0x6]
+??_7IndexBufferData@Video@@6B@                 7     7 adj  CORROBORATED-EXACT  next named table start is 0x180158b30 = exactly this row's end
+      5 writer site(s), first 0x1800541a6 `mov    %rax,(%rcx)` [FUN_1800541a0+0x6]
+??_7ConstantBufferData@Video@@6B@              4     4 adj  CORROBORATED-EXACT  next named table start is 0x180158b50 = exactly this row's end
+      5 writer site(s), first 0x1800536a6 `mov    %rax,(%rcx)` [FUN_1800536a0+0x6]
+??_7ImageBufferData@Video@@6B@                 7     7   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=8 slots only; the 7 still rests on tail-not-a-pointer)
+      5 writer site(s), first 0x180054176 `mov    %rax,(%rcx)` [FUN_180054170+0x6]
+??_7ContextData@Video@@6B@                    20    20 adj  CORROBORATED-EXACT  next named table start is 0x180158c30 = exactly this row's end
+      5 writer site(s), first 0x180053c46 `mov    %rax,(%rcx)` [FUN_180053c40+0x6]
+??_7DeviceData@Video@@6B@                     20    20 adj  CORROBORATED-EXACT  next named table start is 0x180158cd0 = exactly this row's end
+      5 writer site(s), first 0x180058566 `mov    %rax,(%rcx)` [FUN_180058560+0x6]
+??_7Light@Graphics@@6B@                       11    11   .  CONFIRMED-NO-INTERIOR-STAMP  (writer channel bounds it at <=16 slots only; the 11 still rests on tail-not-a-pointer)
+      9 writer site(s), first 0x180058d0c `mov    %rax,(%rbx)` [??0Light@Graphics@@QEAA@XZ+0x1c]
+??_7SunLight@Graphics@@6B@                    11    11   .  CORROBORATED-EXACT  next named table start is 0x180158e68 = exactly this row's end
+      3 writer site(s), first 0x18006443e `mov    %rax,(%rdi)` [??0SunLight@Graphics@@QEAA@AEBV01@@Z+0x2e]
+------------------------------------------------------------------------------------------------------------
+TOTALS over 62 rows: 2 OVER-SIZED, 45 CORROBORATED-EXACT, 15 CONFIRMED-NO-INTERIOR-STAMP, 0 COULD-NOT-DERIVE, 0 carrying a WEAK-ONLY interior hit
+  of the 31 UNCORRECTED adjacent-export rows: 0 OVER-SIZED, 31 corroborated-exact, 0 confirmed-no-interior-stamp, 0 could-not-derive
+  COMPLETENESS of the writer channel, measured on the only table-start set we independently know: 62 of 62 row starts are named by a real instruction. The 'invisible stamp' failure mode has 0 instance(s) among them.
+  CONFIRMED-NO-INTERIOR-STAMP IS NOT 'EXACT': a table no instruction in the image names is invisible to this screen.
+
+POSITIVE CONTROL: 2 of 2 known-wrong rows CAUGHT
+   ??_7ReaderWriter@IO@@6B@           36 -> true 26, screen derived 26
+   ??_7TextFileStream@IO@@6B@         20 -> true 10, screen derived 10
