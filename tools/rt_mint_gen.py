@@ -468,6 +468,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dll", default=DEFAULT_DLL)
     ap.add_argument("--out", default=OUT)
+    ap.add_argument("--check", action="store_true",
+                    help="do not write; exit 3 if regenerating would CHANGE --out, "
+                         "printing the entered/left row names")
     args = ap.parse_args()
 
     pe = pefile.PE(args.dll)
@@ -881,7 +884,64 @@ def main():
     w("};")
     w("")
 
-    open(args.out, "w", encoding="utf-8", newline="\n").write("\n".join(o) + "\n")
+    text = "\n".join(o) + "\n"
+
+    # ---- --check: STALENESS is the failure mode this file actually has -----
+    #
+    # Wave 19 lane MINT, 2026-09-10. Five IO vtables (??_7{BinaryFileStream,
+    # CompressedFileStream, FileStream, TextFileStream, VisitorStream}@IO@@6B@)
+    # were absent from the committed .inc and were diagnosed as a HARVEST GAP in
+    # this generator. They were not. The generator was correct on every run: at
+    # the last regeneration (4f037fd, WAVE 10D) nothing in the tree referenced
+    # those five, and the four files that made the census name them landed
+    # AFTER it, in Wave 11f lane IOSTREAM. The generator was never re-run.
+    #
+    # The population rule is DELIBERATELY a moving target -- see "THE SET IS A
+    # MOVING TARGET" at the top -- so this file goes stale every time any lane
+    # anywhere adds a reference to an exported DATA symbol. Nothing detected
+    # that, because a missing row is INVISIBLE: it does not fail to compile, it
+    # does not trip the shadow (which only checks rows that EXIST), and it does
+    # not fail a build. It shows up as a cutover fault, one row at a time.
+    #
+    # This mode makes the staleness visible without touching the tree, so it can
+    # be a wave-close gate. It prints the entered/left row NAMES, never a count
+    # delta: a count that moves the right direction by the wrong amount reads as
+    # success (reference_diff_the_set_not_the_count).
+    if args.check:
+        try:
+            have = open(args.out, encoding="utf-8").read()
+        except OSError as e:
+            print(f"--check: cannot read {args.out}: {e}", file=sys.stderr)
+            return 3
+        if have.replace("\r\n", "\n") == text:
+            print(f"--check: {args.out} is UP TO DATE "
+                  f"({len(vtables)} vtables, {len(typeinfos)} BaseTypeInfo, "
+                  f"{len(storage)} storage)")
+            return 0
+        # ROWS only, never slots: a kVSlotsN entry has the same {name, VA, ...}
+        # shape, so an untightened pattern reports 35 slot targets alongside the
+        # 5 rows and buries the answer. Each of the three top-level tables is
+        # pinned by what FOLLOWS the VA.
+        ROW = re.compile(r'^\s*\{ (?:"([^"]*)"|nullptr), (0x[0-9a-f]+)ull, '
+                         r'(?:\d+, kVSlots|&kTypeInfoStorage\[|\d+, &kStorageBytes\[)',
+                         re.M)
+        old_rows = set(ROW.findall(have))
+        new_rows = set(ROW.findall(text))
+        print(f"--check: {args.out} is STALE — regenerate it "
+              f"(tools/rt_mint_gen.py)", file=sys.stderr)
+        for label, s in (("ENTERED", new_rows - old_rows),
+                         ("LEFT", old_rows - new_rows)):
+            print(f"  {label} ({len(s)}):", file=sys.stderr)
+            for sym, va in sorted(s, key=lambda r: r[1]):
+                print(f"      {va}  {sym or '(by address)'}", file=sys.stderr)
+            if not s:
+                print("      <none>", file=sys.stderr)
+        print("  (an empty ENTERED and LEFT with a STALE verdict means the row SET "
+              "is unchanged but some row's CONTENT is: diff the file itself)",
+              file=sys.stderr)
+        return 3
+
+    open(args.out, "w", encoding="utf-8", newline="\n").write(text)
     print(f"wrote {args.out}")
     print(f"  scan       +{len(scan_added)} exported DATA symbols the CENSUS CANNOT SEE "
           f"(wrapper / named constant / table loop)")

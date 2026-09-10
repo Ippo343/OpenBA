@@ -981,6 +981,23 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_singleton@FileSystem@IO@@0PEAV12@EA | n/a (scalar ptr) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_singleton@Modification@IO@@2PEAV12@EA | n/a (scalar ptr) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_singleton@Persistence@IO@@0PEAV12@EA | n/a (scalar ptr) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    //
+    // ---- WAVE 19 PHASE 0a LANE NOOP: the two IO abstract bases -------------
+    //
+    // CEIL declined to tag these two because the claim rested on a COMMENT in
+    // encoding.cpp. Lane NOOP settled it from the shipped bytes: both tables
+    // are abstract (30 purecall of 36, and 5 of 7, read out of .rdata), every
+    // reference to either VA in the whole DLL is an in-DLL RIP-relative LEA
+    // (20 and 56, agreed by a decoder route AND a decoder-independent disp32
+    // scan), no shipped image imports either symbol or holds its VA as a
+    // value, and NOTHING dispatches while either table is installed: 17 and 58
+    // stamp-windows contain zero calls through the stamped object. Our own
+    // eight door-stamps of these two symbols all mirror retail's
+    // stamp-then-overwrite or stamp-then-free.
+    //
+    // RT_UNPROMOTABLE: ??_7ReaderWriter@IO@@6B@ | 2/36 ported [INHERITED], 30 purecall [MEASURED] | WAVE19_PHASE0A_NOOP.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7Stream@IO@@6B@ | 1/7 ported [INHERITED], 5 purecall [MEASURED] | WAVE19_PHASE0A_NOOP.md §3.2 | NONE, EVER
+    //
     // RT_UNPROMOTABLE: ?_singleton@AnimationManager@Graphics@@0PEAV12@EA | n/a (scalar ptr) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_frameIndex@ParticleInstance@Graphics@@1HA | n/a (int counter) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rng@Particle@Graphics@@1VRandom@System@@A | n/a (RNG state) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL

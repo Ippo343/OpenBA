@@ -2248,7 +2248,15 @@ void RtOrphanProbe() {
     ProbeVector2NormalizeWithMag();
     ProbeApplication();
     ProbeSaveLoadSingleton();
-    ProbeSaveLoadGenerateSaveName();
+    // ProbeSaveLoadGenerateSaveName is NOT here -- see the comment on it in
+    // RtOrphanProbeInGame below. It formats a String, which allocates through
+    // System::MemoryAllocator, and this function runs from Init() before
+    // Engine::Startup has built the allocator singleton. Wave 14 lane GENNAME
+    // hit exactly the fault ProbeAudioScene's banner already documents ("a
+    // WRITE to +0x648 of a null singleton") before finding that banner, and
+    // Wave 19 lane PERSIST reproduced it independently on the wave19 base.
+    // ProbeSaveLoadSingleton above STAYS: it reads a data slot and does not
+    // format a String, so it does not touch the allocator singleton.
     fprintf(stderr, "[RtOrphan] ==== %d pass, %d fail ====\n", g_pass, g_fail);
     fflush(stderr);
 }
@@ -2671,6 +2679,12 @@ extern "C" void RtOrphanProbeInGame(void* keyMap) {
     // Wave 12 lane VERIFY. In the in-game probe for the same reason: both
     // sides construct a System::WideString through System::MemoryAllocator.
     ProbeApplicationLaunchProcess();
+    // Wave 14 lane GENNAME. Same reason as ProbeAudioScene above: both ours
+    // and the raw DLL body format a System::String, which allocates through
+    // System::MemoryAllocator -- confirmed by hitting the identical "WRITE to
+    // +0x648 of a null singleton" fault when this was first (wrongly) called
+    // from the boot-time RtOrphanProbe() above.
+    ProbeSaveLoadGenerateSaveName();
     fprintf(stderr, "[RtOrphan] ==== running total: %d pass, %d fail ====\n", g_pass, g_fail);
     fflush(stderr);
 }

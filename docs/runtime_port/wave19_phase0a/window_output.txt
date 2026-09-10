@@ -1,0 +1,89 @@
+=== POSITIVE CONTROL: a CONCRETE leaf table (must show indirect calls) ===
+
+### ??_7BinaryReader@IO@@6B@ [CONTROL] : 5 stamp-windows, 7 indirect calls inside a window
+  ??0BinaryReader@IO@@QEAA@AEBV01@@Z                                     stamp@180023979 -> (%rcx)         END OF FUNCTION                                calls=0
+  (unexported 1800239a0)                                                 stamp@1800239c4 -> (%rcx)         END OF FUNCTION                                calls=2  <<< INDIRECT: ['0x1800239d8']
+  (unexported 180023a10)                                                 stamp@180023a68 -> (%rcx)         END OF FUNCTION                                calls=2  <<< INDIRECT: ['0x180023a7c']
+  ??1BinaryReader@IO@@UEAA@XZ                                            stamp@1800a830d -> (%rcx)         END OF FUNCTION                                calls=1  <<< INDIRECT: ['0x1800a8321']
+  ??0BinaryReader@IO@@QEAA@AEAVSerializer@1@H@Z                          stamp@1800a8380 -> (%rcx)         END OF FUNCTION                                calls=4  <<< INDIRECT: ['0x1800a839e', '0x1800a83b1', '0x1800a83bb', '0x1800a83d1']
+
+=== SUBJECTS ===
+
+### ??_7ReaderWriter@IO@@6B@ : 17 stamp-windows, 0 indirect calls inside a window
+  ??0BinaryReader@IO@@QEAA@AEBV01@@Z                                     stamp@180023958 -> (%rcx)         closed by ??_7BinaryReader@IO@@6B@ at 180023979 calls=0
+  (unexported 1800239a0)                                                 stamp@1800239e3 -> (%rdi)         END OF FUNCTION                                calls=1
+  (unexported 180023a10)                                                 stamp@180023a87 -> (%rbx)         END OF FUNCTION                                calls=1
+  ??0BinaryWriter@IO@@QEAA@AEBV01@@Z                                     stamp@180023ad8 -> (%rcx)         closed by ??_7BinaryWriter@IO@@6B@ at 180023af9 calls=0
+  (unexported 180023c21)                                                 stamp@180023c28 -> (%rcx)         END OF FUNCTION                                calls=1
+  ??0Visitor@IO@@QEAA@AEBV01@@Z                                          stamp@18002b698 -> (%rcx)         closed by ??_7Visitor@IO@@6B@ at 18002b6b9     calls=0
+  (unexported 18002b6d0)                                                 stamp@18002b6f7 -> (%rcx)         END OF FUNCTION                                calls=1
+  (unexported 18002b710)                                                 stamp@18002b772 -> (%rcx)         END OF FUNCTION                                calls=1
+  (unexported 18002b7a0)                                                 stamp@18002b7b0 -> (%rcx)         END OF FUNCTION                                calls=1
+  ??1BinaryReader@IO@@UEAA@XZ                                            stamp@1800a832c -> (%rbx)         END OF FUNCTION                                calls=0
+  ??0BinaryReader@IO@@QEAA@AEAVSerializer@1@H@Z                          stamp@1800a8367 -> (%rcx)         closed by ??_7BinaryReader@IO@@6B@ at 1800a8380 calls=0
+  ??1BinaryWriter@IO@@UEAA@XZ                                            stamp@1800a8a16 -> (%rdi)         END OF FUNCTION                                calls=0
+  ??0BinaryWriter@IO@@QEAA@AEAVSerializer@1@H@Z                          stamp@1800a8a57 -> (%rcx)         closed by ??_7BinaryWriter@IO@@6B@ at 1800a8a70 calls=0
+  ??0Visitor@IO@@QEAA@AEAVSerializer@1@H@Z                               stamp@1800bac58 -> (%rcx)         closed by ??_7Visitor@IO@@6B@ at 1800bac71     calls=0
+  ??1Visitor@IO@@UEAA@XZ                                                 stamp@1800bacb2 -> (%rcx)         END OF FUNCTION                                calls=0
+  (unexported 1800bae40)                                                 stamp@1800baeb3 -> (%rdi)         closed by ??_7Visitor@IO@@6B@ at 1800baecc     calls=0
+  (unexported 1800baf00)                                                 stamp@1800baf73 -> (%rdi)         closed by ??_7Visitor@IO@@6B@ at 1800baf8c     calls=0
+
+### ??_7Stream@IO@@6B@ : 58 stamp-windows, 69 indirect calls inside a window
+  ??0FileStream@IO@@QEAA@AEBV01@@Z                                       stamp@18000bf8d -> (%rcx)         closed by ??_7FileStream@IO@@6B@ at 18000bfa5  calls=0
+  (unexported 18000c661)                                                 stamp@18000c668 -> (%rcx)         END OF FUNCTION                                calls=2
+  ??0BinaryFileStream@IO@@QEAA@AEBV01@@Z                                 stamp@180023cbd -> (%rcx)         closed by ??_7FileStream@IO@@6B@ at 180023cd5  calls=0
+  ??0CompressedStream@IO@@QEAA@AEBV01@@Z                                 stamp@180023e8a -> (%rcx)         closed by ??_7CompressedStream@IO@@6B@ at 180023ea2 calls=0
+  ??0MemoryStream@IO@@QEAA@AEBV01@@Z                                     stamp@1800241b8 -> (%rcx)         closed by ??_7MemoryStream@IO@@6B@ at 1800241d0 calls=0
+  (unexported 180024230)                                                 stamp@180024273 -> (%rbx)         END OF FUNCTION                                calls=2
+  (unexported 1800242a0)                                                 stamp@180024317 -> (%rbx)         END OF FUNCTION                                calls=2
+  ??0CompressedMemoryStream@IO@@QEAA@AEBV01@@Z                           stamp@18002439e -> (%r8)          closed by ??_7MemoryStream@IO@@6B@ at 1800243b7 calls=0
+  ??0TextFileStream@IO@@QEAA@AEBV01@@Z                                   stamp@18002b8d5 -> (%rcx)         closed by ??_7FileStream@IO@@6B@ at 18002b8ed  calls=0
+  ??0VisitorStream@IO@@QEAA@AEBV01@@Z                                    stamp@18002bed8 -> (%rcx)         closed by ??_7VisitorStream@IO@@6B@ at 18002bef0 calls=0
+  (unexported 18002bf20)                                                 stamp@18002bf4e -> (%rcx)         END OF FUNCTION                                calls=2
+  (unexported 18002bf80)                                                 stamp@18002bfe2 -> (%rcx)         END OF FUNCTION                                calls=2
+  (unexported 18007c360)                                                 stamp@18007c376 -> (%rcx)         END OF FUNCTION                                calls=2
+  ?Run@Stream@Audio@@UEAAXXZ                                             stamp@1800a1013 -> 0x30(%rsp)     closed by ??_7FileStream@IO@@6B@ at 1800a1029  calls=0
+  ?Run@Stream@Audio@@UEAAXXZ                                             stamp@1800a1610 -> 0x30(%rsp)     END OF FUNCTION                                calls=3  <<< INDIRECT: ['0x1800a1634', '0x1800a164e']
+  ??0BinaryFileStream@IO@@QEAA@XZ                                        stamp@1800a8220 -> (%rcx)         closed by ??_7FileStream@IO@@6B@ at 1800a8233  calls=0
+  ??1CompressedMemoryStream@IO@@UEAA@XZ                                  stamp@1800a95cf -> (%rdi)         END OF FUNCTION                                calls=1
+  ??0CompressedStream@IO@@QEAA@XZ                                        stamp@1800aa3f4 -> (%rcx)         closed by ??_7CompressedStream@IO@@6B@ at 1800aa407 calls=0
+  ??1CompressedStream@IO@@UEAA@XZ                                        stamp@1800aa69b -> (%rbx)         END OF FUNCTION                                calls=0
+  ??0FileStream@IO@@QEAA@XZ                                              stamp@1800aaa2b -> (%rcx)         closed by ??_7FileStream@IO@@6B@ at 1800aaa40  calls=0
+  ??1FileStream@IO@@UEAA@XZ                                              stamp@1800aab27 -> (%rbx)         END OF FUNCTION                                calls=1
+  ??0MemoryStream@IO@@QEAA@XZ                                            stamp@1800ae734 -> (%rcx)         closed by ??_7MemoryStream@IO@@6B@ at 1800ae747 calls=0
+  ??1MemoryStream@IO@@UEAA@XZ                                            stamp@1800ae8cc -> (%rbx)         END OF FUNCTION                                calls=0
+  ?BuildPackageFile@PackageFile@IO@@AEBA_NAEBVFilename@System@@V?$Set@VF stamp@1800b339b -> 0x8(%rbp)      END OF FUNCTION                                calls=23  <<< INDIRECT: ['0x1800b33be', '0x1800b33d8', '0x1800b3413', '0x1800b342d', '0x1800b345a', '0x1800b3474', '0x1800b34a1', '0x1800b34bb', '0x1800b34ec', '0x1800b3506', '0x1800b359c', '0x1800b35b6']
+  ?BuildPackageFile@PackageFile@IO@@AEBA_NAEBVFilename@System@@V?$Set@VF stamp@1800b34c9 -> -0x60(%rbp)    END OF FUNCTION                                calls=10  <<< INDIRECT: ['0x1800b34ec', '0x1800b3506', '0x1800b359c', '0x1800b35b6']
+  ?AreResourcesEqual@PackageFile@IO@@AEBA_NAEBVFilename@System@@_N@Z     stamp@1800b3c11 -> -0x50(%rbp)    END OF FUNCTION                                calls=7  <<< INDIRECT: ['0x1800b3c33', '0x1800b3c4d', '0x1800b3c8f', '0x1800b3ca9']
+  ?AreResourcesEqual@PackageFile@IO@@AEBA_NAEBVFilename@System@@_N@Z     stamp@1800b3c6d -> -0x20(%rbp)    END OF FUNCTION                                calls=3  <<< INDIRECT: ['0x1800b3c8f', '0x1800b3ca9']
+  (unexported 1800b65b0)                                                 stamp@1800b6600 -> 0x20(%rsp)     closed by ??_7FileStream@IO@@6B@ at 1800b6619  calls=0
+  (unexported 1800b65b0)                                                 stamp@1800b6987 -> 0x20(%rsp)     END OF FUNCTION                                calls=1
+  (unexported 1800b6aa0)                                                 stamp@1800b6add -> -0x39(%rbp)    closed by ??_7FileStream@IO@@6B@ at 1800b6af3  calls=0
+  (unexported 1800b6aa0)                                                 stamp@1800b6d93 -> -0x39(%rbp)    END OF FUNCTION                                calls=3  <<< INDIRECT: ['0x1800b6db5', '0x1800b6dcf']
+  (unexported 1800b6e00)                                                 stamp@1800b71f3 -> -0x29(%rbp)    END OF FUNCTION                                calls=3  <<< INDIRECT: ['0x1800b7215', '0x1800b722f']
+  ?Close@TextFile@IO@@QEAAXXZ                                            stamp@1800b9d3c -> -0x49(%rbp)    END OF FUNCTION                                calls=1
+  ?Create@TextFile@IO@@QEAA_NAEBVString@System@@@Z                       stamp@1800b9f92 -> -0x49(%rbp)    END OF FUNCTION                                calls=1
+  ?Open@TextFile@IO@@QEAA_NAEBVString@System@@@Z                         stamp@1800ba17f -> -0x39(%rbp)    END OF FUNCTION                                calls=1
+  ??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z                     stamp@1800ba376 -> (%rcx)         closed by ??_7FileStream@IO@@6B@ at 1800ba38b  calls=0
+  ??0TextFileStream@IO@@QEAA@XZ                                          stamp@1800ba550 -> (%rcx)         closed by ??_7FileStream@IO@@6B@ at 1800ba563  calls=0
+  ??1VisitorStream@IO@@UEAA@XZ                                           stamp@1800bb063 -> (%rcx)         END OF FUNCTION                                calls=0
+  ??0VisitorStream@IO@@QEAA@XZ                                           stamp@1800bb0b7 -> (%rcx)         closed by ??_7VisitorStream@IO@@6B@ at 1800bb0d0 calls=0
+  ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z              stamp@1800bbbf7 -> -0x59(%rbp)    END OF FUNCTION                                calls=1
+  ?Save@External@Object@@QEAA_NAEBVFilename@System@@@Z                   stamp@1800bbef3 -> 0x40(%rsp)     END OF FUNCTION                                calls=1
+  ?IsCurrent@External@Object@@SA_NAEBVFilename@System@@@Z                stamp@1800bc391 -> 0x70(%rsp)     END OF FUNCTION                                calls=3  <<< INDIRECT: ['0x1800bc3b7', '0x1800bc3d1']
+  ?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z         stamp@1800bc90d -> 0x40(%rsp)     END OF FUNCTION                                calls=1
+  ?Add@ExternalFactory@Object@@QEAAXPEAVExternal@2@@Z                    stamp@1800be685 -> -0x18(%rbp)    END OF FUNCTION                                calls=3
+  ?Clone@Internal@Object@@QEAAPEAV12@XZ                                  stamp@1800bfcaa -> 0xf(%rbp)      END OF FUNCTION                                calls=3
+  ?Clone@Internal@Object@@QEAAPEAV12@XZ                                  stamp@1800bfcd6 -> -0x21(%rbp)    END OF FUNCTION                                calls=1
+  ?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z            stamp@1800c1947 -> -0x28(%rbp)    END OF FUNCTION                                calls=19  <<< INDIRECT: ['0x1800c1969', '0x1800c1983', '0x1800c19bf', '0x1800c19d9', '0x1800c1a05', '0x1800c1a1f', '0x1800c1a4b', '0x1800c1a65', '0x1800c1a96', '0x1800c1ab0', '0x1800c1ae9', '0x1800c1b03']
+  ?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z            stamp@1800c1a73 -> 0x70(%rsp)     END OF FUNCTION                                calls=6  <<< INDIRECT: ['0x1800c1a96', '0x1800c1ab0', '0x1800c1ae9', '0x1800c1b03']
+  ?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV stamp@1800c1e13 -> -0x19(%rbp)    END OF FUNCTION                                calls=6
+  ?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV stamp@1800c1e5b -> 0x30(%rsp)     END OF FUNCTION                                calls=1
+  ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z  stamp@1800f2cc5 -> -0x49(%rbp)    END OF FUNCTION                                calls=6  <<< INDIRECT: ['0x1800f2ce8', '0x1800f2d02', '0x1800f2d3f', '0x1800f2d59']
+  ?SaveSettings@DialogInstance@UI@@QEAAXXZ                               stamp@1801143e1 -> -0x38(%rbp)    END OF FUNCTION                                calls=3  <<< INDIRECT: ['0x180114403', '0x18011441d']
+  ?LoadSettings@DialogInstance@UI@@QEAAXXZ                               stamp@180114620 -> -0x38(%rbp)    END OF FUNCTION                                calls=3  <<< INDIRECT: ['0x180114642', '0x18011465c']
+  ?OnOpened@DialogInstance@UI@@UEAAXXZ                                   stamp@180115020 -> -0x38(%rbp)    closed by ??_7MemoryStream@IO@@6B@ at 180115033 calls=0
+  ?OnOpened@DialogInstance@UI@@UEAAXXZ                                   stamp@180115125 -> -0x38(%rbp)    closed by ??_7MemoryStream@IO@@6B@ at 180115279 calls=12  <<< INDIRECT: ['0x18011515a', '0x18011516b', '0x180115180', '0x1801151b2', '0x1801151db', '0x180115215', '0x18011521a', '0x18011522d', '0x180115241', '0x180115256', '0x180115276']
+  ?OnOpened@DialogInstance@UI@@UEAAXXZ                                   stamp@1801152c9 -> -0x38(%rbp)    END OF FUNCTION                                calls=3  <<< INDIRECT: ['0x1801152eb', '0x180115305']
+  ?SaveAllSettings@UserInterface@UI@@QEAAXXZ                             stamp@180120506 -> -0x21(%rbp)    closed by ??_7MemoryStream@IO@@6B@ at 180120512 calls=0
+  ?SaveAllSettings@UserInterface@UI@@QEAAXXZ                             stamp@18012073a -> -0x21(%rbp)    END OF FUNCTION                                calls=3  <<< INDIRECT: ['0x18012075c', '0x180120776']

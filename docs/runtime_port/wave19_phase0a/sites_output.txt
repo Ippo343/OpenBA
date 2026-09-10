@@ -1,0 +1,1147 @@
+==============================================================================
+??_7ReaderWriter@IO@@6B@ VA=1801553b0   LEA sites = 20
+
+  FUNC 180023940..180023996 ??0BinaryReader@IO@@QEAA@AEBV01@@Z  [subject LEAs: 1]
+      180023958  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rcx)   <== SUBJECT
+      180023979  STAMP ??_7BinaryReader@IO@@6B@         -> (%rcx)
+
+  FUNC 1800239a0..180023a01 (unexported 1800239a0)  [subject LEAs: 1]
+      1800239c4  STAMP ??_7BinaryReader@IO@@6B@         -> (%rcx)
+      1800239d8  CALL  call   *0x18(%rax)
+      1800239e3  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rdi)   <== SUBJECT
+      1800239ee  CALL  call   0x180006a10
+
+  FUNC 180023a10..180023aab (unexported 180023a10)  [subject LEAs: 1]
+      180023a47  CALL  call   0x18007ec98
+      180023a56  CALL  call   0x180006a10
+      180023a68  STAMP ??_7BinaryReader@IO@@6B@         -> (%rcx)
+      180023a7c  CALL  call   *0x18(%rax)
+      180023a87  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rbx)   <== SUBJECT
+      180023a93  CALL  call   0x180006a10
+
+  FUNC 180023ac0..180023b16 ??0BinaryWriter@IO@@QEAA@AEBV01@@Z  [subject LEAs: 1]
+      180023ad8  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rcx)   <== SUBJECT
+      180023af9  STAMP ??_7BinaryWriter@IO@@6B@         -> (%rcx)
+
+  FUNC 180023c21..180023c43 (unexported 180023c21)  [subject LEAs: 1]
+      180023c28  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rcx)   <== SUBJECT
+      180023c30  CALL  call   0x180006a10
+
+  SITES OUTSIDE ANY .pdata FUNCTION: ['0x180023c50', '0x1800b9120', '0x1800b9150']
+
+  FUNC 18002b680..18002b6ca ??0Visitor@IO@@QEAA@AEBV01@@Z  [subject LEAs: 1]
+      18002b698  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rcx)   <== SUBJECT
+      18002b6b9  STAMP ??_7Visitor@IO@@6B@              -> (%rcx)
+
+  FUNC 18002b6d0..18002b70d (unexported 18002b6d0)  [subject LEAs: 1]
+      18002b6ed  STAMP ??_7Visitor@IO@@6B@              -> (%rcx)
+      18002b6f7  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rcx)   <== SUBJECT
+      18002b6ff  CALL  call   0x180006a10
+
+  FUNC 18002b710..18002b792 (unexported 18002b710)  [subject LEAs: 1]
+      18002b747  CALL  call   0x18007ec98
+      18002b756  CALL  call   0x180006a10
+      18002b768  STAMP ??_7Visitor@IO@@6B@              -> (%rcx)
+      18002b772  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rcx)   <== SUBJECT
+      18002b77a  CALL  call   0x180006a10
+
+  FUNC 18002b7a0..18002b7c6 (unexported 18002b7a0)  [subject LEAs: 1]
+      18002b7b0  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rcx)   <== SUBJECT
+      18002b7b8  CALL  call   0x180006a10
+
+  FUNC 1800a82f0..1800a8335 ??1BinaryReader@IO@@UEAA@XZ  [subject LEAs: 1]
+      1800a830d  STAMP ??_7BinaryReader@IO@@6B@         -> (%rcx)
+      1800a8321  CALL  call   *0x18(%rax)
+      1800a832c  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rbx)   <== SUBJECT
+
+  FUNC 1800a8340..1800a83e8 ??0BinaryReader@IO@@QEAA@AEAVSerializer@1@H@Z  [subject LEAs: 1]
+      1800a8367  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rcx)   <== SUBJECT
+      1800a8380  STAMP ??_7BinaryReader@IO@@6B@         -> (%rcx)
+      1800a839e  CALL  call   *0x18(%rax)
+      1800a83b1  CALL  call   *0x18(%rax)
+      1800a83bb  CALL  call   *0x28(%rax)
+      1800a83d1  CALL  call   *0x18(%rax)
+
+  FUNC 1800a8980..1800a8a24 ??1BinaryWriter@IO@@UEAA@XZ  [subject LEAs: 1]
+      1800a89a2  STAMP ??_7BinaryWriter@IO@@6B@         -> (%rcx)
+      1800a89ac  CALL  call   *0x28(%rax)
+      1800a89cf  CALL  call   *0x10(%rax)
+      1800a89d9  CALL  call   *0x28(%rax)
+      1800a89e8  CALL  call   *0x20(%r8)
+      1800a89fd  CALL  call   *0x10(%r9)
+      1800a8a0a  CALL  call   *0x20(%r8)
+      1800a8a16  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rdi)   <== SUBJECT
+
+  FUNC 1800a8a30..1800a8af5 ??0BinaryWriter@IO@@QEAA@AEAVSerializer@1@H@Z  [subject LEAs: 1]
+      1800a8a57  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rcx)   <== SUBJECT
+      1800a8a70  STAMP ??_7BinaryWriter@IO@@6B@         -> (%rcx)
+      1800a8a9e  CALL  call   *0x10(%rax)
+      1800a8aa8  CALL  call   *0x28(%rax)
+      1800a8abe  CALL  call   *0x10(%rax)
+      1800a8ac8  CALL  call   *0x28(%rax)
+      1800a8ade  CALL  call   *0x10(%rax)
+
+  FUNC 1800bac40..1800bac80 ??0Visitor@IO@@QEAA@AEAVSerializer@1@H@Z  [subject LEAs: 1]
+      1800bac58  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rcx)   <== SUBJECT
+      1800bac71  STAMP ??_7Visitor@IO@@6B@              -> (%rcx)
+
+  FUNC 1800bac90..1800bacba ??1Visitor@IO@@UEAA@XZ  [subject LEAs: 1]
+      1800baca8  STAMP ??_7Visitor@IO@@6B@              -> (%rcx)
+      1800bacb2  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rcx)   <== SUBJECT
+
+  FUNC 1800bae40..1800baeee (unexported 1800bae40)  [subject LEAs: 1]
+      1800bae7a  CALL  call   *0x90510(%rip)        # 0x18014b390
+      1800bae91  CALL  call   0x1800c6e60
+      1800bae9c  CALL  call   *0x904e6(%rip)        # 0x18014b388
+      1800baeb3  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rdi)   <== SUBJECT
+      1800baecc  STAMP ??_7Visitor@IO@@6B@              -> (%rdi)
+
+  FUNC 1800baf00..1800bafae (unexported 1800baf00)  [subject LEAs: 1]
+      1800baf3a  CALL  call   *0x90450(%rip)        # 0x18014b390
+      1800baf51  CALL  call   0x1800c6e60
+      1800baf5c  CALL  call   *0x90426(%rip)        # 0x18014b388
+      1800baf73  STAMP ??_7ReaderWriter@IO@@6B@         -> (%rdi)   <== SUBJECT
+      1800baf8c  STAMP ??_7Visitor@IO@@6B@              -> (%rdi)
+
+  SELF-CHECK: subject stamps emitted = 17 ; LEA sites = 20 ; MISMATCH -- see note
+==============================================================================
+??_7Stream@IO@@6B@ VA=1801549a0   LEA sites = 56
+
+  FUNC 18000bf70..18000bfd7 ??0FileStream@IO@@QEAA@AEBV01@@Z  [subject LEAs: 1]
+      18000bf8d  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      18000bfa5  STAMP ??_7FileStream@IO@@6B@           -> (%rcx)
+      18000bfc8  CALL  call   0x18000c110
+
+  FUNC 18000c661..18000c695 (unexported 18000c661)  [subject LEAs: 1]
+      18000c668  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      18000c674  CALL  call   0x180006a10
+      18000c682  CALL  call   0x180006a10
+
+  SITES OUTSIDE ANY .pdata FUNCTION: ['0x18000c6d0', '0x1800b99d0', '0x1800b9a40']
+
+  FUNC 180023ca0..180023d11 ??0BinaryFileStream@IO@@QEAA@AEBV01@@Z  [subject LEAs: 1]
+      180023cbd  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      180023cd5  STAMP ??_7FileStream@IO@@6B@           -> (%rcx)
+      180023cf8  CALL  call   0x18000c110
+      180023d05  STAMP ??_7BinaryFileStream@IO@@6B@     -> (%rbx)
+
+  FUNC 180023e60..180023f1b ??0CompressedStream@IO@@QEAA@AEBV01@@Z  [subject LEAs: 1]
+      180023e8a  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      180023ea2  STAMP ??_7CompressedStream@IO@@6B@     -> (%rcx)
+      180023ed0  CALL  call   0x1800246b0
+      180023ee5  CALL  call   0x180024780
+      180023efa  CALL  call   0x180024840
+
+  FUNC 1800241a0..1800241f6 ??0MemoryStream@IO@@QEAA@AEBV01@@Z  [subject LEAs: 1]
+      1800241b8  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      1800241d0  STAMP ??_7MemoryStream@IO@@6B@         -> (%rcx)
+
+  FUNC 180024230..1800242a0 (unexported 180024230)  [subject LEAs: 1]
+      180024254  STAMP ??_7MemoryStream@IO@@6B@         -> (%rcx)
+      180024266  CALL  call   0x1800c7ad0
+      180024273  STAMP ??_7Stream@IO@@6B@               -> (%rbx)   <== SUBJECT
+      18002427f  CALL  call   0x180006a10
+      18002428d  CALL  call   0x180006a10
+
+  FUNC 1800242a0..180024349 (unexported 1800242a0)  [subject LEAs: 1]
+      1800242d7  CALL  call   0x18007ec98
+      1800242e6  CALL  call   0x180006a10
+      1800242f8  STAMP ??_7MemoryStream@IO@@6B@         -> (%rcx)
+      18002430a  CALL  call   0x1800c7ad0
+      180024317  STAMP ??_7Stream@IO@@6B@               -> (%rbx)   <== SUBJECT
+      180024323  CALL  call   0x180006a10
+      180024331  CALL  call   0x180006a10
+
+  FUNC 180024360..1800243f2 ??0CompressedMemoryStream@IO@@QEAA@AEBV01@@Z  [subject LEAs: 1]
+      18002437e  CALL  call   0x180023e60
+      18002438b  STAMP ??_7CompressedMemoryStream@IO@@6B@ -> (%rdi)
+      18002439e  STAMP ??_7Stream@IO@@6B@               -> (%r8)   <== SUBJECT
+      1800243b7  STAMP ??_7MemoryStream@IO@@6B@         -> (%r8)
+
+  FUNC 18002b8b0..18002b984 ??0TextFileStream@IO@@QEAA@AEBV01@@Z  [subject LEAs: 1]
+      18002b8d5  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      18002b8ed  STAMP ??_7FileStream@IO@@6B@           -> (%rcx)
+      18002b910  CALL  call   0x18000c110
+      18002b91d  STAMP ??_7TextFileStream@IO@@6B@       -> (%rbx)
+
+  FUNC 18002bec0..18002befb ??0VisitorStream@IO@@QEAA@AEBV01@@Z  [subject LEAs: 1]
+      18002bed8  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      18002bef0  STAMP ??_7VisitorStream@IO@@6B@        -> (%rcx)
+
+  FUNC 18002bf20..18002bf7b (unexported 18002bf20)  [subject LEAs: 1]
+      18002bf44  STAMP ??_7VisitorStream@IO@@6B@        -> (%rcx)
+      18002bf4e  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      18002bf5a  CALL  call   0x180006a10
+      18002bf68  CALL  call   0x180006a10
+
+  FUNC 18002bf80..18002c014 (unexported 18002bf80)  [subject LEAs: 1]
+      18002bfb7  CALL  call   0x18007ec98
+      18002bfc6  CALL  call   0x180006a10
+      18002bfd8  STAMP ??_7VisitorStream@IO@@6B@        -> (%rcx)
+      18002bfe2  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      18002bfee  CALL  call   0x180006a10
+      18002bffc  CALL  call   0x180006a10
+
+  FUNC 18007c360..18007c3a3 (unexported 18007c360)  [subject LEAs: 1]
+      18007c376  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      18007c382  CALL  call   0x180006a10
+      18007c390  CALL  call   0x180006a10
+
+  FUNC 1800a0f60..1800a1668 ?Run@Stream@Audio@@UEAAXXZ  [subject LEAs: 2]
+      1800a1013  STAMP ??_7Stream@IO@@6B@               -> 0x30(%rsp)   <== SUBJECT
+      1800a1029  STAMP ??_7FileStream@IO@@6B@           -> 0x30(%rsp)
+      1800a107f  CALL  call   0x180007bd0
+      1800a1090  CALL  call   0x1800c9440
+      1800a10ad  CALL  call   0x1800c6970
+      1800a10bc  CALL  call   0x1800aac70
+      1800a10e4  CALL  call   0x1800c7ad0
+      1800a110d  CALL  call   0x1800c7ad0
+      1800a1139  CALL  call   0x1800c7ad0
+      1800a11b6  CALL  call   *0xa9f34(%rip)        # 0x18014b0f0
+      1800a11e7  CALL  call   0x1800ace00
+      1800a124b  CALL  call   *0xaa13f(%rip)        # 0x18014b390
+      1800a1265  CALL  call   *0xc8(%rax)
+      1800a126f  CALL  call   *0xaa113(%rip)        # 0x18014b388
+      1800a129f  CALL  call   *0xaa0b3(%rip)        # 0x18014b358
+      1800a12ab  CALL  call   *0xaa0df(%rip)        # 0x18014b390
+      1800a12cd  CALL  call   *0xc8(%rax)
+      1800a12d7  CALL  call   *0xaa0ab(%rip)        # 0x18014b388
+      1800a12f7  CALL  call   0x1800881b0
+      1800a1343  CALL  call   *0xaa047(%rip)        # 0x18014b390
+      1800a1361  CALL  call   *0xa8(%rax)
+      1800a136b  CALL  call   *0xaa017(%rip)        # 0x18014b388
+      1800a13c1  CALL  call   *0xa9fc9(%rip)        # 0x18014b390
+      1800a13d4  CALL  call   *0xa9fae(%rip)        # 0x18014b388
+      1800a13f1  CALL  call   0x1800accc0
+      1800a1402  CALL  call   *0xc8(%rax)
+      1800a140c  CALL  call   *0xa9f76(%rip)        # 0x18014b388
+      1800a143f  CALL  call   *0xa9f13(%rip)        # 0x18014b358
+      1800a144b  CALL  call   *0xa9f3f(%rip)        # 0x18014b390
+      1800a146d  CALL  call   *0xc8(%rax)
+      1800a1477  CALL  call   *0xa9f0b(%rip)        # 0x18014b388
+      1800a148b  CALL  call   *0xa9ef7(%rip)        # 0x18014b388
+      1800a14a4  CALL  call   0x1800accc0
+      1800a14ba  STAMP ??_7FileStream@IO@@6B@           -> 0x30(%rsp)
+      1800a14d2  CALL  call   0x1800accc0
+      1800a1522  CALL  call   *0xa9e68(%rip)        # 0x18014b390
+      1800a1533  CALL  call   0x1800c6c00
+      1800a153c  CALL  call   *0xa9e46(%rip)        # 0x18014b388
+      1800a158a  CALL  call   *0xa9e00(%rip)        # 0x18014b390
+      1800a159b  CALL  call   0x1800c6c00
+      1800a15a4  CALL  call   *0xa9dde(%rip)        # 0x18014b388
+      1800a15e9  CALL  call   *0xa9da1(%rip)        # 0x18014b390
+      1800a15fa  CALL  call   0x1800c6c00
+      1800a1603  CALL  call   *0xa9d7f(%rip)        # 0x18014b388
+      1800a1610  STAMP ??_7Stream@IO@@6B@               -> 0x30(%rsp)   <== SUBJECT
+      1800a1634  CALL  call   *0xa9d56(%rip)        # 0x18014b390
+      1800a1645  CALL  call   0x1800c6c00
+      1800a164e  CALL  call   *0xa9d34(%rip)        # 0x18014b388
+
+  FUNC 1800a8200..1800a82e8 ??0BinaryFileStream@IO@@QEAA@XZ  [subject LEAs: 1]
+      1800a8220  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      1800a8233  STAMP ??_7FileStream@IO@@6B@           -> (%rcx)
+      1800a8277  STAMP ??_7BinaryFileStream@IO@@6B@     -> (%rdi)
+      1800a8290  CALL  call   *0xa30fa(%rip)        # 0x18014b390
+      1800a82a5  CALL  call   0x1800c6e60
+      1800a82b0  CALL  call   *0xa30d2(%rip)        # 0x18014b388
+      1800a82d3  CALL  call   0x180006a10
+
+  FUNC 1800a9560..1800a95f3 ??1CompressedMemoryStream@IO@@UEAA@XZ  [subject LEAs: 1]
+      1800a9582  STAMP ??_7CompressedMemoryStream@IO@@6B@ -> (%rcx)
+      1800a9591  CALL  call   0x1800a9ee0
+      1800a95a0  CALL  call   *0x38(%rax)
+      1800a95b0  STAMP ??_7MemoryStream@IO@@6B@         -> (%rdi)
+      1800a95c2  CALL  call   0x1800c7ad0
+      1800a95cf  STAMP ??_7Stream@IO@@6B@               -> (%rdi)   <== SUBJECT
+      1800a95db  CALL  call   0x180006a10
+
+  FUNC 1800aa3d0..1800aa4a6 ??0CompressedStream@IO@@QEAA@XZ  [subject LEAs: 1]
+      1800aa3f4  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      1800aa407  STAMP ??_7CompressedStream@IO@@6B@     -> (%rcx)
+      1800aa44a  CALL  call   *0xa0f40(%rip)        # 0x18014b390
+      1800aa45f  CALL  call   0x1800c6e60
+      1800aa46a  CALL  call   *0xa0f18(%rip)        # 0x18014b388
+      1800aa48d  CALL  call   0x180006a10
+
+  FUNC 1800aa650..1800aa6b7 ??1CompressedStream@IO@@UEAA@XZ  [subject LEAs: 1]
+      1800aa66d  STAMP ??_7CompressedStream@IO@@6B@     -> (%rcx)
+      1800aa670  CALL  call   0x1800aa100
+      1800aa67a  CALL  call   0x180024aa0
+      1800aa684  CALL  call   0x1800249c0
+      1800aa68e  CALL  call   0x1800248e0
+      1800aa69b  STAMP ??_7Stream@IO@@6B@               -> (%rbx)   <== SUBJECT
+
+  FUNC 1800aaa10..1800aaa86 ??0FileStream@IO@@QEAA@XZ  [subject LEAs: 1]
+      1800aaa2b  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      1800aaa40  STAMP ??_7FileStream@IO@@6B@           -> (%rcx)
+
+  FUNC 1800aaab0..1800aab43 ??1FileStream@IO@@UEAA@XZ  [subject LEAs: 1]
+      1800aaad2  STAMP ??_7FileStream@IO@@6B@           -> (%rcx)
+      1800aaae6  CALL  call   0x1800accc0
+      1800aaaf0  CALL  call   0x18000c180
+      1800aab11  CALL  call   0x1800c7ad0
+      1800aab27  STAMP ??_7Stream@IO@@6B@               -> (%rbx)   <== SUBJECT
+      1800aab33  CALL  call   0x180006a10
+
+  FUNC 1800ae710..1800ae7c8 ??0MemoryStream@IO@@QEAA@XZ  [subject LEAs: 1]
+      1800ae734  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      1800ae747  STAMP ??_7MemoryStream@IO@@6B@         -> (%rcx)
+      1800ae76c  CALL  call   *0x9cc1e(%rip)        # 0x18014b390
+      1800ae781  CALL  call   0x1800c6e60
+      1800ae78c  CALL  call   *0x9cbf6(%rip)        # 0x18014b388
+      1800ae7af  CALL  call   0x180006a10
+
+  FUNC 1800ae890..1800ae8e8 ??1MemoryStream@IO@@UEAA@XZ  [subject LEAs: 1]
+      1800ae8ad  STAMP ??_7MemoryStream@IO@@6B@         -> (%rcx)
+      1800ae8bf  CALL  call   0x1800c7ad0
+      1800ae8cc  STAMP ??_7Stream@IO@@6B@               -> (%rbx)   <== SUBJECT
+
+  FUNC 1800b1820..1800b35fc ?BuildPackageFile@PackageFile@IO@@AEBA_NAEBVFilename@System@@V?$Set@VFilename@System@@UDefaultAllocator@Collection@@V12@UAVLCompare@4@@Collection@@AEBVString@4@2HHHH_N33@Z  [subject LEAs: 1]
+      1800b187e  CALL  call   0x180007bd0
+      1800b18b9  CALL  call   0x1800c7ad0
+      1800b191f  CALL  call   0x1800ac880
+      1800b1940  CALL  call   0x1800accc0
+      1800b1958  CALL  call   0x1800b3610
+      1800b1988  CALL  call   0x1800c7ad0
+      1800b19c2  CALL  call   0x1800c7ad0
+      1800b19ed  CALL  call   0x1800c95d0
+      1800b19f8  CALL  call   0x1800c6970
+      1800b1a3d  CALL  call   0x1800c7ad0
+      1800b1a60  CALL  call   0x1800c6970
+      1800b1a6a  CALL  call   0x1800c6970
+      1800b1a88  CALL  call   0x1800298f0
+      1800b1ab9  CALL  call   0x1800c7ad0
+      1800b1aec  CALL  call   0x1800c7ad0
+      1800b1b23  CALL  call   0x1800c7ad0
+      1800b1b55  CALL  call   0x1800c7ad0
+      1800b1bf5  CALL  call   0x1800c7ad0
+      1800b1c2f  CALL  call   0x1800c7ad0
+      1800b1c47  CALL  call   0x180026b50
+      1800b1c67  CALL  call   *0x99723(%rip)        # 0x18014b390
+      1800b1c78  CALL  call   0x1800c6c00
+      1800b1c81  CALL  call   *0x99701(%rip)        # 0x18014b388
+      1800b1cb2  CALL  call   0x180010470
+      1800b1cbe  CALL  call   0x180010470
+      1800b1ce3  CALL  call   0x1800c7ad0
+      1800b1d05  CALL  call   *0x99685(%rip)        # 0x18014b390
+      1800b1d16  CALL  call   0x1800c6c00
+      1800b1d1f  CALL  call   *0x99663(%rip)        # 0x18014b388
+      1800b1d43  CALL  call   0x180026b50
+      1800b1d63  CALL  call   *0x99627(%rip)        # 0x18014b390
+      1800b1d74  CALL  call   0x1800c6c00
+      1800b1d7d  CALL  call   *0x99605(%rip)        # 0x18014b388
+      1800b1d9c  CALL  call   0x180010470
+      1800b1dc2  CALL  call   0x1800acc50
+      1800b1df9  CALL  call   0x1800c7ad0
+      1800b1e31  CALL  call   0x1800c7ad0
+      1800b1e42  CALL  call   0x180026b50
+      1800b1e62  CALL  call   *0x99528(%rip)        # 0x18014b390
+      1800b1e73  CALL  call   0x1800c6c00
+      1800b1e7c  CALL  call   *0x99506(%rip)        # 0x18014b388
+      1800b1ead  CALL  call   0x180010470
+      1800b1eb9  CALL  call   0x180010470
+      1800b1ede  CALL  call   0x1800c7ad0
+      1800b1eeb  CALL  call   0x180009c30
+      1800b1f1a  CALL  call   *0x991e8(%rip)        # 0x18014b108
+      1800b1f3d  CALL  call   *0x9944d(%rip)        # 0x18014b390
+      1800b1f58  CALL  call   0x1800c6e60
+      1800b1f63  CALL  call   *0x9941f(%rip)        # 0x18014b388
+      1800b1fec  CALL  call   0x180007bd0
+      1800b1ffc  CALL  call   0x1800c9440
+      1800b201c  CALL  call   0x1800c6970
+      1800b2031  CALL  call   0x1800ac880
+      1800b2072  CALL  call   *0x99318(%rip)        # 0x18014b390
+      1800b2083  CALL  call   0x1800c6c00
+      1800b208c  CALL  call   *0x992f6(%rip)        # 0x18014b388
+      1800b20d5  CALL  call   *0x992b5(%rip)        # 0x18014b390
+      1800b20e6  CALL  call   0x1800c6c00
+      1800b20ef  CALL  call   *0x99293(%rip)        # 0x18014b388
+      1800b213c  CALL  call   *0x9924e(%rip)        # 0x18014b390
+      1800b214d  CALL  call   0x1800c6c00
+      1800b2156  CALL  call   *0x9922c(%rip)        # 0x18014b388
+      1800b2199  CALL  call   0x1800ace00
+      1800b21b8  CALL  call   *0x98f4a(%rip)        # 0x18014b108
+      1800b221d  CALL  call   0x1800ae020
+      1800b2250  CALL  call   0x18000c200
+      1800b228d  CALL  call   *0x990fd(%rip)        # 0x18014b390
+      1800b229e  CALL  call   0x1800c6c00
+      1800b22a7  CALL  call   *0x990db(%rip)        # 0x18014b388
+      1800b22ed  CALL  call   *0x9909d(%rip)        # 0x18014b390
+      1800b22fe  CALL  call   0x1800c6c00
+      1800b2307  CALL  call   *0x9907b(%rip)        # 0x18014b388
+      1800b2354  CALL  call   *0x99036(%rip)        # 0x18014b390
+      1800b2365  CALL  call   0x1800c6c00
+      1800b236e  CALL  call   *0x99014(%rip)        # 0x18014b388
+      1800b23c0  CALL  call   *0x98fca(%rip)        # 0x18014b390
+      1800b23d1  CALL  call   0x1800c6c00
+      1800b23da  CALL  call   *0x98fa8(%rip)        # 0x18014b388
+      1800b2425  CALL  call   *0x98f65(%rip)        # 0x18014b390
+      1800b2436  CALL  call   0x1800c6c00
+      1800b243f  CALL  call   *0x98f43(%rip)        # 0x18014b388
+      1800b2449  CALL  call   0x1800aa3d0
+      1800b2456  STAMP ??_7CompressedMemoryStream@IO@@6B@ -> -0x60(%rbp)
+      1800b245e  CALL  call   0x1800ae710
+      1800b248c  CALL  call   *0x98efe(%rip)        # 0x18014b390
+      1800b24a4  CALL  call   0x1800c6e60
+      1800b24af  CALL  call   *0x98ed3(%rip)        # 0x18014b388
+      1800b24d7  CALL  call   *0x98eb3(%rip)        # 0x18014b390
+      1800b24ed  CALL  call   0x1800c6e60
+      1800b24f8  CALL  call   *0x98e8a(%rip)        # 0x18014b388
+      1800b2509  CALL  call   0x1800881b0
+      1800b251c  CALL  call   0x180024c10
+      1800b2546  CALL  call   *0x98e44(%rip)        # 0x18014b390
+      1800b255f  CALL  call   0x1800c6e60
+      1800b256a  CALL  call   *0x98e18(%rip)        # 0x18014b388
+      1800b2584  CALL  call   0x1800881b0
+      1800b2597  CALL  call   0x1800a9980
+      1800b25c6  CALL  call   0x1800a9aa0
+      1800b2609  CALL  call   0x18008a290
+      1800b2646  CALL  call   0x1800a9aa0
+      1800b2689  CALL  call   0x18008a290
+      1800b26c6  CALL  call   0x1800a9aa0
+      1800b2709  CALL  call   0x18008a290
+      1800b2746  CALL  call   0x1800a9aa0
+      1800b2789  CALL  call   0x18008a290
+      1800b27c6  CALL  call   0x1800a9aa0
+      1800b2809  CALL  call   0x18008a290
+      1800b2846  CALL  call   0x1800a9aa0
+      1800b2889  CALL  call   0x18008a290
+      1800b28b9  CALL  call   0x1800a9aa0
+      1800b28fe  CALL  call   0x18008a290
+      1800b2936  CALL  call   0x1800a9aa0
+      1800b2979  CALL  call   0x18008a290
+      1800b29b6  CALL  call   0x1800a9aa0
+      1800b29f9  CALL  call   0x18008a290
+      1800b2a2b  CALL  call   0x1800a9aa0
+      1800b2a6e  CALL  call   0x18008a290
+      1800b2ab6  CALL  call   0x1800a9aa0
+      1800b2af9  CALL  call   0x18008a290
+      1800b2b36  CALL  call   0x1800a9aa0
+      1800b2b79  CALL  call   0x18008a290
+      1800b2bb6  CALL  call   0x1800a9aa0
+      1800b2bf9  CALL  call   0x18008a290
+      1800b2c4a  CALL  call   0x1800a9aa0
+      1800b2c8f  CALL  call   0x18008a290
+      1800b2cc6  CALL  call   0x1800a9aa0
+      1800b2d09  CALL  call   0x18008a290
+      1800b2d5a  CALL  call   0x1800a9aa0
+      1800b2d9f  CALL  call   0x18008a290
+      1800b2dd6  CALL  call   0x1800a9aa0
+      1800b2e19  CALL  call   0x18008a290
+      1800b2e6a  CALL  call   0x1800a9aa0
+      1800b2eaf  CALL  call   0x18008a290
+      1800b2ee6  CALL  call   0x1800a9aa0
+      1800b2f29  CALL  call   0x18008a290
+      1800b2f89  CALL  call   0x1800a9aa0
+      1800b2fce  CALL  call   0x18008a290
+      1800b3006  CALL  call   0x1800a9aa0
+      1800b3049  CALL  call   0x18008a290
+      1800b307b  CALL  call   0x1800a9aa0
+      1800b30be  CALL  call   0x18008a290
+      1800b30f6  CALL  call   0x1800a9aa0
+      1800b3139  CALL  call   0x18008a290
+      1800b317f  CALL  call   0x1800a9ee0
+      1800b318c  CALL  call   *0x38(%rax)
+      1800b3197  CALL  call   *0x28(%rax)
+      1800b31bb  CALL  call   *0x97f47(%rip)        # 0x18014b108
+      1800b31e3  CALL  call   *0x97f1f(%rip)        # 0x18014b108
+      1800b31fb  CALL  call   0x1800ae020
+      1800b323c  CALL  call   0x18000c200
+      1800b3281  CALL  call   *0x98109(%rip)        # 0x18014b390
+      1800b3292  CALL  call   0x1800c6c00
+      1800b329b  CALL  call   *0x980e7(%rip)        # 0x18014b388
+      1800b32e6  CALL  call   *0x980a4(%rip)        # 0x18014b390
+      1800b32f7  CALL  call   0x1800c6c00
+      1800b3300  CALL  call   *0x98082(%rip)        # 0x18014b388
+      1800b3313  STAMP ??_7CompressedMemoryStream@IO@@6B@ -> -0x60(%rbp)
+      1800b3327  CALL  call   0x1800a9ee0
+      1800b3334  CALL  call   *0x38(%rax)
+      1800b3348  STAMP ??_7MemoryStream@IO@@6B@         -> 0x8(%rbp)
+      1800b3373  CALL  call   *0x98017(%rip)        # 0x18014b390
+      1800b3384  CALL  call   0x1800c6c00
+      1800b338d  CALL  call   *0x97ff5(%rip)        # 0x18014b388
+      1800b339b  STAMP ??_7Stream@IO@@6B@               -> 0x8(%rbp)   <== SUBJECT
+      1800b33be  CALL  call   *0x97fcc(%rip)        # 0x18014b390
+      1800b33cf  CALL  call   0x1800c6c00
+      1800b33d8  CALL  call   *0x97faa(%rip)        # 0x18014b388
+      1800b33e6  STAMP ??_7CompressedStream@IO@@6B@     -> -0x60(%rbp)
+      1800b33ee  CALL  call   0x1800aa100
+      1800b3413  CALL  call   *0x97f77(%rip)        # 0x18014b390
+      1800b3424  CALL  call   0x1800c6c00
+      1800b342d  CALL  call   *0x97f55(%rip)        # 0x18014b388
+      1800b345a  CALL  call   *0x97f30(%rip)        # 0x18014b390
+      1800b346b  CALL  call   0x1800c6c00
+      1800b3474  CALL  call   *0x97f0e(%rip)        # 0x18014b388
+      1800b34a1  CALL  call   *0x97ee9(%rip)        # 0x18014b390
+      1800b34b2  CALL  call   0x1800c6c00
+      1800b34bb  CALL  call   *0x97ec7(%rip)        # 0x18014b388
+      1800b34c9  STAMP ??_7Stream@IO@@6B@               -> -0x60(%rbp)   <== SUBJECT
+      1800b34ec  CALL  call   *0x97e9e(%rip)        # 0x18014b390
+      1800b34fd  CALL  call   0x1800c6c00
+      1800b3506  CALL  call   *0x97e7c(%rip)        # 0x18014b388
+      1800b3534  CALL  call   0x1800c7ad0
+      1800b3566  CALL  call   0x1800c7ad0
+      1800b357c  CALL  call   0x180026b50
+      1800b359c  CALL  call   *0x97dee(%rip)        # 0x18014b390
+      1800b35ad  CALL  call   0x1800c6c00
+      1800b35b6  CALL  call   *0x97dcc(%rip)        # 0x18014b388
+      1800b35d3  CALL  call   0x180010470
+
+  FUNC 1800b3610..1800b3cca ?AreResourcesEqual@PackageFile@IO@@AEBA_NAEBVFilename@System@@_N@Z  [subject LEAs: 1]
+      1800b3646  CALL  call   0x1800aaf20
+      1800b3663  CALL  call   0x1800ab180
+      1800b3681  CALL  call   0x1800adc70
+      1800b368f  CALL  call   0x1800ab180
+      1800b36a4  CALL  call   0x1800ae710
+      1800b36ae  CALL  call   0x1800ae710
+      1800b36c9  CALL  call   *0x97cc1(%rip)        # 0x18014b390
+      1800b36e2  CALL  call   0x1800c6e60
+      1800b36ed  CALL  call   *0x97c95(%rip)        # 0x18014b388
+      1800b3723  CALL  call   *0x97c67(%rip)        # 0x18014b390
+      1800b373a  CALL  call   0x1800c6e60
+      1800b3745  CALL  call   *0x97c3d(%rip)        # 0x18014b388
+      1800b376b  CALL  call   0x1800c64f0
+      1800b377b  CALL  call   0x18007eefc
+      1800b37a2  CALL  call   0x1800c7ad0
+      1800b37d7  CALL  call   0x1800bc620
+      1800b37e9  CALL  call   *0x28(%r8)
+      1800b37f8  CALL  call   *(%r8)
+      1800b381d  CALL  call   0x1800bc620
+      1800b3834  CALL  call   *0x28(%r8)
+      1800b3843  CALL  call   *(%r8)
+      1800b38d7  CALL  call   0x1800ac880
+      1800b38e5  CALL  call   0x18000c200
+      1800b3911  CALL  call   0x1800c7ad0
+      1800b3942  CALL  call   0x1800c7ad0
+      1800b3969  CALL  call   0x1800ac880
+      1800b3977  CALL  call   0x18000c200
+      1800b39a3  CALL  call   0x1800c7ad0
+      1800b39d4  CALL  call   0x1800c7ad0
+      1800b3a12  CALL  call   0x1800accc0
+      1800b3a1f  CALL  call   0x1800accc0
+      1800b3a31  CALL  call   0x1800c7a50
+      1800b3a47  CALL  call   0x1800ace00
+      1800b3a65  CALL  call   0x18008a290
+      1800b3a7b  CALL  call   0x1800ace00
+      1800b3a96  CALL  call   0x18008a290
+      1800b3aa1  CALL  call   0x1800c7ad0
+      1800b3aae  CALL  call   0x1800accc0
+      1800b3abb  CALL  call   0x1800accc0
+      1800b3ac6  CALL  call   0x18000c180
+      1800b3ad1  CALL  call   0x18000c180
+      1800b3b39  CALL  call   0x1800c7ad0
+      1800b3b6f  CALL  call   0x1800c7ad0
+      1800b3ba5  CALL  call   0x1800c7ad0
+      1800b3bdb  CALL  call   0x1800c7ad0
+      1800b3bf1  STAMP ??_7MemoryStream@IO@@6B@         -> -0x50(%rbp)
+      1800b3c04  CALL  call   0x1800c7ad0
+      1800b3c11  STAMP ??_7Stream@IO@@6B@               -> -0x50(%rbp)   <== SUBJECT
+      1800b3c33  CALL  call   *0x97757(%rip)        # 0x18014b390
+      1800b3c44  CALL  call   0x1800c6c00
+      1800b3c4d  CALL  call   *0x97735(%rip)        # 0x18014b388
+      1800b3c54  STAMP ??_7MemoryStream@IO@@6B@         -> -0x20(%rbp)
+      1800b3c67  CALL  call   0x1800c7ad0
+      1800b3c6d  STAMP ??_7Stream@IO@@6B@               -> -0x20(%rbp)   <== SUBJECT
+      1800b3c8f  CALL  call   *0x976fb(%rip)        # 0x18014b390
+      1800b3ca0  CALL  call   0x1800c6c00
+      1800b3ca9  CALL  call   *0x976d9(%rip)        # 0x18014b388
+
+  FUNC 1800b65b0..1800b69ba (unexported 1800b65b0)  [subject LEAs: 2]
+      1800b65ca  CALL  call   0x180095060
+      1800b6600  STAMP ??_7Stream@IO@@6B@               -> 0x20(%rsp)   <== SUBJECT
+      1800b6619  STAMP ??_7FileStream@IO@@6B@           -> 0x20(%rsp)
+      1800b6689  CALL  call   0x1800c6970
+      1800b669b  CALL  call   0x1800aac70
+      1800b66cd  CALL  call   0x1800c7ad0
+      1800b6705  CALL  call   0x1800ace00
+      1800b6748  CALL  call   0x1800ace00
+      1800b678c  CALL  call   0x18002a810
+      1800b67ad  CALL  call   0x1800ace00
+      1800b6811  CALL  call   0x1800c5490
+      1800b684e  CALL  call   *0x9489c(%rip)        # 0x18014b0f0
+      1800b688f  CALL  call   0x1800ace00
+      1800b690c  CALL  call   0x1800accc0
+      1800b6931  STAMP ??_7FileStream@IO@@6B@           -> 0x20(%rsp)
+      1800b6949  CALL  call   0x1800accc0
+      1800b6954  CALL  call   0x18000c180
+      1800b697b  CALL  call   0x1800c7ad0
+      1800b6987  STAMP ??_7Stream@IO@@6B@               -> 0x20(%rsp)   <== SUBJECT
+      1800b6996  CALL  call   0x180006a10
+
+  FUNC 1800b6aa0..1800b6df4 (unexported 1800b6aa0)  [subject LEAs: 2]
+      1800b6add  STAMP ??_7Stream@IO@@6B@               -> -0x39(%rbp)   <== SUBJECT
+      1800b6af3  STAMP ??_7FileStream@IO@@6B@           -> -0x39(%rbp)
+      1800b6b4a  CALL  call   0x1800c6970
+      1800b6b58  CALL  call   0x1800aac70
+      1800b6b81  CALL  call   0x1800c7ad0
+      1800b6bd9  CALL  call   *0x94511(%rip)        # 0x18014b0f0
+      1800b6bff  CALL  call   0x1800ace00
+      1800b6c35  CALL  call   0x1800accc0
+      1800b6c4f  STAMP ??_7FileStream@IO@@6B@           -> -0x39(%rbp)
+      1800b6c64  CALL  call   0x1800accc0
+      1800b6caf  CALL  call   *0x946db(%rip)        # 0x18014b390
+      1800b6cc0  CALL  call   0x1800c6c00
+      1800b6cc9  CALL  call   *0x946b9(%rip)        # 0x18014b388
+      1800b6d12  CALL  call   *0x94678(%rip)        # 0x18014b390
+      1800b6d23  CALL  call   0x1800c6c00
+      1800b6d2c  CALL  call   *0x94656(%rip)        # 0x18014b388
+      1800b6d6d  CALL  call   *0x9461d(%rip)        # 0x18014b390
+      1800b6d7e  CALL  call   0x1800c6c00
+      1800b6d87  CALL  call   *0x945fb(%rip)        # 0x18014b388
+      1800b6d93  STAMP ??_7Stream@IO@@6B@               -> -0x39(%rbp)   <== SUBJECT
+      1800b6db5  CALL  call   *0x945d5(%rip)        # 0x18014b390
+      1800b6dc6  CALL  call   0x1800c6c00
+      1800b6dcf  CALL  call   *0x945b3(%rip)        # 0x18014b388
+
+  FUNC 1800b6e00..1800b7250 (unexported 1800b6e00)  [subject LEAs: 1]
+      1800b6e2f  CALL  call   0x1800a8200
+      1800b6e50  CALL  call   0x1800c6970
+      1800b6e5e  CALL  call   0x1800aa8f0
+      1800b6e86  CALL  call   0x1800c7ad0
+      1800b6fa3  CALL  call   *0x9415f(%rip)        # 0x18014b108
+      1800b6fda  CALL  call   *0x94128(%rip)        # 0x18014b108
+      1800b7018  CALL  call   *0x940ea(%rip)        # 0x18014b108
+      1800b7065  CALL  call   *0x9409d(%rip)        # 0x18014b108
+      1800b7095  CALL  call   0x1800accc0
+      1800b70a8  STAMP ??_7FileStream@IO@@6B@           -> -0x29(%rbp)
+      1800b70bd  CALL  call   0x1800accc0
+      1800b7108  CALL  call   *0x94282(%rip)        # 0x18014b390
+      1800b7119  CALL  call   0x1800c6c00
+      1800b7122  CALL  call   *0x94260(%rip)        # 0x18014b388
+      1800b716b  CALL  call   *0x9421f(%rip)        # 0x18014b390
+      1800b717c  CALL  call   0x1800c6c00
+      1800b7185  CALL  call   *0x941fd(%rip)        # 0x18014b388
+      1800b71c6  CALL  call   *0x941c4(%rip)        # 0x18014b390
+      1800b71d7  CALL  call   0x1800c6c00
+      1800b71e0  CALL  call   *0x941a2(%rip)        # 0x18014b388
+      1800b71f3  STAMP ??_7Stream@IO@@6B@               -> -0x29(%rbp)   <== SUBJECT
+      1800b7215  CALL  call   *0x94175(%rip)        # 0x18014b390
+      1800b7226  CALL  call   0x1800c6c00
+      1800b722f  CALL  call   *0x94153(%rip)        # 0x18014b388
+
+  FUNC 1800b9b10..1800b9d61 ?Close@TextFile@IO@@QEAAXXZ  [subject LEAs: 1]
+      1800b9b4d  CALL  call   0x1800ba530
+      1800b9b6c  CALL  call   0x1800c6970
+      1800b9b85  CALL  call   0x1800aa8f0
+      1800b9be8  CALL  call   *0x9151a(%rip)        # 0x18014b108
+      1800b9c15  CALL  call   0x1800c7ad0
+      1800b9c30  CALL  call   0x1800ba9f0
+      1800b9c46  CALL  call   0x1800accc0
+      1800b9c67  CALL  call   0x1800c7ad0
+      1800b9c7b  STAMP ??_7TextFileStream@IO@@6B@       -> -0x49(%rbp)
+      1800b9c88  CALL  call   0x1800c7ad0
+      1800b9cac  CALL  call   0x1800c7ad0
+      1800b9cd5  CALL  call   0x1800c7ad0
+      1800b9ce7  STAMP ??_7FileStream@IO@@6B@           -> -0x49(%rbp)
+      1800b9cfc  CALL  call   0x1800accc0
+      1800b9d06  CALL  call   0x18000c180
+      1800b9d2a  CALL  call   0x1800c7ad0
+      1800b9d3c  STAMP ??_7Stream@IO@@6B@               -> -0x49(%rbp)   <== SUBJECT
+      1800b9d49  CALL  call   0x180006a10
+
+  FUNC 1800b9d70..1800b9fba ?Create@TextFile@IO@@QEAA_NAEBVString@System@@@Z  [subject LEAs: 1]
+      1800b9db4  CALL  call   0x1800c7ad0
+      1800b9dd2  CALL  call   0x18002bbe0
+      1800b9ddb  CALL  call   0x1800ba530
+      1800b9df8  CALL  call   0x1800c6970
+      1800b9e11  CALL  call   0x1800aa8f0
+      1800b9e73  CALL  call   *0x9128f(%rip)        # 0x18014b108
+      1800b9e9f  CALL  call   0x1800c7ad0
+      1800b9ebf  CALL  call   0x1800accc0
+      1800b9ed1  STAMP ??_7TextFileStream@IO@@6B@       -> -0x49(%rbp)
+      1800b9ede  CALL  call   0x1800c7ad0
+      1800b9f02  CALL  call   0x1800c7ad0
+      1800b9f2b  CALL  call   0x1800c7ad0
+      1800b9f3d  STAMP ??_7FileStream@IO@@6B@           -> -0x49(%rbp)
+      1800b9f52  CALL  call   0x1800accc0
+      1800b9f5c  CALL  call   0x18000c180
+      1800b9f80  CALL  call   0x1800c7ad0
+      1800b9f92  STAMP ??_7Stream@IO@@6B@               -> -0x49(%rbp)   <== SUBJECT
+      1800b9f9f  CALL  call   0x180006a10
+
+  FUNC 1800b9fc0..1800ba1ad ?Open@TextFile@IO@@QEAA_NAEBVString@System@@@Z  [subject LEAs: 1]
+      1800b9fed  CALL  call   0x1800ba530
+      1800ba00c  CALL  call   0x1800c6970
+      1800ba020  CALL  call   0x1800ba640
+      1800ba048  CALL  call   0x1800c7ad0
+      1800ba06d  CALL  call   0x18002bbe0
+      1800ba081  CALL  call   0x18008a290
+      1800ba09a  CALL  call   0x18002bcf0
+      1800ba0b0  CALL  call   0x1800accc0
+      1800ba0be  STAMP ??_7TextFileStream@IO@@6B@       -> -0x39(%rbp)
+      1800ba0cb  CALL  call   0x1800c7ad0
+      1800ba0ef  CALL  call   0x1800c7ad0
+      1800ba118  CALL  call   0x1800c7ad0
+      1800ba12a  STAMP ??_7FileStream@IO@@6B@           -> -0x39(%rbp)
+      1800ba13f  CALL  call   0x1800accc0
+      1800ba149  CALL  call   0x18000c180
+      1800ba16d  CALL  call   0x1800c7ad0
+      1800ba17f  STAMP ??_7Stream@IO@@6B@               -> -0x39(%rbp)   <== SUBJECT
+      1800ba18c  CALL  call   0x180006a10
+
+  FUNC 1800ba340..1800ba481 ??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z  [subject LEAs: 1]
+      1800ba376  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      1800ba38b  STAMP ??_7FileStream@IO@@6B@           -> (%rcx)
+      1800ba3cd  STAMP ??_7TextFileStream@IO@@6B@       -> (%rdi)
+      1800ba403  CALL  call   *0x90f87(%rip)        # 0x18014b390
+      1800ba41b  CALL  call   0x1800c6e60
+      1800ba426  CALL  call   *0x90f5c(%rip)        # 0x18014b388
+      1800ba449  CALL  call   0x180006a10
+      1800ba45e  CALL  call   0x1800ba280
+
+  FUNC 1800ba530..1800ba639 ??0TextFileStream@IO@@QEAA@XZ  [subject LEAs: 1]
+      1800ba550  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      1800ba563  STAMP ??_7FileStream@IO@@6B@           -> (%rcx)
+      1800ba5a7  STAMP ??_7TextFileStream@IO@@6B@       -> (%rdi)
+      1800ba5e1  CALL  call   *0x90da9(%rip)        # 0x18014b390
+      1800ba5f6  CALL  call   0x1800c6e60
+      1800ba601  CALL  call   *0x90d81(%rip)        # 0x18014b388
+      1800ba624  CALL  call   0x180006a10
+
+  FUNC 1800bb040..1800bb07d ??1VisitorStream@IO@@UEAA@XZ  [subject LEAs: 1]
+      1800bb059  STAMP ??_7VisitorStream@IO@@6B@        -> (%rcx)
+      1800bb063  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+
+  FUNC 1800bb090..1800bb14c ??0VisitorStream@IO@@QEAA@XZ  [subject LEAs: 1]
+      1800bb0b7  STAMP ??_7Stream@IO@@6B@               -> (%rcx)   <== SUBJECT
+      1800bb0d0  STAMP ??_7VisitorStream@IO@@6B@        -> (%rcx)
+      1800bb0f0  CALL  call   *0x9029a(%rip)        # 0x18014b390
+      1800bb107  CALL  call   0x1800c6e60
+      1800bb112  CALL  call   *0x90270(%rip)        # 0x18014b388
+      1800bb130  CALL  call   0x180006a10
+
+  FUNC 1800bb9d0..1800bbc24 ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z  [subject LEAs: 1]
+      1800bba07  CALL  call   *0x10(%rax)
+      1800bba4a  CALL  call   0x1800c95d0
+      1800bba5e  CALL  call   0x1800ba340
+      1800bba7a  CALL  call   0x1800c7ad0
+      1800bba9a  CALL  call   0x1800aa8f0
+      1800bbafc  CALL  call   *0x8f606(%rip)        # 0x18014b108
+      1800bbb12  CALL  call   *0x28(%rax)
+      1800bbb29  CALL  call   0x1800accc0
+      1800bbb36  STAMP ??_7TextFileStream@IO@@6B@       -> -0x59(%rbp)
+      1800bbb43  CALL  call   0x1800c7ad0
+      1800bbb67  CALL  call   0x1800c7ad0
+      1800bbb90  CALL  call   0x1800c7ad0
+      1800bbba2  STAMP ??_7FileStream@IO@@6B@           -> -0x59(%rbp)
+      1800bbbb7  CALL  call   0x1800accc0
+      1800bbbc1  CALL  call   0x18000c180
+      1800bbbe5  CALL  call   0x1800c7ad0
+      1800bbbf7  STAMP ??_7Stream@IO@@6B@               -> -0x59(%rbp)   <== SUBJECT
+      1800bbc04  CALL  call   0x180006a10
+
+  FUNC 1800bbc30..1800bbf21 ?Save@External@Object@@QEAA_NAEBVFilename@System@@@Z  [subject LEAs: 1]
+      1800bbc5d  CALL  call   0x1800aa3d0
+      1800bbc6a  STAMP ??_7CompressedFileStream@IO@@6B@ -> 0x40(%rsp)
+      1800bbc73  CALL  call   0x1800a8200
+      1800bbc80  CALL  call   0x1800aa8f0
+      1800bbcb3  CALL  call   *0x8f6d7(%rip)        # 0x18014b390
+      1800bbcca  CALL  call   0x1800c6e60
+      1800bbcd5  CALL  call   *0x8f6ad(%rip)        # 0x18014b388
+      1800bbce7  CALL  call   0x1800c41a0
+      1800bbcfe  CALL  call   0x1800aa020
+      1800bbd2d  CALL  call   *0x18(%rax)
+      1800bbd32  CALL  call   *0x20(%rax)
+      1800bbd47  CALL  call   *0x18(%rax)
+      1800bbd54  CALL  call   *0x10(%rax)
+      1800bbd6a  CALL  call   *0xa0(%rax)
+      1800bbd80  CALL  call   *0x98(%rax)
+      1800bbd96  CALL  call   *0xa0(%rax)
+      1800bbdb1  CALL  call   *0xa0(%rax)
+      1800bbdc9  CALL  call   0x18002c6a0
+      1800bbde9  CALL  call   0x1800c9930
+      1800bbdfc  CALL  call   *0x98(%rax)
+      1800bbe11  CALL  call   *0x98(%rax)
+      1800bbe2b  CALL  call   *0x28(%rax)
+      1800bbe41  CALL  call   *(%rax)
+      1800bbe55  CALL  call   0x1800a9ee0
+      1800bbe6b  CALL  call   0x1800accc0
+      1800bbe71  STAMP ??_7CompressedFileStream@IO@@6B@ -> 0x40(%rsp)
+      1800bbe88  CALL  call   0x1800a9ee0
+      1800bbe9e  CALL  call   0x1800accc0
+      1800bbeb0  CALL  call   0x1800aaab0
+      1800bbebd  STAMP ??_7CompressedStream@IO@@6B@     -> 0x40(%rsp)
+      1800bbec7  CALL  call   0x1800aa100
+      1800bbed1  CALL  call   0x180024aa0
+      1800bbedb  CALL  call   0x1800249c0
+      1800bbee6  CALL  call   0x1800248e0
+      1800bbef3  STAMP ??_7Stream@IO@@6B@               -> 0x40(%rsp)   <== SUBJECT
+      1800bbf02  CALL  call   0x180006a10
+
+  FUNC 1800bbf30..1800bc3ed ?IsCurrent@External@Object@@SA_NAEBVFilename@System@@@Z  [subject LEAs: 1]
+      1800bbf57  CALL  call   0x1800aa3d0
+      1800bbf64  STAMP ??_7CompressedFileStream@IO@@6B@ -> 0x70(%rsp)
+      1800bbf6d  CALL  call   0x1800a8200
+      1800bbf81  CALL  call   *0x38(%rax)
+      1800bbf9b  CALL  call   0x1800aa560
+      1800bbfd3  CALL  call   *0x18(%rax)
+      1800bbfd8  CALL  call   *0x20(%rax)
+      1800bbff0  CALL  call   *0xa0(%rax)
+      1800bc01d  CALL  call   *0x98(%rax)
+      1800bc058  CALL  call   *0x20(%rax)
+      1800bc067  CALL  call   0x1800c0390
+      1800bc099  CALL  call   *0xa0(%r9)
+      1800bc0a6  CALL  call   *0x18(%rax)
+      1800bc0d0  CALL  call   *(%rax)
+      1800bc0eb  CALL  call   *0xa0(%rax)
+      1800bc124  CALL  call   0x1800c9930
+      1800bc139  CALL  call   *0x98(%rax)
+      1800bc14f  CALL  call   *0x98(%rax)
+      1800bc15d  CALL  call   0x180007b90
+      1800bc170  CALL  call   0x1800c9440
+      1800bc190  CALL  call   0x1800c6970
+      1800bc1a3  CALL  call   0x1800ae270
+      1800bc201  CALL  call   0x1800c7ad0
+      1800bc22e  CALL  call   0x1800c7ad0
+      1800bc25b  CALL  call   0x1800c7ad0
+      1800bc28a  CALL  call   0x1800c7ad0
+      1800bc2ac  CALL  call   *0x10(%rax)
+      1800bc2c2  CALL  call   *(%rax)
+      1800bc2d8  CALL  call   *(%rax)
+      1800bc2f1  CALL  call   0x1800a9ee0
+      1800bc307  CALL  call   0x1800accc0
+      1800bc30d  STAMP ??_7CompressedFileStream@IO@@6B@ -> 0x70(%rsp)
+      1800bc324  CALL  call   0x1800a9ee0
+      1800bc33a  CALL  call   0x1800accc0
+      1800bc34f  CALL  call   0x1800aaab0
+      1800bc35c  STAMP ??_7CompressedStream@IO@@6B@     -> 0x70(%rsp)
+      1800bc366  CALL  call   0x1800aa100
+      1800bc370  CALL  call   0x180024aa0
+      1800bc37a  CALL  call   0x1800249c0
+      1800bc384  CALL  call   0x1800248e0
+      1800bc391  STAMP ??_7Stream@IO@@6B@               -> 0x70(%rsp)   <== SUBJECT
+      1800bc3b7  CALL  call   *0x8efd3(%rip)        # 0x18014b390
+      1800bc3c8  CALL  call   0x1800c6c00
+      1800bc3d1  CALL  call   *0x8efb1(%rip)        # 0x18014b388
+
+  FUNC 1800bc620..1800bc93c ?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z  [subject LEAs: 1]
+      1800bc64d  CALL  call   0x1800aa3d0
+      1800bc65a  STAMP ??_7CompressedFileStream@IO@@6B@ -> 0x40(%rsp)
+      1800bc663  CALL  call   0x1800a8200
+      1800bc674  CALL  call   *0x38(%rax)
+      1800bc68e  CALL  call   0x1800aa560
+      1800bc6c2  CALL  call   *0x18(%rax)
+      1800bc6c7  CALL  call   *0x20(%rax)
+      1800bc6df  CALL  call   *0xa0(%rax)
+      1800bc705  CALL  call   *0x98(%rax)
+      1800bc742  CALL  call   *0x20(%rax)
+      1800bc751  CALL  call   0x1800c0390
+      1800bc777  CALL  call   *0xa0(%rax)
+      1800bc783  CALL  call   *0x18(%rax)
+      1800bc7a5  CALL  call   *0xa0(%rax)
+      1800bc7bd  CALL  call   0x18002c6a0
+      1800bc7e9  CALL  call   0x1800c9930
+      1800bc7fc  CALL  call   *0x98(%rax)
+      1800bc811  CALL  call   *0x98(%rax)
+      1800bc82b  CALL  call   *0x28(%rax)
+      1800bc841  CALL  call   *(%rax)
+      1800bc857  CALL  call   *(%rax)
+      1800bc86d  CALL  call   0x1800a9ee0
+      1800bc883  CALL  call   0x1800accc0
+      1800bc88b  STAMP ??_7CompressedFileStream@IO@@6B@ -> 0x40(%rsp)
+      1800bc8a2  CALL  call   0x1800a9ee0
+      1800bc8b8  CALL  call   0x1800accc0
+      1800bc8ca  CALL  call   0x1800aaab0
+      1800bc8d7  STAMP ??_7CompressedStream@IO@@6B@     -> 0x40(%rsp)
+      1800bc8e1  CALL  call   0x1800aa100
+      1800bc8eb  CALL  call   0x180024aa0
+      1800bc8f5  CALL  call   0x1800249c0
+      1800bc900  CALL  call   0x1800248e0
+      1800bc90d  STAMP ??_7Stream@IO@@6B@               -> 0x40(%rsp)   <== SUBJECT
+      1800bc91c  CALL  call   0x180006a10
+
+  FUNC 1800be570..1800be70f ?Add@ExternalFactory@Object@@QEAAXPEAVExternal@2@@Z  [subject LEAs: 1]
+      1800be59b  CALL  call   0x180006250
+      1800be5a8  CALL  call   0x1800067d0
+      1800be5cc  CALL  call   0x1800c7ad0
+      1800be600  CALL  call   0x18007eefc
+      1800be623  CALL  call   0x18007eefc
+      1800be65f  CALL  call   0x1800bb090
+      1800be66f  CALL  call   *0x28(%rax)
+      1800be67a  STAMP ??_7VisitorStream@IO@@6B@        -> -0x18(%rbp)
+      1800be685  STAMP ??_7Stream@IO@@6B@               -> -0x18(%rbp)   <== SUBJECT
+      1800be692  CALL  call   0x180006a10
+      1800be6c1  CALL  call   0x18002ca00
+      1800be6ed  CALL  call   0x1800c7ad0
+
+  FUNC 1800bfb10..1800bfd03 ?Clone@Internal@Object@@QEAAPEAV12@XZ  [subject LEAs: 1]
+      1800bfb3f  CALL  call   *0x10(%rax)
+      1800bfb6f  CALL  call   *0x20(%rax)
+      1800bfb7e  CALL  call   0x1800c0390
+      1800bfb90  CALL  call   0x1800ae710
+      1800bfbab  CALL  call   *0x8b7df(%rip)        # 0x18014b390
+      1800bfbc4  CALL  call   0x1800c6e60
+      1800bfbcf  CALL  call   *0x8b7b3(%rip)        # 0x18014b388
+      1800bfbfc  CALL  call   *0x18(%rax)
+      1800bfc03  CALL  call   0x1800ae710
+      1800bfc1e  CALL  call   *0x8b76c(%rip)        # 0x18014b390
+      1800bfc37  CALL  call   0x1800c6e60
+      1800bfc42  CALL  call   *0x8b740(%rip)        # 0x18014b388
+      1800bfc70  CALL  call   0x18008a290
+      1800bfc7f  CALL  call   *0x18(%rax)
+      1800bfc8a  STAMP ??_7MemoryStream@IO@@6B@         -> 0xf(%rbp)
+      1800bfc9d  CALL  call   0x1800c7ad0
+      1800bfcaa  STAMP ??_7Stream@IO@@6B@               -> 0xf(%rbp)   <== SUBJECT
+      1800bfcb7  CALL  call   0x180006a10
+      1800bfcbd  STAMP ??_7MemoryStream@IO@@6B@         -> -0x21(%rbp)
+      1800bfcd0  CALL  call   0x1800c7ad0
+      1800bfcd6  STAMP ??_7Stream@IO@@6B@               -> -0x21(%rbp)   <== SUBJECT
+      1800bfce3  CALL  call   0x180006a10
+
+  FUNC 1800c1490..1800c1b29 ?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z  [subject LEAs: 1]
+      1800c14c8  CALL  call   0x1800aa3d0
+      1800c14d5  STAMP ??_7CompressedMemoryStream@IO@@6B@ -> 0x70(%rsp)
+      1800c14de  CALL  call   0x1800ae710
+      1800c1509  CALL  call   *0x89e81(%rip)        # 0x18014b390
+      1800c1520  CALL  call   0x1800c6e60
+      1800c152b  CALL  call   *0x89e57(%rip)        # 0x18014b388
+      1800c1540  CALL  call   0x1800c41a0
+      1800c1558  CALL  call   0x1800aa020
+      1800c1585  CALL  call   *0x18(%rax)
+      1800c158a  CALL  call   *0x20(%rax)
+      1800c15a1  CALL  call   0x1800c9930
+      1800c15b5  CALL  call   *0xa0(%rax)
+      1800c15ca  CALL  call   *0xa0(%rax)
+      1800c15e8  CALL  call   *0xc8(%rax)
+      1800c1600  CALL  call   *0xa0(%rax)
+      1800c1667  CALL  call   0x180007bd0
+      1800c168c  CALL  call   0x1800c95d0
+      1800c16b5  CALL  call   0x1800c7ad0
+      1800c16e1  CALL  call   0x1800c7ad0
+      1800c1712  CALL  call   0x180033080
+      1800c1730  CALL  call   0x1800c7ad0
+      1800c1754  CALL  call   0x1800c7ad0
+      1800c178b  CALL  call   *0xa0(%rax)
+      1800c17a4  CALL  call   0x180034010
+      1800c17c9  CALL  call   0x1800c9930
+      1800c17d7  CALL  call   0x1800c9930
+      1800c17ea  CALL  call   *0x98(%rax)
+      1800c17ff  CALL  call   *0x98(%rax)
+      1800c1814  CALL  call   *0x98(%rax)
+      1800c182b  CALL  call   0x1800341e0
+      1800c184a  CALL  call   *0x89b40(%rip)        # 0x18014b390
+      1800c185b  CALL  call   0x1800c6c00
+      1800c1864  CALL  call   *0x89b1e(%rip)        # 0x18014b388
+      1800c1886  CALL  call   *(%rax)
+      1800c189a  CALL  call   0x1800a9ee0
+      1800c18a7  CALL  call   *0x38(%rax)
+      1800c18b2  CALL  call   0x1800c0da0
+      1800c18bf  STAMP ??_7CompressedMemoryStream@IO@@6B@ -> 0x70(%rsp)
+      1800c18d6  CALL  call   0x1800a9ee0
+      1800c18e3  CALL  call   *0x38(%rax)
+      1800c18f6  STAMP ??_7MemoryStream@IO@@6B@         -> -0x28(%rbp)
+      1800c191f  CALL  call   *0x89a6b(%rip)        # 0x18014b390
+      1800c1930  CALL  call   0x1800c6c00
+      1800c1939  CALL  call   *0x89a49(%rip)        # 0x18014b388
+      1800c1947  STAMP ??_7Stream@IO@@6B@               -> -0x28(%rbp)   <== SUBJECT
+      1800c1969  CALL  call   *0x89a21(%rip)        # 0x18014b390
+      1800c197a  CALL  call   0x1800c6c00
+      1800c1983  CALL  call   *0x899ff(%rip)        # 0x18014b388
+      1800c1991  STAMP ??_7CompressedStream@IO@@6B@     -> 0x70(%rsp)
+      1800c199b  CALL  call   0x1800aa100
+      1800c19bf  CALL  call   *0x899cb(%rip)        # 0x18014b390
+      1800c19d0  CALL  call   0x1800c6c00
+      1800c19d9  CALL  call   *0x899a9(%rip)        # 0x18014b388
+      1800c1a05  CALL  call   *0x89985(%rip)        # 0x18014b390
+      1800c1a16  CALL  call   0x1800c6c00
+      1800c1a1f  CALL  call   *0x89963(%rip)        # 0x18014b388
+      1800c1a4b  CALL  call   *0x8993f(%rip)        # 0x18014b390
+      1800c1a5c  CALL  call   0x1800c6c00
+      1800c1a65  CALL  call   *0x8991d(%rip)        # 0x18014b388
+      1800c1a73  STAMP ??_7Stream@IO@@6B@               -> 0x70(%rsp)   <== SUBJECT
+      1800c1a96  CALL  call   *0x898f4(%rip)        # 0x18014b390
+      1800c1aa7  CALL  call   0x1800c6c00
+      1800c1ab0  CALL  call   *0x898d2(%rip)        # 0x18014b388
+      1800c1ae9  CALL  call   *0x898a1(%rip)        # 0x18014b390
+      1800c1afa  CALL  call   0x1800c6c00
+      1800c1b03  CALL  call   *0x8987f(%rip)        # 0x18014b388
+
+  FUNC 1800c1b30..1800c1e8f ?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$Array@UModInfo@SaveLoad@Save@@@Collection@@@Z  [subject LEAs: 1]
+      1800c1b6c  CALL  call   0x1800aa3d0
+      1800c1b79  STAMP ??_7CompressedMemoryStream@IO@@6B@ -> 0x30(%rsp)
+      1800c1b82  CALL  call   0x1800ae710
+      1800c1b90  CALL  call   0x1800ae670
+      1800c1ba1  CALL  call   0x18008a290
+      1800c1bb5  CALL  call   0x1800aa560
+      1800c1be2  CALL  call   *0x18(%rax)
+      1800c1be7  CALL  call   *0x20(%rax)
+      1800c1bf7  CALL  call   *0x8(%rax)
+      1800c1c09  CALL  call   0x1800c9930
+      1800c1c1c  CALL  call   *0xa0(%rax)
+      1800c1c34  CALL  call   *0xa0(%rax)
+      1800c1c57  CALL  call   *0x89733(%rip)        # 0x18014b390
+      1800c1c6e  CALL  call   0x1800c6e60
+      1800c1c79  CALL  call   *0x89709(%rip)        # 0x18014b388
+      1800c1c93  CALL  call   *0xc8(%r10)
+      1800c1cb2  CALL  call   *0xa0(%rax)
+      1800c1cd1  CALL  call   *0xa0(%rax)
+      1800c1ce8  CALL  call   0x180034010
+      1800c1d09  CALL  call   0x1800c9930
+      1800c1d17  CALL  call   0x1800c9930
+      1800c1d2a  CALL  call   *0x98(%rax)
+      1800c1d3f  CALL  call   *0x98(%rax)
+      1800c1d54  CALL  call   *0x98(%rax)
+      1800c1d75  CALL  call   *(%rax)
+      1800c1d88  CALL  call   0x1800a9ee0
+      1800c1d95  CALL  call   *0x38(%rax)
+      1800c1da1  CALL  call   0x1800c7ad0
+      1800c1dbd  STAMP ??_7CompressedMemoryStream@IO@@6B@ -> 0x30(%rsp)
+      1800c1dd3  CALL  call   0x1800a9ee0
+      1800c1de0  CALL  call   *0x38(%rax)
+      1800c1df3  STAMP ??_7MemoryStream@IO@@6B@         -> -0x19(%rbp)
+      1800c1e06  CALL  call   0x1800c7ad0
+      1800c1e13  STAMP ??_7Stream@IO@@6B@               -> -0x19(%rbp)   <== SUBJECT
+      1800c1e20  CALL  call   0x180006a10
+      1800c1e2d  STAMP ??_7CompressedStream@IO@@6B@     -> 0x30(%rsp)
+      1800c1e37  CALL  call   0x1800aa100
+      1800c1e41  CALL  call   0x180024aa0
+      1800c1e4b  CALL  call   0x1800249c0
+      1800c1e55  CALL  call   0x1800248e0
+      1800c1e5b  STAMP ??_7Stream@IO@@6B@               -> 0x30(%rsp)   <== SUBJECT
+      1800c1e69  CALL  call   0x180006a10
+
+  FUNC 1800f2840..1800f2d8a ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z  [subject LEAs: 1]
+      1800f287f  CALL  call   0x1800c6740
+      1800f288e  CALL  call   0x1800c6880
+      1800f289e  CALL  call   0x1800c9440
+      1800f28b2  CALL  call   0x1800c92d0
+      1800f28d2  CALL  call   0x1800c6970
+      1800f28f6  CALL  call   0x1800c7ad0
+      1800f291f  CALL  call   0x1800c7ad0
+      1800f2948  CALL  call   0x1800c7ad0
+      1800f2974  CALL  call   0x1800c7ad0
+      1800f2997  CALL  call   0x1800881b0
+      1800f29f0  CALL  call   0x1800ae430
+      1800f29f9  CALL  call   0x1800a8200
+      1800f2a07  CALL  call   0x1800aa8f0
+      1800f2a33  CALL  call   *0x586cf(%rip)        # 0x18014b108
+      1800f2a5a  CALL  call   *0x586a8(%rip)        # 0x18014b108
+      1800f2a80  CALL  call   0x180053da0
+      1800f2af7  CALL  call   *0x5860b(%rip)        # 0x18014b108
+      1800f2b1e  CALL  call   0x1800accc0
+      1800f2b41  CALL  call   *0x58849(%rip)        # 0x18014b390
+      1800f2b52  CALL  call   0x1800c6c00
+      1800f2b5b  CALL  call   *0x58827(%rip)        # 0x18014b388
+      1800f2b76  STAMP ??_7FileStream@IO@@6B@           -> -0x49(%rbp)
+      1800f2b8b  CALL  call   0x1800accc0
+      1800f2bd7  CALL  call   *0x587b3(%rip)        # 0x18014b390
+      1800f2be8  CALL  call   0x1800c6c00
+      1800f2bf1  CALL  call   *0x58791(%rip)        # 0x18014b388
+      1800f2c3c  CALL  call   *0x5874e(%rip)        # 0x18014b390
+      1800f2c4d  CALL  call   0x1800c6c00
+      1800f2c56  CALL  call   *0x5872c(%rip)        # 0x18014b388
+      1800f2c98  CALL  call   *0x586f2(%rip)        # 0x18014b390
+      1800f2ca9  CALL  call   0x1800c6c00
+      1800f2cb2  CALL  call   *0x586d0(%rip)        # 0x18014b388
+      1800f2cc5  STAMP ??_7Stream@IO@@6B@               -> -0x49(%rbp)   <== SUBJECT
+      1800f2ce8  CALL  call   *0x586a2(%rip)        # 0x18014b390
+      1800f2cf9  CALL  call   0x1800c6c00
+      1800f2d02  CALL  call   *0x58680(%rip)        # 0x18014b388
+      1800f2d3f  CALL  call   *0x5864b(%rip)        # 0x18014b390
+      1800f2d50  CALL  call   0x1800c6c00
+      1800f2d59  CALL  call   *0x58629(%rip)        # 0x18014b388
+
+  FUNC 180114240..18011443b ?SaveSettings@DialogInstance@UI@@QEAAXXZ  [subject LEAs: 1]
+      180114276  CALL  call   0x1800ae710
+      1801142cf  CALL  call   *0x18(%rax)
+      1801142d4  CALL  call   *0x20(%rax)
+      1801142e5  CALL  call   *0x48(%rax)
+      1801142ff  CALL  call   *0xa0(%rax)
+      18011432b  CALL  call   *0x10(%rax)
+      18011433f  CALL  call   *0x98(%rax)
+      180114365  CALL  call   *0x18(%rax)
+      18011436a  CALL  call   *0x20(%rax)
+      180114380  CALL  call   *0x50(%rax)
+      180114395  CALL  call   *(%rax)
+      1801143b7  CALL  call   *(%rax)
+      1801143c1  STAMP ??_7MemoryStream@IO@@6B@         -> -0x38(%rbp)
+      1801143d4  CALL  call   0x1800c7ad0
+      1801143e1  STAMP ??_7Stream@IO@@6B@               -> -0x38(%rbp)   <== SUBJECT
+      180114403  CALL  call   *0x36f87(%rip)        # 0x18014b390
+      180114414  CALL  call   0x1800c6c00
+      18011441d  CALL  call   *0x36f65(%rip)        # 0x18014b388
+
+  FUNC 180114450..18011467e ?LoadSettings@DialogInstance@UI@@QEAAXXZ  [subject LEAs: 1]
+      18011448a  CALL  call   0x1800ae710
+      1801144e7  CALL  call   *0x18(%rax)
+      1801144f8  CALL  call   *0x48(%rax)
+      18011450d  CALL  call   *0xa0(%rax)
+      180114532  CALL  call   *0x98(%rax)
+      18011455b  CALL  call   *0x10(%rax)
+      180114595  CALL  call   *0x18(%rax)
+      18011459a  CALL  call   *0x20(%rax)
+      1801145ad  CALL  call   *0x10(%rax)
+      1801145c1  CALL  call   *0x50(%rax)
+      1801145d6  CALL  call   *(%rax)
+      1801145f6  CALL  call   *(%rax)
+      180114600  STAMP ??_7MemoryStream@IO@@6B@         -> -0x38(%rbp)
+      180114613  CALL  call   0x1800c7ad0
+      180114620  STAMP ??_7Stream@IO@@6B@               -> -0x38(%rbp)   <== SUBJECT
+      180114642  CALL  call   *0x36d48(%rip)        # 0x18014b390
+      180114653  CALL  call   0x1800c6c00
+      18011465c  CALL  call   *0x36d26(%rip)        # 0x18014b388
+
+  FUNC 180114fb0..180115326 ?OnOpened@DialogInstance@UI@@UEAAXXZ  [subject LEAs: 2]
+      180114ffb  CALL  call   *0x28(%rax)
+      180115020  STAMP ??_7Stream@IO@@6B@               -> -0x38(%rbp)   <== SUBJECT
+      180115033  STAMP ??_7MemoryStream@IO@@6B@         -> -0x38(%rbp)
+      180115058  CALL  call   *0x36332(%rip)        # 0x18014b390
+      18011506f  CALL  call   0x1800c6e60
+      18011507a  CALL  call   *0x36308(%rip)        # 0x18014b388
+      1801150b2  CALL  call   *0x362d8(%rip)        # 0x18014b390
+      1801150c3  CALL  call   0x1800c6c00
+      1801150cc  CALL  call   *0x362b6(%rip)        # 0x18014b388
+      18011510c  STAMP ??_7MemoryStream@IO@@6B@         -> -0x38(%rbp)
+      18011511f  CALL  call   0x1800c7ad0
+      180115125  STAMP ??_7Stream@IO@@6B@               -> -0x38(%rbp)   <== SUBJECT
+      180115136  CALL  call   0x180006a10
+      18011515a  CALL  call   *0x18(%rax)
+      18011516b  CALL  call   *0x48(%rax)
+      180115180  CALL  call   *0xa0(%rax)
+      1801151b2  CALL  call   *0x98(%rax)
+      1801151db  CALL  call   *0x10(%rax)
+      180115215  CALL  call   *0x18(%rax)
+      18011521a  CALL  call   *0x20(%rax)
+      18011522d  CALL  call   *0x10(%rax)
+      180115241  CALL  call   *0x50(%rax)
+      180115256  CALL  call   *(%rax)
+      180115276  CALL  call   *(%rax)
+      180115279  STAMP ??_7MemoryStream@IO@@6B@         -> -0x38(%rbp)
+      1801152a1  CALL  call   *0x360e9(%rip)        # 0x18014b390
+      1801152b2  CALL  call   0x1800c6c00
+      1801152bb  CALL  call   *0x360c7(%rip)        # 0x18014b388
+      1801152c9  STAMP ??_7Stream@IO@@6B@               -> -0x38(%rbp)   <== SUBJECT
+      1801152eb  CALL  call   *0x3609f(%rip)        # 0x18014b390
+      1801152fc  CALL  call   0x1800c6c00
+      180115305  CALL  call   *0x3607d(%rip)        # 0x18014b388
+
+  FUNC 1801204b0..1801207ab ?SaveAllSettings@UserInterface@UI@@QEAAXXZ  [subject LEAs: 3]
+      180120506  STAMP ??_7Stream@IO@@6B@               -> -0x21(%rbp)   <== SUBJECT
+      180120512  STAMP ??_7MemoryStream@IO@@6B@         -> -0x21(%rbp)
+      180120537  CALL  call   *0x2ae53(%rip)        # 0x18014b390
+      18012054e  CALL  call   0x1800c6e60
+      180120559  CALL  call   *0x2ae29(%rip)        # 0x18014b388
+      18012058a  CALL  call   *0x2ae00(%rip)        # 0x18014b390
+      18012059b  CALL  call   0x1800c6c00
+      1801205a4  CALL  call   *0x2adde(%rip)        # 0x18014b388
+      1801205ff  CALL  call   *0x18(%rax)
+      180120604  CALL  call   *0x20(%rax)
+      180120615  CALL  call   *0x48(%rax)
+      180120630  CALL  call   *0xa0(%rax)
+      18012065b  CALL  call   *0x10(%rax)
+      18012066f  CALL  call   *0x98(%rax)
+      180120695  CALL  call   *0x18(%rax)
+      18012069a  CALL  call   *0x20(%rax)
+      1801206b0  CALL  call   *0x50(%rax)
+      1801206c5  CALL  call   *(%rax)
+      1801206e7  CALL  call   *(%rax)
+      1801206ea  STAMP ??_7MemoryStream@IO@@6B@         -> -0x21(%rbp)
+      180120712  CALL  call   *0x2ac78(%rip)        # 0x18014b390
+      180120723  CALL  call   0x1800c6c00
+      18012072c  CALL  call   *0x2ac56(%rip)        # 0x18014b388
+      18012073a  STAMP ??_7Stream@IO@@6B@               -> -0x21(%rbp)   <== SUBJECT
+      18012075c  CALL  call   *0x2ac2e(%rip)        # 0x18014b390
+      18012076d  CALL  call   0x1800c6c00
+      180120776  CALL  call   *0x2ac0c(%rip)        # 0x18014b388
+
+  SELF-CHECK: subject stamps emitted = 58 ; LEA sites = 56 ; MISMATCH -- see note

@@ -16,6 +16,7 @@
 //   BANISHED_RT_SERIALIZER=0    ... just Serializer + Encoding    (lane A)
 //   BANISHED_RT_STREAM=0        ... just the Stream family        (lane B)
 //   BANISHED_RT_PERSISTENCE=0   ... just Persistence + Registry   (lane C)
+//   BANISHED_RT_PERSAVES=0      ... just the Persistence save rows (lane PERSIST)
 //   BANISHED_RT_FILESYSTEM=0    ... just FileSystem + Modification(lane D)
 //   BANISHED_RT_FSSTARTUP=0     ... just FileSystem::Startup       (lane ENG)
 //   BANISHED_RT_PERSSTARTUP=0   ... just Persistence::Startup      (lane ENG)
@@ -57,6 +58,13 @@ extern int RtIoSerializerRegister();    // serializer.cpp    (lane A)
 extern int RtIoCompressedStreamRegister();  // compressedstream.cpp (lane B)
 extern int RtIoPersistenceRegister();   // persistence.cpp   (lane C)
 extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
+// Wave 19 lane PERSIST: the save-ENUMERATION and request-ISSUE half of
+// IO::Persistence — GetSaveCount / GetSaveInfo / GetSaveFilename, the three
+// Begin* request issuers, and ~Persistence. Own switch, separate from
+// BANISHED_RT_PERSISTENCE, because that one gates the SETTINGS half (Get/Set/
+// GetSavePath) which is on the boot path; these seven are on the save/load
+// menu path and must be removable without taking the settings with them.
+extern int RtIoPersistenceSavesRegister();  // persistence_saves{,_win}.cpp (lane PERSIST)
 // Wave 9 lane ENG, iteration 2. Its own switch, not folded into
 // BANISHED_RT_FILESYSTEM: this one is on the process's single boot path
 // (Engine::Startup step 3), so the integrator must be able to A/B it without
@@ -190,6 +198,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_SERIALIZER"))  n += RtIoSerializerRegister();
     if (RtWaveEnabled("BANISHED_RT_STREAM"))      n += RtIoCompressedStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSISTENCE")) n += RtIoPersistenceRegister();
+    if (RtWaveEnabled("BANISHED_RT_PERSAVES"))    n += RtIoPersistenceSavesRegister();
     if (RtWaveEnabled("BANISHED_RT_FILESYSTEM"))  n += RtIoFileSystemRegister();
     if (RtWaveEnabled("BANISHED_RT_FSSTARTUP"))   n += RtIoFileSystemStartupRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSSTARTUP")) n += RtIoPersistenceStartupRegister();

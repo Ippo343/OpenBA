@@ -1,5 +1,14 @@
 # WAVE 19 phase 0c — lane TRAPS: the trap counts, re-measured
 
+> **SEALED at `9013067`. Annotated, not altered.** A post-report tranche —
+> [`WAVE19_PHASE0C_TRAPS_TRANCHE2.md`](WAVE19_PHASE0C_TRAPS_TRANCHE2.md) —
+> measured this document's `slots` column against the DLL in Ghidra and found
+> **one extent error**: `??_7ReaderWriter@IO@@6B@` is **31 slots / TRAP=1**, not
+> 36 / TRAP=4, so IO's minted trap total is **24, not 27**. That tranche also
+> **REFUTES §4.2 item 2 and §6 item 4** of this file, and supplies measured slot
+> counts for four of the five vtables §4.1 and §6 record as UNMEASURED.
+> **Read the tranche before scoping anything off §4 or §6.**
+
 Worktree `C:/code/GIT/wt-w19-traps`, branch `wave19/traps`, cut from
 `wave19/base` @ `ebbec6e`. **Every figure below was measured on `ebbec6e`**,
 debug build (`mingw32-make standalone-debug`), DLL present, under

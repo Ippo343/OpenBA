@@ -112,3 +112,402 @@ documented "WRITE to +0x648 of a null singleton" fault.
 orphan probe, so it bites only an armed run. **NOT merged** — a wave-14 fix is
 not Wave 19's to land silently. Flagged for a decision.
 (`reference_lane_closed_is_not_lane_merged.md`.)
+
+## C5. I misread my OWN output to match a prediction (confirmation bias)
+
+Twice — in the tasking message to lane MINT and in the lane TRAPS merge commit
+`20aa588`, which is now permanent in the repo — I wrote that the §0b name-grep
+counts "reproduce on this tip at precisely the predicted **4, 2, 2, 0, 0**."
+
+**My own command output, in the same session, said 4, 2, 0, 2, 0.**
+`??_7FileStream@` reads **0** and `??_7TextFileStream@` reads **2**; the plan has
+them the other way round. I did not mis-run the check — the check was right and I
+read its result as agreeing with the number I was expecting.
+
+Caught by lane MINT, not by me, and not by any instrument. There was no screen to
+fail here: the failure was in reading a correct output. That is the residue §6
+cannot reach, and it is worth recording precisely because every mechanical control
+in this wave was working.
+
+**Substance unaffected** — five rows unminted by VA either way, and every non-zero
+name hit is an `adjacent-export:` label (MINT confirms: 8 hits, all eight labels).
+**What is affected is the standing of a "reproduced" claim.** A prediction I said
+was "sharp and falsifiable" was in fact PARTLY FALSIFIED by my own evidence, and I
+announced it as confirmed.
+
+The plan's §0b should read **4, 2, 0, 2, 0**.
+
+## C6. My harvest-gap hypothesis was WRONG — the file was STALE, not the generator
+
+I gave lane MINT a hypothesis (anchors consumed as coordinates and discarded as
+subjects), flagged as a hypothesis, with an explicit request to refute it. **It
+refuted it**, and the real cause is simpler and cheaper:
+
+`standalone/rt_data_mint_tables.inc` was last regenerated at **`4f037fd`** (Wave
+10D). `tools/rt_mint_gen.py` has not changed since `7bf01e4`, which **precedes**
+that. The four consumers that put these five vtables into the census's `called`
+set all landed **after** it (Wave 11f lane IOSTREAM). **Running the generator
+UNMODIFIED mints all five.**
+
+The generator was *correct* at `4f037fd` — at that commit the only occurrences of
+those names were one comment and its own labels, and it already strips comments
+and `SCAN_SKIP`s its own `.inc`. The memory I pointed MINT at
+(`reference_mint_population_rule_blind_to_its_own_output.md`) is **not** this
+defect; its two closure rules are present and firing.
+
+**The generalisable lesson:** a GENERATED artefact in the tree is a measurement
+with a TIMESTAMP, exactly like a stated blocker. Nobody asked when the `.inc` was
+last produced. Both my hypothesis and the plan's ("a harvest gap; fixing the
+generator is cheaper than five rows") assumed the *code* was wrong because the
+*output* was wrong.
+
+MINT added `tools/rt_mint_gen.py --check` (exit 3, names entered/left rows),
+because **the real defect had no detector at all** — and that checker's own
+positive control caught a regex flaw that review had missed.
+
+## C7. §0b's thesis is only HALF right — the five rows are still port work
+
+**Do not let the mint fix read as a worklist reduction.** MINT minted all five and
+the identity moved by **zero**: `83 >= 122 - 3`, still 36 short at that point.
+`called`, `ported` and `unpromotable` are all unchanged and the census still lists
+all five as unported.
+
+Measured: **52 slots, 1 ported, 51 traps, 0 purecall — all five BLOCKED.** 41
+distinct bodies, 12 unexported.
+
+So §0b converted these rows from **unmeasured** to **measured and blocked**. That
+is real progress — phase 0c could not scope them at all before, and the readiness
+screen now covers 13 IO rows instead of 9 — but it is not the "not port work at
+all" the plan hoped for.
+
+**The genuine saving is elsewhere, and it is large**: the eight `IO::FileStream`
+base slots are traps in **three** of the five rows, so **one body of work clears
+8 + 8 + 7 = 23 trap slots.** That compounds with phase 0c's finding that IO's 8
+blocked rows carry 27 trap slots across only 20 distinct functions. **Both cells
+independently found the same shape: scope FUNCTIONS, not slots.**
+
+## C8. I broadcast two numbers that were later refuted — into two live lane briefs
+
+`27 trap slots / 20 distinct functions` and `??_7ReaderWriter@ slots 31-33 close
+6 slots across 2 rows` went into lane CSTREAM's and lane IOBASE's tasking as
+**scoping multipliers**. Both are wrong: **24 / 17**, and **3 slots in ONE row**.
+
+Lane TRAPS refuted its own sealed claim from the bytes. Both refuted items had
+been flagged in its sealed text as *"confirm from the bytes"* — **the lane marked
+its own uncertainty and I passed the items on without the marking.** That is the
+failure worth recording: the doubt was written down, and it did not survive
+transmission through me.
+
+Retractions were sent to both lanes as soon as the tranche arrived, with
+instructions to rebuild any distinct-body list derived from the bad figures.
+
+**The shape survives, the magnitude did not.** "Scope by FUNCTION, not by slot"
+holds at 24-across-17 exactly as it did at 27-across-20, and `?GetSource@Stream@IO@@`
+as the sole trap in four rows is **not** among the retracted claims.
+
+### The underlying defect, which outlives this wave
+
+`kMintVtables` sizes every row by `adjacent-export:<next symbol>`. That
+construction **cannot see an UNEXPORTED table lying between two exported ones.**
+One does — `0x1801554a8`, 11 DATA xrefs stamping it as a second vptr.
+
+`??_7ReaderWriter@IO@@6B@` is **31 slots**, not 36; its last five were minted
+**twice**; the screen's `546 slots` double-counts 5 and prints
+`slot-count suspects: 0` — **a false green on that very row.** Every lane was told
+to quote greens with denominators; this is a green that was *wrong*, which no
+denominator would have caught.
+
+**Fix, named and not done in this wave:** size rows by **next STAMPED address**,
+not next export. It would have caught ReaderWriter automatically. TRAPS warns the
+non-IO rows may carry the same defect and should be run through this test **before
+Wave 20 scopes them.**
+
+## C9. My "sharp falsifiable prediction" could not discriminate — MINT was right to say so
+
+I told lane MINT its anchor hypothesis made a "sharp, falsifiable prediction":
+that every non-zero name hit would be an `adjacent-export:` provenance label.
+
+MINT confirmed it — all 8, read individually — and then pointed out the flaw:
+**staleness entails the same prediction.** A stale file can only carry those names
+as another row's proof label. **A prediction that BOTH hypotheses make cannot
+select between them**, so confirming it was worth nothing as evidence for mine.
+
+I called it sharp; it was merely *true*. That is a different property, and the
+distinction is the whole of `reference_two_checks_one_hidden_premise.md` — two
+checks sharing a hidden premise are one check. Here it was one check dressed as a
+test between two rivals.
+
+What actually settled it was a fact I never asked for: **the generator, run
+UNCHANGED, mints all five** — which a generator that structurally discarded
+anchors could not do. One decisive observation beat my carefully-framed
+prediction, and it was already sitting in the lane's commit `3620e69` **before I
+sent the hypothesis.**
+
+## C10. The promotion criterion — the most reusable thing phase 0 produced
+
+From lane MINT, and it generalises well beyond IO:
+
+**Every stamp of these vtables is an in-DLL RIP-relative `LEA`, not a door**
+(`1800a8270 LEA RAX,[0x1801554d0] -> MOV [RDI],RAX`). Therefore:
+
+> **A vtable row is promotable exactly insofar as WE OWN THE FUNCTION THAT STAMPS IT.**
+
+This is the operational form of
+`reference_a_ported_row_can_be_permanently_unpromotable.md` — we intercept only at
+**doors**, and an in-DLL rel32 call or a RIP-relative LEA stamp is not a door.
+
+It was validated the right way: it **predicts the attendance data row by row**, by
+two instruments gathered by entirely different means. The ATTENDED rows are
+precisely those whose *ported stamper* runs on the driven route.
+
+**Three consequences already acted on:**
+1. `post=0` on a row with **no ported stamper** is **not route-limited** — no path
+   on this tree could open that door. That is a *diagnosis*, and it retires a
+   route-hunt that would have found nothing.
+2. **`??0BinaryFileStream` is the ONLY stamper of `??_7BinaryFileStream@`**,
+   making it the **cleanest** promotion of the five rather than the hardest — and
+   it is *already* one of lane FILE's code rows and a screenshot dependency. Two
+   independent reasons it is on the critical path.
+3. `??_7FileStream@` has **nine** stampers including `Engine::Run`, so TRAP=0
+   there would still leave most stamps on retail's side. **A clean trap count is
+   not a promotion.**
+
+**Lane IOBASE has been told to apply this to `??_7BinaryWriter@` BEFORE hunting a
+route.** 26/26 TRAP=0 says the table is safe to stamp and says nothing about who
+stamps it. If no stamper is ours, "blocked on attendance" is the wrong diagnosis
+and no `BANISHED_*` variable fixes it.
+
+## C11. `?GetSource@Stream@IO@@` — arbitration, and the "four rows" figure is stale
+
+Lane CSTREAM claimed `?GetSource@Stream@IO@@UEBA?AVString@System@@XZ`
+(`0x18000c6a0`); phase 0c §6.1 had assigned it to lane IOBASE. **Awarded to
+CSTREAM**, on measured grounds rather than on who asked first.
+
+Rows whose slot block references `0x18000c6a0`, measured on the merged tip:
+
+| row | VA | slots | lane |
+|---|---|---|---|
+| `??_7CompressedStream@` | `0x180155640` | 9 | CSTREAM |
+| `??_7CompressedFileStream@` | `0x1801555f0` | 9 | CSTREAM |
+| `??_7CompressedMemoryStream@` | `0x180155560` | 9 | CSTREAM |
+| `??_7MemoryStream@` | `0x1801555b0` | 8 | IOBASE |
+| `??_7VisitorStream@` | `0x180155a20` | 7 | IOBASE |
+| `??_7Stream@` | `0x1801549a0` | 7 | NO-OP (phase 0a) |
+
+CSTREAM carries **three of the five live rows** and the body sits in its class
+family. IOBASE consumes it; CSTREAM registers by NAME **and** ADDRESS so IOBASE's
+rows need no second registration — a duplicate would be a **SHADOWED** slot where
+the later binding wins and the checked line is dead code.
+
+### The figure itself was stale — it is SIX rows, not four
+
+"Sole trap in FOUR rows" predates phase 0b's regeneration, which minted five more
+rows. **I repeated it into two lane briefs after the regeneration was already
+merged.** Both lanes have been told it is superseded, and told to re-derive
+whether it is still the *sole remaining* trap in their rows rather than inherit
+that too.
+
+This is the **third** figure in this wave that decayed between measurement and
+use (after 27/20 and the plan's 4,2,2,0,0). All three shared one property: they
+were quoted downstream **without the timestamp of the tree they were measured on.**
+The wave's own doctrine — a stated blocker is a claim with a timestamp — applies
+to *measurements*, not just to blockers, and phase 0b already proved it applies to
+**generated files**.
+
+## C12. A phase-0 saving can GROW a lane — CSTREAM went 8 -> 14 bodies
+
+Reported up front by the lane rather than at close, which is the behaviour we
+want. Phase 0c wrote "scope 8 functions" while `??_7CompressedFileStream@` was
+**UNMINTED and UNMEASURED**; phase 0b then minted it as a full 9-slot **ATTENDED**
+row. Re-measured on CSTREAM's tip: 3 rows, **27 slots -> 14 distinct functions**,
+3 already ported, so **11 DATA bodies + 3 CODE rows = 14**.
+
+**Superseded, not wrong** is the right characterisation, and it is the C7 shape a
+second time: **a cell that converts rows from UNMEASURED to MEASURED can only ever
+grow the visible denominator.** Both times the wave's numbers moved *against* us
+for a reason that is pure progress.
+
+Expect the same from any future measurement cell, and do not let a growing lane
+size read as a lane falling behind.
+
+## C13. `?GetSource@Stream@IO@@` moves the identity by ZERO — the wave's own metric misread
+
+Found by lane IOBASE, **verified independently by the integrator before adoption**:
+
+```
+GetSource hits in runtime_census.py --namespace IO   : 0
+control  ?CreatePath@FileSystem@IO   (must be present): 1
+occurrences anywhere in the tree: standalone/rt_data_mint_tables.inc ONLY
+```
+
+`?GetSource@Stream@IO@@` appears in the census **neither as called nor as ported**.
+Its six `RT_MINT_NAMED` rows are **not a call door**. Therefore porting it enters
+as **+1 `called` and +1 `ported` simultaneously**, leaving `called - ported`
+unchanged, and it lands in the census's **"ports with no caller"** list.
+
+Phase 0c called it "the cheapest single action in IO's entire DATA set" and **I
+amplified that to two lanes without this qualification.** The phrase is right
+about cost and right about leverage. It is **wrong if read as an identity move**.
+Its whole value is as a prerequisite for four-to-six `??_7` rows reaching READY —
+and it is a **`??_7` row's PROMOTION** that adds +1 to `ported` against a `called`
+the mint file already contributed.
+
+### Why this one matters more than the arithmetic
+
+**The wave's success criterion is the identity, and here the identity is blind to
+real work.** A body that unblocks six rows scores zero. This is the mirror image
+of the ceiling trap in §0: there, the percentage moved without progress; here,
+progress moves without the metric. **Both failures come from scoring a number
+instead of naming what changed.**
+
+Operational rules, now issued to both affected lanes:
+- **Do not book a shared prerequisite as progress against the identity.** Book it
+  as *unblocking N rows*, and name which N.
+- It will report **`calls=0`** from any diff oracle. That is EXPECTED here, not a
+  red flag — but it means **the oracle cannot verify it**
+  (`reference_uncalled_port_is_not_verified.md`: a port with zero callers reports
+  clean). Verification needs a **synthesised** caller;
+  `reference_no_route_is_not_no_oracle.md` records a synthesised oracle for a
+  provably-unreachable body finding a real defect — a missing third argument
+  writing caller garbage into a save. With a hidden return slot in play, that is
+  exactly the defect class here.
+
+### The body, disassembled by the integrator to settle a lane disagreement
+
+CSTREAM read 10 instructions, IOBASE read 11. Both are right — 10 plus the `ret`.
+A small discrepancy, checked rather than waved through, because this wave has
+already lost three figures to unchecked transmission. At `0x18000c6a0`:
+
+```
+mov  %rdx,0x10(%rsp)                 ; spill the retslot
+sub  $0x18,%rsp
+movq $0xfffffffffffffffe,0x8(%rsp)   ; SEH state = -2
+xor  %eax,%eax
+mov  %eax,(%rsp)                     ; SEH state var = 0   <-- NOT object state
+mov  %rax,(%rdx)                     ; THE payload: one qword zero via the retslot
+movl $0x1,(%rsp)                     ; SEH state var = 1   <-- NOT object state
+mov  %rdx,%rax                       ; return the retslot
+add  $0x18,%rsp
+ret
+```
+
+Both lanes read the semantics correctly: `String GetSource() const { return
+String(); }` — an 8-byte null through the **hidden return slot in RDX**. The point
+neither stated: the two `(%rsp)` writes are **compiler-generated SEH state, not
+object state**. A faithful port reproduces the qword at `[rdx]` and the RDX
+return, not the frame bookkeeping.
+
+### Arbitration outcome
+
+**Ownership STAYS with lane CSTREAM** (3 of the 5 live rows; class-family fit).
+IOBASE's counter-argument — that it is blocked and CSTREAM is not — was weighed
+and rejected on the evidence: **IOBASE's own distinct-body list holds 16 bodies**,
+and GetSource gates the *promotion* of two DATA rows, not the writing of anything
+else it owns. CSTREAM is required to land and register it early (by NAME **and**
+ADDRESS) and report the commit; IOBASE is told not to write a local copy, since a
+second registration of the same address is a **SHADOWED** slot where the later
+binding wins and the checked line becomes dead code. Both lanes were given the
+reversal condition explicitly, so the decision is falsifiable rather than final.
+
+### One framing worth keeping
+
+IOBASE stated its scope as **16 distinct bodies, of which the identity can move by
+at most +10**. That is the right way to say it. **Bodies and identity are
+different currencies**, and most of this wave's confusion — C7, C11, C12 and this
+entry — has come from quoting one as the other.
+
+## C14. "The machine has NO SAVE GAMES AT ALL" is FALSE — and I promoted it to a wave-level fact
+
+Lane PERSIST reported it. **I amplified it into the PERSIST merge commit as "a
+WAVE-LEVEL fact, not a lane one", and into a user-facing summary, without running
+a single check.** It is wrong.
+
+```
+C:/Users/USPC/Documents/Banished/Save/*.sav  ->  13 real save files
+  Auto.sav    8,576,259 bytes   Sep 10 15:05
+  Auto2.sav   8,428,302 bytes   Sep  9 20:06
+  Save0.sav   4,097,377 bytes   Aug 29 13:02
+  Save10.sav  7,288,854 bytes   Sep  5 18:44   ... and 9 more
+```
+
+Three of them **predate this session by nearly two weeks**, so this is not a case
+of saves appearing after the lane looked.
+
+And **`BANISHED_SAVE_TEST` exists** — 4 code files, dispatched from
+`code/Game/Game/gameupdateloop.cpp:1097` into `standalone/saveload_harness.cpp`.
+It is a **PRODUCER**: it triggers the retail autosave path on a chosen frame and
+logs the resulting `.sav`. The lane said plainly that it had **not** grepped it
+and would not claim either way — **the honest half of the report was correct, and
+I filled the gap with the lane's other claim instead of a grep.**
+
+### Why this one is the worst of my errors this wave
+
+The other corrections cost accuracy. **This one cost a lane its verification
+route.** PERSIST's six ported rows are recorded as having **no live gameplay
+route**, resting entirely on a synthesised oracle. Its §5 control is sound in what
+it proves — the probe-off run reaches none of the six — but that is evidence
+`BANISHED_AUTOLOAD` **did not fire**, which is not the same as **no route exists**.
+The wave's own §5 names "declaring no oracle or no route" as a failure mode
+refuted four times in Wave 18. It has now been refuted a fifth, by me, against a
+lane I had personally briefed with that exact warning.
+
+**Standing rule, from three instances now (C8, C11, C14): a lane's NEGATIVE claim
+about the environment is the single most dangerous thing to relay, because it
+cannot be checked by reading the lane's own work — only by running a command the
+integrator can always run.** Relaying it unchecked converts one lane's local
+failure into a wave-level fact. `ls` would have caught this.
+
+### Actions
+1. Lane PERSIST re-tasked to re-run its six rows against a real save, as a marked
+   post-report tranche.
+2. The PERSIST merge commit's claim is corrected here rather than rewritten — the
+   commit stands with its error, and this entry is the correction of record.
+
+## C15. Lane PERSIST corrected its OWN stated blocker — `??1Persistence@` was never blocked
+
+The lane wrote, and committed, that `0x1800b7740` "joins and closes a real thread;
+handing it a fabricated worker is not a controlled experiment, it is a crash with
+extra steps." It then read the body and found that **wrong in its conclusion**:
+
+The wait is `WaitForSingleObject` on a handle **at an offset the caller controls**
+(`Pers+0x20`), followed by four `CloseHandle`s on handles at `+0x10/0x18/0x20/0x28`.
+Seed the scratch image with owned, already-signalled handles and the wait returns
+immediately. **The existing oracle applies unchanged in structure** — four seeded
+handles instead of two, plus one "the arrays were cleared" assertion.
+
+The lane's own words: **"What had to change for that to become possible: nothing.
+It was possible when I wrote the holdback; I asserted a blocker instead of reading
+`0x1800b7740`."**
+
+**This is the stated-blocker-with-a-timestamp trap where the stale claim is the
+lane's OWN, written the same session** — the sharpest instance the project has
+recorded, and it was self-caught and self-reported at the cost of one `objdump`.
+
+Two side effects: `Pers+0x30` becomes a **pinned field** rather than the
+`_pad30` the header currently calls it (the dtor pins it), and the dtor's
+`0x18002ac40(Pers+0x80)` confirms the saves array is a `Collection::Array` that
+`GetSaveInfo`/`GetSaveCount` only ever read.
+
+**Written expiry (Wave 18 form):** verified by the existing
+`persistence_saves_probe.cpp` oracle with four owned Win32 handles seeded at
+`Pers+0x20/0x28/0x30/0x38` and non-null array pointers. **Expires the moment
+anyone runs that probe variant** — under an hour, layout work already done. The
+lane has been re-tasked to do exactly that.
+
+## C16. C4 is CLOSED — the stranded fix is merged, on two independent reproductions
+
+Lane PERSIST hit the C4 fault independently: `BANISHED_RT_ORPHAN_PROBE=1` dies at
+boot with `WRITE of 0x648` inside `ProbeSaveLoadGenerateSaveName`. It worked
+around it rather than fixing another wave's code, which was the right call, and
+told me — which was the more useful one.
+
+Two independent reproductions of a fault whose fix already existed and sat
+unmerged. Merged as `e983724`.
+
+**The merge conflicted**, and the conflict was informative: `wave10/base` had
+since gained `ProbeSaveLoadSingleton()` at the same call site from a different
+Wave 14 lane. Resolved to keep **both** intentions — `ProbeSaveLoadSingleton()`
+stays at boot (it reads a data slot and never formats a `String`, so it does not
+touch the allocator singleton), while `ProbeSaveLoadGenerateSaveName()` moves
+in-game. Taking either side wholesale would have silently dropped one lane's work.
+Build green.
