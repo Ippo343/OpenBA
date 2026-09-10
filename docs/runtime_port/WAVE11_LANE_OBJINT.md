@@ -305,7 +305,61 @@ taken by hand. This port calls the already-verified out-of-line
 `??0Dialog@UI@@` instead of re-transcribing the inlined stores, which is the
 move UI3 made in the opposite direction, and says so at the site.
 
-### 2.6 Two live risks, both answered
+### 2.6 Which wall is it — "not called", or "called but stamps by LEA"?
+
+The integrator is right that these are different walls with different expiries,
+and for `UI::Dialog` the answer is **both at once, on different sides of the
+boundary**, which is why the published expiry looked plausible:
+
+* **Our factory is not called.** `[DlgFactory] CreateNewObject=0
+  CreateInPlaceObject=1(control)`. Nothing in the game enters our body, because
+  the DLL reaches its own through a `.data` pointer.
+* **Retail's factory *is* called, and it stamps by in-DLL `LEA`.** Both shipped
+  bodies carry the stamp inline —
+  `0x18003859d LEA RAX,[0x1801562a0]; MOV [RDI],RAX` in `CreateNewObject` and
+  `0x180038650` in `CreateInPlaceObject`, `0x1801562a0` being
+  `??_7Dialog@UI@@6B@`. The `[DlgTrip] stamped=2` in the *control* half is the
+  count of dialogs **our** `??0Dialog@UI@@` stamped; every other `UI::Dialog` in
+  the run was stamped by that `LEA`.
+
+So porting the factory clears the second wall for the objects our factory
+builds — and never gets to build any, because of the first. Clearing one wall
+without the other buys nothing, which is exactly what the two attendance
+readings measured.
+
+This is a second, independent instance of lane OBJDATA's finding that
+`Object::InternalFactory` is constructed every boot by an in-DLL `rel32` from
+`Engine::Startup`. Same mechanism, different opcode (`rel32` there, a `.data`
+indirect here), same conclusion; the two lanes reached it by different routes
+and instruments.
+
+### 2.7 The split-vptr question, answered explicitly
+
+The integrator asks whether promoting `??_7Dialog@UI@@6B@` would have the
+split-vptr shape OBJLIFE found for `??_7Internal@Object@`. **It would, and this
+lane's own measurements show the split already exists — it is merely harmless
+today.**
+
+Two constructors stamp `UI::Dialog` in a live run with the DLL present:
+
+| constructor | how it gets the pointer | measured |
+|---|---|---|
+| retail's `CreateNewObject`/`CreateInPlaceObject@Dialog@UI@@` | in-DLL RIP-relative `LEA [0x1801562a0]` — unredirectable | every resource-loaded dialog |
+| our `??0Dialog@UI@@` (`dialog_ctor_dtor.cpp:242`, default-on since Wave 10 lane DLG2) | `ResolveExport("??_7Dialog@UI@@6B@")` — **consults the port registry first** | `[DlgTrip] stamped=2` on the tutorial route |
+
+Both stamp the **same** value today, because `ResolveExport` falls through to the
+DLL for an unpromoted row. **Promoting the minted row is precisely the act that
+makes them differ**: our ctor would stamp the minted table while retail's
+factory keeps stamping `0x1801562a0`, giving two vtables on one class with the
+DLL present — the identical hazard OBJLIFE names, reached by an identical
+mechanism.
+
+So `??_7Dialog@UI@@6B@` fails the amended promotion rule
+(`WAVE11.md` @ `1aed90e`: attendance is not sufficient, raw-pinning is a
+co-condition) on **two** independent grounds — no attendance, and an
+unpinnable competing stamp. It is not a row waiting on a route.
+
+### 2.8 Two live risks, both answered
 
 * **The 104 abort traps: NONE become reachable.** The
   `RtMintTiTrapStub_*` stubs are only ever loaded into a *minted* `BaseTypeInfo`
@@ -327,6 +381,32 @@ move UI3 made in the opposite direction, and says so at the site.
 
 ---
 
+### 2.9 The static-destructor exposure, checked rather than assumed
+
+The integrator warns that OBJDATA's first `[ObjTI] ATTENDANCE` report printed
+from a static destructor, where the port registry is already torn down, and read
+`unregistered(DLL)` for every row — a false negative made entirely of timing.
+
+`[DlgFactory]` **does** print from a static destructor, and so does `[DlgTrip]`.
+It does not have that exposure, and the reason is what the counter is made of:
+both are plain `uint64_t` globals in their own translation unit, incremented at
+**entry to the body during the run**. Neither consults the port registry, at
+report time or ever. Teardown order can change nothing about a number already
+counted. OBJDATA's report was falsifiable by teardown because it *asked the
+registry a question at print time*; these do not.
+
+And that is argued from construction, so it is backed by the reading the
+integrator asks for — **a positive control that must read nonzero, in both
+instruments, in the same run**:
+
+```
+[DlgFactory] CONTROL FIRED (attendance moved 0 -> 1, returned the buffer)
+[DlgTrip] POSITIVE CONTROL: fired=1 observed-in-slot3=1 -- CAUGHT (the instrument discriminates)
+```
+
+A counter that has only ever printed zero is indistinguishable from one wired
+wrong. Neither of these has only ever printed zero.
+
 ## 3. Contradictions to the brief, collected
 
 1. **"Two rows to port."** Both had bodies and registrations since Wave 3. The
@@ -343,6 +423,25 @@ move UI3 made in the opposite direction, and says so at the site.
    `BANISHED_PAUSEMENU` + `PAUSEMENU_QUIT` was used instead, which is what made
    the `calls=` summary land at all: the first Part-1 run was killed by its
    timeout and printed no summary, which would have read as `calls=0`.
+
+## 3a. LANE-BOUNDARY COLLISION — `internal.cpp`, for the integrator
+
+The lane-boundary message ("OBJLIFE owns `internal.cpp` edits; do not add
+instruments there") arrived **after** this lane had already committed to that
+file. Declaring it rather than leaving it to a merge:
+
+| edit | what it is | can it move? |
+|---|---|---|
+| `ClearPersistState` registration moved out of `if (table)` into an `if (!shadow)` block | **the lane's verdict.** Cannot move — it is the deliverable | no |
+| one first-call `printf` inside `RtObject_InternalFactory_ClearPersistState` | an instrument, and exactly what the boundary reserves to OBJLIFE | **yes — drop it if OBJLIFE's version conflicts.** It only proves the ungated body is not dead code, and §1.5 records that reading |
+| three stale statements corrected (tier banner, the arming block's "NEVER EXECUTED", the `TABLE mode ARMED` printf) | comments only | yes, re-apply on OBJLIFE's text |
+
+The registration edit and OBJLIFE's `??0Internal`/`??1Internal` work touch the
+same `if (table)` block but different lines, and OBJLIFE's rows stay inside it
+while `ClearPersistState` leaves it. If the merge is textual rather than
+semantic, **the thing to preserve is that `ClearPersistState` is registered
+exactly once and outside the tier** — a duplicate registration is
+last-binding-wins and would silently make one body dead code.
 
 ## 4. Files
 
