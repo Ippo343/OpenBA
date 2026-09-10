@@ -66,6 +66,9 @@ extern int RtObjectExternalCompiledRegister();      // external_compiled.cpp
 // branches. Blocked until now on the IO::VisitorStream LAYOUT (not, as the
 // holdback said, on its constructor: that is exported).
 extern int RtObjectExternalAddRegister();           // external_add.cpp
+// Wave 11 follow-up 2 lane IOSTREAM. External::SaveText -- the TextFileStream
+// half of the same blocker: exported ctor, missing LAYOUT.
+extern int RtObjectExternalSaveTextRegister();      // external_savetext_win.cpp
 
 void RtObjectPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
@@ -137,5 +140,10 @@ void RtObjectPortInit() {
     // stack-constructed IO stream, and BANISHED_RT_EXTADD=0 A/Bs exactly that.
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTADD"))
         n += RtObjectExternalAddRegister();
+    // Same nest, its own switch. SaveText is the only body in the class that
+    // WRITES a file, so BANISHED_RT_SAVETEXT=0 A/Bs the write path alone --
+    // which is also how its byte-comparison oracle gets its "theirs" side.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_SAVETEXT"))
+        n += RtObjectExternalSaveTextRegister();
     printf("[RtPort] Object: %d exports registered\n", n);
 }
