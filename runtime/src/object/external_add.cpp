@@ -116,11 +116,21 @@ namespace {
 // ---------------------------------------------------------------------------
 
 // `?GetPath@External@Object@@QEBA?AVFilename@System@@XZ` returns a Filename BY
-// VALUE, so the hidden return slot is the FIRST argument and `this` is the
-// second. Getting this wrong is the shipped defect
-// reference_hidden_retslot_wild_write.md records: a typedef that omits the slot
-// writes past the caller's frame and still returns the right answer, so it
-// passes every functional check.
+// VALUE, so there IS a hidden return slot and a typedef that omits it writes
+// past the caller's frame while still returning the right answer -- the shipped
+// defect reference_hidden_retslot_wild_write.md records.
+//
+// THE ORDER IS (this, retslot), NOT (retslot, this). The inherited draft's
+// comment here said the opposite; its CODE was right and only the prose was
+// wrong, which is the more dangerous way round because the next reader fixes
+// the code to match the comment. Read off the call site rather than from a
+// remembered ABI rule:
+//     1800be594  lea rdx,[rbp+0x30]     <- the return slot, SECOND
+//     1800be598  mov rcx,rsi            <- `external`, FIRST
+//     1800be59b  call 0x180006250       (?GetPath@External@Object@@)
+//     1800be5a1  mov rdx,rax            <- and the callee returns the slot
+// so RCX is `this` and RDX is the slot, and the copy-ctor below takes the
+// returned RAX as its source.
 using GetPathFn = Filename* (*)(const External* self, Filename* ret);
 
 // `??0VisitorStream@IO@@QEAA@XZ`. Returns `this` in RAX; no hidden slot.
@@ -327,13 +337,19 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
             ExternalSerialize(external, &vs);                   // 1800be6a9
 
             // ---- the INLINED ~VisitorStream -----------------------------
-            // Retail inlines the destructor here and its inlined copy makes
-            // ONE vtable stamp, straight to `??_7Stream@IO@@6B@`, where the
-            // out-of-line `??1VisitorStream` (0x1800bb040) makes two (its own,
-            // then Stream's). Both end with the same value in +0x00 and
-            // nothing observes the intermediate, so this is a transcription of
-            // the call site rather than a substitution of the out-of-line body.
-            vs.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");  // 1800be6ae
+            // The inherited draft claimed retail's inlined copy makes ONE
+            // vtable stamp and emitted only the second. It makes TWO, exactly
+            // like the out-of-line `??1VisitorStream` (0x1800bb040):
+            //     1800be673  lea rax,[rip+...]  # 0x180155a20  ??_7VisitorStream
+            //     1800be67a  mov [rbp-0x18],rax
+            //     1800be67e  lea rax,[rip+...]  # 0x1801549a0  ??_7Stream
+            //     1800be685  mov [rbp-0x18],rax
+            // Nothing between the two stores can observe the intermediate, so
+            // this is not a behavioural fix -- but the draft's claim was a
+            // statement about retail that was false, and the transcription is
+            // free.
+            vs.base.vptr = RT_DATA_SLOT(const void*, "??_7VisitorStream@IO@@6B@");  // 1800be67a
+            vs.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");         // 1800be685
             if (vs.base.encoding) EncodingDelete(vs.base.encoding);
         } else {
             ++g_ac.hitSkipped;
@@ -392,5 +408,15 @@ int RtObjectExternalAddRegister() {
 
     std::printf("[RtPort]   Object::ExternalFactory::Add "
                 "(wave 11f lane IOSTREAM): %d export registered\n", n);
+
+    // WAS MISSING IN THE INHERITED DRAFT, AND IT WAS THE FILE'S OWN POSITIVE
+    // CONTROL. `DumpAddCounters` was defined and never scheduled, so `g_ac` --
+    // the counter this file's comments repeatedly call "the positive control
+    // that says so from inside this function" -- could never print. An
+    // instrument that is never reached prints a plausible ZERO, not an error;
+    // here it printed nothing at all. Both sibling files in this directory
+    // (external_find.cpp:302, external_path_win.cpp:993) schedule theirs the
+    // same way.
+    std::atexit(&RtObject::DumpAddCounters);
     return n;
 }
