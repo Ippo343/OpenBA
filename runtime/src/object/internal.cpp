@@ -553,8 +553,15 @@ void RtObject_InternalBasePtr_DeletePtr(InternalBasePtr* self) {
 // Two plain counters, incremented unconditionally in the ported bodies. They
 // are not diff sites and cost one increment on a path that already does a
 // locked array grow. `RtObjectInternalAttendance()` reads them out.
-unsigned long long g_tableCtorRuns = 0;
-unsigned long long g_tableDtorRuns = 0;
+// All FOUR tier-2 rows, not just this lane's two. The other pair
+// (ClearPersistState / ResetPersistState) is lane OBJINT's subject, and this
+// file's own banner has said since Wave 9 that they have NEVER EXECUTED — a
+// claim nothing in the tree could actually check. Now it can, and OBJINT's
+// verdict can cite a counter instead of an absence of evidence.
+unsigned long long g_tableCtorRuns  = 0;
+unsigned long long g_tableDtorRuns  = 0;
+unsigned long long g_tableClearRuns = 0;
+unsigned long long g_tableResetRuns = 0;
 
 Internal* RtObject_Internal_Ctor(Internal* self) {
     ++g_tableCtorRuns;
@@ -612,6 +619,7 @@ void RtObject_Internal_Dtor(Internal* self) {
 // UNCONDITIONALLY, where retail's inline null-checks first. Same behaviour:
 // MemoryAllocator::Free opens with `test rdx,rdx; jz`.
 void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
+    ++g_tableClearRuns;
     if (self->persistIds._data != nullptr)
         MemFree(self->persistIds._data);
     self->persistIds._data     = nullptr;
@@ -666,6 +674,7 @@ void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
 // passes 0 — this call site does not version its record. Written as a named
 // constant so the 0 cannot be mistaken for a placeholder.
 void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* stream) {
+    ++g_tableResetRuns;
     SerializerLite ser;
     ser.stream   = stream;
     ser.readerWriter = nullptr;
@@ -915,8 +924,9 @@ void RtObject_InternalFactory_ResetPersistState_Shadow(InternalFactory* self, vo
 void RtObjectInternalAttendance() {
     using namespace RtObject;
     const bool armed = RuntimeExportIsRegistered("??0Internal@Object@@QEAA@XZ");
-    printf("[RtInternalTable] ctorRuns=%llu dtorRuns=%llu  (%s)\n",
-           g_tableCtorRuns, g_tableDtorRuns,
+    printf("[RtInternalTable] ctorRuns=%llu dtorRuns=%llu clearRuns=%llu "
+           "resetRuns=%llu  (%s)\n",
+           g_tableCtorRuns, g_tableDtorRuns, g_tableClearRuns, g_tableResetRuns,
            g_tableCtorRuns == 0
                ? (armed ? "REGISTERED BUT NEVER ENTERED -- the door exists and "
                           "nothing came through it; do NOT read this run as "
@@ -924,6 +934,17 @@ void RtObjectInternalAttendance() {
                         : "not registered on this run (shadow tier, or "
                           "BANISHED_RT_INTERNAL_TABLE unset) -- expected zero")
                : "our ported bodies drove the LIVE handle table this many times");
+    // The persist-state pair is reported SEPARATELY from the ctor/dtor pair on
+    // purpose: they live only on the save/load path, so zero here with a large
+    // ctorRuns means "this run never saved or loaded", which is a statement
+    // about the RUN, not about those two ports. Reading one pair's zero through
+    // the other pair's non-zero is how an unexercised body gets written up as
+    // exercised.
+    if (armed && g_tableClearRuns == 0 && g_tableResetRuns == 0)
+        printf("[RtInternalTable]   persist-state pair NEVER ENTERED on this "
+               "run -- expected unless the run saved or loaded (they are only "
+               "on that path). NOT evidence about those two ports either way; "
+               "use BANISHED_AUTOLOAD to reach them.\n");
 }
 
 int RtObjectInternalRegister() {
