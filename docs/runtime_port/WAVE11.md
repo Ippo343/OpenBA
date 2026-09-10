@@ -498,3 +498,73 @@ back in.
 for OUR port of that callee.** A local re-declaration is a signature, not a
 source of truth, and this tree has many of them by design. Anywhere a local
 re-declaration exists, the caveat has to be copied with it or pointed at.
+
+## ADVISOR VERDICT on `BANISHED_RT_INTERNAL_TABLE` — the evidence is sufficient; the TIMING is not
+
+Lane OBJLIFE held the gate shut and named its own condition: *"flip it when
+someone who didn't build the counter has read §4.1."* The advisor did not build
+the counter and has read §4.1. **Verdict: the evidence supports arming. Do not
+arm it inside this wave.**
+
+### The evidence, assessed independently
+
+Three things make this stronger than a normal green run:
+
+1. **The oracle is predictive, not a self-check.** `calls=126764 divergences=0`
+   and `calls=126758 divergences=0` — ours predicts, theirs runs, compare. This
+   project's ~250 `RT_DIFF_SHADOW` sites are self-checks that never consult the
+   DLL; this is not one of those. Traffic is a third above Wave 3's 93,387 and
+   still zero.
+2. **The attendance counter discriminates THREE ways, not two.** Baseline
+   `ctorRuns=0 … not registered`; shadow `ctorRuns=0 … REGISTERED BUT NEVER
+   ENTERED`; armed `ctorRuns=122030`. The middle reading is the one that matters
+   — it separates *registered* from *entered*, which a two-cell A/B cannot, and
+   it is the exact distinction that made an earlier attendance counter in this
+   wave lie from a static destructor.
+3. **An undesigned cross-check.** Ctor and dtor differ by exactly **6** in the
+   shadow run (126764/126758) *and* in the armed run (122030/122024) — two
+   different tiers, different totals, the same residue of six live objects. A
+   coincidence nobody engineered agreeing across independent runs is worth more
+   than a designed check, because nothing was tuned to make it pass.
+
+`clearRuns=0 resetRuns=0` is correctly labelled a statement about **the runs**,
+not about lane OBJINT's two ports, and printed on its own line naming
+`BANISHED_AUTOLOAD` so the zero cannot be read through the 122,030.
+
+### Why not now
+
+Arming moves **~122,000 calls per run onto the busiest path in the engine**, for
+every lane, at merge time. Bundling that with a three-lane merge confounds the
+wave's integration measurement: any change in behaviour or timing afterwards has
+two candidate causes and no way to separate them.
+
+**Arm it as the FIRST isolated change after the wave's integration measurement**,
+with its own before/after, and measure it against the perf baseline
+(`make sa-stress`) rather than a functional run alone — 122k calls/run through
+our bodies instead of the DLL's is exactly the shape that has breached the perf
+gate before (Wave 2, two `ResolveExportRaw` calls in a hot ctor).
+
+The lane's own reason for holding — *this lane wrote the instrument that measures
+it* — is sound and is the right instinct. It is now satisfied; what replaces it
+is a sequencing constraint, not a doubt about the evidence.
+
+## Two reusable facts this lane paid a run each for
+
+1. **The DLL's `MemoryAllocator` singleton does not exist at `RuntimePortInit`**
+   (a `MemAlloc` there faults) **and is null again by the exit summary.** Its live
+   window is between engine startup and shutdown, so any probe touching it must
+   run from the frame tick. This is the same family as the attendance counter
+   that lied from a static destructor: **the port registry and the DLL's
+   singletons have narrower lifetimes than the process, and an instrument placed
+   outside that window reports a confident wrong answer rather than an error.**
+2. **`_allocatedBytes` is not a pure function of what was freed** — it records
+   what the allocator *carved*, which moves with bin state. A control fired on
+   the *theirs* side in a cell where both sides tear down identical subjects.
+   **Read blocks as the verdict and bytes as corroboration.** The lane's
+   independently computed `expected=` column turned this from an open question
+   into a one-minute diagnosis, which is the argument for carrying an expected
+   value beside every measured one.
+
+Also confirmed the hard way, again: **`ResolveAddr(Module::Runtime, …)` consults
+the port registry FIRST**, so it is the wrong door for an oracle's theirs-side
+read *on principle*, regardless of what happens to be registered at the time.
