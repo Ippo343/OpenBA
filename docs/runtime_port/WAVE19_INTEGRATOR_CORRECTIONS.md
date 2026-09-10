@@ -276,3 +276,56 @@ precisely those whose *ported stamper* runs on the driven route.
 route.** 26/26 TRAP=0 says the table is safe to stamp and says nothing about who
 stamps it. If no stamper is ours, "blocked on attendance" is the wrong diagnosis
 and no `BANISHED_*` variable fixes it.
+
+## C11. `?GetSource@Stream@IO@@` — arbitration, and the "four rows" figure is stale
+
+Lane CSTREAM claimed `?GetSource@Stream@IO@@UEBA?AVString@System@@XZ`
+(`0x18000c6a0`); phase 0c §6.1 had assigned it to lane IOBASE. **Awarded to
+CSTREAM**, on measured grounds rather than on who asked first.
+
+Rows whose slot block references `0x18000c6a0`, measured on the merged tip:
+
+| row | VA | slots | lane |
+|---|---|---|---|
+| `??_7CompressedStream@` | `0x180155640` | 9 | CSTREAM |
+| `??_7CompressedFileStream@` | `0x1801555f0` | 9 | CSTREAM |
+| `??_7CompressedMemoryStream@` | `0x180155560` | 9 | CSTREAM |
+| `??_7MemoryStream@` | `0x1801555b0` | 8 | IOBASE |
+| `??_7VisitorStream@` | `0x180155a20` | 7 | IOBASE |
+| `??_7Stream@` | `0x1801549a0` | 7 | NO-OP (phase 0a) |
+
+CSTREAM carries **three of the five live rows** and the body sits in its class
+family. IOBASE consumes it; CSTREAM registers by NAME **and** ADDRESS so IOBASE's
+rows need no second registration — a duplicate would be a **SHADOWED** slot where
+the later binding wins and the checked line is dead code.
+
+### The figure itself was stale — it is SIX rows, not four
+
+"Sole trap in FOUR rows" predates phase 0b's regeneration, which minted five more
+rows. **I repeated it into two lane briefs after the regeneration was already
+merged.** Both lanes have been told it is superseded, and told to re-derive
+whether it is still the *sole remaining* trap in their rows rather than inherit
+that too.
+
+This is the **third** figure in this wave that decayed between measurement and
+use (after 27/20 and the plan's 4,2,2,0,0). All three shared one property: they
+were quoted downstream **without the timestamp of the tree they were measured on.**
+The wave's own doctrine — a stated blocker is a claim with a timestamp — applies
+to *measurements*, not just to blockers, and phase 0b already proved it applies to
+**generated files**.
+
+## C12. A phase-0 saving can GROW a lane — CSTREAM went 8 -> 14 bodies
+
+Reported up front by the lane rather than at close, which is the behaviour we
+want. Phase 0c wrote "scope 8 functions" while `??_7CompressedFileStream@` was
+**UNMINTED and UNMEASURED**; phase 0b then minted it as a full 9-slot **ATTENDED**
+row. Re-measured on CSTREAM's tip: 3 rows, **27 slots -> 14 distinct functions**,
+3 already ported, so **11 DATA bodies + 3 CODE rows = 14**.
+
+**Superseded, not wrong** is the right characterisation, and it is the C7 shape a
+second time: **a cell that converts rows from UNMEASURED to MEASURED can only ever
+grow the visible denominator.** Both times the wave's numbers moved *against* us
+for a reason that is pure progress.
+
+Expect the same from any future measurement cell, and do not let a growing lane
+size read as a lane falling behind.
