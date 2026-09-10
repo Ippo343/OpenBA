@@ -3,6 +3,7 @@
 // ============================================================================
 //   BANISHED_RT_SAVE=0       leave the whole Save namespace on the DLL
 //   BANISHED_RT_SAVELOAD=0   ... just Save::SaveLoad + Save::SavedState
+//   BANISHED_RT_SETUPLOAD=0  ... just Wave 14 Save::SavedState::SetupLoad
 //   BANISHED_RT_SAVELOAD_UPDATE=0  ... just Wave 13's six state machines,
 //                            leaving Wave 5's 16 exports ported. This split
 //                            is not decoration: it is the A/B that localised
@@ -17,6 +18,7 @@
 
 extern int RtSaveLoadRegister();       // saveload.cpp (Wave 5 lane C)
 extern int RtSaveLoadUpdateRegister(); // saveload_update.cpp (Wave 13)
+extern int RtSaveSetupLoadRegister();  // savedstate_setupload.cpp (Wave 14)
 
 void RtSavePortInit() {
     if (!RtWaveEnabled("BANISHED_RT_SAVE")) {
@@ -27,6 +29,12 @@ void RtSavePortInit() {
     if (RtWaveEnabled("BANISHED_RT_SAVELOAD")) {
         n += RtSaveLoadRegister();
         if (RtWaveEnabled("BANISHED_RT_SAVELOAD_UPDATE")) n += RtSaveLoadUpdateRegister();
+        // Wave 14: ?SetupLoad@SavedState@Save@@. Gated with Wave 5's block
+        // rather than with Wave 13's, because its three callers are Wave 13
+        // bodies and a SavedState method is Wave 5's subject. Its OWN kill
+        // switch exists so a crash anywhere on the save path can be A/B'd
+        // against this one registration without taking Wave 13 out with it.
+        if (RtWaveEnabled("BANISHED_RT_SETUPLOAD")) n += RtSaveSetupLoadRegister();
     }
     printf("[RtPort] Save: %d exports registered\n", n);
 }
