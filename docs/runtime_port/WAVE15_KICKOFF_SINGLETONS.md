@@ -86,6 +86,32 @@ That is exactly the difference between the two rows that already have verdicts:
     Application  26 refs, 24 of them READS IN UNPORTED BODIES   -> HARMFUL
     SaveLoad      5 refs, 4 in ported bodies + 1 in a DEAD one  -> SAFE
 
+> **CORRECTION 2026-09-09 (Wave 15 lane INSTR, measured).** The Application line
+> above is WRONG and it was wrong the day it was written. `WAVE12_APPLICATION.md`
+> says *"26 in-DLL RIP-relative references, 2 WRITE and 24 READ"* — a count of
+> KINDS. This kickoff transcribed it as "24 of them READS IN UNPORTED BODIES",
+> silently converting a kind-count into a PORT-STATE count. Wave 12 never made
+> that claim; grep it and you will not find it.
+>
+> Measured, the split is **9 reads in unported bodies, not 24.** The other 15
+> owners are ported AND registered — 14 of them on 2026-09-08 (`7ded21a`,
+> `070b546`, `a3de8bd`), the day BEFORE Wave 12 closed (`06624c0`), and the 15th
+> (`?Get@Application@1@`) by Wave 12's own lane A (`74110c0`). The nine are
+> `Update@DialogLoaderLoopT`, `Update@LoaderLoop`, `PlatformShutdown@Device@Input`
+> (x3), `PlatformGetKeyboardState@Device@Input`, and
+> `PlatformGetMouseState@Device@Input` (x3).
+>
+> **The HARMFUL verdict SURVIVES; only this stated reason for it does.** Wave 12's
+> actual argument never rested on the reader split — it is that we intercept only
+> at DOORS, so all 26 in-DLL RIP-relative sites keep reading the DLL slot no
+> matter what is ported, because a ported body's copy INSIDE the DLL still holds
+> its own load. That argument is independent of port state and still holds.
+>
+> The lesson is the one the reference count made easy to miss: a measured number
+> (26/2/24, which reproduces exactly) sat beside an asserted one, and lent it its
+> credibility. Phase 2 classifies from measurement and quotes this line from
+> nobody.
+
 So the lane's real unit of work is **classifying each row's readers**, not
 counting them.
 
