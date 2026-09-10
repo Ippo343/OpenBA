@@ -200,6 +200,7 @@ extern void RtObjectExternalRefTableProbeMaybeRun(ExternalFactory* self, Stream*
 // `CountNodes` walks a tree that is about to be walked and freed anyway.
 extern int  RtObjectExternalRefTableCountNodes(const void* set);
 extern void RtObjectExternalRefTableNoteTeardown(const void* set, int nodesBefore);
+void RtObjectExternalRefTableSummary();
 
 namespace RtObject {
 
@@ -424,6 +425,16 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
     // 1800bcf17. Skipping it leaks 0x30 bytes per call.
     if (rw)
         reinterpret_cast<RwDtorFn>(VSlot(rw, rt::io::rw_vtbl::kDtor))(rw, 1);
+
+    // ---- report, HERE, inside the subject's live window ---------------------
+    // Not only from the exit summary. This body runs at most twice per session
+    // and the run that exercises it usually has to be killed rather than quit:
+    // `BANISHED_AUTOQUIT` OVERRIDES `BANISHED_AUTOLOAD`'s path, so the one run
+    // that reaches a clean exit is the one that never loaded, and an exit-only
+    // instrument prints a plausible ZERO on it
+    // (reference_autoquit_overrides_autostart_newgame.md). This line is what a
+    // killed run can still be read from.
+    RtObjectExternalRefTableSummary();
 }
 
 }  // namespace RtObject

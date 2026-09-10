@@ -771,7 +771,19 @@ int RtObjectExternalRegister() {
     RegisterRuntimeAddr(0x180007650, (void*)&RtObject_ExternalList_GetResourceCount);
     RegisterRuntimeAddr(0x1800bf700, (void*)&RtObject_ExternalList_Find);
 
-    printf("[RtPort]   External: %d exports (Clean/FindOrLoad/SerializeReferenceTable/"
-           "SaveText deliberately NOT ported -- see docs/runtime_port/WAVE3_LANE_C.md)\n", n);
+    // The Wave 3 banner named four deliberate omissions. All four have since
+    // been ported by other files and this line was still claiming otherwise:
+    //   Clean                     external_set.cpp        (Wave 9 lane RES)
+    //   FindOrLoad                external_compiled.cpp   (Wave 11 lane OBJEXT)
+    //   SaveText                  external_savetext_win.cpp (Wave 11 f/u 2)
+    //   SerializeReferenceTable   external_reftable.cpp   (Wave 11 f/u 3, AVL)
+    // A stale banner is how a lane gets sent to port what the tree already has
+    // (reference_grep_for_the_port_before_writing_it.md), so it is corrected
+    // here rather than left for the next reader.
+    printf("[RtPort]   External: %d exports. The four rows this line used to "
+           "call \"deliberately NOT ported\" -- Clean, FindOrLoad, SaveText, "
+           "SerializeReferenceTable -- are ALL ported now, in external_set.cpp, "
+           "external_compiled.cpp, external_savetext_win.cpp and "
+           "external_reftable.cpp respectively.\n", n);
     return n;
 }
