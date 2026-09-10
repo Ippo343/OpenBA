@@ -383,7 +383,7 @@ void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
                 // retail relies on the pointer always being there, and a guard
                 // would skip the emission rather than restore the behaviour.
                 Filename ret;
-                RtObject::RtObject_External_GetPath(
+                RtObject_External_GetPath(
                     rtresset::Elem(n)->external, &ret);      // 1800bce3b
                 Filename path;
                 AdoptRef(&path, ret.data);                   // 1800bce41

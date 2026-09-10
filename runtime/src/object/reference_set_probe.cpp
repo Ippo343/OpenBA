@@ -260,7 +260,7 @@ void RtObjectReferenceSetProbeMaybeRun() {
 void RtObjectReferenceSetProbeRun() {
     auto theirInsert = reinterpret_cast<InsertFn>(ResolveRuntimeRaw(0x18002cb90));
     if (!theirInsert) {
-        std::printf("[RefSet] SKIP -- the shipped 0x18002cb90 is not reachable "
+        printf("[RefSet] SKIP -- the shipped 0x18002cb90 is not reachable "
                     "(cutover, or Runtime-x64.dll is absent). NO COMPARISON WAS "
                     "MADE.\n");
         std::fflush(stdout);
@@ -382,20 +382,20 @@ void RtObjectReferenceSetProbeRun() {
     const rtrefset::ProbeCounters& a = rtrefset::g_fc;
     auto d = [&](uint64_t now, uint64_t then) { return static_cast<unsigned long long>(now - then); };
 
-    std::printf("[RefSet] LOCKSTEP PROBE: %d steps, %d shape/payload mismatches, "
+    printf("[RefSet] LOCKSTEP PROBE: %d steps, %d shape/payload mismatches, "
                 "%d parent-linkage failures\n", steps, mismatches, parentFails);
-    std::printf("[RefSet]   effectiveness (branches taken INSIDE the ported "
+    printf("[RefSet]   effectiveness (branches taken INSIDE the ported "
                 "bodies): rootInsert=%llu descLeft=%llu descRight=%llu "
                 "equalHit=%llu cmpLt=%llu cmpEq=%llu cmpGt=%llu\n",
                 d(a.rootInsert, before.rootInsert), d(a.descLeft, before.descLeft),
                 d(a.descRight, before.descRight),   d(a.equalHit, before.equalHit),
                 d(a.cmpLt, before.cmpLt), d(a.cmpEq, before.cmpEq), d(a.cmpGt, before.cmpGt));
-    std::printf("[RefSet]   rebalance: rotL=%llu rotR=%llu preRotL=%llu "
+    printf("[RefSet]   rebalance: rotL=%llu rotR=%llu preRotL=%llu "
                 "preRotR=%llu retraceIters=%llu allocFail=%llu\n",
                 d(a.rotL, before.rotL), d(a.rotR, before.rotR),
                 d(a.preRotL, before.preRotL), d(a.preRotR, before.preRotR),
                 d(a.retraceIters, before.retraceIters), d(a.allocFail, before.allocFail));
-    std::printf("[RefSet]   NEGATIVE CONTROLS, scored separately: "
+    printf("[RefSet]   NEGATIVE CONTROLS, scored separately: "
                 "balance %d/%d  height %d/%d  id %d/%d  path %d/%d  parent %d/%d\n",
                 ctlBalanceCaught, ctlBalanceRun, ctlHeightCaught, ctlHeightRun,
                 ctlIdCaught, ctlIdRun, ctlPathCaught, ctlPathRun,
@@ -406,20 +406,20 @@ void RtObjectReferenceSetProbeRun() {
     // announced rather than left for a reader to notice.
     if (d(a.rotL, before.rotL) == 0 || d(a.rotR, before.rotR) == 0 ||
         d(a.preRotL, before.preRotL) == 0 || d(a.preRotR, before.preRotR) == 0)
-        std::printf("[RefSet]   *** WARNING: at least one rebalance case never "
+        printf("[RefSet]   *** WARNING: at least one rebalance case never "
                     "fired. The green verdict does NOT cover it.\n");
     if (d(a.equalHit, before.equalHit) == 0)
-        std::printf("[RefSet]   *** WARNING: the equal-key early return never "
+        printf("[RefSet]   *** WARNING: the equal-key early return never "
                     "fired -- the release-on-every-path property is UNTESTED.\n");
     if (ctlBalanceRun == 0 || ctlHeightRun == 0 || ctlIdRun == 0 ||
         ctlPathRun == 0 || ctlParentRun == 0)
-        std::printf("[RefSet]   *** WARNING: a control never RAN. A control that "
+        printf("[RefSet]   *** WARNING: a control never RAN. A control that "
                     "did not run did not pass.\n");
 
     if (firstBad[0])
-        std::printf("[RefSet]   FIRST DIVERGENCE: %s\n", firstBad);
+        printf("[RefSet]   FIRST DIVERGENCE: %s\n", firstBad);
     else if (mismatches == 0 && parentFails == 0)
-        std::printf("[RefSet]   VERDICT: the seven ported bodies agree with the "
+        printf("[RefSet]   VERDICT: the seven ported bodies agree with the "
                     "shipped 0x18002cb90 family at every step.\n");
     std::fflush(stdout);
 }
