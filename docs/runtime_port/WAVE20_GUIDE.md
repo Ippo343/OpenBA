@@ -7,9 +7,14 @@ a fact is inherited and not re-verified it says **[INHERITED]**, and re-verifyin
 is a lane's first job.
 
 Read first: **[WAVE19_CLOSED.md](WAVE19_CLOSED.md)** §2 (the metric is blind to half
-the work), §4 (what Wave 19 does NOT claim), §7.1–§7.4 (what makes a check able to
-fail correctly). Then **[WAVE19_INTEGRATOR_CORRECTIONS.md](WAVE19_INTEGRATOR_CORRECTIONS.md)**
-— 45 entries, of which C34 and C43 are load-bearing.
+the work), §4 (what Wave 19 does NOT claim), §7.1–§7.6 (what makes a check able to
+fail correctly, and the three tests for a stated blocker). Then
+**[WAVE19_INTEGRATOR_CORRECTIONS.md](WAVE19_INTEGRATOR_CORRECTIONS.md)** — 44 entries,
+of which C34 and C43 are load-bearing.
+
+*(Both figures in this paragraph were stale within an hour of being written — "45"
+and "§7.4" were correct when typed and the documents kept growing. Fifth instance in
+this wave of a cross-reference outliving its subject; see §5 item 6.)*
 
 ---
 
