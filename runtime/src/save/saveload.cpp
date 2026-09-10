@@ -28,19 +28,27 @@
 //       phrased as "waiting on another wave" silently becomes a lie the day
 //       that wave lands.)
 //
-//   ??1SaveLoad@Save@@QEAA@XZ         0x1800c3c90 — the destructor walks the
-//       Array<SaveInfo> at +0x50 through FUN_1800329c0, which calls the
-//       un-exported per-element destructor FUN_1800c3f40 0x58 bytes at a time.
-//       No oracle is possible (it frees), the object is a process-lifetime
-//       singleton so it is unlikely ever to run, and a wrong port corrupts the
-//       heap silently. Left on the DLL.
+//   ??1SaveLoad@Save@@QEAA@XZ         0x1800c3c90 — NO LONGER HELD BACK. This
+//       entry described the destructor as "left on the DLL"; it has been ported
+//       and registered since (see RtSave_SaveLoad_Dtor below and the
+//       RegisterRuntimeExport at the bottom of this file). Corrected by Wave 14
+//       lane SINGLETON, which had to know which of the five writers of
+//       _singleton run OUR code and found this banner claiming one of them does
+//       not. The oracle situation is unchanged and still honest: the dtor
+//       frees, so nothing compares it.
 //
-//   ?_singleton@SaveLoad@Save@@0PEAV12@EA  0x1801fc6f0 — a DATA export. The
-//       registry seam maps names to FUNCTIONS; a data symbol cannot be
-//       redirected before cutover, exactly as WAVE3.md and WAVE4.md record for
-//       InternalFactory::_singleton and FileSystem::_singleton. This port
-//       WRITES that DLL global (the ctor publishes it), which is the correct
-//       behaviour while the DLL is still loaded.
+//   ?_singleton@SaveLoad@Save@@0PEAV12@EA  0x1801fc6f0 — a DATA export, and
+//       PROMOTED as of Wave 14 lane SINGLETON. The claim above — "a data symbol
+//       cannot be redirected before cutover" — was true of the FUNCTION seam
+//       and false of the tree as it stands: Wave 9 lane C2's mint registers
+//       data names and addresses through the same registry, and
+//       standalone/reg_mint_promoted.cpp now registers this one unconditionally
+//       with the reader/writer enumeration that licenses it. What has NOT
+//       changed is the rule the old text was protecting: the ctor and dtor
+//       below must PUBLISH through `SaveLoadSingletonSlot()` rather than own a
+//       static of their own, because that accessor is the door that follows the
+//       registration. Verified per run by ProbeSaveLoadSingleton
+//       (standalone/rt_orphan_probe.cpp, BANISHED_RT_ORPHAN_PROBE=1).
 //
 // THE HAZARD THAT DEFINES THIS LANE. A wrong port here does not crash, it
 // desyncs a save and surfaces later on an innocent record. So the oracle shape
