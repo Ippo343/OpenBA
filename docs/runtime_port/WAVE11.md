@@ -143,3 +143,61 @@ Inherited doctrine, restated because each has cost this project a wave:
    as "the row changes nothing". Its own positive control caught it. Any
    attendance instrument must be sampled before teardown and must carry a control
    that is required to read nonzero.
+
+## The scoping error that produced three wrong lane premises — ONE cause, not three
+
+**This wave's briefs mis-scoped three separate row assignments, and the cause is
+a single misreading by the advisor.**
+
+`runtime_census.py --unported` lists what is *called but not ported*. That means
+**"no UNCONDITIONAL registration exists"** — because this project's own rule is
+that a gated registration is not a port. The brief read it as **"no body
+exists"**, and dispatched lanes to author code the tree already had.
+
+Measured instances, all confirmed by the advisor from the source before adoption:
+
+| rows | what the census said | what is actually there |
+|---|---|---|
+| `??0Internal`, `??1Internal` (OBJLIFE) | unported | ported since Wave 3, registered by **name and address**, `internal.cpp:1020-1026`, inside `if (table)` |
+| `?ClearPersistState@InternalFactory`, `?ResetPersistState@InternalFactory` (OBJINT) | unported | same block, `internal.cpp:1028-1036`; the file's own banner names them **"STILL UNEXERCISED"** |
+| the four `??_7…@Object` vtables (OBJDATA) | minted, "so promotion not authoring" | the rows were generated but the **slots were empty** — seven `?Type@`/`?TypeName@` bodies had to be written |
+
+The gate is `BANISHED_RT_INTERNAL_TABLE`, with `|| noDll` so it auto-arms at
+cutover.
+
+**The rule this yields:** a census `unported` row has at least four distinct
+meanings — no body; a body behind a gate; a body never registered; a row whose
+*storage* is never written (see `minted=`, above). They imply completely
+different work, and only the last two are "porting". **Grep for a gated
+registration before assigning authoring work**, i.e. for `RtOptIn(`, `if (table)`,
+`BANISHED_RT_*` near the registration block — not merely for the symbol.
+
+This is the same family as the standing lesson that a body PORTED but never
+REGISTERED is indistinguishable from an ABSENT one to a callee census. Here the
+indistinguishable thing is a body ported, registered, and *gated*.
+
+## Lane collision created and resolved
+
+`??0Internal`/`??1Internal` (OBJLIFE) and both `InternalFactory` persist-state
+rows (OBJINT) live in **the same `if (table)` block, behind the same env var**.
+Resolved in OBJLIFE's favour — it was already in the file with an attendance
+counter. OBJINT keeps the *exercise* verdict on its two rows and routes any
+instrument it needs through OBJLIFE's version. Arming the env var at runtime is
+not a conflict; only source edits are.
+
+## Shared-resource note: the game directory serialises the wave
+
+Four lanes, one game directory, several boot runs each. OBJLIFE lost a 900s
+blocking acquire to the queue. Standing instruction issued: **acquire once and
+batch every run under a single hold**, never acquire/release per run.
+
+Two real defects in `tools/game_dir_lock.sh`, found by OBJLIFE, deliberately NOT
+fixed mid-wave (changing shared tooling under three running lanes is worse than
+the bugs):
+
+1. `line 293: [: : integer expression expected` on every queue poll — cosmetic.
+2. **Blocking `acquire` returns non-zero on timeout, but a wrapping shell
+   function or `if` returns 0.** This is the documented pipe hazard *one layer
+   out* — same class as the incident where a piped acquire made a timeout read as
+   a grant, and it has the same consequence: a lane deploys over another mid-run
+   believing it holds the lock.
