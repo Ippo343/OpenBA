@@ -206,6 +206,27 @@ void CloseIfOpen(RtIO::FileInfo* fi) {
 // reported so that a future caller which does reach it is visible immediately
 // rather than silently.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// NEGATIVE-CONTROL PERTURBATIONS, read by the body below and set only by
+// external_savetext_probe.cpp.
+//
+// They live HERE, in the body, rather than in the probe, because a control that
+// perturbs a copy of the code instead of the code under test catches in a
+// screen it cannot reach (WAVE11_LANE_OBJEXT.md §10.3/§10.5). Each one is a
+// single parameter consumed at exactly one site, each site increments
+// `g_stAtt`, and each produces a COMPARABLE DIVERGENCE -- a different byte
+// string in the output file -- never undefined behaviour.
+//
+//   1  swap the ctor's `type` and `name` arguments
+//   2  pass objectVersion 1 instead of retail's 0
+//   3  force _activeEncoding to 3, which is the ONLY way to reach the
+//      byte-order-mark branch: no caller in either shipped binary sets it to
+//      anything but 2, so without this control that transcription would never
+//      execute and would be verified by inspection alone.
+// ---------------------------------------------------------------------------
+int      g_stCtl = 0;
+uint64_t g_stAtt = 0;
+
 struct SaveTextCounters {
     uint64_t calls;
     uint64_t typeFound;     // the type id was in Factory's tree
@@ -266,8 +287,15 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     // (the position saveload_meta.cpp takes on CompressedStream +0x18/+0x24 and
     // external_add.cpp takes on VisitorStream).
     RtIo::TextFileStream ts;
-    RT_EXPORT_ONCE(TextCtorFn, "??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z")(
-        &ts, &typeStr, reinterpret_cast<const String*>(name), 0);
+    {
+        const String* ctorType = &typeStr;
+        const String* ctorName = reinterpret_cast<const String*>(name);
+        int           ctorVer  = 0;
+        if (g_stCtl == 1) { ++g_stAtt; const String* t = ctorType; ctorType = ctorName; ctorName = t; }
+        if (g_stCtl == 2) { ++g_stAtt; ctorVer = 1; }
+        RT_EXPORT_ONCE(TextCtorFn, "??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z")(
+            &ts, ctorType, ctorName, ctorVer);
+    }
 
     RtString_ReleaseInline(&typeStr);                // 1800bba64
 
@@ -276,6 +304,7 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
     int32_t bomLen = 2;                              // 1800bba88: MOV EBX,2
     ts.requestedFormat = 2;                          // 1800bba8d: [+0x68] = 2
     ts.activeEncoding  = 2;                          // 1800bba90: [+0x6c] = 2
+    if (g_stCtl == 3) { ++g_stAtt; ts.activeEncoding = 3; }  // see the control note
 
     if (RT_EXPORT_ONCE(FsCreateFn,
             "?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z")(&ts, path)) {

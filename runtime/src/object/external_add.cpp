@@ -93,6 +93,11 @@
 // RtObject and link against a symbol nothing defines.
 extern "C" void RtIoProbeRunFileStreamLayoutProbe();
 
+// runtime/src/object/external_savetext_probe.cpp -- the oracle for
+// External::SaveText, which no gameplay route reaches. It needs a live
+// `External*`, and this body is handed one ~7.9k times a run.
+extern "C" void RtObjectSaveTextProbeStepC(void* subject);
+
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
@@ -262,6 +267,15 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
             armed = false;
             RtIoProbeRunFileStreamLayoutProbe();
         }
+    }
+
+    // The SaveText oracle's subject feed. Unlike the layout probe this one is
+    // NOT one-shot: it needs several distinct Externals, so it is stepped on
+    // every call until it has its sample and then returns immediately. Opt-in
+    // for the same reason -- it writes and re-reads two files per subject.
+    {
+        static bool stArmed = (std::getenv("BANISHED_RT_SAVETEXT_PROBE") != nullptr);
+        if (stArmed) RtObjectSaveTextProbeStepC(external);
     }
 
     // ---- 1800be589..1800be5d9 -------------------------------------------
