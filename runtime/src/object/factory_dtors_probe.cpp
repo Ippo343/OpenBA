@@ -376,7 +376,16 @@ template <typename Subject, typename Build, typename TheirFn, typename OurFn>
 Cell RunPair(const char* name, Build build, TheirFn theirs, OurFn ours) {
     Cell c{name, false, false, 0, 0, 0, 0, 0};
 
+    // POISON BOTH SUBJECTS FIRST. `FactorySubject` is {void*, int32} = 16
+    // bytes, so it has four padding bytes that NEITHER destructor writes — and
+    // an oracle that memcmps bytes neither side writes fails on stack garbage
+    // and reads like a catastrophic port defect
+    // (reference_oracle_must_not_compare_unwritten_bytes). Poisoning to the
+    // same pattern makes the untouched bytes compare EQUAL by construction
+    // while still catching a body that writes them.
     Subject a, b;
+    std::memset(&a, 0xCD, sizeof(Subject));
+    std::memset(&b, 0xCD, sizeof(Subject));
     const int blocksA = build(&a);
     const int blocksB = build(&b);
     if (blocksA < 0 || blocksB < 0 || blocksA != blocksB) {
@@ -387,15 +396,13 @@ Cell RunPair(const char* name, Build build, TheirFn theirs, OurFn ours) {
     }
     c.expectedBlocks = blocksA;
 
-    // Byte images of the two subjects BEFORE, to prove the pair really was
-    // identical going in. A pair that differed on entry would make any verdict
-    // afterwards meaningless.
-    Subject beforeA = a, beforeB = b;
-    if (std::memcmp(&beforeA, &beforeB, sizeof(Subject)) != 0) {
-        // Pointer fields differ by construction (different allocations), so
-        // this is expected and is NOT an error. It is why screen 1 compares the
-        // AFTER images, which retail zeroes, rather than the before images.
-    }
+    // NOTE ON WHY SCREEN 1 COMPARES THE *AFTER* IMAGES: the two subjects are
+    // NOT byte-equal on entry and cannot be, because their pointer fields are
+    // different allocations. What both destructors do to those fields is write
+    // constants (null / 0), so the AFTER images are comparable while the BEFORE
+    // images are not. The non-pointer fields the destructors must NOT touch are
+    // seeded to the same values in the builders, so they carry the comparison
+    // for that half.
 
     const AllocSnap s0 = Snapshot();
     theirs(&a);

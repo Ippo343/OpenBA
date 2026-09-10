@@ -519,7 +519,23 @@ void RtObject_InternalBasePtr_DeletePtr(InternalBasePtr* self) {
 //
 // The `-1` / `0` pair is a dead store in both builds — AddObject overwrites
 // both before anything can observe them — and is reproduced anyway.
+// WAVE 11 LANE OBJLIFE — ATTENDANCE COUNTERS.
+//
+// A run of the TABLE tier that boots and plays is NOT evidence that these
+// bodies ran: a green readiness screen is not a route, and only an attendance
+// counter separates "safe" from "never executed"
+// (reference_a_green_readiness_screen_is_not_a_route). The shadow tier gets its
+// `calls=` from RT_DIFF; the table tier had NOTHING, so an armed run could only
+// ever be reported as "did not crash".
+//
+// Two plain counters, incremented unconditionally in the ported bodies. They
+// are not diff sites and cost one increment on a path that already does a
+// locked array grow. `RtObjectInternalAttendance()` reads them out.
+unsigned long long g_tableCtorRuns = 0;
+unsigned long long g_tableDtorRuns = 0;
+
 Internal* RtObject_Internal_Ctor(Internal* self) {
+    ++g_tableCtorRuns;
     self->vptr = VtblBase();
     self->vptr = VtblInternal();
     self->factoryIndex = -1;
@@ -551,6 +567,7 @@ Internal* RtObject_Internal_Ctor(Internal* self) {
 // that block. That is retail's behaviour and this port keeps it; the fix for
 // the family is upstream (unregister before freeing), never a guard here.
 void RtObject_Internal_Dtor(Internal* self) {
+    ++g_tableDtorRuns;
     self->vptr = VtblInternal();
     self->generation = 0;
 
@@ -869,6 +886,24 @@ void RtObject_InternalFactory_ResetPersistState_Shadow(InternalFactory* self, vo
 // ============================================================================
 // Registration
 // ============================================================================
+// WAVE 11 LANE OBJLIFE — the attendance read-out, called from standalone/main.cpp
+// at exit. Prints unconditionally, including 0/0, and says which of the two
+// zeroes it is: "the tier was never armed" and "the tier was armed and never
+// entered" are opposite findings and a silent log cannot tell them apart.
+void RtObjectInternalAttendance() {
+    using namespace RtObject;
+    const bool armed = RuntimeExportIsRegistered("??0Internal@Object@@QEAA@XZ");
+    printf("[RtInternalTable] ctorRuns=%llu dtorRuns=%llu  (%s)\n",
+           g_tableCtorRuns, g_tableDtorRuns,
+           g_tableCtorRuns == 0
+               ? (armed ? "REGISTERED BUT NEVER ENTERED -- the door exists and "
+                          "nothing came through it; do NOT read this run as "
+                          "evidence the port works"
+                        : "not registered on this run (shadow tier, or "
+                          "BANISHED_RT_INTERNAL_TABLE unset) -- expected zero")
+               : "our ported bodies drove the LIVE handle table this many times");
+}
+
 int RtObjectInternalRegister() {
     using namespace RtObject;
     int n = 0;

@@ -1989,6 +1989,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // four different causes and they invert the conclusion, so bodyCalls is
     // printed beside it (runtime/src/save/saveload_meta.cpp).
     RtSaveMetaSummary();
+    // WAVE 11 LANE OBJLIFE: attendance for Object::Internal's TABLE tier. One
+    // line, ALWAYS, including zero -- a tier that is armed and never entered
+    // looks exactly like a tier that is armed and correct if nothing counts
+    // entries, and "it booted fine" is not a measurement of a body that never
+    // ran (reference_a_green_readiness_screen_is_not_a_route).
+    { extern void RtObjectInternalAttendance(); RtObjectInternalAttendance(); }
     RtDiffSummary();
     // Wave 10: the PREDICTIVE shadow oracle (BANISHED_RT_PREDICT=1). Prints
     // beside [RtDiff] and is silent when off. Read its `changed=` column
