@@ -824,6 +824,27 @@ def mint_symbol_count(repo):
 #     unconditional, with BANISHED_RT_MINT_PROMOTED=0 as a kill switch. That is
 #     the ordinary default-on shape this project already counts as a port.
 #
+# WHICH PROMOTION COUNT THIS IS -- there are TWO SUBJECTS and they are not the
+# same question (integrator correction C2, Wave 20):
+#
+#   STATIC   what reg_mint_promoted.cpp REGISTERS IN SOURCE. Derived here on
+#            every run by mint_promoted_symbols(), never cited from a document.
+#            This is the subject the census measures, because the census is a
+#            source scan and cannot observe a process.
+#   RUNTIME  what a PARTICULAR RUN registered. Differs whenever
+#            BANISHED_RT_MINT_PROMOTED=0 is set (reg_mint_promoted.cpp:173
+#            returns 0 before registering anything) -- in which case the STATIC
+#            count is an OVERSTATEMENT of that run and every folded row is
+#            dispatching to the DLL instead. The census cannot see an env var
+#            and does not pretend to; the header says which subject it means.
+#
+# DO NOT HARD-CODE OR CITE A PROMOTED COUNT ANYWHERE. The figure carried by
+# WAVE19_CLOSED.md §7.5a and WAVE20_GUIDE.md §2 ("5 of 62") was itself already
+# stale when written: lane IOBASE promoted five IO vtables in 9f2edbc on the
+# last day of Wave 19, making it 10. A count that corrected another count and
+# then went stale in the same wave is the strongest possible argument for
+# deriving this one at run time, which is what happens here.
+#
 # For an UNPROMOTED row, `RT_DATA_SLOT` falls through to the DLL, our objects
 # get RETAIL'S table, and RETAIL'S BODIES RUN. Wave 19 measured this directly:
 # lane FILE's ten bodies read TRAP=0 with ATTENDANCE ZERO on every one. Folding
@@ -1586,10 +1607,18 @@ def main():
         newly_ported = vt_fold["newly_ported"]
         applicable = vt_fold["applicable"]
         control = vt_fold["control"]
-        print("  subject     %d minted vtables, %d PROMOTED (registered on every run"
-              % (vt_fold["vtables"], vt_fold["promoted_vtables"]))
-        print("              by %s, kill switch BANISHED_RT_MINT_PROMOTED=0)"
+        print("  subject     %d minted vtables (denominator from %s;"
+              % (vt_fold["vtables"], MINT_TABLES))
+        print("              re-derive it with rt_mint_gen.py --check), of which")
+        print("              %d are PROMOTED. Both figures are DERIVED on this run"
+              % vt_fold["promoted_vtables"])
+        print("              from the files named -- neither is cited from a doc.")
+        print("  which       promotion count is STATIC: what %s"
               % MINT_PROMOTED_FILE)
+        print("              registers IN SOURCE. A run with")
+        print("              BANISHED_RT_MINT_PROMOTED=0 registers NONE of them, and")
+        print("              for that run this whole fold-in is an OVERSTATEMENT.")
+        print("              A source scan cannot see an env var; it does not try.")
         print("  ruling      an UNPROMOTED row's slots move NO column: its table is")
         print("              published only under BANISHED_RT_MINT=1, RT_DATA_SLOT")
         print("              falls through to the DLL, and RETAIL'S bodies run.")
