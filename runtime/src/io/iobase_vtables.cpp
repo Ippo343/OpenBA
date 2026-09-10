@@ -31,17 +31,31 @@
 // standalone/rt_data_mint_tables.inc — the four above plus
 // `??_7CompressedFileStream@` (:1223) and `??_7VisitorStream@` (:1569).
 //
-// **It moves the census identity by ZERO on its own.** The symbol appears
-// NOWHERE in `tools/runtime_census.py --namespace IO` today — not called, not
-// ported — because its only occurrences in the tree are mint rows, and the
-// census does not treat a mint row as a call door. Registering it therefore
-// adds +1 to `called` AND +1 to `ported` in the same step, leaving
-// `called - ported` exactly where it was, and it lands in the census's "ports
-// with no caller" list. Its whole value is that it is a PREREQUISITE: a
-// `??_7…` row cannot be promoted while one of its slots is a trap, and it is
-// the row's PROMOTION that adds +1 to `ported` against a `called` the mint
-// file already contributed. Cheap and load-bearing, but not an identity move —
-// see WAVE19_LANE_IOBASE.md §identity.
+// **It moves the census identity by ZERO on its own** — and the reason is not
+// the one this comment first gave. FIRST DRAFT, WRONG, kept because the
+// correction is the useful part: I wrote that registering it "adds +1 to
+// `called` AND +1 to `ported` in the same step". MEASURED after the fact, it
+// adds **nothing to either column**. `runtime_census.py` builds its namespace
+// table from symbols that have a CALL DOOR in our tree; a symbol that is
+// registered but that nothing resolves is excluded from the table entirely and
+// listed under "Ports with no caller in our tree" instead. Before this lane the
+// symbol appeared NOWHERE in `--namespace IO` (its only tree occurrences were
+// mint rows, which are not a call door); after it, it is still nowhere in the
+// table and is one of that list's 234 exports, UNTRIAGED.
+//
+// The conclusion survives the correction and the arithmetic is unchanged, but
+// "+1/+1" and "0/0" are different claims about the instrument and only one of
+// them is true. Its whole value is that it is a PREREQUISITE: a `??_7…` row
+// cannot be promoted while one of its slots is a trap, and it is the row's
+// PROMOTION that adds +1 to `ported` against a `called` the row already had.
+//
+// The same correction applies to `??1BinaryReader@`, `??1Visitor@`,
+// `??1VisitorStream@` and the five VisitorStream stream methods below: all are
+// registered here and none has a resolve door in the tree, so all eight are
+// caller-less ports that move no count. That also means the census's own
+// warning applies to them — a port with no caller is NOT verified by a clean
+// diff run (reference_uncalled_port_is_not_verified.md). What verifies them is
+// that the mint slots they fill are dispatched; see WAVE19_LANE_IOBASE.md.
 //
 // The shipped body, in full (0x18000c6a0):
 //
