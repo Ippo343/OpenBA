@@ -254,6 +254,45 @@ Doctrine 7 earned its keep four times in one lane.
 
 ---
 
+## 7b. An instrument defect found while trying to use it — `abi_retslot_audit.py`
+
+`?GetDisplayMode@` returns by value, so the hidden-return-slot hazard is exactly
+what `tools/abi_retslot_audit.py` exists for. It was run. It printed:
+
+    0 suspicious of 49 by-value-returning exports (enum returns excluded)
+
+**That green says nothing about this lane, or about any runtime port.** The tool
+hardcodes its subject set at `abi_retslot_audit.py:41-42`:
+
+    CPP = os.path.join(REPO, "engine", "funcs", "engine_funcs.cpp")
+    HDR = os.path.join(REPO, "engine", "funcs", "engine_funcs.h")
+
+It reads those two files and nothing else. `runtime/src/`, `standalone/` and
+`dx11/` are outside its window entirely — and a grep for by-value-returning
+mangled names in exactly those three trees returns **131 distinct symbols the
+audit has never looked at.** Its banner and its one-line output both read as
+project-wide; nothing in either says "engine/funcs only".
+
+This is the doctrine-9 shape precisely: *an instrument outside its subject's
+live window prints a plausible ZERO, not an error.* It was one step from being
+cited in §2 as evidence for row 8.
+
+**It is not cited.** Row 8's return slot rests on three things that are actually
+about row 8:
+* the disassembly — RDX is the slot, spilled at `[RSP+0x10]` on entry and
+  returned in RAX at `0x18000d434`;
+* the probe asserts the returned pointer **equals the caller's slot** on both
+  sides (`ro == &mo`, `rt == &mt`), which a stale-register write would fail;
+* the probe **poisons both slots with `0x5A`** before the call, so a write that
+  landed anywhere else would leave the poison and be caught by `SameMode`.
+
+**Recommended (not done by this lane — it is wave-scoped work, not row work):**
+widen the audit to the runtime/dx11 trees, or make it print its subject set
+alongside its count. A one-line output that cannot say which files it read is
+how a blind screen gets quoted as a green one.
+
+---
+
 ## 8. Blocked, and what it cost
 
 `tools/game_dir_lock.sh acquire gfxif` (never piped; own exit status checked)
