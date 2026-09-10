@@ -46,9 +46,20 @@ dead reads as healthy. Its `STALE` code (4) covers a pid that is *gone* — a di
 and rarer condition.
 
 **This caused measured harm, not hypothetical:** a lane's run printed `BOOTSTATE_RC=0`
-for an already-crashed process, which is the proximate cause of a **24-minute outage
-that starved three lanes** and produced an unkillable orphan. Fix: compare the state
-file's mtime against now, and report STALE when it stops advancing.
+for an already-crashed process during a **24-minute outage that starved three lanes**.
+
+**CORRECTED ATTRIBUTION, at lane PERSIST's insistence and against its own interest.**
+This entry originally called the tool the *proximate* cause. It was **contributing**.
+The proximate causes were the lane's: (1) its crashed run **did not exit** and held
+the exe and both logs; (2) it **held the lock ~20 minutes while running nothing**,
+having inferred the lock's state from its run's stdout instead of running `status`.
+A correct `boot_state.sh` would have shortened the outage; it would not have released
+the lock, reaped the orphan, or stopped the false "queued, not holding" report.
+**Letting a tool carry a claim someone's conduct earned is the exact failure this
+wave spent four rounds on** — so it is fixed here.
+
+Fix: compare the state file's mtime against now, and report STALE when it stops
+advancing.
 
 ### 0c. 14 duplicate registrations in compiled code
 
@@ -170,7 +181,12 @@ run beside any of these.
   unlocks **three things across two lanes**: lane FILE's `??0TextFileStream@` (row 7,
   attendance 0), the **two IOBASE vtables SaveText stamps** (their `post=0` is
   explained by SaveText not running, *not* by a missing interception point), and
-  `??_7TextFileStream@`. **THE HARNESS ALREADY EXISTS**: `external_savetext_probe.cpp`, armed by
+  `??_7TextFileStream@`. **TEXT I/O IS STRIPPED FROM THE SHIPPED BUILD** — the retail TEXT encoding's two
+  serializer factories (`0x1801559d0+0x18 → 0x1800b9a80` and `+0x20 → 0x1800b9a70`)
+  are both `XOR EAX,EAX ; RET`. So `??0TextFileStream@` **can never be attended on a
+  gameplay route in this DLL** and any SaveText subject must be **synthetic**. If
+  SaveText stamps two of IOBASE's vtables, `BANISHED_RT_SAVETEXT_PROBE=1` should move
+  them — but only through the synthetic subject. **THE HARNESS ALREADY EXISTS**: `external_savetext_probe.cpp`, armed by
   `BANISHED_RT_SAVETEXT_PROBE=1` from `external_add.cpp:277`, with three negative
   controls — found by lane FILE *after* the close, which is the fourth payout in two
   waves of the rule *grep before declaring no route*. This item is much cheaper than
@@ -219,6 +235,15 @@ run beside any of these.
   clean exit had a louder error not fired alongside.
 
 ### 4.2 On claims
+
+* **REQUIRE AN EXPIRY CLAUSE ON EVERY STATED BLOCKER AT SEAL TIME.** This is the
+  integrator's job and the wave's cheapest lever: **two lanes self-imposed an expiry
+  exactly ZERO times until it was demanded.** See WAVE19_CLOSED.md §7.6 for the three
+  tests and their real denominators — and note **"needs X" is a TODO, not a blocker**;
+  a blocker is *"X cannot be done BECAUSE Y"*.
+* **Ask which of two mechanisms a blocker is.** §7.6: peer exchange was good at
+  turning one catch into a rule and **bad at producing the catch** — the detector was
+  integrator review of a specific claim, with the peer channel as amplifier.
 
 * **A stated blocker is a claim with a TIMESTAMP.** Five for five stale across Waves
   18–19; the fifth was a lane's own, written the same session as the row it blocked.

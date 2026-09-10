@@ -514,6 +514,135 @@ A second independent confirmation of §7.4, from the lane that originally argued
 mechanism could reach such claims. **Decomposition has now reached every premise it
 has been pointed at.**
 
+## 7.6 ADDENDUM 4 — three tests for an impossibility claim, and who has to run them
+
+Lanes CSTREAM and PERSIST pointed §7.4's decomposition rule at **their own already-
+reviewed sealed reports** and found **3 of 5 impossibility-shaped claims wrong or
+misleading** — in under an hour, with **no new measurement**. PERSIST 2 of 2, CSTREAM
+1 of 3.
+
+Then they spent four more rounds correcting each other about *why*, and each round
+cost a claim some scope. What survives:
+
+### Decomposition answers only HALF the question
+
+| | |
+|---|---|
+| **(a) is the premise TRUE?** | decomposition answers this |
+| **(b) is the premise BINDING?** | decomposition is **silent** — and (b) is the one that reads most convincingly when wrong |
+
+**Both of CSTREAM's failures were (b).** PERSIST's *"`?BeginDelete@` needs a Delete
+click"* is **literally true** — and the driver already existed in `autostart.cpp`;
+only an event constant was missing.
+
+### And decomposition itself HAS A FREE PARAMETER
+
+PERSIST's correction, about its own case, and it is the sharpest thing in the
+exchange:
+
+```
+claim: "?BeginDelete@ needs a Delete click"
+  literal premise: "it needs a Delete click"    -> TRUE  -> decomposition PASSES
+  implied premise: "there is no driver for one" -> FALSE -> decomposition CATCHES
+```
+
+**Same claim, two decompositions, opposite verdicts.** *Which* premise you extract is
+an input — so **the meta-tool obeys the meta-rule** (§7.1): it can be aimed wrong
+exactly like the `--namespace IO` diff and the wrong `--root`. PERSIST extracted the
+right premise only because it had the driver constant fresh from an hour earlier —
+**luck with good context, not method.**
+
+### The three tests, scored by AIMING rather than by subset
+
+1. **DECOMPOSE** into premise and conclusion — catches a *false* premise.
+   **2 of 3, CONDITIONAL on aiming it right.**
+2. **"NEEDS X" IS A TODO, NOT A BLOCKER.** A blocker is *"X cannot be done BECAUSE
+   Y"*; a requirement is satisfiable by definition. **2 of 3, with NO aiming** — it
+   reads the sentence as written and takes nothing from whoever applies it. **On the
+   two-axis frame it is the `static_assert` of the three.**
+3. **WRITE AN EXPIRY CLAUSE** — what would have to change for this to stop holding.
+   **The only one that reaches (b) reliably.**
+
+**Sample of three. None of these is a law.** And the bound on test 2: it is
+**unaimable by the AUDITOR and GAMEABLE BY THE AUTHOR**, who picks the wording.
+
+### The corollary, quoted with its REAL denominator
+
+> **Naming MORE conditions makes an impossibility claim WEAKER, not stronger.** It is
+> a conjunction, so each extra condition is another chance to be wrong — and being
+> able to list several is evidence you have **not** found the binding one.
+
+CSTREAM flagged this as its most quotable finding and then **turned its own
+denominator rule on it**: the sample is **ONE**, not three. Only one of the three
+claims named more than one condition. **1-of-1 on applicable cases is not
+validation**, and it was about to enter this document reading as though tested on
+three.
+
+### The sample is NOT carelessness — every claim PAID ITS AUTHOR
+
+CSTREAM originally asked for the grammar test to be quoted with the caveat that all
+three cases were inattention, *"none of us had a stake."* **It then retracted that as
+wrong and generous to itself**, after PERSIST corrected the two claims that were its
+own:
+
+| claim | work it excused |
+|---|---|
+| PERSIST T7.1 — "the destroy pass cannot be exercised" | seeding three more elements |
+| PERSIST T7.2 — "`?BeginDelete@` needs a Delete click" | one lookup for an event id |
+| CSTREAM §8 — "`?Close@CFS` needs a file and `?CloseFile`" | one more probe subject |
+
+> **Nobody in this project defends a thesis. Everybody is finishing a lane, and the
+> claim pays them a few minutes.** That is what motivated reasoning actually looks
+> like here.
+
+Which **flips the caveat in the test's favour**: three mildly-incentivised authors
+reached for *requirement* grammar anyway, so the test has been **weakly tested
+against exactly the pressure** CSTREAM said it could not see. Still a sample of
+three; still gameable once known.
+
+### A negative result, reported rather than papered over
+
+CSTREAM looked for a **non-procedural** test for binding-ness and **did not find
+one**. The obvious candidate — *"if this premise were satisfied tomorrow, would I do
+the work?"* — answers **YES for both not-binding cases**, so it would have caught
+neither. It asks about **intent**, and all three authors had willing intent and a
+wrong obstacle. **A binding test must ask WHAT STOPS YOU, not what you would do.**
+
+Its bounded candidate: *spend a fixed short timebox actually ATTEMPTING the thing and
+record where you stop.* Offered **for its mechanism, not its score** — the
+retrospective 3-of-3 is worth almost nothing, being **a control written by the hand
+that made the mistakes**. It does not displace the expiry clause.
+
+### THE STANDING ANSWER IS PROCEDURAL, AND IT IS THE INTEGRATOR'S
+
+> **Require an expiry clause on every stated blocker AT SEAL TIME.**
+
+The evidence is now explicit rather than argued: **two lanes self-imposed an expiry
+exactly ZERO times until it was demanded.** An expiry nobody demands does not get
+written. That makes it a **process** property, not a tool property — and the cheapest
+of the three to institutionalise, because it costs one line in a checklist.
+
+### And a finding about the review structure itself
+
+PERSIST's observation, which cuts against the obvious reading of these four rounds:
+
+> **Peer exchange was good at turning one catch into a rule, and bad at producing the
+> catch.**
+
+The rule that retired PERSIST's `??1Persistence@` holdback was **not peer-generated**.
+It came from the integrator asking *"is the blocker the thread, or the absence of an
+instance you may destroy?"* — about a claim that had **already passed the lane's own
+review and been written into a sealed section**. Neither lane was looking at it. The
+generalisation into decomposition is genuinely joint; **the seed was integrator review
+of a specific claim.**
+
+Both lanes decomposed their own reports **only after being handed the idea**, and
+neither self-imposed an expiry until told to.
+
+**So the procedural recommendation is: the integrator asks which of two mechanisms a
+blocker is, and the peer channel amplifies. Not lanes reviewing each other as the
+detector.**
+
 ## 8. Wave 20 inputs
 
 1. **Fix `runtime_census.py`** to fold minted-vtable slot bodies in, on the Wave 10
