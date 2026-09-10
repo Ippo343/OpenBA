@@ -38,9 +38,20 @@ import os
 import re
 import sys
 
+# Anchored on the SCRIPT, never on the current directory: two checkouts' copies
+# run from one shell must not both measure whichever tree the shell happens to
+# be sitting in.
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CPP = os.path.join(REPO, "engine", "funcs", "engine_funcs.cpp")
-HDR = os.path.join(REPO, "engine", "funcs", "engine_funcs.h")
+
+# WIDENED 2026-09-10 (Wave 18 lane GFXIF). This audit used to read exactly two
+# hardcoded files -- engine/funcs/engine_funcs.{cpp,h} -- and print
+# "0 suspicious of 49 by-value-returning exports" with nothing in the banner or
+# the output saying so. A grep for by-value-returning mangled names in runtime/,
+# standalone/ and dx11/ returns 131 distinct symbols it had never looked at, and
+# lane GFXIF was one step from citing that green for a file it cannot see.
+# A screen that cannot name its own subject invites exactly that.
+ROOTS = ("engine", "runtime", "standalone", "dx11", "code")
+EXTS = (".cpp", ".h", ".hpp", ".inc")
 
 # `?A` introduces a returned user-defined type; V = class, U = struct (both by
 # memory), W4 = enum (by register, not our problem).
@@ -64,36 +75,104 @@ def arity(args):
     return n
 
 
+def sources():
+    """Every scanned file, as (repo-relative path, text). Sorted, so the subject
+    set this prints is stable run to run."""
+    out = []
+    for root in ROOTS:
+        base = os.path.join(REPO, root)
+        if not os.path.isdir(base):
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = [d for d in dirnames
+                           if d not in ("build", "build-perf", ".git")]
+            for fname in filenames:
+                if not fname.endswith(EXTS):
+                    continue
+                full = os.path.join(dirpath, fname)
+                rel = os.path.relpath(full, REPO).replace("\\", "/")
+                out.append((rel, open(full, encoding="utf-8",
+                                      errors="replace").read()))
+    return sorted(out)
+
+
 def main():
-    cpp = open(CPP, encoding="utf-8", errors="replace").read()
-    hdr = open(HDR, encoding="utf-8", errors="replace").read()
-    tdefs = {m.group(2): (m.group(1).strip(), m.group(3).strip())
-             for m in RE_TYPEDEF.finditer(hdr)}
+    files = sources()
+    if not files:
+        # A scanner that reads nothing prints a confident green. Refuse instead.
+        print("ERROR: scanned 0 files -- the subject set is empty, so a clean "
+              "result here would be meaningless.", file=sys.stderr)
+        return 2
 
-    checked, bad = 0, []
-    for fn, tname, mangled in RE_ASSIGN.findall(cpp):
-        if tname not in tdefs:
-            continue
-        m = RE_BYVAL.search(mangled)
-        if not m:
-            continue
-        checked += 1
-        ret, args = tdefs[tname]
-        is_static = m.group(1) == "SA"
-        need = 1 if is_static else 2
-        n = arity(args)
-        if n < need:
-            bad.append((fn, mangled, ret, args, n, need, is_static))
+    # Typedefs are collected from EVERY scanned file, not one header: a typedef
+    # and the assignment that uses it routinely live in different files.
+    tdefs = {}
+    for rel, text in files:
+        for m in RE_TYPEDEF.finditer(text):
+            tdefs.setdefault(m.group(2), (m.group(1).strip(),
+                                          m.group(3).strip(), rel))
 
-    for fn, mangled, ret, args, n, need, is_static in bad:
-        print(f"SUSPICIOUS {fn}")
+    checked, bad, unresolved = 0, [], []
+    for rel, text in files:
+        for fn, tname, mangled in RE_ASSIGN.findall(text):
+            m = RE_BYVAL.search(mangled)
+            if not m:
+                continue
+            if tname not in tdefs:
+                # Counted and named, never silently dropped -- an unfound
+                # typedef is an UNCHECKED by-value return, not a clean one.
+                unresolved.append((rel, fn, tname))
+                continue
+            checked += 1
+            ret, args, tdef_rel = tdefs[tname]
+            is_static = m.group(1) == "SA"
+            need = 1 if is_static else 2
+            n = arity(args)
+            if n < need:
+                bad.append((rel, fn, mangled, ret, args, n, need, is_static))
+
+    for rel, fn, mangled, ret, args, n, need, is_static in bad:
+        print(f"SUSPICIOUS {fn}   [{rel}]")
         print(f"    export : {mangled}")
         print(f"    typedef: {ret}(*)({args})")
         print(f"    arity {n}, needs >= {need} "
               f"({'static: hidden slot in RCX' if is_static else 'member: this in RCX, hidden slot in RDX'})")
         print()
+
+    if unresolved:
+        print(f"UNCHECKED ({len(unresolved)}) -- by-value return whose typedef "
+              f"this scanner could not find. NOT a clean verdict:")
+        for rel, fn, tname in unresolved:
+            print(f"    {fn}  (typedef {tname} not found)   [{rel}]")
+        print()
+
+    # SUBJECT SET, always printed. The previous version's one-line output could
+    # not distinguish "nothing is wrong" from "nothing was looked at".
+    print(f"subject: {len(files)} file(s) under {'/, '.join(ROOTS)}/ "
+          f"({len(tdefs)} fn_*_t typedefs collected)")
     print(f"{len(bad)} suspicious of {checked} by-value-returning exports "
-          f"(enum returns excluded)")
+          f"checked, {len(unresolved)} unchecked (enum returns excluded)")
+    # COVERAGE, measured rather than asserted. The count above is a numerator
+    # over the doors this scanner can see; this is the denominator. A screen
+    # that states its blind spot in prose but never sizes it lets a reader treat
+    # a partial green as a whole one.
+    RE_ANY = re.compile(r'"(\?[^"]*@@(?:QEBA|QEAA|SA|IEAA|IEBA|MEAA|UEAA|AEBA'
+                        r'|AEAA)\?A[VU][^"]*)"')
+    present = set()
+    for rel, text in files:
+        for m in RE_ANY.finditer(text):
+            present.add(m.group(1))
+    seen = {mg for rel, text in files
+            for fn, tname, mg in RE_ASSIGN.findall(text)
+            if RE_BYVAL.search(mg) and tname in tdefs}
+    missed = len(present - seen)
+    print(f"COVERAGE: {len(present & seen)} of {len(present)} distinct "
+          f"by-value-returning mangled names in the tree reach a door this "
+          f"scanner can read; {missed} do NOT and are UNAUDITED.")
+    print("BLIND SPOT: it matches a literal ResolveExport(\"...\") assignment "
+          "bound to a findable fn_*_t typedef. A resolve through a macro door "
+          "(RT_EXPORT_ONCE / RT_DATA_SLOT), a named constant, or a direct call "
+          "with no typedef is invisible here.")
     return 1 if bad else 0
 
 
