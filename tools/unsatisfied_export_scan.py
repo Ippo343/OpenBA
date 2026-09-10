@@ -69,7 +69,26 @@ DOOR = re.compile(
     r'(RT_EXPORT_ONCE|RT_DATA_SLOT|RT_ORIGINAL_ONCE|ResolveExportRaw|ResolveExport|RtOriginal)'
     r'\s*(?:<[^;{}]*?>)?\s*\([^;{}]*?' + NAME,
     re.S)
-REG = re.compile(r'RegisterRuntimeExport\s*\(\s*"([^"]+)"')
+REG = re.compile(r'RegisterRuntimeExport\s*\(\s*((?:"[^"]*"\s*)+)')
+
+# SATISFACTION-SIDE BLIND SPOT, closed 2026-09-10 (Wave 18 lane GATE).
+# REG above matches a LITERAL first argument only, so a registration written as
+# `RegisterRuntimeExport(kSomeName, ...)` was invisible and its symbol was
+# reported UNSATISFIED. That inflates: unlike a request-side blind spot, which
+# under-reports, this one MANUFACTURES WORK. Measured at the time of the fix:
+# 24 such names in the tree, 19 of them wrongly on the list, all UI -- the
+# headline 111 was really 92, and UI's share fell from 28 to 9.
+#
+# It was caught only because a family partition put UI at 28 in a namespace
+# whose census gap is 5: two numbers that could not both be right. Nothing in
+# the tool's own output could have revealed it, which is why the subject and
+# coverage lines below are now printed unconditionally.
+REG_IDENT = re.compile(r'RegisterRuntimeExport\s*\(\s*([A-Za-z_]\w*)\s*,')
+
+# `constexpr char kX[] = "..."`, `static const char* kX = "..."`, `#define kX "..."`
+CONSTDEF = re.compile(
+    r'(?:#define\s+([A-Za-z_]\w*)\s*"([^"]*)")'
+    r'|(?:\b([A-Za-z_]\w*)\s*(?:\[\s*\])?\s*=\s*((?:"[^"]*"\s*)+)\s*;)')
 MINT = re.compile(r'"(\?[^"\s]+)"')
 
 
@@ -135,12 +154,36 @@ def guard_of(text, pos):
 def main():
     ported, minted, requests = set(), set(), {}
     wrappers = 0
+    consts, ident_regs, unresolved_idents = {}, [], []
+
+    # Pass 0: every string-valued constant in the tree, so a registration whose
+    # first argument is a NAME can be resolved to the symbol it stands for.
+    for rel, path in sources():
+        text = strip_comments(open(path, encoding="utf-8",
+                                   errors="replace").read())
+        for m in CONSTDEF.finditer(text):
+            if m.group(1):
+                consts[m.group(1)] = m.group(2)
+            elif m.group(3):
+                consts[m.group(3)] = "".join(re.findall(r'"([^"]*)"', m.group(4)))
 
     for rel, path in sources():
         raw = open(path, encoding="utf-8", errors="replace").read()
         text = strip_comments(raw)
         for m in REG.finditer(text):
-            ported.add(m.group(1))
+            # Adjacent string literals are one name; a long mangled symbol is
+            # routinely wrapped across two source lines.
+            ported.add("".join(re.findall(r'"([^"]*)"', m.group(1))))
+        for m in REG_IDENT.finditer(text):
+            ident = m.group(1)
+            ident_regs.append(ident)
+            if ident in consts and consts[ident]:
+                ported.add(consts[ident])
+            else:
+                # NAMED, never silently dropped. An unresolvable identifier is an
+                # UNKNOWN registration, not an absent one, and the difference is
+                # the whole reason this blind spot inflated the work list.
+                unresolved_idents.append((rel, ident))
         if rel == "standalone/rt_data_mint_tables.inc":
             for m in MINT.finditer(text):
                 minted.add(m.group(1))
@@ -162,7 +205,15 @@ def main():
         sites = live[n]
         print("  %-88s %s%s" % (n[:88], "%s:%d" % (sites[0][0], sites[0][1]),
                                 "" if len(sites) == 1 else "  (+%d more)" % (len(sites) - 1)))
-    print("\n  BLIND SPOT, measured not assumed: %d resolves go through a wrapper "
+    print("\n  SATISFACTION SIDE, stated so a green cannot be quoted out of context: "
+          "%d registrations use a LITERAL name, %d use a named constant (%d of those "
+          "resolved to a string, %d UNRESOLVED and therefore UNKNOWN rather than "
+          "absent)." % (len(ported) - len(ident_regs) + len(unresolved_idents),
+                        len(ident_regs), len(ident_regs) - len(unresolved_idents),
+                        len(unresolved_idents)))
+    for rel, ident in unresolved_idents[:10]:
+        print("      UNRESOLVED %-40s %s" % (ident, rel))
+    print("  BLIND SPOT, measured not assumed: %d resolves go through a wrapper "
           "taking a non-literal argument and are invisible to this scan." % wrappers)
     print("  Reachability is NOT established here -- 'outside a diff guard' is a "
           "structural property, not 'a run executed it'.")
