@@ -1,0 +1,3 @@
+631bfcb267c88cc4f3ce151cc2b46a49 *standalone/build/reimpl-x64.exe
+631bfcb267c88cc4f3ce151cc2b46a49 */c/GOG Games/Banished/reimpl-x64.exe
+lane CSTREAM marker in DEPLOYED exe: 1

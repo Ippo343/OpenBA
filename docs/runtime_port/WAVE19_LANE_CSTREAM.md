@@ -11,6 +11,11 @@ percentage.** `called` sits in both halves of the ceiling fraction, so a lane
 that opens a door moves the printed ceiling without changing anything real
 (`reference_the_ceiling_percentage_is_a_moving_target.md`).
 
+**Sections 0-9 were REPORTED AND SEALED at `8b82c10`. Everything after them is
+POST-REPORT TRANCHE 2**, added after the integrator re-tasked this lane; sealing
+forbids altering, not annotating, so nothing above is edited and the tranche is
+additive. Where the tranche corrects a sealed section it says so and names it.
+
 ---
 
 ## 0. Headline
@@ -698,3 +703,272 @@ hopeful. This file's own recommendation was to run with `BANISHED_RT_CSWRITE=0` 
 and its `?Read` recovering the original bytes from all twelve — so the default-ON
 switch is defensible rather than hopeful. The switch stays, because the blast
 radius has not changed.
+
+---
+
+# POST-REPORT TRANCHE 2 — re-tasked after §0-§9 were reported and sealed
+
+Everything above §9 was reported at `8b82c10` and is unaltered. This tranche is
+additive, and it exists because the integrator sent four corrections and one
+mandatory action after that report. Merged `wave19/base` @ `adc679a` (which
+brings lanes IOBASE, FILE, MINT and TRAPS tranche 2) and re-measured on the
+merged tip.
+
+## T2.1 `?GetSource@Stream@IO@@` — DROPPED, probe KEPT
+
+**Both lanes ported it.** Mine is deleted: the body, the `RegisterRuntimeExport`
+and the `RegisterRuntimeAddr`. Lane IOBASE's (`runtime/src/io/iobase_vtables.cpp`)
+is the surviving one, and my three rows consume it with no registration here,
+because `ResolveExport` and `ResolveAddr` are both registry-first.
+
+The integrator's stated reason was process (IOBASE is sealed, I am live).
+**IOBASE's own reason is better and is the one recorded here:** `??_7MemoryStream@`
+and `??_7VisitorStream@` are PROMOTED and reach READY only through that body, so
+reverting IOBASE's copy would open an interval in which two promoted rows carry
+traps. A resolution that transiently breaks the tree loses to one that does not.
+
+**The cheap end of the collision is that it would not have linked** — both bodies
+used the same `extern "C" RtIo_Stream_GetSource` symbol. The expensive end is the
+one that *does* link: two `RegisterRuntimeExport` calls on one name are a
+SHADOWED binding where the later wins and the earlier line is dead code that
+still reads like a port.
+
+**The probe is kept and repointed at IOBASE's body**, declared with IOBASE's
+signature (`void* (const void*, void**)` — the same ABI spelled through `void*`).
+Kept because it is the only differential oracle either lane has for that body:
+IOBASE names "no differential oracle in this lane" as its own largest gap, and a
+body with no call door cannot be verified by a live run at all. On the merged tip
+it is inside `PURE READERS: 4 of 4`, with the return slot **pre-poisoned** so
+"never written" and "written null" are different outcomes — which is the actual
+defect class for a hidden return slot.
+
+### The verification tool, and the pipeline that hid its verdict
+
+`tools/dispatch_slot_map.py --check` **cannot see this duplicate** — it scans
+`RegisterDispatchSlot` (the exe's `.rdata` IAT) and is structurally blind to
+`RegisterRuntimeExport`. I had quoted its green twice in §5/§9 of this document;
+it was green about a different subject. `tools/dup_runtime_export.py` is the tool
+for this subject.
+
+```
+scanned 1521 files under C:\code\GIT\wt-w19-cstream
+1111 distinct RegisterRuntimeExport names,   7 duplicated
+1148 distinct RegisterRuntimeAddr addresses, 7 duplicated
+?GetSource@Stream@IO@@ / 0x18000c6a0 : ABSENT from both duplicate lists
+compressed_stream_write.cpp          : ABSENT from both duplicate lists
+```
+
+The 14 duplicates are pre-existing and are Wave 20's, not this wave's (they
+include `runtime/src/object/internal.cpp` registering the same four symbols twice
+in one file).
+
+**My first invocation of that tool reported `EXIT=0` and it was 3.** I had piped
+it into `tail -30`, and `$?` after a pipeline is the LAST command's status — so
+`tail`'s success was read as the checker's verdict. That is
+`reference_a_piped_acquire_discards_the_refusal.md` exactly, one tool over from
+where it was first learned. Re-run unpiped: **exit 3**, which is the correct
+verdict for a tree with 14 pre-existing duplicates and is not about my removal.
+
+## T2.2 Slot extents RE-DERIVED FROM THE BYTES — the sizing defect does not bite these three
+
+The integrator's warning is that `kMintVtables` sizes rows by
+`adjacent-export:<next symbol>`, which **cannot see an unexported table lying
+between two exported ones**, and that the mint shadow is **structurally blind to
+extent** (an over-sized row's surplus slots are read from the DLL at their real
+addresses and compare equal, so `598 comparisons, 0 MISMATCH` was true and
+silent). `??_7ReaderWriter@` went 36 → 31 → 26 on that defect.
+
+**So I re-derived all three of my rows from `.rdata` directly**, by the
+next-stamped-head rule rather than the next export. `read_memory` over
+`0x180155500`–`0x1801556a0`, decoded as little-endian qwords:
+
+```
+0x180155560  0x1800244a0  0x18000c6a0  0x1800aa6c0  0x1800aa780  0x1800aa830
+             0x1800aa850  0x1800aa860  0x1800a9620  0x1800a9660
+0x1801555a8  0x0000000000000000        <-- NULL TERMINATOR  => 9 slots
+0x1801555b0  ??_7MemoryStream@ begins
+
+0x1801555f0  0x180024100  0x18000c6a0  0x1800aa6c0  0x1800aa780  0x1800aa830
+             0x1800aa850  0x1800aa860  0x1800a9490  0x1800aa8c0
+0x180155638  0x0000000000000000        <-- NULL TERMINATOR  => 9 slots
+0x180155640  ??_7CompressedStream@ begins
+
+0x180155640  0x180023fd0  0x18000c6a0  0x1800aa6c0  0x1800aa780  0x1800aa830
+             0x1800aa850  0x1800aa860  0x1800aa8d0  0x1800aa8c0
+0x180155688  "PackageFile\0"           <-- ASCII, NOT A POINTER => 9 slots
+```
+
+**All three are exactly 9, and the evidence is a terminator in the row's own
+bytes, not an adjacency argument.** `??_7CompressedStream@`'s terminator is the
+mint table's own `[tail-not-a-pointer]` annotation, independently reproduced
+here. So the `adjacent-export` hazard is real and narrow — it does not reach
+these rows — and I can say that from the bytes rather than from having been
+lucky.
+
+**Lane TRAPS's byte-identity claim is CONFIRMED, and it is larger than stated.**
+`CompressedFileStream` and `CompressedStream` share slots **1–6 AND slot 8** —
+seven identical addresses, not six. Only slot 0 (the class's own deleting-dtor
+thunk) and slot 7 (`?Close@`) differ. That is why 12 bodies close 24 slots.
+
+## T2.3 `CompressedCopyFileStream` — it IS my family, and it is NOT a wave row
+
+Asked twice, so answered from three sides.
+
+* **It is a real, exported 9-slot vtable at `0x180155510`** (`??_7CompressedCopyFileStream@IO@@6B@`,
+  ordinal 1407 per `runtime/types/io/FileStream.h:184`), terminated by a null
+  qword at `0x180155558`, with `??_7CompressedMemoryStream@` starting at
+  `0x180155560`. Read from `.rdata`, same method as T2.2.
+* **It is in my family.** Its Ghidra xrefs name `CompressedCopyFileStream`'s
+  constructor and destructor as the stampers, and its slots are:
+
+```
+  0  0x1800245f0   its own deleting-dtor thunk        NOT PORTED
+  1  0x18000c6a0   ?GetSource@Stream@IO@@             PORTED (lane IOBASE)
+  2  0x1800a90e0   its own Write                      NOT PORTED
+  3  0x1800a9080   its own Read                       NOT PORTED
+  4  0x1800aa830   ?SetCurrentPos@CompressedStream@   PORTED (this lane)
+  5  0x1800aa850   ?GetCurrentPos@CompressedStream@   PORTED (this lane)
+  6  0x1800aa860   ?GetSize@CompressedStream@         PORTED (this lane)
+  7  0x1800a9140   its own Close                      NOT PORTED
+  8  0x1800aa8c0   ?PreCommit@CompressedStream@       PORTED (this lane)
+```
+
+* **It is NOT called by our tree, so it does NOT belong in the wave's row set.**
+  It is absent from the census's called-but-unported listing, and a whole-tree
+  grep for the mangled name and for `0x180155510` finds only documentation and
+  one comment in `FileStream.h`. There is no call door.
+* **It is UNMINTED**, and the way it appears is the trap phase 0b named: its only
+  occurrence in `standalone/rt_data_mint_tables.inc` is as the
+  `adjacent-export:` LABEL on `??_7BinaryFileStream@`'s row. A name grep would
+  read that as a hit.
+
+**The free part**: 5 of its 9 slots already hold ported bodies as a side effect
+of this lane and IOBASE, so if it is ever minted it starts at 9/5/TRAP=4 rather
+than 9/1/TRAP=8. It costs four bodies, all of them its own, none of them anyone's
+row today. **Recorded, not claimed.**
+
+## T2.4 READY IS NOT PROMOTABLE — stampers enumerated per row
+
+The integrator's criterion: every stamp of these vtables is an in-DLL
+RIP-relative `LEA`, not a door, so **a row is promotable exactly insofar as we
+own the FUNCTION THAT STAMPS IT.** Applied to my three READY rows, from Ghidra
+xrefs (`[DATA]` references, which are the `LEA` sites), one row per distinct
+stamping function:
+
+| row | distinct stampers | ours | theirs |
+|---|---|---|---|
+| `??_7CompressedStream@` | 9 | **2** — `??0CompressedStream@` (0x1800aa3d0), `??1CompressedStream@` (0x1800aa650) | `Save`, `IsCurrent`, `Load`, `BuildPackageFile`, `LoadMetaData`, `SaveMetaData`, and an inlined ctor copy at 0x180023e9b |
+| `??_7CompressedMemoryStream@` | 7 | **3** — `??0CompressedMemoryStream@`, `??1CompressedMemoryStream@`, `?ReadPackfile@PackageFile@` | `BuildPackageFile`, `LoadMetaData`, `SaveMetaData`, an inlined ctor copy at 0x180024384 |
+| `??_7CompressedFileStream@` | 6 | **0** | `??0CompressedFileStream@`, `??1CompressedFileStream@`, `CompressedCopyFileStream` ctor, `Save`, `IsCurrent`, `Load` |
+
+**So all three rows are READY and none is a good promotion candidate**, and
+`??_7CompressedFileStream@` is the worst of the three despite being 9/9/TRAP=0:
+we own **zero** of its stamp sites. Promoting it would publish our table and
+leave every stamp on retail's side.
+
+This is the sharpest form of
+`reference_a_green_readiness_screen_is_not_a_route.md` I have met: the readiness
+screen ranks these three identically, and the stamper census separates them
+0 / 2 / 3. **No row here is promoted, and this table is the reason.** I recommend
+the integrator promote none of them in this wave.
+
+## T2.5 Corrections adopted, and one figure I never used
+
+* **`27 trap slots / 20 distinct functions` is RETRACTED to `24 / 17`.** It does
+  not change this lane's count: **my 14 was never derived from it.** §1 says how
+  it was derived — by decoding my three rows' slot arrays out of
+  `standalone/rt_data_mint_tables.inc` on my own tip, precisely because the
+  figure I was handed was `[INHERITED]`. T2.2 has now re-derived the same three
+  rows a second time from `.rdata`. Two routes, same answer.
+* **`ReaderWriter slots 31–33 close 6 slots across two rows` is RETRACTED to 3 in
+  one row.** Not used here.
+* **`??_7ReaderWriter@` is 26 slots.** No reasoning in this document leans on it.
+* **`?GetSource@` is the sole trap in SIX rows, not four.** Confirmed
+  independently here: `0x18000c6a0` appears at `.inc` slot index 1 of
+  CompressedStream, CompressedMemoryStream, CompressedFileStream, MemoryStream,
+  VisitorStream and Stream. It is IOBASE's body, not mine (T2.1).
+* **The integrator's sharpening of §7 is CORRECT and I adopt it.** I wrote "the
+  identity is blind to DATA work"; the precise statement is **"the identity sees
+  a vtable row being CLAIMED, and is blind to the work that makes the claim
+  true."** My own measurement supports the sharper version: I registered no
+  `??_7` symbol at all, so my twelve bodies moved `ported` by three; IOBASE
+  registered `??_7` symbols and those *did* move it. The blind half is the SLOT
+  BODIES, which is exactly the half that makes a row promotable.
+* **The census MECHANISM I gave in §7 was slightly wrong and the conclusion
+  stands.** I wrote that caller-less registrations "land in Ports with no caller
+  and contribute zero"; the integrator's structural read of `runtime_census.py`
+  confirms the row set is built by iterating `called_*`, so such a registration
+  **never becomes a row at all**. Zero identity movement is unchanged.
+  The integrator also found the precedent: Wave 10's
+  `UI::TabElement::UpdateContainers` was the first instance of this same
+  blindness, fixed by folding detour targets in as called+ported+detoured with
+  the justification *"the detour is what makes it run"* — and **the minted vtable
+  is what makes these slots run**. That makes this a precedented census fix for
+  Wave 20 rather than only a caveat.
+
+## T2.6 The kill-switch hazard IOBASE named — asked, and it does NOT apply here
+
+IOBASE reports that `BANISHED_RT_IOBASE=0` removes its bodies but **not** its
+promotions, so that combination publishes a trap-carrying table and the switch is
+therefore not a clean control for the promotion half.
+
+**`BANISHED_RT_CSWRITE` does not have that shape.** `RtIoCompressedStreamWriteRegister()`
+registers twelve bodies and promotes nothing — this lane promotes no row (T2.4
+argues it should not). So `BANISHED_RT_CSWRITE=0` removes exactly the twelve
+bodies, my three rows revert to BLOCKED with their traps intact, and no table is
+published without its bodies. **It is a clean control.** Checked rather than
+assumed: the registrar's whole body is `RegisterRuntimeExport`/`RegisterRuntimeAddr`
+pairs and one `printf`.
+
+## T2.7 Re-measured on the merged tip — everything holds
+
+Run archived in `docs/runtime_port/wave19_cstream/run_postmerge/`. Same route as
+§5.5, `rc=0`, **0-byte crash log**, deployed-exe md5 recorded inside the locked
+section and equal to my build's.
+
+```
+CONTROL         12 of 12 applicable -- GREEN
+SCREEN A        12 of 12 cases
+SCREEN B        12 of 12 cases; retail's Open ACCEPTED 12, Read+compare AGREED 12
+PURE READERS     4 of 4        (now including lane IOBASE's GetSource body)
+EFFECTIVENESS   42 blocks, 33 COMPRESSED, 9 STORED, 0 skipped
+ATTENDANCE      Create=24 Write=282 Commit=24 PreCommit(base)=1 PreCommit(mem)=24
+                Close=24 GetSize=1 GetCurrentPos=1 SetCurrentPos=1 GetSource=1
+```
+
+Readiness, exit phase, whole screen: **62 vtables, 598 slots, 598 of 598 compared
+against the live DLL 0 MISMATCH, 291 slots minted from our own code, 34 of 62
+complete**, clean at both phases.
+
+```
+??_7CompressedStream@IO@@6B@        9 / 9 / TRAP=0   READY
+??_7CompressedMemoryStream@IO@@6B@  9 / 9 / TRAP=0   READY
+??_7CompressedFileStream@IO@@6B@    9 / 9 / TRAP=0   READY
+```
+
+`??_7MemoryStream@` (8/8/0, PROMOTED) and `??_7VisitorStream@` (7/7/0, PROMOTED)
+are IOBASE's and are green through its GetSource, not mine. `??_7Stream@` is
+7/2/TRAP=0 READY and **must stay UNPROMOTABLE(NO-OP)** per phase 0a — noted
+because a lane reading only the readiness screen would reach for it.
+
+Census on the merged tip: **IO 125 called / 108 ported** (three lanes' work
+together). This lane's own contribution to the identity is unchanged at **+3**,
+and T2.5 explains why that number is not the measure of it.
+
+## T2.8 What THIS TRANCHE does not claim
+
+* **It does not claim `CompressedCopyFileStream` is finished, minted or safe to
+  mint.** Its four own bodies are unported and it has no call door. Five of nine
+  slots being covered is a side effect, not a deliverable.
+* **It does not claim any promotability verdict beyond the stamper counts.**
+  Those counts are distinct stamping FUNCTIONS from Ghidra `[DATA]` xrefs. I did
+  not verify that every such xref is a vptr store rather than some other use of
+  the address, and one of them (`0x1801b204x`, in every row) is plainly a
+  DATA table rather than a stamper and is excluded.
+* **It does not re-verify lane IOBASE's `?GetSource@` body beyond what my probe
+  compares** — one case, against the DLL, with a poisoned return slot. That is
+  more than IOBASE has, and it is still one case.
+* **It does not claim the mint shadow validates any slot COUNT.** T2.2 exists
+  because it structurally cannot; my counts come from `.rdata` terminators.
+* **It does not re-run the `?Write` control question.** The UB control stays
+  disqualified and the payload control stays artificial, as §5.3 says.

@@ -45,6 +45,7 @@
 //
 //   slot 0  0x180023fd0 / 0x1800244a0 / 0x180024100   three DISTINCT dtor thunks
 //   slot 1  ?GetSource@Stream@IO@@                    ONE, shared by all three
+//                                                     (LANE IOBASE'S, consumed)
 //   slot 2  ?Write@CompressedStream@IO@@              ONE, shared by all three
 //   slot 3  ?Read@CompressedStream@IO@@               ONE, shared — ALREADY PORTED
 //   slot 4  ?SetCurrentPos@CompressedStream@IO@@      ONE, shared by all three
@@ -221,21 +222,43 @@ typedef void  (*CloseFileFn)(void*, void*);
 }  // namespace
 
 // ============================================================================
-// ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ             retail 0x18000c6a0
+// ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ  (0x18000c6a0) IS NOT HERE
 // ============================================================================
-// Slot 1 of FIVE minted IO rows (Stream, MemoryStream, CompressedStream,
-// CompressedMemoryStream, CompressedFileStream) and the single cheapest action
-// in IO's whole DATA set. Ten instructions, and the only thing in it that can
-// go wrong is the CALLING CONVENTION, not the logic:
+// It WAS. This lane ported and registered it, and so did lane IOBASE, and both
+// bodies used the same `extern "C" RtIo_Stream_GetSource` symbol — so the two
+// would not even have linked together, which is the cheap end of that failure.
+// The expensive end is the one that DOES link: two RegisterRuntimeExport calls
+// on one name are a SHADOWED registration where the later binding silently wins
+// and the earlier line is dead code that still reads like a port.
 //
-//     MOV [RSP+0x10],RDX ; ... ; XOR EAX,EAX ; MOV [RDX],RAX ; MOV RAX,RDX ; RET
+// The integrator arbitrated it to IOBASE (`runtime/src/io/iobase_vtables.cpp`)
+// on a correctness argument that beats the process one: `??_7MemoryStream@` and
+// `??_7VisitorStream@` are PROMOTED and reach READY only through that body, so
+// reverting IOBASE's copy would open an interval in which two promoted rows
+// carry traps. This lane consumes theirs; the three CompressedStream-family
+// rows pick it up with no registration here, because ResolveExport and
+// ResolveAddr are both registry-first.
 //
-// RDX is the HIDDEN RETURN SLOT for the by-value System::String, RCX is `this`.
-// It writes ONE qword of zero through it and returns it. A System::String is 8
-// bytes whose single field is `char* data`, and `data == nullptr` IS the empty
-// string (runtime/types/system/String.h:82) — so this is `return String();`
-// with no allocation and no refcount traffic, and `this` is never read.
+// TWO THINGS WORTH KEEPING FROM HAVING WRITTEN IT ANYWAY:
 //
+//  * **It moves the identity by ZERO on its own.** It has no call door anywhere
+//    in this tree — its only occurrences are six RT_MINT_NAMED rows in
+//    standalone/rt_data_mint_tables.inc, and the census builds its row set from
+//    call doors, so a registration with no door becomes a "port with no caller"
+//    rather than a row. Its whole value is unblocking six `??_7` rows. It must
+//    not be booked as identity progress, and no diff oracle can verify it
+//    (reference_uncalled_port_is_not_verified.md).
+//  * **The hidden return slot is the only way to get it wrong.** RDX is the
+//    by-value System::String return slot; the body writes ONE qword of zero
+//    through it and returns RDX, and `this` is never read. The two `[RSP]`
+//    stores around that are compiler-generated SEH state, NOT object state. A
+//    typedef that omits the slot is a wild write that STILL RETURNS THE RIGHT
+//    ANSWER (reference_hidden_retslot_wild_write.md) — it passes a naive test
+//    and corrupts the caller.
+//
+// The probe in compressed_stream_write_probe.cpp still COMPARES it against the
+// DLL, because this lane's oracle is the only differential one either lane has
+// for it: IOBASE reports having no differential oracle at all.
 // An fn_* typedef that OMITS the hidden return slot is a wild write that still
 // returns the right answer (reference_hidden_retslot_wild_write.md), so the
 // slot is SPELLED here as the first parameter rather than left to the compiler:
@@ -715,6 +738,12 @@ int RtIoCompressedStreamWriteRegister() {
     using namespace RtIo;
     int n = 0;
 
+    // ?GetSource@Stream@IO@@ IS DELIBERATELY ABSENT from this list -- lane
+    // IOBASE registers it (iobase_vtables.cpp). Registering it here too would be
+    // a SHADOWED binding, and tools/dispatch_slot_map.py --check CANNOT SEE IT:
+    // that checker scans RegisterDispatchSlot (the exe's .rdata IAT) and is
+    // structurally blind to RegisterRuntimeExport. Use
+    // tools/dup_runtime_export.py, which is the tool for this subject.
     // ?GetSource@ registration removed -- lane IOBASE owns it (see above).
 
     RegisterRuntimeExport("?Write@CompressedStream@IO@@UEAA_NHPEBX@Z",

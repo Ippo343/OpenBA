@@ -1,7 +1,5 @@
-// ============================================================================
-// runtime/src/io/rt_io_port.cpp — RtIoPortInit()  (Wave 4)
-// ============================================================================
-// One entry point for the IO namespace: the Serializer forwarder family and
+// =====================================================================// runtime/src/io/rt_io_port.cpp — RtIoPortInit()  (Wave 4)
+// =====================================================================// One entry point for the IO namespace: the Serializer forwarder family and
 // its Encoding, the CompressedMemoryStream / MemoryStream / Stream family,
 // registry-backed Persistence, and FileSystem / Modification lookups.
 //
@@ -51,8 +49,7 @@
 // FileSystem touches Win32 directly. Windows-only code goes in a *_win.cpp
 // beside the portable half; <windows.h> must never appear in a non-_win file
 // under runtime/src/.
-// ============================================================================
-
+// =====================================================================
 #include <cstdio>
 #include "../../funcs/rt_port.h"
 
@@ -175,6 +172,28 @@ extern int RtIoBinaryWriterRegister();      // binary_writer.cpp (lane ENC-2)
 // A/B that could only move both together could not attribute anything.
 extern int RtIoSerializeFamilyRegister();   // serialize_family.cpp (lane SERIAL)
 
+// Wave 19 lane CSTREAM: the IO::CompressedStream WRITE path -- the twelve
+// bodies compressed_stream_read.cpp explicitly listed as owed (?Commit,
+// ?CompressWindow, ?Create, ?Write, ?SetCurrentPos, ?GetCurrentPos, ?GetSize,
+// both ?PreCommit, ?Close on CompressedStream and CompressedFileStream).
+//
+// ?GetSource@Stream@IO@@ WAS in this file and is NOT any more: lane IOBASE
+// landed the same body first, and two RegisterRuntimeExport calls on one name
+// are a SHADOWED registration where the later binding silently wins. It is
+// registered by iobase_vtables.cpp and consumed here.
+//
+// ITS OWN SWITCH, and the reason is sharper than "blast radius": this is the
+// half of the class that PRODUCES bytes. Every save the game writes goes
+// through ?Commit, so an A/B that could only move the read and write halves
+// together could not attribute a corrupt save to either. BANISHED_RT_CSREAD
+// stays independent of it for the same reason it is independent of
+// BANISHED_RT_STREAM.
+//
+// NOTE it does NOT make the writer cutover-clean: ?Write reaches ?SetWindow,
+// whose direction!=0 GROW branch is still DELEGATED to the DLL and counted by
+// compressed_stream_read.cpp. That remains a named cutover blocker.
+extern int RtIoCompressedStreamWriteRegister();    // compressed_stream_write.cpp
+
 // Wave 19 lane IOBASE, tranche 1: the four IO vector deleting destructors that
 // are slot 0 of their rows, the three out-of-line destructors they inline,
 // ?GetSource@Stream@IO@@ (slot 1 of SIX minted rows), and the whole
@@ -243,6 +262,8 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_ENCODING"))    n += RtIoEncodingRegister();
     if (RtWaveEnabled("BANISHED_RT_BINWRITER"))   n += RtIoBinaryWriterRegister();
     if (RtWaveEnabled("BANISHED_RT_SERIALFAM"))   n += RtIoSerializeFamilyRegister();
+    if (RtWaveEnabled("BANISHED_RT_CSWRITE"))     n += RtIoCompressedStreamWriteRegister();
+
     if (RtWaveEnabled("BANISHED_RT_IOBASE"))      n += RtIoBaseVtablesRegister();
     if (RtWaveEnabled("BANISHED_RT_FILESTREAM"))  n += RtIoFileStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_CREATEFILE"))  n += RtIoFileSystemCreateFileRegister();
