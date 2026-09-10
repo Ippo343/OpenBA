@@ -547,6 +547,69 @@ int RtMintRegisterPromotedRows() {
     RegisterRuntimeAddr(0x1801fa4a0ull, st); ++n;
 
     // ========================================================================
+    // THE FIRST PROMOTED MUTABLE SINGLETON POINTER   (Wave 14 lane SINGLETON)
+    //   ?_singleton@SaveLoad@Save@@0PEAV12@EA   0x1801fc6f0   ordinal 4817
+    // ========================================================================
+    //
+    // Every row above this one is a vtable or a BaseTypeInfo — write-once data
+    // whose worst case is a wrong constant. This one is a LIVE MUTABLE POINTER,
+    // the same shape as `?_singleton@Application@1@`, which is tagged
+    // UNPROMOTABLE | HARMFUL twenty lines below. So the difference between the
+    // two has to be shown, not asserted, and it is the READER SET.
+    //
+    // Application::_singleton has 26 in-DLL RIP-relative references, 24 of them
+    // READS in bodies nobody has ported. Promoting it would strand those 24 on
+    // a slot our ctor no longer writes. SaveLoad::_singleton has FIVE, and they
+    // were enumerated twice by routes that could have disagreed — Ghidra
+    // get_xrefs_to, and a decoder-independent scan of every disp32 field in
+    // .text whose RIP-relative target is the slot. (The scan first reported
+    // FOUR: it assumed no trailing immediate, and `??1SaveLoad`'s reference is
+    // `MOV qword ptr [rip+d],0`, where RIP is measured past the imm32.
+    // Corrected, both routes give the same five. A second route only helps if
+    // it can actually disagree, and this one did.)
+    //
+    //   0x1800c3d9b  W  ??0SaveLoad@Save@@QEAA@XZ            PORTED + registered
+    //   0x1800c3ca6  W  ??1SaveLoad@Save@@QEAA@XZ            PORTED + registered
+    //   0x1800dc3e9  R  ?OnVideoRestart@MainLoop@Engine@@    PORTED + registered
+    //   0x1800dcc1d  R  ?OnVideoError@MainLoop@Engine@@      PORTED + registered
+    //   0x180030d40  R  ?Get@SaveLoad@Save@@SAPEAV12@XZ      UNPORTED, and DEAD
+    //
+    // All four ported bodies reach the slot through `RT_DATA_SLOT` /
+    // `ResolveExport`, i.e. through the door, so promoting moves them with it.
+    // The fifth cannot be moved — an in-DLL RIP-relative load is not a door —
+    // and that is the whole question, so `Get`'s deadness is the load-bearing
+    // fact and it is established from the binaries, not from reading:
+    //
+    //   * Runtime-x64.dll: no call site. Ghidra's xrefs to 0x180030d40 are the
+    //     export-directory entry and the entry-point sweep, nothing else.
+    //   * Application-x64.exe: not among its 899 imports (833 from this DLL).
+    //     The exe reaches this singleton at 20 .text sites, every one of them
+    //     through import slot 0x140151610 — a DOOR, registered in
+    //     reg_unreg_lane1.cpp — never through `Get`.
+    //   * VideoDX11-x64.dll (163 imports) and VideoDX9-x64.dll (146): absent.
+    //   * No pointer-valued reference to 0x1801fc6f0 exists in any of the four
+    //     binaries, so there is no fifth way to reach it.
+    //
+    // ORDER. Everything that resolves this name does so after this file runs:
+    // RtDataMintInit() is inside RuntimePortInit() (main.cpp:1731), and
+    // AddressRegistryInit() (which computes RegisterDispatchSlot(0x140151610,
+    // ResolveExport(...)) ) and EngineFuncsInit() both run after it. A
+    // promotion that landed after either would have left the exe's 20 readers
+    // pointed at a slot nothing writes; that is worth stating because it is the
+    // failure this row would have had, and it is ordering, not luck.
+    //
+    // MEASURED, not argued: `ProbeSaveLoadSingleton` in rt_orphan_probe.cpp
+    // (BANISHED_RT_ORPHAN_PROBE=1) sweeps six sentinels through the DLL slot to
+    // prove retail's `Get` reads exactly this address, then runs our REGISTERED
+    // ctor on a private object and checks where the pointer landed. The A/B is
+    // the `arrangement=` line: DLL-SLOT without this row, MINTED with it, and
+    // the publish check passes in BOTH halves — which is the point. The quantity
+    // varies with the thing the gate gates.
+    st = RtMintPromotionStorage("?_singleton@SaveLoad@Save@@0PEAV12@EA", 0x1801fc6f0ull);
+    RegisterRuntimeExport("?_singleton@SaveLoad@Save@@0PEAV12@EA", st);
+    RegisterRuntimeAddr(0x1801fc6f0ull, st); ++n;
+
+    // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted
     // ========================================================================
     //
