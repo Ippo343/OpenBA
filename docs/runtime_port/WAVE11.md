@@ -896,3 +896,57 @@ independently agrees with lane OBJINT's `+0x20`/`+0x28` derivation.
   retail's TEXT `Encoding` has **both** Serializer factory slots stubbed to
   `XOR EAX,EAX; RET` while the BINARY one's are real. Established by **running
   the shipped export**, not by inspection.
+
+## Follow-up 3 CLOSED — `SerializeReferenceTable` + the `Set<ReferenceEntry>` family
+
+| | before | after |
+|---|---|---|
+| **Object** | 50/61 = 82.0% | **51/61 = 83.6%**, ceiling 88.5% — **3 rows from the ceiling** |
+| TOTAL | 80.5% | 80.6% |
+
+`ported` +2 (the export and the address `0x18002cb90`); nothing entered `called`
+unported. Both builds clean with the new log-strip gate active.
+
+**The three rows left are ALL follow-up #5's subject**: `??_7Internal@Object@@6B@`,
+`?_typeInfo@CompiledExternal@Object@@`, `?_typeInfo@Internal@Object@@`. So the
+88.5% ceiling is reachable by promotion alone — subject to the abort-trap
+precondition recorded under follow-up 2.
+
+### Two corrections, and the first is the integrator's
+
+1. **The brief named two missing bodies; only one was missing.** `0x18002ebf0`
+   (destroy-tree) had been ported *and registered* since Wave 11 lane OBJLIFE as
+   `ReferenceSubtreeFree` (`factory_dtors.cpp:381`, registered at `:499`). The
+   integrator passed OBJEXT's §5.1 addresses into the brief **without grepping
+   either**. That is the **fourth** instance in this series of a brief sending a
+   lane at code the tree already had, and the root cause is the same every time:
+   **treating a prior lane's prose as a port-state statement.** Post-merge check:
+   exactly one binding each for `0x18002ebf0` and `0x18002cb90` — necessary
+   because `RegisterRuntimeAddr` is last-binding-wins and a duplicate would have
+   silently made one body dead code.
+
+2. **The AVL family is what the READ path needs.** The WRITE path never inserts —
+   it walks `_resources` in order and emits. **So the half of the function whose
+   failure mode is a silent save desync was never blocked by the Set family at
+   all**, and had been portable and oracle-able since Wave 9 lane S existed.
+   Generalisable: *a holdback's stated blocker can cover one direction of a
+   two-direction function and read as covering both.*
+
+### Method worth reusing
+
+* **Mechanism-pure controls.** `wrong slot` caught on *identical values*
+  (`uint(+0x98)=5683` vs `int(+0xa0)=5683`); `wrong value` caught on *identical
+  slots* (`ours=2 theirs=1`). Neither could have been caught by the other's
+  mechanism — the "catch via the mechanism it names" rule demonstrated, not
+  asserted.
+* **Adversarial population against a signed comparator.** The comparator is a
+  signed `JL`/`JGE` on a `uint32` field while the live caller only ever inserts
+  `1..N`. Populating for that is the difference between a verification and a
+  uniform population that verifies nothing.
+* **Set-diff measured from a scratch worktree at the base.** `git stash` measures
+  nothing once the work is committed, and the lane's first attempt produced
+  exactly that empty diff before it noticed.
+* **Pre-registration scored honestly**: direction and magnitude held, the
+  *mechanism* was wrong (it predicted the exported name would enter `called`; it
+  was the unexported address). Scoring a prediction partly wrong when the
+  headline matched is worth more than a clean-looking hit.
