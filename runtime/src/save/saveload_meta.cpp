@@ -355,9 +355,18 @@ using StreamCloseFn = void (*)(void* stream);
 
 // The four vtables retail stamps by RIP-relative LEA. All four are EXPORTED
 // symbols (??_7...@6B@), so they are resolved by name like everything else.
-inline const void* RtVtable(const char* mangled) {
-    return reinterpret_cast<const void*>(ResolveExport(mangled));
-}
+// Resolve-and-cache, NEVER caching a null — the same contract RT_EXPORT_ONCE
+// has, spelled for a DATA symbol. ResolveExport is GetProcAddress: an
+// export-table binary search under the loader lock, every call
+// (reference_rtoriginal_is_getprocaddress.md). Six of them per save would not
+// be measurable, but the house rule is to resolve once and the cheap version is
+// the same length as the expensive one.
+#define RT_VTABLE_ONCE(MANGLED)                                                \
+    ([]() -> const void* {                                                     \
+        static void* rt_vtable_once__ = nullptr;                               \
+        return reinterpret_cast<const void*>(                                  \
+            RtResolveCached((MANGLED), &rt_vtable_once__));                    \
+    }())
 
 inline void* ReadVtableSlot(const void* obj, int byteOffset) {
     void* const* vtbl = *reinterpret_cast<void* const* const*>(obj);
@@ -397,7 +406,7 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
     RtIo::CompressedMemoryStream cs;
 
     RT_EXPORT_ONCE(CtorFn, "??0CompressedStream@IO@@QEAA@XZ")(&cs.base);
-    cs.base.base.vptr = RtVtable("??_7CompressedMemoryStream@IO@@6B@");
+    cs.base.base.vptr = RT_VTABLE_ONCE("??_7CompressedMemoryStream@IO@@6B@");
     RT_EXPORT_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(&cs.memoryStream);
 
     cs.base.base.direction = 1;                 // 1 == writing
@@ -451,9 +460,18 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
     // which takes an `int&`. Our parameters occupy the same role. On the write
     // path the slot only reads them.
     scalarInt(rw, &width,  nullptr);
-    int heightArg = height;
-    if (ControlMode() == 2) heightArg ^= 1;      // negative control, see below
-    scalarInt(rw, &heightArg, nullptr);
+    if (ControlMode() == 2) {
+        // NEGATIVE CONTROL 2 ONLY. The `else` arm hands the slot the ARGUMENT
+        // ITSELF, exactly as retail hands it the home slot, because the slot
+        // takes an `int&` and writes back through it on the read path. Routing
+        // the normal path through a copy "so both arms look alike" would
+        // quietly break that aliasing, so the control gets its own arm and the
+        // faithful call is left untouched.
+        int corrupted = height ^ 1;
+        scalarInt(rw, &corrupted, nullptr);
+    } else {
+        scalarInt(rw, &height, nullptr);
+    }
 
     writeBytes(rw, width * height * 4, pixels, nullptr);
 
@@ -581,19 +599,19 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
     // under destruction reverts to each base's table in turn). They are not
     // decoration: ?Close@CompressedMemoryStream is virtual, and the second
     // Close below dispatches through the table stamped on the line above it.
-    cs.base.base.vptr = RtVtable("??_7CompressedMemoryStream@IO@@6B@");
+    cs.base.base.vptr = RT_VTABLE_ONCE("??_7CompressedMemoryStream@IO@@6B@");
     if (cs.base.headerSize > 0 && cs.base.base.direction == 1) commit(&cs.base);
     reinterpret_cast<StreamCloseFn>(
         ReadVtableSlot(&cs.memoryStream, RtIo::kStreamVtblCloseSlot * 8))(&cs.memoryStream);
 
-    cs.memoryStream.base.vptr = RtVtable("??_7MemoryStream@IO@@6B@");
+    cs.memoryStream.base.vptr = RT_VTABLE_ONCE("??_7MemoryStream@IO@@6B@");
     if (cs.memoryStream.ownsData != 0 && cs.memoryStream.data != nullptr) {
         MemFree(cs.memoryStream.data);
     }
-    cs.memoryStream.base.vptr = RtVtable("??_7Stream@IO@@6B@");
+    cs.memoryStream.base.vptr = RT_VTABLE_ONCE("??_7Stream@IO@@6B@");
     if (cs.memoryStream.base.encoding != nullptr) MemFree(cs.memoryStream.base.encoding);
 
-    cs.base.base.vptr = RtVtable("??_7CompressedStream@IO@@6B@");
+    cs.base.base.vptr = RT_VTABLE_ONCE("??_7CompressedStream@IO@@6B@");
     RT_EXPORT_ONCE(ReleaseFn, "?Release@CompressedStream@IO@@QEAAXXZ")(&cs.base);
 
     // *** EVERY FREE BELOW THIS LINE IS DEAD, AND THAT IS RETAIL'S DOING. ***
@@ -628,7 +646,7 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
     cs.base.windowSize = 0;
     cs.base.windowCap  = 0;
 
-    cs.base.base.vptr = RtVtable("??_7Stream@IO@@6B@");
+    cs.base.base.vptr = RT_VTABLE_ONCE("??_7Stream@IO@@6B@");
     if (cs.base.base.encoding != nullptr) MemFree(cs.base.base.encoding);
 
     // ---- destroy the BY-VALUE String argument ------------------------------
@@ -691,6 +709,14 @@ using SaveMetaFn = void (*)(void* self, void* pixels, int w, int h, String* name
 
 } // namespace
 
+// Forward declaration so the oracle body can print the summary before exiting
+// on BANISHED_RT_SAVEMETA_QUIT_AFTER.
+extern "C" void RtSaveMetaSummary();
+
+namespace {
+
+} // namespace
+
 extern "C" void RtSave_SaveLoad_SaveMetaData(SaveLoad* self, void* pixels,
                                              int width, int height,
                                              String* name, int nameMode) {
@@ -748,6 +774,23 @@ extern "C" void RtSave_SaveLoad_SaveMetaData(SaveLoad* self, void* pixels,
     std::fflush(stderr);
 
     if (b->_data != nullptr) MemFree(b->_data);
+
+    // HARNESS ONLY, off unless BANISHED_RT_SAVEMETA_QUIT_AFTER is set: end the
+    // process cleanly once N oracle calls have landed, so a verification run
+    // terminates on a COUNT rather than on a wall clock. A wall-clock kill ends
+    // the process at an arbitrary point and takes the summary line with it,
+    // which is exactly the reporting cap that manufactures a false calls=0
+    // (reference_truncated_tool_output_manufactures_calls_zero.md).
+    static const int quitAfter = []() {
+        const char* e = std::getenv("BANISHED_RT_SAVEMETA_QUIT_AFTER");
+        return (e && e[0]) ? std::atoi(e) : 0;
+    }();
+    if (quitAfter > 0 && g_calls >= static_cast<uint64_t>(quitAfter)) {
+        RtSaveMetaSummary();
+        std::fprintf(stderr, "[SaveMetaOracle] QUIT_AFTER=%d reached; exiting.\n", quitAfter);
+        std::fflush(stderr);
+        std::_Exit(0);
+    }
 }
 
 // One line beside the other RtDiff summaries. Reports `calls=` FIRST and always,
