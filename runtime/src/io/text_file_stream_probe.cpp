@@ -64,6 +64,59 @@
 // files compare equal. `att=` reports how many times a negative control was
 // actually consumed — a control with att=0 tested nothing.
 //
+// ---------------------------------------------------------------------------
+// MEASURED 2026-09-10 on this lane's build (deb4a052), autostart+autoquit run.
+//
+//   BANISHED_RT_TFS_PROBE=1, no control:
+//     screen A checked=16 failed=0    screen C checked=12 failed=0
+//     screen B checked=20 failed=0    screen D checked=33 failed=0  bytes=7
+//     VERDICT ctl=0 att=0 checked=81 failed=0 bytes=7 PASS
+//     attendance read=4 setPos(buf=5 file=5 seek=0) getPos(buf=8 file=8)
+//                getSize(buf=8 file=8) create=6 failed=0 bom=3
+//
+//   `bytes=7` IS ITSELF A CHECK, not just a non-zero. The six encodings write
+//   3 + 2 + 2 bytes of mark (enc 3, 4, 5) and nothing at all (enc 0, 2, 7), and
+//   7 is what that predicts. A different total would mean the table moved.
+//   Every arm reads non-zero EXCEPT `setPosSeek`, which is declared undriven
+//   below and is expected to read 0.
+//
+//   The four negative controls, each in its own run. EACH TRIPS EXACTLY ONE
+//   SCREEN and leaves the other three green — they are scored separately, never
+//   on a union (reference_union_control_hides_a_blind_screen.md):
+//     ctl=1  att=16  A 3/16 failed   B,C,D pass
+//     ctl=2  att=5   B 1/20 failed   A,C,D pass
+//     ctl=3  att=4   C 4/12 failed   A,B,D pass
+//     ctl=4  att=6   D 12/30 failed  A,B,C pass
+//
+//   ctl=2 CAN ONLY BE CAUGHT ONCE by construction: it was consumed 5 times and
+//   only `pos == size` exactly can expose an off-by-one, so `att=5, failed=1`
+//   is the honest effectiveness figure and not a weak screen.
+//   ctl=4's denominator is 30, not 33: with every length mismatched the
+//   byte-comparison check does not run. Quote the denominator, not the count.
+//
+// ---------------------------------------------------------------------------
+// WHAT THIS PROBE DOES NOT MOVE, measured rather than assumed.
+//
+// `BANISHED_W17_ATTEND=1` door attendance, its own CONTROL row GREEN
+// (`?_singleton@MainLoop@Engine@@` init=1 post=2) in all four runs:
+//
+//   row                          unarmed   THIS probe only   SaveText probe only
+//   ??_7TextFileStream@IO@@6B@   post=0    post=0            post=2
+//   ??_7FileStream@IO@@6B@       post=2    post=2            post=3
+//   ??_7Stream@IO@@6B@           post=6    post=6            post=7
+//
+// THIS PROBE MOVES NOTHING, and that is correct rather than disappointing.
+// Screens A-C use a hand-built block with no vptr, so they stamp nothing at
+// all; screen D builds its subjects with the SHIPPED constructor, which stamps
+// the DLL's table with a RIP-relative LEA — and an in-DLL LEA stamp is not a
+// door (reference_a_ported_row_can_be_permanently_unpromotable.md).
+//
+// What moves all three rows is OUR ported `?SaveText@External@Object@@`, whose
+// three `RT_DATA_SLOT` stamps DO go through the door — by exactly +1 on the two
+// rows that were already attended, and 0 -> 2 on TextFileStream. A reader who
+// wants that row attended arms `BANISHED_RT_SAVETEXT_PROBE=1`, not this one.
+//
+// ---------------------------------------------------------------------------
 // NEGATIVE CONTROLS — `BANISHED_RT_TFS_NEGCTL=1..4`. The perturbations live in
 // the BODIES (text_file_stream_win.cpp), not here, so each is consumed by the
 // single implementation under test rather than by a copy of it. Each is scored
