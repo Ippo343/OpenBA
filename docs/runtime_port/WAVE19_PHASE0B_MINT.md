@@ -730,3 +730,97 @@ which is why compiling happens without the lock.
 * **Nothing here changes** the root cause (staleness), the population set-diff,
   the stamper/promotion analysis in A.3, or the identity (`83 >= 122 − 3 = 119`,
   36 short, moved by zero).
+
+---
+
+# ANNEXE D — THE SHADOW RE-RUN, AND IT WAS RED FIRST (2026-09-10)
+
+Closes C.6's open item. Two runs, because the first one **failed**.
+
+## D.1 The corrected extents made the shadow FAIL, and the shadow was not wrong
+
+First re-run on the corrected tables: **`==== FAIL: 2 problem(s) ====`**, both
+`SIZE SUSPECT`, on exactly the two rows Annexes B and C had just proved:
+
+```
+SIZE SUSPECT ??_7ReaderWriter@:   minted 26 slots but the qword after the last
+                                  one (00007fff7ed2ec28) is a DLL pointer
+SIZE SUSPECT ??_7TextFileStream@: minted 10 slots but the qword after the last
+                                  one (00007fff7ed69ab0) is a DLL pointer
+```
+
+**That is the tail probe working exactly as designed, on a premise that no
+longer holds.** It asks "is the qword past the last slot a valid image
+pointer?" — a good proxy for *truncated* when a table is followed by non-pointer
+`.rdata`. But a row bounded by a **ctor-stamped neighbour** is followed by that
+neighbour's slot 0, which **is** a DLL pointer **by construction**. So every
+correctly-bounded row of this new kind would flag, forever.
+
+**A permanently red screen is a screen nobody reads** — worse than the defect it
+was added for, and it would have made the next lane "fix" a correct extent back
+to a wrong one to clear the red.
+
+## D.2 The fix inverts the check rather than suppressing it
+
+`standalone/rt_data_mint.cpp` gains a third branch for
+`ctor-stamped-neighbour:` proofs. Suppressing would have retired a check; instead
+the predicate flips to assert what the bound actually rests on:
+
+> if the tail is **NOT** a DLL pointer, the neighbouring table this bound rests
+> on **is not there**, and the extent is the thing to doubt.
+
+Same row, same byte, opposite expectation — because the *reason for the bound*
+changed, not the data.
+
+**Control, argued rather than re-run** (three lanes are queued on the lock).
+The branch is provably **reached**: had it not been, the old `else` would have
+printed its message again, and it did not. Its predicate's subject is
+**known-true from the failing run's own output** — that run printed the two tail
+values, `00007fff7ed2ec28` and `00007fff7ed69ab0`, and printed them *because*
+`DllContains(tail)` was true for both. So the new branch is entered and
+evaluates a condition whose input was independently observed. I did not run a
+control that forces the new arm to fire, and I am not claiming one.
+
+## D.3 Second re-run — clean
+
+```
+ground truth       : 578 slot comparisons vs the live DLL, 0 MISMATCH
+minted from OUR    : 270 slots, 0 MISMATCH   <-- the only number that measures the port
+==== clean: 0 problem(s) ====
+```
+
+Exit 0, 0-byte crash log. **§4.1's clean shadow now describes the CORRECTED
+extents.** 598 → 583 → 578 slot comparisons across the three generations.
+
+## D.4 The row table has MOVED — other lanes landed ports while I worked
+
+Measured on this run, not carried from §4:
+
+| row | slots | ported | TRAP | purecall | state |
+|---|---|---|---|---|---|
+| `??_7BinaryFileStream@` | 8 | 0 | 8 | 0 | BLOCKED |
+| `??_7CompressedFileStream@` | 9 | **2** | 7 | 0 | BLOCKED |
+| `??_7FileStream@` | 8 | 0 | 8 | 0 | BLOCKED |
+| `??_7TextFileStream@` | **10** | 0 | **10** | 0 | BLOCKED |
+| `??_7VisitorStream@` | 7 | **7** | **0** | 0 | **READY** |
+
+**42 slots, 9 ported, 33 traps, 25 distinct trap bodies.** §4 said 52/1/51/41 and
+B.1 corrected it to 42/1/41/31; the port columns have since moved again.
+
+**`??_7VisitorStream@` is the first of the five to reach TRAP=0**, and it is also
+one of the two **ATTENDED** rows (§5, `post=1` via `?Add@External@Object@@`). So
+it has both a proven door and a complete slot set — **the strongest promotion
+candidate of the five, and the one to take first.** Per my own §4 and
+`reference_a_green_readiness_screen_is_not_a_route.md`, **READY is still not
+promoted**: it is not registered in `standalone/reg_mint_promoted.cpp`, and
+A.3's stamper analysis applies unchanged.
+
+`??_7ReaderWriter@` reads **26 slots, 25 purecall, 1 trap** — confirming C.5's
+25-of-26 from the live screen, and a stronger abstract-base signal for phase 0a
+than the 30-of-36 that CEIL §3.4 and WAVE19_IO.md §3.0a still quote.
+
+## D.5 What D does not close
+
+The attendance figures in §5 are from the **earlier** run and were not re-taken;
+ports have landed since, and attendance measures the *door*, not the slots.
+D.4's numbers are one gameplay-route run on this tip.

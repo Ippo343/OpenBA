@@ -1120,6 +1120,26 @@ void RtDataMintShadowReport(const char* phase) {
                        label, v.slotCount,
                        (long long)(((char*)end - (char*)nextVt) / 8), adj);
             }
+        } else if (v.sizeProof && !strncmp(v.sizeProof, "ctor-stamped-neighbour:", 23)) {
+            // Wave 19 lane MINT. This row is bounded by ANOTHER TABLE whose own
+            // constructor names its address, not by the next export. So the
+            // qword after the last slot IS a DLL pointer BY CONSTRUCTION - it is
+            // the neighbour's slot 0 - and the tail probe below would flag every
+            // such row forever. A screen that is permanently red is a screen
+            // nobody reads, which is worse than the defect it was added for.
+            //
+            // The check INVERTS rather than being suppressed: if the tail is NOT
+            // a DLL pointer then the neighbour this bound rests on is not there,
+            // and the extent is the thing to doubt.
+            void* tail = dll[v.slotCount];
+            if (!DllContains(tail)) {
+                ++sizeSuspect;
+                printf("[RtMintShadow] SIZE SUSPECT %s: minted %d slots bounded by a "
+                       "ctor-stamped neighbour, but the qword after the last slot "
+                       "(%p) is NOT a DLL pointer - the neighbouring table the bound "
+                       "rests on is not there [%s]\n", label, v.slotCount, tail,
+                       v.sizeProof);
+            }
         } else {
             void* tail = dll[v.slotCount];
             if (DllContains(tail)) {
