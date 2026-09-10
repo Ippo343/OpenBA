@@ -157,6 +157,12 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
+// standalone/resolve.h:108. The RAW door: it answers from the loaded DLL and
+// never consults the port registry, which is what makes it usable as the
+// "theirs" side of a comparison. Declared here rather than by including
+// standalone/resolve.h, matching how ResolveAddr is already declared above.
+uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
+
 // Rung 4 of Wave 9 lane PKG2 (filesystem_openfile_win.cpp), already ported and
 // registered. Declared here rather than pulled in from a header because that
 // lane publishes none and this lane does not edit another lane's files.
@@ -314,6 +320,80 @@ struct FileStreamCounters {
 FileStreamCounters g_fsc{};
 
 // ============================================================================
+// WAVE 20 LANE PROMOTE — the A/B EFFECT and the ATTENDANCE TIER for
+// `??_7BinaryFileStream@IO@@6B@`
+// ============================================================================
+// `??_7BinaryFileStream@` is promoted by standalone/reg_mint_promoted.cpp. Two
+// separate questions have to be answered separately, and merging them is how
+// "live-exercised" comes to read like "verified":
+//
+//   EFFECT      did the promotion change what our constructors STAMP?
+//               `ctorStamps` is the denominator (every stamp by either of the
+//               row's two stampers); `ctorStampedMint` is how many of those
+//               installed OUR minted table instead of the DLL's. With the row
+//               promoted the two must be EQUAL; with the kill switch set,
+//               `ctorStampedMint` must be ZERO and `ctorStamps` UNCHANGED.
+//               A/B on one variable, scored on applicable cases only.
+//
+//   ATTENDANCE  did anything DISPATCH through the table we stamped?
+//               `slotEntries` counts entries to the seven shared slot bodies;
+//               `slotViaMintBfs` counts the subset whose object carried OUR
+//               minted BinaryFileStream table at the moment of the call. THAT
+//               subset is the attendance number, and it is a different and
+//               weaker claim than "verified": it says a body ran through a
+//               table we published, not that its result was compared against
+//               anything (that is file_stream_slots_probe.cpp's job).
+//
+// WHY THE VPTR TEST IS NEEDED AT ALL. `??_7FileStream@` and
+// `??_7BinaryFileStream@` share slots 1..7 BYTE FOR BYTE, so a plain
+// per-body counter cannot say which of the two tables dispatched, and only one
+// of the two rows is promoted. The test compares the object's live vptr
+// against the DLL's two table addresses, so the three tiers are separable.
+//
+// COST: two pointer compares on bodies that are entered a few thousand times a
+// run. The DLL addresses are resolved once into function-local statics.
+// ============================================================================
+struct BfsPromoteCounters {
+    uint64_t ctorStamps, ctorStampedMint;
+    uint64_t slotEntries, slotViaMintBfs, slotViaDllBfs, slotViaOther;
+};
+BfsPromoteCounters g_bfsp{};
+
+// The DLL's own two table addresses, rebased. `ResolveRuntimeRaw` bypasses the
+// port registry by design — asking `ResolveAddr` here would return whatever the
+// promotion selected and the comparison would be against itself
+// (`reference_resolveaddr_consults_port_registry_first.md`).
+const void* DllBfsTable() {
+    static const void* v = (const void*)ResolveRuntimeRaw(0x1801554d0);
+    return v;
+}
+
+// What OUR BinaryFileStream constructors actually stamp: the promoted minted
+// table, or (kill switch set, or the row never promoted) the DLL's own. This is
+// the SAME expression the constructor uses, so the two cannot drift apart.
+const void* OurBfsTable() {
+    return RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");
+}
+
+// POSITIVELY identify our minted table rather than concluding it by
+// elimination: `??_7TextFileStream@`'s slots 1 and 7 are these same two bodies,
+// so an "anything that is not the DLL's FileStream or BinaryFileStream table"
+// test would score a TextFileStream dispatch as attendance for this row.
+void NoteBfsStamp(const void* stamped) {
+    ++g_bfsp.ctorStamps;
+    if (stamped != DllBfsTable()) ++g_bfsp.ctorStampedMint;
+}
+
+void NoteSlotDispatch(const void* vptr) {
+    ++g_bfsp.slotEntries;
+    const void* ours = OurBfsTable();
+    if (vptr == DllBfsTable())                      ++g_bfsp.slotViaDllBfs;
+    else if (ours != DllBfsTable() && vptr == ours) ++g_bfsp.slotViaMintBfs;
+    else                                            ++g_bfsp.slotViaOther;
+}
+
+
+// ============================================================================
 // ~FileInfo                                              retail 0x18000c180
 // ============================================================================
 // UNEXPORTED, 25 instructions, and it is nothing but the String release idiom
@@ -397,6 +477,7 @@ extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self) 
     FileStreamCtorInline(&self->base);                                   // 1800a8219..70
     self->base.base.vptr =
         RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");        // 1800a8270
+    NoteBfsStamp(self->base.base.vptr);   // Wave 20 lane PROMOTE, stamper 1 of 2
 
     InstallEncoding(&self->base.base, 0x1801554a8);                       // 1800a827a..d8
 
@@ -686,6 +767,7 @@ extern "C" RtSystem::String* RtIo_FileStream_GetSource(const FileStream* self,
                                                        RtSystem::String* ret) {
     RT_DIFF_BEGIN("IO::FileStream::GetSource");
     ++g_fss.getSource;
+    NoteSlotDispatch(self->base.vptr);
 
     ret->data = nullptr;                                  // 1800aab67
     if (self->filename) {                                 // 1800aab6e
@@ -719,6 +801,7 @@ extern "C" RtSystem::String* RtIo_FileStream_GetSource(const FileStream* self,
 extern "C" bool RtIo_FileStream_Read(FileStream* self, int32_t len, void* buf) {
     RT_DIFF_BEGIN("IO::FileStream::Read");
     ++g_fss.read;
+    NoteSlotDispatch(self->base.vptr);
     const bool ok = RtIo_FileSystem_ReadFile(Fs(), &self->file, len, buf);  // 1800aac03
     RT_DIFF_WORK(ok);
     return ok;
@@ -744,12 +827,14 @@ extern "C" bool RtIo_FileStream_Read(FileStream* self, int32_t len, void* buf) {
 extern "C" uint32_t RtIo_FileStream_GetCurrentPos(const FileStream* self) {
     RT_DIFF_BEGIN("IO::FileStream::GetCurrentPos");
     ++g_fss.getPos;
+    NoteSlotDispatch(self->base.vptr);
     return static_cast<uint32_t>(self->file.cursor);       // 1800aac50
 }
 
 extern "C" uint32_t RtIo_FileStream_GetSize(const FileStream* self) {
     RT_DIFF_BEGIN("IO::FileStream::GetSize");
     ++g_fss.getSize;
+    NoteSlotDispatch(self->base.vptr);
     return static_cast<uint32_t>(self->file.size);         // 1800aac60
 }
 
@@ -784,6 +869,7 @@ extern "C" uint32_t RtIo_FileStream_GetSize(const FileStream* self) {
 extern "C" bool RtIo_FileStream_Open(FileStream* self, const Filename* path) {
     RT_DIFF_BEGIN("IO::FileStream::Open");
     ++g_fss.open;
+    NoteSlotDispatch(self->base.vptr);
 
     // ---- 1800aac92..1800aaccc: this->filename = *path -------------------
     char* const incoming = reinterpret_cast<const RtSystem::String*>(path)->data;
@@ -932,6 +1018,7 @@ extern "C" BinaryFileStream* RtIo_BinaryFileStream_CopyCtor(
 
     self->base.base.vptr =
         RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");            // 180023cfe
+    NoteBfsStamp(self->base.base.vptr);   // Wave 20 lane PROMOTE, stamper 2 of 2
     return self;                                                              // 180023d08
 }
 
@@ -944,6 +1031,15 @@ void RtIoFileStreamSlotCounters(unsigned long long* out) {
     out[8]=g_fss.getSize;   out[9]=g_fss.open;
     out[10]=g_fss.openTrue; out[11]=g_fss.dtorScalar;
     out[12]=g_fss.dtorArrayAbort; out[13]=g_fss.copyCtor;
+}
+
+// Wave 20 lane PROMOTE. Six numbers, printed by the same probe, because the
+// EFFECT of the promotion and the ATTENDANCE it buys are different claims and
+// a reader must not be able to see one without the other.
+void RtIoBfsPromoteCounters(unsigned long long* out) {
+    out[0]=g_bfsp.ctorStamps;    out[1]=g_bfsp.ctorStampedMint;
+    out[2]=g_bfsp.slotEntries;   out[3]=g_bfsp.slotViaMintBfs;
+    out[4]=g_bfsp.slotViaDllBfs; out[5]=g_bfsp.slotViaOther;
 }
 
 }  // namespace RtIO
