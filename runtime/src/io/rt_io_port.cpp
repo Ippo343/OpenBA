@@ -242,6 +242,16 @@ extern int RtIoCompressedStreamWriteRegister();    // compressed_stream_write.cp
 // DISPATCHED vtable slot does, as opposed to what a called export does.
 extern int RtIoFileStreamSlotsRegister();       // file_stream.cpp + file_stream_win.cpp
 
+// Wave 20 lane SAVETEXT. Five of the eight unported slots of
+// ??_7TextFileStream@IO@@6B@ (Read, SetCurrentPos, GetCurrentPos, GetSize,
+// Create). Its OWN switch, separate from BANISHED_RT_FSSLOTS, because
+// TextFileStream's slots and FileStream's slots are reachable by different
+// callers -- text I/O is stripped from the shipped DLL (both TEXT serializer
+// factories at 0x1801559d0+0x18/+0x20 are XOR EAX,EAX;RET), so these five have
+// no gameplay route and a run that moves FileStream's slots must not be read as
+// having moved these.
+extern int RtIoTextFileStreamSlotsRegister();   // text_file_stream_win.cpp
+
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
         printf("[RtPort] BANISHED_RT_IO=0 -- IO namespace port disabled\n");
@@ -276,6 +286,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_FILESTREAM"))  n += RtIoFileStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_CREATEFILE"))  n += RtIoFileSystemCreateFileRegister();
     if (RtWaveEnabled("BANISHED_RT_FSSLOTS"))    n += RtIoFileStreamSlotsRegister();
+    if (RtWaveEnabled("BANISHED_RT_TFSSLOTS"))   n += RtIoTextFileStreamSlotsRegister();
 
     // Lane FILE's screenshot-path door screen. Armed OUTSIDE its two switches
     // on purpose: the control for this lane is a run with both of them at 0,
