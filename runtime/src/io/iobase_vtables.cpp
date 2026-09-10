@@ -194,6 +194,36 @@
 // (`ResolveAddr(Module::Runtime, …)`, which is registry-first —
 // reference_resolveaddr_consults_port_registry_first.md), and stamping the
 // wrong one would produce a stream that walks the object and records nothing.
+//
+// ----------------------------------------------------------------------------
+// 5. ??1Modification@IO@@ CLEARS THE EXPORTED SINGLETON, AND THAT IS THE POINT
+// ----------------------------------------------------------------------------
+// 0x1800b0470, in full — five instructions of substance:
+//
+//     mov  [rip+0x14c21f],0        ; ?_singleton@Modification@IO@@2PEAV12@EA
+//     lea  rcx,[rbx+0x18]  ; call 0x180010b80   ; ~Array<Mod>(savedMods)
+//     lea  rcx,[rbx+0x08]  ; jmp  0x180010b80   ; ~Array<Mod>(mods)   TAIL
+//
+// The ORDER is savedMods FIRST, then mods, and it is reproduced rather than
+// tidied — the two arrays alias each other's element storage nowhere, but the
+// claim "order does not matter here" is one this lane did not verify and does
+// not need to make.
+//
+// **The singleton store is a SIDE EFFECT THAT MUST BE PUBLISHED INTO THE
+// EXPORTED SLOT, not into storage of our own** — a port that owns its own copy
+// is invisible until something reads the slot
+// (reference_port_must_reproduce_side_effects.md).
+// `?_singleton@Modification@IO@@2PEAV12@EA` is tagged UNPROMOTABLE(HARMFUL) in
+// reg_mint_promoted.cpp, i.e. deliberately left on the DLL, so `RT_DATA_SLOT`
+// hands back the DLL's slot and the store lands where retail's does. That is
+// the correct outcome and it is why the tag matters here rather than being
+// merely bookkeeping.
+//
+// `0x180010b80` (`Collection::Array<Mod>::~Array`) is ALREADY PORTED —
+// `RtColl_ArrayModDtor_180010b80`, modification.cpp:573, registered by address
+// at :905 — so it is reached through the ADDRESS door, which is registry-first
+// and therefore lands on our body, not the DLL's
+// (reference_resolveaddr_consults_port_registry_first.md).
 // ============================================================================
 
 #include <cstdint>
@@ -205,6 +235,7 @@
 #include "../../types/io/Stream.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Modification.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
@@ -266,6 +297,17 @@ inline const void* VtblVisitorEncoding() {
 
 // The one place the `flags & 2` divergence is spelled, so the four call sites
 // cannot drift apart and the message always names its own class.
+// Collection::Array<Mod>::~Array, 0x180010b80. Already ported by lane MOD
+// (modification.cpp:573) and registered BY ADDRESS at :905, so the address
+// door — which is registry-first — reaches our body.
+using ArrayDtorFn = void* (*)(void*);
+inline void ArrayModDtor(void* arrayField) {
+    static ArrayDtorFn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<ArrayDtorFn>(
+                      ResolveAddr(Module::Runtime, 0x180010b80ull));
+    fn(arrayField);
+}
+
 [[noreturn]] void ArrayArmUnreachable(const char* cls, const char* producer) {
     std::fprintf(stderr,
         "\n[RtIo] FATAL: %s deleting dtor reached with flags&2 (delete[]).\n"
@@ -431,6 +473,18 @@ extern "C" VisitorStream* RtIo_VisitorStream_Ctor(VisitorStream* self) {
     return self;
 }
 
+// ===========================================================================
+// ??1Modification@IO@@QEAA@XZ   0x1800b0470   — header §5
+// ===========================================================================
+extern "C" void RtIo_Modification_Dtor(RtIO::Modification* self) {
+    // Publish into the DLL's exported slot; see header §5.
+    void** singleton = RT_DATA_SLOT(void**, "?_singleton@Modification@IO@@2PEAV12@EA");
+    if (singleton) *singleton = nullptr;                        // 1800b0486
+
+    ArrayModDtor(&self->savedMods);                             // 1800b0495  +0x18
+    ArrayModDtor(&self->mods);                                  // 1800b04a4  +0x08  TAIL
+}
+
 }  // namespace RtIo
 
 // ============================================================================
@@ -499,6 +553,11 @@ int RtIoBaseVtablesRegister() {
     RegisterRuntimeAddr(0x1800bb090, (void*)&RtIo_VisitorStream_Ctor);
 
     RegisterRuntimeAddr(0x18002bf80, (void*)&RtIo_VisitorStream_DeletingDtor); ++n;
+
+    // ---- IO::Modification ---------------------------------------------------
+    RegisterRuntimeExport("??1Modification@IO@@QEAA@XZ",
+                          (void*)&RtIo_Modification_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800b0470, (void*)&RtIo_Modification_Dtor);
 
     return n;
 }
