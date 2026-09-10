@@ -825,7 +825,7 @@ extern "C" void RtSaveMetaSummary() {
 // duplicate RegisterRuntimeAddr is last-binding-wins and would silently make
 // one of the two bodies dead code
 // (reference_grep_for_the_port_before_writing_it.md).
-int RtSaveLoadMetaRegister() {
+int RtSaveSaveMetaDataRegister() {
     int n = 0;
     RegisterRuntimeExport("?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z",
                           (void*)&RtSave_SaveLoad_SaveMetaData); ++n;
