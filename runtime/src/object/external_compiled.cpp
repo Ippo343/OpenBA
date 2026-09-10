@@ -59,6 +59,7 @@
 
 #include "external_path.h"
 #include "external_compiled.h"
+#include "external_path_stack.h"
 
 #include "../../funcs/rt_port.h"
 #include "../../funcs/rt_diff.h"
@@ -67,6 +68,7 @@
 #include "../system/setupdir_helpers.h"
 
 namespace RtSystem {
+Filename* RtSystem_Filename_CtorCStr(Filename* self, const char* src);           // 0x1800c6570
 // Declared locally, house style — filename.cpp exposes no header of its own.
 void      RtSystem_Filename_AdjustDelimiters(Filename* self);              // 0x1800c6970
 Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
@@ -129,7 +131,7 @@ inline const void* FileSystemSingleton() {
 //   4  GetPathFilename called with strip=false
 //   5  the extension, not the identifier, in the "_<ident>" slot
 // ---------------------------------------------------------------------------
-int g_negCtl = 0;
+int g_ccNegCtl = 0;
 
 // ---------------------------------------------------------------------------
 // THE SHARED CONCATENATION.
@@ -156,7 +158,7 @@ void BuildCompiledPath(const Filename* path, Filename* out) {
     Filename ident{nullptr};                                     // [RBP-0x50]
     RtSystem_Filename_GetPathIdentifer(path, &ident);
     Filename fname{nullptr};                                     // [RBP+0x38]
-    RtSystem_Filename_GetPathFilename(path, &fname, g_negCtl != 4);
+    RtSystem_Filename_GetPathFilename(path, &fname, g_ccNegCtl != 4);
     Filename dir{nullptr};                                       // [RBP+0x30]
     RtSystem_Filename_GetPathDirectory(path, &dir);
 
@@ -165,12 +167,12 @@ void BuildCompiledPath(const Filename* path, Filename* out) {
 
     String t1{nullptr}, t2{nullptr}, t3{nullptr}, t4{nullptr}, t5{nullptr};
     RtSystem_String_Concat(&t1, AsStr(&dataDir),
-                           AsStr(g_negCtl == 3 ? &fname : &dir));
+                           AsStr(g_ccNegCtl == 3 ? &fname : &dir));
     RtSystem_String_Concat(&t2, &t1,
-                           AsStr(g_negCtl == 3 ? &dir : &fname));
-    RtSystem_String_ConcatCStr(&t3, &t2, g_negCtl == 1 ? "-" : kUnderscore);
-    RtSystem_String_Concat(&t4, &t3, AsStr(g_negCtl == 5 ? &ext : &ident));
-    RtSystem_String_ConcatCStr(&t5, &t4, g_negCtl == 2 ? ".CRS" : kCrs);
+                           AsStr(g_ccNegCtl == 3 ? &dir : &fname));
+    RtSystem_String_ConcatCStr(&t3, &t2, g_ccNegCtl == 1 ? "-" : kUnderscore);
+    RtSystem_String_Concat(&t4, &t3, AsStr(g_ccNegCtl == 5 ? &ext : &ident));
+    RtSystem_String_ConcatCStr(&t5, &t4, g_ccNegCtl == 2 ? ".CRS" : kCrs);
 
     out->data = nullptr;                                         // 0x1800becdd
     RtString_AdoptInline(AsStr(out), t5.data);                   // 0x1800bece0-0x1800beceb
@@ -187,6 +189,99 @@ void BuildCompiledPath(const Filename* path, Filename* out) {
     RtString_ReleaseInline(AsStr(&fname));
     RtString_ReleaseInline(AsStr(&ident));
     RtString_ReleaseInline(AsStr(&ext));
+}
+
+
+// ---------------------------------------------------------------------------
+// THE INPUT SWEEP — GetCompiledPath's negative controls, all in ONE process.
+//
+// `GetCompiledPath` is PURE, and for a pure function an input sweep against the
+// shipped export beats waiting for a caller
+// (project_pure_functions_verify_by_sweep.md). It is also how every one of its
+// negative controls gets scored without costing a game launch each, which
+// matters because three lanes are queueing on one game directory this wave and
+// a blocking acquire has already timed out once.
+//
+// The sweep runs on a REAL live path plus a fixed set that exercises the shapes
+// the six terms can take: no directory, a nested directory, a path with an
+// explicit `:identifier`, and one with no extension. Each control is scored
+// SEPARATELY with the mechanism of any miss named.
+//
+// Every case is compared ours-vs-theirs as TEXT. Ours and theirs write two
+// different fresh slots, so they cannot alias.
+// ---------------------------------------------------------------------------
+const char* const kSweepPaths[] = {
+    "Terrain/Grass.rsc",
+    "House.rsc",
+    "Template/Building/Deep/Nested/Thing.rsc",
+    "Dialog/MainMenu.rsc:buttonOk",
+    "Audio/Theme",
+};
+const int kSweepN = (int)(sizeof(kSweepPaths) / sizeof(kSweepPaths[0]));
+
+bool g_selfTestPending = false;
+
+void RunCompiledSweep(const Filename* livePath) {
+    typedef Filename* (*GcpFn)(Filename*, const Filename*);
+    GcpFn theirFn = RtOriginal<GcpFn>(
+        "?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z");
+    if (theirFn == nullptr) {
+        std::printf("[Compiled] SWEEP SKIPPED -- the shipped GetCompiledPath did "
+                    "not resolve; NO COMPARISON WAS MADE\n");
+        return;
+    }
+
+    const CompiledCounters saved = g_cc;   // leave no trace in the live counters
+
+    for (int ctl = 0; ctl <= 5; ++ctl) {
+        int compared = 0, mismatches = 0;
+        for (int i = 0; i <= kSweepN; ++i) {
+            Filename in{nullptr};
+            if (i == kSweepN) {
+                // case N is the LIVE path this self-test is riding on: the one
+                // input we know the game actually produces.
+                if (livePath == nullptr || livePath->data == nullptr) continue;
+                RtString_AdoptInline(AsStr(&in), livePath->data);
+            } else {
+                RtSystem::RtSystem_Filename_CtorCStr(&in, kSweepPaths[i]);
+            }
+
+            Filename ours{nullptr}, theirs{nullptr};
+            g_ccNegCtl = ctl;
+            RtObject_ExternalFactory_GetCompiledPath(&ours, &in);
+            g_ccNegCtl = 0;
+            theirFn(&theirs, &in);
+
+            ++compared;
+            const bool equal =
+                ((ours.data == nullptr) == (theirs.data == nullptr)) &&
+                (ours.data == nullptr || std::strcmp(ours.data, theirs.data) == 0);
+            if (!equal) {
+                ++mismatches;
+                if (ctl == 0)
+                    std::printf("[Compiled] SWEEP ctl=0 MISMATCH in=%s\n"
+                                "[Compiled]   ours = %s\n"
+                                "[Compiled] theirs = %s\n",
+                                in.data ? in.data : "(null)",
+                                ours.data ? ours.data : "(null)",
+                                theirs.data ? theirs.data : "(null)");
+            }
+            RtString_ReleaseInline(AsStr(&theirs));
+            RtString_ReleaseInline(AsStr(&ours));
+            RtString_ReleaseInline(AsStr(&in));
+        }
+        std::printf("[Compiled] SWEEP ctl=%d compared=%d mismatches=%d  %s\n",
+                    ctl, compared, mismatches,
+                    ctl == 0 ? (mismatches == 0 ? "PASS" : "*** PORT DEFECT ***")
+                             : (mismatches  > 0 ? "control CAUGHT"
+                                                : "*** control NOT CAUGHT ***"));
+        if (compared == 0)
+            std::printf("[Compiled] SWEEP ctl=%d MADE NO COMPARISONS -- "
+                        "this is not a pass\n", ctl);
+    }
+
+    g_cc = saved;
+    g_ccNegCtl = 0;
 }
 
 }  // namespace
@@ -270,6 +365,18 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
                                                     const Filename* path) {
     RT_DIFF_BEGIN("Object::ExternalFactory::FindOrLoad");
     ++g_cc.findOrLoadCalls;
+
+    // The scheduling seam for BOTH of this lane's self-tests. FindOrLoad is the
+    // one body in the lane that a normal run actually drives (lane RRES counted
+    // 22,583 of them in a menu-to-gameplay run), and it is the only one holding
+    // the LIVE ExternalFactory singleton, which the path-stack probe's part 2
+    // needs and must not fake. Neither test runs unless its own env var armed
+    // it, and each clears its flag before running so it cannot recurse.
+    if (g_selfTestPending) {
+        g_selfTestPending = false;
+        RunCompiledSweep(path);
+    }
+    PathStackProbeGate(self);
 
     // 0x1800bf339 / 0x1800bf345
     if (path->data == nullptr || BufLength(path->data) == 0) {
@@ -375,7 +482,7 @@ int RtObjectExternalCompiledRegister() {
     int n = 0;
 
     const char* nc = std::getenv("BANISHED_RT_COMPILED_NEGCTL");
-    g_negCtl = nc ? std::atoi(nc) : 0;
+    g_ccNegCtl = nc ? std::atoi(nc) : 0;
 
     // Literal mangled names, NOT constants: tools/runtime_census.py matches
     // `RegisterRuntimeExport("<literal>"` and cannot see through a named
@@ -390,8 +497,14 @@ int RtObjectExternalCompiledRegister() {
         (void*)&RtObject_ExternalFactory_FindOrLoad); ++n;
     RegisterRuntimeAddr(0x1800bf320, (void*)&RtObject_ExternalFactory_FindOrLoad);
 
+    // Opt-in, not a kill switch: RtWaveEnabled returns true when the variable
+    // is UNSET, which is right for a port and wrong for a probe -- it would arm
+    // a sweep on every default run.
+    const char* se = std::getenv("BANISHED_RT_COMPILED_SWEEP");
+    g_selfTestPending = (se != nullptr && std::strcmp(se, "0") != 0);
+
     // THE IDENTITY LINE. Nothing else in the tree prints "Compiled".
     std::printf("[Compiled] registered %d exports (GetCompiledPath, FindOrLoad) "
-                "negctl=%d\n", n, g_negCtl);
+                "negctl=%d\n", n, g_ccNegCtl);
     return n;
 }

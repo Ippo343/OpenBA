@@ -43,6 +43,17 @@ struct PathStackCounters {
 };
 extern PathStackCounters g_psc;
 
+// The negative control, defined in external_path_stack.cpp. Exposed so the
+// probe can sweep every value in ONE process: a control that costs a game
+// launch each is a control that does not get run, and the game directory is a
+// contended mutex across three lanes this wave.
+// (external_path_win.cpp:170 states the same reason for the same shape.)
+extern int g_negCtl;
+
+// Runs the probe once, on the first call. Driven from `FindOrLoad`, not from
+// PushPath -- see the comment above the definition for the measured reason.
+void PathStackProbeGate(ExternalFactory* live);
+
 }  // namespace RtObject
 
 extern "C" {
@@ -57,7 +68,12 @@ void  RtObject_PathStackRemoveAt_18002de30(void* arr, int index);
 // external_path_stack_probe.cpp
 void RtObjectPathStackProbeArm(bool on);
 bool RtObjectPathStackProbeArmed();
-void RtObjectPathStackProbeRun();
+// `live` is the LIVE ExternalFactory singleton, or null. It is NOT optional
+// decoration: part 2 of the probe drives PushPath/PopPath against retail's own
+// object rather than a fake, because every row in this lane is a non-static
+// member on that singleton and an oracle that builds its own factory measures
+// an object the game never uses.
+void RtObjectPathStackProbeRun(RtObject::ExternalFactory* live);
 
 // runtime/src/object/rt_object_port.cpp calls this.
 namespace RtObject { int RtObjectExternalPathStackRegister(); }

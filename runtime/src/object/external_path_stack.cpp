@@ -137,13 +137,30 @@ int g_negCtl = 0;
 // moment that is provably safe because the caller is itself mid-Array.
 bool g_probePending = false;
 
-inline void ProbeGate() {
-    if (!g_probePending) return;
-    g_probePending = false;      // before the run, so a re-entry cannot recurse
-    RtObjectPathStackProbeRun();
-}
 
 PathStackCounters g_psc = {};
+
+// ---------------------------------------------------------------------------
+// THE PROBE'S SCHEDULING SEAM — and why it is not in PushPath.
+//
+// The obvious place to self-schedule is the first call into a registered entry
+// point. It does not work here, for a MEASURED reason: `PushPath` is never
+// called on a normal run at all. Lane RRES instrumented the read side and
+// reported `stack empty/nonempty = 22583/0` — 22,583 live `ExpandRelativePath`
+// calls, every one of them against an EMPTY stack. A gate inside `PushPath`
+// would therefore never fire, and the probe would silently never run while the
+// registration line still printed "ARMED".
+//
+// So the gate lives on `FindOrLoad`, which does run (it is what drives those
+// 22,583 calls) and which has the LIVE `ExternalFactory` in hand as its `this`
+// — the object part 2 of the probe needs and must not fake.
+// ---------------------------------------------------------------------------
+void PathStackProbeGate(ExternalFactory* live) {
+    if (!g_probePending) return;
+    g_probePending = false;   // cleared BEFORE the run: the probe calls PushPath
+                              // itself, so an un-cleared flag would recurse.
+    RtObjectPathStackProbeRun(live);
+}
 
 // ============================================================================
 // ?PushPath@ExternalFactory@Object@@QEAAXAEBVFilename@System@@@Z   0x1800bd0e0
@@ -172,7 +189,6 @@ PathStackCounters g_psc = {};
 // computed and DROPPED — see external_compiled.cpp.
 void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const Filename* path) {
     RT_DIFF_BEGIN("Object::ExternalFactory::PushPath");
-    ProbeGate();
     ++g_psc.pushCalls;
 
     Filename ext{nullptr};                                       // [RBP-0x30]
@@ -247,7 +263,6 @@ void RtObject_ExternalFactory_PushPath(ExternalFactory* self, const Filename* pa
 // upstream imbalance rather than the crash.
 void RtObject_ExternalFactory_PopPath(ExternalFactory* self) {
     RT_DIFF_BEGIN("Object::ExternalFactory::PopPath");
-    ProbeGate();
     ++g_psc.popCalls;
 
     PathStackEntry out;                                          // [RSP+0x28]
