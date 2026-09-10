@@ -1,7 +1,9 @@
 // ============================================================================
 // runtime/src/save/saveload.cpp — Wave 5 lane C — Save::SaveLoad / Save::SavedState
 // ============================================================================
-// Ports 16 of the 17 real exports our tree calls on these two classes. Every
+// Ports all 17 of the real exports our tree calls on these two classes (Wave 14
+// lane GENNAME closed the last one, GenerateSaveName, which this banner used to
+// carry as the "16 of 17" gap). Every
 // retail body below was decompiled AND disassembled at its real address in the
 // SHIPPED Runtime-x64.dll (base 0x180000000) on 2026-09-06; both addresses and
 // the oracle shape for each function are in docs/runtime_port/WAVE5_LANE_C.md.
@@ -489,6 +491,98 @@ SaveInfo* RtSave_SaveLoad_GetSaveInfo(const SaveLoad* self, int index) {
         RT_DIFF_SCALAR(oursP, theirsP);
     }
     return ours;
+}
+
+// ============================================================================
+// Save::SaveLoad::GenerateSaveName() const  retail 0x1800c1250  ordinal 2401
+// ?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ
+// ----------------------------------------------------------------------------
+// ABI: a const member returning System::String BY VALUE. The disassembly has
+// `this` arriving in RCX and the hidden return slot in RDX — the MEMBER-
+// function ordering (`this` is the first physical argument, the retslot is
+// pushed to second), not the namespace-scope one (contrast
+// RtSystem_String_Concat's banner in string.h, where the retslot IS first).
+// This matches `NameGetterFn` at saveload_update.cpp:362 — `(self, ret)` — the
+// typedef this function's two existing call sites already use.
+//
+// LOGIC (0x1800c1250..0x1800c1449; read from the disassembly, not the
+// decompiled C, which collapses the do-while into goto soup Ghidra itself
+// mistypes as `void`): try candidates "Save0", "Save1", "Save2", ... in order
+// and return the first one that does not equal the `name` field (SaveInfo+
+// 0x38, RtSave::SaveInfo::name) of any row in
+// self->_savesData[0 .. self->_savesSize). The inlined per-row comparison is
+// length-then-bytes with two empty/null strings counted equal — exactly what
+// the already-ported `RtSystem::RtString_StrCompare` (string.cpp) computes,
+// so this port calls that directly instead of re-transcribing a second copy
+// of the same comparison. (A null row name, length 0, can never collide with
+// a candidate — "SaveN" is never shorter than 5 bytes — so the reuse changes
+// no observable outcome.)
+//
+// `self->_savesSize < 1` is tested ONCE PER OUTER ITERATION, right after the
+// candidate is formatted and stored — not once before the loop — so an empty
+// save list returns "Save0" on the very first pass without ever touching
+// self->_savesData. Retail's retslot is zeroed UNCONDITIONALLY at entry
+// (`*in_RDX = 0`), not released: this is the caller-pre-zeroes-the-String
+// convention (both existing call sites already set `generated = nullptr`
+// before calling), reproduced here rather than "fixed" into a release
+// (CLAUDE.md — retail's unguarded behaviour is load-bearing, not a bug).
+//
+// Oracle: FULL DIFF on the returned string's CONTENT (RtString_StrCompare),
+// not its pointer — ours and theirs each format their own fresh buffer, so
+// equal candidates never share an address the way GetSaveInfo's pointer-
+// identity oracle can rely on.
+// ============================================================================
+namespace {
+using FormatFn = void* (*)(void* retval, const char* fmt, ...);
+
+// The inlined "String::Format into a scratch, then refcount-adopt into *ret"
+// idiom (0x1800c1290..0x1800c1310). NOT `String::operator=`: retail's very
+// first instruction blindly zeroes `*ret` without releasing whatever was
+// there (see the banner above), so the release/adopt pair below only ever
+// runs against a slot this function itself already populated.
+void GenerateSaveName_FormatCandidateInto(const char** ret, int index) {
+    const char* tmp = nullptr;
+    RT_EXPORT_ONCE(FormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(&tmp, "Save%i", index);
+
+    if (*ret != tmp) {
+        ReleaseStringSlot(ret);
+        RtSaveDetail::RetainInto(ret, tmp);
+    }
+    ReleaseStringSlot(&tmp);   // release the temp's OWN reference
+}
+}  // namespace
+
+const char** RtSave_SaveLoad_GenerateSaveName(const SaveLoad* self, const char** ret) {
+    RT_DIFF_BEGIN("Save::SaveLoad::GenerateSaveName");
+
+    *ret = nullptr;   // retail's unconditional zero, NOT a release -- see banner
+    int index = 0;
+    for (;;) {
+        GenerateSaveName_FormatCandidateInto(ret, index);
+        if (self->_savesSize < 1) break;
+        bool collision = false;
+        for (int i = 0; i < self->_savesSize; ++i) {
+            if (RtSystem::RtString_StrCompare(self->_savesData[i].name, *ret) == 0) {
+                collision = true;
+                break;
+            }
+        }
+        if (!collision) break;
+        ++index;
+    }
+
+    if (rt_diff_on__) {
+        using Fn = const char** (*)(const SaveLoad*, const char**);
+        const char* theirs = nullptr;
+        RT_ORIGINAL_ONCE(Fn, "?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ")(self, &theirs);
+        const bool equal = RtSystem::RtString_StrCompare(*ret, theirs) == 0;
+        char a[64], b[64];
+        std::snprintf(a, sizeof(a), "\"%s\"", *ret   ? *ret   : "(null)");
+        std::snprintf(b, sizeof(b), "\"%s\"", theirs ? theirs : "(null)");
+        RtDiffReport(&rt_diff_site__, equal, a, b);
+        ReleaseStringSlot(&theirs);   // release the oracle's own temporary
+    }
+    return ret;
 }
 
 // ============================================================================
@@ -1030,6 +1124,8 @@ int RtSaveLoadRegister() {
     // fix, once corrected, is still the ONLY door — a second port reached by
     // address stays correct even if the name is mistyped again.
     RegisterRuntimeAddr(0x1800c1090, (void*)&RtSave_SaveLoad_CheckMod);
+    RegisterRuntimeExport("?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ", (void*)&RtSave_SaveLoad_GenerateSaveName); ++n;
+    RegisterRuntimeAddr(0x1800c1250, (void*)&RtSave_SaveLoad_GenerateSaveName);
     RegisterRuntimeExport("?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ", (void*)&RtSave_SaveLoad_GetOperation); ++n;
     RegisterRuntimeAddr(0x1800c3c80, (void*)&RtSave_SaveLoad_GetOperation);
     RegisterRuntimeExport("?GetSaveCount@SaveLoad@Save@@QEBAHXZ", (void*)&RtSave_SaveLoad_GetSaveCount); ++n;

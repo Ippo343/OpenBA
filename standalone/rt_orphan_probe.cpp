@@ -43,6 +43,7 @@
 #include "../runtime/types/math/Math.h"
 #include "../runtime/types/audio/Audio.h"
 #include "../runtime/types/application/Application.h"
+#include "../runtime/types/save/SaveLoad.h"
 #include "../runtime/src/collection/set_avl.h"
 
 #include <cstdio>
@@ -50,6 +51,7 @@
 #include <cstring>
 #include <cmath>
 #include <cstdint>
+#include <initializer_list>
 
 namespace {
 
@@ -171,6 +173,162 @@ void ProbeVector2NormalizeWithMag() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Save::SaveLoad::GenerateSaveName() const   retail 0x1800c1250   ordinal 2401
+// ?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ
+//
+// NOT actually an orphan — `UpdateSaveBody` (saveload_update.cpp) calls it
+// through the same NameGetterFn door when the selected save row's `saveIndex`
+// is negative (the blank "new save" slot). But reaching that call site needs
+// the Save dialog open with the blank row selected and its in-dialog
+// Save/confirm button clicked, which Wave 14 lane GENNAME could not drive
+// through the existing pause-menu harness in one session — so the live
+// `RT_DIFF` site's `calls=` reads 0 for this run and would read as an
+// unproven green line on its own
+// (reference_uncalled_port_is_not_verified.md). Probed directly here instead,
+// over a sweep of synthetic save lists that exercises every branch: an empty
+// list (no comparison loop at all), no collision, one collision, a run of N
+// collisions, a gap the loop must not skip over, and a null row name (the
+// state an unwritten SaveInfo.name leaves it in).
+//
+// Row names are built as LOCAL, stack-resident fake System::String blocks
+// (`length` at -8, a nonzero placeholder `refcount` at -4, per
+// runtime/types/system/String.h) rather than through the real allocator:
+// GenerateSaveName only ever READS a row's name (length-then-bytes, mirrored
+// by RtString_StrCompare) and never releases it, so a real heap Wallocation
+// buys nothing here and a stack fake is simpler to prove leak-free. The
+// CANDIDATE string coming back out of `ret`, by contrast, is a real heap
+// String from `String::Format` on both sides (ours and theirs each format
+// their own), and each is released after the comparison through the same
+// refcount-idiom the port itself uses.
+// ---------------------------------------------------------------------------
+namespace {
+
+using GenNameFn      = const char** (*)(const RtSave::SaveLoad*, const char**);
+using StrFormatRawFn  = void* (*)(void*, const char*, ...);
+using MemFreeRawFn    = void (*)(void*);
+
+// `p + 0`: int32 length (excluding NUL). `p + 4`: int32 refcount. `p + 8`:
+// the bytes GenerateSaveName actually reads.
+struct FakeStringBlock {
+    int32_t length;
+    int32_t refcount;
+    char    data[32];
+};
+
+const char* MakeFakeRowName(FakeStringBlock& blk, const char* text) {
+    if (text == nullptr) return nullptr;
+    size_t len = strlen(text);
+    if (len >= sizeof(blk.data)) len = sizeof(blk.data) - 1;
+    blk.length   = static_cast<int32_t>(len);
+    blk.refcount = 1;   // never decremented by the subject; kept non-zero defensively
+    memcpy(blk.data, text, len);
+    blk.data[len] = '\0';
+    return blk.data;
+}
+
+void ReleaseProbeAnswer(const char** slot, MemFreeRawFn memFree) {
+    const char* p = *slot;
+    if (p == nullptr) return;
+    int32_t* refc = reinterpret_cast<int32_t*>(const_cast<char*>(p) - 4);
+    if (--(*refc) == 0) memFree(const_cast<char*>(p) - 8);
+    *slot = nullptr;
+}
+
+void ProbeSaveLoadGenerateSaveName() {
+    const char* kName    = "?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ";
+    const char* kSubject = "Save::SaveLoad::GenerateSaveName";
+
+    GenNameFn ours   = reinterpret_cast<GenNameFn>(ResolveExport(kName));
+    GenNameFn theirs = reinterpret_cast<GenNameFn>(ResolveExportRaw(kName));
+    if (!ours || !theirs) {
+        fprintf(stderr, "[RtOrphan] SKIP %s: ours=%p theirs=%p\n", kSubject, (void*)ours, (void*)theirs);
+        ++g_fail;
+        return;
+    }
+    if (ours == theirs) {
+        fprintf(stderr, "[RtOrphan] FAIL %s: port not registered -- ResolveExport and "
+                        "ResolveExportRaw both returned %p\n", kSubject, (void*)ours);
+        ++g_fail;
+        return;
+    }
+
+    StrFormatRawFn fmt = reinterpret_cast<StrFormatRawFn>(
+        ResolveExportRaw("?Format@String@System@@SA?AV12@PEBDZZ"));
+    MemFreeRawFn memFree = reinterpret_cast<MemFreeRawFn>(
+        ResolveExportRaw("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
+    if (!fmt || !memFree) {
+        fprintf(stderr, "[RtOrphan] SKIP %s: fmt=%p memFree=%p\n", kSubject, (void*)fmt, (void*)memFree);
+        ++g_fail;
+        return;
+    }
+
+    struct Case { const char* name; std::initializer_list<const char*> rowNames; };
+    static const Case kCases[] = {
+        { "empty-list",              {} },
+        { "no-collision",            { "Foo", "Bar" } },
+        { "collides-Save0",          { "Save0" } },
+        { "collides-0-and-1",        { "Save0", "Save1" } },
+        { "collides-0-1-2-3",        { "Save0", "Save1", "Save2", "Save3" } },
+        { "gap-loop-must-not-skip",  { "Save0", "Save2" } },   // must land on "Save1", not "Save3"
+        { "null-row-name",           { nullptr } },
+    };
+
+    for (const Case& c : kCases) {
+        FakeStringBlock blocks[8]{};
+        RtSave::SaveInfo rows[8]{};
+        int n = 0;
+        for (const char* t : c.rowNames) {
+            rows[n].name = MakeFakeRowName(blocks[n], t);
+            ++n;
+        }
+
+        RtSave::SaveLoad selfOurs{};
+        RtSave::SaveLoad selfTheirs{};
+        selfOurs._savesData   = rows;
+        selfOurs._savesSize   = n;
+        selfTheirs._savesData = rows;
+        selfTheirs._savesSize = n;
+
+        const char* ansOurs   = nullptr;
+        const char* ansTheirs = nullptr;
+        ours(&selfOurs, &ansOurs);
+        theirs(&selfTheirs, &ansTheirs);
+
+        bool ok = (ansOurs && ansTheirs && strcmp(ansOurs, ansTheirs) == 0) ||
+                  (!ansOurs && !ansTheirs);
+        char detail[128];
+        snprintf(detail, sizeof(detail), "ours=\"%s\" theirs=\"%s\"",
+                 ansOurs ? ansOurs : "(null)", ansTheirs ? ansTheirs : "(null)");
+        Report(kSubject, c.name, ok, detail);
+
+        ReleaseProbeAnswer(&ansOurs, memFree);
+        ReleaseProbeAnswer(&ansTheirs, memFree);
+    }
+
+    // NEGATIVE CONTROL -- same comparator, same subject the real cases compare
+    // (the returned string's content), deliberately fed the WRONG expectation
+    // so the control itself is the thing that must fail
+    // (reference_control_must_pick_a_compared_subject.md).
+    {
+        ControlScope cs;
+        FakeStringBlock blk{};
+        RtSave::SaveInfo rows[1]{};
+        rows[0].name = MakeFakeRowName(blk, "Save0");
+        RtSave::SaveLoad self{};
+        self._savesData = rows;
+        self._savesSize = 1;
+
+        const char* ans = nullptr;
+        ours(&self, &ans);   // real answer is "Save1" (Save0 collides)
+        bool ok = (ans && strcmp(ans, "Save0") == 0);   // deliberately the WRONG expectation
+        Report(kSubject, "control-wrong-expectation", ok, "expected mismatch: real answer is \"Save1\"");
+        ReleaseProbeAnswer(&ans, memFree);
+    }
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Audio::Scene — the channel-teardown family, on a SYNTHETIC scene
@@ -1930,6 +2088,7 @@ void RtOrphanProbe() {
     fprintf(stderr, "[RtOrphan] ==== probing ports with no caller in our tree ====\n");
     ProbeVector2NormalizeWithMag();
     ProbeApplication();
+    ProbeSaveLoadGenerateSaveName();
     fprintf(stderr, "[RtOrphan] ==== %d pass, %d fail ====\n", g_pass, g_fail);
     fflush(stderr);
 }
