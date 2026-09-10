@@ -12,7 +12,7 @@ Usage:
   dispatch_slot_map.py 0x140151458 ... # look up specific slots
   dispatch_slot_map.py --check         # validate against standalone/*.cpp
 """
-import sys, re, glob, pefile
+import sys, os, re, glob, pefile
 
 EXE = r"C:\GOG Games\Banished\Application-x64.exe"
 
@@ -27,15 +27,53 @@ def build():
 
 slotmap = build()
 
+# Anchored on the SCRIPT, not the CURRENT DIRECTORY. A scanner that globs a
+# relative path measures whichever checkout the shell happens to be sitting in,
+# which has already made two checkouts' copies report on the same tree twice.
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def _sources():
-    return ["standalone/address_registry.cpp"] + sorted(glob.glob("standalone/reg_*.cpp"))
+    return ([os.path.join(_REPO, "standalone", "address_registry.cpp")]
+            + sorted(glob.glob(os.path.join(_REPO, "standalone", "reg_*.cpp"))))
+
+
+def _strip_comments(text):
+    """Remove // line comments and whole-line block-comment bodies.
+
+    A COMMENT IS NOT A REGISTRATION -- the same rule _all_registrations() has
+    enforced since Wave 14, which was never applied to its sibling below.
+    That omission cost exactly what the rule predicts: reg_mint_promoted.cpp:688
+    documents a registration in prose, spelling the symbol TRUNCATED with an
+    ellipsis, and --check graded the prose as code and reported a permanent
+    phantom MISMATCH at 0x140152870 against a name no source line ever passes.
+    CLAUDE.md requires --check to stay at zero, so a phantom here does not just
+    mislead -- it retires the gate.
+    """
+    out = []
+    for line in text.splitlines():
+        bare = line.lstrip()
+        if bare.startswith("//") or bare.startswith("*") or bare.startswith("/*"):
+            continue
+        out.append(re.sub(r'//.*', '', line))
+    return "\n".join(out)
 
 def _registered_pairs():
     """(addr, name) for the ResolveExport form -- the only form whose intended
     symbol is stated in the source, so the only one that can be checked exactly."""
-    txt = "".join(open(f, encoding="utf8", errors="replace").read() for f in _sources())
-    return re.findall(r'RegisterDispatchSlot\(\s*(0x[0-9a-fA-F]+)\s*,\s*'
-                      r'(?:\(uintptr_t\))?\s*ResolveExport\(\s*"([^"]+)"', txt)
+    txt = "".join(_strip_comments(open(f, encoding="utf8", errors="replace").read())
+                  for f in _sources())
+    # ADJACENT STRING LITERALS ARE ONE NAME. A long mangled symbol is routinely
+    # wrapped across two source lines as "...@Object@@" "V?$ExternalPtr@...@Z",
+    # which C++ concatenates. Capturing only the first literal reports the name
+    # as TRUNCATED and manufactures a MISMATCH against a correct registration --
+    # which is exactly what 0x1401528c0 (UI::Dialog::CreateElement) did the
+    # moment comment-stripping made that call visible to this scan at all.
+    pairs = []
+    for addr, lits in re.findall(
+            r'RegisterDispatchSlot\(\s*(0x[0-9a-fA-F]+)\s*,\s*'
+            r'(?:\(uintptr_t\))?\s*ResolveExport\(\s*((?:"[^"]*"\s*)+)', txt):
+        pairs.append((addr, "".join(re.findall(r'"([^"]*)"', lits))))
+    return pairs
 
 def _all_registrations():
     """Every RegisterDispatchSlot call in source order, whatever its second
