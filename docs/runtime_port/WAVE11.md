@@ -269,3 +269,45 @@ project's standing lesson that a prescription gets read as a completion.
    follow-up, and it needs its own verification against the cutover boot gate.
 3. Condition (b) above is recorded here because `reg_mint_promoted.cpp`'s tag
    lives on OBJDATA's branch and OBJDATA has stopped work.
+
+## `game_dir_lock.sh` — root cause of the queue-poll error, and the fix to make at close
+
+Confirmed by reading the source, not inferred from the message. `pick_next()`:
+
+```sh
+asked=$(cat "$f" 2>/dev/null || echo 0)
+if [ -z "$best_at" ] || [ "$asked" -lt "$best_at" ]; then
+```
+
+`|| echo 0` fires only when `cat` **fails**. A ticket file that exists but is
+**empty** makes `cat` succeed with empty output, so `asked=""` and the numeric
+comparison throws `line 293: [: : integer expression expected`. Harmless to the
+ordering (the branch is skipped) but it prints on every poll and trains lanes to
+ignore the script's stderr — which is where a real refusal would appear.
+
+Fix at close: `asked=$(cat "$f" 2>/dev/null); [ -n "$asked" ] || asked=0`, plus a
+digits-only guard. Same treatment for the `age` line above it.
+
+The second defect is the dangerous one and is unchanged: **blocking `acquire`
+returns non-zero on timeout, but a wrapping shell function or `if` returns 0.**
+That is the documented pipe hazard one layer out, with the same consequence — a
+lane deploys over another mid-run believing it holds the lock.
+
+### The field that saved this wave a window
+
+`status` prints `holder activity: reimpl-x64.exe processes=N`. With **`N=0`** and
+the lock held 591s, the holder was demonstrably sitting on the directory through
+*analysis*, not a run. That is what let the advisor intervene on evidence rather
+than on suspicion. **Keep that field, and read it before arbitrating a queue.**
+
+## Advisor error: arbitrating a queue that already had an order
+
+The advisor told OBJEXT it was first in the queue, ranked by "closest to done",
+**without checking that the lock's own queue already had an order**. OBJLIFE was
+at the head with ~630s invested against a 900s timeout and needed a ~30s run;
+honouring the advisor's order would have discarded that wait and probably cost it
+a second full window, for no gain. Retracted to both lanes within minutes.
+
+**Rule: a shared resource with its own queue does not need an external
+scheduler — read the queue before overriding it.** Rank by "closest to done" only
+to break a genuine tie.
