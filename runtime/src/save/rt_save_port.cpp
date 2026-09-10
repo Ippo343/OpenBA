@@ -17,6 +17,7 @@
 
 extern int RtSaveLoadRegister();       // saveload.cpp (Wave 5 lane C)
 extern int RtSaveLoadUpdateRegister(); // saveload_update.cpp (Wave 13)
+extern int RtSaveLoadDrawRegister();   // saveload_draw.cpp (Wave 14 lane DRAW)
 
 void RtSavePortInit() {
     if (!RtWaveEnabled("BANISHED_RT_SAVE")) {
@@ -27,6 +28,11 @@ void RtSavePortInit() {
     if (RtWaveEnabled("BANISHED_RT_SAVELOAD")) {
         n += RtSaveLoadRegister();
         if (RtWaveEnabled("BANISHED_RT_SAVELOAD_UPDATE")) n += RtSaveLoadUpdateRegister();
+        // Wave 14 lane DRAW gets its own switch for the same A/B reason the
+        // UPDATE switch exists: Draw is the only Save body that touches the
+        // GPU, so "the save hangs" and "the thumbnail is wrong" have to be
+        // separable from Wave 5's and Wave 13's bodies in one run.
+        if (RtWaveEnabled("BANISHED_RT_SAVELOAD_DRAW")) n += RtSaveLoadDrawRegister();
     }
     printf("[RtPort] Save: %d exports registered\n", n);
 }

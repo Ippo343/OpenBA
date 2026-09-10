@@ -91,6 +91,24 @@
 // body this lane ported reads them, and inventing a layout we have not proven
 // is how a shared struct corrupts silently (PLAN §4.3 risk 1).
 //
+// WAVE 14 LANE DRAW ADDS A SECOND, INDEPENDENT WITNESS for the same four, and
+// one new fact about +0x50. `Save::SaveLoad::Draw` (0x1800c2eb0) builds a
+// SpriteContext on its STACK with the constructor fully inlined, so its
+// prologue is a field-by-field initialiser list and its epilogue is the
+// destructor:
+//   * it zeroes BOTH halves of the arrays at +0x10, +0x40, +0x58 and +0x68
+//     (0x1800c37e5, 0x1800c3807, 0x1800c3820, 0x1800c382e and their +8 pairs),
+//     and frees exactly those four pointers on the way out in the order
+//     +0x68, +0x58, +0x40, +0x10 (0x1800c3acd .. 0x1800c3af8);
+//   * it NEVER WRITES +0x50. It takes the address (`LEA RAX,[RBP+0xa0]` at
+//     0x1800c3815) for the MSVC exception-state record and nothing else. So the
+//     qword at +0x50 is left as whatever the storage held — uninitialised on a
+//     stack instance. A port of any body that constructs one must NOT zero it,
+//     and an oracle must not compare it.
+// The two arrays at +0x58 and +0x68 are therefore Collection::Array<T> with the
+// usual {_data, _size, _capacity} shape; only their ELEMENT type is still
+// unknown, which is why they stay inside `_opaque50` rather than being named.
+//
 // ---------------------------------------------------------------------------
 // WHAT IS STILL HELD BACK, AND WHY THE WAVE 7 ARGUMENT ONLY HALF SURVIVED
 // ---------------------------------------------------------------------------
