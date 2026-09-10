@@ -37,13 +37,17 @@
 //       not. The oracle situation is unchanged and still honest: the dtor
 //       frees, so nothing compares it.
 //
-//   ?_singleton@SaveLoad@Save@@0PEAV12@EA  0x1801fc6f0 — a DATA export, and
-//       PROMOTED as of Wave 14 lane SINGLETON. The claim above — "a data symbol
-//       cannot be redirected before cutover" — was true of the FUNCTION seam
-//       and false of the tree as it stands: Wave 9 lane C2's mint registers
-//       data names and addresses through the same registry, and
-//       standalone/reg_mint_promoted.cpp now registers this one unconditionally
-//       with the reader/writer enumeration that licenses it. What has NOT
+//   ?_singleton@SaveLoad@Save@@0PEAV12@EA  0x1801fc6f0 — a DATA export, MINTED
+//       and deliberately NOT promoted (Wave 14 lane SINGLETON). The claim above
+//       — "a data symbol cannot be redirected before cutover" — was true of the
+//       FUNCTION seam and false of the tree as it stands: Wave 9 lane C2's mint
+//       registers data names and addresses through the same registry, so this
+//       row COULD be redirected today. It is not, and the reasoning plus the
+//       full reader/writer enumeration that would license it live in
+//       standalone/reg_mint_promoted.cpp under "THE STANDING CASE FOR PROMOTING
+//       AT CUTOVER". Short version: with the DLL present, registering the row
+//       would CREATE a split (our writers move, retail's dead ?Get@ cannot),
+//       and it buys nothing until the DLL is gone. What has NOT
 //       changed is the rule the old text was protecting: the ctor and dtor
 //       below must PUBLISH through `SaveLoadSingletonSlot()` rather than own a
 //       static of their own, because that accessor is the door that follows the
