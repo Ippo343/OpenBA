@@ -72,6 +72,14 @@ extern int RtObjectExternalSaveTextRegister();      // external_savetext_win.cpp
 // Wave 11 follow-up 2 lane IOSTREAM. External::Load -- the CompressedFileStream
 // half, and a full deserialisation driver rather than a stream wrapper.
 extern int RtObjectExternalLoadRegister();          // external_load.cpp
+// Wave 11 follow-up 3 lane AVL. The `Collection::Set<ReferenceEntry>` family --
+// the 0x10-BYTE-element instantiation, node size 0x30 -- and the one body that
+// needs it: ExternalFactory::SerializeReferenceTable, held back since Wave 3.
+// TWO switches, because the two halves carry different risk. The Set family is
+// pure container code with a lockstep oracle; the Serialize body is on the
+// save/load path, which is this project's most-cited failure mode.
+extern int RtObjectReferenceSetRegister();          // reference_set.cpp
+extern int RtObjectExternalRefTableRegister();      // external_reftable.cpp
 
 void RtObjectPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
@@ -154,5 +162,17 @@ void RtObjectPortInit() {
     // in this group.
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTLOAD"))
         n += RtObjectExternalLoadRegister();
+    // Wave 11 follow-up 3 lane AVL. Same nest, its own switch. The Set family
+    // is registered FIRST because SerializeReferenceTable's read path is its
+    // only caller in this tree -- registration order does not decide which body
+    // runs (both are reached at CALL time), but keeping the container
+    // underneath its user is how every other nest in this file reads.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_REFSET"))
+        n += RtObjectReferenceSetRegister();
+    // Its own switch again: BANISHED_RT_REFTABLE=0 leaves the save/load body on
+    // the DLL while keeping the Set family ours, which is the A/B that
+    // separates "the container is wrong" from "the driver is wrong".
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_REFTABLE"))
+        n += RtObjectExternalRefTableRegister();
     printf("[RtPort] Object: %d exports registered\n", n);
 }

@@ -2032,6 +2032,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     RtResolveEarlySummary();
     // Wave 9 lane S: the save-stream A/B oracle (BANISHED_RT_SAVE_TRACE=1).
     RtSaveTraceSummary();
+    // Wave 11 follow-up 3 lane AVL: ExternalFactory::SerializeReferenceTable's
+    // attendance counters and its MUTATION A post-condition. Printed here, from
+    // the process exit path rather than a static destructor, because an
+    // instrument outside its subject's live window prints a plausible ZERO
+    // rather than an error.
+    { extern void RtObjectExternalRefTableSummary();      RtObjectExternalRefTableSummary(); }
+    { extern void RtObjectExternalRefTableProbeSummary(); RtObjectExternalRefTableProbeSummary(); }
     { extern void RtSelfTestSummary(); RtSelfTestSummary(); }
 
     return rc;

@@ -1,0 +1,481 @@
+// ============================================================================
+// runtime/src/object/external_reftable.cpp — Wave 11 follow-up 3, lane AVL
+//   ?SerializeReferenceTable@ExternalFactory@Object@@QEAAXAEAVStream@IO@@@Z
+//   retail 0x1800bcb60 .. 0x1800bcf38   (292 instructions)
+// ============================================================================
+//
+// Byte-faithful port of the disassembly at 0x1800bcb60 (Runtime-x64.dll, image
+// base 0x180000000, read 2026-09-10 with `disassemble_function(address=)`).
+// The AVL family the READ path needs is reference_set.{h,cpp}; the tree
+// teardown the body OPENS with is `RtObjFactoryDtor::ReferenceSubtreeFree`,
+// which has been ported and registered since Wave 11 lane OBJLIFE.
+//
+// ---------------------------------------------------------------------------
+// WHAT THE FUNCTION IS
+// ---------------------------------------------------------------------------
+// The save file's id <-> resource-path table. On SAVE it numbers every loaded
+// resource 1..N in in-order key order, stamps the number into the resource's
+// own `ResourceEntry::referenceId`, and emits (id, path) per resource. On LOAD
+// it reads the pairs back, rebuilds `_references` (id -> path) so
+// `GetPathForReferenceId` can answer, and — for every path that is ALREADY
+// loaded — stamps the id back into that resource's `referenceId`.
+//
+// Everything downstream of it depends on the numbering: `Object::ExternalPtr`'s
+// serializer emits a bare id when reference mode is on, and resolves it through
+// this table on the way back in. Getting the ORDER or the COUNT wrong here is
+// the silent save-desync this project has paid for repeatedly.
+//
+// ---------------------------------------------------------------------------
+// **THE SECOND PARAMETER IS A `Stream&`, NOT A `Serializer&`.**
+// ---------------------------------------------------------------------------
+// The mangled name says `AEAVStream@IO@@` and the body confirms it: it reads
+// `[RDX+0x08]` as the direction and `[RDX+0x10]` as the `Encoding*`, which are
+// Stream fields. The `Serializer` is a LOCAL, built at `[RBP-0x18]` /
+// `[RBP-0x10]` — exactly the 16-byte `{Stream*, ReaderWriter*}` of
+// runtime/types/io/Serializer.h. Passing a Serializer straight through would
+// read 16 bytes past the end of a 16-byte object; the lane-S adapter below
+// exists for that reason and not as a workaround for anything.
+//
+// ---------------------------------------------------------------------------
+// THE FIRST THING IT DOES IS A MUTATION, AND NO EMISSION PRECEDES IT
+// ---------------------------------------------------------------------------
+// Eight instructions in, on BOTH directions, it tears the whole `_references`
+// tree down and zeroes root and count:
+//
+//   1800bcb80  MOV RDX,[RCX+0x20] / ADD RCX,0x20 / CALL 0x18002ebf0
+//   1800bcb90  MOV [R14+0x20],R12 / MOV [R14+0x28],R12D
+//
+// `docs/runtime_port/WAVE8_5_PREFIX_MEASUREMENT.md` measured this and its
+// consequence, and both findings are load-bearing here:
+//
+//   * A prefix stop cannot get in front of it — there is no emission index that
+//     precedes it — so lane S's `stopAfter` is useless for this subject.
+//   * It does not need to. The write path's only other mutation is
+//     `ResourceEntry::referenceId = id`, which a replay rewrites with the
+//     IDENTICAL value into the identical node (the ids are 1..N over a tree
+//     neither call modifies), and the teardown's second run reads
+//     `[this+0x20] == 0` and returns immediately. **No double free.** So the
+//     FULL write-path compare is safe and that is what this file runs.
+//   * The teardown is INVISIBLE to an emission compare — it emits nothing — so
+//     a port that forgot it, or freed it wrongly, would pass a clean emission
+//     trace. The probe therefore asserts the post-condition explicitly, which
+//     is the check that measurement asked whoever ported it to add.
+//
+// ---------------------------------------------------------------------------
+// THE FOUR ENCODING/READERWRITER SLOTS IT DRIVES
+// ---------------------------------------------------------------------------
+//   Encoding    +0x18 / +0x20   CreateReader / CreateWriter, (this, &ser, 0)
+//   ReaderWriter +0xa0          kScalarInt   — the entry COUNT, once
+//   ReaderWriter +0x98          kScalarUInt  — the id, once per entry
+//   ReaderWriter +0x00          the scalar deleting dtor, flags = 1, once
+// plus `String::Serialize` (0x1800c9930) per entry, which is itself +0x98 for
+// the length and +0x18 for the char array.
+//
+// These are RETAIL offsets. The profile build's differ
+// (reference_encoding_vtable_offsets_differ_between_builds.md); the constants
+// come from `rt::io::rw_vtbl`, which is pinned against retail.
+//
+// ---------------------------------------------------------------------------
+// PORTABILITY: no <windows.h>, per PLAN.md §4.1 decision 1.
+// ============================================================================
+
+#include <cstdint>
+#include <cstdio>
+
+#include "reference_set.h"
+#include "external_set.h"                 // rtresset::{Node,Set,Elem} — the
+                                          //   0x38-byte ResourceEntry node
+#include "../../funcs/rt_port.h"
+#include "../../types/io/Serializer.h"
+#include "../../types/object/External.h"
+#include "../io/save_trace.h"
+#include "../system/string.h"
+
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
+
+namespace RtSystem {
+// 0x1800c9930 — ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z, ported in
+// runtime/src/system/string.cpp. Takes the Serializer, not the Stream.
+void RtSystem_String_Serialize(String* self, void* serializer);
+// 0x1800c6970 — ?AdjustDelimiters@Filename@System@@, ported in filename.cpp.
+void RtSystem_Filename_AdjustDelimiters(Filename* self);
+}
+
+namespace RtObject {
+// 0x180006250 — ?GetPath@External@Object@@QEBA?AVFilename@System@@XZ, ported in
+// external.cpp. HIDDEN RETURN SLOT: (this in RCX, ret in RDX), returns ret.
+Filename* RtObject_External_GetPath(const External* self, Filename* ret);
+}
+
+namespace RtObjFactoryDtor {
+// 0x18002ebf0 — the post-order `_references` teardown, ported in
+// factory_dtors.cpp by Wave 11 lane OBJLIFE. IT RELEASES `node + 0x08` (the
+// ReferenceEntry's `path`, which is the VALUE), NOT `node + 0x00`; its sibling
+// 0x180008340 in avl_trees.cpp is the same 0x30-byte node releasing +0x00
+// instead, and releasing both in either body corrupts the heap. This lane
+// re-read both disassemblies rather than trust the comment, and both stand.
+void ReferenceSubtreeFree(void* set, void* node);
+}
+
+namespace {
+
+using rt::io::Encoding;
+using rt::io::ReaderWriter;
+using rt::io::Serializer;
+using rt::io::Stream;
+using RtObject::ExternalFactory;
+using RtObject::External;
+using RtSystem::Filename;
+using RtSystem::String;
+
+// ---------------------------------------------------------------------------
+// The vtable call shapes, all pinned by the disassembly.
+//
+//   1800bcbab  MOV RAX,[RCX] ; XOR R8D,R8D ; LEA RDX,[RBP-0x18] ; CALL [RAX+0x18]
+//       -> (Encoding* this, Serializer* ser, int version = 0) -> ReaderWriter*
+//   1800bcbd5  MOV RAX,[RCX] ; XOR R8D,R8D ; LEA RDX,[RBP+0x40] ; CALL [RAX+0xa0]
+//       -> (ReaderWriter* this, T* value, const char* name = 0)
+//   1800bcf28  MOV RAX,[RCX] ; MOV EDX,1 ; CALL [RAX]
+//       -> (ReaderWriter* this, int flags)
+// ---------------------------------------------------------------------------
+using EncFactoryFn = ReaderWriter* (*)(Encoding*, Serializer*, int);
+using RwScalarFn   = void (*)(ReaderWriter*, void*, const char*);
+using RwDtorFn     = void (*)(ReaderWriter*, int);
+
+inline void* VSlot(void* obj, int byteOffset) {
+    void** vt = *reinterpret_cast<void***>(obj);
+    return vt[byteOffset / 8];
+}
+
+// 0x18007eefc — the CRT `_stricmp`. Already an unregistered address door in
+// avl_trees.cpp with the same justification: it is CRT code inside the DLL, it
+// has no export, and the descent below must use the SAME comparator retail
+// inlines or the two trees order differently.
+int StrICmp(const char* a, const char* b) {
+    using Fn = int (*)(const char*, const char*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18007eefc));
+    return fn ? fn(a, b) : 0;
+}
+
+// The refcount release idiom retail inlines at six sites in this body.
+inline void ReleaseInline(Filename* f) {
+    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(f));
+}
+
+// `dst = src` with an AddRef, the `TEST RBX,RBX / MOV / INC [RBX-4]` retail
+// inlines at 1800bcc31, 1800bcc94, 1800bce41 and 1800bce4d. `dst` must already
+// be null.
+inline void AdoptRef(Filename* dst, char* src) {
+    dst->data = nullptr;
+    if (src) {
+        dst->data = src;
+        ++reinterpret_cast<int32_t*>(src)[-1];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// EFFECTIVENESS COUNTERS. Branches taken INSIDE the body under test, not
+// proxies observed from outside it.
+// ---------------------------------------------------------------------------
+struct Counters {
+    uint64_t calls, save, load;
+    uint64_t entries;            // rows emitted or consumed
+    uint64_t teardownNonEmpty;   // entered with a NON-empty _references tree
+    uint64_t resFound, resMissed;// read path: the path matched a loaded resource
+    uint64_t nullSearchKey, nullNodeKey;   // the two asymmetric null arms
+    uint64_t nullEncoding, nullRw;
+};
+Counters g_c = {};
+
+}  // namespace
+
+// ============================================================================
+// void Object::ExternalFactory::SerializeReferenceTable(IO::Stream&)
+// ============================================================================
+extern void RtObjectExternalRefTableProbeMaybeRun(ExternalFactory* self, Stream* stream);
+// The MUTATION A post-condition check. Cheap enough to leave unconditional:
+// `CountNodes` walks a tree that is about to be walked and freed anyway.
+extern int  RtObjectExternalRefTableCountNodes(const void* set);
+extern void RtObjectExternalRefTableNoteTeardown(const void* set, int nodesBefore);
+void RtObjectExternalRefTableSummary();
+
+namespace RtObject {
+
+void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
+                                                      Stream* stream) {
+    ++g_c.calls;
+
+    // The lane-S write-path oracle. Runs BEFORE the real body, against two
+    // synthetic sinks, and only in the writing direction. See
+    // external_reftable_probe.cpp for what it can and cannot say.
+    RtObjectExternalRefTableProbeMaybeRun(self, stream);
+
+    // ---- MUTATION A: tear the reference table down --------------------------
+    // 1800bcb80. `this` for the teardown is the SET (`ADD RCX,0x20`), not the
+    // factory: retail loads RCX = this+0x20. The callee ignores it, but a port
+    // that passed the factory would be relying on that.
+    rtrefset::Set* refs =
+        reinterpret_cast<rtrefset::Set*>(reinterpret_cast<uint8_t*>(self) + 0x20);
+    if (refs->root) ++g_c.teardownNonEmpty;
+    const int nodesBefore = RtObjectExternalRefTableCountNodes(refs);
+    RtObjFactoryDtor::ReferenceSubtreeFree(refs, refs->root);
+    refs->root  = nullptr;                       // 1800bcb90, qword
+    refs->count = 0;                             // 1800bcb94, DWORD
+    RtObjectExternalRefTableNoteTeardown(refs, nodesBefore);
+
+    // ---- the local Serializer and its codec ---------------------------------
+    Serializer ser;
+    ser.stream       = stream;                   // 1800bcb98 [RBP-0x18]
+    ser.readerWriter = nullptr;                  // 1800bcb9c [RBP-0x10]
+
+    Encoding* enc = stream->encoding;            // 1800bcba0 [RBX+0x10]
+    if (!enc) ++g_c.nullEncoding;                // counted, NOT guarded: retail
+                                                 //   derefs it unconditionally
+    const int factorySlot = (stream->direction == rt::io::kDirectionReading)
+                                ? rt::io::encoding_vtbl::kCreateReader   // +0x18
+                                : rt::io::encoding_vtbl::kCreateWriter;  // +0x20
+    ReaderWriter* rw =
+        reinterpret_cast<EncFactoryFn>(VSlot(enc, factorySlot))(enc, &ser, 0);
+    ser.readerWriter = rw;                       // 1800bcbbc
+    if (!rw) ++g_c.nullRw;
+
+    // ---- the entry count ----------------------------------------------------
+    // 1800bcbc0: the value emitted is `_resources._count` on BOTH directions.
+    // On the reading side the slot OVERWRITES it with what the stream holds, so
+    // the local is the loop bound either way. It is read as a SIGNED int
+    // (`kScalarInt`, +0xa0) and the read-path loop is `JLE` / `JL` on it, so a
+    // negative count is a zero-iteration loop rather than a wild one.
+    int32_t count = static_cast<int32_t>(
+        reinterpret_cast<rtresset::Set*>(
+            reinterpret_cast<uint8_t*>(self) + 0x10)->count);
+    reinterpret_cast<RwScalarFn>(VSlot(rw, rt::io::rw_vtbl::kScalarInt))(
+        rw, &count, nullptr);
+
+    if (stream->direction == rt::io::kDirectionReading) {
+        // ====================================================================
+        // READ PATH — 1800bcbe5 .. 1800bcdef
+        // ====================================================================
+        ++g_c.load;
+
+        Filename scratch;                        // [RBP-0x40], and RBX caches it
+        scratch.data = nullptr;                  // 1800bcbe8
+
+        for (int32_t i = 0; i < count; ++i) {    // 1800bcbef JLE / 1800bcdbf JL
+            uint32_t id = 0;                     // [RBP+0x48]
+            reinterpret_cast<RwScalarFn>(VSlot(rw, rt::io::rw_vtbl::kScalarUInt))(
+                rw, &id, nullptr);               // 1800bcc1e, +0x98
+
+            // 1800bcc2c — reads the path into `scratch`, replacing whatever it
+            // held. `RBX` is reloaded from the slot AFTER this call, which is
+            // why the port re-reads `scratch.data` here and not before.
+            RtSystem::RtSystem_String_Serialize(
+                reinterpret_cast<String*>(&scratch), &ser);
+            char* raw = scratch.data;            // 1800bcc35
+            ++g_c.entries;
+
+            // Temporary A: an AddRef'd alias, delimiter-normalised, handed to
+            // the Set insert as the VALUE. 1800bcc31 .. 1800bcc49.
+            Filename keyPath;
+            AdoptRef(&keyPath, raw);
+            RtSystem::RtSystem_Filename_AdjustDelimiters(&keyPath);
+
+            uint32_t key = id;                   // 1800bcc4f [RBP+0x50]
+            rtrefset::Node* outSlot = nullptr;   // [RBP-0x20]
+            rtrefset::Insert(refs, &outSlot, &key, &keyPath);   // 1800bcc65
+            ReleaseInline(&keyPath);             // 1800bcc6b
+
+            // Temporary B: a SECOND AddRef'd alias, normalised again, then
+            // copy-assigned into a third slot which is normalised TWICE more.
+            // 1800bcc94 .. 1800bcd01. Retail really does call AdjustDelimiters
+            // at 1800bccf4 AND at 1800bccfd on the same object — the inlined
+            // `Filename::operator=` carries one and the statement carries the
+            // other. It is idempotent, and it is transcribed rather than
+            // folded because "obviously redundant" is how a port stops being a
+            // port.
+            Filename tmpB;
+            AdoptRef(&tmpB, raw);
+            RtSystem::RtSystem_Filename_AdjustDelimiters(&tmpB);
+
+            Filename lookup;
+            lookup.data = nullptr;               // 1800bccae
+            if (lookup.data != tmpB.data) {      // 1800bccbd — always true here
+                if (lookup.data) ReleaseInline(&lookup);
+                lookup.data = tmpB.data;         // 1800bcce8
+                if (lookup.data) ++reinterpret_cast<int32_t*>(lookup.data)[-1];
+            }
+            RtSystem::RtSystem_Filename_AdjustDelimiters(&lookup);   // 1800bccf4
+            RtSystem::RtSystem_Filename_AdjustDelimiters(&lookup);   // 1800bccfd
+
+            // ---- the INLINED find over `_resources` ------------------------
+            // 1800bcd07 .. 1800bcd5d. This is the same descent
+            // `rtresset::Find` (0x18002dd70) makes, open-coded here by MSVC,
+            // over the 0x38-byte ResourceEntry node: left +0x20, right +0x28,
+            // key = element.path at +0x00, compared with `_stricmp`.
+            //
+            // THE TWO NULL ARMS ARE ASYMMETRIC and are retail's:
+            //   node key null  -> fall through to the second test, then RIGHT
+            //   search key null with a non-null node key -> LEFT
+            //   both null      -> FOUND
+            rtresset::Node* found =
+                reinterpret_cast<rtresset::Set*>(
+                    reinterpret_cast<uint8_t*>(self) + 0x10)->root;
+            while (found) {
+                char* searchKey = lookup.data;
+                char* nodeKey   = rtresset::Elem(found)->path.data;
+                if (nodeKey) {
+                    if (!searchKey) {
+                        ++g_c.nullSearchKey;
+                        found = found->left;     // 1800bcd31, +0x20
+                        if (!found) break;
+                        continue;
+                    }
+                    if (StrICmp(searchKey, nodeKey) < 0) {
+                        found = found->left;
+                        if (!found) break;
+                        continue;
+                    }
+                } else {
+                    ++g_c.nullNodeKey;
+                }
+                // second test — 1800bcd37
+                if (!searchKey) break;           // FOUND (both keys null)
+                nodeKey = rtresset::Elem(found)->path.data;
+                if (nodeKey && StrICmp(nodeKey, searchKey) >= 0) break;  // FOUND
+                found = found->right;            // 1800bcd54, +0x28
+            }
+
+            ReleaseInline(&lookup);              // 1800bcd60
+            ReleaseInline(&tmpB);                // 1800bcd89
+
+            if (found) {                         // 1800bcdb2
+                ++g_c.resFound;
+                rtresset::Elem(found)->referenceId = id;   // +0x14
+            } else {
+                ++g_c.resMissed;
+            }
+        }
+
+        ReleaseInline(&scratch);                 // 1800bcdc8
+    } else {
+        // ====================================================================
+        // WRITE PATH — 1800bcdf4 .. 1800bcf11
+        // ====================================================================
+        ++g_c.save;
+
+        uint32_t id = 1;                         // 1800bcdf4, ids start at ONE
+        rtresset::Node* n =
+            reinterpret_cast<rtresset::Set*>(
+                reinterpret_cast<uint8_t*>(self) + 0x10)->root;
+
+        if (n) {
+            while (n->left) n = n->left;         // 1800bce10, leftmost
+
+            while (n) {
+                // MUTATION B — 1800bce30. Idempotent under replay: the ids run
+                // 1..N in in-order key order over a tree this body never
+                // modifies, so a second pass writes the identical value into
+                // the identical node.
+                rtresset::Elem(n)->referenceId = id;        // +0x14
+
+                // 1800bce37: NO NULL CHECK on `element.external`. Faithful —
+                // retail relies on the pointer always being there, and a guard
+                // would skip the emission rather than restore the behaviour.
+                Filename ret;
+                RtObject_External_GetPath(
+                    rtresset::Elem(n)->external, &ret);      // 1800bce3b
+                Filename path;
+                AdoptRef(&path, ret.data);                   // 1800bce41
+                ReleaseInline(&ret);                         // 1800bce54
+                ++g_c.entries;
+
+                reinterpret_cast<RwScalarFn>(
+                    VSlot(rw, rt::io::rw_vtbl::kScalarUInt))(rw, &id, nullptr);
+                RtSystem::RtSystem_String_Serialize(
+                    reinterpret_cast<String*>(&path), &ser); // 1800bce99
+                ReleaseInline(&path);                        // 1800bce9f
+
+                // ---- in-order successor, 1800bcec0 .. 1800bcf02 ------------
+                if (n->right) {
+                    n = n->right;
+                    while (n->left) n = n->left;
+                } else {
+                    rtresset::Node* p = n->parent;           // +0x18
+                    if (!p) {
+                        n = n->parent;                       // 1800bcf02 -> null
+                    } else if (p->left == n) {               // 1800bcee0, +0x20
+                        n = p;
+                    } else {
+                        // 1800bcef0: climb while we are the RIGHT child.
+                        while (p && p->right == n) {         // +0x28
+                            n = p;
+                            p = p->parent;
+                        }
+                        n = n->parent;                       // 1800bcf02
+                    }
+                }
+                ++id;                                        // 1800bcf09
+            }
+        }
+    }
+
+    // ---- destroy the codec the factory allocated ----------------------------
+    // 1800bcf17. Skipping it leaks 0x30 bytes per call.
+    if (rw)
+        reinterpret_cast<RwDtorFn>(VSlot(rw, rt::io::rw_vtbl::kDtor))(rw, 1);
+
+    // ---- report, HERE, inside the subject's live window ---------------------
+    // Not only from the exit summary. This body runs at most twice per session
+    // and the run that exercises it usually has to be killed rather than quit:
+    // `BANISHED_AUTOQUIT` OVERRIDES `BANISHED_AUTOLOAD`'s path, so the one run
+    // that reaches a clean exit is the one that never loaded, and an exit-only
+    // instrument prints a plausible ZERO on it
+    // (reference_autoquit_overrides_autostart_newgame.md). This line is what a
+    // killed run can still be read from.
+    RtObjectExternalRefTableSummary();
+}
+
+}  // namespace RtObject
+
+// ============================================================================
+// Registration
+// ============================================================================
+int RtObjectExternalRefTableRegister() {
+    int n = 0;
+
+    RegisterRuntimeExport(
+        "?SerializeReferenceTable@ExternalFactory@Object@@QEAAXAEAVStream@IO@@@Z",
+        (void*)&RtObject::RtObject_ExternalFactory_SerializeReferenceTable); ++n;
+    RegisterRuntimeAddr(0x1800bcb60,
+        (void*)&RtObject::RtObject_ExternalFactory_SerializeReferenceTable);
+
+    printf("[RtPort]   Object::ExternalFactory::SerializeReferenceTable: 1 export "
+           "+ 1 address registered. Its live call site is "
+           "code/Game/Game/gameupdateloop_serialize.cpp (by export name), so it "
+           "runs once per save AND once per load.\n");
+    return n;
+}
+
+// The counters, for the exit summary.
+void RtObjectExternalRefTableSummary() {
+    if (g_c.calls == 0) {
+        std::fprintf(stderr,
+            "[RefTable] calls=0 -- the body never ran. That is EXPECTED on a run "
+            "that neither saved nor loaded; it is NOT evidence the port is "
+            "correct and it is NOT evidence it is dead "
+            "(reference_uncalled_port_is_not_verified.md).\n");
+        return;
+    }
+    std::fprintf(stderr,
+        "[RefTable] calls=%llu save=%llu load=%llu entries=%llu "
+        "teardownNonEmpty=%llu resFound=%llu resMissed=%llu "
+        "nullSearchKey=%llu nullNodeKey=%llu nullEncoding=%llu nullRw=%llu\n",
+        (unsigned long long)g_c.calls, (unsigned long long)g_c.save,
+        (unsigned long long)g_c.load, (unsigned long long)g_c.entries,
+        (unsigned long long)g_c.teardownNonEmpty,
+        (unsigned long long)g_c.resFound, (unsigned long long)g_c.resMissed,
+        (unsigned long long)g_c.nullSearchKey, (unsigned long long)g_c.nullNodeKey,
+        (unsigned long long)g_c.nullEncoding, (unsigned long long)g_c.nullRw);
+}
