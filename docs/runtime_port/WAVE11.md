@@ -568,3 +568,49 @@ is a sequencing constraint, not a doubt about the evidence.
 Also confirmed the hard way, again: **`ResolveAddr(Module::Runtime, …)` consults
 the port registry FIRST**, so it is the wrong door for an oracle's theirs-side
 read *on principle*, regardless of what happens to be registered at the time.
+
+## A CLEAN MERGE IS NOT A CORRECT MERGE — caught before the real integration
+
+`git merge-tree` said the only conflicting file was `rt_object_port.cpp`, and it
+was right. **The damage was in a file that merged with no conflict at all.**
+
+Trial-merging OBJDATA + OBJLIFE + OBJINT into a scratch worktree produced a tree
+that **builds cleanly** and in which lane OBJINT's headline verdict has been
+silently reverted:
+
+```
+wave11/objint      internal.cpp:  if (shadow) … | if (!shadow) { ClearPersistState } | if (table) { … }
+trial merge        internal.cpp:  if (shadow) … |            (BLOCK GONE)            | if (table) { ClearPersistState }
+                                  grep -c "if (!shadow)"  ->  0
+```
+
+OBJINT moved `?ClearPersistState@InternalFactory@Object@@` **out of** the opt-in
+`if (table)` tier and into `if (!shadow)` — that move *is* the lane's verdict
+(VERIFIED, UNGATED, default-on) and is the one row it added to the census. Lane
+OBJLIFE edited the same region to add its attendance counters. Git reconciled the
+two without a conflict marker and **kept OBJLIFE's version of the region,
+discarding OBJINT's deletion and its new block.** The row goes back to being
+gated, which by this project's own rule means *not ported*.
+
+Nothing about the result announces this. It compiles, the census still moves
+(from the other lanes), and no marker was ever written.
+
+**The rule for every multi-lane integration from here: after merging, GREP FOR
+EACH LANE'S HEADLINE VERDICT and confirm it survived.** Conflict-freedom is a
+statement about text, not about meaning. Specifically check:
+
+* a registration a lane deliberately MOVED between guards — the move is a delete
+  plus an add, and a neighbour editing the same region can silently undo it;
+* the invariant OBJINT stated: **`ClearPersistState` must be registered exactly
+  once and OUTSIDE the tier.** A duplicate is last-binding-wins and would
+  silently make one body dead code; a survivor inside the tier is a lost row.
+
+**Credit where it is due: this was found because the lane DECLARED the collision
+rather than leaving the merge to discover it.** OBJINT triaged its own three
+`internal.cpp` edits by whether each could move (registration: no, it is the
+verdict; one `printf`: yes, drop it; three comment fixes: re-apply on OBJLIFE's
+text) before any merge was attempted. Without that declaration the trial merge
+would have read as a success.
+
+The preview census on the trial merge — **Object 37/58 = 63.8%** — is therefore
+**one row LOW**; with OBJINT's ungating restored it should read 38/58.
