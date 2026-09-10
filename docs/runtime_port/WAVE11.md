@@ -767,3 +767,51 @@ The census points are the smaller half. The larger half:
    that reported success three times in one lane.
 5. **Typeinfo-row promotion**, gated by the `minted=` test — the real successor to
    the "object creation path" wave.
+
+## Follow-up 1 CLOSED — `BANISHED_RT_INTERNAL_TABLE` armed (`wave11f/arm`)
+
+Measured by the integrator on the merge:
+
+| | before | after |
+|---|---|---|
+| **Object** | 44/61 = 72.1% | **47/61 = 77.0%**, ceiling 88.5% |
+| TOTAL | 80.7% | **81.0%** |
+
+Set-diff: **3 rows left, ZERO entered** — `??0Internal`, `??1Internal`,
+`?ResetPersistState@InternalFactory@`. Both `standalone-debug` and
+`standalone-perf` build clean at the merge.
+
+**Perf: the effect is inside the noise.** 6 interleaved `sa-stress` runs under
+one lock hold — ARMED 0.18856 sim ms/iter (spread 0.00467), KILLED 0.19033
+(spread 0.00511). Difference of means −0.93%, **2.7× smaller than the within-arm
+spread**, ranges fully overlapping. That **bounds** the cost well inside the 5%
+gate; it does not measure it, and −0.93% is not a speed-up. The lane said so in
+those words rather than quoting a point estimate.
+
+The gate is `table = noDll || (!tableKilled && (tableForced || !shadow))`. A
+naive default-on would have made `BANISHED_RT_INTERNAL_SHADOW=1` hit the
+mutual-exclusion refusal and **silently delete the oracle that produced the
+evidence for arming** — so an *explicit* arm still conflicts loudly while the
+*default* arm yields. Kill switch verified by running it, not by reading it.
+
+It also ran the live tier-2 load run that `ResetPersistState`'s own comment still
+owed (`clearRuns=1 resetRuns=1`, clean exit), which closes lane OBJINT's
+VERIFIED-BUT-UNARMED holdback.
+
+### Two pre-existing defects it found, both confirmed by the integrator
+
+1. **`make standalone-perf` did not build at `bd0f184`.** Six files call
+   `std::printf`, which `log_strip.h`'s own comment says cannot survive the perf
+   build's `printf` macro. The integrator reproduced this in an **untouched main
+   checkout**: 20 errors, all in `log_strip.h`. **Consequence: `sa-stress` has
+   been unrunnable since those files landed, so any recent "no perf regression"
+   claim was not measured on the perf exe.** Fixed here mechanically.
+2. **`runtime_census.py`'s `GATED_OFF_BLOCKS` refused to count any registration
+   inside a block gated on a variable named `"table"` in `internal.cpp`.** That
+   list exists to stop an UNARMED row counting as a port — left alone it would
+   have refused to count an **ARMED** one, and the lane's first measurement came
+   back empty for exactly that reason. **The empty answer was the tool's, not the
+   change's.** Integrator check on blast radius: `GATED_OFF_BLOCKS` is keyed by
+   FILE, and the only other `if (table)` in the tree (`runtime/src/ui/dialog.cpp:2171`)
+   is a local pointer, not a gate, and registers nothing — so removing `"table"`
+   affects exactly `internal.cpp`. `"shadow"`/`"checkPtr"` correctly stay.
