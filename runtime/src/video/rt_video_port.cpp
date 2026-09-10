@@ -16,6 +16,9 @@
 //                            two Context methods dx11/ calls once per draw
 //                                                        (Wave 9 lane CTX)
 //   BANISHED_RT_CTXBIND_PROBE=1 runs lane CTX's 37-case oracle at init.
+//   BANISHED_RT_VIDRES=0     ... just the Video resource lifecycle: RenderBuffer
+//                            ctor/dtor/Bind, ImageBuffer::Recreate, and the
+//                            Configuration/Device dtors  (Wave 18 lane VRES)
 //
 // Each lane owns exactly one .cpp and exposes one Register function returning
 // the number of RegisterRuntime* calls it made. A lane with nothing landed yet
@@ -138,6 +141,19 @@ void RtVideoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_EVM")) {
         extern int RtVideoEnumerateModesRegister();
         n += RtVideoEnumerateModesRegister();
+    }
+
+    // Wave 18 lane VRES: the Video resource lifecycle — RenderBuffer
+    // ctor/dtor/Bind, ImageBuffer::Recreate, and the Configuration and Device
+    // destructors. Registered LAST of the Video lanes because
+    // ??1Device@Video@@'s body reaches the two exported DATA singletons through
+    // RT_DATA_SLOT and destroys three Arrays through lane D2's bodies; nothing
+    // earlier in this init depends on it, and nothing it needs is registered
+    // here (Collection's inits run after all of Video's, and this body resolves
+    // through function-local statics on first USE, not at init).
+    if (RtWaveEnabled("BANISHED_RT_VIDRES")) {
+        extern int RtVideoResourcesRegister();
+        n += RtVideoResourcesRegister();
     }
 
     printf("[RtPort] Video: %d exports registered\n", n);
