@@ -53,15 +53,19 @@
 // runtime/src/video/save_image_to_file.cpp's RT_EXPORT_ONCE sites and from the
 // disassembly of each callee, transitively, down to Win32.
 //
-// IT IS A HAND-BUILT LIST AND THAT IS ITS LIMIT. It cannot discover a door
-// nobody wrote down. It says nothing about doors reached from anywhere else in
+// IT IS A HAND-BUILT LIST AND THAT IS ITS LIMIT — and the limit is not
+// theoretical: WAVE 20 LANE DOORS found FOUR unconditional doors in
+// save_image_to_file.cpp itself that this array had never listed (see the (20)
+// rows). `tools/screenshot_door_walk.py` now re-derives the DIRECT half of the
+// list from the source and diffs it against the array; the TRANSITIVE half is
+// still hand-built and still cannot discover a door nobody wrote down. It says nothing about doors reached from anywhere else in
 // the process, and nothing about whether the bodies behind those doors are
 // CORRECT — that is half A's job. A green board here means "every door I was
 // told about is answered by our registry", never "the screenshot works at
 // cutover".
 //
 // It prints `MEASURED NOTHING` rather than a green line when the list is empty
-// or when both controls fail, because from outside "no problem found" and "I
+// or when EITHER control fails, because from outside "no problem found" and "I
 // looked at nothing" are indistinguishable and this project has repeatedly
 // shipped the second believing the first (WAVE19_IO.md §6.6).
 // ============================================================================
@@ -75,6 +79,10 @@
 
 void* RtPortLookupExport(const char* mangled_name);
 void* RtPortLookupAddr(uintptr_t ghidra_addr);
+// The DLL's own export directory, walked without any resolver (resolve.h).
+int RtEnumRuntimeExports(bool (*visit)(const char* name, void* addr,
+                                       uintptr_t ghidraAddr, void* ctx),
+                         void* ctx);
 
 // The two lane-FILE attendance blocks. Printed here rather than by their own
 // files so a reader cannot see the DOOR verdicts without the CALL counts: a
@@ -93,6 +101,13 @@ struct Door {
     const char* name;   // nullptr for an unexported address-only door
     uintptr_t   addr;   // 0 when only the name door exists
     const char* note;
+    // WAVE 20 LANE DOORS. True for a row whose ADDRESS door is registered only
+    // on the DLL-ABSENT path, which a screen running with the DLL present can
+    // never observe. Such a row reads OPEN here and that is not evidence of a
+    // gap; it is this screen being unable to see the registration. It is
+    // counted OPEN anyway -- a board that quietly re-scored the rows it cannot
+    // check would be flattering itself -- and named on its own line instead.
+    bool cutoverOnlyAddr;
 };
 
 // ---------------------------------------------------------------------------
@@ -108,30 +123,56 @@ struct Door {
 // ---------------------------------------------------------------------------
 const Door kDoors[] = {
     // ---- (18) the six save_image_to_file.cpp reaches directly --------------
-    { "?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z", 0x1800ae430, "(18) lane FILE" },
-    { "?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z",     0x1800aa8f0, "(18) lane FILE" },
-    { "??0BinaryFileStream@IO@@QEAA@XZ",                          0x1800a8200, "(18) lane FILE" },
-    { "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z",        0x1800accc0, "(18) lane FILE" },
-    { "??1BinaryFileStream@IO@@UEAA@XZ",                          0x180023c80, "(18) lane FILE" },
-    { "??1FileStream@IO@@UEAA@XZ",                                0x1800aaab0, "(18) lane FILE" },
+    { "?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z", 0x1800ae430, "(18) lane FILE", false },
+    { "?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z",     0x1800aa8f0, "(18) lane FILE", false },
+    { "??0BinaryFileStream@IO@@QEAA@XZ",                          0x1800a8200, "(18) lane FILE", false },
+    { "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z",        0x1800accc0, "(18) lane FILE", false },
+    { "??1BinaryFileStream@IO@@UEAA@XZ",                          0x180023c80, "(18) lane FILE", false },
+    { "??1FileStream@IO@@UEAA@XZ",                                0x1800aaab0, "(18) lane FILE", false },
+
+    // ---- (20) FOUR DOORS THE BOARD NEVER LISTED, found by lane DOORS -------
+    //
+    // These four are `RT_EXPORT_ONCE` sites in `Video_ImageBuffer_SaveImageToFile`
+    // ITSELF — save_image_to_file.cpp:227-233, unconditional, in the first
+    // statement block, before anything the board did list. The row above says
+    // C2 "measured six out of save_image_to_file.cpp"; the file has TEN
+    // RT_EXPORT_ONCE sites and one RT_DATA_SLOT. Six of the ten were carried
+    // forward and four were not, and nothing noticed, because a hand-built list
+    // has no derivation to disagree with it.
+    //
+    // This is the THIRD time this debt has been found deeper than stated (the
+    // Wave 19 plan said four exports, C2 said six, a call-graph walk found ten,
+    // and this walk finds four more). `tools/screenshot_door_walk.py` now
+    // re-derives the DIRECT half of this list from the source on every run and
+    // diffs it against the array, so a fourth instance is a tool failure rather
+    // than a reading failure.
+    //
+    // All four are ported by other lanes, so they land SHUT — the denominator
+    // moves and the open set does not. That is why they were survivable, and it
+    // is not a reason to have left them out: an unlisted door is unlisted
+    // whether or not it happens to be shut today.
+    { "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z",         0x1800c6740, "(20) walk, lane Filename", false },
+    { "?GetPathDirectory@Filename@System@@QEBA?AV12@XZ",          0x1800c6880, "(20) walk, lane SetupDir", false },
+    { "??HSystem@@YA?AVString@0@AEBV10@0@Z",                      0x1800c9440, "(20) walk, lane String", false },
+    { "??HSystem@@YA?AVString@0@AEBV10@PEBD@Z",                   0x1800c92d0, "(20) walk, lane String", false },
 
     // ---- (19) the closure between those six and Win32 ----------------------
     { "?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z",
-                                                                  0x1800acc50, "(19) closure" },
+                                                                  0x1800acc50, "(19) closure", false },
     { "?PlatformCreateFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z",
-                                                                  0x1800ade60, "(19) closure" },
-    { "?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z", 0x1800ae020, "(19) closure" },
-    { nullptr,                                                    0x18000c180, "(19) ~FileInfo, unexported" },
+                                                                  0x1800ade60, "(19) closure", false },
+    { "?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z", 0x1800ae020, "(19) closure", false },
+    { nullptr,                                                    0x18000c180, "(19) ~FileInfo, unexported", false },
 
     // ---- (pre) already ported by earlier lanes -----------------------------
-    { "?SubString@String@System@@QEBA?AV12@HH@Z",                  0x1800c9230, "(pre) lane String" },
-    { "?AdjustDelimiters@Filename@System@@AEAAXXZ",                0x1800c6970, "(pre) lane String" },
-    { "??4Filename@System@@QEAAAEAV01@AEBV01@@Z",                  0x180006770, "(pre) lane String" },
-    { "??0WideString@System@@QEAA@AEBVString@1@@Z",                0x1800cab50, "(pre) lane WideStr" },
-    { "?Set@WideString@System@@QEAAXPEB_W@Z",                      0x1800caf40, "(pre) lane WideStr" },
-    { "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ",             0x1800cacd0, "(pre) lane WideStr" },
-    { nullptr,                                                    0x18000c200, "(pre) FileInfo::operator=" },
-    { nullptr,                                                    0x180006a10, "(pre) guarded object free" },
+    { "?SubString@String@System@@QEBA?AV12@HH@Z",                  0x1800c9230, "(pre) lane String", false },
+    { "?AdjustDelimiters@Filename@System@@AEAAXXZ",                0x1800c6970, "(pre) lane String", false },
+    { "??4Filename@System@@QEAAAEAV01@AEBV01@@Z",                  0x180006770, "(pre) lane String", false },
+    { "??0WideString@System@@QEAA@AEBVString@1@@Z",                0x1800cab50, "(pre) lane WideStr", false },
+    { "?Set@WideString@System@@QEAAXPEB_W@Z",                      0x1800caf40, "(pre) lane WideStr", false },
+    { "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ",             0x1800cacd0, "(pre) lane WideStr", false },
+    { nullptr,                                                    0x18000c200, "(pre) FileInfo::operator=", false },
+    { nullptr,                                                    0x180006a10, "(pre) guarded object free", false },
     // CORRECTED after the first measured run, by the OTHER instrument.
     // This row originally named `?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z`
     // (the member, 0x1800c6e60), which is what retail INLINES inside
@@ -145,18 +186,26 @@ const Door kDoors[] = {
     // `?Allocate@`, which is how this was found: two instruments looking at the
     // same path from opposite ends, one static and one live, and the live one
     // corrected the static one's subject. Recorded rather than quietly swapped.
-    { "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z",             0x1800c7a50, "(pre) allocator" },
-    { "?MemFree@MemoryAllocator@System@@SAXPEAX@Z",                0x1800c7ad0, "(pre) allocator" },
+    // `cutoverOnlyAddr` on both: allocator.cpp's RegisterAllocatorAddresses()
+    // — the ONLY registrar of 0x1800c7a50/0x1800c7ad0 — is called from the
+    // `if (!RuntimeDllPresent())` arm alone (allocator.cpp:1343-1372). With the
+    // DLL present, `BANISHED_RT_ALLOC=1` registers the EXPORTS only, which is
+    // exactly what this screen measured: armed, the two rows read
+    // `name=yes addr=NO`. Their by-address callers (rtcoll::MemAlloc/MemFree in
+    // collection/array.cpp:166,176 and application/message_callbacks.cpp:104)
+    // have NO name fallback, so the address door is the only door they use.
+    { "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z",             0x1800c7a50, "(pre) allocator", true },
+    { "?MemFree@MemoryAllocator@System@@SAXPEAX@Z",                0x1800c7ad0, "(pre) allocator", true },
 
     // ---- (pre) the DATA doors — vtables, not code -------------------------
     // Listed with the code doors on purpose: at cutover an unminted vtable is
     // exactly as fatal as an unported function, and separating them is how a
     // board reads green while the object gets a null vptr.
-    { "?_singleton@FileSystem@IO@@0PEAV12@EA",                     0x1801fc6a8, "(pre) DATA singleton" },
-    { "??_7Stream@IO@@6B@",                                        0x1801549a0, "(pre) DATA vtable" },
-    { "??_7FileStream@IO@@6B@",                                    0x180154960, "(19) DATA vtable, lane MINT" },
-    { "??_7BinaryFileStream@IO@@6B@",                              0x1801554d0, "(19) DATA vtable, lane MINT" },
-    { nullptr,                                                    0x1801554a8, "(pre) DATA encoding vtable" },
+    { "?_singleton@FileSystem@IO@@0PEAV12@EA",                     0x1801fc6a8, "(pre) DATA singleton", false },
+    { "??_7Stream@IO@@6B@",                                        0x1801549a0, "(pre) DATA vtable", false },
+    { "??_7FileStream@IO@@6B@",                                    0x180154960, "(19) DATA vtable, lane MINT", false },
+    { "??_7BinaryFileStream@IO@@6B@",                              0x1801554d0, "(19) DATA vtable, lane MINT", false },
+    { nullptr,                                                    0x1801554a8, "(pre) DATA encoding vtable", false },
 };
 const int kDoorCount = static_cast<int>(sizeof(kDoors) / sizeof(kDoors[0]));
 
@@ -165,24 +214,123 @@ const int kDoorCount = static_cast<int>(sizeof(kDoors) / sizeof(kDoors[0]));
 // (WAVE19_IO.md §6.3 — a union denominator overstates a blind control, and
 // Wave 18 shipped one).
 //
-// POSITIVE control, MUST read NOT-PORTED. `?Commit@CompressedStream@IO@@` is
-// WAVE19_IO.md §2's worked example of a door that LOOKS ported —
-// compressedstream.cpp names it eight times — and is not. If this screen calls
-// it PORTED, the screen is answering from something other than the registry and
-// every zero below is worthless.
+// WHAT THEY GUARD. This screen's whole verdict is `RtPortLookupExport(x) !=
+// nullptr`. Two ways that can be worthless, and they invert each other:
 //
-// SUBJECT control, MUST read PORTED. `?OpenFile@FileSystem@IO@@` has been
-// registered by name AND address since Wave 9 lane PKG2 rung 3. If this reads
-// NOT-PORTED the lookup is broken in the other direction and every "not ported"
-// below is a false alarm.
+//   * the lookup says YES to everything (it answered from the DLL, or from a
+//     fall-through resolver) — then every `shut` below is a lie;
+//   * the lookup says NO to everything (the registry is empty, unbuilt, or
+//     BANISHED_RT_PORT=0) — then every `OPEN` below is a false alarm.
 //
-// A screen with only the first control cannot tell "nothing is ported" from
-// "the lookup always says no"; with only the second it cannot tell "everything
-// is ported" from "the lookup always says yes". Both, or no verdict.
+// One control each, or no verdict.
+//
 // ---------------------------------------------------------------------------
-const char* const kCtlMustBeUnported = "?Commit@CompressedStream@IO@@QEAAXXZ";
-const char* const kCtlMustBePorted   =
+// WHY BOTH ARE NOW DERIVED — WAVE 20 LANE DOORS
+// ---------------------------------------------------------------------------
+// Until this wave the negative control was a HARD-CODED SYMBOL LITERAL,
+// `?Commit@CompressedStream@IO@@QEAAXXZ`, chosen because it was a door that
+// LOOKED ported and was not. Then a lane ported it, the control read PORTED,
+// and this screen — correctly — refused to report. It stayed dark, and the
+// board's last number (18 of 25 SHUT) went on being quoted from a document
+// while nothing could re-derive it.
+//
+// The screen was not broken. The CONTROL'S SUBJECT was a free parameter that
+// DECAYS AS LANES DO THEIR JOB: every symbol that qualifies today is one a lane
+// is trying to disqualify. Picking a different literal only resets that clock,
+// and the next lane to darken the board would have no way to know why.
+//
+// WAVE19_CLOSED.md §7.1: *remove the free parameter; failing that, PRINT IT
+// BESIDE THE VERDICT.* Both are done here, in that order:
+//
+//   REMOVED   the subject is SELECTED AT RUN TIME from Runtime-x64.dll's own
+//             export directory (`RtEnumRuntimeExports`, which consults no
+//             registry and no resolver): the first named export the port
+//             registry does not answer. There is no symbol to go stale,
+//             because there is no symbol in the source.
+//   PRINTED   the name it happened to pick is printed beside the verdict
+//             anyway, with the denominators, so a reader can see the aim.
+//
+// AND IT CAN STILL FAIL — which is the part a derived control can quietly lose.
+// The failure mode is not "the picked symbol turned out to be ported": it is
+// `candidates == 0`, i.e. the registry answered YES to all ~4,800 exports.
+// That is exactly the hazard the literal was guarding, reached from the other
+// side, and it is a real reachable state, not a `static_assert(true)`:
+// `BANISHED_RT_FILE_CUTOVER_CTLBREAK=yes` forces the lookup to answer non-null
+// and drives it, and `=no` drives the positive control red the same way.
+// Demonstrated red-then-green in docs/runtime_port/WAVE20_LANE_DOORS.md §1.
+//
+// The POSITIVE control is derived from the same single walk: `portedSeen`, the
+// number of exported names the registry DOES answer, which must be non-zero
+// over the same denominator. Two counters, one scan, opposite directions.
+//
+// `?OpenFile@FileSystem@IO@@` — the old named positive control, registered
+// since Wave 9 lane PKG2 rung 3 — is still printed, but as an INFORMATIVE line
+// that GATES NOTHING. It is a literal, and a literal in a gate is what darkened
+// this screen; kept because a change in it is worth seeing, demoted because a
+// change in it must not silence the board.
+// ---------------------------------------------------------------------------
+const char* const kCtlInformativePorted =
     "?OpenFile@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z";
+
+// ---- the break switch, which exists so the controls can be shown to fail ---
+// Not a kill switch for the port: it only lies to THIS FILE'S copy of the
+// lookup, so the screen sees a registry that always says yes / always says no.
+enum class CtlBreak { None, AlwaysPorted, NeverPorted };
+
+CtlBreak ReadBreak() {
+    const char* e = std::getenv("BANISHED_RT_FILE_CUTOVER_CTLBREAK");
+    if (!e || !*e) return CtlBreak::None;
+    if (std::strcmp(e, "yes") == 0) return CtlBreak::AlwaysPorted;
+    if (std::strcmp(e, "no")  == 0) return CtlBreak::NeverPorted;
+    return CtlBreak::None;
+}
+CtlBreak g_break = CtlBreak::None;
+
+// A non-null address that is NOT a function: the break must never be able to
+// hand a caller something callable.
+int g_breakSentinel = 0;
+
+void* PortLookupName(const char* n) {
+    if (g_break == CtlBreak::AlwaysPorted) return &g_breakSentinel;
+    if (g_break == CtlBreak::NeverPorted)  return nullptr;
+    return RtPortLookupExport(n);
+}
+void* PortLookupAddr(uintptr_t a) {
+    if (g_break == CtlBreak::AlwaysPorted) return &g_breakSentinel;
+    if (g_break == CtlBreak::NeverPorted)  return nullptr;
+    return RtPortLookupAddr(a);
+}
+
+// ---- one walk of the DLL's export table, three products -------------------
+struct Walk {
+    int         scanned    = 0;   // named exports visited      (the denominator)
+    int         withAddr   = 0;   // ... that resolve to an address in the module
+    int         portedSeen = 0;   // ... the port registry answers  (POSITIVE ctl)
+    int         candidates = 0;   // ... it does not              (NEGATIVE ctl)
+    const char* pick       = nullptr;   // the negative control's derived subject
+    uintptr_t   pickGhidra = 0;
+    uintptr_t   dllAddr[kDoorCount];    // where the DLL says each named row lives
+};
+
+bool WalkVisit(const char* name, void* addr, uintptr_t ghidra, void* ctx) {
+    Walk* w = static_cast<Walk*>(ctx);
+    ++w->scanned;
+    if (addr) ++w->withAddr;
+
+    // Address provenance for the board's own rows. A row's `addr` field was
+    // copied out of some lane's RegisterRuntimeAddr call, which makes the addr
+    // column trivially green for the row that copied it; this asks the SHIPPED
+    // BINARY where the symbol actually is.
+    for (int i = 0; i < kDoorCount; ++i)
+        if (kDoors[i].name && std::strcmp(kDoors[i].name, name) == 0)
+            w->dllAddr[i] = ghidra;
+
+    if (!addr) return true;                       // no body to be ported to
+    if (PortLookupName(name)) { ++w->portedSeen; return true; }
+    ++w->candidates;
+    if (!w->pick) { w->pick = name; w->pickGhidra = ghidra; }
+    return true;                                  // keep going: the counts ARE the control
+}
 
 bool g_armed = false;
 
@@ -194,19 +342,58 @@ void Run() {
            kDoorCount);
 
     // ---- controls first, and their verdict gates everything below ---------
-    const bool ctlNegOk = (RtPortLookupExport(kCtlMustBeUnported) == nullptr);
-    const bool ctlPosOk = (RtPortLookupExport(kCtlMustBePorted)   != nullptr);
-    printf("[FileCutover] CONTROL positive (must read PORTED)     %-64s : %s\n",
-           kCtlMustBePorted, ctlPosOk ? "PORTED -> GREEN" : "not ported -> RED");
-    printf("[FileCutover] CONTROL negative (must read NOT-PORTED) %-64s : %s\n",
-           kCtlMustBeUnported, ctlNegOk ? "not ported -> GREEN" : "PORTED -> RED");
+    //
+    // ONE walk of Runtime-x64.dll's export directory produces both. Neither
+    // names a symbol in this source; see the control block above for why the
+    // literal that used to sit here had to go.
+    g_break = ReadBreak();
+    if (g_break != CtlBreak::None)
+        printf("[FileCutover] *** BANISHED_RT_FILE_CUTOVER_CTLBREAK=%s IS SET: this "
+               "run's registry lookup is DELIBERATELY LYING (%s). Nothing below is "
+               "a measurement of the tree; this arm exists only to show the "
+               "controls can go red. ***\n",
+               g_break == CtlBreak::AlwaysPorted ? "yes" : "no",
+               g_break == CtlBreak::AlwaysPorted ? "always answers PORTED"
+                                                 : "never answers PORTED");
+
+    Walk w;
+    for (int i = 0; i < kDoorCount; ++i) w.dllAddr[i] = 0;
+    const int walked = RtEnumRuntimeExports(&WalkVisit, &w);
+
+    const bool ctlPosOk = (w.portedSeen > 0);
+    const bool ctlNegOk = (w.candidates > 0) && (w.pick != nullptr);
+
+    printf("[FileCutover] CONTROL walk: %d named exports in Runtime-x64.dll, "
+           "%d with an address (the denominator for both controls below)\n",
+           walked, w.withAddr);
+    printf("[FileCutover] CONTROL positive (registry MUST be able to say YES): "
+           "%d of %d exports answered -> %s\n",
+           w.portedSeen, w.withAddr, ctlPosOk ? "GREEN" : "RED");
+    printf("[FileCutover] CONTROL negative (registry MUST be able to say NO):  "
+           "%d of %d exports unanswered -> %s\n",
+           w.candidates, w.withAddr, ctlNegOk ? "GREEN" : "RED");
+    printf("[FileCutover] CONTROL negative SUBJECT, derived not named: %s "
+           "(0x%09llx) -- the first export the registry does not answer. Printed "
+           "so the aim is visible; nothing in this file selects it.\n",
+           w.pick ? w.pick : "(none -- and that IS the red)",
+           (unsigned long long)w.pickGhidra);
+
+    // Informative only, and deliberately NOT part of the gate: it is a literal,
+    // and a literal in a gate is what darkened this screen for a whole wave.
+    printf("[FileCutover] informative (GATES NOTHING) %-64s : %s\n",
+           kCtlInformativePorted,
+           PortLookupName(kCtlInformativePorted) ? "ported" : "NOT ported");
 
     if (kDoorCount == 0 || !ctlPosOk || !ctlNegOk) {
         printf("[FileCutover] *** MEASURED NOTHING: %s. No verdict is offered "
                "below, and an absence of red lines here is not evidence. ***\n",
-               kDoorCount == 0 ? "the door list is empty"
-                               : "a control failed, so the lookup is not "
-                                 "distinguishing ported from unported");
+               kDoorCount == 0     ? "the door list is empty"
+               : walked == 0       ? "the export walk visited nothing, so neither "
+                                     "control had a case to be scored on"
+               : !ctlPosOk         ? "the registry answered NO to every export, so "
+                                     "every OPEN below would be a false alarm"
+                                   : "the registry answered YES to every export, so "
+                                     "every shut below would be a lie");
         return;
     }
 
@@ -217,9 +404,9 @@ void Run() {
     for (int i = 0; i < kDoorCount; ++i) {
         const Door& d = kDoors[i];
         bool byName = false, byAddr = false;
-        if (d.name) { ++nameDoors; byName = (RtPortLookupExport(d.name) != nullptr);
+        if (d.name) { ++nameDoors; byName = (PortLookupName(d.name) != nullptr);
                       if (!byName) ++nameOpen; }
-        if (d.addr) { ++addrDoors; byAddr = (RtPortLookupAddr(d.addr) != nullptr);
+        if (d.addr) { ++addrDoors; byAddr = (PortLookupAddr(d.addr) != nullptr);
                       if (!byAddr) ++addrOpen; }
 
         const bool rowOpen = (d.name && !byName) || (d.addr && !byAddr);
@@ -239,6 +426,51 @@ void Run() {
            addrDoors - addrOpen, addrDoors, addrOpen);
     printf("[FileCutover] ==== %d of %d rows SHUT, %d OPEN ====\n",
            kDoorCount - openRows, kDoorCount, openRows);
+
+    // ---- rows this screen CANNOT SCORE on this route ----------------------
+    int cutoverOnly = 0, cutoverOnlyOpen = 0;
+    for (int i = 0; i < kDoorCount; ++i) {
+        if (!kDoors[i].cutoverOnlyAddr) continue;
+        ++cutoverOnly;
+        if (kDoors[i].addr && !PortLookupAddr(kDoors[i].addr)) {
+            ++cutoverOnlyOpen;
+            printf("[FileCutover] UNSCOREABLE ON THIS ROUTE (counted OPEN above) "
+                   "0x%09llx %s -- its address door is registered only by the "
+                   "DLL-ABSENT arm of the allocator's arming path, which cannot "
+                   "run while the DLL is loaded.\n",
+                   (unsigned long long)kDoors[i].addr, kDoors[i].name);
+        }
+    }
+    if (cutoverOnly)
+        printf("[FileCutover] %d of %d rows are cutover-only by construction; %d of "
+               "them read OPEN in this run. Subtracting them would be a claim this "
+               "screen cannot make, so the count above does NOT.\n",
+               cutoverOnly, kDoorCount, cutoverOnlyOpen);
+
+    // ---- ADDRESS PROVENANCE, derived from the export table ----------------
+    // Every `addr` in the array above was copied out of some lane's
+    // RegisterRuntimeAddr call, which makes the addr column trivially green for
+    // whoever copied it: the row and the registration share one typo. This asks
+    // the SHIPPED BINARY where each named symbol actually lives and compares.
+    // It cannot check the address-only rows -- they have no name to look up --
+    // and that inapplicable set is stated, not folded in.
+    int provChecked = 0, provOk = 0, provSkipped = 0;
+    for (int i = 0; i < kDoorCount; ++i) {
+        if (!kDoors[i].name || !kDoors[i].addr || w.dllAddr[i] == 0) {
+            ++provSkipped;
+            continue;
+        }
+        ++provChecked;
+        if (w.dllAddr[i] == kDoors[i].addr) { ++provOk; continue; }
+        printf("[FileCutover] PROVENANCE MISMATCH row says 0x%09llx, the DLL's "
+               "export table says 0x%09llx : %s\n",
+               (unsigned long long)kDoors[i].addr,
+               (unsigned long long)w.dllAddr[i], kDoors[i].name);
+    }
+    printf("[FileCutover] address provenance %d of %d checkable rows match the "
+           "DLL's own export table (%d rows have no exported name to check "
+           "against and are NOT scored)\n", provOk, provChecked, provSkipped);
+
 
     // ---- attendance, printed WHATEVER the door board said -----------------
     // The board above is a STATIC registry query. It cannot tell a body that

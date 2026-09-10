@@ -1,0 +1,9 @@
+[FileCutover] ==== screenshot-path door screen ====
+[FileCutover] subject: 29 hand-enumerated doors on the path from ?SaveImageToFile@ImageBuffer@Video@@ down to Win32. It cannot see a door nobody wrote down, and it says NOTHING about correctness.
+[FileCutover] *** BANISHED_RT_FILE_CUTOVER_CTLBREAK=yes IS SET: this run's registry lookup is DELIBERATELY LYING (always answers PORTED). Nothing below is a measurement of the tree; this arm exists only to show the controls can go red. ***
+[FileCutover] CONTROL walk: 4926 named exports in Runtime-x64.dll, 4926 with an address (the denominator for both controls below)
+[FileCutover] CONTROL positive (registry MUST be able to say YES): 4926 of 4926 exports answered -> GREEN
+[FileCutover] CONTROL negative (registry MUST be able to say NO):  0 of 4926 exports unanswered -> RED
+[FileCutover] CONTROL negative SUBJECT, derived not named: (none -- and that IS the red) (0x000000000) -- the first export the registry does not answer. Printed so the aim is visible; nothing in this file selects it.
+[FileCutover] informative (GATES NOTHING) ?OpenFile@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z : ported
+[FileCutover] *** MEASURED NOTHING: the registry answered YES to every export, so every shut below would be a lie. No verdict is offered below, and an absence of red lines here is not evidence. ***

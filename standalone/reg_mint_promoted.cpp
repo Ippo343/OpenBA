@@ -1189,7 +1189,8 @@ int RtMintRegisterPromotedRows() {
     //
     // CEIL declined to tag these two because the claim rested on a COMMENT in
     // encoding.cpp. Lane NOOP settled it from the shipped bytes: both tables
-    // are abstract (30 purecall of 36, and 5 of 7, read out of .rdata), every
+    // are abstract (25 purecall of 26 [was written 30 of 36 — see the note
+    // below the tags], and 5 of 7, read out of .rdata), every
     // reference to either VA in the whole DLL is an in-DLL RIP-relative LEA
     // (20 and 56, agreed by a decoder route AND a decoder-independent disp32
     // scan), no shipped image imports either symbol or holds its VA as a
@@ -1198,8 +1199,43 @@ int RtMintRegisterPromotedRows() {
     // eight door-stamps of these two symbols all mirror retail's
     // stamp-then-overwrite or stamp-then-free.
     //
-    // RT_UNPROMOTABLE: ??_7ReaderWriter@IO@@6B@ | 2/36 ported [INHERITED], 30 purecall [MEASURED] | WAVE19_PHASE0A_NOOP.md §3.1 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7ReaderWriter@IO@@6B@ | ?/26 ported [NUMERATOR STILL INHERITED], 25 purecall [RE-DERIVED] | WAVE19_PHASE0A_NOOP.md §3.1 + WAVE19_INTEGRATOR_CORRECTIONS.md C30 | NONE, EVER
     // RT_UNPROMOTABLE: ??_7Stream@IO@@6B@ | 1/7 ported [INHERITED], 5 purecall [MEASURED] | WAVE19_PHASE0A_NOOP.md §3.2 | NONE, EVER
+    //
+    // WAVE 20 LANE DOORS — the ReaderWriter denominator, and a convention split
+    // these tags never declared.
+    //
+    // `2/36 ported, 30 purecall` was honestly marked [INHERITED] and had gone
+    // stale: WAVE19_INTEGRATOR_CORRECTIONS C30 re-derived the row as **26
+    // slots**, not 36 — TWO unexported tables sit between it and the next
+    // export, one of them stamped by a three-instruction leaf ctor with no
+    // .pdata entry — and lane EXTENT re-derived 26 again this wave
+    // (docs/runtime_port/wave20_extent_audit.txt, CORROBORATED-EXACT). The
+    // slot array in this tree agrees without being asked: `kVSlots46` in
+    // standalone/rt_data_mint_tables.inc is 26 entries, 25 of them
+    // RT_MINT_PURECALL. So the denominator is 26 and the purecall count is 25.
+    //
+    // THE NUMERATOR IS NOT FIXED, AND IS WRITTEN `?` RATHER THAN GUESSED. The
+    // `2` came from WAVE17_LANE_CEIL §3.1's `36 / 2 / 4 / 30` row, counted over
+    // the 36-slot extent — so its two ported slots may have been inside the ten
+    // slots that turned out to belong to other tables, and nothing cheap
+    // decides which. EXPIRY: the next lane that counts ported slots on this row
+    // writes the number; until then `?` is the honest value and it is not a
+    // count anything reads (tools/runtime_census.py parses this field as free
+    // text and derives no number from it).
+    //
+    // AND A SPLIT NOBODY DECLARED: these tags use TWO conventions for the
+    // denominator. The Object/Video rows above are `N/M (K purecall)` where
+    // M is the NON-purecall slots and M+K is the table (Base 2/2 (1) = 3
+    // slots, ContextData 1/1 (19) = 20); the two IO rows here are `N/M ...,
+    // K purecall` where M is the WHOLE table (Stream 1/7, 5 purecall = 7
+    // slots). Both readings are self-consistent and they disagree by K, so a
+    // reader who assumes the wrong one mis-sizes the row. Declared here rather
+    // than normalised, because rewriting eighteen lanes' numbers to one
+    // convention is a change to eighteen written verdicts, not a tidy-up.
+    // `tools/unpromotable_slot_check.py` checks every tag under BOTH readings
+    // and reports a row only when NEITHER fits — which is how the 36 was found
+    // and how the other nineteen rows were cleared.
     //
     // RT_UNPROMOTABLE: ?_singleton@AnimationManager@Graphics@@0PEAV12@EA | n/a (scalar ptr) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_frameIndex@ParticleInstance@Graphics@@1HA | n/a (int counter) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
