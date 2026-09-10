@@ -815,3 +815,84 @@ VERIFIED-BUT-UNARMED holdback.
    FILE, and the only other `if (table)` in the tree (`runtime/src/ui/dialog.cpp:2171`)
    is a local pointer, not a gate, and registers nothing — so removing `"table"`
    affects exactly `internal.cpp`. `"shadow"`/`"checkPtr"` correctly stay.
+
+## Follow-up 2 CLOSED — and it makes a Wave 11 safety statement STALE
+
+Measured by the integrator on the merge:
+
+| | before | after |
+|---|---|---|
+| **Object** | 47/61 = 77.0% | **50/61 = 82.0%**, ceiling 88.5% — **4 rows from the ceiling** |
+| IO | 110/83 = 75.5% | 120/83 = **69.2%** (`ported` unchanged; the predicted fall) |
+| TOTAL | 81.0% | 80.5% |
+
+Set-diff: the **three subject rows left**; **11 entered** — ten exported IO names
+and **one address, `0x18002c6a0`** (`Array<ExternalArrayElement>::SetSize`,
+unexported in both builds), the only genuine new address door. The IO fall was
+**pre-registered by the lane before the run** and is the honest price of
+resolving by name. Both build configurations clean.
+
+### ⚠ THE 104 FACTORY ABORT TRAPS ARE NOW REACHABLE — this changes follow-up 5
+
+Wave 11 lane OBJINT recorded *"Abort traps: none become reachable"*, correctly at
+the time: nothing in our tree called a `BaseTypeInfo` factory pointer. **That
+statement is now stale, and this merge is what made it stale.**
+
+Our newly ported `?Load@External@Object@@` is not the "construct, Open, dispatch
++0x28" body the brief described — the lane found it **under-scoped** — it is a
+full deserialisation driver that looks up a type id and **creates the object
+through `BaseTypeInfo::factoryFn`**:
+
+```
+runtime/src/object/external_load.cpp:351    reinterpret_cast<FactoryFn>(info->factoryFn)()
+                                            created=2847 per boot
+```
+
+And the mint's own rule (`standalone/rt_data_mint.cpp:394-395`) is:
+
+```cpp
+if (f) { bti->factoryFn = f; }                      // ported
+else   { bti->factoryFn = (void*)t.factoryTrap; }   // ABORT TRAP
+        RtMintTrapDie("minted BaseTypeInfo::factoryFn is not ported")
+```
+
+**So promoting any minted `?_typeInfo@` row whose factory is not ported now hands
+our own `Load` an abort trap, 2 847 times a boot.** Before this merge that was
+unreachable by construction; it is now one promotion away.
+
+**Binding on follow-up 5:** a typeinfo row may be promoted only if its
+`factoryFn`/`inPlaceFactoryFn` is **ported**, or that type is **provably never
+constructed through `External::Load`**. Read `tiFactoriesTrapped` — the mint
+already counts this — and treat a non-zero count on a promoted row as a blocker,
+not a warning. This is the risk the Wave 11 kickoff called *"a live risk, not a
+footnote"*; it has now materialised.
+
+Corroboration worth noting: `rt_data_mint.cpp:147` carries
+`static_assert(offsetof(RtObject::BaseTypeInfo, factoryFn) == 0x20)` — the mint
+independently agrees with lane OBJINT's `+0x20`/`+0x28` derivation.
+
+### Four defects in the restart-orphaned draft, all fixed
+
+1. **`DumpAddCounters` was never `atexit`-scheduled**, so the file's own *stated*
+   positive control could not print — another instrument that would have been
+   silently inert. Fixed, and it immediately produced the `visited=1799
+   skipped=3221` split.
+2. **A comment inverted the `GetPath` ABI** (claimed retslot-first; the binary
+   says `this`-first). **The code was right and only the prose was wrong** — the
+   dangerous direction, because the next reader trusts the prose.
+3. *"Retail's inlined `~VisitorStream` makes ONE vtable stamp"* — it makes two.
+4. **The perf build was broken again** by `std::printf` vs `log_strip.h`'s macro
+   — **a recurrence one lane after follow-up 1 fixed it**, and this time 4 of the
+   6 offending files were the lane's own. The fix has no guard, so it will recur
+   again. See the follow-up list.
+
+### Two scoping corrections to the endorsed decomposition
+
+* **`Load` was UNDER-scoped** by the brief and by the decomposition I endorsed.
+* **`IO::Serializer` is a 16-byte facade `{Stream*, Impl*}`**, not the
+  vtable-carrying object — getting that wrong would have mis-shaped every
+  serializer call.
+* **`SaveText` can never be verified against a real object in the shipped DLL**:
+  retail's TEXT `Encoding` has **both** Serializer factory slots stubbed to
+  `XOR EAX,EAX; RET` while the BINARY one's are real. Established by **running
+  the shipped export**, not by inspection.
