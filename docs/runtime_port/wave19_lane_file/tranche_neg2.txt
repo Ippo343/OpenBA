@@ -1,0 +1,5 @@
+[FSSlots] ==== ten slot bodies, ours vs the shipped ones ====
+[FSSlots] subject: two BinaryFileStreams built by RETAIL's ctor and Create, driven through identical operations, one side entirely through OUR bodies and one entirely through the shipped ones (ResolveRuntimeRaw). ctl=2
+[FSSlots] MISMATCH copyCtor bytes         byte +0x00 ours=00 theirs=d0
+[FSSlots] cases=2 mismatches=1 comparisons=15 file-bytes-compared=11 controlFired=1
+[FSSlots] control 2 CAUGHT (1 mismatch(es)) -- the screen can see a wrong body.

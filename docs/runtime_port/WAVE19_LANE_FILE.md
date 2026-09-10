@@ -445,3 +445,314 @@ differs. Every number in this document comes from a run that printed
   lane one whole run.
 
 **Two commits: `45d2baa` (the ports), `4025da5` (the instruments and evidence).**
+
+---
+---
+
+# POST-REPORT TRANCHE — the two FileStream DATA rows
+
+**Added 2026-09-10, after §0–§8 were reported and sealed. Nothing above this
+line is altered, reworded or renumbered.** Deleting everything from this rule
+down reconstructs the report as delivered, which is the audit property that
+distinguishes a marked addendum from a silent rewrite (WAVE19_IO.md §7, §6.16).
+
+Re-tasked by the integrator once phase 0b regenerated the mint: the three DATA
+rows this lane had been told to DEFER were un-deferred. This lane took **two**
+and handed back the third. Branch merged `wave19/base` @ **`ee3d557`** (note the
+tip had moved past the `e06c162` the re-tasking named).
+
+## T0. Headline
+
+**Both rows cleared: `??_7FileStream@IO@@6B@` and `??_7BinaryFileStream@IO@@6B@`
+go from `0 ported / 8 TRAP` to `8 ported / TRAP=0`, READY** — measured by
+`BANISHED_RT_MINT_SHADOW`, with a kill-switch control that puts them back.
+
+**Ten bodies, all VERIFIED against the shipped ones**, `cases=2 mismatches=0
+comparisons=90 file-bytes-compared=11`, both negative controls fired and caught.
+
+**And on the first measured run all ten read attendance ZERO while the readiness
+screen said READY.** That is not a contradiction, it is §T3 — and it is why
+these bodies needed an oracle rather than an attendance count.
+
+## T1. What landed
+
+| body | retail | ord | door | file |
+|---|---|---|---|---|
+| `?GetSource@FileStream@IO@@UEBA?AVString@System@@XZ` | 0x1800aab50 | 2920 | name+addr | `file_stream.cpp` |
+| `?Write@FileStream@IO@@UEAA_NHPEBX@Z` | 0x1800aab90 | 4549 | name+addr | `file_stream_win.cpp` |
+| `?Read@FileStream@IO@@UEAA_NHPEAX@Z` | 0x1800aabf0 | 3450 | name+addr | `file_stream.cpp` |
+| `?SetCurrentPos@FileStream@IO@@UEAA_NH@Z` | 0x1800aac10 | 3856 | name+addr | `file_stream_win.cpp` |
+| `?GetCurrentPos@FileStream@IO@@UEBAIXZ` | 0x1800aac50 | 2534 | name+addr | `file_stream.cpp` |
+| `?GetSize@FileStream@IO@@UEBAIXZ` | 0x1800aac60 | 2904 | name+addr | `file_stream.cpp` |
+| `?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z` | 0x1800aac70 | 3304 | name+addr | `file_stream.cpp` |
+| FileStream deleting-dtor thunk | 0x18000c090 | — | **addr only** | `file_stream.cpp` |
+| BinaryFileStream deleting-dtor thunk | 0x180023d80 | — | **addr only** | `file_stream.cpp` |
+| `??0BinaryFileStream@IO@@QEAA@AEBV01@@Z` (copy ctor) | 0x180023ca0 | — | name+addr | `file_stream.cpp` |
+
+Kill switch `BANISHED_RT_FSSLOTS`. Oracle `BANISHED_RT_FSSLOTS_PROBE=1`
+(`neg1`, `neg2` for controls). Commits `5cb83ea`, `2ab06ae`, and the oracle.
+
+**Sixteen trap slots are nine functions.** `??_7FileStream@` and
+`??_7BinaryFileStream@` have BYTE-IDENTICAL slots 1..7 — re-derived by reading
+both tables out of the image, not inherited:
+
+```
+0x1801554d0: 180023d80 1800aab50 1800aab90 1800aabf0 1800aac10 1800aac50 1800aac60 1800aac70
+0x180154960: 18000c090 <the same seven>
+```
+
+The two rows differ ONLY in slot 0. Scope a DATA row by FUNCTION, not by slot.
+
+## T2. The grep the integrator assigned — answered
+
+MINT reported the eight base slots UNREGISTERED and was explicit that
+**unregistered is not unported**. Checked two ways, because an address grep
+cannot see a name-only registration: by ADDRESS (all nine), and by EXACT MANGLED
+NAME (all seven exported, taken from the shipped export directory).
+
+**Genuinely UNPORTED, not merely unregistered.** Every non-mint-table hit is a
+comment in `runtime/types/io/FileStream.h`, plus `file_stream_probe.cpp`, which
+resolves them through `RtResolveExportForProbe` — raw doors, deliberately.
+
+**Byproduct worth more than the answer**: `file_stream_probe.cpp` already exists,
+drives these classes, and carries five negative controls. **Its limit, stated so
+it is not mistaken for an oracle for this tranche: both its sides go through raw
+doors, so it compares retail with itself.** It needs an ours-side.
+
+## T3. THE CENTRAL RESULT: READY, TRAP=0, AND ATTENDANCE ZERO
+
+The first measured run after the tranche:
+
+```
+[RtMintShadow]   READY  ??_7FileStream@IO@@6B@        slots=8 ported=8 TRAP=0 purecall=0
+[RtMintShadow]   READY  ??_7BinaryFileStream@IO@@6B@  slots=8 ported=8 TRAP=0 purecall=0
+[FileCutover] slots  GetSource=0  Write=0  Read=0  SetCurrentPos=0  GetCurrentPos=0
+                     GetSize=0  Open=0  deletingDtor=0  copyCtor=0
+```
+
+**Ten registered bodies at TRAP=0 and not one of them entered.** The cause is
+measured, not guessed, and this lane's own cutover board prints it two lines
+above: the name doors for both tables read **NO**. The tables are MINTED but
+**NOT PROMOTED** (`[RtMint] promoted 31` of 62 minted rows), so
+`RT_DATA_SLOT("??_7FileStream@IO@@6B@")` inside our own constructors falls
+through to the DLL, our objects get RETAIL's table, and retail's slot bodies run.
+
+**A green readiness screen is not a route**
+(`reference_a_green_readiness_screen_is_not_a_route.md`), and this is as clean an
+instance as the project has produced: the screen's READY verdict and the
+attendance counters are both correct and they answer different questions.
+READY means *safe to stamp*. Attendance means *something dispatched it*.
+
+Promotion is not this lane's gate to open. So the bodies were verified directly
+instead (§T4) — which is the same disposition as "no route driven is not no
+route exists", one step further: **no route AVAILABLE is still not no oracle.**
+
+## T4. The oracle — `runtime/src/io/file_stream_slots_probe.cpp`
+
+Two `BinaryFileStream`s, **both constructed and `Create`d through RETAIL's
+bodies** so the constructor is not a second variable, then driven through an
+identical operation sequence — one side entirely through OUR ten bodies, one
+entirely through the shipped ones via `ResolveRuntimeRaw`. Every return value
+compared pairwise, and **the two files byte-compared at the end**, the same
+artefact trick Wave 18 used for the BMPs.
+
+Neither side uses `ResolveExport`, which is registry-first and would hand both
+sides ours — a probe whose ours-side reaches the body by address compares retail
+with itself.
+
+**Result, with its denominators:**
+
+```
+[FSSlots] cases=2 mismatches=0 comparisons=90 file-bytes-compared=11 controlFired=0
+[FSSlots] VERDICT: ours matches the shipped bodies on every comparison above.
+[FileCutover] slots  GetSource=1 (nonNull=1)  Write=2 (full=2)  Read=1
+                     SetCurrentPos=1 (win32=1)  GetCurrentPos=3  GetSize=1
+                     Open=1 (true=1)  deletingDtor=2  arrayArmAbort=0  copyCtor=1
+```
+
+**Every one of the ten bodies is now non-zero** except the array arm, which is a
+declared abort and is deliberately not driven. The 11 file bytes are the whole
+artefact: `Write("hello world")`, `SetCurrentPos(6)`, `Write("THERE")` →
+`hello THERE`, 11 bytes, read back through `Open` + `Read` and compared.
+
+**Controls, each scored on its own applicable case, 1 of 1, never on a union:**
+
+| control | what it perturbs | applicable case | result |
+|---|---|---|---|
+| `neg1` | seeks to 7 instead of 6 on OUR side only | case 1 | **CAUGHT**, 4 mismatches |
+| `neg2` | drops the copy ctor's third vtable store | case 2 | **CAUGHT**, 1 mismatch |
+
+Both produce a COMPARABLE DIVERGENCE — a different file, a different byte —
+never undefined behaviour, and both `controlFired=1` printed before any verdict
+was trusted.
+
+### T4.1 The probe was wrong twice before it was right, both caught by its own guards
+
+1. **`GetSource` compared two values that DIFFER BY CONSTRUCTION.** Subject A's
+   filename is `…fsslots_ours.bin` and B's is `…fsslots_theirs.bin`, so a value
+   comparison reported a mismatch on a correct port every run. **The evidence
+   pointed at the probe because the "defect" was exactly the difference the
+   subject was built to have** — the same shape as Wave 18 case 9. It now
+   compares the BEHAVIOUR (returns this stream's own buffer, AddRef'd not
+   copied) plus an ABSOLUTE assertion, because two sides that were both wrong
+   the same way would agree.
+2. **The effectiveness guard printed before the control verdict**, so a control
+   that was caught *so decisively that the two files ended up different sizes*
+   printed `THIS RUN PROVES NOTHING` and nothing else — which reads as a FAILED
+   control when it is the opposite. Reordered; the qualifier now follows the
+   verdict instead of replacing it.
+
+## T5. Two briefed stamper counts were wrong, and one changes a verdict
+
+The promotion criterion supplied with the re-tasking is right and is the
+sharpest tool in this wave: **every stamp of these tables is an in-DLL
+RIP-relative LEA, not a door, so a row is promotable exactly insofar as we own
+the function that stamps it.** The two counts attached to it are not.
+`get_xrefs_to` is cheap and neither had been run.
+
+### `??_7BinaryFileStream@` — briefed ONE stamper, measured TWO
+
+`get_xrefs_to 0x1801554d0` returns exactly two code sites: `0x1800a8270`
+(`??0BinaryFileStream@IO@@QEAA@XZ`, ported in the sealed report) and
+**`0x180023cfe`, inside `??0BinaryFileStream@IO@@QEAA@AEBV01@@Z` (0x180023ca0),
+the COPY CONSTRUCTOR** — unported, and not listed as called by the census.
+
+**Acting on "port that ctor and you own every stamp" would have declared the row
+fully owned while a second stamper sat in the DLL putting retail's table into
+every copied object.** The copy constructor is now ported, registered and
+oracle-verified (control `neg2` targets it), so the claim is true — because it
+was checked, not because it was told.
+
+### `??_7FileStream@` — briefed NINE stampers, measured about SEVENTEEN
+
+Distinct containing functions at `get_xrefs_to 0x180154960` include
+`??0FileStream`, `~FileStream`, both `??0TextFileStream` overloads, the
+BinaryFileStream default and copy ctors, `SaveText`, `SaveImageToFile`,
+`TextFileStream::{Close,Create,Open}`, **`Engine::Run` at two sites**, and three
+unexported bodies (`FUN_1800b6aa0`, `FUN_1800b6e00`, `FUN_1800b65b0`). **Five are
+already ours.**
+
+The CONCLUSION survives — Engine::Run and the three unexported bodies are not
+ours, so **TRAP=0 on this row is NOT a promotion** — but the number it rested on
+does not. Recorded because a measured number sitting beside an asserted one
+lends the asserted one credibility.
+
+## T6. The kill-switch control, and an aggregate that agrees from outside
+
+| | main | control (`BANISHED_RT_FSSLOTS=0`) |
+|---|---|---|
+| `??_7FileStream@` | READY 8 / 8 / TRAP=0 | **BLOCKED 8 / 0 / TRAP=8** |
+| `??_7BinaryFileStream@` | READY 8 / 8 / TRAP=0 | **BLOCKED 8 / 0 / TRAP=8** |
+| `??_7TextFileStream@` | BLOCKED 20 / 2 / TRAP=18 | BLOCKED 20 / 0 / TRAP=20 |
+| mint aggregate | 598 slots, **275 ported**, 175 unported-trap | 598 slots, **257 ported**, 193 unported-trap |
+| every slot counter | non-zero (§T4) | **all 0** |
+
+**The aggregate reconciles exactly against the row table, from a number that was
+not used to build it:** `275 − 257 = 18` and `193 − 175 = 18`. My two rows are
+16 of those; the other 2 are `??_7TextFileStream@`'s slots 1 and 7, which are
+FileStream's `GetSource` and `Open` — the same shared bodies, showing up in a
+third row. **8 + 8 + 2 = 18.**
+
+Scored on applicable cases only: **2 of 2 rows moved, GREEN**, by the mechanism
+the switch names. The other 59 minted rows did not move — a specificity result,
+scored separately, not part of the control's denominator.
+
+## T7. Facts the disassembly settled
+
+* **Reads go through `FileSystem`, writes do not.** `?Read@` is six instructions
+  and a tail-jump into `?ReadFile@FileSystem@IO@@`; `?Write@` calls `WriteFile`
+  directly and hand-advances `FileInfo::cursor`. That asymmetry is why only one
+  of the two needed a `_win` file — reading a PACKED file must consult the
+  package index, and `FileSystem::ReadFile` is where that lives.
+* **`?Write@` returns `written == len`, not the `WriteFile` BOOL**, which is
+  discarded. A short write returns false *and* has already advanced the cursor.
+* **`?SetCurrentPos@` writes the cursor BEFORE its branch** (0x1800aac1c), so it
+  moves on the packed path that never touches Win32 and on a failed seek. Its
+  discriminator `CMP [RCX+0x20],-0x3 ; JA` is **UNSIGNED** — read as signed it
+  inverts and every packed read would `SetFilePointer` a handle that is not one.
+* **`?GetCurrentPos@`/`?GetSize@` return UNSIGNED** (`UEBAIXZ`) while the fields
+  are modelled `int32_t`; **`?SetCurrentPos@` returns `_N`, a bool**, not void.
+  A one-instruction body cannot show a return type — the export directory is the
+  only place these are visible.
+* **`?Open@` is the read twin of `?Create@`**: same five steps, three
+  differences — no `CreatePath`, `direction = 0` instead of 1, and
+  `FileSystem::OpenFile` instead of `CreateFileW`. **A port written by analogy
+  from `Create` would add the `CreatePath` call**, which would create
+  directories on the way to a file it is about to read.
+* **The copy constructor copies `Stream::encoding` as a RAW POINTER**
+  (0x180023cc6). Two objects share one heap Encoding and both destructors free
+  it — **a double-free waiting for the second destructor**, and a plausible
+  reason nothing calls it. Reproduced exactly rather than deep-copied: an
+  unguarded hazard in a faithful body is retail's statement, not ours to repair.
+  The hazard is recorded at the body.
+
+## T8. The one declared divergence
+
+The `flags & 2` (delete[]) arm of **both** deleting-destructor thunks is a
+**NAMED ABORT**. Retail calls the CRT's `eh_vector_destructor_iterator` at
+`0x18007ec98`, unexported and unported; `binary_writer.cpp` faced this and took
+the same disposition rather than open an address door onto a CRT helper for a
+path no caller takes.
+
+**Its limit, because it is weaker than the precedent's.** BinaryWriter's only
+producer is a `MemAlloc(0x30,4)` with no array cookie, so that lane could PROVE
+the arm unreachable. This lane can only say it **found no array producer** —
+every FileStream it can see is stack-constructed or embedded in a
+`CompressedFileStream`. The abort message says what would have had to happen.
+
+## T9. What this tranche does NOT claim
+
+* **NOT that either row is PROMOTED.** They are minted and at TRAP=0. `[RtMint]
+  promoted 31` of 62 — **minted is not promoted**, and until promotion nothing
+  in play dispatches these bodies (§T3). `??_7BinaryFileStream@` is now fully
+  owned (both stampers ours) and is *ready for* promotion; that is a different
+  statement from being promoted, and the decision is not this lane's.
+* **NOT that `??_7FileStream@` becomes promotable.** §T5 — twelve of its
+  seventeen stampers are not ours, including `Engine::Run`.
+* **NOT that these bodies run in play.** Every non-zero slot count in §T4 was
+  produced BY THE ORACLE, not by gameplay. On the gameplay route they are still
+  zero, and will be until promotion. The oracle proves the bodies are RIGHT; it
+  proves nothing about whether anything reaches them.
+* **NOT that the array arm works.** It is a declared abort and was deliberately
+  not driven; `arrayArmAbort=0` on every run means it was never reached, which
+  is the expected and desired reading.
+* **NOT `??_7TextFileStream@`.** Handed back. It is minted at 20 slots and is
+  really **10** — an unexported table sits at 0x1801559d0, exactly ten slots in,
+  and `adjacent-export:` cannot see it. Three routes agree: the constructor
+  NAMES the address (`??0TextFileStream` at 0x1800ba431 is
+  `LEA RAX,[0x1801559d0]`), the byte dump shows ten coherent pointers and then a
+  different class's descending group, and `FileStream.h` has said 10 since Wave
+  11. **A second instance of the ReaderWriter 36-vs-31 defect**, reported to lane
+  MINT with the general pattern: every concrete IO stream ctor heap-allocates an
+  8-byte Encoding and stamps an UNEXPORTED vtable into it, and those tables live
+  in .rdata interleaved with the exported class tables. Its 2 ported slots in
+  §T6 are FileStream's shared bodies, not work on that row.
+* **NOT a change to §0–§8.** Rows 7 and 8 of the sealed report
+  (`??0TextFileStream@`, `??1FileSystem@`) are still **PORTED, NOT VERIFIED**,
+  attendance 0 on every run here too. This tranche did not close that.
+* **The screenshot board did not move.** Still **18 of 25 SHUT, 7 OPEN** — these
+  ten bodies are not on the screenshot path, and three of the seven open doors
+  are the very tables this tranche cleared, which are open for lack of
+  PROMOTION rather than for lack of ports.
+
+## T10. Handover, updated
+
+* **Whoever owns promotion**: `??_7BinaryFileStream@` is now the strongest
+  promotion candidate in IO — TRAP=0, **both** stampers ours, bodies
+  oracle-verified. Promoting it is what turns §T4's green into a live route.
+  `??_7FileStream@` is TRAP=0 but should NOT be promoted on that basis alone.
+* **Lane MINT**: `??_7TextFileStream@` is over-sized by 10 (§T9), and the
+  interleaved-unexported-Encoding pattern will over-size other rows in this
+  family. Bounding a table by the next STAMPED address rather than the next
+  export fixes the class, not the instance.
+* **Whoever takes `??_7TextFileStream@`**: it is 10 slots and **8 bodies** — its
+  slots 1 and 7 are FileStream's and already done.
+* **Lane CSTREAM**: `??_7CompressedFileStream@` is BLOCKED 9 / 1 / TRAP=8 and
+  its slot 7 trap is `?Close@CompressedFileStream@`, which you are porting. Its
+  slots 1..6 are CompressedStream's, not FileStream's, so this tranche does not
+  help it.
+
+**Tranche commits on top of the sealed report: `5cb83ea` (slot bodies),
+`2ab06ae` (the copy constructor), plus the oracle and this addendum.**
+Evidence: `docs/runtime_port/wave19_lane_file/tranche_main_{debug,error}.log`,
+`tranche_neg1.txt`, `tranche_neg2.txt`.

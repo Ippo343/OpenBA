@@ -77,18 +77,59 @@
 // WHAT IS *NOT* PORTED HERE, NAMED RATHER THAN SILENT
 // ---------------------------------------------------------------------------
 //   ??_7FileStream@IO@@6B@ (0x180154960), ??_7BinaryFileStream@ (0x1801554d0)
-//   and ??_7TextFileStream@ (0x180155980) are DEFERRED to lane MINT by the
-//   Wave 19 brief: WAVE19_IO.md §0b found all three appear ZERO times by VA in
-//   standalone/rt_data_mint_tables.inc, and phase 0c reproduced that from a
-//   second instrument. Every vtable store below therefore goes through a door
-//   that today reads the DLL. AT CUTOVER THEY NEED LANE MINT'S MINT. This is a
-//   real residual and it is named in WAVE19_LANE_FILE.md rather than glossed.
+//   and ??_7TextFileStream@ (0x180155980) were DEFERRED to lane MINT by the
+//   Wave 19 brief.
+//
+//   [CORRECTED 2026-09-10, post-report. What stood here said all three appear
+//   ZERO times by VA in standalone/rt_data_mint_tables.inc, citing WAVE19_IO.md
+//   §0b and phase 0c. That was measured at 20aa588 and is now FALSE: phase 0b
+//   regenerated the mint and all three are minted, verified by VA on this tip.
+//   The cause was neither a generator bug nor a harvest gap -- the generated
+//   file was simply STALE, last regenerated at 4f037fd (Wave 10D) while the
+//   consumers that put these tables into the census landed after it. A
+//   GENERATED ARTEFACT IN THE TREE IS A MEASUREMENT WITH A TIMESTAMP, exactly
+//   like a stated blocker, and this comment was a second-hand copy of one.
+//   Recorded rather than quietly rewritten.]
+//
+//   ??_7FileStream@ and ??_7BinaryFileStream@ are minted, and this file's
+//   post-report tranche clears BOTH to TRAP=0. Promotion is a separate question
+//   and the two rows differ on it.
+//
+//   THE STAMPER COUNTS BELOW ARE MEASURED HERE, and both differ from the ones
+//   this lane was briefed with. `get_xrefs_to` is cheap and neither figure had
+//   been run:
+//
+//     ??_7BinaryFileStream@ (0x1801554d0) — briefed as ONE stamper, measured
+//       **TWO**: 0x1800a8270 (the default ctor) and 0x180023cfe (the COPY
+//       ctor, 0x180023ca0). Both are ported by this lane, so the row IS fully
+//       owned — but only because the copy ctor was added. On the briefed claim
+//       it would have been declared owned with a stamper still in the DLL.
+//
+//     ??_7FileStream@ (0x180154960) — briefed as NINE stampers, measured about
+//       **SEVENTEEN**, of which five are already ours (SaveText, ~FileStream,
+//       ??0TextFileStream, ??0BinaryFileStream, SaveImageToFile). The
+//       CONCLUSION the brief drew still holds — Engine::Run (two sites) and
+//       three unexported bodies are not ours, so TRAP=0 here is NOT a
+//       promotion (reference_a_ported_row_can_be_permanently_unpromotable.md)
+//       — but the number it rested on does not.
+//
+//   ??_7TextFileStream@ is minted at 20 SLOTS AND IS REALLY 10 -- an unexported
+//   table sits at 0x1801559d0, exactly ten slots in, and the generator's
+//   adjacent-export bound cannot see it. Reported to lane MINT; the row is
+//   handed back rather than taken here.
 //
 //   ??_7Stream@IO@@6B@ (0x1801549a0) and the shared Encoding table
 //   (0x1801554a8) ARE minted already — checked BY VA in
 //   rt_data_mint_tables.inc, not by name. Phase 0b warns that the name grep
 //   returns `adjacent-export:` labels on OTHER rows and looks exactly like a
 //   hit; 0x1801559d0 is NOT minted.
+//
+//   MINTED IS NOT PROMOTED, and this is where a reader of the above will go
+//   wrong. None of these tables is promoted: a run reports
+//   `[RtMint] promoted 31` of 62 minted rows, so ??_7Stream@ prints
+//   READY / TRAP=0 on the readiness screen and is STILL AN OPEN DOOR that this
+//   lane's own cutover screen catches
+//   (reference_a_green_readiness_screen_is_not_a_route.md).
 //
 //   ??0FileStream@IO@@QEAA@XZ (0x1800aaa10) is deliberately absent. Retail
 //   INLINES it into both constructors below rather than calling it, and the
@@ -119,6 +160,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // registered. Declared here rather than pulled in from a header because that
 // lane publishes none and this lane does not edit another lane's files.
 extern "C" RtIO::FileInfo* RtIo_FileInfo_Assign(RtIO::FileInfo*, const RtIO::FileInfo*);
+extern "C" RtIO::FileInfo* RtIo_FileInfo_CopyCtor(RtIO::FileInfo*, const RtIO::FileInfo*);
 
 namespace RtIO {
 
@@ -143,6 +185,15 @@ bool      RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* pat
 void      RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info);
 FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
                                       const Filename* path);
+
+// Wave 9 lane PKG2 rung 3 (filesystem_openfile_win.cpp), already ported and
+// registered. The post-report slot tranche below calls both DIRECTLY.
+}  // namespace RtIO
+extern "C" bool      RtIo_FileSystem_ReadFile(RtIO::FileSystem*, RtIO::FileInfo*,
+                                             int32_t, void*);
+extern "C" RtIO::FileInfo* RtIo_FileSystem_OpenFile(RtIO::FileSystem*, RtIO::FileInfo*,
+                                                   const RtSystem::Filename*);
+namespace RtIO {
 
 namespace {
 
@@ -513,5 +564,432 @@ int RtIoFileStreamRegister() {
 
     printf("[RtPort]   IO::FileStream family (wave 19 lane FILE): "
            "%d exports + 1 unexported address registered\n", n);
+    return n;
+}
+
+// ============================================================================
+// THE VTABLE SLOT BODIES — Wave 19 lane FILE, POST-REPORT TRANCHE (see §6.16:
+// sealing forbids altering, not adding; this is new work, clearly marked).
+// ============================================================================
+//
+//   | Export                                             | Retail      | Ord  | Slot |
+//   |----------------------------------------------------|-------------|------|------|
+//   | ?GetSource@FileStream@IO@@UEBA?AVString@System@@XZ | 0x1800aab50 | 2920 |  1   |
+//   | ?Read@FileStream@IO@@UEAA_NHPEAX@Z                 | 0x1800aabf0 | 3450 |  3   |
+//   | ?GetCurrentPos@FileStream@IO@@UEBAIXZ              | 0x1800aac50 | 2534 |  5   |
+//   | ?GetSize@FileStream@IO@@UEBAIXZ                    | 0x1800aac60 | 2904 |  6   |
+//   | ?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z | 0x1800aac70 | 3304 |  7   |
+//
+// plus the two UNEXPORTED deleting-destructor thunks at slot 0 —
+// `0x18000c090` (FileStream's) and `0x180023d80` (BinaryFileStream's).
+// `?Write@` (slot 2) and `?SetCurrentPos@` (slot 4) are in file_stream_win.cpp
+// because they call Win32 directly; the split is the platform seam, not a
+// division of the row.
+//
+// Kill switch: BANISHED_RT_FSSLOTS=0 leaves all nine on the DLL.
+//
+// ---------------------------------------------------------------------------
+// WHY NINE BODIES CLEAR TWO WHOLE DATA ROWS
+// ---------------------------------------------------------------------------
+// `??_7FileStream@IO@@6B@` (0x180154960, 8 slots) and
+// `??_7BinaryFileStream@IO@@6B@` (0x1801554d0, 8 slots) were both minted by
+// Wave 19 phase 0b at 0 ported / 8 TRAP. **Their slots 1..7 are byte-identical**
+// — re-derived here by reading both tables' bytes rather than inherited:
+//
+//   0x1801554d0: 180023d80 1800aab50 1800aab90 1800aabf0
+//                1800aac10 1800aac50 1800aac60 1800aac70
+//   0x180154960: 18000c090 <the same seven>
+//
+// So the two rows differ ONLY in slot 0, and 7 shared bodies + 2 thunks = 9
+// functions cover 16 trap slots. That is the "scope a DATA row by FUNCTION, not
+// by slot" shape, and it was found independently by two Wave 19 cells before it
+// was found here.
+//
+// ---------------------------------------------------------------------------
+// WHAT CLEARING THEM DOES AND DOES NOT BUY — the STAMPER criterion
+// ---------------------------------------------------------------------------
+// A minted vtable row is promotable exactly insofar as WE OWN THE FUNCTION THAT
+// STAMPS IT: every stamp of these tables is an in-DLL RIP-relative LEA
+// (`1800a8270 LEA RAX,[0x1801554d0] -> MOV [RDI],RAX`), and a LEA is not a door
+// (`reference_a_ported_row_can_be_permanently_unpromotable.md`).
+//
+//   * `??_7BinaryFileStream@` has ONE stamper — `??0BinaryFileStream@`, which
+//     this lane already ported. Clearing these traps makes that row promotable.
+//   * `??_7FileStream@` has NINE distinct stampers, including `Engine::Run`.
+//     **TRAP=0 there is NOT a promotion** and must not be read as one; most
+//     stamps stay on retail's side whatever we do to the slots.
+//
+// The consequence for these bodies is that they must be byte-faithful for BOTH
+// tables: an object WE construct gets our minted table and our slot bodies, an
+// object retail constructs gets retail's, and the two have to behave alike.
+//
+// ---------------------------------------------------------------------------
+// THE ARRAY ARM OF BOTH THUNKS IS A NAMED ABORT — a declared divergence
+// ---------------------------------------------------------------------------
+// Both thunks are MSVC's standard scalar/vector deleting destructor, and the
+// `flags & 2` (delete[]) arm calls the CRT's `eh_vector_destructor_iterator` at
+// `0x18007ec98`, which is unexported and unported. `binary_writer.cpp` faced
+// exactly this and made the arm a NAMED ABORT rather than open an address door
+// onto a CRT helper for a path no caller takes; this file takes the same
+// disposition for consistency, and states its limit:
+//
+//   * nothing in this tree array-allocates a FileStream or BinaryFileStream —
+//     every one is stack-constructed by its caller (`external_load.cpp`,
+//     `external_savetext_win.cpp`, `save_image_to_file.cpp`) or embedded in a
+//     `CompressedFileStream`;
+//   * **but unlike BinaryWriter, whose only producer is a `MemAlloc(0x30,4)`
+//     with no array cookie, this lane did NOT prove no such producer can
+//     exist.** The claim here is "no caller in either binary that we have
+//     found", which is weaker, and the abort message says so.
+//
+// This is the one place in this tranche that is not byte-faithful. It is
+// deliberate, it is declared, and if it ever fires the message names what would
+// have had to happen.
+// ============================================================================
+
+namespace RtIO {
+
+// The two Win32 slot bodies, and their attendance counters, live next door.
+extern uint64_t g_fsWrite, g_fsWriteFull, g_fsSeek, g_fsSeekPlatform;
+
+// Slot-body attendance. Same reasoning as the lifecycle block above: a static
+// door screen cannot tell a registered body from an entered one.
+struct SlotCounters {
+    uint64_t getSource, getSourceNonNull;
+    uint64_t read, getPos, getSize;
+    uint64_t open, openTrue;
+    uint64_t dtorScalar, dtorArrayAbort;
+    uint64_t copyCtor;
+};
+SlotCounters g_fss{};
+
+// ============================================================================
+// IO::FileStream::GetSource() const                      retail 0x1800aab50
+// ============================================================================
+// Returns a `System::String` BY VALUE, so RCX is `this` and **RDX is the hidden
+// return slot** (`reference_hidden_retslot_wild_write.md`). The whole body is
+// the String copy-constructor from `this->filename`:
+//
+//     *ret = nullptr;
+//     if (this->filename) { *ret = this->filename; ++refcount(this->filename); }
+//     return ret;
+//
+// IT IS AN ADD-REF, NOT A COPY. The caller receives the same buffer and owes it
+// a release. A port that duplicated the characters would be observably wrong to
+// anyone comparing pointers, and would leak.
+//
+// The `[RSP]` slot retail writes 0 then 1 into is the SEH unwind state for the
+// temporary, not a field of anything.
+// ============================================================================
+extern "C" RtSystem::String* RtIo_FileStream_GetSource(const FileStream* self,
+                                                       RtSystem::String* ret) {
+    RT_DIFF_BEGIN("IO::FileStream::GetSource");
+    ++g_fss.getSource;
+
+    ret->data = nullptr;                                  // 1800aab67
+    if (self->filename) {                                 // 1800aab6e
+        ret->data = self->filename;                       // 1800aab73
+        ++StringRefCount(ret->data);                      // 1800aab76
+        ++g_fss.getSourceNonNull;
+    }
+    RT_DIFF_WORK(ret->data != nullptr);
+    return ret;                                           // 1800aab80
+}
+
+// ============================================================================
+// IO::FileStream::Read(int, void*)                       retail 0x1800aabf0
+// ============================================================================
+// SIX INSTRUCTIONS AND A TAIL-JUMP. The whole body is
+//
+//     return FileSystem::ReadFile(_singleton, &this->file, len, buf);
+//
+// and the argument shuffle is the only content: `len` arrives in EDX and has to
+// reach R8D, `buf` arrives in R8 and has to reach R9, because the callee takes
+// `this` in RCX and the FileInfo in RDX.
+//
+// **READS GO THROUGH FileSystem, WRITES DO NOT.** `?Write@FileStream@` calls
+// `WriteFile` directly (file_stream_win.cpp). That asymmetry is retail's, and
+// it is why only one of the two needed a `_win` file: reading a packed file has
+// to consult the package index, and `FileSystem::ReadFile` is where that lives.
+//
+// `?ReadFile@FileSystem@IO@@` is already ported and registered (Wave 9 lane
+// PKG2 rung 3), so it is called DIRECTLY here rather than through a door.
+// ============================================================================
+extern "C" bool RtIo_FileStream_Read(FileStream* self, int32_t len, void* buf) {
+    RT_DIFF_BEGIN("IO::FileStream::Read");
+    ++g_fss.read;
+    const bool ok = RtIo_FileSystem_ReadFile(Fs(), &self->file, len, buf);  // 1800aac03
+    RT_DIFF_WORK(ok);
+    return ok;
+}
+
+// ============================================================================
+// IO::FileStream::GetCurrentPos() const                  retail 0x1800aac50
+// IO::FileStream::GetSize() const                        retail 0x1800aac60
+// ============================================================================
+// One instruction each: `MOV EAX,[RCX+0x2c]` and `MOV EAX,[RCX+0x28]`.
+//
+// BOTH RETURN **UNSIGNED** (`UEBAIXZ`), while `FileInfo::cursor` and `::size`
+// are modelled `int32_t`. The bits are identical; the return TYPE is what the
+// caller's comparison sees, and a signed reading flips every test above 2GB.
+// The signature comes from the export directory, which is the only place it is
+// visible — a one-instruction body cannot show a return type.
+//
+// These two are also what `FileStream.h` used to PIN `FileInfo` at +0x20 (its
+// route 2), so they are the cheapest possible cross-check on that claim: if the
+// offset were wrong these would return the wrong field on every call, on a path
+// the package loader takes thousands of times per run.
+// ============================================================================
+extern "C" uint32_t RtIo_FileStream_GetCurrentPos(const FileStream* self) {
+    RT_DIFF_BEGIN("IO::FileStream::GetCurrentPos");
+    ++g_fss.getPos;
+    return static_cast<uint32_t>(self->file.cursor);       // 1800aac50
+}
+
+extern "C" uint32_t RtIo_FileStream_GetSize(const FileStream* self) {
+    RT_DIFF_BEGIN("IO::FileStream::GetSize");
+    ++g_fss.getSize;
+    return static_cast<uint32_t>(self->file.size);         // 1800aac60
+}
+
+// ============================================================================
+// IO::FileStream::Open(Filename const&)                  retail 0x1800aac70
+// ============================================================================
+// THE READ TWIN OF `?Create@FileStream@`, and comparing the two is the clearest
+// statement of what each does. Same five steps, three differences:
+//
+//   | step                | Create (0x1800aa8f0)   | Open (0x1800aac70)      |
+//   |---------------------|------------------------|-------------------------|
+//   | 1. prepare          | CreatePath(_singleton) | *(nothing)*             |
+//   | 2. filename         | release/adopt          | release/adopt, IDENTICAL|
+//   | 3. direction (+0x8) | **1** (writing)        | **0** (reading)         |
+//   | 4. get the FileInfo | FileSystem::CreateFileW| FileSystem::**OpenFile**|
+//   | 5. return           | file.handle != -1      | file.handle != -1       |
+//
+// Step 2's SELF-ASSIGNMENT SHORT-CIRCUIT JUMPS PAST BOTH HALVES here too
+// (`CMP RAX,[RDX] ; JZ 0x1800aaccd` skips the release AND the adopt), and step
+// 4's temporary is destroyed in the same order — `_name1` (rsp+0x50) before
+// `_name0` (rsp+0x48).
+//
+// **Open does NOT call CreatePath.** Creating directories on the way to a file
+// you are about to READ would be wrong, and retail does not do it. Worth
+// stating because the two bodies are otherwise near-identical and a port
+// written by analogy from `Create` would add it.
+//
+// `?OpenFile@FileSystem@IO@@` is already ported and registered (Wave 9 lane
+// PKG2 rung 3) and returns a `FileInfo` BY VALUE — RDX is the hidden return
+// slot, R8 the Filename.
+// ============================================================================
+extern "C" bool RtIo_FileStream_Open(FileStream* self, const Filename* path) {
+    RT_DIFF_BEGIN("IO::FileStream::Open");
+    ++g_fss.open;
+
+    // ---- 1800aac92..1800aaccc: this->filename = *path -------------------
+    char* const incoming = reinterpret_cast<const RtSystem::String*>(path)->data;
+    if (self->filename != incoming) {                     // 1800aac98
+        if (self->filename) {                             // 1800aac9d
+            if (--StringRefCount(self->filename) == 0) {  // 1800aaca2/a5
+                self->filename -= 8;                      // 1800aacaa
+                RtSystem::RtMemFree(self->filename);      // 1800aacb3
+            } else {
+                self->filename = nullptr;                 // 1800aacba
+            }
+        }
+        self->filename = incoming;                        // 1800aacc1
+        if (incoming) ++StringRefCount(incoming);         // 1800aacca
+    }
+
+    self->base.direction = 0;                             // 1800aaccd — READING
+
+    FileInfo tmp;                                          // not zero-initialised
+    RtIo_FileSystem_OpenFile(Fs(), &tmp, path);           // 1800aacdf
+    RtIo_FileInfo_Assign(&self->file, &tmp);              // 1800aacec
+    RtString_ReleaseInline(&tmp._name1);                  // 1800aacf2  +0x28 first
+    RtString_ReleaseInline(&tmp._name0);                  // 1800aad29  +0x20
+
+    const bool ok = (self->file.handle != -1);            // 1800aad60
+    if (ok) ++g_fss.openTrue;
+    RT_DIFF_WORK(ok);
+    return ok;
+}
+
+// ============================================================================
+// The two slot-0 deleting-destructor thunks
+//   FileStream        retail 0x18000c090   (unexported)
+//   BinaryFileStream  retail 0x180023d80   (unexported)
+// ============================================================================
+// Both are MSVC's standard scalar/vector deleting destructor and both are five
+// statements. They differ ONLY in which destructor they name — 0x1800aaab0
+// (`~FileStream`) for the first, 0x180023c80 (`~BinaryFileStream`) for the
+// second — which is the whole reason the two vtable rows are distinct.
+//
+// `0x180006a10`, the unexported guarded free both arms call, is registered
+// (context_lifecycle.cpp) and byte-identical to the exported
+// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` — binary_writer.cpp compared
+// them instruction for instruction and this lane inherits that rather than
+// re-deriving it.
+//
+// The `flags & 2` arm is a NAMED ABORT. See the header note for why, and for
+// the exact strength of the claim behind it.
+// ============================================================================
+namespace {
+
+void* DeletingDtorCommon(void* self, unsigned flags, void (*dtor)(void*),
+                         const char* which) {
+    if (flags & 2) {                                      // 18000c09f / 180023da2
+        ++g_fss.dtorArrayAbort;
+        std::printf("[RtPort] FATAL: %s deleting destructor reached its "
+                    "delete[] arm. Retail would call the CRT vector-destructor "
+                    "iterator at 0x18007ec98, which is unexported and unported, "
+                    "so this arm is a declared divergence (see the header note). "
+                    "Reaching it means something ARRAY-ALLOCATED a FileStream, "
+                    "which no caller found in either binary does.\n", which);
+        std::abort();
+    }
+    dtor(self);                                            // 18000c0e1 / 180023dd1
+    if (flags & 1) EncodingDelete(self);                   // 18000c0ef / 180023ddf
+    return self;                                           // 18000c0f4 / 180023de4
+}
+
+}  // namespace
+
+extern "C" void* RtIo_FileStream_DeletingDtor(void* self, unsigned flags) {
+    RT_DIFF_BEGIN("IO::FileStream::`scalar deleting destructor'");
+    ++g_fss.dtorScalar;
+    return DeletingDtorCommon(self, flags,
+        [](void* p) { RtIo_FileStream_Dtor(static_cast<FileStream*>(p)); },
+        "IO::FileStream");
+}
+
+extern "C" void* RtIo_BinaryFileStream_DeletingDtor(void* self, unsigned flags) {
+    RT_DIFF_BEGIN("IO::BinaryFileStream::`scalar deleting destructor'");
+    ++g_fss.dtorScalar;
+    return DeletingDtorCommon(self, flags,
+        [](void* p) { RtIo_BinaryFileStream_Dtor(static_cast<BinaryFileStream*>(p)); },
+        "IO::BinaryFileStream");
+}
+
+// ============================================================================
+// IO::BinaryFileStream::BinaryFileStream(BinaryFileStream const&)
+//                                                         retail 0x180023ca0
+// ============================================================================
+// THE COPY CONSTRUCTOR, AND IT IS HERE FOR ONE REASON: IT IS THE SECOND STAMPER
+// OF `??_7BinaryFileStream@IO@@6B@`.
+//
+// The Wave 19 brief stated that `??0BinaryFileStream@IO@@QEAA@XZ` is that
+// table's ONLY stamper, and that porting it would therefore make the row
+// promotable. **That is not what the binary says.** `get_xrefs_to 0x1801554d0`
+// returns exactly two code sites: 0x1800a8270 (the default ctor, ported above)
+// and **0x180023cfe, inside this function**. Acting on the brief's claim would
+// have declared the row fully owned while a second stamper sat in the DLL
+// putting retail's table into every copied object.
+//
+// The same query also refutes the brief's "nine distinct stampers" for
+// `??_7FileStream@` — there are about seventeen, five of which are already
+// ours. The conclusion the brief drew from that number still holds (Engine::Run
+// and three unexported bodies are not ours, so TRAP=0 there is not a
+// promotion); the number itself does not. `get_xrefs_to` is cheap and neither
+// figure had been run.
+//
+// ---------------------------------------------------------------------------
+// IT COPIES THE ENCODING AS A RAW POINTER, AND THAT IS NOT A BUG TO FIX
+// ---------------------------------------------------------------------------
+// 0x180023cc6 is `MOV RAX,[RDX+0x10] ; MOV [RCX+0x10],RAX` — a shallow copy of
+// `Stream::encoding`. Both objects then point at ONE heap Encoding, and both
+// destructors free it: `~FileStream` ends in `if (encoding) <guarded free>`.
+// **A copy of a BinaryFileStream is a double-free waiting for the second
+// destructor**, which is a plausible reason nothing in either binary calls
+// this.
+//
+// Reproduced exactly. Deep-copying the Encoding here would be a divergence that
+// changes what retail does on a path retail may rely on never taking, and this
+// project's rule is that an unguarded hazard in a faithful body is retail's
+// statement, not ours to correct (CLAUDE.md, "Don't 'fix' a faithful crash").
+// The hazard is recorded here instead.
+//
+// The three vtable stores are Stream -> FileStream -> BinaryFileStream, in that
+// order, exactly as in the default constructor: MSVC emits one per sub-object
+// as each base finishes.
+// ============================================================================
+extern "C" BinaryFileStream* RtIo_BinaryFileStream_CopyCtor(
+        BinaryFileStream* self, const BinaryFileStream* src) {
+    RT_DIFF_BEGIN("IO::BinaryFileStream::BinaryFileStream(const&)");
+    ++g_fss.copyCtor;
+
+    self->base.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");   // 180023cb6
+    self->base.base.direction = src->base.base.direction;                     // 180023cc0
+    self->base.base.encoding  = src->base.base.encoding;                      // 180023cc6 SHALLOW
+    self->base.base.vptr = RT_DATA_SLOT(const void*, "??_7FileStream@IO@@6B@"); // 180023cce
+
+    self->base.filename = nullptr;                                            // 180023cd8
+    if (src->base.filename) {                                                 // 180023ce4
+        self->base.filename = src->base.filename;                             // 180023ce9
+        ++StringRefCount(self->base.filename);                                // 180023ced
+    }
+
+    RtIo_FileInfo_CopyCtor(&self->base.file, &src->base.file);                // 180023cf8
+
+    self->base.base.vptr =
+        RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");            // 180023cfe
+    return self;                                                              // 180023d08
+}
+
+// Published to the cutover probe alongside the lifecycle counters.
+void RtIoFileStreamSlotCounters(unsigned long long* out) {
+    out[0]=g_fss.getSource; out[1]=g_fss.getSourceNonNull;
+    out[2]=g_fsWrite;       out[3]=g_fsWriteFull;
+    out[4]=g_fss.read;      out[5]=g_fsSeek;
+    out[6]=g_fsSeekPlatform;out[7]=g_fss.getPos;
+    out[8]=g_fss.getSize;   out[9]=g_fss.open;
+    out[10]=g_fss.openTrue; out[11]=g_fss.dtorScalar;
+    out[12]=g_fss.dtorArrayAbort; out[13]=g_fss.copyCtor;
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// Registration for the seven slot bodies in this file.
+// ============================================================================
+int RtIoFileStreamSlotsRegister() {
+    using namespace RtIO;
+    int n = 0;
+
+    RegisterRuntimeExport("?GetSource@FileStream@IO@@UEBA?AVString@System@@XZ",
+                          (void*)&RtIo_FileStream_GetSource); ++n;
+    RegisterRuntimeAddr(0x1800aab50, (void*)&RtIo_FileStream_GetSource);
+
+    RegisterRuntimeExport("?Read@FileStream@IO@@UEAA_NHPEAX@Z",
+                          (void*)&RtIo_FileStream_Read); ++n;
+    RegisterRuntimeAddr(0x1800aabf0, (void*)&RtIo_FileStream_Read);
+
+    RegisterRuntimeExport("?GetCurrentPos@FileStream@IO@@UEBAIXZ",
+                          (void*)&RtIo_FileStream_GetCurrentPos); ++n;
+    RegisterRuntimeAddr(0x1800aac50, (void*)&RtIo_FileStream_GetCurrentPos);
+
+    RegisterRuntimeExport("?GetSize@FileStream@IO@@UEBAIXZ",
+                          (void*)&RtIo_FileStream_GetSize); ++n;
+    RegisterRuntimeAddr(0x1800aac60, (void*)&RtIo_FileStream_GetSize);
+
+    RegisterRuntimeExport("?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z",
+                          (void*)&RtIo_FileStream_Open); ++n;
+    RegisterRuntimeAddr(0x1800aac70, (void*)&RtIo_FileStream_Open);
+
+    // Both UNEXPORTED — the address is their only door.
+    RegisterRuntimeAddr(0x18000c090, (void*)&RtIo_FileStream_DeletingDtor);
+    RegisterRuntimeAddr(0x180023d80, (void*)&RtIo_BinaryFileStream_DeletingDtor);
+
+    // The SECOND stamper of ??_7BinaryFileStream@. Without it that row keeps a
+    // door onto retail's table and is NOT promotable, whatever its trap count
+    // says -- see the body's header note.
+    RegisterRuntimeExport("??0BinaryFileStream@IO@@QEAA@AEBV01@@Z",
+                          (void*)&RtIo_BinaryFileStream_CopyCtor); ++n;
+    RegisterRuntimeAddr(0x180023ca0, (void*)&RtIo_BinaryFileStream_CopyCtor);
+
+    extern int RtIoFileStreamWinRegister();
+    n += RtIoFileStreamWinRegister();
+
+    printf("[RtPort]   IO::FileStream vtable slots (wave 19 lane FILE, post-report): "
+           "%d exports + 2 unexported addresses registered -- "
+           "clears ??_7FileStream@ and ??_7BinaryFileStream@ to TRAP=0\n", n);
     return n;
 }

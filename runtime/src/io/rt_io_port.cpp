@@ -25,6 +25,7 @@
 //                                   GetSource and VisitorStream   (lane IOBASE)
 //   BANISHED_RT_FILESTREAM=0    ... just the FileStream family      (lane FILE)
 //   BANISHED_RT_CREATEFILE=0    ... just FileSystem create/close   (lane FILE)
+//   BANISHED_RT_FSSLOTS=0       ... just the FileStream vtable slots (lane FILE)
 //
 // THREE WARNINGS THIS WAVE INHERITS, each already paid for once:
 //
@@ -234,6 +235,13 @@ extern int RtIoFileSystemCreateFileRegister();  // filesystem_createfile_win.cpp
 // compressed_stream_read.cpp. That remains a named cutover blocker.
 extern int RtIoCompressedStreamWriteRegister();    // compressed_stream_write.cpp
 
+// Wave 19 lane FILE, POST-REPORT TRANCHE. The nine bodies behind the eight
+// vtable slots of BOTH ??_7FileStream@ and ??_7BinaryFileStream@ (their slots
+// 1..7 are byte-identical, so nine functions cover sixteen trap slots). Own
+// switch because it is the only part of this lane that changes what a
+// DISPATCHED vtable slot does, as opposed to what a called export does.
+extern int RtIoFileStreamSlotsRegister();       // file_stream.cpp + file_stream_win.cpp
+
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
         printf("[RtPort] BANISHED_RT_IO=0 -- IO namespace port disabled\n");
@@ -267,6 +275,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_IOBASE"))      n += RtIoBaseVtablesRegister();
     if (RtWaveEnabled("BANISHED_RT_FILESTREAM"))  n += RtIoFileStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_CREATEFILE"))  n += RtIoFileSystemCreateFileRegister();
+    if (RtWaveEnabled("BANISHED_RT_FSSLOTS"))    n += RtIoFileStreamSlotsRegister();
 
     // Lane FILE's screenshot-path door screen. Armed OUTSIDE its two switches
     // on purpose: the control for this lane is a run with both of them at 0,

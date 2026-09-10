@@ -525,6 +525,28 @@ void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
     RtString_ReleaseInline(&fresh._name1);           // 1800acd20  +0x28 first
     RtString_ReleaseInline(&fresh._name0);           // 1800acd50  +0x20
     RT_DIFF_WORK(true);
+
+    // ---- NOT PART OF THE PORT ------------------------------------------
+    // A one-shot trigger for file_stream_slots_probe.cpp, which needs a LIVE
+    // FileSystem singleton (it builds its paths through GetSaveDirectory) and
+    // therefore cannot run from RuntimePortInit or from an atexit handler.
+    //
+    // This body is the latest-and-most-attended anchor this lane owns: 2854
+    // calls on the gameplay route, all of them after the package mount. Call
+    // 2000 is arbitrary but comfortably inside that. It is gated on the probe's
+    // own env var, so an unarmed run does one integer compare and nothing else.
+    //
+    // The probe drives RETAIL's ctor and Create, never ours, so this cannot
+    // recurse back into the bodies under test.
+    {
+        static uint64_t closeSeen = 0;
+        static bool probeRan = false;
+        if (!probeRan && ++closeSeen >= 2000) {
+            probeRan = true;
+            extern void RunFileStreamSlotsProbe();
+            RunFileStreamSlotsProbe();
+        }
+    }
 }
 
 // ============================================================================
