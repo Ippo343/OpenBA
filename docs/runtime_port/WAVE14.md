@@ -186,6 +186,37 @@ on, and see nothing in the log.
 env var gating two ports means neither is independently A/B-able, which defeats
 the stated reason both lanes wanted their own.
 
+## A green screen has two causes, and they are opposite
+
+Lane LOADMETA's closing generalization, and the most transferable thing in the
+wave: **a screen can be green because it is RIGHT, or because it had NOTHING TO
+TEST.** A divergence count cannot tell those apart, and neither can an aggregate.
+
+Both of its own results are instances, in opposite directions:
+
+* **S6 scored 11/13**, and the shortfall was NOT a blind screen — 11 of 13 saves
+  carry at least one `ModInfo` and two carry none, so on those two the control
+  had no subject. That was only visible because the controls were scored PER
+  SCREEN; on the union it would have read as a hole in the screen.
+* **S7 did not exist** until the integrator asked whether the oracle covered the
+  side effect. The original six screens compared out-params only and were
+  structurally blind to a missing free-and-zero — while reporting
+  `calls=13 divergences=0`. The green was real and the coverage was not.
+
+The same shape recurs across the wave, which is why it is stated here as a rule
+rather than as three anecdotes:
+
+* SAVEMETA's SIZE screen scored **0/3** against a value corruption while the
+  BYTES screen scored 3/3. Scored on the union: 3/3 twice, and the blind screen
+  invisible.
+* DRAW's negative control fired **4/4 on `[pixels]` and 0/4 on the other two**
+  sites — the reason it split one site into three.
+* SETUPLOAD's Screen A reported `wrong=0` and needed a SELF-TEST returning
+  `wrong=56` to prove the comparison could go red at all.
+
+The rule that follows: score every screen SEPARATELY, state the mechanism of
+each miss, and never report a control result as a union total.
+
 ## Instruments and their blind spots
 
 * `tools/abi_retslot_audit.py` scans **only `engine/funcs/`**. It could not see
