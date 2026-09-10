@@ -86,8 +86,16 @@ namespace RtSystem {
 // Declared locally, house style (see runtime/src/io/filesystem_setupdirs_win.cpp
 // lines 138-158): filename.cpp exposes no header of its own.
 void      RtSystem_Filename_AdjustDelimiters(Filename* self);              // 0x1800c6970
+// `emptyIfNoExt` is NOT "strip the extension" -- the backward scan for '.' strips
+// it unconditionally. The flag is read in exactly one place: when NO '.' is found
+// at index >= 1, a TRUE flag yields the EMPTY filename rather than the whole leaf.
+// So on an extension-less path GetPathFilename(true) returns nothing at all, which
+// is why the `filenameFromStack` fallback below exists. Full derivation and the
+// ported body: runtime/src/system/filename.cpp:282-288.
+// Retail's own parameter reads as `stripExt`; do NOT copy that name here -- it is
+// what sent Wave 11 lane OBJEXT to re-derive this from the disassembly.
 Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
-                                            bool stripExtension);          // 0x1800c6740
+                                            bool emptyIfNoExt);            // 0x1800c6740
 Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret);
                                                                            // 0x1800c6610
 Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other);

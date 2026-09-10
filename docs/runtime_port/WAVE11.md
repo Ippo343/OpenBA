@@ -456,3 +456,45 @@ plus the same digits-guard on `age`, and a timeout path that preserves the
 original `asked` epoch rather than minting a new one. **A queue that silently
 starves its longest waiter is worse than no queue**, because the waiter reads its
 own starvation as patience.
+
+## A knowledge-loss defect: locally re-declared prototypes strip the caveats
+
+Lane OBJEXT derived, from the disassembly, that
+`?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z` (`0x1800c6740`) **does not
+mean "strip the extension"**: the backward scan for `'.'` strips it
+unconditionally, and the flag is read in exactly one place — when no `'.'` is
+found at index >= 1, a true flag yields the **EMPTY** filename rather than the
+whole leaf. The derivation is strong: **one fact predicts all five of its control
+ratios exactly** (6/6, 6/6, 4/6, 1/6, 5/6), and it is corroborated by lane RRES's
+`filenameFromStack` counter, which exists precisely to handle that empty return.
+
+**And the tree already knew.** `runtime/src/system/filename.cpp:282-288` — the
+port of that very function — documents it in almost the same words, with the
+parameter named `stripExt` and the caveat attached.
+
+So a lane spent a cycle re-deriving a fact already written down at the callee's
+own port. The mechanism is the local re-declaration:
+
+```cpp
+// external_path_win.cpp, BEFORE — "Declared locally, house style"
+Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
+                                            bool stripExtension);   // 0x1800c6740
+```
+
+The house style of re-declaring a callee locally (to avoid dragging in a header)
+**carries the signature and drops everything that makes it usable** — here a
+retail-flavoured parameter name with no caveat, sitting two call sites away from
+code whose behaviour depends entirely on the caveat. It did not merely fail to
+help; it actively misled, because `stripExtension` is a confident-sounding wrong
+name.
+
+**Fixed at source** (the advisor's to fix — no lane owns this file and no lane
+branch touches it): the parameter is now `emptyIfNoExt`, with the semantics, the
+reason the `filenameFromStack` fallback exists, and a pointer to
+`filename.cpp:282-288`. It also says explicitly not to copy retail's own name
+back in.
+
+**The general rule: before deriving a callee's semantics from disassembly, grep
+for OUR port of that callee.** A local re-declaration is a signature, not a
+source of truth, and this tree has many of them by design. Anywhere a local
+re-declaration exists, the caveat has to be copied with it or pointed at.
