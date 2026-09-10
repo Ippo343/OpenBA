@@ -453,3 +453,78 @@ Two consequences worth stating rather than leaving implicit:
   on DLL-constructed objects, which is self-consistent: there is no mixed pair
   in which one half is ours and the other retail's. Should a later lane port
   `Add` or `Load`, that is where the vtable question becomes live — not here.
+
+---
+
+## 10. Two instruments that would have lied, caught before the run
+
+Both were written by this lane, both were found by this lane, and both would
+have produced a **green line with no comparison behind it**. Recorded here
+because the failure mode is the same one other lanes of this wave hit
+independently, which makes it the reusable part.
+
+### 10.1 A probe scheduled off a body that is never called
+
+The probe originally self-scheduled from the first call into `PushPath` — the
+obvious choice, and the one `array_internal.h` recommends in general ("the first
+call into ANY registered entry point runs it").
+
+**`PushPath` is never called on a normal run.** Lane RRES had already measured
+it and written the number down: `stack empty/nonempty = 22583/0` — 22,583 live
+`ExpandRelativePath` calls in a menu-to-gameplay run, every one against an EMPTY
+stack. Nothing pushes.
+
+The registration line would have printed `probe=ARMED`. The probe would never
+have run. There would have been no `[PathStack] PROBE` line in the log at all —
+and an absent line is exactly what a reader skims past, because a *failing*
+probe prints and a *skipped* probe prints, but an *unreached* one is silent.
+
+The gate now hangs off `FindOrLoad`, which is what drives those 22,583 calls,
+and which additionally holds the live `ExternalFactory` the probe's part 2
+needs. **The fix and the requirement came from the same fact.**
+
+Generalisation: *scheduling an instrument off a body is a claim that the body
+runs.* That claim is measurable and was already measured here, in another lane's
+counters, by someone who had no idea it would be load-bearing for this one.
+
+### 10.2 A negative control that would have crashed instead of diverging
+
+Control 4 was originally "SetSize ignores the fill" — pass `nullptr` where
+retail passes the entry. It reads like the sharpest possible perturbation.
+
+With `fill == nullptr` and `spec->init == nullptr`, retail's else-arm is empty
+and **the new tail is left UNINITIALISED**. The probe's comparator reads
+`element.directory.data` as a `char*` and prints it. On a fresh `MemAlloc` block
+that is a garbage pointer, so the control would have taken the process down
+inside the probe rather than reporting `control CAUGHT`.
+
+A crash is not a caught control. It is an unusable instrument that also destroys
+the run carrying the other three.
+
+Control 4 is now "grow by 2 instead of 1", which keeps every element initialised
+(`SetSizeCore` assigns the fill to every element in `[oldSize, newSize)`) and
+diverges in the **shape**, which is compared. The genuinely-uninitialised arm is
+therefore **not exercised by this lane**, and that is stated rather than papered
+over: reading it at all is a wild dereference, so it cannot be compared, only
+reasoned about.
+
+Generalisation: *a negative control has to survive being wrong.* It must produce
+an observable, comparable divergence — not undefined behaviour. "Did this
+perturbation change a value the comparator reads?" is the question; "is this
+perturbation a real defect?" is not sufficient.
+
+### 10.3 The pattern
+
+Both defects share a shape with the third thing this lane checked (§6.2's
+`ResolveRuntimeRaw`-not-`ResolveAddr`): **an instrument can be wrong in a way
+that makes it silent or vacuous rather than wrong-looking.** Each of the three
+has a one-line test that would have caught it:
+
+| defect | the test |
+|---|---|
+| probe on an uncalled body | does the body it hangs off run? *count it, don't assume* |
+| control that dereferences uninitialised memory | does the perturbed value get **read** by the comparator, and is it **valid**? |
+| oracle resolving through the port registry | does "theirs" reach the DLL, or has it come back to us? |
+
+All three are answerable before a run, and all three are cheaper to answer than
+one contended launch of the game.
