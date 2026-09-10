@@ -43,6 +43,7 @@
 #include "../runtime/types/math/Math.h"
 #include "../runtime/types/audio/Audio.h"
 #include "../runtime/types/application/Application.h"
+#include "../runtime/types/save/SaveLoad.h"
 #include "../runtime/src/collection/set_avl.h"
 
 #include <cstdio>
@@ -50,6 +51,7 @@
 #include <cstring>
 #include <cmath>
 #include <cstdint>
+#include <initializer_list>
 
 namespace {
 
@@ -171,6 +173,162 @@ void ProbeVector2NormalizeWithMag() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Save::SaveLoad::GenerateSaveName() const   retail 0x1800c1250   ordinal 2401
+// ?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ
+//
+// NOT actually an orphan — `UpdateSaveBody` (saveload_update.cpp) calls it
+// through the same NameGetterFn door when the selected save row's `saveIndex`
+// is negative (the blank "new save" slot). But reaching that call site needs
+// the Save dialog open with the blank row selected and its in-dialog
+// Save/confirm button clicked, which Wave 14 lane GENNAME could not drive
+// through the existing pause-menu harness in one session — so the live
+// `RT_DIFF` site's `calls=` reads 0 for this run and would read as an
+// unproven green line on its own
+// (reference_uncalled_port_is_not_verified.md). Probed directly here instead,
+// over a sweep of synthetic save lists that exercises every branch: an empty
+// list (no comparison loop at all), no collision, one collision, a run of N
+// collisions, a gap the loop must not skip over, and a null row name (the
+// state an unwritten SaveInfo.name leaves it in).
+//
+// Row names are built as LOCAL, stack-resident fake System::String blocks
+// (`length` at -8, a nonzero placeholder `refcount` at -4, per
+// runtime/types/system/String.h) rather than through the real allocator:
+// GenerateSaveName only ever READS a row's name (length-then-bytes, mirrored
+// by RtString_StrCompare) and never releases it, so a real heap Wallocation
+// buys nothing here and a stack fake is simpler to prove leak-free. The
+// CANDIDATE string coming back out of `ret`, by contrast, is a real heap
+// String from `String::Format` on both sides (ours and theirs each format
+// their own), and each is released after the comparison through the same
+// refcount-idiom the port itself uses.
+// ---------------------------------------------------------------------------
+namespace {
+
+using GenNameFn      = const char** (*)(const RtSave::SaveLoad*, const char**);
+using StrFormatRawFn  = void* (*)(void*, const char*, ...);
+using MemFreeRawFn    = void (*)(void*);
+
+// `p + 0`: int32 length (excluding NUL). `p + 4`: int32 refcount. `p + 8`:
+// the bytes GenerateSaveName actually reads.
+struct FakeStringBlock {
+    int32_t length;
+    int32_t refcount;
+    char    data[32];
+};
+
+const char* MakeFakeRowName(FakeStringBlock& blk, const char* text) {
+    if (text == nullptr) return nullptr;
+    size_t len = strlen(text);
+    if (len >= sizeof(blk.data)) len = sizeof(blk.data) - 1;
+    blk.length   = static_cast<int32_t>(len);
+    blk.refcount = 1;   // never decremented by the subject; kept non-zero defensively
+    memcpy(blk.data, text, len);
+    blk.data[len] = '\0';
+    return blk.data;
+}
+
+void ReleaseProbeAnswer(const char** slot, MemFreeRawFn memFree) {
+    const char* p = *slot;
+    if (p == nullptr) return;
+    int32_t* refc = reinterpret_cast<int32_t*>(const_cast<char*>(p) - 4);
+    if (--(*refc) == 0) memFree(const_cast<char*>(p) - 8);
+    *slot = nullptr;
+}
+
+void ProbeSaveLoadGenerateSaveName() {
+    const char* kName    = "?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ";
+    const char* kSubject = "Save::SaveLoad::GenerateSaveName";
+
+    GenNameFn ours   = reinterpret_cast<GenNameFn>(ResolveExport(kName));
+    GenNameFn theirs = reinterpret_cast<GenNameFn>(ResolveExportRaw(kName));
+    if (!ours || !theirs) {
+        fprintf(stderr, "[RtOrphan] SKIP %s: ours=%p theirs=%p\n", kSubject, (void*)ours, (void*)theirs);
+        ++g_fail;
+        return;
+    }
+    if (ours == theirs) {
+        fprintf(stderr, "[RtOrphan] FAIL %s: port not registered -- ResolveExport and "
+                        "ResolveExportRaw both returned %p\n", kSubject, (void*)ours);
+        ++g_fail;
+        return;
+    }
+
+    StrFormatRawFn fmt = reinterpret_cast<StrFormatRawFn>(
+        ResolveExportRaw("?Format@String@System@@SA?AV12@PEBDZZ"));
+    MemFreeRawFn memFree = reinterpret_cast<MemFreeRawFn>(
+        ResolveExportRaw("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
+    if (!fmt || !memFree) {
+        fprintf(stderr, "[RtOrphan] SKIP %s: fmt=%p memFree=%p\n", kSubject, (void*)fmt, (void*)memFree);
+        ++g_fail;
+        return;
+    }
+
+    struct Case { const char* name; std::initializer_list<const char*> rowNames; };
+    static const Case kCases[] = {
+        { "empty-list",              {} },
+        { "no-collision",            { "Foo", "Bar" } },
+        { "collides-Save0",          { "Save0" } },
+        { "collides-0-and-1",        { "Save0", "Save1" } },
+        { "collides-0-1-2-3",        { "Save0", "Save1", "Save2", "Save3" } },
+        { "gap-loop-must-not-skip",  { "Save0", "Save2" } },   // must land on "Save1", not "Save3"
+        { "null-row-name",           { nullptr } },
+    };
+
+    for (const Case& c : kCases) {
+        FakeStringBlock blocks[8]{};
+        RtSave::SaveInfo rows[8]{};
+        int n = 0;
+        for (const char* t : c.rowNames) {
+            rows[n].name = MakeFakeRowName(blocks[n], t);
+            ++n;
+        }
+
+        RtSave::SaveLoad selfOurs{};
+        RtSave::SaveLoad selfTheirs{};
+        selfOurs._savesData   = rows;
+        selfOurs._savesSize   = n;
+        selfTheirs._savesData = rows;
+        selfTheirs._savesSize = n;
+
+        const char* ansOurs   = nullptr;
+        const char* ansTheirs = nullptr;
+        ours(&selfOurs, &ansOurs);
+        theirs(&selfTheirs, &ansTheirs);
+
+        bool ok = (ansOurs && ansTheirs && strcmp(ansOurs, ansTheirs) == 0) ||
+                  (!ansOurs && !ansTheirs);
+        char detail[128];
+        snprintf(detail, sizeof(detail), "ours=\"%s\" theirs=\"%s\"",
+                 ansOurs ? ansOurs : "(null)", ansTheirs ? ansTheirs : "(null)");
+        Report(kSubject, c.name, ok, detail);
+
+        ReleaseProbeAnswer(&ansOurs, memFree);
+        ReleaseProbeAnswer(&ansTheirs, memFree);
+    }
+
+    // NEGATIVE CONTROL -- same comparator, same subject the real cases compare
+    // (the returned string's content), deliberately fed the WRONG expectation
+    // so the control itself is the thing that must fail
+    // (reference_control_must_pick_a_compared_subject.md).
+    {
+        ControlScope cs;
+        FakeStringBlock blk{};
+        RtSave::SaveInfo rows[1]{};
+        rows[0].name = MakeFakeRowName(blk, "Save0");
+        RtSave::SaveLoad self{};
+        self._savesData = rows;
+        self._savesSize = 1;
+
+        const char* ans = nullptr;
+        ours(&self, &ans);   // real answer is "Save1" (Save0 collides)
+        bool ok = (ans && strcmp(ans, "Save0") == 0);   // deliberately the WRONG expectation
+        Report(kSubject, "control-wrong-expectation", ok, "expected mismatch: real answer is \"Save1\"");
+        ReleaseProbeAnswer(&ans, memFree);
+    }
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Audio::Scene — the channel-teardown family, on a SYNTHETIC scene
@@ -1922,6 +2080,165 @@ void ProbeApplication() {
     fflush(stderr);
 }
 
+// ---------------------------------------------------------------------------
+// Save::SaveLoad::_singleton  —  ?_singleton@SaveLoad@Save@@0PEAV12@EA
+// Runtime 0x1801fc6f0, ordinal 4817.                      (Wave 14 lane SINGLETON)
+//
+// This is a DATA row, so there is no body to diff. The question it has to
+// answer is the one a data row's port turns on: DOES OUR WRITER PUBLISH INTO
+// THE SLOT OUR READERS READ, and is that the same slot retail's own
+// instructions read? A port that owns storage instead of publishing it is
+// invisible until something reads the slot
+// (reference_port_must_reproduce_side_effects.md).
+//
+// The complete reference set for 0x1801fc6f0 was enumerated twice, by two
+// routes that could have disagreed (Ghidra xrefs, and a decoder-independent
+// scan of every disp32 field in .text whose RIP-relative target is the slot —
+// the scan initially reported 4 against Ghidra's 5 because it assumed no
+// trailing immediate, which is exactly the encoding `MOV qword ptr [rip+d],0`
+// uses; corrected, both routes give the same five):
+//
+//   0x1800c3d9b  W  ??0SaveLoad@Save@@QEAA@XZ           PORTED, registered
+//   0x1800c3ca6  W  ??1SaveLoad@Save@@QEAA@XZ           PORTED, registered
+//   0x1800dc3e9  R  ?OnVideoRestart@MainLoop@Engine@@   PORTED, registered
+//   0x1800dcc1d  R  ?OnVideoError@MainLoop@Engine@@     PORTED, registered
+//   0x180030d40  R  ?Get@SaveLoad@Save@@SAPEAV12@XZ     UNPORTED — and DEAD:
+//        zero call sites in the DLL (Ghidra xrefs are the export table entry
+//        and the entry-point sweep only), and it is not among the 899 imports
+//        of Application-x64.exe nor the 163/146 of VideoDX11/VideoDX9.
+//
+// Plus 20 read sites in Application-x64.exe, every one of them through the
+// import slot 0x140151610 — a DOOR, registered in reg_unreg_lane1.cpp — and no
+// pointer-valued reference to the slot anywhere in any of the four binaries.
+//
+// So retail's `Get` is the ONE retail instruction that reads this slot and can
+// never be redirected. That makes it useless as a consumer and perfect as an
+// ORACLE: it is retail's own RIP-relative load of 0x1801fc6f0, and it can tell
+// us where our ported constructor actually published.
+//
+// WHAT THIS PROBE COSTS, stated because the census cannot: naming `?Get@` as a
+// string literal here PUT IT IN THE CENSUS'S `called` COLUMN. Save went
+// called 29 -> 30 in the same commit that took ported 22 -> 23, so the set
+// difference is `-_singleton, +Get` and not simply "one row closed"
+// (reference_diff_the_set_not_the_count.md). The dependency is real but it is
+// DIAGNOSTIC ONLY: the call is `ResolveExportRaw` under
+// BANISHED_RT_ORPHAN_PROBE, it must be retail's body or the oracle is a
+// self-check, and at cutover it resolves null and the probe says so and stops.
+// Nobody should port `?Get@` on the strength of that row.
+// ---------------------------------------------------------------------------
+void ProbeSaveLoadSingleton() {
+    const char* const kSlot = "?_singleton@SaveLoad@Save@@0PEAV12@EA";
+    const char* const kGet  = "?Get@SaveLoad@Save@@SAPEAV12@XZ";
+    const char* const kCtor = "??0SaveLoad@Save@@QEAA@XZ";
+    const char* const kDtor = "??1SaveLoad@Save@@QEAA@XZ";
+    const char* const kSubject = "Save::SaveLoad::_singleton";
+
+    typedef void* (*GetFn)(void);
+    typedef void* (*CtorFn)(void*);
+    typedef void  (*DtorFn)(void*);
+
+    void** oursSlot   = reinterpret_cast<void**>(ResolveExport(kSlot));
+    void** theirsSlot = reinterpret_cast<void**>(ResolveExportRaw(kSlot));
+    GetFn  retailGet  = reinterpret_cast<GetFn>(ResolveExportRaw(kGet));
+    CtorFn ourCtor    = reinterpret_cast<CtorFn>(ResolveExport(kCtor));
+    DtorFn ourDtor    = reinterpret_cast<DtorFn>(ResolveExport(kDtor));
+
+    if (!theirsSlot || !retailGet || !ourCtor || !ourDtor) {
+        Report(kSubject, "resolve", false, "one of the four doors resolved null");
+        return;
+    }
+
+    // ARRANGEMENT. This line is the A/B: with the minted row NOT registered the
+    // two doors are the same address and our ctor writes the DLL's own .data;
+    // with it registered they differ and our storage is the live one.
+    const bool minted = (oursSlot != theirsSlot);
+    fprintf(stderr, "[RtOrphan][SL] arrangement=%s  ourDoor=%p  dllSlot=%p\n",
+            minted ? "MINTED (our storage is live)" : "DLL-SLOT (retail .data is live)",
+            (void*)oursSlot, (void*)theirsSlot);
+
+    void* const savedOurs   = oursSlot ? *oursSlot : nullptr;
+    void* const savedTheirs = *theirsSlot;
+
+    // 1. PREMISE. Prove by execution — not by disassembly — that retail's Get
+    //    reads exactly this slot. If this fails, every verdict below is void.
+    {
+        static const uint64_t kVals[] = {
+            0x0000000000000000ull, 0xffffffffffffffffull, 0x00000000deadbeefull,
+            0x0000000180000000ull, 0x0000000000000008ull, 0x7fffffffffffffffull,
+        };
+        int bad = 0;
+        for (uint64_t v : kVals) {
+            *theirsSlot = reinterpret_cast<void*>(static_cast<uintptr_t>(v));
+            void* got = retailGet();
+            if (got != reinterpret_cast<void*>(static_cast<uintptr_t>(v))) ++bad;
+        }
+        char detail[192];
+        snprintf(detail, sizeof(detail),
+                 "the shipped Get returned the written value for %d of 6 sentinels",
+                 6 - bad);
+        Report(kSubject, "retail-Get-reads-this-slot", bad == 0, detail);
+        *theirsSlot = savedTheirs;
+    }
+
+    // 2. THE PUBLISH CHECK. Run our REGISTERED constructor on a private object
+    //    and ask where the pointer landed. `alignas(16)` and 0x90 bytes are the
+    //    object's real size (runtime/types/save/SaveLoad.h); the ctor allocates
+    //    nothing, so the matching dtor frees nothing.
+    alignas(16) uint8_t scratch[0x90];
+    memset(scratch, 0xCD, sizeof(scratch));
+    *theirsSlot = nullptr;
+    if (oursSlot) *oursSlot = nullptr;
+
+    void* const obj = ourCtor(scratch);
+    {
+        char detail[224];
+        snprintf(detail, sizeof(detail),
+                 "after our ctor: ourDoor slot holds %p, dll slot holds %p, "
+                 "retail Get returns %p, object is %p",
+                 oursSlot ? *oursSlot : nullptr, *theirsSlot, retailGet(), obj);
+        // The verdict that matters is the same in both halves of the A/B: our
+        // writer must publish into the slot OUR readers resolve. Whether
+        // retail's dead Get can also see it is reported, never asserted.
+        Report(kSubject, "ctor-publishes-into-our-door",
+               oursSlot && *oursSlot == scratch, detail);
+        if (!minted) {
+            Report(kSubject, "retail-Get-sees-our-object", retailGet() == scratch,
+                   detail);
+        } else {
+            fprintf(stderr, "[RtOrphan][SL] SPLIT (expected, row is registered): "
+                            "retail's Get reads the DLL slot and returns %p while our "
+                            "readers hold %p. Harmless ONLY because Get is dead in all "
+                            "four shipped binaries — see the banner.\n",
+                    retailGet(), oursSlot ? *oursSlot : nullptr);
+        }
+    }
+
+    // 3. NEGATIVE CONTROL, through the SAME comparator, on the value it
+    //    compares: corrupt the published pointer and the publish check must
+    //    report CONTROL-CAUGHT. (A control that corrupts something nothing
+    //    compares indicts a sound instrument —
+    //    reference_control_must_pick_a_compared_subject.md.)
+    if (oursSlot) {
+        ControlScope cs;
+        void* const keep = *oursSlot;
+        *oursSlot = reinterpret_cast<void*>(static_cast<uintptr_t>(0xBADC0DEull));
+        Report(kSubject, "control:corrupted-published-pointer",
+               *oursSlot == scratch, "the published pointer was overwritten and the "
+                                     "publish comparator must NOT report ok");
+        *oursSlot = keep;
+    }
+
+    // 4. The dtor's unconditional clear, through the same door.
+    ourDtor(scratch);
+    Report(kSubject, "dtor-clears-our-door",
+           oursSlot && *oursSlot == nullptr, "our dtor must null the same slot");
+
+    if (oursSlot) *oursSlot = savedOurs;
+    *theirsSlot = savedTheirs;
+    fprintf(stderr, "[RtOrphan][SL] restored: ourDoor=%p dllSlot=%p\n",
+            oursSlot ? *oursSlot : nullptr, *theirsSlot);
+}
+
 } // namespace
 
 void RtOrphanProbe() {
@@ -1930,6 +2247,8 @@ void RtOrphanProbe() {
     fprintf(stderr, "[RtOrphan] ==== probing ports with no caller in our tree ====\n");
     ProbeVector2NormalizeWithMag();
     ProbeApplication();
+    ProbeSaveLoadSingleton();
+    ProbeSaveLoadGenerateSaveName();
     fprintf(stderr, "[RtOrphan] ==== %d pass, %d fail ====\n", g_pass, g_fail);
     fflush(stderr);
 }

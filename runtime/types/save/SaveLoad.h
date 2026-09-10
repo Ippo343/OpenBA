@@ -99,6 +99,17 @@ struct ModInfo {
 static_assert(offsetof(ModInfo, path)         == 0x08, "ModInfo.path @ 0x08");
 static_assert(offsetof(ModInfo, versionMajor) == 0x10, "ModInfo.versionMajor @ 0x10");
 static_assert(offsetof(ModInfo, gameVersion)  == 0x14, "ModInfo.gameVersion @ 0x14");
+// *** WAVE 14 ADDITION (lane LOADMETA) — THE WIRE FORMAT IS UNSIGNED. ***
+// ?LoadMetaData (0x1800c1b30) serializes +0x10, +0x14 and +0x18 through
+// ReaderWriter vtable **+0x98**, which runtime/types/io/Serializer.h names
+// kScalarUInt, not +0xa0 (kScalarInt) — 0x1800c1d2a, 0x1800c1d3f, 0x1800c1d54.
+// Two of the three are typed int32_t above because CheckMod compares them
+// SIGNED; both readings are right about their own instruction and neither is
+// changed here, because a sign test and a wire type are different facts about
+// the same four bytes and collapsing them would lose one. +0x1c is written by
+// NEITHER: LoadMetaData serializes exactly three uints per element, so a byte
+// comparison over a ModInfo must stop at +0x1c or it compares uninitialised
+// stack.
 static_assert(offsetof(ModInfo, versionMinor) == 0x18, "ModInfo.versionMinor @ 0x18");
 static_assert(sizeof(ModInfo) == 0x20, "sizeof(Save::SaveLoad::ModInfo) == 0x20");
 
@@ -140,7 +151,13 @@ static_assert(sizeof(ModInfo) == 0x20, "sizeof(Save::SaveLoad::ModInfo) == 0x20"
 //   +0x28  void*    the thumbnail pixel block (MOV RDX,[+0x28]).
 //   +0x40  int32    see the correction below.
 //   +0x44  int32    written by UpdateList state 4 from LoadMetaData's sixth
-//                   out-param, and zeroed on the failure arm.
+//                   out-param, and zeroed on the failure arm. WAVE 14 names
+//                   what that out-param IS: the save's FORMAT VERSION. It
+//                   receives ReaderWriter::GetVersion() — the number the
+//                   BinaryReader read out of the stream header — and then, when
+//                   that is > 2, a SECOND number read from the record body
+//                   through the same reference (0x1800c1bf7, then 0x1800c1cb2).
+//                   Retail uses one variable for both and so does the port.
 //
 // ----------------------------------------------------------------------------
 // *** WAVE 13 CORRECTION, MADE BY THE UpdateList LANE: +0x40 IS NOT A FLAG. ***

@@ -1,7 +1,9 @@
 // ============================================================================
 // runtime/src/save/saveload.cpp — Wave 5 lane C — Save::SaveLoad / Save::SavedState
 // ============================================================================
-// Ports 16 of the 17 real exports our tree calls on these two classes. Every
+// Ports all 17 of the real exports our tree calls on these two classes (Wave 14
+// lane GENNAME closed the last one, GenerateSaveName, which this banner used to
+// carry as the "16 of 17" gap). Every
 // retail body below was decompiled AND disassembled at its real address in the
 // SHIPPED Runtime-x64.dll (base 0x180000000) on 2026-09-06; both addresses and
 // the oracle shape for each function are in docs/runtime_port/WAVE5_LANE_C.md.
@@ -9,38 +11,54 @@
 // HELD BACK, with reasons (a held-back function with a stated reason is a
 // result; a registered function nothing ever measured is not):
 //
-//   ?Draw@SaveLoad@Save@@…            0x1800c2eb0 — 400 lines that construct a
-//       Graphics::FrameCopyImageBuffer, a Video::ImageBuffer, a
-//       Video::RenderBuffer, a Graphics::MaterialInstance, a UI::SpriteSheet,
-//       a Graphics::Camera and a UI::SpriteContext by hand, stamping five
-//       vtables this project does not own.
-//       THE LOAD-BEARING REASON IS THE ORACLE, NOT THE OWNERSHIP: it renders
-//       into the live Video::Context and allocates and destroys GPU resources,
-//       so running both implementations would draw twice and leak a render
-//       target every frame. That is independent of who owns the classes and it
-//       does not expire.
-//       (The ownership half of this comment used to read "those classes are
-//       Waves 6 and 7", which now reads as RESOLVED because both waves are
-//       closed. It is not: MaterialInstance's and SpriteSheet's vtables and
-//       SpriteContext::AddLine/SetScissor are still individually unported.
-//       Corrected in the Wave 8.5 close-out -- see
-//       docs/runtime_port/WAVE8_5_HOLDBACK_RECHECK.md -- because a blocker
-//       phrased as "waiting on another wave" silently becomes a lie the day
-//       that wave lands.)
+//   ?Draw@SaveLoad@Save@@…            0x1800c2eb0 — *** NO LONGER HELD BACK. ***
+//       PORTED 2026-09-09 by Wave 14 lane DRAW, in runtime/src/save/saveload_draw.cpp.
+//       BOTH of this entry's reasons were wrong, and the correction is recorded
+//       here rather than only in a wave doc because this is where the next
+//       reader will meet the claim (PLAN §6 step 8).
+//         * "it stamps five vtables this project does not own" — irrelevant and
+//           also not a blocker. Those constructors are INLINED into Draw, so
+//           there was never anything to port first; the four vtable symbols it
+//           stamps are ordinary DATA EXPORTS of the shipped DLL (??_7Base@Object@@6B@,
+//           ??_7External@Object@@6B@, ??_7MaterialInstance@Graphics@@6B@,
+//           ??_7SpriteSheet@UI@@6B@) and resolve by name.
+//         * "the load-bearing reason is the oracle: running both would draw
+//           twice and leak a render target every frame" — the FREQUENCY was
+//           wrong (Draw runs on exactly one frame per save, gated by
+//           _captureFlags, not every frame) and the leak is the harness's to
+//           fix, not the oracle's to suffer. saveload_draw.cpp's replay round
+//           frees our readback buffer and rewinds _captureFlags, _capturePixels
+//           and four Video::Context fields before handing the frame to the DLL,
+//           so retail runs on pristine input and the game keeps RETAIL's result.
+//       What the old comment WAS right about: MaterialInstance's and
+//       SpriteSheet's vtables and SpriteContext::AddLine/SetScissor are still
+//       individually unported. Draw does not need them to be.
 //
-//   ??1SaveLoad@Save@@QEAA@XZ         0x1800c3c90 — the destructor walks the
-//       Array<SaveInfo> at +0x50 through FUN_1800329c0, which calls the
-//       un-exported per-element destructor FUN_1800c3f40 0x58 bytes at a time.
-//       No oracle is possible (it frees), the object is a process-lifetime
-//       singleton so it is unlikely ever to run, and a wrong port corrupts the
-//       heap silently. Left on the DLL.
+//   ??1SaveLoad@Save@@QEAA@XZ         0x1800c3c90 — NO LONGER HELD BACK. This
+//       entry described the destructor as "left on the DLL"; it has been ported
+//       and registered since (see RtSave_SaveLoad_Dtor below and the
+//       RegisterRuntimeExport at the bottom of this file). Corrected by Wave 14
+//       lane SINGLETON, which had to know which of the five writers of
+//       _singleton run OUR code and found this banner claiming one of them does
+//       not. The oracle situation is unchanged and still honest: the dtor
+//       frees, so nothing compares it.
 //
-//   ?_singleton@SaveLoad@Save@@0PEAV12@EA  0x1801fc6f0 — a DATA export. The
-//       registry seam maps names to FUNCTIONS; a data symbol cannot be
-//       redirected before cutover, exactly as WAVE3.md and WAVE4.md record for
-//       InternalFactory::_singleton and FileSystem::_singleton. This port
-//       WRITES that DLL global (the ctor publishes it), which is the correct
-//       behaviour while the DLL is still loaded.
+//   ?_singleton@SaveLoad@Save@@0PEAV12@EA  0x1801fc6f0 — a DATA export, MINTED
+//       and deliberately NOT promoted (Wave 14 lane SINGLETON). The claim above
+//       — "a data symbol cannot be redirected before cutover" — was true of the
+//       FUNCTION seam and false of the tree as it stands: Wave 9 lane C2's mint
+//       registers data names and addresses through the same registry, so this
+//       row COULD be redirected today. It is not, and the reasoning plus the
+//       full reader/writer enumeration that would license it live in
+//       standalone/reg_mint_promoted.cpp under "THE STANDING CASE FOR PROMOTING
+//       AT CUTOVER". Short version: with the DLL present, registering the row
+//       would CREATE a split (our writers move, retail's dead ?Get@ cannot),
+//       and it buys nothing until the DLL is gone. What has NOT
+//       changed is the rule the old text was protecting: the ctor and dtor
+//       below must PUBLISH through `SaveLoadSingletonSlot()` rather than own a
+//       static of their own, because that accessor is the door that follows the
+//       registration. Verified per run by ProbeSaveLoadSingleton
+//       (standalone/rt_orphan_probe.cpp, BANISHED_RT_ORPHAN_PROBE=1).
 //
 // THE HAZARD THAT DEFINES THIS LANE. A wrong port here does not crash, it
 // desyncs a save and surfaces later on an innocent record. So the oracle shape
@@ -489,6 +507,144 @@ SaveInfo* RtSave_SaveLoad_GetSaveInfo(const SaveLoad* self, int index) {
         RT_DIFF_SCALAR(oursP, theirsP);
     }
     return ours;
+}
+
+// ============================================================================
+// Save::SaveLoad::GetAutoSaveName() const  retail 0x1800c1440   ordinal 2457
+// ?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ
+// ----------------------------------------------------------------------------
+// ABI: `?AV...@@` is a class returned BY VALUE, so unlike GetOperation this
+// DOES have a hidden return slot -- and `self` (RCX) is genuinely dead, not
+// merely unused-by-convention: retail never stores RCX to its home slot and
+// never reads it. Confirmed byte-identical in BOTH the profile build
+// (0x180090a90) and retail (0x1800c1440):
+//     MOV [RSP+0x10],RDX ; PUSH RBX ; SUB RSP,0x30    <- RDX = retslot, homed
+//     MOV RBX,RDX                                     <- kept across the call
+//     XOR EAX,EAX ; MOV [RDX],RAX                     <- ret->data = nullptr
+//     LEA RDX,[0x180155b30] ; MOV RCX,RBX              <- "Auto\0" literal
+//     CALL String::Set [0x1800c95d0]                   <- Set(ret, "Auto")
+//     MOV RAX,RBX ; RET                                 <- return ret
+// String::Set is already ported verbatim as RtSystem_String_Set
+// (runtime/src/system/string.cpp, same 0x1800c95d0 body), so this reduces to
+// zeroing the slot and calling it -- retail always returns the literal "Auto"
+// regardless of `self`.
+//
+// Oracle: FULL DIFF, RT_DIFF_SHADOW against a genuine second call into the
+// shipped export (not a self-check -- reference_shadow_marker_is_not_an_oracle.md),
+// same shape as RtSystem_String_Concat's diff above. The function takes no
+// meaningful input (every call is the same case), so the commit's input sweep
+// instead varies `self` -- nullptr, a stack-garbage pointer, and a live
+// SaveLoad -- to verify the "self is dead" claim rather than sweeping an
+// argument that does nothing.
+// ============================================================================
+String* RtSave_SaveLoad_GetAutoSaveName(const SaveLoad* self, String* ret) {
+    RT_DIFF_BEGIN("Save::SaveLoad::GetAutoSaveName");
+    ret->data = nullptr;
+    RtSystem::RtSystem_String_Set(ret, "Auto");
+    if (rt_diff_on__) {
+        using Fn = String* (*)(const SaveLoad*, String*);
+        String theirs{nullptr};
+        RT_ORIGINAL_ONCE(Fn, "?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ")(self, &theirs);
+        const bool same =
+            (ret->data == nullptr && theirs.data == nullptr) ||
+            (ret->data != nullptr && theirs.data != nullptr &&
+             RtSystem::RtString_StrCompare(ret->data, theirs.data) == 0);
+        RT_DIFF_SHADOW(same, ret->data ? ret->data : "(null)",
+                       theirs.data ? theirs.data : "(null)");
+        RtSystem::RtString_ReleaseInline(&theirs);
+    }
+    return ret;
+}
+
+// Save::SaveLoad::GenerateSaveName() const  retail 0x1800c1250  ordinal 2401
+// ?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ
+// ----------------------------------------------------------------------------
+// ABI: a const member returning System::String BY VALUE. The disassembly has
+// `this` arriving in RCX and the hidden return slot in RDX — the MEMBER-
+// function ordering (`this` is the first physical argument, the retslot is
+// pushed to second), not the namespace-scope one (contrast
+// RtSystem_String_Concat's banner in string.h, where the retslot IS first).
+// This matches `NameGetterFn` at saveload_update.cpp:362 — `(self, ret)` — the
+// typedef this function's two existing call sites already use.
+//
+// LOGIC (0x1800c1250..0x1800c1449; read from the disassembly, not the
+// decompiled C, which collapses the do-while into goto soup Ghidra itself
+// mistypes as `void`): try candidates "Save0", "Save1", "Save2", ... in order
+// and return the first one that does not equal the `name` field (SaveInfo+
+// 0x38, RtSave::SaveInfo::name) of any row in
+// self->_savesData[0 .. self->_savesSize). The inlined per-row comparison is
+// length-then-bytes with two empty/null strings counted equal — exactly what
+// the already-ported `RtSystem::RtString_StrCompare` (string.cpp) computes,
+// so this port calls that directly instead of re-transcribing a second copy
+// of the same comparison. (A null row name, length 0, can never collide with
+// a candidate — "SaveN" is never shorter than 5 bytes — so the reuse changes
+// no observable outcome.)
+//
+// `self->_savesSize < 1` is tested ONCE PER OUTER ITERATION, right after the
+// candidate is formatted and stored — not once before the loop — so an empty
+// save list returns "Save0" on the very first pass without ever touching
+// self->_savesData. Retail's retslot is zeroed UNCONDITIONALLY at entry
+// (`*in_RDX = 0`), not released: this is the caller-pre-zeroes-the-String
+// convention (both existing call sites already set `generated = nullptr`
+// before calling), reproduced here rather than "fixed" into a release
+// (CLAUDE.md — retail's unguarded behaviour is load-bearing, not a bug).
+//
+// Oracle: FULL DIFF on the returned string's CONTENT (RtString_StrCompare),
+// not its pointer — ours and theirs each format their own fresh buffer, so
+// equal candidates never share an address the way GetSaveInfo's pointer-
+// identity oracle can rely on.
+// ============================================================================
+namespace {
+using FormatFn = void* (*)(void* retval, const char* fmt, ...);
+
+// The inlined "String::Format into a scratch, then refcount-adopt into *ret"
+// idiom (0x1800c1290..0x1800c1310). NOT `String::operator=`: retail's very
+// first instruction blindly zeroes `*ret` without releasing whatever was
+// there (see the banner above), so the release/adopt pair below only ever
+// runs against a slot this function itself already populated.
+void GenerateSaveName_FormatCandidateInto(const char** ret, int index) {
+    const char* tmp = nullptr;
+    RT_EXPORT_ONCE(FormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(&tmp, "Save%i", index);
+
+    if (*ret != tmp) {
+        ReleaseStringSlot(ret);
+        RtSaveDetail::RetainInto(ret, tmp);
+    }
+    ReleaseStringSlot(&tmp);   // release the temp's OWN reference
+}
+}  // namespace
+
+const char** RtSave_SaveLoad_GenerateSaveName(const SaveLoad* self, const char** ret) {
+    RT_DIFF_BEGIN("Save::SaveLoad::GenerateSaveName");
+
+    *ret = nullptr;   // retail's unconditional zero, NOT a release -- see banner
+    int index = 0;
+    for (;;) {
+        GenerateSaveName_FormatCandidateInto(ret, index);
+        if (self->_savesSize < 1) break;
+        bool collision = false;
+        for (int i = 0; i < self->_savesSize; ++i) {
+            if (RtSystem::RtString_StrCompare(self->_savesData[i].name, *ret) == 0) {
+                collision = true;
+                break;
+            }
+        }
+        if (!collision) break;
+        ++index;
+    }
+
+    if (rt_diff_on__) {
+        using Fn = const char** (*)(const SaveLoad*, const char**);
+        const char* theirs = nullptr;
+        RT_ORIGINAL_ONCE(Fn, "?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ")(self, &theirs);
+        const bool equal = RtSystem::RtString_StrCompare(*ret, theirs) == 0;
+        char a[64], b[64];
+        std::snprintf(a, sizeof(a), "\"%s\"", *ret   ? *ret   : "(null)");
+        std::snprintf(b, sizeof(b), "\"%s\"", theirs ? theirs : "(null)");
+        RtDiffReport(&rt_diff_site__, equal, a, b);
+        ReleaseStringSlot(&theirs);   // release the oracle's own temporary
+    }
+    return ret;
 }
 
 // ============================================================================
@@ -1030,8 +1186,17 @@ int RtSaveLoadRegister() {
     // fix, once corrected, is still the ONLY door — a second port reached by
     // address stays correct even if the name is mistyped again.
     RegisterRuntimeAddr(0x1800c1090, (void*)&RtSave_SaveLoad_CheckMod);
+    RegisterRuntimeExport("?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ", (void*)&RtSave_SaveLoad_GenerateSaveName); ++n;
+    RegisterRuntimeAddr(0x1800c1250, (void*)&RtSave_SaveLoad_GenerateSaveName);
     RegisterRuntimeExport("?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ", (void*)&RtSave_SaveLoad_GetOperation); ++n;
     RegisterRuntimeAddr(0x1800c3c80, (void*)&RtSave_SaveLoad_GetOperation);
+    // Wave 14 lane AUTONAME. Registered both ways from the start (not a
+    // retrofit): saveload_update.cpp's UpdateSave/UpdateList already call
+    // this by NAME through RT_EXPORT_ONCE (:1159, :1753), so the address door
+    // closes the same silent-reversion class those two call sites would
+    // otherwise be exposed to if the export name were ever mistyped again.
+    RegisterRuntimeExport("?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ", (void*)&RtSave_SaveLoad_GetAutoSaveName); ++n;
+    RegisterRuntimeAddr(0x1800c1440, (void*)&RtSave_SaveLoad_GetAutoSaveName);
     RegisterRuntimeExport("?GetSaveCount@SaveLoad@Save@@QEBAHXZ", (void*)&RtSave_SaveLoad_GetSaveCount); ++n;
     RegisterRuntimeExport("?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z", (void*)&RtSave_SaveLoad_GetSaveInfo); ++n;
     RegisterRuntimeExport("?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ", (void*)&RtSave_SaveLoad_GetSaveState); ++n;

@@ -1,0 +1,12 @@
+[SaveTest]   Auto.sav                   8372055 bytes  written 30s ago
+[SaveTest] frame 261: SAVE OPERATION COMPLETE (61 frames elapsed)
+[SaveTest]   Auto.sav                   8529164 bytes  written 0s ago
+[SaveTest]   Auto.sav                   8529164 bytes  written 2s ago
+[SaveTest] frame 443: SAVE OPERATION COMPLETE (61 frames elapsed)
+[SaveTest]   Auto.sav                   8527060 bytes  written 0s ago
+[SaveTest]   Auto.sav                   8527060 bytes  written 2s ago
+[SaveTest] frame 625: SAVE OPERATION COMPLETE (61 frames elapsed)
+[SaveTest]   Auto.sav                   8519461 bytes  written 0s ago
+[SaveTest]   Auto.sav                   8519461 bytes  written 2s ago
+[SaveTest] frame 807: SAVE OPERATION COMPLETE (61 frames elapsed)
+[SaveTest]   Auto.sav                   8509312 bytes  written 0s ago

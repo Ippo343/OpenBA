@@ -30,6 +30,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/save/SaveLoad.h"
 #include "../../types/io/Stream.h"
+#include "../../types/io/Persistence.h"   // SaveBlock — SetupLoadFn's return
 #include "../system/string.h"
 #include "../system/timer.h"
 
@@ -50,6 +51,24 @@ using ConcatFn           = String*  (*)(String* ret, const String* lhs, const St
 using AdjustDelimsFn     = void     (*)(String* self);
 using MemStreamOpenFn    = bool     (*)(MemoryStream* self, int size);
 using SaveLoadVoidFn     = void     (*)(SaveLoad* self);
+
+// ?SetupLoad@SavedState@Save@@ — SELF FIRST, HIDDEN RETURN SLOT SECOND.
+//
+// It lives here, and not in whichever file happens to call it, because it now
+// has THREE consumers: Wave 13's UpdateList / UpdateLoad / UpdateLoadFromFile
+// call it as a dependency, and Wave 14's port of it in savedstate_setupload.cpp
+// calls the shipped body through it as an oracle. Wave 13 wrote it correctly in
+// an anonymous namespace inside saveload_update.cpp, where nothing else could
+// reach it; a second spelling elsewhere is how the two later drift, and this
+// particular shape is one where drift is a WILD WRITE rather than a compile
+// error (reference_hidden_retslot_wild_write.md).
+//
+// The order is the MSVC member-function convention — `this` in RCX, the hidden
+// return pointer in RDX — which is the OPPOSITE of the GCC/Itanium sret order
+// we would get by writing the natural `SaveBlock SetupLoad(SavedState*)`. All
+// three retail call sites say so register for register; 0x1800c25cc is the
+// clearest: `LEA RDX,[RSP+0x28]` (slot) then `MOV RCX,RAX` (self).
+using SetupLoadFn        = RtIo::SaveBlock* (*)(SavedState* self, RtIo::SaveBlock* ret);
 
 // MemAlloc/MemFree go through the PORT registry, not the raw door: they are
 // not oracles here, they are the allocation this lane performs, and a raw-door
