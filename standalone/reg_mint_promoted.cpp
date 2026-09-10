@@ -732,6 +732,181 @@ int RtMintRegisterPromotedRows() {
     RegisterRuntimeAddr(0x1801f9be0ull, st); ++n;
 
     // ========================================================================
+    // WAVE 18 lane VDATA — the ImageBuffer vtable and the TEN OnVideoError
+    // BaseTypeInfo rows (six Video + four Graphics)
+    // ========================================================================
+    //
+    // Doc: docs/runtime_port/WAVE18_LANE_VDATA.md. Predictions pre-registered
+    // at 88f90b3, BEFORE any code was written and before any run.
+    //
+    // THE BLOCKER THESE ELEVEN WERE HELD BEHIND WAS STALE, WHICH IS THE WHOLE
+    // STORY. Wave 17 lane CEIL §3.4 and the Wave 18 kickoff both record the ten
+    // `?_typeInfo@` rows as "blocked on attendance": their only consumer in the
+    // tree is the ten-element `ids[]` in `RtEngine_MainLoop_OnVideoError`
+    // (runtime/src/engine/mainloop_video.cpp:487-499), that is the device-lost
+    // recovery path, and `post=0` on all four of CEIL's routes. CEIL §5.4
+    // therefore prescribed SYNTHESISING an `OnVideoError` call.
+    //
+    // No synthesis was needed. `BANISHED_FORCE_DEVICE_LOST=<frame>`
+    // (dx11/src/contextdata.cpp:594-628, Wave 9 lane ENGIO) injects one
+    // synthetic DXGI_ERROR_DEVICE_RESET into a Present result and lets the REAL
+    // teardown and rebuild run. It was already in the tree, already documented
+    // in WAVE9_LANE_VIDL.md §4.2, and it still works. That is the third stale
+    // stated-blocker of this wave
+    // (reference_holdback_blockers_are_stale_check_them_first.md).
+    //
+    // ---- THE WARRANT --------------------------------------------------------
+    // Debug build, DLL present, `tools/game_dir_lock.sh run vdata` (never
+    // piped, never backgrounded as a bare acquire). ONE control/armed pair
+    // against ONE binary, identical but for `BANISHED_RT_MINT_ROWS`. Env:
+    // BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1 BANISHED_W17_ATTEND=1
+    // BANISHED_RT_MINT_SHADOW=1 BANISHED_RT_SAVE_TRACE=1
+    // BANISHED_FORCE_DEVICE_LOST=400 BANISHED_PAUSEMENU=900
+    // BANISHED_PAUSEMENU_QUIT=120. Both halves rc=0, both crash logs 0 bytes,
+    // both `[RtResolve] 0 misses`. Logs: docs/runtime_port/wave18_lane_vdata/.
+    //
+    //  1. THE ROUTE FIRED. `[DeviceLost] INJECTING DXGI_ERROR_DEVICE_RESET` ->
+    //     `hr=0x887a0007 onLost=... -> calling` -> `recreate OK` ->
+    //     `device-lost round trip COMPLETE`, and it reached the consumer:
+    //     `Engine::MainLoop::OnVideoError calls=1 divergences=0` in BOTH halves.
+    //
+    //  2. ATTENDANCE. `BANISHED_W17_ATTEND=1` (CEIL's counter, unmodified —
+    //     a fixed 63-entry watch list spelled as literals in
+    //     standalone/wave17_door_attend.cpp, 62 subject rows plus the wiring
+    //     control) reads all ten rows ATTENDED, `post=1`. Its two controls
+    //     both hold: the wiring control `?_singleton@MainLoop@Engine@@` reads
+    //     `init=1 post=3` GREEN (the table is SUPPRESSED, not printed, if it
+    //     reads 0), and the phase marker sits AFTER `AddressRegistryInit()`,
+    //     so a resolve during registration is not counted as attendance —
+    //     exactly one of the ten (`GraphicsMesh`, eagerly resolved by
+    //     reg_unreg_lane3.cpp) carries `init=1`, and the other nine `init=0`.
+    //     `post=1` means the consumer RAN. It does NOT mean "ran once": every
+    //     `TypeIdX()` caches in its own function-local static.
+    //     This single route attends 49 of the 62 subject rows, where CEIL's
+    //     union of four routes attended 36.
+    //
+    //  3. READINESS. At exit, all ten read
+    //     `READY … idcmp=yes strs=0 ptr=2 fac=2traps`, inside
+    //     `BaseTypeInfo: 624 field comparisons, 0 MISMATCH, 0 typeId
+    //     not-yet-comparable`. `idcmp=yes` is the load-bearing one: our minted
+    //     typeId is compared against the live DLL's own value and agrees.
+    //     `ptr=2` is the pointer-identity column, scored SEPARATELY from
+    //     `strs=` and permanently harmless here — `BaseTypeInfo::name` is
+    //     content-only in both shipped binaries. `fac=2traps` does not bite:
+    //     CEIL §2.6 re-measured the factory-trap hazard on exactly this
+    //     subject and found 0 of 106,251 dispatches went through a minted
+    //     BaseTypeInfo, because every dispatch site walks
+    //     `?_singleton@Factory@Object@@`'s AVL tree, built from the DLL's
+    //     `_firstTypeInfo` chain, while minted nodes hang off
+    //     `g_mintTypeInfoHead` — which no `Factory::Startup` walks. Structural.
+    //
+    //  4. THE VALUE CHECK, and it is not a tautology.
+    //     `Collection::Array::SetSize @0x18004f620` is the `_videoResources`
+    //     sweep: `OnVideoError` walks `ExternalFactory::FindNext` for each of
+    //     the ten type ids and appends every live resource it finds. It reads
+    //     **calls=995 in BOTH halves.** In the armed half those ten ids came
+    //     from OUR minted nodes and in the control from the DLL's statics. Had
+    //     ANY of the ten minted ids been wrong, `FindNext` would have matched a
+    //     different set and that count would have moved. (995 is also the
+    //     number Wave 9 lane VIDL measured independently.)
+    //
+    //  5. THE VTABLE'S EFFECTIVENESS CONTROL — GREEN, and only the SET-DIFF
+    //     could see it. "The boot still works" is also what a promotion that
+    //     did NOTHING reports. The raw site counts are 601 control / 600 armed
+    //     and say nothing; the set-diff of the site NAMES says everything:
+    //         only in armed:   `Video::ImageBuffer`  calls=6 divergences=0
+    //     That site is the scalar deleting destructor
+    //     (runtime/src/object/deleting_dtor.cpp). It does not exist in the
+    //     control run at all, so real dispatch went through slot 0 of the
+    //     MINTED table and came back clean. Corroborated by a second counter
+    //     nobody had to look for: `ImageBuffer::PlatformDestruct` moves 4 -> 10,
+    //     +6, matching those six destructions exactly. This is the
+    //     `??_7SpriteSheet@UI@@6B@` shape reproduced.
+    //
+    //     The two sites present only in the CONTROL (`Video::Context::
+    //     SetInverseScale` calls=2383 and `Math::Transform::Identity()`
+    //     calls=1) were CHECKED rather than dismissed as jitter:
+    //     `SetInverseScale`'s only caller in the tree is the WEATHER particle
+    //     draw (code/Game/Game/weather_particle_draw.cpp:274), reached only
+    //     when weather is active with visible tiles, and the neighbouring
+    //     draw-volume counter `Video::Context::SetColor` moves 195,598 ->
+    //     170,022 in the same direction. Weather is simulation-state
+    //     dependent; the promotion cannot reach it.
+    //
+    // ---- WHAT THIS WARRANT DOES **NOT** CLAIM -------------------------------
+    // SEVEN of the ten ImageBuffer slots are **PORTED, NOT VERIFIED.** Slots
+    // 1,2,3,5,6,7,8 (`TypeName`, `Type`, `GetFileVersion`, `Serialize`,
+    // `Reconstruct`, `Destruct`, `Construct`) report NO `[RtDiff]` site in
+    // EITHER half, because no site is registered until the body is entered —
+    // they were never dispatched on this route. `Serialize`'s save-trace oracle
+    // reported no entry at all (the only `[RtSaveTrace]` lines in either run
+    // are `Achievement::Goal::Serialize`), which is the `calls=0` column and
+    // not a pass (reference_uncalled_port_is_not_verified.md).
+    //
+    // Promoting is still right, and for the reason lane SS gave for SpriteSheet
+    // slot 5: TRAP=0 means those seven slots can no longer `abort()`, slot 0 IS
+    // exercised and clean, and leaving the row unpromoted would not verify the
+    // seven either — it would only keep slot 0 unreachable too.
+    st = RtMintPromotionStorage("??_7ImageBuffer@Video@@6B@", 0x180154fc0ull);
+    RegisterRuntimeExport("??_7ImageBuffer@Video@@6B@", st);
+    RegisterRuntimeAddr(0x180154fc0ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A",
+                                0x1801fa548ull);
+    RegisterRuntimeExport("?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801fa548ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A",
+                                0x1801fa580ull);
+    RegisterRuntimeExport("?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801fa580ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A",
+                                0x1801fa5f0ull);
+    RegisterRuntimeExport("?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801fa5f0ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A",
+                                0x1801fa660ull);
+    RegisterRuntimeExport("?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801fa660ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A",
+                                0x1801fa698ull);
+    RegisterRuntimeExport("?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801fa698ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A",
+                                0x1801fa5b8ull);
+    RegisterRuntimeExport("?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801fa5b8ull, st); ++n;
+
+    // The four Graphics rows ride the SAME consumer — they are elements 7..10
+    // of the same `ids[]` — so one run decided all ten. They are promoted here
+    // rather than left for the Graphics wave because the evidence is the same
+    // evidence, and splitting it would mean re-running the device-lost drive to
+    // re-derive numbers this run already produced.
+    st = RtMintPromotionStorage("?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A",
+                                0x1801f99b0ull);
+    RegisterRuntimeExport("?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801f99b0ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A",
+                                0x1801fa708ull);
+    RegisterRuntimeExport("?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801fa708ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A",
+                                0x1801f9a90ull);
+    RegisterRuntimeExport("?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801f9a90ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A",
+                                0x1801f99e8ull);
+    RegisterRuntimeExport("?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801f99e8ull, st); ++n;
+
+    // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted
     // ========================================================================
     //

@@ -6,6 +6,8 @@
 //   BANISHED_RT_VIDCONTEXT=0 ... just Video::Context            (lane A)
 //   BANISHED_RT_VIDDEVICE=0  ... just Video::Device/Configuration/RenderBuffer (lane B)
 //   BANISHED_RT_VIDBUFFERS=0 ... just Video::ImageBuffer/Index/VertexBuffer (lane C)
+//   BANISHED_RT_VIDIMGVT=0   ... just the seven ??_7ImageBuffer@Video@@6B@ vtable
+//                            slots (Wave 18 lane VDATA)
 //   BANISHED_RT_VIDCOMPANION=0 ... just the twelve Video::*Data companion bases,
 //                            the buffer Lock/Unlock/Bind trampolines and
 //                            Device::DisplayMode          (Wave 9 lane B2)
@@ -30,6 +32,7 @@
 extern int RtVideoContextRegister();   // context.cpp  (lane A)
 extern int RtVideoDeviceRegister();    // device.cpp   (lane B)
 extern int RtVideoBuffersRegister();   // buffers.cpp  (lane C)
+extern int RtVideoImageBufferVtableRegister();  // imagebuffer_vtable.cpp (Wave 18 lane VDATA)
 extern int RtVideoCompanionRegister(); // companion_data.cpp (Wave 9 lane B2)
 extern int RtVideoDynamicResourcesRegister();  // dynamic_resources.cpp (Wave 9 lane VID)
 extern int RtVideoContextLifecycleRegister();  // context_lifecycle.cpp (Wave 9 lane VID2)
@@ -53,6 +56,10 @@ void RtVideoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_VIDCONTEXT")) n += RtVideoContextRegister();
     if (RtWaveEnabled("BANISHED_RT_VIDDEVICE"))  n += RtVideoDeviceRegister();
     if (RtWaveEnabled("BANISHED_RT_VIDBUFFERS")) n += RtVideoBuffersRegister();
+    // Wave 18 lane VDATA: the seven abort-trap slots of
+    // ??_7ImageBuffer@Video@@6B@. Its own switch rather than VIDBUFFERS' so the
+    // vtable row's promotion can be A/B'd with the SAME BINARY one flag apart.
+    if (RtWaveEnabled("BANISHED_RT_VIDIMGVT")) n += RtVideoImageBufferVtableRegister();
     if (RtWaveEnabled("BANISHED_RT_VIDCOMPANION")) n += RtVideoCompanionRegister();
     if (RtWaveEnabled("BANISHED_RT_VIDDYNAMIC"))   n += RtVideoDynamicResourcesRegister();
     // Wave 9 lane VID2. The probe runs only when BANISHED_RT_CTXCLEAR_PROBE is
