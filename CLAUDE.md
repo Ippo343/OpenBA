@@ -196,6 +196,14 @@ is the path to use for verifying any rendering / gameplay / world-build change.
   `UI::ShowDialog` (which pumps its own loop no driver can reach) with `n`.
   Example, the Mods menu: `BANISHED_AUTOMENU_BUTTON=7
   BANISHED_AUTOMENU_CLICKS=1001,5001,d0,4001,101,m6 BANISHED_MODAL_ANSWER=1`.
+  **THIS EXAMPLE IS CURRENTLY BROKEN (verified 2026-09-10 on `3da1503` and on the
+  Wave 17 merge).** It dies ~5s in with an ACCESS_VIOLATION, `READ of 0xd0`, at
+  `reimpl-x64.exe+0x144575` (`ModDialog_ToggleMod_Impl+0x43`) <- `ModDialog_Slot8`
+  <- `AutoStart::TickMenu`. Found by Wave 17 lane CEIL with a control (same crash,
+  same address, with its own env var unset) and reproduced independently by the
+  integrator; evidence in `docs/runtime_port/wave17_modsroute_crash.txt`. Do not
+  plan a lane around this route until it is fixed, and per project doctrine the
+  fix is to find the upstream null, NOT to guard the deref.
 
 ### Stress Test / Performance Baseline
 
