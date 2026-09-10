@@ -142,7 +142,7 @@ const uint8_t* TypeInfoImageBuffer() {
 // `ResolveAddr(Module::Runtime, …)` is registry-FIRST, so this reaches our port
 // when it is registered and the DLL's body when it is not — which is what
 // retail's tail JMP to 0x1800f2580 does.
-using CtorFn = void* (*)(ImageBuffer*);
+using CtorFn = void (*)(ImageBuffer*);
 CtorFn ImageBufferCtor() {
     static CtorFn f =
         reinterpret_cast<CtorFn>(ResolveAddr(Module::Runtime, 0x1800f2580));
@@ -406,10 +406,12 @@ extern "C" void Video_ImageBuffer_Destruct(ImageBuffer* self) {
 //
 // The return value is `this`: the ctor at 0x1800f2580 ends `MOV RAX,RBX; RET`
 // (read at 0x1800f25ff), and this body TAIL JUMPS to it, so RAX at return is
-// the constructed object. Our ported ctor returns `void`, so the value is
-// supplied here explicitly rather than being read out of a register nothing
-// wrote — an `fn_*` typedef that got this wrong is
-// `reference_hidden_retslot_wild_write.md`'s family of bug.
+// the constructed object. `CtorFn` is DELIBERATELY typed `void` and the value
+// is supplied here explicitly, because the registry may hand back either
+// retail's body (which returns `this`) or our port (which returns `void`, so
+// RAX would be whatever was left in it). Declaring a return the callee may not
+// have written and then using it is `reference_hidden_retslot_wild_write.md`'s
+// family of bug; returning `self` ourselves is correct against both.
 //
 // ORACLE: shadow post-condition, on the constants the CTOR writes. No replay:
 // constructing twice over one object leaks its platform data.
