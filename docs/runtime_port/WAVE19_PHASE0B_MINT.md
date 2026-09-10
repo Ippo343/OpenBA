@@ -491,3 +491,133 @@ All five **BLOCKED**. Re-running the readiness screen on this branch will now sh
 13 IO rows, not 9. Lane FILE's DATA rows are unblocked for scoping; §4 (the shared
 `IO::FileStream` base slots) and A.3 (stamper ownership) are the two facts that
 should drive its ordering.
+
+---
+
+# ANNEXE B — CORRECTION (2026-09-10, post-report tranche 2)
+
+Raised by **lane FILE** against my `??_7TextFileStream@` row. **FILE is right.**
+I confirmed it from the bytes and the disassembly, and it is **two rows, not
+one**. §0–§8 and Annexe A stay sealed; this annexe states what they got wrong.
+
+## B.1 What is wrong, and it is a number I published
+
+`adjacent-export` proves *"the last slot ends exactly where the next EXPORTED
+symbol starts."* **That is an UPPER bound and the generator read it as exact.**
+Every concrete IO stream constructor heap-allocates an 8-byte `IO::Encoding` and
+stamps an **unexported** vtable into it; those tables sit in `.rdata` interleaved
+with the exported class tables, so the row before one **swallows it**.
+
+| row | VA | minted | **true** | swallowed |
+|---|---|---|---|---|
+| `??_7ReaderWriter@IO@@6B@` | `0x1801553b0` | 36 | **31** | the 5-slot Encoding table at `0x1801554a8` |
+| `??_7TextFileStream@IO@@6B@` | `0x180155980` | 20 | **10** | the Encoding table at `0x1801559d0` |
+
+**§4 of this document says `??_7TextFileStream@` is 20 slots / 20 TRAP. It is 10
+and 10.** The corrected totals for the five rows are **42 slots, 1 ported, 41
+traps** (not 52 / 1 / 51), and **31 distinct trap bodies** (not 41) — the ten
+"unexported, known by address only" entries I listed for TextFileStream
+(`0x1800b9a70`…`0x1800bafe0`) are **not TextFileStream's**; they are the
+Encoding's. **A.4's table is wrong in the same cell and lane FILE's row halves.**
+
+`??_7ReaderWriter@` is not mine, but the generator is, and the same fix covers
+it. Note the sign: it is **30 of 31 purecall, not 30 of 36**, which makes phase
+0a's abstract-base argument *stronger*, not weaker. CEIL §3.4 and WAVE19_IO.md
+§3.0a both quote the 36.
+
+Evidence, read as disassembly. **The constructor names the address it stamps**,
+which is strictly tighter than adjacency to the next export:
+
+```
+1800ba431  ??0TextFileStream   LEA RAX,[0x1801559d0] -> MOV [RSI],RAX
+1800a82bb  ??0BinaryFileStream  LEA RAX,[0x1801554a8] -> MOV [RSI],RAX
+```
+
+Ghidra's xrefs to `0x1801559d0` are that constructor and only that constructor.
+Bytes: `0x1801554a0` is ReaderWriter's last `_purecall`; `0x1801554a8` is
+`0x1800a81e0`, the Encoding's slot 0. `runtime/types/io/FileStream.h` has said
+10 since Wave 11.
+
+## B.2 Why no instrument caught it — including two of mine
+
+**The shadow is structurally incapable of seeing this.** An over-sized row's
+surplus slots are read from the DLL *at their real addresses*, so the shadow
+compares them and finds them equal. `598 slot comparisons, 0 MISMATCH` was
+**true, and silent on extent**. The shadow can only check rows that exist, at
+the addresses they claim; it has no opinion on where a row should stop. Same
+family as `reference_shadow_marker_is_not_an_oracle.md`.
+
+**§4.1's arithmetic was not the independent check I called it.** I wrote that
+`546 + 52 = 598` "closes by identity, which is a second, independent check that
+the five rows and nothing else entered." The *rows* part stands. The *sizes*
+part does not: both sides of that sum are the generator's own slot counts, so
+the identity is self-consistency and **cannot detect a wrong extent**. Ten of
+those 52 were another class's table and the arithmetic closed anyway.
+
+**And I had the symptom in front of me and misread it.** Control D (§3.1)
+reported that slot VA `0x1800a81e0` appears in **both** `??_7ReaderWriter@` and
+the by-address row at `0x1801554a8`, and I wrote it up as *"the instrument being
+right about a shared body, and it is stated here rather than rounded to 1."*
+**A body appearing in two minted rows is not sharing — it is one row swallowing
+the other.** The control was reporting the defect; I explained it away as a
+feature of the control. That is the precise failure
+`reference_a_reconciliation_retires_the_flag.md` warns about, committed against
+my own instrument's output.
+
+## B.3 The fix, and why it is deliberately NOT an automatic scan
+
+FILE proposed bounding a table by the next **stamped** address seen in any
+constructor. Right in principle. **I implemented it and it is unsound as a
+scan.** A linear byte scan of `.text` for `48/4C 8D /r` with `mod=00 rm=101`
+(`LEA r64,[rip+disp32]`) found **2** rows whose extent contains a stamp target:
+
+* `??_7TextFileStream@` → `0x1801559d0` — **real**.
+* `??_7ReaderWriter@` → `0x180155480` — **a decoding artefact.** Ghidra finds
+  **no reference** to that address and its bytes are mid-run `_purecall` inside
+  ReaderWriter. Acting on it would have cut ReaderWriter to **26 slots, silently
+  deleting 5 real ones.**
+
+**An over-sized row is a visible surplus; an under-sized row loses slots with no
+symptom.** A linear byte scan cannot tell an instruction from a byte sequence
+inside one, so it **manufactures** bounds — and it manufactured one on the very
+row FILE had already sized correctly by hand. 1 of 2 findings wrong is not a
+rule to ship.
+
+So the fix is two parts (commit `f30bf61`):
+
+1. **`VTABLE_EXTENT`** — a hand-checked override keyed by VA, each entry
+   carrying the constructor site that proves it, validated by the generator
+   (an override larger than the decode is refused).
+2. **A fail-closed OVERLAP REFUSAL** — no minted vtable's extent may contain
+   another minted vtable's start. No disassembly, no false positives (two rows
+   cannot begin inside one table), and it catches ReaderWriter automatically,
+   computing 31 by pure arithmetic — **a third independent route to FILE's
+   number**. It does **not** catch TextFileStream, because `0x1801559d0` is
+   minted by nobody; the code says so, so the green is never read as "no
+   over-sized rows remain".
+
+Controls, each verified to fire before any green was trusted:
+
+| control | required | read |
+|---|---|---|
+| overrides disabled | refuse, name ReaderWriter | exit 2, computes 31 ✅ |
+| bogus override (999 slots) | refuse | exit 2, "999 but only 20 decode" ✅ |
+| real run | generate | exit 0 ✅ |
+
+Set-diff of the correction, all three tables: vtable **ENTERED 0 / LEFT 0 /
+CHANGED exactly 2**; typeinfo 0/0/0; storage 0/0/0; PARSEFAIL 0. Slot total
+**598 → 583 = −10 −5**, the two corrections and nothing else. Build green.
+
+## B.4 What is still open
+
+* **The shadow has NOT been re-run** on the corrected tables. The game dir is
+  held by an **unlocked** run from another lane (pid 17292, deployed hash
+  `f87c552a`, not my build); per the lock tool's own rule I will not kill a
+  process I did not start. Escalated with those numbers. **Until that run,
+  §4.1's clean shadow describes the OLD extents.**
+* **I have not audited the other 60 rows for this defect by constructor
+  evidence.** The overlap check clears them of *swallowing a minted row*; it
+  says nothing about swallowing an unminted one. Every `adjacent-export` row in
+  the file is a candidate, and there are 31 of them.
+* **B.1's corrected trap counts are arithmetic on the new extents**, not a fresh
+  readiness run — that needs the lock.
