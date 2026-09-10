@@ -63,8 +63,9 @@
 //       replay: all three destroy or construct the live object in place, and
 //       running theirs afterwards would double-destruct it. Every term of each
 //       shadow is read back OUT of the object after the body and none is
-//       written by this file's own arithmetic — they are written by the ported
-//       deleting destructor and the ported constructor this file calls.
+//       written by this file's own arithmetic — they are written by the
+//       deleting destructor and the constructor this file reaches THROUGH THE
+//       REGISTRY DOOR (see `ImageBufferCtor()` and the kill-switch note there).
 //
 //   Serialize   `RtSaveTrace::Compare`, WRITING direction, two independent
 //       synthetic sinks, **with a prefix stop at 10 emissions**. The prefix is
@@ -95,11 +96,6 @@ using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 
-// Declared in buffers.cpp (Wave 6 lane C). Registered by BOTH name and address
-// there, so calling it directly here is calling the same body the registry
-// hands out — this is a dependency call inside one port, not a door.
-void Video_ImageBuffer_Ctor(ImageBuffer* self);
-
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h:
 // that header drags in <windows.h> and PLAN §4.1 requires runtime/src/ to stay
 // platform-neutral. Must sit at FILE scope or it declares a different,
@@ -127,6 +123,30 @@ namespace {
 const uint8_t* TypeInfoImageBuffer() {
     return RT_DATA_SLOT(const uint8_t*,
                         "?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A");
+}
+
+// `??0ImageBuffer@Video@@QEAA@XZ` — retail 0x1800f2580, PORTED by Wave 6 lane C
+// (`buffers.cpp`, registered by BOTH name and address).
+//
+// REACHED THROUGH THE REGISTRY DOOR, NOT AS A C++ CALL, and the first draft of
+// this file had it wrong. `Video_ImageBuffer_Ctor` has external linkage, so a
+// direct call compiles and reaches our body — but `buffers.cpp`'s registration
+// is gated on `BANISHED_RT_VIDBUFFERS`, and a kill switch gates the
+// REGISTRATION, not a C++ call. With `BANISHED_RT_VIDBUFFERS=0` a direct call
+// would still run our constructor while every other caller in the process ran
+// the DLL's, and no counter would report it. That is exactly
+// `reference_off_by_default_was_not_true.md`, where an unarmed run mutated
+// retail's arena because one wrapper called a ported body directly instead of
+// through the door.
+//
+// `ResolveAddr(Module::Runtime, …)` is registry-FIRST, so this reaches our port
+// when it is registered and the DLL's body when it is not — which is what
+// retail's tail JMP to 0x1800f2580 does.
+using CtorFn = void* (*)(ImageBuffer*);
+CtorFn ImageBufferCtor() {
+    static CtorFn f =
+        reinterpret_cast<CtorFn>(ResolveAddr(Module::Runtime, 0x1800f2580));
+    return f;
 }
 
 // `?PlatformSerialize@ImageBuffer@Video@@AEAAXAEAVSerializer@IO@@@Z`
@@ -398,7 +418,7 @@ extern "C" void* Video_ImageBuffer_Construct(ImageBuffer* self) {
     RT_DIFF_BEGIN("Video::ImageBuffer::Construct");
 
     if (self == nullptr) return nullptr;
-    Video_ImageBuffer_Ctor(self);
+    ImageBufferCtor()(self);
 
     RT_DIFF_SHADOW(self->kind == 2 && self->filter == 1 && self->width == 0 &&
                        self->height == 0 && self->pixelData == nullptr,
@@ -440,7 +460,7 @@ extern "C" void* Video_ImageBuffer_Reconstruct(ImageBuffer* self) {
     using DelDtorFn = void* (*)(ImageBuffer*, unsigned);
     reinterpret_cast<DelDtorFn>(vt[0])(self, 0u);
 
-    Video_ImageBuffer_Ctor(self);
+    ImageBufferCtor()(self);
 
     RT_DIFF_SHADOW(self->kind == 2 && self->filter == 1 && self->width == 0 &&
                        self->height == 0 && self->pixelData == nullptr,
