@@ -606,3 +606,92 @@ merges.
 97 >= 123 - 5 = 118      21 SHORT     (36 at wave start)
 ```
 Build green. `--check` clean. No percentage quoted.
+
+## C21. C14 is CLOSED — the live route exists, and 13 is the number
+
+`BANISHED_AUTOLOAD=Save0` drove the real route: **"save list ready (13 entries)"**.
+The route exists, lane PERSIST's six rows ran, and **13 matches exactly** the count
+the integrator measured on disk. Both halves of C14 are now confirmed by a second,
+independent route — the lane's own run rather than my `ls`.
+
+### The failure mode underneath it deserves its own name
+
+The lane had **already found, quoted and cited** `BANISHED_AUTOLOAD` at
+`standalone/autostart.cpp:147`. Its §2 reasoning then correctly deduced that the
+missing thing was **the dialog route, not the save file** — arguing from its own
+control that `GetSaveCount` never registered at all, and that
+`?UpdateList@SaveLoad@Save@@` would have called it even for an empty list, so the
+route never opened a save/load dialog.
+
+That reasoning was **right**. And in the lane's own words:
+
+> *"That reasoning was right and I then failed to act on it... I diagnosed the gap
+> accurately and then wrote a negative claim instead of running the driver."*
+
+**This is a distinct failure mode from every other one this wave has catalogued.**
+It is not a stale claim, not a blind instrument, not an unchecked inheritance.
+**It is stopping one step short of the command that would have settled it**, while
+holding all the information needed to run it.
+
+I did no better one level up: I relayed the negative claim into a merge commit and
+a user-facing summary without running `ls`. **Same shape, and mine had a wider
+blast radius.**
+
+## C22. My supposed instrument defect was WRONG — `abi_retslot_audit` is a good citizen
+
+I asked whether `abi_retslot_audit` states its 77-unaudited denominator "or whether
+you had to derive it", and pre-announced that if a lane must derive it, that is an
+instrument defect. **The premise was inverted. The tool states it. The lane derived
+nothing.** Verbatim from its own output:
+
+```
+COVERAGE: 56 of 133 distinct by-value-returning mangled names in the tree reach a
+door this scanner can read; 77 do NOT and are UNAUDITED.
+BLIND SPOT: it matches a literal ResolveExport("...") assignment bound to a
+findable fn_*_t typedef. A resolve through a macro door (RT_EXPORT_ONCE /
+RT_DATA_SLOT), a named constant, or a direct call with no typedef is invisible.
+```
+
+The macro-door limitation is **documented in the tool**, not discovered by a lane.
+On the §6.6 test — *can it say "I MEASURED NOTHING"?* — **it passes.**
+
+**I inferred an instrument defect from a LANE'S SUMMARY of a tool's output rather
+than reading the output.** That is C14's error one level up: treating a downstream
+report as evidence about an upstream artefact. Had it gone unchecked it would have
+**manufactured work** and levelled a false accusation at the best-behaved
+instrument in the wave — the INFLATING blind spot of
+`reference_a_screen_that_cannot_name_its_subject.md`, this time in the integrator
+rather than in a tool.
+
+### The real defect is narrower, and it IS being fixed
+
+The **headline** line reads `0 suspicious of 61 by-value-returning exports checked,
+0 unchecked` — one line above `77 UNAUDITED`. The two are reconcilable
+(`unchecked` = matched a door, arity unreadable; `UNAUDITED` = reached no readable
+door at all) but they **read as contradictory**, and the headline is **quotable out
+of context as complete coverage**. A lane quoting it and stopping reports a clean
+sweep of a subject that is **58% invisible**. That is §6.1 — quote a green WITH its
+denominator — not a missing denominator.
+
+Fix authorised as a separately-revertable commit in PERSIST's tranche: fold the
+qualifier into the headline so it **cannot be quoted alone**. Second repair to this
+tool after Wave 18's `fa85957`, and to be recorded as an **improvement**, not a
+defect finding.
+
+## C23. Wave 20 scoping input: the save route and lane FILE's debt share code
+
+`?GetSaveFilename@Persistence@IO@@` builds `<savePath>Save\<name>.sav`, so the
+`Save\` directory is created by **`?CreatePath@FileSystem@IO@@` — lane FILE's row**,
+which landed this wave.
+
+Two consequences: a save/load route cell is **cheaper than it looked**, and
+`CreatePath` gains a **second independent exercise path** beyond the screenshot
+oracle — which matters, because FILE reports its Half-A comparison does not
+attribute to the lane at all.
+
+Lane PERSIST's scoping of that cell is accepted as the right shape: **"open the
+dialog and produce one save", not "produce one save."** `BANISHED_PAUSEMENU_BUTTON`
+exists but the Save/Load id is unknown; (1) opening the dialog alone unlocks
+`GetSaveCount` and `BeginGetSaveGameList`, while (2) a real `.sav` is what unlocks
+`GetSaveInfo`, `GetSaveFilename`, `BeginLoad` and `BeginDelete` **on real data**.
+Keep mod state constant across any save/load comparison.
