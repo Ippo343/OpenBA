@@ -821,3 +821,207 @@ FILE will annotate rather than rewrite, per §6.16. **It was instructed to state
 the annotation that the claim was TRUE WHEN WRITTEN** — that is the entire point
 of the timestamp rule, and a reader who sees only "this was wrong" learns the
 wrong lesson.
+
+## C29. `dispatch_slot_map --check` CANNOT see this duplicate class — I quoted it twice as if it could
+
+Lane IOBASE flagged it; I verified it. **`tools/dispatch_slot_map.py --check`
+scans `RegisterDispatchSlot(...)` ONLY** — the exe's `.rdata` IAT slots. Its own
+source confirms: the regexes match `RegisterDispatchSlot\(...\)` and nothing else.
+
+`?GetSource@Stream@IO@@` binds through **`RegisterRuntimeExport(name, ptr)`**, an
+entirely different mechanism. **The tool is structurally incapable of seeing a
+duplicate there — and I quoted its "0 address(es) registered more than once" TWICE
+as evidence the tree was clean of shadowed registrations**, once in a merge commit
+and once to the user.
+
+**Fifth instrument-subject error of the wave, third that is mine.** The pattern is
+now unmistakable: this project's instruments are individually sound and
+collectively easy to misapply, because *a green print does not state what it
+examined*. C22 caught me about to accuse a tool that was innocent; this one is the
+mirror — I credited a tool with coverage it never claimed.
+
+### The check that actually covers it: `tools/dup_runtime_export.py`
+
+Written this wave, and deliberately built to the wave's own instrument doctrine:
+
+* scans **`RegisterRuntimeExport`** (by name) and **`RegisterRuntimeAddr`** (by address)
+* **strips comments** first — a checker with no comment stripper reports prose as
+  code, and the prose most likely to name a symbol is a comment saying that code
+  was deleted (`reference_uncommented_checker_manufactures_work.md`)
+* walks from **the script's own root, not cwd**
+  (`reference_scanner_walks_cwd_not_script.md`)
+* carries a **positive control** that must find a planted duplicate and must
+  ignore a commented one — verified to print before any zero was trusted
+* **prints its SUBJECT and its DENOMINATORS**, and says explicitly what it does
+  NOT cover, so it cannot be quoted as broader than it is
+* exits **3** on duplicates, 0 clean
+
+### It immediately found 14 pre-existing duplicates in COMPILED code
+
+**7 duplicate names, 7 duplicate addresses**, of 1100 names and 1135 addresses.
+None is Wave 19's. The starkest: **`runtime/src/object/internal.cpp` registers the
+same symbol twice IN ONE FILE** (`??0Internal@Object@@QEAA@XZ`, lines ~1229 and
+~1312). Others pair `buffers.cpp` with `context_lifecycle.cpp`, `input.cpp` with
+`input_config_startup.cpp`, `external_path_stack.cpp` with `factory_dtors.cpp`.
+The `allocator.cpp` / `rt_alloc_swap.cpp` pair is plausibly the deliberate atomic
+swap.
+
+**In every case the LAST registration wins and the others are DEAD CODE that still
+reads as a live port** to a census and to a reviewer
+(`reference_half_registered_port_reads_as_absent.md`, inverted). **Wave 20 work,
+recorded, not fixed here.**
+
+An initial run reported **31**; `tools/fixtures/` holds before-snapshots that are
+**not compiled** (0 occurrences in `standalone/build/link_objects.rsp` — verified,
+not assumed), so that directory is excluded and 14 is the real residue.
+
+**A footnote on my own reading of it:** I ran the tool through `| tail -22` and
+then `echo "EXIT=$?"`, which reports **`tail`'s** status, not the script's — it
+printed `EXIT=0` beside a screen full of duplicates. That is
+`reference_a_piped_acquire_discards_the_refusal.md` exactly, on a memory this
+project already holds. Caught on read.
+
+## C30. `??_7ReaderWriter@` is 26 slots — my correction needed correcting
+
+I told lanes CSTREAM and IOBASE it was **31**, correcting the plan's 36. **It is
+26.** There are **TWO** hidden tables in that gap, not one, so the over-count is
+**10, not 5**:
+
+```
+0x1801553b0  ??_7ReaderWriter@IO@@6B@   -> next stamped head 0x180155480 = 26 slots
+0x180155480  UNEXPORTED, UNMINTED       -> next stamped head 0x1801554a8 =  5, ALL purecall
+0x1801554a8  UNEXPORTED (the Encoding)  -> next stamped head 0x1801554d0 =  5
+0x1801554d0  ??_7BinaryFileStream@                                        =  8
+```
+
+`0x180155480` is a genuine head whose stamper is a **three-instruction leaf
+constructor at `0x180023e10` with NO `.pdata` entry** — invisible to a
+`.pdata`-grouped screen for a *second, independent* reason. It is minted
+**nowhere**. So in `rt_data_mint_tables.inc:1320`, ReaderWriter's slots 26–30 are a
+table nobody has, and slots 31–35 are `0x1801554a8`, which is *also* minted
+separately at `:1580` — **five slots minted twice, five belonging to no row.**
+
+True state: **26 slots / 0 ported / TRAP=1 / 25 purecall.** The readiness screen's
+`598 slots` over-counts by **10**, and its `slot-count suspects: 0` is a false
+green by that much. **Phase 0a strengthens again: 25 of 26 purecall, not 30 of 36.**
+
+### The rule that cannot have the failure mode it replaces
+
+Lane IOBASE's clearance of the residual interior risk is the structurally
+satisfying part: **the next-stamped-head rule sweeps interiors BY CONSTRUCTION** —
+a hidden table inside a row would *be* a head inside that range, and the walk stops
+there. Eight rows re-derived: BinaryWriter 26 ✓, BinaryReader 26 ✓, Visitor 26 ✓,
+MemoryStream 8 ✓, VisitorStream 7 ✓, Stream 7 ✓, PackageFile 9 ✓, ReaderWriter 26 ✗.
+**One wrong of eight, and all five promoted rows correctly sized.**
+
+Also settled: `MemoryStream` **does** stamp the hidden `0x1801554a8` table (at
+`0x1801204e7`, inside `?SaveAllSettings@UserInterface@UI@@`) **and its own extent
+is still 8.** Stamping a hidden table and being mis-sized are independent facts —
+my earlier warning to IOBASE conflated them.
+
+### A method note worth more than the count
+
+> **The decoder-independent disp32 sweep is the BETTER instrument for "is this
+> referenced at all" and the WORSE one for "where does this table END".**
+
+The second question needs a real instruction operand; the sweep sized
+`??_7BinaryReader@` at **0 slots** off an unaligned coincidence at `0x1801552e7`.
+Two instruments, two subjects — using either for the other's question is this
+wave's recurring failure in miniature. It also explains why lane FILE's route 1
+(the constructor's own `LEA`) was decisive for TextFileStream: **the writer beats
+any number of readers.**
+
+## C31. Lane IOBASE's stamper enumeration was wrong, self-caught — and it answered the route question anyway
+
+**`??_7BinaryWriter@` has three stampers and TWO are ours, not three.** IOBASE's
+§5.3 said all three. It had listed the slot-0 deleting dtor (which does **not**
+stamp — it *calls* `??1BinaryWriter`) and **missed the copy constructor
+`??0BinaryWriter@IO@@QEAA@AEBV01@@Z` at `0x180023af2`, which stamps and is
+UNPORTED.**
+
+The lane named its own error class exactly: *listing our ported bodies and
+asserting they were the stampers, rather than enumerating stamp sites from the
+binary.* Same shape as its census claim — **twice in one lane, both self-caught.**
+
+**The verdict survives at 2 of 3** — still decisively not the
+permanently-unpromotable shape, because the two stampers on the construct/destruct
+path an `IO::Encoding` codec uses are both ours. But the unported copy constructor
+is a real, previously invisible row for whoever takes BinaryWriter further.
+
+### The stamper chase answered the route question, as predicted
+
+`?SaveSettings@DialogInstance@UI@@` (`0x180114240`) stamps `??_7MemoryStream@`
+inline at `0x1801143ba` and reaches a BinaryWriter through
+`Encoding::CreateWriter` → `??0BinaryWriter@…@AEAVSerializer@1@H@Z` — **ours, both
+doors.**
+
+So **run5's `post=0` is a HARNESS FAULT, not a property of the row.** The
+`dlgsettings` driver reported *"no entity with a UIComponent in this world"* and
+never reached `SaveSettings`. **What is missing is a world containing such an
+entity — not a port, not an interception point.** That converts an "unverifiable"
+into a "needs a different world", which is a completely different Wave 20 item.
+
+And the free siblings explain the ATTENDED split cleanly: `?SaveMetaData@SaveLoad@Save@@`,
+`?LoadMetaData@` and `?OnOpened@DialogInstance@UI@@` **all stamp `??_7MemoryStream@`
+INLINE** — none is a door. **That is why `??_7MemoryStream@` reads ATTENDED while
+`??_7BinaryWriter@` does not**, and it is the cleanest mechanism anyone has produced
+for that distinction.
+
+## C32. The GetSource resolution — decided on IOBASE's better argument, not mine
+
+**Resolution (a): lane IOBASE keeps it, lane CSTREAM drops and consumes.**
+
+I had resolved this on *"IOBASE is sealed, CSTREAM is live"* — a **process**
+argument. IOBASE supplied a **correctness** one: option (b) creates an interval in
+which two PROMOTED rows (`??_7MemoryStream@`, `??_7VisitorStream@`) carry traps —
+the BLOCKED-while-PROMOTED hazard it had itself flagged. **A resolution that
+transiently breaks the tree loses to one that does not, regardless of ownership.**
+
+IOBASE explicitly did **not** resolve it unilaterally, left the code untouched, put
+both one-commit options to me and offered to execute either immediately. That is
+the correct handling of an instruction that arrived after the work.
+
+**Exactly one registration of `0x18000c6a0` must survive the merge, and it must be
+checked with `dup_runtime_export.py` — NOT with `dispatch_slot_map --check`,
+which cannot see it** (C29).
+
+## C33. Lane PERSIST's sharpening, adopted verbatim
+
+I named the failure mode "stopping one step short of the command that would settle
+it". PERSIST's version is checkable where mine was descriptive:
+
+> **A negative claim asserted from an observation CHEAPER than the experiment that
+> would settle it is not a result.**
+
+Its own instance: it found `BANISHED_AUTOLOAD`, quoted its semantics correctly,
+reasoned its way to *"the missing thing is the dialog route"* — and then ran `ls`
+on a **guessed directory** and wrote the conclusion from that. *"The `ls` was
+cheap, so it felt like evidence; it was cheap BECAUSE it wasn't the experiment."*
+
+**And the tell it identified makes this catchable in review:** its §5 said the
+route *"never opened a save/load dialog"* — a statement about **the driver it
+chose** — written in a section whose conclusion was about **the game**. The
+subject slipped between premise and conclusion.
+
+That is `reference_a_screen_that_cannot_name_its_subject.md` **in prose rather than
+in an instrument**, and it generalises: an instrument that cannot name its subject
+is a known failure; **a paragraph that changes subject between its premise and its
+conclusion is the same failure in a form no linter will ever catch.**
+
+Both of us hit it on the same fact within an hour — PERSIST from a wrong-directory
+`ls`, me from a lane's summary. Two independent instances on one fact is evidence
+of a common shape rather than two coincidences.
+
+### Also corrected on PERSIST's account
+
+* **`BANISHED_AUTOLOAD` reaches FOUR of the six rows, not six.** I wrote "converts
+  your six rows to live-route verified"; PERSIST caught that `BeginDelete` (needs a
+  Delete click) and `BeginGetSaveGameInfo` (command 3, a different entry point from
+  the list scan's command 4) are not reached. **To be reported as 4 live-verified,
+  2 synthesised-only, with the two NAMED** — letting "the six" carry a claim
+  covering four is the union-denominator failure, and my wording introduced it.
+* **`e983724` IS on `wave19/base`.** PERSIST reasoned its C4 workaround should stay
+  because the fix "is on `wave10/base`, not my `wave19/base`". `wave19/base` is
+  force-updated to `wave10/base` after every merge; PERSIST's tree is simply based
+  on the older `20aa588`. The decision may stand on its stated independent ground,
+  but not on the branch-topology one.
