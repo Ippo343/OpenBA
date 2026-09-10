@@ -78,6 +78,24 @@
 #
 #   if ! tools/game_dir_lock.sh acquire lane-FOO 900; then exit 1; fi
 #
+# SECOND COSTUME, found 2026-09-10 by Wave 18 lane VDATA, cost ~15 min: it is
+# not only pipes. ANY compound command discards the refusal, because the caller
+# (or the agent harness reporting the step) sees the status of the LAST element:
+#
+#   tools/game_dir_lock.sh acquire lane-FOO 540; echo "ACQUIRE_EXIT=$?"   # <-- reports 0
+#
+# Note what makes this one nastier than the pipe: the echoed text is CORRECT --
+# `$?` there really is acquire's status -- so the human-readable output says
+# ACQUIRE_EXIT=1 while the step's own exit status says 0. Two fields disagree
+# and the authoritative-looking one is wrong. A wrapper added to make the status
+# more visible is what hid it.
+#
+# So the rule is not "do not pipe". It is: DO NOT PUT `acquire` IN A COMPOUND
+# COMMAND OF ANY KIND -- no pipe, no `;`, no trailing echo, no `&&` tail. Give
+# it a statement of its own, and put `assert-held` in front of the dangerous
+# action regardless (below). In that lane's case assert-held is what caught it
+# before it deployed over another lane.
+#
 # A granted acquire now also prints a line matching `^\[gamelock\] GRANT `, so a
 # caller that must pipe can test for the POSITIVE rather than trusting a status
 # that a pipe can swallow. And `verify <lane>` (alias: `assert-held`)

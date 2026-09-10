@@ -331,3 +331,74 @@ Every one was written by a competent lane, was true or plausible when written,
 and was inherited by later readers without re-checking. **The tree's prose is the
 least reliable thing in it.** Re-check a holdback's STATED BLOCKER before you
 inherit it, and before you scope a lane around it.
+
+### 6.11 `game_dir_lock.sh acquire` is defeated by ANY compound command — lane VDATA
+
+The banner warned against **piping** `acquire`. It is not only pipes:
+
+```
+tools/game_dir_lock.sh acquire lane-FOO 540; echo "ACQUIRE_EXIT=$?"   # reports 0
+```
+
+A trailing `;` element makes the step's exit status the **last** command's, exactly
+as a pipe does. **This costume is nastier than the pipe**: the echoed text is
+*correct* — `$?` really is `acquire`'s status — so the human-readable output says
+`ACQUIRE_EXIT=1` while the step's own status says `0`. Two fields disagree and the
+authoritative-looking one is wrong, and **the wrapper added to make the status more
+visible is what hid it.**
+
+The rule is therefore **not** "do not pipe" but: **give `acquire` a statement of
+its own — no pipe, no `;`, no trailing echo, no `&&` tail** — and put
+`assert-held` in front of the dangerous action regardless. `assert-held` is what
+caught it here, before the lane deployed over GFXIF. **Prefer the self-releasing
+`game_dir_lock.sh run` form**, which has no exit code to discard because it leaves
+no gap between the check and the action. Documented in the tool's own banner at
+the point of use.
+
+### 6.12 `??1Device` does NOT call `??1GraphicsInterface` — lane VRES, correcting the advisor
+
+I told VRES that `??1Device@Video@@` would depend on GFXIF's
+`??1GraphicsInterface@` and to rebase to compile against it. **That was wrong.**
+The destroy path is **inlined** through `0x1800109d0` → `0x180010f00` →
+`0x180010da0` → `0x180010cf0`, all four unexported; no GFXIF-owned mangled name
+appears in VRES's files, which make exactly twelve `RegisterRuntime*` calls, all
+for their own six rows. VRES verified rather than complied, which saved a rebase
+for nothing. **A brief is a hypothesis too, including the advisor's.**
+
+**Carry this to integration:** because the destroy path is inlined, GFXIF landing
+`??1GraphicsInterface` does **not** route `??1Device`'s array teardown through it.
+They are two independent bodies doing the same work, and a reader will expect
+otherwise.
+
+### 6.13 `array_destroy.cpp`'s banner undercounts its own cluster — lane VRES
+
+**Fourteen addresses, not eleven.** `0x180010cf0` is a second address for the
+`kD_InnerArr_18` spec; `0x180010da0` and `0x180010f00` are two more of the
+recursive shape the banner names once.
+
+**This is the wave's fourth instance of one class**: a tool or file that cannot
+accurately name its own contents — `abi_retslot_audit` (two files, unstated),
+`runtime_census`'s ceiling (a moving denominator, unstated), CEIL's Graphics
+undercount (17 vs 20), and now this. **A screen or a helper file that miscounts
+its own subject invites every reader to cite it for something it does not cover.**
+
+### 6.14 An instrument that refuted itself three times — lane VRES, worth copying
+
+VRES's replay probe produced a confident wrong answer **three** different ways
+before it was trusted, each caught and each written up where the mistake was:
+
+1. Two nested `memcmp`s that were **use-after-free** — printed artefact
+   MISMATCHes, then crashed.
+2. Their replacement measured **bytes** released and failed by 24 on a **correct**
+   body, because `Free` decrements by an address-dependent block size. Fixed by
+   switching to `_allocCount` (`+0x638`), which is **symmetric by construction**
+   rather than merely correct-looking.
+3. The stride control produced a **wild free** rather than a comparable
+   divergence — a control must produce a comparable divergence, not UB.
+
+**The structural point, which the numbers alone will not convey:** a memory
+comparator **cannot** see this leak, because each level frees the level below's
+buffer, so a body that skips the recursion leaves the outer buffer byte-identical.
+Same shape as an oracle comparing bytes neither side writes. What sees it is
+`_allocCount`: the LEAK control reads `ours=5 theirs=9` and `ours=3 theirs=21`
+where a correct body reads equal. Four controls, scored separately, all green.
