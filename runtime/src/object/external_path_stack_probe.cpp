@@ -67,7 +67,7 @@
 //
 //   ctl 1  "-" not "." joining the entry filename   -> PART 2 only
 //   ctl 2  entry halves stored in the wrong order   -> PART 1 and PART 2
-//   ctl 3  RemoveAt skips the shift-down            -> PART 1 only
+//   ctl 3  RemoveAt removes index+1, not index      -> PART 1 only
 //   ctl 4  SetSize grows by 2 instead of 1          -> PART 1 and PART 2
 //
 // ctl 4 is NOT "ignore the fill", which is what a first draft used. With

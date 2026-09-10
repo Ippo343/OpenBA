@@ -44,31 +44,29 @@ if [ "$GOT" != "$WANT" ]; then
 fi
 echo "== objext_run: deployed md5 matches"
 
-# ---- run A: everything armed, one launch ------------------------------------
-# The probe and the sweep both self-schedule off FindOrLoad's first call, so a
-# single menu-to-gameplay run drives every control of both screens.
-tools/rt_run.sh objextA --timeout 900 -- \
-    BANISHED_AUTOSTART=1 \
-    BANISHED_RT_DIFF=1 \
-    BANISHED_RT_PATHSTACK_PROBE=1 \
-    BANISHED_RT_COMPILED_SWEEP=1 \
-    BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=60
+# ---- run A: PORTS ON, PROBE OFF ---------------------------------------------
+# Runs first and on its own, because it answers the question the probe cannot:
+# is the PORT stable in a live boot? The previous attempt crashed inside the
+# probe's own negative control, and "the port is fine, my instrument was not"
+# is a claim that needs its own run rather than an argument.
+tools/rt_run.sh objextA --timeout 900 --     BANISHED_AUTOSTART=1     BANISHED_RT_DIFF=1     BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=60
 echo "== objext_run: run A exit=$?"
 cp -f "$GAME_DIR/standalone_error.log" "$OUT/A_error.log" 2>/dev/null
 cp -f "$GAME_DIR/standalone_debug.log" "$OUT/A_debug.log" 2>/dev/null
 cp -f "$GAME_DIR/standalone_crash.log" "$OUT/A_crash.log" 2>/dev/null
 
-# ---- run B: the kill switch --------------------------------------------------
-# BANISHED_RT_PATHSTACK=0 / BANISHED_RT_COMPILED=0 leave all four rows on the
-# DLL. This is the A/B that says the ports are what ran in A, rather than the
-# DLL running in both and the instruments agreeing about it.
-tools/rt_run.sh objextB --timeout 900 -- \
-    BANISHED_AUTOSTART=1 \
-    BANISHED_RT_PATHSTACK=0 BANISHED_RT_COMPILED=0 \
-    BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=60
-echo "== objext_run: run B exit=$?"
-cp -f "$GAME_DIR/standalone_error.log" "$OUT/B_error.log" 2>/dev/null
-cp -f "$GAME_DIR/standalone_debug.log" "$OUT/B_debug.log" 2>/dev/null
-cp -f "$GAME_DIR/standalone_crash.log" "$OUT/B_crash.log" 2>/dev/null
+# ---- run C: PORTS ON, PROBE ON ----------------------------------------------
+# Both screens, every control, one launch.
+tools/rt_run.sh objextC --timeout 900 --     BANISHED_AUTOSTART=1     BANISHED_RT_DIFF=1     BANISHED_RT_PATHSTACK_PROBE=1     BANISHED_RT_COMPILED_SWEEP=1     BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=60
+echo "== objext_run: run C exit=$?"
+cp -f "$GAME_DIR/standalone_error.log" "$OUT/C_error.log" 2>/dev/null
+cp -f "$GAME_DIR/standalone_debug.log" "$OUT/C_debug.log" 2>/dev/null
+cp -f "$GAME_DIR/standalone_crash.log" "$OUT/C_crash.log" 2>/dev/null
+
+# Run B (BANISHED_RT_PATHSTACK=0 BANISHED_RT_COMPILED=0, the kill switch) is NOT
+# repeated here. It was measured under the previous hold and completed cleanly
+# with an EMPTY crash log; the ports are OFF in it, so the binary change since
+# then cannot affect its result. Its logs are lane_objext_logs/B_*.log. Dropping
+# it shortens the hold, which is the scarce resource this wave.
 
 echo "== objext_run: DONE"

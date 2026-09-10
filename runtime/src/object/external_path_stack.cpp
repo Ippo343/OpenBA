@@ -118,7 +118,7 @@ inline void ReleaseThenAdopt(Filename* dst, char* src) {
 // every measuring run uses. `BANISHED_RT_PATHSTACK_NEGCTL=<n>` forces one.
 //   1  entry filename joined with "-" instead of "."
 //   2  PushPath stores the entry's two Filenames in the WRONG ORDER
-//   3  RemoveAt skips the shift-down, so a pop from the middle duplicates
+//   3  RemoveAt removes index+1 instead of index (guarded to stay in range)
 //   4  SetSize's fill element is ignored (new tail left as the old bytes)
 }  // namespace
 
@@ -402,6 +402,20 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(void* arrVoid, int index) {
     rtcoll::ArrayHdr* a = static_cast<rtcoll::ArrayHdr*>(arrVoid);
     ++RtObject::g_psc.removeAtCalls;
 
+    // CONTROL 3, and note WHERE it perturbs. It removes a DIFFERENT, valid
+    // index -- it does not break the body's invariants.
+    //
+    // Its first form did: it skipped the shift-down, which leaves every
+    // shifted-from slot holding pointers the loop had already released, and the
+    // next pop then copy-constructs from freed memory and releases it again.
+    // That is a DOUBLE FREE, and it took the process down inside
+    // System::MemoryAllocator::Free (0x1800c6c00) on the measuring run rather
+    // than reporting `control CAUGHT` -- taking control 4 and the whole of the
+    // probe's part 2 with it. A negative control has to survive being wrong:
+    // it must produce an observable, COMPARABLE divergence, not undefined
+    // behaviour. See WAVE11_LANE_OBJEXT.md §10.
+    if (RtObject::g_negCtl == 3 && index + 1 < a->_size) index = index + 1;
+
     if (index < a->_size) {
         int32_t i = index;
         do {
@@ -410,7 +424,7 @@ extern "C" void RtObject_PathStackRemoveAt_18002de30(void* arrVoid, int index) {
             RtSystem::RtString_ReleaseInline(reinterpret_cast<RtSystem::String*>(e));
 
             const int32_t next = i + 1;
-            if (next < a->_size && RtObject::g_negCtl != 3) {
+            if (next < a->_size) {
                 uint8_t* dst = a->_data + static_cast<int64_t>(i) * 0x10;
                 // Retail tests the COMPUTED address, which can only be null
                 // when _data is null and i == 0.
