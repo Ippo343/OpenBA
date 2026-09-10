@@ -236,7 +236,7 @@ one at a time.
 
 > **THE ENFORCEMENT IS NOT IMPLEMENTED. This sentence originally read
 > "`unpromotable_slot_check.py` is the place to enforce it", which is a PRESCRIPTION and
-> was correctable as a COMPLETION.** Lane DOORS flagged it against its own lane's
+> was READABLE as a COMPLETION.** Lane DOORS flagged it against its own lane's
 > credit. As merged, that tool **accepts either convention** and reports only rows
 > fitting neither; **it cannot tell a tag that declares its convention from one that does
 > not.** The doctrine currently lives as PROSE in `reg_mint_promoted.cpp`'s comment block
