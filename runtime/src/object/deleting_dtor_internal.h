@@ -51,10 +51,15 @@ struct DelDtorSpec {
 // 37 as surveyed by Wave 9 lane K; the 38th (UI::Dialog, 0x180038b20) was added
 // by Wave 10C lane DLG8 when it closed `??_7Dialog@UI@@6B@`, and the 39th
 // (UI::ToolTipDialog, 0x18004d270) by Wave 10D lane TIP for the same reason on
-// `??_7ToolTipDialog@UI@@6B@`. Prose in deleting_dtor.cpp that says "37" is
-// describing lane K's original survey and stays true of it; the TABLE is the
-// authority and this constant tracks it.
-constexpr int kSpecCount = 39;
+// `??_7ToolTipDialog@UI@@6B@`. Wave 19 lane CSTREAM added the 40th and 41st
+// (IO::CompressedStream 0x180023fd0, IO::CompressedFileStream 0x180024100) on
+// `??_7CompressedStream@IO@@6B@` and `??_7CompressedFileStream@IO@@6B@` --
+// making that four lanes now that have appended, which is the whole reason this
+// constant exists. Prose in deleting_dtor.cpp that says "37" is describing lane
+// K's original survey and stays true of it; the TABLE is the authority and this
+// constant tracks it, and the static_assert next to the table is what forces
+// an appender to notice (it caught CSTREAM's addition, at 41 vs 39).
+constexpr int kSpecCount = 41;
 
 // *** A Site MUST HAVE STATIC STORAGE DURATION. *** RtDiffRegister keeps the
 // POINTER and rt_diff.cpp re-reads it at summary time, so a stack Site dangles

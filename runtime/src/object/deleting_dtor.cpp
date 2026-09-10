@@ -374,6 +374,46 @@ static const DelDtorSpec kSpecs[] = {
     // INDICES and a mid-table insert silently re-points all twelve
     // Video::*Data probe subjects at the wrong rows.
     RT_DELDTOR(0x18004d270, 0x1800dac70, 0x0c0, "UI::ToolTipDialog"),
+    // ---- WAVE 19 lane CSTREAM -----------------------------------------------
+    // Slot 0 of `??_7CompressedStream@IO@@6B@` (0x180155640) and of
+    // `??_7CompressedFileStream@IO@@6B@` (0x1801555f0). The THIRD member of that
+    // family, `??_7CompressedMemoryStream@`'s 0x1800244a0, is already row 17 —
+    // which is exactly why these two are two TABLE ROWS and not two hand-written
+    // bodies in compressed_stream_write.cpp. One body, three constants each.
+    //
+    // Both constants come out of the shipped bytes, disassembled for this lane:
+    //     0x180023fd0:  LEA R9,[0x1800aa650]  ~CompressedStream
+    //                   MOV EDX,0x68          sizeof(IO::CompressedStream)
+    //     0x180024100:  LEA R9,[0x1800a9330]  ~CompressedFileStream
+    //                   MOV EDX,0xb8          sizeof(IO::CompressedFileStream)
+    // and BOTH sizes are already independently pinned in the type headers:
+    // runtime/types/io/Stream.h asserts sizeof(CompressedStream) == 0x68 from
+    // the ctor's store pattern, and runtime/types/io/FileStream.h:55 records the
+    // 0xb8 stride from THIS VERY THUNK. That second one is a circular witness
+    // and is named as such rather than counted twice — the independent one for
+    // CompressedFileStream is its ctor at 0x1800a93b0, which places the
+    // BinaryFileStream member at +0x68 and BinaryFileStream is 0x50: 0x68 + 0x50
+    // = 0xb8. tools/rt_deleting_dtor_verify.py re-derives both from the DLL.
+    //
+    // ~CompressedStream (0x1800aa650) is PORTED — compressed_stream_release.cpp
+    // registers it by name AND address — so ResolveAddr hands back OUR body.
+    // ~CompressedFileStream (0x1800a9330) is NOT ported and is EXPORTED as
+    // ??1CompressedFileStream@IO@@UEAA@XZ; this row makes that address newly
+    // `called` (reference_porting_can_grow_the_cutover_surface.md). It is NOT
+    // one of the plan's 36 IO rows and it is NOT claimed by this lane; it is
+    // named here so the next census does not have to discover it.
+    //
+    // NOT added to kProbeSubjects: both destructors free the window array, the
+    // block array and an Encoding, so running either on a fabricated object
+    // would be a manufactured crash, not a measurement.
+    //
+    // APPENDED rather than inserted in address order (0x180023fd0 and
+    // 0x180024100 would sort between Graphics::ParticleSystemInstance and
+    // IO::CompressedMemoryStream) for the reason the two rows above are
+    // appended: kProbeSubjects is a list of TABLE INDICES and a mid-table insert
+    // silently re-points all twelve Video::*Data probe subjects at wrong rows.
+    RT_DELDTOR(0x180023fd0, 0x1800aa650, 0x068, "IO::CompressedStream"),
+    RT_DELDTOR(0x180024100, 0x1800a9330, 0x0b8, "IO::CompressedFileStream"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -658,6 +698,14 @@ void* RtDelDtor_Dialog(void* self, unsigned flags) {
 void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 38);
 }
+// IO::CompressedStream     ~CompressedStream = 0x1800aa650  (PORTED, lane PKG2)  [Wave 19]
+void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 39);
+}
+// IO::CompressedFileStream ~CompressedFileStream = 0x1800a9330  (NOT ported)  [Wave 19]
+void* RtDelDtor_CompressedFileStream(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 40);
+}
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36 };
 const int* ProbeSubjects(int* count) {
@@ -672,7 +720,16 @@ const DelDtorSpec* Specs() { return kSpecs; }
 // ============================================================================
 // Registration
 //
-// By ADDRESS only: all 37 are unnamed in the export directory (see the banner).
+// By ADDRESS only: every one of them is unnamed in the export directory (see
+// the banner). The table has grown past the banner's "37" — Wave 10C added
+// UI::Dialog, Wave 10D UI::ToolTipDialog, and Wave 19 lane CSTREAM the two
+// IO::Compressed{,File}Stream thunks — so the running count is kSpecCount and
+// the standing figures in the banner above are a HISTORICAL record of Wave 9
+// lane K's original cluster, not a current census. Lane CSTREAM re-checked the
+// "unnamed" claim for its two additions against the DLL's export table rather
+// than inheriting it (both `<UNNAMED>`; `AEAA` means private, not unexported,
+// and this DLL exports its private members, so that check is not free —
+// reference_aeaa_is_private_not_unexported.md).
 // Every address below is a LITERAL, deliberately —
 // reference_census_cannot_see_nonliteral_registrations.md: a registration built
 // from a loop index or a named constant is invisible to tools/runtime_census.py,
@@ -682,8 +739,11 @@ const DelDtorSpec* Specs() { return kSpecs; }
 // ============================================================================
 void RtObjectDeletingDtorPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_DELDTOR")) {
-        printf("[RtDelDtor] DISABLED via BANISHED_RT_DELDTOR=0 -- all 37 "
-                    "deleting destructors stay on the DLL\n");
+        // The count is taken from kSpecCount rather than typed, for the same
+        // reason the summary at the bottom of this file already does it: two
+        // earlier lanes appended rows and left this literal reading 37.
+        printf("[RtDelDtor] DISABLED via BANISHED_RT_DELDTOR=0 -- all %d "
+                    "deleting destructors stay on the DLL\n", rtdtor::kSpecCount);
         return;
     }
 
@@ -728,6 +788,8 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180058b10, (void*)&RtDelDtor_DeviceData);
     RegisterRuntimeAddr(0x180038b20, (void*)&RtDelDtor_Dialog);   // Wave 10C DLG8
     RegisterRuntimeAddr(0x18004d270, (void*)&RtDelDtor_ToolTipDialog);  // Wave 10D TIP
+    RegisterRuntimeAddr(0x180023fd0, (void*)&RtDelDtor_CompressedStream);      // Wave 19 CSTREAM
+    RegisterRuntimeAddr(0x180024100, (void*)&RtDelDtor_CompressedFileStream);  // Wave 19 CSTREAM
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --

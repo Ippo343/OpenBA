@@ -163,6 +163,24 @@ extern int RtIoBinaryWriterRegister();      // binary_writer.cpp (lane ENC-2)
 // A/B that could only move both together could not attribute anything.
 extern int RtIoSerializeFamilyRegister();   // serialize_family.cpp (lane SERIAL)
 
+// Wave 19 lane CSTREAM: the IO::CompressedStream WRITE path -- the twelve
+// bodies compressed_stream_read.cpp explicitly listed as owed (?Commit,
+// ?CompressWindow, ?Create, ?Write, ?SetCurrentPos, ?GetCurrentPos, ?GetSize,
+// both ?PreCommit, ?Close on CompressedStream and CompressedFileStream) plus
+// ?GetSource@Stream@IO@@, which is slot 1 of FIVE minted IO vtables.
+//
+// ITS OWN SWITCH, and the reason is sharper than "blast radius": this is the
+// half of the class that PRODUCES bytes. Every save the game writes goes
+// through ?Commit, so an A/B that could only move the read and write halves
+// together could not attribute a corrupt save to either. BANISHED_RT_CSREAD
+// stays independent of it for the same reason it is independent of
+// BANISHED_RT_STREAM.
+//
+// NOTE it does NOT make the writer cutover-clean: ?Write reaches ?SetWindow,
+// whose direction!=0 GROW branch is still DELEGATED to the DLL and counted by
+// compressed_stream_read.cpp. That remains a named cutover blocker.
+extern int RtIoCompressedStreamWriteRegister();    // compressed_stream_write.cpp
+
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
         printf("[RtPort] BANISHED_RT_IO=0 -- IO namespace port disabled\n");
@@ -190,5 +208,6 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_ENCODING"))    n += RtIoEncodingRegister();
     if (RtWaveEnabled("BANISHED_RT_BINWRITER"))   n += RtIoBinaryWriterRegister();
     if (RtWaveEnabled("BANISHED_RT_SERIALFAM"))   n += RtIoSerializeFamilyRegister();
+    if (RtWaveEnabled("BANISHED_RT_CSWRITE"))     n += RtIoCompressedStreamWriteRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
