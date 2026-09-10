@@ -6,11 +6,22 @@
 //   | Export                                | Retail      | Ord  | Instrs |
 //   |---------------------------------------|-------------|------|--------|
 //   | ?Startup@Configuration@Input@@QEAA_NXZ | 0x1800e0d30 | 4085 |   43   |
-//   | (unexported) Configuration::Load       | 0x1800e0c80 |  --  |   25   |
+//   | ?Load@Configuration@Input@@QEAAXXZ     | 0x1800e0c80 | 3199 |   25   |
 //
-// The exported name was checked against Runtime-x64.dll's export directory with
-// pefile before a line was written; 0x1800e0c80 has no name in either build and
-// is registered by ADDRESS only. No new Win32 API and no new import library.
+// CORRECTED, Wave 20 Phase 0c. This table used to call 0x1800e0c80
+// "(unexported)" and the paragraph below used to say it "has no name in either
+// build and is registered by ADDRESS only". BOTH WERE FALSE, and re-running the
+// very check they claim to have run is what showed it:
+//
+//   ?Load@Configuration@Input@@QEAAXXZ -> ordinal 3199, 0x1800e0c80
+//
+// It is a plain public export (QEAA). This is the documented trap -- this DLL
+// exports its private members, so "unexported" is a conclusion that has to be
+// MEASURED, never inferred from a mangling or from a name not being to hand
+// (reference_aeaa_is_private_not_unexported.md). The cost was real: input.cpp
+// had already ported and NAME-registered the same function, so the false belief
+// produced a second body, and the export's two doors reached one each. input.cpp
+// now registers both doors at THIS body; see the note there.
 //
 // `Engine::Startup` step 14 — the last of the four `Configuration::Startup`
 // calls, and the last thing before `PlatformConfigure`. Off the current reach
@@ -127,7 +138,8 @@ const char kMouseDisplay[]  = "MouseDisplay";   // 0x180157d48
 }  // namespace
 
 // ============================================================================
-// 0x1800e0c80 — Input::Configuration::Load.  UNEXPORTED.
+// ?Load@Configuration@Input@@QEAAXXZ — retail 0x1800e0c80, ordinal 3199.
+// (Was labelled UNEXPORTED here. It is not -- see the banner.)
 // ============================================================================
 extern "C" void RtInput_Configuration_Load(Configuration* self) {
     RT_DIFF_BEGIN("Input::Configuration::Load");
@@ -216,8 +228,11 @@ int RtInputConfigStartupRegister() {
     RegisterRuntimeExport("?Startup@Configuration@Input@@QEAA_NXZ", (void*)&RtInput_Configuration_Startup); ++n;
     RegisterRuntimeAddr(0x1800e0d30, (void*)&RtInput_Configuration_Startup);
 
-    // No export name in either build -- address only.
-    RegisterRuntimeAddr(0x1800e0c80, (void*)&RtInput_Configuration_Load);
+    // 0x1800e0c80 / ?Load@Configuration@Input@@QEAAXXZ is registered -- BOTH
+    // doors, at this body -- by input.cpp, whose registration is ungated. It
+    // was registered here too, by address, on the false premise that the
+    // function had no export name; that duplicate is what made the two doors
+    // disagree, so it is gone rather than merely repointed.
 
     // NOTHING is deliberately absent here -- see the banner. Every callee in
     // the closure is ported: MemAlloc (lane E), ?Load@KeyMap@Input@@ (lane IOA,
