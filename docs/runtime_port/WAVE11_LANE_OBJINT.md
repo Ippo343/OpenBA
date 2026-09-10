@@ -6,7 +6,7 @@ Two deliverables, and they point in opposite directions. The two rows were **not
 unported** — they had bodies since Wave 3 and the work was verifying them, which
 this lane did with a new oracle. The probe's answer is **negative and it
 contradicts its own brief**: porting a factory does not reach the creation path,
-and that is a fact about 200 of the 202, established completely rather than
+and that is a fact about all 202, established completely rather than
 sampled.
 
 ---
@@ -212,6 +212,37 @@ code references to ANY of them, all encodings, whole .text      0
 factories with >= 1 qword reference in .data                  202   (206 refs total)
 ```
 
+**Scope of that zero, bounded precisely** (asked by the integrator, and worth
+answering with a second scan rather than a caveat):
+
+* **Both images, not one.** The `1,349,120` bytes above are `Runtime-x64.dll`'s
+  `.text`. The same scan over `Application-x64.exe`'s `.text` (`1,372,672`
+  bytes) also returns **zero**. So the claim is complete across both shipped
+  code sections, not bounded to the DLL.
+* **The zero includes the two doored exports.** `?CreateInPlaceObject@DialogController@UI@@`
+  and `?CreateInPlaceObject@Internal@Object@@` were inside the covered set and
+  are likewise unreferenced from either `.text`. Their door is the exe's
+  **import slot**, which is an indirect call through the IAT and by construction
+  contains no direct reference to the DLL address — which is exactly why a
+  direct-encoding scan cannot see it, and why the import table had to be read
+  separately to find them.
+
+**The `.data` pointer is the `BaseTypeInfo` factory slot — measured, not
+inferred.** For all **98** classes exporting both factories, the qword holding
+`?CreateNewObject@` sits **exactly 8 bytes before** the one holding
+`?CreateInPlaceObject@`, i.e. `BaseTypeInfo+0x20` (`factoryFn`) and `+0x28`
+(`inPlaceFactoryFn`); node start is `ref − 0x20`. Zero exceptions. The
+206-vs-202 discrepancy resolves cleanly too: **201 factories have exactly one
+`.data` reference, and `?CreateInPlaceObject@Internal@Object@@` has five** —
+it is shared by five typeinfo nodes, the classes that define no in-place factory
+of their own and inherit `Internal`'s.
+
+**So the whole chain resolves the way the integrator guessed.** To intercept any
+factory you must own the **minted typeinfo row**, because the pointer lives in
+that row. This is not a factory-porting problem at all — it is lane OBJDATA's
+subject. Porting the 202 bodies is neither necessary nor sufficient for
+interception; owning the rows is both.
+
 **The only route into any of the 202 is an indirect call through a function
 pointer in the DLL's `.data`,** written there by the DLL's static initialiser.
 That is not a door. Not the import table, not the port registry, not a detour —
@@ -281,10 +312,12 @@ promotion. Its verdict is permanent and independent of creation.
 
 Stated as three claims at three different strengths:
 
-* **Complete and mechanical (all 202).** No code in `Runtime-x64.dll` names any
-  of the 202 factory addresses in any direct encoding. Every one is reachable
-  only through a `.data` function pointer. This is measured over the whole
-  `.text`, not sampled.
+* **Complete and mechanical (all 202, both images).** No code in
+  `Runtime-x64.dll` **or `Application-x64.exe`** names any of the 202 factory
+  addresses in any direct encoding. Every one is reachable only through a
+  `.data` function pointer, and that pointer is a `BaseTypeInfo` `factoryFn` /
+  `inPlaceFactoryFn` slot (§2.2). Measured over both whole `.text` sections,
+  not sampled.
 * **Complete, and it is the one exception (2 of 202).** The exe's import table
   names exactly two factories —
   `?CreateInPlaceObject@DialogController@UI@@` (slot `0x140151688`) and
