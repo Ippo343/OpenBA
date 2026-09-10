@@ -1530,8 +1530,10 @@ using LoadMetaDataFn = void (*)(SaveLoad* self, const char** description,
 // and the DLL took the success arm would report our `field44 = 0` as a MISMATCH
 // and indict a correct port.
 //
-// *** AN OPEN FINDING, LEFT OPEN ON PURPOSE. *** Every predicting run of this
-// site reports the same thing and it is NOT explained yet:
+// *** WAVE 14 CLOSES THIS FINDING. *** It is left standing, with the correction
+// beneath it, because the reasoning is what the next reader needs and because
+// the WRONG half of it is the kind of claim that gets believed. Every predicting
+// run of this site reports:
 //
 //     UNPREDICTED WRITE Save::SaveLoad::UpdateList  9 byte(s) ...
 //     first at Save::SaveLoad [state 4 meta] +44
@@ -1542,16 +1544,37 @@ using LoadMetaDataFn = void (*)(SaveLoad* self, const char** description,
 // (the state was put into the Watch LABEL precisely because two successive
 // guesses about which state it was were both wrong, and `excluded=` staying
 // flat across a build that added Exclude()s is what exposed the second one).
-// What is NOT established: the writer. `?LoadMetaData@SaveLoad@Save@@`
-// (0x1800c1b30) only READS +0x2c/+0x30 — `MOV EDX,[R14+0x2c]` and
-// `MOV RDX,[R14+0x30]` at 0x1800c1b88/0x1800c1b99, opening a MemoryStream over
-// the loaded buffer — and its tail stores to neither.
+// The writer was recorded here as unknown, with this sentence:
 //
-// It is deliberately NOT excluded. An Exclude is a CLAIM that the body knows
-// what writes those bytes and has decided not to model them; declaring one here
-// would silence a real signal behind a sentence that is not true yet. The count
-// stays in `unpredicted=` where the next lane can see it. This is the half of
-// the oracle that catches what we do not know about, and it caught something.
+//     "`?LoadMetaData@SaveLoad@Save@@` (0x1800c1b30) only READS +0x2c/+0x30 —
+//      `MOV EDX,[R14+0x2c]` and `MOV RDX,[R14+0x30]` at 0x1800c1b88/0x1800c1b99,
+//      opening a MemoryStream over the loaded buffer — and its tail stores to
+//      neither."
+//
+// *** THAT LAST CLAUSE IS FALSE, and LoadMetaData IS the writer. *** Its tail
+// stores to BOTH, at 0x1800c1d98..0x1800c1db5:
+//
+//     MOV RCX,[R14+0x30] ; TEST RCX,RCX ; JZ ; CALL 0x1800c7ad0   ; MemFree
+//     MOV qword ptr [R14+0x30],0x0
+//     MOV dword ptr [R14+0x2c],0x0
+//
+// It frees the compressed image it has just consumed and zeroes the embedded
+// SavedState in place. That accounts for the finding exactly: it is the state-4
+// arm (the only arm that calls LoadMetaData), the bytes are +0x2c and +0x30, and
+// the callee is one this site SUPPRESSES with out.Call, so no prediction of ours
+// could ever have covered it. The lesson is the one this project keeps
+// re-learning: the two reads were verified at named addresses and the "stores to
+// neither" was not, and an unverified clause sitting beside two verified ones
+// inherits their authority. (Wave 14 lane LOADMETA, which ported the function:
+// runtime/src/save/saveload_loadmeta.cpp.)
+//
+// It is STILL deliberately not excluded, and the reason has changed. It was
+// "we do not know what writes these bytes"; it is now "these bytes are written
+// by a suppressed callee we have since ported, and the honest bucket for a
+// suppressed callee's footprint is `unpredicted=` until this site models it".
+// An Exclude here would be defensible now and is left for whoever re-tunes this
+// round, so that the count keeps naming a real, understood hole rather than
+// disappearing into a sentence.
 //
 // ONE CALL IS DELIBERATELY *NOT* SUPPRESSED IN PREDICT MODE, and skipping it
 // would be a bug rather than caution: `~SaveInfo` on the stack template at the
