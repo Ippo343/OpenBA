@@ -195,7 +195,9 @@ because the protocol said so, a **linker refusing a duplicate symbol**, a second
 lane re-deriving a number, and tools printing their own subject and denominator.
 
 Three people broke a rule they had personally articulated — two within the hour,
-**and the integrator did it four times**. The remedy is not better memory. It is
+**and the integrator did it four times**. **§7.1 supersedes this section's framing**
+with what two lanes worked out between them: *what makes a check able to fail
+correctly.* The remedy is not better memory. It is
 **cheap unconditional checks whose output cannot be read as success when they have
 measured nothing.**
 
@@ -217,6 +219,138 @@ most dangerous thing to relay, because it cannot be checked by reading the lane'
 work — only by running a command the integrator can always run.*
 
 ---
+
+---
+
+## 7.1 ADDENDUM — the converged doctrine, from three rounds of lane-to-lane refutation
+
+**Added after §7 was written.** Lanes CSTREAM and PERSIST worked this out between
+themselves, each refuting the other twice. It supersedes §7's looser framing —
+*"cheap unconditional checks"* — which is true but does not say **what makes a
+check able to fail correctly.** Recorded as an addition rather than a rewrite; §7
+stands as written.
+
+### It is TWO axes, and every failure this wave hit is placed by them
+
+PERSIST proposed: *a check either **re-derives** its subject from the artefact, or
+**restates** it; a derived subject cannot be aimed wrong, because there is no
+aiming step.*
+
+**CSTREAM refuted it with a clean counterexample.** A census set-diff that derived
+its subject entirely mechanically was still confidently wrong, because it carried
+`--namespace IO` — and **a namespace-filtered listing cannot contain a `System`
+symbol whatever its state.** Fully derived, confidently wrong. *(This is also
+exactly the integrator's C2 error, found independently by a lane.)*
+
+CSTREAM's replacement — *a check is unaimable exactly insofar as it has **no free
+parameter*** — is the more surprising half and it is right. PERSIST then showed it
+does not replace derivation; they are **separate axes**:
+
+| | **no free parameter** | **has a free parameter** |
+|---|---|---|
+| **one side derived** | `static_assert(sizeof(kSpecs)/sizeof(kSpecs[0]) == kSpecCount)` — unaimable, cannot go stale | the two lane scans — cannot go stale, **and both lanes aimed them wrong** |
+| **nothing derived** | `"37"` in prose — unaimable, **wrong for two waves** | — |
+
+> **Zero free parameters buys UNAIMABILITY, NOT SOUNDNESS.**
+> `static_assert(A == 37)` has no parameter either, and is exactly as stale as the
+> comment. **Parameters govern WHERE a check points; derivation governs WHETHER it
+> can notice change.** You need both.
+
+**Practical ordering, reached independently by both lanes: remove the parameter;
+failing that, PRINT IT BESIDE THE VERDICT.** The `SUBJECT ROOT:` line added to
+`dup_runtime_export.py` (C39) is the second-best case — it does not stop the tool
+being aimed wrong (PERSIST still aimed it at `AppData\Local`), it makes the aim
+**visible next to the verdict**, so a restated subject becomes checkable by a
+reader. That is what let PERSIST catch its own mistake.
+
+CSTREAM's `static_assert` is the day's one check that fired correctly on its own
+lane: it failed the build with `(41 == 39)` on an addition the lane had not thought
+about — **while two prose literals in the SAME FILE, left reading `"37"` by two
+earlier lanes, went unchecked for two waves.** Same file, same edit shape. The
+assertion's subject was the thing that changed; the prose was nobody's subject.
+
+### Where the mechanism runs out — the expensive category
+
+CSTREAM proposed a defence for claims with no instrument at all: **run one screen
+whose subject is STRICTLY WIDER than your claim.** A claim of the form *"these are
+the N things"* is refutable by any superset enumerator that does not know the claim
+exists — which is how its own four-doors-vs-five banner was refuted within the
+hour by a whole-tree census diff.
+
+**PERSIST bounded it tighter, and the bound is the important part.** That defence
+requires the claim to be about **membership in a set our tools already enumerate.**
+Its `??1Persistence@` holdback was not: it was ***"X is impossible"*** — the scratch
+route cannot be built because the dtor joins a real thread.
+
+> **No enumerator refutes an impossibility claim.** There is no superset of "things
+> that are possible" for a census to list, and a wide screen running daily for a
+> year would never have contradicted it.
+
+What refuted it was **one `objdump`** — and the only reason anyone ran it was that
+the integrator asked *which of two mechanisms* the blocker was.
+
+**Scored honestly for the day: the wide-screen defence caught 1 of 3
+no-instrument claims.** The two it missed were an impossibility claim and a number
+quoted from a stale document.
+
+> **Impossibility claims do not fail loudly. They quietly REMOVE WORK FROM THE
+> WAVE.**
+
+The aiming failures are the ones that *got caught*, because a misaimed check
+eventually contradicts something. The no-instrument claims sat for **two waves**
+(`"37"`), **five waves** (a dark probe), or **one session** (PERSIST's holdback) —
+and each surfaced only when a person happened to ask.
+
+**Neither lane could name a mechanism for these beyond the procedural one this
+wave already runs:**
+
+> **A stated blocker is a claim with a TIMESTAMP. Re-check it before believing it.**
+
+**Five for five stale across Waves 18–19** — and the fifth was a lane's own,
+written in the same session as the row it blocked.
+
+### A fifth instance, self-reported
+
+Lane CSTREAM quoted *"`?GetSource@` is the sole trap in FOUR rows"* to lane FILE as
+background. It is **six**. The figure came from its tasking, which predated the
+mint regeneration. It changes nothing in its results and it reported it anyway —
+**a fifth instance in one afternoon of quoting a number about a subject that had
+changed since the number was written.**
+
+---
+
+## 7.2 An asset recorded before it is forgotten
+
+Lane PERSIST's `BANISHED_AUTOLOAD=Auto` run is a **clean PRE-CSWRITE baseline on
+the load path**, and lane CSTREAM identified it as a usable control for its own
+change — then explicitly declined to use it, because its verification is an
+artefact oracle that needs no route comparison.
+
+Verified by construction rather than asserted: `wave19/persist` is cut from
+`wave19/base @ 20aa588`, and `git merge-base --is-ancestor wave19/cstream HEAD` is
+**false**, so **none of CSTREAM's twelve bodies is in the binary that run
+measured** — both halves of the save path there are retail's.
+
+```
+609 RtDiff sites · 20,060,624 calls · 30 divergences in 7 sites
+none in IO::Persistence · exit 0 · 0-byte crash log
+docs/runtime_port/wave19_persist/live_autoload_run.log
+```
+
+If anyone later needs to isolate `BANISHED_RT_CSWRITE` on the load path: same save,
+same route. Either the divergence set moves — the delta is CSTREAM's — or it does
+not, which is **a real negative result rather than an absence.**
+
+## 7.3 Integrator decision: lane PERSIST is NOT rebased
+
+PERSIST asked whether to rebase onto `wave19/base`, noting it *"changes the binary
+both runs' numbers are tied to."* **Decision: no rebase.**
+
+Its code is already merged and building on the wave tip; a rebase of its worktree
+would buy nothing and would strand two archived measurements from the binary that
+produced them (`d7ab834b`). **The numbers stay tied to the binary that produced
+them, and §7.2's baseline stays valid** — which it would not, if rebased. Lane
+closed as-is.
 
 ## 8. Wave 20 inputs
 
