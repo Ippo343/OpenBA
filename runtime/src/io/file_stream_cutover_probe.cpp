@@ -101,6 +101,13 @@ struct Door {
     const char* name;   // nullptr for an unexported address-only door
     uintptr_t   addr;   // 0 when only the name door exists
     const char* note;
+    // WAVE 20 LANE DOORS. True for a row whose ADDRESS door is registered only
+    // on the DLL-ABSENT path, which a screen running with the DLL present can
+    // never observe. Such a row reads OPEN here and that is not evidence of a
+    // gap; it is this screen being unable to see the registration. It is
+    // counted OPEN anyway -- a board that quietly re-scored the rows it cannot
+    // check would be flattering itself -- and named on its own line instead.
+    bool cutoverOnlyAddr;
 };
 
 // ---------------------------------------------------------------------------
@@ -116,12 +123,12 @@ struct Door {
 // ---------------------------------------------------------------------------
 const Door kDoors[] = {
     // ---- (18) the six save_image_to_file.cpp reaches directly --------------
-    { "?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z", 0x1800ae430, "(18) lane FILE" },
-    { "?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z",     0x1800aa8f0, "(18) lane FILE" },
-    { "??0BinaryFileStream@IO@@QEAA@XZ",                          0x1800a8200, "(18) lane FILE" },
-    { "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z",        0x1800accc0, "(18) lane FILE" },
-    { "??1BinaryFileStream@IO@@UEAA@XZ",                          0x180023c80, "(18) lane FILE" },
-    { "??1FileStream@IO@@UEAA@XZ",                                0x1800aaab0, "(18) lane FILE" },
+    { "?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z", 0x1800ae430, "(18) lane FILE", false },
+    { "?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z",     0x1800aa8f0, "(18) lane FILE", false },
+    { "??0BinaryFileStream@IO@@QEAA@XZ",                          0x1800a8200, "(18) lane FILE", false },
+    { "?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z",        0x1800accc0, "(18) lane FILE", false },
+    { "??1BinaryFileStream@IO@@UEAA@XZ",                          0x180023c80, "(18) lane FILE", false },
+    { "??1FileStream@IO@@UEAA@XZ",                                0x1800aaab0, "(18) lane FILE", false },
 
     // ---- (20) FOUR DOORS THE BOARD NEVER LISTED, found by lane DOORS -------
     //
@@ -144,28 +151,28 @@ const Door kDoors[] = {
     // moves and the open set does not. That is why they were survivable, and it
     // is not a reason to have left them out: an unlisted door is unlisted
     // whether or not it happens to be shut today.
-    { "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z",         0x1800c6740, "(20) walk, lane Filename" },
-    { "?GetPathDirectory@Filename@System@@QEBA?AV12@XZ",          0x1800c6880, "(20) walk, lane SetupDir" },
-    { "??HSystem@@YA?AVString@0@AEBV10@0@Z",                      0x1800c9440, "(20) walk, lane String" },
-    { "??HSystem@@YA?AVString@0@AEBV10@PEBD@Z",                   0x1800c92d0, "(20) walk, lane String" },
+    { "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z",         0x1800c6740, "(20) walk, lane Filename", false },
+    { "?GetPathDirectory@Filename@System@@QEBA?AV12@XZ",          0x1800c6880, "(20) walk, lane SetupDir", false },
+    { "??HSystem@@YA?AVString@0@AEBV10@0@Z",                      0x1800c9440, "(20) walk, lane String", false },
+    { "??HSystem@@YA?AVString@0@AEBV10@PEBD@Z",                   0x1800c92d0, "(20) walk, lane String", false },
 
     // ---- (19) the closure between those six and Win32 ----------------------
     { "?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z",
-                                                                  0x1800acc50, "(19) closure" },
+                                                                  0x1800acc50, "(19) closure", false },
     { "?PlatformCreateFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z",
-                                                                  0x1800ade60, "(19) closure" },
-    { "?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z", 0x1800ae020, "(19) closure" },
-    { nullptr,                                                    0x18000c180, "(19) ~FileInfo, unexported" },
+                                                                  0x1800ade60, "(19) closure", false },
+    { "?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z", 0x1800ae020, "(19) closure", false },
+    { nullptr,                                                    0x18000c180, "(19) ~FileInfo, unexported", false },
 
     // ---- (pre) already ported by earlier lanes -----------------------------
-    { "?SubString@String@System@@QEBA?AV12@HH@Z",                  0x1800c9230, "(pre) lane String" },
-    { "?AdjustDelimiters@Filename@System@@AEAAXXZ",                0x1800c6970, "(pre) lane String" },
-    { "??4Filename@System@@QEAAAEAV01@AEBV01@@Z",                  0x180006770, "(pre) lane String" },
-    { "??0WideString@System@@QEAA@AEBVString@1@@Z",                0x1800cab50, "(pre) lane WideStr" },
-    { "?Set@WideString@System@@QEAAXPEB_W@Z",                      0x1800caf40, "(pre) lane WideStr" },
-    { "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ",             0x1800cacd0, "(pre) lane WideStr" },
-    { nullptr,                                                    0x18000c200, "(pre) FileInfo::operator=" },
-    { nullptr,                                                    0x180006a10, "(pre) guarded object free" },
+    { "?SubString@String@System@@QEBA?AV12@HH@Z",                  0x1800c9230, "(pre) lane String", false },
+    { "?AdjustDelimiters@Filename@System@@AEAAXXZ",                0x1800c6970, "(pre) lane String", false },
+    { "??4Filename@System@@QEAAAEAV01@AEBV01@@Z",                  0x180006770, "(pre) lane String", false },
+    { "??0WideString@System@@QEAA@AEBVString@1@@Z",                0x1800cab50, "(pre) lane WideStr", false },
+    { "?Set@WideString@System@@QEAAXPEB_W@Z",                      0x1800caf40, "(pre) lane WideStr", false },
+    { "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ",             0x1800cacd0, "(pre) lane WideStr", false },
+    { nullptr,                                                    0x18000c200, "(pre) FileInfo::operator=", false },
+    { nullptr,                                                    0x180006a10, "(pre) guarded object free", false },
     // CORRECTED after the first measured run, by the OTHER instrument.
     // This row originally named `?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z`
     // (the member, 0x1800c6e60), which is what retail INLINES inside
@@ -179,18 +186,26 @@ const Door kDoors[] = {
     // `?Allocate@`, which is how this was found: two instruments looking at the
     // same path from opposite ends, one static and one live, and the live one
     // corrected the static one's subject. Recorded rather than quietly swapped.
-    { "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z",             0x1800c7a50, "(pre) allocator" },
-    { "?MemFree@MemoryAllocator@System@@SAXPEAX@Z",                0x1800c7ad0, "(pre) allocator" },
+    // `cutoverOnlyAddr` on both: allocator.cpp's RegisterAllocatorAddresses()
+    // — the ONLY registrar of 0x1800c7a50/0x1800c7ad0 — is called from the
+    // `if (!RuntimeDllPresent())` arm alone (allocator.cpp:1343-1372). With the
+    // DLL present, `BANISHED_RT_ALLOC=1` registers the EXPORTS only, which is
+    // exactly what this screen measured: armed, the two rows read
+    // `name=yes addr=NO`. Their by-address callers (rtcoll::MemAlloc/MemFree in
+    // collection/array.cpp:166,176 and application/message_callbacks.cpp:104)
+    // have NO name fallback, so the address door is the only door they use.
+    { "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z",             0x1800c7a50, "(pre) allocator", true },
+    { "?MemFree@MemoryAllocator@System@@SAXPEAX@Z",                0x1800c7ad0, "(pre) allocator", true },
 
     // ---- (pre) the DATA doors — vtables, not code -------------------------
     // Listed with the code doors on purpose: at cutover an unminted vtable is
     // exactly as fatal as an unported function, and separating them is how a
     // board reads green while the object gets a null vptr.
-    { "?_singleton@FileSystem@IO@@0PEAV12@EA",                     0x1801fc6a8, "(pre) DATA singleton" },
-    { "??_7Stream@IO@@6B@",                                        0x1801549a0, "(pre) DATA vtable" },
-    { "??_7FileStream@IO@@6B@",                                    0x180154960, "(19) DATA vtable, lane MINT" },
-    { "??_7BinaryFileStream@IO@@6B@",                              0x1801554d0, "(19) DATA vtable, lane MINT" },
-    { nullptr,                                                    0x1801554a8, "(pre) DATA encoding vtable" },
+    { "?_singleton@FileSystem@IO@@0PEAV12@EA",                     0x1801fc6a8, "(pre) DATA singleton", false },
+    { "??_7Stream@IO@@6B@",                                        0x1801549a0, "(pre) DATA vtable", false },
+    { "??_7FileStream@IO@@6B@",                                    0x180154960, "(19) DATA vtable, lane MINT", false },
+    { "??_7BinaryFileStream@IO@@6B@",                              0x1801554d0, "(19) DATA vtable, lane MINT", false },
+    { nullptr,                                                    0x1801554a8, "(pre) DATA encoding vtable", false },
 };
 const int kDoorCount = static_cast<int>(sizeof(kDoors) / sizeof(kDoors[0]));
 
@@ -411,6 +426,51 @@ void Run() {
            addrDoors - addrOpen, addrDoors, addrOpen);
     printf("[FileCutover] ==== %d of %d rows SHUT, %d OPEN ====\n",
            kDoorCount - openRows, kDoorCount, openRows);
+
+    // ---- rows this screen CANNOT SCORE on this route ----------------------
+    int cutoverOnly = 0, cutoverOnlyOpen = 0;
+    for (int i = 0; i < kDoorCount; ++i) {
+        if (!kDoors[i].cutoverOnlyAddr) continue;
+        ++cutoverOnly;
+        if (kDoors[i].addr && !PortLookupAddr(kDoors[i].addr)) {
+            ++cutoverOnlyOpen;
+            printf("[FileCutover] UNSCOREABLE ON THIS ROUTE (counted OPEN above) "
+                   "0x%09llx %s -- its address door is registered only by the "
+                   "DLL-ABSENT arm of the allocator's arming path, which cannot "
+                   "run while the DLL is loaded.\n",
+                   (unsigned long long)kDoors[i].addr, kDoors[i].name);
+        }
+    }
+    if (cutoverOnly)
+        printf("[FileCutover] %d of %d rows are cutover-only by construction; %d of "
+               "them read OPEN in this run. Subtracting them would be a claim this "
+               "screen cannot make, so the count above does NOT.\n",
+               cutoverOnly, kDoorCount, cutoverOnlyOpen);
+
+    // ---- ADDRESS PROVENANCE, derived from the export table ----------------
+    // Every `addr` in the array above was copied out of some lane's
+    // RegisterRuntimeAddr call, which makes the addr column trivially green for
+    // whoever copied it: the row and the registration share one typo. This asks
+    // the SHIPPED BINARY where each named symbol actually lives and compares.
+    // It cannot check the address-only rows -- they have no name to look up --
+    // and that inapplicable set is stated, not folded in.
+    int provChecked = 0, provOk = 0, provSkipped = 0;
+    for (int i = 0; i < kDoorCount; ++i) {
+        if (!kDoors[i].name || !kDoors[i].addr || w.dllAddr[i] == 0) {
+            ++provSkipped;
+            continue;
+        }
+        ++provChecked;
+        if (w.dllAddr[i] == kDoors[i].addr) { ++provOk; continue; }
+        printf("[FileCutover] PROVENANCE MISMATCH row says 0x%09llx, the DLL's "
+               "export table says 0x%09llx : %s\n",
+               (unsigned long long)kDoors[i].addr,
+               (unsigned long long)w.dllAddr[i], kDoors[i].name);
+    }
+    printf("[FileCutover] address provenance %d of %d checkable rows match the "
+           "DLL's own export table (%d rows have no exported name to check "
+           "against and are NOT scored)\n", provOk, provChecked, provSkipped);
+
 
     // ---- attendance, printed WHATEVER the door board said -----------------
     // The board above is a STATIC registry query. It cannot tell a body that

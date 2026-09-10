@@ -773,7 +773,8 @@ int RtEnumRuntimeExports(bool (*visit)(const char* name, void* addr,
                                        uintptr_t ghidraAddr, void* ctx),
                          void* ctx) {
     if (!visit) return 0;
-    HMODULE h = g_modules[static_cast<int>(Module::Runtime)].handle;
+    const ModuleInfo& mi = g_modules[static_cast<int>(Module::Runtime)];
+    HMODULE h = mi.handle;
     if (!h) return 0;
 
     const auto* base = reinterpret_cast<const unsigned char*>(h);
@@ -797,11 +798,16 @@ int RtEnumRuntimeExports(bool (*visit)(const char* name, void* addr,
         void* addr = (ord < ex->NumberOfFunctions)
                    ? const_cast<unsigned char*>(base + funcRvas[ord])
                    : nullptr;
+        // NOT `- base + nt->OptionalHeader.ImageBase`: the Windows loader
+        // REWRITES the in-memory OptionalHeader.ImageBase to the address it
+        // actually mapped the module at, so that expression collapses to the
+        // loaded address and prints a plausible-looking wrong number. The first
+        // measured run of this walk printed `0x7fff975453d0` as a Ghidra
+        // address, which is how it was found. `mi.delta` is the relocation the
+        // resolver itself uses, and it is computed from the PREFERRED base the
+        // module table records rather than from the header.
         const uintptr_t ghidra =
-            addr ? (reinterpret_cast<uintptr_t>(addr) -
-                    reinterpret_cast<uintptr_t>(base) +
-                    static_cast<uintptr_t>(nt->OptionalHeader.ImageBase))
-                 : 0;
+            addr ? (reinterpret_cast<uintptr_t>(addr) - mi.delta) : 0;
         ++seen;
         if (!visit(name, addr, ghidra, ctx)) break;
     }

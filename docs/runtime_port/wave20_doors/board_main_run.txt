@@ -1,0 +1,49 @@
+[BfsPromote] BODIES      GetSource=0 Write=0 Read=9455 SetCurrentPos=3761 GetCurrentPos=0 GetSize=2847 Open=2847 deletingDtor=0 copyCtor=0
+[BfsPromote] EFFECT      stamps=2847  stampedMinted=2847  (promoted <=> the two are EQUAL and non-zero; kill switch <=> stampedMinted=0 with stamps UNCHANGED)
+[BfsPromote] ATTENDANCE  slotEntries=18910  viaMintBFS=18910  viaDllBFS=0  other=0
+[FileCutover] ==== screenshot-path door screen ====
+[FileCutover] subject: 29 hand-enumerated doors on the path from ?SaveImageToFile@ImageBuffer@Video@@ down to Win32. It cannot see a door nobody wrote down, and it says NOTHING about correctness.
+[FileCutover] CONTROL walk: 4926 named exports in Runtime-x64.dll, 4926 with an address (the denominator for both controls below)
+[FileCutover] CONTROL positive (registry MUST be able to say YES): 1113 of 4926 exports answered -> GREEN
+[FileCutover] CONTROL negative (registry MUST be able to say NO):  3813 of 4926 exports unanswered -> GREEN
+[FileCutover] CONTROL negative SUBJECT, derived not named: ??0?$InterpolatedState@M@Graphics@@QEAA@M@Z (0x1800153d0) -- the first export the registry does not answer. Printed so the aim is visible; nothing in this file selects it.
+[FileCutover] informative (GATES NOTHING) ?OpenFile@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z : ported
+[FileCutover] shut  name=yes  addr=yes  0x1800ae430 (18) lane FILE                 ?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z
+[FileCutover] shut  name=yes  addr=yes  0x1800aa8f0 (18) lane FILE                 ?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z
+[FileCutover] shut  name=yes  addr=yes  0x1800a8200 (18) lane FILE                 ??0BinaryFileStream@IO@@QEAA@XZ
+[FileCutover] shut  name=yes  addr=yes  0x1800accc0 (18) lane FILE                 ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z
+[FileCutover] shut  name=yes  addr=yes  0x180023c80 (18) lane FILE                 ??1BinaryFileStream@IO@@UEAA@XZ
+[FileCutover] shut  name=yes  addr=yes  0x1800aaab0 (18) lane FILE                 ??1FileStream@IO@@UEAA@XZ
+[FileCutover] shut  name=yes  addr=yes  0x1800c6740 (20) walk, lane Filename       ?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z
+[FileCutover] shut  name=yes  addr=yes  0x1800c6880 (20) walk, lane SetupDir       ?GetPathDirectory@Filename@System@@QEBA?AV12@XZ
+[FileCutover] shut  name=yes  addr=yes  0x1800c9440 (20) walk, lane String         ??HSystem@@YA?AVString@0@AEBV10@0@Z
+[FileCutover] shut  name=yes  addr=yes  0x1800c92d0 (20) walk, lane String         ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z
+[FileCutover] shut  name=yes  addr=yes  0x1800acc50 (19) closure                   ?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z
+[FileCutover] shut  name=yes  addr=yes  0x1800ade60 (19) closure                   ?PlatformCreateFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z
+[FileCutover] shut  name=yes  addr=yes  0x1800ae020 (19) closure                   ?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z
+[FileCutover] shut  name=-    addr=yes  0x18000c180 (19) ~FileInfo, unexported     (unexported)
+[FileCutover] shut  name=yes  addr=yes  0x1800c9230 (pre) lane String              ?SubString@String@System@@QEBA?AV12@HH@Z
+[FileCutover] shut  name=yes  addr=yes  0x1800c6970 (pre) lane String              ?AdjustDelimiters@Filename@System@@AEAAXXZ
+[FileCutover] shut  name=yes  addr=yes  0x180006770 (pre) lane String              ??4Filename@System@@QEAAAEAV01@AEBV01@@Z
+[FileCutover] shut  name=yes  addr=yes  0x1800cab50 (pre) lane WideStr             ??0WideString@System@@QEAA@AEBVString@1@@Z
+[FileCutover] shut  name=yes  addr=yes  0x1800caf40 (pre) lane WideStr             ?Set@WideString@System@@QEAAXPEB_W@Z
+[FileCutover] shut  name=yes  addr=yes  0x1800cacd0 (pre) lane WideStr             ?AsUTF8@WideString@System@@QEBA?AVString@2@XZ
+[FileCutover] shut  name=-    addr=yes  0x18000c200 (pre) FileInfo::operator=      (unexported)
+[FileCutover] shut  name=-    addr=yes  0x180006a10 (pre) guarded object free      (unexported)
+[FileCutover] OPEN  name=NO   addr=NO   0x1800c7a50 (pre) allocator                ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z
+[FileCutover] OPEN  name=NO   addr=NO   0x1800c7ad0 (pre) allocator                ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
+[FileCutover] OPEN  name=NO   addr=NO   0x1801fc6a8 (pre) DATA singleton           ?_singleton@FileSystem@IO@@0PEAV12@EA
+[FileCutover] OPEN  name=NO   addr=NO   0x1801549a0 (pre) DATA vtable              ??_7Stream@IO@@6B@
+[FileCutover] OPEN  name=NO   addr=NO   0x180154960 (19) DATA vtable, lane MINT    ??_7FileStream@IO@@6B@
+[FileCutover] shut  name=yes  addr=yes  0x1801554d0 (19) DATA vtable, lane MINT    ??_7BinaryFileStream@IO@@6B@
+[FileCutover] OPEN  name=-    addr=NO   0x1801554a8 (pre) DATA encoding vtable     (unexported)
+[FileCutover] name doors 20 of 25 answered by our registry, 5 OPEN
+[FileCutover] addr doors 23 of 29 answered by our registry, 6 OPEN
+[FileCutover] ==== 23 of 29 rows SHUT, 6 OPEN ====
+[FileCutover] UNSCOREABLE ON THIS ROUTE (counted OPEN above) 0x1800c7a50 ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z -- its address door is registered only by the DLL-ABSENT arm of the allocator's arming path, which cannot run while the DLL is loaded.
+[FileCutover] UNSCOREABLE ON THIS ROUTE (counted OPEN above) 0x1800c7ad0 ?MemFree@MemoryAllocator@System@@SAXPEAX@Z -- its address door is registered only by the DLL-ABSENT arm of the allocator's arming path, which cannot run while the DLL is loaded.
+[FileCutover] 2 of 29 rows are cutover-only by construction; 2 of them read OPEN in this run. Subtracting them would be a claim this screen cannot make, so the count above does NOT.
+[FileCutover] address provenance 25 of 25 checkable rows match the DLL's own export table (4 rows have no exported name to check against and are NOT scored)
+[FileCutover] attendance  ??0BinaryFileStream=2847  ??1BinaryFileStream=0  ??1FileStream=2847  ??0TextFileStream=0  ?Create@FileStream=0 (true=0)  ~FileInfo=2847
+[FileCutover] attendance  ?CreatePath=0 (dirs=0)  ?CreateFileW=0  ?PlatformCreateFile=0 (ok=0 fail=0)  ?CloseFile=2851  ?PlatformCloseFile=2851 (renamed=0)  ??1FileSystem=0
+[FileCutover] slots       GetSource=0 (nonNull=0)  Write=0 (full=0)  Read=9455  SetCurrentPos=3761 (win32=0)  GetCurrentPos=0  GetSize=2847  Open=2847 (true=2847)  deletingDtor=0  arrayArmAbort=0  copyCtor=0
