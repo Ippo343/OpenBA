@@ -19,7 +19,7 @@ reimplemented are stubbed or registered individually via the address registry (s
 per-function recipe are in **[docs/runtime_port/PLAN.md](docs/runtime_port/PLAN.md)**. Read it
 before any runtime work.
 
-**Status 2026-09-10 — WAVE 20 CLOSED (`97607dd9`): an INSTRUMENTS wave.** All three
+**Status 2026-09-10 — WAVE 20 CLOSED (`65bd63e4`): an INSTRUMENTS wave.** All three
 known-broken tools fixed, the 31-row vtable-extent question closed in **both** error
 directions, and `??_7BinaryFileStream@` promoted — **attendance 0 -> 18,906**, which
 converts four of Wave 19's ten TRAP=0/attendance-0 bodies into bodies that actually run.
