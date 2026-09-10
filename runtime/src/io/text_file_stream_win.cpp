@@ -121,6 +121,32 @@ struct TfsCounters {
 };
 TfsCounters g_tfs{};
 
+// ---------------------------------------------------------------------------
+// NEGATIVE-CONTROL PERTURBATIONS, set only by text_file_stream_probe.cpp and
+// read HERE, in the bodies under test. They live in the body rather than in the
+// probe because a control that perturbs a COPY of the code catches in a screen
+// it cannot reach (WAVE11_LANE_OBJEXT.md 10.3/10.5). Each is consumed at
+// exactly one site, each site increments `g_tfsAtt`, and each produces a
+// COMPARABLE DIVERGENCE against the shipped export -- never undefined
+// behaviour.
+//
+//   1  GetSize: drop the `buffer` branch and always return the FILE size.
+//      -> screen A. This is the mistake a port that ignored +0x70 would make.
+//   2  SetCurrentPos (buffer arm): `pos <= size` instead of `pos < size`.
+//      -> screen B, and ONLY at pos == size exactly. An off-by-one that no
+//      other value of `pos` can expose.
+//   3  Read: omit the `bufCursor += len` advance.
+//      -> screen C, on POST-STATE only; the bytes copied are still right, so a
+//      screen that compared only the destination buffer would pass.
+//   4  Create: select the byte-order mark from `_requestedFormat` (+0x68)
+//      instead of `_activeEncoding` (+0x6c).
+//      -> screen D, and only when the two are passed DIFFERENT values. This is
+//      the precise confusion the field pair invites and the reason this probe
+//      passes them apart.
+// ---------------------------------------------------------------------------
+int      g_tfsCtl = 0;
+uint64_t g_tfsAtt = 0;
+
 // ============================================================================
 // IO::TextFileStream::GetSize() const                    retail 0x1800ba8e0
 // IO::TextFileStream::GetCurrentPos() const              retail 0x1800bac30
@@ -145,7 +171,9 @@ TfsCounters g_tfs{};
 // ============================================================================
 extern "C" uint32_t RtIo_TextFileStream_GetSize(const TextFileStream* self) {
     RT_DIFF_BEGIN("IO::TextFileStream::GetSize");
-    if (self->buffer != nullptr) {                                  // 1800ba8e0
+    bool useBuffer = (self->buffer != nullptr);
+    if (g_tfsCtl == 1) { ++g_tfsAtt; useBuffer = false; }
+    if (useBuffer) {                                                // 1800ba8e0
         ++g_tfs.getSizeBuffer;
         return static_cast<uint32_t>(*TfsBufSize(self));            // 1800ba8e7  +0x78
     }
@@ -211,7 +239,8 @@ extern "C" bool RtIo_TextFileStream_Read(TextFileStream* self, int32_t len, void
                      static_cast<int64_t>(*cursor),
                  static_cast<size_t>(static_cast<int64_t>(len)));   // 1800ba921
 
-    *cursor += len;                                                // 1800ba926
+    if (g_tfsCtl == 3) { ++g_tfsAtt; }
+    else               { *cursor += len; }                         // 1800ba926
     RT_DIFF_WORK(true);
     return true;                                                   // 1800ba92e
 }
@@ -254,7 +283,8 @@ extern "C" bool RtIo_TextFileStream_SetCurrentPos(TextFileStream* self, int32_t 
         ++g_tfs.setPosBuffer;
         const int32_t size = *TfsBufSize(self);
         *TfsBufCursor(self) = pos;                                 // 1800babdf  +0x7c
-        const bool ok = (pos >= 0) && (pos < size);                // 1800babe2/e6
+        bool ok = (pos >= 0) && (pos < size);                      // 1800babe2/e6
+        if (g_tfsCtl == 2) { ++g_tfsAtt; ok = (pos >= 0) && (pos <= size); }
         RT_DIFF_WORK(ok);
         return ok;
     }
@@ -350,7 +380,9 @@ extern "C" bool RtIo_TextFileStream_Create(TextFileStream* self, const Filename*
 
     uint8_t bom[3] = { 0, 0, 0 };
     int32_t bomLen = 0;
-    switch (self->activeEncoding) {                          // 1800ba960..76
+    int32_t bomSelector = self->activeEncoding;              // 1800ba960  +0x6c
+    if (g_tfsCtl == 4) { ++g_tfsAtt; bomSelector = self->requestedFormat; }
+    switch (bomSelector) {                                   // 1800ba963..76
         case 3:  bom[0] = 0xEF; bom[1] = 0xBB; bom[2] = 0xBF;  // 1800ba994
                  bomLen = 3; break;
         case 4:  bom[0] = 0xFF; bom[1] = 0xFE;                 // 1800ba985

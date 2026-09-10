@@ -92,6 +92,7 @@
 // `extern "C"`: a block-scope `extern void` would bind the name into namespace
 // RtObject and link against a symbol nothing defines.
 extern "C" void RtIoProbeRunFileStreamLayoutProbe();
+extern "C" void RtIoProbeRunTextFileStreamProbe();   // Wave 20 lane SAVETEXT
 
 // runtime/src/object/external_savetext_probe.cpp -- the oracle for
 // External::SaveText, which no gameplay route reaches. It needs a live
@@ -276,6 +277,19 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
     {
         static bool stArmed = (std::getenv("BANISHED_RT_SAVETEXT_PROBE") != nullptr);
         if (stArmed) RtObjectSaveTextProbeStepC(external);
+    }
+
+    // Wave 20 lane SAVETEXT's oracle for the five TextFileStream vtable slots.
+    // Same host, same one-shot shape and the same reason as the layout probe
+    // above: this is the earliest point where the FileSystem singleton is up,
+    // and `Add`'s own call counter is the positive control that the host runs.
+    // Opt-in because screen D writes twelve files.
+    {
+        static bool tfsArmed = (std::getenv("BANISHED_RT_TFS_PROBE") != nullptr);
+        if (tfsArmed) {
+            tfsArmed = false;
+            RtIoProbeRunTextFileStreamProbe();
+        }
     }
 
     // ---- 1800be589..1800be5d9 -------------------------------------------
