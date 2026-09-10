@@ -126,6 +126,11 @@ extern "C" void RtVideoDeleteDeviceLock(void* device);
 // video_resources_probe.cpp — armed at init, RUN from the first Bind.
 void RtVideoResourcesProbeArm(bool on);
 void RtVideoResourcesProbeRun();
+// Tranche 2's probe. It has its own env var and its own summary line so the
+// sealed report's cases=8 and tranche 1's cases=11 stay reproducible; it only
+// shares this gate, which is the one moment in a run known to be safe for a
+// probe that allocates.
+void RtVideoImageBufferSerializeProbeRun();
 
 namespace {
 
@@ -282,6 +287,7 @@ inline void ProbeGate() {
     if (g_probeRunning) return;
     g_probeRunning = true;
     RtVideoResourcesProbeRun();
+    RtVideoImageBufferSerializeProbeRun();
 }
 
 }  // namespace
