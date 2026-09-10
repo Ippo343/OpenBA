@@ -34,6 +34,28 @@
 //     object built by our ctor is byte-for-byte indistinguishable from one
 //     built by the DLL's, including its virtual dispatch.
 //
+//     *** THAT SECOND BULLET IS CONDITIONALLY TRUE, AND ITS CONDITION IS NOT
+//         VISIBLE FROM HERE. *** (Wave 11 lane OBJLIFE, 2026-09-09.)
+//     `VtblInternal()` / `VtblBase()` below reach those two symbols through
+//     `ResolveExport`, which consults the PORT REGISTRY FIRST. Both symbols are
+//     already MINTED into standalone/rt_data_mint_tables.inc; they are simply
+//     not promoted yet. The moment anything registers them — and that is
+//     exactly what Wave 11 lane OBJDATA's Class A row set is for —
+//     `ResolveExport` starts handing back OUR MINTED VTABLE, and:
+//
+//         objects built by OUR ctor (the doors we intercept) carry the minted
+//         vptr, while objects built by the DLL's ctor (its own in-DLL rel32
+//         callers, which we do NOT intercept) carry 0x180154720.
+//
+//     That is TWO VTABLES IN PLAY ON ONE CLASS — PLAN.md §4.3 risk 3 verbatim,
+//     the hazard this very bullet exists to deny. Neither lane creates it
+//     alone: it needs the TABLE tier armed AND those two ??_7 rows promoted.
+//     Do not arm this tier and promote those rows in the same build without
+//     first making these two accessors resolve RAW (theirs when the DLL is
+//     present) and fall back to the registry only when it is absent.
+//     That change is not made here because it also decides what cutover sees,
+//     which belongs to whoever owns the mint, not to this file.
+//
 // What is left is therefore an ordinary faithfulness question — does our body
 // compute the same indices and the same array growth as theirs — and that is
 // exactly what the shadow mode below measures.
