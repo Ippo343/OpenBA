@@ -1327,6 +1327,22 @@ J1_ENTRY(180073bb0)   // Picking:     Scene+0x30, Array<Link>
 // same immediates, same targets, so the "no parameters at all, not even a
 // stride" conclusion covers it unchanged and one body still serves them all.
 J1_ENTRY(180037240)   // UI:          Element::_children (+0xa0), Array<Element*>
+// WAVE 11 LANE OBJLIFE, 2026-09-09 — THE SEVENTEENTH ADDRESS, and the note
+// above predicted it: 0x18002fb70 is `Object::InternalFactory::_objects`'
+// `~Array<Internal*>`, the TAIL JUMP of `??1InternalFactory@Object@@` at
+// 0x18002f888. It was invisible to every previous survey for the standing
+// reason — nothing in our tree called it until this lane ported that dtor.
+//
+// SAME BODY, measured rather than eyeballed. Both bodies were disassembled and
+// every RIP displacement and rel32 resolved to its ABSOLUTE target before
+// comparing (a raw byte-diff of two copies of one function reports differences
+// that are only distances — reference_position_only_diffs_hide_one_body):
+// 29 instructions on each side, 29 identical, and the ONE textual difference
+// is an internal forward branch whose ENCODED displacement is the same byte
+// (0x36) on both sides. The four external operands resolve identically to
+// 0x1801fc718, 0x18014b390, 0x1800c6c00 and 0x18014b388 — the same four the
+// J1 note above pins.
+J1_ENTRY(18002fb70)   // Object:      InternalFactory::_objects, Array<Internal*>
 // WAVE 9 LANE UIW, 2026-09-08 — THE THIRTEENTH AND FOURTEENTH ADDRESSES, both
 // reached by `?RemoveAllItems@ComboElement@UI@@` (0x180075120): its second and
 // third calls, on `_sprites` (+0xf8) and `_userData` (+0x108).
@@ -1624,6 +1640,8 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180073bb0, (void*)&RtColl_ArrayDtor_180073bb0);
     // Wave 9 lane UIF: the twelfth J1 address, reached by ??1Element@UI@@.
     RegisterRuntimeAddr(0x180037240, (void*)&RtColl_ArrayDtor_180037240);
+    // Wave 11 lane OBJLIFE: the seventeenth, reached by ??1InternalFactory@Object@@.
+    RegisterRuntimeAddr(0x18002fb70, (void*)&RtColl_ArrayDtor_18002fb70);
     // ---- THIRTEENTH THROUGH SIXTEENTH, and the number is STILL a lower bound.
     //
     // Lanes UIC and UIW each found "the thirteenth and fourteenth" J1 address,
