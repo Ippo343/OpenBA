@@ -25,6 +25,27 @@ as a literal in order to use retail's own RIP-relative read as an oracle. That
 is a real dependency and the census is right to count it. It is also a row that
 can never be ported — see the wart below.
 
+## What the remaining two rows are — Save's real ceiling
+
+At 28/30 the two rows left are NOT unfinished work. Both are decisions:
+
+    ?_singleton@SaveLoad@Save@@0PEAV12@EA   minted, DELIBERATELY not promoted.
+                                            Promotable at cutover; the standing
+                                            case and full enumeration are in
+                                            reg_mint_promoted.cpp.
+    ?Get@SaveLoad@Save@@SAPEAV12@XZ         PERMANENTLY unportable. Dead in all
+                                            four shipped binaries AND in the
+                                            ToolKit profile build. Present in
+                                            `called` only because SINGLETON's
+                                            probe names it as a literal to use
+                                            retail's own RIP-relative read as an
+                                            oracle.
+
+So **Save's true ceiling is 29/30 = 96.7%**, reachable by promoting one data row
+at cutover, and 30/30 is not reachable at all. 93.3% is one deliberate deferral
+below ceiling — which is a different statement from "two rows to go", and the
+distinction is the one Wave 10 had to invent the `ceiling` column to express.
+
 ## Per-lane accounting, unsmoothed
 
 | lane | target | SHA | ported | note |
