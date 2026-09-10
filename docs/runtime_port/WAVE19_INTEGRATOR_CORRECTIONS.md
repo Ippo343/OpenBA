@@ -415,3 +415,99 @@ IOBASE stated its scope as **16 distinct bodies, of which the identity can move 
 at most +10**. That is the right way to say it. **Bodies and identity are
 different currencies**, and most of this wave's confusion — C7, C11, C12 and this
 entry — has come from quoting one as the other.
+
+## C14. "The machine has NO SAVE GAMES AT ALL" is FALSE — and I promoted it to a wave-level fact
+
+Lane PERSIST reported it. **I amplified it into the PERSIST merge commit as "a
+WAVE-LEVEL fact, not a lane one", and into a user-facing summary, without running
+a single check.** It is wrong.
+
+```
+C:/Users/USPC/Documents/Banished/Save/*.sav  ->  13 real save files
+  Auto.sav    8,576,259 bytes   Sep 10 15:05
+  Auto2.sav   8,428,302 bytes   Sep  9 20:06
+  Save0.sav   4,097,377 bytes   Aug 29 13:02
+  Save10.sav  7,288,854 bytes   Sep  5 18:44   ... and 9 more
+```
+
+Three of them **predate this session by nearly two weeks**, so this is not a case
+of saves appearing after the lane looked.
+
+And **`BANISHED_SAVE_TEST` exists** — 4 code files, dispatched from
+`code/Game/Game/gameupdateloop.cpp:1097` into `standalone/saveload_harness.cpp`.
+It is a **PRODUCER**: it triggers the retail autosave path on a chosen frame and
+logs the resulting `.sav`. The lane said plainly that it had **not** grepped it
+and would not claim either way — **the honest half of the report was correct, and
+I filled the gap with the lane's other claim instead of a grep.**
+
+### Why this one is the worst of my errors this wave
+
+The other corrections cost accuracy. **This one cost a lane its verification
+route.** PERSIST's six ported rows are recorded as having **no live gameplay
+route**, resting entirely on a synthesised oracle. Its §5 control is sound in what
+it proves — the probe-off run reaches none of the six — but that is evidence
+`BANISHED_AUTOLOAD` **did not fire**, which is not the same as **no route exists**.
+The wave's own §5 names "declaring no oracle or no route" as a failure mode
+refuted four times in Wave 18. It has now been refuted a fifth, by me, against a
+lane I had personally briefed with that exact warning.
+
+**Standing rule, from three instances now (C8, C11, C14): a lane's NEGATIVE claim
+about the environment is the single most dangerous thing to relay, because it
+cannot be checked by reading the lane's own work — only by running a command the
+integrator can always run.** Relaying it unchecked converts one lane's local
+failure into a wave-level fact. `ls` would have caught this.
+
+### Actions
+1. Lane PERSIST re-tasked to re-run its six rows against a real save, as a marked
+   post-report tranche.
+2. The PERSIST merge commit's claim is corrected here rather than rewritten — the
+   commit stands with its error, and this entry is the correction of record.
+
+## C15. Lane PERSIST corrected its OWN stated blocker — `??1Persistence@` was never blocked
+
+The lane wrote, and committed, that `0x1800b7740` "joins and closes a real thread;
+handing it a fabricated worker is not a controlled experiment, it is a crash with
+extra steps." It then read the body and found that **wrong in its conclusion**:
+
+The wait is `WaitForSingleObject` on a handle **at an offset the caller controls**
+(`Pers+0x20`), followed by four `CloseHandle`s on handles at `+0x10/0x18/0x20/0x28`.
+Seed the scratch image with owned, already-signalled handles and the wait returns
+immediately. **The existing oracle applies unchanged in structure** — four seeded
+handles instead of two, plus one "the arrays were cleared" assertion.
+
+The lane's own words: **"What had to change for that to become possible: nothing.
+It was possible when I wrote the holdback; I asserted a blocker instead of reading
+`0x1800b7740`."**
+
+**This is the stated-blocker-with-a-timestamp trap where the stale claim is the
+lane's OWN, written the same session** — the sharpest instance the project has
+recorded, and it was self-caught and self-reported at the cost of one `objdump`.
+
+Two side effects: `Pers+0x30` becomes a **pinned field** rather than the
+`_pad30` the header currently calls it (the dtor pins it), and the dtor's
+`0x18002ac40(Pers+0x80)` confirms the saves array is a `Collection::Array` that
+`GetSaveInfo`/`GetSaveCount` only ever read.
+
+**Written expiry (Wave 18 form):** verified by the existing
+`persistence_saves_probe.cpp` oracle with four owned Win32 handles seeded at
+`Pers+0x20/0x28/0x30/0x38` and non-null array pointers. **Expires the moment
+anyone runs that probe variant** — under an hour, layout work already done. The
+lane has been re-tasked to do exactly that.
+
+## C16. C4 is CLOSED — the stranded fix is merged, on two independent reproductions
+
+Lane PERSIST hit the C4 fault independently: `BANISHED_RT_ORPHAN_PROBE=1` dies at
+boot with `WRITE of 0x648` inside `ProbeSaveLoadGenerateSaveName`. It worked
+around it rather than fixing another wave's code, which was the right call, and
+told me — which was the more useful one.
+
+Two independent reproductions of a fault whose fix already existed and sat
+unmerged. Merged as `e983724`.
+
+**The merge conflicted**, and the conflict was informative: `wave10/base` had
+since gained `ProbeSaveLoadSingleton()` at the same call site from a different
+Wave 14 lane. Resolved to keep **both** intentions — `ProbeSaveLoadSingleton()`
+stays at boot (it reads a data slot and never formats a `String`, so it does not
+touch the allocator singleton), while `ProbeSaveLoadGenerateSaveName()` moves
+in-game. Taking either side wholesale would have silently dropped one lane's work.
+Build green.
