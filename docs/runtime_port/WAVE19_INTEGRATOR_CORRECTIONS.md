@@ -185,3 +185,94 @@ base slots are traps in **three** of the five rows, so **one body of work clears
 8 + 8 + 7 = 23 trap slots.** That compounds with phase 0c's finding that IO's 8
 blocked rows carry 27 trap slots across only 20 distinct functions. **Both cells
 independently found the same shape: scope FUNCTIONS, not slots.**
+
+## C8. I broadcast two numbers that were later refuted — into two live lane briefs
+
+`27 trap slots / 20 distinct functions` and `??_7ReaderWriter@ slots 31-33 close
+6 slots across 2 rows` went into lane CSTREAM's and lane IOBASE's tasking as
+**scoping multipliers**. Both are wrong: **24 / 17**, and **3 slots in ONE row**.
+
+Lane TRAPS refuted its own sealed claim from the bytes. Both refuted items had
+been flagged in its sealed text as *"confirm from the bytes"* — **the lane marked
+its own uncertainty and I passed the items on without the marking.** That is the
+failure worth recording: the doubt was written down, and it did not survive
+transmission through me.
+
+Retractions were sent to both lanes as soon as the tranche arrived, with
+instructions to rebuild any distinct-body list derived from the bad figures.
+
+**The shape survives, the magnitude did not.** "Scope by FUNCTION, not by slot"
+holds at 24-across-17 exactly as it did at 27-across-20, and `?GetSource@Stream@IO@@`
+as the sole trap in four rows is **not** among the retracted claims.
+
+### The underlying defect, which outlives this wave
+
+`kMintVtables` sizes every row by `adjacent-export:<next symbol>`. That
+construction **cannot see an UNEXPORTED table lying between two exported ones.**
+One does — `0x1801554a8`, 11 DATA xrefs stamping it as a second vptr.
+
+`??_7ReaderWriter@IO@@6B@` is **31 slots**, not 36; its last five were minted
+**twice**; the screen's `546 slots` double-counts 5 and prints
+`slot-count suspects: 0` — **a false green on that very row.** Every lane was told
+to quote greens with denominators; this is a green that was *wrong*, which no
+denominator would have caught.
+
+**Fix, named and not done in this wave:** size rows by **next STAMPED address**,
+not next export. It would have caught ReaderWriter automatically. TRAPS warns the
+non-IO rows may carry the same defect and should be run through this test **before
+Wave 20 scopes them.**
+
+## C9. My "sharp falsifiable prediction" could not discriminate — MINT was right to say so
+
+I told lane MINT its anchor hypothesis made a "sharp, falsifiable prediction":
+that every non-zero name hit would be an `adjacent-export:` provenance label.
+
+MINT confirmed it — all 8, read individually — and then pointed out the flaw:
+**staleness entails the same prediction.** A stale file can only carry those names
+as another row's proof label. **A prediction that BOTH hypotheses make cannot
+select between them**, so confirming it was worth nothing as evidence for mine.
+
+I called it sharp; it was merely *true*. That is a different property, and the
+distinction is the whole of `reference_two_checks_one_hidden_premise.md` — two
+checks sharing a hidden premise are one check. Here it was one check dressed as a
+test between two rivals.
+
+What actually settled it was a fact I never asked for: **the generator, run
+UNCHANGED, mints all five** — which a generator that structurally discarded
+anchors could not do. One decisive observation beat my carefully-framed
+prediction, and it was already sitting in the lane's commit `3620e69` **before I
+sent the hypothesis.**
+
+## C10. The promotion criterion — the most reusable thing phase 0 produced
+
+From lane MINT, and it generalises well beyond IO:
+
+**Every stamp of these vtables is an in-DLL RIP-relative `LEA`, not a door**
+(`1800a8270 LEA RAX,[0x1801554d0] -> MOV [RDI],RAX`). Therefore:
+
+> **A vtable row is promotable exactly insofar as WE OWN THE FUNCTION THAT STAMPS IT.**
+
+This is the operational form of
+`reference_a_ported_row_can_be_permanently_unpromotable.md` — we intercept only at
+**doors**, and an in-DLL rel32 call or a RIP-relative LEA stamp is not a door.
+
+It was validated the right way: it **predicts the attendance data row by row**, by
+two instruments gathered by entirely different means. The ATTENDED rows are
+precisely those whose *ported stamper* runs on the driven route.
+
+**Three consequences already acted on:**
+1. `post=0` on a row with **no ported stamper** is **not route-limited** — no path
+   on this tree could open that door. That is a *diagnosis*, and it retires a
+   route-hunt that would have found nothing.
+2. **`??0BinaryFileStream` is the ONLY stamper of `??_7BinaryFileStream@`**,
+   making it the **cleanest** promotion of the five rather than the hardest — and
+   it is *already* one of lane FILE's code rows and a screenshot dependency. Two
+   independent reasons it is on the critical path.
+3. `??_7FileStream@` has **nine** stampers including `Engine::Run`, so TRAP=0
+   there would still leave most stamps on retail's side. **A clean trap count is
+   not a promotion.**
+
+**Lane IOBASE has been told to apply this to `??_7BinaryWriter@` BEFORE hunting a
+route.** 26/26 TRAP=0 says the table is safe to stamp and says nothing about who
+stamps it. If no stamper is ours, "blocked on attendance" is the wrong diagnosis
+and no `BANISHED_*` variable fixes it.
