@@ -201,3 +201,71 @@ the bugs):
    out* — same class as the incident where a piped acquire made a timeout read as
    a grant, and it has the same consequence: a lane deploys over another mid-run
    believing it holds the lock.
+
+## ADVISOR ADJUDICATION — the OBJLIFE/OBJDATA vtable deadlock
+
+Lane OBJLIFE raised a cross-lane merge hazard neither lane could see from its own
+side. It is real, it is **latent rather than live**, and the two lanes' exit
+conditions are **mutually triggering** — which is the part that needed an
+advisor and not a lane.
+
+### The hazard
+
+`internal.cpp`'s ported `??0Internal`/`??1Internal` stamp the vptr via
+`VtblInternal()` / `VtblBase()`, which reach `??_7Internal@Object@@6B@` /
+`??_7Base@Object@@6B@` through **`ResolveExport`, which consults the port
+registry FIRST**. So if those minted rows are ever promoted *while the TABLE
+tier is armed and the DLL is present*, objects built by our ctor carry the
+minted table and objects built by the DLL's in-DLL `rel32` callers carry
+`0x180154720` — **two vtables for one class**, PLAN.md §4.3 risk 3. It is the
+exact condition `internal.cpp`'s own header bullet denies ("There is ONE vtable,
+and it is THEIRS"): that bullet is *conditionally* true and its condition is
+invisible at the site where it is asserted.
+
+### Verified state — the hazard is NOT live on this wave's merge
+
+Checked by the advisor on `wave11/objdata`, not taken from either lane's report:
+
+```
+git grep 'RegisterRuntimeExport("??_7(Internal|Base|External|CompiledExternal)@Object'  ->  ZERO
+```
+
+All five occurrences of those symbols in `reg_mint_promoted.cpp` are **comments**
+(an `RT_UNPROMOTABLE` tag and a readiness note). OBJDATA promoted two
+`?_typeInfo@` rows and no `??_7@Object` row at all. **Trigger requires both
+halves and only one exists, so arming the TABLE tier is safe on this merge and
+stays safe.**
+
+### The deadlock, and the amendment that breaks it
+
+The two lanes' conditions form a cycle:
+
+* **OBJDATA** left `??_7Internal@Object@@6B@` READY with
+  `EXPIRY: the moment [ObjTI] ATTENDANCE prints entries>0`.
+* The **only** thing that makes that counter move is our ported `??0Internal`
+  running — which requires **OBJLIFE's TABLE tier armed**.
+* And arming + promoting is precisely the hazard.
+
+So a future lane reading OBJDATA's expiry literally, after OBJLIFE arms, walks
+straight into the split vptr. **OBJDATA's expiry is INCOMPLETE: it names a
+necessary condition and reads as a sufficient one.** Same family as this
+project's standing lesson that a prescription gets read as a completion.
+
+**AMENDED, and binding on any future lane:**
+
+> `??_7Internal@Object@@6B@` and `??_7Base@Object@@6B@` may be promoted only when
+> BOTH hold: (a) `[ObjTI] ATTENDANCE … entries>0`, **and** (b) `VtblInternal()` /
+> `VtblBase()` pin to the RAW DLL symbol while the DLL is present, falling back
+> to the registry only when it is absent. Attendance alone is NOT sufficient.
+
+### Decisions
+
+1. **The hazard does not justify holding back rows 1-2.** OBJLIFE's instinct was
+   right and its reasoning was right; the premise ("the neighbouring lane lands a
+   promotion") is false on the actual merge. The arming decision stands or falls
+   on its own run evidence, which is what the lock window is for.
+2. **The raw-pinning fix is NOT to be made mid-wave.** OBJLIFE was correct to
+   flag rather than do it: it decides what cutover sees. It is the wave's top
+   follow-up, and it needs its own verification against the cutover boot gate.
+3. Condition (b) above is recorded here because `reg_mint_promoted.cpp`'s tag
+   lives on OBJDATA's branch and OBJDATA has stopped work.
