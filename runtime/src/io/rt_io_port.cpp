@@ -210,5 +210,11 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_SERIALFAM"))   n += RtIoSerializeFamilyRegister();
     if (RtWaveEnabled("BANISHED_RT_FILESTREAM"))  n += RtIoFileStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_CREATEFILE"))  n += RtIoFileSystemCreateFileRegister();
+
+    // Lane FILE's screenshot-path door screen. Armed OUTSIDE its two switches
+    // on purpose: the control for this lane is a run with both of them at 0,
+    // and a screen that the control switches off cannot be that control.
+    extern void RtIoFileCutoverProbeArm();
+    RtIoFileCutoverProbeArm();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

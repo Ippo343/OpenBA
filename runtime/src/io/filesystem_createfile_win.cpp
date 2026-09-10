@@ -189,6 +189,24 @@ typedef void (*SubtreeFreeFn)(void* tree, void* node);
 }  // namespace
 
 // ============================================================================
+// ATTENDANCE COUNTERS - see the note in file_stream.cpp. `calls=` is the half
+// the static door screen cannot answer, and a registered-but-never-entered body
+// looks identical to a working one without it.
+//
+// `createOk` / `createFail` and `closeRenamed` are EFFECTIVENESS counters, not
+// call counts: they say which BRANCH ran. `calls=N worked=0` is the shape that
+// means the body ran every time and always took the arm nothing covers
+// (`reference_calls_zero_can_mean_always_took_the_uncovered_branch.md`).
+// ============================================================================
+struct FsCreateCounters {
+    uint64_t createPath, createPathDirs;
+    uint64_t closeFile, platClose, closeRenamed;
+    uint64_t createFileW, platCreate, createOk, createFail;
+    uint64_t fsDtor;
+};
+FsCreateCounters g_fcc{};
+
+// ============================================================================
 // IO::FileSystem::CreatePath(Filename const&) const       retail 0x1800ae430
 // ============================================================================
 // Walk the path's characters; at every `\` or `/`, take the prefix up to (but
@@ -214,6 +232,7 @@ typedef void (*SubtreeFreeFn)(void* tree, void* node);
 // ============================================================================
 bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
     RT_DIFF_BEGIN("IO::FileSystem::CreatePath");
+    ++g_fcc.createPath;
     (void)self;   // detail 4 — retail reads no field of `this`
 
     const String* src = reinterpret_cast<const String*>(path);
@@ -244,7 +263,7 @@ bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
         w.data = nullptr;
         WideFromString(&w, &dir);
         ::CreateDirectoryW(w.data, nullptr);                // 1800ae54a — result DISCARDED
-        ++created;
+        ++created; ++g_fcc.createPathDirs;
         WideRelease(&w);                                    // 1800ae551..5bd
         RtString_ReleaseInline(&dir);                       // 1800ae5bd..629
     }
@@ -288,6 +307,7 @@ bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
 bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
                                         const Filename* path) {
     RT_DIFF_BEGIN("IO::FileSystem::PlatformCreateFile");
+    ++g_fcc.platCreate;
     (void)self;
 
     wchar_t tempDir[MAX_PATH];
@@ -308,6 +328,7 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
 
     const uint64_t probe = static_cast<uint64_t>(info->winHandle) - 1;
     if (probe > static_cast<uint64_t>(-3)) {                 // 1800adee9..f0
+        ++g_fcc.createFail;
         RT_DIFF_WORK(false);
         return false;                                        // 1800adffa
     }
@@ -348,6 +369,7 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
     RtSystem_Filename_Assign(
         reinterpret_cast<Filename*>(&info->_name1), path);   // 1800adfea/f1
 
+    ++g_fcc.createOk;
     RT_DIFF_WORK(true);
     return true;                                             // 1800adff6
 }
@@ -372,6 +394,7 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
 FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
                                       const Filename* path) {
     RT_DIFF_BEGIN("IO::FileSystem::CreateFileW");
+    ++g_fcc.createFileW;
 
     ret->handle      = -1;          // 1800acc6c
     ret->size        = 0;           // 1800acc72 (qword +0x08, covers cursor)
@@ -414,6 +437,7 @@ FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
 // ============================================================================
 void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
     RT_DIFF_BEGIN("IO::FileSystem::PlatformCloseFile");
+    ++g_fcc.platClose;
     (void)self;
 
     if (info->winHandle == -1) return;                       // 1800ae03d/41
@@ -423,6 +447,8 @@ void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
 
     if (!info->_name0.data) return;                          // 1800ae059/5f
     if (RtSystem::StringLength(info->_name0.data) == 0) return;  // 1800ae065/69
+
+    ++g_fcc.closeRenamed;
 
     // 3. delete the destination
     {
@@ -481,6 +507,7 @@ void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
 // ============================================================================
 void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
     RT_DIFF_BEGIN("IO::FileSystem::CloseFile");
+    ++g_fcc.closeFile;
 
     RtIo_FileSystem_PlatformCloseFile(self, info);   // 1800accde
 
@@ -526,6 +553,7 @@ void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
 // ============================================================================
 void RtIo_FileSystem_Dtor(FileSystem* self) {
     RT_DIFF_BEGIN("IO::FileSystem::~FileSystem");
+    ++g_fcc.fsDtor;
 
     // Step 1. The tree object is (root, count) at +0x40/+0x48; retail passes
     // its ADDRESS as `this` and the root as the node.
@@ -552,6 +580,16 @@ void RtIo_FileSystem_Dtor(FileSystem* self) {
     RtString_ReleaseInline(&self->dataDirectory);     // 1800ac74a  +0x08
     RtString_ReleaseInline(&self->sourceDirectory);   // 1800ac775  +0x00
     RT_DIFF_WORK(true);
+}
+
+// Read by file_stream_cutover_probe.cpp, which prints attendance beside the
+// door verdicts so a reader cannot see one without the other.
+void RtIoFileSystemCreateFileCounters(unsigned long long* out) {
+    out[0]=g_fcc.createPath;   out[1]=g_fcc.createPathDirs;
+    out[2]=g_fcc.createFileW;  out[3]=g_fcc.platCreate;
+    out[4]=g_fcc.createOk;     out[5]=g_fcc.createFail;
+    out[6]=g_fcc.closeFile;    out[7]=g_fcc.platClose;
+    out[8]=g_fcc.closeRenamed; out[9]=g_fcc.fsDtor;
 }
 
 }  // namespace RtIO

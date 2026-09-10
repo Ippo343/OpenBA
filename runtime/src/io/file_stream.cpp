@@ -237,6 +237,31 @@ typedef void (*SetObjectFn)(TextFileStream*, const String*, const String*, int32
 }  // namespace
 
 // ============================================================================
+// ATTENDANCE COUNTERS — the `calls=` half of the verification
+// ============================================================================
+// The door screen in file_stream_cutover_probe.cpp is STATIC: it proves the
+// registry answers each door, not that anything walked through one. A body that
+// is registered and never entered is indistinguishable from a working one on
+// that screen alone, and `calls=0` has four causes that invert the conclusion
+// (WAVE19_IO.md §6.5).
+//
+// These are unconditional and cheap (one increment). They are printed by the
+// cutover probe so the attendance figures sit beside the door verdicts rather
+// than in a different part of the log.
+//
+// RT_DIFF's counters would have answered the same question and were tried
+// FIRST: BANISHED_RT_DIFF=1 makes every diffed port also run the original, and
+// the autostart route did not reach its exit inside a 900s timeout, so the
+// atexit report never printed at all. Recorded rather than dropped — "the
+// instrument existed and was too slow for this route" is a different fact from
+// "there was no instrument".
+// ============================================================================
+struct FileStreamCounters {
+    uint64_t binCtor, binDtor, fsDtor, textCtor, create, createTrue, fileInfoDtor;
+};
+FileStreamCounters g_fsc{};
+
+// ============================================================================
 // ~FileInfo                                              retail 0x18000c180
 // ============================================================================
 // UNEXPORTED, 25 instructions, and it is nothing but the String release idiom
@@ -252,6 +277,7 @@ typedef void (*SetObjectFn)(TextFileStream*, const String*, const String*, int32
 // ============================================================================
 extern "C" void RtIo_FileInfo_Dtor(FileInfo* self) {
     RT_DIFF_BEGIN("IO::FileSystem::FileInfo::~FileInfo");
+    ++g_fsc.fileInfoDtor;
     RtString_ReleaseInline(&self->_name1);   // 18000c19f  +0x28 FIRST
     RtString_ReleaseInline(&self->_name0);   // 18000c1ce  +0x20
 }
@@ -274,6 +300,7 @@ extern "C" void RtIo_FileInfo_Dtor(FileInfo* self) {
 // ============================================================================
 extern "C" void RtIo_FileStream_Dtor(FileStream* self) {
     RT_DIFF_BEGIN("IO::FileStream::~FileStream");
+    ++g_fsc.fsDtor;
 
     self->base.vptr = RT_DATA_SLOT(const void*, "??_7FileStream@IO@@6B@");
 
@@ -301,6 +328,7 @@ extern "C" void RtIo_FileStream_Dtor(FileStream* self) {
 // ============================================================================
 extern "C" void RtIo_BinaryFileStream_Dtor(BinaryFileStream* self) {
     RT_DIFF_BEGIN("IO::BinaryFileStream::~BinaryFileStream");
+    ++g_fsc.binDtor;
     RtIo_FileStream_Dtor(&self->base);                // 180023c96 JMP
 }
 
@@ -312,6 +340,7 @@ extern "C" void RtIo_BinaryFileStream_Dtor(BinaryFileStream* self) {
 // ============================================================================
 extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self) {
     RT_DIFF_BEGIN("IO::BinaryFileStream::BinaryFileStream");
+    ++g_fsc.binCtor;
 
     FileStreamCtorInline(&self->base);                                   // 1800a8219..70
     self->base.base.vptr =
@@ -350,6 +379,7 @@ extern "C" TextFileStream* RtIo_TextFileStream_Ctor(TextFileStream* self,
                                                     const String* name,
                                                     int32_t version) {
     RT_DIFF_BEGIN("IO::TextFileStream::TextFileStream");
+    ++g_fsc.textCtor;
 
     FileStreamCtorInline(&self->base);                                   // 1800ba36f..c6
     self->base.base.vptr =
@@ -400,6 +430,7 @@ extern "C" TextFileStream* RtIo_TextFileStream_Ctor(TextFileStream* self,
 // ============================================================================
 extern "C" bool RtIo_FileStream_Create(FileStream* self, const Filename* path) {
     RT_DIFF_BEGIN("IO::FileStream::Create");
+    ++g_fsc.create;
 
     RtIo_FileSystem_CreatePath(Fs(), path);                     // 1800aa919
 
@@ -430,8 +461,17 @@ extern "C" bool RtIo_FileStream_Create(FileStream* self, const Filename* path) {
     RtString_ReleaseInline(&tmp._name0);                        // 1800aa9b9  +0x20
 
     const bool ok = (self->file.handle != -1);                  // 1800aa9f0
+    if (ok) ++g_fsc.createTrue;
     RT_DIFF_WORK(ok);
     return ok;
+}
+
+// Read by file_stream_cutover_probe.cpp, so the attendance figures print beside
+// the door verdicts and a reader cannot see one without the other.
+void RtIoFileStreamCounters(unsigned long long* out) {
+    out[0]=g_fsc.binCtor;  out[1]=g_fsc.binDtor;   out[2]=g_fsc.fsDtor;
+    out[3]=g_fsc.textCtor; out[4]=g_fsc.create;    out[5]=g_fsc.createTrue;
+    out[6]=g_fsc.fileInfoDtor;
 }
 
 }  // namespace RtIO
