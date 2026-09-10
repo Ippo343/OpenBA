@@ -83,7 +83,7 @@ void* RtPortLookupAddr(uintptr_t ghidra_addr);
 namespace RtIO {
 void RtIoFileStreamCounters(unsigned long long* out);            // 7 slots
 void RtIoFileSystemCreateFileCounters(unsigned long long* out);  // 10 slots
-void RtIoFileStreamSlotCounters(unsigned long long* out);        // 13 slots
+void RtIoFileStreamSlotCounters(unsigned long long* out);        // 14 slots
 }
 
 namespace {
@@ -260,18 +260,18 @@ void Run() {
     // through a vtable rather than called through an export door, so their
     // attendance says something the door board structurally cannot: whether a
     // table WE stamped was actually dispatched.
-    unsigned long long sl[13] = {0};
+    unsigned long long sl[14] = {0};
     RtIO::RtIoFileStreamSlotCounters(sl);
     printf("[FileCutover] slots       GetSource=%llu (nonNull=%llu)  Write=%llu (full=%llu)  "
            "Read=%llu  SetCurrentPos=%llu (win32=%llu)  GetCurrentPos=%llu  GetSize=%llu  "
-           "Open=%llu (true=%llu)  deletingDtor=%llu  arrayArmAbort=%llu\n",
+           "Open=%llu (true=%llu)  deletingDtor=%llu  arrayArmAbort=%llu  copyCtor=%llu\n",
            sl[0], sl[1], sl[2], sl[3], sl[4], sl[5], sl[6], sl[7], sl[8],
-           sl[9], sl[10], sl[11], sl[12]);
+           sl[9], sl[10], sl[11], sl[12], sl[13]);
 
     unsigned long long entered = 0;
     for (int i = 0; i < 7; ++i)  entered += fs[i];
     for (int i = 0; i < 10; ++i) entered += fc[i];
-    for (int i = 0; i < 13; ++i) entered += sl[i];
+    for (int i = 0; i < 14; ++i) entered += sl[i];
     if (entered == 0)
         printf("[FileCutover] *** NO BODY IN THIS LANE WAS ENTERED IN THIS RUN. "
                "The board above is a static registry query and says nothing about "

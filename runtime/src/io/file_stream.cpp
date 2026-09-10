@@ -93,11 +93,25 @@
 //
 //   ??_7FileStream@ and ??_7BinaryFileStream@ are minted, and this file's
 //   post-report tranche clears BOTH to TRAP=0. Promotion is a separate question
-//   and the two rows differ on it: our ??0BinaryFileStream is the SOLE stamper
-//   of ??_7BinaryFileStream@, so that row becomes promotable, while
-//   ??_7FileStream@ has NINE stampers including Engine::Run and TRAP=0 there is
-//   NOT a promotion
-//   (reference_a_ported_row_can_be_permanently_unpromotable.md).
+//   and the two rows differ on it.
+//
+//   THE STAMPER COUNTS BELOW ARE MEASURED HERE, and both differ from the ones
+//   this lane was briefed with. `get_xrefs_to` is cheap and neither figure had
+//   been run:
+//
+//     ??_7BinaryFileStream@ (0x1801554d0) — briefed as ONE stamper, measured
+//       **TWO**: 0x1800a8270 (the default ctor) and 0x180023cfe (the COPY
+//       ctor, 0x180023ca0). Both are ported by this lane, so the row IS fully
+//       owned — but only because the copy ctor was added. On the briefed claim
+//       it would have been declared owned with a stamper still in the DLL.
+//
+//     ??_7FileStream@ (0x180154960) — briefed as NINE stampers, measured about
+//       **SEVENTEEN**, of which five are already ours (SaveText, ~FileStream,
+//       ??0TextFileStream, ??0BinaryFileStream, SaveImageToFile). The
+//       CONCLUSION the brief drew still holds — Engine::Run (two sites) and
+//       three unexported bodies are not ours, so TRAP=0 here is NOT a
+//       promotion (reference_a_ported_row_can_be_permanently_unpromotable.md)
+//       — but the number it rested on does not.
 //
 //   ??_7TextFileStream@ is minted at 20 SLOTS AND IS REALLY 10 -- an unexported
 //   table sits at 0x1801559d0, exactly ten slots in, and the generator's
@@ -146,6 +160,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // registered. Declared here rather than pulled in from a header because that
 // lane publishes none and this lane does not edit another lane's files.
 extern "C" RtIO::FileInfo* RtIo_FileInfo_Assign(RtIO::FileInfo*, const RtIO::FileInfo*);
+extern "C" RtIO::FileInfo* RtIo_FileInfo_CopyCtor(RtIO::FileInfo*, const RtIO::FileInfo*);
 
 namespace RtIO {
 
@@ -644,6 +659,7 @@ struct SlotCounters {
     uint64_t read, getPos, getSize;
     uint64_t open, openTrue;
     uint64_t dtorScalar, dtorArrayAbort;
+    uint64_t copyCtor;
 };
 SlotCounters g_fss{};
 
@@ -853,6 +869,71 @@ extern "C" void* RtIo_BinaryFileStream_DeletingDtor(void* self, unsigned flags) 
         "IO::BinaryFileStream");
 }
 
+// ============================================================================
+// IO::BinaryFileStream::BinaryFileStream(BinaryFileStream const&)
+//                                                         retail 0x180023ca0
+// ============================================================================
+// THE COPY CONSTRUCTOR, AND IT IS HERE FOR ONE REASON: IT IS THE SECOND STAMPER
+// OF `??_7BinaryFileStream@IO@@6B@`.
+//
+// The Wave 19 brief stated that `??0BinaryFileStream@IO@@QEAA@XZ` is that
+// table's ONLY stamper, and that porting it would therefore make the row
+// promotable. **That is not what the binary says.** `get_xrefs_to 0x1801554d0`
+// returns exactly two code sites: 0x1800a8270 (the default ctor, ported above)
+// and **0x180023cfe, inside this function**. Acting on the brief's claim would
+// have declared the row fully owned while a second stamper sat in the DLL
+// putting retail's table into every copied object.
+//
+// The same query also refutes the brief's "nine distinct stampers" for
+// `??_7FileStream@` — there are about seventeen, five of which are already
+// ours. The conclusion the brief drew from that number still holds (Engine::Run
+// and three unexported bodies are not ours, so TRAP=0 there is not a
+// promotion); the number itself does not. `get_xrefs_to` is cheap and neither
+// figure had been run.
+//
+// ---------------------------------------------------------------------------
+// IT COPIES THE ENCODING AS A RAW POINTER, AND THAT IS NOT A BUG TO FIX
+// ---------------------------------------------------------------------------
+// 0x180023cc6 is `MOV RAX,[RDX+0x10] ; MOV [RCX+0x10],RAX` — a shallow copy of
+// `Stream::encoding`. Both objects then point at ONE heap Encoding, and both
+// destructors free it: `~FileStream` ends in `if (encoding) <guarded free>`.
+// **A copy of a BinaryFileStream is a double-free waiting for the second
+// destructor**, which is a plausible reason nothing in either binary calls
+// this.
+//
+// Reproduced exactly. Deep-copying the Encoding here would be a divergence that
+// changes what retail does on a path retail may rely on never taking, and this
+// project's rule is that an unguarded hazard in a faithful body is retail's
+// statement, not ours to correct (CLAUDE.md, "Don't 'fix' a faithful crash").
+// The hazard is recorded here instead.
+//
+// The three vtable stores are Stream -> FileStream -> BinaryFileStream, in that
+// order, exactly as in the default constructor: MSVC emits one per sub-object
+// as each base finishes.
+// ============================================================================
+extern "C" BinaryFileStream* RtIo_BinaryFileStream_CopyCtor(
+        BinaryFileStream* self, const BinaryFileStream* src) {
+    RT_DIFF_BEGIN("IO::BinaryFileStream::BinaryFileStream(const&)");
+    ++g_fss.copyCtor;
+
+    self->base.base.vptr = RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");   // 180023cb6
+    self->base.base.direction = src->base.base.direction;                     // 180023cc0
+    self->base.base.encoding  = src->base.base.encoding;                      // 180023cc6 SHALLOW
+    self->base.base.vptr = RT_DATA_SLOT(const void*, "??_7FileStream@IO@@6B@"); // 180023cce
+
+    self->base.filename = nullptr;                                            // 180023cd8
+    if (src->base.filename) {                                                 // 180023ce4
+        self->base.filename = src->base.filename;                             // 180023ce9
+        ++StringRefCount(self->base.filename);                                // 180023ced
+    }
+
+    RtIo_FileInfo_CopyCtor(&self->base.file, &src->base.file);                // 180023cf8
+
+    self->base.base.vptr =
+        RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");            // 180023cfe
+    return self;                                                              // 180023d08
+}
+
 // Published to the cutover probe alongside the lifecycle counters.
 void RtIoFileStreamSlotCounters(unsigned long long* out) {
     out[0]=g_fss.getSource; out[1]=g_fss.getSourceNonNull;
@@ -861,7 +942,7 @@ void RtIoFileStreamSlotCounters(unsigned long long* out) {
     out[6]=g_fsSeekPlatform;out[7]=g_fss.getPos;
     out[8]=g_fss.getSize;   out[9]=g_fss.open;
     out[10]=g_fss.openTrue; out[11]=g_fss.dtorScalar;
-    out[12]=g_fss.dtorArrayAbort;
+    out[12]=g_fss.dtorArrayAbort; out[13]=g_fss.copyCtor;
 }
 
 }  // namespace RtIO
@@ -896,6 +977,13 @@ int RtIoFileStreamSlotsRegister() {
     // Both UNEXPORTED — the address is their only door.
     RegisterRuntimeAddr(0x18000c090, (void*)&RtIo_FileStream_DeletingDtor);
     RegisterRuntimeAddr(0x180023d80, (void*)&RtIo_BinaryFileStream_DeletingDtor);
+
+    // The SECOND stamper of ??_7BinaryFileStream@. Without it that row keeps a
+    // door onto retail's table and is NOT promotable, whatever its trap count
+    // says -- see the body's header note.
+    RegisterRuntimeExport("??0BinaryFileStream@IO@@QEAA@AEBV01@@Z",
+                          (void*)&RtIo_BinaryFileStream_CopyCtor); ++n;
+    RegisterRuntimeAddr(0x180023ca0, (void*)&RtIo_BinaryFileStream_CopyCtor);
 
     extern int RtIoFileStreamWinRegister();
     n += RtIoFileStreamWinRegister();
