@@ -84,6 +84,39 @@ ceiling is well under 100% and its "72.7%" is an understatement of how finished
 it is. **Do not scope this wave against Video's percentage; scope it against the
 boot.**
 
+### MEASURED (Wave 17 lane CEIL, merged) — and it refutes the hypothesis above
+
+The "live hypothesis" in the paragraph above was the integrator's, and it was
+**right for Video and wrong for IO and Graphics**:
+
+| namespace | ported | **ceiling** | unpromotable | **real work left** |
+|---|---|---|---|---|
+| Video | 72.7% | **88.0%** | 18 (12 NO-OP + 6 HARMFUL) | **23** |
+| IO | 69.2% | **97.5%** | 3 (all HARMFUL) | **34** |
+| Graphics | 66.7% | **96.0%** | 4 (all HARMFUL) | **29** |
+
+IO's and Graphics' data rows are **BLOCKED on unported vtable slots — ordinary
+port work, not a ceiling.** So the raw-gap ranking that put Video first
+(41 > 37 > 33) is **backwards** by real remaining work: **IO 34 > Graphics 29 >
+Video 23.**
+
+**This does not change Wave 18**, because Wave 18 is scoped against the *boot*,
+not the census — and that separation is exactly why it survives the correction.
+Video is now the SMALLEST census target of the three and still the ONLY cutover
+target. But it does mean: **do not follow Wave 18 with "more Video" on census
+grounds.** IO and Graphics are the larger real gaps.
+
+The 12 Video NO-OPs are the `??_7*Data@Video@@6B@` companion bases — our ported
+ctor stamps them through a registry-first door and `dx11/`'s factory overwrites
+the stamp on the very next statement (the dtor's stamp is followed only by
+`MemFree`). That is the `??_7DialogController@UI@@6B@` shape, third instance.
+
+**The lesson the lane paid for, worth carrying into any ceiling work: BLOCKED is
+not a ceiling.** It predicted 40 NO-OPs and measured 12, because it reasoned
+about whether promotion would *matter* without first asking whether it was
+*possible* — **22 of 26 vtable rows carry abort traps and are simply unfinished.**
+BLOCKED absorbed almost exactly that error (5 predicted, 35 actual).
+
 ## The residue is a LOWER BOUND, and it has already changed
 
 Attempt 24 recorded 17 distinct residue symbols and said so explicitly: a cutover
