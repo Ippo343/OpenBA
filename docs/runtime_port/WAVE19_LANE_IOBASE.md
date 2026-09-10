@@ -486,3 +486,227 @@ from it** — `called` sits in both halves of the ceiling fraction
   `??_7FileStream@` (8/0/8) and `??_7TextFileStream@` (20/0/20) are untouched.
 * **Anyone reading the readiness screen**: `??_7Stream@IO@@6B@` now prints READY
   and must stay UNPROMOTABLE(NO-OP). §2.1.
+
+---
+
+# 11. POST-REPORT TRANCHE — re-tasked by the integrator after §0–§10 were sealed
+
+Added **after** this lane reported at `7c88c2b`. **Nothing above §11 is altered**
+(§6.16: sealing forbids altering, not annotating). No verdict in §0–§10 moves;
+§11.2 **corrects one enumeration inside §5.3** and says so explicitly, and
+§11.1 **corrects the correction I was sent.**
+
+Scripts: `docs/runtime_port/wave19_iobase/heads2.py`, `heads3.py`, `owner.py`.
+Each takes hex VAs and reads the shipped DLL directly. Static only — no run.
+
+## 11.1 `??_7ReaderWriter@IO@@6B@` is **26 slots**, not 36 and not 31
+
+I was told: *"`??_7ReaderWriter@IO@@6B@` is 31 slots / 0 ported / TRAP=1 / 30
+purecall — NOT 36 / 2 / 4 / 30"*, because `adjacent-export` sizing cannot see the
+unexported table at `0x1801554a8`. **The diagnosis is exactly right and the
+number is still wrong. There are TWO hidden tables in that gap, not one.**
+
+Re-derived by the rule I was given — extent runs to the next **STAMPED** address,
+not the next export. `heads3.py`: decode every `lea reg,[rip+d]` in `.text`
+(3,071 of them), keep those landing in `.rdata`, **8-byte aligned**, whose own
+qword points into `.text` → **168 heads**.
+
+```
+0x1801553b0  ??_7ReaderWriter@IO@@6B@     -> next stamped head 0x180155480  = 26 slots
+0x180155480  UNEXPORTED, UNMINTED         -> next stamped head 0x1801554a8  =  5 slots
+0x1801554a8  UNEXPORTED (the Encoding)    -> next stamped head 0x1801554d0  =  5 slots
+0x1801554d0  ??_7BinaryFileStream@IO@@6B@                                   =  8 slots
+```
+
+`0x180155480` is a genuine table head, not a coincidence. Its stamper is a
+three-instruction leaf constructor with **no `.pdata` entry**, which is why a
+`.pdata`-grouped screen cannot see it either:
+
+```
+180023e10:  48 8d 05 69 16 13 00   lea 0x131669(%rip),%rax   # 0x180155480
+180023e17:  48 89 01               mov %rax,(%rcx)
+180023e1a:  48 8b c1               mov %rcx,%rax
+180023e1d:  c3                     ret
+```
+
+All five of its qwords are `0x18007ec28` (`_purecall`). It is **minted nowhere** —
+not as a named row, not as one of the three `(unexported @…)` rows.
+
+**Consequences, corrected:**
+
+* `standalone/rt_data_mint_tables.inc:1320` claims **36** slots. Slots **26–30**
+  are the five all-purecall qwords of `0x180155480`; slots **31–35** are the five
+  qwords of `0x1801554a8`, which is *also* minted as its own 5-slot row at
+  `:1580`. So the row is over-long by **10**, and five of those ten are minted
+  **twice**.
+* `??_7ReaderWriter@IO@@6B@`'s true state is **26 slots / 0 ported / TRAP=1 /
+  25 purecall.** Same shape the correction gave, different numbers.
+* The readiness screen's `598 slots` over-counts by **10**, not 5, and its
+  `slot-count suspects: 0` is a false green by that much. **Every `598 of 598`
+  denominator quoted in §3–§4 above inherits this** and should be read as
+  598 reported / 588 distinct. It does not change `0 MISMATCH`: the ten extra
+  slots are compared against the DLL bytes that really are at those addresses.
+* **Phase 0a is strengthened again, not weakened.** ReaderWriter is purecall in
+  **25 of 26** rather than 30 of 36. Both abstract-base rows stay NO-OP and I did
+  not touch them.
+
+### A methodological note, because my first version of this screen was wrong
+
+`heads2.py` (kept, not deleted) scans every 4-byte window in `.text` as a signed
+`disp32` — decoder-independent, a strict superset. It produced **4,287** `.rdata`
+targets and, unfiltered, "sized" `??_7BinaryReader@` at **0 slots** off an
+unaligned coincidence at `0x1801552e7`. Adding *aligned* + *holds a `.text`
+pointer* cut it to 190 and it still mis-sized `??_7BinaryWriter@` at **21**. Only
+the decoder route (`heads3.py`, 168 heads) agrees with the bytes throughout.
+
+**The decoder-independent route is the better instrument for "is this address
+referenced at all" and the WORSE one for "where does this table end"** — the
+second question needs the reference to be a real instruction operand, and a byte
+window cannot tell an operand from a coincidence.
+
+## 11.2 The residual-interior risk on my three 26-slot rows is CLEARED
+
+I was warned that `BinaryReader`, `BinaryWriter` and `Visitor` keep residual
+interior risk from `adjacent-export` sizing — *"ends confirmed, interiors
+unswept"*. The next-stamped-head rule sweeps interiors **by construction**: if a
+hidden table lay inside a row, it would *be* a head inside that range and the
+walk would stop there.
+
+| row | mint says | next stamped head | derived | verdict |
+|---|---|---|---|---|
+| `??_7BinaryWriter@IO@@6B@` `0x180155210` | 26 | `0x1801552e0` | **26** | ✔ |
+| `??_7BinaryReader@IO@@6B@` `0x1801552e0` | 26 | `0x1801553b0` | **26** | ✔ |
+| `??_7Visitor@IO@@6B@` `0x1801558b0` | 26 | `0x180155980` | **26** | ✔ |
+| `??_7MemoryStream@IO@@6B@` `0x1801555b0` | 8 | `0x1801555f0` | **8** | ✔ |
+| `??_7VisitorStream@IO@@6B@` `0x180155a20` | 7 | ASCII `"External"` | **7** | ✔ |
+| `??_7Stream@IO@@6B@` `0x1801549a0` | 7 | null qword | **7** | ✔ |
+| `??_7PackageFile@IO@@6B@` `0x180155700` | 9 | null qword | **9** | ✔ |
+| `??_7ReaderWriter@IO@@6B@` `0x1801553b0` | 36 | `0x180155480` | **26** | ✘ §11.1 |
+
+**Eight rows checked, one wrong, and it is not one of mine.** All five promoted
+rows are correctly sized, so §2's promotions do not rest on the broken sizing.
+
+The specific worry I was handed — *"`MemoryStream` stamps the hidden table at
+`0x1801554a8`, so its own 8-slot figure came from the same sizing"* — is
+answered: MemoryStream **does** stamp it (`0x1801204e7`, inside
+`?SaveAllSettings@UserInterface@UI@@`, which loads both tables into registers in
+adjacent instructions), and its own extent is **still 8**, because
+`0x1801555f0` (`??_7CompressedFileStream@`) is a stamped head and nothing lies
+between. **Stamping a hidden table and being mis-sized by one are independent
+facts; the first does not imply the second.**
+
+## 11.3 `??_7BinaryWriter@` by the STAMPER CRITERION — and a correction to §5.3
+
+The criterion I was given: *a row is promotable exactly insofar as we own the
+function that stamps it.* Applied from the bytes — every `lea` targeting
+`0x180155210`, each mapped to its containing `.pdata` function (`owner.py`):
+
+| stamp site | containing function | ours? |
+|---|---|---|
+| `0x180023af2` | `??0BinaryWriter@IO@@QEAA@AEBV01@@Z` (**copy ctor**) | **NO — not ported** |
+| `0x1800a899b` | `??1BinaryWriter@IO@@UEAA@XZ` | **YES** — `binary_writer.cpp:187`, both doors |
+| `0x1800a8a69` | `??0BinaryWriter@IO@@QEAA@AEAVSerializer@1@H@Z` | **YES** — `encoding.cpp`, both doors |
+
+**§5.3 IS WRONG AND THIS SUPERSEDES IT.** §5.3 listed three stampers and claimed
+*"all three bodies that install this table are ours"*. Both halves were off:
+
+1. **I listed a function that does not stamp.** The slot-0 deleting destructor
+   `0x180023b50` appears nowhere in the LEA list — it *calls* `??1BinaryWriter`,
+   which does the stamping. Counting it inflated my "ours" column.
+2. **I missed a function that does.** `??0BinaryWriter@IO@@QEAA@AEBV01@@Z`
+   (`0x180023ac0`) stamps the table and **is not ported**.
+
+I never enumerated the stamp sites from the binary: I listed our tree's ported
+bodies and asserted they were the stampers. That is the same error class as the
+§1.2 census claim — **asserting an enumeration instead of measuring one** — and
+it is the second time in this lane.
+
+**The verdict of §5 survives; the arithmetic behind it does not.** It is
+**2 of 3**, not 3 of 3, and that is still decisively not the
+permanently-unpromotable shape: the two stampers on the construct/destruct path
+an `IO::Encoding` codec actually uses are both ours.
+
+### 11.3.1 The route exists, is named, and run5's zero was a harness fault
+
+Chasing the stamper rather than the route answered the route question anyway.
+`?SaveSettings@DialogInstance@UI@@` (`0x180114240`) stamps `??_7MemoryStream@`
+inline at `0x1801143ba` — it builds a MemoryStream, and per ENC-2 it then reaches
+a BinaryWriter through `IO::Encoding::CreateWriter`, whose callee is
+`??0BinaryWriter@…@AEAVSerializer@1@H@Z` (`0x1800a8a30`) — **ours, registered
+under both doors.** So that route **does** open the door.
+
+§4's reading of run5 therefore stands and is now *explained* rather than merely
+observed: `post=0` there is **a harness fault, not a property of the row.** The
+`dlgsettings` driver reported *"no entity with a UIComponent in this world"* and
+never reached `SaveSettings`. **`??_7BinaryWriter@` is attendable, the driver is
+identified, and what is missing is a world containing a `UIComponent`-bearing
+entity — not a port and not an interception point.**
+
+Three sibling stampers found the same way, offered to whoever wants them:
+`?SaveMetaData@SaveLoad@Save@@` (`0x1800c18ef`), `?LoadMetaData@` (`0x1800c1dec`)
+and `?OnOpened@DialogInstance@UI@@` (`0x18011502c`) all stamp `??_7MemoryStream@`
+**inline** — none is a door, and they are why that row reads ATTENDED while
+BinaryWriter does not.
+
+## 11.4 `?GetSource@Stream@IO@@` — an arbitration that arrived after the code
+
+**Reported, not resolved unilaterally. I have not touched the code.**
+
+The arbitration awarding `?GetSource@Stream@IO@@` to lane CSTREAM reached me
+after it was already written, committed at `000b727`, registered under both
+doors, and verified — it is body #1 of §1, and the C1 control in §3 moved eight
+rows through it. Two promoted rows (`??_7MemoryStream@`, `??_7VisitorStream@`)
+reach READY only because of it.
+
+I did not delete it, and the reason is not that I disagree with the arbitration:
+
+* Deleting it now returns both rows to **BLOCKED-while-PROMOTED**, which is
+  precisely the hazard §3 names — publishing a trap-carrying table. Backing out
+  the two promotions as well is possible and is one commit, but it regresses
+  verified state to prepare for a body that does not yet exist.
+* The instruction — *"do not write a local copy or placeholder"* — is about
+  avoiding a **shadowed duplicate registration**. That hazard is created by
+  CSTREAM's landing, not by mine standing alone, so it is resolvable at merge
+  either way round, and cheaper in the direction that does not throw work away.
+
+Two resolutions, both one commit, integrator's call:
+
+* **(a)** CSTREAM deletes its copy and consumes mine — already landed, controlled,
+  with an A/B behind it.
+* **(b)** I delete mine and back out the `??_7MemoryStream@` and
+  `??_7VisitorStream@` promotions until CSTREAM's body lands.
+
+I recommend **(a)** on the narrow ground that it is the only one of the two with
+no interval during which a promoted row carries traps. **Whichever is chosen,
+exactly one registration of `0x18000c6a0` must survive the merge** — a second is
+a SHADOWED slot where the later binding wins and the checked line is dead code,
+and `tools/dispatch_slot_map.py --check` will **not** catch it, because this is a
+runtime-port registration and not a dispatch slot.
+
+One detail for the owner, since our two readings differed: the integrator's
+disassembly is right that the two `(%rsp)` writes are compiler SEH state and not
+object state. My body reproduces the qword at `[rdx]` and the RDX return and
+nothing else — `runtime/src/io/iobase_vtables.cpp`, `RtIo_Stream_GetSource`.
+
+## 11.5 What §11 does NOT claim
+
+* **It does not re-run the game.** Every figure in §11 is static, from the
+  shipped bytes. No readiness or attendance number above is re-measured, and the
+  `598 of 598` denominators in §3–§4 are annotated in §11.1 rather than restated.
+* **It does not fix `tools/rt_mint_gen.py`.** ReaderWriter's row is still 36 slots
+  in the tree and `0x180155480` is still minted nowhere. I am reporting the defect
+  and its exact size, not repairing the generator — that is phase 0b's file, and
+  lane MINT added `--check` to it.
+* **It does not claim `0x180155480` is dead.** It has a real constructor at
+  `0x180023e10`. I did not identify the class, did not enumerate its callers, and
+  make **no** NO-OP claim about it. It is an unminted, all-purecall table and it
+  is someone's row.
+* **It does not claim the stamper criterion is complete for my other rows.** I
+  enumerated stamp sites for five tables but scored ownership exhaustively only
+  for `??_7BinaryWriter@`.
+* **It does not test the `SaveSettings` route.** §11.3.1 identifies the driver
+  from the bytes and explains run5's zero; **nobody has yet run a world in which
+  it fires**, so `??_7BinaryWriter@`'s door remains observed at `post=0` on every
+  route actually driven.
+* **It does not resolve §11.4.** That is the integrator's call, and the code is
+  untouched pending it.
