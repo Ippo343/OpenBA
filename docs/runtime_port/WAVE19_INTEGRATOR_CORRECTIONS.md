@@ -1025,3 +1025,156 @@ of a common shape rather than two coincidences.
   force-updated to `wave10/base` after every merge; PERSIST's tree is simply based
   on the older `20aa588`. The decision may stand on its stated independent ground,
   but not on the branch-topology one.
+
+## C34. THE WAVE'S SUCCESS CRITERION IS PARTLY BLIND TO THE WORK IT COMMISSIONED
+
+Found by lane CSTREAM, measured not argued, **confirmed structurally by the
+integrator, with a precedent the lane did not have.** This is the most important
+result of Wave 19 and it changes how every DATA lane must be read.
+
+### What was measured
+
+Lane CSTREAM registered **12 exports** by name AND address. `ported` moved **+3**.
+
+Nine of the twelve are **vtable SLOT bodies**. Nothing in our tree calls them by
+name or by address — they are dispatched **through a minted vtable at run time**,
+and `called` does not model a minted slot as a call. They land in "Ports with no
+caller in our tree" and contribute **exactly zero** to
+`ported >= called - unpromotable`. The three that moved it are precisely the three
+the plan lists as this lane's CODE rows.
+
+### The structural confirmation
+
+`runtime_census.py` builds its row set by **iterating `called_exports` and
+`called_addrs`**. A registration with no corresponding `called_*` entry **never
+becomes a row at all.** So `ported` is exactly `|called INTERSECT registered|`, and
+**a body that runs by any mechanism other than a resolve door is invisible to it.**
+
+This is not a census bug. It counts what it says it counts, and
+`rt_data_mint_tables.inc` gets its own reported line. It is a statement about what
+the identity can SEE:
+
+> **A lane that closes every trap slot in every vtable it owns can move the
+> identity by almost nothing. A lane that ports three ordinary functions moves it
+> by three.**
+
+Scored on the identity alone, lane CSTREAM would read as having done a fifth of
+its work.
+
+### The precedent — the project already hit this ONCE and patched one instance
+
+Twelve lines below the code that would need to change, in a comment in the same
+function:
+
+> Wave 10's `UI::TabElement::UpdateContainers` was *"ported, registered under both
+> doors, detoured, verified against the DLL, exercised in a live run... and printed
+> as `detour 0` with the function itself sitting in the 'ports with no caller'
+> list, because our tree calls it as a direct C++ call rather than through a
+> resolve door."*
+
+The fix folded **detour targets** in as called + ported + detoured, justified as:
+*"This is not crediting unrun code: the detour is what makes it run."*
+
+**Minted vtable slots are the SECOND instance of the identical root cause, and the
+identical argument applies: the minted vtable is what makes them run.** That makes
+CSTREAM's finding a **precedented, concrete census fix** rather than only a
+caveat.
+
+**NOT changed mid-wave, deliberately.** Every lane's numbers were measured against
+the current definition, and moving the instrument under the measurements would
+invalidate all of them. **Wave 20 item.**
+
+### The refinement, from checking IOBASE's numbers against CSTREAM's
+
+The `??_7X@` vtable **SYMBOL** registration **does** count — our source references
+the symbol, so it is in `called`. IOBASE's `??_7BinaryReader@`, `??_7BinaryWriter@`,
+`??_7MemoryStream@` and `??_7VisitorStream@` all left the unported set and moved
+`ported`. **What is invisible is the SLOT BODIES that make a row promotable.**
+
+So the precise statement is sharper than "blind to DATA work":
+
+> **The identity sees a vtable row being CLAIMED, and is blind to the work that
+> makes the claim TRUE.**
+
+### ADOPTED for the wave close
+
+**Report DATA lanes as "bodies closed / trap slots thereby cleared" and CODE lanes
+on the identity. Do NOT blend them into one number or one percentage.** The
+instrument that can see DATA work is `BANISHED_RT_MINT_SHADOW`'s readiness screen,
+which is why phase 0c's table is the right denominator for IOBASE, FILE and
+CSTREAM, and the identity is the right one for PERSIST (7 CODE rows, no DATA).
+
+This also retroactively explains C13/C17: `?GetSource@` moving the identity by zero
+was not a quirk of one caller-less symbol, but **one visible instance of a general
+blindness.**
+
+## C35. `?PlatformDestruct@RenderBuffer@Video@@` — TWO DISTINCT BODIES under one export name
+
+Found by lane PERSIST, chasing a cross-file duplicate that
+`tools/dup_runtime_export.py` surfaced. **Materially worse than a
+double-registration:**
+
+* `runtime/src/video/buffers.cpp:1308` — `void Video_RenderBuffer_PlatformDestruct(RtVideo::RenderBuffer*)` (Wave 9 lane **GFX2**)
+* `runtime/src/video/context_lifecycle.cpp:296` — `extern "C" void Video_RenderBuffer_PlatformDestruct(RenderBuffer*)` (Wave 9 lane **VID2**)
+
+**Different linkage, so both link.** Both register the name *and* the address
+`0x1800f4400`. `RtVideoContextLifecycleRegister()` (`rt_video_port.cpp:126`) runs
+**after** `RtVideoBuffersRegister()` (line 66), so VID2 wins both doors
+consistently — **no split brain, but lane GFX2's body is fully SHADOWED DEAD CODE
+that the census counts as PORTED and which can never run.**
+
+**This is the inverse of `reference_half_registered_port_reads_as_absent.md`:**
+there, a real port read as absent; here, **a dead body reads as a live port.**
+
+Two Wave 9 lanes independently believed they owned that function and neither knew.
+**Not IO's, not this wave's to fix — a Wave 20 item for whoever owns Video**, with
+the finding credited to lane PERSIST.
+
+The other 7 duplicates are same-file pairs (`internal.cpp` ×4, `dialog_create.cpp`,
+and the `allocator.cpp`/`rt_alloc_swap.cpp` pair, which is the known atomic-swap
+arrangement and probably deliberate). PERSIST's *"I have not checked whether those
+are conditionals"* is the right thing to say rather than guess — a same-file pair
+under an `#if` or an `if` is legitimate and a checker cannot tell.
+
+## C36. Two lanes independently rediscovered the same two scanner defects
+
+Lane PERSIST could not see `tools/dup_runtime_export.py` (its fetch predated the
+push by two commits; the tool is in `be3dcb7`, all refs now at `45851bb`). Rather
+than claim to have run it **or** claim it could not be checked, it **wrote the
+equivalent scan** — the correct third option.
+
+**Its first attempt failed in exactly the two ways the tool was written to avoid:**
+
+1. a **line-based grep missed 3 of its own 7 registrations**, because the literal
+   sits on a continuation line (`reference_half_registered_port_reads_as_absent.md`);
+2. it reported `<lit>` and `<literal>` as registered names, **for want of a comment
+   stripper** (`reference_uncommented_checker_manufactures_work.md`).
+
+Two independent implementations hitting the same two defects is evidence these are
+**structural properties of the task**, not authorship accidents — worth knowing for
+anyone writing the third such scanner.
+
+Its corrected version carries a control reading **7 of 7 on its own rows**, which
+is what makes its "none of my seven is duplicated" trustworthy: *a scan reading 0
+for its own rows would be one it was trusting to audit registrations it could not
+see.*
+
+## C37. The `?Write` positive control was UB — and the crash is a finding about RETAIL
+
+Lane CSTREAM's obvious positive control for `?Write` — clamping the chunk against
+`w->end` instead of `w->start+0x8000`, **the realistic transcription defect,
+because `?Read` one file over genuinely does clamp against `end`** — was written,
+run, and **FAULTED**: ACCESS_VIOLATION, page-aligned WRITE inside `ucrtbase`
+`memcpy`, symbolized to `WriteBuggy+0xc2`. It took the whole probe down before one
+denominator printed.
+
+**Correctly disqualified under §6.4** (a control must produce a comparable
+divergence, not UB) — and **correctly KEPT in the record**, for a reason worth
+stating in the port's own comment:
+
+> **Retail's clamp against window CAPACITY rather than `end` is load-bearing for
+> MEMORY SAFETY, not merely for correctness.**
+
+The realistic transcription defect produces an exploitable overrun. The next person
+to "tidy" that clamp will make the same mistake, and the crash is the evidence that
+stops them.
