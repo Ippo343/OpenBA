@@ -473,11 +473,6 @@ RT_MINT_TRAP(46,27)
 RT_MINT_TRAP(46,28)
 RT_MINT_TRAP(46,29)
 RT_MINT_TRAP(46,30)
-RT_MINT_TRAP(46,31)
-RT_MINT_TRAP(46,32)
-RT_MINT_TRAP(46,33)
-RT_MINT_TRAP(46,34)
-RT_MINT_TRAP(46,35)
 RT_MINT_TRAP(47,0)
 RT_MINT_TRAP(47,1)
 RT_MINT_TRAP(47,2)
@@ -522,16 +517,6 @@ RT_MINT_TRAP(52,6)
 RT_MINT_TRAP(52,7)
 RT_MINT_TRAP(52,8)
 RT_MINT_TRAP(52,9)
-RT_MINT_TRAP(52,10)
-RT_MINT_TRAP(52,11)
-RT_MINT_TRAP(52,12)
-RT_MINT_TRAP(52,13)
-RT_MINT_TRAP(52,14)
-RT_MINT_TRAP(52,15)
-RT_MINT_TRAP(52,16)
-RT_MINT_TRAP(52,17)
-RT_MINT_TRAP(52,18)
-RT_MINT_TRAP(52,19)
 RT_MINT_TRAP(53,0)
 RT_MINT_TRAP(53,1)
 RT_MINT_TRAP(54,0)
@@ -1317,7 +1302,7 @@ static const RtMintVSlot kVSlots45[] = {
 static void* kVTable45[3];
 static const RtMintTrapFn kVTraps45[] = { &RtMintTrapStub_45_0, &RtMintTrapStub_45_1, &RtMintTrapStub_45_2 };
 
-// ??_7ReaderWriter@IO@@6B@  DLL 0x1801553b0  36 slots  [adjacent-export:??_7BinaryFileStream@IO@@6B@]
+// ??_7ReaderWriter@IO@@6B@  DLL 0x1801553b0  31 slots  [ctor-stamped-neighbour: ??_7ReaderWriter@IO@@6B@. adjacent-export bounds it at the next export ??_7BinaryFileStream@ (0x1801554d0) = 36 slots, but the 5-slot UNEXPORTED IO::Encoding table at 0x1801554a8 sits in between -- the same table EXTRA_VTABLES_BY_ADDR already mints by address, so the generator was emitting those 5 bodies TWICE. Bytes: 0x1801554a0 is the last _purecall, 0x1801554a8 is 0x1800a81e0 (the Encoding slot 0). Stamped by ??0BinaryFileStream at 0x1800a82bb, LEA RAX,[0x1801554a8] -> MOV [RSI],RAX into the 8-byte allocation from 0x1800a82a5.]
 static const RtMintVSlot kVSlots46[] = {
     { nullptr, 0x180023bd0ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
@@ -1350,14 +1335,9 @@ static const RtMintVSlot kVSlots46[] = {
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x1800a81e0ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800a81d0ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800a81c0ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800a8120ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800a8080ull, RT_MINT_UNNAMED },
 };
-static void* kVTable46[36];
-static const RtMintTrapFn kVTraps46[] = { &RtMintTrapStub_46_0, &RtMintTrapStub_46_1, &RtMintTrapStub_46_2, &RtMintTrapStub_46_3, &RtMintTrapStub_46_4, &RtMintTrapStub_46_5, &RtMintTrapStub_46_6, &RtMintTrapStub_46_7, &RtMintTrapStub_46_8, &RtMintTrapStub_46_9, &RtMintTrapStub_46_10, &RtMintTrapStub_46_11, &RtMintTrapStub_46_12, &RtMintTrapStub_46_13, &RtMintTrapStub_46_14, &RtMintTrapStub_46_15, &RtMintTrapStub_46_16, &RtMintTrapStub_46_17, &RtMintTrapStub_46_18, &RtMintTrapStub_46_19, &RtMintTrapStub_46_20, &RtMintTrapStub_46_21, &RtMintTrapStub_46_22, &RtMintTrapStub_46_23, &RtMintTrapStub_46_24, &RtMintTrapStub_46_25, &RtMintTrapStub_46_26, &RtMintTrapStub_46_27, &RtMintTrapStub_46_28, &RtMintTrapStub_46_29, &RtMintTrapStub_46_30, &RtMintTrapStub_46_31, &RtMintTrapStub_46_32, &RtMintTrapStub_46_33, &RtMintTrapStub_46_34, &RtMintTrapStub_46_35 };
+static void* kVTable46[31];
+static const RtMintTrapFn kVTraps46[] = { &RtMintTrapStub_46_0, &RtMintTrapStub_46_1, &RtMintTrapStub_46_2, &RtMintTrapStub_46_3, &RtMintTrapStub_46_4, &RtMintTrapStub_46_5, &RtMintTrapStub_46_6, &RtMintTrapStub_46_7, &RtMintTrapStub_46_8, &RtMintTrapStub_46_9, &RtMintTrapStub_46_10, &RtMintTrapStub_46_11, &RtMintTrapStub_46_12, &RtMintTrapStub_46_13, &RtMintTrapStub_46_14, &RtMintTrapStub_46_15, &RtMintTrapStub_46_16, &RtMintTrapStub_46_17, &RtMintTrapStub_46_18, &RtMintTrapStub_46_19, &RtMintTrapStub_46_20, &RtMintTrapStub_46_21, &RtMintTrapStub_46_22, &RtMintTrapStub_46_23, &RtMintTrapStub_46_24, &RtMintTrapStub_46_25, &RtMintTrapStub_46_26, &RtMintTrapStub_46_27, &RtMintTrapStub_46_28, &RtMintTrapStub_46_29, &RtMintTrapStub_46_30 };
 
 // ??_7RenderBufferData@Video@@6B@  DLL 0x180158a28  4 slots  [adjacent-export:??_7VideoProgramData@Video@@6B@]
 static const RtMintVSlot kVSlots47[] = {
@@ -1423,7 +1403,7 @@ static const RtMintVSlot kVSlots51[] = {
 static void* kVTable51[11];
 static const RtMintTrapFn kVTraps51[] = { &RtMintTrapStub_51_0, &RtMintTrapStub_51_1, &RtMintTrapStub_51_2, &RtMintTrapStub_51_3, &RtMintTrapStub_51_4, &RtMintTrapStub_51_5, &RtMintTrapStub_51_6, &RtMintTrapStub_51_7, &RtMintTrapStub_51_8, &RtMintTrapStub_51_9, &RtMintTrapStub_51_10 };
 
-// ??_7TextFileStream@IO@@6B@  DLL 0x180155980  20 slots  [adjacent-export:??_7VisitorStream@IO@@6B@]
+// ??_7TextFileStream@IO@@6B@  DLL 0x180155980  10 slots  [ctor-stamped-neighbour: ??_7TextFileStream@IO@@6B@. adjacent-export bounds it at ??_7VisitorStream@ (0x180155a20) = 20 slots; the real table is 10, and 0x1801559d0 starts a separate UNEXPORTED IO::Encoding table. Proof: ??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z at 0x1800ba431 is LEA RAX,[0x1801559d0] -> MOV [RSI],RAX into a fresh allocation it then installs at Stream::encoding (+0x10); Ghidra's xrefs to 0x1801559d0 are that ctor and only that ctor. Slot 9 is ?Create@TextFileStream@IO@@ (0x1800ba940) and slot 10 would be 0x1800b9ab0, the head of a different descending method group. runtime/types/io/FileStream.h has said 10 since Wave 11.]
 static const RtMintVSlot kVSlots52[] = {
     { nullptr, 0x18002ba90ull, RT_MINT_UNNAMED },
     { "?GetSource@FileStream@IO@@UEBA?AVString@System@@XZ", 0x1800aab50ull, RT_MINT_NAMED },
@@ -1435,19 +1415,9 @@ static const RtMintVSlot kVSlots52[] = {
     { "?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z", 0x1800aac70ull, RT_MINT_NAMED },
     { "?Open@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@@Z", 0x1800ba640ull, RT_MINT_NAMED },
     { "?Create@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@1@Z", 0x1800ba940ull, RT_MINT_NAMED },
-    { nullptr, 0x1800b9ab0ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800b9aa0ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800b9a90ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800b9a80ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800b9a70ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800bafe0ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800bafd0ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800bafc0ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800baf00ull, RT_MINT_UNNAMED },
-    { nullptr, 0x1800bae40ull, RT_MINT_UNNAMED },
 };
-static void* kVTable52[20];
-static const RtMintTrapFn kVTraps52[] = { &RtMintTrapStub_52_0, &RtMintTrapStub_52_1, &RtMintTrapStub_52_2, &RtMintTrapStub_52_3, &RtMintTrapStub_52_4, &RtMintTrapStub_52_5, &RtMintTrapStub_52_6, &RtMintTrapStub_52_7, &RtMintTrapStub_52_8, &RtMintTrapStub_52_9, &RtMintTrapStub_52_10, &RtMintTrapStub_52_11, &RtMintTrapStub_52_12, &RtMintTrapStub_52_13, &RtMintTrapStub_52_14, &RtMintTrapStub_52_15, &RtMintTrapStub_52_16, &RtMintTrapStub_52_17, &RtMintTrapStub_52_18, &RtMintTrapStub_52_19 };
+static void* kVTable52[10];
+static const RtMintTrapFn kVTraps52[] = { &RtMintTrapStub_52_0, &RtMintTrapStub_52_1, &RtMintTrapStub_52_2, &RtMintTrapStub_52_3, &RtMintTrapStub_52_4, &RtMintTrapStub_52_5, &RtMintTrapStub_52_6, &RtMintTrapStub_52_7, &RtMintTrapStub_52_8, &RtMintTrapStub_52_9 };
 
 // ??_7Thread@System@@6B@  DLL 0x180155f20  2 slots  [tail-not-a-pointer]
 static const RtMintVSlot kVSlots53[] = {
@@ -1623,13 +1593,13 @@ static RtMintVtable kMintVtables[] = {
     { "??_7ParticleInstance@Graphics@@6B@", 0x1801550e0ull, 10, kVSlots43, kVTable43, kVTraps43, "adjacent-export:??_7Particle@Graphics@@6B@" },
     { "??_7ParticleSystemInstance@Graphics@@6B@", 0x180155040ull, 10, kVSlots44, kVTable44, kVTraps44, "adjacent-export:??_7ParticleSystem@Graphics@@6B@" },
     { "??_7PixelProgramData@Video@@6B@", 0x180158a78ull, 3, kVSlots45, kVTable45, kVTraps45, "adjacent-export:??_7VertexProgramData@Video@@6B@" },
-    { "??_7ReaderWriter@IO@@6B@", 0x1801553b0ull, 36, kVSlots46, kVTable46, kVTraps46, "adjacent-export:??_7BinaryFileStream@IO@@6B@" },
+    { "??_7ReaderWriter@IO@@6B@", 0x1801553b0ull, 31, kVSlots46, kVTable46, kVTraps46, "ctor-stamped-neighbour: ??_7ReaderWriter@IO@@6B@. adjacent-export bounds it at the next export ??_7BinaryFileStream@ (0x1801554d0) = 36 slots, but the 5-slot UNEXPORTED IO::Encoding table at 0x1801554a8 sits in between -- the same table EXTRA_VTABLES_BY_ADDR already mints by address, so the generator was emitting those 5 bodies TWICE. Bytes: 0x1801554a0 is the last _purecall, 0x1801554a8 is 0x1800a81e0 (the Encoding slot 0). Stamped by ??0BinaryFileStream at 0x1800a82bb, LEA RAX,[0x1801554a8] -> MOV [RSI],RAX into the 8-byte allocation from 0x1800a82a5." },
     { "??_7RenderBufferData@Video@@6B@", 0x180158a28ull, 4, kVSlots47, kVTable47, kVTraps47, "adjacent-export:??_7VideoProgramData@Video@@6B@" },
     { "??_7RenderStateData@Video@@6B@", 0x180158a60ull, 3, kVSlots48, kVTable48, kVTraps48, "adjacent-export:??_7PixelProgramData@Video@@6B@" },
     { "??_7SpriteSheet@UI@@6B@", 0x180154590ull, 9, kVSlots49, kVTable49, kVTraps49, "tail-not-a-pointer" },
     { "??_7Stream@IO@@6B@", 0x1801549a0ull, 7, kVSlots50, kVTable50, kVTraps50, "tail-not-a-pointer" },
     { "??_7SunLight@Graphics@@6B@", 0x180158e10ull, 11, kVSlots51, kVTable51, kVTraps51, "tail-not-a-pointer" },
-    { "??_7TextFileStream@IO@@6B@", 0x180155980ull, 20, kVSlots52, kVTable52, kVTraps52, "adjacent-export:??_7VisitorStream@IO@@6B@" },
+    { "??_7TextFileStream@IO@@6B@", 0x180155980ull, 10, kVSlots52, kVTable52, kVTraps52, "ctor-stamped-neighbour: ??_7TextFileStream@IO@@6B@. adjacent-export bounds it at ??_7VisitorStream@ (0x180155a20) = 20 slots; the real table is 10, and 0x1801559d0 starts a separate UNEXPORTED IO::Encoding table. Proof: ??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z at 0x1800ba431 is LEA RAX,[0x1801559d0] -> MOV [RSI],RAX into a fresh allocation it then installs at Stream::encoding (+0x10); Ghidra's xrefs to 0x1801559d0 are that ctor and only that ctor. Slot 9 is ?Create@TextFileStream@IO@@ (0x1800ba940) and slot 10 would be 0x1800b9ab0, the head of a different descending method group. runtime/types/io/FileStream.h has said 10 since Wave 11." },
     { "??_7Thread@System@@6B@", 0x180155f20ull, 2, kVSlots53, kVTable53, kVTraps53, "tail-not-a-pointer" },
     { "??_7ToolTipDialog@UI@@6B@", 0x180157880ull, 10, kVSlots54, kVTable54, kVTraps54, "adjacent-export:??_7DialogLoaderLoopT@Engine@@6B@" },
     { "??_7UpdateLoop@Engine@@6B@", 0x180155ba0ull, 12, kVSlots55, kVTable55, kVTraps55, "tail-not-a-pointer" },
