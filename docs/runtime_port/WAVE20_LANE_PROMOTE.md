@@ -349,3 +349,67 @@ is how a screen quietly stops being able to fail.
    direction for the `retail` column, which is therefore also an upper bound.
 7. **I did not measure whether promotion changes anything the player can see.**
    Both halves boot, play and quit 0; I ran no screenshot or save comparison.
+
+---
+
+## 8. POST-REPORT TRANCHE — premise P2 answered: CHECKED, and it is EMPTY
+
+*Added after this lane reported, at the integrator's request. Sealing forbids
+altering, not annotating; nothing above is changed.*
+
+Lane EXTENT self-reported **premise P2** as NOT CHECKED and the integrator
+carried it as the wave's residue: a table stamped by an address **computed** from
+a LEA'd base —
+
+```
+lea  rax,[rip+A] ; add rax,0x50 ; mov [rcx],rax
+```
+
+— would be attributed to `A` by both the extent audit's writer channel and by my
+own stamper census, so an INTERIOR table could hide inside a row and neither
+channel could see it. The integrator asked me to say if my enumeration met the
+shape. **It is cheaper to look for it directly than to wait to trip over it**, so
+I wrote `tools/mint_p2_arith_scan.py` and looked.
+
+**Result, with its denominators and its control:**
+
+```
+instructions parsed .................. 417835
+rip-relative LEA / movabs TRACKED .... 3335
+window ............................... 12 instructions (the writer channel uses 3)
+POSITIVE CONTROL synthetic lea;add;store .. REPORTED
+HITS ................................. 1
+  0x18009a094  lea -> 0x1801f8f10 (%r9)   in FUN_180099e90
+      0x18009a09e  sub $0x60,%r9
+      0x18009a0b5  add $0x54,%r9
+      0x18009a0c1  mov %r9,-0x59(%rbp)    <- the store
+```
+
+**That single hit is not a vtable stamp, on two independent grounds:**
+`0x1801f8f10` is in **`.data`**, not `.rdata` — it is not a vtable and appears
+nowhere in `rt_data_mint_tables.inc` — and **the store goes to a stack slot
+(`-0x59(%rbp)`), not to an object's `+0x00`**. It is a struct-array walk.
+
+> **P2 is upgraded from NOT CHECKED to CHECKED-AND-EMPTY: zero instances in the
+> image that could hide an interior table.** My own stamper enumeration
+> encountered the shape **zero** times, which is the specific question I was
+> asked.
+
+**Two bugs the control caught, in my own tool, before it reported anything.**
+Both were in the same place and are worth recording because they are the shape
+this project keeps paying for. First run: `dest_reg` matched `,%reg$` on the RAW
+objdump text, which for a rip-relative LEA ends in `# 0x180154960`, so **every
+rip-relative LEA silently dropped out** — `tracked 146` (the `movabs` forms only)
+and control `*NOT REPORTED*`. Second run: I stripped the comment globally at the
+top of the loop, which killed `LEA_RIP`'s ability to read the TARGET out of that
+same comment — **the mirror image of the first bug, caught by the same control**.
+`tracked` went 146 → 3335 once both were right. **A scan whose "0 hits" I could
+not distinguish from a dead parser would have retired this residue falsely**, and
+the only thing standing between those two runs and a confident wrong answer was
+a synthetic hit handed to the scan.
+
+**WHAT THIS DOES NOT CLAIM.** It does not cover arithmetic performed in a
+**different register** from the LEA'd one, arithmetic more than **12
+instructions** from the LEA, or a computation split across a basic-block
+boundary that a linear scan reorders. Those three are the residue of the
+residue, and they are smaller than what was open before.
