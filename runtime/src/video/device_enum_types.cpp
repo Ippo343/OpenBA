@@ -1,0 +1,639 @@
+// ============================================================================
+// runtime/src/video/device_enum_types.cpp — Wave 18 lane GFXIF
+//   Video::Device::Adapter and ::GraphicsInterface (the enumeration value
+//   types), plus the two Device methods that build and read them.
+// ============================================================================
+//
+// WHY THIS FILE EXISTS: these are the six functions the cutover boot gate has
+// died on since attempt 23. `VideoDX11`'s `DeviceData::EnumerateInterfaces`
+// resolves a 40-entry Runtime import table at dx11/src/devicedata.cpp:216-277;
+// nine of those entries are the symbols below, `GetImports()` sets `g_imOk =
+// false` if ANY entry is null, and the null-import path forwards to
+// `Orig<...>(1)` — which with the shipped DLL absent is a null pointer.
+// That is the VCALL-of-0. Filling these nine names is what makes GetImports
+// succeed. (docs/runtime_port/WAVE16_BOOTGATE.md)
+//
+// `Dx11ResolveRuntimeImport` (dx11/src/dx11_backend_access.cpp:9) tries
+// `ResolveExport(mangled)` FIRST, so registration BY NAME is the registration
+// that unblocks the wall. Registration by address is done too, for the 13 live
+// sites that reach Runtime symbols through `ResolveAddr(Module::Runtime, …)`.
+//
+//   | Export                                        | Retail      |
+//   |-----------------------------------------------|-------------|
+//   | ??0GraphicsInterface@Device@Video@@QEAA@XZ    | 0x18000cd90 |
+//   | ??0GraphicsInterface@…@AEBU012@@Z             | 0x18000ce10 |
+//   | ??1GraphicsInterface@Device@Video@@QEAA@XZ    | 0x18000cdc0 |
+//   | ??0Adapter@Device@Video@@QEAA@XZ              | 0x1800f7100 |
+//   | ??0Adapter@Device@Video@@QEAA@AEBU012@@Z      | 0x18000cc70 |
+//   | ??1Adapter@Device@Video@@QEAA@XZ              | 0x18000cc10 |
+//   | ?FindOrAddMode@Adapter@Device@Video@@…        | 0x1800f7020 |
+//   | ?GetDisplayMode@Device@Video@@QEBA?AV…@H@Z    | 0x18000d3e0 |
+//
+// (`?AdjustDisplay@Device@Video@@QEAAXXZ`, 0x1800f7e20, is the ninth. It is
+// pure Win32 and lives in the _win twin, device_adjustdisplay_win.cpp.)
+//
+// Every address above was read out of the shipped export directory of
+// C:\GOG Games\Banished\Runtime-x64.dll with tools/pe_exports.py BEFORE any
+// body was written, not copied from a document.
+//
+// THE ONE ADDRESS THE BRIEF FLAGGED. `??0Adapter@Device@Video@@QEAA@XZ` sits at
+// 0x1800f7100, far from the other five (0x18000cc10-0x18000ce10), which raised
+// the question of whether it is a thunk. It is NOT: the body at 0x1800f7100 is
+// fourteen instructions that zero +0x00..+0x27, store -1 as a QWORD across
+// +0x28..+0x2f and -1 as a DWORD at +0x30, and return `this`. Disassembled, not
+// decompiled. The split is just which translation unit MSVC emitted each into.
+//
+// A NEAR-MISS NOT TO REPEAT: dx11/src/devicedata.cpp lists a different address
+// beside each of these names (0x1800132d0 for the GraphicsInterface ctor, and
+// so on). That column is VideoDX11's OWN IAT SLOT, not the Runtime function —
+// every value in it falls inside 0x180013218-0x1800134c8. It is not a
+// discrepancy and must not be "fixed".
+//
+// WHAT THIS FILE DOES NOT DUPLICATE
+// ---------------------------------
+// Four of the six unexported Collection::Array instantiations these bodies call
+// were ALREADY ported by Wave 9 lane VID2 in device_startup.cpp and are
+// registered by address there:
+//     0x18000fcd0  Array<DisplayMode>::operator=   RtVideo_ArrayModeAssign
+//     0x180008b00  Array<bool>::operator=          RtVideo_ArrayBoolAssign
+//     0x180010830  Array<DisplayMode>::~Array      RtVideo_ArrayModeDtor
+//     0x180009560  Array<bool>::~Array             RtVideo_ArrayBoolDtor
+//     0x180010cf0  Array<DisplayMode> elem destroy RtVideo_ArrayModeElemDestroy
+//     0x18000fbf0  Array<RefreshRate>::operator=   RtVideo_ArrayRefreshAssign
+// They are declared here and CALLED, not rewritten. Porting a second copy would
+// be last-binding-wins on the address registry and would silently make one of
+// the two bodies dead code.
+//
+// Five instantiations were NOT already ported, and are added below because the
+// nine bodies cannot run without them once the DLL is gone:
+//     0x180010da0  Array<Adapter> per-element destroy
+//     0x180010900  Array<Adapter>::~Array
+//     0x18000fe10  Array<Adapter>::operator=
+//     0x180057340  Array<RefreshRate>::SetSize(n, fill)
+//     0x180057440  Array<DisplayMode>::SetSize(n, fill)
+// None of the five is exported (checked against the export directory, not
+// assumed from the mangling — `AEAA` means private, not unexported, and this
+// DLL does export its private members). They are template instantiations with
+// no name of their own, so they can only be registered by address.
+//
+// PORTABILITY: no <windows.h> here, per PLAN §4.1 decision 1.
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+
+#include "../../funcs/rt_port.h"
+#include "../../types/video/Device.h"
+
+using RtVideo::Adapter;
+using RtVideo::Device;
+using RtVideo::DisplayMode;
+using RtVideo::GraphicsInterface;
+using RtVideo::RefreshRate;
+
+// Declared locally rather than by including standalone/resolve.h (PLAN §4.1
+// decision 1). Byte-identical to device_startup.cpp:109.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
+// Already ported, in device_startup.cpp (Wave 9 lane VID2). Called, not copied.
+extern "C" void  RtVideo_ArrayModeElemDestroy(void* unused, void* data, int32_t count);
+extern "C" void  RtVideo_ArrayModeDtor(void* arr);
+extern "C" void  RtVideo_ArrayBoolDtor(void* arr);
+extern "C" void* RtVideo_ArrayModeAssign(void* dst, const void* src);
+extern "C" void* RtVideo_ArrayBoolAssign(void* dst, const void* src);
+extern "C" void* RtVideo_ArrayRefreshAssign(void* dst, const void* src);
+
+// The Win32 twin (device_adjustdisplay_win.cpp).
+extern "C" void RtVideo_Device_AdjustDisplay(void* self);
+
+namespace {
+
+// ---------------------------------------------------------------------------
+// The allocator boundary. Cache a hit, RETRY a miss — identical to
+// device_startup.cpp:129, and deliberately not shared with it: that file keeps
+// these in its own anonymous namespace for the same reason.
+// ---------------------------------------------------------------------------
+void* MemAlloc(uint64_t bytes, int align) {
+    using Fn = void* (*)(uint64_t, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
+    return fn ? fn(bytes, align) : nullptr;
+}
+void MemFree(void* p) {
+    using Fn = void (*)(void*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
+    if (fn) fn(p);
+}
+
+// The 16-byte Collection::Array header, {data, size, capacity}.
+struct ArrayHdr {
+    void*   data;      // +0x00
+    int32_t size;      // +0x08
+    int32_t capacity;  // +0x0c
+};
+static_assert(sizeof(ArrayHdr) == 0x10, "Collection::Array is 16 bytes");
+
+// ---------------------------------------------------------------------------
+// THE GROWTH RULE. Identical in shape to device_startup.cpp's GrowFor, but the
+// new size arrives as a PARAMETER here rather than from a source array, and the
+// old size is read by the caller before `size` is overwritten. Transcribed from
+// 0x180057370-0x1800573a1 (RefreshRate) and 0x18005747a-0x1800574af
+// (DisplayMode), which are the same instructions with a different stride.
+//
+//   if (n > capacity) {
+//       capacity = n;
+//       if (n == old + 1 && old != 0) capacity = n * 3;   // amortise
+//       data = MemAlloc(capacity * stride, align);
+//   }
+//
+// The `n == old + 1 && old != 0` guard is the whole rule: growth by exactly one
+// from a non-empty array triples, everything else takes the exact size. It
+// decides the heap layout, so it is reproduced rather than simplified.
+// ---------------------------------------------------------------------------
+void GrowTo(ArrayHdr* a, int32_t n, int32_t old, int stride, int align) {
+    if (n > a->capacity) {
+        a->capacity = n;
+        if (n == old + 1 && old != 0) a->capacity = n * 3;
+        a->data = MemAlloc(static_cast<uint64_t>(
+                      static_cast<int64_t>(a->capacity) * stride), align);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The inlined System::String release, in its TWO retail spellings.
+//
+// A System::String is one pointer to a refcounted char buffer: the refcount is
+// the DWORD at [-4] and the allocation base is [-8] (dx11/src/devicedata.cpp:518
+// says the same, from Video::Configuration::Startup's own inlined dtor).
+//
+// Both spellings leave the slot in a state that looks wrong and is retail's:
+// on the FREE path the slot is left pointing at the freed allocation base, and
+// only on the still-referenced path is it nulled. Reproduced, not tidied — the
+// object is being destroyed and no retail reader looks at the slot again.
+// ---------------------------------------------------------------------------
+
+// Spelling A — the standalone dtors, 0x18000cde0 (~GraphicsInterface) and
+// 0x18000cc3a (~Adapter). Byte-identical to each other.
+void StringRelease(void** slot) {
+    void* p = *slot;
+    if (!p) return;
+    int32_t* rc = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(p) - 4);
+    if (--*rc == 0) {
+        *slot = static_cast<uint8_t*>(*slot) - 8;
+        MemFree(*slot);
+    } else {
+        *slot = nullptr;
+    }
+}
+
+// Spelling B — the copy INSIDE the Array<Adapter> element-destroy loop,
+// 0x180010e85. Same code plus ONE extra test: at 0x180010e96 retail does
+//     ADD qword ptr [RSI],-0x8
+//     MOV RSI,qword ptr [RSI]
+//     JZ  <skip the free>
+// and the JZ reads the flags of the ADD, not of the MOV (a MOV sets no flags).
+// So the free is skipped when the decremented pointer is exactly zero. It is a
+// difference of one instruction from spelling A and it is invisible in
+// decompiled C, which is why this was read from the disassembly.
+void StringReleaseInLoop(void** slot) {
+    void* p = *slot;
+    if (!p) return;
+    int32_t* rc = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(p) - 4);
+    if (--*rc == 0) {
+        void* base = static_cast<uint8_t*>(*slot) - 8;
+        *slot = base;
+        if (base) MemFree(base);
+    } else {
+        *slot = nullptr;
+    }
+}
+
+// The inlined System::String share, from both copy ctors (0x18000ce29 and
+// 0x18000cc95): null the destination first, then adopt and bump the refcount.
+void StringShare(void** dst, void* const* src) {
+    *dst = nullptr;
+    void* p = *src;
+    if (p) {
+        *dst = p;
+        ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(p) - 4);
+    }
+}
+
+}  // namespace
+
+// ============================================================================
+// 0x180010da0 — the per-element destroy for Array<Adapter>.
+//
+// Retail walks with a cursor at element+0x10 (`LEA RBX,[RDX+0x10]`, stride
+// 0x38) and destroys each Adapter in the order: the msaa Array<bool> at +0x18,
+// then the Array<DisplayMode> at +0x08 (through the shared element-destroy at
+// 0x180010cf0), then the String at +0x00. Both array frees are open-coded
+// Enter/Free/Leave triples, which IS ?MemFree@MemoryAllocator@System@@ at
+// 0x1800c7ad0 (runtime/src/collection/array.cpp:191 established this).
+//
+// The first parameter is the array object; the callee spills it at [RSP+8] and
+// NEVER READS IT — same as the DisplayMode twin. Unnamed here for that reason.
+// ============================================================================
+extern "C" void RtVideo_ArrayAdapterElemDestroy(void* /*unused*/, void* data, int32_t count) {
+    if (count <= 0) return;
+    uint8_t* e = static_cast<uint8_t*>(data);
+    for (int64_t i = count; i != 0; --i) {
+        // +0x18 Array<bool> — data freed, then size AND capacity cleared by one
+        // qword store at +0x20 (0x180010e2b/0x180010e2f, relative to elem+0x10).
+        void* msaa = *reinterpret_cast<void**>(e + 0x18);
+        if (msaa) MemFree(msaa);
+        *reinterpret_cast<uint64_t*>(e + 0x18) = 0;
+        *reinterpret_cast<uint64_t*>(e + 0x20) = 0;
+
+        // +0x08 Array<DisplayMode> — per-element destroy, then the block.
+        RtVideo_ArrayModeElemDestroy(nullptr,
+                                     *reinterpret_cast<void**>(e + 0x08),
+                                     *reinterpret_cast<int32_t*>(e + 0x10));
+        void* modes = *reinterpret_cast<void**>(e + 0x08);
+        if (modes) MemFree(modes);
+        *reinterpret_cast<uint64_t*>(e + 0x08) = 0;
+        *reinterpret_cast<uint64_t*>(e + 0x10) = 0;
+
+        // +0x00 System::String — spelling B (see the note on that helper).
+        StringReleaseInLoop(reinterpret_cast<void**>(e));
+
+        e += 0x38;
+    }
+}
+
+// ============================================================================
+// 0x180010900 — Collection::Array<Adapter>::~Array
+// ============================================================================
+extern "C" void RtVideo_ArrayAdapterDtor(void* arr) {
+    ArrayHdr* a = static_cast<ArrayHdr*>(arr);
+    RtVideo_ArrayAdapterElemDestroy(arr, a->data, a->size);
+    if (a->data) MemFree(a->data);
+    a->data = nullptr;
+    *reinterpret_cast<uint64_t*>(&a->size) = 0;   // one store clears size AND capacity
+}
+
+// ============================================================================
+// 0x18000fe10 — Collection::Array<Adapter>::operator=   (stride 0x38, align 8)
+//
+// Destroy the destination, grow it, then COPY-CONSTRUCT each element with the
+// Adapter copy ctor (0x18000cc70) — not a memcpy. Retail calls the copy ctor
+// per element at 0x18000fe92.
+//
+// THE PER-ELEMENT NULL TEST IS ON THE COMPUTED ADDRESS, NOT ON `data`:
+//     MOV RCX,[RBX] / ADD RCX,RDX / JZ skip
+// the ZF comes from the ADD, so the element is skipped when `data + offset` is
+// zero — which with a null `data` (a failed MemAlloc) skips element 0 only and
+// copies through null for the rest. Retail's, and reproduced rather than
+// guarded: a guard here would change which of the two implementations faults
+// first, and the fault is the signal. Same shape as
+// device_startup.cpp:RtVideo_ArrayRefreshAssign.
+// ============================================================================
+extern "C" void* RtVideo_Adapter_CopyCtor(void* dst, const void* src);
+
+extern "C" void* RtVideo_ArrayAdapterAssign(void* dstv, const void* srcv) {
+    ArrayHdr* dst = static_cast<ArrayHdr*>(dstv);
+    const ArrayHdr* src = static_cast<const ArrayHdr*>(srcv);
+    if (dst == src) return dst;
+
+    RtVideo_ArrayAdapterDtor(dst);
+
+    const int32_t n   = src->size;
+    const int32_t old = dst->size;
+    dst->size = n;
+    GrowTo(dst, n, old, 0x38, 8);
+
+    for (int32_t i = 0, off = 0; i < dst->size; ++i, off += 0x38) {
+        uint8_t* d = static_cast<uint8_t*>(dst->data) + off;
+        if (d == nullptr) continue;
+        RtVideo_Adapter_CopyCtor(d, static_cast<const uint8_t*>(src->data) + off);
+    }
+    return dst;
+}
+
+// ============================================================================
+// 0x180057340 — Collection::Array<RefreshRate>::SetSize(int n, const T& fill)
+//                                                       (stride 8, align 4)
+//
+// Grow or shrink to `n`, filling any NEW element from `fill` and copying the
+// surviving ones out of the old block. The `i` cursor starts at 0 when the
+// block MOVED (everything must be copied across) and at `old` when it did not
+// (the survivors are already in place) — that is the `CMOVZ EAX,ESI` at
+// 0x1800573a9, and it is the only reason this reads as one loop instead of two.
+//
+// RefreshRate is trivially destructible, so a shrink needs no element destroy.
+// ============================================================================
+extern "C" void RtVideo_ArrayRefreshSetSize(void* arrv, int32_t n, const void* fillv) {
+    ArrayHdr* a = static_cast<ArrayHdr*>(arrv);
+    const int32_t old = a->size;
+    if (n == old) return;
+
+    uint8_t* oldData = static_cast<uint8_t*>(a->data);
+    a->size = n;
+    GrowTo(a, n, old, 8, 4);
+
+    int32_t i = (oldData == a->data) ? old : 0;
+    for (; i < n; ++i) {
+        uint8_t* d = static_cast<uint8_t*>(a->data) + static_cast<int64_t>(i) * 8;
+        if (d == nullptr) continue;
+        const uint8_t* s = (i < old) ? (oldData + static_cast<int64_t>(i) * 8)
+                                     : static_cast<const uint8_t*>(fillv);
+        *reinterpret_cast<uint64_t*>(d) = *reinterpret_cast<const uint64_t*>(s);
+    }
+
+    if (oldData != a->data && oldData) MemFree(oldData);
+}
+
+// ============================================================================
+// 0x180057440 — Collection::Array<DisplayMode>::SetSize(int n, const T& fill)
+//                                                       (stride 0x18, align 8)
+//
+// Same skeleton as the RefreshRate twin, with three differences, all of them
+// consequences of DisplayMode owning a nested Array<RefreshRate> at +0x08:
+//   1. the per-element copy zeroes that nested array before assigning into it
+//      (0x180057518/0x18005751b), so the assignment sees an empty destination
+//      rather than the old block's pointer;
+//   2. when the block MOVED, the old elements are destroyed (0x180057559);
+//   3. when it did NOT move and the array SHRANK, only the tail beyond `n` is
+//      destroyed (0x1800575b2). Retail has both, and they are exclusive.
+// ============================================================================
+extern "C" void RtVideo_ArrayModeSetSize(void* arrv, int32_t n, const void* fillv) {
+    ArrayHdr* a = static_cast<ArrayHdr*>(arrv);
+    const int32_t old = a->size;
+    if (n == old) return;
+
+    uint8_t* oldData = static_cast<uint8_t*>(a->data);
+    a->size = n;
+    GrowTo(a, n, old, 0x18, 8);
+
+    int32_t i = (oldData == a->data) ? old : 0;
+    for (; i < n; ++i) {
+        uint8_t* d = static_cast<uint8_t*>(a->data) + static_cast<int64_t>(i) * 0x18;
+        if (d == nullptr) continue;
+        const uint8_t* s = (i < old) ? (oldData + static_cast<int64_t>(i) * 0x18)
+                                     : static_cast<const uint8_t*>(fillv);
+
+        *reinterpret_cast<int32_t*>(d)     = *reinterpret_cast<const int32_t*>(s);
+        *reinterpret_cast<int32_t*>(d + 4) = *reinterpret_cast<const int32_t*>(s + 4);
+
+        uint8_t* dArr = d + 8;
+        *reinterpret_cast<uint64_t*>(dArr)     = 0;
+        *reinterpret_cast<uint64_t*>(dArr + 8) = 0;
+        RtVideo_ArrayRefreshAssign(dArr, s + 8);
+    }
+
+    if (oldData != a->data) {
+        RtVideo_ArrayModeElemDestroy(arrv, oldData, old);
+        if (oldData) MemFree(oldData);
+    } else if (old > n) {
+        RtVideo_ArrayModeElemDestroy(arrv,
+                                     oldData + static_cast<int64_t>(n) * 0x18,
+                                     old - n);
+    }
+}
+
+// ============================================================================
+// ??0GraphicsInterface@Device@Video@@QEAA@XZ      retail 0x18000cd90
+//
+// Zeroes exactly three qwords — name, adapterData, and the {count, capacity}
+// pair as one store — and returns `this`. That is the whole body.
+// ============================================================================
+extern "C" void* RtVideo_GraphicsInterface_Ctor(void* selfv) {
+    GraphicsInterface* self = static_cast<GraphicsInterface*>(selfv);
+    self->name        = nullptr;
+    self->adapterData = nullptr;
+    *reinterpret_cast<uint64_t*>(&self->adapterCount) = 0;
+    return self;
+}
+
+// ============================================================================
+// ??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z   retail 0x18000ce10
+// ============================================================================
+extern "C" void* RtVideo_GraphicsInterface_CopyCtor(void* dstv, const void* srcv) {
+    GraphicsInterface* dst = static_cast<GraphicsInterface*>(dstv);
+    const GraphicsInterface* src = static_cast<const GraphicsInterface*>(srcv);
+
+    StringShare(&dst->name, &src->name);
+
+    // Zero the Array<Adapter> before assigning into it: the assignment starts
+    // by destroying its destination, and an uninitialised destination would be
+    // destroyed through garbage. Retail's, at 0x18000ce3e/0x18000ce41.
+    dst->adapterData = nullptr;
+    *reinterpret_cast<uint64_t*>(&dst->adapterCount) = 0;
+    RtVideo_ArrayAdapterAssign(&dst->adapterData, &src->adapterData);
+
+    return dst;
+}
+
+// ============================================================================
+// ??1GraphicsInterface@Device@Video@@QEAA@XZ      retail 0x18000cdc0
+//
+// Array<Adapter>::~Array on +0x08, then the String at +0x00. In that order.
+// ============================================================================
+extern "C" void RtVideo_GraphicsInterface_Dtor(void* selfv) {
+    GraphicsInterface* self = static_cast<GraphicsInterface*>(selfv);
+    RtVideo_ArrayAdapterDtor(&self->adapterData);
+    StringRelease(&self->name);
+}
+
+// ============================================================================
+// ??0Adapter@Device@Video@@QEAA@XZ                retail 0x1800f7100
+//
+// Zeroes +0x00..+0x27 (five qwords), stores -1 as a QWORD over +0x28..+0x2f and
+// -1 as a DWORD at +0x30, returns `this`. +0x34 is NOT written — the ctor
+// leaves it, so this port leaves it too.
+//
+// This is the body the brief asked to be confirmed as not-a-thunk. It is not;
+// see the file banner.
+// ============================================================================
+extern "C" void* RtVideo_Adapter_Ctor(void* selfv) {
+    Adapter* self = static_cast<Adapter*>(selfv);
+    uint8_t* p = static_cast<uint8_t*>(selfv);
+    for (int off = 0; off < 0x28; off += 8) *reinterpret_cast<uint64_t*>(p + off) = 0;
+    *reinterpret_cast<int64_t*>(p + 0x28) = -1;          // maxFilterLevel AND field2C
+    *reinterpret_cast<int32_t*>(p + 0x30) = -1;          // field30
+    return self;
+}
+
+// ============================================================================
+// ??0Adapter@Device@Video@@QEAA@AEBU012@@Z        retail 0x18000cc70
+//
+// String share, then the two owned arrays (each zeroed then assigned), then
+// three plain DWORDs. +0x34 is not copied, matching the ctor.
+// ============================================================================
+extern "C" void* RtVideo_Adapter_CopyCtor(void* dstv, const void* srcv) {
+    Adapter* dst = static_cast<Adapter*>(dstv);
+    const Adapter* src = static_cast<const Adapter*>(srcv);
+
+    StringShare(&dst->name, &src->name);
+
+    dst->modeData = nullptr;
+    *reinterpret_cast<uint64_t*>(&dst->modeCount) = 0;
+    RtVideo_ArrayModeAssign(&dst->modeData, &src->modeData);
+
+    dst->multisampleData = nullptr;
+    *reinterpret_cast<uint64_t*>(&dst->multisampleCount) = 0;
+    RtVideo_ArrayBoolAssign(&dst->multisampleData, &src->multisampleData);
+
+    dst->maxFilterLevel = src->maxFilterLevel;   // +0x28
+    dst->field2C        = src->field2C;          // +0x2c
+    dst->field30        = src->field30;          // +0x30
+    return dst;
+}
+
+// ============================================================================
+// ??1Adapter@Device@Video@@QEAA@XZ                retail 0x18000cc10
+//
+// Destruction order is +0x18 (msaa), then +0x08 (modes), then +0x00 (name) —
+// the REVERSE of construction, and the reverse of the field order. Read from
+// 0x18000cc26/0x18000cc30/0x18000cc3a.
+// ============================================================================
+extern "C" void RtVideo_Adapter_Dtor(void* selfv) {
+    Adapter* self = static_cast<Adapter*>(selfv);
+    RtVideo_ArrayBoolDtor(&self->multisampleData);
+    RtVideo_ArrayModeDtor(&self->modeData);
+    StringRelease(&self->name);
+}
+
+// ============================================================================
+// ?FindOrAddMode@Adapter@Device@Video@@QEAAXAEBVDisplayMode@23@AEBVRefreshRate@23@@Z
+//                                                 retail 0x1800f7020
+//
+// Idempotent insert into the adapter's mode list, then into that mode's refresh
+// list. Two linear searches, each followed by a SetSize(count + 1, value) when
+// the search missed.
+//
+// TWO THINGS THE DISASSEMBLY SETTLES AND THE DECOMPILED C WOULD NOT:
+//
+//  1. Both SetSize calls take THREE arguments. `R8` still holds the incoming
+//     `mode` pointer at 0x1800f7088 (the search loop uses R9/R10/R11 and never
+//     touches R8), so 0x180057440 is called as (array, count+1, mode) — the new
+//     element is FILLED with the mode, not default-constructed. A two-argument
+//     reading would grow the array and leave the new mode's width and height as
+//     whatever the allocator returned, and the mode would then never match on
+//     any later call. That is the "drops whole arguments" defect class.
+//
+//  2. The element pointer is recomputed from `*R14` AFTER the SetSize
+//     (0x1800f7094), not carried across it. It has to be: SetSize may
+//     reallocate.
+//
+// The `TEST EDI,EDI / JNS` at 0x1800f7075 is retail checking a loop counter
+// that started at 0 and only increments, so it always takes the jump. Kept as
+// the unconditional it provably is, rather than transcribed as a live branch.
+// ============================================================================
+extern "C" void RtVideo_Adapter_FindOrAddMode(void* selfv, const void* modev,
+                                              const void* ratev) {
+    Adapter* self = static_cast<Adapter*>(selfv);
+    const DisplayMode* mode = static_cast<const DisplayMode*>(modev);
+    const RefreshRate* rate = static_cast<const RefreshRate*>(ratev);
+
+    int32_t idx = 0;
+    bool found = false;
+    const int64_t n = self->modeCount;
+    if (n > 0) {
+        const DisplayMode* p = self->modeData;
+        for (int64_t i = 0; i < n; ++i, ++idx, ++p) {
+            if (p->width == mode->width && p->height == mode->height) { found = true; break; }
+        }
+    }
+    if (!found) {
+        idx = self->modeCount;
+        RtVideo_ArrayModeSetSize(&self->modeData, self->modeCount + 1, mode);
+    }
+
+    DisplayMode* m = self->modeData + idx;   // reloaded: SetSize may have moved it
+    bool rfound = false;
+    const int64_t rn = m->refreshCount;
+    if (rn > 0) {
+        const RefreshRate* q = m->refreshData;
+        for (int64_t i = 0; i < rn; ++i, ++q) {
+            if (q->numerator == rate->numerator &&
+                q->denominator == rate->denominator) { rfound = true; break; }
+        }
+    }
+    if (!rfound) {
+        RtVideo_ArrayRefreshSetSize(&m->refreshData, m->refreshCount + 1, rate);
+    }
+}
+
+// ============================================================================
+// ?GetDisplayMode@Device@Video@@QEBA?AVDisplayMode@12@H@Z   retail 0x18000d3e0
+//
+// Returns a DisplayMode BY VALUE, which on this ABI means a HIDDEN RETURN SLOT
+// in RDX and the index in R8 — the signature below has three parameters for a
+// one-parameter method, and that is not a mistake. A typedef that omits the
+// hidden slot writes the return value through whatever was in RDX and still
+// hands the caller a plausible answer, which is a wild write that verifies
+// green.
+//
+// The returned mode is a DEEP copy: the embedded Array<RefreshRate> is zeroed
+// and then assigned, so the caller owns its own refresh list and must destroy
+// it. Retail, 0x18000d41b-0x18000d426.
+// ============================================================================
+extern "C" void* RtVideo_Device_GetDisplayMode(const void* selfv, void* retv, int32_t index) {
+    const Device* self = static_cast<const Device*>(selfv);
+    DisplayMode* ret = static_cast<DisplayMode*>(retv);
+    const DisplayMode* m = self->modeData + index;
+
+    ret->width  = m->width;
+    ret->height = m->height;
+    ret->refreshData = nullptr;
+    *reinterpret_cast<uint64_t*>(&ret->refreshCount) = 0;
+    RtVideo_ArrayRefreshAssign(&ret->refreshData, &m->refreshData);
+    return ret;
+}
+
+// ============================================================================
+// Registration.
+//
+// BY NAME first, because that is the door the wall goes through:
+// `Dx11ResolveRuntimeImport` calls `ResolveExport(mangled)` before anything
+// else. BY ADDRESS as well, because 13 live sites in the tree reach Runtime
+// symbols through `ResolveAddr(Module::Runtime, …)`, which is registry-first —
+// that call is NOT "the DLL".
+//
+// The five Array instantiations are address-only: they are unexported template
+// instantiations with no mangled name to register. (Checked against the export
+// directory, not inferred from the mangling.)
+// ============================================================================
+int RtVideoDeviceEnumTypesRegister() {
+    int n = 0;
+
+    RegisterRuntimeExport("??0GraphicsInterface@Device@Video@@QEAA@XZ",
+                          (void*)&RtVideo_GraphicsInterface_Ctor); ++n;
+    RegisterRuntimeExport("??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z",
+                          (void*)&RtVideo_GraphicsInterface_CopyCtor); ++n;
+    RegisterRuntimeExport("??1GraphicsInterface@Device@Video@@QEAA@XZ",
+                          (void*)&RtVideo_GraphicsInterface_Dtor); ++n;
+    RegisterRuntimeExport("??0Adapter@Device@Video@@QEAA@XZ",
+                          (void*)&RtVideo_Adapter_Ctor); ++n;
+    RegisterRuntimeExport("??0Adapter@Device@Video@@QEAA@AEBU012@@Z",
+                          (void*)&RtVideo_Adapter_CopyCtor); ++n;
+    RegisterRuntimeExport("??1Adapter@Device@Video@@QEAA@XZ",
+                          (void*)&RtVideo_Adapter_Dtor); ++n;
+    RegisterRuntimeExport("?FindOrAddMode@Adapter@Device@Video@@QEAAXAEBVDisplayMode@23@AEBVRefreshRate@23@@Z",
+                          (void*)&RtVideo_Adapter_FindOrAddMode); ++n;
+    RegisterRuntimeExport("?GetDisplayMode@Device@Video@@QEBA?AVDisplayMode@12@H@Z",
+                          (void*)&RtVideo_Device_GetDisplayMode); ++n;
+    RegisterRuntimeExport("?AdjustDisplay@Device@Video@@QEAAXXZ",
+                          (void*)&RtVideo_Device_AdjustDisplay); ++n;
+
+    RegisterRuntimeAddr(0x18000cd90, (void*)&RtVideo_GraphicsInterface_Ctor);
+    RegisterRuntimeAddr(0x18000ce10, (void*)&RtVideo_GraphicsInterface_CopyCtor);
+    RegisterRuntimeAddr(0x18000cdc0, (void*)&RtVideo_GraphicsInterface_Dtor);
+    RegisterRuntimeAddr(0x1800f7100, (void*)&RtVideo_Adapter_Ctor);
+    RegisterRuntimeAddr(0x18000cc70, (void*)&RtVideo_Adapter_CopyCtor);
+    RegisterRuntimeAddr(0x18000cc10, (void*)&RtVideo_Adapter_Dtor);
+    RegisterRuntimeAddr(0x1800f7020, (void*)&RtVideo_Adapter_FindOrAddMode);
+    RegisterRuntimeAddr(0x18000d3e0, (void*)&RtVideo_Device_GetDisplayMode);
+    RegisterRuntimeAddr(0x1800f7e20, (void*)&RtVideo_Device_AdjustDisplay);
+
+    RegisterRuntimeAddr(0x180010da0, (void*)&RtVideo_ArrayAdapterElemDestroy);
+    RegisterRuntimeAddr(0x180010900, (void*)&RtVideo_ArrayAdapterDtor);
+    RegisterRuntimeAddr(0x18000fe10, (void*)&RtVideo_ArrayAdapterAssign);
+    RegisterRuntimeAddr(0x180057340, (void*)&RtVideo_ArrayRefreshSetSize);
+    RegisterRuntimeAddr(0x180057440, (void*)&RtVideo_ArrayModeSetSize);
+
+    return n;
+}
