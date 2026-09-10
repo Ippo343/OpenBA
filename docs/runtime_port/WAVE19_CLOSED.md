@@ -95,10 +95,10 @@ reported on the identity. They are never added together.**
    and is renamed into place on close.**
 3. **TRAP=0 IS NOT A PROMOTION, AND READY IS NOT A ROUTE.** Lane FILE's ten bodies
    read **TRAP=0 with attendance ZERO on every one** — the tables are minted but
-   **not promoted (31 of 62)**, so `RT_DATA_SLOT` falls through to the DLL and
+   **not promoted (5 of 62 vtables -- see §7.5a; "31 of 62" was a CATEGORY ERROR)**, so `RT_DATA_SLOT` falls through to the DLL and
    *retail's* bodies run. **These bodies do not run in play.** Every non-zero count
    came from an oracle.
-4. **Only 31 of 62 minted rows are promoted.** The census objective and the
+4. **Only 5 of 62 VTABLES are promoted** (§7.5a corrects the "31 of 62" printed here originally; 31 mixes kinds, 62 is vtables only). **23 complete tables are minted and unregistered.** The census objective and the
    cutover objective **have diverged**, exactly as the plan's §8 warned. This is
    the first hard measurement of that gap.
 5. **The CompressedStream writer is not cutover-clean.** `?SetWindow`'s GROW branch
@@ -108,8 +108,9 @@ reported on the identity. They are never added together.**
    proof** — a table stamped other than by a plain RIP-relative LEA is invisible to
    it. **Narrowed, not closed. Wave 20 must not scope a DATA lane against an
    unverified slot count.**
-7. **`??0TextFileStream@` and `??1FileSystem@` are PORTED, NOT VERIFIED** —
-   attendance 0 on every run. Lane FILE owns this and did not close it.
+7. **`??1FileSystem@` is PORTED, NOT VERIFIED**, with a written expiry read off
+   the callee (§7.5c). **Row 7 `??0TextFileStream@` is CLOSED** — exercised and
+   covered by an enclosing oracle.
 8. **`?BeginDelete@` and `??1Persistence@` have no live-route exercise.**
    `??1Persistence@` is verified by synthesised oracle only.
 9. **`?SetupFileSystem@Modification@` (~600 instructions) and the PackageFile
@@ -423,6 +424,95 @@ the FILE ON DISK** against retail's — the same artefact oracle CSTREAM already
 one subject over. Lane FILE's finding that a `%TEMP%` file is **renamed into place**
 on close makes the on-disk comparison the right subject: nothing appears at the
 caller's path until `Close` runs.
+
+## 7.5 ADDENDUM 3 — "31 of 62 promoted" WAS WRONG, and a NO-OP row is the SAFEST promotion
+
+Two corrections from lane FILE's final tranche, landed after the close was written.
+**Both are load-bearing: the first is quoted four times above and in the Wave 20
+guide; the second inverts a decision this wave made twice.**
+
+### 7.5a The promotion figure is a CATEGORY ERROR — it is 5 of 62 VTABLES
+
+`[RtMint] promoted 31 minted DATA row(s)` **carries no denominator and does not name
+its kinds.** Lane FILE paired it with the `62` on the adjacent minted-vtables line,
+and so did I — in §4 items 3 and 4, and in `WAVE20_GUIDE.md` §2, where it is the
+headline of the recommended subject.
+
+**`n` counts a MIX of kinds.** Confirmed structurally by the integrator:
+`reg_mint_promoted.cpp` increments the same `n` for storage rows
+(`RegisterRuntimeAddr(0x1801fa9a8ull, st); ++n;` and its neighbours), for typeinfo
+rows, and for vtables. **62 is a vtable-only count.** Pairing them compares different
+populations.
+
+Lane FILE's count from the file: **5 vtables, 25 typeInfo, ~1 storage = 31.**
+
+> **The right figure is 5 OF 62 VTABLES PROMOTED, not 31 of 62.**
+
+**The corrected number is STRONGER, not weaker.** The same run prints
+**"28 of 62 vtables are COMPLETE"** — so **23 complete tables are minted and
+unregistered.** The promotion opportunity Wave 20 is being pointed at is roughly
+four times what §4 implied, not half.
+
+This is the same instrument defect the wave catalogued repeatedly — a green printed
+without its denominator or its kinds — and it took a lane that had been *asked to
+diagnose that defect in others* to notice it had fallen into it.
+
+### 7.5b A NO-OP row is the SAFEST promotion, not one to skip
+
+§4 and lane IOBASE both concluded that `??_7Stream@IO@@6B@` should stay unpromoted
+because it is a proven NO-OP. **Lane FILE answered the open question with the
+mechanism rather than an inference, and the mechanism inverts the conclusion.**
+
+Eight sites in six files resolve that symbol, and **every one is a WRITE of the
+address into an object vptr — none dispatches.** So:
+
+* **A NO-OP row can be permanently unpromotable AND a live cutover door**, because
+  what cutover needs is *the address to stamp*, not our slot pointers. That confirms
+  the reading I offered lane FILE earlier and had not proved.
+* **And the inversion:** promotion is risky *only* because a wrong slot might be
+  dispatched. For a proven NO-OP row **nothing is dispatched**, so there is no risk
+  to weigh — **a NO-OP row is the SAFEST promotion available, not one to skip.**
+
+**This reverses guidance I gave twice** (to lane CSTREAM and in §4), and it was
+reached by reading what the eight sites *do* rather than by reasoning about what
+NO-OP implies. Wave 20 should promote `??_7Stream@` and `??_7ReaderWriter@` **first**,
+as the lowest-risk items on the board, before the candidates in §5.1.
+
+### 7.5c Row 7 is CLOSED — and the harness was in the tree
+
+§4 item 7 named `??0TextFileStream@` and `??1FileSystem@` as PORTED, NOT VERIFIED.
+**Row 7 is now closed:**
+
+```
+[SaveTextProbe] VERDICT ctl=0 checked=13 failed=0 bytes=42 serCalls=1/1 PASS
+[FileCutover]   attendance ??0TextFileStream=1
+```
+
+Lane FILE states its standing precisely — **"PORTED, EXERCISED, COVERED BY AN
+ENCLOSING ORACLE"**, because it is *not* a dedicated oracle on the constructor. That
+is the right tier discipline again.
+
+**And the harness already existed**: `external_savetext_probe.cpp`, armed by
+`BANISHED_RT_SAVETEXT_PROBE=1` from `external_add.cpp:277`, with three negative
+controls. Lane FILE: *"the save-text harness existed in the tree and I had not
+looked."* **That is the fourth time in two waves** that the rule *grep `standalone/`
+and the `BANISHED_*` list before declaring no route* has paid out — and this time it
+also **reduces the Wave 20 SaveText item** (`WAVE20_GUIDE.md` §3), which assumed a
+harness had to be built.
+
+**Row 8 (`??1FileSystem@`) gets an expiry read off the CALLEE, not off a failed
+search** — the form §7.4 asks for. Its sole caller is `RtEngine_Engine_Shutdown`, and
+`engine_lifecycle.cpp:183` already records with evidence that its `calls=` is
+**structurally zero**: `game_main.cpp` resolves `Engine::Shutdown` only to satisfy a
+null guard and calls its own `ShutdownEngineStaged()` instead. So the blocker is that
+**its only caller is deliberately never called by this project's design** — a request
+to another lane, not a waiting game.
+
+### 7.5d Lane PERSIST decomposed its own impossibility claims — 2 of 2 FALSE
+
+A second independent confirmation of §7.4, from the lane that originally argued no
+mechanism could reach such claims. **Decomposition has now reached every premise it
+has been pointed at.**
 
 ## 8. Wave 20 inputs
 

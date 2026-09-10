@@ -100,8 +100,11 @@ Report a set-diff of what entered `called`, never a percentage delta.**
 
 ### Candidate A: PROMOTION, not porting — **recommended**
 
-**Only 31 of 62 minted rows are promoted.** Wave 19's sharpest measurement is that
-this is where the value now sits:
+**Only 5 of 62 VTABLES are promoted, and 23 COMPLETE tables are minted and
+unregistered.** (The "31 of 62" first written here was a category error: 31 mixes
+vtables, typeinfo and storage; 62 counts vtables only. See WAVE19_CLOSED.md §7.5a.
+The corrected figure makes this subject ~4x LARGER, not smaller.) Wave 19's sharpest
+measurement is that this is where the value now sits:
 
 > Lane FILE's ten bodies read **TRAP=0 with attendance ZERO on every one**, because
 > the tables are minted but **not promoted** — so `RT_DATA_SLOT` falls through to the
@@ -109,7 +112,12 @@ this is where the value now sits:
 
 Ten verified bodies that **do not run in play**. Promotion is what converts them.
 
-**Two rows are ready now**, both unpromoted, both with their warrant already written:
+**Start with the two proven NO-OP rows** — `??_7Stream@` and `??_7ReaderWriter@`.
+§7.5b establishes that nothing dispatches through them, so promotion carries no
+dispatch risk at all; they are the lowest-risk items on the board and this wave
+twice, wrongly, told lanes to skip them.
+
+**Then these two**, both unpromoted, both with their warrant already written:
 * **`??_7BinaryFileStream@`** — TRAP=0, **both** stampers ours, bodies oracle-verified.
   The strongest candidate in IO.
 * **`??_7VisitorStream@`** — 7/7/0 **and** ATTENDED via `External::Add`. A proven door
@@ -131,7 +139,8 @@ in the DLL putting retail's table into every copied object.**
 **Not shut.** The door board stands at **18 of 25 SHUT, 7 OPEN**. But the remainder is
 *enumerated*, which is rare:
 * **3 open for lack of PROMOTION, not ports** — the very tables lane FILE cleared.
-  **Candidate A closes these.**
+  **Candidate A closes these.** Note §7.5b: a proven NO-OP row is the SAFEST
+  promotion, not one to skip, because nothing dispatches through it.
 * **2** are the allocator behind `BANISHED_RT_ALLOC`.
 * **2** remain.
 
@@ -161,8 +170,11 @@ run beside any of these.
   unlocks **three things across two lanes**: lane FILE's `??0TextFileStream@` (row 7,
   attendance 0), the **two IOBASE vtables SaveText stamps** (their `post=0` is
   explained by SaveText not running, *not* by a missing interception point), and
-  `??_7TextFileStream@`. **Grep `standalone/` and the `BANISHED_*` list before
-  building a harness** — that rule paid out repeatedly in Wave 19.
+  `??_7TextFileStream@`. **THE HARNESS ALREADY EXISTS**: `external_savetext_probe.cpp`, armed by
+  `BANISHED_RT_SAVETEXT_PROBE=1` from `external_add.cpp:277`, with three negative
+  controls — found by lane FILE *after* the close, which is the fourth payout in two
+  waves of the rule *grep before declaring no route*. This item is much cheaper than
+  written above.
 * **`??_7TextFileStream@`** — handed back by lane FILE at **10 slots / 8 bodies** (not
   20/20); its slots 1 and 7 are FileStream's and are already done.
 * **`?Close@CompressedFileStream` (`0x1800a9490`)** — nine instructions; lane CSTREAM
