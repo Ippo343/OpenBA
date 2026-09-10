@@ -1367,6 +1367,8 @@ def main():
         "folded_addrs": set(),    # ... as raw VAs   (for the orphan screen)
         "backlog": {},            # symbol -> set of registered slot bodies
         "backlog_rows": 0,
+        "backlog_slots": {},      # symbol -> non-purecall slot count
+        "backlog_complete": [],   # unpromoted vtables with EVERY slot ours
     }
     if vt_fold["readable"]:
         promoted_vt = {s for s in promoted_syms if s.startswith("??_7")}
@@ -1378,17 +1380,21 @@ def main():
             if is_promoted:
                 vt_fold["promoted_vtables"] += 1
             src = "mint-vtable:%s" % (sym or "unexported")
+            row_key = sym or ("0x%x" % _vva)
+            n_slots = n_ours = 0
             for sname, sva, kind in slots:
                 if kind == "RT_MINT_PURECALL":
                     continue        # no body to port
                 # The mint's OWN lookup order: name first, then address.
                 registered = (sname in d["ported_exports"]) if sname else False
                 registered = registered or (sva in d["ported_addrs"])
+                n_slots += 1
+                if registered:
+                    n_ours += 1
                 if not is_promoted:
                     if registered:
-                        key = sname or ("0x%x" % sva)
-                        vt_fold["backlog"].setdefault(sym or "0x%x" % _vva,
-                                                      set()).add(key)
+                        vt_fold["backlog"].setdefault(row_key, set()).add(
+                            sname or ("0x%x" % sva))
                     continue
                 name = sname or addr_to_name.get(sva)
                 if name:
@@ -1406,6 +1412,16 @@ def main():
                 vt_fold["folded_called"].add(key)
                 if registered:
                     vt_fold["applicable"].add(key)
+            if not is_promoted and n_slots:
+                vt_fold["backlog_slots"][row_key] = n_slots
+                # COMPLETE = every non-purecall slot has a registered body, so
+                # promoting the row would put NO trap into a live table. This is
+                # the static half of the readiness question and nothing more: it
+                # does NOT decide promotability, which turns on whether we own
+                # the function that STAMPS the table (WAVE20_GUIDE.md §2), and
+                # that is not a question a source scan can answer.
+                if n_ours == n_slots:
+                    vt_fold["backlog_complete"].append(row_key)
         vt_fold["backlog_rows"] = sum(len(v) for v in vt_fold["backlog"].values())
 
     # The fold's EFFECT, computed here so the header above the table can quote
@@ -1611,11 +1627,21 @@ def main():
         print("  PROMOTION BACKLOG -- registered bodies whose ONLY dispatch route is")
         print("  a vtable that is NOT promoted. These are NOT counted above, and")
         print("  they are the measure of Wave 20 Candidate A:")
-        print("    %d bodies across %d unpromoted vtable(s)."
-              % (vt_fold["backlog_rows"], len(vt_fold["backlog"])))
-        for sym in sorted(vt_fold["backlog"]):
-            print("      %-52s %d" % (sym, len(vt_fold["backlog"][sym])))
-        if not vt_fold["backlog"]:
+        print("    %d bodies across %d unpromoted vtable(s), of which %d are"
+              % (vt_fold["backlog_rows"], len(vt_fold["backlog"]),
+                 len(vt_fold["backlog_complete"])))
+        print("    COMPLETE (every non-purecall slot registered). COMPLETE is the")
+        print("    STATIC half of readiness ONLY: it says promoting would put no")
+        print("    trap in a live table. It does NOT say the row is promotable --")
+        print("    that turns on owning the function that STAMPS the table, which")
+        print("    no source scan can answer (WAVE20_GUIDE.md §2).")
+        print("      %-52s %5s %5s  %s" % ("vtable", "ours", "slots", "complete"))
+        for sym in sorted(set(vt_fold["backlog"]) | set(vt_fold["backlog_slots"])):
+            print("      %-52s %5d %5d  %s"
+                  % (sym, len(vt_fold["backlog"].get(sym, ())),
+                     vt_fold["backlog_slots"].get(sym, 0),
+                     "COMPLETE" if sym in vt_fold["backlog_complete"] else ""))
+        if not vt_fold["backlog_slots"]:
             print("      (none)")
 
     ng = len(d["gated_exports"]) + len(d["gated_addrs"])
