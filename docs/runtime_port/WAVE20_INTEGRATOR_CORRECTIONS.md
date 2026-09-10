@@ -236,3 +236,90 @@ CEILING before and after. Video's *printed* ceiling moved **88.2% → 88.6%** wh
 verdict did not — a live instance of the standing rule that **the ceiling percentage is
 a moving target with `called` in both halves, so score the IDENTITY and never the
 percentage.**
+
+---
+
+## C7 — the "unexported" banner was NOT the recorded trap: a REAL check whose SUBJECT was one symbol and whose CONCLUSION was written as covering two
+
+I filed lane TOOLS' `0x1800e0c80` finding as a third instance of the recorded
+`AEAA means PRIVATE, not unexported` trap and asked the lane a narrow question: is the
+banner's claim **false**, or was it **true of a different symbol when written**? Those
+call for different fixes.
+
+**The answer is neither, and it is more useful than either.**
+
+The banner in `input_config_startup.cpp` says the name *"was checked against
+Runtime-x64.dll's export directory with pefile before a line was written."*
+
+> **That check was REAL, and it was RUN. Its subject was
+> `?Startup@Configuration@Input@@QEAA_NXZ` (ordinal 4085, re-verified by the lane).
+> The lane then extended the conclusion to the SECOND function it happened to port in
+> the same file, without running the check again.** `0x1800e0c80` is ordinal 3199 — a
+> public `QEAA` export.
+
+So it is **not a fabricated verification** and **not a decayed one**. It is a genuine
+verification **whose subject was one symbol and whose conclusion was written as though
+it covered two.** And it cannot be decayed: `Runtime-x64.dll` is a fixed 2017 artefact,
+an export table does not change under us, so the claim was **false the day it was
+typed**. Nor did it drift onto the wrong address — the table row, the section header and
+the registration comment all say `0x1800e0c80`.
+
+**The fix therefore differs from the recorded trap's**, which is why the distinction
+earns its place:
+
+| | recorded trap | this |
+|---|---|---|
+| failure | inferring "unexported" from the `AEAA` mangling | a real check silently scope-widened |
+| fix | stop inferring unexported from the mangling | **a check NAMES THE SYMBOL IT EXAMINED, and a second symbol needs a second check** |
+
+This is the same family as Wave 18's *"a screen that cannot name its subject"* and Wave
+19's `--namespace IO` diff — **a sound instrument, correctly run, whose result is
+recorded against a wider population than it examined.** It is the *authoring* form of
+that defect rather than the *tooling* form: no tool was wrong; the sentence was.
+
+**Scope limit on the refutation, self-reported:** the lane checked **retail only** and
+did not open the profile DLL, so the *"either build"* half is not independently
+falsified — but *"either"* is a universal over both builds, and **retail alone falsifies
+it.** Correct logic, and it is recorded because the lane bounded its own claim without
+being asked.
+
+---
+
+## C8 — TWO BEHAVIOURAL DELTAS from lane TOOLS, stated rather than buried
+
+Recorded because both change what a future A/B run measures, and a kill-switch that
+silently changes meaning is how a control stops being a control:
+
+1. **The RenderBuffer registration now rides `BANISHED_RT_VIDBUFFERS`** — and **that
+   kill switch previously FAILED TO KILL.** So an earlier A/B that set it and read no
+   change was not measuring what it thought.
+2. **With `BANISHED_RT_INPUTCFGSTART=0` the NAME door now reaches lane ENG's body**
+   rather than `input.cpp`'s.
+
+---
+
+## C9 — the PlatformDestruct equivalence is OURS-vs-OURS, and the lane said so unprompted
+
+Asked to state the strength of its equivalence claim precisely, lane TOOLS gave **both
+tiers separately** rather than the stronger one:
+
+* **Full reading**, transitively — `context_lifecycle`'s open-coded body in full, and
+  because `buffers.cpp` delegates, also `PlatformDestructBody` and `ListUnlink` in full,
+  with `kRenderLinks {next 0x18, prev 0x20}` checked against `RenderBuffer`'s
+  `static_assert`s **rather than trusting the literal**.
+* **Differences-cannot-affect-behaviour**, three found and argued individually: a
+  redundant inner null test the caller already guards, a deleting-dtor function pointer
+  typed `void` vs `void*` (same register, return ignored), and RT_DIFF instrumentation
+  inert unless `rt_diff_on__`.
+
+**And the limit that matters, volunteered:**
+
+> **That equivalence is OURS-vs-OURS, not ours-vs-retail. A shared misunderstanding of
+> `0x1800f4400` would pass it invisibly.**
+
+That is the standing `reference_shadow_marker_is_not_an_oracle` finding applied by a
+lane to its own result. The ours-vs-retail evidence is separate, covers **only the
+surviving body**, and is thin: `calls=3 divergences=0`. **Quoted as thin.**
+
+Also self-reported: the lane **did not measure `calls=0` for the RenderBuffer body
+pre-fix** — that is an inference from registration order, which it verified statically.
