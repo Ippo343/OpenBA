@@ -114,7 +114,18 @@
 namespace RtIo {
 
 // The twelve bodies under test, by C++ symbol — never by address.
-extern "C" RtSystem::String* RtIo_Stream_GetSource(const void*, RtSystem::String*);
+// LANE IOBASE'S BODY, not this lane's — declared with ITS signature
+// (`void* (const void* self, void** ret)`), which is the same ABI spelled
+// through void* instead of System::String*. Both spell the HIDDEN RETURN SLOT
+// as an explicit parameter, which is the whole point: a typedef that omits it
+// is a wild write that still returns the right answer
+// (reference_hidden_retslot_wild_write.md).
+//
+// This probe keeps comparing it against the DLL even though the body is not
+// ours, because it is the ONLY differential oracle either lane has for it —
+// IOBASE names "no differential oracle in this lane" as its own largest gap —
+// and because a body with no call door cannot be verified by a live run at all.
+extern "C" void* RtIo_Stream_GetSource(const void* self, void** ret);
 extern "C" bool     RtIo_CompressedStream_Write(CompressedStream*, int32_t, const void*);
 extern "C" bool     RtIo_CompressedStream_SetCurrentPos(CompressedStream*, int32_t);
 extern "C" uint32_t RtIo_CompressedStream_GetCurrentPos(const CompressedStream*);
@@ -564,7 +575,8 @@ void RtIo_CompressedStreamWriteProbe() {
             RtSystem::String so, st;
             so.data = reinterpret_cast<char*>(~uintptr_t(0));
             st.data = reinterpret_cast<char*>(~uintptr_t(0));
-            void* const ro = RtIo_Stream_GetSource(cs, &so);
+            void* const ro = RtIo_Stream_GetSource(
+                cs, reinterpret_cast<void**>(&so));
             void* const rt = RT_ORIGINAL_ONCE(GetSourceFn,
                 "?GetSource@Stream@IO@@UEBA?AVString@System@@XZ")(cs, &st);
             if (so.data == st.data && so.data == nullptr &&

@@ -54,14 +54,80 @@
 
 namespace RtIo {
 
+// Defined in full at the bottom of this header; Persistence holds an array of
+// them at +0x80 and ?GetSaveInfo@ returns one BY VALUE.
+struct SaveGameInfo;
+
 struct Persistence {
     void*            settingsMapRoot;   // +0x00 — Set<Pair<String,String>> root
     int32_t          settingsMapCount;  // +0x08 — see below (Wave 9 lane BOOT2)
-    uint8_t          _unknown[0x84];    // +0x0C .. +0x8F — NOT pinned, NOT modeled
+    uint8_t          _pad0c[0x04];      // +0x0C — NOT pinned
+
+    // ---- the embedded worker, +0x10 .. +0x7F (Wave 19 lane PERSIST) --------
+    // ??0Persistence@IO@@QEAA@XZ (0x1800b8020) runs
+    // `??0Thread@System@@QEAA@I@Z(this+0x10, 0x10000)` and then stamps a
+    // derived vtable (0x180155860) over `this+0x10`, so IO::Persistence
+    // EMBEDS a Thread-derived save/load worker at +0x10 rather than being
+    // one. Every offset below was read twice, once Persistence-relative in a
+    // public entry point and once worker-relative (rdi = this+0x10) in the
+    // private enqueue helpers, and the two agree:
+    //
+    //   field     Persistence-rel reader        worker-rel reader
+    //   flags     0x1800b7c60 testb $1,0x18     —
+    //   workEvt   0x1800b7911 mov 0x28(rbx)     0x1800b7428 mov 0x18(rdi)
+    //   doneEvt   0x1800b791b mov 0x38(rbx)     0x1800b742c mov 0x28(rdi)
+    //   filename  0x1800b78f7 mov ..,0x40(rbx)  0x1800b73f0 mov ..,0x30(rdi)
+    //   status    0x1800b7903 movl $0,0x48(rbx) 0x1800b7425 mov esi,0x38(rdi)
+    //   command   0x1800b78b7 movl $3,0x4c(rbx) 0x1800b741e movl $2,0x3c(rdi)
+    //
+    // The `flags` bit-0 test is the FIRST instruction of all seven public
+    // entry points this lane ports; retail treats it as "the worker is dead /
+    // persistence unavailable" and refuses the request. It is NOT a
+    // busy flag: BeginGetSaveGameList (0x1800b7b30) tests it too and issues
+    // straight away.
+    void*            workerVtable;      // +0x10 — 0x180155860
+    uint32_t         flags;             // +0x18 — bit 0 == unavailable
+    uint8_t          _pad1c[0x0c];      // +0x1C — NOT pinned
+    void*            workEvent;         // +0x28 — HANDLE, SetEvent  (wake worker)
+    uint8_t          _pad30[0x08];      // +0x30 — NOT pinned
+    void*            doneEvent;         // +0x38 — HANDLE, ResetEvent(before issue)
+    RtSystem::String pendingFilename;   // +0x40 — request filename
+    int32_t          status;            // +0x48 — ?GetStatus@ (0x1800b7c40) reads this
+    int32_t          command;           // +0x4C — 1 load · 2 delete · 3 info · 4 list
+    int32_t          blockCount;        // +0x50 — int arg of BeginGetSaveGameInfo
+    uint8_t          _pad54[0x0c];      // +0x54 — NOT pinned
+    void*            blockDescData;     // +0x60 — Array<{id,?,size}>, stride 0xc
+    int32_t          blockDescCount;    // +0x68 — ?GetDataSize@ (0x1800b7b80) walks these
+    uint8_t          _pad6c[0x04];      // +0x6C — NOT pinned (Array capacity)
+    void*            blockPtrData;      // +0x70 — Array<void*>
+    int32_t          blockPtrCount;     // +0x78 — SetSize'd to blockDescCount at 0x1800b7514
+    uint8_t          _pad7c[0x04];      // +0x7C — NOT pinned (Array capacity)
+
+    // ---- the save list, +0x80 .. +0x8F ------------------------------------
+    // ?GetSaveInfo@ (0x1800b7bd0) is `((SaveGameInfo*)this[0x80])[index]` with
+    // `shl $4` for the stride; ?GetSaveCount@ (0x1800b7c60) returns the dword
+    // at +0x88 and nothing else. Neither bounds-checks.
+    SaveGameInfo*    saves;             // +0x80
+    int32_t          saveCount;         // +0x88
+    uint8_t          _pad8c[0x04];      // +0x8C — NOT pinned (Array capacity)
+
     RtSystem::String savePath;          // +0x90
 };
 static_assert(offsetof(Persistence, settingsMapCount) == 0x08,
               "Set<Pair<String,String>>::_count must sit at +0x08 (Map_Clear, retail 0x18000f7d0)");
+static_assert(offsetof(Persistence, flags)           == 0x18, "flags @ 0x18");
+static_assert(offsetof(Persistence, workEvent)       == 0x28, "workEvent @ 0x28");
+static_assert(offsetof(Persistence, doneEvent)       == 0x38, "doneEvent @ 0x38");
+static_assert(offsetof(Persistence, pendingFilename) == 0x40, "pendingFilename @ 0x40");
+static_assert(offsetof(Persistence, status)          == 0x48, "status @ 0x48");
+static_assert(offsetof(Persistence, command)         == 0x4c, "command @ 0x4c");
+static_assert(offsetof(Persistence, blockCount)      == 0x50, "blockCount @ 0x50");
+static_assert(offsetof(Persistence, blockDescData)   == 0x60, "blockDescData @ 0x60");
+static_assert(offsetof(Persistence, blockDescCount)  == 0x68, "blockDescCount @ 0x68");
+static_assert(offsetof(Persistence, blockPtrData)    == 0x70, "blockPtrData @ 0x70");
+static_assert(offsetof(Persistence, blockPtrCount)   == 0x78, "blockPtrCount @ 0x78");
+static_assert(offsetof(Persistence, saves)           == 0x80, "saves @ 0x80");
+static_assert(offsetof(Persistence, saveCount)       == 0x88, "saveCount @ 0x88");
 static_assert(offsetof(Persistence, savePath) == 0x90,
               "IO::Persistence::_savePath must sit at +0x90 (GetSavePath, retail 0x180007ad0)");
 

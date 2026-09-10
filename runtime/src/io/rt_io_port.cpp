@@ -1,7 +1,5 @@
-// ============================================================================
-// runtime/src/io/rt_io_port.cpp — RtIoPortInit()  (Wave 4)
-// ============================================================================
-// One entry point for the IO namespace: the Serializer forwarder family and
+// =====================================================================// runtime/src/io/rt_io_port.cpp — RtIoPortInit()  (Wave 4)
+// =====================================================================// One entry point for the IO namespace: the Serializer forwarder family and
 // its Encoding, the CompressedMemoryStream / MemoryStream / Stream family,
 // registry-backed Persistence, and FileSystem / Modification lookups.
 //
@@ -16,12 +14,17 @@
 //   BANISHED_RT_SERIALIZER=0    ... just Serializer + Encoding    (lane A)
 //   BANISHED_RT_STREAM=0        ... just the Stream family        (lane B)
 //   BANISHED_RT_PERSISTENCE=0   ... just Persistence + Registry   (lane C)
+//   BANISHED_RT_PERSAVES=0      ... just the Persistence save rows (lane PERSIST)
 //   BANISHED_RT_FILESYSTEM=0    ... just FileSystem + Modification(lane D)
 //   BANISHED_RT_FSSTARTUP=0     ... just FileSystem::Startup       (lane ENG)
 //   BANISHED_RT_PERSSTARTUP=0   ... just Persistence::Startup      (lane ENG)
 //   BANISHED_RT_REGREAD=0       ... just ReadSettings + Registry() (lane BOOT2)
 //   BANISHED_RT_FSDIRS=0        ... just SetupDirectories + friends (lane FS)
 //   BANISHED_RT_PKG=0           ... just LoadPackages + friends     (lane PKG)
+//   BANISHED_RT_IOBASE=0        ... just the IOBASE slot-0 dtors,
+//                                   GetSource and VisitorStream   (lane IOBASE)
+//   BANISHED_RT_FILESTREAM=0    ... just the FileStream family      (lane FILE)
+//   BANISHED_RT_CREATEFILE=0    ... just FileSystem create/close   (lane FILE)
 //
 // THREE WARNINGS THIS WAVE INHERITS, each already paid for once:
 //
@@ -46,8 +49,7 @@
 // FileSystem touches Win32 directly. Windows-only code goes in a *_win.cpp
 // beside the portable half; <windows.h> must never appear in a non-_win file
 // under runtime/src/.
-// ============================================================================
-
+// =====================================================================
 #include <cstdio>
 #include "../../funcs/rt_port.h"
 
@@ -55,6 +57,13 @@ extern int RtIoSerializerRegister();    // serializer.cpp    (lane A)
 extern int RtIoCompressedStreamRegister();  // compressedstream.cpp (lane B)
 extern int RtIoPersistenceRegister();   // persistence.cpp   (lane C)
 extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
+// Wave 19 lane PERSIST: the save-ENUMERATION and request-ISSUE half of
+// IO::Persistence — GetSaveCount / GetSaveInfo / GetSaveFilename, the three
+// Begin* request issuers, and ~Persistence. Own switch, separate from
+// BANISHED_RT_PERSISTENCE, because that one gates the SETTINGS half (Get/Set/
+// GetSavePath) which is on the boot path; these seven are on the save/load
+// menu path and must be removable without taking the settings with them.
+extern int RtIoPersistenceSavesRegister();  // persistence_saves{,_win}.cpp (lane PERSIST)
 // Wave 9 lane ENG, iteration 2. Its own switch, not folded into
 // BANISHED_RT_FILESYSTEM: this one is on the process's single boot path
 // (Engine::Startup step 3), so the integrator must be able to A/B it without
@@ -166,8 +175,12 @@ extern int RtIoSerializeFamilyRegister();   // serialize_family.cpp (lane SERIAL
 // Wave 19 lane CSTREAM: the IO::CompressedStream WRITE path -- the twelve
 // bodies compressed_stream_read.cpp explicitly listed as owed (?Commit,
 // ?CompressWindow, ?Create, ?Write, ?SetCurrentPos, ?GetCurrentPos, ?GetSize,
-// both ?PreCommit, ?Close on CompressedStream and CompressedFileStream) plus
-// ?GetSource@Stream@IO@@, which is slot 1 of FIVE minted IO vtables.
+// both ?PreCommit, ?Close on CompressedStream and CompressedFileStream).
+//
+// ?GetSource@Stream@IO@@ WAS in this file and is NOT any more: lane IOBASE
+// landed the same body first, and two RegisterRuntimeExport calls on one name
+// are a SHADOWED registration where the later binding silently wins. It is
+// registered by iobase_vtables.cpp and consumed here.
 //
 // ITS OWN SWITCH, and the reason is sharper than "blast radius": this is the
 // half of the class that PRODUCES bytes. Every save the game writes goes
@@ -180,6 +193,28 @@ extern int RtIoSerializeFamilyRegister();   // serialize_family.cpp (lane SERIAL
 // whose direction!=0 GROW branch is still DELEGATED to the DLL and counted by
 // compressed_stream_read.cpp. That remains a named cutover blocker.
 extern int RtIoCompressedStreamWriteRegister();    // compressed_stream_write.cpp
+// Wave 19 lane IOBASE, tranche 1: the four IO vector deleting destructors that
+// are slot 0 of their rows, the three out-of-line destructors they inline,
+// ?GetSource@Stream@IO@@ (slot 1 of SIX minted rows), and the whole
+// IO::VisitorStream null-sink family. Its own switch because it is the first
+// lane to make four minted DATA rows PROMOTABLE at once, so a boot regression
+// must be attributable to exactly it and not to the promotions that follow.
+extern int RtIoBaseVtablesRegister();       // iobase_vtables.cpp (lane IOBASE)
+// Wave 19 lane FILE: the IO::FileStream family lifecycle (both constructors,
+// both destructors, Create) and the FileSystem create/close pair underneath it.
+// TWO switches, not one, and deliberately so: the FileStream half is pure
+// object lifecycle while the FileSystem half is the only code in this tree that
+// creates a file in %TEMP% and RENAMES it over the target. If a write goes
+// wrong the integrator needs to be able to remove exactly the platform half and
+// leave the lifecycle standing, and vice versa.
+//
+// THIS LANE'S HEADLINE IS THE SCREENSHOT CUTOVER HOLE, NOT ITS ROW COUNT.
+// Wave 18 lane VRES ported ?SaveImageToFile@ImageBuffer@Video@@ and left it
+// reaching six unported IO exports through RT_EXPORT_ONCE doors, which resolve
+// to the shipped DLL today and to NULL at cutover. These two files are those
+// six plus the three-body closure between them and Win32.
+extern int RtIoFileStreamRegister();            // file_stream.cpp               (lane FILE)
+extern int RtIoFileSystemCreateFileRegister();  // filesystem_createfile_win.cpp (lane FILE)
 
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
@@ -190,6 +225,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_SERIALIZER"))  n += RtIoSerializerRegister();
     if (RtWaveEnabled("BANISHED_RT_STREAM"))      n += RtIoCompressedStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSISTENCE")) n += RtIoPersistenceRegister();
+    if (RtWaveEnabled("BANISHED_RT_PERSAVES"))    n += RtIoPersistenceSavesRegister();
     if (RtWaveEnabled("BANISHED_RT_FILESYSTEM"))  n += RtIoFileSystemRegister();
     if (RtWaveEnabled("BANISHED_RT_FSSTARTUP"))   n += RtIoFileSystemStartupRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSSTARTUP")) n += RtIoPersistenceStartupRegister();
@@ -209,5 +245,14 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_BINWRITER"))   n += RtIoBinaryWriterRegister();
     if (RtWaveEnabled("BANISHED_RT_SERIALFAM"))   n += RtIoSerializeFamilyRegister();
     if (RtWaveEnabled("BANISHED_RT_CSWRITE"))     n += RtIoCompressedStreamWriteRegister();
+    if (RtWaveEnabled("BANISHED_RT_IOBASE"))      n += RtIoBaseVtablesRegister();
+    if (RtWaveEnabled("BANISHED_RT_FILESTREAM"))  n += RtIoFileStreamRegister();
+    if (RtWaveEnabled("BANISHED_RT_CREATEFILE"))  n += RtIoFileSystemCreateFileRegister();
+
+    // Lane FILE's screenshot-path door screen. Armed OUTSIDE its two switches
+    // on purpose: the control for this lane is a run with both of them at 0,
+    // and a screen that the control switches off cannot be that control.
+    extern void RtIoFileCutoverProbeArm();
+    RtIoFileCutoverProbeArm();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

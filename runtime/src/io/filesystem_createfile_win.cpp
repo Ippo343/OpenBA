@@ -1,0 +1,639 @@
+// ============================================================================
+// runtime/src/io/filesystem_createfile_win.cpp — Wave 19 lane FILE
+// IO::FileSystem CreatePath / CreateFileW / PlatformCreateFile / CloseFile /
+//                PlatformCloseFile / ~FileSystem
+// ============================================================================
+//
+//   | Export                                                | Retail      | Ord  | Instrs |
+//   |-------------------------------------------------------|-------------|------|--------|
+//   | ?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@…@Z     | 0x1800ae430 | 2130 |  105   |
+//   | ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z     | 0x1800accc0 | 1726 |   50   |
+//   | ??1FileSystem@IO@@QEAA@XZ                             | 0x1800ac6d0 |  594 |   50   |
+//   | ?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEB…@Z | 0x1800acc50 | —    |   17   |
+//   | ?PlatformCreateFile@FileSystem@IO@@AEAA_N…@Z          | 0x1800ade60 | 3357 |  ~95   |
+//   | ?PlatformCloseFile@FileSystem@IO@@AEAAX…@Z            | 0x1800ae020 | —    |   62   |
+//
+// Kill switch: BANISHED_RT_CREATEFILE=0 leaves all of it on the DLL.
+//
+// ---------------------------------------------------------------------------
+// THE LAST THREE ROWS ARE NOT ON THE WAVE 19 ROW LIST, AND THAT IS THE POINT
+// ---------------------------------------------------------------------------
+// Lane FILE's brief names eight rows and its acceptance criterion is the
+// SCREENSHOT CUTOVER HOLE, not the row count. Walking the call graph out of the
+// two rows that ARE on the list found three more bodies between them and Win32,
+// none of them ported:
+//
+//     ?Create@FileStream@       -> ?CreateFileW@FileSystem@   -> ?PlatformCreateFile@
+//     ?CloseFile@FileSystem@    -> ?PlatformCloseFile@
+//
+// Porting only the named rows would have left `ResolveExport` falling through
+// to the DLL at each of those three, and the DLL-absent screenshot would still
+// have died — one link further down than before. `called` grows by these; that
+// is DEFERRED WORK BEING SURFACED, not invented work, and it is exactly what
+// Wave 18 lane VRES said about the rows that produced this lane.
+//
+// Two of the three are `AEAA` — PRIVATE, not unexported. This DLL exports its
+// private members and `?PlatformCreateFile@` is ordinal 3357
+// (`reference_aeaa_is_private_not_unexported.md`).
+//
+// ---------------------------------------------------------------------------
+// THE FACT THAT DECIDES ALL OF THIS: A WRITE GOES TO %TEMP% FIRST
+// ---------------------------------------------------------------------------
+// `?PlatformCreateFile@` does NOT open the caller's path. It calls
+// `GetTempPathW`, `GetTempFileNameW`, and opens THAT — then stores the temp
+// path in `FileInfo::_name0` (+0x20) and the CALLER'S path in `_name1` (+0x28).
+// `?PlatformCloseFile@` then closes the handle, `DeleteFileW`s the destination
+// and `MoveFileW`s the temp over it.
+//
+// So the pair is an ATOMIC-REPLACE, and three consequences follow that a
+// signature or a decompile summary would each get wrong:
+//
+//   1. **Nothing appears at the caller's path until CLOSE.** A screenshot that
+//      is written but never closed leaves a stray file in %TEMP% and no BMP.
+//      `~FileStream` is what closes it, which is why that row and this one had
+//      to land in the same lane.
+//   2. **`_name0` is the TEMP path and `_name1` is the FINAL path**, not the
+//      other way round. `MoveFileW`'s arguments settle it: at 0x1800ae0d7/0da
+//      RDX comes from the WideString built over `_name1` and RCX from the one
+//      built over `_name0`, and MoveFileW's first argument is the EXISTING
+//      file. Two same-typed adjacent String fields are otherwise a coin flip
+//      (FileStream.h records losing exactly that coin flip once on
+//      TextFileStream's `objectName`/`objectType` pair).
+//   3. **The rename is skipped when `_name0` has ZERO LENGTH**, not merely when
+//      it is null. 0x1800ae065 is `CMP dword ptr [RAX-0x8],0x0` — the String
+//      block's LENGTH field, at -8, not the refcount at -4.
+//
+// ---------------------------------------------------------------------------
+// `?CreatePath@` RETURNS TRUE UNCONDITIONALLY
+// ---------------------------------------------------------------------------
+// Its epilogue is `MOV AL,0x1` on the ONLY path out (0x1800ae637); every
+// `CreateDirectoryW` result is discarded. It is not a status, and a port that
+// propagated the Win32 return would diverge on every path that already exists.
+// `?Create@FileStream@` discards it too.
+//
+// PORTABILITY: this file is `_win` BECAUSE IT GENUINELY IS (PLAN.md §4.1). The
+// six Win32 entry points below were read out of Runtime-x64.dll's OWN import
+// table with `pefile` — `tools/dispatch_slot_map.py` is for the EXE's imports:
+//
+//     0x18014b0c8 CreateDirectoryW   0x18014b340 GetTempPathW
+//     0x18014b338 GetTempFileNameW   0x18014b320 CreateFileW
+//     0x18014b3b8 CloseHandle        0x18014b330 DeleteFileW
+//     0x18014b100 MoveFileW
+// ============================================================================
+
+#include <windows.h>
+
+#include <cstdint>
+#include <cstddef>
+#include <cstdio>
+
+#include "../../funcs/rt_port.h"
+#include "../../funcs/rt_diff.h"
+#include "../../types/io/FileSystem.h"
+#include "../../types/io/FileStream.h"
+#include "../../types/system/String.h"
+#include "../../types/system/Filename.h"
+#include "../system/string.h"
+
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
+// Lane String's ports, forward-declared rather than pulled in from a header,
+// because that lane publishes none and this lane does not edit another lane's
+// files. Signatures copied from their definitions. Called DIRECTLY, not through
+// a door: they are already ported, so a door would only be a way to reach the
+// shipped copy by accident.
+namespace RtSystem {
+void      RtSystem_Filename_AdjustDelimiters(Filename* self);
+Filename* RtSystem_Filename_Assign(Filename* self, const Filename* rhs);
+}  // namespace RtSystem
+
+// Rung 4 of Wave 9 lane PKG2, already ported and registered.
+extern "C" RtIO::FileInfo* RtIo_FileInfo_Assign(RtIO::FileInfo*, const RtIO::FileInfo*);
+
+namespace RtIO {
+
+using RtSystem::String;
+using RtSystem::Filename;
+using RtSystem::RtString_ReleaseInline;
+using RtSystem::RtSystem_Filename_AdjustDelimiters;
+using RtSystem::RtSystem_Filename_Assign;
+
+namespace {
+
+// ---- the two System::WideString entry points this file needs ---------------
+// Both are EXPORTED and both are ALREADY PORTED (runtime/src/system/
+// widestring.cpp), so they are reached through the proper name door, which the
+// registry answers first.
+//
+// `??0WideString@System@@QEAA@AEBVString@1@@Z` RETURNS BY VALUE — RCX is the
+// hidden return slot and RDX is the String. Getting that typedef wrong is a
+// wild write that still returns the right answer
+// (`reference_hidden_retslot_wild_write.md`).
+//
+// A System::WideString is one pointer, exactly like a String, and the release
+// idiom on it is the same (refcount at -4, block at -8). Retail inlines that
+// idiom at all four sites below rather than calling ~WideString.
+struct WideStr { wchar_t* data; };
+typedef WideStr* (*WideCtorFn)(WideStr* ret, const String* s);
+
+WideStr* WideFromString(WideStr* ret, const String* s) {
+    return RT_EXPORT_ONCE(WideCtorFn,
+        "??0WideString@System@@QEAA@AEBVString@1@@Z")(ret, s);
+}
+
+// The inlined WideString release. Same asymmetry as the String one: the
+// freeing branch leaves the slot holding `data - 8`, the non-freeing branch
+// nulls it. Reproduced, not tidied.
+void WideRelease(WideStr* w) {
+    if (!w->data) return;
+    int32_t* rc = reinterpret_cast<int32_t*>(w->data) - 1;
+    if (--*rc == 0) {
+        w->data = reinterpret_cast<wchar_t*>(
+            reinterpret_cast<char*>(w->data) - 8);
+        RtSystem::RtMemFree(w->data);
+    } else {
+        w->data = nullptr;
+    }
+}
+
+// ?SubString@String@System@@QEBA?AV12@HH@Z — ported (string.cpp), returns by
+// value, so RCX = this, RDX = the return slot, R8/R9 the two ints.
+typedef String* (*SubStringFn)(const String* self, String* ret, int a, int b);
+
+// Collection::Array<T>::~Array for a POD element, retail 0x1800097f0.
+// `if (data) MemFree(data); data = 0; size = capacity = 0;`
+//
+// TRANSCRIBED AS A FILE-LOCAL HELPER AND DELIBERATELY *NOT* REGISTERED. It is a
+// Collection-namespace body, not IO's, and this lane does not mint rows in
+// another namespace's census. Nothing else in the tree reaches 0x1800097f0
+// (grepped), so calling our own copy directly leaves no door open at cutover;
+// if a Collection lane later ports and registers it, this call site is
+// unaffected because it never went through a door.
+struct PodArray { void* data; int32_t size; int32_t capacity; };
+void PodArrayDtor(PodArray* a) {
+    if (a->data) RtSystem::RtMemFree(a->data);   // 180009814..44 (the locked free)
+    a->data = nullptr;                           // 18000984c
+    a->size = 0; a->capacity = 0;                // 18000984f (one qword store)
+}
+
+// Collection::Array<Filename>::~Array, retail 0x1800098d0 — ALREADY PORTED and
+// registered by runtime/src/io/modification.cpp:911, so the address door
+// answers from our registry.
+typedef void (*ArrayFilenameDtorFn)(void*);
+
+// The unexported AVL subtree free at 0x180008340 — ALREADY PORTED and
+// registered by runtime/src/collection/avl_trees.cpp:1252.
+typedef void (*SubtreeFreeFn)(void* tree, void* node);
+
+}  // namespace
+
+// ============================================================================
+// ATTENDANCE COUNTERS - see the note in file_stream.cpp. `calls=` is the half
+// the static door screen cannot answer, and a registered-but-never-entered body
+// looks identical to a working one without it.
+//
+// `createOk` / `createFail` and `closeRenamed` are EFFECTIVENESS counters, not
+// call counts: they say which BRANCH ran. `calls=N worked=0` is the shape that
+// means the body ran every time and always took the arm nothing covers
+// (`reference_calls_zero_can_mean_always_took_the_uncovered_branch.md`).
+// ============================================================================
+struct FsCreateCounters {
+    uint64_t createPath, createPathDirs;
+    uint64_t closeFile, platClose, closeRenamed;
+    uint64_t createFileW, platCreate, createOk, createFail;
+    uint64_t fsDtor;
+};
+FsCreateCounters g_fcc{};
+
+// ============================================================================
+// IO::FileSystem::CreatePath(Filename const&) const       retail 0x1800ae430
+// ============================================================================
+// Walk the path's characters; at every `\` or `/`, take the prefix up to (but
+// not including) that separator and `CreateDirectoryW` it. Returns TRUE
+// UNCONDITIONALLY — see the header note.
+//
+// FOUR DETAILS THE DISASSEMBLY SETTLES:
+//
+//  1. THE LENGTH COMES FROM THE STRING BLOCK, NOT strlen. 0x1800ae459 is
+//     `MOV EAX,[RAX-0x8]` — the block's length field — and a NULL `data` yields
+//     length 0 and no iterations at all (0x1800ae45e).
+//  2. `SubString(0, i)` IS EXCLUSIVE OF THE SEPARATOR. R8D is 0 and R9D is the
+//     loop counter EBP, which is the index OF the separator, so the directory
+//     created for `a\b\c` is `a`, then `a\b` — never a path ending in `\`.
+//  3. `AdjustDelimiters` RUNS ON THE COPY, NOT ON THE SUBSTRING. Retail builds
+//     the substring, ADOPTS it into a second String slot with an explicit
+//     refcount increment (0x1800ae4aa/4b2), normalises THAT, and releases the
+//     substring separately. Collapsing the two slots would normalise a buffer
+//     the substring temporary still owns.
+//  4. THE `this` POINTER IS NEVER READ. It is a `QEBA` const member that
+//     touches no field — which is why `?Create@FileStream@` can and does call
+//     it on the singleton rather than on anything of its own.
+// ============================================================================
+bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
+    RT_DIFF_BEGIN("IO::FileSystem::CreatePath");
+    ++g_fcc.createPath;
+    (void)self;   // detail 4 — retail reads no field of `this`
+
+    const String* src = reinterpret_cast<const String*>(path);
+    const int32_t len = src->data ? RtSystem::StringLength(src->data) : 0;  // 1800ae459
+
+    int32_t created = 0;
+    for (int32_t i = 0; i < len; ++i) {                     // 1800ae467/62e
+        const char c = src->data[i];                        // 1800ae473
+        if (c != '\\' && c != '/') continue;                // 1800ae477/47d
+
+        String sub{};                                       // 1800ae489..94
+        sub.data = nullptr;
+        RT_EXPORT_ONCE(SubStringFn, "?SubString@String@System@@QEBA?AV12@HH@Z")(
+            src, &sub, 0, i);
+
+        // Detail 3: adopt into a SECOND slot, normalise that, release the first.
+        String dir{};                                       // 1800ae49a
+        dir.data = nullptr;
+        if (sub.data) {                                     // 1800ae4a5
+            dir.data = sub.data;                            // 1800ae4aa
+            ++RtSystem::StringRefCount(dir.data);           // 1800ae4b2
+        }
+        RtSystem_Filename_AdjustDelimiters(
+            reinterpret_cast<Filename*>(&dir));             // 1800ae4bd
+        RtString_ReleaseInline(&sub);                       // 1800ae4c3..52f
+
+        WideStr w{};                                        // 1800ae53f
+        w.data = nullptr;
+        WideFromString(&w, &dir);
+        ::CreateDirectoryW(w.data, nullptr);                // 1800ae54a — result DISCARDED
+        ++created; ++g_fcc.createPathDirs;
+        WideRelease(&w);                                    // 1800ae551..5bd
+        RtString_ReleaseInline(&dir);                       // 1800ae5bd..629
+    }
+
+    RT_DIFF_WORK(created != 0);
+    return true;                                            // 1800ae637: MOV AL,1
+}
+
+// ============================================================================
+// IO::FileSystem::PlatformCreateFile(FileInfo&, Filename const&)
+//                                                         retail 0x1800ade60
+// ============================================================================
+// Open a NEW temp file in %TEMP% and record both names on the FileInfo — see
+// the header note on the atomic-replace pair.
+//
+// THE CREATE FLAGS ARE READ OFF THE PUSHES, NOT GUESSED:
+//   0x1800aded5  EDX = 0x40000000  GENERIC_WRITE
+//   0x1800aded2  R8D = 0           dwShareMode = 0 (exclusive)
+//   0x1800adecf  R9D = 0           lpSecurityAttributes = null
+//   0x1800adec7  [rsp+0x20] = 2    CREATE_ALWAYS
+//   0x1800adebf  [rsp+0x28] = 0x80 FILE_ATTRIBUTE_NORMAL
+//   0x1800adeba  [rsp+0x30] = 0    hTemplateFile = null
+//
+// THE FAILURE TEST IS UNSIGNED AND CATCHES TWO VALUES, NOT ONE.
+// `DEC RAX ; CMP RAX,-0x3 ; JA fail` fails when `handle - 1` is above
+// 0xFFFFFFFFFFFFFFFD unsigned, i.e. when the handle is INVALID_HANDLE_VALUE
+// (-1) **or NULL**. A port that tested only INVALID_HANDLE_VALUE would treat a
+// null handle as success. On failure the FileInfo's `handle` is left at
+// whatever the caller set (`?CreateFileW@` sets -1) and `false` is returned;
+// the Win32 handle at +0x18 is stored EITHER WAY, before the test.
+//
+// `handle = -2` on success is the LOOSE-FILE sentinel FileSystem.h documents
+// (-1 nothing, -2 loose, otherwise a packed (packIndex<<24)|fileIndex).
+//
+// GetTempFileNameW's prefix comes from the .rdata literal at 0x1801557e8, which
+// READS AS `L"SRS"` (53 00 52 00 53 00 00 00 — Shining Rock Software). It is
+// still fetched live through the address door rather than spelled here: it is an
+// unexported literal, and a transcription of it is a guess no static check
+// could catch. The bytes are quoted so a reader can see the door was verified.
+// ============================================================================
+bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
+                                        const Filename* path) {
+    RT_DIFF_BEGIN("IO::FileSystem::PlatformCreateFile");
+    ++g_fcc.platCreate;
+    (void)self;
+
+    wchar_t tempDir[MAX_PATH];
+    ::GetTempPathW(MAX_PATH, tempDir);                       // 1800ade91/96
+
+    // The three-character prefix retail passes. Read out of the DLL's .rdata at
+    // 0x1801557e8 through the address door rather than spelled here: it is an
+    // unexported string literal, and a transcription of it would be a guess
+    // that no static check could catch.
+    const wchar_t* prefix = reinterpret_cast<const wchar_t*>(
+        ResolveAddr(Module::Runtime, 0x1801557e8));
+    wchar_t tempFile[MAX_PATH];
+    ::GetTempFileNameW(tempDir, prefix, 0, tempFile);        // 1800adea4..b2
+
+    HANDLE h = ::CreateFileW(tempFile, GENERIC_WRITE, 0, nullptr,
+                             CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    info->winHandle = reinterpret_cast<int64_t>(h);          // 1800adee5 — stored EITHER WAY
+
+    const uint64_t probe = static_cast<uint64_t>(info->winHandle) - 1;
+    if (probe > static_cast<uint64_t>(-3)) {                 // 1800adee9..f0
+        ++g_fcc.createFail;
+        RT_DIFF_WORK(false);
+        return false;                                        // 1800adffa
+    }
+
+    info->handle = -2;                                       // 1800adef6 — LOOSE
+
+    // temp path -> _name0, via WideString::Set / AsUTF8 / AdjustDelimiters.
+    // Both WideString entry points are ported; the two temporaries are released
+    // in retail's order (the UTF-8 String first, then the WideString).
+    {
+        WideStr w{};  w.data = nullptr;                      // 1800adefc
+        using WideSetFn = void (*)(WideStr*, const wchar_t*);
+        RT_EXPORT_ONCE(WideSetFn, "?Set@WideString@System@@QEAAXPEB_W@Z")(
+            &w, tempFile);                                   // 1800adf0f
+
+        String utf8{};  utf8.data = nullptr;                 // 1800adf15
+        using AsUtf8Fn = String* (*)(const WideStr*, String*);
+        RT_EXPORT_ONCE(AsUtf8Fn, "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ")(
+            &w, &utf8);                                      // 1800adf21
+
+        String norm{};  norm.data = nullptr;                 // 1800adf27
+        if (utf8.data) {                                     // 1800adf31
+            norm.data = utf8.data;                           // 1800adf36
+            ++RtSystem::StringRefCount(norm.data);           // 1800adf3d
+        }
+        RtSystem_Filename_AdjustDelimiters(
+            reinterpret_cast<Filename*>(&norm));             // 1800adf47
+        RtSystem_Filename_Assign(
+            reinterpret_cast<Filename*>(&info->_name0),
+            reinterpret_cast<const Filename*>(&norm));       // 1800adf58
+
+        RtString_ReleaseInline(&norm);                       // 1800adf5e..93
+        RtString_ReleaseInline(&utf8);                       // 1800adf93..c0
+        WideRelease(&w);                                     // 1800adfc0..ea
+    }
+
+    // the CALLER's path -> _name1
+    RtSystem_Filename_Assign(
+        reinterpret_cast<Filename*>(&info->_name1), path);   // 1800adfea/f1
+
+    ++g_fcc.createOk;
+    RT_DIFF_WORK(true);
+    return true;                                             // 1800adff6
+}
+
+// ============================================================================
+// IO::FileSystem::CreateFileW(Filename const&)            retail 0x1800acc50
+// ============================================================================
+// SEVENTEEN INSTRUCTIONS: build an empty FileInfo in the caller's return slot,
+// then hand it to PlatformCreateFile. It RETURNS THE FileInfo BY VALUE, so RDX
+// is the hidden return slot and R8 is the Filename — the signature detail
+// file_stream.cpp's header note is about.
+//
+// The initialisation is the SAME field list `??0FileStream`'s inlined prologue
+// writes, +0x04 excluded in both. Two unrelated functions leaving the same
+// field alone is the agreement FileStream.h's note is built on.
+//
+// THE PLATFORM RESULT IS DISCARDED (0x1800acca4 has no test after it). The
+// caller learns success from `handle != -1`, which PlatformCreateFile sets to
+// -2 only on the success path — so the information is carried by the field, not
+// by the bool.
+// ============================================================================
+FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
+                                      const Filename* path) {
+    RT_DIFF_BEGIN("IO::FileSystem::CreateFileW");
+    ++g_fcc.createFileW;
+
+    ret->handle      = -1;          // 1800acc6c
+    ret->size        = 0;           // 1800acc72 (qword +0x08, covers cursor)
+    ret->cursor      = 0;
+    ret->baseOffset  = 0;           // 1800acc76
+    ret->_name0.data = nullptr;     // 1800acc82
+    ret->_name1.data = nullptr;     // 1800acc8e
+    ret->winHandle   = -1;          // 1800acc91
+    // +0x04 deliberately untouched, exactly as in ??0FileStream's prologue.
+
+    RtIo_FileSystem_PlatformCreateFile(self, ret, path);   // 1800acca4 — result discarded
+
+    RT_DIFF_WORK(ret->handle != -1);
+    return ret;                                            // 1800acca9
+}
+
+// ============================================================================
+// IO::FileSystem::PlatformCloseFile(FileInfo&)            retail 0x1800ae020
+// ============================================================================
+// Close the Win32 handle, then perform the atomic replace: DeleteFileW the
+// destination, MoveFileW the temp over it, and clear both name slots.
+//
+// FIVE THINGS THE DISASSEMBLY SETTLES, each of which a paraphrase gets wrong:
+//
+//  1. EVERY EARLY-OUT IS A PLAIN RETURN, and the three of them are at
+//     0x1800ae041 (no handle), 0x1800ae05f (`_name0` is null) and 0x1800ae069
+//     (`_name0` has zero LENGTH). The last reads `[RAX-0x8]`, the block's
+//     length, NOT the refcount at -4.
+//  2. THE HANDLE IS RESET TO -1 BEFORE ANY OF THE NAME WORK (0x1800ae04d), so
+//     a second close is a no-op even if the rename throws.
+//  3. `DeleteFileW` IS CALLED ON `_name1`, the DESTINATION — 0x1800ae073 puts
+//     RSI (`&_name1`) in RDX for the WideString ctor. It removes an existing
+//     file so the move can land; its result is discarded.
+//  4. `MoveFileW(_name0, _name1)`, in that order. See the header note — the
+//     argument order is what identifies which field is which.
+//  5. BOTH NAME SLOTS ARE CLEARED THROUGH `Filename::operator=` FROM A NULL
+//     TEMPORARY (0x1800ae14b/15e), not by storing null. That runs the release
+//     AND `AdjustDelimiters` on an empty string, which is what retail does; a
+//     bare `= nullptr` would leak both buffers.
+// ============================================================================
+void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
+    RT_DIFF_BEGIN("IO::FileSystem::PlatformCloseFile");
+    ++g_fcc.platClose;
+    (void)self;
+
+    if (info->winHandle == -1) return;                       // 1800ae03d/41
+
+    ::CloseHandle(reinterpret_cast<HANDLE>(info->winHandle));// 1800ae047
+    info->winHandle = -1;                                    // 1800ae04d
+
+    if (!info->_name0.data) return;                          // 1800ae059/5f
+    if (RtSystem::StringLength(info->_name0.data) == 0) return;  // 1800ae065/69
+
+    ++g_fcc.closeRenamed;
+
+    // 3. delete the destination
+    {
+        WideStr w{};  w.data = nullptr;
+        WideFromString(&w, &info->_name1);                   // 1800ae07b
+        ::DeleteFileW(w.data);                               // 1800ae084 — discarded
+        WideRelease(&w);                                     // 1800ae08d..b9
+    }
+
+    // 4. move the temp over it. Retail builds the DESTINATION wide string
+    //    FIRST (0x1800ae0c1, over _name1) and the SOURCE second (0x1800ae0d1,
+    //    over _name0), then calls MoveFileW(source, destination).
+    {
+        WideStr dst{};  dst.data = nullptr;
+        WideFromString(&dst, &info->_name1);                 // 1800ae0c1
+        WideStr src{};  src.data = nullptr;
+        WideFromString(&src, &info->_name0);                 // 1800ae0d1
+        ::MoveFileW(src.data, dst.data);                     // 1800ae0dd — discarded
+        WideRelease(&src);                                   // 1800ae0e4..111  (src first)
+        WideRelease(&dst);                                   // 1800ae111..13e
+    }
+
+    // 5. clear both, through Filename::operator= from a null temporary
+    {
+        Filename empty{};                                    // 1800ae13e
+        reinterpret_cast<String*>(&empty)->data = nullptr;
+        RtSystem_Filename_Assign(
+            reinterpret_cast<Filename*>(&info->_name0), &empty);  // 1800ae14b
+    }
+    {
+        Filename empty{};                                    // 1800ae151
+        reinterpret_cast<String*>(&empty)->data = nullptr;
+        RtSystem_Filename_Assign(
+            reinterpret_cast<Filename*>(&info->_name1), &empty);  // 1800ae15e
+    }
+    RT_DIFF_WORK(true);
+}
+
+// ============================================================================
+// IO::FileSystem::CloseFile(FileInfo&)                    retail 0x1800accc0
+// ============================================================================
+// `PlatformCloseFile(info); *info = FileInfo();`
+//
+// THE RESET IS A REAL ASSIGNMENT FROM A REAL TEMPORARY, not a field-by-field
+// clear: retail builds a fresh FileInfo on its own stack (0x1800acce3..d0b),
+// calls `FileInfo::operator=` (0x1800acd1a) and then destroys the temporary
+// (0x1800acd20..d81, _name1 before _name0). That matters because
+// `FileInfo::operator=` runs `AdjustDelimiters` on BOTH name slots on BOTH
+// paths and short-circuits self-assignment of the buffer — behaviour a
+// hand-written clear does not have.
+//
+// The temporary leaves +0x04 unwritten, so the assignment copies a dword of
+// retail's own stack garbage into the caller's FileInfo. That is faithful and
+// it is why filesystem_openfile_win.cpp's oracle already excludes +0x04
+// (`reference_oracle_must_not_compare_unwritten_bytes.md`).
+// ============================================================================
+void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
+    RT_DIFF_BEGIN("IO::FileSystem::CloseFile");
+    ++g_fcc.closeFile;
+
+    RtIo_FileSystem_PlatformCloseFile(self, info);   // 1800accde
+
+    FileInfo fresh;                                  // NOT zero-initialised: see above
+    fresh.handle      = -1;                          // 1800acce3
+    fresh.size        = 0;                           // 1800accec (qword)
+    fresh.cursor      = 0;
+    fresh.baseOffset  = 0;                           // 1800accf0
+    fresh._name0.data = nullptr;                     // 1800accfb
+    fresh._name1.data = nullptr;                     // 1800acd07
+    fresh.winHandle   = -1;                          // 1800acd0b
+
+    RtIo_FileInfo_Assign(info, &fresh);              // 1800acd1a
+
+    RtString_ReleaseInline(&fresh._name1);           // 1800acd20  +0x28 first
+    RtString_ReleaseInline(&fresh._name0);           // 1800acd50  +0x20
+    RT_DIFF_WORK(true);
+}
+
+// ============================================================================
+// IO::FileSystem::~FileSystem                             retail 0x1800ac6d0
+// ============================================================================
+// Six steps, in retail's order:
+//   1. SubtreeFree(&packfileIndexRoot, packfileIndexRoot)    1800ac6ff
+//   2. packfileIndexRoot = null; packfileIndexCount = 0      1800ac706/09
+//   3. ~Array<Filename>(&userPackFilenames)  (+0x30)         1800ac710
+//   4. ~Array<PackageFile*>(&packfiles)      (+0x20)         1800ac71a
+//   5. release packDirectory (+0x10), dataDirectory (+0x08),
+//      sourceDirectory (+0x00), in THAT order                1800ac720..79c
+//
+// NOTE THE CLASS HAS NO VTABLE. `FileSystem::sourceDirectory` is at +0x00 and
+// the destructor's last act is to release it — a `QEAA` non-virtual destructor
+// on a class whose first field is a String, which is why no table is stamped
+// anywhere in this body. FileSystem.h already pins that layout.
+//
+// STEP 4's ELEMENT DESTRUCTOR IS A POD FREE, NOT A PER-ELEMENT WALK.
+// 0x1800097f0 frees the block and zeroes the three header fields; it does NOT
+// release the PackageFile* elements. That is retail: `ClosePackages` owns those
+// and has already run. A port that "helpfully" destroyed the elements here
+// would double-free every mounted package
+// (`reference_a_written_recipe_can_be_wrong.md` is exactly this shape — two
+// destructors that look interchangeable and are not).
+// ============================================================================
+void RtIo_FileSystem_Dtor(FileSystem* self) {
+    RT_DIFF_BEGIN("IO::FileSystem::~FileSystem");
+    ++g_fcc.fsDtor;
+
+    // Step 1. The tree object is (root, count) at +0x40/+0x48; retail passes
+    // its ADDRESS as `this` and the root as the node.
+    void* tree = &self->packfileIndexRoot;
+    static SubtreeFreeFn subtreeFree = nullptr;
+    if (!subtreeFree) subtreeFree = reinterpret_cast<SubtreeFreeFn>(
+        ResolveAddr(Module::Runtime, 0x180008340));
+    subtreeFree(tree, self->packfileIndexRoot);       // 1800ac6ff
+
+    self->packfileIndexRoot  = nullptr;               // 1800ac706
+    self->packfileIndexCount = 0;                     // 1800ac709
+
+    // Step 3 — Array<Filename>, ported by modification.cpp and registered.
+    static ArrayFilenameDtorFn fnArrayDtor = nullptr;
+    if (!fnArrayDtor) fnArrayDtor = reinterpret_cast<ArrayFilenameDtorFn>(
+        ResolveAddr(Module::Runtime, 0x1800098d0));
+    fnArrayDtor(&self->userPackFilenames);            // 1800ac710
+
+    // Step 4 — the POD array free, our own copy. See the note above.
+    PodArrayDtor(reinterpret_cast<PodArray*>(&self->packfiles));  // 1800ac71a
+
+    // Step 5
+    RtString_ReleaseInline(&self->packDirectory);     // 1800ac720  +0x10
+    RtString_ReleaseInline(&self->dataDirectory);     // 1800ac74a  +0x08
+    RtString_ReleaseInline(&self->sourceDirectory);   // 1800ac775  +0x00
+    RT_DIFF_WORK(true);
+}
+
+// Read by file_stream_cutover_probe.cpp, which prints attendance beside the
+// door verdicts so a reader cannot see one without the other.
+void RtIoFileSystemCreateFileCounters(unsigned long long* out) {
+    out[0]=g_fcc.createPath;   out[1]=g_fcc.createPathDirs;
+    out[2]=g_fcc.createFileW;  out[3]=g_fcc.platCreate;
+    out[4]=g_fcc.createOk;     out[5]=g_fcc.createFail;
+    out[6]=g_fcc.closeFile;    out[7]=g_fcc.platClose;
+    out[8]=g_fcc.closeRenamed; out[9]=g_fcc.fsDtor;
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// Registration — BY NAME *AND* BY ADDRESS for every row.
+// `?CreateFileW@FileSystem@IO@@` and `?PlatformCloseFile@FileSystem@IO@@` are
+// exported under their mangled names but carry no ordinal in the table dump
+// above; the name door is the one their callers use and the address door is the
+// one an inlined caller would use.
+// ============================================================================
+int RtIoFileSystemCreateFileRegister() {
+    using namespace RtIO;
+    int n = 0;
+
+    RegisterRuntimeExport("?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z",
+                          (void*)&RtIo_FileSystem_CreatePath); ++n;
+    RegisterRuntimeAddr(0x1800ae430, (void*)&RtIo_FileSystem_CreatePath);
+
+    RegisterRuntimeExport("?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z",
+                          (void*)&RtIo_FileSystem_CloseFile); ++n;
+    RegisterRuntimeAddr(0x1800accc0, (void*)&RtIo_FileSystem_CloseFile);
+
+    RegisterRuntimeExport("??1FileSystem@IO@@QEAA@XZ",
+                          (void*)&RtIo_FileSystem_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800ac6d0, (void*)&RtIo_FileSystem_Dtor);
+
+    // The three closure rows — not on the Wave 19 list, required by the
+    // screenshot path. See the header note.
+    RegisterRuntimeExport(
+        "?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z",
+        (void*)&RtIo_FileSystem_CreateFileW); ++n;
+    RegisterRuntimeAddr(0x1800acc50, (void*)&RtIo_FileSystem_CreateFileW);
+
+    RegisterRuntimeExport(
+        "?PlatformCreateFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z",
+        (void*)&RtIo_FileSystem_PlatformCreateFile); ++n;
+    RegisterRuntimeAddr(0x1800ade60, (void*)&RtIo_FileSystem_PlatformCreateFile);
+
+    RegisterRuntimeExport("?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z",
+                          (void*)&RtIo_FileSystem_PlatformCloseFile); ++n;
+    RegisterRuntimeAddr(0x1800ae020, (void*)&RtIo_FileSystem_PlatformCloseFile);
+
+    printf("[RtPort]   IO::FileSystem create/close (wave 19 lane FILE): "
+           "%d exports registered\n", n);
+    return n;
+}
