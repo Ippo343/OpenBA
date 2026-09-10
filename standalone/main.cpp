@@ -46,6 +46,9 @@ extern "C" void WorkSchedProbe_Report();
 #include <windows.h>
 #include <dbghelp.h>
 
+// WAVE 14 LANE SAVEMETA -- runtime/src/save/saveload_meta.cpp.
+extern "C" void RtSaveMetaSummary();
+
 // Wave 9 lane S save-stream oracle summary (runtime/src/io/save_trace.cpp).
 namespace RtSaveTrace { void Summary(); }
 static inline void RtSaveTraceSummary() { RtSaveTrace::Summary(); }
@@ -1961,7 +1964,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     printf("\n[Standalone] === ENTERING GameMain ===\n");
     int rc = Game::RunGameMain(hInstance, lpCmdLine ? lpCmdLine : "");
     printf("[Standalone] === GameMain returned %d ===\n", rc);
-
     // Unregistered-address census (BANISHED_UNREG_CENSUS=1). Dumped here and
     // not from atexit: the crash handler ends in ExitProcess, which skips it.
     DumpUnregCensus();
@@ -1983,6 +1985,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // WAVE 10 LANE UI4: says so out loud when its deferred probe never fired,
     // so a silent log cannot be mistaken for a passing one. No-op otherwise.
     { extern void RtUiSpriteCaptureProbeReport(); RtUiSpriteCaptureProbeReport(); }
+    // WAVE 14 LANE SAVEMETA: one line, always, including calls=0 -- calls=0 has
+    // four different causes and they invert the conclusion, so bodyCalls is
+    // printed beside it (runtime/src/save/saveload_meta.cpp).
+    RtSaveMetaSummary();
     RtDiffSummary();
     // Wave 10: the PREDICTIVE shadow oracle (BANISHED_RT_PREDICT=1). Prints
     // beside [RtDiff] and is silent when off. Read its `changed=` column
