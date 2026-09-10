@@ -337,3 +337,157 @@ Build: `mingw32-make standalone-debug` **green**, no warnings introduced, done
 **without** the game-dir lock. Both measurement runs used the self-releasing
 `tools/game_dir_lock.sh run lane-MINT 900 -- …` form, each as its own statement;
 both exited 0 with a 0-byte `standalone_crash.log`.
+
+---
+
+# ANNEXE A — POST-REPORT TRANCHE (2026-09-10, after this lane reported)
+
+Added on re-tasking by the integrator. **§0–§8 above are sealed and unaltered;
+this annexe only adds** (WAVE19_IO.md §7: sealing forbids altering, not
+annotating). Nothing here changes the root cause, the set-diff, or the identity.
+
+## A.1 The integrator's ANCHOR hypothesis is REFUTED
+
+The hypothesis: *"the generator uses an export as an ANCHOR to locate an adjacent
+unnamed vtable, mints the NEIGHBOUR, and never mints the ANCHOR itself — the five
+are anchors, consumed as coordinates and discarded as subjects."*
+
+**It is wrong, and one fact settles it: the generator, run UNCHANGED, mints all
+five.** A generator that structurally discarded anchors could not produce them
+from the same code. That result predates this annexe (§2, commit `3620e69`).
+
+Three further refutations, each independent:
+
+1. **`adjacent-export:` is a SIZE PROOF, not a discovery mechanism.** In
+   `tools/rt_mint_gen.py` the population is fixed **before** any slot is decoded
+   (census ∪ source-literal scan ∪ `EXTRA_*` ∪ two typeinfo closures). The proof
+   string is computed *afterwards*, per row, from the next exported RVA:
+   `nxt = sorted_rvas[bisect_right(sorted_rvas, rva)]`, then
+   `if nxt == end_rva: proof = "adjacent-export:" + by_rva[nxt]`. It records
+   *why we believe the slot count*, and **feeds nothing back into the set**.
+2. **Anchor and subject are not disjoint — the regenerated file proves it in
+   both directions.** `??_7BinaryFileStream@IO@@6B@` is now a minted row *whose
+   own proof* reads `adjacent-export:??_7CompressedCopyFileStream@IO@@6B@`,
+   while simultaneously being the anchor named by `??_7ReaderWriter@IO@@6B@`'s
+   proof. Likewise `??_7TextFileStream@`'s proof names `??_7VisitorStream@`,
+   and **both are minted rows**. Under the hypothesis neither pair could exist.
+3. **The neighbours were never "minted instead of" the anchors.** The
+   by-address row at `0x1801554a8` (BinaryEncoding) is not a discovery of the
+   generator at all — it is a hand-written `EXTRA_VTABLES_BY_ADDR` entry from
+   Wave 9 lane C2, with the adjacency argument written out in its comment.
+
+### A.1.1 The prediction was true and did not discriminate
+
+The integrator called it a sharp falsifiable prediction: *every non-zero name hit
+should be an `adjacent-export:` provenance label.* **I confirm it — all 8 hits
+are provenance labels** (§1, verified by reading every hit).
+
+But that prediction is **equally entailed by the true explanation**. If the file
+is simply stale, the only way one of these names can appear is as some other
+row's proof label — which is exactly what is observed. **A prediction that both
+hypotheses make cannot select between them**
+(`reference_two_checks_one_hidden_premise.md`). The test that *does*
+discriminate is running the generator, and it comes out against the hypothesis.
+
+### A.1.2 A number that looked like a match
+
+The integrator's message reports *"I reproduced the name-grep counts on this tip
+and got precisely the plan's predicted 4, 2, 2, 0, 0"* — but the table printed
+directly beneath that sentence reads:
+
+```
+4  ??_7BinaryFileStream@IO@@6B@
+2  ??_7CompressedFileStream@IO@@6B@
+0  ??_7FileStream@IO@@6B@
+2  ??_7TextFileStream@IO@@6B@
+0  ??_7VisitorStream@IO@@6B@
+```
+
+That is **4, 2, 0, 2, 0** — which matches **my** measurement (§1) and **not** the
+plan's 4, 2, 2, 0, 0. So the two independent measurements agree with each other
+and the plan is wrong in the same way I reported. The multiset {4,2,2,0,0} and
+{4,2,0,2,0} are identical as a bag, which is what let the prose read as a match.
+**Two of the three things a lane could quote here — the total and the sorted
+multiset — cannot tell the plan's claim from the truth; only the per-symbol
+pairing can.**
+
+## A.2 Ghidra corroboration (port 8089, `Runtime-x64.dll`)
+
+Used as corroboration, not as the subject. `get_function_metrics` was not used
+(`reference_ghidra_mcp_address_param_silently_ignored.md`).
+
+**Slot counts confirmed independently of `pefile` and of the mint.** Raw bytes at
+`0x180155980` are 20 consecutive image pointers, and qword 20 sits at
+`0x180155a20` — the `??_7VisitorStream@` export. The count, the anchor and the
+`adjacent-export` proof all close on the same address. This is a *third* route to
+the 20 (after the generator's decode and the live shadow's 598-comparison check).
+
+## A.3 The promotion answer, and it is the sharpest finding of the cell
+
+**Every stamp of all five vtables is an in-DLL RIP-relative `LEA`, and per
+`reference_a_ported_row_can_be_permanently_unpromotable.md` that is NOT a door.**
+Verified as disassembly, not decompiled C — four sampled stamp sites, all the
+same two-instruction shape:
+
+```
+1800a8270  LEA RAX,[0x1801554d0]     ; ??0BinaryFileStream
+1800a8277  MOV qword ptr [RDI],RAX
+180023cfe  LEA RAX,[0x1801554d0]  -> MOV [RBX],RAX
+1800bc653  LEA R14,[0x1801555f0]  -> MOV [RSP+0x40],R14   ; External::Load
+1800be673  LEA RAX,[0x180155a20]  -> MOV [RBP-0x18],RAX   ; External::Add
+```
+
+So **a row is promotable exactly insofar as WE own the function that stamps it.**
+Mapping every stamper Ghidra lists against what our tree has ported:
+
+| row | stampers in the DLL | ported stamper(s) we own today |
+|---|---|---|
+| `??_7BinaryFileStream@` | `??0BinaryFileStream` ×2 only | **none** |
+| `??_7FileStream@` | FileStream/BinaryFileStream/TextFileStream ctors+dtor, Close/Create/Open, `Engine::Run` ×2 | `?SaveText@External@Object@@`, `?SaveImageToFile@ImageBuffer@Video@@` |
+| `??_7CompressedFileStream@` | CompressedFileStream/CompressedCopyFileStream ctors+dtor, `Save`, `IsCurrent` | `?Load@External@Object@@` |
+| `??_7TextFileStream@` | TextFileStream ctors+dtor, Close/Create/Open | `?SaveText@External@Object@@` |
+| `??_7VisitorStream@` | VisitorStream ctor+dtor, `FUN_18002bf20`, `FUN_18002bf80` | `?Add@External@Object@@` |
+
+**This explains the attendance data exactly, and that is the point.** The two
+ATTENDED rows (§5) are precisely the two whose ported stamper actually runs on
+the gameplay route — `External::Load` on world load, `External::Add`. `SaveText`
+stamps `??_7FileStream@` and `??_7TextFileStream@` but did not run on that route,
+so `post=0`. And `??_7BinaryFileStream@` has **no ported stamper at all**, so its
+`post=0` is not route-limited — **on the current tree there is no code path that
+could ever open its door.** An independent instrument (CEIL's counter) and an
+independent binary fact (Ghidra's xref set) agree row by row, having been
+gathered by entirely different means.
+
+**Consequence for lane FILE, and it reorders the work:** promoting
+`??_7BinaryFileStream@` requires `??0BinaryFileStream@IO@@QEAA@XZ` — already one
+of FILE's 11 rows — and that ctor is its *only* stamper, which makes it the
+**cleanest promotion of the five**, not the hardest. `??_7FileStream@` is the
+opposite: nine distinct stampers including `Engine::Run`, so TRAP=0 there still
+leaves most stamps on retail's side.
+
+**What A.3 does NOT claim.** It does not claim any of the five is unpromotable —
+a stamper we have not ported yet is ordinary port work, not a ceiling. It does
+not claim the ported stampers listed actually install our table today (they
+resolve the symbol; whether the minted row is *promoted* is gated by
+`standalone/reg_mint_promoted.cpp`, and none of the five is registered there).
+It does not claim Ghidra's xref set is exhaustive — it is the xrefs Ghidra has
+found in this project's analysis, and an indirect stamp would not appear.
+
+## A.4 For lane TRAPS and lane FILE — the minted set, deliverable now
+
+TRAPS's readiness screen held 9 IO rows where the plan lists 13; the four missing
+are my five minus VisitorStream. **They are minted as of `3620e69` and their trap
+counts are measured, not zero:**
+
+| row | VA | slots | ported | TRAP | purecall |
+|---|---|---|---|---|---|
+| `??_7BinaryFileStream@IO@@6B@` | `0x1801554d0` | 8 | 0 | 8 | 0 |
+| `??_7CompressedFileStream@IO@@6B@` | `0x1801555f0` | 9 | 1 | 8 | 0 |
+| `??_7FileStream@IO@@6B@` | `0x180154960` | 8 | 0 | 8 | 0 |
+| `??_7TextFileStream@IO@@6B@` | `0x180155980` | 20 | 0 | 20 | 0 |
+| `??_7VisitorStream@IO@@6B@` | `0x180155a20` | 7 | 0 | 7 | 0 |
+
+All five **BLOCKED**. Re-running the readiness screen on this branch will now show
+13 IO rows, not 9. Lane FILE's DATA rows are unblocked for scoping; §4 (the shared
+`IO::FileStream` base slots) and A.3 (stamper ownership) are the two facts that
+should drive its ordering.
