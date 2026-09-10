@@ -1296,3 +1296,78 @@ tool reported pid liveness as health.
 the pid exists.** Its `STALE` code (4) covers a pid that is *gone*, which is a
 different and rarer condition than a pid that is *present but no longer
 publishing*. Until then, lanes have been told to check the mtime themselves.
+
+## C43. The strongest practical conclusion this wave produced about its own failures
+
+Lane PERSIST, on hitting the premise/conclusion subject slip **twice within the
+hour after naming it** — the second time *while actively quoting the rule at me*:
+
+> **What caught both was not vigilance but A CHECK THAT RAN REGARDLESS OF WHAT I
+> BELIEVED** — `game_dir_lock.sh status` for the lock, and the probe-off control
+> run for the route. **Neither required me to suspect anything.**
+
+That is the practical conclusion, and it outranks every individual correction in
+this file. **This wave recorded 40+ instrument and reasoning failures, and almost
+none of them were caught by someone being careful.** They were caught by:
+
+* a control that had to print non-zero before a green was believed,
+* a set-diff run because the protocol said to run one,
+* a linker that refused a duplicate symbol,
+* a second lane independently re-deriving a number,
+* a tool printing its own subject and denominator.
+
+**Knowing a failure mode does not inoculate against it.** Three people in this wave
+broke a rule they had personally articulated, two of them within the hour, and the
+integrator did it twice. **The remedy is not better memory — it is cheap checks
+that run unconditionally**, especially ones whose output is unreadable as success
+when they have measured nothing.
+
+This is the through-line of C22, C29, C34, C39 and C42: in every case the
+instrument was *available* and the failure was in whether it ran, or in whether its
+output could be read wrongly.
+
+## C44. `??1Persistence@IO@@` is VERIFIED — the expiry written in C15 is discharged
+
+Closed by lane PERSIST, on the correction it made against its own committed
+holdback.
+
+```
+~Persistence  control 2 of 2 caught | 2 agreed, 0 diverged, 0 inert, of 2 APPLICABLE
+  rc=2 -> agree (shipped wrote 36 of 152 bytes; arm=0 expected=0; arrays cleared=1)
+  rc=1 -> agree (shipped wrote 26 of 152 bytes; arm=5 expected=5; arrays cleared=1)
+  CTRL-DTOR caught both at firstDiff=16 = +0x10 -- the worker vtable the mutant never stamps
+```
+
+**The case split is what earns it.** Both `String`-release arms are exercised, each
+reporting the arm the **shipped** side took against the arm its refcount predicts.
+Retail deliberately leaves a dangling `buf-8`, so **a port that "tidied" it to null
+passes rc=2 and fails rc=1** — without the split it passes silently. That is a
+plausible-and-wrong port caught by design rather than by luck.
+
+**Effectiveness stated rather than implied:** the subjects write **36 and 26 of 152
+bytes**, against at most 8 for the `Begin*` screen — so this screen is
+substantially more capable of detecting a difference than the one beside it, and
+the lane says so.
+
+## C45. The PERSIST tally, final — three groups, and my wording was wrong in both directions
+
+Recorded here as the corrected form of what I told the lane to report:
+
+| tier | rows | what it means |
+|---|---|---|
+| **live-verified** | `?GetSaveFilename@` 28 calls · `?GetSaveCount@` 14 · `?GetSaveInfo@` 13 | **0 divergences each**, against the shipped DLL on 13 real saves |
+| **live-EXERCISED, never compared** | `?BeginLoad@` · `?BeginGetSaveGameInfo@` | a site registers on body **ENTRY**, so both bodies ran; `calls=0` only because neither has an oracle arm |
+| **not reached** | `?BeginDelete@` · `??1Persistence@` (live route) | absent from the 609-site list |
+
+`??1Persistence@` is verified by the **synthesised** oracle (C44) while having **no
+live-route exercise** — those are different facts and the lane keeps them apart.
+
+The lane also **refuted its own prediction**: it expected `?BeginGetSaveGameInfo@`
+not to be reached (command 3 versus the list scan's command 4). The load route does
+reach it. Its diagnosis: *reasoning from the disassembly's command codes rather
+than from the caller.*
+
+And `Auto.sav` loading clean on the same binary and mod state is the control that
+makes the `Save0` **format-mismatch** reading the supported one — rather than
+leaving "consistent with the mods-off hazard" standing as a cause, which is where I
+had left it.
