@@ -101,7 +101,7 @@ useful than pasting a hash-match nobody verified.
 | 3 | `??0SavedState@Save@@QEAA@XZ` | `0x1800c0ee0` | Two qword zero stores | scratch-copy diff, `0xCD`-filled | **ported** |
 | 4 | `??1SavedState@Save@@QEAA@XZ` | `0x1800c0ea0` | `if (_data) locked-free(_data)` | **none** (a second run double-frees) | **ported, unmeasured** |
 | 5 | `?CheckMod@SaveLoad@Save@@QEBAHHH@Z` | `0x1800c1090` | Matches a save's recorded mod against `IO::Modification` | **full diff** (idempotent) | **ported** |
-| 6 | `?Draw@SaveLoad@Save@@…` | `0x1800c2eb0` | Renders the save thumbnail to an offscreen target | none possible | **HELD BACK** |
+| 6 | `?Draw@SaveLoad@Save@@…` | `0x1800c2eb0` | Renders the save thumbnail to an offscreen target | ~~none possible~~ **replay, see below** | ~~HELD BACK~~ **PORTED 2026-09-09, Wave 14 lane DRAW** |
 | 7 | `?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ` | `0x1800c3c80` | `return *(int*)this` | **full diff** | **ported** |
 | 8 | `?GetSaveCount@SaveLoad@Save@@QEBAHXZ` | `0x1800c3b80` | `return *(int*)(this+0x58)` | **full diff** | **ported** |
 | 9 | `?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z` | `0x1800c3b60` | `_savesData + index*0x58`, unbounded | **full diff** | **ported** |
@@ -117,7 +117,16 @@ useful than pasting a hash-match nobody verified.
 
 ### The two held-back functions, in full
 
-**`?Draw@SaveLoad@Save@@…` (`0x1800c2eb0`).** ~400 decompiled lines. It `operator new`s and
+**`?Draw@SaveLoad@Save@@…` (`0x1800c2eb0`).** *** SUPERSEDED 2026-09-09 — both
+reasons below were WRONG. See `docs/runtime_port/WAVE14_LANE_DRAW.md` and the
+banner of `runtime/src/save/saveload_draw.cpp`. In short: the five
+constructors are INLINED into Draw (nothing had to be ported first, and the
+four vtables are named DATA EXPORTS), and the "no oracle" claim mis-stated the
+frequency (one frame per save, not every frame) and treated the render-target
+leak as the oracle's problem rather than the harness's. The paragraph is kept
+verbatim so the next reader recognises the claim if they meet it elsewhere. ***
+
+~400 decompiled lines. It `operator new`s and
 hand-constructs a `Graphics::FrameCopyImageBuffer` (0x88 bytes), a `Video::ImageBuffer` (0x68),
 a `Video::RenderBuffer` (0x30), a `Graphics::MaterialInstance` (0x60) and a `UI::SpriteSheet`
 (0x58), stamping `Object::Base`, `Object::External`, `Graphics::MaterialInstance` and

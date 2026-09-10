@@ -1,0 +1,43 @@
+Wave 14 lane DRAW — the crash the FIRST live run produced, kept as evidence for
+WAVE14_LANE_DRAW.md §6.4.
+
+CAUSE: the port read `??0ImageBuffer@Video@@QEAA@XZ`'s return value, exactly as
+retail does (MSVC returns `this` in RAX from a constructor). That name is PORTED
+and `Video_ImageBuffer_Ctor` (runtime/src/video/buffers.cpp:387) is declared
+`void`, so RAX held whatever its last expression left there — here, 1.
+
+FIX: use the `operator new` result `p` instead. Same pointer by construction,
+and independent of how any port spells its signature. The identical crash and
+the identical resolution are already documented at
+runtime/src/graphics/sunlight.cpp:230-247 from Wave 9.
+
+=== STANDALONE CRASH ===
+Exception: 0xC0000005 (ACCESS_VIOLATION)
+Address:   00007ff68ad414a8
+RAX=0000000000000001 RCX=000001FBB3EC8368 RDX=0000000000000001 RBX=0000000000000008
+RBP=000000DEDC1FE840 RSI=0000000000000000 RDI=000001FBB3EC96B8 R8 =000000DEDC1FE4C0
+R9 =0000800000000000 R10=FFFFE00000000000 R11=000001FBB70FB7D8 R12=0000000000000000
+RIP=00007FF68AD414A8 RSP=000000DEDC1FE7C0
+Module:    reimpl-x64.exe + 0x3514A8  (base=00007ff68a9f0000)
+Fault: READ of 0000000000000001
+Registry: 1618 registered, 48 stubs hit
+Stack trace:
+  #0  reimpl-x64.exe         + 0x3514A8    (RIP=00007FF68AD414A8 RSP=000000DEDC1FE7C0)
+  #1  reimpl-x64.exe         + 0x352C54    (RIP=00007FF68AD42C54 RSP=000000DEDC1FEC90)
+  #2  reimpl-x64.exe         + 0x1AE238    (RIP=00007FF68AB9E238 RSP=000000DEDC1FED80)
+  #3  Runtime-x64.dll        + 0xDCE01     (RIP=00007FFCAB35CE01 RSP=000000DEDC1FF030)
+  #4  Runtime-x64.dll        + 0xDD398     (RIP=00007FFCAB35D398 RSP=000000DEDC1FF070)
+  #5  reimpl-x64.exe         + 0x2E30AB    (RIP=00007FF68ACD30AB RSP=000000DEDC1FF100)
+  #6  reimpl-x64.exe         + 0x1A8607    (RIP=00007FF68AB98607 RSP=000000DEDC1FF170)
+  #7  reimpl-x64.exe         + 0x402190    (RIP=00007FF68ADF2190 RSP=000000DEDC1FF9C0)
+=== END CRASH ===
+
+Symbolised with nm against that build (image base 0x140000000):
+  0x3514A8 -> (anonymous namespace)::DrawBody(RtSave::SaveLoad*, RtVideo::Context*, void*) +0x19f
+  0x352C54 -> RtSave_SaveLoad_Draw(RtSave::SaveLoad*, RtVideo::Context*, void*) +0x96
+  0x1AE238 -> GameUpdateLoop_Draw +0xc26
+  0x2E30AB -> RtEngine_MainLoop_Run +0x1c2
+
+The faulting instruction, from objdump of that build:
+  1403514a1: mov 0x420(%rbp),%rax    ; <- the constructor's return value
+  1403514a8: mov (%rax),%rax         ; <- vtable load; RAX was 1

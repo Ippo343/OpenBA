@@ -11,24 +11,28 @@
 // HELD BACK, with reasons (a held-back function with a stated reason is a
 // result; a registered function nothing ever measured is not):
 //
-//   ?Draw@SaveLoad@Save@@…            0x1800c2eb0 — 400 lines that construct a
-//       Graphics::FrameCopyImageBuffer, a Video::ImageBuffer, a
-//       Video::RenderBuffer, a Graphics::MaterialInstance, a UI::SpriteSheet,
-//       a Graphics::Camera and a UI::SpriteContext by hand, stamping five
-//       vtables this project does not own.
-//       THE LOAD-BEARING REASON IS THE ORACLE, NOT THE OWNERSHIP: it renders
-//       into the live Video::Context and allocates and destroys GPU resources,
-//       so running both implementations would draw twice and leak a render
-//       target every frame. That is independent of who owns the classes and it
-//       does not expire.
-//       (The ownership half of this comment used to read "those classes are
-//       Waves 6 and 7", which now reads as RESOLVED because both waves are
-//       closed. It is not: MaterialInstance's and SpriteSheet's vtables and
-//       SpriteContext::AddLine/SetScissor are still individually unported.
-//       Corrected in the Wave 8.5 close-out -- see
-//       docs/runtime_port/WAVE8_5_HOLDBACK_RECHECK.md -- because a blocker
-//       phrased as "waiting on another wave" silently becomes a lie the day
-//       that wave lands.)
+//   ?Draw@SaveLoad@Save@@…            0x1800c2eb0 — *** NO LONGER HELD BACK. ***
+//       PORTED 2026-09-09 by Wave 14 lane DRAW, in runtime/src/save/saveload_draw.cpp.
+//       BOTH of this entry's reasons were wrong, and the correction is recorded
+//       here rather than only in a wave doc because this is where the next
+//       reader will meet the claim (PLAN §6 step 8).
+//         * "it stamps five vtables this project does not own" — irrelevant and
+//           also not a blocker. Those constructors are INLINED into Draw, so
+//           there was never anything to port first; the four vtable symbols it
+//           stamps are ordinary DATA EXPORTS of the shipped DLL (??_7Base@Object@@6B@,
+//           ??_7External@Object@@6B@, ??_7MaterialInstance@Graphics@@6B@,
+//           ??_7SpriteSheet@UI@@6B@) and resolve by name.
+//         * "the load-bearing reason is the oracle: running both would draw
+//           twice and leak a render target every frame" — the FREQUENCY was
+//           wrong (Draw runs on exactly one frame per save, gated by
+//           _captureFlags, not every frame) and the leak is the harness's to
+//           fix, not the oracle's to suffer. saveload_draw.cpp's replay round
+//           frees our readback buffer and rewinds _captureFlags, _capturePixels
+//           and four Video::Context fields before handing the frame to the DLL,
+//           so retail runs on pristine input and the game keeps RETAIL's result.
+//       What the old comment WAS right about: MaterialInstance's and
+//       SpriteSheet's vtables and SpriteContext::AddLine/SetScissor are still
+//       individually unported. Draw does not need them to be.
 //
 //   ??1SaveLoad@Save@@QEAA@XZ         0x1800c3c90 — NO LONGER HELD BACK. This
 //       entry described the destructor as "left on the DLL"; it has been ported
