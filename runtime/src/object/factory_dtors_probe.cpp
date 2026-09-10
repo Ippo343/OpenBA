@@ -87,6 +87,9 @@
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+// The RAW DLL address, port registry bypassed. Declared here for the same
+// reason as ResolveAddr: standalone/resolve.h drags in <windows.h>.
+uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 namespace RtObjFactoryDtor {
 // The three ports and the helpers, from factory_dtors.cpp.
@@ -123,16 +126,45 @@ bool ProbeOptIn(const char* name) {
 // ---------------------------------------------------------------------------
 struct AllocSnap { int64_t bytes; int32_t count; bool valid; };
 
+// *** THIS MUST NOT USE ResolveAddr, AND THE FIRST VERSION OF IT DID. ***
+//
+// `ResolveAddr(Module::Runtime, …)` CONSULTS THE PORT REGISTRY FIRST
+// (reference_resolveaddr_consults_port_registry_first). For an oracle's
+// THEIRS-side read that is the wrong door on principle — whatever it hands back
+// is "whatever our tree currently thinks that address means", not the DLL's
+// own .data — and in practice it made every cell of this probe report
+// `deferred: singleton not readable` at BOTH call sites on the first run that
+// ever exercised it. `ResolveRuntimeRaw` is the raw DLL address, registry
+// bypassed, which is what an oracle wants.
+//
+// The two failure causes are now reported separately, because "the address did
+// not resolve" and "the address resolved and the pointer in it is null" are
+// different findings and the first version collapsed them into one silent
+// `valid = false`.
+enum class SnapFail { None, NoAddress, NullSingleton };
+SnapFail g_lastSnapFail = SnapFail::None;
+
 AllocSnap Snapshot() {
     AllocSnap s{0, 0, false};
-    uintptr_t slot = ResolveAddr(Module::Runtime, 0x1801fc718);
-    if (!slot) return s;
+    uintptr_t slot = ResolveRuntimeRaw(0x1801fc718);
+    if (!slot) { g_lastSnapFail = SnapFail::NoAddress; return s; }
     uint8_t* a = *reinterpret_cast<uint8_t**>(slot);
-    if (!a) return s;
+    if (!a) { g_lastSnapFail = SnapFail::NullSingleton; return s; }
     s.bytes = *reinterpret_cast<int64_t*>(a + 0x630);
     s.count = *reinterpret_cast<int32_t*>(a + 0x638);
     s.valid = true;
+    g_lastSnapFail = SnapFail::None;
     return s;
+}
+
+const char* SnapFailWhy() {
+    switch (g_lastSnapFail) {
+        case SnapFail::NoAddress:      return "ResolveRuntimeRaw(0x1801fc718) returned 0 "
+                                              "-- Runtime-x64.dll is not mapped";
+        case SnapFail::NullSingleton:  return "the slot resolved but holds NULL -- the DLL's "
+                                              "MemoryAllocator singleton is not constructed yet";
+        default:                       return "no failure recorded";
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -452,12 +484,30 @@ void RtObjectFactoryDtorsProbe() {
         // Refuse to report at all if the arena is not readable — a probe that
         // cannot run screen 2 would be a bytes-only oracle, and screen 1 is
         // STRUCTURALLY BLIND to the defect class this row set is about.
+        // MEASURED 2026-09-09, and it cost a run to learn: at RuntimePortInit
+        // the DLL's allocator singleton is not merely unreadable, IT DOES NOT
+        // EXIST YET — a `MemAlloc(16, 8)` through the DLL's own static at this
+        // point CRASHES on the null singleton (exit=3, ACCESS_VIOLATION, run
+        // `factdtor4`). So this probe cannot run here at all: not just screen 2,
+        // but the subject builders too, since every one of them allocates.
+        //
+        // It cannot run from the exit summary either — by then the allocator has
+        // been shut down and the slot is null again. The live window is
+        // BETWEEN those two points, which is why the real call site is the
+        // frame tick (standalone/menudialogloopt_stubs.cpp), and why this
+        // early call now does nothing but decline.
+        //
+        // NOTHING IS ALLOCATED BEFORE THE SNAPSHOT SUCCEEDS. That ordering is
+        // the whole guard: a probe that allocates in order to find out whether
+        // it may allocate has already crashed.
         const AllocSnap probe = Snapshot();
         if (!probe.valid) {
-            printf("[FactoryDtorProbe] deferred — the DLL allocator singleton "
-                   "at 0x1801fc718 is not readable yet, so screen 2 would be "
-                   "vacuous and screen 1 alone cannot see the leak class. Will "
-                   "retry from the exit summary.\n");
+            printf("[FactoryDtorProbe] deferred — %s. raw slot=0x%llx. Screen 2 "
+                   "would be vacuous and screen 1 alone cannot see the leak "
+                   "class, so nothing is reported. Will retry from the exit "
+                   "summary.\n",
+                   SnapFailWhy(),
+                   (unsigned long long)ResolveRuntimeRaw(0x1801fc718));
             return;
         }
     }

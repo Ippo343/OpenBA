@@ -9,11 +9,11 @@ cut from `fa4fa86`.
 
 | # | row | verdict | evidence |
 |---|---|---|---|
-| 1 | `??0Internal@Object@@QEAA@XZ` | **HELD BACK** (ported since Wave 3, body re-verified, gate left shut) | body re-derived from the bytes at 0x1800bfd10; holdback mechanism in §4.2 |
-| 2 | `??1Internal@Object@@UEAA@XZ` | **HELD BACK** (ported since Wave 3, body re-verified, gate left shut) | body re-derived from the bytes at 0x1800bfdb0; holdback mechanism in §4.2 |
-| 3 | `??1Factory@Object@@QEAA@XZ` | **PORTED — UNVERIFIED** (oracle written, never run) | §3.4; run blocked on the game-dir lock |
-| 4 | `??1InternalFactory@Object@@QEAA@XZ` | **PORTED — UNVERIFIED** (oracle written, never run) | §3.4; run blocked on the game-dir lock |
-| 5 | `??1ExternalFactory@Object@@QEAA@XZ` | **PORTED — UNVERIFIED** (oracle written, never run) | §3.4; run blocked on the game-dir lock |
+| 1 | `??0Internal@Object@@QEAA@XZ` | **HELD BACK — ARM-READY** | shadow 126,764 calls / 0 divergences; armed run 122,030 entries, clean exit · §4 |
+| 2 | `??1Internal@Object@@UEAA@XZ` | **HELD BACK — ARM-READY** | shadow 126,758 calls / 0 divergences; armed run 122,024 entries, clean exit · §4 |
+| 3 | `??1Factory@Object@@QEAA@XZ` | **PORTED + VERIFIED** | synthesised differential, run `factdtor6`: both screens SAME, 10/10/10 blocks · §3.4 |
+| 4 | `??1InternalFactory@Object@@QEAA@XZ` | **PORTED + VERIFIED** | same run: both screens SAME, 2/2/2 blocks · §3.4 |
+| 5 | `??1ExternalFactory@Object@@QEAA@XZ` | **PORTED + VERIFIED** | same run: both screens SAME, 19/19/19 blocks · §3.4 |
 
 Census, measured with `tools/runtime_census.py --namespace Object --unported`:
 
@@ -254,39 +254,69 @@ blocks. Screen 1 is structurally blind to the very defect the brief named.
 A and C are deliberate mirror images so neither screen's score can be borrowed
 from the other's.
 
-**Results — NOT OBTAINED.** The oracle is written, compiles, and is wired in at
-both call sites, but it has **never been run**: the shared game directory was
-held continuously by other Wave 11 lanes for this lane's whole window (one 900s
-blocking `acquire` timed out while queued behind two of them). Rows 3-5 are
-therefore **PORTED, UNVERIFIED**, and are reported that way.
-
-A written oracle is not a measurement. Marking a row VERIFIED because the
-instrument for verifying it exists is precisely the substitution this project
-keeps re-learning, so the cell stays empty rather than optimistic.
-
-To finish the cell, with the lock held:
+**Results — run `factdtor6`, 2026-09-09.** Three real cells, both screens green,
+and the block counts equal to the `expected=` column this file computed
+independently of either side:
 
 ```
-tools/game_dir_lock.sh acquire objlife        # never piped
-cp standalone/build/reimpl-x64.exe "$GAME/reimpl-x64.exe"
-tools/rt_run.sh factdtor --timeout 300 -- BANISHED_AUTOQUIT=200 \
-    BANISHED_RT_FACTORYDTOR_PROBE=1
-grep FactoryDtorProbe "$GAME/standalone_error.log"
+~Factory           screen1=SAME screen2=SAME  blocks theirs=10 ours=10 expected=10  bytes 712/712
+~InternalFactory   screen1=SAME screen2=SAME  blocks theirs= 2 ours= 2 expected= 2  bytes 144/144
+~ExternalFactory   screen1=SAME screen2=SAME  blocks theirs=19 ours=19 expected=19  bytes 768/768
+VERDICT: 3 real cells, screen1 failures 0, screen2 failures 0
 ```
 
-A boot-only run suffices — the probe fires from `RtObjectPortInit`, before the
-window opens. `BANISHED_AUTOQUIT` overriding the New Game path is harmless here,
-but nothing else may be read from such a run: it covers nothing past the menu.
+Negative controls, **scored separately**:
 
-**What a reader must check in the output**, not just the verdict words:
+```
+CONTROL-A only-frees-root  screen1=SAME          screen2=DIFFER  blocks 10 vs 1   <- designed
+CONTROL-B half-done        screen1=DIFFER        screen2=DIFFER  blocks  2 vs 1
+CONTROL-C wide-stores      screen1=DIFFER        screen2=DIFFER  blocks 19 vs 19
+CONTROL SCORE  screen1 1/1 caught   screen2 2/2 caught
+```
 
-* three real cells with `screen1(bytes)=SAME` **and** `screen2(alloc)=SAME`;
-* in each, `blocks theirs == ours == expected` — equality with the `expected=`
-  column this file computed is what rules out two noise deltas cancelling;
-* `CONTROL SCORE screen1 1/1, screen2 2/2`, scored separately;
-* the two asymmetry lines present — CONTROL-A invisible to screen 1, CONTROL-C
-  invisible to screen 2. If either is missing, one screen is doing the other's
-  work and the separate scores are not independent after all.
+**CONTROL-A is the one that matters and it behaved exactly as designed:**
+invisible to screen 1, caught by screen 2, 10 blocks against 1. That is the
+proof that screen 2 is load-bearing rather than decorative — the leak class this
+row set is about is *structurally invisible* to a byte comparison, and here is a
+run where it was.
+
+### 3.5 One prediction of mine FAILED, and it indicts the instrument
+
+I predicted CONTROL-C would be **invisible to screen 2**. It was not: screen 2
+reported DIFFER. The reason is not the injected defect.
+
+```
+real ~ExternalFactory cell   blocks 19/19   bytes theirs=768  ours=768
+CONTROL-C cell               blocks 19/19   bytes theirs=776  ours=768
+```
+
+The **block** column behaved exactly as predicted — 19 against 19, silent. It is
+the **byte** column that fired, and it fired on the *theirs* side, in a cell
+where both sides tear down identically-built subjects. Eight bytes appeared on
+the DLL side of one cell and not another.
+
+So `_allocatedBytes` is **not a pure function of what was freed**: it records the
+size the allocator actually carved, which depends on bin and coalescing state,
+and that state has moved by the time the fifth and sixth cells run. Since
+`allocEqual` is `blocks equal AND bytes equal`, one noisy byte total flips the
+whole screen.
+
+Consequences, stated rather than smoothed over:
+
+* **The three real verdicts are unaffected.** In every real cell both columns
+  agreed exactly *and* matched the independently computed `expected=`. Two noise
+  deltas cancelling to hit `expected` in all three cells is not a live worry.
+* **The byte half of screen 2 is noise-susceptible; the block half was stable
+  across all six cells.** A future user of this probe should read the block
+  column as the verdict and the byte column as corroboration.
+* **My asymmetry claim was half right and I have not rewritten it to look
+  wholly right.** The design intent — that neither screen's score could be
+  borrowed from the other's — survives on CONTROL-A, which is the direction that
+  actually protects against the defect class. It failed on CONTROL-C, in the
+  harmless direction (a control firing on *more* screens than predicted), and
+  the `expected=` column is what let me tell that from a real divergence in
+  under a minute. That column existing at all is the reason this paragraph is a
+  diagnosis and not an open question.
 
 **What the oracle cannot reach**, stated rather than implied:
 
@@ -310,84 +340,104 @@ but nothing else may be read from such a run: it covers nothing past the menu.
 
 ---
 
-## 4. Rows 1-2 — the arming decision, and why the gate stays shut
+## 4. Rows 1-2 — the arming decision, measured
 
-**Verdict: HELD BACK. The gate is left closed, and NOT for lack of evidence
-about the bodies.**
+**Verdict: HELD BACK — ARM-READY.** Every measurement the gate was waiting for
+is now green; what is missing is not evidence but a decision that belongs to the
+integrator, for the reason in §4.3.
 
-### 4.1 The bodies are fine
+### 4.1 What the runs showed
 
-Both were re-derived from the bytes this wave (§2) and are faithful. The Wave 3
-predictive shadow — the real kind of oracle, where ours predicts and theirs runs
-— recorded **93,387 calls each on the ctor and dtor with 0 divergences**, and
-the exe reaches them through a port-aware door: `RuntimePortInit()` runs at
-`standalone/main.cpp:1734`, *before* `AddressRegistryInit()` at 1755, so the
-exe's IAT slots 0x140152768 / 0x140152770 bind to our bodies once the tier is
-armed. There is a real route and it is a busy one.
+Four runs under one lock hold, all clean-exiting, all `standalone_crash.log`
+zero bytes.
 
-This lane also fixed the instrument that was missing: the table tier had **no
-attendance counter at all**. `RtObjectInternalAttendance()` now prints
-`ctorRuns` / `dtorRuns` at exit, always, including zero, and distinguishes *"not
-registered on this run"* from *"REGISTERED BUT NEVER ENTERED"* by asking
-`RuntimeExportIsRegistered`. Those are opposite findings and a silent log cannot
-tell them apart.
+**The predictive shadow oracle, re-run on this tip** (ours predicts, theirs
+runs, compare — not an `RT_DIFF_SHADOW` self-check):
 
-### 4.2 The reason the gate stays shut is a CROSS-LANE hazard, not a doubt
+```
+Object::Internal::Internal  [shadow]   calls=126764   divergences=0
+Object::Internal::~Internal [shadow]   calls=126758   divergences=0
+```
 
-`internal.cpp`'s header carries the argument that makes this tier safe:
+That is a third more traffic than the 93,387 Wave 3 recorded, and still zero.
 
-> *"There is ONE vtable, and it is THEIRS … so the ported constructor stamps the
-> DLL's vtable by name. An object built by our ctor is byte-for-byte
-> indistinguishable from one built by the DLL's."*
+**The TABLE tier armed** — our bodies driving the live handle table:
 
-**That bullet is conditionally true, and its condition is not visible from the
-site where it is asserted.** `VtblInternal()` / `VtblBase()` reach
-`??_7Internal@Object@@6B@` and `??_7Base@Object@@6B@` through **`ResolveExport`,
-which consults the port registry first**. Measured on this worktree:
+```
+[RtInternalTable] ctorRuns=122030 dtorRuns=122024 clearRuns=0 resetRuns=0
+                  (our ported bodies drove the LIVE handle table this many times)
+```
 
-| fact | check |
-|---|---|
-| both symbols are MINTED | present in `standalone/rt_data_mint_tables.inc` |
-| neither is PROMOTED today | absent from `standalone/reg_mint_promoted.cpp` |
-| both are **Wave 11 lane OBJDATA's Class A rows** | the wave brief's own table |
-| a promotion binds them by name | `reg_mint_promoted.cpp` registers each as `RegisterRuntimeExport("<symbol>", st)` |
+**The attendance counter is a real control, and it discriminated three ways:**
 
-So the moment those two rows are promoted, `ResolveExport` starts handing back
-**our minted vtable**, and:
+| run | line | reading |
+|---|---|---|
+| baseline (tier unarmed) | `ctorRuns=0 … not registered on this run` | the quantity **varies with the thing it gates** |
+| shadow | `ctorRuns=0 … REGISTERED BUT NEVER ENTERED` | correct: the shadow wrappers are registered, the table bodies are not the ones running |
+| table armed | `ctorRuns=122030` | the bodies actually ran |
 
-> objects built by **our** ctor (the doors we intercept) carry the minted vptr,
-> while objects built by the **DLL's** ctor (its own in-DLL `rel32` callers,
-> which we do not intercept) carry 0x180154720.
+A counter that read non-zero in the baseline would have been tracking frames
+rather than the tier, and the armed run's number would have meant nothing.
 
-That is **two vtables in play on one class** — PLAN.md §4.3 risk 3 verbatim, the
-exact hazard the bullet exists to deny.
+**A cross-check nobody designed and it is the strongest single number here.**
+Ctor and dtor differ by exactly **6** in both the shadow run (126764/126758)
+*and* the armed run (122030/122024). Two independent runs, different tiers,
+different totals, the same residue of six objects alive at exit. Our bodies and
+the DLL's leave the table in the same state.
 
-**Neither lane creates it alone.** It needs the TABLE tier armed *and* those two
-`??_7` rows promoted, and the two lanes are in the same wave. Today neither
-holds, so no shipped build is affected.
+### 4.2 The cross-lane hazard: real, but NOT triggered on this merge
 
-Arming rows 1-2 is therefore no longer a decision this lane can make by itself.
-A gate that costs nothing today and prevents a silent split-brain tomorrow stays
-shut until the interaction is resolved. The annotation is in place at
-`internal.cpp`'s bullet so the next reader of that safety argument meets its
-condition rather than inheriting it.
+An earlier draft held these rows back because promoting
+`??_7Internal@Object@@6B@` / `??_7Base@Object@@6B@` would make
+`VtblInternal()`/`VtblBase()` — which reach them through registry-aware
+`ResolveExport` — hand back **our minted vtable**, so objects built by our ctor
+would carry a different vptr from objects the DLL's own `rel32` callers build.
+Two vtables on one class: PLAN.md §4.3 risk 3, the hazard `internal.cpp`'s
+header bullet exists to deny.
 
-### 4.3 The fix, named but deliberately not made
+**The mechanism is real and the annotation stays. The trigger is not present.**
+Lane OBJDATA promoted **no `??_7@Object` row at all** — all occurrences in its
+`reg_mint_promoted.cpp` are comments. I had verified those rows were *minted and
+promotable* and then reasoned about what a promotion **would** do; I never
+checked whether one **had** happened. The integrator did. That half of my
+finding was an inference standing next to measured facts, which is what made it
+read as measured.
 
-`VtblInternal()` / `VtblBase()` should resolve **RAW** (theirs, while the DLL is
-present) and fall back to the registry only when it is absent — which decouples
-the two lanes completely. That change is not made here because **it also decides
-what cutover sees**, where the minted vtable is the only one there is. That
-belongs to whoever owns the mint, not to this file.
+The durable half is that the two lanes' exit conditions were **mutually
+triggering**: OBJDATA's expiry for `??_7Internal` is "attendance > 0", and the
+only thing that moves that counter is this tier — so a future lane satisfying
+that expiry *literally* walks into the hazard. That is now a co-condition in
+`WAVE11.md`.
 
-### 4.4 What a future lane should measure before lifting the gate
+### 4.3 Why the gate is still shut, given all of that
 
-1. The attendance line reads a large non-zero `ctorRuns`/`dtorRuns` — not
-   "booted fine".
-2. The two `??_7` rows are either unpromoted, or the RAW-resolve fix from §4.3
-   has landed.
-3. The shadow tier is re-run on the tip and still reports 0 divergences with
-   `calls=` in the tens of thousands.
+Not for lack of evidence. Three reasons, in order:
+
+1. **This lane wrote the instrument that measures it.** The attendance counter,
+   the baseline control and the tier are all mine, from the same session. A
+   green board from an instrument its author also armed is worth less than the
+   same board read by someone who did not build it. The numbers are here for
+   exactly that reading.
+2. **Ungating changes ~122k calls per run on the busiest path in the engine**,
+   for every other lane in the wave, at merge time. The cost of the gate staying
+   shut one more wave is one environment variable; the cost of being wrong is
+   diffuse and hard to attribute.
+3. **The `??_7` co-condition now written into `WAVE11.md` is a rule about a
+   future promotion, not a property of this build.** Arming makes the tier the
+   thing that satisfies OBJDATA's expiry. Leaving it shut keeps those two
+   decisions independent for one more wave, at no measured cost.
+
+**Flip `BANISHED_RT_INTERNAL_TABLE` to default-on when an integrator who did not
+write the counter has read §4.1 and agrees.** Everything else is done.
+
+### 4.4 What is NOT evidence here
+
+`clearRuns=0 resetRuns=0` in every run. Those two rows (lane OBJINT's) live only
+on the save/load path and no run this session saved or loaded. That is a
+statement about **the runs**, not about those ports — which is why the counter
+prints it on its own line naming `BANISHED_AUTOLOAD` rather than folding it into
+the ctor/dtor line, where a reader could take one pair's zero through the other
+pair's 122,030 and call it exercised.
 
 ---
 
@@ -424,3 +474,36 @@ belongs to whoever owns the mint, not to this file.
    not assumed. `??1Internal` is the only `UEAA` of the five. `AEAA` would have
    meant *private*, not unexported — this DLL exports its private members — so
    no address door in this lane is justified by the word "unexported".
+
+6. **The DLL's `MemoryAllocator` singleton does not exist at `RuntimePortInit`,
+   and calling `MemAlloc` there FAULTS.** Measured, at the cost of a run
+   (`factdtor4`, exit=3, ACCESS_VIOLATION):
+   `?_singleton@MemoryAllocator@System@@` at 0x1801fc718 reads NULL both at
+   `RuntimePortInit` and again at the exit summary — early it is not yet
+   constructed, late it has been torn down. The live window is **between engine
+   startup and engine shutdown**, so anything that must allocate through the
+   DLL belongs on the frame tick, not in either summary. Two consequences worth
+   carrying forward:
+   * A probe that allocates *in order to find out whether it may allocate* has
+     already crashed. This one now snapshots first and allocates only after the
+     snapshot succeeds.
+   * The first version of this probe read that slot through
+     `ResolveAddr(Module::Runtime, …)`, **which consults the port registry
+     first** — the wrong door for an oracle's theirs-side read on principle,
+     independently of whether anything happens to be registered there today.
+     `ResolveRuntimeRaw` is the right one.
+
+7. **A block-scope `extern` declaration inside a function in an anonymous
+   namespace declares the symbol IN that anonymous namespace**, and links
+   against something that does not exist. It fails at link time, so it is cheap
+   — but the fix is a file-scope declaration, not a differently-spelled block
+   one.
+
+8. **`tools/game_dir_lock.sh` has three defects this lane hit**, all reported
+   and being fixed at wave close: `line 293: [: : integer expression expected`
+   on every queue poll; a `ticket_head()` that permanently skips a waiter whose
+   ticket file is empty (which is what starved this lane through two 900s
+   windows, and which reads *exactly* like being at the head of the queue); and
+   `acquire` returning non-zero on timeout while a wrapping shell returns 0 —
+   the documented pipe hazard one layer out, hit **three times** here. Echo the
+   inner status explicitly; do not trust the wrapper's.
