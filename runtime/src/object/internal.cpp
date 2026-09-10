@@ -43,10 +43,13 @@
 // ----------------------------------------------------------------------------
 //   BANISHED_RT_INTERNAL=0            nothing in this file registers.
 //
-//   (default)                         TIER 1 only — the five functions with no
+//   (default)                         TIER 1 only — the functions with no
 //                                     shared state: both InternalBasePtr
-//                                     constructors, Copy, DeletePtr and
-//                                     Internal::Persist.
+//                                     constructors, Copy, DeletePtr,
+//                                     Internal::Persist, and — since Wave 11
+//                                     lane OBJINT — InternalFactory::
+//                                     ClearPersistState, which touches
+//                                     _persistIds and never the handle table.
 //
 //   BANISHED_RT_INTERNAL_SHADOW=1     adds observe-only wrappers around
 //                                     Internal::Internal, ~Internal,
@@ -573,6 +576,15 @@ void RtObject_Internal_Dtor(Internal* self) {
 // UNCONDITIONALLY, where retail's inline null-checks first. Same behaviour:
 // MemoryAllocator::Free opens with `test rdx,rdx; jz`.
 void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
+    // LIVENESS. This body is DEFAULT-ON as of Wave 11 lane OBJINT, and a
+    // verified body that nothing calls is dead code that reads exactly like a
+    // landed port (reference_uncalled_port_is_not_verified.md). Once per
+    // process, on a function the save/load path enters once per transaction.
+    static bool first = true;
+    if (first) { first = false;
+        printf("[RtPort] FIRST LIVE CALL into our ?ClearPersistState@InternalFactory@Object@@ "
+               "(default-on since Wave 11 lane OBJINT)\n"); }
+
     if (self->persistIds._data != nullptr)
         MemFree(self->persistIds._data);
     self->persistIds._data     = nullptr;
@@ -900,10 +912,17 @@ int RtObjectInternalRegister() {
     // lane closed from the bytes — see ResetPersistState above. Step 3 is the
     // wave-boundary run, which is a cell for the integrator, not a code change.
     //
-    // WHAT IS STILL OWED, said plainly rather than implied by the arming: the two
-    // persist-state shadow sites have NEVER EXECUTED (WAVE3.md, defect E — they
-    // live only on the save/load path). `BANISHED_AUTOLOAD` was repaired in Wave
-    // 4, so that is now a runnable cell and it is asked for in the lane report.
+    // WHAT IS STILL OWED — REWRITTEN 2026-09-09 (Wave 11 lane OBJINT), because
+    // what stood here was the eight-wave-old "the two persist-state shadow sites
+    // have NEVER EXECUTED (WAVE3.md, defect E)". THEY HAVE NOW. A
+    // `BANISHED_AUTOLOAD` run reached both, `calls=1 divergences=0` each, and
+    // defect E is closed. `ClearPersistState` left the tier entirely as a
+    // result (see its own block below); `ResetPersistState` did not, and the
+    // block on it below says exactly which one line keeps it here.
+    //
+    // What is owed now is a LIVE TIER-2 LOAD RUN — this tier armed, a save
+    // loaded, our `ResetPersistState` driving the real handle table with the
+    // DLL present. Lane OBJINT did not have that run and does not claim it.
     const bool noDll = RtOptIn("BANISHED_RT_NO_DLL");
     const bool table = RtOptIn("BANISHED_RT_INTERNAL_TABLE") || noDll;
 
@@ -1015,6 +1034,45 @@ int RtObjectInternalRegister() {
     // `??1DialogInstance@UI@@` (runtime/src/ui/dialog.cpp, lane UID).
     RegisterRuntimeAddr(0x18002fca0, (void*)&RtObject_ArrayPtrSetSize_18002fca0); ++n;
 
+    // ---- ClearPersistState — UNGATED 2026-09-09 (Wave 11 lane OBJINT) -------
+    //
+    // It sat in the TABLE tier below. IT DOES NOT BELONG THERE, and the reason
+    // is the one Wave 9 gave when it ungated `InternalBasePtr::Serialize`:
+    // gated-because-unverified is not the same as gated-because-dangerous, and
+    // keeping the two in one switch makes a verified port look like a NO-GO.
+    //
+    // WHY IT IS NOT DANGEROUS. The tier's hazard, stated in the arming block
+    // above, is TWO WRITERS ON THE HANDLE TABLE — our `_objects` mutations
+    // racing the DLL's, where a wrong `_factoryIndex` is the swap-remove wild
+    // write with no proximate symptom. **This body never touches `_objects`.**
+    // It frees `_persistIds._data` and zeroes that array's three fields, and
+    // `_persistIds` is touched by exactly two functions in the whole engine —
+    // this one and `ResetPersistState`. There is no second writer to race.
+    //
+    // WHY IT IS NO LONGER UNVERIFIED. WAVE3.md's defect E recorded that this
+    // function's shadow HAD NEVER EXECUTED, and that stood for eight waves.
+    // Lane OBJINT ran it (`BANISHED_AUTOLOAD`, `calls=1 divergences=0`) and,
+    // because a live shadow is structurally unable to see the one thing that
+    // could be wrong here, also built a synthetic-subject A/B that watches the
+    // ALLOCATOR'S OWN COUNTERS across the call
+    // (runtime/src/object/internalfactory_persist_probe.cpp):
+    //
+    //     ours{blocks=-1 bytes=-72}  theirs{blocks=-1 bytes=-72}   IDENTICAL
+    //
+    // and its negative control — the same body with the `MemFree` deleted —
+    // was CAUGHT, by that screen and only by that screen. That is the leak a
+    // green post-state check would have passed
+    // (reference_a_written_recipe_can_be_wrong.md).
+    //
+    // NOT registered in SHADOW mode: the shadow wrapper above claims the same
+    // two doors, and a second binding would win and silently replace the
+    // oracle with the thing it was measuring.
+    if (!shadow) {
+        RegisterRuntimeExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ",
+                              (void*)&RtObject_InternalFactory_ClearPersistState); ++n;
+        RegisterRuntimeAddr(0x1800bfe30, (void*)&RtObject_InternalFactory_ClearPersistState);
+    }
+
     // ---- Tier 2: the real table ports. Opt-in, and MANDATORY at cutover. ----
     if (table) {
         RegisterRuntimeExport("??0Internal@Object@@QEAA@XZ",
@@ -1025,10 +1083,29 @@ int RtObjectInternalRegister() {
                               (void*)&RtObject_Internal_Dtor); ++n;
         RegisterRuntimeAddr(0x1800bfdb0, (void*)&RtObject_Internal_Dtor);
 
-        RegisterRuntimeExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ",
-                              (void*)&RtObject_InternalFactory_ClearPersistState); ++n;
-        RegisterRuntimeAddr(0x1800bfe30, (void*)&RtObject_InternalFactory_ClearPersistState);
-
+        // ---- ResetPersistState — STAYS IN THE TIER, and NOT because it is
+        // unverified. Lane OBJINT verified the BODY as thoroughly as
+        // ClearPersistState's: the shadow ran (calls=1, divergences=0) and the
+        // synthetic A/B found the emission sequence identical (3 emissions —
+        // the encoding-factory create, the int count, the destroy) with an
+        // identical post-state, its fill control CAUGHT.
+        //
+        // It stays because of ONE LINE that ClearPersistState does not have:
+        //
+        //     ArrayPtrReserve(&self->objects, count);
+        //
+        // `_objects` IS the handle table, and on the LOAD leg `count` comes off
+        // the stream and can exceed `_size`, so that call can REALLOC the array
+        // the DLL's own `Internal` ctors and dtors are also writing. Reserve
+        // never moves an index or a `_factoryIndex`, and the DLL re-reads
+        // `_data` through the singleton on every access, so the argument that
+        // it is safe is a good one — but it is an ARGUMENT, and the tier exists
+        // precisely because this project has been wrong about a two-writer
+        // array before with no proximate symptom. Record the distinction
+        // rather than collapsing it: this row is VERIFIED-BUT-UNARMED, which is
+        // a different state from the UNVERIFIED it was in until today, and the
+        // measurement it still owes is a live tier-2 load run, not another
+        // oracle.
         RegisterRuntimeExport("?ResetPersistState@InternalFactory@Object@@QEAAXAEAVStream@IO@@@Z",
                               (void*)&RtObject_InternalFactory_ResetPersistState); ++n;
         RegisterRuntimeAddr(0x1800bfe40, (void*)&RtObject_InternalFactory_ResetPersistState);
@@ -1037,8 +1114,9 @@ int RtObjectInternalRegister() {
         printf("[RtPort]   Object::Internal: TABLE mode ARMED by %s — our code now drives the "
                "handle table. Shadow gate step 1 was met in Wave 3 (93,387 calls each on the "
                "ctor/dtor, 0 divergences); step 2 (the encoding-factory arity) was closed "
-               "2026-09-08. STILL UNEXERCISED: ClearPersistState/ResetPersistState, which "
-               "only the save/load path reaches.\n",
+               "2026-09-08. ResetPersistState is VERIFIED (Wave 11 lane OBJINT: shadow "
+               "calls=1 divergences=0, plus a synthetic A/B green on emissions and "
+               "post-state) but this is its FIRST LIVE ARMING — watch the load path.\n",
                noDll ? "BANISHED_RT_NO_DLL (there is no other implementation)"
                      : "BANISHED_RT_INTERNAL_TABLE");
     }
