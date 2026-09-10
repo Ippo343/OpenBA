@@ -1,0 +1,5 @@
+[RtMint] BANISHED_RT_PROMOTE_BFS=0 -- ??_7BinaryFileStream@IO@@6B@ left on the DLL (A/B control)
+[BfsPromote] BODIES      GetSource=0 Write=0 Read=0 SetCurrentPos=0 GetCurrentPos=0 GetSize=0 Open=0 deletingDtor=0 copyCtor=0
+[BfsPromote] EFFECT      stamps=2847  stampedMinted=0  (promoted <=> the two are EQUAL and non-zero; kill switch <=> stampedMinted=0 with stamps UNCHANGED)
+[BfsPromote] ATTENDANCE  slotEntries=0  viaMintBFS=0  viaDllBFS=0  other=0
+[BfsPromote] attendance is ZERO with stamps=2847: the table was installed and never dispatched. That is a finding, not a dead instrument -- the EFFECT line above is its liveness control.

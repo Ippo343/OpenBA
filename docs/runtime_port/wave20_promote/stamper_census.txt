@@ -1,0 +1,281 @@
+SUBJECT  who STAMPS each minted ??_7 row, and is that function OURS
+  dll  : C:\GOG Games\Banished\Runtime-x64.dll
+  inc  : C:\code\GIT\wave20\promote\standalone\rt_data_mint_tables.inc
+  tree : C:\code\GIT\wave20\promote
+PARAMETERS  --rows=??_7Stream@IO,??_7ReaderWriter@IO,??_7FileStream@IO,??_7BinaryFileStream@IO,??_7Compressed  --control=??0BinaryFileStream@IO@@QEAA@XZ  --objdump=C:\msys64\ucrt64\bin\objdump.EXE
+
+WRITER CHANNEL (borrowed from tools/mint_extent_audit.py)
+  instructions parsed 417832 ; lea rip 3188 ; movabs 146 ; addresses named 1193
+  DECODER CONTROL 0x180155480 FOUND     the all-purecall table, leaf ctor 0x180023e10
+  DECODER CONTROL 0x1801554a8 FOUND     the IO::Encoding EXTRA_VTABLES_BY_ADDR mints, leaf ctor 0x180023e00
+  DECODER CONTROL 0x1801559d0 FOUND     the TextFileStream Encoding, stamped by ??0TextFileStream 0x1800ba431
+  DECODER CONTROL: 3 of 3 found
+
+OWNERSHIP SCREEN (literal registration scan, COMMENTS STRIPPED)
+  dirs runtime/engine/code/standalone/dx11 ; 1519 files ; 26020985 bytes scanned
+  distinct RegisterRuntimeExport names 1118 ; RegisterRuntimeAddr addrs 1158
+  POSITIVE CONTROL ??0BinaryFileStream@IO@@QEAA@XZ                            REGISTERED
+  NEGATIVE CONTROL (synthetic symbol)                                         not-registered OK
+  LIMIT: a registration is a DOOR, not a guarantee every caller uses it.
+         `ours-capable` is an UPPER BOUND on ownership (optimistic).
+
+ROW SET: 7 of 62 rows selected
+
+??_7BinaryFileStream@IO@@6B@   0x1801554d0   8 slots   2 stamp site(s) in 2 function(s)
+   EXPORT      ??0BinaryFileStream@IO@@QEAA@AEBV01@@Z                                   OURS-CAPABLE via NAME+ADDR
+        0x180023cfe +0x5e   mov    %rax,(%rbx)
+   EXPORT      ??0BinaryFileStream@IO@@QEAA@XZ                                          OURS-CAPABLE via NAME+ADDR
+        0x1800a8270 +0x70   mov    %rax,(%rdi)
+   STAMPERS 2 ; ours-capable 2 ; retail 0 ; unattributed 0
+
+??_7CompressedFileStream@IO@@6B@   0x1801555f0   9 slots   8 stamp site(s) in 8 function(s)
+   EXPORT      ??0CompressedFileStream@IO@@QEAA@AEBV01@@Z                               RETAIL (no registration by name or address)
+        0x180024074 +0x24   mov    %rax,(%rdi)
+   EXPORT      ??0CompressedCopyFileStream@IO@@QEAA@AEBV01@@Z                           RETAIL (no registration by name or address)
+        0x180024554 +0x24   mov    %rax,(%rdi)
+   EXPORT      ??0CompressedCopyFileStream@IO@@QEAA@AEAVCompressedMemoryStream@1@@Z     RETAIL (no registration by name or address)
+        0x1800a92f4 +0x24   mov    %rax,(%rdi)
+   EXPORT      ??1CompressedFileStream@IO@@UEAA@XZ                                      RETAIL (no registration by name or address)
+        0x1800a934b +0x1b   mov    %rax,(%rcx)
+   EXPORT      ??0CompressedFileStream@IO@@QEAA@XZ                                      RETAIL (no registration by name or address)
+        0x1800a93cc +0x1c   mov    %rax,(%rbx)
+   EXPORT      ?Save@External@Object@@QEAA_NAEBVFilename@System@@@Z                     RETAIL (no registration by name or address)
+        0x1800bbc63 +0x33   mov    %r14,0x40(%rsp)
+   EXPORT      ?IsCurrent@External@Object@@SA_NAEBVFilename@System@@@Z                  RETAIL (no registration by name or address)
+        0x1800bbf5d +0x2d   mov    %r12,0x70(%rsp)
+   EXPORT      ?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z           OURS-CAPABLE via NAME+ADDR
+        0x1800bc653 +0x33   mov    %r14,0x40(%rsp)
+   STAMPERS 8 ; ours-capable 1 ; retail 7 ; unattributed 0
+
+??_7CompressedMemoryStream@IO@@6B@   0x180155560   9 slots   10 stamp site(s) in 7 function(s)
+   EXPORT      ??0CompressedMemoryStream@IO@@QEAA@AEBV01@@Z                             RETAIL (no registration by name or address)
+        0x180024384 +0x24   mov    %rax,(%rdi)
+   EXPORT      ??0CompressedMemoryStream@IO@@QEAA@XZ                                    OURS-CAPABLE via NAME+ADDR
+        0x1800a953c +0x1c   mov    %rax,(%rbx)
+   EXPORT      ??1CompressedMemoryStream@IO@@UEAA@XZ                                    OURS-CAPABLE via NAME+ADDR
+        0x1800a957b +0x1b   mov    %rax,(%rcx)
+   EXPORT      ?BuildPackageFile@PackageFile@IO@@AEBA_NAEBVFilename@System@@V?$Set@VFil RETAIL (no registration by name or address)
+        0x1800b244f +0xc2f  mov    %rax,-0x60(%rbp)
+        0x1800b330c +0x1aec mov    %rax,-0x60(%rbp)
+   EXPORT      ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z              OURS-CAPABLE via NAME+ADDR
+        0x1800b4830 +0x180  mov    %rax,0x40(%rsp)
+   EXPORT      ?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z              OURS-CAPABLE via NAME+ADDR
+        0x1800c14ce +0x3e   mov    %rax,0x70(%rsp)
+        0x1800c18b8 +0x428  mov    %rax,0x70(%rsp)
+   EXPORT      ?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$ OURS-CAPABLE via NAME+ADDR
+        0x1800c1b72 +0x42   mov    %rax,0x30(%rsp)
+        0x1800c1db6 +0x286  mov    %rax,0x30(%rsp)
+   STAMPERS 7 ; ours-capable 5 ; retail 2 ; unattributed 0
+
+??_7CompressedStream@IO@@6B@   0x180155640   9 slots   9 stamp site(s) in 9 function(s)
+   EXPORT      ??0CompressedStream@IO@@QEAA@AEBV01@@Z                                   RETAIL (no registration by name or address)
+        0x180023e9b +0x3b   mov    %rax,(%rcx)
+   EXPORT      ??0CompressedStream@IO@@QEAA@XZ                                          OURS-CAPABLE via NAME+ADDR
+        0x1800aa400 +0x30   mov    %rax,(%rcx)
+   EXPORT      ??1CompressedStream@IO@@UEAA@XZ                                          OURS-CAPABLE via NAME+ADDR
+        0x1800aa666 +0x16   mov    %rax,(%rcx)
+   EXPORT      ?BuildPackageFile@PackageFile@IO@@AEBA_NAEBVFilename@System@@V?$Set@VFil RETAIL (no registration by name or address)
+        0x1800b33df +0x1bbf mov    %rax,-0x60(%rbp)
+   EXPORT      ?Save@External@Object@@QEAA_NAEBVFilename@System@@@Z                     RETAIL (no registration by name or address)
+        0x1800bbeb6 +0x286  mov    %rax,0x40(%rsp)
+   EXPORT      ?IsCurrent@External@Object@@SA_NAEBVFilename@System@@@Z                  RETAIL (no registration by name or address)
+        0x1800bc355 +0x425  mov    %rax,0x70(%rsp)
+   EXPORT      ?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z           OURS-CAPABLE via NAME+ADDR
+        0x1800bc8d0 +0x2b0  mov    %rax,0x40(%rsp)
+   EXPORT      ?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z              OURS-CAPABLE via NAME+ADDR
+        0x1800c198a +0x4fa  mov    %rax,0x70(%rsp)
+   EXPORT      ?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$ OURS-CAPABLE via NAME+ADDR
+        0x1800c1e26 +0x2f6  mov    %rax,0x30(%rsp)
+   STAMPERS 9 ; ours-capable 5 ; retail 4 ; unattributed 0
+
+??_7FileStream@IO@@6B@   0x180154960   8 slots   20 stamp site(s) in 17 function(s)
+   EXPORT      ??0FileStream@IO@@QEAA@AEBV01@@Z                                         RETAIL (no registration by name or address)
+        0x18000bf9e +0x2e   mov    %rax,(%rcx)
+   EXPORT      ??0BinaryFileStream@IO@@QEAA@AEBV01@@Z                                   OURS-CAPABLE via NAME+ADDR
+        0x180023cce +0x2e   mov    %rax,(%rcx)
+   EXPORT      ??0TextFileStream@IO@@QEAA@AEBV01@@Z                                     RETAIL (no registration by name or address)
+        0x18002b8e6 +0x36   mov    %rax,(%rcx)
+   EXPORT      ?Run@Stream@Audio@@UEAAXXZ                                               RETAIL (no registration by name or address)
+        0x1800a1022 +0xc2   mov    %rax,0x30(%rsp)
+        0x1800a14b3 +0x553  mov    %rax,0x30(%rsp)
+   EXPORT      ??0BinaryFileStream@IO@@QEAA@XZ                                          OURS-CAPABLE via NAME+ADDR
+        0x1800a822c +0x2c   mov    %rax,(%rcx)
+   EXPORT      ??0FileStream@IO@@QEAA@XZ                                                RETAIL (no registration by name or address)
+        0x1800aaa39 +0x29   mov    %rax,(%rcx)
+   EXPORT      ??1FileStream@IO@@UEAA@XZ                                                OURS-CAPABLE via NAME+ADDR
+        0x1800aaacb +0x1b   mov    %rax,(%rcx)
+   PRIVATE     FUN_1800b65b0                                                            RETAIL (no registration by name or address)
+        0x1800b6612 +0x62   mov    %rax,0x20(%rsp)
+        0x1800b692a +0x37a  mov    %rax,0x20(%rsp)
+   PRIVATE     FUN_1800b6aa0                                                            RETAIL (no registration by name or address)
+        0x1800b6aec +0x4c   mov    %rax,-0x39(%rbp)
+        0x1800b6c48 +0x1a8  mov    %rax,-0x39(%rbp)
+   PRIVATE     FUN_1800b6e00                                                            RETAIL (no registration by name or address)
+        0x1800b70a1 +0x2a1  mov    %rax,-0x29(%rbp)
+   EXPORT      ?Close@TextFile@IO@@QEAAXXZ                                              RETAIL (no registration by name or address)
+        0x1800b9ce0 +0x1d0  mov    %rax,-0x49(%rbp)
+   EXPORT      ?Create@TextFile@IO@@QEAA_NAEBVString@System@@@Z                         RETAIL (no registration by name or address)
+        0x1800b9f36 +0x1c6  mov    %rax,-0x49(%rbp)
+   EXPORT      ?Open@TextFile@IO@@QEAA_NAEBVString@System@@@Z                           RETAIL (no registration by name or address)
+        0x1800ba123 +0x163  mov    %rax,-0x39(%rbp)
+   EXPORT      ??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z                       OURS-CAPABLE via NAME+ADDR
+        0x1800ba384 +0x44   mov    %rax,(%rcx)
+   EXPORT      ??0TextFileStream@IO@@QEAA@XZ                                            RETAIL (no registration by name or address)
+        0x1800ba55c +0x2c   mov    %rax,(%rcx)
+   EXPORT      ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z                OURS-CAPABLE via NAME+ADDR
+        0x1800bbb9b +0x1cb  mov    %rax,-0x59(%rbp)
+   EXPORT      ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z    OURS-CAPABLE via NAME+ADDR
+        0x1800f2b6f +0x32f  mov    %rax,-0x49(%rbp)
+   STAMPERS 17 ; ours-capable 6 ; retail 11 ; unattributed 0
+
+??_7ReaderWriter@IO@@6B@   0x1801553b0   26 slots   20 stamp site(s) in 20 function(s)
+   EXPORT      ??0BinaryReader@IO@@QEAA@AEBV01@@Z                                       RETAIL (no registration by name or address)
+        0x180023951 +0x11   mov    %rax,(%rcx)
+   PRIVATE     FUN_1800239a0                                                            RETAIL (no registration by name or address)
+        0x1800239dc +0x3c   mov    %rax,(%rdi)
+   PRIVATE     FUN_180023a10                                                            OURS-CAPABLE via ADDR
+        0x180023a80 +0x70   mov    %rax,(%rbx)
+   EXPORT      ??0BinaryWriter@IO@@QEAA@AEBV01@@Z                                       RETAIL (no registration by name or address)
+        0x180023ad1 +0x11   mov    %rax,(%rcx)
+   PRIVATE     FUN_180023c21                                                            RETAIL (no registration by name or address)
+        0x180023c21 +0x0    mov    %rax,(%rcx)
+   UNATTRIBUTED ~??0ReaderWriter@IO@@QEAA@AEBV01@@Z                                      UNATTRIBUTED (no .pdata) -- NOT OURS; nearest-export HINT only
+        0x180023c50 +0x0    mov    %rax,(%rcx)
+   EXPORT      ??0Visitor@IO@@QEAA@AEBV01@@Z                                            RETAIL (no registration by name or address)
+        0x18002b691 +0x11   mov    %rax,(%rcx)
+   PRIVATE     FUN_18002b6d0                                                            RETAIL (no registration by name or address)
+        0x18002b6f0 +0x20   mov    %rax,(%rcx)
+   PRIVATE     FUN_18002b710                                                            OURS-CAPABLE via ADDR
+        0x18002b76b +0x5b   mov    %rax,(%rcx)
+   PRIVATE     FUN_18002b7a0                                                            RETAIL (no registration by name or address)
+        0x18002b7a6 +0x6    mov    %rax,(%rcx)
+   EXPORT      ??1BinaryReader@IO@@UEAA@XZ                                              OURS-CAPABLE via NAME+ADDR
+        0x1800a8325 +0x35   mov    %rax,(%rbx)
+   EXPORT      ??0BinaryReader@IO@@QEAA@AEAVSerializer@1@H@Z                            OURS-CAPABLE via NAME+ADDR
+        0x1800a8360 +0x20   mov    %rax,(%rcx)
+   EXPORT      ??1BinaryWriter@IO@@UEAA@XZ                                              OURS-CAPABLE via NAME+ADDR
+        0x1800a8a0f +0x8f   mov    %rax,(%rdi)
+   EXPORT      ??0BinaryWriter@IO@@QEAA@AEAVSerializer@1@H@Z                            OURS-CAPABLE via NAME+ADDR
+        0x1800a8a50 +0x20   mov    %rax,(%rcx)
+   UNATTRIBUTED ~??0ReaderWriter@IO@@QEAA@AEAVSerializer@1@_N@Z                          UNATTRIBUTED (no .pdata) -- NOT OURS; nearest-export HINT only
+        0x1800b9120 +0x0    mov    %rax,(%rcx)
+   UNATTRIBUTED ~??1ReaderWriter@IO@@UEAA@XZ                                             UNATTRIBUTED (no .pdata) -- NOT OURS; nearest-export HINT only
+        0x1800b9150 +0x0    mov    %rax,(%rcx)
+   EXPORT      ??0Visitor@IO@@QEAA@AEAVSerializer@1@H@Z                                 RETAIL (no registration by name or address)
+        0x1800bac51 +0x11   mov    %rax,(%rcx)
+   EXPORT      ??1Visitor@IO@@UEAA@XZ                                                   OURS-CAPABLE via NAME+ADDR
+        0x1800bacab +0x1b   mov    %rax,(%rcx)
+   PRIVATE     FUN_1800bae40                                                            RETAIL (no registration by name or address)
+        0x1800baeac +0x6c   mov    %rax,(%rdi)
+   PRIVATE     FUN_1800baf00                                                            RETAIL (no registration by name or address)
+        0x1800baf6c +0x6c   mov    %rax,(%rdi)
+   STAMPERS 20 ; ours-capable 7 ; retail 10 ; unattributed 3
+
+??_7Stream@IO@@6B@   0x1801549a0   7 slots   56 stamp site(s) in 50 function(s)
+   EXPORT      ??0FileStream@IO@@QEAA@AEBV01@@Z                                         RETAIL (no registration by name or address)
+        0x18000bf86 +0x16   mov    %rax,(%rcx)
+   PRIVATE     FUN_18000c661                                                            RETAIL (no registration by name or address)
+        0x18000c661 +0x0    mov    %rax,(%rcx)
+   UNATTRIBUTED ~??0Stream@IO@@QEAA@AEBV01@@Z                                            UNATTRIBUTED (no .pdata) -- NOT OURS; nearest-export HINT only
+        0x18000c6d0 +0x0    mov    %rax,(%rcx)
+   EXPORT      ??0BinaryFileStream@IO@@QEAA@AEBV01@@Z                                   OURS-CAPABLE via NAME+ADDR
+        0x180023cb6 +0x16   mov    %rax,(%rcx)
+   EXPORT      ??0CompressedStream@IO@@QEAA@AEBV01@@Z                                   RETAIL (no registration by name or address)
+        0x180023e83 +0x23   mov    %rax,(%rcx)
+   EXPORT      ??0MemoryStream@IO@@QEAA@AEBV01@@Z                                       RETAIL (no registration by name or address)
+        0x1800241b1 +0x11   mov    %rax,(%rcx)
+   PRIVATE     FUN_180024230                                                            RETAIL (no registration by name or address)
+        0x18002426c +0x3c   mov    %rax,(%rbx)
+   PRIVATE     FUN_1800242a0                                                            OURS-CAPABLE via ADDR
+        0x180024310 +0x70   mov    %rax,(%rbx)
+   EXPORT      ??0CompressedMemoryStream@IO@@QEAA@AEBV01@@Z                             RETAIL (no registration by name or address)
+        0x180024397 +0x37   mov    %rax,(%r8)
+   EXPORT      ??0TextFileStream@IO@@QEAA@AEBV01@@Z                                     RETAIL (no registration by name or address)
+        0x18002b8ce +0x1e   mov    %rax,(%rcx)
+   EXPORT      ??0VisitorStream@IO@@QEAA@AEBV01@@Z                                      RETAIL (no registration by name or address)
+        0x18002bed1 +0x11   mov    %rax,(%rcx)
+   PRIVATE     FUN_18002bf20                                                            RETAIL (no registration by name or address)
+        0x18002bf47 +0x27   mov    %rax,(%rcx)
+   PRIVATE     FUN_18002bf80                                                            OURS-CAPABLE via ADDR
+        0x18002bfdb +0x5b   mov    %rax,(%rcx)
+   PRIVATE     FUN_18007c360                                                            RETAIL (no registration by name or address)
+        0x18007c36a +0xa    mov    %rax,(%rcx)
+   EXPORT      ?Run@Stream@Audio@@UEAAXXZ                                               RETAIL (no registration by name or address)
+        0x1800a100c +0xac   mov    %r12,0x30(%rsp)
+        0x1800a14ac +0x54c  lea    0xb34a6(%rip),%rax        # 0x180154960
+   EXPORT      ??0BinaryFileStream@IO@@QEAA@XZ                                          OURS-CAPABLE via NAME+ADDR
+        0x1800a8219 +0x19   mov    %rax,(%rcx)
+   EXPORT      ??1CompressedMemoryStream@IO@@UEAA@XZ                                    OURS-CAPABLE via NAME+ADDR
+        0x1800a95c8 +0x68   mov    %rax,(%rdi)
+   EXPORT      ??0CompressedStream@IO@@QEAA@XZ                                          OURS-CAPABLE via NAME+ADDR
+        0x1800aa3ed +0x1d   mov    %rax,(%rcx)
+   EXPORT      ??1CompressedStream@IO@@UEAA@XZ                                          OURS-CAPABLE via NAME+ADDR
+        0x1800aa694 +0x44   mov    %rax,(%rbx)
+   EXPORT      ??0FileStream@IO@@QEAA@XZ                                                RETAIL (no registration by name or address)
+        0x1800aaa24 +0x14   mov    %rax,(%rcx)
+   EXPORT      ??1FileStream@IO@@UEAA@XZ                                                OURS-CAPABLE via NAME+ADDR
+        0x1800aab20 +0x70   mov    %rax,(%rbx)
+   EXPORT      ??0MemoryStream@IO@@QEAA@XZ                                              OURS-CAPABLE via NAME+ADDR
+        0x1800ae72d +0x1d   mov    %rax,(%rcx)
+   EXPORT      ??1MemoryStream@IO@@UEAA@XZ                                              OURS-CAPABLE via NAME+ADDR
+        0x1800ae8c5 +0x35   mov    %rax,(%rbx)
+   EXPORT      ?BuildPackageFile@PackageFile@IO@@AEBA_NAEBVFilename@System@@V?$Set@VFil RETAIL (no registration by name or address)
+        0x1800b3394 +0x1b74 mov    %r15,0x8(%rbp)
+   EXPORT      ?AreResourcesEqual@PackageFile@IO@@AEBA_NAEBVFilename@System@@_N@Z       RETAIL (no registration by name or address)
+        0x1800b3c0a +0x5fa  mov    %r15,-0x50(%rbp)
+   PRIVATE     FUN_1800b65b0                                                            RETAIL (no registration by name or address)
+        0x1800b65f9 +0x49   mov    %rsi,0x20(%rsp)
+        0x1800b6923 +0x373  lea    0x9e02f(%rip),%rax        # 0x180154960
+   PRIVATE     FUN_1800b6aa0                                                            RETAIL (no registration by name or address)
+        0x1800b6ad6 +0x36   mov    %r12,-0x39(%rbp)
+        0x1800b6c41 +0x1a1  lea    0x9dd11(%rip),%rax        # 0x180154960
+   PRIVATE     FUN_1800b6e00                                                            RETAIL (no registration by name or address)
+        0x1800b71ec +0x3ec  mov    %rax,-0x29(%rbp)
+   UNATTRIBUTED ~??0Stream@IO@@QEAA@XZ                                                   UNATTRIBUTED (no .pdata) -- NOT OURS; nearest-export HINT only
+        0x1800b99d0 +0x0    mov    %rax,(%rcx)
+   UNATTRIBUTED ~??1Stream@IO@@UEAA@XZ                                                   UNATTRIBUTED (no .pdata) -- NOT OURS; nearest-export HINT only
+        0x1800b9a40 +0x0    mov    %rax,(%rcx)
+   EXPORT      ?Close@TextFile@IO@@QEAAXXZ                                              RETAIL (no registration by name or address)
+        0x1800b9d35 +0x225  mov    %rax,-0x49(%rbp)
+   EXPORT      ?Create@TextFile@IO@@QEAA_NAEBVString@System@@@Z                         RETAIL (no registration by name or address)
+        0x1800b9f8b +0x21b  mov    %rax,-0x49(%rbp)
+   EXPORT      ?Open@TextFile@IO@@QEAA_NAEBVString@System@@@Z                           RETAIL (no registration by name or address)
+        0x1800ba178 +0x1b8  mov    %rax,-0x39(%rbp)
+   EXPORT      ??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z                       OURS-CAPABLE via NAME+ADDR
+        0x1800ba36f +0x2f   mov    %rax,(%rcx)
+   EXPORT      ??0TextFileStream@IO@@QEAA@XZ                                            RETAIL (no registration by name or address)
+        0x1800ba549 +0x19   mov    %rax,(%rcx)
+   EXPORT      ??1VisitorStream@IO@@UEAA@XZ                                             OURS-CAPABLE via NAME+ADDR
+        0x1800bb05c +0x1c   mov    %rax,(%rcx)
+   EXPORT      ??0VisitorStream@IO@@QEAA@XZ                                             OURS-CAPABLE via NAME+ADDR
+        0x1800bb0b0 +0x20   mov    %rax,(%rcx)
+   EXPORT      ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z                OURS-CAPABLE via NAME+ADDR
+        0x1800bbbf0 +0x220  mov    %rax,-0x59(%rbp)
+   EXPORT      ?Save@External@Object@@QEAA_NAEBVFilename@System@@@Z                     RETAIL (no registration by name or address)
+        0x1800bbeec +0x2bc  mov    %rax,0x40(%rsp)
+   EXPORT      ?IsCurrent@External@Object@@SA_NAEBVFilename@System@@@Z                  RETAIL (no registration by name or address)
+        0x1800bc38a +0x45a  mov    %rax,0x70(%rsp)
+   EXPORT      ?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z           OURS-CAPABLE via NAME+ADDR
+        0x1800bc906 +0x2e6  mov    %rax,0x40(%rsp)
+   EXPORT      ?Add@ExternalFactory@Object@@QEAAXPEAVExternal@2@@Z                      OURS-CAPABLE via NAME+ADDR
+        0x1800be67e +0x10e  mov    %rax,-0x18(%rbp)
+   EXPORT      ?Clone@Internal@Object@@QEAAPEAV12@XZ                                    RETAIL (no registration by name or address)
+        0x1800bfca3 +0x193  mov    %rbx,0xf(%rbp)
+   EXPORT      ?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z              OURS-CAPABLE via NAME+ADDR
+        0x1800c1940 +0x4b0  mov    %rsi,-0x28(%rbp)
+   EXPORT      ?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$ OURS-CAPABLE via NAME+ADDR
+        0x1800c1e0c +0x2dc  mov    %rbx,-0x19(%rbp)
+   EXPORT      ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z    OURS-CAPABLE via NAME+ADDR
+        0x1800f2cbe +0x47e  mov    %rax,-0x49(%rbp)
+   EXPORT      ?SaveSettings@DialogInstance@UI@@QEAAXXZ                                 OURS-CAPABLE via NAME+ADDR
+        0x1801143da +0x19a  mov    %rax,-0x38(%rbp)
+   EXPORT      ?LoadSettings@DialogInstance@UI@@QEAAXXZ                                 RETAIL (no registration by name or address)
+        0x180114619 +0x1c9  mov    %rax,-0x38(%rbp)
+   EXPORT      ?OnOpened@DialogInstance@UI@@UEAAXXZ                                     OURS-CAPABLE via NAME+ADDR
+        0x180115019 +0x69   mov    %r15,-0x38(%rbp)
+        0x1801152c2 +0x312  mov    %rax,-0x38(%rbp)
+   EXPORT      ?SaveAllSettings@UserInterface@UI@@QEAAXXZ                               OURS-CAPABLE via NAME+ADDR
+        0x1801204dd +0x2d   xor    %r12d,%r12d
+        0x180120733 +0x283  mov    %rax,-0x21(%rbp)
+        0x18012077c +0x2cc  lea    0x34d1e(%rip),%r15        # 0x1801554a8
+   STAMPERS 50 ; ours-capable 22 ; retail 25 ; unattributed 3

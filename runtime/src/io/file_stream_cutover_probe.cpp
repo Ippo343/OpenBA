@@ -269,6 +269,34 @@ void Run() {
            sl[0], sl[1], sl[2], sl[3], sl[4], sl[5], sl[6], sl[7], sl[8],
            sl[9], sl[10], sl[11], sl[12], sl[13]);
 
+    unsigned long long entered = 0;
+    for (int i = 0; i < 7; ++i)  entered += fs[i];
+    for (int i = 0; i < 10; ++i) entered += fc[i];
+    for (int i = 0; i < 14; ++i) entered += sl[i];
+    if (entered == 0)
+        printf("[FileCutover] *** NO BODY IN THIS LANE WAS ENTERED IN THIS RUN. "
+               "The board above is a static registry query and says nothing about "
+               "behaviour; read it as 'registered', never as 'working'. ***\n");
+
+    if (openRows == 0)
+        printf("[FileCutover] every door IN THIS LIST is answered by our port "
+               "registry. That is not the same statement as 'the screenshot "
+               "works with the DLL absent' -- see this file's header.\n");
+}
+
+// ---------------------------------------------------------------------------
+// WAVE 20 LANE PROMOTE -- a SEPARATE atexit, deliberately.
+//
+// This block first sat inside Run(), AFTER the door screen's control gate,
+// and on its first measurement run it printed NOTHING: the door screen's own
+// negative control (?Commit@CompressedStream@IO@@, "must read NOT-PORTED")
+// now reads PORTED -- another lane ported it -- so Run() correctly refused to
+// report and took this instrument down with it. A control failing for the
+// DOOR BOARD says nothing about the counters, which are a different subject
+// with their own liveness control (`stamps`). Separated so one screen's
+// red cannot silence the other.
+// ---------------------------------------------------------------------------
+void RunBfsPromote() {
     // ---- WAVE 20 LANE PROMOTE: the ??_7BinaryFileStream@ promotion ---------
     // Two claims, printed on two lines, deliberately not merged.
     //
@@ -281,6 +309,17 @@ void Run() {
     //              two ways an entry to these shared bodies can arrive without
     //              being attendance for it, and they are printed rather than
     //              folded away so the tiers stay separable.
+    // The per-body breakdown, printed HERE as well as in the door screen: the
+    // door screen's own control is red on this tree, so its copy of this line
+    // never prints, and "attendance" with no body named is the weakest possible
+    // form of the claim.
+    unsigned long long sb[14] = {0};
+    RtIO::RtIoFileStreamSlotCounters(sb);
+    printf("[BfsPromote] BODIES      GetSource=%llu Write=%llu Read=%llu "
+           "SetCurrentPos=%llu GetCurrentPos=%llu GetSize=%llu Open=%llu "
+           "deletingDtor=%llu copyCtor=%llu\n",
+           sb[0], sb[2], sb[4], sb[5], sb[7], sb[8], sb[9], sb[11], sb[13]);
+
     unsigned long long bp[6] = {0};
     RtIO::RtIoBfsPromoteCounters(bp);
     printf("[BfsPromote] EFFECT      stamps=%llu  stampedMinted=%llu  "
@@ -298,19 +337,6 @@ void Run() {
                "instrument -- the EFFECT line above is its liveness control.\n",
                bp[0]);
 
-    unsigned long long entered = 0;
-    for (int i = 0; i < 7; ++i)  entered += fs[i];
-    for (int i = 0; i < 10; ++i) entered += fc[i];
-    for (int i = 0; i < 14; ++i) entered += sl[i];
-    if (entered == 0)
-        printf("[FileCutover] *** NO BODY IN THIS LANE WAS ENTERED IN THIS RUN. "
-               "The board above is a static registry query and says nothing about "
-               "behaviour; read it as 'registered', never as 'working'. ***\n");
-
-    if (openRows == 0)
-        printf("[FileCutover] every door IN THIS LIST is answered by our port "
-               "registry. That is not the same statement as 'the screenshot "
-               "works with the DLL absent' -- see this file's header.\n");
 }
 
 }  // namespace
@@ -321,4 +347,5 @@ void RtIoFileCutoverProbeArm() {
     if (g_armed) return;
     g_armed = true;
     std::atexit(&Run);
+    std::atexit(&RunBfsPromote);
 }

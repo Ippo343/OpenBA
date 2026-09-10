@@ -1,0 +1,3 @@
+[BfsPromote] BODIES      GetSource=0 Write=0 Read=9453 SetCurrentPos=3759 GetCurrentPos=0 GetSize=2847 Open=2847 deletingDtor=0 copyCtor=0
+[BfsPromote] EFFECT      stamps=2847  stampedMinted=2847  (promoted <=> the two are EQUAL and non-zero; kill switch <=> stampedMinted=0 with stamps UNCHANGED)
+[BfsPromote] ATTENDANCE  slotEntries=18906  viaMintBFS=18906  viaDllBFS=0  other=0
