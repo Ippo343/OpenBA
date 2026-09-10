@@ -223,17 +223,68 @@ void BuildCompiledPath(const Filename* path, Filename* out) {
 // sensitive to it, so a future reader does not have to infer coverage from a
 // ratio.
 const char* const kSweepPaths[] = {
-    "Terrain/Grass.rsc",
-    "House.rsc",                                   // EMPTY directory term
-    "Template/Building/Deep/Nested/Thing.rsc",
-    "Dialog/MainMenu.rsc:buttonOk",                // explicit :identifier
-    "Audio/Theme",                                 // NO extension term
-    "Audio/Music/Theme.ogg",                       // non-.rsc extension
-    "Terrain/Grass.rsc:alt",                       // identifier AND extension
-    "Deep/Nested/Thing.tga:sprite",                // both, non-.rsc
-    "Solo.tga",                                    // no dir, has ext
-    "A/B.c:d",                                     // all four terms, minimal
+    /*  0 */ "Terrain/Grass.rsc",
+    /*  1 */ "House.rsc",                        // EMPTY directory term
+    /*  2 */ "Template/Building/Deep/Nested/Thing.rsc",
+    /*  3 */ "Dialog/MainMenu.rsc:buttonOk",     // explicit :identifier
+    /*  4 */ "Audio/Theme",                      // NO extension -> EMPTY filename
+    /*  5 */ "Audio/Music/Theme.ogg",            // non-.rsc extension
+    /*  6 */ "Terrain/Grass.rsc:alt",            // identifier AND extension
+    /*  7 */ "Deep/Nested/Thing.tga:sprite",     // both, non-.rsc
+    /*  8 */ "Solo.tga",                         // no dir, has ext
+    /*  9 */ "A/B.c:d",                          // all four terms, minimal
+    /* 10 */ "Solo",                             // no dir, NO ext
+    /* 11 */ "Deep/Nested/NoExt",                // dir, NO ext
+    /* 12 */ "A/B:c",                            // identifier, NO ext
 };
+
+// ---------------------------------------------------------------------------
+// THE PREDICTED SENSITIVITY MASKS — WRITTEN BEFORE THE RUN, ON PURPOSE.
+//
+// A measured mask alone is a prettier ratio: without a prior to disagree with,
+// whatever comes back reads as explicable, which is exactly how this lane's
+// first sweep got past me. `ctl=4` caught on 1 of 6 where my model said 4-5 and
+// I recorded it as "coverage" rather than chasing it.
+//
+// Chasing it found a FACT ABOUT THE FUNCTION, not about the input list.
+// `?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z` (0x1800c6740) does NOT
+// mean "strip the extension". Its backward scan for '.' runs unconditionally
+// and `length = dotIndex - 1` strips the extension WHETHER OR NOT the flag is
+// set. The flag is read in exactly one place:
+//
+//     if (dotIndex < 1) {            // no '.' at all, or one at index 0
+//         if (stripExt) { *retval = 0; return retval; }   // EMPTY
+//     }                              // else: fall through, keep the whole name
+//
+// So the flag means "yield an EMPTY filename when the path has no extension".
+// For every path that HAS an extension it is dead. That single fact explains
+// all five of the first sweep's ratios exactly, and it is corroborated by lane
+// RRES's own counter `filenameFromStack // filename was empty -> taken from the
+// stack`, which exists precisely because this call returns empty for
+// extension-less paths.
+//
+// *** runtime/src/object/external_path_win.cpp DECLARES THIS PARAMETER
+// `bool stripExtension`, AND THAT NAME IS WRONG. *** It is another lane's file
+// so it is not renamed here; it is reported in WAVE11_LANE_OBJEXT.md §11.
+//
+// One char per input index: 'X' = this control should change the result,
+// '.' = it should not. Index kSweepN is the live path, predicted from the fact
+// that every resource path the game feeds this function carries an extension.
+const char* const kPredicted[6] = {
+    /* ctl 0  no perturbation                     */ "..............",
+    /* ctl 1  "-" not "_"      always concatenated*/ "XXXXXXXXXXXXXX",
+    /* ctl 2  ".CRS" not ".crs" always concatenated*/ "XXXXXXXXXXXXXX",
+    /* ctl 3  dir<->fname swapped: dead iff either term is EMPTY
+              (1,8 empty dir; 4,11,12 empty fname; 10 both)          */
+                                                     "X.XX.XXX.X....",
+    /* ctl 4  stripExt flipped: dead unless the path has NO extension
+              (only 4,10,11,12)                                      */
+                                                     "....X.....XXX.",
+    /* ctl 5  ext substituted for ident: dead iff ext == ident, i.e. both
+              empty (4,10,11)                                        */
+                                                     "XXXX.XXXXX..XX",
+};
+
 const int kSweepN = (int)(sizeof(kSweepPaths) / sizeof(kSweepPaths[0]));
 
 bool g_selfTestPending = false;
@@ -253,8 +304,8 @@ void RunCompiledSweep(const Filename* livePath) {
     for (int ctl = 0; ctl <= 5; ++ctl) {
         int compared = 0, mismatches = 0;
         // One character per input: '.' insensitive, 'X' diverged, '-' skipped.
-        char mask[16];
-        for (int m = 0; m < 16; ++m) mask[m] = 0;
+        char mask[32];
+        for (int m = 0; m < 32; ++m) mask[m] = 0;
         for (int i = 0; i <= kSweepN; ++i) {
             Filename in{nullptr};
             mask[i] = '.';
@@ -296,11 +347,30 @@ void RunCompiledSweep(const Filename* livePath) {
             RtString_ReleaseInline(AsStr(&in));
         }
         mask[kSweepN + 1] = 0;
-        std::printf("[Compiled] SWEEP ctl=%d compared=%d mismatches=%d sens=%s  %s\n",
-                    ctl, compared, mismatches, mask,
+        // Score the MEASURED mask against the PREDICTED one, per input. A
+        // disagreement here is the interesting output of this whole screen: it
+        // means the model of what the function does is wrong somewhere, and it
+        // names the input that proves it.
+        const char* pred = kPredicted[ctl];
+        char diff[32];
+        int disagreements = 0;
+        int d = 0;
+        for (int m = 0; m <= kSweepN && m < 30; ++m) {
+            const char me = mask[m] ? mask[m] : '-';
+            if (me == '-') { diff[d++] = '-'; continue; }   // skipped, not scored
+            if (me != pred[m]) { diff[d++] = '!'; ++disagreements; }
+            else               { diff[d++] = ' '; }
+        }
+        diff[d] = 0;
+        std::printf("[Compiled] SWEEP ctl=%d compared=%d mismatches=%d  %s\n",
+                    ctl, compared, mismatches,
                     ctl == 0 ? (mismatches == 0 ? "PASS" : "*** PORT DEFECT ***")
                              : (mismatches  > 0 ? "control CAUGHT"
                                                 : "*** control NOT CAUGHT ***"));
+        std::printf("[Compiled]   ctl=%d predicted=%s\n", ctl, pred);
+        std::printf("[Compiled]   ctl=%d measured =%s\n", ctl, mask);
+        std::printf("[Compiled]   ctl=%d disagree =%s  (%d input(s) contradict "
+                    "the model)\n", ctl, diff, disagreements);
         if (compared == 0)
             std::printf("[Compiled] SWEEP ctl=%d MADE NO COMPARISONS -- "
                         "this is not a pass\n", ctl);
