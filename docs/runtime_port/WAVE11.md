@@ -614,3 +614,87 @@ would have read as a success.
 
 The preview census on the trial merge — **Object 37/58 = 63.8%** — is therefore
 **one row LOW**; with OBJINT's ungating restored it should read 38/58.
+
+## THE CREATION PATH IS ANSWERED — and it is not a factory-porting problem
+
+Lane OBJINT closed the question `WAVE11_KICKOFF.md` opened the wave with, and the
+answer inverts the plan.
+
+### The measurement
+
+A linear scan for every direct encoding — `E8`/`E9 rel32`, any REX
+`LEA reg,[rip+d32]`, `MOVABS reg,imm64` — against all 202 `?Create*Object@`
+exports, over **both** shipped code sections:
+
+| image | `.text` bytes | direct references to any of the 202 |
+|---|---|---|
+| `Runtime-x64.dll` | 1,349,120 | **0** |
+| `Application-x64.exe` | 1,372,672 | **0** |
+
+The 202 are reachable **only through a `.data` function pointer** — and that
+pointer is the `BaseTypeInfo` factory slot: the qword holding `?CreateNewObject@`
+sits **exactly 8 bytes before** the one holding `?CreateInPlaceObject@`, i.e.
+**`+0x20 factoryFn` and `+0x28 inPlaceFactoryFn`, node start = ref − 0x20.**
+
+**Verified independently by the advisor** with `pefile` against the shipped DLL,
+by a different route than the lane's scan: 103 `?CreateNewObject@` exports, 99
+`?CreateInPlaceObject@` (202 total), 99 classes exporting both, **15 of 15
+spot-checked pairs adjacent at +8, zero failures**, every node landing in the
+`0x1801f9xxx`-`0x1801faxxx` typeinfo region.
+
+The 206-vs-202 reference gap resolves cleanly and is itself corroboration: **201
+factories have exactly one `.data` reference; `?CreateInPlaceObject@Internal@Object@@`
+has five** — shared by the five typeinfo nodes whose classes define no in-place
+factory and inherit `Internal`'s. An anomaly that explains itself is the
+strongest sign the model is right.
+
+### The conclusion that reframes the wave
+
+> **To intercept a factory you must own the minted `?_typeInfo@` row, because the
+> pointer lives in that row. Porting the 202 bodies is neither necessary nor
+> sufficient; owning the rows is both.**
+
+So the kickoff's "202 factory exports, zero ported" is a true statement about a
+**non-problem**. The creation path is not a factory-porting wave — it is a
+**typeinfo-row promotion** wave, i.e. lane OBJDATA's subject, gated by the
+`minted=` question (does our storage ever get WRITTEN?) rather than by any amount
+of body-porting.
+
+### Two exceptions, and why they change nothing
+
+Exactly **two** of the 202 have an import-table door, confirmed by the advisor
+with `tools/dispatch_slot_map.py`:
+
+```
+0x140151688 -> ?CreateInPlaceObject@DialogController@UI@@…
+0x140152a88 -> ?CreateInPlaceObject@Internal@Object@@…
+```
+
+`UI::Dialog`'s is not among them. And `DialogController`'s door does **not**
+revive its vtable row: that verdict was never about creation — its single
+consumer stamps the pointer and then calls `??1Internal@Object@@`, whose first
+statement overwrites the same qword unread.
+
+### Why two instruments were needed
+
+The direct-encoding scan and the import-table read are **complementary, not
+redundant**, and neither alone gives the right picture: the scan alone says "202
+doorless" (wrong — two have doors); the import table alone says nothing about the
+other 200. A door through the IAT is an indirect call and by construction holds
+no direct reference to the DLL address, which is exactly why a byte scan cannot
+see it.
+
+### Correction to the advisor's own ruling
+
+The integration ruling attributed the dropped `printf`'s liveness reading to
+**OBJLIFE's** §1.5. It is **OBJINT's** — `WAVE11_LANE_OBJINT.md` §1.5. The record
+that must survive the dropped instrument is:
+
+```
+[RtPort] FIRST LIVE CALL into our ?ClearPersistState@InternalFactory@Object@@
+         (default-on since Wave 11 lane OBJINT)
+```
+
+40s `BANISHED_AUTOLOAD` run, `rc=0`, empty crash log. That reading is *why* the
+instrument can be dropped without losing the evidence that the ungated body is
+not dead code.
