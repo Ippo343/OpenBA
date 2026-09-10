@@ -1,0 +1,237 @@
+# WAVE 19 CLOSED — IO to 12 short, and the metric that could not see half the work
+
+**Closed 2026-09-10 by the integrator.** Five porting lanes and three phase-0
+cells, all merged. Build green, every standing checker clean.
+
+Read with **[WAVE19_INTEGRATOR_CORRECTIONS.md](WAVE19_INTEGRATOR_CORRECTIONS.md)**
+(45 entries — §C34 and §C43 are the load-bearing ones) and
+**[WAVE19_IO.md](WAVE19_IO.md)** (the plan, whose §0b and §4 this wave corrected).
+
+---
+
+## 1. The number, and why it is only half the story
+
+```
+wave start   83 >= 122 - 3 = 119      36 SHORT
+wave close  116 >= 133 - 5 = 128      12 SHORT
+```
+
+**`called` grew 122 → 133 (+11)** as lanes opened doors. The plan predicted this
+and told lanes to report a set-diff rather than a percentage; they did.
+
+**DO NOT read 36 → 12 as "the wave did 24 rows of work."** It is mostly a
+**CODE-work** measurement. §2 says why, and it is this wave's most important
+finding.
+
+Namespace state at close: **IO 133 called / 116 ported**, ceiling 96.2%.
+TOTAL 4632 / 1195 called / 1007 ported (82.6% → **84.3%**).
+
+---
+
+## 2. THE HEADLINE FINDING: the success criterion is blind to half the work
+
+Found by lane CSTREAM, **measured not argued**, confirmed structurally by the
+integrator, with a precedent neither had.
+
+CSTREAM registered **12 exports** by name and address. `ported` moved **+3**.
+
+`runtime_census.py` builds its row set by **iterating `called_exports` and
+`called_addrs`**. A registration with no `called_*` entry **never becomes a row**.
+So `ported` is exactly `|called ∩ registered|`, and **a body that runs by any
+mechanism other than a resolve door is invisible to it.** Nine of CSTREAM's twelve
+are vtable **slot bodies**, dispatched through a minted vtable — not a call door.
+
+Refined against IOBASE's numbers (which *did* move, because it registered `??_7`
+symbols our source references):
+
+> **The identity sees a vtable row being CLAIMED, and is blind to the work that
+> makes the claim TRUE.**
+
+**The precedent sits twelve lines from the code that would change.** Wave 10's
+`UI::TabElement::UpdateContainers` was *"ported, registered under both doors,
+detoured, verified, exercised in a live run... and printed in the 'ports with no
+caller' list."* The fix folded detour targets in as called+ported+detoured —
+*"the detour is what makes it run."* **Minted vtable slots are the second instance
+of the identical root cause.** That makes this a **precedented, concrete Wave 20
+fix**, not merely a caveat.
+
+**Not changed mid-wave, deliberately:** every lane measured against the current
+definition, and moving the instrument under the measurements would invalidate all
+of them.
+
+### Consequence, applied throughout this document
+
+**DATA lanes are reported in bodies closed and trap slots cleared. CODE lanes are
+reported on the identity. They are never added together.**
+
+---
+
+## 3. Per lane — on the right metric for each
+
+| lane | kind | result |
+|---|---|---|
+| **PERSIST** | CODE | **7 rows, identity +7.** 7 verified by synthesised oracle; **3 additionally live-verified** (28/14/13 calls, 0 divergences each on 13 real saves); 2 live-exercised-but-uncompared; 2 not reached live |
+| **FILE** | CODE + DATA | **8 code rows + 4 unbriefed closure bodies + 10 slot bodies.** Both DATA rows **TRAP=0 and oracle-verified** |
+| **IOBASE** | DATA | **14 bodies, 19 trap slots, 8 rows, 6 rows out of the unported set.** 5 vtable rows promoted behind an 8-of-8 kill-switch control |
+| **CSTREAM** | DATA | **14 bodies, 20 trap slots.** All three rows BLOCKED → **READY 9/9 TRAP=0**. **Promote none** — see §5 |
+| **MINT** (0b) | tooling | mint tables were **STALE**, not the generator wrong; five rows minted; `--check` added |
+| **NOOP** (0a) | analysis | both abstract bases **NO-OP**, settled from shipped bytes; worklist 36 → 34 |
+| **TRAPS** (0c) | measurement | CEIL §3.4 re-measured: **16 of 17 rows unchanged** |
+
+---
+
+## 4. WHAT THIS WAVE DOES NOT CLAIM
+
+**The load-bearing section. Read it before quoting anything above.**
+
+1. **THE SCREENSHOT CUTOVER HOLE IS NOT SHUT.** It is narrower by ten bodies and
+   **the remainder is enumerated**: the door board stands at **18 of 25 SHUT, 7
+   OPEN**, unmoved by the final tranche. Three of the seven open doors are the
+   very tables lane FILE cleared — **open for lack of PROMOTION, not for lack of
+   ports**. Two are the allocator behind `BANISHED_RT_ALLOC`.
+2. **Correction C2 said the debt was six exports, not four. Six was still not
+   enough** — a call-graph walk found four more bodies between the named rows and
+   Win32. The mechanism no row list could show: **a write goes to `%TEMP%` first
+   and is renamed into place on close.**
+3. **TRAP=0 IS NOT A PROMOTION, AND READY IS NOT A ROUTE.** Lane FILE's ten bodies
+   read **TRAP=0 with attendance ZERO on every one** — the tables are minted but
+   **not promoted (31 of 62)**, so `RT_DATA_SLOT` falls through to the DLL and
+   *retail's* bodies run. **These bodies do not run in play.** Every non-zero count
+   came from an oracle.
+4. **Only 31 of 62 minted rows are promoted.** The census objective and the
+   cutover objective **have diverged**, exactly as the plan's §8 warned. This is
+   the first hard measurement of that gap.
+5. **The CompressedStream writer is not cutover-clean.** `?SetWindow`'s GROW branch
+   has the DLL on **both** sides of the oracle — neither blamed nor cleared.
+6. **31 `adjacent-export` rows may still be over-sized.** `mint_extent_audit.py`
+   reads clean across all 62 rows **and says in its own output that clean is not
+   proof** — a table stamped other than by a plain RIP-relative LEA is invisible to
+   it. **Narrowed, not closed. Wave 20 must not scope a DATA lane against an
+   unverified slot count.**
+7. **`??0TextFileStream@` and `??1FileSystem@` are PORTED, NOT VERIFIED** —
+   attendance 0 on every run. Lane FILE owns this and did not close it.
+8. **`?BeginDelete@` and `??1Persistence@` have no live-route exercise.**
+   `??1Persistence@` is verified by synthesised oracle only.
+9. **`?SetupFileSystem@Modification@` (~600 instructions) and the PackageFile
+   cluster are unstarted**, re-scoped as one real body with three cheap ones behind
+   it.
+10. **Attendance is one route on most rows.** `post=0` frequently means *not
+    driven*, not *unreachable* — proved twice, once as a **harness fault**.
+
+---
+
+## 5. Two criteria this wave established, both reusable
+
+### 5.1 A row is promotable insofar as WE OWN THE FUNCTION THAT STAMPS IT
+
+Every stamp of these vtables is an **in-DLL RIP-relative `LEA`**, not a door. So
+TRAP=0 says nothing about who installs the table. Validated by **predicting the
+attendance data row by row**, via two instruments gathered by different means.
+
+Lane CSTREAM's stamper census is the sharpest demonstration — the readiness screen
+ranks all three of its rows identically at 9/9/TRAP=0:
+
+| row | stampers | ours |
+|---|---|---|
+| `??_7CompressedStream@` | 9 | 2 |
+| `??_7CompressedMemoryStream@` | 7 | 3 |
+| `??_7CompressedFileStream@` | 6 | **0** |
+
+**Recommendation accepted: promote none of them.**
+
+**Strongest promotion candidates for Wave 20**, both still unpromoted:
+`??_7BinaryFileStream@` (TRAP=0, **both** stampers ours, oracle-verified) and
+`??_7VisitorStream@` (7/7/0 **and** ATTENDED via `External::Add` — a proven door
+plus a complete slot set).
+
+### 5.2 A bound that DELETES slots must carry a named ctor a human checked
+
+`adjacent-export` proves *"the last slot ends where the next EXPORTED symbol
+starts"* — an **upper bound read as exact**. Every concrete IO stream ctor
+heap-allocates an 8-byte `IO::Encoding` and stamps an **unexported** vtable
+interleaved in `.rdata`.
+
+Two rows were over-sized: **`??_7ReaderWriter@` 36 → 26** (two hidden tables) and
+**`??_7TextFileStream@` 20 → 10**.
+
+The rule rests on an **asymmetry**, not on any scan being wrong: *an over-sized row
+is a visible surplus; an under-sized one has no symptom.*
+
+---
+
+## 6. Instruments — what changed, and what is still lying
+
+**Fixed this wave:** `abi_retslot_audit` headline now carries its own denominator ·
+`rt_mint_gen.py --check` added (the real defect had no detector) ·
+`tools/dup_runtime_export.py` written (`dispatch_slot_map --check` is
+**structurally blind** to `RegisterRuntimeExport`) · `game_dir_lock.sh` advisory now
+**measures handles** instead of asserting from pid presence ·
+`tools/mint_extent_audit.py` written.
+
+**STILL BROKEN — Wave 20 must fix:**
+* **`tools/boot_state.sh` reports `RUNNING` off a stale state file.** It checks pid
+  liveness, never file freshness. **This caused measured harm**: a lane's run
+  printed `BOOTSTATE_RC=0` for an already-crashed process, which is the proximate
+  cause of a 24-minute outage that starved three lanes.
+* **`runtime_census.py` cannot see minted-vtable slot bodies** (§2).
+* **14 pre-existing duplicate registrations** in compiled code, including
+  `?PlatformDestruct@RenderBuffer@Video@@` — **two distinct bodies under one export
+  name**; one is shadowed **dead code the census counts as ported**. Also
+  `0x1800e0c80` in Input, same shape, unexamined.
+
+---
+
+## 7. The methodological result, and it outranks the number
+
+Lane PERSIST hit the same reasoning slip **twice within an hour of naming it** —
+the second time while quoting the rule:
+
+> **What caught both was not vigilance but A CHECK THAT RAN REGARDLESS OF WHAT I
+> BELIEVED.** Neither required me to suspect anything.
+
+**45 corrections were recorded this wave. Almost none were caught by anyone being
+careful.** They were caught by a control that had to print non-zero, a set-diff run
+because the protocol said so, a **linker refusing a duplicate symbol**, a second
+lane re-deriving a number, and tools printing their own subject and denominator.
+
+Three people broke a rule they had personally articulated — two within the hour,
+**and the integrator did it four times**. The remedy is not better memory. It is
+**cheap unconditional checks whose output cannot be read as success when they have
+measured nothing.**
+
+### The integrator's own errors, since they are the seat with the widest blast radius
+
+* Reported Ghidra **down** having probed the wrong port (C3).
+* Read my own output as matching a prediction it contradicted (C5).
+* Relayed a lane's **negative claim about the environment** — "no save games at
+  all" — into a merge commit as a wave-level fact. **13 saves existed.** It cost a
+  lane its verification route (C14).
+* Quoted `dispatch_slot_map --check` **twice** as proof of no shadowed
+  registration; it cannot see that class (C29).
+* Passed on **stamper counts** that were wrong — one of which would have let a lane
+  declare a row fully owned **with a stamper still in the DLL** (FILE's tranche).
+* Passed a lane's marked uncertainty downstream **without the marking** (C8).
+
+**Standing rule extracted:** *a lane's negative claim about the environment is the
+most dangerous thing to relay, because it cannot be checked by reading the lane's
+work — only by running a command the integrator can always run.*
+
+---
+
+## 8. Wave 20 inputs
+
+1. **Fix `runtime_census.py`** to fold minted-vtable slot bodies in, on the Wave 10
+   detour precedent (§2).
+2. **Fix `boot_state.sh`** to check state-file mtime (§6).
+3. **Promote `??_7BinaryFileStream@` and `??_7VisitorStream@`** (§5.1).
+4. **Close the extent risk** on the 31 remaining `adjacent-export` rows (§5.2).
+5. **`?SaveText@External@Object@@` is the highest-leverage single item left** — it
+   unlocks lane FILE's row 7, the two IOBASE vtables SaveText stamps, and the
+   handed-back `??_7TextFileStream@` (10 slots / 8 bodies).
+6. **A save/load route cell** — "open the dialog and produce one save", not
+   "produce one save". Its `Save\` directory is created by `?CreatePath@FileSystem@`,
+   lane FILE's row, so it shares code with the screenshot debt.
+7. **`?SetupFileSystem@Modification@`** — a lane on its own.
+8. **The 14 duplicate registrations**, starting with the two cross-file ones (§6).
+9. **The cutover boot wall is `?PlatformConfigure@Engine@1@`** — an ENGINE row,
+   neither IO nor Graphics. Engine sits at 33 called / 23 ported.
