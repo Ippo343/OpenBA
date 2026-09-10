@@ -69,6 +69,9 @@ extern int RtObjectExternalAddRegister();           // external_add.cpp
 // Wave 11 follow-up 2 lane IOSTREAM. External::SaveText -- the TextFileStream
 // half of the same blocker: exported ctor, missing LAYOUT.
 extern int RtObjectExternalSaveTextRegister();      // external_savetext_win.cpp
+// Wave 11 follow-up 2 lane IOSTREAM. External::Load -- the CompressedFileStream
+// half, and a full deserialisation driver rather than a stream wrapper.
+extern int RtObjectExternalLoadRegister();          // external_load.cpp
 
 void RtObjectPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
@@ -145,5 +148,11 @@ void RtObjectPortInit() {
     // which is also how its byte-comparison oracle gets its "theirs" side.
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_SAVETEXT"))
         n += RtObjectExternalSaveTextRegister();
+    // Same nest, its own switch. Load is the only body in the class that
+    // CREATES objects (through BaseTypeInfo::factoryFn) and the only one on the
+    // resource read path, so BANISHED_RT_EXTLOAD=0 is the A/B that matters most
+    // in this group.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTLOAD"))
+        n += RtObjectExternalLoadRegister();
     printf("[RtPort] Object: %d exports registered\n", n);
 }
