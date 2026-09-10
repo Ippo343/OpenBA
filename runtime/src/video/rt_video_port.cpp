@@ -140,5 +140,19 @@ void RtVideoPortInit() {
         n += RtVideoEnumerateModesRegister();
     }
 
+    // Wave 18 lane GFXIF: Video::Device::Adapter and ::GraphicsInterface, plus
+    // AdjustDisplay / FindOrAddMode / GetDisplayMode. These nine names are the
+    // ones VideoDX11's devicedata import table cannot fill with the shipped DLL
+    // absent, which is the VCALL-of-0 the cutover boot gate has died on since
+    // attempt 23. Registered LAST in this file because the Array<Adapter>
+    // helpers it adds call the Array<DisplayMode> and Array<bool> bodies lane
+    // VID2 registers above — the calls are by C++ symbol, not through the
+    // registry, so the order is documentation rather than a dependency, but it
+    // should stay this way so that reading the file in order reads correctly.
+    if (RtWaveEnabled("BANISHED_RT_VIDENUMTYPES")) {
+        extern int RtVideoDeviceEnumTypesRegister();
+        n += RtVideoDeviceEnumTypesRegister();
+    }
+
     printf("[RtPort] Video: %d exports registered\n", n);
 }
