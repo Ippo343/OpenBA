@@ -407,6 +407,13 @@ void RuntimePortInit() {
 
     RtResolveMarkPortInitDone();
 
+    // NOTE (Wave 17 lane CEIL): the door-attendance phase marker is DELIBERATELY
+    // NOT here. RuntimePortInit is not the end of registration —
+    // AddressRegistryInit() runs afterwards (standalone/main.cpp) and
+    // reg_unreg_lane3.cpp resolves four ?_typeInfo@Graphics@@ rows by name to
+    // fill dispatch slots. Marking here read all four as ATTENDANCE and would
+    // have handed four rows a route that is really a registration.
+
     // Wave 9 lane X's oracle. LAST, after the mint AND after the mark above,
     // and both halves of that placement are deliberate.
     //
@@ -775,6 +782,10 @@ uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr) {
 }
 
 void* ResolveExport(const char* mangled_name) {
+    // WAVE 17 LANE CEIL — door attendance. FIRST, before the registry
+    // short-circuit, so a row that IS registered is still counted; off unless
+    // BANISHED_W17_ATTEND=1, and one strcmp against a 63-entry list when on.
+    { extern void Wave17DoorAttendNote(const char*); Wave17DoorAttendNote(mangled_name); }
     if (mangled_name && RtPortEnabled()) {
         auto& reg = RtExportReg();
         auto it = reg.find(mangled_name);

@@ -1,0 +1,68 @@
+[ctrl] Runtime-x64.dll: qword 0x180000000 (its own ImageBase) appears 1 time(s)
+[ctrl] Application-x64.exe: qword 0x140000000 (its own ImageBase) appears 1 time(s)
+[ctrl] VideoDX11-x64.dll: qword 0x180000000 (its own ImageBase) appears 1 time(s)
+[ctrl] VideoDX9-x64.dll: qword 0x180000000 (its own ImageBase) appears 1 time(s)
+[ctrl] TOTAL 4 -> GREEN
+
+no-qword ??_7ConstantBufferData@Video@@6B@                              0x180158b30 
+no-qword ??_7ContextData@Video@@6B@                                     0x180158b90 
+no-qword ??_7DeviceData@Video@@6B@                                      0x180158c30 
+no-qword ??_7ImageBuffer@Video@@6B@                                     0x180154fc0 
+no-qword ??_7ImageBufferData@Video@@6B@                                 0x180158b50 
+no-qword ??_7IndexBufferData@Video@@6B@                                 0x180158af8 
+no-qword ??_7PixelProgramData@Video@@6B@                                0x180158a78 
+no-qword ??_7RenderBufferData@Video@@6B@                                0x180158a28 
+no-qword ??_7RenderStateData@Video@@6B@                                 0x180158a60 
+no-qword ??_7VertexBufferData@Video@@6B@                                0x180158ac0 
+no-qword ??_7VertexLayoutData@Video@@6B@                                0x180158aa8 
+no-qword ??_7VertexProgramData@Video@@6B@                               0x180158a90 
+no-qword ??_7VideoProgramData@Video@@6B@                                0x180158a48 
+no-qword ?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA                    0x1801fe788 
+no-qword ?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA                   0x1801fe798 
+no-qword ?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA             0x1801fe790 
+no-qword ?_firstSurface@ImageBuffer@Video@@0PEAV12@EA                   0x1801fe780 
+no-qword ?_singleton@Configuration@Video@@0PEAV12@EA                    0x1801fe7a0 
+no-qword ?_singleton@Device@Video@@0PEAV12@EA                           0x1801fe7a8 
+no-qword ?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A         0x1801fa548 
+no-qword ?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A        0x1801fa580 
+no-qword ?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A         0x1801fa5f0 
+no-qword ?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A        0x1801fa660 
+no-qword ?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A       0x1801fa698 
+no-qword ?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A        0x1801fa5b8 
+no-qword ??_7BinaryFileStream@IO@@6B@                                   0x1801554d0 
+no-qword ??_7BinaryReader@IO@@6B@                                       0x1801552e0 
+no-qword ??_7BinaryWriter@IO@@6B@                                       0x180155210 
+no-qword ??_7CompressedFileStream@IO@@6B@                               0x1801555f0 
+no-qword ??_7CompressedMemoryStream@IO@@6B@                             0x180155560 
+no-qword ??_7CompressedStream@IO@@6B@                                   0x180155640 
+no-qword ??_7FileStream@IO@@6B@                                         0x180154960 
+no-qword ??_7MemoryStream@IO@@6B@                                       0x1801555b0 
+no-qword ??_7PackageFile@IO@@6B@                                        0x180155700 
+no-qword ??_7ReaderWriter@IO@@6B@                                       0x1801553b0 
+no-qword ??_7Stream@IO@@6B@                                             0x1801549a0 
+no-qword ??_7TextFileStream@IO@@6B@                                     0x180155980 
+no-qword ??_7VisitorStream@IO@@6B@                                      0x180155a20 
+no-qword ?_singleton@FileSystem@IO@@0PEAV12@EA                          0x1801fc6a8 
+no-qword ?_singleton@Modification@IO@@2PEAV12@EA                        0x1801fc6b0 
+no-qword ?_singleton@Persistence@IO@@0PEAV12@EA                         0x1801fc6b8 
+no-qword ?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A            0x1801f9ac8 
+no-qword ??_7AnimationEvent@Graphics@@6B@                               0x180154bf0 
+no-qword ??_7Geometry@Graphics@@6B@                                     0x180154e60 
+no-qword ??_7Light@Graphics@@6B@                                        0x180158d30 
+no-qword ??_7MaterialInstance@Graphics@@6B@                             0x1801545e0 
+no-qword ??_7Particle@Graphics@@6B@                                     0x180155130 
+no-qword ??_7ParticleInstance@Graphics@@6B@                             0x1801550e0 
+no-qword ??_7ParticleSystemInstance@Graphics@@6B@                       0x180155040 
+no-qword ??_7SunLight@Graphics@@6B@                                     0x180158e10 
+no-qword ?_frameIndex@ParticleInstance@Graphics@@1HA                    0x1801fe77c 
+no-qword ?_rng@Particle@Graphics@@1VRandom@System@@A                    0x1801fe7f0 
+no-qword ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA                  0x1801fc70b 
+no-qword ?_singleton@AnimationManager@Graphics@@0PEAV12@EA              0x1801fe7b0 
+no-qword ?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A         0x1801f99b0 
+no-qword ?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A 0x1801f99e8 
+no-qword ?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A 0x1801f9a20 
+no-qword ?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A     0x1801fa708 
+no-qword ?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A         0x1801fa740 
+no-qword ?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A 0x1801fa778 
+no-qword ?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A         0x1801fa7b0 
+no-qword ?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A 0x1801f9a90 
