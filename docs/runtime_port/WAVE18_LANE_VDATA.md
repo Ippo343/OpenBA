@@ -11,7 +11,7 @@ Graphics `?_typeInfo@` rows that ride the same consumer.
 ## 0. PRE-REGISTERED PREDICTIONS
 
 **Written and committed BEFORE any code was written and before any run.**
-Scored in §6.
+Commit `88f90b3`. Scored honestly in §5.
 
 ### 0.1 The route for the ten `OnVideoError` typeinfos
 
@@ -87,8 +87,6 @@ CEIL measured 0 READ / 0 WRITE / 5–118 DATA for all 26 vtable rows including
 this one. If our own ctor's `ResolveExport` stamp turns out to be the ONLY door,
 the row is promotable but the promotion may be a NO-OP for every object the DLL
 constructs itself.
-
----
 
 ---
 
@@ -208,17 +206,120 @@ port into the DLL — silently — while the census still counted the port
 `ResolveAddr(Module::Runtime, 0x1800c9930)`, which is what `goal_serialize.cpp`
 does and for the same stated reason.
 
-### 1.4 A predicate that could not fail, caught before it shipped
+### 1.4 TWO DEFECTS I PUT IN MY OWN CODE AND CAUGHT BEFORE SHIPPING
 
-The `Destruct` shadow was first written `RT_DIFF_SHADOW(a || b ? true : true,
-…)`. That is a predicate nobody evaluates
-(`reference_a_predicate_nobody_evaluates.md`) and it would have printed green
-forever. It is now one term that can actually fail: after the deleting
-destructor runs, `self->vtable` must no longer be the value it held on entry,
-because the destructor's last act before `~External` is to stamp
-`??_7CompiledExternal@Object@@6B@`. The term is written by the destructor, not
+These sit at the same prominence as the results deliberately. Both are defect
+classes this project already has a written reference for, which means neither was
+a new idea — they are shapes I walked into anyway, and the transferable part is
+*how* each was caught, not that it was.
+
+**(a) A shadow predicate that could never fail.** The `Destruct` shadow was first
+written `RT_DIFF_SHADOW(a || b ? true : true, …)`. That is a predicate nobody
+evaluates (`reference_a_predicate_nobody_evaluates.md`); it would have printed
+green forever, on every run, and its greenness would have been quoted.
+
+*How it was caught:* re-reading my own diff before the first build and asking of
+each shadow the question that reference exists to force — *could this term be
+false?* It could not. It is now one term that can actually fail: after the
+deleting destructor runs, `self->vtable` must no longer hold the value it had on
+entry, because the destructor's last act before `~External` is to stamp
+`??_7CompiledExternal@Object@@6B@`. That term is written by the destructor, not
 by this function's own arithmetic, which is what stops the shadow from restating
 the code above it.
+
+**(b) A direct C++ call that bypassed the kill switch entirely — this project's
+"off by default was not true" defect, exactly.** `Construct` and `Reconstruct`
+both re-run `??0ImageBuffer@Video@@QEAA@XZ`. The first draft called
+`Video_ImageBuffer_Ctor` **directly**, because it has external linkage and the
+call compiles cleanly.
+
+That is wrong for a reason no compiler or test could have surfaced:
+`buffers.cpp`'s registration of that constructor is gated on
+`BANISHED_RT_VIDBUFFERS`, and **a kill switch gates the REGISTRATION, not a C++
+call.** With `BANISHED_RT_VIDBUFFERS=0` — the A/B half whose entire purpose is to
+put `Video::ImageBuffer` back on the DLL — these two bodies would still have run
+OUR constructor while every other caller in the process ran retail's. No switch
+reaches it, and no counter reports it, so the A/B would have compared two states
+that both contained our ctor and reported a clean difference of nothing. That is
+`reference_off_by_default_was_not_true.md` reproduced almost line for line: there,
+one wrapper called `rtalloc::MemFree` directly and an *unarmed* run mutated
+retail's arena.
+
+*How it was caught:* not by a test, and not by review of the body. It was caught
+by asking a **gate-shaped** question about a line I had already written and was
+happy with — *if someone sets this lane's kill switch to 0, does this line
+change?* The answer was no, and a line that does not vary with the switch that is
+supposed to gate it is not gated. This is the same test the project states for
+instruments (`reference_the_gate_was_never_a_control.md`: test a gate by asking
+whether its quantity VARIES with the thing it gates); it applies to ordinary
+calls too.
+
+Both bodies now go through `ResolveAddr(Module::Runtime, 0x1800f2580)`, which is
+registry-first — our port when registered, the DLL's body when not, which is
+exactly what retail's tail `JMP` to that address does. A follow-on commit also
+retyped that door `void`-returning rather than `void*`, because the registry may
+hand back either retail's body (which ends `MOV RAX,RBX` and returns `this`) or
+our port (which returns `void`, leaving RAX undefined): declaring a return one of
+the two callees never writes, and then using it, is
+`reference_hidden_retslot_wild_write.md`. `Construct`/`Reconstruct` return `self`
+themselves, which is correct against both.
+
+### 1.5 A lock hazard, and the guard that earned its keep
+
+`tools/game_dir_lock.sh`'s banner warns against **piping** `acquire`, because a
+pipeline exits with the last command's status and a TIMEOUT then reads as a
+GRANT. I hit the same hazard in a second costume: I wrote
+
+```
+tools/game_dir_lock.sh acquire vdata; echo "ACQUIRE_EXIT=$?"
+```
+
+— and the harness reported the **compound** command's status, `0`, while the
+acquire had actually TIMED OUT after 900s with `gfxif` still holding the lock.
+
+**What makes this worse than a pipe, and worth recording:** the echoed text was
+*correct*. `$?` really was `acquire`'s status, so the output literally said
+`ACQUIRE_EXIT=1` while the step's status said `0`. Two fields disagreed, and the
+authoritative-looking one was the wrong one — and **the wrapper I added to make
+the status MORE visible is what hid it.** Any trailing command discards the
+refusal just as a pipe does: no pipe, no `;`, no trailing echo, no `&&` tail.
+
+**`assert-held` is what stopped this becoming a clobber.** I gated the deploy on
+`tools/game_dir_lock.sh assert-held vdata`, it returned `VERIFY FAILED: held by
+'gfxif', not 'vdata'`, and nothing was written to the game directory. The cost was
+about fifteen idle minutes instead of another lane's run measured against my
+binary. Every subsequent run in this lane used the self-releasing
+`game_dir_lock.sh run` form, which has no exit code to discard and cannot be held
+unnoticed.
+
+### 1.6 A third self-inflicted defect, and it is the same one twice
+
+The commit that added §1.5 was written with `git commit -m "…"` in double quotes,
+with backticks around the offending shell snippet. **The backticks ran command
+substitution.** Git received a message in which the quoted snippet had been
+*executed* and replaced by its output, and `$?` had been expanded — so the
+committed text read `ACQUIRE_EXIT=127` and "`0` really was acquire's status".
+Neither is true. The message describing a command-substitution hazard was
+silently rewritten by command substitution, and it made two confident factual
+claims that were artefacts of its own corruption.
+
+`reference_heredoc_eats_backslashes.md` already states the rule — **use `Write`
+plus `git commit -F`, never inline shell quoting** — and I had read it. The
+commit was amended (`a22f0b0`) and the amendment says so in its own body.
+
+Three things make this worth a section rather than a blush:
+
+* **It is the same failure as §1.5, one layer up.** In §1.5 a wrapper meant to
+  make a status *more* visible discarded it; here a quoting style meant to make a
+  snippet *more* readable executed it. Both times the visible text looked right.
+* **It would have been permanent.** A commit message is not re-run, so nothing
+  would ever have contradicted `ACQUIRE_EXIT=127`. The next reader would have
+  inherited a fabricated number attached to a real lesson — which is precisely
+  the failure mode §5.1 is about.
+* **It was caught by one line of incidental stderr**: `bash: line 41: acquire:
+  command not found`, printed beside a successful commit. Had the snippet been a
+  valid command, it would have run silently and the corruption would have been
+  invisible. That is luck, not method, and the method is the rule I skipped.
 
 ---
 
@@ -499,7 +600,7 @@ amendment.
 
 ---
 
-## 5. Prediction scoring — 8 right, 3 wrong, 1 self-answered
+## 5. Prediction scoring — 8 right, 3 wrong, 1 given no credit
 
 Pre-registered at **`88f90b3`**, before the first line of the port and before any
 run.
@@ -519,14 +620,35 @@ run.
 | P11 | the ceiling does not move | **WRONG** — 88.0% → 88.2%, §2.1 |
 | P12 | at least one prediction fails, most likely P7 | **RIGHT that one would fail, WRONG about which** |
 
-**P3 is the instructive one.** CEIL §2.2 says its phase-boundary correction moved
-"the four lane-3 rows" out of ATTENDED, and I read "four rows" as four of MINE
-without checking which four. They are `MaterialInstance`, `Material`,
-`GraphicsMesh` and `Particle` — and **three of those four are outside my ten**. I
-caught it by grep before the run rather than after, which is the only reason it
-did not become a claim; the grep took ten seconds and the assumption had already
-survived being written down. A number inherited from a neighbouring lane's prose
-is still a number nobody re-derived.
+### 5.1 P3: inheriting a count without checking what it was a count OF
+
+**This is the error class, not a footnote about one prediction.** It is the same
+class this wave has now hit repeatedly, and it is worth naming precisely because
+the number I inherited was *correct*.
+
+CEIL §2.2 says its phase-boundary correction moved "the four lane-3 rows" out of
+ATTENDED. That statement is true. I read "four rows" as **four of MINE** and
+predicted four of my ten would carry `init=1`. The four rows CEIL means are
+`MaterialInstance`, `Material`, `GraphicsMesh` and `Particle` — and **three of
+the four are outside my ten**. Exactly one of my rows (`GraphicsMesh`) carries
+`init=1`; the other nine read `init=0`.
+
+The failure was not arithmetic and not a misquotation. **I carried a count across
+a boundary without checking what set it was counting over.** A count is only
+meaningful with its denominator attached, and "four rows" borrowed from a
+neighbouring lane's prose silently acquires *my* subject as its denominator the
+moment I write it down.
+
+The generalisation, and it is the one to carry forward: this is the same shape as
+`reference_kind_count_read_as_a_portstate_count.md` (a count of KINDS read as a
+count of PORT-STATES) and as this lane's own §2.1 (a *ceiling* percentage read as
+a fixed target when its denominator moves). Three different manifestations, one
+mechanism — **a number inherited from prose is a number nobody re-derived, and
+the first thing to re-derive is not its value but its subject.**
+
+I caught it by grep before the run rather than after, which is the only reason it
+never became a claim. The grep took ten seconds; the assumption had already
+survived being written into a pre-registered prediction and committed.
 
 **P11 is the one that mattered**, and it is written up as §2.1 because it changes
 how the wave is scored, not just my scoreboard.
