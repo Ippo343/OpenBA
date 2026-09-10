@@ -393,3 +393,66 @@ name. So `called` grew by **one**, not three. Reading `AEAA` as "unexported,
 reach it by address" would have opened an address door **onto our own ported
 body** — a fresh instance of the standing lesson that
 **`AEAA` means private, not unexported**, this time with the trap pointing at us.
+
+## CORRECTION — the queue-poll error is NOT harmless; it is the starvation itself
+
+This document said of `pick_next()`/`ticket_head()`'s empty-ticket bug:
+
+> Harmless to the ordering (the branch is skipped) but it prints on every poll…
+
+**That is wrong, and it cost lane OBJLIFE two 900s windows.** Line 293:
+
+```sh
+asked=$(cat "$f" 2>/dev/null || echo 0)          # 292 -- `|| echo 0` fires only if cat FAILS
+if [ -z "$best_at" ] || [ "$asked" -lt "$best_at" ]; then   # 293 -- throws when asked=""
+```
+
+`ticket_head()` returns **the waiter with the earliest `asked` epoch**. When a
+ticket file exists but is **empty**, `cat` succeeds with empty output, the
+numeric test throws, and the `if` is false — so **that waiter is never selected
+as head.** Skipping the branch is not a cosmetic skip: it is the selection.
+A lane with an empty ticket can never reach the head of the queue while any
+other lane holds a valid ticket, no matter how long it has waited.
+
+**This exactly reproduces what OBJLIFE observed**, and the transition is the
+signature:
+
+```
+[gamelock] waiting for 'objint'  (780s/900s)   <- head EMPTY (own ticket skipped) -> falls through
+[gamelock] queued behind 'objext' (810s/900s)  <- objext queues with a VALID ticket -> becomes head
+```
+
+While OBJLIFE was alone, its skipped ticket left `head` empty, `[ -n "$head" ]`
+was false, and it fell through to the "waiting for <owner>" branch — which reads
+exactly like being at the head. The moment a lane with a readable ticket queued,
+that lane became head and OBJLIFE was displaced **permanently**, not transiently.
+
+### OBJEXT is exonerated
+
+The reorder was **not** a lane jumping the queue, and not a lane acting on the
+advisor's earlier bad ranking. OBJLIFE flagged this itself — *"my evidence points
+at the script rather than at OBJEXT… worth checking before attributing it to a
+lane"* — and it was right to. The advisor's retraction had nothing to revert.
+**Attributing a scheduling anomaly to a peer before reading the scheduler is its
+own failure**, and the lane that stood to gain from the accusation is the one
+that prevented it.
+
+### A second, independent unfairness in the same function
+
+`ticket_drop` on timeout removes the ticket; the replacement `acquire` calls
+`ticket_take`, which writes a **fresh** `asked = now()`. So **a timed-out waiter
+returns to the BACK of the queue**, having already waited the longest. That is
+the precise failure the ticketing system was introduced to fix (see the header
+comment: lane UI3 lost a slot after waiting an hour) — reintroduced through the
+timeout path.
+
+### The fix, for the wave close
+
+```sh
+asked=$(cat "$f" 2>/dev/null); case "$asked" in ''|*[!0-9]*) asked=0 ;; esac
+```
+
+plus the same digits-guard on `age`, and a timeout path that preserves the
+original `asked` epoch rather than minting a new one. **A queue that silently
+starves its longest waiter is worse than no queue**, because the waiter reads its
+own starvation as patience.
