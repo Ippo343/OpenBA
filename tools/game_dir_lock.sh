@@ -35,6 +35,7 @@
 # USAGE
 #
 #   tools/game_dir_lock.sh acquire <lane-name> [timeout-seconds]   # default 900
+#   tools/game_dir_lock.sh assert-held <lane-name>   # gate a step on ownership; see below
 #   tools/game_dir_lock.sh release <lane-name>
 #   tools/game_dir_lock.sh status
 #   tools/game_dir_lock.sh orphans   # is the dir usable? names an UNLOCKED run
@@ -79,8 +80,24 @@
 #
 # A granted acquire now also prints a line matching `^\[gamelock\] GRANT `, so a
 # caller that must pipe can test for the POSITIVE rather than trusting a status
-# that a pipe can swallow. And `verify <lane>` re-checks ownership immediately
-# before launch.
+# that a pipe can swallow. And `verify <lane>` (alias: `assert-held`)
+# re-checks ownership immediately before launch.
+#
+# THE STRONGEST GUARD DOES NOT TRUST `acquire`'S EXIT CODE AT ALL -- a caller
+# that forgets the `||` entirely (not even a pipe, just a bare call with no
+# check) defeats every mitigation above, and that happened in Wave 11. Put
+# `assert-held` directly in front of the dangerous action instead, as its own
+# statement that fails the step on its own if ownership is not current:
+#
+#   tools/game_dir_lock.sh acquire lane-FOO 900
+#   tools/game_dir_lock.sh assert-held lane-FOO || exit 1     # <-- copy this line
+#   cp standalone/build/reimpl-x64.exe "$GAME/reimpl-x64.exe"
+#
+# This is what `run` already does internally, and it is why `run` is PREFERRED
+# over hand-rolling acquire/deploy/release: there is no exit code to discard
+# because there is no gap between the check and the action for a bad read of
+# it to land in.
+#
 #   trap 'tools/game_dir_lock.sh release lane-FOO' EXIT
 #   cp standalone/build/reimpl-x64.exe "$GAME/reimpl-x64.exe"
 #   ( cd "$GAME" && BANISHED_AUTOSTART=1 ./reimpl-x64.exe )
@@ -274,13 +291,44 @@ TICKET_STALE=60
 ticket_take() {
     local who="$1"
     mkdir -p "$QUEUE" 2>/dev/null
+    ticket_sweep_garbage
     [ -f "$QUEUE/$who" ] || printf '%s' "$(now)" > "$QUEUE/$who"
 }
 ticket_touch() { touch "$QUEUE/$1" 2>/dev/null; }
 ticket_drop()  { rm -f "$QUEUE/$1" 2>/dev/null; }
 
+# A ticket a caller keeps ON TIMEOUT (see cmd_acquire below) so a requeue keeps
+# its original epoch is, by design, no longer touched -- ticket_head ignores it
+# once it passes TICKET_STALE, but nothing else ever removes the file. A lane
+# that times out and never retries would otherwise leave it in $QUEUE forever.
+# That is harmless to correctness (stale tickets are never counted) but is
+# unbounded garbage, so sweep anything far past any realistic retry gap.
+TICKET_GARBAGE_AFTER=$(( TICKET_STALE * 20 ))   # 20 min; no real retry waits that long
+ticket_sweep_garbage() {
+    local f age
+    [ -d "$QUEUE" ] || return 0
+    for f in "$QUEUE"/*; do
+        [ -f "$f" ] || continue
+        age=$(( $(now) - $(date -r "$f" +%s 2>/dev/null || echo 0) ))
+        case "$age" in ''|*[!0-9]*) age=0 ;; esac
+        [ "$age" -gt "$TICKET_GARBAGE_AFTER" ] && rm -f "$f" 2>/dev/null
+    done
+}
+
 # Echo the lane name at the head of the queue: the LIVE ticket (refreshed within
 # TICKET_STALE) with the earliest first-asked epoch. Empty if nobody is queued.
+#
+# DIGITS GUARD, 2026-09-10: `cmd || echo 0` only fires if `cmd` FAILS. A ticket
+# file that EXISTS but is EMPTY (e.g. a `ticket_take` interrupted between
+# `mkdir -p` and the `printf` that fills it in, or a filesystem hiccup) makes
+# `cat` succeed with empty output, so `asked=""`. The numeric test below then
+# THROWS ("integer expression expected"), the `if` reads as false, and that
+# ticket is silently never chosen as head -- forever, while any other lane
+# holds a readable ticket. Observed in Wave 11: a lane's own ticket went blind
+# this way, `ticket_head` fell through to the wrong branch, and the lane's log
+# read like queued-behind-nobody. `date -r` failing has the same shape (a
+# successful-but-empty read), so both are guarded the same way: force to a
+# sane integer before the numeric tests use it.
 ticket_head() {
     local best="" best_at="" f name asked age
     [ -d "$QUEUE" ] || return 0
@@ -288,8 +336,10 @@ ticket_head() {
         [ -f "$f" ] || continue
         name=$(basename "$f")
         age=$(( $(now) - $(date -r "$f" +%s 2>/dev/null || echo 0) ))
+        case "$age" in ''|*[!0-9]*) age=0 ;; esac
         [ "$age" -gt "$TICKET_STALE" ] && continue      # waiter died or left
         asked=$(cat "$f" 2>/dev/null || echo 0)
+        case "$asked" in ''|*[!0-9]*) asked=0 ;; esac
         if [ -z "$best_at" ] || [ "$asked" -lt "$best_at" ]; then
             best_at=$asked; best=$name
         fi
@@ -309,7 +359,15 @@ cmd_acquire() {
             if [ "$waited" -ge "$timeout" ]; then
                 echo "[gamelock] DENIED -- TIMEOUT after ${timeout}s; queued behind '$head'."
                 echo "[gamelock] TIMEOUT after ${timeout}s; queued behind '$head'." >&2
-                ticket_drop "$who"
+                # Do NOT ticket_drop here. Dropping would make a requeuing
+                # `acquire` call ticket_take() fresh, which stamps a NEW asked
+                # epoch and sends the longest-waiting lane to the BACK of the
+                # queue -- exactly the unfairness FIFO ticketing exists to
+                # prevent (see the block comment above). Leave the ticket in
+                # place: a caller that retries soon keeps its original place;
+                # a caller that never retries has its ticket age past
+                # TICKET_STALE (ignored by ticket_head) and eventually swept
+                # by ticket_sweep_garbage.
                 return 1
             fi
             [ $(( waited % 30 )) -eq 0 ] &&
@@ -352,7 +410,9 @@ cmd_acquire() {
             echo "[gamelock] Do NOT deploy anyway -- that is the clobber this prevents."
             echo "[gamelock] TIMEOUT after ${timeout}s; '$(lock_owner)' still holds it." >&2
             echo "[gamelock] Do NOT deploy anyway -- that is the clobber this prevents." >&2
-            ticket_drop "$who"
+            # Same reasoning as the other TIMEOUT branch above: keep the
+            # ticket so a requeue preserves the original asked epoch instead
+            # of restamping now() and losing FIFO priority.
             return 1
         fi
         [ $(( waited % 30 )) -eq 0 ] &&
@@ -510,7 +570,12 @@ cmd_run() {
 
 # Returns 0 only if the lock is held BY YOU, right now. Cheap enough to call
 # immediately before a launch: it answers "is the exe about to run still mine?"
-# in the one way a discarded exit code cannot fake.
+# in the one way a discarded exit code cannot fake. Also reachable as
+# `assert-held` (same command, different verb) for a caller that wants a name
+# that cannot be misread as anything but a gate: `acquire` grants a lock,
+# `assert-held` is the thing you put directly at a deploy step so the step
+# itself refuses to proceed on a stolen or expired lock, regardless of what
+# any earlier `acquire`'s exit code was read as.
 cmd_verify() {
     local who="${1:?lane name required}" owner
     if [ ! -d "$LOCK" ]; then
@@ -526,12 +591,18 @@ cmd_verify() {
 }
 
 
+# Test seam: GAMELOCK_NO_MAIN=1 sources this file for its functions (used by
+# tools/game_dir_lock_selftest.sh to exercise ticket_head/ticket_take/etc.
+# directly) without running the dispatch below. Never set in normal use. Same
+# shape as the existing GAMELOCK_FAKE_RUN seam above.
+if [ "${GAMELOCK_NO_MAIN:-0}" != "1" ]; then
 case "${1:-}" in
     acquire) shift; cmd_acquire "$@" ;;
     run)     shift; cmd_run "$@" ;;
-    verify)  shift; cmd_verify "$@" ;;
+    verify|assert-held) shift; cmd_verify "$@" ;;
     release) shift; cmd_release "$@" ;;
     status)  cmd_status ;;
     orphans) cmd_orphans ;;
     *)       usage ;;
 esac
+fi
