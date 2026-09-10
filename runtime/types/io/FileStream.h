@@ -138,8 +138,22 @@ struct FileStream {
 };
 static_assert(offsetof(FileStream, filename) == 0x18,
               "FileStream.filename @ 0x18 (~FileStream 0x1800aaad4 releases it)");
+// VERIFIED BY AN INDEPENDENT ROUTE, not merely asserted. Ghidra's decompiler on
+// ?Write@FileStream@IO@@UEAA_NHPEBX@Z (0x1800aab90) -- a body that has nothing to
+// do with the destructor this claim was originally read off -- gives
+//     WriteFile(*(HANDLE *)(this + 0x38), buf, len, &written, 0);
+//     *(DWORD *)(this + 0x2c) = *(int *)(this + 0x2c) + written;
+// so +0x38 is the HANDLE and +0x2c is the byte counter. Against `FileInfo` at
+// +0x20 those are winHandle (+0x18) and cursor (+0x0C) at exactly the offsets
+// FileSystem.h already asserts: ONE ALREADY-PINNED STRUCT PREDICTING TWO
+// OFFSETS, BOTH LANDING. A third route agrees from a third direction --
+// ?SaveText@External@Object@@ (0x1800bb9d0) reaches the same two fields from a
+// frame pointer of rsp-0x37, so every offset in its epilogue is odd and none of
+// it could have been copied from either of the other two bodies.
 static_assert(offsetof(FileStream, file)     == 0x20,
-              "FileStream.file @ 0x20 (~FileStream passes this+0x20 to CloseFile)");
+              "FileStream.file @ 0x20 (~FileStream passes this+0x20 to CloseFile; "
+              "confirmed independently by ?Write@FileStream's +0x38/+0x2c pair "
+              "and again by ?SaveText@External's epilogue)");
 static_assert(offsetof(FileStream, file) + offsetof(RtIO::FileInfo, cursor) == 0x2c,
               "?Write@FileStream 0x1800aabb8: `ADD dword [RCX+0x2c],EAX`; and "
               "?GetCurrentPos@FileStream 0x1800aac50 is `MOV EAX,[RCX+0x2c]; RET`");
