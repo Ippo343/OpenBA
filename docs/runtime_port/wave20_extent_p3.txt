@@ -1,0 +1,58 @@
+SUBJECT   P3: is the address at each CORROBORATED-EXACT row's END a DISTINCT OBJECT'S START?
+          inc : C:\code\GIT\wave20\extent\standalone\rt_data_mint_tables.inc
+          dll : C:\GOG Games\Banished\Runtime-x64.dll
+TREE ROOT     : C:\code\GIT\wave20\extent
+PARAMETERS    : --objdump=C:\msys64\ucrt64\bin\objdump.EXE  WINDOW=6 instructions
+
+DECODE: 417832 instructions, 3188 rip-relative LEA -> 1193 distinct named addresses
+
+POSITIVE CONTROL  (applicable: the 62 minted row starts, all known genuine vtable starts)
+   classified as a vptr stamp: 62 of 62
+NEGATIVE CONTROL  (applicable: 343 named .rdata addresses whose first 8 bytes are printable ASCII = string constants, not tables)
+   wrongly classified as a vptr stamp: 0 of 343
+CONTROLS GREEN: 62/62 positive, 0/343 negative false positives
+
+ROW (adjacent-export only)                  SLOT END          P3
+------------------------------------------------------------------------------------------------------------
+??_7GoalInstance@Achievement@@6B@              7 0x1801546b0  PREMISE-CHECKED-PASS  vptr stamp at 0x180001c3c `mov    %rax,(%rdi)` (also a minted row start)
+??_7Goal@Achievement@@6B@                     10 0x180154700  PREMISE-CHECKED-PASS  vptr stamp at 0x180001915 `mov    %rax,(%rdi)` (also a minted row start)
+??_7AchievementInstance@Achievement@@6B@       4 0x180154720  PREMISE-CHECKED-PASS  vptr stamp at 0x180001998 `mov    %rax,(%rcx)` (also a minted row start)
+??_7Internal@Object@@6B@                       4 0x180154740  PREMISE-CHECKED-PASS  vptr stamp at 0x1800011b6 `mov    %rax,(%rdi)` (also a minted row start)
+??_7Achievement@0@6B@                          9 0x180154788  PREMISE-CHECKED-PASS  vptr stamp at 0x18000118c `mov    %rax,(%rdi)` (also a minted row start)
+??_7Base@Object@@6B@                           3 0x1801547a0  PREMISE-CHECKED-PASS  vptr stamp at 0x180001196 `mov    %rax,(%rdi)` (also a minted row start)
+??_7FileStream@IO@@6B@                         8 0x1801549a0  PREMISE-CHECKED-PASS  vptr stamp at 0x18000bf86 `mov    %rax,(%rcx)` (also a minted row start)
+??_7ParticleSystemInstance@Graphics@@6B@      10 0x180155090  PREMISE-CHECKED-PASS  vptr stamp at 0x180020684 `mov    %rax,(%rdi)`
+??_7ParticleInstance@Graphics@@6B@            10 0x180155130  PREMISE-CHECKED-PASS  vptr stamp at 0x18002008c `mov    %rax,(%rdi)` (also a minted row start)
+??_7BinaryWriter@IO@@6B@                      26 0x1801552e0  PREMISE-CHECKED-PASS  vptr stamp at 0x180023972 `mov    %rax,(%rcx)` (also a minted row start)
+??_7BinaryReader@IO@@6B@                      26 0x1801553b0  PREMISE-CHECKED-PASS  vptr stamp at 0x180023951 `mov    %rax,(%rcx)` (also a minted row start)
+(by address)                                   5 0x1801554d0  PREMISE-CHECKED-PASS  vptr stamp at 0x180023cfe `mov    %rax,(%rbx)` (also a minted row start)
+??_7BinaryFileStream@IO@@6B@                   8 0x180155510  PREMISE-CHECKED-PASS  vptr stamp at 0x18002456c `mov    %rax,(%rdi)`
+??_7MemoryStream@IO@@6B@                       8 0x1801555f0  PREMISE-CHECKED-PASS  vptr stamp at 0x180024074 `mov    %rax,(%rdi)` (also a minted row start)
+??_7Visitor@IO@@6B@                           26 0x180155980  PREMISE-CHECKED-PASS  vptr stamp at 0x18002b916 `mov    %rax,(%rbx)` (also a minted row start)
+??_7Element@UI@@6B@                           12 0x1801561c0  PREMISE-CHECKED-PASS  vptr stamp at 0x18003517c `mov    %rax,(%rdi)` (also a minted row start)
+??_7DialogInstance@UI@@6B@                    10 0x180156dc0  PREMISE-CHECKED-PASS  vptr stamp at 0x180045169 `mov    %rax,(%rdi)`
+??_7ToolTipDialog@UI@@6B@                     10 0x1801578d0  PREMISE-CHECKED-PASS  vptr stamp at 0x18004d594 `mov    %rax,(%rbx)` (also a minted row start)
+??_7LoaderLoop@Engine@@6B@                    12 0x1801579a0  PREMISE-CHECKED-PASS  vptr stamp at 0x18004d828 `mov    %rax,(%rbx)` (also a minted row start)
+??_7DialogLoopT@Engine@@6B@                   13 0x180157a08  PREMISE-CHECKED-PASS  vptr stamp at 0x1800dc111 `mov    %rax,(%rbx)` (also a minted row start)
+??_7RenderBufferData@Video@@6B@                4 0x180158a48  PREMISE-CHECKED-PASS  vptr stamp at 0x180055b46 `mov    %rax,(%rcx)` (also a minted row start)
+??_7VideoProgramData@Video@@6B@                3 0x180158a60  PREMISE-CHECKED-PASS  vptr stamp at 0x180055c96 `mov    %rax,(%rcx)` (also a minted row start)
+??_7RenderStateData@Video@@6B@                 3 0x180158a78  PREMISE-CHECKED-PASS  vptr stamp at 0x180054fa6 `mov    %rax,(%rcx)` (also a minted row start)
+??_7PixelProgramData@Video@@6B@                3 0x180158a90  PREMISE-CHECKED-PASS  vptr stamp at 0x180057296 `mov    %rax,(%rcx)` (also a minted row start)
+??_7VertexProgramData@Video@@6B@               3 0x180158aa8  PREMISE-CHECKED-PASS  vptr stamp at 0x1800564e6 `mov    %rax,(%rcx)` (also a minted row start)
+??_7VertexLayoutData@Video@@6B@                3 0x180158ac0  PREMISE-CHECKED-PASS  vptr stamp at 0x180055fa6 `mov    %rax,(%rcx)` (also a minted row start)
+??_7VertexBufferData@Video@@6B@                7 0x180158af8  PREMISE-CHECKED-PASS  vptr stamp at 0x1800541a6 `mov    %rax,(%rcx)` (also a minted row start)
+??_7IndexBufferData@Video@@6B@                 7 0x180158b30  PREMISE-CHECKED-PASS  vptr stamp at 0x1800536a6 `mov    %rax,(%rcx)` (also a minted row start)
+??_7ConstantBufferData@Video@@6B@              4 0x180158b50  PREMISE-CHECKED-PASS  vptr stamp at 0x180054176 `mov    %rax,(%rcx)` (also a minted row start)
+??_7ContextData@Video@@6B@                    20 0x180158c30  PREMISE-CHECKED-PASS  vptr stamp at 0x180058566 `mov    %rax,(%rcx)` (also a minted row start)
+??_7DeviceData@Video@@6B@                     20 0x180158cd0  PREMISE-CHECKED-PASS  vptr stamp at 0x180058f7e `mov    %rax,(%rdi)`
+------------------------------------------------------------------------------------------------------------
+P3 over the 31 adjacent-export rows: 31 PREMISE-CHECKED-PASS, 0 PREMISE-FAILED, 0 COULD-NOT-DERIVE
+  EFFECTIVENESS: 702 naming sites examined at the 31 end addresses; the store-shape requirement REJECTED 51 of them, across 6 rows that still passed on another site. The requirement is live, not vacuous.
+  27 of 31 row ends are ALSO minted row starts (corroborated a second way). P3 is the ONLY evidence for the other 4:
+      ??_7ParticleSystemInstance@Graphics@@6B@   end 0x180155090
+      ??_7BinaryFileStream@IO@@6B@               end 0x180155510
+      ??_7DialogInstance@UI@@6B@                 end 0x180156dc0
+      ??_7DeviceData@Video@@6B@                  end 0x180158cd0
+
+EXPIRY: the impossibility claim -- 'under-sizing cannot occur on this row' -- stands ONLY for the 31 rows above marked PREMISE-CHECKED-PASS. For every other row the honest statement is the weaker one: NOT OVER-SIZED, with under-sizing out of the screen's reach.
+STILL NOT CLAIMED: this tool does not upgrade any CORROBORATED-EXACT verdict, does not check slot CONTENT, and cannot see a table stamped by an address computed as (named base + constant offset) -- premise P2, which remains UNCHECKED.
