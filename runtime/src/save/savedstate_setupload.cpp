@@ -141,7 +141,11 @@ namespace {
 
 using MemAllocFn = void* (*)(uint64_t, int);
 using MemFreeFn  = void  (*)(void*);
-using SetupLoadFn = SaveBlock* (*)(SavedState*, SaveBlock*);
+// NOT minted here. `RtSaveDetail::SetupLoadFn` (saveload_internal.h) is the one
+// definition of this shape, hoisted out of saveload_update.cpp's anonymous
+// namespace by this lane precisely so that the port and its three callers
+// cannot end up with two spellings of an ABI whose drift mode is a wild write.
+using RtSaveDetail::SetupLoadFn;
 
 const char* const kSetupLoadMangled =
     "?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ";
