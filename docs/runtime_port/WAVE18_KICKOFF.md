@@ -176,7 +176,21 @@ Do the reading, the disassembly and the porting first; batch the runs.
 
 ## 5. What "done" looks like
 
-* Census reads **Video 88.0%, AT CEILING** with no row left untriaged.
+* Census satisfies the **AT CEILING identity** with no row left untriaged.
+  **NOT a percentage.** Corrected 2026-09-10 by lane VDATA and verified against
+  `tools/runtime_census.py:1230-1232`: `ceiling = (called - unpromotable) /
+  called`, so **both halves move whenever any lane opens a door**, and
+  `AT CEILING` is really the absolute count identity
+  **`ported >= called - unpromotable`** — the percentage is just its lossy
+  rendering. VDATA's demonstration: closing the seven `??_7ImageBuffer` trap
+  slots moved Video 150/109 -> 152/110, so **ported% went DOWN (72.7 -> 72.4)
+  while the printed ceiling went UP (88.0 -> 88.2) with no triage change at
+  all** — one new row, `?PlatformSerialize@ImageBuffer@Video@@`, the callee
+  `Serialize` reaches. With three lanes opening doors at once, **quote the
+  identity and the set-diff of what entered `called`, never a percentage
+  delta.** '88.0%' in §0 is the target as it stood at `dacc015` and is
+  already stale; it is left there rather than rewritten so this correction
+  stays legible.
 * Every ported row has a **verdict with evidence**, not a registration. An
   UNTRIAGED caller-less port is not evidence of anything; it is work nobody has
   done.
@@ -245,3 +259,75 @@ subject sits in a file the old version could not read.
 that cannot name its own subject invites a lane to cite its green for something
 it never looked at. Sizing a blind spot is not optional garnish — an unsized
 blind spot lets a partial green read as a whole one.
+
+### 6.6 The ten OnVideoError typeinfos DO have a harness route — lane VDATA
+
+**CEIL §3.4 and this kickoff's §1 are both wrong** to say no harness route drives
+`RtEngine_MainLoop_OnVideoError`, and **no synthesis is needed.**
+`BANISHED_FORCE_DEVICE_LOST=<frame>` (`dx11/src/contextdata.cpp`, Wave 9 lane
+ENGIO) injects a synthetic `DXGI_ERROR_DEVICE_RESET` into a `Present` result and
+lets the real device-lost teardown run; `WAVE9_LANE_VIDL.md` §4.2 records it
+firing and reaching the ported body with `calls=1`, and that body is the sole
+consumer of the ten-element `ids[]`.
+
+Pre-registered by VDATA as prediction P1 before it checked anything else, which
+is what makes the outcome scoreable rather than rationalisable.
+
+### 6.7 Closing seven abort traps is worth +1, not +7 — lane VDATA
+
+Six of the seven `??_7ImageBuffer@Video@@6B@` slot-target names **are not in
+`called` and never were** — `runtime_census.py` excludes vtable slot-target names
+in the `.inc`. **The value of that work is that the row can be promoted at all,
+not the +1.** Recorded here so the wave summary cannot round it up.
+
+### 6.8 The `SaveImageToFile` holdback note is false AND self-contradictory — lane VRES
+
+`runtime/src/video/buffers.cpp:1415` closes with *"w2_takescreenshot.cpp calls a
+different, already-ported capture path — so leaving this on the DLL costs
+nothing."* It does not. `w2_takescreenshot.cpp:165` resolves this exact mangled
+name and `:270` calls it; the screenshot path goes through this export and
+nothing else.
+
+**The note refutes itself.** Its own opening line reads *"One caller
+(code/Game/Game/w2_takescreenshot.cpp, the screenshot path)"* — both halves sat
+in one comment block for four waves. "Grep the call site" is the cheap lesson;
+"the note already disagreed with itself" is the cheaper one.
+
+Its second claim, *"that is Wave 4 (IO) and System::String territory"*, is **half
+stale**: the Filename/String/allocator half is all ported today; only the IO half
+remains.
+
+**Ruling: row 7 IS ported in this wave** (VRES), so the wave can close on the
+§5 identity. But note what that does and does not buy — **porting it does NOT
+close the screenshot cutover hole.** Its four IO callees (`?CreatePath@FileSystem@IO@@`,
+`??0BinaryFileStream@IO@@`, `?Create@FileStream@IO@@`, `?CloseFile@FileSystem@IO@@`)
+are reached through `ResolveExport`, which **falls through to the raw impl for an
+unported symbol** — with the DLL absent they are null and the path dies either
+way. Porting moves the hole from *no implementation* to *implementation with four
+unresolved deps*. **Those four are Wave 19's, and are named here so the IO brief
+inherits them rather than rediscovering them.**
+
+### 6.9 `??1Device` and `??1Configuration` have no live route — lane VRES
+
+Their only caller is `RtEngine_Engine_Shutdown` phase 2, which never runs:
+`game_main.cpp` calls `ShutdownEngineStaged()`, which stops at step 13 with
+*"(14+ deliberately omitted)"*. Both will read **registered-but-uncalled**.
+VRES verified them with a **synthesised replay oracle** against the shipped
+bodies rather than recording them unverifiable — correct, and the standing rule:
+**"no live route" is NOT "no oracle"**, and a registered-but-uncalled row is
+exactly where a reader is most tempted to accept a green on trust.
+
+### 6.10 THE PATTERN OF THIS WAVE: a stated blocker is a claim with a timestamp
+
+Three instances in one wave, from three different lanes:
+
+1. **GFXIF** — the plan's "six functions" wall was nine (§6.1).
+2. **VDATA** — "blocked on attendance, needs a synthesised call" had a shipped
+   harness env var all along (§6.6).
+3. **VRES** — the `SaveImageToFile` holdback note is false, self-contradictory,
+   and half stale (§6.8).
+
+Every one was written by a competent lane, was true or plausible when written,
+and was inherited by later readers without re-checking. **The tree's prose is the
+least reliable thing in it.** Re-check a holdback's STATED BLOCKER before you
+inherit it, and before you scope a lane around it.
