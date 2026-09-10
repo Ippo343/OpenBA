@@ -22,6 +22,8 @@
 //   BANISHED_RT_REGREAD=0       ... just ReadSettings + Registry() (lane BOOT2)
 //   BANISHED_RT_FSDIRS=0        ... just SetupDirectories + friends (lane FS)
 //   BANISHED_RT_PKG=0           ... just LoadPackages + friends     (lane PKG)
+//   BANISHED_RT_FILESTREAM=0    ... just the FileStream family      (lane FILE)
+//   BANISHED_RT_CREATEFILE=0    ... just FileSystem create/close   (lane FILE)
 //
 // THREE WARNINGS THIS WAVE INHERITS, each already paid for once:
 //
@@ -163,6 +165,22 @@ extern int RtIoBinaryWriterRegister();      // binary_writer.cpp (lane ENC-2)
 // A/B that could only move both together could not attribute anything.
 extern int RtIoSerializeFamilyRegister();   // serialize_family.cpp (lane SERIAL)
 
+// Wave 19 lane FILE: the IO::FileStream family lifecycle (both constructors,
+// both destructors, Create) and the FileSystem create/close pair underneath it.
+// TWO switches, not one, and deliberately so: the FileStream half is pure
+// object lifecycle while the FileSystem half is the only code in this tree that
+// creates a file in %TEMP% and RENAMES it over the target. If a write goes
+// wrong the integrator needs to be able to remove exactly the platform half and
+// leave the lifecycle standing, and vice versa.
+//
+// THIS LANE'S HEADLINE IS THE SCREENSHOT CUTOVER HOLE, NOT ITS ROW COUNT.
+// Wave 18 lane VRES ported ?SaveImageToFile@ImageBuffer@Video@@ and left it
+// reaching six unported IO exports through RT_EXPORT_ONCE doors, which resolve
+// to the shipped DLL today and to NULL at cutover. These two files are those
+// six plus the three-body closure between them and Win32.
+extern int RtIoFileStreamRegister();            // file_stream.cpp               (lane FILE)
+extern int RtIoFileSystemCreateFileRegister();  // filesystem_createfile_win.cpp (lane FILE)
+
 void RtIoPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_IO")) {
         printf("[RtPort] BANISHED_RT_IO=0 -- IO namespace port disabled\n");
@@ -190,5 +208,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_ENCODING"))    n += RtIoEncodingRegister();
     if (RtWaveEnabled("BANISHED_RT_BINWRITER"))   n += RtIoBinaryWriterRegister();
     if (RtWaveEnabled("BANISHED_RT_SERIALFAM"))   n += RtIoSerializeFamilyRegister();
+    if (RtWaveEnabled("BANISHED_RT_FILESTREAM"))  n += RtIoFileStreamRegister();
+    if (RtWaveEnabled("BANISHED_RT_CREATEFILE"))  n += RtIoFileSystemCreateFileRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
