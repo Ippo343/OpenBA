@@ -372,6 +372,39 @@ about row 8:
 * the probe **poisons both slots with `0x5A`** before the call, so a write that
   landed anywhere else would leave the poison and be caught by `SameMode`.
 
+### FOLLOW-UP: the audit was widened, and row 8 is STILL outside it
+
+The advisor fixed and widened the audit at `fa85957` — it now walks
+`engine/ runtime/ standalone/ dx11/ code/`, collects typedefs from every file,
+prints its subject set, and prints a measured blind spot. `checked` went 49 → 61,
+still 0 suspicious. It was then reasonable to ask whether row 8 could now be
+cited, and this lane was asked to check which side of the coverage line it falls
+on before doing so.
+
+**Checked empirically, not by reading the regexes** — the widened script was run
+against this worktree (it derives its root from its own path, so it had to be
+run *from here* to measure *this* tree):
+
+```
+subject: 1500 file(s) under engine/, runtime/, standalone/, dx11/, code/
+0 suspicious of 61 by-value-returning exports checked, 0 unchecked
+COVERAGE: 56 of 133 distinct by-value-returning mangled names in the tree reach
+          a door this scanner can read; 77 do NOT and are UNAUDITED.
+```
+
+`GetDisplayMode` appears **zero times** anywhere in that output. It is in the
+**77 unaudited**, and the audit's own blind-spot line says why: it matches a
+literal `ResolveExport("...")` assignment bound to a findable `fn_*_t` typedef,
+and *"a direct call with no typedef is invisible here."* This lane reaches the
+shipped body as `RtOriginal<GetModeFn>("?GetDisplayMode@…")` with a `using`
+alias — no `fn_` name, no `reinterpret_cast`, no `typedef`. Nothing about row 8
+is in that scanner's subject set before or after the widening.
+
+**So the conclusion below is unchanged: it is still not cited.** The widening was
+worth doing and it exposed a real under-statement of scope, but a green that grew
+from 49 to 61 checked names does not cover the 62nd. Row 8's evidence remains the
+three items below, which are about row 8.
+
 **Recommended (not done by this lane — it is wave-scoped work, not row work):**
 widen the audit to the runtime/dx11 trees, or make it print its subject set
 alongside its count. A one-line output that cannot say which files it read is
