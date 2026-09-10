@@ -1,0 +1,18 @@
+SUBJECT  premise P2 -- a vtable stamped by an address COMPUTED from a
+         rip-relative LEA (lea A ; add imm ; store), which both the
+         extent audit and the stamper census would attribute to A.
+  dll  : C:\GOG Games\Banished\Runtime-x64.dll
+  tree : C:\code\GIT\wave20\promote
+PARAMETERS  --window=12  --control=on  --dis=C:/Users/USPC/AppData/Local/Temp/claude/rt.dis
+
+DENOMINATORS
+  instructions parsed ................ 417835
+  rip-relative LEA / movabs TRACKED .. 3335
+  window (instructions) .............. 12
+  POSITIVE CONTROL synthetic lea;add;store .. REPORTED
+
+HITS (arithmetic on a LEA'd register before it is stored): 1
+  0x18009a094 lea -> 0x1801f8f10 (%r9)  in FUN_180099e90
+      0x18009a09e  sub    $0x60,%r9
+      0x18009a0b5  add    $0x54,%r9
+      0x18009a0c1  mov    %r9,-0x59(%rbp)   <- the store
