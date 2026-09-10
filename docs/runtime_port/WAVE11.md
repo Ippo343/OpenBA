@@ -311,3 +311,49 @@ a second full window, for no gain. Retracted to both lanes within minutes.
 **Rule: a shared resource with its own queue does not need an external
 scheduler — read the queue before overriding it.** Rank by "closest to done" only
 to break a genuine tie.
+
+## Integration pre-check (advisor, done during the lock wait — needs no lock)
+
+### The merge is one file, and the conflict is textual only
+
+`git merge-tree` on all three pairs, non-destructive:
+
+| pair | conflicts |
+|---|---|
+| objdata + objlife | `runtime/src/object/rt_object_port.cpp` (`standalone/main.cpp` auto-merges) |
+| objdata + objext | `runtime/src/object/rt_object_port.cpp` |
+| objlife + objext | `runtime/src/object/rt_object_port.cpp` |
+
+Every lane adds a **purely additive, disjoint block** to that file — its own
+`extern …Register()` declaration and its own switch. **No two lanes register the
+same symbol**, checked by extracting the added `RegisterRuntime*` calls per
+branch. So the resolution is "take all three blocks", and the standing hazard
+that a duplicate registration is last-binding-wins and silently makes one body
+dead code **does not apply here**. Confirm again on the real merge, since two
+lanes are still moving.
+
+### The gate semantics that make these rows real ports — checked, not assumed
+
+All three lanes wrap their registrations in `RtWaveEnabled("BANISHED_RT_*")`.
+Given that this wave's own headline finding is that **a gated registration is not
+a port**, that had to be verified rather than trusted. `runtime/funcs/rt_port.h:114`:
+
+```cpp
+inline bool RtWaveEnabled(const char* envName) {
+    const char* e = std::getenv(envName);
+    return !(e && (std::strcmp(e, "0") == 0 || std::strcmp(e, "false") == 0));
+}
+```
+
+**Default-ON kill-switch.** So the two gate helpers mean opposite things and the
+distinction decides whether a row counts:
+
+| helper | default | counts as a port? | used by |
+|---|---|---|---|
+| `RtWaveEnabled("X")` | **ON** (kill-switch, `X=0` disables) | **YES** | all three lanes' new work |
+| `RtOptIn("X")` | **OFF** (opt-in) | **NO** | `BANISHED_RT_INTERNAL_TABLE`, the tier-2 block |
+
+This is why the tier-2 rows (`??0Internal`, `??1Internal`, `ClearPersistState`,
+`ResetPersistState`) read unported while the lanes' new rows legitimately move
+the census. **Read which helper wraps a registration before believing either a
+census gain or a "this is already ported" claim.**
