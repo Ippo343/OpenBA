@@ -282,9 +282,49 @@ report_unlocked_run() {
     echo "[gamelock]         keeps the exe and logs open for the life of the process, so" >&2
     echo "[gamelock]         every deploy fails with 'Device or resource busy'." >&2
     echo "[gamelock]     (b) somebody RUNNING UNLOCKED, mid-measurement." >&2
-    echo "[gamelock]   THEY LOOK IDENTICAL FROM HERE. Do NOT kill a process you did not" >&2
-    echo "[gamelock]   start -- killing (b) destroys a real run. If it is yours, kill it;" >&2
-    echo "[gamelock]   otherwise ASK, and escalate with these numbers, not with a guess." >&2
+    echo "[gamelock]     (c) a THREAD-LESS HUSK: the process crashed or exited, every" >&2
+    echo "[gamelock]         thread is gone and every HANDLE IS ALREADY RELEASED, but the" >&2
+    echo "[gamelock]         pid lingers in the table because something still holds a" >&2
+    echo "[gamelock]         handle to the process object. taskkill reports 'no running" >&2
+    echo "[gamelock]         instance of the task' while tasklist still lists it." >&2
+    echo "[gamelock]   (a) and (b) look identical from here. (c) DOES NOT -- measure it:" >&2
+    # The (a)/(b)/(c) split is not a guess: the same non-destructive move-aside
+    # test `run_in_progress` already runs on the logs answers the ONE question a
+    # blocked lane actually has -- will my deploy fail? A live run (b), and an
+    # orphan (a) whose threads are still alive, hold the exe open. A husk (c)
+    # holds nothing.
+    #
+    # WAVE 19: this block previously asserted "Windows keeps the exe and logs
+    # open for the life of the process, so EVERY DEPLOY FAILS". That premise is
+    # FALSE for (c) -- handles die with the last thread, not with the pid. On
+    # 2026-09-10 pid 17292 sat here for 22 minutes after an ACCESS_VIOLATION,
+    # blocking three lanes, while the exe renamed freely the whole time. The
+    # tool drew a conclusion its evidence (a pid in the table) did not support.
+    # A PID IN THE PROCESS TABLE IS NOT A RUNNING PROGRAM.
+    local held=""
+    for f in reimpl-x64.exe standalone_debug.log standalone_error.log; do
+        [ -f "$GAME/$f" ] || continue
+        if mv "$GAME/$f" "$GAME/$f.holdtest" 2>/dev/null; then
+            mv "$GAME/$f.holdtest" "$GAME/$f" 2>/dev/null
+        else
+            held="${held}${held:+ }$f"
+        fi
+    done
+    if [ -n "$held" ]; then
+        echo "[gamelock]   HANDLES HELD: $held" >&2
+        echo "[gamelock]   -> a deploy WILL fail. This is (a) or (b), and they are" >&2
+        echo "[gamelock]      indistinguishable from here. Do NOT kill a process you did" >&2
+        echo "[gamelock]      not start -- killing (b) destroys a real run. If it is" >&2
+        echo "[gamelock]      yours, kill it; otherwise ASK, and escalate with these" >&2
+        echo "[gamelock]      numbers, not with a guess." >&2
+    else
+        echo "[gamelock]   HANDLES HELD: none (exe and logs both move aside freely)" >&2
+        echo "[gamelock]   -> a deploy will SUCCEED. This is (c), a husk. It is not" >&2
+        echo "[gamelock]      holding the game dir and waiting on it is waiting on" >&2
+        echo "[gamelock]      nothing. PROCEED, and take the lock as usual." >&2
+        echo "[gamelock]      (This does NOT prove no lane is mid-measurement -- it" >&2
+        echo "[gamelock]      proves nothing is holding these three files right now.)" >&2
+    fi
 }
 
 # ---- FIFO ticketing ---------------------------------------------------------
