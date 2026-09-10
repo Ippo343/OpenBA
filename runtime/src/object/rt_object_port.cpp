@@ -47,6 +47,13 @@ extern int RtObjectExternalPtrSerializeRegister();  // external_ptr_serialize.cp
 // (Base, Internal, External, CompiledExternal) and the row they unblock is one
 // per class; its own switch keeps the four rows A/B-able together.
 extern int RtObjectTypeInfoAccessorsRegister();     // object_typeinfo_accessors.cpp
+// Wave 11 lane OBJLIFE: the three Object FACTORY destructors (~Factory,
+// ~InternalFactory, ~ExternalFactory) plus the five unexported helper bodies
+// they reach. Its own switch because all three are reachable only from
+// Engine::Shutdown, which our tree never calls -- so this is the one part of
+// the Object port whose absence a gameplay run cannot detect, and its presence
+// should be as cheap to A/B as its absence.
+extern int RtObjectFactoryDtorsRegister();          // factory_dtors.cpp
 
 void RtObjectPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
@@ -87,5 +94,16 @@ void RtObjectPortInit() {
     // ??_7SpriteSheet and BANISHED_RT_DELDTOR, and for the same reason.
     if (RtWaveEnabled("BANISHED_RT_OBJTYPEINFO"))
         n += RtObjectTypeInfoAccessorsRegister();
+    if (RtWaveEnabled("BANISHED_RT_FACTORYDTOR")) {
+        n += RtObjectFactoryDtorsRegister();
+        // The synthesised oracle for those three. Opt-in
+        // (BANISHED_RT_FACTORYDTOR_PROBE=1) and run right after the
+        // registration, because the "ours" side calls the ported bodies
+        // directly by symbol and the "theirs" side calls RtOriginal, so
+        // neither depends on registration order — but the report reads better
+        // next to the line that registered them.
+        extern void RtObjectFactoryDtorsProbe();
+        RtObjectFactoryDtorsProbe();
+    }
     printf("[RtPort] Object: %d exports registered\n", n);
 }

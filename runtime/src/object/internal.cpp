@@ -34,6 +34,28 @@
 //     object built by our ctor is byte-for-byte indistinguishable from one
 //     built by the DLL's, including its virtual dispatch.
 //
+//     *** THAT SECOND BULLET IS CONDITIONALLY TRUE, AND ITS CONDITION IS NOT
+//         VISIBLE FROM HERE. *** (Wave 11 lane OBJLIFE, 2026-09-09.)
+//     `VtblInternal()` / `VtblBase()` below reach those two symbols through
+//     `ResolveExport`, which consults the PORT REGISTRY FIRST. Both symbols are
+//     already MINTED into standalone/rt_data_mint_tables.inc; they are simply
+//     not promoted yet. The moment anything registers them — and that is
+//     exactly what Wave 11 lane OBJDATA's Class A row set is for —
+//     `ResolveExport` starts handing back OUR MINTED VTABLE, and:
+//
+//         objects built by OUR ctor (the doors we intercept) carry the minted
+//         vptr, while objects built by the DLL's ctor (its own in-DLL rel32
+//         callers, which we do NOT intercept) carry 0x180154720.
+//
+//     That is TWO VTABLES IN PLAY ON ONE CLASS — PLAN.md §4.3 risk 3 verbatim,
+//     the hazard this very bullet exists to deny. Neither lane creates it
+//     alone: it needs the TABLE tier armed AND those two ??_7 rows promoted.
+//     Do not arm this tier and promote those rows in the same build without
+//     first making these two accessors resolve RAW (theirs when the DLL is
+//     present) and fall back to the registry only when it is absent.
+//     That change is not made here because it also decides what cutover sees,
+//     which belongs to whoever owns the mint, not to this file.
+//
 // What is left is therefore an ordinary faithfulness question — does our body
 // compute the same indices and the same array growth as theirs — and that is
 // exactly what the shadow mode below measures.
@@ -519,7 +541,30 @@ void RtObject_InternalBasePtr_DeletePtr(InternalBasePtr* self) {
 //
 // The `-1` / `0` pair is a dead store in both builds — AddObject overwrites
 // both before anything can observe them — and is reproduced anyway.
+// WAVE 11 LANE OBJLIFE — ATTENDANCE COUNTERS.
+//
+// A run of the TABLE tier that boots and plays is NOT evidence that these
+// bodies ran: a green readiness screen is not a route, and only an attendance
+// counter separates "safe" from "never executed"
+// (reference_a_green_readiness_screen_is_not_a_route). The shadow tier gets its
+// `calls=` from RT_DIFF; the table tier had NOTHING, so an armed run could only
+// ever be reported as "did not crash".
+//
+// Two plain counters, incremented unconditionally in the ported bodies. They
+// are not diff sites and cost one increment on a path that already does a
+// locked array grow. `RtObjectInternalAttendance()` reads them out.
+// All FOUR tier-2 rows, not just this lane's two. The other pair
+// (ClearPersistState / ResetPersistState) is lane OBJINT's subject, and this
+// file's own banner has said since Wave 9 that they have NEVER EXECUTED — a
+// claim nothing in the tree could actually check. Now it can, and OBJINT's
+// verdict can cite a counter instead of an absence of evidence.
+unsigned long long g_tableCtorRuns  = 0;
+unsigned long long g_tableDtorRuns  = 0;
+unsigned long long g_tableClearRuns = 0;
+unsigned long long g_tableResetRuns = 0;
+
 Internal* RtObject_Internal_Ctor(Internal* self) {
+    ++g_tableCtorRuns;
     self->vptr = VtblBase();
     self->vptr = VtblInternal();
     self->factoryIndex = -1;
@@ -551,6 +596,7 @@ Internal* RtObject_Internal_Ctor(Internal* self) {
 // that block. That is retail's behaviour and this port keeps it; the fix for
 // the family is upstream (unregister before freeing), never a guard here.
 void RtObject_Internal_Dtor(Internal* self) {
+    ++g_tableDtorRuns;
     self->vptr = VtblInternal();
     self->generation = 0;
 
@@ -573,6 +619,7 @@ void RtObject_Internal_Dtor(Internal* self) {
 // UNCONDITIONALLY, where retail's inline null-checks first. Same behaviour:
 // MemoryAllocator::Free opens with `test rdx,rdx; jz`.
 void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
+    ++g_tableClearRuns;
     if (self->persistIds._data != nullptr)
         MemFree(self->persistIds._data);
     self->persistIds._data     = nullptr;
@@ -627,6 +674,7 @@ void RtObject_InternalFactory_ClearPersistState(InternalFactory* self) {
 // passes 0 — this call site does not version its record. Written as a named
 // constant so the 0 cannot be mistaken for a placeholder.
 void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* stream) {
+    ++g_tableResetRuns;
     SerializerLite ser;
     ser.stream   = stream;
     ser.readerWriter = nullptr;
@@ -869,6 +917,36 @@ void RtObject_InternalFactory_ResetPersistState_Shadow(InternalFactory* self, vo
 // ============================================================================
 // Registration
 // ============================================================================
+// WAVE 11 LANE OBJLIFE — the attendance read-out, called from standalone/main.cpp
+// at exit. Prints unconditionally, including 0/0, and says which of the two
+// zeroes it is: "the tier was never armed" and "the tier was armed and never
+// entered" are opposite findings and a silent log cannot tell them apart.
+void RtObjectInternalAttendance() {
+    using namespace RtObject;
+    const bool armed = RuntimeExportIsRegistered("??0Internal@Object@@QEAA@XZ");
+    printf("[RtInternalTable] ctorRuns=%llu dtorRuns=%llu clearRuns=%llu "
+           "resetRuns=%llu  (%s)\n",
+           g_tableCtorRuns, g_tableDtorRuns, g_tableClearRuns, g_tableResetRuns,
+           g_tableCtorRuns == 0
+               ? (armed ? "REGISTERED BUT NEVER ENTERED -- the door exists and "
+                          "nothing came through it; do NOT read this run as "
+                          "evidence the port works"
+                        : "not registered on this run (shadow tier, or "
+                          "BANISHED_RT_INTERNAL_TABLE unset) -- expected zero")
+               : "our ported bodies drove the LIVE handle table this many times");
+    // The persist-state pair is reported SEPARATELY from the ctor/dtor pair on
+    // purpose: they live only on the save/load path, so zero here with a large
+    // ctorRuns means "this run never saved or loaded", which is a statement
+    // about the RUN, not about those two ports. Reading one pair's zero through
+    // the other pair's non-zero is how an unexercised body gets written up as
+    // exercised.
+    if (armed && g_tableClearRuns == 0 && g_tableResetRuns == 0)
+        printf("[RtInternalTable]   persist-state pair NEVER ENTERED on this "
+               "run -- expected unless the run saved or loaded (they are only "
+               "on that path). NOT evidence about those two ports either way; "
+               "use BANISHED_AUTOLOAD to reach them.\n");
+}
+
 int RtObjectInternalRegister() {
     using namespace RtObject;
     int n = 0;
