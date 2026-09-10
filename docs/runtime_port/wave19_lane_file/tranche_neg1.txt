@@ -1,0 +1,8 @@
+[FSSlots] ==== ten slot bodies, ours vs the shipped ones ====
+[FSSlots] subject: two BinaryFileStreams built by RETAIL's ctor and Create, driven through identical operations, one side entirely through OUR bodies and one entirely through the shipped ones (ResolveRuntimeRaw). ctl=1
+[FSSlots] MISMATCH GetCurrentPos#2        ours=7 theirs=6
+[FSSlots] MISMATCH GetCurrentPos#3        ours=12 theirs=11
+[FSSlots] MISMATCH Read buffer            the 16 bytes read back differ
+[FSSlots] MISMATCH file bytes             file SIZE ours=12 theirs=11
+[FSSlots] cases=2 mismatches=4 comparisons=90 file-bytes-compared=0 controlFired=1
+[FSSlots] control 1 CAUGHT (4 mismatch(es)) -- the screen can see a wrong body.  (It diverged enough that the two files differed in SIZE, so the byte comparison was skipped -- caught by the value comparisons alone.)
