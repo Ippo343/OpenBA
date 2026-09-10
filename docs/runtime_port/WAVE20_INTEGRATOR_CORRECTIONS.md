@@ -323,3 +323,82 @@ surviving body**, and is thin: `calls=3 divergences=0`. **Quoted as thin.**
 
 Also self-reported: the lane **did not measure `calls=0` for the RenderBuffer body
 pre-fix** — that is an inference from registration order, which it verified statically.
+
+---
+
+## C10 — `?SaveText@` was ported NINE WAVES AGO; and THREE of the guide's named items have now failed, which is a PATTERN with a mechanism
+
+### The fact
+
+`WAVE20_GUIDE.md` §3 opens with ***"`?SaveText@External@Object@@` is the
+highest-leverage single item left"***, and `WAVE19_CLOSED.md` §8 item 5 repeats it. It
+was **already ported**, in **Wave 11f lane IOSTREAM**:
+`runtime/src/object/external_savetext_win.cpp`, 407 lines, a full transcription
+including the dead BOM branch and the inlined `~FileInfo`, **registered by name AND by
+address** (`0x1800bb9d0`), with a three-screen oracle.
+
+**Verified by me on the wave tip**, not in the reporting lane's tree, because it retires
+the wave's top-billed item: registration block at `external_savetext_win.cpp:397-407`,
+dated by git to `1b4980a` / `16acde4` *"Wave 11f lane IOSTREAM CLOSED"*.
+
+Fifth payout in two waves of **grep before you port**.
+
+### The pattern, which is the part worth keeping
+
+**Three separate items the guide named as cheap, high-leverage or do-this-first have
+now failed on contact, all in one wave:**
+
+| guide's claim | reality | found by |
+|---|---|---|
+| `??_7VisitorStream@` — "still unpromoted", a top candidate | **already promoted** by lane IOBASE on Wave 19's last day | integrator (C2) |
+| promote the NO-OP pair **first**, "lowest-risk items on the board" | safest **because pointless** — both already tagged `RT_UNPROMOTABLE \| NONE, EVER`; promoting deletes tags and lowers the printed ceiling for zero behaviour change | lane PROMOTE |
+| `?SaveText@` — "the highest-leverage single item left" | **ported nine waves earlier** | lane SAVETEXT |
+
+Meanwhile the guide's **measured** §1 table was *right*, in the sense that it was honest
+about the tool that produced it — and its §0 instrument diagnoses were **all three
+correct and worth the whole of Phase 0**.
+
+> **So the defect is not "the guide was unreliable". It is CONCENTRATED IN ONE SECTION
+> KIND, and that section is the one lanes act on FIRST.**
+
+### The mechanism, stated so it can be defended against
+
+A closing integrator's **"named, specified, cheap — take these opportunistically"** list
+is assembled at close, from **lane reports**, about **territory the writer did not
+personally work**, at the exact moment when **nobody is re-measuring anything**. Every
+one of those properties pushes toward staleness:
+
+* it is *about other people's work*, so the writer has no working knowledge to
+  contradict it;
+* it is *cheap by construction*, so it gets no scrutiny — nobody audits a five-minute
+  item;
+* it is written *at close*, when the wave's own lanes have just changed the very
+  facts it describes (`??_7VisitorStream@` was promoted **the same day** the guide
+  called it unpromoted);
+* and being cheap and specific, **it is the first thing the next wave picks up.**
+
+**The measured sections carry an instrument and a denominator. The opportunistic list
+carries neither** — it is prose describing measurements, which
+`reference_a_generated_file_goes_stale_with_no_detector` says decays silently because
+nothing regenerates a comment.
+
+### The rule extracted
+
+> **A "cheap wins" list is the STALEST section of any handover and the FIRST one acted
+> on. Every entry needs a re-derivation step before a lane is scoped on it — and the
+> cheapest entries need it MOST, because their cheapness is what exempts them from
+> scrutiny.**
+
+Concretely, for Wave 21's handover: **every item in an opportunistic list gets a
+one-line "re-derive this by running X" beside it**, or it does not go in the list. Two
+of this wave's three failures would have been caught by a single `grep`, and the third
+by reading a file the claim was about.
+
+### The cost, honestly
+
+Near zero — and *that* is why the pattern survived long enough to be visible three
+times. Each stale item cost a lane minutes, not hours, because **every lane found it
+immediately on being told to grep first.** The damage is not wasted work; it is
+**misdirected scoping**: `?SaveText@` was billed as the wave's highest-leverage item and
+would have been a lane's whole subject had the brief not also said *read the harness
+first and grep before you port*.
