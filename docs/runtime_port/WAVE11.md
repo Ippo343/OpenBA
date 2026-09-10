@@ -41,7 +41,7 @@ Every one of these is already generated into
 | `??_7CompiledExternal@Object@@6B@` | vtable |
 | `??_7External@Object@@6B@` | vtable |
 | `??_7Internal@Object@@6B@` | vtable |
-| `?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA` | chain head (split brain) |
+| `?_firstTypeInfo@BaseTypeInfo@Object@@2PEAV12@EA` | chain head (see retraction below) |
 | `?_typeInfo@External@Object@@0VBaseTypeInfo@2@A` | BaseTypeInfo |
 | `?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A` | BaseTypeInfo |
 | `?_singleton@Factory@Object@@0PEAV12@EA` | storage |
@@ -53,6 +53,28 @@ doctrine verbatim (`WAVE15_CLOSED.md` §"Phase 2"): UNKNOWN-OWNER counts as
 unported; a promotion must register the **address as well as the name**;
 `ExternalFactory@Object` is explicitly flagged **NOT cheap tier** (127 of 151
 references are unknown-owner).
+
+#### RETRACTED — the `_firstTypeInfo` "split brain" was backwards
+
+This brief, inheriting the line from `WAVE11_KICKOFF.md`, told lane OBJDATA that
+`Factory::Startup` resolving `?_firstTypeInfo@` **by name** "walks the DLL's
+chain, not the minted one", and called that a split brain to be repaired.
+
+**That is the wrong way round. Resolving by name is what PREVENTS the split.**
+Every `?_typeInfo@` static's constructor head-inserts itself into that one slot,
+and `Object::Factory::Startup` walks that one chain — so a by-name resolve gives
+**one merged chain** of both our minted nodes and the DLL's. *Promoting* the row
+is what would break it into our half and theirs, with retail's `Factory::Startup`
+walking the wrong one.
+
+Confirmed by a route independent of the lane that reported it:
+`tools/rt_mint_gen.py` §"CLOSURE 2: THE REFLECTION CHAIN IS NOT A SUBSET"
+(Wave 9) states the head-insert mechanism and **measured** it — 415 nodes / 413
+parentNames / 0 unresolved with the DLL loaded.
+
+The error is kept here rather than deleted: it conflated *the slot belongs to the
+DLL* with *the contents belong to the DLL*, and it would have justified exactly
+the promotion that breaks the chain.
 
 ### Class B — lifecycle (5)
 
@@ -95,3 +117,29 @@ Inherited doctrine, restated because each has cost this project a wave:
 7. **Report the set-diff, not the count.** A closure count moving the right
    direction by the wrong amount reads as success.
 8. **Stay in your own worktree.** Never `git checkout`/`switch` a branch.
+
+## Corrections earned mid-wave (advisor, from lane OBJDATA's close)
+
+1. **`runtime_census.py` resolves its scan roots SCRIPT-relative** —
+   `REPO = dirname(dirname(abspath(__file__)))`, line 40. Running the main
+   checkout's copy from inside a lane worktree measures the **main checkout** and
+   returns the baseline, i.e. "my change did nothing". Measure a lane branch with
+   *that worktree's own copy* of the script. This is the **opposite** of the
+   standing memory about the runtime-port source scanners walking cwd; the two
+   tools differ and both failure modes print a confident wrong number.
+2. **The reference-ownership table is necessary and NOT sufficient — read the
+   `minted=` column first.** `?_singleton@InternalFactory@Object@@` scores as the
+   cheap SaveLoad shape on the Wave 15 reference screen (6 refs, 5
+   ported+registered, 1 unported reader provably dead) and is still HARMFUL to
+   promote: `DLL=WRITTEN minted=zero`, because the factory is constructed every
+   boot by an **in-DLL rel32 from `Engine::Startup`**. Our ported ctor never
+   runs, minted storage stays zero, and promotion hands every reader a null.
+   This amends `WAVE15_CLOSED.md` §"Phase 2", which lists
+   `InternalFactory@Object` as a lead cheap candidate on the reference count.
+3. **An attendance counter sampled from a static destructor is a false negative
+   made of timing.** OBJDATA's `[ObjTI] ATTENDANCE` first printed after port-
+   registry teardown, so every row read `unregistered(DLL)` and the armed half of
+   the A/B was indistinguishable from the control — it would have been written up
+   as "the row changes nothing". Its own positive control caught it. Any
+   attendance instrument must be sampled before teardown and must carry a control
+   that is required to read nonzero.
