@@ -244,6 +244,30 @@ void DestroyScratchModArray(ModArray* arr) {
     f(arr);
 }
 
+bool TraceOn() {
+    static bool v = [] {
+        const char* s = std::getenv("BANISHED_RT_LOADMETA_TRACE");
+        return s != nullptr && s[0] != '\0' && std::strcmp(s, "0") != 0;
+    }();
+    return v;
+}
+
+// Bytes of a value that are non-zero, counting from the low end up to the
+// highest non-zero byte. Printed by the trace because the +0x2c signal's
+// per-round byte count is exactly nzbytes(_size) + nzbytes(_data) when both go
+// to zero — the arithmetic a sibling lane used, reproduced here from the
+// writer's side so the relation can be checked against a real entry list rather
+// than inferred from a capped printout.
+int NonZeroBytes(uint64_t u) {
+    int n = 0;
+    for (int i = 0; i < 8; ++i) if ((u >> (i * 8)) & 0xffull) n = i + 1;
+    return n;
+}
+int NonZeroBytes(uint32_t u) { return NonZeroBytes(static_cast<uint64_t>(u)); }
+int NonZeroBytes(const void* p) {
+    return NonZeroBytes(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(p)));
+}
+
 // ---- the negative control ---------------------------------------------------
 // BANISHED_RT_LOADMETA_NEGCTL=<1..6> corrupts, on the THEIRS side only, exactly
 // one quantity that one screen compares. Theirs is a private scratch that is
@@ -295,6 +319,7 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
     // time theirs could run the input no longer exists. Copy it first; the copy
     // is the input both halves are given.
     const uint32_t inSize = self->_embeddedState._size;
+    void* const    inData = self->_embeddedState._data;
     void*          inCopy = nullptr;
     if (rt_diff_on__ && inSize != 0 && self->_embeddedState._data != nullptr) {
         inCopy = MemAlloc(inSize, 4);
@@ -416,9 +441,37 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
 
     // ---- 0x1800c1d98 : release the consumed image --------------------------
     // THE WRITER Wave 13's UpdateList note went looking for. See the header.
+    //
+    // *** THE MemFree IS GUARDED; BOTH ZERO STORES ARE NOT. *** The JZ at
+    // 0x1800c1d9c jumps to 0x1800c1da6, which is the FIRST zero store — so the
+    // guard covers the free alone and both stores execute on every path. The
+    // natural C++ for this,
+    //     if (_data) { MemFree(_data); _data = 0; _size = 0; }
+    // is WRONG, and wrong in a way that survives testing: whenever `_data` is
+    // already null the two spellings leave an identical end state, so a byte pin
+    // agrees. They diverge only when `_data` is null and `_size` is NOT — which
+    // is exactly what a round that skipped BeginLoad leaves behind. Written out
+    // in retail's shape, and it stays that shape.
     if (self->_embeddedState._data != nullptr) MemFree(self->_embeddedState._data);
     self->_embeddedState._data = nullptr;
     self->_embeddedState._size = 0;
+
+    // BANISHED_RT_LOADMETA_TRACE=1 — the entry/exit observation of the embedded
+    // SavedState that only the writer's own body can make cheaply. It is a
+    // POST-STATE reading, not a watchpoint: it shows what this body leaves, and
+    // it does NOT observe the store. See the header for what that grade does and
+    // does not license anyone to write down.
+    if (TraceOn()) {
+        static uint64_t entries = 0;
+        ++entries;
+        std::fprintf(stderr,
+                     "[LoadMeta] entry #%llu  pre _size=%u _data=%p  ->  "
+                     "post _size=%u _data=%p  (nzbytes pre = %d+%d)\n",
+                     static_cast<unsigned long long>(entries),
+                     inSize, inData,
+                     self->_embeddedState._size, self->_embeddedState._data,
+                     NonZeroBytes(inSize), NonZeroBytes(inData));
+    }
 
     // ---- 0x1800c1db6 : ~CompressedMemoryStream, inlined by retail ----------
     RT_EXPORT_ONCE(CmsVoidFn, "??1CompressedMemoryStream@IO@@UEAA@XZ")(cms);
@@ -465,6 +518,7 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
     static RtDiffSite sPixels   = { "Save::SaveLoad::LoadMetaData [S4 pixel block, arg 3]" };
     static RtDiffSite sModCount = { "Save::SaveLoad::LoadMetaData [S5 mod count, arg 7 = STACK]" };
     static RtDiffSite sModElems = { "Save::SaveLoad::LoadMetaData [S6 mod elements, arg 7 = STACK]" };
+    static RtDiffSite sTeardown = { "Save::SaveLoad::LoadMetaData [S7 SIDE EFFECT: embedded SavedState freed and zeroed]" };
 
     alignas(16) unsigned char scratchSelf[sizeof(SaveLoad)];
     std::memset(scratchSelf, 0, sizeof(scratchSelf));
@@ -481,6 +535,13 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
 
     RT_ORIGINAL_ONCE(LoadMetaDataFn, kLoadMetaData)(
         theirSelf, &tDesc, &tPixels, &tW, &tH, &tVersion, &tMods);
+
+    // The shipped body's own teardown of the embedded SavedState, read off the
+    // scratch immediately. This is what makes S7 an ORACLE and not a self-check:
+    // the claim "LoadMetaData frees and zeroes +0x2c/+0x30" is tested against
+    // the DLL doing it, on its own copy, not against our expectation of it.
+    const uint32_t tPostSize = theirSelf->_embeddedState._size;
+    void*          tPostData = theirSelf->_embeddedState._data;
 
     // The real element count, kept aside because negative control 5 deliberately
     // falsifies `tMods._size` and the teardown below walks the array with it.
@@ -512,6 +573,15 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
             break;
         default:
             break;
+    }
+    uint32_t tPostSizeCtl = tPostSize;
+    void*    tPostDataCtl = tPostData;
+    if (NegControl() == 7) {
+        // S7: make the shipped body look as if it had NOT zeroed the SavedState.
+        // Corrupting the OBSERVATION, not the scratch, so the teardown below is
+        // unaffected.
+        tPostSizeCtl = 1u;
+        tPostDataCtl = reinterpret_cast<void*>(static_cast<uintptr_t>(0x1000));
     }
 
     char a[96], b[96];
@@ -579,9 +649,25 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
                       eqCount ? "" : " (count already differs)");
     ReportScreen(&sModElems, eqElems, a, b);
 
+    // S7 — THE SIDE EFFECT THE OTHER SIX SCREENS ARE STRUCTURALLY BLIND TO.
+    // S1..S6 compare out-parameters only. A port that produced every out-param
+    // correctly and simply omitted the free-and-zero would pass all six and be
+    // wrong — a leak plus a stale `_size` over a null `_data`, invisible until
+    // something read the slot. So the post-state of the embedded SavedState is
+    // compared on both sides: ours on the live SaveLoad, theirs on the scratch.
+    // Both must be {_size == 0, _data == null} AND must agree.
+    const bool oursTornDown   = (self->_embeddedState._size == 0) &&
+                                (self->_embeddedState._data == nullptr);
+    const bool theirsTornDown = (tPostSizeCtl == 0) && (tPostDataCtl == nullptr);
+    const bool eqTeardown     = oursTornDown && theirsTornDown;
+    std::snprintf(a, sizeof(a), "pre{%u,%p} post{%u,%p}", inSize, inData,
+                  self->_embeddedState._size, self->_embeddedState._data);
+    std::snprintf(b, sizeof(b), "post{%u,%p}", tPostSizeCtl, tPostDataCtl);
+    ReportScreen(&sTeardown, eqTeardown, a, b);
+
     // The aggregate, on this function's own site.
     const bool allEqual = eqVersion && eqExtent && eqDesc && eqPixels &&
-                          eqCount && eqElems;
+                          eqCount && eqElems && eqTeardown;
     std::snprintf(a, sizeof(a), "v=%d %dx%d %d mods", *version, *width, *height, mods->_size);
     std::snprintf(b, sizeof(b), "v=%d %dx%d %d mods", tVersion, tW, tH, tMods._size);
     RtDiffReport(&rt_diff_site__, allEqual, a, b);
