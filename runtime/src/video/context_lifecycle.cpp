@@ -79,6 +79,16 @@ void RtVideoDeviceUnlock(void** deviceSingleton);
 // resolver sits on the path at all.
 void Video_IndexBuffer_PlatformDestruct(IndexBuffer* self);
 void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self);
+// ...and the THIRD sibling, added by Wave 20 Phase 0c. This file used to carry
+// its own `extern "C"` copy of RenderBuffer::PlatformDestruct. Two distinct
+// bodies under one export name link happily (different linkage), and because
+// RtVideoContextLifecycleRegister runs AFTER RtVideoBuffersRegister, the copy
+// won both doors and lane C's body -- the instrumented one, the one the
+// BufferClass probe drives -- was shadowed dead code that the census still
+// counted as ported. The two were behaviourally equivalent (same companion
+// release, same lock, same double head-fixup, same non-nulling of +0x28), so
+// nothing was ever observably wrong; it was one edit away from being wrong.
+void Video_RenderBuffer_PlatformDestruct(RenderBuffer* self);
 
 // Declared locally rather than by including standalone/resolve.h, which drags
 // in <windows.h> — PLAN §4.1 decision 1 keeps runtime/src/ platform-neutral
@@ -103,13 +113,14 @@ void MemFree(void* p) {
     if (fn) fn(p);
 }
 
-Device** DeviceSlot() {
-    return RT_DATA_SLOT(Device**, "?_singleton@Device@Video@@0PEAV12@EA");
-}
-RenderBuffer** FirstRenderBufferSlot() {
-    return RT_DATA_SLOT(RenderBuffer**,
-        "?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA");
-}
+// `DeviceSlot()` and `FirstRenderBufferSlot()` used to live here. They had
+// exactly one caller between them -- this file's duplicate copy of
+// RenderBuffer::PlatformDestruct -- and went unused when that copy was deleted
+// (Wave 20 Phase 0c), which -Wextra reported. buffers.cpp reaches the same two
+// data slots through its own `DeviceSingletonPtr()` and
+// `RenderBufferFirstRenderBuffer()`, so nothing is lost:
+//   ?_singleton@Device@Video@@0PEAV12@EA
+//   ?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA
 
 // ---------------------------------------------------------------------------
 // The scalar-deleting-dtor call every one of these bodies makes.
@@ -293,31 +304,17 @@ extern "C" void Video_Buffer_OperatorDelete(void* p)  { MemFree(p); }
 // that was never linked (PlatformConstruct not run) is skipped rather than
 // unlinked through null. Retail does NOT guard the head slot pointer itself.
 // ============================================================================
-extern "C" void Video_RenderBuffer_PlatformDestruct(RenderBuffer* self) {
-    void* companion = self->platformData;
-    if (companion) DeletingDtor(companion);
-
-    Device** slot = DeviceSlot();
-    RtVideoDeviceLock(reinterpret_cast<void**>(slot));
-
-    if (self->prev != nullptr && self->next != nullptr) {
-        RenderBuffer** head = FirstRenderBufferSlot();
-
-        // 0x1800f445d: head == this ? this->next : head
-        if (*head == self) *head = static_cast<RenderBuffer*>(self->next);
-
-        // 0x1800f4472: prev->next = next ; next->prev = prev
-        static_cast<RenderBuffer*>(self->prev)->next = self->next;
-        static_cast<RenderBuffer*>(self->next)->prev = self->prev;
-        self->prev = nullptr;
-        self->next = nullptr;
-
-        // 0x1800f4494: head == this ? nullptr : head
-        if (*head == self) *head = nullptr;
-    }
-
-    RtVideoDeviceUnlock(reinterpret_cast<void**>(slot));
-}
+// THE BODY THAT WAS HERE IS GONE -- it lives in buffers.cpp (Wave 6 lane C /
+// Wave 9 lane GFX2), declared at the top of this file with its two siblings.
+// The analysis above stands and was cross-checked against lane C's version
+// instruction by instruction before the deletion: `ListUnlink` with
+// kRenderLinks = {next 0x18, prev 0x20} performs the same head fixup twice
+// around the same unlink, and `PlatformDestructBody(..., /*null=*/false, ...)`
+// leaves +0x28 dangling exactly as retail does. Lane C's is kept rather than
+// this one because it is the version the RT_DIFF shadow oracle and the
+// list-emptied probe actually instrument, and because it is one arm of the
+// six-way BufferClass composition -- keeping a second spelling here is the
+// "two places to drift" this file warns about for `operator delete`.
 
 // ============================================================================
 // ?ClearResources@Context@Video@@QEAAXXZ — retail 0x1800f2090, ordinal 1712
@@ -650,8 +647,15 @@ extern "C" void RtVideoContextLifecycleProbe() {
 //   ?ClearResources@Context@Video@@QEAAXXZ            0x1800f2090  ord 1712
 //   ??1Context@Video@@QEAA@XZ                         0x1800f16e0  ord  562
 //   ??1ConstantBuffer@Video@@QEAA@XZ                  0x1800eeee0  ord  558
-//   ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ     0x1800f4400  ord 3369
 //   ??3RenderBuffer@Video@@SAXPEAX@Z                  0x18001f360  ord  995
+//
+// ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ (0x1800f4400, ord 3369) was in
+// this list and is NOT any more: buffers.cpp registers both of its doors. See
+// the note beside the declaration at the top of this file. NOTE THE ONE
+// BEHAVIOURAL CONSEQUENCE: that registration now rides BANISHED_RT_VIDBUFFERS
+// instead of BANISHED_RT_VIDCTXLIFE, so VIDBUFFERS=0 now really does leave the
+// export on the DLL. It did not before -- this file re-registered it and the
+// kill switch silently failed to kill.
 //
 // Note `??1` for the destructors and `QEAA` (non-virtual) for Context's and
 // ConstantBuffer's — `??1Context@Video@@UEAA@XZ` does not exist and would
@@ -675,15 +679,16 @@ int RtVideoContextLifecycleRegister() {
                           (void*)&RtVideo_Context_Dtor); ++n;
     RegisterRuntimeExport("??1ConstantBuffer@Video@@QEAA@XZ",
                           (void*)&Video_ConstantBuffer_Dtor); ++n;
-    RegisterRuntimeExport("?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ",
-                          (void*)&Video_RenderBuffer_PlatformDestruct); ++n;
+    // ?PlatformDestruct@RenderBuffer@Video@@ is registered by buffers.cpp, which
+    // owns the body. Registering it here too made this file's (now deleted)
+    // duplicate body win both doors.
     RegisterRuntimeExport("??3RenderBuffer@Video@@SAXPEAX@Z",
                           (void*)&Video_RenderBuffer_OperatorDelete); ++n;
 
     RegisterRuntimeAddr(0x1800f2090, (void*)&RtVideo_Context_ClearResources);
     RegisterRuntimeAddr(0x1800f16e0, (void*)&RtVideo_Context_Dtor);
     RegisterRuntimeAddr(0x1800eeee0, (void*)&Video_ConstantBuffer_Dtor);
-    RegisterRuntimeAddr(0x1800f4400, (void*)&Video_RenderBuffer_PlatformDestruct);
+    // 0x1800f4400: likewise buffers.cpp's, see above.
     RegisterRuntimeAddr(0x18001f360, (void*)&Video_RenderBuffer_OperatorDelete);
     // Bound by NAME as well as by address since Wave 9 phase 4. It was
     // address-only for three phases and nothing noticed, because nothing in the

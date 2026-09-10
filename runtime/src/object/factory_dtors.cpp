@@ -475,6 +475,10 @@ void RtObject_ExternalFactory_Dtor(void* self) {
 // 0x18002fb70 is NOT registered here: it belongs to the J1 family and is
 // registered by its owner, runtime/src/collection/array.cpp.
 // ============================================================================
+// external_path_stack.cpp's port of 0x18002e8d0 -- the one body behind that
+// address door. See the note at the registration below.
+extern "C" void RtObject_PathStackDestroyRange_18002e8d0(void*, uint8_t*, int);
+
 int RtObjectFactoryDtorsRegister() {
     using namespace RtObjFactoryDtor;
     int n = 0;
@@ -494,7 +498,22 @@ int RtObjectFactoryDtorsRegister() {
 
     // Helpers owned by this file.
     RegisterRuntimeAddr(0x180008250, (void*)&TypeSubtreeFree);
-    RegisterRuntimeAddr(0x18002e8d0, (void*)&PathStackDestroyRange);
+    // 0x18002e8d0 -- ONE ADDRESS, ONE REGISTERED BODY.
+    //
+    // external_path_stack.cpp ports the same retail function as
+    // RtObject_PathStackDestroyRange_18002e8d0 and registers this address too,
+    // under a DIFFERENT switch (EXTERNAL+PATHSTACK, where this block is
+    // FACTORYDTOR), and it registers LAST, so its body has been the one behind
+    // this address all along. The two bodies agree instruction for instruction
+    // -- same 0x10 stride, same filename-before-directory release order, same
+    // RtString_ReleaseInline -- so nothing was observably wrong, but two
+    // spellings of one retail function is one edit away from a silent
+    // divergence, and the address door must not depend on which switch is on.
+    //
+    // So this registration now names the SAME body the other file registers.
+    // `PathStackDestroyRange` below stays as this file's own helper for
+    // PathStackArrayDtor's inlined call; it is no longer an address door.
+    RegisterRuntimeAddr(0x18002e8d0, (void*)&RtObject_PathStackDestroyRange_18002e8d0);
     RegisterRuntimeAddr(0x18002e9e0, (void*)&PathStackArrayDtor);
     RegisterRuntimeAddr(0x18002ebf0, (void*)&ReferenceSubtreeFree);
     RegisterRuntimeAddr(0x18002eea0, (void*)&ResourceSubtreeFree);

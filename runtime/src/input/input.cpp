@@ -631,32 +631,28 @@ void RtInput_Device_ResetState(void* self) {
 // Wave 6's Video::Context lane used for methods it called but did not own.
 
 // ?Load@Configuration@Input@@QEAAXXZ  retail 0x1800e0c80  ord 3199
-void RtInput_Configuration_Load(void* self) {
-    RT_DIFF_BEGIN("Input::Configuration::Load");
-    auto* cfg = static_cast<Configuration*>(self);
-
-    using KeyMapLoadFn = void (*)(void*);
-    static auto keyMapLoad = reinterpret_cast<KeyMapLoadFn>(ResolveAddr(Module::Runtime, 0x1800a7190));
-    keyMapLoad(cfg->keyMap);
-
-    uint8_t** persistenceSlot = RT_DATA_SLOT(uint8_t**,
-        "?_singleton@Persistence@IO@@0PEAV12@EA");
-    void* persistence = persistenceSlot ? *persistenceSlot : nullptr;
-
-    bool mouseClipping = cfg->mouseClipping, legacy = cfg->legacy, mouseDisplay = cfg->mouseDisplay;
-    RtIo_Persistence_GetBool(persistence, "Input", "MouseClipping", &mouseClipping);
-    RtIo_Persistence_GetBool(persistence, "Input", "Legacy", &legacy);
-    RtIo_Persistence_GetBool(persistence, "Input", "MouseDisplay", &mouseDisplay);
-    cfg->mouseClipping = mouseClipping;
-    cfg->legacy = legacy;
-    cfg->mouseDisplay = mouseDisplay;
-
-    // No further oracle: re-calling retail Configuration::Load would re-run
-    // KeyMap::Load a second time, which mutates a live String-keyed map
-    // (same class of hazard IO::Persistence::Set already documents). This
-    // shadow only proves we wrote the 3 fields at the offsets Load.h pins.
-    RT_DIFF_SHADOW(true, "3 bools loaded via Persistence::Get", "not re-checked (see comment)");
-}
+//
+// THE BODY THAT WAS HERE IS GONE. Wave 9 lane ENG independently ported the same
+// function into input_config_startup.cpp, believing 0x1800e0c80 to be
+// unexported. It is not (see below), so from that moment this export had TWO
+// bodies and its TWO DOORS REACHED DIFFERENT ONES: the name door bound here,
+// the address door bound there and won, because RtInputConfigStartupRegister
+// runs after RtInputRegister. Callers resolving by name and callers resolving
+// by address were running different code for one function.
+//
+// Lane ENG's body is the one kept, on three counts: it already won the address
+// door, so keeping it is the smaller behavioural change; it reaches KeyMap::Load
+// through the NAME "?Load@KeyMap@Input@@QEAAXXZ" where this one used a bare
+// ResolveAddr(0x1800a7190) address door that dies at cutover (verified with
+// pefile: that address IS that export); and its RT_DIFF shadow actually
+// predicates on something (the three bools landing in {0,1}) where this one
+// passed a literal `true`.
+//
+// ONE BEHAVIOURAL CONSEQUENCE, stated rather than buried: with
+// BANISHED_RT_INPUTCFGSTART=0 the name door used to reach this body. Both doors
+// now reach lane ENG's regardless of that switch -- the switch gates
+// ?Startup@'s registration, never the linkage of a body this file registers.
+extern "C" void RtInput_Configuration_Load(Configuration* self);
 
 // ?Save@Configuration@Input@@QEAAXXZ  retail 0x1800e0c00  ord 3604
 void RtInput_Configuration_Save(void* self) {
@@ -729,6 +725,9 @@ int RtInputRegister() {
     RegisterRuntimeExport("?ResetState@Device@Input@@QEAAXXZ", (void*)&RtInput_Device_ResetState);
     RegisterRuntimeAddr(0x1800e0ef0, (void*)&RtInput_Device_ResetState); ++n;
 
+    // Both doors, one body -- and that body is input_config_startup.cpp's. This
+    // file keeps the registration because RtInputRegister is ungated, so the
+    // export stays bound whatever BANISHED_RT_INPUTCFGSTART says.
     RegisterRuntimeExport("?Load@Configuration@Input@@QEAAXXZ", (void*)&RtInput_Configuration_Load);
     RegisterRuntimeAddr(0x1800e0c80, (void*)&RtInput_Configuration_Load); ++n;
 
