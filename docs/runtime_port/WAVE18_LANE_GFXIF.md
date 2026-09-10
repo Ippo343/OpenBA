@@ -388,8 +388,20 @@ contending for one game directory is, as the kickoff predicted, this wave's real
 throughput ceiling — but the reading, disassembly and porting were all done
 first, so the lock was held only for the runs.
 
-Everything owed is done: both builds clean, `make check-log-strip` passes, the
-oracle is run and green, the kill switch is measured.
+Everything owed is done: `standalone-debug`, `standalone-perf` and `standalone`
+all build, the oracle is run and green on the final binary, and the kill switch
+is measured.
+
+**One correction to an earlier draft of this document.** It claimed
+`make check-log-strip` passed. It did — and then stopped, because the NC3 fix
+added two more `std::printf` calls, and the release target gates on that check.
+The whole probe file used the qualified spelling; the strip macro cannot replace
+a qualified name, so it survives into the stripped build and the compiler then
+blames `log_strip.h` instead of the offending file. Fixed by matching the
+convention every other probe here uses (bare `printf`), re-checked green, and
+the oracle re-run afterwards on the rebuilt binary — same 55/55, same ten
+counters, same four CAUGHT. The lesson is small and worth stating: **a gate that
+passed before your last edit has not passed.**
 
 **What is still owed, and it is not this lane's:** lane GATE's cutover boot.
 

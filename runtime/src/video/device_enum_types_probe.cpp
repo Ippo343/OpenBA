@@ -204,7 +204,7 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
     if (!theirAdapterCtor || !theirAdapterCopy || !theirAdapterDtor ||
         !theirGiCtor || !theirGiCopy || !theirGiDtor || !theirFind ||
         !theirGetMode || !theirModeDtor) {
-        std::printf("[VidEnum] *** at least one shipped export did not resolve; "
+        printf("[VidEnum] *** at least one shipped export did not resolve; "
                     "the probe did NOT run and its silence means nothing ***\n");
         g_running = false;
         return;
@@ -232,7 +232,7 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
         ++cases;
         if (std::memcmp(a, b, sizeof(a)) != 0) {
             ++mismatches;
-            std::printf("[VidEnum] MISMATCH Adapter::ctor (poisoned block compare)\n");
+            printf("[VidEnum] MISMATCH Adapter::ctor (poisoned block compare)\n");
         }
     }
     {
@@ -244,7 +244,7 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
         ++cases;
         if (std::memcmp(a, b, sizeof(a)) != 0) {
             ++mismatches;
-            std::printf("[VidEnum] MISMATCH GraphicsInterface::ctor\n");
+            printf("[VidEnum] MISMATCH GraphicsInterface::ctor\n");
         }
     }
 
@@ -294,7 +294,7 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
         ++cases;
         if (!SameAdapter(ao, at)) {
             ++mismatches;
-            std::printf("[VidEnum] MISMATCH FindOrAddMode step=%zu %dx%d @%d/%d "
+            printf("[VidEnum] MISMATCH FindOrAddMode step=%zu %dx%d @%d/%d "
                         "(ours modes=%d, theirs modes=%d)\n",
                         s, kSteps[s].w, kSteps[s].h, kSteps[s].num, kSteps[s].den,
                         ao.modeCount, at.modeCount);
@@ -335,10 +335,10 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
                 ++cases;
                 if (ro != &mo || rt != &mt) {
                     ++mismatches;
-                    std::printf("[VidEnum] MISMATCH GetDisplayMode return slot i=%d\n", i);
+                    printf("[VidEnum] MISMATCH GetDisplayMode return slot i=%d\n", i);
                 } else if (!SameMode(mo, mt)) {
                     ++mismatches;
-                    std::printf("[VidEnum] MISMATCH GetDisplayMode i=%d "
+                    printf("[VidEnum] MISMATCH GetDisplayMode i=%d "
                                 "(ours %dx%d/%d, theirs %dx%d/%d)\n", i,
                                 mo.width, mo.height, mo.refreshCount,
                                 mt.width, mt.height, mt.refreshCount);
@@ -410,10 +410,10 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
             ++cases;
             if (ro != &go || rt != &gt) {
                 ++mismatches;
-                std::printf("[VidEnum] MISMATCH GraphicsInterface::copy return value\n");
+                printf("[VidEnum] MISMATCH GraphicsInterface::copy return value\n");
             } else if (!SameInterface(go, gt)) {
                 ++mismatches;
-                std::printf("[VidEnum] MISMATCH GraphicsInterface::copy "
+                printf("[VidEnum] MISMATCH GraphicsInterface::copy "
                             "str=%s adapters=%d (ours n=%d cap=%d, theirs n=%d cap=%d)\n",
                             kStrs[s].what, adapters,
                             go.adapterCount, go.adapterCapacity,
@@ -437,7 +437,7 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
                 go.adapterCount != gt.adapterCount ||
                 go.adapterCapacity != gt.adapterCapacity) {
                 ++mismatches;
-                std::printf("[VidEnum] MISMATCH GraphicsInterface::dtor post-state "
+                printf("[VidEnum] MISMATCH GraphicsInterface::dtor post-state "
                             "str=%s adapters=%d (ours name=%p, theirs name=%p)\n",
                             kStrs[s].what, adapters, go.name, gt.name);
             }
@@ -516,7 +516,7 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
             go.adapterCount != gt.adapterCount ||
             go.adapterCapacity != gt.adapterCapacity) {
             ++mismatches;
-            std::printf("[VidEnum] MISMATCH dtor FREE path adapters=%d "
+            printf("[VidEnum] MISMATCH dtor FREE path adapters=%d "
                         "(ours slot rewound=%d, theirs slot rewound=%d)\n",
                         adapters, oursOk ? 1 : 0, theirsOk ? 1 : 0);
         }
@@ -552,7 +552,7 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
             ++cases;
             if (ro != &mo || rt != &mt || !SameMode(mo, mt)) {
                 ++mismatches;
-                std::printf("[VidEnum] MISMATCH GetDisplayMode empty-refresh i=%d\n", i);
+                printf("[VidEnum] MISMATCH GetDisplayMode empty-refresh i=%d\n", i);
             }
             if (mt.refreshCount == 0) ++hitEmptyRefresh;
             theirModeDtor(&mo);
@@ -638,7 +638,7 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
 
         nc3 = cleanAgree && !slippedAgree;   // agreed clean, rejected slipped
         if (!cleanAgree)
-            std::printf("[VidEnum] *** NC3 is INERT: its predicate already "
+            printf("[VidEnum] *** NC3 is INERT: its predicate already "
                         "disagreed before the slip was applied ***\n");
     }
 
@@ -659,7 +659,7 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
         theirAdapterDtor(&src);
     }
 
-    std::printf("[VidEnum] cases=%d mismatches=%d\n"
+    printf("[VidEnum] cases=%d mismatches=%d\n"
                 "[VidEnum] effectiveness (ALL measured on THEIRS): "
                 "dtorFree=%d dtorShared=%d dtorNull=%d modeAdded=%d modeFound=%d "
                 "refreshAdded=%d refreshFound=%d arrayGrew=%d emptyAdapters=%d "
@@ -679,10 +679,10 @@ extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun() {
     if (!hitDtorFree || !hitDtorShared || !hitDtorNull || !hitModeAdded ||
         !hitModeFound || !hitRefreshAdded || !hitRefreshFound ||
         !hitArrayGrew || !hitEmptyAdapters || !hitEmptyRefresh)
-        std::printf("[VidEnum] *** at least one branch counter is ZERO: the sweep "
+        printf("[VidEnum] *** at least one branch counter is ZERO: the sweep "
                     "did not reach that branch and says NOTHING about it ***\n");
     if (!nc1 || !nc2 || !nc3 || !nc4)
-        std::printf("[VidEnum] *** a negative control was NOT caught: the screen it "
+        printf("[VidEnum] *** a negative control was NOT caught: the screen it "
                     "names cannot see a wrong answer, so its green cases are void ***\n");
 
     g_running = false;
