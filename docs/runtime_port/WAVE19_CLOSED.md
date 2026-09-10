@@ -302,7 +302,8 @@ eventually contradicts something. The no-instrument claims sat for **two waves**
 and each surfaced only when a person happened to ask.
 
 **Neither lane could name a mechanism for these beyond the procedural one this
-wave already runs:**
+wave already runs** (SUPERSEDED — see §7.4, which names one: decompose the claim
+and check its premise):
 
 > **A stated blocker is a claim with a TIMESTAMP. Re-check it before believing it.**
 
@@ -351,6 +352,77 @@ would buy nothing and would strand two archived measurements from the binary tha
 produced them (`d7ab834b`). **The numbers stay tied to the binary that produced
 them, and §7.2's baseline stays valid** — which it would not, if rebased. Lane
 closed as-is.
+
+## 7.4 ADDENDUM 2 — impossibility claims ARE reachable: DECOMPOSE them
+
+**§7.1 concluded that neither lane could name a mechanism for impossibility claims
+beyond the procedural one. That conclusion is now superseded — by the lane that
+helped reach it, after it had closed.**
+
+Lane CSTREAM's addition:
+
+> An impossibility claim is a **conclusion over a premise**, and the premise is
+> usually an ordinary **existence claim a wide screen CAN reach.** So decompose it.
+
+It then applied this to the three impossibility-shaped claims in its own **sealed**
+§8. Two survived with their premises checked (the `?SetWindow` GROW delegation, and
+`?PreCommit@` being one instruction — both read from the source and the raw bytes).
+**One did not.**
+
+### The retraction, verified independently by the integrator
+
+CSTREAM's §8 held `?Close@CompressedFileStream` unverifiable because it *"needs a
+real file and lane FILE's `?CloseFile`"*. **Both halves of that premise are false on
+the merged tip:**
+
+```
+?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z
+    hits in called-but-unported : 0      (control, a genuinely unported row : 1)
+    registered by lane FILE      : filesystem_createfile_win.cpp:634
+    lane FILE measures 2854 live calls
+
+??0CompressedFileStream@IO@@QEAA@XZ
+    IS AN EXPORT at 0x1800a93b0   (control ??0BinaryFileStream@ : found)
+```
+
+So a caller can stack-construct one — which CSTREAM's **own probe already does
+three times over** for `CompressedMemoryStream` via retail's ctor.
+
+**And the deeper fault is not staleness.** CSTREAM: *"I named two conditions and did
+not ask whether either was actually what stopped a synthesised route."* It asserted
+a blocker in a document whose own §5 quotes the doctrine that **"no route" is not
+"no oracle"** — the thing Wave 18 refuted four times.
+
+### The transferable rule
+
+> **When you write a blocker, write its PREMISE as a separate, checkable line.**
+
+*"A stated blocker is a claim with a timestamp"* tells you to re-check it and gives
+you **nothing to re-check**. The premise is the thing a screen can reach. CSTREAM:
+*"Mine was checkable and I wrote it as a conclusion, so nothing could reach it —
+including me, twice."*
+
+**This upgrades §7.1's score.** Of 3 no-instrument claims, a wide screen reached 1
+directly; decomposition reaches a second. The residue is claims whose premises are
+themselves unenumerable — a smaller category than §7.1 concluded.
+
+### Integrator decision: NOT reopened; it is a Wave 20 line
+
+CSTREAM offered to build the probe and recommended against reopening. **Agreed, and
+its reasoning is right**: the lane is sealed, the wave is closed, and a fourth probe
+subject would land unreviewed. **It changes no measured number — it retracts a
+stated limitation**, which is the cheaper and more honest deliverable.
+
+The work is specified precisely enough to be cheap for whoever takes it:
+`?Close@CompressedFileStream` (`0x1800a9490`) is **nine instructions** — `if
+(headerSize>0 && direction==1) Commit(this)`, then `if (*(int*)(this+0x88) != -1)`
+tail-jump `CloseFile(_singleton, this+0x88)`. A probe stack-constructs a
+`CompressedFileStream` through retail's exported ctor, `Create`s it onto a temp file
+via lane FILE's now-ported `?Create@FileStream@`, writes, `Close`s, and **compares
+the FILE ON DISK** against retail's — the same artefact oracle CSTREAM already runs,
+one subject over. Lane FILE's finding that a `%TEMP%` file is **renamed into place**
+on close makes the on-disk comparison the right subject: nothing appears at the
+caller's path until `Close` runs.
 
 ## 8. Wave 20 inputs
 
