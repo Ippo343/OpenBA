@@ -114,3 +114,65 @@ are under **`%USERPROFILE%\Documents\Banished\Save`**. A check aimed at the game
 directory returns zero and is **correct about the wrong directory**. Correction C14 of
 Wave 19 was the integrator relaying that zero as *"no save games at all"*, which cost
 a lane its verification route.
+
+---
+
+## C4 — CORROBORATED-EXACT rests on an unstated premise; 30 of 31 rows have it ASSUMED
+
+**Not a correction of an error. A correction of a CONFIDENCE**, and it is Phase 0's
+most valuable output. Self-reported by lane EXTENT **after it had already reported a
+clean 31 of 31**, against its own headline, in answer to a question about a *different*
+limitation.
+
+**The claim as it reads:** `CORROBORATED-EXACT` = *"the next address any instruction in
+the image names is exactly this row's end"* — presented as strictly stronger than the
+`adjacent-export` bound it replaces, which it is.
+
+**The premise nobody had written down:**
+
+> **P3 — the address named at `va + 8n` is a DISTINCT OBJECT'S START, not an INTERIOR
+> address of the same table that some code took the address of.**
+
+A vtable cannot overlap a *distinct* object — that is what makes the bound work. But
+nothing stops code from `LEA`-ing an address *within* a table it already owns: a
+partial dispatch, a cached sub-range, a pointer to `vtable+0x50` handed to a helper. If
+the address at `va + 8n` is such an interior address, then the true extent `m > n`, the
+row is **UNDER-SIZED**, and — per Wave 19 §5.2's asymmetry — **there is no symptom.**
+
+**Status: 1 of 31 CHECKED, 30 ASSUMED.** The one checked is
+`??_7DeviceData@Video@@` (`0x180158cd0` is `LEA`'d by two constructors at `0x180058f7e`
+and `0x1800fa966`, each followed by a `mov %rax,(%rdi)` vptr store — a genuine table
+start).
+
+**Why this matters more than it looks.** §0d exists so that **no Wave 20 DATA lane is
+scoped against a slot count not re-derived from the writer.** Lane PROMOTE is being
+scoped against these counts now, and a `COMPLETE` verdict from lane CENSUS means *"every
+non-purecall slot IN THE RECORDED COUNT is registered."* **If a row is under-sized there
+are slots beyond the recorded end, neither counted nor registered** — so promoting it
+publishes a table that is complete over the visible part and **traps past it**. So
+`COMPLETE` is conditional on the extent being right, and for 30 rows that condition is
+assumed.
+
+**What makes this a good outcome rather than a bad one:** the premise is **checkable
+with machinery already in the tool.** The store-shape test the audit already parses and
+prints for row-*start* writers, applied at `va + 8n`, settles all 31. Re-tasked to lane
+EXTENT as a clearly-marked **post-report tranche** — sealing forbids altering a reported
+result, not adding a marked one, so `296140e` stays quotable as the state at report.
+
+**The tiering instruction issued with it:** report **PREMISE-CHECKED** vs
+**PREMISE-ASSUMED** as distinct, never collapsed, and do not silently upgrade
+`CORROBORATED-EXACT` for rows that pass. A uniform 31-of-31 PASS is itself to be looked
+at hard — *one hand-check passing is not evidence that thirty will.* `COULD-NOT-DERIVE`
+remains first-class: **"24 checked, 7 unreachable" beats 31 confident verdicts.**
+
+**How it was caught, which is the transferable part.** Not by a screen — no screen has a
+superset of "premises I did not state". It came from the integrator asking a lane to
+finish a sentence that had been truncated in transmission, about a limitation it had
+already volunteered. That is Wave 19 §7.6's standing finding holding again: **the
+detector is integrator review of a specific claim, not peer review and not a tool.** And
+it is the third time this wave that *asking a lane which of two mechanisms a limitation
+is* has produced a finding neither the lane nor the tool would have surfaced.
+
+**Relayed immediately to lane PROMOTE**, with instructions to keep working — its §5.1
+stamper gate is independent of extent — but to record `PREMISE-ASSUMED` in any
+promotion warrant covering a row whose premise the tranche has not cleared.
