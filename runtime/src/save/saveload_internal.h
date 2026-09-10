@@ -91,20 +91,37 @@ inline T* RtDataExport(const char* mangled) {
     return reinterpret_cast<T*>(ResolveExport(mangled));
 }
 
+// WAVE 15 LANE ORDER. These four were `static T** p = RtDataExport<T*>(...)`,
+// a frozen static that keeps the FIRST answer including a non-null one. Three
+// of the four names are Wave 15 rows and the fourth, `SaveLoad`, is PROMOTED to
+// our own storage on every default run — so ResolveExport's answer for it
+// genuinely changes across RtDataMintInit() and a first call during startup
+// would have kept the DLL's `.data` slot forever while every other reader moved
+// to the minted one. Two copies of one live mutable pointer is a SPLIT BRAIN,
+// not a stale cache.
+//
+// `RT_DATA_SLOT` is the right door and it also keeps Wave 5's cost argument
+// intact (a hit is still cached, so steady state is one load, not a
+// GetProcAddress — reference_rtoriginal_is_getprocaddress.md). What made the
+// conversion worth doing is NOT the macro itself: RT_DATA_SLOT froze a hit
+// exactly as hard as these statics did until lane ORDER changed
+// RtResolveCached to refuse to freeze a pre-init answer
+// (rt_resolve_cache.cpp §6). Converting the shape is what puts these four
+// under that rule, and under the [RtSlotAudit] instrument that can see them.
+using SaveLoadSlot = SaveLoad**;
 inline SaveLoad** SaveLoadSingletonSlot() {
-    static SaveLoad** p = RtDataExport<SaveLoad*>("?_singleton@SaveLoad@Save@@0PEAV12@EA");
-    return p;
+    return RT_DATA_SLOT(SaveLoadSlot, "?_singleton@SaveLoad@Save@@0PEAV12@EA");
 }
 inline void* FileSystemSingleton() {
-    static void** p = RtDataExport<void*>("?_singleton@FileSystem@IO@@0PEAV12@EA");
+    void** p = RT_DATA_SLOT(void**, "?_singleton@FileSystem@IO@@0PEAV12@EA");
     return p ? *p : nullptr;
 }
 inline uint8_t* ModificationSingleton() {
-    static uint8_t** p = RtDataExport<uint8_t*>("?_singleton@Modification@IO@@2PEAV12@EA");
+    uint8_t** p = RT_DATA_SLOT(uint8_t**, "?_singleton@Modification@IO@@2PEAV12@EA");
     return p ? *p : nullptr;
 }
 inline uint8_t* PersistenceSingleton() {
-    static uint8_t** p = RtDataExport<uint8_t*>("?_singleton@Persistence@IO@@0PEAV12@EA");
+    uint8_t** p = RT_DATA_SLOT(uint8_t**, "?_singleton@Persistence@IO@@0PEAV12@EA");
     return p ? *p : nullptr;
 }
 

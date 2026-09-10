@@ -343,14 +343,22 @@ using AddSpriteDrawFn = void (*)(UI::SpriteContext*, const UI::SpriteDraw*);
 
 // The two Video singletons Draw reads. Both are DATA exports whose slot holds
 // the pointer, so the slot is dereferenced, unlike the vtable symbols below.
+// Wave 15 lane ORDER converted both from `static T** p = ResolveExport(...)`,
+// which freezes the FIRST answer including a non-null one, to the caching door
+// that now refuses to freeze a pre-init answer (rt_resolve_cache.cpp §6).
+// Neither of these two rows is promoted today; the conversion is for the shape,
+// so a future promotion of Device@Video or Configuration@Video cannot strand
+// this file's readers on the DLL's `.data` (and so [RtSlotAudit] can see them).
+using DeviceSlot = RtVideo::Device**;
+using ConfigSlot = RtVideo::Configuration**;
 RtVideo::Device* DeviceSingleton() {
-    static RtVideo::Device** p = reinterpret_cast<RtVideo::Device**>(
-        ResolveExport("?_singleton@Device@Video@@0PEAV12@EA"));          // 0x1801fe7a8
+    DeviceSlot p = RT_DATA_SLOT(DeviceSlot,
+        "?_singleton@Device@Video@@0PEAV12@EA");                         // 0x1801fe7a8
     return p ? *p : nullptr;
 }
 RtVideo::Configuration* ConfigurationSingleton() {
-    static RtVideo::Configuration** p = reinterpret_cast<RtVideo::Configuration**>(
-        ResolveExport("?_singleton@Configuration@Video@@0PEAV12@EA"));   // 0x1801fe7a0
+    ConfigSlot p = RT_DATA_SLOT(ConfigSlot,
+        "?_singleton@Configuration@Video@@0PEAV12@EA");                  // 0x1801fe7a0
     return p ? *p : nullptr;
 }
 

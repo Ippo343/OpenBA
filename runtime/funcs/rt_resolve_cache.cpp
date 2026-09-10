@@ -36,12 +36,14 @@
 //   * A miss is NAMED, once per symbol, and counted. `RtResolveMissCount()`
 //     reading zero across a run is the measurement that a conversion changed
 //     nothing (WAVE9_LANE_H.md §4).
-//   * It does NOT fix the other half of the frozen-static problem: a NON-null
-//     answer is still frozen, so a site whose first call happens before
-//     RuntimePortInit() captures the DLL's address permanently and bypasses a
-//     port registered afterwards. That is a separate defect class, it is live
-//     today rather than at cutover, and this file does not address it. See
-//     WAVE9_LANE_H.md §5.
+//   * WAVE 15 LANE ORDER CHANGED THIS. It used to read: "it does NOT fix the
+//     other half of the frozen-static problem -- a NON-null answer is still
+//     frozen, so a site whose first call happens before RuntimePortInit()
+//     captures the DLL's address permanently and bypasses a port registered
+//     afterwards." That is now fixed here, in §6 below: a hit obtained before
+//     RtResolvePortInitDone() is RETURNED but NOT STORED, so the site
+//     re-resolves and picks up the final answer. See §6 for the reason this
+//     helper is the right place for the fix and what it still does not cover.
 //
 // The benign race on `*cache` is intentional: two threads may both resolve and
 // both store, and they store the same value. A lock here would put a mutex in
@@ -49,6 +51,7 @@
 // ============================================================================
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "rt_port.h"
@@ -147,6 +150,7 @@ void RtResolveEarlySummary() {
             "RuntimePortInit() finished. The early-snapshot port-bypass class is "
             "NOT LIVE on this path.\n");
         std::fflush(stderr);
+        RtResolveSlotAudit();     // Wave 15 lane ORDER, §6
         return;
     }
     int confirmed = 0;
@@ -175,12 +179,170 @@ void RtResolveEarlySummary() {
         "Do NOT fix them here; name them and hand them on.\n",
         confirmed, g_earlyCount);
     std::fflush(stderr);
+    RtResolveSlotAudit();         // Wave 15 lane ORDER, §6
+}
+
+// ============================================================================
+// §6 — DO NOT FREEZE AN ANSWER OBTAINED BEFORE RuntimePortInit() FINISHED
+//      (Wave 15 lane ORDER)
+// ============================================================================
+//
+// §5 above, and WAVE9_LANE_H.md §5, describe the half of the frozen-static
+// defect the retry contract does not fix: a NON-null answer is frozen too, so a
+// site first called before the registry is complete keeps the DLL's address for
+// the life of the process while every other site moves to our storage. On a
+// LIVE MUTABLE POINTER — which is what every `?_singleton@` row is — that is a
+// SPLIT BRAIN: two copies of one pointer, our writer publishing into one and
+// somebody's reader loading the other.
+//
+// TWO FACTS FROM LANE ORDER'S ENUMERATION MADE THIS THE PLACE TO FIX IT.
+//
+//  1. The hazard is NOT confined to hand-written `static T* p = Resolve(...)`
+//     accessors. `RT_DATA_SLOT` and `RT_EXPORT_ONCE` both expand to a
+//     function-local static plus THIS function, and this function froze a hit
+//     unconditionally — so all 83 RT_DATA_SLOT singleton sites carried exactly
+//     the same hazard as the 10 hand-written frozen statics. The distinction
+//     the Wave 15 kickoff drew ("still a plain frozen static rather than
+//     RtResolveCached") is not a distinction for THIS defect: converting a
+//     frozen static to RtResolveCached fixed the null half and changed nothing
+//     about the non-null half. Fixing it here fixes both macros and every
+//     caller of them at once.
+//
+//  2. `?_singleton@SaveLoad@Save@@` is PROMOTED to our own storage on every
+//     default run (rt_data_mint.cpp:924 calls RtMintRegisterPromotedRows()
+//     unless BANISHED_RT_MINT=1), so ResolveExport's answer for that name
+//     genuinely CHANGES across RtDataMintInit(). The hazard therefore has a
+//     live subject in the tree today, not a hypothetical one.
+//
+// THE RULE. A hit obtained while `!RtResolvePortInitDone()` is returned to the
+// caller but NOT stored. The caller gets a correct answer for right now, and
+// re-resolves next time, so the first call made after the registry is complete
+// is the one that freezes. Cost: pre-init calls pay a GetProcAddress each
+// (ResolveExportRaw IS GetProcAddress —
+// reference_rtoriginal_is_getprocaddress.md), which is why the count is
+// reported rather than hidden. It is bounded by the startup path; steady state
+// is unchanged, one plain load.
+//
+// WHAT THIS STILL DOES NOT COVER, stated so the number is not over-read:
+//
+//   * The ADDRESS route. `ResolveAddr(Module::Runtime, 0x1801fc6f0)` does not
+//     come through here at all, and 13 live source sites reach a Wave 15 row
+//     that way (`reference_resolveaddr_consults_port_registry_first.md` — that
+//     door consults the port registry FIRST, so it has the same ordering
+//     dependence). A promotion must therefore register the ADDRESS as well as
+//     the NAME, which is what reg_mint_promoted.cpp:669-670 does for SaveLoad.
+//   * Hand-written frozen statics that call `ResolveExport` directly. Lane
+//     ORDER converted the ten it found in `runtime/`; a new one can always be
+//     written, and `tools/` has no checker for the shape.
+//   * An in-DLL RIP-relative reference. We intercept only at doors
+//     (reference_a_ported_row_can_be_permanently_unpromotable.md).
+// ============================================================================
+
+namespace {
+
+// One record per NAME (not per site): the audit's question is "did this
+// symbol's answer change across init?", which is a property of the name.
+struct EarlySlotRec { const char* name; void* first; bool frozen; };
+const int    kMaxEarlySlot = 128;
+EarlySlotRec g_slot[kMaxEarlySlot];
+int          g_slotCount     = 0;
+uint64_t     g_preInitHits   = 0;   // returned WITHOUT freezing (the new rule)
+uint64_t     g_preInitFrozen = 0;   // frozen anyway (negative control armed)
+int          g_freezeEarly   = -1;
+
+// NEGATIVE CONTROL. BANISHED_RT_FREEZE_EARLY=1 restores the pre-Wave-15
+// behaviour — freeze a hit whenever it arrives — so the audit below can be
+// shown going RED on a build where the only difference is this rule. A change
+// here is invisible without an instrument that CAN go red
+// (reference_a_predicate_nobody_evaluates.md).
+bool FreezeEarlyControl() {
+    if (g_freezeEarly < 0) {
+        const char* e = std::getenv("BANISHED_RT_FREEZE_EARLY");
+        g_freezeEarly = (e && *e && std::strcmp(e, "0") != 0 &&
+                         std::strcmp(e, "false") != 0) ? 1 : 0;
+    }
+    return g_freezeEarly == 1;
+}
+
+void NoteEarlySlot(const char* mangled, void* first, bool frozen) {
+    for (int i = 0; i < g_slotCount; ++i)
+        if (std::strcmp(g_slot[i].name, mangled) == 0) return;
+    if (g_slotCount >= kMaxEarlySlot) return;
+    g_slot[g_slotCount++] = { mangled, first, frozen };
+}
+
+}  // namespace
+
+uint64_t RtResolvePreInitHitCount()   { return g_preInitHits; }
+uint64_t RtResolvePreInitFrozenCount(){ return g_preInitFrozen; }
+
+int RtResolveSlotAudit() {
+    if (g_slotCount == 0) {
+        std::fprintf(stderr,
+            "[RtSlotAudit] 0 names were resolved through the CACHING door "
+            "(RtResolveCached / RT_DATA_SLOT / RT_EXPORT_ONCE) before "
+            "RuntimePortInit() finished. Nothing could have frozen an early "
+            "answer on this path.\n");
+        std::fflush(stderr);
+        return 0;
+    }
+    int changed = 0, split = 0;
+    std::fprintf(stderr,
+        "[RtSlotAudit] %d distinct name(s) first resolved through the caching "
+        "door BEFORE init finished; %llu hit(s) returned unfrozen, %llu frozen "
+        "early (control %s). Each name is re-resolved now and compared.\n",
+        g_slotCount, (unsigned long long)g_preInitHits,
+        (unsigned long long)g_preInitFrozen,
+        FreezeEarlyControl() ? "ARMED: BANISHED_RT_FREEZE_EARLY=1" : "off");
+    for (int i = 0; i < g_slotCount; ++i) {
+        const EarlySlotRec& r = g_slot[i];
+        void* now = ResolveExport(r.name);
+        if (now == r.first) {
+            std::fprintf(stderr,
+                "[RtSlotAudit]   same      %p  \"%s\"\n", now, r.name);
+            continue;
+        }
+        ++changed;
+        // The answer moved across init. Whether that is a defect depends
+        // entirely on whether the site kept the old one.
+        if (r.frozen) {
+            ++split;
+            std::fprintf(stderr,
+                "[RtSlotAudit]   SPLIT     early=%p final=%p  \"%s\"  -- FROZEN "
+                "on the pre-init answer: this site reads the old storage for the "
+                "life of the process while everyone else reads the new one.\n",
+                r.first, now, r.name);
+        } else {
+            std::fprintf(stderr,
+                "[RtSlotAudit]   REPAIRED  early=%p final=%p  \"%s\"  -- not "
+                "frozen (§6), so the site re-resolved and now reads the final "
+                "storage.\n", r.first, now, r.name);
+        }
+    }
+    std::fprintf(stderr,
+        "[RtSlotAudit] %d of %d name(s) CHANGED answer across init (that is the "
+        "EFFECTIVENESS number -- a run where it is 0 says the rule had nothing "
+        "to bite on, not that the rule works); %d of those are LIVE SPLIT "
+        "BRAINS on this run.\n", changed, g_slotCount, split);
+    std::fflush(stderr);
+    return split;
 }
 
 void* RtResolveCached(const char* mangled, void** cache) {
     if (*cache) return *cache;
     void* p = ResolveExport(mangled);
-    if (p) { *cache = p; return p; }
+    if (p) {
+        // §6. An answer obtained before the registry is complete is handed back
+        // but not kept, so a later promotion of this name is picked up.
+        const bool early  = !RtResolvePortInitDone();
+        const bool freeze = !early || FreezeEarlyControl();
+        if (early) {
+            NoteEarlySlot(mangled, p, freeze);
+            if (freeze) ++g_preInitFrozen; else ++g_preInitHits;
+        }
+        if (freeze) *cache = p;
+        return p;
+    }
 
     // NAMED REFUSAL. The null is deliberately not stored.
     ++g_missCount;
