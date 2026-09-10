@@ -357,3 +357,39 @@ This is why the tier-2 rows (`??0Internal`, `??1Internal`, `ClearPersistState`,
 `ResetPersistState`) read unported while the lanes' new rows legitimately move
 the census. **Read which helper wraps a registration before believing either a
 census gain or a "this is already ported" claim.**
+
+## ADVISOR ERROR — "SA" is a calling convention, not a return shape
+
+Lane OBJEXT corrected the brief and it is right. The brief said:
+
+> `?GetCompiledPath@` and `?Load@` are `SA` — statics. … **Get the ABI right for
+> the two by-value-return rows.**
+
+**`?Load@` is not a by-value return.** The two facts live in different parts of
+the mangled name and the brief conflated them:
+
+```
+?Load@External@Object@@ SA PEAV12@ AEBVFilename@System@@ PEAV12@ @Z
+                        ^^ static   ^^^^^^^ RETURN External*  -> RAX, NO hidden slot
+
+?GetCompiledPath@ExternalFactory@Object@@ SA ?AVFilename@System@@ AEBV34@ @Z
+                                          ^^ static ^^^^^^^^^^^^^ RETURN BY VALUE -> hidden slot
+```
+
+**The rule:** the letters after the class list (`SA`, `QEAA`, `AEAA`, `UEAA`)
+give **linkage and calling convention only**. The return shape is the token that
+follows them: `?AV…` / `?AU…` is a **by-value class return and takes a hidden
+first parameter**; `PEAV…` is a **pointer return in RAX and takes none**.
+Applying the by-value rule to `?Load@` would insert a phantom first parameter —
+the mirror image of the standing hazard where an `fn_*` typedef *omits* the
+hidden slot and becomes a wild write that still returns the right answer.
+
+Of the seven OBJEXT rows exactly **one** (`GetCompiledPath`) has a hidden slot.
+
+Second finding from the same lane, worth carrying: `FindOrLoad` calls the
+**private** `?Find@…@AEAA…` (`0x1800be0e0`), not the public `Find` that
+`external.cpp` ports — and `external_find.cpp` already registers that private
+name. So `called` grew by **one**, not three. Reading `AEAA` as "unexported,
+reach it by address" would have opened an address door **onto our own ported
+body** — a fresh instance of the standing lesson that
+**`AEAA` means private, not unexported**, this time with the trap pointing at us.
