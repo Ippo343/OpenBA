@@ -112,7 +112,7 @@ void CheckI(bool ok, const char* what, long long got, long long want) {
     ++g_checked;
     if (!ok) {
         ++g_failed;
-        std::printf("[LoadProbe]   FAIL %-28s ours=%lld theirs=%lld\n", what, got, want);
+        printf("[LoadProbe]   FAIL %-28s ours=%lld theirs=%lld\n", what, got, want);
     }
 }
 
@@ -146,13 +146,13 @@ void RtObjectLoadProbeStep(const Filename* path, External* ours) {
         g_started = true;
         const char* e = std::getenv("BANISHED_RT_EXTLOAD_NEGCTL");
         g_lcCtl = (e && e[0]) ? std::atoi(e) : 0;
-        std::printf("[LoadProbe] ctl=%d -- replaying each load against the shipped DLL\n",
+        printf("[LoadProbe] ctl=%d -- replaying each load against the shipped DLL\n",
                     g_lcCtl);
     }
 
     auto theirs = reinterpret_cast<LoadFn>(ResolveExportRaw(kLoad));
     if (theirs == nullptr) {
-        std::printf("[LoadProbe] FATAL phantom export name: %s\n", kLoad);
+        printf("[LoadProbe] FATAL phantom export name: %s\n", kLoad);
         g_done = true;
         return;
     }
@@ -186,7 +186,7 @@ void RtObjectLoadProbeStep(const Filename* path, External* ours) {
             ++g_checked;
             if (!same) {
                 ++g_failed;
-                std::printf("[LoadProbe]   FAIL dep[%d] filename ours=%s theirs=%s\n",
+                printf("[LoadProbe]   FAIL dep[%d] filename ours=%s theirs=%s\n",
                             i, sa ? sa : "<null>", sb ? sb : "<null>");
             }
             CheckI(*reinterpret_cast<const int32_t*>(a + 0x08) ==
@@ -213,20 +213,20 @@ void RtObjectLoadProbeStep(const Filename* path, External* ours) {
         ? " -- WEAK: no subject had dependencies, the replay loop never ran"
         : "";
     if (g_lcCtl == 0) {
-        std::printf("[LoadProbe] VERDICT ctl=0 subjects=%d checked=%d failed=%d deps=%llu  %s%s\n",
+        printf("[LoadProbe] VERDICT ctl=0 subjects=%d checked=%d failed=%d deps=%llu  %s%s\n",
                     g_subjects, g_checked, g_failed, (unsigned long long)g_deps,
                     g_failed == 0 ? "PASS" : "*** MISMATCH ***", effect);
     } else if (g_failed == 0) {
-        std::printf("[LoadProbe] VERDICT ctl=%d subjects=%d checked=%d failed=0 att=%llu "
+        printf("[LoadProbe] VERDICT ctl=%d subjects=%d checked=%d failed=0 att=%llu "
                     "deps=%llu  control NOT CAUGHT%s\n",
                     g_lcCtl, g_subjects, g_checked, (unsigned long long)g_lcAtt,
                     (unsigned long long)g_deps, effect);
     } else if (g_lcAtt == 0) {
-        std::printf("[LoadProbe] VERDICT ctl=%d subjects=%d checked=%d failed=%d att=0  "
+        printf("[LoadProbe] VERDICT ctl=%d subjects=%d checked=%d failed=%d att=0  "
                     "CAUGHT BUT NOT VIA ITS OWN MECHANISM -- NOT BANKED\n",
                     g_lcCtl, g_subjects, g_checked, g_failed);
     } else {
-        std::printf("[LoadProbe] VERDICT ctl=%d subjects=%d checked=%d failed=%d att=%llu "
+        printf("[LoadProbe] VERDICT ctl=%d subjects=%d checked=%d failed=%d att=%llu "
                     "deps=%llu  control CAUGHT\n",
                     g_lcCtl, g_subjects, g_checked, g_failed,
                     (unsigned long long)g_lcAtt, (unsigned long long)g_deps);

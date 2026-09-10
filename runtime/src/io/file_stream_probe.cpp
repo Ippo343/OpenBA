@@ -122,7 +122,7 @@ void* RtResolveExportForProbe(const char* mangled) {
         // A name the DLL does not contain resolves NULL SILENTLY
         // (reference_resolveexport_phantom_names.md). Say so loudly rather than
         // calling through it.
-        std::printf("[IOStream]   FATAL phantom export name: %s\n", mangled);
+        printf("[IOStream]   FATAL phantom export name: %s\n", mangled);
         std::abort();
     }
     return p;
@@ -149,7 +149,7 @@ void Check(bool ok, const char* what, unsigned long long got, unsigned long long
     ++g_checked;
     if (!ok) {
         ++g_failed;
-        std::printf("[IOStream]   FAIL %-46s got=0x%llx want=0x%llx\n", what, got, want);
+        printf("[IOStream]   FAIL %-46s got=0x%llx want=0x%llx\n", what, got, want);
     }
 }
 
@@ -255,11 +255,11 @@ size_t RunCtorScreen(const char* label, size_t realSize, int classId,
     ++g_checked;
     if (guardHits != 0) {
         ++g_failed;
-        std::printf("[IOStream]   FAIL %-20s wrote %llu byte(s) PAST claimed size 0x%llx\n",
+        printf("[IOStream]   FAIL %-20s wrote %llu byte(s) PAST claimed size 0x%llx\n",
                     label, (unsigned long long)guardHits, (unsigned long long)claimed);
     }
     if (wrote == 0)
-        std::printf("[IOStream]   WARN %-20s constructor wrote NOTHING -- cell is vacuous\n",
+        printf("[IOStream]   WARN %-20s constructor wrote NOTHING -- cell is vacuous\n",
                     label);
 
     *outObj = obj;
@@ -277,7 +277,7 @@ void RunFileStreamLayoutProbe() {
     const char* e = std::getenv("BANISHED_RT_IOSTREAM_NEGCTL");
     g_ctl = (e && e[0]) ? std::atoi(e) : 0;
 
-    std::printf("[IOStream] layout probe ctl=%d -- retail constructors vs "
+    printf("[IOStream] layout probe ctl=%d -- retail constructors vs "
                 "runtime/types/io/FileStream.h\n", g_ctl);
 
     // ---------------------------------------------------------------- FileStream
@@ -315,7 +315,7 @@ void RunFileStreamLayoutProbe() {
         reinterpret_cast<CtorFn>(
             RtResolveExportForProbe("??1FileStream@IO@@UEAA@XZ"))(obj);
         std::free(buf);
-        std::printf("[IOStream]   FileStream            wrote=%llu/0x%llx\n",
+        printf("[IOStream]   FileStream            wrote=%llu/0x%llx\n",
                     (unsigned long long)wrote, (unsigned long long)sizeof(RtIo::FileStream));
     }
 
@@ -339,7 +339,7 @@ void RunFileStreamLayoutProbe() {
         reinterpret_cast<CtorFn>(
             RtResolveExportForProbe("??1BinaryFileStream@IO@@UEAA@XZ"))(obj);
         std::free(buf);
-        std::printf("[IOStream]   BinaryFileStream      wrote=%llu/0x%llx\n",
+        printf("[IOStream]   BinaryFileStream      wrote=%llu/0x%llx\n",
                     (unsigned long long)wrote,
                     (unsigned long long)sizeof(RtIo::BinaryFileStream));
     }
@@ -377,7 +377,7 @@ void RunFileStreamLayoutProbe() {
         reinterpret_cast<CtorFn>(
             RtResolveExportForProbe("??1CompressedFileStream@IO@@UEAA@XZ"))(obj);
         std::free(buf);
-        std::printf("[IOStream]   CompressedFileStream  wrote=%llu/0x%llx\n",
+        printf("[IOStream]   CompressedFileStream  wrote=%llu/0x%llx\n",
                     (unsigned long long)wrote,
                     (unsigned long long)sizeof(RtIo::CompressedFileStream));
     }
@@ -447,7 +447,7 @@ void RunFileStreamLayoutProbe() {
         RtSystem::RtString_ReleaseInline(&typeStr);
         RtSystem::RtString_ReleaseInline(&nameStr);
         std::free(buf);
-        std::printf("[IOStream]   TextFileStream        wrote=%llu/0x%llx\n",
+        printf("[IOStream]   TextFileStream        wrote=%llu/0x%llx\n",
                     (unsigned long long)wrote,
                     (unsigned long long)sizeof(RtIo::TextFileStream));
     }
@@ -473,7 +473,7 @@ void RunFileStreamLayoutProbe() {
         reinterpret_cast<CtorFn>(
             RtResolveExportForProbe("??1VisitorStream@IO@@UEAA@XZ"))(obj);
         std::free(buf);
-        std::printf("[IOStream]   VisitorStream         wrote=%llu/0x%llx\n",
+        printf("[IOStream]   VisitorStream         wrote=%llu/0x%llx\n",
                     (unsigned long long)wrote,
                     (unsigned long long)sizeof(RtIo::VisitorStream));
     }
@@ -481,17 +481,17 @@ void RunFileStreamLayoutProbe() {
     // ---------------------------------------------------------------- verdict
     const uint64_t att = (g_ctl >= 1 && g_ctl <= 5) ? g_att[g_ctl] : 0;
     if (g_ctl == 0) {
-        std::printf("[IOStream] LAYOUT ctl=0 checked=%d failed=%d  %s\n",
+        printf("[IOStream] LAYOUT ctl=0 checked=%d failed=%d  %s\n",
                     g_checked, g_failed, g_failed == 0 ? "PASS" : "*** MISMATCH ***");
     } else if (g_failed == 0) {
-        std::printf("[IOStream] LAYOUT ctl=%d checked=%d failed=0 att=%llu  "
+        printf("[IOStream] LAYOUT ctl=%d checked=%d failed=0 att=%llu  "
                     "control NOT CAUGHT\n", g_ctl, g_checked, (unsigned long long)att);
     } else if (att == 0) {
-        std::printf("[IOStream] LAYOUT ctl=%d checked=%d failed=%d att=0  "
+        printf("[IOStream] LAYOUT ctl=%d checked=%d failed=%d att=0  "
                     "CAUGHT BUT NOT VIA ITS OWN MECHANISM -- NOT BANKED\n",
                     g_ctl, g_checked, g_failed);
     } else {
-        std::printf("[IOStream] LAYOUT ctl=%d checked=%d failed=%d att=%llu  "
+        printf("[IOStream] LAYOUT ctl=%d checked=%d failed=%d att=%llu  "
                     "control CAUGHT\n", g_ctl, g_checked, g_failed,
                     (unsigned long long)att);
     }

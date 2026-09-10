@@ -486,7 +486,7 @@ extern "C" External* RtObject_External_Load(const Filename* path, External* exis
 }
 
 void DumpLoadCounters() {
-    std::printf("[ExtLoad] calls=%llu openFileFail=%llu openCompFail=%llu nullSer=%llu "
+    printf("[ExtLoad] calls=%llu openFileFail=%llu openCompFail=%llu nullSer=%llu "
                 "badMagic=%llu created=%llu reused=%llu notExternal=%llu badVer=%llu "
                 "sized=%llu deps=%llu serialized=%llu committed=%llu retNull=%llu\n",
                 (unsigned long long)g_lc.calls,
@@ -516,7 +516,7 @@ int RtObjectExternalLoadRegister() {
                           (void*)&RtObject::RtObject_External_Load); ++n;
     RegisterRuntimeAddr(0x1800bc620, (void*)&RtObject::RtObject_External_Load);
 
-    std::printf("[RtPort]   Object::External::Load "
+    printf("[RtPort]   Object::External::Load "
                 "(wave 11f lane IOSTREAM): %d export registered\n", n);
     std::atexit(&RtObject::DumpLoadCounters);
     return n;

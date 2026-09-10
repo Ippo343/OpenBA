@@ -378,7 +378,7 @@ extern "C" bool RtObject_External_SaveText(External* self, const Filename* path,
 }
 
 void DumpSaveTextCounters() {
-    std::printf("[ExtSaveText] calls=%llu typeFound=%llu typeMissing=%llu "
+    printf("[ExtSaveText] calls=%llu typeFound=%llu typeMissing=%llu "
                 "createFailed=%llu serialized=%llu serializeTrue=%llu bomWritten=%llu\n",
                 (unsigned long long)g_st.calls,
                 (unsigned long long)g_st.typeFound,
@@ -400,7 +400,7 @@ int RtObjectExternalSaveTextRegister() {
                           (void*)&RtObject::RtObject_External_SaveText); ++n;
     RegisterRuntimeAddr(0x1800bb9d0, (void*)&RtObject::RtObject_External_SaveText);
 
-    std::printf("[RtPort]   Object::External::SaveText "
+    printf("[RtPort]   Object::External::SaveText "
                 "(wave 11f lane IOSTREAM): %d export registered\n", n);
     std::atexit(&RtObject::DumpSaveTextCounters);
     return n;

@@ -200,7 +200,7 @@ bool FakeSerialize(void* /*self*/, void* stream) {
 // tail is filled with a trap so a dispatch this probe did not predict dies
 // loudly instead of running into whatever follows in .rdata.
 void FakeTrap() {
-    std::printf("[SaveTextProbe] FATAL: the subject's vtable was dispatched at a "
+    printf("[SaveTextProbe] FATAL: the subject's vtable was dispatched at a "
                 "slot SaveText is not supposed to touch\n");
     std::abort();
 }
@@ -228,14 +228,14 @@ void Check(bool ok, const char* what, const char* got, const char* want) {
     ++g_checked;
     if (!ok) {
         ++g_failed;
-        std::printf("[SaveTextProbe]   FAIL %-34s ours=%s theirs=%s\n", what, got, want);
+        printf("[SaveTextProbe]   FAIL %-34s ours=%s theirs=%s\n", what, got, want);
     }
 }
 void CheckI(bool ok, const char* what, long long got, long long want) {
     ++g_checked;
     if (!ok) {
         ++g_failed;
-        std::printf("[SaveTextProbe]   FAIL %-34s ours=%lld theirs=%lld\n", what, got, want);
+        printf("[SaveTextProbe]   FAIL %-34s ours=%lld theirs=%lld\n", what, got, want);
     }
 }
 
@@ -272,11 +272,11 @@ void RtObjectSaveTextProbeStep(External* liveSubject) {
     if (theirs == nullptr) {
         // A name the DLL does not contain resolves NULL SILENTLY
         // (reference_resolveexport_phantom_names.md).
-        std::printf("[SaveTextProbe] FATAL phantom export name: %s\n", kSaveText);
+        printf("[SaveTextProbe] FATAL phantom export name: %s\n", kSaveText);
         return;
     }
 
-    std::printf("[SaveTextProbe] ctl=%d typeId=0x%08x -- ours vs the shipped DLL\n",
+    printf("[SaveTextProbe] ctl=%d typeId=0x%08x -- ours vs the shipped DLL\n",
                 g_stCtl, typeId);
 
     // ---- the REAL-object reproduction of the retail fault ------------------
@@ -286,12 +286,12 @@ void RtObjectSaveTextProbeStep(External* liveSubject) {
             Filename n{}; n.data = nullptr;
             RtSystem::RtSystem_String_Set(reinterpret_cast<String*>(&p), kTheirsPath);
             RtSystem::RtSystem_String_Set(reinterpret_cast<String*>(&n), "savetext_probe");
-            std::printf("[SaveTextProbe] REAL-object mode: calling the SHIPPED export on a "
+            printf("[SaveTextProbe] REAL-object mode: calling the SHIPPED export on a "
                         "live External. It is expected to fault in the DLL at "
                         "?Serialize@StringTable@UI@@+0x53 -- see this file's header.\n");
             std::fflush(stdout);
             (void)theirs(liveSubject, &p, &n);
-            std::printf("[SaveTextProbe] REAL-object mode: it RETURNED. That contradicts "
+            printf("[SaveTextProbe] REAL-object mode: it RETURNED. That contradicts "
                         "this file's header and must be investigated.\n");
             std::fflush(stdout);
             return;
@@ -314,11 +314,11 @@ void RtObjectSaveTextProbeStep(External* liveSubject) {
     // THEIRS FIRST, deliberately: if this half ever faults again, the log line
     // above it says which side we were in before anything of ours had run.
     g_side = 0;
-    std::printf("[SaveTextProbe]   THEIRS...\n"); std::fflush(stdout);
+    printf("[SaveTextProbe]   THEIRS...\n"); std::fflush(stdout);
     const bool rTheirs = theirs(reinterpret_cast<External*>(&g_fake), &pathTheirs, &objName);
 
     g_side = 1;
-    std::printf("[SaveTextProbe]   OURS...\n"); std::fflush(stdout);
+    printf("[SaveTextProbe]   OURS...\n"); std::fflush(stdout);
     const bool rOurs = RtObject_External_SaveText(
         reinterpret_cast<External*>(&g_fake), &pathOurs, &objName);
 
@@ -375,17 +375,17 @@ void RtObjectSaveTextProbeStep(External* liveSubject) {
 
     if (nO != nT) {
         ++g_checked; ++g_failed;
-        std::printf("[SaveTextProbe]   FAIL file SIZE ours=%ld theirs=%ld\n", nO, nT);
+        printf("[SaveTextProbe]   FAIL file SIZE ours=%ld theirs=%ld\n", nO, nT);
         // NAME THE DIFFERENCE, do not just count it. A control that catches has
         // to be shown to catch VIA THE MECHANISM IT NAMES, and for control 3
         // that means the extra bytes are the UTF-8 byte-order mark and not
         // three bytes of anything else. Printing the head of each file is what
         // turns "it grew by 3" into evidence about the transcription.
-        std::printf("[SaveTextProbe]        ours head:");
-        for (long i = 0; i < nO && i < 6; ++i) std::printf(" %02x", bufO[i]);
-        std::printf("\n[SaveTextProbe]        theirs head:");
-        for (long i = 0; i < nT && i < 6; ++i) std::printf(" %02x", bufT[i]);
-        std::printf("\n");
+        printf("[SaveTextProbe]        ours head:");
+        for (long i = 0; i < nO && i < 6; ++i) printf(" %02x", bufO[i]);
+        printf("\n[SaveTextProbe]        theirs head:");
+        for (long i = 0; i < nT && i < 6; ++i) printf(" %02x", bufT[i]);
+        printf("\n");
     } else if (nO > 0) {
         ++g_checked;
         g_bytes += static_cast<uint64_t>(nO);
@@ -393,7 +393,7 @@ void RtObjectSaveTextProbeStep(External* liveSubject) {
             ++g_failed;
             long at = 0;
             while (at < nO && bufO[at] == bufT[at]) ++at;
-            std::printf("[SaveTextProbe]   FAIL file BYTES differ at %ld of %ld "
+            printf("[SaveTextProbe]   FAIL file BYTES differ at %ld of %ld "
                         "(ours=0x%02x theirs=0x%02x)\n",
                         at, nO, bufO[at], bufT[at]);
         }
@@ -413,7 +413,7 @@ void RtObjectSaveTextProbeStep(External* liveSubject) {
     // sat two lines above. A verdict line that contradicts the failures printed
     // above it is worse than no verdict line.
     if (g_failed == 0 && (g_bytes == 0 || O.serCalls == 0 || T.serCalls == 0)) {
-        std::printf("[SaveTextProbe] VERDICT ctl=%d checked=%d failed=%d bytes=%llu "
+        printf("[SaveTextProbe] VERDICT ctl=%d checked=%d failed=%d bytes=%llu "
                     "serCalls=%d/%d -- VACUOUS: %s\n",
                     g_stCtl, g_checked, g_failed, (unsigned long long)g_bytes,
                     O.serCalls, T.serCalls,
@@ -421,20 +421,20 @@ void RtObjectSaveTextProbeStep(External* liveSubject) {
                         ? "a side never reached Serialize"
                         : "no file bytes were compared");
     } else if (g_stCtl == 0) {
-        std::printf("[SaveTextProbe] VERDICT ctl=0 checked=%d failed=%d bytes=%llu "
+        printf("[SaveTextProbe] VERDICT ctl=0 checked=%d failed=%d bytes=%llu "
                     "serCalls=%d/%d  %s\n",
                     g_checked, g_failed, (unsigned long long)g_bytes,
                     O.serCalls, T.serCalls, g_failed == 0 ? "PASS" : "*** MISMATCH ***");
     } else if (g_failed == 0) {
-        std::printf("[SaveTextProbe] VERDICT ctl=%d checked=%d failed=0 att=%llu  "
+        printf("[SaveTextProbe] VERDICT ctl=%d checked=%d failed=0 att=%llu  "
                     "control NOT CAUGHT\n", g_stCtl, g_checked,
                     (unsigned long long)g_stAtt);
     } else if (g_stAtt == 0) {
-        std::printf("[SaveTextProbe] VERDICT ctl=%d checked=%d failed=%d att=0  "
+        printf("[SaveTextProbe] VERDICT ctl=%d checked=%d failed=%d att=0  "
                     "CAUGHT BUT NOT VIA ITS OWN MECHANISM -- NOT BANKED\n",
                     g_stCtl, g_checked, g_failed);
     } else {
-        std::printf("[SaveTextProbe] VERDICT ctl=%d checked=%d failed=%d att=%llu  "
+        printf("[SaveTextProbe] VERDICT ctl=%d checked=%d failed=%d att=%llu  "
                     "control CAUGHT\n", g_stCtl, g_checked, g_failed,
                     (unsigned long long)g_stAtt);
     }

@@ -397,7 +397,7 @@ extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* ex
 }
 
 void DumpAddCounters() {
-    std::printf("[ExtAdd] calls=%llu insert=%llu hit=%llu "
+    printf("[ExtAdd] calls=%llu insert=%llu hit=%llu "
                 "(visited=%llu skipped=%llu) descL=%llu descR=%llu empty=%llu\n",
                 (unsigned long long)g_ac.calls,
                 (unsigned long long)g_ac.inserted,
@@ -420,7 +420,7 @@ int RtObjectExternalAddRegister() {
                           (void*)&RtObject::RtObject_ExternalFactory_Add); ++n;
     RegisterRuntimeAddr(0x1800be570, (void*)&RtObject::RtObject_ExternalFactory_Add);
 
-    std::printf("[RtPort]   Object::ExternalFactory::Add "
+    printf("[RtPort]   Object::ExternalFactory::Add "
                 "(wave 11f lane IOSTREAM): %d export registered\n", n);
 
     // WAS MISSING IN THE INHERITED DRAFT, AND IT WAS THE FILE'S OWN POSITIVE
