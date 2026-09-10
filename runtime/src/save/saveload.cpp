@@ -492,6 +492,53 @@ SaveInfo* RtSave_SaveLoad_GetSaveInfo(const SaveLoad* self, int index) {
 }
 
 // ============================================================================
+// Save::SaveLoad::GetAutoSaveName() const  retail 0x1800c1440   ordinal 2457
+// ?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ
+// ----------------------------------------------------------------------------
+// ABI: `?AV...@@` is a class returned BY VALUE, so unlike GetOperation this
+// DOES have a hidden return slot -- and `self` (RCX) is genuinely dead, not
+// merely unused-by-convention: retail never stores RCX to its home slot and
+// never reads it. Confirmed byte-identical in BOTH the profile build
+// (0x180090a90) and retail (0x1800c1440):
+//     MOV [RSP+0x10],RDX ; PUSH RBX ; SUB RSP,0x30    <- RDX = retslot, homed
+//     MOV RBX,RDX                                     <- kept across the call
+//     XOR EAX,EAX ; MOV [RDX],RAX                     <- ret->data = nullptr
+//     LEA RDX,[0x180155b30] ; MOV RCX,RBX              <- "Auto\0" literal
+//     CALL String::Set [0x1800c95d0]                   <- Set(ret, "Auto")
+//     MOV RAX,RBX ; RET                                 <- return ret
+// String::Set is already ported verbatim as RtSystem_String_Set
+// (runtime/src/system/string.cpp, same 0x1800c95d0 body), so this reduces to
+// zeroing the slot and calling it -- retail always returns the literal "Auto"
+// regardless of `self`.
+//
+// Oracle: FULL DIFF, RT_DIFF_SHADOW against a genuine second call into the
+// shipped export (not a self-check -- reference_shadow_marker_is_not_an_oracle.md),
+// same shape as RtSystem_String_Concat's diff above. The function takes no
+// meaningful input (every call is the same case), so the commit's input sweep
+// instead varies `self` -- nullptr, a stack-garbage pointer, and a live
+// SaveLoad -- to verify the "self is dead" claim rather than sweeping an
+// argument that does nothing.
+// ============================================================================
+String* RtSave_SaveLoad_GetAutoSaveName(const SaveLoad* self, String* ret) {
+    RT_DIFF_BEGIN("Save::SaveLoad::GetAutoSaveName");
+    ret->data = nullptr;
+    RtSystem::RtSystem_String_Set(ret, "Auto");
+    if (rt_diff_on__) {
+        using Fn = String* (*)(const SaveLoad*, String*);
+        String theirs{nullptr};
+        RT_ORIGINAL_ONCE(Fn, "?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ")(self, &theirs);
+        const bool same =
+            (ret->data == nullptr && theirs.data == nullptr) ||
+            (ret->data != nullptr && theirs.data != nullptr &&
+             RtSystem::RtString_StrCompare(ret->data, theirs.data) == 0);
+        RT_DIFF_SHADOW(same, ret->data ? ret->data : "(null)",
+                       theirs.data ? theirs.data : "(null)");
+        RtSystem::RtString_ReleaseInline(&theirs);
+    }
+    return ret;
+}
+
+// ============================================================================
 // Save::SaveLoad::GetSaveState()        retail 0x1800c3b50   ordinal 2891
 // ?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ
 // ----------------------------------------------------------------------------
@@ -1032,6 +1079,13 @@ int RtSaveLoadRegister() {
     RegisterRuntimeAddr(0x1800c1090, (void*)&RtSave_SaveLoad_CheckMod);
     RegisterRuntimeExport("?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ", (void*)&RtSave_SaveLoad_GetOperation); ++n;
     RegisterRuntimeAddr(0x1800c3c80, (void*)&RtSave_SaveLoad_GetOperation);
+    // Wave 14 lane AUTONAME. Registered both ways from the start (not a
+    // retrofit): saveload_update.cpp's UpdateSave/UpdateList already call
+    // this by NAME through RT_EXPORT_ONCE (:1159, :1753), so the address door
+    // closes the same silent-reversion class those two call sites would
+    // otherwise be exposed to if the export name were ever mistyped again.
+    RegisterRuntimeExport("?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ", (void*)&RtSave_SaveLoad_GetAutoSaveName); ++n;
+    RegisterRuntimeAddr(0x1800c1440, (void*)&RtSave_SaveLoad_GetAutoSaveName);
     RegisterRuntimeExport("?GetSaveCount@SaveLoad@Save@@QEBAHXZ", (void*)&RtSave_SaveLoad_GetSaveCount); ++n;
     RegisterRuntimeExport("?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z", (void*)&RtSave_SaveLoad_GetSaveInfo); ++n;
     RegisterRuntimeExport("?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ", (void*)&RtSave_SaveLoad_GetSaveState); ++n;
