@@ -513,3 +513,18 @@ docs/runtime_port/WAVE19_LANE_CSTREAM.md          this file
 switch and not folded into `BANISHED_RT_CSREAD`, because this is the half of the
 class that **produces** bytes: an A/B that could only move the read and write
 halves together could not attribute a corrupt save to either.
+
+### 9.1 This lane changes SAVE-WRITING behaviour today, not only at cutover
+
+`?Close@CompressedMemoryStream@` is already ported and already live
+(`compressedstream.cpp:429`), and it reaches `?Commit` through `RT_EXPORT_ONCE`.
+Until this lane, that door fell through to **the DLL's compressor**. It now
+resolves to ours, and `code/Game/Game/gameupdateloop_serialize.cpp` is on the
+game's real save path.
+
+So `BANISHED_RT_CSWRITE=1` (the default) means **every save this build writes is
+compressed by our `?Commit`, `?CompressWindow` and `?Write`.** That is the point
+of the lane, and it is also its whole risk. The kill switch exists for exactly
+this, and the oracle in §5 exists to make the default defensible rather than
+hopeful. **If §5.4 is empty, this file's own recommendation is to run with
+`BANISHED_RT_CSWRITE=0` until it is not.**
