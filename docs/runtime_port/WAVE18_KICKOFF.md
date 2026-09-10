@@ -211,7 +211,17 @@ Do the reading, the disassembly and the porting first; batch the runs.
 `WAVE18_VIDEO.md`'s headline is *"The wall: six functions"*. **It is nine.**
 
 Mechanism, measured at `dx11/src/devicedata.cpp:216-300`: `GetImports()` resolves
-a **40-entry** table and sets `g_imOk = false` if **any** entry is null.
+a **50-entry** table and sets `g_imOk = false` if **any** entry is null.
+
+> **CORRECTED 2026-09-10 by lane GATE: the table is 50 entries, not 40.** GFXIF §3
+> said 40 and *this section repeated it without checking* — the integrator
+> propagating an unverified number is the same failure this wave documents six
+> times over. Counted directly: 50 `{ (void**)&g_im.` table entries, and 50
+> `Imports` pointer fields, consistent with attempt 24 naming a null at field #28.
+> **No conclusion moves** — `g_imOk` is an AND over the table at any length — but
+> it is the **denominator of GATE's headline zero**, so every zero in that report
+> now carries one: 50/50 imports resolved and 50/50 struct fields non-null,
+> against 9 unresolved and 9 null in attempt 24.
 `EnumerateInterfaces` then does `if (!im) return Orig<...>(1)(self)`, and with the
 DLL absent that `Orig` is null — **that is the VCALL-of-0.** `AdjustDisplay`,
 `FindOrAddMode` and `GetDisplayMode` are entries in the same table, so `g_imOk`
@@ -487,3 +497,58 @@ can only report "no difference found."** The two are indistinguishable from the
 outside, and this project has repeatedly shipped the second while believing the
 first. Compare lane GFXIF's `dtorFree=0` on a 50-case, 0-mismatch, all-controls-
 caught run, and lane VDATA's `calls=0` refusal.
+
+### 6.18 GATE's re-score under §6.15 — H1 TRUE, H2 TRUE, and the rule was not stretched
+
+| line | verdict |
+|---|---|
+| **H1** — the wall moves off `DeviceData::EnumerateInterfaces` | **TRUE** |
+| **H2** — it does not follow that the boot completes | **TRUE** |
+| **distance travelled** (neither half's) | **+2 named `Engine::Startup` steps** |
+
+**H1 established by ADDRESS RANGE**, as §6.15 required — not by nearest preceding
+symbol and not from a crash-log summary field. The null call's return address
+`0x1402DEEF9` lies inside `RtEngine_Engine_Startup` `[0x1402DE782, 0x1402DF472)`
+at `+0x777`; `DeviceData_EnumerateInterfaces` occupies
+`[0x1403F632A, 0x1403F6E3C)`. No overlap, over 1 MB apart.
+
+**Both ambiguous shapes §6.15 said it could not pre-decide were checked, and
+neither applies**: `EnumerateInterfaces` has its own non-empty range in this
+binary, so it was not inlined into anything; and the complete stack
+(`Startup ← RunGameMain ← WinMain ← KERNEL32 ← ntdll`) has no DX11 frame at any
+depth. **The rule decided this cleanly. H1 did not need stretching and did not
+get any** — which is the outcome the strict reading was betting on.
+
+**H2 scored on its one question alone**: the boot did not complete — exit 3,
+`STATE=BOOTING`, `[BootState] RUNNING` never printed. The refutation of the
+*reasoning* GFXIF offered for H2 is recorded beside it and **marked as explicitly
+not part of the score.**
+
+### 6.19 GATE's own correction: its upper bound was 88, not 92
+
+Having found and sized one blind-spot class in `unsatisfied_export_scan.py`
+(named-constant registrations, 19 rows), GATE reported screen 1 as 92. **The tool
+had a second class it did not measure** — adjacent string literals split across
+source lines — accounting for 8 more departures, including
+`?PlayAnimation@MeshInstance@Graphics@@` at `runtime/src/graphics/mesh.cpp:1781`.
+Corrected: **111 − 27 = 88.**
+
+GATE's own framing, which is the sharpest thing in it: *"I nearly filed a set-diff
+finding off a one-line grep that missed a multi-line registration, and then
+reported a different tool's blind spot while carrying an unmeasured instance of
+the same class in my own number. The concatenation class was in front of me both
+times."*
+
+**Finding a blind-spot class does not mean you have found all of its instances —
+least of all the one in your own number.**
+
+### 6.20 The new wall is softer than it looks
+
+`?PlatformConfigure@Engine@1@` (`0x1800a1670`) is **documented at length in
+CLAUDE.md**: it opens the Win32 launcher dialog whenever the registry's
+`VideoSettings` bit says the previous run never finished `Engine::Startup`, and
+`HarnessGuardUnattendedBoot()` in `standalone/main.cpp` already deals with it —
+by clearing that bit, not by porting it. GATE's caution that it is *"one row, not
+one hour"* stands for the porting work, but the next lane inherits **a full
+behavioural description and an existing seam**, which `EnumerateInterfaces` never
+had.
