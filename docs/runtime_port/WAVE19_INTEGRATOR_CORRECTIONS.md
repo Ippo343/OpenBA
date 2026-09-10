@@ -329,3 +329,89 @@ for a reason that is pure progress.
 
 Expect the same from any future measurement cell, and do not let a growing lane
 size read as a lane falling behind.
+
+## C13. `?GetSource@Stream@IO@@` moves the identity by ZERO — the wave's own metric misread
+
+Found by lane IOBASE, **verified independently by the integrator before adoption**:
+
+```
+GetSource hits in runtime_census.py --namespace IO   : 0
+control  ?CreatePath@FileSystem@IO   (must be present): 1
+occurrences anywhere in the tree: standalone/rt_data_mint_tables.inc ONLY
+```
+
+`?GetSource@Stream@IO@@` appears in the census **neither as called nor as ported**.
+Its six `RT_MINT_NAMED` rows are **not a call door**. Therefore porting it enters
+as **+1 `called` and +1 `ported` simultaneously**, leaving `called - ported`
+unchanged, and it lands in the census's **"ports with no caller"** list.
+
+Phase 0c called it "the cheapest single action in IO's entire DATA set" and **I
+amplified that to two lanes without this qualification.** The phrase is right
+about cost and right about leverage. It is **wrong if read as an identity move**.
+Its whole value is as a prerequisite for four-to-six `??_7` rows reaching READY —
+and it is a **`??_7` row's PROMOTION** that adds +1 to `ported` against a `called`
+the mint file already contributed.
+
+### Why this one matters more than the arithmetic
+
+**The wave's success criterion is the identity, and here the identity is blind to
+real work.** A body that unblocks six rows scores zero. This is the mirror image
+of the ceiling trap in §0: there, the percentage moved without progress; here,
+progress moves without the metric. **Both failures come from scoring a number
+instead of naming what changed.**
+
+Operational rules, now issued to both affected lanes:
+- **Do not book a shared prerequisite as progress against the identity.** Book it
+  as *unblocking N rows*, and name which N.
+- It will report **`calls=0`** from any diff oracle. That is EXPECTED here, not a
+  red flag — but it means **the oracle cannot verify it**
+  (`reference_uncalled_port_is_not_verified.md`: a port with zero callers reports
+  clean). Verification needs a **synthesised** caller;
+  `reference_no_route_is_not_no_oracle.md` records a synthesised oracle for a
+  provably-unreachable body finding a real defect — a missing third argument
+  writing caller garbage into a save. With a hidden return slot in play, that is
+  exactly the defect class here.
+
+### The body, disassembled by the integrator to settle a lane disagreement
+
+CSTREAM read 10 instructions, IOBASE read 11. Both are right — 10 plus the `ret`.
+A small discrepancy, checked rather than waved through, because this wave has
+already lost three figures to unchecked transmission. At `0x18000c6a0`:
+
+```
+mov  %rdx,0x10(%rsp)                 ; spill the retslot
+sub  $0x18,%rsp
+movq $0xfffffffffffffffe,0x8(%rsp)   ; SEH state = -2
+xor  %eax,%eax
+mov  %eax,(%rsp)                     ; SEH state var = 0   <-- NOT object state
+mov  %rax,(%rdx)                     ; THE payload: one qword zero via the retslot
+movl $0x1,(%rsp)                     ; SEH state var = 1   <-- NOT object state
+mov  %rdx,%rax                       ; return the retslot
+add  $0x18,%rsp
+ret
+```
+
+Both lanes read the semantics correctly: `String GetSource() const { return
+String(); }` — an 8-byte null through the **hidden return slot in RDX**. The point
+neither stated: the two `(%rsp)` writes are **compiler-generated SEH state, not
+object state**. A faithful port reproduces the qword at `[rdx]` and the RDX
+return, not the frame bookkeeping.
+
+### Arbitration outcome
+
+**Ownership STAYS with lane CSTREAM** (3 of the 5 live rows; class-family fit).
+IOBASE's counter-argument — that it is blocked and CSTREAM is not — was weighed
+and rejected on the evidence: **IOBASE's own distinct-body list holds 16 bodies**,
+and GetSource gates the *promotion* of two DATA rows, not the writing of anything
+else it owns. CSTREAM is required to land and register it early (by NAME **and**
+ADDRESS) and report the commit; IOBASE is told not to write a local copy, since a
+second registration of the same address is a **SHADOWED** slot where the later
+binding wins and the checked line becomes dead code. Both lanes were given the
+reversal condition explicitly, so the decision is falsifiable rather than final.
+
+### One framing worth keeping
+
+IOBASE stated its scope as **16 distinct bodies, of which the identity can move by
+at most +10**. That is the right way to say it. **Bodies and identity are
+different currencies**, and most of this wave's confusion — C7, C11, C12 and this
+entry — has come from quoting one as the other.
