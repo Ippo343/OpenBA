@@ -183,6 +183,23 @@ arrays to `?Close@CompressedStream@IO@@UEAAXXZ` **(0x1800aa8d0)**.
 **That address contains no walk.** It is five instructions:
 `CMP dword [RCX+0x48],0 / JLE out / CMP dword [RCX+8],1 / JZ 0x1800a9ee0 / RET`.
 
+**Confirmed a second way, from the raw image rather than from Ghidra's function
+boundaries**, because "Ghidra split the function" is exactly the explanation that
+would make this correction wrong. `read_memory` at `0x1800aa8b6`:
+
+```
+1800aa8b6  f3 c3                    REP RET          <- ?GetSize ends
+1800aa8c0  c2 00 00                 RET 0            <- ?PreCommit@CompressedStream, ENTIRE
+1800aa8d0  83 79 48 00              CMP [RCX+0x48],0
+           7e 0a                    JLE +10
+           83 79 08 01              CMP [RCX+0x08],1
+           0f 84 00 f6 ff ff        JZ  -0xA00  =  0x1800a9ee0  (?Commit)
+1800aa8e0  f3 c3                    REP RET
+```
+
+Twelve bytes of body between two `0xcc` pads. There is no walk there and there
+is no room for one.
+
 The walks are real and the array layouts are right — they are in `?Release@`
 (`0x1800aa100`) and `?Commit@` (`0x1800a9ee0`), both of which Close reaches. The
 FACT stands; the CITED ADDRESS is wrong. Recorded in the source rather than
