@@ -468,11 +468,6 @@ RT_MINT_TRAP(46,22)
 RT_MINT_TRAP(46,23)
 RT_MINT_TRAP(46,24)
 RT_MINT_TRAP(46,25)
-RT_MINT_TRAP(46,26)
-RT_MINT_TRAP(46,27)
-RT_MINT_TRAP(46,28)
-RT_MINT_TRAP(46,29)
-RT_MINT_TRAP(46,30)
 RT_MINT_TRAP(47,0)
 RT_MINT_TRAP(47,1)
 RT_MINT_TRAP(47,2)
@@ -1302,7 +1297,7 @@ static const RtMintVSlot kVSlots45[] = {
 static void* kVTable45[3];
 static const RtMintTrapFn kVTraps45[] = { &RtMintTrapStub_45_0, &RtMintTrapStub_45_1, &RtMintTrapStub_45_2 };
 
-// ??_7ReaderWriter@IO@@6B@  DLL 0x1801553b0  31 slots  [ctor-stamped-neighbour: ??_7ReaderWriter@IO@@6B@. adjacent-export bounds it at the next export ??_7BinaryFileStream@ (0x1801554d0) = 36 slots, but the 5-slot UNEXPORTED IO::Encoding table at 0x1801554a8 sits in between -- the same table EXTRA_VTABLES_BY_ADDR already mints by address, so the generator was emitting those 5 bodies TWICE. Bytes: 0x1801554a0 is the last _purecall, 0x1801554a8 is 0x1800a81e0 (the Encoding slot 0). Stamped by ??0BinaryFileStream at 0x1800a82bb, LEA RAX,[0x1801554a8] -> MOV [RSI],RAX into the 8-byte allocation from 0x1800a82a5.]
+// ??_7ReaderWriter@IO@@6B@  DLL 0x1801553b0  26 slots  [ctor-stamped-neighbour: ??_7ReaderWriter@IO@@6B@. adjacent-export bounds it at the next export ??_7BinaryFileStream@ (0x1801554d0) = 36 slots. TWO unexported tables sit in between, so 36 swallows BOTH and the intermediate value 31 swallows one: 0x180155480 (5 slots, all _purecall) and 0x1801554a8 (5 slots, the IO::Encoding EXTRA_VTABLES_BY_ADDR already mints -- those bodies were being emitted TWICE). Each has its own leaf constructor, and the two sit adjacent in .text with clean ret+int3 boundaries: | 180023e00  48 8d 05 a1 16 13 00  LEA RAX,[0x1801554a8] | 180023e07  48 89 01 48 8b c1 c3  MOV [RCX],RAX; MOV RAX,RCX; RET | 180023e10  48 8d 05 69 16 13 00  LEA RAX,[0x180155480] | 180023e17  48 89 01 48 8b c1 c3  MOV [RCX],RAX; MOV RAX,RCX; RET | Both tables end in _purecall and so does ReaderWriter, so the BYTES CANNOT distinguish 26 from 31 from 36 -- only the constructors can. 26 corroborated three ways: lane IOBASE derived it independently, the integrator confirmed 0 .pdata coverage of 0x180023e10 with a working positive control, and lane MINT's own .text LEA scan reported it before being wrongly overruled by hand.]
 static const RtMintVSlot kVSlots46[] = {
     { nullptr, 0x180023bd0ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
@@ -1330,14 +1325,9 @@ static const RtMintVSlot kVSlots46[] = {
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
-static void* kVTable46[31];
-static const RtMintTrapFn kVTraps46[] = { &RtMintTrapStub_46_0, &RtMintTrapStub_46_1, &RtMintTrapStub_46_2, &RtMintTrapStub_46_3, &RtMintTrapStub_46_4, &RtMintTrapStub_46_5, &RtMintTrapStub_46_6, &RtMintTrapStub_46_7, &RtMintTrapStub_46_8, &RtMintTrapStub_46_9, &RtMintTrapStub_46_10, &RtMintTrapStub_46_11, &RtMintTrapStub_46_12, &RtMintTrapStub_46_13, &RtMintTrapStub_46_14, &RtMintTrapStub_46_15, &RtMintTrapStub_46_16, &RtMintTrapStub_46_17, &RtMintTrapStub_46_18, &RtMintTrapStub_46_19, &RtMintTrapStub_46_20, &RtMintTrapStub_46_21, &RtMintTrapStub_46_22, &RtMintTrapStub_46_23, &RtMintTrapStub_46_24, &RtMintTrapStub_46_25, &RtMintTrapStub_46_26, &RtMintTrapStub_46_27, &RtMintTrapStub_46_28, &RtMintTrapStub_46_29, &RtMintTrapStub_46_30 };
+static void* kVTable46[26];
+static const RtMintTrapFn kVTraps46[] = { &RtMintTrapStub_46_0, &RtMintTrapStub_46_1, &RtMintTrapStub_46_2, &RtMintTrapStub_46_3, &RtMintTrapStub_46_4, &RtMintTrapStub_46_5, &RtMintTrapStub_46_6, &RtMintTrapStub_46_7, &RtMintTrapStub_46_8, &RtMintTrapStub_46_9, &RtMintTrapStub_46_10, &RtMintTrapStub_46_11, &RtMintTrapStub_46_12, &RtMintTrapStub_46_13, &RtMintTrapStub_46_14, &RtMintTrapStub_46_15, &RtMintTrapStub_46_16, &RtMintTrapStub_46_17, &RtMintTrapStub_46_18, &RtMintTrapStub_46_19, &RtMintTrapStub_46_20, &RtMintTrapStub_46_21, &RtMintTrapStub_46_22, &RtMintTrapStub_46_23, &RtMintTrapStub_46_24, &RtMintTrapStub_46_25 };
 
 // ??_7RenderBufferData@Video@@6B@  DLL 0x180158a28  4 slots  [adjacent-export:??_7VideoProgramData@Video@@6B@]
 static const RtMintVSlot kVSlots47[] = {
@@ -1593,7 +1583,7 @@ static RtMintVtable kMintVtables[] = {
     { "??_7ParticleInstance@Graphics@@6B@", 0x1801550e0ull, 10, kVSlots43, kVTable43, kVTraps43, "adjacent-export:??_7Particle@Graphics@@6B@" },
     { "??_7ParticleSystemInstance@Graphics@@6B@", 0x180155040ull, 10, kVSlots44, kVTable44, kVTraps44, "adjacent-export:??_7ParticleSystem@Graphics@@6B@" },
     { "??_7PixelProgramData@Video@@6B@", 0x180158a78ull, 3, kVSlots45, kVTable45, kVTraps45, "adjacent-export:??_7VertexProgramData@Video@@6B@" },
-    { "??_7ReaderWriter@IO@@6B@", 0x1801553b0ull, 31, kVSlots46, kVTable46, kVTraps46, "ctor-stamped-neighbour: ??_7ReaderWriter@IO@@6B@. adjacent-export bounds it at the next export ??_7BinaryFileStream@ (0x1801554d0) = 36 slots, but the 5-slot UNEXPORTED IO::Encoding table at 0x1801554a8 sits in between -- the same table EXTRA_VTABLES_BY_ADDR already mints by address, so the generator was emitting those 5 bodies TWICE. Bytes: 0x1801554a0 is the last _purecall, 0x1801554a8 is 0x1800a81e0 (the Encoding slot 0). Stamped by ??0BinaryFileStream at 0x1800a82bb, LEA RAX,[0x1801554a8] -> MOV [RSI],RAX into the 8-byte allocation from 0x1800a82a5." },
+    { "??_7ReaderWriter@IO@@6B@", 0x1801553b0ull, 26, kVSlots46, kVTable46, kVTraps46, "ctor-stamped-neighbour: ??_7ReaderWriter@IO@@6B@. adjacent-export bounds it at the next export ??_7BinaryFileStream@ (0x1801554d0) = 36 slots. TWO unexported tables sit in between, so 36 swallows BOTH and the intermediate value 31 swallows one: 0x180155480 (5 slots, all _purecall) and 0x1801554a8 (5 slots, the IO::Encoding EXTRA_VTABLES_BY_ADDR already mints -- those bodies were being emitted TWICE). Each has its own leaf constructor, and the two sit adjacent in .text with clean ret+int3 boundaries: | 180023e00  48 8d 05 a1 16 13 00  LEA RAX,[0x1801554a8] | 180023e07  48 89 01 48 8b c1 c3  MOV [RCX],RAX; MOV RAX,RCX; RET | 180023e10  48 8d 05 69 16 13 00  LEA RAX,[0x180155480] | 180023e17  48 89 01 48 8b c1 c3  MOV [RCX],RAX; MOV RAX,RCX; RET | Both tables end in _purecall and so does ReaderWriter, so the BYTES CANNOT distinguish 26 from 31 from 36 -- only the constructors can. 26 corroborated three ways: lane IOBASE derived it independently, the integrator confirmed 0 .pdata coverage of 0x180023e10 with a working positive control, and lane MINT's own .text LEA scan reported it before being wrongly overruled by hand." },
     { "??_7RenderBufferData@Video@@6B@", 0x180158a28ull, 4, kVSlots47, kVTable47, kVTraps47, "adjacent-export:??_7VideoProgramData@Video@@6B@" },
     { "??_7RenderStateData@Video@@6B@", 0x180158a60ull, 3, kVSlots48, kVTable48, kVTraps48, "adjacent-export:??_7PixelProgramData@Video@@6B@" },
     { "??_7SpriteSheet@UI@@6B@", 0x180154590ull, 9, kVSlots49, kVTable49, kVTraps49, "tail-not-a-pointer" },

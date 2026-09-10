@@ -288,26 +288,45 @@ EXTRA_VTABLES = {
 # more direct bound than adjacency-to-the-next-export. That is the evidence for
 # both entries here; each was read as DISASSEMBLY, not decompiled C.
 #
-# THIS IS DELIBERATELY A HAND-CHECKED TABLE AND NOT AN AUTOMATIC SCAN. Lane MINT
-# implemented the obvious automation -- scan .text for RIP-relative LEAs and
-# bound each row by the first one landing inside it -- and it was UNSOUND: of
-# its two findings one was real (TextFileStream) and one was a decoding artefact
-# (a byte sequence inside another instruction that looked like
-# `LEA r64,[rip+disp32]` targeting 0x180155480, an address Ghidra finds NO
-# reference to and which sits mid-run of _purecall inside ReaderWriter). Acting
-# on it would have cut ReaderWriter to 26 slots, SILENTLY DELETING 5 real ones.
-# An over-sized row is a visible surplus; an under-sized row loses slots with no
-# symptom. Only add an entry here with the constructor site that proves it.
+# THIS IS DELIBERATELY A HAND-CHECKED TABLE AND NOT AN AUTOMATIC SCAN -- but the
+# reason first written here was WRONG and the correction matters more than the
+# rule. Lane MINT implemented the obvious automation (scan .text for
+# RIP-relative LEAs, bound each row by the first target landing inside it), got
+# TWO findings, and dismissed one -- 0x180155480 inside ReaderWriter -- as a
+# decoding artefact. It was not. It is a genuine leaf constructor at
+# 0x180023e10, ret+int3 aligned, byte-verified above. THE SCAN SCORED 2 OF 2.
+#
+# It was dismissed on two bad grounds, both worth naming because they are
+# generic: (1) Ghidra reported "no references" to 0x180155480, which meant NOT
+# ANALYSED there, not ABSENT -- a silence read as a negative
+# (reference_a_screen_that_cannot_name_its_subject); and (2) "it sits mid-run of
+# _purecall INSIDE ReaderWriter", which assumes ReaderWriter's extent, the very
+# thing in dispute. Both tables and ReaderWriter itself end in _purecall, so the
+# BYTES CANNOT settle this -- only the constructors can.
+#
+# The rule stands anyway, on the asymmetry alone and not on a measured false
+# positive: an over-sized row is a visible surplus, an under-sized row loses
+# slots with NO symptom, so a bound that DELETES slots must carry a named
+# constructor a human checked. Only add an entry here with that site.
 VTABLE_EXTENT = {
-    0x1801553b0: (31,
+    0x1801553b0: (26,
         "??_7ReaderWriter@IO@@6B@. adjacent-export bounds it at the next export "
-        "??_7BinaryFileStream@ (0x1801554d0) = 36 slots, but the 5-slot "
-        "UNEXPORTED IO::Encoding table at 0x1801554a8 sits in between -- the same "
-        "table EXTRA_VTABLES_BY_ADDR already mints by address, so the generator "
-        "was emitting those 5 bodies TWICE. Bytes: 0x1801554a0 is the last "
-        "_purecall, 0x1801554a8 is 0x1800a81e0 (the Encoding slot 0). Stamped by "
-        "??0BinaryFileStream at 0x1800a82bb, LEA RAX,[0x1801554a8] -> MOV [RSI],RAX "
-        "into the 8-byte allocation from 0x1800a82a5."),
+        "??_7BinaryFileStream@ (0x1801554d0) = 36 slots. TWO unexported tables sit "
+        "in between, so 36 swallows BOTH and the intermediate value 31 swallows "
+        "one: 0x180155480 (5 slots, all _purecall) and 0x1801554a8 (5 slots, the "
+        "IO::Encoding EXTRA_VTABLES_BY_ADDR already mints -- those bodies were "
+        "being emitted TWICE). Each has its own leaf constructor, and the two sit "
+        "adjacent in .text with clean ret+int3 boundaries:\n"
+        "    180023e00  48 8d 05 a1 16 13 00  LEA RAX,[0x1801554a8]\n"
+        "    180023e07  48 89 01 48 8b c1 c3  MOV [RCX],RAX; MOV RAX,RCX; RET\n"
+        "    180023e10  48 8d 05 69 16 13 00  LEA RAX,[0x180155480]\n"
+        "    180023e17  48 89 01 48 8b c1 c3  MOV [RCX],RAX; MOV RAX,RCX; RET\n"
+        "Both tables end in _purecall and so does ReaderWriter, so the BYTES "
+        "CANNOT distinguish 26 from 31 from 36 -- only the constructors can. "
+        "26 corroborated three ways: lane IOBASE derived it independently, the "
+        "integrator confirmed 0 .pdata coverage of 0x180023e10 with a working "
+        "positive control, and lane MINT's own .text LEA scan reported it before "
+        "being wrongly overruled by hand."),
     0x180155980: (10,
         "??_7TextFileStream@IO@@6B@. adjacent-export bounds it at "
         "??_7VisitorStream@ (0x180155a20) = 20 slots; the real table is 10, and "
@@ -507,7 +526,13 @@ def run_census(csv_path):
 def cstr(s):
     if s is None:
         return "nullptr"
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    # Newlines matter: a note is emitted as a single C string literal, and a raw
+    # newline in one is a compile error, not a wrapped line. Wave 19 lane MINT
+    # added a multi-line VTABLE_EXTENT proof and broke the build with
+    # "missing terminating \" character" -- caught by compiling, which is why
+    # compiling happens without the game-dir lock.
+    return ('"' + s.replace("\\", "\\\\").replace('"', '\\"')
+            .replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t") + '"')
 
 
 def main():
@@ -733,7 +758,12 @@ def main():
                               f"or the table moved")
                 continue
             slots = slots[:want]
-            proof_override = "ctor-stamped-neighbour: " + why
+            # Collapse to ONE line here, at the source. The proof is emitted
+            # BOTH as a // comment header and as a C string literal, and a raw
+            # newline breaks each in its own way -- escaping it in cstr() alone
+            # fixed the literal and left the comment broken.
+            proof_override = "ctor-stamped-neighbour: " + " | ".join(
+                ln.strip() for ln in why.splitlines() if ln.strip())
         else:
             proof_override = None
         n = len(slots)
