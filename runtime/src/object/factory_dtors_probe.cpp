@@ -438,6 +438,31 @@ Cell RunPair(const char* name, Build build, TheirFn theirs, OurFn ours) {
 void RtObjectFactoryDtorsProbe() {
     if (!ProbeOptIn("BANISHED_RT_FACTORYDTOR_PROBE")) return;
 
+    // CALLED TWICE ON PURPOSE: once from RtObjectPortInit (early, before the
+    // window opens) and once from the exit summary. The early call is where a
+    // boot-only run can see it, but it runs before some of the engine is up, so
+    // if the DLL allocator singleton is not readable yet every cell would
+    // report SKIPPED and the run would be wasted. The late call is the safety
+    // net. Whichever one produces a real verdict first claims the slot; the
+    // other returns immediately.
+    static bool s_reported = false;
+    if (s_reported) return;
+
+    {
+        // Refuse to report at all if the arena is not readable — a probe that
+        // cannot run screen 2 would be a bytes-only oracle, and screen 1 is
+        // STRUCTURALLY BLIND to the defect class this row set is about.
+        const AllocSnap probe = Snapshot();
+        if (!probe.valid) {
+            printf("[FactoryDtorProbe] deferred — the DLL allocator singleton "
+                   "at 0x1801fc718 is not readable yet, so screen 2 would be "
+                   "vacuous and screen 1 alone cannot see the leak class. Will "
+                   "retry from the exit summary.\n");
+            return;
+        }
+    }
+    s_reported = true;
+
     printf("[FactoryDtorProbe] ==== synthesised differential for the three "
            "Object factory destructors ====\n");
     printf("[FactoryDtorProbe] theirs = the SHIPPED body via RtOriginal (never "

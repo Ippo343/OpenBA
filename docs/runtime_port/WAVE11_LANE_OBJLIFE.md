@@ -145,7 +145,57 @@ External operands resolve identically on both sides:
 It is registered in `array.cpp` (the family's owner), not in this lane's file,
 so the family keeps one owner and no registration is shadowed.
 
-### 3.3 The oracle — and why `calls=0` here is not a finding
+### 3.3 The five helper bodies are SHARED instantiations
+
+Scanning every `E8`/`E9` rel32 in `.text` and resolving its target gives the
+in-DLL caller count for each body this lane registered:
+
+| address | body | in-DLL callers |
+|---|---|---|
+| 0x180008110 | `~Factory`'s real body | 9 |
+| 0x180008250 | TypeNode subtree free | 4 (2 are its own recursion) |
+| 0x18002fb70 | J1 `~Array<T>` | 5 |
+| 0x18002ebf0 | `_references` subtree free | 11 |
+| 0x18002eea0 | `_resources` subtree free | 10 |
+| 0x18002e9e0 | `~Array<PathStackEntry>` | 4 |
+| 0x18002e8d0 | PathStackEntry destroy-range | 3 |
+
+Two consequences, and it is worth being precise about which is which:
+
+* **None of those callers is affected by our registration.** They are in-DLL
+  `rel32` calls, and *we intercept only at doors* — a `rel32` is not one. So
+  registering these addresses changes nothing for the DLL's own behaviour with
+  the DLL present.
+* **But the ports are correct for all of them by construction.** MSVC emitted
+  ONE body per shape and reused it, which is the same argument the J1 family
+  rests on: a body that frees a node does not need to know what type the node
+  holds, only where its children and its one destructible slot are. So these
+  registrations are worth more than the three rows suggest — at cutover the
+  10-and-11-caller bodies will be needed by whatever ports those other call
+  sites' owners eventually.
+
+**Which of the four callees these bodies reach are ours today**, since a port
+that reaches the DLL for half its work is worth saying out loud:
+
+| callee | owner | ours by default? |
+|---|---|---|
+| 0x1800093e0 `~Array<T*>` | `avl_trees.cpp` | **yes** — ungated |
+| 0x18001c750 `~Array<T>` | `array.cpp` (J1) | **yes** — `BANISHED_RT_COLLECTION` is a kill switch, default-on |
+| 0x18002fb70 `~Array<T>` | `array.cpp` (J1, added here) | **yes** — same switch |
+| 0x180009c30 `SetNodeFree` | `allocator.cpp` | **no** — the allocator wave is opt-in (`BANISHED_RT_ALLOC=1`), so with the DLL present the node free lands in the DLL |
+
+That last row is not a defect: the address door is port-aware, so arming the
+allocator moves it without touching this lane, and at cutover the allocator is
+armed by necessity (there is no DLL to fall through to). It is recorded because
+"our port frees the nodes" is only true today in the sense that *our port asks
+the right function to*.
+
+The one thing the shared-body fact does **not** license is merging 0x18002ebf0 and
+0x18002eea0, or either of them with `avl_trees.cpp`'s 0x180008340. Retail kept
+three separate bodies because the shapes differ (§3.1), and the shared-body
+argument applies *within* a shape, never across.
+
+### 3.4 The oracle — and why `calls=0` here is not a finding
 
 **These three rows have exactly one caller in the entire tree —
 `RtEngine_Engine_Shutdown` — and that body itself has `calls=0`.** The full
@@ -215,6 +265,16 @@ from the other's.
   same blocks in a different order would pass.
 * Recursion depth here is 3; retail's would be ~20. Nothing about stack depth
   is tested.
+* Screen 2 reads a **process-wide** counter, so any other allocation between
+  the two snapshots is noise. The probe defends against reading noise as a
+  finding by printing an `expected=` column it computed from the builder — a
+  cell where `theirs == ours == expected` cannot be a lucky cancellation of
+  noise, and a cell where they differ from `expected` in the same direction is
+  noise rather than a divergence. Read all three numbers, never just the verdict.
+* The probe **refuses to report at all** if the allocator singleton is not
+  readable, rather than falling back to a bytes-only run. A screen-1-only
+  verdict would be a green board over exactly the defect class this row set is
+  about, which is worse than no verdict.
 
 ---
 
