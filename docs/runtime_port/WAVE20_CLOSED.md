@@ -197,6 +197,22 @@ putting unpromoted slots in a **backlog** rather than the columns: *when an inst
 cannot see something, it says so in the direction that costs you, not the one that
 flatters you.*
 
+### 5.7 AN EXPIRY CLAUSE NEEDS AN ADDRESSEE, not just a condition
+
+**Wave 19's standing answer was "require an expiry clause on every stated blocker at seal
+time." Lane DOORS found the gap in it**, about its own tag: `??_7ReaderWriter@`'s `?`
+numerator expires when *"the next lane that counts ported slots on this row"* does so.
+
+> **If nothing ever routes a lane at that row, the clause NEVER FIRES and the `?` becomes
+> permanent.**
+
+An expiry clause with no addressee is **a TODO with nobody's name on it** — it satisfies
+the seal-time checklist and then waits forever. It is still strictly better than the
+wrong `2` it replaced. **The refinement: an expiry must name WHO or WHAT will evaluate
+it, not only the condition under which it lapses** — and if the answer is "whoever
+happens to pass by", it belongs in the next wave's input list, which is the only thing
+anyone is guaranteed to read. Hence §8 items 11 and 12.
+
 ### 5.6 A number you cannot measure gets a `?` and an expiry, not a guess
 
 `??_7ReaderWriter@`'s tag read `2/36`. The **36** is corrected to 26 by three independent
@@ -215,9 +231,22 @@ claims**, and normalising rewrites eighteen written verdicts by a hand that meas
 none of them. It would also **destroy the evidence that a split ever existed**, and
 convert a **known, declared inconsistency into an invisible, assumed one** — strictly
 worse, because the invisible kind cannot be checked. The parameter is **printed beside
-the verdict** instead. Going forward a new tag must **declare its convention**;
-`unpromotable_slot_check.py` is the place to enforce it. Normalise a tag only when the
-lane that owns it re-measures it, one at a time.
+the verdict** instead. Normalise a tag only when the lane that owns it re-measures it,
+one at a time.
+
+> **THE ENFORCEMENT IS NOT IMPLEMENTED. This sentence originally read
+> "`unpromotable_slot_check.py` is the place to enforce it", which is a PRESCRIPTION and
+> was correctable as a COMPLETION.** Lane DOORS flagged it against its own lane's
+> credit. As merged, that tool **accepts either convention** and reports only rows
+> fitting neither; **it cannot tell a tag that declares its convention from one that does
+> not.** The doctrine currently lives as PROSE in `reg_mint_promoted.cpp`'s comment block
+> and `WAVE20_LANE_DOORS.md` §5 — **the exact decay class this lane existed to fix.**
+> Whoever picks it up is **adding a new check, not turning one on.** It is Wave 21 item
+> 11.
+
+That is the recorded trap *"a wave doc naming the fix in the past tense reads as proof it
+landed"*, committed by the integrator inside the close that catalogues it — and caught by
+a sealed lane re-reading a ruling written in its favour.
 
 **6.2 Post-report tranches are permitted and were used twice.** Sealing forbids
 **altering** a reported result, not **adding a marked one**. Both tranches (EXTENT's P3,
@@ -295,3 +324,11 @@ wave.**
 10. **P2's residue-of-residue**: arithmetic in a different register, beyond a
     12-instruction window, or across a basic-block boundary. All three are **widenings
     of `mint_p2_arith_scan.py`**, not new work.
+11. **IMPLEMENT the `RT_UNPROMOTABLE` convention-declaration check** (§6.1). It does not
+    exist; the doctrine is prose today. *Re-derive:* run
+    `unpromotable_slot_check.py` and observe that it accepts either convention silently.
+12. **`??_7ReaderWriter@`'s `?` numerator NEEDS AN ADDRESSEE.** Its expiry says *"the
+    next lane that counts ported slots on this row"* — and **if nothing ever routes a
+    lane there, the clause never fires and the `?` becomes permanent.** A better failure
+    than a wrong `2`, but still a TODO with nobody's name on it. *Re-derive:* the tag at
+    `reg_mint_promoted.cpp:1201`.
