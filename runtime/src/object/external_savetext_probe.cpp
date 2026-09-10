@@ -3,11 +3,31 @@
 //   The oracle for `Object::External::SaveText` (retail 0x1800bb9d0).
 // ============================================================================
 //
-// NO GAMEPLAY ROUTE REACHES SaveText. It is an authoring entry point: nothing
-// in Application-x64.exe imports it and nothing in the DLL calls it, so a live
-// run reports `calls=0` for exactly the reason
-// reference_uncalled_port_is_not_verified.md warns about — and "no route" is
-// NOT "no oracle" (reference_no_route_is_not_no_oracle.md).
+// NO GAMEPLAY ROUTE REACHES SaveText, so a live run reports `calls=0` for
+// exactly the reason reference_uncalled_port_is_not_verified.md warns about —
+// and "no route" is NOT "no oracle" (reference_no_route_is_not_no_oracle.md).
+//
+// CORRECTED 2026-09-10, Wave 20 lane SAVETEXT. This paragraph used to give the
+// reason as "nothing in Application-x64.exe imports it and nothing in the DLL
+// calls it". THE FIRST HALF IS FALSE. Measured from the two shipped binaries:
+//
+//   * Runtime-x64.dll `.text` contains ZERO references to 0x1800bb9d0. That
+//     half was right.
+//   * Application-x64.exe DOES import it — `?SaveText@External@Object@@…` sits
+//     in the import table at slot 0x140151d70 — and there is exactly ONE call
+//     through that slot, at 0x1400795a9.
+//
+// The conclusion survives and now rests on something better than a miscount.
+// That one call site is an AUTHORING path: the same function builds its target
+// from `?GetSourceDirectory@FileSystem@IO@@` (slot 0x140151d90) and the literals
+// `.rsc` (0x14015d424) and `resource` (0x14015d430) — it writes an object back
+// out as a text resource into a SOURCE tree a shipped install does not have.
+// And even reached, the shipped DLL cannot service it: the TEXT encoding's two
+// serializer factories are stubs (below), so retail ITSELF faults, which is the
+// fault this probe already reproduces twice from the shipped export.
+//
+// So the premise to re-check is not "does anything call it" — something does —
+// but "can the shipped DLL complete it", and that is the stub check below.
 //
 // ---------------------------------------------------------------------------
 // WHAT THE FIRST TWO RUNS OF THIS PROBE ESTABLISHED, AND WHY THE SUBJECT IS
