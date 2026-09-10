@@ -47,6 +47,17 @@ def _all_registrations():
     out = []
     for f in _sources():
         for i, line in enumerate(open(f, encoding="utf8", errors="replace"), 1):
+            # A COMMENT IS NOT A REGISTRATION. Without this, prose that names a
+            # RegisterDispatchSlot call -- and the prose most likely to name one
+            # is a comment explaining where a slot IS registered -- is graded as
+            # a second binding and reported as a SHADOWED address. Wave 14 hit
+            # exactly that: lane SINGLETON's ordering note in reg_mint_promoted.cpp
+            # mentioned RegisterDispatchSlot(0x140151610, ...) and --check went
+            # from 0 shadowed to 1, naming a dead line that does not exist.
+            bare = line.lstrip()
+            if bare.startswith("//") or bare.startswith("*"):
+                continue
+            line = re.sub(r'//.*', '', line)
             m = re.search(r'RegisterDispatchSlot\(\s*(0x[0-9a-fA-F]+)\s*,\s*(.*)', line)
             if m:
                 out.append((int(m.group(1), 16), f, i, m.group(2).strip().rstrip(');')))

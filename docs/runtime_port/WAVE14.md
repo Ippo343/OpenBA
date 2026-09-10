@@ -1,7 +1,7 @@
 # WAVE 14 — Save::SaveLoad's last seven rows
 
-**Status: IN PROGRESS.** Five of seven lanes landed and merged; DRAW and GENNAME
-outstanding. Integration branch `wave14/trial`, base `64d3948`.
+**Status: ALL SEVEN LANES MERGED. Build links. One port unverified (GENNAME).**
+Integration branch `wave14/trial`, base `64d3948`.
 
 Scope was the seven rows the census reported as called-but-not-ported in the
 `Save` namespace after Wave 13 closed at 22/29 = 75.9%. Six were function
@@ -12,9 +12,12 @@ bodies. The seventh was not — see lane SINGLETON.
 | tree | called | ported | % |
 |---|---|---|---|
 | base `64d3948` | 29 | 22 | 75.9% |
-| 5-lane merge `386331f` | 30 | 26 | 86.7% |
+| all 7 lanes merged | 30 | 28 | **93.3%** |
 
-TOTAL across all namespaces: 79.9% → 80.0%.
+TOTAL across all namespaces: 79.9% → **79.9%**, i.e. it did not move. That is
+honest, not disappointing: DRAW's faithful port resolves four NEW retail callees
+by name, growing `called` 1133 → 1143, so UI reads 97.4% where it read 98.9%.
+Succeeding moves the denominator — the Wave 10B effect, twice in this wave.
 
 **The denominator moved, and not only because we succeeded.** `called` went
 29 → 30 because lane SINGLETON's probe names `?Get@SaveLoad@Save@@SAPEAV12@XZ`
@@ -31,14 +34,52 @@ can never be ported — see the wart below.
 | SAVEMETA | `?SaveMetaData@SaveLoad@Save@@` 0x1800c1490 | `3476fc4` | +1 | modded path never ran |
 | LOADMETA | `?LoadMetaData@SaveLoad@Save@@` 0x1800c1b30 | `d7a7993` | +1 | write path never ran |
 | SINGLETON | `?_singleton@SaveLoad@Save@@0PEAV12@EA` | `94d8d15` | **0** | **net −2.6 points alone** |
-| DRAW | `?Draw@SaveLoad@Save@@` 0x1800c2eb0 | pending | — | — |
-| GENNAME | `?GenerateSaveName@SaveLoad@Save@@` 0x1800c1250 | pending | — | — |
+| DRAW | `?Draw@SaveLoad@Save@@` 0x1800c2eb0 | `63b5e0a` | +1 | 352,256 px bytes byte-identical |
+| GENNAME | `?GenerateSaveName@SaveLoad@Save@@` 0x1800c1250 | `f4c07d7` | +1 | **UNVERIFIED — never got a run** |
 
 SINGLETON's branch alone reads 29/22/75.9% → 30/22/73.3%: zero ported, and the
 percentage FALLS. The lane disclosed this itself. It kept its oracle and paid
 the census row, because retail's own read is the only instrument that can say
 where our ctor actually published. A lane that dropped the probe would have
 scored better and known less.
+
+## Kill switches, pinned
+
+The integrator gave one of these three spellings over the course of the wave.
+THE TREE IS AUTHORITATIVE and these are the names in it:
+
+    BANISHED_RT_SETUPLOAD        SavedState::SetupLoad
+    BANISHED_RT_SAVE_METADATA    SaveLoad::SaveMetaData
+    BANISHED_RT_LOAD_METADATA    SaveLoad::LoadMetaData
+    BANISHED_RT_SAVELOAD_DRAW    SaveLoad::Draw
+
+`RtWaveEnabled` defaults to ON when unset, so a MISSPELLED switch fails safe —
+the port stays live — but is silently unusable as an A/B kill switch, which is
+the exact independence the rename existed to provide. Flagged by lane LOADMETA.
+
+## A cross-seam hazard that outlives this wave
+
+Lane DRAW's first live run crashed: `READ of 0x1` at `DrawBody+0x19f`. Retail
+does `CALL <ctor>; MOV R12,RAX` and is entitled to — MSVC returns `this` in RAX
+from every constructor. But `??0ImageBuffer@Video@@QEAA@XZ` is PORTED, and our
+`Video_ImageBuffer_Ctor` is declared `void`, so RAX held whatever its last
+expression left.
+
+**A byte-faithful transcription of retail is UNSAFE across the port seam at
+exactly this construct**, and our ported constructors are not uniform. Surveyed
+across `runtime/`:
+
+    VOID-returning ported ctors : 3   <-- unsafe if retail reads RAX
+      Video_ImageBuffer_Ctor   [video/buffers.cpp]
+      Video_IndexBuffer_Ctor   [video/buffers.cpp]
+      Video_VertexBuffer_Ctor  [video/buffers.cpp]
+    pointer-returning           : 33
+
+The fix is to use the `operator new` result instead — the same pointer by
+construction. `runtime/src/graphics/sunlight.cpp:230-247` ALREADY documents the
+identical Wave 9 crash and this fix. DRAW found that note only after paying for
+the crash, and named the real lesson itself: it grepped for the SYMBOL and not
+for the HAZARD. Evidence: `docs/runtime_port/wave14/draw_ctor_return_crash.txt`.
 
 ## The ABI error, and how it was caught
 
