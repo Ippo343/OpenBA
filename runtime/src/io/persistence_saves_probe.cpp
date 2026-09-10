@@ -92,9 +92,11 @@ void* RtIo_Persistence_GetSaveFilename(const void*, void*, const void*);
 bool  RtIo_Persistence_BeginDelete(void*, const void*);
 bool  RtIo_Persistence_BeginLoad(void*, const void*, int, const void*);
 bool  RtIo_Persistence_BeginGetSaveGameInfo(void*, const void*, int);
+void  RtIo_Persistence_dtor(void*);
 
 extern "C" __declspec(dllimport) void* __stdcall CreateEventA(void*, int, int, const char*);
 extern "C" __declspec(dllimport) int   __stdcall CloseHandle(void*);
+extern "C" __declspec(dllimport) int   __stdcall SetEvent(void*);
 
 namespace {
 
@@ -133,6 +135,7 @@ int g_objBytesWrittenMax = 0;
 Screen g_str{"GetSaveFilename content"};
 Screen g_val{"GetSaveInfo by-value struct"};
 Screen g_int{"GetSaveCount scalar"};
+Screen g_dtor{"~Persistence whole-object (handles/Strings by predicate)"};
 
 // ---- the synthesised subject ----------------------------------------------
 constexpr size_t kImage = 0x98;
@@ -490,6 +493,207 @@ void RunReaderSweep(const String& savePath, bool useMutant) {
     RtSystem::RtString_ReleaseInline(&n1);
 }
 
+// ===========================================================================
+// ~Persistence -- the row this lane held back on a blocker it never read
+// ---------------------------------------------------------------------------
+// The holdback said 0x1800b7740 "joins and closes a REAL thread, so handing it
+// a fabricated worker is a crash with extra steps". Reading it retired that in
+// one objdump: the join is `WaitForSingleObject([this+0x20], INFINITE)` on a
+// handle at an offset the CALLER owns, and the four CloseHandle calls close
+// four handles the caller owns. Seed four already-signalled events of our own
+// and the same scratch route that verified the Begin* applies unchanged.
+//
+// WHAT IS COMPARED. The whole 0x98-byte image, EXCEPT four ranges that cannot
+// position-compare because the two sides legitimately hold different values:
+//
+//   +0x20/+0x28/+0x30/+0x38  each side owns its OWN four handles, so the raw
+//                            values differ. Checked by PREDICATE instead:
+//                            unchanged from the seed on both sides (the dtor
+//                            reads and closes them, it must not write them).
+//   +0x40  pendingFilename   independent String allocations
+//   +0x90  savePath          independent String allocations
+//
+// Both Strings are seeded with refcount 2, so the release takes the SHARING
+// arm and both sides end at nullptr -- which means +0x40 and +0x90 DO
+// position-compare after all, and the exclusion above is belt-and-braces. Case
+// B seeds refcount 1 to drive the FREEING arm, where retail deliberately
+// leaves the field holding `buf - 8` rather than null; there the two sides
+// hold different dangling pointers and the predicate is `field == ownBuf - 8`.
+// Reproducing that asymmetry is the whole point of the second case: a port
+// that "cleaned it up" to null would pass case A and fail case B.
+//
+// The three arrays are seeded NON-NULL with real engine allocations, so the
+// three clear helpers do real work (each frees the block, then zeroes the
+// pointer and the count) rather than taking their null-safe arm and leaving
+// the case inert.
+// ===========================================================================
+
+// An engine-allocated block, obtained the only way this file can get one: a
+// String allocation's user pointer is `data - 8` (String.h's header layout).
+// The array clear helpers MemFree exactly that pointer, so the block must come
+// from the engine allocator and must NOT be released again afterwards.
+void* EngineBlock(String& keepAlive, const char* filler) {
+    keepAlive = MakeString(filler);
+    return keepAlive.data ? (void*)(keepAlive.data - 8) : nullptr;
+}
+
+struct DtorSeed {
+    void* handles[4] = {nullptr, nullptr, nullptr, nullptr};
+    String savePath, pending, b0, b1, b2;
+};
+
+// Seed one side of a dtor case. Returns false if any resource could not be
+// made, so the case is reported as MEASURED NOTHING rather than as a pass.
+bool SeedDtor(Scratch& s, DtorSeed& res, int refcount) {
+    std::memset(s.bytes, 0, kImage);
+    Persistence* p = s.p();
+
+    for (int i = 0; i < 4; ++i) {
+        // Manual-reset, created SIGNALLED: the WaitForSingleObject(INFINITE)
+        // on handles[0] must return immediately or the probe hangs the game.
+        res.handles[i] = CreateEventA(nullptr, 1, 1, nullptr);
+        if (!res.handles[i]) return false;
+    }
+    p->threadHandle = res.handles[0];
+    p->workEvent    = res.handles[1];
+    p->readyEvent   = res.handles[2];
+    p->doneEvent    = res.handles[3];
+
+    res.savePath = MakeString("C:\\PersistProbe\\");
+    res.pending  = MakeString("C:\\PersistProbe\\Save\\Save1.sav");
+    if (!res.savePath.data || !res.pending.data) return false;
+    p->savePath        = res.savePath;
+    p->pendingFilename = res.pending;
+    // refcount 2 -> the release takes the SHARING arm (field nulled);
+    // refcount 1 -> the FREEING arm (field left holding buf - 8).
+    StringRefCount(res.savePath.data) = refcount;
+    StringRefCount(res.pending.data)  = refcount;
+
+    p->blockDescData = EngineBlock(res.b0, "block-desc-array-filler");
+    p->blockPtrData  = EngineBlock(res.b1, "block-ptr-array-filler");
+    p->saves         = static_cast<SaveGameInfo*>(EngineBlock(res.b2, "saves-array-filler"));
+    if (!p->blockDescData || !p->blockPtrData || !p->saves) return false;
+    // Counts the clear helpers will zero. They do not walk the elements on the
+    // free path -- 0x18002a930 / 0x180024aa0 / 0x18002ac40 each MemFree the
+    // block and zero the pair -- so the contents need not be well-formed.
+    p->blockDescCount = 0;
+    p->blockPtrCount  = 0;
+    p->saveCount      = 0;
+    return true;
+}
+
+using DtorFn = void (*)(void*);
+
+// CTRL-DTOR: skips the worker destructor entirely, so the three arrays stay
+// populated and the four handles stay open. Applicable to every dtor case.
+void Mutant_Dtor(void* self) {
+    auto* p = static_cast<Persistence*>(self);
+    RtSystem::RtString_ReleaseInline(&p->savePath);
+    reinterpret_cast<DtorFn>(ResolveAddr(Module::Runtime, 0x18000f7d0))(self);
+}
+
+void RunDtorCase(int refcount, bool useMutant) {
+    Scratch a, b, preA, preB;
+    DtorSeed ra, rb;
+    if (!SeedDtor(a, ra, refcount) || !SeedDtor(b, rb, refcount)) {
+        fprintf(stderr, "[PersistProbe]   ~Persistence rc=%d -> ABORT, could not seed; "
+                        "MEASURED NOTHING\n", refcount);
+        return;
+    }
+    std::memcpy(preA.bytes, a.bytes, kImage);
+    std::memcpy(preB.bytes, b.bytes, kImage);
+
+    if (useMutant) Mutant_Dtor(a.p());
+    else           RtIo_Persistence_dtor(a.p());
+    RtOriginal<DtorFn>("??1Persistence@IO@@QEAA@XZ")(b.p());
+
+    const int changed = BytesChanged(preB, b);
+
+    // (i) position compare, excluding the four handle qwords and the two
+    //     String fields, each of which is checked by predicate below.
+    int firstDiff = -1;
+    for (size_t i = 0; i < kImage; ++i) {
+        const bool excluded =
+            (i >= offsetof(Persistence, threadHandle) &&
+             i <  offsetof(Persistence, threadHandle) + 4 * sizeof(void*)) ||
+            (i >= offsetof(Persistence, pendingFilename) &&
+             i <  offsetof(Persistence, pendingFilename) + sizeof(void*)) ||
+            (i >= offsetof(Persistence, savePath) &&
+             i <  offsetof(Persistence, savePath) + sizeof(void*));
+        if (excluded) continue;
+        if (a.bytes[i] != b.bytes[i]) { firstDiff = (int)i; break; }
+    }
+
+    // (ii) the handles must be READ and CLOSED, never written.
+    bool handlesIntact = true;
+    for (int i = 0; i < 4; ++i) {
+        handlesIntact &= (&a.p()->threadHandle)[i] == ra.handles[i];
+        handlesIntact &= (&b.p()->threadHandle)[i] == rb.handles[i];
+    }
+
+    // (iii) the two String fields took the SAME arm on both sides.
+    auto arm = [&](const Persistence* p, const DtorSeed& r) {
+        // 0 = nulled (sharing arm), 1 = left at buf-8 (freeing arm), 2 = other
+        auto one = [](const char* got, const char* buf) -> int {
+            if (got == nullptr)      return 0;
+            if (got == buf - 8)      return 1;
+            return 2;
+        };
+        return one(p->savePath.data, r.savePath.data) * 4 +
+               one(p->pendingFilename.data, r.pending.data);
+    };
+    const int armA = arm(a.p(), ra), armB = arm(b.p(), rb);
+    const bool armsMatch = (armA == armB);
+    const int expectedArm = (refcount == 2) ? 0 : (1 * 4 + 1);
+
+    // (iv) all three arrays cleared, both sides.
+    auto cleared = [](const Persistence* p) {
+        return p->blockDescData == nullptr && p->blockDescCount == 0 &&
+               p->blockPtrData  == nullptr && p->blockPtrCount  == 0 &&
+               p->saves         == nullptr && p->saveCount      == 0;
+    };
+    const bool clearedA = cleared(a.p()), clearedB = cleared(b.p());
+
+    const bool ok = firstDiff < 0 && handlesIntact && armsMatch &&
+                    clearedA == clearedB;
+
+    if (useMutant) {
+        ++g_dtor.ctrlCases;
+        if (!ok) ++g_dtor.ctrlCaught;
+        fprintf(stderr, "[PersistProbe]   CTRL-DTOR       rc=%d  -> %s "
+                        "(firstDiff=%d handles=%d arms=%d clearedA=%d clearedB=%d)\n",
+                refcount, ok ? "NOT CAUGHT" : "caught", firstDiff,
+                (int)handlesIntact, (int)armsMatch, (int)clearedA, (int)clearedB);
+    } else {
+        ++g_dtor.applicable;
+        if (changed == 0)   ++g_dtor.inert;
+        else if (ok)        ++g_dtor.agreed;
+        else              { ++g_dtor.diverged;
+            fprintf(stderr, "[PersistProbe]   DIVERGE ~Persistence rc=%d: firstDiff=%d "
+                            "handlesIntact=%d armA=%d armB=%d clearedA=%d clearedB=%d\n",
+                    refcount, firstDiff, (int)handlesIntact, armA, armB,
+                    (int)clearedA, (int)clearedB); }
+        fprintf(stderr, "[PersistProbe]   ~Persistence    rc=%d  -> %s "
+                        "(shipped side wrote %d of %d bytes; arm=%d expected=%d; "
+                        "arrays cleared=%d)\n",
+                refcount, changed == 0 ? "INERT" : (ok ? "agree" : "DIVERGE"),
+                changed, (int)kImage, armB, expectedArm, (int)clearedB);
+        // The arm the SHIPPED side took is reported against what the refcount
+        // predicts, so a case that silently stopped exercising the freeing arm
+        // announces itself rather than passing quietly.
+        if (armB != expectedArm)
+            fprintf(stderr, "[PersistProbe]   NOTE ~Persistence rc=%d: the shipped side "
+                            "took arm %d, not the predicted %d -- this case is NOT "
+                            "exercising the branch it was written for\n",
+                    refcount, armB, expectedArm);
+    }
+
+    for (int i = 0; i < 4; ++i) { CloseHandle(ra.handles[i]); CloseHandle(rb.handles[i]); }
+    // b0/b1/b2 were MemFree'd by the subjects; releasing the String wrappers
+    // would be a double free. They are deliberately abandoned -- three small
+    // blocks, once per process, under an env-gated probe.
+}
+
 void ReportScreen(const Screen& s) {
     fprintf(stderr, "[PersistProbe] %-42s control %d of %d caught | "
                     "%d agreed, %d diverged, %d inert, of %d applicable\n",
@@ -525,6 +729,8 @@ extern "C" void RtIo_PersistenceSavesProbeEntry() {
     RunIssueCase(Issue::Info, 1, "Save1", 2, savePath, Ctrl::IgnoreRefusal);
     RunFilenameSweep(savePath, /*useMutant=*/true);
     RunReaderSweep(savePath, /*useMutant=*/true);
+    RunDtorCase(2, /*useMutant=*/true);
+    RunDtorCase(1, /*useMutant=*/true);
 
     fprintf(stderr, "[PersistProbe] -- subjects --\n");
     for (unsigned flags : {0u, 1u}) {
@@ -536,12 +742,15 @@ extern "C" void RtIo_PersistenceSavesProbeEntry() {
     }
     RunFilenameSweep(savePath, false);
     RunReaderSweep(savePath, false);
+    RunDtorCase(2, false);   // sharing arm: both String fields end nulled
+    RunDtorCase(1, false);   // freeing arm: both end holding buf - 8
 
     fprintf(stderr, "[PersistProbe] ==== results ====\n");
     ReportScreen(g_obj);
     ReportScreen(g_str);
     ReportScreen(g_val);
     ReportScreen(g_int);
+    ReportScreen(g_dtor);
 
     // EVERY screen must carry its own control that reads non-zero. The first
     // version of this predicate omitted g_int, and g_int duly printed
@@ -550,9 +759,11 @@ extern "C" void RtIo_PersistenceSavesProbeEntry() {
     auto green = [](const Screen& sc) {
         return sc.ctrlCases > 0 && sc.ctrlCaught == sc.ctrlCases;
     };
-    bool controlsGreen = green(g_obj) && green(g_str) && green(g_val) && green(g_int);
-    int diverged = g_obj.diverged + g_str.diverged + g_val.diverged + g_int.diverged;
-    int inert    = g_obj.inert + g_str.inert + g_val.inert;
+    bool controlsGreen = green(g_obj) && green(g_str) && green(g_val) &&
+                     green(g_int) && green(g_dtor);
+    int diverged = g_obj.diverged + g_str.diverged + g_val.diverged +
+                   g_int.diverged + g_dtor.diverged;
+    int inert    = g_obj.inert + g_str.inert + g_val.inert + g_dtor.inert;
     fprintf(stderr, "[PersistProbe] effectiveness: the whole-object screen "
                     "compares %d bytes, of which the subjects write at most %d "
                     "(command, blockCount and the filename pointer). The other "
