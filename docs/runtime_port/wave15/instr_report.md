@@ -81,6 +81,19 @@ named only inside `ResolveFn(...)` and `RT_EXPORT_ONCE(...)`.
 
 * **Count and kind: GREEN.** 26 references, 2 WRITE at exactly `0x18009f5b8`
   and `0x1800dbbe2`, 24 READ. Reproduces WAVE12_APPLICATION.md exactly.
+> **INTEGRATOR NOTE (added at merge; the lane had already stopped editing).**
+> This section attributes the false "24 reads in unported bodies" to
+> `WAVE12_APPLICATION.md`. **It is not from Wave 12** — grep that file and you
+> get zero hits. Wave 12 wrote a KIND count, *"26 in-DLL RIP-relative
+> references, 2 WRITE and 24 READ"*, which this lane reproduced GREEN. The
+> conversion of that kind-count into a port-state count happened at
+> `WAVE15_KICKOFF_SINGLETONS.md:86`, and the integrator then repeated it with a
+> false citation to Wave 12 in this lane's own brief — so the lane was
+> dispatched against a control whose expected value was wrong, and scored it RED
+> rather than bending its measurement to fit. The lane's MEASUREMENT (9) stands
+> and is unaffected; only the attribution is wrong. Authority:
+> [WAVE15_PHASE1_FINDINGS.md](../WAVE15_PHASE1_FINDINGS.md).
+
 * **Classification split: RED, and the ground truth is what is wrong.** The truth
   says 24 reads in unported bodies. Measured today: **9**. The other 15 reads sit
   in bodies that are ported AND registered, and this is not drift since Wave 12 —
