@@ -381,3 +381,75 @@ _TO BE FILLED FROM THE MEASURED RUN._
    `BANISHED_*` list."** Done, and it did not change any verdict here — the three
    holdbacks are blocked on *expressing the body*, not on reaching it. No route
    exists to a function the tree cannot compile.
+
+---
+
+## 9. Two cross-lane questions, answered for this lane
+
+### 9.1 Was any of the seven already ported behind a gate?
+
+**No.** Three of this wave's row assignments turned out to be already ported and
+merely gated behind an env var (`??0Internal` / `??1Internal` and both of
+OBJINT's `InternalFactory` rows, inside an `if (table)` block in
+`runtime/src/object/internal.cpp` since Wave 3), so the question is a real one.
+
+Swept both ways — every mangled-name fragment **and** every retail address —
+across `runtime/`, `standalone/`, `engine/` and `code/`, filtered to lines that
+register or gate (`Register*`, `RtOptIn(`, `if (`), excluding this lane's own
+two new sources:
+
+```
+PushPath@ExternalFactory     none      1800bd0e0   none
+PopPath@ExternalFactory      none      1800bd040   none
+FindOrLoad@ExternalFactory   none      1800bf320   none
+GetCompiledPath@Externa…     none      1800bec10   none
+SerializeReferenceTable@…    none      1800bcb60   none
+SaveText@External            none      1800bb9d0   none
+Load@External@Object         none      1800bc620   none
+```
+
+The address half matters as much as the name half: a registration written
+through a *named constant* rather than a string literal is invisible to
+`runtime_census.py` (`reference_census_cannot_see_nonliteral_registrations.md`),
+but it still has to name the address somewhere. Both columns are empty.
+
+So all seven rows were genuine unported work. Four are now ports; three are
+holdbacks. **No row in this lane has an "arming decision" disposition.**
+
+The one thing this lane *did* find already ported was a **callee**, not a
+subject row — see §4.
+
+### 9.2 Do any of the ported bodies stamp or read a vptr?
+
+**No — not one of the four, and this is what makes these rows independent of the
+two-vtables-on-one-class hazard** that binds `??_7External@Object@@6B@` and
+`??_7CompiledExternal@Object@@6B@` in this same wave.
+
+Checked from the listings rather than asserted: **every `CALL` in all four
+bodies is a direct `CALL 0x…`. There is not one `CALL qword ptr [reg+disp]` in
+any of them** — no virtual dispatch at all, so there is no slot for a wrong
+vtable to be read out of.
+
+| body | vptr traffic |
+|---|---|
+| `GetCompiledPath` | none — string work on `Filename`, which has no vtable |
+| `PushPath` / `PopPath` | none — `Filename` and the array header only |
+| the four `Array<PathStackEntry>` bodies | none — `Filename` copy-ctor and release |
+| `FindOrLoad` | **touches an `External` but never its vptr** |
+
+`FindOrLoad` is the only one that handles a polymorphic object at all. It
+receives an `External*` from `External::Load` — retail-constructed, therefore
+carrying retail's vtable — and writes exactly one field, `_path` at **+0x08**.
+It never writes +0x00 and never dispatches through it.
+
+Two consequences worth stating rather than leaving implicit:
+
+* Promoting `??_7External@Object@@6B@` or `??_7CompiledExternal@Object@@6B@`
+  cannot change the behaviour of anything this lane ported. These four rows are
+  not a reason to promote and not a reason not to.
+* The virtual dispatch retail *does* perform on this path (`Add` and
+  `External::Load` both drive slot **+0x28**, `Serialize`) happens **inside
+  bodies we did not port** and which we reach by name. Those run the DLL's code
+  on DLL-constructed objects, which is self-consistent: there is no mixed pair
+  in which one half is ours and the other retail's. Should a later lane port
+  `Add` or `Load`, that is where the vtable question becomes live — not here.
