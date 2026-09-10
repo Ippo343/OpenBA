@@ -100,8 +100,20 @@ STRIP_LOGS_FLAGS = -DBANISHED_STRIP_LOGS -include standalone/log_strip.h
 # PERF_EXPERIMENTAL_RELEASE=1 compiles the NON-RETAIL PerfX knobs default-on in the
 # release exe too (default 0 = off; see standalone/perf_experimental.h).
 PERF_EXPERIMENTAL_RELEASE ?= 0
+# Gate the LOG-STRIPPED builds on the one rule log_strip.h states and that has
+# been broken twice in two days: no qualified `std::printf`. The preprocessor
+# cannot replace a qualified name, so it survives the macro and the compiler
+# then blames log_strip.h instead of the offending file. tools/check_log_strip.py
+# strips comments and string literals first -- a naive grep reports three PROSE
+# hits on a clean tree and would send someone to "fix" documentation.
+# Run its controls with: python tools/check_log_strip.py --self-test
+PYTHON ?= python
+.PHONY: check-log-strip
+check-log-strip:
+	@$(PYTHON) tools/check_log_strip.py
+
 standalone: SA_CXXFLAGS += -O3 -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL_RELEASE) $(STRIP_LOGS_FLAGS)
-standalone: $(SA_TARGET)
+standalone: check-log-strip $(SA_TARGET)
 
 standalone-debug: SA_CXXFLAGS += -g -O0 -D_DEBUG
 standalone-debug: $(SA_TARGET)
@@ -141,6 +153,7 @@ PERF_EXTRA ?=
 # default-on (standalone/perf_experimental.h); =0 leaves them compiled but default-off.
 # Runtime kill-switch either way: BANISHED_PERF_EXPERIMENTAL=0.
 PERF_EXPERIMENTAL ?= 1
+standalone-perf: check-log-strip
 standalone-perf:
 	$(MAKE) SA_BUILD_DIR=$(SA_PERF_DIR) \
 	        SA_CXXFLAGS="$(SA_CXXFLAGS) -O2 -g -DNDEBUG -DBANISHED_CHECKPTR_STATIC_NOP -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL) $(STRIP_LOGS_FLAGS) $(PERF_EXTRA)" \
