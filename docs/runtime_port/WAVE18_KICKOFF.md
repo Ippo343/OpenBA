@@ -187,3 +187,61 @@ Do the reading, the disassembly and the porting first; batch the runs.
 * GATE reports the new wall by **set diff**, and scopes the next wave with three
   separate bounded screens (predicted walls = upper bound, residue = lower
   bound, census gap = lossy both ways).
+
+---
+
+## 6. Corrections from the lanes (appended as they report)
+
+### 6.1 The wall needs NINE functions, not six — lane GFXIF, `57ed42d`
+
+`WAVE18_VIDEO.md`'s headline is *"The wall: six functions"*. **It is nine.**
+
+Mechanism, measured at `dx11/src/devicedata.cpp:216-300`: `GetImports()` resolves
+a **40-entry** table and sets `g_imOk = false` if **any** entry is null.
+`EnumerateInterfaces` then does `if (!im) return Orig<...>(1)(self)`, and with the
+DLL absent that `Orig` is null — **that is the VCALL-of-0.** `AdjustDisplay`,
+`FindOrAddMode` and `GetDisplayMode` are entries in the same table, so `g_imOk`
+is an **AND over all nine**.
+
+**A lane scoped to the plan's six would have finished green and left the wall
+exactly where it is.** §2 grouped all nine into GFXIF for cohesion; that grouping
+turns out to be **load-bearing, not cosmetic — do not let a future brief re-split
+them.**
+
+Related, and it decides the registration question: `Dx11ResolveRuntimeImport`
+tries `ResolveExport(<mangled>)` **first**, so this is a **NAME-resolution wall.**
+Registration by address alone would not have moved it.
+
+### 6.2 Four of the six `Collection::Array` helpers were already ported
+
+By Wave 9 lane VID2. Neither the plan nor this kickoff said so, and it is most of
+the reason lane GFXIF was cheap. This is the standing hazard from §4.1-4.2 landing
+in this wave's favour for once: **grep for the port before planning to write it.**
+
+### 6.3 Layout facts the header understates
+
+`runtime/types/video/Device.h` calls `Adapter+0x2c/+0x30` *"meaning not
+recovered"*, while `dx11/` already names them `dxgiAdapterIndex` /
+`dxgiOutputIndex`. `Device+0xA0` is an `HMONITOR`. Two files in this tree knew
+more than the header did.
+
+### 6.4 Both brief traps resolved as described
+
+`0x1800f7100` **is** the real `??0Adapter` body (14 instructions, disassembled),
+not a thunk; and the DX11 address column is the IAT slot range, left untouched.
+
+### 6.5 `tools/abi_retslot_audit.py` was reading two files — fixed at `fa85957`
+
+It hardcoded `engine/funcs/engine_funcs.{cpp,h}` and printed *"0 suspicious of 49
+by-value-returning exports"* with nothing saying so. It now walks five roots,
+prints its **subject set**, names **UNCHECKED** assignments individually, and
+**sizes its blind spot**: 56 of 133 distinct by-value-returning mangled names in
+the tree reach a door it can read; **77 do not.** Checked 49 → 61, still 0
+suspicious — the widening exposed no latent defect, it exposed that the number
+was over a subject nobody had stated. Positive control 1/1, and the control
+subject sits in a file the old version could not read.
+
+**The general lesson, and it applies to every screen this project owns:** a tool
+that cannot name its own subject invites a lane to cite its green for something
+it never looked at. Sizing a blind spot is not optional garnish — an unsized
+blind spot lets a partial green read as a whole one.
