@@ -122,3 +122,55 @@ lane can be measured as never having read:
 * **Grep before you port**, in three forms: mangled name, retail VA, and the
   `RtIo_<Class>_<Method>` convention. And **grep `standalone/` and the `BANISHED_*`
   list before writing "no route"** — that rule has paid out four times in two waves.
+
+---
+
+## 4. PHASE 0 CLOSED (partial) — the measured state, replacing the guide's §1
+
+Measured by lane CENSUS with the **fixed** census at `efb2b5a`, merged at `b081875`.
+The guide's §1 numbers were taken with the **broken** tool and are superseded.
+
+```
+                 OLD (broken tool)          NEW (minted-vtable slots folded in)
+IO          133 called  116 ported     ->   211 called  194 ported   ceiling 97.6%
+Graphics     99 called   70 ported     ->    99 called   70 ported   ceiling 96.0%
+Engine       33 called   23 ported     ->    33 called   23 ported
+Video       152 called  134 ported     ->   158 called  140 ported   AT CEILING
+TOTAL      1195 called 1007 ported     ->  1306 called 1118 ported   84.3% -> 85.6%
+```
+
+**Read the delta as a set-diff, not a percentage.** +111 rows became visible; all 111
+are PORTED; **no namespace gained more `ported` than `called`** (C6), so no shortfall
+was closed by the instrument change. **No namespace changed its ceiling verdict.**
+
+### The Phase 1 board, DERIVED and not quoted
+
+```
+164 bodies across 49 unpromoted vtables, of which 26 are COMPLETE
+   (static source scan at efb2b5a -- quote it WITH the instrument, see C5)
+10 of 62 vtables promoted   (NOT 5 -- see C2)
+```
+
+| row | ours/slots | standing |
+|---|---|---|
+| `??_7BinaryFileStream@IO@@6B@` | **8/8 COMPLETE** | guide's strongest candidate |
+| `??_7FileStream@IO@@6B@` | **8/8 COMPLETE** | not named by the guide; surfaced here |
+| `??_7Stream@IO@@6B@` | **2/2 COMPLETE** | proven NO-OP — §7.5b's "safest promotion" |
+| `??_7ReaderWriter@IO@@6B@` | **0/1** | proven NO-OP, but promoting publishes a TRAP — see below |
+| `??_7CompressedStream@` / `MemoryStream@` / `FileStream@` | 9/9 each | CSTREAM said promote NONE (stampers owned 2/3/0) |
+| `??_7TextFileStream@IO@@6B@` | 2/10 | lane SAVETEXT's row |
+
+**The `??_7ReaderWriter@` tension, issued to lane PROMOTE as its own item.** The guide
+and §7.5b say promote it FIRST as a lowest-risk NO-OP. But at **0 ours of 1 slot**,
+promoting it publishes a table whose single slot is a **trap**, so its safety rests
+ENTIRELY on the NO-OP premise being true. That is an impossibility-shaped premise doing
+load-bearing work, so it gets §7.4 treatment: check the premise from the binary, and
+**a refutation of §7.5b is a better deliverable than a promotion.**
+
+### Caveat that survives Phase 0 — see C4
+
+`COMPLETE` means *every non-purecall slot IN THE RECORDED COUNT is registered*. For
+**30 of 31** rows the recorded count rests on a premise that is assumed rather than
+checked, and an under-sized row **has no symptom**. Lane EXTENT is running that test as
+a post-report tranche. **A promotion warrant must record `PREMISE-ASSUMED` for any row
+the tranche has not cleared.**

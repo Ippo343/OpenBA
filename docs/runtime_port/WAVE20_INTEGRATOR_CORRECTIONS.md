@@ -176,3 +176,63 @@ is* has produced a finding neither the lane nor the tool would have surfaced.
 **Relayed immediately to lane PROMOTE**, with instructions to keep working — its §5.1
 stamper gate is independent of extent — but to record `PREMISE-ASSUMED` in any
 promotion warrant covering a row whose premise the tranche has not cleared.
+
+---
+
+## C5 — do NOT quote "23 complete tables"; and an 8-table gap between two instruments is OPEN
+
+**Claimed** (WAVE19_CLOSED §7.5a, carried into WAVE20_GUIDE §2): *"23 complete tables
+are minted and unregistered."*
+
+**Measured** by lane CENSUS at `efb2b5a`: **26 complete unpromoted tables.**
+
+**These are not the same measurement and neither should be quoted as the other.** The
+*definition* is identical (`missing == 0` over non-purecall slots). Everything else
+differs — **both the tip and the instrument**:
+
+| | Wave 19's 23 | Wave 20's 26 |
+|---|---|---|
+| instrument | **live registry lookup** in a running process (`RtPortLookupExport`) | **static source scan** of `RegisterRuntimeExport`/`RegisterRuntimeAddr` |
+| arithmetic | 28 complete − **5** promoted | 36 complete − **10** promoted |
+
+**The comparable pair is 28 vs 36 overall-complete — an 8-table gap that is NOT
+EXPLAINED.** Lane CENSUS reported it as unexplained rather than reconciling it with a
+plausible story, which is the right call: a divergence between what a *live registry*
+holds and what a *source scan* finds is the exact shape of
+`reference_half_registered_port_reads_as_absent` and of the gated-registration trap,
+and a guess would retire the flag without earning it.
+
+> **STANDING INSTRUCTION: quote "26 complete unpromoted tables, static source scan,
+> `efb2b5a`" — WITH the instrument named — or quote nothing.** Five figures decayed in
+> transmission in Wave 19, four of them through the integrator, and the fix is naming
+> the instrument and the tip beside the number.
+
+**OPEN ITEM for the next `BANISHED_RT_MINT_SHADOW=1` run:** reconcile 28 vs 36. This is
+a TODO with a named route, not a blocker.
+
+---
+
+## C6 — the fold-in's symmetry is FORCED, not lucky (a check that could have flattered us, and does not)
+
+I asked lane CENSUS whether any namespace gained more `ported` than `called`, because
+that is the shape that would make the ceiling identity **easier to satisfy with no work
+done** — an instrument fix that quietly manufactures progress.
+
+**Answer: none, anywhere.**
+
+```
+IO +78/+78    UI +17/+17    internal +10/+10    Video +6/+6    TOTAL +111/+111
+every other namespace 0/0
+```
+
+**And the reason is structural, not incidental**, which is what makes it trustworthy:
+all 111 newly-visible rows are `PORTED`, so each adds 1 to **both** sides. An unported
+slot of a promoted table **does** fold in as called-and-not-ported, so the asymmetry can
+only ever go the **safe** direction. It reads clean today only because all 10 promoted
+tables happen to be COMPLETE.
+
+**No namespace changed its ceiling VERDICT.** Video / Object / Application read AT
+CEILING before and after. Video's *printed* ceiling moved **88.2% → 88.6%** while its
+verdict did not — a live instance of the standing rule that **the ceiling percentage is
+a moving target with `called` in both halves, so score the IDENTITY and never the
+percentage.**
