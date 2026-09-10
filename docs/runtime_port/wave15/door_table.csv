@@ -1,0 +1,21 @@
+symbol,runtime_slot_va,exe_import,exe_slot_va,dx11_import,dx11_slot_va,dx9_import,dx9_slot_va,exe_text_sites_ghidra_xrefs,exe_text_sites_disp32_scan,sites_agree,registered,registered_where,accessor_imported,door_verdict
+AchievementManager@Achievement,0x1801fc670,yes,0x1401514f0,no,,no,,9,9,yes,yes,reg_unreg_lane1.cpp:206 (ResolveExport passthrough),no,DOOR
+AnimationManager@Graphics,0x1801fe7b0,no,,no,,no,,n/a,n/a,n/a,no,,no,NO-DOOR
+Application@1,0x1801fc678,yes,0x140152368,yes,0x180013310,yes,0x1800122f8,6,8,no (2 disp32 false positives),yes,address_registry.cpp:1536 (ResolveAddr(Module::Runtime\,0x1801fc678)),no,DOOR (UNPROMOTABLE|HARMFUL per Wave 12 -- door exists but must not move)
+Configuration@Audio,0x1801fe758,yes,0x140151b78,no,,no,,9,10,no (1 disp32 false positive),no,,no,DOOR (unregistered)
+Configuration@Input,0x1801fe768,yes,0x140151738,no,,no,,31,31,yes,yes,address_registry.cpp:1606 (populated with &g_StandaloneKeyMapMid\, not the mint slot),no,DOOR
+Configuration@System,0x1801fc6f8,no,,no,,no,,n/a,n/a,n/a,no,,no,NO-DOOR
+Configuration@Video,0x1801fe7a0,yes,0x140151b70,yes,0x180013480,yes,0x1800123d0,6,8,no (2 disp32 false positives),no,,no,DOOR (unregistered; door exists in all 3 binaries)
+Device@Audio,0x1801fe760,no,,no,,no,,n/a,n/a,n/a,no,,no,NO-DOOR
+Device@Input,0x1801fe770,yes,0x140151b80,no,,no,,6,6,yes,no,,no,DOOR (unregistered)
+Device@Video,0x1801fe7a8,yes,0x140151a80,yes,0x1800134b8,yes,0x180012460,53,54,no (1 disp32 false positive),yes,address_registry.cpp:1403 (ResolveExport passthrough),no,DOOR (unregistered in DX11/DX9\, door exists in all 3 binaries)
+Engine@1,0x1801fe748,no,,no,,no,,n/a,n/a,n/a,no,,no,NO-DOOR
+ExternalFactory@Object,0x1801fc6c8,yes,0x1401529d8,no,,no,,177,177,yes,no,,no,DOOR (unregistered; largest reader count of all 20 rows)
+Factory@Object,0x1801fc6e8,yes,0x140152760,no,,no,,8,9,no (1 disp32 false positive),yes,address_registry.cpp:1544 (ResolveAddr(Module::Runtime\,0x1801fc6e8)),no,DOOR
+FileSystem@IO,0x1801fc6a8,yes,0x140151d18,no,,no,,5,6,no (1 disp32 false positive),yes,reg_unreg_lane1.cpp:177 (ResolveExport passthrough),no,DOOR
+InternalFactory@Object,0x1801fc6d8,yes,0x140151ef8,no,,no,,2,2,yes,no,,no,DOOR (unregistered)
+MainLoop@Engine,0x1801fe750,yes,0x140151440,no,,no,,12,12,yes,yes,reg_unreg_lane1.cpp:190 (ResolveExport passthrough),no,DOOR
+MemoryAllocator@System,0x1801fc718,no,,no,,no,,n/a,n/a,n/a,no,,no,NO-DOOR (also behind the BANISHED_RT_ALLOC gate -- its own wave per kickoff)
+Modification@IO,0x1801fc6b0,yes,0x1401519e8,no,,no,,12,13,no (1 disp32 false positive),no,,no,DOOR (unregistered)
+Persistence@IO,0x1801fc6b8,yes,0x140151b88,no,,no,,15,15,yes,no,,no,DOOR (unregistered)
+SaveLoad@Save,0x1801fc6f0,yes,0x140151610,no,,no,,20,20,yes,yes,reg_unreg_lane1.cpp:168 (ResolveExport passthrough) + Wave 14 mint-storage promotion (separate mechanism),no,DOOR (PROMOTED -- Wave 14 ceiling)
