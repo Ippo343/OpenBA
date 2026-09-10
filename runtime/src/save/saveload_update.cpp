@@ -111,9 +111,9 @@ using RecreateFn    = void (*)(void* imageBuffer);
 // the prologue), not an argument.
 using ImageUploadFn = void (*)(void* self, void* pixels, uint32_t w, uint32_t h);
 
+// Wave 15 lane ORDER: was a frozen static (see saveload_internal.h's note).
 void** DeviceSingletonSlot() {
-    static void** p = RtDataExport<void*>("?_singleton@Device@Video@@0PEAV12@EA");
-    return p;
+    return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
 }
 
 // ---------------------------------------------------------------------------

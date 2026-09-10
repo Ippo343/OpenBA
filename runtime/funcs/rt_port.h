@@ -63,9 +63,30 @@ void* ResolveExport(const char* mangled_name);
 // to provide — can never be picked up, and nothing says which symbol was
 // missing. This caches a hit (so the steady-state cost is one load) and retries
 // a miss, naming it once.
+// It ALSO refuses to freeze a hit obtained before RuntimePortInit() finished
+// (Wave 15 lane ORDER, rt_resolve_cache.cpp §6): that answer is returned but
+// not stored, so a site whose first call lands during startup cannot keep the
+// DLL's address while the rest of the tree moves to a promoted row. `SaveLoad`
+// is promoted on every default run, so that is a live subject, not a
+// hypothetical one.
 void*    RtResolveCached(const char* mangled, void** cache);
 uint64_t RtResolveMissCount();     // 0 across a run == every cached resolve hit
 void     RtResolveMissSummary();   // one line; call beside RtDiffSummary()
+
+// ---- Pre-init slot audit (Wave 15 lane ORDER) ------------------------------
+//
+// RtResolveSlotAudit() re-resolves every NAME that first came through the
+// caching door before init finished and compares it with the answer that name
+// gave then. Returns the number of LIVE SPLIT BRAINS (answer changed AND the
+// site froze the old one), which is 0 by construction unless the negative
+// control BANISHED_RT_FREEZE_EARLY=1 restores the old freeze-always behaviour.
+// The number to read for EFFECTIVENESS is the `CHANGED answer` count it prints:
+// a run where that is 0 says the rule had nothing to bite on
+// (reference_probe_needs_an_effectiveness_control.md). Called from
+// RtResolveEarlySummary(), so it needs no new call site in standalone/.
+int      RtResolveSlotAudit();
+uint64_t RtResolvePreInitHitCount();     // hits handed back WITHOUT freezing
+uint64_t RtResolvePreInitFrozenCount();  // hits frozen anyway (control armed)
 
 // ---- Early-resolve recorder ------------------------------------------------
 //

@@ -252,9 +252,18 @@ T* DataExport(const char* mangled) {
     return reinterpret_cast<T*>(ResolveExport(mangled));
 }
 
+// Wave 15 lane ORDER converted the three singleton accessors below from
+// `static T** p = DataExport<T*>(...)` — a frozen static, which keeps the FIRST
+// answer including a non-null one — to the caching door that now refuses to
+// freeze a pre-init answer (rt_resolve_cache.cpp §6). All three names are Wave
+// 15 rows. `DataExport` itself is left in place: `VTableUpdateLoop` and friends
+// below resolve a `??_7` symbol whose value is an ADDRESS rather than a live
+// mutable pointer, and freezing that is not the same hazard.
+using ExternalFactorySlot = RtObject::ExternalFactory**;
+using MainLoopSlot        = RtEngine::MainLoop**;
 RtObject::ExternalFactory* Factory() {
-    static RtObject::ExternalFactory** p =
-        DataExport<RtObject::ExternalFactory*>("?_singleton@ExternalFactory@Object@@0PEAV12@EA");
+    ExternalFactorySlot p = RT_DATA_SLOT(ExternalFactorySlot,
+        "?_singleton@ExternalFactory@Object@@0PEAV12@EA");
     return p ? *p : nullptr;
 }
 // IO::Modification::_singleton. Note the `2PEAV12@EA` spelling — a PUBLIC
@@ -262,7 +271,7 @@ RtObject::ExternalFactory* Factory() {
 // spelling is a phantom that resolves NULL in silence
 // (reference_resolveexport_phantom_names.md).
 uint8_t* ModificationSingleton() {
-    static uint8_t** p = DataExport<uint8_t*>("?_singleton@Modification@IO@@2PEAV12@EA");
+    uint8_t** p = RT_DATA_SLOT(uint8_t**, "?_singleton@Modification@IO@@2PEAV12@EA");
     return p ? *p : nullptr;
 }
 // Engine::MainLoop::_singleton — the DLL data symbol holding a MainLoop*.
@@ -278,8 +287,8 @@ uint8_t* ModificationSingleton() {
 // `RtEngine::UpdateLoop*`, the same type this lane's ports take, so the
 // comparison below is type-checked end to end.
 RtEngine::MainLoop* MainLoopSingleton() {
-    static RtEngine::MainLoop** p =
-        DataExport<RtEngine::MainLoop*>("?_singleton@MainLoop@Engine@@1PEAV12@EA");
+    MainLoopSlot p = RT_DATA_SLOT(MainLoopSlot,
+        "?_singleton@MainLoop@Engine@@1PEAV12@EA");
     return p ? *p : nullptr;
 }
 // UI::Dialog's BaseTypeInfo. Both Load bodies read its FIRST DWORD as the type
