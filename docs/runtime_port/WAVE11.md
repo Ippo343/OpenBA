@@ -698,3 +698,72 @@ that must survive the dropped instrument is:
 40s `BANISHED_AUTOLOAD` run, `rc=0`, empty crash log. That reading is *why* the
 instrument can be dropped without losing the evidence that the ungated body is
 not dead code.
+
+---
+
+# WAVE 11 CLOSED — 2026-09-09, merge `0bd9328`
+
+## The numbers, measured on the merge
+
+| | before | after |
+|---|---|---|
+| **Object** | 32/56 = **57.1%** | 44/61 = **72.1%**, ceiling **88.5%** |
+| TOTAL | 80.0% | 80.7% |
+
+**Read the set-diff, not the percentage.** The percentage is partly instrument
+inflation — lane OBJEXT's probe pulled rows into the call graph, lifting
+numerator and denominator together, **and the lane flagged this itself** rather
+than banking it.
+
+* **17 rows LEFT the unported set** — **10 by being PORTED**, **7 by being TAGGED
+  provably unpromotable** (3 abstract `??_7` vtables, `?_firstTypeInfo@`, 3
+  `?_singleton@` rows). Those two are different achievements and must not be
+  added together.
+* **3 rows ENTERED**: `?_typeInfo@CompiledExternal@`, `?_typeInfo@Internal@`
+  (named by OBJDATA's new accessors) and `?Add@ExternalFactory@` (opened by
+  OBJEXT).
+
+## Was the goal met?
+
+The goal was **100% of `called`, or its ceiling**. Neither: **72.1% against a
+proven ceiling of 88.5%.** The gap is 10 rows, and every one has a named
+mechanism — the `Set<ReferenceEntry>` AVL family, the by-value `IO` stream
+classes, `ResetPersistState`'s realloc-on-the-load-leg, and the two ARM-READY
+`Internal` rows behind a sequencing decision rather than a doubt.
+
+## Integration verified on the merge, not summed from reports
+
+Clean build; deployed under the game-dir lock (acquired **unpiped**);
+`BANISHED_AUTOSTART` run driving menu → New Game → Start; 151s uptime; zero
+asserts; **0-byte crash log**. Each lane's headline verdict was **grepped for
+after merging** — a trial merge had already reverted one lane's verdict silently,
+with no conflict marker, in a tree that still built.
+
+## What the wave actually produced
+
+The census points are the smaller half. The larger half:
+
+1. **The creation path is answered** — a typeinfo-row problem, not a
+   factory-porting one. Retires the kickoff's framing.
+2. **Five instruments that would have lied**, each caught by its own author
+   before publishing a number: an attendance counter in a static destructor; a
+   probe scheduled off a function never called; a control that double-freed; a
+   control that caught via a stale mechanism it did not name; and two shadow
+   sites that had never executed in eight waves.
+3. **A clean merge is not a correct merge** — now an integration gate.
+4. **A census `unported` row has four meanings**, only two of which are porting.
+
+## Follow-ups, in priority order
+
+1. **Arm `BANISHED_RT_INTERNAL_TABLE`** as the first isolated change after this
+   merge, measured against `make sa-stress`. Evidence is sufficient (advisor
+   verdict above); the deferral was sequencing.
+2. **The `IO` stream family** (`CompressedFileStream`, `BinaryFileStream`,
+   `TextFileStream`, `VisitorStream`) — one root cause behind three held-back
+   rows plus `Add`. Scoping it as "port `External::Load`" would scope the symptom.
+3. **`Set<ReferenceEntry>` AVL family** (0x10-element, node 0x30).
+4. **Fix `tools/game_dir_lock.sh`** — the empty-ticket starvation (line 293), the
+   timeout path that sends the longest waiter to the back, and the exit-code trap
+   that reported success three times in one lane.
+5. **Typeinfo-row promotion**, gated by the `minted=` test — the real successor to
+   the "object creation path" wave.
