@@ -275,6 +275,71 @@ EXTRA_VTABLES = {
         "stamped by the ?_loader construction; no other consumer exists",
 }
 
+# Vtables whose extent the `adjacent-export` proof gets WRONG, keyed by VA.
+#
+# Wave 19 lane FILE found this and lane MINT confirmed it from the bytes.
+# `adjacent-export` says "the last slot ends exactly where the next EXPORTED
+# symbol starts". That is only an UPPER bound, and it reads as exact. Every
+# concrete IO stream constructor heap-allocates an 8-byte IO::Encoding and
+# stamps an UNEXPORTED vtable into it; those tables live in .rdata interleaved
+# with the exported class tables, so the row before one SWALLOWS it.
+#
+# The constructor NAMES the address it stamps, which is a strictly tighter and
+# more direct bound than adjacency-to-the-next-export. That is the evidence for
+# both entries here; each was read as DISASSEMBLY, not decompiled C.
+#
+# THIS IS DELIBERATELY A HAND-CHECKED TABLE AND NOT AN AUTOMATIC SCAN -- but the
+# reason first written here was WRONG and the correction matters more than the
+# rule. Lane MINT implemented the obvious automation (scan .text for
+# RIP-relative LEAs, bound each row by the first target landing inside it), got
+# TWO findings, and dismissed one -- 0x180155480 inside ReaderWriter -- as a
+# decoding artefact. It was not. It is a genuine leaf constructor at
+# 0x180023e10, ret+int3 aligned, byte-verified above. THE SCAN SCORED 2 OF 2.
+#
+# It was dismissed on two bad grounds, both worth naming because they are
+# generic: (1) Ghidra reported "no references" to 0x180155480, which meant NOT
+# ANALYSED there, not ABSENT -- a silence read as a negative
+# (reference_a_screen_that_cannot_name_its_subject); and (2) "it sits mid-run of
+# _purecall INSIDE ReaderWriter", which assumes ReaderWriter's extent, the very
+# thing in dispute. Both tables and ReaderWriter itself end in _purecall, so the
+# BYTES CANNOT settle this -- only the constructors can.
+#
+# The rule stands anyway, on the asymmetry alone and not on a measured false
+# positive: an over-sized row is a visible surplus, an under-sized row loses
+# slots with NO symptom, so a bound that DELETES slots must carry a named
+# constructor a human checked. Only add an entry here with that site.
+VTABLE_EXTENT = {
+    0x1801553b0: (26,
+        "??_7ReaderWriter@IO@@6B@. adjacent-export bounds it at the next export "
+        "??_7BinaryFileStream@ (0x1801554d0) = 36 slots. TWO unexported tables sit "
+        "in between, so 36 swallows BOTH and the intermediate value 31 swallows "
+        "one: 0x180155480 (5 slots, all _purecall) and 0x1801554a8 (5 slots, the "
+        "IO::Encoding EXTRA_VTABLES_BY_ADDR already mints -- those bodies were "
+        "being emitted TWICE). Each has its own leaf constructor, and the two sit "
+        "adjacent in .text with clean ret+int3 boundaries:\n"
+        "    180023e00  48 8d 05 a1 16 13 00  LEA RAX,[0x1801554a8]\n"
+        "    180023e07  48 89 01 48 8b c1 c3  MOV [RCX],RAX; MOV RAX,RCX; RET\n"
+        "    180023e10  48 8d 05 69 16 13 00  LEA RAX,[0x180155480]\n"
+        "    180023e17  48 89 01 48 8b c1 c3  MOV [RCX],RAX; MOV RAX,RCX; RET\n"
+        "Both tables end in _purecall and so does ReaderWriter, so the BYTES "
+        "CANNOT distinguish 26 from 31 from 36 -- only the constructors can. "
+        "26 corroborated three ways: lane IOBASE derived it independently, the "
+        "integrator confirmed 0 .pdata coverage of 0x180023e10 with a working "
+        "positive control, and lane MINT's own .text LEA scan reported it before "
+        "being wrongly overruled by hand."),
+    0x180155980: (10,
+        "??_7TextFileStream@IO@@6B@. adjacent-export bounds it at "
+        "??_7VisitorStream@ (0x180155a20) = 20 slots; the real table is 10, and "
+        "0x1801559d0 starts a separate UNEXPORTED IO::Encoding table. Proof: "
+        "??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z at 0x1800ba431 is "
+        "LEA RAX,[0x1801559d0] -> MOV [RSI],RAX into a fresh allocation it then "
+        "installs at Stream::encoding (+0x10); Ghidra's xrefs to 0x1801559d0 are "
+        "that ctor and only that ctor. Slot 9 is "
+        "?Create@TextFileStream@IO@@ (0x1800ba940) and slot 10 would be "
+        "0x1800b9ab0, the head of a different descending method group. "
+        "runtime/types/io/FileStream.h has said 10 since Wave 11."),
+}
+
 # Storage symbols the DLL's CRT CONSTRUCTS at load, and where the construction
 # lives on our side. A symbol that the sweep finds a constructor for and that is
 # NOT listed here is new work: the generator refuses rather than emitting a
@@ -461,7 +526,13 @@ def run_census(csv_path):
 def cstr(s):
     if s is None:
         return "nullptr"
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    # Newlines matter: a note is emitted as a single C string literal, and a raw
+    # newline in one is a compile error, not a wrapped line. Wave 19 lane MINT
+    # added a multi-line VTABLE_EXTENT proof and broke the build with
+    # "missing terminating \" character" -- caught by compiling, which is why
+    # compiling happens without the game-dir lock.
+    return ('"' + s.replace("\\", "\\\\").replace('"', '\\"')
+            .replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t") + '"')
 
 
 def main():
@@ -677,9 +748,29 @@ def main():
         if not slots:
             errors.append(f"{sym}: decoded 0 slots")
             continue
+        # A hand-proved extent overrides the adjacency bound (see VTABLE_EXTENT).
+        ovr = VTABLE_EXTENT.get(ib + rva)
+        if ovr:
+            want, why = ovr
+            if want > len(slots):
+                errors.append(f"{sym or hex(ib+rva)}: VTABLE_EXTENT says {want} slots "
+                              f"but only {len(slots)} decode -- the override is wrong "
+                              f"or the table moved")
+                continue
+            slots = slots[:want]
+            # Collapse to ONE line here, at the source. The proof is emitted
+            # BOTH as a // comment header and as a C string literal, and a raw
+            # newline breaks each in its own way -- escaping it in cstr() alone
+            # fixed the literal and left the comment broken.
+            proof_override = "ctor-stamped-neighbour: " + " | ".join(
+                ln.strip() for ln in why.splitlines() if ln.strip())
+        else:
+            proof_override = None
         n = len(slots)
         end_rva = rva + 8 * n
-        if nxt == end_rva:
+        if proof_override:
+            proof = proof_override
+        elif nxt == end_rva:
             proof = "adjacent-export:" + by_rva[nxt]
         else:
             tail = int.from_bytes(pe.get_data(end_rva, 8), "little")
@@ -695,6 +786,38 @@ def main():
         if hn and hn != n:
             errors.append(f"{sym}: harvest has {hn} slots, this decode has {n}")
         vtables.append({"symbol": sym, "va": ib + rva, "slots": slots, "proof": proof})
+
+    # ---- NO MINTED VTABLE MAY CONTAIN ANOTHER'S START ----------------------
+    #
+    # Wave 19 lane MINT. The cheap, SOUND half of the over-sizing check above.
+    # It needs no disassembly and has no false positives: if row A's extent
+    # strictly contains row B's start address, then A has swallowed B, full
+    # stop -- two rows cannot begin inside one table. That is exactly what
+    # ??_7ReaderWriter@ was doing to the by-address IO::Encoding table at
+    # 0x1801554a8, emitting those 5 bodies twice, for the entire life of this
+    # generator.
+    #
+    # It is a REFUSAL, not a warning, because the symptom is otherwise
+    # invisible: an over-sized row's surplus slots are read from the DLL at
+    # their real addresses, so the mint's own shadow compares them and finds
+    # 0 MISMATCH. The shadow cannot see extent -- only overlap can.
+    #
+    # It does NOT catch the general case: an unexported neighbour that nothing
+    # else mints (??_7TextFileStream@'s 0x1801559d0) is invisible here and needs
+    # the constructor evidence in VTABLE_EXTENT. Stated so the green is not read
+    # as "no over-sized rows remain".
+    starts = sorted(v["va"] for v in vtables)
+    for v in vtables:
+        lo, hi = v["va"], v["va"] + 8 * len(v["slots"])
+        for s in starts:
+            if lo < s < hi:
+                errors.append(
+                    f"{v['symbol'] or hex(lo)}: extent {hex(lo)}..{hex(hi)} "
+                    f"({len(v['slots'])} slots) CONTAINS the start of another "
+                    f"minted vtable at {hex(s)} — it has swallowed that table and "
+                    f"is emitting its bodies twice. True extent is at most "
+                    f"{(s - lo) // 8} slots; add it to VTABLE_EXTENT with the "
+                    f"constructor site that proves the bound.")
 
     # ---- the construction sweep, now that every symbol's EXTENT is known ---
     # A constructor may reference any field, not the base (see scan_ctor_refs),
