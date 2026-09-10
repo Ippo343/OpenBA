@@ -349,29 +349,17 @@ void RtObjectPathStackProbeRun(ExternalFactory* live) {
         return;
     }
 
+    // PART 2 RUNS FIRST, deliberately. It is the only screen for the two rows
+    // still open; PART 1 re-proves bodies that already reported PASS. Ordering
+    // the open question first is what stops a tight window -- or another defect
+    // in PART 1's own controls -- from costing the thing the run is FOR. That
+    // is not hypothetical: the previous measuring run died inside PART1 ctl=3
+    // and took the whole of PART 2 with it.
+    //
     // Snapshot/restore rather than a guard at each `++`: the script must leave
     // NO trace in the effectiveness counters, or they stop measuring the game
     // and start measuring the probe.
     const RtObject::PathStackCounters saved = RtObject::g_psc;
-
-    // ---- PART 1 -------------------------------------------------------------
-    const int ctls1[] = { 0, 2, 3, 4 };
-    for (int i = 0; i < 4; ++i) {
-        const Score s = RunContainerPass(ctls1[i]);
-        const bool isCtl = ctls1[i] != 0;
-        std::printf("[PathStack] PART1 ctl=%d compared=%d mismatches=%d  %s\n",
-                    ctls1[i], s.compared, s.mismatches,
-                    !isCtl ? (s.mismatches == 0 ? "PASS" : "*** PORT DEFECT ***")
-                           : (s.mismatches  > 0 ? "control CAUGHT"
-                                                : "*** control NOT CAUGHT ***"));
-        if (s.compared == 0)
-            std::printf("[PathStack] PART1 ctl=%d MADE NO COMPARISONS -- "
-                        "this is not a pass\n", ctls1[i]);
-        if (s.mismatches && ctls1[i] == 0) {
-            std::printf("[PathStack] PART1   ours = %s\n", g_lastOurs);
-            std::printf("[PathStack] PART1 theirs = %s\n", g_lastTheirs);
-        }
-    }
 
     // ---- PART 2 -------------------------------------------------------------
     if (live == nullptr) {
@@ -401,6 +389,25 @@ void RtObjectPathStackProbeRun(ExternalFactory* live) {
         std::printf("[PathStack] PART2 offset cross-check (+0x30/+0x38 read by "
                     "retail's own accessors on the live object): %d checked, "
                     "%d disagreed\n", xChecks, xFails);
+    }
+
+    // ---- PART 1 -------------------------------------------------------------
+    const int ctls1[] = { 0, 2, 3, 4 };
+    for (int i = 0; i < 4; ++i) {
+        const Score s = RunContainerPass(ctls1[i]);
+        const bool isCtl = ctls1[i] != 0;
+        std::printf("[PathStack] PART1 ctl=%d compared=%d mismatches=%d  %s\n",
+                    ctls1[i], s.compared, s.mismatches,
+                    !isCtl ? (s.mismatches == 0 ? "PASS" : "*** PORT DEFECT ***")
+                           : (s.mismatches  > 0 ? "control CAUGHT"
+                                                : "*** control NOT CAUGHT ***"));
+        if (s.compared == 0)
+            std::printf("[PathStack] PART1 ctl=%d MADE NO COMPARISONS -- "
+                        "this is not a pass\n", ctls1[i]);
+        if (s.mismatches && ctls1[i] == 0) {
+            std::printf("[PathStack] PART1   ours = %s\n", g_lastOurs);
+            std::printf("[PathStack] PART1 theirs = %s\n", g_lastTheirs);
+        }
     }
 
     RtObject::g_psc = saved;

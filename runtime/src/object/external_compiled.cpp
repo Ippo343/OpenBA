@@ -210,12 +210,29 @@ void BuildCompiledPath(const Filename* path, Filename* out) {
 // Every case is compared ours-vs-theirs as TEXT. Ours and theirs write two
 // different fresh slots, so they cannot alias.
 // ---------------------------------------------------------------------------
+//
+// The set is chosen so that every one of the six concatenated terms is
+// EXERCISED BY MORE THAN ONE CASE where that is possible. A control that
+// catches on 1 of N is one input away from reporting NOT CAUGHT and indicting
+// a sound instrument, and its catch-rate is a coverage statement about this
+// list rather than a statement about the control
+// (reference_control_must_pick_a_compared_subject.md,
+//  reference_uniform_population_is_not_a_verification.md).
+//
+// The `sens=` mask printed beside each control names exactly which entries are
+// sensitive to it, so a future reader does not have to infer coverage from a
+// ratio.
 const char* const kSweepPaths[] = {
     "Terrain/Grass.rsc",
-    "House.rsc",
+    "House.rsc",                                   // EMPTY directory term
     "Template/Building/Deep/Nested/Thing.rsc",
-    "Dialog/MainMenu.rsc:buttonOk",
-    "Audio/Theme",
+    "Dialog/MainMenu.rsc:buttonOk",                // explicit :identifier
+    "Audio/Theme",                                 // NO extension term
+    "Audio/Music/Theme.ogg",                       // non-.rsc extension
+    "Terrain/Grass.rsc:alt",                       // identifier AND extension
+    "Deep/Nested/Thing.tga:sprite",                // both, non-.rsc
+    "Solo.tga",                                    // no dir, has ext
+    "A/B.c:d",                                     // all four terms, minimal
 };
 const int kSweepN = (int)(sizeof(kSweepPaths) / sizeof(kSweepPaths[0]));
 
@@ -235,12 +252,19 @@ void RunCompiledSweep(const Filename* livePath) {
 
     for (int ctl = 0; ctl <= 5; ++ctl) {
         int compared = 0, mismatches = 0;
+        // One character per input: '.' insensitive, 'X' diverged, '-' skipped.
+        char mask[16];
+        for (int m = 0; m < 16; ++m) mask[m] = 0;
         for (int i = 0; i <= kSweepN; ++i) {
             Filename in{nullptr};
+            mask[i] = '.';
             if (i == kSweepN) {
                 // case N is the LIVE path this self-test is riding on: the one
                 // input we know the game actually produces.
-                if (livePath == nullptr || livePath->data == nullptr) continue;
+                if (livePath == nullptr || livePath->data == nullptr) {
+                    mask[i] = '-';
+                    continue;
+                }
                 RtString_AdoptInline(AsStr(&in), livePath->data);
             } else {
                 RtSystem::RtSystem_Filename_CtorCStr(&in, kSweepPaths[i]);
@@ -258,6 +282,7 @@ void RunCompiledSweep(const Filename* livePath) {
                 (ours.data == nullptr || std::strcmp(ours.data, theirs.data) == 0);
             if (!equal) {
                 ++mismatches;
+                mask[i] = 'X';
                 if (ctl == 0)
                     std::printf("[Compiled] SWEEP ctl=0 MISMATCH in=%s\n"
                                 "[Compiled]   ours = %s\n"
@@ -270,8 +295,9 @@ void RunCompiledSweep(const Filename* livePath) {
             RtString_ReleaseInline(AsStr(&ours));
             RtString_ReleaseInline(AsStr(&in));
         }
-        std::printf("[Compiled] SWEEP ctl=%d compared=%d mismatches=%d  %s\n",
-                    ctl, compared, mismatches,
+        mask[kSweepN + 1] = 0;
+        std::printf("[Compiled] SWEEP ctl=%d compared=%d mismatches=%d sens=%s  %s\n",
+                    ctl, compared, mismatches, mask,
                     ctl == 0 ? (mismatches == 0 ? "PASS" : "*** PORT DEFECT ***")
                              : (mismatches  > 0 ? "control CAUGHT"
                                                 : "*** control NOT CAUGHT ***"));
