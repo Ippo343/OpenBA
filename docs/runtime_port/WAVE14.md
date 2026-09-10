@@ -32,7 +32,7 @@ can never be ported — see the wart below.
 | AUTONAME | `?GetAutoSaveName@SaveLoad@Save@@` 0x1800c1440 | `c2d23d8` | +1 | calls=1, thin but real |
 | SETUPLOAD | `?SetupLoad@SavedState@Save@@` 0x1800c0c60 | `f862276` | +1 | two screens, no gameplay route |
 | SAVEMETA | `?SaveMetaData@SaveLoad@Save@@` 0x1800c1490 | `3476fc4` | +1 | modded path never ran |
-| LOADMETA | `?LoadMetaData@SaveLoad@Save@@` 0x1800c1b30 | `d7a7993` | +1 | write path never ran |
+| LOADMETA | `?LoadMetaData@SaveLoad@Save@@` 0x1800c1b30 | `76cf7e4` | +1 | write path never ran; S7 side-effect screen |
 | SINGLETON | `?_singleton@SaveLoad@Save@@0PEAV12@EA` | `94d8d15` | **0** | **net −2.6 points alone** |
 | DRAW | `?Draw@SaveLoad@Save@@` 0x1800c2eb0 | `63b5e0a` | +1 | 352,256 px bytes byte-identical |
 | GENNAME | `?GenerateSaveName@SaveLoad@Save@@` 0x1800c1250 | `f4c07d7` | +1 | **UNVERIFIED — never got a run** |
