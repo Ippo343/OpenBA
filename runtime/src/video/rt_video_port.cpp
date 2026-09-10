@@ -18,6 +18,13 @@
 //                            two Context methods dx11/ calls once per draw
 //                                                        (Wave 9 lane CTX)
 //   BANISHED_RT_CTXBIND_PROBE=1 runs lane CTX's 37-case oracle at init.
+//   BANISHED_RT_VIDRES=0     ... just the Video resource lifecycle: RenderBuffer
+//                            ctor/dtor/Bind, ImageBuffer::Recreate, and the
+//                            Configuration/Device dtors  (Wave 18 lane VRES)
+//   BANISHED_RT_VIDSAVEIMG=0 ... just ImageBuffer::SaveImageToFile, which is
+//                            the one VRES row with unported IO dependencies
+//   BANISHED_RT_VRES_PROBE=1 runs lane VRES's replay oracle (=neg adds the
+//                            four negative controls)
 //
 // Each lane owns exactly one .cpp and exposes one Register function returning
 // the number of RegisterRuntime* calls it made. A lane with nothing landed yet
@@ -165,6 +172,31 @@ void RtVideoPortInit() {
         // at this point in boot.
         const char* ep = std::getenv("BANISHED_RT_VIDENUMTYPES_PROBE");
         RtVideoDeviceEnumTypesProbeArm(ep && *ep && std::strcmp(ep, "0") != 0);
+    }
+
+    // Wave 18 lane VRES: the Video resource lifecycle — RenderBuffer
+    // ctor/dtor/Bind, ImageBuffer::Recreate, and the Configuration and Device
+    // destructors. Registered LAST of the Video lanes because
+    // ??1Device@Video@@'s body reaches the two exported DATA singletons through
+    // RT_DATA_SLOT and destroys three Arrays through lane D2's bodies; nothing
+    // earlier in this init depends on it, and nothing it needs is registered
+    // here (Collection's inits run after all of Video's, and this body resolves
+    // through function-local statics on first USE, not at init).
+    if (RtWaveEnabled("BANISHED_RT_VIDRES")) {
+        extern int RtVideoResourcesRegister();
+        n += RtVideoResourcesRegister();
+        // ARMED here, RUN from the first ?Bind@RenderBuffer@ — it allocates
+        // ~40 blocks and at THIS point in boot the MemoryAllocator singleton is
+        // constructed but not started. `=neg` additionally runs the four
+        // negative controls. See video_resources_probe.cpp.
+        // Wave 18 lane VRES row 7. Separate from the six above because it is
+        // the only row that depends on unported IO exports, so an A/B that
+        // needs the rest of the lane on and this one off has a switch for it.
+        extern int RtVideoSaveImageRegister();
+        if (RtWaveEnabled("BANISHED_RT_VIDSAVEIMG")) n += RtVideoSaveImageRegister();
+        extern void RtVideoResourcesProbeArm(bool on);
+        const char* vp = std::getenv("BANISHED_RT_VRES_PROBE");
+        RtVideoResourcesProbeArm(vp && *vp && std::strcmp(vp, "0") != 0);
     }
 
     printf("[RtPort] Video: %d exports registered\n", n);

@@ -1,0 +1,65 @@
+// ============================================================================
+// runtime/src/video/video_resources_win.cpp — Wave 18 lane VRES
+//   The single Win32 call in ??1Device@Video@@: DeleteCriticalSection.
+// ============================================================================
+//
+// PLAN §4.1 decision 1 keeps runtime/src/ free of <windows.h> outside a `_win`
+// twin, so this one line lives here and video_resources.cpp stays portable.
+// Same split, and the same reason, as device_startup_win.cpp and
+// buffers_win.cpp.
+//
+// The offset is a literal here rather than an include of
+// runtime/types/video/Device.h, for the reason buffers_win.cpp gives: pulling
+// an engine header in behind <windows.h> is the collision PLAN §4.1 is about
+// (<wingdi.h> declares a function called `Rectangle`; <windef.h> #defines
+// `near` and `far` away). The static_assert that binds this constant to
+// `Device::lock` lives in the portable half.
+//
+// Retail: `LEA RCX,[RBX+0x60] / CALL qword ptr [0x18014b370]` at 0x1800f72d9.
+// 0x18014b370 is Runtime-x64.dll's IAT slot for KERNEL32!DeleteCriticalSection
+// (confirmed against the shipped import directory with pefile, not inferred
+// from the surrounding code).
+// ============================================================================
+
+#include <windows.h>
+#include <cstdint>
+
+static const size_t kDeviceLock = 0x60;
+
+extern "C" void RtVideoDeleteDeviceLock(void* device) {
+    // Retail does not null-check `this` — nor does it need to, the caller is
+    // the destructor. The cast is the whole body.
+    DeleteCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(
+        static_cast<uint8_t*>(device) + kDeviceLock));
+}
+
+// The probe's synthetic Devices need a REAL critical section at +0x60, because
+// both bodies under test call DeleteCriticalSection on it. Seeding that block
+// with the probe's byte pattern instead and letting the DLL delete it would be
+// testing the OS, not the port.
+//
+// The spin count matches ??0Device@Video@@'s own
+// InitializeCriticalSectionAndSpinCount(&this->lock, 5000) — the probe's
+// subject should be the shape retail builds, not a plainer one.
+extern "C" void RtVideoProbeInitDeviceLock(void* device) {
+    InitializeCriticalSectionAndSpinCount(
+        reinterpret_cast<CRITICAL_SECTION*>(static_cast<uint8_t*>(device) + kDeviceLock),
+        5000);
+}
+
+// ============================================================================
+// The three WriteFile calls in ?SaveImageToFile@ImageBuffer@Video@@
+// ============================================================================
+//
+// Retail's shape at 0x1800f2a33 / 0x1800f2a5a / 0x1800f2af7 is identical three
+// times: zero a DWORD, `WriteFile(handle, buf, len, &written, NULL)`, then add
+// `written` to the stream's cursor. It NEVER looks at WriteFile's BOOL — a
+// failed write contributes whatever the pre-zeroed out-parameter holds, which
+// is zero. That is reproduced here rather than turned into an error path: a
+// port that returned early on failure would stop writing rows retail keeps
+// writing.
+extern "C" uint32_t RtVideoWriteFileRaw(void* handle, const void* buf, uint32_t bytes) {
+    DWORD written = 0;
+    WriteFile(reinterpret_cast<HANDLE>(handle), buf, bytes, &written, nullptr);
+    return static_cast<uint32_t>(written);
+}
