@@ -985,3 +985,98 @@ scope** and flagged the caller instead of editing outside its subject — had it
 edited, the false finding would have landed as a change; and it reported defect 3
 as **already mostly fixed** rather than claiming a fresh save, which is a
 correction to the brief that is easy to quietly not make.
+
+---
+
+# WAVE 11 + FOLLOW-UPS CLOSED — Object is AT CEILING
+
+## Follow-up 5 CLOSED — zero rows promoted, and that is the right answer
+
+| | before | after |
+|---|---|---|
+| **Object** | 51/61 = 83.6%, ceiling 88.5% | 51/61 = **83.6%, ceiling 83.6% — AT CEILING** |
+
+**`ported` and `called` did not move. The ceiling came down to meet them.** All
+three remaining rows are **READY-BUT-UNPROMOTABLE (NO-OP)** and now tagged: their
+only consumers are vtable slots nothing in this tree can dispatch. **The wave did
+not port these rows — it proved they cannot be ported.** Set-diff on the *ported*
+set: zero entered, zero left, exactly as pre-registered; the three rows left the
+*listing* by being tagged, which is a different achievement and is recorded as
+one.
+
+### The safety question, answered by measurement rather than argument
+
+A new probe instruments **all three** `BaseTypeInfo::factoryFn` dispatch sites:
+**0 of 102,454 dispatches went through a minted node**, and both subject types
+were created through a factory pointer **0 times** on a cap-immune counter —
+confirmed on a second, very different mix (`BANISHED_AUTOLOAD`, all three rows
+armed). Predicate and liveness controls both GREEN, and the site that never ran
+(`AddControllerTab`) **reports that fact instead of a clean zero**.
+
+**So porting the two trapped factories would have changed no verdict.** The
+abort-trap hazard follow-up 2 created was real and worth checking; the answer is
+that it is not reachable.
+
+### Condition (b) implemented — and the split was LIVE, not theoretical
+
+`VtblInternal()`/`VtblBase()` now pin the DLL's table while it is present, with
+the registry only as the DLL-absent fallback. One-variable A/B:
+
+```
+BANISHED_RT_INTERNAL_VTBL_RAW=0  ->  stamped=MINTED (SPLIT)   ctorRuns=124395
+default                          ->  stamped=DLL, no split    ctorRuns=124680
+```
+
+Lane OBJLIFE's hazard was real. With `BANISHED_RT_INTERNAL_TABLE` armed by
+default since follow-up 1, our ctor runs ~124k times a boot, so this was one
+promotion away from two vtables on one class in a shipping build.
+
+### ⚠ AN ERROR IN THE INTEGRATOR'S OWN ADJUDICATION
+
+`WAVE11.md` (`1aed90e`) amended the `??_7Internal` expiry to require **BOTH**
+(a) `ATTENDANCE entries>0` **and** (b) raw-pinning of `VtblInternal`/`VtblBase`.
+
+**Those two gates are mutually exclusive.** The only thing that could ever make
+attendance move is our ctor stamping the *minted* table — and (b) is precisely
+what stops it doing so. The amendment specified a conjunction whose halves cannot
+both hold, so as written it could never be satisfied by anything.
+
+**Correct reading: (b) RETIRES (a); it is not a step before it.** The row's
+verdict is NO-OP on its own evidence (`entries=0` in *both* halves of the A/B,
+including the half where 124,395 objects a boot really did carry the minted
+table) — which is a stronger result than the amendment was reaching for.
+
+The original adjudication was still worth making: it caught a real deadlock
+between two lanes' exit conditions. But it replaced one under-specified gate with
+an unsatisfiable one, and only a lane that tried to satisfy it would find that.
+
+### Two more corrections
+
+* *"There was no other `factoryFn` caller before follow-up 2"* — there were
+  **two**, both older (`Factory::CreateObject`, Wave 9;
+  `DialogInstance::AddControllerTab`, Wave 10). The conclusion holds; the history
+  in the brief does not.
+* **Scope the brief missed:** **twelve other files besides `internal.cpp`** reach
+  `??_7Base@Object@@6B@` through a registry-first door. Anyone revisiting that tag
+  has twelve sites to pin, not one.
+
+### Three instrument defects fixed, two of them pre-existing
+
+An armed candidate row printed **no readiness line** once it went READY (and the
+first fix missed the `BANISHED_RT_MINT_ROWS` path); the probe's own name table
+**dropped 102,486 dispatches**; and a loop-variable resolve read as
+`UNRESOLVED-NAME`. Audit deltas vs untouched main: `BYPASS 25→25`,
+`UNRESOLVED-NAME 3→3`, `OK-DATA 15→19`.
+
+## Final state
+
+| | start of Wave 11 | now |
+|---|---|---|
+| **Object** | 32/56 = **57.1%** | 51/61 = **83.6% — AT CEILING** |
+| TOTAL | 80.0% | 80.6% |
+
+`standalone-debug`, `standalone-perf` and `make check-log-strip` all clean.
+
+**The user's question — "100% or the ceiling" — is answered: the ceiling, and it
+is proven rather than asserted.** Ten of the original 24 rows were ported; the
+rest carry binary proofs that they cannot be.
