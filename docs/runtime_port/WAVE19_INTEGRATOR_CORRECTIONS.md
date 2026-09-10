@@ -511,3 +511,98 @@ stays at boot (it reads a data slot and never formats a `String`, so it does not
 touch the allocator singleton), while `ProbeSaveLoadGenerateSaveName()` moves
 in-game. Taking either side wholesale would have silently dropped one lane's work.
 Build green.
+
+## C17. C13's MECHANISM was wrong — the conclusion survives, the explanation did not
+
+Lane IOBASE measured what C13 asserted. **C13 said** a caller-less port like
+`?GetSource@Stream@IO@@` "enters as +1 `called` AND +1 `ported` simultaneously,
+so `called - ported` is unchanged."
+
+**Measured:** it adds **nothing to either.** `runtime_census.py` builds its table
+only from symbols that **have a call door**; a registered-but-unresolved symbol
+lands in **"Ports with no caller (234 exports)"** instead, which feeds no column.
+
+**The conclusion — zero identity movement — is correct. My reasoning for it was
+not, and a right answer from a wrong mechanism is worth flagging**, because the
+mechanism is what a lane reuses on the next symbol. It also has a consequence
+C13 did not draw: this covers **8 of IOBASE's 15 registrations**, and the census's
+own rule then applies to them — **a caller-less port is NOT verified by a clean
+run.** IOBASE declined to bank those 8 rather than counting them, which is right.
+
+## C18. The grep-before-you-write rule needs a THIRD form — the linker caught what two greps missed
+
+Lane IOBASE nearly rewrote `~MemoryStream`, **which was already ported.** Its grep
+searched the **mangled name** and the **retail VA** and returned only comments.
+The body exists as **`RtIo_MemoryStream_Dtor`** — in a file called
+`compressedstream.cpp`.
+
+**The LINKER caught it, not the grep.** And Lane W had **predicted this exact gap**
+in a comment at `compressedstream.cpp:966-971`.
+
+`reference_grep_for_the_port_before_writing_it.md` has now failed in a new way:
+the two forms we tell lanes to grep (mangled name, VA) are both blind to a body
+that carries **our own naming convention** in a neighbouring class's file.
+
+**Rule, now issued to the live lanes:** grep the mangled name, the retail VA, **and
+the plausible `RtIo_<Class>_<Method>` symbol name** — and **treat a duplicate-symbol
+link error as a discovery, not a nuisance.** This is the fourth instance this wave
+of an instrument being blind in a way it never announced.
+
+## C19. `??_7Stream@IO@@6B@` is READY and must STAY UNPROMOTABLE — verified
+
+IOBASE's `?GetSource@` filled the last trap on `??_7Stream@`, taking it to
+**7/2 TRAP=0 READY**. It correctly did **not** promote it and left phase 0a's tag
+alone. Verified on the merged tip:
+
+```
+reg_mint_promoted.cpp:1126  RT_UNPROMOTABLE: ??_7Stream@IO@@6B@ ... NONE, EVER
+census:  ??_7Stream@IO@@6B@  [PORTED ... UNPROMOTABLE(NO-OP) ... §3.2]
+```
+
+**READY means SAFE TO STAMP, not that anything dispatches it**
+(`reference_a_green_readiness_screen_is_not_a_route.md`). A lane reading only the
+readiness screen would reach for this row. It is a NO-OP abstract base — phase 0a
+settled that from the shipped bytes — and promoting it would be wrong however
+green it reads.
+
+**A stale-number footnote on the tags themselves:** both `RT_UNPROMOTABLE` lines
+still carry `[INHERITED]` slot counts — `2/36` for ReaderWriter and `1/7` for
+Stream. ReaderWriter is **31 slots, not 36** (TRAPS tranche 2), and Stream is now
+**2 ported, TRAP=0**. **The verdicts are right; the numbers beside them are stale.**
+Fifth instance of the wave's recurring failure, and this one sits in the tree
+rather than in a document.
+
+## C20. A COORDINATION FAILURE THAT IS MINE: `?GetSource@` was ported TWICE
+
+Both lanes ported `?GetSource@Stream@IO@@` (`0x18000c6a0`):
+
+```
+wave19/iobase  : runtime/src/io/iobase_vtables.cpp            (4 refs)
+wave19/cstream : runtime/src/io/compressed_stream_write.cpp   (3 refs) + a probe
+```
+
+**I arbitrated it to CSTREAM, IOBASE requested it in a message that crossed mine,
+I re-affirmed CSTREAM — and IOBASE built it anyway.** The arbitration existed
+precisely to prevent this and it failed, because I treated "I sent the ruling" as
+"the ruling landed before work started". With four concurrent lanes and messages
+in flight, **a ruling on a shared body needs an ACKNOWLEDGEMENT before the losing
+lane proceeds**, not just a send.
+
+Resolved by reversing myself: **CSTREAM drops its copy and consumes IOBASE's**, on
+the single ground that IOBASE is sealed and CSTREAM is still live. Not a quality
+judgement — and CSTREAM was told to **keep its PROBE** if it is the better one,
+since IOBASE reports **no differential oracle in its lane at all** as its own
+largest named gap.
+
+The specific hazard this creates is a **SHADOWED** registration — two registrations
+of one address, later binding wins, earlier checked line silently dead.
+`dispatch_slot_map.py --check` on the merged tip reads **0 addresses registered
+more than once**, so the tree is clean today; it must be re-checked after CSTREAM
+merges.
+
+### Identity after PERSIST + IOBASE
+
+```
+97 >= 123 - 5 = 118      21 SHORT     (36 at wave start)
+```
+Build green. `--check` clean. No percentage quoted.
