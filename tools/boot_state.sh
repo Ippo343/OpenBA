@@ -125,6 +125,16 @@ probe_once() {
     # APPLICABLE ONLY to the three states a LIVE watchdog republishes every
     # tick. EXITED is written once by Stop() and is SUPPOSED to sit frozen, so
     # ageing it would turn every clean shutdown into a false STALE.
+    #
+    # MEASURED WHILE WRITING THIS, and it makes the freshness check MORE
+    # load-bearing rather than less: `BootState::Stop()` HAS NO CALLER anywhere
+    # in the tree (only `Start()` at main.cpp:1639 and `MarkStartupComplete()`
+    # at game_main.cpp:478). So STATE=EXITED is never actually written, and
+    # EVERY run -- including a clean self-quit, verified twice today -- leaves
+    # STATE=RUNNING behind with a dead pid. The pid check catches that today;
+    # freshness catches it even if the pid were recycled. The EXITED arm below
+    # is kept because it is the correct rule for the state the header
+    # documents, but nothing in the shipped exe currently produces it.
     case "$state" in
         BOOTING|RUNNING|BLOCKED_DIALOG)
             age="$(file_age)"

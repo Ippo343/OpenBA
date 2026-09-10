@@ -36,12 +36,33 @@ echo "FIXTURE DIR  : $FIX   (private; the shared game dir is NOT touched)"
 
 # The BEFORE script, straight out of git, so "it used to say RUNNING" is a
 # measurement and not a recollection.
-( cd "$SCRIPT_DIR/.." && git show HEAD:tools/boot_state.sh ) > "$OLD" 2>/dev/null
-if [ ! -s "$OLD" ]; then
-    echo "FATAL: could not extract HEAD:tools/boot_state.sh -- no BEFORE to compare against"
+#
+# IT IS FOUND BY CONTENT, NOT PINNED TO HEAD. The first version of this file
+# used `git show HEAD:tools/boot_state.sh`, which was correct for exactly as
+# long as the fix was uncommitted: the moment it landed, HEAD became the NEW
+# script, "old" and "new" were the same file, and P1a/P2a flipped from PASS to
+# FAIL. A baseline that MOVES WITH THE THING IT IS THE BASELINE FOR is not a
+# baseline. So: walk this file's history and take the newest revision that does
+# NOT contain the freshness check, identified by the helper the fix introduced.
+BASE_SHA=""
+for sha in $(git -C "$SCRIPT_DIR/.." log --format=%H -- tools/boot_state.sh); do
+    if ! git -C "$SCRIPT_DIR/.." show "$sha:tools/boot_state.sh" 2>/dev/null \
+         | grep -q 'file_age()'; then
+        BASE_SHA="$sha"
+        break
+    fi
+done
+if [ -z "$BASE_SHA" ]; then
+    echo "FATAL: no revision of tools/boot_state.sh WITHOUT file_age() -- nothing to"
+    echo "       compare against. If the pre-fix history is gone, P1a/P2a cannot run."
     exit 1
 fi
-echo "SUBJECT (old): HEAD:tools/boot_state.sh -> $OLD"
+git -C "$SCRIPT_DIR/.." show "$BASE_SHA:tools/boot_state.sh" > "$OLD" 2>/dev/null
+if [ ! -s "$OLD" ]; then
+    echo "FATAL: could not extract $BASE_SHA:tools/boot_state.sh"
+    exit 1
+fi
+echo "SUBJECT (old): ${BASE_SHA} (newest revision with no file_age) -> $OLD"
 
 # ---------------------------------------------------------------------------
 # A REAL live process, so the pid-liveness half of the tool is genuinely
@@ -119,7 +140,10 @@ echo "--- N3: BOOTING, pid ALIVE, file FRESH -- a real slow boot must stay BOOTI
 make_state BOOTING "$LIVE_PID" 0
 check "N3 NEW script says BOOTING (not STALE)" "$NEW" 3
 
-echo "--- N4: EXITED, frozen 600s -- a clean shutdown is SUPPOSED to sit frozen"
+echo "--- N4: EXITED, frozen 600s -- a clean shutdown is SUPPOSED to sit frozen."
+echo "        SCOPE: BootState::Stop() has NO CALLER in the tree, so the shipped"
+echo "        exe never writes EXITED. This exercises probe_once's EXITED arm --"
+echo "        real code -- against a state no real run currently produces."
 make_state EXITED "$LIVE_PID" 600
 check "N4 NEW script says NOT_RUNNING, not STALE" "$NEW" 1
 
