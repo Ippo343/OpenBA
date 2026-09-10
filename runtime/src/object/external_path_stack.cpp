@@ -534,7 +534,7 @@ int RtObjectExternalPathStackRegister() {
     g_probePending = RtObjectPathStackProbeArmed();
 
     // THE IDENTITY LINE. Nothing else in the tree prints "PathStack".
-    std::printf("[PathStack] registered %d exports + 4 container addresses "
+    printf("[PathStack] registered %d exports + 4 container addresses "
                 "(negctl=%d, probe=%s)\n",
                 n, g_negCtl, RtObjectPathStackProbeArmed() ? "ARMED" : "off");
     return n;

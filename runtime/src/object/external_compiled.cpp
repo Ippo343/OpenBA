@@ -341,7 +341,7 @@ void RunCompiledSweep(const Filename* livePath) {
     GcpFn theirFn = RtOriginal<GcpFn>(
         "?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z");
     if (theirFn == nullptr) {
-        std::printf("[Compiled] SWEEP SKIPPED -- the shipped GetCompiledPath did "
+        printf("[Compiled] SWEEP SKIPPED -- the shipped GetCompiledPath did "
                     "not resolve; NO COMPARISON WAS MADE\n");
         return;
     }
@@ -382,7 +382,7 @@ void RunCompiledSweep(const Filename* livePath) {
                 ++mismatches;
                 mask[i] = 'X';
                 if (ctl == 0)
-                    std::printf("[Compiled] SWEEP ctl=0 MISMATCH in=%s\n"
+                    printf("[Compiled] SWEEP ctl=0 MISMATCH in=%s\n"
                                 "[Compiled]   ours = %s\n"
                                 "[Compiled] theirs = %s\n",
                                 in.data ? in.data : "(null)",
@@ -418,17 +418,17 @@ void RunCompiledSweep(const Filename* livePath) {
             else               { diff[d++] = ' '; }
         }
         diff[d] = 0;
-        std::printf("[Compiled] SWEEP ctl=%d compared=%d mismatches=%d  %s\n",
+        printf("[Compiled] SWEEP ctl=%d compared=%d mismatches=%d  %s\n",
                     ctl, compared, mismatches,
                     ctl == 0 ? (mismatches == 0 ? "PASS" : "*** PORT DEFECT ***")
                              : (mismatches  > 0 ? "control CAUGHT"
                                                 : "*** control NOT CAUGHT ***"));
-        std::printf("[Compiled]   ctl=%d predicted=%s\n", ctl, pred);
-        std::printf("[Compiled]   ctl=%d measured =%s\n", ctl, mask);
-        std::printf("[Compiled]   ctl=%d disagree =%s  (%d input(s) contradict "
+        printf("[Compiled]   ctl=%d predicted=%s\n", ctl, pred);
+        printf("[Compiled]   ctl=%d measured =%s\n", ctl, mask);
+        printf("[Compiled]   ctl=%d disagree =%s  (%d input(s) contradict "
                     "the model)\n", ctl, diff, disagreements);
         if (compared == 0)
-            std::printf("[Compiled] SWEEP ctl=%d MADE NO COMPARISONS -- "
+            printf("[Compiled] SWEEP ctl=%d MADE NO COMPARISONS -- "
                         "this is not a pass\n", ctl);
     }
 
@@ -656,7 +656,7 @@ int RtObjectExternalCompiledRegister() {
     g_selfTestPending = (se != nullptr && std::strcmp(se, "0") != 0);
 
     // THE IDENTITY LINE. Nothing else in the tree prints "Compiled".
-    std::printf("[Compiled] registered %d exports (GetCompiledPath, FindOrLoad) "
+    printf("[Compiled] registered %d exports (GetCompiledPath, FindOrLoad) "
                 "negctl=%d\n", n, g_ccNegCtl);
     return n;
 }

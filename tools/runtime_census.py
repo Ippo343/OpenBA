@@ -643,9 +643,23 @@ GATED_OFF_FILES = {
 # `?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z`. All four are
 # in WAVE3.md's NO-GO handle-table tier, which is exactly why they are off.
 #
+# `table` LEFT THIS LIST 2026-09-09 (Wave 11 follow-up lane ARM). That gate is
+# now DEFAULT-ON with `BANISHED_RT_INTERNAL_TABLE=0` as its kill switch, so its
+# three registrations (`??0Internal@Object@@QEAA@XZ`,
+# `??1Internal@Object@@UEAA@XZ`, `?ResetPersistState@InternalFactory@Object@@`)
+# are live on every ordinary run and are ordinary ports. Leaving it here would
+# have inverted this list's own purpose: instead of refusing to count an
+# unarmed row it would have refused to count an armed one, and the census would
+# have read exactly the same before and after the arming — which is what it did
+# on this lane's first measurement, and is why this entry is mentioned in
+# WAVE11F_LANE_ARM.md rather than quietly edited.
+#
+# `shadow` and `checkPtr` stay: shadow is an oracle tier that is opt-in by
+# design, and checkPtr registers a body under BANISHED_RT_INTERNAL_CHECKPTR.
+#
 # Keyed by file -> the gate variables whose `if (<var>) { ... }` body is opt-in.
 GATED_OFF_BLOCKS = {
-    "runtime/src/object/internal.cpp": ("table", "shadow", "checkPtr"),
+    "runtime/src/object/internal.cpp": ("shadow", "checkPtr"),
 }
 
 # The MINT is a third gating shape and the first two could not describe it.

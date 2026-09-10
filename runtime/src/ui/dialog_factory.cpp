@@ -258,20 +258,20 @@ void DialogFactoryReport() {
     const char* v = std::getenv("BANISHED_RT_DLGFACTORY");
     const bool armed = v && v[0] != '\0' && v[0] != '0';
     if (!armed) return;   // unarmed: nothing registered, nothing to say
-    std::printf("[DlgFactory] attendance: CreateNewObject=%llu CreateInPlaceObject=%llu "
+    printf("[DlgFactory] attendance: CreateNewObject=%llu CreateInPlaceObject=%llu "
                 "control=%llu\n",
                 (unsigned long long)g_attendNew,
                 (unsigned long long)g_attendInPlace,
                 (unsigned long long)g_controlFired);
     if (g_controlFired == 0 && v[0] == '2') {
-        std::printf("[DlgFactory] *** CONTROL DID NOT FIRE — this run's zeros prove "
+        printf("[DlgFactory] *** CONTROL DID NOT FIRE — this run's zeros prove "
                     "NOTHING about the route.\n");
     } else if (g_attendNew + g_attendInPlace == g_controlFired) {
-        std::printf("[DlgFactory] VERDICT: the ONLY entries were the control's own. "
+        printf("[DlgFactory] VERDICT: the ONLY entries were the control's own. "
                     "Nothing in the game reached either factory, so registering the "
                     "mangled name did NOT redirect the DLL's creation path.\n");
     } else {
-        std::printf("[DlgFactory] VERDICT: %llu REAL entries (attendance minus control). "
+        printf("[DlgFactory] VERDICT: %llu REAL entries (attendance minus control). "
                     "Something DOES reach the port through a door.\n",
                     (unsigned long long)(g_attendNew + g_attendInPlace - g_controlFired));
     }
@@ -294,7 +294,7 @@ int RtUiDialogFactoryRegister() {
                           (void*)&RtUiDialog_CreateNewObject);
     RegisterRuntimeAddr(0x180038530, (void*)&RtUiDialog_CreateNewObject);      ++n;
 
-    std::printf("[DlgFactory] ARMED — 2 factories registered (export AND address). "
+    printf("[DlgFactory] ARMED — 2 factories registered (export AND address). "
                 "Read [DlgFactory] attendance AND [DlgTrip] foreignDispatch at exit.\n");
 
     // ---- effectiveness control ---------------------------------------------
@@ -311,7 +311,7 @@ int RtUiDialogFactoryRegister() {
         // null; running it would exercise a teardown this probe is not measuring
         // and would put a free on the arena the run is using.
         g_controlFired = (g_attendInPlace > before && got == scratch) ? 1u : 0u;
-        std::printf("[DlgFactory] CONTROL %s (attendance moved %llu -> %llu, "
+        printf("[DlgFactory] CONTROL %s (attendance moved %llu -> %llu, "
                     "returned %s the buffer)\n",
                     g_controlFired ? "FIRED" : "*** DID NOT FIRE ***",
                     (unsigned long long)before, (unsigned long long)g_attendInPlace,
