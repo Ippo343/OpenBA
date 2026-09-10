@@ -212,21 +212,64 @@ void* g_oursVtable[9] = {
     reinterpret_cast<void*>(&PreCommitMemCounted)                   // 8
 };
 
-// The one deliberate defect, for the positive control. Identical to
-// RtIo_CompressedStream_Write except for the marked line.
+// ---------------------------------------------------------------------------
+// THE POSITIVE CONTROL, AND WHY IT IS NOT THE OBVIOUS ONE
+// ---------------------------------------------------------------------------
+// The obvious control is the realistic transcription defect: clamp the chunk
+// against `w->end` instead of `w->start + 0x8000`, which is what ?Read (the
+// body one file over) genuinely does. **That control was written, run, and it
+// CRASHED** — ACCESS_VIOLATION, a WRITE of a page-aligned address inside
+// ucrtbase's memcpy, at `WriteBuggy+0xc2`, symbolized off the crash log.
+//
+// That is disqualifying, and it is disqualifying by rule, not by taste: Wave 19
+// §6.4 requires that **a control produce a comparable divergence, not UB.** A
+// control that faults tells you nothing about the screen, because the screen
+// never ran — and this one took the whole probe down with it before a single
+// denominator was printed.
+//
+// It is recorded rather than quietly replaced, because the crash is itself a
+// finding about the body under test: **retail's clamp against the window
+// CAPACITY is load-bearing for memory safety, not just for correctness.** A
+// port that clamped against `end` would be a heap overflow on the first write
+// into a fresh window, not a wrong number — which is a stronger reason to get
+// that line right than "the bytes would differ".
+//
+// So the control below corrupts the PAYLOAD instead: it complements the first
+// byte of every piece written. It is artificial, and saying so is part of the
+// claim. What it still does correctly is the thing that matters:
+//
+//   * it mutates a value BOTH screens compare — the byte lands in a block, the
+//     block lands in the image, screen A memcmps that image against retail's
+//     and screen B asks retail's reader to reproduce the original content from
+//     it (reference_control_must_pick_a_compared_subject.md: a control that
+//     corrupts a value NOTHING compares reports NOT CAUGHT and indicts a sound
+//     instrument);
+//   * it stays entirely inside the window buffer, so it is defined behaviour;
+//   * it is applicable to every case with at least one byte of content.
+//
+// What it does NOT do, stated so the green is not overread: it does not prove
+// the screens would catch a defect in block LAYOUT (a wrong sourceOffset, a
+// wrong directory length). Screen B's Open would catch those structurally —
+// it validates `4 + n*8 + sum(block sizes) == size` exactly — but that is an
+// argument from reading Open's disassembly, not a measurement, and it is
+// labelled as such.
 bool WriteBuggy(CompressedStream* self, int32_t n, const void* src) {
     const uint8_t* in = static_cast<const uint8_t*>(src);
+    bool firstOfPiece = true;
     while (n > 0) {
         RtIo_CompressedStream_SetWindow(self, self->position);
         CompressedStreamWindow* const w =
             &static_cast<CompressedStreamWindow*>(self->windowData)[self->activeWindow];
         const int32_t pos = self->position;
         int32_t chunk = n;
-        const int32_t cap = w->end;          // <-- THE DEFECT: should be w->start + 0x8000
+        const int32_t cap = w->start + kCompressedStreamWindowSize;
         if (pos + n > cap) chunk = cap - pos;
-        if (chunk <= 0) chunk = n;           // keep it a defined stream, not UB
-        std::memcpy(static_cast<uint8_t*>(w->buffer) + (pos - w->start), in,
-                    static_cast<size_t>(chunk));
+        uint8_t* const dst = static_cast<uint8_t*>(w->buffer) + (pos - w->start);
+        std::memcpy(dst, in, static_cast<size_t>(chunk));
+        if (firstOfPiece && chunk > 0) {        // <-- THE DEFECT, and only this
+            dst[0] = static_cast<uint8_t>(~dst[0]);
+            firstOfPiece = false;
+        }
         self->position += chunk;
         n  -= chunk;
         in += chunk;
@@ -470,9 +513,9 @@ void RtIo_CompressedStreamWriteProbe() {
             }
 
             // ---- POSITIVE CONTROL, applicable cases only -------------------
-            // The clamp only differs once a write crosses a window's current
-            // end within a block, which needs content longer than one piece.
-            if (c.len > kPiece) {
+            // Applicable to every case with at least one byte: the corrupted
+            // byte is written on the first piece, which every case has.
+            if (c.len > 0) {
                 ++ctrlApplicable;
                 const int32_t nX = BuildImage(Side::Buggy, cmsC, content, c.len,
                                               imgBuggy, kImage, windows, &step);
