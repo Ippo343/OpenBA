@@ -552,3 +552,151 @@ construction** — decremented exactly once per `Free`, independent of the block
 size the allocator happened to hand out — not because it looked more correct.
 A metric that is right by construction beats one that is merely right on the
 runs you have taken.
+
+## Tranche 2 — `?PlatformSerialize@ImageBuffer@Video@@` (re-tasked)
+
+**The row this wave created for itself.** It entered the census's `called`
+column only because lane VDATA's ImageBuffer work reaches it, and nothing ported
+it. Assigned to this lane after the report; not part of the sealed measurement.
+
+**Result: PORTED, registered by NAME and by ADDRESS, VERIFIED by synthetic
+replay against the shipped body.** `runtime/src/video/imagebuffer_platform_serialize.cpp`,
+kill switch `BANISHED_RT_VIDIMGSER`, oracle
+`runtime/src/video/imagebuffer_serialize_probe.cpp`
+(`BANISHED_RT_VIDIMGSER_PROBE=1`, `=neg` for the controls).
+
+| symbol | retail | ord | ported | reg name | reg addr | verdict |
+|---|---|---|---|---|---|---|
+| `?PlatformSerialize@ImageBuffer@Video@@AEAAXAEAVSerializer@IO@@@Z` | 0x1800f3130 | 3387 | yes | yes | yes | **VERIFIED by synthetic replay** (live `calls=0`, no route) |
+
+**`AEAA` is PRIVATE, not unexported** — checked against the shipped export
+directory before writing anything, exactly as the advisor said to. Ordinal 3387,
+sitting in a run with its four siblings. It is a plain NAME door and this lane
+made no address-door argument.
+
+**Confirmed absent first.** `PlatformSerialize` appears nowhere in
+`code/ engine/ runtime/ standalone/ dx11/`.
+
+### T2.1 What it does, and the two `direction` arms
+
+Its only caller is `?Serialize@ImageBuffer@Video@@` (0x1800f26f0), which has
+already serialized every scalar field and the refcounted `pixelData` by the time
+it calls this. So this body carries the **per-mip-level pixel blobs** and then
+re-`Create`s the platform resource from the fields just read.
+
+`Stream::direction` is `0 = READING, 1 = writing` — already pinned in
+`runtime/types/io/Stream.h`, not re-derived. That makes both arms readable: the
+generated/rendered arm does nothing at all on save, and the outer array is sized
+only on load.
+
+### T2.2 The oracle — five cases, its own counter
+
+A **separate probe file and a separate summary line**, deliberately: the sealed
+report quotes `cases=8` and tranche 1 quotes `cases=11` from
+`video_resources_probe.cpp`. Appending to that probe would have silently
+restated both and made two published measurements unreproducible.
+
+The subject is synthesised, and **the advisor's warning is the reason**: lane
+VDATA reports that Serialize's save-trace oracle recorded NO ENTRY at all for
+the seven ImageBuffer vtable slots — the `calls=` column, not a pass. Waiting
+for a live route means waiting for something no harness route does.
+
+Faked: the ImageBuffer's vtable slot 9 (`Create`), which records its twelve
+arguments instead of building a GPU resource — the only way the write path is
+safe to drive at all, since retail's write path calls `Create` and running that
+twice on a live texture is two rebuilds, not a replay; the ReaderWriter, which
+records every slot and plays a script back on the read path; and the Encoding,
+whose gate this probe chooses. **Real**: both `Array<T>::SetSize` helpers, which
+both sides reach through the same door.
+
+| case | subject | expectation |
+|---|---|---|
+| A | kind=4, saving | the whole body is a no-op |
+| B | kind=4, loading | `Create(initialData=null)`, no stream traffic |
+| C | kind=2, gate says no | gate consulted, then nothing |
+| D | kind=2, saving | emits a zero count, then `Create` |
+| E | kind=2, loading, 3 levels of 4/0/7 bytes | the full loop; the 0-byte level is deliberate |
+
+Compared: the full `Create` argument vector, the complete ReaderWriter call
+trace (slot, value, whether data was non-null), whether the gate was consulted,
+and the temporary array's post-state.
+
+**Final run: `cases=5 mismatches=0`, `recorded-calls=28`, `RC=0`, 0-byte crash
+log.** Controls, each scored on its APPLICABLE cases: **GATE 3/3, SLOT 2/2,
+NOLOAD 1/1, all GREEN.**
+
+**The denominator was wrong on the first run and is worth recording.** It scored
+all three controls against all five cases and printed `GATE caught 3 of 5` —
+which reads as two escapes and is nothing of the sort: cases A and B never reach
+the gate, so there was nothing there to corrupt. A denominator that includes
+inapplicable cases understates a working control exactly the way a union
+denominator overstates a blind one. Fixed to an explicit per-case applicability
+mask; the controls now read N of N.
+
+**A control considered and rejected**, because this lane had already paid for
+the mistake once in `video_resources_probe.cpp`: inverting the direction test
+that sizes the outer array. On the load path that leaves `_data` null while the
+count says three, and the blob loop then walks a null pointer — UB, not a
+comparable divergence. SLOT (wrong vtable offset for the count) exercises the
+same class of defect and stays in bounds.
+
+### T2.3 A faithfulness detail that looks like a tidy-up
+
+`kind` is read **once** at entry (0x1800f3154) and the branch is taken on that
+value. The generated/rendered arm then passes **that same register** to `Create`
+(0x1800f331d never reloads it), while the pixel arm **reloads** `[this+0x2c]` at
+0x1800f3217. Both are reproduced separately. They can only differ if something
+between the two points writes `this->kind` — nothing in this body does — but
+collapsing them to one read would silently change which value reaches `Create`.
+
+### T2.4 The gate is NOT named, and this port says so
+
+`stream->encoding->vtable[0]()` returns a bool and the entire pixel path hangs
+off it. No `??_7…Encoding@IO@@6B@` is exported under any name, so this lane
+could not put a name to slot 0 the way `Serializer.h` names slots 3 and 4 (the
+reader/writer factories). It is reproduced as "call slot 0, obey the bool",
+which is what the instruction stream says, and it is **called out rather than
+guessed at** — a plausible-sounding name for an unidentified virtual is how a
+wrong model gets into a header and stays.
+
+### T2.5 Cutover surface: exactly ONE new address, and it has an owner
+
+Retail reaches both `SetSize` helpers by in-DLL `rel32`, so the port has to call
+something; both go through `ResolveAddr(Module::Runtime, …)`, which is
+registry-first and therefore not "the DLL".
+
+* **0x180029630** `Array<uint8>::SetSize` — **already ported.** Lane Q registers
+  it (`array.cpp:1469`, `RegisterRuntimeAddr` at `:1686`), so this call reaches
+  OUR body today. Found by grepping the address before writing a line.
+* **0x180053f00** `Array<Array<uint8>>::SetSize` — **unported.** 107
+  instructions, the non-trivial J3 shape with inner-array element operations.
+  It is **Collection lane work, not Video**: porting it here would mean adding
+  an `ArraySpec` row to lane Q's `array.cpp`, which another lane owns. Named
+  here so the Collection wave inherits it as ONE address.
+
+The per-element serialize loop (0x180054080) is written out rather than called
+by address — 20 instructions, this function's own helper, nothing else in the
+tree resolves it — and is deliberately **not registered**, for the reason
+`array_destroy.cpp` gives for the eight helpers it also declines to register.
+
+### T2.6 Attendance
+
+`calls=5` on the measurement run, and **all five are the probe's**. There is no
+live route: the only caller is `ImageBuffer::Serialize`, and lane VDATA's
+save-trace oracle already established that no harness route enters those slots.
+Recorded as PORTED + VERIFIED-BY-SYNTHETIC-ORACLE, never as "verified" on the
+strength of a `calls=` column that is measuring this lane's own probe.
+
+## Where the lane stands after both tranches
+
+| tranche | rows | status |
+|---|---|---|
+| SEALED (`024a06a`) | 6 | 5 verified, 1 PORTED-NOT-VERIFIED (`??1Configuration`) |
+| Tranche 1 | 1 (`?SaveImageToFile@`) | verified by file byte-compare |
+| Tranche 2 | 1 (`?PlatformSerialize@`) | verified by synthetic replay |
+
+**8 rows ported, 7 verified, 1 PORTED-NOT-VERIFIED and staying that way.**
+`??1Configuration@Video@@` is not upgraded: its entire body is one store to a
+slot an oracle would have to redirect to observe, so an oracle for it would be
+testing the redirection. "Small enough to be obviously correct" is not a verdict
+class, and neither tranche opened a route that reaches it.

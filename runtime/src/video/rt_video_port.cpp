@@ -21,6 +21,7 @@
 //                            Configuration/Device dtors  (Wave 18 lane VRES)
 //   BANISHED_RT_VIDSAVEIMG=0 ... just ImageBuffer::SaveImageToFile, which is
 //                            the one VRES row with unported IO dependencies
+//   BANISHED_RT_VIDIMGSER=0  ... just ImageBuffer::PlatformSerialize
 //   BANISHED_RT_VRES_PROBE=1 runs lane VRES's replay oracle (=neg adds the
 //                            four negative controls)
 //
@@ -167,6 +168,16 @@ void RtVideoPortInit() {
         // needs the rest of the lane on and this one off has a switch for it.
         extern int RtVideoSaveImageRegister();
         if (RtWaveEnabled("BANISHED_RT_VIDSAVEIMG")) n += RtVideoSaveImageRegister();
+        // Wave 18 lane VRES tranche 2. Its own switch for the same reason: it
+        // is the only row that reaches an unported Collection helper
+        // (0x180053f00), so an A/B that needs the rest of the lane on and this
+        // one off has a switch for it.
+        extern int RtVideoImageBufferSerializeRegister();
+        if (RtWaveEnabled("BANISHED_RT_VIDIMGSER"))
+            n += RtVideoImageBufferSerializeRegister();
+        extern void RtVideoImageBufferSerializeProbeArm(bool on);
+        const char* ip = std::getenv("BANISHED_RT_VIDIMGSER_PROBE");
+        RtVideoImageBufferSerializeProbeArm(ip && *ip && std::strcmp(ip, "0") != 0);
         extern void RtVideoResourcesProbeArm(bool on);
         const char* vp = std::getenv("BANISHED_RT_VRES_PROBE");
         RtVideoResourcesProbeArm(vp && *vp && std::strcmp(vp, "0") != 0);
