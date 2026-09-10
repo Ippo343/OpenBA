@@ -41,6 +41,13 @@ extern int RtObjectExternalFindRegister(); // external_find.cpp     (Wave 9 lane
 // 25 unexported addresses, of which 4 are registered. It is what unblocks
 // ?Serialize@ElementDescription@UI@@ (runtime/src/ui/elementdescription_serialize.cpp).
 extern int RtObjectExternalPtrSerializeRegister();  // external_ptr_serialize.cpp
+// Wave 11 lane OBJEXT. The two WRITERS of the path stack lane RRES ported the
+// readers of (external_path.h names them as its explicit deferral), plus the
+// four Collection::Array<PathStackEntry> bodies that were its stated blocker.
+extern int RtObjectExternalPathStackRegister();     // external_path_stack.cpp
+// Wave 11 lane OBJEXT. ExternalFactory::GetCompiledPath and ::FindOrLoad --
+// one six-term concatenation MSVC emitted twice.
+extern int RtObjectExternalCompiledRegister();      // external_compiled.cpp
 
 void RtObjectPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_OBJECT")) {
@@ -74,5 +81,19 @@ void RtObjectPortInit() {
     // the way to A/B ?Serialize@ElementDescription@ against its callees.
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTPTR"))
         n += RtObjectExternalPtrSerializeRegister();
+    // Wave 11 lane OBJEXT. Nested under BANISHED_RT_EXTERNAL because both are
+    // ExternalFactory state and behaviour, each with its own switch so its
+    // doors can be A/B'd without turning the whole class off.
+    //
+    // ORDER IS LOAD-BEARING between these two and nothing else: PATHSTACK
+    // registers 0x18002e220 and friends, and COMPILED's FindOrLoad reaches
+    // ExpandRelativePath, which reads the path stack those bodies maintain.
+    // Registration order does not change which body runs (both are reached by
+    // name/address at CALL time, not at init), but keeping the container
+    // underneath its user is how every other nest in this file reads.
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_PATHSTACK"))
+        n += RtObjectExternalPathStackRegister();
+    if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_COMPILED"))
+        n += RtObjectExternalCompiledRegister();
     printf("[RtPort] Object: %d exports registered\n", n);
 }
