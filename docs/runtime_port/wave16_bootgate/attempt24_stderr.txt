@@ -1,0 +1,82 @@
+[Standalone] BANISHED_RT_NO_DLL=1 -- continuing with Runtime-x64.dll ABSENT.  This is the controlled cutover boot; a crash is the EXPECTED outcome and its location is the result.  See docs/runtime_port/WAVE9_CUTOVER_BOOT_RUNBOOK.md
+[AllocLock] could not resolve Allocate (0x1800c6e60)
+[AllocLock] could not resolve Free (0x1800c6c00)
+[RtMathTransform] registered 31 functions (Matrix/Quaternion/Transform/Transform2/Transform3)
+[RtAllocSwap] cutover arm: no detour installed (no DLL, so no DLL-internal callers to redirect); ?Allocate@/?Free@ will be the composed stubs, which take the allocator CS at self+0x640.
+[RtUnresolved] ?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ  (asked by 00007ff7ad456e1e)
+[ElemTid] registered 21/21 element type-id slots
+[RtUnresolved] ?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z  (asked by 00007ff7ad41c5c3)
+[RtUnresolved] ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z  (asked by 00007ff7ad41ca7b)
+[DlgCtrlVt] tables=38 unknown=0 inheritedSlotsFilled=166 keptOverride=10 unresolved=0
+[RtUnresolved] ?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z  (asked by 00007ff7ad2dc740)
+[RtUnresolved] ?LoadResources@UpdateLoop@Engine@@QEAAXXZ  (asked by 00007ff7ad2dc7f4)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b80
+[RtUnresolved] ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z  (asked by 00007ff7ad2ddb58)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c6c0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015fa00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f5a0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f980
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151ca8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b78
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b70
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c70e8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015be00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151488
+[CheckPtr] export=00007ff7ad36fd3f body[0]=0x55 source=our port -> NOP (calls skipped)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529d0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151a90
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401528f0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401527f8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151880
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c400
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c3b0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140002280
+[RtUnresolved] ?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z  (asked by 00007ff7ad2e0a3b)
+[RtUnresolved] ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z  (asked by 00007ff7ad2e1dbf)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140160bf8
+[FNHook] could not resolve Video::Device::InitializeInterfaces
+[VideoInterface] *** DETOUR FAILED *** Video::Device::InitializeInterfaces (0x1800F79F0) could not be resolved.
+[VideoInterface]   With the DLL PRESENT this means the pre-fill did not happen and Runtime will LoadLibrary VideoDX11-x64.dll, falling back to VideoDX9-x64.dll if it is missing.
+[VideoInterface]   With the DLL ABSENT (cutover) it means something MUST call VideoInterfaceFillDx11Slot() from the ported InitializeInterfaces -- nothing else fills the slot, and nothing loads VideoDX9 either. See dx11/README.md.
+[FNHook] could not resolve ExternalFactory::FindOrLoad
+[FNHook] could not resolve External::Load
+[ResLoad] serialized: FindOrLoad=0000000000000000 External::Load=0000000000000000 (recursive CS, target-resolution=RAW)
+[AutoStart] ENABLED (BANISHED_AUTOSTART="1") — will auto-open New Game after 60 menu frames, then auto-Start
+[RtUnresolved] ?AdjustDisplay@Device@Video@@QEAAXXZ  (asked by 00007ff7ad4162ec)
+[Dx11] FAILED to resolve Runtime import "?AdjustDisplay@Device@Video@@QEAAXXZ" (IAT slot 0x180013238)
+[Dx11] devicedata import UNRESOLVED: ?AdjustDisplay@Device@Video@@QEAAXXZ
+[RtUnresolved] ?GetDisplayMode@Device@Video@@QEBA?AVDisplayMode@12@H@Z  (asked by 00007ff7ad4162ec)
+[Dx11] FAILED to resolve Runtime import "?GetDisplayMode@Device@Video@@QEBA?AVDisplayMode@12@H@Z" (IAT slot 0x180013300)
+[Dx11] devicedata import UNRESOLVED: ?GetDisplayMode@Device@Video@@QEBA?AVDisplayMode@12@H@Z
+[RtUnresolved] ??0Adapter@Device@Video@@QEAA@XZ  (asked by 00007ff7ad4162ec)
+[Dx11] FAILED to resolve Runtime import "??0Adapter@Device@Video@@QEAA@XZ" (IAT slot 0x180013250)
+[Dx11] devicedata import UNRESOLVED: ??0Adapter@Device@Video@@QEAA@XZ
+[RtUnresolved] ??0Adapter@Device@Video@@QEAA@AEBU012@@Z  (asked by 00007ff7ad4162ec)
+[Dx11] FAILED to resolve Runtime import "??0Adapter@Device@Video@@QEAA@AEBU012@@Z" (IAT slot 0x1800132b8)
+[Dx11] devicedata import UNRESOLVED: ??0Adapter@Device@Video@@QEAA@AEBU012@@Z
+[RtUnresolved] ??1Adapter@Device@Video@@QEAA@XZ  (asked by 00007ff7ad4162ec)
+[Dx11] FAILED to resolve Runtime import "??1Adapter@Device@Video@@QEAA@XZ" (IAT slot 0x1800134c8)
+[Dx11] devicedata import UNRESOLVED: ??1Adapter@Device@Video@@QEAA@XZ
+[RtUnresolved] ?FindOrAddMode@Adapter@Device@Video@@QEAAXAEBVDisplayMode@23@AEBVRefreshRate@23@@Z  (asked by 00007ff7ad4162ec)
+[Dx11] FAILED to resolve Runtime import "?FindOrAddMode@Adapter@Device@Video@@QEAAXAEBVDisplayMode@23@AEBVRefreshRate@23@@Z" (IAT slot 0x180013280)
+[Dx11] devicedata import UNRESOLVED: ?FindOrAddMode@Adapter@Device@Video@@QEAAXAEBVDisplayMode@23@AEBVRefreshRate@23@@Z
+[RtUnresolved] ??0GraphicsInterface@Device@Video@@QEAA@XZ  (asked by 00007ff7ad4162ec)
+[Dx11] FAILED to resolve Runtime import "??0GraphicsInterface@Device@Video@@QEAA@XZ" (IAT slot 0x1800132d0)
+[Dx11] devicedata import UNRESOLVED: ??0GraphicsInterface@Device@Video@@QEAA@XZ
+[RtUnresolved] ??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z  (asked by 00007ff7ad4162ec)
+[Dx11] FAILED to resolve Runtime import "??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z" (IAT slot 0x1800132b0)
+[Dx11] devicedata import UNRESOLVED: ??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z
+[RtUnresolved] ??1GraphicsInterface@Device@Video@@QEAA@XZ  (asked by 00007ff7ad4162ec)
+[Dx11] FAILED to resolve Runtime import "??1GraphicsInterface@Device@Video@@QEAA@XZ" (IAT slot 0x1800132c8)
+[Dx11] devicedata import UNRESOLVED: ??1GraphicsInterface@Device@Video@@QEAA@XZ
+[Dx11] devicedata Imports field #18 is null (no table entry?)
+[Dx11] devicedata Imports field #19 is null (no table entry?)
+[Dx11] devicedata Imports field #22 is null (no table entry?)
+[Dx11] devicedata Imports field #23 is null (no table entry?)
+[Dx11] devicedata Imports field #24 is null (no table entry?)
+[Dx11] devicedata Imports field #25 is null (no table entry?)
+[Dx11] devicedata Imports field #26 is null (no table entry?)
+[Dx11] devicedata Imports field #27 is null (no table entry?)
+[Dx11] devicedata Imports field #28 is null (no table entry?)
+[Dx11Seam] FORWARD TO ORIGINAL: DeviceData slot 1 (DeviceData::EnumerateInterfaces) — but the shipped DLL is not loaded, so there is no original. Returning null; the caller will fault. A Runtime import failed to resolve.
+[REDZONE-DUMP] no allocator singleton
