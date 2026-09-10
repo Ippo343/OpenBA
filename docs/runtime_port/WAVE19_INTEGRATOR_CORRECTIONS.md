@@ -1178,3 +1178,121 @@ stating in the port's own comment:
 The realistic transcription defect produces an exploitable overrun. The next person
 to "tidy" that clamp will make the same mistake, and the crash is the evidence that
 stops them.
+
+## C39. An instrument that names its subject only AFTER its findings has not named it
+
+Lane PERSIST ran `dup_runtime_export.py` from a copy in `/tmp`, so `--root`
+defaulted to the parent of **that** directory. It scanned **68,287 files under
+`C:\Users\USPC\AppData\Local`**, counting every agent's scratchpad copy of the
+repo as a duplicate of every other, and reported **"1029 of 1066 names
+duplicated"** — which it nearly relayed.
+
+The tool printed `scanned N files under <root>` **at the bottom**, beneath ~1000
+finding lines. **A confident, catastrophically wrong answer with the one line that
+would expose it buried underneath.**
+
+Fixed: `SUBJECT ROOT:` now prints **first**, with a `no .git here` warning. Control
+run reproducing PERSIST's exact failure:
+
+```
+SUBJECT ROOT: C:\Users\USPC\AppData\Local\Temp
+WARNING: no .git here -- is this the repo you meant to measure?
+```
+
+**Same defect and same fix as `abi_retslot_audit` (`1ad9e8e`), where the
+computation had to be hoisted above the print.** Twice in one wave, in two
+unrelated tools: *a screen that states its subject after its verdict lets the
+reader form the conclusion first.* This is the operational form of
+`reference_a_screen_that_cannot_name_its_subject.md` — the subject was named, just
+too late to be read.
+
+PERSIST also noted it had **quoted §6.1 at me an hour earlier** (*"run an
+instrument in the tree you are measuring, because several derive their root from
+the script path"*) and then violated it. Third instance this wave of someone
+breaking a rule they had just articulated.
+
+### The tool comparison, by set-diff rather than counts
+
+PERSIST's scratchpad implementation said 8 of 1072; this tool says 7 of 1073.
+**Seven in common; the one extra was PERSIST's false positive.**
+
+`?AddController@DialogInstance@UI@@QEAAXIPEAVBase@Object@@` — note it ends without
+`@Z`. `dialog_create.cpp:1420` splits that mangled name across **three adjacent
+string literals**; PERSIST's regex took only the first and matched the same
+truncated prefix from two different overloads. So its throwaway scan had a
+**THIRD** blind spot beyond the two already reported — adjacent-literal
+concatenation — and it is **the INFLATING kind, which manufactures work.**
+
+Two independent implementations now confirm `0x1800f4400`
+(`?PlatformDestruct@RenderBuffer@Video@@`, C35). And this tool found one PERSIST
+missed entirely: **`0x1800e0c80` — `input.cpp:~733` vs
+`input_config_startup.cpp:~220`**, cross-file, the same shape as the Video case.
+**Possible second shadowed body; Wave 20, for whoever owns Input.** PERSIST scanned
+names only; addresses never occurred to it.
+
+## C40. My adopted wording was wrong in BOTH directions — the tally is THREE-way
+
+I adopted PERSIST's "4 live-verified, 2 synthesised-only" verbatim and told it to
+report that. **Run A shows it is wrong both ways**, and PERSIST corrected its own
+prediction as well as my wording:
+
+| tier | rows | evidence |
+|---|---|---|
+| **live-verified** (compared) | `?GetSaveFilename@` **28 calls**, `?GetSaveCount@` **14**, `?GetSaveInfo@` **13** | **0 divergences each**, against the shipped DLL on 13 real saves |
+| **live-EXERCISED, never compared** | `?BeginLoad@`, `?BeginGetSaveGameInfo@` | both **registered a site** (which happens on body entry), so both bodies ran; `calls=0` because no oracle arm exists for an issue that cannot be replayed in place |
+| **never entered** | `?BeginDelete@`, `??1Persistence@` | absent from the 609-site list entirely |
+
+**PERSIST had predicted `?BeginGetSaveGameInfo@` would NOT be reached** (command 3
+versus the list scan's command 4). **The load route does reach it.** Its diagnosis
+of its own error: *reasoning from the disassembly's command codes rather than from
+the caller.*
+
+**The middle tier is the dangerous one and PERSIST named why:** *"live-exercised"
+is weaker than "verified" and reads almost the same.* Five rows under one heading
+would have carried a stronger claim than three of them earn — the union-denominator
+failure again, and **my wording would have introduced it.**
+
+Run A overall: `609 sites, 20,060,624 calls, 30 divergences in 7 sites` — **none of
+the seven divergent sites is PERSIST's.** `Auto.sav` loads clean, which also
+settles the `Save0` question: same binary, same mod state, different save, so the
+`Save0` crash was the save, not the port.
+
+## C41. Orphan attribution — unresolvable, and the durable fact is neither claim
+
+Lane PERSIST killed the orphan's **parent MSYS bash** (WINPID 11280 / MSYS 76816)
+at ~15:32 and its lock-runner group; I ran `Invoke-CimMethod Terminate` on the
+child, which returned 0. **The two may have raced and I cannot establish from here
+which cleared it.** PERSIST explicitly declined to claim it; so do I. Recording it
+as unresolved rather than letting either account stand unchallenged.
+
+**The durable finding is PERSIST's and belongs in the runbook:**
+
+> For a `reimpl-x64.exe` that refuses `taskkill /PID /F`, `/T /F`, `/IM /F` **and**
+> `Stop-Process -Force` — all four returning *"no running instance of the task"*
+> while `Get-Process` still lists it and it holds file handles — **go UP to the
+> launching shell rather than escalating on the process.** The child is reaped
+> immediately.
+
+PERSIST has added an unconditional `taskkill /IM reimpl-x64.exe /F` to the tail of
+its run script. Both runs since have exited clean with 0-byte crash logs.
+
+**And PERSIST caught itself in my own C-38 defect**: when it told CSTREAM "the game
+dir is free, go ahead", its file test covered **only `reimpl-x64.exe`** — the same
+partial-test-over-generalised error. Its verdict was right for a reason its test
+did not establish (the process was by then gone, and handles die with the process).
+**Right answer, insufficient test** — and it would have had no way to know if the
+process had still been alive. Two of us made the identical error on the identical
+file within twenty minutes.
+
+## C42. `boot_state.sh`'s staleness caused concrete harm, measured
+
+Not speculative. PERSIST's run script polls `boot_state.sh --wait 300`, and the
+`Save0` run printed **`BOOTSTATE_RC=0` — a clean RUNNING — for a process that had
+already crashed.** PERSIST read it as healthy and moved on. That is the outage's
+proximate cause: the watchdog died with the crash, the state file froze, and the
+tool reported pid liveness as health.
+
+**Wave 20 fix: `boot_state.sh` must check the state file's MTIME, not just whether
+the pid exists.** Its `STALE` code (4) covers a pid that is *gone*, which is a
+different and rarer condition than a pid that is *present but no longer
+publishing*. Until then, lanes have been told to check the mtime themselves.

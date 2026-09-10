@@ -105,6 +105,24 @@ def main():
     ap.add_argument('--root', default=os.path.dirname(here))
     a = ap.parse_args()
 
+    # PRINT THE SUBJECT FIRST, BEFORE ANY FINDING.
+    #
+    # This line used to sit at the BOTTOM, under up to a thousand finding
+    # lines. Lane PERSIST ran the script from a copy in /tmp, so --root
+    # defaulted to the parent of THAT directory and it scanned 68,287 files
+    # under C:\Users\USPC\AppData\Local -- counting every agent's scratchpad
+    # copy of the repo as a duplicate of every other, and reporting
+    # "1029 of 1066 names duplicated". A confident, catastrophically wrong
+    # answer with the one line that would expose it buried beneath it.
+    #
+    # An instrument that names its subject only AFTER its findings has not
+    # really named it: the reader has already formed a conclusion. Same defect,
+    # and same fix, as the abi_retslot_audit headline (Wave 19, 1ad9e8e), where
+    # the computation had to be hoisted above the print.
+    print('SUBJECT ROOT: %s' % a.root)
+    if not os.path.isdir(os.path.join(a.root, '.git')):
+        print('WARNING: no .git here -- is this the repo you meant to measure?')
+
     names, addrs, files = scan(a.root)
     dup_n = {k: v for k, v in names.items() if len(v) > 1}
     dup_a = {k: v for k, v in addrs.items() if len(v) > 1}
