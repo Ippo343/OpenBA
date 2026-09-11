@@ -1309,6 +1309,26 @@ extern "C" void RtSystemAllocatorSetLockRetirer(RtAllocLockRetirer retire,
     g_restoreLock = restore;
 }
 
+// WAVE 22 LANE ALLOC -- SELF-ATTESTATION, and why it is fprintf and not printf.
+//
+// Every [RtAlloc] line in this file that reports the outcome of arming is a
+// `printf`, and the PERF build compiles printf to `((void)0)`
+// (standalone/log_strip.h). So the one binary an A/B is measured on is
+// precisely the binary that cannot say whether it armed. A perf run with
+// BANISHED_RT_ALLOC=1 that silently REFUSED (missing platform seam, missing
+// detour installer, foreign prologue patch) is indistinguishable from an armed
+// one, and the A/B would then be comparing a build against itself and would
+// report `no regression` -- the measurement reading GREEN because the subject
+// never ran. That is this project's own recurring defect shape.
+//
+// stderr survives the strip (see the note in standalone/log_strip.h) and lands
+// in standalone_error.log, which tools/stress_run.sh already collects per run.
+// One line, once, at init, outside every measurement window.
+static void AttestArming(const char* verdict, int exports) {
+    fprintf(stderr, "[RtAlloc] ATTEST: %s (exports=%d)\n", verdict, exports);
+    std::fflush(stderr);
+}
+
 int RtSystemAllocatorRegister() {
 #if defined(_WIN32)
     if (!g_platInstalled) RtSystemAllocatorInstallPlatform();
@@ -1320,6 +1340,7 @@ int RtSystemAllocatorRegister() {
                "not install it). A half-built seam is worse than none: rtalloc::Construct "
                "would call a null lockInit. See docs/runtime_port/WAVE2_ALLOCATOR.md\n",
                missing ? missing : "(table complete but g_platInstalled is false)");
+        AttestArming("REFUSED: platform seam incomplete", 0);
         return 0;
     }
 
@@ -1347,6 +1368,7 @@ int RtSystemAllocatorRegister() {
                    "would leave ?Allocate@/?Free@ running with NO critical section, which "
                    "is the free-list race allocator_lock.cpp exists to prevent. "
                    "standalone/main.cpp must call RtSystemAllocatorSetCutoverArmer().\n");
+            AttestArming("REFUSED: cutover, no armer installed", 0);
             return 0;
         }
         void* composedAlloc = nullptr;
@@ -1356,6 +1378,7 @@ int RtSystemAllocatorRegister() {
                           &composedAlloc, &composedFree) ||
             composedAlloc == nullptr || composedFree == nullptr) {
             printf("[RtPort] MemoryAllocator: cutover armer REFUSED -- registering nothing\n");
+            AttestArming("REFUSED: cutover armer said no", 0);
             return 0;
         }
         const int n = RegisterAllocatorExports(composedAlloc, composedFree);
@@ -1367,6 +1390,7 @@ int RtSystemAllocatorRegister() {
                "no detour installed because there are no DLL-internal callers to redirect. "
                "?Allocate@/?Free@ point at the COMPOSED entry points, which take the "
                "allocator critical section.\n", n);
+        AttestArming("ARMED (cutover, DLL absent)", n);
         return n;
     }
 
@@ -1378,6 +1402,7 @@ int RtSystemAllocatorRegister() {
         printf("[RtPort] MemoryAllocator: no detour installer -- registering the exports "
                     "alone would let us allocate while the DLL frees. REFUSING. "
                     "See docs/runtime_port/WAVE2_ALLOCATOR.md\n");
+        AttestArming("REFUSED: no detour installer", 0);
         return 0;
     }
 
@@ -1402,6 +1427,7 @@ int RtSystemAllocatorRegister() {
                     "critical section that Runtime's own direct calls to Free rely "
                     "on (docs/runtime_port/WAVE2_ALLOCATOR.md section 4).\n", patched);
         if (retired && g_restoreLock) g_restoreLock();
+        AttestArming("REFUSED: foreign prologue patch", 0);
         return 0;
     }
 
@@ -1412,6 +1438,7 @@ int RtSystemAllocatorRegister() {
                           reinterpret_cast<void*>(&rtalloc::Free))) {
         printf("[RtPort] MemoryAllocator: detour install FAILED -- registering nothing\n");
         if (retired && g_restoreLock) g_restoreLock();
+        AttestArming("REFUSED: detour install failed", 0);
         return 0;
     }
 
@@ -1419,6 +1446,7 @@ int RtSystemAllocatorRegister() {
                                            reinterpret_cast<void*>(&rtalloc::Free));
     printf("[RtAlloc] ARMED (atomic swap taken, Runtime-x64.dll present) -- %d exports "
            "registered; the DLL's own Allocate/Free now JMP to our composed stubs.\n", n);
+    AttestArming("ARMED (atomic swap, DLL present)", n);
     return n;
 }
 
