@@ -743,6 +743,13 @@ extern "C" void RtIo_MemoryStream_Dtor(MemoryStream* self) {
 //     from the cause. Better failure, not no failure. See §11 for which of the
 //     five stampers that leaves and what still has to happen.
 //
+//   UPDATE, Wave 21 lane ENC: the "all five mint as NAMED TRAPS" sentence above
+//   is now STALE. Slots 0/1/2 (0x1800a81e0, 0x1800a81d0, 0x1800a81c0) are
+//   ported in runtime/src/io/encoding.cpp as RtIo_Encoding_{IsBinary,IsText,
+//   GetKind} alongside the two factories already there. All FIVE slots of
+//   0x1801554a8 are our bodies now, so an `IO::Encoding` built on this table
+//   IS functional after cutover, not merely constructed.
+//
 // TRANSCRIBED FROM THE LISTINGS (0x1800ae710..0x1800ae7c7 and
 // 0x1800aa3d0..0x1800aa4a5), which are the same function with a different field
 // set. Details the decompiled C would have lost:

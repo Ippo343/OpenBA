@@ -278,6 +278,53 @@ extern "C" BinaryCodec* RtIo_BinaryWriter_Ctor(BinaryCodec* self, Serializer* se
 }
 
 // ---------------------------------------------------------------------------
+// Slots 0, 1 and 2 of the shared BINARY encoding vtable 0x1801554a8 — Wave 21
+// lane ENC, item 1. NONE of the three is exported; no debug string names them,
+// so the names below are DESCRIPTIVE (behaviour-derived), not attested.
+//
+// Transcribed straight from the shipped bytes (read via pefile against
+// Runtime-x64.dll, RETAIL, not the profile build — this table has no
+// counterpart in the profile export list to cross-check against, and the
+// project's own trap says profile OFFSETS must never be trusted for this
+// vtable family):
+//
+//   0x1800a81e0  slot 0   B0 01 C3          MOV AL,1  ; RET   -> true
+//   0x1800a81d0  slot 1   32 C0 C3          XOR AL,AL ; RET   -> false
+//   0x1800a81c0  slot 2   B8 02 00 00 00 C3 MOV EAX,2 ; RET   -> 2
+//
+// All three ignore `self` completely (never read RCX) — the same "self
+// accepted and ignored" shape as CreateReader/CreateWriter below, consistent
+// with Encoding being a stateless policy tag.
+//
+// THE SEMANTICS ARE INFERRED FROM A SIBLING TABLE, NOT GUESSED FROM NOTHING.
+// The unexported TEXT encoding vtable at 0x1801559d0 (see file_stream.cpp)
+// has the SAME SHAPE at the SAME three slots, with slot 0/1 EXACTLY INVERTED
+// and slot 2 holding a DIFFERENT small constant:
+//
+//   0x1801559d0  slot 0   0x1800b9ab0   32 C0 C3          -> false
+//   0x1801559d0  slot 1   0x1800b9aa0   B0 01 C3          -> true
+//   0x1801559d0  slot 2   0x1800b9a90   B8 01 00 00 00 C3 -> 1
+//
+// A predicate pair that flips between the binary and text tables and a third
+// slot that varies 2-vs-1 reads as {IsBinary, IsText, EncodingKind} — but that
+// reading is NOT proven by a string or an export; it is this lane's naming
+// choice, called out so a later lane does not mistake the names for an
+// attested fact.
+// ---------------------------------------------------------------------------
+extern "C" bool RtIo_Encoding_IsBinary(void* self) {
+    (void)self;
+    return true;
+}
+extern "C" bool RtIo_Encoding_IsText(void* self) {
+    (void)self;
+    return false;
+}
+extern "C" int32_t RtIo_Encoding_GetKind(void* self) {
+    (void)self;
+    return 2;
+}
+
+// ---------------------------------------------------------------------------
 // IO::Encoding::CreateReader   0x1800a8120   (vtable 0x1801554a8 slot +0x18)
 // IO::Encoding::CreateWriter   0x1800a8080   (vtable 0x1801554a8 slot +0x20)
 // ---------------------------------------------------------------------------
@@ -315,8 +362,18 @@ extern "C" BinaryCodec* RtIo_Encoding_CreateWriter(void* self, Serializer* ser,
 // also the door lane C2's mint uses: an RT_MINT_UNNAMED slot resolves through
 // RtPortLookupAddr on its dllVa, so registering these two addresses is exactly
 // what turns slots 3 and 4 of the minted 0x1801554a8 table from named traps
-// into our bodies. Slots 0, 1 and 2 (0x1800a81e0, 0x1800a81d0, 0x1800a81c0)
-// are NOT touched by this lane and remain traps — see WAVE9_LANE_ENC.md.
+// into our bodies. Wave 21 lane ENC closes the same door for the remaining
+// three: slots 0, 1 and 2 (0x1800a81e0, 0x1800a81d0, 0x1800a81c0) are now
+// registered too, so all FIVE slots of the shared BINARY encoding vtable are
+// our bodies. The table itself stays permanently address-keyed (unexported),
+// so it can never move into the "promoted" bucket a `??_7` export can — see
+// the mint-vtable census comment in tools/runtime_census.py — but every
+// dispatch that reaches it now runs OUR code, which is the thing that
+// actually matters. Our own ctors are the stampers (RtIo_CompressedMemoryStream_Ctor,
+// RtIo_MemoryStream_Ctor, RtIo_CompressedStream_Ctor, RtIo_TextFileStream_Ctor
+// et al. all read this exact pointer through `ResolveAddr(Module::Runtime,
+// 0x1801554a8ull)` before storing it), so we own the route, not merely the
+// slots.
 int RtIoEncodingRegister() {
     using namespace RtIo;
     int n = 0;
@@ -331,6 +388,10 @@ int RtIoEncodingRegister() {
 
     RegisterRuntimeAddr(0x1800a8120, (void*)&RtIo_Encoding_CreateReader); ++n;
     RegisterRuntimeAddr(0x1800a8080, (void*)&RtIo_Encoding_CreateWriter); ++n;
+
+    RegisterRuntimeAddr(0x1800a81e0, (void*)&RtIo_Encoding_IsBinary); ++n;
+    RegisterRuntimeAddr(0x1800a81d0, (void*)&RtIo_Encoding_IsText);   ++n;
+    RegisterRuntimeAddr(0x1800a81c0, (void*)&RtIo_Encoding_GetKind);  ++n;
 
     return n;
 }

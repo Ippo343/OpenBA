@@ -1199,7 +1199,7 @@ int RtMintRegisterPromotedRows() {
     // eight door-stamps of these two symbols all mirror retail's
     // stamp-then-overwrite or stamp-then-free.
     //
-    // RT_UNPROMOTABLE: ??_7ReaderWriter@IO@@6B@ | ?/26 ported [NUMERATOR STILL INHERITED], 25 purecall [RE-DERIVED] | WAVE19_PHASE0A_NOOP.md §3.1 + WAVE19_INTEGRATOR_CORRECTIONS.md C30 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7ReaderWriter@IO@@6B@ | 1/26 ported [RE-DERIVED, WAVE21_LANE_ENC.md item 12: the `?` numerator resolved by lane ENC, the assigned addressee -- slot 0 (0x180023bd0, the deleting dtor) is now runtime/src/object/deleting_dtor.cpp row 42, verified against tools/rt_deleting_dtor_verify.py], 25 purecall [RE-DERIVED] | WAVE19_PHASE0A_NOOP.md §3.1 + WAVE19_INTEGRATOR_CORRECTIONS.md C30 + WAVE21_LANE_ENC.md item 12 | NONE, EVER
     // RT_UNPROMOTABLE: ??_7Stream@IO@@6B@ | 1/7 ported [INHERITED], 5 purecall [MEASURED] | WAVE19_PHASE0A_NOOP.md §3.2 | NONE, EVER
     //
     // WAVE 20 LANE DOORS — the ReaderWriter denominator, and a convention split

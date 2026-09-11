@@ -55,11 +55,16 @@ struct DelDtorSpec {
 // (IO::CompressedStream 0x180023fd0, IO::CompressedFileStream 0x180024100) on
 // `??_7CompressedStream@IO@@6B@` and `??_7CompressedFileStream@IO@@6B@` --
 // making that four lanes now that have appended, which is the whole reason this
-// constant exists. Prose in deleting_dtor.cpp that says "37" is describing lane
-// K's original survey and stays true of it; the TABLE is the authority and this
-// constant tracks it, and the static_assert next to the table is what forces
-// an appender to notice (it caught CSTREAM's addition, at 41 vs 39).
-constexpr int kSpecCount = 41;
+// constant exists. Wave 21 lane ENC added the 42nd (IO::TextFileStream,
+// 0x18002ba90) closing slot 0 of `??_7TextFileStream@IO@@6B@`, and the 43rd
+// (IO::ReaderWriter, 0x180023bd0) closing the single non-purecall slot of
+// `??_7ReaderWriter@IO@@6B@` (Wave 21 §8 item 12 — that row stays
+// RT_UNPROMOTABLE regardless; see reg_mint_promoted.cpp). Prose in
+// deleting_dtor.cpp that says "37" is describing lane K's original survey and
+// stays true of it; the TABLE is the authority and this constant tracks it,
+// and the static_assert next to the table is what forces an appender to
+// notice (it caught CSTREAM's addition, at 41 vs 39).
+constexpr int kSpecCount = 43;
 
 // *** A Site MUST HAVE STATIC STORAGE DURATION. *** RtDiffRegister keeps the
 // POINTER and rt_diff.cpp re-reads it at summary time, so a stack Site dangles

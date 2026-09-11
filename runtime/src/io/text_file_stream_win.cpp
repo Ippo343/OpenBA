@@ -420,13 +420,19 @@ void RtIoTextFileStreamCounters(unsigned long long* out) {
 // DEFERRED — the three slots NOT in this file, each with its own reason and its
 // own expiry condition, because "needs X" is a TODO and not a blocker.
 // ============================================================================
-//   [0] +0x00  0x18002ba90  deleting dtor — UNEXPORTED, so its address is its
-//       only door, and it needs TWO more bodies first: `??1TextFileStream@`
-//       (0x1800ba490 — EXPORTED, unported) and the CRT's vector-destructor
-//       iterator (0x18007ec98, unexported). Porting it as it stands would add
-//       two address doors to the cutover surface to close one slot
-//       (reference_porting_can_grow_the_cutover_surface.md). EXPIRES when
-//       `??1TextFileStream@` is ported — after that this slot is small.
+//   [0] +0x00  0x18002ba90  deleting dtor — CLOSED, Wave 21 lane ENC. This slot's
+//       expiry was "EXPIRES when `??1TextFileStream@` is ported", which was the
+//       WRONG shape of expiry: the deleting dtor does not need its ~Class
+//       CALLEE ported, only the two ADDRESSES it reaches, and both are reached
+//       by ResolveAddr the same way whether the callee is ours or the DLL's
+//       (the shared eh-vector-iterator generic used by the whole
+//       runtime/src/object/deleting_dtor.cpp family already does this for the
+//       ToolTipDialog and CompressedFileStream rows). It is now
+//       runtime/src/object/deleting_dtor.cpp's row 41 ("IO::TextFileStream"),
+//       calling `??1TextFileStream@IO@@UEAA@XZ` (0x1800ba490 — EXPORTED, still
+//       NOT ported, so this makes that address newly `called`) through the
+//       family's shared iterator (0x18007ec98). Verified by
+//       tools/rt_deleting_dtor_verify.py against retail's shipped bytes.
 //       IT IS ALSO THE SOURCE OF A LAYOUT FACT ALREADY IN USE: its `MOV EDX,0x80`
 //       element stride is where FileStream.h's `sizeof(TextFileStream) == 0x80`
 //       comes from.
