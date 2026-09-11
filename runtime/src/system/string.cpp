@@ -154,6 +154,21 @@ void RtString_AdoptInline(String* self, char* src) {
 // Null-tolerant strcmp: null sorts before everything, two nulls are equal.
 // Retail walks to the first differing byte (or to either terminator) and then
 // returns the signed difference of the CHARS at that index.
+//
+// WAVE 22 LANE SYSBODY — the return is SIGN-EXTENDED, and this was latent.
+// Retail's last three instructions are
+//     1800c98ec  MOVSX EAX,byte ptr [RCX + R10*0x1]
+//     1800c98f1  MOVSX ECX,byte ptr [RCX + RDX*0x1]
+//     1800c98f5  SUB   EAX,ECX
+// i.e. both bytes are widened SIGNED. The body below used to spell that
+// `static_cast<int>(a[i])` on a plain `const char*`, which is only the same
+// thing while `char` happens to be signed — true for MSVC and for MinGW on
+// x86-64 Windows, and therefore invisible to every build this project makes.
+// It is written as an explicit `signed char` now so the port states the fact
+// rather than inheriting it from the toolchain, and the static_assert below
+// records which way the assumption used to point. Any input with a byte >=
+// 0x80 at the differing index separates the two spellings; the sweep in
+// RtSystem_StrCompareProbe() feeds exactly those (bucket `highBit`).
 int RtString_StrCompare(const char* a, const char* b) {
     if (a == nullptr)
         return -static_cast<int>(b != nullptr);
@@ -172,7 +187,9 @@ int RtString_StrCompare(const char* a, const char* b) {
                 break;
         }
     }
-    return static_cast<int>(a[i]) - static_cast<int>(b[i]);
+    // MOVSX, not MOVZX: see the note above.
+    return static_cast<int>(static_cast<signed char>(a[i])) -
+           static_cast<int>(static_cast<signed char>(b[i]));
 }
 
 // ?GetLength@String@System@@QEBAHXZ  retail 0x1800063c0
@@ -1122,6 +1139,175 @@ void RtSystem_String_Serialize(String* self, void* serializerRaw) {
 
 }  // namespace RtSystem
 
+namespace RtSystem {
+
+// ============================================================================
+// WAVE 22 LANE SYSBODY — the StrCompare input sweep
+// ============================================================================
+// WHY A SWEEP AND NOT A CALL COUNT. `RtString_StrCompare` has had a correct
+// body since Wave 2 and was never registered, so until this wave it was
+// reachable only from six in-tree callers and never from the exported name.
+// The obvious "verification" — register it, boot, read `calls=` — is exactly
+// the trap reference_uniform_population_is_not_a_verification.md names: a
+// previously ported inline strcmp returned 0 for EVERY distinct pair sharing a
+// first byte, the shared BST find still "worked" because equal-compares are
+// what a find mostly does, and thousands of agreeing calls read as thorough.
+// A population whose answers are all the same cannot distinguish a comparator
+// from a constant.
+//
+// So this is an INPUT SWEEP against the shipped export, over a corpus chosen
+// so the answers are NOT uniform, and it compares the FULL int — not the sign.
+// Sign-only agreement is the weaker claim, and retail's contract here is the
+// magnitude too: `String::operator<` and the mod-list tie-break both only read
+// the sign, but `StrCompare` is exported and returns a difference, and the
+// walk-then-test ordering in the body above gets the sign right by accident
+// while getting the magnitude wrong (see the comment inside the loop). A
+// sign-only oracle would pass the very defect that comment exists to prevent.
+//
+// THE EFFECTIVENESS CONTROL. The sweep prints, per class, how many pairs it
+// actually produced AND how many of those returned non-zero:
+//
+//   diffAtN — pairs that SHARE byte 0 and differ at some index > 0. This is
+//             the precise defect class from the memory note. If its non-zero
+//             count is not equal to its total, our body is the broken one; if
+//             its total is 0 the corpus is the broken one. Both are printed.
+//   diffAt0 — differ at the first byte.
+//   prefix  — one string is a proper prefix of the other (the terminator is
+//             the differing byte, so this exercises the "walked one past"
+//             arm).
+//   equal   — must return 0 on both sides.
+//   highBit — the differing byte is >= 0x80 on at least one side. This is the
+//             MOVSX class; with a MOVZX port these are the ONLY pairs whose
+//             magnitude changes, so a zero here means the signedness fix above
+//             is untested rather than confirmed.
+//   nulls   — null/null, null/x, x/null.
+//
+// It also prints the number of DISTINCT return values observed. One distinct
+// value over N cases is the uniform-population signature and is reported as a
+// failure of the sweep, not a pass of the port.
+//
+// PURE, SO NO ALLOCATOR ORDERING PROBLEM. StrCompare touches no heap and no
+// singleton, unlike the Compression probe one file over, so this can and does
+// run from RtSystemPortInit rather than needing a live-heap hook.
+namespace {
+
+struct StrCmpClassCounts {
+    long long cases = 0;
+    long long nonZero = 0;
+};
+
+void StrCmpTally(StrCmpClassCounts* c, int v) { ++c->cases; if (v != 0) ++c->nonZero; }
+
+}  // namespace
+
+void RtSystem_StrCompareProbe() {
+    using StrCompareFn = int (*)(const char*, const char*);
+    // RT_RAW_OK: this is an ORACLE. It must reach the SHIPPED body, so it is
+    // ResolveExportRaw on purpose and not ResolveExport — going through the
+    // registry after the line below registers our port would compare our body
+    // with itself (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
+    StrCompareFn theirs = RtOriginal<StrCompareFn>("?StrCompare@String@System@@SAHPEBD0@Z");
+    if (theirs == nullptr) {
+        printf("[SYSBODY/StrCompare] sweep SKIPPED: no shipped export (cutover build?)\n");
+        return;
+    }
+    // Deliberately NOT reinterpret_cast<StrCompareFn>(&RtString_StrCompare):
+    // ours is called as a plain C++ call to the body in this translation unit.
+    // Nothing here reaches it by address or by name.
+
+    static const char* const kCorpus[] = {
+        "",  "a", "b", "A",
+        "ab", "aa", "ba", "abc", "abd", "abcd", "abce",
+        "banished", "banisher", "banishe", "banished2",
+        "the quick brown fox", "the quick brown fix",
+        "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+        "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzy",
+        // High-bit bytes: the MOVSX class. \x80 and \xff are negative as
+        // signed chars and positive as unsigned, so these pairs are the only
+        // ones whose MAGNITUDE separates the two widenings.
+        "\x7f", "\x80", "\xff", "a\x80", "a\x7f", "a\xff", "\x80\x80", "\x80\x01",
+    };
+    const int kN = static_cast<int>(sizeof(kCorpus) / sizeof(kCorpus[0]));
+
+    StrCmpClassCounts equal, diffAt0, diffAtN, prefixCls, highBit, nulls;
+    long long cases = 0, divergences = 0;
+    // Distinct return values, for the uniform-population control. A small
+    // fixed table is enough: a comparator over this corpus returns a handful
+    // of small differences, and anything beyond 64 distinct values is already
+    // far past the "it is not a constant" bar.
+    int seen[64];
+    int seenCount = 0;
+
+    const char* const kNullSide = nullptr;
+    for (int i = -1; i < kN; ++i) {
+        for (int j = -1; j < kN; ++j) {
+            const char* a = (i < 0) ? kNullSide : kCorpus[i];
+            const char* b = (j < 0) ? kNullSide : kCorpus[j];
+
+            const int ours = RtString_StrCompare(a, b);
+            const int them = theirs(a, b);
+            ++cases;
+            if (ours != them) {
+                if (divergences < 8) {
+                    printf("[SYSBODY/StrCompare] DIVERGENCE a=%d b=%d ours=%d theirs=%d\n",
+                           i, j, ours, them);
+                }
+                ++divergences;
+            }
+
+            bool isNew = true;
+            for (int k = 0; k < seenCount; ++k) if (seen[k] == ours) { isNew = false; break; }
+            if (isNew && seenCount < 64) seen[seenCount++] = ours;
+
+            // Classify on the INPUTS, never on the answer — a class derived
+            // from the return value would agree with any body by construction
+            // (reference_recheck_must_match_its_own_proof.md).
+            if (a == nullptr || b == nullptr) { StrCmpTally(&nulls, ours); continue; }
+
+            int d = 0;
+            while (a[d] != '\0' && b[d] != '\0' && a[d] == b[d]) ++d;
+            const bool same    = (a[d] == '\0' && b[d] == '\0');
+            const bool isPfx   = !same && (a[d] == '\0' || b[d] == '\0');
+            if (same)                 StrCmpTally(&equal, ours);
+            else if (isPfx)           StrCmpTally(&prefixCls, ours);
+            else if (d == 0)          StrCmpTally(&diffAt0, ours);
+            else                      StrCmpTally(&diffAtN, ours);
+            if (!same && (static_cast<unsigned char>(a[d]) >= 0x80 ||
+                          static_cast<unsigned char>(b[d]) >= 0x80))
+                StrCmpTally(&highBit, ours);
+        }
+    }
+
+    printf("[SYSBODY/StrCompare] sweep: %lld cases, %lld divergences (FULL int, not sign)\n",
+           cases, divergences);
+    printf("[SYSBODY/StrCompare] classes (cases/non-zero): equal=%lld/%lld diffAt0=%lld/%lld "
+           "diffAtN=%lld/%lld prefix=%lld/%lld highBit=%lld/%lld nulls=%lld/%lld\n",
+           equal.cases, equal.nonZero, diffAt0.cases, diffAt0.nonZero,
+           diffAtN.cases, diffAtN.nonZero, prefixCls.cases, prefixCls.nonZero,
+           highBit.cases, highBit.nonZero, nulls.cases, nulls.nonZero);
+
+    // The control, evaluated rather than merely described. A predicate written
+    // into a warrant and never evaluated is not a check
+    // (reference_a_predicate_nobody_evaluates.md).
+    const bool populated = diffAtN.cases > 0 && diffAt0.cases > 0 &&
+                           prefixCls.cases > 0 && equal.cases > 0 &&
+                           highBit.cases > 0 && nulls.cases > 0;
+    const bool discriminating = diffAtN.nonZero == diffAtN.cases &&
+                                diffAt0.nonZero == diffAt0.cases &&
+                                prefixCls.nonZero == prefixCls.cases &&
+                                equal.nonZero == 0;
+    printf("[SYSBODY/StrCompare] control: %d distinct return values; corpus %s; "
+           "answers %s -- %s\n",
+           seenCount,
+           populated ? "POPULATES ALL SIX CLASSES" : "*** A CLASS IS EMPTY ***",
+           discriminating ? "DISCRIMINATE" : "*** UNIFORM WITHIN A CLASS ***",
+           (divergences == 0 && populated && discriminating && seenCount > 4)
+               ? "VERIFIED"
+               : "*** NOT a verification ***");
+}
+
+}  // namespace RtSystem
+
 // ============================================================
 // Registration
 // ============================================================
@@ -1142,6 +1328,19 @@ int RtSystemStringRegister() {
     RegisterRuntimeExport("?Set@String@System@@QEAAXPEBD@Z",        (void*)&RtSystem_String_Set); ++n;
     RegisterRuntimeExport("?SubString@String@System@@QEBA?AV12@HH@Z", (void*)&RtSystem_String_SubString); ++n;
     RegisterRuntimeExport("?ToFloat@String@System@@SAMPEBD@Z",      (void*)&RtSystem_String_ToFloat); ++n;
+    // WAVE 22 LANE SYSBODY. The body has existed since Wave 2 (above) and was
+    // never registered, which is why runtime_census.py has been printing it as
+    // an unported System BODY for twenty waves -- a port that is never
+    // registered is indistinguishable from an absent one
+    // (reference_half_registered_port_reads_as_absent.md). Name only, and that
+    // is checked rather than assumed: 0x1800c98a0 appears nowhere in this tree
+    // as a RegisterRuntimeAddr target or an address door (grep over runtime/,
+    // engine/, code/, standalone/ -- the three hits are all comments naming
+    // the retail address beside the mangled name). Its live consumers
+    // (ui/dialog_create.cpp:357, ui/element.cpp:215) both resolve BY NAME
+    // through ResolveExport, so this registration routes them to the body
+    // below and they are the route, not a synthetic one.
+    RegisterRuntimeExport("?StrCompare@String@System@@SAHPEBD0@Z",  (void*)&RtString_StrCompare); ++n;
     // Wave 9 lane B3 -- the four raw-door rows.
     RegisterRuntimeExport("?ToInteger@String@System@@SAHPEBD@Z",    (void*)&RtSystem_String_ToInteger); ++n;
     RegisterRuntimeExport("?Release@String@System@@AEAAXXZ",        (void*)&RtSystem_String_Release); ++n;
