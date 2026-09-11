@@ -139,6 +139,24 @@ def main():
                   for s in pe.DIRECTORY_ENTRY_EXPORT.symbols if s.address)
     exp_rvas = [e[0] for e in exps]
     exp_at = dict(exps)
+    # ---- A .pdata RANGE IS A FRAGMENT, NOT A FUNCTION (Wave 21) ----------
+    # MSVC chains function fragments through UNW_FLAG_CHAININFO, so a .pdata
+    # entry bounds ONE FRAGMENT.  Measured in this DLL by Wave 21 lane CLASS:
+    # 932 of 6045 entries (15.4%) carry that flag, covering 116,964 bytes.
+    #
+    # TWO CONSEQUENCES, and the second is why this note is here:
+    #   * END - BEGIN IS A LOWER BOUND ON A FUNCTION'S SIZE, not its size.  Lane
+    #     GFXBODY measured AnimationManager::Update at 50 bytes from one record;
+    #     it is 430, and 3 of its 13 rows were understated, the worst by 8.6x.
+    #   * ATTRIBUTION by raw range names the FRAGMENT's start, which for a
+    #     chained fragment is NOT the owning function's entry point.
+    #
+    # A SIZE-UNDERSTATING blind spot is the opposite polarity from an inflating
+    # one: it does not manufacture work, it makes work look CHEAP -- and cheap is
+    # what gets picked up without scrutiny.  This tool does NOT follow the chain.
+    # It is DECLARED here rather than fixed: correcting attribution would move
+    # numbers other lanes are quoting, and lane GFXBODY's corrected method has
+    # only 4 of its 13 extents Ghidra-confirmed.  Wave 22 input.
     pdata = sorted((f.struct.BeginAddress, f.struct.EndAddress)
                    for f in getattr(pe, "DIRECTORY_ENTRY_EXCEPTION", []))
     pd_begin = [p[0] for p in pdata]

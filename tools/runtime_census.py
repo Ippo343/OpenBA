@@ -258,6 +258,51 @@ RE_EXPORT_NONLITERAL = re.compile(
 RE_MACRO_DOOR = re.compile(r'\b(?:RT_EXPORT_ONCE|RT_DATA_SLOT)\s*\(')
 RE_RESOLVE_CACHED = re.compile(r'\bRtResolveCached\s*\(\s*(?=")')
 
+# ---- THE WRAPPER-DOOR SCREEN (Wave 21; found by lane GFXVT) --------------
+#
+# THE SIXTH INSTANCE OF ONE FAMILY, AND THE REASON THIS IS A SCREEN RATHER
+# THAN A SEVENTH PATTERN.  Every previous fix above added one more literal to
+# match -- which is precisely why there was a sixth.  GFXVT found three live
+# cutover dependencies (the EdgeMesh, EdgeMeshInstance and MeshInstance
+# vtables) that never enter `called` at all, because they are reached through
+# `RtVtable("...")` at runtime/src/graphics/mesh.cpp:305 -- a project-local
+# one-line wrapper around ResolveExport that no pattern here recognises.
+#
+# GFXVT's control is what makes that a diagnosis rather than a guess: RtVtable
+# has exactly five call sites, and the other two rows it names (Base@Object,
+# External@Object) appear in the census ONLY because a second, known door also
+# names them.  The wrapper door is invisible; the two survivors are
+# coincidences.
+#
+# So this does not match a door.  It matches ANY identifier called with a
+# mangled-name string literal, and prints the ones it does NOT recognise, BY
+# NAME, with counts.  An instrument that says "I found N doors and could not
+# classify these M identifiers" is worth more than one that silently matches N
+# -- which is this wave's own doctrine (a screen must name what it could not
+# examine) applied to the census itself.
+#
+# IT CHANGES NO COUNT.  Deliberately: deciding that a given wrapper IS a door
+# is a judgement about that wrapper's semantics, and making it here would move
+# numbers other lanes are quoting mid-wave.  The screen hands the list forward.
+RE_MANGLED_CALL = re.compile(
+    r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\(\s*"(\?[^"]{4,})"')
+
+# Identifiers that ARE known doors, or are known NOT to be (a registration
+# side, a probe, a log line).  An identifier absent from both lists is
+# reported as UNCLASSIFIED -- never silently assumed to be either.
+WRAPPER_KNOWN_DOOR = {
+    "ResolveExport", "ResolveExportRaw", "RtResolveCached",
+    "RT_EXPORT_ONCE", "RT_DATA_SLOT", "InstallRuntimeDetourExport",
+}
+WRAPPER_KNOWN_NOTDOOR = {
+    # registration / minting sides: they publish, they do not resolve
+    "RegisterRuntimeExport", "RegisterRuntimeAddr", "RegisterDispatchSlot",
+    "RegisterExeAddr", "RtMintPromotionStorage", "RtMintVtable",
+    # diagnostics and string handling
+    "printf", "fprintf", "sprintf", "snprintf", "strcmp", "strncmp", "strstr",
+    "puts", "fputs", "TRACE", "LOG", "Log", "assert",
+}
+
 
 def first_literal_after(text, pos, limit=400):
     """Position of the first `"` within `limit` chars of `pos`, or None.
@@ -542,6 +587,210 @@ def load_export_addrs():
         raise
     except Exception as exc:
         return _bail("reading the DLL's export directory failed: %r" % exc)
+
+
+def load_section_map():
+    """[(name, lo, hi)] for the shipped DLL's sections, or None.
+
+    SECONDARY evidence only, and deliberately kept apart from the name-based
+    classifier below. It exists for one population the classifier CANNOT
+    reach: a row keyed by a raw address has no mangled name, so no amount of
+    name grammar will say whether it is code or data. Section membership does
+    say that, from a different piece of evidence, so it is printed as a HINT
+    beside the UNKNOWN count and never folded into a named bucket.
+
+    Returns None (not {}) when it cannot read the DLL, so the caller prints
+    "not probed" rather than a zero. A zero here would be indistinguishable
+    from "every address was unclassifiable", which is the failure this whole
+    section exists to avoid.
+    """
+    try:
+        import pefile
+    except ImportError:
+        return None
+    if not os.path.exists(RUNTIME_DLL):
+        return None
+    try:
+        pe = pefile.PE(RUNTIME_DLL, fast_load=True)
+        base = pe.OPTIONAL_HEADER.ImageBase
+        out = []
+        for s in pe.sections:
+            lo = base + s.VirtualAddress
+            out.append((s.Name.rstrip(b"\x00").decode("ascii", "replace"), lo,
+                        lo + max(s.Misc_VirtualSize, s.SizeOfRawData)))
+        return out or None
+    except Exception:
+        return None
+
+
+def section_of(secmap, va):
+    if secmap is None:
+        return None
+    for name, lo, hi in secmap:
+        if lo <= va < hi:
+            return name
+    return "(outside every section)"
+
+
+# ---- THE SYMBOL-KIND CLASSIFIER (Wave 21 lane CLASS) ---------------------
+#
+# WHY IT EXISTS. A namespace's gap (called - ported) was being read as "N
+# functions left to port" and it is not one population. Wave 10 discovered
+# this for UI the expensive way -- 13 of its 31 were minted DATA with no body
+# to reimplement (memory project_ui_namespace_gap_decomposition) -- and Wave
+# 21's kickoff discovered it again, from scratch, for Graphics: 29 = 13 code
+# rows + 8 vtable rows + 8 data rows. The fact was written down both times and
+# NOTHING IN THE CENSUS ASKED FOR IT, so each wave paid for it again.
+#
+# WHAT IT READS. The MSVC mangled name, and nothing else. It does not consult
+# the DLL, the mint tables, or our source. It is therefore blind to everything
+# a name does not carry -- including how big a body is, whether it is
+# reachable, and whether a DATA row is minted already.
+#
+# WHAT IT CANNOT CLASSIFY, stated here rather than discovered later:
+#   * an ADDRESS-KEYED row (our tree reaches it by VA; it is unexported and
+#     has no name at all) -> UNKNOWN, with a section hint from load_section_map
+#   * an ORDINAL row (the export directory gives a number, not a name)
+#     -> UNKNOWN, no hint available
+#   * any name whose grammar this walker cannot finish -> UNKNOWN, printed by
+#     name so it can be fixed rather than absorbed
+# An identifier a tool cannot resolve is UNKNOWN, not ABSENT
+# (memory reference_a_screen_that_cannot_name_its_subject): collapsing the
+# first bucket into BODY would silently claim 29 unexported .text rows and 12
+# unexported DATA rows are all port work, which is the INFLATING direction and
+# the one that manufactures work.
+
+KIND_ORDER = ["BODY", "CTOR", "DTOR", "OPNEWDEL", "OPERATOR", "VTABLE",
+              "DATA", "UNKNOWN"]
+
+
+def _type_code_char(mangled):
+    """The MSVC type-code character that follows the qualified-name list.
+
+    Walks the same grammar as namespace_of() -- fragments terminated by '@',
+    single-digit back-references that are NOT terminated, list closed by an
+    empty component -- and returns the first character after that closing '@'.
+    In MSVC's grammar that character is a DIGIT for static/global DATA
+    (0..5 = member data by access, 3 = plain global) and a LETTER for a
+    function (A..Z member access + calling convention, Y = free function).
+    Returns None if the name cannot be walked to that point.
+    """
+    if not mangled.startswith("?"):
+        return None
+    i, n = 1, len(mangled)
+    if i < n and mangled[i] == "?":
+        # operator/special name: "?X" or "?_X"; not a name fragment
+        i += 1
+        if i < n and mangled[i] == "_":
+            i += 1
+        i += 1
+    while i < n:
+        c = mangled[i]
+        if c == "@":                     # empty component: list closed
+            return mangled[i + 1] if i + 1 < n else None
+        if c.isdigit():                  # back-reference, no terminator
+            i += 1
+            continue
+        j = mangled.find("@", i)
+        if j < 0:
+            return None
+        i = j + 1
+    return None
+
+
+def classify_symbol(key, kind):
+    """(bucket, why) for one census row key. `why` is set only for UNKNOWN."""
+    if kind == "ordinal":
+        return "UNKNOWN", "ordinal row: the binary gives a number, not a name"
+    if not key.startswith("?"):
+        return "UNKNOWN", "address-keyed row: unexported, no mangled name"
+    if key.startswith("??_7") or key.startswith("??_8"):
+        return "VTABLE", ""              # ??_7 vftable, ??_8 vbtable
+    if key.startswith("??_R") or key.startswith("??_C"):
+        return "DATA", ""                # RTTI records, string literals
+    if key.startswith("??0"):
+        return "CTOR", ""
+    if key.startswith("??1") or key.startswith("??_E") or key.startswith("??_G"):
+        return "DTOR", ""                # dtor, vector/scalar deleting dtor
+    if key.startswith("??2") or key.startswith("??3"):
+        return "OPNEWDEL", ""
+    if key.startswith("??"):
+        return "OPERATOR", ""
+    tc = _type_code_char(key)
+    if tc is None:
+        return "UNKNOWN", "mangled name this walker could not finish"
+    if tc.isdigit():
+        return "DATA", ""
+    if tc.isalpha():
+        return "BODY", ""
+    return "UNKNOWN", "type code %r is neither a digit nor a letter" % tc
+
+
+CLASSIFIER_FIXTURES = [
+    # (row kind, key, expected bucket, what this case exists to pin)
+    ("export", "?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
+     "BODY", "ordinary virtual member function"),
+    ("export", "?Foo@@YAXXZ", "BODY", "free function (type code Y, not a member)"),
+    ("export", "?GetDescription@Achievement@1@QEBA?AVString@System@@XZ",
+     "BODY", "innermost scope is a BACK-REFERENCE, so the list ends on a "
+             "SINGLE '@' -- the case that once filed three Achievement "
+             "methods under System"),
+    ("export", "?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A",
+     "DATA", "private static member data (type code 0)"),
+    ("export", "?_frameIndex@ParticleInstance@Graphics@@1HA",
+     "DATA", "protected static member data (type code 1)"),
+    ("export", "?_singleton@Modification@IO@@2PEAV12@EA",
+     "DATA", "public static member data (type code 2)"),
+    ("export", "??_7Light@Graphics@@6B@", "VTABLE", "vftable"),
+    ("export", "??0FrameCopyImageBuffer@Graphics@@QEAA@XZ", "CTOR", "constructor"),
+    ("export", "??1FrameCopyImageBuffer@Graphics@@UEAA@XZ", "DTOR", "destructor"),
+    ("export", "??_GTextFileStream@IO@@UEAAPEAXI@Z", "DTOR",
+     "scalar DELETING destructor -- still a dtor, not an operator"),
+    ("export", "??2MaterialInstance@Graphics@@SAPEAX_K@Z", "OPNEWDEL",
+     "operator new"),
+    ("export", "??4Vector3@Math@@QEAAAEAV01@AEBV01@@Z", "OPERATOR",
+     "operator= -- an operator that is NOT new/delete/ctor/dtor"),
+    ("addr", "0x180003970", "UNKNOWN", "address-keyed row: there is no name"),
+    ("ordinal", "1234", "UNKNOWN", "ordinal row: there is no name"),
+    # THE NEGATIVE CONTROL. Nothing in the live tree currently trips the
+    # grammar branch, so without this line "0 unparseable names" would be
+    # indistinguishable from a classifier that had stopped parsing at all
+    # (memory reference_absence_screen_must_be_handed_a_shape).
+    ("export", "?BrokenName@NoTerminator", "UNKNOWN",
+     "DELIBERATELY MALFORMED: an unterminated final fragment. This is the "
+     "synthetic shape handed to the UNKNOWN branch."),
+]
+
+
+def selftest_classifier():
+    print("classify_symbol() fixture table")
+    print("SUBJECT : the classifier ONLY. Nothing here reads the tree or the DLL.")
+    print("=" * 78)
+    bad = 0
+    seen = collections.Counter()
+    for kind, key, want, why in CLASSIFIER_FIXTURES:
+        got = classify_symbol(key, kind)[0]
+        seen[got] += 1
+        ok = got == want
+        bad += 0 if ok else 1
+        print("%-5s %-9s %-9s %s" % ("ok" if ok else "FAIL", want, got, key))
+        print("          %s" % why)
+    covered = sorted(seen)
+    missing = [k for k in KIND_ORDER if k not in seen]
+    print("=" * 78)
+    print("COVERAGE : %d fixtures exercise %d of the %d buckets (%s)"
+          % (len(CLASSIFIER_FIXTURES), len(covered), len(KIND_ORDER),
+             ", ".join(covered)))
+    if missing:
+        print("           UNEXERCISED BUCKETS: %s -- no fixture reaches them, so"
+              % ", ".join(missing))
+        print("           this run says nothing about whether they work.")
+    print("NEGATIVE : the malformed name must land in UNKNOWN -> %s"
+          % ("GREEN" if classify_symbol("?BrokenName@NoTerminator",
+                                        "export")[0] == "UNKNOWN" else "RED"))
+    print("RESULT   : %d of %d fixtures correct"
+          % (len(CLASSIFIER_FIXTURES) - bad, len(CLASSIFIER_FIXTURES)))
+    return 1 if bad else 0
 
 
 def namespace_of(mangled):
@@ -1294,7 +1543,16 @@ def main():
                          "rows become invisible and BOTH numbers are "
                          "understated -- the census says so on stderr. Do not "
                          "publish a number produced this way.")
+    ap.add_argument("--selftest-classifier", action="store_true",
+                    help="run the symbol-kind classifier against its fixture "
+                         "table and exit. Includes a DELIBERATELY MALFORMED "
+                         "name, because the UNKNOWN bucket is absence-shaped: "
+                         "'0 unparseable names' in a real run is otherwise "
+                         "indistinguishable from a dead parser.")
     args = ap.parse_args()
+
+    if args.selftest_classifier:
+        return selftest_classifier()
 
     global ALLOW_DEGRADED
     ALLOW_DEGRADED = args.allow_degraded
@@ -1590,6 +1848,137 @@ def main():
     print("called = distinct functions our tree resolves today, OR that retail's")
     print("         own callers reach through a detour or a PROMOTED minted vtable")
 
+    # ---- WRAPPER-DOOR SCREEN (Wave 21; defect found by lane GFXVT) --------
+    # See RE_MANGLED_CALL. Changes no count; names what the door scan cannot
+    # classify, instead of adding a seventh hardcoded pattern.
+    wrap = collections.Counter()
+    wrap_where = {}
+    for path in iter_sources():
+        try:
+            text = open(path, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        # Comment-stripped, unlike the RT_UNPROMOTABLE checker: THIS subject is
+        # code. A checker with no comment stripper reports prose as code, and
+        # the prose most likely to name a door is a comment saying that door was
+        # DELETED (reference_uncommented_checker_manufactures_work).
+        stripped = strip_comments(text)
+        for m in RE_MANGLED_CALL.finditer(stripped):
+            ident = m.group(1)
+            wrap[ident] += 1
+            wrap_where.setdefault(ident, path)
+    n_all = sum(wrap.values())
+    known = {i: c for i, c in wrap.items() if i in WRAPPER_KNOWN_DOOR}
+    notdoor = {i: c for i, c in wrap.items() if i in WRAPPER_KNOWN_NOTDOOR}
+    unclass = {i: c for i, c in wrap.items()
+               if i not in WRAPPER_KNOWN_DOOR and i not in WRAPPER_KNOWN_NOTDOOR}
+    print()
+    print("WRAPPER-DOOR SCREEN  (Wave 21; the SIXTH instance of one blind-spot")
+    print("family, found by lane GFXVT -- and a SCREEN, not a seventh pattern)")
+    print("  subject     every identifier in the scanned tree called with a")
+    print("              mangled-name string literal: %d call site(s), %d distinct"
+          % (n_all, len(wrap)))
+    print("  known DOOR        %5d site(s) across %d identifier(s)"
+          % (sum(known.values()), len(known)))
+    print("  known NOT a door  %5d site(s) across %d identifier(s)"
+          % (sum(notdoor.values()), len(notdoor)))
+    print("  UNCLASSIFIED      %5d site(s) across %d identifier(s) -- an"
+          % (sum(unclass.values()), len(unclass)))
+    print("                    identifier this script cannot resolve is UNKNOWN,")
+    print("                    NOT absent. Each is named below with a file.")
+    for ident, c in sorted(unclass.items(), key=lambda kv: (-kv[1], kv[0])):
+        print("      %-34s %4d   first seen in %s" % (ident, c, wrap_where[ident]))
+    if not unclass:
+        print("      (none -- every identifier is classified)")
+    print("  CAVEAT      this screen CHANGES NO COUNT above. Whether an")
+    print("              unclassified identifier is really a door is a judgement")
+    print("              about that wrapper's semantics, and making it here would")
+    print("              move numbers other lanes quote mid-wave. Known live")
+    print("              example: RtVtable (runtime/src/graphics/mesh.cpp) IS a")
+    print("              door -- three Graphics vtable rows reach the DLL only")
+    print("              through it and are absent from `called` entirely.")
+
+    # ---- GAP DECOMPOSITION BY SYMBOL KIND (Wave 21 lane CLASS) ------------
+    # The doctrine this implements: a namespace gap figure is uninterpretable
+    # until decomposed by symbol kind. See classify_symbol() for what it reads
+    # and, more importantly, what it cannot.
+    secmap = load_section_map()
+    gap_kinds = collections.defaultdict(collections.Counter)
+    unknown_why = collections.Counter()
+    unknown_sect = collections.Counter()
+    unknown_named = []
+    for kind, key, ns, ported, detoured, files in rows:
+        if ported:
+            continue
+        bucket, why = classify_symbol(key, kind)
+        gap_kinds[ns][bucket] += 1
+        if bucket == "UNKNOWN":
+            unknown_why[why] += 1
+            if kind == "addr":
+                unknown_sect[section_of(secmap, int(key, 16)) or "(not probed)"] += 1
+            if why.startswith("mangled name") or why.startswith("type code"):
+                unknown_named.append(key)
+
+    print()
+    print("GAP DECOMPOSITION BY SYMBOL KIND  (Wave 21 lane CLASS)")
+    print("  subject     the %d rows that are called-but-NOT-ported, i.e. exactly"
+          % (tot_called - tot_ported))
+    print("              the per-namespace gap in the table above. Ported rows are")
+    print("              NOT classified and are not in any figure here.")
+    print("  evidence    the MSVC MANGLED NAME and nothing else. Not the DLL, not")
+    print("              the mint tables, not our source. So this says what KIND of")
+    print("              thing a row is; it says NOTHING about size, reachability,")
+    print("              or whether a DATA row is already minted.")
+    print("  why         a gap read as \"N functions to port\" is scoped against a")
+    print("              population that does not exist. Wave 10 paid to learn this")
+    print("              for UI and Wave 21's kickoff paid again for Graphics.")
+    print()
+    print("  %-13s %5s | %s" % ("namespace", "gap",
+                                " ".join("%8s" % k for k in KIND_ORDER)))
+    print("  " + "-" * 76)
+    gap_tot = collections.Counter()
+    for ns in sorted(gap_kinds, key=lambda n: (-sum(gap_kinds[n].values()), n)):
+        c = gap_kinds[ns]
+        gap_tot.update(c)
+        print("  %-13s %5d | %s" % (ns, sum(c.values()),
+                                    " ".join("%8d" % c[k] for k in KIND_ORDER)))
+    print("  " + "-" * 76)
+    print("  %-13s %5d | %s" % ("TOTAL", sum(gap_tot.values()),
+                                " ".join("%8d" % gap_tot[k] for k in KIND_ORDER)))
+    code_kinds = ("BODY", "CTOR", "DTOR", "OPNEWDEL", "OPERATOR")
+    n_code = sum(gap_tot[k] for k in code_kinds)
+    n_gap = sum(gap_tot.values())
+    print()
+    print("  BODY/CTOR/DTOR/OPNEWDEL/OPERATOR = a function to reimplement.")
+    print("  VTABLE = promotion work (the body rows are its slots, counted")
+    print("           separately; see PROMOTION BACKLOG below).")
+    print("  DATA   = mint/publish work; there is no body to write.")
+    print("  UNKNOWN = this classifier REFUSES to guess. Not zero, not BODY.")
+    print("  => %d of %d gap rows (%.0f%%) are a function to reimplement."
+          % (n_code, n_gap, 100.0 * n_code / n_gap if n_gap else 0.0))
+    print()
+    print("  UNKNOWN, itemised -- %d rows this classifier cannot read:"
+          % gap_tot["UNKNOWN"])
+    for why, n in sorted(unknown_why.items(), key=lambda kv: -kv[1]):
+        print("    %4d  %s" % (n, why))
+    if unknown_named:
+        print("    the unparseable NAMES, so they can be fixed rather than absorbed:")
+        for k in sorted(unknown_named):
+            print("      %s" % k)
+    print("    SECONDARY HINT for the address-keyed rows -- which DLL SECTION each")
+    print("    lands in. Different evidence from the name grammar, so it is a hint")
+    print("    beside the bucket and never folded into one:")
+    if secmap is None:
+        print("      (not probed: pefile or the DLL was unavailable -- this is a")
+        print("       REFUSAL, not a zero)")
+    elif not unknown_sect:
+        print("      (no address-keyed rows in the gap)")
+    else:
+        for s, n in sorted(unknown_sect.items(), key=lambda kv: -kv[1]):
+            print("      %-28s %4d" % (s, n))
+        print("      .text = code; .rdata/.data = data. So even the address-keyed")
+        print("      half of the gap is NOT all port work either.")
+
     # ---- THE VTABLE FOLD-IN, REPORTED AS A SET-DIFF -----------------------
     # Never as a percentage delta: a percentage cannot say WHICH rows moved,
     # and this census has `called` in both halves of its own ceiling identity,
@@ -1875,9 +2264,16 @@ def main():
     if args.csv:
         with open(args.csv, "w", newline="", encoding="utf-8") as fh:
             w = csv.writer(fh)
-            w.writerow(["kind", "key", "namespace", "ported", "detoured", "callers"])
+            # symbol_kind is APPENDED, not inserted: every existing column keeps
+            # its index, so an ad-hoc positional reader of the old five + callers
+            # is unaffected. It is emitted for every row, ported or not, so a
+            # consumer can re-derive the gap decomposition instead of trusting
+            # the printed table.
+            w.writerow(["kind", "key", "namespace", "ported", "detoured",
+                        "callers", "symbol_kind"])
             for kind, key, ns, ported, detoured, files in sorted(rows, key=lambda r: (r[0], r[2], r[1])):
-                w.writerow([kind, key, ns, int(ported), int(detoured), ";".join(files)])
+                w.writerow([kind, key, ns, int(ported), int(detoured),
+                            ";".join(files), classify_symbol(key, kind)[0]])
         print()
         print("wrote %s (%d rows)" % (args.csv, len(rows)))
 
