@@ -127,6 +127,10 @@ namespace {
 typedef void  (*StringDtorFn)(String*);
 typedef void  (*ParseFn)(String* ret, int* pos, const String* src);
 typedef void* (*MapInsertFn)(void* map, void** ret, const String* key, const String* val);
+// Wave 22 lane ERRCFG. THREE parameters: the hidden String return slot is the
+// SECOND, between `this` and the key. See GetCommandLineString's banner for why
+// omitting it is a wild write that still returns the right answer.
+typedef String* (*GetCmdLineStrFn)(void* self, String* ret, const String* key);
 
 // ---------------------------------------------------------------------------
 // The node the two tree walkers agree on. Only three of its fields are touched
@@ -136,11 +140,18 @@ typedef void* (*MapInsertFn)(void* map, void** ret, const String* key, const Str
 // ---------------------------------------------------------------------------
 struct MapNode {
     char*    key;                    // +0x00  String::data of the key
-    uint8_t  _unknown08[0x18 - 0x08];
+    char*    value;                  // +0x08  String::data of the value
+    uint8_t  _unknown10[0x18 - 0x10];
     MapNode* left;                   // +0x18
     MapNode* right;                  // +0x20
 };
 static_assert(offsetof(MapNode, key)   == 0x00, "0x18002ace0: MOV R9,[R8]");
+// +0x08 added 2026-09-11 by Wave 22 lane ERRCFG. Pinned by GetCommandLineString
+// at 0x1800c533b (`MOV RCX,[RAX+0x8]`) immediately followed by `INC dword
+// [RCX-0x4]` at 0x1800c534c -- a String refcount bump, so the qword at +0x08 is
+// a System::String's `data`, not an arbitrary pointer. The remaining eight
+// bytes of the node's head stay undescribed for the reason above.
+static_assert(offsetof(MapNode, value) == 0x08, "0x1800c533b: MOV RCX,[RAX+0x8]");
 static_assert(offsetof(MapNode, left)  == 0x18, "0x18002ad3f: MOV R8,[R8+0x18]");
 static_assert(offsetof(MapNode, right) == 0x20, "0x18002ad8d: MOV R8,[R8+0x20]");
 
@@ -520,6 +531,192 @@ extern "C" String* RtSystem_Configuration_ParseCommand(String* ret, int* pos,
 }
 
 // ============================================================================
+// ?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z
+//                                                  retail 0x1800c5300  ord 2495
+// ============================================================================
+// Wave 22 lane ERRCFG.
+//
+// THE SIGNATURE IS THREE REGISTERS, NOT TWO. `?AVString@2@` in the mangling is
+// a `System::String` returned BY VALUE, so MSVC inserts a hidden return slot as
+// the first ordinary argument:
+//
+//     RCX = this        RDX = String* ret        R8 = const String& key
+//
+// and retail says so on its first three instructions -- `MOV [RSP+0x10],RDX`
+// parks the return slot in its home space, `MOV RSI,RDX` keeps it, and
+// `MOV RDX,R8` shuffles the real argument down before the find. The function
+// returns `RAX = RSI`, the slot it was handed. An `fn_*` typedef that omitted
+// the slot would put `key` in RDX, hand the find a `String*` that is really a
+// `String**`, and then write the answer through whatever the caller happened to
+// leave in R8 -- a wild write that would STILL appear to return the right
+// answer, because RAX comes back correct either way
+// (reference_hidden_retslot_wild_write.md). The typedef above spells all three.
+//
+// WHAT IT DOES
+// ------------
+//     node = ConfigMap_Find(this + 0x10, key);        // 0x18002ace0, ported above
+//     temp = node ? node->value : nullptr;            // 0x1800c533b
+//     if (temp) ++temp[-4];                           // 0x1800c534c  temp's ref
+//     ret->data = nullptr;                            // 0x1800c537f
+//     if (temp) { ret->data = temp; ++temp[-4]; }     // 0x1800c538a  ret's ref
+//     <release temp>                                  // 0x1800c53a9 / 0x1800c53d5
+//     return ret;
+//
+// The refcount goes +2 then -1, never through zero, and the net is the +1 the
+// returned String owns. The transient +2 is written out rather than folded into
+// a single AddRef: nothing in this project can observe the difference, but
+// those two arms ARE the arms retail compiled, and a reader diffing this
+// against 0x1800c5300 should find them.
+//
+// THE TWO `TEST DIL,n` ARMS AND THE GARBAGE THEY GUARD. Retail keeps a
+// destructor-state byte at [RSP+0x20] (1 = the found-arm temporary is live,
+// 2 = the not-found-arm temporary is live, |4 = the return value is live), and
+// each arm loads the OTHER arm's UNINITIALISED stack slot into RCX/RBX before
+// falling into the common tail. That is not a bug and it is not transcribed:
+// the state bit guarding each release is clear in the arm that did not create
+// the temporary, so the garbage is never dereferenced. Modelled here as one
+// `temp`, which is what that state machine computes.
+//
+// ORACLE -- a real differential one, and it needs no snapshot.
+// -----------------------------------------------------------
+// This body is a PURE READ. It does not touch the map, so unlike SetCommandLine
+// a replay is not a double insert, and unlike ParseValue there is no aliased
+// in/out parameter to snapshot. The shipped body is run afterwards into a
+// second String and the two `data` POINTERS are compared -- as pointers, not as
+// text, which is the SHARPER test here precisely because neither side
+// allocates: both must hand back the identical buffer that lives in the map. A
+// text comparison would pass on two different nodes holding equal strings,
+// which is exactly the failure the ported find had once already (see §3).
+//
+// The replay takes a third reference, released afterwards through retail's own
+// idiom so the refcount ends where our body left it. Without that release a
+// diff run leaks one reference per call and no buffer in the configuration map
+// could ever be freed.
+extern "C" String* RtSystem_Configuration_GetCommandLineString(
+        void* self, String* ret, const String* key) {
+    RT_DIFF_BEGIN("System::Configuration::GetCommandLineString");
+
+    MapNode* node = static_cast<MapNode*>(
+        RtSystem_ConfigMap_Find(static_cast<uint8_t*>(self) + 0x10, key));
+
+    // 0x1800c533b: the found node's VALUE, and the temporary's reference.
+    char* temp = (node != nullptr) ? node->value : nullptr;
+    if (temp != nullptr) ++RtSystem::StringRefCount(temp);
+
+    // 0x1800c537f: the slot is zeroed FIRST and unconditionally, then adopted.
+    ret->data = nullptr;
+    RtSystem::RtString_AdoptInline(ret, temp);
+
+    // 0x1800c53a9 / 0x1800c53d5: the temporary dies. Through the shared
+    // primitive, so the freeing branch's dangling-pointer asymmetry (String.h)
+    // is reproduced rather than re-typed.
+    {
+        String tmpObj;
+        tmpObj.data = temp;
+        RtSystem::RtString_ReleaseInline(&tmpObj);
+    }
+
+    if (rt_diff_on__) {
+        String theirRet;
+        theirRet.data = nullptr;
+        RT_ORIGINAL_ONCE(GetCmdLineStrFn,
+            "?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z")(
+                self, &theirRet, key);
+
+        const bool eq = (ret->data == theirRet.data);
+        char ours[128], theirs[128];
+        std::snprintf(ours, sizeof(ours), "data=%p \"%.60s\"",
+                      (void*)ret->data, ret->data ? ret->data : "(null)");
+        std::snprintf(theirs, sizeof(theirs), "data=%p \"%.60s\"",
+                      (void*)theirRet.data, theirRet.data ? theirRet.data : "(null)");
+        RT_DIFF_SHADOW(eq, ours, theirs);
+
+        RtSystem::RtString_ReleaseInline(&theirRet);
+    }
+
+    // EFFECTIVENESS CONTROL. A run in which every lookup MISSED has exercised
+    // the null arm only and said nothing about the arm that matters; `work`
+    // counts the hits (reference_probe_needs_an_effectiveness_control.md).
+    RT_DIFF_WORK(ret->data != nullptr);
+    return ret;
+}
+
+// ============================================================================
+// ??1Configuration@System@@QEAA@XZ                       retail 0x1800c5170
+// ============================================================================
+// Wave 22 lane ERRCFG. Thirteen instructions, two of which are the whole body:
+//
+//   1800c5186  ADD  RCX,0x10
+//   1800c518f  CALL 0x18000f7d0        ; Set<Pair<String,String>>::Clear(this+0x10)
+//   1800c5195  MOV  RCX,RBX
+//   1800c519d  JMP  0x180010ab0        ; ~Array(+elem)(this)      -- TAIL CALL
+//
+// The name was checked against the export directory with pefile before a line
+// was written: `??1` is the destructor and `QEAA` is the NON-VIRTUAL spelling,
+// and it is ordinal 556 at 0x1800c5170. `??1...UEAA@XZ` does not exist in this
+// DLL and would have resolved NULL in silence
+// (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+//
+// NOT PRESCRIBED, READ. `reference_a_written_recipe_can_be_wrong.md` records a
+// wave that ported two dtors exactly as prescribed and swapped a body that
+// destroys EVERY element for one that destroys only the FIRST, so both callees
+// were opened rather than assumed:
+//
+//   0x18000f7d0  loads [this]; on non-null it calls 0x18000f890 TWICE, once
+//                with [node+0x18] and once with [node+0x20] -- i.e. it recurses
+//                down BOTH subtrees -- then frees the node and zeroes
+//                {ptr, int}. It is the whole container, not one element.
+//   0x180010ab0  reads the COUNT from [this+0x8] and the base from [this] and
+//                hands both to 0x180011010 (the per-element loop), then frees
+//                the block under the allocator lock and zeroes {ptr, ptr}.
+//                Again the whole array.
+//
+// BOTH ARE ALREADY PORTED AND REGISTERED BY ADDRESS IN THIS TREE, which is why
+// this row is thirteen lines rather than a Collection lane. That was the
+// STATED blocker on this row and re-checking it first is the point
+// (reference_holdback_blockers_are_stale_check_them_first.md):
+//
+//   0x18000f7d0 -> rtsetclear::Clear               runtime/src/collection/set_clear.cpp:212
+//   0x180010ab0 -> RtColl_ArrayDtorElem_180010ab0  runtime/src/collection/array_destroy.cpp:902
+//
+// so `ResolveAddr(Module::Runtime, ...)` -- which consults the port registry
+// BEFORE the DLL (reference_resolveaddr_consults_port_registry_first.md) --
+// reaches OUR bodies today and at cutover alike. This body therefore adds no
+// new dependency on Runtime-x64.dll.
+//
+// THE THIRD SUB-OBJECT IS NOT DESTROYED, AND THAT IS RETAIL'S CHOICE.
+// ??0Configuration (engine_lifecycle.cpp) initialises THREE {pointer, int}
+// pairs -- at +0x00, +0x10 and +0x20. This dtor touches +0x10 and +0x00 and
+// leaves +0x20 alone. That is a retail leak of the same family as the two
+// already flagged inside Engine::Shutdown (Input::Device and Audio::Device),
+// and it is reproduced rather than tidied: "fixing" it would free a block
+// retail still considers live, which is strictly worse than the leak.
+//
+// ORACLE: none, and none is manufactured. A destructor's entire output is that
+// its subject is gone, so a replay would run the same two frees over the same
+// freed blocks -- a double free, not a comparison. What it gets instead is the
+// call-site counter: engine_lifecycle.cpp's ported Engine::Shutdown reaches
+// this name through RT_EXPORT_ONCE, i.e. through a DOOR, so registering moves
+// that call to this body, and `work` counts the objects actually destroyed.
+extern "C" void RtSystem_Configuration_Dtor(void* self) {
+    RT_DIFF_BEGIN("System::Configuration::~Configuration");
+
+    typedef void (*CleanupFn)(void*);
+
+    // 0x1800c518f -- the string->string map at +0x10.
+    if (CleanupFn setClear = reinterpret_cast<CleanupFn>(
+            ResolveAddr(Module::Runtime, 0x18000f7d0)))
+        setClear(static_cast<uint8_t*>(self) + 0x10);
+
+    // 0x1800c519d -- the tail call, on `this` itself.
+    if (CleanupFn arrayDtor = reinterpret_cast<CleanupFn>(
+            ResolveAddr(Module::Runtime, 0x180010ab0)))
+        arrayDtor(self);
+
+    RT_DIFF_WORK(true);
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 // Every mangled name is ONE literal on ONE line, so runtime_census.py and
@@ -544,6 +741,18 @@ int RtSystemConfigurationRegister() {
 
     RegisterRuntimeExport("?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z", (void*)&RtSystem_Configuration_ParseValue); ++n;
     RegisterRuntimeAddr(0x1800c4930, (void*)&RtSystem_Configuration_ParseValue);
+
+    // ---- Wave 22 lane ERRCFG -----------------------------------------------
+    // BOTH DOORS for both rows. The NAME closes the census row and moves
+    // filesystem_setupdirs_win.cpp's two RT_EXPORT_ONCE call sites and
+    // engine_lifecycle.cpp's Engine::Shutdown; the ADDRESS closes the
+    // `ResolveAddr(Module::Runtime, ...)` door that would otherwise resolve to
+    // null at cutover (reference_by_address_door_dies_at_cutover.md).
+    RegisterRuntimeExport("?GetCommandLineString@Configuration@System@@QEBA?AVString@2@AEBV32@@Z", (void*)&RtSystem_Configuration_GetCommandLineString); ++n;
+    RegisterRuntimeAddr(0x1800c5300, (void*)&RtSystem_Configuration_GetCommandLineString);
+
+    RegisterRuntimeExport("??1Configuration@System@@QEAA@XZ", (void*)&RtSystem_Configuration_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800c5170, (void*)&RtSystem_Configuration_Dtor);
 
     // DELIBERATELY ABSENT, with reasons in the banner:
     //   (unexported) the map insert              0x18002a090  -> 0x18002a170

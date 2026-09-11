@@ -139,19 +139,29 @@ uint64_t g_largestRequestedSize = 0;
 // (`BYPASS ... allocator.cpp:128 ?SetText@Error@System@@ [live path]`), which is
 // exactly the class reference_bypassed_port_needs_a_source_checker.md exists for.
 //
-// `?Display@` STAYS a raw door on purpose. It has no port
-// (error.cpp declines it: nothing on any path this wave reaches calls it, since
-// Engine::Startup only ever passes stopApplication=false). Converting a door on
-// a symbol with NO port changes only which residue list it prints in
-// (reference_converting_a_door_is_not_satisfying_it.md) -- it would still be
-// null at cutover, and the `if (display)` below already handles that.
+// `?Display@` USED TO STAY a raw door on purpose, on the ground that it had no
+// port: "Converting a door on a symbol with NO port changes only which residue
+// list it prints in (reference_converting_a_door_is_not_satisfying_it.md)."
+//
+// CONVERTED 2026-09-11 by Wave 22 lane ERRCFG, because that ground is gone:
+// runtime/src/system/error.cpp now ports AND registers
+// `?Display@Error@System@@SAXXZ`. The moment it did, this `RtOriginal<>` became
+// the SAME live bypass the `?SetText@` line above was -- a registered port sat
+// next to a GetProcAddress that walks straight past it -- which is precisely
+// what tools/port_bypass_audit.py exists to catch and what
+// reference_bypassed_port_needs_a_source_checker.md records. Converted in the
+// same commit that created the hazard rather than leaving it for the audit.
+//
+// The `if (display)` guard below is kept: ResolveExport still yields null if
+// neither the port nor the DLL can supply the symbol.
 typedef void (*ErrorSetTextFn)(const char* text, bool stopApplication);
 typedef void (*ErrorDisplayFn)();
 
 void FatalOutOfMemory(const char* text, bool stopApplication) {
     ErrorSetTextFn setText =
         reinterpret_cast<ErrorSetTextFn>(ResolveExport("?SetText@Error@System@@SAXPEBD_N@Z"));
-    ErrorDisplayFn display = RtOriginal<ErrorDisplayFn>("?Display@Error@System@@SAXXZ");
+    ErrorDisplayFn display =
+        reinterpret_cast<ErrorDisplayFn>(ResolveExport("?Display@Error@System@@SAXXZ"));
     if (setText) setText(text, stopApplication);
     if (stopApplication && display) display();
     if (!setText) {
