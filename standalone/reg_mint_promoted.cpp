@@ -1128,6 +1128,74 @@ int RtMintRegisterPromotedRows() {
     // FORMAT (one per line, parsed):
     //   RT_UNPROMOTABLE: <symbol> | <slots ported> | <doc §> | <expiry> [| <class>]
     //
+    // DECLARING THE DENOMINATOR CONVENTION — REQUIRED ON EVERY NEW TAG.
+    // (WAVE20_CLOSED §6.1; ENFORCED since Wave 21 by
+    // tools/unpromotable_slot_check.py, which is a NEW CHECK, not a switch
+    // that was turned on.) `<slots ported>` of the form N/M is ambiguous: two
+    // conventions are in use here and they disagree by the purecall count K —
+    // see the WAVE 20 LANE DOORS note further down for the history and why
+    // the existing tags were NOT rewritten. A tag written from now on must
+    // carry exactly one of these tokens anywhere in the `<slots ported>`
+    // field:
+    //
+    //   [CONV: M=TABLE]        M is the WHOLE table
+    //   [CONV: M=NONPURECALL]  M counts only non-purecall slots; table = M + K
+    //
+    //   e.g. (the marker is spelled RT_UNPROMOTABLE followed by a colon; it is
+    //   written apart here so this EXAMPLE cannot be parsed as a real tag by
+    //   this or any future reader):
+    //      <marker> ??_7Foo@Bar@@6B@ | 3/9 (2 purecall) [CONV: M=NONPURECALL]
+    //               | WAVE21_LANE_X.md §2 | NONE, EVER
+    //
+    // Declaring is not paperwork: the checker verifies a DECLARED tag under
+    // that reading ONLY, instead of accepting either, so a declaration is what
+    // retires the accept-either blind spot for that row.
+    //
+    // The twenty tags that predate this rule are exempt and are FROZEN in the
+    // checker as (symbol, exact field text) pairs. Editing one of those fields
+    // — which §6.1 permits when the owning lane re-measures — makes that tag
+    // require a declaration, by design.
+    //
+    // DECLARING THE ROUTE SCOPE AND AN ADDRESSEE — REQUIRED ON EVERY NEW TAG.
+    // (Wave 21; same enforcement, CHECK 3.) The <expiry> field must carry
+    // both of:
+    //
+    //   [SCOPE: PERMANENT]    true on EVERY route that could ever exist,
+    //                         cutover included
+    //   [SCOPE: DLL-PRESENT]  true only while Runtime-x64.dll is loaded; at
+    //                         cutover the verdict CHANGES
+    //   [SCOPE: CONDITIONAL]  lapses on the stated condition
+    //   [ADDRESSEE: <who or what will evaluate this>]
+    //
+    // WHY BOTH FIELDS EXIST, each paid for once:
+    //   SCOPE     — Wave 21 lane SHOT proved ?_singleton@FileSystem@IO@@'s
+    //               "NONE, EVER" is really DLL-PRESENT: the harm is real while
+    //               the DLL is loaded (89 reads across 44 functions, 26 still
+    //               retail, against 2 writes, both ours) and FALSE at cutover,
+    //               where the row is REQUIRED. ??_7Stream@IO@@6B@ is spelled
+    //               identically and IS permanent. Of the forty existing
+    //               expiries, 36 say "NONE, EVER" — the phrase had become the
+    //               default spelling, which is what a required choice stops.
+    //   ADDRESSEE — an expiry naming a CONDITION but nobody to evaluate it
+    //               never fires (WAVE20_CLOSED §5.7). ??_7ReaderWriter@'s `?`
+    //               waited a full wave for "the next lane that counts ported
+    //               slots on this row"; naming an addressee in the Wave 21
+    //               kickoff closed it in one lane, and the work was small.
+    //
+    // WHAT THE CHECK DOES NOT DO, so a green is not over-read: it enforces
+    // PRESENCE and a closed vocabulary, nothing more. It cannot tell a correct
+    // scope from a wrong one, a false condition from a true one, or a
+    // RELEVANT condition from an irrelevant one — Wave 21 lane ENC found a
+    // TextFileStream expiry that was both false AND beside the point, since
+    // the deleting-dtor thunk pattern would not have required the callee to be
+    // ported at all. All four tag defects found in Wave 21 sat in tags that
+    // were perfectly well formed. THE FIELDS MAKE THE AUTHOR CHOOSE; they do
+    // not make anyone right.
+    //
+    // The forty tags that predate this rule are frozen the same way and do not
+    // fail the check. They declare NEITHER field; that is a backlog, printed
+    // as a counted NOTE by the tool, not a clean bill.
+    //
     // <class> is OPTIONAL and defaults to NO-OP, so every line written before
     // Wave 12 keeps its exact meaning. There are TWO reasons a row cannot be
     // promoted and they are near-opposites, so they must not share one word:
@@ -1241,6 +1309,33 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_frameIndex@ParticleInstance@Graphics@@1HA | n/a (int counter) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rng@Particle@Graphics@@1VRandom@System@@A | n/a (RNG state) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA | n/a (bool flag) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    //
+    // ---- WAVE 21 LANE GFXBODY (row 11), routed through lane CLASS ----------
+    //
+    // The FIRST tag written under the Wave 21 form: it declares a route SCOPE
+    // and an ADDRESSEE. GFXBODY supplied the row and the reason and correctly
+    // declined to write the tag itself.
+    //
+    // ?AddDrawItems@MeshInstance@Graphics@@ (retail 0x180100f20, ordinal 1550)
+    // is PORTED AND UNDERSTOOD (body transcribed in WAVE6_LANE_E.md) and must
+    // NOT be registered, for a reason the census cannot see: our tree's only
+    // use of that address is NOT A CALL. `standalone/scene_watch.cpp:401`
+    // resolves it as an IDENTITY TOKEN and compares it against `vtable[3]` of a
+    // live object to decide whether the object is a MeshInstance. Register the
+    // address and ResolveAddr hands back OUR body, the compare fails for every
+    // object, and BANISHED_LOD_CENSUS / BANISHED_FORCE_LOD0 silently observe an
+    // EMPTY SCENE -- a wrong answer with no error, which is the worst shape.
+    // Same mechanism as `0x1400f2f00` in PLAN §1.1. The fuller write-up is at
+    // runtime/src/graphics/mesh.cpp:1822 and is not repeated here.
+    //
+    // SCOPE is DLL-PRESENT, not PERMANENT, and the distinction is load-bearing
+    // exactly as lane SHOT showed for ?_singleton@FileSystem@IO@@: the harm is
+    // that a retail vtable slot is the thing being compared against. At cutover
+    // there is no retail slot, scene_watch's identity test must be rebuilt
+    // whatever we decide here, and this row stops being harmful. Writing
+    // "NONE, EVER" would have filed a cutover task as a permanent refusal.
+    //
+    // RT_UNPROMOTABLE: ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z | n/a (function, not a table) | WAVE21_LANE_GFXBODY.md row 11 + WAVE21_LANE_CLASS.md §2 | registering it is harmful while the DLL supplies vtable[3]; voids when scene_watch.cpp:401 stops using this address as an identity token [SCOPE: DLL-PRESENT] [ADDRESSEE: the lane that next needs AddDrawItems registered -- it must give scene_watch a different identity token first; if no lane does, the Wave 22 kickoff writer] | HARMFUL
     //
     // WHY EACH, in one line — the proofs are in the lane doc:
     //
