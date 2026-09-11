@@ -1,0 +1,34 @@
+SUBJECT   runtime/src/io/file_stream_cutover_probe.cpp, 29 rows parsed
+CHANNEL   literal registration scan, 1521 files / 26113438 bytes, 1124 names / 1164 addrs
+POS CTL   ??0BinaryFileStream@IO@@QEAA@XZ registered: YES
+NEG CTL   synthetic registered: no (ok)
+  shut name=yes  addr=yes  0x1800ae430 (18) lane FILE             ?CreatePath@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z
+  shut name=yes  addr=yes  0x1800aa8f0 (18) lane FILE             ?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z
+  shut name=yes  addr=yes  0x1800a8200 (18) lane FILE             ??0BinaryFileStream@IO@@QEAA@XZ
+  shut name=yes  addr=yes  0x1800accc0 (18) lane FILE             ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z
+  shut name=yes  addr=yes  0x180023c80 (18) lane FILE             ??1BinaryFileStream@IO@@UEAA@XZ
+  shut name=yes  addr=yes  0x1800aaab0 (18) lane FILE             ??1FileStream@IO@@UEAA@XZ
+  shut name=yes  addr=yes  0x1800c6740 (20) walk, lane Filename   ?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z
+  shut name=yes  addr=yes  0x1800c6880 (20) walk, lane SetupDir   ?GetPathDirectory@Filename@System@@QEBA?AV12@XZ
+  shut name=yes  addr=yes  0x1800c9440 (20) walk, lane String     ??HSystem@@YA?AVString@0@AEBV10@0@Z
+  shut name=yes  addr=yes  0x1800c92d0 (20) walk, lane String     ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z
+  shut name=yes  addr=yes  0x1800acc50 (19) closure               ?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z
+  shut name=yes  addr=yes  0x1800ade60 (19) closure               ?PlatformCreateFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z
+  shut name=yes  addr=yes  0x1800ae020 (19) closure               ?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z
+  shut name=-    addr=yes  0x18000c180 (19) ~FileInfo, unexported (unexported)
+  shut name=yes  addr=yes  0x1800c9230 (pre) lane String          ?SubString@String@System@@QEBA?AV12@HH@Z
+  shut name=yes  addr=yes  0x1800c6970 (pre) lane String          ?AdjustDelimiters@Filename@System@@AEAAXXZ
+  shut name=yes  addr=yes  0x180006770 (pre) lane String          ??4Filename@System@@QEAAAEAV01@AEBV01@@Z
+  shut name=yes  addr=yes  0x1800cab50 (pre) lane WideStr         ??0WideString@System@@QEAA@AEBVString@1@@Z
+  shut name=yes  addr=yes  0x1800caf40 (pre) lane WideStr         ?Set@WideString@System@@QEAAXPEB_W@Z
+  shut name=yes  addr=yes  0x1800cacd0 (pre) lane WideStr         ?AsUTF8@WideString@System@@QEBA?AVString@2@XZ
+  shut name=-    addr=yes  0x18000c200 (pre) FileInfo::operator=  (unexported)
+  shut name=-    addr=yes  0x180006a10 (pre) guarded object free  (unexported)
+  shut name=yes  addr=yes  0x1800c7a50 (pre) allocator            ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z
+  shut name=yes  addr=yes  0x1800c7ad0 (pre) allocator            ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
+  OPEN name=NO   addr=NO   0x1801fc6a8 (pre) DATA singleton       ?_singleton@FileSystem@IO@@0PEAV12@EA
+  OPEN name=NO   addr=NO   0x1801549a0 (pre) DATA vtable          ??_7Stream@IO@@6B@
+  OPEN name=NO   addr=NO   0x180154960 (19) DATA vtable, lane MINT ??_7FileStream@IO@@6B@
+  shut name=yes  addr=yes  0x1801554d0 (19) DATA vtable, lane MINT ??_7BinaryFileStream@IO@@6B@
+  OPEN name=-    addr=NO   0x1801554a8 (pre) DATA encoding vtable (unexported)
+==== STATIC: 25 of 29 rows shut, 4 OPEN ====

@@ -1,0 +1,48 @@
+SUBJECT ROOT : C:\code\GIT\untitled_rev_eng_project\.claude\worktrees\agent-a85bdb60be2c39a5e
+SUBJECT FILES (the free parameter -- this is where the check POINTS):
+               runtime/src/video/save_image_to_file.cpp
+BOARD        : runtime/src/io/file_stream_cutover_probe.cpp
+SCOPE        : DIRECT doors + TRANSITIVE closure over OUR OWN ported bodies from the root symbol below.
+ROOT SYMBOL  : ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z   (the transitive half's free parameter)
+CONTROL pos  : 11 door literals derived from source, 25 names parsed from the board -> GREEN
+CONTROL neg  : synthetic symbol absent from both sets -> GREEN
+BLIND SPOT   : 0 door macro(s) in the subject files spell their name with something other than a literal and are invisible to this tool
+==== 11 of 11 derived direct doors are on the board, 0 MISSING ====
+
+---- TRANSITIVE HALF (Wave 21 lane SHOT) ----
+POPULATION   : 1521 files / 26113438 bytes across runtime/engine/code/standalone/dx11 ; 10577 function definitions indexed ; 2196 mangled symbols mapped to an impl
+ROOT IMPL    : Video_ImageBuffer_SaveImageToFile
+CONTROL t-pos : synthetic door injected into RtIo_FileSystem_CreatePath         -> FOUND  (GREEN)
+CONTROL t-neg : synthetic door injected into RtVideo_Device_EnumerateVideoModes -> not found  (GREEN)
+REACHED      : 156 of our own function bodies from the root, of which 74 were entered through an AMBIGUOUS name hop (see walk())
+BLIND SPOT   : 4 transitive door macro(s) spell their name with something other than a literal
+NOT A NAME   : 17 address-keyed door(s) and 0 ordinal door(s) were found; neither is a mangled name, so neither is set-diffed against the board's name column.
+ADDR NOT ON BOARD  0x180023ca0         (CaseCopyCtor)
+ADDR NOT ON BOARD  0x180023d80         (Drive)
+ADDR NOT ON BOARD  0x18007eefc         (PathStrICmp  [AMBIGUOUS HOP])
+ADDR NOT ON BOARD  0x1800aab50         (Drive)
+ADDR NOT ON BOARD  0x1800aab90         (Drive)
+ADDR NOT ON BOARD  0x1800aabf0         (Drive)
+ADDR NOT ON BOARD  0x1800aac10         (Drive)
+ADDR NOT ON BOARD  0x1800aac50         (Drive)
+ADDR NOT ON BOARD  0x1800aac60         (Drive)
+ADDR NOT ON BOARD  0x1800aac70         (Drive)
+ADDR NOT ON BOARD  0x1801557e8         (RtIo_FileSystem_PlatformCreateFile)
+ADDRESS COLUMN: 6 of 17 derived address doors are on the board's address column (29 addresses there)
+NOT ON BOARD  ??0Filename@System@@QEAA@AEBV01@@Z                                        (RtIo_FileInfo_CopyCtor)
+NOT ON BOARD  ??0Filename@System@@QEAA@AEBVString@1@@Z                                  (MakePath)
+NOT ON BOARD  ?Display@Error@System@@SAXXZ                                              (FatalOutOfMemory  [AMBIGUOUS HOP -- may not be on this path])
+NOT ON BOARD  ?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ               (MakePath)
+NOT ON BOARD  ?Set@String@System@@QEAAXPEBD@Z                                           (RtIo_FileSystem_OpenFile)
+NOT ON BOARD  ?SetText@Error@System@@SAXPEBD_N@Z                                        (FatalOutOfMemory  [AMBIGUOUS HOP -- may not be on this path])
+NOT ON BOARD  ?StrAppend@String@System@@SAPEADPEADHPEBD@Z                               (RtSystem_String_StrAppend  [AMBIGUOUS HOP -- may not be on this path])
+NOT ON BOARD  ?_errorString@Error@System@@0PADA                                         (ErrorStringBuffer  [AMBIGUOUS HOP -- may not be on this path])
+NOT ON BOARD  ?_singleton@ExternalFactory@Object@@0PEAV12@EA                            (SingletonSlot  [AMBIGUOUS HOP -- may not be on this path])
+NOT ON BOARD  ?_singleton@MemoryAllocator@System@@0PEAV12@EA                            (SingletonSlot  [AMBIGUOUS HOP -- may not be on this path])
+NOT ON BOARD  ?_stopApplication@Error@System@@0_NA                                      (StopApplicationSlot  [AMBIGUOUS HOP -- may not be on this path])
+BOARD ONLY    ??1FileStream@IO@@UEAA@XZ                                                 (reached as a DIRECT CALL to RtIo_FileStream_Dtor, not through a door)
+BOARD ONLY    ??4Filename@System@@QEAAAEAV01@AEBV01@@Z                                  (reached as a DIRECT CALL to RtSystem_Filename_Assign, not through a door)
+BOARD ONLY    ?CreateFileW@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z    (reached as a DIRECT CALL to RtIo_FileSystem_CreateFileW, not through a door)
+BOARD ONLY    ?PlatformCloseFile@FileSystem@IO@@AEAAXAEAUFileInfo@12@@Z                 (reached as a DIRECT CALL to RtIo_FileSystem_PlatformCloseFile, not through a door)
+BOARD ONLY    ?PlatformCreateFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z  (reached as a DIRECT CALL to RtIo_FileSystem_PlatformCreateFile, not through a door)
+==== transitive: 31 name doors derived, 20 of them on the board, 11 NOT ON BOARD (4 of those on an UNAMBIGUOUS path); board has 29 rows / 25 names, 5 of which the walk does not reach ====

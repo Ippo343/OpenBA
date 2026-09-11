@@ -1,0 +1,58 @@
+SUBJECT   0x1801fc6a8 in C:\GOG Games\Banished\Runtime-x64.dll
+CHANNEL   objdump text scan of C:/Users/USPC/AppData/Local/Temp/claude/C--code-GIT-untitled-rev-eng-project/48a52b4e-d181-4c56-9825-936f05695386/scratchpad/rt.dis
+OWNERSHIP literal RegisterRuntimeExport/Addr scan, 1521 files / 26113438 bytes, 1124 names / 1164 addrs
+POS CONTROL ??0BinaryFileStream@IO@@QEAA@XZ registered: YES
+NEG CONTROL synthetic registered: NO (ok)
+refs 91 = 89 reads + 2 writes
+
+---- WRITE sites in 2 distinct function(s) ----
+  OURS   ??0FileSystem@IO@@QEAA@XZ                                                    x1  @0x1800ac818
+  OURS   ?Startup@Engine@1@QEAAIPEBDII_N@Z                                            x1  @0x1800dba3e
+  => 2 of 2 WRITE functions are ours-capable
+
+---- READ sites in 44 distinct function(s) ----
+  retail (no .pdata) NEAREST-EXPORT-HINT ?Get@FileSystem@IO@@SAPEAV12@XZ              x1  @0x180007c70
+  retail (no .pdata) NEAREST-EXPORT-HINT ??0Type@Object@@QEAA@AEBV01@@Z               x6  @0x1800293b0
+  OURS   ?Update@AchievementManager@Achievement@@QEAAXAEBVTime@System@@@Z             x1  @0x18009e6c6
+  retail ?Run@Stream@Audio@@UEAAXXZ                                                   x5  @0x1800a1078
+  retail ?Close@CompressedCopyFileStream@IO@@UEAAXXZ                                  x1  @0x1800a9176
+  retail ??1CompressedFileStream@IO@@UEAA@XZ                                          x1  @0x1800a9373
+  OURS   ?Close@CompressedFileStream@IO@@UEAAXXZ                                      x1  @0x1800a94b6
+  OURS   ?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z                         x2  @0x1800aa912
+  retail (no .pdata) NEAREST-EXPORT-HINT ?Close@FileStream@IO@@QEAAXXZ                x1  @0x1800aaa9a
+  OURS   ??1FileStream@IO@@UEAA@XZ                                                    x1  @0x1800aaadf
+  retail (no .pdata) NEAREST-EXPORT-HINT ?Read@FileStream@IO@@UEAA_NHPEAX@Z           x1  @0x1800aabf6
+  OURS   ?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z                           x1  @0x1800aacd8
+  OURS   ?ClosePackages@FileSystem@IO@@QEAAXXZ                                        x1  @0x1800abaef
+  retail ?SetupFileSystem@Modification@IO@@QEAAXXZ                                    x1  @0x1800aebe1
+  OURS   ?RefreshList@Modification@IO@@QEAAXXZ                                        x3  @0x1800af648
+  retail ?WritePackfile@PackageFile@IO@@QEBA_NHH_N0PEBD@Z                             x4  @0x1800b07f7
+  retail ?ExtractPackFile@PackageFile@IO@@SA_NXZ                                      x1  @0x1800b0fe1
+  retail ?BuildPackageFile@PackageFile@IO@@AEBA_NAEBVFilename@System@@V?$Set@VFilenam x1  @0x1800b1860
+  retail ?AreResourcesEqual@PackageFile@IO@@AEBA_NAEBVFilename@System@@_N@Z           x7  @0x1800b3637
+  retail ?BuildFileSet@PackageFile@IO@@AEBAXAEBV?$Array@VString@System@@@Collection@@ x1  @0x1800b3d0e
+  retail (no .pdata) NEAREST-EXPORT-HINT ?ClosePackFile@PackageFile@IO@@QEAAXXZ       x1  @0x1800b4697
+  OURS   ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z                  x2  @0x1800b46e8
+  retail FUN_1800b6290                                                                x1  @0x1800b62b8
+  retail FUN_1800b65b0                                                                x8  @0x1800b65de
+  retail FUN_1800b6aa0                                                                x5  @0x1800b6ac4
+  retail FUN_1800b6e00                                                                x2  @0x1800b708e
+  OURS   ?Startup@Persistence@IO@@QEAA_NXZ                                            x1  @0x1800b7f01
+  retail ?Close@TextFile@IO@@QEAAXXZ                                                  x2  @0x1800b9c3f
+  retail ?Create@TextFile@IO@@QEAA_NAEBVString@System@@@Z                             x2  @0x1800b9eb8
+  retail ?Open@TextFile@IO@@QEAA_NAEBVString@System@@@Z                               x2  @0x1800ba0a9
+  retail ?Open@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@@Z       x2  @0x1800ba6bc
+  OURS   ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z                    x2  @0x1800bbb22
+  retail ?Save@External@Object@@QEAA_NAEBVFilename@System@@@Z                         x2  @0x1800bbe64
+  retail ?IsCurrent@External@Object@@SA_NAEBVFilename@System@@@Z                      x3  @0x1800bc0f1
+  retail ?AddDependancy@External@Object@@QEAAXAEBVFilename@System@@@Z                 x1  @0x1800bc47c
+  OURS   ?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z               x2  @0x1800bc87c
+  OURS   ?ExpandRelativePath@ExternalFactory@Object@@QEBA?AVFilename@System@@AEBV34@_ x1  @0x1800bd5e3
+  OURS   ?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z     x1  @0x1800bec75
+  OURS   ?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@ x1  @0x1800bf3cf
+  OURS   ?CheckMod@SaveLoad@Save@@QEBAHHH@Z                                           x1  @0x1800c10cf
+  OURS   ?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z                  x1  @0x1800c1660
+  OURS   ?UpdateLoad@SaveLoad@Save@@QEAAXXZ                                           x1  @0x1800c2764
+  retail ?LoadResources@UpdateLoop@Engine@@QEAAXXZ                                    x1  @0x1800dd988
+  OURS   ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z        x3  @0x1800f29e9
+  => 18 of 44 READ functions are ours-capable
