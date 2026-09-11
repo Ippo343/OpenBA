@@ -399,6 +399,84 @@ not a cleanup that would be nice to have before promoting this row — it is on 
 CUTOVER CRITICAL PATH.** I had written it up as an opportunistic unlock; that was
 wrong, and route-scoping is what exposed it.
 
+### 5.2a PRICING THE BLOCKER — the comment was wrong, and the fix still holds
+
+The integrator declined to accept "one character on the critical path" on my say-so
+(correctly — that pairing is exactly what gets applied unscrutinised). Three
+questions were put. All three settle from the shipped bytes; **no run was needed
+and none is claimed.**
+
+**Q1 — is the billboard table really 12 slots? NO. It is NINE. The comment above
+the loop is wrong.**
+
+Retail's own billboard vtable is named in our source (`statusiconcomponent.cpp:582`
+quoting retail's ctor: `*(this + 0x28) = &PTR_FUN_14015f0c0`). Read from the
+shipped `Application-x64.exe` at **0x14015f0c0**:
+
+```
+slot  0..8   nine image pointers            <- the table
+slot  9      0000000000000000               <- NULL PAD, not a slot
+slot 10..18  a SECOND nine-pointer table, whose last five entries
+             (0x14003aa7a/aaa4/ab22/ab1c/aaaa) are byte-identical to
+             slots 4..8 above — the shared inherited Geometry base group
+slot 19      "TerrainG"                     <- string run, end of .rdata block
+```
+
+**Confirmed as two tables, not one long one, by xrefs rather than by the byte
+pattern alone** (Application-x64.exe, program confirmed active before each read):
+
+* `get_xrefs_to(0x14015f0c0)` → `StatusIconComponent_Ctor` at 0x14012c0fe (LEA +
+  store). **This is the billboard table, independently of our source comment.**
+* `get_xrefs_to(0x14015f110)` → `TradeWork_impl_ed50` and `FUN_1400b00e0`.
+  **Different class, different stampers.** Slots "10" and "11" of the `i < 12`
+  read are the first two slots of somebody else's vtable.
+
+The comment's author *saw* the zero and mis-explained it — "slot 9 is null in the
+original" reads it as a null slot of this class rather than as the terminator
+between two tables. **The count 12 has no basis in either binary.**
+
+Note both sides of the copy are nine: the SOURCE (`??_7Geometry@Graphics@@6B@`,
+9 slots, §4) and the DESTINATION class (9 slots, here). `i < 12` is wrong
+against both.
+
+**Q2 — is anything ever dispatched through slots 9, 10 or 11? NO, and this is a
+structural result, not an observation about one route.**
+
+A caller can dispatch slot N only if it believes the object's class has at least
+N+1 virtuals. **Exactly two classes are in play, and both are nine slots:**
+
+* `Graphics::Geometry` — 9, measured from the DLL (§4, CORROBORATED-EXACT,
+  followed by the `"ImageBuf"` string run). Every DLL-side dispatcher —
+  `Scene`, `Renderer`, the cull walk — holds a `Graphics::Geometry*` and can
+  reach slots 0..8 only.
+* Retail's billboard class — 9, measured above, with a NULL tenth. **In retail,
+  dispatching slot 9 on this object would call NULL.** There is no such virtual
+  function.
+
+Our tree adds nothing: a grep of `code/`, `standalone/` and `runtime/` for any
+indexed dispatch at 9..15 on a geometry vtable returns **nothing**.
+
+**So the stub is safe and the one-character claim holds.** Slots 9-11 are not
+"three slots the code believes are real"; they are three slots the *comment*
+believes are real, and the binaries say otherwise. Slots 12-15 already take the
+stub today and do not change.
+
+**Q3 — which kind of item is it?** It is the **cheap** kind: a one-character code
+change, `i < 12` → `i < 9`, affecting exactly three slots that nothing can reach,
+**plus a correction to the wrong comment above it** — which matters more than the
+character, because the comment is what would talk the next reader out of the fix.
+It is **not** the other kind: no slot needs sourcing, so this is not hidden port
+work.
+
+**Two honest residuals.** (a) Retail's slot 9 is NULL and our stub is non-null; a
+reader testing that slot for null would see a difference. Nothing does, and our
+`s_siGeomVtable[16]` is our own storage, but the faithful spelling would be
+`nullptr` for slot 9 — a judgement call for whoever applies it, not a blocker.
+(b) I derived Q2 from the extents of the only two classes in play rather than
+enumerating every dispatcher in the DLL. That derivation is *stronger* than a
+run, which could only ever say "not on this route" — but it is a derivation, and
+I am labelling it as one.
+
 **Expiry, with an addressee:** `statusicon_geometry.cpp:341` must read `i < 9`.
 The addressee is **the next lane that owns `code/Game/Component/`** — explicitly
 not "whoever next counts slots on this row", because that phrasing satisfies a
@@ -553,14 +631,25 @@ the world build, or a clean shutdown.
    GFXDATA's kind**, opened by my port.
 3. **`??_7Geometry@` is now tagged HARMFUL** and Graphics' printed ceiling moved
    96.0% → 95.0% because of it. Expected, and the tag moved no other count.
-4. **`statusicon_geometry.cpp:341` `i < 12` → `i < 9` is a CUTOVER BLOCKER**, not
-   the opportunistic unlock I first wrote it up as. Prescribed in Wave 6, never
+4. **`statusicon_geometry.cpp:341` `i < 12` → `i < 9` is a CUTOVER BLOCKER, and it
+   is PRICED: it is the cheap kind (§5.2a).** Prescribed in Wave 6, never
    applied. At cutover the overrun reads our storage whatever we do about the
    Geometry row, so the fix is on the critical path and the row cannot be
-   promoted around it. Whoever takes it should expect the `RT_UNPROMOTABLE` tag
-   to be deleted in the same commit. **This escalation is entirely due to lane
-   SHOT's route distinction** — my first draft of §5.2 carried the same evidence
-   and the wrong priority.
+   promoted around it. **This escalation is entirely due to lane SHOT's route
+   distinction** — my first draft carried the same evidence and the wrong
+   priority.
+
+   **Do not apply it on the strength of this line.** §5.2a is the derivation and
+   it corrected me too: **the billboard table is NINE slots, not the twelve the
+   comment above the loop claims.** Retail's table at 0x14015f0c0 is 9 pointers,
+   a NULL pad, then a *different class's* table at 0x14015f110 — proved by xrefs
+   showing different stampers, not by the byte pattern. Slots 9-11 cannot be
+   dispatched by anything: both classes in play are 9 slots. So no slot needs
+   sourcing and this is not hidden port work. The change is one character **plus
+   a correction to the wrong comment**, which matters more, because that comment
+   is what would talk the next reader out of the fix. Whoever takes it should
+   expect the `RT_UNPROMOTABLE` tag deleted in the same commit, and should decide
+   whether slot 9 ought to be `nullptr` (retail's value) rather than the stub.
 6. **Every verdict in §5 now names its route, and none of mine is `NONE, EVER`.**
    All 8 rows are REQUIRED at cutover; 7 are blocked today by traps and 1
    (`Geometry`) is harmful today and mandatory later. The promotion price per row

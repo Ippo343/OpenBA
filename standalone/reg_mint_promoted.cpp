@@ -1269,6 +1269,18 @@ int RtMintRegisterPromotedRows() {
     //      So statusicon_geometry.cpp:341 is NOT a tidy-up that would be nice to
     //      have before promoting this row — it is ON THE CUTOVER CRITICAL PATH.
     //
+    //      AND IT IS PRICED — the cheap kind, established from the shipped bytes
+    //      and NOT from the comment above that loop, which is WRONG.
+    //      WAVE21_LANE_GFXVT.md §5.2a: retail's billboard vtable at 0x14015f0c0
+    //      in Application-x64.exe is NINE pointers, then a NULL pad, then a
+    //      DIFFERENT CLASS's table at 0x14015f110 — proved by xrefs (0x14015f0c0
+    //      is stamped by StatusIconComponent_Ctor at 0x14012c0fe; 0x14015f110 by
+    //      TradeWork_impl_ed50 and FUN_1400b00e0). So the loop's "12 real slots"
+    //      has no basis in either binary, and slots 10 and 11 it copies are the
+    //      first two slots of somebody else's vtable. Nothing can dispatch slots
+    //      9-11: both classes in play are nine slots, so no slot needs SOURCING
+    //      and this is not hidden port work.
+    //
     //  ??_7Geometry@Graphics@@6B@ — HARMFUL, and it is the ONE Graphics vtable
     //      row that is COMPLETE, which is exactly why it needed a verdict: the
     //      next lane to read the PROMOTION BACKLOG sees `6 6 COMPLETE` and a
