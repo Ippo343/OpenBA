@@ -1241,6 +1241,71 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_frameIndex@ParticleInstance@Graphics@@1HA | n/a (int counter) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rng@Particle@Graphics@@1VRandom@System@@A | n/a (RNG state) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA | n/a (bool flag) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ??_7Geometry@Graphics@@6B@ | 6/6 (3 purecall) | WAVE21_LANE_GFXVT.md §5.2 | statusicon_geometry.cpp:341 reads `i < 9` | HARMFUL
+    //
+    //  ??_7Geometry@Graphics@@6B@ — HARMFUL, and it is the ONE Graphics vtable
+    //      row that is COMPLETE, which is exactly why it needed a verdict: the
+    //      next lane to read the PROMOTION BACKLOG sees `6 6 COMPLETE` and a
+    //      stamper census that is 2-of-3 ours, and promotes it.
+    //
+    //      COMPLETE is the static half of readiness and the stamper gate is the
+    //      dynamic half; this row passes BOTH and is still harmful, for a third
+    //      reason neither gate asks about: A CONSUMER READS PAST THE END OF THE
+    //      TABLE, and how bad that is depends on WHOSE storage it overruns.
+    //
+    //      The chain, every link measured on this tree at wave21/gfxvt:
+    //        1. code/Game/Component/statusiconcomponent.cpp:611 calls the
+    //           Geometry base ctor on `s+0x28`, then reads back the vtable it
+    //           stamped as `baseV` and hands it to StatusIconGeometry_BuildVtable.
+    //           The path is gated on BANISHED_LIVE_STATUSICON_DRAW, which is in
+    //           kDefaultOnFlags (component_factory_base.cpp:189) — DEFAULT ON.
+    //        2. code/Game/Component/statusicon_geometry.cpp:341 copies
+    //           `i < 12` slots out of that table into the billboard's own.
+    //        3. The table is NINE slots. Read from the shipped DLL at
+    //           0x180154e60 this lane: slots 0..8 are image pointers and
+    //           0x180154ea8 is `49 6d 61 67 65 42 75 66` = "ImageBuf" — the
+    //           start of the "ImageBuffer\0GeneratedImageBuffer\0" string run.
+    //           So baseVtbl[9..11] are 0x6675426567616d49, 0x726566 and
+    //           0x65746172656e6547: all non-zero, so the `baseVtbl[i]` test
+    //           passes and all three are installed as function pointers.
+    //           (WAVE6_LANE_D.md §6.1 found this and prescribed `i < 9`; the
+    //           prescription was never applied — a prescription read as a
+    //           completion, reference_a_prescription_read_as_a_completion.md.)
+    //        4. Our ported Geometry ctor stamps
+    //           ResolveAddr(Module::Runtime, 0x180154e60)
+    //           (runtime/src/graphics/scene.cpp:176), and ResolveAddr consults
+    //           the PORT REGISTRY FIRST. Promoting this row — which, following
+    //           the ??_7BinaryFileStream@ precedent above, registers by name AND
+    //           by address — therefore redirects that stamp to `kVTable28`, a
+    //           `static void* kVTable28[9]` in standalone/rt_data_mint_tables.inc.
+    //        5. Step 2 then reads 24 bytes PAST the end of that 9-element array,
+    //           out of whatever our image's linker placed next, and installs it
+    //           as three function pointers in a live exe-side vtable.
+    //
+    //      TODAY the same out-of-bounds read is dormant: the three values are
+    //      fixed ASCII from the DLL's own .rdata and nothing dispatches a
+    //      Geometry past slot 8 (WAVE6_LANE_D.md §6.1, measured). Promotion does
+    //      not create the overrun — it moves it off known-dormant DLL bytes onto
+    //      unanalysed storage of ours. That is "changes behaviour for the worse"
+    //      in the sense this tag exists for, and the direction matters more than
+    //      the current dormancy: reference_vtable_slot_count_from_the_name_string
+    //      is precisely the case where fixing one dormant slot unleashes the rest.
+    //
+    //      ⚠ THE A/B WAS NOT RUN. This verdict is derived — from the shipped
+    //      bytes, from the two source sites, and from ResolveAddr's documented
+    //      registry-first order — and it was NOT confirmed by promoting the row
+    //      and observing a failure. A lane that wants to overturn it must run
+    //      that A/B, not re-read this comment.
+    //
+    //      EXPIRY, WITH AN ADDRESSEE (reference_expiry_clause_needs_an_addressee).
+    //      The blocker is ONE CHARACTER: statusicon_geometry.cpp:341's `i < 12`
+    //      must read `i < 9`, the fix WAVE6_LANE_D prescribed in Wave 6. The
+    //      addressee is THE NEXT LANE THAT OWNS code/Game/Component/ —
+    //      explicitly not "whoever next counts slots on this row", because this
+    //      lane could not make that edit and verify it inside a vtable-scoped
+    //      brief. When that line reads `i < 9`, this tag is void and the row
+    //      should be re-scored from scratch (its stamper census is already
+    //      green: 3 stampers, 2 ours-capable, 0 unattributed).
     //
     // WHY EACH, in one line — the proofs are in the lane doc:
     //

@@ -20,6 +20,9 @@
 //                                InterpolatedState<Transform>::Lerp,
 //                                MaterialInstance::RenderTextures,
 //                                Renderer::AddDrawItem)
+//   BANISHED_RT_GFXTI=0      ... just the eight ?Type@/?TypeName@/?GetFileVersion@
+//                                vtable-slot accessors of AnimationEvent /
+//                                MaterialInstance / Particle    (Wave 21 lane GFXVT)
 // ============================================================================
 
 #include <cstdio>
@@ -34,6 +37,8 @@ extern int RtGraphicsWave9GfxRegister();  // wave9_lane_gfx.cpp (Wave 9 lane GFX
 extern int RtGraphicsSunLightRegister();  // sunlight.cpp (Wave 9 lane GFX2)
 extern int RtGraphicsGridRegister();      // scene_grid.cpp (Wave 9 lane GFX3)
 extern int RtGraphicsWave9GfxdRegister(); // wave9_lane_gfxd.cpp (Wave 9 lane GFXD)
+extern int RtGraphicsTypeInfoAccessorsRegister();
+                                          // graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT)
 
 void RtGraphicsPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_GRAPHICS")) {
@@ -47,6 +52,15 @@ void RtGraphicsPortInit() {
     if (RtWaveEnabled("BANISHED_RT_GFXANIM"))   n += RtGraphicsAnimationRegister();
     if (RtWaveEnabled("BANISHED_RT_GFX9"))      n += RtGraphicsWave9GfxRegister();
     if (RtWaveEnabled("BANISHED_RT_GFXSUN"))   n += RtGraphicsSunLightRegister();
+
+    // WAVE 21 LANE GFXVT — the eight ?Type@/?TypeName@/?GetFileVersion@ slot
+    // bodies of ??_7AnimationEvent@ / ??_7MaterialInstance@ / ??_7Particle@.
+    // Counted into `n` above so the existing identity line carries them; the
+    // per-lane count is printed separately below for the same reason lane
+    // GFXD's is (a run log must carry a line only THIS build emits).
+    int gfxti = 0;
+    if (RtWaveEnabled("BANISHED_RT_GFXTI")) gfxti = RtGraphicsTypeInfoAccessorsRegister();
+    n += gfxti;
 
     // WAVE 9 LANE GFXD -- the bottom half of the Graphics::Renderer class
     // lane: Renderer::Reset, Renderer::AddScene, two more Graphics::Camera
@@ -76,4 +90,5 @@ void RtGraphicsPortInit() {
     // THIS build emits: the on-disk md5 says which exe is on disk, not
     // which one ran, and six lanes share one game directory.
     printf("[RtPort] Wave 9 lane GFXD: %d exports + 11 addresses registered\n", gfxd);
+    printf("[RtPort] Wave 21 lane GFXVT: %d typeinfo-accessor exports registered\n", gfxti);
 }
