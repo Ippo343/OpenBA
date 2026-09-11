@@ -354,10 +354,34 @@ void CaseDriven() {
 // Case 2 — the COPY CONSTRUCTOR, field by field.
 //
 // It is the second stamper of ??_7BinaryFileStream@ and has no caller in either
-// binary, so this is its only exercise. All 0x50 bytes are compared EXCEPT
-// +0x24 (`FileInfo::_unk04`), which NEITHER constructor writes: comparing bytes
-// neither side writes fails 100% of calls and reads like a catastrophic port
-// defect (`reference_oracle_must_not_compare_unwritten_bytes.md`).
+// binary, so this is its only exercise. All 0x50 bytes are compared EXCEPT:
+//
+//   +0x24        `FileInfo::_unk04`, which NEITHER constructor writes:
+//                comparing bytes neither side writes fails 100% of calls and
+//                reads like a catastrophic port defect
+//                (`reference_oracle_must_not_compare_unwritten_bytes.md`).
+//
+//   +0x00..+0x07 the VPTR. *** ADDED after Wave 20 PROMOTE, and it is the
+//                exact same trap one level up. *** `dstO`'s vptr is written by
+//                OUR CopyCtor as `RT_DATA_SLOT("??_7BinaryFileStream@IO@@6B@")`,
+//                which — now that this row is PROMOTED (reg_mint_promoted.cpp)
+//                — resolves to OUR OWN minted table's address (`kVTable7`,
+//                inside this exe). `dstT`'s vptr is written by retail's own
+//                copy ctor to the DLL's OWN table address (0x1801554d0+delta).
+//                THESE ARE TWO DIFFERENT, UNRELATED MEMORY ADDRESSES IN TWO
+//                DIFFERENT MODULES, and they are SUPPOSED to differ on a
+//                perfectly correct port. Byte-comparing them is not a check
+//                of port correctness at all; it fails on every run, port bug
+//                or not, and it is only because the loop BREAKS on the first
+//                mismatch that this did not also swallow every real
+//                divergence after it. Before Wave 20 promoted the row,
+//                RT_DATA_SLOT fell through to the DLL and returned the SAME
+//                address retail's own ctor used, so this comparison passed by
+//                coincidence — the promotion silently invalidated it and
+//                nobody re-ran this probe until Wave 21 lane VFY did.
+//                (`reference_control_must_pick_a_compared_subject.md`,
+//                same shape one level up: a byte the instrument should never
+//                have put in its compared set at all.)
 // ---------------------------------------------------------------------------
 void CaseCopyCtor() {
     ++g_cases;
@@ -385,13 +409,23 @@ void CaseCopyCtor() {
 
     RtIo_BinaryFileStream_CopyCtor(reinterpret_cast<RtIo::BinaryFileStream*>(dstO),
                                    reinterpret_cast<const RtIo::BinaryFileStream*>(src));
-    if (g_ctl == 2) {   // CONTROL 2: skip the third vtable store on our side
+    // CONTROL 2, RETARGETED (Wave 21 lane VFY). It used to null out dstO's
+    // vptr at +0x00 -- but +0x00..+0x07 is now EXCLUDED from the compared set
+    // (see the comment above), so a control landing there would fire and
+    // never be caught by construction, which is exactly the failure mode
+    // `reference_control_must_pick_a_compared_subject.md` warns about: it
+    // would indict a sound instrument rather than test it. Retargeted to
+    // +0x18, the refcounted `_filename` pointer: both sides copy it from the
+    // SAME `src` object and it IS in the compared byte range, so corrupting
+    // one byte of ours' copy is a comparable, catchable defect.
+    if (g_ctl == 2) {
         ++g_att;
-        *reinterpret_cast<void**>(dstO) = nullptr;
+        dstO[0x18] ^= 0xFF;
     }
     rawCopy(dstT, src);
 
     for (size_t b = 0; b < 0x50; ++b) {
+        if (b < 0x08) continue;                // vptr — see the comment above
         if (b >= 0x24 && b < 0x28) continue;   // FileInfo::_unk04 — never written
         ++g_compares;
         if (dstO[b] != dstT[b]) {
