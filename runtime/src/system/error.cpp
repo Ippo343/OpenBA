@@ -24,15 +24,39 @@
 // path and squarely on the DIAGNOSTIC path, and there are a dozen faults left.
 //
 // ---------------------------------------------------------------------------
-// 2. ⛔ THE MINT ROW FOR `?_errorString@` IS 8 BYTES AND THE BUFFER IS 0x2000
+// 2. ✅ DISCHARGED 2026-09-11 — THE MINT ROW FOR `?_errorString@` IS NOW 0x2000
 // ---------------------------------------------------------------------------
-// **This port must not be armed at cutover until lane C2 fixes one table row.**
+// **THE BLOCKING WARNING BELOW NO LONGER APPLIES. DO NOT ACT ON IT.** It is
+// kept, struck through, because the reasoning is the evidence for the fix and
+// deleting it would leave the corrected row looking arbitrary.
 //
-//     standalone/rt_data_mint_tables.inc:1538
+// Discharged by Wave 22 lane ERRCFG, 2026-09-11. EVIDENCE, re-read at that
+// date rather than inherited — `standalone/rt_data_mint_tables.inc:2244` today
+// reads:
+//
+//     { "?_errorString@Error@System@@0PADA", 0x1801fc720ull, 8192,
+//       &kStorageBytes[32],
+//       "char[0x2000] -- the error text BUFFER; PAD in the mangling is MSVC's
+//        array-as-pointer encoding, see ?SetText@ 0x1800c5fa0", ... }
+//
+// i.e. size 8192 == 0x2000 and a description that names the array, exactly the
+// change §2 demanded. `BANISHED_RT_ERROR=0` is consequently NOT required for
+// this reason any more; it remains an ordinary A/B kill-switch.
+//
+// A blocking warning that no longer applies is worse than no warning, because
+// the next lane obeys it and stops. Recorded here as the mirror of the defect
+// Wave 22 lane GEOM found in statusicon_geometry.cpp: there a PRESCRIPTION was
+// left reading as a COMPLETION; here a COMPLETION was left reading as a
+// PRESCRIPTION. Both cost a wave.
+//
+// ---- the original §2, superseded --------------------------------------------
+// ~~This port must not be armed at cutover until lane C2 fixes one table row.~~
+//
+//     standalone/rt_data_mint_tables.inc:1538   (as it read in Wave 9)
 //     { "?_errorString@Error@System@@0PADA", 0x1801fc720ull, 8,
 //       &kStorageBytes[16], "char*", nullptr, nullptr, 0 },
 //
-// The row mints **8 bytes** and describes the symbol as `"char*"`. The
+// The row minted **8 bytes** and described the symbol as `"char*"`. The
 // disassembly says otherwise, twice over, and the mangled name is what misled
 // the generator — MSVC decays a `static char[N]` member to `PAD` (`char *`):
 //
@@ -54,9 +78,11 @@
 // reader needs the mint's address registration too — which the row already
 // carries.
 //
-// Until that lands, hold this file with **`BANISHED_RT_ERROR=0`**. That switch
-// exists for exactly this and nothing else. DLL-present is unaffected: the slot
-// resolves to the DLL's own 0x2000-byte buffer and the port is byte-faithful.
+// ~~Until that lands, hold this file with `BANISHED_RT_ERROR=0`.~~ **THAT LAND-
+// ED; see the discharge note at the top of §2. Do not hold this file.** The
+// rest of the sentence is still true and is not struck: DLL-present is
+// unaffected either way, because the slot resolves to the DLL's own 0x2000-byte
+// buffer and the port is byte-faithful.
 //
 // This file does NOT edit the mint table. Widening a row changes every
 // `kStorageBytes` offset after it, which is lane C2's generator's business, and
@@ -95,7 +121,44 @@
 
 #include "../../funcs/rt_port.h"
 
+// ---- Wave 22 lane ERRCFG ---------------------------------------------------
+// `ResolveAddr` for the one address-keyed callee ?Display@ has (retail's CRT
+// `exit`). Declared the way every other runtime/src file declares it rather
+// than by pulling in a header, so this file keeps its "no new include" property.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
+// Four kernel32 entry points, declared directly instead of including
+// <windows.h>. The banner's "no new Win32 API and no new import library" claim
+// is preserved in the sense that matters: kernel32 is already an import of this
+// binary and nothing new is linked. `MessageBoxW` itself is NOT linked — it is
+// fetched with GetProcAddress at call time, deliberately (see ?Display@'s ⚠).
+extern "C" __declspec(dllimport) void* __stdcall GetModuleHandleW(const wchar_t*);
+extern "C" __declspec(dllimport) void* __stdcall LoadLibraryW(const wchar_t*);
+extern "C" __declspec(dllimport) void* __stdcall GetProcAddress(void*, const char*);
+extern "C" __declspec(dllimport) void  __stdcall ExitProcess(unsigned);
+
 namespace {
+
+// user32!MessageBoxW, the function behind retail's IAT slot 0x18014b540.
+// GetModuleHandleW first: user32 is already loaded in any process that has a
+// window, and LoadLibraryW is the fallback for the case where Display fires
+// before the window exists — which is exactly the allocator's OOM path.
+void* RtSystem_ResolveUser32MessageBoxW() {
+    static void* cached = nullptr;
+    if (cached) return cached;
+    void* user32 = GetModuleHandleW(L"user32.dll");
+    if (!user32) user32 = LoadLibraryW(L"user32.dll");
+    if (!user32) return nullptr;
+    cached = GetProcAddress(user32, "MessageBoxW");
+    return cached;
+}
+
+// Reached only with Runtime-x64.dll absent; see DisplayStopIfRequested.
+void RtSystem_ErrorDisplayFallbackExit() {
+    std::fflush(nullptr);
+    ExitProcess(0xFFFFFFFFu);
+}
 
 // Retail's capacity, the literal `MOV EDI,0x2000` at 0x1800c5fc1. Named once so
 // that the two places that use it cannot drift apart. See §2.
@@ -113,6 +176,41 @@ char* ErrorStringBuffer() {
 }
 bool* StopApplicationSlot() {
     return RT_DATA_SLOT(bool*, "?_stopApplication@Error@System@@0_NA");
+}
+
+// ---- Wave 22 lane ERRCFG: the pieces ?Display@ needs ------------------------
+//   ?_hideDisplay@Error@System@@0_NA   ord 4791, 0x1801fc709
+bool* HideDisplaySlot() {
+    return RT_DATA_SLOT(bool*, "?_hideDisplay@Error@System@@0_NA");
+}
+
+// The two literals, read out of Runtime-x64.dll with read_memory rather than
+// retyped from a decompiler's rendering. 0x180155dc0 is 64 bytes ending in a
+// newline; 0x180154858 is the qword "Banished" and 0x180154860 its NUL.
+const char kFatalPrefix[] =
+    "A fatal error has occurred and the application cannot continue.\n";
+const char kCaption[9] = { 'B','a','n','i','s','h','e','d','\0' };
+
+// 0x1800c63d1 — the tail both arms of Display fall into.
+//
+// 0x18007f8a8 is three instructions (`XOR R8D,R8D ; LEA EDX,[R8+1] ; JMP
+// 0x18007f9f8`), i.e. MSVC's CRT `exit(code)` with the quick-exit flag set, and
+// it belongs to RUNTIME-X64.DLL'S OWN statically-linked CRT. It is reached by
+// ADDRESS because it has no name in either build. With the DLL present that is
+// byte-faithful: retail's atexit chain and static destructors run. With the DLL
+// absent there is no such chain to run and no address to reach, so the fallback
+// is ExitProcess with the same code — stated, because it is the one place in
+// this file where cutover behaviour differs from retail's and the difference is
+// deliberate rather than overlooked.
+void DisplayStopIfRequested() {
+    const bool* stop = StopApplicationSlot();
+    if (!stop || !*stop) return;
+    typedef void (*ExitFn)(unsigned);
+    if (ExitFn rtExit = reinterpret_cast<ExitFn>(
+            ResolveAddr(Module::Runtime, 0x18007f8a8))) {
+        rtExit(0xFFFFFFFFu);      // retail's `OR ECX,0xffffffff`
+    }
+    RtSystem_ErrorDisplayFallbackExit();
 }
 
 typedef char* (*StrAppendFn)(char*, int, const char*);
@@ -278,6 +376,229 @@ extern "C" void RtSystem_Error_SetText(const char* text, bool stopApplication) {
 }
 
 // ============================================================================
+// ?Display@Error@System@@SAXXZ                             retail 0x1800c6060
+// ============================================================================
+// Wave 22 lane ERRCFG. 0x1800c6060 - 0x1800c63ea, read instruction by
+// instruction; the structure below is retail's, not a paraphrase.
+//
+//   if (_hideDisplay) goto stopCheck;                     // 0x1800c6077
+//   char     text[0x800];  zeroed                         // RBP-0x40
+//   uint16_t wtext[0x800]; zeroed                         // RBP+0x7c0 (0x1000 bytes)
+//   AppendClamped(text, 0x800, "A fatal error has occurred and the "
+//                              "application cannot continue.\n");  // 0x1800c6142
+//   AppendClamped(text, 0x800, _errorString);             // 0x1800c61b2
+//   Utf8ToUtf16Clamped(wtext, 0x800, text);               // 0x1800c61c3..6295
+//   char     cap[9]  = "Banished";                        // RSP+0x30, from 0x180154858
+//   uint16_t wcap[0x40]; zeroed                           // RSP+0x40 (0x80 bytes)
+//   Utf8ToUtf16Clamped(wcap, 0x40, cap);                  // 0x1800c62c5..63ae
+//   MessageBoxW(nullptr, wtext, wcap, 0x10);              // 0x1800c63c3 -> [0x18014b540]
+// stopCheck:
+//   if (_stopApplication) exit(-1);                       // 0x1800c63d1 -> 0x18007f8a8
+//
+// THE TWO LITERALS WERE READ OUT OF THE BINARY, NOT GUESSED. read_memory at
+// 0x180155dc0 gives the 64 bytes "A fatal error has occurred and the
+// application cannot continue.\n"; the caption is loaded as a qword from
+// 0x180154858 plus the single byte at 0x180154860, which read back as
+// "Banished" and a NUL — i.e. retail copies exactly nine bytes, not a strcpy.
+//
+// THE CLAMP UNIT IS BYTES, AND IT IS NOT THE BUFFER SIZE. Both conversion
+// loops accumulate the ENCODER'S byte count and stop at 0x800 (text) / 0x40
+// (caption), while the destinations hold 0x1000 / 0x80 bytes. Retail is
+// conservative by a factor of two and that is reproduced, not "corrected": the
+// bound is observable as the point at which a long error string is truncated.
+// Likewise the terminator is written only when `total + 4` is still inside the
+// bound (0x1800c628b / 0x1800c639f), so a message that fills the bound exactly
+// is left UNTERMINATED in a buffer that was zeroed up front — which is why the
+// zeroing is load-bearing and is not elided.
+//
+// 0x18014b540 IS `user32!MessageBoxW`: get_xrefs_from on that IAT slot resolves
+// to EXTERNAL MessageBoxW. The argument order is retail's — hwnd=0 (XOR ECX),
+// text=RDX, caption=R8, type=R9D=0x10 (MB_ICONERROR).
+//
+// ⚠ ONE REAL REGRESSION THIS PORT CAUSES, STATED RATHER THAN DISCOVERED LATER.
+// `standalone/main.cpp:728` (`HookRuntimeMessageBoxW`) patches **Runtime-x64.
+// dll's IAT** entry for user32!MessageBoxW, so every message box RETAIL pops
+// goes through the harness's wrapper. Our body lives in `reimpl-x64.exe` and
+// calls the EXE's `MessageBoxW`, which that hook does not cover. So registering
+// this port MOVES the only Error message box out from under the harness's only
+// MessageBoxW seam. It is not silently relocated: it is called here through a
+// `GetProcAddress` on `user32.dll` taken at call time, the same indirection
+// retail's IAT gives, so an exe-side hook of the same shape would still work —
+// but no such hook exists today. Recorded as an open residual in
+// docs/runtime_port/WAVE22_LANE_ERRCFG.md rather than papered over.
+//
+// A modal Win32 dialog blocks boot in a way that looks exactly like a slow
+// load (CLAUDE.md, "Boot State"), so it matters WHO can reach this. On this
+// tree the answer is: `FatalOutOfMemory` in runtime/src/system/allocator.cpp,
+// and only when `stopApplication` is true, which `Engine::Startup` never
+// passes; plus exe import slot 0x140152b58, which is UNREGISTERED. Retail's own
+// kill switch, `_hideDisplay`, is honoured on the first line.
+//
+// ORACLE: NOT RUN, and the reason is not "no route". A real differential oracle
+// exists and is described in the lane doc — set `_errorString`, call ours with
+// MessageBoxW intercepted, capture (wtext, wcap), call theirs, capture, compare
+// the two wide buffers — and it needs a process, which this lane did not get:
+// ALLOC and GEOM owned the game directory. This body is therefore
+// **TRANSCRIBED AND UNVERIFIED AT RUNTIME**, and the two codec helpers below
+// are the only part not lifted from retail at all.
+// ============================================================================
+
+namespace {
+
+// The clamped append retail INLINES at 0x1800c6142 and 0x1800c61b2. It is
+// 0x1800c9020 (`StrAppend`, ported above) minus the return value, which the
+// inlined copies do not compute. Written out rather than delegated to
+// RtSystem_String_StrAppend so that this file does not fire that function's
+// oracle — which snapshots a 0x2000 buffer — twice per fatal error.
+void AppendClamped(char* dst, int capacity, const char* src) {
+    const int dstLen = RetailStrLen(dst);
+    const int room   = capacity - dstLen;
+    if (room <= 0) return;
+    char* end = dst + dstLen;
+    const int n   = RetailStrLen(src) + 1;       // the NUL is copied
+    const int cnt = (room < n) ? room : n;
+    std::memmove(end, src, static_cast<size_t>(cnt));   // 0x18008a290 is memmove
+    if (n > room) end[room - 1] = '\0';
+}
+
+// ---------------------------------------------------------------------------
+// The codec pair, encoding ids 2 (UTF-8) and 4 (UTF-16LE).
+// ---------------------------------------------------------------------------
+// COPIED VERBATIM from runtime/src/system/widestring.cpp's anonymous namespace,
+// which is the canonical copy and carries the full disclosure. Repeating the
+// essential half of it here rather than only cross-referencing, because the
+// disclosure is the kind that must travel with the code:
+//
+//   The DLL's two dispatchers are 0x1800c9fc0 (decode) and 0x1800c9b60
+//   (encode), both jump tables indexed by the encoding id. Ghidra cannot
+//   recover the table's bodies as functions ("Too many branches"), so these
+//   two helpers are written FROM THE UNICODE SPECIFICATION, not lifted from
+//   the DLL. What WAS checked in the disassembly: table entry 4 at 0x1800c9c58
+//   rejects a lone surrogate (`LEA EAX,[R9-0xD800]; CMP EAX,0x7FF; JBE err`)
+//   and emits a surrogate pair after `SUB R9D,0x10000`.
+//
+//   Contract taken from the call sites: `*cp` is pre-set to -1 (retail's
+//   `MOV dword [RBP+0x17f8],0xffffffff` at 0x1800c6212) and a decoder that
+//   cannot make a codepoint leaves it negative and still reports a NONZERO
+//   consumption, so the loop always advances. Retail relies on that: its
+//   `ADD RDI,RCX` is unconditional.
+//
+// These are duplicated, not shared, deliberately: making them shared would mean
+// exporting them from widestring.cpp, and a second file's fatal-error path is
+// the worst place to introduce a new link-order dependency.
+int Utf8DecodeOne(const uint8_t* p, const uint8_t* end, int32_t* cp) {
+    const uint32_t b0 = p[0];
+    if (b0 < 0x80) { *cp = static_cast<int32_t>(b0); return 1; }
+    int n;
+    uint32_t v;
+    if      ((b0 & 0xE0) == 0xC0) { n = 2; v = b0 & 0x1F; }
+    else if ((b0 & 0xF0) == 0xE0) { n = 3; v = b0 & 0x0F; }
+    else if ((b0 & 0xF8) == 0xF0) { n = 4; v = b0 & 0x07; }
+    else                          { *cp = -1; return 1; }   // stray continuation
+    if (p + n > end) { *cp = -1; return 1; }
+    for (int i = 1; i < n; ++i) {
+        const uint32_t b = p[i];
+        if ((b & 0xC0) != 0x80) { *cp = -1; return 1; }
+        v = (v << 6) | (b & 0x3F);
+    }
+    *cp = static_cast<int32_t>(v);
+    return n;
+}
+
+int Utf16EncodeOne(int32_t codepoint, uint8_t* dst) {
+    const uint32_t c = static_cast<uint32_t>(codepoint);
+    if (c - 0xD800u <= 0x7FFu) return 0;             // `CMP EAX,0x7FF ; JBE error`
+    if (c < 0x10000u) {
+        dst[0] = static_cast<uint8_t>(c & 0xFF);
+        dst[1] = static_cast<uint8_t>((c >> 8) & 0xFF);
+        return 2;
+    }
+    const uint32_t v  = c - 0x10000u;
+    const uint32_t hi = 0xD800u | (v >> 10);
+    const uint32_t lo = 0xDC00u | (v & 0x3FFu);
+    dst[0] = static_cast<uint8_t>(hi & 0xFF);
+    dst[1] = static_cast<uint8_t>((hi >> 8) & 0xFF);
+    dst[2] = static_cast<uint8_t>(lo & 0xFF);
+    dst[3] = static_cast<uint8_t>((lo >> 8) & 0xFF);
+    return 4;
+}
+
+// Both conversion loops, which are the same code at 0x1800c6200 and 0x1800c6300
+// with different buffers and different bounds. `limitBytes` is retail's, in
+// BYTES of OUTPUT, and is deliberately not the destination's size.
+void Utf8ToUtf16Clamped(uint8_t* dst, int limitBytes, const char* src) {
+    const uint8_t* p   = reinterpret_cast<const uint8_t*>(src);
+    const uint8_t* end = p + RetailStrLen(src);
+    int total = 0;
+    while (p < end) {
+        int32_t cp = -1;                                   // 0x1800c6212
+        const int consumed = Utf8DecodeOne(p, end, &cp);
+        p += consumed;                                     // 0x1800c622c, unconditional
+        if (cp < 0) continue;                              // 0x1800c6237  JS
+        uint8_t unit[4];
+        const int nb = Utf16EncodeOne(cp, unit);
+        total += nb;                                       // 0x1800c624b
+        if (total > limitBytes) break;                     // 0x1800c624e  JG
+        if (nb <= 0) continue;                             // 0x1800c625c  JLE
+        std::memmove(dst, unit, static_cast<size_t>(nb));  // 0x1800c626b
+        dst += nb;
+    }
+    // 0x1800c6278 / 0x1800c628b: the terminator is conditional on there being
+    // room for one more code unit PLUS the two bytes retail counts twice. If
+    // `total + 4` is past the bound the buffer is left as the initial zeroing
+    // made it, which is why the zeroing above is not optional.
+    if (total + 4 <= limitBytes) { dst[0] = 0; dst[1] = 0; }
+}
+
+}  // namespace
+
+extern "C" void RtSystem_Error_Display() {
+    RT_DIFF_BEGIN("System::Error::Display");
+
+    // 0x1800c6077 — retail's own kill switch, tested FIRST and skipping the
+    // whole box. `_stopApplication` is still honoured below.
+    if (const bool* hide = HideDisplaySlot()) {
+        if (*hide) { DisplayStopIfRequested(); RT_DIFF_WORK(false); return; }
+    }
+
+    // RBP-0x40 and RBP+0x7c0 in retail: 0x800 bytes of text followed by 0x800
+    // UTF-16 code units. Both zeroed up front (0x1800c60b0 / 0x1800c60d2).
+    char     text[0x800];
+    uint16_t wtext[0x800];
+    std::memset(text,  0, sizeof(text));
+    std::memset(wtext, 0, sizeof(wtext));
+
+    AppendClamped(text, 0x800, kFatalPrefix);
+    if (const char* err = ErrorStringBuffer()) AppendClamped(text, 0x800, err);
+
+    Utf8ToUtf16Clamped(reinterpret_cast<uint8_t*>(wtext), 0x800, text);
+
+    // 0x1800c6299: nine bytes, copied as a qword plus a byte — not a strcpy.
+    char     cap[9];
+    uint16_t wcap[0x40];
+    std::memcpy(cap, kCaption, sizeof(cap));
+    std::memset(wcap, 0, sizeof(wcap));
+    Utf8ToUtf16Clamped(reinterpret_cast<uint8_t*>(wcap), 0x40, cap);
+
+    // 0x1800c63c3. Resolved at call time rather than linked, so the call is an
+    // indirection an exe-side hook could take — see the ⚠ note in the banner.
+    typedef int (__stdcall *MessageBoxWFn)(void*, const wchar_t*, const wchar_t*,
+                                           unsigned);
+    if (MessageBoxWFn box = reinterpret_cast<MessageBoxWFn>(
+            RtSystem_ResolveUser32MessageBoxW())) {
+        box(nullptr, reinterpret_cast<const wchar_t*>(wtext),
+            reinterpret_cast<const wchar_t*>(wcap), 0x10);
+    }
+
+    DisplayStopIfRequested();
+
+    // EFFECTIVENESS CONTROL. `work` counts the calls that actually reached the
+    // message box; a run whose Display rows are all work=0 took the
+    // `_hideDisplay` arm every time and has exercised none of the above.
+    RT_DIFF_WORK(true);
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 int RtSystemErrorRegister() {
@@ -289,10 +610,30 @@ int RtSystemErrorRegister() {
     RegisterRuntimeExport("?StrAppend@String@System@@SAPEADPEADHPEBD@Z", (void*)&RtSystem_String_StrAppend); ++n;
     RegisterRuntimeAddr(0x1800c9020, (void*)&RtSystem_String_StrAppend);
 
-    // DELIBERATELY ABSENT:
-    //   ?Display@Error@System@@SAXXZ  -- the message box. Not on any path this
-    //   wave reaches: Engine::Startup never calls it (only SetText), and
-    //   allocator.cpp's FatalOutOfMemory calls it solely when
-    //   stopApplication is true, which Engine::Startup never passes.
+    // ---- Wave 22 lane ERRCFG ------------------------------------------------
+    // WAS "DELIBERATELY ABSENT" UNTIL 2026-09-11. The old note read: "the
+    // message box. Not on any path this wave reaches: Engine::Startup never
+    // calls it (only SetText), and allocator.cpp's FatalOutOfMemory calls it
+    // solely when stopApplication is true, which Engine::Startup never passes."
+    // Every clause of that is still TRUE and it is no longer the reason to
+    // decline: unreachability on the happy path is why this row is SAFE to
+    // land, not why it should be skipped. What changed is that ?Display@ is
+    // the ONLY unported in-DLL reader of three exported statics
+    // (?_errorString@, ?_stopApplication@, ?_hideDisplay@), so while it is
+    // unported those three rows cannot be reasoned about at all. See
+    // docs/runtime_port/WAVE22_LANE_ERRCFG.md.
+    //
+    // BOTH DOORS. The address closes exe import slot 0x140152b58's eventual
+    // consumer and any ResolveAddr site.
+    RegisterRuntimeExport("?Display@Error@System@@SAXXZ", (void*)&RtSystem_Error_Display); ++n;
+    RegisterRuntimeAddr(0x1800c6060, (void*)&RtSystem_Error_Display);
+
+    // STILL DELIBERATELY ABSENT:
+    //   ?HideErrorDisplay@Error@System@@SAX_N@Z  0x1800c5f90 -- a seven-byte
+    //   setter (`MOV byte [rip],CL ; RET`) for ?_hideDisplay@. NOT ported
+    //   because it is DEAD, and the proof is in the lane doc §4: no call site
+    //   in any of the four shipped binaries by four independent screens, each
+    //   run with a known-live positive control. Porting a dead export would
+    //   grow `called` for nothing.
     return n;
 }
