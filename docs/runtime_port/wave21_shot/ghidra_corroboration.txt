@@ -1,0 +1,45 @@
+GHIDRA CORROBORATION (mcp__ghidra-mcp__get_xrefs_to), program verified
+Runtime-x64.dll on every call via the switch_program result.
+
+A SECOND, INDEPENDENT CHANNEL for every count in WAVE21_LANE_SHOT.md §1.3 and
+§2.  The first channel is objdump text + pefile .pdata/export attribution
+(tools/mint_extent_audit.py's writer channel, borrowed by
+tools/mint_stamper_census.py).  The second is Ghidra's own xref graph.  They
+agree exactly.
+
+  0x1801fc6a8  ?_singleton@FileSystem@IO@@
+      objdump : 91 code refs = 89 reads + 2 writes
+      Ghidra  : 89 [READ] + 2 [WRITE]  == 91          AGREES EXACTLY
+      writers : 1800ac818 in FileSystem (??0FileSystem@IO@@)
+                1800dba3e in Startup    (?Startup@Engine@1@)
+      WAVE17_LANE_CEIL.md 3.2 says "85 / 2" -- the write count is right and
+      the read count is 4 LOW.  Two independent channels now say 89.
+      EXTRA SHAPE, which NEITHER channel counts as a door:
+                From 1801b5570 [DATA]   -- a data-held pointer TO the slot
+                From Entry Point [EXTERNAL]
+
+  0x180154960  ??_7FileStream@IO@@6B@
+      mint_stamper_census : STAMPERS 17 ; ours-capable 6 ; retail 11
+      Ghidra distinct stamping functions : 17                AGREES EXACTLY
+      (the ours/retail split is from our own source scan and is NOT
+       corroborated by Ghidra -- Ghidra has no view of our registrations)
+
+  0x1801549a0  ??_7Stream@IO@@6B@
+      mint_stamper_census : STAMPERS 50 ; ours-capable 22 ; retail 25 ;
+                            UNATTRIBUTED 3
+      Ghidra distinct stamping functions : 50                AGREES EXACTLY
+      AND IT NAMES ALL THREE UNATTRIBUTED SITES.  They are frameless leaf
+      functions with no .pdata entry, which is why the .pdata-bounded channel
+      could not name them -- not because they are nameless:
+                0x1800b99d0  ??0Stream@IO@@QEAA@XZ
+                0x1800b9a40  ??1Stream@IO@@UEAA@XZ
+                0x18000c6d0  ??0Stream@IO@@QEAA@AEBV01@@Z
+      So the row's price is 25 + 3 = 28 NAMEABLE bodies.  A draft of this
+      lane's 1.3 said "you cannot port a function you cannot name"; that is
+      RETRACTED -- Ghidra names them, and the objdump channel's silence was a
+      limit of .pdata attribution, not a fact about the binary.
+
+CAUTION OBSERVED: a Ghidra silence is not a negative.  Every query above
+returned a non-empty list, so no conclusion here rests on an empty Ghidra
+answer.  The one place a Ghidra silence WOULD have mattered -- the three
+unattributed stampers -- is the place it spoke.
