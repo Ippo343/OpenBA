@@ -1360,7 +1360,21 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_frameIndex@ParticleInstance@Graphics@@1HA | n/a (int counter) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rng@Particle@Graphics@@1VRandom@System@@A | n/a (RNG state) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA | n/a (bool flag) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
-    // RT_UNPROMOTABLE: ??_7Geometry@Graphics@@6B@ | 6/6 (3 purecall) [CONV: M=NONPURECALL] | WAVE21_LANE_GFXVT.md §5.2 | ROUTE-SCOPED (DLL-PRESENT ONLY); voids when statusicon_geometry.cpp:341 reads `i < 9`; REQUIRED at cutover [SCOPE: DLL-PRESENT] [ADDRESSEE: Wave 22 lane GEOM, which owns the statusicon_geometry.cpp:341 cutover blocker -- WAVE21_CLOSED.md §7 item 1] | HARMFUL
+    // RESOLVED by Wave 22 lane GEOM (docs/runtime_port/WAVE22_LANE_GEOM.md):
+    // this row's expiry condition FIRED. code/Game/Component/statusicon_geometry.cpp:341
+    // now reads `i < 9` (re-derived independently this lane by reading the raw
+    // bytes of both 0x180154e60 in Runtime-x64.dll and 0x14015f0c0 in
+    // Application-x64.exe via pefile, not just re-quoting WAVE21_LANE_GFXVT.md
+    // §5.2 -- both extents confirmed 9), so the below is HISTORY, not a live
+    // tag, and there is deliberately no `RT_UNPROMOTABLE:` line here for
+    // tools/unpromotable_slot_check.py to score. The row is NOT re-promoted by
+    // this commit -- lane GEOM's brief was the cutover blocker in
+    // code/Game/Component/, not a decision to add a
+    // RegisterRuntimeExport("??_7Geometry@Graphics@@6B@", ...) call in this
+    // file, which is a separate, still-open step for whichever lane next
+    // re-scores this row from scratch (its stamper census was already green
+    // before this fix: 3 stampers, 2 ours-capable, 0 unattributed, 1 retail
+    // copy-ctor stamper that is moot at cutover).
     //
     //      ⚠ THIS TAG IS ROUTE-SCOPED AND ITS EXPIRY IS **NOT** "NONE, EVER".
     //      Wave 21 lane SHOT established that the existing vocabulary spells two
@@ -1454,15 +1468,19 @@ int RtMintRegisterPromotedRows() {
     //      and observing a failure. A lane that wants to overturn it must run
     //      that A/B, not re-read this comment.
     //
-    //      EXPIRY, WITH AN ADDRESSEE (reference_expiry_clause_needs_an_addressee).
-    //      The blocker is ONE CHARACTER: statusicon_geometry.cpp:341's `i < 12`
-    //      must read `i < 9`, the fix WAVE6_LANE_D prescribed in Wave 6. The
-    //      addressee is THE NEXT LANE THAT OWNS code/Game/Component/ —
-    //      explicitly not "whoever next counts slots on this row", because this
-    //      lane could not make that edit and verify it inside a vtable-scoped
-    //      brief. When that line reads `i < 9`, this tag is void and the row
-    //      should be re-scored from scratch (its stamper census is already
-    //      green: 3 stampers, 2 ours-capable, 0 unattributed).
+    //      EXPIRY, WITH AN ADDRESSEE (reference_expiry_clause_needs_an_addressee)
+    //      -- FIRED, by the named addressee. The blocker was ONE CHARACTER:
+    //      statusicon_geometry.cpp:341's `i < 12` needed to read `i < 9`, the
+    //      fix WAVE6_LANE_D prescribed in Wave 6 and Wave 21 lane GFXVT
+    //      re-confirmed. The addressee was THE NEXT LANE THAT OWNS
+    //      code/Game/Component/ (Wave 22 lane GEOM) — explicitly not "whoever
+    //      next counts slots on this row", because GFXVT could not make that
+    //      edit and verify it inside a vtable-scoped brief. That line now
+    //      reads `i < 9`, so this tag is void and the row is eligible to be
+    //      re-scored from scratch (its stamper census was already green: 3
+    //      stampers, 2 ours-capable, 0 unattributed) — but re-scoring and
+    //      actually registering the promotion is a SEPARATE, still-open step
+    //      lane GEOM did not take (see the RESOLVED note above this essay).
     //
     //      THE PRICE OF THIS PROMOTION, in lane SHOT's units — stampers split by
     //      owner, with the unattributed bucket kept SEPARATE rather than folded

@@ -336,47 +336,65 @@ static void* SIGeom_StubRet0() { return nullptr; }
 void StatusIconGeometry_BuildVtable(void** baseVtbl) {
     if (s_siGeomVtableBuilt) return;
     for (int i = 0; i < 16; ++i) {
-        // ⚠ THE `12` HERE IS WRONG AND IS LEFT IN PLACE DELIBERATELY. Wave 21
-        // lane GFXVT measured both sides of this copy from the shipped binaries
-        // (WAVE21_LANE_GFXVT.md §5.2a) and BOTH ARE NINE:
+        // FIXED by Wave 22 lane GEOM, discharging the addressee tag on
+        // ??_7Geometry@Graphics@@6B@ in standalone/reg_mint_promoted.cpp.
+        // The `12` here was wrong; the true extent is NINE on both sides,
+        // RE-MEASURED THIS LANE (not just re-quoted from Wave 21 lane GFXVT /
+        // WAVE21_LANE_GFXVT.md §5.2a) by reading the raw bytes of both shipped
+        // binaries directly with pefile:
         //
-        //   SOURCE      ??_7Geometry@Graphics@@6B@, Runtime-x64.dll 0x180154e60:
-        //               9 pointers, then the ASCII "ImageBuffer\0Generated…".
-        //               So baseVtbl[9], [10], [11] are STRING FRAGMENTS — all
-        //               non-zero, so the `baseVtbl[i]` test passes and three
-        //               pieces of a C string are installed as function pointers.
-        //   DESTINATION retail's own billboard vtable, Application-x64.exe
-        //               0x14015f0c0: 9 pointers, then a NULL pad, then a
-        //               DIFFERENT CLASS's 9-slot table at 0x14015f110. Proved by
-        //               xrefs, not by the byte pattern: 0x14015f0c0 is stamped
-        //               by StatusIconComponent_Ctor (0x14012c0fe), 0x14015f110
-        //               by TradeWork_impl_ed50 and FUN_1400b00e0.
+        //   SOURCE      ??_7Geometry@Graphics@@6B@, Runtime-x64.dll, image
+        //               VA 0x180154e60: qwords[0..8] are code pointers into
+        //               .text (0x18001____-0x1800a____ range); qword[9] =
+        //               0x6675426567616d49 = ASCII "ImageBuf" (of
+        //               "ImageBuffer\0Generated..."), confirming slots 9-11
+        //               are STRING BYTES, not function pointers, and all are
+        //               non-zero so the old `baseVtbl[i]` truthiness test
+        //               would have installed three fragments of a C string as
+        //               callable slots.
+        //   DESTINATION retail's own billboard vtable, Application-x64.exe,
+        //               image VA 0x14015f0c0: qwords[0..8] are code pointers
+        //               into .text; qword[9] == 0 (a genuine NULL, not a
+        //               string byte); qwords[10..18] are a DIFFERENT class's
+        //               9-slot table (confirmed by xrefs: 0x14015f0c0 is
+        //               stamped by StatusIconComponent_Ctor at 0x14012c0fe,
+        //               0x14015f110 by TradeWork_impl_ed50 and
+        //               FUN_1400b00e0), then qwords[19..20] are ASCII
+        //               ("Terrain..." reversed).
         //
-        // The previous comment here read "the billboard vtable has 12 real slots
-        // (slot 9 is null in the original)". It saw that null and mis-explained
-        // it: the null is the TERMINATOR BETWEEN TWO TABLES, not a null slot of
-        // this class. The count 12 has no basis in either binary.
+        // So the destination's slot 9 is the TERMINATOR BETWEEN TWO TABLES,
+        // not a null slot of the Geometry class itself, and "12 real slots"
+        // has no basis in either binary — the fix is `i < 9`.
         //
-        // THE FIX IS `i < 9`, and it is safe: nothing can dispatch slots 9-11,
-        // because both classes in play have nine virtuals. It is NOT applied
-        // here because this file belongs to code/Game/Component/ and lane GFXVT
-        // was scoped to Runtime vtable rows; applying it blind is precisely the
-        // failure this wave exists to avoid. WAVE6_LANE_D.md §6.1 prescribed the
-        // same fix in Wave 6 and it was never applied.
+        // Both classes present at the destination address (billboard and
+        // whatever owns the 0x14015f110 table) have exactly nine virtuals, so
+        // nothing in the shipped code can dispatch index 9, 10 or 11 through
+        // this object's vtable pointer. THIS IS A DERIVED conclusion (from the
+        // extents above, from xrefs on the stampers, and from ResolveAddr's
+        // registry-first order at runtime/src/graphics/scene.cpp:176), NOT an
+        // observed one: there is no attendance counter on
+        // StatusIconGeometry_Vtable()'s call sites, so a live run has not
+        // been used to confirm slots 9-11 are never invoked. A lane that
+        // wants an observation, not a derivation, needs to add one.
         //
-        // IT IS ALSO A CUTOVER BLOCKER, which is new information: today the
-        // overread lands on the DLL's own .rdata and is dormant, but at cutover
-        // ??_7Geometry@ must be promoted (or every Geometry gets a NULL vtable),
-        // and the overread then walks off the end of a 9-element static array of
-        // OURS. That is why ??_7Geometry@Graphics@@6B@ is currently tagged
-        // RT_UNPROMOTABLE(HARMFUL) in standalone/reg_mint_promoted.cpp with this
-        // line named as its expiry condition. Whoever applies `i < 9` should
-        // delete that tag in the same commit, and decide whether slot 9 ought to
-        // be nullptr (retail's value) rather than the stub.
-        if (baseVtbl && i < 12 && baseVtbl[i])
-            s_siGeomVtable[i] = baseVtbl[i];
+        // RESIDUAL (recorded by Wave 21, resolved here): should the
+        // now-unreachable tail (i >= 9) hold retail's nullptr or the
+        // SIGeom_StubRet0 stub? Slot 9 specifically mirrors a genuine retail
+        // NULL (measured above), so this lane installs nullptr for i >= 9
+        // rather than a callable stub nobody asked for -- a null pointer in
+        // an unreachable slot fails LOUDLY if some future change ever did
+        // reach it, matching retail's own exposure there, instead of quietly
+        // absorbing the call the way the stub would. Slots 0-8 keep the stub
+        // fallback for when baseVtbl itself is null/not yet built, because
+        // those ARE real, potentially-dispatched Geometry virtuals (dtor,
+        // bounds/type getters) and a null there would crash on ordinary
+        // scene culling, not just on a hypothetical stray call.
+        if (i < 9)
+            s_siGeomVtable[i] = (baseVtbl && baseVtbl[i])
+                                     ? baseVtbl[i]
+                                     : reinterpret_cast<void*>(&SIGeom_StubRet0);
         else
-            s_siGeomVtable[i] = reinterpret_cast<void*>(&SIGeom_StubRet0);
+            s_siGeomVtable[i] = nullptr;
     }
     s_siGeomVtable[2] = reinterpret_cast<void*>(&StatusIconGeom_Draw);
     s_siGeomVtable[3] = reinterpret_cast<void*>(&StatusIconGeom_AddDrawItems);
