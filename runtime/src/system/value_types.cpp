@@ -39,10 +39,27 @@
 // state-mutating Random member.
 // ============================================================================
 
+#include <cstdio>
 #include <cstring>
 #include <ctime>
+// WAVE 22 LANE SYSBODY: DateAsString/TimeAsString are Win32 date formatting
+// (FileTimeToLocalFileTime / FileTimeToSystemTime / GetDateFormatW /
+// GetTimeFormatW), so this file now needs the platform header. LEAN_AND_MEAN
+// plus NOMINMAX because <wingdi.h> declares a function called `Rectangle` and
+// <windef.h> #defines `near`/`far` away -- the collision compression.cpp's
+// probe documents one directory over. Nothing in this file uses those names
+// today; the narrowing is so that stays true.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 #include "../../types/system/Value.h"
+#include "../../types/system/String.h"
 #include "../../funcs/rt_port.h"
+#include "widestring.h"
 
 namespace {
 
@@ -339,6 +356,10 @@ struct StrSlot { void* p; };  // opaque 8-byte pass-through, NOT a String port
 //   * DateAsString / TimeAsString are unported, but the raw door is
 //     ResolveExportRaw, which returns NULL once Runtime-x64.dll is absent. A
 //     null call at cutover is a crash; a registry miss is a named row.
+//     WAVE 22 LANE SYSBODY: "unported" is no longer true -- both are ported
+//     and registered below, so these two RT_EXPORT_ONCE lines now reach our
+//     own bodies. The RT_EXPORT_ONCE spelling is what makes that automatic
+//     and is why it is left exactly as it is; only this sentence changed.
 // RT_EXPORT_ONCE also removes a GetProcAddress per call, which bare RtOriginal
 // was paying on every one of these.
 StrSlot* RtSystem_DateTime_AsString(const void* self, StrSlot* ret) {
@@ -368,6 +389,265 @@ StrSlot* RtSystem_DateTime_AsString(const void* self, StrSlot* ret) {
     release(&dateStr);
     release(&timeStr);
     return ret;
+}
+
+// ============================================================================
+// WAVE 22 LANE SYSBODY — DateAsString / TimeAsString
+// ============================================================================
+//   ?DateAsString@DateTime@System@@QEBA?AVString@2@XZ   0x1800c56a0  ord 2149
+//   ?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ   0x1800c55b0  ord 4131
+//
+// These are the two functions AsString above has been forwarding to since
+// Wave 9. Registering them therefore lights up a route that already exists:
+// AsString resolves both BY NAME through RT_EXPORT_ONCE (the registry), so the
+// bodies below become the ones it calls the moment RtSystemValueRegister runs.
+// That is a real caller, not a synthetic driver.
+//
+// THE HIDDEN RETURN SLOT IS REAL, AND GHIDRA DROPPED IT. `decompile_function`
+// prints both of these as `void __thiscall DateAsString(DateTime *this)` — no
+// second parameter and no return — which is the documented failure mode
+// (reference_ghidra_c_output_vs_disassembly.md: whole arguments dropped). The
+// disassembly is unambiguous:
+//     1800c56a0  MOV qword ptr [RSP+0x10],RDX    ; RDX is a REAL argument
+//     1800c56b6  MOV RBX,RDX                     ; kept across the whole body
+//     1800c5773  MOV RAX,RBX / RET               ; and returned again in RAX
+// so the signature is `String* f(const DateTime* this, String* ret)` — RCX =
+// this, RDX = ret — and the callee returns the slot. Writing this as a C++
+// method returning `String` by value is the wild write in
+// reference_hidden_retslot_wild_write.md, which "works" because the right
+// answer still lands in the right place while a second, uninitialised pointer
+// is scribbled through. Spelled out as a parameter here, exactly as every
+// other String-returning port in this tree does, and `StrSlot` is the same
+// opaque 8-byte pass-through the rest of this file uses.
+//
+// THE TWO BODIES ARE THE SAME FUNCTION WITH TWO CONSTANTS. Instruction for
+// instruction, DateAsString and TimeAsString differ in exactly two places:
+//     1800c56fc  LEA EDX,[R9+0x1] / CALL [0x18014b130]   GetDateFormatW, flag 1
+//     1800c560c  LEA EDX,[R9+0x2] / CALL [0x18014b138]   GetTimeFormatW, flag 2
+// (1 = DATE_SHORTDATE, 2 = TIME_NOSECONDS; locale 0x400 = LOCALE_USER_DEFAULT
+// in both, cchOut 0x100 in both.) They share one helper below rather than
+// being transcribed twice, because two copies of a 20-line body is how the
+// second one drifts.
+//
+// `this` IS A FILETIME. Retail's first instruction hands `this` straight to
+// FileTimeToLocalFileTime, so System::DateTime is an 8-byte FILETIME and
+// needs no layout of its own — the same reason the file header gives for
+// AsString. Left as `const void*` for that reason.
+//
+// THE WIDESTRING TEMPORARY IS RELEASED INLINE, AND WE ALREADY OWN THAT.
+// 0x1800c5742..0x1800c5773 is `WideString::~WideString` inlined: decrement the
+// refcount at data-4, and on zero rewind to data-8 and MemFree. That is
+// bit-for-bit the sequence `RtSystem_WideString_Dtor` (widestring.cpp, Wave 9
+// lane FS) already implements, including its asymmetry, so this calls that
+// rather than open-coding a third copy of the idiom.
+static StrSlot* RtSystem_DateTime_FormatPart(const void* self, StrSlot* ret, bool timePart) {
+    // DELIBERATELY UNINITIALISED, and this is the one thing the sweep below
+    // CAUGHT rather than confirmed. Retail's prologue reserves 0x250 bytes and
+    // writes NOTHING into these three slots before the API calls
+    // (0x1800c56a5..0x1800c56c1 is a PUSH, a SUB RSP,0x250 and two stores of a
+    // frame cookie -- no zeroing of [RSP+0x40], [RSP+0x50] or [RSP+0x270]).
+    // It then IGNORES both BOOL results. So when the conversion FAILS --
+    // FILETIME 0, the 1601 epoch, is the easy case -- retail formats from an
+    // uninitialised stack buffer and returns whatever was lying there.
+    //
+    // The first draft of this port wrote `FILETIME local{}; SYSTEMTIME st{};`
+    // and the sweep reported a divergence at exactly that input: ours produced
+    // one piece of mojibake and retail another. That is not a defect in either
+    // body; it is two different stacks. Zero-initialising is nevertheless the
+    // WRONG transcription -- a behaviour change on the failure path, invisible
+    // on the success path, and exactly the sort of tidy-up this project's
+    // rules exist to prevent. Left uninitialised so the port says what retail
+    // does. Do NOT "fix" a -Wmaybe-uninitialized warning here by adding `{}`.
+    //
+    // The failure path is UNCOMPARABLE BY CONSTRUCTION rather than merely
+    // untested, and the sweep says so explicitly instead of scoring it.
+    FILETIME local;
+    SYSTEMTIME st;
+    // Unguarded, and faithful: retail passes `this` straight through with no
+    // null test and ignores both BOOL results. A guard here would change what
+    // the function returns rather than protect anything.
+    FileTimeToLocalFileTime(static_cast<const FILETIME*>(self), &local);
+    FileTimeToSystemTime(&local, &st);
+
+    wchar_t buf[256];   // 0x100 WCHARs, retail's [RSP+0x50] scratch -- also uninitialised
+    if (timePart)
+        GetTimeFormatW(0x400, 2, &st, nullptr, buf, 0x100);
+    else
+        GetDateFormatW(0x400, 1, &st, nullptr, buf, 0x100);
+
+    // Retail zeroes the WideString slot before Set, because Set releases
+    // whatever is there first (0x1800c570b: MOV qword [RSP+0x260],0).
+    RtSystem::WideString ws{};
+    RtSystem::RtSystem_WideString_Set(&ws, buf);
+    RtSystem::RtSystem_WideString_AsUTF8(&ws, reinterpret_cast<RtSystem::String*>(ret));
+    RtSystem::RtSystem_WideString_Dtor(&ws);
+    return ret;   // MOV RAX,RBX
+}
+
+StrSlot* RtSystem_DateTime_DateAsString(const void* self, StrSlot* ret) {
+    return RtSystem_DateTime_FormatPart(self, ret, /*timePart=*/false);
+}
+
+StrSlot* RtSystem_DateTime_TimeAsString(const void* self, StrSlot* ret) {
+    return RtSystem_DateTime_FormatPart(self, ret, /*timePart=*/true);
+}
+
+// ============================================================================
+// WAVE 22 LANE SYSBODY — the DateAsString / TimeAsString sweep
+// ============================================================================
+// AN INPUT SWEEP, FOR THE SAME REASON THE COMPRESS ONE IS. Given a FILETIME
+// these two are pure within a process: same locale, same clock, same answer.
+// So they do not have to wait for a caller to be verified, and waiting would
+// be a poor plan anyway — AsString (their only in-tree caller) is reached from
+// save-file metadata, which an autostart run may or may not touch, and a
+// `calls=0` row is not a verified row.
+//
+// WHAT IS COMPARED: the RESULTING STRING'S CHARACTERS, ours against the
+// shipped export's, for the same FILETIME. Not the pointer (two calls
+// necessarily allocate two buffers) and not the length alone.
+//
+// THE EFFECTIVENESS CONTROL, and it is the specific trap this row invites.
+// A date formatter fed a narrow input range returns THE SAME STRING every
+// time, and N identical agreeing answers is the uniform population that reads
+// as a thorough test (reference_uniform_population_is_not_a_verification.md).
+// A body that ignored `this` entirely and formatted the current time would
+// pass such a sweep on the date half and fail nothing visibly. So the sweep
+// spans FILETIMEs decades apart AND counts how many DISTINCT strings each side
+// produced; fewer than half a dozen distinct values is reported as a failure
+// of the sweep rather than a pass of the port.
+//
+// WHAT THIS DOES NOT CHECK, stated rather than left implied: the sweep runs
+// under ONE locale (whatever the test machine has), so it cannot distinguish
+// our GetDateFormatW flag `1` from any other flag that happens to render the
+// same under that locale. The flags are read off the disassembly instead
+// (0x1800c56fc `LEA EDX,[R9+0x1]`, 0x1800c560c `LEA EDX,[R9+0x2]`), which is a
+// stronger source than a single-locale comparison would be.
+namespace {
+
+int RtDateTimeDistinct(char (*seen)[64], int seenCount, const char* s) {
+    for (int i = 0; i < seenCount; ++i)
+        if (std::strcmp(seen[i], s) == 0) return seenCount;
+    if (seenCount < 32) {
+        std::strncpy(seen[seenCount], s, 63);
+        seen[seenCount][63] = '\0';
+        ++seenCount;
+    }
+    return seenCount;
+}
+
+}  // namespace
+
+void RtSystem_DateTimeProbe() {
+    if (!RtDiffEnabled()) return;
+
+    using PartFn = StrSlot* (*)(const void*, StrSlot*);
+    using ReleaseFn = void (*)(StrSlot*);
+    // RT_RAW_OK: ORACLE. RtOriginal is ResolveExportRaw, so these reach the
+    // SHIPPED bodies even though ours are registered under the same names by
+    // the time this runs. ResolveExport here would compare our body with
+    // itself and the probe would be dark.
+    PartFn theirDate = RtOriginal<PartFn>("?DateAsString@DateTime@System@@QEBA?AVString@2@XZ");
+    PartFn theirTime = RtOriginal<PartFn>("?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ");
+    if (!theirDate || !theirTime) {
+        printf("[SYSBODY/DateTime] sweep SKIPPED: no shipped exports (cutover build?)\n");
+        return;
+    }
+    // The releases are the WORK of the probe, not an oracle readback, so they
+    // go through the registry to our ported String::Release.
+    ReleaseFn release = RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ");
+
+    long long cases = 0, dateDiff = 0, timeDiff = 0, uncomparable = 0;
+    char seenDate[32][64]; int seenDateCount = 0;
+    char seenTime[32][64]; int seenTimeCount = 0;
+
+    // FILETIME is 100ns ticks since 1601-01-01. These span ~1601 to ~2100 and
+    // sub-day steps, so both halves vary.
+    static const unsigned long long kTicks[] = {
+        0ULL,
+        116444736000000000ULL,                       // 1970-01-01
+        116444736000000000ULL + 36000000000ULL,      // +1h
+        116444736000000000ULL + 863990000000ULL,     // +23:59:59
+        128000000000000000ULL,                       // ~2006
+        131000000000000000ULL,                       // ~2016
+        131000000000000000ULL + 5000000000000ULL,
+        150000000000000000ULL,                       // ~2076
+        157000000000000000ULL,                       // ~2098
+        131500000000000000ULL, 132000000000000000ULL, 132500000000000000ULL,
+    };
+    const int kN = static_cast<int>(sizeof(kTicks) / sizeof(kTicks[0]));
+
+    for (int i = 0; i < kN; ++i) {
+        FILETIME ft;
+        ft.dwLowDateTime  = static_cast<DWORD>(kTicks[i] & 0xffffffffULL);
+        ft.dwHighDateTime = static_cast<DWORD>(kTicks[i] >> 32);
+
+        // Is this input COMPARABLE at all? Both bodies ignore the two BOOLs
+        // and format from an UNINITIALISED stack buffer when the conversion
+        // fails, so on a rejected FILETIME there is no deterministic answer on
+        // EITHER side and a reported "divergence" would be two different
+        // stacks, not a defect. The probe re-runs the conversions ITSELF to
+        // decide, rather than inferring it from the answers -- a class derived
+        // from the output would agree with any body by construction
+        // (reference_recheck_must_match_its_own_proof.md). Both bodies are
+        // still CALLED on these inputs, so "neither faults on a rejected
+        // FILETIME" stays exercised; only the comparison is withheld, and the
+        // count is printed rather than folded away.
+        FILETIME probeLocal;
+        SYSTEMTIME probeSt;
+        const bool convertible =
+            FileTimeToLocalFileTime(&ft, &probeLocal) != 0 &&
+            FileTimeToSystemTime(&probeLocal, &probeSt) != 0;
+
+        StrSlot ourD{}, theirD{}, ourT{}, theirT{};
+        RtSystem_DateTime_DateAsString(&ft, &ourD);
+        theirDate(&ft, &theirD);
+        RtSystem_DateTime_TimeAsString(&ft, &ourT);
+        theirTime(&ft, &theirT);
+        ++cases;
+
+        const char* od = static_cast<const char*>(ourD.p);
+        const char* td = static_cast<const char*>(theirD.p);
+        const char* ot = static_cast<const char*>(ourT.p);
+        const char* tt = static_cast<const char*>(theirT.p);
+        // Null on one side only is itself a divergence, so test that before
+        // dereferencing either.
+        const bool dOk = (od == nullptr) == (td == nullptr) &&
+                         (od == nullptr || std::strcmp(od, td) == 0);
+        const bool tOk = (ot == nullptr) == (tt == nullptr) &&
+                         (ot == nullptr || std::strcmp(ot, tt) == 0);
+        if (!convertible) {
+            ++uncomparable;
+            release(&ourD); release(&theirD); release(&ourT); release(&theirT);
+            continue;
+        }
+        if (!dOk) {
+            if (dateDiff < 6)
+                printf("[SYSBODY/DateTime] DATE DIVERGENCE i=%d ours='%s' theirs='%s'\n",
+                       i, od ? od : "(null)", td ? td : "(null)");
+            ++dateDiff;
+        }
+        if (!tOk) {
+            if (timeDiff < 6)
+                printf("[SYSBODY/DateTime] TIME DIVERGENCE i=%d ours='%s' theirs='%s'\n",
+                       i, ot ? ot : "(null)", tt ? tt : "(null)");
+            ++timeDiff;
+        }
+        if (od) seenDateCount = RtDateTimeDistinct(seenDate, seenDateCount, od);
+        if (ot) seenTimeCount = RtDateTimeDistinct(seenTime, seenTimeCount, ot);
+
+        release(&ourD); release(&theirD); release(&ourT); release(&theirT);
+    }
+
+    printf("[SYSBODY/DateTime] sweep: %lld cases (%lld compared, %lld UNCOMPARABLE -- the "
+           "Win32 conversion rejects the FILETIME and BOTH bodies then format from an "
+           "uninitialised stack buffer), date divergences=%lld, time divergences=%lld\n",
+           cases, cases - uncomparable, uncomparable, dateDiff, timeDiff);
+    const bool varied = seenDateCount >= 6 && seenTimeCount >= 4;
+    printf("[SYSBODY/DateTime] control: %d distinct dates, %d distinct times -- %s; %s\n",
+           seenDateCount, seenTimeCount,
+           varied ? "population NOT UNIFORM" : "*** UNIFORM: the sweep proves little ***",
+           (dateDiff == 0 && timeDiff == 0 && varied) ? "VERIFIED"
+                                                      : "*** NOT a verification ***");
 }
 
 // ?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ  retail 0x1800c4c60
@@ -485,6 +765,14 @@ int RtSystemValueRegister() {
     RegisterRuntimeExport("?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z", (void*)&RtSystem_Color_Serialize); ++n;
 
     RegisterRuntimeExport("?AsString@DateTime@System@@QEBA?AVString@2@XZ", (void*)&RtSystem_DateTime_AsString); ++n;
+    // WAVE 22 LANE SYSBODY -- the two AsString has been forwarding to since
+    // Wave 9. Name only: grep over runtime/, engine/, code/ and standalone/
+    // finds 0x1800c56a0 / 0x1800c55b0 in exactly one place each, a comment in
+    // this file, so there is no by-address consumer to satisfy.
+    RegisterRuntimeExport("?DateAsString@DateTime@System@@QEBA?AVString@2@XZ",
+                          (void*)&RtSystem_DateTime_DateAsString); ++n;
+    RegisterRuntimeExport("?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ",
+                          (void*)&RtSystem_DateTime_TimeAsString); ++n;
 
     RegisterRuntimeExport("?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ", (void*)&RtSystem_Configuration_CurrentBuildId); ++n;
     RegisterRuntimeExport("?CurrentVersion@Configuration@System@@SA?AVString@2@XZ", (void*)&RtSystem_Configuration_CurrentVersion); ++n;

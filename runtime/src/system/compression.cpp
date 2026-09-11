@@ -164,6 +164,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "string.h"   // RtMemAlloc -- the lock-wrapped MemoryAllocator door
 
 namespace RtSystem {
 
@@ -287,7 +288,322 @@ int DecompressBody(const void* src, uint32_t srcLen, void* dst, uint32_t dstCap)
     return static_cast<int>(op - dstBase);              // 1800c472d
 }
 
+// ============================================================================
+// WAVE 22 LANE SYSBODY — the ENCODER: Compression::Compress and its ctor
+// ============================================================================
+//   ??0Compression@System@@QEAA@XZ                    0x1800c41a0  ord  109
+//   ?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z   0x1800c4230  ord 1749
+//
+// THE PRIOR HOLDBACK, RE-CHECKED RATHER THAN INHERITED. The registration block
+// at the bottom of this file records Compress as DELIBERATELY ABSENT, with a
+// stated reason: this file's Decompress probe USES the shipped Compress as its
+// input generator, and "porting the thing that generates your test inputs is
+// how a shared misreading passes its own test." That was the right call when
+// it was written. It does not survive being checked
+// (reference_holdback_blockers_are_stale_check_them_first.md), for a reason
+// that is mechanical rather than a matter of judgement:
+//
+//     RT_ORIGINAL_ONCE expands to RtOriginal<Fn>(name), and RtOriginal is
+//     ResolveExportRaw (runtime/funcs/rt_port.h:140,154). It does NOT consult
+//     the port registry.
+//
+// All three of the probe's Compression doors — the ctor at line ~417, the
+// Compress at ~475, the dtor at ~494 — are RT_ORIGINAL_ONCE. So registering
+// our encoder cannot change what the Decompress probe calls: it keeps
+// generating its corpus with the SHIPPED compressor, and check B (ours
+// round-trips to the original bytes) never involved the DLL's decoder in the
+// first place. At cutover the probe is compiled out entirely. The holdback's
+// premise is false in the DLL-present route and moot in the other; it is
+// discharged here rather than quietly dropped, and the registration block
+// below is rewritten to say so.
+//
+// WHAT THE ENCODER IS. LZ77 with a 16-bit hash chain of ONE slot per bucket
+// (a "hash head" table, no chain walking, no lazy matching) producing exactly
+// the stream the Decompress above consumes. 0x40000 bytes = 0x10000 uint32
+// entries, each a byte OFFSET from `src`, which is why the table is useless
+// across calls and why the ctor zeroes it.
+//
+//   op starts at dst+1 (0x1800c429b: LEA R10,[R9+1]). The first byte is
+//   RESERVED for the literal-run control that has not been emitted yet. Every
+//   emit path writes that control BACKWARDS, at op-ii-1, and every match path
+//   reserves a fresh one by advancing op TWO past the low offset byte.
+//
+// THE SIX THINGS THAT ARE EASY TO GET WRONG HERE, all verified against the
+// disassembly rather than the decompiler (which renders this body as a
+// 60-line ternary nest):
+//
+//  1. **`dv` IS A 32-BIT ROLLING REGISTER AND IS NEVER MASKED TO 24 BITS —
+//     BUT THE UPPER BYTE IS PROVABLY UNOBSERVABLE, AND THE FIRST DRAFT OF
+//     THIS NOTE CLAIMED THE OPPOSITE.** EDI starts as `(src[0]<<8)|src[1]`
+//     and every loop top does `SHL EDI,8 / OR EDI,ip[2]`. On the LITERAL path
+//     it is NOT reset, so after k consecutive literals the register holds k+2
+//     bytes. This note used to say that those upper bytes therefore "CHANGE
+//     THE BUCKET" and that masking to 24 bits would silently produce a
+//     different stream. **That is false, and a negative control found it**:
+//     masking dv to 24 bits was injected on purpose, and the sweep reported
+//     ZERO divergences over 40 cases. The sweep was right and the note was
+//     wrong. Write dv = M + (U << 24), M = dv & 0xFFFFFF:
+//
+//         hash = (uint16)((dv >> 8) - 5*dv)
+//         (dv >> 8)  low 16 bits = dv bits 8..23  = M >> 8      (U is at 16+)
+//         (5 * dv)   low 16 bits = 5*M low 16     (5*(U<<24) is all bits 24+)
+//         subtraction borrows propagate UPWARD only
+//         => hash = (uint16)((M >> 8) - 5*M), independent of U.
+//
+//     And dv feeds nothing but the hash. So the upper byte cannot reach any
+//     output, and masking is a NO-OP rather than a silent defect. It is still
+//     transcribed unmasked, because the register is what retail has and a
+//     mask would be an unforced claim about what is safe -- but the reason is
+//     now "no reason to deviate", not "load-bearing".
+//     The lesson generalises and is why this note survives its own
+//     retraction: a control that corrupts a value NOTHING OBSERVES reports
+//     NOT CAUGHT and reads as an indictment of a sound instrument
+//     (reference_control_must_pick_a_compared_subject.md). Note 5 is the
+//     round-trip-invisible hazard on this body that IS real; that is the one
+//     the effectiveness control uses.
+//
+//  2. **`dv` IS CLOBBERED BY THE MATCH PATH.** EDI is reused as `maxLen`
+//     (0x1800c4332). Retail rebuilds it afterwards from ip-1 (0x1800c4566),
+//     24-bit-clean, which is why the rolling value restarts clean after every
+//     match and only accumulates across literal runs. Reproduced exactly.
+//
+//  3. **THE HASH IS `(uint16)((dv>>8) - 5*dv)`**, all in 32-bit arithmetic
+//     (`SHR EDX,8`, `LEA ECX,[RDI+RDI*4]`, `SUB EDX,ECX`, `MOVZX EDX,DX`).
+//     The subtraction wraps; the truncation to 16 bits is what bounds it to
+//     the table. Written with explicit uint32_t so the wrap is defined.
+//
+//  4. **THE MATCH GUARD IS `m_pos > src`, STRICTLY** (`CMP R11,R14 / JBE`),
+//     not `>=`. Offset 0 in the table means "nothing stored", and a stored
+//     offset of 0 at position 0 is indistinguishable from it — so retail
+//     simply never matches against the very first byte. A `>=` here matches
+//     one byte earlier than retail and diverges on inputs that begin with a
+//     repeat.
+//
+//  5. **THE TWO HASH-TABLE BACKFILLS AFTER A MATCH ARE NOT OPTIONAL.**
+//     0x1800c4522..0x1800c4585 stores the buckets for ip-2 and ip-1 (the two
+//     positions the match skipped over). Dropping them still round-trips and
+//     still compresses; it just finds different matches later. Byte-visible,
+//     round-trip-invisible.
+//
+//  6. **THE TAIL'S 3-BYTE RESERVATION CAN BE OVERRUN BY ONE**, and that is
+//     retail's. `CMP RCX(op+3),R12 / JBE` reserves three bytes, then the tail
+//     literal loop appends up to two bytes with NO further bounds check; if
+//     `ii` reaches 0x20 inside that loop it writes a control byte and advances
+//     again, so worst case is 2 data + 1 flush control + 1 final control = 4.
+//     Not guarded — the project rule is that a faithful unguarded write stays
+//     faithful, and a guard would change the RETURN VALUE rather than protect
+//     anything. Callers reach this only through CompressedStream, which sizes
+//     its output window at 0x8000 for a 0x8000 input.
+//
+// ALSO FAITHFUL AND ALSO UNGUARDED: the two loads at 0x1800c425e/0x1800c4272
+// read src[0] AND src[1] before anything has established srcLen >= 2, so
+// Compress(src, 1, ...) reads one byte past the input. Retail's. The sweep
+// below passes srcLen == 1 on purpose so the behaviour is exercised and
+// compared rather than merely asserted.
+
+// BRANCH COVERAGE FOR THE ENCODER. Same reason the decoder above counts its
+// six branches: a codec sweep is exactly where a uniform population hides. A
+// corpus of incompressible bytes drives ONLY the literal path and the two
+// 0x20-flushes, agrees perfectly with retail on every case, and says nothing
+// at all about the match encoder -- which is two thirds of the body. Six
+// counters, printed, with a verdict line that FAILS when any of them is zero.
+struct CompressBranchCounts {
+    long long literal      = 0;   // a byte emitted as a literal
+    long long literalFlush = 0;   // a run hit 0x20 and flushed its control
+    long long matchShort   = 0;   // code < 7, one control byte
+    long long matchLong    = 0;   // code >= 7, control + extra length byte
+    long long matchUnroll  = 0;   // the maxLen > 0x10 unrolled comparison ran
+    long long failDst      = 0;   // an output-bounds rejection (either site)
+};
+CompressBranchCounts* g_cbranch = nullptr;
+
+// The hash retail computes, in the width retail computes it in.
+static inline uint32_t CompressHash(uint32_t dv) {
+    return static_cast<uint16_t>((dv >> 8) - dv * 5u);   // 1800c42bc..1800c42c9
+}
+
+int CompressBody(void* self, const void* src, uint32_t srcLen,
+                 void* dst, uint32_t dstCap) {
+    // 1800c4247 / 1800c4255 — both length tests, before anything else.
+    if (srcLen == 0 || dstCap == 0)
+        return 0;                                        // 1800c4645
+
+    uint32_t* const table = *static_cast<uint32_t**>(self);   // 1800c42c6: MOV RCX,[R11]
+    const uint8_t* const in     = static_cast<const uint8_t*>(src);
+    const uint8_t* const inEnd  = in + srcLen;                // 1800c4289
+    const uint8_t* const inMax  = inEnd - 2;                  // 1800c4292: R15
+    uint8_t* const outBase      = static_cast<uint8_t*>(dst);
+    uint8_t* const outEnd       = outBase + dstCap;           // 1800c428e: R12
+
+    const uint8_t* ip = in;                                   // 1800c4296: RAX
+    uint8_t* op = outBase + 1;                                // 1800c429b: the RESERVED control byte
+    int32_t  ii = 0;                                          // 1800c4299: EBX, the pending literal count
+    uint32_t dv = (static_cast<uint32_t>(in[0]) << 8) | in[1];   // 1800c427d..1800c428c
+
+    bool fail = false;
+
+    if (ip < inMax) {                                         // 1800c429f: CMP RDX,R15 / JNC
+        for (;;) {
+            dv = (dv << 8) | ip[2];                           // 1800c42b0..1800c42ba
+            uint32_t* const slot = &table[CompressHash(dv)];
+            const uint8_t* const mpos = in + *slot;           // 1800c42d2: zero-extended uint32
+            *slot = static_cast<uint32_t>(ip - in);           // 1800c42db
+            const uint64_t off = static_cast<uint64_t>(ip - mpos) - 1u;   // 1800c42de..42e1
+
+            const bool isMatch =
+                off < 0x2000u &&                              // 1800c42e4  JNC (unsigned)
+                mpos > in &&                                  // 1800c42f1  JBE (STRICT, see note 4)
+                mpos[2] == ip[2] &&                           // 1800c42fa
+                mpos[0] == ip[0] && mpos[1] == ip[1];         // 1800c4308..4327 (as one 16-bit cmp)
+
+            if (!isMatch) {
+                // ---- LITERAL ---- 1800c458f
+                if (op >= outEnd) { fail = true; if (g_cbranch) ++g_cbranch->failDst; break; }  // 1800c458f  JNC
+                *op++ = *ip++;
+                ++ii;
+                if (g_cbranch) ++g_cbranch->literal;
+                if (ii == 0x20) {                             // 1800c45a7
+                    if (g_cbranch) ++g_cbranch->literalFlush;
+                    op[-0x21] = 0x1f;                         // 1800c45ac: the reserved slot, 32 literals back
+                    ++op;                                     // and reserve the next one
+                    ii = 0;
+                }
+                if (!(ip < inMax)) break;                     // 1800c45b6  JC
+                continue;
+            }
+
+            // ---- MATCH ---- how long?  1800c432d..1800c4342
+            uint32_t maxLen = static_cast<uint32_t>(inEnd - ip) - 2u;
+            if (maxLen > 0x108u) maxLen = 0x108u;             // CMOVA
+
+            // The output reservation, BEFORE the literal header is flushed.
+            // 1800c4345..1800c4363. Note the second test backs `op` up by one
+            // when there is no pending literal run, because that reserved byte
+            // is about to be reclaimed.
+            if (!(op + 4 < outEnd)) {
+                if (op - (ii == 0 ? 1 : 0) + 4 >= outEnd) {
+                    fail = true; if (g_cbranch) ++g_cbranch->failDst; break;
+                }
+            }
+
+            // Flush the pending literal run header at op-ii-1. 1800c4369..4382.
+            // When ii == 0 this writes 0xff into the reserved byte and then
+            // reclaims it, so the match control overwrites it. Faithful, and
+            // the write is retail's, not a transcription slip.
+            op[-ii - 1] = static_cast<uint8_t>(ii - 1);
+            if (ii == 0) --op;
+
+            uint32_t len;                                      // R9D
+            if (maxLen <= 0x10u) {                             // 1800c4385  JBE
+                len = 2;
+                goto generic;                                  // 1800c44b2
+            }
+            // The unrolled 3..0x12 comparison. Transcribed as a loop: every
+            // step is `if (mpos[k] != ip[k]) { len = k; goto emit; }` with the
+            // SAME k in the same order, and the fallthrough sets len = 0x12
+            // and enters the generic loop (1800c44a2..44b0).
+            len = 0x12;
+            if (g_cbranch) ++g_cbranch->matchUnroll;
+            for (uint32_t k = 3; k <= 0x12u; ++k) {
+                if (mpos[k] != ip[k]) { len = k; goto emit; }
+            }
+        generic:
+            // 1800c44b2..44c3
+            for (;;) {
+                ++len;
+                if (len >= maxLen) break;                      // JNC (unsigned)
+                if (ip[len] != mpos[len]) break;
+            }
+        emit:
+            {
+                const uint32_t mlen = len;                     // total bytes matched
+                const uint32_t code = mlen - 2;                // 1800c44c5: ADD R9D,-2
+                ++ip;                                          // 1800c44c9: INC RAX
+                if (code < 7u) {                               // 1800c44cc  JNC
+                    // 1800c44d2..44e5
+                    if (g_cbranch) ++g_cbranch->matchShort;
+                    *op++ = static_cast<uint8_t>((off >> 8) + (code << 5));
+                } else {
+                    // 1800c44eb..4501
+                    if (g_cbranch) ++g_cbranch->matchLong;
+                    *op++ = static_cast<uint8_t>((off >> 8) - 0x20u);
+                    *op++ = static_cast<uint8_t>(code - 7u);
+                }
+                *op = static_cast<uint8_t>(off);               // 1800c450d: the low offset byte
+                op += 2;                                       // ...and RESERVE the next control
+                ip += mlen - 1;                                // 1800c4510 (ip was already +1)
+                ii = 0;                                        // 1800c4517
+            }
+            if (!(ip < inMax)) break;                          // 1800c4519  JNC -> 45bf
+
+            // The two skipped positions get their buckets filled.
+            // 1800c4522..1800c4585.  q = ip-2, then ip-1.
+            {
+                const uint8_t* const q = ip - 2;
+                uint32_t v = (static_cast<uint32_t>(q[0]) << 16) |
+                             (static_cast<uint32_t>(q[1]) << 8)  |
+                              static_cast<uint32_t>(q[2]);
+                table[CompressHash(v)] = static_cast<uint32_t>(q - in);
+                v = (v << 8) | q[3];                           // 1800c4557/4566: 3 bytes at ip-1
+                table[CompressHash(v)] = static_cast<uint32_t>((q + 1) - in);
+                dv = v;                                        // EDI, 24-bit-clean again (note 2)
+            }
+        }
+    }
+
+    if (fail)
+        return 0;                                              // 1800c45cd
+
+    // ---- THE TAIL ---- 1800c45c4
+    if (op + 3 > outEnd)
+        return 0;
+    while (ip < inEnd) {                                       // 1800c4600..4621
+        *op++ = *ip++;
+        ++ii;
+        if (ii == 0x20) {
+            op[-0x21] = 0x1f;
+            ++op;
+            ii = 0;
+        }
+    }
+    // 1800c4623..4640
+    op[-ii - 1] = static_cast<uint8_t>(ii - 1);
+    if (ii == 0) --op;
+    return static_cast<int>(op - outBase);
+}
+
 }  // namespace
+
+// ============================================================================
+// ??0Compression@System@@QEAA@XZ                             retail 0x1800c41a0
+// ============================================================================
+// EnterCS(_singleton+0x640); Allocate(_singleton, 0x40000, 4); LeaveCS;
+// *this = p; memset(p, 0, 0x40000).
+//
+// `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50) IS that exact
+// lock/Allocate/unlock sequence — verified by decompiling it, not assumed — so
+// `RtMemAlloc(0x40000, 4)` from string.cpp is the same three instructions plus
+// a call, and it keeps standalone/allocator_lock.cpp's detour on Allocate in
+// the path. Open-coding EnterCriticalSection on `_singleton + 0x640` here
+// would be a second, private opinion about where that lock lives.
+//
+// NOT NULL-CHECKED: retail stores the result and memsets it unconditionally.
+// An allocation failure here is an upstream fault to find.
+extern "C" void* RtSystem_Compression_Ctor(void* self) {
+    void* p = RtMemAlloc(0x40000u, 4);
+    *static_cast<void**>(self) = p;
+    std::memset(p, 0, 0x40000u);
+    return self;   // 1800c41a0 is QEAA: a ctor returns `this` in RAX
+}
+
+// ============================================================================
+// ?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z             retail 0x1800c4230
+// ============================================================================
+extern "C" int RtSystem_Compression_Compress(void* self, const void* src, uint32_t srcLen,
+                                             void* dst, uint32_t dstCap) {
+    RT_DIFF_BEGIN("System::Compression::Compress");
+    return CompressBody(self, src, srcLen, dst, dstCap);
+}
 
 // ============================================================================
 // ?Decompress@Compression@System@@SAHPEBXIPEAXI@Z            retail 0x1800c4660
@@ -517,6 +833,247 @@ void RtSystem_CompressionProbe() {
                 (long long)counts.exitExact, (long long)counts.exitOvershoot);
 }
 
+// ============================================================================
+// WAVE 22 LANE SYSBODY — the Compress input sweep
+// ============================================================================
+// WHY A SWEEP RATHER THAN WAITING FOR A CALLER. Compress has NO caller in this
+// tree and none in the game: only the ToolKit writes packages, so a registered
+// encoder would sit at `calls=0` forever and a `calls=0` row is not a verified
+// row (reference_uncalled_port_is_not_verified.md). For a function that is
+// pure given its object, an INPUT SWEEP against the shipped export is strictly
+// better than waiting — it is available now, it covers cases play never
+// produces, and it is the method that caught a real defect on
+// GetAlignedPosition when an in-game run reported calls=0 across 16.9M calls
+// (reference_project_pure_functions_verify_by_sweep.md).
+//
+// THE OBJECT IS STATEFUL, AND THAT IS THE WHOLE DESIGN OF THIS PROBE.
+// Compression's 0x40000-byte table carries over between calls: bucket contents
+// from case N change which matches case N+1 finds. So the sweep keeps TWO
+// objects and feeds both the SAME sequence:
+//
+//     theirObj — built with the DLL's ctor, driven with the DLL's Compress
+//     ourObj   — built with OUR ctor,       driven with OUR   Compress
+//
+// which makes the two tables shadow each other case by case. That is what
+// turns the sweep into a test of the ctor as well: a ctor that allocated but
+// did not zero the table would diverge on the very first case, and a ctor that
+// zeroed the wrong size would diverge partway through the first buffer bigger
+// than the region it cleared. There is no separate ctor probe because this IS
+// the ctor probe.
+//
+// THE COMPARISON IS BYTE-EXACT ON THE OUTPUT, NOT A ROUND-TRIP. A round-trip
+// check (compress with ours, decompress, compare to the input) is the WEAK
+// oracle here: this format has many valid encodings of the same bytes, so a
+// port that masked the rolling hash to 24 bits, or dropped the two
+// post-match bucket backfills, round-trips perfectly and emits a different
+// stream. Both of those are live hazards in the body above (notes 1 and 5), so
+// the sweep compares the returned length AND every emitted byte against the
+// shipped encoder. The round-trip is ALSO run, as an independent second check
+// that does not involve the DLL's encoder at all.
+//
+// THE EFFECTIVENESS CONTROL. Six encoder branches are counted (literal,
+// literal-flush, short match, long match, the unrolled comparison, and the
+// output-bounds rejection) and all six are printed. A corpus of random bytes
+// drives only the first two and would agree with retail on every case while
+// leaving the match encoder — two thirds of the body — completely untested.
+// The corpus below is built to fill all six on purpose, and the verdict line
+// FAILS if any bucket reads zero, so "the sweep did not reach it" and "the
+// branch is correct" cannot be confused.
+void RtSystem_CompressProbe() {
+    if (!RtDiffEnabled()) return;
+
+    typedef void* (*CompressionCtorFn)(void*);
+    typedef void  (*CompressionDtorFn)(void*);
+    typedef int   (*CompressFn)(void*, const void*, uint32_t, void*, uint32_t);
+
+    // RT_RAW_OK: probe-only, and an ORACLE. RT_ORIGINAL_ONCE is
+    // ResolveExportRaw, so `theirs` is the SHIPPED encoder even though our own
+    // is registered under the same name by the time this runs. Reaching it
+    // through ResolveExport would compare our body with itself
+    // (reference_a_probe_whose_ours_side_reaches_the_body_by_address...).
+    CompressFn theirs = RT_ORIGINAL_ONCE(CompressFn,
+        "?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z");
+    CompressionCtorFn theirCtor = RT_ORIGINAL_ONCE(CompressionCtorFn,
+        "??0Compression@System@@QEAA@XZ");
+    CompressionDtorFn theirDtor = RT_ORIGINAL_ONCE(CompressionDtorFn,
+        "??1Compression@System@@QEAA@XZ");
+    if (!theirs || !theirCtor || !theirDtor) {
+        printf("[SYSBODY/Compress] sweep SKIPPED: no shipped encoder (cutover build?)\n");
+        return;
+    }
+
+    const uint8_t* const decompressFn = reinterpret_cast<const uint8_t*>(
+        RtOriginal<DecompressFn>("?Decompress@Compression@System@@SAHPEBXIPEAXI@Z"));
+    if (decompressFn == nullptr) {
+        printf("[SYSBODY/Compress] sweep SKIPPED: cannot locate the DLL image\n");
+        return;
+    }
+    const uint8_t* const image = decompressFn - 0xC4660;   // same derivation as the probe above
+
+    void* theirObj[1] = { nullptr };
+    void* ourObj[1]   = { nullptr };
+    theirCtor(theirObj);
+    RtSystem_Compression_Ctor(ourObj);   // OUR ctor -- see the note above
+    if (ourObj[0] == nullptr || theirObj[0] == nullptr) {
+        printf("[SYSBODY/Compress] sweep SKIPPED: a ctor returned no table\n");
+        return;
+    }
+
+    static const uint32_t kMaxIn = 0x8000;   // CompressedStream's window size
+    static uint8_t raw[kMaxIn];
+    static uint8_t ourPacked[kMaxIn + 4096];
+    static uint8_t theirPacked[kMaxIn + 4096];
+    static uint8_t rt[kMaxIn + 64];
+
+    CompressBranchCounts counts;
+    g_cbranch = &counts;
+
+    long long cases = 0, lenDiff = 0, byteDiff = 0, accepted = 0, rejected = 0;
+    long long roundTripOk = 0, roundTripBad = 0;
+    int distinctLen[64]; int distinctCount = 0;
+
+    // One case. `n` bytes of `raw` through both encoders, into separate
+    // buffers, compared exactly.
+    struct Case {
+        static void Run(void* ourO, void* theirO, CompressFn theirsFn,
+                        const uint8_t* src, uint32_t n, uint32_t cap,
+                        uint8_t* ourBuf, uint8_t* theirBuf, uint8_t* rtBuf,
+                        long long* cases, long long* lenDiff, long long* byteDiff,
+                        long long* accepted, long long* rejected,
+                        long long* rtOk, long long* rtBad,
+                        int* seen, int* seenCount) {
+            std::memset(ourBuf, 0xCD, cap);
+            std::memset(theirBuf, 0xCD, cap);
+            const int ourLen   = RtSystem_Compression_Compress(ourO, src, n, ourBuf, cap);
+            const int theirLen = theirsFn(theirO, src, n, theirBuf, cap);
+            ++*cases;
+            if (ourLen != theirLen) {
+                if (*lenDiff < 8)
+                    printf("[SYSBODY/Compress] LENGTH DIVERGENCE n=%u cap=%u ours=%d theirs=%d\n",
+                           n, cap, ourLen, theirLen);
+                ++*lenDiff;
+                return;
+            }
+            if (ourLen == 0) { ++*rejected; return; }
+            ++*accepted;
+            // Compare the WHOLE capacity, not the prefix the return claims: a
+            // body that returned the right length while writing further is a
+            // defect this catches and a prefix compare does not. Both sides
+            // were pre-filled with the same 0xCD.
+            if (std::memcmp(ourBuf, theirBuf, cap) != 0) {
+                if (*byteDiff < 8)
+                    printf("[SYSBODY/Compress] BYTE DIVERGENCE n=%u len=%d\n", n, ourLen);
+                ++*byteDiff;
+            }
+            bool isNew = true;
+            for (int k = 0; k < *seenCount; ++k) if (seen[k] == ourLen) { isNew = false; break; }
+            if (isNew && *seenCount < 64) seen[(*seenCount)++] = ourLen;
+
+            // Independent second check: OUR stream through OUR decoder must
+            // reproduce the input. Involves the DLL's encoder nowhere.
+            const int got = RtSystem_Compression_Decompress(
+                ourBuf, static_cast<uint32_t>(ourLen), rtBuf, n + 64);
+            if (got == static_cast<int>(n) && std::memcmp(rtBuf, src, n) == 0) ++*rtOk;
+            else ++*rtBad;
+        }
+    };
+
+    // ---- 1. real code bytes: literals, short matches, the unrolled arm -----
+    for (uint32_t off = 0x1000; off < 0x30000u; off += 0x2800u) {
+        const uint32_t n = 0x2000;
+        std::memcpy(raw, image + off, n);
+        Case::Run(ourObj, theirObj, theirs, raw, n, sizeof(ourPacked),
+                  ourPacked, theirPacked, rt, &cases, &lenDiff, &byteDiff,
+                  &accepted, &rejected, &roundTripOk, &roundTripBad,
+                  distinctLen, &distinctCount);
+    }
+
+    // ---- 2. highly repetitive: LONG matches, the >0x108 cap, RLE offsets ---
+    // Runs of one byte drive maxLen to its 0x108 ceiling and the match-length
+    // encoder into its long form; without these `matchLong` reads zero.
+    for (uint32_t rep = 1; rep <= 64u; rep *= 4) {
+        const uint32_t n = 0x1800;
+        for (uint32_t i = 0; i < n; ++i) raw[i] = static_cast<uint8_t>((i / rep) & 0x0f);
+        Case::Run(ourObj, theirObj, theirs, raw, n, sizeof(ourPacked),
+                  ourPacked, theirPacked, rt, &cases, &lenDiff, &byteDiff,
+                  &accepted, &rejected, &roundTripOk, &roundTripBad,
+                  distinctLen, &distinctCount);
+    }
+
+    // ---- 3. incompressible: the 0x20-literal flush, over and over ----------
+    {
+        uint32_t x = 0x12345678u;
+        const uint32_t n = 0x1000;
+        for (uint32_t i = 0; i < n; ++i) {
+            x = x * 1103515245u + 12345u;
+            raw[i] = static_cast<uint8_t>(x >> 16);
+        }
+        Case::Run(ourObj, theirObj, theirs, raw, n, sizeof(ourPacked),
+                  ourPacked, theirPacked, rt, &cases, &lenDiff, &byteDiff,
+                  &accepted, &rejected, &roundTripOk, &roundTripBad,
+                  distinctLen, &distinctCount);
+    }
+
+    // ---- 4. the degenerate lengths, including the ones that read OOB -------
+    // srcLen 1 makes retail read src[1] before any length test (see the banner).
+    // `raw` is a static 0x8000 buffer, so that read is in-bounds of real memory
+    // and both sides read the SAME byte -- the behaviour is exercised and
+    // compared rather than merely asserted, and nothing faults.
+    std::memcpy(raw, image + 0x1000, 64);
+    for (uint32_t n = 0; n <= 8u; ++n) {
+        Case::Run(ourObj, theirObj, theirs, raw, n, sizeof(ourPacked),
+                  ourPacked, theirPacked, rt, &cases, &lenDiff, &byteDiff,
+                  &accepted, &rejected, &roundTripOk, &roundTripBad,
+                  distinctLen, &distinctCount);
+    }
+
+    // ---- 5. the output-bounds rejections, driven ON PURPOSE ----------------
+    // Without these `failDst` reads zero and the two rejection sites are
+    // untested. Both sides get the same cap, so this stays a fair comparison.
+    std::memcpy(raw, image + 0x4000, 0x1000);
+    for (uint32_t cap = 1; cap < 0x400u; cap = cap * 3 + 1) {
+        Case::Run(ourObj, theirObj, theirs, raw, 0x1000, cap,
+                  ourPacked, theirPacked, rt, &cases, &lenDiff, &byteDiff,
+                  &accepted, &rejected, &roundTripOk, &roundTripBad,
+                  distinctLen, &distinctCount);
+    }
+    // dstCap == 0 -- the second early exit.
+    Case::Run(ourObj, theirObj, theirs, raw, 0x1000, 0,
+              ourPacked, theirPacked, rt, &cases, &lenDiff, &byteDiff,
+              &accepted, &rejected, &roundTripOk, &roundTripBad,
+              distinctLen, &distinctCount);
+
+    g_cbranch = nullptr;
+    theirDtor(theirObj);
+    // OUR object is freed with the DLL's dtor on purpose: our ctor allocated
+    // through the same MemoryAllocator door, and this is the cross-check that
+    // says so. A split heap shows up here as a crash or a redzone violation,
+    // not as a silent pass.
+    theirDtor(ourObj);
+
+    printf("[SYSBODY/Compress] sweep: %lld cases, %lld length divergences, "
+           "%lld byte divergences (accepted=%lld rejected=%lld)\n",
+           cases, lenDiff, byteDiff, accepted, rejected);
+    printf("[SYSBODY/Compress] independent round-trip (ours->ours, DLL not involved): "
+           "ok=%lld bad=%lld\n", roundTripOk, roundTripBad);
+    printf("[SYSBODY/Compress] encoder branches: literal=%lld literalFlush=%lld "
+           "matchShort=%lld matchLong=%lld matchUnroll=%lld failDst=%lld\n",
+           counts.literal, counts.literalFlush, counts.matchShort,
+           counts.matchLong, counts.matchUnroll, counts.failDst);
+
+    const bool allBranches = counts.literal && counts.literalFlush &&
+                             counts.matchShort && counts.matchLong &&
+                             counts.matchUnroll && counts.failDst;
+    const bool populated = accepted > 0 && rejected > 0 && distinctCount > 3;
+    printf("[SYSBODY/Compress] control: %d distinct output lengths; branches %s; "
+           "population %s -- %s\n",
+           distinctCount,
+           allBranches ? "ALL SIX COVERED" : "*** A BRANCH READS ZERO ***",
+           populated ? "NOT UNIFORM" : "*** UNIFORM ***",
+           (lenDiff == 0 && byteDiff == 0 && roundTripBad == 0 &&
+            allBranches && populated) ? "VERIFIED" : "*** NOT a verification ***");
+}
+
 }  // namespace RtSystem
 
 // ============================================================================
@@ -529,14 +1086,39 @@ int RtSystemCompressionRegister() {
                           (void*)&RtSystem_Compression_Decompress); ++n;
     RegisterRuntimeAddr(0x1800c4660, (void*)&RtSystem_Compression_Decompress);
 
-    // DELIBERATELY ABSENT, and the reason is the point of the whole lane:
-    //   ?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z  0x1800c4230  ord 1749
-    //       The ENCODER. It is not on the game's read path at all (only the
-    //       ToolKit writes packages), and this lane USES it as the oracle's
-    //       input generator. Porting the thing that generates your test inputs
-    //       is how a shared misreading passes its own test.
-    //   ??0Compression@System@@ / ??1Compression@System@@  ctor/dtor
-    //       Only the encoder needs the 0x40000 hash table; Decompress is static
-    //       and touches no object. They are needed at cutover only if Compress is.
+    // WAVE 22 LANE SYSBODY — the encoder and its ctor, and the holdback that
+    // used to stand here, DISCHARGED rather than dropped.
+    //
+    // What this block said before: Compress is "DELIBERATELY ABSENT" because
+    // the Decompress probe in this file uses it as the oracle's input
+    // generator, and porting your test-input generator is how a shared
+    // misreading passes its own test. Re-checked at the top of this wave
+    // rather than inherited, and the premise is FALSE in the only route where
+    // it could bite: all three of the probe's Compression doors are
+    // RT_ORIGINAL_ONCE, which is RtOriginal == ResolveExportRaw and does NOT
+    // consult the port registry (rt_port.h:140,154). The probe keeps building
+    // its corpus with the SHIPPED encoder no matter what is registered here,
+    // and at cutover the probe is compiled out. See the banner above
+    // CompressBody for the full argument.
+    //
+    // The dtor ??1Compression@System@@ (0x1800c4170) stays on the DLL. It is
+    // not a census gap row, it is not in this lane's scope, and our ctor
+    // allocates through the SAME MemoryAllocator door the DLL's dtor frees
+    // through (RtMemAlloc -> ?MemAlloc@MemoryAllocator@, which decompiles to
+    // exactly the ctor's inlined lock/Allocate/unlock), so an object built by
+    // our ctor is destroyed correctly by retail's dtor. That is a DLL-present
+    // statement; at cutover the dtor becomes a required row and is recorded as
+    // such in docs/runtime_port/WAVE22_LANE_SYSBODY.md rather than left to be
+    // rediscovered.
+    //
+    // Name only for both. 0x1800c4230 and 0x1800c41a0 appear in this tree
+    // exactly three times between them and every hit is a comment (grep over
+    // runtime/, engine/, code/, standalone/), so there is no by-address
+    // consumer to satisfy and RegisterRuntimeAddr would only add a door
+    // nothing asked for.
+    RegisterRuntimeExport("?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z",
+                          (void*)&RtSystem_Compression_Compress); ++n;
+    RegisterRuntimeExport("??0Compression@System@@QEAA@XZ",
+                          (void*)&RtSystem_Compression_Ctor); ++n;
     return n;
 }

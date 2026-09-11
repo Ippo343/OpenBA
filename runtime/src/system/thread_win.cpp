@@ -133,11 +133,50 @@ void RtSystem_CriticalSection_Unlock(CriticalSection* self) {
 // log shows it as the very first `[RtUnresolved]` line of the whole run —
 // line 6, above every other symbol, before the mint had a chance to exist.
 //
-// The mint DOES carry this row (rt_data_mint_tables.inc, `kVSlots42`, 2 slots:
-// _purecall + ?OnCompleted@Thread@System@@UEAAXXZ), so the row was never
-// missing — only unreachable through a cache that had already answered. Going
-// through RT_DATA_SLOT (RtResolveCached: cache a hit, RETRY a miss, name it
-// once) is the whole fix.
+// The mint DOES carry this row (rt_data_mint_tables.inc, 2 slots: _purecall +
+// ?OnCompleted@Thread@System@@UEAAXXZ), so the row was never missing -- only
+// unreachable through a cache that had already answered. Going through
+// RT_DATA_SLOT (RtResolveCached: cache a hit, RETRY a miss, name it once) is
+// the whole fix.
+//
+// WAVE 22 LANE SYSBODY: this sentence used to name the slot array `kVSlots42`.
+// It is `kVSlots53` today. The array names are GENERATOR-ASSIGNED indices and
+// they renumber whenever a row is added or removed above this one, so any
+// comment quoting one goes stale silently and with no detector
+// (reference_a_generated_file_goes_stale_with_no_detector.md). The name is
+// DROPPED rather than corrected -- the row is findable by its symbol, which
+// does not drift.
+//
+// WAVE 22 LANE SYSBODY -- THE PROMOTION VERDICT, AND IT IS ROUTE-SCOPED.
+// The promotion backlog reads this row 1/1 COMPLETE and that is CORRECT: the
+// table has two slots, slot 0 is _purecall, slot 1 is OnCompleted, and
+// OnCompleted is ported (below). But COMPLETE says a promotion puts no trap in
+// a live table; it does NOT say the row should be promoted
+// (reference_a_green_readiness_screen_is_not_a_route.md). Promotability turns
+// on owning what STAMPS the table, and the answer differs by route:
+//
+//   DLL PRESENT -- DO NOT PROMOTE. Two things stamp this vptr and we own only
+//   one. `RtSystemThreadVftable()` below is a real door feeding our ported
+//   Thread ctor/dtor (all three constructing call sites -- pathfinder_seed.cpp,
+//   engine/singleton_ctors.cpp, standalone/rt_data_mint.cpp -- reach us by
+//   NAME). Retail's own Thread ctor stamps 0x180155f20 with a RIP-relative LEA
+//   inside the DLL, which is not a door and never will be
+//   (reference_a_ported_row_can_be_permanently_unpromotable.md). Promoting
+//   therefore puts TWO different vptr values in play for one class where today
+//   there is one, and buys nothing: the only dispatched slot is slot 1, and
+//   our OnCompleted and retail's are both a bare RET. Small cost, zero
+//   benefit -- a reason not to do it, not a demonstration that it is safe.
+//
+//   CUTOVER -- REQUIRED. With Runtime-x64.dll absent, RT_DATA_SLOT has nothing
+//   to fall through to and this function returns NULL, so our Thread ctor
+//   stamps a null vptr into every Thread the process builds. That is the
+//   attempt-14 failure this block was written about, one layer along.
+//
+// The two verdicts are opposite, which is the shape
+// reference_unpromotable_is_route_scoped_not_permanent.md names, so neither
+// may be quoted without its route. NOT PROMOTED by this lane: DLL-present is
+// the route every run today takes, and promoting for a route that cannot boot
+// yet would be a change nothing can measure.
 static void* RtSystemThreadVftable() {
     return RT_DATA_SLOT(void*, "??_7Thread@System@@6B@");
 }

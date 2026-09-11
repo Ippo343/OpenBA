@@ -63,7 +63,7 @@ extern int RtSystemSetupDirHelpersRegister();  // setupdir_helpers.cpp (lane FS)
 // the game loads. Its own switch, because a defect here is silent wrong data
 // rather than a crash and the integrator must be able to remove exactly it.
 extern int RtSystemCompressionRegister();      // compression.cpp    (lane PKG2)
-namespace RtSystem { void RtSystem_CompressionProbe(); }
+namespace RtSystem { void RtSystem_CompressionProbe(); void RtSystem_StrCompareProbe(); }
 
 // allocator.cpp -- the single owner of the 0x180009c30 registration; see the
 // comment at the call site in RtSystemPortInit below.
@@ -85,6 +85,13 @@ void RtSystemPortInit() {
 
     int n = 0;
     if (RtWaveEnabled("BANISHED_RT_STRING"))   n += RtSystemStringRegister();
+    // WAVE 22 LANE SYSBODY. Unlike the Compression and DateTime sweeps, which
+    // live in filesystem_packages.cpp because they allocate, StrCompare is
+    // PURE -- no heap, no singleton -- so it can and does run here. It is
+    // gated on RtDiffEnabled() inside itself. Placed after the registration so
+    // a reader sees the order, though it does not depend on it: the probe
+    // calls our body directly and the shipped one through ResolveExportRaw.
+    RtSystem::RtSystem_StrCompareProbe();
     if (RtWaveEnabled("BANISHED_RT_FILENAME")) n += RtSystemFilenameRegister();
     if (RtWaveEnabled("BANISHED_RT_VALUE"))    n += RtSystemValueRegister();
     if (RtWaveEnabled("BANISHED_RT_THREAD"))   n += RtSystemThreadRegister();
