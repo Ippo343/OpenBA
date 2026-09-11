@@ -1241,6 +1241,118 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_frameIndex@ParticleInstance@Graphics@@1HA | n/a (int counter) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rng@Particle@Graphics@@1VRandom@System@@A | n/a (RNG state) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA | n/a (bool flag) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ??_7Geometry@Graphics@@6B@ | 6/6 (3 purecall) | WAVE21_LANE_GFXVT.md §5.2 | ROUTE-SCOPED (DLL-PRESENT ONLY); voids when statusicon_geometry.cpp:341 reads `i < 9`; REQUIRED at cutover | HARMFUL
+    //
+    //      ⚠ THIS TAG IS ROUTE-SCOPED AND ITS EXPIRY IS **NOT** "NONE, EVER".
+    //      Wave 21 lane SHOT established that the existing vocabulary spells two
+    //      opposite instructions the same way: ??_7Stream@IO@@6B@ is
+    //      PERMANENTLY unpromotable (a no-op on every route), while
+    //      ?_singleton@FileSystem@IO@@ is harmful only WITH THE DLL PRESENT and
+    //      is REQUIRED at cutover. This row is the second kind, and writing a
+    //      bare "NONE, EVER" here would have inherited exactly that ambiguity.
+    //
+    //        WITH THE DLL PRESENT — HARMFUL, and promotion is OPTIONAL, so
+    //          don't. Retail's table answers the door; promoting buys nothing
+    //          and moves the overrun below onto our storage.
+    //        AT CUTOVER — REQUIRED, not merely safe. scene.cpp:176 reaches this
+    //          table through ResolveAddr(Module::Runtime, 0x180154e60), and
+    //          standalone/resolve_standalone.cpp returns 0 for an unmapped
+    //          module ("Return 0 when the module is not mapped", guarding on the
+    //          handle). Unpromoted, the ported Geometry ctor stamps a NULL
+    //          vtable into every Geometry and the first virtual call is an
+    //          EXEC-of-0 — the identical argument mesh.cpp:295-305 already makes
+    //          for its own three rows.
+    //
+    //      THE CONSEQUENCE, and it is the reason this scoping matters: at
+    //      cutover the `i < 12` overrun below reads OUR storage no matter what
+    //      we choose, because the DLL's table is not available to read instead.
+    //      So statusicon_geometry.cpp:341 is NOT a tidy-up that would be nice to
+    //      have before promoting this row — it is ON THE CUTOVER CRITICAL PATH.
+    //
+    //      AND IT IS PRICED — the cheap kind, established from the shipped bytes
+    //      and NOT from the comment above that loop, which is WRONG.
+    //      WAVE21_LANE_GFXVT.md §5.2a: retail's billboard vtable at 0x14015f0c0
+    //      in Application-x64.exe is NINE pointers, then a NULL pad, then a
+    //      DIFFERENT CLASS's table at 0x14015f110 — proved by xrefs (0x14015f0c0
+    //      is stamped by StatusIconComponent_Ctor at 0x14012c0fe; 0x14015f110 by
+    //      TradeWork_impl_ed50 and FUN_1400b00e0). So the loop's "12 real slots"
+    //      has no basis in either binary, and slots 10 and 11 it copies are the
+    //      first two slots of somebody else's vtable. Nothing can dispatch slots
+    //      9-11: both classes in play are nine slots, so no slot needs SOURCING
+    //      and this is not hidden port work.
+    //
+    //  ??_7Geometry@Graphics@@6B@ — HARMFUL, and it is the ONE Graphics vtable
+    //      row that is COMPLETE, which is exactly why it needed a verdict: the
+    //      next lane to read the PROMOTION BACKLOG sees `6 6 COMPLETE` and a
+    //      stamper census that is 2-of-3 ours, and promotes it.
+    //
+    //      COMPLETE is the static half of readiness and the stamper gate is the
+    //      dynamic half; this row passes BOTH and is still harmful, for a third
+    //      reason neither gate asks about: A CONSUMER READS PAST THE END OF THE
+    //      TABLE, and how bad that is depends on WHOSE storage it overruns.
+    //
+    //      The chain, every link measured on this tree at wave21/gfxvt:
+    //        1. code/Game/Component/statusiconcomponent.cpp:611 calls the
+    //           Geometry base ctor on `s+0x28`, then reads back the vtable it
+    //           stamped as `baseV` and hands it to StatusIconGeometry_BuildVtable.
+    //           The path is gated on BANISHED_LIVE_STATUSICON_DRAW, which is in
+    //           kDefaultOnFlags (component_factory_base.cpp:189) — DEFAULT ON.
+    //        2. code/Game/Component/statusicon_geometry.cpp:341 copies
+    //           `i < 12` slots out of that table into the billboard's own.
+    //        3. The table is NINE slots. Read from the shipped DLL at
+    //           0x180154e60 this lane: slots 0..8 are image pointers and
+    //           0x180154ea8 is `49 6d 61 67 65 42 75 66` = "ImageBuf" — the
+    //           start of the "ImageBuffer\0GeneratedImageBuffer\0" string run.
+    //           So baseVtbl[9..11] are 0x6675426567616d49, 0x726566 and
+    //           0x65746172656e6547: all non-zero, so the `baseVtbl[i]` test
+    //           passes and all three are installed as function pointers.
+    //           (WAVE6_LANE_D.md §6.1 found this and prescribed `i < 9`; the
+    //           prescription was never applied — a prescription read as a
+    //           completion, reference_a_prescription_read_as_a_completion.md.)
+    //        4. Our ported Geometry ctor stamps
+    //           ResolveAddr(Module::Runtime, 0x180154e60)
+    //           (runtime/src/graphics/scene.cpp:176), and ResolveAddr consults
+    //           the PORT REGISTRY FIRST. Promoting this row — which, following
+    //           the ??_7BinaryFileStream@ precedent above, registers by name AND
+    //           by address — therefore redirects that stamp to `kVTable28`, a
+    //           `static void* kVTable28[9]` in standalone/rt_data_mint_tables.inc.
+    //        5. Step 2 then reads 24 bytes PAST the end of that 9-element array,
+    //           out of whatever our image's linker placed next, and installs it
+    //           as three function pointers in a live exe-side vtable.
+    //
+    //      TODAY the same out-of-bounds read is dormant: the three values are
+    //      fixed ASCII from the DLL's own .rdata and nothing dispatches a
+    //      Geometry past slot 8 (WAVE6_LANE_D.md §6.1, measured). Promotion does
+    //      not create the overrun — it moves it off known-dormant DLL bytes onto
+    //      unanalysed storage of ours. That is "changes behaviour for the worse"
+    //      in the sense this tag exists for, and the direction matters more than
+    //      the current dormancy: reference_vtable_slot_count_from_the_name_string
+    //      is precisely the case where fixing one dormant slot unleashes the rest.
+    //
+    //      ⚠ THE A/B WAS NOT RUN. This verdict is derived — from the shipped
+    //      bytes, from the two source sites, and from ResolveAddr's documented
+    //      registry-first order — and it was NOT confirmed by promoting the row
+    //      and observing a failure. A lane that wants to overturn it must run
+    //      that A/B, not re-read this comment.
+    //
+    //      EXPIRY, WITH AN ADDRESSEE (reference_expiry_clause_needs_an_addressee).
+    //      The blocker is ONE CHARACTER: statusicon_geometry.cpp:341's `i < 12`
+    //      must read `i < 9`, the fix WAVE6_LANE_D prescribed in Wave 6. The
+    //      addressee is THE NEXT LANE THAT OWNS code/Game/Component/ —
+    //      explicitly not "whoever next counts slots on this row", because this
+    //      lane could not make that edit and verify it inside a vtable-scoped
+    //      brief. When that line reads `i < 9`, this tag is void and the row
+    //      should be re-scored from scratch (its stamper census is already
+    //      green: 3 stampers, 2 ours-capable, 0 unattributed).
+    //
+    //      THE PRICE OF THIS PROMOTION, in lane SHOT's units — stampers split by
+    //      owner, with the unattributed bucket kept SEPARATE rather than folded
+    //      into either side: 3 stampers = 2 ours-capable / 1 retail / 0
+    //      unattributed. The one retail stamper is the copy ctor
+    //      ??0Geometry@Graphics@@QEAA@AEBV01@@Z at 0x180015b7e, so a
+    //      copy-constructed Geometry keeps retail's table after a promotion.
+    //      That is a SPLIT, not a trap — and at cutover it is moot, because
+    //      there is no retail body left to run.
     //
     // WHY EACH, in one line — the proofs are in the lane doc:
     //

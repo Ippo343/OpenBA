@@ -336,8 +336,43 @@ static void* SIGeom_StubRet0() { return nullptr; }
 void StatusIconGeometry_BuildVtable(void** baseVtbl) {
     if (s_siGeomVtableBuilt) return;
     for (int i = 0; i < 16; ++i) {
-        // The billboard vtable has 12 real slots; copy what the base provides (slot 9
-        // is null in the original) and stub anything we cannot source.
+        // ⚠ THE `12` HERE IS WRONG AND IS LEFT IN PLACE DELIBERATELY. Wave 21
+        // lane GFXVT measured both sides of this copy from the shipped binaries
+        // (WAVE21_LANE_GFXVT.md §5.2a) and BOTH ARE NINE:
+        //
+        //   SOURCE      ??_7Geometry@Graphics@@6B@, Runtime-x64.dll 0x180154e60:
+        //               9 pointers, then the ASCII "ImageBuffer\0Generated…".
+        //               So baseVtbl[9], [10], [11] are STRING FRAGMENTS — all
+        //               non-zero, so the `baseVtbl[i]` test passes and three
+        //               pieces of a C string are installed as function pointers.
+        //   DESTINATION retail's own billboard vtable, Application-x64.exe
+        //               0x14015f0c0: 9 pointers, then a NULL pad, then a
+        //               DIFFERENT CLASS's 9-slot table at 0x14015f110. Proved by
+        //               xrefs, not by the byte pattern: 0x14015f0c0 is stamped
+        //               by StatusIconComponent_Ctor (0x14012c0fe), 0x14015f110
+        //               by TradeWork_impl_ed50 and FUN_1400b00e0.
+        //
+        // The previous comment here read "the billboard vtable has 12 real slots
+        // (slot 9 is null in the original)". It saw that null and mis-explained
+        // it: the null is the TERMINATOR BETWEEN TWO TABLES, not a null slot of
+        // this class. The count 12 has no basis in either binary.
+        //
+        // THE FIX IS `i < 9`, and it is safe: nothing can dispatch slots 9-11,
+        // because both classes in play have nine virtuals. It is NOT applied
+        // here because this file belongs to code/Game/Component/ and lane GFXVT
+        // was scoped to Runtime vtable rows; applying it blind is precisely the
+        // failure this wave exists to avoid. WAVE6_LANE_D.md §6.1 prescribed the
+        // same fix in Wave 6 and it was never applied.
+        //
+        // IT IS ALSO A CUTOVER BLOCKER, which is new information: today the
+        // overread lands on the DLL's own .rdata and is dormant, but at cutover
+        // ??_7Geometry@ must be promoted (or every Geometry gets a NULL vtable),
+        // and the overread then walks off the end of a 9-element static array of
+        // OURS. That is why ??_7Geometry@Graphics@@6B@ is currently tagged
+        // RT_UNPROMOTABLE(HARMFUL) in standalone/reg_mint_promoted.cpp with this
+        // line named as its expiry condition. Whoever applies `i < 9` should
+        // delete that tag in the same commit, and decide whether slot 9 ought to
+        // be nullptr (retail's value) rather than the stub.
         if (baseVtbl && i < 12 && baseVtbl[i])
             s_siGeomVtable[i] = baseVtbl[i];
         else
