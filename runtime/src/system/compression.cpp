@@ -1101,15 +1101,22 @@ int RtSystemCompressionRegister() {
     // and at cutover the probe is compiled out. See the banner above
     // CompressBody for the full argument.
     //
-    // The dtor ??1Compression@System@@ (0x1800c4170) stays on the DLL. It is
-    // not a census gap row, it is not in this lane's scope, and our ctor
-    // allocates through the SAME MemoryAllocator door the DLL's dtor frees
-    // through (RtMemAlloc -> ?MemAlloc@MemoryAllocator@, which decompiles to
-    // exactly the ctor's inlined lock/Allocate/unlock), so an object built by
-    // our ctor is destroyed correctly by retail's dtor. That is a DLL-present
-    // statement; at cutover the dtor becomes a required row and is recorded as
-    // such in docs/runtime_port/WAVE22_LANE_SYSBODY.md rather than left to be
-    // rediscovered.
+    // The dtor ??1Compression@System@@ (0x1800c4170) stays on the DLL, and it
+    // is NOT a cutover-required row. This lane's first draft claimed it became
+    // one the moment the ctor was ported; that was wrong, and re-checking it
+    // is what found it. Retail does not destroy a Compression through its dtor
+    // on the live path at all -- the teardown is INLINED into
+    // ?Release@CompressedStream@IO@@ (compressed_stream_release.cpp:104-113,
+    // retail 0x1800aa1f3..0x1800aa26f), which is already ported and registered
+    // and which frees the 0x40000 table and then the 8-byte object directly
+    // through MemFree:
+    //     if (comp) { if (comp[0]) MemFree(comp[0]); comp[0] = nullptr;
+    //                 MemFree(comp); }
+    // That is the same MemFree door our ctor's RtMemAlloc allocates through
+    // (?MemAlloc@MemoryAllocator@ decompiles to exactly the ctor's inlined
+    // lock/Allocate/unlock), so the pairing is correct in both routes. The only
+    // two in-tree references to the dtor name are inside diff-guarded probes,
+    // which die with the oracle at cutover.
     //
     // Name only for both. 0x1800c4230 and 0x1800c41a0 appear in this tree
     // exactly three times between them and every hit is a comment (grep over

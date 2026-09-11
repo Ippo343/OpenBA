@@ -5,16 +5,36 @@ Branch `wave22/sysbody`, cut from `wave22/base` at `37706651`. Closed 2026-09-11
 ## 0. HEADLINE
 
 **Five of six rows moved. The sixth — `??_7Thread@System@@6B@` — is NOT promoted, on
-purpose, and the reason is route-scoped.** System **78 → 83 ported** (gap 25 → 20),
-TOTAL **1129 → 1134**, **86.0% → 86.4%**. Re-derived on this branch's tip with
-`tools/runtime_census.py`, not inherited.
+purpose, and the reason is route-scoped.**
+
+> **BRANCH-LOCAL FIGURES — NOT WAVE NUMBERS.** System **78 → 83 ported** (gap 25 → 20),
+> TOTAL **1129 → 1134**, **86.0% → 86.4%**. These were measured with
+> `tools/runtime_census.py` on **this lane's isolated worktree tip, where only this
+> lane's changes exist**. They describe this branch and nothing else. Lane ERRCFG
+> independently measured 1314/1132 on *its* tip; both are honest about their own tree
+> and **neither describes the tree that will exist after the merge**. That conflation
+> was Wave 21's closing defect. **The integrator re-measures on the merged tip; quote
+> that, not this.**
 
 Two things this lane found that outlive it:
 
 1. **`?StrCompare@String@System@@SAHPEBD0@Z` was never unported.** It has had a correct
    body since Wave 2 (`runtime/src/system/string.cpp:157`) and was simply never
    registered. It has read as an unported System `BODY` for twenty waves. The Task-0 grep
-   caught it before a line was written.
+   caught it before a line was written. **Third recorded instance** of
+   `reference_half_registered_port_reads_as_absent.md`.
+
+   **And the body carried a latent defect that NO TEST WE CAN RUN WOULD CATCH.** Retail
+   widens the two compared bytes with `MOVSX` (`1800c98ec`/`1800c98f1`); the Wave 2 body
+   spelled that `static_cast<int>(a[i])` on a plain `const char*`. That is the same
+   value **only while `char` happens to be signed** — which it is for MSVC and for MinGW
+   on x86-64 Windows, i.e. for *every build this project produces*. No run, no sweep and
+   no oracle on this toolchain can distinguish the two spellings, because the toolchain
+   never produces the case where they differ. It was found by reading the disassembly
+   and fixed by making the widening explicit (`signed char`); the sweep's `highBit`
+   bucket (228 cases) is what now *exercises* it, and the negative control in §5.1
+   confirms that bucket is live — but the defect itself was never discoverable by
+   testing, only by reading.
 2. **A note I wrote in this lane was FALSE, and my own negative control caught it.**
    The first draft of the Compress banner claimed the 32-bit rolling hash register's
    upper byte "CHANGES THE BUCKET" and that masking to 24 bits would be a silent defect.
@@ -64,9 +84,14 @@ entirely. The old block is replaced in-tree with this argument, not deleted.
 **`??1Compression@System@@` stays on the DLL.** It is not a census row and not in scope.
 Our ctor allocates through `RtMemAlloc` → `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z`,
 which I decompiled and confirmed is *exactly* the `EnterCS(_singleton+0x640) / Allocate /
-LeaveCS` sequence the ctor inlines — so retail's dtor frees our object correctly. **That
-is a DLL-present statement. At cutover the dtor becomes a required row**, recorded here
-rather than left to be rediscovered.
+LeaveCS` sequence the ctor inlines.
+
+> **CORRECTION.** This section first said "at cutover the dtor becomes a required row".
+> **That was wrong**, and re-checking it while re-pointing the residuals is what found it.
+> Retail does not destroy a Compression through its dtor at all on the live path: the
+> teardown is **inlined into the already-ported `CompressedStream::Release`**, which
+> frees the 0x40000 table and the object directly through `MemFree`. Full evidence in
+> §7.1. The claim is corrected here rather than deleted so the retraction stays visible.
 
 ## 3. WHAT WAS READ FROM THE DISASSEMBLY, NOT THE DECOMPILER
 
@@ -211,30 +236,110 @@ the input, never the output.
   tail's 1-byte overrun boundary. The overrun is documented from the disassembly, not
   provoked.
 - **`?StrCompare`'s two live consumers** (`ui/dialog_create.cpp:357`, `ui/element.cpp:215`)
-  both cache the resolved pointer in a **plain function-local static**. I did not verify
-  that those resolves happen after `RtSystemStringRegister`, i.e. that they actually pick
-  up our body rather than freezing the DLL's. The sweep verifies the *body*; it does not
-  verify those two *routes*. This is the `RtResolveCached` hazard and is left as a
-  residual below.
-- **The `??1Compression` cutover row** is named, not fixed.
+  both cache the resolved pointer in a **plain function-local static**. **The sweep
+  verifies the BODY; it does not verify those two ROUTES.** §7.2 argues from the
+  initialisation order and from `port_bypass_audit.py` that both pick up our body, and I
+  believe that argument — but it is **derived, not observed**. I did not run with
+  `BANISHED_RT_STRICT` to confirm `StrCompare` is absent from the residue list, which is
+  the measurement that would settle it.
 - I ran no filesystem-wide scans; all searching was worktree-scoped.
 
-## 7. OPEN RESIDUALS
+## 7. RESIDUALS — RE-CHECKED, AND TWO OF FOUR DISSOLVED
 
-1. **`?StrCompare@` consumers use frozen function-local statics.** `ui/dialog_create.cpp:357`
-   and `ui/element.cpp:215` are `static Fn fn = ResolveExport(...)`. If either resolves
-   before registration it caches the DLL for the life of the process — the exact defect
-   Wave 9 lane SYS2 fixed for `??_7Thread@` by moving to `RT_DATA_SLOT` /
-   `RtResolveCached`. **Not touched by this lane** (out of scope, and the fix is a
-   one-line conversion at each site). *Addressee: whichever Wave 23 lane owns UI string
-   comparison, or the next lane to touch either file.*
-2. **`??1Compression@System@@QEAA@XZ` (0x1800c4170) is a cutover-required row** now that
-   the ctor is ported. Not a census row today. *Addressee: the lane that next runs a
-   cutover boot.*
-3. **`??_7Thread@System@@6B@` must be registered at cutover** and must NOT be promoted
-   before then (§4).
-4. The Compress sweep's corpus is DLL image bytes; a **real package round-trip** would be
-   a stronger second oracle and needs no new harness beyond a `.pkg` path.
+The integrator returned the first draft of this section because its addressees read
+*"the next lane to touch either file"* and *"the lane that next runs a cutover boot"*.
+**Those are conditions, not addressees** — the form that satisfies a seal-time checklist
+and then never fires, because no lane ever identifies itself as that lane
+(`reference_expiry_clause_needs_an_addressee.md`; it is why lane GEOM had to exist this
+wave to pay off a Wave 6 prescription that sat unapplied for fifteen waves).
+
+Re-pointing them meant re-checking them first, and **two of the four turned out to be
+false** — both of them mine, both one turn old. That is the same lesson as §2 and §5.1
+for the third time in one lane: *re-check a stated blocker before acting on it, including
+your own.*
+
+### 7.1 RETIRED — `??1Compression@System@@` is NOT a cutover-required row
+
+I claimed in §2 that porting the ctor makes the dtor cutover-required. **False.** The
+Compression teardown is **INLINED into `?Release@CompressedStream@IO@@`**, which is
+already ported and registered (`runtime/src/io/compressed_stream_release.cpp:104-113`,
+retail `0x1800aa1f3..0x1800aa26f`):
+
+```c
+void** const comp = *reinterpret_cast<void***>(base + 0x60);
+if (comp) {
+    if (comp[0]) MemFree(comp[0]);   // <- the 0x40000 table OUR ctor allocates
+    comp[0] = nullptr;
+    MemFree(comp);
+}
+```
+
+Retail never calls `??1Compression@` on the live path; it frees the table and the object
+directly, through the same `MemFree` door our ctor allocates through. The only two
+in-tree references are inside diff-guarded probes that die with the oracle at cutover
+(and this lane's own probe explicitly SKIPs on a null dtor). **Nothing to hand to
+anybody.** The §2 sentence is corrected in place rather than deleted, so the retraction
+is visible.
+
+### 7.2 RETIRED — the two `StrCompare` consumers resolve AFTER registration
+
+`ui/dialog_create.cpp:357` and `ui/element.cpp:215` are `static Fn fn =
+ResolveExport(...)`, and I flagged them as possibly freezing the DLL's address. Two
+facts close it:
+
+- **They use the port-AWARE door** (`ResolveExport`, not `RtOriginal`), so they are not
+  bypasses — `tools/port_bypass_audit.py`, re-run after this landing exactly as
+  `value_types.cpp` instructs ("re-run after every LANDING, not after every edit"),
+  reports **no row** for `StrCompare`, `dialog_create.cpp` or `element.cpp`.
+- **Registration strictly precedes any UI.** `RuntimePortInit()` is `standalone/main.cpp:1736`,
+  and the comment there states it must run *before* `AddressRegistryInit` and
+  `EngineFuncsInit` precisely so no port is "resolved by nobody". Dialog and element
+  construction cannot precede it.
+
+**Caveat, stated rather than smoothed: this is DERIVED, not OBSERVED.** I did not run
+with `BANISHED_RT_STRICT` to confirm `StrCompare` is absent from the residue list. The
+argument is structural and I believe it; it is not a measurement. Carried into §6.
+
+### 7.3 OPEN — `??_7Thread@System@@6B@` at cutover
+**Owner: the integrator, in the Wave 22 close handover.** I cannot name a Wave 23 lane
+honestly because no cutover lane is planned and inventing one would be the same defect in
+a new coat.
+
+- **Precondition that makes it live:** the first cutover boot that constructs a
+  `System::Thread` — which is every cutover boot, because `ConstructLoader` builds one
+  during `RtDataMintInit`.
+- **Symptom if missed:** a null vptr stamped into every Thread; an `EXEC-of-0` or
+  `VCALL-of-0` whose top frame will *not* name this row.
+- **Action:** register the minted row at cutover. Do **not** promote it before then (§4).
+- Recorded at the site (`runtime/src/system/thread_win.cpp`, the
+  `RtSystemThreadVftable()` banner) as well as here, so a cutover lane reading the code
+  finds it without reading this doc.
+
+### 7.4 OPEN — a real package round-trip for `Compress`
+**Owner: the integrator, to place in the Wave 22 close handover as a scoping item for
+whichever Wave 23 lane takes IO packages** (the natural home; `PackageFile`/
+`CompressedStream` work already lives there).
+
+- **Precondition:** any lane that already has a `.pkg` read path stood up.
+- **Why it is worth doing:** §5.1 demonstrated that the round-trip is the *weak* oracle
+  on this row and the byte comparison is what does the work. A real package would add an
+  independent *input distribution*, not an independent check — the corpus today is
+  Runtime-x64.dll's own image bytes plus synthetic patterns.
+- **It is an improvement, not a gap:** the encoder is verified as it stands (40 cases, 0
+  length and 0 byte divergences, all six branches). If this is never done, nothing
+  regresses.
+
+## 7.5 WHAT THE INTEGRATOR IS BEING HANDED
+
+Two items, both explicitly owned rather than left to a condition:
+
+| # | item | precondition | why it cannot self-surface |
+|---|---|---|---|
+| §7.3 | register the minted `??_7Thread@System@@6B@` row at cutover; do **not** promote it before | the first cutover boot (every one — `ConstructLoader` builds a Thread) | the crash names an address, not this row |
+| §7.4 | a real `.pkg` round-trip as a second input distribution for `Compress` | a lane with a `.pkg` read path already stood up | it is an improvement; nothing fails if it never happens |
+
+§7.1 and §7.2 are **retired, not handed over** — both were my own claims and both were
+false on inspection.
 
 ## 8. FILES CHANGED
 
