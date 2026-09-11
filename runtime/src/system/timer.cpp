@@ -130,9 +130,35 @@ double  g_systemSecondsPerTick = 0.0;
 // writes the DLL's `.data` today and lane C2's mint at cutover -- where the same
 // IDIV would divide by the same zero, so this is on the critical path either way.
 //
-// `?_systemSecondsPerTick@Timer@System@@0NA` (0x1801fe740) is NOT in
-// rt_data_mint_tables.inc; its slot resolves null at cutover and that store is
-// skipped. The other four are minted (lines 1552, 1571, 1572, 1573).
+// CORRECTION (Wave 22 lane TIMER, re-derived from the generated table rather
+// than inherited): all FIVE of this file's statics are present in
+// rt_data_mint_tables.inc's `kMintStorage` array today, including
+// `?_systemSecondsPerTick@Timer@System@@0NA` -- the claim above that it was
+// absent is stale (the table has grown since this comment was written; the
+// row is there, just not at the line numbers this comment used to cite).
+//
+// Presence in the table is NOT the gate, though: NONE of the five is in
+// `standalone/reg_mint_promoted.cpp`, so none is registered unconditionally.
+// `RT_DATA_SLOT` therefore resolves all five the SAME way right now,
+// regardless of which are "minted": through `ResolveExport`, which finds no
+// registration for these names and falls through to the DLL's real exported
+// address when the DLL is present, or returns null with nothing to fall back
+// to at cutover. See docs/runtime_port/WAVE22_LANE_TIMER.md for why
+// PROMOTING them (adding them to reg_mint_promoted.cpp) is NOT safe while the
+// DLL is the route: `Runtime-x64.dll`'s own `SleepThread`, `MainLoop::Draw`,
+// `MainLoop::Frame`, `Video::Finish`, and dozens of Graphics/UI/Save
+// functions still read these five addresses directly out of the DLL's
+// `.data`, by hard-coded RVA, and are not ported. Promoting would redirect
+// this file's own writes to a NEW address (our mint storage) that none of
+// those DLL-internal readers know about, freezing the DLL's real globals at
+// whatever they last held -- for `_systemTicksPerSecond`/`_systemInitialTick`
+// that reintroduces the exact IDIV-by-zero this section was written to fix,
+// now against a much wider reader set than the one `MainLoop::Run` alone
+// used to present (`Run` is ported today and reads through the registry, so
+// it would be unaffected; its former unported siblings would not be).
+// Promotion is safe and necessary once those DLL-internal readers no longer
+// exist, i.e. at cutover -- which was lane B3's and lane C2's original
+// intent and still holds.
 namespace {
 void PublishTimerStatics() {
     if (int64_t* p = RT_DATA_SLOT(int64_t*, "?_ticksPerSecond@Timer@System@@0_JA"))
