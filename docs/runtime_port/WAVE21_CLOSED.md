@@ -7,8 +7,11 @@ Seven lanes, each in a private worktree. All seven reported.
 
 ## 1. THE NUMBER — and §2 before you quote it
 
-**`TOTAL` is UNCHANGED at 1311 called / 1124 ported / 85.7%.** Lane CLASS re-derived it and
-the census output is byte-identical to base outside the new section.
+> **CORRECTED AT MERGE. READ §1.1.** The figures first published in this section were
+> **1311 / 1124 / 85.7%** and **52 of 187 (28%)**. Those were measured **per lane, in
+> isolated worktrees**. On the **MERGED tip they are wrong**, and the corrected numbers are
+> in §1.1. The decomposition table below is the **pre-merge** one and is kept only because
+> §1.1 is a diff against it.
 
 **The headline is not a percentage. It is a decomposition.**
 
@@ -34,6 +37,64 @@ TOTAL           187 |    39     3     7        3      43    47       45
 
 **52 of 187 gap rows (28%) are a function to reimplement.** The rest is 43 vtable
 promotion rows, 47 data mint rows, and **45 rows the classifier REFUSES to guess about.**
+
+---
+
+## 1.1 THE MERGED TIP — and the reason this section exists
+
+All seven lanes merged onto `wave21/base`. One content conflict
+(`rt_graphics_port.cpp`, two lanes adding a declaration at the same spot; both kept).
+Build clean. `unpromotable_slot_check.py` went **RED at merge exactly as lane CLASS
+predicted** — 2 UNDECLARED tags and 1 missing scope — and is green again after adding the
+tokens the tool asked for. Both new declarations **pass under the exact reading chosen**,
+which is what confirms the slot-count reasoning behind them: the checker tests a declared
+tag under that reading ONLY, so a wrong declaration fails loudly instead of passing.
+
+**MEASURED ON THE MERGED TIP:**
+
+```
+TOTAL   4632   1313 called   1129 ported   9 detour   86.0%
+Graphics 599    100 called     75 ported             75.0%   ceiling 94.0%
+Video    573    159 called    140 ported             88.1%   ceiling 88.7%
+GAP DECOMPOSITION  TOTAL 184 | BODY 39  CTOR 3  DTOR 7  OPNEWDEL 1  VTABLE 43  DATA 46  UNKNOWN 45
+=> 50 of 184 gap rows (27%) are a function to reimplement.
+```
+
+| figure | published from lane reports | **merged tip** |
+|---|---|---|
+| TOTAL called / ported | 1311 / 1124 | **1313 / 1129** |
+| TOTAL covered | 85.7% | **86.0%** |
+| gap rows | 187 | **184** |
+| body rows | 52 (28%) | **50 (27%)** |
+| Graphics called / ported | 99 / 70 | **100 / 75** |
+| Video | 158, `AT CEILING` | **159, no longer AT CEILING** |
+
+### THE FINDING: A CLOSE WRITTEN FROM LANE REPORTS DESCRIBES A TREE THAT NEVER EXISTED
+
+**Every lane measured in its own isolated worktree, where only ITS changes existed.** Each
+number was honest about the tree it was taken against. **No lane was taken against the
+tree that now exists**, because that tree did not exist until the merge — and the
+integrator published §1 from those reports *before* merging.
+
+This is not the denominator failure of §5.6 (wrong population) nor the timestamp failure
+of §5.4 (different waves). It is a third variant: **every figure had the right population,
+the right unit AND the same wave — and a DIFFERENT TREE.** Worktree isolation is what makes
+parallel lanes safe, and it is exactly what makes their numbers un-addable. Note the
+direction: the merged figures are BETTER than the published ones, so nothing here would
+have been caught by a sanity check looking for an implausible claim.
+
+Two second-order effects the merge produced that no lane could have reported:
+
+- **`Video` lost `AT CEILING`** — 158 → 159 called, gap now 19. No lane touched Video. A
+  door opened elsewhere moved it, which is the moving-target property in
+  `reference_the_ceiling_percentage_is_a_moving_target.md` acting ACROSS lanes.
+- **`Graphics`'s ceiling** is 94.0% on the merged tip, against the 96.0% inherited from
+  Wave 20 and the 94.9% lane CLASS measured. **Three different values in one wave, all
+  correctly derived.** Quote the set-diff, never the percentage.
+
+> **THE RULE: a wave's headline number is measured ONCE, on the MERGED tip, by the
+> integrator. Lane figures are set-diffs for their own lane and MUST NOT be summed,
+> inherited into a close, or published before the merge.**
 
 ---
 

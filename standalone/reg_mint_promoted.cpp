@@ -1318,7 +1318,7 @@ int RtMintRegisterPromotedRows() {
     // eight door-stamps of these two symbols all mirror retail's
     // stamp-then-overwrite or stamp-then-free.
     //
-    // RT_UNPROMOTABLE: ??_7ReaderWriter@IO@@6B@ | 1/26 ported [RE-DERIVED, WAVE21_LANE_ENC.md item 12: the `?` numerator resolved by lane ENC, the assigned addressee -- slot 0 (0x180023bd0, the deleting dtor) is now runtime/src/object/deleting_dtor.cpp row 42, verified against tools/rt_deleting_dtor_verify.py], 25 purecall [RE-DERIVED] | WAVE19_PHASE0A_NOOP.md §3.1 + WAVE19_INTEGRATOR_CORRECTIONS.md C30 + WAVE21_LANE_ENC.md item 12 | NONE, EVER
+    // RT_UNPROMOTABLE: ??_7ReaderWriter@IO@@6B@ | 1/26 ported [RE-DERIVED, WAVE21_LANE_ENC.md item 12: the `?` numerator resolved by lane ENC, the assigned addressee -- slot 0 (0x180023bd0, the deleting dtor) is now runtime/src/object/deleting_dtor.cpp row 42, verified against tools/rt_deleting_dtor_verify.py], 25 purecall [RE-DERIVED] [CONV: M=TABLE] | WAVE19_PHASE0A_NOOP.md §3.1 + WAVE19_INTEGRATOR_CORRECTIONS.md C30 + WAVE21_LANE_ENC.md item 12 | NONE, EVER
     // RT_UNPROMOTABLE: ??_7Stream@IO@@6B@ | 1/7 ported [INHERITED], 5 purecall [MEASURED] | WAVE19_PHASE0A_NOOP.md §3.2 | NONE, EVER
     //
     // WAVE 20 LANE DOORS — the ReaderWriter denominator, and a convention split
@@ -1360,7 +1360,7 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_frameIndex@ParticleInstance@Graphics@@1HA | n/a (int counter) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rng@Particle@Graphics@@1VRandom@System@@A | n/a (RNG state) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA | n/a (bool flag) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
-    // RT_UNPROMOTABLE: ??_7Geometry@Graphics@@6B@ | 6/6 (3 purecall) | WAVE21_LANE_GFXVT.md §5.2 | ROUTE-SCOPED (DLL-PRESENT ONLY); voids when statusicon_geometry.cpp:341 reads `i < 9`; REQUIRED at cutover | HARMFUL
+    // RT_UNPROMOTABLE: ??_7Geometry@Graphics@@6B@ | 6/6 (3 purecall) [CONV: M=NONPURECALL] | WAVE21_LANE_GFXVT.md §5.2 | ROUTE-SCOPED (DLL-PRESENT ONLY); voids when statusicon_geometry.cpp:341 reads `i < 9`; REQUIRED at cutover [SCOPE: DLL-PRESENT] [ADDRESSEE: Wave 22 lane GEOM, which owns the statusicon_geometry.cpp:341 cutover blocker -- WAVE21_CLOSED.md §7 item 1] | HARMFUL
     //
     //      ⚠ THIS TAG IS ROUTE-SCOPED AND ITS EXPIRY IS **NOT** "NONE, EVER".
     //      Wave 21 lane SHOT established that the existing vocabulary spells two
