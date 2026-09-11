@@ -907,6 +907,57 @@ int RtMintRegisterPromotedRows() {
     RegisterRuntimeAddr(0x1801f99e8ull, st); ++n;
 
     // ========================================================================
+    // WAVE 21 LANE GFXDATA — the two Graphics `?_typeInfo@` rows WAVE17_LANE_CEIL
+    // §3.3 named PROMOTABLE and explicitly left for a porting lane ("Both are the
+    // shape the UI namespace promoted eleven of in Wave 10... it does not move
+    // the ceiling, which is why this lane did not do it").
+    //
+    // Both cleared the same bar as the ten OnVideoError rows above:
+    //   * READY — id, name, parentName, fileExtension all agree with the live
+    //     DLL (0 MISMATCH across the whole 104-row `BaseTypeInfo` shadow this
+    //     wave, re-measured live 2026-09-11).
+    //   * fac=2traps is a non-issue for EVERY `?_typeInfo@` row structurally
+    //     (WAVE17_LANE_CEIL §2.6: `[FactoryDispatch]` on 106,251 real dispatches
+    //     found 0 that walk a minted node — the AVL tree Factory::CreateObject
+    //     walks is built from the DLL's own `_firstTypeInfo` chain, which our
+    //     minted nodes never join).
+    //   * No consumer walks past the object: GeneratedImageBuffer's is a single
+    //     `*typeIdPtr` read (runtime/src/graphics/wave9_lane_gfx.cpp); Material's
+    //     is `IsDerivedFrom(ext, *g_TypeId_Material)` (code/Game/Game/
+    //     gameupdateloop_load.cpp:250 and mapui.cpp/noiseui.cpp) — both dereference
+    //     the scalar typeId once and stop, so GFXVT's "the harm can live in the
+    //     READER" finding (a fixed-count loop reading past a shorter table) does
+    //     not apply to either row.
+    //   * ATTENDED, live, both rows, this wave: `BANISHED_AUTOSTART=1
+    //     BANISHED_PAUSEMENU=1200 BANISHED_PAUSEMENU_QUIT=60 BANISHED_W17_ATTEND=1`
+    //     (a real New Game boot reaching gameplay, NOT the menu-only
+    //     `BANISHED_AUTOQUIT` route the first attempt mistakenly used — see
+    //     reference_autoquit_overrides_autostart_newgame.md) reported:
+    //       ATTENDED init=0 post=1  ?_typeInfo@GeneratedImageBuffer@Graphics@@...
+    //       ATTENDED init=1 post=1  ?_typeInfo@Material@Graphics@@...
+    //     matching WAVE17_LANE_CEIL's own measurement for both rows exactly.
+    //
+    // `?_typeInfo@MaterialInstance@Graphics@@` and `?_typeInfo@Particle@Graphics@@`
+    // are READY on the identical evidence (0 mismatch, same factory argument, same
+    // single-dereference consumer shape — code/Game/Game/serialize_arrays.cpp and
+    // engine_funcs.cpp's `g_ppTypeInfo_MaterialInstance`) but NOT promoted here:
+    // the same live run reported `never init=1 post=0` for both, matching
+    // WAVE17_LANE_CEIL's "blocked on attendance" verdict exactly, one wave later.
+    // Per this file's own rule (item 2, top of file) and the precedent set by the
+    // ten OnVideoError rows above (promoted only after a later wave SYNTHESISED
+    // their route and measured attendance), readiness alone is not being taken as
+    // sufficient here either. See docs/runtime_port/WAVE21_LANE_GFXDATA.md §3.
+    st = RtMintPromotionStorage("?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A",
+                                0x1801f9a20ull);
+    RegisterRuntimeExport("?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801f9a20ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A",
+                                0x1801fa740ull);
+    RegisterRuntimeExport("?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801fa740ull, st); ++n;
+
+    // ========================================================================
     // WAVE 19 LANE IOBASE — four IO vtables, unblocked by ONE tranche of bodies
     // ========================================================================
     //
