@@ -1241,7 +1241,33 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_frameIndex@ParticleInstance@Graphics@@1HA | n/a (int counter) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rng@Particle@Graphics@@1VRandom@System@@A | n/a (RNG state) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA | n/a (bool flag) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
-    // RT_UNPROMOTABLE: ??_7Geometry@Graphics@@6B@ | 6/6 (3 purecall) | WAVE21_LANE_GFXVT.md §5.2 | statusicon_geometry.cpp:341 reads `i < 9` | HARMFUL
+    // RT_UNPROMOTABLE: ??_7Geometry@Graphics@@6B@ | 6/6 (3 purecall) | WAVE21_LANE_GFXVT.md §5.2 | ROUTE-SCOPED (DLL-PRESENT ONLY); voids when statusicon_geometry.cpp:341 reads `i < 9`; REQUIRED at cutover | HARMFUL
+    //
+    //      ⚠ THIS TAG IS ROUTE-SCOPED AND ITS EXPIRY IS **NOT** "NONE, EVER".
+    //      Wave 21 lane SHOT established that the existing vocabulary spells two
+    //      opposite instructions the same way: ??_7Stream@IO@@6B@ is
+    //      PERMANENTLY unpromotable (a no-op on every route), while
+    //      ?_singleton@FileSystem@IO@@ is harmful only WITH THE DLL PRESENT and
+    //      is REQUIRED at cutover. This row is the second kind, and writing a
+    //      bare "NONE, EVER" here would have inherited exactly that ambiguity.
+    //
+    //        WITH THE DLL PRESENT — HARMFUL, and promotion is OPTIONAL, so
+    //          don't. Retail's table answers the door; promoting buys nothing
+    //          and moves the overrun below onto our storage.
+    //        AT CUTOVER — REQUIRED, not merely safe. scene.cpp:176 reaches this
+    //          table through ResolveAddr(Module::Runtime, 0x180154e60), and
+    //          standalone/resolve_standalone.cpp returns 0 for an unmapped
+    //          module ("Return 0 when the module is not mapped", guarding on the
+    //          handle). Unpromoted, the ported Geometry ctor stamps a NULL
+    //          vtable into every Geometry and the first virtual call is an
+    //          EXEC-of-0 — the identical argument mesh.cpp:295-305 already makes
+    //          for its own three rows.
+    //
+    //      THE CONSEQUENCE, and it is the reason this scoping matters: at
+    //      cutover the `i < 12` overrun below reads OUR storage no matter what
+    //      we choose, because the DLL's table is not available to read instead.
+    //      So statusicon_geometry.cpp:341 is NOT a tidy-up that would be nice to
+    //      have before promoting this row — it is ON THE CUTOVER CRITICAL PATH.
     //
     //  ??_7Geometry@Graphics@@6B@ — HARMFUL, and it is the ONE Graphics vtable
     //      row that is COMPLETE, which is exactly why it needed a verdict: the
@@ -1306,6 +1332,15 @@ int RtMintRegisterPromotedRows() {
     //      brief. When that line reads `i < 9`, this tag is void and the row
     //      should be re-scored from scratch (its stamper census is already
     //      green: 3 stampers, 2 ours-capable, 0 unattributed).
+    //
+    //      THE PRICE OF THIS PROMOTION, in lane SHOT's units — stampers split by
+    //      owner, with the unattributed bucket kept SEPARATE rather than folded
+    //      into either side: 3 stampers = 2 ours-capable / 1 retail / 0
+    //      unattributed. The one retail stamper is the copy ctor
+    //      ??0Geometry@Graphics@@QEAA@AEBV01@@Z at 0x180015b7e, so a
+    //      copy-constructed Geometry keeps retail's table after a promotion.
+    //      That is a SPLIT, not a trap — and at cutover it is moot, because
+    //      there is no retail body left to run.
     //
     // WHY EACH, in one line — the proofs are in the lane doc:
     //

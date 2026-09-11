@@ -48,7 +48,8 @@ tagged one row unpromotable; ran the game twice and measured attendance.
 | **I did not patch `tools/runtime_census.py`.** | Six other lanes are measuring against it this wave; moving its numbers mid-wave is exactly the "lane edits after report" failure. Defect measured and reported; fix proposed in §3.3, not applied. |
 | **I ported 8 of the 29 unported non-purecall slots.** | 21 remain. §4 names each. I did not attempt any `Serialize`, `Draw`, `AddDrawItems`, `Update` or deleting-dtor slot. |
 | **Attendance of my 8 bodies is 0, and I did not try to manufacture a route.** | §6. Expected: nothing dispatches an unpromoted row, and no door in our tree resolves those names. |
-| **`??_7Light@` / `??_7SunLight@` slot-0 (the unnamed deleting-dtor thunks at 0x180058dd0 / 0x180064620).** | Real bodies with SEH prologues, not accessors. Untouched. |
+| **`??_7Light@` / `??_7SunLight@` slot-0 (the unnamed deleting-dtor thunks at 0x180058dd0 / 0x180064620).** | Real bodies with SEH prologues, not accessors. Untouched. I did **not** assert they are hard or unnameable — I simply did not port them. |
+| **I named the six `FUN_` stampers but did not port any of them.** | §5.1a. Naming them settles reachability, not ownership. |
 | **The other 9 wrapper identifiers of §3.2.** | I established that `RtVtable`'s 3 symbols are invisible. I did NOT check whether the other 54 sites' symbols are reachable by some other spelling the census does know. |
 
 ---
@@ -238,6 +239,39 @@ while right in general, does not bite on this set.**
 
 ## 5. PROMOTABILITY — the stamper question, per row
 
+### 5.0 EVERY VERDICT BELOW NAMES ITS ROUTE
+
+Folded in from lane SHOT, which found that `??_7Stream@IO@@6B@` (permanently
+unpromotable — a no-op on every route) and `?_singleton@FileSystem@IO@@`
+(harmful only with the DLL present, **required** at cutover) were spelled
+identically as `NONE, EVER`. **Those are opposite instructions.** A bare
+`NONE, EVER` on any row of mine would have inherited that ambiguity, so:
+
+**All eight rows are REQUIRED at cutover. Not one of them is optional.**
+
+Every one has a resolve door in our own tree — that is why they are in `called`
+at all. With `Runtime-x64.dll` unmapped, `standalone/resolve_standalone.cpp`
+returns **0** for `ResolveAddr(Module::Runtime, …)` ("Return 0 when the module is
+not mapped", guarding on the handle, not the delta), and `ResolveExport` falls
+through to `GetProcAddress` on a module that is not there. **An unpromoted row at
+cutover stamps a NULL vtable into every object of its class, and the first
+virtual call is an EXEC-of-0.** `mesh.cpp:295-305` already makes exactly this
+argument for its own three rows; it applies verbatim to all eight of mine.
+
+**Which door each row uses — this decides what a promotion must register:**
+
+| door | rows | a promotion MUST |
+|---|---|---|
+| `ResolveAddr(Module::Runtime, VA)` | `AnimationEvent` 0x180154bf0, `Geometry` 0x180154e60, `Particle` 0x180155130, `ParticleInstance` 0x1801550e0, `ParticleSystemInstance` 0x180155040 | `RegisterRuntimeAddr` — **this is THE registration**, not belt-and-braces. A name-only promotion of these five would be invisible to their own call sites. |
+| `ResolveExport("??_7…")` | `Light`, `MaterialInstance`, `SunLight` | `RegisterRuntimeExport` |
+
+The `??_7BinaryFileStream@` precedent registers both, which is the right habit;
+for these five it is not a habit but a requirement.
+
+So the route-scoped verdict for the seven incomplete rows is **not** "unfinished
+polish". It is: *blocked today by named traps, and mandatory before cutover.*
+§4's 21 remaining slots are cutover work.
+
 ### 5.1 The stamper census
 
 `tools/mint_stamper_census.py` groups every RIP-relative-LEA-then-store of each
@@ -247,19 +281,37 @@ control 3/3, ownership positive control REGISTERED, negative control
 not-registered. **`ours-capable` is an UPPER BOUND** (a registration is a door,
 not a guarantee every caller uses it) and the tool says so.
 
-| row | stamp sites | ours-capable | retail | unattributed |
-|---|---|---|---|---|
-| `AnimationEvent` | 5 | 3 | 2 | 0 |
-| `Geometry` | 3 | 2 | 1 | 0 |
-| `Light` | 9 | 1 | 8 | 0 |
-| `MaterialInstance` | 10 | 3 | 7 | 0 |
-| `Particle` | 4 | 1 | 3 | 0 |
-| `ParticleInstance` | 8 | 3 | 5 | 0 |
-| `ParticleSystemInstance` | 3 | 1 | 2 | 0 |
-| `SunLight` | 3 | 2 | 1 | 0 |
-| *(context)* `EdgeMesh` | 3 | 1 | 2 | 0 |
-| *(context)* `EdgeMeshInstance` | 2 | 2 | 0 | 0 |
-| *(context)* `MeshInstance` | 2 | 2 | 0 | 0 |
+**This table is the PRICE OF A PROMOTION, in lane SHOT's units** — stampers split
+by owner, not a bare ours-over-slots ratio. **The `unattributed` column is kept
+separate and is never folded into either side**: an unattributed site is a
+function you cannot name, and you cannot own what you cannot name.
+
+| row | stamp sites | ours-capable | retail | unattributed | price |
+|---|---|---|---|---|---|
+| `AnimationEvent` | 5 | 3 | 2 | 0 | 2 stamps stay retail |
+| `Geometry` | 3 | 2 | 1 | 0 | 1 (the copy ctor) |
+| `Light` | 9 | 1 | 8 | 0 | **8** — the worst of the set |
+| `MaterialInstance` | 10 | 3 | 7 | 0 | 7, incl. the whole `Create*Object` factory group |
+| `Particle` | 4 | 1 | 3 | 0 | 3 |
+| `ParticleInstance` | 8 | 3 | 5 | 0 | 5 |
+| `ParticleSystemInstance` | 3 | 1 | 2 | 0 | 2 |
+| `SunLight` | 3 | 2 | 1 | 0 | 1 (the copy ctor) |
+| *(context)* `EdgeMesh` | 3 | 1 | 2 | 0 | 2 |
+| *(context)* `EdgeMeshInstance` | 2 | 2 | 0 | 0 | **0 — fully owned** |
+| *(context)* `MeshInstance` | 2 | 2 | 0 | 0 | **0 — fully owned** |
+
+**Totals over the 8 subject rows: 45 stamp sites, 16 ours-capable, 29 retail, 0
+unattributed.** A retail stamper is a *split*, not a trap: objects it builds keep
+retail's table, objects ours builds carry the minted one, and both tables' slots
+reach working bodies while the DLL is present. **At cutover the split is moot —
+there is no retail body left to run** — which is another way of saying the
+`retail` column prices the *interim*, not the endgame.
+
+Read `Light` and `MaterialInstance` (8 and 7 retail stamps) as expensive to
+promote early and cheap to promote late. Read `EdgeMeshInstance` and
+`MeshInstance` — 2 stampers, both ours, zero retail — as the two cleanest
+promotion candidates anywhere in Graphics, and note they are exactly two of the
+three rows §3 found the census cannot see.
 
 **GOOD NEWS, and it is the answer to the kickoff's step-3 question: NOT ONE of
 the 8 rows is unstampable.** Every row has at least one stamper we own, and
@@ -273,6 +325,30 @@ writer channel named — `Geometry` 0x180015b7e (copy ctor), `~Geometry`
 0x1800a41d5, `Geometry` 0x1800a4281 (default ctor) — each twice (the LEA and the
 store), plus the export-table entry. **Two derivations by different means,
 agreeing.** I did not repeat this for the other 10 rows.
+
+### 5.1a The six `FUN_` stampers ARE identifiable — I asked Ghidra by address
+
+Lane SHOT drafted a claim that three stampers were unportable because they could
+not be named, and retracted it when Ghidra named all three. My tables contain six
+sites the stamper census printed as `PRIVATE FUN_…`, and **I asked by address
+before writing anything about them.** All six are MSVC deleting-destructor
+thunks, and the pattern is identical across the three classes:
+
+| address | what it is (from the disassembly, Runtime-x64.dll) | owner |
+|---|---|---|
+| 0x1800117b0 | `??_G`-shape **scalar** deleting dtor for `AnimationEvent`: stamps 0x180154bf0, `CALL 0x1800bc950` (the real dtor), `TEST BL,1` → `CALL 0x180006a10` (operator delete) | retail |
+| 0x180011800 | `??_E`-shape **vector** deleting dtor: `TEST DL,2`, `MOV R8D,[RCX-8]` (element count), `CALL 0x18007ec98` with elem size 0x20 and dtor 0x1800a2120 — **and this is mint slot 0** | ours (ADDR) |
+| 0x180002cf0 | scalar deleting dtor for `MaterialInstance`: stamps 0x1801545e0, `ADD RCX,0x50`, `CALL 0x180004d60` | retail |
+| 0x180002d60 | vector deleting dtor for `MaterialInstance` — **mint slot 0** | ours (ADDR) |
+| 0x1800202c0 | scalar deleting dtor for `ParticleInstance` | retail |
+| 0x180020310 | vector deleting dtor for `ParticleInstance`: `TEST DL,2`, `MOV R8D,[RCX-8]`, dtor 0x1801041f0 — **mint slot 0** | ours (ADDR) |
+
+**Nothing in this set is unnameable, and no claim of unreachability rests on a
+`FUN_` prefix or a `.pdata` gap.** The useful structural fact that fell out: the
+"ours-capable via ADDR" private stamper of each class is *always* that class's
+vtable slot 0, because a deleting destructor re-stamps the base table before
+destructing. That is why those three rows score an extra ours-capable stamper
+for free.
 
 ### 5.2 `??_7Geometry@Graphics@@6B@` — COMPLETE, STAMPABLE, and HARMFUL
 
@@ -304,6 +380,25 @@ Promotion does not create the overrun; it **moves it off known-dormant DLL bytes
 onto unanalysed storage of ours.** Tagged `HARMFUL`, not `NO-OP`: the two are
 near-opposites and this one is the "would change behaviour for the worse" kind.
 
+**ROUTE SCOPE — and this is where SHOT's distinction changes my own conclusion.**
+The tag is **not** `NONE, EVER`. It reads
+`ROUTE-SCOPED (DLL-PRESENT ONLY); voids when statusicon_geometry.cpp:341 reads
+"i < 9"; REQUIRED at cutover`:
+
+* **With the DLL present — HARMFUL, and promotion is OPTIONAL.** Retail's table
+  answers the door; promoting buys nothing and moves the overrun onto our
+  storage. Don't.
+* **At cutover — REQUIRED, not merely safe.** `scene.cpp:176` reaches this table
+  through `ResolveAddr(Module::Runtime, 0x180154e60)`, which returns 0 for an
+  unmapped module. Unpromoted, every Geometry gets a NULL vtable.
+
+**The consequence I did not see until the route was named:** at cutover the
+`i < 12` overrun reads *our* storage no matter what we choose, because retail's
+table is no longer there to read instead. **So `statusicon_geometry.cpp:341` is
+not a cleanup that would be nice to have before promoting this row — it is on the
+CUTOVER CRITICAL PATH.** I had written it up as an opportunistic unlock; that was
+wrong, and route-scoping is what exposed it.
+
 **Expiry, with an addressee:** `statusicon_geometry.cpp:341` must read `i < 9`.
 The addressee is **the next lane that owns `code/Game/Component/`** — explicitly
 not "whoever next counts slots on this row", because that phrasing satisfies a
@@ -311,14 +406,30 @@ checklist and then waits forever
 (`reference_expiry_clause_needs_an_addressee`). When that line is fixed the tag
 is void and the row should be re-scored; its stamper census is already green.
 
+**Price of the promotion:** 3 stampers = 2 ours-capable / 1 retail / 0
+unattributed. The retail one is the copy ctor at 0x180015b7e, so a
+copy-constructed Geometry keeps retail's table — a split, not a trap, and moot at
+cutover.
+
 `tools/unpromotable_slot_check.py` after the tag: **21 of 21 scoreable tags fit,
 0 STALE**, both controls green.
 
-### 5.3 The other seven
+### 5.3 The other seven — route-scoped
 
-None is unpromotable. All seven are simply **INCOMPLETE** — ordinary port work,
-which is §4's list. Promoting any of them today would put a named trap in a live
-table. No RT_UNPROMOTABLE tag is warranted for any.
+None is unpromotable on any route. All seven are **INCOMPLETE**: promoting one
+today puts a named trap in a live table. But the route scope changes what that
+sentence *means*:
+
+* **With the DLL present:** blocked, and there is no urgency — retail's table
+  answers every door.
+* **At cutover:** **required**, by the same NULL-vtable argument as §5.0. Each of
+  the seven must be COMPLETE and promoted, or its class gets a null vtable.
+
+So **§4's 21 remaining slot bodies are cutover work, not optional polish**, and
+the honest ordering is by promotion price (§5.1) rather than by slot count:
+`SunLight` and `Geometry` are cheapest to own (1 retail stamp each), `Light` and
+`MaterialInstance` dearest (8 and 7). No `RT_UNPROMOTABLE` tag is warranted for
+any of the seven, and I did not add one.
 
 ---
 
@@ -442,9 +553,23 @@ the world build, or a clean shutdown.
    GFXDATA's kind**, opened by my port.
 3. **`??_7Geometry@` is now tagged HARMFUL** and Graphics' printed ceiling moved
    96.0% → 95.0% because of it. Expected, and the tag moved no other count.
-4. **The unlock is one character** — `statusicon_geometry.cpp:341` `i < 12` →
-   `i < 9`, prescribed in Wave 6, never applied. Whoever takes it should expect
-   the `RT_UNPROMOTABLE` tag to be deleted in the same commit.
+4. **`statusicon_geometry.cpp:341` `i < 12` → `i < 9` is a CUTOVER BLOCKER**, not
+   the opportunistic unlock I first wrote it up as. Prescribed in Wave 6, never
+   applied. At cutover the overrun reads our storage whatever we do about the
+   Geometry row, so the fix is on the critical path and the row cannot be
+   promoted around it. Whoever takes it should expect the `RT_UNPROMOTABLE` tag
+   to be deleted in the same commit. **This escalation is entirely due to lane
+   SHOT's route distinction** — my first draft of §5.2 carried the same evidence
+   and the wrong priority.
+6. **Every verdict in §5 now names its route, and none of mine is `NONE, EVER`.**
+   All 8 rows are REQUIRED at cutover; 7 are blocked today by traps and 1
+   (`Geometry`) is harmful today and mandatory later. The promotion price per row
+   (stampers split ours/retail/unattributed, unattributed never folded in) is in
+   §5.1: **45 sites, 16 ours, 29 retail, 0 unattributed** over the 8.
+7. **Cheapest promotions in Graphics are `EdgeMeshInstance` and `MeshInstance`** —
+   2 stampers each, both ours, zero retail — and they are two of the three rows
+   §3 found the census structurally cannot see. Not my rows; flagged for whoever
+   scopes the next Graphics lane.
 5. **Files touched:** `runtime/src/graphics/graphics_typeinfo_accessors.cpp`
    (new), `runtime/src/graphics/rt_graphics_port.cpp`,
    `standalone/reg_mint_promoted.cpp` (comment block only),
