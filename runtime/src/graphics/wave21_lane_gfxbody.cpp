@@ -29,6 +29,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
@@ -106,6 +107,31 @@ template <typename T> inline T& Field(void* p, size_t off) {
     return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
 }
 
+// ---------------------------------------------------------------------------
+// ATTENDANCE, not a diff oracle. Three bodies, three counters.
+//
+// This exists because a registered port with no caller reports a clean run and
+// reads as verification (reference_uncalled_port_is_not_verified.md), and
+// because the A/B control for these three is `BANISHED_RT_GFXBODY=0`, under
+// which the registrations do not happen at all -- so the flag-off arm MUST show
+// zero here. If it did not, the "kill switch" would not be killing anything,
+// which is the failure reference_the_gate_was_never_a_control.md describes.
+//
+// Printed at 1, 10, 1000 and every 100000 calls, so a log tail carries the
+// evidence without flooding. Unconditional rather than env-gated: the whole
+// point is that the flag-off arm can be compared against the flag-on arm, and
+// a second env var would just be another thing to get wrong.
+// ---------------------------------------------------------------------------
+void Attend(const char* what, unsigned long long& n) {
+    ++n;
+    if (n == 1 || n == 10 || n == 1000 || (n % 100000) == 0)
+        printf("[GFXBODY] %s calls=%llu\n", what, n);
+}
+
+unsigned long long g_setupCalls   = 0;
+unsigned long long g_fcibNewCalls = 0;
+unsigned long long g_matNewCalls  = 0;
+
 // ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z, retail 0x1800c7a50.
 //
 // Resolved by ADDRESS through ResolveAddr, which consults the port registry
@@ -169,10 +195,12 @@ void SetupShaders(void* program, Context* ctx) {
 // not an approximation of these two functions; it is them.
 // ============================================================================
 extern "C" void* RtGraphics_FrameCopyImageBuffer_OperatorNew(uint64_t bytes) {
+    Attend("FrameCopyImageBuffer::operator new", g_fcibNewCalls);
     return MemAlloc(bytes, 8);                          // MOV R8D,0x8 @ 0x18001eff4
 }
 
 extern "C" void* RtGraphics_MaterialInstance_OperatorNew(uint64_t bytes) {
+    Attend("MaterialInstance::operator new", g_matNewCalls);
     return MemAlloc(bytes, 8);                          // MOV R8D,0x8 @ 0x180002854
 }
 
@@ -236,6 +264,8 @@ extern "C" void* RtGraphics_MaterialInstance_OperatorNew(uint64_t bytes) {
 extern "C" void RtGraphics_MaterialInstance_Setup(const MaterialInstance* self,
                                                   Context* ctx,
                                                   int32_t shader) {
+    Attend("MaterialInstance::Setup", g_setupCalls);
+
     // mat = this->material (ExternalPtr<Material>, by value);
     // prog = ((VideoProgram**)(mat + 0x28))[shader]
     void*  mat      = Field<void*>(const_cast<MaterialInstance*>(self), 0x28);

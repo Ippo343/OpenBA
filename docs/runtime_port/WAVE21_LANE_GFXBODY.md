@@ -258,7 +258,7 @@ PLAN §4.1 decision 3).
 |---|---|---|
 | `??2FrameCopyImageBuffer@Graphics@@SAPEAX_K@Z` | `MemAlloc(bytes, 8)` | **STRUCTURAL** |
 | `??2MaterialInstance@Graphics@@SAPEAX_K@Z` | `MemAlloc(bytes, 8)` | **STRUCTURAL** |
-| `?Setup@MaterialInstance@Graphics@@QEBAX…` | full transcription | **STRUCTURAL** |
+| `?Setup@MaterialInstance@Graphics@@QEBAX…` | full transcription | **EXERCISED** (upgraded by §7) |
 
 **Registered by NAME only, deliberately.** All three addresses were checked
 first: `0x18001efc0` and `0x180002820` have **zero** occurrences anywhere in
@@ -271,6 +271,11 @@ exists because this lane's own row 11 is a case where a `RegisterRuntimeAddr`
 would be active harm; the rule is check every address, not register none.
 
 ### 4.1 Why STRUCTURAL and not EXERCISED — say it plainly
+
+**SUPERSEDED FOR `Setup` BY §7**, which was written after the lock came free and
+four runs were taken. `Setup` is now EXERCISED; the two `operator new`s are
+still STRUCTURAL, for the reason §7.4 gives. The paragraph below is kept as
+written because it is the state the port was committed in.
 
 **No run happened.** `tools/game_dir_lock.sh acquire GFXBODY 600` **TIMED OUT
 after 600s** with lane GFXDATA still holding the directory. It was not piped
@@ -365,3 +370,100 @@ scoped input for a follow-on lane, not a finding.
 * **Whether `?SetupShaders@VideoProgram@Video@@` is safe to leave on the DLL.**
   It is, today, because that is where it already was — but this lane made our
   tree depend on it by name for the first time and did not read its body.
+
+---
+
+## 7. THE RUN (added after the lock came free) — AND MY PREDICTION WAS WRONG
+
+Four in-world runs on 2026-09-11, lock held by GFXBODY throughout, released
+after. Deployed exe md5 `0955f458159cc78d3a0c76cfe735fbd3`, **compared against
+this worktree's own build before the first run and equal**. No
+`BANISHED_AUTOQUIT` anywhere — every arm used `BANISHED_AUTOSTART=1` with
+`BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120`, and all four reached
+**frame 721 in the world**, clicked Quit through the in-game pause menu, and
+exited `rc=0` with a **0-byte crash log**.
+
+| arm | env beyond autostart+pausemenu | `Graphics: N exports` | `[GFXBODY]` attendance |
+|---|---|---|---|
+| A | — | **70** | **none** |
+| B | `BANISHED_RT_GFXBODY=0` | **67** | none |
+| C | `BANISHED_TOOL_HARNESS=utility BANISHED_RT_FLUSH_PROBE=1` | **70** | **`Setup calls=1, 10, 1000`** |
+| D | as C, plus `BANISHED_RT_GFXBODY=0` | **67** | none |
+
+### 7.1 The kill switch is a real control
+
+70 against 67, in both directions, on two different routes. The three
+registrations happen when the flag is on and do not when it is off, and the
+attendance counter is zero in exactly the arms where the registration did not
+happen. That is the check `reference_the_gate_was_never_a_control.md` says to
+make, and this gate passes it.
+
+### 7.2 MY PREDICTION FAILED, AND FAILED INFORMATIVELY
+
+My report said: *"`Setup` is on two every-frame paths, so a defect in it should
+be visible rather than silent."*
+
+**Arm A refutes that.** A full in-world run entered my `Setup` **zero times**.
+The claim was true of the FUNCTION and false of OUR BODY: `Setup`'s every-frame
+callers are the DLL's own `Renderer::Draw` and `UserInterface::Draw`, reaching
+it by direct in-DLL call — **not a door**
+(`reference_a_ported_row_can_be_permanently_unpromotable.md`). Our two doors are
+`tool_base_tilerender.cpp` (needs a build-tool overlay) and
+`spritecontext_flush.cpp`, whose own `Flush` is entered only through three lane
+UIF bodies — and `runtime/src/ui/spritecontext_flush.cpp:698` already records
+that its vertex loop runs **zero** times on the live route.
+
+So "it will be visible" was not a conservative claim, it was **the wrong
+claim**, and the honest version is: a defect in this body is invisible on the
+default route because the body does not run there.
+
+### 7.3 What made it run — the harness, again
+
+Arm C reached it with `BANISHED_TOOL_HARNESS=utility BANISHED_RT_FLUSH_PROBE=1`,
+a route the tree already documents at `spritecontext_flush.cpp:710`: the probe
+drives `Flush` against synthetic objects but borrows **the real
+`MaterialInstance*`, "because `Setup` must be given a real material to walk"**.
+That sentence was sitting in the tree the whole time.
+**Third instance of `reference_grep_the_harness_before_writing_unverifiable.md`
+on this project, and the first where the harness was written by a lane that had
+no idea it would become somebody else's only route.**
+
+### 7.4 Final tiers
+
+| symbol | tier | on what |
+|---|---|---|
+| `?Setup@MaterialInstance@` | **EXERCISED** | **>=1000 live calls** (arm C) on a real material and a real live `Video::Context`, in-world, clean exit, 0-byte crash log, and zero calls in both flag-off arms |
+| `??2FrameCopyImageBuffer@` | **STRUCTURAL** | attendance 0 in all four arms |
+| `??2MaterialInstance@` | **STRUCTURAL** | attendance 0 in all four arms |
+
+The exact `Setup` count is between 1000 and 99,999 — the counter reports at 1,
+10, 1000 and then every 100,000, and no fourth line was printed. Neither
+`operator new` is reachable on any route driven here: their only caller is
+`runtime/src/save/saveload_draw.cpp`, the save-thumbnail / screenshot path,
+which no arm exercised. **That is the SAME route as the FrameCopyImageBuffer
+block (§3.1) and as kickoff item 5 — three separate things now point at one
+missing driver.**
+
+### 7.5 WHAT THESE RUNS COULD NOT HAVE DETECTED — read this before quoting §7.4
+
+* **No oracle ran.** Nothing compared our `Setup` against the DLL's on the same
+  inputs. EXERCISED means it ran without crashing, not that it is right.
+* **NO PIXEL WAS COMPARED.** No screenshot, no frame diff. A wrong texture slot
+  or a wrong constant that still yields a plausible frame passes all four arms
+  silently.
+* **THE COUNTER COUNTS ENTRIES, NOT BRANCHES.** `Setup`'s whole job is two
+  conditionals — "is this texture already bound" and "are these four floats
+  already equal". A body can run 1000 times and take the *already-equal, skip*
+  path every single time, exercising none of the stores and none of the
+  dirty-bit ORs. **I did not instrument the branch split, so I cannot rule that
+  out.** This is exactly
+  `reference_calls_zero_can_mean_always_took_the_uncovered_branch.md` one step
+  along, and it is the first thing a follow-on should measure.
+* **Arm C against arm D showed no behavioural difference in any counter I
+  compared** (`ExtLoad calls=2847` identical both arms, `Dx11Seam fallbacks to
+  shipped code: 0` identical); `ResFind calls` differed by 5 in 8222 and the
+  logs differ by 10 lines overall, so there is run-to-run variance at that
+  magnitude and **I attribute nothing to the flag on that evidence**.
+* The attendance instrumentation added for these runs (`Attend()`, three
+  counters, printing at 1/10/1000/100000) is **in the committed body**, so the
+  binary measured in §7 is not the one described in §4.
