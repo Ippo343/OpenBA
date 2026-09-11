@@ -16,6 +16,14 @@
 //                            sees a new failure can halve the search space with
 //                            one env var. With it off, scene.cpp's five
 //                            forwarders go back to the DLL exactly as before.
+//   BANISHED_RT_GFXBODY=0    ... just the Wave 21 lane GFXBODY three
+//                            (MaterialInstance::Setup and the two class
+//                            operator news). Its OWN switch because Setup is
+//                            the only one of the three that can change a
+//                            PIXEL -- it binds textures and material constants
+//                            onto the live Video::Context -- so an integration
+//                            run that sees the UI or the tile overlay render
+//                            wrong can halve the search space with one env var.
 //   BANISHED_RT_GFX9=0       ... just the Wave 9 lane GFX four (Transform::Lerp,
 //                                InterpolatedState<Transform>::Lerp,
 //                                MaterialInstance::RenderTextures,
@@ -34,6 +42,7 @@ extern int RtGraphicsWave9GfxRegister();  // wave9_lane_gfx.cpp (Wave 9 lane GFX
 extern int RtGraphicsSunLightRegister();  // sunlight.cpp (Wave 9 lane GFX2)
 extern int RtGraphicsGridRegister();      // scene_grid.cpp (Wave 9 lane GFX3)
 extern int RtGraphicsWave9GfxdRegister(); // wave9_lane_gfxd.cpp (Wave 9 lane GFXD)
+extern int RtGraphicsWave21GfxbodyRegister(); // wave21_lane_gfxbody.cpp (Wave 21 lane GFXBODY)
 
 void RtGraphicsPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_GRAPHICS")) {
@@ -47,6 +56,7 @@ void RtGraphicsPortInit() {
     if (RtWaveEnabled("BANISHED_RT_GFXANIM"))   n += RtGraphicsAnimationRegister();
     if (RtWaveEnabled("BANISHED_RT_GFX9"))      n += RtGraphicsWave9GfxRegister();
     if (RtWaveEnabled("BANISHED_RT_GFXSUN"))   n += RtGraphicsSunLightRegister();
+    if (RtWaveEnabled("BANISHED_RT_GFXBODY")) n += RtGraphicsWave21GfxbodyRegister();
 
     // WAVE 9 LANE GFXD -- the bottom half of the Graphics::Renderer class
     // lane: Renderer::Reset, Renderer::AddScene, two more Graphics::Camera

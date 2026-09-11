@@ -34,13 +34,27 @@ All 13 were also confirmed **present in the shipped export directory** of
 (`reference_resolveexport_phantom_names.md`); the addresses in §2 are that
 query's output, not Ghidra's.
 
-### 1.1 Ghidra was NOT available — how the size column was obtained instead
+### 1.1 Ghidra was down for the triage — and the substitute turned out to be checkable
 
-The Ghidra MCP bridge refused connection for this lane's whole run
-(`127.0.0.1:8089`, WinError 10061). Instruction counts therefore come from
-**`.pdata` + `objdump`, not from `get_function_metrics`** — which, per
+The Ghidra MCP bridge refused connection (`127.0.0.1:8089`, WinError 10061) for
+the whole of Phase 1 and 2. Sizes therefore come from **`.pdata` + `objdump`,
+not from `get_function_metrics`** — which, per
 `reference_ghidra_mcp_address_param_silently_ignored.md`, is the weaker tool
 anyway.
+
+**Ghidra came up during Phase 3 and every corrected extent was confirmed
+exactly** (`get_function_by_address`, program `Runtime-x64.dll`, confirmed
+current on the call):
+
+| symbol | this lane's `.pdata` chain | Ghidra `Body:` | agree |
+|---|---|---|---|
+| `?Setup@MaterialInstance@` | `0x180102c90-0x180102ddc` (332) | `180102c90 - 180102ddb` | yes |
+| `?Update@AnimationManager@` | `0x1800fc240-0x1800fc3ee` (430) | `1800fc240 - 1800fc3ed` | yes |
+| `?Draw@Renderer@` | `0x180104bb0-0x180104f49` (921) | `180104bb0 - 180104f48` | yes |
+| `?AddDrawItems@MeshInstance@` | `0x180100f20-0x1801011f0` (720) | `180100f20 - 1801011ef` | yes |
+
+So the unwind-chain grouping is the right method and the **uncorrected**
+single-record reading was the wrong one — confirmed from outside, not argued.
 
 **A measurement error inside this lane, caught and corrected — record it:** my
 first pass read the extent of each function from the **single `.pdata` entry
@@ -235,8 +249,86 @@ between them is a lane.
 
 ## 4. WHAT THIS LANE PORTED
 
-See §5 of this document after Phase 2, and the report. Phase 1 is committed
-before any code is written, per the lane brief.
+**3 of the 13.** All in `runtime/src/graphics/wave21_lane_gfxbody.cpp`,
+registered by `RtGraphicsWave21GfxbodyRegister()` behind its own kill switch
+`BANISHED_RT_GFXBODY` (wired into `rt_graphics_port.cpp`; unset = ON, per
+PLAN §4.1 decision 3).
+
+| symbol | how | verification tier |
+|---|---|---|
+| `??2FrameCopyImageBuffer@Graphics@@SAPEAX_K@Z` | `MemAlloc(bytes, 8)` | **STRUCTURAL** |
+| `??2MaterialInstance@Graphics@@SAPEAX_K@Z` | `MemAlloc(bytes, 8)` | **STRUCTURAL** |
+| `?Setup@MaterialInstance@Graphics@@QEBAX…` | full transcription | **STRUCTURAL** |
+
+**Registered by NAME only, deliberately.** All three addresses were checked
+first: `0x18001efc0` and `0x180002820` have **zero** occurrences anywhere in
+`code/ engine/ runtime/ standalone/ dx11/`, and `0x180102c90` occurs only in
+three comments (`runtime/src/ui/spritecontext_flush.cpp` :95, :138, :260) —
+both live consumers of `Setup`
+(`code/Game/Player/tool_base_tilerender.cpp:100` and
+`runtime/src/ui/spritecontext_flush.cpp:267`) resolve it **by name**. That check
+exists because this lane's own row 11 is a case where a `RegisterRuntimeAddr`
+would be active harm; the rule is check every address, not register none.
+
+### 4.1 Why STRUCTURAL and not EXERCISED — say it plainly
+
+**No run happened.** `tools/game_dir_lock.sh acquire GFXBODY 600` **TIMED OUT
+after 600s** with lane GFXDATA still holding the directory. It was not piped
+into anything, so the refusal was read as a refusal
+(`reference_a_piped_acquire_discards_the_refusal.md`), and nothing was deployed.
+The lock was never held by this lane.
+
+So the tier is STRUCTURAL for all three — argued from the disassembly, never
+run. It is, however, **structural against two independent recoveries**, which is
+stronger than the usual single-source structural claim:
+
+* each body was transcribed by this lane from `objdump -d` on the shipped DLL,
+  **before** Ghidra was available;
+* each was then re-read from Ghidra's decompiler **after**, and compared.
+
+The two agree on every point, including the four places a plausible rewrite
+diverges — the masked shift (`1 << (slot & 0x1f)`), the unordered-compare
+semantics, the integer (not float) copy of the four constants, and both
+`operator new` alignments being 8 and not 4. The comparison is recorded in the
+source file's header comment.
+
+Ghidra's decompiler drops dereferences and whole arguments, so it is **not** an
+oracle on its own; here it is used only as a second, differently-biased reading
+of a body this lane had already transcribed from the bytes.
+
+### 4.2 The measured cost of this port, stated as the census sees it
+
+```
+                 before      after
+Graphics ported     70    ->    73        (+3, of a 13-row lane denominator)
+TOTAL called      1311    ->  1312        (+1)
+TOTAL ported      1124    ->  1127        (+3)
+```
+
+**The `called` column moved, and this lane moved it.** `?Setup@MaterialInstance@`
+calls `?SetupShaders@VideoProgram@Video@@QEBAXAEAVContext@2@@Z`, which was not
+in `called` before — porting a body adds its callees to the cutover surface
+(`reference_porting_can_grow_the_cutover_surface.md`). One new row, in Video,
+unported. It is named in the source at the call site so the next census reader
+can attribute it.
+
+Build: `mingw32-make standalone-debug` clean in this worktree; all three symbols
+present in `standalone/build/reimpl-x64.exe` (`nm`). Nothing was copied into the
+game directory.
+
+### 4.3 A sized follow-on this lane opened but did not take
+
+Ghidra's decompile of `?Update@AnimationManager@` (row 10) enumerates the whole
+of the "unpinned `AnimationState` record" the Wave 6 holdback could not afford
+to pin. It is **two records and eight offsets**: the group is stride `0x30`
+(`+0x00` ptr, `+0x10` `Array<GraphicsMesh::Node>`, `+0x20` state array `_data`,
+`+0x28` count) and the state is stride `0x48` (`+0x18` `Vector3`, `+0x1c`,
+`+0x20`, `+0x28` `Transform*`, `+0x38` `InterpolatedState<Transform>*`). With
+the callee's nine arguments already spelled out by its exported mangled name
+(§3.2), **the stated blocker is an afternoon, not a wave.** That enumeration is
+decompiler output and has NOT been checked against the disassembly, which is
+exactly the step the coordinator's hazard 3 says not to skip — so it is a
+scoped input for a follow-on lane, not a finding.
 
 ---
 
@@ -258,6 +350,18 @@ before any code is written, per the lane brief.
   failed to match — they are absent from the retail export table by address,
   which `reference_grep_cannot_tell_internal_from_unported_export.md` warns is
   not the same question. Not chased further.
-* **Any runtime behaviour.** No game was launched by this lane and
-  `tools/game_dir_lock.sh` was never taken; see §6 for what that costs each
-  ported body's verification tier.
+* **Any runtime behaviour.** No game was launched by this lane. The lock was
+  requested and **refused on timeout** (§4.1), so all three ports are
+  STRUCTURAL. In particular nobody has seen `MaterialInstance::Setup` bind a
+  texture through our body: it is on the sprite-flush path
+  (`runtime/src/ui/spritecontext_flush.cpp`) and the tile-overlay path
+  (`code/Game/Player/tool_base_tilerender.cpp`), both of which run every frame,
+  so **a defect in it should be visible rather than silent** — but "should be
+  visible" is a prediction, not a check. `BANISHED_RT_GFXBODY=0` is the A/B.
+* **The `.pdata` extents of the ten rows I did NOT port** were confirmed against
+  Ghidra for only **4 of 13** (§1.1). The other nine sizes in §2 rest on the
+  unwind-chain method alone. The method is now corroborated; those nine
+  individual numbers are not.
+* **Whether `?SetupShaders@VideoProgram@Video@@` is safe to leave on the DLL.**
+  It is, today, because that is where it already was — but this lane made our
+  tree depend on it by name for the first time and did not read its body.
