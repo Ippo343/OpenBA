@@ -196,6 +196,25 @@ extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
 // make the whole file worthless (dialog_factory.cpp has been dark since Wave 11).
 extern int RtUiFactory2Register();         // ui_factory_wave28.cpp (FACTUI2)
 
+// ---- CUTOVER VTABLE BATCH 4 "elem_B", 2026-09-12 --------------------------
+// Fourteen UI::*Element widget classes, one file each, every vtable slot plus
+// the ctor and dtor. Registered UNCONDITIONALLY (DIRECTION.md §2: a port
+// registers; no new BANISHED_RT_* flags).
+extern int RtUiLayoutElementRegister();       // layoutelement.cpp
+extern int RtUiListElementRegister();         // listelement.cpp
+extern int RtUiNumberEditElementRegister();   // numbereditelement.cpp
+extern int RtUiNumberElementRegister();       // numberelement.cpp
+extern int RtUiPageElementRegister();         // pageelement.cpp
+extern int RtUiProgressElementRegister();     // progresselement.cpp
+extern int RtUiRadioElementRegister();        // radioelement.cpp
+extern int RtUiRibbonElementRegister();       // ribbonelement.cpp
+extern int RtUiScrollElementRegister();       // scrollelement.cpp
+extern int RtUiSliderElementRegister();       // sliderelement.cpp
+extern int RtUiSpinnerElementRegister();      // spinnerelement.cpp
+extern int RtUiTabElementRegister();          // tabelement.cpp
+extern int RtUiTableElementRegister();        // tableelement.cpp
+extern int RtUiTextElementRegister();         // textelement.cpp
+
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
         printf("[RtPort] BANISHED_RT_UI=0 -- UI namespace port disabled\n");
@@ -239,5 +258,22 @@ void RtUiPortInit() {
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
     n += RtUiFactory1Register();  // owns BANISHED_RT_UIFACT1 (FACTUI1)
     n += RtUiFactory2Register();          // owns BANISHED_RT_UIFACT2 (FACTUI2)
+
+    // ---- CUTOVER VTABLE BATCH 4 "elem_B" ---------------------------------
+    n += RtUiLayoutElementRegister();
+    n += RtUiListElementRegister();
+    n += RtUiNumberEditElementRegister();
+    n += RtUiNumberElementRegister();
+    n += RtUiPageElementRegister();
+    n += RtUiProgressElementRegister();
+    n += RtUiRadioElementRegister();
+    n += RtUiRibbonElementRegister();
+    n += RtUiScrollElementRegister();
+    n += RtUiSliderElementRegister();
+    n += RtUiSpinnerElementRegister();
+    n += RtUiTabElementRegister();
+    n += RtUiTableElementRegister();
+    n += RtUiTextElementRegister();
+
     printf("[RtPort] UI: %d exports registered\n", n);
 }
