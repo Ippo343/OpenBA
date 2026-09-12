@@ -64,12 +64,11 @@ struct DelDtorSpec {
 // stays true of it; the TABLE is the authority and this constant tracks it,
 // and the static_assert next to the table is what forces an appender to
 // notice (it caught CSTREAM's addition, at 41 vs 39).
-constexpr int kSpecCount = 71;   // 71: VTABLE BATCH 7 -- Graphics::AnimationGroup + ParticleSystem,
+constexpr int kSpecCount = 75;   // 71-74: VTABLE BATCH 7 -- Graphics::AnimationGroup + ParticleSystem,
                                  // Audio::SoundBuffer + SoundEffect (2026-09-12), appended AFTER
-                                 // batch 9's six rows below (indices 67-70)
-                                 // 67: VTABLE BATCH 9 -- ComboDialog, DialogControllerConfig,
-                                 // ExtensionCompiler, ExternalCompiler, ExternalList,
-                                 // CompressedCopyFileStream (2026-09-12)
+                                 // batch 8's four rows below (indices 67-70)
+                                 // 67-70: Collision2D::CollisionMesh/Surface, Pathfinding::PointList,
+                                 //     Picking::PickingMesh (vtable batch 8, 2026-09-12); 61-66 batch 9
                                  // 61: UI::ImageDescription + AnimatedImageDescription (2026-09-12)   // 59: UI::RibbonDescription (2026-09-12)   // 58: UI::GroupDescription (2026-09-12)   // 57: Video::ShaderProgram + VertexProgram + PixelProgram + RenderState (2026-09-12)   // 53: Video::VertexLayout (2026-09-12)   // 52: Video::VideoProgram (2026-09-12)   // 51: Graphics::Material (2026-09-12)
                                  // (was 50)   // 45-47: Graphics::EdgeMesh / EdgeMeshInstance /
                                  // MeshInstance (Wave 27 lane GFXMESH)

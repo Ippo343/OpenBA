@@ -879,6 +879,11 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18003b600, 0x18003b4f0, 0x020, "UI::DialogControllerConfig"),
     //   0x18002c300  LEA R9,[0x1800bcac0]  MOV EDX,0x08   ~ExtensionCompiler
     //     (own body: stamp own vtable, then Base's -- no members beyond vptr)
+    //     tools/rt_deleting_dtor_verify.py reports this row and the next as BAD
+    //     ("restamps 0x180155a88 but its dtor restamps 0x?"): the reader knows
+    //     one restamp per body and these dtors do TWO (own vtable, then
+    //     ??_7Base@Object@@6B@, 0x1800bcac0 / 0x1800bca90 read 2026-09-12). The
+    //     row matches the bytes; the reader does not know the shape.
     RT_DELDTOR(0x18002c300, 0x1800bcac0, 0x008, "Object::ExtensionCompiler"),
     //   0x18002c180  LEA R9,[0x1800bca90]  MOV EDX,0x08   ~ExternalCompiler
     //     (same shape as ExtensionCompiler above)
@@ -891,8 +896,21 @@ static const DelDtorSpec kSpecs[] = {
     //     (own body: stamp own vtable, tail into ~CompressedFileStream, itself
     //     an unported export reached by name through the port-aware door)
     RT_DELDTOR(0x1800245f0, 0x1800a92a0, 0x0c8, "IO::CompressedCopyFileStream"),
-    // VTABLE BATCH 7 (2026-09-12), appended AFTER batch 9's six rows above --
-    // indices 67-70. Four more classes' slot0, read the same way as every row
+    // Vtable batch 8 (2026-09-12), slot 0 of the four spatial classes' vtables.
+    // Both constants read from each deleting dtor's own bytes:
+    //     0x1800656b0  ~CollisionMesh 0x180065400  MOV EDX,0x70
+    //     0x180064ea0  ~Surface       0x18010ca00  MOV EDX,0x30 (scalar arm only; no vector arm)
+    //     0x1800713b0  ~PointList     0x18010f8e0  MOV EDX,0x50
+    //     0x180072050  ~PickingMesh   0x1801228a0  MOV EDX,0x48
+    // All four destructors are ported in runtime/src/collision2d/, pathfinding/, picking/.
+    // None is a probe subject: each releases owned Array buffers and/or refcounted
+    // Strings, so a fabricated subject would free/decrement garbage.
+    RT_DELDTOR(0x1800656b0, 0x180065400, 0x070, "Collision2D::CollisionMesh"),
+    RT_DELDTOR(0x180064ea0, 0x18010ca00, 0x030, "Collision2D::Surface"),
+    RT_DELDTOR(0x1800713b0, 0x18010f8e0, 0x050, "Pathfinding::PointList"),
+    RT_DELDTOR(0x180072050, 0x1801228a0, 0x048, "Picking::PickingMesh"),
+    // VTABLE BATCH 7 (2026-09-12), appended AFTER batch 8's four rows above --
+    // indices 71-74. Four more classes' slot0, read the same way as every row
     // above (LEA R9,[~Class] / MOV EDX,sizeof from the deleting dtor's own
     // bytes, objdump against retail):
     //   0x1800167f0  LEA R9,[0x1800fb620]  MOV EDX,0x58   Graphics::AnimationGroup
@@ -1275,9 +1293,25 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 56);
 }
 
-// VTABLE BATCH 9 (2026-09-12). Indices 61-66, appended after the four rows
-// (57-60) that a concurrent lane added to the table without wiring a wrapper
-// or a RegisterRuntimeAddr call -- see the table comment above each row.
+// Rows 57-60 (2026-09-12): the four UI::*Description classes the cutover boot
+// walked that afternoon. Their table rows landed with the class ports but the
+// wrapper + RegisterRuntimeAddr pair did not, so slot 0 of each minted vtable
+// stayed a trap; wired here by the coordinator when batch 9's merge exposed it.
+void* RtDelDtor_GroupDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 57);
+}
+void* RtDelDtor_RibbonDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 58);
+}
+void* RtDelDtor_ImageDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 59);
+}
+void* RtDelDtor_AnimatedImageDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 60);
+}
+
+// VTABLE BATCH 9 (2026-09-12). Indices 61-66, appended after rows 57-60
+// (wired above, after this batch's merge found them without wrappers).
 // UI::ComboDialog          ~ComboDialog = 0x180111cd0             (PORTED, runtime/src/ui/combodialog.cpp)
 void* RtDelDtor_ComboDialog(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 61);
@@ -1302,28 +1336,40 @@ void* RtDelDtor_ExternalList(void* self, unsigned flags) {
 void* RtDelDtor_CompressedCopyFileStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 66);
 }
+// Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
+// Pathfinding::PointList, Picking::PickingMesh. Indices 67-70 (renumbered at
+// the merge: batch 9 took 61-66 on main first).
+void* RtDelDtor_CollisionMesh(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 67);
+}
+void* RtDelDtor_Collision2DSurface(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 68);
+}
+void* RtDelDtor_PointList(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 69);
+}
+void* RtDelDtor_PickingMesh(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 70);
+}
 
-// VTABLE BATCH 7 (2026-09-12). Indices 67-70, appended AFTER batch 9's six
-// rows above. kSpecs[57..60] (GroupDescription, RibbonDescription,
-// ImageDescription, AnimatedImageDescription) remain an EXISTING,
-// PRE-EXISTING GAP -- present in the table with no entry point and no
-// registration -- left exactly as found; not this batch's four classes and
-// not touched here.
+// VTABLE BATCH 7 (2026-09-12). Indices 71-74 (renumbered at this merge: batch
+// 8 took 67-70 on main first, concurrently with this batch's own claim on the
+// same range on this branch).
 // Graphics::AnimationGroup  ~AnimationGroup = 0x1800fb620  (NOT ported)
 void* RtDelDtor_AnimationGroup(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 67);
+    return DeletingDtorCore(self, flags, 71);
 }
 // Graphics::ParticleSystem  ~ParticleSystem = 0x1800a51c0  (NOT ported)
 void* RtDelDtor_ParticleSystem(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 68);
+    return DeletingDtorCore(self, flags, 72);
 }
 // Audio::SoundBuffer        ~SoundBuffer = 0x1800e03b0     (NOT ported)
 void* RtDelDtor_SoundBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 69);
+    return DeletingDtorCore(self, flags, 73);
 }
 // Audio::SoundEffect        ~SoundEffect = 0x1800e0880     (NOT ported)
 void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 70);
+    return DeletingDtorCore(self, flags, 74);
 }
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
@@ -1429,12 +1475,21 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004b9d0, (void*)&RtDelDtor_RenderState);
 
     // VTABLE BATCH 9
+    // Rows 57-60, the UI::*Description four (wrappers above).
+    RegisterRuntimeAddr(0x180046af0, (void*)&RtDelDtor_GroupDescription);
+    RegisterRuntimeAddr(0x180044620, (void*)&RtDelDtor_RibbonDescription);
+    RegisterRuntimeAddr(0x1800361f0, (void*)&RtDelDtor_ImageDescription);
+    RegisterRuntimeAddr(0x1800369e0, (void*)&RtDelDtor_AnimatedImageDescription);
     RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
     RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
     RegisterRuntimeAddr(0x18002c300, (void*)&RtDelDtor_ExtensionCompiler);
     RegisterRuntimeAddr(0x18002c180, (void*)&RtDelDtor_ExternalCompiler);
     RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
     RegisterRuntimeAddr(0x1800245f0, (void*)&RtDelDtor_CompressedCopyFileStream);
+    RegisterRuntimeAddr(0x1800656b0, (void*)&RtDelDtor_CollisionMesh);       // vtable batch 8 SPATIAL
+    RegisterRuntimeAddr(0x180064ea0, (void*)&RtDelDtor_Collision2DSurface);  // vtable batch 8 SPATIAL
+    RegisterRuntimeAddr(0x1800713b0, (void*)&RtDelDtor_PointList);           // vtable batch 8 SPATIAL
+    RegisterRuntimeAddr(0x180072050, (void*)&RtDelDtor_PickingMesh);         // vtable batch 8 SPATIAL
 
     // VTABLE BATCH 7 (2026-09-12).
     RegisterRuntimeAddr(0x1800167f0, (void*)&RtDelDtor_AnimationGroup);
