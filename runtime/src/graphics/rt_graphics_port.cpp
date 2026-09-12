@@ -34,6 +34,12 @@
 //                            runs every sim iteration and a defect in it freezes
 //                            every skinned citizen at bind pose. One env var
 //                            each keeps those two separable in an A/B.
+//   BANISHED_RT_GFXBIG=0     ... just the Wave 27 lane GFXBIG three:
+//                            MaterialInstance::BuildParameters, Renderer::Draw
+//                            and AnimationState::Update. THE WIDEST BLAST RADIUS
+//                            OF ANY SWITCH IN THIS FILE -- Renderer::Draw is the
+//                            entire 3D frame dispatch -- so it gets its own
+//                            variable rather than sharing one.
 //   BANISHED_RT_GFX9=0       ... just the Wave 9 lane GFX four (Transform::Lerp,
 //                                InterpolatedState<Transform>::Lerp,
 //                                MaterialInstance::RenderTextures,
@@ -58,6 +64,7 @@ extern int RtGraphicsWave9GfxdRegister(); // wave9_lane_gfxd.cpp (Wave 9 lane GF
 extern int RtGraphicsWave21GfxbodyRegister(); // wave21_lane_gfxbody.cpp (Wave 21 lane GFXBODY)
 extern int RtGraphicsWave23GfxbodyRegister(); // wave23_lane_gfxbody.cpp (Wave 23 lane GFXBODY)
 extern int RtGraphicsWave24GfxmatRegister();  // wave24_lane_gfxmat.cpp (Wave 24 lane GFXMAT)
+extern int RtGraphicsWave27GfxbigRegister();  // wave27_lane_gfxbig.cpp (Wave 27 lane GFXBIG)
 extern int RtGraphicsTypeInfoAccessorsRegister();
                                           // graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT)
 
@@ -100,6 +107,27 @@ void RtGraphicsPortInit() {
     int gfxmat = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXMAT")) gfxmat = RtGraphicsWave24GfxmatRegister();
     n += gfxmat;
+
+    // WAVE 27 LANE GFXBIG -- the three large Graphics BODY rows
+    // (MaterialInstance::BuildParameters, Renderer::Draw,
+    // AnimationState::Update) plus the one unexported Array instantiation
+    // BuildParameters cannot run without.
+    //
+    // ITS OWN SWITCH, and this is the switch in this file with the widest blast
+    // radius: `Renderer::Draw` IS the 3D frame. With GFXBIG on, every frame's
+    // cull, sort, clear and draw dispatch runs through our body; with it off all
+    // three go back to the DLL and nothing else in this file changes. So an
+    // integration run that renders wrong has a one-variable A/B available before
+    // anything is bisected.
+    //
+    // All three rows are LIVE the moment they are registered -- each already has
+    // at least one name door in the tree (see the registration banner in
+    // wave27_lane_gfxbig.cpp) -- so unlike lane GFXD's inert rows, a zero
+    // attendance count from this lane means something is wrong, not that the
+    // rows are unreachable.
+    int gfxbig = 0;
+    if (RtWaveEnabled("BANISHED_RT_GFXBIG")) gfxbig = RtGraphicsWave27GfxbigRegister();
+    n += gfxbig;
 
     // WAVE 9 LANE GFXD -- the bottom half of the Graphics::Renderer class
     // lane: Renderer::Reset, Renderer::AddScene, two more Graphics::Camera
