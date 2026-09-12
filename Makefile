@@ -348,3 +348,26 @@ libm-tables:
 
 clean:
 	rm -rf $(SA_BUILD_DIR) $(SA_OG_DIR) $(SA_PERF_DIR)
+
+# WAVE 24 LANE GFXMAT. A SYNTHESISED differential oracle for the three Graphics
+# `?Serialize@` bodies, needing NO game run and NO game-directory lock -- it
+# LoadLibrary()s Runtime-x64.dll (a read; nothing is written and no game is
+# launched), builds an IO::Stream / Encoding factory / Encoding whose vtables it
+# owns, overwrites the eleven helper callees with recorders in the loaded image,
+# then runs the SHIPPED body and OUR body over two identical arenas and compares
+# the call trace. It compiles the SHIPPING body
+# (runtime/src/graphics/wave24_lane_gfxmat.cpp), not a copy of it.
+#
+# `gfxmat24-sweep` runs the full control matrix with EVERY CELL NAMED, including
+# the CONDITIONAL effectiveness control -- read tools/gfxmat24_probe/probe.cpp's
+# header block before quoting a score.
+GFXMAT24_FLAGS = -std=c++17 -O0 -g -Wall -Wextra -Wno-cast-function-type \
+                 -DGFXMAT24_PROBE -I. -Iruntime/types -Iruntime/funcs -Istandalone
+.PHONY: gfxmat24-probe gfxmat24-sweep
+gfxmat24-probe:
+	$(CXX) $(GFXMAT24_FLAGS) tools/gfxmat24_probe/probe.cpp \
+	    runtime/src/graphics/wave24_lane_gfxmat.cpp -o tools/gfxmat24_probe/probe.exe
+	tools/gfxmat24_probe/probe.exe $(GFXMAT24_ARGS)
+
+gfxmat24-sweep: gfxmat24-probe
+	sh tools/gfxmat24_probe/sweep.sh

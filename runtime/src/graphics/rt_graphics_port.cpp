@@ -57,6 +57,7 @@ extern int RtGraphicsGridRegister();      // scene_grid.cpp (Wave 9 lane GFX3)
 extern int RtGraphicsWave9GfxdRegister(); // wave9_lane_gfxd.cpp (Wave 9 lane GFXD)
 extern int RtGraphicsWave21GfxbodyRegister(); // wave21_lane_gfxbody.cpp (Wave 21 lane GFXBODY)
 extern int RtGraphicsWave23GfxbodyRegister(); // wave23_lane_gfxbody.cpp (Wave 23 lane GFXBODY)
+extern int RtGraphicsWave24GfxmatRegister();  // wave24_lane_gfxmat.cpp (Wave 24 lane GFXMAT)
 extern int RtGraphicsTypeInfoAccessorsRegister();
                                           // graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT)
 
@@ -90,6 +91,15 @@ void RtGraphicsPortInit() {
     int gfxti = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXTI")) gfxti = RtGraphicsTypeInfoAccessorsRegister();
     n += gfxti;
+
+    // WAVE 24 LANE GFXMAT -- the four remaining ??_7MaterialInstance@ slot
+    // bodies (5 Serialize, 6 Reconstruct, 7 Destruct, 8 Construct) and the two
+    // Graphics ?Serialize@ rows. Its own identity line is printed below for the
+    // reason every other lane line here gives: the on-disk md5 says which exe
+    // is on disk, not which one ran.
+    int gfxmat = 0;
+    if (RtWaveEnabled("BANISHED_RT_GFXMAT")) gfxmat = RtGraphicsWave24GfxmatRegister();
+    n += gfxmat;
 
     // WAVE 9 LANE GFXD -- the bottom half of the Graphics::Renderer class
     // lane: Renderer::Reset, Renderer::AddScene, two more Graphics::Camera

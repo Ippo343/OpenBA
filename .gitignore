@@ -64,3 +64,4 @@ tools/libm_probe/full_sweep.txt
 # Evidence for a lane report, not source; the lane doc quotes what matters.
 lane_*_logs/
 tools/endsprites_probe/sweep.exe
+tools/gfxmat24_probe/probe.exe
