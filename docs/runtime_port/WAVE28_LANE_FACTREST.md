@@ -467,6 +467,7 @@ cp docs/runtime_port/wave28_factrest_oracle.cpp.txt /tmp/oracle.cpp
 g++ -std=c++17 -O0 -g -o oracle.exe oracle.cpp
 ./oracle.exe                 # positive
 ./oracle.exe --negative      # MUST be 0/N everywhere
+./oracle.exe --derefbug      # MUST be 0/11 on shape (b) -- see §9.5
 NEWSTEPS=1 ./oracle.exe      # same, against the CreateNewObject tables
 RISKY=1 ONLY=<class> ./oracle.exe
 RISKY=1 OURSONLY=1 / THEIRSONLY=1 ONLY=<class> ./oracle.exe   # which side faults
@@ -557,3 +558,38 @@ Two things worth carrying:
   level down, and I proposed it without noticing.
 
   **No residual. Nothing is owed to the integrator on this point.**
+
+### 9.5 `--derefbug`: the accidental positive turned into a command (MEASURED)
+
+§9.4's evidence that this screen catches a stamped-wrong vtable was **an anecdote
+about a run nobody can repeat** — it fired once, by accident, before the fix.
+Lane FACTUI1 made the general point after hitting the same gap from its own side:
+**a screen whose normal answer is "clean" is indistinguishable from a dead screen
+until something makes it fire.**
+
+`--derefbug` reintroduces the deref on OUR side only. Measured, this tip:
+
+```
+./oracle.exe --derefbug    shape (b) 0/11   shape (a) 12/12   <- armed, fires
+./oracle.exe               shape (b) 11/11  shape (a) 12/12   <- clean
+./oracle.exe --negative    shape (b) 0/11   shape (a) 0/12    <- armed, fires
+```
+
+Shape (a) staying 12/12 under `--derefbug` is correct and is itself a check: those
+classes stamp no vptr, so an arming aimed at vptrs must not move them. An arming
+that moved everything would be corrupting the run, not the subject.
+
+**Note what the three rows do NOT overlap on.** `--negative` corrupts a store
+VALUE; `--derefbug` corrupts how a vtable ADDRESS is obtained. The first cannot
+detect the second: it perturbs the table the screen reads, not the resolution
+step between the table and the buffer. Two armings, two different failure modes,
+and neither substitutes for the other.
+
+**A second defect, found by grepping for the thing I had just added.** The first
+attempt to add the "ARMED" banner **silently no-op'd** (a string replacement that
+did not match), so the armed run printed `0/11` with nothing saying the failure
+was intended — byte-for-byte indistinguishable in the log from a genuine
+catastrophic port regression. That is the same defect class the arming exists to
+police: a screen that cannot name its own subject. It was caught by `grep`ping the
+file for the banner text instead of trusting that the edit had landed, which is
+the whole habit: **verify the edit, not the intent to edit.**

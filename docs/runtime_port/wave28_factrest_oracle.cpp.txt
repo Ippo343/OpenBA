@@ -109,6 +109,7 @@ static const Group kGroups[] = {
 };
 
 static HMODULE g_dll;
+static bool g_derefBug = false;   // --derefbug: arm the vptr screen
 static void* Sym(const char* n) { return (void*)GetProcAddress(g_dll, n); }
 typedef void* (*CtorFn)(void*);
 
@@ -143,7 +144,13 @@ static bool OursInPlace(const RtCtorStep* steps, void* self, const char* cls) {
             // classes -- an instrument defect that read exactly like a
             // catastrophic port. rt_factories_core.cpp stores ResolveExport()'s
             // return value, which is this address, so this now matches the port.
-            void* vt = Sym(s.name);
+            // --derefbug REINTRODUCES the defect on OUR side only, so the screen
+            // is handed the shape it exists to detect. Without it the evidence
+            // that this screen catches a deref is an ANECDOTE about a run nobody
+            // can repeat (the accidental 0/11 in §9.4); with it, it is a command.
+            // A screen whose normal answer is "clean" is indistinguishable from a
+            // dead screen until something makes it fire (FACTUI1).
+            void* vt = g_derefBug ? *(void**)Sym(s.name) : Sym(s.name);
             memcpy(p + s.off, &vt, 8);
         } else if (s.kind == RtFactOp::Imm) {
             uint64_t v = s.imm;
@@ -163,6 +170,7 @@ static bool OursInPlace(const RtCtorStep* steps, void* self, const char* cls) {
 int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
     const bool neg = (argc > 1 && strcmp(argv[1], "--negative") == 0);
+    for (int i = 1; i < argc; ++i) if (!strcmp(argv[i], "--derefbug")) g_derefBug = true;
     const bool runRisky = getenv("RISKY") != nullptr;
     g_dll = LoadLibraryA("C:\\GOG Games\\Banished\\Runtime-x64.dll");
     if (!g_dll) { printf("LoadLibrary failed %lu\n", GetLastError()); return 2; }
@@ -296,7 +304,18 @@ int main(int argc, char** argv) {
         }
     }
 
-    printf("\n%s\n", neg ? "NEGATIVE CONTROL — every checked row MUST fail" : "ORACLE");
+    // NAME THE ARMING IN THE OUTPUT. An armed run scores 0/11 and, without this
+    // line, is byte-for-byte indistinguishable in the log from a genuine
+    // catastrophic port regression -- which is the same defect class the arming
+    // exists to police (a screen that cannot name its own subject). The first
+    // attempt to add this line silently no-op'd and was caught only by grepping
+    // for it afterwards, which is the cheap habit that makes the difference.
+    if (g_derefBug)
+        printf("\n*** --derefbug ARMED: the vptr deref is REINTRODUCED on OUR side "
+               "only. Every shape-(b) row MUST now FAIL at +0x00. A clean run here "
+               "means the screen is DEAD, not that the port is good. ***\n");
+    printf("\n%s%s\n", neg ? "NEGATIVE CONTROL — every checked row MUST fail" : "ORACLE",
+           g_derefBug ? "   [DEREF-ARMED — failures below are INTENDED]" : "");
     printf("  shape (b) REAL store comparison : %d/%d\n", realPass, realChk);
     printf("  shape (c) WRAPPER ONLY          : %d/%d  (does NOT test the ctor)\n",
            wrapPass, wrapChk);
