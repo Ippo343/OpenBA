@@ -716,10 +716,28 @@ void* Ctor_AudioConfiguration(void* self) {
 // when someone does port it. Today it resolves to the DLL, which is exactly the
 // documented shape for an unported neighbour.
 //
-// *** ONE RESIDUAL CUTOVER DEPENDENCY, NAMED. *** The per-record vtable at
-// 0x180157c60 is not an export and is not in lane C2's mint table, so it is
-// reached by address and will be null at cutover. Same handover as
-// Persistence's 0x180155860.
+// *** THIS RESIDUAL CUTOVER DEPENDENCY IS DISCHARGED. *** The paragraph that
+// stood here said: "The per-record vtable at 0x180157c60 is not an export and is
+// not in lane C2's mint table, so it is reached by address and will be null at
+// cutover." The second clause is NO LONGER TRUE and has not been for some time.
+// Re-derived by Wave 24 lane SMALLBODY, and independently by lane CUTOVER:
+//
+//     grep -n '180157c60' standalone/rt_data_mint_tables.inc
+//     608:  // (unexported, carried by address)  DLL 0x180157c60  7 slots
+//     1542: { nullptr, 0x180157c60ull, 7, kVSlots2, kVTable2, kVTraps2, ... }
+//
+// It IS in the mint table, carried as an unexported address-keyed row with 7
+// slots, which is exactly the shape an unexported per-record vtable needs. The
+// `ResolveAddr(Module::Runtime, 0x180157c60)` door above therefore resolves to
+// the minted row at cutover rather than to null.
+//
+// This correction is itself the Wave 23 §6 defect class — a discharge does not
+// propagate, and nothing in this project detects a stale blocker. The comment
+// was true when written and has been read as current ever since.
+//
+// NOT discharged, and deliberately still named: Persistence's 0x180155860,
+// which this paragraph used to bracket with 0x180157c60. It was NOT re-checked
+// by this lane and nothing here should be read as a verdict on it.
 //
 // NO TYPE HEADER for Audio::Device — Audio.h models Scene, Channel, EffectSlot
 // and Configuration, not the device. The two array shapes above are pinned by

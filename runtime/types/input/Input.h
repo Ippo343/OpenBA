@@ -203,6 +203,41 @@ constexpr int kHasFocusOffset      = 0x11F0;
 // puts Acquire and GetDeviceState — an independent confirmation that these two
 // pointers really are DirectInput devices rather than something else that
 // happens to live at the end of the object.
+// +0x11D8 — the THIRD COM pointer, added by Wave 24 lane SMALLBODY when it
+// ported `?PlatformShutdown@Device@Input@@AEAAXXZ` (0x1800e1b50), whose last
+// three acts are a teardown of exactly these three slots.
+//
+// The paragraph above says "There are exactly TWO COM pointers"; that was the
+// truth available to the two pollers it was derived from, and it is one field
+// short. Pinned the same way `_hasFocus` was — a byte-pattern search for the
+// displacement over the WHOLE image, which is a screen with a POSITIVE CONTROL
+// available (KICKOFF §3 rule 4): the same scan run for +0x11E0 and +0x11E8 must
+// re-find the two reads this header already names, and it does
+// (0x1800e1d15 and 0x1800e1f81). So a hit list for +0x11D8 is a live parser's
+// output, not a dead one's silence. The three displacements behave identically:
+//
+//   +0x11D8   6 accesses   W 0x1800e1421 (ctor)  W 0x1800e1839 (PlatformConstruct)
+//   +0x11E0  10 accesses   W 0x1800e1428 (ctor)  W 0x1800e1840 (PlatformConstruct)
+//   +0x11E8  10 accesses   W 0x1800e142f (ctor)  W 0x1800e1847 (PlatformConstruct)
+//
+// It is the IDirectInput8 FACTORY, not a device, and that is established by its
+// WRITER rather than by resemblance (a writer beats readers agreeing on a shape
+// — reference_a_writer_beats_readers_agreeing_on_a_sign.md). At 0x1800e18a3
+// `PlatformConstruct` does:
+//
+//     LEA R9,[RCX+0x11d8]                  the out-parameter
+//     MOV RCX,[0x1801fc680]                hInstance
+//     LEA R8,[0x18014ce30]                 riid
+//     MOV EDX,0x800                        DIRECTINPUT_VERSION
+//     MOV [RSP+0x20],0                     punkOuter
+//     CALL [0x18014b048]                   DINPUT8.dll!DirectInput8Create
+//
+// — the import name read out of the DLL's OWN import table, not guessed. The
+// very next instructions load [RBX+0x11d8] and call `[vtbl+0x18]` (COM index 3
+// = IDirectInput8::CreateDevice) twice, to FILL +0x11E0 and +0x11E8. So the
+// factory creates the other two, which is why the shutdown releases it without
+// an Unacquire: a factory was never acquired.
+constexpr int kDirectInputOffset   = 0x11D8;
 constexpr int kKeyboardComOffset   = 0x11E0;
 constexpr int kMouseComOffset      = 0x11E8;
 constexpr int kWheelAccumOffset    = 0x11F4;

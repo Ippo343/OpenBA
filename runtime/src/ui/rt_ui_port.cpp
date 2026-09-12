@@ -141,6 +141,10 @@ extern int RtUiDragStartRegister();        // userinterface_dragstart.cpp (DRAG)
 // the file banner before arming it: it exists to TEST the published
 // `??_7Dialog@UI@@6B@` expiry, and it predicts that the expiry is WRONG.
 extern int RtUiDialogFactoryRegister();    // dialog_factory.cpp (lane OBJINT)
+// Wave 24 lane SMALLBODY: ??2SpriteSheet@UI@@SAPEAX_K@Z (0x180002e60) -- the
+// class operator new, byte-identical to ToolTipDialog's and verified side by
+// side rather than by resemblance. Its own file and switch.
+extern int RtUiSpriteSheetNewRegister();   // spritesheet_new.cpp (lane SMALLBODY)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -168,6 +172,10 @@ void RtUiPortInit() {
     n += RtUiHoverRegister();          // owns BANISHED_RT_UIHOVER + _UITOOLTIP
     n += RtUiStandAloneRegister();     // owns BANISHED_RT_UISTANDALONE
     n += RtUiToolTipDialogRegister();  // owns BANISHED_RT_UITOOLTIPDLG
+    // Wave 24 lane SMALLBODY: ??2SpriteSheet@UI@@SAPEAX_K@Z (0x180002e60),
+    // the last UI operator-new row in the census gap. Its own switch so an
+    // A/B can move it without moving ToolTipDialog's five bodies.
+    n += RtUiSpriteSheetNewRegister();  // owns BANISHED_RT_UISPRITESHEETNEW
     n += RtUiDragStartRegister();      // owns BANISHED_RT_UIDRAGSTART
     n += RtUiDialogFactoryRegister();  // owns BANISHED_RT_DLGFACTORY (lane OBJINT)
     printf("[RtPort] UI: %d exports registered\n", n);
