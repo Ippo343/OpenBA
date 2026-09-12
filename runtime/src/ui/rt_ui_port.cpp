@@ -139,6 +139,11 @@ extern int RtUiDragStartRegister();        // userinterface_dragstart.cpp (DRAG)
 // `?_typeInfo@Dialog@UI@@`'s unported-factoryFn trap because of that gate, so
 // both bodies now register unconditionally and the flag is gone.
 extern int RtUiDialogFactoryRegister();    // dialog_factory.cpp
+// UI::GroupDescription, the whole class (2026-09-12). The cutover boot stopped
+// on ??_7GroupDescription@UI@@6B@ slot 2; the two factory steps were already
+// registered by RtUiFactory1Register above, the other nine slots were not.
+extern int RtUiGroupDescriptionRegister(); // groupdescription.cpp
+extern int RtUiRibbonDescriptionRegister(); // ribbondescription.cpp
 // Wave 24 lane SMALLBODY: ??2SpriteSheet@UI@@SAPEAX_K@Z (0x180002e60) -- the
 // class operator new, byte-identical to ToolTipDialog's and verified side by
 // side rather than by resemblance. Its own file and switch.
@@ -221,6 +226,8 @@ void RtUiPortInit() {
     n += RtUiSpriteSheetNewRegister();  // owns BANISHED_RT_UISPRITESHEETNEW
     n += RtUiDragStartRegister();      // owns BANISHED_RT_UIDRAGSTART
     n += RtUiDialogFactoryRegister();  // UI::Dialog CreateNewObject / CreateInPlaceObject
+    n += RtUiGroupDescriptionRegister();  // UI::GroupDescription, all nine bodies
+    n += RtUiRibbonDescriptionRegister(); // UI::RibbonDescription, all nine bodies
     n += RtUiStringTableFactoryRegister();  // owns BANISHED_RT_UISTRTAB (FACTORY)
     n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)

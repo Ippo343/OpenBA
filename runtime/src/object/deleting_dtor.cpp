@@ -832,6 +832,30 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18004e810, 0x1800f61b0, 0x058, "Video::VertexProgram"),
     RT_DELDTOR(0x18004eb90, 0x1800f3a00, 0x058, "Video::PixelProgram"),
     RT_DELDTOR(0x18004b9d0, 0x1800f4c30, 0x080, "Video::RenderState"),
+    // 2026-09-12: slot 0 of ??_7GroupDescription@UI@@6B@ (0x180157190), the
+    // vtable the cutover boot stopped on. Both constants read from the shipped
+    // bytes of 0x180046af0, not from the class header:
+    //     0x180046b08  LEA R9,[0x180117c00]     ~GroupDescription
+    //     0x180046b0f  MOV EDX,0x78             sizeof
+    // The SCALAR arm calls ~GroupDescription out of line (0x180046b41) and then
+    // a CLASS-SPECIFIC operator delete, ??3GroupDescription@UI@@SAXPEAX@Z
+    // (0x1800466f0). That one was disassembled for this row and is the same
+    // `if (p) { Enter(cs); Free(_singleton, p); Leave(cs); }` as the other
+    // copies this file's banner enumerates, so DeletingDtorCore's single
+    // MemFree IS retail's body here too.
+    //
+    // NOT ADDED to kProbeSubjects, on the UI::ElementDescription row's test:
+    // ~GroupDescription releases a refcounted String at +0x60 and destroys an
+    // Array whose buffer came from the Runtime heap. A fabricated subject would
+    // decrement a refcount nothing incremented and free a garbage pointer.
+    RT_DELDTOR(0x180046af0, 0x180117c00, 0x078, "UI::GroupDescription"),
+    // 2026-09-12: slot 0 of ??_7RibbonDescription@UI@@6B@ (0x180156ed0), the
+    // wall after GroupDescription. Read from 0x180044620's own bytes:
+    //     0x180044638  LEA R9,[0x1800d5c90]     ~RibbonDescription
+    //     0x18004463f  MOV EDX,0x80             sizeof
+    // Same two-arm shape as the GroupDescription row above; not a probe
+    // subject, for the same reason.
+    RT_DELDTOR(0x180044620, 0x1800d5c90, 0x080, "UI::RibbonDescription"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
