@@ -53,6 +53,8 @@ extern "C" void RtVideoContextCtorProbeArm(bool on);     // context_ctor.cpp
 extern int      RtVideoContextBindRegister();            // context_bind.cpp (lane CTX)
 extern "C" void RtVideoContextBindProbe();               // context_bind.cpp (lane CTX)
 extern int      RtVideoDeviceEnumTypesRegister();          // device_enum_types.cpp (Wave 18 GFXIF)
+extern int      RtVideoVideoProgramRegister();              // video_program.cpp (Wave 23 lane VIDVT)
+extern "C" int  RtVideoVideoProgramSweep();                 // video_program.cpp (Wave 23 lane VIDVT)
 extern "C" void RtVideoDeviceEnumTypesProbeArm(bool on);   // device_enum_types_probe.cpp
 
 void RtVideoPortInit() {
@@ -173,6 +175,26 @@ void RtVideoPortInit() {
         // at this point in boot.
         const char* ep = std::getenv("BANISHED_RT_VIDENUMTYPES_PROBE");
         RtVideoDeviceEnumTypesProbeArm(ep && *ep && std::strcmp(ep, "0") != 0);
+    }
+
+    // Wave 23 lane VIDVT: ?SetupShaders@VideoProgram@Video@@, the single BODY
+    // row in Video's nineteen-row gap. It has NO dependency on anything above
+    // -- no calls at all, five compare-guarded field writes -- so its position
+    // here is arbitrary and its own switch exists only so the row can be A/B'd
+    // with the same binary one flag apart. Its ONLY caller in this tree is
+    // Wave 21's ?Setup@MaterialInstance@Graphics@@, which reaches it by name
+    // through ResolveExport, so with BANISHED_RT_VIDPROGRAM=0 that call falls
+    // through to the DLL exactly as it did before this lane.
+    if (RtWaveEnabled("BANISHED_RT_VIDPROGRAM")) {
+        n += RtVideoVideoProgramRegister();
+        // The VERIFICATION, because this row has no caller: an input sweep
+        // against the shipped export. Opt-in because it calls into the DLL 128
+        // times and is a check, not boot work. It allocates NOTHING (two .bss
+        // Contexts and a stack VideoProgram), so it is safe this early --
+        // unlike the enum-types and device-startup probes above, which is why
+        // it runs here rather than being armed for later.
+        const char* sw = std::getenv("BANISHED_RT_VIDPROGRAM_SWEEP");
+        if (sw && *sw && std::strcmp(sw, "0") != 0) RtVideoVideoProgramSweep();
     }
 
     // Wave 18 lane VRES: the Video resource lifecycle — RenderBuffer
