@@ -1,0 +1,221 @@
+// WAVE 28 lane FACTUI1 — OFFLINE BYTE ORACLE (scratchpad probe, not committed).
+//
+// Loads the retail Runtime-x64.dll, and for each of the 27 CONCRETE classes in
+// the lane's roster runs BOTH in-place constructors on two separate poisoned
+// buffers -- ours and the DLL's own exported CreateInPlaceObject -- then
+// compares the buffers byte for byte over the class's allocation size.
+//
+// This is a SEPARATE, SHORT-LIVED PROCESS. That is what makes it safe for the
+// Element-derived classes: their base ctor chain registers a handle in
+// ?_singleton@InternalFactory@Object@@ pointing at the buffer, and in the GAME
+// that entry would dangle. Here the process exits immediately afterwards, so
+// nothing ever reads it. The in-game control in factory_ui1.cpp deliberately
+// does NOT do this, which is why it can only reach 13 of 31.
+//
+// EXCLUDED FROM THE COMPARISON, with the reason:
+//   * Object::Internal's handle id at +0x08/+0x0c of every Element-derived
+//     object. ??0Internal@Object@@ calls ?Rand@Random@System@@ and the
+//     InternalFactory hands out a DIFFERENT id to the second caller BY DESIGN.
+//     Comparing it would report a divergence that is the correct behaviour.
+//     The two runs are otherwise identical, so this is the ONLY field either
+//     side writes that they are required to write differently.
+//     (reference_oracle_must_not_compare_unwritten_bytes.md, one step over.)
+//   * Nothing else. The vptr IS compared: with the DLL present our port
+//     resolves the same ??_7 export the DLL stamps, so they must agree, and a
+//     disagreement here would be a real defect.
+//
+// EFFECTIVENESS CONTROL: --negative flips one byte of one store value in the
+// spec table before the comparison; the oracle must then report that class
+// FAIL. A screen that cannot be made to fail is not a screen.
+
+#include <windows.h>
+#include <cstdio>
+#include <cstdint>
+#include <cstring>
+#include <cstdlib>
+
+enum StoreKind : uint8_t { SK_IMM = 0, SK_VTABLE = 1 };
+struct Store { uint16_t off; uint8_t width; uint8_t kind; uint64_t imm;
+               const char* sym; uint64_t srcVa; };
+struct Spec { const char* cls; uint64_t size; int align; const char* baseCtor;
+              const Store* stores; uint16_t nStores;
+              const char* newName; uint64_t newVa;
+              const char* ipName;  uint64_t ipVa;
+              const char* ctorName; uint64_t ctorVa; };
+
+#include "factory_ui1_tables.inc"
+static const int kSpecCount = (int)(sizeof(kSpecs)/sizeof(kSpecs[0]));
+
+static HMODULE g_dll;
+static void* Sym(const char* n) { return (void*)GetProcAddress(g_dll, n); }
+
+static void* VT(const char* n) { return *(void**)Sym(n); }   // ??_7 export IS the slot
+
+typedef void* (*CtorFn)(void*);
+
+static void OursCtor(const Spec& sp, void* self) {
+    if (sp.baseCtor) {
+        CtorFn b = (CtorFn)Sym(sp.baseCtor);
+        if (!b) { printf("  !! base ctor %s NOT FOUND\n", sp.baseCtor); return; }
+        b(self);
+    }
+    unsigned char* p = (unsigned char*)self;
+    for (uint16_t i = 0; i < sp.nStores; ++i) {
+        const Store& s = sp.stores[i];
+        uint64_t v = (s.kind == SK_VTABLE) ? (uint64_t)Sym(s.sym) : s.imm;
+        memcpy(p + s.off, &v, s.width);
+    }
+}
+
+int main(int argc, char** argv) {
+    bool neg = (argc > 1 && strcmp(argv[1], "--negative") == 0);
+    g_dll = LoadLibraryA("C:\\GOG Games\\Banished\\Runtime-x64.dll");
+    if (!g_dll) { printf("LoadLibrary failed %lu\n", GetLastError()); return 2; }
+
+    // The DLL's allocator singleton must exist before any ctor that allocates
+    // or registers a handle runs. Object::Internal's ctor reaches
+    // InternalFactory, which reaches the MemoryAllocator singleton.
+    void** allocSlot = (void**)Sym("?_singleton@MemoryAllocator@System@@0PEAV12@EA");
+    printf("MemoryAllocator singleton = %p\n", allocSlot ? *allocSlot : nullptr);
+    void** ifSlot = (void**)Sym("?_singleton@InternalFactory@Object@@0PEAV12@EA");
+    printf("InternalFactory singleton = %p\n", ifSlot ? *ifSlot : nullptr);
+
+
+    // ---- bootstrap: the two singletons the Element-derived ctors reach -----
+    if (allocSlot && !*allocSlot) {
+        void* store = calloc(1, 1 << 16);
+        typedef void* (*C0)(void*);
+        typedef bool  (*S2)(void*, size_t, size_t);
+        C0 c = (C0)Sym("??0MemoryAllocator@System@@QEAA@XZ");
+        S2 st = (S2)Sym("?Startup@MemoryAllocator@System@@QEAA_N_K0@Z");
+        if (c && st) { c(store); size_t a0 = getenv("A0") ? strtoull(getenv("A0"),0,0) : (64ull<<20);
+                       size_t a1 = getenv("A1") ? strtoull(getenv("A1"),0,0) : (8ull<<20);
+                       bool ok = st(store, a0, a1);
+                       printf("MemoryAllocator ctor+Startup -> %d, singleton now %p\n",
+                              (int)ok, *allocSlot); }
+    }
+    if (ifSlot && !*ifSlot && allocSlot && *allocSlot) {
+        void* store = calloc(1, 1 << 16);
+        typedef void* (*C0)(void*);
+        typedef bool  (*S0)(void*);
+        C0 c = (C0)Sym("??0InternalFactory@Object@@QEAA@XZ");
+        S0 st = (S0)Sym("?Startup@InternalFactory@Object@@QEAA_NXZ");
+        if (c && st) { c(store); bool ok = st(store);
+                       printf("InternalFactory ctor+Startup -> %d, singleton now %p\n",
+                              (int)ok, *ifSlot); }
+    }
+
+    int checked = 0, pass = 0, skipped = 0;
+    for (int i = 0; i < kSpecCount; ++i) {
+        Spec sp = kSpecs[i];
+        if (sp.size == 0) { ++skipped; continue; }          // abstract
+        if (!sp.ipName)   { ++skipped; continue; }          // slot not ours
+        CtorFn theirs = (CtorFn)Sym(sp.ipName);
+        if (!theirs) { printf("%-24s SKIP (export missing)\n", sp.cls); ++skipped; continue; }
+
+        // The handle-registering classes need the InternalFactory singleton up.
+        bool handles = sp.baseCtor != nullptr;
+        if (handles && (!ifSlot || !*ifSlot)) {
+            printf("%-24s SKIP (InternalFactory singleton not initialised in this "
+                   "bare LoadLibrary process)\n", sp.cls);
+            ++skipped; continue;
+        }
+
+        static unsigned char a[0x400], b[0x400];
+        memset(a, 0xA5, sizeof(a));
+        memset(b, 0x5A, sizeof(b));   // DIFFERENT poison, so an untouched byte
+                                      // can never accidentally match.
+
+        Store mutated;
+        const Store* saved = sp.stores;
+        static Store tmp[512];
+        if (neg && sp.nStores) {
+            memcpy(tmp, sp.stores, sp.nStores * sizeof(Store));
+            // corrupt the LAST IMM store's value by one bit -- a subject both
+            // sides write, so the screen must catch it.
+            bool armed = false;
+            for (int k = sp.nStores - 1; k >= 0 && !armed; --k)
+                if (tmp[k].kind == SK_IMM) { tmp[k].imm ^= 1; armed = true; }
+            // GroupElement's table has NO immediate store -- a single vtable
+            // stamp is its whole ctor. A control that cannot be ARMED on a
+            // subject says nothing about that subject, so fall back to
+            // corrupting the vtable value instead of silently passing.
+            if (!armed) { tmp[sp.nStores-1].kind = SK_IMM; tmp[sp.nStores-1].imm = 0; }
+            sp.stores = tmp;
+        }
+        (void)mutated; (void)saved;
+
+        OursCtor(sp, a);
+        theirs(b);
+
+        ++checked;
+        // SUBJECT: the bytes EITHER side wrote. The two buffers carry
+        // DIFFERENT poison, so "byte != my own poison" identifies a write
+        // exactly; a byte neither side wrote is skipped, because comparing
+        // bytes neither side writes fails 100% of calls and reads like a
+        // catastrophic port (reference_oracle_must_not_compare_unwritten_
+        // bytes.md). This catches a DROPPED store (we did not write where
+        // they did), an EXTRA store, and a WRONG VALUE -- all three.
+        // No store value in the 27 tables contains a 0xA5 or 0x5A byte, so a
+        // real write can never be mistaken for an untouched byte.
+        int bad = 0; int firstBad = -1;
+        for (uint64_t o = 0; o < sp.size; ++o) {
+            if (handles && o >= 0x08 && o < 0x10) continue;   // Internal handle id
+            bool ourW = (a[o] != 0xA5), theirW = (b[o] != 0x5A);
+            if (!ourW && !theirW) continue;
+            if (ourW != theirW || a[o] != b[o]) {
+                ++bad; if (firstBad < 0) firstBad = (int)o;
+            }
+        }
+        if (bad == 0) { ++pass; printf("%-24s OK   (0x%llx bytes)\n", sp.cls,
+                                       (unsigned long long)sp.size); }
+        else printf("%-24s FAIL %d/%llu bytes differ, first +0x%x (ours %02x theirs %02x)\n",
+                    sp.cls, bad, (unsigned long long)sp.size, firstBad,
+                    a[firstBad], b[firstBad]);
+    }
+    // ---- second pass: the 14 OUT-OF-LINE CONSTRUCTORS -------------------
+    // `??0X@UI@@QEAA@XZ` compared directly against the DLL's export. This is
+    // the only door DialogInstance has here: its mint slot 1 is
+    // ?CreateInPlaceObject@Internal@Object@@ (FACTREST's symbol), so the first
+    // pass cannot reach it.
+    printf("\n---- out-of-line constructors ----\n");
+    int cchecked = 0, cpass = 0;
+    for (int i = 0; i < kSpecCount; ++i) {
+        Spec sp = kSpecs[i];
+        if (!sp.ctorName) continue;
+        CtorFn theirsC = (CtorFn)Sym(sp.ctorName);
+        if (!theirsC) { printf("%-24s SKIP (ctor export missing)\n", sp.cls); continue; }
+        bool handles = sp.baseCtor != nullptr;
+        static unsigned char a[0x400], b[0x400];
+        memset(a, 0xA5, sizeof(a));
+        memset(b, 0x5A, sizeof(b));
+        static Store tmp[512];
+        if (neg && sp.nStores) {
+            memcpy(tmp, sp.stores, sp.nStores * sizeof(Store));
+            bool armed = false;
+            for (int k = sp.nStores - 1; k >= 0 && !armed; --k)
+                if (tmp[k].kind == SK_IMM) { tmp[k].imm ^= 1; armed = true; }
+            if (!armed) { tmp[sp.nStores-1].kind = SK_IMM; tmp[sp.nStores-1].imm = 0; }
+            sp.stores = tmp;
+        }
+        OursCtor(sp, a);
+        theirsC(b);
+        ++cchecked;
+        int bad = 0, firstBad = -1;
+        for (uint64_t o = 0; o < sp.size; ++o) {
+            if (handles && o >= 0x08 && o < 0x10) continue;
+            bool ourW = (a[o] != 0xA5), theirW = (b[o] != 0x5A);
+            if (!ourW && !theirW) continue;
+            if (ourW != theirW || a[o] != b[o]) { ++bad; if (firstBad < 0) firstBad = (int)o; }
+        }
+        if (bad == 0) { ++cpass; printf("%-24s ctor OK\n", sp.cls); }
+        else printf("%-24s ctor FAIL %d bytes, first +0x%x (ours %02x theirs %02x)\n",
+                    sp.cls, bad, firstBad, a[firstBad], b[firstBad]);
+    }
+    printf("CTORS: %d/%d byte-identical\n", cpass, cchecked);
+
+    printf("\n%s: %d/%d classes byte-identical, %d skipped\n",
+           neg ? "NEGATIVE CONTROL (every checked class MUST fail)" : "ORACLE",
+           pass, checked, skipped);
+    return 0;
+}
