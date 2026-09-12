@@ -819,3 +819,168 @@ error is a **non-reproducing use-after-free** — *stronger* than when written.
 as UNCONFIRMED.** A lane recording that its own supporting evidence got thinner,
 while the conclusion it supports got firmer, is the behaviour this log exists to
 capture.
+
+---
+
+## ENTRY 10 — MINT closed: the regeneration landed, and a FLAT BOARD was correct
+
+Closed at `wave29/mint` `b01654a0`, clean tree, lock released. **Two commits: the
+regeneration ALONE (`70c43851`), then docs-only** — the "do not fold it into
+another change" instruction executed literally.
+
+`standalone/rt_data_mint_tables.inc` regenerated; `--check` now reads **UP TO
+DATE** (132 vtables / 104 BaseTypeInfo / 39 storage).
+
+### 10.1 Staleness DECOMPOSED, and the generator's own stdout is misleading
+
+`--check`'s ENTERED/LEFT uses one regex, so MINT classified by **enclosing table**
+instead: `kMintVtables` 64 -> 132 (+68, 0 left); **TypeInfos and Storage
+identical**. And:
+
+> The generator's "+45/+4 BaseTypeInfo closure" stdout **reads like 49 new rows
+> and is not a delta at all** — it describes *this run's derivation*. **Only
+> diffing the file refutes that.**
+
+A progress line that reads as a result is the same family as entry 3's phantom
+names: output that cannot be distinguished from the thing a reader wants it to be.
+
+### 10.2 Purely additive, PROVED with a control
+
+0 of 64 surviving rows changed in slot count, `sizeProof`, or slot targets; the 59
+textually "changed" rows differ **only in array index**. Control: one slot VA set
+to `0xdeadbeef` flagged 1/64, so the screen is live rather than vacuously green.
+
+**The exclusion list is empty, with an argument rather than by default:** minting
+is layout-only, and a row goes live unarmed only if an unconditional publisher
+names it (`reg_mint_promoted.cpp`, `CUTOVER_REQUIRED`). **0 of 68** are named, and
+the control caught an injected known positive. That is the right shape for "I
+excluded nothing" — an argument plus a control, not an absence of findings.
+
+### 10.3 A flat board was the CORRECT expectation, not a shortfall
+
+Census CSV **byte-identical**. Build gate passed; manifest gate OK both sides;
+DLL-present run reached a full world build.
+
+> **A minted row is a data descriptor, not a resolve door**, so it cannot move a
+> census keyed on doors.
+
+This is the second wave running in which the correct expectation for a large,
+real landing was **no board movement at all** (Wave 28's factory family was the
+first). Anyone scoring this lane on the board would score it at zero.
+
+### 10.4 The cutover A/B, and why it does NOT contradict WALL
+
+Both arms attested; **both faulted at `RtUi_SpriteSheet_Serialize+0x1b7`** — the
+wall moved in neither direction, which is the correct result for a layout-only
+change.
+
+**This is NOT in conflict with entry 7, where WALL cleared that exact wall.**
+MINT's tree is rooted at the kickoff commit and does **not** contain WALL's fix.
+Two lanes reporting different walls in the same wave is exactly the shape that
+reads as a contradiction later; recording the reconciliation now.
+
+MINT symbolised the fault **in each image separately**, because the two exes have
+different layouts and equal raw offsets would otherwise be luck. That is the
+position-dependence rule applied to a crash address rather than to a byte diff.
+
+### 10.5 Six instrument defects, deflating first
+
+1. **§0.4's attempt-31 evidence DOES NOT EXIST** — a blanket `*.log` gitignore ate
+   it. My kickoff cited that directory as the arm's source of truth. (WALL found
+   this independently; two lanes, same hole.)
+2. Census backlog **prose (104) undercounts its own table (110)** — the gap is
+   exactly the 6 newly minted zero-body tables.
+3. **`mint_slot_sweep.py` reads `git show HEAD:`**, so it silently returns the
+   **pre-change** answer for uncommitted work. A lane measuring its own
+   in-progress edits gets yesterday's number with no warning.
+4. **A backgrounded acquire laundered a trailing command's exit 0 into a false
+   GRANT.** MINT counts **three hits this wave** and calls it wave-level. This is
+   entry 6.5 confirmed by a second lane through a *different* mechanism — not the
+   600s cap but a pipeline exit status. **My §0.3 warned about piping and about
+   backgrounding as two separate hazards; they compose into a third.**
+5. **The build is not byte-reproducible**, making `assert-held` unsound as
+   evidence of "built from my source". (WALL found this too.)
+6. A mangled-name `strings` grep is not a valid discriminator — which bears on my
+   own §0.2 build gate, where `strings` is one of the four checks.
+
+### 10.6 Its own errors, all three consequential
+
+- **It built a TWO-VARIABLE cutover arm and would have measured an UNARMED
+  mint** — `RegisterMintedData()` runs only under `BANISHED_RT_MINT`, so all 132
+  regenerated rows would have bound nothing and the A/B would have reported "no
+  difference" about a subject that was never armed. **WALL caught it**, and MINT
+  records that it *had already read the refuting line and did not apply it*.
+- It **nearly certified the ordinary path on an `AUTOQUIT` run that never built a
+  world** — exit 0, empty crash log, zero `[AutoStart]` lines. That is
+  `reference_autoquit_overrides_autostart_newgame.md` arriving on schedule.
+- **Its worktree was checked out at a STALE COMMIT**, and following my kickoff's
+  literal `git checkout -b wave29/mint` would have invalidated every figure in
+  the lane. See entry 11.
+
+### 10.7 Pairing, both directions, with a result that QUALIFIES its own numbers
+
+WALL corrected MINT's arm (decisive). MINT sharpened WALL's `addr_door_audit.py`
+defect from "40 is a floor" to **total blindness over data-driven doors** — it
+would report 0 for a file describing 1312 — and closed WALL's open question for
+all 19 `ExternalPtr` addresses by section disjointness, which **WALL then
+correctly narrowed to *address* collision only.**
+
+And WALL's return finding **qualifies a number MINT itself published**:
+
+> **A COMPLETE vtable is not a BOOTABLE one**, so MINT's "60 of 132 COMPLETE" is
+> **not readiness.**
+
+A lane publishing a figure and then, in the same report, recording its partner's
+reason why that figure does not mean what it looks like.
+
+**Lock wait: ~16 minutes** across two acquires (one DENIED-TIMEOUT, one granted).
+WALL's priority was enforced by the tool's own queue, not by etiquette.
+
+---
+
+## ENTRY 11 — I AUDITED EVERY LANE'S BASE, because MINT was handed a stale one
+
+MINT reported that its worktree was checked out at a **stale commit**, and that
+obeying my kickoff's literal `git checkout -b wave29/mint` would have rooted the
+lane at the wrong tree and invalidated every figure in it. MINT caught this
+itself. **If it had not, I would have merged a lane whose measurements were taken
+against a different base than the one I published.**
+
+That is not a lane-local risk, so I audited **all eight**:
+
+```
+kickoff commit c11511a1
+  wall      tip 69c39061   merge-base c11511a1   OK
+  mint      tip b01654a0   merge-base c11511a1   OK
+  verify    tip c11511a1   merge-base c11511a1   OK  (no commits yet)
+  instr     tip 9776a690   merge-base c11511a1   OK
+  gfxbody   tip c11511a1   merge-base c11511a1   OK  (no commits yet)
+  slots     tip caa5ff11   merge-base c11511a1   OK
+  iolane    tip 26896fb2   merge-base c11511a1   OK
+  avbody    tip c11511a1   merge-base c11511a1   OK  (no commits yet)
+```
+
+**All eight are correctly rooted.** The hazard was real and was absorbed by the
+one lane that hit it.
+
+> **A kickoff instruction that assumes the harness put you where you think it did
+> is an unstated premise.** `git checkout -b <branch>` names the branch and says
+> nothing about the commit — it inherits whatever HEAD happens to be. Wave 30's
+> kickoff must say `git checkout -b wave30/<lane> <explicit-sha>` **and** require
+> each lane to print and report its merge-base before doing any work.
+
+### 11.1 WALL also edited after reporting — declared, docs-only, verified
+
+```
+$ git log --oneline 5f653d1a..wave29/wall
+  69c39061 WAVE 29 LANE WALL: DOC-ONLY amendment -- MINT's final measured partner result
+$ git diff --stat 5f653d1a wave29/wall -- runtime/ standalone/ code/ engine/ dx11/
+  (EMPTY)
+```
+
+Docs only, and the commit **labels itself** as such. Two lanes have now edited
+after reporting this wave; both declared it, both were clean, and **I verified
+both myself rather than accepting the label.** Warning 18 is working, and the
+`git diff --stat` scoped to the source roots is doing exactly the job Wave 28
+§7.5 designed it for: separating "a late commit exists" from "a late commit
+invalidates the measurement".
