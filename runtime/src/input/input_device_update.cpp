@@ -4,16 +4,30 @@
 // ============================================================================
 //
 //   ?Update@Device@Input@@QEAAXAEBVTime@System@@@Z   retail 0x1800E1490  ord 4498
-//   Device::UpdateState                              retail 0x1800E0FC0  not exported
-//   Device::PlatformGetKeyboardState                 retail 0x1800E1C60  not exported
-//   Device::PlatformGetMouseState                    retail 0x1800E1E10  not exported
+//   Device::UpdateState                              retail 0x1800E0FC0  ord 4528
+//   Device::PlatformGetKeyboardState                 retail 0x1800E1C60  ord 3381
+//   Device::PlatformGetMouseState                    retail 0x1800E1E10  ord 3382
 //   Device::PlatformUpdate                           retail 0x1800E2130  — ALREADY
 //       PORTED by Wave 9 lane IOA (input_win.cpp). Called directly; no door.
 //
-// The three unexported names are Ghidra's, recovered from the profile DLL's
-// debug strings. WAVE9_LANE_INPUT.md calls the same three addresses
-// DispatchEvents, PollKeyboard and PollMouse; the Ghidra spellings are used
-// here so a reader can find them in the project database.
+// The three names are Ghidra's, recovered from the profile DLL's debug
+// strings. WAVE9_LANE_INPUT.md calls the same three addresses DispatchEvents,
+// PollKeyboard and PollMouse; the Ghidra spellings are used here so a reader
+// can find them in the project database.
+//
+// CORRECTION (batch 7, 2026-09-12): this file used to claim all three had "no
+// mangled export in either the retail or the profile DLL" and registered none
+// of them. That was WRONG in the `reference_aeaa_is_private_not_unexported.md`
+// direction: checked with pefile against the retail export directory (not
+// assumed), all three ARE exported --
+//   0x1800e0fc0  ord 4528  ?UpdateState@Device@Input@@AEAAXPEAUState@12@0HAEBVTime@System@@@Z
+//   0x1800e1c60  ord 3381  ?PlatformGetKeyboardState@Device@Input@@AEAA_NPEAUState@12@@Z
+//   0x1800e1e10  ord 3382  ?PlatformGetMouseState@Device@Input@@AEAA_NPEAUState@12@@Z
+// `AEAA` is PRIVATE, not unexported. So a by-name `ResolveExport` of any of the
+// three used to fall through to the DLL silently -- exactly the
+// half-registered-port trap other files in this directory warn about. All
+// three are now registered by NAME and by ADDRESS below, in
+// `RtInputDeviceUpdateRegister`.
 //
 // This is the whole of the row WAVE9.md called the hardest single item in the
 // wave, which two earlier lanes sized and declined. Both of their measurements
@@ -742,26 +756,49 @@ int RtInputDeviceUpdateRegister() {
     // registered by name only leaves every by-address caller falling through to
     // the DLL silently — lane UIF's finding, and the reason both lines are here
     // rather than just the first.
+    int n = 1;
     RegisterRuntimeExport("?Update@Device@Input@@QEAAXAEBVTime@System@@@Z",
                           (void*)&RtInput_Device_Update);
     RegisterRuntimeAddr(0x1800e1490, (void*)&RtInput_Device_Update);
 
-    // THE THREE INTERNAL BODIES GET NO REGISTRATION AT ALL, and that is a
-    // decision rather than an omission. None of them has a mangled export in
-    // either the retail or the profile DLL, and NOTHING IN OUR TREE CALLS ANY
-    // OF THE THREE ADDRESSES — grepped for 0x1800E0FC0, 0x1800E1C60 and
-    // 0x1800E1E10 across code/, engine/, runtime/, standalone/ and dx11/
-    // before writing this line; the only hits are comments in
-    // engine_funcs.cpp and input_win.cpp. Registering an address with no
-    // caller adds a row to the door census that nothing reads, and
-    // docs/waves/unregistered_slots_wave.md is explicit that "registering an
-    // unregistered slot is not automatically safe". They are reached from our
-    // Update by a direct C++ call, which is what retail's near calls are, and
-    // from the probe through the three forwarders above.
+    // THE THREE INTERNAL BODIES ARE NOW REGISTERED (batch 7, 2026-09-12). The
+    // file header used to say none of them "has a mangled export in either the
+    // retail or the profile DLL" and left them address-only, reached from our
+    // own `Update` by a direct C++ call. That premise was checked with pefile
+    // against the retail export directory and found FALSE: all three are
+    // `AEAA` (PRIVATE) exports, and private is not unexported
+    // (reference_aeaa_is_private_not_unexported.md). Left unregistered, any
+    // OTHER by-name `ResolveExport` of one of them --
+    // `docs/runtime_port/closure/WORKLIST.md`'s own Input rows are exactly
+    // this -- would fall through to the DLL silently. Registering by NAME and
+    // by ADDRESS is what closes that, the same reason `Update` above gets both
+    // doors.
     //
-    // What a registration would NOT buy: it would not redirect the DLL's own
-    // near calls to them from the DLL's own Update. That needs a detour, and
-    // none is installed.
+    // Direct function pointers, not `RT_EXPORT_ONCE`/forwarders: all three are
+    // already free functions taking `this` as an explicit first `void*`
+    // parameter (Device_UpdateState/Device_PlatformGetKeyboardState/
+    // Device_PlatformGetMouseState above), which is exactly the calling
+    // shape a `RegisterRuntimeAddr` table entry needs, so no extra `extern "C"`
+    // shim is required to take their address here (internal linkage is not a
+    // barrier to a function pointer inside the same translation unit).
+    RegisterRuntimeExport("?UpdateState@Device@Input@@AEAAXPEAUState@12@0HAEBVTime@System@@@Z",
+                          (void*)&Device_UpdateState);
+    RegisterRuntimeAddr(0x1800e0fc0, (void*)&Device_UpdateState); ++n;
 
-    return 4;   // Update + the three internal bodies it owns
+    RegisterRuntimeExport("?PlatformGetKeyboardState@Device@Input@@AEAA_NPEAUState@12@@Z",
+                          (void*)&Device_PlatformGetKeyboardState);
+    RegisterRuntimeAddr(0x1800e1c60, (void*)&Device_PlatformGetKeyboardState); ++n;
+
+    RegisterRuntimeExport("?PlatformGetMouseState@Device@Input@@AEAA_NPEAUState@12@@Z",
+                          (void*)&Device_PlatformGetMouseState);
+    RegisterRuntimeAddr(0x1800e1e10, (void*)&Device_PlatformGetMouseState); ++n;
+
+    // What this does NOT buy: it does not redirect the DLL's OWN internal near
+    // calls from the DLL's own copy of `Update` to these bodies (an internal
+    // jump needs a detour, not a registration -- the same caveat input_win.cpp
+    // states for `PlatformUpdate`). It closes every OTHER path to these three:
+    // a by-name `ResolveExport`, and a by-address `ResolveAddr(Module::Runtime,
+    // ...)` from anywhere else in the tree.
+
+    return n;   // Update + the three internal bodies, all four now registered
 }
