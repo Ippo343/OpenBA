@@ -11,7 +11,14 @@ class in the absent-factory roster.
 
 **35 classes, 70 slots, 68 distinct functions ported and registered by default.**
 
-**It is not 35 verified bodies.** Every row registers with **attendance 0** in an
+**34 of the 70 slots are now BYTE-VERIFIED against the shipped DLL** (§9), by
+lane FACTUI1's offline oracle retargeted at this lane's committed tables, with a
+negative control that fails every one of them. Nine more are unreachable in that
+harness **because RETAIL's own constructor faults there**, which was measured by
+running each side alone rather than assumed.
+
+**It is still not 35 verified bodies, and no body has run in the game.** Every row
+registers with **attendance 0** in an
 ordinary run and nothing in this lane executed any of these bodies through a
 door. That is the EXPECTED reading with the DLL present (Wave 11 lane OBJINT:
 the DLL reaches its own factories through an in-module pointer stamped by a
@@ -202,8 +209,9 @@ DLL; address-only is invisible to `tools/runtime_census.py`.
 
 ## 4. WHAT IS UNVERIFIED
 
-**UNVERIFIED: every one of the 70 slots.** No body in this lane was executed
-through a door in any run. There is no live route: the DLL reaches its own
+**UNVERIFIED IN THE GAME: every one of the 70 slots** — separate from §9's
+offline byte verification, which is a different claim and does not replace this
+one. No body in this lane was executed through a door in any run. There is no live route: the DLL reaches its own
 factories through an in-module pointer, so with the DLL present the ported rows
 are registered and dead by construction. The attendance counters
 (`RtFactoriesSummary()`) exist so a later DLL-ABSENT cutover can say whether a
@@ -218,7 +226,12 @@ mint's own shape and returns null, rather than executing an EXEC-of-0. This is
 unconditionally and always reaches a real body — the diagnostic says the
 constructor behind a ported factory is itself unported. See §5.
 
-**A VERIFICATION ROUTE EXISTS AND THIS LANE DID NOT RUN IT.** Lane FACTUI1
+**THE VERIFICATION ROUTE WAS RUN AFTER ALL — see §9**, which replaces the
+paragraph that stood here. It said the oracle existed on FACTUI1's branch and
+could not reach this branch's tables; the integrator then added that worktree to
+this lane's reach, the oracle was retargeted, and the result is §9. The original
+text is kept below only so the reasoning that produced the wrong conclusion stays
+visible: *"Lane FACTUI1
 built an OFFLINE byte oracle for exactly this family and reports 26/26
 in-place bodies and 14/14 out-of-line constructors byte-identical to the
 shipped DLL's, with a negative control at 0/26 and 0/14: a short-lived
@@ -231,7 +244,11 @@ not run against this branch's tables before the merge. So "no oracle" was
 never true for this family (`reference_no_route_is_not_no_oracle.md`); what
 is true is that this lane did not have one in reach and says so.
 **Addressee: the Wave 28 integrator on the merged tip, or Wave 29** — point
-FACTUI1's harness at `runtime/src/*/rt_factories_*.inc`.
+FACTUI1's harness at `runtime/src/*/rt_factories_*.inc`."* — and it is exactly
+the shape of holdback this project keeps finding: a blocker stated once and true
+at the time, left standing after the thing that caused it went away
+(`reference_holdback_blockers_are_stale_check_them_first.md`). It survived about
+twenty minutes.
 
 **MEASURED, not predicted: the census delta.** §6.
 
@@ -428,3 +445,94 @@ doors does. See §7.2.
 - **Do not read "74 PORTED" as "74 working factories."** It means 74 slots now
   resolve to one of our functions. Whether those functions do the right thing is
   untested, by construction, until a DLL-absent boot runs one.
+
+---
+
+## 9. OFFLINE BYTE ORACLE — MEASURED, AFTER §4 HAD ALREADY RECORDED IT AS UNREACHABLE
+
+Source committed beside this doc as `docs/runtime_port/wave28_factrest_oracle.cpp.txt`
+— a `.txt`, and deliberately NOT under `tools/`, for the reason lane FACTUI1 gives
+for its own: standing warning 1 forbids this wave shipping an instrument, so
+promoting it is Wave 29's call. It is recorded where the next lane will reach it
+instead of dying with the session.
+
+**The method is FACTUI1's, not this lane's.** What is new here is that it
+`#include`s **this lane's committed `.inc` tables verbatim** (through one-line
+namespace wrappers), so the thing under test is the thing that shipped, not a
+hand-copy of it.
+
+```
+cp docs/runtime_port/wave28_factrest_oracle.cpp.txt /tmp/oracle.cpp
+# + inc/rt_factories_<ns>.inc.h wrappers: namespace f_<ns> { #include "<repo>/runtime/src/<ns>/rt_factories_<ns>.inc" }
+g++ -std=c++17 -O0 -g -o oracle.exe oracle.cpp
+./oracle.exe                 # positive
+./oracle.exe --negative      # MUST be 0/N everywhere
+NEWSTEPS=1 ./oracle.exe      # same, against the CreateNewObject tables
+RISKY=1 ONLY=<class> ./oracle.exe
+RISKY=1 OURSONLY=1 / THEIRSONLY=1 ONLY=<class> ./oracle.exe   # which side faults
+```
+
+### 9.1 Result
+
+| subject | positive | negative control | what it is worth |
+|---|---|---|---|
+| shape (b), `CreateInPlaceObject` tables | **11/11 byte-identical** | **0/11** | a REAL oracle: our transcribed stores vs retail's stores |
+| shape (b), `CreateNewObject` tables (`NEWSTEPS=1`) | **11/11** | **0/11** | ditto, the other table |
+| shape (a), abstract classes | **12/12** | **0/12** | both sides return `nullptr` — the whole of retail's behaviour for those 24 slots |
+| shape (c), reachable | **3/3** (`GraphicsMesh`, `ParticleSystem`, `PackageFile`) | — | **WRAPPER ONLY** |
+| shape (c), unreachable | 9 not run | — | retail's own ctor faults here, §9.3 |
+
+**34 of 70 slots verified** (11 classes x 2 + 12 abstract in-place slots... counted
+as slots: 22 shape-(b) + 12 abstract = 34), plus 3 wrapper-only.
+
+### 9.2 The wrapper-only rows are scored SEPARATELY and deliberately
+
+For the 14 delegating classes our body calls the DLL's `??0C@NS@@` and so does
+retail's, **so the constructor's stores cannot disagree — the two sides share the
+body they are supposed to be comparing.** Folding those into the headline would be
+`reference_shadow_marker_is_not_an_oracle.md` exactly. What the 3/3 does test is
+the wrapper: that we call the same constructor, add no store and drop none.
+
+### 9.3 The nine unreachable rows: MEASURED which side faults
+
+`EdgeMesh`, `FrameCopyImageBuffer`, `ReflectionImageBuffer`, `ImageBuffer`,
+`PixelProgram`, `RenderState`, `VertexLayout`, `VertexProgram`, `VideoProgram`
+segfault in this harness. Running **each side alone** (`OURSONLY=1` /
+`THEIRSONLY=1`, nine classes, both ways):
+
+```
+EdgeMesh       OURS-side:CRASHED   DLL-side:CRASHED
+ImageBuffer    OURS-side:CRASHED   DLL-side:CRASHED
+...   (all nine, both sides)
+```
+
+**The DLL's own constructor faults with our code not running at all.** Their ctors
+reach `?PlatformConstruct@VertexBuffer/IndexBuffer/ImageBuffer@Video@@`, which
+needs a video Device this bare `LoadLibrary` process has not stood up. So these
+nine are unreachable because of retail's dependency, not because of anything in
+the port — a statement this lane can make because it ran the one-sided check
+rather than inferring it from a two-sided crash. **A SKIP IS STILL NOT A PASS**:
+they are UNVERIFIED.
+
+### 9.4 INSTRUMENT DEFECT IN THIS ORACLE, FOUND AND FIXED BEFORE IT WAS BELIEVED
+
+The first run scored **0/11** with "3 bytes differ, first +0x00" on every
+shape-(b) class — a result that reads exactly like a catastrophic port. It was the
+**oracle**: it dereferenced the `??_7` export (`*(void**)Sym(name)`), which yields
+`vtable[0]`, the first virtual function, where a `??_7` export's ADDRESS *is* the
+vtable. `rt_factories_core.cpp` stores `ResolveExport()`'s return value — the
+address — and was right all along.
+
+Two things worth carrying:
+
+* **The divergence was three bytes wide and at offset 0 on every class**, i.e.
+  maximally consistent, which is what made it read as a real systematic defect
+  rather than an instrument fault. A uniform failure is evidence about the
+  instrument at least as often as about the subject.
+* The bug is inherited verbatim from FACTUI1's oracle, whose comment asserts
+  "the `??_7` export IS the slot". **That lane reports 26/26 and 14/14 passing**,
+  so either its tables store the dereferenced value consistently on both sides or
+  its wrapper shape hides it. **Addressee: lane FACTUI1 (messaged), and the Wave
+  28 integrator** — this is a question about FACTUI1's numbers, raised by this
+  lane, and it must not be quietly assumed to be benign there because it was
+  benign to fix here.
