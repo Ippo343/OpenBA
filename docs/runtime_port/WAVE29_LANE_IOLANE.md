@@ -5,6 +5,97 @@ Subject: IO's 4 BODY gap rows, IO's 2 MINTED vtable rows.
 
 ---
 
+## ⚠ POST-REPORT CORRECTION — READ THIS FIRST
+
+**I EDITED AFTER REPORTING. Kickoff warning 18 says to say so loudly; this is
+that.** The edit is **DOCUMENTATION ONLY** — `WAVE29_LANE_IOLANE.md` and
+`wave29_iolane_retslot_screen.py.txt`. **No file under `runtime/`, `standalone/`,
+`code/`, `engine/` or `dx11/` was touched**, so the integrator's merge-time
+`git diff --stat <base>...<branch> -- runtime/ standalone/ code/ engine/ dx11/`
+is byte-identical to what it was at `ea8a2839`, and no measurement in this
+document changes.
+
+**WHAT WAS WRONG.** In §7.1 I wrote that AVBODY's typedef needs "the slot first",
+and I sent the same prescription to AVBODY:
+
+```
+    WRONG:  using FnGetName = String* (*)(String* retSlot, const ShaderProgram* self, int index);
+```
+
+**Lane AVBODY refuted it, and they are right.** That is the FREE-FUNCTION rule.
+For a **member** function returning a class by value, MSVC x64 leaves `this` in
+RCX and puts the return pointer in RDX:
+
+```
+    RIGHT:  using FnGetName = String* (*)(const void* self, String* ret, int32_t index);
+            // RCX = this, RDX = hidden return slot, R8D = index
+```
+
+I re-read `0x18004e4b0` myself rather than taking the correction on trust, and
+the bytes settle it with an asymmetry that cannot be faked — an **object is
+dereferenced**, a **slot is stored through**:
+
+```
+  18004e4cc:  shl  $0x4,%rax          ; R8D is the index, scaled by 16
+  18004e4d0:  add  0x30(%rcx),%rax    ; RCX DEREFERENCED at +0x30  => RCX is `this`
+  18004e4d4:  mov  %r9,(%rdx)         ; RDX STORED THROUGH         => RDX is the slot
+  18004e4ec:  mov  %rdx,%rax          ; the slot is what comes back
+```
+
+**My prescription was wrong IN THE WILD-WRITE DIRECTION** — it would have put
+`self` in RDX and the caller's `ret` in RCX, so the body would dereference the
+caller's String slot as a `ShaderProgram` at +0x30 and write 8 bytes through
+`self`. That is precisely the defect the screen exists to prevent. AVBODY also
+notes independent agreement from Wave 28 lane GFXBODY's already-landed
+`Material::GetConstantName` forwarder, which has used the correct order since
+last wave.
+
+**WHY MY CONTROLS COULD NOT CATCH IT — AVBODY's diagnosis, and it is the
+transferable part.** M1 and M2 both answer *"IS there a hidden slot?"*. Neither
+answers *"WHERE does it sit?"*, and my known-positive/known-negative pair only
+exercises the first question. **A control that scores a binary present/absent
+verdict cannot validate an ORDERING claim derived beside it.** The ordering rode
+along on the screen's credibility — a measured number lending cover to an
+asserted one, which is a named pattern in this project's ledger and which I
+walked straight into while writing a message telling AVBODY to control their own
+screen.
+
+**FIXED, by adding the third column AVBODY asked for.** M3 reads, from the
+bytes, which register is **dereferenced** (→ `this`) and which is **stored
+through** (→ the slot). Re-run:
+
+```
+M1     M2     extent  M3 where           symbol
+BYVAL  BYVAL  0x29    this=?   slot=rdx  ?GetSource@Stream@IO@@…     [M1/M2 positive; SLOT HALF of M3 only]
+BYVAL  BYVAL  0x38    this=rcx slot=rdx  ?GetName@PackageFile@IO@@…  [M3 positive, BOTH halves]
+ref    ref    0x5     n/a (no slot)      ?GetObjectName@TextFileStream@IO@@…  [negative]
+ref    ref    0x5     n/a (no slot)      ?GetObjectType@TextFileStream@IO@@…
+ref    ref    0x4     n/a (no slot)      ?GetObjectVersion@TextFileStream@IO@@…
+BYVAL  BYVAL  0x44    this=rcx slot=rdx  ?GetConstantName@ShaderProgram@Video@@…  va=0x18004e4b0
+BYVAL  BYVAL  0x44    this=rcx slot=rdx  ?GetTextureName@ShaderProgram@Video@@…   va=0x18004e420
+```
+
+**AND I ALMOST REPEATED THE MISTAKE INSIDE THE FIX.** M3's first run scored my
+existing known positive as `this=? slot=rdx`, and I nearly read that as a pass.
+It is not: `?GetSource@Stream@IO@@` is the **abstract base** — it writes a null
+String into the slot and **never touches RCX at all** (verified at
+`0x18000c6a0`), so `this=?` is a *true statement about that body* and that row
+**cannot exercise M3's `this` half**. A control that cannot reach half the
+mechanism it scores is the union-control defect again. I added
+`?GetName@PackageFile@IO@@` (`0x180025310`, `mov 0x40(%rcx),%rax` **and**
+`mov %rax,(%rdx)`) as M3's own positive, which reaches both halves and reads
+`this=rcx slot=rdx`.
+
+**None of this touches my own four rows**: they are `AEBV`/`H`, have no hidden
+slot, and M3 correctly prints `n/a (no slot)` for all three. The error was
+entirely in advice I gave about a *partner's* subject.
+
+**Scored honestly: the pairing instruction worked exactly as the kickoff says it
+does. This defect was found by my partner and by nobody on my side, and my own
+controls were structurally incapable of finding it.**
+
+---
+
 ## 0. HEADLINE
 
 **Three of four bodies ported, registered and ORACLE-verified against retail on a
@@ -400,9 +491,23 @@ BYVAL  BYVAL  0x44    yes    ?GetTextureName@ShaderProgram@Video@@…           
 ```
 
 Result handed to AVBODY: both their rows carry a hidden RDX return slot,
-confirmed twice; the typedef needs **three** parameters with the slot first, and
-at 0x44 bytes each the bodies construct a String into that slot rather than
-returning a field.
+confirmed twice.
+
+> ⚠ **THE NEXT CLAUSE OF THIS PARAGRAPH WAS WRONG AND IS CORRECTED AT THE TOP OF
+> THIS DOCUMENT.** It read *"the typedef needs three parameters with the slot
+> first"*. It is `(self /*RCX*/, ret /*RDX*/, index /*R8D*/)` — `this` stays in
+> RCX for a member function. Refuted by lane AVBODY, re-verified by me from
+> `0x18004e4b0`'s bytes, and the screen now carries an M3 column that measures
+> the ordering instead of asserting it. The false sentence is left visible rather
+> than silently deleted.
+
+I also told AVBODY that 0x44 bytes was "far too big for a bare accessor, so they
+construct a String". **AVBODY's caution on that is correct and I accept it**:
+~0x20 of the 0x44 is MSVC EH-state bookkeeping (`MOV [RSP+8],-2`,
+`MOV [RSP],0`/`1`) with no observable effect, and the real work is 9
+instructions. The conclusion was true but **size alone was a weak argument**; the
+store through RDX is the strong one. A correct conclusion reached by a weak
+argument is still a weak argument, and it is the argument that gets reused.
 
 **THE SCREEN SHIPPED A DEFLATING BUG AND ONLY THE CONTROL FOUND IT.** M1's first
 version fell back to `sym[sym.rfind("QEBA"):]`, which for a `UEBA` symbol is
@@ -413,14 +518,52 @@ exists to prevent. Every other row it was asked about happened to be right, so
 nothing but the known positive could have caught it. The fix carries the defect
 in a comment at the fix site.
 
-### 7.2 The other direction
+### 7.2 The other direction — AVBODY reported after I did, and it mattered
 
-I could not run AVBODY's instrument against my subject because AVBODY has not
-published one. What I did instead, and it is weaker: I ran the **previous wave's**
-equivalent — the `file_stream_probe.cpp` ctor/vptr screens already in the tree —
-against my rows, and added screen D and control 6 to them (§3.4). That is a
-substitute for a partner's eyes, not a replacement, and it found nothing my own
-screens had not.
+At the time I first reported, AVBODY had not published an instrument, so I ran
+the **previous wave's** equivalent — the `file_stream_probe.cpp` ctor/vptr
+screens already in the tree — against my rows, and added screen D and control 6
+to them (§3.4). That found nothing my own screens had not, and I recorded it as a
+substitute for a partner's eyes rather than a replacement.
+
+**AVBODY then replied, and refuted the central prescription I had sent them.**
+See the correction at the top. The score for the pairing instruction is
+unambiguous and it is the kickoff's own claim, reproduced:
+
+* defects my controls found in my work: **2** (§9 rows 1 and 2), both by a
+  control firing, neither by review;
+* defects **AVBODY** found in my work: **2** — the argument ORDER (wild-write
+  direction) and the weak size argument;
+* defects **I** found in AVBODY's work: **0**. My screen CONFIRMED their subject
+  and my extent and BYVAL figures reproduced theirs independently, which is
+  useful, but it is corroboration and not a defect found.
+
+**What they got from me that reproduced**: extent 0x44 on both rows (they derived
+the same from inter-function `CC` padding, a different method, and neither is
+`.pdata`); BYVAL on both; FACT 1 that the hidden-slot trap is theirs alone; and
+my M1 self-reported defect, which they cite.
+
+### 7.3 The String idiom — one half corroborated, one half NOT
+
+I asked AVBODY to compare transcriptions of the inlined `System::String`
+refcount idiom, since half of the body I declined (§6) is that idiom.
+
+**ADOPT half — CORROBORATED, from a different function in a different
+namespace.** AVBODY's `0x18004e4d4..e4e2` matches my transcription from
+`?SetObject@TextFileStream@IO@@` (`0x1800ba280`) exactly: unconditional QWORD
+null-store into the destination, load candidate, `TEST`/`JZ`, store, then
+`INC dword [p-0x4]` — same `[ptr-4]`, same DWORD width.
+
+**RELEASE half — NOT CORROBORATED, and I say so rather than letting the adopt
+half stand in for it.** AVBODY reports that **none** of their five bodies
+contains an inlined String release, so they could not check it. What it does have
+is a **third, independent** source: `runtime/types/system/String.h` documents the
+block as `{int32 length @ -8, int32 refCount @ -4, chars @ 0}`, which is why the
+freed pointer is `p-8` and not `p`. That is a header agreeing with my read of the
+bytes, not a second reader of the bytes. **The release half of the idiom still
+rests on one reading**, and it is exactly the half where an error is a
+use-after-free that does not reproduce on short runs — which is reason #1 in §6
+for declining `SetupFileSystem`, now slightly stronger than when I wrote it.
 
 ---
 
@@ -457,6 +600,17 @@ screens had not.
    unpromotable, 1 measured-not-promotable) + 4 DATA.
 9. **The board figures in §1 are mine, on my branch, pre-merge.** They must be
    re-derived by the integrator; `called` moved for two reasons at once.
+10. **The retail `System::String` RELEASE idiom transcribed in §7.3 still rests
+    on ONE reading of the bytes.** AVBODY has no body containing an inlined
+    release and could not corroborate it; the ADOPT half is corroborated
+    independently, and `String.h` agrees about the block layout, but a header is
+    not a second reader. Anyone porting `SetupFileSystem` should treat the
+    release half as unconfirmed.
+11. **The post-report correction re-verified ONE thing and inherited the rest.**
+    I re-read `0x18004e4b0` and `0x18000c6a0` and `0x180025310` myself. I did
+    NOT re-run the game, the census, the oracles, or the promotion A/B after the
+    doc edit — nothing in the edit could affect them, because no code file
+    changed.
 
 ---
 
@@ -470,6 +624,8 @@ Deflating outranks inflating (warning 8).
 | 2 | `file_stream_probe.cpp` verdict line | the `att` range was hard-bounded `1..5`; a new control scores `att=0` and prints "CAUGHT BUT NOT VIA ITS OWN MECHANISM — NOT BANKED" | **DEFLATING** — a working control reads as a broken one | **FIXED** in the same commit as control 6; the bound is invisible and nothing points at it |
 | 3 | `RtIo_PackageFile_Ctor` / `Reconstruct` oracles | compared the vtable field, which a promotion makes differ by construction | would have become a permanent unexplained red line | **FIXED** with a derived exclusion + A/B, §4.5 |
 | 4 | `PromoteVtableGuarded` | its own printout says the refusal path is `UNTESTED` on every normal run | inflating-ish: "0 refused" from a guard never handed a bad row | **NOT fixed** — exercised on my row instead (§4.1). The tool already names the remedy. |
+| 1b | my own retslot screen, **again** | M1+M2 answer only "IS there a slot?"; I derived an ORDERING prescription beside them that no control could reach, and got it **backwards** | **WILD-WRITE** — the prescription would deref the caller's slot as an object and write through `self` | **FIXED** post-report: M3 column measures deref-vs-store-through. **Found by lane AVBODY. Not findable by my controls, by construction.** |
+| 1c | M3's first control | scored `?GetSource@Stream@IO@@` `this=? slot=rdx` and I nearly read it as a pass — that body is the abstract base and **never touches RCX**, so it cannot exercise M3's `this` half | **DEFLATING** (a half-blind control reading as a whole one) | **FIXED** in the same edit: `?GetName@PackageFile@IO@@` added as M3's own positive, reaching both halves |
 | 5 | my registration check | concat branch never handed a positive | unknown; cannot be scored | **RECORDED, not cleared** (§8.6) |
 | 6 | `.pdata` for my three accessors | **does not exist at all** (leaf, no prologue) | DEFLATING — silence reads as "no such function" | pre-existing; the vtable and the export directory are the authorities here |
 
@@ -562,3 +718,19 @@ No tool in `tools/` was written or modified.
 5. My first registration check compared an uppercase verb against a lowercased
    string, so its BY-ADDRESS branch could never fire. The by-name branch masked
    it, which is a union-scored control in miniature.
+6. **I prescribed a wild-write argument order to my partner** and put it in a
+   committed document (see the correction at the top). I applied the
+   free-function return-slot rule to a member function. Two things make this
+   worse than an ordinary mistake and both are mine: I derived an **ordering**
+   claim from a **present/absent** screen and let the screen's credibility carry
+   it; and I did it **in the same message** in which I was telling AVBODY to hand
+   their screen a known positive. I could not have caught it — but I could have
+   noticed that I was asserting something my instrument did not measure, which is
+   the check this project keeps writing down.
+7. **I nearly repeated it inside the fix**, reading a half-blind M3 control as a
+   pass (§9 row 1c). The only reason I did not is that I disassembled the control
+   subject to ask *why* it printed `this=?` instead of accepting the shape.
+8. I edited after reporting. It is documentation-only and the top of this file
+   says so, but it is still a violation of warning 18's default and the
+   integrator should treat the `ea8a2839` code tree, not this prose, as the
+   measured artefact.
