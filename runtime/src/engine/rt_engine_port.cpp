@@ -53,6 +53,8 @@ extern int RtEngineCoreRegister();      // engine.cpp           (lane B)  — 3
 extern int RtEngineLifecycleRegister(); // engine_lifecycle.cpp (lane ENG) — 8
 extern int RtEngineMainLoopRunRegister();// mainloop_run.cpp    (lane ADDR)— 2
 extern int RtEngineMainLoopVideoRegister();// mainloop_video.cpp (lane VIDL)— 2
+extern int RtEnginePlatformRegister();  // engine_platform.cpp  (W23 ENGINE)— 1
+extern int RtEngineLoadResourcesRegister();// updateloop_loadresources.cpp  — 1
 
 void RtEnginePortInit() {
     if (!RtWaveEnabled("BANISHED_RT_ENGINE")) {
@@ -88,6 +90,23 @@ void RtEnginePortInit() {
     // need (0x18004f620 SetSize and 0x180034440 elem-destroy), so turning this
     // switch off returns BOTH of those to the DLL as well.
     if (RtWaveEnabled("BANISHED_RT_MAINLOOPVIDEO")) mlvid = RtEngineMainLoopVideoRegister();
+    // Wave 23 lane ENGINE. Two OWN switches, and neither is folded into
+    // ENGINELIFE, because they fail in opposite ways and an integrator needs to
+    // A/B them separately:
+    //   * PlatformConfigure is the CUTOVER BOOT WALL. Its Half A is the branch
+    //     every unattended boot takes and is fully ported; its Half B (the
+    //     launcher dialog) needs DLL resources and refuses BY NAME at cutover.
+    //     A defect here shows up as "the launcher appears when it should not"
+    //     or "settings stop persisting", neither of which is a crash.
+    //   * LoadResources runs on EVERY game load, once per loop, from the LOADER
+    //     THREAD (Loader::Run -> UpdateLoop::LoadResources). A defect here is a
+    //     missing mod resource or a leaked String refcount, both silent. It is
+    //     also the body that removes one of the two unported readers of
+    //     ?_singleton@Configuration@System@@ — see the file banner for what
+    //     that does and does NOT discharge.
+    int plat = 0, ldres = 0;
+    if (RtWaveEnabled("BANISHED_RT_ENGINEPLATFORM")) plat = RtEnginePlatformRegister();
+    if (RtWaveEnabled("BANISHED_RT_ENGINELOADRES")) ldres = RtEngineLoadResourcesRegister();
     printf("[RtPort]   Engine loop family (lane A): %d exports registered "
            "(LoadResources held back -- no oracle, see WAVE8_LANE_A.md)\n", loops);
     printf("[RtPort]   Engine::Engine + MainLoop (lane B): %d exports registered "
@@ -105,6 +124,12 @@ void RtEnginePortInit() {
            "0x18004f620 and elem-destroy 0x180034440 by ADDRESS; OnVideoRestart "
            "OPENS THREE NAME DOORS -- Load@External, GetCompiledPath@ExternalFactory, "
            "OnVideoRestart@SaveLoad -- see WAVE9_LANE_VIDL.md §2)\n", mlvid);
+    printf("[RtPort]   Engine::PlatformConfigure (W23 lane ENGINE): %d registered "
+           "(THE CUTOVER BOOT WALL -- Half A ported, Half B is the launcher "
+           "dialog and needs DLL resources; see WAVE23_LANE_ENGINE.md §1)\n", plat);
+    printf("[RtPort]   UpdateLoop::LoadResources (W23 lane ENGINE): %d registered "
+           "(Wave 8 lane A's oldest holdback, discharged; removes ONE of the two "
+           "unported readers of ?_singleton@Configuration@System@@)\n", ldres);
     printf("[RtPort] Engine: %d exports registered\n",
-           loops + core + life + mlrun + mlvid);
+           loops + core + life + mlrun + mlvid + plat + ldres);
 }
