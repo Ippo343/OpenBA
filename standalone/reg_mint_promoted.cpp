@@ -165,6 +165,58 @@
 // no run can verify (reference_uncalled_port_is_not_verified.md). These ten
 // have live consumers; that is the whole difference.
 
+// ===========================================================================
+// THE GUARDED VTABLE PROMOTION  (Wave 25 lane SWEEP)
+// ===========================================================================
+// A promoted `??_7` row publishes WHATEVER THE LIVE REGISTRY HELD when
+// RtDataMintInit() ran. If a wave kill switch (BANISHED_RT_GRAPHICS=0,
+// BANISHED_RT_IO=0, ...) suppressed a slot's registration, the mint fills that
+// slot with a named abort trap -- and the promotion then stamps a table of
+// abort traps into a LIVE OBJECT'S VPTR. The build stays clean and links;
+// kickoff §3.6 says exactly that a build check cannot see this.
+//
+// Wave 25 lane VTGFX added RtMintVtableTrapCount() and made its own new row
+// refuse itself, and explicitly handed the extension to this lane: the five
+// vtables promoted in Waves 19-20 (and the four UI rows from Wave 10B, and the
+// Video one from Wave 18 -- ELEVEN rows in total, not five) carried the
+// identical exposure with no guard at all.
+//
+// Every `??_7` promotion in this file now goes through here. A `?_typeInfo@`
+// row does NOT: it is a single pointer, not a table of slots, and
+// RtMintVtableTrapCount would answer -1 for it -- which is "not a vtable row",
+// a different answer from "zero traps", and routing those through this helper
+// would have refused all thirty of them.
+//
+// WHAT THIS GUARD DOES NOT DO: it does not check that a slot's body is CORRECT,
+// only that a body was registered. A wrong port passes it.
+static int g_vtGuardEvaluated = 0;
+static int g_vtGuardRefused   = 0;
+
+static bool PromoteVtableGuarded(const char* symbol, unsigned long long va, int* n) {
+    ++g_vtGuardEvaluated;
+    const int traps = RtMintVtableTrapCount(symbol);
+    if (traps != 0) {
+        ++g_vtGuardRefused;
+        // traps < 0 is "not a minted VTABLE row" -- a typo or a table that was
+        // never minted -- which must NOT read as a green light either.
+        fprintf(stderr,
+                "[RtMint] REFUSING to promote %s: RtMintVtableTrapCount()=%d "
+                "(expected 0). %s Publishing this table would put named abort "
+                "traps in a live object's vptr. The row stays on the DLL.\n",
+                symbol, traps,
+                traps < 0 ? "The symbol is not a minted VTABLE row at all."
+                          : "A slot has no registered port -- a wave kill switch "
+                            "has suppressed at least one registration.");
+        fflush(stderr);
+        return false;
+    }
+    void* st = RtMintPromotionStorage(symbol, va);
+    RegisterRuntimeExport(symbol, st);
+    RegisterRuntimeAddr(va, st);
+    if (n) ++*n;
+    return true;
+}
+
 int RtMintRegisterPromotedRows() {
     // Kill switch, for the A/B this file's warrants were written from and for
     // anyone bisecting a UI regression onto it. DEFAULT-ON: these rows are
@@ -322,9 +374,7 @@ int RtMintRegisterPromotedRows() {
     // The `Construct` divergence above is expected and permanent for any
     // promoted vtable: it is the vtable identity, nothing else. Stated here so
     // a later reader does not find that red line and read it as a regression.
-    st = RtMintPromotionStorage("??_7SpriteSheet@UI@@6B@", 0x180154590ull);
-    RegisterRuntimeExport("??_7SpriteSheet@UI@@6B@", st);
-    RegisterRuntimeAddr(0x180154590ull, st); ++n;
+    PromoteVtableGuarded("??_7SpriteSheet@UI@@6B@", 0x180154590ull, &n);
     // ---- the ELEVENTH `?_typeInfo@` row  (Wave 10B lane ELEM) --------------
     //
     // Not promoted with the ten above for the reason that block's closing
@@ -417,9 +467,7 @@ int RtMintRegisterPromotedRows() {
     // and what the boot confirms. It is NOT a claim that all eleven bodies are
     // differentially verified, and docs/runtime_port/WAVE10B_LANE_ELEM.md says
     // which are and which are not, per slot.
-    st = RtMintPromotionStorage("??_7Element@UI@@6B@", 0x180156160ull);
-    RegisterRuntimeExport("??_7Element@UI@@6B@", st);
-    RegisterRuntimeAddr(0x180156160ull, st); ++n;
+    PromoteVtableGuarded("??_7Element@UI@@6B@", 0x180156160ull, &n);
     // ========================================================================
     // THE FIRST MINTED **VTABLE** ROW  —  Wave 10B lane DLGV
     // ========================================================================
@@ -469,9 +517,7 @@ int RtMintRegisterPromotedRows() {
     // `calls=0`-inverts-the-conclusion shape caught early rather than late
     // (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md), and
     // the sub-counters exist precisely so the gap is visible in every run's log.
-    st = RtMintPromotionStorage("??_7DialogInstance@UI@@6B@", 0x180156d70ull);
-    RegisterRuntimeExport("??_7DialogInstance@UI@@6B@", st);
-    RegisterRuntimeAddr(0x180156d70ull, st); ++n;
+    PromoteVtableGuarded("??_7DialogInstance@UI@@6B@", 0x180156d70ull, &n);
 
     // ========================================================================
     // ??_7ToolTipDialog@UI@@6B@  —  WAVE 10D, warrant 7a
@@ -525,9 +571,7 @@ int RtMintRegisterPromotedRows() {
     // The tooltip is fully populated — what is empty is the +0x58 override, not
     // the tooltip. Covering the other arm needs an element some controller has
     // called ?SetToolTipString@Element@UI@@ on; see WAVE10D_LANE_MOUSE.md §9.
-    st = RtMintPromotionStorage("??_7ToolTipDialog@UI@@6B@", 0x180157880ull);
-    RegisterRuntimeExport("??_7ToolTipDialog@UI@@6B@", st);
-    RegisterRuntimeAddr(0x180157880ull, st); ++n;
+    PromoteVtableGuarded("??_7ToolTipDialog@UI@@6B@", 0x180157880ull, &n);
 
     // ---- ?_typeInfo@ToolTipDialog@  —  WAVE 10D, warrant 7b ----------------
     //
@@ -847,9 +891,7 @@ int RtMintRegisterPromotedRows() {
     // slot 5: TRAP=0 means those seven slots can no longer `abort()`, slot 0 IS
     // exercised and clean, and leaving the row unpromoted would not verify the
     // seven either — it would only keep slot 0 unreachable too.
-    st = RtMintPromotionStorage("??_7ImageBuffer@Video@@6B@", 0x180154fc0ull);
-    RegisterRuntimeExport("??_7ImageBuffer@Video@@6B@", st);
-    RegisterRuntimeAddr(0x180154fc0ull, st); ++n;
+    PromoteVtableGuarded("??_7ImageBuffer@Video@@6B@", 0x180154fc0ull, &n);
 
     st = RtMintPromotionStorage("?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A",
                                 0x1801fa548ull);
@@ -1015,21 +1057,13 @@ int RtMintRegisterPromotedRows() {
     // READY and unpromoted since Wave 17; see WAVE19_LANE_IOBASE.md for the
     // route question, which is answered there and is NOT answered by this
     // comment.
-    st = RtMintPromotionStorage("??_7BinaryReader@IO@@6B@", 0x1801552e0ull);
-    RegisterRuntimeExport("??_7BinaryReader@IO@@6B@", st);
-    RegisterRuntimeAddr(0x1801552e0ull, st); ++n;
+    PromoteVtableGuarded("??_7BinaryReader@IO@@6B@", 0x1801552e0ull, &n);
 
-    st = RtMintPromotionStorage("??_7Visitor@IO@@6B@", 0x1801558b0ull);
-    RegisterRuntimeExport("??_7Visitor@IO@@6B@", st);
-    RegisterRuntimeAddr(0x1801558b0ull, st); ++n;
+    PromoteVtableGuarded("??_7Visitor@IO@@6B@", 0x1801558b0ull, &n);
 
-    st = RtMintPromotionStorage("??_7MemoryStream@IO@@6B@", 0x1801555b0ull);
-    RegisterRuntimeExport("??_7MemoryStream@IO@@6B@", st);
-    RegisterRuntimeAddr(0x1801555b0ull, st); ++n;
+    PromoteVtableGuarded("??_7MemoryStream@IO@@6B@", 0x1801555b0ull, &n);
 
-    st = RtMintPromotionStorage("??_7VisitorStream@IO@@6B@", 0x180155a20ull);
-    RegisterRuntimeExport("??_7VisitorStream@IO@@6B@", st);
-    RegisterRuntimeAddr(0x180155a20ull, st); ++n;
+    PromoteVtableGuarded("??_7VisitorStream@IO@@6B@", 0x180155a20ull, &n);
 
     // ---- ??_7BinaryWriter@IO@@6B@ — the row that was READY since Wave 17 ----
     //
@@ -1080,9 +1114,7 @@ int RtMintRegisterPromotedRows() {
     // If nothing ever dispatches it, promoting changes nothing. If something
     // does, it changes from the DLL's table to one with no traps in it. Neither
     // outcome is a regression, and leaving it unpromoted would not verify it.
-    st = RtMintPromotionStorage("??_7BinaryWriter@IO@@6B@", 0x180155210ull);
-    RegisterRuntimeExport("??_7BinaryWriter@IO@@6B@", st);
-    RegisterRuntimeAddr(0x180155210ull, st); ++n;
+    PromoteVtableGuarded("??_7BinaryWriter@IO@@6B@", 0x180155210ull, &n);
 
     // ========================================================================
     // WAVE 20 LANE PROMOTE — ??_7BinaryFileStream@IO@@6B@, and it is the ONLY
@@ -1154,9 +1186,7 @@ int RtMintRegisterPromotedRows() {
             printf("[RtMint] BANISHED_RT_PROMOTE_BFS=0 -- "
                    "??_7BinaryFileStream@IO@@6B@ left on the DLL (A/B control)\n");
         } else {
-            st = RtMintPromotionStorage("??_7BinaryFileStream@IO@@6B@", 0x1801554d0ull);
-            RegisterRuntimeExport("??_7BinaryFileStream@IO@@6B@", st);
-            RegisterRuntimeAddr(0x1801554d0ull, st); ++n;
+            PromoteVtableGuarded("??_7BinaryFileStream@IO@@6B@", 0x1801554d0ull, &n);
         }
     }
 
@@ -2152,5 +2182,17 @@ int RtMintRegisterPromotedRows() {
     // ------------------------------------------------------------------------
 
     printf("[RtMint] promoted %d minted DATA row(s) -- live on every run\n", n);
+    // The vtable promotion guard's own line. EFFECTIVENESS COUNTER FIRST: a
+    // "0 refused" from a guard that was never handed a bad row is not a
+    // measurement, so the number of synthetic trap injections is printed beside
+    // it. Arm them with BANISHED_RT_MINT_TRAP_CONTROL=<symbol>[;<symbol>...],
+    // or `*` for every row; each armed row MUST appear as a REFUSING line above.
+    printf("[RtMint] vtable promotion guard: %d row(s) evaluated, %d refused, "
+           "%d synthetic trap injection(s) this run%s\n",
+           g_vtGuardEvaluated, g_vtGuardRefused, RtMintTrapControlInjections(),
+           RtMintTrapControlInjections() == 0
+               ? "  (refusal path UNTESTED on this run -- set "
+                 "BANISHED_RT_MINT_TRAP_CONTROL=* to test it)"
+               : "");
     return n;
 }

@@ -45,9 +45,20 @@ for L in open(UNTRIAGED, encoding='utf-8', errors='replace'):
 
 run = {}
 for L in open(RUNLOG, encoding='utf-8', errors='replace'):
-    m = re.match(r'\[RtDiff\]\s+(.*?)\s+calls=(\d+)\s+worked=(\S+)\s+divergences=(\d+)', L)
+    # WAVE 25 lane SWEEP widened this. RtDiffSummary now prints two more
+    # columns -- `entered=` (the entry counter) and `class=` (the per-site
+    # population, derived at runtime) -- BETWEEN `calls=` and `divergences=`.
+    # The old pattern required `worked=` to be followed immediately by
+    # `divergences=`, so on a new log it matched NOTHING and this tool would
+    # have printed a confident "0 sites" instead of failing. Both fields are
+    # optional so the tool still reads Wave 24's logs.
+    m = re.match(r'\[RtDiff\]\s+(.*?)\s+calls=(\d+)\s+'
+                 r'(?:entered=(\S+)\s+)?worked=(\S+)\s+'
+                 r'(?:class=(\S+)\s+)?divergences=(\d+)', L)
     if m:
-        run[m.group(1).strip()] = (int(m.group(2)), m.group(3), int(m.group(4)))
+        # groups: 1 name, 2 calls, 3 entered (optional), 4 worked,
+        #         5 class (optional), 6 divergences
+        run[m.group(1).strip()] = (int(m.group(2)), m.group(4), int(m.group(6)))
 
 
 def ran(entry):

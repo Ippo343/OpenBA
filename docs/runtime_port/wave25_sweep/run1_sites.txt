@@ -1,0 +1,646 @@
+[RtDiff]   Math::Matrix::Matrix(4 x const Vector4&)         calls=855        entered=855        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Context::Clear[slot]                      calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::Context::DrawIndexed[slot]                calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::Context::GetMaxDynamicInstances[slot]     calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::Context::BeginVertices[slot]              calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::Context::EndVertices[slot]                calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::Context::BeginIndexedVertices[slot]       calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::Context::EndIndexedVertices[slot]         calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::Context::BeginInstancedIndexedVertices[slot] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::Context::EndInstancedIndexedVertices[slot] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Element::ComputeLayout[thunk]                calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Element::Draw[thunk]                         calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::DialogInstance::OnUpdateLayout[shape]        calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::DialogInstance::OnUpdate[shape]              calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::DialogInstance::OnElementEvent[shape]        calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::DialogController::~DialogController[shape]   calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::DialogInstance::~DialogInstance[shape]       calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::LinkedList::Clear(0x1800325f0)[shape] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   WAVE9 lane UID shape decoders [negative control] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::SpriteContext::AddSpriteDraw                 calls=4          entered=16         worked=12         class=SHADOW         divergences=0
+[RtDiff]   UI::SpriteContext::AddLine                       calls=4          entered=7          worked=3          class=ATTENDANCE     divergences=0
+[RtDiff]   UI::SpriteContext::SetScissor(Viewport const&)   calls=9          entered=9          worked=0          class=ORACLE         divergences=0
+[RtDiff]   UI::SpriteContext::SetScissor(int,int,int,int)   calls=4          entered=4          worked=0          class=ORACLE         divergences=0
+[RtDiff]   UI::SpriteContext::FlushDeferred                 calls=1          entered=1          worked=0          class=SHADOW         divergences=0
+[RtDiff]   UI::DialogInstance::StartTimer[shape]            calls=6          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::DialogInstance::AddController(tab)[shape]    calls=10         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::DialogInstance::AddController(6)[shape]      calls=10         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::DialogInstance::DialogInstance[shape]        calls=14         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI3 pin negative control (sink)                  calls=3          entered=?          worked=?          class=UNCLASSED      divergences=3
+[RtDiff]   DLG2 pin negative control (sink)                 calls=3          entered=?          worked=?          class=UNCLASSED      divergences=3
+[RtDiff]   UI::Element::TypeName[bytes]                     calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Element::Type[bytes]                         calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Element::Persist[bytes]                      calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Element::Update[bytes]                       calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Element::Enable[bytes]                       calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Element::Contains[bytes]                     calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Element::SetColor[bytes]                     calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Element::GetBorder[bytes]                    calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Wave9X::System::MemoryAllocator::ctor            calls=3          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Wave9X::IO::Modification::ctor                   calls=2          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Wave9X::Object::Factory::ctor                    calls=2          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Wave9X::Object::ExternalFactory::ctor            calls=2          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Wave9X::IO::FileSystem::ctor                     calls=2          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Wave9X::Video::Configuration::ctor               calls=2          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Wave9X::Input::Device::ctor                      calls=2          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Wave9X::Input::Configuration::ctor               calls=2          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Wave9X::Audio::Configuration::ctor               calls=2          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Wave9X::Application::Application::ctor           calls=2          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Wave9X::Video::Device::ctor(type=0)              calls=3          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Wave9X::Video::Device::ctor(type=1, must NOT publish) calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   Wave9X::Object::InternalFactory::ctor            calls=3          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   Object::BaseTypeInfo::BaseTypeInfo               calls=312        entered=312        worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Engine::Engine::Engine                           calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   Engine::Engine::Startup                          calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   System::Configuration::SetCommandLine            calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::Startup                          calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::SetupDirectories                 calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::GetRootDirectory                 calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   System::WideString::Set                          calls=622        entered=622        worked=622        class=SHADOW         divergences=0
+[RtDiff]   System::WideString::AsUTF8                       calls=622        entered=622        worked=622        class=SHADOW         divergences=0
+[RtDiff]   System::Filename::GetPathDirectory               calls=11069      entered=11069      worked=11069      class=SHADOW         divergences=0
+[RtDiff]   System::String::SubString                        calls=52593      entered=52593      worked=?          class=SHADOW         divergences=0
+[RtDiff]   System::operator+(String,char*)                  calls=39116      entered=39116      worked=?          class=SHADOW         divergences=0
+[RtDiff]   System::WideString::ctor(String)                 calls=601        entered=601        worked=601        class=SHADOW         divergences=0
+[RtDiff]   System::Configuration::GetPlatformName           calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   System::Configuration::GetBuildName              calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   System::operator+(String,String)                 calls=74494      entered=74494      worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::LoadPackages                     calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::ClosePackages                    calls=2          entered=2          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::GetPackDirectory                 calls=2          entered=2          worked=2          class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::FindFiles                        calls=2          entered=2          worked=1          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array<Filename>::SetSize @0x180026880 calls=4          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   IO::PackageFile::PackageFile                     calls=9          entered=9          worked=9          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::ReadPackfile                    calls=4          entered=4          worked=4          class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::OpenFile                         calls=0          entered=2860       worked=2860       class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::FileSystem::PlatformOpenFile                 calls=0          entered=7          worked=7          class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::FileSystem::FileInfo::operator=              calls=5735       entered=5735       worked=5735       class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::ReadFile                         calls=0          entered=18963      worked=18963      class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::CompressedStream           calls=2862       entered=2862       worked=?          class=ORACLE         divergences=0
+[RtDiff]   IO::MemoryStream::MemoryStream                   calls=18         entered=18         worked=?          class=ORACLE         divergences=0
+[RtDiff]   IO::CompressedStream::Open                       calls=0          entered=2860       worked=2860       class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::SetWindowCount             calls=0          entered=2886       worked=2886       class=NO-COMPARISON  divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180024c10          calls=2886       entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   IO::CompressedStream::GetAvailableWindow         calls=2918       entered=2918       worked=2918       class=SHADOW         divergences=0
+[RtDiff]   IO::MemoryStream::GetSize                        calls=0          entered=14         worked=14         class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::MemoryStream::Read                           calls=0          entered=45         worked=45         class=NO-COMPARISON  divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180024d70          calls=2856       entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   IO::CompressedStream::Read                       calls=0          entered=23645      worked=23641      class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::SetWindow                  calls=0          entered=24293      worked=120        class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::DecompressFromSource       calls=32         entered=32         worked=32         class=SHADOW         divergences=0
+[RtDiff]   IO::MemoryStream::SetCurrentPos                  calls=0          entered=59         worked=59         class=NO-COMPARISON  divergences=0
+[RtDiff]   System::Compression::Decompress                  calls=241        entered=241        worked=201        class=SHADOW         divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180029510          calls=4          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180029630          calls=4          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   kSpec_PkgEntry destroy arm: REALLOC (0x180029a0e -> 0x180026b50) calls=16         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array elem-destroy(String) @0x180026b50 calls=16         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::SetSize @0x1800298f0          calls=5848       entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   IO::MemoryStream::Close                          calls=0          entered=8          worked=8          class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedMemoryStream::~CompressedMemoryStream calls=10         entered=10         worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::MemoryStream::~MemoryStream                  calls=16         entered=16         worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::MemoryStream::~MemoryStream[live:owned buffer freed] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   IO::MemoryStream::~MemoryStream[live:no owned buffer -- that free unexercised] calls=16         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   IO::MemoryStream::~MemoryStream[live:encoding freed] calls=16         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   IO::CompressedStream::~CompressedStream          calls=0          entered=10         worked=10         class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::Release                    calls=0          entered=2892       worked=2892       class=NO-COMPARISON  divergences=0
+[RtDiff]   Collection::Array::~Array @0x180024aa0           calls=2858       entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array @0x1800249c0           calls=2858       entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array @0x1800248e0           calls=2858       entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   IO::PackageFile::GetFileName                     calls=5841       entered=5841       worked=5841       class=SHADOW         divergences=0
+[RtDiff]   IO::PackageFile::Construct                       calls=2          entered=2          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::PackageFile::Type                            calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::TypeId                          calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::TypeName                        calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::GetFileVersion                  calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::Compile                         calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::GetName                         calls=4          entered=4          worked=4          class=SHADOW         divergences=0
+[RtDiff]   IO::PackageFile::GetAuthor                       calls=4          entered=4          worked=4          class=SHADOW         divergences=0
+[RtDiff]   IO::PackageFile::GetDescription                  calls=4          entered=4          worked=4          class=SHADOW         divergences=0
+[RtDiff]   IO::PackageFile::GetVersion                      calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::GetUserVersion                  calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::GetPlatform                     calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::GetPriority                     calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::GetCRC                          calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::CanOverride                     calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::GetIconWidth                    calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::GetIconHeight                   calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::GetFileCount                    calls=4          entered=4          worked=4          class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::GetFileSize                     calls=5836       entered=5836       worked=5836       class=ORACLE         divergences=0
+[RtDiff]   IO::PackageFile::GetFileOffset                   calls=5836       entered=5836       worked=5836       class=ORACLE         divergences=0
+[RtDiff]   System::Compression::Compress                    calls=0          entered=84         worked=?          class=NO-COMPARISON  divergences=0
+[RtDiff]   System::String::Release [no oracle: mutates a shared refcount] calls=51         entered=51         worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::CompressedStream::ReadPath [lockstep probe]  calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::CompressedStream::WritePath [artefact oracle] calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::CompressedStream::Create                     calls=0          entered=24         worked=24         class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::Write                      calls=0          entered=282        worked=282        class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::Close                      calls=0          entered=24         worked=24         class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::Commit                     calls=0          entered=24         worked=24         class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::CompressWindow             calls=0          entered=44         worked=44         class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedMemoryStream::PreCommit            calls=0          entered=24         worked=24         class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::MemoryStream::Create                         calls=24         entered=24         worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::CompressedStream::GetCurrentPos              calls=0          entered=1          worked=1          class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::GetSize                    calls=0          entered=1          worked=1          class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::SetCurrentPos              calls=0          entered=1          worked=1          class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream::PreCommit                  calls=0          entered=1          worked=0          class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::FileSystem::OpenFile/ReadFile [lockstep probe] calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::PackageFile::GetFileInfo                     calls=9471       entered=9471       worked=9471       class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::FileInfo::FileInfo(const&)       calls=9471       entered=9471       worked=9471       class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::CloseFile                        calls=0          entered=2868       worked=2868       class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::FileSystem::PlatformCloseFile                calls=0          entered=2868       worked=?          class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::FileSystem::FileInfo::operator= [probe]      calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::MemoryStream [probe]                         calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::MemoryStream::Write                          calls=0          entered=154        worked=154        class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::MemoryStream::GetCurrentPos                  calls=0          entered=82         worked=82         class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::CompressedStream SetWindowCount/Open/Release [probe] calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::Encoding::Create{Reader,Writer} [probe]      calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::BinaryWriter record [probe]                  calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::{BinaryReader,BinaryWriter,Visitor}::Serialize family [probe] calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   UI::DialogInstance::SaveSettings/OnClosed [probe] calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::Serializer::Serializer(Stream&,int)          calls=3647       entered=3647       worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Persistence::Startup                         calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   IO::Persistence::ReadSettings                    calls=1          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   IO::Registry::Registry(const char*)              calls=5          entered=5          worked=5          class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::GetSaveDirectory                 calls=1          entered=1          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   IO::Modification::RefreshList                    calls=1          entered=1          worked=0          class=SHADOW         divergences=0
+[RtDiff]   Object::Factory::Startup [probe, not diffable]   calls=1          entered=1          worked=?          class=UNCLASSED      divergences=1
+[RtDiff]   Application::Application::PlatformStartup [no oracle on the live path; see BANISHED_PLAT_ORACLE] calls=1          entered=1          worked=1          class=ATTENDANCE     divergences=0
+[RtDiff]   System::WideString::ctor(const char*)            calls=2          entered=2          worked=2          class=SHADOW         divergences=0
+[RtDiff]   Video::Configuration::Startup                    calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Persistence::Get(int&)                       calls=29         entered=29         worked=?          class=ORACLE         divergences=0
+[RtDiff]   IO::Persistence::Get(bool&)                      calls=48         entered=48         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Device::EnumerateVideoModes [no oracle: see the banner; the sort pass is verified separately] calls=1          entered=1          worked=1          class=ATTENDANCE     divergences=0
+[RtDiff]   Video::Device::InitializeInterfaces [no oracle: LoadLibrary on the live process] calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   Video::Device::GetDLLForInterface                calls=8          entered=8          worked=5          class=SHADOW         divergences=0
+[RtDiff]   Video::DeviceData::DeviceData                    calls=2          entered=2          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Device::DisplayMode::DisplayMode          calls=490        entered=490        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Device::DisplayMode::~DisplayMode         calls=491        entered=491        worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::DeviceData::~DeviceData                   calls=2          entered=2          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Audio::Configuration::Startup                    calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Input::Configuration::Startup                    calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   Input::Configuration::Load                       calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   Input::KeyMap::Load                              calls=2          entered=2          worked=1          class=ATTENDANCE     divergences=0
+[RtDiff]   System::Configuration::GetCommandLineString      calls=1          entered=1          worked=0          class=SHADOW         divergences=0
+[RtDiff]   Video::Configuration::Save                       calls=2          entered=2          worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Persistence::Set(int)                        calls=135        entered=135        worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Persistence::Set(bool)                       calls=15         entered=15         worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Persistence::WriteSettings                   calls=2          entered=2          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Video::Device::GetMultisampleModeCount           calls=2          entered=2          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Device::IsMultisampleModeSupported        calls=2          entered=2          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Audio::Stream::Stream [SELF-CHECK, not an oracle] calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Audio::Device::PlatformStartup [oracle behind BANISHED_PLAT_ORACLE] calls=1          entered=1          worked=1          class=ATTENDANCE     divergences=0
+[RtDiff]   Input::Device::PlatformStartup [no oracle: creates real DirectInput devices] calls=1          entered=1          worked=1          class=ATTENDANCE     divergences=0
+[RtDiff]   Input::Device::PlatformUpdate                    calls=3          entered=3          worked=0          class=ATTENDANCE     divergences=0
+[RtDiff]   Achievement::Goal::Goal                          calls=139        entered=139        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Engine::MainLoop::MainLoop                       calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::ConstantBufferData::ConstantBufferData    calls=7          entered=7          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::ContextData::ContextData                  calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformConstruct           calls=6          entered=6          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::VertexBufferData::VertexBufferData        calls=1168       entered=1168       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformConstruct[branch:first-in-list] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformConstruct[branch:appended] calls=5          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::VertexBufferData::~VertexBufferData       calls=80         entered=80         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformConstruct[PROBE:first-in-list] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformConstruct            calls=5          entered=5          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::IndexBufferData::IndexBufferData          calls=1166       entered=1166       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformConstruct[branch:first-in-list] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformConstruct[branch:appended] calls=4          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::IndexBufferData::~IndexBufferData         calls=78         entered=78         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformConstruct[PROBE:first-in-list] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformConstruct           calls=5          entered=5          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::RenderBufferData::RenderBufferData        calls=16         entered=16         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformConstruct[branch:first-in-list] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformConstruct[branch:appended] calls=4          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::RenderBufferData::~RenderBufferData       calls=12         entered=12         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformConstruct[PROBE:first-in-list] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformDestruct[PROBE:list-emptied] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::ImageBuffer::ImageBuffer                  calls=11         entered=11         worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformConstruct            calls=11         entered=11         worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::ImageBufferData::ImageBufferData          calls=425        entered=425        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformConstruct[branch:first-in-list] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformConstruct[branch:appended] calls=10         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::ImageBuffer::IsGenerated                  calls=874        entered=874        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::ImageBuffer::IsRendered                   calls=867        entered=867        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformConstruct[PROBE:first-in-list] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformDestruct[PROBE:list-emptied] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::RenderBuffer::Create                      calls=5          entered=5          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::Sprite::Sprite()                             calls=2          entered=2          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Input::KeyMap::ClearAll                          calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Input::KeyMap::RegisterInput                     calls=50         entered=50         worked=?          class=SHADOW         divergences=0
+[RtDiff]   Object::Factory::GetTypeIdFromName               calls=38         entered=38         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Object::ExternalFactory::FindOrLoad              calls=2848       entered=8220       worked=8220       class=SHADOW         divergences=0
+[RtDiff]   Object::ExternalFactory::ExpandRelativePath      calls=0          entered=8220       worked=?          class=NO-COMPARISON  divergences=0
+[RtDiff]   System::Filename::GetPathExtension               calls=11068      entered=11068      worked=11068      class=SHADOW         divergences=0
+[RtDiff]   System::Filename::GetPathIdentifer               calls=19910      entered=19910      worked=?          class=SHADOW         divergences=0
+[RtDiff]   System::Filename::GetPathFilename                calls=11068      entered=11068      worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::FileSystem::GetDataDirectory                 calls=11068      entered=11068      worked=?          class=ORACLE         divergences=0
+[RtDiff]   IO::FileSystem::ExistsInPackfile                 calls=8220       entered=8220       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Object::ExternalFactory::Find                    calls=0          entered=8220       worked=?          class=NO-COMPARISON  divergences=0
+[RtDiff]   Object::External::Load                           calls=0          entered=2848       worked=2848       class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::BinaryFileStream::BinaryFileStream           calls=0          entered=2848       worked=?          class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::FileStream::Open                             calls=0          entered=2848       worked=2848       class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::FileStream::GetSize                          calls=0          entered=2848       worked=?          class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::FileStream::Read                             calls=0          entered=9456       worked=9456       class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::FileStream::SetCurrentPos                    calls=0          entered=3760       worked=3760       class=NO-COMPARISON  divergences=0
+[RtDiff]   Object::Base::IsDerivedFrom                      calls=674913     entered=674913     worked=?          class=ORACLE         divergences=0
+[RtDiff]   IO::FileStream::~FileStream                      calls=0          entered=2848       worked=?          class=NO-COMPARISON  divergences=0
+[RtDiff]   IO::FileSystem::FileInfo::~FileInfo              calls=0          entered=2848       worked=?          class=NO-COMPARISON  divergences=0
+[RtDiff]   Object::ExternalFactory::Add                     calls=0          entered=7866       worked=7866       class=NO-COMPARISON  divergences=0
+[RtDiff]   Object::External::GetPath                        calls=10724      entered=10724      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::VideoProgramData::VideoProgramData        calls=66         entered=66         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::VertexLayoutData::VertexLayoutData        calls=19         entered=19         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::VertexProgramData::VertexProgramData      calls=30         entered=30         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::PixelProgramData::PixelProgramData        calls=37         entered=37         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::RenderStateData::RenderStateData          calls=24         entered=24         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::ImageBuffer::Width                        calls=409        entered=409        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::ImageBuffer::Height                       calls=409        entered=409        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::ImageBuffer::IsCompressed                 calls=6338       entered=6338       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::ImageBuffer::GetLevelCount                calls=3550       entered=3550       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::ImageBuffer::IsDepthBuffer                calls=418        entered=418        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::ImageBuffer::IsRenderBuffer               calls=407        entered=407        worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::Sprite::Sprite(sheet,name)                   calls=20         entered=20         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::SpriteCapture::AddScissor                    calls=0          entered=14         worked=14         class=NO-COMPARISON  divergences=0
+[RtDiff]   Collection::Array::SetSize @0x18004bfc0          calls=33         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::SpriteCapture::AddSprite                     calls=0          entered=7          worked=7          class=NO-COMPARISON  divergences=0
+[RtDiff]   UI::SpriteSheet::GetSpriteNameFromIndex()        calls=2          entered=2          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::SpriteSheet::Type                            calls=1          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   UI::SpriteSheet::TypeId                          calls=1          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   UI::SpriteSheet::TypeName                        calls=1          entered=1          worked=1          class=ORACLE         divergences=1
+[RtDiff]   UI::SpriteSheet::GetFileVersion                  calls=1          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   UI::SpriteSheet::Compile                         calls=1          entered=1          worked=1          class=ORACLE         divergences=0
+[RtDiff]   UI::SpriteSheet::Construct                       calls=3          entered=2          worked=1          class=ORACLE         divergences=1
+[RtDiff]   UI::SpriteSheet::Reconstruct                     calls=0          entered=1          worked=1          class=NO-COMPARISON  divergences=0
+[RtDiff]   UI::SpriteSheet                                  calls=2          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::SpriteSheet::Destruct                        calls=0          entered=1          worked=1          class=NO-COMPARISON  divergences=0
+[RtDiff]   Engine::DialogLoopT::ctor                        calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::UserInterface::UserInterface                 calls=9          entered=9          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::UserInterface::~UserInterface [twin synthetic] calls=2          entered=?          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Collection::LinkedList::Clear(0x1800325f0)       calls=0          entered=6          worked=4          class=NO-COMPARISON  divergences=0
+[RtDiff]   UI::UserInterface::SaveAllSettings [twin synthetic] calls=4          entered=?          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Timer::SecondsToTicks                            calls=94448      entered=94448      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Engine::DialogLoaderLoopT::ctor                  calls=3          entered=3          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Engine::DialogLoaderLoopT::Load                  calls=6          entered=6          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Engine::LoaderLoop::ctor                         calls=3          entered=3          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Engine::MainLoop::Run                            calls=0          entered=1          worked=1          class=NO-COMPARISON  divergences=0
+[RtDiff]   Engine::Loader::Load                             calls=6          entered=6          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   IO::Serializer::Serialize(int&)                  calls=11869      entered=11869      worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Serializer::Serialize(bool&)                 calls=12679      entered=12679      worked=?          class=SHADOW         divergences=0
+[RtDiff]   Object::ExternalFactory::Find                    calls=606        entered=606        worked=?          class=ORACLE         divergences=0
+[RtDiff]   IO::Serializer::~Serializer [not diffable]       calls=3633       entered=3633       worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   IO::Serializer::GetEncoding                      calls=10400      entered=10400      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Object::ExternalFactory::IsReferenceModeEnabled  calls=6251       entered=6251       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Object::Type::Serialize [not diffable]           calls=606        entered=606        worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Serializer::Serialize(float&)                calls=3594       entered=3594       worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Serializer::SerializeBytes                   calls=27770      entered=27770      worked=?          class=SHADOW         divergences=0
+[RtDiff]   Math::Vector3::FromYawPitch                      calls=32999      entered=32999      worked=?          class=ORACLE         divergences=0
+[RtDiff]   System::String::operator==(char*)                calls=531        entered=531        worked=?          class=ORACLE         divergences=0
+[RtDiff]   IO::Serializer::GetVersion                       calls=566        entered=566        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::AnimationEvent::AnimationEvent()       calls=10         entered=10         worked=?          class=ORACLE         divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,float*)              calls=5          entered=5          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Achievement::Achievement::ctor                   calls=4          entered=4          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Achievement::Achievement::GetFileVersion         calls=4          entered=4          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Input::Device::Update                            calls=1          entered=1          worked=1          class=ATTENDANCE     divergences=0
+[RtDiff]   Input::Device::PlatformGetKeyboardState          calls=1          entered=1          worked=0          class=ATTENDANCE     divergences=0
+[RtDiff]   Input::Device::UpdateState                       calls=2          entered=2          worked=0          class=ATTENDANCE     divergences=0
+[RtDiff]   Input::Device::PlatformGetMouseState             calls=1          entered=1          worked=0          class=ATTENDANCE     divergences=0
+[RtDiff]   Audio::Device::Update                            calls=78         entered=78         worked=0          class=ATTENDANCE     divergences=0
+[RtDiff]   Application::Application::PlatformUpdate [no oracle: pumps the live message queue] calls=1          entered=1          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Engine::MainLoop::Update                         calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   Engine::MainLoop::SetNextLoop                    calls=9          entered=9          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Engine::DialogLoaderLoopT::Startup               calls=3          entered=3          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Object::InternalBasePtr::InternalBasePtr(Internal*) calls=643993     entered=643993     worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::DialogInstance::StartTimer[synthetic diff]   calls=9          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::DialogInstance::StartTimer[negative control] calls=9          entered=?          worked=?          class=UNCLASSED      divergences=8
+[RtDiff]   Collection::Array::SetSize @0x180076250          calls=22         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Dialog::Dialog[diff]                         calls=3          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Dialog::~Dialog[diff]                        calls=3          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Dialog::Dialog[+0x44 hole]                   calls=3          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array @0x180009460           calls=6          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array @0x180039440           calls=6          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   System::Random::Rand                             calls=125093     entered=125093     worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::SpriteSheet::GetSpriteIndexFromName()        calls=4          entered=4          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::DialogInstance::FindElement                  calls=55         entered=55         worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Element::FindElement                         calls=67         entered=67         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Collection::Array::SetSize @0x18007a0d0          calls=13         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::UserInterface::SetFullscreenFadeSprite       calls=5          entered=5          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::UserInterface::SetFullscreenFade             calls=14         entered=14         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::UserInterface::Play                          calls=0          entered=7          worked=0          class=NO-COMPARISON  divergences=0
+[RtDiff]   Video::Context::SetRenderBuffer                  calls=47101      entered=47101      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Context::SetViewport                      calls=47100      entered=47100      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::RenderBuffer::Bind [trampoline into RenderBufferData slot 2] calls=94260      entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::Camera::Camera                         calls=47057      entered=47057      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Camera::SetFrustum                     calls=78477      entered=78477      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Volume::Frustum::Projection                      calls=78477      entered=78477      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Context::SetCamera                        calls=78208      entered=78208      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Matrix::Inverse                            calls=78208      entered=78208      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Matrix::operator*(const Matrix&)           calls=109632     entered=109632     worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::VertexBuffer::Lock                        calls=176823     entered=176823     worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Video::VertexBuffer::Unlock                      calls=176823     entered=176823     worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Video::Context::SetVertexBuffer                  calls=2004347    entered=2004347    worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Context::BindResources[live]              calls=3292755    entered=3292755    worked=1622328    class=ATTENDANCE     divergences=0
+[RtDiff]   Video::Context::BindTextures[live]               calls=931458     entered=931458     worked=931458     class=ATTENDANCE     divergences=0
+[RtDiff]   Video::ConstantBuffer::Bind                      calls=1547893    entered=1547893    worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Collection::Array<SpriteDraw>::SetSize(0) @0x1800783d0 calls=78472      entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   System::Random::Rand(uint)                       calls=16043891   entered=16043891   worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Math::Transform::Transform()                     calls=22070      entered=22070      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform3::Identity()                     calls=3          entered=3          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Volume::Frustum::Frustum (near,far,fovX,fovY)    calls=31423      entered=31423      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Geometry::Geometry()                   calls=34957      entered=34957      worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::VertexBuffer::VertexBuffer                calls=4          entered=4          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::IndexBuffer::IndexBuffer                  calls=4          entered=4          worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,ushort*)             calls=237        entered=237        worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::VertexBuffer::Create                      calls=4          entered=4          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Video::VertexBuffer::Set                         calls=1156       entered=1156       worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Video::IndexBuffer::Create                       calls=4          entered=4          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Video::IndexBuffer::Set                          calls=2          entered=2          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,short*)              calls=101408     entered=101408     worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,uchar*)              calls=50708      entered=50708      worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Serializer::Serialize(uchar&)                calls=26844      entered=26844      worked=?          class=SHADOW         divergences=0
+[RtDiff]   IO::Serializer::Serialize(n,int*)                calls=5          entered=5          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::ImageBuffer::Create                       calls=9          entered=9          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Video::ImageBuffer::CopyToTexture                calls=5          entered=5          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Video::ImageBuffer::IsDynamic                    calls=5          entered=5          worked=?          class=ORACLE         divergences=0
+[RtDiff]   IO::Serializer::Serialize(uint&)                 calls=127997     entered=127997     worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::Renderer::Renderer                     calls=3          entered=3          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Scene::Scene()                         calls=3          entered=3          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::Scene grid init (0x18005e4a0)          calls=0          entered=3          worked=3          class=NO-COMPARISON  divergences=0
+[RtDiff]   Collection::Array::SetSize @0x18002fea0          calls=192        entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::SunLight::SunLight                     calls=3          entered=3          worked=3          class=ATTENDANCE     divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[branch:colour-target built, DEAD while DeviceData slot 6 is `xor al,al;ret`] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[branch:bounds differed -> written] calls=3          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[branch:bounds already equal -> skipped] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[PROBE:object fields, ours vs shipped] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[PROBE:depth-target Create tuple, ours vs shipped] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::SunLight::SunLight[PROBE:_firstRenderBuffer restored by each dtor] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::SunLight::~SunLight                    calls=1          entered=1          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformDestruct             calls=8          entered=8          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformDestruct[branch:unlinked] calls=8          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::ImageBuffer::PlatformDestruct[branch:list-emptied] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Video::ImageBuffer                               calls=4          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformDestruct            calls=3          entered=3          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformDestruct[branch:unlinked] calls=3          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::RenderBuffer::PlatformDestruct[branch:list-emptied] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Graphics::Geometry::~Geometry()                  calls=22070      entered=22070      worked=?          class=SHADOW         divergences=0
+[RtDiff]   Collection::Array::~Array @0x18001bf50           calls=22070      entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::MeshInstance::MeshInstance()           calls=34766      entered=34766      worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::MeshInstance::SetMesh                  calls=51310      entered=51310      worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::MeshInstance::UpdateHierarchy          calls=51310      entered=51310      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Scene::AddGlobalObject                 calls=12         entered=12         worked=?          class=SHADOW         divergences=0
+[RtDiff]   Math::Transform::FromYawPitchOffset(const Scalar&, const Scalar&, const Vector3&) calls=52914      entered=52914      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Geometry::SetTransform                 calls=399258     entered=399258     worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::GraphicsMesh::GetMaterialList          calls=12673      entered=12673      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::MeshInstance::SetMaterialInstance      calls=15154      entered=15154      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Scene::AddObject                       calls=34903      entered=34903      worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::Scene grid add (0x18005e5e0)           calls=0          entered=34903      worked=34903      class=NO-COMPARISON  divergences=0
+[RtDiff]   Collection::Array::SetSize @0x18005fb00          calls=34737      entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::Scene grid reindex (0x18005ee30)       calls=0          entered=176016     worked=34957      class=NO-COMPARISON  divergences=0
+[RtDiff]   Graphics::Scene grid thread (0x18005f4b0)        calls=0          entered=34957      worked=34957      class=NO-COMPARISON  divergences=0
+[RtDiff]   Graphics::Scene grid thread[branch:cell was empty] calls=843        entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::Scene grid reindex[branch:first threading] calls=34903      entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::Scene grid thread[branch:appended to ring] calls=34114      entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Math::Quaternion::operator*(const Quaternion&)   calls=89248      entered=89248      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Timer::TicksToSeconds                            calls=142589     entered=142589     worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::ParticleSystemInstance::ParticleSystemInstance() calls=126        entered=126        worked=?          class=SHADOW         divergences=0
+[RtDiff]   UI::ImageElement::SetRotation                    calls=1103       entered=1103       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Engine::DialogLoopT::Load                        calls=2          entered=2          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Save::SaveLoad::SaveLoad                         calls=2          entered=2          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Engine::DialogLoopT::Startup                     calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   UI::Element::SetElementId                        calls=38         entered=38         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::UserInterface::AddDialog                     calls=0          entered=6          worked=6          class=NO-COMPARISON  divergences=0
+[RtDiff]   UI::String::operator System::String()            calls=45         entered=45         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::StringTable::GetText(int)                    calls=83         entered=83         worked=?          class=ORACLE         divergences=0
+[RtDiff]   System::String::FormatParamCount                 calls=36         entered=36         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180029a80          calls=17         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   System::String::FormatParamList                  calls=27         entered=27         worked=?          class=SHADOW         divergences=0
+[RtDiff]   UI::UserInterface::SetCursor                     calls=0          entered=1324       worked=1324       class=NO-COMPARISON  divergences=0
+[RtDiff]   Video::ImageBuffer::CopyFromTexture              calls=4          entered=4          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Application::Application::GetInstance            calls=3          entered=3          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::UserInterface::EnableCursor                  calls=0          entered=3          worked=2          class=NO-COMPARISON  divergences=0
+[RtDiff]   Audio::Scene::PlayEffect                         calls=2          entered=2          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Save::SaveLoad::Update [shadow]                  calls=1399       entered=1399       worked=?          class=SHADOW         divergences=0
+[RtDiff]   Math::Transform::FromLookAt(const Vector3&, const Vector3&) calls=1280       entered=1280       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform::FromDirection(const Vector3&, const Vector3&) calls=1280       entered=1280       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Quaternion::Quaternion(const Vector3&, const Vector3&, const Vector3&) calls=1280       entered=1280       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform::AsTransform3                    calls=120805     entered=120805     worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform::AsMatrix()                      calls=1967389    entered=1967389    worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Camera::SetCameraToWorld               calls=1279       entered=1279       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::ParticleInstance::IncrementInstanceIndex calls=77         entered=77         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Scene::Clean                           calls=1400       entered=1400       worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::Scene grid reindex[branch:same cell, early out] calls=141059     entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::Geometry::Clean                        calls=8          entered=8          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Engine::DialogLoopT::Update[time]                calls=77         entered=77         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::SunLight::Set                          calls=31420      entered=31420      worked=31420      class=ORACLE         divergences=0
+[RtDiff]   Graphics::SunLight::Set[branch:build-colour-target, DEAD while DeviceData slot 6 is `xor al,al;ret`] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Graphics::SunLight::Set[branch:drop-colour-target, DEAD while DeviceData slot 6 is `xor al,al;ret`] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Video::Context::SetFog                           calls=31420      entered=31420      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Renderer::GetCullCamera                calls=94257      entered=94257      worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Math::Transform3::Transform3(const Transform3&)  calls=94288      entered=94288      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Geometry::GetTransform                 calls=94257      entered=94257      worked=?          class=SHADOW         divergences=0
+[RtDiff]   Math::Transform::Inverse()                       calls=94257      entered=94257      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Camera::GetFrustum                     calls=94288      entered=94288      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Volume::Frustum::operator*(Transform3)           calls=188545     entered=188545     worked=?          class=ORACLE         divergences=0
+[RtDiff]   Volume::Frustum::Contains                        calls=54915741   entered=54915741   worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Renderer::AddDrawItem                  calls=1846615    entered=2022866    worked=1846615    class=SHADOW         divergences=0
+[RtDiff]   Graphics::Renderer::GetShader                    calls=94257      entered=94257      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::MaterialInstance::RenderTextures       calls=0          entered=157630     worked=157630     class=NO-COMPARISON  divergences=0
+[RtDiff]   Graphics::InterpolatedState<Transform>::Lerp     calls=1846584    entered=1846584    worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform::Lerp                            calls=1846584    entered=1846584    worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Quaternion::Lerp                           calls=1846584    entered=1846584    worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Context::SetTransform                     calls=1847415    entered=1847415    worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Context::SetColor                         calls=1846615    entered=1846615    worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Context::SetImageBuffer                   calls=2046925    entered=2046925    worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::IndexBuffer::Lock                         calls=26574      entered=26574      worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Video::IndexBuffer::Unlock                       calls=26574      entered=26574      worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Graphics::Scene grid unthread (0x18005f090)      calls=0          entered=22158      worked=22158      class=NO-COMPARISON  divergences=0
+[RtDiff]   Graphics::Scene grid reindex[branch:moved cell]  calls=54         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Achievement::AchievementManager::SetAchievements calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180008ff0          calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180008b90          calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Achievement::AchievementManager::GetAchievementCount calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Object::ExternalList::GetResourceCount           calls=15         entered=15         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::String::String(table,name)                   calls=22         entered=22         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::StringTable::GetIndexFromName                calls=23         entered=23         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::ComboElement::AddItem [no oracle: appends + bumps a refcount] calls=8          entered=8          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Collection::Array elem-destroy(String) @0x180011010 calls=7          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180034860          calls=8          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180024fe0          calls=11         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::EditElement::SetText                         calls=0          entered=2          worked=?          class=NO-COMPARISON  divergences=0
+[RtDiff]   System::String::operator!= [ported by lane UIW2 to close address door 0x18003ffe0] calls=2          entered=2          worked=0          class=ORACLE         divergences=0
+[RtDiff]   UI::NumberEditElement::SetValue [no oracle: SetText mutates the live element] calls=1          entered=1          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   UI::ComboElement::SetCurrentItem [no oracle: closes a dialog and rewrites a shared child] calls=4          entered=6          worked=4          class=SHADOW         divergences=0
+[RtDiff]   UI::ComboElement::UpdateText [no oracle: refcounted String swap on a shared child] calls=4          entered=4          worked=4          class=SHADOW         divergences=0
+[RtDiff]   UI::ComboElement::GetItemCount                   calls=5          entered=5          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::ComboElement::GetItemData                    calls=3          entered=3          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::NumberEditElement::GetValue                  calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   System::String::ToInteger                        calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Engine::UpdateLoop::ctor                         calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Particle::Particle()                   calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   UI::ElementDescription::ctor                     calls=5          entered=5          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::ElementDescription::CreateInstance [twin synthetic] calls=7          entered=?          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::ElementDescription::CreateInstance           calls=4          entered=3          worked=3          class=ORACLE         divergences=0
+[RtDiff]   UI::ElementDescription::GetFileVersion           calls=2          entered=2          worked=?          class=ORACLE         divergences=0
+[RtDiff]   System::Random::Random(uint)                     calls=2          entered=2          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Picking::Scene::Scene()                          calls=2          entered=2          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Collection::Array::SetSize(10000,-1) @0x18007b960 calls=2          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::AnimationManager::AnimationManager()   calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Achievement::AchievementManager::SetEventHandler calls=2          entered=2          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Achievement::AchievementManager::Reset           calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180008d60          calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::operator= @0x180003970        calls=36         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Achievement::Goal::GetInstanceType               calls=125        entered=125        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Achievement::GoalInstance::GoalInstance          calls=9          entered=9          worked=?          class=SHADOW         divergences=0
+[RtDiff]   System::Random::RandTol                          calls=2738       entered=2738       worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Utility::PerlinNoise::Generate                   calls=2193080    entered=2193080    worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::StringTable::GetCount()                      calls=8          entered=8          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::String::String(table,index)                  calls=8          entered=8          worked=?          class=ORACLE         divergences=0
+[RtDiff]   System::Random::RandFloatTol                     calls=98614      entered=98614      worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Math::Vector2::Length                            calls=766        entered=766        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Vector2::Normalize                         calls=28097      entered=28097      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Vector2::LengthSquared                     calls=590592     entered=590592     worked=?          class=ORACLE         divergences=0
+[RtDiff]   System::Random::RandFloat                        calls=245631     entered=245631     worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   System::Random::Rand(int,int)                    calls=8          entered=8          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Object::Factory::CreateObject                    calls=101674     entered=101674     worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::SpriteSheet::GetSpriteCount()                calls=29         entered=29         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Geometry::SetBounds                    calls=31         entered=31         worked=?          class=SHADOW         divergences=0
+[RtDiff]   Math::Transform2::Transform2(const Scalar&, const Vector2&) calls=16         entered=16         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform2::FromYawOffset(const Scalar&, const Vector2&) calls=8          entered=8          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform2::operator*(const Transform2&)   calls=40         entered=40         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform2::operator*(const Vector2&)      calls=768        entered=768        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Picking::Scene::AddMesh                          calls=42         entered=42         worked=?          class=SHADOW         divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180059140          calls=42         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array @0x1800739e0           calls=44         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Audio::Scene::FindEffect3D                       calls=1538       entered=1538       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Audio::Scene::PlayEffect3D                       calls=390        entered=390        worked=?          class=SHADOW         divergences=0
+[RtDiff]   Audio::Scene::AddEmitter                         calls=1538       entered=1538       worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::Scene::RemoveObject                    calls=22104      entered=22104      worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::Scene grid unthread[branch:was cell head] calls=21753      entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::Scene grid unthread[branch:cell emptied] calls=428        entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180023830          calls=22113      entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Picking::Scene::RemoveMesh                       calls=42         entered=42         worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::GraphicsMesh::GetNodeIndexFromName     calls=12         entered=12         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::MeshInstance::GetNodeToWorld           calls=6          entered=6          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::MeshInstance::PlayAnimation            calls=513        entered=513        worked=?          class=SHADOW         divergences=0
+[RtDiff]   Math::Vector3::NormalizeWithMag                  calls=14806      entered=7403       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Vector3::Heading                           calls=7394       entered=7394       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Audio::Scene::Pause                              calls=3          entered=3          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Object::ExternalFactory::FindNext                calls=95         entered=95         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Object::ExternalList::Find                       calls=3          entered=3          worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::Dialog::GetTemplate                          calls=10         entered=10         worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::Element::SetName                             calls=10         entered=10         worked=?          class=SHADOW         divergences=0
+[RtDiff]   UI::Element::SetUserData                         calls=10         entered=10         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::Element::SetToolTip                          calls=10         entered=10         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::Element::SetFlagsOnOff                       calls=10         entered=10         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::Element::ChildCount                          calls=70         entered=70         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::Element::Child                               calls=77         entered=77         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::Sprite::IsValid()                            calls=59         entered=59         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::ImageElement::SetSprite                      calls=38         entered=19         worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::RadioElement::FindCheckBoxes()               calls=0          entered=1          worked=1          class=NO-COMPARISON  divergences=0
+[RtDiff]   UI::RadioElement::FindCheckBoxes(InternalPtr) [no oracle: appends + recurses] calls=73         entered=73         worked=9          class=SHADOW         divergences=0
+[RtDiff]   Collection::Array::SetSize @0x180048fe0          calls=11         entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::UserInterface::PausesGame                    calls=66277      entered=66277      worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::UserInterface::GetFirstDialog                calls=22         entered=22         worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::MeshInstance::~MeshInstance            calls=22067      entered=22067      worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::MeshInstance::RootAnimationOffset      calls=324270     entered=324270     worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform::operator=(const Transform&)     calls=324270     entered=324270     worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform::Transform(const Transform&)     calls=25221      entered=25221      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Picking::Scene::SetTransform                     calls=25221      entered=25221      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::MeshInstance::IsAnimating              calls=324059     entered=324059     worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Vector2::Dot                               calls=130        entered=130        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform::operator*(const Vector3&)       calls=19356      entered=19356      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Quaternion::Rotate(const Vector3&)         calls=19356      entered=19356      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Audio::Scene::FindFree3DEffect                   calls=4          entered=4          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Audio::Scene::FindFree3DEffect[branch:reuse-hit, -1 -- the ONLY path through the distance+window test] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Audio::Scene::FindFree3DEffect[branch:free-slot returned] calls=4          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Audio::Scene::FindFree3DEffect[branch:table FULL, -1 after 4096] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Math::Transform::Identity()                      calls=2          entered=2          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Achievement::AchievementManager::Update          calls=1201       entered=1201       worked=?          class=SHADOW         divergences=0
+[RtDiff]   Achievement::AchievementInstance::Update         calls=1201       entered=1201       worked=?          class=SHADOW         divergences=0
+[RtDiff]   Achievement::AchievementInstance::IsMet          calls=1201       entered=1201       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Audio::Scene::IsEffectPlaying                    calls=1322       entered=1322       worked=?          class=ORACLE         divergences=0
+[RtDiff]   UI::Element::SetPadding                          calls=1322       entered=1322       worked=?          class=ORACLE         divergences=0
+[RtDiff]   Input::KeyMap::Pressed                           calls=17044      entered=17044      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Input::KeyMap::GetValue                          calls=12000      entered=12000      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Context::SetTime                          calls=31154      entered=31154      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Scene::RemoveGlobalObject              calls=9          entered=9          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::RenderBuffer::RenderBuffer                calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Volume::Frustum::Frustum (isOrtho,near,far,edgeA..D) calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Quaternion::FromYawPitch(const Scalar&, const Scalar&) calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Camera::SnapCameraToWorld              calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Math::Transform3::AsMatrix()                     calls=31155      entered=31155      worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::Context::SetDefaultRenderBuffer           calls=2          entered=2          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::RenderBuffer::~RenderBuffer               calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::Context::Reset                            calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Graphics::Scene::~Scene()                        calls=2          entered=2          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Graphics::Scene free globals (0x18005f1f0)       calls=0          entered=2          worked=0          class=NO-COMPARISON  divergences=0
+[RtDiff]   Collection::Array::~Array @0x18001c750           calls=8          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array @0x18005fc20           calls=2          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::Renderer::~Renderer                    calls=2          entered=2          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Collection::Array::~Array @0x18001c9e0           calls=2          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array(eh_vector) @0x18001c8c0 calls=2          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array(+elem) @0x18001c7e0    calls=2          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::Context::SetInverseScale                  calls=31         entered=31         worked=?          class=ORACLE         divergences=0
+[RtDiff]   Save::SaveLoad::Draw                             calls=0          entered=31154      worked=0          class=NO-COMPARISON  divergences=0
+[RtDiff]   Math::Vector3::Dot                               calls=325626     entered=325626     worked=?          class=ORACLE         divergences=0
+[RtDiff]   Achievement::GoalList::AreGoalsMetExcept         calls=344        entered=344        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Achievement::GoalInstance::Update                calls=344        entered=344        worked=?          class=ORACLE         divergences=0
+[RtDiff]   Audio::Scene::SetEmitterVolume                   calls=32         entered=32         worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Application::Application::Quit                   calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Audio::Scene::StopAll                            calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Audio::Device::Stop                              calls=3          entered=3          worked=3          class=ATTENDANCE     divergences=0
+[RtDiff]   Audio::Device::StopPlatform                      calls=3          entered=3          worked=3          class=ATTENDANCE     divergences=0
+[RtDiff]   Audio::Device::FreeChannelPlatform               calls=3          entered=3          worked=3          class=ATTENDANCE     divergences=0
+[RtDiff]   UI::DialogInstance::GetController                calls=84         entered=84         worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   UI::UserInterface::~UserInterface [liveness]     calls=0          entered=1          worked=1          class=NO-COMPARISON  divergences=0
+[RtDiff]   UI::DialogInstance::~DialogInstance [liveness]   calls=0          entered=4          worked=4          class=NO-COMPARISON  divergences=0
+[RtDiff]   UI::DialogInstance                               calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Picking::Scene::~Scene()                         calls=2          entered=2          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Collection::Array::~Array(+elem) @0x180073c90    calls=2          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array @0x180073bb0           calls=2          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array @0x1800737f0           calls=2          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Graphics::AnimationManager::~AnimationManager()  calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Collection::Array::~Array(+nested elem) @0x18005bf60 calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Engine::UpdateLoop::dtor                         calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   UI::ElementDescription::~ElementDescription      calls=0          entered=2          worked=0          class=NO-COMPARISON  divergences=0
+[RtDiff]   Video::PixelProgramData::~PixelProgramData       calls=4          entered=4          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::VertexProgramData::~VertexProgramData     calls=4          entered=4          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::VideoProgramData::~VideoProgramData       calls=5          entered=5          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::RenderStateData::~RenderStateData         calls=2          entered=2          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::VertexLayoutData::~VertexLayoutData       calls=3          entered=3          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Collection::Array::~Array(+elem) @0x180010ab0    calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Engine::MainLoop::~MainLoop                      calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::ContextData::~ContextData                 calls=1          entered=1          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformDestruct            calls=2          entered=2          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformDestruct[branch:unlinked] calls=2          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::VertexBuffer::PlatformDestruct[branch:list-emptied] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformDestruct             calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformDestruct[branch:unlinked] calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Video::IndexBuffer::PlatformDestruct[branch:list-emptied] calls=0          entered=0          worked=?          class=UNEXERCISED    divergences=0
+[RtDiff]   Video::ConstantBufferData::~ConstantBufferData   calls=7          entered=7          worked=?          class=ORACLE         divergences=0
+[RtDiff]   Collection::Array::~Array @0x180033a40           calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array @0x180033960           calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Collection::Array::~Array(+elem) @0x180033880    calls=1          entered=?          worked=?          class=UNCLASSED      divergences=0
+[RtDiff]   Achievement::GoalInstance::~GoalInstance         calls=9          entered=9          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Input::Device::PlatformShutdown [SELF-CHECK, not an oracle] calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Input::Configuration::Save                       calls=1          entered=1          worked=?          class=ATTENDANCE     divergences=0
+[RtDiff]   Input::KeyMap::Save                              calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   Audio::Configuration::Save                       calls=1          entered=1          worked=?          class=SHADOW         divergences=0
+[RtDiff]   Application::Application::PlatformShutdown [NO ORACLE POSSIBLE: DestroyWindow/UnregisterClassW are one-shot, so a replay measures the first run's success as a failure. This site records EXECUTION, not a comparison] calls=1          entered=1          worked=1          class=ATTENDANCE     divergences=0
+[RtDiff]   IO::Modification::SaveList                       calls=0          entered=1          worked=?          class=NO-COMPARISON  divergences=0
+[RtDiff]   Engine::Engine::~Engine                          calls=1          entered=1          worked=1          class=SHADOW         divergences=0
+[RtDiff]   population      sites        entries    comparisons   diverg
+[RtDiff]   ORACLE            227       77813300       77820752        2
+[RtDiff]   SHADOW            148        3378051        3196414        0
+[RtDiff]   ATTENDANCE         41        6183881        6183878        0
+[RtDiff]   UNCLASSED         140       16712402       17218095       15
+[RtDiff]   NO-COMPARISON      63         597838              0        0   <- RAN and compared NOTHING; its 0 is not evidence
+[RtDiff]   UNEXERCISED        15              0              0        0
+[RtDiff]   (ORACLE = a macro that evaluates THEIRS ran here; it does NOT
+[RtDiff]    prove THEIRS came from the DLL -- tools/rt_diff_site_classify.py
+[RtDiff]    checks for a door. SHADOW = the port judged itself. ATTENDANCE =
+[RtDiff]    the verdict is a compile-time `true`, a LOWER bound. UNCLASSED =
+[RtDiff]    compared through a hand-rolled RtDiffReport, no kind recorded.)

@@ -102,6 +102,12 @@ bool RtMintRowIsPromoted(const char* symbol);
 // and friends) empties slots at runtime and no build check can see it.
 int RtMintVtableTrapCount(const char* symbol);
 
+// WAVE 25 lane SWEEP. How many times BANISHED_RT_MINT_TRAP_CONTROL made
+// RtMintVtableTrapCount report a SYNTHETIC trap count this run. It is the
+// effectiveness counter for the promotion guard: a run with 0 injections has
+// not tested the refusal path, and its "0 refusals" is not evidence.
+int RtMintTrapControlInjections();
+
 // True once RtMintRegisterRow has registered this symbol — i.e. it was ARMED
 // for measurement (BANISHED_RT_MINT_ROWS or a direct call) rather than promoted.
 // The readiness report prints armed rows for the same reason it prints promoted

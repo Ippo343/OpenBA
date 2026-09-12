@@ -297,8 +297,51 @@ static const char* StripParent(const char* p) {
 // the first thing in the tree that can answer the question at all.
 static int g_vtableTraps[kVtableCount];
 
+// The count of synthetic trap injections performed this run. Printed by the
+// promotion guard as its EFFECTIVENESS COUNTER: "0 refusals" from a guard that
+// was never handed anything to refuse is not a measurement.
+static int g_trapControlInjections = 0;
+int RtMintTrapControlInjections() { return g_trapControlInjections; }
+
 int RtMintVtableTrapCount(const char* symbol) {
     if (!symbol) return -1;
+
+    // ---- NEGATIVE CONTROL (Wave 25 lane SWEEP) -----------------------------
+    // VTGFX shipped this counter with a refusal path that had NEVER FIRED and
+    // had no control, and said so. A guard that has never refused anything is
+    // an unvalidated screen: its green means nothing, and if it were wired up
+    // backwards nothing in the tree would notice.
+    //
+    // BANISHED_RT_MINT_TRAP_CONTROL=<mangled symbol> makes THIS function report
+    // a synthetic trap count for that one symbol. It corrupts EXACTLY the value
+    // the guard compares -- the trap count -- and nothing else, which is the
+    // rule both directions of this project's control failures come from. The
+    // promotion for that symbol must then REFUSE ITSELF and say so on stderr;
+    // if it promotes anyway, the guard is broken.
+    //
+    // Semicolon-separated list, so several rows can be armed at once, and the
+    // literal `*` arms every row (the whole-harness sweep).
+    const char* ctl = getenv("BANISHED_RT_MINT_TRAP_CONTROL");
+    if (ctl && *ctl) {
+        bool armed = (strcmp(ctl, "*") == 0);
+        if (!armed) {
+            const size_t len = strlen(symbol);
+            for (const char* q = ctl; *q; ) {
+                const char* e = strchr(q, ';');
+                const size_t n = e ? (size_t)(e - q) : strlen(q);
+                if (n == len && strncmp(q, symbol, n) == 0) { armed = true; break; }
+                if (!e) break;
+                q = e + 1;
+            }
+        }
+        if (armed) {
+            ++g_trapControlInjections;
+            fprintf(stderr, "[RtMint] TRAP CONTROL: reporting a synthetic trap "
+                            "count of 99 for %s -- its promotion MUST refuse.\n", symbol);
+            fflush(stderr);
+            return 99;
+        }
+    }
     for (int i = 0; i < kVtableCount; ++i)
         if (kMintVtables[i].symbol && strcmp(kMintVtables[i].symbol, symbol) == 0)
             return g_vtableTraps[i];
