@@ -64,7 +64,8 @@
 //   0x180105700  ?AddScene@Renderer@Graphics@@                 ord 1579
 //   0x180104fd0  ?BeginDrawGroup@Renderer@Graphics@@           ord 1640
 //   0x1801017a0  ?AddCulledDrawItems@Scene@Graphics@@          ord 1543
-//   0x180062d60  the draw-item sort                     NOT EXPORTED  (door)
+//   0x180062d60  the draw-item sort                 NOT EXPORTED (ported, BATCH 8b)
+//   0x180063b90  its selection-sort callee          NOT EXPORTED (ported, BATCH 8b)
 //   0x1800fd4c0  ?CopyInstancedToUnique@AnimationState@        ord 1868
 //   0x1800fc870  ?UpdateRootOnly@AnimationState@Graphics@@     ord 4525
 //   0x1800fcc20  ?UpdateNodes@AnimationState@Graphics@@        ord 4522
@@ -110,6 +111,7 @@
 #include "../../types/graphics/Material.h"
 #include "../../types/video/Context.h"
 #include "../collection/array_internal.h"
+#include "../collection/introsort_msvc.h"
 #include "../system/string.h"
 
 // Byte-identical to standalone/resolve.h's declaration; the linker checks the
@@ -542,7 +544,118 @@ using EmitFn    = void (*)(void* self, void* context, Renderer*, int32_t drawGro
 
 inline void** VTable(void* obj) { return *reinterpret_cast<void***>(obj); }
 
+// ============================================================================
+// Graphics::Renderer::DrawItemSort       retail 0x180062d60  (2311 bytes)
+// Graphics::Renderer::DrawItemSortSmall  retail 0x180063b90  ( 344 bytes)
+//   - BATCH 8b.  Replaces BATCH 8's std::sort, which was NOT faithful.
+// ============================================================================
+// Neither address is exported (checked against the PE export directory), so
+// both are address-only rows. Both are now ported and registered; the
+// `ResolveAddr` in Draw's pass loop therefore lands on our body, because the
+// resolver consults the port registry first.
+//
+// WHY THE PREVIOUS PORT WAS REPLACED. BATCH 8 wrote this as
+// `std::sort(first, last, DrawItemLess)` and argued that the comparator is a
+// strict total order over distinguishable items, so any correct sort gives the
+// same array and the algorithm need not be retail's. Reading the instructions
+// instead of reconstructing them shows two defects:
+//
+//   1. THE FLOAT TERM WAS BACKWARDS. At 0x180062e0e retail does
+//        MOVSS XMM0,[mid+0x1c] / MOVSS XMM1,[lo+0x1c]
+//        COMISS XMM0,XMM1 / JA  <swap, i.e. "mid sorts before lo">
+//        COMISS XMM1,XMM0 / JA  <no swap>
+//      so `sortKey` is DESCENDING. The std::sort port had `a.sortKey <
+//      b.sortKey`. Every frame's draw order was wrong in that term.
+//   2. "EQUAL IMPLIES INDISTINGUISHABLE" IS FALSE HERE. `arg8` (+0x20) and
+//      `_pad24` (+0x24) are never compared. Two items that tie on all eight
+//      compared terms can still differ in `arg8`, and then which one lands
+//      first is decided by the swap sequence - so the swap sequence must be
+//      retail's.
+//
+// FUN_180063b90 IS NOT AN INSERTION SORT, which BATCH 8 also assumed when it
+// declined to give it a body ("std::sort's own small-range handling subsumes
+// it"). It is a SELECTION SORT that repeatedly moves the MAXIMUM of [lo,hi] to
+// `hi`: 0x180063c47 `MOV RDI,R8` sits on the JB arms, so the tracked position
+// advances only on STRICTLY less. It is a distinct closure row and is ported
+// and registered here in its own right.
+//
+// The skeleton itself lives in ../collection/introsort_msvc.h, transcribed once
+// from these bytes and instantiated a second time for the Array<Mod> pair
+// (0x180028760 / 0x180028fc0), which is the same template with a different
+// element, comparator and swap.
+//
+// NO ORACLE WRAPPER: `sort` mutates the pass list in place and returns nothing,
+// so there is no value to replay. The diff harness sees it as a registered
+// address; the verdict is Draw's per-frame attendance climbing with the frame
+// on screen unchanged.
+// ============================================================================
+
+// The comparator. Every term below is one `CMP`/`COMISS` pair read out of
+// 0x180062dfe..0x180062e85, and the identical chain is repeated at six more
+// sites across the two bodies (the three median-of-three tests, the two
+// partition scans, the two equal-run walks and the selection sort's inner
+// loop). The field ORDER is the order of the compares, not of the struct.
+bool DrawItemLess(const RendererDrawItem& a, const RendererDrawItem& b) {
+    // +0x18, MOVZX / CMP AX,CX - UNSIGNED 16-bit.  JB -> less, JA -> not less.
+    if (a.flags != b.flags) return a.flags < b.flags;
+
+    // +0x1c, COMISS both ways - DESCENDING.  Written as two one-sided tests
+    // rather than `!=` so that a NaN (for which both JA arms fail) falls
+    // through to the next term exactly as retail's does.
+    if (a.sortKey > b.sortKey) return true;
+    if (b.sortKey > a.sortKey) return false;
+
+    // The remaining six are unsigned integer compares, in this order.
+    if (a.material != b.material)
+        return reinterpret_cast<uintptr_t>(a.material) <
+               reinterpret_cast<uintptr_t>(b.material);            // +0x08
+    if (a.instance != b.instance)
+        return reinterpret_cast<uintptr_t>(a.instance) <
+               reinterpret_cast<uintptr_t>(b.instance);            // +0x10
+    if (a.arg5  != b.arg5)  return a.arg5  < b.arg5;               // +0x1a
+    if (a.arg10 != b.arg10) return a.arg10 < b.arg10;              // +0x30
+    if (a.userData != b.userData)
+        return reinterpret_cast<uintptr_t>(a.userData) <
+               reinterpret_cast<uintptr_t>(b.userData);            // +0x28
+    // +0x00, the last term: `CMP RAX,[RBP] / JAE <not less>`.
+    return reinterpret_cast<uintptr_t>(a.geometry) <
+           reinterpret_cast<uintptr_t>(b.geometry);
+}
+
+// Retail swaps the 0x38-byte element as SEVEN qword moves (0x180062e87 and the
+// five other swap sites), reading one side into registers first. Self-swap is
+// a no-op either way, which matters because the selection sort can call it
+// with best == last.
+void DrawItemSwap(RendererDrawItem* a, RendererDrawItem* b) {
+    uint64_t* const pa = reinterpret_cast<uint64_t*>(a);
+    uint64_t* const pb = reinterpret_cast<uint64_t*>(b);
+    for (int k = 0; k < 7; ++k) {
+        const uint64_t t = pa[k];
+        pa[k] = pb[k];
+        pb[k] = t;
+    }
+}
+
 }  // namespace
+
+// 0x180063b90 - the small-range pass. `lo`/`hi` are INCLUSIVE bounds, as
+// 0x180062dc1 passes them (`MOV RDX,R15 / MOV RCX,RBP`).
+extern "C" void RtGraphics_Renderer_DrawItemSortSmall(void* lo, void* hi) {
+    rtsort::SelectionSortMaxToHigh(static_cast<RendererDrawItem*>(lo),
+                                   static_cast<RendererDrawItem*>(hi),
+                                   DrawItemLess, DrawItemSwap);
+}
+
+// 0x180062d60. Matches the call site's `void(void* data, int32_t count,
+// void* scratch)`; `scratch` is retail's spare register window and the body
+// never reads R8.
+extern "C" void RtGraphics_Renderer_DrawItemSort(void* data, int32_t count, void*) {
+    rtsort::Introsort(static_cast<RendererDrawItem*>(data), count,
+                      DrawItemLess, DrawItemSwap,
+                      [](RendererDrawItem* lo, RendererDrawItem* hi) {
+                          RtGraphics_Renderer_DrawItemSortSmall(lo, hi);
+                      });
+}
 
 extern "C" void RtGraphics_Renderer_Draw(void* self, void* context, float alpha,
                                          const void* scene, const void* camera) {
@@ -623,24 +736,11 @@ extern "C" void RtGraphics_Renderer_Draw(void* self, void* context, float alpha,
                 // a different path if it were removed.
                 if (list._size > 0 && list._size > 1) {
                     // ---------------------------------------------------------
-                    // ADDRESS DOOR 1 of 3.
-                    //   SYMBOL:      0x180062d60 — the draw-item sort. NOT in the
-                    //                export directory (checked with pefile; AEAA
-                    //                would have meant merely private, so the
-                    //                absence was verified, not assumed —
-                    //                reference_aeaa_is_private_not_unexported.md).
-                    //                2311 bytes per .pdata, an introsort-shaped
-                    //                body, and the ONLY unported callee of Draw.
-                    //   CONDITION:   reached whenever any pass list holds two or
-                    //                more items, i.e. essentially every frame.
-                    //   CONSEQUENCE: at cutover, with the DLL absent, this call
-                    //                resolves to nothing and the draw items go
-                    //                out UNSORTED — visible as transparency and
-                    //                depth-sort artefacts, not as a crash. It
-                    //                must be ported before Draw can run
-                    //                DLL-free. ADDRESSEE: the Wave 28 Graphics
-                    //                lane; recorded as residual R1 in
-                    //                docs/runtime_port/WAVE27_LANE_GFXBIG.md §6.
+                    // ADDRESS DOOR 1 of 3 — PORTED (BATCH 8b, faithfully):
+                    // RtGraphics_Renderer_DrawItemSort, above, registered at
+                    // the bottom of this file together with its 0x180063b90
+                    // selection-sort callee. ResolveAddr consults the port
+                    // registry first, so this call site needs no change.
                     // ---------------------------------------------------------
                     using SortFn = void (*)(void* data, int32_t count, void* scratch);
                     static SortFn sort = nullptr;
@@ -960,7 +1060,13 @@ extern "C" bool RtGraphics_AnimationState_Update(
                 } else {
                     const float num = static_cast<float>(clip->loopFrame - clip->frameFirst);
                     const float den = static_cast<float>(clip->frameLast  - clip->frameFirst);
-                    const float rate = static_cast<float>(clip->frameRate);
+                    // `rate` was this lane's name for +0x50 and it is WRONG:
+                    // +0x50 is the clip's FRAME COUNT (corrected 2026-09-12 in
+                    // AnimationState.h from ?GetPoseAtTime@Animation@Graphics@@,
+                    // which bounds a frame index with it). The expression is
+                    // unchanged -- fraction * frameCount is a frame index, and
+                    // +0x48 converts that to seconds.
+                    const float rate = static_cast<float>(clip->frameCount);
                     // (((num / den) * rate) * loopScale) — THREE separate
                     // instructions in this exact order (DIVSS, MULSS, MULSS at
                     // 0x1800fddc7..0x1800fddcf). Re-associating would be
@@ -1114,7 +1220,12 @@ int RtGraphicsWave27GfxbigRegister() {
     RegisterRuntimeAddr(0x180060d30,
                         (void*)&RtCollection_Array_MaterialParameterSet_SetSize); ++count;
 
-    return count;   // 4
+    // BATCH 8b: the draw-item sort and its selection-sort callee — see the
+    // banner above RtGraphics_Renderer_DrawItemSort.
+    RegisterRuntimeAddr(0x180062d60, (void*)&RtGraphics_Renderer_DrawItemSort); ++count;
+    RegisterRuntimeAddr(0x180063b90, (void*)&RtGraphics_Renderer_DrawItemSortSmall); ++count;
+
+    return count;   // 6
 }
 
 // One line beside the other wave summaries, so a run that entered none of these

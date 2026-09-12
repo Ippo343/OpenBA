@@ -333,6 +333,67 @@ extern "C" void* RtUi_SpriteSheet_OperatorNew(uint64_t bytes) {
 }
 
 // ============================================================================
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — ~SpriteSheet
+// and its class's three per-TU `operator delete` copies.
+// ============================================================================
+
+// The exported `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` wrapper, MemFree
+// above, is `static`-cached per translation unit already; these three rows
+// all reuse that one cache rather than each keeping their own, since it is
+// the SAME shipped body (0x1800c7ad0) underneath every one of them.
+
+// `??3SpriteSheet@UI@@SAXPEAX@Z` (retail 0x180002ee0, 93 bytes) — decompiled:
+// `if (p) { Enter(cs); Free(_singleton, p); Leave(cs); }`, i.e. exactly
+// MemFree with the null test open-coded rather than delegated. Byte-identical
+// in shape to the ten other per-TU copies runtime/src/object/deleting_dtor.cpp
+// already catalogued.
+extern "C" void RtUi_SpriteSheet_OperatorDelete(void* p) { MemFree(p); }
+// `??3ToolTipDialog@UI@@SAXPEAX@Z` (retail 0x18004d050, 93 bytes). Same body.
+extern "C" void RtUi_ToolTipDialog_OperatorDelete(void* p) { MemFree(p); }
+// `??3DialogInstance@UI@@SAXPEAX@Z` (retail 0x180045490, 93 bytes). Same body.
+extern "C" void RtUi_DialogInstance_OperatorDelete(void* p) { MemFree(p); }
+
+// `??1SpriteSheet@UI@@UEAA@XZ` — retail 0x18011d670, ord 686.
+// Releases the two refcounted String slots at +0x40 (`m_groupName`) then
+// +0x38 (`m_textureName`) — in THAT order, per the disassembly — destroys the
+// `m_sprites` array (+0x20, Array<SpriteInfo>) through the already-ported
+// `~Array<SpriteEntry:0x38>` at 0x180004f50
+// (runtime/src/collection/array_destroy.cpp), then tail-calls
+// `Object::External::~External`. The vtable is re-stamped first, exactly as
+// retail's `*(undefined***)this = &_vftable_` does — this class's own vtable,
+// not a base class's, because a derived class's dtor thunk has already
+// re-stamped ITS vtable and this call is the base-class step of that chain.
+extern "C" void RtUi_SpriteSheet_Dtor(void* self) {
+    uint8_t* p = static_cast<uint8_t*>(self);
+    void* vtbl = RT_DATA_SLOT(void*, "??_7SpriteSheet@UI@@6B@");
+    if (vtbl) *reinterpret_cast<void**>(p) = vtbl;
+
+    auto release = [](uint8_t* slot) {
+        uint8_t* str = *reinterpret_cast<uint8_t**>(slot);
+        if (!str) return;
+        int32_t* rc = reinterpret_cast<int32_t*>(str - 4);
+        if (--*rc == 0) {
+            uint8_t* blk = str - 8;
+            *reinterpret_cast<uint8_t**>(slot) = blk;
+            if (blk) MemFree(blk);
+        } else {
+            *reinterpret_cast<uint8_t**>(slot) = nullptr;
+        }
+    };
+    release(p + 0x40);   // m_groupName
+    release(p + 0x38);   // m_textureName
+
+    using ArrayDtorFn = void* (*)(void*);
+    static ArrayDtorFn arrayDtor = nullptr;
+    if (!arrayDtor) arrayDtor = reinterpret_cast<ArrayDtorFn>(
+        ResolveAddr(Module::Runtime, 0x180004f50));
+    arrayDtor(p + 0x20);   // m_sprites, Array<SpriteInfo>
+
+    using ExternalDtorFn = void (*)(void*);
+    RT_EXPORT_ONCE(ExternalDtorFn, "??1External@Object@@UEAA@XZ")(self);
+}
+
+// ============================================================================
 // Registration. BOTH doors — BY NAME and BY ADDRESS.
 // ============================================================================
 // The address door is not redundant with the name door: a caller that reaches a
@@ -350,5 +411,23 @@ int RtUiSpriteSheetNewRegister() {
     RegisterRuntimeExport("??2SpriteSheet@UI@@SAPEAX_K@Z",
                           (void*)&RtUi_SpriteSheet_OperatorNew);
     RegisterRuntimeAddr(0x180002e60, (void*)&RtUi_SpriteSheet_OperatorNew);
+
+    RegisterRuntimeExport("??1SpriteSheet@UI@@UEAA@XZ", (void*)&RtUi_SpriteSheet_Dtor);
+    RegisterRuntimeAddr(0x18011d670, (void*)&RtUi_SpriteSheet_Dtor);
+
+    // Three deleting-dtor rows (operator_delete), UI leftovers batch. Each is
+    // one of the per-translation-unit `operator delete` copies
+    // runtime/src/object/deleting_dtor.cpp already catalogued (byte-identical
+    // to the exported `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`), reached
+    // here by whichever class's scalar/vector deleting destructor calls it.
+    RegisterRuntimeExport("??3SpriteSheet@UI@@SAXPEAX@Z", (void*)&RtUi_SpriteSheet_OperatorDelete);
+    RegisterRuntimeAddr(0x180002ee0, (void*)&RtUi_SpriteSheet_OperatorDelete);
+
+    RegisterRuntimeExport("??3ToolTipDialog@UI@@SAXPEAX@Z", (void*)&RtUi_ToolTipDialog_OperatorDelete);
+    RegisterRuntimeAddr(0x18004d050, (void*)&RtUi_ToolTipDialog_OperatorDelete);
+
+    RegisterRuntimeExport("??3DialogInstance@UI@@SAXPEAX@Z", (void*)&RtUi_DialogInstance_OperatorDelete);
+    RegisterRuntimeAddr(0x180045490, (void*)&RtUi_DialogInstance_OperatorDelete);
+
     return 1;
 }

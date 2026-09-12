@@ -118,6 +118,8 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/Sprite.h"
 #include "../../types/ui/SpriteContext.h"
+#include "../../types/math/Math.h"
+#include "../../types/video/Context.h"
 
 // ----------------------------------------------------------------------------
 // Module / ResolveAddr, forward-declared rather than pulled in from
@@ -260,6 +262,60 @@ inline int ScaleUp(int v, float scale) {
 // Every body is byte-faithful to the retail DISASSEMBLY, not to Ghidra's
 // decompiled C (reference_ghidra_c_output_vs_disassembly.md). No null guard
 // retail does not have.
+
+// ?Begin@SpriteContext@UI@@QEAAXMPEAVSpriteCapture@2@PEAVViewport@Video@@@Z
+// Retail 0x18011d2b0, ord 1632. UI leftovers batch
+// (docs/runtime_port/closure/WORKLIST.md). Read the scissor from the context's
+// CURRENT render target (this is the same read
+// runtime/src/save/saveload_draw.cpp's own SpriteContext construction already
+// makes, through `RtVideo::RenderBufferPrefix`); store the capture object and
+// the clip viewport; if a capture object was handed in, clear its `_entries`
+// and `_sprites` arrays to size 0 (0x18004ba90 / 0x1800370c0, array.cpp's
+// kSpec_CaptureEntryZ / kSpec_SpriteIndexZ — both zero SpriteCapture+0x50 as a
+// side effect of this same call site, per `SpriteCapture::BeginAddingSprites`'
+// own +0x50 clear noted in SpriteCapture.h); push an identity Matrix through
+// `Video::Context::SetTransform`; and finally store `_scale`.
+void RtUi_SpriteContext_Begin(UI::SpriteContext* self, float scale,
+                              void* spriteCapture, const UI::ClipRect* viewport) {
+    RtVideo::Context* ctx = static_cast<RtVideo::Context*>(self->_context);
+    const auto* rb = static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);
+    const int32_t w = rb->width;
+    const int32_t h = rb->height;
+
+    self->_spriteCapture = spriteCapture;
+    self->_clipRegion = viewport;
+
+    if (spriteCapture) {
+        uint8_t* cap = static_cast<uint8_t*>(spriteCapture);
+        *reinterpret_cast<uint64_t*>(cap + 0x50) = 0;
+
+        using ArraySetSize1Fn = void (*)(void*, int32_t);
+        static ArraySetSize1Fn clearSprites = nullptr;
+        if (!clearSprites) clearSprites = reinterpret_cast<ArraySetSize1Fn>(
+            ResolveAddr(Module::Runtime, 0x1800370c0));
+        clearSprites(cap + 0x40, 0);
+
+        static ArraySetSize1Fn clearEntries = nullptr;
+        if (!clearEntries) clearEntries = reinterpret_cast<ArraySetSize1Fn>(
+            ResolveAddr(Module::Runtime, 0x18004ba90));
+        clearEntries(cap + 0x30, 0);
+    }
+
+    self->_currentSheet = nullptr;
+    self->_scissorX = 0;
+    self->_scissorY = 0;
+    self->_scissorW = w;
+    self->_scissorH = h;
+
+    Matrix identity;
+    std::memset(&identity, 0, sizeof(identity));
+    identity.m[0] = 1.0f; identity.m[5] = 1.0f; identity.m[10] = 1.0f; identity.m[15] = 1.0f;
+    using SetTransformFn = void (*)(RtVideo::Context*, int32_t, const Matrix*);
+    RT_EXPORT_ONCE(SetTransformFn, "?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z")(
+        ctx, 0, &identity);
+
+    self->_scale = scale;
+}
 
 // ---- 0x18011c890  SpriteContext::AddSpriteDraw (internal) ------------------
 //
@@ -620,6 +676,11 @@ int RtUiSpriteContextRegister() {
     // be safe on a live frame rather than only in a scratch.
     RegisterRuntimeAddr(0x18011c890, (void*)&RtUi_SpriteContext_AddSpriteDraw); ++n;
     RegisterRuntimeAddr(0x18011c6a0, (void*)&RtUi_SpriteContext_FlushDeferred); ++n;
+
+    // UI leftovers batch (docs/runtime_port/closure/WORKLIST.md). No exported
+    // name in either build for Begin either -- address door, same as the two
+    // internals above.
+    RegisterRuntimeAddr(0x18011d2b0, (void*)&RtUi_SpriteContext_Begin); ++n;
 
     // WAVE 9 LANE FLUSH. `Flush` (0x18011ba40) was this file's ONE opened
     // address door -- the per-frame call every body above makes and the reason

@@ -400,6 +400,87 @@ void InitIdentityTransform(uint8_t* d) {
     *reinterpret_cast<uint64_t*>(d + 0x14) = 0;
 }
 
+// ---------------------------------------------------------------------------
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — three more
+// element types, read from the disassembly of 0x18004ba90/0x18004bde0
+// (`UI::SpriteCapture::_entries`, element `UI::SpriteCapture::CaptureEntry`
+// per runtime/types/ui/SpriteCapture.h), 0x180033690 (`UI::UserInterface::
+// _events`, element `UI::UserInterface::Event`) and 0x1800370c0
+// (`UI::SpriteCapture::_sprites` / `UI::UserInterface`'s fade sprite family,
+// element `UI::Sprite`, {ExternalPtr<SpriteSheet>, int32 index, pad}).
+// ---------------------------------------------------------------------------
+
+// `CaptureEntry` (0x28 bytes): sheetIndex(+0x00,i32), pad04(+0x04, never
+// touched by either instantiation), name(+0x08, System::String, refcounted),
+// x1/y1/x2/y2(+0x10..+0x1f, i32 each), rotation(+0x20,f32), color(+0x24,u32).
+// SpriteCapture.h's banner already worked out that both 0x18004ba90 (the
+// two-argument SetSize) and 0x18004bde0 (the three-argument SetSize with a
+// fill) COPY-CONSTRUCT this element -- the name slot is zeroed first, then the
+// source pointer is copied and its refcount bumped, exactly like
+// `ReleaseStringsCore`'s release is the mirror of this acquire. Read out of
+// 0x18004be97..0x18004bed0 (the 3-arg body) and cross-checked against
+// 0x18004ba90's own copy loop, which is instruction-for-instruction the same
+// shape at a different source pointer (the OLD element during a realloc move,
+// rather than the caller's `fill`).
+void AssignCaptureEntry(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<int32_t*>(d) = *reinterpret_cast<const int32_t*>(s);  // +0x00 sheetIndex
+    // +0x04 pad -- neither instantiation writes it.
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    const uint64_t str = *reinterpret_cast<const uint64_t*>(s + 0x08);
+    if (str) {
+        *reinterpret_cast<uint64_t*>(d + 0x08) = str;
+        ++*reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(str) - 4);  // INC [str-4]
+    }
+    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
+    *reinterpret_cast<uint32_t*>(d + 0x14) = *reinterpret_cast<const uint32_t*>(s + 0x14);
+    *reinterpret_cast<uint32_t*>(d + 0x18) = *reinterpret_cast<const uint32_t*>(s + 0x18);
+    *reinterpret_cast<uint32_t*>(d + 0x1c) = *reinterpret_cast<const uint32_t*>(s + 0x1c);
+    *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
+    *reinterpret_cast<uint32_t*>(d + 0x24) = *reinterpret_cast<const uint32_t*>(s + 0x24);
+}
+// 0x18004ba90's `else` (init) arm, the two-argument form's default-constructed
+// tail: FOUR qword zero stores at +0x08, +0x10, +0x18, +0x20. +0x00 (sheetIndex)
+// and +0x04 (pad) are NEVER written by this arm -- a real gap, not an omission
+// here: the disassembly's else-branch starts at `lVar5+8`, never `lVar5`.
+void InitCaptureEntryTail(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
+}
+
+// `UI::UserInterface::Event` (0x30 bytes), the array UserInterface.h left
+// deliberately opaque. 0x180033690's copy loop, read field by field: +0x00 and
+// +0x08 are "zero-then-copy" qwords (a smart-pointer-shaped store, but NO
+// refcount INC anywhere in this body -- unlike CaptureEntry's name slot, so
+// these are raw pointers with no owned reference), +0x10/+0x14/+0x18/+0x1c/
+// +0x20 are five plain dword copies, and +0x28 is a plain qword copy. That
+// leaves **+0x24..+0x27 (4 bytes) NEVER WRITTEN** -- the one gap in an
+// otherwise fully-covered 0x30-byte element.
+void AssignEvent30(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x00) = *reinterpret_cast<const uint64_t*>(s + 0x00);
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
+    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
+    *reinterpret_cast<uint32_t*>(d + 0x14) = *reinterpret_cast<const uint32_t*>(s + 0x14);
+    *reinterpret_cast<uint32_t*>(d + 0x18) = *reinterpret_cast<const uint32_t*>(s + 0x18);
+    *reinterpret_cast<uint32_t*>(d + 0x1c) = *reinterpret_cast<const uint32_t*>(s + 0x1c);
+    *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
+    // +0x24..+0x27 deliberately untouched -- retail does not write it either.
+    *reinterpret_cast<uint64_t*>(d + 0x28) = *reinterpret_cast<const uint64_t*>(s + 0x28);
+}
+
+// 0x1800370c0's `else` (init) arm, the two-argument UI::Sprite clear: the
+// ExternalPtr<SpriteSheet> qword at +0x00 goes to null and the index dword at
+// +0x08 goes to -1 (`MOV [d],0; MOV dword[d+8],0xffffffff`), matching
+// UI::Sprite's documented default (UserInterface.h: "index = -1 is the
+// engine's empty-sprite value"). +0x0c (pad) is never written.
+void InitSpriteIndexNeg1(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<int32_t*>(d + 0x08) = -1;
+}
+
 // ============================================================================
 // The three NON-TRIVIAL element types (0x180004e30, 0x180051390, 0x180061480)
 // ============================================================================
@@ -486,6 +567,18 @@ void InitSprite38Z(uint8_t* d) {
 void Destroy38(void* ignoredThis, uint8_t* base, int count) {
     using Fn = void (*)(void*, uint8_t*, int);
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800059e0));
+    fn(ignoredThis, base, count);
+}
+
+// UI leftovers batch: `Array<CaptureEntry>`'s shrink/realloc destroy, one
+// String release at +0x08 per element (stride 0x28). Ported and registered by
+// runtime/src/collection/array_destroy.cpp (kD_Str_28at08, B_ENTRY(18003f070,
+// ...)); reached through ResolveAddr so the registry-first rule
+// (reference_resolveaddr_consults_port_registry_first.md) picks up OUR body
+// regardless of file init order.
+void Destroy28Call(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18003f070));
     fn(ignoredThis, base, count);
 }
 
@@ -1109,6 +1202,22 @@ const ArraySpec kSpec_I32Neg1 = {                 // 0x18007b960  Array<int>, fi
 const ArraySpec kSpec_Fill8 = {                   // 0x18001f990  Array<T*>
     "Array<ptr>", 8, 8, &Assign8, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
+// BATCH 4 — 0x18000c300, `Array<T>::SetSize(4)` for a 0x8ba0-byte element, the
+// one-argument constant-folded shape. Read off its own body:
+//   IMUL / `(longlong)capacity * 0x8ba0` at the MemAlloc  -> stride 0x8ba0
+//   MOV EDX,0x4                                           -> align 4
+//   the element copy is `memcpy(dst, src, 0x8ba0)` (retail hand-unrolls a
+//   16-byte SSE loop when both pointers are 16-aligned and calls `memcpy`
+//   otherwise — same bytes either way, so one memcpy is faithful)
+//   the copy loop's `else` arm does not exist: elements in [oldSize, 4) are
+//   LEFT UNINITIALISED, so `init` stays null.
+// The element size is the only thing about the type this lane can state: the
+// sole caller is Engine::Play (0x1800a0d10) and nothing there names it.
+void AssignBlob8ba0(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x8ba0); }
+const ArraySpec kSpec_Blob8ba0 = {                // 0x18000c300
+    "Array<blob0x8ba0>", 0x8ba0, 4, &AssignBlob8ba0, nullptr, nullptr, true,
+    0, 0, 0, 0, 0, 0 };
+
 const ArraySpec kSpec_Fill8Z = {                  // 0x180076900, 0x18007a0d0
     "Array<InternalPtr>(fill)", 8, 8, &Assign8Z, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
@@ -1117,6 +1226,14 @@ const ArraySpec kSpec_Fill4 = {                   // 0x180023830  Array<uint32>
 
 const ArraySpec kSpec_Fill16 = {                  // 0x18004f790, 0x18004f8e0
     "Array<callback16>", 0x10, 8, &Assign16, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// 0x180051aa0 — Graphics::ParticleSystem::AddEmitter's emitter-slot array.
+// Same 16-byte element and Assign16 as kSpec_Fill16, but the body's own
+// `MemAlloc(n << 4, 4)` passes align=4, not 8 (read from the body, not
+// assumed from the sibling row above) — a distinct spec so the allocator call
+// stays byte-faithful.
+const ArraySpec kSpec_Fill16A4 = {                // 0x180051aa0
+    "Array<EmitterSlot16>", 0x10, 4, &Assign16, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 // WAVE 9 LANE UIF — Array<UI::SpriteDraw>, the sprite batch behind
 // SpriteContext::AddSpriteDraw (append, 0x180078520) and
@@ -1175,6 +1292,48 @@ const ArraySpec kSpec_SpriteDraw = {              // 0x180078520, 0x1800783d0
 // in the assign, a refcount release in 0x1800059e0). Everything from +0x10 on
 // is plain scalars and IS seeded non-zero, which is what makes the +0x34 window
 // testable at all.
+// UI leftovers batch -- the CaptureEntry pair. Both share AssignCaptureEntry
+// and Destroy28Call; they differ only in the 2-arg form's default-tail arm
+// (see InitCaptureEntryTail's banner). NON-TRIVIAL (owned String reference,
+// per-element destroy), same tier as kSpec_Sprite38 above and registered
+// unconditionally for the same reason 0x180078950 is: nothing in either spec
+// calls an unexported helper still on the DLL -- both AssignCaptureEntry and
+// Destroy28Call are ours.
+const ArraySpec kSpec_CaptureEntry = {            // 0x18004bde0 (3-arg, with fill)
+    "Array<UI::SpriteCapture::CaptureEntry>", 0x28, 8, &AssignCaptureEntry,
+    nullptr, &Destroy28Call, false,
+    /*assign unwritten*/ 0x04, 0x08,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x08, 0x10 };
+
+const ArraySpec kSpec_CaptureEntryZ = {           // 0x18004ba90 (2-arg, default tail)
+    "Array<UI::SpriteCapture::CaptureEntry> (2-arg)", 0x28, 8, &AssignCaptureEntry,
+    &InitCaptureEntryTail, &Destroy28Call, false,
+    /*assign unwritten*/ 0x04, 0x08,
+    /*init   unwritten*/ 0x00, 0x08,
+    /*seed zero       */ 0x08, 0x10 };
+
+// UI leftovers batch -- UI::UserInterface::_events, three-argument form only
+// (0x180033690's only caller passes a fill; there is no two-argument sibling
+// in this worklist). TRIVIAL: no owned resource, no destroy -- same
+// classification kSpec_PtrZero gets for its own zero-then-copy idiom.
+const ArraySpec kSpec_Event30 = {                 // 0x180033690
+    "Array<UI::UserInterface::Event>", 0x30, 8, &AssignEvent30, nullptr, nullptr, true,
+    /*assign unwritten*/ 0x24, 0x28,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0,    0 };
+
+// UI leftovers batch -- UI::Sprite, the two-argument form (0x1800370c0,
+// `SpriteContext::Begin` clearing SpriteCapture's own `_sprites`/`_entries`
+// pair to size 0). TRIVIAL: Assign16 is the existing pure byte copy: no
+// refcount touch anywhere in this element, so no destroy is needed either.
+const ArraySpec kSpec_SpriteIndexZ = {            // 0x1800370c0
+    "Array<UI::Sprite> (2-arg, index=-1 tail)", 0x10, 8, &Assign16,
+    &InitSpriteIndexNeg1, nullptr, true,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0x0c, 0x10,
+    /*seed zero       */ 0,    0 };
+
 const ArraySpec kSpec_Sprite38 = {                // 0x180004e30
     "Array<SpriteEntry:0x38>", 0x38, 8, &Assign38Call, nullptr, &Destroy38, false,
     /*assign unwritten*/ 0x34, 0x38,
@@ -1309,6 +1468,43 @@ const ArraySpec kSpec_StringExt = {               // 0x180061480
 const ArraySpec kSpec_StringRef = {               // 0x180034860
     "Array<System::String>", 8, 8, &AssignStringRef, nullptr,
     &DestroyStringRange, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x08 };
+
+// --- Cutover closure batch 2: Graphics::Material::_parameters, 0x1800616c0 --
+//
+// Two-argument `SetSize(this, int)`, stride 0x18. Read out of 0x1800616c0's
+// own body:
+//   ASSIGN (element in range): zero +0x00, then AssignStringRef's zero-then-
+//     addref-copy of the String* at +0x00; +0x08..+0x17 copied verbatim as
+//     four dwords (one memcpy, no refcounted field in that half).
+//   INIT (grown past old size): all three qwords (+0x00..+0x17) zeroed.
+//   DESTROY: 0x180005880 (Collection_Array_MaterialParam_DestroyStrings, this
+//     file's `kD_Str_18at00` in array_destroy.cpp), called on both the
+//     realloc arm and the shrink-tail arm — read from the disassembly, not
+//     assumed from kSpec_StringRef's shape.
+// MemAlloc's align argument is 8 (`MOV EDX,8` at 0x1800617d9).
+void AssignStringPlus16(uint8_t* d, const uint8_t* s) {
+    AssignStringRef(d, s);                        // +0x00: String* ref
+    std::memcpy(d + 0x08, s + 0x08, 0x10);         // +0x08..+0x17: raw copy
+}
+void InitZero18(uint8_t* d) {
+    std::memset(d, 0, 0x18);
+}
+// Reached by ADDRESS, not a direct call into array_destroy.cpp's translation
+// unit — same door DestroyStringRange/DestroyVertexElement already use, so a
+// caller elsewhere in the tree that registers 0x180005880 differently is
+// picked up here too.
+void DestroyMaterialParamStrings(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180005880));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_MaterialParam = {           // 0x1800616c0
+    "Array<Material::Parameter>", 0x18, 8, &AssignStringPlus16, &InitZero18,
+    &DestroyMaterialParamStrings, false,
     /*assign unwritten*/ 0,    0,
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x00, 0x08 };
@@ -1571,97 +1767,221 @@ const ArraySpec kSpec_InnerArrayU8 = {            // 0x180053f00
     /*seed zero       */ 0x00, 0x10 };
 
 // ============================================================================
-// 2026-09-12 - Graphics::MaterialInstance's two arrays, 0x180061880 and
-// 0x1800616c0.  Both are reached from ?Serialize@MaterialInstance@Graphics@@
-// (runtime/src/graphics/wave24_lane_gfxmat.cpp), which is ON THE CUTOVER BOOT
-// PATH: SpriteSheet::Serialize -> ExternalPtr<MaterialInstance>::Serialize ->
-// ExternalFactory::FindOrLoad -> External::Load -> MaterialInstance::Serialize.
-// Unregistered, each is `ResolveAddr(...) == 0` the moment the DLL is gone, and
-// the boot dies with EXEC-of-0 one instruction into the read path.  That is
-// exactly what it did.
+// CUTOVER CLOSURE BATCH 2b (2026-09-12) — eleven more instantiations
+// ============================================================================
 //
-// --- 0x180061880, Array<MaterialInstance::Texture> {String* name @+0x00,
-//     ExternalPtr<ImageBuffer> @+0x08}, stride 0x10 ---------------------------
+// All eleven came off docs/runtime_port/closure/WORKLIST.md in one batch and
+// every parameter below was read out of the ADDRESS's OWN body (stride from the
+// index arithmetic, align from its `MOV EDX,<n>` into MemAlloc, the assign and
+// init arms from the copy loop, the destroy from the CALL on the realloc and
+// shrink arms). Nothing here is inherited from a lookalike row: this family has
+// now produced five wrong answers by resemblance (alignment immediate, shift,
+// trailing call, missing else-arm, and batch 2's align-4 emitter array).
 //
-// *** IT IS NOT kSpec_StringExt, AND THE DIFFERENCE IS THE ARITY. ***
-// 0x180061480 (kSpec_StringExt) is the THREE-argument `SetSize(this, n, fill)`
-// for the SAME element type -- Graphics::Material's copy of it -- and its
-// `init` is null because a caller that always passes a fill never takes an
-// else arm.  0x180061880 is TWO-argument (`MOVSXD RDI,EDX` at 0x18006189c is
-// the only parameter past `this`; nothing homes or reads R8) and it HAS an else
-// arm, at 0x18006194c/0x18006194f: two zero qword stores covering the whole
-// stride.  Reusing kSpec_StringExt would have left every newly grown slot
-// holding whatever the fresh MemAlloc block contained, and the next SetSize's
-// destroy arm would have decremented a refcount through that garbage -- the
-// same trap kSpec_StringRefZ's note records, on the same pair of arms.
-//
-// Everything else is read from 0x180061880's own disassembly and DOES agree
-// with kSpec_StringExt, so those parts are reused rather than duplicated:
-//   stride  0x10   `SHL RCX,0x4` at 0x1800618d1, `ADD RDX,0x10` at 0x180061956
-//   align   8      `MOV EDX,0x8` at 0x1800618d5
-//   assign  zero-then-adopt the String at +0x00 (`MOV [RCX],R14` /
-//           `MOV RAX,[RDX]` / `INC [RAX-0x4]`, 0x180061923..0x180061931) then
-//           the verbatim qword at +0x08 (0x180061934) == AssignStringExt
-//   destroy CALL 0x180005930 on BOTH arms -- realloc at 0x18006196a
-//           (count = oldSize) and shrink-tail at 0x1800619c3
-//           (count = oldSize - newSize) == DestroyStringExt
-const ArraySpec kSpec_MaterialTexture = {         // 0x180061880
-    "Array<MaterialInstance::Texture>", 0x10, 8, &AssignStringExt, &InitZero10,
-    &DestroyStringExt, false,
+// The element types that are NOT trivially copyable reach their per-element
+// helper by ADDRESS (ResolveAddr consults the port registry first), exactly as
+// kSpec_PkgEntry and kSpec_MaterialParam already do.
+// ============================================================================
+
+// --- 0x1800136f0  Array<Graphics::EdgeMesh::Triangle>, stride 0x18, ALIGN 4 --
+// The TriangleList array `Graphics::EdgeMesh` serialises through
+// SerializeTriangleListArray (0x180014850, ported in this batch). Retail writes
+// SIX DWORDS, not three qwords — transcribed as dwords so a watchpoint sees
+// retail's store widths. NO ELSE ARM: the copy loop's body is guarded by
+// `if (i < oldSize)` with nothing after it, so a grow past the old size leaves
+// the new tail UNINITIALISED (this is why it cannot reuse kSpec_Node18, which
+// also differs on align: 4 here, 8 there).
+void Assign18d(uint8_t* d, const uint8_t* s) {
+    for (int k = 0; k < 6; ++k)
+        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
+}
+const ArraySpec kSpec_Tri18A4 = {                 // 0x1800136f0
+    "Array<EdgeMesh::Triangle>", 0x18, 4, &Assign18d,
+    nullptr,   // NEW TAIL LEFT UNINITIALISED — retail's loop has no else arm
+    nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// --- 0x18005cc60  Array<T*>, stride 8, align 8, tail ZEROED ------------------
+// Two-argument. Assign is a PLAIN qword move (no zero-first store), so it is
+// Assign8 and NOT Assign8Z — the distinction kSpec_PtrZero exists for. The
+// else arm is one qword zero store. Parameter-identical to kSpec_U64Zero
+// ("Array<Time>"); given its own row because the name is what the diff summary
+// prints and "Array<Time>" on a pointer array is the kind of label that gets
+// believed.
+const ArraySpec kSpec_Ptr8Zero = {                // 0x18005cc60
+    "Array<T*>(zero tail)", 8, 8, &Assign8, &InitZero8, nullptr, true,
+    0, 0, 0, 0, 0, 0 };
+
+// --- 0x180053da0  Array<uint8>, stride 1, align 1, three-argument ------------
+// The compiled-shader BLOB array's inner byte buffer (Video::*::PlatformSerialize
+// reaches it through 0x180053ea0). `MemAlloc(cap, 1)` — no shift at all.
+const ArraySpec kSpec_Fill1 = {                   // 0x180053da0
+    "Array<uint8>", 1, 1, &Assign1, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// --- 0x180063680  Array<{7 qwords}>, stride 0x38, align 8, three-argument ----
+// Seven plain qword moves at +0x00..+0x30; no refcount, no zero-first store,
+// no else arm (every caller passes a fill).
+void Assign38(uint8_t* d, const uint8_t* s) {
+    for (int k = 0; k < 7; ++k)
+        reinterpret_cast<uint64_t*>(d)[k] = reinterpret_cast<const uint64_t*>(s)[k];
+}
+const ArraySpec kSpec_Fill38 = {                  // 0x180063680
+    "Array<blk56>", 0x38, 8, &Assign38, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// --- 0x180061880  Array<{String*, qword}>, stride 0x10, tail ZEROED ----------
+// The TWO-ARGUMENT sibling of kSpec_StringExt (0x180061480). Same element, same
+// AssignStringExt, same destroy helper (0x180005930, Body B / kD_Str_10) — and
+// one difference that is the whole reason for a separate row: this body HAS an
+// else arm, `MOV [R..],0 ; MOV [R..+8],0`, so the new tail is zeroed. Reusing
+// kSpec_StringExt (init = nullptr) would leave a grown tail holding whatever
+// the allocator returned, and the first destroy would then release a garbage
+// String pointer.
+const ArraySpec kSpec_StringExtZ = {              // 0x180061880
+    "Array<{String*,ExternalPtr}>(zero tail)", 0x10, 8,
+    &AssignStringExt, &InitZero10, &DestroyStringExt, false,
     /*assign unwritten*/ 0,    0,
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x00, 0x08 };
 
-// --- 0x1800616c0, Array<MaterialInstance::Constant> {String* name @+0x00,
-//     float[4] @+0x08}, stride 0x18 ------------------------------------------
+// --- 0x180034010 / 0x180033080  Array<Save::MetaDataEntry>, stride 0x20 ------
+// Two addresses, ONE spec: 0x180034010 is the two-argument form and 0x180033080
+// the three-argument one, and their copy loops are the same instructions. Both
+// are reached from IO::Persistence's LoadMetaData (0x1800c1b30) / SaveMetaData
+// (0x1800c1490) / UpdateList (0x1800c1ea0).
 //
-// TWO-ARGUMENT (`MOVSXD RDI,EDX` at 0x1800616dc; no R8 is homed or read).
-//   stride  0x18   `LEA RCX,[RAX+RAX*0x2]` / `SHL RCX,0x3` at
-//                  0x180061711..0x180061715, and `ADD RDX,0x18` at 0x1800617a0
-//   align   8      `MOV EDX,0x8` at 0x180061719
-//   assign  the same zero-then-adopt String at +0x00 as above
-//           (0x180061759..0x180061767) and then FOUR SEPARATE DWORD moves at
-//           +0x08/+0x0c/+0x10/+0x14 (0x18006176a..0x18006177f).  The four
-//           dwords are the float4 the serializer writes with the Encoding's
-//           +0x28 float-array slot; they are copied as dwords here because
-//           retail copies them as dwords, and the whole stride is covered.
-//   init    THREE zero qword stores at 0x180061792/0x180061795/0x180061799 --
-//           +0x00, +0x08, +0x10 -- so the whole 0x18 stride is zeroed.
-//   destroy CALL 0x180005880 on BOTH arms -- realloc at 0x1800617b4 and
-//           shrink-tail at 0x180061807.  0x180005880 is Body B with
-//           (stride 0x18, String @+0x00); it is ported and registered in
-//           array_destroy.cpp as kD_Str_18at00 in this same commit.  It is NOT
-//           kD_Str_18, which is the same stride with the String at +0x10.
-void AssignMaterialConstant(uint8_t* d, const uint8_t* s) {
+// Element, read from 0x180034010's loop at its assign arm:
+//     +0x00  String*  zero-then-adopt-then-INC [str-4]
+//     +0x08  String*  same
+//     +0x10  int32    plain dword
+//     +0x14  int32    plain dword
+//     +0x18  int32    plain dword
+//     +0x1c..+0x1f    NEVER WRITTEN BY EITHER ARM
+// Init arm (0x180034010 only): the two STRING qwords zeroed and nothing else —
+// so the init window is +0x10..+0x20, wider than the assign's.
+// Destroy: CALL 0x1800341e0 on both the realloc arm and the shrink tail
+// (array_destroy.cpp's `kD_Str2_20`, ported in this same commit).
+void AssignMetaEntry20(uint8_t* d, const uint8_t* s) {
     void** dp = reinterpret_cast<void**>(d);
     void* const* sp = reinterpret_cast<void* const*>(s);
     dp[0] = nullptr;
-    void* str = sp[0];
-    if (str) {
-        dp[0] = str;
-        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
+    if (void* a = sp[0]) {
+        dp[0] = a;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(a) - 4));
     }
-    std::memcpy(d + 0x08, s + 0x08, 4);
-    std::memcpy(d + 0x0c, s + 0x0c, 4);
-    std::memcpy(d + 0x10, s + 0x10, 4);
-    std::memcpy(d + 0x14, s + 0x14, 4);
+    dp[1] = nullptr;
+    if (void* b = sp[1]) {
+        dp[1] = b;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(b) - 4));
+    }
+    *reinterpret_cast<int32_t*>(d + 0x10) = *reinterpret_cast<const int32_t*>(s + 0x10);
+    *reinterpret_cast<int32_t*>(d + 0x14) = *reinterpret_cast<const int32_t*>(s + 0x14);
+    *reinterpret_cast<int32_t*>(d + 0x18) = *reinterpret_cast<const int32_t*>(s + 0x18);
 }
-void InitZero18(uint8_t* d) {
+void InitMetaEntry20(uint8_t* d) {
     *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
     *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
 }
-void DestroyMaterialConstantRange(void* ignoredThis, uint8_t* base, int count) {
+void DestroyMetaEntry20Range(void* ignoredThis, uint8_t* base, int count) {
     using Fn = void (*)(void*, uint8_t*, int);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180005880));
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800341e0));
     fn(ignoredThis, base, count);
 }
-const ArraySpec kSpec_MaterialConstant = {        // 0x1800616c0
-    "Array<MaterialInstance::Constant>", 0x18, 8, &AssignMaterialConstant, &InitZero18,
-    &DestroyMaterialConstantRange, false,
+const ArraySpec kSpec_MetaEntry20 = {             // 0x180034010, 0x180033080
+    "Array<Save::MetaDataEntry>", 0x20, 8,
+    &AssignMetaEntry20, &InitMetaEntry20, &DestroyMetaEntry20Range, false,
+    /*assign unwritten*/ 0x1c, 0x20,
+    /*init   unwritten*/ 0x10, 0x20,
+    /*seed zero       */ 0x00, 0x10 };
+
+// --- 0x1800332d0  Array<Save::MetaData>, stride 0x58, three-argument ---------
+// Element assign is a CALL to the copy constructor 0x180032f70 (ported in this
+// batch, runtime/src/save/save_metadata.cpp) and the per-element destroy is a
+// CALL to 0x1800c3f40 IN A LOOP — retail has no range helper here, it writes the
+// loop out at both arms. The wrapper below is that loop; the order is ascending
+// at both arms, read from the two `ADD R..,0x58` walks.
+void DestroyMetaData58Range(void* ignoredThis, uint8_t* base, int count) {
+    (void)ignoredThis;
+    using Fn = void (*)(void*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c3f40));
+    for (int i = 0; i < count; ++i) fn(base + static_cast<int64_t>(i) * 0x58);
+}
+void AssignMetaData58(uint8_t* d, const uint8_t* s) {
+    using Fn = void* (*)(void*, const void*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180032f70));
+    fn(d, s);
+}
+const ArraySpec kSpec_MetaData58 = {              // 0x1800332d0
+    "Array<Save::MetaData>", 0x58, 8,
+    &AssignMetaData58, nullptr, &DestroyMetaData58Range, false,
     /*assign unwritten*/ 0,    0,
     /*init   unwritten*/ 0,    0,
-    /*seed zero       */ 0x00, 0x08 };
+    /*seed zero       */ 0x00, 0x58 };
+
+// --- 0x1800638e0  Array<Graphics::DrawGroup>, stride 0x1f0, three-argument ---
+// Element assign is the copy constructor 0x18001be60 (ported in this batch);
+// the per-element destroy is MSVC's `eh vector destructor iterator` over THREE
+// inner `Collection::Array<T>` at +0x1c0/+0x1d0/+0x1e0, i.e. exactly
+// array_destroy.cpp's `kD_InnerArr3_1f0` (J2b's 0x18001c8c0 row), destroyed in
+// DESCENDING slot order. Written out here with ArrayDtorImpl rather than
+// reaching array_destroy.cpp, because ArrayDtorImpl IS the body the iterator
+// eventually calls (0x18001c650, the twelfth copy of J1).
+void DestroyDrawGroup1f0Range(void* ignoredThis, uint8_t* base, int count) {
+    (void)ignoredThis;
+    for (int i = 0; i < count; ++i) {
+        uint8_t* e = base + static_cast<int64_t>(i) * 0x1f0;
+        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1e0));   // reverse order,
+        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1d0));   // as the CRT
+        ArrayDtorImpl(reinterpret_cast<ArrayHdr*>(e + 0x1c0));   // iterator does
+    }
+}
+void AssignDrawGroup1f0(uint8_t* d, const uint8_t* s) {
+    using Fn = void* (*)(void*, const void*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001be60));
+    fn(d, s);
+}
+const ArraySpec kSpec_DrawGroup1f0 = {            // 0x1800638e0
+    "Array<Graphics::DrawGroup>", 0x1f0, 8,
+    &AssignDrawGroup1f0, nullptr, &DestroyDrawGroup1f0Range, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x1f0 };
+
+// --- 0x180051020  Array<Audio::Channel>, stride 0x70, n FOLDED TO 256 --------
+// A one-argument body like 0x18007b960: `CMP E..,0x100`, `MOV [RCX+8],0x100`,
+// `MOV [RCX+0xc],0x300` (the folded 3*256). Assign is fourteen plain qword
+// moves. The else arm is NOT a memset — it writes a specific pattern with two
+// 1.0f floats in it, and it SKIPS +0x0c..+0x0f and +0x6d..+0x6f:
+//     +0x00 q=0   +0x08 d=0   +0x10 q=0   +0x18 d=1.0f  +0x1c d=1.0f
+//     +0x68 d=0   +0x6c b=0   +0x20..+0x67 q=0 (nine qwords)
+// Transcribed in retail's own store order.
+void Assign70(uint8_t* d, const uint8_t* s) {
+    for (int k = 0; k < 14; ++k)
+        reinterpret_cast<uint64_t*>(d)[k] = reinterpret_cast<const uint64_t*>(s)[k];
+}
+void InitAudioChannel70(uint8_t* d) {
+    uint64_t* q = reinterpret_cast<uint64_t*>(d);
+    q[0] = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x08) = 0;
+    q[2] = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x18) = 0x3f800000u;   // 1.0f
+    *reinterpret_cast<uint32_t*>(d + 0x1c) = 0x3f800000u;   // 1.0f
+    *reinterpret_cast<uint32_t*>(d + 0x68) = 0;
+    *(d + 0x6c) = 0;
+    for (int k = 4; k <= 12; ++k) q[k] = 0;                 // +0x20..+0x67
+}
+const ArraySpec kSpec_AudioChannel70 = {          // 0x180051020
+    "Array<Audio::Channel>", 0x70, 8, &Assign70, &InitAudioChannel70, nullptr,
+    true,
+    /*assign unwritten*/ 0,    0,
+    // The init arm leaves +0x0c..+0x0f and +0x6d..+0x6f unwritten; ArraySpec
+    // carries ONE window per arm, so the first is recorded and the second is
+    // stated here. Neither is compared by anything: no oracle in this tree
+    // constructs an Audio::Channel array.
+    /*init   unwritten*/ 0x0c, 0x10,
+    /*seed zero       */ 0,    0 };
 
 // ============================================================================
 // Live instrumentation.
@@ -2044,6 +2364,26 @@ J1_ENTRY(18002a930)   // IO:          Persistence's save-list Array<T>
 // `~Array`, and freeing a buffer does not need to know what is in it — the
 // reason stated at the top of this section for why J1 has no parameters.
 J1_ENTRY(18000c4a0)   // Audio:       Audio::Stream's +0x30 Array<T>
+// Cutover closure batch 2 (2026-09-12): 0x180051ef0 has no element-destroy
+// CALL at all — just the allocator Enter/Free/Leave triple and the two zero
+// stores. Same J1 body, no new spec.
+J1_ENTRY(180051ef0)   // Audio:       EffectSlot-adjacent Array<T>, trivial T
+// ---- CUTOVER CLOSURE BATCH 2b (2026-09-12): nine more J1 addresses ---------
+//
+// Every one was decompiled individually and is the SAME 115-byte body lane Q
+// proved twelve times — `free(_data); _data = 0; {_size,_capacity} = 0` — with
+// no element-destroy prologue at all. J1 has no parameters (not even a stride),
+// so nine registrations cost nothing but nine lines, and each still owns its
+// own Site so a run can say which address it reached.
+J1_ENTRY(180005800)   // UI:       0x180005770's operator= clears through this
+J1_ENTRY(1800097f0)   // Achievement
+J1_ENTRY(180008e80)   // Achievement
+J1_ENTRY(180009700)   // Achievement
+J1_ENTRY(180014d00)   // Graphics: 0x180014c70's operator= clears through this
+J1_ENTRY(180033bc0)   // Save:     Persistence metadata
+J1_ENTRY(180033de0)   // Save:     Persistence metadata
+J1_ENTRY(180062320)   // Graphics
+
 
 #undef J1_ENTRY
 
@@ -2172,14 +2512,26 @@ J3_ENTRY2(18002c6a0, kSpec_ExtArrayElem) // Object: External::_refs, the depende
 // WAVE 27 LANE FRONTIER - the array ?Serialize@StringTable@UI@@ resizes on the
 // read path. Two-argument, read from the body (see kSpec_StringPair10).
 J3_ENTRY2(180078c90, kSpec_StringPair10) // UI: StringTable's TextEntry array
+// Cutover closure batch 2 (2026-09-12): Graphics::Material::_parameters,
+// ~MaterialInstance's array's sibling SetSize.
+J3_ENTRY2(1800616c0, kSpec_MaterialParam) // Graphics: Material::_parameters
 // 2026-09-12 — the two Video::ShaderProgram instantiations. Both two-argument,
 // read from their own bodies; see the two spec rows above.
 J3_ENTRY2(180055db0, kSpec_ShaderParam)  // Video: ShaderProgram::_textures / _constants [NON-TRIVIAL]
 J3_ENTRY2(180053f00, kSpec_InnerArrayU8) // Video: ShaderProgram::_byteCode            [NON-TRIVIAL]
-// 2026-09-12 - Graphics::MaterialInstance's two. Both two-argument, read from
-// their own bodies; see the two spec rows above.
-J3_ENTRY2(180061880, kSpec_MaterialTexture)  // Graphics: MaterialInstance::_textures  [NON-TRIVIAL]
-J3_ENTRY2(1800616c0, kSpec_MaterialConstant) // Graphics: MaterialInstance::_constants [NON-TRIVIAL]
+
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — the two-argument
+// CaptureEntry and Sprite instantiations SpriteContext::Begin (0x18011d2b0)
+// calls to clear SpriteCapture's `_entries` and `_sprites` to size 0.
+J3_ENTRY2(18004ba90, kSpec_CaptureEntryZ) // UI: SpriteCapture::_entries clear
+J3_ENTRY2(1800370c0, kSpec_SpriteIndexZ)  // UI: SpriteCapture::_sprites clear
+// ---- CUTOVER CLOSURE BATCH 2b (2026-09-12) --------------------------------
+J3_ENTRY2(180009d70, kSpec_PtrZero)     // Achievement: Array<InternalPtr>, zero-then-copy
+J3_ENTRY2(18005cc60, kSpec_Ptr8Zero)    // Graphics:    Array<T*>, plain copy, zero tail
+J3_ENTRY2(1800136f0, kSpec_Tri18A4)     // Graphics:    EdgeMesh's TriangleList (align 4)
+J3_ENTRY2(180061880, kSpec_StringExtZ)  // Graphics:    Material's {String*,ExternalPtr}, zero tail
+J3_ENTRY2(180034010, kSpec_MetaEntry20) // Save:        Persistence metadata entries
+
 
 #undef J3_ENTRY2
 
@@ -2271,6 +2623,20 @@ J3_ENTRY3(180078520, kSpec_SpriteDraw)  // UI:          Array<SpriteDraw> append
 // the script and both runs are in docs/runtime_port/WAVE10_LANE_UI3.md §2.
 J3_ENTRY3(180076250, kSpec_Node18)      // UI:          DialogInstance::_timers append
 J3_ENTRY3(180076370, kSpec_Fill8Z)      // UI:          DialogInstance::_controllers append
+J3_ENTRY3(180051aa0, kSpec_Fill16A4)    // Graphics:    ParticleSystem::AddEmitter's emitter array
+
+// UI leftovers batch — the three-argument CaptureEntry and Event pushes:
+// SpriteContext::Begin's own callees build these with a fill value.
+J3_ENTRY3(18004bde0, kSpec_CaptureEntry) // UI: SpriteCapture::_entries append
+J3_ENTRY3(180033690, kSpec_Event30)      // UI: UserInterface::_events append
+// ---- CUTOVER CLOSURE BATCH 2b (2026-09-12) --------------------------------
+J3_ENTRY3(18002ffa0, kSpec_Fill8)       // Object:   Array<InternalPtr>, plain qword fill
+J3_ENTRY3(180053da0, kSpec_Fill1)       // Video:    Array<uint8>, the shader blob bytes
+J3_ENTRY3(180063680, kSpec_Fill38)      // Graphics: Array<blk56>
+J3_ENTRY3(180033080, kSpec_MetaEntry20) // Save:     Persistence metadata entries (fill form)
+J3_ENTRY3(1800332d0, kSpec_MetaData58)  // Save:     Array<Save::MetaData>
+J3_ENTRY3(1800638e0, kSpec_DrawGroup1f0)// Graphics: Renderer::BeginDrawGroup's group array
+
 
 #undef J3_ENTRY3
 
@@ -2318,6 +2684,446 @@ Site g_j3_1800783d0 = { { "Collection::Array<SpriteDraw>::SetSize(0) @0x1800783d
 void RtColl_ArraySetSize_1800783d0(void* a) {
     SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SpriteDraw,
                 &g_j3_1800783d0);
+}
+
+// ============================================================================
+// CUTOVER CLOSURE BATCH 2b (2026-09-12) — `Reserve`, the fourth Array job
+// ============================================================================
+//
+// 0x18002fd90 (`Collection_Array_InternalPtr_Reserve`, already carrying that
+// recovered name in Ghidra) is NOT a `SetSize`, and running it through
+// SetSizeCore would be a live defect rather than a mislabel. Read out of its
+// own body, the differences from J3 are all in the tail:
+//
+//   * It is a GROW-ONLY no-op guard: `if (newSize <= _size) return;` — J3's
+//     guard is `newSize == _size`, so J3 would SHRINK on a smaller argument
+//     where Reserve does nothing.
+//   * It RESTORES `_size` to the old value at the end (`MOV [RCX+8],<old>` at
+//     the epilogue). The whole point is capacity, not length.
+//   * Its copy loop runs ONLY when the buffer actually moved (`CMP <old>,[RCX]`
+//     / `JZ`), and it copies `oldSize` elements — not `newSize`. J3 copies the
+//     prefix on the no-realloc path too (that path is a self-copy and so is
+//     invisible, which is exactly why the difference is easy to miss).
+//   * The `MemFree(old)` is likewise inside the moved-buffer branch, and is
+//     itself null-guarded before the Enter/Free/Leave triple.
+//
+// Element operations are still an ArraySpec: stride 8, align 8, a PLAIN qword
+// move (no zero-first store — checked against Assign8Z's shape), which is
+// `kSpec_Fill8` exactly. So the spec framework is reused and only the control
+// flow is new. One address today; the job is written parameterised because the
+// family has never had exactly one instantiation of anything.
+void ReserveCore(ArrayHdr* a, int newSize, const ArraySpec* spec, Site* site) {
+    ProbeGate();
+    const bool diff = (site != nullptr) && RtDiffEnabled();
+    const uint32_t stride = spec->stride;
+
+    const int32_t oldSizeI = a->_size;
+    if (oldSizeI >= newSize) {
+        if (diff) {
+            RtDiffRegister(&site->d);
+            RtDiffReport(&site->d, true, "noop(n<=size)", "noop(n<=size)");
+        }
+        return;
+    }
+
+    uint8_t* const old = a->_data;
+    a->_size = newSize;                      // set, then restored below
+
+    if (newSize > a->_capacity) {
+        a->_capacity = newSize;
+        if (newSize == static_cast<int32_t>(oldSizeI + 1) && oldSizeI != 0)
+            a->_capacity = static_cast<int32_t>(newSize * 3);
+        a->_data = static_cast<uint8_t*>(
+            MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity)) * stride,
+                     spec->align));
+    }
+
+    if (old != a->_data) {
+        for (int64_t i = 0; i < static_cast<int64_t>(oldSizeI); ++i) {
+            uint8_t* dst = a->_data + i * stride;
+            if (dst == nullptr) continue;    // retail tests the COMPUTED address
+            spec->assign(dst, old + i * stride);
+        }
+        MemFree(old);                        // null-guarded inside 0x1800c7ad0
+    }
+
+    a->_size = oldSizeI;                     // *** the whole point of Reserve ***
+
+    if (diff) {
+        RtDiffRegister(&site->d);
+        const bool ok = (a->_size == oldSizeI && a->_capacity >= newSize);
+        char ours[128], theirs[128];
+        std::snprintf(ours,   sizeof(ours),   "size=%d cap=%d", a->_size, a->_capacity);
+        std::snprintf(theirs, sizeof(theirs), "size=%d cap>=%d", oldSizeI, newSize);
+        RtDiffReport(&site->d, ok, ours, theirs);
+    }
+}
+
+Site g_j5_18002fd90 = { { "Collection::Array::Reserve @0x18002fd90", 0, 0, false, false },
+                        0x18002fd90 };
+void RtColl_ArrayReserve_18002fd90(void* a, int n) {
+    ReserveCore(static_cast<ArrayHdr*>(a), n, &kSpec_Fill8, &g_j5_18002fd90);
+}
+
+// CUTOVER CLOSURE BATCH 2b — 0x180051020, the THIRD constant-folded one-argument
+// SetSize (after 0x18007b960 and 0x1800783d0). `Audio::Scene`'s 256-channel
+// table: `CMP E..,0x100` / `MOV [RCX+8],0x100` / `MOV [RCX+0xc],0x300`, and the
+// loop bound `CMP R..,0x7000` is 256 * 0x70 written as a byte offset. It takes
+// ONE argument; a two-argument registration would read a register the caller
+// never set.
+Site g_j3_180051020 = { { "Collection::Array<Audio::Channel>::SetSize(256) @0x180051020",
+                          0, 0, false, false }, 0x180051020 };
+void RtColl_ArraySetSize_180051020(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0x100, nullptr, &kSpec_AudioChannel70,
+                &g_j3_180051020);
+}
+
+
+// ============================================================================
+// CUTOVER CLOSURE BATCH 2b (2026-09-12) — `Remove(const T&)`, the fifth job
+// ============================================================================
+//
+// 0x180050e00, reached from `RemoveEmitter` (0x1800decf0) in Audio. A
+// search-and-erase over a 16-byte element whose first three dwords are compared
+// with FLOATING-POINT equality (UCOMISS, not CMP) — a Vector3 key in a padded
+// 16-byte slot. It removes EVERY match, not the first, and it compacts in place
+// with no reallocation and no capacity change.
+//
+// Transcribed from the body rather than rewritten as an idiomatic erase-remove,
+// because three details are load-bearing and all three would be "tidied" away:
+//
+//   * The shift loop re-reads `this->_size` on EVERY iteration (`CMP <k>,
+//     [RBX+8]`), and the outer loop re-reads it again after each removal. The
+//     element move is guarded by `k < _size` — so on the LAST element the guard
+//     fails and the move is skipped, which is what makes the walk terminate.
+//   * The compare is float `==`. A NaN key matches nothing, including a stored
+//     NaN. `memcmp` would match it, and -0.0f/+0.0f would stop matching.
+//   * The element move is FOUR DWORDS (+0x00..+0x0f) from index k+1 to k, and
+//     the address `base + o2` is null-tested first — retail tests the COMPUTED
+//     address, as everywhere else in this family.
+//
+// No ArraySpec: the element operations are inlined constants in this body (a
+// three-float compare and a four-dword move), not a parameter, so a spec row
+// would be a table with one entry and one user.
+Site g_j6_180050e00 = { { "Collection::Array<Vec3+pad>::Remove @0x180050e00",
+                          0, 0, false, false }, 0x180050e00 };
+void RtColl_ArrayRemove_180050e00(void* self, const float* value) {
+    ProbeGate();
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);
+
+    int32_t  size = a->_size;
+    uint64_t off  = 0;
+    int64_t  idx  = 0;
+    int      removed = 0;
+
+    int32_t i = 0;
+    if (size > 0) {
+        do {
+            i = static_cast<int32_t>(idx);
+            const uint8_t* base = a->_data;
+            if (*reinterpret_cast<const float*>(base + off)     == value[0] &&
+                *reinterpret_cast<const float*>(base + off + 4) == value[1] &&
+                *reinterpret_cast<const float*>(base + off + 8) == value[2]) {
+                uint64_t o2 = off;
+                if (i < size) {
+                    uint32_t k;
+                    do {
+                        k = static_cast<uint32_t>(idx) + 1;
+                        idx = k;
+                        if (static_cast<int32_t>(k) < a->_size) {
+                            uint32_t* p = reinterpret_cast<uint32_t*>(a->_data + o2);
+                            if (p != nullptr) {
+                                p[0] = p[4];
+                                p[1] = p[5];
+                                p[2] = p[6];
+                                p[3] = p[7];
+                            }
+                        }
+                        o2 += 0x10;
+                    } while (static_cast<int32_t>(k) < a->_size);
+                }
+                a->_size = a->_size - 1;
+                i   = i - 1;
+                off = off - 0x10;
+                ++removed;
+            }
+            size = a->_size;
+            off += 0x10;
+            idx  = static_cast<uint32_t>(i + 1);
+        } while (i + 1 < size);
+    }
+
+    if (RtDiffEnabled()) {
+        RtDiffRegister(&g_j6_180050e00.d);
+        // Coverage plus the one invariant the body itself guarantees: no
+        // element equal to the key may survive. Weak (it restates the goal),
+        // and labelled as such; its value is `calls=`.
+        bool ok = true;
+        for (int32_t j = 0; j < a->_size; ++j) {
+            const uint8_t* e = a->_data + static_cast<int64_t>(j) * 0x10;
+            if (*reinterpret_cast<const float*>(e)     == value[0] &&
+                *reinterpret_cast<const float*>(e + 4) == value[1] &&
+                *reinterpret_cast<const float*>(e + 8) == value[2]) { ok = false; break; }
+        }
+        char ours[96];
+        std::snprintf(ours, sizeof(ours), "removed=%d size=%d", removed, a->_size);
+        RtDiffReport(&g_j6_180050e00.d, ok, ours, "no surviving element == key");
+    }
+}
+
+// UI leftovers batch — the SAME one-argument `SetSize(0)` shape as
+// 0x1800783d0 above, for two more callers: `UserInterface::CleanRemovedDialogs`
+// (0x18011f790) clears `_removedDialogs` (Array<DialogInstancePtr>, stride 8)
+// and `UserInterface::UpdateEvents` (0x18011fc60) clears `_events`
+// (Array<Event>, stride 0x30). Both bodies were read out of the disassembly
+// and both have the identical dead-branch shape 0x1800783d0's banner already
+// explains: with `n` folded to the literal 0, the fill loop's guard is
+// `start(=oldSize) < n(=0)`, which is false for every non-negative oldSize, so
+// the loop NEVER RUNS and the realloc/free branches are equally unreachable
+// (capacity is never negative, so `pvVar2 == *param_1` is always true). The
+// only observable effect of either body is `_size = 0` — no element is
+// destroyed, no buffer is freed, no per-element write happens. That matters
+// here specifically: `_removedDialogs` holds DialogInstance pointers already
+// released by the vtable-slot-0 call CleanRemovedDialogs makes just before
+// this clear, and `_events` holds no owned resource (kSpec_Event30's banner),
+// so a `_size = 0` that keeps the buffer is exactly what retail does and not
+// a hand-written shortcut around it.
+//
+// SetSizeCore is still the right implementation, for the same reason
+// 0x1800783d0 gives: if the "always dead" reasoning is ever wrong for either
+// spec, the two disagree under the diff oracle instead of silently agreeing.
+Site g_j3_18011f7f8 = { { "Collection::Array<DialogInstancePtr>::SetSize(0) @0x180079c90", 0, 0, false, false },
+                        0x180079c90 };
+void RtColl_ArraySetSize_180079c90(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_PtrZero,
+                &g_j3_18011f7f8);
+}
+
+Site g_j3_18011fc90 = { { "Collection::Array<UI::UserInterface::Event>::SetSize(0) @0x180079df0", 0, 0, false, false },
+                        0x180079df0 };
+void RtColl_ArraySetSize_180079df0(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Event30,
+                &g_j3_18011fc90);
+}
+
+// ---- BATCH 4 (Graphics render/cull/sun-camera cluster) ---------------------
+// Two more one-argument constant-folded members, both reached from that
+// cluster. Each spec is read out of ITS OWN body; neither could have been
+// inferred from the caller's element type.
+//
+// 0x18000c300 — `SetSize(4)` over a 0x8ba0-byte element (Engine::Play's
+// per-something block array). See kSpec_Blob8ba0 above for the three reads.
+// The grow rule folds the same way every other member does, which is how the
+// generic core is known to fit: retail's `_capacity = 4; if (oldSize == 3)
+// _capacity = 12;` is `(newSize == oldSize + 1 && oldSize != 0) ? n*3 : n`
+// with n folded to 4.
+Site g_j3_18000c300 = { { "Collection::Array<blob0x8ba0>::SetSize(4) @0x18000c300",
+                          0, 0, false, false }, 0x18000c300 };
+void RtColl_ArraySetSize_18000c300(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 4, nullptr, &kSpec_Blob8ba0,
+                &g_j3_18000c300);
+}
+
+// 0x18005f980 — NOT a SetSize at all but a `Reserve(16384)`: SetSize(0x4000)
+// with the OLD size written straight back over it at the end
+// (`MOV [RCX+8],ESI` at the epilogue, where ESI is the size captured on
+// entry). The one caller is Graphics::Scene::AddCulledDrawItems (0x1801017a0),
+// which reserves room for the visible-object list up front so its inlined
+// per-object append never reallocates.
+//
+// *** REGISTERING THE PLAIN kSpec_Fill8 SetSize BODY HERE WOULD BE A DEFECT,
+// not a rounding error: it would leave `_size` at 16384 and the caller would
+// then dispatch Draw through 16384 uninitialised pointers. ***
+// The restore is therefore part of the port, outside SetSizeCore.
+//
+// Spec read off the body: `MemAlloc(capacity << 3, 8)` -> stride 8, align 8;
+// the copy is one qword move; the copy loop is bounded by the OLD size, so the
+// new tail is left UNINITIALISED. That is kSpec_Fill8 exactly — and it does not
+// matter that the tail is never initialised, because `_size` goes back to the
+// old value before anything can look at it.
+//
+// Retail also has no `newSize == oldSize` early return here (it was folded
+// away). SetSizeCore keeps one, and it is unobservable: the only state that
+// path would skip is `_size = 0x4000`, which the restore below undoes.
+Site g_j3_18005f980 = { { "Collection::Array<ptr>::Reserve(16384) @0x18005f980",
+                          0, 0, false, false }, 0x18005f980 };
+void RtColl_ArrayReserve_18005f980(void* a) {
+    ArrayHdr* h = static_cast<ArrayHdr*>(a);
+    const int32_t oldSize = h->_size;
+    SetSizeCore(h, 0x4000, nullptr, &kSpec_Fill8, &g_j3_18005f980);
+    h->_size = oldSize;
+}
+
+// ============================================================================
+// BATCH 5 (2026-09-12) — three more SetSize instantiations, two element types
+//
+//   0x18002ae20  Array<IO::Persistence::SaveGameInfo>::SetSize(n, fill)
+//   0x18002aae0  the SAME array's SetSize(0), constant-folded to one argument
+//   0x180028cd0  Array<{uint32 typeId, Object::External*, System::Filename}>
+//                ::SetSize(n, fill) — IO::Modification::SetupFileSystem's
+//                reload list
+//
+// NEITHER ELEMENT TYPE MATCHES AN EXISTING ROW, and that was MEASURED before
+// either spec was written rather than assumed from the address neighbourhood:
+// each body was byte-compared against the twelve non-trivial rows already in
+// this file and the closest match differed in 187 of 333 / 242 of 364 bytes.
+// The specs below are read out of each body's own disassembly.
+//
+//   0x18002ae20   SHL RCX,0x4        -> stride 0x10
+//                 MOV EDX,0x8        -> align 8
+//                 MOV RAX,[RDX] / MOV [RCX],RAX            +0x00 verbatim
+//                 MOV [RCX+8],0 / TEST / store / INC [RAX-4]
+//                                                          +0x08 String adopt
+//                 == AssignExtStringAt08 exactly, the helper 0x180075d20's row
+//                 already uses. NO INIT ARM: the copy loop's source is a
+//                 `CMOVL` between the old element and the fill and there is no
+//                 third branch, so this address is only ever the 3-arg form.
+//                 destroy CALL 0x18002afc0 on both arms (kD_Str_10at08).
+//
+//   0x180028cd0   LEA RCX,[RAX+RAX*2] / SHL RCX,0x3 @0x180028d2d -> stride 0x18
+//                 MOV EDX,0x8        @0x180028d35             -> align 8
+//                 MOV EAX,[RDX] / MOV [RCX],EAX  @0x180028d8a  +0x00 DWORD
+//                 MOV RAX,[RDX+8] / MOV [RCX+8],RAX           +0x08 qword
+//                 ADD RCX,0x10 / ADD RDX,0x10 / CALL 0x1800067d0
+//                                                             +0x10 Filename
+//                 destroy CALL 0x180029190 @0x180028dcd (kD_Str_18).
+//
+//   *** 0x180028cd0's +0x04..+0x07 IS NEVER WRITTEN. *** The first store is a
+//   DWORD and the next is at +0x08. An oracle that compared those four bytes
+//   would fail 100% of calls and read like a catastrophic port defect
+//   (reference_oracle_must_not_compare_unwritten_bytes.md). Declared in the
+//   assign window below. There is no init arm, so there is no init window to
+//   read separately — the extent belongs to the ARM, and this element type has
+//   exactly one.
+//
+// SaveGameInfo's layout is corroborated by an INDEPENDENT witness:
+// runtime/types/io/Persistence.h has said since Wave 19 lane PERSIST that
+// `?GetSaveInfo@Persistence@IO@@` indexes the array at +0x80 with `SHL 4`,
+// i.e. a 0x10 stride, and the save-list job ported in this same commit fills
+// {timestamp, name} in that order. Derived here from the RESIZER, there from
+// the PRODUCER and the CONSUMER, with no shared premise.
+// ============================================================================
+
+// 0x180028cd0's element assign. The Filename copy constructor is reached BY
+// ADDRESS, not as a direct call, for the reason `AssignGraphSeries` above
+// records: retail's 0x180028d9e is a CALL to that address and the registry is
+// the door every other caller of it uses (runtime/src/io/modification.cpp and
+// runtime/src/collection/avl_trees.cpp both reach 0x1800067d0 the same way).
+void AssignModExternal18(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);
+    /* +0x04..+0x07 deliberately not copied — retail's first store is a DWORD */
+    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
+
+    using FilenameCopyFn = void* (*)(void*, const void*);
+    static FilenameCopyFn copy = nullptr;          // cache a hit, retry a miss
+    if (!copy) copy = reinterpret_cast<FilenameCopyFn>(
+        ResolveAddr(Module::Runtime, 0x1800067d0));
+    copy(d + 0x10, s + 0x10);
+}
+
+// The two destroy ranges. Both are ported AND registered in array_destroy.cpp
+// in this same commit (`B_ENTRY(18002afc0, kD_Str_10at08)` and
+// `B_ENTRY(180029190, kD_Str_18)`), so these ResolveAddr calls are
+// registry-first and land on OUR bodies rather than opening a door onto an
+// unported callee — the failure mode
+// reference_porting_can_grow_the_cutover_surface.md names.
+void DestroySaveGameInfoRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18002afc0));
+    fn(ignoredThis, base, count);
+}
+void DestroyModExternal18Range(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180029190));
+    fn(ignoredThis, base, count);
+}
+
+// NOT kSpec_ExtStr10at08, and the difference is the two fields that decide
+// behaviour: that row has `init = InitZero10` and destroys through
+// 0x180039640. This one has NO init arm at all and destroys through
+// 0x18002afc0. Reusing it would zero a tail retail never writes and free
+// through the wrong instantiation's helper.
+const ArraySpec kSpec_SaveGameInfo = {           // 0x18002ae20, 0x18002aae0
+    "Array<IO::Persistence::SaveGameInfo>", 0x10, 8,
+    &AssignExtStringAt08, nullptr, &DestroySaveGameInfoRange, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x08, 0x10 };   // only the String slot is dereferenced
+
+const ArraySpec kSpec_ModExternal18 = {          // 0x180028cd0
+    "Array<{uint32, External*, Filename}>", 0x18, 8,
+    &AssignModExternal18, nullptr, &DestroyModExternal18Range, false,
+    /*assign unwritten*/ 0x04, 0x08,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x10, 0x18 };   // the Filename slot is dereferenced
+
+#define J3_ENTRY3(ADDR, SPEC)                                                 \
+    Site g_j3_##ADDR = { { "Collection::Array::SetSize @0x" #ADDR, 0, 0, false, false }, \
+                         0x##ADDR };                                          \
+    void RtColl_ArraySetSizeFill_##ADDR(void* a, int n, const void* fill) {   \
+        SetSizeCore(static_cast<ArrayHdr*>(a), n,                             \
+                    static_cast<const uint8_t*>(fill), &SPEC, &g_j3_##ADDR);  \
+    }
+
+J3_ENTRY3(18002ae20, kSpec_SaveGameInfo)   // IO: Persistence's save-list append
+J3_ENTRY3(180028cd0, kSpec_ModExternal18)  // IO: SetupFileSystem's reload list
+
+#undef J3_ENTRY3
+
+// 0x18002aae0 — the SAME Array<SaveGameInfo> with the new size folded to the
+// constant 0, exactly the one-argument shape 0x1800783d0 above has.
+//
+// IT IS NOT A MEMBER OF THE J1 `~Array` FAMILY and reading it as one would be
+// a live defect: `~Array` frees the buffer unconditionally, and this body's
+// grow test (`CMP dword [RCX+0xc],0 / JGE`, and capacity is never negative)
+// can never be taken with a new size of 0, so its MemFree is unreachable and
+// the buffer and capacity SURVIVE. What it DOES do — and what 0x1800783d0 does
+// not — is run the shrink-path destroy over the old elements
+// (`CALL 0x18002afc0` with count = the old size), which is how the save list
+// releases its filename Strings before it is refilled.
+//
+// SetSizeCore is still the implementation rather than a hand-written
+// `_size = 0`: it reproduces the same unreachable branches for the same
+// reasons, so if that reading is ever wrong the two disagree under the oracle
+// instead of agreeing by construction.
+Site g_j3_18002aae0 = { { "Collection::Array<SaveGameInfo>::SetSize(0) @0x18002aae0",
+                          0, 0, false, false }, 0x18002aae0 };
+void RtColl_ArraySetSize_18002aae0(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SaveGameInfo,
+                &g_j3_18002aae0);
+}
+
+
+// ============================================================================
+// BATCH 8b (2026-09-12) - 0x180052330, Audio::Scene::EffectSlot::positions
+// ============================================================================
+// `Collection::Array<Audio::EmitterInstance>::SetSize(int)`, the resize the
+// EffectSlot inner-array serialize (0x180051e00, ported in
+// runtime/src/audio/audio_effectslot_serialize.cpp) calls on the READING side.
+// Read out of the body at 0x180052330, not inferred from a sibling:
+//
+//   stride 0x10   SHL RCX,0x4                          at 0x180052391
+//   align  4      MOV R14D,0x4 / MOV EDX,R14D          at 0x18005236e/0x180052395
+//   assign        FOUR dword moves per element         at 0x180052411
+//   init          the `else` arm writes TWO ZERO QWORDS at 0x180052433, so the
+//                 whole stride is covered and there is no init window
+//   destroy       NONE - the shrink path frees the old buffer and destroys
+//                 nothing (0x180052557 goes straight to the locked free)
+//
+// It is NOT kSpec_Fill16A4 (0x180051aa0), which is the same stride and the same
+// align 4 but has NO init arm; reusing it would leave a tail retail zeroes.
+// It is NOT kSpec_Fill16 either, whose align is 8.
+const ArraySpec kSpec_EmitterInstance = {        // 0x180052330
+    "Array<Audio::EmitterInstance>", 0x10, 4, &Assign16, &InitZero10, nullptr,
+    true, 0, 0, 0, 0, 0, 0 };
+
+Site g_j3_180052330 = { { "Collection::Array::SetSize @0x180052330",
+                          0, 0, false, false }, 0x180052330 };
+void RtColl_ArraySetSize_180052330(void* a, int n) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_EmitterInstance,
+                &g_j3_180052330);
 }
 
 }  // namespace rtcoll
@@ -2404,6 +3210,7 @@ void RtCollectionPortInit() {
     // call site is not attendance, and neither has been watched running.
     RegisterRuntimeAddr(0x18002a930, (void*)&RtColl_ArrayDtor_18002a930);
     RegisterRuntimeAddr(0x18000c4a0, (void*)&RtColl_ArrayDtor_18000c4a0);
+    RegisterRuntimeAddr(0x180051ef0, (void*)&RtColl_ArrayDtor_180051ef0);
 
     // ---- J3: SetSize, trivially-copyable elements --------------------------
     RegisterRuntimeAddr(0x180008b90, (void*)&RtColl_ArraySetSize_180008b90);
@@ -2417,16 +3224,16 @@ void RtCollectionPortInit() {
     // to zero the moment the DLL is gone.
     RegisterRuntimeAddr(0x180055db0, (void*)&RtColl_ArraySetSize_180055db0);
     RegisterRuntimeAddr(0x180053f00, (void*)&RtColl_ArraySetSize_180053f00);
-    // 2026-09-12 - Graphics::MaterialInstance's two, on the same terms and for
-    // the same reason: ?Serialize@MaterialInstance@Graphics@@ is the cutover
-    // boot path and an unregistered address there is a call to zero.
-    RegisterRuntimeAddr(0x180061880, (void*)&RtColl_ArraySetSize_180061880);
-    RegisterRuntimeAddr(0x1800616c0, (void*)&RtColl_ArraySetSize_1800616c0);
     RegisterRuntimeAddr(0x180008ff0, (void*)&RtColl_ArraySetSize_180008ff0);
     RegisterRuntimeAddr(0x18002fea0, (void*)&RtColl_ArraySetSize_18002fea0);
     RegisterRuntimeAddr(0x180059140, (void*)&RtColl_ArraySetSize_180059140);
     RegisterRuntimeAddr(0x1800764c0, (void*)&RtColl_ArraySetSize_1800764c0);
     RegisterRuntimeAddr(0x18007b960, (void*)&RtColl_ArraySetSize_18007b960);
+    // BATCH 4 (Graphics render/cull/sun-camera cluster), two one-argument
+    // constant-folded members. 0x18005f980 is a Reserve, not a SetSize — see
+    // the banner over RtColl_ArrayReserve_18005f980.
+    RegisterRuntimeAddr(0x18000c300, (void*)&RtColl_ArraySetSize_18000c300);
+    RegisterRuntimeAddr(0x18005f980, (void*)&RtColl_ArrayReserve_18005f980);
     RegisterRuntimeAddr(0x180029510, (void*)&RtColl_ArraySetSize_180029510);  // PKG2 4b
     RegisterRuntimeAddr(0x180029630, (void*)&RtColl_ArraySetSize_180029630);  // PKG2 4b
     RegisterRuntimeAddr(0x180024d70, (void*)&RtColl_ArraySetSize_180024d70);  // PKG2 4b-ii
@@ -2434,6 +3241,9 @@ void RtCollectionPortInit() {
     // Wave 25 lane INTERNAL42: Wave 24 lane INTERNAL8's two declared doors.
     RegisterRuntimeAddr(0x18002a9d0, (void*)&RtColl_ArraySetSize_18002a9d0);
     RegisterRuntimeAddr(0x18002a810, (void*)&RtColl_ArraySetSize_18002a810);
+    // BATCH 8b: Audio::Scene::EffectSlot::positions, the read-path resize
+    // inside the EffectSlot inner-array serialize (0x180051e00).
+    RegisterRuntimeAddr(0x180052330, (void*)&RtColl_ArraySetSize_180052330);
     RegisterRuntimeAddr(0x18002f070, (void*)&RtColl_ArraySetSize_18002f070);
     RegisterRuntimeAddr(0x1800492d0, (void*)&RtColl_ArraySetSize_1800492d0);
     RegisterRuntimeAddr(0x180005110, (void*)&RtColl_ArraySetSize_180005110);
@@ -2444,6 +3254,7 @@ void RtCollectionPortInit() {
     // WAVE 27 LANE FRONTIER - the read-path resize inside
     // ?Serialize@StringTable@UI@@ (0x18011d9b7), ported in the same commit.
     RegisterRuntimeAddr(0x180078c90, (void*)&RtColl_ArraySetSize_180078c90);
+    RegisterRuntimeAddr(0x1800616c0, (void*)&RtColl_ArraySetSize_1800616c0);
     // Wave 26 lane INT33 — Array<SpriteSheet::SpriteInfo>::SetSize, the
     // two-argument form. NON-TRIVIAL, and registered HERE rather than behind
     // BANISHED_RT_ARRAY_NONTRIVIAL, for the same reason 0x180034860 and
@@ -2503,6 +3314,14 @@ void RtCollectionPortInit() {
     // its negative control are in the J3 table's note.
     RegisterRuntimeAddr(0x180076250, (void*)&RtColl_ArraySetSizeFill_180076250);
     RegisterRuntimeAddr(0x180076370, (void*)&RtColl_ArraySetSizeFill_180076370);
+    // ---- UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) -------
+    RegisterRuntimeAddr(0x18004ba90, (void*)&RtColl_ArraySetSize_18004ba90);
+    RegisterRuntimeAddr(0x1800370c0, (void*)&RtColl_ArraySetSize_1800370c0);
+    RegisterRuntimeAddr(0x18004bde0, (void*)&RtColl_ArraySetSizeFill_18004bde0);
+    RegisterRuntimeAddr(0x180033690, (void*)&RtColl_ArraySetSizeFill_180033690);
+    RegisterRuntimeAddr(0x180079c90, (void*)&RtColl_ArraySetSize_180079c90);
+    RegisterRuntimeAddr(0x180079df0, (void*)&RtColl_ArraySetSize_180079df0);
+    RegisterRuntimeAddr(0x180051aa0, (void*)&RtColl_ArraySetSizeFill_180051aa0);
     // 0x180011010, 0x180010ab0 and 0x1800419b0 are NOT registered here: all
     // three belong to runtime/src/collection/array_destroy.cpp, which already
     // registered 0x180010ab0 and, in this same commit, registers the other two
@@ -2587,8 +3406,70 @@ void RtCollectionPortInit() {
                     "%d + %d + %d addresses registered\n", avl, sort, icmp);
     }
 
+    // ---- CUTOVER CLOSURE BATCH 2b (2026-09-12) -----------------------------
+    // Twenty-one addresses off docs/runtime_port/closure/WORKLIST.md, all
+    // spelled as LITERALS so tools/runtime_census.py can see them
+    // (reference_census_cannot_see_nonliteral_registrations.md).
+    //
+    // J1 — nine more copies of the parameterless `~Array` body.
+    RegisterRuntimeAddr(0x180005800, (void*)&RtColl_ArrayDtor_180005800);
+    RegisterRuntimeAddr(0x1800097f0, (void*)&RtColl_ArrayDtor_1800097f0);
+    RegisterRuntimeAddr(0x180008e80, (void*)&RtColl_ArrayDtor_180008e80);
+    RegisterRuntimeAddr(0x180009700, (void*)&RtColl_ArrayDtor_180009700);
+    RegisterRuntimeAddr(0x180014d00, (void*)&RtColl_ArrayDtor_180014d00);
+    RegisterRuntimeAddr(0x180033bc0, (void*)&RtColl_ArrayDtor_180033bc0);
+    RegisterRuntimeAddr(0x180033de0, (void*)&RtColl_ArrayDtor_180033de0);
+    RegisterRuntimeAddr(0x180062320, (void*)&RtColl_ArrayDtor_180062320);
+
+    // J3, two-argument.
+    RegisterRuntimeAddr(0x180009d70, (void*)&RtColl_ArraySetSize_180009d70);
+    RegisterRuntimeAddr(0x18005cc60, (void*)&RtColl_ArraySetSize_18005cc60);
+    RegisterRuntimeAddr(0x1800136f0, (void*)&RtColl_ArraySetSize_1800136f0);
+    RegisterRuntimeAddr(0x180061880, (void*)&RtColl_ArraySetSize_180061880);
+    RegisterRuntimeAddr(0x180034010, (void*)&RtColl_ArraySetSize_180034010);
+
+    // J3, three-argument.
+    RegisterRuntimeAddr(0x18002ffa0, (void*)&RtColl_ArraySetSizeFill_18002ffa0);
+    RegisterRuntimeAddr(0x180053da0, (void*)&RtColl_ArraySetSizeFill_180053da0);
+    RegisterRuntimeAddr(0x180063680, (void*)&RtColl_ArraySetSizeFill_180063680);
+    RegisterRuntimeAddr(0x180033080, (void*)&RtColl_ArraySetSizeFill_180033080);
+    RegisterRuntimeAddr(0x1800332d0, (void*)&RtColl_ArraySetSizeFill_1800332d0);
+    RegisterRuntimeAddr(0x1800638e0, (void*)&RtColl_ArraySetSizeFill_1800638e0);
+
+    // J3, constant-folded one-argument (the third of its kind).
+    RegisterRuntimeAddr(0x180051020, (void*)&RtColl_ArraySetSize_180051020);
+
+    // The new fourth job: Reserve. NOT a SetSize — see ReserveCore's banner.
+    RegisterRuntimeAddr(0x18002fd90, (void*)&RtColl_ArrayReserve_18002fd90);
+
+    // The fifth job: Remove(const T&). Also not a SetSize — see its banner.
+    RegisterRuntimeAddr(0x180050e00, (void*)&RtColl_ArrayRemove_180050e00);
+
     // ARM the probe rather than running it. It runs on the first call into any
     // entry point above, because at THIS moment the DLL's MemoryAllocator is
     // constructed but not started — see array_internal.h's "Probe scheduling".
+    // ---- BATCH 5 (2026-09-12): the IO save-list and mod-reload arrays ------
+    // Callers: runtime/src/io/persistence_savelist_job.cpp (0x1800b6290) and
+    // runtime/src/io/modification_setupfilesystem.cpp (0x1800aebb0), both
+    // ported in this commit. Their two element-destroy helpers are registered
+    // by array_destroy.cpp in the same commit, so both halves are ours and
+    // neither of these three opens a door onto an unported callee.
+    RegisterRuntimeAddr(0x18002ae20, (void*)&RtColl_ArraySetSizeFill_18002ae20);
+    RegisterRuntimeAddr(0x18002aae0, (void*)&RtColl_ArraySetSize_18002aae0);
+    RegisterRuntimeAddr(0x180028cd0, (void*)&RtColl_ArraySetSizeFill_180028cd0);
+
+    // BATCH 5 — the seventh Collection::Set instantiation, the compiled-path →
+    // packfile-id map IO::Modification::SetupFileSystem builds on its stack.
+    // Called from here because this is the Collection namespace's one init
+    // hook, the same reasoning as the linked list and lane VID2's AVL
+    // primitives below. Registered UNCONDITIONALLY (DIRECTION.md §2: a port
+    // registers unconditionally; no new BANISHED_RT_* flag).
+    {
+        extern int RtCollectionSetAvlPathIdRegister();
+        const int pathId = RtCollectionSetAvlPathIdRegister();
+        printf("[RtPort]   Collection::Set<Filename,uint32> (batch 5): "
+                    "%d addresses registered\n", pathId);
+    }
+
     rtcoll::g_probePending = RtCollectionProbeArmed();
 }

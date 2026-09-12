@@ -329,7 +329,8 @@ extern "C" int32_t RtGraphics_MaterialInstance_FindTexture(const void* self,
 // WALKS, AND THAT IS MEASURED HERE, NOT ASSUMED. *** Wave 27 lane GFXBIG built
 // `AnimationClipPrefix` entirely from the OTHER side — from Update's reads of
 // `group->clips[i]` — and named +0x30 frameFirst, +0x34 frameLast, +0x48
-// loopScale, +0x50 frameRate, +0x58 duration, +0x08 eventCount. This body's
+// loopScale, +0x50 frameRate (SINCE CORRECTED to frameCount -- see
+// AnimationState.h, 2026-09-12), +0x58 duration, +0x08 eventCount. This body's
 // `this` reads EVERY ONE OF THOSE SIX at exactly those offsets and uses them in
 // the same roles. Two bodies reached from opposite directions agreeing on six
 // offsets is a far stronger statement than either alone, and it is the reason
@@ -343,11 +344,11 @@ extern "C" int32_t RtGraphics_MaterialInstance_FindTexture(const void* self,
 // THE EVENT TIME IS COMPUTED, NOT STORED, and the float association order is
 // retail's exactly:
 //
-//   1800fa9f9: CVTDQ2PS XMM1, (int)clip->frameRate          ; +0x50, an INT
+//   1800fa9f9: CVTDQ2PS XMM1, (int)clip->frameCount         ; +0x50, an INT
 //   1800fa9fc: EAX = entry.frame - clip->frameFirst         ; both INTs
 //   1800faa08: EAX2 = clip->frameLast - clip->frameFirst
 //   1800faa1a: DIVSS XMM2, XMM0                             ; (a) / (b)
-//   1800faa1e: MULSS XMM2, XMM1                             ;     * frameRate
+//   1800faa1e: MULSS XMM2, XMM1                             ;     * frameCount
 //   1800faa22: MULSS XMM2, [R15+0x48]                       ;     * loopScale
 //   1800faa28: CVTPS2PD XMM0, XMM2                          ; float -> double
 //   1800faa2b: DIVSD  XMM0, [0x1801fe728]                   ; / _secondsPerTick
@@ -430,7 +431,9 @@ extern "C" void RtGraphics_Animation_ApplyEvents(const void* self, const void* t
             reinterpret_cast<const AnimationEventEntry*>(
                 *reinterpret_cast<void* const*>(clip)) + i;   // MOV RDX,[R15]
 
-        const float rate  = static_cast<float>(clip->frameRate);    // CVTDQ2PS
+        // +0x50 is the FRAME COUNT, not the frame rate -- corrected
+        // 2026-09-12 in AnimationState.h; the arithmetic is unchanged.
+        const float rate  = static_cast<float>(clip->frameCount);   // CVTDQ2PS
         const float num   = static_cast<float>(ev->frame - clip->frameFirst);
         const float den   = static_cast<float>(clip->frameLast - clip->frameFirst);
         const float secs  = ((num / den) * rate) * clip->loopScale;

@@ -311,11 +311,44 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_FSSLOTS"))    n += RtIoFileStreamSlotsRegister();
     if (RtWaveEnabled("BANISHED_RT_TFSSLOTS"))   n += RtIoTextFileStreamSlotsRegister();
 
+    // BATCH 8b. Registers unconditionally (DIRECTION.md §2: a port registers,
+    // it does not get a flag).
+    extern int RtIoModificationSortRegisterC();   // modification_sort.cpp
+    n += RtIoModificationSortRegisterC();
+
     // Lane FILE's screenshot-path door screen. Armed OUTSIDE its two switches
     // on purpose: the control for this lane is a run with both of them at 0,
     // and a screen that the control switches off cannot be that control.
     extern void RtIoFileCutoverProbeArm();
     RtIoFileCutoverProbeArm();
+
+    // ---- BATCH 5 (2026-09-12) ---------------------------------------------
+    // Registered UNCONDITIONALLY (DIRECTION.md §2 — a port registers
+    // unconditionally, and no new BANISHED_RT_* flag is minted for one):
+    //
+    //   filesystem_timestamp_win.cpp    ?GetFileTimeStamp@FileSystem@  0x1800ae270
+    //   persistence_savelist_job.cpp    worker command 4 (unexported)  0x1800b6290
+    //   modification_setupfilesystem.cpp ?SetupFileSystem@Modification@ 0x1800aebb0
+    //
+    // 0x1800b6290 pays one of the five address doors
+    // persistence_worker_win.cpp's `Run` opened and declared; BATCH 8b's
+    // 0x1800b65b0 below pays a second, leaving LOAD and DELETE outstanding.
+    extern int RtIoFileSystemTimeStampRegister();
+    extern int RtIoPersistenceSaveListRegister();
+    extern int RtIoModificationSetupFileSystemRegister();
+    n += RtIoFileSystemTimeStampRegister();
+    n += RtIoPersistenceSaveListRegister();
+    n += RtIoModificationSetupFileSystemRegister();
+
+    // ---- BATCH 8b (2026-09-12), also unconditional -------------------------
+    //   persistence_saveinfo_job.cpp    worker command 3 (unexported)  0x1800b65b0
+    //   text_codec.cpp                  the five text-codec internals
+    //                                   0x1800c9d60 / 0x1800c9fc0 / 0x1800c9b60 /
+    //                                   0x1800ca260 / 0x180029bb0 (all unexported)
+    extern int RtIoPersistenceSaveInfoRegister();
+    extern int RtIoTextCodecRegister();
+    n += RtIoPersistenceSaveInfoRegister();
+    n += RtIoTextCodecRegister();
     if (RtWaveEnabled("BANISHED_RT_CSWRITE"))     n += RtIoCompressedStreamWriteRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

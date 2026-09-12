@@ -784,4 +784,106 @@ float Powf(float base, float expo) {
     return PowCore(base, expo, signMask);
 }
 
+// ===========================================================================
+// fmodf -- retail 0x180127010 (Ghidra: Crt_fmodf, was FUN_180127010)
+// ===========================================================================
+// BATCH 4, 2026-09-12. The sixth member of this family, and the last one the
+// Graphics render/cull/sun-camera cluster reaches: Graphics::SunLight::
+// GetSunCamera (0x180107010) calls it three times to snap the shadow camera's
+// eye onto a shadow-map texel grid, and is its ONLY caller in the DLL.
+//
+// The body is the classic MSVC shift-and-subtract remainder done in DOUBLE, on
+// float arguments widened at entry and narrowed at exit -- so it is NOT
+// float-precision arithmetic. When the exponent gap exceeds 24 bits it scales
+// the divisor up by 2^(24*n) and walks it back down one 2^-24 step per
+// iteration; every intermediate is a double and the truncation is `cvttsd2si`
+// (toward zero), not a round.
+//
+// Same FAITHFULNESS BOUNDARY as the rest of the file: the domain-error arms
+// return the value retail returns (the reporter at 0x18012a070 hands its input
+// straight back when no user _matherr is installed); the errno /
+// _invalid_parameter traffic beside it is not ported. Each omission is marked.
+float Fmodf(float xf, float yf) {
+    const double   x  = (double)xf;
+    const double   y  = (double)yf;
+    const uint64_t bx = U64(x);
+    const uint64_t by = U64(y);
+
+    double         ax = F64(bx & kAbsMask64);
+    double         ay = F64(by & kAbsMask64);
+    const uint32_t ex = (uint32_t)((bx >> 52) & 0x7ff);
+    const uint32_t ey = (uint32_t)((by >> 52) & 0x7ff);
+
+    if (ex != 0 && ex < 0x7ff && (ey - 1u) < 0x7feu) {
+        // Both finite and normal: the only path that computes anything.
+        if (ax == ay) return (float)F64(bx & kSignBit64);   // +-0 with x's sign
+        if (U64(ax) < U64(ay)) {
+            if (xf < 0.0f) ax = F64(U64(ax) ^ kSignBit64);
+            return (float)ax;
+        }
+        int32_t n    = 0;
+        double  step = 1.0;                 // retail DAT_1801616d0; dead when n == 0
+        if (ey < ex) {
+            n    = (int32_t)(ex - ey) / 0x18;
+            step = 5.960464477539063e-08;   // 2^-24
+            ay   = F64((uint64_t)((int64_t)n * 0x18 + 0x3ff) << 52) * ay;
+        }
+        for (int32_t i = n; i > 0; --i) {
+            const double q = (double)(int32_t)(ax / ay) * ay;
+            ay = ay * step;
+            ax = ax - q;
+        }
+        ax = ax - (double)(int32_t)(ax / ay) * ay;
+        if (xf < 0.0f) ax = F64(U64(ax) ^ kSignBit64);
+        return (float)ax;
+    }
+
+    if (ex > 0x7fe) {                                   // x is Inf or NaN
+        if ((bx & 0x000fffffffffffffull) != 0)
+            return F32(U32(xf) | 0x00400000u);          // retail: quieted x, reports DOMAIN
+        return F32(0xffc00000u);                        // +-Inf: reports DOMAIN
+    }
+    if (ey > 0x7fe) {                                   // y is Inf or NaN
+        if ((by & 0x000fffffffffffffull) == 0) return xf;  // y == +-Inf -> x
+        return F32(U32(yf) | 0x00400000u);              // retail: quieted y, reports DOMAIN
+    }
+    if (ex == 0 && ey != 0) return xf;                  // x zero/subnormal, y normal
+    return F32(0xffc00000u);                            // y == 0 -> retail reports DOMAIN
+}
+
 }  // namespace MsvcLibm
+
+// ===========================================================================
+// Registration -- the six CRT math bodies at their retail addresses.
+// ===========================================================================
+// These have no export name in either build (the DLL statically links the MSVC
+// CRT), so they are `RegisterRuntimeAddr` only. Until BATCH 4 they were ported
+// but UNREGISTERED, which is why the cutover closure still listed all six plus
+// the error-reporting subtree they reach (0x18012a070, 0x18012a940,
+// 0x18012a524, 0x18012a428, 0x18012a5c0, 0x180129e24, 0x18012b8c0) as work to
+// do. Registering the six cuts that subtree out of the closure: it is reachable
+// ONLY from these bodies' domain-error arms, which this file deliberately does
+// not port (msvc_libm.h's FAITHFULNESS BOUNDARY -- every RETURN VALUE is
+// ported, the errno/_matherr traffic is not).
+//
+// Registering here does NOT disturb the BANISHED_RT_LIBM=dll diagnostic:
+// rt_libm.cpp reaches the DLL bodies through ResolveRuntimeRaw, which skips the
+// port registry on purpose.
+static float RtCrt_Sqrtf (float x)          { return MsvcLibm::Sqrtf(x); }
+static float RtCrt_Sinf  (float x)          { return MsvcLibm::Sinf(x); }
+static float RtCrt_Cosf  (float x)          { return MsvcLibm::Cosf(x); }
+static float RtCrt_Atan2f(float y, float x) { return MsvcLibm::Atan2f(y, x); }
+static float RtCrt_Powf  (float b, float e) { return MsvcLibm::Powf(b, e); }
+static float RtCrt_Fmodf (float x, float y) { return MsvcLibm::Fmodf(x, y); }
+
+void RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn);
+
+int RtCrtLibmRegister() {
+    RegisterRuntimeAddr(0x180128110ull, (void*)&RtCrt_Sqrtf);   // Crt_sqrtf
+    RegisterRuntimeAddr(0x180127d90ull, (void*)&RtCrt_Sinf);    // Crt_sinf
+    RegisterRuntimeAddr(0x180126d10ull, (void*)&RtCrt_Cosf);    // Crt_cosf
+    RegisterRuntimeAddr(0x180126680ull, (void*)&RtCrt_Atan2f);  // Crt_atan2f
+    RegisterRuntimeAddr(0x180127560ull, (void*)&RtCrt_Powf);    // Crt_powf
+    RegisterRuntimeAddr(0x180127010ull, (void*)&RtCrt_Fmodf);   // Crt_fmodf
+    return 6;
+}

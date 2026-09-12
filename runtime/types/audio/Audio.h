@@ -123,6 +123,15 @@ struct EmitterInstance {
     float volume;
 };
 static_assert(sizeof(EmitterInstance) == 0x10, "EmitterInstance must be 16 bytes");
+// BATCH 8b: the four offsets, pinned by the inner-array serialize
+// (0x180051e00, runtime/src/audio/audio_effectslot_serialize.cpp), which emits
+// `kArrayFloat(n=3, &e[0])` then `kScalarFloat(&e[0]+0xc)` and strides 0x10.
+// The widths are not inferred from the field types: each comes from the
+// ReaderWriter vtable slot the body picks (Serializer.h `rw_vtbl`).
+static_assert(offsetof(EmitterInstance, x)      == 0x00, "0x180051e5a MOV R8,RBX");
+static_assert(offsetof(EmitterInstance, y)      == 0x04, "kArrayFloat n=3 from +0x00");
+static_assert(offsetof(EmitterInstance, z)      == 0x08, "kArrayFloat n=3 from +0x00");
+static_assert(offsetof(EmitterInstance, volume) == 0x0c, "0x180051e6b LEA RDX,[RBX+0xc]");
 
 // ============================================================
 // Audio::Scene::EffectSlot — one id-keyed slot in the 4096-entry table,

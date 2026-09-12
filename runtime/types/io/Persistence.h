@@ -112,7 +112,25 @@ struct Persistence {
     int32_t          status;            // +0x48 — ?GetStatus@ (0x1800b7c40) reads this
     int32_t          command;           // +0x4C — 1 load · 2 delete · 3 info · 4 list
     int32_t          blockCount;        // +0x50 — int arg of BeginGetSaveGameInfo
-    uint8_t          _pad54[0x0c];      // +0x54 — NOT pinned
+
+    // ---- the on-disk header triple, +0x54 .. +0x5F ------------------------
+    // Pinned 2026-09-12 by the SAVE job (FUN_1800b6e00, worker-relative +0x44/
+    // +0x48/+0x4c) and independently corroborated by the GET-SAVE-INFO job
+    // (FUN_1800b65b0, same three worker-relative offsets, reading them BACK):
+    // the SAVE job writes `fileHeader` and `magic` as the file's first 12
+    // bytes (4 + 8, the 8 being magic:crc together) and stores the running
+    // CRC-32 into `crc`; the GET-SAVE-INFO job reads the same 12 bytes off
+    // disk into the SAME three fields and checks them (fileHeader's high
+    // 16 bits against `blockCount` above, `magic` against the sentinel
+    // 0x80808080, `crc` against a freshly recomputed checksum). Whoever
+    // enqueues a SAVE (BeginSaveGame, not yet ported) must pack
+    // `fileHeader = version | (blockDescCount << 16)` and preset
+    // `crc = 0xFFFFFFFF` before signalling the worker — neither job writes
+    // those two on entry, only reads them.
+    uint32_t         fileHeader;        // +0x54 — (version:16 | blockCount:16)
+    uint32_t         magic;             // +0x58 — sentinel 0x80808080
+    uint32_t         crc;               // +0x5C — running/verified CRC-32
+
     void*            blockDescData;     // +0x60 — Array<{id,?,size}>, stride 0xc
     int32_t          blockDescCount;    // +0x68 — ?GetDataSize@ (0x1800b7b80) walks these
     uint8_t          _pad6c[0x04];      // +0x6C — NOT pinned (Array capacity)
@@ -141,6 +159,9 @@ static_assert(offsetof(Persistence, pendingFilename) == 0x40, "pendingFilename @
 static_assert(offsetof(Persistence, status)          == 0x48, "status @ 0x48");
 static_assert(offsetof(Persistence, command)         == 0x4c, "command @ 0x4c");
 static_assert(offsetof(Persistence, blockCount)      == 0x50, "blockCount @ 0x50");
+static_assert(offsetof(Persistence, fileHeader)      == 0x54, "fileHeader @ 0x54 (SAVE job worker+0x44)");
+static_assert(offsetof(Persistence, magic)           == 0x58, "magic @ 0x58 (SAVE job worker+0x48)");
+static_assert(offsetof(Persistence, crc)             == 0x5c, "crc @ 0x5c (SAVE job worker+0x4c)");
 static_assert(offsetof(Persistence, blockDescData)   == 0x60, "blockDescData @ 0x60");
 static_assert(offsetof(Persistence, blockDescCount)  == 0x68, "blockDescCount @ 0x68");
 static_assert(offsetof(Persistence, blockPtrData)    == 0x70, "blockPtrData @ 0x70");
@@ -231,8 +252,16 @@ static_assert(sizeof(SaveBlock) == 0x10, "sizeof(IO::Persistence::SaveBlock) == 
 // Nothing reads past +0x10, and the caller's by-value temporary destructor
 // touches only +0x08, so 0x10 is the whole struct.
 // ============================================================================
+// *** +0x00 SETTLED 2026-09-12 (batch 5), FROM ITS PRODUCER. *** The comment
+// above named it `sortKey` "for what it is used as", from the CONSUMER side
+// only. The producer is the worker's command-4 job (retail 0x1800b6290,
+// runtime/src/io/persistence_savelist_job.cpp), which fills it with
+// `FileSystem::GetFileTimeStamp(<the .sav path>)` — a raw Win32 FILETIME, i.e.
+// 100 ns ticks since 1601-01-01 UTC, which is exactly why an UNSIGNED
+// DESCENDING sort puts the most recently written save first. The name is kept
+// (it is still what the comparator uses it for) and the type is now known.
 struct SaveGameInfo {
-    uint64_t         sortKey;  // +0x00
+    uint64_t         sortKey;  // +0x00 — a FILETIME; see the note above
     RtSystem::String name;     // +0x08
 };
 static_assert(offsetof(SaveGameInfo, name) == 0x08, "SaveGameInfo.name @ 0x08");

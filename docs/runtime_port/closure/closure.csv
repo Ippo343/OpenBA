@@ -79,7 +79,7 @@ addr,name,namespace,size,ported,external_export
 0x180033080,"FUN_180033080",FUN_pool,362,0,0
 0x180026080,"FUN_180026080",FUN_pool,299,1,0
 0x180054080,"FUN_180054080",FUN_pool,127,0,0
-0x18009408c,"FUN_18009408c",FUN_pool,395,0,0
+0x18009408c,"_filbuf",global_named,395,0,0
 0x1800b6080,"GetFileVersion",IO,6,1,1
 0x1800a8080,"FUN_1800a8080",FUN_pool,148,1,0
 0x180014090,"FUN_180014090",FUN_pool,127,0,0
@@ -250,7 +250,7 @@ addr,name,namespace,size,ported,external_export
 0x18000c200,"FUN_18000c200",FUN_pool,222,1,0
 0x1800a8200,"BinaryFileStream",IO,232,1,1
 0x1800de200,"Stop",Audio,117,1,1
-0x180094218,"FUN_180094218",FUN_pool,2592,0,0
+0x180094218,"_output_l",global_named,2592,0,0
 0x180082218,"__doserrno",global_named,32,0,0
 0x18007b210,"FUN_18007b210",FUN_pool,370,1,0
 0x1800db210,"Draw",Engine,86,1,1
@@ -416,7 +416,7 @@ addr,name,namespace,size,ported,external_export
 0x1800f33a0,"CopyFromTexture",Video,11,1,1
 0x1801153a0,"OnUpdateLayout",UI,76,1,1
 0x18000d3b0,"GetInterfaceCount",Video,4,1,1
-0x1800973bc,"FUN_1800973bc",FUN_pool,227,0,0
+0x1800973bc,"_lseeki64",global_named,227,0,0
 0x18007c3b0,"Serialize",IO,14,1,1
 0x18009e3b0,"AchievementInstance",Achievement,69,1,1
 0x1800dc3b0,"Engine_MainLoop_OnVideoRestart",Engine,507,1,1
@@ -616,7 +616,7 @@ addr,name,namespace,size,ported,external_export
 0x18002e570,"FUN_18002e570",FUN_pool,84,1,0
 0x1800be570,"Add",Object,415,1,1
 0x1800a8570,"Serialize",IO,76,1,1
-0x180097588,"FUN_180097588",FUN_pool,24,0,0
+0x180097588,"_get_printf_count_output",global_named,24,0,0
 0x180039580,"FUN_180039580",FUN_pool,187,1,0
 0x180025580,"GetPreviewData",IO,73,1,1
 0x180045580,"GetRoot",UI,11,1,1
@@ -630,7 +630,7 @@ addr,name,namespace,size,ported,external_export
 0x18009f590,"Application",Application,68,1,1
 0x1800ca590,"~Thread",System,88,1,1
 0x1800155a0,"SetTransform",Graphics,280,1,1
-0x1800805a8,"FUN_1800805a8",FUN_pool,618,0,0
+0x1800805a8,"_NMSG_WRITE",global_named,618,0,0
 0x1800675a0,"Serialize",IO,14,1,1
 0x1800a55a0,"ParticleSystemInstance",Graphics,90,1,1
 0x1800025b0,"GetText",UI,83,1,1
@@ -843,7 +843,7 @@ addr,name,namespace,size,ported,external_export
 0x180031790,"AllowsModChanges",Engine,3,1,1
 0x180051790,"Object_ExternalPtr_Serialize_SoundEffect",global_named,748,1,0
 0x18004f790,"PostDrawPush",global_named,262,1,0
-0x18009b794,"FUN_18009b794",FUN_pool,8,0,0
+0x18009b794,"mbtowc",global_named,8,0,0
 0x1801057b0,"AddDrawItem",Graphics,366,1,1
 0x1800847a8,"FUN_1800847a8",FUN_pool,26,0,0
 0x1800977ac,"_wctomb_s_l",global_named,394,0,0
@@ -860,7 +860,7 @@ addr,name,namespace,size,ported,external_export
 0x1800a87b0,"Serialize",IO,75,1,1
 0x1800dd7b0,"IsRunning",Engine,24,1,1
 0x1800087c0,"FUN_1800087c0",FUN_pool,115,1,0
-0x1800867cc,"FUN_1800867cc",FUN_pool,25,0,0
+0x1800867cc,"wcslen",global_named,25,0,0
 0x1800ac7c0,"FileSystem",IO,103,1,1
 0x1800ca7c0,"Startup",System,45,1,1
 0x1801137c0,"StartTimer",UI,119,1,1
@@ -1264,7 +1264,7 @@ addr,name,namespace,size,ported,external_export
 0x180104bb0,"Draw",Graphics,921,1,1
 0x18000aba0,"FUN_18000aba0",FUN_pool,472,1,0
 0x18009fba0,"GetWindow",Application,4,1,1
-0x180096ba0,"FUN_180096ba0",FUN_pool,223,0,0
+0x180096ba0,"_write",global_named,223,0,0
 0x180029bb0,"FUN_180029bb0",FUN_pool,684,0,0
 0x18005bbb0,"FUN_18005bbb0",FUN_pool,127,0,0
 0x180073bb0,"FUN_180073bb0",FUN_pool,115,1,0
@@ -1355,7 +1355,7 @@ addr,name,namespace,size,ported,external_export
 0x180004c80,"FUN_180004c80",FUN_pool,127,0,0
 0x180023c80,"~BinaryFileStream",IO,27,1,1
 0x180055c80,"Serialize",IO,14,1,1
-0x180096c80,"FUN_180096c80",FUN_pool,1852,0,0
+0x180096c80,"_write_nolock",global_named,1852,0,0
 0x1800b7c80,"GetSaveFilename",IO,154,1,1
 0x1800a3c80,"~FrameCopyImageBuffer",Graphics,138,1,1
 0x1800c3c80,"GetOperation",Save,3,1,1
@@ -1399,7 +1399,7 @@ addr,name,namespace,size,ported,external_export
 0x180010cf0,"FUN_180010cf0",FUN_pool,171,1,0
 0x180094cf8,"write_string",global_named,148,0,0
 0x180026cf0,"Filename",System,53,1,1
-0x180093cf0,"FUN_180093cf0",FUN_pool,8,0,0
+0x180093cf0,"__iob_func",global_named,8,0,0
 0x1800bacf0,"Serialize",IO,3,1,1
 0x1800d7cf0,"GetValue",UI,55,1,1
 0x1800decf0,"RemoveEmitter",Audio,105,1,1
@@ -1626,7 +1626,7 @@ addr,name,namespace,size,ported,external_export
 0x1800beec0,"ForceUnload",Object,539,0,1
 0x1800dbec0,"~Engine",Engine,57,1,1
 0x180019ed0,"SetImageBuffer",Video,40,1,1
-0x180080ed8,"FUN_180080ed8",FUN_pool,100,0,0
+0x180080ed8,"_invalid_parameter",global_named,100,0,0
 0x180077ed0,"SetCurrentValue",UI,9,1,1
 0x18009eed0,"IsMet",Achievement,7,1,1
 0x1800dfed0,"GetVolumeForPosition",Audio,148,1,1
@@ -1671,7 +1671,7 @@ addr,name,namespace,size,ported,external_export
 0x18005ff40,"Serialize",Math,24,1,1
 0x18009bf4c,"__initconout",global_named,59,0,0
 0x18009ef40,"~GoalInstance",Achievement,37,1,1
-0x180080f40,"FUN_180080f40",FUN_pool,30,0,0
+0x180080f40,"_invalid_parameter_noinfo",global_named,30,0,0
 0x1800bcf40,"EnableReferenceMode",Object,4,1,1
 0x1800c3f40,"FUN_1800c3f40",FUN_pool,182,1,0
 0x1800c4f40,"CurrentVersion",System,61,1,1

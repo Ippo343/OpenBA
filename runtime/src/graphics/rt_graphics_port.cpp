@@ -240,6 +240,17 @@ void RtGraphicsPortInit() {
     // 2026-09-12: Graphics::Material, the whole vtable (material.cpp). No switch.
     n += RtGraphicsMaterialRegister();
 
+    // 2026-09-12, cutover closure batch 3: the Graphics animation / skeleton
+    // cluster -- AnimationState::Serialize / ResetAnimationState,
+    // AnimationManager::GetPose, Animation::GetPoseAtTime, the six Array<T>
+    // serializers and the three element copy constructors underneath them
+    // (animationstate.cpp), plus the seventeen Collection::Array<T>
+    // instantiations they drive (collection/array_graphics_anim.cpp, whose
+    // register function animationstate.cpp calls so this stays one line).
+    // NO SWITCH -- DIRECTION.md §2: a port registers unconditionally.
+    { extern int RtGraphicsAnimationStateRegister();
+      n += RtGraphicsAnimationStateRegister(); }
+
     int gfxd = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXD")) gfxd = RtGraphicsWave9GfxdRegister();
 
@@ -275,4 +286,27 @@ void RtGraphicsPortInit() {
     // that registers this lane provably emits the line even if neither body ever
     // runs -- which is exactly the distinction warning 10 is about.
     RtGraphicsWave29SlotsSummary();
+
+    // BATCH 4 — the render/cull/sun-camera cluster. Registered unconditionally
+    // (DIRECTION.md §2.3: a port registers unconditionally; no new switches).
+    //   cull.cpp       Scene::AddCulledDrawItems + the two cull-stack helpers
+    //   sun_camera.cpp SunLight::GetSunCamera
+    {
+        extern int RtGraphicsCullRegister();
+        extern int RtGraphicsSunCameraRegister();
+        const int cull = RtGraphicsCullRegister();
+        const int sun  = RtGraphicsSunCameraRegister();
+        printf("[RtPort] BATCH 4: %d cull + %d sun-camera entries registered\n", cull, sun);
+    }
+
+    // BATCH 3b — the five animation bodies with hand-scheduled floating point:
+    // AnimationState::PlayAnimation / CopyInstancedToUnique / UpdateNodes,
+    // AnimationManager::GetInstanceId and MeshInstance::GetBones
+    // (runtime/src/graphics/animationstate_transforms.cpp). Registered
+    // unconditionally (DIRECTION.md §2.3); no switch.
+    {
+        extern int RtGraphicsAnimationTransformsRegister();
+        const int fp = RtGraphicsAnimationTransformsRegister();
+        printf("[RtPort] BATCH 3b: %d animation-transform exports registered\n", fp);
+    }
 }

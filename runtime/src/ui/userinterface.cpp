@@ -1317,7 +1317,175 @@ void UiDtorBody(UserInterface* self) {
     UiListClear(p);
 }
 
+// ============================================================================
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — the three
+// remaining UserInterface frame bodies.
+// ============================================================================
+
+// Drop every pending `_events` entry (stride 0x30) whose dialog pointer at
+// +0x00 matches `dlg`, shifting later entries down in place. Retail's own
+// loop (0x18011f88a..0x18011f947) is a field-by-field copy of event[i+1] onto
+// event[i] repeated in place rather than a single memmove, but the net effect
+// over the whole run is identical to erasing every match and closing the gap,
+// so it is written as one for clarity — the field layout it copies is exactly
+// AssignEvent30's (array.cpp), which is the byte-level cross-check.
+void RemoveEventsForDialog(uint8_t* p, void* dlg) {
+    uint8_t* data = *reinterpret_cast<uint8_t**>(p + 0x48);
+    int32_t* size = reinterpret_cast<int32_t*>(p + 0x50);
+    for (int32_t i = 0; i < *size; ) {
+        if (*reinterpret_cast<void**>(data + static_cast<size_t>(i) * 0x30) == dlg) {
+            std::memmove(data + static_cast<size_t>(i) * 0x30,
+                         data + static_cast<size_t>(i + 1) * 0x30,
+                         static_cast<size_t>(*size - i - 1) * 0x30);
+            --*size;
+            // do not advance i -- re-check the slot the shift just filled
+        } else {
+            ++i;
+        }
+    }
+}
+
+// ?CleanRemovedDialogs@UserInterface@UI@@AEAAXXZ — retail 0x18011f790, ord 1704.
+// For each dialog in `_removedDialogs` (+0x18, size +0x20): unlink it from
+// `_dialogs` (same walk-and-splice UiDtorBody's phase 1 above already does,
+// which is this same body's inlined shape one caller over), drop any pending
+// `_events` entry that names it, then release it through its own vtable slot
+// 0 UNLESS flag bit 5 says a nested ShowDialog UI owns it (the same bit
+// UiDtorBody's phase 1 tests, same "read the flags before the null test"
+// order retail uses). Finishes by clearing `_removedDialogs` to empty --
+// `FUN_180079c90` (array.cpp's registration note), which is PROVEN to reduce
+// to `_size = 0` and nothing else: its fill loop's bound folds to `< 0` for a
+// compile-time-constant new size of 0, which is never true for a
+// non-negative old size, so the loop, the realloc arm and the free arm are
+// all unreachable.
+void CleanRemovedDialogsBody(UserInterface* self) {
+    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+    const int32_t removedCount = *reinterpret_cast<int32_t*>(p + 0x20);
+    for (int32_t i = 0; i < removedCount; ++i) {
+        uint8_t* removed = *reinterpret_cast<uint8_t**>(p + 0x18);
+        void* want = *reinterpret_cast<void**>(removed + static_cast<size_t>(i) * 8);
+
+        for (uint8_t* node = *reinterpret_cast<uint8_t**>(p + 0x00); node;
+             node = *reinterpret_cast<uint8_t**>(node + 0x10)) {
+            if (*reinterpret_cast<void**>(node) != want) continue;
+            if (node == *reinterpret_cast<uint8_t**>(p + 0x00))
+                *reinterpret_cast<void**>(p + 0x00) = *reinterpret_cast<void**>(node + 0x10);
+            if (node == *reinterpret_cast<uint8_t**>(p + 0x08))
+                *reinterpret_cast<void**>(p + 0x08) = *reinterpret_cast<void**>(node + 0x08);
+            if (uint8_t* prev = *reinterpret_cast<uint8_t**>(node + 0x08))
+                *reinterpret_cast<void**>(prev + 0x10) = *reinterpret_cast<void**>(node + 0x10);
+            if (uint8_t* next = *reinterpret_cast<uint8_t**>(node + 0x10))
+                *reinterpret_cast<void**>(next + 0x08) = *reinterpret_cast<void**>(node + 0x08);
+            *reinterpret_cast<void**>(node + 0x08) = nullptr;
+            *reinterpret_cast<void**>(node + 0x10) = nullptr;
+            --*reinterpret_cast<int32_t*>(p + 0x10);
+            UiMemFree(node);
+            break;
+        }
+
+        RemoveEventsForDialog(p, want);
+
+        // RE-READ, exactly as UiDtorBody's own phase 1 does, in case any of
+        // the above moved the array (it does not, but the re-read is free and
+        // keeps this body honest against retail's own instruction order).
+        uint8_t* dlg = *reinterpret_cast<uint8_t**>(
+            *reinterpret_cast<uint8_t**>(p + 0x18) ? *reinterpret_cast<uint8_t**>(p + 0x18) + static_cast<size_t>(i) * 8 : nullptr);
+        const uint32_t flags = *reinterpret_cast<uint32_t*>(dlg + 0x20);   // trap (a): read before the null test
+        if (((~static_cast<uint8_t>(flags >> 5)) & 1) != 0 && dlg != nullptr) {
+            UiDeletingDtorOf(dlg)(dlg, 1);
+            *reinterpret_cast<void**>(*reinterpret_cast<uint8_t**>(p + 0x18) + static_cast<size_t>(i) * 8) = nullptr;
+        }
+    }
+
+    *reinterpret_cast<int32_t*>(p + 0x20) = 0;   // FUN_180079c90 -- see banner
+}
+
+// ?UpdateEvents@UserInterface@UI@@QEAAXXZ — retail 0x18011fc60, ord 4515.
+// Re-entrancy guarded by +0x88 (set for the duration of the drain, exactly
+// like retail). Dispatches each queued event through its own dialog's
+// OnElementEvent (vtable slot 8/+0x40 -- runtime/src/ui/dialog.cpp's
+// RtUiDialogInstance_OnElementEvent is that slot's body), handing it a FRESH
+// stack copy of the event's +0x08 field by address on every iteration (the
+// same "controller must not see the caller's own storage" contract
+// RtUiDialogInstance_OnElementEvent's own banner states for its element
+// argument). Finishes by clearing `_events` -- `FUN_180079df0`, proven the
+// same way `FUN_180079c90` is above: the dead-branch reasoning is identical,
+// just at stride 0x30 instead of 8.
+void UpdateEventsBody(UserInterface* self) {
+    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+    if (p[0x88] != 0) return;
+    p[0x88] = 1;
+
+    const int32_t count = *reinterpret_cast<int32_t*>(p + 0x50);
+    uint8_t* data = *reinterpret_cast<uint8_t**>(p + 0x48);
+    for (int32_t i = 0; i < count; ++i) {
+        uint8_t* ev = data + static_cast<size_t>(i) * 0x30;
+        void* dlg = *reinterpret_cast<void**>(ev);
+        void* elem = *reinterpret_cast<void**>(ev + 0x08);
+        void** vt = *reinterpret_cast<void***>(dlg);
+        using Fn = void (*)(void*, void**, int32_t, int32_t, int32_t, int32_t, int32_t, uint64_t);
+        reinterpret_cast<Fn>(vt[8])(dlg, &elem,
+            *reinterpret_cast<int32_t*>(ev + 0x10), *reinterpret_cast<int32_t*>(ev + 0x14),
+            *reinterpret_cast<int32_t*>(ev + 0x18), *reinterpret_cast<int32_t*>(ev + 0x1c),
+            *reinterpret_cast<int32_t*>(ev + 0x20), *reinterpret_cast<uint64_t*>(ev + 0x28));
+    }
+
+    *reinterpret_cast<int32_t*>(p + 0x50) = 0;   // FUN_180079df0 -- see banner
+    p[0x88] = 0;
+}
+
+// ?GetMouseCursorIndex@UserInterface@UI@@QEBAHHH@Z — retail 0x18011fa40, ord
+// 2800. Walks `_dialogs` back-to-front (from _tail, +0x08, via each node's
+// `prev` at +0x08 -- the same front-to-back convention UserInterface.h
+// documents for BringDialogToFront/GetFirstContainedDialog), returns 0 if
+// none contains (x,y), otherwise defers to that dialog's OWN
+// GetMouseCursorIndex starting from its root Element.
+extern "C" int32_t RtUiDialogInstance_GetMouseCursorIndex(const void* self, void** elementPtr,
+                                                          int32_t x, int32_t y);
+int32_t GetMouseCursorIndexBody(const UserInterface* self, int32_t x, int32_t y) {
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(self);
+    for (const uint8_t* node = *reinterpret_cast<uint8_t* const*>(p + 0x08); node;
+         node = *reinterpret_cast<uint8_t* const*>(node + 0x08)) {
+        void* dlg = *reinterpret_cast<void* const*>(node);
+        const uint8_t* d = static_cast<const uint8_t*>(dlg);
+        const uint32_t flags = *reinterpret_cast<const uint32_t*>(d + 0x20);
+        if ((flags >> 2) & 1) continue;
+        const uint8_t* root = *reinterpret_cast<uint8_t* const*>(d + 0x50);
+        bool hit;
+        if ((flags >> 3) & 1) {
+            void* const* vt = *reinterpret_cast<void* const* const*>(root);
+            using Fn = bool (*)(const void*, int32_t, int32_t, void*);
+            hit = reinterpret_cast<Fn>(vt[9])(root, x, y, *reinterpret_cast<void* const*>(d + 0x10));
+        } else {
+            const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
+            const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
+            const int32_t top    = *reinterpret_cast<const int32_t*>(root + 0x6c);
+            const int32_t bottom = *reinterpret_cast<const int32_t*>(root + 0x74);
+            hit = left <= x && x <= right && top <= y && y <= bottom;
+        }
+        if (hit) {
+            if (!dlg) return 0;
+            void* elementPtr = *reinterpret_cast<void* const*>(d + 0x50);
+            return RtUiDialogInstance_GetMouseCursorIndex(d, &elementPtr, x, y);
+        }
+    }
+    return 0;
+}
+
 } // namespace
+
+extern "C" void RtUi_UserInterface_CleanRemovedDialogs(UserInterface* self) {
+    CleanRemovedDialogsBody(self);
+}
+
+extern "C" void RtUi_UserInterface_UpdateEvents(UserInterface* self) {
+    UpdateEventsBody(self);
+}
+
+extern "C" int32_t RtUi_UserInterface_GetMouseCursorIndex(const UserInterface* self,
+                                                          int32_t x, int32_t y) {
+    return GetMouseCursorIndexBody(self, x, y);
+}
 
 extern "C" void RtUi_UserInterface_Dtor(UserInterface* self) {
     RT_DIFF_BEGIN("UI::UserInterface::~UserInterface [liveness]");
@@ -2142,6 +2310,19 @@ int RtUiManagerRegister() {
     RegisterRuntimeExport("?SaveAllSettings@UserInterface@UI@@QEAAXXZ",
                           (void*)&RtUi_UserInterface_SaveAllSettings); ++count;
     RegisterRuntimeAddr(0x1801204b0, (void*)&RtUi_UserInterface_SaveAllSettings);
+
+    // ---- UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) --------
+    RegisterRuntimeExport("?CleanRemovedDialogs@UserInterface@UI@@AEAAXXZ",
+                          (void*)&RtUi_UserInterface_CleanRemovedDialogs); ++count;
+    RegisterRuntimeAddr(0x18011f790, (void*)&RtUi_UserInterface_CleanRemovedDialogs);
+
+    RegisterRuntimeExport("?UpdateEvents@UserInterface@UI@@QEAAXXZ",
+                          (void*)&RtUi_UserInterface_UpdateEvents); ++count;
+    RegisterRuntimeAddr(0x18011fc60, (void*)&RtUi_UserInterface_UpdateEvents);
+
+    RegisterRuntimeExport("?GetMouseCursorIndex@UserInterface@UI@@QEBAHHH@Z",
+                          (void*)&RtUi_UserInterface_GetMouseCursorIndex); ++count;
+    RegisterRuntimeAddr(0x18011fa40, (void*)&RtUi_UserInterface_GetMouseCursorIndex);
 
     // The twin-synthetic oracle is NOT called here — it needs the allocator,
     // which does not exist yet at registration time. It is triggered from the

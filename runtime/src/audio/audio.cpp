@@ -739,10 +739,22 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
 //   0x180052640  the bulk element serialize
 // Neither is reimplemented here; both are shared Collection code whose own port
 // belongs to whoever ports Collection, not to Audio.
+//
+// *** CORRECTED, BATCH 8b: 0x180052640 IS NOT Collection CODE. *** It is an
+// Audio body -- it walks Audio::Scene::EffectSlot and calls the SoundEffect
+// ExternalPtr serialize -- and it is now ported and registered in
+// runtime/src/audio/audio_effectslot_serialize.cpp together with its inner-array
+// callee 0x180051e00. Only the resize it reaches on the read path
+// (0x180052330) is Collection code, and that one is in
+// runtime/src/collection/array.cpp as kSpec_EmitterInstance. The
+// `ResolveAddr(Module::Runtime, 0x180052640)` below therefore lands on our body
+// now, because the resolver consults the port registry first; the call site
+// needs no change.
 // WAVE 9 LANE Q did that for the first of the two: 0x180051390 is now a
 // registered port (kSpec_EffectSlot in runtime/src/collection/array.cpp) and
 // still calls retail's per-element copy-assign 0x180051650 and destroy-range
-// 0x180052110 by address. 0x180052640 is untouched and still the DLL's.
+// 0x180052110 by address. 0x180052640 WAS untouched and still the DLL's; as of
+// BATCH 8b it is ours (audio_effectslot_serialize.cpp).
 // One fact from that reading matters to this file: the EffectSlot default
 // element leaves bytes +0x2c..+0x2f UNWRITTEN, so a byte comparison of a
 // freshly grown _effects array must skip that window per element.

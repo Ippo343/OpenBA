@@ -1326,6 +1326,13 @@ int RtSystemStringRegister() {
     RegisterRuntimeExport("??YString@System@@QEAA?AV01@AEBV01@@Z",  (void*)&RtSystem_String_AppendAssign); ++n;
     RegisterRuntimeExport("??YString@System@@QEAA?AV01@PEBD@Z",     (void*)&RtSystem_String_AppendAssignCStr); ++n;
     RegisterRuntimeExport("?Set@String@System@@QEAAXPEBD@Z",        (void*)&RtSystem_String_Set); ++n;
+    // BATCH 8: RtString_SetLength has had a body since this file's very first
+    // wave (it backs every String mutator above) but was never itself
+    // registered under its own export/address — every caller reached it as a
+    // plain C++ call within this TU, not through the registry. Registering it
+    // closes that gap for any caller that reaches it BY NAME or BY ADDRESS
+    // instead (`?SetLength@String@System@@AEAAXH@Z`, retail 0x1800c8220).
+    RegisterRuntimeExport("?SetLength@String@System@@AEAAXH@Z",     (void*)&RtString_SetLength); ++n;
     RegisterRuntimeExport("?SubString@String@System@@QEBA?AV12@HH@Z", (void*)&RtSystem_String_SubString); ++n;
     RegisterRuntimeExport("?ToFloat@String@System@@SAMPEBD@Z",      (void*)&RtSystem_String_ToFloat); ++n;
     // WAVE 22 LANE SYSBODY. The body has existed since Wave 2 (above) and was
@@ -1386,6 +1393,7 @@ int RtSystemStringRegister() {
     RegisterRuntimeAddr(0x1800c9930, (void*)&RtSystem_String_Serialize);
     RegisterRuntimeAddr(0x1800c9440, (void*)&RtSystem_String_Concat);
     RegisterRuntimeAddr(0x1800c92d0, (void*)&RtSystem_String_ConcatCStr);
+    RegisterRuntimeAddr(0x1800c8220, (void*)&RtString_SetLength);   // BATCH 8
 
     printf("[RtPort]   System::String: %d exports registered\n", n);
     return n;
