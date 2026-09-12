@@ -2456,6 +2456,39 @@ int RtMintRegisterPromotedRows() {
     //  engine/ dx11/` returned exactly the two sites named here on wave27/base
     //  (this file and scene_watch.cpp) plus rt_data_mint_tables.inc, which
     //  STAMPS the address rather than comparing it.]
+    //
+    // ==== WAVE 28 LANE SLOTS: THE REMAINING WORK IS DONE. ===================
+    // *** THE PARAGRAPH IMMEDIATELY ABOVE IS NOW FALSE AND MUST NOT BE READ AS
+    // CURRENT. *** Lane SLOTS was the named addressee. It did what the addressee
+    // clause required, in order:
+    //
+    //   1. RE-RAN THE GREP on the wave28 tip, before registering anything:
+    //      `grep -rn 0x180100f20 runtime/ code/ standalone/ engine/ dx11/`
+    //      returns this file, scene_watch.cpp (the rebuilt two-token test, which
+    //      no longer goes through ResolveAddr), scene_watch.h (a comment),
+    //      rt_data_mint_tables.inc (which STAMPS the address) and mesh.cpp.
+    //      **NO NEW IDENTITY-TOKEN CONSUMER HAS APPEARED.**
+    //   2. PORTED BOTH BODIES -- ?AddDrawItems@MeshInstance@ AND its sibling
+    //      ?AddDrawItems@EdgeMeshInstance@ (0x1800a2fd0), together, because
+    //      WAVE27_LANE_GFXMESH.md §7 warned that porting one without the other
+    //      leaves two overrides of one slot derived from different readings of
+    //      the same nine-argument call. runtime/src/graphics/mesh.cpp, Wave 28
+    //      section.
+    //   3. REGISTERED BOTH, by NAME and by ADDRESS, in
+    //      RtGraphicsMeshVtableRegister().
+    //
+    // A CORRECTION TO THE SIZE CLAIM ABOVE, because it made the job look cheap:
+    // "0xd0 bytes" UNDERSTATES it. The body runs 0x180100f20..0x1801011ef =
+    // **0x2d0 bytes**, measured from the instruction listing (the next function,
+    // ?GetSubTransform@MeshInstance@, starts at 0x180101200). 0xd0 is roughly
+    // the LOD-selection PREAMBLE alone. This is the `.pdata`-understates shape
+    // (reference_pdata_is_a_lower_bound_on_function_extent.md) in its
+    // consequence rather than its mechanism: an understated extent makes work
+    // look cheap, and this one sat in a tag for a wave.
+    //
+    // THE ROW IS STILL TAGGED HARMFUL ABOVE AND THAT TAG IS DEAD IN BOTH ITS
+    // CLAUSES. It is left standing, per lane GFXMESH's own reasoning, because a
+    // refusal that vanishes teaches nothing.
     // ========================================================================
     //
     // WHY EACH, in one line — the proofs are in the lane doc:

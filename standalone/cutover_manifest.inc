@@ -7,7 +7,7 @@
 // REASON CLASS and a measured by-name-door count -- never asserted
 // here.  standalone/cutover_manifest.cpp consumes this.
 
-// CONDITIONAL 1 | REQUIRED 58 | WITHHELD 1   (of 60 rows)
+// REQUIRED 58 | WITHHELD 1   (of 59 rows)
 
 // Achievement  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=5  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@AchievementManager@Achievement@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc670ull, "Achievement", 5)
@@ -23,8 +23,6 @@ CUTOVER_ROW("?_loader@LoaderLoop@Engine@@1VLoader@2@A", CUTOVER_REQUIRED, true, 
 CUTOVER_ROW("?_singleton@Engine@1@0PEAV11@EA", CUTOVER_REQUIRED, true, 0x1801fe748ull, "Engine", 3)
 // Engine  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=9  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@MainLoop@Engine@@1PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe750ull, "Engine", 9)
-// Graphics  HARMFUL / DLL-PRESENT  doors=0  -- HARMFUL, scoped DLL-PRESENT, but the tag never states an inversion -- nobody has adjudicated this row FOR cutover
-CUTOVER_ROW("?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z", CUTOVER_CONDITIONAL, false, 0x0ull, "Graphics", 0)
 // Graphics  HARMFUL / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_frameIndex@ParticleInstance@Graphics@@1HA", CUTOVER_REQUIRED, true, 0x1801fe77cull, "Graphics", 3)
 // Graphics  HARMFUL / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
@@ -37,8 +35,8 @@ CUTOVER_ROW("?_singleton@AnimationManager@Graphics@@0PEAV12@EA", CUTOVER_REQUIRE
 CUTOVER_ROW("??_7ReaderWriter@IO@@6B@", CUTOVER_REQUIRED, true, 0x1801553b0ull, "IO", 4)
 // IO  NO-OP / DLL-PRESENT  doors=10  -- verdict is DLL-PRESENT only and 10 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("??_7Stream@IO@@6B@", CUTOVER_REQUIRED, true, 0x1801549a0ull, "IO", 10)
-// IO  HARMFUL / DLL-PRESENT  doors=25  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@FileSystem@IO@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6a8ull, "IO", 25)
+// IO  HARMFUL / DLL-PRESENT  doors=26  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@FileSystem@IO@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6a8ull, "IO", 26)
 // IO  HARMFUL / DLL-PRESENT  doors=6  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@Modification@IO@@2PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6b0ull, "IO", 6)
 // IO  HARMFUL / DLL-PRESENT  doors=13  -- tag states the verdict inverts at cutover

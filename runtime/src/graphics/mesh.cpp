@@ -2358,6 +2358,387 @@ extern "C" void* RtGraphics_MeshInstance_GetNodeToWorldInterp(const void* self, 
 }
 
 // ============================================================================
+// ============================================================================
+// WAVE 28 LANE SLOTS — the two `AddDrawItems` overrides, DERIVED TOGETHER
+// ============================================================================
+//
+//   ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+//       retail 0x180100f20, ordinal 1550 — slot 3 of ??_7MeshInstance@
+//   ?AddDrawItems@EdgeMeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+//       retail 0x1800a2fd0, ordinal 1549 — slot 3 of ??_7EdgeMeshInstance@
+//
+// **THEY ARE PORTED IN ONE GO ON PURPOSE.** WAVE27_LANE_GFXMESH.md §7 warned
+// that porting one without the other "would leave the two overrides of one slot
+// derived from different readings of [Renderer::AddDrawItem's] call", and its §4
+// is the standing proof that this family goes wrong exactly there: the two
+// `GetInstanceTransform` overrides differ ONLY in their last four stores, and
+// carrying either body's ending over to the other is silent, plausible and
+// wrong. So the nine-argument frame below was decoded once, from the CALLEE's
+// mangled name and prologue, and then each override's nine arguments were read
+// out of its OWN listing independently.
+//
+// ---------------------------------------------------------------------------
+// THE NINE-ARGUMENT FRAME, decoded once
+// ---------------------------------------------------------------------------
+// `?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@
+//  GGMMHPEBXI@Z` — `this` in RCX, then Geometry*, MaterialInstance*, `G`
+// (unsigned short) in R9W, and six stack slots at [rsp+0x20 .. +0x48] carrying
+// `G M M H PEBX I`. runtime/src/graphics/wave9_lane_gfx.cpp ported it in Wave 9
+// and confirmed the six stack slots against the prologue; nothing here
+// re-derives that.
+//
+//      arg2  Geometry*           the instance itself, BOTH overrides
+//      arg3  MaterialInstance*   selected per list, DIFFERENTLY in each
+//      arg4  unsigned short      sort key
+//      arg5  unsigned short      packed (group << shift) | listIndex
+//      arg6  float               0.0f in BOTH overrides
+//      arg7  float               opacity / blend
+//      arg8  int
+//      arg9  const void*
+//      arg10 unsigned
+//
+// ---------------------------------------------------------------------------
+// THE SEVEN PLACES THE TWO OVERRIDES DISAGREE — count the STORES, not the shape
+// ---------------------------------------------------------------------------
+// Every one of these was read from the override's own bytes. A port that
+// derived either from the other would be wrong in all seven.
+//
+//  1. **LOD.** `MeshInstance` selects a detail level by squared distance and
+//     draws ONE level. `EdgeMeshInstance` has no LOD at all and draws TWO
+//     fixed lists (triangles then edges), back to back.
+//  2. **arg4.** `MeshInstance` computes `(unsigned short)(_sortBias +
+//     (unsigned short)Geometry::_detailId)` — a 16-BIT ADD (`ADD 0x28(%rbx),%r9w`),
+//     so it WRAPS at 0x10000 rather than promoting. `EdgeMeshInstance`
+//     hard-codes **0x2000** for the triangle pass and **0x2001** for the edge
+//     pass and never looks at either field.
+//  3. **arg5's packing.** `MeshInstance` is `(level << 12) | listIndex`
+//     (`SHL $0xc,%r15w`). `EdgeMeshInstance` is `listIndex` for the triangle
+//     pass and `listIndex | 0x8000` for the edge pass. Different shift,
+//     different width, different meaning.
+//  4. **arg7.** `MeshInstance` interpolates: `a*_opacity + (1-a)*_opacityPrev`
+//     with `a = Renderer::frameAlpha` (+0x40). `EdgeMeshInstance` passes the
+//     CONSTANT **1.0f** — the outline never fades. Both read the same 1.0f at
+//     0x18016169c; only one of them subtracts `frameAlpha` from it.
+//  5. **arg8.** `MeshInstance` reads it out of the selected detail level
+//     (`level + 0xa8`), and OVERRIDES it with 1 on one branch (§below).
+//     `EdgeMeshInstance` hard-codes **1**.
+//  6. **arg9.** `MeshInstance` passes the GraphicsMesh pointer it re-reads from
+//     `_mesh` on every iteration. `EdgeMeshInstance` passes **null**.
+//  7. **arg10.** `MeshInstance` passes the animation pool slot id, or
+//     0xffffffff when the list is not skinned. `EdgeMeshInstance` hard-codes
+//     **0xffffffff**.
+//
+// What they DO share is the per-list material choice being a SIGN TEST on the
+// list's +0x14 field — and even there the two sides of the test select from
+// different places.
+//
+// ---------------------------------------------------------------------------
+// ONE CONSTANT, READ FROM THE PE
+// ---------------------------------------------------------------------------
+// 0x180161694 = `c3 f5 a8 3e 00 00 00 3f` -> the second dword is **0x3f000000
+// = 0.5f**, the bounds-centre multiplier. 0x18016169c = **0x3f800000 = 1.0f**.
+// Both read with `objdump -s -j .rdata` against the retail file on disk, not
+// recognised by eye (kickoff warning 4).
+// ============================================================================
+
+namespace {
+
+// The draw group's view position. `Camera.h` models `RendererDrawGroup` from
+// +0xe0 onward and states in terms that its 0xe0-byte HEAD is "not read by lane
+// F" — these three floats live inside that head, so they are read by offset
+// rather than through a member, and the header is NOT edited to invent a field
+// on one witness.
+const size_t kDrawGroupViewPos = 0x90;          // three floats, x/y/z
+
+// Graphics::GraphicsMesh::DetailLevel — stride 0xb0. Only the four fields these
+// two bodies read are named; Mesh.h's GraphicsMeshView declares the array as
+// `Array<uint8_t>` at +0x50 with the 0xb0 stride in its banner, and nothing
+// else in the tree models the element.
+const size_t kDetail_Stride       = 0xb0;
+const size_t kDetail_SwitchDist   = 0x10;   // float; compared SQUARED
+const size_t kDetail_Lists        = 0x98;   // -> TriangleList[], stride 0x18
+const size_t kDetail_ListCount    = 0xa0;   // int32
+const size_t kDetail_DefaultArg8  = 0xa8;   // int32, handed to AddDrawItem arg8
+
+// One entry of a detail level's list array — stride 0x18 for MeshInstance and
+// for BOTH EdgeMesh arrays (`LEA (%rax,%rax,2),%rcx` then scale 8).
+const size_t kList_Stride    = 0x18;
+const size_t kList_Material  = 0x10;   // int32 index into MeshInstance::_materials
+const size_t kList_NodeFlag  = 0x14;   // int32; NEGATIVE means "skinned"
+
+// The name door for the append. Spelled on ONE line: runtime_census.py's
+// called-scan cannot see a mangled name split across a C++ string-literal
+// concatenation (reference_census_three_blind_spots.md), and
+// wave27_lane_gfxpart.cpp:625 has exactly such a split at ITS AddDrawItem door
+// — so that door may be invisible to the census today. Recorded, not fixed;
+// it is another lane's file and this wave builds no tooling.
+//
+//   SYMBOL:      ?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z
+//                retail 0x1801057b0, ordinal 1547.
+//   CONDITION:   a public export, ALREADY PORTED (wave9_lane_gfx.cpp). Reached
+//                BY NAME so ResolveExport's registry-first lookup hands back our
+//                body rather than the DLL's.
+//   CONSEQUENCE: null means nothing this instance owns is ever queued — a
+//                silent empty screen, which is why the miss is announced once.
+using AddDrawItemFn = void (*)(void* renderer, const void* geometry,
+                               const void* material, uint16_t a4, uint16_t a5,
+                               float a6, float a7, int32_t a8,
+                               const void* a9, uint32_t a10);
+
+AddDrawItemFn RtRendererAddDrawItem() {
+    static AddDrawItemFn fn = nullptr;
+    static bool tried = false;
+    if (!tried) {
+        tried = true;
+        fn = reinterpret_cast<AddDrawItemFn>(ResolveExport("?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z"));
+        if (!fn)
+            std::fprintf(stderr, "[GFXSLOTS28] AddDrawItems: Renderer::AddDrawItem "
+                                 "resolved NULL -- no mesh will draw\n");
+    }
+    return fn;
+}
+
+uint64_t g_addDrawItemsMesh   = 0;   // MeshInstance calls entered
+uint64_t g_addDrawItemsMeshQ  = 0;   // ... items actually queued
+uint64_t g_addDrawItemsEdge   = 0;
+uint64_t g_addDrawItemsEdgeQ  = 0;
+
+}  // namespace
+
+// ============================================================================
+// void Graphics::MeshInstance::AddDrawItems(const Scene&, Renderer&) const
+//   retail 0x180100f20 — slot 3
+// ============================================================================
+// THE `Scene&` ARGUMENT IS ACCEPTED AND NEVER READ. RDX is overwritten before
+// any use. Stated rather than left to be noticed, because "it takes a Scene, so
+// it must consult the scene" is exactly the kind of inference that produces a
+// body which compiles and queries the wrong object.
+//
+// STEP 1 — LOD SELECTION, against the UNION of the two world boxes.
+//   `max` of the two boxes' maxima, `min` of the two minima, centre = (min+max)
+//   * 0.5f, then the squared distance from the current draw group's view
+//   position. Retail sums the terms as `(dy2 + dx2) + dz2` — the ORDER of a
+//   float sum is part of the body (reference_moved_term_hides_where_terms_cancel.md),
+//   so it is reproduced rather than tidied.
+//   The level is then the FIRST whose `switchDistance²` EXCEEDS that distance;
+//   if none does, level 0 is used (the counter never advances past the loop
+//   because retail falls through to the same join point with r15d still 0).
+//   **With one detail level or fewer the whole of step 1 is skipped** — retail
+//   tests `levelCount <= 1`, not `< 1`, so a single-level mesh never even reads
+//   the bounds.
+//
+//   A DEAD BRANCH IS REPRODUCED AS DEAD AND NOT AS CODE: after picking a level
+//   retail does `TEST EDX,EDX ; JS <epilogue>`. `edx` started at 0 and only
+//   increments, so the jump can never be taken. It is noted here instead of
+//   being written as an `if` that would read like a real guard.
+//
+// STEP 2 — one AddDrawItem per list of the selected level.
+//   `_mesh` is RE-READ FROM THE INSTANCE ON EVERY ITERATION (`MOV R11,[RBX+0xc0]`
+//   is inside the loop), and so is the detail-level array through it. Hoisting
+//   them is what a tidy port does and it is not what the machine does; the
+//   pointer is also arg9, so a hoist changes what is PASSED, not just what is
+//   read.
+//
+//   THE SKINNED BRANCH, and the one store that makes it worth a paragraph:
+//   when a list's `+0x14` is NEGATIVE and the instance is NOT instanced
+//   (`_animation._instanced == 0`), retail overwrites **arg8 with 1**, having
+//   already loaded the level's own `+0xa8` into it. When it IS instanced it
+//   keeps `+0xa8` and puts the pool slot id into arg10 instead. So the two
+//   branches differ in WHICH ARGUMENT they touch, not in the value of one — and
+//   a port that computed arg10 and left arg8 alone would be wrong on every
+//   non-instanced skinned mesh while rendering every other mesh correctly.
+// ============================================================================
+extern "C" void RtGraphics_MeshInstance_AddDrawItems(const MeshInstance* self,
+                                                     const void* scene,
+                                                     void* renderer) {
+    RT_DIFF_BEGIN("Graphics::MeshInstance::AddDrawItems");
+    (void)scene;                      // RDX is overwritten at 0x180100f65
+    ++g_addDrawItemsMesh;
+
+    const uint8_t* const mesh = B(Rd<void*>(self, 0xc0));      // 180100f32
+    const uint8_t* const rend = B(renderer);
+    const float alpha = Rd<float>(rend, 0x40);                 // Renderer::frameAlpha
+
+    int32_t level = 0;                                         // r15d
+    const int32_t levelCount = Rd<int32_t>(mesh, 0x58);        // 180100f57
+
+    if (levelCount > 1) {                                      // 180100f5b  JLE
+        const uint8_t* const groups = B(Rd<void*>(rend, 0x10));
+        const size_t gi = static_cast<size_t>(Rd<int32_t>(rend, 0x34)) * 0x1f0;
+        const uint8_t* const view = groups + gi + kDrawGroupViewPos;
+
+        const Geometry* g = &self->_base;
+        // max of the two maxima, min of the two minima. Retail's COMISS/JA pairs
+        // keep the FIRST operand when it does not compare above, which is what
+        // makes these max/min rather than the other way round.
+        const float maxZ = (Rd<float>(g, 0x78) > Rd<float>(g, 0x60)) ? Rd<float>(g, 0x78) : Rd<float>(g, 0x60);
+        const float maxY = (Rd<float>(g, 0x74) > Rd<float>(g, 0x5c)) ? Rd<float>(g, 0x74) : Rd<float>(g, 0x5c);
+        const float maxX = (Rd<float>(g, 0x70) > Rd<float>(g, 0x58)) ? Rd<float>(g, 0x70) : Rd<float>(g, 0x58);
+        const float minZ = (Rd<float>(g, 0x54) > Rd<float>(g, 0x6c)) ? Rd<float>(g, 0x6c) : Rd<float>(g, 0x54);
+        const float minY = (Rd<float>(g, 0x50) > Rd<float>(g, 0x68)) ? Rd<float>(g, 0x68) : Rd<float>(g, 0x50);
+        const float minX = (Rd<float>(g, 0x4c) > Rd<float>(g, 0x64)) ? Rd<float>(g, 0x64) : Rd<float>(g, 0x4c);
+
+        const float kHalf = 0.5f;                              // 0x180161694
+        const float cx = (minX + maxX) * kHalf;
+        const float cy = (minY + maxY) * kHalf;
+        const float cz = (minZ + maxZ) * kHalf;
+
+        float dx = Rd<float>(view, 0x00) - cx;
+        float dy = Rd<float>(view, 0x04) - cy;
+        float dz = Rd<float>(view, 0x08) - cz;
+        dx *= dx; dy *= dy; dz *= dz;
+        const float distSq = (dy + dx) + dz;                   // retail's order
+
+        const uint8_t* lvl = B(Rd<void*>(mesh, 0x50));
+        for (int32_t i = 0; i < levelCount; ++i) {             // 180101070
+            const float d = Rd<float>(lvl, i * kDetail_Stride + kDetail_SwitchDist);
+            if (d * d > distSq) { level = i; break; }          // COMISS / JA
+        }
+        // The `TEST EDX,EDX ; JS` that follows is unreachable — see the banner.
+    }
+
+    const uint8_t* const levels = B(Rd<void*>(mesh, 0x50));    // 18010109a
+    const size_t off = static_cast<size_t>(level) * kDetail_Stride;
+    const int32_t listCount = Rd<int32_t>(levels, off + kDetail_ListCount);
+    if (listCount <= 0) return;                                // 1801010c0
+
+    const uint16_t packedLevel = static_cast<uint16_t>(
+        static_cast<uint16_t>(level) << 12);                   // SHL $0xc,%r15w
+    const float kOne = 1.0f;                                   // 0x18016169c
+    const float oneMinusAlpha = kOne - alpha;                  // SUBSS XMM6,XMM10
+
+    AddDrawItemFn add = RtRendererAddDrawItem();
+    if (!add) return;
+
+    for (int32_t i = 0; i < listCount; ++i) {                  // 1801010f0
+        // BOTH re-read inside the loop, exactly as retail does.
+        const uint8_t* const meshNow = B(Rd<void*>(self, 0xc0));
+        const uint8_t* const lists   = B(Rd<void*>(levels, off + kDetail_Lists));
+        const size_t li = static_cast<size_t>(i) * kList_Stride;
+
+        uint32_t arg10 = 0xffffffffu;                          // OR $-1,%r10d
+        const uint8_t* const levelsNow = B(Rd<void*>(meshNow, 0x50));
+        int32_t arg8 = Rd<int32_t>(levelsNow, off + kDetail_DefaultArg8);
+
+        if (Rd<int32_t>(lists, li + kList_NodeFlag) < 0) {     // 180101103  JGE
+            if (self->_animation._instanced == 0) {            // 180101116
+                arg8 = 1;                                      // 180101138
+            } else {
+                arg10 = static_cast<uint32_t>(Rd<int32_t>(
+                    self->_animation._layers._data,
+                    static_cast<size_t>(self->_animation._layers._size) * 0x38 - 0x2c));
+            }
+        }
+
+        const int32_t matIndex = Rd<int32_t>(lists, li + kList_Material);
+        const void* material = Rd<void*>(Rd<void*>(self, 0xc8),
+                                         static_cast<size_t>(matIndex) * 8);
+
+        // 16-BIT add: `ADD 0x28(%rbx),%r9w`. It WRAPS; it does not promote.
+        const uint16_t arg4 = static_cast<uint16_t>(
+            static_cast<uint16_t>(self->_sortBias) +
+            static_cast<uint16_t>(Rd<int32_t>(self, 0x28)));
+
+        const uint16_t arg5 = static_cast<uint16_t>(packedLevel |
+                                                    static_cast<uint16_t>(i));
+
+        const float arg7 = (alpha * Rd<float>(self, 0x7c)) +
+                           (oneMinusAlpha * Rd<float>(self, 0x80));
+
+        add(renderer, self, material, arg4, arg5,
+            0.0f, arg7, arg8, meshNow, arg10);                 // 18010119e
+        ++g_addDrawItemsMeshQ;
+    }
+    RT_DIFF_WORK(true);
+}
+
+// ============================================================================
+// void Graphics::EdgeMeshInstance::AddDrawItems(const Scene&, Renderer&) const
+//   retail 0x1800a2fd0 — slot 3
+// ============================================================================
+// TWO FLAT PASSES over the EdgeMesh's two list arrays — triangles first, then
+// edges. No LOD, no bounds, no distance, no opacity: the selection outline is
+// drawn at full strength whenever it exists.
+//
+// `Scene&` is again accepted and never read.
+//
+// The EdgeMesh pointer is loaded ONCE into RSI for the loop CONDITION (the
+// counts) and RE-READ from `_mesh` on every iteration for the MATERIAL (`MOV
+// R8,[RDI+0xc0]` inside both loops). That asymmetry is retail's and is
+// reproduced: the counts come from the cached pointer, the materials from a
+// fresh load.
+//
+// **AND THE SECOND LOOP RE-READS `_mesh` INTO RSI AGAIN before it starts**
+// (0x1800a3087), so the two passes do not necessarily see the same EdgeMesh.
+// Nothing in this tree can make them differ today; it is reproduced because a
+// reload is an observable act, not a redundancy.
+//
+// The material choice is a SIGN TEST on each list's +0x14, selecting from
+// `_material0`/`_material1` (+0x28/+0x30) in the triangle pass and
+// `_material2`/`_material3` (+0x38/+0x40) in the edge pass. Mesh.h already
+// records that `SetMaterials` stores its four arguments into those slots with
+// THE MIDDLE TWO CROSSED; this body reads them in slot order and inherits that
+// note without re-deriving it.
+// ============================================================================
+extern "C" void RtGraphics_EdgeMeshInstance_AddDrawItems(const EdgeMeshInstance* self,
+                                                         const void* scene,
+                                                         void* renderer) {
+    RT_DIFF_BEGIN("Graphics::EdgeMeshInstance::AddDrawItems");
+    (void)scene;
+    ++g_addDrawItemsEdge;
+
+    const float kOne = 1.0f;                                   // 0x18016169c
+
+    AddDrawItemFn add = RtRendererAddDrawItem();
+    if (!add) return;
+
+    // ---- pass 1: the triangle lists, sort key 0x2000 -----------------------
+    {
+        const uint8_t* const em = B(Rd<void*>(self, 0xc0));    // 1800a2fe2
+        const int32_t n = Rd<int32_t>(em, 0x150);
+        for (int32_t i = 0; i < n; ++i) {                      // 1800a3020
+            const uint8_t* const emNow = B(Rd<void*>(self, 0xc0));
+            const uint8_t* const lists = B(Rd<void*>(em, 0x148));
+            const size_t li = static_cast<size_t>(i) * kList_Stride;
+
+            const void* material =
+                (Rd<int32_t>(lists, li + kList_NodeFlag) >= 0)  // 1800a305f  JGE
+                    ? Rd<void*>(emNow, 0x28)                    // _material0
+                    : Rd<void*>(emNow, 0x30);                   // _material1
+
+            add(renderer, self, material,
+                0x2000, static_cast<uint16_t>(i),
+                0.0f, kOne, 1, nullptr, 0xffffffffu);           // 1800a3078
+            ++g_addDrawItemsEdgeQ;
+        }
+    }
+
+    // ---- pass 2: the edge lists, sort key 0x2001, index | 0x8000 -----------
+    {
+        const uint8_t* const em = B(Rd<void*>(self, 0xc0));    // 1800a3087 RELOAD
+        const int32_t n = Rd<int32_t>(em, 0x160);
+        for (int32_t i = 0; i < n; ++i) {                      // 1800a30b0
+            const uint8_t* const emNow = B(Rd<void*>(self, 0xc0));
+            const uint8_t* const lists = B(Rd<void*>(em, 0x158));
+            const size_t li = static_cast<size_t>(i) * kList_Stride;
+
+            const void* material =
+                (Rd<int32_t>(lists, li + kList_NodeFlag) >= 0)  // 1800a30ef  JGE
+                    ? Rd<void*>(emNow, 0x38)                    // _material2
+                    : Rd<void*>(emNow, 0x40);                   // _material3
+
+            const uint16_t arg5 =
+                static_cast<uint16_t>(static_cast<uint16_t>(i) | 0x8000u);
+
+            add(renderer, self, material,
+                0x2001, arg5,
+                0.0f, kOne, 1, nullptr, 0xffffffffu);           // 1800a310f
+            ++g_addDrawItemsEdgeQ;
+        }
+    }
+    RT_DIFF_WORK(true);
+}
+
 // WAVE 27 LANE GFXMESH registration — by NAME and by ADDRESS, both.
 //
 // All four slots are RT_MINT_NAMED in standalone/rt_data_mint_tables.inc
@@ -2432,7 +2813,61 @@ int RtGraphicsMeshVtableRegister() {
     RegisterRuntimeAddr(0x180016c20ull,
                         (void*)&RtGraphics_MeshInstance_GetNodeToWorldInterp);
 
-    return n;   // 5
+    // ---- WAVE 28 LANE SLOTS ------------------------------------------------
+    // The two ?AddDrawItems@ overrides. BOTH mangled names were read out of the
+    // retail export directory at the VAs the two vtables hold, with objdump's
+    // export address table cross-checked against its name table -- NOT built by
+    // analogy with the four slots above, which is exactly how this file
+    // acquired a phantom `UEBA` in Wave 27.
+    //   ?AddDrawItems@MeshInstance@Graphics@@...      0x180100f20  ord 1550
+    //   ?AddDrawItems@EdgeMeshInstance@Graphics@@...  0x1800a2fd0  ord 1549
+    //
+    // *** THE `AddDrawItems` HARMFUL TAG WAS RE-CHECKED BEFORE THIS LINE WAS
+    // ADDED, AND IT IS STILL RETIRED. *** Wave 27 lane GFXMESH rebuilt
+    // standalone/scene_watch.cpp's `IsMeshInstance` on two registry-independent
+    // tokens precisely so a later lane could register this symbol, and required
+    // that lane to re-run the grep. Re-run on this tip:
+    //     grep -rn 0x180100f20 runtime/ code/ standalone/ engine/ dx11/
+    // returns scene_watch.cpp (the rebuilt two-token test, which
+    // ResolveAddr no longer feeds), rt_data_mint_tables.inc (which STAMPS the
+    // address, not compares it), and comments. NO NEW IDENTITY-TOKEN CONSUMER
+    // HAS APPEARED. The debt GFXMESH paid is still paid.
+    RegisterRuntimeExport("?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
+                          (void*)&RtGraphics_MeshInstance_AddDrawItems); ++n;
+    RegisterRuntimeAddr(0x180100f20ull, (void*)&RtGraphics_MeshInstance_AddDrawItems);
+
+    RegisterRuntimeExport("?AddDrawItems@EdgeMeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
+                          (void*)&RtGraphics_EdgeMeshInstance_AddDrawItems); ++n;
+    RegisterRuntimeAddr(0x1800a2fd0ull, (void*)&RtGraphics_EdgeMeshInstance_AddDrawItems);
+
+    return n;   // 7
+}
+
+// ============================================================================
+// WAVE 28 LANE SLOTS — attendance, AND A CALLER FOR IT
+// ============================================================================
+// The integrator's standing finding for this wave: **every lane's `*Summary()`
+// is written and NOTHING CALLS IT**, so a zero can mean "never printed" rather
+// than "never called". This one is therefore called from
+// `RtGraphicsMeshVtableRegister`'s own module teardown path — no, it is not:
+// there is no teardown hook in this file, and inventing one would be tooling.
+//
+// So the honest arrangement is the narrow one: the four counters below are
+// EXPORTED for a caller to read, and **this lane states plainly that NOTHING IN
+// THE TREE CALLS THIS FUNCTION TODAY.** No number from it is quoted anywhere in
+// WAVE28_LANE_SLOTS.md, and none may be quoted by a later reader without first
+// checking that something invokes it.
+//
+// > **[ADDRESSEE — wiring these four counters to a printer]** the Wave 29
+// > verification lane, which the Wave 28 kickoff §4 says is the wave that pays
+// > the "registered and never executed" debt. `RT_DIFF_WORK` already records
+// > liveness for both bodies; these four separate CALLS ENTERED from ITEMS
+// > QUEUED, which is the distinction that tells a silent-drop apart from a
+// > no-op (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
+// ============================================================================
+extern "C" void RtGraphicsAddDrawItemsCounters(unsigned long long* out) {
+    out[0] = g_addDrawItemsMesh;   out[1] = g_addDrawItemsMeshQ;
+    out[2] = g_addDrawItemsEdge;   out[3] = g_addDrawItemsEdgeQ;
 }
 
 int RtGraphicsMeshRegister() {
