@@ -268,6 +268,7 @@ constexpr DestroySpec kD_Str_08 = { "String @+0x000, stride 0x008", 0x008, 1, { 
 constexpr DestroySpec kD_Str_10 = { "String @+0x000, stride 0x010", 0x010, 1, { 0x000 } };
 constexpr DestroySpec kD_Str_48 = { "String @+0x000, stride 0x048", 0x048, 1, { 0x000 } };
 constexpr DestroySpec kD_Str_18 = { "String @+0x010, stride 0x018", 0x018, 1, { 0x010 } };
+constexpr DestroySpec kD_Str_20 = { "String @+0x000, stride 0x020", 0x020, 1, { 0x000 } };  // VertexLayout::Element (2026-09-12)
 constexpr DestroySpec kD_Str2_38 = { "2 Strings @+0x008,+0x000, stride 0x038", 0x038, 2, { 0x008, 0x000 } };
 // WAVE 27 LANE FRONTIER - UI::StringTable's TextEntry {name, text}, the element
 // of the array at StringTable+0x20. Read out of 0x180005570's own body:
@@ -512,6 +513,7 @@ B_ENTRY(180005930, kD_Str_10)         // {String*, ExternalPtr} — lane Q's kSp
 B_ENTRY(1800059e0, kD_Str2_38)        // SpriteSheet's 0x38 entry — lane Q's kSpec_Sprite38
 B_ENTRY(180011010, kD_Str_08)         // UI: ComboElement::_strings — lane UIW's kSpec_StringRef
 B_ENTRY(180026b50, kD_Str_10)         // IO::PackageFile::Entry — lane Q's kSpec_PkgEntry
+B_ENTRY(18004fe20, kD_Str_20)         // Video::VertexLayout::Element — array.cpp kSpec_VertexElement (2026-09-12)
 // WAVE 26 LANE INT33 — the fifth, and it is one of "the eight ported but
 // deliberately unregistered" the banner above lists. The stated condition for
 // registering one of the eight is "when a caller exists", and one now does:
@@ -673,6 +675,7 @@ J2_ENTRY(18001c7e0, FreeInnerArraysCounted, kD_InnerArr_110) // CALL 0x18001ce90
 J2_ENTRY(180033880, ReleaseStringsCounted,  kD_Str_18)       // CALL 0x180034440  Body B
 J2_ENTRY(1800416d0, FreeInnerArraysCounted, kD_InnerArr_18)  // CALL 0x1800419b0  Body A
 J2_ENTRY(180073c90, FreeInnerArraysCounted, kD_InnerArr_48)  // CALL 0x180074100  Body A
+J2_ENTRY(18004fa30, ReleaseStringsCounted,  kD_Str_20)       // CALL 0x18004fe20  Body B  ~VertexLayout (2026-09-12)
 
 // ---- WAVE 25 LANE INTERNAL42: three more J2 addresses ----------------------
 //
@@ -1043,6 +1046,7 @@ void RtCollectionDestroyPortInit() {
     // above the A_ENTRY block.
     RegisterRuntimeAddr(0x1800419b0, (void*)&RtColl_DestroyInner_1800419b0);
     RegisterRuntimeAddr(0x180011010, (void*)&RtColl_DestroyStrings_180011010);
+    RegisterRuntimeAddr(0x18004fe20, (void*)&RtColl_DestroyStrings_18004fe20);
     // Wave 9 lane DESTROY: the packfile-entry range destroy. array.cpp's
     // kSpec_PkgEntry reaches it by address from ReadPackfile's SetSize, and it
     // was the attempt-17 cutover wall (an EXEC of 0 with the DLL absent).
@@ -1069,6 +1073,7 @@ void RtCollectionDestroyPortInit() {
 
     // ---- J2: ~Array with an element-destroy prologue, six addresses --------
     RegisterRuntimeAddr(0x180010ab0, (void*)&RtColl_ArrayDtorElem_180010ab0);
+    RegisterRuntimeAddr(0x18004fa30, (void*)&RtColl_ArrayDtorElem_18004fa30);
     RegisterRuntimeAddr(0x18001c7e0, (void*)&RtColl_ArrayDtorElem_18001c7e0);
     RegisterRuntimeAddr(0x180033880, (void*)&RtColl_ArrayDtorElem_180033880);
     RegisterRuntimeAddr(0x1800416d0, (void*)&RtColl_ArrayDtorElem_1800416d0);

@@ -226,6 +226,7 @@ void RtVideoPortInit() {
     // through function-local statics on first USE, not at init).
     // 2026-09-12: Video::VideoProgram, the whole class (videoprogram.cpp). No switch.
     { extern int RtVideoProgramRegister(); n += RtVideoProgramRegister(); }
+    { extern int RtVideoVertexLayoutRegister(); n += RtVideoVertexLayoutRegister(); }
 
     if (RtWaveEnabled("BANISHED_RT_VIDRES")) {
         extern int RtVideoResourcesRegister();

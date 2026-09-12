@@ -1259,6 +1259,40 @@ const ArraySpec kSpec_EffectSlot = {              // 0x180051390
 // SEED ZEROS +0x00..+0x07: the String slot is dereferenced by the assign's
 // `INC [RAX-4]` and by 0x180005930's release. +0x08, the ExternalPtr, is copied
 // verbatim and never dereferenced by either, so it IS seeded non-zero.
+// 2026-09-12 -- Video::VertexLayout::Element, 0x180056240's SetSize (cutover
+// worklist, runtime/src/video/vertexlayout.cpp). Read out of the body:
+//   stride 0x20  (`SHL RCX,5` on the capacity), align 8
+//   assign       String adopt at +0x00 (`dst=0; if (src) { dst=src; ++[src-4] }`)
+//                then five dwords +0x08..+0x1b copied; +0x1c NOT written
+//   init         three qwords + one dword zeroed: +0x00..+0x1b; +0x1c NOT written
+//   destroy      0x18004fe20, the String release loop at stride 0x20
+//                (array_destroy.cpp kD_Str_20)
+void AssignVertexElement(uint8_t* d, const uint8_t* s) {
+    void** dp = reinterpret_cast<void**>(d);
+    void* const* sp = reinterpret_cast<void* const*>(s);
+    dp[0] = nullptr;
+    void* str = sp[0];
+    if (str) {
+        dp[0] = str;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
+    }
+    std::memcpy(d + 0x08, s + 0x08, 0x14);
+}
+void InitVertexElement(uint8_t* d) {
+    std::memset(d, 0, 0x1c);
+}
+void DestroyVertexElement(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18004fe20));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_VertexElement = {           // 0x180056240
+    "Array<VertexLayout::Element>", 0x20, 8, &AssignVertexElement, &InitVertexElement,
+    &DestroyVertexElement, false,
+    /*assign unwritten*/ 0x1c, 0x20,
+    /*init   unwritten*/ 0x1c, 0x20,
+    /*seed zero       */ 0x00, 0x08 };
+
 const ArraySpec kSpec_StringExt = {               // 0x180061480
     "Array<{String*,ExternalPtr}>", 0x10, 8, &AssignStringExt, nullptr,
     &DestroyStringExt, true,
@@ -1880,6 +1914,7 @@ void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src) {
 J3_ENTRY2(180008b90, kSpec_Bool)        // Achievement: Array<bool>, tail UNINITIALISED
 J3_ENTRY2(180008d60, kSpec_PtrZero)     // Achievement: Array<InternalPtr>
 J3_ENTRY2(1800604e0, kSpec_PtrZero)     // Graphics:    Material::_programs, Array<ExternalPtr<VideoProgram>> (2026-09-12)
+J3_ENTRY2(180056240, kSpec_VertexElement) // Video:      VertexLayout::_elements (2026-09-12)
 J3_ENTRY2(180008ff0, kSpec_U64Zero)     // Achievement: Array<Time>
 J3_ENTRY2(18002fea0, kSpec_I32)         // Object/UI:   Array<int32>, tail UNINITIALISED
 J3_ENTRY2(180059140, kSpec_Transform)   // Picking:     Array<Transform>, 4x unrolled in retail
@@ -2192,6 +2227,7 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180008b90, (void*)&RtColl_ArraySetSize_180008b90);
     RegisterRuntimeAddr(0x180008d60, (void*)&RtColl_ArraySetSize_180008d60);
     RegisterRuntimeAddr(0x1800604e0, (void*)&RtColl_ArraySetSize_1800604e0);
+    RegisterRuntimeAddr(0x180056240, (void*)&RtColl_ArraySetSize_180056240);
     RegisterRuntimeAddr(0x180008ff0, (void*)&RtColl_ArraySetSize_180008ff0);
     RegisterRuntimeAddr(0x18002fea0, (void*)&RtColl_ArraySetSize_18002fea0);
     RegisterRuntimeAddr(0x180059140, (void*)&RtColl_ArraySetSize_180059140);

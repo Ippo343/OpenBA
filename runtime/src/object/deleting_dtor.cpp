@@ -811,6 +811,7 @@ static const DelDtorSpec kSpecs[] = {
     // 2026-09-12: slot 0 of ??_7VideoProgram@Video@@6B@ (videoprogram.cpp); 0x48 from
     // CreateNewObject's Allocate(0x48, 8) and the eh_vector iterator stride.
     RT_DELDTOR(0x18004efb0, 0x1800f4650, 0x048, "Video::VideoProgram"),
+    RT_DELDTOR(0x18004e000, 0x1800f5df0, 0x048, "Video::VertexLayout"),   // vertexlayout.cpp (2026-09-12)
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1159,6 +1160,11 @@ void* RtDelDtor_VideoProgram(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 51);
 }
 
+// Video::VertexLayout       ~VertexLayout = 0x1800f5df0  (PORTED, vertexlayout.cpp)
+void* RtDelDtor_VertexLayout(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 52);
+}
+
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
     *count = static_cast<int>(sizeof(kProbeSubjects) / sizeof(kProbeSubjects[0]));
@@ -1255,6 +1261,7 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180035350, (void*)&RtDelDtor_ElementDescription);    // Wave 27 IOTEXT
     RegisterRuntimeAddr(0x180011d20, (void*)&RtDelDtor_Material);
     RegisterRuntimeAddr(0x18004efb0, (void*)&RtDelDtor_VideoProgram);
+    RegisterRuntimeAddr(0x18004e000, (void*)&RtDelDtor_VertexLayout);
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --
