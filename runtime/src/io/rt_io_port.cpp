@@ -342,8 +342,13 @@ void RtIoPortInit() {
 
     // ---- BATCH 8b (2026-09-12), also unconditional -------------------------
     //   persistence_saveinfo_job.cpp    worker command 3 (unexported)  0x1800b65b0
+    //   text_codec.cpp                  the five text-codec internals
+    //                                   0x1800c9d60 / 0x1800c9fc0 / 0x1800c9b60 /
+    //                                   0x1800ca260 / 0x180029bb0 (all unexported)
     extern int RtIoPersistenceSaveInfoRegister();
+    extern int RtIoTextCodecRegister();
     n += RtIoPersistenceSaveInfoRegister();
+    n += RtIoTextCodecRegister();
     if (RtWaveEnabled("BANISHED_RT_CSWRITE"))     n += RtIoCompressedStreamWriteRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

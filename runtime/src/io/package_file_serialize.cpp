@@ -85,15 +85,18 @@
 //   0x180029510  Array<uint>::SetSize (unexported)
 //                PORTED — array.cpp:2002.
 //   0x180029bb0  Array-of-String serialize (unexported, ~680 bytes)
-//                ⚠ **A NEW ADDRESS DOOR, AND IT IS NOT PORTED.** See the block
-//                at its helper below for SYMBOL / CONDITION / CONSEQUENCE.
+//                PORTED — BATCH 8b, runtime/src/io/text_codec.cpp registers it,
+//                so ResolveAddr (registry-first) hands back OUR body. It WAS a
+//                new address door this file opened, and the door was honest;
+//                it is now closed rather than merely declared.
 //
-// SO THIS PORT GROWS THE CUTOVER SURFACE BY ONE FUNCTION, and that is stated
-// here rather than discovered later: the pattern is
-// reference_porting_can_grow_the_cutover_surface.md, and the census will show
-// 0x180029bb0 as a newly-`called` unported address the moment this file lands.
-// The alternative — reproducing a 680-byte UTF-8/UTF-16 transcoder to avoid one
-// door — is not a better trade, and the door is honest.
+// SO THIS PORT GREW THE CUTOVER SURFACE BY ONE FUNCTION for a day, and that was
+// stated here rather than discovered later: the pattern is
+// reference_porting_can_grow_the_cutover_surface.md. The trade it weighed —
+// "reproducing a 680-byte UTF-8/UTF-16 transcoder to avoid one door is not a
+// better trade" — was the right call at the time and is now moot: the
+// transcoder came with the four text-codec internals, which had to be ported
+// anyway for TextFileStream.
 //
 // ---------------------------------------------------------------------------
 // ORACLE — RtSaveTrace::Compare, WRITING direction, FULL replay
@@ -167,13 +170,13 @@ StringSerializeFn StringSerialize() {
 //              ser->readerWriter at +0x08 for the codec), EDX = count,
 //              R8 = the Array's data pointer. `TEST EDX,EDX / JLE ret` at
 //              0x180029bb0, so count <= 0 is a no-op and needs no guard here.
-// CONDITION:   NOT PORTED. This file is the first caller in the tree, so this
-//              port GROWS the `called` column by one unported address.
-// CONSEQUENCE: at cutover, with no DLL, ResolveAddr returns NULL and the two
-//              string-array records fault. Before cutover it is the DLL's own
-//              body and behaves exactly as retail. ADDRESSEE: whichever Wave 28
-//              lane owns IO's remaining address doors — it is ~680 bytes and it
-//              is a UTF-8 / UTF-16 transcoder, so it is a body, not a stub.
+// CONDITION:   PORTED, BATCH 8b — runtime/src/io/text_codec.cpp. ResolveAddr is
+//              registry-first, so this helper reaches OUR body and the call
+//              site is unchanged.
+// CONSEQUENCE: none outstanding. (It previously read: "at cutover, with no DLL,
+//              ResolveAddr returns NULL and the two string-array records fault
+//              ... ADDRESSEE: whichever Wave 28 lane owns IO's remaining address
+//              doors". That was accurate until this address was registered.)
 using StringArraySerializeFn = void (*)(Serializer*, int32_t, void*);
 StringArraySerializeFn StringArraySerialize() {
     static StringArraySerializeFn f = reinterpret_cast<StringArraySerializeFn>(

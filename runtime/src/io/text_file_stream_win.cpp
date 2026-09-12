@@ -489,6 +489,17 @@ extern "C" bool RtIo_TextFileStream_Create(TextFileStream* self, const Filename*
 // TWO entries their caller could reach and said so. Here the id is a variable,
 // so the honest shape is a door.
 //
+// *** ALL FOUR ARE PORTED AS OF BATCH 8b (2026-09-12) ***
+// runtime/src/io/text_codec.cpp carries all four, and the four `ResolveAddr`
+// helpers below now land on OUR bodies because the resolver is registry-first;
+// the call sites are unchanged. What made this smaller than the paragraph above
+// expected: the two "dispatchers" are not dispatchers onto twelve separate
+// bodies. Both jump tables were read out of the image, and EVERY entry points
+// back INSIDE the dispatching function - they are MSVC switch arms, four
+// distinct ones per table (ids 2/3 share the UTF-8 arm, 4/5 the UTF-16 arm). So
+// the work was two functions with a switch each, not twelve ports from spec.
+// The ADDRESSEE block further down is left in place with its own correction.
+//
 //   0x1800c9d60  DetectFormat(src, len) -> format id
 //                Compares a 3-byte "EF BB BF" then a 2-byte "FF FE" then
 //                "FE FF" against the head of the buffer; returns 3, 4, 5 or 0.
@@ -521,14 +532,18 @@ extern "C" bool RtIo_TextFileStream_Create(TextFileStream* self, const Filename*
 //               At cutover all four are NULL and both slots fault.
 //
 // > **[ADDRESSEE — the four text-codec internals 0x1800c9d60, 0x1800c9fc0,
-// > 0x1800c9b60, 0x1800ca260]** the Wave 29 lane that takes IO's remaining
-// > `internal` address rows, together with lane IOTEXT's residual #1
-// > (0x180029bb0, the array-of-String serializer, which is the same
-// > neighbourhood and the same transcoder family). The two dispatchers are jump
-// > tables with six entries each; `package_file_read_win.cpp` §94 has already
-// > transcribed decode entry 1 and encode entry 2, and `widestring.cpp` has
-// > decode 2/4 and encode 2/4 from spec — so roughly half of both tables is
-// > already written down in this tree and needs collecting, not deriving.
+// > 0x1800c9b60, 0x1800ca260]** ~~the Wave 29 lane that takes IO's remaining
+// > `internal` address rows~~ — **DISCHARGED, BATCH 8b.** All four, plus the
+// > 0x180029bb0 array-of-String serializer this block named as the same
+// > transcoder family, are ported and registered in
+// > runtime/src/io/text_codec.cpp. The prediction that "roughly half of both
+// > tables is already written down in this tree" was true and was not what the
+// > port needed: the tables' entries are switch arms inside the two functions,
+// > so they were transcribed from those two bodies rather than collected from
+// > the four files that had guessed at individual entries. Of those, only
+// > `package_file_read_win.cpp` §94's two entries were read from the image; the
+// > `string.cpp` / `widestring.cpp` spec versions are independent of this port
+// > and are left alone.
 //
 // ---------------------------------------------------------------------------
 // ONE TABLE, READ THREE TIMES, AGREEING — the BOM lengths
