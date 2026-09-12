@@ -1360,6 +1360,125 @@ int RtMintRegisterPromotedRows() {
     }
 
     // ========================================================================
+    // WAVE 26 LANE PROMOGFX — TWO OF WAVE 25 LANE DATA's SEVEN `?_typeInfo@`
+    // ROWS. THE OTHER FIVE ARE **NOT** PROMOTED. Read this whole block before
+    // adding a sixth.
+    // ========================================================================
+    //
+    // Lane DATA left those seven rows READY and blocked on exactly ONE thing:
+    // CRITERION 2 at the top of this file — "the row must be run in a real boot
+    // and the run must reach the same place the control reaches". Wave 26 lane
+    // ATTEND ran it. Its verdict decides each row individually, and it did NOT
+    // come out the same for all seven.
+    //
+    // ATTEND's run: tip wave26/base 7de42dd1, exe md5
+    // 45c72978bfbc80f17935d9701fe58977, BANISHED_W17_ATTEND=1
+    // BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120,
+    // clean exit 0, 0-byte crash log, CONTROL GREEN
+    // (?_singleton@MainLoop@Engine@@ init=1 post=2). 66 subject rows.
+    // Full table: docs/runtime_port/wave26_attend/run1_w17attend.txt.
+    //
+    //   ?_typeInfo@Achievement@1@                 init=0 post=1   ATTENDED
+    //   ?_typeInfo@GoalInstance@Achievement@@     init=0 post=1   ATTENDED
+    //   ?_typeInfo@AchievementInstance@Achievement@@  init=0 post=0   never
+    //   ?_typeInfo@AnimationEvent@Graphics@@      init=0 post=0   never
+    //   ?_typeInfo@MaterialInstance@Graphics@@    init=1 post=0   never
+    //   ?_typeInfo@Particle@Graphics@@            init=1 post=0   never
+    //   (?_typeInfo@PackageFile@IO@@ is lane PROMOIO's row, not decided here.)
+    //
+    // THE TWO BELOW ARE PROMOTED because post>0 IS criterion 2: a consumer in
+    // this tree opened the door after init, on a real boot that reached the
+    // control. The four `never` rows are NOT promoted and are NOT tagged
+    // unpromotable either — see the ROUTE-UNDECIDED block after them.
+    //
+    // ONE ANNOTATION THAT LANE DATA REQUIRED IS **NOT APPLICABLE HERE**, and
+    // that is worth stating rather than silently omitting. DATA's fourth bullet
+    // says promoting AnimationEvent / MaterialInstance / Particle / PackageFile
+    // makes their `?TypeName@` bodies hand out OUR node's `name` POINTER, so
+    // their RT_DIFF_SCALAR sites read `divergences=N` forever after — annotate
+    // beside each body IN THE SAME COMMIT. Neither row below has that exposure:
+    // `?TypeName@Achievement@1@` (table slot 1, 0x180001040) and
+    // `?TypeName@GoalInstance@Achievement@@` (table slot 1, 0x180001e60) are
+    // UNREGISTERED — those slots are two of the reasons ??_7Achievement@0@6B@
+    // reads 4/9 and ??_7GoalInstance@Achievement@@6B@ reads 3/7 — so there is
+    // no ported body to hand out a pointer and no RT_DIFF_SCALAR site to
+    // annotate. The obligation transfers with the slot: WHOEVER PORTS EITHER
+    // `?TypeName@` MUST write that annotation then.
+    st = RtMintPromotionStorage("?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A",
+                                0x1801f9898ull);
+    RegisterRuntimeExport("?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801f9898ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A",
+                                0x1801f9940ull);
+    RegisterRuntimeExport("?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801f9940ull, st); ++n;
+
+    // ------------------------------------------------------------------------
+    // ROUTE-UNDECIDED — the four `?_typeInfo@` rows ATTEND measured `never`.
+    // NOT promoted, NOT tagged RT_UNPROMOTABLE, and NOT dropped.
+    // ------------------------------------------------------------------------
+    //
+    // A bare `never` cannot tell "this row is not ready" from "this route does
+    // not reach this row", and those have OPPOSITE consequences. ATTEND was
+    // asked to separate them and did: ALL FOUR are (b), route-never-reached,
+    // and the zero is therefore NOT evidence about the row.
+    //
+    //   * The general (a)-refutation, applying to all four: in the SAME run,
+    //     rows using the identical RT_DATA_SLOT -> RtResolveCached ->
+    //     ResolveExport idiom read post>0 — ?_typeInfo@Material@Graphics@@
+    //     post=1 and ?_typeInfo@GeneratedImageBuffer@Graphics@@ post=1, same
+    //     file family. The idiom is proven live in that run, so a zero cannot
+    //     be blamed on the door mechanism. ATTEND also checked every consumer
+    //     literal byte-for-byte against its watch-table literal, which excludes
+    //     spelling drift — the one (a)-shaped failure this instrument has.
+    //   * MaterialInstance and Particle prove their OWN door: init=1 means the
+    //     symbol resolved once, from reg_unreg_lane3.cpp:164/195, so post=0 can
+    //     only mean no post-init consumer ran.
+    //   * AnimationEvent, MaterialInstance and Particle are corroborated: their
+    //     only consumers are the vtable-slot bodies at
+    //     graphics_typeinfo_accessors.cpp:132/136/140, and in the same run
+    //     ??_7AnimationEvent@, ??_7MaterialInstance@, ??_7Particle@,
+    //     ??_7ParticleInstance@ and ??_7ParticleSystemInstance@ ALL read
+    //     post=0 — nothing fetched any of those tables through a door, so those
+    //     slot bodies never dispatched.
+    //   * AchievementInstance's only consumer is gameupdateloop_serialize.cpp:195
+    //     inside EnsureResolved(), and its "[GUL::Serialize] resolved:" line has
+    //     ZERO occurrences in both logs. Corroborated twice more:
+    //     "[SaveMetaOracle] bodyCalls=0 calls=0" and "[RefTable] calls=0".
+    //     A New-Game-and-quit route neither saves nor loads.
+    //
+    // ATTEND'S OWN CAVEAT, carried here so it is not lost: this instrument
+    // counts DOORS, not EXECUTIONS. "Route never reaches it" and "route reaches
+    // those objects but only through in-DLL calls, which are not doors" are
+    // BOTH consistent with post=0 and it cannot separate them. For a promotion
+    // decision the consequence is identical — the zero is not evidence about
+    // the row — but it is NOT proof the class is unused.
+    //
+    // [SCOPE: DLL-PRESENT, on the autostart New-Game-and-quit route only.]
+    // [ADDRESSEE: the Wave 27 kickoff writer, who must NOT copy these four into
+    //  a cheap-wins list as "ready, just promote them" — criterion 2 is still
+    //  unmet for all four.]
+    // [CONDITION, per row:
+    //    ?_typeInfo@AchievementInstance@ — A RUN THAT SAVES. ATTEND named it
+    //      exactly: re-run the W17 watch on a route that reaches
+    //      GameUpdateLoop::Serialize. post>0 there is criterion 2 and the row
+    //      can be promoted with no further argument.
+    //    ?_typeInfo@AnimationEvent@ / @MaterialInstance@ / @Particle@ — these
+    //      three are downstream of a DIFFERENT question: their consumers are
+    //      vtable slot bodies whose TABLES are not fetched through a door on
+    //      any route measured so far. Do NOT keep re-running the autostart
+    //      route expecting a different answer. The prerequisite is an
+    //      EXECUTION counter inside graphics_typeinfo_accessors.cpp:132/136/140
+    //      (the accessor bodies themselves), which separates "no route" from
+    //      "reached only by in-DLL call". Until someone builds that, these
+    //      three rows are undecidable by the door instrument and no amount of
+    //      booting changes it.
+    //    AND WHEN ANY OF THE THREE IS PROMOTED: lane DATA's `?TypeName@`
+    //      RT_DIFF_SCALAR annotation DOES apply to them, unlike the two rows
+    //      promoted above. Write it in the same commit.]
+
+    // ========================================================================
     // WAVE 26 LANE PROMOGFX — ??_7Geometry@Graphics@@6B@ (0x180154e60)
     // ========================================================================
     //
