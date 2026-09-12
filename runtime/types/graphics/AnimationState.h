@@ -40,6 +40,8 @@
 #include <cstdint>
 #include <cstddef>
 
+#include "../collection/Collection.h"
+
 namespace RtGraphics {
 
 // ============================================================================
@@ -133,7 +135,18 @@ struct AnimationClipPrefix {
     int32_t  _unpinned_44;    // +0x44
     float    loopScale;       // +0x48  final multiplier
     int32_t  _unpinned_4c;    // +0x4c
-    int32_t  frameRate;       // +0x50  read as an INT and cvtdq2ps'd to float
+    // +0x50  read as an INT and cvtdq2ps'd to float.
+    //
+    // *** THIS IS THE CLIP'S FRAME COUNT, NOT ITS FRAME RATE. Corrected
+    // 2026-09-12 (cutover closure batch 3). *** The name here was a guess from
+    // the cvtdq2ps; `?GetPoseAtTime@Animation@Graphics@@` (0x1800faca0) settles
+    // it by using BOTH fields in one expression — it multiplies elapsed seconds
+    // by +0x44 to get a frame cursor, then compares that cursor against +0x50
+    // to decide whether the clip has run out and must clamp or wrap. A rate
+    // cannot be the bound of a frame index. So +0x44 is the frames-per-second
+    // and +0x50 is the number of keyframes; `loopScale` at +0x48 above has no
+    // reader in GetPoseAtTime and is left as this lane named it.
+    int32_t  frameCount;      // +0x50
     int32_t  _unpinned_54;    // +0x54
 
     // +0x58  clip duration in System::Time ticks (int64, compared against
@@ -146,7 +159,7 @@ static_assert(offsetof(AnimationClipPrefix, frameLast)  == 0x34, "clip::frameLas
 static_assert(offsetof(AnimationClipPrefix, looping)    == 0x3c, "clip::looping @ +0x3c");
 static_assert(offsetof(AnimationClipPrefix, loopFrame)  == 0x40, "clip::loopFrame @ +0x40");
 static_assert(offsetof(AnimationClipPrefix, loopScale)  == 0x48, "clip::loopScale @ +0x48");
-static_assert(offsetof(AnimationClipPrefix, frameRate)  == 0x50, "clip::frameRate @ +0x50");
+static_assert(offsetof(AnimationClipPrefix, frameCount) == 0x50, "clip::frameCount @ +0x50");
 static_assert(offsetof(AnimationClipPrefix, duration)   == 0x58, "clip::duration @ +0x58");
 static_assert(sizeof(AnimationClipPrefix) == 0x60,
               "the PREFIX of an animation clip Update reads ends at +0x60; the "
@@ -192,13 +205,32 @@ struct AnimationState {
     float    rootOffset[3];
     int32_t  _unpinned_24;
 
-    // +0x28 / +0x38  the two InterpolatedState<Math::Transform>* the caller
-    //        passes as Update's 4th and 5th parameters (note the caller passes
-    //        +0x38 FIRST). INHERITED, not measured here.
-    void*    interpB;          // +0x28
-    uint8_t  _unpinned_30[8];  // +0x30
-    void*    interpA;          // +0x38
-    uint8_t  _unpinned_40[8];  // +0x40
+    // +0x28 / +0x38  the two buffers the caller passes as Update's 4th and 5th
+    //        parameters (note the caller passes +0x38 FIRST).
+    //
+    //        *** CORRECTED 2026-09-12 (cutover closure batch 3). *** Each of
+    //        these is a 16-byte `Collection::Array` HEADER, not a bare
+    //        pointer: +0x28 is `Array<Math::Transform>` (the baked pose) and
+    //        +0x38 is `Array<InterpolatedState<Transform>>` (the per-node
+    //        interpolation state). What this header used to call `interpB` /
+    //        `interpA` is the Array's `_data` field in each case, so the
+    //        POINTER VALUE it described was right and the TYPE was wrong.
+    //
+    //        Three independent bodies say so, and all three were read for the
+    //        correction rather than inferred from each other:
+    //          * `Array<AnimationState>::Serialize` (0x18005c2c0) resizes
+    //            `this+0x38` through `Array<InterpolatedState>::SetSize`
+    //            (0x18005ac50) with the count it reads at `this+0x40`, and
+    //            hands `this+0x28` whole to `Array<Transform>::Serialize`
+    //            (0x180059820).
+    //          * `?GetPose@AnimationManager@Graphics@@` (0x1800fb8e0) loads
+    //            `state+0x28` as a BUFFER BASE and walks it at stride 0x1c.
+    //          * the element-destroy helper 0x18005bce0 — array_destroy.cpp's
+    //            `kD_InnerArr3_48` — frees three inner Array buffers per 0x48
+    //            record, at offsets {0x38, 0x28, 0x08}.
+    //        The full declaration is runtime/types/graphics/AnimationManager.h.
+    Collection::Array<uint8_t> pose;   // +0x28  Array<Math::Transform>
+    Collection::Array<uint8_t> nodes;  // +0x38  Array<InterpolatedState<Transform>>
 };
 static_assert(sizeof(AnimationState) == 0x48,
               "Graphics::AnimationState stride is 0x48 — INHERITED from WAVE 23 "
@@ -208,8 +240,8 @@ static_assert(offsetof(AnimationState, layers)        == 0x08, "AnimationState::
 static_assert(offsetof(AnimationState, layerCount)    == 0x10, "AnimationState::layerCount @ +0x10");
 static_assert(offsetof(AnimationState, layerCapacity) == 0x14, "AnimationState::layerCapacity @ +0x14");
 static_assert(offsetof(AnimationState, rootOffset)    == 0x18, "AnimationState::rootOffset @ +0x18");
-static_assert(offsetof(AnimationState, interpB)       == 0x28, "AnimationState::interpB @ +0x28");
-static_assert(offsetof(AnimationState, interpA)       == 0x38, "AnimationState::interpA @ +0x38");
+static_assert(offsetof(AnimationState, pose)          == 0x28, "AnimationState::pose @ +0x28");
+static_assert(offsetof(AnimationState, nodes)         == 0x38, "AnimationState::nodes @ +0x38");
 
 // ============================================================================
 // Math::InterpolatedState<Math::Transform> — 0x38 bytes, two Math::Transform.

@@ -240,6 +240,17 @@ void RtGraphicsPortInit() {
     // 2026-09-12: Graphics::Material, the whole vtable (material.cpp). No switch.
     n += RtGraphicsMaterialRegister();
 
+    // 2026-09-12, cutover closure batch 3: the Graphics animation / skeleton
+    // cluster -- AnimationState::Serialize / ResetAnimationState,
+    // AnimationManager::GetPose, Animation::GetPoseAtTime, the six Array<T>
+    // serializers and the three element copy constructors underneath them
+    // (animationstate.cpp), plus the seventeen Collection::Array<T>
+    // instantiations they drive (collection/array_graphics_anim.cpp, whose
+    // register function animationstate.cpp calls so this stays one line).
+    // NO SWITCH -- DIRECTION.md §2: a port registers unconditionally.
+    { extern int RtGraphicsAnimationStateRegister();
+      n += RtGraphicsAnimationStateRegister(); }
+
     int gfxd = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXD")) gfxd = RtGraphicsWave9GfxdRegister();
 

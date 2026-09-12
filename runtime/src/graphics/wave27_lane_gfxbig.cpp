@@ -960,7 +960,13 @@ extern "C" bool RtGraphics_AnimationState_Update(
                 } else {
                     const float num = static_cast<float>(clip->loopFrame - clip->frameFirst);
                     const float den = static_cast<float>(clip->frameLast  - clip->frameFirst);
-                    const float rate = static_cast<float>(clip->frameRate);
+                    // `rate` was this lane's name for +0x50 and it is WRONG:
+                    // +0x50 is the clip's FRAME COUNT (corrected 2026-09-12 in
+                    // AnimationState.h from ?GetPoseAtTime@Animation@Graphics@@,
+                    // which bounds a frame index with it). The expression is
+                    // unchanged -- fraction * frameCount is a frame index, and
+                    // +0x48 converts that to seconds.
+                    const float rate = static_cast<float>(clip->frameCount);
                     // (((num / den) * rate) * loopScale) — THREE separate
                     // instructions in this exact order (DIVSS, MULSS, MULSS at
                     // 0x1800fddc7..0x1800fddcf). Re-associating would be
