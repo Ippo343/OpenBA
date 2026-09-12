@@ -137,6 +137,19 @@ Watch g_watch[] = {
     { "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A", 0, 0 },
     { "?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A", 0, 0 },
     { "?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", 0, 0 },
+    // ---- Achievement: 3 typeinfo, added WAVE 25 lane DATA -------------------
+    // These three are the only `?_typeInfo@` rows in the Wave 25 DATA gap whose
+    // name-door consumer is ORDINARY CODE rather than a vtable-slot body --
+    // achievement_manager.cpp:293, goal.cpp:169, gameupdateloop_load.cpp:75 and
+    // gameupdateloop_serialize.cpp:195 all run on a plain New Game route -- so
+    // they are the three most likely of the seven to come back ATTENDED.  They
+    // were never in this table, which is why no wave has ever had an attendance
+    // figure for them, which is in turn the ONLY thing standing between them and
+    // promotion (see the WAVE 25 LANE DATA block in reg_mint_promoted.cpp: safe,
+    // consumer present, blocked on criterion 2 alone).
+    { "?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A", 0, 0 },
+    { "?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A", 0, 0 },
+    { "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A", 0, 0 },
 };
 
 const int kWatchCount = (int)(sizeof(g_watch) / sizeof(g_watch[0]));
