@@ -574,8 +574,7 @@ int RtGraphicsEdgeMeshVtableRegister() {
                           (void*)&RtGraphics_EdgeMesh_GetFileVersion); ++n;
     RegisterRuntimeAddr(0x1800a23d0ull, (void*)&RtGraphics_EdgeMesh_GetFileVersion);
 
-    RegisterRuntimeExport("?Compile@EdgeMesh@Graphics@@UEAA?AW4CompileResult@External@"
-                          "Object@@AEBVFilename@System@@@Z",
+    RegisterRuntimeExport("?Compile@EdgeMesh@Graphics@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z",
                           (void*)&RtGraphics_EdgeMesh_Compile); ++n;
     RegisterRuntimeAddr(0x1800a21c0ull, (void*)&RtGraphics_EdgeMesh_Compile);
 

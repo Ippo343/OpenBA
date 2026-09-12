@@ -1840,6 +1840,19 @@ NodeToWorldInterpFn RtNodeToWorldInterp() {
         "?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z");
 }
 
+// ?Lerp@Transform@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z — retail 0x18001d690,
+// ordinal 3193. PORTED and registered BY ADDRESS by
+// runtime/src/graphics/wave9_lane_gfx.cpp:555, so this resolves to our own body.
+// HIDDEN RETURN SLOT: RCX = the FROM transform, RDX = the return buffer,
+// R8 = the TO transform, R9 = &t — the argument order wave9_lane_gfx.cpp:271
+// records from the shipped call site.
+typedef void* (*TransformLerpFn)(const void* from, void* ret, const void* to,
+                                 const void* t);
+TransformLerpFn RtTransformLerp() {
+    static TransformLerpFn f = RtAddr<TransformLerpFn>(0x18001d690);
+    return f;
+}
+
 // ?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z — retail
 // 0x1800155a0, ordinal 3992. PORTED and registered BY ADDRESS by
 // runtime/src/graphics/scene.cpp:1906, so this resolves to our own body.
@@ -2229,6 +2242,122 @@ extern "C" void* RtGraphics_MeshInstance_GetInstanceTransform(const void* selfv,
 }
 
 // ============================================================================
+// Graphics::MeshInstance::GetNodeToWorld(int, float) const -> Math::Transform
+//   ?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z
+//   retail 0x180016c20, ordinal 2814
+//
+// *** THIS IS NOT THE FUNCTION 900 LINES ABOVE. *** That one is
+// `…?AVTransform@Math@@H@Z`, retail 0x180016a40, ordinal 2813. The two mangled
+// names differ only in a trailing `M` and BOTH are exported, which is the pair
+// reference_resolveexport_phantom_names.md exists for; both VAs were confirmed
+// against the retail export directory with pefile. They are separate bodies:
+// 0x180016a40 reads a pose, 0x180016c20 INTERPOLATES between two.
+//
+// WHY IT IS HERE AND NOT IN THE NEXT LANE'S WORKLIST. It is not a vtable slot of
+// any of this lane's three tables, so strictly it is out of scope. It is ported
+// because `?GetInstanceTransform@EdgeMeshInstance@` above CALLS it, and porting
+// that body made this address newly `called`
+// (reference_porting_can_grow_the_cutover_surface.md): the census `called` column
+// went 1372 -> 1373 and the BODY gap 18 -> 19. A lane that opens a row and hands
+// it on has moved work, not done it — so this closes the one row this lane
+// opened, and closes it in the file that already holds the shared helper.
+//
+// RELATION TO 0x180016a40, WHICH IS EXACT AND IS THE WHOLE DESIGN. Instruction
+// for instruction, this is that function with every pose read replaced by a LERP
+// of a Transform PAIR by `t`. Same two arms, same `_instanced` byte, same pool
+// indirection, same identity seeding, same two-call composition, same hidden
+// return slot. Nothing else differs.
+//
+// *** HIDDEN RETURN SLOT. *** RCX = this, RDX = the caller's Math::Transform
+// buffer, R8D = the node index, XMM3 = t, RAX = RDX on return. Declaring it
+// without the return slot is the recorded WILD WRITE that still returns the
+// right answer (reference_hidden_retslot_wild_write.md).
+//
+// TWO ARMS:
+//
+//  * NOT instanced (`_animation._instanced == 0`) — retail emits a CALL, not
+//    inline arithmetic:
+//        Transform::Lerp(pair+0x1c, ret, pair+0x00, &t)     0x18001d690
+//    where pair = _nodes._data + node*0x38. That helper is PORTED and registered
+//    BY ADDRESS (wave9_lane_gfx.cpp:555), so the call reaches our own body, and
+//    calling it rather than re-deriving its arithmetic is the faithful spelling
+//    AND the one that keeps a single owner for it.
+//
+//  * INSTANCED — retail INLINES the interpolation twice, with
+//    Quaternion::Lerp + three SUBSS/MULSS/ADDSS triples each, so the port
+//    reproduces it through the shared RtLerpTransformPair helper rather than
+//    calling Transform::Lerp. The two spellings compute the same thing; this one
+//    is what the shipped instructions are.
+//        geomXf = lerp(this->_transform pair at +0x84 / +0xa0, t)
+//        poolXf = lerp(poolPoses + node*0x38, t)
+//    then the composition is byte for byte 0x180016a40's:
+//        ret = identity  (qword at +0x0c = 0x3f800000, everything else 0)
+//        ret.translation = geomXf.translation
+//                        + Rotate(geomXf.rotation, poolXf.translation)
+//        ret.rotation    = geomXf.rotation * poolXf.rotation
+//    `poolSlot + 0x38` is a POINTER to the pool entry's per-node pose array and
+//    the node index strides THAT, not the slot — the correction
+//    RtInstancedPoolSlot's banner paid for, reused here rather than re-derived.
+//
+// THE IDENTITY SEEDING IS REPRODUCED even though both following calls overwrite
+// everything it wrote, for the reason 0x180016a40's port gives: it is observable
+// if either call were ever to fault, and a port that computes the same bytes by a
+// different route is a different function under any interruption.
+//
+// ORACLE: FULL, through a scratch buffer. Pure read on both arms; ours writes the
+// caller's real slot, theirs writes a private 0x1c buffer, and all seven dwords
+// are compared. Never let the original write into live state.
+// ============================================================================
+extern "C" void* RtGraphics_MeshInstance_GetNodeToWorldInterp(const void* self, void* ret,
+                                                             int node, float t) {
+    RT_DIFF_BEGIN("Graphics::MeshInstance::GetNodeToWorld(int,float)");
+
+    const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(self);
+    uint8_t* out = reinterpret_cast<uint8_t*>(ret);
+
+    if (mi->_animation._instanced == 0) {
+        const uint8_t* pair = B(mi->_nodes._data) + static_cast<int64_t>(node) * 0x38;
+        const Scalar s = { t };
+        RtTransformLerp()(pair + 0x1c, ret, pair + 0x00, &s);
+    } else {
+        Transform geomXf;
+        RtLerpTransformPair(B(self) + 0x84, t, &geomXf);
+
+        const uint8_t* poses = B(Rd<void*>(RtInstancedPoolSlot(mi), 0x38));
+        Transform poolXf;
+        RtLerpTransformPair(poses + static_cast<int64_t>(node) * 0x38, t, &poolXf);
+
+        std::memset(out, 0, 0x1c);
+        const float one = 1.0f;
+        std::memcpy(out + 0x0c, &one, 4);
+
+        uint8_t rotated[16];
+        RtQuatRotate()(&geomXf.rotation, rotated, &poolXf.translation);
+        for (int i = 0; i < 3; ++i) {
+            const float v = Rd<float>(&geomXf, 0x10 + i * 4) + Rd<float>(rotated, i * 4);
+            std::memcpy(out + 0x10 + i * 4, &v, 4);
+        }
+        uint8_t q[16];
+        RtQuatMul()(&geomXf, q, &poolXf);
+        std::memcpy(out, q, 16);
+    }
+
+    if (rt_diff_on__) {
+        uint8_t scratch[0x1c];
+        std::memset(scratch, 0xcd, sizeof(scratch));
+        typedef void* (*Fn)(const void*, void*, int, float);
+        Fn f = RT_ORIGINAL_ONCE(Fn,
+            "?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z");
+        if (f) {
+            f(self, scratch, node, t);
+            RT_DIFF_BYTES(out, scratch, sizeof(scratch));
+        }
+    }
+    RT_DIFF_WORK(true);
+    return ret;
+}
+
+// ============================================================================
 // WAVE 27 LANE GFXMESH registration — by NAME and by ADDRESS, both.
 //
 // All four slots are RT_MINT_NAMED in standalone/rt_data_mint_tables.inc
@@ -2256,8 +2385,7 @@ int RtGraphicsMeshVtableRegister() {
                           (void*)&RtGraphics_EdgeMeshInstance_Update); ++n;
     RegisterRuntimeAddr(0x1800a39b0ull, (void*)&RtGraphics_EdgeMeshInstance_Update);
 
-    RegisterRuntimeExport("?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@"
-                          "Math@@HM@Z",
+    RegisterRuntimeExport("?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z",
                           (void*)&RtGraphics_EdgeMeshInstance_GetInstanceTransform); ++n;
     RegisterRuntimeAddr(0x1800a3840ull,
                         (void*)&RtGraphics_EdgeMeshInstance_GetInstanceTransform);
@@ -2266,13 +2394,45 @@ int RtGraphicsMeshVtableRegister() {
                           (void*)&RtGraphics_MeshInstance_GetSubTransform); ++n;
     RegisterRuntimeAddr(0x180101200ull, (void*)&RtGraphics_MeshInstance_GetSubTransform);
 
-    RegisterRuntimeExport("?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@"
-                          "Math@@HM@Z",
+    RegisterRuntimeExport("?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z",
                           (void*)&RtGraphics_MeshInstance_GetInstanceTransform); ++n;
     RegisterRuntimeAddr(0x180101280ull,
                         (void*)&RtGraphics_MeshInstance_GetInstanceTransform);
 
-    return n;   // 4
+    // NOT a vtable slot -- the row this lane's own
+    // ?GetInstanceTransform@EdgeMeshInstance@ opened. Registered here so the lane
+    // closes it rather than handing it on. Note the trailing `M`: this is the
+    // (int,float) overload, ordinal 2814, and the (int) overload registered by
+    // RtGraphicsMeshRegister above is a DIFFERENT function at a DIFFERENT address.
+    //
+    // *** QEBA, NOT UEBA, AND THIS LINE HAD IT WRONG FIRST. *** This overload is
+    // a PUBLIC NON-VIRTUAL const member, so `QEBA`; it is not a vtable slot and
+    // never was. The first draft of this registration wrote `UEBA` by analogy
+    // with the four slot bodies above it, which IS a name the DLL does not
+    // export -- so RegisterRuntimeExport would have registered a symbol nothing
+    // can ever ask for, leaving the body written and unreachable by name while
+    // every door in this file kept resolving the DLL's
+    // (reference_resolveexport_phantom_names.md, and the QEAA/UEAA form of the
+    // same trap in reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+    // It was NOT caught by reading the code. `tools/runtime_census.py --unported
+    // --namespace Graphics` kept listing the symbol as unported AFTER the
+    // registration was added, which is what a phantom name looks like from the
+    // outside. The spelling below is the one pefile reads out of the retail
+    // export directory at 0x180016c20, ordinal 2814.
+    //
+    // AND IT IS ON ONE LINE ON PURPOSE. runtime_census.py cannot see a mangled
+    // name split across a C++ string-literal concatenation
+    // (reference_census_three_blind_spots.md), so a registration spelled over two
+    // lines is invisible to it and reads as an ABSENT port
+    // (reference_half_registered_port_reads_as_absent.md). Every
+    // RegisterRuntimeExport this lane added is single-line for that reason, even
+    // where it overruns the column width.
+    RegisterRuntimeExport("?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z",
+                          (void*)&RtGraphics_MeshInstance_GetNodeToWorldInterp); ++n;
+    RegisterRuntimeAddr(0x180016c20ull,
+                        (void*)&RtGraphics_MeshInstance_GetNodeToWorldInterp);
+
+    return n;   // 5
 }
 
 int RtGraphicsMeshRegister() {

@@ -22,19 +22,83 @@ again on the lane tip. Both numbers are from the same tool at the same two tips.
 | `??_7MeshInstance@Graphics@@6B@` | 2 / 9 | **5 / 9** |
 
 **13 slot bodies ported. One table reaches COMPLETE. Nothing is promoted.**
+Plus a 14th body outside the tables, below — **14 bodies in total.**
 
 The pre-edit run reproduced the brief's three figures exactly, so the brief's
 counts were not stale — stated because "re-derive, do not trust" was the
 instruction and a re-derivation that *agrees* still has to be reported as having
 happened (`reference_a_matching_number_can_match_because_it_is_stale.md`).
 
-**COST, stated beside the gain rather than under it.** Census `called` went
-**1372 → 1373** and the BODY gap **18 → 19**. That is one symbol, and it is
-named in §6: `?GetNodeToWorld@MeshInstance@Graphics@@UEBA?AVTransform@Math@@HM@Z`,
-newly `called` by a body this lane ported. TOTAL % therefore reads 90.2% → 90.1%.
-The percentage went DOWN while thirteen bodies were added, which is the
-`reference_the_ceiling_percentage_is_a_moving_target.md` effect in its plainest
-form: `called` is in both halves of the ratio.
+### The fourteenth body, and why it is here
+
+`?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z`
+(0x180016c20, ordinal 2814) is **not** a vtable slot of any of the three tables,
+so it is strictly out of scope. It is ported because
+`?GetInstanceTransform@EdgeMeshInstance@` **calls** it, and porting that body made
+this address newly `called`. **A lane that opens a row and hands it on has moved
+work, not done it** — so this closes the one row this lane opened.
+
+### THE TOTALS — measured, with the part I could NOT reconcile said plainly
+
+| | `wave27/base` | lane tip |
+|---|---|---|
+| called | 1372 | **1377** |
+| ported | 1237 | **1238** |
+| gap | 135 | **139** |
+| BODY rows in the gap | 18 | **18** |
+| TOTAL % | 90.2% | **89.9%** |
+
+**The percentage went DOWN while fourteen bodies were added.** That is
+`reference_the_ceiling_percentage_is_a_moving_target.md` in its plainest form:
+`called` is in both halves of the ratio, and thirteen of the fourteen bodies land
+in the **PROMOTION BACKLOG**, a population the census states explicitly is *"NOT
+counted above"*. **Score this lane on the three table rows, never on the TOTAL.**
+
+Of the **+5** in `called` I can positively attribute **three**: the
+`EdgeMesh::Serialize` helpers in §6, which appear both in
+`runtime_census.py --unported` as `addr internal` rows and in this lane's diff —
+`0x180014230`, `0x180014520`, `0x180014850`. A fourth is `0x180016c20`, which is
++1 `called` and +1 `ported` and therefore net zero on the gap.
+
+**I did not reconcile the remaining ~1 row, and I am not going to guess at it.**
+Saying so is the point: a decomposition that closes by assertion is the defect
+`reference_a_matching_number_can_match_because_it_is_stale.md` describes. The
+figures above are what the tool printed at the two tips, nothing more.
+
+> **[ADDRESSEE — the ~1 unreconciled `called` row]** the Wave 28 kickoff writer,
+> if the figure still matters then. The re-derivation is
+> `tools/runtime_census.py --unported` at `wave27/base` and at this tip, diffed
+> as SETS rather than compared as counts
+> (`reference_diff_the_set_not_the_count.md` — this lane deliberately does not
+> pretend to have done that).
+
+### A DEFECT IN THIS LANE'S OWN WORK, CAUGHT BY THE CENSUS AND NOT BY READING
+
+The first draft registered the fourteenth body as
+`?GetNodeToWorld@MeshInstance@Graphics@@`**`UEBA`**`?AVTransform@Math@@HM@Z`, by
+analogy with the four virtual slot bodies beside it. **That overload is a public
+NON-VIRTUAL const member: `QEBA`.** `UEBA` is a name the retail DLL does not
+export, so `RegisterRuntimeExport` would have registered a symbol nothing can ever
+ask for — the body written and unreachable by name, while every door in the file
+went on resolving the DLL's copy
+(`reference_resolveexport_phantom_names.md`, and the `QEAA`/`UEAA` form of the
+same trap in `reference_phantom_dtor_mangling_qeaa_vs_ueaa.md`).
+
+**Reading the code did not catch it. The tool did**, in a specific and reusable
+way: `runtime_census.py --unported --namespace Graphics` kept listing the symbol
+as *unported* **after** the registration had been added. That is what a phantom
+name looks like from the outside, and it is worth keeping as a detector:
+**a registration that does not move the census is a registration of a name that
+does not exist.** With the spelling corrected, `ported` moved 1237 → 1238 and the
+BODY gap 19 → 18.
+
+A second, independent half of the same fix: every `RegisterRuntimeExport` this
+lane added is now spelled **on one line**, because `runtime_census.py` cannot see
+a mangled name split across a C++ string-literal concatenation
+(`reference_census_three_blind_spots.md`), and a registration it cannot see reads
+as an absent port
+(`reference_half_registered_port_reads_as_absent.md`). Four of this lane's
+registrations had been split for column width.
 
 ---
 
@@ -44,6 +108,10 @@ form: `called` is in both halves of the ratio.
 
 - The three census rows above, before and after, same tool, same tips.
 - `mingw32-make standalone-debug` exits 0 on the lane tip.
+- `tools/addr_door_audit.py` reports UNREGISTERED **21 → 25** and a new
+  concentration of **4 in `runtime/src/graphics/edgemesh_vtable.cpp`**. That rise
+  is the audit becoming ABLE TO SEE, not doors being added — see §8.2, and note
+  that ONE of the four is not this lane's at all.
 - Every one of the 21 addresses in scope, plus every `~Class` and every helper,
   resolved in the RETAIL export directory **by VA** with `pefile` against
   `C:\GOG Games\Banished\Runtime-x64.dll` — not by name pattern, not through
@@ -117,6 +185,7 @@ form: `called` is in both halves of the ratio.
 | 4 | `?UpdateAttached@Geometry@` | 0x1800a4020 | already ported (scene.cpp) |
 | 5 | `?GetSubTransform@MeshInstance@` | 0x180101200 | **ported** |
 | 6 | `?GetInstanceTransform@MeshInstance@` | 0x180101280 | **ported** |
+| — | `?GetNodeToWorld@MeshInstance@…HM@Z` 0x180016c20 | *not a slot* | **ported** — closes the row this lane opened |
 | 7 | `?SetSharedInstanceData@MeshInstance@` | 0x180101660 | **BLOCKED** (§7) |
 | 8 | `?Clean@Geometry@` | 0x1800a4420 | already ported (scene.cpp) |
 
@@ -278,7 +347,7 @@ census has to rediscover them. **None is claimed as ported by this lane.**
 
 | symbol / address | reached from | door |
 |---|---|---|
-| `?GetNodeToWorld@MeshInstance@Graphics@@UEBA?AVTransform@Math@@HM@Z` 0x180016c20 ord 2814 | `EdgeMeshInstance::GetInstanceTransform` | NAME |
+| ~~`?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z` 0x180016c20 ord 2814~~ | `EdgeMeshInstance::GetInstanceTransform` | **CLOSED — ported by this lane** |
 | `??1EdgeMesh@Graphics@@UEAA@XZ` 0x1800a2780 ord 580 | `deleting_dtor.cpp` row 44 | ADDRESS |
 | `??1EdgeMeshInstance@Graphics@@UEAA@XZ` 0x1800174d0 ord 581 | `deleting_dtor.cpp` row 45 | ADDRESS |
 | (unexported) 0x180014230 `SerializeExternalPtr<Base>` | `EdgeMesh::Serialize` | ADDRESS |
@@ -296,11 +365,35 @@ overload is not. Exactly the pair
 `reference_resolveexport_phantom_names.md` warns about, so the VA was confirmed
 against the export directory rather than the name being assumed to exist.
 
-> **[ADDRESSEE — closing 0x180016c20]** the next lane scoped to Graphics bodies.
-> It is the ONE row this lane opened that can be closed by ordinary port work,
-> it is the `(int,float)` sibling of a body already in `mesh.cpp`, and it reuses
-> that file's `RtInstancedPoolSlot` helper. It is also the reason the census's
-> BODY gap reads 19 instead of 18.
+**0x180016c20 IS CLOSED — this lane ported it** rather than handing it on, and
+that is why the BODY gap reads 18 at the tip instead of 19. Instruction for
+instruction it is the already-ported `(int)` overload with every pose read
+replaced by a LERP of a Transform pair by `t`: same two arms, same `_instanced`
+byte, same pool indirection, same identity seeding, same two-call composition. It
+reuses `RtInstancedPoolSlot`, so the MOVSXD / SAR / second-deref corrections
+`WAVE6_LANE_E.md` §6.7-6.8 paid for keep exactly one owner. Its whole constant set
+was confirmed with `objdump` against the retail file (§8.5): the
+`cmpb $0x0,0xd8(%rcx)` instanced test, `movslq %r8d,%rsi`, both
+`call 0x18001d500`, the `movslq 0xe8(%rdi)` / `imul $0x38` /
+`movslq -0x2c(%rcx,%rax,1)` pool-id chain, `add 0x38(%rax,%rdx,8),%r8`,
+`movq $0x3f800000,0xc(%rbx)`, `call 0x18001e140`, `call 0x18001e280`, and the
+simple arm's `add 0xf0(%rcx),%r8` then `call 0x18001d690`.
+
+**The five other rows in the table above are NOT closed.**
+
+> **[ADDRESSEE — the three unexported `EdgeMesh::Serialize` helpers
+> 0x180014230, 0x180014520, 0x180014850]** the lane that next ports
+> `Object::ExternalPtr` serialization, or the cutover lane that finds them in the
+> `[RtRawResidue]` list — whichever comes first. They are template instantiations
+> with no export entry, so they need address doors. The first two are the SAME
+> body differing only in the `?_typeInfo@` they type-check against
+> (`GraphicsMesh` 0x1801fa708 vs `MaterialInstance` 0x1801fa778), which is why
+> retail emits two and why they must not be collapsed into one.
+
+> **[ADDRESSEE — `??1EdgeMesh@` 0x1800a2780 and `??1EdgeMeshInstance@`
+> 0x1800174d0]** the next lane scoped to Graphics destructors. Both are exported
+> (`UEAA`, ordinals 580 and 581), so both are plain NAME ports, and both are
+> reached today only by this lane's two deleting-destructor rows.
 
 ---
 
@@ -435,10 +528,29 @@ DLL internals that SHOULD appear in the UNREGISTERED list** — did not appear
 anywhere in the audit's output.
 
 **Not fixed in the tool. Worked around in the source**: the file now spells the
-literal at each `ResolveAddr` call, one accessor per helper, with a comment
-saying why that is not a style choice. This is the fifth recorded instance of
-`reference_literal_grep_blind_to_variables.md`, and note that the same blindness
-covers `mesh.cpp`'s long-standing `RtAddr<Fn>(0x…)` house style.
+literal at each `ResolveAddr` call, one accessor per helper, with a comment saying
+why that is not a style choice. This is the fifth recorded instance of
+`reference_literal_grep_blind_to_variables.md`.
+
+**AND THE RESPELLING FOUND SOMETHING THAT WAS NOT THIS LANE'S.** After it, the
+audit reports UNREGISTERED 21 → 25 and names
+`runtime/src/graphics/edgemesh_vtable.cpp` with **four**. Three are this lane's
+genuinely-unported `EdgeMesh::Serialize` helpers and belong there. **The fourth is
+`0x1800136f0`, `Array<GraphicsMesh::TriangleList>::SetSize` — an unregistered
+by-address door that `mesh.cpp:201` has held since WAVE 6**, spelled
+`RtAddr<ArrayResizeFn>(0x1800136f0)` through that file's own wrapper template and
+therefore invisible to this audit for the entire time it has existed. Nothing was
+wrong with the door; what was wrong is that no audit could count it, which is the
+whole hazard the reference describes. It surfaced only because a second file
+reached the same address through the spelling the tool can read.
+
+> **[ADDRESSEE — `mesh.cpp`'s wrapper-hidden address doors]** whoever scopes a
+> Wave 28 instruments lane, alongside §8.1. `mesh.cpp` reaches at least seven
+> `Collection::Array` instantiations through `RtAddr<Fn>(literal)`
+> (`mesh.cpp:183-201`) and every one of them is invisible to
+> `addr_door_audit.py`. The cheap half is respelling them; the half that matters
+> is deciding whether the audit should learn to follow a one-line wrapper, because
+> this house style is not unique to `mesh.cpp`.
 
 ### 8.3 `get_function_metrics` ignores `address=`
 
