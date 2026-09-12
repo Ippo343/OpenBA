@@ -29,6 +29,14 @@ extern int RtAudioStreamRegister();         // audio_stream_win.cpp (Wave 24)
 // own switch: address doors only (nothing here is exported) and it needs
 // <windows.h> for SetEvent, which audio.cpp must stay free of.
 extern int RtAudioVoiceCallbackRegister();  // audio_voice_callback_win.cpp
+// WAVE 29 lane AVBODY: Scene::GetAttenuatedVolume + Scene::OnSoundEnded (two of
+// Audio's three remaining BODY rows), plus Scene::GetVolumeForPosition -- which
+// was NOT on the work list. It is the helper GetAttenuatedVolume calls twice,
+// and it is EXPORTED (ord 3027): `AEBA` means PRIVATE, not unexported. Porting
+// it by name rather than inlining it keeps this lane's address-door count at
+// ZERO. Own switch so the three can be bisected out together.
+extern int RtAudioWave29AvbodyRegister();   // wave29_lane_avbody.cpp
+extern int RtAudioWave29AvbodySweep();      // wave29_lane_avbody.cpp
 
 void RtAudioPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_AUDIO")) {
@@ -45,6 +53,17 @@ void RtAudioPortInit() {
     // synchronisation and audio.cpp must stay free of <windows.h>.
     n += RtAudioStreamRegister();
     n += RtAudioVoiceCallbackRegister();
+    // Wave 29 lane AVBODY. The sweep needs no allocator, no gameplay route and
+    // no caller: two of the three bodies are PURE (the `this` they are handed is
+    // never read), and the third is fully synthesisable. It compares against the
+    // SHIPPED export through ResolveExportRaw, so it is a real oracle rather
+    // than a self-check. Opt-in because it is a verification step, not boot work.
+    if (RtWaveEnabled("BANISHED_RT_AVBODY29")) {
+        n += RtAudioWave29AvbodyRegister();
+        const char* sw = std::getenv("BANISHED_RT_AVBODY29_SWEEP");
+        if (sw && *sw && std::strcmp(sw, "0") != 0)
+            RtAudioWave29AvbodySweep();
+    }
     // The denominator was a hardcoded 22 -- Wave 8's own scope -- and Wave 9
     // lane W adding Scene::FindFree3DEffect made "20/22" arithmetic that no
     // longer resolves against the three-held-back / one-phantom / one-data

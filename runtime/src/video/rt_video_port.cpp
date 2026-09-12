@@ -124,6 +124,25 @@ void RtVideoPortInit() {
         if (bp && *bp && std::strcmp(bp, "0") != 0)
             RtVideoContextBindProbe();
     }
+    // WAVE 29 lane AVBODY: ?GetConstantName@ShaderProgram@Video@@ and
+    // ?GetTextureName@ShaderProgram@Video@@ -- Video's ENTIRE remaining body
+    // surface (re-derived: the other 18 unported Video rows are 12 NO-OP
+    // vtables + 6 HARMFUL data slots, all tagged UNPROMOTABLE). Both return
+    // System::String BY VALUE, i.e. through a hidden RDX slot.
+    //
+    // The sweep needs no allocator and no gameplay route: both bodies are pure
+    // apart from a refcount INC, so it synthesises its own ShaderProgram and
+    // String blocks and compares against the SHIPPED export via
+    // ResolveExportRaw. It is safe to run right here, like lane CTX's.
+    if (RtWaveEnabled("BANISHED_RT_VIDSHADERNAME")) {
+        extern int RtVideoShaderProgramNamesRegister();
+        n += RtVideoShaderProgramNamesRegister();
+        const char* sp = std::getenv("BANISHED_RT_SHADERNAME_SWEEP");
+        if (sp && *sp && std::strcmp(sp, "0") != 0) {
+            extern int RtVideoShaderProgramNamesSweep();
+            RtVideoShaderProgramNamesSweep();
+        }
+    }
     if (RtWaveEnabled("BANISHED_RT_VIDCTXLIFE")) {
         n += RtVideoContextLifecycleRegister();
         const char* probe = std::getenv("BANISHED_RT_CTXCLEAR_PROBE");
