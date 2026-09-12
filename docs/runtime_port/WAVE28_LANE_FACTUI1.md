@@ -133,7 +133,7 @@ direction: there is **no** class here whose `CreateNewObject` is concrete while
 its `CreateInPlaceObject` is a stub — that is one of the three assertions in
 §3.2, and it held for all 27 concrete classes.
 
-FACTREST reports 20 of 70 slots (10 of 34 classes, 29%) abstract. The two
+FACTREST's final figure is 12 classes abstract in both slots (24 slots of 70). The two
 readings agree on the shape and disagree on the rate, which is what one would
 expect: the UI slice is weighted towards leaf widgets and the non-UI slice
 towards base classes.
@@ -331,7 +331,8 @@ expected disagreement as a defect
 (`reference_oracle_must_not_compare_unwritten_bytes.md`, one step over). It is
 **not** scored on bytes retail leaves alone.
 
-**It reaches 13 of 31 classes, and the exclusions are principled, not
+**It reaches 12 of 31 classes (MEASURED live, §7.3 — the estimate written here
+first was 13 and was wrong by one), and the exclusions are principled, not
 convenient.** The 14 Element-derived classes plus DialogInstance and ComboDialog
 are excluded because their base constructor chain ends in
 `??0Internal@Object@@`, which **registers a handle in
@@ -473,6 +474,41 @@ poisons on the two sides is what lets the screen also catch a **dropped** store
 and an **extra** store, not only a wrong value. No store value in the 27 tables
 contains an 0xA5 or 0x5A byte, so a real write can never read as untouched.
 
+**THE VPTR IS COMPARED, AND THAT IS NOW WITNESSED RATHER THAN ASSUMED.**
+Lane FACTREST adapted this harness to its own tables and its first run scored
+**0/11, "3 bytes differ, first +0x00" on every class** — maximally consistent,
+and it reads exactly like a catastrophic port. **It was the instrument:** its
+copy dereferenced the `??_7` export, and a `??_7` export's ADDRESS *is* the
+vtable, so the deref yields `vtable[0]`, the first virtual function, instead of
+the vptr. FACTREST's port was right throughout.
+
+That line was inherited from this file, so FACTREST correctly asked whether the
+same defect was inflating **this lane's** 26/26 rather than assuming it benign
+here because it was benign to fix there. The answer, checked rather than
+argued:
+
+* the helper carrying the deref (`VT()`) exists in this copy but **is never
+  called** — dead code, now deleted with a comment in its place;
+* the live `SK_VTABLE` branch has always used `Sym(s.sym)` directly, i.e. the
+  address, which is what the port does and what retail's
+  `lea rax,[rip+X] ; mov rax,(rcx)` does;
+* and a **vptr witness** was added to print ours-vs-theirs at +0x00:
+
+```
+[vptr witness] AnimatedImageDescription ours=00007fff54976060 theirs=…6060  AGREE
+[vptr witness] AnimatedImageElement     ours=00007fff54976000 theirs=…6000  AGREE
+[vptr witness] BorderDescription        ours=00007fff54976980 theirs=…6980  AGREE
+```
+
+Those are `.rdata` addresses, not code addresses — which is the second half of
+the check, because a screen where BOTH sides dereferenced would also have
+reported AGREE while comparing the wrong thing.
+
+**The finding FACTREST names is the one worth carrying: a uniform,
+maximally-consistent failure is evidence about the INSTRUMENT at least as often
+as about the subject.** The very consistency that makes it look systematic is
+the tell.
+
 **Excluded, with the reason:** `Object::Internal`'s handle id at +0x08..+0x0f of
 every Element-derived object. `??0Internal@Object@@` draws it from
 `?Rand@Random@System@@` and the factory hands the second caller a DIFFERENT one
@@ -562,9 +598,40 @@ total** that must be >= the first, which is a chunk size. Passing byte counts
 makes it return false silently and the next allocation dies. Read at
 0x1800c7626 and 0x1800c76a5.
 
-### 7.3 THE IN-TREE CONTROL AND THE LIVE BOOT
+### 7.3 THE LIVE BOOT AND THE IN-TREE CONTROL — MEASURED
 
-*(see §7.4)*
+Run under `tools/game_dir_lock.sh run lane-factui1` (deployed exe md5 verified
+identical to the built one), `BANISHED_AUTOQUIT=1 BANISHED_RT_UIFACT1=2`:
+
+```
+exe exit = 0        standalone_crash.log EMPTY        BootState RUNNING
+
+[RtPort] UI FACTUI1: 74 rows registered across 31 classes
+[RtPort] UI FACTUI1 CONTROL: fired 12 of 12 reachable classes
+         (19 of 31 excluded: abstract, or an Element/Internal base ctor that
+          would register a handle to the scratch buffer)
+[RtPort] UI FACTUI1 ATTENDANCE: CreateNewObject=0 CreateInPlaceObject=12
+         ctor=12 (control fired 12 of 12)
+[RtPort] UI FACTUI1 VERDICT: the ONLY entries were the control's own. Nothing
+         in this run reached these ports through a door -- EXPECTED with the DLL
+         present (Wave 11 lane OBJINT), and NOT evidence any body is correct.
+         THESE ZEROS MEASURE NOTHING.
+```
+
+**Four things this settles, and one it does not.**
+
+Settled: (a) 74 registrations do not break boot; (b) the count is **74**, printed
+by the process rather than counted from source; (c) the control fires on
+**12 of 12** reachable classes — the estimate in §5 said 13 and was wrong by one,
+which is why the measured number replaced it; (d) **the report actually prints.**
+That last one matters because a sibling lane measured that every lane's
+`*Summary()` is written and nothing calls it. Mine hangs off a static
+destructor, which is *weaker* than a call site — it would not run on a killed
+process. It ran here, so this lane's counters are not structurally invisible.
+That was **checked, not inherited from `stringtable_factory.cpp`'s precedent.**
+
+Not settled: anything about cutover. `CreateNewObject=0` is the expected
+attendance and the port says so itself.
 
 ---
 
@@ -573,16 +640,19 @@ makes it return false silently and the next allocation dies. Read at
 In that word, per WAVE28_KICKOFF.md §4:
 
 * **Every one of the 60 factory slots and 14 constructors is UNVERIFIED as
-  cutover behaviour.** No cutover boot was run. The registrations are present;
-  whether the mint consumes them is inferred from the mechanism and from lane
+  cutover behaviour.** No cutover boot was run. The registrations are present
+  and were confirmed to REGISTER in a live boot (§7.3); whether the mint
+  CONSUMES them at cutover is inferred from the mechanism and from lane
   FACTORY's precedent, not measured here.
-* **The 18 classes the control cannot reach are UNVERIFIED even as
-  transcription** — the 14 Element-derived, DialogInstance, ComboDialog, and the
-  4 abstract (trivially, they write nothing). Their store tables were produced by
-  the same asserting interpreter as the 13 that ARE checked, and the interpreter
-  itself is corroborated on `??0Element@UI@@` against a separately written port
-  (§3.3), but **no instrument executed those 18 bodies and looked at the
-  result.**
+* The in-tree control reaches only 12 of 31 classes, but **that gap is closed by
+  the offline oracle, which reaches all 31** (§7.2) — so no class in this slice
+  is UNVERIFIED as transcription. This bullet previously claimed 18 classes were,
+  and it was written before pass 3 existed; it is corrected rather than deleted
+  because the correction is the point.
+* **The ALLOCATOR ITSELF is UNVERIFIED under the port.** Pass 3 exercises
+  `?MemAlloc@` as the shipped DLL implements it. With `BANISHED_RT_ALLOC=1` that
+  address resolves to our own allocator instead, and nothing here has run that
+  combination.
 * **No gameplay route exercises any of these bodies with the DLL present**, by
   construction (§0). "No route" is not "no oracle"
   (`reference_no_route_is_not_no_oracle.md`) and a synthesised oracle for the 18
@@ -592,16 +662,16 @@ In that word, per WAVE28_KICKOFF.md §4:
 
 ## 9. RESIDUALS, EACH WITH AN ADDRESSEE
 
-1. **The 18 control-excluded classes need a synthesised oracle.**
-   The blocker is concrete and small: `??0Internal@Object@@` registers a handle
-   into `?_singleton@InternalFactory@Object@@` pointing at the subject. An oracle
-   that constructs into a heap buffer and then runs the DLL's matching
-   destructor — the pattern `element.cpp`'s own build oracle already uses for
-   exactly this reason — would unregister it and make all 18 reachable.
-   **Addressee: WAVE 29, whichever lane pays the verification debt
-   WAVE28_KICKOFF.md §4 says this wave defers and grows.** If Wave 29 has no
-   such lane, the addressee is the FACTUI2 lane of any later factory wave, since
-   it inherits the identical problem for its own Element-derived classes.
+1. **CLOSED DURING THE LANE, recorded because the closing is the useful part.**
+   This slot originally read "the 18 control-excluded classes need a synthesised
+   oracle" and named Wave 29 as the addressee. The blocker — that
+   `??0Internal@Object@@` registers a handle pointing at the subject buffer —
+   was real for an IN-PROCESS control and evaporated for a SEPARATE, short-lived
+   probe process, where the dangling entry is never read. **A blocker stated
+   against one execution context is not a blocker in another**, and the habit of
+   re-checking a stated blocker before deferring it
+   (`reference_holdback_blockers_are_stale_check_them_first.md`) is what turned
+   19 UNVERIFIED classes into 31 verified ones. **No residual remains here.**
 
 2. **Two vtable symbols outside this lane's slice are READ by its store tables:
    `??_7ImageDescription@UI@@6B@` and `??_7ImageElement@UI@@6B@`** — dead

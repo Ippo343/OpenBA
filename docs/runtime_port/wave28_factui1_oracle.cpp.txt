@@ -49,7 +49,15 @@ static const int kSpecCount = (int)(sizeof(kSpecs)/sizeof(kSpecs[0]));
 static HMODULE g_dll;
 static void* Sym(const char* n) { return (void*)GetProcAddress(g_dll, n); }
 
-static void* VT(const char* n) { return *(void**)Sym(n); }   // ??_7 export IS the slot
+// NOTE (raised by lane FACTREST, Wave 28): there is deliberately NO
+// `*(void**)Sym(n)` helper here. A ??_7 export's ADDRESS *is* the vtable, so
+// dereferencing it yields vtable[0] -- the first virtual function -- not the
+// vptr. The SK_VTABLE branch below stores Sym() DIRECTLY, which is what the
+// port does and what retail's `lea rax,[rip+X] ; mov rax,(rcx)` does.
+// FACTREST's adapted copy carried the deref and scored 0/11 with
+// "3 bytes differ, first +0x00" on every class: maximally consistent, and it
+// reads exactly like a catastrophic port rather than an instrument fault.
+// The vptr witness below exists so that this is CHECKED, not asserted.
 
 typedef void* (*CtorFn)(void*);
 
@@ -105,7 +113,7 @@ int main(int argc, char** argv) {
                               (int)ok, *ifSlot); }
     }
 
-    int checked = 0, pass = 0, skipped = 0;
+    int checked = 0, pass = 0, skipped = 0, vptrWitness = 0;
     for (int i = 0; i < kSpecCount; ++i) {
         Spec sp = kSpecs[i];
         if (sp.size == 0) { ++skipped; continue; }          // abstract
@@ -166,6 +174,16 @@ int main(int argc, char** argv) {
             if (ourW != theirW || a[o] != b[o]) {
                 ++bad; if (firstBad < 0) firstBad = (int)o;
             }
+        }
+        // VPTR WITNESS: prove the screen can SEE +0x00 rather than assume it.
+        // A green screen blind to the vptr would pass a port that stamps the
+        // wrong table, which is the most consequential single field here.
+        if (!neg && vptrWitness < 3) {
+            ++vptrWitness;
+            unsigned long long ov, tv;
+            memcpy(&ov, a, 8); memcpy(&tv, b, 8);
+            printf("   [vptr witness] %-22s ours=%016llx theirs=%016llx  %s\n",
+                   sp.cls, ov, tv, ov == tv ? "AGREE" : "*** DIFFER ***");
         }
         if (bad == 0) { ++pass; printf("%-24s OK   (0x%llx bytes)\n", sp.cls,
                                        (unsigned long long)sp.size); }
