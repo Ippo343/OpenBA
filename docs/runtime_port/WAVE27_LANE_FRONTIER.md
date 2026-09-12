@@ -400,18 +400,20 @@ landed.
 point, since all-zero elements are the one seed under which a refcount bug is
 invisible.
 
-### 6.3 Attendance is unmeasured for everything this lane registered
+### 6.3 Attendance: MEASURED for item 1, ZERO for item 2
 
-`ArraySetSize` in `external_load.cpp` is a live path (resource loading), so
-`0x18002c6a0` should have real attendance — but this lane's smoke run is a
-functional check, not an attendance measurement, and the `RtDiff` sites are off
-unless `BANISHED_RT_DIFF` is armed. Slot 0 and `Serialize` are expected to read
-**zero** with the DLL present, for the reason FACTORY's banner gives (the DLL
-reaches its own vtable by in-module RIP-relative stamp, which is not a door) —
-and a zero there must not be read as "dead".
+See §7.2 for the numbers. Item 1's rows are **live and busy** — the wall address
+ran 2,848 times in one in-game run. Item 2's rows have attendance **zero**, which
+is the EXPECTED reading with the DLL present, for the reason FACTORY's banner
+gives (the DLL reaches its own StringTable vtable by an in-module RIP-relative
+stamp, which is not a door — `reference_a_ported_row_can_be_permanently_
+unpromotable.md`). **A zero there must not be read as "dead".**
 
-**ADDRESSEE: the integrator, at cutover attempt 30.** The counters and the
-`[RtPort] UI::StringTable slot ATTENDANCE` line exist so that run can answer it.
+What remains unmeasured is whether item 2's bodies are CORRECT; nothing in this
+run entered them. **ADDRESSEE: the integrator, at cutover attempt 30**, where the
+DLL is absent and the minted vtable is the only one. The `[RtPort] UI::StringTable
+slot ATTENDANCE` line exists so that run can answer it, and it prints a named
+warning if the `0x18007ec98` vector arm turns out to be live.
 
 ### 6.4 The `0x18007ec98` door — see §3.3, addressee named there.
 
@@ -429,6 +431,50 @@ tools/game_dir_lock.sh assert-held     verified, deployed exe == this build
 Deploy, re-assert, then launch — that is the sequence, and the refusal is the
 tool working.
 
+### 7.1 A trap walked into and caught BEFORE it produced a number
+
+The first RtDiff run was launched with `BANISHED_AUTOQUIT=900`, intending "quit
+after 900 frames". **`BANISHED_AUTOQUIT` drives menu -> Quit INSTEAD OF menu ->
+New Game** (`standalone/autostart.cpp:124`), so that run exited 0, with an empty
+crash log, having never built a world — the exact shape
+`reference_autoquit_overrides_autostart_newgame.md` describes: *it looks
+healthy*. It was caught by reading the flag's implementation rather than its
+name, and it produced no figure. The working incantation is
+`BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=900 BANISHED_PAUSEMENU_QUIT=120
+BANISHED_PAUSEMENU_BUTTON=6`.
+
+### 7.2 LIVE ATTENDANCE — measured, and read for what it does NOT say
+
+One in-game run, `BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1` plus the pause-menu
+self-quit above. Crash log **0 bytes**. From `standalone_error.log`:
+
+```
+[ResLoad] census: FindOrLoad=14371 External::Load=2838
+
+[RtDiff] Collection::Array::SetSize @0x18002c6a0   calls=2848  divergences=0
+[RtDiff] Collection::Array elem-destroy(String) @0x180006ac0  calls=791  divergences=0
+```
+
+So **the attempt-29 wall address is not merely registered — it runs, 2,848 times,
+on the ordinary resource-loading path**, and it tracks `External::Load`'s own
+2,838 entries. The element destroy fired 791 times, which means the realloc and
+shrink arms are genuinely exercised and not just the fresh-grow case.
+
+**WHAT `divergences=0` DOES NOT MEAN HERE, stated because the number is
+inviting.** `SetSizeCore` has two live checks. The strong one — memcmp the copied
+prefix against the old buffer — is gated on `spec->byteCopy`, and this spec sets
+`byteCopy = false` **correctly**, because its assign is a CALL, not a byte copy.
+So that check did not run. What ran is the header-algebra check, which restates
+the rule this function implements and is documented in the source as *"WEAK BY
+CONSTRUCTION"*. `divergences=0` therefore says: **the address was reached 2,848
+times and `_size`/`_capacity` came out as the rule says.** It says **nothing**
+about the refcount arithmetic — which is precisely the defect class
+WAVE26_CLOSED.md §6 item 1 predicted no byte oracle on `SetSize` would catch.
+That hole is §6.2, and it is still open.
+
+No `[RtDiff]` row appeared for `0x180078c90`, `0x180005570`, `0x180004a90`, slot 0
+or `Serialize`. Absence of a row means the body was never entered — see §6.3.
+
 ---
 
 ## 8. WILL ATTEMPT 30 CLEAR THIS WALL?
@@ -436,8 +482,10 @@ tool working.
 **It will clear `ArraySetSize+0x4d`. It will almost certainly report a new
 name.** Stated as a prediction, with its reasoning, so it can be scored:
 
-* The wall itself is gone in the only sense a cutover gate measures: the address
-  now resolves to a registered body, and so do both of its callees.
+* The wall itself is gone in a stronger sense than a cutover gate measures: the
+  address does not merely resolve, it **executed 2,848 times with the DLL
+  present** (§7.2), so the body is reachable through the real door and does not
+  fault.
 * `Object::External::Load` is a **full deserialisation driver** whose own banner
   lists nine steps, and attempt 29 died at step 7. Steps 8 and 9 — the object's
   own `Serialize` at vtable `+0x28`, and the three-level inlined destructor
