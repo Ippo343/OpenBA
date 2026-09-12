@@ -17,7 +17,7 @@ happen, and **nothing detects it**. Deflating entries are the dangerous ones.
 |---|---|---|---|---|
 | 1 | GhidraMCP program selection | **WRONG SOURCE** | FRONTIER | open |
 | 2 | `list_segments` section bounds | **WRONG SOURCE** | FRONTIER | open |
-| 3 | `rt_deleting_dtor_verify.py` scalar-branch check | INFLATING | GFXMESH | open, corrected in-source |
+| 3 | `rt_deleting_dtor_verify.py` scalar-branch check | INFLATING | GFXMESH **+ GFXPART, independently** | open, corrected in-source twice |
 | 4 | **`disassemble_function` serves the WRONG FUNCTION** | **WRONG SUBJECT** | GFXBIG | open, workaround in force |
 | 5 | `runtime_census.py --csv` column name | cosmetic | GFXBIG | open |
 
@@ -80,7 +80,32 @@ hand-verified instruction by instruction.
 **Already handled the right way:** GFXMESH wrote the correction *beside the rows*
 in `deleting_dtor.cpp`, so the integrator meets it before meeting the tool's
 verdict. That is KICKOFF §4 #9 (put a correction on the surface the next person
-will REACH) applied without being asked.
+will REACH) applied without being asked. GFXPART did the same for its row,
+naming the exact message the tool prints.
+
+### 3a. THE INTEGRATOR-ONLY FINDING: TWO lanes hit that bare `else` with DIFFERENT shapes
+
+Neither lane could see this, and it is the whole reason this ledger is kept
+during the wave rather than assembled at merge time.
+
+- **GFXMESH**, on `Graphics::EdgeMeshInstance` and `Graphics::MeshInstance`: the
+  scalar branch inlines a `~Class` **whose own body has no restamp at all**.
+- **GFXPART**, on `Graphics::Light`: the scalar branch is **devirtualised to
+  `~Geometry`** — a different mechanism entirely.
+
+Both lanes described their own finding as "a **third** shape". **They are a third
+and a fourth**, and each lane, reasoning correctly from what it could see,
+under-reported the defect's size by one. So the tool does not have one missing
+arm; its shape enumeration is **open-ended**, and two of the four known shapes
+were discovered on the same afternoon by lanes that never spoke.
+
+**Consequence for the Wave 28 fix: do NOT fix this by adding a third arm.** The
+evidence says a closed enumeration is the wrong model for that check. Either the
+check verifies the *property* (does the scalar branch destroy the object exactly
+once) rather than matching shapes, or it reports UNRECOGNISED SHAPE instead of
+`BAD` — the direction distinction this ledger opens with. As written, its bare
+`else` converts "I have never seen this" into "this is wrong", which is the
+`reference_a_screen_that_cannot_name_its_subject.md` family again.
 
 ---
 
@@ -149,6 +174,13 @@ answers a question about a SUBJECT it has not verified is the subject you named*
 — wrong program (#1), wrong section bounds (#2), wrong function (#4). That is the
 project's existing finding `reference_a_screen_that_cannot_name_its_subject.md`,
 now with a third instance and a new severity: #4 produces no anomaly at all.
+
+**Independently corroborated by GFXPART**, which ran the #1 discriminator on both
+call paths and then re-confirmed **all ten** of its load-bearing regions with
+`objdump` against the retail file — no discrepancy. Its own conclusion, reached
+without seeing this ledger: *"two of three defects are in `disassemble_function`
+and neither is visible in its output — tell decompilation lanes to use objdump as
+the primary witness."* That is the rule below, arrived at from the other end.
 
 CLAUDE.md says Ghidra is the project's primary DOCUMENTATION tool. It is not a
 reliable oracle for addresses, extents or bodies. **The operating rule for the
