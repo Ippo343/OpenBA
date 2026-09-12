@@ -367,8 +367,27 @@ void RunFileStreamLayoutProbe() {
         // TWO vtables in one object, at two different offsets, each stamped by
         // its own constructor. If +0x68 were wrong, the inner stamp would land
         // somewhere else and this pair could not both hold.
-        const void* vtOuter = RT_DATA_SLOT(const void*, "??_7CompressedFileStream@IO@@6B@");
-        const void* vtInner = RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");
+        // THE TABLE THIS MUST COMPARE AGAINST IS THE DLL'S, NOT THE REGISTRY'S.
+        // WAVE 26 lane PROMOIO. RunCtorScreen builds the object with
+        // RtResolveExportForProbe -> ResolveExportRaw, i.e. RETAIL's constructor,
+        // which stamps retail's table by an absolute LEA. `RT_DATA_SLOT` goes
+        // through ResolveExport, which consults the PORT REGISTRY FIRST, so the
+        // moment a `??_7` row is PROMOTED it hands back OUR minted table and the
+        // two sides can no longer be equal by construction.
+        //
+        // That already happened, twice, and nothing noticed because this probe is
+        // opt-in (BANISHED_RT_IOSTREAM_PROBE): `??_7BinaryFileStream@IO@@6B@` was
+        // promoted by WAVE 20 lane PROMOTE and `??_7VisitorStream@IO@@6B@` by
+        // WAVE 19 lane IOBASE, so two of this file's three vptr checks have been
+        // structurally FALSE since those waves. The failure does not read as
+        // "a promotion happened" — it reads as a LAYOUT defect, which is the one
+        // thing this probe exists to detect.
+        //
+        // The claim the check is making is about the OFFSET (+0x00 and +0x68 are
+        // two separately-stamped vtables in one object), and that claim is
+        // preserved exactly by asking the DLL for the address. Use the raw door.
+        const void* vtOuter = RtResolveExportForProbe("??_7CompressedFileStream@IO@@6B@");
+        const void* vtInner = RtResolveExportForProbe("??_7BinaryFileStream@IO@@6B@");
         Check(cf->base.base.vptr == vtOuter, "vptr(+0x00) == ??_7CompressedFileStream",
               (uintptr_t)cf->base.base.vptr, (uintptr_t)vtOuter);
         Check(cf->file.base.base.vptr == vtInner, "vptr(+0x68) == ??_7BinaryFileStream",
@@ -466,7 +485,11 @@ void RunFileStreamLayoutProbe() {
               (unsigned)vs->base.direction, 1);
         Check(vs->base.encoding != nullptr, "VisitorStream.encoding installed",
               (uintptr_t)vs->base.encoding, 1);
-        const void* vt = RT_DATA_SLOT(const void*, "??_7VisitorStream@IO@@6B@");
+        // Raw, not RT_DATA_SLOT — see the block above the CompressedFileStream
+        // pair. This row has been PROMOTED since WAVE 19 lane IOBASE, so the
+        // RT_DATA_SLOT spelling of this line has been comparing our minted table
+        // against retail's stamp, and failing, ever since.
+        const void* vt = RtResolveExportForProbe("??_7VisitorStream@IO@@6B@");
         Check(vs->base.vptr == vt, "VisitorStream.vptr == ??_7VisitorStream",
               (uintptr_t)vs->base.vptr, (uintptr_t)vt);
 
