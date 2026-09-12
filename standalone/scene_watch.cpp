@@ -396,13 +396,70 @@ bool LodEnabled() {
 // Only Graphics::MeshInstance runs the distance pick. Identify one by its
 // AddDrawItems slot (vtable index 3, +0x18) rather than by the class vtable, so
 // the test still holds for any subclass that inherits the retail implementation.
+//
+// ---------------------------------------------------------------------------
+// WAVE 27 lane GFXMESH — THE IDENTITY TOKEN, REBUILT SO A REGISTRATION CANNOT
+// BLIND IT.
+//
+//   SYMBOL:      ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAV
+//                Renderer@2@@Z, retail 0x180100f20, ordinal 1550 (confirmed by
+//                VA against the export directory with pefile).
+//   CONDITION:   this function is the ONLY use of that address in the tree that
+//                is NOT a call, and until this change it asked for the address
+//                through `ResolveAddr(Module::Runtime, ...)`, WHICH CONSULTS THE
+//                PORT REGISTRY FIRST
+//                (reference_resolveaddr_consults_port_registry_first.md).
+//   CONSEQUENCE: the moment any lane registered a port of AddDrawItems,
+//                ResolveAddr handed back OUR body, the compare below failed for
+//                every object built by the DLL's constructor, and
+//                BANISHED_LOD_CENSUS / BANISHED_FORCE_LOD0 silently observed an
+//                EMPTY SCENE — a wrong answer with no error. That is why
+//                standalone/reg_mint_promoted.cpp:2257 tagged the symbol
+//                HARMFUL with [SCOPE: DLL-PRESENT] and named "the lane that next
+//                needs AddDrawItems registered" as the addressee that must fix
+//                THIS LINE first.
+//
+// Wave 27 lane GFXMESH is that addressee and this is the fix. The test now
+// accepts a MATCH AGAINST EITHER of two tokens:
+//
+//   * `ResolveRuntimeRaw(0x180100f20)` — the registry-FREE door. This is what
+//     the DLL's own constructor actually stamped into vtable[3], so it is the
+//     token that is CORRECT BY CONSTRUCTION for every object the DLL built, and
+//     it cannot be moved by anything any lane registers. `ResolveAddr` could
+//     never answer this question: it is the port registry's job to hide the
+//     DLL's address, and here the DLL's address is the subject.
+//   * `RtPortLookupAddr(0x180100f20)` — our port, if one is ever registered.
+//     Objects constructed after a promotion of ??_7MeshInstance@ would carry
+//     OUR slot, and a test that only knew the DLL's would then miss those. Two
+//     tokens cover both populations; one covers whichever half you thought of.
+//
+// The refusal this retires is only the one that pointed at this line. Whether
+// ?AddDrawItems@MeshInstance@ SHOULD be registered is a separate question, and
+// this lane does NOT register it — the body is not ported. See
+// docs/runtime_port/WAVE27_LANE_GFXMESH.md §7.
+// ---------------------------------------------------------------------------
 bool IsMeshInstance(void* obj) {
-    static uintptr_t s_addDrawItems = 0;
-    if (s_addDrawItems == 0) s_addDrawItems = ResolveAddr(Module::Runtime, 0x180100f20);
-    if (!s_addDrawItems) return false;
+    static uintptr_t s_addDrawItemsDll  = 0;
+    static uintptr_t s_addDrawItemsOurs = 0;
+    static bool      s_resolved         = false;
+    // Resolved once, lazily. Safe here and nowhere near the pre-init freeze
+    // hazard rt_resolve_cache.cpp §6 describes: this function is reached only
+    // from the per-frame LOD walk during gameplay, long after
+    // RuntimePortInit() has finished, so the registry is complete at the first
+    // call. A registration made AFTER the first rendered frame would not be
+    // picked up -- and there is no such thing in this tree.
+    if (!s_resolved) {
+        s_resolved = true;
+        s_addDrawItemsDll  = ResolveRuntimeRaw(0x180100f20);
+        s_addDrawItemsOurs =
+            reinterpret_cast<uintptr_t>(RtPortLookupAddr(0x180100f20));
+    }
+    if (!s_addDrawItemsDll && !s_addDrawItemsOurs) return false;
     void** vt = *reinterpret_cast<void***>(obj);
     if (!VtableLooksLikeCode(vt)) return false;
-    return reinterpret_cast<uintptr_t>(vt[3]) == s_addDrawItems;
+    const uintptr_t slot3 = reinterpret_cast<uintptr_t>(vt[3]);
+    return (s_addDrawItemsDll  && slot3 == s_addDrawItemsDll)
+        || (s_addDrawItemsOurs && slot3 == s_addDrawItemsOurs);
 }
 
 struct MeshInfo {

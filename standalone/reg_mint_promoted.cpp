@@ -2416,7 +2416,47 @@ int RtMintRegisterPromotedRows() {
     // whatever we decide here, and this row stops being harmful. Writing
     // "NONE, EVER" would have filed a cutover task as a permanent refusal.
     //
-    // RT_UNPROMOTABLE: ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z | n/a (function, not a table) | WAVE21_LANE_GFXBODY.md row 11 + WAVE21_LANE_CLASS.md §2 | registering it is harmful while the DLL supplies vtable[3]; voids when scene_watch.cpp:401 stops using this address as an identity token [SCOPE: DLL-PRESENT] [ADDRESSEE: the lane that next needs AddDrawItems registered -- it must give scene_watch a different identity token first; if no lane does, the Wave 22 kickoff writer] | HARMFUL
+    // RT_UNPROMOTABLE: ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z | n/a (function, not a table) | WAVE21_LANE_GFXBODY.md row 11 + WAVE21_LANE_CLASS.md §2 | *** THIS EXPIRY HAS FIRED. WAVE 27 lane GFXMESH. *** The original clause was: registering it is harmful while the DLL supplies vtable[3]; voids when scene_watch.cpp:401 stops using this address as an identity token. scene_watch.cpp:401 NO LONGER USES IT AS A TOKEN -- IsMeshInstance now matches vtable[3] against ResolveRuntimeRaw(0x180100f20) (the registry-FREE door, what the DLL ctor stamped, unmovable by any registration) OR RtPortLookupAddr(0x180100f20) (our port, if ever registered). So the HARMFUL verdict is RETIRED and this row is no longer a refusal: registering AddDrawItems is now SAFE on the DLL-present route. It remains unregistered only because THE BODY IS NOT PORTED -- lane GFXMESH removed the blocker and did not write the ~0xd0-byte LOD-selection body, which needs Renderer::AddDrawItem's 9-argument frame. [SCOPE: DLL-PRESENT] [ADDRESSEE: the lane that PORTS ?AddDrawItems@MeshInstance@ -- it needs no scene_watch change of its own, that debt is paid; it must only re-run `grep -rn 0x180100f20 runtime/ code/ standalone/ engine/ dx11/` and confirm no NEW identity-token consumer has appeared since wave27/gfxmesh, where the only live one was scene_watch.cpp] | HARMFUL
+    //
+    // ==== WAVE 27 LANE GFXMESH: THE CONDITION ABOVE IS NOW FALSE. ============
+    // The tag's own voiding clause -- "voids when scene_watch.cpp:401 stops
+    // using this address as an identity token" -- HAS FIRED. Lane GFXMESH was
+    // the named addressee, it re-verified the clause was still true before
+    // acting (it was: the line still called ResolveAddr, which consults the port
+    // registry first), and it then did exactly what the tag prescribed, FIRST:
+    //
+    //   standalone/scene_watch.cpp `IsMeshInstance` no longer asks ResolveAddr.
+    //   It now matches vtable[3] against EITHER ResolveRuntimeRaw(0x180100f20) --
+    //   the registry-FREE door, which is what the DLL's constructor actually
+    //   stamped and which no registration can move -- OR
+    //   RtPortLookupAddr(0x180100f20), our own port if one is ever registered.
+    //   Two tokens, so the test is right for objects built before and after any
+    //   future promotion of ??_7MeshInstance@. The full write-up is at that call
+    //   site, in the SYMBOL / CONDITION / CONSEQUENCE shape.
+    //
+    // SO THE HARMFUL VERDICT ABOVE IS RETIRED. It is left standing rather than
+    // deleted because a refusal that vanishes teaches nothing, and because its
+    // reasoning is the clearest example in this file of a port being harmful for
+    // a reason the census cannot see.
+    //
+    // WHAT IS *NOT* RETIRED, and lane GFXMESH says so rather than letting the
+    // silence read as a completion: ?AddDrawItems@MeshInstance@ IS STILL NOT
+    // REGISTERED, because THIS LANE DID NOT PORT THE BODY. Nothing above changes
+    // that -- it removes the BLOCKER, not the work. The body is 0xd0 bytes of
+    // LOD selection (a squared-distance compare against the union of
+    // _worldBounds and _prevWorldBounds, walking _detailLevels at stride 0xb0)
+    // followed by one ?AddDrawItem@Renderer@ call per TriangleList, and it needs
+    // Renderer::AddDrawItem's 9-argument frame reproduced exactly.
+    //
+    // [ADDRESSEE for the remaining work: the lane that ports
+    //  ?AddDrawItems@MeshInstance@Graphics@@ itself. It may now register the
+    //  symbol with no scene_watch change of its own -- that debt is paid. It
+    //  must still check, at that time, that no OTHER identity-token consumer of
+    //  0x180100f20 has appeared: `grep -rn 0x180100f20 runtime/ code/ standalone/
+    //  engine/ dx11/` returned exactly the two sites named here on wave27/base
+    //  (this file and scene_watch.cpp) plus rt_data_mint_tables.inc, which
+    //  STAMPS the address rather than comparing it.]
+    // ========================================================================
     //
     // WHY EACH, in one line — the proofs are in the lane doc:
     //

@@ -550,6 +550,150 @@ static const DelDtorSpec kSpecs[] = {
     //
     // THIS DOES NOT PROMOTE THE ROW, and the table is still 6/9.
     RT_DELDTOR(0x1800259d0, 0x1800b4540, 0x0f0, "IO::PackageFile"),
+    // ---- WAVE 27 lane GFXMESH ------------------------------------------------
+    // Slot 0 of the three Graphics mesh vtables this lane owns:
+    //     ??_7EdgeMesh@Graphics@@6B@          0x180154c70   -> 0x1800134b0
+    //     ??_7EdgeMeshInstance@Graphics@@6B@  0x180154d70   -> 0x1800175d0
+    //     ??_7MeshInstance@Graphics@@6B@      0x180154dc0   -> 0x180017330
+    // All three are the family's exact shape and none is a new one; they are
+    // three ADDRESSES, not three bodies, which is the whole point of this table.
+    //
+    // Every constant below was disassembled from the RETAIL Runtime-x64.dll for
+    // this lane, and EVERY ~Class VA was then confirmed against the export
+    // directory BY VA with pefile -- not by name pattern, and not against the
+    // profile build:
+    //
+    //   0x1800134b0  LEA R9,[0x1800a2780]   ~EdgeMesh
+    //                MOV EDX,0x180          sizeof(Graphics::EdgeMesh)
+    //     0x1800a2780 = ordinal 580, ??1EdgeMesh@Graphics@@UEAA@XZ. UEAA, the
+    //     VIRTUAL spelling -- QEAA would have resolved NULL silently
+    //     (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+    //
+    //   0x1800175d0  LEA R9,[0x1800174d0]   ~EdgeMeshInstance
+    //                MOV EDX,0xd0           sizeof(Graphics::EdgeMeshInstance)
+    //     0x1800174d0 = ordinal 581, ??1EdgeMeshInstance@Graphics@@UEAA@XZ.
+    //
+    //   0x180017330  LEA R9,[0x180017060]   ~MeshInstance
+    //                MOV EDX,0x120          sizeof(Graphics::MeshInstance)
+    //     0x180017060 = ordinal 632, ??1MeshInstance@Graphics@@UEAA@XZ.
+    //
+    // ALL THREE SIZES ARE INDEPENDENTLY PINNED, by a witness that is not this
+    // thunk: runtime/types/graphics/Mesh.h carries static_assert(sizeof(EdgeMesh)
+    // == 0x180), (sizeof(EdgeMeshInstance) == 0xd0) and (sizeof(MeshInstance)
+    // == 0x120), each derived from that class's CONSTRUCTOR store pattern in
+    // Wave 6 lane E, years of waves before this row existed. Two independent
+    // derivations, same three numbers.
+    //
+    // THE SCALAR BRANCH INLINES ~Class IN ALL THREE, and all three were checked
+    // against the destructor their own array branch names, which is the check
+    // the banner says was done for the original 22 of 37:
+    //   * 0x1800174d0 (~EdgeMeshInstance) is 0x1a bytes and is a bare tail
+    //     `JMP 0x1800a41c0` (~Geometry) with NO vtable restamp -- and the
+    //     scalar branch at 0x180017621 is exactly `CALL 0x1800a41c0`. Identical.
+    //   * 0x180017060 (~MeshInstance) destroys the node array (+0xf0), the
+    //     animation layer array (+0xd8+8) and the material array (+0xc8), then
+    //     tail-jumps ~Geometry -- and the scalar branch at 0x180017381 emits
+    //     those same four calls on those same four offsets, in that same order.
+    //   * 0x1800a2780 (~EdgeMesh) restamps ??_7EdgeMesh@ , destroys the two
+    //     lists (+0x158, +0x148) and the eight Video buffers in DESCENDING
+    //     address order, then tail-jumps ~External -- and the EdgeMesh thunk's
+    //     scalar branch is a plain `CALL 0x1800a2780`, so nothing is inlined
+    //     there at all. It is a K1 "call the dtor" row.
+    // So calling ~Class in both branches -- this family's one deliberate
+    // departure -- costs one extra call on two of the three and nothing on the
+    // third, and changes no byte.
+    //
+    // THREE MORE `operator delete` COPIES, and the banner's list of ten is
+    // therefore incomplete rather than wrong. The scalar branches free through
+    // 0x180012d20 (EdgeMesh), 0x180017460 (EdgeMeshInstance) and 0x1800169c0
+    // (MeshInstance); the array branches all use 0x180006a10, which IS on the
+    // banner's list. All three new addresses were disassembled and all three are
+    // instruction-for-instruction `if (p) { Enter(cs); Free(_singleton, p);
+    // Leave(cs); }` -- the same per-translation-unit copy, and Ghidra names all
+    // three `operator_delete`. Nothing about the port changes: `operator delete`
+    // is a CONSTANT in this family, not a parameter, and these three confirm
+    // that rather than complicate it.
+    //
+    // ONE OF THE THREE ~Class BODIES IS OURS, TWO ARE THE DLL'S, and the split
+    // is stated rather than glossed. Dtor(i) above resolves BY ADDRESS, and
+    // ResolveAddr consults the port registry first, so what each row reaches is
+    // decided by whether that ADDRESS is registered -- a name registration is
+    // not enough:
+    //   * ??1MeshInstance@Graphics@@UEAA@XZ IS ported
+    //     (mesh.cpp, RtGraphics_MeshInstance_Dtor) but was registered BY NAME
+    //     ONLY, so ResolveAddr(0x180017060) handed back the DLL's. This lane
+    //     adds the matching RegisterRuntimeAddr in mesh.cpp; row 46 is now ours.
+    //     That is reference_half_registered_port_reads_as_absent.md seen from
+    //     the other side: the body existed, the door did not.
+    //   * ??1EdgeMesh@ (0x1800a2780) and ??1EdgeMeshInstance@ (0x1800174d0) are
+    //     NOT ported anywhere in this tree -- grepped by mangled name and by
+    //     address before this row was written. Rows 44 and 45 therefore make
+    //     those two addresses newly `called`
+    //     (reference_porting_can_grow_the_cutover_surface.md). Neither is
+    //     claimed as ported by this lane; both are named in
+    //     docs/runtime_port/WAVE27_LANE_GFXMESH.md §6 as inherited cutover work,
+    //     so the next census does not have to rediscover them.
+    //
+    // NOT added to kProbeSubjects. ~MeshInstance frees three arrays and
+    // ~EdgeMesh frees two lists and tears down eight Video buffer objects;
+    // running either over a fabricated subject frees garbage pointers. A probe
+    // subject must be safe to run and neither is. ~EdgeMeshInstance would be
+    // safe on its own (it is a bare tail call) but its callee ~Geometry is not
+    // read by this lane, so it is left out rather than assumed.
+    //
+    // APPENDED rather than inserted in address order (all three would sort into
+    // the middle of the table) for the reason every row since Wave 10C gives:
+    // kProbeSubjects is a list of TABLE INDICES and a mid-table insert silently
+    // re-points all twelve Video::*Data probe subjects at wrong rows.
+    //
+    // THESE ROWS DO NOT PROMOTE ANYTHING. They make slot 0 of each of the three
+    // tables ported, which is what lets ??_7EdgeMesh@ reach 9/9 COMPLETE; see
+    // docs/runtime_port/WAVE27_LANE_GFXMESH.md §5 for the promotion verdicts.
+    //
+    // *** tools/rt_deleting_dtor_verify.py PRINTS `BAD` FOR THE SECOND AND THIRD
+    // *** OF THESE THREE ROWS. THE ROWS ARE RIGHT AND THE TOOL HAS A BLIND SPOT.
+    // Read this before "fixing" the rows, because its verdict is the first thing
+    // the next person will see:
+    //
+    //     BAD 0x1800175d0 ... scalar branch neither calls 0x1800174d0 nor
+    //                         restamps a vtable
+    //     BAD 0x180017330 ... scalar branch neither calls 0x180017060 nor
+    //                         restamps a vtable
+    //
+    // The checker (tools/rt_deleting_dtor_verify.py:260-273) knows exactly TWO
+    // shapes for the scalar branch -- K1, it CALLS ~Class; K2/K3, it INLINES a
+    // ~Class that begins with a vtable RESTAMP, which the tool matches on -- and
+    // its third arm is a bare `else` that reports anything else as a problem.
+    // These two rows are a THIRD shape: the scalar branch inlines a ~Class whose
+    // own body contains NO restamp at all, so there is nothing for the tool to
+    // match and it cannot tell an inlined-correct row from a wrong one. It
+    // announces a verdict without being able to examine its subject
+    // (reference_a_screen_that_cannot_name_its_subject.md), and it INFLATES:
+    // two false positives, no false negatives.
+    //
+    // BOTH WERE THEREFORE CHECKED BY HAND, instruction by instruction, which is
+    // the check the tool is standing in for:
+    //   0x1800175d0 scalar branch (at 0x180017621) is `CALL 0x1800a41c0` and
+    //       nothing else, and ~EdgeMeshInstance (0x1800174d0) is 0x1a bytes
+    //       whose whole body is `JMP 0x1800a41c0`. Identical.
+    //   0x180017330 scalar branch (at 0x180017381) is, in order,
+    //       CALL 0x18001c550 on this+0xf0, CALL 0x18001c480 on this+0xd8+8,
+    //       CALL 0x180014d00 on this+0xc8, CALL 0x1800a41c0 on this -- and
+    //       ~MeshInstance (0x180017060) is those same four calls on those same
+    //       four offsets in that same order, the last as a tail JMP. Identical.
+    // The row's `dtor` field is what DeletingDtorCore CALLS, and calling ~Class
+    // in both branches is this family's one documented deliberate departure, so
+    // both rows compute what retail computes.
+    //
+    // NOT FIXED IN THE TOOL, deliberately: WAVE27_KICKOFF.md §4 #1 forbids this
+    // wave's lanes from touching instruments. Recorded with file and line in
+    // docs/runtime_port/WAVE27_LANE_GFXMESH.md under "INSTRUMENT DEFECT
+    // OBSERVED, NOT FIXED". [ADDRESSEE: whoever scopes a Wave 28 instruments
+    // lane -- the fix is a K4 arm that accepts a scalar branch whose call set
+    // equals the call set of the named ~Class.]
+    RT_DELDTOR(0x1800134b0, 0x1800a2780, 0x180, "Graphics::EdgeMesh"),
+    RT_DELDTOR(0x1800175d0, 0x1800174d0, 0x0d0, "Graphics::EdgeMeshInstance"),
+    RT_DELDTOR(0x180017330, 0x180017060, 0x120, "Graphics::MeshInstance"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -854,6 +998,18 @@ void* RtDelDtor_ReaderWriter(void* self, unsigned flags) {
 void* RtDelDtor_PackageFile(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 43);
 }
+// Graphics::EdgeMesh          ~EdgeMesh = 0x1800a2780          [Wave 27 GFXMESH]
+void* RtDelDtor_EdgeMesh(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 44);
+}
+// Graphics::EdgeMeshInstance  ~EdgeMeshInstance = 0x1800174d0  [Wave 27 GFXMESH]
+void* RtDelDtor_EdgeMeshInstance(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 45);
+}
+// Graphics::MeshInstance      ~MeshInstance = 0x180017060      [Wave 27 GFXMESH]
+void* RtDelDtor_MeshInstance(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 46);
+}
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
@@ -941,6 +1097,9 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18002ba90, (void*)&RtDelDtor_TextFileStream);        // Wave 21 ENC
     RegisterRuntimeAddr(0x180023bd0, (void*)&RtDelDtor_ReaderWriter);          // Wave 21 ENC item 12
     RegisterRuntimeAddr(0x1800259d0, (void*)&RtDelDtor_PackageFile);           // Wave 25 VTIO
+    RegisterRuntimeAddr(0x1800134b0, (void*)&RtDelDtor_EdgeMesh);              // Wave 27 GFXMESH
+    RegisterRuntimeAddr(0x1800175d0, (void*)&RtDelDtor_EdgeMeshInstance);      // Wave 27 GFXMESH
+    RegisterRuntimeAddr(0x180017330, (void*)&RtDelDtor_MeshInstance);          // Wave 27 GFXMESH
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --
