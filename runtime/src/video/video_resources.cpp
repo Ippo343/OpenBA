@@ -308,6 +308,43 @@ void RtVideoProbe_DestroyInterfaceRange(GraphicsInterface* base, int count) {
     DestroyInterfaceRange(base, count);
 }
 
+// ---------------------------------------------------------------------------
+// 0x180010f00 — the RETAIL-ABI entry point. WAVE 26 LANE INT33.
+//
+// The banner above says these nested walkers are "deliberately NOT registered
+// at their own addresses ... nothing in this tree resolves them". **That second
+// clause stopped being true and nobody noticed**: video_resources_probe.cpp:661
+// resolves 0x180010f00, so `tools/runtime_census.py` has carried it as a
+// CALLED-but-unported `internal` row ever since that probe landed — Wave 25
+// lane INTERNAL42 residual #3 called it "the cheapest row left in the bucket"
+// and addressed it to a Wave 26 lane. This is that lane.
+//
+// The deliberate-non-registration reason is preserved for the OTHER two:
+// 0x180010cf0 is still unresolved anywhere and still unregistered here.
+// (0x180010da0 has been registered since Wave 18 from a SECOND, open-coded port
+// in video/device_enum_types.cpp:632 — see §DUPLICATE in the lane doc; that
+// duplication is pre-existing and is NOT resolved by this change.)
+//
+// SIGNATURE, read from 0x180010f00's own prologue and not from the C++ shape:
+//   TEST R8D,R8D / JLE   -> R8D is `count`
+//   MOV [RSP+8],RCX      -> RCX is spilled and NEVER READ (the array object)
+//   RDX                  -> the element base
+// i.e. `void(void* ignoredThis, void* base, int32_t count)`, which is exactly
+// the `RangeFn` the probe already casts the shipped body to.
+//
+// WHY REGISTERING DOES NOT BLIND THE ORACLE. The probe's THEIRS side reaches
+// the shipped body through `ResolveRuntimeRaw(0x180010f00)`, which is the RAW
+// door and does not consult the port registry, so it keeps calling the DLL
+// after this. Had it used `ResolveAddr(Module::Runtime, …)` — registry-first —
+// this registration would have converted a working oracle into a self-check.
+// That direction of the trap is the one this project has actually been bitten
+// by, so it is checked rather than assumed.
+extern "C" void RtVideo_ArrayInterfaceElemDestroy(void* /*array, spilled and
+                                                  never read*/,
+                                                  void* base, int32_t count) {
+    DestroyInterfaceRange(static_cast<GraphicsInterface*>(base), count);
+}
+
 // ============================================================================
 // ??0RenderBuffer@Video@@QEAA@XZ — 0x1800f3ee0, ordinal 346
 // ============================================================================
@@ -582,6 +619,13 @@ int RtVideoResourcesRegister() {
 
     RegisterRuntimeExport("??1Device@Video@@QEAA@XZ", (void*)&Video_Device_Dtor);
     RegisterRuntimeAddr(0x1800f7290, (void*)&Video_Device_Dtor);
+    n++;
+
+    // Wave 26 lane INT33 — 0x180010f00, the per-GraphicsInterface element
+    // destroy. ADDRESS ONLY: it has no exported name in either shipped build
+    // (checked against the export directory, not asserted from the `internal`
+    // bucket's label). See the comment above RtVideo_ArrayInterfaceElemDestroy.
+    RegisterRuntimeAddr(0x180010f00, (void*)&RtVideo_ArrayInterfaceElemDestroy);
     n++;
 
     printf("[RtPort] Video resource lifecycle (Wave 18 lane VRES): %d exports registered\n", n);

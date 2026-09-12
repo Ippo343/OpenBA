@@ -471,6 +471,18 @@ void Assign38Call(uint8_t* d, const uint8_t* s) {
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180004220));
     fn(d, s);
 }
+// 0x180078950's `else` (init) arm — see kSpec_Sprite38Z for the transcription
+// and for why this arm exists here and not on kSpec_Sprite38.
+void InitSprite38Z(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x28) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x30) = 0;   // DWORD, not a qword
+    /* +0x34..+0x37 deliberately untouched — retail does not write them */
+}
 void Destroy38(void* ignoredThis, uint8_t* base, int count) {
     using Fn = void (*)(void*, uint8_t*, int);
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800059e0));
@@ -562,6 +574,99 @@ void DestroyStringExt(void* ignoredThis, uint8_t* base, int count) {
 // The unconditional `dst = 0` before the test is why a null source leaves the
 // destination NULL rather than untouched: the whole 8-byte stride is written on
 // both arms, so there is no unwritten window.
+// --- WAVE 26 LANE INT33 -----------------------------------------------------
+// 0x180075d20's assign arm, read at 0x180075dc4..0x180075ddb. It is the MIRROR
+// of AssignStringExt above and NOT a reuse of it: that one has the String at
+// +0x00 and the verbatim qword at +0x08; this one has them the other way round.
+// The two are indistinguishable by stride, by alignment and by element size,
+// and swapping them would refcount-bump whatever integer happens to sit at
+// +0x00 and then leak the real String -- the same offset-vs-stride confusion
+// array_destroy.cpp's kD_Str_10 / kD_Str_10at08 pair exists to prevent.
+//
+//   180075dc4  MOV RAX,[RDX-0x8] / MOV [RCX],RAX     +0x00 copied VERBATIM,
+//                                                    and copied FIRST
+//   180075dcb  MOV [RCX+0x8],R14  (R14 = 0)          +0x08 zeroed
+//   180075dcf  MOV RAX,[RDX] / TEST RAX,RAX / JE
+//   180075dd7  MOV [RCX+0x8],RAX / INC [RAX-0x4]     refcounted String
+//
+// The unconditional zero store at +0x08 BEFORE the test is why this arm covers
+// the whole 0x10 stride even when the source String is null, and why the assign
+// window is 0/0 rather than +0x08..+0x10.
+void AssignExtStringAt08(uint8_t* d, const uint8_t* s) {
+    void** dp = reinterpret_cast<void**>(d);
+    void* const* sp = reinterpret_cast<void* const*>(s);
+    dp[0] = sp[0];                       // verbatim, and first
+    dp[1] = nullptr;
+    void* str = sp[1];
+    if (str) {
+        dp[1] = str;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
+    }
+}
+// 0x180075d20's `else` (init) arm, 0x180075dee..0x180075df1: two qword zero
+// stores, so the whole 0x10 stride is written and there is no init window.
+void InitZero10(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+}
+// 0x180075d20's shrink/realloc destroy: `CALL 0x180039640`, Body B with
+// kD_Str_10at08. Ported AND registered in array_destroy.cpp in the same commit
+// (it was one of "the eight ported but unregistered", and this is the caller
+// that file's banner says to wait for), so this ResolveAddr is registry-first
+// and lands on our body rather than opening a door onto an unported callee.
+void DestroyExtStringAt08(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180039640));
+    fn(ignoredThis, base, count);
+}
+
+// --- WAVE 26 LANE INT33: 0x180075b20's three element ops --------------------
+// Element `{ int32 +0x00, HOLE +0x04..+0x07, qword +0x08, qword +0x10,
+// System::String* +0x18 }`, stride 0x20. Read at 0x180075bc8..0x180075bed; the
+// source cursor sits at src+0x18, so the displacements below are the listing's
+// RDX-relative ones resolved to element-relative:
+//
+//   180075bc8  MOV EAX,[RDX-0x18] / MOV [RCX],EAX        +0x00  DWORD
+//   180075bcd  MOV RAX,[RDX-0x10] / MOV [RCX+0x8],RAX    +0x08
+//   180075bd5  MOV RAX,[RDX-0x8]  / MOV [RCX+0x10],RAX   +0x10
+//   180075bdd  MOV [RCX+0x18],R14 (R14 = 0)              +0x18 zeroed first
+//   180075be1  MOV RAX,[RDX] / TEST / MOV [RCX+0x18],RAX / INC [RAX-0x4]
+//
+// *** +0x04..+0x07 IS NEVER WRITTEN BY EITHER ARM. *** The first store is a
+// DWORD and the next is at +0x08. The init arm (0x180075c00..0x180075c0b)
+// makes the same four stores in zeroes -- `MOV dword [RAX],R14D` then qwords at
+// +0x08/+0x10/+0x18 -- and skips the same hole. So the window is 0x04..0x08 on
+// BOTH arms, and each was read separately rather than one assumed from the
+// other (reference_never_written_needs_by_whom.md: the extent belongs to the
+// ARM). An oracle that compared those four bytes would fail 100% of calls.
+void AssignCfgEntry20(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);
+    /* +0x04..+0x07 deliberately not copied */
+    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
+    *reinterpret_cast<uint64_t*>(d + 0x10) = *reinterpret_cast<const uint64_t*>(s + 0x10);
+    void** dstr = reinterpret_cast<void**>(d + 0x18);
+    *dstr = nullptr;
+    void* str = *reinterpret_cast<void* const*>(s + 0x18);
+    if (str) {
+        *dstr = str;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
+    }
+}
+void InitCfgEntry20(uint8_t* d) {
+    *reinterpret_cast<uint32_t*>(d + 0x00) = 0;   // DWORD, not a qword
+    /* +0x04..+0x07 deliberately untouched */
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+}
+// CALL 0x180039580 — Body B with kD_Str_20at18, ported and registered by
+// array_destroy.cpp in this same commit for the same reason as 0x180039640.
+void DestroyCfgEntry20(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180039580));
+    fn(ignoredThis, base, count);
+}
+
 void AssignStringRef(uint8_t* d, const uint8_t* s) {
     void** dp = reinterpret_cast<void**>(d);
     void* const* sp = reinterpret_cast<void* const*>(s);
@@ -979,6 +1084,55 @@ const ArraySpec kSpec_Sprite38 = {                // 0x180004e30
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x00, 0x10 };
 
+// --- WAVE 26 LANE INT33 -----------------------------------------------------
+// 0x180078950 — `Array<UI::SpriteSheet::SpriteInfo>::SetSize(this, int)`, the
+// TWO-argument sibling of 0x180004e30 above. `ui/spritesheet_vtable.cpp:397`
+// filed it as "a one-row follow-on for the collection family"; this is that row.
+//
+// *** IT DOES NOT TAKE kSpec_Sprite38, AND THAT IS THE WHOLE POINT OF THE ROW.
+// *** The two bodies share the element type, the stride, the alignment, the
+// assign helper AND the destroy helper — everything a reader would use to decide
+// they are the same spec — and they differ in the one field that is reachable
+// only through the two-argument form. `kSpec_Sprite38` has `init = nullptr`,
+// which array_internal.h defines as "retail leaves the new tail UNTOUCHED", and
+// that is CORRECT FOR 0x180004e30 because it is the three-argument form: every
+// grown element takes the assign arm with the caller's `fill`, so its init arm
+// is unreachable and was never written down. 0x180078950 has NO fill, so its
+// init arm is the ONLY path a grown element takes — and retail zeroes 0x34
+// bytes there. Reusing kSpec_Sprite38 would have left the new tail holding the
+// previous allocation's bytes, including two String POINTERS that the next
+// destroy would then release. Silently, with a clean build and a green census.
+//
+// The init arm, transcribed from 0x180078a0e..0x180078a38 — six qword zero
+// stores at +0x00,+0x08,+0x10,+0x18,+0x20,+0x28 and ONE DWORD at +0x30:
+//
+//   180078a0e  MOV [RCX],R8        (R8 = 0)      +0x00
+//   180078a11  MOV [RCX+0x08],R8                 +0x08
+//   180078a15  MOV qword [RCX+0x10],0            +0x10
+//   180078a1d  MOV qword [RCX+0x18],0            +0x18
+//   180078a25  MOV qword [RCX+0x20],0            +0x20
+//   180078a2d  MOV qword [RCX+0x28],0            +0x28
+//   180078a35  MOV dword [RCX+0x30],R8D          +0x30   <- DWORD, not qword
+//
+// so it covers +0x00..+0x33 and **+0x34..+0x37 is never written**, the same
+// four bytes `SpriteSheet.h` names `_pad34` and the same window the ASSIGN arm
+// already has recorded against it. Two arms, two independent readings, one
+// window — which is why both are spelled out below rather than one being
+// inferred from the other.
+//
+// Everything else read from the body rather than inherited:
+//   stride 0x38   IMUL RCX,RCX,0x38   at 0x1800789ae
+//   align  8      MOV EDX,8           at 0x1800789b2, before CALL 0x1800c7a50
+//   assign        CALL 0x180004220    at 0x1800789f7   (== Assign38Call)
+//   destroy       CALL 0x1800059e0    at 0x180078a54 and 0x180078aab
+//                 (the second is the SHRINK path, over the truncated tail)
+const ArraySpec kSpec_Sprite38Z = {               // 0x180078950
+    "Array<SpriteEntry:0x38> (2-arg, tail ZEROED)", 0x38, 8,
+    &Assign38Call, &InitSprite38Z, &Destroy38, false,
+    /*assign unwritten*/ 0x34, 0x38,
+    /*init   unwritten*/ 0x34, 0x38,
+    /*seed zero       */ 0x00, 0x10 };
+
 // BOTH ARMS SKIP +0x2c..+0x2f, for two independent reasons -- which is a fact,
 // not an assumption. The init arm is InitEffectSlot above. The assign arm,
 // 0x180051650, was disassembled for this correction: dwords at +0x00,+0x04,
@@ -1058,6 +1212,54 @@ const ArraySpec kSpec_StringRef = {               // 0x180034860
 // destroy = 0x180011010 (kD_Str_08, already ported and registered in
 // array_destroy.cpp) on BOTH the realloc arm (180029b40) and the shrink arm
 // (180029b8f).
+// --- WAVE 26 LANE INT33 -----------------------------------------------------
+// 0x180075d20 — `Array<UI::DialogNamedTemplate>::SetSize(this, int)`, the
+// two-argument form. Element `{ qword copied verbatim at +0x00, System::String*
+// at +0x08 }`, stride 0x10.
+//
+// NO WINDOW ON EITHER ARM, and both halves of that are measured, not one
+// inferred from the other:
+//   * ASSIGN covers +0x00..+0x0f because the store at +0x08 is an UNCONDITIONAL
+//     zero BEFORE the null test (0x180075dcb), so the byte range is written
+//     even when the source String is null.
+//   * INIT covers +0x00..+0x0f -- two qword zero stores, 0x180075dee/0x180075df1.
+//
+// SEED ZEROS +0x08..+0x10 and NOT +0x00..+0x08. Only the String slot is
+// dereferenced (`INC [RAX-0x4]` in the assign, a refcount release in
+// 0x180039640); +0x00 is copied verbatim by the assign and never touched by the
+// destroy, so it IS seeded non-zero -- which is what makes a mirrored
+// AssignStringExt detectable instead of agreeing by accident on zeros.
+//
+//   stride 0x10   SHL RCX,0x4         at 0x180075d71
+//   align  8      MOV EDX,8           at 0x180075d75
+//   assign        inline              at 0x180075dc4  (AssignExtStringAt08)
+//   init          inline              at 0x180075dee  (InitZero10)
+//   destroy       CALL 0x180039640    at 0x180075e0f and on the shrink path
+const ArraySpec kSpec_ExtStr10at08 = {            // 0x180075d20
+    "Array<{qword, String*@+8}>", 0x10, 8,
+    &AssignExtStringAt08, &InitZero10, &DestroyExtStringAt08, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x08, 0x10 };
+
+// 0x180075b20 — `Array<UI::DialogControllerConfigEntry>::SetSize(this, int)`.
+// See AssignCfgEntry20 above for the transcription and for the +0x04..+0x07
+// hole that both arms skip.
+//
+//   stride 0x20   SHL RCX,0x5         at 0x180075b71
+//   align  8      MOV EDX,8           at 0x180075b75
+//   destroy       CALL 0x180039580    (kD_Str_20at18)
+//
+// SEED ZEROS +0x18..+0x20: only the String slot is dereferenced. +0x00..+0x17
+// is scalars copied verbatim and IS seeded non-zero -- which is exactly what
+// makes the +0x04 hole detectable rather than agreeing by accident on zeros.
+const ArraySpec kSpec_CfgEntry20 = {              // 0x180075b20
+    "Array<DialogControllerConfigEntry:0x20>", 0x20, 8,
+    &AssignCfgEntry20, &InitCfgEntry20, &DestroyCfgEntry20, false,
+    /*assign unwritten*/ 0x04, 0x08,
+    /*init   unwritten*/ 0x04, 0x08,
+    /*seed zero       */ 0x18, 0x20 };
+
 const ArraySpec kSpec_StringRefZ = {              // 0x180029a80
     "Array<System::String>(zero tail)", 8, 8, &AssignStringRef, &InitZero8,
     &DestroyStringRange, false,
@@ -1571,6 +1773,13 @@ J3_ENTRY2(1800492d0, kSpec_U64Zero)     // UI:          Array<ExternalPtr<Elemen
 // which.
 J3_ENTRY2(180005110, kSpec_U64Zero)     // Achievement: Array<ExternalPtr<Goal>>
 
+// WAVE 26 LANE INT33 — see kSpec_Sprite38Z for why this is NOT kSpec_Sprite38
+// even though the two bodies agree on stride, align, assign helper and destroy
+// helper. [NON-TRIVIAL], but registered UNCONDITIONALLY; see the registration.
+J3_ENTRY2(180078950, kSpec_Sprite38Z)   // UI: Array<SpriteSheet::SpriteInfo>
+J3_ENTRY2(180075d20, kSpec_ExtStr10at08) // UI: Array<DialogNamedTemplate>
+J3_ENTRY2(180075b20, kSpec_CfgEntry20)   // UI: Array<DialogControllerConfigEntry>
+
 #undef J3_ENTRY2
 
 // --- J3: the three-argument form, `SetSize(this, int n, const T* fill)` -----
@@ -1800,6 +2009,22 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x18002f070, (void*)&RtColl_ArraySetSize_18002f070);
     RegisterRuntimeAddr(0x1800492d0, (void*)&RtColl_ArraySetSize_1800492d0);
     RegisterRuntimeAddr(0x180005110, (void*)&RtColl_ArraySetSize_180005110);
+    // Wave 26 lane INT33 — Array<SpriteSheet::SpriteInfo>::SetSize, the
+    // two-argument form. NON-TRIVIAL, and registered HERE rather than behind
+    // BANISHED_RT_ARRAY_NONTRIVIAL, for the same reason 0x180034860 and
+    // 0x1800417d0 below are: that switch exists because ITS three members call
+    // per-element helpers by address INTO THE DLL, and this one's two do not.
+    // 0x180004220 (the assign) and 0x1800059e0 (the destroy) are BOTH ported
+    // and registered by runtime/src/collection/array_destroy.cpp, so
+    // Assign38Call and Destroy38 reach OUR bodies through the registry-first
+    // ResolveAddr. Checked in that file rather than assumed from the tier name.
+    RegisterRuntimeAddr(0x180078950, (void*)&RtColl_ArraySetSize_180078950);
+    // Wave 26 lane INT33 — Array<DialogNamedTemplate>::SetSize. Same reasoning
+    // as the line above: its one per-element helper (0x180039640) is ported and
+    // registered by array_destroy.cpp in this commit, so it is not in the tier
+    // BANISHED_RT_ARRAY_NONTRIVIAL exists to switch off.
+    RegisterRuntimeAddr(0x180075d20, (void*)&RtColl_ArraySetSize_180075d20);
+    RegisterRuntimeAddr(0x180075b20, (void*)&RtColl_ArraySetSize_180075b20);
     RegisterRuntimeAddr(0x1800298f0, (void*)&RtColl_ArraySetSizeFill_1800298f0);  // PKG2 4c-ii
     RegisterRuntimeAddr(0x18001f990, (void*)&RtColl_ArraySetSizeFill_18001f990);
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
