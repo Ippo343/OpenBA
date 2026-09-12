@@ -20,6 +20,8 @@ happen, and **nothing detects it**. Deflating entries are the dangerous ones.
 | 3 | `rt_deleting_dtor_verify.py` scalar-branch check | INFLATING | GFXMESH **+ GFXPART, independently** | open, corrected in-source twice |
 | 4 | **`disassemble_function` serves the WRONG FUNCTION** | **WRONG SUBJECT** | GFXBIG | open, workaround in force |
 | 5 | `runtime_census.py --csv` column name | cosmetic | GFXBIG | open |
+| 6 | **WAVE26_CLOSED.md §2 item 6 is STALE** | **DOC, propagated by the integrator** | IOTEXT | corrected here |
+| 7 | `dialog.cpp:1471` phantom-address comment (since Wave 9) | INFLATING | IOTEXT | fixed in-source by IOTEXT |
 
 ---
 
@@ -191,3 +193,63 @@ rest of this wave, and a Wave 28 doctrine candidate:**
 > EXTENT or BODY that a port depends on.
 
 Two sources that share no mechanism are two sources; two Ghidra calls are one.
+
+---
+
+## 6. A STALE FACT IN A CLOSING DOC, AND THE INTEGRATOR PROPAGATED IT — IOTEXT
+
+`WAVE26_CLOSED.md` §2 item 6 states that two of three vptr checks in
+`file_stream_probe.cpp` "have been structurally false since Waves 19/20". **They
+were already FIXED** — by Wave 26 lane PROMOIO at `d668f883`; all three checks now
+use `RtResolveExportForProbe`. IOTEXT verified this by reading the file.
+
+**The integrator copied that stale claim into IOTEXT's lane brief**, complete with
+an instruction not to repair the probe. The brief was wrong about the state of the
+tree at the moment it was written.
+
+**This is the documented failure mode, committed by the person who had just
+written the warning against it** — `reference_cheap_wins_list_is_the_stalest_section.md`,
+and Wave 26's own closing correction about filtering a table through
+`RT_UNPROMOTABLE` *before* it reaches a brief. The parallel is exact: a
+five-wave-old tag went unconsulted there; a one-wave-old fix went unconsulted
+here. **The lesson does not transfer by being written down.**
+
+**What limited the damage** was hedging rather than rigour: the brief said *"note
+that you re-confirmed it, or that you found it already fixed"*, which gave the
+lane a licence to contradict it. That is luck about phrasing, not a control.
+**The control would have been one `git log` on the file.**
+
+**ADDRESSEE: whoever writes the Wave 28 kickoff.** Any claim about the state of a
+FILE that is copied from a closing doc must be re-read from the file. A closing
+doc records what was true at seal time, and a lane merged *after* the section was
+drafted can falsify it inside the same wave.
+
+## 7. `dialog.cpp:1471` asserted a ported address that never existed — IOTEXT
+
+Since Wave 9 the comment claimed `0x180035350` was "one of the 37 lane K ported".
+It was not. **The address existed only in that comment and in the mint table (as
+the trap).** Three further `(NOT ported)` comments in `deleting_dtor.cpp` were
+also stale. All corrected in-source by IOTEXT.
+
+Same family as `reference_uncommented_checker_manufactures_work.md`: prose that
+names an address gets read as evidence about code. A comment is not a registration.
+
+---
+
+## A QUESTION THIS WAVE CLOSED BY MEASUREMENT
+
+The standing warning that **IO Encoding vtable offsets differ between the retail
+and profile builds** (`+0x78/98/a0` vs `+0x90/b0/b8`) was the wave's sharpest
+retail/profile hazard, and it sat in exactly the namespace defect #1 could have
+corrupted. IOTEXT settled it **at the raw-byte level, from the retail file on
+disk**:
+
+```
+ff 90 a0 00 00 00    kScalarInt   -> +0xa0   (NOT +0xb8)
+ff 50 78             kScalarBool  -> +0x78   (NOT +0x90)
+```
+
+**Every `ReaderWriter` slot the tree carries is the RETAIL offset.** That is a
+measurement against the shipped bytes, not an argument from which program Ghidra
+had open — so it holds regardless of defect #1, which is what makes it worth
+recording as closed rather than as reassurance.
