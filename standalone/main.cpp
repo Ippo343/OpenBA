@@ -50,6 +50,8 @@ extern "C" void WorkSchedProbe_Report();
 
 // WAVE 14 LANE SAVEMETA -- runtime/src/save/saveload_meta.cpp.
 extern "C" void RtSaveMetaSummary();
+// WAVE 29 LANE VERIFY — standalone/factory_byte_oracle.cpp
+extern "C" void RtFactoryByteOracle();
 
 // Wave 9 lane S save-stream oracle summary (runtime/src/io/save_trace.cpp).
 namespace RtSaveTrace { void Summary(); }
@@ -2080,6 +2082,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Wave 28 lane PARTSYS. UNCONDITIONAL, so the expected zeros are PRINTED
     // rather than inferred from silence (reference_uncalled_port_is_not_verified.md).
     { extern void RtGraphicsWave28PartsysSummary(); RtGraphicsWave28PartsysSummary(); }
+    // WAVE 29 LANE VERIFY — defect #7 from the Wave 28 ledger, FIXED HERE.
+    //
+    // These three summaries were WRITTEN, each with the standard "a run that
+    // entered none of these must SAY so rather than stay silent" comment above
+    // it, and NOTHING CALLED THEM. Three waves of Graphics attendance numbers
+    // (Wave 24 GFXMAT 6 rows, Wave 27 GFXBIG 4 rows, Wave 28 GFXBODY 8 rows —
+    // 18 registered rows, all DEFAULT-ON kill-switch waves) were therefore
+    // never printed by any run, and the silence was read as attendance 0.
+    //
+    // A zero from an unreached printf and a zero from an unentered body are the
+    // same character in a log. That is the defect: the instrument could not
+    // express the difference (reference_diagnostic_field_cannot_express_the_answer.md).
+    // Reachability of every *Summary/*Report/*Census in the tree is now a screen
+    // of its own, recorded in docs/runtime_port/WAVE29_LANE_VERIFY.md §2.
+    { extern void RtGraphicsWave24GfxmatSummary();  RtGraphicsWave24GfxmatSummary(); }
+    { extern void RtGraphicsWave27GfxbigSummary();  RtGraphicsWave27GfxbigSummary(); }
+    { extern void RtGraphicsWave28GfxbodySummary(); RtGraphicsWave28GfxbodySummary(); }
     RtAllocShadowSummary();
     // Wave 9 lane H: 0 misses == every cached Runtime resolve found its symbol.
     // A non-zero count names the symbols that would be unminted at cutover.
@@ -2097,6 +2116,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     { extern void RtObjectExternalRefTableSummary();      RtObjectExternalRefTableSummary(); }
     { extern void RtObjectExternalRefTableProbeSummary(); RtObjectExternalRefTableProbeSummary(); }
     { extern void RtSelfTestSummary(); RtSelfTestSummary(); }
+    // WAVE 29 LANE VERIFY — per-row port-door attendance. Here rather than in a
+    // static destructor for the reason every instrument above gives: by
+    // static-destructor time the registry is torn down and every row would read
+    // as unregistered, which its own screen would print as a plausible zero.
+    RtRowAttendanceReport();
+    // WAVE 29 LANE VERIFY -- NO factory-oracle call here, and that is a
+    // MEASURED decision, not an omission. It ran here first and faulted on its
+    // third row: by the exit path the engine has torn down the MemoryAllocator
+    // these constructors need. It now runs from ToolHarness_Tick at in-game
+    // frame 120, the first point where the ENGINE'S OWN allocator is live.
+    // See the placement block in standalone/factory_byte_oracle.cpp.
 
     return rc;
 }

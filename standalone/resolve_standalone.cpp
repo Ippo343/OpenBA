@@ -183,6 +183,46 @@ std::unordered_map<uint16_t, void*>& RtOrdinalReg() {
 }
 size_t g_rtHits = 0;
 
+// ---- WAVE 29 LANE VERIFY: PER-ROW PORT-DOOR ATTENDANCE --------------------
+//
+// WHAT THIS MEASURES, exactly: for each REGISTERED runtime port row, how many
+// times the port registry HANDED OUR FUNCTION POINTER to a caller. Nothing
+// more. It is a door counter, not an execution counter, and the difference is
+// load-bearing in both directions:
+//
+//   * count > 0 does NOT mean the body ran N times. `RT_EXPORT_ONCE` and every
+//     other caching door resolve ONCE and then call through the cached pointer
+//     forever, so a body that ran 16.9M times can report count=1.
+//   * count == 0 does NOT always mean the body never ran. A row reached through
+//     a MINTED VTABLE SLOT or a static-initialiser-stamped pointer never passes
+//     through this door at all — that is the whole "a stamp is not a DOOR"
+//     finding, and it is why the 206-row factory family is attendance-0 BY
+//     DESIGN (reference_a_ported_row_can_be_permanently_unpromotable.md).
+//
+// What it DOES establish, and what no instrument in the tree established
+// before it: the set of ported rows for which NOTHING IN THE PROCESS EVER
+// ASKED. For a row whose only door is the name/addr/ordinal registry, count==0
+// is a PROOF OF NON-EXECUTION, not a silence. That is the half of the ~280-body
+// verification debt that can be settled without writing 1294 counters.
+//
+// ARMED WITH BANISHED_RT_ATTEND=1, and OFF by default on purpose: this adds a
+// hash lookup to the registry-hit path, and `ResolveExport` sits inside hot
+// bodies in this tree (the Wave 2 perf breach was two resolves in System::Time).
+// The report PRINTS ITS ARM STATE unconditionally, so an unarmed run cannot be
+// misread as a run in which nothing was resolved
+// (reference_the_gate_was_never_a_control.md).
+bool RtAttendEnabled() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = getenv("BANISHED_RT_ATTEND");
+        on = (e && *e && strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return on != 0;
+}
+std::map<std::string, unsigned long long>&   RtAttendExport()  { static std::map<std::string, unsigned long long> m; return m; }
+std::map<uintptr_t, unsigned long long>&     RtAttendAddr()    { static std::map<uintptr_t, unsigned long long> m; return m; }
+std::map<uint16_t, unsigned long long>&      RtAttendOrdinal() { static std::map<uint16_t, unsigned long long> m; return m; }
+
 // BANISHED_RT_PORT=0 disables every runtime port at once (the master
 // kill-switch for an A/B run). Individual ports keep their own
 // BANISHED_RT_<CLASS> switches; this one short-circuits the whole seam.
@@ -313,6 +353,84 @@ void DumpRuntimeRegistry() {
             fprintf(stderr, "[RtCensus] ordinal %u\n", (unsigned)o);
     }
     fflush(stderr);
+}
+
+// ---- WAVE 29 LANE VERIFY: the per-row attendance report -------------------
+// Prints UNCONDITIONALLY, including (especially) when unarmed, because the two
+// readings it must never be allowed to confuse are "nothing resolved" and
+// "nothing was counting".
+//
+// Three populations, SCORED SEPARATELY and never as a union
+// (reference_union_control_hides_a_blind_screen.md): the name door, the address
+// door and the ordinal door each get their own asked/silent split, because a
+// row can be registered at one door and reached at another (the ordinal->name
+// bridge in ResolveOrdinal is exactly that case).
+//
+// The per-row listing is printed for the SILENT rows, not the asked ones: the
+// asked set is the part that needs no further work.
+extern "C" void RtRowAttendanceReport() {
+    const bool armed = RtAttendEnabled();
+    const size_t nE = RtExportReg().size(), nA = RtAttendExport().size();
+    const size_t nD = RtAddrReg().size(),   nB = RtAttendAddr().size();
+    const size_t nO = RtOrdinalReg().size(), nC = RtAttendOrdinal().size();
+    printf("[RtAttend] ARM=%s (BANISHED_RT_ATTEND)  "
+           "name %zu/%zu asked  addr %zu/%zu asked  ord %zu/%zu asked\n",
+           armed ? "ARMED" : "UNARMED -- every zero below means NOTHING WAS COUNTING",
+           nA, nE, nB, nD, nC, nO);
+    if (!armed) { fflush(stdout); return; }
+    // Aggregate. A door counter is not an execution counter; see the block
+    // comment on RtAttendEnabled above, which this line points the reader at.
+    unsigned long long tot = 0;
+    for (auto& kv : RtAttendExport())  tot += kv.second;
+    for (auto& kv : RtAttendAddr())    tot += kv.second;
+    for (auto& kv : RtAttendOrdinal()) tot += kv.second;
+    printf("[RtAttend] total port-door handouts = %llu  (a DOOR count, NOT a call "
+           "count: a caching door resolves once and calls forever)\n", tot);
+    printf("[RtAttend] SILENT rows below are rows NOTHING ASKED FOR this run. For a "
+           "row whose only door is this registry that is a proof of non-execution; "
+           "for a row reached through a minted vtable slot or a static-init stamp "
+           "it is expected and says nothing.\n");
+    for (auto& kv : RtExportReg())
+        if (RtAttendExport().find(kv.first) == RtAttendExport().end())
+            printf("[RtAttend] SILENT export %s\n", kv.first.c_str());
+    for (auto& kv : RtAddrReg())
+        if (RtAttendAddr().find(kv.first) == RtAttendAddr().end())
+            printf("[RtAttend] SILENT addr 0x%llx\n", (unsigned long long)kv.first);
+    for (auto& kv : RtOrdinalReg())
+        if (RtAttendOrdinal().find(kv.first) == RtAttendOrdinal().end())
+            printf("[RtAttend] SILENT ordinal %u\n", (unsigned)kv.first);
+    // And the asked rows with their counts, so the file is self-contained and a
+    // reader can tell "asked once" from "asked a million times" without a
+    // second run.
+    for (auto& kv : RtAttendExport())
+        printf("[RtAttend] ASKED export %llu %s\n", kv.second, kv.first.c_str());
+    for (auto& kv : RtAttendAddr())
+        printf("[RtAttend] ASKED addr %llu 0x%llx\n", kv.second, (unsigned long long)kv.first);
+    for (auto& kv : RtAttendOrdinal())
+        printf("[RtAttend] ASKED ordinal %llu %u\n", kv.second, (unsigned)kv.first);
+    // CONTROLS, printed with the screen (kickoff warning 7).
+    //  (1) EFFECTIVENESS: if nothing at all was asked, the counters are not
+    //      "all silent", the instrument is dead. Say which.
+    //  (2) KNOWN POSITIVE: `?Update@Device@Audio@@` is registered by
+    //      runtime/src/audio/audio_device.cpp:461 and resolved BY NAME from
+    //      `EngineFuncsInit()` (engine/funcs/engine_funcs.cpp:1558), which runs
+    //      unconditionally on every boot with no env gate. It is therefore a
+    //      positive this screen MUST see. Chosen over a Wave 2 String ctor
+    //      precisely because that one's only literal resolve site is in
+    //      standalone/mouse_inject.cpp, which an unattended run may not reach --
+    //      a "known positive" that is not actually known is a control that
+    //      manufactures a FAIL.
+    printf("[RtAttend] CONTROL 1 (effectiveness): %s\n",
+           tot == 0 ? "ZERO handouts on an ARMED run -- INSTRUMENT DEAD, not a finding"
+                    : "non-zero handouts, the counter is live");
+    const char* kPos = "?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z";
+    bool posReg = RtExportReg().count(kPos) != 0;
+    bool posSaw = RtAttendExport().count(kPos) != 0;
+    printf("[RtAttend] CONTROL 2 (known positive %s): registered=%s asked=%s -> %s\n",
+           kPos, posReg ? "yes" : "NO", posSaw ? "yes" : "no",
+           !posReg ? "INCONCLUSIVE -- the control row is not registered in this build"
+                   : (posSaw ? "PASS" : "FAIL -- a row known to resolve reads SILENT"));
+    fflush(stdout);
 }
 
 void RuntimePortInit() {
@@ -490,6 +608,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
         auto it = reg.find(ghidra_addr);
         if (it != reg.end()) {
             g_rtHits++;
+            if (RtAttendEnabled()) ++RtAttendAddr()[ghidra_addr];   // Wave 29 VERIFY
             return reinterpret_cast<uintptr_t>(it->second);
         }
         RecordRuntimeResidue(nullptr, ghidra_addr, 0, _ReturnAddress());
@@ -857,6 +976,7 @@ void* ResolveExport(const char* mangled_name) {
         auto it = reg.find(mangled_name);
         if (it != reg.end()) {
             g_rtHits++;
+            if (RtAttendEnabled()) ++RtAttendExport()[mangled_name];   // Wave 29 VERIFY
             return it->second;
         }
     }
@@ -917,6 +1037,7 @@ void* ResolveOrdinal(uint16_t ordinal) {
         auto it = reg.find(ordinal);
         if (it != reg.end()) {
             g_rtHits++;
+            if (RtAttendEnabled()) ++RtAttendOrdinal()[ordinal];   // Wave 29 VERIFY
             return it->second;
         }
         // Not registered by ordinal -- try the NAME this ordinal denotes.
@@ -925,6 +1046,8 @@ void* ResolveOrdinal(uint16_t ordinal) {
             auto nit = nreg.find(mangled);
             if (nit != nreg.end()) {
                 g_rtHits++;
+                // Credited to the NAME row, which is the row that is registered.
+                if (RtAttendEnabled()) ++RtAttendExport()[mangled];   // Wave 29 VERIFY
                 return nit->second;
             }
         } else {

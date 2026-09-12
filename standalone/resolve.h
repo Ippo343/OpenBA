@@ -147,6 +147,22 @@ RuntimeRegistryStats GetRuntimeRegistryStats();
 // Written to stderr when BANISHED_RT_CENSUS is set.
 void DumpRuntimeRegistry();
 
+// WAVE 29 LANE VERIFY — PER-ROW port-door attendance. `RuntimeRegistryStats::hits`
+// above is one GLOBAL counter: it can say 400,000 resolves happened and cannot
+// say which of the 1294 registered rows got even one. That is why "~280 bodies
+// are registered and have never executed" was an accumulated estimate rather
+// than a measurement for three waves.
+//
+// Armed with BANISHED_RT_ATTEND=1 (off by default -- it adds a hash lookup to
+// the registry-hit path, and ResolveExport sits inside hot bodies here).
+// Prints `[RtAttend]` lines from the process exit path, ALWAYS, including its
+// arm state, so an unarmed run cannot be read as a run in which nothing
+// resolved. Read the block comment on RtAttendEnabled in
+// standalone/resolve_standalone.cpp before quoting any number from it: it
+// counts DOORS, not calls, and a row reached through a minted vtable slot or a
+// static-initialiser stamp never passes this door at all.
+extern "C" void RtRowAttendanceReport();
+
 // ---- Cutover residue census (BANISHED_RT_STRICT=1) ------------------------
 // PLAN.md wave 9 removes `LoadLibrary("Runtime-x64.dll")` entirely. The gate on
 // that is not "how many functions are ported" but "does anything still ASK the
