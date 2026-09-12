@@ -359,3 +359,26 @@ I did not add it: `sprite.cpp` is not this lane's file.
 * No `EditElement` / `DialogInstance` ctor (R2 — another lane's classes).
 * No verification of any body (§6). The wave explicitly does not pay that debt;
   this lane adds 102 rows to it.
+
+---
+
+## 8. BUILD GATE, AND ONE THING DELIBERATELY LEFT UNDONE
+
+`mingw32-make standalone-debug` exits **0**, with **0** errors and **0**
+warnings, on the lane tip.
+
+It prints one gate warning, and this lane deliberately did **not** clear it:
+
+```
+GATE WARN: standalone\cutover_manifest.inc is stale in COSMETIC fields only
+(a by-name door count moved -- some lane added or removed a door). Row set and
+every disposition match, so nothing the process acts on has changed and the
+build is NOT failed.
+```
+
+That is my 102 new by-name doors. Regenerating `cutover_manifest.inc` on a lane
+branch is exactly what **Wave 26 defect 4** names: six lanes each regenerating
+the same generated file on their own branch produces six conflicting versions of
+it, and a keep-both merge yields a manifest matching no tip.
+*Addressee:* **the WAVE 28 INTEGRATOR** — regenerate it ONCE on the merged tip
+with `python tools/cutover_manifest.py --inc`, as `db43287a` did for Wave 26.
