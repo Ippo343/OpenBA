@@ -22,6 +22,8 @@ happen, and **nothing detects it**. Deflating entries are the dangerous ones.
 | 5 | `runtime_census.py --csv` column name | cosmetic | GFXBIG | open |
 | 6 | **WAVE26_CLOSED.md §2 item 6 is STALE** | **DOC, propagated by the integrator** | IOTEXT | corrected here |
 | 7 | `dialog.cpp:1471` phantom-address comment (since Wave 9) | INFLATING | IOTEXT | fixed in-source by IOTEXT |
+| 8 | **`addr_door_audit.py:47` blind to a wrapped address** | **DEFLATING** | GFXMESH | open — hid a door for 21 waves |
+| 9 | `get_function_metrics` ignores `address=` | WRONG SUBJECT | GFXMESH (known) | open, pre-existing |
 
 ---
 
@@ -253,3 +255,61 @@ ff 50 78             kScalarBool  -> +0x78   (NOT +0x90)
 measurement against the shipped bytes, not an argument from which program Ghidra
 had open — so it holds regardless of defect #1, which is what makes it worth
 recording as closed rather than as reassurance.
+
+---
+
+## 8. `addr_door_audit.py:47` cannot see an address passed to a WRAPPER — GFXMESH
+
+**DEFLATING, and it hid a real cutover obligation for twenty-one waves.**
+
+The audit matches a literal address at a resolve call. It is blind to the same
+address handed to a *wrapper* function. GFXMESH noticed only because respelling
+its own door changed the audit's answer — and that respelling exposed that
+
+> **`mesh.cpp:201` has held an UNREGISTERED address door at `0x1800136f0` since
+> Wave 6.**
+
+Invisible for the whole of its existence. Nothing was wrong with the code; the
+screen simply could not see it, and a clean audit was read as "no doors here".
+
+This is the **sixth or seventh** instance of one family —
+`reference_literal_grep_blind_to_variables.md`, `reference_census_cannot_see_the_macro_doors.md`,
+`reference_census_cannot_see_nonliteral_registrations.md` — and the family's
+defining property is again on display: **it never announces the blindness.**
+
+**Direction matters here more than anywhere else in this ledger.** Entries 3 and 7
+INFLATE: someone chases a false positive and finds the truth. This one DEFLATES —
+it reports that work does not exist. Nothing detects that except an accident, and
+this time the accident was 21 waves late. **Wave 28 must treat a DEFLATING screen
+as unproven until it is handed a known positive** —
+`reference_control_must_be_handed_a_known_positive.md`.
+
+**The door itself is now a cutover obligation** — see the merge checklist.
+
+## 9. `get_function_metrics` ignores `address=` — GFXMESH (pre-existing)
+
+Silently falls back to a NAME lookup. Already recorded as
+`reference_ghidra_mcp_address_param_silently_ignored.md`; re-confirmed this wave.
+Listed only so the Ghidra count in this ledger is honest: **four** GhidraMCP
+defects were live during Wave 27 (#1, #2, #4, #9), and all four are the same shape
+— the tool answers about a subject it has not verified is the one you named.
+
+---
+
+## A LANE CAUGHT A DEFECT IN ITS OWN WORK, AND THE DETECTOR GENERALISES
+
+GFXMESH registered its 14th body as `UEBA` — by analogy with the virtual slots
+beside it — when it is a public **non-virtual const** member, `QEBA`. A phantom
+name: `ResolveExport` returns NULL silently and the `ResolveAddr` fallback hides
+it (`reference_resolveexport_phantom_names.md`).
+
+**How it was caught, and this is the reusable part:**
+
+> **A registration that does not move the census is a registration of a name that
+> does not exist.**
+
+That is a free, universal check on every port in the project, it requires no new
+tool, and it caught an error that reading the code did not. It belongs in the Wave
+28 kickoff as a step, not as a lesson. Note what it implies about the reverse
+case too: the lane had to *attribute* its census delta to notice a row missing
+from it — an unexplained `called` movement is a finding, not noise.

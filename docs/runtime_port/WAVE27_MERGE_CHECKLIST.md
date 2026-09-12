@@ -59,6 +59,7 @@ KICKOFF §4 #10. None is a merge blocker; all are Wave 28 inputs.
 | `0x18005aa30`, `0x18005b1e0` | ~400 b each; two more `ArraySpec` rows, not two bodies | GFXBIG | a buffer leak on a rare layer-expiry arm |
 | `0x180029bb0` | ~680-byte array-of-String serializer, unexported | IOTEXT | IO cutover |
 | `0x18007ec98` | MSVC `eh_vector_destructor_iterator` | FRONTIER | counted at runtime, addressee named |
+| `0x1800136f0` | **unregistered door at `mesh.cpp:201` SINCE WAVE 6** | GFXMESH (found via ledger #8) | pre-existing, NOT opened by this wave — 21 waves invisible |
 
 ## NAMED FOR WAVE 28, NOT DONE HERE
 
@@ -71,4 +72,24 @@ KICKOFF §4 #10. None is a merge blocker; all are Wave 28 inputs.
 - `Particle::Serialize`'s write-path `RtSaveTrace` oracle — available, not built.
 - `?_typeInfo@ElementDescription@UI@@` is minted but not promoted; promoting it
   converts two by-construction ports into measured ones.
-- Every ledger entry.
+- Every ledger entry — and **#8 first**, because it is the only DEFLATING one.
+
+## ONE TAG WAS RETIRED THIS WAVE, CORRECTLY, AND IT NEEDS RE-READING AT MERGE
+
+GFXMESH was the named addressee of the `?AddDrawItems@MeshInstance@Graphics@@`
+HARMFUL tag. It did the right things in the right order:
+
+1. **Re-verified the tag was still true** before acting (it was).
+2. Did the **prescribed fix first** — `scene_watch.cpp`'s `IsMeshInstance` now
+   matches `vtable[3]` against `ResolveRuntimeRaw` (registry-free, unmovable) OR
+   `RtPortLookupAddr`. **Two tokens**, so it is correct before *and* after any
+   future promotion.
+3. **Rewrote the expiry clause itself**, not merely a comment beside it, because
+   the census echoes that clause verbatim — KICKOFF §4 #9, applied to the surface
+   that actually gets read.
+4. **Declined to register `AddDrawItems`**: the body is not ported, and *removing
+   a blocker is not doing the work.* Addressee named for whoever ports it.
+
+**At merge, confirm the census's echoed clause matches the rewritten tag** — the
+one thing that could go wrong here is the doc and the echo drifting apart, which
+is the failure the rewrite was meant to prevent.
