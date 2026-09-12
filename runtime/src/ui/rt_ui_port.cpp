@@ -269,6 +269,37 @@ void RtUiPortInit() {
     n += RtUiFactory1Register();  // owns BANISHED_RT_UIFACT1 (FACTUI1)
     n += RtUiFactory2Register();          // owns BANISHED_RT_UIFACT2 (FACTUI2)
 
+    // ------------------------------------------------------------------
+    // 2026-09-12, the UI TEXT PIPELINE batch. No switches: a port registers
+    // unconditionally (DIRECTION.md §2 item 3). Declared here rather than at
+    // the top of the file so the whole batch is one contiguous block --
+    // eight agents are appending to this file in parallel today.
+    // ------------------------------------------------------------------
+    extern int RtUiClassOperatorDeleteRegister();  // ui_operator_delete.cpp
+    extern int RtUiCharacterSetRegister();         // characterset.cpp
+    extern int RtUiCursorRegister();               // cursor.cpp
+    extern int RtUiSpriteCaptureClassRegister();   // spritecapture_class.cpp
+    extern int RtUiFontRegister();                 // font.cpp
+    extern int RtUiDescriptionDtorsRegister();     // description_dtors.cpp
+    extern int RtUiDocumentTextRegister();         // documenttext.cpp
+    extern int RtUiSpriteContextAddRegister();     // spritecontext_add.cpp
+    extern int RtUiElementBodiesB5Register();      // element_bodies_b5.cpp
+    // combodialog_ctor.cpp, NOT combodialog.cpp: vtable batch 9 landed the
+    // class's slots in that file under the same register-function name, so
+    // the construction half took its own file at the merge. See its banner.
+    extern int RtUiComboDialogCtorRegister();      // combodialog_ctor.cpp
+    n += RtUiClassOperatorDeleteRegister();  // the 60 ??3<Class>@UI@@, one body
+    n += RtUiCharacterSetRegister();         // UI::CharacterSet, whole class
+    n += RtUiCursorRegister();               // UI::Cursor, whole class
+    n += RtUiSpriteCaptureClassRegister();   // UI::SpriteCapture vtable + Draw
+    n += RtUiFontRegister();                 // UI::Font, whole class + metrics
+    n += RtUiDescriptionDtorsRegister();     // 26 ??1<Class>@UI@@ destructors
+    n += RtUiDocumentTextRegister();         // UI::DocumentTextElement pipeline
+    n += RtUiSpriteContextAddRegister();     // SpriteContext AddSprite x3 + AddFont
+    n += RtUiElementBodiesB5Register();      // assorted *Element / *Description
+    n += RtUiComboDialogCtorRegister();      // ??0ComboDialog, ??2ComboDialog,
+                                             // ??0DialogInstance (2nd overload)
+
     // ---- VTABLE BATCH 9 (2026-09-12), unconditional -------------------------
     //   combodialog.cpp             UI::ComboDialog
     //   dialogcontrollerconfig.cpp  UI::DialogControllerConfig

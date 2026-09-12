@@ -1,0 +1,176 @@
+// ============================================================================
+// runtime/types/ui/Font.h — UI::Font, 0x90 bytes, plus its two helper PODs
+// ============================================================================
+//
+// `UI::Font` is an `Object::External` that owns a codepoint -> glyph table, a
+// glyph metric table, and the sprite sheet the glyphs are cut from. It is the
+// class behind every piece of text the engine draws: the three text-metric
+// bodies ported in runtime/src/ui/font.cpp (`ComputeStringLayout`,
+// `ComputeLineLayout`, `ComputeCharacterPosition`) are the only readers of most
+// of these fields.
+//
+// EVERY NUMBER HERE IS READ OUT OF THE SHIPPED RETAIL BYTES:
+//
+//   sizeof 0x90   `MOV EDX,0x90` at 0x18003214f — the eh_vector_destructor
+//                 stride in the deleting destructor 0x180032130. Corroborated
+//                 by the already-ported factory row (`"Font", 0x90ull, 8` in
+//                 runtime/src/ui/factory_ui1_tables.inc) whose last store is
+//                 +0x88, and by the constructor 0x180031ce0, which zeroes
+//                 +0x08 .. +0x88 and nothing past it.
+//
+//   +0x30 _charToGlyph   `MOV RAX,[RBP+0x30]` then `[RAX + cp*4]` at
+//                        0x180116d16 — indexed by a DECODED CODEPOINT, and the
+//                        bound tested one instruction earlier is +0x38, which
+//                        is Array::_size. The element is int32 (`MOVSXD RDX,
+//                        dword ptr [RAX+RCX*4]`).
+//   +0x40 _glyphs        `SHL RBX,0x4 ; ADD RBX,[RBP+0x40]` at 0x180116d52 —
+//                        16-byte stride, indexed by the GLYPH index the table
+//                        above produced. Size at +0x48 (`MOV EAX,[RSI+0x48]`
+//                        in Serialize at 0x1801178f2).
+//   +0x50 _lineHeight    ComputeStringLayout adds it once per line
+//                        (0x1801171a0) and hands it back as the height of a
+//                        SINGLE line at 0x180117076.
+//   +0x58 _ellipsisWidth Serialize computes it, for a file older than reader
+//                        version 1, by measuring the literal "..."
+//                        (0x180159138) — 0x180117a99 — and ComputeLineLayout
+//                        reserves exactly it before deciding to elide
+//                        (0x180116d6e).
+//   +0x5c _spaceWidth    the same loop over the literal " " (0x1801567e0),
+//                        stored at 0x180117b28. No body in this class READS
+//                        it; the name comes from what is measured.
+//   +0x60 _spriteSheet   serialized by 0x180004590, which our tree already
+//                        names `ExternalPtr<UI::SpriteSheet>::Serialize`
+//                        (runtime/src/object/external_ptr_serialize.cpp). The
+//                        metric bodies read a count at +0x28 of the pointee and
+//                        an array of 0x38-byte sprite records at +0x20.
+//   +0x68 _material      serialized by 0x180014520 =
+//                        `ExternalPtr<Graphics::MaterialInstance>::Serialize`,
+//                        same file.
+//
+// FIELDS DELIBERATELY LEFT UNNAMED. +0x20, +0x78, +0x80 and +0x88 are four
+// `System::String`s (the destructor 0x1801175a0 releases all four through the
+// refcount-at-data[-4] sequence, and Serialize hands all four to
+// `String::Serialize` 0x1800c9930). Serialize fixes their ORDER but says
+// nothing about their meaning, and one class is not enough to name a field.
+// +0x28 is whatever 0x180076e90 serializes and +0x54/+0x70/+0x74 are three
+// plain int32s; same rule.
+//
+// PORTABILITY: no <windows.h>, per PLAN.md §4.1 decision 1.
+// ============================================================================
+#pragma once
+
+#include <cstdint>
+#include <cstddef>
+
+#include "../collection/Collection.h"
+
+namespace RtUI {
+
+// One row of UI::Font::_glyphs, 16 bytes. Named from the three bodies that
+// walk it, which agree field for field:
+//   penX += _preAdvance + <carried kern>   ; the glyph is DRAWN at that penX
+//   penX += _postAdvance
+//   <carried kern> = _postKern             ; applied before the NEXT glyph
+//   glyphY = baseY - _offsetY - <sprite top>
+// (0x180116d7f..0x180116dd1 in ComputeLineLayout; 0x180116f8f..0x180116f9b in
+// ComputeCharacterPosition; 0x180117318..0x180117335 in ComputeStringLayout.)
+struct FontGlyph {
+    int32_t _preAdvance;    // +0x00
+    int32_t _postKern;      // +0x04
+    int32_t _postAdvance;   // +0x08
+    int32_t _offsetY;       // +0x0c
+};
+static_assert(sizeof(FontGlyph) == 0x10, "UI::Font glyph stride 0x10 (SHL RBX,4)");
+
+// One placed glyph in a UI::Font::Layout, 16 bytes. Built on the stack at
+// [RSP+0x58] in ComputeLineLayout (0x180116d99..0x180116dc0) and appended by
+// 0x180076d10; the justify pass at the end of ComputeStringLayout re-reads
+// `_line` (0x1801174be) and adjusts `_x` (0x1801174d2 / 0x1801174de).
+struct FontLayoutEntry {
+    int32_t _codepoint;     // +0x00
+    int32_t _x;             // +0x04
+    int32_t _y;             // +0x08
+    int32_t _line;          // +0x0c  index into Layout::_lineWidths
+};
+static_assert(sizeof(FontLayoutEntry) == 0x10, "Layout entry stride 0x10");
+
+// UI::Font::Layout, 0x28 bytes — the out-parameter of ComputeStringLayout.
+// ComputeStringLayout's own prologue names every field: it clears +0x18 with
+// `Array<int32>::SetSize(.,0)` (0x18002fea0 at 0x18011700b), clears +0x08 with
+// 0x180076a40, and zeroes +0x00..+0x07 with ONE qword store (0x180117021),
+// which is why _width and _height are adjacent int32s. It fills them back in
+// at 0x1801174f0 / 0x1801174f5.
+struct FontLayout {
+    int32_t                              _width;        // +0x00
+    int32_t                              _height;       // +0x04
+    Collection::Array<FontLayoutEntry>   _entries;      // +0x08
+    Collection::Array<int32_t>           _lineWidths;   // +0x18
+};
+static_assert(offsetof(FontLayout, _entries) == 0x08, "Layout::_entries @ +0x08");
+static_assert(offsetof(FontLayout, _entries._size) == 0x10,
+              "Layout::_entries._size @ +0x10 (MOV EDX,[RDI+0x10] at 0x18011718a)");
+static_assert(offsetof(FontLayout, _lineWidths) == 0x18, "Layout::_lineWidths @ +0x18");
+static_assert(offsetof(FontLayout, _lineWidths._size) == 0x20,
+              "Layout::_lineWidths._size @ +0x20 (MOV EDX,[RDI+0x20] at 0x180117190)");
+static_assert(sizeof(FontLayout) == 0x28, "sizeof(UI::Font::Layout) == 0x28");
+
+struct Font {
+    void*                          _vtbl;          // +0x00  Base -> External -> Font
+    void*                          _external08;    // +0x08  Object::External's three
+    void*                          _external10;    // +0x10
+    void*                          _external18;    // +0x18
+    void*                          _string20;      // +0x20  System::String
+    void*                          _field28;       // +0x28  serialized by 0x180076e90
+    Collection::Array<int32_t>     _charToGlyph;   // +0x30  codepoint -> glyph index
+    Collection::Array<FontGlyph>   _glyphs;        // +0x40
+    int32_t                        _lineHeight;    // +0x50
+    int32_t                        _field54;       // +0x54
+    int32_t                        _ellipsisWidth; // +0x58
+    int32_t                        _spaceWidth;    // +0x5c
+    void*                          _spriteSheet;   // +0x60  ExternalPtr<UI::SpriteSheet>
+    void*                          _material;      // +0x68  ExternalPtr<MaterialInstance>
+    int32_t                        _field70;       // +0x70
+    int32_t                        _field74;       // +0x74
+    void*                          _string78;      // +0x78  System::String
+    void*                          _string80;      // +0x80  System::String
+    void*                          _string88;      // +0x88  System::String
+};
+
+static_assert(offsetof(Font, _string20)      == 0x20, "Font::_string20 @ +0x20");
+static_assert(offsetof(Font, _field28)       == 0x28, "Font::_field28 @ +0x28");
+static_assert(offsetof(Font, _charToGlyph)   == 0x30, "Font::_charToGlyph @ +0x30");
+static_assert(offsetof(Font, _charToGlyph._size) == 0x38,
+              "Font::_charToGlyph._size @ +0x38 (CMP EAX,[RBP+0x38] at 0x180116d0a)");
+static_assert(offsetof(Font, _glyphs)        == 0x40, "Font::_glyphs @ +0x40");
+static_assert(offsetof(Font, _glyphs._size)  == 0x48,
+              "Font::_glyphs._size @ +0x48 (MOV EAX,[RSI+0x48] at 0x1801178f2)");
+static_assert(offsetof(Font, _lineHeight)    == 0x50, "Font::_lineHeight @ +0x50");
+static_assert(offsetof(Font, _field54)       == 0x54, "Font::_field54 @ +0x54");
+static_assert(offsetof(Font, _ellipsisWidth) == 0x58, "Font::_ellipsisWidth @ +0x58");
+static_assert(offsetof(Font, _spaceWidth)    == 0x5c, "Font::_spaceWidth @ +0x5c");
+static_assert(offsetof(Font, _spriteSheet)   == 0x60, "Font::_spriteSheet @ +0x60");
+static_assert(offsetof(Font, _material)      == 0x68, "Font::_material @ +0x68");
+static_assert(offsetof(Font, _field70)       == 0x70, "Font::_field70 @ +0x70");
+static_assert(offsetof(Font, _field74)       == 0x74, "Font::_field74 @ +0x74");
+static_assert(offsetof(Font, _string78)      == 0x78, "Font::_string78 @ +0x78");
+static_assert(offsetof(Font, _string80)      == 0x80, "Font::_string80 @ +0x80");
+static_assert(offsetof(Font, _string88)      == 0x88, "Font::_string88 @ +0x88");
+static_assert(sizeof(Font) == 0x90, "sizeof(UI::Font) == 0x90 (MOV EDX,0x90 at 0x18003214f)");
+
+// The three vtables UI::Font's constructor stamps, in the order it stamps them
+// (0x180031cf6, 0x180031d00, 0x180031d20). All three are exported, so the port
+// resolves them by name and the mint supplies them at cutover.
+constexpr const char* kVtblFontBase     = "??_7Base@Object@@6B@";      // 0x180154788
+constexpr const char* kVtblFontExternal = "??_7External@Object@@6B@";  // 0x1801547a0
+constexpr const char* kVtblFont         = "??_7Font@UI@@6B@";          // 0x180155b50
+
+// UI::Font::Justify, the W4 enum ComputeStringLayout's fifth parameter carries.
+// Only two values are ever tested (0x1801174c5 and 0x1801174d8); 0 is every
+// other value and is the do-nothing case, so it is named for what it does.
+enum FontJustify : int32_t {
+    kFontJustifyLeft   = 0,
+    kFontJustifyCenter = 1,
+    kFontJustifyRight  = 2,
+};
+
+}  // namespace RtUI

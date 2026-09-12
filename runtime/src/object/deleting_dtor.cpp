@@ -59,6 +59,21 @@
 //     per-translation-unit copies of `operator delete`, and byte-identical to
 //     the exported `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800c7ad0)
 //     that lane Q already reaches. One constant, not a parameter.
+//
+//     CORRECTED 2026-09-12 (UI text-pipeline batch): "ten" and
+//     "per-translation-unit" were both too small a claim. Many of these are
+//     per-CLASS `operator delete`s with NAMES in the export directory
+//     (`??3<Class>@UI@@SAXPEAX@Z`), and SIXTY of the UI ones were read out of
+//     the shipped DLL and compared byte for byte for
+//     runtime/src/ui/ui_operator_delete.cpp: all sixty are 93 bytes, every
+//     difference between them is inside a RIP-relative displacement, and all
+//     sixty resolve to the same four targets (the allocator singleton,
+//     EnterCriticalSection, MemoryAllocator::Free, LeaveCriticalSection).
+//     So the conclusion this paragraph draws is unchanged and now rests on
+//     seventy measurements rather than ten — but the DESCRIPTION was wrong in
+//     the way reference_grep_cannot_tell_internal_from_unported_export.md is
+//     about, and the dialog_vtable.cpp banner already had to correct it once
+//     for `??3Dialog@UI@@`.
 //   * The ARITY does not vary. Lane Q's correction on `SetSize` — where eight
 //     instantiations took two arguments behind a three-argument typedef — was
 //     checked for here address by address: all 37 read RCX and EDX and nothing
@@ -963,6 +978,44 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180020a70, 0x1800a51c0, 0x108, "Graphics::ParticleSystem"),
     RT_DELDTOR(0x18000bef0, 0x1800e03b0, 0x080, "Audio::SoundBuffer"),
     RT_DELDTOR(0x180050820, 0x1800e0880, 0x040, "Audio::SoundEffect"),
+    // 2026-09-12, the UI TEXT PIPELINE batch. APPENDED AFTER the batch-8 and
+    // batch-9 rows above at merge time: kSpecs is POSITIONAL and three batches
+    // each started appending at the same index on their own branch, so the
+    // wrapper indices below were re-derived from the merged table, not before.
+    // 2026-09-12, the UI TEXT PIPELINE batch: the four classes of
+    // runtime/src/ui/{font,characterset,cursor,spritecapture_class}.cpp. Each
+    // row's two constants were read from the deleting destructor's OWN bytes
+    // (the `LEA R9` and `MOV EDX` of its array arm), not from the class header:
+    //     0x180032130  LEA R9,[0x1801175a0]  MOV EDX,0x90   UI::Font
+    //     0x1800378a0  LEA R9,[0x1800cb840]  MOV EDX,0x28   UI::CharacterSet
+    //     0x18003b3a0  LEA R9,[0x1800cd1c0]  MOV EDX,0x30   UI::Cursor
+    //     0x18003ccf0  LEA R9,[0x1800d91b0]  MOV EDX,0x58   UI::SpriteCapture
+    // All four destructors are ported and registered in runtime/src/ui/.
+    //
+    // THREE OF THE FOUR INLINE ~Class IN THE SCALAR ARM (CharacterSet, Cursor
+    // and SpriteCapture open-code the restamp, the member release and the
+    // `CALL ??1External`); UI::Font is the one that CALLS it (0x180032181).
+    // That is exactly the split this family handles by calling `~Class` on
+    // BOTH arms, and it cost nothing to check: the inlined code in each of the
+    // three IS the body of the destructor its own array arm names.
+    //
+    // Each also calls its CLASS-SPECIFIC `operator delete` in the scalar arm
+    // (??3Font 0x180031a50, ??3CharacterSet 0x1800374e0, ??3Cursor 0x18003b010,
+    // ??3SpriteCapture 0x18003c8a0) rather than the shared 0x180006a10. All
+    // four are now ported in runtime/src/ui/ui_operator_delete.cpp, which
+    // proves by byte comparison that all sixty UI class operator deletes are
+    // one function — so DeletingDtorCore's single MemFree IS retail's body
+    // here too, as it is for the GroupDescription and Video rows above.
+    //
+    // NOT ADDED to kProbeSubjects, on the UI::ElementDescription row's test:
+    // ~CharacterSet releases a refcounted String, ~SpriteCapture destroys
+    // three Arrays whose buffers came from the Runtime heap, and ~Font does
+    // both. A fabricated subject would decrement a refcount nothing
+    // incremented and free garbage pointers.
+    RT_DELDTOR(0x180032130, 0x1801175a0, 0x090, "UI::Font"),
+    RT_DELDTOR(0x1800378a0, 0x1800cb840, 0x028, "UI::CharacterSet"),
+    RT_DELDTOR(0x18003b3a0, 0x1800cd1c0, 0x030, "UI::Cursor"),
+    RT_DELDTOR(0x18003ccf0, 0x1800d91b0, 0x058, "UI::SpriteCapture"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1391,6 +1444,25 @@ void* RtDelDtor_PointList(void* self, unsigned flags) {
 void* RtDelDtor_PickingMesh(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 70);
 }
+// UI TEXT PIPELINE batch (2026-09-12). Indices 71-74, counted off the MERGED
+// table rather than assumed: this is the fourth batch to append here today and
+// the previous three each started at the same index on their own branch.
+// UI::Font          ~Font          = 0x1801175a0  (PORTED, runtime/src/ui/font.cpp)
+void* RtDelDtor_Font(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 85);
+}
+// UI::CharacterSet  ~CharacterSet  = 0x1800cb840  (PORTED, runtime/src/ui/characterset.cpp)
+void* RtDelDtor_CharacterSet(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 86);
+}
+// UI::Cursor        ~Cursor        = 0x1800cd1c0  (PORTED, runtime/src/ui/cursor.cpp)
+void* RtDelDtor_Cursor(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 87);
+}
+// UI::SpriteCapture ~SpriteCapture = 0x1800d91b0  (PORTED, runtime/src/ui/spritecapture_class.cpp)
+void* RtDelDtor_SpriteCapture(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 88);
+}
 
 // ---------------------------------------------------------------------------
 // 2026-09-12, VTABLE BATCH 1 -- ten UI::*Description classes, indices 71..80.
@@ -1603,6 +1675,11 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180020a70, (void*)&RtDelDtor_ParticleSystem);
     RegisterRuntimeAddr(0x18000bef0, (void*)&RtDelDtor_SoundBuffer);
     RegisterRuntimeAddr(0x180050820, (void*)&RtDelDtor_SoundEffect);
+    // UI TEXT PIPELINE batch, rows 71-74 (wrappers above).
+    RegisterRuntimeAddr(0x180032130, (void*)&RtDelDtor_Font);
+    RegisterRuntimeAddr(0x1800378a0, (void*)&RtDelDtor_CharacterSet);
+    RegisterRuntimeAddr(0x18003b3a0, (void*)&RtDelDtor_Cursor);
+    RegisterRuntimeAddr(0x18003ccf0, (void*)&RtDelDtor_SpriteCapture);
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --
