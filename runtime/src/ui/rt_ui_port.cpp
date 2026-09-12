@@ -196,6 +196,10 @@ extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
 // make the whole file worthless (dialog_factory.cpp has been dark since Wave 11).
 extern int RtUiFactory2Register();         // ui_factory_wave28.cpp (FACTUI2)
 
+// VTABLE BATCH 9 (2026-09-12).
+extern int RtUiComboDialogRegister();             // combodialog.cpp
+extern int RtUiDialogControllerConfigRegister();   // dialogcontrollerconfig.cpp
+
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
         printf("[RtPort] BANISHED_RT_UI=0 -- UI namespace port disabled\n");
@@ -255,7 +259,10 @@ void RtUiPortInit() {
     extern int RtUiDocumentTextRegister();         // documenttext.cpp
     extern int RtUiSpriteContextAddRegister();     // spritecontext_add.cpp
     extern int RtUiElementBodiesB5Register();      // element_bodies_b5.cpp
-    extern int RtUiComboDialogRegister();          // combodialog.cpp
+    // combodialog_ctor.cpp, NOT combodialog.cpp: vtable batch 9 landed the
+    // class's slots in that file under the same register-function name, so
+    // the construction half took its own file at the merge. See its banner.
+    extern int RtUiComboDialogCtorRegister();      // combodialog_ctor.cpp
     n += RtUiClassOperatorDeleteRegister();  // the 60 ??3<Class>@UI@@, one body
     n += RtUiCharacterSetRegister();         // UI::CharacterSet, whole class
     n += RtUiCursorRegister();               // UI::Cursor, whole class
@@ -265,7 +272,14 @@ void RtUiPortInit() {
     n += RtUiDocumentTextRegister();         // UI::DocumentTextElement pipeline
     n += RtUiSpriteContextAddRegister();     // SpriteContext AddSprite x3 + AddFont
     n += RtUiElementBodiesB5Register();      // assorted *Element / *Description
-    n += RtUiComboDialogRegister();          // UI::ComboDialog + DialogInstance ctor
+    n += RtUiComboDialogCtorRegister();      // ??0ComboDialog, ??2ComboDialog,
+                                             // ??0DialogInstance (2nd overload)
+
+    // ---- VTABLE BATCH 9 (2026-09-12), unconditional -------------------------
+    //   combodialog.cpp             UI::ComboDialog
+    //   dialogcontrollerconfig.cpp  UI::DialogControllerConfig
+    n += RtUiComboDialogRegister();
+    n += RtUiDialogControllerConfigRegister();
 
     printf("[RtPort] UI: %d exports registered\n", n);
 }
