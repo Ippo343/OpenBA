@@ -2055,6 +2055,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     RtEngineLifecycleSummary();
     RtEnginePlatformSummary();
     RtEngineLoadResourcesSummary();
+    // Wave 23 lane GFXBODY: attendance for the four FrameCopyImageBuffer bodies
+    // and AnimationManager::Update. Always on and unconditional, because the
+    // number this lane needs is the ZERO — a run that never entered a ported
+    // body must SAY so rather than stay silent
+    // (reference_uncalled_port_is_not_verified.md). `Generate` reports its BLIT
+    // count separately from its entry count: its whole body sits behind one
+    // equality test, so an entry count cannot tell you the copy happened.
+    { extern void RtGraphicsWave23GfxbodySummary(); RtGraphicsWave23GfxbodySummary(); }
     RtAllocShadowSummary();
     // Wave 9 lane H: 0 misses == every cached Runtime resolve found its symbol.
     // A non-zero count names the symbols that would be unminted at cutover.

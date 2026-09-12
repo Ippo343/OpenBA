@@ -92,10 +92,18 @@
 //     and is why porting the ctor without a vtable of our own is the safe
 //     choice here (PLAN §4.3 risk 3).
 //   * Keeping the DLL vtable is also what keeps
-//     code/Game/Component/statusicon_geometry.cpp:335 working: it builds its
-//     billboard vtable by COPYING slots out of whatever the Geometry ctor
-//     stamped. Stamping our own table would silently change every slot it
-//     copies.
+//     `StatusIconGeometry_BuildVtable` (code/Game/Component/
+//     statusicon_geometry.cpp:336) working: it builds its billboard vtable by
+//     COPYING slots out of whatever the Geometry ctor stamped. Stamping our own
+//     table would silently change every slot it copies, so this bullet is a
+//     STANDING BLOCKER on minting `??_7Geometry@Graphics@@6B@`, not a note.
+//     RE-CHECKED AND CORRECTED, Wave 23 lane GFXBODY, on lane GFXVT's report:
+//     the SUBSTANCE holds and the DETAIL did not. Wave 22 lane GEOM rewrote
+//     that loop, so what it does today (:393) is copy slots 0-8 and install
+//     nullptr from 9 up — the true Geometry vtable extent is NINE, not the
+//     twelve the old loop assumed. The set of slots this file's ctor decision
+//     protects is therefore 0-8, and it is smaller than it was when this bullet
+//     was written; it is not empty, so nothing about the decision changes.
 // ============================================================================
 
 #include <cstdint>

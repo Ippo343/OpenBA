@@ -61,32 +61,62 @@ static_assert(offsetof(AnimationEvent, _f18) == 0x18, "AnimationEvent::_f18 @ +0
 // into the exported static `Graphics::AnimationManager::_singleton`
 // (0x1801fe7b0, ordinal 4799).
 //
-// +0x00/+0x08/+0x0c are NOT reproduced here as a real Win32 CRITICAL_SECTION:
-// the ctor never calls InitializeCriticalSection, so DebugInfo stays null
-// forever. The dtor (retail 0x1800fc400) nulls _singleton and then calls
-// FUN_18005bf60(this) AS IF `this` were an LPCRITICAL_SECTION (it reads
-// ->DebugInfo, ->LockCount, ->RecursionCount at exactly +0x00/+0x08/+0x0c),
-// but since DebugInfo is always null the function's only live branch
-// (freeing DebugInfo's block) never fires -- it is a defensive no-op call
-// against a lock this class never actually initialises. This lane calls it
-// at its own retail address rather than reproducing FUN_18005bf60 and
-// FUN_18005c550's Win32-shaped internals (PLAN §4.1 decision 1: no
-// <windows.h> outside a _win twin).
+// ----------------------------------------------------------------------------
+// CORRECTION, WAVE 23 LANE GFXBODY: +0x00/+0x08/+0x0c ARE NOT A LOCK.
 //
-// +0x10 is a fourth dword this lane could not pin to any read: nothing this
-// lane decompiled (ctor, dtor) reads it, and Update/Serialize -- which likely
-// do -- are HELD BACK (see animation.cpp). Left UNVERIFIED.
+// This header used to call them a "CRITICAL_SECTION-shaped, never initialised"
+// triple and called the dtor's helper "a defensive no-op call against a lock
+// this class never actually initialises". Both statements are WRONG, and the
+// wrongness was invisible while Update and Serialize were held back, because
+// nothing else in the tree read those twelve bytes.
+//
+// They are a `Collection::Array<AnimationGroup>` — _data / _size / _capacity —
+// and the proof is in `?Update@AnimationManager@Graphics@@` (0x1800fc240),
+// which this lane disassembled:
+//
+//     1800fc268:  CMP dword ptr [RCX + 0x8],R14D   ; +0x08 is a LOOP BOUND
+//     1800fc26c:  JLE <return>
+//     1800fc2a0:  MOV RBP,qword ptr [R15]          ; +0x00 is an ARRAY BASE
+//                                                   ; (elements of stride 0x30)
+//
+// A LockCount is not a loop bound and a DebugInfo pointer is not an array base.
+// The dtor's helper, read the other way round, says the same thing: FUN_18005bf60
+// destroys each element, frees the block at +0x00, then zeroes +0x00/+0x08/+0x0c
+// — that is `Collection::Array<T>::~Array`, and Ghidra typed its parameter
+// LPCRITICAL_SECTION only because the free happens under the ALLOCATOR's own
+// critical section. So the dtor's call is load-bearing whenever any group has
+// been registered, not a no-op.
+//
+// NO BEHAVIOURAL CHANGE FOLLOWS. animation.cpp's ported ctor zeroes the same
+// twelve bytes it always did (a zeroed Array is an empty Array) and its ported
+// dtor still delegates to the real helper at its retail address, which is
+// correct under either reading. Only the NAMES and the explanation change —
+// and they are what a future lane would have built on.
+//
+// The Mersenne-Twister block at +0x14 is unaffected and stands as decompiled.
+// ----------------------------------------------------------------------------
+//
+// PLAN §4.1 decision 1 (no <windows.h> outside a _win twin) is still why
+// animation.cpp calls FUN_18005bf60 / FUN_18005c550 at their retail addresses
+// rather than reproducing them.
+//
+// +0x10 is a fourth dword no body this project has read touches: not the ctor,
+// not the dtor, and not Update (which reads only +0x00 and +0x08). Serialize
+// (0x1800fc190) is still unported. Left UNVERIFIED.
 // ============================================================================
 struct AnimationManager {
-    uint64_t _lockDebugInfo;   // +0x00  CRITICAL_SECTION-shaped, never initialised; zeroed
-    uint32_t _lockCount;       // +0x08  ditto
-    uint32_t _lockRecursion;   // +0x0c  ditto
-    uint32_t _f10;             // +0x10  UNVERIFIED -- no reader in ctor/dtor
+    void*    _groupData;       // +0x00  Collection::Array<AnimationGroup>::_data (stride 0x30)
+    int32_t  _groupCount;      // +0x08  ::_size      -- Update's outer loop bound
+    int32_t  _groupCapacity;   // +0x0c  ::_capacity
+    uint32_t _f10;             // +0x10  UNVERIFIED -- no reader in ctor/dtor/Update
     uint32_t _rngState[624];   // +0x14  Mersenne-Twister state, time64-seeded
     uint32_t _pad9d4;          // +0x9d4 alignment pad to the 0x9d8 allocation size
 };
 static_assert(sizeof(AnimationManager) == 0x9d8,
               "Graphics::AnimationManager must match AllocSub(0x9d8, 8)");
 static_assert(offsetof(AnimationManager, _rngState) == 0x14, "AnimationManager::_rngState @ +0x14");
+static_assert(offsetof(AnimationManager, _groupData) == 0x00, "AnimationManager::_groupData @ +0x00");
+static_assert(offsetof(AnimationManager, _groupCount) == 0x08, "AnimationManager::_groupCount @ +0x08");
+static_assert(offsetof(AnimationManager, _groupCapacity) == 0x0c, "AnimationManager::_groupCapacity @ +0x0c");
 
 }  // namespace RtGraphics

@@ -305,9 +305,14 @@ extern "C" void RtGraphics_AnimationEvent_Dtor(AnimationEvent* self) {
 extern "C" AnimationManager* RtGraphics_AnimationManager_Ctor(AnimationManager* self) {
     RT_DIFF_BEGIN("Graphics::AnimationManager::AnimationManager()");
 
-    self->_lockDebugInfo = 0;
-    self->_lockCount = 0;
-    self->_lockRecursion = 0;
+    // Retail zeroes +0x00..+0x13 with three stores (8 + 8 + 4). The first
+    // twelve bytes are a Collection::Array<AnimationGroup> — NOT the
+    // CRITICAL_SECTION this file used to name; see the CORRECTION banner in
+    // runtime/types/graphics/Animation.h. Zeroing them IS constructing an empty
+    // array, so the bytes written here are unchanged by that correction.
+    self->_groupData = nullptr;
+    self->_groupCount = 0;
+    self->_groupCapacity = 0;
     self->_f10 = 0;
 
     const uint32_t seed = static_cast<uint32_t>(std::time(nullptr));
