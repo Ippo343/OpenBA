@@ -845,9 +845,39 @@ indistinguishable from a genuine catastrophic regression.**
 FACTREST's `SectionOf` counterpart in this lane (§7.2 defect 2) is the same
 error in different clothes: **a fix that was written but never verified to have
 taken effect.**
-The only defence that worked anywhere in this lane was **checking the
-BEHAVIOUR changed, or grepping the file for the text**, never trusting the edit
-tool's success report. Worth a wave-level note; not fixed.
+**THE ONE-LINE FIX, and it is FACTREST's finding independently reproduced
+here.** They noticed that across four such defects in their lane, the *only*
+difference between the three that failed silently and the one that failed
+loudly was a single `assert old in s` in the replacement script. **That
+correlation is exact in this lane too:**
+
+| edit | precondition? | outcome |
+|---|---|---|
+| the two `-Wcomment` comment fixes | none | silent; warning survived two rebuilds |
+| the §7.0 section insert | none | silent; section simply absent |
+| the §6/§7.1 rewrites | `assert old in s` | **AssertionError in under a second** |
+
+The loud one is how the heredoc backslash-mangling was found at all. So the
+actionable rule is not "verify your edits" — it is **put a precondition on the
+replacement**, one line, zero cost, and the failure announces itself instead of
+being reported as success.
+
+**For the memory file, not just this doc:**
+`reference_heredoc_eats_backslashes.md` covers the QUOTING half of this and does
+**not** cover the SILENCE. It reads as a text-mangling problem, when the
+expensive half is that the mangling is **reported as success** — which is what
+makes stopping to look feel unnecessary. **Addressee: the integrator**, for the
+memory file, since that is where the next lane meets this rather than in two
+lane docs.
+
+**This lane's printed counts cannot drift the same way.** FACTREST's worst
+instance of this defect was in COMMITTED PORT CODE — a `printf` that kept
+reporting 70 slots after a dedupe made it 68, so the shipped build lied about
+itself in its own log. Checked here: `RtUiFactory1Register` prints
+`int n = RegisterAll(...)`, a value **accumulated by the registration loop
+itself** (`++n` per registered row), not a literal. The live run printed **74**,
+which matches the 74 derived from the spec table independently. A derived count
+cannot disagree with what it counts.
 
 **6. THE SESSION SCRATCHPAD IS A SHARED NAMESPACE AND A COLLISION IS SILENT.**
 Not a tool defect — a harness one, and it is live. This lane's `exp.py` was
