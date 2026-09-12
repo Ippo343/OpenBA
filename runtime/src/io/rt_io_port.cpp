@@ -311,6 +311,11 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_FSSLOTS"))    n += RtIoFileStreamSlotsRegister();
     if (RtWaveEnabled("BANISHED_RT_TFSSLOTS"))   n += RtIoTextFileStreamSlotsRegister();
 
+    // BATCH 8b. Registers unconditionally (DIRECTION.md §2: a port registers,
+    // it does not get a flag).
+    extern int RtIoModificationSortRegisterC();   // modification_sort.cpp
+    n += RtIoModificationSortRegisterC();
+
     // Lane FILE's screenshot-path door screen. Armed OUTSIDE its two switches
     // on purpose: the control for this lane is a run with both of them at 0,
     // and a screen that the control switches off cannot be that control.

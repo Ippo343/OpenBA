@@ -64,7 +64,8 @@
 //   0x180105700  ?AddScene@Renderer@Graphics@@                 ord 1579
 //   0x180104fd0  ?BeginDrawGroup@Renderer@Graphics@@           ord 1640
 //   0x1801017a0  ?AddCulledDrawItems@Scene@Graphics@@          ord 1543
-//   0x180062d60  the draw-item sort                     NOT EXPORTED  (ported, BATCH 8)
+//   0x180062d60  the draw-item sort                 NOT EXPORTED (ported, BATCH 8b)
+//   0x180063b90  its selection-sort callee          NOT EXPORTED (ported, BATCH 8b)
 //   0x1800fd4c0  ?CopyInstancedToUnique@AnimationState@        ord 1868
 //   0x1800fc870  ?UpdateRootOnly@AnimationState@Graphics@@     ord 4525
 //   0x1800fcc20  ?UpdateNodes@AnimationState@Graphics@@        ord 4522
@@ -103,7 +104,6 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
-#include <algorithm>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/AnimationState.h"
@@ -111,6 +111,7 @@
 #include "../../types/graphics/Material.h"
 #include "../../types/video/Context.h"
 #include "../collection/array_internal.h"
+#include "../collection/introsort_msvc.h"
 #include "../system/string.h"
 
 // Byte-identical to standalone/resolve.h's declaration; the linker checks the
@@ -544,63 +545,116 @@ using EmitFn    = void (*)(void* self, void* context, Renderer*, int32_t drawGro
 inline void** VTable(void* obj) { return *reinterpret_cast<void***>(obj); }
 
 // ============================================================================
-// FUN_180062d60 (retail 0x180062d60, 2311 bytes) — Draw's per-pass sort, plus
-// its small-range insertion-sort callee FUN_180063b90 (retail 0x180063b90,
-// 344 bytes)  —  BATCH 8
+// Graphics::Renderer::DrawItemSort       retail 0x180062d60  (2311 bytes)
+// Graphics::Renderer::DrawItemSortSmall  retail 0x180063b90  ( 344 bytes)
+//   - BATCH 8b.  Replaces BATCH 8's std::sort, which was NOT faithful.
 // ============================================================================
-// ADDRESS DOOR 1 of 3 (Draw's comment block above names all three; this is
-// the one this file previously left as a `ResolveAddr` fallback with no body
-// behind it — "the draw-item sort ... must be ported before Draw can run
-// DLL-free"). Neither retail address is exported (checked against the PE
-// export directory with pefile, per `reference_aeaa_is_private_not_
-// unexported.md`'s method) so both are address-only rows.
+// Neither address is exported (checked against the PE export directory), so
+// both are address-only rows. Both are now ported and registered; the
+// `ResolveAddr` in Draw's pass loop therefore lands on our body, because the
+// resolver consults the port registry first.
 //
-// WHAT RETAIL DOES: an introsort (median-of-3 quicksort down to an
-// insertion-sort floor, FUN_180063b90) over a `Collection::Array<
-// RendererDrawItem>`, stride 0x38. The comparator, read out of both bodies'
-// heavily-inlined comparisons, is lexicographic ascending over
-// (flags, sortKey, material, instance, arg5, arg10, userData, geometry) — see
-// RendererDrawItem's field list in runtime/types/graphics/Camera.h.
+// WHY THE PREVIOUS PORT WAS REPLACED. BATCH 8 wrote this as
+// `std::sort(first, last, DrawItemLess)` and argued that the comparator is a
+// strict total order over distinguishable items, so any correct sort gives the
+// same array and the algorithm need not be retail's. Reading the instructions
+// instead of reconstructing them shows two defects:
 //
-// WHY THIS PORT USES std::sort RATHER THAN TRANSCRIBING THE QUICKSORT:
-// the comparator's tie-break chain bottoms out on `geometry`, a raw pointer.
-// Two items compare EQUAL under this order only when every field through
-// `geometry` matches too — at which point the two draw items are themselves
-// value-identical, so swapping them changes nothing an observer can see. The
-// comparator is therefore a strict total order over DISTINGUISHABLE items,
-// and for such an order every correct sort produces the SAME final array
-// regardless of algorithm — "byte-faithful" here means the OUTPUT array
-// matches, not that this file replays retail's swap sequence. (Contrast
-// modification_refresh.cpp's Array<Mod> introsort, held back for the opposite
-// reason: that population ties on `order` across DIFFERENT records, so its
-// result genuinely depends on the swap sequence and std::sort would diverge.)
-// FUN_180063b90 is therefore deliberately given NO C++ body of its own:
-// std::sort's own small-range handling subsumes it, and it is not registered.
+//   1. THE FLOAT TERM WAS BACKWARDS. At 0x180062e0e retail does
+//        MOVSS XMM0,[mid+0x1c] / MOVSS XMM1,[lo+0x1c]
+//        COMISS XMM0,XMM1 / JA  <swap, i.e. "mid sorts before lo">
+//        COMISS XMM1,XMM0 / JA  <no swap>
+//      so `sortKey` is DESCENDING. The std::sort port had `a.sortKey <
+//      b.sortKey`. Every frame's draw order was wrong in that term.
+//   2. "EQUAL IMPLIES INDISTINGUISHABLE" IS FALSE HERE. `arg8` (+0x20) and
+//      `_pad24` (+0x24) are never compared. Two items that tie on all eight
+//      compared terms can still differ in `arg8`, and then which one lands
+//      first is decided by the swap sequence - so the swap sequence must be
+//      retail's.
 //
-// NO ORACLE: `sort` mutates the pass list in place with no return value to
-// replay against, and the population's total order (see above) already
-// pins the observable result independent of algorithm — there is nothing a
-// second run would tell us that the total-order argument does not already
-// guarantee.
+// FUN_180063b90 IS NOT AN INSERTION SORT, which BATCH 8 also assumed when it
+// declined to give it a body ("std::sort's own small-range handling subsumes
+// it"). It is a SELECTION SORT that repeatedly moves the MAXIMUM of [lo,hi] to
+// `hi`: 0x180063c47 `MOV RDI,R8` sits on the JB arms, so the tracked position
+// advances only on STRICTLY less. It is a distinct closure row and is ported
+// and registered here in its own right.
+//
+// The skeleton itself lives in ../collection/introsort_msvc.h, transcribed once
+// from these bytes and instantiated a second time for the Array<Mod> pair
+// (0x180028760 / 0x180028fc0), which is the same template with a different
+// element, comparator and swap.
+//
+// NO ORACLE WRAPPER: `sort` mutates the pass list in place and returns nothing,
+// so there is no value to replay. The diff harness sees it as a registered
+// address; the verdict is Draw's per-frame attendance climbing with the frame
+// on screen unchanged.
 // ============================================================================
+
+// The comparator. Every term below is one `CMP`/`COMISS` pair read out of
+// 0x180062dfe..0x180062e85, and the identical chain is repeated at six more
+// sites across the two bodies (the three median-of-three tests, the two
+// partition scans, the two equal-run walks and the selection sort's inner
+// loop). The field ORDER is the order of the compares, not of the struct.
 bool DrawItemLess(const RendererDrawItem& a, const RendererDrawItem& b) {
-    if (a.flags    != b.flags)    return a.flags    < b.flags;
-    if (a.sortKey  != b.sortKey)  return a.sortKey  < b.sortKey;
-    if (a.material != b.material) return a.material < b.material;
-    if (a.instance != b.instance) return a.instance < b.instance;
-    if (a.arg5     != b.arg5)     return a.arg5     < b.arg5;
-    if (a.arg10    != b.arg10)    return a.arg10    < b.arg10;
-    if (a.userData != b.userData) return a.userData < b.userData;
-    return a.geometry < b.geometry;
+    // +0x18, MOVZX / CMP AX,CX - UNSIGNED 16-bit.  JB -> less, JA -> not less.
+    if (a.flags != b.flags) return a.flags < b.flags;
+
+    // +0x1c, COMISS both ways - DESCENDING.  Written as two one-sided tests
+    // rather than `!=` so that a NaN (for which both JA arms fail) falls
+    // through to the next term exactly as retail's does.
+    if (a.sortKey > b.sortKey) return true;
+    if (b.sortKey > a.sortKey) return false;
+
+    // The remaining six are unsigned integer compares, in this order.
+    if (a.material != b.material)
+        return reinterpret_cast<uintptr_t>(a.material) <
+               reinterpret_cast<uintptr_t>(b.material);            // +0x08
+    if (a.instance != b.instance)
+        return reinterpret_cast<uintptr_t>(a.instance) <
+               reinterpret_cast<uintptr_t>(b.instance);            // +0x10
+    if (a.arg5  != b.arg5)  return a.arg5  < b.arg5;               // +0x1a
+    if (a.arg10 != b.arg10) return a.arg10 < b.arg10;              // +0x30
+    if (a.userData != b.userData)
+        return reinterpret_cast<uintptr_t>(a.userData) <
+               reinterpret_cast<uintptr_t>(b.userData);            // +0x28
+    // +0x00, the last term: `CMP RAX,[RBP] / JAE <not less>`.
+    return reinterpret_cast<uintptr_t>(a.geometry) <
+           reinterpret_cast<uintptr_t>(b.geometry);
+}
+
+// Retail swaps the 0x38-byte element as SEVEN qword moves (0x180062e87 and the
+// five other swap sites), reading one side into registers first. Self-swap is
+// a no-op either way, which matters because the selection sort can call it
+// with best == last.
+void DrawItemSwap(RendererDrawItem* a, RendererDrawItem* b) {
+    uint64_t* const pa = reinterpret_cast<uint64_t*>(a);
+    uint64_t* const pb = reinterpret_cast<uint64_t*>(b);
+    for (int k = 0; k < 7; ++k) {
+        const uint64_t t = pa[k];
+        pa[k] = pb[k];
+        pb[k] = t;
+    }
 }
 
 }  // namespace
 
-// Matches the call site's `void(void* data, int32_t count, void* scratch)`;
-// `scratch` is retail's spare register window and unused by this body.
+// 0x180063b90 - the small-range pass. `lo`/`hi` are INCLUSIVE bounds, as
+// 0x180062dc1 passes them (`MOV RDX,R15 / MOV RCX,RBP`).
+extern "C" void RtGraphics_Renderer_DrawItemSortSmall(void* lo, void* hi) {
+    rtsort::SelectionSortMaxToHigh(static_cast<RendererDrawItem*>(lo),
+                                   static_cast<RendererDrawItem*>(hi),
+                                   DrawItemLess, DrawItemSwap);
+}
+
+// 0x180062d60. Matches the call site's `void(void* data, int32_t count,
+// void* scratch)`; `scratch` is retail's spare register window and the body
+// never reads R8.
 extern "C" void RtGraphics_Renderer_DrawItemSort(void* data, int32_t count, void*) {
-    std::sort(static_cast<RendererDrawItem*>(data),
-              static_cast<RendererDrawItem*>(data) + count, DrawItemLess);
+    rtsort::Introsort(static_cast<RendererDrawItem*>(data), count,
+                      DrawItemLess, DrawItemSwap,
+                      [](RendererDrawItem* lo, RendererDrawItem* hi) {
+                          RtGraphics_Renderer_DrawItemSortSmall(lo, hi);
+                      });
 }
 
 extern "C" void RtGraphics_Renderer_Draw(void* self, void* context, float alpha,
@@ -682,9 +736,10 @@ extern "C" void RtGraphics_Renderer_Draw(void* self, void* context, float alpha,
                 // a different path if it were removed.
                 if (list._size > 0 && list._size > 1) {
                     // ---------------------------------------------------------
-                    // ADDRESS DOOR 1 of 3 — PORTED (BATCH 8):
+                    // ADDRESS DOOR 1 of 3 — PORTED (BATCH 8b, faithfully):
                     // RtGraphics_Renderer_DrawItemSort, above, registered at
-                    // the bottom of this file. ResolveAddr consults the port
+                    // the bottom of this file together with its 0x180063b90
+                    // selection-sort callee. ResolveAddr consults the port
                     // registry first, so this call site needs no change.
                     // ---------------------------------------------------------
                     using SortFn = void (*)(void* data, int32_t count, void* scratch);
@@ -1165,10 +1220,12 @@ int RtGraphicsWave27GfxbigRegister() {
     RegisterRuntimeAddr(0x180060d30,
                         (void*)&RtCollection_Array_MaterialParameterSet_SetSize); ++count;
 
-    // BATCH 8: the draw-item sort — see the banner above RtGraphics_Renderer_DrawItemSort.
+    // BATCH 8b: the draw-item sort and its selection-sort callee — see the
+    // banner above RtGraphics_Renderer_DrawItemSort.
     RegisterRuntimeAddr(0x180062d60, (void*)&RtGraphics_Renderer_DrawItemSort); ++count;
+    RegisterRuntimeAddr(0x180063b90, (void*)&RtGraphics_Renderer_DrawItemSortSmall); ++count;
 
-    return count;   // 5
+    return count;   // 6
 }
 
 // One line beside the other wave summaries, so a run that entered none of these
