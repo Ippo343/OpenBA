@@ -2712,6 +2712,22 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_loader@LoaderLoop@Engine@@1VLoader@2@A | n/a (a Loader OBJECT, not a pointer) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- this row is an AGGREGATE and its consumers take its ADDRESS: 5 LEA and 2 stores, and ?Startup@LoaderLoop@Engine@@ (UNPORTED) does `lea rcx,[0x1801fe7b8]` and then works through the register. Promoting gives our doors a different object from the one that unported body constructs and runs. NOTE FOR ANY LANE RE-DERIVING THIS: a RIP-relative READ/WRITE census reports `R=0` here and that 0 is an ARTEFACT of the access pattern, not evidence of disuse. At cutover REQUIRED (engine/funcs/engine_funcs.cpp and runtime/src/engine/loops.cpp both resolve it by name) [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ?Startup@LoaderLoop@Engine@@ ported AND registered] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
     // RT_UNPROMOTABLE: ?_singleton@Configuration@System@@0PEAV12@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- 4 in-DLL reads / 2 writes, and BOTH halves are split: the reader ?Get@Configuration@System@@ is unported AND the writer ??0Configuration@System@@ is unported, so a promoted slot is neither written by retail's ctor nor read by retail's accessor. At cutover REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ??0Configuration@System@@ ported AND registered, then ?Get@] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
     // RT_UNPROMOTABLE: ?_singleton@AchievementManager@Achievement@@0PEAV12@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.5 | NONE while the DLL is present -- an INVERTED-SHAPE row: only 1 in-DLL read against 5 writes, and the harm is on the writer side. Two of the five writers, ??0AchievementManager@Achievement@@ and a store inside ??0DialogLoopT@Engine@@'s range, are UNPORTED, so retail constructs the manager into retail's slot and a promoted slot would hold whatever our ported Engine::Startup/Shutdown last wrote -- two owners, one object. A LOW READ COUNT IS NOT A SAFE ROW. At cutover REQUIRED (gameupdateloop_serialize.cpp and achievement_manager.cpp both resolve it by name) [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ??0AchievementManager@Achievement@@ ported AND registered] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    //   [WAVE 27 lane ACHIEVE -- HALF THE EXPIRY CLAUSE IS NOW SATISFIED. THE TAG
+    //    STANDS.] ??0AchievementManager@Achievement@@ (retail 0x18009eb00) IS NOW
+    //    PORTED AND REGISTERED, by name and by address:
+    //    runtime/src/achievement/achievement_manager_ctor.cpp, gated
+    //    BANISHED_RT_ACHMGR. So ONE of the two unported writers this tag names is
+    //    gone, and the ported ctor writes the same cell the already-ported dtor
+    //    nulls (both through RT_DATA_SLOT on this symbol).
+    //    THE OTHER WRITER IS STILL UNPORTED: "a store inside
+    //    ??0DialogLoopT@Engine@@'s range". That is ??_7DialogLoopT@Engine@@6B@'s
+    //    family, owned in Wave 27 by lane LOOPS, and lane ACHIEVE is forbidden to
+    //    touch it. The two-owners-one-object hazard therefore still holds and this
+    //    row must NOT be promoted on the strength of the ctor alone.
+    //    [ADDRESSEE: lane LOOPS of Wave 27, or whichever lane next owns
+    //     ??0DialogLoopT@Engine@@. When that store is ported and registered, this
+    //     tag's expiry has fired in full and the row should be re-triaged --
+    //     re-derive the writer set first, do not trust this count.]
     //
     // THE SEVEN `?_typeInfo@` GAP ROWS ARE DELIBERATELY NOT TAGGED HERE.
     // They are NOT unpromotable -- they are READY and BLOCKED ON ONE THING

@@ -28,9 +28,25 @@ extern int RtAchGoalSerializeRegister();  // goal_serialize.cpp      (Wave 9 P)
 // SAME three classes (the manager dtor, RemoveAll, ReadAchievements,
 // SetAchievementMet and Achievement::CreateInstance) and
 // achievement_serialize.cpp the two stream members Wave 5 held back. Class
-// atomicity (PLAN �4.1 decision 5) puts them on one switch.
+// atomicity (PLAN �4.1 decision 5) puts them on one switch.
 extern int RtAchStateRegister();          // achievement_state.cpp     (Wave 23)
 extern int RtAchSerializeRegister();      // achievement_serialize.cpp (Wave 23)
+// Wave 27 lane ACHIEVE — achievement_typeinfo_accessors.cpp. ONE file, TWO
+// register functions, because its eleven slot bodies span all four Achievement
+// vtable rows and those rows sit on DIFFERENT kill switches. Splitting the
+// registration rather than the file is what keeps class atomicity (PLAN §4.1
+// decision 5) while the eleven bodies — which are the same two-instruction
+// shape — stay together where they can be read side by side.
+extern int RtAchGoalTypeInfoAccessorsRegister();     // Goal + GoalInstance
+extern int RtAchManagerTypeInfoAccessorsRegister();  // Achievement + …Instance
+// Wave 27 lane ACHIEVE — achievement_vtable.cpp (the four non-accessor slots).
+extern int RtAchVtableRegister();
+// Wave 27 lane ACHIEVE — goal_list.cpp (GoalList::Initialize, a BODY gap row).
+extern int RtAchGoalListRegister();
+// Wave 27 lane ACHIEVE — achievement_manager_ctor.cpp. Ported to retire HALF of
+// the ?_singleton@AchievementManager@ UNPROMOTABLE tag's expiry clause; see that
+// file's banner for what it does and does not retire.
+extern int RtAchManagerCtorRegister();
 
 void RtAchievementPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_ACHIEVEMENT")) {
@@ -41,11 +57,16 @@ void RtAchievementPortInit() {
     if (RtWaveEnabled("BANISHED_RT_GOAL")) {
         n += RtAchGoalRegister();
         n += RtAchGoalSerializeRegister();
+        n += RtAchGoalTypeInfoAccessorsRegister();
+        n += RtAchGoalListRegister();
     }
     if (RtWaveEnabled("BANISHED_RT_ACHMGR")) {
         n += RtAchManagerRegister();
         n += RtAchStateRegister();
         n += RtAchSerializeRegister();
+        n += RtAchManagerTypeInfoAccessorsRegister();
+        n += RtAchVtableRegister();
+        n += RtAchManagerCtorRegister();
     }
     printf("[RtPort] Achievement: %d exports registered\n", n);
 }
