@@ -62,15 +62,26 @@ the polarity least likely to be challenged.  Corrected by WAVE 26 lane PROMOIO:
     printed NOT OURS for every one.  The twelve `??_7*Data@Video@@6B@` rows read
     `ours-capable 0`; the true figure is 2 of 5 per row.
 
-The per-site verdict now reads `UNSCORED`, says whether the hint RESOLVES
-EXACTLY, and a CAVEAT block is PRINTED after the rows -- printed, not merely
-documented, because the reader about to misread the column is the one who did not
-open this file.  You cannot score a function you cannot name; that is a reason to
-say UNSCORED, not to say NOT OURS.
+WAVE 29 LANE INSTR FOLDED THEM IN, AND THE COUNTS MOVED.
+PROMOIO's paragraph ended "folding these into `ours-capable` would move a number
+other lanes quote ... a deliberate decision for a lane that owns the board".
+Wave 29 lane INSTR is that lane and took it.  A stamp site whose address IS an
+export's ENTRY POINT is that export -- `site` is the LEA's own VA, so this is an
+identity, not a nearest-neighbour guess -- and owner() now returns `EXPORT-LEAF`
+for it and SCORES it exactly like any other export.
 
-The COUNTS are deliberately unchanged: folding these into `ours-capable` would
-move a number other lanes quote, and that belongs to a lane that owns the board.
-Evidence: docs/runtime_port/WAVE26_LANE_PROMOIO.md S2.
+  MEASURED on wave29/base, all 64 rows, before and after:
+      before   47 unattributed group(s), 45 of them resolving exactly, 0 scored
+      after    45 EXPORT-LEAF group(s) scored, 24 of them ours-capable,
+               2 group(s) still UNSCORED
+  DIRECTION: the correction is INFLATING relative to the old output, because the
+  old output was DEFLATING -- it printed NOT OURS for 24 functions we own.
+  `ours-capable` is STILL an upper bound for the reason two paragraphs up.
+
+A site with neither a `.pdata` range nor an exact export match still prints
+UNSCORED with a NEAREST-EXPORT HINT, never RETAIL.  You cannot score a function
+you cannot name; that is a reason to say UNSCORED, not to say NOT OURS.
+Evidence: docs/runtime_port/WAVE26_LANE_PROMOIO.md S2, WAVE29_LANE_INSTR.md S3.
 
 POSITIVE CONTROLS, both of which MUST read non-zero / must fire
 --------------------------------------------------------------
@@ -81,6 +92,11 @@ POSITIVE CONTROLS, both of which MUST read non-zero / must fire
      dead and every `retail` verdict below would be an artefact; exit 2.
   3. OWNERSHIP NEGATIVE: a synthetic symbol that cannot exist must read
      NOT-REGISTERED.  A scan that says yes to everything is equally dead.
+  4. `--selftest` (Wave 29 lane INSTR): the EXPORT-LEAF branch is handed a
+     KNOWN POSITIVE and a KNOWN NEGATIVE.  Its normal answer in a healthy run
+     is a COUNT, but the branch is absence-shaped from the other side -- a dead
+     exact-match lookup reports zero leaves and all 45 of those sites silently
+     revert to UNSCORED, which is exactly the state this fold-in ended.
 
 Exit 0 report produced, 2 a control is red.
 
@@ -146,6 +162,9 @@ def main():
     ap.add_argument("--rows", default="",
                     help="comma-separated substrings; empty = every row")
     ap.add_argument("--control", default=POS_CONTROL_DEFAULT)
+    ap.add_argument("--selftest", action="store_true",
+                    help="Wave 29 lane INSTR: control the EXPORT-LEAF branch "
+                         "with a known positive and a known negative, and exit.")
     a = ap.parse_args()
 
     print("SUBJECT  who STAMPS each minted ??_7 row, and is that function OURS")
@@ -185,7 +204,33 @@ def main():
     pd_begin = [p[0] for p in pdata]
 
     def owner(va):
-        """-> (kind, name, func_start_va or None, offset)."""
+        """-> (kind, name, func_start_va or None, offset).
+
+        WAVE 29 LANE INSTR -- THE `EXPORT-LEAF` BRANCH, AND WHY IT IS SAFE.
+
+        Wave 26 lane PROMOIO measured that this function's `.pdata` lookup
+        fails for 47 of the stamp sites on the full row set, 45 of which sit
+        at an address that IS an entry in the shipped export directory. MSVC
+        emits no `.pdata` for a FRAMELESS LEAF, which is the shape of every
+        three-instruction companion ctor/dtor in this DLL -- so the failure
+        correlates with exactly the function shape this tool is most often
+        asked about. PROMOIO declined to fold them in because doing so moves a
+        number other lanes quote; Wave 29 lane INSTR owns the board and does.
+
+        THIS IS NOT A HINT AND NOT A HEURISTIC. `site` is the address of the
+        LEA itself (tools/mint_extent_audit.disasm_channel records the LEA's
+        VA, not the store's). If that address is an export's ENTRY POINT, the
+        stamp is that function's FIRST instruction: the site does not merely
+        lie near the export, it IS the export. The nearest-export search below
+        -- which is a hint, and stays UNSCORED -- is only reached when that
+        exact-match test fails.
+
+        DIRECTION OF THE CORRECTION: the old behaviour printed NOT OURS for a
+        function we own, i.e. it was DEFLATING, which makes work look
+        impossible rather than cheap and is the polarity least likely to be
+        challenged. Re-derived on wave29/base before the change: 47
+        unattributed groups, 45 resolving exactly.
+        """
         rva = va - ib
         j = X.bisect.bisect_right(pd_begin, rva) - 1
         if j >= 0 and pdata[j][0] <= rva < pdata[j][1]:
@@ -194,6 +239,9 @@ def main():
             if nm:
                 return ("EXPORT", nm, ib + b, rva - b)
             return ("PRIVATE", "FUN_%08x" % (ib + b), ib + b, rva - b)
+        exact = exp_at.get(rva)
+        if exact:
+            return ("EXPORT-LEAF", exact, va, 0)
         k = X.bisect.bisect_right(exp_rvas, rva) - 1
         return ("UNATTRIBUTED", exps[k][1] if k >= 0 else "?", None, 0)
 
@@ -240,6 +288,7 @@ def main():
         return 2
 
     resolved_unattr = 0
+    leaf_groups = leaf_owned = 0     # the Wave 29 fold-in, counted separately
     for nm, va, slots in sel:
         sites = dis.get(va, [])
         byfn = {}
@@ -262,23 +311,30 @@ def main():
                 # three-instruction companion ctor/dtor -- so the hint is not a
                 # guess: when the stamp address IS the export's entry point, the
                 # site is that export. Tested here, with data already in scope.
-                hit = (exp_at.get(ss[0][0] - ib) == fname)
-                if hit:
-                    resolved_unattr += 1
-                    verdict = ("UNSCORED -- this site IS that export "
-                               "(stamp VA == export VA); .pdata-blind, see CAVEAT")
-                else:
-                    verdict = ("UNSCORED -- no .pdata AND the hint does not "
-                               "resolve; genuinely unattributed")
+                # WAVE 29 lane INSTR: the exact-match case now leaves owner()
+                # as EXPORT-LEAF and is SCORED, so anything still arriving here
+                # is genuinely unnameable. `resolved_unattr` counts what is
+                # left UNSCORED, which is what the caveat below is about.
+                resolved_unattr += 1
+                verdict = ("UNSCORED -- no .pdata AND the stamp VA is not an "
+                           "export entry; the name above is a NEAREST-EXPORT "
+                           "HINT, not an identification")
             else:
                 by = []
-                if kind == "EXPORT" and fname in names:
+                if kind in ("EXPORT", "EXPORT-LEAF") and fname in names:
                     by.append("NAME")
                 if fva in addrs:
                     by.append("ADDR")
+                if kind == "EXPORT-LEAF":
+                    leaf_groups += 1
                 if by:
                     own += 1
+                    if kind == "EXPORT-LEAF":
+                        leaf_owned += 1
                     verdict = "OURS-CAPABLE via %s" % "+".join(by)
+                    if kind == "EXPORT-LEAF":
+                        verdict += "   (frameless leaf: no .pdata; the stamp IS "
+                        verdict += "this export's entry point)"
                 else:
                     verdict = "RETAIL (no registration by name or address)"
             head = fname if kind != "UNATTRIBUTED" else ("~" + fname)
@@ -301,22 +357,88 @@ def main():
     # IMPOSSIBLE rather than cheap, which is the polarity a lane is least
     # likely to challenge.
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # THE FOLD-IN, AND WHAT IS STILL UNSCORED.  WAVE 29 lane INSTR.
+    #
+    # Printed unconditionally, INCLUDING the zero case: every list here is
+    # absence-shaped, and "no frameless leaves found" is indistinguishable
+    # from a dead exact-match lookup. `--self-test` hands it a positive.
+    # ------------------------------------------------------------------
+    if a.selftest:
+        # ---- THE EXPORT-LEAF CONTROL  (Wave 29 lane INSTR) ---------------
+        # Each check prints its own verdict AND what it saw: a control scored
+        # on the union of several screens reads green and hides a blind one,
+        # and a green line that does not name its subject is not evidence.
+        checks = []
+        checks.append(("POSITIVE: the live run found EXPORT-LEAF group(s)",
+                       leaf_groups > 0, "%d group(s)" % leaf_groups))
+        checks.append(("POSITIVE: some are ours-capable, so the ownership join "
+                       "actually reaches the new branch",
+                       leaf_owned > 0, "%d of %d" % (leaf_owned, leaf_groups)))
+        # HANDED ONE, explicitly rather than relying on the sweep above: a real
+        # export that carries no .pdata, asked about by its entry point.
+        pd_set = set(pd_begin)
+        leaf_rva = next((r for r, _n in exps
+                         if r not in pd_set and exp_at.get(r)), None)
+        if leaf_rva is not None:
+            k = owner(ib + leaf_rva)
+            checks.append(("HANDED ONE: %s (no .pdata) is NAMED, not UNATTRIBUTED"
+                           % exp_at[leaf_rva][:44],
+                           k[0] == "EXPORT-LEAF" and k[1] == exp_at[leaf_rva],
+                           "owner() said %s %s" % (k[0], k[1][:36])))
+        else:
+            checks.append(("HANDED ONE: an export with no .pdata exists to hand",
+                           False, "none found -- the control could not run"))
+        # NEGATIVE: neither .pdata nor an export entry must stay UNATTRIBUTED.
+        # A branch that names everything is as dead as one that names nothing.
+        bad = ib + max(exp_rvas) + 0x5
+        kn = owner(bad)
+        checks.append(("NEGATIVE: a non-export, non-.pdata address stays "
+                       "UNATTRIBUTED", kn[0] == "UNATTRIBUTED",
+                       "owner(%#x) said %s" % (bad, kn[0])))
+        # NO REGRESSION: a .pdata-covered export must still take the old branch,
+        # or the fold-in replaced attribution instead of extending it.
+        pd_rva = next((r for r, _n in exps if r in pd_set), None)
+        if pd_rva is not None:
+            k2 = owner(ib + pd_rva)
+            checks.append(("NO REGRESSION: a .pdata-covered export is still "
+                           "plain EXPORT", k2[0] == "EXPORT",
+                           "owner() said %s" % k2[0]))
+        bad_n = 0
+        print("\nSELFTEST  EXPORT-LEAF branch (Wave 29 lane INSTR)")
+        print("  subject: %d export(s), %d .pdata range(s), %d selected row(s)"
+              % (len(exps), len(pdata), len(sel)))
+        for label, ok, saw in checks:
+            bad_n += 0 if ok else 1
+            print("  %-5s %s  [%s]" % ("ok" if ok else "*RED*", label, saw))
+        print("  RESULT: %d of %d checks correct" % (len(checks) - bad_n, len(checks)))
+        return 2 if bad_n else 0
+
+    print("\nFRAMELESS-LEAF FOLD-IN  (Wave 29 lane INSTR; this MOVED a number)")
+    print("  %d stamp-site group(s) carried NO .pdata range and sat EXACTLY at an"
+          % leaf_groups)
+    print("  export's entry point, so they are that export and are now SCORED.")
+    print("  %d of them are ours-capable; they used to print NOT OURS."
+          % leaf_owned)
+    print("  The old text read `An unattributed site is NOT OURS`. That was wrong")
+    print("  in the DEFLATING direction -- work looked impossible rather than")
+    print("  cheap -- and Wave 26 lane PROMOIO measured it at 45 of 47 sites")
+    print("  resolving exactly and 24 of 47 ours by name AND address.")
+    print("  WHAT THIS DOES NOT CLAIM: `ours-capable` is still an UPPER BOUND.")
+    print("  A registration is a DOOR; an in-DLL `call rel32` to that function")
+    print("  still runs retail's body. The fold-in fixed WHO the site belongs to,")
+    print("  not whether every caller comes through us.")
+    if leaf_groups == 0:
+        print("  *** ZERO leaf groups. On wave29/base there were 45 of them, so an")
+        print("  *** empty result here means the exact-match lookup is DEAD, not")
+        print("  *** that the shape is gone. Run --self-test.")
     if resolved_unattr:
-        print("\nCAVEAT -- THE `unattributed` COLUMN IS UNSCORED, NOT RETAIL")
-        print("  %d of the unattributed stamp site(s) above sit at an address that"
-              % resolved_unattr)
-        print("  IS an entry in the shipped export directory -- they ARE that export.")
-        print("  This tool cannot score them because it attributes by `.pdata`, and")
-        print("  MSVC emits no .pdata for a frameless leaf function.")
-        print("  MEASURED, Wave 26 lane PROMOIO, full 63-row set: 45 of 47 such")
-        print("  sites resolved exactly, and 24 of the 47 were registered in our")
-        print("  tree by NAME AND ADDRESS -- i.e. OURS, while this tool said NOT OURS.")
-        print("  So: do NOT read `ours-capable` as ownership when `unattributed` is")
-        print("  non-zero, and do NOT read `unattributed` as `retail`.")
-        print("  NOT FIXED HERE ON PURPOSE: folding these into `ours-capable` would")
-        print("  move a number other lanes quote. It is a deliberate decision for a")
-        print("  lane that owns the board, not a side effect of a reading.")
-        print("  Full evidence: docs/runtime_port/WAVE26_LANE_PROMOIO.md S2.")
+        print("\nCAVEAT -- %d SITE(S) REMAIN UNSCORED" % resolved_unattr)
+        print("  No .pdata AND no exact export match: this tool cannot NAME the")
+        print("  owning function, so it says UNSCORED. You cannot score a function")
+        print("  you cannot name; that is a reason to say UNSCORED, never RETAIL.")
+        print("  Full evidence for the fold-in: docs/runtime_port/WAVE26_LANE_PROMOIO.md S2")
+        print("  and docs/runtime_port/WAVE29_LANE_INSTR.md S3.")
     return 0
 
 
