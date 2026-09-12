@@ -760,7 +760,25 @@ In that word, per WAVE28_KICKOFF.md §4:
    own. Porting it clears three traps, not one.
    **Addressee: WAVE 28 lane FACTREST**, which owns `Internal@Object`.
 
-4. **The scratchpad transcriber is not committed.** Per standing warning 1 this
+4. **THE CROSS-LANE PRACTICE HAS AN UNTESTED BLIND SPOT, and it must be
+   recorded WITH the practice or the practice gets oversold.**
+   Raised by FACTREST, and it is the honest limit of everything §7.2 claims.
+   Eight instrument defects were found this wave by one lane running the other's
+   instrument against a subject its author had not seen; **zero were found by
+   self-review.** But every one of the eight was *one lane's* mistake that the
+   other did not share. **Neither lane has tested the practice against a premise
+   BOTH lanes hold and both hold wrongly** — two lanes adapting the same oracle
+   inherit the same assumptions about the DLL and would both come back green.
+   That is `reference_two_checks_one_hidden_premise.md`, and running each
+   other's instruments is **no defence at all** against it.
+   A concrete candidate in this lane, named so it is not hypothetical: both
+   oracles exclude `Object::Internal`'s handle id at +0x08..+0x0f from the
+   comparison on the same reasoning. If that reasoning is wrong, **both lanes
+   are green and neither screen can see it.**
+   **Addressee: the integrator**, as a sentence attached to the practice
+   wherever it is adopted — not as a reason to decline it.
+
+5. **The scratchpad transcriber is not committed.** Per standing warning 1 this
    lane built no tooling; the interpreter lives in the session scratchpad and
    dies with it. The table it produced is committed, is human-readable, and
    cites a retail address per row, so it is re-checkable without the tool — but

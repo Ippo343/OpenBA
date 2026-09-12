@@ -438,9 +438,16 @@ void RunControl() {
 int RtUiFactory1Register() {
     const char* v = std::getenv("BANISHED_RT_UIFACT1");
     if (v && v[0] == '0') {
-        printf("[RtPort] BANISHED_RT_UIFACT1=0 -- 31 UI factory pairs left on "
-               "the DLL\n");
-        return 0;
+        // kSpecCount, not a literal 31. Lane FACTREST sharpened the
+        // accumulate-don't-assert rule into a place to LOOK: **the branch
+        // nothing exercises is where an asserted count survives**, because a
+        // count only goes stale when the thing it counts changes and nobody
+        // changes a branch they never run. This one said "31" and a default run
+        // never executes it, so nothing would ever have contradicted it.
+        printf("[RtPort] BANISHED_RT_UIFACT1=0 -- %d UI factory pairs "
+               "(%d slots) left on the DLL\n",
+               kSpecCount, kSpecCount * 2 - 2);   // -2: Element/DialogInstance
+        return 0;                                 //     slot 1 is FACTREST's
     }
 
     int n = RegisterAll(std::make_index_sequence<kSpecCount>{});
