@@ -26,6 +26,8 @@ on **both sides of every copy**, per the kickoff's standing warning 1.
 | 4 | **C** — clean, **fresh manifest** | `7de42dd1`+1 | `866e31a6e49bbf343a5c859c61d30a87` | as B | wall moved forward past MainLoop → `RtObject_External_Load+0x18f`, READ of 0x18, from `Game::LoadInputNameTables` |
 | 5 | **A2** — control re-taken on the new exe | `7de42dd1`+1 | `866e31a6…` | as A | **StringTable factory trap** (identical to A) |
 | 6 | **D** — blanket switch ON, `MAINLOOPFRAME` override REMOVED | `7de42dd1`+1 | `866e31a6…` | as A minus `RT_MAINLOOPFRAME=0` | **StringTable factory trap** (identical to A2) |
+| 7 | **attempt 28** — + `wave26/factory` `4d4402dd` | scratch | `386f64dc3a12b7c86ba7da243483b941` | as D + `RT_MINT_FACTORYLIST=1` | StringTable FATAL gone → AV at `External::Load+0x33c`, `??_7StringTable@UI@@6B@` unminted (§7) |
+| 8 | **attempt 29** — + `wave26/factory` `c1be6b7b` | scratch | `a09e0695e89107465ebf662848ce74cf` | as attempt 28 | past `GetTypeIdVirtual` → **EXEC-of-0** at `External::Load+0x470`, `Array<ExternalArrayElement>::SetSize` (§7.1) |
 
 `866e31a6…` differs from `45c72978…` by exactly one source file:
 `standalone/cutover_manifest.inc`, regenerated (§4).
@@ -244,6 +246,26 @@ They wrote the retraction *into* `standalone/reg_mint_promoted.cpp` rather than
 deleting the proposal, because a wrong recipe outlives the row it was written
 for — this project has a recorded case of a written recipe from a *good* lane
 being followed into a defect.
+
+**THE RULE THE THREE OF US CONVERGED ON, worth more than any row in this doc.**
+Arrived at across lanes ATTEND and PROMOIO over four corrections, each of us
+finding the case the other had missed:
+
+> **A correction has to live on the surface the next person will actually reach**
+> — because the reader who most needs it is, by definition, the one who did not
+> open the file explaining it.
+
+Three surfaces, three grep keys, all three now closed in Wave 26:
+
+| the misleading artefact is… | the key the next reader greps | where the correction must go |
+|---|---|---|
+| a promoted/adjudicated **row** | the row's mangled name | beside the row in source (PROMOIO, `2630244d`) |
+| a **script** someone runs | the script's filename | in the script — header **and** a runtime echo (ATTEND, `fe0afddc`) |
+| a **tool that prints** | nothing — they only see **output** | in the printed output itself (PROMOIO, `7698efdb`) |
+
+The third is the one neither of us had: a lane doc cannot protect anyone from a
+tool that goes on printing `NOT OURS` for 45 sites that are exports. A doc has
+the same weakness it describes.
 
 > ⚠ **CITATION HAZARD, and it cannot be fixed in place.** The commit message on
 > **`d668f883` still carries the original bad recipe**; `c9a56cb8` is the
@@ -496,6 +518,91 @@ for the very class they ported. The next name is `??_7StringTable@UI@@6B@`.
 **ONE NAME. NOT A ROADMAP.** A cutover boot is a gate; it can only name what it
 reached. Nothing here says `??_7StringTable@UI@@6B@` is the last thing between
 the tree and a booting cutover, and it is not written as a plan.
+
+### 7.1 ATTEMPT 29 — FACTORY's prediction CONFIRMED, and the new wall was WRITTEN DOWN IN SOURCE YEARS EARLIER
+
+Scratch branch `wave26/attend-x29-scratch` = `wave26/attend` + `wave26/factory`
+(`c1be6b7b`, their pass 2+3), merged clean. Exe md5
+`a09e0695e89107465ebf662848ce74cf` (differs from FACTORY's own `60d3e9f7…`
+because my branch adds the build gate and docs), md5 checked both sides, lock
+held, DLL restored and verified. Same env as attempt 28.
+
+**FACTORY's prediction was stated in advance and is CONFIRMED.** They predicted
+the boot would get past `GetTypeIdVirtual`. It does — progress *within*
+`RtObject_External_Load`, from `+0x33c` to **`+0x470`**:
+
+```
+Fault: EXEC of 0x0        (a null function pointer was CALLED)
+  #0  ???  @ 0x0
+  #1  RtObject::(anonymous namespace)::ArraySetSize+0x4d
+  #2  RtObject_External_Load+0x470
+  #3  ExternalFactory::FindOrLoad+0x2b1
+  #4  Game::LoadInputNameTables
+```
+
+Their *secondary* guess — `?Serialize@StringTable@UI@@`, on the reasoning that
+`External::Load` is a deserialisation path — **did not hit**, and the wall is not
+on their class at all. That is the shape they said would be fine, and it is worth
+being explicit that a confirmed primary with a missed secondary is a **good**
+prediction, not a half-failed one: the secondary was offered as a guess and
+labelled as one.
+
+**THE FINDING, AND IT IS THE POSITIVE COUNTER-EXAMPLE TO THIS WHOLE WAVE'S THEME.**
+The new wall is `Collection::Array<ExternalArrayElement>::SetSize`
+(`0x18002c6a0`), and **the lane that wrote `external_load.cpp` predicted this
+exact failure, in a comment, at the call site**:
+
+```c
+// `Collection::Array<ExternalArrayElement>::SetSize`, 0x18002c6a0. NOT exported
+// in either build, so this is a genuine ADDRESS door and the only one this file
+// adds to the cutover surface (reference_porting_can_grow_the_cutover_surface.md).
+// Nothing in the tree registers it today; at cutover it needs a body or this
+// call site needs to be revisited. Recorded rather than hidden behind a helper.
+```
+
+Every clause of that is correct and it fired exactly as written. **This wave has
+been a catalogue of artefacts that went stale, masked each other, or could never
+be repaired** — a generated file with no invalidation (§4.1), a manifest verdict
+overridden by a switch (§2), a permanently uncorrectable commit message (§1.7). A
+residual that names its symbol, its condition, its consequence **and sits at the
+call site rather than in a doc** is what the other end of that spectrum looks
+like, and it cost the next lane nothing to find.
+
+**Checked before calling it unported**, because this project has a recorded case
+of a body that existed since Wave 3 being called unported by two lane docs (*a
+half-registered port reads as absent*): `0x18002c6a0` appears in exactly two
+places in the tree, both of them the comment and the `ResolveAddr` above it.
+The `Collection::Array<T>::SetSize` family *is* partly ported —
+`achievement_manager.cpp` carries `Array<bool>` (`0x180008b90`), `Array<Time>`
+(`0x180008ff0`) and `Array<InternalPtr>` (`0x180008d60`) — but **none of them is
+this instantiation**, whose element is 0x10 bytes (a `String` plus two `int32`).
+So: genuinely unported, genuinely unregistered, and a sibling family already
+exists to pattern-match against.
+
+`[RtMint] BaseTypeInfo factories: … 2 PORTED, 204 ABORT-TRAP` is unchanged from
+attempt 28 — FACTORY's pass 2+3 added *vtable slots*, not factory slots, so this
+line is expected to be flat and its flatness is not a sign their work did not
+land.
+
+**ONE NAME AGAIN.** Nothing here says `Array<ExternalArrayElement>::SetSize` is
+the last wall.
+
+### 7.2 THE BUILD GATE, EXERCISED ON A REAL CROSS-LANE MERGE
+
+Unplanned, and better evidence than my three synthetic controls. Building the
+`wave26/attend` + `wave26/factory` merge:
+
+```
+GATE WARN: standalone\cutover_manifest.inc is stale in COSMETIC fields only
+  (a by-name door count moved …). Row set and every disposition match …
+  and the build is NOT failed.
+cutover manifest gate: OK (60 rows; …)
+```
+
+FACTORY's new `stringtable_factory.cpp` moved door counts, exactly the case §8
+predicted. **The gate warned, the build completed, and no lane was blocked** — the
+discrimination between load-bearing and cosmetic staleness is now validated on a
+real merge and not only on injected faults.
 
 ---
 

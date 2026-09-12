@@ -1,0 +1,843 @@
+[Standalone] Banished Reimplementation - Standalone EXE
+[Standalone] Build: Sep 12 2026 09:27:32
+[StartupInfo] dwFlags=0x00000100 USESHOWWINDOW=0 wShowWindow=0 (SW_HIDE)
+[Stall] Initialize: freq=10000000 Hz boot=2081723562336
+[RenderDoc] renderdoc.dll not loaded — running without graphics debugger. Launch reimpl-x64.exe via RenderDoc's UI to enable in-app capture.
+[VideoReg AT-BOOT]   VideoSettings      = "false" (type 1)
+[VideoReg AT-BOOT]   VideoInterface     = "1" (type 1)
+[VideoReg AT-BOOT]   VideoFullscreen    = "false" (type 1)
+[VideoReg AT-BOOT]   VideoWidth         = "2560" (type 1)
+[VideoReg AT-BOOT]   VideoHeight        = "1440" (type 1)
+[VideoReg AT-BOOT]   VideoWindowX       = "1265" (type 1)
+[VideoReg AT-BOOT]   VideoWindowY       = "188" (type 1)
+[VideoReg AT-BOOT]   VideoWindowWidth   = "1024" (type 1)
+[VideoReg AT-BOOT]   VideoWindowHeight  = "640" (type 1)
+[BootTime] registry probe + harness guard               +    3.00ms   (t=    3.00ms)
+[Standalone] Resolving DLLs...
+[BootTime] (pre ResolveInit)                            +    0.19ms   (t=    3.19ms)
+[Resolve-Standalone] Standalone-EXE: base=0x7ff71f310000 preferred=0x140000000 delta=+0
+[Resolve-Standalone] Runtime-x64.dll: not loaded
+[Resolve-Standalone] VideoDX11-x64.dll: not loaded
+[Resolve-Standalone] Address registry: 4 entries
+[BootTime] ResolveInit (LoadLibrary Runtime+DX11)       +    2.64ms   (t=    5.83ms)
+[Standalone] WARN: failed to hook Runtime!MessageBoxW; pure-virtual popups will block
+[BootTime] HookRuntimeMessageBoxW                       +    0.27ms   (t=    6.09ms)
+[RtMathPortInit] Lane 1 (Scalar/Vector2/Vector3/Vector4): 32 exports registered
+[RtMathPortInit] Wave 9 lane P: 2 exports registered (Quaternion::Lerp, Transform::AsTransform3)
+[RtMathPortInit] Wave 9 lane GFXR: 1 exports registered (Matrix::Inverse)
+[RtVolume] 12 exports registered (Box x5, Rectangle x1, Frustum x6)
+[RtPort]   System::String: 23 exports registered
+[SYSBODY/StrCompare] sweep SKIPPED: no shipped export (cutover build?)
+[RtPort]   System::Filename: 11 exports registered
+[RtPort]   System::WideString: 8 exports registered
+[RtPort]   Wave9 lane FS helpers: 3 exports registered
+[RtAlloc] cutover: 4 allocator ADDRESSES registered for by-address callers (rtcoll::MemAlloc and friends). See RegisterAllocatorAddresses.
+[RtAlloc] ARMED (cutover: Runtime-x64.dll absent) -- 27 exports registered, no detour installed because there are no DLL-internal callers to redirect. ?Allocate@/?Free@ point at the COMPOSED entry points, which take the allocator critical section.
+[RtPort] System: 122 exports registered
+[RtPort]   Object::Internal: TABLE mode ARMED by BANISHED_RT_NO_DLL (there is no other implementation) — our code now drives the handle table. Shadow gate step 1 was met in Wave 3 (93,387 calls each on the ctor/dtor, 0 divergences); step 2 (the encoding-factory arity) was closed 2026-09-08. ResetPersistState is VERIFIED (Wave 11 lane OBJINT: shadow calls=1 divergences=0, plus a synthetic A/B green on emissions and post-state) but this is its FIRST LIVE ARMING — watch the load path.
+[RtPort]   Object::Internal: 12 exports registered (INCLUDING the table tier)
+[RtPort]   External: 12 exports. The four rows this line used to call "deliberately NOT ported" -- Clean, FindOrLoad, SaveText, SerializeReferenceTable -- are ALL ported now, in external_set.cpp, external_compiled.cpp, external_savetext_win.cpp and external_reftable.cpp respectively.
+[ResSet] registered 13 doors (12 Set bodies + Clean by name and address, resource-tree-instantiation=0x18002xxx, probe=off)
+[ResPath] registered 4 doors + 4 addresses (detour=off negctl=0)
+[ResFind] registered 1 door + 1 address (detour=off negctl=0)
+[RtPort]   Object::factory dtors: 3 exports + 5 helper addresses registered. NOTE: their only caller in this tree is Engine::Shutdown, which itself has calls=0 -- see docs/runtime_port/WAVE11_LANE_OBJLIFE.md before reading a 0 here as a regression.
+[PathStack] registered 2 exports + 4 container addresses (negctl=0, probe=off)
+[Compiled] registered 2 exports (GetCompiledPath, FindOrLoad) negctl=0
+[RtPort]   Object::ExternalFactory::Add (wave 11f lane IOSTREAM): 1 export registered
+[RtPort]   Object::External::SaveText (wave 11f lane IOSTREAM): 1 export registered
+[RtPort]   Object::External::Load (wave 11f lane IOSTREAM): 1 export registered
+[RtPort]   Object::Set<ReferenceEntry>: 7 address doors registered (no export exists for any of them). Their only caller in this tree is SerializeReferenceTable's READ path, so a 0 here on a run that never loaded a save is expected -- see docs/runtime_port/WAVE11F_LANE_AVL.md.
+[RtPort]   Object::ExternalFactory::SerializeReferenceTable: 1 export + 1 address registered. Its live call site is code/Game/Game/gameupdateloop_serialize.cpp (by export name), so it runs once per save AND once per load.
+[RtPort] Object: 79 exports registered
+[RtIO/Serializer] 22 of 22 structural checks could not run (the symbol did not resolve). Registering ANYWAY: with no shipped body to compare against there is nothing to verify, and refusing here would leave the fallback path -- which is that same absent DLL -- as the only implementation.
+[RtIO/Serializer] 22 exports registered, all 22 retail bodies verified (ReaderWriter vtable slots match the DLL's own tail-jumps)
+[RtPort]   IO::CompressedMemoryStream: 11 exports registered (SAVE PATH ONLY -- a plain autostart session never reaches them; needs a save or a load, see WAVE4_LANE_B.md)
+[RtPort] IO::Persistence: 5/7 exports registered here; ReadSettings + WriteSettings + Registry::Registry are registered by persistence_registry_win.cpp
+[RtPort] IO::Persistence saves: 7/7 exports registered (6 here + 1 in the _win twin), each by name AND address
+[RtPort]   IO::FileSystem/Modification: 6 exports registered
+[RtPort]   IO::FileSystem find/exists: 3 exports registered
+[RtPort]   IO::PackageFile (lane PKG2): 21 exports registered
+[RtPort]   IO::PackageFile::~PackageFile (lane BODY, W25): 1 export registered (opens ONE address door, 0x1800269a0; the "5 unported callees" blocker was measured FALSE -- 6 of 7 are ported -- and the "no oracle" blocker is answered by the [ORACLE] site in package_file_dtor.cpp section 3)
+[RtPort]   IO::CompressedStream read path (lane PKG2): 4 exports registered
+[RtPort]   IO::FileSystem open/read (lane PKG2 rung 3): 4 exports registered
+[RtPort]   IO::MemoryStream virtuals (lane PKG2 rung 4b-ii): 6 exports registered
+[RtPort]   IO::CompressedStream Release/dtor (lane PKG2 rung 4b-iii, lane W's rows): 2 exports registered
+[RtPort]   IO::CompressedStream SetWindowCount/Open (lane PKG2 rung 4b-iii): 2 exports registered
+[RtPort]   IO::PackageFile::ReadPackfile (lane PKG3): 1 exports registered
+[RtPort]   IO::Modification (lane MOD): 5 exports + 14 addresses
+[RtPort]   IO::Modification::RefreshList (lane MOD2): 3 exports + 8 addresses
+[RtPort]   IO::CompressedStream write path (lane CSTREAM): 11 exports registered
+[RtPort]   IO::FileStream family (wave 19 lane FILE): 6 exports + 1 unexported address registered
+[RtPort]   IO::FileSystem create/close (wave 19 lane FILE): 6 exports registered
+[RtPort]   IO::FileStream vtable slots (wave 19 lane FILE, post-report): 8 exports + 2 unexported addresses registered -- clears ??_7FileStream@ and ??_7BinaryFileStream@ to TRAP=0
+[RtPort]   IO::TextFileStream vtable slots (wave 20 lane SAVETEXT): 5 exports registered -- ??_7TextFileStream@ 2/10 -> 7/10 (slots 0, 2, 8 still trap)
+[RtPort]   IO::CompressedStream write path (lane CSTREAM): 11 exports registered
+[RtPort] IO: 264 exports registered
+[RtPort] Achievement::Goal: 13/15 exports registered here (+2 in goal_serialize.cpp: Goal::Serialize, GoalInstance::Persist)
+[RtPort]   Achievement::AchievementManager/Instance/Achievement: 21/23 exports registered (AchievementManager::Persist and Achievement::Serialize held back -- both construct an IO::Serializer, which has no runnable oracle; see WAVE5_LANE_B.md)
+[RtPort] Achievement: 43 exports registered
+[RtPort] Save: 31 exports registered
+[RtPort] Picking: 9 exports + 19 grid addresses registered
+[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C): 29 exports registered
+[LaneVID2] identity: device_startup.cpp built Sep 12 2026 09:27:22
+[ShaderLit] SKIP -- Runtime-x64.dll is not mapped (cutover). 45 lifted literals go UNCHECKED, which is expected: with no DLL our copy is the only copy.
+[LaneEVM] rev=EVM-r1 interfaces registered=2
+[LaneEVM] mode/refresh sort addresses registered=5
+[RtPort] Video resource lifecycle (Wave 18 lane VRES): 6 exports registered
+[RtPort] Video::ImageBuffer::SaveImageToFile (Wave 18 lane VRES): 1 export registered
+[RtPort] Video::ImageBuffer::PlatformSerialize (Wave 18 lane VRES): 1 export registered
+[RtPort] Video: 157 exports registered
+[RtPort] Graphics::SunLight (lane GFX2): 3 exports registered
+[RtPort] Graphics: 89 exports + 6 grid addresses registered
+[RtPort] Wave 9 lane GFXD: 4 exports + 11 addresses registered
+[RtPort] Wave 21 lane GFXVT: 8 typeinfo-accessor exports registered
+[RtPort]   WAVE9 LANE UID ARMED -- ~DialogInstance (0x180114d40) + LinkedList::Clear (0x1800325f0) + the Array<8>::SetSize address door (0x18002fca0). Shape oracles report under BANISHED_RT_DIFF=1; read the [negative control] line first.
+[RtPort] UI widgets(layout): 27 exports registered
+[RtPort] UI: 218 exports registered
+[RtPort]   Engine loop family (lane A): 18 exports registered (LoadResources held back -- no oracle, see WAVE8_LANE_A.md)
+[RtPort]   Engine::Engine + MainLoop (lane B): 3 exports registered (2 held back: both detour-required, plus _singleton which is DATA -- see WAVE8_LANE_B.md; Run is NO LONGER among them, see lane ADDR below)
+[RtPort]   MainLoop::Run + Update (lane ADDR): 2 exports registered (Run closes the ADDRESS door at game_main.cpp:176 and opens two NAME doors -- Input::Device::Update and MainLoop::Frame; Run has NO ORACLE by construction -- see WAVE9_LANE_ADDR.md)
+[RtPort]   MainLoop::Frame (lane BODY, W25): 1 exports registered (closes the NAME door lane ADDR opened; opens TWO name doors -- MainLoop::Draw ord 2251 and Audio::Device::FreeChannelPlatform ord 2380. NO ORACLE: the site is named [ATTENDANCE] and its divergences column carries no verdict -- see WAVE25_LANE_BODY.md)
+[RtPort]   Engine lifecycle (lane ENG): 8 exports registered (ctor/dtor/Startup/Shutdown + 4 helpers; Shutdown is UNVERIFIED, calls=0 by construction -- see WAVE9_LANE_ENG.md)
+[RtPort]   MainLoop device-lost pair (lane VIDL): 2 exports registered (OnVideoError + OnVideoRestart, plus Array<VideoResource>::SetSize 0x18004f620 and elem-destroy 0x180034440 by ADDRESS; OnVideoRestart OPENS THREE NAME DOORS -- Load@External, GetCompiledPath@ExternalFactory, OnVideoRestart@SaveLoad -- see WAVE9_LANE_VIDL.md §2)
+[RtPort]   Engine::PlatformConfigure (W23 lane ENGINE): 1 registered (THE CUTOVER BOOT WALL -- Half A ported, Half B is the launcher dialog and needs DLL resources; see WAVE23_LANE_ENGINE.md §1)
+[RtPort]   UpdateLoop::LoadResources (W23 lane ENGINE): 1 registered (Wave 8 lane A's oldest holdback, discharged; removes ONE of the two unported readers of ?_singleton@Configuration@System@@)
+[RtPort] Engine: 35 exports registered
+[RtPort] Audio: 27 exports registered (WAVE8_LANE_C.md for Wave 8's set, audio.cpp's header for the four that moved in Wave 8.5 and for Wave 9 lane W's FindFree3DEffect; the held-back set is listed in audio.cpp, not counted here)
+[RtPort] Input: 33 exports registered (lane INPUT: +2 KeyMap doors, +5 Set<E24> AVL addresses; lane ENGIO: +4 Device::Update bodies)
+[LanePLAT] rev=PLAT-r5 registered=10
+[RtPort] Application: 33 exports registered
+[RtPort] Utility: 2 exports registered
+[RtPort]   Collection::Set AVL: 4 addresses registered
+[RtPort]   Collection::Set Clear: 3 addresses registered
+[RtCrt] _stricmp locale flag: NOT CHECKED (the DLL is not mapped). The static argument stands on its own.
+[RtPort]   Collection keyed Set/Map + sort (lane COLL): 24 + 3 + 2 addresses registered
+[RtPort]   Collection::Array destroy (lane DESTROY): 0x180026b50 registered, built Sep 12 2026 09:27:10
+[RtDelDtor] 44 deleting destructors registered (one body, 44 rows); ~Class resolves lazily
+[RtPort] Wave9 lane X (singleton ctors): 15 exports registered
+[RtPort] runtime registry: 1179 exports, 1198 addrs, 2 ordinals
+[RtMint] seeded 2 storage row(s) with a known constant value
+[RtMint] registered 203 by name, 209 by address
+
+[CutoverManifest] ==== DLL ABSENT (cutover) ==== 60 tagged gap rows
+[CutoverManifest] CONDITIONAL Graphics  ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z  (no by-name door)
+[CutoverManifest] WITHHELD    UI        ??_7Dialog@UI@@6B@
+[CutoverManifest]   ^ NOT published, and 5 by-name door(s) in this tree WILL resolve NULL. If attempt 26 faults reaching this symbol, that is this line, not a new discovery.
+[CutoverManifest] published 58, withheld 1, conditional 1, unminted 0, failed 0 (of 60)
+[CutoverManifest] 5 by-name door(s) are KNOWINGLY left resolving NULL by the rows above. That is a published prediction, not an oversight.
+[RtMint] constructed 3 of the 3 statics the DLL's CRT builds at load
+[RtMint] minted 64 vtables (589 slots: 361 ported, 85 unported-trap, 143 purecall-trap), 104 BaseTypeInfo, 39 storage symbols (11344 bytes)
+[RtMint] 41 of 64 vtables are COMPLETE (every non-purecall slot is our port); registration is ON (BANISHED_RT_MINT=1)
+[RtMint] BaseTypeInfo factories: 104 rows x 2 slots = 208; 2 PORTED, 204 ABORT-TRAP, 2 absent in retail too (no factory name)
+[RtMint] 204 trapped factory slot(s) remain: EVERY ONE of them is a cutover wall of the shape attempt 26 hit. Set BANISHED_RT_MINT_FACTORYLIST=1 to print the roster.
+[RtMint] --- unported minted BaseTypeInfo factories ---
+[RtMint]   [  0] slot0 0x180001130  ?CreateNewObject@Achievement@1@SAPEAVBase@Object@@XZ
+[RtMint]   [  0] slot1 0x1800011f0  ?CreateInPlaceObject@Achievement@1@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [  1] slot0 0x1800018b0  ?CreateNewObject@AchievementInstance@Achievement@@SAPEAVBase@Object@@XZ
+[RtMint]   [  1] slot1 0x1800070c0  ?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z
+[RtMint]   [  2] slot0 0x1800367c0  ?CreateNewObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [  2] slot1 0x180036840  ?CreateInPlaceObject@AnimatedImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [  3] slot0 0x180036ba0  ?CreateNewObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [  3] slot1 0x180036c20  ?CreateInPlaceObject@AnimatedImageElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [  4] slot0 0x180011700  ?CreateNewObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@XZ
+[RtMint]   [  4] slot1 0x180011710  ?CreateInPlaceObject@AnimationEvent@Graphics@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [  5] slot0 0x180016400  ?CreateNewObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@XZ
+[RtMint]   [  5] slot1 0x1800164d0  ?CreateInPlaceObject@AnimationGroup@Graphics@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [  7] slot0 0x180040ad0  ?CreateNewObject@BorderDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [  7] slot1 0x180040b50  ?CreateInPlaceObject@BorderDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [  8] slot0 0x1800411a0  ?CreateNewObject@BorderElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [  8] slot1 0x180041220  ?CreateInPlaceObject@BorderElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [  9] slot0 0x180047f20  ?CreateNewObject@ButtonDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [  9] slot1 0x180047fa0  ?CreateInPlaceObject@ButtonDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 10] slot0 0x180048350  ?CreateNewObject@ButtonElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 10] slot1 0x1800483f0  ?CreateInPlaceObject@ButtonElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 11] slot0 0x180037540  ?CreateNewObject@CharacterSet@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 11] slot1 0x1800375f0  ?CreateInPlaceObject@CharacterSet@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 12] slot0 0x180048770  ?CreateNewObject@CheckDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 12] slot1 0x180048800  ?CreateInPlaceObject@CheckDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 13] slot0 0x180048b70  ?CreateNewObject@CheckElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 13] slot1 0x180048c20  ?CreateInPlaceObject@CheckElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 14] slot0 0x180037a80  ?CreateNewObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 14] slot1 0x180037b80  ?CreateInPlaceObject@ClipRegionDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 15] slot0 0x180038060  ?CreateNewObject@ClipRegionElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 15] slot1 0x180038110  ?CreateInPlaceObject@ClipRegionElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 16] slot0 0x180065060  ?CreateNewObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 16] slot1 0x180065130  ?CreateInPlaceObject@CollisionMesh@Collision2D@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 17] slot0 0x180074bd0  ?CreateNewObject@ComboDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 17] slot1 0x180074c70  ?CreateInPlaceObject@ComboDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 18] slot0 0x180074850  ?CreateNewObject@ComboDialog@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 18] slot1 0x1800748f0  ?CreateInPlaceObject@ComboDialog@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 19] slot0 0x180075020  ?CreateNewObject@ComboElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 19] slot1 0x1800750a0  ?CreateInPlaceObject@ComboElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 20] slot0 0x18000b6c0  ?CreateNewObject@CompiledExternal@Object@@SAPEAVBase@2@XZ
+[RtMint]   [ 20] slot1 0x18000b6d0  ?CreateInPlaceObject@CompiledExternal@Object@@SAPEAVBase@2@PEAX@Z
+[RtMint]   [ 21] slot0 0x1800399c0  ?CreateNewObject@ContainerDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 21] slot1 0x180039a40  ?CreateInPlaceObject@ContainerDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 22] slot0 0x180039db0  ?CreateNewObject@ContainerElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 22] slot1 0x180039e50  ?CreateInPlaceObject@ContainerElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 23] slot0 0x18003b070  ?CreateNewObject@Cursor@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 23] slot1 0x18003b120  ?CreateInPlaceObject@Cursor@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 24] slot0 0x180038530  ?CreateNewObject@Dialog@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 24] slot1 0x180038610  ?CreateInPlaceObject@Dialog@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 25] slot0 0x18003b6e0  ?CreateNewObject@DialogController@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 25] slot1 0x18003b6f0  ?CreateInPlaceObject@DialogController@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 26] slot0 0x18003b480  ?CreateNewObject@DialogControllerConfig@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 26] slot1 0x18003b490  ?CreateInPlaceObject@DialogControllerConfig@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 27] slot0 0x1800454f0  ?CreateNewObject@DialogInstance@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 27] slot1 0x1800070c0  ?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z
+[RtMint]   [ 28] slot0 0x18003b9f0  ?CreateNewObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 28] slot1 0x18003ba70  ?CreateInPlaceObject@DocumentTextDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 29] slot0 0x18003bf40  ?CreateNewObject@DocumentTextElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 29] slot1 0x18003bfc0  ?CreateInPlaceObject@DocumentTextElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 30] slot0 0x180012d80  ?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 30] slot1 0x180012e00  ?CreateInPlaceObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 31] slot0 0x18003f7c0  ?CreateNewObject@EditDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 31] slot1 0x18003f840  ?CreateInPlaceObject@EditDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 32] slot0 0x18003fbd0  ?CreateNewObject@EditElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 32] slot1 0x18003fc50  ?CreateInPlaceObject@EditElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 33] slot0 0x180035450  ?CreateNewObject@Element@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 33] slot1 0x1800070c0  ?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z
+[RtMint]   [ 34] slot0 0x180035100  ?CreateNewObject@ElementDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 34] slot1 0x180035110  ?CreateInPlaceObject@ElementDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 35] slot0 0x18002c260  ?CreateNewObject@ExtensionCompiler@Object@@SAPEAVBase@2@XZ
+[RtMint]   [ 35] slot1 0x18002c270  ?CreateInPlaceObject@ExtensionCompiler@Object@@SAPEAVBase@2@PEAX@Z
+[RtMint]   [ 36] slot0 0x18002c980  ?CreateNewObject@External@Object@@SAPEAVBase@2@XZ
+[RtMint]   [ 36] slot1 0x18002c990  ?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z
+[RtMint]   [ 37] slot0 0x18002c0e0  ?CreateNewObject@ExternalCompiler@Object@@SAPEAVBase@2@XZ
+[RtMint]   [ 37] slot1 0x18002c0f0  ?CreateInPlaceObject@ExternalCompiler@Object@@SAPEAVBase@2@PEAX@Z
+[RtMint]   [ 38] slot0 0x180007460  ?CreateNewObject@ExternalList@Object@@SAPEAVBase@2@XZ
+[RtMint]   [ 38] slot1 0x180007510  ?CreateInPlaceObject@ExternalList@Object@@SAPEAVBase@2@PEAX@Z
+[RtMint]   [ 39] slot0 0x180031ab0  ?CreateNewObject@Font@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 39] slot1 0x180031ba0  ?CreateInPlaceObject@Font@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 40] slot0 0x18001f0a0  ?CreateNewObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 40] slot1 0x18001f120  ?CreateInPlaceObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 41] slot0 0x18001edf0  ?CreateNewObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 41] slot1 0x18001ee00  ?CreateInPlaceObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 42] slot0 0x180001b70  ?CreateNewObject@Goal@Achievement@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 42] slot1 0x180001b80  ?CreateInPlaceObject@Goal@Achievement@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 43] slot0 0x180001f50  ?CreateNewObject@GoalInstance@Achievement@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 43] slot1 0x1800070c0  ?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z
+[RtMint]   [ 44] slot0 0x180040180  ?CreateNewObject@GraphDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 44] slot1 0x180040200  ?CreateInPlaceObject@GraphDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 45] slot0 0x180040550  ?CreateNewObject@GraphElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 45] slot1 0x1800405d0  ?CreateInPlaceObject@GraphElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 46] slot0 0x180012480  ?CreateNewObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 46] slot1 0x180012500  ?CreateInPlaceObject@GraphicsMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 47] slot0 0x180046750  ?CreateNewObject@GroupDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 47] slot1 0x180046840  ?CreateInPlaceObject@GroupDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 48] slot0 0x180046ca0  ?CreateNewObject@GroupElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 48] slot1 0x180046d30  ?CreateInPlaceObject@GroupElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 49] slot0 0x18001e9f0  ?CreateNewObject@ImageBuffer@Video@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 49] slot1 0x18001ea70  ?CreateInPlaceObject@ImageBuffer@Video@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 50] slot0 0x180035dc0  ?CreateNewObject@ImageDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 50] slot1 0x180035eb0  ?CreateInPlaceObject@ImageDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 51] slot0 0x1800363a0  ?CreateNewObject@ImageElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 51] slot1 0x180036450  ?CreateInPlaceObject@ImageElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 52] slot0 0x18002fc80  ?CreateNewObject@Internal@Object@@SAPEAVBase@2@XZ
+[RtMint]   [ 52] slot1 0x1800070c0  ?CreateInPlaceObject@Internal@Object@@SAPEAVBase@2@PEAX@Z
+[RtMint]   [ 53] slot0 0x1800424a0  ?CreateNewObject@LabelDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 53] slot1 0x180042520  ?CreateInPlaceObject@LabelDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 54] slot0 0x1800428e0  ?CreateNewObject@LabelElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 54] slot1 0x180042960  ?CreateInPlaceObject@LabelElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 55] slot0 0x180042e30  ?CreateNewObject@LayoutDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 55] slot1 0x180042f20  ?CreateInPlaceObject@LayoutDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 56] slot0 0x180043380  ?CreateNewObject@LayoutElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 56] slot1 0x180043420  ?CreateInPlaceObject@LayoutElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 57] slot0 0x180044c90  ?CreateNewObject@ListDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 57] slot1 0x180044d10  ?CreateInPlaceObject@ListDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 58] slot0 0x180045080  ?CreateNewObject@ListElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 58] slot1 0x180045100  ?CreateInPlaceObject@ListElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 59] slot0 0x1800119c0  ?CreateNewObject@Material@Graphics@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 59] slot1 0x180011a70  ?CreateInPlaceObject@Material@Graphics@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 60] slot0 0x180002900  ?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 60] slot1 0x1800029d0  ?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 61] slot0 0x18004a330  ?CreateNewObject@NumberDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 61] slot1 0x18004a420  ?CreateInPlaceObject@NumberDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 62] slot0 0x180045f80  ?CreateNewObject@NumberEditDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 62] slot1 0x180046000  ?CreateInPlaceObject@NumberEditDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 63] slot0 0x180046340  ?CreateNewObject@NumberEditElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 63] slot1 0x1800463e0  ?CreateInPlaceObject@NumberEditElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 64] slot0 0x18004a910  ?CreateNewObject@NumberElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 64] slot1 0x18004a990  ?CreateInPlaceObject@NumberElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 65] slot0 0x180025240  ?CreateNewObject@PackageFile@IO@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 65] slot1 0x1800252c0  ?CreateInPlaceObject@PackageFile@IO@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 66] slot0 0x180046fd0  ?CreateNewObject@PageDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 66] slot1 0x180047050  ?CreateInPlaceObject@PageDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 67] slot0 0x180047360  ?CreateNewObject@PageElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 67] slot1 0x180047400  ?CreateInPlaceObject@PageElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 68] slot0 0x18001ff40  ?CreateNewObject@Particle@Graphics@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 68] slot1 0x18001ff50  ?CreateInPlaceObject@Particle@Graphics@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 69] slot0 0x1800204d0  ?CreateNewObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 69] slot1 0x180020550  ?CreateInPlaceObject@ParticleSystem@Graphics@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 70] slot0 0x180071ba0  ?CreateNewObject@PickingMesh@Picking@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 70] slot1 0x180071c60  ?CreateInPlaceObject@PickingMesh@Picking@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 71] slot0 0x18004e9d0  ?CreateNewObject@PixelProgram@Video@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 71] slot1 0x18004ea50  ?CreateInPlaceObject@PixelProgram@Video@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 72] slot0 0x180070f30  ?CreateNewObject@PointList@Pathfinding@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 72] slot1 0x180070ff0  ?CreateInPlaceObject@PointList@Pathfinding@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 73] slot0 0x180077860  ?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 73] slot1 0x1800778e0  ?CreateInPlaceObject@ProgressDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 74] slot0 0x180077e30  ?CreateNewObject@ProgressElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 74] slot1 0x180077eb0  ?CreateInPlaceObject@ProgressElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 75] slot0 0x180047760  ?CreateNewObject@RadioDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 75] slot1 0x1800477e0  ?CreateInPlaceObject@RadioDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 76] slot0 0x180047af0  ?CreateNewObject@RadioElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 76] slot1 0x180047ba0  ?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 77] slot0 0x1800222c0  ?CreateNewObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 77] slot1 0x180022370  ?CreateInPlaceObject@ReflectionImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 78] slot0 0x18004b660  ?CreateNewObject@RenderState@Video@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 78] slot1 0x18004b6e0  ?CreateInPlaceObject@RenderState@Video@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 79] slot0 0x180044220  ?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 79] slot1 0x180044310  ?CreateInPlaceObject@RibbonDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 80] slot0 0x1800447d0  ?CreateNewObject@RibbonElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 80] slot1 0x180044880  ?CreateInPlaceObject@RibbonElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 81] slot0 0x18003a210  ?CreateNewObject@ScrollDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 81] slot1 0x18003a290  ?CreateInPlaceObject@ScrollDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 82] slot0 0x18003a940  ?CreateNewObject@ScrollElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 82] slot1 0x18003a9c0  ?CreateInPlaceObject@ScrollElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 83] slot0 0x18004e0d0  ?CreateNewObject@ShaderProgram@Video@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 83] slot1 0x18004e0e0  ?CreateInPlaceObject@ShaderProgram@Video@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 84] slot0 0x180049840  ?CreateNewObject@SliderDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 84] slot1 0x1800498c0  ?CreateInPlaceObject@SliderDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 85] slot0 0x180049e10  ?CreateNewObject@SliderElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 85] slot1 0x180049e90  ?CreateInPlaceObject@SliderElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 86] slot0 0x18000b9a0  ?CreateNewObject@SoundBuffer@Audio@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 86] slot1 0x18000ba90  ?CreateInPlaceObject@SoundBuffer@Audio@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 87] slot0 0x180050430  ?CreateNewObject@SoundEffect@Audio@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 87] slot1 0x1800504f0  ?CreateInPlaceObject@SoundEffect@Audio@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 88] slot0 0x18004ae50  ?CreateNewObject@SpinnerDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 88] slot1 0x18004aed0  ?CreateInPlaceObject@SpinnerDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 89] slot0 0x18004b200  ?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 89] slot1 0x18004b290  ?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 90] slot0 0x18003c900  ?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 90] slot1 0x18003c9c0  ?CreateInPlaceObject@SpriteCapture@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 91] slot0 0x180002f40  ?CreateNewObject@SpriteSheet@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 91] slot1 0x180003000  ?CreateInPlaceObject@SpriteSheet@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 93] slot0 0x180064b60  ?CreateNewObject@Surface@Collision2D@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 93] slot1 0x180064c10  ?CreateInPlaceObject@Surface@Collision2D@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 94] slot0 0x18004c2e0  ?CreateNewObject@TabDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 94] slot1 0x18004c360  ?CreateInPlaceObject@TabDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 95] slot0 0x18004c7f0  ?CreateNewObject@TabElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 95] slot1 0x18004c870  ?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 96] slot0 0x180078fc0  ?CreateNewObject@TableDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 96] slot1 0x180079040  ?CreateInPlaceObject@TableDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 97] slot0 0x1800793c0  ?CreateNewObject@TableElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 97] slot1 0x180079440  ?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 98] slot0 0x180041bc0  ?CreateNewObject@TextDescription@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 98] slot1 0x180041c40  ?CreateInPlaceObject@TextDescription@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [ 99] slot0 0x180041fe0  ?CreateNewObject@TextElement@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [ 99] slot1 0x180042060  ?CreateInPlaceObject@TextElement@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [100] slot0 0x18004d0b0  ?CreateNewObject@ToolTipDialog@UI@@SAPEAVBase@Object@@XZ
+[RtMint]   [100] slot1 0x18004d140  ?CreateInPlaceObject@ToolTipDialog@UI@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [101] slot0 0x18004ddc0  ?CreateNewObject@VertexLayout@Video@@SAPEAVBase@Object@@XZ
+[RtMint]   [101] slot1 0x18004de40  ?CreateInPlaceObject@VertexLayout@Video@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [102] slot0 0x18004e650  ?CreateNewObject@VertexProgram@Video@@SAPEAVBase@Object@@XZ
+[RtMint]   [102] slot1 0x18004e6d0  ?CreateInPlaceObject@VertexProgram@Video@@SAPEAVBase@Object@@PEAX@Z
+[RtMint]   [103] slot0 0x18004ed40  ?CreateNewObject@VideoProgram@Video@@SAPEAVBase@Object@@XZ
+[RtMint]   [103] slot1 0x18004edc0  ?CreateInPlaceObject@VideoProgram@Video@@SAPEAVBase@Object@@PEAX@Z
+[RtMint] --- end roster ---
+
+[RtMintShadow] ==== phase=init  DLL=ABSENT (post-cutover; oracle gone) ====
+[RtMintShadow] The DLL is not loaded, so there is nothing to compare
+[RtMintShadow] against. This is the expected state AFTER cutover and
+[RtMintShadow] the reason this check had to be run BEFORE it.
+[BootTime] RuntimePortInit                              +   59.03ms   (t=   65.12ms)
+[Standalone] Initializing address registry...
+[AddressRegistry] 1617 addresses registered
+[BootTime] AddressRegistryInit                          +    1.26ms   (t=   66.38ms)
+[BootTime] UIDialogControllerVtable::Apply              +    0.31ms   (t=   66.69ms)
+[Standalone] Resolving engine functions...
+[EngineFuncs] Player/Tool APIs resolved:
+  SceneAddObject            = 00007ff71f60b14a
+  SceneRemoveObject         = 00007ff71f60b490
+  Transform_FromYawPitch    = 00007ff71f65ce1f
+  Geometry_SetTransform     = 00007ff71f60893d
+  MeshInstance_UpdateHier   = 00007ff71f6020eb
+  TileRender                = 00007ff71f5534e0
+  TileValidityCheck         = 00007ff71f5490a0
+  FencedPlacementParams     = 00007ff71f54522d
+  HighlightRemove           = 00007ff71f3b2520
+[EngineFuncs] MenuDLT static-mesh + particle helpers:
+  Scene::AddObject              = 00007ff71f60b14a
+  GraphicsMesh::GetMaterialList = 00007ff71f601786
+  MeshInstance::SetMatInstance  = 00007ff71f6026f7
+  ParticleSystemInstance::Ctor  = 00007ff71f5ff7d5
+  ParticleInstance::IncrementInstanceIndex = 00007ff71f5ff6a7
+  Particle::Ctor                = 00007ff71f5ff070
+[EngineFuncs] Timer globals:
+  _ticksPerSecond       @ 00007ff720165e80 = 1000000
+  _secondsPerTick       @ 00007ff720165cf0 = 0.000001
+  _systemTicksPerSecond @ 00007ff720165e70 = 0
+  _systemInitialTick    @ 00007ff720165e50 = 0
+[EngineFuncs] Functions:
+  Input::Device::Update     = 00007ff71f61c976
+  Audio::Device::Update     = 00007ff71f5d9016
+  Audio::FreeChannel        = 00007ff71f5d8e3b
+  App::PlatformUpdate       = 00007ff71f5d23ae
+  VideoCtx::ClearResources  = 00007ff71f711700
+  VideoCtx::Reset           = 00007ff71f6f34d1
+  Loader::Load              = 00007ff71f5f605a
+  App::SleepThread          = 00007ff71f5d24cd
+  UI::Update                = 00007ff71f6dd8b4
+  UI::Draw                  = 00007ff71f6dc1d4
+  UI::CloseDialog           = 00007ff71f6d9e8a
+  DynArrayPush              = 00007ff71f5dc76f
+  String::Set               = 00007ff71f6a236d
+  String::Format            = 00007ff71f6a2e8d
+  String::~String           = 00007ff71f6a22e5
+  String::String()          = 00007ff71f6a225f
+  String::String(cstr)      = 00007ff71f6a2278
+  String::String(copy)      = 00007ff71f6a22ad
+  PostDrawPush              = 00007ff71f5dc66f
+  PostUpdatePush            = 00007ff71f5dc6af
+  VideoCtx::Ctor            = 00007ff71f70be47
+  VideoCtx::Dtor            = 00007ff71f71185f
+  VideoCtx::Delete          = 00007ff71f7116c2
+  MemAlloc                  = 00007ff71f77a164
+  MemAllocSingleton         = 0000000000000000
+  VideoDevice::_singleton   = 00007ff720165d90 -> 0000000000000000
+  ExtFactory::_singleton    = 00007ff720165db0 -> 0000000000000000
+  ExtFactory::FindOrLoad    = 00007ff71f666c63
+  ExtFactory::Clean         = 00007ff71f670a8c
+  IsDerivedFrom             = 00007ff71f5bb77c
+  ExternalTypeId            = 00007ff7201620c0 -> 0x4fcc106b
+  Filename::AdjustDelimiters= 00007ff71f6a06ce
+  UpdateLoop::LoadResources = 00007ff71f5fe26b
+  ListCleanup               = 00007ff71f5dd9ac
+  ModEntry::CopyCtor        = 00007ff71f63c289
+  ModEntry::Assign          = 00007ff71f63c48f
+  ModEntry::Dtor            = 00007ff71f63c664
+  Map::Find                 = 00007ff71f69df14
+  Map::Insert               = 00007ff71f5e41fa
+  ParseCommand              = 00007ff71f69e973
+  ParseValue                = 00007ff71f69e5cb
+  Persistence::_singleton   = 00007ff720165e20 -> 0000000000000000
+  Persistence::SetBool      = 00007ff71f64730b
+  Persistence::SetInt       = 00007ff71f647099
+  Filename::GetPathFilename = 00007ff71f6a09fd
+  ModArrayCopy              = 00007ff71f63c83f
+[EngineFuncs] UI infrastructure:
+  DialogController::~Dtor   = 00007ff71f6ab961
+  MemFreeStatic             = 00007ff71f6999f1
+  FindElement               = 00007ff71f6ba36f
+  TextElement::SetParameter = 00007ff71f6e5872
+  Element::GetUserData      = 00007ff71f6bb679
+  InternalBasePtr::Ctor     = 00007ff71f675cf0
+  KeyMap::GetInputForId     = 00007ff71f619e8b
+  KeyMap::GetDeviceForId    = 00007ff71f619cd1
+[EngineFuncs] Phase A1 — UI Widget Functions:
+  Elem::SetFlagsOnOff       = 00007ff71f6bbb13
+  Elem::SetElementId        = 00007ff71f6bb9b3
+  Elem::SetName             = 00007ff71f6bbc15
+  Elem::SetToolTip          = 00007ff71f6bc2f7
+  Elem::Child               = 00007ff71f6b9df3
+  Elem::ChildCount          = 00007ff71f6b9fa7
+  Elem::FindElementType     = 00007ff71f6ba5f3
+  DI::FindElement           = 00007ff71f6aad1f
+  DI::GetController         = 00007ff71f6aab71
+  DI::FindElementType       = 00007ff71f6aae63
+  DI::SetFlagsOnOff         = 00007ff71f6aafa5
+  Combo::AddItem            = 00007ff71f6e14e0
+  Combo::SetCurrentItem     = 00007ff71f6e2c7e
+  Combo::GetItemCount       = 00007ff71f6e1267
+  Combo::GetCurrentItem     = 00007ff71f6e10ed
+  Combo::RemoveAllItems     = 00007ff71f6e17aa
+  Progress::SetTextParam    = 00007ff71f6e282d
+  Progress::SetMaxValue     = 00007ff71f6e2307
+  Progress::SetCurValue     = 00007ff71f6e2509
+  Table::SetSize            = 00007ff71f6e462d
+  Table::SetChild(3)        = 00007ff71f6e4541
+  NumEdit::SetValue         = 00007ff71f6e01b5
+  NumElem::SetValue(int)    = 00007ff71f6e1af1
+  Spinner::SetElementId     = 00007ff71f6e0a2b
+  Image::SetSprite          = 00007ff71f6e4d59
+  Label::SetSprite          = 00007ff71f6e55e3
+  Text::SetText             = 00007ff71f6e5901
+[EngineFuncs] Phase A2 — Type IDs:
+  ComponentDescription      = 00007ff72015ffec -> 0x0
+  DestroyComponent          = 00007ff72015fc98 -> 0x0
+  MeshInstanceComponent     = 00007ff72015fc44 -> 0x0
+[EngineFuncs] Phase A3 — Singletons:
+  GameWorld                 = 00007ff7200a7448 -> 0000000000000000
+  KeyMap (container)        = 00007ff7200a7440 -> 0000000000000000
+  KeyMap (object exref)     = 000001b926d83820 -> 00007ff71f839020
+  EngineSingleton           = 00007ff720165df0 -> 0000000000000000
+[EngineFuncs] Phase A4 -- FindComponent type IDs (C++ reimpl):
+  MapComponent              = 00007ff72015fc34 -> 0x0
+  CemeteryComponent         = 00007ff72015ffc4 -> 0x0
+[EngineFuncs] Video::ImageBuffer:
+  ImageBuffer::Ctor         = 00007ff71f6e8f28
+  ImageBuffer::Dtor         = 00007ff71f6e90b6
+  ImageBuffer::CopyToTex    = 00007ff71f6ea005
+  ImageBuffer::CopyFromTex  = 00007ff71f6ea0bd
+[EngineFuncs] Globals:
+  _loader                   = 00007ff7201652d0
+  _loader.m_flags           = 00007ff7201652d8 -> 0x0
+  _loader.m_completionEvent = 00007ff7201652f8 -> 00000000000002cc
+  App::_singleton           = 00007ff720165d20 -> 0000000000000000
+[EngineFuncs] Phase H: Factory::GetTypeIdFromName + IsA + Factory singleton resolved
+[EngineFuncs] Phase H: FindDialogByName_Impl, Game_TriggerDisasterByType_Impl, Game_SpawnResources_Impl now available as inline replacements
+[EngineFuncs] Phase I: Work class helpers resolved
+[EngineFuncs] Phase I+J: All work class + BuildStructure helpers resolved
+[EngineFuncs] Achievement Goal support resolved
+  Goal::~Goal         = 00007ff71f5cdc25
+  Goal::Goal()        = 00007ff71f5cdb2d
+  Goal::Serialize     = 00007ff71f5cf6c9
+  GoalInst::~GoalInst = 00007ff71f5cdf49
+  GoalInst::Persist   = 00007ff71f5cf931
+  IBP::Serialize      = 00007ff71f6761ff
+  IsRunning           = 00007ff71f5f5d73
+[EngineFuncs] Phase K: Tutorial goal helpers resolved
+  FindUIElementByPath   = 00007ff71f5570eb
+  ObjectInternal::Ctor  = 00007ff71f675eb0
+  TutorialTreeInsert    = 00007ff71f55c48a
+  TutorialStepExecute   = 00007ff71f55df62
+  TypeId_FTGoal         = 00007ff720160000
+  SingletonExref_151a80 = 000001b926d82fe0
+  TutInstVtable         = 0000000000000000
+[EngineFuncs] Phase L: ComponentEntity deps resolved
+  TypeId_ComponentBase  = 00007ff72015fb24
+  ExeArrayResizeFill    = 00007ff71f5bc185
+[EngineFuncs] Phase L2: CitizenBehavior deps resolved
+  CountResources = 00007ff71f4a1d3e
+  CollectStats   = 00007ff71f4a2944
+[EngineFuncs] EntityList deps resolved:
+  IBPTreeInsert       = 00007ff71f5b4b2b
+  IBPTreeRemove       = 00007ff71f5b4cdd
+  Time::Serialize     = 00007ff71f6a65bd
+  BucketTreeSerialize = 00007ff71f4c8155
+[EngineFuncs] Path sub-functions resolved
+  NotificationEvent = 00007ff71f4b322c
+[EngineFuncs] CitizenBehavior Find deps resolved
+  PathDistance       = 00007ff71f5b805e
+  AssignHousing      = 00007ff71f39df3c
+[EngineFuncs] M3.5 Path B session 2 (0x60B struct lifecycle) resolved
+  Struct60B_Resize        = 00007ff71f4e716e
+  Struct60B_CopyCtor      = 00007ff71f4e7193
+  Struct60B_DtorRange     = 00007ff71f4e71b9
+  Struct60B_SubCopyS14    = 00007ff71f4e71ea
+  Struct60B_SubCopyS02    = 00007ff71f4e7228
+[EngineFuncs] M3.5 Path B session 5 (geometry resize helpers) resolved
+  Array_Resize_Stride02       = 00007ff71f4e60eb
+  Array_Resize_Stride16A      = 00007ff71f4e611c
+  Array_Resize_ArrayOfArrays  = 00007ff71f4e63b9
+  Array_Resize_Stride16B      = 00007ff71f4e614d
+  Array_Resize_Stride04       = 00007ff71f4e617e
+[EngineFuncs] M3.5 MenuScene::Serialize helpers resolved
+  Geometry_Init           = 00007ff71f4e0a70
+  Graphics_Geometry_Ctor  = 00007ff71f607f17
+  Video_VertexBuffer_Ctor = 00007ff71f6ec6ed
+  Video_IndexBuffer_Ctor  = 00007ff71f6ec63e
+  Transform_SerializeWrap = 00007ff71f4e0d02
+  Math_Transform_Serial   = 00007ff71f65d858
+  Math_Vector3_Serial     = 00007ff71f65f79f
+  Math_Vector4_Serial     = 00007ff71f65f8a3
+  System_Color_Serial     = 00007ff71f6a6612
+  Serializer_Float        = 00007ff71f6565f5
+  Array_Resize_S20/S08/S14= 00007ff71f4e1199 / 00007ff71f4e11ca / 00007ff71f4e13eb
+  Array_Serialize_S20     = 00007ff71f4e1671
+  ExtArr GraphicsMesh/Part= 00007ff71f4e1ef4 / 00007ff71f4e1f6b
+  ExtPtr Mesh/Weather     = 00007ff71f4e26c2 / 00007ff71f4e2731
+  Serializer_GetEncoding  = 00007ff71f657b67
+  Serializer_Serialize_U  = 00007ff71f656455
+  EFactory_IsRefModeEn    = 00007ff71f6647a1
+  EFactory_GetReferenceId = 00007ff71f664ae7
+  EFactory_GetPathForRef  = 00007ff71f664c26
+  Filename_AssignOp       = 00007ff71f6a043f
+  TypeInfo Mesh/Particle  = 000001b926d63640 / 000001b926d634c0
+  TypeId Weather          = 00007ff71f839a98
+  ExtPtr_Typed_7140       = 00007ff71f4e2fd2
+  TypeInfo MaterialInst   = 000001b926d63220
+[EngineFuncs] M3.5 Path B session 4 (0x60B + typed-array serialize) resolved
+  Struct60B_Serialize             = 00007ff71f4e8031
+  Array_Serialize_Ext_MatInstance = 00007ff71f4e8061
+[EngineFuncs] M3.5 Path B session 6 (heightmap mesh build) resolved
+  TradeWork_sub_c1e0      = 00007ff71f4e51a0
+  TradeWork_FUN_ac880     = 00007ff71f4e51bf
+  TradeWork_helper_e270   = 00007ff71f4e5204
+  Geometry_ChunkUpdate    = 00007ff71f4e523f
+[EngineFuncs] M3.5 Path B session 7 (image-buffer upload) resolved
+  TradeWork_sub_c780      = 00007ff71f4e5bf8
+[EngineFuncs] M3.5 Path B session 8 (Geometry::Serialize) resolved
+  TradeWork_impl_04d0     = 00007ff71f4cfccb
+  TradeWork_impl_f1a0     = 00007ff71f4cfcf2
+  Ser slot SerInt_AC8     = 00007ff71f6562b5
+  Ser slot SerByte_410    = 00007ff71f655dd5
+  Ser slot SerFloat_A60   = 00007ff71f6565f5
+  Ser slot SerUShortArr   = 00007ff71f657005
+  Ser slot SerSizedRaw_3F8= 00007ff71f656e55
+  Ser slot SerSizedRaw_400= 00007ff71f656ca5
+  Ser slot SerByteArr_618 = 00007ff71f6576c5
+[EngineFuncs] M3.5 Geometry vtable draw primitives resolved
+  Renderer_GetCullCamera   = 00007ff71f606608
+  Renderer_AddDrawItem     = 00007ff71f615682
+  Renderer_GetShader       = 00007ff71f6066f3
+  Camera_GetFrustum        = 00007ff71f60630e
+  Frustum_Contains         = 00007ff71f727bf8
+  Frustum_MulTransform3    = 00007ff71f727adc
+  Geometry_GetTransform    = 00007ff71f609d66
+  Transform_Inverse        = 00007ff71f65bbe4
+  Transform_AsMatrix       = 00007ff71f65b78f
+  Transform3_Copy_Ctor     = 00007ff71f65ad4c
+  Vector3_FromFloats_Ctor  = 00007ff71f65eb4a
+  InterpState_Trans_Lerp   = 00007ff71f615408
+  Context_SetTransform     = 00007ff71f6f3085
+  Context_SetColor         = 00007ff71f6f2185
+  Context_SetVertexBuffer  = 00007ff71f6f2c0b
+  Context_SetImageBuffer   = 00007ff71f6f2a7d
+  Context_BeginIndexedVtx  = 00007ff71f6f3eca
+  Context_EndIndexedVtx    = 00007ff71f6f3f10
+  Context_DrawIndexed      = 00007ff71f6f3daa
+  Geometry_UpdateAttached  = 00007ff71f609154
+  Geometry_GetSubTransform = 00007ff71f609fe5
+  Geometry_GetInstanceTr   = 00007ff71f60a26a
+  Geometry_SetSharedInst   = 00007ff71f60a646
+  Geometry_Clean           = 00007ff71f609504
+[RuntimeFuncs] Init (no internal function pointers yet)
+[BootTime] EngineFuncsInit + RuntimeFuncsInit           +   21.16ms   (t=   87.85ms)
+[Dx11Funcs] VideoDX11-x64.dll not loaded — nothing resolved
+[Dx11Seam] 84/84 slots ours, in 12 exe-owned vtables. VideoDX11-x64.dll is not required.
+[Dx11Seam]   DeviceData          -> 00007ff7200a6268 (20 slots)
+[Dx11Seam]   ContextData         -> 00007ff7200a6310 (20 slots)
+[Dx11Seam]   ImageBufferData     -> 00007ff7200a63b8 (7 slots)
+[Dx11Seam]   ConstantBufferData  -> 00007ff7200a6460 (4 slots)
+[Dx11Seam]   IndexBufferData     -> 00007ff7200a6508 (7 slots)
+[Dx11Seam]   VertexBufferData    -> 00007ff7200a65b0 (7 slots)
+[Dx11Seam]   VertexLayoutData    -> 00007ff7200a6658 (3 slots)
+[Dx11Seam]   VertexProgramData   -> 00007ff7200a6700 (3 slots)
+[Dx11Seam]   PixelProgramData    -> 00007ff7200a67a8 (3 slots)
+[Dx11Seam]   RenderStateData     -> 00007ff7200a6850 (3 slots)
+[Dx11Seam]   VideoProgramData    -> 00007ff7200a68f8 (3 slots)
+[Dx11Seam]   RenderBufferData    -> 00007ff7200a69a0 (4 slots)
+[BootTime] Dx11FuncsInit + seam + prefill               +    2.53ms   (t=   90.38ms)
+[BootTime] redzone/alloc-lock/diagnostic installers     +    0.49ms   (t=   90.87ms)
+[Probe BEFORE InvokeAllRegistrations] _firstTypeInfo @ 0x7ff7201652a0, head=00007ff720161cd0
+[Probe BEFORE InvokeAllRegistrations]   #0   name=Base                             parent=(null)
+[Probe BEFORE InvokeAllRegistrations]   #1   name=ExtensionCompiler                parent=Base
+[Probe BEFORE InvokeAllRegistrations]   #2   name=External                         parent=Base
+[Probe BEFORE InvokeAllRegistrations]   #3   name=ExternalCompiler                 parent=Base
+[Probe BEFORE InvokeAllRegistrations]   #4   name=ExternalList                     parent=External
+[Probe BEFORE InvokeAllRegistrations] FOUND #30 Dialog parent=External
+[Probe BEFORE InvokeAllRegistrations] FOUND #36 ElementDescription parent=External
+[Probe BEFORE InvokeAllRegistrations] FOUND #41 GroupDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #44 ImageDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #59 RibbonDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #73 TextDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #78 AnimatedImageDescription parent=ImageDescription
+[Probe BEFORE InvokeAllRegistrations] Total: 104 entries, 7 Loading.rsc target descs found
+[BootTime] DumpFirstTypeInfo (before)                   +    2.10ms   (t=   92.97ms)
+[Standalone] Invoking factory registrations...
+[FactoryReg] Registered 312 types into Runtime _firstTypeInfo
+[BootTime] Object::InvokeAllRegistrations               +    0.42ms   (t=   93.38ms)
+[Probe AFTER InvokeAllRegistrations] _firstTypeInfo @ 0x7ff7201652a0, head=00007ff71fae1200
+[Probe AFTER InvokeAllRegistrations]   #0   name=TradeWork                        parent=Work
+[Probe AFTER InvokeAllRegistrations]   #1   name=TendArea                         parent=Work
+[Probe AFTER InvokeAllRegistrations]   #2   name=PlantOrchard                     parent=Work
+[Probe AFTER InvokeAllRegistrations]   #3   name=PlantArea                        parent=Work
+[Probe AFTER InvokeAllRegistrations]   #4   name=Pickup                           parent=Work
+[Probe AFTER InvokeAllRegistrations] FOUND #342 Dialog parent=External
+[Probe AFTER InvokeAllRegistrations] FOUND #348 ElementDescription parent=External
+[Probe AFTER InvokeAllRegistrations] FOUND #353 GroupDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #356 ImageDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #371 RibbonDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #385 TextDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #390 AnimatedImageDescription parent=ImageDescription
+[Probe AFTER InvokeAllRegistrations] Total: 416 entries, 7 Loading.rsc target descs found
+[BootTime] DumpFirstTypeInfo (after)                    +    2.09ms   (t=   95.47ms)
+[Standalone] Window-message hook installed (focus diag)
+[BootTime] WndMsgHook + AutoStart::Init                 +    0.41ms   (t=   95.88ms)
+[Standalone] Init complete.
+
+[Standalone] === INIT SUCCESS ===
+[AddressRegistry] 1617 addresses registered
+[Standalone] Coverage: 1617 / 582 exe addresses registered (277.8%)
+
+[Standalone] === ENTERING GameMain ===
+[GameMain] Engine ctor          = 00007ff71f5f106d
+[GameMain] Engine dtor          = 00007ff71f5f14fd
+[GameMain] Engine::Startup      = 00007ff71f5f1caa
+[GameMain] Engine::Shutdown     = 00007ff71f5f2df9
+[GameMain] Constructing Engine (storage=0000009d5bdff580)...
+[GameMain] Engine constructed.
+[BootTime] Init() -> RunGameMain entry + Engine ctor    +    0.93ms   (t=   96.81ms)
+[GameMain] Engine::Startup(cmdLine=000001b926cd5b26, 512, 0, false)...
+[Standalone] Swapped window class background brush from 0000000000000006 to BLACK_BRUSH (0000000000900011) on engine hwnd=0000000000340f74
+[WndMsg] WM_GETMINMAXINFO     hwnd=0000000000340f74 w=0 l=9d5bdfe670
+[WndMsg] WM_SIZE               hwnd=00000000001b0f8c type=0 0x0
+[VideoInterface] DX11 slot pre-filled on Device 000001b9290b8300: module=00007ff71f310000 GetDeviceName=00007ff71f732452 CreateDeviceData=00007ff71f732313 — Runtime will not LoadLibrary VideoDX11-x64.dll
+[BootTime]   DX11 CreateDevice: entry                   +  304.34ms   (t=  401.16ms)
+[BootTime]   DX11 DXGI factory + adapter + output enum  +    0.26ms   (t=  401.42ms)
+[BootWindow] armed: Configuration+0x42 set, hwnd=0000000000340f74 stays hidden until the splash presents a frame
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000001b0f8c 0,0 0x0 flags=0x13
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000001b0f8c w=0 l=9d5bdfee70
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000340f74 1265,188 1040x679 flags=0x30
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000340f74 w=0 l=9d5bdfee70
+[WndMsg] WM_GETMINMAXINFO     hwnd=0000000000340f74 w=0 l=9d5bdfe990
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=00000000001b0f8c w=0 l=9d5bdfee70
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=0000000000340f74 w=0 l=9d5bdfee70
+[WndMsg] WM_SIZE               hwnd=0000000000340f74 type=0 1024x640
+[BootTime]   DX11 AdjustDisplay (window sized)          +    1.72ms   (t=  403.14ms)
+[BootTime]   DX11 D3D11CreateDevice                     +   69.50ms   (t=  472.64ms)
+[BootTime]   DX11 swapchain + color/depth buffers       +    0.73ms   (t=  473.37ms)
+[GameMain] Engine::Startup returned 1
+[BootTime] Engine::Startup                              +   87.24ms   (t=  560.61ms)
+[GameMain] Post-Startup _firstTypeInfo: 416 entries, 416 have non-FF typeId
+[GameMain]   typeId=0x4C6DC97E name=TradeWork
+[GameMain]   typeId=0x32010680 name=TendArea
+[GameMain]   typeId=0x071AE7EA name=PlantOrchard
+[GameMain]   typeId=0x91867ABF name=PlantArea
+[GameMain]   typeId=0x25D5C240 name=Pickup
+[GameMain]   typeId=0xD94735D5 name=PastureWork
+[GameMain]   typeId=0xB1EBC2E8 name=MarketWork
+[GameMain]   typeId=0x75232D30 name=LocationWork
+[GameMain]   typeId=0x00A5F817 name=HuntWork
+[GameMain]   typeId=0xD7F30414 name=HerbalistWork
+[BootTime] post-Startup typeinfo dump + typeId globals  +    1.81ms   (t=  562.41ms)
+[GameMain] MainLoop ctor      = 00007ff71f5f0475
+[GameMain] MainLoop dtor      = 00007ff71f5f08c9
+[GameMain] MemAlloc/Free      = 00007ff71f77a164 / 00007ff71f6999f1
+[GameMain] MemAllocSingleton (fresh) = 0000009d5bdff580
+
+[Standalone] === Running factory self-tests ===
+
+[SelfTest StatGoal] start
+[SelfTest StatGoal]   refreshed g_pMemAllocSingleton = 0000009d5bdff580
+[SelfTest StatGoal]   found entry @ 00007ff71fad7a60 (factoryFn=00007ff71f520efe, parent=Goal)
+[SelfTest StatGoal]   factory returned 000001b9290bc260
+[SelfTest StatGoal]   vtable OK (00007ff71f81d680)
+[SelfTest StatGoal] PASS (sizeof=128, 9 fields verified)
+
+[VideoProbe] Configuration::_singleton = 000001b9290b67b0
+[VideoProbe]   +0x04 interface = 1 (VideoDX11)
+[VideoProbe]   +0x08 adapter   = 0
+[VideoProbe]   +0x0c width     = 2560
+[VideoProbe]   +0x10 height    = 1440
+[VideoProbe]   +0x00 settings  = 1  (true => launcher dialog next boot)
+[VideoProbe]   +0x14 windowX   = 1265
+[VideoProbe]   +0x18 windowY   = 188
+[VideoProbe]   +0x1c windowW   = 1024
+[VideoProbe]   +0x20 windowH   = 640
+[VideoProbe]   +0x40 fullscreen= 0  +0x41 vsync=0  +0x42 skipShow=1
+[VideoProbe] Device::_singleton        = 000001b9290b8300
+[VideoProbe]   +0x48  interface count = 1
+[VideoProbe]   +0xf8  active idx  = 1
+[VideoProbe]   +0x100 active DeviceData = 000001b9290b9b68
+[VideoProbe]   slot0 DX9:  HMOD=0000000000000000 GetName=0000000000000000 Create=0000000000000000
+[VideoProbe]   slot1 DX11: HMOD=00007ff71f310000 GetName=00007ff71f732452 Create=00007ff71f732313
+[VideoProbe]   slot2 GL:   HMOD=0000000000000000
+[VideoProbe]   active DeviceData vtable = 00007ff7200a6268
+[VideoProbe]   active vtable lives in: reimpl-x64.exe
+[SwapProbe AFTER_ENGINE_STARTUP] sc=000001b98f5f3e60 vt=00007fffce33a000
+[SwapProbe AFTER_ENGINE_STARTUP]   GetFullscreenState hr=0x00000000 fs=0 output=0000000000000000
+[SwapProbe AFTER_ENGINE_STARTUP]   GetDesc hr=0x00000000 Windowed=1 1024x640 fmt=87 BufferCount=2 SwapEffect=0 Flags=0x2
+[SwapProbe AFTER_ENGINE_STARTUP]   hwnd=0000000000340f74 visible=0 iconic=0 client=1024x640 window=1265,188 1040x679
+[Standalone] Boot mode: borderless/windowed
+[BootTime] RunStartupSelfTests + video probes           +   14.87ms   (t=  577.29ms)
+[GameMain] MainLoop alloc = 000001b9290bc2e8
+[GameMain] MainLoop constructed.
+[GameMain] Game alloc      = 000001b9290bf9d8
+[BootTime] MainLoop ctor + Game ctor                    +    5.59ms   (t=  582.88ms)
+[GameMain] Game_Ctor done; KeyMap singleton -> 000001b9290bf9d8
+[GameMain] InputConfig=000001b9290b6398  -> KeyMap=000001b9290b9570
+[InputBindings] Populating KeyMap 000001b9290b9570 with 50 default bindings...
+[InputBindings] Done — 50 bindings + Load applied.
+[InputBindings] StringTable typeId = 3224705508
+
+[Dx11Seam] === slot table ===
+[Dx11Seam] DeviceData          @ 00007ff7200a6268 (20 slots, was 0x180018bb0)
+[Dx11Seam]     slot  0  OURS     DeviceData::~DeviceData (scalar deleting)
+[Dx11Seam]     slot  1  OURS     DeviceData::EnumerateInterfaces
+[Dx11Seam]     slot  2  OURS     DeviceData::CreateDevice
+[Dx11Seam]     slot  3  OURS     DeviceData::Shutdown
+[Dx11Seam]     slot  4  OURS     DeviceData::Stub4 (void)
+[Dx11Seam]     slot  5  OURS     DeviceData::Stub5 (0.0f)
+[Dx11Seam]     slot  6  OURS     DeviceData::Stub6 (false)
+[Dx11Seam]     slot  7  OURS     DeviceData::Stub7 (true)
+[Dx11Seam]     slot  8  OURS     DeviceData::SetImageBuffer (HCURSOR)
+[Dx11Seam]     slot  9  OURS     DeviceData::CreateContextData
+[Dx11Seam]     slot 10  OURS     DeviceData::CreateImageBufferData
+[Dx11Seam]     slot 11  OURS     DeviceData::CreateConstantBufferData
+[Dx11Seam]     slot 12  OURS     DeviceData::CreateIndexBufferData
+[Dx11Seam]     slot 13  OURS     DeviceData::CreateVertexBufferData
+[Dx11Seam]     slot 14  OURS     DeviceData::CreateVertexLayoutData
+[Dx11Seam]     slot 15  OURS     DeviceData::CreateVertexProgramData
+[Dx11Seam]     slot 16  OURS     DeviceData::CreatePixelProgramData
+[Dx11Seam]     slot 17  OURS     DeviceData::CreateRenderStateData
+[Dx11Seam]     slot 18  OURS     DeviceData::CreateVideoProgramData
+[Dx11Seam]     slot 19  OURS     DeviceData::CreateRenderBufferData
+[Dx11Seam] ContextData         @ 00007ff7200a6310 (20 slots, was 0x1800186f0)
+[Dx11Seam]     slot  0  OURS     ContextData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     ContextData::BeginCommands
+[Dx11Seam]     slot  2  OURS     ContextData::EndCommands
+[Dx11Seam]     slot  3  OURS     ContextData::Finish
+[Dx11Seam]     slot  4  OURS     ContextData::Clear
+[Dx11Seam]     slot  5  OURS     ContextData::BindRenderBuffer
+[Dx11Seam]     slot  6  OURS     ContextData::BindViewport
+[Dx11Seam]     slot  7  OURS     ContextData::BindScissor
+[Dx11Seam]     slot  8  OURS     ContextData::BindTransforms
+[Dx11Seam]     slot  9  OURS     ContextData::BindTextureNone
+[Dx11Seam]     slot 10  OURS     ContextData::BindIndexNone
+[Dx11Seam]     slot 11  OURS     ContextData::BindVertexNone
+[Dx11Seam]     slot 12  OURS     ContextData::DrawIndexed
+[Dx11Seam]     slot 13  OURS     ContextData::GetMaxDynamicInstances (52)
+[Dx11Seam]     slot 14  OURS     ContextData::BeginVertices
+[Dx11Seam]     slot 15  OURS     ContextData::EndVertices
+[Dx11Seam]     slot 16  OURS     ContextData::BeginIndexedVertices
+[Dx11Seam]     slot 17  OURS     ContextData::EndIndexedVertices (= slot 19)
+[Dx11Seam]     slot 18  OURS     ContextData::BeginInstancedIndexedVertices
+[Dx11Seam]     slot 19  OURS     ContextData::EndInstancedIndexedVertices
+[Dx11Seam] ImageBufferData     @ 00007ff7200a63b8 (7 slots, was 0x180018790)
+[Dx11Seam]     slot  0  OURS     ImageBufferData::~ImageBufferData (deleting)
+[Dx11Seam]     slot  1  OURS     ImageBufferData::AttachColorBuffer
+[Dx11Seam]     slot  2  OURS     ImageBufferData::AttachDepthBuffer
+[Dx11Seam]     slot  3  OURS     ImageBufferData::Create
+[Dx11Seam]     slot  4  OURS     ImageBufferData::Bind
+[Dx11Seam]     slot  5  OURS     ImageBufferData::Update
+[Dx11Seam]     slot  6  OURS     ImageBufferData::Read
+[Dx11Seam] ConstantBufferData  @ 00007ff7200a6460 (4 slots, was 0x1800185d0)
+[Dx11Seam]     slot  0  OURS     ConstantBufferData::ScalarDeletingDtor
+[Dx11Seam]     slot  1  OURS     ConstantBufferData::Create
+[Dx11Seam]     slot  2  OURS     ConstantBufferData::Bind
+[Dx11Seam]     slot  3  OURS     ConstantBufferData::SlotIndex+1
+[Dx11Seam] IndexBufferData     @ 00007ff7200a6508 (7 slots, was 0x1800187c8)
+[Dx11Seam]     slot  0  OURS     IndexBufferData::ScalarDeletingDtor
+[Dx11Seam]     slot  1  OURS     IndexBufferData::Create
+[Dx11Seam]     slot  2  OURS     IndexBufferData::SetData
+[Dx11Seam]     slot  3  OURS     IndexBufferData::Lock (shared)
+[Dx11Seam]     slot  4  OURS     IndexBufferData::Unlock (shared)
+[Dx11Seam]     slot  5  OURS     IndexBufferData::Bind
+[Dx11Seam]     slot  6  OURS     IndexBufferData::Serialize
+[Dx11Seam] VertexBufferData    @ 00007ff7200a65b0 (7 slots, was 0x180018830)
+[Dx11Seam]     slot  0  OURS     VertexBufferData::ScalarDeletingDtor
+[Dx11Seam]     slot  1  OURS     VertexBufferData::Create
+[Dx11Seam]     slot  2  OURS     VertexBufferData::SetData
+[Dx11Seam]     slot  3  OURS     VertexBufferData::Lock (shared)
+[Dx11Seam]     slot  4  OURS     VertexBufferData::Unlock (shared)
+[Dx11Seam]     slot  5  OURS     VertexBufferData::Bind
+[Dx11Seam]     slot  6  OURS     VertexBufferData::Serialize
+[Dx11Seam] VertexLayoutData    @ 00007ff7200a6658 (3 slots, was 0x180018878)
+[Dx11Seam]     slot  0  OURS     VertexLayoutData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     VertexLayoutData::Bind
+[Dx11Seam]     slot  2  OURS     VertexLayoutData::PlatformCreate
+[Dx11Seam] VertexProgramData   @ 00007ff7200a6700 (3 slots, was 0x180018890)
+[Dx11Seam]     slot  0  OURS     VertexProgramData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     VertexProgramData::PlatformCreate
+[Dx11Seam]     slot  2  OURS     VertexProgramData::Bind
+[Dx11Seam] PixelProgramData    @ 00007ff7200a67a8 (3 slots, was 0x180018800)
+[Dx11Seam]     slot  0  OURS     PixelProgramData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     PixelProgramData::PlatformCreate
+[Dx11Seam]     slot  2  OURS     PixelProgramData::Bind
+[Dx11Seam] RenderStateData     @ 00007ff7200a6850 (3 slots, was 0x180018818)
+[Dx11Seam]     slot  0  OURS     RenderStateData::~RenderStateData
+[Dx11Seam]     slot  1  OURS     RenderStateData::Create
+[Dx11Seam]     slot  2  OURS     RenderStateData::Bind
+[Dx11Seam] VideoProgramData    @ 00007ff7200a68f8 (3 slots, was 0x1800185a8)
+[Dx11Seam]     slot  0  OURS     VideoProgramData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     VideoProgramData::Stub1 (true)
+[Dx11Seam]     slot  2  OURS     VideoProgramData::Stub2 (void)
+[Dx11Seam] RenderBufferData    @ 00007ff7200a69a0 (4 slots, was 0x180018588)
+[Dx11Seam]     slot  0  OURS     RenderBufferData::~ (scalar deleting)
+[Dx11Seam]     slot  1  OURS     RenderBufferData::Stub1 (true)
+[Dx11Seam]     slot  2  OURS     RenderBufferData::Bind
+[Dx11Seam]     slot  3  OURS     RenderBufferData::Resolve
+[Dx11Seam] fallbacks to shipped code: 0 (expected 0)
