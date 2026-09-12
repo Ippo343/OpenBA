@@ -68,6 +68,7 @@ extern int RtGraphicsWave27GfxbigRegister();  // wave27_lane_gfxbig.cpp (Wave 27
 
 extern int RtGraphicsWave27GfxpartRegister(); // wave27_lane_gfxpart.cpp (Wave 27 lane GFXPART)
 extern int RtGraphicsWave28GfxbodyRegister(); // wave28_lane_gfxbody.cpp (Wave 28 lane GFXBODY)
+extern int RtGraphicsWave29GfxbodyRegister(); // wave29_lane_gfxbody.cpp (Wave 29 lane GFXBODY)
 // PARTSYS defines this with C linkage (wave28_lane_partsys.cpp:1076); GFXBODY's
 // above is C++-linkage. The spellings differ on purpose -- each matches its own
 // definition, and swapping either one to match the other is a link error.
@@ -190,6 +191,23 @@ void RtGraphicsPortInit() {
     n += gfxbody28;
     printf("[RtPort] GFXBODY28 (Wave 28 lane GFXBODY): %d Graphics body exports "
            "registered\n", gfxbody28);
+
+    // WAVE 29 LANE GFXBODY -- four of Graphics' eight remaining BODY rows:
+    // Scene::AddGlobalDrawItems, Renderer::AddLight, Renderer::EndDrawGroup and
+    // Animation::GetRootPoseAtTime. The first three are callees lane PARTSYS
+    // put into the `called` column and did not port; the fourth is Wave 28
+    // residual R6. ITS OWN SWITCH, deliberately not shared with GFXBODY28 or
+    // PARTSYS: with PARTSYS armed and this at 0, PARTSYS's
+    // SunLight::AddDrawItems runs and reaches the DLL for exactly these
+    // callees, which separates "the caller is wrong" from "a callee is".
+    // DEFAULT ON -- RtWaveEnabled is a kill switch, so =0 disarms and anything
+    // else arms (a lane that ports behind an opt-in switch moves the live count
+    // not at all).
+    int gfxbody29 = 0;
+    if (RtWaveEnabled("BANISHED_RT_GFXBODY29")) gfxbody29 = RtGraphicsWave29GfxbodyRegister();
+    n += gfxbody29;
+    printf("[RtPort] GFXBODY29 (Wave 29 lane GFXBODY): %d Graphics body exports "
+           "registered\n", gfxbody29);
 
     // WAVE 9 LANE GFXD -- the bottom half of the Graphics::Renderer class
     // lane: Renderer::Reset, Renderer::AddScene, two more Graphics::Camera
