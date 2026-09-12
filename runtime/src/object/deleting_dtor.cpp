@@ -494,6 +494,62 @@ static const DelDtorSpec kSpecs[] = {
     // IO::TextFileStream) for the same reason every other row above is
     // appended: kProbeSubjects is a list of TABLE INDICES.
     RT_DELDTOR(0x180023bd0, 0x1800b9150, 0x020, "IO::ReaderWriter"),
+    // ---- WAVE 25 lane VTIO ----------------------------------------------------
+    // Slot 0 of `??_7PackageFile@IO@@6B@` (0x180155700). WAVE23_LANE_IOPORT.md
+    // §8 item 2 is the residual this discharges: that lane measured the table at
+    // 5/9 and the stamper split, and recorded plainly that it "did not enumerate
+    // which four slots are unported". They are slots 0, 5, 6 and 7 --
+    // this thunk, `?Serialize@PackageFile@IO@@`, `?Reconstruct@PackageFile@IO@@`
+    // and `?Destruct@PackageFile@IO@@`. This row closes slot 0, taking the table
+    // to 6/9.
+    //
+    // I NEARLY RECORDED THIS ROW AS NEEDING A DIFFERENT RECIPE, AND THAT WOULD
+    // HAVE BEEN WRONG. Reading 0x1800259d0 on its own, the `test $0x2,%dl` /
+    // `mov -0x8(%rcx),%r8d` array branch looked like a vector-deleting form
+    // distinct from this family. Disassembling the SIBLING row 0x18002ba90
+    // (IO::TextFileStream, above) refuted that in one step: the two are the same
+    // instruction sequence, operand for operand, differing only in the two
+    // constants this macro carries. The family already handles the flags
+    // argument; the branch is what `??_E`/`??_G` always look like.
+    //
+    // Both constants read from RETAIL Runtime-x64.dll with objdump:
+    //     4C 8D 0D 51 EB 08 00   LEA R9,[rip+0x8eb51] -> 0x1800b4540  ~PackageFile
+    //     BA F0 00 00 00         MOV EDX,0xf0          sizeof(IO::PackageFile)
+    // 0x1800b4540 is `??1PackageFile@IO@@UEAA@XZ` in the export directory --
+    // UEAA, the VIRTUAL spelling; the QEAA form resolves NULL silently
+    // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). The array-branch CALL
+    // (0x18007ec98, the shared iterator) and the MemFree CALL (0x180006a10) are
+    // the family's known constants.
+    //
+    // sizeof == 0xf0 (240). WAVE23_LANE_IOPORT §2.4 estimated "0xc8+ bytes";
+    // 0xf0 is the shipped figure and is larger, which matters because that
+    // lane's stated reason for not porting `??1PackageFile@` was that a
+    // fabricated subject would be a fake rather than a synthetic one. 240 bytes
+    // makes that reason stronger, not weaker.
+    //
+    // DECLARED SURFACE GROWTH: `??1PackageFile@IO@@UEAA@XZ` is NOT ported, so
+    // this row makes 0x1800b4540 newly reachable through our thunk -- the same
+    // accepted growth as the UI::ToolTipDialog, IO::CompressedFileStream and
+    // IO::ReaderWriter rows above (reference_porting_can_grow_the_cutover_surface.md).
+    // MEASURED: that growth is REAL but INVISIBLE to `tools/runtime_census.py`.
+    // A row-set diff across this change adds NO row for 0x1800b4540, because
+    // DeletingDtorCore reaches the dtor through a table field rather than a
+    // literal at a resolve call site, which is the census's known non-literal
+    // blind spot (reference_census_cannot_see_nonliteral_registrations.md).
+    // So the cutover surface grew by one function and the board will not say so
+    // -- recorded here rather than left to be rediscovered.
+    //
+    // NOT ADDED to kProbeSubjects, deliberately, and this is the difference from
+    // the IO::ReaderWriter row directly above. That one qualified because
+    // ~ReaderWriter's whole body is a vtable restamp -- safe on a fabricated
+    // object. ~PackageFile is not remotely that: WAVE23_LANE_IOPORT §2.4 read it
+    // and it destroys a FileInfo, two Arrays, five separately-inlined Strings
+    // and two lists, then chains to ~External. Running that over a fabricated
+    // 240-byte subject frees garbage pointers. A probe subject must be safe to
+    // run, and this one is not.
+    //
+    // THIS DOES NOT PROMOTE THE ROW, and the table is still 6/9.
+    RT_DELDTOR(0x1800259d0, 0x1800b4540, 0x0f0, "IO::PackageFile"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -794,6 +850,10 @@ void* RtDelDtor_TextFileStream(void* self, unsigned flags) {
 void* RtDelDtor_ReaderWriter(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 42);
 }
+// IO::PackageFile          ~PackageFile = 0x1800b4540  (NOT ported)  [Wave 25 VTIO]
+void* RtDelDtor_PackageFile(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 43);
+}
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
@@ -880,6 +940,7 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180024100, (void*)&RtDelDtor_CompressedFileStream);  // Wave 19 CSTREAM
     RegisterRuntimeAddr(0x18002ba90, (void*)&RtDelDtor_TextFileStream);        // Wave 21 ENC
     RegisterRuntimeAddr(0x180023bd0, (void*)&RtDelDtor_ReaderWriter);          // Wave 21 ENC item 12
+    RegisterRuntimeAddr(0x1800259d0, (void*)&RtDelDtor_PackageFile);           // Wave 25 VTIO
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --

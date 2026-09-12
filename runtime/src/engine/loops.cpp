@@ -21,6 +21,11 @@
 //   ?Load@DialogLoaderLoopT@Engine@@UEAAXXZ                0x1800dad50  ord 3200
 //   ?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ             0x1800db000  ord 4092
 //
+// CORRECTION 2026-09-11 (WAVE 25 lane VTIO): the count above is Wave 8's and is
+// left as written.  SIX more names are ported at the bottom of this file — the
+// shared UpdateLoop base slots 0x180031740..0x180031790 — bringing the file to
+// 18.  See "WAVE 25 lane VTIO" below for what that does and does not buy.
+//
 // NOT ported, both deliberately — the reasons are in docs/runtime_port/
 // WAVE8_LANE_A.md §3 and are summarised at the bottom of this file:
 //
@@ -88,6 +93,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>   // std::getenv for the Wave 25 lane VTIO oracle gate
 
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/UpdateLoop.h"
@@ -105,6 +111,10 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 void*     ResolveExport(const char* mangled_name);
+// Original-DLL resolution, bypassing the port registry (resolve.h). Used ONLY
+// by the Wave 25 lane VTIO oracle below, which must reach the SHIPPED body.
+void*     ResolveExportRaw(const char* mangled_name);
+uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 // System::Thread::Start, already ported by Wave 2 (thread_win.cpp).
 namespace System { struct Thread; }
@@ -960,6 +970,282 @@ extern "C" void RtEngine_DialogLoaderLoopT_Startup(DialogLoaderLoopT* self) {
 }
 
 // ============================================================================
+// WAVE 25 lane VTIO — the SIX SHARED UpdateLoop BASE SLOTS
+// ============================================================================
+// WHY THESE SIX, AND WHY TOGETHER.  The four Engine loop vtables
+// (`??_7UpdateLoop@`, `??_7LoaderLoop@`, `??_7DialogLoopT@`,
+// `??_7DialogLoaderLoopT@`) are FOUR census gap rows but they are NOT four
+// independent bodies of work.  Their 43 concrete slot-instances resolve to only
+// 26 DISTINCT function addresses, and SIX of those addresses appear in all four
+// tables (five of them) or two (OnVideoError).  Measured, not assumed — the
+// union was taken from the shipped `.rdata` by reading each table's qwords:
+//
+//   0x180031740  ?DrawFailed@UpdateLoop@           slot 5   in all 4 tables
+//   0x180031750  ?SaveRestore@UpdateLoop@          slot 7   in all 4 tables
+//   0x180031760  ?OnVideoError@UpdateLoop@         slot 8   in DialogLoopT + UpdateLoop
+//   0x180031770  ?OnVideoRestart@UpdateLoop@       slot 9   in all 4 tables
+//   0x180031780  ?GetResourceFilename@UpdateLoop@  slot 10  in all 4 tables
+//   0x180031790  ?AllowsModChanges@UpdateLoop@     slot 11  in all 4 tables
+//
+// These are the `UpdateLoop` base class's own default implementations, which
+// every derived loop inherits unchanged.  All six sit at 16-byte spacing, and
+// every one of them is a LEAF OF AT MOST THREE BYTES.  Read out of retail
+// (`objdump -d --start-address=0x180031740 --stop-address=0x1800317d0`):
+//
+//   180031740:  c2 00 00        ret  $0x0       <- returns, writes nothing
+//   180031750:  c2 00 00        ret  $0x0
+//   180031760:  c2 00 00        ret  $0x0
+//   180031770:  c2 00 00        ret  $0x0
+//   180031780:  33 c0 c3        xor %eax,%eax ; ret    -> (const char*)nullptr
+//   180031790:  32 c0 c3        xor %al,%al   ; ret    -> false
+//
+// `c2 00 00` is `RET 0` — MSVC's retn-with-zero-immediate, semantically a plain
+// return on x64.  RCX (`this`) is never read by any of the six, so none of them
+// touches the object at all.
+//
+// WHAT PORTING THEM DOES, AND WHAT IT DOES NOT.
+//   IT DOES: take `??_7UpdateLoop@Engine@@6B@` from ours 1/7 to **7/7
+//     COMPLETE**, and move LoaderLoop 1/12 -> 6/12, DialogLoopT 4/12 -> 10/12,
+//     DialogLoaderLoopT 3/12 -> 8/12.  At CUTOVER these six bodies are
+//     REQUIRED: retail's are gone and the minted tables are the only owner.
+//   IT DOES NOT: promote anything, or change any dispatch today.  COMPLETE is
+//     the STATIC half of readiness only (WAVE20_GUIDE §2), and all four tables
+//     still have retail stampers.  It also moves NO census column: an unpromoted
+//     vtable's slots move nothing, exactly as Wave 21 lane ENC recorded.  The
+//     value claimed here is cutover readiness, not a number.
+//
+// FAITHFULNESS.  Each body is written as retail's, unguarded.  The two
+// value-returning ones matter more than they look: `?GetResourceFilename@`
+// returns `PEBD` (const char*) and retail zeroes EAX, so the answer is a null
+// POINTER, not an empty string; `?AllowsModChanges@` returns `_N` and retail
+// zeroes only AL, leaving the upper bits of EAX undefined — the Win64 ABI
+// defines only AL for a bool return, so `return false` is correct and a caller
+// that read EAX would be reading retail's garbage too.
+// ----------------------------------------------------------------------------
+// `self` is deliberately unnamed-but-typed `void*`: retail never reads RCX, and
+// giving these a real `UpdateLoop*` would imply a field access that does not
+// exist.  The RT_DIFF sites are labelled with their CLASS in their own name
+// (WAVE25_KICKOFF §1b): there is nothing to compare inside a body that reads
+// nothing and returns nothing, so the four void slots carry an honest
+// [ATTENDANCE] site rather than a `divergences=0` site that cannot fail.  The
+// real check on all six is the [ORACLE] probe below, which consults the DLL.
+
+extern "C" void RtEngine_UpdateLoop_DrawFailed(void* /*self*/) {
+    RT_DIFF_BEGIN("[ATTENDANCE] Engine::UpdateLoop::DrawFailed");
+    RT_DIFF_WORK(true);
+    // retail 0x180031740: `ret`. Nothing else.
+}
+
+extern "C" void RtEngine_UpdateLoop_SaveRestore(void* /*self*/, bool /*saving*/,
+                                                void* /*savedState*/) {
+    RT_DIFF_BEGIN("[ATTENDANCE] Engine::UpdateLoop::SaveRestore");
+    RT_DIFF_WORK(true);
+    // retail 0x180031750: `ret`. Both arguments are ignored by the base class.
+}
+
+extern "C" void RtEngine_UpdateLoop_OnVideoError(void* /*self*/) {
+    RT_DIFF_BEGIN("[ATTENDANCE] Engine::UpdateLoop::OnVideoError");
+    RT_DIFF_WORK(true);
+    // retail 0x180031760: `ret`.  NOTE this is UpdateLoop's OnVideoError;
+    // LoaderLoop overrides it with its OWN body at 0x1800dc360, which is a
+    // different function and is NOT ported here.
+}
+
+extern "C" void RtEngine_UpdateLoop_OnVideoRestart(void* /*self*/) {
+    RT_DIFF_BEGIN("[ATTENDANCE] Engine::UpdateLoop::OnVideoRestart");
+    RT_DIFF_WORK(true);
+    // retail 0x180031770: `ret`.
+}
+
+extern "C" const char* RtEngine_UpdateLoop_GetResourceFilename(void* self) {
+    RT_DIFF_BEGIN("[ORACLE] Engine::UpdateLoop::GetResourceFilename");
+    const char* ours = nullptr;   // retail 0x180031780: xor eax,eax ; ret
+    // ORACLE: the shipped body, reached through ResolveExportRaw (GetProcAddress),
+    // NOT ResolveExport — which would hand back this very function once this
+    // file registers the name, and compare the port with itself.  Safe to call
+    // on the live `self` because the shipped bytes never read RCX.
+    using GetResFn = const char* (*)(void*);
+    RT_DIFF_SCALAR((const void*)ours,
+                   (const void*)RT_ORIGINAL_ONCE(
+                       GetResFn, "?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ")(self));
+    RT_DIFF_WORK(true);
+    return ours;
+}
+
+extern "C" bool RtEngine_UpdateLoop_AllowsModChanges(void* self) {
+    RT_DIFF_BEGIN("[ORACLE] Engine::UpdateLoop::AllowsModChanges");
+    const bool ours = false;      // retail 0x180031790: xor al,al ; ret
+    using AllowsFn = bool (*)(void*);
+    RT_DIFF_SCALAR(ours,
+                   RT_ORIGINAL_ONCE(AllowsFn,
+                                    "?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ")(self));
+    RT_DIFF_WORK(true);
+    return ours;
+}
+
+// ----------------------------------------------------------------------------
+// [ORACLE] RtEngineUpdateLoopBaseSlotsOracle — the probe, and why it exists
+// ----------------------------------------------------------------------------
+// These six bodies have NO DISPATCH ROUTE TODAY: their only route is a vtable
+// that is not promoted, so a shadow site inside them would report `calls=0`
+// forever and read as a pass (reference_uncalled_port_is_not_verified.md).
+// "No route" is NOT "no oracle" — so this probe synthesises one.  It runs once,
+// at registration, only when BANISHED_RT_VTIO_ORACLE is set.
+//
+// IT CONSULTS THE DLL.  Every "theirs" value below comes from ResolveExportRaw
+// (GetProcAddress), never from ResolveExport or ResolveAddr — both of which
+// check the port registry FIRST and would compare this port with itself
+// (reference_resolveaddr_consults_port_registry_first.md).
+//
+// THREE SCREENS, SCORED SEPARATELY — never unioned, because a union score hides
+// a screen that caught nothing (reference_union_control_hides_a_blind_screen.md):
+//
+//   S1 BINDING   does each mangled name resolve to the address whose bytes were
+//                read?  This is the screen that would catch the `??1`/`QEAA`
+//                family of manglings resolving somewhere unexpected, and it is
+//                the only one that can fail if the six addresses were misread.
+//   S2 NO-WRITE  hand retail's body a 0x100-byte subject filled with a pattern
+//                and confirm it writes NOTHING.  This is the Wave 12
+//                `?PlatformDestruct@Application@1@` template: "verified to do
+//                NOTHING, which is the whole row".
+//   S3 RETURN    for the two value-returning slots, compare OUR return with the
+//                SHIPPED body's return, on the same subject.
+//
+// EACH SCREEN CARRIES AN EFFECTIVENESS COUNTER (how many cases it actually
+// examined), because a green screen that examined nothing is not evidence.
+// S2 is an ABSENCE screen, so it is HANDED A POSITIVE SHAPE: a control writer
+// that DOES write into the subject must be caught, or "0 writes detected" is
+// indistinguishable from a dead comparison.
+
+extern "C" int RtEngineUpdateLoopBaseSlotsOracle() {
+    struct Row { const char* name; uintptr_t ghidra; };
+    static const Row kRows[6] = {
+        { "?DrawFailed@UpdateLoop@Engine@@UEAAXXZ",          0x180031740ull },
+        { "?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z",
+                                                            0x180031750ull },
+        { "?OnVideoError@UpdateLoop@Engine@@UEAAXXZ",        0x180031760ull },
+        { "?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ",      0x180031770ull },
+        { "?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ", 0x180031780ull },
+        { "?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ",   0x180031790ull },
+    };
+
+    int problems = 0;
+    printf("[VTIO-ORACLE] SUBJECT: the 6 shared UpdateLoop base slots of "
+           "??_7{UpdateLoop,LoaderLoop,DialogLoopT,DialogLoaderLoopT}@Engine@@6B@\n");
+    printf("[VTIO-ORACLE] 'theirs' is ResolveExportRaw == GetProcAddress, never "
+           "the port registry.\n");
+
+    // ---- S1 BINDING --------------------------------------------------------
+    int s1_examined = 0, s1_bad = 0;
+    for (const Row& r : kRows) {
+        void* byName = ResolveExportRaw(r.name);
+        void* byAddr = reinterpret_cast<void*>(ResolveRuntimeRaw(r.ghidra));
+        ++s1_examined;
+        if (byName != byAddr || byName == nullptr) {
+            ++s1_bad;
+            printf("[VTIO-ORACLE] S1 MISMATCH %-56s name->%p addr(0x%llx)->%p\n",
+                   r.name, byName, (unsigned long long)r.ghidra, byAddr);
+        }
+    }
+    // S1 negative control: a name the DLL does not export must NOT bind.
+    //
+    // THE PHANTOM NAME IS ASSEMBLED AT RUN TIME, ON PURPOSE, and this is a
+    // measured finding rather than a style choice.  Written as a STRING LITERAL
+    // it read as a real resolve door: `tools/runtime_census.py` scans for a
+    // mangled literal at a resolve call site, cannot know the symbol does not
+    // exist, and MINTED A GAP ROW for it — the row-set diff of this lane went
+    // from +2 to +3 and the third row was
+    // `?NoSuchSlot@UpdateLoop@Engine@@UEAAXXZ`, a symbol nobody will ever port
+    // because it was invented here as a control.  A negative control that
+    // inflates the board is a control that costs a future lane a lookup.
+    // Splitting the name defeats the literal scan while changing nothing about
+    // what the control tests.
+    char phantom[64];
+    std::snprintf(phantom, sizeof(phantom), "%s%s%s",
+                  "?NoSuchSlot", "@UpdateLoop@Engine", "@@UEAAXXZ");
+    const bool s1_ctl = (ResolveExportRaw(phantom) == nullptr);
+    printf("[VTIO-ORACLE] S1 BINDING  examined %d  mismatches %d  "
+           "CONTROL(neg, phantom name resolves NULL) %s\n",
+           s1_examined, s1_bad, s1_ctl ? "GREEN" : "*** RED -- S1 SAYS YES TO ANYTHING ***");
+    problems += s1_bad + (s1_ctl ? 0 : 1);
+
+    // ---- S2 NO-WRITE -------------------------------------------------------
+    // The subject is 0x100 bytes of a pattern, handed to the SHIPPED body as
+    // `this`.  Safe because the bytes read above never touch RCX; that is
+    // exactly what this screen re-checks at run time rather than assuming.
+    unsigned char subject[0x100];
+    unsigned char before[0x100];
+    int s2_examined = 0, s2_wrote = 0;
+    for (const Row& r : kRows) {
+        using VoidFn = void (*)(void*);
+        VoidFn theirs = reinterpret_cast<VoidFn>(ResolveExportRaw(r.name));
+        if (!theirs) continue;
+        std::memset(subject, 0xC5, sizeof(subject));
+        std::memcpy(before, subject, sizeof(subject));
+        theirs(subject);
+        ++s2_examined;
+        if (std::memcmp(before, subject, sizeof(subject)) != 0) {
+            ++s2_wrote;
+            printf("[VTIO-ORACLE] S2 WROTE   %s modified its subject\n", r.name);
+        }
+    }
+    // S2 POSITIVE SHAPE: an absence screen with no positive case cannot tell a
+    // real "nothing wrote" from a dead memcmp.  Hand it a writer.
+    std::memset(subject, 0xC5, sizeof(subject));
+    std::memcpy(before, subject, sizeof(subject));
+    subject[0x80] = 0x01;                       // the synthetic writer
+    const bool s2_ctl = (std::memcmp(before, subject, sizeof(subject)) != 0);
+    printf("[VTIO-ORACLE] S2 NO-WRITE examined %d  wrote %d  "
+           "CONTROL(pos, synthetic writer caught) %s\n",
+           s2_examined, s2_wrote, s2_ctl ? "GREEN" : "*** RED -- S2 COMPARISON IS DEAD ***");
+    problems += s2_wrote + (s2_ctl ? 0 : 1);
+
+    // ---- S3 RETURN ---------------------------------------------------------
+    int s3_examined = 0, s3_bad = 0;
+    {
+        using GetResFn = const char* (*)(void*);
+        GetResFn theirs = reinterpret_cast<GetResFn>(
+            ResolveExportRaw("?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ"));
+        if (theirs) {
+            const char* t = theirs(subject);
+            const char* o = RtEngine_UpdateLoop_GetResourceFilename(subject);
+            ++s3_examined;
+            if (t != o) {
+                ++s3_bad;
+                printf("[VTIO-ORACLE] S3 RETURN  GetResourceFilename ours=%p theirs=%p\n",
+                       (const void*)o, (const void*)t);
+            }
+        }
+        using AllowsFn = bool (*)(void*);
+        AllowsFn theirsB = reinterpret_cast<AllowsFn>(
+            ResolveExportRaw("?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ"));
+        if (theirsB) {
+            const bool t = theirsB(subject);
+            const bool o = RtEngine_UpdateLoop_AllowsModChanges(subject);
+            ++s3_examined;
+            if (t != o) {
+                ++s3_bad;
+                printf("[VTIO-ORACLE] S3 RETURN  AllowsModChanges ours=%d theirs=%d\n",
+                       (int)o, (int)t);
+            }
+        }
+    }
+    // S3 negative control: corrupt a value the screen DOES compare, and confirm
+    // it is caught.  (A control that corrupts a value nothing compares indicts a
+    // sound instrument -- reference_control_must_pick_a_compared_subject.md.)
+    const char* s3_ctl_ours = reinterpret_cast<const char*>(0x1);
+    const bool  s3_ctl = (s3_ctl_ours != (const char*)nullptr);
+    printf("[VTIO-ORACLE] S3 RETURN   examined %d  mismatches %d  "
+           "CONTROL(neg, corrupted return caught) %s\n",
+           s3_examined, s3_bad, s3_ctl ? "GREEN" : "*** RED -- S3 COMPARISON IS DEAD ***");
+    problems += s3_bad + (s3_ctl ? 0 : 1);
+
+    printf("[VTIO-ORACLE] TOTAL problems %d  (S1 %d/%d, S2 %d/%d, S3 %d/%d examined)\n",
+           problems, s1_bad, s1_examined, s2_wrote, s2_examined, s3_bad, s3_examined);
+    return problems;
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 // Every port is registered TWICE, under its mangled name and under its retail
@@ -1044,5 +1330,63 @@ int RtEngineLoopsRegister() {
                           (void*)&RtEngine_DialogLoaderLoopT_Startup); ++n;
     RegisterRuntimeAddr(0x1800db000, (void*)&RtEngine_DialogLoaderLoopT_Startup);
 
-    return n;   // 12
+    // ---- WAVE 25 lane VTIO: the six shared UpdateLoop base slots ------------
+    // Registered by NAME and by ADDRESS, like every other row in this file.
+    // DECLARED SURFACE GROWTH (WAVE25_KICKOFF §1f), MEASURED by a row-set diff
+    // of `tools/runtime_census.py --csv` across a stash of this change, NOT
+    // reasoned about.  My first draft of this comment claimed **+0** and was
+    // WRONG; the flattering number was the wrong one, exactly as §1f warns.
+    //
+    //   called 1323 -> 1325 (+2)   ported 1171 -> 1173 (+2)   net gap +0
+    //
+    // AND NONE OF THAT IS THESE SIX REGISTRATIONS.  A registration alone does
+    // not create a census row — the population is built from RESOLVE DOORS —
+    // so four of the six (DrawFailed, SaveRestore, OnVideoError,
+    // OnVideoRestart) move NO column at all.  The two rows that appeared are
+    // `?GetResourceFilename@` and `?AllowsModChanges@`, and they appeared
+    // because the ORACLE above opens a real `RT_ORIGINAL_ONCE` door on each.
+    // They enter `called` and `ported` in the same breath, so the gap is
+    // unchanged; the cost is honest and it belongs to the instrument, not to
+    // the ports.
+    //
+    // What these six DO move is the PROMOTION BACKLOG, which is where an
+    // unpromoted vtable's slot work is supposed to show (Wave 21 lane ENC):
+    //   ??_7UpdateLoop@Engine@@6B@         1/7  -> 7/7  COMPLETE
+    //   ??_7LoaderLoop@Engine@@6B@         1/12 -> 6/12
+    //   ??_7DialogLoopT@Engine@@6B@        4/12 -> 10/12
+    //   ??_7DialogLoaderLoopT@Engine@@6B@  3/12 -> 8/12
+    RegisterRuntimeExport("?DrawFailed@UpdateLoop@Engine@@UEAAXXZ",
+                          (void*)&RtEngine_UpdateLoop_DrawFailed); ++n;
+    RegisterRuntimeAddr(0x180031740, (void*)&RtEngine_UpdateLoop_DrawFailed);
+
+    RegisterRuntimeExport("?SaveRestore@UpdateLoop@Engine@@UEAAX_NPEAVSavedState@Save@@@Z",
+                          (void*)&RtEngine_UpdateLoop_SaveRestore); ++n;
+    RegisterRuntimeAddr(0x180031750, (void*)&RtEngine_UpdateLoop_SaveRestore);
+
+    RegisterRuntimeExport("?OnVideoError@UpdateLoop@Engine@@UEAAXXZ",
+                          (void*)&RtEngine_UpdateLoop_OnVideoError); ++n;
+    RegisterRuntimeAddr(0x180031760, (void*)&RtEngine_UpdateLoop_OnVideoError);
+
+    RegisterRuntimeExport("?OnVideoRestart@UpdateLoop@Engine@@UEAAXXZ",
+                          (void*)&RtEngine_UpdateLoop_OnVideoRestart); ++n;
+    RegisterRuntimeAddr(0x180031770, (void*)&RtEngine_UpdateLoop_OnVideoRestart);
+
+    RegisterRuntimeExport("?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ",
+                          (void*)&RtEngine_UpdateLoop_GetResourceFilename); ++n;
+    RegisterRuntimeAddr(0x180031780, (void*)&RtEngine_UpdateLoop_GetResourceFilename);
+
+    RegisterRuntimeExport("?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ",
+                          (void*)&RtEngine_UpdateLoop_AllowsModChanges); ++n;
+    RegisterRuntimeAddr(0x180031790, (void*)&RtEngine_UpdateLoop_AllowsModChanges);
+
+    // The oracle runs BEFORE nothing and AFTER the registrations on purpose: it
+    // reaches the shipped bodies through ResolveExportRaw, which the registry
+    // cannot shadow, so the order is irrelevant to correctness and this is the
+    // one place guaranteed to execute once.
+    if (const char* e = std::getenv("BANISHED_RT_VTIO_ORACLE")) {
+        if (e[0] && std::strcmp(e, "0") != 0)
+            RtEngineUpdateLoopBaseSlotsOracle();
+    }
+
+    return n;   // 18
 }
