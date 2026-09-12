@@ -952,3 +952,74 @@ The habit that caught it is the cheapest one in this whole exchange: **run the
 row before you write the row.** Four of the five prediction slots in §13.2 were
 hits and felt like confirmation; this one was invented reasoning that sounded
 plausible and was simply false.
+
+---
+
+## 14. THE ONE JOINT RESULT, SCOPED — AND THE LANE CLOSES
+
+Lane FACTUI1 closed the exchange with a claim about both harnesses. It is the
+only place in nine rounds where the two genuinely **corroborate** rather than
+merely agree — different subjects, different mechanisms, same answer — so it is
+worth stating exactly, and exactly no wider.
+
+### 14.1 The claim, and its real scope
+
+> **Our step tables write exactly the set of bytes retail writes — not one more,
+> not one fewer.**
+
+Established twice, independently:
+
+* **FACTUI1's construction:** both buffers poisoned with DIFFERENT bytes, so a
+  store retail makes that we dropped reads poison-vs-value and one we make that
+  retail does not reads value-vs-poison. Set equality falls out of the subject
+  itself, for its 27 concrete classes.
+* **This lane's construction:** the same property for the 11 shape-(b) classes
+  (pass 1 poisons both sides identically in spirit), plus §13's pass 2b, which
+  reached it from the other direction — a prediction that the full-width subject
+  would pull in extra bytes, **refuted** by pulling in zero.
+
+**SCOPE, because a flattering summary is the easiest thing to accept.** On THIS
+roster the joint result covers **13 of 35 classes** at full-width byte-set
+equality:
+
+| classes | status |
+|---|---|
+| **11** shape (b) | full-width set equality, pass 1 |
+| **2** AchievementInstance, GoalInstance | full-width set equality, pass 2b |
+| 10 abstract in both slots | return-null only — a different claim, not this one |
+| 3 wrapper-only | **excluded**: both sides call the same ctor, so set equality is trivially true and says nothing about our transcription |
+| 9 video-dependent | UNVERIFIED — retail's own ctor faults in the harness |
+
+So: **40 concrete classes across the two lanes, of which 13 are this lane's.** The
+claim does NOT extend to the 9 unverified rows, and it must not be read as
+covering the 3 wrapper-only ones, where the two sides share the body being
+compared.
+
+### 14.2 The closing observation, which outranks every rule either lane wrote
+
+FACTUI1's:
+
+> Neither of us found anything by looking harder at our own output. Every single
+> one came from the other lane asking a question we would not have thought to ask
+> ourselves.
+
+**15 instrument defects. 0 in the ports. 0 found by their own author.** Across two
+lanes each competent enough to find the other's. Every rule this exchange
+produced — err narrow, arm the scope, run the row before you write the row,
+prefer an accumulated count — was *derived from a defect the other lane surfaced*,
+never from self-review. The rules are worth keeping; the mechanism that produced
+them is worth more, and it is not a rule but a pairing.
+
+### 14.3 Lane closed
+
+Closing here, and for FACTUI1's reason rather than a schedule: **the ports have
+been stable at their final numbers since round four**, and the last three findings
+were about the *epistemic status* of results neither lane has changed since then.
+That is the correct point to stop — an exchange that keeps producing findings
+about its own findings has stopped producing findings about the subject.
+
+Final state of this lane is §0 and §6, unchanged by any of the instrument work:
+35 classes, 70 slots, 68 distinct functions, registered default-ON; live mint
+**2 → 74 PORTED** with a two-run control; 13 classes at full-width byte-set
+equality, 12 abstract rows return-null verified, 3 wrapper-only, **9 UNVERIFIED**;
+7 constructors and the manifest refresh as residuals, each with an addressee.
