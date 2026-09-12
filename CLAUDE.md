@@ -258,6 +258,11 @@ through `_putenv_s` (wrapped, invalidates the cache).
 > differed by 97.98%; an armed and an unarmed run by 0.79%). **A pixel diff between two
 > runs measures nothing.** This blocks every pixel-level verification until the
 > non-determinism is found — see `docs/runtime_port/WAVE23_CLOSED.md` §3.
+>
+> **The replacement is `tools/trace_oracle/`** (Wave 24 lane TRACE): it compares the
+> draw-call/pipeline-state COMMAND STREAM, not pixels, so it needs no frame
+> determinism. Read its README's measured noise-floor table before quoting any of
+> its six screens — only three of them are verdict-bearing.
 
 `BANISHED_CAMERA_PIN=x,y[,dist]` (`code/Game/Game/camera_input.cpp`) pins the camera
 focus to a world position every frame, overriding pan/follow — the autostart camera
