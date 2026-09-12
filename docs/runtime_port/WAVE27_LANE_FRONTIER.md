@@ -14,7 +14,7 @@ and three separate MCP tools said otherwise.** `list_open_programs` reported
 "Runtime-x64.dll"}` and **changed nothing**. Only passing
 `program="Runtime-x64.dll"` explicitly to each call reached retail.
 
-It was caught by an unrelated accident (see §4), not by any check this lane had
+It was caught by an unrelated accident (see §5.1), not by any check this lane had
 planned, and **the profile build's bodies at these addresses happened to be
 identical**, so no downstream number was wrong. That is luck, not a control.
 Details and the discriminator in §5.
@@ -422,7 +422,11 @@ warning if the `0x18007ec98` vector arm turns out to be live.
 ## 7. GATES RUN
 
 ```
-mingw32-make standalone-debug          exit 0   (twice: after item 1, after item 2)
+mingw32-make standalone-debug          exit 0   (three times: after item 1, after
+                                                item 2, and on the final tip)
+cutover_manifest.py --gate (in-build)  OK, 60 rows, row set + every disposition
+                                       match a fresh derivation
+                                       + cosmetic WARN, see below
 tools/game_dir_lock.sh acquire         ACQUIRED by FRONTIER (not piped, not backgrounded)
 tools/game_dir_lock.sh assert-held     verified, deployed exe == this build
 ```
@@ -430,6 +434,17 @@ tools/game_dir_lock.sh assert-held     verified, deployed exe == this build
 `assert-held` **refused first**, correctly: the deployed exe was another lane's.
 Deploy, re-assert, then launch — that is the sequence, and the refusal is the
 tool working.
+
+**The manifest gate's cosmetic WARN is this lane's and is deliberately NOT
+refreshed.** It fires because a by-name door count moved — the doors in §1. The
+gate's own message says the row set and every disposition match, so nothing the
+process acts on changed and the build is not failed. `tools/cutover_manifest.py
+--inc` would clear it, and running it in each of seven parallel lanes would hand
+the integrator seven conflicting diffs of one generated file for a field nothing
+reads. **ADDRESSEE: the integrator, once on the merged tip.** (Wave 26 §7 is why
+this is stated rather than silently left: a stale `.inc` is the class that wave
+made structurally unmergeable, and a cosmetic WARN is the one variety it
+deliberately allows through.)
 
 ### 7.1 A trap walked into and caught BEFORE it produced a number
 
