@@ -347,6 +347,39 @@ three reproduced exactly.
 standing warnings told every lane not to.** The lanes complied; the integrator
 did not.
 
+## 7.5 A LANE KEPT WORKING AFTER IT REPORTED, AND I HAD ALREADY MERGED IT
+
+**FACTUI1 reported, I merged it, and it then committed four more times** (tip
+`122649a0`). The wave was closed and the board published against a tree that did
+not contain them. That is
+`reference_lane_edits_after_report_invalidate_the_measurement.md` arriving on
+schedule, and the integrator did not detect it — **the lane's own second report
+did.**
+
+**It cost nothing THIS time, and the reason is checkable rather than lucky:**
+
+```
+git diff --stat wave28/base...wave28/factui1 -- runtime/ standalone/ code/ engine/ dx11/
+   (EMPTY -- no compiled input changed)
+```
+
+All four commits are documentation: the lane doc, its oracle source, a coverage
+script and a prediction record. Re-derived after merging them, **both headline
+figures are unchanged**: factory census still `103 PRESENT / 0 ABSENT`, board
+still `1453/1294, 89.1%`. The build, the cutover attempt and every gate in §8
+stand.
+
+**The general rule, and it is the thing to carry:** a late lane commit does not
+invalidate a measurement *by existing*. It invalidates it if it touches a
+**compiled input**. One `git diff --stat` scoped to the source roots separates
+the two, and it is cheaper than re-running anything. **Run it before concluding
+either way** — asserting "docs only" without it would have been the same
+unlicensed inference this wave twice recorded (§4.4, §7).
+
+**Wave 29: merge lane branches by TIP AT MERGE TIME and re-check every lane tip
+before publishing a board.** A lane that has reported is not a lane that has
+stopped.
+
 ## 8. GATES, ON THE FINAL MERGED TIP
 
 ```
