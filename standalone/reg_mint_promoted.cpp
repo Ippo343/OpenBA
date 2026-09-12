@@ -1360,6 +1360,286 @@ int RtMintRegisterPromotedRows() {
     }
 
     // ========================================================================
+    // WAVE 26 LANE PROMOGFX — TWO OF WAVE 25 LANE DATA's SEVEN `?_typeInfo@`
+    // ROWS. THE OTHER FIVE ARE **NOT** PROMOTED. Read this whole block before
+    // adding a sixth.
+    // ========================================================================
+    //
+    // Lane DATA left those seven rows READY and blocked on exactly ONE thing:
+    // CRITERION 2 at the top of this file — "the row must be run in a real boot
+    // and the run must reach the same place the control reaches". Wave 26 lane
+    // ATTEND ran it. Its verdict decides each row individually, and it did NOT
+    // come out the same for all seven.
+    //
+    // ATTEND's run: tip wave26/base 7de42dd1, exe md5
+    // 45c72978bfbc80f17935d9701fe58977, BANISHED_W17_ATTEND=1
+    // BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120,
+    // clean exit 0, 0-byte crash log, CONTROL GREEN
+    // (?_singleton@MainLoop@Engine@@ init=1 post=2). 66 subject rows.
+    // Full table: docs/runtime_port/wave26_attend/run1_w17attend.txt.
+    //
+    //   ?_typeInfo@Achievement@1@                 init=0 post=1   ATTENDED
+    //   ?_typeInfo@GoalInstance@Achievement@@     init=0 post=1   ATTENDED
+    //   ?_typeInfo@AchievementInstance@Achievement@@  init=0 post=0   never
+    //   ?_typeInfo@AnimationEvent@Graphics@@      init=0 post=0   never
+    //   ?_typeInfo@MaterialInstance@Graphics@@    init=1 post=0   never
+    //   ?_typeInfo@Particle@Graphics@@            init=1 post=0   never
+    //   (?_typeInfo@PackageFile@IO@@ is lane PROMOIO's row, not decided here.)
+    //
+    // THE TWO BELOW ARE PROMOTED because post>0 IS criterion 2: a consumer in
+    // this tree opened the door after init, on a real boot that reached the
+    // control. The four `never` rows are NOT promoted and are NOT tagged
+    // unpromotable either — see the ROUTE-UNDECIDED block after them.
+    //
+    // ONE ANNOTATION THAT LANE DATA REQUIRED IS **NOT APPLICABLE HERE**, and
+    // that is worth stating rather than silently omitting. DATA's fourth bullet
+    // says promoting AnimationEvent / MaterialInstance / Particle / PackageFile
+    // makes their `?TypeName@` bodies hand out OUR node's `name` POINTER, so
+    // their RT_DIFF_SCALAR sites read `divergences=N` forever after — annotate
+    // beside each body IN THE SAME COMMIT. Neither row below has that exposure:
+    // `?TypeName@Achievement@1@` (table slot 1, 0x180001040) and
+    // `?TypeName@GoalInstance@Achievement@@` (table slot 1, 0x180001e60) are
+    // UNREGISTERED — those slots are two of the reasons ??_7Achievement@0@6B@
+    // reads 4/9 and ??_7GoalInstance@Achievement@@6B@ reads 3/7 — so there is
+    // no ported body to hand out a pointer and no RT_DIFF_SCALAR site to
+    // annotate. The obligation transfers with the slot: WHOEVER PORTS EITHER
+    // `?TypeName@` MUST write that annotation then.
+    st = RtMintPromotionStorage("?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A",
+                                0x1801f9898ull);
+    RegisterRuntimeExport("?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801f9898ull, st); ++n;
+
+    st = RtMintPromotionStorage("?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A",
+                                0x1801f9940ull);
+    RegisterRuntimeExport("?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A", st);
+    RegisterRuntimeAddr(0x1801f9940ull, st); ++n;
+
+    // ------------------------------------------------------------------------
+    // ROUTE-UNDECIDED — the four `?_typeInfo@` rows ATTEND measured `never`.
+    // NOT promoted, NOT tagged RT_UNPROMOTABLE, and NOT dropped.
+    // ------------------------------------------------------------------------
+    //
+    // A bare `never` cannot tell "this row is not ready" from "this route does
+    // not reach this row", and those have OPPOSITE consequences. ATTEND was
+    // asked to separate them and did: ALL FOUR are (b), route-never-reached,
+    // and the zero is therefore NOT evidence about the row.
+    //
+    //   * The general (a)-refutation, applying to all four: in the SAME run,
+    //     rows using the identical RT_DATA_SLOT -> RtResolveCached ->
+    //     ResolveExport idiom read post>0 — ?_typeInfo@Material@Graphics@@
+    //     post=1 and ?_typeInfo@GeneratedImageBuffer@Graphics@@ post=1, same
+    //     file family. The idiom is proven live in that run, so a zero cannot
+    //     be blamed on the door mechanism. ATTEND also checked every consumer
+    //     literal byte-for-byte against its watch-table literal, which excludes
+    //     spelling drift — the one (a)-shaped failure this instrument has.
+    //   * MaterialInstance and Particle prove their OWN door: init=1 means the
+    //     symbol resolved once, from reg_unreg_lane3.cpp:164/195, so post=0 can
+    //     only mean no post-init consumer ran.
+    //   * AnimationEvent, MaterialInstance and Particle are corroborated: their
+    //     only consumers are the vtable-slot bodies at
+    //     graphics_typeinfo_accessors.cpp:132/136/140, and in the same run
+    //     ??_7AnimationEvent@, ??_7MaterialInstance@, ??_7Particle@,
+    //     ??_7ParticleInstance@ and ??_7ParticleSystemInstance@ ALL read
+    //     post=0 — nothing fetched any of those tables through a door, so those
+    //     slot bodies never dispatched.
+    //   * AchievementInstance's only consumer is gameupdateloop_serialize.cpp:195
+    //     inside EnsureResolved(), and its "[GUL::Serialize] resolved:" line has
+    //     ZERO occurrences in both logs. Corroborated twice more:
+    //     "[SaveMetaOracle] bodyCalls=0 calls=0" and "[RefTable] calls=0".
+    //     A New-Game-and-quit route neither saves nor loads.
+    //
+    // ATTEND'S OWN CAVEAT, carried here so it is not lost: this instrument
+    // counts DOORS, not EXECUTIONS. "Route never reaches it" and "route reaches
+    // those objects but only through in-DLL calls, which are not doors" are
+    // BOTH consistent with post=0 and it cannot separate them. For a promotion
+    // decision the consequence is identical — the zero is not evidence about
+    // the row — but it is NOT proof the class is unused.
+    //
+    // [SCOPE: DLL-PRESENT, on the autostart New-Game-and-quit route only.]
+    // [ADDRESSEE: the Wave 27 kickoff writer, who must NOT copy these four into
+    //  a cheap-wins list as "ready, just promote them" — criterion 2 is still
+    //  unmet for all four.]
+    // [CONDITION, per row:
+    //    ?_typeInfo@AchievementInstance@ — A RUN THAT SAVES. ATTEND named it
+    //      exactly: re-run the W17 watch on a route that reaches
+    //      GameUpdateLoop::Serialize. post>0 there is criterion 2 and the row
+    //      can be promoted with no further argument.
+    //    ?_typeInfo@AnimationEvent@ / @MaterialInstance@ / @Particle@ — these
+    //      three are downstream of a DIFFERENT question: their consumers are
+    //      vtable slot bodies whose TABLES are not fetched through a door on
+    //      any route measured so far. Do NOT keep re-running the autostart
+    //      route expecting a different answer. The prerequisite is an
+    //      EXECUTION counter inside graphics_typeinfo_accessors.cpp:132/136/140
+    //      (the accessor bodies themselves), which separates "no route" from
+    //      "reached only by in-DLL call". Until someone builds that, these
+    //      three rows are undecidable by the door instrument and no amount of
+    //      booting changes it.
+    //    AND WHEN ANY OF THE THREE IS PROMOTED: lane DATA's `?TypeName@`
+    //      RT_DIFF_SCALAR annotation DOES apply to them, unlike the two rows
+    //      promoted above. Write it in the same commit.]
+
+    // ========================================================================
+    // WAVE 26 LANE PROMOGFX — ??_7Geometry@Graphics@@6B@ (0x180154e60)
+    // ========================================================================
+    //
+    // THIS ROW WAS HANDED TO THIS LANE BY NAME. Wave 21 lane GFXVT tagged it
+    // HARMFUL; Wave 22 lane GEOM discharged the blocker and wrote, in the
+    // RESOLVED note above, that "re-scoring and actually registering the
+    // promotion is a SEPARATE, still-open step lane GEOM did not take". This
+    // lane is that step, and it did not take GEOM's word for any of it.
+    //
+    // RE-DERIVED HERE, not re-quoted:
+    //
+    //   1. THE BLOCKER IS GONE. The whole HARMFUL verdict rested on ONE
+    //      consumer reading past the end of the table:
+    //      code/Game/Component/statusicon_geometry.cpp copied `i < 12` slots
+    //      out of a NINE-slot table into a live exe-side vtable, so promoting
+    //      would have moved a dormant overrun off the DLL's .rdata (three
+    //      qwords of the "ImageBuffer\0..." string run) onto `kVTable28`, a
+    //      `static void* kVTable28[9]`. READ ON THIS TIP: that loop now reads
+    //      `if (i < 9) ... else s_siGeomVtable[i] = nullptr;` and never
+    //      indexes baseVtbl at 9 or beyond. The overrun does not exist.
+    //
+    //   2. THE STATIC HALF. tools/mint_slot_sweep.py-equivalent slot scan on
+    //      this tip: 9 slots, 3 RT_MINT_PURECALL, 6 non-purecall, 6 of 6
+    //      registered -> COMPLETE. Slot 0 is address-registered
+    //      (runtime/src/object/deleting_dtor.cpp:912, 0x180015e90); slots 4-8
+    //      are name-registered in runtime/src/graphics/scene.cpp:1884-1899.
+    //      PromoteVtableGuarded re-asks this at runtime through
+    //      RtMintVtableTrapCount and refuses on any non-zero.
+    //
+    //   3. THE DYNAMIC HALF — WHO STAMPS IT. tools/mint_stamper_census.py on
+    //      this tip (decoder control 3/3, positive control REGISTERED,
+    //      negative control not-registered): 3 stamp sites in 3 functions,
+    //      ours-capable 2, retail 1, unattributed 0.
+    //        ??0Geometry@Graphics@@QEAA@XZ   0x1800a4281  OURS (name+addr)
+    //        ??1Geometry@Graphics@@UEAA@XZ   0x1800a41d5  OURS (name+addr)
+    //        ??0Geometry@Graphics@@QEAA@AEBV01@@Z 0x180015b7e  RETAIL
+    //      So a COPY-CONSTRUCTED Geometry keeps retail's table. That is a
+    //      SPLIT, not a trap: both tables dispatch the same six bodies, and at
+    //      cutover there is no retail body left for the copy ctor to run.
+    //
+    //   4. THE DOOR EXISTS AND PROMOTION REACHES IT. runtime/src/graphics/
+    //      scene.cpp:212 stamps ResolveAddr(Module::Runtime, 0x180154e60), and
+    //      ResolveAddr consults the PORT REGISTRY FIRST, so registering by
+    //      address here is what re-points that stamp. Registering by NAME as
+    //      well matches the ??_7BinaryFileStream@ precedent above.
+    //
+    // WHAT THIS DOES NOT CLAIM. No A/B was run for this row in this lane, and
+    // no attendance counter says a promoted Geometry vtable is ever
+    // DISPATCHED. This promotion is the same tier as every other row in this
+    // file: the table is installed. Whether our six bodies agree with retail's
+    // is a separate tier and is not asserted here.
+    //
+    // A/B CONTROL: BANISHED_RT_PROMOTE_GEOM=0 leaves the row on the DLL.
+    {
+        const char* off = getenv("BANISHED_RT_PROMOTE_GEOM");
+        if (off && strcmp(off, "0") == 0) {
+            printf("[RtMint] BANISHED_RT_PROMOTE_GEOM=0 -- "
+                   "??_7Geometry@Graphics@@6B@ left on the DLL (A/B control)\n");
+        } else {
+            PromoteVtableGuarded("??_7Geometry@Graphics@@6B@", 0x180154e60ull, &n);
+        }
+    }
+
+    // ========================================================================
+    // WAVE 26 LANE PROMOGFX — ??_7AnimationEvent@Graphics@@6B@ (0x180154bf0)
+    // ========================================================================
+    //
+    //   1. STATIC HALF: 9 slots, 5 RT_MINT_PURECALL, 4 non-purecall, 4 of 4
+    //      registered -> COMPLETE. Slot 0 is the unnamed deleting dtor
+    //      (0x180011800, address-registered); slots 1, 2 and 4 are
+    //      ?TypeName@ / ?Type@ / ?Compile@External@Object@, name-registered.
+    //
+    //   2. DYNAMIC HALF: 5 stamp sites in 5 functions, ours-capable 3, retail
+    //      2, unattributed 0 — ??1AnimationEvent (0x1800a2132) and
+    //      ??0AnimationEvent@@QEAA@XZ (0x1800a218b) by NAME+ADDR, plus
+    //      FUN_180011800 by ADDR; the two retail stampers are the copy ctor
+    //      (0x180011777) and FUN_1800117b0. Same SPLIT shape as Geometry, and
+    //      the split is over four bodies all of which we own.
+    //
+    //   3. THE DOOR: runtime/src/graphics/animation.cpp:156 resolves it by
+    //      ADDRESS (ResolveAddr(Module::Runtime, 0x180154bf0)) and
+    //      animation.cpp:240 and :276 stamp it. Registry-first, so the
+    //      address registration below re-points both stamps.
+    //
+    //   4. NO OUT-OF-BOUNDS CONSUMER. The Geometry hazard was a copy loop over
+    //      the table; grepped for on this tip and there is none for this row —
+    //      the two consumers assign the pointer and nothing indexes it. The
+    //      minted storage is `static void* kVTable5[9]`, the full extent.
+    //
+    // WHAT THIS DOES NOT CLAIM: as for Geometry, installation only. No A/B and
+    // no attendance evidence that the table is dispatched.
+    //
+    // A/B CONTROL: BANISHED_RT_PROMOTE_ANIMEVT=0 leaves the row on the DLL.
+    {
+        const char* off = getenv("BANISHED_RT_PROMOTE_ANIMEVT");
+        if (off && strcmp(off, "0") == 0) {
+            printf("[RtMint] BANISHED_RT_PROMOTE_ANIMEVT=0 -- "
+                   "??_7AnimationEvent@Graphics@@6B@ left on the DLL (A/B control)\n");
+        } else {
+            PromoteVtableGuarded("??_7AnimationEvent@Graphics@@6B@", 0x180154bf0ull, &n);
+        }
+    }
+
+    // ========================================================================
+    // WAVE 26 LANE PROMOGFX — ??_7UpdateLoop@Engine@@6B@ IS **HELD BACK**
+    // ========================================================================
+    //
+    // It is the third COMPLETE table in this lane's namespaces (7/7 of its 12
+    // slots non-purecall, every one registered) and it is DELIBERATELY NOT
+    // PROMOTED HERE. Stated so the next lane does not read the census's
+    // `7 7 COMPLETE` and promote it as the obvious cheap win it looks like.
+    //
+    // THE REASON IS THE STAMPER CENSUS, and it is a DIFFERENT SHAPE from the
+    // two rows above. 8 stamp sites in 8 functions: ours-capable 2, retail 6,
+    // unattributed 0. The two ours are ??0UpdateLoop@Engine@@QEAA@XZ
+    // (0x1800ddd44) and ??1UpdateLoop@Engine@@UEAA@XZ (0x1800dddc6). The six
+    // retail ones are NOT UpdateLoop functions at all — they are the
+    // BASE-SUBOBJECT stamps in the ctors and dtors of DERIVED loop classes:
+    //   ??0UpdateLoop@Engine@@QEAA@AEBV01@@Z  0x1800317ee  (copy ctor)
+    //   FUN_180031880                         0x18003189d
+    //   ??0LoaderLoop@Engine@@QEAA@AEBV01@@Z  0x18004d3be
+    //   ??0DialogLoopT@Engine@@QEAA@AEBV01@@Z 0x18004d7f3
+    //   ??1DialogLoopT@Engine@@UEAA@XZ        0x1800db394
+    //   ??1LoaderLoop@Engine@@UEAA@XZ         0x1800dc190
+    //
+    // Geometry's single retail stamper is a copy ctor and the split it causes
+    // is one object's vptr. This row's six are the base-class stamp of THREE
+    // OTHER CLASSES whose own tables (??_7LoaderLoop@ 6/12,
+    // ??_7DialogLoopT@ 10/12, ??_7DialogLoaderLoopT@ 8/12) are all INCOMPLETE
+    // and unpromoted. So promotion here puts OUR table in an UpdateLoop and
+    // RETAIL's in the base sub-object of every derived loop, across the
+    // hierarchy that runs the entire front end.
+    //
+    // WHAT THIS LANE DID **NOT** DETERMINE, said plainly rather than guessed:
+    // whether those six stamps are TRANSIENT (the ordinary MSVC sequence —
+    // base ctor stamps the base table, the derived ctor immediately overwrites
+    // it, so the split never outlives the constructor and is harmless) or
+    // FINAL. That is decidable by disassembling the six, and it is the whole
+    // question. Nothing above settles it, and a lane that promotes this row on
+    // the strength of `COMPLETE` will not have asked it.
+    //
+    // RT_UNPROMOTABLE is deliberately NOT written for this row: it is not a
+    // verdict that promotion is harmful, it is an admission that this lane did
+    // not finish the check. Tagging it would file an unfinished measurement as
+    // a permanent refusal, which is the error
+    // reference_unpromotable_is_route_scoped_not_permanent.md warns about from
+    // the other side.
+    //
+    // [SCOPE: DLL-PRESENT — at cutover there are no retail stampers and the
+    //  question dissolves; the row is then REQUIRED, because
+    //  runtime/src/engine/loops.cpp:313 resolves it BY NAME and ResolveExport
+    //  returns NULL for an unpublished row, so loops.cpp:414 and :583 would
+    //  stamp a NULL vptr.]
+    // [ADDRESSEE: the next lane that owns runtime/src/engine/loops.cpp, or
+    //  failing that the Wave 27 kickoff writer.]
+    // [CONDITION: disassemble the six retail stamp sites listed above and
+    //  record, per site, whether the UpdateLoop table is still in the object
+    //  when that function returns. If all six are transient, promote. If any
+    //  is final, write an RT_UNPROMOTABLE tag naming that site.]
+
+    // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted
     // ========================================================================
     //

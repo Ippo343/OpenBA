@@ -51,10 +51,45 @@ if not inc:
 # Every registration LITERAL anywhere in the tree, read from the REV rather than
 # the working copy -- so this is worktree-independent, which in a session where
 # the harness re-points a worktree between two commands is not a nicety.
+# -a IS LOAD-BEARING, NOT TIDINESS (Wave 26 lane PROMOGFX).
+# `git grep -h` prints "Binary file <path> matches" INSTEAD OF THE LINES for any
+# blob with a NUL in git's first-8000-byte sniff window, and says nothing else.
+# runtime/src/graphics/scene.cpp carried exactly one NUL, at byte 7277, inside a
+# COMMENT that had pasted a raw 0x00 where it meant the two characters \\0 --
+# a comment about the ??_7Geometry@Graphics@@6B@ overrun. All 38 of that file's
+# RegisterRuntimeExport lines were therefore invisible here, and this tool
+# reported ??_7Geometry@Graphics@@6B@ as 5/9 unported while every one of those 5
+# slots was registered and tools/runtime_census.py scored the row 6/6 COMPLETE.
+# Two instruments disagreeing by five with no detector.
+#
+# THE NULL BYTE IS ALSO FIXED AT SOURCE, but the tool is hardened anyway: the
+# blindness is silent, is re-armed by any future stray byte, and its error
+# direction is INFLATING -- it manufactures port work, which is the direction
+# this project has recorded a lane acting on.
+#
+# A CONTROL, because a scan for a LITERAL cannot tell "absent" from "suppressed":
+# git grep -c counts matches per file WITHOUT needing content, so it sees the
+# binary blobs too. If the two channels disagree the scan is under-reading and
+# this tool refuses rather than printing a confident low number.
 tree = subprocess.run(
-    ["git", "grep", "-h", "-E", r"RegisterRuntime(Export|Addr)\(", REV, "--",
+    ["git", "grep", "-h", "-a", "-E", r"RegisterRuntime(Export|Addr)\(", REV, "--",
      "runtime", "standalone", "code", "engine", "dx11"],
     capture_output=True, text=True, errors="replace").stdout
+
+_counts = subprocess.run(
+    ["git", "grep", "-c", "-a", "-E", r"RegisterRuntime(Export|Addr)\(", REV, "--",
+     "runtime", "standalone", "code", "engine", "dx11"],
+    capture_output=True, text=True, errors="replace").stdout
+_expected = sum(int(l.rsplit(":", 1)[1]) for l in _counts.splitlines() if ":" in l)
+_got = len([l for l in tree.splitlines() if l.strip()])
+if _got < _expected:
+    sys.exit("mint_slot_sweep: registration scan READ %d lines but git counts %d "
+             "across the same pathspec -- %d line(s) suppressed (a NUL byte makes "
+             "git grep emit 'Binary file ... matches' instead of the lines). "
+             "REFUSING to print an inflated unported count."
+             % (_got, _expected, _expected - _got))
+print("  reg-scan control        %d lines read == %d counted by git  (no file suppressed)"
+      % (_got, _expected))
 
 reg_names = set(re.findall(r'RegisterRuntimeExport\(\s*"([^"]+)"', tree))
 reg_addrs = set(int(a, 16) for a in
