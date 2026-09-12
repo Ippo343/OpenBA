@@ -63,6 +63,10 @@
 //
 // LINK (stride 0x18):
 //   +0x08 int32 first item   +0x0c int32 one past last   +0x10 uint8 armed
+//
+// `??0DocumentTextElement@UI@@QEAA@XZ` (0x1800cf410) is NOT here: it is already
+// ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
+// (the factory roster). One address, one owner.
 // ============================================================================
 #include "widget_common.h"
 #include "../../types/ui/DocumentTextElement.h"
@@ -436,30 +440,6 @@ extern "C" void RtUi_DocumentTextElement_Update(void* selfv, const void* time, v
 // ============================================================================
 // Constructors / destructor
 // ============================================================================
-extern "C" void* RtUi_DocumentTextElement_Ctor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<ElementCtorFn>(0x180115e50ull)(self);
-    P(self, 0x00) = VtDocumentTextElement();
-    *reinterpret_cast<uint64_t*>(self + 0xc0) = 0;
-    I32(self, 0xc8) = -1;
-    *reinterpret_cast<uint64_t*>(self + 0xd0) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0xd8) = 0;
-    I32(self, 0xe0) = -1;
-    *reinterpret_cast<uint64_t*>(self + 0xe8) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0xf0) = 0;
-    U32(self, kColorNormal)  = 0xffeeee00u;
-    U32(self, kColorHover)   = 0xffffff00u;
-    U32(self, kColorPressed) = 0xffcccc00u;
-    I32(self, 0x104) = 4;
-    I32(self, kWrapWidth) = 300;
-    for (int off = 0x110; off <= 0x168; off += 8)
-        *reinterpret_cast<uint64_t*>(self + off) = 0;
-    // +0x170 .. +0x197 are NOT written; the constructor jumps straight to +0x198.
-    *reinterpret_cast<uint64_t*>(self + 0x198) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0x1a0) = 0xffffffffffffffffull;
-    self[0x1a8] = 0;
-    return self;
-}
 
 extern "C" void* RtUi_DocumentTextElement_CopyCtor(void* selfv, const void* otherv) {
     uint8_t* self = static_cast<uint8_t*>(selfv);
@@ -570,10 +550,6 @@ int RtUiDocumentTextElementRegister() {
         "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
         (void*)&RtUi_DocumentTextElement_Update);                          ++n;
     RegisterRuntimeAddr(0x1800cd360ull, (void*)&RtUi_DocumentTextElement_Update);
-
-    RegisterRuntimeExport("??0DocumentTextElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_DocumentTextElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x1800cf410ull, (void*)&RtUi_DocumentTextElement_Ctor);
 
     RegisterRuntimeExport("??0DocumentTextElement@UI@@QEAA@AEBV01@@Z",
                           (void*)&RtUi_DocumentTextElement_CopyCtor);      ++n;

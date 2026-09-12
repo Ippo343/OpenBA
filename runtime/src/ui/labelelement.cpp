@@ -44,6 +44,10 @@
 // The TextElement fields this file reads are named at their use: +0xc0 the
 // `UI::Font*`, +0xe8/+0xe9 two byte flags, +0xec/+0xf0/+0xf4 three ints and
 // +0xf8 the `System::String`.
+//
+// `??0LabelElement@UI@@QEAA@XZ` (0x1800d2620) is NOT here: it is already
+// ported and registered, table-driven, by runtime/src/ui/ui_factory_wave28.cpp
+// (the factory roster). One address, one owner.
 // ============================================================================
 #include "widget_common.h"
 
@@ -365,22 +369,6 @@ extern "C" void RtUi_LabelElement_SetColor(void* self, uint32_t color) {
 // The constructor's +0x114 store is a QWORD of 1, covering `_mode = 1` AND
 // `_minTextWidth = 0`; the +0x120 store is a QWORD of -1, covering both icon
 // size overrides. Written here as the four fields they cover.
-extern "C" void* RtUi_LabelElement_Ctor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<TextCtorFn>(0x18011eb80ull)(self);
-    P(self, 0x00) = VtLabelElement();
-    *reinterpret_cast<uint64_t*>(self + kIcon) = 0;
-    I32(self, kIconIndex) = -1;
-    I32(self, kAlign)     = 3;
-    U32(self, kMode)      = 1;
-    I32(self, kMinTextW)  = 0;
-    I32(self, kGap)       = 2;
-    I32(self, kIconW)     = -1;
-    I32(self, kIconH)     = -1;
-    U32(self, kIconColor) = 0xffffffffu;
-    I32(self, kTextWidth) = 0;
-    return self;
-}
 
 extern "C" void* RtUi_LabelElement_CopyCtor(void* selfv, const void* otherv) {
     uint8_t* self = static_cast<uint8_t*>(selfv);
@@ -427,10 +415,6 @@ int RtUiLabelElementRegister() {
     RegisterRuntimeExport("?SetColor@LabelElement@UI@@UEAAXI@Z",
                           (void*)&RtUi_LabelElement_SetColor);      ++n;
     RegisterRuntimeAddr(0x180042970ull, (void*)&RtUi_LabelElement_SetColor);
-
-    RegisterRuntimeExport("??0LabelElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_LabelElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x1800d2620ull, (void*)&RtUi_LabelElement_Ctor);
 
     RegisterRuntimeExport("??0LabelElement@UI@@QEAA@AEBV01@@Z",
                           (void*)&RtUi_LabelElement_CopyCtor);      ++n;

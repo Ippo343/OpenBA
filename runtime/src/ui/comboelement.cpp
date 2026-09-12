@@ -34,6 +34,10 @@
 // Both are proven by Update: it calls slot 8 (`+0x40`, CreateInstance) on each
 // and type-tests the result against `UI::ListElement` and `UI::TextElement`
 // respectively.
+//
+// `??0ComboElement@UI@@QEAA@XZ` (0x1801123f0) is NOT here: it is already
+// ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
+// (the factory roster). One address, one owner.
 // ============================================================================
 #include "widget_common.h"
 #include "../../types/ui/ComboElement.h"
@@ -254,19 +258,6 @@ extern "C" void RtUi_ComboElement_Update(void* selfv, const void* time, void* ui
 // The default constructor INLINES ButtonElement's body (the base vtable stamp,
 // +0xc0 = -1, +0xc4 = 0) and then zeroes everything from +0xd8 to +0x120 except
 // +0x118, which starts at -1 ("no current item").
-extern "C" void* RtUi_ComboElement_Ctor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<ElementCtorFn>(0x180115e50ull)(self);
-    P(self, 0x00) = VtButtonElementBase();
-    I32(self, 0xc0) = -1;
-    I32(self, 0xc4) = 0;
-    P(self, 0x00) = VtComboElement();
-    for (int off = kListDesc; off <= 0x110; off += 8)
-        *reinterpret_cast<uint64_t*>(self + off) = 0;
-    I32(self, kCurrentItem) = -1;
-    *reinterpret_cast<uint64_t*>(self + kOpenDialog) = 0;
-    return self;
-}
 
 // ??0ComboElement@UI@@QEAA@AEBV01@@Z  0x1800751e0 — chains to the out-of-line
 // ??0ButtonElement copy ctor, copies the two description handles, then
@@ -339,10 +330,6 @@ int RtUiComboElementRegister() {
         "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
         (void*)&RtUi_ComboElement_Update);                          ++n;
     RegisterRuntimeAddr(0x1801125d0ull, (void*)&RtUi_ComboElement_Update);
-
-    RegisterRuntimeExport("??0ComboElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_ComboElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x1801123f0ull, (void*)&RtUi_ComboElement_Ctor);
 
     RegisterRuntimeExport("??0ComboElement@UI@@QEAA@AEBV01@@Z",
                           (void*)&RtUi_ComboElement_CopyCtor);      ++n;

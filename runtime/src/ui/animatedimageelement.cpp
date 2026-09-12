@@ -35,6 +35,10 @@
 // There is no type header for this class: every offset above is cited at its
 // use below, which is the same standard runtime/src/ui/widgets_layout.cpp
 // applies to the eight classes it ports without one.
+//
+// `??0AnimatedImageElement@UI@@QEAA@XZ` (0x1800cb3f0) is NOT here: it is already
+// ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
+// (the factory roster). One address, one owner.
 // ============================================================================
 #include "widget_common.h"
 
@@ -155,21 +159,6 @@ extern "C" void RtUi_AnimatedImageElement_Update(void* selfv, const void* time,
 // stores INLINED (retail does not call ??0ImageElement here), then its own
 // vtable and four more stores. The dead intermediate stamp is reproduced for
 // the same reason runtime/src/ui/groupdescription.cpp reproduces its three.
-extern "C" void* RtUi_AnimatedImageElement_Ctor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<ElementCtorFn>(0x180115e50ull)(self);
-    P(self, 0x00) = VtImageElementBase();
-    *reinterpret_cast<uint64_t*>(self + 0xc0) = 0;
-    I32(self, 0xc8) = -1;
-    I32(self, 0xd0) = 0;
-    *reinterpret_cast<uint64_t*>(self + 0xd4) = 0xffffffffffffffffull;
-    P(self, 0x00) = VtAnimatedImageElement();
-    *reinterpret_cast<uint64_t*>(self + kFrames)     = 0;
-    *reinterpret_cast<uint64_t*>(self + kFrameCount) = 0;   // _size + _capacity
-    I32(self, kFps) = 0x1e;
-    *reinterpret_cast<uint64_t*>(self + kAccumTicks) = 0;
-    return self;
-}
 
 // ??0AnimatedImageElement@UI@@QEAA@AEBV01@@Z   0x180036c30
 // Chains to ??0ImageElement (the COPY ctor, out of line this time), then
@@ -222,10 +211,6 @@ int RtUiAnimatedImageElementRegister() {
         "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@Element@2@@Z",
         (void*)&RtUi_AnimatedImageElement_Update);                        ++n;
     RegisterRuntimeAddr(0x1800cb290ull, (void*)&RtUi_AnimatedImageElement_Update);
-
-    RegisterRuntimeExport("??0AnimatedImageElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_AnimatedImageElement_Ctor);        ++n;
-    RegisterRuntimeAddr(0x1800cb3f0ull, (void*)&RtUi_AnimatedImageElement_Ctor);
 
     RegisterRuntimeExport("??0AnimatedImageElement@UI@@QEAA@AEBV01@@Z",
                           (void*)&RtUi_AnimatedImageElement_CopyCtor);    ++n;

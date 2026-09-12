@@ -51,21 +51,28 @@ typedef void (*HitCallback)(void* userData, int, int,
                             const Vector3&, const Vector3&, const Vector3&);
 
 // ============================================================
-// Picking::PickingMesh::Triangle — 12 bytes: three uint16 vertex indices
-// followed by six bytes this lane did NOT pin.
+// Picking::PickingMesh::Triangle — 12 bytes: SIX uint16 fields.
 //
-// Pinned by Scene::Intersect (retail 0x1801246c0): the triangle walk advances
-// by 0xc per iteration (`ADD RBX,0xc` at 0x1801250af) and reads exactly three
-// ushorts at +0x00/+0x02/+0x04, each multiplied by 0xc to index the vertex
-// Array. The remaining six bytes are never touched by any function this lane
-// read, so they are left as an explicit blob rather than guessed at — the
-// obvious reading (three more uint16 normal or UV indices) is UNVERIFIED.
+// The first three are pinned by Scene::Intersect (retail 0x1801246c0): the
+// triangle walk advances by 0xc per iteration (`ADD RBX,0xc` at 0x1801250af)
+// and reads exactly three ushorts at +0x00/+0x02/+0x04, each multiplied by
+// 0xc to index the vertex Array.
+//
+// The remaining six bytes were "NOT pinned" until vtable batch 8
+// (2026-09-12) ported PickingMesh::Serialize (retail 0x122960) and its
+// per-SubMesh loop FUN_18007a350 (0x18007a350): it serializes a Triangle as
+// TWO back-to-back `kArrayUShort(n=3)` calls, at elem+0x00 and elem+0x06 --
+// i.e. the whole 12 bytes are six uint16s, no unknown tail. What j0..j2 MEAN
+// is still unverified (a second index triple, e.g. normal/UV indices, is the
+// obvious reading) but the BYTES are now fully accounted for.
 // ============================================================
 struct Triangle {
-    uint16_t i0;            // +0x00
-    uint16_t i1;            // +0x02
-    uint16_t i2;            // +0x04
-    uint8_t  _unknown6[6];  // +0x06  NOT pinned by anything this lane read
+    uint16_t i0;  // +0x00  vertex index (Intersect)
+    uint16_t i1;  // +0x02  vertex index (Intersect)
+    uint16_t i2;  // +0x04  vertex index (Intersect)
+    uint16_t j0;  // +0x06  second triple (Serialize FUN_18007a350) -- MEANING unverified
+    uint16_t j1;  // +0x08
+    uint16_t j2;  // +0x0a
 };
 static_assert(sizeof(Triangle) == 0xc, "PickingMesh::Triangle must be 12 bytes");
 
@@ -79,7 +86,10 @@ static_assert(sizeof(Triangle) == 0xc, "PickingMesh::Triangle must be 12 bytes")
 //
 // | Off  | Field       | Pinned by                                           |
 // |------|-------------|-----------------------------------------------------|
-// | 0x00 | (not pinned)| nothing this lane read touches +0x00..+0x07         |
+// | 0x00 | _name       | PINNED by vtable batch 8 (2026-09-12): PickingMesh::
+// |      |             | Serialize's per-SubMesh loop (0x18007ac20) opens with
+// |      |             | `String::Serialize(elem+0x00, ser)`, and the fresh-tail
+// |      |             | init in FUN_18007aa40 zeroes this qword -- a System::String
 // | 0x08 | _parent     | AddMesh reads `*(int*)(nodes + 8 + i*0x80)` and uses |
 // |      |             | it to index the WORLD transform array it is filling, |
 // |      |             | so it is a parent index; its loop starts at i == 1,  |
@@ -94,17 +104,30 @@ static_assert(sizeof(Triangle) == 0xc, "PickingMesh::Triangle must be 12 bytes")
 // | 0x60 | _triangles  | Triangles (0x180071e50). TriangleCount (0x180071e70) |
 // |      |             | reads +0x68, which IS that Array's _size — the two   |
 // |      |             | agreeing is the cross-check on the Array layout      |
-// | 0x70 | (not pinned)| 16 bytes nothing in this lane reads                  |
+// | 0x70 | _uvs        | PINNED by vtable batch 8 (2026-09-12): the tail of the |
+// |      |             | same Serialize loop reads a size at elem+0x78, resizes  |
+// |      |             | via FUN_18007a900 (stride 4, align 2 -- two uint16s),    |
+// |      |             | and serializes `kArrayUShort(n=2)` per element -- an     |
+// |      |             | Array<UV16>, not an opaque 16-byte blob                 |
 // ============================================================
+// Picking::PickingMesh::UV16 — 4 bytes, two uint16s. Named for what a
+// per-vertex-adjacent 2-ushort array on a picking submesh most plausibly
+// holds (a compact UV pair); MEANING is unverified, byte shape is not.
+struct UV16 {
+    uint16_t u;  // +0x00
+    uint16_t v;  // +0x02
+};
+static_assert(sizeof(UV16) == 4, "PickingMesh::UV16 must be 4 bytes");
+
 struct SubMesh {
-    uint8_t                     _unknown00[8];   // +0x00  NOT pinned
-    int32_t                     _parent;         // +0x08
-    ::Transform             _local;          // +0x0c  (0x1c bytes)
-    ::Box                 _aabb;           // +0x28
-    Collection::Array<Vector3>  _vertices;       // +0x40
-    Collection::Array<Vector3>  _normals;        // +0x50
-    Collection::Array<Triangle> _triangles;      // +0x60
-    uint8_t                     _unknown70[16];  // +0x70  NOT pinned
+    void*                        _name;           // +0x00  System::String
+    int32_t                      _parent;         // +0x08
+    ::Transform              _local;          // +0x0c  (0x1c bytes)
+    ::Box                  _aabb;           // +0x28
+    Collection::Array<Vector3>   _vertices;       // +0x40
+    Collection::Array<Vector3>   _normals;        // +0x50
+    Collection::Array<Triangle>  _triangles;      // +0x60
+    Collection::Array<UV16>      _uvs;            // +0x70
 };
 static_assert(sizeof(SubMesh) == 0x80, "PickingMesh::SubMesh must be 0x80 bytes");
 static_assert(offsetof(SubMesh, _parent)    == 0x08, "SubMesh::_parent @ +0x08");
@@ -113,6 +136,7 @@ static_assert(offsetof(SubMesh, _aabb)      == 0x28, "SubMesh::_aabb @ +0x28");
 static_assert(offsetof(SubMesh, _vertices)  == 0x40, "SubMesh::_vertices @ +0x40");
 static_assert(offsetof(SubMesh, _normals)   == 0x50, "SubMesh::_normals @ +0x50");
 static_assert(offsetof(SubMesh, _triangles) == 0x60, "SubMesh::_triangles @ +0x60");
+static_assert(offsetof(SubMesh, _uvs)       == 0x70, "SubMesh::_uvs @ +0x70");
 
 // ============================================================
 // Picking::PickingMesh — only the two fields this lane needs are pinned.

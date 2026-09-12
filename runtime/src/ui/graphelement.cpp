@@ -33,6 +33,10 @@
 //   +0xe4 int32   vertical grid divisions   (ctor 12)
 //   +0xe8 int32   horizontal grid divisions (ctor 4)
 //   +0xf0 Array<GraphSeries> — GraphElement.h
+//
+// `??0GraphElement@UI@@QEAA@XZ` (0x1800d1880) is NOT here: it is already
+// ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
+// (the factory roster). One address, one owner.
 // ============================================================================
 #include "widget_common.h"
 #include "../../types/ui/GraphElement.h"
@@ -200,23 +204,6 @@ extern "C" void RtUi_GraphElement_Draw(const void* selfv, void* ctx, uint8_t alp
 // ============================================================================
 // Constructors / destructor
 // ============================================================================
-extern "C" void* RtUi_GraphElement_Ctor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<ElementCtorFn>(0x180115e50ull)(self);
-    P(self, 0x00) = VtGraphElement();
-    I32(self, kReqWidth)  = 100;
-    I32(self, kReqHeight) = 100;
-    I32(self, kTickSize)  = 4;
-    I32(self, 0xcc)       = -1;
-    *reinterpret_cast<uint64_t*>(self + kLineSprite) = 0;
-    I32(self, 0xd8)       = -1;
-    U32(self, kMaxValue)  = 0x3f800000u;      // 1.0f, written as an immediate
-    I32(self, kDivsX)     = 12;
-    I32(self, kDivsY)     = 4;
-    *reinterpret_cast<uint64_t*>(self + kSeries)    = 0;
-    *reinterpret_cast<uint64_t*>(self + kSeriesCnt) = 0;
-    return self;
-}
 
 extern "C" void* RtUi_GraphElement_CopyCtor(void* selfv, const void* otherv) {
     uint8_t* self = static_cast<uint8_t*>(selfv);
@@ -271,10 +258,6 @@ int RtUiGraphElementRegister() {
     RegisterRuntimeExport("?Draw@GraphElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
                           (void*)&RtUi_GraphElement_Draw);          ++n;
     RegisterRuntimeAddr(0x1800d1360ull, (void*)&RtUi_GraphElement_Draw);
-
-    RegisterRuntimeExport("??0GraphElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_GraphElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x1800d1880ull, (void*)&RtUi_GraphElement_Ctor);
 
     RegisterRuntimeExport("??0GraphElement@UI@@QEAA@AEBV01@@Z",
                           (void*)&RtUi_GraphElement_CopyCtor);      ++n;

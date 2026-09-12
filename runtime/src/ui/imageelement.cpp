@@ -36,6 +36,10 @@
 // are registered ONCE, here, and animatedimageelement.cpp does not re-register
 // them — two owners for one address is the merge hazard deleting_dtor.cpp's
 // banner describes one file over.
+//
+// `??0ImageElement@UI@@QEAA@XZ` (0x180118410) is NOT here: it is already
+// ported and registered, table-driven, by runtime/src/ui/ui_factory_wave28.cpp
+// (the factory roster). One address, one owner.
 // ============================================================================
 #include "widget_common.h"
 #include "../../types/ui/ImageElement.h"
@@ -157,16 +161,6 @@ extern "C" void RtUi_ImageElement_Draw(const void* selfv, void* ctx, uint8_t alp
 // written as ONE QWORD of -1 (`MOV qword [RBX+0xd4],-1`), which is why the
 // struct's two "override" ints both start at -1 and why +0xDC (the trailing
 // pad) is left as the allocator found it.
-extern "C" void* RtUi_ImageElement_Ctor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<ElementCtorFn>(0x180115e50ull)(self);
-    P(self, 0x00) = VtImageElement();
-    *reinterpret_cast<uint64_t*>(self + kSprite)   = 0;
-    I32(self, kSpriteIndex)                        = -1;
-    I32(self, kRotation)                           = 0;
-    *reinterpret_cast<uint64_t*>(self + kWidthOverride) = 0xffffffffffffffffull;
-    return self;
-}
 
 // ??0ImageElement@UI@@QEAA@AEBV01@@Z   0x1800364c0
 // The copy constructor. +0xC0 and +0xC8 are copied as two overlapping qwords
@@ -219,10 +213,6 @@ int RtUiImageElementRegister() {
     RegisterRuntimeExport("?Draw@ImageElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
                           (void*)&RtUi_ImageElement_Draw);           ++n;
     RegisterRuntimeAddr(0x180118850ull, (void*)&RtUi_ImageElement_Draw);
-
-    RegisterRuntimeExport("??0ImageElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_ImageElement_Ctor);           ++n;
-    RegisterRuntimeAddr(0x180118410ull, (void*)&RtUi_ImageElement_Ctor);
 
     RegisterRuntimeExport("??0ImageElement@UI@@QEAA@AEBV01@@Z",
                           (void*)&RtUi_ImageElement_CopyCtor);       ++n;

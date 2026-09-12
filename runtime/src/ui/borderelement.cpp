@@ -32,6 +32,10 @@
 // That assignment is READ OUT OF Draw (0x1801103e0), not guessed: the corner
 // sprites are the ones drawn with the point-form AddSprite at the four extreme
 // coordinates, and the edges are the ones stretched between them.
+//
+// `??0BorderElement@UI@@QEAA@XZ` (0x18010fd40) is NOT here: it is already
+// ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
+// (the factory roster). One address, one owner.
 // ============================================================================
 #include "widget_common.h"
 
@@ -192,16 +196,6 @@ extern "C" void RtUi_BorderElement_Draw(const void* selfv, void* ctx, uint8_t al
 // ============================================================================
 // ??0BorderElement@UI@@QEAA@XZ   0x18010fd40
 // ============================================================================
-extern "C" void* RtUi_BorderElement_Ctor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<ElementCtorFn>(0x180115e50ull)(self);
-    P(self, 0x00) = VtBorderElement();
-    for (int off = kTopLeft; off < kSizeOf; off += 0x10) {
-        *reinterpret_cast<uint64_t*>(self + off) = 0;   // sheet
-        I32(self, off + 8) = -1;                        // index
-    }
-    return self;
-}
 
 // ??0BorderElement@UI@@QEAA@AEBV01@@Z   0x180041250
 // Eighteen qword copies, i.e. the nine sprites verbatim INCLUDING each one's
@@ -254,10 +248,6 @@ int RtUiBorderElementRegister() {
     RegisterRuntimeExport("?Draw@BorderElement@UI@@UEBAXAEAVSpriteContext@2@E@Z",
                           (void*)&RtUi_BorderElement_Draw);          ++n;
     RegisterRuntimeAddr(0x1801103e0ull, (void*)&RtUi_BorderElement_Draw);
-
-    RegisterRuntimeExport("??0BorderElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_BorderElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x18010fd40ull, (void*)&RtUi_BorderElement_Ctor);
 
     RegisterRuntimeExport("??0BorderElement@UI@@QEAA@AEBV01@@Z",
                           (void*)&RtUi_BorderElement_CopyCtor);      ++n;

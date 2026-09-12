@@ -46,6 +46,10 @@
 //   +0xe4 int32          the caret position, in characters
 //   +0xe8 uint8          caret blink phase (visible when non-zero)
 //   +0xf0 int64          blink accumulator, in ticks
+//
+// `??0EditElement@UI@@QEAA@XZ` (0x1800d0f10) is NOT here: it is already
+// ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
+// (the factory roster). One address, one owner.
 // ============================================================================
 #include "widget_common.h"
 #include "../../types/ui/EditElement.h"
@@ -514,21 +518,6 @@ extern "C" void RtUi_EditElement_FinalizeText(void*) {}
 // ============================================================================
 // Constructors / destructor
 // ============================================================================
-extern "C" void* RtUi_EditElement_Ctor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<ElementCtorFn>(0x180115e50ull)(self);
-    P(self, 0x00) = VtEditElement();
-    *reinterpret_cast<uint64_t*>(self + kFont) = 0;
-    *reinterpret_cast<uint64_t*>(self + kText) = 0;
-    I32(self, kMaxLen) = 0;
-    self[kPassword] = 0;
-    *reinterpret_cast<uint64_t*>(self + kFilter) = 0;
-    self[kFocused] = 0;
-    I32(self, kCaret) = 0;
-    self[kBlinkOn] = 0;
-    *reinterpret_cast<uint64_t*>(self + kBlinkAcc) = 0;
-    return self;
-}
 
 extern "C" void* RtUi_EditElement_CopyCtor(void* selfv, const void* otherv) {
     uint8_t* self = static_cast<uint8_t*>(selfv);
@@ -610,10 +599,6 @@ int RtUiEditElementRegister() {
     RegisterRuntimeExport("?FinalizeText@EditElement@UI@@UEAAXXZ",
                           (void*)&RtUi_EditElement_FinalizeText);  ++n;
     RegisterRuntimeAddr(0x1800d0da0ull, (void*)&RtUi_EditElement_FinalizeText);
-
-    RegisterRuntimeExport("??0EditElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_EditElement_Ctor);          ++n;
-    RegisterRuntimeAddr(0x1800d0f10ull, (void*)&RtUi_EditElement_Ctor);
 
     RegisterRuntimeExport("??0EditElement@UI@@QEAA@AEBV01@@Z",
                           (void*)&RtUi_EditElement_CopyCtor);      ++n;

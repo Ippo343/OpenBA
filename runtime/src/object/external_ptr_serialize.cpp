@@ -493,6 +493,13 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_PixelProgram,
              "?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A")
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_RenderState,
              "?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A")
+// VTABLE BATCH 7 (2026-09-12): 0x1800594a0 — Graphics::AnimationEvent. Reached
+// from Graphics::AnimationGroup::Serialize's per-clip event-list element loop
+// (runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp), the same
+// 748-byte shared template as every other row here; typeInfo confirmed against
+// the retail export table (pefile) at 0x1801f9978, not assumed.
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationEvent,
+             "?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A")
 
 #undef EXTPTR_THUNK
 
@@ -660,6 +667,8 @@ int RtObjectExternalPtrSerializeRegister() {
     RegisterRuntimeAddr(0x1800542a0, (void*)&RtObject_ExternalPtrSerialize_VertexProgram);          ++n;
     RegisterRuntimeAddr(0x180055380, (void*)&RtObject_ExternalPtrSerialize_PixelProgram);           ++n;
     RegisterRuntimeAddr(0x180055670, (void*)&RtObject_ExternalPtrSerialize_RenderState);            ++n;
+    // VTABLE BATCH 7 (2026-09-12): AnimationGroup's clip event list.
+    RegisterRuntimeAddr(0x1800594a0, (void*)&RtObject_ExternalPtrSerialize_AnimationEvent);          ++n;
     // array form
     RegisterRuntimeAddr(0x18002f170, (void*)&RtObject_ExternalPtrArraySerialize_External);           ++n;
     RegisterRuntimeAddr(0x180005220, (void*)&RtObject_ExternalPtrArraySerialize_Goal);               ++n;
