@@ -235,54 +235,129 @@ ownership move — and it needs no second run because it compares our output
 against a snapshot of our own input. **It is not a comparison against retail and
 this lane does not claim one.**
 
-### 3.4 `achievement_manager_ctor.cpp` — `??0AchievementManager@Achievement@@`
+### 3.4 `achievement_manager_ctor.cpp` — WRITTEN, THEN DELETED. It was a duplicate.
 
-Retail 0x18009eb00. **Ported, registered by name and by address.** Verified with
-a **full-byte oracle** into a 0xCD-poisoned scratch buffer — the strongest
-verification in this lane, and possible because the ctor's writes are confined to
-`this`.
+**This lane ported `??0AchievementManager@Achievement@@` (retail 0x18009eb00)
+with a full-byte oracle, and then deleted the file, because the ctor was ALREADY
+ported and registered through both doors** in
+`runtime/src/engine/engine_lifecycle.cpp:1101-1102`. A second
+`RegisterRuntimeExport` for one mangled name makes one of the two dead code —
+the SHADOWED hazard. **Caught by lane LOOPS on review, not by me, and not by the
+build.**
 
-**MEASURED, and it is the positive evidence for a claim `AchievementManager.h`
-made without a writer:** the last store is `89 41 40` — a **DWORD** `MOV
-[RCX+0x40],EAX`, not a qword. So **+0x44 is never written**, and the poisoned
-oracle shows `0xCDCDCDCD` there on BOTH sides, which is positive evidence rather
-than an absence of evidence. The header's `_pad44 // never read or written` now
-has its writer.
+This is kickoff warning **#3**, "grep for the port before writing it", and it is
+worth recording exactly HOW the pre-write grep missed it, because the next person
+will grep the same way:
 
-The ctor's one side effect outside `this` is `MOV [0x1801fc670],RCX` —
-`_singleton = this`, **last and unconditional**. Running retail's copy on scratch
-would leave the singleton pointing at a dead stack buffer, so the oracle
-snapshots and restores the cell around the call. **That restore has a named
-limit and an addressee — see §6.2.**
+* My existence check was `grep -rn RegisterRuntimeExport runtime/src/achievement/`
+  — **scoped to the class's own directory**, because I reasoned about ownership
+  by CLASS.
+* That ctor lives under `runtime/src/engine/` because it was found as an
+  **INLINED BLOCK inside `Engine::Startup`** and ported by the lane that owned
+  the **CALLER**, not the callee's class.
+* A directory-scoped grep structurally cannot see a port filed under its
+  caller's namespace. **Grep the MANGLED NAME across the whole tree.**
+* A broader grep I *did* run (for `0x1801fc670`) returned `engine_lifecycle.cpp`
+  five times. I read those hits as commentary about the singleton and did not
+  follow one to a body. A hit in an unexpected file is the signal, not noise.
+
+**CONFIRMING DATUM:** deleting my registration changed the census by **zero** —
+Achievement stayed 54 called / 47 ported. A port whose removal moves no number
+was never adding one.
+
+The note explaining this now sits in `rt_achievement_port.cpp` where the
+registration would have gone, so the next lane that considers adding it reads
+why it is absent.
+
+**The one finding worth keeping** is that the ctor's last store is `89 41 40` —
+a **DWORD**, so **+0x44 is never written**. `AchievementManager.h` already
+declares `_pad44 // never read or written`; this is the writer that proves it.
+No edit was made to `engine_lifecycle.cpp` to record it — that file is in lane
+LOOPS's area this wave.
 
 ---
 
-## 4. DID THIS LANE RETIRE THE `?_singleton@AchievementManager@` BLOCKER?
+## 4. THE `?_singleton@AchievementManager@` BLOCKER — re-derived, and BOTH the tag and its refutation were wrong
 
-**NO. It retired exactly HALF of the expiry clause, and the tag STANDS.** Said
-explicitly because the brief asked for an explicit answer.
+**Short answer to the brief's question: this lane retired NOTHING by porting,
+because there was nothing left for it to port. But the row's hazard is gone, on
+facts neither the tag nor lane LOOPS had right.**
 
-The tag (`standalone/reg_mint_promoted.cpp:2714`) names **two** unported writers:
+### 4.1 What I first reported, and why it was wrong
 
-1. `??0AchievementManager@Achievement@@` — **now PORTED and REGISTERED**
-   (§3.4). This half is satisfied. The ported ctor writes the same cell, through
-   the same `RT_DATA_SLOT` door, that the already-ported destructor nulls — so
-   ctor and dtor cannot disagree about which cell holds the manager whichever way
-   the row is promoted.
-2. "a store inside `??0DialogLoopT@Engine@@`'s range" — **still unported.** That
-   is `??_7DialogLoopT@Engine@@6B@`'s family, owned in Wave 27 by **lane LOOPS**,
-   and kickoff §3 forbids this lane from touching it.
+I first reported that porting `??0AchievementManager@` retired half the expiry
+clause. **Both halves of that were wrong**: the ctor was already ported (§3.4),
+and the clause's other half names a function that does not contain the store.
 
-So the two-owners-one-object hazard the tag describes **still holds**, and the
-row must NOT be promoted on the strength of the ctor alone. What changed is that
-the expiry clause now has one outstanding condition instead of two.
+### 4.2 The re-derivation — MEASURED, on the retail file
 
-**The correction is written beside the tag itself**, in
-`standalone/reg_mint_promoted.cpp`, not only here — kickoff §4 #9, because a lane
-doc is not the surface the next person reaches. It carries its own ADDRESSEE:
-**lane LOOPS of Wave 27, or whichever lane next owns
-`??0DialogLoopT@Engine@@`**, with an instruction to re-derive the writer set
-rather than trust the count.
+Lane LOOPS challenged the tag and told me to reproduce rather than believe it.
+I did, by a different mechanism than LOOPS used: full `objdump -d` of
+`C:/GOG Games/Banished/Runtime-x64.dll`, then grep for objdump's own
+resolved-target comment `# 0x1801fc670`. That finds every RIP-relative access
+regardless of opcode. **Complete site set — 6 sites, 1 read and 5 writes:**
+
+| VA | kind | function | state |
+|---|---|---|---|
+| 0x1800079d0 | READ | `?Get@AchievementManager@` | PORTED + registered (`achievement_manager.cpp:1143`) |
+| 0x18004d946 | WRITE | `FUN_18004d930` | **UNPORTED — and DEAD CODE** |
+| 0x18009eac6 | WRITE | `??1AchievementManager@` | PORTED (`achievement_state.cpp`) |
+| 0x18009eb35 | WRITE | `??0AchievementManager@` | PORTED (`engine_lifecycle.cpp:1101`) |
+| 0x1800db698 | WRITE | `?Shutdown@Engine@1@` | PORTED |
+| 0x1800dbe83 | WRITE | `?Startup@Engine@1@` | PORTED |
+
+### 4.3 Two errors pointing in OPPOSITE directions, and the truth is a third thing
+
+**The tag's ATTRIBUTION is wrong — LOOPS is right about that.** There is no store
+to this cell anywhere in `??0DialogLoopT@Engine@@` (0x1800db3f0..0x1800db452).
+LOOPS read that ctor instruction by instruction; the real writer at 0x1800db698
+is 0x246 bytes past its end, inside `?Shutdown@Engine@1@`. The tag's attribution
+came from a function extent stretched to the next export —
+`reference_adjacent_export_is_an_upper_bound.md`.
+
+**But the tag's COUNT is right, and the refutation's count is wrong.** LOOPS
+reported 3 writes and concluded every writer was already ours. It scanned for
+`48/4C + 89|8B + modrm mod=00,rm=101` — MOV r/m,r and MOV r,r/m. That pattern is
+**blind to `MOV r/m, imm32` (opcode C7)**, and *both* `= nullptr` stores
+(0x18004d946 and 0x18009eac6) are C7. So the tag's "5 writes / 1 read" is
+literally correct; two writes were invisible to the instrument that refuted it.
+Another instance of the family in
+`reference_literal_grep_blind_to_variables.md` — an instrument blind to the same
+fact spelled another way, announcing nothing.
+
+**So a lane doc that said "the expiry clause has fired in full" would have been
+right by accident, from a writer set missing two entries.**
+
+### 4.4 Why the hazard is nevertheless gone — a THIRD set of facts
+
+`FUN_18004d930` is the compiler-generated **scalar deleting destructor**:
+null the singleton, then the same three array-free leaves in the same order as
+the ported `??1AchievementManager@` (0x180009700 / 0x180008e80 / 0x180009560),
+then a trailing `CALL 0x180006a10` — `~AchievementManager(); operator delete(this)`.
+
+**It is unreachable.** Measured: **zero** rel32 `call`/`jmp` sites anywhere in
+`.text`, and an 8-byte scan of **every section** of the PE finds its address
+nowhere — so it is in no vtable and no dispatch table. It cannot execute, so it
+cannot write the cell. `?Get@` likewise has **zero in-DLL callers**: it is an
+exported accessor the EXE calls, and it is ported.
+
+**No in-DLL code path touches this cell at all.** The "two owners, one object"
+hazard has no owner on the DLL side.
+
+**LIMIT OF THAT CLAIM, stated:** it is a direct-call and address-taken scan. A
+call through a computed pointer would evade it. `AchievementManager` has no
+vtable — its constructor stamps none — so there is no virtual route, which is
+what makes the scan sufficient here rather than merely suggestive.
+
+### 4.5 What this lane did about it
+
+**Nothing but write it down.** The row was NOT promoted: promotion is the
+mint/manifest owner's call and needs the cutover manifest regenerated. The full
+re-derivation, with both re-run commands, is written **beside the tag in
+`standalone/reg_mint_promoted.cpp`**, replacing the incorrect note I put there
+earlier in this lane. Its addressee is the **Wave 28 kickoff writer or whichever
+lane next owns the mint tables**, with an instruction to re-run before acting —
+because the thing it replaces was also once a measurement.
 
 ---
 
@@ -423,12 +498,12 @@ guaranteed and will not look like a port bug.
 
 | # | residual | addressee |
 |---|---|---|
-| 1 | **`?_singleton@AchievementManager@` tag's second writer.** The store inside `??0DialogLoopT@Engine@@`'s range is still unported, so the tag stands. Correction already written beside the tag. | **Lane LOOPS of Wave 27**, or whichever lane next owns `??0DialogLoopT@Engine@@`. Re-derive the writer set; do not trust the count |
+| 1 | **`?_singleton@AchievementManager@` is a promotion CANDIDATE, re-derived (§4): all 5 writers and 1 reader accounted for, every live one ported, the only unported one provably dead code. NOT promoted here.** Evidence and both re-run commands sit beside the tag in `reg_mint_promoted.cpp` | **The Wave 28 kickoff writer, or whichever lane next owns the mint tables.** Re-run before acting — what this replaced was also once a measurement |
 | 2 | **`?Run@Stream@Audio@@`** (0x1800a0f60, 1800 bytes) — the last slot of `??_7Stream@Audio@@6B@`. Not blocked, out of budget | **The Wave 28 kickoff writer.** Note `audio_stream_win.cpp`'s existing HANDOVER to mint `??_7Stream@Audio@@6B@` is a SEPARATE item and is still open |
 | 3 | **`?Update@Scene@Audio@@`** (0x1800df6c0, 1816 bytes) — oracle blocker only, not a wall, per Wave 24 lane SMALLBODY | **The Wave 28 kickoff writer.** Unblocks both Audio DATA reader sets |
 | 4 | **`disassemble_function` returns the wrong function for an address** (§2.1). Three reproductions in this lane. NOT FIXED | **The Wave 28 tooling decision.** Until then: `objdump -d --start-address=… --stop-address=… "C:/GOG Games/Banished/Runtime-x64.dll"` addresses by true VA and cannot be fooled |
 | 5 | **`AchievementInstance::Persist`'s `stopAfter=1` is a floor, not the derived index** (§3.2). Everything after the first emission is uncompared | **Whichever lane next ports `ExternalPtr<T>::Serialize` (0x180006d10)** — its emission count is the missing input, and once known the `stopAfter` here should be raised to it |
-| 6 | **`achievement_manager_ctor.cpp`'s oracle must be deleted when the singleton row is promoted** (§3.4). It restores the cell through `RT_DATA_SLOT`; retail's ctor writes the DLL's cell by hard-coded RVA. Same cell while unpromoted, two cells after. Guarded by `BANISHED_RT_DIFF`, so inert on a default run — but "inert by default" is not "safe once promoted" | **The lane that first promotes `?_singleton@AchievementManager@Achievement@@0PEAV12@EA`**, in the same commit |
+| 6 | **`??0AchievementManager@` has NO oracle of any kind** — the pre-existing port in `engine_lifecycle.cpp` carries none, and the full-byte one this lane wrote went with the deleted duplicate (§3.4). Its writes are confined to `this`, so a poisoned-scratch byte oracle IS available to whoever wants it, and it also yields positive evidence that `_pad44` is unwritten | **Whichever lane next owns `runtime/src/engine/engine_lifecycle.cpp`** — lane LOOPS's area this wave, which is why no edit was made there |
 | 7 | **Four new address doors**, each commented at its call site in the kickoff §4 #10 shape: `0x180006d10` (`ExternalPtr<Achievement>::Serialize`), `0x180009d70` (`Array<InternalPtr<GoalInstance>>::SetSize`), `0x180009fa0` (the N-element `InternalPtr<GoalInstance>` serializer). They GROW the cutover surface | **The cutover lane that first loads a game with achievements mounted.** `0x180009d70` is reached UNCONDITIONALLY by `GoalList::Initialize` — it is an `Array<8>` SetSize, i.e. the shape `array.cpp` already has eleven instantiations of, so it is a cheap ArraySpec row for a `collection`-owning lane |
 | 8 | `runtime/src/achievement/README.md` still says "**Ported here:** _nothing yet_" while the directory holds eight ported files. Cosmetic, not corrected here to keep this diff to one subject | **The Wave 27 integrator**, at close |
 

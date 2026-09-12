@@ -43,10 +43,19 @@ extern int RtAchManagerTypeInfoAccessorsRegister();  // Achievement + …Instanc
 extern int RtAchVtableRegister();
 // Wave 27 lane ACHIEVE — goal_list.cpp (GoalList::Initialize, a BODY gap row).
 extern int RtAchGoalListRegister();
-// Wave 27 lane ACHIEVE — achievement_manager_ctor.cpp. Ported to retire HALF of
-// the ?_singleton@AchievementManager@ UNPROMOTABLE tag's expiry clause; see that
-// file's banner for what it does and does not retire.
-extern int RtAchManagerCtorRegister();
+// NO ??0AchievementManager@Achievement@@ HERE, DELIBERATELY. Wave 27 lane
+// ACHIEVE wrote one and DELETED it: the ctor (retail 0x18009eb00) was ALREADY
+// ported and registered through both doors in
+// runtime/src/engine/engine_lifecycle.cpp:1101-1102, and a second
+// RegisterRuntimeExport for the same mangled name makes one of the two dead
+// code (the SHADOWED hazard). Caught by lane LOOPS, not by review.
+//
+// WHY THE PRE-WRITE GREP MISSED IT, because the next person will grep the same
+// way: the search was scoped to runtime/src/achievement/ — reasoning about
+// ownership by CLASS. That ctor lives under runtime/src/engine/ because it was
+// found as an INLINED BLOCK inside Engine::Startup and ported by the lane that
+// owned the CALLER. A directory-scoped grep cannot see a port filed under its
+// caller's namespace. Grep the MANGLED NAME across the whole tree.
 
 void RtAchievementPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_ACHIEVEMENT")) {
@@ -66,7 +75,6 @@ void RtAchievementPortInit() {
         n += RtAchSerializeRegister();
         n += RtAchManagerTypeInfoAccessorsRegister();
         n += RtAchVtableRegister();
-        n += RtAchManagerCtorRegister();
     }
     printf("[RtPort] Achievement: %d exports registered\n", n);
 }
