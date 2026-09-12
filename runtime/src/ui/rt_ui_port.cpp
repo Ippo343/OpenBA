@@ -175,6 +175,15 @@ extern int RtUiStringTableSlotsRegister(); // stringtable_factory.cpp (FRONTIER)
 // passes above -- one class, one cutover wall. These are not vtable slots; the
 // row was already 9/9 before this wave.
 extern int RtUiStringTableLifecycleDtorRegister(); // stringtable_lifecycle.cpp (MISC)
+// WAVE 28 lane FACTUI1: the `?CreateNewObject@`/`?CreateInPlaceObject@` pair for
+// the 31 UI classes of the absent-factory roster sorting strictly before
+// `ImageDescription`, plus the 14 out-of-line constructors they call. Owns
+// BANISHED_RT_UIFACT1 (DEFAULT ON, like FACTORY's switch and deliberately not
+// like the OBJINT probe's opt-in one) and is called unconditionally so its own
+// switch is the only one. It must register BEFORE RtDataMintInit(), which is
+// why it lives here: standalone/resolve_standalone.cpp:333 (RtUiPortInit)
+// precedes :406 (the mint). See docs/runtime_port/WAVE28_LANE_FACTUI1.md.
+extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -213,5 +222,6 @@ void RtUiPortInit() {
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
     n += RtUiStringTableSlotsRegister();  // same switch (FRONTIER)
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
+    n += RtUiFactory1Register();  // owns BANISHED_RT_UIFACT1 (FACTUI1)
     printf("[RtPort] UI: %d exports registered\n", n);
 }
