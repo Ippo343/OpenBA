@@ -1118,6 +1118,14 @@ const ArraySpec kSpec_Fill4 = {                   // 0x180023830  Array<uint32>
 const ArraySpec kSpec_Fill16 = {                  // 0x18004f790, 0x18004f8e0
     "Array<callback16>", 0x10, 8, &Assign16, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
+// 0x180051aa0 — Graphics::ParticleSystem::AddEmitter's emitter-slot array.
+// Same 16-byte element and Assign16 as kSpec_Fill16, but the body's own
+// `MemAlloc(n << 4, 4)` passes align=4, not 8 (read from the body, not
+// assumed from the sibling row above) — a distinct spec so the allocator call
+// stays byte-faithful.
+const ArraySpec kSpec_Fill16A4 = {                // 0x180051aa0
+    "Array<EmitterSlot16>", 0x10, 4, &Assign16, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
 // WAVE 9 LANE UIF — Array<UI::SpriteDraw>, the sprite batch behind
 // SpriteContext::AddSpriteDraw (append, 0x180078520) and
 // SpriteContext::FlushDeferred (clear, 0x1800783d0). stride 0x28, align 8
@@ -1309,6 +1317,43 @@ const ArraySpec kSpec_StringExt = {               // 0x180061480
 const ArraySpec kSpec_StringRef = {               // 0x180034860
     "Array<System::String>", 8, 8, &AssignStringRef, nullptr,
     &DestroyStringRange, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x08 };
+
+// --- Cutover closure batch 2: Graphics::Material::_parameters, 0x1800616c0 --
+//
+// Two-argument `SetSize(this, int)`, stride 0x18. Read out of 0x1800616c0's
+// own body:
+//   ASSIGN (element in range): zero +0x00, then AssignStringRef's zero-then-
+//     addref-copy of the String* at +0x00; +0x08..+0x17 copied verbatim as
+//     four dwords (one memcpy, no refcounted field in that half).
+//   INIT (grown past old size): all three qwords (+0x00..+0x17) zeroed.
+//   DESTROY: 0x180005880 (Collection_Array_MaterialParam_DestroyStrings, this
+//     file's `kD_Str_18at00` in array_destroy.cpp), called on both the
+//     realloc arm and the shrink-tail arm — read from the disassembly, not
+//     assumed from kSpec_StringRef's shape.
+// MemAlloc's align argument is 8 (`MOV EDX,8` at 0x1800617d9).
+void AssignStringPlus16(uint8_t* d, const uint8_t* s) {
+    AssignStringRef(d, s);                        // +0x00: String* ref
+    std::memcpy(d + 0x08, s + 0x08, 0x10);         // +0x08..+0x17: raw copy
+}
+void InitZero18(uint8_t* d) {
+    std::memset(d, 0, 0x18);
+}
+// Reached by ADDRESS, not a direct call into array_destroy.cpp's translation
+// unit — same door DestroyStringRange/DestroyVertexElement already use, so a
+// caller elsewhere in the tree that registers 0x180005880 differently is
+// picked up here too.
+void DestroyMaterialParamStrings(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180005880));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_MaterialParam = {           // 0x1800616c0
+    "Array<Material::Parameter>", 0x18, 8, &AssignStringPlus16, &InitZero18,
+    &DestroyMaterialParamStrings, false,
     /*assign unwritten*/ 0,    0,
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x00, 0x08 };
@@ -1870,6 +1915,10 @@ J1_ENTRY(18002a930)   // IO:          Persistence's save-list Array<T>
 // `~Array`, and freeing a buffer does not need to know what is in it — the
 // reason stated at the top of this section for why J1 has no parameters.
 J1_ENTRY(18000c4a0)   // Audio:       Audio::Stream's +0x30 Array<T>
+// Cutover closure batch 2 (2026-09-12): 0x180051ef0 has no element-destroy
+// CALL at all — just the allocator Enter/Free/Leave triple and the two zero
+// stores. Same J1 body, no new spec.
+J1_ENTRY(180051ef0)   // Audio:       EffectSlot-adjacent Array<T>, trivial T
 
 #undef J1_ENTRY
 
@@ -1998,6 +2047,9 @@ J3_ENTRY2(18002c6a0, kSpec_ExtArrayElem) // Object: External::_refs, the depende
 // WAVE 27 LANE FRONTIER - the array ?Serialize@StringTable@UI@@ resizes on the
 // read path. Two-argument, read from the body (see kSpec_StringPair10).
 J3_ENTRY2(180078c90, kSpec_StringPair10) // UI: StringTable's TextEntry array
+// Cutover closure batch 2 (2026-09-12): Graphics::Material::_parameters,
+// ~MaterialInstance's array's sibling SetSize.
+J3_ENTRY2(1800616c0, kSpec_MaterialParam) // Graphics: Material::_parameters
 
 #undef J3_ENTRY2
 
@@ -2089,6 +2141,7 @@ J3_ENTRY3(180078520, kSpec_SpriteDraw)  // UI:          Array<SpriteDraw> append
 // the script and both runs are in docs/runtime_port/WAVE10_LANE_UI3.md §2.
 J3_ENTRY3(180076250, kSpec_Node18)      // UI:          DialogInstance::_timers append
 J3_ENTRY3(180076370, kSpec_Fill8Z)      // UI:          DialogInstance::_controllers append
+J3_ENTRY3(180051aa0, kSpec_Fill16A4)    // Graphics:    ParticleSystem::AddEmitter's emitter array
 
 #undef J3_ENTRY3
 
@@ -2222,6 +2275,7 @@ void RtCollectionPortInit() {
     // call site is not attendance, and neither has been watched running.
     RegisterRuntimeAddr(0x18002a930, (void*)&RtColl_ArrayDtor_18002a930);
     RegisterRuntimeAddr(0x18000c4a0, (void*)&RtColl_ArrayDtor_18000c4a0);
+    RegisterRuntimeAddr(0x180051ef0, (void*)&RtColl_ArrayDtor_180051ef0);
 
     // ---- J3: SetSize, trivially-copyable elements --------------------------
     RegisterRuntimeAddr(0x180008b90, (void*)&RtColl_ArraySetSize_180008b90);
@@ -2250,6 +2304,7 @@ void RtCollectionPortInit() {
     // WAVE 27 LANE FRONTIER - the read-path resize inside
     // ?Serialize@StringTable@UI@@ (0x18011d9b7), ported in the same commit.
     RegisterRuntimeAddr(0x180078c90, (void*)&RtColl_ArraySetSize_180078c90);
+    RegisterRuntimeAddr(0x1800616c0, (void*)&RtColl_ArraySetSize_1800616c0);
     // Wave 26 lane INT33 — Array<SpriteSheet::SpriteInfo>::SetSize, the
     // two-argument form. NON-TRIVIAL, and registered HERE rather than behind
     // BANISHED_RT_ARRAY_NONTRIVIAL, for the same reason 0x180034860 and
@@ -2309,6 +2364,7 @@ void RtCollectionPortInit() {
     // its negative control are in the J3 table's note.
     RegisterRuntimeAddr(0x180076250, (void*)&RtColl_ArraySetSizeFill_180076250);
     RegisterRuntimeAddr(0x180076370, (void*)&RtColl_ArraySetSizeFill_180076370);
+    RegisterRuntimeAddr(0x180051aa0, (void*)&RtColl_ArraySetSizeFill_180051aa0);
     // 0x180011010, 0x180010ab0 and 0x1800419b0 are NOT registered here: all
     // three belong to runtime/src/collection/array_destroy.cpp, which already
     // registered 0x180010ab0 and, in this same commit, registers the other two
