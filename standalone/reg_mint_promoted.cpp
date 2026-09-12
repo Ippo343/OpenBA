@@ -1161,6 +1161,175 @@ int RtMintRegisterPromotedRows() {
     }
 
     // ========================================================================
+    // WAVE 25 LANE VTGFX — ??_7MaterialInstance@Graphics@@6B@
+    // ========================================================================
+    //
+    // THE FIRST GRAPHICS VTABLE PROMOTED. It is the ONLY one of the eight
+    // Graphics `??_7` gap rows for which a promotion can change a dispatch,
+    // and the sorting axis that says so is the PURECALL COUNT, not the
+    // readiness screen (WAVE23_LANE_GFXVT.md §0: readiness and value are
+    // ANTI-CORRELATED here). Re-derived this lane from the shipped bytes with
+    // tools/vtable_dump.py, whose `_purecall` control printed FOUND:
+    //
+    //   AnimationEvent  9 slots, 5 purecall -> ABSTRACT, 4/4 COMPLETE, NO-OP
+    //   Geometry        9 slots, 3 purecall -> ABSTRACT, 6/6 COMPLETE, NO-OP
+    //   MaterialInstance 9 slots, 0 purecall -> CONCRETE, 9/9 COMPLETE  <- this
+    //   the other five  incomplete (1 to 6 slots short)
+    //
+    // A class with a pure virtual cannot be instantiated, so its table is only
+    // ever a base-ctor window that the derived ctor overwrites one statement
+    // later. MaterialInstance has NO pure virtual, is LEAF in Graphics, and
+    // its table IS a live object's final vptr.
+    //
+    // WHAT CHANGED SINCE WAVE 23 REFUSED IT. GFXVT's stated blocker was
+    // "blocked, 4 slots short" and nothing else; its cutover verdict was
+    // already REQUIRED. Wave 24 lane GFXMAT ported those four
+    // (runtime/src/graphics/wave24_lane_gfxmat.cpp: Serialize, Reconstruct,
+    // Destruct, Construct) and left the row COMPLETE and deliberately
+    // unpromoted, with an explicit residual (WAVE24_LANE_GFXMAT.md §7 R1)
+    // naming the promotion as the next step. All nine slot registrations were
+    // re-verified BY LITERAL this lane, one grep per slot:
+    //   slot 0 0x180002d60  runtime/src/object/deleting_dtor.cpp:844  (ADDR)
+    //   slots 1,2,3         runtime/src/graphics/graphics_typeinfo_accessors.cpp
+    //   slot 4              runtime/src/object/external.cpp:741 (shared Compile)
+    //   slots 5,6,7,8       runtime/src/graphics/wave24_lane_gfxmat.cpp:791-797
+    // and every one of those *_PortInit() runs BEFORE RtDataMintInit()
+    // (resolve_standalone.cpp:318-406), so the mint fills all nine from the
+    // live registry. TRAP=0 is not assumed — see the runtime guard below.
+    //
+    // STAMPER CENSUS, re-run this lane (tools/mint_stamper_census.py, decoder
+    // controls 3 of 3, ownership pos+neg green):
+    //
+    //   ??_7MaterialInstance@Graphics@@6B@  10 stampers, 5 OURS-CAPABLE,
+    //                                        5 retail, 0 unattributed
+    //
+    // **That is 3 -> 5 since Wave 23**, and the two new ones are GFXMAT's own
+    // Reconstruct and the slot-0 deleting dtor. `ours-capable` is an UPPER
+    // BOUND (a registration is a door, not a guarantee), so the honest reading
+    // is: SOME MaterialInstance objects will carry our table and some will
+    // carry retail's, because retail's five stampers are in-DLL and are not
+    // doors. Both tables are semantically the same nine methods; a mixed
+    // population is not a hazard, it is a coverage limit.
+    //
+    // ATTENDANCE IS MEASURED, NOT ASSUMED — and the measurement already
+    // existed in the tree (reference_grep_the_harness_before_declaring_no_route).
+    // standalone/wave17_door_attend.cpp watches this exact symbol, and Wave 17
+    // lane CEIL's recorded runs read, with the MainLoop control GREEN in both:
+    //     docs/runtime_port/wave17_lane_ceil/attend_load.txt:49
+    //        ATTENDED init=0 post=1   ??_7MaterialInstance@Graphics@@6B@
+    //     docs/runtime_port/wave17_lane_ceil/attend_save.txt:49
+    //        ATTENDED init=0 post=1   ??_7MaterialInstance@Graphics@@6B@
+    //     docs/runtime_port/wave17_lane_ceil/attend_mods.txt:49
+    //        never    init=0 post=0   (the mods route does not reach it)
+    // `post` counts DOOR OPENS, not dispatches, and post==1 is NOT "ran once"
+    // — every consumer caches in a function-local static. So what this proves
+    // is that a consumer of this symbol RAN on the save and load routes. The
+    // consumers are exactly four, all re-grepped this lane:
+    //   runtime/src/graphics/renderer.cpp:561       our ported ctor's stamp
+    //   runtime/src/graphics/wave24_lane_gfxmat.cpp:244  Construct/Reconstruct
+    //   runtime/src/save/saveload_draw.cpp:373/560  the SaveLoad thumbnail stamp
+    //   standalone/wave17_door_attend.cpp           the instrument itself
+    // It does NOT prove a slot body was dispatched. That is a separate tier and
+    // it is NOT claimed here (§ "what this does not claim", below).
+    //
+    // THE CONSUMER THAT MADE ??_7Geometry@ HARMFUL DOES NOT APPLY HERE, and it
+    // was checked rather than assumed, because it is the one failure mode that
+    // has actually bitten a Graphics vtable promotion in this tree. Geometry is
+    // HARMFUL because code/Game/Component/statusicon_geometry.cpp COPIES slots
+    // out of the stamped table with a fixed bound. MaterialInstance has the
+    // same shape of consumer — code/Game/Dialog/thumb_vtables.cpp builds the
+    // four dialogs' thumbnail vtable by copying out of whatever the Runtime
+    // ctor installed — and it is WIDTH-CORRECT:
+    //     thumb_vtables.cpp:38   constexpr int kSlots = 9;
+    //     thumb_vtables.cpp:74   for (int i = 1; i < kSlots; i++) ...
+    //     rt_data_mint_tables.inc:1197  static void* kVTable38[9];
+    // 9 against 9, copying indices 1..8. No overrun exists in either direction,
+    // which is precisely the fact that is false for Geometry.
+    //
+    // NO CONSUMER READS THIS SYMBOL AS AN IDENTITY TOKEN. Grepped across
+    // runtime/ code/ standalone/ engine/ dx11/: the four consumers above all
+    // STAMP the pointer; none compares an object's vptr against it. That is the
+    // `standalone/scene_watch.cpp` shape that makes ?AddDrawItems@MeshInstance@
+    // permanently HARMFUL, and it is absent here.
+    //
+    // THE RUNTIME SELF-REFUSAL, and why it is new. A promoted vtable's slots
+    // are filled from the LIVE port registry at RtDataMintInit(). Three wave
+    // kill switches can empty this row's slots at runtime —
+    // BANISHED_RT_GRAPHICS=0, BANISHED_RT_GFXTI=0, BANISHED_RT_GFXMAT=0 — and
+    // the promotion would then publish a table of named abort traps into live
+    // objects. The build is clean and links; kickoff §3.6 says exactly that a
+    // build check cannot see this. RtMintVtableTrapCount() (added this lane,
+    // standalone/rt_data_mint.cpp) answers it, and the row refuses ITSELF
+    // rather than trusting the A/B operator. The five vtables promoted in
+    // Waves 19-20 carry the same exposure unguarded; extending this guard to
+    // them is a SWEEP-sized change and is NOT made here (§ addressee below).
+    //
+    // A/B CONTROL: BANISHED_RT_PROMOTE_MATINST=0 turns THIS ROW off and
+    // nothing else, following the ??_7BinaryFileStream@ precedent above, so a
+    // comparison has ONE variable rather than the file-wide
+    // BANISHED_RT_MINT_PROMOTED=0.
+    //
+    // WHAT THIS PROMOTION DOES **NOT** CLAIM — stated before anyone reads a
+    // green line as coverage:
+    //   * NO LANE-VTGFX GAME RUN HAPPENED. Wave 25 gave this lane no
+    //     game-directory lock by design (kickoff §1d). The attendance above is
+    //     Wave 17's, on a Wave 17 tree; it establishes the ROUTE exists, not
+    //     that it still runs identically today.
+    //   * NO SLOT BODY IS VERIFIED BY THIS. GFXMAT's synthetic differential
+    //     oracle (tools/gfxmat24_probe/, 5 of 6 controls CAUGHT) covers
+    //     Serialize/Construct/Reconstruct/Destruct against the SHIPPED export;
+    //     slots 1,2,3 (Type/TypeName/GetFileVersion) and slot 4 (the shared
+    //     Compile@External) are covered by neither this promotion nor that
+    //     probe.
+    //   * `Graphics::MaterialInstance::RenderTextures` measured
+    //     worked=201,103 / calls=0 / divergences=0 (Wave 24 lane DIFF). NO
+    //     EXISTING MaterialInstance GREEN MAY BE READ AS COVERAGE OF THIS ROW.
+    //   * A PERMANENT +0x00 DIVERGENCE IS THE PROMOTION'S SIGNATURE, NOT A
+    //     REGRESSION. renderer.cpp's ctor and gfxmat's Construct[ORACLE] both
+    //     byte-compare against retail; a promoted table makes the vptr differ
+    //     by construction. GFXMAT wrote the Construct oracle to score the vptr
+    //     on its OWN screen precisely so this shows as a pointer move
+    //     (reference_a_control_can_corrupt_a_byte_that_should_not_be_compared).
+    //
+    // ADDRESSEE for the two things this lane could not do:
+    //   [SCOPE: DLL-PRESENT] [ADDRESSEE: WAVE 25 lane SWEEP, which holds the
+    //   second game-directory slot] — run one autostart boot with
+    //   `BANISHED_W17_ATTEND=1 BANISHED_RT_DIFF=1` and a second with
+    //   `BANISHED_RT_PROMOTE_MATINST=0`, and report (a) that this row still
+    //   reads ATTENDED, (b) the `Graphics::MaterialInstance::Construct[ORACLE]`
+    //   vptr screen, which must move and only move, (c) whether any slot body
+    //   records calls>0, which is the dispatch evidence nobody has yet.
+    //   [SCOPE: DLL-PRESENT] [ADDRESSEE: WAVE 25 lane SWEEP] — extend the
+    //   RtMintVtableTrapCount() self-refusal to the five vtables promoted in
+    //   Waves 19-20, which have the identical exposure and no guard.
+    {
+        const char* off = getenv("BANISHED_RT_PROMOTE_MATINST");
+        const int traps = RtMintVtableTrapCount("??_7MaterialInstance@Graphics@@6B@");
+        if (off && strcmp(off, "0") == 0) {
+            printf("[RtMint] BANISHED_RT_PROMOTE_MATINST=0 -- "
+                   "??_7MaterialInstance@Graphics@@6B@ left on the DLL (A/B control)\n");
+        } else if (traps != 0) {
+            // traps < 0 means "not a minted vtable row", which is a DIFFERENT
+            // failure from "has traps" and must not read as a green light.
+            fprintf(stderr,
+                    "[RtMint] REFUSING to promote ??_7MaterialInstance@Graphics@@6B@: "
+                    "RtMintVtableTrapCount()=%d (expected 0). %s Publishing this "
+                    "table would put named abort traps in a live object's vptr. "
+                    "The row stays on the DLL.\n",
+                    traps,
+                    traps < 0 ? "The symbol is not a minted VTABLE row at all."
+                              : "A wave kill switch (BANISHED_RT_GRAPHICS / "
+                                "BANISHED_RT_GFXTI / BANISHED_RT_GFXMAT) has "
+                                "suppressed at least one slot's registration.");
+            fflush(stderr);
+        } else {
+            st = RtMintPromotionStorage("??_7MaterialInstance@Graphics@@6B@", 0x1801545e0ull);
+            RegisterRuntimeExport("??_7MaterialInstance@Graphics@@6B@", st);
+            RegisterRuntimeAddr(0x1801545e0ull, st); ++n;
+        }
+    }
+
+    // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted
     // ========================================================================
     //

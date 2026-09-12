@@ -88,6 +88,20 @@ void* RtMintPromotionStorage(const char* symbol, unsigned long long expectVa);
 // True once RtMintPromotionStorage has accepted this symbol.
 bool RtMintRowIsPromoted(const char* symbol);
 
+// WAVE 25 lane VTGFX. How many slots of the minted VTABLE row `symbol` the
+// mint had to fill with a named abort trap because no port was registered by
+// the time RtDataMintInit() ran. Valid only AFTER RtDataMintInit().
+//
+//   >= 0   a minted vtable row; 0 means every non-purecall slot is ours
+//   -1     `symbol` is not a minted VTABLE row at all -- which is NOT the
+//          same answer as "zero traps", and a caller that conflates the two
+//          would read a typo as a green light.
+//
+// A promotion is expected to consult this and REFUSE ITSELF rather than
+// publish a trap table, because a wave kill switch (BANISHED_RT_GRAPHICS=0
+// and friends) empties slots at runtime and no build check can see it.
+int RtMintVtableTrapCount(const char* symbol);
+
 // True once RtMintRegisterRow has registered this symbol — i.e. it was ARMED
 // for measurement (BANISHED_RT_MINT_ROWS or a direct call) rather than promoted.
 // The readiness report prints armed rows for the same reason it prints promoted
