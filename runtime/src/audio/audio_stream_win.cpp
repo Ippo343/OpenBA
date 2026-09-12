@@ -131,12 +131,25 @@
 // 0x18000c4a0 is a heap-buffer release: `if (this[0]) { lock;
 // Free(*0x1801fc718, this[0]); unlock; } this[0] = 0; this[1] = 0;` — i.e. the
 // lock/Free/unlock triple that IS `?MemFree@MemoryAllocator@System@@`, plus a
-// two-qword clear. It is NOT ported (no hits for 0x18000c4a0 in the tree), so it
-// is reached BY ADDRESS through `ResolveAddr`, which consults the port registry
-// first and today falls through to the DLL — exactly the documented shape for an
-// unported neighbour, and the same shape the `deleting_dtor.cpp` family's
-// unported callees already have. NOT re-implemented here: it is 0x18 bytes of
-// somebody else's object and this lane has no witness for what lives at +0x30.
+// two-qword clear. It is reached BY ADDRESS through `ResolveAddr`, which
+// consults the port registry first.
+//
+// *** WAVE 25 LANE INTERNAL42 CORRECTION, left in place rather than deleted so
+// the next reader sees which half was wrong. *** This banner used to end: "NOT
+// re-implemented here: it is 0x18 bytes of somebody else's object and this lane
+// has no witness for what lives at +0x30." The observation was right and the
+// inference was wrong, which is the DEPENDENCY-SHAPED blocker class Wave 24
+// measured false 5 times in 9. 0x18000c4a0 is byte-for-byte
+// `Collection::Array<T>::~Array` — the J1 body already ported seventeen times
+// in runtime/src/collection/array.cpp — proved by an address-normalised diff
+// against the canonical 0x180004890 with the J2 body as a negative control.
+// Freeing a buffer does not need a witness for what is in it; that is exactly
+// why J1 takes no stride and no parameters at all.
+//
+// It is now REGISTERED (array.cpp, the eighteenth/nineteenth J1 addresses), so
+// the `ResolveAddr` below reaches OUR body. Nothing in this file changed: the
+// call site was already a door, and a door is what made the port reachable
+// without touching its caller.
 //
 // ---------------------------------------------------------------------------
 // ??_7Stream@Audio@@6B@ (0x180154950) IS NOT MINTED, AND THAT IS DELIBERATE
@@ -310,9 +323,9 @@ void ThreadDtor(void* self) {
     if (fn) fn(self);
 }
 
-// 0x18000c4a0 — the unexported +0x30 heap-buffer release. UNPORTED; reached by
-// address so the registry gets first refusal and it falls through to the DLL
-// today. See the banner for why it is not reimplemented here.
+// 0x18000c4a0 — the +0x30 `Collection::Array<T>::~Array`. PORTED (Wave 25 lane
+// INTERNAL42, array.cpp's J1 family); reached by address so the registry gets
+// first refusal and now answers with our body. See the banner.
 void ReleaseField30Buffer(void* p) {
     using Fn = void (*)(void*);
     static Fn fn = nullptr;

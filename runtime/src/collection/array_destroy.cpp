@@ -270,6 +270,20 @@ constexpr DestroySpec kD_Str_48 = { "String @+0x000, stride 0x048", 0x048, 1, { 
 constexpr DestroySpec kD_Str_18 = { "String @+0x010, stride 0x018", 0x018, 1, { 0x010 } };
 constexpr DestroySpec kD_Str2_38 = { "2 Strings @+0x008,+0x000, stride 0x038", 0x038, 2, { 0x008, 0x000 } };
 
+// ---- WAVE 25 LANE INTERNAL42: two more Body-B rows -------------------------
+// Both read out of their own helper's disassembly. The helpers walk a POINTER
+// rather than indexing (`LEA RBX,[RDX+off]` ... `ADD RBX,stride`), which is the
+// same body as 0x180011010's indexed form with a non-zero offset; the loop
+// shape differs, the rule does not.
+//   0x18002afc0  LEA RBX,[RDX+0x08] ... ADD RBX,0x10   -> stride 0x10, off 0x08
+//   0x180039640  LEA RBX,[RDX+0x08] ... ADD RBX,0x10   -> the SAME row
+//   0x180039580  LEA RBX,[RDX+0x18] ... ADD RBX,0x20   -> stride 0x20, off 0x18
+// kD_Str_10 is stride 0x10 at offset 0x00 and is NOT these: the suffix in these
+// names is the STRIDE, so a row at the same stride and a different offset needs
+// its own name or the next reader reuses the wrong one.
+constexpr DestroySpec kD_Str_10at08 = { "String @+0x008, stride 0x010", 0x010, 1, { 0x008 } };
+constexpr DestroySpec kD_Str_20at18 = { "String @+0x018, stride 0x020", 0x020, 1, { 0x018 } };
+
 // ---------------------------------------------------------------------------
 // Compile-time checks on the transcription.
 //
@@ -594,6 +608,25 @@ J2_ENTRY(180033880, ReleaseStringsCounted,  kD_Str_18)       // CALL 0x180034440
 J2_ENTRY(1800416d0, FreeInnerArraysCounted, kD_InnerArr_18)  // CALL 0x1800419b0  Body A
 J2_ENTRY(180073c90, FreeInnerArraysCounted, kD_InnerArr_48)  // CALL 0x180074100  Body A
 
+// ---- WAVE 25 LANE INTERNAL42: three more J2 addresses ----------------------
+//
+// *** THE TRAP THESE THREE CARRY, AND IT NEARLY COST TWO WRONG SPECS. ***
+// Wave 23 established by address-normalised opcode hash that
+//     0x18002ac40 == 0x180039280 == 0x180039360
+// are ONE body, 127 bytes, hash 089ee8. That is true, and it does NOT mean they
+// take the same DestroySpec. An address-normalised hash erases the rel32 field
+// of the `CALL helper` at the top — which is the ONLY thing that distinguishes
+// a J2 entry from its siblings. Read by filtering each body's own CALLs:
+//     0x18002ac40 -> CALL 0x18002afc0   stride 0x10, String at +0x08
+//     0x180039360 -> CALL 0x180039640   stride 0x10, String at +0x08  (same row)
+//     0x180039280 -> CALL 0x180039580   stride 0x20, String at +0x18  (DIFFERENT)
+// So "byte-identical" here means "identical except for the one operand that
+// decides the answer". Taking the hash as authority would have run a
+// stride-0x20 array at stride 0x10 and walked off the end of the buffer.
+J2_ENTRY(18002ac40, ReleaseStringsCounted,  kD_Str_10at08)   // CALL 0x18002afc0  Body B
+J2_ENTRY(180039360, ReleaseStringsCounted,  kD_Str_10at08)   // CALL 0x180039640  Body B
+J2_ENTRY(180039280, ReleaseStringsCounted,  kD_Str_20at18)   // CALL 0x180039580  Body B
+
 #undef J2_ENTRY
 
 // ---- 0x18005bf60 / 0x18005c550: the one that is NEITHER body ---------------
@@ -905,6 +938,11 @@ void RtCollectionDestroyPortInit() {
     RegisterRuntimeAddr(0x1800416d0, (void*)&RtColl_ArrayDtorElem_1800416d0);
     RegisterRuntimeAddr(0x18005bf60, (void*)&RtColl_ArrayDtorElem_18005bf60);
     RegisterRuntimeAddr(0x180073c90, (void*)&RtColl_ArrayDtorElem_180073c90);
+    // Wave 25 lane INTERNAL42 — see the banner above these three for why one
+    // opcode hash covers all three bodies and three specs do not.
+    RegisterRuntimeAddr(0x18002ac40, (void*)&RtColl_ArrayDtorElem_18002ac40);
+    RegisterRuntimeAddr(0x180039360, (void*)&RtColl_ArrayDtorElem_180039360);
+    RegisterRuntimeAddr(0x180039280, (void*)&RtColl_ArrayDtorElem_180039280);
 
     // ---- J2b -------------------------------------------------------------
     RegisterRuntimeAddr(0x18001c8c0, (void*)&RtColl_ArrayDtorEhVec_18001c8c0);

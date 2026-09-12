@@ -337,6 +337,16 @@ void Assign28(uint8_t* d, const uint8_t* s) {
         reinterpret_cast<uint64_t*>(d)[k] = reinterpret_cast<const uint64_t*>(s)[k];
 }
 
+// WAVE 25 LANE INTERNAL42 — 0x18002a810, the Persistence block directory.
+// The copy at 0x18002a89d..0x18002a8b2 is THREE plain dword moves at +0x00,
+// +0x04 and +0x08, written out longhand by MSVC rather than looped. Stride is
+// `LEA RCX,[RAX+RAX*2]; SHL RCX,2` = 0xc, so the element is exactly the three
+// dwords and there is no tail padding for a fourth store to hide in.
+void Assign12(uint8_t* d, const uint8_t* s) {
+    for (int k = 0; k < 3; ++k)
+        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
+}
+
 void InitZero8(uint8_t* d) { *reinterpret_cast<uint64_t*>(d) = 0; }
 // 0x18007b960's `else` arm is `MOV dword ptr [RDX],0xffffffff`.
 void InitNeg1 (uint8_t* d) { *reinterpret_cast<int32_t*>(d) = -1; }
@@ -873,6 +883,21 @@ const ArraySpec kSpec_Node18 = {                  // 0x18005fb00  Array<Scene::N
 const ArraySpec kSpec_PtrZero = {                 // 0x180008d60, 0x1800764c0
     "Array<InternalPtr>", 8, 8, &Assign8Z, &InitZero8, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
+// WAVE 25 LANE INTERNAL42 — 0x18002a810, the Persistence worker's block
+// directory ({id, offset, size}, three dwords). A NEW ROW, and the reason is
+// the same one kSpec_U64ZeroA4 was written for: it is close to several existing
+// rows and identical to none. Read out of the body, not out of the caller:
+//   stride 0xc   LEA RCX,[RAX+RAX*2] ; SHL RCX,0x2   at 0x18002a863
+//   align  4     MOV EDX,0x4                         at 0x18002a86b
+//   assign       three dword moves                   at 0x18002a89d
+//   init         NONE — the else arm of the copy loop is empty, so the new
+//                tail is left UNINITIALISED (`JGE 0x18002a8b3` past it)
+//   destroy      NONE — retail frees the old buffer and destroys nothing
+const ArraySpec kSpec_Blk12 = {                   // 0x18002a810
+    "Array<{id,offset,size}>", 0xc, 4, &Assign12,
+    nullptr,   // NEW TAIL LEFT UNINITIALISED
+    nullptr, true, 0, 0, 0, 0, 0, 0 };
+
 const ArraySpec kSpec_Transform = {               // 0x180059140  Array<Transform>
     "Array<Transform>", 0x1c, 4, &Assign1c, &InitIdentityTransform, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
@@ -1401,6 +1426,38 @@ J1_ENTRY(180039440)   // UI:          reached from ?AddController@DialogInstance
 J1_ENTRY(1800249c0)   // IO:          CompressedStream::_headers (+0x40), Array<Header>
 J1_ENTRY(1800248e0)   // IO:          CompressedStream::_windows (+0x30), Array<Window>
 
+// ---- WAVE 25 LANE INTERNAL42: the eighteenth and nineteenth ----------------
+// Both proved by an ADDRESS-NORMALISED identity check against the canonical
+// body at 0x180004890, not by eye and not by a raw byte diff:
+//
+//     tools-side probe: read 0x73 bytes at each address, diff against the
+//     canonical, and require (a) every differing byte to fall inside one of the
+//     five 4-byte displacement fields and (b) all five RESOLVED absolute
+//     targets to be equal. Raw diffs were 15/115 and 13/115 bytes — i.e. a raw
+//     byte diff of two copies of ONE function says "13% different", because
+//     every rel32/RIP field encodes a DISTANCE
+//     (reference_position_only_diffs_hide_one_body.md).
+//
+//     Resolved targets, identical in all three:
+//         0x1801fc718 (allocator singleton)  0x18014b390 (EnterCriticalSection)
+//         0x1800c6c00 (Free)                 0x18014b388 (LeaveCriticalSection)
+//
+//     NEGATIVE CONTROL, in-population: the J2 body 0x18002ac40 — same family,
+//     one extra element-destroy CALL at the top — pushed through the SAME check
+//     reports 63 differing bytes OUTSIDE the displacement fields and unequal
+//     targets. Without it, "IDENTICAL" would have been a screen that passes
+//     everything in this neighbourhood.
+J1_ENTRY(18002a930)   // IO:          Persistence's save-list Array<T>
+// 0x18000c4a0 was recorded by Wave 24 lane SMALLBODY as "a heap-buffer release
+// ... NOT re-implemented here: it is 0x18 bytes of somebody else's object and
+// this lane has no witness for what lives at +0x30". That blocker is
+// DEPENDENCY-SHAPED and it is FALSE, which is the class Wave 24 measured at 5
+// of 9 (WAVE25_KICKOFF §1a). The body does not need a witness for +0x30,
+// because it is not a bespoke release at all: it is byte-for-byte this family's
+// `~Array`, and freeing a buffer does not need to know what is in it — the
+// reason stated at the top of this section for why J1 has no parameters.
+J1_ENTRY(18000c4a0)   // Audio:       Audio::Stream's +0x30 Array<T>
+
 #undef J1_ENTRY
 
 // 0x18001cdf0 — `Array<int32>::operator=`. Body and evidence above.
@@ -1471,6 +1528,48 @@ J3_ENTRY2(180029630, kSpec_Bool)        // IO:          Array<bool>,  tail UNINI
 // (`MOV [RDX],R10` with R10 == 0), but align 4 — see kSpec_U64ZeroA4 above.
 J3_ENTRY2(180024d70, kSpec_U64ZeroA4)   // IO:          Array<CompressedStream::Header>
 J3_ENTRY2(180024c10, kSpec_Window)      // IO:          Array<CompressedStream::Window>
+// ---- WAVE 25 LANE INTERNAL42: Wave 24 lane INTERNAL8's declared debt --------
+// Both of these became census rows because INTERNAL8's faithful port of the
+// Persistence worker reached them by address; that lane declared the +2 rather
+// than hiding it, and named its addressee. This is that addressee.
+//
+// Each spec is read out of ITS OWN body, and the two differ in every field that
+// matters, so neither could have been inferred from the other:
+//   0x18002a9d0  SHL RCX,0x3 / MOV EDX,0x8, copy is one qword move, and the
+//                copy loop's else arm is empty -> stride 8, align 8, tail
+//                UNINITIALISED. That is kSpec_Fill8 exactly, so it is REUSED
+//                rather than duplicated. NOT kSpec_PtrZero: this body has no
+//                zero-first store and no init arm.
+//   0x18002a810  LEA RCX,[RAX+RAX*2] / SHL RCX,0x2 / MOV EDX,0x4, copy is three
+//                dword moves -> stride 0xc, align 4, tail UNINITIALISED. No
+//                existing row has stride 0xc; see kSpec_Blk12 above.
+J3_ENTRY2(18002a9d0, kSpec_Fill8)       // IO:          Persistence blockPtr Array<void*>
+J3_ENTRY2(18002a810, kSpec_Blk12)       // IO:          Persistence block directory
+// ---- WAVE 25 LANE INTERNAL42: the two UI ExternalPtr arrays ----------------
+// Wave 23 recorded 0x18002f070 and 0x1800492d0 as byte-identical (address-
+// normalised hash 4645ec). Unlike the J2 trio in array_destroy.cpp, that
+// identity IS load-bearing HERE, and the difference is worth stating because it
+// is the same hash property read two ways: a SetSize body's stride, alignment
+// and element ops are IMMEDIATES and opcodes, which an address-normalised hash
+// preserves; a J2 body's spec lives in the rel32 of a CALL, which it erases. So
+// the hash binds these two and not those three.
+// Re-derived from the bodies anyway rather than taken from the hash:
+//   SHL RCX,0x3 / MOV EDX,0x8                -> stride 8, align 8
+//   MOV RAX,[RSI+RCX*8] / MOV [RDX],RAX      -> a PLAIN qword copy, so Assign8
+//                                               and NOT Assign8Z: there is no
+//                                               zero-first store in either body
+//   MOV [RDX],R10 with R10 = 0               -> the new tail IS ZEROED
+// which is kSpec_U64Zero exactly. Reused, not duplicated.
+J3_ENTRY2(18002f070, kSpec_U64Zero)     // UI:          Array<ExternalPtr<External>>
+J3_ENTRY2(1800492d0, kSpec_U64Zero)     // UI:          Array<ExternalPtr<ElementDescription>>
+// 0x180005110 — Array<ExternalPtr<Goal>>, a door Wave 23's Achievement lane
+// opened. Same three reads off its own body (SHL 3 / MOV EDX,8 / plain qword
+// copy / `MOV [RDX],R10` with R10 zero), so the same row. Named here as an
+// ExternalPtr array and given kSpec_U64Zero rather than kSpec_PtrZero, because
+// the ELEMENT TYPE does not decide the spec: 0x180008d60's ExternalPtr array
+// really does store a zero first and this one does not, and only the body says
+// which.
+J3_ENTRY2(180005110, kSpec_U64Zero)     // Achievement: Array<ExternalPtr<Goal>>
 
 #undef J3_ENTRY2
 
@@ -1673,6 +1772,15 @@ void RtCollectionPortInit() {
     // byte identity to the canonical J1 body, and it is stated as such.
     RegisterRuntimeAddr(0x180009460, (void*)&RtColl_ArrayDtor_180009460);
     RegisterRuntimeAddr(0x180039440, (void*)&RtColl_ArrayDtor_180039440);
+    // ---- EIGHTEENTH AND NINETEENTH (Wave 25 lane INTERNAL42) ---------------
+    // The count above says "expect a seventeenth rather than be surprised by
+    // it", and that held: both of these became visible because another lane
+    // ported the caller, which is the caller-driven-survey lower bound working
+    // exactly as lane UIC described it. Both are exercised today —
+    // 0x18002a930 has three call sites in the tree and 0x18000c4a0 one — but a
+    // call site is not attendance, and neither has been watched running.
+    RegisterRuntimeAddr(0x18002a930, (void*)&RtColl_ArrayDtor_18002a930);
+    RegisterRuntimeAddr(0x18000c4a0, (void*)&RtColl_ArrayDtor_18000c4a0);
 
     // ---- J3: SetSize, trivially-copyable elements --------------------------
     RegisterRuntimeAddr(0x180008b90, (void*)&RtColl_ArraySetSize_180008b90);
@@ -1686,6 +1794,12 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180029630, (void*)&RtColl_ArraySetSize_180029630);  // PKG2 4b
     RegisterRuntimeAddr(0x180024d70, (void*)&RtColl_ArraySetSize_180024d70);  // PKG2 4b-ii
     RegisterRuntimeAddr(0x180024c10, (void*)&RtColl_ArraySetSize_180024c10);  // PKG2 4b-ii
+    // Wave 25 lane INTERNAL42: Wave 24 lane INTERNAL8's two declared doors.
+    RegisterRuntimeAddr(0x18002a9d0, (void*)&RtColl_ArraySetSize_18002a9d0);
+    RegisterRuntimeAddr(0x18002a810, (void*)&RtColl_ArraySetSize_18002a810);
+    RegisterRuntimeAddr(0x18002f070, (void*)&RtColl_ArraySetSize_18002f070);
+    RegisterRuntimeAddr(0x1800492d0, (void*)&RtColl_ArraySetSize_1800492d0);
+    RegisterRuntimeAddr(0x180005110, (void*)&RtColl_ArraySetSize_180005110);
     RegisterRuntimeAddr(0x1800298f0, (void*)&RtColl_ArraySetSizeFill_1800298f0);  // PKG2 4c-ii
     RegisterRuntimeAddr(0x18001f990, (void*)&RtColl_ArraySetSizeFill_18001f990);
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
