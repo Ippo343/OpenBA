@@ -117,6 +117,29 @@
 //             `Device::StopPlatform`'s own, from a different body.
 //     +0xaa0  void*  platformChannels[], stride 0x20 -- 0x1800dfbef `SHL RAX,5`
 //
+//   *** CORROBORATED, and the corroboration also EXPLAINS the +0xaa0. ***
+//   WAVE 28 lane SLOTS, working on the unnamed table 0x180157c60 and knowing
+//   nothing of this body, found that Audio::Device embeds 64 instances of an
+//   internal `IXAudio2VoiceCallback` implementer at Device+0xa98, stride 0x20,
+//   with record +0x08 = the source voice, +0x10 = AudioChannel*, +0x18 = the
+//   event Stream::Run signals.  0xa98 + 0x08 = 0xaa0 EXACTLY, so what this body
+//   loads is `record[idx].sourceVoice`, and the stride agrees.
+//
+//   That settles the virtual call below. The object is an IXAudio2SourceVoice,
+//   and vtable offset 0x60 on IXAudio2Voice is the THIRTEENTH method --
+//   GetVoiceDetails, SetOutputVoices, SetEffectChain, EnableEffect,
+//   DisableEffect, GetEffectState, SetEffectParameters, GetEffectParameters,
+//   SetFilterParameters, GetFilterParameters, SetOutputFilterParameters,
+//   GetOutputFilterParameters, SetVolume -- i.e. 12 * 8 = 0x60 is
+//   `SetVolume(float Volume, UINT32 OperationSet)`, and the second argument
+//   this body passes is 0 = XAUDIO2_COMMIT_NOW. The call is named `SetVolumeFn`
+//   below for that reason.
+//
+//   Recorded the way SLOTS recorded its own, and the distinction is deliberate:
+//   the INTERFACE is identified; the internal class that owns the record is
+//   UNIDENTIFIED and its name is not recoverable from the retail file. No name
+//   has been invented for it here.
+//
 //   Audio::SoundEffect
 //     +0x28  int64  total duration in ticks    -- 0x1800df7e0 (and audio.cpp:496
 //                                                 already reads this offset)
@@ -280,12 +303,33 @@ double SecondsPerTick() {
     return slot ? *slot : 0.0;
 }
 
+// The static callback retail stamps into each device slot. Named typedef, NOT
+// an inline `void(*)()` as the first RT_EXPORT_ONCE argument -- see below.
+using OnSoundEndedFn = void (*)(void* audioChannel, void* userData, uint32_t tag);
+
 void* OnSoundEndedThunk() {
     // 0x1800dffe0, stamped into the device slot's +0x20 callback field. It is
     // ?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z (ord
     // 3283) -- a NAME door, so at cutover this follows a port of that function
     // instead of freezing the DLL's address.
-    return reinterpret_cast<void*>(RT_EXPORT_ONCE(void(*)(), "?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z"));
+    //
+    // WHY THE TYPEDEF, and it is not style. This was first written as
+    // `RT_EXPORT_ONCE(void(*)(), "?OnSoundEnded@...")`. It compiled, it worked,
+    // and `tools/runtime_census.py` DID NOT COUNT IT AS A DOOR: the Audio
+    // `called` column moved by 3 when this file adds 4 Audio names, and putting
+    // the type behind a typedef moved it to 4. The census's macro-door scan
+    // (RE_MACRO_DOOR, tools/runtime_census.py:258) has to find the SECOND
+    // argument of the macro, and an inline function-pointer type carries its own
+    // parentheses and commas into the first one.
+    //
+    // So an inline function-pointer type in a macro door is INVISIBLE TO THE
+    // CENSUS, silently. This is the `literal grep blind to variables` family
+    // again, from a new direction. The defect is recorded in
+    // WAVE28_LANE_MISC.md's instrument section and NOT fixed (standing warning
+    // 1); this typedef is the local workaround, kept so the row stays countable.
+    return reinterpret_cast<void*>(
+        RT_EXPORT_ONCE(OnSoundEndedFn,
+                       "?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z"));
 }
 
 // One MT19937 draw, exactly as retail inlines it at 0x1800df992 and 0x1800dfa0c

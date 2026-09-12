@@ -27,6 +27,62 @@ by overstating the work, two by misnaming the obstacle.** §6 is the finding.
 
 ---
 
+## 0a. CENSUS DELTA, ATTRIBUTED ROW BY ROW (warning 5)
+
+**Both halves measured by me, with the same tool, minutes apart.** The base was
+NOT taken from the kickoff: `wave28/base` was materialised into a lane-private
+directory with `git archive` and `tools/runtime_census.py` was run inside it.
+(`git checkout wave28/base` is impossible from a lane worktree — the main
+checkout holds that branch. See §7 defect 5 for the near-miss that taught me to
+do this properly.)
+
+```
+wave28/base   4632   1430 called   1277 ported   89.3%   gap 153
+wave28/misc   4632   1435 called   1284 ported   89.5%   gap 151
+                     ---------     ---------             --------
+                        +5            +7                   -2
+```
+
+**`ported` +7 — every one attributed:**
+
+| Δ | namespace | row | why |
+|---|---|---|---|
+| +1 | UI | `??1StringTable@UI@@UEAA@XZ` | new body, §2.3 |
+| +1 | UI | `??3StringTable@UI@@SAXPEAX@Z` | new body, §2.3 |
+| +1 | Video | `?SetTransformScale@Context@Video@@…` | new body, §2.2 |
+| +1 | System | `?NextGroup@Random@System@@AEAAXXZ` | registration, §2.1 |
+| +1 | Audio | `?Update@Scene@Audio@@…` | new body, §5.1 |
+| +1 | Audio | `?StopEffect@Scene@Audio@@QEAAXI@Z` | **not my port.** It was already ported (Wave 8.5) but had NO CALLER in our tree, so it sat outside `called` and therefore outside `called ∩ ported`. My Audio body calls it. The census moved it out of "Ports with no caller" and into the stale-verdict list in the same run — that exact pair of lines is the diff. |
+| +1 | internal | `0x180050d30` `Array<T16>::operator=` | **not my port either.** Already ported and registered by lane Q; my Audio body calls it BY ADDRESS, and the census buckets address-called rows as `internal`. |
+
+**`called` +5 — every one attributed:**
+
+| Δ | namespace | row | why |
+|---|---|---|---|
+| +1 | Audio | `?GetAttenuatedVolume@Scene@Audio@@…` | new name door; unported, so it ENTERS THE GAP |
+| +1 | Audio | `?PlayPlatform@Device@Audio@@…` | new name door; unported, enters the gap |
+| +1 | Audio | `?OnSoundEnded@Scene@Audio@@…` | new name door; unported, enters the gap |
+| +1 | Audio | `?StopEffect@Scene@Audio@@QEAAXI@Z` | gained a caller (above) |
+| +1 | internal | `0x180050d30` | gained a caller (above) |
+
+All three new Audio callees were checked against the BASE tree before being
+claimed as new: `git grep` on `wave28/base` finds them in `docs/` and
+`notes/` only, in no source file.
+
+**Two things this delta says that the percentage does not.**
+
+1. **Porting one body GREW the cutover surface by three rows.** Three exports
+   that nothing in our tree previously named are now named, unported, and in the
+   gap. That is `reference_porting_can_grow_the_cutover_surface.md` happening
+   again, and it is why the gap fell by only 2 when 5 rows were closed.
+2. **Two of the seven `ported` are not ports.** They are rows that were already
+   ported and were invisible to the census for want of a caller. A reader who
+   takes "+7 ported" as "seven functions written" would be wrong by two, and the
+   honest count of bodies I wrote is **four, plus one registration of a body
+   Wave 2 wrote.**
+
+---
+
 ## 1. ROW-BY-ROW STATUS
 
 | # | Row | Retail | Bytes | Outcome |
@@ -335,6 +391,33 @@ log. So the 799 is gated on the port actually being registered — it is not a
 counter that increments regardless — and the DLL path and our path both reach
 the same gameplay milestones.
 
+#### The single-reader layout got an INDEPENDENT corroboration, from another lane and another body
+
+My `Device` offsets came from one reader and I flagged them as the weakest kind
+of evidence. Lane SLOTS then reported, from a completely different subject (the
+unnamed table `0x180157c60`), that `Audio::Device` embeds **64 instances of an
+internal `IXAudio2VoiceCallback` implementer at `Device+0xa98`, stride `0x20`,
+record `+0x08` = source voice, `+0x10` = `AudioChannel*`, `+0x18` = the event**.
+
+Check that against what I read out of `?Update@Scene@Audio@@` without knowing
+any of it:
+
+| mine, from `0x1800dfbef`/`0x1800dfbf3` | SLOTS, from `0x180157c60` | agree? |
+|---|---|---|
+| table at `+0xaa0`, stride `0x20` | table at `+0xa98`, stride `0x20`, field `+0x08` | **yes — `0xa98 + 0x08 = 0xaa0`, exactly** |
+| the pointer there has a vtable | `+0x08` is the IXAudio2 source voice | yes |
+| I call `vtbl[0x60/8](obj, float, 0)` | — | **`IXAudio2Voice` slot `0x60` is `SetVolume(float, UINT32)`.** Count the interface: GetVoiceDetails, SetOutputVoices, SetEffectChain, EnableEffect, DisableEffect, GetEffectState, SetEffectParameters, GetEffectParameters, SetFilterParameters, GetFilterParameters, SetOutputFilterParameters, GetOutputFilterParameters, **SetVolume** — the 13th, at `12 × 8 = 0x60`. |
+
+So the call my port makes 2031 times per run is
+`IXAudio2Voice::SetVolume(mix, XAUDIO2_COMMIT_NOW)`. Two lanes, two subjects,
+two derivations, one answer — and the second one also explains *why* the offset
+is `0xaa0` and not `0xa98`, which my single reader could not have told me.
+
+Recording it the way SLOTS recorded its own: **the interface is IDENTIFIED
+(`IXAudio2SourceVoice` / `IXAudio2Voice`); the internal class that owns the
+record is UNIDENTIFIED and its name is not recoverable from the retail file.** I
+have not invented one. R2 still stands — a writer still outranks both readers.
+
 **What the 799 does NOT establish, in the file and here:** that the body is
 CORRECT. Nothing compares its output to retail's and nothing can. Lane GFXBODY's
 measurement this wave cuts the other way too — a non-zero attendance is not
@@ -599,6 +682,46 @@ reader of this row lands. `audio.cpp`'s header was left alone — a merge hazard
 for no behavioural gain, and lane PARTSYS made the same call this wave for the
 same reason.
 
+**5. `tools/runtime_census.py:258` (`RE_MACRO_DOOR`) — a macro door whose FIRST
+argument is an inline function-pointer type is INVISIBLE, silently.**
+**Measured, not suspected, and by experiment.** My Audio port adds four Audio
+name doors; the census moved Audio `called` by only 3. The odd one out was
+written `RT_EXPORT_ONCE(void(*)(), "?OnSoundEnded@...")`. Putting that type
+behind a named typedef and changing nothing else moved Audio `called` 34 → 35
+and TOTAL 1434 → 1435. The scan has to find the macro's SECOND argument, and an
+inline function-pointer type carries its own parentheses and commas into the
+first. **Not fixed** (warning 1); worked around locally with a typedef, and the
+reason is written at the call site in `audio_scene_update.cpp`, which is where
+the next person to touch it looks.
+Scope, measured rather than assumed: `grep -rE 'RT_(EXPORT_ONCE|DATA_SLOT)\s*\([^,]*\(\*\)'`
+over `runtime/ code/ standalone/ engine/ dx11/` finds **zero other live sites**
+today. So the defect costs the board nothing right now; its cost is prospective,
+on whoever writes the next one. ADDRESSEE: §8 R7.
+
+**6. `/tmp` is shared between lanes too, and its failure mode is WORSE than the
+scratchpad's — a stale read that SUCCEEDS and returns the number you expected.**
+A NEAR MISS, reported because it nearly entered this document as a measurement.
+I ran `git checkout wave28/base && … && python tools/runtime_census.py >
+/tmp/census_base.txt ; grep … /tmp/census_base.txt`. The checkout FAILED (the
+main checkout holds that branch), so the `&&` chain short-circuited and the
+census never ran — **and the grep still printed `TOTAL 4632 1430 1277 89.3%`,
+because `/tmp/census_base.txt` already existed, written by another lane at
+12:44, before my shell existed.**
+
+It printed the RIGHT number. That is the whole danger: every lane's base
+measurement is the same number, so a stale read of a sibling's file agrees with
+the kickoff perfectly and reads as a clean result. This is
+`reference_a_matching_number_can_match_because_it_is_stale.md` with a new
+mechanism — not a stale figure carried forward in prose, but a stale FILE read
+by a command that never ran. Caught only because the "checkout failed" line was
+sitting above the output.
+
+What cleared it: §0a's baseline was re-derived from scratch in a lane-private
+directory, with `git archive wave28/base` into
+`<scratchpad>/misc/basetree/`, and it happens to agree — which is exactly why
+the miss needed catching rather than shrugging off. **Not fixed**; the
+convention needs the same per-lane namespacing as the scratchpad (§8 R6).
+
 ### 7a. The re-derivation, since it is the only thing that clears a clobber
 
 `<scratchpad>/misc/misc_exp_recheck.py`, run against
@@ -622,13 +745,27 @@ The `UEAA`-vs-`QEAA` question my brief flagged is answered in both directions:
 ### 7b. Build gate — foreground, and checked four ways
 
 ```
-standalone/build/reimpl-x64.exe   33,410,905 bytes   2026-09-12 13:15
+standalone/build/reimpl-x64.exe   33,410,905 bytes   2026-09-12 13:39
 find <my 6 touched sources> -newer <the exe>   ->   EMPTY
 ```
 
 Every build in this lane was FOREGROUND (`make ... > log 2>&1` then `echo $?`),
-never backgrounded. `mingw32-make standalone-debug` exits **0**, including the
-`check-log-strip` gate and `cutover manifest gate: OK (60 rows)`.
+never backgrounded — so the zero-byte-output-with-exit-0 failure lane GFXBODY
+measured cannot be hiding here, and the two lines above confirm it independently.
+`mingw32-make standalone-debug` exits **0**, including the `check-log-strip`
+gate and `cutover manifest gate: OK (60 rows; row set and every disposition
+match a fresh derivation)`.
+
+One non-failing gate line, left deliberately unactioned (R9):
+
+> `GATE WARN: standalone\cutover_manifest.inc is stale in COSMETIC fields only
+> (a by-name door count moved…). Row set and every disposition match, so nothing
+> the process acts on has changed and the build is NOT failed.`
+
+That is my three new Audio name doors moving a count. I did **not** regenerate
+the manifest: Wave 26 defect 4 established that it must be regenerated on the
+MERGED tip (commit `db43287a`), and doing it here would collide with six sibling
+lanes and be redone anyway.
 
 Symbols in the **linked image**, not just the objects:
 
@@ -702,7 +839,45 @@ back to the DLL body that does **not** disturb `audio.cpp`'s sixteen other Audio
 ports. That separation is deliberate and is the whole reason the switch is its
 own.
 
-**R6 — the shared-scratchpad clobber convention.**
+**R6 — the shared-scratchpad clobber convention, and `/tmp` with it.**
 ADDRESSEE: **the Wave 29 kickoff author.** Three lanes lost or risked artefacts
-to it this wave. The fix is one sentence in the standing warnings ("write to
-`<scratchpad>/<lane>/`"); standing warning 1 forbids me building it.
+to it this wave, and §7 defect 6 shows `/tmp` is the same hazard with a nastier
+failure mode (a stale read that succeeds and returns the expected number). The
+fix is one sentence in the standing warnings — "write every intermediate to
+`<scratchpad>/<lane>/`, never to `/tmp` and never to the scratchpad root" —
+plus, for anything a figure will be quoted from, "re-derive it privately".
+Standing warning 1 forbids me building it.
+
+**R7 — `runtime_census.py`'s macro-door scan cannot see an inline
+function-pointer type (§7 defect 5).**
+ADDRESSEE: **the Wave 29 lane that is allowed to touch tooling** — Wave 28
+carried none by rule, and this is a one-line regex change plus a positive-control
+fixture. It costs the board nothing today (zero other live sites, measured), so
+it is not urgent; it is a silent-undercount trap with a known reproduction, which
+is the cheapest kind of instrument bug to fix and the most expensive to
+rediscover. The reproduction is in `audio_scene_update.cpp`'s
+`OnSoundEndedThunk` comment: revert the typedef, re-run the census, watch Audio
+`called` drop by one with no other change.
+
+**R8 — `??_7Stream@Audio@@6B@` slot 2 (`Stream::Run`) is DECLINED, and this is a
+SIZE JUDGEMENT, not a blocker.**
+Lane SLOTS measured it at **1800 bytes** — the XAudio2 streaming thread — and
+declined on size; my brief made it conditional on SLOTS not taking it, and the
+integrator confirmed mid-wave that SLOTS did not. I am declining it for the same
+reason and in the same words: **it is large, not blocked.** I had already spent
+this lane's remaining capacity on `?Update@Scene@Audio@@` (1816 bytes, the
+comparable body) and taking a second one of that size last would have produced
+two half-read bodies instead of one measured one.
+ADDRESSEE: **the same Wave 29 Audio lane named in R2**, which will already be
+inside `Audio::Device` for `?Update@Device@Audio@@` — `Stream::Run` writes the
+event that `Device`'s embedded callback array signals, so the two are one
+subject and should not be split again.
+
+**R9 — `standalone/cutover_manifest.inc` is COSMETICALLY stale on this branch
+and I did not regenerate it.**
+My three new Audio name doors moved a by-name door count. The gate says in its
+own words that the row set and every disposition still match a fresh derivation
+and the build is NOT failed. ADDRESSEE: **the Wave 28 integrator**, per Wave 26
+defect 4 — it is regenerated on the MERGED tip (`db43287a` did exactly that last
+wave), and regenerating it per-lane would collide across seven branches and be
+redone anyway.
