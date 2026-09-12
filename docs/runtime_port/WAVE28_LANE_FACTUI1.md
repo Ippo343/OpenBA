@@ -674,9 +674,35 @@ poison BOTH buffers with DIFFERENT bytes, so the subject is *the bytes either
 side wrote*: a store retail makes that we DROPPED shows up as
 poison-vs-value, and one we make that retail does not shows up as
 value-vs-poison. **Set equality of the written bytes is therefore already
-established for all 27 concrete classes**, which is the property FACTREST had to
-build a new pass (2b) to obtain — and which their pass 2b then showed was true
-on their roster too, pulling in zero extra bytes. What the mismatch corrects is
+established for all 27 concrete classes in THIS slice**, which is the property
+FACTREST had to build a new pass (2b) to obtain.
+
+**The joint claim, scoped by FACTREST rather than by this lane, because a
+flattering summary is the easiest thing to accept.** An earlier draft here said
+their pass 2b "showed the same thing on their roster", which is true and reads
+much wider than it is. Their correction:
+
+```
+full-width byte-set equality, both lanes
+   FACTUI1   27 of 31 concrete classes   (the other 4 are abstract)
+   FACTREST  13 of 35                    (11 shape-(b) + 2 via pass 2b)
+   TOTAL     40 concrete classes
+NOT covered by that claim, on their side
+   10 abstract-in-both-slots rows   -- return-null is a DIFFERENT claim
+    9 video-dependent rows          -- UNVERIFIED, retail's own ctor faults
+    3 wrapper-only rows             -- EXPLICITLY EXCLUDED: both sides call the
+                                       same ctor, so set equality is trivially
+                                       true and says nothing about transcription
+```
+
+That last exclusion is the one worth carrying: **a comparison both sides pass by
+construction is not evidence, and counting it would have inflated the joint
+figure with rows that could not have failed.** It is the shadow-marker shape
+appearing one final time, in the summary rather than in a screen.
+
+This is the one place in the exchange where the two harnesses genuinely
+CORROBORATE rather than agree — different subjects, different constructions,
+same conclusion. What the mismatch corrects is
 a claim never made explicitly before: **pass 3's subject is narrower than passes
 1–2's**, and it is the allocation-path check, not a third full-width comparison.
 
@@ -906,6 +932,15 @@ In that word, per WAVE28_KICKOFF.md §4:
    are green and neither screen can see it.**
    **Addressee: the integrator**, as a sentence attached to the practice
    wherever it is adopted — not as a reason to decline it.
+
+   **AND THE PRACTICE BELONGS IN THE KICKOFF, NOT IN A LANE DOC.** Measured
+   across this wave's two factory lanes: **15 instrument defects, 0 in the
+   ports, 0 found by their own author** — between two lanes each demonstrably
+   capable of finding the other's. Every rule either lane derived came from a
+   defect the *other* lane surfaced. **The mechanism is a PAIRING, not a rule,
+   so no lane can adopt it alone**, and a lane doc is the one place it cannot
+   take effect. It needs to be a wave-level instruction that two lanes with
+   overlapping subjects are assigned to run each other's instruments.
 
    **PARTIALLY DISCHARGED, and the discharge is the useful part.** Both lanes
    then tested the named premise instead of leaving it recorded, and **both
