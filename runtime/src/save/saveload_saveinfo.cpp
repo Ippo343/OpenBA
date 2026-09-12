@@ -1,0 +1,436 @@
+// ============================================================================
+// runtime/src/save/saveload_saveinfo.cpp — Wave 24 lane INTERNAL8
+// ============================================================================
+//
+// Two of the eight real bodies inside the census's 45 `internal` UNKNOWN rows
+// (WAVE23_LANE_INTERNAL.md §4B/B4):
+//
+//   0x1800c3db0   the qsort comparator UpdateList sorts the save list with
+//   0x1800c3de0   Save::SaveLoad::SaveInfo::SetThumbnail(row, px, w, h)
+//
+// Both were already fully DESCRIBED by our own tree — saveload_update.cpp's
+// "THE UpdateList DEPENDENCY SET" banner transcribes the comparator byte for
+// byte and names SetThumbnail's three stores — and both were still address
+// doors into the shipped DLL. That is the whole of the `internal` mystery: a
+// row printed UNKNOWN because the census reads names and a comment is not a
+// name.
+//
+// EXTENTS, AND HOW THEY WERE BOUNDED
+// ---------------------------------------------------------------------------
+//   0x1800c3db0   34 bytes, 0x1800c3db0..0x1800c3dd1, then 0xCC padding.
+//   0x1800c3de0  332 bytes, 0x1800c3de0..0x1800c3f2b (tail JMP).
+//
+// NEITHER came from `.pdata`, and for the comparator `.pdata` could not have
+// answered at all. 52.9% of this DLL's `.text` exports have NO `.pdata` entry
+// (leaf functions) and this one is a leaf with no unwind data and no Ghidra
+// function object either. Its extent is read out of the IMAGE BYTES: 34 bytes
+// of instructions terminating in `C3`, followed by a run of `CC`. SetThumbnail
+// is bounded by Ghidra's function body, which ends at the tail
+// `JMP qword ptr [0x18014b388]` (LeaveCriticalSection).
+//
+// `.pdata` UNDERSTATES an extent — MSVC chains fragments through
+// UNW_FLAG_CHAININFO, and the ENTRY fragment is the one that reads
+// `chained=False`, so a chained function looks complete when looked up by its
+// own address (a 20.4x understatement was measured on a row in this same
+// bucket). Understating makes work look cheap and truncates a port silently.
+// Neither body here is chained, but the bound is taken from an instrument that
+// cannot understate rather than from one that can.
+// ============================================================================
+
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+#include "../../funcs/rt_port.h"
+#include "../../types/save/SaveLoad.h"
+#include "../../types/video/ImageBuffer.h"
+
+using RtSave::SaveInfo;
+
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+// The door that does NOT consult the port registry — always the shipped bytes.
+// A probe whose "ours" side reaches the body by ADDRESS compares retail with
+// ITSELF (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md);
+// the sweep below is the mirror of that and needs the raw door for THEIRS.
+uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
+
+// Video::Device's recursive render lock, already ported in
+// runtime/src/video/buffers_win.cpp and already used from this directory
+// (saveload_update.cpp:94). Declared, not re-implemented.
+void RtVideoDeviceLock(void** deviceSingleton);
+void RtVideoDeviceUnlock(void** deviceSingleton);
+
+namespace {
+
+// ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z, 0x1800c7a50.
+//
+// SetThumbnail does NOT call this symbol — it OPEN-CODES the triple
+// `EnterCriticalSection(*0x1801fc718 + 0x640); Allocate(*0x1801fc718, 0x68, 8);
+// LeaveCriticalSection(...)`. Lane Q disassembled 0x1800c7a50 and proved that
+// triple IS its body, instruction for instruction; array.cpp:155 and
+// message_callbacks.cpp:91 already reach the allocator this way for exactly
+// the same open-coded shape. Calling the composed symbol keeps this file free
+// of <windows.h> (PLAN §4.1) at the cost of nothing observable.
+void* MemAlloc(uint64_t bytes, int align) {
+    using Fn = void* (*)(uint64_t, int);
+    static Fn fn = nullptr;   // cache a hit, RETRY a miss (RtResolveCached contract)
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
+    return fn ? fn(bytes, align) : nullptr;
+}
+
+// ??0ImageBuffer@Video@@QEAA@XZ, 0x1800f2580. Ported (buffers.cpp:1450).
+void ImageBufferCtor(void* self) {
+    using Fn = void (*)(void*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800f2580));
+    if (fn) fn(self);
+}
+
+// ?_singleton@Device@Video@@0PEAV12@EA, 0x1801fe7a8 — the SLOT, not the Device.
+void** DeviceSingletonSlot() {
+    static void** slot = nullptr;
+    if (!slot) slot = reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fe7a8));
+    return slot;
+}
+
+// ---------------------------------------------------------------------------
+// 0x1800c3db0 as a plain function, so the sweep and the registered entry point
+// drive the SAME code. A probe that re-derived the body would be testing a
+// copy of the port.
+//
+// The bytes, read out of the image (Ghidra has no function object here):
+//
+//     83 79 40 00  CMP dword ptr [RCX+0x40],0x0
+//     7c 16        JL  .greater             ; a.saveIndex < 0 -> return 1
+//     83 7a 40 00  CMP dword ptr [RDX+0x40],0x0
+//     7c 10        JL  .greater             ; b.saveIndex < 0 -> return 1
+//     48 8b 41 30  MOV RAX,[RCX+0x30]       ; a.sortKey
+//     48 8b 4a 30  MOV RCX,[RDX+0x30]       ; b.sortKey
+//     48 3b c8     CMP RCX,RAX              ; UNSIGNED, b vs a
+//     77 03        JA  .greater
+//     1b c0        SBB EAX,EAX              ; CF set iff b<a  ->  -1 ; else 0
+//     c3           RET
+//   .greater:
+//     b8 01 00 00 00 / c3                   ; return 1
+//
+// THREE THINGS A "TIDIER" SPELLING GETS WRONG, all of them observable:
+//
+//  1. The compare is UNSIGNED (`JA`, and `SBB` on CF). sortKey is a uint64 and
+//     the top bit is live in a FILETIME-shaped value; a signed compare would
+//     reverse the order of any pair straddling 2^63.
+//  2. It is NOT A TOTAL ORDER. A row with saveIndex < 0 compares GREATER in
+//     BOTH positions — cmp(blank, x) == 1 and cmp(x, blank) == 1 — so a blank
+//     row and any other row are each "after" the other. That is a genuine
+//     violation of the strict weak ordering qsort requires, and it is retail's
+//     behaviour. UpdateList gets away with it because the only such row is the
+//     "new save" slot and state 1 deliberately sorts the sub-range that
+//     EXCLUDES it (the base+0x58 / count-1 shift in saveload_update.cpp). The
+//     comparator is reproduced as written, violation included; "fixing" it
+//     would change the row order the player sees on any input where retail's
+//     inconsistency actually fires.
+//  3. Ordering is DESCENDING by sortKey (newest first), because the compare is
+//     `b vs a` and not `a vs b`.
+// ---------------------------------------------------------------------------
+int SaveInfoCompareImpl(const void* a, const void* b) {
+    const uint8_t* pa = static_cast<const uint8_t*>(a);
+    const uint8_t* pb = static_cast<const uint8_t*>(b);
+
+    if (*reinterpret_cast<const int32_t*>(pa + 0x40) < 0) return 1;
+    if (*reinterpret_cast<const int32_t*>(pb + 0x40) < 0) return 1;
+
+    const uint64_t ka = *reinterpret_cast<const uint64_t*>(pa + 0x30);
+    const uint64_t kb = *reinterpret_cast<const uint64_t*>(pb + 0x30);
+    if (kb > ka) return 1;     // JA  — UNSIGNED
+    if (kb < ka) return -1;    // SBB EAX,EAX with CF set
+    return 0;                  // SBB EAX,EAX with CF clear
+}
+
+}  // namespace
+
+// ============================================================================
+// 0x1800c3db0 — the qsort comparator. PURE.
+// ============================================================================
+// It is passed to qsort as DATA, so retail never "calls" it from a site we can
+// wrap; the sweep below is the verification, not a call-site oracle.
+extern "C" int RtSave_SaveInfo_Compare(const void* a, const void* b) {
+    return SaveInfoCompareImpl(a, b);
+}
+
+// ============================================================================
+// 0x1800c3de0 — SaveInfo::SetThumbnail(row, pixels, w, h)
+// ----------------------------------------------------------------------------
+// void (SaveInfo* row /*RCX*/, void* pixels /*RDX*/, int w /*R8D*/, int h /*R9D*/)
+//
+// Retail, in order:
+//   1. allocate 0x68 bytes / align 8 under the ALLOCATOR's lock and
+//      placement-construct a Video::ImageBuffer in it. 0x68 is exactly
+//      sizeof(Video::ImageBuffer) as this tree's header already asserts, which
+//      is an independent corroboration of the layout and not a coincidence.
+//   2. publish it at row+0x18 (`imageBuffer`) and call vtable slot 9,
+//      ?Create@ImageBuffer@Video@@ — eleven arguments, four in registers and
+//      seven on the stack.
+//   3. under VIDEO DEVICE's lock (a different lock from step 1), call the
+//      ImageBufferData at +0x60 through ITS vtable slot 5 with (pixels, w, h).
+//   4. store pixels/w/h at row+0x28/+0x20/+0x24 — the three stores that are the
+//      independent confirmation of this header's thumbPixels/Width/Height
+//      names, since OnVideoRestart reads the same three back as upload args.
+//
+// *** THE CTOR'S RETURN VALUE IS NOT USED HERE, DELIBERATELY. *** Retail does
+// `RDI = alloc; if (RDI) { CALL ctor; RDI = RAX; }` — an MSVC constructor
+// returns `this` in RAX, so RAX == RDI and the move is a no-op. Our port of
+// that ctor is a plain `void (ImageBuffer*)`, and GCC does NOT guarantee `this`
+// in RAX on return from it. Reading RAX through a `void*(*)(void*)` typedef
+// here would be reading a register the callee does not set — the same class of
+// defect as an fn_* typedef that omits a hidden return slot
+// (reference_hidden_retslot_wild_write.md), and it would silently work while
+// the DLL body is in use and break at cutover. So the allocation pointer is
+// carried in a local. The two are provably the same value.
+//
+// Retail does NOT null-check `row`, `row->imageBuffer` after Create, or the
+// ImageBufferData at +0x60, and neither does this. The one `if` it does have —
+// `TEST RDI,RDI` after the allocation — is reproduced, and note what it guards:
+// on an allocation failure retail skips only the CONSTRUCTOR and then stores
+// null at row+0x18 and DEREFERENCES IT one instruction later at
+// `MOV RAX,[RDI]`. That is a fault on OOM in the shipped binary. Transcribed
+// as written (CLAUDE.md: do not "fix" a faithful crash).
+// ============================================================================
+extern "C" void RtSave_SaveInfo_SetThumbnail(SaveInfo* row, void* pixels, int w, int h) {
+    RT_DIFF_BEGIN("[SELF-CHECK] Save::SaveInfo::SetThumbnail @0x1800c3de0");
+    RT_DIFF_WORK(true);   // no early-out; every call allocates and uploads
+
+    void* mem = MemAlloc(0x68, 8);
+    if (mem != nullptr) ImageBufferCtor(mem);
+    ImageBuffer* img = static_cast<ImageBuffer*>(mem);   // == RAX; see the banner
+
+    row->imageBuffer = img;
+
+    // vtable slot 9 (+0x48):
+    //   ?Create@ImageBuffer@Video@@UEAA_N W4ImageType W4Usage W4Format I H H
+    //                                     W4FilterMode W4AddressMode 4 4
+    //                                     PEAV?$Array@V?$Array@E@Collection@@@
+    // Argument values are immediates in the shipped body and are transcribed,
+    // not interpreted: type=0, usage=2, format=5, 0, w, h, filter=0,
+    // addressU=addressV=addressW=1, no initial data.
+    using CreateFn = bool (*)(void* self, int type, int usage, int format,
+                              unsigned int a4, int width, int height,
+                              int filter, int addrU, int addrV, int addrW,
+                              void* initialData);
+    void** vt = *reinterpret_cast<void***>(img);
+    reinterpret_cast<CreateFn>(vt[9])(img, 0, 2, 5, 0u, w, h, 0, 1, 1, 1, nullptr);
+
+    // ---- the VIDEO DEVICE lock, open-coded in retail ----------------------
+    // 0x1800c3eb4..0x1800c3eca is EnterCriticalSection(dev+0x60) /
+    // GetCurrentThreadId / [dev+0x88]=tid / INC [dev+0x8c] — the OWNER-FIRST
+    // inline copy, and the unlock at 0x1800c3eee RE-READS the singleton before
+    // decrementing. That is exactly RtVideoDeviceLock/Unlock, which take the
+    // SLOT for that reason. This is a different lock from the allocator's, and
+    // running the two in the wrong nesting would be a deadlock, not a style
+    // difference — the allocator's is already released by step 1.
+    void** devSlot = DeviceSingletonSlot();
+    RtVideoDeviceLock(devSlot);
+
+    // ImageBufferData vtable slot 5 (+0x28) — the pixel upload. PURECALL in
+    // the base Video table; the live body is the DX11 override.
+    using UploadFn = void (*)(void* data, void* pixels, int w, int h);
+    void*  data   = img->platformData;                 // +0x60
+    void** dataVt = *reinterpret_cast<void***>(data);
+    reinterpret_cast<UploadFn>(dataVt[5])(data, pixels, w, h);
+
+    row->thumbPixels = pixels;   // +0x28
+    row->thumbWidth  = w;        // +0x20
+    row->thumbHeight = h;        // +0x24
+
+    RtVideoDeviceUnlock(devSlot);
+
+    // SHADOW — a SELF-CHECK, not an oracle (it never consults the DLL). It can
+    // only say "the three stores landed and the buffer was published"; it
+    // cannot say the Create arguments are right. The Create arguments are
+    // verified by TRANSCRIPTION against the immediates in the listing, and this
+    // file says so rather than letting a green site imply more.
+    RT_DIFF_SHADOW(row->imageBuffer == img && row->thumbPixels == pixels &&
+                       row->thumbWidth == w && row->thumbHeight == h,
+                   "SELF-CHECK imageBuffer published, px/w/h stored",
+                   "SELF-CHECK: no DLL side -- running retail's body would "
+                   "allocate a SECOND ImageBuffer and upload twice");
+}
+
+// ============================================================================
+// THE INPUT SWEEP — a REAL two-sided oracle for 0x1800c3db0
+// ============================================================================
+//
+// Probe shape (kickoff §1c): an INPUT SWEEP against the shipped body. It is
+// available here and nowhere else in this lane because the comparator is the
+// only PURE row: no state, no allocation, two const pointers in and an int out.
+//
+// WHY A SWEEP AND NOT A CALL-SITE ORACLE. The comparator is passed to qsort as
+// DATA. There is no call site of ours to wrap, and a port with zero callers
+// reports `calls=0` and reads CLEAN (reference_uncalled_port_is_not_verified.md).
+// Waiting for a caller would have produced exactly that
+// (project_pure_functions_verify_by_sweep.md — GetAlignedPosition reported
+// calls=0 in a 16.9M-call in-game run and was verified by sweep instead).
+//
+// THEIRS is reached through ResolveRuntimeRaw, NOT ResolveAddr. ResolveAddr
+// consults the port registry FIRST, and this file REGISTERS 0x1800c3db0 — so
+// using it would compare our body with itself and pass unconditionally. That
+// exact defect kept a Wave 5 probe dark for five waves.
+//
+// CONTROLS, and what each is for:
+//   * EFFECTIVENESS — `g_decisive` counts the cases that reached the sortKey
+//     comparison at all. Every case with a negative saveIndex returns 1 from
+//     the first two instructions; a sweep made only of those would be 100%
+//     green while testing two CMPs. If g_decisive is 0 the sweep proves
+//     nothing and says so in those words.
+//   * NEGATIVE / mutation — a deliberately WRONG comparator (SIGNED compare,
+//     which is the single most likely way to get this body wrong) is pushed
+//     through the SAME comparison path. It must be CAUGHT. The mutation
+//     changes a value the probe actually compares (the return code), which is
+//     the requirement a corrupted-but-uncompared control fails
+//     (reference_control_must_pick_a_compared_subject.md).
+//   * A second negative confirms the sweep is not merely "returns nonzero on
+//     any change": the wrong comparator agrees with retail on every pair whose
+//     keys are both below 2^63, so the sweep also reports HOW MANY of the
+//     mutant's answers differed. If that count is 0 the negative control is
+//     inconclusive rather than passing, and it is reported that way.
+//
+// It runs under BANISHED_RT_SAVEINFO_SWEEP. Lane INTERNAL8 has no
+// game-directory lock; the intended driver is lane DIFF's armed sweep, which
+// sets nothing else this file needs.
+// ============================================================================
+namespace {
+
+struct SweepRow {   // a 0x58-byte SaveInfo stand-in; only +0x30 and +0x40 matter
+    uint8_t bytes[0x58];
+};
+
+void MakeRow(SweepRow* r, uint64_t sortKey, int32_t saveIndex) {
+    // A varying non-zero pattern everywhere else: an all-zero subject is the
+    // one seed under which a wrong offset is invisible, because both sides
+    // read zero there and agree by accident.
+    for (size_t i = 0; i < sizeof(r->bytes); ++i)
+        r->bytes[i] = static_cast<uint8_t>(0x5A + (i & 0x1f));
+    *reinterpret_cast<uint64_t*>(r->bytes + 0x30) = sortKey;
+    *reinterpret_cast<int32_t*>(r->bytes + 0x40) = saveIndex;
+}
+
+// The MUTANT: identical except the key compare is SIGNED. Used as the negative
+// control. It is NOT registered and nothing else calls it.
+int SaveInfoCompareSignedMutant(const void* a, const void* b) {
+    const uint8_t* pa = static_cast<const uint8_t*>(a);
+    const uint8_t* pb = static_cast<const uint8_t*>(b);
+    if (*reinterpret_cast<const int32_t*>(pa + 0x40) < 0) return 1;
+    if (*reinterpret_cast<const int32_t*>(pb + 0x40) < 0) return 1;
+    const int64_t ka = *reinterpret_cast<const int64_t*>(pa + 0x30);
+    const int64_t kb = *reinterpret_cast<const int64_t*>(pb + 0x30);
+    if (kb > ka) return 1;
+    if (kb < ka) return -1;
+    return 0;
+}
+
+}  // namespace
+
+void RtSaveInfoComparatorSweep() {
+    const char* mode = std::getenv("BANISHED_RT_SAVEINFO_SWEEP");
+    if (!mode || !*mode || std::strcmp(mode, "0") == 0) return;
+
+    using CmpFn = int (*)(const void*, const void*);
+    CmpFn theirs = reinterpret_cast<CmpFn>(ResolveRuntimeRaw(0x1800c3db0));
+    if (!theirs) {
+        std::fprintf(stderr,
+            "[RtSaveInfoSweep] SKIP: no shipped body at 0x1800c3db0 (DLL absent). "
+            "This is the CUTOVER case; the sweep is a DLL-present instrument.\n");
+        return;
+    }
+
+    // Keys chosen to drive every arm: equal, adjacent, and STRADDLING 2^63 —
+    // the last is the only region where signed and unsigned disagree, and it is
+    // the whole reason the sweep exists.
+    static const uint64_t kKeys[] = {
+        0ull, 1ull, 2ull,
+        0x7FFFFFFFFFFFFFFEull, 0x7FFFFFFFFFFFFFFFull,
+        0x8000000000000000ull, 0x8000000000000001ull,
+        0xFFFFFFFFFFFFFFFEull, 0xFFFFFFFFFFFFFFFFull,
+        0x01D4A7C3B2E10000ull,     // a FILETIME-shaped value
+    };
+    static const int32_t kIndices[] = { -1, 0, 1, 7, 0x7FFFFFFF };
+    const int nK = static_cast<int>(sizeof(kKeys) / sizeof(kKeys[0]));
+    const int nI = static_cast<int>(sizeof(kIndices) / sizeof(kIndices[0]));
+
+    int cases = 0, mismatches = 0, decisive = 0;
+    // ONE number, not two: "the probe caught the mutant" and "the mutant's
+    // answer differed from retail's" are the SAME test by construction, and
+    // reporting them as two figures would be a union control dressed as
+    // corroboration (reference_union_control_hides_a_blind_screen.md).
+    int mutantCases = 0, mutantDiffered = 0;
+
+    for (int ai = 0; ai < nI; ++ai)
+    for (int ak = 0; ak < nK; ++ak)
+    for (int bi = 0; bi < nI; ++bi)
+    for (int bk = 0; bk < nK; ++bk) {
+        SweepRow A, B;
+        MakeRow(&A, kKeys[ak], kIndices[ai]);
+        MakeRow(&B, kKeys[bk], kIndices[bi]);
+
+        const int t = theirs(&A, &B);
+        const int o = RtSave_SaveInfo_Compare(&A, &B);
+        ++cases;
+        // "Decisive" == the call got past both saveIndex tests and the answer
+        // was actually produced by the key comparison.
+        const bool reachedKeys = (kIndices[ai] >= 0 && kIndices[bi] >= 0);
+        if (reachedKeys) ++decisive;
+        if (t != o) {
+            if (mismatches == 0)
+                std::fprintf(stderr,
+                    "[RtSaveInfoSweep] MISMATCH a={key=0x%llx idx=%d} "
+                    "b={key=0x%llx idx=%d}: ours=%d theirs=%d\n",
+                    (unsigned long long)kKeys[ak], kIndices[ai],
+                    (unsigned long long)kKeys[bk], kIndices[bi], o, t);
+            ++mismatches;
+        }
+
+        // ---- the negative control, on the SAME pair ----------------------
+        const int m = SaveInfoCompareSignedMutant(&A, &B);
+        ++mutantCases;
+        if (m != t) ++mutantDiffered;
+    }
+
+    std::fprintf(stderr,
+        "[RtSaveInfoSweep] 0x1800c3db0: cases=%d mismatches=%d decisive=%d\n",
+        cases, mismatches, decisive);
+    std::fprintf(stderr,
+        "[RtSaveInfoSweep] NEGATIVE CONTROL (signed-compare mutant): "
+        "cases=%d differed-from-retail=%d\n",
+        mutantCases, mutantDiffered);
+
+    if (decisive == 0)
+        std::fprintf(stderr,
+            "[RtSaveInfoSweep] *** EFFECTIVENESS CONTROL FAILED: no case "
+            "reached the sortKey comparison. This run proves NOTHING. ***\n");
+    if (mutantDiffered == 0)
+        std::fprintf(stderr,
+            "[RtSaveInfoSweep] *** NEGATIVE CONTROL INCONCLUSIVE: the mutant "
+            "agreed with retail on every pair, so a zero here would be "
+            "indistinguishable from a dead comparison. Widen the key set. ***\n");
+}
+
+// ============================================================================
+// Registration
+// ============================================================================
+//
+// ADDRESSES ONLY. Neither row has a mangled name: Wave 23's export screen ran
+// all 183 address-keyed census rows through the export table with 100% recall
+// and 0 false positives on 1,125 in-population controls and recovered 0 names.
+// "AEAA means PRIVATE, not unexported" does not bite here — these two have no
+// name at all, not a private one.
+//
+// REGISTERING 0x1800c3db0 IS WHAT MAKES IT SURVIVE CUTOVER. saveload_update.cpp
+// hands the comparator's ADDRESS to retail's own qsort as data; without a
+// registration that address is the DLL's, and at cutover it is nothing.
+// ============================================================================
+int RtSaveInfoRegister() {
+    RegisterRuntimeAddr(0x1800c3db0, (void*)&RtSave_SaveInfo_Compare);
+    RegisterRuntimeAddr(0x1800c3de0, (void*)&RtSave_SaveInfo_SetThumbnail);
+    RtSaveInfoComparatorSweep();   // no-op unless BANISHED_RT_SAVEINFO_SWEEP is set
+    return 2;
+}

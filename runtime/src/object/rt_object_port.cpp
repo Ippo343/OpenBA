@@ -32,6 +32,12 @@
 #include "../../funcs/rt_port.h"
 
 extern int RtObjectTypeSystemRegister();   // type_system.cpp   (lane A)
+// Wave 24 lane INTERNAL8. ?GetTypeIdForFileExtension@Factory@Object@@ — the
+// ONE real row among the census's four `ordinal` gap rows (the other three are
+// phantoms of already-ported exports). Own switch: it is an in-order walk of
+// the WHOLE type tree called from two exe component paths, so "the extension
+// lookup is wrong" has to be separable from lane A's type-system registrations.
+extern int RtObjectFactoryFileExtensionRegister(); // factory_file_extension.cpp
 extern int RtObjectInternalRegister();     // internal.cpp      (lane B)
 extern int RtObjectExternalRegister();     // external.cpp      (lane C)
 extern int RtObjectExternalSetRegister();  // external_set.cpp  (Wave 9 lane RES)
@@ -88,6 +94,7 @@ void RtObjectPortInit() {
     }
     int n = 0;
     if (RtWaveEnabled("BANISHED_RT_TYPESYS"))  n += RtObjectTypeSystemRegister();
+    if (RtWaveEnabled("BANISHED_RT_FILEEXT"))  n += RtObjectFactoryFileExtensionRegister();
     if (RtWaveEnabled("BANISHED_RT_INTERNAL")) n += RtObjectInternalRegister();
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL")) n += RtObjectExternalRegister();
     // Wave 9 lane RES: the resource tree's own Set bodies, plus Clean. Nested

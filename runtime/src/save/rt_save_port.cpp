@@ -75,6 +75,14 @@ extern int RtSaveSetupLoadRegister();  // savedstate_setupload.cpp (Wave 14)
 extern int RtSaveSaveMetaDataRegister();// saveload_meta.cpp   (Wave 14, lane SAVEMETA)
 extern int RtSaveLoadMetaDataRegister();// saveload_loadmeta.cpp (Wave 14, lane LOADMETA)
 extern int RtSaveLoadDrawRegister();   // saveload_draw.cpp (Wave 14 lane DRAW)
+// Wave 24 lane INTERNAL8. The two UNEXPORTED bodies UpdateList reaches by
+// address: the qsort comparator (0x1800c3db0) and SaveInfo::SetThumbnail
+// (0x1800c3de0). Own switch, nested under SAVELOAD for the same reason DRAW
+// is: SetThumbnail is the only one of the two that touches the GPU, and the
+// comparator decides the ORDER the player sees in the save list, so "the list
+// is in the wrong order" and "the thumbnail is wrong" must be separable from
+// Wave 13's UpdateList itself.
+extern int RtSaveInfoRegister();       // saveload_saveinfo.cpp (Wave 24 INTERNAL8)
 
 void RtSavePortInit() {
     RtSaveEarlyTouchProbe();   // off unless BANISHED_RT_EARLY_TOUCH=1
@@ -103,6 +111,7 @@ void RtSavePortInit() {
         // GPU, so "the save hangs" and "the thumbnail is wrong" have to be
         // separable from Wave 5's and Wave 13's bodies in one run.
         if (RtWaveEnabled("BANISHED_RT_SAVELOAD_DRAW")) n += RtSaveLoadDrawRegister();
+        if (RtWaveEnabled("BANISHED_RT_SAVEINFO")) n += RtSaveInfoRegister();
     }
     printf("[RtPort] Save: %d exports registered\n", n);
 }
