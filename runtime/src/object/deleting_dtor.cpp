@@ -856,6 +856,17 @@ static const DelDtorSpec kSpecs[] = {
     // Same two-arm shape as the GroupDescription row above; not a probe
     // subject, for the same reason.
     RT_DELDTOR(0x180044620, 0x1800d5c90, 0x080, "UI::RibbonDescription"),
+    // 2026-09-12: UI::ImageDescription and its subclass
+    // UI::AnimatedImageDescription. Each row's two constants read from the
+    // deleting destructor's own bytes:
+    //     0x1800361f0  LEA R9,[0x180118370]  MOV EDX,0x80   ImageDescription
+    //     0x1800369e0  LEA R9,[0x1800cb6b0]  MOV EDX,0x98   AnimatedImageDescription
+    // Both destructors are ported in runtime/src/ui/. Neither is a probe
+    // subject: ~ImageDescription releases TWO refcounted Strings (+0x70 and
+    // the base's +0x60) and ~AnimatedImageDescription destroys an
+    // Array<String> whose buffer came from the Runtime heap.
+    RT_DELDTOR(0x1800361f0, 0x180118370, 0x080, "UI::ImageDescription"),
+    RT_DELDTOR(0x1800369e0, 0x1800cb6b0, 0x098, "UI::AnimatedImageDescription"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];

@@ -144,6 +144,8 @@ extern int RtUiDialogFactoryRegister();    // dialog_factory.cpp
 // registered by RtUiFactory1Register above, the other nine slots were not.
 extern int RtUiGroupDescriptionRegister(); // groupdescription.cpp
 extern int RtUiRibbonDescriptionRegister(); // ribbondescription.cpp
+extern int RtUiImageDescriptionRegister();  // imagedescription.cpp
+extern int RtUiAnimatedImageDescriptionRegister(); // animatedimagedescription.cpp
 // Wave 24 lane SMALLBODY: ??2SpriteSheet@UI@@SAPEAX_K@Z (0x180002e60) -- the
 // class operator new, byte-identical to ToolTipDialog's and verified side by
 // side rather than by resemblance. Its own file and switch.
@@ -228,6 +230,8 @@ void RtUiPortInit() {
     n += RtUiDialogFactoryRegister();  // UI::Dialog CreateNewObject / CreateInPlaceObject
     n += RtUiGroupDescriptionRegister();  // UI::GroupDescription, all nine bodies
     n += RtUiRibbonDescriptionRegister(); // UI::RibbonDescription, all nine bodies
+    n += RtUiImageDescriptionRegister();  // UI::ImageDescription + the shared applier
+    n += RtUiAnimatedImageDescriptionRegister(); // UI::AnimatedImageDescription
     n += RtUiStringTableFactoryRegister();  // owns BANISHED_RT_UISTRTAB (FACTORY)
     n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
