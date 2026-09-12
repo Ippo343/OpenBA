@@ -365,6 +365,14 @@ An expiry clause naming a condition but no addressee never fires
    generated, so resolve any conflict by re-running `tools/rt_mint_gen.py` on the
    merged tree rather than by hand-merging, and check `--check` reads UP TO DATE
    afterwards.
+8. **To LANE INT33, or whoever the Wave 27 integrator gives the address-keyed
+   rows to:** `Collection::Array<ExternalArrayElement>::SetSize` (`0x18002c6a0`)
+   is the live cutover frontier as of attempt 29 and is an unexported
+   address-keyed row, i.e. your bucket, not FACTORY's. This lane read it and
+   deliberately did not adopt it. **Read §9.2 before pattern-matching it onto the
+   three ported sibling instantiations — they are POD-element arrays and this one
+   is not, and the difference is a refcount leak no byte oracle on `SetSize`
+   would catch.**
 4. **To this lane's reviewer:** the three ported bodies have **attendance 0 from
    the game** and there is no route to give them one with the DLL present (§3.4).
    If that is not an acceptable verification standard for a merge, the correct
@@ -506,3 +514,94 @@ again, should die on one of those two — most likely `Serialize`, since
 `External::Load` is a deserialisation path. If it dies somewhere else entirely
 that is the expected shape: a gate names what it reached
 (`reference_the_boot_is_a_gate_not_a_planner.md`), and one name is one name.
+
+---
+
+## 9. ATTEMPT 29 — the wall left this lane's family (ATTEND's measurement)
+
+Lane ATTEND ran attempt 29 on `c1be6b7b`
+(`docs/runtime_port/WAVE26_LANE_ATTEND.md` §7.1, `wave26/attend` `d5da5f1b`).
+Recorded here as THEIR measurement.
+
+**§8.5's primary prediction held: the boot gets past `GetTypeIdVirtual`.**
+Progress is *within* `RtObject_External_Load`, `+0x33c` → `+0x470`:
+
+```
+Fault: EXEC of 0x0          (a null function POINTER was called)
+  #1 ArraySetSize+0x4d
+  #2 RtObject_External_Load+0x470
+  #3 ExternalFactory::FindOrLoad+0x2b1
+  #4 Game::LoadInputNameTables
+```
+
+**§8.5's secondary guess (`?Serialize@StringTable@UI@@`) did not hit, and the
+wall is no longer on this lane's class at all.** Both of the two slots this file
+left trapped — the `0x180002740` deleting dtor and `Serialize` — remain
+**untested** by this run. They are still open, and attempt 29 is not evidence
+either way about them.
+
+### 9.1 The new wall is NOT this lane's, and is not being adopted
+
+`Collection::Array<ExternalArrayElement>::SetSize`, retail `0x18002c6a0`.
+
+This lane read it before handing it on, so the handoff carries facts rather than
+a pointer — but deliberately **did not port it**. It is a different family
+(`Collection::Array<T>`), it is an unexported address-keyed row (lane INT33's
+bucket, not FACTORY's), and it is ~110 instructions with grow, shrink, per-element
+construct/destroy and a locked free. Porting it from this lane would be drift on
+exactly the kind of body that produces a confident wrong port.
+
+### 9.2 THE TRAP IN THE OBVIOUS RECIPE — read this before pattern-matching
+
+ATTEND correctly noted that a sibling family is already ported in
+`achievement_manager.cpp`: `Array<bool>` (`0x180008b90`), `Array<Time>`
+(`0x180008ff0`), `Array<InternalPtr>` (`0x180008d60`). **Those three are the
+wrong template to copy from**, and the reason is visible in the disassembly
+before a line is written (`reference_a_written_recipe_can_be_wrong.md`):
+
+* all three siblings have **POD elements**, so their grow/shrink path is a
+  realloc plus a memcpy and nothing else;
+* this instantiation's element is `0x10` bytes containing a **refcounted
+  `System::String`**, and its body therefore calls **two per-element helpers the
+  POD instantiations never touch**:
+  * `0x1800067d0` (37 instructions) — per-element move/copy on the grow path,
+    at `18002c773`, including the `[RBX+8] -> [R14+8]` second-field carry;
+  * `0x180006ac0` (49 instructions) — destroy-range on the shrink and
+    free paths, at `18002c7d4` and `18002c82b`.
+
+A port that follows the sibling recipe would compile, run, and **leak or
+double-release a refcount**, which is exactly the class of defect no byte oracle
+on `SetSize` itself would catch.
+
+Two further facts for whoever takes it:
+* the free path is the **locked** allocator triple (`[0x1801fc718]+0x640`,
+  `[0x18014b390]` / `[0x18014b388]`, `?Free@` at `0x1800c6c00`) — the same shape
+  §1.3 describes for the allocation side, and `runtime/src/ui/stringtable_factory.cpp`
+  already has the `MemAllocLocked` idiom to mirror;
+* growth policy is not `capacity *= 2`. At `18002c6f1`-`18002c703` it is: only
+  when `newSize == oldSize + 1` **and** `oldSize != 0`, set capacity to
+  `newSize * 3`. Transcribe it, do not infer it.
+
+### 9.3 THE POSITIVE COUNTER-EXAMPLE, and it deserves naming
+
+ATTEND's best find is not the symbol. `runtime/src/object/external_load.cpp:147`
+**predicted this exact failure, in a comment, at the call site**: not exported in
+either build, a genuine address door, nothing in the tree registers it, "at
+cutover it needs a body or this call site needs to be revisited." Every clause
+correct; it fired as written.
+
+This wave's own memory index is mostly a catalogue of residuals that went stale,
+named no addressee, or masked each other
+(`reference_expiry_clause_needs_an_addressee.md`,
+`reference_cheap_wins_list_is_the_stalest_section.md`). **A residual that names
+its symbol, its condition AND its consequence, and that lives at the call site
+rather than in a wave doc, is the shape that worked.** That is a cheaper lesson
+than any of the failures it contrasts with.
+
+### 9.4 One flat number that is NOT a failure
+
+`[RtMint] BaseTypeInfo factories: 2 PORTED, 204 ABORT-TRAP` is **unchanged**
+between attempts 28 and 29. That is expected: §8's passes added *vtable slots*,
+not *factory slots*, and this screen counts only the latter. Written down because
+a flat line beside a claim of progress is exactly what gets read as "the work did
+not land". The evidence that it landed is the moved wall, not this line.
