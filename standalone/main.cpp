@@ -2014,6 +2014,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // any of them is reachable in fact. Always printed, including zero, and it
     // carries its own two controls -- read them before trusting the zero.
     RtFactoryDispatchReport();
+    // WAVE 24 LANE TINFO: the factory probe above measures the AVL-TREE door,
+    // which no `?_typeInfo@` symbol is consulted by name for — so its
+    // `minted=0` is silent about what a PROMOTION does. This screen measures
+    // the NAME door instead: per minted row, what ResolveExport hands a caller,
+    // whether that node is zeroed (Wave 23 handover item 1's premise), whether
+    // it agrees with the loaded DLL's node, and how many times the symbol was
+    // asked for. Four controls, printed with it.
+    { extern void RtTInfoDoorReport(); RtTInfoDoorReport(); }
     { extern void RtObjectTypeInfoAccessorsReport();
       RtObjectTypeInfoAccessorsReport(); }
     // WAVE 10 LANE UI4: says so out loud when its deferred probe never fired,

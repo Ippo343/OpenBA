@@ -838,6 +838,12 @@ void* ResolveExport(const char* mangled_name) {
     // short-circuit, so a row that IS registered is still counted; off unless
     // BANISHED_W17_ATTEND=1, and one strcmp against a 63-entry list when on.
     { extern void Wave17DoorAttendNote(const char*); Wave17DoorAttendNote(mangled_name); }
+    // WAVE 24 LANE TINFO — `?_typeInfo@` name-door attendance. Also FIRST, and
+    // for a sharper reason than the line above: a promoted row is EXACTLY the
+    // row the registry short-circuit returns early for, so counting after it
+    // would report `resolves=0` for every promoted row and manufacture the
+    // "inert" verdict the screen exists to test. Cost is one strncmp.
+    { extern void RtTInfoDoorNote(const char*); RtTInfoDoorNote(mangled_name); }
     if (mangled_name && RtPortEnabled()) {
         auto& reg = RtExportReg();
         auto it = reg.find(mangled_name);
