@@ -213,4 +213,8 @@ void RtGraphicsPortInit() {
     printf("[RtPort] Wave 9 lane GFXD: %d exports + 11 addresses registered\n", gfxd);
     printf("[RtPort] Wave 21 lane GFXVT: %d typeinfo-accessor exports registered\n", gfxti);
     printf("[RtPort] Wave 27 lane GFXPART: %d particle exports registered\n", gfxpart);
+    // Wave 28 lane PARTSYS's own identity line, for the same reason every other
+    // lane line here gives: the on-disk md5 says which exe is on disk, not which
+    // one ran, and seven lanes share one game directory.
+    printf("[RtPort] Wave 28 lane PARTSYS: %d particle/sunlight exports registered\n", partsys);
 }
