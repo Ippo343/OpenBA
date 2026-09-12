@@ -1638,6 +1638,168 @@ int RtMintRegisterPromotedRows() {
     //  record, per site, whether the UpdateLoop table is still in the object
     //  when that function returns. If all six are transient, promote. If any
     //  is final, write an RT_UNPROMOTABLE tag naming that site.]
+    //
+    // ========================================================================
+    // ANSWERED 2026-09-12 — WAVE 27 lane LOOPS, the named addressee.
+    // ========================================================================
+    // The condition above was discharged: all six retail stamp sites were
+    // disassembled. THE VERDICT IS **PROMOTE**, and the four loop tables below
+    // are promoted on the same evidence. Full derivation in
+    // docs/runtime_port/WAVE27_LANE_LOOPS.md §3; the load-bearing part:
+    //
+    // THE STAMPER CENSUS WAS RE-DERIVED WITHOUT GHIDRA. Two Ghidra MCP defects
+    // were live during this wave (a wrong-program server, and
+    // disassemble_function serving a DIFFERENT function's listing relabelled
+    // with the requested address). So the census was retaken by scanning .text
+    // in the shipped file for every RIP-relative LEA of each vtable VA, and
+    // every body by `objdump -d --start-address=…`. The scan reproduces the
+    // note above EXACTLY: 8 LEA sites for ??_7UpdateLoop@, at the same 8
+    // addresses. Re-derive with the two scanners quoted in the lane doc §3.1.
+    //
+    // PER-SITE, `objdump` on the retail file (NOT Ghidra):
+    //   0x1800317ee  ??0UpdateLoop@…@AEBV01@@Z  +0x1e  FINAL, no overwrite
+    //                before `ret` at 0x180031830.  BUT: **0 direct callers.**
+    //   0x18003189d  an UNREFERENCED deleting-dtor variant (FUN_180031880).
+    //                Not vtable slot 0 — slot 0 is 0x180031900, which does not
+    //                stamp. **0 direct callers**; dead code in the shipped .text.
+    //   0x18004d3be  ??0LoaderLoop@…@AEBV01@@Z   TRANSIENT — overwritten with
+    //                ??_7LoaderLoop@ at 0x18004d3f3, nothing virtual between.
+    //   0x18004d7f3  ??0DialogLoopT@…@AEBV01@@Z  TRANSIENT — overwritten at
+    //                0x18004d82f.
+    //   0x1800db394  ??1DialogLoopT@  destruction-time (inlined ~UpdateLoop).
+    //   0x1800dc190  ??1LoaderLoop@   destruction-time, 2 insns after the
+    //                derived stamp, nothing between.
+    //
+    // WHERE THIS DIFFERS FROM THE CONDITION AS WRITTEN, SAID PLAINLY RATHER
+    // THAN QUIETLY REDEFINED. The condition asks "is the UpdateLoop table still
+    // in the object when that function returns", and answers PROMOTE only if
+    // all six are transient. On that LITERAL test sites #1/#2/#5/#6 are "final"
+    // and the answer would be a tag. That literal test is the wrong test, for a
+    // reason the note's author could not see without the disassembly: it cannot
+    // distinguish a ctor from a DTOR (every MSVC base dtor ends with the base
+    // vptr in a dead object — #5/#6 — so the literal test can never pass for any
+    // class with a virtual dtor), and it asks about the table rather than about
+    // whether anything can DISPATCH through it. The substantive question is
+    // "can a LIVE object end up holding retail's table", and the answer is no:
+    // the two live-object-final sites have ZERO callers, measured twice (a raw
+    // E8/E9 scan of .text, and Ghidra xrefs, agreeing).
+    //
+    // THE COPY-CTOR REACHABILITY RESULT, which is what clears the other three
+    // tables too (raw E8/E9 scan of the whole .text):
+    //   ??0UpdateLoop@…@AEBV01@@Z         0 callers
+    //   FUN_180031880                     0 callers
+    //   ??0DialogLoopT@…@AEBV01@@Z        0 callers
+    //   ??0DialogLoaderLoopT@…@AEBV01@@Z  0 callers
+    //   ??0LoaderLoop@…@AEBV01@@Z         1 caller — 0x18004d58e, which is
+    //       INSIDE ??0DialogLoaderLoopT@…@AEBV01@@Z (the base-subobject copy),
+    //       and that copy ctor has 0 callers. Transitively unreachable.
+    // So no shipped code path constructs any of these four classes by copy, and
+    // the "retail stamper" half of each table's census is unreachable code.
+    //
+    // LIMIT OF THAT SCAN, stated because it is the reason ??_7Loader@ is NOT
+    // promoted below: a direct-E8/E9 scan cannot see a call made through the
+    // CRT static-initialiser table, so a `0` for a STATIC object's constructor
+    // is an artefact, not a finding. `??0Loader@Engine@@QEAA@XZ` scores 0 for
+    // exactly that reason — `_loader` is a static — so it is NOT cleared.
+    //
+    // WHAT THIS DOES NOT CLAIM: that the twelve slot bodies these four tables
+    // now route to are CORRECT. They are byte-derived and they run (measured
+    // below), but eleven of the twelve have no oracle. This promotion is what
+    // gives them a route at all; verifying them is separate work.
+    //
+    // A/B: each row has its own kill switch so a bisect can isolate one table.
+    // ========================================================================
+    {
+        const char* off = getenv("BANISHED_RT_PROMOTE_UPDATELOOP");
+        if (off && strcmp(off, "0") == 0) {
+            printf("[RtMint] BANISHED_RT_PROMOTE_UPDATELOOP=0 -- "
+                   "??_7UpdateLoop@Engine@@6B@ left on the DLL (A/B control)\n");
+        } else {
+            PromoteVtableGuarded("??_7UpdateLoop@Engine@@6B@", 0x180155ba0ull, &n);
+        }
+    }
+    // ========================================================================
+    // MEASURED, AND IT CHANGED THIS LANE'S MIND — the three DERIVED loop tables
+    // below are ARMED-OFF BY DEFAULT. Read this before flipping one on.
+    // ========================================================================
+    // This lane promoted all three, built, and RAN (autostart -> in-game ->
+    // pause-menu quit, rc=0, crash log 0 bytes). The promotion WORKED: the guard
+    // line went `17 row(s) evaluated` -> `21 ... 0 refused`, so all four tables
+    // are COMPLETE with every slot registered. TWO THINGS WERE THEN MEASURED,
+    // and the second is why these three are off:
+    //
+    //  1. ZERO of the twelve slot bodies these tables route to was CALLED. Not
+    //     one registered an RtDiff site across a full boot-to-gameplay run.
+    //     The reason is NOT the promotion and promoting cannot fix it: every
+    //     loop our standalone constructs is an EXE SUBCLASS whose own table
+    //     replaces these slots -- g_outerLoaderLoopVtable (12/12 Outer_* stubs,
+    //     standalone/loader_loop_stubs.cpp:309), g_menuDialogLoopVtable (13/13
+    //     Stub_*, standalone/menudialogloopt_stubs.cpp:757),
+    //     g_splashDialogLoopVtable. Those stubs DELEGATE to the base for
+    //     Startup/Load/Update (which is why ?Load@DialogLoopT@ and
+    //     ?Update@DialogLoopT@ DO show attendance) and OVERRIDE
+    //     Shutdown/Draw/OnVideoError outright. A base body the subclass
+    //     overrides is unreachable no matter whose table is published.
+    //
+    //  2. It costs three permanently-RED ctor oracles. `Engine::LoaderLoop::ctor`,
+    //     `Engine::DialogLoopT::ctor` and `Engine::DialogLoaderLoopT::ctor` are
+    //     RT_DIFF_BYTES oracles comparing an object OUR ctor built against one
+    //     the DLL's ctor built. Our ctor stamps the symbol BY NAME, so once the
+    //     row is promoted ours holds OUR table and theirs holds the DLL's, and
+    //     the objects differ -- at OFFSET +0x0 AND NOWHERE ELSE, verified from
+    //     the per-call dumps:
+    //         ours  =+0x0: 20 74 f9 fb f6 7f 00 00  (our minted table, in the exe)
+    //         theirs=+0x0: 40 79 84 55 ff 7f 00 00  (0x...7940 == ??_7LoaderLoop@)
+    //     divergences exactly equalled calls (3/3, 1/1, 3/3): every call, one
+    //     qword. THIS IS NOT A PORT DEFECT, and it is a trap for the next reader,
+    //     because the row then reads as a regression forever. GENERAL RULE, since
+    //     it applies to every future vtable promotion and nothing else records it:
+    //     PROMOTING A VTABLE ROW INVALIDATES ANY ctor BYTE-ORACLE FOR THAT CLASS.
+    //     Not fixed here (Wave 27 standing warning #1, NO TOOLING).
+    //
+    // NET: all cost, no measured benefit, on the boot path the whole front end
+    // runs through. So they are opt-in. The evidence that they are SAFE stands
+    // (the stamper analysis above -- every retail stamper is an unreachable copy
+    // ctor or a destruction-time stamp); what is missing is a REASON.
+    //
+    // [ADDRESSEE: the Wave 28 lane that owns standalone/loader_loop_stubs.cpp or
+    //  standalone/menudialogloopt_stubs.cpp.]
+    // [CONDITION: flip one on when you make the corresponding exe-subclass stub
+    //  DELEGATE to the base body instead of overriding it -- then the base body
+    //  has a route and the promotion is what carries it. Expect that class's ctor
+    //  oracle to go red at +0x0 when you do; that is item 2, not a bug.]
+    // ARM WITH: BANISHED_RT_PROMOTE_LOADERLOOP=1 / _DIALOGLOOPT=1 /
+    //           _DIALOGLOADERLOOPT=1   (default OFF, unlike every other row here)
+    {
+        const char* on = getenv("BANISHED_RT_PROMOTE_LOADERLOOP");
+        if (on && on[0] && strcmp(on, "0") != 0) {
+            PromoteVtableGuarded("??_7LoaderLoop@Engine@@6B@", 0x180157940ull, &n);
+            printf("[RtMint] BANISHED_RT_PROMOTE_LOADERLOOP=1 -- ??_7LoaderLoop@Engine@@6B@ PROMOTED "
+                   "(opt-in; expect that class's ctor byte-oracle to diverge at +0x0, "
+                   "which is the promotion, not a defect)\n");
+        }
+    }
+    {
+        const char* on = getenv("BANISHED_RT_PROMOTE_DIALOGLOOPT");
+        if (on && on[0] && strcmp(on, "0") != 0) {
+            PromoteVtableGuarded("??_7DialogLoopT@Engine@@6B@", 0x1801579a0ull, &n);
+            printf("[RtMint] BANISHED_RT_PROMOTE_DIALOGLOOPT=1 -- ??_7DialogLoopT@Engine@@6B@ PROMOTED "
+                   "(opt-in; expect that class's ctor byte-oracle to diverge at +0x0, "
+                   "which is the promotion, not a defect)\n");
+        }
+    }
+    {
+        const char* on = getenv("BANISHED_RT_PROMOTE_DIALOGLOADERLOOPT");
+        if (on && on[0] && strcmp(on, "0") != 0) {
+            PromoteVtableGuarded("??_7DialogLoaderLoopT@Engine@@6B@", 0x1801578d0ull, &n);
+            printf("[RtMint] BANISHED_RT_PROMOTE_DIALOGLOADERLOOPT=1 -- ??_7DialogLoaderLoopT@Engine@@6B@ PROMOTED "
+                   "(opt-in; expect that class's ctor byte-oracle to diverge at +0x0, "
+                   "which is the promotion, not a defect)\n");
+        }
+    }
+    // ??_7Loader@Engine@@6B@ (0x180157a08) IS **NOT** PROMOTED, and this is a
+    // real blocker rather than an unfinished check.
+    // RT_UNPROMOTABLE: ??_7Loader@Engine@@6B@ | 2 slots, both ours as of Wave 27 lane LOOPS (slot 0 ?Run@Loader@Engine@@ new this lane, slot 1 ?OnCompleted@Thread@System@@ ported earlier) | WAVE27_LANE_LOOPS.md §4 | HARMFUL while the DLL is present -- this table has exactly ONE stamper, `??0Loader@Engine@@QEAA@XZ` (0x1800dc0f0, stamp at +0x21), and it is RETAIL AND UNPORTED. Every other table this lane promoted has OUR ctor as its stamper, which is why promoting them is safe; this one does not. The single instance is the static `?_loader@LoaderLoop@Engine@@1VLoader@2@A`, constructed by the DLL's own CRT static-init before any of our code runs, so promoting the symbol would publish OUR table to name-resolving readers while the live object keeps the DLL's -- two tables, one object, and the loader thread is what dispatches through it. *** CORRECTED BEFORE THIS LANE CLOSED: THE REAL STAMPER IS NOT `??0Loader@`. *** The exported `??0Loader@Engine@@QEAA@XZ` (0x1800dc0f0) is NEVER CALLED: 0 direct E8/E9 sites AND its address occurs as a qword in NO PE section (so it is in no vtable, jump table or function-pointer global, which rules out an indirect call too; that absence screen was validated by handing it two known positives, ?Run@Loader@ and the UpdateLoop deleting dtor, each found at exactly its vtable slot 0). The code that actually builds `_loader` is an UNEXPORTED STATIC-INIT THUNK at 0x180148fe0 with the ctor INLINED: `mov $0x40000,%edx` / `lea rcx,[0x1801fe7b8]` / `call 0x1800ca4e0` (Thread::Thread, 256 KB stack), then the vtable stamp at 0x180148fff, then `movq $0x0,[0x1801fe7e8]` (_loop = nullptr, at _loader+0x30), then it registers the atexit dtor. IT RUNS AT DLL LOAD, BEFORE ANY OF OUR CODE EXISTS. *** CONSEQUENCE: THERE IS NO SYMBOL TO PORT THAT RETIRES THIS ROW. *** An expiry naming `??0Loader@` would be satisfiable and would change nothing -- the same defect this lane documented on ?_loader@LoaderLoop@ below, which this tag very nearly reproduced. [SCOPE: DLL-PRESENT. This is a ROUTE-SCOPED refusal, not a permanent one (reference_unpromotable_is_route_scoped_not_permanent.md): while the DLL is present NO port can retire it, because the constructor is DLL-load-time and unexported. At CUTOVER the thunk does not exist, we construct `_loader` ourselves, and the row becomes REQUIRED.] [ADDRESSEE: the lane that runs the next CUTOVER attempt -- not a porting lane.] [CONDITION: do NOT wait for a symbol. Promote this row as part of the cutover changeover, at the same moment our own code takes over constructing `_loader`.] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
 
     // ========================================================================
     // ========================================================================
@@ -2709,6 +2871,39 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_systemSecondsPerTick@Timer@System@@0NA | n/a (double) | WAVE25_LANE_DATA.md §3.3 | NONE while the DLL is present -- exactly ONE in-DLL reference in the whole of .text and it is a WRITE, by the UNPORTED ?PlatformStartup@Timer@System@@. Zero in-DLL readers, so there is no split-brain to fear and the harm is purely the writer: a promoted slot is never written and runtime/src/system/timer.cpp reads 0.0. A one-reference row is the easiest kind to misread as trivially safe [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ?PlatformStartup@Timer@System@@ ported AND registered] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
     // RT_UNPROMOTABLE: ?_singleton@MainLoop@Engine@@1PEAV12@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- 19 in-DLL reads against 1 write (the MainLoop ctor, which IS ported), the textbook Wave 23 GFXDATA shape: a ported writer is not progress toward promotability while readers remain. Unported readers include ?Draw@MainLoop@Engine@@ and ?Finish@Context@Video@@. At cutover REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = every in-DLL reader ported] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
     // RT_UNPROMOTABLE: ?_singleton@Engine@1@0PEAV11@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- 4 in-DLL reads / 2 writes; both writers are ours (Engine ctor and dtor) and at least one reader, ?Run@Loader@Engine@@, is not. Same shape as ?_singleton@AnimationManager@Graphics@@, which Wave 23 GFXDATA re-derived and left HARMFUL on identical grounds. At cutover REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ?Run@Loader@Engine@@ and the other in-DLL readers ported] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // *** WAVE 27 lane LOOPS, 2026-09-12: THE EXPIRY CONDITION ABOVE IS NOW
+    // *** SATISFIED AND THE ROW IS STILL NOT PROMOTABLE. `?Startup@LoaderLoop@`
+    // *** IS ported and registered (runtime/src/engine/loops.cpp,
+    // *** RtEngine_LoaderLoop_Startup). So the condition was MIS-SPECIFIED: it
+    // *** named the wrong fact. Owning the CODE that takes `_loader`'s address
+    // *** was never the blocker -- owning the code that CONSTRUCTS the object
+    // *** is. `??0Loader@Engine@@QEAA@XZ` (0x1800dc0f0) is retail and unported,
+    // *** `_loader` is a STATIC built by the DLL's CRT static-init before any of
+    // *** our code runs, and the DLL's loader thread was created on THAT object
+    // *** and waits on ITS events. A promoted row would hand our name-resolving
+    // *** doors a second Loader that nothing constructed and no thread watches;
+    // *** the loading screen would hang rather than crash. The verdict was RIGHT
+    // *** on a PREMISE THAT HAS NOW CHANGED, which is the shape that lets a
+    // *** satisfied expiry read as a green light.
+    // *** CORRECTED CONDITION -- AND THE FIRST CORRECTION THIS LANE WROTE HERE
+    // *** WAS ITSELF WRONG, FIXED BEFORE THE LANE CLOSED. It said 'expiry =
+    // *** ??0Loader@Engine@@QEAA@XZ ported AND registered'. That is the SAME
+    // *** defect it was correcting: a condition naming a symbol that is not the
+    // *** blocker. The exported ??0Loader@ is NEVER CALLED (0 direct E8/E9
+    // *** sites, and its address occurs as a qword in NO PE section, so no
+    // *** indirect route either). `_loader` is really built by an UNEXPORTED
+    // *** STATIC-INIT THUNK at 0x180148fe0 with the ctor inlined -- it calls
+    // *** Thread::Thread(&_loader, 0x40000), stamps ??_7Loader@ at 0x180148fff,
+    // *** and nulls _loop -- AT DLL LOAD, before any of our code exists.
+    // *** THERE IS THEREFORE NO SYMBOL TO PORT THAT RETIRES THIS ROW.
+    // *** CORRECTED CONDITION: none. [SCOPE: DLL-PRESENT] is route-scoped: while
+    // *** the DLL is present this row can never be promoted; at CUTOVER it is
+    // *** REQUIRED and we construct `_loader` ourselves.
+    // *** CORRECTED ADDRESSEE: the lane that runs the next CUTOVER attempt --
+    // *** NOT a porting lane, because no amount of porting reaches it. (The old
+    // *** addressee, 'lane MANIFEST of Wave 25', is a closed wave.)
+    // *** Same blocker and same disposition as ??_7Loader@Engine@@6B@ above;
+    // *** the two rows must be retired together, at cutover.
     // RT_UNPROMOTABLE: ?_loader@LoaderLoop@Engine@@1VLoader@2@A | n/a (a Loader OBJECT, not a pointer) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- this row is an AGGREGATE and its consumers take its ADDRESS: 5 LEA and 2 stores, and ?Startup@LoaderLoop@Engine@@ (UNPORTED) does `lea rcx,[0x1801fe7b8]` and then works through the register. Promoting gives our doors a different object from the one that unported body constructs and runs. NOTE FOR ANY LANE RE-DERIVING THIS: a RIP-relative READ/WRITE census reports `R=0` here and that 0 is an ARTEFACT of the access pattern, not evidence of disuse. At cutover REQUIRED (engine/funcs/engine_funcs.cpp and runtime/src/engine/loops.cpp both resolve it by name) [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ?Startup@LoaderLoop@Engine@@ ported AND registered] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
     // RT_UNPROMOTABLE: ?_singleton@Configuration@System@@0PEAV12@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- 4 in-DLL reads / 2 writes, and BOTH halves are split: the reader ?Get@Configuration@System@@ is unported AND the writer ??0Configuration@System@@ is unported, so a promoted slot is neither written by retail's ctor nor read by retail's accessor. At cutover REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ??0Configuration@System@@ ported AND registered, then ?Get@] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
     // RT_UNPROMOTABLE: ?_singleton@AchievementManager@Achievement@@0PEAV12@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.5 | NONE while the DLL is present -- an INVERTED-SHAPE row: only 1 in-DLL read against 5 writes, and the harm is on the writer side. Two of the five writers, ??0AchievementManager@Achievement@@ and a store inside ??0DialogLoopT@Engine@@'s range, are UNPORTED, so retail constructs the manager into retail's slot and a promoted slot would hold whatever our ported Engine::Startup/Shutdown last wrote -- two owners, one object. A LOW READ COUNT IS NOT A SAFE ROW. At cutover REQUIRED (gameupdateloop_serialize.cpp and achievement_manager.cpp both resolve it by name) [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ??0AchievementManager@Achievement@@ ported AND registered] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
