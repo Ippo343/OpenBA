@@ -812,6 +812,26 @@ static const DelDtorSpec kSpecs[] = {
     // CreateNewObject's Allocate(0x48, 8) and the eh_vector iterator stride.
     RT_DELDTOR(0x18004efb0, 0x1800f4650, 0x048, "Video::VideoProgram"),
     RT_DELDTOR(0x18004e000, 0x1800f5df0, 0x048, "Video::VertexLayout"),   // vertexlayout.cpp (2026-09-12)
+    // 2026-09-12: the Video shader family, all four slot-0 entries. Each row's two
+    // constants were read from the shipped bytes, not from the class header:
+    //   0x18004e360  LEA R9,[0x1800f50b0]  MOV EDX,0x50   Video::ShaderProgram
+    //   0x18004e810  LEA R9,[0x1800f61b0]  MOV EDX,0x58   Video::VertexProgram
+    //   0x18004eb90  LEA R9,[0x1800f3a00]  MOV EDX,0x58   Video::PixelProgram
+    //   0x18004b9d0  LEA R9,[0x1800f4c30]  MOV EDX,0x80   Video::RenderState
+    // All four destructors are ported in runtime/src/video/.
+    //
+    // THREE OF THE FOUR INLINE ~Class IN THE SCALAR ARM and call a CLASS-SPECIFIC
+    // `operator delete` (??3VertexProgram 0x18004e5f0, ??3PixelProgram 0x18004e970,
+    // ??3RenderState 0x18004b600) instead of the shared 0x180006a10. That changes
+    // nothing here: all three were disassembled for this commit and are the same
+    // `if (p) { Enter(cs); Free(_singleton, p); Leave(cs); }` as the other ten
+    // copies this file's banner enumerates, so DeletingDtorCore's single MemFree
+    // is retail's body. The `LEA R9` in each VECTOR arm still names the real
+    // destructor, which is what tools/rt_deleting_dtor_verify.py reads.
+    RT_DELDTOR(0x18004e360, 0x1800f50b0, 0x050, "Video::ShaderProgram"),
+    RT_DELDTOR(0x18004e810, 0x1800f61b0, 0x058, "Video::VertexProgram"),
+    RT_DELDTOR(0x18004eb90, 0x1800f3a00, 0x058, "Video::PixelProgram"),
+    RT_DELDTOR(0x18004b9d0, 0x1800f4c30, 0x080, "Video::RenderState"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1165,6 +1185,23 @@ void* RtDelDtor_VertexLayout(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 52);
 }
 
+// Video::ShaderProgram      ~ShaderProgram = 0x1800f50b0  (PORTED, shaderprogram.cpp)
+void* RtDelDtor_ShaderProgram(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 53);
+}
+// Video::VertexProgram      ~VertexProgram = 0x1800f61b0  (PORTED, vertexprogram.cpp)
+void* RtDelDtor_VertexProgram(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 54);
+}
+// Video::PixelProgram       ~PixelProgram = 0x1800f3a00   (PORTED, pixelprogram.cpp)
+void* RtDelDtor_PixelProgram(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 55);
+}
+// Video::RenderState        ~RenderState = 0x1800f4c30    (PORTED, renderstate.cpp)
+void* RtDelDtor_RenderState(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 56);
+}
+
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
     *count = static_cast<int>(sizeof(kProbeSubjects) / sizeof(kProbeSubjects[0]));
@@ -1262,6 +1299,10 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180011d20, (void*)&RtDelDtor_Material);
     RegisterRuntimeAddr(0x18004efb0, (void*)&RtDelDtor_VideoProgram);
     RegisterRuntimeAddr(0x18004e000, (void*)&RtDelDtor_VertexLayout);
+    RegisterRuntimeAddr(0x18004e360, (void*)&RtDelDtor_ShaderProgram);
+    RegisterRuntimeAddr(0x18004e810, (void*)&RtDelDtor_VertexProgram);
+    RegisterRuntimeAddr(0x18004eb90, (void*)&RtDelDtor_PixelProgram);
+    RegisterRuntimeAddr(0x18004b9d0, (void*)&RtDelDtor_RenderState);
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --

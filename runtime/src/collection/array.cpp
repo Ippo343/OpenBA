@@ -1534,6 +1534,87 @@ const ArraySpec kSpec_GraphSeries = {             // 0x1800417d0
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x08, 0x18 };
 
+// --- 2026-09-12: the two Video::ShaderProgram instantiations ---------------
+//
+// Both are reached from ?Serialize@ShaderProgram@Video@@ (0x1800f5110) and its
+// PlatformSerialize (0x1800f52b0) — runtime/src/video/shaderprogram.cpp — and
+// both were read out of their own bodies, not inferred from the element type.
+//
+// 0x180055db0, Array<ShaderProgram::Parameter>:
+//   stride 0x10 (`SHL RCX,0x4` at 0x180055e01), align 8 (`MOV EDX,0x8`)
+//   TWO-ARGUMENT: nothing in the body homes or reads R8.
+//   assign  String adopt at +0x00 (`dst=0; if (src) { dst=src; ++[src-4] }`
+//           at 0x180055e53..0x180055e61), then the int at +0x08 and the BYTE at
+//           +0x0c. +0x0d..+0x0f is NEVER WRITTEN by either arm.
+//   init    `MOV [RAX],R14(=0)` / `MOV [RAX+8],R14D` / `MOV byte [RAX+0xc],0`
+//           at 0x180055e81 — the tail IS zeroed, so `init` is not null.
+//   destroy 0x18004fed0, the String release loop at stride 0x10 offset 0
+//           (array_destroy.cpp kD_Str_10 — the SAME spec 0x180026b50 uses, and
+//           for the same reason: that row is (stride 0x10, offs {0x00}) and
+//           this body computes exactly those two numbers itself).
+void AssignShaderParam(uint8_t* d, const uint8_t* s) {
+    void** dp = reinterpret_cast<void**>(d);
+    void* const* sp = reinterpret_cast<void* const*>(s);
+    dp[0] = nullptr;
+    void* str = sp[0];
+    if (str) {
+        dp[0] = str;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
+    }
+    std::memcpy(d + 0x08, s + 0x08, 4);   // Parameter::dest
+    d[0x0c] = s[0x0c];                    // Parameter::internal (a BYTE)
+}
+void InitShaderParam(uint8_t* d) {
+    std::memset(d, 0, 0x0d);
+}
+void DestroyShaderParamRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18004fed0));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_ShaderParam = {             // 0x180055db0
+    "Array<ShaderProgram::Parameter>", 0x10, 8, &AssignShaderParam, &InitShaderParam,
+    &DestroyShaderParamRange, false,
+    /*assign unwritten*/ 0x0d, 0x10,
+    /*init   unwritten*/ 0x0d, 0x10,
+    /*seed zero       */ 0x00, 0x08 };
+
+// 0x180053f00, Array<Collection::Array<uint8>> — an array OF arrays, which is
+// the byte-code-per-backend list at ShaderProgram+0x40.
+//   stride 0x10 (`SHL RCX,0x4` at 0x180053f63), align 8, TWO-ARGUMENT.
+//   assign  ZEROES BOTH QWORDS FIRST (`MOV [RCX],R8(=0)` /
+//           `MOV qword [RCX+8],0` at 0x180053fad) and only then, if dst != src,
+//           calls Array<uint8>::operator= (0x180011220, already ported in
+//           runtime/src/io/modification.cpp). The zero-first is not cosmetic:
+//           operator= opens with ~Array on the DESTINATION, so a non-zero
+//           garbage buffer pointer there would be handed to MemFree.
+//   init    the same two zero stores, no operator= — whole stride written.
+//   destroy 0x18004ff80, the inner-array free loop at stride 0x10 offset 0
+//           (array_destroy.cpp kD_InnerArr_10).
+void AssignInnerArrayU8(uint8_t* d, const uint8_t* s) {
+    void** dp = reinterpret_cast<void**>(d);
+    dp[0] = nullptr;
+    dp[1] = nullptr;
+    if (d == s) return;                   // retail's `CMP RCX,RSI; JE` skip
+    using AssignFn = void* (*)(void*, const void*);
+    static AssignFn fn = reinterpret_cast<AssignFn>(ResolveAddr(Module::Runtime, 0x180011220));
+    fn(d, s);
+}
+void InitInnerArrayU8(uint8_t* d) {
+    std::memset(d, 0, 0x10);
+}
+void DestroyInnerArrayU8Range(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18004ff80));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_InnerArrayU8 = {            // 0x180053f00
+    "Array<Array<uint8>>", 0x10, 8, &AssignInnerArrayU8, &InitInnerArrayU8,
+    &DestroyInnerArrayU8Range, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x10 };
+
 // ============================================================================
 // Live instrumentation.
 //
@@ -2050,6 +2131,10 @@ J3_ENTRY2(180078c90, kSpec_StringPair10) // UI: StringTable's TextEntry array
 // Cutover closure batch 2 (2026-09-12): Graphics::Material::_parameters,
 // ~MaterialInstance's array's sibling SetSize.
 J3_ENTRY2(1800616c0, kSpec_MaterialParam) // Graphics: Material::_parameters
+// 2026-09-12 — the two Video::ShaderProgram instantiations. Both two-argument,
+// read from their own bodies; see the two spec rows above.
+J3_ENTRY2(180055db0, kSpec_ShaderParam)  // Video: ShaderProgram::_textures / _constants [NON-TRIVIAL]
+J3_ENTRY2(180053f00, kSpec_InnerArrayU8) // Video: ShaderProgram::_byteCode            [NON-TRIVIAL]
 
 #undef J3_ENTRY2
 
@@ -2282,6 +2367,13 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180008d60, (void*)&RtColl_ArraySetSize_180008d60);
     RegisterRuntimeAddr(0x1800604e0, (void*)&RtColl_ArraySetSize_1800604e0);
     RegisterRuntimeAddr(0x180056240, (void*)&RtColl_ArraySetSize_180056240);
+    // 2026-09-12 — Video::ShaderProgram's two. Registered UNCONDITIONALLY and
+    // NOT behind BANISHED_RT_ARRAY_NONTRIVIAL, even though both call unexported
+    // per-element helpers: they sit on ?Serialize@ShaderProgram@Video@@, which
+    // is on the cutover boot path, and an unregistered address there is a call
+    // to zero the moment the DLL is gone.
+    RegisterRuntimeAddr(0x180055db0, (void*)&RtColl_ArraySetSize_180055db0);
+    RegisterRuntimeAddr(0x180053f00, (void*)&RtColl_ArraySetSize_180053f00);
     RegisterRuntimeAddr(0x180008ff0, (void*)&RtColl_ArraySetSize_180008ff0);
     RegisterRuntimeAddr(0x18002fea0, (void*)&RtColl_ArraySetSize_18002fea0);
     RegisterRuntimeAddr(0x180059140, (void*)&RtColl_ArraySetSize_180059140);
