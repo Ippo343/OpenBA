@@ -224,9 +224,21 @@ struct MainLoop {
     // All times are QPC ticks converted through System::Timer's
     // (qpc - base) * mul / div, NOT raw QPC counts.
     // Run converts QPC once, before the frame loop, and stores it here
-    // (0x1800dd404). Whether MainLoop::Frame (0x1800dd100, DLL-internal) also
-    // rewrites it per frame was NOT checked by lane B — the name says what the
-    // one site we read does, not that it is never updated again.
+    // (0x1800dd404).
+    //
+    // *** ANSWERED, Wave 25 lane BODY. *** Lane B left open "whether
+    // MainLoop::Frame also rewrites it per frame". IT DOES — every call,
+    // unconditionally, at 0x1800dd146, and it uses the PREVIOUS value as the
+    // delta base:
+    //       now  = CurrentTimeTicks()
+    //       R8   = now - _startTicks        ; elapsed since the last Frame
+    //       _startTicks   = now             ; 0x1800dd146
+    //       _accumulator += R8              ; 0x1800dd14a
+    // So this field means "the tick at which the LAST FRAME was sampled", not
+    // "the tick Run started". Run's single pre-loop store is the seed for the
+    // first frame's delta, not a start timestamp anything later reads as one.
+    // Re-derive: objdump -d -M intel --start-address=0x1800dd100
+    //            --stop-address=0x1800dd3ac Runtime-x64.dll
     int64_t  _startTicks;         // +0x30
     int64_t  _accumulator;        // +0x38  fixed-step carry
     int64_t  _totalTime;          // +0x40

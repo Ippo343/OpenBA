@@ -1,0 +1,450 @@
+// ============================================================================
+// runtime/src/io/package_file_dtor.cpp — ~IO::PackageFile
+//                                        Wave 25 lane BODY
+// ============================================================================
+//
+//   | Export                     | Retail      | Ord | Bytes | Instrs |
+//   |----------------------------|-------------|-----|-------|--------|
+//   | ??1PackageFile@IO@@UEAA@XZ | 0x1800b4540 | 639 |  318  |   87   |
+//
+// `UEAA` is the VIRTUAL spelling and it is the one the DLL exports — the
+// non-virtual `QEAA` form of this name does not exist, and asking for it would
+// have resolved NULL with `ResolveExport` hiding the miss
+// (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). The name above was printed
+// out of the shipped export directory by ADDRESS, not typed from the pattern.
+//
+// ---------------------------------------------------------------------------
+// 1. THE STATED BLOCKERS, AND WHAT RE-DERIVING THEM FOUND
+// ---------------------------------------------------------------------------
+// Two blockers were on the record for this row, one of each shape. Kickoff §1a:
+// dependency-shaped claims decay, oracle-shaped ones do not. Here BOTH failed,
+// which is itself the news.
+//
+// (a) DEPENDENCY — `package_file.cpp:925` lists this row as deliberately absent
+//     with the parenthetical **"(5 unported callees)"**.
+//     **RE-DERIVED: FALSE. The dtor has SEVEN distinct callees and SIX of them
+//     are ported AND registered in this tree today.** Measured by disassembling
+//     0x1800b4540..0x1800b467e and grepping each target for a
+//     `RegisterRuntimeAddr`/`RegisterRuntimeExport`:
+//
+//       0x18000c180  ~FileSystem::FileInfo   PORTED  io/file_stream.cpp:886
+//       0x1800269a0  ~Array<T> (elem loop)   NOT PORTED  <- the only one
+//       0x1800112a0  ~Array<uint8>           PORTED  io/modification.cpp:909
+//       0x1800111a0  ~Array<int32>           PORTED  io/modification.cpp:907
+//       0x1800c7ad0  ?MemFree@MemoryAllocator PORTED  system/allocator.cpp:1701
+//       0x180010ab0  ~Array<T> (elem dtor)   PORTED  collection/array_destroy.cpp:902
+//       0x1800bc950  ~Object::External       PORTED  object/external.cpp:762
+//
+//     The count was wrong by four and, more to the point, **an unported callee
+//     was never a blocker in the first place**: retail reaches all seven by
+//     rel32, this port reaches them through
+//     `ResolveAddr(Module::Runtime, addr)`, and that consults the PORT REGISTRY
+//     FIRST and falls through to the DLL. So 0x1800269a0 lands on the DLL's own
+//     body today and on whatever registers it later, with no change here. That
+//     is the kickoff's worked specimen — "not exported" is not "no door" — in
+//     its dependency form.
+//
+// (b) ORACLE — `WAVE23_LANE_IOPORT.md §2.4`, carried forward by Wave 24 lane
+//     SMALLBODY as "the strongest-held of the nine, and correctly scoped":
+//     *"it has no oracle... a fabricated subject is a fake rather than a
+//     synthetic one"*.
+//     **RE-DERIVED: FALSE, and §3 is the oracle.** The objection is real but it
+//     is an objection to ONE construction (fabricating a PackageFile by hand),
+//     not to the existence of an oracle. The subject below is not fabricated:
+//     it is built by **retail's own exported constructor**
+//     (`??0PackageFile@IO@@QEAA@XZ`, which this tree already ports and which
+//     `package_file.cpp` §5 already byte-verifies against the DLL), then filled
+//     with **real refcounted System::String blocks from the real allocator**.
+//     That is a SYNTHETIC SUBJECT, which beats a fake precisely because every
+//     part of it was produced by the shipped code
+//     (reference_synthetic_subject_beats_a_fake.md).
+//
+// ---------------------------------------------------------------------------
+// 2. THE BODY — WHAT THE BYTES DO
+// ---------------------------------------------------------------------------
+// Stamp the vtable, destroy five embedded members, release five Strings, then
+// TAIL-JUMP to `~Object::External`.
+//
+//   1800b455b  LEA RAX,[0x180155700] / MOV [RCX],RAX   ??_7PackageFile@IO@@6B@
+//   1800b4565  ADD RCX,0xc0 / CALL 0x18000c180         ~FileInfo        (+0xC0)
+//   1800b4572  LEA RCX,[RBX+0xb0] / CALL 0x1800269a0   ~Array           (+0xB0)
+//   1800b457f  LEA RCX,[RBX+0x98] / CALL 0x1800112a0   ~Array<uint8>    (+0x98)
+//   1800b458c  LEA RCX,[RBX+0x80] / CALL 0x1800111a0   ~Array<int32>    (+0x80)
+//   1800b4599  the String release idiom at +0x60, +0x58, +0x50, +0x48, +0x40
+//   1800b4658  LEA RCX,[RBX+0x30] / CALL 0x180010ab0   ~Array           (+0x30)
+//   1800b4662  LEA RCX,[RBX+0x20] / CALL 0x180010ab0   ~Array           (+0x20)
+//   1800b466c  MOV RCX,RBX / JMP 0x1800bc950           ~External, TAIL
+//
+// FOUR TRANSCRIPTION POINTS THAT MATTER:
+//
+// (i)   **THE FIVE STRINGS ARE RELEASED IN DESCENDING ORDER** — +0x60 first,
+//       +0x40 last. That is reverse construction order, which is what a dtor
+//       must do, and it reaches the allocator in that order. A port that
+//       released them ascending would produce an identical object and a
+//       different free sequence, and no comparator on the object bytes could
+//       see it (array_destroy_internal.h records the same trap on three rows).
+//
+// (ii)  **THE RELEASE IDIOM'S TWO ARMS LEAVE THE SLOT HOLDING DIFFERENT
+//       THINGS.** On the freeing arm the slot keeps `data - 8`; on the sharing
+//       arm it is NULLED. That asymmetry is retail's and it is the ONLY part of
+//       this function a byte comparator can see, which is why §3's subject
+//       deliberately contains both kinds. `RtSystem::RtString_ReleaseInline`
+//       already is this idiom, instruction for instruction (string.cpp:132),
+//       so this file calls it rather than re-transcribing it — the fifth and
+//       sixth copies of a refcount idiom are how one of them drifts.
+//
+// (iii) **TWO MORE STRING FIELDS THAN FileSystem.h NAMES.** The header models
+//       +0x40 `name`, +0x48 `author`, +0x50 `description` and then
+//       `_unknown58[0x58..0x67]`. The dtor releases **+0x58 and +0x60 with the
+//       same String idiom**, so both are `System::String`. They are recorded in
+//       the header as strings-of-unknown-purpose; they are NOT given invented
+//       names, because a destructor pins the TYPE and says nothing about the
+//       MEANING (reference_a_writer_beats_readers_agreeing_on_a_sign.md is the
+//       same discipline one step over).
+//
+// (iv)  **THE LAST CALL IS A TAIL JUMP, SO ITS RETURN VALUE IS THIS
+//       FUNCTION'S.** `JMP 0x1800bc950` — whatever `~Object::External` leaves
+//       in RAX is what `~PackageFile` returns. Retail's callers are free to use
+//       it. Declaring this `void` would leave RAX unset, which works with the
+//       DLL present and is exactly the shape §1c of the kickoff describes for
+//       ctors; so the signature returns what the tail call returns rather than
+//       discarding it. That is a transcription of the jump, not a guess about
+//       a caller.
+//
+// ---------------------------------------------------------------------------
+// 3. THE ORACLE — PROBE SHAPE: **SYNTHESISED ORACLE**, named up front
+// ---------------------------------------------------------------------------
+// Why not the others: an INPUT SWEEP needs purity and this mutates an object
+// and the heap; a SHADOW SITE alone cannot work, and the reason is the whole
+// difficulty of this row — the two arms would share the same String blocks and
+// the second run would DOUBLE FREE; a WRITE-PATH REPLAY has no stream; the
+// fallback is TWO-SIDED DISASSEMBLY and it was not needed.
+//
+// The construction, and every part of it is shipped code:
+//
+//   1. two arenas of 0xF0 bytes, prefilled 0xCD
+//   2. `RtOriginal<CtorFn>("??0PackageFile@IO@@QEAA@XZ")` on BOTH — the DLL's
+//      own constructor, so the starting states are retail's and identical
+//   3. five String slots filled per arena with **SEPARATE** blocks from
+//      `RtString_SetLength` (the real allocator), with a deliberately MIXED
+//      refcount pattern: refcount 1 on +0x60/+0x50/+0x40 (the FREEING arm) and
+//      refcount 2 on +0x58/+0x48 (the SHARING arm). Separate blocks are what
+//      makes two runs safe; the mixed pattern is what makes the comparison
+//      mean anything (reference_uniform_population_is_not_a_verification.md —
+//      a population where every case takes the same branch verifies one branch
+//      and reports as if it verified the function).
+//   4. `RtOriginal<DtorFn>("??1PackageFile@IO@@UEAA@XZ")` on arena B — **this
+//      is a real consultation of the DLL**, which is what makes the site an
+//      `[ORACLE]` rather than one of the 133 NO-COMPARISON sites the kickoff
+//      counts. `ResolveAddr(Module::Runtime, …)` would NOT do: it checks the
+//      port registry first and would compare this port with itself
+//      (reference_resolveaddr_consults_port_registry_first.md).
+//   5. our body on arena A
+//   6. compare all 0xF0 bytes — EXCEPT the two qwords holding the String
+//      pointers whose arms FREED, because those hold `data - 8` for two
+//      DIFFERENT heap blocks and must differ. Comparing them would fail 100%
+//      of calls and read like a catastrophic port
+//      (reference_oracle_must_not_compare_unwritten_bytes.md). They are checked
+//      by PREDICATE instead — "freed slot holds its own block minus 8" — which
+//      is strictly stronger than a byte compare and is stated as its own row.
+//
+// CONTROLS (kickoff §3.2: a control must corrupt something the probe COMPARES):
+//   C1  release the Strings in ASCENDING order         -> must ABSTAIN (agree):
+//                                                         the object bytes
+//                                                         cannot see order. It
+//                                                         is the EFFECTIVENESS
+//                                                         control and its green
+//                                                         is the honest report
+//                                                         of a real blind spot.
+//   C2  null the slot on the FREEING arm too           -> must be CAUGHT
+//   C3  skip the +0x58 release                         -> must be CAUGHT
+//   C4  skip the vtable stamp                          -> must be CAUGHT
+//   C5  skip the ~Array at +0x20                       -> must be CAUGHT
+// Each control's verdict is reported on ITS OWN ROW and never unioned
+// (reference_union_control_hides_a_blind_screen.md).
+//
+// **WHAT THE ORACLE DOES NOT ESTABLISH, PLAINLY:** it cannot see the ORDER of
+// the seven callee invocations (C1 is the standing proof of that, not a
+// suspicion), and it cannot see anything the five member destructors do to
+// memory OUTSIDE the 0xF0 arena. It establishes that the object is left in the
+// same state, with the same slots freed and the same slots shared.
+//
+// ---------------------------------------------------------------------------
+// 4. DOOR ARITHMETIC — DECLARED
+// ---------------------------------------------------------------------------
+// CLOSES: the NAME door `??1PackageFile@IO@@UEAA@XZ` and the ADDRESS door
+//         0x1800b4540.
+// OPENS:  **0x1800269a0** — an ADDRESS door, and it is genuinely one: the
+//         function is not in the export directory under any name (checked by
+//         address with pefile; `AEAA` would not have settled it, since this DLL
+//         exports its private members —
+//         reference_aeaa_is_private_not_unexported.md). The other six callees
+//         are already registered, so they add no rows.
+// NET DECLARED SURFACE GROWTH: **+1 census row** (0x1800269a0, address-keyed,
+// which lands in the `internal` bucket), against 1 row moved into `ported`.
+//
+// Kill switch: BANISHED_RT_PKGDTOR=0 returns the call to the DLL.
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include <cstdio>
+#include <cstring>
+
+#include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
+#include "../../types/io/FileSystem.h"
+#include "../system/string.h"
+
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
+using RtSystem::String;
+
+namespace {
+
+constexpr size_t kPackageFileSize = 0xF0;
+
+// The five String slots, in RETAIL'S RELEASE ORDER (descending). Reproduced,
+// not sorted — see §2(i).
+constexpr uint32_t kStringOffsets[5] = { 0x60, 0x58, 0x50, 0x48, 0x40 };
+
+typedef void* (*MemberDtorFn)(void* self);
+
+inline uint8_t* Bytes(void* p) { return reinterpret_cast<uint8_t*>(p); }
+
+// Retail's `MOV [RCX],RAX` with RAX = ??_7PackageFile@IO@@6B@ (0x180155700,
+// ord 1471, EXPORTED). RT_DATA_SLOT, not a literal VA: at cutover a raw VA is a
+// pointer into a module that is not loaded, and it would be stamped into every
+// package object in the process. package_file.cpp's constructor uses the same
+// door for the same store.
+inline void StampVtable(void* self) {
+    *reinterpret_cast<void**>(self) =
+        RT_DATA_SLOT(void*, "??_7PackageFile@IO@@6B@");
+}
+
+// ---------------------------------------------------------------------------
+// The body, as a plain function so the oracle in §3 drives the SAME code the
+// registered entry point drives. A probe that re-derived it would be testing a
+// copy of the port rather than the port (the reason array_destroy_internal.h
+// and array_internal.h exist).
+//
+// `corrupt` is 0 on every real call. It exists only so §3's controls can
+// perturb THIS body rather than a retyped twin; a control that corrupts a copy
+// proves nothing about what ships.
+// ---------------------------------------------------------------------------
+void* PackageFileDtorBody(void* self, int corrupt = 0) {
+    // All seven callees BY ADDRESS, exactly as retail's rel32 calls reach them.
+    // ResolveAddr consults the port registry FIRST, so the six that are ported
+    // land on our bodies and 0x1800269a0 falls through to the DLL (§1a).
+    static auto dtorFileInfo  = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x18000c180));
+    static auto dtorArrayB0   = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x1800269a0));
+    static auto dtorArrayU8   = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x1800112a0));
+    static auto dtorArrayI32  = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x1800111a0));
+    static auto dtorArrayElem = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x180010ab0));
+    static auto dtorExternal  = reinterpret_cast<MemberDtorFn>(ResolveAddr(Module::Runtime, 0x1800bc950));
+
+    uint8_t* p = Bytes(self);
+
+    if (corrupt != 4)                       // C4 skips the stamp
+        StampVtable(self);                  // 0x1800b455b
+
+    dtorFileInfo (p + 0xC0);                // 0x1800b456c
+    dtorArrayB0  (p + 0xB0);                // 0x1800b4579
+    dtorArrayU8  (p + 0x98);                // 0x1800b4586
+    dtorArrayI32 (p + 0x80);                // 0x1800b4593
+
+    // 0x1800b4599..0x1800b4658 — five copies of the release idiom, descending.
+    for (int i = 0; i < 5; ++i) {
+        const int idx = (corrupt == 1) ? (4 - i) : i;      // C1: ascending
+        const uint32_t off = kStringOffsets[idx];
+        if (corrupt == 3 && off == 0x58)                   // C3: skip one
+            continue;
+
+        String* s = reinterpret_cast<String*>(p + off);
+        if (corrupt == 2) {
+            // C2: null the slot on BOTH arms. This is the one-character
+            // difference the two arms exist to prevent, and it is invisible to
+            // any test that only checks "did it free".
+            char* d = s->data;
+            if (d && --RtSystem::StringRefCount(d) == 0)
+                RtSystem::RtMemFree(d - 8);
+            s->data = nullptr;
+        } else {
+            RtSystem::RtString_ReleaseInline(s);
+        }
+    }
+
+    dtorArrayElem(p + 0x30);                // 0x1800b465c
+    if (corrupt != 5)                       // C5 skips the second one
+        dtorArrayElem(p + 0x20);            // 0x1800b4666
+
+    // 0x1800b4679 — TAIL JUMP. Its return value is ours (§2 iv).
+    return dtorExternal(self);
+}
+
+}  // namespace
+
+// ============================================================================
+// §3's oracle. Runs ONCE, on the first destruction of a real PackageFile in a
+// BANISHED_RT_DIFF run, and reports every control on its own row.
+// ============================================================================
+namespace {
+
+typedef void* (*CtorFn)(void*);
+typedef void* (*DtorFn)(void*);
+
+// Fill the five String slots with SEPARATE real blocks. `shared` gets refcount
+// 2 (the SHARING arm), the rest refcount 1 (the FREEING arm). Returns the five
+// data pointers so the predicate row can check `slot == data - 8`.
+void PopulateStrings(void* arena, char* out[5]) {
+    for (int i = 0; i < 5; ++i) {
+        const uint32_t off = kStringOffsets[i];
+        String* s = reinterpret_cast<String*>(Bytes(arena) + off);
+        s->data = nullptr;
+        RtSystem::RtString_SetLength(s, 7);       // fresh block, refcount 1
+        std::memcpy(s->data, "pkgdtor", 7);
+        s->data[7] = '\0';
+        // +0x58 and +0x48 take the SHARING arm.
+        if (off == 0x58 || off == 0x48)
+            ++RtSystem::StringRefCount(s->data);
+        out[i] = s->data;
+    }
+}
+
+bool g_selfTestDone = false;
+bool g_selfTestOk   = false;
+char g_selfTestOurs[240]   = "not run";
+char g_selfTestTheirs[240] = "not run";
+
+void RunOracleOnce() {
+    if (g_selfTestDone) return;
+    g_selfTestDone = true;
+
+    auto theirCtor = RtOriginal<CtorFn>("??0PackageFile@IO@@QEAA@XZ");
+    auto theirDtor = RtOriginal<DtorFn>("??1PackageFile@IO@@UEAA@XZ");
+    if (!theirCtor || !theirDtor) {
+        // The DLL is gone (cutover). An oracle with no second arm must say so,
+        // not silently report agreement.
+        std::snprintf(g_selfTestOurs, sizeof g_selfTestOurs,
+                      "NO SECOND ARM: the shipped ctor/dtor did not resolve "
+                      "(ctor=%p dtor=%p) -- this row carries NO VERDICT",
+                      (void*)theirCtor, (void*)theirDtor);
+        std::snprintf(g_selfTestTheirs, sizeof g_selfTestTheirs, "n/a");
+        g_selfTestOk = false;
+        return;
+    }
+
+    struct Cell { int corrupt; const char* name; bool mustDiverge; };
+    static const Cell cells[] = {
+        { 0, "NULL CASE          (must agree)",              false },
+        { 1, "C1 ascending order (EFFECTIVENESS: abstain)",  false },
+        { 2, "C2 null on free arm(must be CAUGHT)",          true  },
+        { 3, "C3 skip +0x58      (must be CAUGHT)",          true  },
+        { 4, "C4 skip vtable     (must be CAUGHT)",          true  },
+        { 5, "C5 skip ~Array+0x20(must be CAUGHT)",          true  },
+    };
+
+    int passed = 0;
+    int comparedBytes = 0;
+    char line[512] = {0};
+    for (const Cell& c : cells) {
+        alignas(16) uint8_t mine[kPackageFileSize];
+        alignas(16) uint8_t theirs[kPackageFileSize];
+        std::memset(mine,   0xCD, sizeof mine);
+        std::memset(theirs, 0xCD, sizeof theirs);
+        theirCtor(mine);
+        theirCtor(theirs);
+
+        char mineData[5], *mineStr[5];
+        char *theirsStr[5];
+        (void)mineData;
+        PopulateStrings(mine,   mineStr);
+        PopulateStrings(theirs, theirsStr);
+
+        PackageFileDtorBody(mine, c.corrupt);
+        theirDtor(theirs);
+
+        // Compare all 0xF0 EXCEPT the three slots whose arms FREED: those hold
+        // `data - 8` for two DIFFERENT blocks and MUST differ (§3 step 6).
+        bool differ = false;
+        int  compared = 0;
+        for (size_t i = 0; i < kPackageFileSize; ++i) {
+            bool skip = false;
+            for (int k = 0; k < 5; ++k) {
+                const uint32_t off = kStringOffsets[k];
+                if (off == 0x58 || off == 0x48) continue;   // sharing arm: nulled, comparable
+                if (i >= off && i < off + 8) { skip = true; break; }
+            }
+            if (skip) continue;
+            ++compared;
+            if (mine[i] != theirs[i]) differ = true;
+        }
+        comparedBytes = compared;
+
+        // The predicate row the skipped bytes are replaced by: every FREEING
+        // slot must hold its OWN block minus 8, on both sides.
+        bool predicateOk = true;
+        for (int k = 0; k < 5; ++k) {
+            const uint32_t off = kStringOffsets[k];
+            if (off == 0x58 || off == 0x48) continue;
+            char* got = *reinterpret_cast<char**>(mine + off);
+            if (got != mineStr[k] - 8) predicateOk = false;
+            char* gotT = *reinterpret_cast<char**>(theirs + off);
+            if (gotT != theirsStr[k] - 8) predicateOk = false;
+        }
+        if (c.corrupt != 0) predicateOk = true;   // only the null case asserts it
+
+        const bool verdictOk = (differ == c.mustDiverge) && predicateOk;
+        if (verdictOk) ++passed;
+        std::snprintf(line, sizeof line, "[PKGDTOR] %-36s %-9s %s\n",
+                      c.name, differ ? "DIVERGED" : "agreed",
+                      verdictOk ? "" : "  <-- UNEXPECTED");
+        std::printf("%s", line);
+    }
+
+    g_selfTestOk = (passed == 6);
+    std::snprintf(g_selfTestOurs, sizeof g_selfTestOurs,
+                  "ORACLE vs the SHIPPED ??1PackageFile@: %d/6 cells as "
+                  "specified; %d of %d object bytes compared per cell "
+                  "(24 excluded: the 3 freeing slots, which MUST differ and are "
+                  "checked by predicate instead)",
+                  passed, comparedBytes, (int)kPackageFileSize);
+    std::snprintf(g_selfTestTheirs, sizeof g_selfTestTheirs,
+                  "expected 6/6: null agrees, C1 ABSTAINS (order is invisible "
+                  "to the object bytes -- a real blind spot, reported not hidden), "
+                  "C2..C5 all CAUGHT");
+}
+
+}  // namespace
+
+// ??1PackageFile@IO@@UEAA@XZ   retail 0x1800b4540  ord 639
+extern "C" void* RtIo_PackageFile_Dtor(void* self) {
+    RT_DIFF_BEGIN("IO::PackageFile::~PackageFile [ORACLE]");
+
+    if (rt_diff_on__) {
+        RunOracleOnce();
+        RT_DIFF_SHADOW(g_selfTestOk, g_selfTestOurs, g_selfTestTheirs);
+    }
+
+    void* r = PackageFileDtorBody(self);
+    RT_DIFF_WORK(true);
+    return r;
+}
+
+// ============================================================================
+// Registration — BOTH doors.
+// Every mangled name is ONE literal on ONE line so runtime_census.py and
+// export_name_audit.py can see it.
+// ============================================================================
+int RtIoPackageFileDtorRegister() {
+    int n = 0;
+    RegisterRuntimeExport("??1PackageFile@IO@@UEAA@XZ", (void*)&RtIo_PackageFile_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800b4540, (void*)&RtIo_PackageFile_Dtor);
+    std::printf("[RtPort]   IO::PackageFile::~PackageFile (lane BODY, W25): %d "
+                "export registered (opens ONE address door, 0x1800269a0; the "
+                "\"5 unported callees\" blocker was measured FALSE -- 6 of 7 are "
+                "ported -- and the \"no oracle\" blocker is answered by the "
+                "[ORACLE] site in package_file_dtor.cpp section 3)\n", n);
+    return n;
+}
