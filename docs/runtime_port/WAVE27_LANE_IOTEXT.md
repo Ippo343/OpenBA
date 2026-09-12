@@ -423,3 +423,12 @@ No tool was written, fixed or extended. `file_stream_probe.cpp` was not touched.
   so no measurement was taken against another lane's binary.
 * `tools/rt_deleting_dtor_verify.py` → 45 rows, problems: 0.
 * `tools/boot_state.sh` → RUNNING; `standalone_crash.log` zero bytes.
+* `standalone/cutover_manifest.inc` now reports `GATE WARN: stale in COSMETIC
+  fields only (a by-name door count moved)` — that moved count is this lane's two
+  new by-name registrations. The gate itself says `OK (60 rows; row set and every
+  disposition match a fresh derivation)` and explicitly does **not** fail the
+  build. Deliberately NOT refreshed here: the `.inc` is a generated artefact the
+  integrator derives at merge, and refreshing it from one lane's branch would put
+  a mid-wave snapshot in the file the next lane's build compares against.
+  **ADDRESSEE: the Wave 27 integrator** — `python tools/cutover_manifest.py --inc`
+  once the lanes are merged.
