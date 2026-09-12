@@ -949,6 +949,20 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x1800403a0, 0x1800d1b30, 0x088, "UI::GraphDescription"),
     RT_DELDTOR(0x180042730, 0x1800d2960, 0x0b8, "UI::LabelDescription"),
 
+    // VTABLE BATCH 7 (2026-09-12), appended AFTER batch 8's four rows above --
+    // indices 71-74. Four more classes' slot0, read the same way as every row
+    // above (LEA R9,[~Class] / MOV EDX,sizeof from the deleting dtor's own
+    // bytes, objdump against retail):
+    //   0x1800167f0  LEA R9,[0x1800fb620]  MOV EDX,0x58   Graphics::AnimationGroup
+    //   0x180020a70  LEA R9,[0x1800a51c0]  MOV EDX,0x108  Graphics::ParticleSystem
+    //   0x18000bef0  LEA R9,[0x1800e03b0]  MOV EDX,0x80   Audio::SoundBuffer
+    //   0x180050820  LEA R9,[0x1800e0880]  MOV EDX,0x40   Audio::SoundEffect
+    // None of the four ~Class bodies is ported by this batch; all four reach
+    // the DLL through ResolveAddr, exactly like most of the rows above.
+    RT_DELDTOR(0x1800167f0, 0x1800fb620, 0x058, "Graphics::AnimationGroup"),
+    RT_DELDTOR(0x180020a70, 0x1800a51c0, 0x108, "Graphics::ParticleSystem"),
+    RT_DELDTOR(0x18000bef0, 0x1800e03b0, 0x080, "Audio::SoundBuffer"),
+    RT_DELDTOR(0x180050820, 0x1800e0880, 0x040, "Audio::SoundEffect"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1431,6 +1445,25 @@ void* RtDelDtor_LabelDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 80);
 }
 
+// VTABLE BATCH 7 (2026-09-12). Indices 81-84 (renumbered at this merge: batch
+// 8 took 67-70 on main first, concurrently with this batch's own claim on the
+// same range on this branch).
+// Graphics::AnimationGroup  ~AnimationGroup = 0x1800fb620  (NOT ported)
+void* RtDelDtor_AnimationGroup(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 81);
+}
+// Graphics::ParticleSystem  ~ParticleSystem = 0x1800a51c0  (NOT ported)
+void* RtDelDtor_ParticleSystem(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 82);
+}
+// Audio::SoundBuffer        ~SoundBuffer = 0x1800e03b0     (NOT ported)
+void* RtDelDtor_SoundBuffer(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 83);
+}
+// Audio::SoundEffect        ~SoundEffect = 0x1800e0880     (NOT ported)
+void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 84);
+}
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
@@ -1565,6 +1598,11 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800403a0, (void*)&RtDelDtor_GraphDescription);
     RegisterRuntimeAddr(0x180042730, (void*)&RtDelDtor_LabelDescription);
 
+    // VTABLE BATCH 7 (2026-09-12).
+    RegisterRuntimeAddr(0x1800167f0, (void*)&RtDelDtor_AnimationGroup);
+    RegisterRuntimeAddr(0x180020a70, (void*)&RtDelDtor_ParticleSystem);
+    RegisterRuntimeAddr(0x18000bef0, (void*)&RtDelDtor_SoundBuffer);
+    RegisterRuntimeAddr(0x180050820, (void*)&RtDelDtor_SoundEffect);
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --
