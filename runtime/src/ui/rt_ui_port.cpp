@@ -196,6 +196,10 @@ extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
 // make the whole file worthless (dialog_factory.cpp has been dark since Wave 11).
 extern int RtUiFactory2Register();         // ui_factory_wave28.cpp (FACTUI2)
 
+// VTABLE BATCH 9 (2026-09-12).
+extern int RtUiComboDialogRegister();             // combodialog.cpp
+extern int RtUiDialogControllerConfigRegister();   // dialogcontrollerconfig.cpp
+
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
         printf("[RtPort] BANISHED_RT_UI=0 -- UI namespace port disabled\n");
@@ -239,5 +243,12 @@ void RtUiPortInit() {
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
     n += RtUiFactory1Register();  // owns BANISHED_RT_UIFACT1 (FACTUI1)
     n += RtUiFactory2Register();          // owns BANISHED_RT_UIFACT2 (FACTUI2)
+
+    // ---- VTABLE BATCH 9 (2026-09-12), unconditional -------------------------
+    //   combodialog.cpp             UI::ComboDialog
+    //   dialogcontrollerconfig.cpp  UI::DialogControllerConfig
+    n += RtUiComboDialogRegister();
+    n += RtUiDialogControllerConfigRegister();
+
     printf("[RtPort] UI: %d exports registered\n", n);
 }
