@@ -602,6 +602,30 @@ def main():
         data_syms.append((sym, "scan", rva, ";".join(sorted(where))))
         scan_added.append((sym, sorted(where)[0]))
 
+    # ---- 2026-09-12: EVERY exported vtable / BaseTypeInfo / singleton --------
+    # "Mint what the source names" left 18 exported ??_7 tables unminted,
+    # among them the whole Video shader family (VideoProgram, VertexLayout,
+    # VertexProgram, PixelProgram, RenderState, ShaderProgram) -- exactly what
+    # the first cutover boot past Material::Serialize needed. At cutover the
+    # DLL's .rdata does not exist, so a table nothing names TODAY is still a
+    # table that must exist; an unported slot is a named trap, which is the
+    # right outcome. So the set is now: everything exported that is not code.
+    have = {d[0] for d in data_syms if d[0]}
+    all_added = []
+    for sym, rva in sorted(by_name.items()):
+        if sym in have or section_of(rva) == ".text":
+            continue
+        if not (sym.startswith("??_7") or sym.startswith("?_typeInfo@")
+                or sym.startswith("?_singleton@")):
+            continue
+        ns = "?"
+        m = re.match(r"^\?\?_7[^@]+@([^@]+)@@6B@$", sym) or re.match(r"^\?_[a-zA-Z]+@[^@]+@([^@]+)@@", sym)
+        if m:
+            ns = m.group(1)
+        data_syms.append((sym, ns, rva, "mint:all-exported-data"))
+        all_added.append(sym)
+    print(f"all-exported-data union added {len(all_added)} symbols", file=sys.stderr)
+
     for va, why in list(EXTRA_VTABLES_BY_ADDR.items()) + list(
             (k, v[1]) for k, v in EXTRA_STORAGE_BY_ADDR.items()):
         data_syms.append((None, "byaddr", va - ib, "mint:" + why))

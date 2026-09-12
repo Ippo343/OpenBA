@@ -60,9 +60,33 @@ def main():
 
     with open(os.path.join(OUT, "roots.txt"), "w") as f:
         f.write("\n".join("%x" % a for a in sorted(roots)) + "\n")
+
+    # The ported set comes from the LIVE registry when a cutover run has left
+    # one behind (tools/cutover_run.sh arms BANISHED_RT_CENSUS=1, which prints
+    # every registered export/address as "[RtCensus] ..." to stderr).  The
+    # census's source parse undercounted it by ~600 rows on 2026-09-12 because
+    # it guesses at env gates; the process does not guess.
+    live_log = os.path.join(REPO, "docs", "runtime_port", "cutover", "latest", "standalone_error.log")
+    source = "census source parse"
+    if os.path.exists(live_log):
+        import re
+        log = open(live_log, encoding="utf-8", errors="ignore").read()
+        live_exports = set(re.findall(r"\[RtCensus\] export (\S+)", log))
+        live_addrs = set(int(a, 16) for a in re.findall(r"\[RtCensus\] addr (0x[0-9a-fA-F]+)", log))
+        live_ords = set(int(o) for o in re.findall(r"\[RtCensus\] ordinal (\d+)", log))
+        if live_exports or live_addrs:
+            live = set(live_addrs)
+            for n in live_exports:
+                if n in by_name:
+                    live.add(by_name[n])
+            for o in live_ords:
+                if o in by_ord:
+                    live.add(by_ord[o])
+            ported = live
+            source = f"live registry ({live_log})"
     with open(os.path.join(OUT, "ported.txt"), "w") as f:
         f.write("\n".join("%x" % a for a in sorted(ported)) + "\n")
-    print(f"roots={len(roots)} ported={len(ported)} unresolved={len(missing)}")
+    print(f"roots={len(roots)} ported={len(ported)} (from {source}) unresolved={len(missing)}")
     for m in missing[:20]:
         print("  unresolved:", m)
     print("next: run tools/cutover_closure/CutoverClosure.java in Ghidra (program Runtime-x64.dll)")

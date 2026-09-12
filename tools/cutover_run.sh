@@ -60,6 +60,7 @@ EXE="${3:-standalone/build/reimpl-x64.exe}"
 mkdir -p "$OUT"
 
 ARM=(BANISHED_RT_NO_DLL=1
+     BANISHED_RT_CENSUS=1
      BANISHED_RT_ALLOC=1
      BANISHED_RT_MINT=1
      BANISHED_AUTOSTART=1)

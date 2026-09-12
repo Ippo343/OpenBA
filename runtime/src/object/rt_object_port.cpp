@@ -47,6 +47,7 @@ extern int RtObjectExternalFindRegister(); // external_find.cpp     (Wave 9 lane
 // 25 unexported addresses, of which 4 are registered. It is what unblocks
 // ?Serialize@ElementDescription@UI@@ (runtime/src/ui/elementdescription_serialize.cpp).
 extern int RtObjectExternalPtrSerializeRegister();  // external_ptr_serialize.cpp
+extern int RtObjectInternalPtrArraySerializeRegister();  // internal_ptr_array_serialize.cpp
 // Wave 11 lane OBJDATA: the seven `?Type@` / `?TypeName@` accessors that were
 // the entire TRAP set of four minted `??_7…@Object@@6B@` vtable rows. Not
 // nested under TYPESYS/INTERNAL/EXTERNAL because the seven span all three
@@ -120,6 +121,7 @@ void RtObjectPortInit() {
     // the way to A/B ?Serialize@ElementDescription@ against its callees.
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_EXTPTR"))
         n += RtObjectExternalPtrSerializeRegister();
+    n += RtObjectInternalPtrArraySerializeRegister();   // internal_ptr_array_serialize.cpp
     // Wave 11 lane OBJDATA. BANISHED_RT_OBJTYPEINFO=0 leaves all seven
     // accessors on the DLL, which re-traps two slots each in
     // ??_7CompiledExternal / ??_7External / ??_7Internal and one in ??_7Base —

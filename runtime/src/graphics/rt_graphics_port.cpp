@@ -81,6 +81,8 @@ extern int RtGraphicsEdgeMeshVtableRegister();
                                           // edgemesh_vtable.cpp (Wave 27 lane GFXMESH)
 extern int RtGraphicsMeshVtableRegister(); // mesh.cpp (Wave 27 lane GFXMESH)
 
+extern int RtGraphicsMaterialRegister();   // material.cpp
+
 void RtGraphicsPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_GRAPHICS")) {
         printf("[RtPort] BANISHED_RT_GRAPHICS=0 -- Graphics namespace port disabled\n");
@@ -234,6 +236,9 @@ void RtGraphicsPortInit() {
     int slots29 = 0;
     if (RtWaveEnabled("BANISHED_RT_SLOTS29")) slots29 = RtGraphicsWave29SlotsRegister();
     n += slots29;
+
+    // 2026-09-12: Graphics::Material, the whole vtable (material.cpp). No switch.
+    n += RtGraphicsMaterialRegister();
 
     int gfxd = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXD")) gfxd = RtGraphicsWave9GfxdRegister();

@@ -804,6 +804,13 @@ static const DelDtorSpec kSpecs[] = {
     // decrements a refcount that was never incremented and frees a garbage
     // pointer. A probe subject must be SAFE TO RUN; this one is not.
     RT_DELDTOR(0x180035350, 0x180116100, 0x068, "UI::ElementDescription"),
+    // 2026-09-12: slot 0 of ??_7Material@Graphics@@6B@. ~Material 0x180102a00 is
+    // ported in runtime/src/graphics/material.cpp; sizeof from the
+    // eh_vector_destructor_iterator call in 0x180011d20 (0x38).
+    RT_DELDTOR(0x180011d20, 0x180102a00, 0x038, "Graphics::Material"),
+    // 2026-09-12: slot 0 of ??_7VideoProgram@Video@@6B@ (videoprogram.cpp); 0x48 from
+    // CreateNewObject's Allocate(0x48, 8) and the eh_vector iterator stride.
+    RT_DELDTOR(0x18004efb0, 0x1800f4650, 0x048, "Video::VideoProgram"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1142,6 +1149,16 @@ void* RtDelDtor_ElementDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 49);
 }
 
+// Graphics::Material        ~Material = 0x180102a00  (PORTED, material.cpp)
+void* RtDelDtor_Material(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 50);
+}
+
+// Video::VideoProgram       ~VideoProgram = 0x1800f4650  (PORTED, videoprogram.cpp)
+void* RtDelDtor_VideoProgram(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 51);
+}
+
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
     *count = static_cast<int>(sizeof(kProbeSubjects) / sizeof(kProbeSubjects[0]));
@@ -1236,6 +1253,8 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180064620, (void*)&RtDelDtor_SunLight);              // Wave 27 GFXPART
 
     RegisterRuntimeAddr(0x180035350, (void*)&RtDelDtor_ElementDescription);    // Wave 27 IOTEXT
+    RegisterRuntimeAddr(0x180011d20, (void*)&RtDelDtor_Material);
+    RegisterRuntimeAddr(0x18004efb0, (void*)&RtDelDtor_VideoProgram);
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --

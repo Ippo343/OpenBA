@@ -1705,6 +1705,7 @@ namespace rtcoll {
     }
 
 J1_ENTRY(180004890)   // Achievement: Array<ExternalPtr<Goal>>
+J1_ENTRY(180013da0)   // Graphics:    Material::_programs, ~Material's call (2026-09-12 cutover closure)
 J1_ENTRY(18001bf50)   // Graphics:    Array<Geometry*>, ~Geometry's tail call
 J1_ENTRY(18001c750)   // Graphics:    Array<int32>, the Scene dtor's four middle calls
 J1_ENTRY(18001c9e0)   // Graphics:    Renderer::_drawables
@@ -1878,6 +1879,7 @@ void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src) {
 
 J3_ENTRY2(180008b90, kSpec_Bool)        // Achievement: Array<bool>, tail UNINITIALISED
 J3_ENTRY2(180008d60, kSpec_PtrZero)     // Achievement: Array<InternalPtr>
+J3_ENTRY2(1800604e0, kSpec_PtrZero)     // Graphics:    Material::_programs, Array<ExternalPtr<VideoProgram>> (2026-09-12)
 J3_ENTRY2(180008ff0, kSpec_U64Zero)     // Achievement: Array<Time>
 J3_ENTRY2(18002fea0, kSpec_I32)         // Object/UI:   Array<int32>, tail UNINITIALISED
 J3_ENTRY2(180059140, kSpec_Transform)   // Picking:     Array<Transform>, 4x unrolled in retail
@@ -2130,6 +2132,7 @@ void RtCollectionPortInit() {
 
     // ---- J1: Array<T>::~Array, one body, eleven addresses ------------------
     RegisterRuntimeAddr(0x180004890, (void*)&RtColl_ArrayDtor_180004890);
+    RegisterRuntimeAddr(0x180013da0, (void*)&RtColl_ArrayDtor_180013da0);
     RegisterRuntimeAddr(0x18001bf50, (void*)&RtColl_ArrayDtor_18001bf50);
     RegisterRuntimeAddr(0x18001c750, (void*)&RtColl_ArrayDtor_18001c750);
     RegisterRuntimeAddr(0x18001c9e0, (void*)&RtColl_ArrayDtor_18001c9e0);
@@ -2188,6 +2191,7 @@ void RtCollectionPortInit() {
     // ---- J3: SetSize, trivially-copyable elements --------------------------
     RegisterRuntimeAddr(0x180008b90, (void*)&RtColl_ArraySetSize_180008b90);
     RegisterRuntimeAddr(0x180008d60, (void*)&RtColl_ArraySetSize_180008d60);
+    RegisterRuntimeAddr(0x1800604e0, (void*)&RtColl_ArraySetSize_1800604e0);
     RegisterRuntimeAddr(0x180008ff0, (void*)&RtColl_ArraySetSize_180008ff0);
     RegisterRuntimeAddr(0x18002fea0, (void*)&RtColl_ArraySetSize_18002fea0);
     RegisterRuntimeAddr(0x180059140, (void*)&RtColl_ArraySetSize_180059140);

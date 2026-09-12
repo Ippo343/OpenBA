@@ -453,7 +453,101 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SpriteSheet,
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_MaterialInstance,
              "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A")
 
+// ---- 2026-09-12: the rest of the family that the cutover closure reaches ----
+// (docs/runtime_port/closure/WORKLIST.md). Same 748-byte body, one typeInfo
+// each; the pairing of address to T is the RIP-relative `_typeInfo` operand
+// each body loads, read out of Ghidra, not guessed from the caller.
+// 0x18005d0f0 — Video::ImageBuffer
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ImageBuffer,
+             "?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A")
+// 0x180061100 — Graphics::Material (cutover attempt 33's wall, from MaterialInstance::Serialize+0x83)
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Material,
+             "?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A")
+// 0x180014230 — Graphics::GraphicsMesh
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_GraphicsMesh,
+             "?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A")
+// 0x1800756d0 — UI::DialogControllerConfig
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_DialogControllerConfig,
+             "?_typeInfo@DialogControllerConfig@UI@@0VBaseTypeInfo@Object@@A")
+// 0x180051790 — Audio::SoundEffect
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SoundEffect,
+             "?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A")
+// 0x18005b840 — Graphics::AnimationGroup
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationGroup,
+             "?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A")
+// 0x180006d10 — Achievement::Achievement. The export spells the class with a
+// back-reference (`@Achievement@1@`), which is why a grep for
+// `Achievement@Achievement@@` finds nothing; the name below is verified against
+// the export directory and is the same key the mint uses.
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Achievement,
+             "?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A")
+// The four Video::VideoProgram fields (runtime/src/video/videoprogram.cpp):
+// 0x180055090 VertexLayout, 0x1800542a0 VertexProgram, 0x180055380 PixelProgram,
+// 0x180055670 RenderState. Reached only through VideoProgram's Serialize slot,
+// so invisible to the static closure until that class was ported.
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_VertexLayout,
+             "?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_VertexProgram,
+             "?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_PixelProgram,
+             "?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A")
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_RenderState,
+             "?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A")
+
 #undef EXTPTR_THUNK
+
+// ============================================================================
+// The ARRAY form of the same template — 818 bytes, four instantiations.
+//
+//     void (Serializer* ser, int count, External** elems)      RCX, EDX, R8
+//
+// Retail's loop body is the single-pointer body above with `elems[i]` in place
+// of `*self` (0x18005d4a0: the encoding-type-3 branch, the path/reference
+// branches, the FindOrLoad + IsDerivedFrom tail and the String release are all
+// instruction-for-instruction the same, indexed by R14). R9 is spilled to its
+// home slot and never read. So the port is the loop, calling the shared body.
+// ============================================================================
+extern "C" void RtObject_ExternalPtrArray_Serialize(Serializer* ser, int count,
+                                                    External** elems, const void* typeInfo) {
+    for (int i = 0; i < count; ++i)
+        RtObject_ExternalPtr_Serialize(&elems[i], ser, typeInfo);
+}
+
+#define EXTPTR_ARRAY_THUNK(fnName, mangledTypeInfo)                            \
+    extern "C" void fnName(Serializer* ser, int count, External** elems) {     \
+        using TypeInfoPtr = const void*;                                       \
+        const void* ti = RT_DATA_SLOT(TypeInfoPtr, mangledTypeInfo);           \
+        if (ti == nullptr) {                                                   \
+            static bool warned = false;                                        \
+            if (!warned) {                                                     \
+                warned = true;                                                 \
+                std::fprintf(stderr,                                           \
+                    "[RtExtPtr] %s did not resolve -- this instantiation "     \
+                    "cannot run its type check\n", mangledTypeInfo);           \
+            }                                                                  \
+            return;                                                            \
+        }                                                                      \
+        RtObject_ExternalPtrArray_Serialize(ser, count, elems, ti);            \
+    }
+
+// 0x18002f170 — Object::External (note the `@2@` back-reference in the export)
+EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_External,
+                   "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A")
+// 0x180005220 — Achievement::Goal
+EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_Goal,
+                   "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A")
+// 0x1800493d0 — UI::ElementDescription
+EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_ElementDescription,
+                   "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A")
+// 0x18005d4a0 — Graphics::MaterialInstance
+EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_MaterialInstance,
+                   "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A")
+// 0x1800605e0 -- Video::VideoProgram (Material::_programs; not in the static
+// closure because Material::Serialize is reached only through a vtable slot)
+EXTPTR_ARRAY_THUNK(RtObject_ExternalPtrArraySerialize_VideoProgram,
+                   "?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A")
+
+#undef EXTPTR_ARRAY_THUNK
 
 // ---- Registration ----------------------------------------------------------
 //
@@ -553,5 +647,24 @@ int RtObjectExternalPtrSerializeRegister() {
     // Particle serialization and it is stated here rather than discovered:
     // `BANISHED_RT_EXTPTR=0` reverts all six instantiations together.
     RegisterRuntimeAddr(0x180014520, (void*)&RtObject_ExternalPtrSerialize_MaterialInstance); ++n;
+
+    // ---- 2026-09-12: the remaining instantiations in the cutover closure ----
+    RegisterRuntimeAddr(0x18005d0f0, (void*)&RtObject_ExternalPtrSerialize_ImageBuffer);            ++n;
+    RegisterRuntimeAddr(0x180061100, (void*)&RtObject_ExternalPtrSerialize_Material);               ++n;
+    RegisterRuntimeAddr(0x180014230, (void*)&RtObject_ExternalPtrSerialize_GraphicsMesh);           ++n;
+    RegisterRuntimeAddr(0x1800756d0, (void*)&RtObject_ExternalPtrSerialize_DialogControllerConfig); ++n;
+    RegisterRuntimeAddr(0x180051790, (void*)&RtObject_ExternalPtrSerialize_SoundEffect);            ++n;
+    RegisterRuntimeAddr(0x18005b840, (void*)&RtObject_ExternalPtrSerialize_AnimationGroup);         ++n;
+    RegisterRuntimeAddr(0x180006d10, (void*)&RtObject_ExternalPtrSerialize_Achievement);            ++n;
+    RegisterRuntimeAddr(0x180055090, (void*)&RtObject_ExternalPtrSerialize_VertexLayout);           ++n;
+    RegisterRuntimeAddr(0x1800542a0, (void*)&RtObject_ExternalPtrSerialize_VertexProgram);          ++n;
+    RegisterRuntimeAddr(0x180055380, (void*)&RtObject_ExternalPtrSerialize_PixelProgram);           ++n;
+    RegisterRuntimeAddr(0x180055670, (void*)&RtObject_ExternalPtrSerialize_RenderState);            ++n;
+    // array form
+    RegisterRuntimeAddr(0x18002f170, (void*)&RtObject_ExternalPtrArraySerialize_External);           ++n;
+    RegisterRuntimeAddr(0x180005220, (void*)&RtObject_ExternalPtrArraySerialize_Goal);               ++n;
+    RegisterRuntimeAddr(0x1800493d0, (void*)&RtObject_ExternalPtrArraySerialize_ElementDescription); ++n;
+    RegisterRuntimeAddr(0x18005d4a0, (void*)&RtObject_ExternalPtrArraySerialize_MaterialInstance);   ++n;
+    RegisterRuntimeAddr(0x1800605e0, (void*)&RtObject_ExternalPtrArraySerialize_VideoProgram);        ++n;
     return n;
 }

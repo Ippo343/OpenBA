@@ -224,6 +224,9 @@ void RtVideoPortInit() {
     // earlier in this init depends on it, and nothing it needs is registered
     // here (Collection's inits run after all of Video's, and this body resolves
     // through function-local statics on first USE, not at init).
+    // 2026-09-12: Video::VideoProgram, the whole class (videoprogram.cpp). No switch.
+    { extern int RtVideoProgramRegister(); n += RtVideoProgramRegister(); }
+
     if (RtWaveEnabled("BANISHED_RT_VIDRES")) {
         extern int RtVideoResourcesRegister();
         n += RtVideoResourcesRegister();

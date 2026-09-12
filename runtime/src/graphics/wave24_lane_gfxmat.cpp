@@ -552,7 +552,7 @@ struct RtIoSerializer {       // ONLY the two fields these bodies read.
 };
 static_assert(offsetof(RtIoSerializer, encoding) == 0x08, "IO::Serializer encoding @ +0x08");
 
-using MakeEncodingFn = void* (*)(void* factory, RtIoStream** streamSlot, int zero);
+using MakeEncodingFn = void* (*)(void* factory, RtIoSerializer* ser, int zero);
 using EncodeIntFn    = void  (*)(void* enc, void* value, int zero);
 using EncodeFloatsFn = void  (*)(void* enc, int count, void* values, int zero);
 using EncDtorFn      = void  (*)(void* enc, int flag);
@@ -572,19 +572,29 @@ void*  VSlot(void* obj, size_t byteOffset) {
 
 // Make the Encoding the way retail does: read-side factory slot when the
 // stream's mode is 0, write-side otherwise.
-void* MakeEncoding(RtIoStream* stream, RtIoStream** slot) {
+// Retail keeps the IO::Serializer PAIR on its own stack -- [RSP+0x28] = stream,
+// [RSP+0x30] = the reader/writer the factory returns (0x1800fc1a5..0x1800fc1d0)
+// -- and hands `LEA [RSP+0x28]` to every callee. The first draft of this file
+// passed the address of a lone `RtIoStream*` local instead, so every callee
+// read its reader from whatever stack slot happened to sit next to it. With
+// the DLL present that slot happened to survive; the first cutover boot to
+// reach ExternalPtr<Material>::Serialize through it died on EXEC-of-8.
+void* MakeEncoding(RtIoSerializer* ser) {
+    RtIoStream* stream = ser->stream;
     void* factory = stream->encodingFactory;
     const size_t which = (stream->mode == 0) ? kEncMakeRead : kEncMakeWrite;
-    return reinterpret_cast<MakeEncodingFn>(VSlot(factory, which))(factory, slot, 0);
+    void* enc = reinterpret_cast<MakeEncodingFn>(VSlot(factory, which))(factory, ser, 0);
+    ser->encoding = enc;                                   // MOV [RSP+0x30],RAX
+    return enc;
 }
 
 // The ten address doors, each resolved once per call site.
-using SerExtPtrFn   = void (*)(void* field, RtIoStream** slot);
+using SerExtPtrFn   = void (*)(void* field, RtIoSerializer* ser);
 using ArraySetSizeFn= void (*)(void* arrayField, int count);
-using SerStringFn   = void (*)(void* field, RtIoStream** slot);
+using SerStringFn   = void (*)(void* field, RtIoSerializer* ser);
 using MeshSubSerFn  = void (*)(void* field, RtIoSerializer* ser);
 using MeshSerElemFn = void (*)(RtIoSerializer* ser, int count, void* data);
-using AnimSerElemFn = void (*)(RtIoStream** slot, int count, void* data);
+using AnimSerElemFn = void (*)(RtIoSerializer* ser, int count, void* data);
 
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) {
@@ -599,10 +609,11 @@ extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv
 
     RtGraphics::MaterialInstance* self = reinterpret_cast<RtGraphics::MaterialInstance*>(selfv);
     RtIoStream* localStream = reinterpret_cast<RtIoStream*>(streamv);
-    void* enc = MakeEncoding(localStream, &localStream);
+    RtIoSerializer ser = { localStream, nullptr };          // [RSP+0x28], [RSP+0x30]
+    void* enc = MakeEncoding(&ser);
 
     // The ExternalPtr<Material> at +0x28.
-    RtAddr<SerExtPtrFn>(0x180061100ull)(&self->material, &localStream);
+    RtAddr<SerExtPtrFn>(0x180061100ull)(&self->material, &ser);
 
     // Control 2 is THE documented retail-vs-profile Encoding offset trap turned
     // into a negative control: a port written from the profile decompile would
@@ -624,8 +635,8 @@ extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv
         // latches the bound in EDI, nothing under the loop can resize the
         // array, so a re-read is genuinely unobservable here.
         for (int32_t i = 0; i < (RT_GFXMAT_CORRUPT(6) ? self->textures._size : n); ++i) {
-            RtAddr<SerStringFn>(0x1800c9930ull)(p, &localStream);
-            RtAddr<SerExtPtrFn>(0x18005d0f0ull)(p + 8, &localStream);
+            RtAddr<SerStringFn>(0x1800c9930ull)(p, &ser);
+            RtAddr<SerExtPtrFn>(0x18005d0f0ull)(p + 8, &ser);
             p += stride;                                     // static_asserted 0x10
             ++g_matSerTextures;
         }
@@ -640,7 +651,7 @@ extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv
     {
         uint8_t* p = reinterpret_cast<uint8_t*>(self->constants._data);
         for (int32_t i = n; i > 0; --i) {
-            RtAddr<SerStringFn>(0x1800c9930ull)(p, &localStream);
+            RtAddr<SerStringFn>(0x1800c9930ull)(p, &ser);
             reinterpret_cast<EncodeFloatsFn>(VSlot(enc, kEncSerializeFloats))(
                 enc, RT_GFXMAT_CORRUPT(5) ? 3 : 4, p + 8, 0);
             p += sizeof(RtGraphics::MaterialConstant);       // static_asserted 0x18
@@ -749,7 +760,8 @@ extern "C" void RtGraphics_AnimationManager_Serialize(void* selfv, void* serv) {
     RtIoSerializer* ser = reinterpret_cast<RtIoSerializer*>(serv);
 
     RtIoStream* localStream = ser->stream;
-    void* enc = MakeEncoding(localStream, &localStream);
+    RtIoSerializer localSer = { localStream, nullptr };     // [RSP+0x28], [RSP+0x30]
+    void* enc = MakeEncoding(&localSer);
 
     int32_t n = *reinterpret_cast<int32_t*>(self + 8);
     reinterpret_cast<EncodeIntFn>(VSlot(enc, kEncSerializeInt))(enc, &n, 0);
@@ -757,7 +769,7 @@ extern "C" void RtGraphics_AnimationManager_Serialize(void* selfv, void* serv) {
     if (localStream->mode == 0)
         RtAddr<ArraySetSizeFn>(0x18005c3d0ull)(self, n);
 
-    RtAddr<AnimSerElemFn>(0x18005c660ull)(&localStream, n, *reinterpret_cast<void**>(self));
+    RtAddr<AnimSerElemFn>(0x18005c660ull)(&localSer, n, *reinterpret_cast<void**>(self));
 
     if (enc) reinterpret_cast<EncDtorFn>(VSlot(enc, kEncScalarDtor))(enc, 1);
 
