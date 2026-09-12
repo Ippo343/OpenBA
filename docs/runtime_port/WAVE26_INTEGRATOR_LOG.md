@@ -259,3 +259,41 @@ kickoff, not left to "whoever notices".** Fix is known and stated in
 directory instead of against `.pdata`. **CONDITION: before any Wave 27 promotion
 verdict is written**, because a deflating stamper census does not produce a wrong
 promotion — it produces a promotion that never happens, and nothing detects that.
+
+### SUPERSEDED: the stamper census WAS fixed, and the integrator's own entry above went stale within the hour
+
+**The section above says "STATE AS OF THIS COMMIT: `mint_stamper_census.py` IS STILL
+DEFLATING." That was true when written and is now FALSE.** Lane PROMOIO committed the
+fix at `7698efdb` — *after* the integrator merged its first tip and *after* the
+integrator recorded the fix as existing only as an uncommitted worktree edit. Merged.
+
+The per-site verdict now reads **`UNSCORED`** and says whether the hint resolves,
+instead of asserting `NOT OURS`. The lane also put its retraction at the row and in
+the tool's printed output, on the stated principle that **a commit message is a
+permanently uncorrectable artefact**.
+
+**HOW IT WAS CAUGHT, which is the only part worth generalising.** Not by noticing.
+The integrator ran a sweep for uncommitted work across every lane worktree; it
+returned **empty**. An absence result is indistinguishable from a dead loop, so it
+was control-tested against a **known positive** — the one worktree measured
+half an hour earlier as having ` M tools/mint_stamper_census.py`. The control came
+back empty too, which is what exposed that the world had moved rather than that the
+loop was broken.
+
+**Had the sweep not been control-tested, the wave would have closed on a committed,
+confidently-worded, false claim** — in the same document that criticises Wave 25 for
+exactly that. The recorded lesson (*a lane that keeps improving after it reports
+invalidates the integrator's build*) did not prevent this; a control on an
+absence-shaped screen did.
+
+**The general form, which is the fourth face of the control rule this wave has now
+collected:** a screen that reports "nothing changed" must be tested against something
+that *did* change, or "nothing changed" and "I can no longer see changes" are the
+same output. This wave has now hit the control rule from four sides — a control must
+corrupt something the check compares; it must not corrupt something it should not; it
+must be able to OBSERVE the channel it polices (PROMOGFX's `git grep -l`); and it must
+be handed a known positive when its normal answer is empty.
+
+**Every stamper ratio quoted in Wave 26 still came from the DEFECTIVE tool** — the fix
+changes what future runs print, not what past ones printed. PROMOGFX's verdicts survive
+because their `unattributed` count is 0, which is a per-row check and is recorded above.
