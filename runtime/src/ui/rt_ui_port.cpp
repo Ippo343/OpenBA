@@ -146,6 +146,9 @@ extern int RtUiGroupDescriptionRegister(); // groupdescription.cpp
 extern int RtUiRibbonDescriptionRegister(); // ribbondescription.cpp
 extern int RtUiImageDescriptionRegister();  // imagedescription.cpp
 extern int RtUiAnimatedImageDescriptionRegister(); // animatedimagedescription.cpp
+// VTABLE BATCH 2 -- the UI::*Description second half (2026-09-12). One file per
+// class; each registers every slot, the ctor and the dtor of its class.
+extern int RtUiTextDescriptionRegister();      // textdescription.cpp
 // Wave 24 lane SMALLBODY: ??2SpriteSheet@UI@@SAPEAX_K@Z (0x180002e60) -- the
 // class operator new, byte-identical to ToolTipDialog's and verified side by
 // side rather than by resemblance. Its own file and switch.
@@ -232,6 +235,9 @@ void RtUiPortInit() {
     n += RtUiRibbonDescriptionRegister(); // UI::RibbonDescription, all nine bodies
     n += RtUiImageDescriptionRegister();  // UI::ImageDescription + the shared applier
     n += RtUiAnimatedImageDescriptionRegister(); // UI::AnimatedImageDescription
+    // vtable batch 2 -- the UI::*Description second half. One file per class,
+    // each registering every body of that class unconditionally.
+    n += RtUiTextDescriptionRegister();   // UI::TextDescription (+ ??0TextElement)
     n += RtUiStringTableFactoryRegister();  // owns BANISHED_RT_UISTRTAB (FACTORY)
     n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
