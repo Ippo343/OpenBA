@@ -231,8 +231,16 @@ static_assert(sizeof(SaveBlock) == 0x10, "sizeof(IO::Persistence::SaveBlock) == 
 // Nothing reads past +0x10, and the caller's by-value temporary destructor
 // touches only +0x08, so 0x10 is the whole struct.
 // ============================================================================
+// *** +0x00 SETTLED 2026-09-12 (batch 5), FROM ITS PRODUCER. *** The comment
+// above named it `sortKey` "for what it is used as", from the CONSUMER side
+// only. The producer is the worker's command-4 job (retail 0x1800b6290,
+// runtime/src/io/persistence_savelist_job.cpp), which fills it with
+// `FileSystem::GetFileTimeStamp(<the .sav path>)` — a raw Win32 FILETIME, i.e.
+// 100 ns ticks since 1601-01-01 UTC, which is exactly why an UNSIGNED
+// DESCENDING sort puts the most recently written save first. The name is kept
+// (it is still what the comparator uses it for) and the type is now known.
 struct SaveGameInfo {
-    uint64_t         sortKey;  // +0x00
+    uint64_t         sortKey;  // +0x00 — a FILETIME; see the note above
     RtSystem::String name;     // +0x08
 };
 static_assert(offsetof(SaveGameInfo, name) == 0x08, "SaveGameInfo.name @ 0x08");

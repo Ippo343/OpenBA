@@ -183,5 +183,26 @@ void RtObjectPortInit() {
     // separates "the container is wrong" from "the driver is wrong".
     if (RtWaveEnabled("BANISHED_RT_EXTERNAL") && RtWaveEnabled("BANISHED_RT_REFTABLE"))
         n += RtObjectExternalRefTableRegister();
+
+    // ---- BATCH 5 (2026-09-12) ---------------------------------------------
+    // Registered UNCONDITIONALLY: DIRECTION.md §2 — a port registers
+    // unconditionally, and no new BANISHED_RT_* flag is minted for one.
+    //
+    //   external_forceunload.cpp        ?ForceUnload@ExternalFactory@       0x1800beec0
+    //   internalfactory_persist.cpp     ?PersistObject@InternalFactory@     0x1800bff10
+    //
+    // ForceUnload is deliberately NOT put behind BANISHED_RT_EXTERNAL with the
+    // Set family: its only mutation is one dword store, its lookup is lane
+    // RES's already-registered `rtresset::Find`, and its only caller
+    // (IO::Modification::SetupFileSystem) is ported in this same commit. Gating
+    // it would mean flipping that switch left SetupFileSystem calling a
+    // function whose address is not registered at cutover — a worse failure
+    // than the one the switch exists to make cheap to bisect (the argument
+    // array.cpp already makes for its two non-trivial UI specs).
+    extern int RtObjectExternalForceUnloadRegister();
+    extern int RtObjectInternalFactoryPersistRegister();
+    n += RtObjectExternalForceUnloadRegister();
+    n += RtObjectInternalFactoryPersistRegister();
+
     printf("[RtPort] Object: %d exports registered\n", n);
 }

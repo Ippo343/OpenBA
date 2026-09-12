@@ -643,6 +643,10 @@ extern "C" void RtIo_PersistenceWorker_Dtor(void* worker) {
 //   SYMBOL      (unexported) 0x1800b69c0  the DELETE job
 //   SYMBOL      (unexported) 0x1800b65b0  the GET-SAVE-INFO job
 //   SYMBOL      (unexported) 0x1800b6290  the GET-SAVE-LIST job
+//                                         *** PAID 2026-09-12, batch 5 ***
+//                                         runtime/src/io/persistence_savelist_job.cpp
+//                                         registers this address. FOUR of the
+//                                         five remain open, not five.
 //   CONDITION   each door is live the moment `Run` is dispatched out of a
 //               PROMOTED/minted 0x180155860 with the matching command pending.
 //   CONSEQUENCE with the DLL present each resolves to the shipped body and
@@ -657,7 +661,8 @@ extern "C" void RtIo_PersistenceWorker_Dtor(void* worker) {
 // (reference_literal_grep_blind_to_variables.md — and GFXMESH found a door
 // hidden this way in `mesh.cpp:201` for 21 waves).
 //
-// > **[ADDRESSEE — the five Persistence job bodies]** the Wave 29 lane scoped
+// > **[ADDRESSEE — the FOUR remaining Persistence job bodies]** (was five;
+// > 0x1800b6290 landed 2026-09-12, batch 5) the Wave 29 lane scoped
 // > to IO's remaining `internal` address rows, or the cutover lane that finds
 // > them in the `[RtRawResidue]` list, whichever comes first. They are the
 // > save/load/delete/info/list workers themselves and each is several hundred

@@ -316,6 +316,24 @@ void RtIoPortInit() {
     // and a screen that the control switches off cannot be that control.
     extern void RtIoFileCutoverProbeArm();
     RtIoFileCutoverProbeArm();
+
+    // ---- BATCH 5 (2026-09-12) ---------------------------------------------
+    // Registered UNCONDITIONALLY (DIRECTION.md §2 — a port registers
+    // unconditionally, and no new BANISHED_RT_* flag is minted for one):
+    //
+    //   filesystem_timestamp_win.cpp    ?GetFileTimeStamp@FileSystem@  0x1800ae270
+    //   persistence_savelist_job.cpp    worker command 4 (unexported)  0x1800b6290
+    //   modification_setupfilesystem.cpp ?SetupFileSystem@Modification@ 0x1800aebb0
+    //
+    // 0x1800b6290 pays one of the five address doors
+    // persistence_worker_win.cpp's `Run` opened and declared; the other four
+    // (SAVE / LOAD / DELETE / GET-SAVE-INFO) are still outstanding.
+    extern int RtIoFileSystemTimeStampRegister();
+    extern int RtIoPersistenceSaveListRegister();
+    extern int RtIoModificationSetupFileSystemRegister();
+    n += RtIoFileSystemTimeStampRegister();
+    n += RtIoPersistenceSaveListRegister();
+    n += RtIoModificationSetupFileSystemRegister();
     if (RtWaveEnabled("BANISHED_RT_CSWRITE"))     n += RtIoCompressedStreamWriteRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }
