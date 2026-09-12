@@ -447,6 +447,11 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Goal,
 // route that already exists. See the registration block below.
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SpriteSheet,
              "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A")
+// 0x180014520 — the SIXTH (WAVE 29 LANE WALL). `SpriteSheet+0x30`, and also
+// the four material slots of `Graphics::EdgeMeshInstance` and
+// `Graphics::Particle`. See the registration block below for why it moves now.
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_MaterialInstance,
+             "?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A")
 
 #undef EXTPTR_THUNK
 
@@ -504,5 +509,49 @@ int RtObjectExternalPtrSerializeRegister() {
     // So RT_DATA_SLOT opens a NAME door here, not an address door, and this
     // registration adds ZERO to the cutover address surface.
     RegisterRuntimeAddr(0x180004590, (void*)&RtObject_ExternalPtrSerialize_SpriteSheet); ++n;
+
+    // ---- WAVE 29 LANE WALL: the sixth --------------------------------------
+    //
+    // 0x180014520 — `ExternalPtr<Graphics::MaterialInstance>`, another of the
+    // twenty-one this file deliberately left standing. It moves for a reason
+    // that is neither an oracle route nor a scope creep: IT IS THE NEXT
+    // CUTOVER WALL, NINETEEN BYTES PAST THE ONE ATTEMPT 31 DIED ON.
+    //
+    // `RtUi_SpriteSheet_Serialize` calls FOUR helpers by address. Two were
+    // already registered (0x1800c9930 String::Serialize, 0x180078950
+    // Array<SpriteInfo>::SetSize). The other two were not: 0x180078ad0, which
+    // is attempt 31's EXEC-of-0 and which lane WALL ported into
+    // runtime/src/ui/spritesheet_vtable.cpp, and THIS ONE, which the very next
+    // `CALL RAX` in the same function goes through
+    // (`RtUi_SpriteSheet_Serialize+0x1ca` in the attempt-31 image: the faulting
+    // `CALL RAX` sat at +0x1b5 and the next one at +0x1c8, so the two return
+    // addresses are 0x1b7 and 0x1ca — NINETEEN BYTES APART). Fixing only the
+    // first would have moved the wall nineteen bytes and bought a boot that
+    // looked different and was not.
+    //
+    // THE TYPE ID IS DERIVED FOUR INDEPENDENT WAYS AND THEY ALL AGREE:
+    //   (a) objdump of the shipped DLL at 0x180014578:
+    //         MOV EDX, dword [rip+0x1e61fa]  -> 0x1801fa778
+    //   (b) `python tools/extptr_family_sweep.py`, the masked-pattern sweep:
+    //         0x180014520 -> 0x1801fa778 ?_typeInfo@MaterialInstance@Graphics@@
+    //   (c) `pefile` straight out of the export directory: that name is
+    //         ordinal 4883 at exactly 0x1801fa778;
+    //   (d) runtime/src/graphics/edgemesh_vtable.cpp:221, which recorded the
+    //         same pairing independently in Wave 27.
+    // The spelling is `…0VBaseTypeInfo…A` — PRIVATE static data, which this
+    // DLL exports ([[reference_aeaa_is_private_not_unexported]]) — so
+    // RT_DATA_SLOT opens a NAME door, not an address door, and this adds
+    // nothing to the cutover address surface. It is additionally MINTED
+    // (standalone/rt_data_mint_tables.inc:2093, kTypeInfoStorage[60]), so it
+    // resolves with the DLL absent, which is the only condition that matters
+    // for the boot this registration exists to unblock.
+    //
+    // TWO OTHER CALL SITES START REACHING THIS FILE THE MOMENT THIS RUNS —
+    // `edgemesh_vtable.cpp:254` and `wave27_lane_gfxpart.cpp:395`, both of
+    // which resolve 0x180014520 by address today and therefore run retail's
+    // copy. That is a REAL behavioural change for EdgeMeshInstance and
+    // Particle serialization and it is stated here rather than discovered:
+    // `BANISHED_RT_EXTPTR=0` reverts all six instantiations together.
+    RegisterRuntimeAddr(0x180014520, (void*)&RtObject_ExternalPtrSerialize_MaterialInstance); ++n;
     return n;
 }
