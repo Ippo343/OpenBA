@@ -169,7 +169,10 @@ const char* const kAddFont =
 typedef void (*FlushFn)(void* self);
 typedef void (*AddSpriteDrawFn)(void* self, const void* draw);
 typedef void (*ArrayAppendFn)(void* array, int32_t newSize, const void* fill);
-// ComputeStringLayout (0x180116fd0). NOT PORTED — this file's one opened door.
+// ComputeStringLayout (0x180116fd0). Read by address through the registry-first
+// resolver. This line used to say "NOT PORTED — this file's one opened door";
+// that was true when it was written and stopped being true in the same batch:
+// runtime/src/ui/font.cpp ports and registers it, so the call lands on ours.
 // Argument order is read off the nine stores at 0x18011ccfb..0x18011cd61, NOT
 // guessed from the callee's name: note that the `Justify` and the sixth AddFont
 // parameter arrive at the callee in the OPPOSITE order to the one AddFont

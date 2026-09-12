@@ -625,7 +625,11 @@ extern "C" void RtUi_ListElement_DrawHighlight(const void* selfv, void* ctx,
     }
 
     // ?AddSprite@SpriteContext@UI@@ (0x18011d3c0): (ctx, Sprite*, l, t, r, b,
-    // color). NOT PORTED anywhere in the tree — by address, registry-first.
+    // color). Reached by address through the registry-first resolver. This
+    // line used to say "NOT PORTED anywhere in the tree"; that was true when
+    // it was written and stopped being true in the same batch —
+    // runtime/src/ui/spritecontext_add.cpp ports and registers all three
+    // AddSprite overloads, so this call now lands on our body.
     using AddSpriteFn = void (*)(void* ctx, const void* sprite,
                                  int32_t l, int32_t t, int32_t r, int32_t b, uint32_t c);
     RtAddr<AddSpriteFn>(0x18011d3c0ull)(ctx, self + 0xc0, left, top, right, bottom, color);
