@@ -1,0 +1,176 @@
+subject population: 12 vtables + 6 statics
+denominator: .text 0x180001000 .. 0x18014a600 (1349120 bytes), ONE section; .rdata/.data are
+  NOT scanned for references -- a vtable referenced only from another
+  vtable or a relocation table would be invisible here.
+
+CONTROL 1 (positive, SaveLoad ground truth): found 5/5 known VAs  GREEN
+CONTROL 2 (negative, imm=0 only): lost 1 of the 5  GREEN (quirk handling is load-bearing)
+CONTROL 3 (blind-spot, an arbitrary .rdata address): 0 refs  (a 0 here is only meaningful because controls 1/2 are green)
+
+==============================================================================
+VTABLE (the question is who STAMPS it: LEA)
+==============================================================================
+??_7RenderBufferData@Video@@6B@                      0x180158a28  total=5 {'LEA': 5}
+     0x180054fd6  LEA    ?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z     PORTED(R1)     lea rax, [rip + 0x103a4b]
+     0x1800585e1  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x100440]
+     0x18007df30  LEA    ??0RenderBufferData@Video@@QEAA@AEBV01@@Z      NOT-IN-CENSUS  lea rax, [rip + 0xdaaf1]
+     0x1800f8b70  LEA    ??0RenderBufferData@Video@@QEAA@PEAVRenderBuff PORTED(R1)     lea rax, [rip + 0x5feb1]
+     0x1800f8db0  LEA    ??1RenderBufferData@Video@@UEAA@XZ             PORTED(R1)     lea rax, [rip + 0x5fc71]
+     -> 1 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+??_7VideoProgramData@Video@@6B@                      0x180158a48  total=5 {'LEA': 5}
+     0x180055b46  LEA    ?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z     PORTED(R1)     lea rax, [rip + 0x102efb]
+     0x180058661  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x1003e0]
+     0x18007df00  LEA    ??0VideoProgramData@Video@@QEAA@AEBV01@@Z      NOT-IN-CENSUS  lea rax, [rip + 0xdab41]
+     0x1800f8b90  LEA    ??0VideoProgramData@Video@@QEAA@PEAVVideoProgr PORTED(R1)     lea rax, [rip + 0x5feb1]
+     0x1800f8d90  LEA    ??1VideoProgramData@Video@@UEAA@XZ             PORTED(R1)     lea rax, [rip + 0x5fcb1]
+     -> 1 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+??_7RenderStateData@Video@@6B@                       0x180158a60  total=5 {'LEA': 5}
+     0x180055c96  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x102dc3]
+     0x1800586e1  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x100378]
+     0x18007ded0  LEA    ??0RenderStateData@Video@@QEAA@AEBV01@@Z       NOT-IN-CENSUS  lea rax, [rip + 0xdab89]
+     0x1800f8bb0  LEA    ??0RenderStateData@Video@@QEAA@PEAVRenderState PORTED(R1)     lea rax, [rip + 0x5fea9]
+     0x1800f8d70  LEA    ??1RenderStateData@Video@@UEAA@XZ              PORTED(R1)     lea rax, [rip + 0x5fce9]
+     -> 1 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+??_7PixelProgramData@Video@@6B@                      0x180158a78  total=5 {'LEA': 5}
+     0x180054fa6  LEA    ?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z     PORTED(R1)     lea rax, [rip + 0x103acb]
+     0x180058761  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x100310]
+     0x18007dea0  LEA    ??0PixelProgramData@Video@@QEAA@AEBV01@@Z      NOT-IN-CENSUS  lea rax, [rip + 0xdabd1]
+     0x1800f8bd0  LEA    ??0PixelProgramData@Video@@QEAA@PEAVPixelProgr PORTED(R1)     lea rax, [rip + 0x5fea1]
+     0x1800f8dd0  LEA    ??1PixelProgramData@Video@@UEAA@XZ             PORTED(R1)     lea rax, [rip + 0x5fca1]
+     -> 1 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+??_7VertexProgramData@Video@@6B@                     0x180158a90  total=5 {'LEA': 5}
+     0x180057296  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x1017f3]
+     0x1800587e1  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x1002a8]
+     0x18007de70  LEA    ??0VertexProgramData@Video@@QEAA@AEBV01@@Z     NOT-IN-CENSUS  lea rax, [rip + 0xdac19]
+     0x1800f8bf0  LEA    ??0VertexProgramData@Video@@QEAA@PEAVVertexPro PORTED(R1)     lea rax, [rip + 0x5fe99]
+     0x1800f8d10  LEA    ??1VertexProgramData@Video@@UEAA@XZ            PORTED(R1)     lea rax, [rip + 0x5fd79]
+     -> 1 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+??_7VertexLayoutData@Video@@6B@                      0x180158aa8  total=5 {'LEA': 5}
+     0x1800564e6  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x1025bb]
+     0x180058861  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x100240]
+     0x18007de40  LEA    ??0VertexLayoutData@Video@@QEAA@AEBV01@@Z      NOT-IN-CENSUS  lea rax, [rip + 0xdac61]
+     0x1800f8c10  LEA    ??0VertexLayoutData@Video@@QEAA@PEAVVertexLayo PORTED(R1)     lea rax, [rip + 0x5fe91]
+     0x1800f8d30  LEA    ??1VertexLayoutData@Video@@UEAA@XZ             PORTED(R1)     lea rax, [rip + 0x5fd71]
+     -> 1 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+??_7VertexBufferData@Video@@6B@                      0x180158ac0  total=5 {'LEA': 5}
+     0x180055fa6  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x102b13]
+     0x1800588e1  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x1001d8]
+     0x18007de10  LEA    ??0VertexBufferData@Video@@QEAA@AEBV01@@Z      NOT-IN-CENSUS  lea rax, [rip + 0xdaca9]
+     0x1800f8c30  LEA    ??0VertexBufferData@Video@@QEAA@PEAVVertexBuff PORTED(R1)     lea rax, [rip + 0x5fe89]
+     0x1800f8d50  LEA    ??1VertexBufferData@Video@@UEAA@XZ             PORTED(R1)     lea rax, [rip + 0x5fd69]
+     -> 1 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+??_7IndexBufferData@Video@@6B@                       0x180158af8  total=5 {'LEA': 5}
+     0x1800541a6  LEA    ?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z     PORTED(R1)     lea rax, [rip + 0x10494b]
+     0x180058961  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x100190]
+     0x18007dde0  LEA    ??0IndexBufferData@Video@@QEAA@AEBV01@@Z       NOT-IN-CENSUS  lea rax, [rip + 0xdad11]
+     0x1800f8c50  LEA    ??0IndexBufferData@Video@@QEAA@PEAVIndexBuffer PORTED(R1)     lea rax, [rip + 0x5fea1]
+     0x1800f8df0  LEA    ??1IndexBufferData@Video@@UEAA@XZ              PORTED(R1)     lea rax, [rip + 0x5fd01]
+     -> 1 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+??_7ConstantBufferData@Video@@6B@                    0x180158b30  total=5 {'LEA': 5}
+     0x1800536a6  LEA    ?Get@MemoryAllocator@System@@SAPEAV12@XZ       UNPORTED(R1)   lea rax, [rip + 0x105483]
+     0x1800589e1  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x100148]
+     0x18007ddb0  LEA    ??0ConstantBufferData@Video@@QEAA@AEBV01@@Z    NOT-IN-CENSUS  lea rax, [rip + 0xdad79]
+     0x1800f8c70  LEA    ??0ConstantBufferData@Video@@QEAA@PEAVConstant PORTED(R1)     lea rax, [rip + 0x5feb9]
+     0x1800f8e50  LEA    ??1ConstantBufferData@Video@@UEAA@XZ           PORTED(R1)     lea rax, [rip + 0x5fcd9]
+     -> 2 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+??_7ImageBufferData@Video@@6B@                       0x180158b50  total=5 {'LEA': 5}
+     0x180054176  LEA    ?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z     PORTED(R1)     lea rax, [rip + 0x1049d3]
+     0x180058a61  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x1000e8]
+     0x18007dd80  LEA    ??0ImageBufferData@Video@@QEAA@AEBV01@@Z       NOT-IN-CENSUS  lea rax, [rip + 0xdadc9]
+     0x1800f8c90  LEA    ??0ImageBufferData@Video@@QEAA@PEAVImageBuffer PORTED(R1)     lea rax, [rip + 0x5feb9]
+     0x1800f8e10  LEA    ??1ImageBufferData@Video@@UEAA@XZ              PORTED(R1)     lea rax, [rip + 0x5fd39]
+     -> 1 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+??_7ContextData@Video@@6B@                           0x180158b90  total=5 {'LEA': 5}
+     0x180053c46  LEA    ??8String@System@@QEBA_NPEBD@Z                 PORTED(R1)     lea rax, [rip + 0x104f43]
+     0x180058ae1  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x1000a8]
+     0x18007dd50  LEA    ??0ContextData@Video@@QEAA@AEBV01@@Z           NOT-IN-CENSUS  lea rax, [rip + 0xdae39]
+     0x1800f8cb0  LEA    ??0ContextData@Video@@QEAA@PEAVContext@1@@Z    PORTED(R1)     lea rax, [rip + 0x5fed9]
+     0x1800f8e30  LEA    ??1ContextData@Video@@UEAA@XZ                  PORTED(R1)     lea rax, [rip + 0x5fd59]
+     -> 1 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+??_7DeviceData@Video@@6B@                            0x180158c30  total=5 {'LEA': 5}
+     0x180058566  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x1006c3]
+     0x180058b61  LEA    ?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z      PORTED(R1)     lea rax, [rip + 0x1000c8]
+     0x18007df60  LEA    ??0DeviceData@Video@@QEAA@AEBV01@@Z            NOT-IN-CENSUS  lea rax, [rip + 0xdacc9]
+     0x1800f8cd0  LEA    ??0DeviceData@Video@@QEAA@PEAVDevice@1@@Z      PORTED(R1)     lea rax, [rip + 0x5ff59]
+     0x1800f8cf0  LEA    ??1DeviceData@Video@@UEAA@XZ                   PORTED(R1)     lea rax, [rip + 0x5ff39]
+     -> 1 of 5 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+==============================================================================
+STATIC (the question is who READS it: rule 6)
+==============================================================================
+?_firstSurface@ImageBuffer@Video@@0PEAV12@EA         0x1801fe780  total=14 {'UNKNOWN-FORM': 3, 'READ': 8, 'WRITE': 3}
+     0x1800201f2  UNKNOWN-FORM  ?IncrementInstanceIndex@ParticleInstance@Graph PORTED(R1)     (no decode)
+     0x1800a5645  UNKNOWN-FORM  ?Update@ParticleSystemInstance@Graphics@@UEAAX NOT-IN-CENSUS  (no decode)
+     0x1800f2dc2  READ   ?RecreateDynamic@ImageBuffer@Video@@SAXXZ      NOT-IN-CENSUS  mov rbx, qword ptr [rip + 0x10b9b7]
+     0x1800f2e39  READ   ?RecreateDynamic@ImageBuffer@Video@@SAXXZ      NOT-IN-CENSUS  cmp rbx, qword ptr [rip + 0x10b940]
+     0x1800f2eb7  READ   ?ReleaseDynamic@ImageBuffer@Video@@SAXXZ       NOT-IN-CENSUS  mov rcx, qword ptr [rip + 0x10b8c2]
+     0x1800f2eef  READ   ?ReleaseDynamic@ImageBuffer@Video@@SAXXZ       NOT-IN-CENSUS  mov rcx, qword ptr [rip + 0x10b88a]
+     0x1800f2f9e  READ   ?PlatformConstruct@ImageBuffer@Video@@AEAAXXZ  NOT-IN-CENSUS  mov rcx, qword ptr [rip + 0x10b7db]
+     0x1800f2fb2  READ   ?PlatformConstruct@ImageBuffer@Video@@AEAAXXZ  NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x10b7c7]
+     0x1800f2fcb  WRITE  ?PlatformConstruct@ImageBuffer@Video@@AEAAXXZ  NOT-IN-CENSUS  mov qword ptr [rip + 0x10b7ae], rdi
+     0x1800f307d  READ   ?PlatformDestruct@ImageBuffer@Video@@AEAAXXZ   NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x10b6fc]
+     0x1800f308b  WRITE  ?PlatformDestruct@ImageBuffer@Video@@AEAAXXZ   NOT-IN-CENSUS  mov qword ptr [rip + 0x10b6ee], rax
+     0x1800f30b4  READ   ?PlatformDestruct@ImageBuffer@Video@@AEAAXXZ   NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x10b6c5]
+     0x1800f30c2  WRITE  ?PlatformDestruct@ImageBuffer@Video@@AEAAXXZ   NOT-IN-CENSUS  mov qword ptr [rip + 0x10b6b7], rax
+     0x1801041b0  UNKNOWN-FORM  ?Update@ParticleInstance@Graphics@@QEAA_NXZ    PORTED(R1)     (no decode)
+     -> 12 of 14 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA          0x1801fe788  total=11 {'READ': 8, 'WRITE': 3}
+     0x1800f3532  READ   ?RecreateDynamic@IndexBuffer@Video@@SAXXZ      NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x10b24f]
+     0x1800f357d  READ   ?RecreateDynamic@IndexBuffer@Video@@SAXXZ      NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x10b204]
+     0x1800f3607  READ   ?ReleaseDynamic@IndexBuffer@Video@@SAXXZ       NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x10b17a]
+     0x1800f3635  READ   ?ReleaseDynamic@IndexBuffer@Video@@SAXXZ       NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x10b14c]
+     0x1800f36de  READ   ?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ  PORTED(R1)     mov rcx, qword ptr [rip + 0x10b0a3]
+     0x1800f36f2  READ   ?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ  PORTED(R1)     mov rax, qword ptr [rip + 0x10b08f]
+     0x1800f370b  WRITE  ?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ  PORTED(R1)     mov qword ptr [rip + 0x10b076], rdi
+     0x1800f37c7  READ   ?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ   NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x10afba]
+     0x1800f37d5  WRITE  ?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ   NOT-IN-CENSUS  mov qword ptr [rip + 0x10afac], rax
+     0x1800f37fc  READ   ?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ   NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x10af85]
+     0x1800f380a  WRITE  ?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ   NOT-IN-CENSUS  mov qword ptr [rip + 0x10af77], rax
+     -> 8 of 11 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA   0x1801fe790  total=11 {'READ': 8, 'WRITE': 3}
+     0x1800f4062  READ   ?RecreateDynamic@RenderBuffer@Video@@SAXXZ     NOT-IN-CENSUS  mov rbx, qword ptr [rip + 0x10a727]
+     0x1800f407c  READ   ?RecreateDynamic@RenderBuffer@Video@@SAXXZ     NOT-IN-CENSUS  cmp rbx, qword ptr [rip + 0x10a70d]
+     0x1800f40f7  READ   ?ReleaseDynamic@RenderBuffer@Video@@SAXXZ      NOT-IN-CENSUS  mov rbx, qword ptr [rip + 0x10a692]
+     0x1800f4120  READ   ?ReleaseDynamic@RenderBuffer@Video@@SAXXZ      NOT-IN-CENSUS  cmp rbx, qword ptr [rip + 0x10a669]
+     0x1800f4381  READ   ?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ PORTED(R1)     mov rcx, qword ptr [rip + 0x10a408]
+     0x1800f4395  READ   ?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ PORTED(R1)     mov rax, qword ptr [rip + 0x10a3f4]
+     0x1800f43ae  WRITE  ?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ PORTED(R1)     mov qword ptr [rip + 0x10a3db], rdi
+     0x1800f445d  READ   ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ  PORTED(R1)     mov rax, qword ptr [rip + 0x10a32c]
+     0x1800f446b  WRITE  ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ  PORTED(R1)     mov qword ptr [rip + 0x10a31e], rax
+     0x1800f4494  READ   ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ  PORTED(R1)     mov rax, qword ptr [rip + 0x10a2f5]
+     0x1800f44a2  WRITE  ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ  PORTED(R1)     mov qword ptr [rip + 0x10a2e7], rax
+     -> 4 of 11 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA         0x1801fe798  total=11 {'READ': 8, 'WRITE': 3}
+     0x1800f5692  READ   ?RecreateDynamic@VertexBuffer@Video@@SAXXZ     NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x1090ff]
+     0x1800f56dd  READ   ?RecreateDynamic@VertexBuffer@Video@@SAXXZ     NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x1090b4]
+     0x1800f5767  READ   ?ReleaseDynamic@VertexBuffer@Video@@SAXXZ      NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x10902a]
+     0x1800f5795  READ   ?ReleaseDynamic@VertexBuffer@Video@@SAXXZ      NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x108ffc]
+     0x1800f583e  READ   ?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ PORTED(R1)     mov rcx, qword ptr [rip + 0x108f53]
+     0x1800f5852  READ   ?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ PORTED(R1)     mov rax, qword ptr [rip + 0x108f3f]
+     0x1800f586b  WRITE  ?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ PORTED(R1)     mov qword ptr [rip + 0x108f26], rdi
+     0x1800f5927  READ   ?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ  NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x108e6a]
+     0x1800f5935  WRITE  ?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ  NOT-IN-CENSUS  mov qword ptr [rip + 0x108e5c], rax
+     0x1800f595c  READ   ?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ  NOT-IN-CENSUS  mov rax, qword ptr [rip + 0x108e35]
+     0x1800f596a  WRITE  ?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ  NOT-IN-CENSUS  mov qword ptr [rip + 0x108e27], rax
+     -> 8 of 11 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+?_singleton@Configuration@Video@@0PEAV12@EA          0x1801fe7a0  total=63 {'READ': 56, 'WRITE': 7}
+     -> 42 of 63 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+
+?_singleton@Device@Video@@0PEAV12@EA                 0x1801fe7a8  total=165 {'READ': 163, 'WRITE': 2}
+     -> 113 of 165 references sit in a body this tree has NOT ported (screen R1 only; owner = nearest preceding export, which for an unexported internal is an OVER-attribution)
+

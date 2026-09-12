@@ -1,0 +1,3 @@
+86:[VidProgSweep] clean: 64 cases, 64 agreed, 0 diverged | EFFECTIVENESS: 59 of 64 cases changed the dirty mask, bits seen 0x1e4 of 0x1e4
+87:[VidProgSweep] NEGATIVE CONTROL (render-state bit swapped for the pixel-program bit): 64 cases, 40 agreed, 24 diverged | EFFECTIVENESS: 59 of 64 cases changed the dirty mask, bits seen 0x1e4 of 0x1e4
+88:[VidProgSweep] verdict: clean diverged=0, control caught=24 -> GREEN
