@@ -2077,6 +2077,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // vtable that is NOT promoted today, so a zero here is the EXPECTED reading
     // and must be printed rather than inferred from silence.
     { extern void RtGraphicsWave27GfxpartSummary(); RtGraphicsWave27GfxpartSummary(); }
+    // Wave 28 lane PARTSYS. UNCONDITIONAL, so the expected zeros are PRINTED
+    // rather than inferred from silence (reference_uncalled_port_is_not_verified.md).
+    { extern void RtGraphicsWave28PartsysSummary(); RtGraphicsWave28PartsysSummary(); }
     RtAllocShadowSummary();
     // Wave 9 lane H: 0 misses == every cached Runtime resolve found its symbol.
     // A non-zero count names the symbols that would be unminted at cutover.

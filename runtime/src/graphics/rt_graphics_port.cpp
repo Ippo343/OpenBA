@@ -67,6 +67,7 @@ extern int RtGraphicsWave24GfxmatRegister();  // wave24_lane_gfxmat.cpp (Wave 24
 extern int RtGraphicsWave27GfxbigRegister();  // wave27_lane_gfxbig.cpp (Wave 27 lane GFXBIG)
 
 extern int RtGraphicsWave27GfxpartRegister(); // wave27_lane_gfxpart.cpp (Wave 27 lane GFXPART)
+extern "C" int RtGraphicsWave28PartsysRegister(); // wave28_lane_partsys.cpp (Wave 28 lane PARTSYS)
 extern int RtGraphicsTypeInfoAccessorsRegister();
                                           // graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT)
 extern int RtGraphicsEdgeMeshVtableRegister();
@@ -177,6 +178,17 @@ void RtGraphicsPortInit() {
     // instantiations underneath them. Registered but INERT -- no door in
     // the tree resolves any of them today, so this changes nothing in a
     // live run. Its oracle is its own probe, behind BANISHED_RT_GFXD_PROBE.
+    // WAVE 28 LANE PARTSYS -- ?Update@ParticleSystemInstance@ (the whole
+    // particle simulation, and the LAST unported slot of
+    // ??_7ParticleSystemInstance@Graphics@@6B@), ?RemoveState@ParticleInstance@,
+    // and three ??_7SunLight@Graphics@@6B@ slots. DEFAULT ON: RtWaveEnabled is a
+    // kill switch, so BANISHED_RT_PARTSYS=0 leaves every call on the DLL for an
+    // A/B and anything else arms it (kickoff §2.2 caveat 1 -- a lane that ports
+    // behind an opt-in switch moves the live count not at all).
+    int partsys = 0;
+    if (RtWaveEnabled("BANISHED_RT_PARTSYS")) partsys = RtGraphicsWave28PartsysRegister();
+    n += partsys;
+
     int gfxd = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXD")) gfxd = RtGraphicsWave9GfxdRegister();
 
