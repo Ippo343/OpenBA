@@ -292,6 +292,14 @@ constexpr DestroySpec kD_Str2_10 = { "2 Strings @+0x008,+0x000, stride 0x010", 0
 constexpr DestroySpec kD_Str_10at08 = { "String @+0x008, stride 0x010", 0x010, 1, { 0x008 } };
 constexpr DestroySpec kD_Str_20at18 = { "String @+0x018, stride 0x020", 0x020, 1, { 0x018 } };
 
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — 0x18003f070,
+// the shrink/realloc destroy for `UI::SpriteCapture::_entries`
+// (Array<CaptureEntry>, runtime/types/ui/SpriteCapture.h). One String release
+// at +0x08 (the `name` slot), stride 0x28 — read out of the loop's own
+// `plVar3 = plVar3 + 5` (5 qwords = 0x28) with the release at `plVar3[0]`
+// where `plVar3` starts at `param_2 + 8`.
+constexpr DestroySpec kD_Str_28at08 = { "String @+0x008, stride 0x028", 0x028, 1, { 0x008 } };
+
 // ---------------------------------------------------------------------------
 // Compile-time checks on the transcription.
 //
@@ -329,6 +337,7 @@ RTCOLL_FITS(kD_Str_18, 1, 8u);
 RTCOLL_FITS(kD_Str2_38, 2, 8u);
 RTCOLL_FITS(kD_Str2_10, 2, 8u);
 static_assert(kD_Str2_38.offs[1] + 8u <= kD_Str2_38.stride, "offs[1]");
+RTCOLL_FITS(kD_Str_28at08, 1, 8u);
 
 // The three DESCENDING rows, asserted as descending. "Sorted them while tidying
 // up" is a silent change to the order the ALLOCATOR sees, and no comparator in
@@ -553,6 +562,12 @@ B_ENTRY(180039580, kD_Str_20at18)     // UI: DialogControllerConfigEntry
 // 0x00. That is kD_Str_10, no new row. Third instance of one body; the first
 // two are the two lines above.
 B_ENTRY(180006ac0, kD_Str_10)         // Object: ExternalArrayElement {Filename, 2x int32}
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — the SHRINK/
+// REALLOC destroy behind `UI::SpriteCapture::_entries`'s two SetSize
+// instantiations (array.cpp's kSpec_CaptureEntry / kSpec_CaptureEntryZ,
+// 0x18004bde0 / 0x18004ba90). One String release at +0x08, stride 0x28 — see
+// kD_Str_28at08 above for the read.
+B_ENTRY(18003f070, kD_Str_28at08)     // UI: SpriteCapture::_entries (CaptureEntry, name @+0x08)
 
 // ---- WAVE 27 LANE FRONTIER: 0x180005570, the FIRST TWO-SLOT Body-B at 0x10 --
 //
@@ -752,6 +767,16 @@ J2_ENTRY(180006b80, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x180006ac0
 //   then the allocator Enter / Free / Leave triple and the two zero stores
 //   that are ArrayDtorImpl.
 J2_ENTRY(180004a90, ReleaseStringsCounted,  kD_Str2_10)      // CALL 0x180005570  Body B
+
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — 0x180004f50,
+// `~Array<UI::SpriteSheet::SpriteInfo>`, the member destroy `~SpriteSheet`
+// (runtime/src/ui/spritesheet_new.cpp) calls on `this+0x20`. Read out of its
+// own disassembly:
+//     FUN_1800059e0(this, *(void**)this, *(int32*)(this+8));  // Body B
+//     free *(void**)this; zero the header                     // ArrayDtorImpl
+// 0x1800059e0 is ALREADY PORTED AND REGISTERED (B_ENTRY(1800059e0, kD_Str2_38)
+// above), so this is an entry point for existing machinery, no new spec.
+J2_ENTRY(180004f50, ReleaseStringsCounted,  kD_Str2_38)      // CALL 0x1800059e0  Body B
 
 #undef J2_ENTRY
 
@@ -1098,6 +1123,12 @@ void RtCollectionDestroyPortInit() {
     // Wave 27 lane FRONTIER -- ~Array<UI::StringTable::TextEntry>, the member
     // ??1StringTable@UI@@ destroys at this+0x20.
     RegisterRuntimeAddr(0x180004a90, (void*)&RtColl_ArrayDtorElem_180004a90);
+    // UI leftovers batch -- ~Array<UI::SpriteSheet::SpriteInfo>, the member
+    // ~SpriteSheet destroys at this+0x20 (runtime/src/ui/spritesheet_new.cpp).
+    RegisterRuntimeAddr(0x180004f50, (void*)&RtColl_ArrayDtorElem_180004f50);
+
+    // ---- the SpriteCapture entry range destroy (B_ENTRY, this batch) -------
+    RegisterRuntimeAddr(0x18003f070, (void*)&RtColl_DestroyStrings_18003f070);
 
     // ---- J2b -------------------------------------------------------------
     RegisterRuntimeAddr(0x18001c8c0, (void*)&RtColl_ArrayDtorEhVec_18001c8c0);

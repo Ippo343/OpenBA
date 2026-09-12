@@ -400,6 +400,87 @@ void InitIdentityTransform(uint8_t* d) {
     *reinterpret_cast<uint64_t*>(d + 0x14) = 0;
 }
 
+// ---------------------------------------------------------------------------
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — three more
+// element types, read from the disassembly of 0x18004ba90/0x18004bde0
+// (`UI::SpriteCapture::_entries`, element `UI::SpriteCapture::CaptureEntry`
+// per runtime/types/ui/SpriteCapture.h), 0x180033690 (`UI::UserInterface::
+// _events`, element `UI::UserInterface::Event`) and 0x1800370c0
+// (`UI::SpriteCapture::_sprites` / `UI::UserInterface`'s fade sprite family,
+// element `UI::Sprite`, {ExternalPtr<SpriteSheet>, int32 index, pad}).
+// ---------------------------------------------------------------------------
+
+// `CaptureEntry` (0x28 bytes): sheetIndex(+0x00,i32), pad04(+0x04, never
+// touched by either instantiation), name(+0x08, System::String, refcounted),
+// x1/y1/x2/y2(+0x10..+0x1f, i32 each), rotation(+0x20,f32), color(+0x24,u32).
+// SpriteCapture.h's banner already worked out that both 0x18004ba90 (the
+// two-argument SetSize) and 0x18004bde0 (the three-argument SetSize with a
+// fill) COPY-CONSTRUCT this element -- the name slot is zeroed first, then the
+// source pointer is copied and its refcount bumped, exactly like
+// `ReleaseStringsCore`'s release is the mirror of this acquire. Read out of
+// 0x18004be97..0x18004bed0 (the 3-arg body) and cross-checked against
+// 0x18004ba90's own copy loop, which is instruction-for-instruction the same
+// shape at a different source pointer (the OLD element during a realloc move,
+// rather than the caller's `fill`).
+void AssignCaptureEntry(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<int32_t*>(d) = *reinterpret_cast<const int32_t*>(s);  // +0x00 sheetIndex
+    // +0x04 pad -- neither instantiation writes it.
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    const uint64_t str = *reinterpret_cast<const uint64_t*>(s + 0x08);
+    if (str) {
+        *reinterpret_cast<uint64_t*>(d + 0x08) = str;
+        ++*reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(str) - 4);  // INC [str-4]
+    }
+    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
+    *reinterpret_cast<uint32_t*>(d + 0x14) = *reinterpret_cast<const uint32_t*>(s + 0x14);
+    *reinterpret_cast<uint32_t*>(d + 0x18) = *reinterpret_cast<const uint32_t*>(s + 0x18);
+    *reinterpret_cast<uint32_t*>(d + 0x1c) = *reinterpret_cast<const uint32_t*>(s + 0x1c);
+    *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
+    *reinterpret_cast<uint32_t*>(d + 0x24) = *reinterpret_cast<const uint32_t*>(s + 0x24);
+}
+// 0x18004ba90's `else` (init) arm, the two-argument form's default-constructed
+// tail: FOUR qword zero stores at +0x08, +0x10, +0x18, +0x20. +0x00 (sheetIndex)
+// and +0x04 (pad) are NEVER written by this arm -- a real gap, not an omission
+// here: the disassembly's else-branch starts at `lVar5+8`, never `lVar5`.
+void InitCaptureEntryTail(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;
+}
+
+// `UI::UserInterface::Event` (0x30 bytes), the array UserInterface.h left
+// deliberately opaque. 0x180033690's copy loop, read field by field: +0x00 and
+// +0x08 are "zero-then-copy" qwords (a smart-pointer-shaped store, but NO
+// refcount INC anywhere in this body -- unlike CaptureEntry's name slot, so
+// these are raw pointers with no owned reference), +0x10/+0x14/+0x18/+0x1c/
+// +0x20 are five plain dword copies, and +0x28 is a plain qword copy. That
+// leaves **+0x24..+0x27 (4 bytes) NEVER WRITTEN** -- the one gap in an
+// otherwise fully-covered 0x30-byte element.
+void AssignEvent30(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x00) = *reinterpret_cast<const uint64_t*>(s + 0x00);
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
+    *reinterpret_cast<uint32_t*>(d + 0x10) = *reinterpret_cast<const uint32_t*>(s + 0x10);
+    *reinterpret_cast<uint32_t*>(d + 0x14) = *reinterpret_cast<const uint32_t*>(s + 0x14);
+    *reinterpret_cast<uint32_t*>(d + 0x18) = *reinterpret_cast<const uint32_t*>(s + 0x18);
+    *reinterpret_cast<uint32_t*>(d + 0x1c) = *reinterpret_cast<const uint32_t*>(s + 0x1c);
+    *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
+    // +0x24..+0x27 deliberately untouched -- retail does not write it either.
+    *reinterpret_cast<uint64_t*>(d + 0x28) = *reinterpret_cast<const uint64_t*>(s + 0x28);
+}
+
+// 0x1800370c0's `else` (init) arm, the two-argument UI::Sprite clear: the
+// ExternalPtr<SpriteSheet> qword at +0x00 goes to null and the index dword at
+// +0x08 goes to -1 (`MOV [d],0; MOV dword[d+8],0xffffffff`), matching
+// UI::Sprite's documented default (UserInterface.h: "index = -1 is the
+// engine's empty-sprite value"). +0x0c (pad) is never written.
+void InitSpriteIndexNeg1(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<int32_t*>(d + 0x08) = -1;
+}
+
 // ============================================================================
 // The three NON-TRIVIAL element types (0x180004e30, 0x180051390, 0x180061480)
 // ============================================================================
@@ -486,6 +567,18 @@ void InitSprite38Z(uint8_t* d) {
 void Destroy38(void* ignoredThis, uint8_t* base, int count) {
     using Fn = void (*)(void*, uint8_t*, int);
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800059e0));
+    fn(ignoredThis, base, count);
+}
+
+// UI leftovers batch: `Array<CaptureEntry>`'s shrink/realloc destroy, one
+// String release at +0x08 per element (stride 0x28). Ported and registered by
+// runtime/src/collection/array_destroy.cpp (kD_Str_28at08, B_ENTRY(18003f070,
+// ...)); reached through ResolveAddr so the registry-first rule
+// (reference_resolveaddr_consults_port_registry_first.md) picks up OUR body
+// regardless of file init order.
+void Destroy28Call(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18003f070));
     fn(ignoredThis, base, count);
 }
 
@@ -1175,6 +1268,48 @@ const ArraySpec kSpec_SpriteDraw = {              // 0x180078520, 0x1800783d0
 // in the assign, a refcount release in 0x1800059e0). Everything from +0x10 on
 // is plain scalars and IS seeded non-zero, which is what makes the +0x34 window
 // testable at all.
+// UI leftovers batch -- the CaptureEntry pair. Both share AssignCaptureEntry
+// and Destroy28Call; they differ only in the 2-arg form's default-tail arm
+// (see InitCaptureEntryTail's banner). NON-TRIVIAL (owned String reference,
+// per-element destroy), same tier as kSpec_Sprite38 above and registered
+// unconditionally for the same reason 0x180078950 is: nothing in either spec
+// calls an unexported helper still on the DLL -- both AssignCaptureEntry and
+// Destroy28Call are ours.
+const ArraySpec kSpec_CaptureEntry = {            // 0x18004bde0 (3-arg, with fill)
+    "Array<UI::SpriteCapture::CaptureEntry>", 0x28, 8, &AssignCaptureEntry,
+    nullptr, &Destroy28Call, false,
+    /*assign unwritten*/ 0x04, 0x08,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x08, 0x10 };
+
+const ArraySpec kSpec_CaptureEntryZ = {           // 0x18004ba90 (2-arg, default tail)
+    "Array<UI::SpriteCapture::CaptureEntry> (2-arg)", 0x28, 8, &AssignCaptureEntry,
+    &InitCaptureEntryTail, &Destroy28Call, false,
+    /*assign unwritten*/ 0x04, 0x08,
+    /*init   unwritten*/ 0x00, 0x08,
+    /*seed zero       */ 0x08, 0x10 };
+
+// UI leftovers batch -- UI::UserInterface::_events, three-argument form only
+// (0x180033690's only caller passes a fill; there is no two-argument sibling
+// in this worklist). TRIVIAL: no owned resource, no destroy -- same
+// classification kSpec_PtrZero gets for its own zero-then-copy idiom.
+const ArraySpec kSpec_Event30 = {                 // 0x180033690
+    "Array<UI::UserInterface::Event>", 0x30, 8, &AssignEvent30, nullptr, nullptr, true,
+    /*assign unwritten*/ 0x24, 0x28,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0,    0 };
+
+// UI leftovers batch -- UI::Sprite, the two-argument form (0x1800370c0,
+// `SpriteContext::Begin` clearing SpriteCapture's own `_sprites`/`_entries`
+// pair to size 0). TRIVIAL: Assign16 is the existing pure byte copy: no
+// refcount touch anywhere in this element, so no destroy is needed either.
+const ArraySpec kSpec_SpriteIndexZ = {            // 0x1800370c0
+    "Array<UI::Sprite> (2-arg, index=-1 tail)", 0x10, 8, &Assign16,
+    &InitSpriteIndexNeg1, nullptr, true,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0x0c, 0x10,
+    /*seed zero       */ 0,    0 };
+
 const ArraySpec kSpec_Sprite38 = {                // 0x180004e30
     "Array<SpriteEntry:0x38>", 0x38, 8, &Assign38Call, nullptr, &Destroy38, false,
     /*assign unwritten*/ 0x34, 0x38,
@@ -1999,6 +2134,12 @@ J3_ENTRY2(18002c6a0, kSpec_ExtArrayElem) // Object: External::_refs, the depende
 // read path. Two-argument, read from the body (see kSpec_StringPair10).
 J3_ENTRY2(180078c90, kSpec_StringPair10) // UI: StringTable's TextEntry array
 
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — the two-argument
+// CaptureEntry and Sprite instantiations SpriteContext::Begin (0x18011d2b0)
+// calls to clear SpriteCapture's `_entries` and `_sprites` to size 0.
+J3_ENTRY2(18004ba90, kSpec_CaptureEntryZ) // UI: SpriteCapture::_entries clear
+J3_ENTRY2(1800370c0, kSpec_SpriteIndexZ)  // UI: SpriteCapture::_sprites clear
+
 #undef J3_ENTRY2
 
 // --- J3: the three-argument form, `SetSize(this, int n, const T* fill)` -----
@@ -2090,6 +2231,11 @@ J3_ENTRY3(180078520, kSpec_SpriteDraw)  // UI:          Array<SpriteDraw> append
 J3_ENTRY3(180076250, kSpec_Node18)      // UI:          DialogInstance::_timers append
 J3_ENTRY3(180076370, kSpec_Fill8Z)      // UI:          DialogInstance::_controllers append
 
+// UI leftovers batch — the three-argument CaptureEntry and Event pushes:
+// SpriteContext::Begin's own callees build these with a fill value.
+J3_ENTRY3(18004bde0, kSpec_CaptureEntry) // UI: SpriteCapture::_entries append
+J3_ENTRY3(180033690, kSpec_Event30)      // UI: UserInterface::_events append
+
 #undef J3_ENTRY3
 
 // --- J3: the constant-folded one-argument form ------------------------------
@@ -2136,6 +2282,41 @@ Site g_j3_1800783d0 = { { "Collection::Array<SpriteDraw>::SetSize(0) @0x1800783d
 void RtColl_ArraySetSize_1800783d0(void* a) {
     SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SpriteDraw,
                 &g_j3_1800783d0);
+}
+
+// UI leftovers batch — the SAME one-argument `SetSize(0)` shape as
+// 0x1800783d0 above, for two more callers: `UserInterface::CleanRemovedDialogs`
+// (0x18011f790) clears `_removedDialogs` (Array<DialogInstancePtr>, stride 8)
+// and `UserInterface::UpdateEvents` (0x18011fc60) clears `_events`
+// (Array<Event>, stride 0x30). Both bodies were read out of the disassembly
+// and both have the identical dead-branch shape 0x1800783d0's banner already
+// explains: with `n` folded to the literal 0, the fill loop's guard is
+// `start(=oldSize) < n(=0)`, which is false for every non-negative oldSize, so
+// the loop NEVER RUNS and the realloc/free branches are equally unreachable
+// (capacity is never negative, so `pvVar2 == *param_1` is always true). The
+// only observable effect of either body is `_size = 0` — no element is
+// destroyed, no buffer is freed, no per-element write happens. That matters
+// here specifically: `_removedDialogs` holds DialogInstance pointers already
+// released by the vtable-slot-0 call CleanRemovedDialogs makes just before
+// this clear, and `_events` holds no owned resource (kSpec_Event30's banner),
+// so a `_size = 0` that keeps the buffer is exactly what retail does and not
+// a hand-written shortcut around it.
+//
+// SetSizeCore is still the right implementation, for the same reason
+// 0x1800783d0 gives: if the "always dead" reasoning is ever wrong for either
+// spec, the two disagree under the diff oracle instead of silently agreeing.
+Site g_j3_18011f7f8 = { { "Collection::Array<DialogInstancePtr>::SetSize(0) @0x180079c90", 0, 0, false, false },
+                        0x180079c90 };
+void RtColl_ArraySetSize_180079c90(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_PtrZero,
+                &g_j3_18011f7f8);
+}
+
+Site g_j3_18011fc90 = { { "Collection::Array<UI::UserInterface::Event>::SetSize(0) @0x180079df0", 0, 0, false, false },
+                        0x180079df0 };
+void RtColl_ArraySetSize_180079df0(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Event30,
+                &g_j3_18011fc90);
 }
 
 }  // namespace rtcoll
@@ -2309,6 +2490,13 @@ void RtCollectionPortInit() {
     // its negative control are in the J3 table's note.
     RegisterRuntimeAddr(0x180076250, (void*)&RtColl_ArraySetSizeFill_180076250);
     RegisterRuntimeAddr(0x180076370, (void*)&RtColl_ArraySetSizeFill_180076370);
+    // ---- UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) -------
+    RegisterRuntimeAddr(0x18004ba90, (void*)&RtColl_ArraySetSize_18004ba90);
+    RegisterRuntimeAddr(0x1800370c0, (void*)&RtColl_ArraySetSize_1800370c0);
+    RegisterRuntimeAddr(0x18004bde0, (void*)&RtColl_ArraySetSizeFill_18004bde0);
+    RegisterRuntimeAddr(0x180033690, (void*)&RtColl_ArraySetSizeFill_180033690);
+    RegisterRuntimeAddr(0x180079c90, (void*)&RtColl_ArraySetSize_180079c90);
+    RegisterRuntimeAddr(0x180079df0, (void*)&RtColl_ArraySetSize_180079df0);
     // 0x180011010, 0x180010ab0 and 0x1800419b0 are NOT registered here: all
     // three belong to runtime/src/collection/array_destroy.cpp, which already
     // registered 0x180010ab0 and, in this same commit, registers the other two
