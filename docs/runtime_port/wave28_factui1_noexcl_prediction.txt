@@ -1,0 +1,39 @@
+FACTUI1 -- NOEXCL PREDICTION, WRITTEN BEFORE THE RUN
+=====================================================
+NOEXCL=1 disables the +0x08..+0x0f handle-id exclusion entirely. It arms the
+SCOPE of the exclusion, which neither --negative (a store value) nor --derefbug
+(address resolution) can touch.
+
+Internal-rooted classes in this slice, derived from the spec table's baseCtor
+column BEFORE running anything:
+
+  via ??0Element@UI@@ (11):
+     AnimatedImageElement, BorderElement, ButtonElement, CheckElement,
+     ClipRegionElement, ComboElement, ContainerElement, DocumentTextElement,
+     EditElement, GraphElement, GroupElement
+  via ??0DialogInstance@UI@@ (1):
+     ComboDialog
+  via ??0Internal@Object@@ (1):
+     DialogInstance                      (no in-place slot of ours)
+
+PREDICTION
+  pass 1 (in-place, 26 classes)   26/26 -> 14/26   (12 Internal-rooted fail)
+  pass 2 (out-of-line ctors, 14)  14/14 ->  7/14   (AnimatedImageElement,
+                                                    BorderElement, ComboElement,
+                                                    DocumentTextElement,
+                                                    EditElement, GraphElement,
+                                                    DialogInstance)
+  pass 3 (CreateNewObject, 31)    31/31 -> 18/31   (13 Internal-rooted fail)
+
+  every failure lands at first-differing offset +0x8, and ONLY inside
+  +0x08..+0x0f.
+
+MUST NOT MOVE -- this is the point of the check:
+  CheckDescription and ComboDescription. They derive from
+  ??0ButtonDescription@UI@@ (External-rooted). Under the OLD too-wide flag they
+  were excluded and would have kept PASSING here, which is the tell:
+  A ROW THAT PASSES WITH ITS EXCLUSION DISABLED IS A ROW WHOSE EXCLUSION WAS
+  DOING NOTHING. With the tightened flag they are no longer excluded, so they
+  must pass because the bytes genuinely agree -- not because they were skipped.
+  Also must not move: CharacterSet, ClipRegionDescription, Cursor, Font, and
+  every other *Description, plus the 4 abstract rows.

@@ -617,6 +617,61 @@ on the in-place slot**, so `DialogInstance`'s real allocating body is compared
 (0xb8 bytes from the arena) and `Element`'s null return is checked. Verified by
 reading the pass-3 output for those two names, not by reasoning about the code.
 
+#### `NOEXCL=1` — arming the SCOPE, and a prediction that was 2/3 right
+
+FACTREST's third arming, and the only one that can see a scope error:
+`--negative` arms a store **value**, `--derefbug` arms address **resolution**,
+and **neither touches which classes the exclusion applies to** — which is where
+both lanes' defects lived. `NOEXCL=1` disables the exclusion outright. It
+settles both directions at once:
+
+* **too wide** — an excluded row that still PASSES with the exclusion off was
+  being skipped for nothing. **A row that passes with its exclusion disabled is
+  a row whose exclusion was doing nothing.** This would have caught this lane's
+  `CheckDescription`/`ComboDescription` defect automatically.
+* **too narrow** — an unflagged row that FAILS was wrongly compared.
+
+**The prediction was written and committed to a file before the run**
+(`noexcl_prediction.txt`). Two passes matched exactly; the third did not, and
+the mismatch is the finding:
+
+```
+              predicted   measured
+  pass 1        14/26       14/26   MATCH  (the 11 Element-derived + ComboDialog)
+  pass 2         7/14        7/14   MATCH  (the same 7 classes, by name)
+  pass 3        18/31       31/31   *** WRONG ***
+  every failure at first-differing offset +0x8, nothing outside +0x08..+0x0f
+  CheckDescription / ComboDescription / every *Description: UNMOVED, as required
+```
+
+**Why pass 3 did not move, and why it matters.** Pass 3 compares only the bytes
+**our store table claims to write** — retail's block is not poisoned, so it has
+no other subject. No Element-derived store table touches +0x08..+0x0f: those
+bytes are written by the *base ctor*, not by our rows (verified — the lowest
+offsets in `kAnimatedImageElement` are 0x000 then 0x0c0). **So pass 3's copy of
+the exclusion is dead code — a premise that never bites, which is FACTREST's
+exact defect class, sitting in this lane's pass 3.**
+
+**It is a dead predicate, not a coverage hole, and that was checked rather than
+assumed:** every concrete class is compared at FULL WIDTH by pass 1 (26 classes)
+or pass 2 (14 ctors, including `DialogInstance`, whose in-place slot is
+FACTREST's). The union leaves no body uncompared. What the mismatch corrects is
+a claim never made explicitly before: **pass 3's subject is narrower than passes
+1–2's**, and it is the allocation-path check, not a third full-width comparison.
+
+**Writing the prediction down first is what produced this.** A run that agrees
+with an unwritten expectation teaches nothing; this one disagreed in exactly one
+place and that place was a real defect.
+
+**A second corroboration fell out of it.** The failures are **5 bytes** —
+`+0x08` plus `+0x0c..0x0f` — independently reproducing FACTREST's `--selfdiff`
+window from the opposite direction (ours-vs-theirs rather than theirs-vs-theirs).
+`ComboElement` showed **4**, not 5, because one byte of its handle id happened
+to coincide between the two runs. That is FACTREST's `_factoryIndex` point
+arriving unbidden in this lane: **the measured window is narrower than the true
+one whenever the values happen to agree**, so a window fitted to a measurement
+is a window that fails later for a reason the measurement could not show.
+
 **Excluded, with the reason:** `Object::Internal`'s handle id at +0x08..+0x0f of
 every Element-derived object. `??0Internal@Object@@` draws it from
 `?Rand@Random@System@@` and the factory hands the second caller a DIFFERENT one

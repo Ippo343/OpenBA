@@ -82,7 +82,24 @@ static bool g_derefBug = false;   // --derefbug: arm the vptr witness
 // fired and left bodies uncompared; this one fired where it did not apply and
 // left bytes uncompared. Both are the same question answered by MEASURING the
 // premise against the subject rather than assuming its scope.
+// NOEXCL=1 disables the exclusion entirely, ARMING ITS SCOPE. Lane FACTREST's
+// third arming, and the only one that can see a scope error: --negative arms a
+// store VALUE, --derefbug arms address RESOLUTION, and neither touches WHICH
+// CLASSES the exclusion applies to -- which is precisely where both lanes'
+// defects lived.
+//
+// It settles both directions in one run:
+//   TOO WIDE    an excluded row that still PASSES with the exclusion off was
+//               being skipped for nothing. **A row that passes with its
+//               exclusion disabled is a row whose exclusion was doing
+//               nothing.** That is exactly this lane's CheckDescription /
+//               ComboDescription defect, and this check would have caught it
+//               automatically.
+//   TOO NARROW  an unflagged row that FAILS was wrongly compared.
+static bool g_noExcl = false;
+
 static bool IsInternalRooted(const Spec& sp) {
+    if (g_noExcl) return false;
     if (!sp.baseCtor) return false;
     return strcmp(sp.baseCtor, "??0Element@UI@@QEAA@XZ") == 0 ||
            strcmp(sp.baseCtor, "??0DialogInstance@UI@@QEAA@XZ") == 0 ||
@@ -168,6 +185,10 @@ static void OursCtor(const Spec& sp, void* self) {
 int main(int argc, char** argv) {
     bool neg = (argc > 1 && strcmp(argv[1], "--negative") == 0);
     g_derefBug = (argc > 1 && strcmp(argv[1], "--derefbug") == 0);
+    g_noExcl   = (getenv("NOEXCL") != nullptr);
+    if (g_noExcl) printf("*** NOEXCL: the +0x08..+0x0f handle-id exclusion is "
+                         "DISABLED. Internal-rooted rows MUST now fail, at +0x8, "
+                         "and NOTHING ELSE may move. ***\n");
     g_dll = LoadLibraryA("C:\\GOG Games\\Banished\\Runtime-x64.dll");
     if (!g_dll) { printf("LoadLibrary failed %lu\n", GetLastError()); return 2; }
 
