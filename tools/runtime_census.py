@@ -762,6 +762,70 @@ CLASSIFIER_FIXTURES = [
 ]
 
 
+def selftest_unpromotable_key():
+    """Regression guard for BOTH defects in load_unpromotable()'s one regex.
+
+    WAVE 25. The REASON CLASS field was `(\\S+)` (lane MANIFEST: a class naming
+    two routes dropped the whole tag, 5 rows live) and the SYMBOL field was
+    `(\\?\\S+)` (lane INTERNAL42: an address-keyed row cannot match at all,
+    0 rows live but the `internal` bucket is 190 address-keyed rows).
+
+    Both were invisible because a failed match drops the tag SILENTLY and the
+    row then prints as ordinary unported work. Neither had a regression guard,
+    and the address half is ABSENCE-shaped -- there is no live specimen, so it
+    must be HANDED a positive case or it cannot be distinguished from a dead
+    parser. That is what the two synthetic address rows below are for.
+    """
+    import re as _re
+    src = open(__file__, encoding="utf-8").read()
+    pat = _re.search(r'm = re\.search\((r"RT_UNPROMOTABLE.*?), line\)', src, _re.S)
+    if not pat:
+        print("RESULT   : CANNOT LOCATE THE REGEX -- this guard is DEAD"); return 1
+    rx = _re.compile(eval("(" + pat.group(1).replace("\n", "") + ")"))
+
+    def parse(line):
+        m = rx.search(line)
+        if not m:
+            return None
+        k = m.group(1)
+        return ("0x%x" % int(k, 16)) if k[:2].lower() == "0x" else k
+
+    T = "// RT_UNPROMOTABLE: %s | n/a | DOC.md | reason | %s"
+    cases = [
+        ("POSITIVE symbol, single-token class",
+         T % ("?_singleton@Foo@@0PEAV12@EA", "HARMFUL"), "?_singleton@Foo@@0PEAV12@EA"),
+        ("POSITIVE symbol, MULTI-token class (MANIFEST's live defect)",
+         T % ("?_x@Bar@@0PEAV12@EA", "HARMFUL (DLL-present) / REQUIRED (cutover)"),
+         "?_x@Bar@@0PEAV12@EA"),
+        ("POSITIVE address, lowercase (INTERNAL42's latent twin)",
+         T % ("0x18002ac40", "HARMFUL"), "0x18002ac40"),
+        ("POSITIVE address, UPPERCASE -- must normalise to the row-set spelling",
+         T % ("0x18002AC40", "NO-OP"), "0x18002ac40"),
+        ("POSITIVE address, zero-padded -- must normalise",
+         T % ("0x018002ac40", "NO-OP"), "0x18002ac40"),
+        ("NEGATIVE no pipe fields -- must NOT match",
+         "// RT_UNPROMOTABLE: 0x18002ac40 no pipes at all", None),
+        ("NEGATIVE neither a symbol nor an address -- must NOT match",
+         T % ("banana", "HARMFUL"), None),
+    ]
+    bad = 0
+    parsed = 0
+    for name, line, want in cases:
+        got = parse(line)
+        ok = got == want
+        if want is not None and got is not None:
+            parsed += 1
+        print(("  GREEN   " if ok else "  RED     ") + name + " -> " + repr(got))
+        bad += 0 if ok else 1
+    # EFFECTIVENESS: a run where nothing parsed would print all-GREEN on the
+    # negatives alone. Five positives MUST have produced a key.
+    print("  EFFECTIVENESS: %d of 5 positive cases actually parsed a key" % parsed)
+    if parsed != 5:
+        print("RESULT   : DEAD PARSER -- negatives passed but positives parsed nothing"); return 1
+    print("RESULT   : %d of %d cases correct" % (len(cases) - bad, len(cases)))
+    return 1 if bad else 0
+
+
 def selftest_classifier():
     print("classify_symbol() fixture table")
     print("SUBJECT : the classifier ONLY. Nothing here reads the tree or the DLL.")
@@ -1711,11 +1775,36 @@ def load_unpromotable(root):
                 # exactly the tags that said the most. Measured: 41 matches
                 # before, 46 after, with a positive control on both a
                 # single-token and a multi-token class.
-                m = re.search(r"RT_UNPROMOTABLE:\s*(\?\S+)\s*\|\s*([^|]+?)\s*\|"
+                # WAVE 25 lane INTERNAL42 -- the TWIN of the defect above, one
+                # field to the LEFT and in the same two lines. The SYMBOL key
+                # was `(\?\S+)`, anchored on a literal `?`. A space cannot
+                # truncate it (every mangled name starts with `?`), but an
+                # ADDRESS-KEYED row cannot match it AT ALL: write
+                # `RT_UNPROMOTABLE: 0x18002ac40 | ...` and the whole expression
+                # fails and the tag is dropped -- the identical symptom, from a
+                # different cause.
+                #
+                # LATENT, NOT LIVE, and that was measured rather than assumed:
+                # every RT_UNPROMOTABLE: line in reg_mint_promoted.cpp today
+                # carries a `?`-prefixed symbol, so 0 rows were affected. But
+                # the population that hits it is the whole `internal` bucket --
+                # 190 rows, every one keyed by an address -- so the FIRST
+                # address-keyed row anyone tags would have disappeared silently.
+                #
+                # It is TWO changes, not one: the capture must admit `0x...`
+                # AND the key must then be spelled the way the row set spells
+                # it ("0x%x" % addr, lowercase and unpadded, as at line 1783),
+                # or the tag parses and then matches nothing -- which would
+                # look exactly like the bug it replaced.
+                m = re.search(r"RT_UNPROMOTABLE:\s*((?:\?\S+)|(?:0[xX][0-9a-fA-F]+))\s*\|"
+                              r"\s*([^|]+?)\s*\|"
                               r"\s*([^|]+?)\s*\|\s*([^|]+?)\s*(?:\|\s*(\S.*?)\s*)?$", line)
                 if m:
-                    out[m.group(1)] = (m.group(2), m.group(3), m.group(4),
-                                       (m.group(5) or "NO-OP"))
+                    key = m.group(1)
+                    if key[:2].lower() == "0x":
+                        key = "0x%x" % int(key, 16)   # normalise to the row-set spelling
+                    out[key] = (m.group(2), m.group(3), m.group(4),
+                                (m.group(5) or "NO-OP"))
     except OSError:
         pass
     return out
@@ -1851,6 +1940,8 @@ def main():
                          "rows become invisible and BOTH numbers are "
                          "understated -- the census says so on stderr. Do not "
                          "publish a number produced this way.")
+    ap.add_argument("--selftest-unpromotable-key", action="store_true",
+                    help="regression guard for load_unpromotable()'s symbol/class regex")
     ap.add_argument("--selftest-classifier", action="store_true",
                     help="run the symbol-kind classifier against its fixture "
                          "table and exit. Includes a DELIBERATELY MALFORMED "
@@ -1868,6 +1959,8 @@ def main():
                          "split to be exact.")
     args = ap.parse_args()
 
+    if args.selftest_unpromotable_key:
+        return selftest_unpromotable_key()
     if args.selftest_classifier:
         return selftest_classifier()
 
