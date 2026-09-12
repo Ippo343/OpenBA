@@ -867,6 +867,39 @@ static const DelDtorSpec kSpecs[] = {
     // Array<String> whose buffer came from the Runtime heap.
     RT_DELDTOR(0x1800361f0, 0x180118370, 0x080, "UI::ImageDescription"),
     RT_DELDTOR(0x1800369e0, 0x1800cb6b0, 0x098, "UI::AnimatedImageDescription"),
+    // 2026-09-12, VTABLE BATCH 1 (the first half of the UI::*Description
+    // family): ten more slot-0 rows, indices 61..70. Each row's two constants
+    // were read from that deleting destructor's OWN bytes -- the `LEA R9` that
+    // names ~Class and the `MOV EDX` that is sizeof(Class) -- never from the
+    // class header, and each was cross-checked against the `Allocate(size, 8)`
+    // in that class's `?CreateNewObject@` (already transcribed in
+    // runtime/src/ui/factory_ui1_tables.inc). All ten agree.
+    //
+    //     0x180040ff0  LEA R9,[0x18010fb20]  MOV EDX,0xb8   BorderDescription
+    //     0x1800481a0  LEA R9,[0x180110bd0]  MOV EDX,0xa0   ButtonDescription
+    //     0x1800489c0  LEA R9,[0x180111620]  MOV EDX,0xa8   CheckDescription
+    //     0x180037eb0  LEA R9,[0x1800cc0d0]  MOV EDX,0x78   ClipRegionDescription
+    //     0x180074e70  LEA R9,[0x180112370]  MOV EDX,0xb8   ComboDescription
+    //     0x180039c00  LEA R9,[0x1800ccff0]  MOV EDX,0x90   ContainerDescription
+    //     0x18003bd90  LEA R9,[0x1800cfb30]  MOV EDX,0xe8   DocumentTextDescription
+    //     0x18003fa20  LEA R9,[0x1800d11f0]  MOV EDX,0x88   EditDescription
+    //     0x1800403a0  LEA R9,[0x1800d1b30]  MOV EDX,0x88   GraphDescription
+    //     0x180042730  LEA R9,[0x1800d2960]  MOV EDX,0xb8   LabelDescription
+    //
+    // None of the ten is a probe subject: every one of these destructors
+    // releases at least one refcounted String, and ~DocumentTextDescription
+    // also destroys four arrays, so running one on a fabricated object would
+    // be a manufactured crash rather than a measurement.
+    RT_DELDTOR(0x180040ff0, 0x18010fb20, 0x0b8, "UI::BorderDescription"),
+    RT_DELDTOR(0x1800481a0, 0x180110bd0, 0x0a0, "UI::ButtonDescription"),
+    RT_DELDTOR(0x1800489c0, 0x180111620, 0x0a8, "UI::CheckDescription"),
+    RT_DELDTOR(0x180037eb0, 0x1800cc0d0, 0x078, "UI::ClipRegionDescription"),
+    RT_DELDTOR(0x180074e70, 0x180112370, 0x0b8, "UI::ComboDescription"),
+    RT_DELDTOR(0x180039c00, 0x1800ccff0, 0x090, "UI::ContainerDescription"),
+    RT_DELDTOR(0x18003bd90, 0x1800cfb30, 0x0e8, "UI::DocumentTextDescription"),
+    RT_DELDTOR(0x18003fa20, 0x1800d11f0, 0x088, "UI::EditDescription"),
+    RT_DELDTOR(0x1800403a0, 0x1800d1b30, 0x088, "UI::GraphDescription"),
+    RT_DELDTOR(0x180042730, 0x1800d2960, 0x0b8, "UI::LabelDescription"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1237,6 +1270,72 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 56);
 }
 
+// ---------------------------------------------------------------------------
+// 2026-09-12, VTABLE BATCH 1. Rows 57, 59 and 60 were ADDED TO THE TABLE by the
+// GroupDescription / ImageDescription / AnimatedImageDescription ports earlier
+// the same day but never given an entry point or a registration, so those three
+// vtable slot 0s were still traps. They are wired here together with this
+// batch's own ten (61..70). Row 58 (UI::RibbonDescription) is left alone: it is
+// another agent's class and wiring it from here would give one row two owners.
+//
+// The indices below were re-derived from the table AFTER this batch's append,
+// not carried over from the append -- the merge hazard documented at
+// kSpecCount in deleting_dtor_internal.h is an index collision the
+// static_assert cannot see.
+// ---------------------------------------------------------------------------
+// UI::GroupDescription      ~GroupDescription = 0x180117c00   (PORTED, groupdescription.cpp)
+void* RtDelDtor_GroupDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 57);
+}
+// UI::ImageDescription      ~ImageDescription = 0x180118370   (PORTED, imagedescription.cpp)
+void* RtDelDtor_ImageDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 59);
+}
+// UI::AnimatedImageDescription ~ = 0x1800cb6b0   (PORTED, animatedimagedescription.cpp)
+void* RtDelDtor_AnimatedImageDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 60);
+}
+// UI::BorderDescription     ~ = 0x18010fb20   (PORTED, borderdescription.cpp)
+void* RtDelDtor_BorderDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 61);
+}
+// UI::ButtonDescription     ~ = 0x180110bd0   (PORTED, buttondescription.cpp)
+void* RtDelDtor_ButtonDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 62);
+}
+// UI::CheckDescription      ~ = 0x180111620   (PORTED, checkdescription.cpp)
+void* RtDelDtor_CheckDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 63);
+}
+// UI::ClipRegionDescription ~ = 0x1800cc0d0   (PORTED, clipregiondescription.cpp)
+void* RtDelDtor_ClipRegionDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 64);
+}
+// UI::ComboDescription      ~ = 0x180112370   (PORTED, combodescription.cpp)
+void* RtDelDtor_ComboDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 65);
+}
+// UI::ContainerDescription  ~ = 0x1800ccff0   (PORTED, containerdescription.cpp)
+void* RtDelDtor_ContainerDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 66);
+}
+// UI::DocumentTextDescription ~ = 0x1800cfb30 (PORTED, documenttextdescription.cpp)
+void* RtDelDtor_DocumentTextDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 67);
+}
+// UI::EditDescription       ~ = 0x1800d11f0   (PORTED, editdescription.cpp)
+void* RtDelDtor_EditDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 68);
+}
+// UI::GraphDescription      ~ = 0x1800d1b30   (PORTED, graphdescription.cpp)
+void* RtDelDtor_GraphDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 69);
+}
+// UI::LabelDescription      ~ = 0x1800d2960   (PORTED, labeldescription.cpp)
+void* RtDelDtor_LabelDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 70);
+}
+
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
     *count = static_cast<int>(sizeof(kProbeSubjects) / sizeof(kProbeSubjects[0]));
@@ -1338,6 +1437,23 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004e810, (void*)&RtDelDtor_VertexProgram);
     RegisterRuntimeAddr(0x18004eb90, (void*)&RtDelDtor_PixelProgram);
     RegisterRuntimeAddr(0x18004b9d0, (void*)&RtDelDtor_RenderState);
+
+    // 2026-09-12 VTABLE BATCH 1 — the three rows that were in the table but
+    // unregistered, plus this batch's ten. Every address a LITERAL, for the
+    // reason the banner above gives.
+    RegisterRuntimeAddr(0x180046af0, (void*)&RtDelDtor_GroupDescription);
+    RegisterRuntimeAddr(0x1800361f0, (void*)&RtDelDtor_ImageDescription);
+    RegisterRuntimeAddr(0x1800369e0, (void*)&RtDelDtor_AnimatedImageDescription);
+    RegisterRuntimeAddr(0x180040ff0, (void*)&RtDelDtor_BorderDescription);
+    RegisterRuntimeAddr(0x1800481a0, (void*)&RtDelDtor_ButtonDescription);
+    RegisterRuntimeAddr(0x1800489c0, (void*)&RtDelDtor_CheckDescription);
+    RegisterRuntimeAddr(0x180037eb0, (void*)&RtDelDtor_ClipRegionDescription);
+    RegisterRuntimeAddr(0x180074e70, (void*)&RtDelDtor_ComboDescription);
+    RegisterRuntimeAddr(0x180039c00, (void*)&RtDelDtor_ContainerDescription);
+    RegisterRuntimeAddr(0x18003bd90, (void*)&RtDelDtor_DocumentTextDescription);
+    RegisterRuntimeAddr(0x18003fa20, (void*)&RtDelDtor_EditDescription);
+    RegisterRuntimeAddr(0x1800403a0, (void*)&RtDelDtor_GraphDescription);
+    RegisterRuntimeAddr(0x180042730, (void*)&RtDelDtor_LabelDescription);
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --
