@@ -246,3 +246,476 @@ IO gap 12 → 8, BODY 4 → 1. **Unverified by me and not a published board**: t
 lane has not closed, and per kickoff warning 18 no figure is final until I
 re-derive on the merged tip with every lane tip checked. Recorded as an interim
 claim only.
+
+---
+
+## ENTRY 3 — INSTR refutes entry 2. SLOTS' 67 was right all along.
+
+Lane INSTR fixed `mint_slot_sweep.py` at `wave29/instr` `e3c09f5b`. It now prints
+7 traps and the four table identities. **Entry 1's expiry condition is met.**
+
+### 3.1 I ruled out a spans-lines defect with a line-based grep
+
+Entry 2 asserted **"There are ZERO adjacent-string-concatenated registration
+literals in the tree"** and instructed INSTR to drop that branch as dead code.
+**There are 28.** INSTR caught it; I then verified with a *multiline* matcher
+rather than `grep`:
+
+```
+(multiline)  RegisterRuntimeExport\(\s*"[^"]*"\s*\n\s*"
+   -> 28 occurrences across 16 files
+
+runtime/src/achievement/achievement_state.cpp:447
+    RegisterRuntimeExport("?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@"
+                          "VAchievementInstance@Achievement@@@Object@@XZ",
+```
+
+My entry-2 grep required **both fragments on one line**, and `grep` is line-based.
+
+> **I used a line-based screen to rule out a defect whose definition is "spans
+> lines".** It was structurally incapable of returning anything but zero, and
+> zero read as a refutation.
+
+That is the absence-screen rule and the name-your-subject rule firing together,
+committed by the integrator **while correcting someone else for insufficient
+rigour**, one entry after writing "a caveat is not a derivation". INSTR's concat
+control is drawn from the tree, not constructed as I advised, and it passes.
+
+### 3.2 The decomposition, and SLOTS was exactly right
+
+INSTR's whole-file, comment-stripped count over all five source roots:
+
+```
+  RegisterRuntimeExport( call sites                    1416
+    literal SAME line, one fragment                    1312   fine
+    literal same line, CONTINUED on next line            17   TRUNCATED
+    literal starts on the NEXT line, one fragment        39   INVISIBLE
+    literal starts on next line AND continued            11   INVISIBLE
+    first argument is NOT a literal                      37   DIFFERENT, known
+  affected population = 17 + 39 + 11                =    67
+```
+
+**67 is SLOTS' figure, exactly.** Of the four numbers in play **the lane's was
+correct and all three of mine were wrong**: 49 counted only the open-paren-at-EOL
+form; 87 was `1442 - 1355` with comments *included*, folding in the unrelated
+non-literal blind spot, and 1442 also counted the macro definitions in
+`rt_port.h`.
+
+Entry 2 scolded SLOTS for a number that was right, on the authority of two
+numbers that were not.
+
+### 3.3 TWO shapes, and the smaller one is worse
+
+50 sites were **INVISIBLE**; 17 were **TRUNCATED** to their first fragment, so
+the old scan carried **23 PHANTOM names**. A phantom is worse than an omission:
+it matches nothing and **cannot be noticed as absent**. The tool now prints a SET
+DIFFERENCE against the old scan in both directions rather than a count — diff the
+set not the count, applied by the lane without being told.
+
+### 3.4 THE LESSON THAT OUTLIVES THE WAVE, and it is not the one I recorded twice
+
+**The regex was never the bug.** Its `\s*` matches newlines, so applied to whole
+files it reads all 1379 literal sites correctly. The defect was **feeding it
+`git grep -h` OUTPUT** — line fragments.
+
+> **Fixing the regex would have changed nothing. Anyone who reads this as "a
+> regex was too narrow" will write the same defect again.**
+
+The bug was in the **input pipeline**, not the pattern. Entries 1 and 2 both
+described it as a pattern defect. That framing is retired.
+
+### 3.5 The cross-tool screen paid on its FIRST RUN
+
+INSTR built the screen entry 1 asked for — the sweep's registered-name set vs the
+census's `ported_exports`, set difference **both ways**, printed every run — and
+it immediately found a **fourth** sweep defect: **no comment stripper.** It had
+registered the names `<lit>`, `<literal>` and `<slot name>`, read out of comments
+in `renderer.cpp` and two gfxbody files **that quote this project's own match
+patterns while explaining a blind spot.** Harmless placeholders here, but a
+comment naming a REAL symbol would mark a minted slot PORTED when nothing
+registers it — for a hazard list, the dangerous direction.
+
+`concat_literal` and `strip_comments` are now **IMPORTED from `runtime_census`
+rather than re-implemented, so the next fix to either cannot fail to propagate.**
+That is the structural answer to entry 1's finding, not a patch to one symptom.
+
+The screen also surfaced 27 names the sweep sees and the census does not. INSTR
+checked **all 27, not the printed 8**: every one is a `MemoryAllocator` row gated
+behind `BANISHED_RT_ALLOC`. The sweep does not model gating, so each reads PORTED
+and **cannot fill a minted slot at cutover.** Recorded with an ADDRESSEE (the
+Wave 30 kickoff writer) rather than fixed, because it would move the trap count UP
+and INSTR had already moved two boards — a correct refusal to stack a second
+variable inside one measurement.
+
+### 3.6 Board movement, all of it MEASUREMENT
+
+```
+  census  TOTAL  1453/1294  89.1%  ->  1460/1295  88.7%
+          (+7 called from 32 recovered macro-door sites,
+           + SIX new unported UI bodies the board could not see)
+  sweep   ported 430 -> 439 ; traps 16 -> 7
+```
+
+**No work landed in that delta.** And kickoff §1.2's headline — "the remaining
+body work in the entire runtime port is SEVENTEEN functions" — **is now 23.**
+
+### 3.7 Entry 1 §1.6 status
+
+- Kickoff §1.3 identities: refuted (entry 1), now **fixed at source**.
+- Kickoff §1.2 "17 real bodies": **superseded, 23** (and see entry 5: +1 more).
+- Cross-tool consistency item: **TAKEN and DISCHARGED this wave**, helpers
+  imported rather than duplicated. Does not return to Wave 30.
+- New Wave 30 item, addressee named by INSTR: the sweep does not model gating; 27
+  `BANISHED_RT_ALLOC` rows read PORTED and would not fill a minted slot at cutover.
+
+---
+
+## ENTRY 4 — IOLANE closed, and it names a NEW CLASS: a promotion has a LIFETIME
+
+Closed at `wave29/iolane` `ea8a2839`, clean tree, stopped editing.
+
+**Landed:** three `TextFileStream` bodies ported, registered by name AND address,
+oracle-verified ours-vs-retail via `ResolveExportRaw` (`calls=2/3/3`, `div=0`).
+`??_7PackageFile@IO@@6B@` **PROMOTED** — 9/9, guard-refusal path exercised *on
+that row* with a synthetic trap (50->49 promoted, 1 refused), attended `post=1` in
+armed AND unarmed runs with a green control, kill switch
+`BANISHED_RT_PROMOTE_PKGFILE=0`.
+
+**Declined, obstacle class named:** `?SetupFileSystem@` as a **size judgement** —
+extent DERIVED (not `.pdata`) at `0x1800aebb0..0x1800af5e9`, 0xA39 = 2617 B, 714
+instructions — plus a new budget fact: **three of its 18 callees are absent from
+our tree.** `??_7TextFileStream@IO@@6B@` not promoted **and not for want of
+slots** (10/10 COMPLETE): attendance `post=0` in both arms, stampers 3 of 8.
+
+### 4.1 The new class
+
+IOLANE wrote *"checked rather than assumed"* into a promotion warrant about
+something it had **assumed**, and the Reconstruct oracle **DIVERGED** on the
+first promoted run. Retail's `Reconstruct` destructs through the object's own
+slot 0 (ours), then **tail-jumps retail's constructor by an in-DLL rel32 — not a
+door** — so retail **re-stamps its own table over an object we built.**
+
+> The known rule is "we cannot get our table in". **This is the mirror: our table
+> can be EVICTED after it is in. A promotion has a LIFETIME, not just a route.**
+
+Caught by a `printf`, not by review. Correctness unaffected; coverage is not.
+IOLANE also **nearly reported Wave 26's route condition for
+`?_typeInfo@PackageFile@IO@@` as satisfied** — it reads `post=1` armed and
+`post=0` unarmed, and **its own instrumentation was the consumer.** Not promoted.
+
+### 4.2 Its own instrument defects, both DEFLATING, fixed at the fix site
+
+- the retslot screen reported a by-value return as a reference for any `UEBA`
+  symbol (an `rfind("QEBA")` fallback) — found **only** by its known positive;
+- `file_stream_probe`'s verdict line hard-bounded `att` to 1..5, which would have
+  printed a working control as "NOT BANKED".
+
+### 4.3 A pairing PREMISE that was false, and the pairing paid anyway
+
+AVBODY had not reported; IOLANE self-controlled and said so. Its screen confirms
+**both** AVBODY Video rows carry a hidden RDX return slot (two mechanisms, 0x44 B
+each) and it sent AVBODY the typedef shape. **Its own three came back `ref/ref` —
+the shared trap I built the pairing on does not exist.** The pairing still paid,
+in the direction nobody predicted: IOLANE verified its PARTNER's subject, not its
+own. Recorded because I chose that pairing on a guess about shared shape, and the
+guess was wrong while the pairing was right.
+
+Six runs, every `standalone_crash.log` 0 bytes. Lock unpiped, unbackgrounded,
+0 s wait, `assert-held` against its md5 before every launch. No `tools/` touched.
+
+---
+
+## ENTRY 5 — AVBODY: an "unexported internal" was an EXPORT, and Audio is 4 bodies
+
+Interim (lane still running). All five targets confirmed UNPORTED on
+`wave29/base` by a scan that strips comments, physically JOINS adjacent literals,
+and reports its population (1583 files, 2870 `Register*(` sites, 1467 distinct
+names).
+
+### 5.1 A GUESSED known-positive is not a known positive
+
+AVBODY's first run **failed its own control**: it wrote the `Scene::Update`
+control symbol *from memory* as `?Update@Scene@Audio@@QEAAXAEBVTime@System@@@Z`;
+the real spelling is
+`?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z`
+(returns `_N` not `X`, takes `Random&` and `Vector3&`). The screen refused to
+report and exited 2.
+
+> **A control symbol you RECONSTRUCTED is not a known positive.** It can only
+> fail closed by luck; when it doesn't, you have a screen that silently validates
+> nothing. Hand a control a symbol you have READ.
+
+It also chose **all three** positives to be split across lines, so a joiner that
+handled only single-line names could not sail through. That construction is
+better than the one my messages specified.
+
+### 5.2 The scope correction: `AEBA` means PRIVATE, not unexported
+
+`?GetAttenuatedVolume@` calls a helper at `0x1800dfed0` twice, which AVBODY was
+about to inline as "an unexported internal". **It is EXPORTED** — ord 3027,
+`?GetVolumeForPosition@Scene@Audio@@AEBAMAEBVVector3@Math@@MM0@Z`. AVBODY then
+verified **every** callee VA against the export directory with `pefile` instead
+of assuming, and all three "internals" in its subject are exported name doors:
+
+```
+  0x1800dfed0  ord 3027  ?GetVolumeForPosition@Scene@Audio@@
+  0x1800a0d10  ord 3417  ?Play@Stream@Audio@@QEAAXHH@Z
+  0x1801fe728  ord 4797  ?_secondsPerTick@Timer@System@@0NA
+```
+
+**So the lane opens ZERO address doors**, and `GetVolumeForPosition` is ported by
+name rather than inlined. **Audio is 4 bodies, not 3.** It was not on any work
+list because nothing in our tree resolved it — the census cannot see what nothing
+asks for. This is the recorded `AEAA`/`AEBA` trap **inverted**: it usually hides
+an address door behind the word "unexported"; here it nearly caused a real export
+to be silently inlined away.
+
+Extents derived from the byte stream (first `CC-CC` padding), agreeing with
+Ghidra in all four cases: `0x44`/`0x44` Video pair, `0xea` GetAttenuatedVolume,
+`0x278` PlayPlatform. No `.pdata` used.
+
+---
+
+## ENTRY 6 — GFXBODY: all 8 confirmed, a false positive worth more than the result, and a HARNESS defect
+
+Interim (lane still running). **All eight Graphics targets confirmed UNPORTED**,
+so kickoff §1.2's Graphics list holds and `runtime_census.py --unported` is
+confirmed sound for this blind spot on this subject.
+
+GFXBODY deliberately **did not reuse SLOTS' scanner** — two checks sharing a
+hidden premise are one check — and wrote its own over 3260 door call sites, of
+which **56 are multi-line joins, printed as an EFFECTIVENESS CONTROL**: a scan
+that joined zero literals is indistinguishable from the line-by-line scan it
+replaces and would give the same clean answer for the wrong reason. Controls
+scored **separately**, not on a union: a known multi-line positive, a known
+single-line positive, a certain-absent negative. With a comment stripper —
+**without it, three of the eight would have read as registered** from prose.
+
+### 6.1 The false positive that is the shape that fools people
+
+Its first run reported **4 of 8 ALREADY REGISTERED** and for ten seconds looked
+exactly like SLOTS' finding reproducing in a second namespace. All four were
+**its own registrations, written minutes earlier.**
+
+> **A tree-reading scan run AFTER you start work cannot answer "was this already
+> there" without an explicit exclusion — and it fails in the ALARMING
+> direction.** Entry 1's whole finding has this shape; had GFXBODY reported the
+> false positive instead of chasing it, I would have had two lanes "confirming"
+> a phantom.
+
+### 6.2 The converse of SLOTS' defect lands on GFXBODY
+
+Its own `?GetRootPoseAtTime@` registration is a **2-fragment multi-line literal**
+(the name is too long for one line) — precisely the shape the unfixed
+`mint_slot_sweep.py` could not see. Neither SLOTS nor GFXBODY fixed that tool, on
+the explicit grounds that **two lanes editing one scoring tool makes the delta
+unattributable**. INSTR owned it and has now fixed it (entry 3). That is the
+coordination working as designed, without anyone arbitrating it.
+
+### 6.3 Extent walker: SLOTS' 70.3x finding changed behaviour
+
+GFXBODY rewrote its extent walker before trusting it. v1 walked forward and
+required the successor `.pdata` row to begin exactly at the predecessor's end,
+which **alignment padding defeats (DEFLATING)**. v2 is parent-indexed over the
+chained `UNWIND_INFO` tail and **reproduces PARTSYS's 157->5242, SLOTS' 25->1757
+and SLOTS' 50->900 exactly** before being used on its own subject. On the eight,
+v1 and v2 agree — **sound by luck, now sound by construction.**
+
+### 6.4 Scope correction to kickoff §1.2
+
+`?GetSunCamera@SunLight@` is **3775 bytes**, the largest of the eight and larger
+than `Scene::AddCulledDrawItems` (2950). Verified as the only export and only
+`.pdata` begin in `[0x180107010,0x180107ecf)`, so it is not a swallowed
+neighbour. **My kickoff groups it with a Scene/Renderer family that reads as
+tractable; it is not.** Declined on size.
+
+### 6.5 HARNESS DEFECT — no lane can prevent this, and it can deadlock the wave
+
+**The Bash tool auto-backgrounds any foreground command at 600s.** GFXBODY asked
+for a 960s timeout on a 900s `game_dir_lock.sh` acquire and **the harness
+backgrounded it at 600s anyway.**
+
+§0.3 says never background a blocking acquire, because **the lock is held from
+the moment it is GRANTED, not when you notice.** A lane that issued that command
+and moved on would hold the lock unknowingly and block every other lane — the
+exact failure §0.3 names, arriving through a mechanism §0.3 did not anticipate
+and no lane can opt out of.
+
+**Mitigation pushed to all running lanes:** never issue an acquire with a timeout
+over ~500s; use short acquires in a lane-controlled retry loop; assert you hold
+the lock immediately before every launch; if an acquire is backgrounded, treat
+lock state as UNKNOWN and assert rather than assuming failure.
+
+**Wave 30 kickoff §0.3 must carry this.** Addressee: the Wave 30 kickoff author.
+
+---
+
+## ENTRY 7 — WALL closed: the wall MOVED, and it refutes a claim I put in its own brief
+
+Closed at `wave29/wall` `5f653d1a`. Done, no further edits.
+
+### 7.1 The fault, by offset and not by inference
+
+`+0x1b7` is the return address of `CALL *RAX` at `0x1403d7ca8`, whose RAX came
+from `EntriesSerialize()` = `ResolveAddr(Module::Runtime, 0x180078ad0)`. RAX=0.
+
+**Fault class: an ADDRESS DOOR onto an unported, unexported DLL internal** —
+works DLL-present, null at cutover. Four such doors in that body; two registered,
+two not. Fixed UPSTREAM with no guards: `0x180078ad0` ported (extent 0x109 B
+derived from the instruction stream, not `.pdata`), and `0x180014520` registered
+as a sixth `EXTPTR_THUNK` — **the very next `CALL RAX`, 19 bytes on. Fixing only
+the first would have bought nothing**, which is the difference between clearing a
+wall and stepping one instruction.
+
+A field-order detail worth preserving: retail emits the five ints as
+`+0x10,+0x14,+0x1c,+0x20,+0x18` — **the reserved field is FIFTH**, and a
+declaration-order loop would silently corrupt every following record.
+
+### 7.2 THE DEFLATING DEFECT, AND IT WAS IN MY BRIEF
+
+`WAVE28_CLOSED.md` §2 reasoned: *"`RtUnresolved` count for the whole run is ZERO
+— this is not a resolve miss, so it is a null slot or a null stored pointer, not
+a missing registration."* **I copied that into kickoff §2 and into WALL's brief as
+a load-bearing premise.**
+
+**It was a missing registration.** `mainloop_run.cpp:13` states in-tree that an
+unregistered *address* door prints no `[RtUnresolved]` line.
+
+> **The counter is STRUCTURALLY BLIND to the exact fault it was used to exclude.**
+
+This is the same family as entry 3's: a screen used to rule something out, which
+could not have detected it. It is the third time this wave, and the second time
+by me. `reference_diagnostic_field_cannot_express_the_answer.md` already records
+two crash-log fields with this property; `RtUnresolved` is now a third, and it had
+been quoted across two waves.
+
+### 7.3 Measured, with a control and a negative control
+
+- **Control** on the preserved attempt-31 binary reproduced the published wall
+  exactly (same offset, frames, registers) — so this is a **moved wall, not a
+  moved tree**.
+- **Oracle** found by grepping `standalone/` (kickoff warning 13, paying again):
+  7151 emissions identical in both side orders.
+- **Negative control**: permuting the three order-critical ints gave DIVERGE at
+  emission 28 — proving the oracle reaches the body, *can* fail, and confirming
+  the field order independently.
+
+### 7.4 The arm: §0.4's recipe was right and its ANSWER was incomplete by two
+
+Attempt 31 also ran `BANISHED_RT_MINT=1` and `BANISHED_AUTOSTART=1`, each proved
+by the line printed by the code that read it. My §0.4 named only three variables.
+**The method I gave (recover the arm from ATTEST lines, never a log grep) is what
+found the two I had missed** — the recipe survived its author's own incomplete
+application of it. Captured in `tools/cutover_attempt32.sh`.
+
+### 7.5 The next wall
+
+`RtGraphics_MaterialInstance_Serialize+0x83` -> `RtAddr(0x180061100)` =
+`ExternalPtr<Graphics::Material>::Serialize` — the **7th of 25 instantiations of
+one family**, 6/25 registered, 19 enumerated. Holdback addressed to *the lane
+that runs attempt 33*. A family again, but an enumerated one.
+
+### 7.6 Pairing, in both directions
+
+WALL gave MINT the two missing arm variables — **on MINT's two-variable arm
+`RegisterMintedData()` never runs, so all 132 regenerated rows would have bound
+nothing and its A/B would have reported "no difference" about an unarmed
+subject.** MINT confirmed the correction from the source side and independently
+found an evidence-route gap.
+
+Running MINT's `mint_slot_sweep.py` against WALL's subject found its blind spot:
+it scores vtable slots only (`grep -c ResolveAddr` = 0), so **SpriteSheet's table
+reads 9/9 COMPLETE while one of those bodies took the boot down.**
+
+> **A COMPLETE vtable is not a BOOTABLE one, and no instrument in this wave
+> crosses that gap.**
+
+Four further defects recorded with directions: empty evidence dirs from a blanket
+`*.log` gitignore; `addr_door_audit.py`'s count is a FLOOR that missed this lane's
+own next wall; **the build is not byte-reproducible, so md5 cannot certify a
+measured image**; and the Bash 600s auto-background laundering a false lock grant
+(entry 6.5, found independently).
+
+---
+
+## ENTRY 8 — INSTR closed: two kickoff sections refuted, and a ledger item that was a TRAP
+
+Closed at `wave29/instr` `9776a690`. Protected-path diff
+`c11511a1...HEAD -- runtime/ standalone/ code/ engine/ dx11/` is **EMPTY** — an
+instrument lane that touched no compiled input, verified the way kickoff warning
+18 asks.
+
+```
+                       kickoff §1    closed tip
+census called/ported   1453/1294     1460/1295   (89.1% -> 88.7%)
+gap BODY                      24            30
+slot sweep traps              16             7   (ported 430 -> 439)
+```
+
+**Nothing was ported.** `%` fell because `called` grew by 7 rows that always
+existed.
+
+### 8.1 Both of my kickoff's headline claims are refuted
+
+- **§1.2 "17 remaining bodies" is 23**, and §1.1's proud scoping correction is
+  now itself corrected: six unported **UI** bodies were invisible —
+  `Begin@SpriteContext`, `CleanRemovedDialogs`, `ComputeLayout@DialogInstance`,
+  `GetMouseCursorIndex`, `Update@DialogInstance`, `UpdateEvents@UserInterface`.
+  **UI is 94.1%, not 96.7%.** (Entry 5 adds a 24th in Audio, from a different
+  cause.)
+- **§1.3's vtable identities are wrong for three of six rows** (entry 1).
+
+I wrote §1.1 as a demonstration of catching a stale figure before dispatch. It
+caught one and shipped two.
+
+### 8.2 "Retire the 8 stale verdicts" was a TRAP, and obeying my instruction would have destroyed evidence
+
+I told INSTR to retire or rewrite the 8 stale verdict rows. **Seven were stale
+only because their sole caller is `rt_orphan_probe.cpp` — the probe that produced
+the verdict.** Obeying the ledger literally would have **deleted the triage of
+seven ports that nothing calls.** 8 -> 1; the one genuinely stale row retired with
+its evidence preserved.
+
+> A ledger item phrased as an ACTION ("retire these") presumes the finding it was
+> derived from is still true. **The instruction outlived its justification**, and
+> the lane was right to interrogate the instruction rather than execute it.
+
+### 8.3 The ledger named the WRONG TRIGGER for a real defect
+
+Macro doors: 36 of 780 sites dropped silently (DEFLATING), fixed with a
+paren-depth scan plus named-constant resolution, and unreadables now printed.
+**But the recorded trigger — "a macro door whose first argument is an inline
+function-pointer type" — has ZERO live instances. All 36 are the `kName` constant
+shape.** A defect can be real, reproducible and correctly sized while its
+*recorded cause* is fiction; the experiment that "proved" it (moving a typedef
+moved TOTAL by 1) confirmed a real effect and misattributed it.
+
+### 8.4 The rest
+
+- **Factory family**: deliberately NOT folded in (+103/+103 for no work).
+  Decomposed instead into an INTRINSIC cause and a MISSING-CAPABILITY one that
+  expires — the right treatment, and it keeps the board honest.
+- **Stamper fold-in** — the item WAVE26 PROMOIO explicitly reserved for a
+  board-owning lane: 47 unattributed -> **45 scored, 24 ours-capable**,
+  **reproducing Wave 26's prediction exactly.** A four-wave-old prediction
+  confirmed on the nose.
+- `--csv >` left an argparse usage message inside the `.csv`. Fixed.
+- dtor-verify BAD -> UNREC (3 rows).
+- `mint_slot_sweep` 16 -> 7 traps, identities printed for the first time, and the
+  cross-tool screen (entry 3.5).
+- 5 new control suites, 33 checks, all green; `--selftest-all` is now 16 screens.
+
+### 8.5 Its own errors, and a pairing scored HONESTLY as one-directional
+
+- **INSTR claimed to have read `factory_byte_oracle.cpp` and had not** — the file
+  is uncommitted and was never visible to it. **Retracted to VERIFY in the same
+  turn** and recorded; its critique stands only as a design review from a
+  description.
+- **VERIFY changed INSTR's tree three times; INSTR ran none of VERIFY's
+  instruments.** It scored the pairing **one-directional** rather than claiming
+  mutual validation. That is the honest version of the metric I have been
+  celebrating, and the first lane this wave to report the pairing as partly
+  unfulfilled instead of rounding it up.
+- It declined VERIFY's bit-flip request because it requires editing `runtime/`,
+  referring it to a body lane — correct refusal for an instrument lane whose
+  whole claim is an empty protected-path diff.
