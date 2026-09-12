@@ -388,6 +388,46 @@ opposite.
 
 ---
 
+## 4A. THE RAX QUESTION — MEASURED FOR ALL FOUR PORTS
+
+Lane INTERNAL8 found that **an MSVC constructor returns `this` in RAX, and a C++
+ctor written to return `void` does not** — a defect that *works with the DLL
+present and breaks at cutover*, invisible to every DLL-present test including a
+green diff sweep. I have a ctor, two dtors and an `operator new`, and the ctor is
+the function attempt 25 died on, so this was measured rather than reasoned.
+
+**Method:** scan every `E8 rel32` in `.text` whose target is the row, then
+disassemble the bytes **immediately after** the call. Bytes, not the decompiler,
+which drops exactly this kind of register move.
+
+**POSITIVE CONTROL, and it fires** (KICKOFF §3 rule 4 — an absence screen must be
+handed a positive shape, or "no consumer" is indistinguishable from a dead
+parser): `??2SpriteSheet@UI@@` returns a pointer its caller *must* use, and the
+scan finds its one caller at `0x1800c3242` doing `mov rbx,rax` on the very next
+instruction. So a "no consumer" verdict below is a live parser's output.
+
+| row | direct callers | first instruction after the call | consumes RAX? | my signature | correct? |
+|---|---|---|---|---|---|
+| `??2SpriteSheet@UI@@` | 1 (`0x1800c3242`) | `mov rbx,rax` | **YES** | `void* (uint64_t)`, returns the block | ✔ |
+| `??0Stream@Audio@@` | 1 (`0x1800de3f0`, `Ctor_AudioDevice`) | `nop` ; `lea rax,[rbx+0xa98]` — RAX **overwritten** | no | `void* (void*)`, **returns `self`** | ✔ (and safe either way) |
+| `??1Stream@Audio@@` | 2 (`0x18004d9bd`, `0x1800db705`) | `mov rcx,rbx/rdi` ; `call 0x180006a10` (the free) | no | `void (void*)` | ✔ |
+| `?PlatformShutdown@Device@Input@@` | 1 (`0x1800db544`) | `mov rdi,[rbx+0x6d8]` | no | `void (void*)` | ✔ |
+
+**None of the four is defective, and the ctor is right for the stronger reason.**
+Its single in-DLL caller happens *not* to consume RAX — but my port returns
+`self` anyway, because retail's body ends `MOV RAX,RDI / RET` and that is the
+convention, not an accident of this one call site. Our own caller's typedef
+already agrees: `singleton_ctors.cpp` declares
+`using StreamCtorFn = void* (*)(void*)`.
+
+**The generalisation worth keeping:** a ctor's correctness here cannot be settled
+by looking at its callers, because a caller that ignores RAX today proves nothing
+about the next one. **Reproduce the `MOV RAX,<this>` because the bytes do it**,
+not because a caller was observed to need it — the caller survey is a check on
+the port, not a licence to omit the store.
+
+---
+
 ## 5. THE MINT ROW I DELIBERATELY DID **NOT** TAKE
 
 `??_7Stream@Audio@@6B@` (`0x180154950`) **is not in the mint table** — re-derived
@@ -462,6 +502,7 @@ recorded against a wider population than it examined
 | H4 | `?Frame@MainLoop@Engine@@` has **no blocker at all** — 684 bytes, 3 chained fragments, unclaimed since Wave 9 | the Wave 25 kickoff writer | PERMANENT |
 | H5 | `?Update@Scene@Audio@@` — Audio's last BODY row; the holdback is an ORACLE one and Wave 23 names the precedent for porting without one | the Wave 25 kickoff writer | PERMANENT |
 | H6 | Fire my three probes' controls in an armed sweep and report `probePairs`/`erased`/`*Checks` | Wave 24 lane DIFF | this wave |
+| H6a | **The RAX/`this` check (§4A) should be a TOOL, not a per-lane habit.** Nothing in the tree detects a ctor ported as `void`, and the failure is invisible until cutover. The scan is ~40 lines and has a natural positive control. | the Wave 25 kickoff writer | PERMANENT |
 | H7 | `.pdata` entry-only sizing understates `?Frame@MainLoop@` **5.6x** with `chained=False` on the entry fragment. Any future extent claim must union forward | anyone sizing a Runtime function | PERMANENT |
 
 ---
