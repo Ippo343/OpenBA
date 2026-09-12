@@ -1,0 +1,8 @@
+== arm, as the RUNNING CODE reported it ==
+[Standalone] BANISHED_RT_NO_DLL=1 -- continuing with Runtime-x64.dll ABSENT.  This is the controlled cutover boot; a crash is the EXPECTED outcome and its location is the result.  See docs/runtime_port/WAVE9_CUTOVER_BOOT_RUNBOOK.md
+[RtAlloc] ATTEST: ARMED (cutover, DLL absent) (exports=27)
+[AutoStart] ENABLED (BANISHED_AUTOSTART="1") — will auto-open New Game after 60 menu frames, then auto-Start
+[RtMint] 60 of 64 vtables are COMPLETE (every non-purecall slot is our port); registration is ON (BANISHED_RT_MINT=1)
+== RtDiff ON count (MUST be 0) ==
+0
+0

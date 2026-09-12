@@ -511,6 +511,25 @@ void RecBool(ReaderWriter* rw, uint8_t* v) {
     reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarBool / 8])(rw, v, nullptr);
 }
 
+// WAVE 29 LANE WALL — the `…Via` pair reload `ser->readerWriter` AND its
+// vtable pointer on EVERY call, which is what 0x180078ad0 does and is NOT what
+// `RecInt`/`RecBool` above do (those take an already-loaded `rw` because their
+// caller holds one across a straight run of calls with nothing in between).
+// The difference is deliberate and is argued in the banner on
+// RtUi_SpriteSheet_SerializeEntries: in that loop `String::Serialize` runs
+// between the reload and the scalar calls.
+void RecIntVia(Serializer* ser, int32_t* v) {
+    ReaderWriter* rw = ser->readerWriter;
+    using Fn = void (*)(ReaderWriter*, int32_t*, const char*);
+    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, v, nullptr);
+}
+
+void RecFloatVia(Serializer* ser, float* v) {
+    ReaderWriter* rw = ser->readerWriter;
+    using Fn = void (*)(ReaderWriter*, float*, const char*);
+    reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarFloat / 8])(rw, v, nullptr);
+}
+
 // ---- probe scaffolding (same contract as elementdescription_serialize.cpp) --
 Stream* StreamOf(void* serializer) {
     return static_cast<Serializer*>(serializer)->stream;
@@ -547,6 +566,108 @@ StreamMemberFn RetailBody() {
 }
 
 }  // namespace
+
+// ============================================================================
+// WAVE 29 LANE WALL — `0x180078ad0`, the per-SpriteInfo record walker.
+//
+// THIS IS THE FUNCTION CUTOVER ATTEMPT 31 DIED ON, and it died here for a
+// reason that had nothing to do with SpriteSheet. `EntriesSerialize()` above
+// is an ADDRESS DOOR onto an unported, unexported DLL internal. With the DLL
+// PRESENT `ResolveAddr(Module::Runtime, 0x180078ad0)` hands back retail's body
+// and everything works; with the DLL ABSENT it hands back nothing and the
+// `CALL RAX` that follows is an EXEC of 0
+// ([[reference_by_address_door_dies_at_cutover]]).
+//
+// THE OFFSET IN THE CRASH LOG NAMES THE DOOR, AND NOTHING ELSE DOES. The
+// attempt-31 return address was `RtUi_SpriteSheet_Serialize+0x1b7`, i.e. the
+// instruction after `CALL *%RAX` at 0x1403d7ca8, whose RAX came from
+// `EntriesSerialize()` at +0x198 — with RAX=0 in the register dump. There are
+// FOUR address doors in this body and reading them in source order would have
+// fingered `StringSerialize()` instead, which is registered and fine.
+//
+// ---------------------------------------------------------------------------
+// EXTENT, DERIVED FROM THE INSTRUCTION STREAM (not `.pdata` — warning 16)
+// ---------------------------------------------------------------------------
+// 0x180078ad0 .. 0x180078bd8, i.e. through the `REPZ RET` at 0x180078bd7,
+// followed by seven INT3 and then an unrelated `XOR EAX,EAX / MOV [RCX],RAX`
+// body at 0x180078be0. 0x109 bytes, one loop, no SEH, and no allocation of
+// its own beyond whatever `String::Serialize` does.
+//
+// ---------------------------------------------------------------------------
+// SIGNATURE AND BODY — objdump of the shipped Runtime-x64.dll
+// ---------------------------------------------------------------------------
+//   (RCX = Serializer*, EDX = count, R8 = SpriteInfo* entries)
+//
+//   TEST EDX,EDX ; JLE  -> a count of zero or less does NOTHING, including no
+//                          virtual call. `count` is read SIGNED even though
+//                          the caller's typedef spells it `uint32_t`; the bits
+//                          in EDX are the same either way.
+//   RBX = entries + 0x10, and the loop is a DO-WHILE on `DEC RSI`, stride 0x38.
+//
+//   per entry:
+//     CALL 0x1800c9930   (RBX-0x10, ser)   String::Serialize  name   +0x00
+//     CALL 0x1800c9930   (RBX-0x08, ser)   String::Serialize  group  +0x08
+//     vtable +0xa0 (kScalarInt)   RBX+0x00   -> x           +0x10
+//     vtable +0xa0                RBX+0x04   -> y           +0x14
+//     vtable +0xa0                RBX+0x0c   -> width       +0x1c
+//     vtable +0xa0                RBX+0x10   -> height      +0x20
+//     vtable +0xa0                RBX+0x08   -> _reserved18 +0x18   <-- LAST
+//     vtable +0x80 (kScalarFloat) RBX+0x14   -> u0          +0x24
+//     vtable +0x80                RBX+0x18   -> v0          +0x28
+//     vtable +0x80                RBX+0x1c   -> u1          +0x2c
+//     vtable +0x80                RBX+0x20   -> v1          +0x30
+//
+// THE FIELD AT +0x18 IS SERIALIZED FIFTH OF THE FIVE INTS, NOT THIRD. The
+// record is walked in AddSpriteInfo's PARAMETER order — x, y, width, height —
+// with the always-zero `_reserved18` appended at the end, which is why the
+// stream order is not the declaration order. A loop written "in field order"
+// emits the same eleven values in the wrong SEQUENCE and desynchronises every
+// following record in the file: the failure is not a crash, it is a corrupt
+// sprite atlas, and nothing in this tree would report it. The order here is
+// transcribed from the displacement on each LEA, one at a time.
+//
+// It agrees with the field list this file's own door table at the top already
+// recorded — "name, group, x, y, width, height, reserved, u0, v0, u1, v1" —
+// an annotation that HELD when it was finally checked. Recorded because the
+// standing expectation in this project is the opposite
+// ([[reference_pdata_understates_by_24x_and_annotations_lie]]) and a warning
+// that is always right is a warning nobody re-checks.
+//
+// `+0x34` IS NOT SERIALIZED. There is no eleventh scalar call. That agrees
+// with SpriteSheet.h's Wave 7 correction, which proved from the element
+// copy-construct helper that +0x34 is never written by either implementation.
+//
+// RETAIL RELOADS `ser->readerWriter` AND ITS VTABLE POINTER BEFORE EVERY ONE
+// of the nine scalar calls (`MOV RCX,[RDI+8] ; MOV RAX,[RCX]`), rather than
+// hoisting either out of the loop. Reproduced through `RecIntVia`/
+// `RecFloatVia`, because `String::Serialize` runs between the reload and the
+// first scalar call and a hoist would be a silent behavioural change if it
+// ever replaced the codec.
+// ---------------------------------------------------------------------------
+extern "C" void RtUi_SpriteSheet_SerializeEntries(Serializer* ser,
+                                                  int32_t     count,
+                                                  SpriteInfo* entries) {
+    if (count <= 0) return;                 // 0x180078ad0  TEST EDX,EDX ; JLE
+
+    SpriteInfo* e = entries;
+    do {
+        StringSerialize()(&e->name,  ser);  // +0x00  CALL 0x1800c9930
+        StringSerialize()(&e->group, ser);  // +0x08  CALL 0x1800c9930
+
+        RecIntVia(ser, &e->x);              // +0x10
+        RecIntVia(ser, &e->y);              // +0x14
+        RecIntVia(ser, &e->width);          // +0x1c
+        RecIntVia(ser, &e->height);         // +0x20
+        RecIntVia(ser, &e->_reserved18);    // +0x18  FIFTH — see the banner
+
+        RecFloatVia(ser, &e->u0);           // +0x24
+        RecFloatVia(ser, &e->v0);           // +0x28
+        RecFloatVia(ser, &e->u1);           // +0x2c
+        RecFloatVia(ser, &e->v1);           // +0x30
+
+        ++e;                                // ADD RBX,0x38
+    } while (--count != 0);                 // DEC RSI ; JNE
+}
 
 extern "C" bool RtUi_SpriteSheet_Serialize(SpriteSheet* self, Stream* stream) {
     static int probes = 0;
@@ -631,5 +752,26 @@ int RtUiSpriteSheetVtableRegister() {
     // vtable slot is filled by NAME, but 30-odd sites in this tree reach
     // exported code by ADDRESS, and a name-only registration leaves those
     // walking past the port into the DLL.
+
+    // ---- WAVE 29 LANE WALL -------------------------------------------------
+    //
+    // 0x180078ad0 — the per-SpriteInfo record walker, and the EXEC-of-0 that
+    // cutover attempt 31 died on. ADDRESS ONLY: it is an unexported internal,
+    // so there is no name to register and the address door is the only door.
+    //
+    // GREPPED BEFORE WRITING, across runtime/, standalone/, code/ and engine/:
+    // 0x180078ad0 appears at exactly four sites, three of them comments in
+    // this file and the fourth the `EntriesSerialize()` door at :469. Nothing
+    // registers it, so this shadows no existing binding
+    // ([[reference_grep_for_the_port_before_writing_it]]).
+    //
+    // This registration is what turns the probe at the top of
+    // `RtUi_SpriteSheet_Serialize` into an oracle for the new body: retail's
+    // outer body reaches 0x180078ad0 by an in-DLL `rel32` CALL, which is not a
+    // door and which we therefore do NOT intercept — so the `theirs` side
+    // keeps running retail's copy while `ours` now runs this file
+    // ([[reference_registering_an_address_converts_a_selfcheck_into_an_oracle]]).
+    // Before this line the probe compared retail's inner body with itself.
+    RegisterRuntimeAddr(0x180078ad0, (void*)&RtUi_SpriteSheet_SerializeEntries); ++n;
     return n;
 }

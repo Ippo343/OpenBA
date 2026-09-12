@@ -1,0 +1,6 @@
+[RtSaveTrace] pass UI::SpriteSheet::Serialize: 7151 emissions identical
+[RtSaveTrace] pass UI::SpriteSheet::Serialize[swapped]: 7151 emissions identical
+[RtSaveTrace] ==== 24 compared, 0 diverged ====
+[RtSaveTrace] DIVERGE UI::SpriteSheet::Serialize at emission 28: ours int(+0xa0)=1  theirs int(+0xa0)=48   (7151 vs 7151 emissions total)
+[RtSaveTrace] DIVERGE UI::SpriteSheet::Serialize[swapped] at emission 28: ours int(+0xa0)=1  theirs int(+0xa0)=48   (7151 vs 7151 emissions total)
+[RtSaveTrace] ==== 24 compared, 2 diverged ====
