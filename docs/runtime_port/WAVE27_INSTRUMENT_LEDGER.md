@@ -25,6 +25,8 @@ happen, and **nothing detects it**. Deflating entries are the dangerous ones.
 | 8 | **`addr_door_audit.py:47` blind to a wrapped address** | **DEFLATING** | GFXMESH | open — hid a door for 21 waves |
 | 9 | `get_function_metrics` ignores `address=` | WRONG SUBJECT | GFXMESH (known) | open, pre-existing |
 | 10 | `disassemble_function` wrong function — **3 more addresses** | **WRONG SUBJECT** | ACHIEVE, independently | open; `get_function_by_address` was CORRECT |
+| 11 | **`read_memory` + `inspect_memory_content` return wrong bytes AND AGREE** | **WRONG SUBJECT, self-corroborating** | LOOPS | open — bears on other lanes' outputs |
+| 12 | a `C7`-blind scanner in LOOPS' own work | INFLATING | ACHIEVE, reviewing LOOPS | fixed in-lane |
 
 ---
 
@@ -365,3 +367,76 @@ the refcounted recipe — is the more dangerous error.**
 **ADDRESSEE: whoever writes the Wave 28 kickoff.** A hazard being real does not
 make any given instance of it real. Relay the *method* (read the consuming body
 and ask whether ownership leaves the array) and never the *verdict*.
+
+---
+
+## 11. `read_memory` and `inspect_memory_content` are WRONG **and corroborate each other** — LOOPS
+
+**The worst shape in this ledger, and the reason it is worse than #4:** both tools
+silently return **wrong bytes** for some `(address, length)` pairs, and **they
+agree with each other when they do.** LOOPS caught it only by checking against the
+PE file.
+
+This is `reference_two_checks_one_hidden_premise.md` in its purest form. A lane
+that read a vtable through one of these and then "verified" it with the other
+performed **one** check, got a confident agreement, and may have decoded garbage.
+Agreement between two tools on the same server is not corroboration.
+
+**SCOPE ASSESSMENT FOR THIS WAVE — done at merge, and it is reassuring but not
+clean:** most lanes had already routed vtable and byte decoding through PE-direct
+witnesses, for unrelated reasons (they were defending against #1 and #4):
+
+| lane | byte/offset witness | exposed to #11? |
+|---|---|---|
+| IOTEXT | `pefile` on retail for all three tables' `.rdata` slots; `objdump` for bodies | no |
+| GFXMESH | `pefile` for every export VA; `objdump` for bodies | no |
+| GFXPART | `objdump` on all ten load-bearing regions | no |
+| ACHIEVE | `pefile` + `objdump` for every body | no |
+| GFXBIG | `objdump`/`pefile` by explicit path | no |
+| FRONTIER | Ghidra disassembly, re-taken with explicit `program=` | **not assessed for #11** |
+| LOOPS | caught the defect; checked against the PE | no |
+
+**So the defence against #1 and #4 incidentally defended against #11** — the lanes
+were right for reasons better than the ones they knew. That is luck compounding in
+our favour, and it should be recorded as luck, exactly as FRONTIER recorded its
+own.
+
+**ADDRESSEE: Wave 28, before any lane reads a byte through GhidraMCP.** And the
+operating rule at the bottom of this ledger is now carried by **five** defects,
+not three.
+
+## 12. A `C7`-blind scanner — ACHIEVE, reviewing LOOPS
+
+Found by a **peer lane reviewing another lane's work**, which is the only entry
+here discovered that way. Fixed in-lane. Listed because the discovery MECHANISM is
+the finding: ACHIEVE corrected LOOPS three times — the scanner, a wrong blocker in
+LOOPS' own `??_7Loader@` tag, and a false sentence in its §3.5 that contradicted
+its own §2.
+
+**Cross-lane review caught what self-review did not, including a defect LOOPS had
+DOCUMENTED ONE SECTION EARLIER.** Knowing a failure mode and writing it down does
+not protect you from committing it in the next paragraph — the same thing this
+ledger records against the integrator twice (#6, and the relayed warning).
+
+---
+
+## THE WAVE'S SHARPEST EPISTEMIC FINDING — repair the LICENCE, not the sentence
+
+From LOOPS §9.1, and it required two lanes to see.
+
+ACHIEVE and LOOPS drew **the same unlicensed inference** from the same evidence.
+**LOOPS' conclusion was false; ACHIEVE's was true.** Both were reached by a step
+neither was entitled to take.
+
+> **A true conclusion reached by an unlicensed inference is not a success, and
+> correcting only the false one leaves the mechanism intact.** The repair belongs
+> to the LICENCE — the reasoning step — not to the sentence that happened to be
+> wrong.
+
+This is why "fix the finding" is not enough and why this project keeps
+rediscovering the same families: the false instance gets corrected, the true
+instance is left standing as evidence the method works, and the method is what
+produced both. Sits with
+`reference_a_working_number_does_not_validate_the_recipe.md` and
+`reference_an_explanation_offered_for_someone_elses_anomaly_needs_a_higher_bar`
+(`reference_a_reconciliation_retires_the_flag.md`).

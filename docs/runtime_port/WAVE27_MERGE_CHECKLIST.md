@@ -17,6 +17,16 @@ addressee keeps a list. Built as reports arrive, not at merge time.
       the lanes' individual figures.
 - [ ] **`rt_mint_gen.py --check`** and **`runtime_census.py --selftest-all`**.
 - [ ] **Cutover attempt 30.**
+- [ ] **`??_7UpdateLoop@Engine@@6B@` IS PROMOTED by LOOPS** — the one promotion
+      claimed in this wave, and it was the wave's one explicitly open question.
+      LOOPS settled it and recorded two corrections to the holdback note, including
+      that its literal test **cannot distinguish a ctor from a dtor**, making it
+      unsatisfiable for any class with a virtual dtor. Re-read that before trusting
+      any similarly-worded holdback elsewhere.
+- [ ] **LOOPS reversed itself on three promotions and shipped them OPT-IN** —
+      promoting the three derived tables routed ZERO bodies and cost three red
+      oracles. Confirm they are still opt-in on the merged tip; do not "tidy" them
+      to default-on.
 - [ ] **Watch two ACHIEVE probes on the merge run** — every oracle it wired is
       UNEXERCISED, because lane LOOPS held the game-dir lock for ACHIEVE's whole
       600s window (verified: legitimately held, heartbeat current — ACHIEVE
@@ -25,6 +35,12 @@ addressee keeps a list. Built as reports arrive, not at merge time.
       - `Achievement::AchievementManager::ctor` — full byte oracle
       - `Achievement::GoalList::Initialize` — shadow; **`firstWrongGoal >= 0`
         means the ownership MOVE is transposed**
+- [ ] **ELEVEN of LOOPS' twelve new bodies have NO oracle** — byte-derived and
+      registered, never executed. LOOPS says in as many words: *"ported + registered
+      should not be read as verified."* The same is true of most of GFXMESH's 14,
+      GFXPART's 8 and ACHIEVE's 16. **The wave ported ~72 bodies and verified a
+      minority of them by execution.** Say so in the close; it is the single most
+      misleading thing available to omit.
 - [ ] **Confirm `?_singleton@AchievementManager@Achievement@@` is still NOT
       promoted.** ACHIEVE retired HALF the blocker (the ctor is ported and
       registered with a full-byte oracle); the other writer is a store inside
@@ -40,10 +56,17 @@ work**, because a faithful by-address port grows `called`:
 | lane | board after its own work |
 |---|---|
 | base | 1372/1237 90.2% |
+| **LOOPS** | **1392/1262 90.7%, gap 130 — Engine 77.8% -> 94.1% AT CEILING** |
 | FRONTIER | 1378/1241 90.1% |
 | GFXPART | 1376/1237 89.9% (`ported` cannot move — promotion-backlog rows) |
 | IOTEXT | 1377/1242 90.2%, `DTOR 2 -> 0` |
 | GFXBIG | Graphics `BODY` gap 4 -> 11 (seven newly *visible* named exports) |
+
+**LOOPS is the one lane whose percentage went UP, and it is not the lane that did
+the most work** — it is the lane whose bodies were mostly already-`called` vtable
+slots rather than new by-address doors. That is the whole argument for scoring
+identities: the sign of the percentage tracks *what kind* of row a lane touched,
+not how much it achieved.
 
 **A reader who diffs the merge on the percentage will conclude the wave went
 backwards.** The close must lead with identities: tables reaching COMPLETE, the
@@ -97,7 +120,14 @@ KICKOFF §4 #10. None is a merge blocker; all are Wave 28 inputs.
   passes 0, plus a real `GetVersion()==0` early return.
 - `?_typeInfo@ElementDescription@UI@@` is minted but not promoted; promoting it
   converts two by-construction ports into measured ones.
-- Every ledger entry — and **#8 first**, because it is the only DEFLATING one.
+- Every ledger entry — **#8 first** (the only DEFLATING one) and **#11 next**
+  (wrong bytes, self-corroborating, and it bears on trust in lane outputs).
+- **`?_loader@LoaderLoop@Engine@@` was NOT retired, and the reason matters:** LOOPS
+  satisfied the written expiry condition and **the row is still unpromotable — the
+  condition named the wrong fact.** It and `??_7Loader@Engine@@` are now
+  route-scoped refusals retiring only at cutover, addressed to the cutover lane.
+  This is the fourth time this project has found an expiry clause that was well
+  formed and wrong; see `reference_four_tag_defects_all_well_formed.md`.
 
 ## ONE TAG WAS RETIRED THIS WAVE, CORRECTLY, AND IT NEEDS RE-READING AT MERGE
 
