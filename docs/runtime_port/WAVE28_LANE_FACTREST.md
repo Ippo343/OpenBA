@@ -424,6 +424,36 @@ doors does. See §7.2.
 4. **NOT an instrument defect, recorded so it is not mistaken for one:** the
    kickoff's "34 non-UI classes" is 35 (§1). The census is right; the prose is
    one short.
+5. **THE EDIT THAT REPORTS SUCCESS AND DOES NOTHING — four in this lane, and one
+   of them reached COMMITTED PORT CODE.** Audited after lane FACTUI1 reported
+   four of the same in its own lane. Mine, MEASURED by going back through the
+   run log and the files rather than from memory:
+
+   | # | where | how it was caught |
+   |---|---|---|
+   | 1 | a shell heredoc rewrote `\b` to a literal BACKSPACE byte, so a scratch extractor's `re.search(r"\bint3\b")` could never match and it silently swallowed 227 lines of `int3` padding into the function bodies | `cat -A` on the file, after the output refused to change across two rewrites |
+   | 2 | **`runtime/src/object/rt_factories_core.cpp`** — the registration line's `printf` replacement matched nothing, so the shipped build printed `"70 slots"` after the dedupe had made it 68 | reading the actual run log and noticing the OLD text |
+   | 3 | the oracle's `ARMED` banner replacement matched nothing (§9.5) | `grep`ping the file for the banner text |
+   | 4 | an `.inc` file-header banner replacement matched nothing | **an `assert` in the script — it failed LOUDLY and cost nothing** |
+
+   **Row 4 is the finding.** The only difference between the three silent ones
+   and the one that announced itself was a single `assert old in s` in the
+   replacement script. Three no-ops reported success and left me to discover
+   them downstream — one of them in the log of a build I had already committed;
+   the fourth stopped and named itself in under a second.
+
+   The direction of the evidence is what makes this class nastier than an
+   ordinary bug: **the edit reports success, so the natural next move is to stop
+   looking.** Defences that actually worked here, cheapest first: put an
+   `assert` in every string-replacement script; `grep` the file for the text you
+   just added; read the BEHAVIOUR (the log, the binary) rather than the intent.
+
+   **NOT FIXED** — no tooling this wave, and the three silent instances were
+   repaired individually rather than by a rule. **Addressee: every Wave 29 lane
+   that edits files with a script**, which is all of them.
+   (`reference_heredoc_eats_backslashes.md` already covers half of this from the
+   quoting side; the half it does not cover is that the FAILURE IS SILENT, and
+   that is the half that costs the time.)
 
 ---
 
