@@ -1764,6 +1764,20 @@ int RtGraphicsMeshRegister() {
                           (void*)&RtGraphics_MeshInstance_CopyCtor); ++count;
     RegisterRuntimeExport("??1MeshInstance@Graphics@@UEAA@XZ",
                           (void*)&RtGraphics_MeshInstance_Dtor); ++count;
+    // WAVE 27 lane GFXMESH -- the ADDRESS door for a body that had only a NAME
+    // door.
+    //   SYMBOL:      ??1MeshInstance@Graphics@@UEAA@XZ, retail 0x180017060,
+    //                ordinal 632 (confirmed by VA against the export directory
+    //                with pefile, not by name pattern).
+    //   CONDITION:   runtime/src/object/deleting_dtor.cpp row 46 -- slot 0 of
+    //                ??_7MeshInstance@Graphics@@6B@ -- reaches ~Class through
+    //                ResolveAddr(Module::Runtime, 0x180017060), BY ADDRESS.
+    //                A RegisterRuntimeExport does not satisfy that door.
+    //   CONSEQUENCE: without this line the deleting-destructor row runs the
+    //                DLL's ~MeshInstance while this file's port sits unreached
+    //                on that path -- correct behaviour, but not ours, and
+    //                invisible to any check that asks "is it ported?".
+    RegisterRuntimeAddr(0x180017060ull, (void*)&RtGraphics_MeshInstance_Dtor);
     RegisterRuntimeExport("?IsAnimating@MeshInstance@Graphics@@QEBA_NXZ",
                           (void*)&RtGraphics_MeshInstance_IsAnimating); ++count;
     RegisterRuntimeExport("?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@H@Z",

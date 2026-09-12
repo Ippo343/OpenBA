@@ -60,6 +60,8 @@ extern int RtGraphicsWave23GfxbodyRegister(); // wave23_lane_gfxbody.cpp (Wave 2
 extern int RtGraphicsWave24GfxmatRegister();  // wave24_lane_gfxmat.cpp (Wave 24 lane GFXMAT)
 extern int RtGraphicsTypeInfoAccessorsRegister();
                                           // graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT)
+extern int RtGraphicsEdgeMeshVtableRegister();
+                                          // edgemesh_vtable.cpp (Wave 27 lane GFXMESH)
 
 void RtGraphicsPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_GRAPHICS")) {
@@ -100,6 +102,19 @@ void RtGraphicsPortInit() {
     int gfxmat = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXMAT")) gfxmat = RtGraphicsWave24GfxmatRegister();
     n += gfxmat;
+
+    // WAVE 27 LANE GFXMESH -- the eight non-slot-0 bodies of
+    // ??_7EdgeMesh@Graphics@@6B@ (slots 1..8). Slot 0 is the unnamed vector
+    // deleting destructor and lives in runtime/src/object/deleting_dtor.cpp as
+    // a table row, not here. Counted into `n` and printed on its own line for
+    // the reason every other lane line here gives: the on-disk md5 says which
+    // exe is on disk, not which one ran, and several lanes share one game dir.
+    int gfxedgevt = 0;
+    if (RtWaveEnabled("BANISHED_RT_GFXEDGEVT"))
+        gfxedgevt = RtGraphicsEdgeMeshVtableRegister();
+    n += gfxedgevt;
+    printf("[RtPort] GFXEDGEVT (Wave 27 lane GFXMESH): %d EdgeMesh vtable slot "
+           "bodies registered\n", gfxedgevt);
 
     // WAVE 9 LANE GFXD -- the bottom half of the Graphics::Renderer class
     // lane: Renderer::Reset, Renderer::AddScene, two more Graphics::Camera
