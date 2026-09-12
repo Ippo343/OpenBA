@@ -19,40 +19,34 @@ reimplemented are stubbed or registered individually via the address registry (s
 per-function recipe are in **[docs/runtime_port/PLAN.md](docs/runtime_port/PLAN.md)**. Read it
 before any runtime work.
 
-**Status 2026-09-10 — WAVE 20 CLOSED (`65bd63e4`): an INSTRUMENTS wave.** All three
-known-broken tools fixed, the 31-row vtable-extent question closed in **both** error
-directions, and `??_7BinaryFileStream@` promoted — **attendance 0 -> 18,906**, which
-converts four of Wave 19's ten TRAP=0/attendance-0 bodies into bodies that actually run.
-IO 133/116 -> **216 called / 200 ported**; TOTAL **1311/1124 (85.7%)**.
+**Status 2026-09-12 — WAVE 29 CLOSED.** Eight lanes merged onto `wave29/base`.
+Board **1472 called / 1317 ported (89.5%)**, gap 155. **Read
+`docs/runtime_port/WAVE29_CLOSED.md` before quoting any figure** — and its §1 before
+comparing it to any earlier board: the census was fixed mid-wave, so the kickoff's
+1453/1294 and the close were produced by **different instruments**. The only
+like-for-like delta is 1460/1295 -> 1472/1317.
 
-**DO NOT read 85.7% as 84.3% plus work.** The census was fixed mid-wave and +111 of that
-movement is rows that always existed and were invisible to the old tool. **Six symbols
-entered `ported`.** Read `docs/runtime_port/WAVE20_CLOSED.md` §2 (what it does NOT claim)
-and §4 before quoting any figure.
+**Real remaining BODY work is 14 functions, itemised in WAVE29_CLOSED §1.2** (21 BODY
+gap rows minus 7 `MemoryAllocator` rows that are written and gated behind
+`BANISHED_RT_ALLOC`). Work the list, never the count.
 
-**§4 is the finding that outlives the wave:** three items the previous handover named as
-*cheap* or *highest-leverage* were stale — one already promoted, one ported nine waves
-earlier, one "safest" only because it was pointless — while every **measured** section
-held. **A cheap-wins list is the stalest section of a handover and the first one acted
-on.** Wave 21 inputs are in §8, each with its own re-derivation command.
-
-**NEXT: Graphics (99 called / 70 ported, ceiling 96.0%) is the largest untouched gap.**
+**The cutover wall** (attempt 33, on the merged tip) is
+**`RtGraphics_MaterialInstance_Serialize+0x83`** -> `0x180061100` =
+`ExternalPtr<Graphics::Material>::Serialize`, the 7th of **25** instantiations of one
+template, 19 enumerated. Port the family, not the instance. Arm and procedure:
+`tools/cutover_attempt32.sh`. **`RtUnresolved = 0` does NOT exclude a missing
+registration** — it is blind to unregistered address doors.
 
 **Score a namespace on the IDENTITY, never the percentage.** `ceiling = (called -
-unpromotable) / called` has `called` in BOTH halves, so any lane opening a door
-moves it: closing seven trap slots sent Video's ported% DOWN and its printed
-ceiling UP with zero triage change.
+unpromotable) / called` has `called` in BOTH halves, and a faithful port that calls
+DLL internals grows `called`. The board has fallen or stayed flat in waves that
+succeeded; a minted row and a factory body cannot move it at all.
 
-**The cutover boot wall moved** off `DeviceData::EnumerateInterfaces` (where
-attempts 23 and 24 both died) to **`?PlatformConfigure@Engine@1@`** (`0x1800a1670`,
-EXEC-of-0 at `RtEngine_Engine_Startup+0x777`). That is the Win32 launcher dialog
-already described under "Launcher Dialog" below, and `HarnessGuardUnattendedBoot()`
-already has a seam on it — a softer wall than the last one.
-
-**NEXT: IO and Graphics, NOT Video.** Corroborated three independent ways. Real
-remaining work is **IO 34 > Graphics 29 > Video 0**, and their data rows are
-BLOCKED on unported vtable slots — ordinary port work, not a ceiling. Wave 19
-scoping items are listed in WAVE18_CLOSED.md §8.
+**Two standing hazards for parallel lanes** (WAVE29_CLOSED §6): an isolated worktree
+may be checked out at a **stale commit** — pin the base sha and report the merge-base
+before working; and the Bash tool **auto-backgrounds any command at 600s**, which
+silently launders a blocking `tools/game_dir_lock.sh acquire` into a held-but-unnoticed
+lock. Use short acquires and `assert-held` before every launch.
 
 ## Target Binaries
 
@@ -202,7 +196,9 @@ is the path to use for verifying any rendering / gameplay / world-build change.
 - **Enable**: `BANISHED_AUTOSTART` env var (any value except `0`/`false`). A numeric
   value > 1 overrides the menu settle-frame count (default 60). `make sa-run` sets it;
   a direct launch of `reimpl-x64.exe` leaves it unset and stops at the menu.
-- **Trace**: grep `standalone_debug.log` for `[AutoStart]` lines (each step logs).
+- **Trace**: grep **`standalone_error.log`** (stderr) for `[AutoStart]` lines (each step
+  logs). **Not `standalone_debug.log`** — a grep there returns 0 on a healthy run, which is
+  the same signature as a run that never built a world (verified at Wave 29 close).
   A 600-frame (~10s) timeout aborts the Start injection if `NewGameDialog::buttonOk`
   (+0xF0) never populates, rather than crashing on half-built combos.
 - **VS Code**: launch config **"Launch Standalone (debug, autostart new game)"**

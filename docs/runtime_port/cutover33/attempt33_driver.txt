@@ -1,0 +1,9 @@
+[attempt32] source exe : standalone/build/reimpl-x64.exe
+[attempt32] build md5  : bb9e65c552ec07c9d3549be3bb8335f2
+[attempt32] deployed md5: bb9e65c552ec07c9d3549be3bb8335f2
+[attempt32] arm: BANISHED_RT_NO_DLL=1 BANISHED_RT_ALLOC=1 BANISHED_RT_MINT=1 BANISHED_AUTOSTART=1   (BANISHED_RT_DIFF deliberately UNSET)
+[attempt32] DLL moved aside (verified absent); launching
+[attempt32] exit status: 3
+[attempt32] logs + attest.txt copied to docs/runtime_port/cutover33
+[attempt32] Runtime-x64.dll RESTORED
+[attempt32] verified present: 2762752 bytes
