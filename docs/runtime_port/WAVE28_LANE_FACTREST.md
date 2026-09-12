@@ -756,3 +756,96 @@ the premise against the SUBJECT rather than against another instrument.
 result `CRASHED`, so a filter string matching no class — `Material::` does not
 occur in `Graphics::Material` — reads as a crash. Scratchpad only; nothing
 committed depends on it.)*
+
+---
+
+## 12. THE PREMISE WAS NEVER WRONG — ITS SCOPE WAS. MEASURED BOTH WAYS.
+
+Lane FACTUI1 found the mirror image of §11.1 in its own harness and the pair is
+the finding: its `handles` flag was `sp.baseCtor != nullptr`, which fired on two
+classes (`CheckDescription`, `ComboDescription`) that derive from
+`??0ButtonDescription@UI@@` and never reach `Internal` at all — 16 bytes skipped
+for nothing. Mine never fired where it should have.
+
+> **Neither is a premise that is wrong. Both are a correct premise applied to the
+> wrong SET.** (FACTUI1's formulation, and it is better than "shared premise":
+> the scary version — two harnesses believing the same false thing — remains
+> untested, while the version that actually bit us twice is milder and much more
+> common.)
+
+### 12.1 The two scope errors are opposite in sign AND in SAFETY
+
+This is the part that generalises, and it was not obvious until both specimens
+were on the table:
+
+| scope error | effect | how it fails |
+|---|---|---|
+| **too wide** (FACTUI1: any base ctor) | skips bytes that were never in question | **SILENT** — a pass you will not investigate |
+| **too narrow** (this lane: direct call only) | compares bytes that legitimately differ | **LOUD** — a false alarm you will investigate |
+
+So for an exclusion predicate, **when the scope is uncertain, err NARROW.** The
+two directions are not symmetric: a too-narrow exclusion hands you a failing row
+and an hour's work; a too-wide one hands you a green screen and nothing.
+
+### 12.2 `NOEXCL=1` — arming the SCOPE, not the value (MEASURED)
+
+`--negative` arms a store value and `--derefbug` arms address resolution; neither
+touches the exclusion's scope. `NOEXCL=1` turns the exclusion off entirely. The
+prediction, written before running it: *exactly the Internal-rooted classes must
+fail, only inside `+0x08..+0x0f`, and nothing else may move.*
+
+```
+NOEXCL=1 ./oracle.exe
+  Achievement::AchievementInstance slot-0 FAIL 5/40 compared, first +0x8 (ours 00 theirs 01)
+  Achievement::GoalInstance        slot-0 FAIL 5/28 compared, first +0x8 (ours 02 theirs 03)
+  pass 2: 0/2
+  shape (b) REAL store comparison : 11/11      <- unmoved
+  shape (a) abstract null return  : 12/12      <- unmoved
+```
+
+Both halves confirmed at once, and this is the check neither lane had:
+
+* **Not too wide.** If the exclusion were skipping bytes nothing disputes —
+  FACTUI1's defect — those rows would still PASS with it off. They fail. It is
+  load-bearing exactly where it fires.
+* **Not too narrow.** No unflagged class fails. Nothing else needs it.
+
+**And the failure is 5 bytes**, independently reproducing §11.2's `--selfdiff`
+measurement (`+0x08` plus `+0x0c..+0x0f`) from the opposite direction —
+ours-versus-theirs rather than theirs-versus-theirs. Two unrelated screens, same
+five bytes.
+
+The scope test remains narrow BY CONSTRUCTION (a direct `Call` step naming
+`Internal@Object@@`), which on this roster is exactly right — the mint's declared
+base is `Object::Internal` for precisely `AchievementInstance` and `GoalInstance`
+— but it is right *by roster*, not by derivation: a future class reaching
+`Internal` through an intermediate constructor would be missed. That is the safe
+direction per §12.1, and pass 2 now prints a named diagnostic when a failure
+lands inside the handle window on a class it did not flag, so the false alarm
+arrives already diagnosed instead of looking like a bad port.
+
+### 12.3 Residual, discharged and re-aimed
+
+§10's caveat is **partially discharged**: the specific candidate FACTUI1 named is
+tested and sound in both harnesses, and the two defects it exposed were scope,
+not truth. **The scary version — both harnesses believing the same false thing
+about retail — remains untested and is not dischargeable from inside either
+harness.** **Addressee: the Wave 28 integrator**, as the second clause on §10's
+practice:
+
+> Run each other's instruments — that found eight defects. AND measure each
+> instrument's premises against the SUBJECT — that found two more, of a class the
+> first action provably cannot reach. Two different actions; both needed.
+
+### 12.4 One item this lane is NOT the right owner of
+
+FACTUI1 proposes that §11.2's finding — *a measured nondeterminism window is a
+LOWER BOUND on the true one; the disassembly is the authority for extents* —
+belongs in the memory files beside
+`reference_pdata_is_a_lower_bound_on_function_extent.md`, which it matches in
+shape while arriving from a completely different direction. **This lane agrees
+and has deliberately not written it there:** the memory directory is not a lane's
+to edit on a sibling lane's suggestion. **Addressee: the Wave 28 integrator**, to
+promote or decline. The `_factoryIndex` specimen is the whole argument — the
+window passes today and fails at index 256, for a reason nothing in the
+measurement could reveal.

@@ -110,6 +110,16 @@ static const Group kGroups[] = {
 
 static HMODULE g_dll;
 static bool g_derefBug = false;   // --derefbug: arm the vptr screen
+static bool g_noExcl = false;     // NOEXCL=1: arm the EXCLUSION SCOPE itself
+// An exclusion's scope test can be wrong in two directions and they are NOT
+// equally safe. TOO WIDE (lane FACTUI1's `sp.baseCtor != nullptr`, which fired
+// on two classes that have no handle) skips bytes for nothing and fails SILENT.
+// TOO NARROW (this file's direct-call test, which would miss a class reaching
+// Internal through an intermediate ctor) compares bytes that legitimately
+// differ and fails LOUD. NOEXCL=1 turns the exclusion off entirely: exactly the
+// Internal-rooted classes must then fail, and only inside +0x08..+0x0f. Anything
+// else failing means the scope is too narrow; nothing failing means it is
+// unnecessary.
 static void* Sym(const char* n) { return (void*)GetProcAddress(g_dll, n); }
 typedef void* (*CtorFn)(void*);
 
@@ -171,6 +181,7 @@ int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
     const bool neg = (argc > 1 && strcmp(argv[1], "--negative") == 0);
     for (int i = 1; i < argc; ++i) if (!strcmp(argv[i], "--derefbug")) g_derefBug = true;
+    if (getenv("NOEXCL")) g_noExcl = true;
     const bool runRisky = getenv("RISKY") != nullptr;
     g_dll = LoadLibraryA("C:\\GOG Games\\Banished\\Runtime-x64.dll");
     if (!g_dll) { printf("LoadLibrary failed %lu\n", GetLastError()); return 2; }
@@ -287,7 +298,7 @@ int main(int argc, char** argv) {
 
             int bad = 0, firstBad = -1;
             for (uint32_t o = 0; o < c.allocSize; ++o) {
-                if (handle && o >= 0x08 && o < 0x10) continue;   // Internal handle id
+                if (handle && !g_noExcl && o >= 0x08 && o < 0x10) continue;  // Internal handle id
                 bool ourW = (a[o] != 0xA5), theirW = (b[o] != 0x5A);
                 if (!ourW && !theirW) continue;
                 if (ourW != theirW || a[o] != b[o]) { ++bad; if (firstBad < 0) firstBad = (int)o; }
@@ -368,7 +379,7 @@ int main(int argc, char** argv) {
             const bool handle2 = ReachesInternal(c.newSteps);
             int bad = 0, firstBad = -1, cmped = 0;
             for (uint32_t o = 0; o < c.allocSize; ++o) {
-                if (handle2 && o >= 0x08 && o < 0x10) continue;   // see --selfdiff
+                if (handle2 && !g_noExcl && o >= 0x08 && o < 0x10) continue;  // see --selfdiff
                 if (a[o] == 0xA5) continue;            // ours did not write it
                 ++cmped;
                 if (a[o] != b2[o]) { ++bad; if (firstBad < 0) firstBad = (int)o; }
@@ -377,8 +388,15 @@ int main(int argc, char** argv) {
             if (!bad) { ++p2pass; printf("%-28s slot-0 OK   (0x%x bytes, %d compared%s)\n",
                                          c.typeName, c.allocSize, cmped,
                                          handle2 ? ", +0x08..0f excluded" : ""); }
-            else printf("%-28s slot-0 FAIL %d/%d compared, first +0x%x (ours %02x theirs %02x)\n",
-                        c.typeName, bad, cmped, firstBad, a[firstBad], b2[firstBad]);
+            else {
+                printf("%-28s slot-0 FAIL %d/%d compared, first +0x%x (ours %02x theirs %02x)\n",
+                       c.typeName, bad, cmped, firstBad, a[firstBad], b2[firstBad]);
+                if (!handle2 && !g_noExcl && firstBad >= 0x08 && firstBad < 0x10)
+                    printf("%-28s    ^ failure is INSIDE +0x08..+0x0f on a class this "
+                           "oracle did NOT flag as Internal-rooted. That is the signature "
+                           "of a SCOPE test that is too narrow, not of a bad port.\n",
+                           c.typeName);
+            }
         }
     }
     printf("  pass 2: %d/%d\n", p2pass, p2chk);
