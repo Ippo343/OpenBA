@@ -891,3 +891,32 @@ script is lane-private scaffolding and is **not committed**.
 7. **Twelve bodies, zero observed executing.** **ADDRESSEE: the Wave 29
    verification lane.** This lane grew that debt by twelve and says so in the
    word UNVERIFIED rather than reporting "ported + registered" as verified.
+
+---
+
+## 11. CLOSING GATE — RE-DERIVED AND QUOTED ON THE LANE TIP
+
+`mingw32-make standalone-debug` → **MAKE-EXIT=0** (foreground),
+`reimpl-x64.exe` **33,400,025 bytes, Sep 12 13:24**, `find … -newer` **empty**,
+`cutover manifest gate: OK (59 rows)`.
+
+`tools/ghidra_mcp/.venv/…/python.exe tools/runtime_census.py` on the lane tip:
+
+```
+TOTAL              4632     1439     1278        9   88.8%
+Graphics            599      126       99        1   78.6%   96.8%
+IO                  407      234      222        0   94.9%   97.9%
+
+PROMOTION BACKLOG
+  187 bodies across 42 unpromoted vtable(s), of which 37 are COMPLETE
+      vtable                                                ours slots  complete
+      0x180155860                                              2     2  COMPLETE
+      0x180157c60                                              7     7  COMPLETE
+      ??_7EdgeMeshInstance@Graphics@@6B@                       8     9
+      ??_7MeshInstance@Graphics@@6B@                           6     9
+      ??_7Stream@Audio@@6B@                                    1     2
+      ??_7TextFileStream@IO@@6B@                              10    10  COMPLETE
+```
+
+Those six lines are this lane's whole scope. Five of the six moved; the sixth
+(`??_7Stream@Audio@@6B@`) is §7's declared non-attempt.
