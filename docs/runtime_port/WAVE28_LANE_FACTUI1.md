@@ -652,16 +652,48 @@ offsets in `kAnimatedImageElement` are 0x000 then 0x0c0). **So pass 3's copy of
 the exclusion is dead code — a premise that never bites, which is FACTREST's
 exact defect class, sitting in this lane's pass 3.**
 
-**It is a dead predicate, not a coverage hole, and that was checked rather than
-assumed:** every concrete class is compared at FULL WIDTH by pass 1 (26 classes)
-or pass 2 (14 ctors, including `DialogInstance`, whose in-place slot is
-FACTREST's). The union leaves no body uncompared. What the mismatch corrects is
+**It is a dead predicate, not a coverage hole — and after FACTREST found the
+same narrow-subject shape in their pass 2, this claim was re-checked
+MECHANICALLY rather than by eye.** `coverage.py` derives the union from the
+committed spec table:
+
+```
+ABSTRACT (pass 3 checks both sides return null)          4
+CONCRETE covered at FULL WIDTH                          27
+   via pass 1 (in-place, both buffers poisoned)         26
+   via pass 2 only (no in-place slot of ours)            1   DialogInstance
+CONCRETE covered ONLY by the narrow pass 3            NONE
+```
+
+The first version of this paragraph said "checked rather than assumed" and the
+check was **a human reading two lines of output**. That is the weaker thing this
+whole section is about, so it was redone from the table.
+
+**Why full-width coverage settles the dropped-store question.** Passes 1 and 2
+poison BOTH buffers with DIFFERENT bytes, so the subject is *the bytes either
+side wrote*: a store retail makes that we DROPPED shows up as
+poison-vs-value, and one we make that retail does not shows up as
+value-vs-poison. **Set equality of the written bytes is therefore already
+established for all 27 concrete classes**, which is the property FACTREST had to
+build a new pass (2b) to obtain — and which their pass 2b then showed was true
+on their roster too, pulling in zero extra bytes. What the mismatch corrects is
 a claim never made explicitly before: **pass 3's subject is narrower than passes
 1–2's**, and it is the allocation-path check, not a third full-width comparison.
 
 **Writing the prediction down first is what produced this.** A run that agrees
 with an unwritten expectation teaches nothing; this one disagreed in exactly one
 place and that place was a real defect.
+
+**And the technique has its own failure mode, which is FACTREST's and is worth
+more than the technique:** *a run of hits makes the next prediction feel
+measured.* They had four of five prediction slots come back hits, and wrote the
+fifth — a `--derefbug` "KNOWN GAP", with plausible reasoning — straight into a
+draft without running it. It was false; the arming fires. Four confirmations in
+a row had converted invention into something that sounded like analysis.
+**The discipline is not predicting. It is running the row before writing the
+row, and most of all the row you are confident about.** This lane's own
+`NOEXCL` table was filled in from output for that reason, including the two
+rows that matched.
 
 **A second corroboration fell out of it.** The failures are **5 bytes** —
 `+0x08` plus `+0x0c..0x0f` — independently reproducing FACTREST's `--selfdiff`
