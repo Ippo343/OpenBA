@@ -184,19 +184,52 @@ void InstallVideoInterfacePrefill() {
         // for exactly that purpose. `VideoInterfacePrefilled()` stays false and
         // is the detector.
         //
-        // 0x1800F79F0 is UNPORTED AND UNREGISTERED as of this lane (grepped
-        // across runtime/, standalone/, engine/ and dx11/: every hit is a
-        // comment). Recorded in docs/runtime_port/WAVE9_LANE_ENGIO.md.
-        fprintf(stderr,
+        // *** AND THE PARAGRAPH ABOVE IS NOW OUT OF DATE TOO. ***
+        // "0x1800F79F0 is UNPORTED AND UNREGISTERED" was true when Wave 9 lane
+        // ENGIO wrote it. It is false today:
+        // runtime/src/video/video_interfaces_win.cpp:266 ports the body,
+        // registers it (`?InitializeInterfaces@Device@Video@@QEAAXXZ` + the
+        // 0x1800f79f0 address), and its FIRST statement is the
+        // `VideoInterfaceFillDx11Slot(self)` call this message asks for.
+        //
+        // WAVE 25 lane SWEEP: so at CUTOVER -- the one place this message is
+        // GUARANTEED to print, because there is no DLL to patch -- it was a
+        // FALSE ALARM claiming the slot is unfilled while the slot is filled by
+        // the ported body twelve lines into Engine::Startup. Wave 24 named it
+        // the line most likely to cost cutover attempt 26 a session.
+        //
+        // It is not silenced, because with the DLL PRESENT a failed detour IS a
+        // real problem. Instead the message now ASKS THE REGISTRY -- the same
+        // question a reader would have to go and answer by hand -- and says
+        // which of the two situations this is. RtPortLookupExport inspects the
+        // port registry without resolving through it (standalone/resolve.h).
+        const bool ported =
+            RtPortLookupExport("?InitializeInterfaces@Device@Video@@QEAAXXZ") != nullptr;
+        if (ported) {
+            fprintf(stderr,
+                "[VideoInterface] detour not installed for Video::Device::"
+                "InitializeInterfaces (0x1800F79F0) -- EXPECTED, NOT A FAULT.\n"
+                "[VideoInterface]   The body is PORTED and registered, and our "
+                "?InitializeInterfaces@Device@Video@@QEAAXXZ calls "
+                "VideoInterfaceFillDx11Slot() itself, so the DX11 slot is filled "
+                "without a detour. At cutover there is also no 0x1800F79F0 in the "
+                "process to patch, which is why this path is taken.\n"
+                "[VideoInterface]   VideoInterfacePrefilled() is still the "
+                "detector: if it reads false AFTER Engine::Startup, the slot "
+                "really was not filled and THAT is the fault to chase.\n");
+        } else {
+            fprintf(stderr,
                 "[VideoInterface] *** DETOUR FAILED *** Video::Device::"
-                "InitializeInterfaces (0x1800F79F0) could not be resolved.\n"
+                "InitializeInterfaces (0x1800F79F0) could not be resolved, and "
+                "the body is NOT in the port registry.\n"
                 "[VideoInterface]   With the DLL PRESENT this means the pre-fill "
                 "did not happen and Runtime will LoadLibrary VideoDX11-x64.dll, "
                 "falling back to VideoDX9-x64.dll if it is missing.\n"
                 "[VideoInterface]   With the DLL ABSENT (cutover) it means "
-                "something MUST call VideoInterfaceFillDx11Slot() from the ported "
-                "InitializeInterfaces -- nothing else fills the slot, and nothing "
-                "loads VideoDX9 either. See dx11/README.md.\n");
+                "NOTHING fills the DX11 slot: no detour, and no ported "
+                "InitializeInterfaces to call VideoInterfaceFillDx11Slot(). "
+                "See dx11/README.md.\n");
+        }
         fflush(stderr);
     }
 }

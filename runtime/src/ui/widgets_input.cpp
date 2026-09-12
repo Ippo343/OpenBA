@@ -702,18 +702,45 @@ void RtUi_SpinnerElement_SetElementId(SpinnerElement* self, int id) {
 }
 
 // ---- ?SetIncrement@SpinnerElement@UI@@QEAAXH@Z  0x1800d7d30 ----------------
+//
+// *** THE FIRST ADOPTER OF RT_DIFF_REPLAY_PRE/POST (Wave 25 lane SWEEP). ***
+//
+// Wave 24 lane DIFF measured that the invert mode documented at length in
+// rt_diff.h had ZERO adopters tree-wide: `BANISHED_RT_DIFF_INVERT=1` was a flag
+// that changed nothing, and the header's instructions described a conversion
+// nobody had performed. Inert documented machinery is how a future lane loses a
+// day, so the kickoff asked for "adopt or delete".
+//
+// WHY THIS SITE. The invert order exists to expose a body that double-manages
+// an allocation, and the way to prove the machinery works is a site where
+// inverting is KNOWN SAFE. This body writes one int into a field neither side
+// allocates, refcounts or frees, so PRE and POST are equivalent here by
+// construction: whichever order runs, both sides end with `_increment` set and
+// nothing else touched. `SetMinMax` and `SetValue` immediately below are NOT
+// converted -- they go through NumberEditElement::SetValue, which reformats
+// text through a REFCOUNTED buffer, and that is Wave 9 lane M's Finding 1
+// exactly. Converting those would be arming a crash, not adopting a tool.
+//
+// WHAT THIS ADOPTION DOES NOT ESTABLISH: this site did not register on Wave
+// 24's route and did not register on Wave 25 lane SWEEP's either (no menu path
+// reaches a spinner), so the PRE arm is COMPILED and SELECTED but has not been
+// OBSERVED to run. `[RtDiff] INVERT arm: UI::SpinnerElement::SetIncrement` in
+// standalone_error.log under BANISHED_RT_DIFF=1 BANISHED_RT_DIFF_INVERT=1 is
+// the line that would prove it, on a route that touches a spinner.
 void RtUi_SpinnerElement_SetIncrement(SpinnerElement* self, int increment) {
     RT_DIFF_BEGIN("UI::SpinnerElement::SetIncrement");
     SpinnerElement replay;
     std::memcpy(&replay, self, sizeof(SpinnerElement));
+    using Fn = void (*)(SpinnerElement*, int);
+
+    // Exactly one of the two blocks runs. PRE only under INVERT; POST is the
+    // shipped order and is what every unconverted site does.
+    RT_DIFF_REPLAY_PRE  { RT_ORIGINAL_ONCE(Fn, kSpinnerSetIncrement)(&replay, increment); }
 
     self->_increment = increment;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(SpinnerElement*, int);
-        RT_ORIGINAL_ONCE(Fn, kSpinnerSetIncrement)(&replay, increment);
-        RT_DIFF_BYTES(self, &replay, sizeof(SpinnerElement));
-    }
+    RT_DIFF_REPLAY_POST { RT_ORIGINAL_ONCE(Fn, kSpinnerSetIncrement)(&replay, increment); }
+    RT_DIFF_BYTES(self, &replay, sizeof(SpinnerElement));
 }
 
 // ---- ?SetMinMax@SpinnerElement@UI@@QEAAXHH@Z  0x1800d7d40 ------------------
@@ -1277,18 +1304,24 @@ void RtUi_ProgressElement_SetMaximumValue(ProgressElement* self, float value) {
 }
 
 // ---- ?SetCurrentValue@ProgressElement@UI@@QEAAXM@Z  0x180077ed0 -----------
+// SECOND ADOPTER of RT_DIFF_REPLAY_PRE/POST. Same argument as
+// SpinnerElement::SetIncrement above: one float written into a field neither
+// side allocates or frees, so the two orders are equivalent here and the
+// conversion cannot arm a use-after-free. Chosen as the second adopter because
+// it is the replay-shaped site most likely to be reached on a normal route (the
+// loading bar), which is the one that would actually exercise the PRE arm.
 void RtUi_ProgressElement_SetCurrentValue(ProgressElement* self, float value) {
     RT_DIFF_BEGIN("UI::ProgressElement::SetCurrentValue");
     ProgressElement replay;
     std::memcpy(&replay, self, sizeof(ProgressElement));
+    using Fn = void (*)(ProgressElement*, float);
+
+    RT_DIFF_REPLAY_PRE  { RT_ORIGINAL_ONCE(Fn, kProgressSetCurrent)(&replay, value); }
 
     self->_currentValue = value;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(ProgressElement*, float);
-        RT_ORIGINAL_ONCE(Fn, kProgressSetCurrent)(&replay, value);
-        RT_DIFF_BYTES(self, &replay, sizeof(ProgressElement));
-    }
+    RT_DIFF_REPLAY_POST { RT_ORIGINAL_ONCE(Fn, kProgressSetCurrent)(&replay, value); }
+    RT_DIFF_BYTES(self, &replay, sizeof(ProgressElement));
 }
 
 

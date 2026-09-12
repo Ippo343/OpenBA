@@ -83,6 +83,52 @@ struct RtDiffSite {
     // pointer into a block our body had already released. This is a finding
     // about the HARNESS, never about the port. See RtDiffReportBytes.
     uint64_t    freedPtrHits = 0;
+
+    // ---- WAVE 25 lane SWEEP: THE ENTRY COUNTER AND THE CLASS MASK ----------
+    //
+    // `calls` counts COMPARISONS (RtDiffReport increments it), not entries. A
+    // site that is entered a million times and never compares anything prints
+    // `calls=0 divergences=0` and is INDISTINGUISHABLE, in the summary, from a
+    // site that never ran at all. Wave 24 lane DIFF measured 133 such sites
+    // (16.7M calls of traffic) plus 48 more reading `calls=0 worked>0`, and
+    // named that column the single most misreadable thing in the report.
+    //
+    // `entered` closes it. RT_DIFF_BEGIN bumps it on every entry, so
+    //    entered=0  calls=0  -> the body never ran           ([UNEXERCISED])
+    //    entered=N  calls=0  -> it ran N times and compared NOTHING
+    //                                                        ([NO-COMPARISON])
+    // and the second can never again be read as a pass.
+    //
+    // It is DERIVED, per run, from the site itself. A source-side label -- a
+    // class token written into the name literal -- is an assertion that goes
+    // stale the first time a site gains or loses a comparison macro, with no
+    // detector; this project has paid for that shape repeatedly.
+    //
+    // `kindMask` records WHICH comparison macros actually executed, so the
+    // summary prints each row's class without a source scan. See kRtDiffKind*.
+    uint64_t    entered      = 0;
+    uint32_t    kindMask     = 0;
+};
+
+// Which comparison macro produced this site's verdicts. Set AT the macro, so it
+// reflects what RAN, not what a grep found near it.
+//
+//   SHADOW      the port's OWN verdict; no call into the DLL happens at the
+//               macro. Whether that verdict consulted the DLL earlier in the
+//               function is a SOURCE question -- tools/rt_diff_site_classify.py
+//               answers it, the runtime cannot, and this label does not claim
+//               to: [SHADOW] means "the port judged itself", nothing more.
+//   ATTENDANCE  a SHADOW whose verdict is a compile-time constant `true`
+//               (detected with __builtin_constant_p). It compares nothing and
+//               structurally cannot fail. LOWER BOUND: an expression the
+//               compiler declines to fold is recorded as SHADOW instead.
+//   SCALAR      RT_DIFF_SCALAR / RT_DIFF_FLOAT -- THEIRS is evaluated here.
+//   BYTES       RT_DIFF_BYTES / RtDiffReportBytes -- two buffers compared.
+enum : uint32_t {
+    kRtDiffKindShadow     = 1u,
+    kRtDiffKindAttendance = 2u,
+    kRtDiffKindScalar     = 4u,
+    kRtDiffKindBytes      = 8u,
 };
 
 // ---------------------------------------------------------------------------
@@ -112,6 +158,13 @@ static_assert(offsetof(RtDiffSite, linked)      == 25, "RtDiffSite: append only,
 
 // Register a site (idempotent) so it appears in the summary even with 0 calls.
 void RtDiffRegister(RtDiffSite* site);
+
+// Register (idempotent) AND count one ENTRY. RT_DIFF_BEGIN calls this; nothing
+// else should. See RtDiffSite::entered for why the entry count exists.
+void RtDiffEnter(RtDiffSite* site);
+
+// Record which comparison macro ran here (a bitwise OR of kRtDiffKind*).
+void RtDiffNoteKind(RtDiffSite* site, uint32_t kind);
 
 // Report one comparison. `equal` is the caller's verdict; the two `desc`
 // strings are pre-formatted renderings of ours/theirs for the log.
@@ -209,13 +262,14 @@ void RtDiffSetReadableProbe(bool (*fn)(const void* p, size_t n));
      * need to edit here on a future append. */                               \
     static RtDiffSite rt_diff_site__ = { NAME };                              \
     const bool rt_diff_on__ = RtDiffEnabled();                                 \
-    if (rt_diff_on__) RtDiffRegister(&rt_diff_site__)
+    if (rt_diff_on__) RtDiffEnter(&rt_diff_site__)
 
 // Scalar comparison. THEIRS is only evaluated when diffing is on, so the
 // original is not called in a normal run.
 #define RT_DIFF_SCALAR(OURS, THEIRS)                                           \
     do {                                                                       \
         if (rt_diff_on__) {                                                    \
+            RtDiffNoteKind(&rt_diff_site__, kRtDiffKindScalar);                \
             auto rt_diff_theirs__ = (THEIRS);                                  \
             char a__[64], b__[64];                                             \
             RtDiffFormat(a__, sizeof(a__), (OURS));                            \
@@ -231,6 +285,7 @@ void RtDiffSetReadableProbe(bool (*fn)(const void* p, size_t n));
 #define RT_DIFF_FLOAT(OURS, THEIRS, TOL)                                       \
     do {                                                                       \
         if (rt_diff_on__) {                                                    \
+            RtDiffNoteKind(&rt_diff_site__, kRtDiffKindScalar);                \
             float rt_diff_theirs__ = (THEIRS);                                 \
             float rt_diff_ours__   = (OURS);                                   \
             char a__[64], b__[64];                                             \
@@ -253,10 +308,20 @@ void RtDiffSetReadableProbe(bool (*fn)(const void* p, size_t n));
 // Shadow mode marker for stateful ports: ours computed a replica, theirs did
 // the real work, and EQUAL is the port's own verdict on whether the replica
 // still matches. No call into the original happens here.
+// The ATTENDANCE test is `__builtin_constant_p(EQUAL) && (EQUAL)`, evaluated by
+// the COMPILER: a site whose verdict is the literal `true` compares nothing and
+// can never print a divergence, and it now says so in its own summary row
+// instead of sitting among the green ones. One-directional -- an expression the
+// compiler declines to fold is recorded as SHADOW -- so the ATTENDANCE count is
+// a lower bound and never an inflated one.
 #define RT_DIFF_SHADOW(EQUAL, OURS_DESC, THEIRS_DESC)                          \
     do {                                                                       \
-        if (rt_diff_on__)                                                      \
+        if (rt_diff_on__) {                                                    \
+            RtDiffNoteKind(&rt_diff_site__,                                    \
+                (__builtin_constant_p((EQUAL)) && (EQUAL))                     \
+                    ? kRtDiffKindAttendance : kRtDiffKindShadow);              \
             RtDiffReport(&rt_diff_site__, (EQUAL), (OURS_DESC), (THEIRS_DESC));\
+        }                                                                      \
     } while (0)
 
 // ---- Formatting overloads used by the macros ------------------------------

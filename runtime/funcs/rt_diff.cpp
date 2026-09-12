@@ -62,6 +62,57 @@ void RtDiffRegister(RtDiffSite* site) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// WAVE 25 lane SWEEP — the entry counter and the per-site class.
+//
+// The thing this closes: `calls` is incremented by RtDiffReport, i.e. it counts
+// COMPARISONS. A site that RT_DIFF_BEGINs and then never compares anything
+// prints `calls=0 ... divergences=0` — the same row a site that never ran
+// prints, and the same row a clean oracle prints. Wave 24 lane DIFF put 133
+// sites and 16.7M calls of traffic in that state and could only separate them
+// with a source scan run afterwards.
+// ---------------------------------------------------------------------------
+
+void RtDiffEnter(RtDiffSite* site) {
+    if (!site) return;
+    RtDiffRegister(site);
+    site->entered++;
+}
+
+void RtDiffNoteKind(RtDiffSite* site, uint32_t kind) {
+    if (!site) return;
+    site->kindMask |= kind;
+}
+
+// The class token printed on every summary row. It is DERIVED from what the
+// site did on THIS run — never from a label written into the name.
+//
+// Ordering is by strength of evidence, strongest first: a site that evaluated
+// the original even once is an ORACLE-shaped site regardless of what else it
+// did, and a site whose only verdicts were compile-time `true` is ATTENDANCE
+// regardless of how busy it looks.
+//
+// WHAT EACH TOKEN DOES **NOT** CLAIM:
+//   [ORACLE]  says a comparison macro that evaluates THEIRS ran here. It does
+//             NOT say THEIRS came from the shipped DLL — a body may produce
+//             `theirs` from its own replica, and RT_DIFF_BYTES cannot tell.
+//             tools/rt_diff_site_classify.py is what checks for a door.
+//   [SHADOW]  says the port judged itself. Whether that verdict consulted the
+//             DLL earlier in the function is a source question.
+//   [NO-COMPARISON] is the strong one: this site RAN and compared NOTHING, so
+//             its divergences=0 is not evidence of anything at all.
+static const char* RtDiffClassOf(const RtDiffSite* s) {
+    if (s->calls == 0)
+        return s->entered ? "NO-COMPARISON" : "UNEXERCISED";
+    if (s->kindMask & (kRtDiffKindScalar | kRtDiffKindBytes)) return "ORACLE";
+    if (s->kindMask & kRtDiffKindShadow)                      return "SHADOW";
+    if (s->kindMask & kRtDiffKindAttendance)                  return "ATTENDANCE";
+    // Compared, but through a hand-rolled RtDiffReport call rather than a
+    // macro, so nothing recorded a kind. 101 sites in the tree are shaped that
+    // way; they are NOT unclassifiable, only unclassified HERE.
+    return "UNCLASSED";
+}
+
 // Cheap sanity test for a site that a stray write may have overwritten.
 //
 // A live site has a plausible name pointer and cannot have diverged more times
@@ -274,6 +325,9 @@ static void RtDiffDetectorSelfTest() {
 
 void RtDiffReportBytes(RtDiffSite* site, const void* ours, const void* theirs, size_t n) {
     if (!site) return;
+    // Recorded here rather than in RT_DIFF_BYTES so the 101 hand-rolled sites
+    // that call this function directly are classified too.
+    site->kindMask |= kRtDiffKindBytes;
     if (!ours || !theirs) {
         RtDiffReport(site, false, ours ? "(ptr)" : "(null)", theirs ? "(ptr)" : "(null)");
         return;
@@ -316,6 +370,20 @@ void RtDiffSummary() {
     uint64_t totalCalls = 0, totalDiv = 0, totalWorked = 0;
     size_t   dirtySites = 0, undeclared = 0, harnessSites = 0;
     size_t corrupt = 0;
+    // The four populations the summary now reports SEPARATELY. A merged
+    // "N sites, 0 divergences" headline is what made 286 sites that cannot
+    // catch a shared misunderstanding of retail read as 286 passes.
+    struct Pop { const char* name; size_t sites; uint64_t calls, div, entered; };
+    Pop pops[] = {
+        {"ORACLE",        0, 0, 0, 0},
+        {"SHADOW",        0, 0, 0, 0},
+        {"ATTENDANCE",    0, 0, 0, 0},
+        {"UNCLASSED",     0, 0, 0, 0},
+        {"NO-COMPARISON", 0, 0, 0, 0},
+        {"UNEXERCISED",   0, 0, 0, 0},
+    };
+    const size_t kPopCount = sizeof(pops) / sizeof(pops[0]);
+    size_t enteredKnown = 0, coverageUnknown = 0;
     for (size_t i = 0; i < g_siteCount; i++) {
         RtDiffSite* s = g_sites[i];
         if (!RtDiffSiteLooksLive(s)) { corrupt++; continue; }
@@ -324,6 +392,23 @@ void RtDiffSummary() {
         if (s->divergences)   dirtySites++;
         if (s->freedPtrHits)  harnessSites++;
         if (s->workDeclared)  totalWorked += s->worked; else undeclared++;
+        if (s->entered) enteredKnown++;
+        // A site whose coverage is still UNKNOWN after this run: it declared no
+        // RT_DIFF_WORK *and* has no entry count (a hand-rolled site, which does
+        // not go through RT_DIFF_BEGIN), so nothing says whether its calls did
+        // anything. With entered>0 the unknown is gone: entries are counted and
+        // comparisons are counted, and the gap between them is the coverage.
+        if (!s->workDeclared && s->entered == 0) coverageUnknown++;
+        const char* cls = RtDiffClassOf(s);
+        for (size_t k = 0; k < kPopCount; k++) {
+            if (strcmp(cls, pops[k].name) == 0) {
+                pops[k].sites++;
+                pops[k].calls   += s->calls;
+                pops[k].div     += s->divergences;
+                pops[k].entered += s->entered;
+                break;
+            }
+        }
     }
     fprintf(stderr, "[RtDiff] ==== %zu sites, %llu calls, %llu divergences in %zu sites ====\n",
             g_siteCount, (unsigned long long)totalCalls,
@@ -360,13 +445,55 @@ void RtDiffSummary() {
             snprintf(workBuf, sizeof(workBuf), "%llu", (unsigned long long)s->worked);
         else
             snprintf(workBuf, sizeof(workBuf), "?");
-        fprintf(stderr, "[RtDiff]   %-48s calls=%-10llu worked=%-10s divergences=%llu%s\n",
+        // `entered=?` for a hand-rolled site: it never passes through
+        // RT_DIFF_BEGIN, so nothing counted its entries, and printing 0 there
+        // would assert something false. Same rule as `worked=?`.
+        char entBuf[32];
+        if (s->entered)
+            snprintf(entBuf, sizeof(entBuf), "%llu", (unsigned long long)s->entered);
+        else
+            snprintf(entBuf, sizeof(entBuf), s->calls ? "?" : "0");
+        // COLUMN ORDER IS LOAD-BEARING. `divergences=<n>` must stay at END OF
+        // LINE: tools/rt_matrix_cell.sh selects dirty sites with
+        // `grep -av 'divergences=0$'`, so a token appended after it would make
+        // every site read as dirty. New columns go BEFORE it, and the two
+        // joiners (tools/rt_diff_run_join.py, rt_diff_triage_callerless.py)
+        // were widened to accept them.
+        fprintf(stderr, "[RtDiff]   %-48s calls=%-10llu entered=%-10s worked=%-10s "
+                        "class=%-14s divergences=%llu%s\n",
                 s->name,
                 (unsigned long long)s->calls,
+                entBuf,
                 workBuf,
+                RtDiffClassOf(s),
                 (unsigned long long)s->divergences,
                 s->freedPtrHits ? "  *** HARNESS DEFECT: released pointer replayed ***" : "");
     }
+    // ---- THE FOUR POPULATIONS, NEVER MERGED --------------------------------
+    // Read the CLASS column before the divergences column. Only the ORACLE row
+    // can report a port defect; NO-COMPARISON's zero is structural, and
+    // ATTENDANCE's zero is a compile-time constant.
+    fprintf(stderr, "[RtDiff] ==== POPULATIONS (a merged 'N sites, 0 divergences' "
+                    "is worthless; these are what the zeros mean) ====\n");
+    fprintf(stderr, "[RtDiff]   %-14s %6s %14s %14s %8s\n",
+            "population", "sites", "entries", "comparisons", "diverg");
+    for (size_t k = 0; k < kPopCount; k++)
+        fprintf(stderr, "[RtDiff]   %-14s %6zu %14llu %14llu %8llu%s\n",
+                pops[k].name, pops[k].sites,
+                (unsigned long long)pops[k].entered,
+                (unsigned long long)pops[k].calls,
+                (unsigned long long)pops[k].div,
+                (strcmp(pops[k].name, "NO-COMPARISON") == 0 && pops[k].sites)
+                    ? "   <- RAN and compared NOTHING; its 0 is not evidence" : "");
+    fprintf(stderr, "[RtDiff]   (ORACLE = a macro that evaluates THEIRS ran here; it does NOT\n"
+                    "[RtDiff]    prove THEIRS came from the DLL -- tools/rt_diff_site_classify.py\n"
+                    "[RtDiff]    checks for a door. SHADOW = the port judged itself. ATTENDANCE =\n"
+                    "[RtDiff]    the verdict is a compile-time `true`, a LOWER bound. UNCLASSED =\n"
+                    "[RtDiff]    compared through a hand-rolled RtDiffReport, no kind recorded.)\n");
+    fprintf(stderr, "[RtDiff] ==== coverage: %zu of %zu sites have an ENTRY count; %zu still "
+                    "have NO coverage signal at all (no RT_DIFF_WORK and no entry count) ====\n",
+            enteredKnown, g_siteCount, coverageUnknown);
+
     // The did-work rollup. `undeclared` is the honest headline: until a site
     // declares RT_DIFF_WORK, nobody knows whether its calls did anything, and
     // that unknown is what let Finding 1 hide behind a busy-looking counter.
