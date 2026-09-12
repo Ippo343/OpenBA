@@ -672,3 +672,87 @@ The MEASURED support for it, so it is not adopted on a story: 8 defects, 8 found
 cross-lane, 0 found by self-review, across two lanes that were each competent
 enough to find the other's. None of the eight touched a port number — every one
 was in an instrument, which is precisely why none of them announced itself.
+
+---
+
+## 11. THE SHARED PREMISE, TESTED — AND A COVERAGE GAP IT EXPOSED
+
+Lane FACTUI1 answered §10's caveat with a concrete candidate rather than a
+scenario: **both harnesses exclude `Object::Internal`'s handle id at
+`+0x08..+0x0f` on the same reasoning**, so if that reasoning is wrong, both lanes
+are green and neither screen can see it. That is
+`reference_two_checks_one_hidden_premise.md` sitting live in two committed files.
+
+**A shared premise is invisible to cross-running but it is not invisible.** It is
+directly measurable, because it is a claim about RETAIL ALONE. Three things came
+out of testing it, and only the first was expected.
+
+### 11.1 The premise had never FIRED in this harness (MEASURED)
+
+The first question to ask of a premise is not whether it is true but whether it
+**bites**. Pass 1 routes on `inPlaceSteps`, and `AchievementInstance` and
+`GoalInstance` have `inPlaceSteps == nullptr` — their slot-1 is the shared
+`?CreateInPlaceObject@Internal@Object@@` null stub. So both took the "abstract,
+both return null" branch, the exclusion never executed, and **their slot-0 — a
+real allocating body with an out-of-line ctor call — was compared by nothing at
+all.** §9.1 reported them under "abstract null return", which is true of their
+OTHER slot.
+
+So the honest reading of the earlier §9.1 table is that it covered 11 classes and
+silently omitted 2 allocating bodies. **Pass 2 now covers them:**
+
+```
+Achievement::AchievementInstance slot-0 OK  (0x28 bytes, 32 compared, +0x08..0f excluded)
+Achievement::GoalInstance        slot-0 OK  (0x20 bytes, 20 compared, +0x08..0f excluded)
+  pass 2: 2/2
+```
+
+### 11.2 The premise is CORROBORATED, and the exclusion is WIDER than the variation
+
+`SELFDIFF=1` constructs each class **twice through the DLL** and diffs the two
+results — retail against itself, no reference to our port. Measured:
+
+```
+Achievement::AchievementInstance   differs at +0x8..0x8  +0xc..0xf
+Achievement::GoalInstance          differs at +0x8..0x8  +0xc..0xf
+every other class measured         (nothing -- fully deterministic)
+```
+
+Both fields the disassembly names (`_factoryIndex` +0x08, `_generation` +0x0c) do
+move, so the premise survives. **But the measured variation is 5 bytes and the
+exclusion is 8**: `+0x09..+0x0b` agreed.
+
+**Narrowing the window to the measured set would be WRONG, and this is the part
+worth carrying.** `_factoryIndex` is a 4-byte int holding a small object index —
+1 versus 2 in this process — so only its low byte differs *at these values*. It
+is not deterministic; it is nondeterministic and currently agreeing. A window
+narrowed to fit would pass today and fail at index 256. **A measured
+nondeterminism window is a LOWER BOUND on the true one.** The disassembly is the
+authority for the field extents; `--selfdiff` corroborates that both fields move,
+and cannot define the window.
+
+### 11.3 `--selfdiff` has its own limit, and it announced itself
+
+One run reported `GoalInstance` also differing at `+0x14..+0x15`; four repeat runs
+did not. The difference: that run had `ONLY=Achievement::`, so three classes
+allocated before it. `+0x14..+0x15` is **arena residue nobody wrote**, varying
+with preceding allocations. So `--selfdiff` conflates "a byte retail writes
+nondeterministically" with "a byte nobody writes", and is sensitive to what ran
+before it. The byte comparisons are unaffected — they skip bytes our side did not
+write — but **`--selfdiff` must not be read as a definition of the exclusion set**,
+only as corroboration that the named fields move.
+
+### 11.4 What this says about the §10 practice
+
+The caveat holds and is now concrete rather than hypothetical: cross-running
+found eight defects and could not have found this one, because both harnesses
+would have agreed. What found it was **asking whether the premise fires** — and
+the answer in this harness was that it never had. **Addressee: the Wave 28
+integrator**, alongside §10: the practice is sound, and the class of defect it
+cannot see is a premise the instruments share, for which the test is to measure
+the premise against the SUBJECT rather than against another instrument.
+
+*(Throwaway-script defect, not a finding: the `selfdiff.sh` loop labels an empty
+result `CRASHED`, so a filter string matching no class — `Material::` does not
+occur in `Graphics::Material` — reads as a crash. Scratchpad only; nothing
+committed depends on it.)*

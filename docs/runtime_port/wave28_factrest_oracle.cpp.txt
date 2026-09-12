@@ -314,6 +314,122 @@ int main(int argc, char** argv) {
         printf("\n*** --derefbug ARMED: the vptr deref is REINTRODUCED on OUR side "
                "only. Every shape-(b) row MUST now FAIL at +0x00. A clean run here "
                "means the screen is DEAD, not that the port is good. ***\n");
+    // ======================================================================
+    // PASS 2 -- THE ALLOCATING CreateNewObject BODIES OF CLASSES WHOSE
+    // IN-PLACE SLOT IS THE ABSTRACT STUB.
+    //
+    // WHY THIS EXISTS: pass 1 routes on `inPlaceSteps`, so a class whose
+    // slot-1 is the shared `?CreateInPlaceObject@Internal@Object@@` null stub
+    // (AchievementInstance, GoalInstance) took the "abstract, both return null"
+    // branch and its slot-0 -- a REAL allocating body with an out-of-line ctor
+    // call -- was never compared by anything. It was reported only as an
+    // abstract pass, which is true of its OTHER slot. Found because lane FACTUI1
+    // asked whether a premise both harnesses share is sound, and the first
+    // question that asks of a premise is whether it FIRES at all.
+    //
+    // Here theirs ALLOCATES, so the comparison subject is the DLL's own heap
+    // object rather than a poisoned buffer; ours still runs on a poisoned one,
+    // and only bytes either side wrote are compared.
+    printf("\n---- pass 2: allocating slot-0 bodies skipped by pass 1 ----\n");
+    int p2chk = 0, p2pass = 0;
+    for (const Group& g : kGroups) {
+        for (int i = 0; i < g.n; ++i) {
+            const RtFactoryReg& r = g.regs[i];
+            const RtFactoryClass& c = *r.cls;
+            const char* only2 = getenv("ONLY");
+            if (only2 && !strstr(c.typeName, only2)) continue;
+            if (c.inPlaceSteps || !c.newSteps) continue;      // pass 1 covered it
+            typedef void* (*NewFn)();
+            NewFn theirsNew = (NewFn)Sym(r.newName);
+            if (!theirsNew) { printf("%-28s SKIP (slot-0 export missing)\n", c.typeName); continue; }
+
+            static unsigned char a[0x400];
+            memset(a, 0xA5, sizeof(a));
+            const RtCtorStep* st2 = c.newSteps;
+            static RtCtorStep tmp2[512];
+            if (neg) {
+                int n = StepCount(st2);
+                memcpy(tmp2, st2, (n + 1) * sizeof(RtCtorStep));
+                bool armed = false;
+                for (int k = n - 1; k >= 0 && !armed; --k)
+                    if (tmp2[k].kind == RtFactOp::Imm) { tmp2[k].imm ^= 1; armed = true; }
+                if (!armed)
+                    for (int k = n - 1; k >= 0 && !armed; --k)
+                        if (tmp2[k].kind == RtFactOp::Vptr) {
+                            tmp2[k].kind = RtFactOp::Imm; tmp2[k].imm = 0; armed = true;
+                        }
+                if (!armed) printf("%-28s *** CONTROL COULD NOT BE ARMED\n", c.typeName);
+                st2 = tmp2;
+            }
+            if (!OursInPlace(st2, a, c.typeName)) continue;
+            unsigned char* b2 = (unsigned char*)theirsNew();
+            if (!b2) { printf("%-28s SKIP (their slot-0 returned null)\n", c.typeName); continue; }
+
+            const bool handle2 = ReachesInternal(c.newSteps);
+            int bad = 0, firstBad = -1, cmped = 0;
+            for (uint32_t o = 0; o < c.allocSize; ++o) {
+                if (handle2 && o >= 0x08 && o < 0x10) continue;   // see --selfdiff
+                if (a[o] == 0xA5) continue;            // ours did not write it
+                ++cmped;
+                if (a[o] != b2[o]) { ++bad; if (firstBad < 0) firstBad = (int)o; }
+            }
+            ++p2chk;
+            if (!bad) { ++p2pass; printf("%-28s slot-0 OK   (0x%x bytes, %d compared%s)\n",
+                                         c.typeName, c.allocSize, cmped,
+                                         handle2 ? ", +0x08..0f excluded" : ""); }
+            else printf("%-28s slot-0 FAIL %d/%d compared, first +0x%x (ours %02x theirs %02x)\n",
+                        c.typeName, bad, cmped, firstBad, a[firstBad], b2[firstBad]);
+        }
+    }
+    printf("  pass 2: %d/%d\n", p2pass, p2chk);
+
+    // ======================================================================
+    // --selfdiff -- IS THE EXCLUSION WINDOW THE RIGHT ONE?
+    //
+    // Both this oracle and lane FACTUI1's exclude +0x08..+0x0f on the SAME
+    // reasoning: ??0Internal@Object@@ takes a handle id from Random::Rand and
+    // the InternalFactory hands the second caller a different one. That is a
+    // premise SHARED by two harnesses, so neither can catch it being wrong by
+    // running the other (reference_two_checks_one_hidden_premise.md) -- lane
+    // FACTUI1 named it as the live instance of exactly that shape.
+    //
+    // It is, however, directly MEASURABLE without either harness: construct the
+    // same class TWICE through the DLL and diff the two results. That yields the
+    // set of bytes retail itself does not reproduce, with no reference to our
+    // port at all. If that set == the excluded window, the premise is sound in
+    // both directions -- not too wide (we are not hiding a real divergence) and
+    // not too narrow (nothing else varies).
+    if (getenv("SELFDIFF")) {
+        printf("\n---- --selfdiff: DLL vs DLL, which bytes does RETAIL not reproduce? ----\n");
+        for (const Group& g : kGroups) {
+            for (int i = 0; i < g.n; ++i) {
+                const RtFactoryReg& r = g.regs[i];
+                const RtFactoryClass& c = *r.cls;
+                const char* only3 = getenv("ONLY");
+                if (only3 && !strstr(c.typeName, only3)) continue;
+                if (!c.allocSize) continue;
+                typedef void* (*NewFn)();
+                NewFn tn = (NewFn)Sym(r.newName);
+                if (!tn) continue;
+                unsigned char* x = (unsigned char*)tn();
+                unsigned char* y = (unsigned char*)tn();
+                if (!x || !y) continue;
+                char rng[256]; rng[0] = 0; int lo = -1;
+                for (uint32_t o = 0; o <= c.allocSize; ++o) {
+                    bool d = (o < c.allocSize) && (x[o] != y[o]);
+                    if (d && lo < 0) lo = (int)o;
+                    if (!d && lo >= 0) {
+                        char one[32]; snprintf(one, sizeof one, "+0x%x..0x%x ", lo, (int)o - 1);
+                        strncat(rng, one, sizeof(rng) - strlen(rng) - 1);
+                        lo = -1;
+                    }
+                }
+                printf("%-28s retail-vs-retail differs at: %s\n", c.typeName,
+                       rng[0] ? rng : "(nothing -- fully deterministic)");
+            }
+        }
+    }
+
     printf("\n%s%s\n", neg ? "NEGATIVE CONTROL — every checked row MUST fail" : "ORACLE",
            g_derefBug ? "   [DEREF-ARMED — failures below are INTENDED]" : "");
     printf("  shape (b) REAL store comparison : %d/%d\n", realPass, realChk);
