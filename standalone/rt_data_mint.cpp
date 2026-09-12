@@ -283,6 +283,28 @@ static const char* StripParent(const char* p) {
     return q;
 }
 
+// WAVE 25 lane VTGFX. Per-row unported-trap count, recorded while MintVtables
+// fills. This exists so a PROMOTION can refuse itself at runtime.
+//
+// THE HAZARD IT CLOSES, and it is one no build check can see (kickoff §3.6):
+// a promoted vtable's slots are filled from the LIVE port registry, so any
+// wave kill switch that suppresses a registration (BANISHED_RT_GRAPHICS=0,
+// BANISHED_RT_GFXMAT=0, BANISHED_RT_GFXTI=0, ...) turns that row's slots into
+// named abort traps -- and the promotion would then publish a TRAP TABLE into
+// live objects. The build is clean, the link succeeds, and the first virtual
+// call aborts. `??_7BinaryFileStream@IO@@6B@` and the other five promoted
+// vtables have carried that exposure unguarded since Wave 19; this counter is
+// the first thing in the tree that can answer the question at all.
+static int g_vtableTraps[kVtableCount];
+
+int RtMintVtableTrapCount(const char* symbol) {
+    if (!symbol) return -1;
+    for (int i = 0; i < kVtableCount; ++i)
+        if (kMintVtables[i].symbol && strcmp(kMintVtables[i].symbol, symbol) == 0)
+            return g_vtableTraps[i];
+    return -1;   // not a minted VTABLE row -- NOT "zero traps"
+}
+
 static void MintVtables() {
     for (int vi = 0; vi < kVtableCount; ++vi) {
         const RtMintVtable& v = kMintVtables[vi];
@@ -305,6 +327,7 @@ static void MintVtables() {
                 ++missing;
             }
         }
+        g_vtableTraps[vi] = missing;
         if (missing == 0) ++g_counts.vtablesComplete;
     }
 }
