@@ -283,3 +283,51 @@ project shapes:
   a stand-in command. Its 10s default interval and its interaction with a real
   `make sa-run` are **unmeasured**.
 * **I did not touch the FIFO ticketing, the orphan reporting, or `boot_state.sh`.**
+
+---
+
+## INTEGRATOR VERIFICATION (2026-09-12, independent of the lane's own report)
+
+Run at `f4c1ae83` in a **detached worktree**, not in the lane's checkout, so the
+subject is the committed tree and not a working copy.
+
+```
+tools/game_dir_lock_selftest.sh    PASS=15 FAIL=0
+tools/game_dir_lock_mutations.sh   PASS=5  FAIL=0
+```
+
+Cells watched by name rather than trusting the aggregate — this project's recorded
+defect is a control scored on a UNION reading 3/3 while one screen caught 1/3:
+
+- `defect 4/recent write (ALLOC, wrote 1s before the check): KEEP (legacy age-only rule: BREAK)`
+  — **the exact Wave 25 incident, now decided the other way.**
+- `defect 4/handles held open` and `defect 4/fresh holder heartbeat`: KEEP where the legacy rule BREAKs.
+- `defect 4/hard ceiling breaks despite every live signal: BREAK` — the conservative
+  direction is bounded, and the bound is tested rather than asserted.
+- `defect 5`: the broken holder is told, **only the victim**, and **only until acked**.
+- `defect 6`, all three cells: live-run clobber FLAGs (rc=7); **an ordinary idle deploy
+  stays CLEAN**; live run with an untouched exe stays CLEAN.
+
+**Both directions of the identity watcher are mutation-tested** (M4 = flags an ordinary
+deploy as a clobber; M5 = never notices a real one). That two-sidedness is the property
+that matters: this project has one recorded case of a control that corrupted a value
+NOTHING COMPARES (indicting a sound instrument) and one of a control that corrupted a
+byte that SHOULD NOT be compared (exonerating a broken one). A watcher tested in only
+one direction is vulnerable to whichever it skipped.
+
+**M1 is literally the Wave 25 code and M3 is ALLOC's silence** — so the suite's positive
+cases are the historical defects themselves, not synthetic stand-ins.
+
+### The two load-bearing design choices, recorded so a later wave does not undo them
+
+1. **The breach notice is written OUTSIDE `$LOCK`.** `$LOCK` is what gets removed when
+   the lock is broken, which is *why* the old code was structurally silent — there was
+   nowhere durable for it to write. Moving that path back inside `$LOCK` for tidiness
+   restores the silence and the selftest's defect-5 cell is the only thing standing in
+   the way.
+2. **`STALE_HARD=10800` bounds the conservative direction.** Three of the four liveness
+   signals are not attributable to the holder, so evidence-only staleness could be held
+   open forever by a signal that is not the holder's. The ceiling breaks on the wall
+   clock alone **and says that is why**. This project's failure mode is the opposite one
+   (expiring a live lock), so the temptation later will be to raise or remove it: it is
+   protecting against a deadlock, not against a slow lane.
