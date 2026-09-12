@@ -539,6 +539,34 @@ one it replaced.** I wrote §2 of this report about a screen that printed a
 verdict its evidence could not support, and then proposed one three sections
 later.
 
+### 7.2 A COMMIT MESSAGE IS A PERMANENTLY UNCORRECTABLE ARTEFACT
+
+Generalised with lane ATTEND out of §7.1, and it is the more durable of the two
+findings.
+
+The bad recipe went out in **`d668f883`'s commit message** and is in that message
+forever. `c9a56cb8` retracts it and is the correction of record — but a later
+reader grepping `?_typeInfo@PackageFile@IO@@` through the history meets the two
+messages in either order and **has no way to tell which one the tree agrees
+with**. Neither can be edited without rewriting a branch other lanes have
+already read.
+
+This project knows two neighbours of this family — *a generated file that goes
+stale with no detector*, and *a prescription read as a completion*. This is the
+third and worst, because it is not stale-with-no-detector but
+**stale-with-no-possible-repair**.
+
+**The source is the only surface that can carry the correction**, and both
+defences are taken in `standalone/reg_mint_promoted.cpp`:
+
+1. the correction **names the uncorrectable artefact by hash**, so a reader who
+   finds either one is led to the other and to the tree's actual position;
+2. it lives **beside the row**, not only in a lane doc, because *the row's name
+   is what gets grepped*.
+
+A retraction that exists only in the commit that performed it has corrected
+nothing that anyone will find.
+
 ---
 
 ## 8. WHAT THIS LANE DID NOT REACH, BY NAME

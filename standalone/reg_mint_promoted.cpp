@@ -2557,6 +2557,24 @@ int RtMintRegisterPromotedRows() {
     //   COUNTER MEASURES WHETHER THE GAME REACHED A SYMBOL.  Any close that
     //   works by adding a caller does not satisfy it — it defeats it, and
     //   leaves a number that reads exactly like the one it replaced.
+    //
+    //   AND THE REASON THIS RETRACTION IS SPELLED OUT HERE, IN SOURCE, RATHER
+    //   THAN LEFT IN THE COMMIT THAT FIXED IT: **a commit message is a
+    //   permanently uncorrectable artefact.**  The bad recipe went out in
+    //   `d668f883`'s message and is in that message forever; `c9a56cb8`
+    //   retracts it and is the correction of record, but a later reader
+    //   grepping `?_typeInfo@PackageFile@IO@@` through the history will meet
+    //   the two messages in either order and has no way to tell which one the
+    //   tree agrees with.  This project knows two neighbours of this family — a
+    //   generated file that goes stale with no detector, and a prescription
+    //   read as a completion — and this is the third and worst, because it is
+    //   not stale-with-no-detector but stale-with-NO-POSSIBLE-REPAIR.
+    //
+    //   SO THE SOURCE IS THE ONLY SURFACE THAT CAN CARRY THE CORRECTION, and
+    //   the two defences are both taken here: the correction NAMES the
+    //   uncorrectable artefact by hash, and it lives beside the row rather than
+    //   only in a lane doc, because the row's name is what gets grepped.
+    //   (Framing due to lane ATTEND, Wave 26.)
     // ------------------------------------------------------------------------
 
     printf("[RtMint] promoted %d minted DATA row(s) -- live on every run\n", n);
