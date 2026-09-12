@@ -972,6 +972,65 @@ static void RegisterMintedData() {
     printf("[RtMint] registered %d by name, %d by address\n", names, addrs);
 }
 
+// ============================================================
+// WAVE 26 LANE FACTORY — THE FACTORY-FAMILY ROSTER
+// ============================================================
+//
+// Attempt 26 died on ONE minted BaseTypeInfo factory and named it. A cutover
+// boot is a GATE, not a PLANNER (reference_the_boot_is_a_gate_not_a_planner.md)
+// — it can only name what it reached before faulting, so at one name per
+// attempt the family behind this wall costs one boot per row to enumerate.
+//
+// This screen enumerates it in ONE run, and it does so through the SAME two
+// doors MintTypeInfos() itself uses (RtPortLookupExport by name, then
+// RtPortLookupAddr by VA) — it re-reads the verdict the mint already recorded
+// in the storage block, so it CANNOT disagree with the mint. That is the point:
+// a second implementation of "is it ported?" would be a second thing to be
+// wrong (reference_two_checks_one_hidden_premise.md).
+//
+// WHAT IT EXAMINES, stated because a screen that cannot name its subject
+// manufactures work (reference_a_screen_that_cannot_name_its_subject.md): all
+// kTypeInfoCount minted `?_typeInfo@...@` rows, both factory slots of each, by
+// comparing the minted `factoryFn`/`inPlaceFactoryFn` against that row's own
+// trap stub address. Rows whose factory name is nullptr (`Base@Object@` is one)
+// have NO factory in retail either and are counted separately, not as unported.
+//
+// It is NOT a promotion screen and NOT a route: a filled slot means the mint
+// found OUR body, not that anything dispatches through it.
+static void RtMintReportTypeInfoFactories() {
+    int nullName = 0, filled = 0, trapped = 0;
+    for (int i = 0; i < kTypeInfoCount; ++i) {
+        const RtMintTypeInfo& t = kMintTypeInfos[i];
+        const RtObject::BaseTypeInfo* b = t.storage;
+        if (!t.factoryName && !t.factoryVa) ++nullName;
+        else if (b->factoryFn == (void*)t.factoryTrap) ++trapped; else ++filled;
+        if (!t.inPlaceName && !t.inPlaceVa) ++nullName;
+        else if (b->inPlaceFactoryFn == (void*)t.inPlaceTrap) ++trapped; else ++filled;
+    }
+    printf("[RtMint] BaseTypeInfo factories: %d rows x 2 slots = %d; %d PORTED, "
+           "%d ABORT-TRAP, %d absent in retail too (no factory name)\n",
+           kTypeInfoCount, kTypeInfoCount * 2, filled, trapped, nullName);
+    if (trapped)
+        printf("[RtMint] %d trapped factory slot(s) remain: EVERY ONE of them is "
+               "a cutover wall of the shape attempt 26 hit. Set "
+               "BANISHED_RT_MINT_FACTORYLIST=1 to print the roster.\n", trapped);
+
+    if (!EnvOn("BANISHED_RT_MINT_FACTORYLIST")) return;
+    printf("[RtMint] --- unported minted BaseTypeInfo factories ---\n");
+    for (int i = 0; i < kTypeInfoCount; ++i) {
+        const RtMintTypeInfo& t = kMintTypeInfos[i];
+        const RtObject::BaseTypeInfo* b = t.storage;
+        if (t.factoryName && b->factoryFn == (void*)t.factoryTrap)
+            printf("[RtMint]   [%3d] slot0 0x%09llx  %s\n", i,
+                   (unsigned long long)t.factoryVa, t.factoryName);
+        if (t.inPlaceName && b->inPlaceFactoryFn == (void*)t.inPlaceTrap)
+            printf("[RtMint]   [%3d] slot1 0x%09llx  %s\n", i,
+                   (unsigned long long)t.inPlaceVa, t.inPlaceName);
+    }
+    printf("[RtMint] --- end roster ---\n");
+    fflush(stdout);
+}
+
 void RtDataMintInit() {
     if (g_minted) return;
     g_minted = true;
@@ -1036,6 +1095,8 @@ void RtDataMintInit() {
            g_counts.vtablesComplete, kVtableCount,
            EnvOn("BANISHED_RT_MINT") ? "ON (BANISHED_RT_MINT=1)"
                                      : "off (set BANISHED_RT_MINT=1 to go live)");
+
+    RtMintReportTypeInfoFactories();
 
     // RegisterMintedData() has already run, above MintConstructedStatics().
     if (EnvOn("BANISHED_RT_MINT_SHADOW")) RtDataMintShadowReport("init");

@@ -145,6 +145,13 @@ extern int RtUiDialogFactoryRegister();    // dialog_factory.cpp (lane OBJINT)
 // class operator new, byte-identical to ToolTipDialog's and verified side by
 // side rather than by resemblance. Its own file and switch.
 extern int RtUiSpriteSheetNewRegister();   // spritesheet_new.cpp (lane SMALLBODY)
+// WAVE 26 lane FACTORY: `??0StringTable@UI@@`, `?CreateNewObject@StringTable@UI@@`
+// and `?CreateInPlaceObject@StringTable@UI@@` -- the three rows cutover attempt
+// 26 died on. Owns BANISHED_RT_UISTRTAB (DEFAULT ON, unlike the OBJINT probe
+// above) and is called unconditionally so that its own switch is the only one.
+// It must register BEFORE RtDataMintInit(), which is why it lives here at all:
+// standalone/resolve_standalone.cpp:333 (RtUiPortInit) precedes :406 (the mint).
+extern int RtUiStringTableFactoryRegister(); // stringtable_factory.cpp (FACTORY)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -178,5 +185,6 @@ void RtUiPortInit() {
     n += RtUiSpriteSheetNewRegister();  // owns BANISHED_RT_UISPRITESHEETNEW
     n += RtUiDragStartRegister();      // owns BANISHED_RT_UIDRAGSTART
     n += RtUiDialogFactoryRegister();  // owns BANISHED_RT_DLGFACTORY (lane OBJINT)
+    n += RtUiStringTableFactoryRegister();  // owns BANISHED_RT_UISTRTAB (FACTORY)
     printf("[RtPort] UI: %d exports registered\n", n);
 }

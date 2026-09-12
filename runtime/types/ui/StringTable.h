@@ -68,3 +68,45 @@ namespace StringTableOffsets {
     inline constexpr size_t kData  = 0x20;  // StringTableTextEntry* (Collection::Array._data)
     inline constexpr size_t kCount = 0x28;  // int32_t                (Collection::Array._size)
 }
+
+// ---------------------------------------------------------------------------
+// WAVE 26 LANE FACTORY — THE WHOLE OBJECT, pinned by its WRITER
+// ---------------------------------------------------------------------------
+// The note above deferred the full layout because Wave 7 lane F had only
+// READERS in scope. This wave ports the CONSTRUCTOR, which is the writer, and
+// a writer pins an extent in a way no set of readers can
+// (reference_a_writer_beats_readers_agreeing_on_a_sign.md).
+//
+// `??0StringTable@UI@@QEAA@XZ` (retail 0x18011d890, ord 421) writes, in order:
+//     [this+0x00] = ??_7Base@Object@@6B@       (0x180154788)  dead store
+//     [this+0x00] = ??_7External@Object@@6B@   (0x1801547a0)  dead store
+//     [this+0x08] = 0
+//     [this+0x10] = 0
+//     [this+0x18] = 0
+//     [this+0x00] = ??_7StringTable@UI@@6B@    (0x180154630)
+//     [this+0x20] = 0
+//     [this+0x28] = 0            <- an 8-byte store: covers _size AND _capacity
+//
+// SIZE IS 0x30 AND IT IS NOT INFERRED FROM THE STORES. It is read off the
+// ALLOCATION in `?CreateNewObject@StringTable@UI@@` (0x1800022b1):
+//     MOV EDX,0x30 ; LEA R8D,[RDX-0x28]   -> size 0x30, align 8
+// The stores then cover 0x00..0x2f with NO HOLE, which is a corroboration of
+// the allocation size rather than its source.
+struct UiStringTable {
+    void*                  vptr;        // +0x00
+    void*                  external_08; // +0x08  Object::External base
+    void*                  external_10; // +0x10
+    void*                  external_18; // +0x18
+    StringTableTextEntry*  data;        // +0x20  Collection::Array._data
+    int32_t                size;        // +0x28  Collection::Array._size
+    int32_t                capacity;    // +0x2C  Collection::Array._capacity
+};
+static_assert(sizeof(UiStringTable) == 0x30, "UI::StringTable must be 0x30 bytes");
+static_assert(offsetof(UiStringTable, external_08) == 0x08, "external_08 at +0x08");
+static_assert(offsetof(UiStringTable, external_10) == 0x10, "external_10 at +0x10");
+static_assert(offsetof(UiStringTable, external_18) == 0x18, "external_18 at +0x18");
+static_assert(offsetof(UiStringTable, data)     == StringTableOffsets::kData,
+              "data must sit at the offset Wave 7 lane F's readers proved");
+static_assert(offsetof(UiStringTable, size)     == StringTableOffsets::kCount,
+              "size must sit at the offset Wave 7 lane F's readers proved");
+static_assert(offsetof(UiStringTable, capacity) == 0x2C, "capacity at +0x2C");
