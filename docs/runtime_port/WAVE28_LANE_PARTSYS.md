@@ -489,6 +489,15 @@ established by reading the WRITER, not by the shape of the field.
   held as `PARTSYS` throughout and released immediately after the last
   measurement — a sibling lane reported queueing behind it).
 
+  **TWO md5s appear in this doc and they are the same source.** The measurement
+  run (§6.1) used the 13:18 build, md5 `625017315272d0a308a09eaafc652008`. The
+  tree was then rebuilt once more with `-Wall -Wextra` after a `touch`, purely to
+  confirm **zero compiler warnings** from the new translation unit; that relink
+  produced md5 `8e79c662fe32e71fb356779da730c86d` at 13:23, same 33,415,616
+  bytes, from byte-identical sources. Stated rather than glossed, because "the
+  md5 in the doc is not the md5 on disk" is exactly the kind of quiet mismatch
+  that makes a later reader distrust a sound measurement.
+
   **And size plus exit code still cannot tell "linked my work" from "relinked
   without it"**, so, on the integrator's instruction after lane FACTUI1 measured
   a backgrounded build producing NO output file at exit 0 — four more lines,
