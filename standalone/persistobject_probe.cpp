@@ -166,6 +166,16 @@ extern "C" void InstallPersistObjectProbe() {
     // RuntimeDetourInstall takes the GHIDRA address and resolves it RAW itself
     // (Wave 9 lane FNHOOK) — handing it a ResolveAddr result aims the patch at
     // our own body the day 0x1800bff10 gets ported.
+    //
+    // *** THAT DAY WAS 2026-09-12 (batch 5). *** `PersistObject` is now ported
+    // and registered (runtime/src/object/internalfactory_persist.cpp, both
+    // doors). The RAW resolution above still does the right thing — the patch
+    // still lands on the DLL's body — but the POPULATION this probe sees has
+    // changed: our own callers now reach OUR body through the registry and
+    // never touch the patched DLL copy, so what the trace shows is the DLL's
+    // remaining internal callers only. With `BANISHED_PERSIST_TRACE=1` and no
+    // DLL (cutover) it sees nothing at all. Retire the probe, or re-aim it at
+    // the ported body, rather than reading a quiet log as "no calls".
     g_origPersistObject = reinterpret_cast<PersistObjectFn>(
         RuntimeDetourInstall(kPersistObject, reinterpret_cast<void*>(&WrapPersistObject),
                              kPersistPatchLen, kPersistPrologue, kPersistPatchLen,
