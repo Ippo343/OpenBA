@@ -134,6 +134,24 @@ constexpr int kVoiceReleaseSlot    = 0x90;   // vtable byte offset called by
                                              // FreeChannelPlatform (StopPlatform
                                              // uses +0xA0 on the same object)
 
+// ---- WAVE 23 LANE TAIL: the StopPlatform-only offsets ---------------------
+// Read off 0x1800DEA20 (disassembly in the body's banner below). They are new
+// to this file because `Stop`/`StopPlatform` are the first bodies here to take
+// the event path; lane IOA's banner already cited this function for the voice
+// array, and these are the rest of what it touches.
+constexpr int kVoiceStopSlot          = 0xA0;  // vtable byte offset StopPlatform
+                                               // calls - deliberately NOT the
+                                               // +0x90 above, see the banner
+constexpr int kVoiceChannelBackOffset = 0xAA8; // the voice record's back-pointer
+                                               // to its AudioChannel; +0x08 past
+                                               // the voice ptr in the same 0x20 cell
+constexpr int kDeviceFlagsOffset      = 0xA08; // byte; bit 0 gates the wake
+constexpr int kStopRequestedOffset    = 0xA80; // byte; set to 1 before the wake
+constexpr int kStopEventOffset        = 0xA40; // HANDLE passed to SetEvent
+
+static_assert(kVoiceChannelBackOffset == kVoiceBaseOffset + 8,
+              "the voice ptr and its channel back-pointer share one 0x20 cell");
+
 static_assert(kChannelCount * kChannelStride <= kLockOffset,
               "the 64 channels (ending at 0xA00) must not overlap the lock at 0xA50");
 
@@ -274,6 +292,167 @@ void RtAudio_Device_Update(void* selfPtr, const void* /*time — never read*/) {
                    "not diffable (fires stored completion callbacks)");
 }
 
+// ---------------------------------------------------------------------------
+// Audio::Device::StopPlatform(int) - retail 0x1800DEA20.
+//
+// WAVE 23 LANE TAIL. This body is NOT one of the lane's 18 rows. It is here
+// because of the census trap named in
+// reference_porting_can_grow_the_cutover_surface.md: `Device::Stop` (the row
+// that IS on the board) calls this function, and reaching it with
+// `RT_EXPORT_ONCE("?StopPlatform@Device@Audio@@AEAAXH@Z")` would have ADDED a
+// new called-but-unported row in the same namespace as the one it closed -
+// Audio's gap would have read the same before and after. Porting the callee
+// too is what makes closing `Stop` an actual closure.
+//
+// It IS exported, under a PRIVATE (`AEAA`) mangling - this DLL exports its
+// private members, so "private" is not "unexported"
+// (reference_aeaa_is_private_not_unexported.md). Verified with pefile against
+// the shipped export directory, not inferred: 0x1800DEA20 maps to
+// `?StopPlatform@Device@Audio@@AEAAXH@Z`.
+//
+// Every layout constant it needs was ALREADY derived and cross-confirmed in
+// this file's banner by Wave 9 lane IOA, which read this exact function as its
+// third witness for the platform-side offsets.
+//
+// Retail, instruction for instruction:
+//   1800dea24  CMP qword ptr [RCX+0xa88],0 ; JZ -> return   (platform down)
+//   1800dea3d  RDX = [this + idx*0x28 + 8]        ; channel->source
+//   1800dea46  RBX = this + idx*0x20              ; the voice-array cursor
+//   1800dea4e  if (source && source[0x21] && (this[0xa08] & 1)) {
+//   1800dea5d      this[0xa80] = 1;
+//   1800dea6b      SetEvent([this + 0xa40]);
+//              }
+//   1800dea71  RCX = [this + idx*0x20 + 0xaa0]    ; the platform voice
+//   1800dea85  if (RCX) CALL [[RCX]+0xa0](RCX, 0, 0)
+//   1800dea8b  RAX = [this + idx*0x20 + 0xaa8]    ; the voice's channel back-ptr
+//   1800dea97  *(dword*)RAX |= 2                  ; set the "reap me" bit
+//
+// THREE DETAILS THAT ARE FAITHFUL, NOT SLIPS:
+//
+//  * The slot called on the voice is +0xA0, NOT the +0x90 that
+//    `FreeChannelPlatform` calls on the SAME object. That difference is the
+//    whole reason lane IOA used this body as its cross-check, and it is
+//    preserved. It is also why `Stop` calls BOTH: +0xA0 stops the voice,
+//    +0x90 releases it.
+//  * The final `OR dword ptr [RAX],0x2` is UNGUARDED - retail does not test
+//    RAX for null. Left unguarded (CLAUDE.md "Don't 'fix' a faithful crash
+//    with a null check"): retail relies on the back-pointer always being
+//    there once the platform is up, and a guard would SKIP the reap rather
+//    than restore it. Note it sits OUTSIDE the `if (voice)`, so it runs on
+//    every call that gets past the platform-down gate.
+//  * The lock here is NOT the critical section `FreeChannelPlatform` takes.
+//    This body signals an EVENT (`SetEvent` on the handle at Device+0xA40)
+//    and sets the byte at Device+0xA80 first. Both are reproduced in order.
+// ---------------------------------------------------------------------------
+void RtAudio_Device_StopPlatform(void* selfPtr, int index) {
+    RT_DIFF_BEGIN("Audio::Device::StopPlatform");
+
+    auto* base = static_cast<uint8_t*>(selfPtr);
+    const bool platformUp = *reinterpret_cast<void**>(base + kPlatformReadyOffset) != nullptr;
+
+    RT_DIFF_WORK(platformUp);
+
+    if (!platformUp) {
+        RT_DIFF_SHADOW(true, "platform down, nothing to stop",
+                       "not diffable (stops a COM voice)");
+        return;
+    }
+
+    AudioChannel* ch = ChannelAt(selfPtr, index);
+    uint8_t* voiceCursor = base + static_cast<int64_t>(index) * kVoiceStride;
+
+    // The wake: only when the source wants the device lock AND the device's
+    // own flag byte has bit 0 set.
+    {
+        auto* src = static_cast<uint8_t*>(ch->source);
+        if (src && src[0x21] != 0 && (base[kDeviceFlagsOffset] & 1) != 0) {
+            base[kStopRequestedOffset] = 1;
+            SetEvent(*reinterpret_cast<HANDLE*>(base + kStopEventOffset));
+        }
+    }
+
+    if (void* voice = *reinterpret_cast<void**>(voiceCursor + kVoiceBaseOffset)) {
+        void** vtable = *reinterpret_cast<void***>(voice);
+        reinterpret_cast<void (*)(void*, void*, uint32_t)>(
+            vtable[kVoiceStopSlot / 8])(voice, nullptr, 0);
+    }
+
+    // Unguarded on purpose - see the banner above.
+    auto* backPtr = *reinterpret_cast<uint32_t**>(voiceCursor + kVoiceChannelBackOffset);
+    *backPtr |= 2u;
+
+    RT_DIFF_SHADOW(true, "stopped the platform voice and set the reap bit",
+                   "not diffable (stops a COM voice)");
+}
+
+// ---------------------------------------------------------------------------
+// Audio::Device::Stop(AudioChannel*) - retail 0x1800DE200, ord 4105.
+// WAVE 23 LANE TAIL - one of the lane's rows.
+//
+// Already reached BY NAME from runtime/src/audio/audio.cpp:901
+// (`ReleasePlatformChannels`), which is why it sat in the census's `called`
+// column unported. Registering it flips that call site onto this body.
+//
+// Retail:
+//   1800de20a  index = ((char*)channel - (char*)this) / 0x28   ; signed, via
+//              the 0x6666666666666667 / SAR 4 magic-division idiom
+//   1800de230  StopPlatform(this, index);
+//   1800de23a  FreeChannelPlatform(this, index);
+//   1800de23f  ---- the reap epilogue, five instructions ----
+//   1800de246  cb = channel->onComplete;            ; read BEFORE the clears
+//   1800de24b  channel->flags &= ~3;
+//   1800de253  channel->source = 0;
+//   1800de268  if (cb) cb(channel, channel->userData, channel->userValue);
+//
+// THE EPILOGUE IS BYTE-FOR-BYTE THE ONE `Device::Update` RUNS at
+// 0x1800DE560..0x1800DE57B. Lane IOA wrote that sequence out in this file's
+// banner as its cross-check for `Update`; this body is the other half of that
+// pair, and the two are deliberately written to read identically below. The
+// orderings that matter are the same two: `onComplete` is read BEFORE the
+// clears, and the callback's 2nd and 3rd arguments AFTER them. `&= ~3` clears
+// bits 0 and 1 although `Stop` - unlike `Update` - never tested either.
+//
+// THE DIVISION. Retail does the whole thing in 64-bit signed arithmetic and
+// only then truncates to 32 bits for the two calls (`MOV EDX,EBX`), and
+// re-sign-extends that truncated value for the epilogue (`MOVSXD RAX,EBX`).
+// So a pointer difference that did not fit in an int would be truncated ONCE
+// and the same truncated index used everywhere. Reproduced by doing the
+// divide in int64_t and narrowing to `int` exactly once. The magic sequence
+// (`SAR 4` then add the sign bit) truncates toward zero, which is also what
+// C++ integer division does, so `/ kChannelStride` is the faithful spelling
+// and not merely an approximation of it.
+//
+// NO ORACLE, for the reason this file's banner already gives for its two
+// siblings and which applies here verbatim: the body ends in a STORED
+// COMPLETION CALLBACK and a COM voice stop/release. Replaying the DLL's copy
+// afterwards would fire the callback a second time and release a released
+// object - a second side effect, not a comparison. `RT_DIFF_WORK` carries the
+// distinction `calls=` cannot: there is no early-out here, so the work verdict
+// is `true` and the number to read is whether the callback fired.
+// ---------------------------------------------------------------------------
+void RtAudio_Device_Stop(void* selfPtr, void* channelPtr) {
+    RT_DIFF_BEGIN("Audio::Device::Stop");
+    RT_DIFF_WORK(true);          // no early-out; see the banner
+
+    const int64_t byteDelta = static_cast<uint8_t*>(channelPtr) -
+                              static_cast<uint8_t*>(selfPtr);
+    const int index = static_cast<int>(byteDelta / kChannelStride);
+
+    RtAudio_Device_StopPlatform(selfPtr, index);
+    RtAudio_Device_FreeChannelPlatform(selfPtr, index);
+
+    // ---- the reap epilogue, identical to Device::Update's ------------------
+    AudioChannel* ch = ChannelAt(selfPtr, index);
+    void* cb = ch->onComplete;
+    ch->flags &= 0xFFFFFFFCu;
+    ch->source = nullptr;
+    if (cb)
+        reinterpret_cast<AudioCompletionFn>(cb)(ch, ch->userData, ch->userValue);
+
+    RT_DIFF_SHADOW(true, "stopped, freed and reaped the channel",
+                   "not diffable (fires a stored completion callback)");
+}
+
 int RtAudioDeviceRegister() {
     int n = 0;
     // Name AND address for both, the pattern audio.cpp already uses: the name
@@ -286,5 +465,21 @@ int RtAudioDeviceRegister() {
     RegisterRuntimeExport("?FreeChannelPlatform@Device@Audio@@AEAAXH@Z",
                           (void*)&RtAudio_Device_FreeChannelPlatform);
     RegisterRuntimeAddr(0x1800de6f0, (void*)&RtAudio_Device_FreeChannelPlatform); ++n;
+
+    // ---- WAVE 23 LANE TAIL -------------------------------------------------
+    // Both doors for both, the pattern above. `Stop`'s NAME door is the live
+    // one (audio.cpp:901 resolves it by name); the ADDRESS door keeps
+    // tools/port_bypass_audit.py's address route off the DLL. `StopPlatform`
+    // has no caller in our tree other than `Stop` immediately above it, and is
+    // registered anyway for the reason its banner gives - an unregistered body
+    // is indistinguishable from an absent one to the census
+    // (reference_half_registered_port_reads_as_absent.md).
+    RegisterRuntimeExport("?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z",
+                          (void*)&RtAudio_Device_Stop);
+    RegisterRuntimeAddr(0x1800de200, (void*)&RtAudio_Device_Stop); ++n;
+
+    RegisterRuntimeExport("?StopPlatform@Device@Audio@@AEAAXH@Z",
+                          (void*)&RtAudio_Device_StopPlatform);
+    RegisterRuntimeAddr(0x1800dea20, (void*)&RtAudio_Device_StopPlatform); ++n;
     return n;
 }
