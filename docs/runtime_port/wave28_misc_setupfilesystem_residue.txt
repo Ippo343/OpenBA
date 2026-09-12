@@ -1,0 +1,65 @@
+WAVE 28 LANE MISC -- evidence that ?SetupFileSystem@Modification@IO@@ IS reached
+on the ORDINARY unattended autostart path, refuting WAVE27_CLOSED.md section 5's
+"writable but NOT VERIFIABLE: the only unattended mod route is the broken
+ModDialog_ToggleMod_Impl+0x43 one".
+
+RUN: standalone-debug (33,410,905 bytes, built 2026-09-12 13:15), deployed to
+     C:\GOG Games\Banished\reimpl-x64.exe.
+CMD: BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 \
+     BANISHED_RT_STRICT=1 ./reimpl-x64.exe
+     -- NO mods env var of any kind. No BANISHED_AUTOMENU_BUTTON, no
+     BANISHED_PAUSEMENU_BUTTON=7, nothing that touches the mods route.
+RESULT: clean self-quit, standalone_crash.log 0 bytes, 141 residue rows total.
+
+WHY THIS LINE IS PROOF OF A CALL AND NOT JUST OF A RESOLVE
+----------------------------------------------------------
+The only ResolveExport of this symbol in the tree is the FUNCTION-LOCAL STATIC
+inside ModificationSetupFileSystem() at runtime/src/engine/loops.cpp:214-218.
+A function-local static initialises lazily, on first entry. The sole call site
+is loops.cpp:712, inside ?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z
+(retail 0x1800dc050), and it is written as
+
+        ModificationSetupFileSystem()(mod);
+
+-- ONE expression: the accessor call that performs the resolve, and the
+invocation of what it returns. So a residue row for this symbol means
+loops.cpp:712 EXECUTED; and the run completed normally afterwards, so the
+pointer it returned was non-null and was called.
+
+Loader::Load runs on every loop transition, which an autostart run performs
+going menu -> New Game -> GameUpdateLoop. The mods menu is not involved at any
+point.
+
+THE EVIDENCE
+------------
+[RtResidue] 1        7ff6123a91be     ?SetupFileSystem@Modification@IO@@QEAAXXZ
+
+and the same run reached the built world and ran it for 480 frames:
+
+[Vitals] frame=480 citizens=18  age mean=2.39 max=3.76 (maxAge[0]=102.78)  hunger mean=0.2 max=0.2  thirst mean=0.3 max=0.3  char=18 busy=18 ibp238=18 ibp248=0
+
+WHAT THIS DOES NOT ESTABLISH
+----------------------------
+It establishes a ROUTE, not an ORACLE. It says a lane porting this body can get
+ATTENDANCE and CRASH-FREEDOM from an ordinary `make sa-run`, which Wave 27
+believed impossible. It says nothing about whether the mod list the body builds
+is byte-correct -- that still needs the mods route or a synthesised subject.
+
+The count is 1, and 1 is the expected number: one loop transition into the game.
+
+HOW TO RE-DERIVE IT
+-------------------
+  cd "C:/GOG Games/Banished"
+  rm -f standalone_debug.log standalone_error.log standalone_crash.log
+  BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120 \
+      BANISHED_RT_STRICT=1 ./reimpl-x64.exe
+  grep SetupFileSystem standalone_error.log
+
+Two things that will make this print nothing and mean nothing:
+  * omitting BANISHED_RT_STRICT=1 -- the residue census is off by default;
+  * killing the process instead of letting BANISHED_PAUSEMENU_QUIT self-quit --
+    DumpRuntimeResidue() runs at standalone/main.cpp:1991, on the normal exit
+    path only.
+A POSITIVE CONTROL for the instrument itself: the same run printed 141 residue
+rows, so an empty SetupFileSystem result would be a real absence and not a dead
+census.
