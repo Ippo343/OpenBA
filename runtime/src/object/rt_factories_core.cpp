@@ -217,8 +217,18 @@ int RtFactoriesObjectRegister() {
 // BANISHED_RT_FACTREST=0 for an A/B run.
 void RtFactoriesPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_FACTREST")) {
-        printf("[RtFactory] FACTREST DISABLED (BANISHED_RT_FACTREST=0); "
-               "35 non-UI factory pairs stay abort traps\n");
+        // NO COUNT HERE, DELIBERATELY. This line used to say "35 non-UI factory
+        // pairs stay abort traps" — a LITERAL, in the one branch a default run
+        // never executes, so it could rot for waves without anything noticing.
+        // The same defect in this file's other printf (a stale "70 slots" after
+        // a dedupe made it 68) shipped in a committed build and was caught only
+        // by reading a log. Prefer a count the code ACCUMULATES over one it
+        // ASSERTS (lane FACTUI1); where there is nothing to accumulate — as
+        // here, since nothing was registered — print no number at all. The mint
+        // reports the true abort-trap total a few lines later anyway.
+        printf("[RtFactory] FACTREST DISABLED (BANISHED_RT_FACTREST=0); the "
+               "non-UI factory pairs stay abort traps -- see the [RtMint] "
+               "BaseTypeInfo factories line below for the count\n");
         return;
     }
     int n = 0;

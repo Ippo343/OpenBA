@@ -451,6 +451,23 @@ doors does. See §7.2.
    **NOT FIXED** — no tooling this wave, and the three silent instances were
    repaired individually rather than by a rule. **Addressee: every Wave 29 lane
    that edits files with a script**, which is all of them.
+
+   **FIXED IN THIS LANE'S PORT CODE, one instance, after lane FACTUI1 audited its
+   own for the same shape.** `RtFactoriesPortInit`'s DISABLED branch said
+   `"35 non-UI factory pairs stay abort traps"` — a LITERAL, in the one branch a
+   default run never executes, so it could rot for waves with nothing noticing.
+   It now prints no count and points at the mint's own line. The general rule is
+   FACTUI1's and it is better than "check your literals":
+
+   > **Prefer a count the code ACCUMULATES over a count the code ASSERTS, because
+   > only the first one is wrong when the thing it counts changes.**
+
+   The live path already obeyed it (`n` is `++n` per row inside the registration
+   loop); the dead path did not, which is the giveaway — **the branch nothing
+   exercises is where an asserted count survives.** Where there is nothing to
+   accumulate, print no number. Verified in the BUILT ARTIFACT, not the source:
+   `strings reimpl-x64.exe | grep '35 non-UI factory pairs'` → 0 hits, new text
+   → 1 hit.
    (`reference_heredoc_eats_backslashes.md` already covers half of this from the
    quoting side; the half it does not cover is that the FAILURE IS SILENT, and
    that is the half that costs the time.)
@@ -623,3 +640,35 @@ catastrophic port regression. That is the same defect class the arming exists to
 police: a screen that cannot name its own subject. It was caught by `grep`ping the
 file for the banner text instead of trusting that the edit had landed, which is
 the whole habit: **verify the edit, not the intent to edit.**
+
+---
+
+## 10. THE PRACTICE THIS LANE WOULD PUT TO THE INTEGRATOR
+
+Eight instrument defects were found across lanes FACTREST and FACTUI1 during this
+wave. **Zero of them were found by their own author rereading their own file.**
+Every one was found by the other lane.
+
+The tempting generalisation is "cross-lane review". **Lane FACTUI1's narrower
+version is the one to adopt, and it is theirs, not this lane's:**
+
+> **Every instrument gets RUN by someone who did not write it, against their own
+> subject.**
+
+That is what actually happened, twice, in both directions: this lane found
+FACTUI1's `??_7` deref by *adapting their oracle to its own tables*, and FACTUI1
+found this lane's unarmed screen by *asking what its armed run proved*. Neither
+defect was found by reading. Review of instrument SOURCE found nothing in this
+wave; running an instrument on a subject its author had not seen found eight.
+
+It is also cheaper than a review mandate and more likely to survive contact with
+a wave schedule: it costs one lane one compile, it produces a number rather than
+an opinion, and a lane that skips it is visible because it has no second run to
+show. **Addressee: the Wave 28 integrator at close, and Wave 29 scoping** — most
+cheaply as a line in the kickoff's standing warnings, since that is the section
+every lane actually reads.
+
+The MEASURED support for it, so it is not adopted on a story: 8 defects, 8 found
+cross-lane, 0 found by self-review, across two lanes that were each competent
+enough to find the other's. None of the eight touched a port number — every one
+was in an instrument, which is precisely why none of them announced itself.
