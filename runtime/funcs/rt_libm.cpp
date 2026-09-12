@@ -56,6 +56,14 @@ void InstallPorted() {
 
 }  // namespace
 
+// runtime/src/crt/msvc_libm.cpp — registers the six ported CRT math bodies at
+// their retail addresses (sqrtf/sinf/cosf/atan2f/powf/fmodf). BATCH 4:
+// unconditional, because a port registers unconditionally (DIRECTION.md §2.3)
+// and because these six have been the default arithmetic here since Wave 8 —
+// they were simply never registered, so the cutover closure still listed them
+// and their whole error-reporting subtree as unported.
+int RtCrtLibmRegister();
+
 namespace RtLibm {
 
 // Static-init defaults are the ported bodies, so a caller that runs before
@@ -69,6 +77,8 @@ float (*Pow)(float, float)     = &MsvcLibm::Powf;
 bool UsingDllLibm() { return s_usingDll; }
 
 void Init() {
+    ::RtCrtLibmRegister();
+
     const char* e = std::getenv("BANISHED_RT_LIBM");
 
     if (e && std::strcmp(e, "std") == 0) {
