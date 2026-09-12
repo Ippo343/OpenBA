@@ -167,6 +167,30 @@ Random* RtSystem_Random_CtorSeed(Random* self, uint32_t seed) {
     return self;
 }
 
+// ?NextGroup@Random@System@@AEAAXXZ  retail 0x1800c7dd0, ordinal 3245.
+//
+// WAVE 28 LANE MISC.  The BODY for this row has existed since Wave 2 as the
+// file-local `NextGroupImpl` above; what was missing was the REGISTRATION, so a
+// callee census could not tell it from an absent body and Wave 27's board
+// carried it as a named unported System BODY row.  This wrapper is the whole of
+// the port -- it adds no logic, it opens the door.
+//
+// AEAA is the PRIVATE spelling, NOT the unexported one.  Verified against the
+// export directory with pefile, by name AND by RVA: both lookups return
+// (?NextGroup@Random@System@@AEAAXXZ, 0x1800c7dd0, ord 3245).  Registering the
+// name is therefore the plain door, not a workaround.
+//
+// NOT DIFFED, deliberately.  Every other Random member here compares through
+// RtDiffRandomShadow, which replays the original on a scratch COPY of a
+// pre-call snapshot.  That shape works because those members RETURN a value.
+// NextGroup returns void and its entire effect is the 624-word state, which
+// `RtDiffRandomShadow`'s memcmp of `self` against the scratch already covers on
+// every Rand* call that triggers a twist -- i.e. this body is under continuous
+// comparison through its only retail caller, and a second oracle wrapped around
+// the same bytes would be the self-check shape
+// (reference_shadow_marker_is_not_an_oracle.md), not a new screen.
+extern "C" void RtSystem_Random_NextGroup(Random* self) { NextGroupImpl(self); }
+
 // ?Rand@Random@System@@QEAAIXZ  retail 0x1800c7f90
 uint32_t RtSystem_Random_Rand(Random* self) {
     RT_DIFF_BEGIN("System::Random::Rand");
@@ -750,6 +774,8 @@ int RtSystemValueRegister() {
 
     RegisterRuntimeExport("??0Random@System@@QEAA@XZ", (void*)&RtSystem_Random_Ctor); ++n;
     RegisterRuntimeExport("??0Random@System@@QEAA@I@Z", (void*)&RtSystem_Random_CtorSeed); ++n;
+    // WAVE 28 LANE MISC: the body has existed since Wave 2; this line is the port.
+    RegisterRuntimeExport("?NextGroup@Random@System@@AEAAXXZ", (void*)&RtSystem_Random_NextGroup); ++n;
     RegisterRuntimeExport("?Rand@Random@System@@QEAAIXZ", (void*)&RtSystem_Random_Rand); ++n;
     RegisterRuntimeExport("?Rand@Random@System@@QEAAII@Z", (void*)&RtSystem_Random_RandBound); ++n;
     RegisterRuntimeExport("?Rand@Random@System@@QEAAHHH@Z", (void*)&RtSystem_Random_RandRange); ++n;

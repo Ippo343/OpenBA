@@ -13,6 +13,11 @@
 #include "../../funcs/rt_port.h"
 
 extern int RtAudioSceneRegister();          // audio.cpp
+// WAVE 28 lane MISC: ?Update@Scene@Audio@@ (0x1800df6c0, 1816 bytes), the one
+// unported Audio BODY row. Its OWN switch, BANISHED_RT_AUDIOSCENEUPDATE
+// (default ON, owned inside the file), so this single large per-frame body can
+// be bisected out without taking audio.cpp's sixteen ports with it.
+extern int RtAudioSceneUpdateRegister();     // audio_scene_update.cpp
 extern int RtAudioConfigurationRegister();  // audio.cpp
 // Wave 9 lane IOA: Audio::Device::Update + ::FreeChannelPlatform. Their own
 // .cpp because they need <windows.h> for the Device+0xA50 critical section and
@@ -32,6 +37,7 @@ void RtAudioPortInit() {
     }
     int n = 0;
     n += RtAudioSceneRegister();
+    n += RtAudioSceneUpdateRegister();   // owns BANISHED_RT_AUDIOSCENEUPDATE
     n += RtAudioConfigurationRegister();
     n += RtAudioDeviceRegister();
     // Wave 24 lane SMALLBODY: Audio::Stream's ctor and dtor (0x1800a0e30 /
