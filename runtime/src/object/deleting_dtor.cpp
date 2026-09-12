@@ -867,6 +867,36 @@ static const DelDtorSpec kSpecs[] = {
     // Array<String> whose buffer came from the Runtime heap.
     RT_DELDTOR(0x1800361f0, 0x180118370, 0x080, "UI::ImageDescription"),
     RT_DELDTOR(0x1800369e0, 0x1800cb6b0, 0x098, "UI::AnimatedImageDescription"),
+    // MERGE 2026-09-12: batch 9's six rows come FIRST so their indices
+    // (61..66), already baked into their entry points below, are unchanged;
+    // VTABLE BATCH 1's ten were renumbered 67..76 after the merge, exactly as
+    // the kSpecCount comment in deleting_dtor_internal.h demands.
+
+    // 2026-09-12 (VTABLE BATCH 9). Six rows for the object-misc batch, each
+    // read straight from the deleting destructor's own bytes:
+    //   0x180074a10  LEA R9,[0x180111cd0]  MOV EDX,0xd0   ~ComboDialog
+    //     (own body: stamp own vtable, tail into ~DialogInstance -- already
+    //     ported, runtime/src/ui/dialog.cpp)
+    RT_DELDTOR(0x180074a10, 0x180111cd0, 0x0d0, "UI::ComboDialog"),
+    //   0x18003b600  LEA R9,[0x18003b4f0]  MOV EDX,0x20   ~DialogControllerConfig
+    //     (own body: stamp own vtable, tail into ~External -- already ported,
+    //     runtime/src/object/external.cpp)
+    RT_DELDTOR(0x18003b600, 0x18003b4f0, 0x020, "UI::DialogControllerConfig"),
+    //   0x18002c300  LEA R9,[0x1800bcac0]  MOV EDX,0x08   ~ExtensionCompiler
+    //     (own body: stamp own vtable, then Base's -- no members beyond vptr)
+    RT_DELDTOR(0x18002c300, 0x1800bcac0, 0x008, "Object::ExtensionCompiler"),
+    //   0x18002c180  LEA R9,[0x1800bca90]  MOV EDX,0x08   ~ExternalCompiler
+    //     (same shape as ExtensionCompiler above)
+    RT_DELDTOR(0x18002c180, 0x1800bca90, 0x008, "Object::ExternalCompiler"),
+    //   0x180007800  LEA R9,[0x1800076c0]  MOV EDX,0x30   ~ExternalList
+    //     (own body: Array<ExternalPtr<External>>::~Array at +0x20 (0x180009460,
+    //     already ported), then ~External -- already ported)
+    RT_DELDTOR(0x180007800, 0x1800076c0, 0x030, "Object::ExternalList"),
+    //   0x1800245f0  LEA R9,[0x1800a92a0]  MOV EDX,0xc8   ~CompressedCopyFileStream
+    //     (own body: stamp own vtable, tail into ~CompressedFileStream, itself
+    //     an unported export reached by name through the port-aware door)
+    RT_DELDTOR(0x1800245f0, 0x1800a92a0, 0x0c8, "IO::CompressedCopyFileStream"),
+
     // 2026-09-12, VTABLE BATCH 1 (the first half of the UI::*Description
     // family): ten more slot-0 rows, indices 61..70. Each row's two constants
     // were read from that deleting destructor's OWN bytes -- the `LEA R9` that
@@ -900,6 +930,7 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x18003fa20, 0x1800d11f0, 0x088, "UI::EditDescription"),
     RT_DELDTOR(0x1800403a0, 0x1800d1b30, 0x088, "UI::GraphDescription"),
     RT_DELDTOR(0x180042730, 0x1800d2960, 0x0b8, "UI::LabelDescription"),
+
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1270,12 +1301,41 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 56);
 }
 
+
+// VTABLE BATCH 9 (2026-09-12). Indices 61-66, appended after the four rows
+// (57-60) that a concurrent lane added to the table without wiring a wrapper
+// or a RegisterRuntimeAddr call -- see the table comment above each row.
+// UI::ComboDialog          ~ComboDialog = 0x180111cd0             (PORTED, runtime/src/ui/combodialog.cpp)
+void* RtDelDtor_ComboDialog(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 61);
+}
+// UI::DialogControllerConfig ~DialogControllerConfig = 0x18003b4f0  (PORTED, runtime/src/ui/dialogcontrollerconfig.cpp)
+void* RtDelDtor_DialogControllerConfig(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 62);
+}
+// Object::ExtensionCompiler ~ExtensionCompiler = 0x1800bcac0      (PORTED, runtime/src/object/ext_compilers.cpp)
+void* RtDelDtor_ExtensionCompiler(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 63);
+}
+// Object::ExternalCompiler  ~ExternalCompiler = 0x1800bca90       (PORTED, runtime/src/object/ext_compilers.cpp)
+void* RtDelDtor_ExternalCompiler(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 64);
+}
+// Object::ExternalList      ~ExternalList = 0x1800076c0           (PORTED, runtime/src/object/external_list.cpp)
+void* RtDelDtor_ExternalList(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 65);
+}
+// IO::CompressedCopyFileStream ~CompressedCopyFileStream = 0x1800a92a0 (PORTED, runtime/src/io/compressedcopyfilestream.cpp)
+void* RtDelDtor_CompressedCopyFileStream(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 66);
+}
+
 // ---------------------------------------------------------------------------
 // 2026-09-12, VTABLE BATCH 1. Rows 57, 59 and 60 were ADDED TO THE TABLE by the
 // GroupDescription / ImageDescription / AnimatedImageDescription ports earlier
 // the same day but never given an entry point or a registration, so those three
 // vtable slot 0s were still traps. They are wired here together with this
-// batch's own ten (61..70). Row 58 (UI::RibbonDescription) is left alone: it is
+// batch's own ten (67..76). Row 58 (UI::RibbonDescription) is left alone: it is
 // another agent's class and wiring it from here would give one row two owners.
 //
 // The indices below were re-derived from the table AFTER this batch's append,
@@ -1297,44 +1357,45 @@ void* RtDelDtor_AnimatedImageDescription(void* self, unsigned flags) {
 }
 // UI::BorderDescription     ~ = 0x18010fb20   (PORTED, borderdescription.cpp)
 void* RtDelDtor_BorderDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 61);
+    return DeletingDtorCore(self, flags, 67);
 }
 // UI::ButtonDescription     ~ = 0x180110bd0   (PORTED, buttondescription.cpp)
 void* RtDelDtor_ButtonDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 62);
+    return DeletingDtorCore(self, flags, 68);
 }
 // UI::CheckDescription      ~ = 0x180111620   (PORTED, checkdescription.cpp)
 void* RtDelDtor_CheckDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 63);
+    return DeletingDtorCore(self, flags, 69);
 }
 // UI::ClipRegionDescription ~ = 0x1800cc0d0   (PORTED, clipregiondescription.cpp)
 void* RtDelDtor_ClipRegionDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 64);
+    return DeletingDtorCore(self, flags, 70);
 }
 // UI::ComboDescription      ~ = 0x180112370   (PORTED, combodescription.cpp)
 void* RtDelDtor_ComboDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 65);
+    return DeletingDtorCore(self, flags, 71);
 }
 // UI::ContainerDescription  ~ = 0x1800ccff0   (PORTED, containerdescription.cpp)
 void* RtDelDtor_ContainerDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 66);
+    return DeletingDtorCore(self, flags, 72);
 }
 // UI::DocumentTextDescription ~ = 0x1800cfb30 (PORTED, documenttextdescription.cpp)
 void* RtDelDtor_DocumentTextDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 67);
+    return DeletingDtorCore(self, flags, 73);
 }
 // UI::EditDescription       ~ = 0x1800d11f0   (PORTED, editdescription.cpp)
 void* RtDelDtor_EditDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 68);
+    return DeletingDtorCore(self, flags, 74);
 }
 // UI::GraphDescription      ~ = 0x1800d1b30   (PORTED, graphdescription.cpp)
 void* RtDelDtor_GraphDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 69);
+    return DeletingDtorCore(self, flags, 75);
 }
 // UI::LabelDescription      ~ = 0x1800d2960   (PORTED, labeldescription.cpp)
 void* RtDelDtor_LabelDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 70);
+    return DeletingDtorCore(self, flags, 76);
 }
+
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
@@ -1438,6 +1499,15 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004eb90, (void*)&RtDelDtor_PixelProgram);
     RegisterRuntimeAddr(0x18004b9d0, (void*)&RtDelDtor_RenderState);
 
+
+    // VTABLE BATCH 9
+    RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
+    RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
+    RegisterRuntimeAddr(0x18002c300, (void*)&RtDelDtor_ExtensionCompiler);
+    RegisterRuntimeAddr(0x18002c180, (void*)&RtDelDtor_ExternalCompiler);
+    RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
+    RegisterRuntimeAddr(0x1800245f0, (void*)&RtDelDtor_CompressedCopyFileStream);
+
     // 2026-09-12 VTABLE BATCH 1 — the three rows that were in the table but
     // unregistered, plus this batch's ten. Every address a LITERAL, for the
     // reason the banner above gives.
@@ -1454,6 +1524,7 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18003fa20, (void*)&RtDelDtor_EditDescription);
     RegisterRuntimeAddr(0x1800403a0, (void*)&RtDelDtor_GraphDescription);
     RegisterRuntimeAddr(0x180042730, (void*)&RtDelDtor_LabelDescription);
+
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --
