@@ -2747,9 +2747,32 @@ int RtMintRegisterPromotedRows() {
     //    so it cannot write this cell. ?Get@ likewise has ZERO in-DLL callers.
     //    So NO in-DLL code path touches this cell at all, and the "two owners,
     //    one object" hazard has no owner on the DLL side.
-    //    LIMIT OF THAT CLAIM: it is a direct-call and address-taken scan. A call
-    //    through a computed pointer would evade it. AchievementManager has no
-    //    vtable (its ctor stamps none), so there is no virtual route.
+    //    THAT LIMIT WAS THEN CLOSED, because "is this symbol the thing that
+    //    actually RUNS?" is the check these tags keep failing. It is not enough
+    //    that our copies of the four live writers are ported: if the DLL calls
+    //    its OWN copy of any of them, a promoted cell and the DLL's cell are
+    //    two owners again. Measured, both ways, for all four:
+    //      DIRECT   rel32 call/jmp sites in .text      ctor 0, dtor 0,
+    //                                                  Engine::Startup 0,
+    //                                                  Engine::Shutdown 0
+    //      INDIRECT 8-byte scan of EVERY PE section    all four: absent
+    //    (Engine::Startup 0x1800db8a0 and Engine::Shutdown 0x1800db4f0 were
+    //     confirmed as true function entries via get_function_by_address, not
+    //     derived by subtracting an offset.)
+    //
+    //    BOTH SCREENS WERE HANDED KNOWN POSITIVES FIRST, because a screen whose
+    //    normal answer is 0 is indistinguishable from a dead parser
+    //    (reference_absence_screen_must_be_handed_a_shape.md):
+    //      direct-call screen: 0x180009700 -> 5 sites, 0x1800ca4e0 -> 5 sites
+    //      address-presence  : ?Run@Loader@ 0x1800dbfc0 found once at
+    //                          0x180157a08, and the UpdateLoop deleting dtor
+    //                          0x180031900 found once at 0x180155ba0 -- the two
+    //                          positives Wave 27 lane LOOPS used, reproduced
+    //                          here independently at the same two addresses.
+    //    REMAINING LIMIT, stated: the address-presence screen matches 64-bit
+    //    VAs, so it cannot see the PE export table (which stores 32-bit RVAs).
+    //    That is not the question being asked -- the question is in-DLL dispatch
+    //    tables -- but "absent" here does not mean "not exported".
     //
     //    LANE ACHIEVE DID NOT PROMOTE THIS ROW and is not asking for it to be:
     //    promotion is the mint/manifest owner's call and needs the cutover

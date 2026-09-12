@@ -344,10 +344,47 @@ exported accessor the EXE calls, and it is ported.
 **No in-DLL code path touches this cell at all.** The "two owners, one object"
 hazard has no owner on the DLL side.
 
-**LIMIT OF THAT CLAIM, stated:** it is a direct-call and address-taken scan. A
-call through a computed pointer would evade it. `AchievementManager` has no
-vtable — its constructor stamps none — so there is no virtual route, which is
-what makes the scan sufficient here rather than merely suggestive.
+### 4.4b "Is this symbol the thing that actually RUNS?" — applied to my own claim
+
+Lane LOOPS, having had its `??_7Loader@Engine@@` tag fail exactly this test,
+named the general form: *naming a plausible symbol feels like discharging the
+obligation; the check that catches it is "is this symbol the thing that actually
+RUNS?"* **That test bites my promotion-candidate claim too**, and it was not
+enough that our copies of the four live writers are ported — if the DLL calls
+its OWN copy of any of them, a promoted cell and the DLL's cell are two owners
+again.
+
+**MEASURED, both routes, all four writers:**
+
+| writer | in-DLL rel32 call/jmp sites | address present in any PE section |
+|---|---|---|
+| `??0AchievementManager@` 0x18009eb00 | 0 | no |
+| `??1AchievementManager@` 0x18009eab0 | 0 | no |
+| `?Startup@Engine@1@` 0x1800db8a0 | 0 | no |
+| `?Shutdown@Engine@1@` 0x1800db4f0 | 0 | no |
+
+The two Engine entry addresses were confirmed as true function entries with
+`get_function_by_address` rather than trusted from my own subtraction of an
+offset — I had derived `0x1800db8a0` as `0x1800dbe83 − 0x5e3`, which is the kind
+of second-hand input that should not carry a conclusion.
+
+**BOTH SCREENS WERE HANDED KNOWN POSITIVES BEFORE THEIR ZEROS WERE BELIEVED**
+(`reference_absence_screen_must_be_handed_a_shape.md` — a screen whose normal
+answer is 0 is indistinguishable from a dead parser):
+
+* direct-call screen: `0x180009700` → 5 sites, `0x1800ca4e0` → 5 sites.
+* address-presence screen: `?Run@Loader@` (0x1800dbfc0) found **once**, at
+  `0x180157a08`; the UpdateLoop deleting dtor (0x180031900) found **once**, at
+  `0x180155ba0`. Those are the two positives lane LOOPS used, and this lane
+  reproduced them independently **at the same two addresses** — which makes them
+  a cross-check of LOOPS's screen as well as a control for mine.
+
+**REMAINING LIMIT, stated:** the address-presence screen matches 64-bit VAs, so
+it cannot see the PE export table, which stores 32-bit RVAs. That is not the
+question being asked — the question is in-DLL dispatch tables — but "absent"
+here does not mean "not exported". `AchievementManager` also has no vtable at
+all (its ctor stamps none), so there is no virtual route to miss.
+
 
 ### 4.5 What this lane did about it
 
@@ -505,7 +542,8 @@ guaranteed and will not look like a port bug.
 | 5 | **`AchievementInstance::Persist`'s `stopAfter=1` is a floor, not the derived index** (§3.2). Everything after the first emission is uncompared | **Whichever lane next ports `ExternalPtr<T>::Serialize` (0x180006d10)** — its emission count is the missing input, and once known the `stopAfter` here should be raised to it |
 | 6 | **`??0AchievementManager@` has NO oracle of any kind** — the pre-existing port in `engine_lifecycle.cpp` carries none, and the full-byte one this lane wrote went with the deleted duplicate (§3.4). Its writes are confined to `this`, so a poisoned-scratch byte oracle IS available to whoever wants it, and it also yields positive evidence that `_pad44` is unwritten | **Whichever lane next owns `runtime/src/engine/engine_lifecycle.cpp`** — lane LOOPS's area this wave, which is why no edit was made there |
 | 7 | **Four new address doors**, each commented at its call site in the kickoff §4 #10 shape: `0x180006d10` (`ExternalPtr<Achievement>::Serialize`), `0x180009d70` (`Array<InternalPtr<GoalInstance>>::SetSize`), `0x180009fa0` (the N-element `InternalPtr<GoalInstance>` serializer). They GROW the cutover surface | **The cutover lane that first loads a game with achievements mounted.** `0x180009d70` is reached UNCONDITIONALLY by `GoalList::Initialize` — it is an `Array<8>` SetSize, i.e. the shape `array.cpp` already has eleven instantiations of, so it is a cheap ArraySpec row for a `collection`-owning lane |
-| 8 | `runtime/src/achievement/README.md` still says "**Ported here:** _nothing yet_" while the directory holds eight ported files. Cosmetic, not corrected here to keep this diff to one subject | **The Wave 27 integrator**, at close |
+| 8 | **A pre-write existence grep scoped by CLASS cannot see a body filed by CALLER** (§3.4). This is a structural blind spot in the standard warning-#3 check, not a lapse: `??0AchievementManager@` is ported under `runtime/src/engine/` because it was found inlined in `Engine::Startup`. The check that works is a MANGLED-NAME grep across the whole tree. Lane LOOPS asked specifically that this reach the next kickoff | **The Wave 28 kickoff writer**, as an amendment to standing warning #3 |
+| 9 | `runtime/src/achievement/README.md` still says "**Ported here:** _nothing yet_" while the directory holds eight ported files. Cosmetic, not corrected here to keep this diff to one subject | **The Wave 27 integrator**, at close |
 
 ---
 
