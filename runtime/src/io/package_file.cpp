@@ -287,6 +287,7 @@
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../../src/system/string.h"
+#include "save_trace.h"   // Wave 27 IOTEXT: the Serialize oracle gate
 
 namespace RtIO {
 
@@ -392,6 +393,11 @@ typedef uint32_t (*U32ThisIntFn)(const void*, int);
 typedef String*  (*StrGetterFn)(const void*, String*);
 typedef uint32_t (*U32VoidFn)();
 typedef int32_t  (*I32ThisFilenameFn)(void*, const void*);
+
+// Wave 27 lane IOTEXT. Defined in package_file_serialize.cpp; declared rather
+// than included so that file keeps its own banner as the single place the
+// record sequence is documented.
+extern "C" void RtIo_PackageFile_SerializeProbe(void* self);
 
 // The one shared piece of the three String getters: retail nulls the return
 // slot, loads the field, and AddRefs only if it is non-null. The FREEING branch
@@ -592,6 +598,86 @@ extern "C" int32_t RtIo_PackageFile_Compile(void* self, const void* filename) {
 }
 
 // ============================================================================
+// ?Destruct@PackageFile@IO@@UEAAXXZ      retail 0x180025300   vtable slot 7
+// ?Reconstruct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ
+//                                        retail 0x1800252d0   vtable slot 6
+//                                              (WAVE 27 LANE IOTEXT)
+// ============================================================================
+//
+// DISASSEMBLED from Runtime-x64.dll (NOT the profile build -- this namespace's
+// recorded trap is carrying an IO vtable offset across builds,
+// reference_encoding_vtable_offsets_differ_between_builds.md; nothing here is
+// taken from the profile DLL).
+//
+//   ?Destruct@        180025300  MOV RAX,qword ptr [RCX]   ; this->vtable
+//                     180025303  XOR EDX,EDX               ; flags = 0
+//                     180025305  JMP  qword ptr [RAX]      ; TAIL, slot 0
+//
+//   ?Reconstruct@     1800252d0  PUSH RBX / SUB RSP,0x20
+//                     1800252d6  MOV RAX,qword ptr [RCX]   ; this->vtable
+//                     1800252d9  XOR EDX,EDX               ; flags = 0
+//                     1800252db  MOV RBX,RCX
+//                     1800252de  CALL qword ptr [RAX]      ; slot 0
+//                     1800252e0  MOV RCX,RBX
+//                     1800252e8  JMP  0x1800b4440          ; TAIL, ??0PackageFile
+//
+// THE DISPATCH IS VIRTUAL AND IT STAYS VIRTUAL. Both read slot 0 out of the
+// OBJECT'S OWN vtable rather than naming the deleting destructor, so both are
+// written here as an indirect call through `*(void**)self`. Short-cutting to
+// `RtDelDtor_PackageFile` would read correct today and be wrong for anything
+// derived from PackageFile -- and it would also hide which table is live
+// (the DLL's .rdata before cutover, lane C2's mint after).
+//
+// FLAGS = 0, which in the deleting-destructor family
+// (runtime/src/object/deleting_dtor.cpp) means DESTRUCT IN PLACE AND DO NOT
+// FREE. That is the whole of `Destruct`: the object's storage belongs to the
+// factory that owns it. Passing 1 here would free a block the caller still
+// holds; the constant is read off `XOR EDX,EDX` at both sites, not assumed.
+//
+// `Reconstruct` is therefore exactly "destroy in place, then run the
+// constructor over the same storage", and its declared return is
+// `Object::External*` -- retail returns whatever the tail-jumped constructor
+// leaves in RAX, which `??0PackageFile@IO@@QEAA@XZ` (0x1800b4440, ported at
+// :443) sets to `this`.
+//
+// EVERY CALLEE IS OURS -- these two rows CLOSE:
+//   slot 0  0x1800259d0  deleting dtor   PORTED (deleting_dtor.cpp, Wave 25)
+//   tail    0x1800b4440  ??0PackageFile  PORTED (this file, :443)
+//   (via slot 0) 0x1800b4540 ~PackageFile PORTED and registered BY ADDRESS
+//       (package_file_dtor.cpp:442). NOTE: deleting_dtor.cpp's row-43 comment
+//       still reads "~PackageFile = 0x1800b4540  (NOT ported)". That is STALE
+//       -- Wave 25 lane BODY ported it. Recorded, not fixed, per Wave 27 §4 #1.
+//
+// ORACLE: driven by the sweep probe below on a FRESHLY CONSTRUCTED scratch
+// object, ours and theirs on two separate blocks, compared over all
+// kPackageFileSize bytes. The comparison is sound because the CONSTRUCTOR
+// writes every one of those bytes, so there are no bytes neither side wrote
+// (reference_oracle_must_not_compare_unwritten_bytes.md); and it is SAFE
+// because a just-constructed PackageFile holds only null Strings, empty Arrays
+// and an empty FileInfo, so the destructor releases nothing.
+typedef void* (*SlotZeroFn)(void*, unsigned);
+
+extern "C" void RtIo_PackageFile_Destruct(void* self) {
+    RT_DIFF_BEGIN("IO::PackageFile::Destruct");
+    void** const vt = *reinterpret_cast<void***>(self);   // 180025300
+    reinterpret_cast<SlotZeroFn>(vt[0])(self, 0u);        // 180025305, flags 0
+    RT_DIFF_WORK(true);
+}
+
+extern "C" void* RtIo_PackageFile_Reconstruct(void* self) {
+    RT_DIFF_BEGIN("IO::PackageFile::Reconstruct");
+    void** const vt = *reinterpret_cast<void***>(self);   // 1800252d6
+    reinterpret_cast<SlotZeroFn>(vt[0])(self, 0u);        // 1800252de, flags 0
+    // The tail jump. Calling our own ported constructor directly rather than
+    // through a door, for the reason ?Construct@ above states at :511: a door
+    // would resolve to this same body and add one more resolve site the
+    // cutover census has to carry.
+    RtIo_PackageFile_Ctor(static_cast<PackageFileView*>(self));   // 1800252e8
+    RT_DIFF_WORK(true);
+    return self;
+}
+
+// ============================================================================
 // The three String getters. Shape and oracle in the helpers above.
 // ============================================================================
 extern "C" String* RtIo_PackageFile_GetName(const PackageFileView* self, String* ret) {
@@ -745,6 +831,111 @@ void RtIo_PackageFile_SweepProbe(const FileSystem* fs) {
         std::memset(scratch, 0xCD, sizeof scratch);
         RtIo_PackageFile_Construct(scratch);
         RtIo_PackageFile_Construct(nullptr);
+    }
+
+    // ---- WAVE 27 lane IOTEXT: the Destruct / Reconstruct oracle -------------
+    // Two scratch blocks, each freshly CONSTRUCTED so that (a) every one of the
+    // kPackageFileSize bytes has been written by a writer -- there are no
+    // unwritten bytes for the memcmp to fail on -- and (b) every String is null
+    // and every Array empty, so the destructor these two slots run releases
+    // nothing and the probe is safe to execute.
+    //
+    // ⚠ THE ONE HOLE, AND IT IS CLOSED BY CONSTRUCTION RATHER THAN BY EXCLUSION.
+    // The constructor does NOT write all 240 bytes. The number is MEASURED, not
+    // reasoned: the `[PKG2] ctor effectiveness` line this same probe prints reads
+    // `ours wrote 213/240 bytes, theirs wrote 213/240 (the 27 untouched are
+    // +0x78,+0x7c,+0x90,+0xad..af,+0xc4,+0xd4)`. A memcmp over the whole object
+    // would therefore compare 27 bytes NEITHER side wrote, which is the exact
+    // shape of reference_oracle_must_not_compare_unwritten_bytes.md -- it fails
+    // on stack garbage and reads like a catastrophic port defect.
+    //
+    // Closed by memsetting BOTH blocks to the same pattern before either
+    // constructor runs, so every untouched byte is equal by construction. That is
+    // preferred over an exclusion window because a window is a second copy of the
+    // header's layout that nothing keeps in step with it.
+    //
+    // `theirs` is reached through ResolveExportRaw, NOT ResolveExport: the
+    // ordinary door is registry-first and, now that these two names are
+    // registered below, would hand back OUR body and compare retail with itself
+    // (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
+    //
+    // EFFECTIVENESS: the two pairs are compared separately and the verdict says
+    // which one ran, so a pass cannot be read as covering a slot that no-op'd
+    // (reference_probe_needs_an_effectiveness_control.md).
+    {
+        typedef void  (*DestructFn)(void*);
+        typedef void* (*ReconstructFn)(void*);
+
+        alignas(16) uint8_t ours[kPackageFileSize];
+        alignas(16) uint8_t theirs[kPackageFileSize];
+
+        DestructFn theirDestruct = reinterpret_cast<DestructFn>(
+            ResolveExportRaw("?Destruct@PackageFile@IO@@UEAAXXZ"));
+        if (theirDestruct) {
+            std::memset(ours, 0xCD, sizeof ours);      // see the ⚠ note above
+            std::memset(theirs, 0xCD, sizeof theirs);
+            RtIo_PackageFile_Ctor(reinterpret_cast<PackageFileView*>(ours));
+            RtIo_PackageFile_Ctor(reinterpret_cast<PackageFileView*>(theirs));
+            RtIo_PackageFile_Destruct(ours);
+            theirDestruct(theirs);
+            printf("[PKG2] Destruct oracle: %s (%d bytes compared)\n",
+                   std::memcmp(ours, theirs, kPackageFileSize) == 0 ? "MATCH"
+                                                                    : "DIVERGED",
+                   static_cast<int>(kPackageFileSize));
+        } else {
+            printf("[PKG2] Destruct oracle SKIPPED: ?Destruct@PackageFile@IO@@ "
+                   "did not resolve raw\n");
+        }
+
+        ReconstructFn theirReconstruct = reinterpret_cast<ReconstructFn>(
+            ResolveExportRaw("?Reconstruct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ"));
+        if (theirReconstruct) {
+            std::memset(ours, 0xCD, sizeof ours);      // see the ⚠ note above
+            std::memset(theirs, 0xCD, sizeof theirs);
+            RtIo_PackageFile_Ctor(reinterpret_cast<PackageFileView*>(ours));
+            RtIo_PackageFile_Ctor(reinterpret_cast<PackageFileView*>(theirs));
+            void* const rOurs   = RtIo_PackageFile_Reconstruct(ours);
+            void* const rTheirs = theirReconstruct(theirs);
+            printf("[PKG2] Reconstruct oracle: %s (%d bytes compared), "
+                   "return-is-this ours=%d theirs=%d\n",
+                   std::memcmp(ours, theirs, kPackageFileSize) == 0 ? "MATCH"
+                                                                    : "DIVERGED",
+                   static_cast<int>(kPackageFileSize),
+                   rOurs == static_cast<void*>(ours) ? 1 : 0,
+                   rTheirs == static_cast<void*>(theirs) ? 1 : 0);
+            // Leave both blocks destructed rather than constructed, so nothing
+            // downstream inherits two live PackageFiles on the stack.
+            RtIo_PackageFile_Destruct(ours);
+            RtIo_PackageFile_Destruct(theirs);
+        } else {
+            printf("[PKG2] Reconstruct oracle SKIPPED: ?Reconstruct@PackageFile@IO@@ "
+                   "did not resolve raw\n");
+        }
+    }
+
+    // ---- WAVE 27 lane IOTEXT: drive ?Serialize@PackageFile@IO@@ -------------
+    // `?Serialize@` (vtable slot 5) has NO GAMEPLAY ROUTE -- nothing in the game
+    // writes a .pkg; that is the ToolKit's job -- so left alone it would report
+    // `calls=0` for ever. "No route" is not "no oracle"
+    // (reference_no_route_is_not_no_oracle.md): its own file carries a
+    // RtSaveTrace::Compare write-path oracle, and this loop is what hands that
+    // oracle a REAL, fully-populated subject instead of a fabricated one. It is
+    // a pure read of the package on the write path (see the callee analysis in
+    // package_file_serialize.cpp), so driving it here mutates nothing.
+    //
+    // THE DRIVER CALLS THE PROBE, NOT THE BODY, AND THAT COST A CRASH TO LEARN.
+    // The first version of this block called `RtIo_PackageFile_Serialize(pkg,
+    // nullptr)` on the argument that Compare substitutes its own sink. It died
+    // with an ACCESS_VIOLATION in MakeCodec on the FIRST package: the probe block
+    // does not RETURN, so the body ran on past it with the null Stream.
+    // `RtIo_PackageFile_SerializeProbe` is the instrument's own
+    // door; see the block above it in package_file_serialize.cpp. It self-gates
+    // on RtSaveTrace::Enabled(), so the check below is belt-and-braces and the
+    // loop costs nothing when the trace is off.
+    if (RtSaveTrace::Enabled()) {
+        for (int32_t i = 0; i < fs->packfileCount; ++i)
+            if (PackageFileView* const pkg = const_cast<PackageFileView*>(fs->packfiles[i]))
+                RtIo_PackageFile_SerializeProbe(pkg);
     }
 
     // Distinct-value counters, so a row that is one value repeated N times is
@@ -920,11 +1111,25 @@ int RtIoPackageFileRegister() {
                           (void*)&RtIo_PackageFile_GetIconHeight); ++n;
     RegisterRuntimeAddr(0x180025520, (void*)&RtIo_PackageFile_GetIconHeight);
 
+    // ---- WAVE 27 lane IOTEXT: `??_7PackageFile@IO@@6B@` slots 6 and 7 -------
+    // BY NAME *AND* BY ADDRESS, as every row above: the minted table fills these
+    // NAMED rows by name, while the DLL's own .rdata table is reached by
+    // address, and a name-only registration is invisible to the second door
+    // (reference_count_the_doors_not_the_calls.md).
+    RegisterRuntimeExport("?Reconstruct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ",
+                          (void*)&RtIo_PackageFile_Reconstruct); ++n;
+    RegisterRuntimeAddr(0x1800252d0, (void*)&RtIo_PackageFile_Reconstruct);
+
+    RegisterRuntimeExport("?Destruct@PackageFile@IO@@UEAAXXZ",
+                          (void*)&RtIo_PackageFile_Destruct); ++n;
+    RegisterRuntimeAddr(0x180025300, (void*)&RtIo_PackageFile_Destruct);
+
     // DELIBERATELY ABSENT — full reasons in §4.
     //   ?ReadPackfile@PackageFile@IO@@…   0x1800b46b0  ord 3461  6,597 bytes  <- NEXT WALL
     //   ??1PackageFile@IO@@UEAA@XZ        0x1800b4540  ord  639  (5 unported callees)
-    //   FUN_1800259d0 (deleting dtor, vtable slot 0)
+    //   FUN_1800259d0 (deleting dtor, vtable slot 0) -- CLOSED Wave 25 VTIO
     //   ?Reconstruct@ 0x1800252d0 / ?Destruct@ 0x180025300  (drive slot 0)
+    //       -- CLOSED, Wave 27 lane IOTEXT, registered above.
     //   ?Serialize@   0x1800b60a0  (Encoding vtable, save path)
     //   ?GetFileInfo@ 0x180025400 / ?GetIconData@ / ?GetPreviewData@
     //   the ToolKit half: WritePackfile, ExtractPackFile, BuildPackageFile,

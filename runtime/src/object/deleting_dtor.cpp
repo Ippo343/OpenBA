@@ -768,6 +768,42 @@ static const DelDtorSpec kSpecs[] = {
     // OBSERVED, NOT FIXED, with this file:line. ADDRESSEE for the fix: Wave 28.
     RT_DELDTOR(0x180058dd0, 0x180058d20, 0x0c0, "Graphics::Light"),
     RT_DELDTOR(0x180064620, 0x180108160, 0x108, "Graphics::SunLight"),
+
+    // ---- WAVE 27 lane IOTEXT --------------------------------------------------
+    // Slot 0 of `??_7ElementDescription@UI@@6B@` (0x1801561c0). This is the row
+    // runtime/src/ui/dialog.cpp:1471 has asserted since Wave 9 was ALREADY
+    // ported ("one of the 37 Wave 9 lane K ported") -- IT WAS NOT. Grepping
+    // 0x180035350 across runtime/, standalone/ and code/ at wave27/base finds it
+    // only in that comment and in standalone/rt_data_mint_tables.inc:1016, i.e.
+    // in the MINT (which is where the trap lives), never in a registration. A
+    // body ported but never registered and a body never written look identical
+    // from the outside (reference_half_registered_port_reads_as_absent.md); here
+    // the prose claimed the port and neither existed. The comment at dialog.cpp
+    // has been corrected in place rather than left to be rediscovered.
+    //
+    // DISASSEMBLED AT 0x180035350 (Runtime-x64.dll, not the profile build) and it
+    // is this family, operand for operand: `TEST DL,0x2` -> array arm
+    // `LEA R9,[0x180116100]; MOV R8D,[RCX-0x8]; MOV EDX,0x68; CALL 0x18007ec98`,
+    // then `TEST SIL,0x1` / free / return `this-8`. One of the 22 rows whose
+    // SCALAR arm is INLINED (it open-codes the vtable restamp, the +0x60 String
+    // release and the `CALL 0x1800bc950` tail), which is exactly the case this
+    // family handles by calling `~Class` on BOTH arms.
+    //
+    // sizeof == 0x68 THREE WAYS: the `MOV EDX,0x68` here, the ctor's last store
+    // at +0x60, and runtime/types/ui/ElementDescription.h's static_assert.
+    //
+    // EVERY CALLEE IS OURS -- this row closes rather than deepening:
+    //   0x180116100 ~ElementDescription  PORTED and registered BY ADDRESS
+    //                                    (dialog.cpp, Wave 9 lane UIF)
+    //   0x18007ec98 eh vector iterator   reproduced by this file
+    //   operator delete                  this file's MemFree
+    //
+    // NOT ADDED to kProbeSubjects, on the IO::PackageFile row's test rather than
+    // the IO::ReaderWriter one: ~ElementDescription releases a refcounted String
+    // at +0x60 and chains to ~External. Run over a fabricated subject that
+    // decrements a refcount that was never incremented and frees a garbage
+    // pointer. A probe subject must be SAFE TO RUN; this one is not.
+    RT_DELDTOR(0x180035350, 0x180116100, 0x068, "UI::ElementDescription"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1056,11 +1092,15 @@ void* RtDelDtor_ToolTipDialog(void* self, unsigned flags) {
 void* RtDelDtor_CompressedStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 39);
 }
-// IO::CompressedFileStream ~CompressedFileStream = 0x1800a9330  (NOT ported)  [Wave 19]
+// IO::CompressedFileStream ~CompressedFileStream = 0x1800a9330  (PORTED, Wave 27 IOTEXT
+//                          -- runtime/src/io/file_stream.cpp; this row's address
+//                          door is what made porting it worth doing)
 void* RtDelDtor_CompressedFileStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 40);
 }
-// IO::TextFileStream       ~TextFileStream = 0x1800ba490  (NOT ported)  [Wave 21 ENC]
+// IO::TextFileStream       ~TextFileStream = 0x1800ba490  (PORTED, Wave 27 IOTEXT --
+//                          runtime/src/io/file_stream.cpp; this row's own
+//                          address door is what made porting it worth doing)
 void* RtDelDtor_TextFileStream(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 41);
 }
@@ -1068,7 +1108,10 @@ void* RtDelDtor_TextFileStream(void* self, unsigned flags) {
 void* RtDelDtor_ReaderWriter(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 42);
 }
-// IO::PackageFile          ~PackageFile = 0x1800b4540  (NOT ported)  [Wave 25 VTIO]
+// IO::PackageFile          ~PackageFile = 0x1800b4540  (PORTED -- Wave 25 lane BODY,
+//                          runtime/src/io/package_file_dtor.cpp:442. This line read
+//                          "NOT ported" until Wave 27 lane IOTEXT; the two waves
+//                          landed in the same wave and the comment never caught up.)
 void* RtDelDtor_PackageFile(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 43);
 }
@@ -1092,6 +1135,11 @@ void* RtDelDtor_Light(void* self, unsigned flags) {
 // Graphics::SunLight       ~SunLight = 0x180108160  (NOT ported)  [Wave 27 GFXPART]
 void* RtDelDtor_SunLight(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 48);
+}
+
+// UI::ElementDescription   ~ElementDescription = 0x180116100  (PORTED)  [Wave 27 IOTEXT]
+void* RtDelDtor_ElementDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 49);
 }
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
@@ -1186,6 +1234,8 @@ void RtObjectDeletingDtorPortInit() {
 
     RegisterRuntimeAddr(0x180058dd0, (void*)&RtDelDtor_Light);                 // Wave 27 GFXPART
     RegisterRuntimeAddr(0x180064620, (void*)&RtDelDtor_SunLight);              // Wave 27 GFXPART
+
+    RegisterRuntimeAddr(0x180035350, (void*)&RtDelDtor_ElementDescription);    // Wave 27 IOTEXT
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --

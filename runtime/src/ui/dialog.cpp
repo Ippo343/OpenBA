@@ -545,6 +545,27 @@ inline const uint8_t* DialogInstanceTypeInfo() {
 // in this TU — see the ⚠ note beside the includes.
 constexpr int kBaseTypeInfoName = 0x08;
 
+// ---- WAVE 27 lane IOTEXT: the same exported DATA slot, for ----------------
+// `??_7ElementDescription@UI@@6B@` slots 1 and 2.
+//
+// `?TypeName@ElementDescription@UI@@UEBAPEBDXZ` (0x1800350f0) is
+//     MOV RAX,qword ptr [0x1801fab00] ; RET
+// and `?Type@ElementDescription@UI@@UEBAIXZ` (0x1800350d0) is
+//     MOV EAX,dword ptr [0x1801faaf8] ; RET
+// -- the identical two-slot / one-object shape `RtUiDialogInstance_TypeName`
+// documents below, eight bytes apart on ONE BaseTypeInfo. Read out of the
+// RETAIL DLL's disassembly (Runtime-x64.dll), not the profile build.
+//
+// UNLIKE the DialogInstance row's ⚠ note, this symbol IS in the mint today:
+// standalone/rt_data_mint_tables.inc:1989 carries
+// `?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A` at 0x1801faaf8.
+// Same door, same retry-a-miss form, so a row minted later cannot be frozen
+// null by whoever resolves first.
+inline const uint8_t* ElementDescriptionTypeInfo() {
+    return RT_DATA_SLOT(const uint8_t*,
+                        "?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A");
+}
+
 
 // ---- WAVE 9 LANE UID helpers ----------------------------------------------
 // All four use the RETRY-a-miss form (RT_DATA_SLOT / RT_EXPORT_ONCE, and the
@@ -1461,6 +1482,42 @@ int32_t RtUiElementDescription_GetFileVersion(const ElementDescription* self) {
 }
 
 // ============================================================================
+// ?TypeName@ElementDescription@UI@@UEBAPEBDXZ  retail 0x1800350f0
+// ?Type@ElementDescription@UI@@UEBAIXZ         retail 0x1800350d0
+//                                          (WAVE 27 LANE IOTEXT, slots 1 and 2)
+// ============================================================================
+//
+// Two instructions each, both reading one `Object::BaseTypeInfo` at 0x1801faaf8
+// -- +0x00 for the type id, +0x08 for the name. The disassembly is quoted
+// beside `ElementDescriptionTypeInfo()` above.
+//
+// NEITHER READS RCX. Retail's `MOV EAX,dword ptr [...]` / `MOV RAX,qword ptr
+// [...]` touch no `this`; the parameter is named and unused here for the same
+// reason the PackageFile pair (runtime/src/io/package_file.cpp) names it --
+// the vtable dispatches them with a this-pointer and the signature must match.
+//
+// NO ORACLE, AND THE REASON IS NOT "no route" -- IT IS THAT AN ORACLE WOULD BE
+// VACUOUS TODAY. `?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A`
+// is MINTED (rt_data_mint_tables.inc:1989) but NOT PROMOTED
+// (standalone/reg_mint_promoted.cpp carries no row for it), so with the DLL
+// present RT_DATA_SLOT falls through to the DLL's own static -- our side and
+// retail's side would read the SAME object through the SAME door and a
+// comparison would be retail against itself
+// (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
+// What IS checked: the mint shadow compares every minted BaseTypeInfo's fields
+// against the loaded DLL's nodes, and that is the check that becomes
+// load-bearing the day this row is promoted. Stated, not hidden.
+extern "C" const char* RtUiElementDescription_TypeName(const void* /*self*/) {
+    return *reinterpret_cast<const char* const*>(
+        ElementDescriptionTypeInfo() + kBaseTypeInfoName);
+}
+
+extern "C" uint32_t RtUiElementDescription_Type(const void* /*self*/) {
+    return *reinterpret_cast<const uint32_t*>(
+        ElementDescriptionTypeInfo() + kBaseTypeInfoTypeId);
+}
+
+// ============================================================================
 // ??1ElementDescription@UI@@UEAA@XZ  retail 0x180116100  ord 585
 //                                                          (WAVE 9 LANE UIF)
 // ============================================================================
@@ -1468,9 +1525,18 @@ int32_t RtUiElementDescription_GetFileVersion(const ElementDescription* self) {
 // WHY THIS ROW EXISTS AT ALL. Like `??1Element`, this destructor is not reached
 // by any direct C++ caller in our tree — it is reached through a LIVE MINTED
 // VTABLE. `??_7ElementDescription@UI@@6B@` slot 0 is the vector deleting
-// destructor `??_EElementDescription@UI@@` at 0x180035350, one of the 37 Wave 9
-// lane K ported, and lane K reaches `~Class` by ADDRESS through ResolveAddr.
+// destructor `??_EElementDescription@UI@@` at 0x180035350, and lane K's family
+// reaches `~Class` by ADDRESS through ResolveAddr.
 // With this row unported that edge went to the DLL, and after cutover to NULL.
+//
+// ⚠ CORRECTION, WAVE 27 lane IOTEXT. This paragraph used to call 0x180035350
+// "one of the 37 Wave 9 lane K ported". IT WAS NOT PORTED until Wave 27: at
+// wave27/base, grepping 0x180035350 across runtime/, standalone/ and code/
+// found it ONLY in this comment and in standalone/rt_data_mint_tables.inc:1016
+// (the mint row, i.e. the TRAP), never in a RegisterRuntimeAddr. The sentence
+// read as a completion and cost the table three waves of being 3/6
+// (reference_a_prescription_read_as_a_completion.md). The row now exists:
+// runtime/src/object/deleting_dtor.cpp, spec index 44, "UI::ElementDescription".
 //
 // 0x180035350 WAS DISASSEMBLED FOR THIS LANE, and it is one of lane K's "22 of
 // 37 that INLINE the scalar branch": only its ARRAY branch names the destructor
@@ -2608,6 +2674,19 @@ int RtUiDialogRegister() {
     RegisterRuntimeExport("??1ElementDescription@UI@@UEAA@XZ",
                           (void*)&RtUiElementDescription_Dtor);
     RegisterRuntimeAddr(0x180116100, (void*)&RtUiElementDescription_Dtor);            ++n;
+
+    // WAVE 27 lane IOTEXT -- `??_7ElementDescription@UI@@6B@` slots 2 and 1.
+    // BY NAME *AND* BY ADDRESS, because the minted table fills a NAMED row
+    // through the name and an in-tree caller can arrive by address; a name-only
+    // registration is invisible to the second door and dies at cutover
+    // (reference_count_the_doors_not_the_calls.md).
+    RegisterRuntimeExport("?Type@ElementDescription@UI@@UEBAIXZ",
+                          (void*)&RtUiElementDescription_Type);
+    RegisterRuntimeAddr(0x1800350d0, (void*)&RtUiElementDescription_Type);            ++n;
+
+    RegisterRuntimeExport("?TypeName@ElementDescription@UI@@UEBAPEBDXZ",
+                          (void*)&RtUiElementDescription_TypeName);
+    RegisterRuntimeAddr(0x1800350f0, (void*)&RtUiElementDescription_TypeName);        ++n;
 
     // ---- Wave 9 lane Z: three DialogInstance vtable slots ------------------
     // Registered by NAME and by ADDRESS like the rest of the lane. The name is
