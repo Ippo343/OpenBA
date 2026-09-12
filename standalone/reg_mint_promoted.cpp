@@ -1360,6 +1360,167 @@ int RtMintRegisterPromotedRows() {
     }
 
     // ========================================================================
+    // WAVE 26 LANE PROMOGFX — ??_7Geometry@Graphics@@6B@ (0x180154e60)
+    // ========================================================================
+    //
+    // THIS ROW WAS HANDED TO THIS LANE BY NAME. Wave 21 lane GFXVT tagged it
+    // HARMFUL; Wave 22 lane GEOM discharged the blocker and wrote, in the
+    // RESOLVED note above, that "re-scoring and actually registering the
+    // promotion is a SEPARATE, still-open step lane GEOM did not take". This
+    // lane is that step, and it did not take GEOM's word for any of it.
+    //
+    // RE-DERIVED HERE, not re-quoted:
+    //
+    //   1. THE BLOCKER IS GONE. The whole HARMFUL verdict rested on ONE
+    //      consumer reading past the end of the table:
+    //      code/Game/Component/statusicon_geometry.cpp copied `i < 12` slots
+    //      out of a NINE-slot table into a live exe-side vtable, so promoting
+    //      would have moved a dormant overrun off the DLL's .rdata (three
+    //      qwords of the "ImageBuffer\0..." string run) onto `kVTable28`, a
+    //      `static void* kVTable28[9]`. READ ON THIS TIP: that loop now reads
+    //      `if (i < 9) ... else s_siGeomVtable[i] = nullptr;` and never
+    //      indexes baseVtbl at 9 or beyond. The overrun does not exist.
+    //
+    //   2. THE STATIC HALF. tools/mint_slot_sweep.py-equivalent slot scan on
+    //      this tip: 9 slots, 3 RT_MINT_PURECALL, 6 non-purecall, 6 of 6
+    //      registered -> COMPLETE. Slot 0 is address-registered
+    //      (runtime/src/object/deleting_dtor.cpp:912, 0x180015e90); slots 4-8
+    //      are name-registered in runtime/src/graphics/scene.cpp:1884-1899.
+    //      PromoteVtableGuarded re-asks this at runtime through
+    //      RtMintVtableTrapCount and refuses on any non-zero.
+    //
+    //   3. THE DYNAMIC HALF — WHO STAMPS IT. tools/mint_stamper_census.py on
+    //      this tip (decoder control 3/3, positive control REGISTERED,
+    //      negative control not-registered): 3 stamp sites in 3 functions,
+    //      ours-capable 2, retail 1, unattributed 0.
+    //        ??0Geometry@Graphics@@QEAA@XZ   0x1800a4281  OURS (name+addr)
+    //        ??1Geometry@Graphics@@UEAA@XZ   0x1800a41d5  OURS (name+addr)
+    //        ??0Geometry@Graphics@@QEAA@AEBV01@@Z 0x180015b7e  RETAIL
+    //      So a COPY-CONSTRUCTED Geometry keeps retail's table. That is a
+    //      SPLIT, not a trap: both tables dispatch the same six bodies, and at
+    //      cutover there is no retail body left for the copy ctor to run.
+    //
+    //   4. THE DOOR EXISTS AND PROMOTION REACHES IT. runtime/src/graphics/
+    //      scene.cpp:212 stamps ResolveAddr(Module::Runtime, 0x180154e60), and
+    //      ResolveAddr consults the PORT REGISTRY FIRST, so registering by
+    //      address here is what re-points that stamp. Registering by NAME as
+    //      well matches the ??_7BinaryFileStream@ precedent above.
+    //
+    // WHAT THIS DOES NOT CLAIM. No A/B was run for this row in this lane, and
+    // no attendance counter says a promoted Geometry vtable is ever
+    // DISPATCHED. This promotion is the same tier as every other row in this
+    // file: the table is installed. Whether our six bodies agree with retail's
+    // is a separate tier and is not asserted here.
+    //
+    // A/B CONTROL: BANISHED_RT_PROMOTE_GEOM=0 leaves the row on the DLL.
+    {
+        const char* off = getenv("BANISHED_RT_PROMOTE_GEOM");
+        if (off && strcmp(off, "0") == 0) {
+            printf("[RtMint] BANISHED_RT_PROMOTE_GEOM=0 -- "
+                   "??_7Geometry@Graphics@@6B@ left on the DLL (A/B control)\n");
+        } else {
+            PromoteVtableGuarded("??_7Geometry@Graphics@@6B@", 0x180154e60ull, &n);
+        }
+    }
+
+    // ========================================================================
+    // WAVE 26 LANE PROMOGFX — ??_7AnimationEvent@Graphics@@6B@ (0x180154bf0)
+    // ========================================================================
+    //
+    //   1. STATIC HALF: 9 slots, 5 RT_MINT_PURECALL, 4 non-purecall, 4 of 4
+    //      registered -> COMPLETE. Slot 0 is the unnamed deleting dtor
+    //      (0x180011800, address-registered); slots 1, 2 and 4 are
+    //      ?TypeName@ / ?Type@ / ?Compile@External@Object@, name-registered.
+    //
+    //   2. DYNAMIC HALF: 5 stamp sites in 5 functions, ours-capable 3, retail
+    //      2, unattributed 0 — ??1AnimationEvent (0x1800a2132) and
+    //      ??0AnimationEvent@@QEAA@XZ (0x1800a218b) by NAME+ADDR, plus
+    //      FUN_180011800 by ADDR; the two retail stampers are the copy ctor
+    //      (0x180011777) and FUN_1800117b0. Same SPLIT shape as Geometry, and
+    //      the split is over four bodies all of which we own.
+    //
+    //   3. THE DOOR: runtime/src/graphics/animation.cpp:156 resolves it by
+    //      ADDRESS (ResolveAddr(Module::Runtime, 0x180154bf0)) and
+    //      animation.cpp:240 and :276 stamp it. Registry-first, so the
+    //      address registration below re-points both stamps.
+    //
+    //   4. NO OUT-OF-BOUNDS CONSUMER. The Geometry hazard was a copy loop over
+    //      the table; grepped for on this tip and there is none for this row —
+    //      the two consumers assign the pointer and nothing indexes it. The
+    //      minted storage is `static void* kVTable5[9]`, the full extent.
+    //
+    // WHAT THIS DOES NOT CLAIM: as for Geometry, installation only. No A/B and
+    // no attendance evidence that the table is dispatched.
+    //
+    // A/B CONTROL: BANISHED_RT_PROMOTE_ANIMEVT=0 leaves the row on the DLL.
+    {
+        const char* off = getenv("BANISHED_RT_PROMOTE_ANIMEVT");
+        if (off && strcmp(off, "0") == 0) {
+            printf("[RtMint] BANISHED_RT_PROMOTE_ANIMEVT=0 -- "
+                   "??_7AnimationEvent@Graphics@@6B@ left on the DLL (A/B control)\n");
+        } else {
+            PromoteVtableGuarded("??_7AnimationEvent@Graphics@@6B@", 0x180154bf0ull, &n);
+        }
+    }
+
+    // ========================================================================
+    // WAVE 26 LANE PROMOGFX — ??_7UpdateLoop@Engine@@6B@ IS **HELD BACK**
+    // ========================================================================
+    //
+    // It is the third COMPLETE table in this lane's namespaces (7/7 of its 12
+    // slots non-purecall, every one registered) and it is DELIBERATELY NOT
+    // PROMOTED HERE. Stated so the next lane does not read the census's
+    // `7 7 COMPLETE` and promote it as the obvious cheap win it looks like.
+    //
+    // THE REASON IS THE STAMPER CENSUS, and it is a DIFFERENT SHAPE from the
+    // two rows above. 8 stamp sites in 8 functions: ours-capable 2, retail 6,
+    // unattributed 0. The two ours are ??0UpdateLoop@Engine@@QEAA@XZ
+    // (0x1800ddd44) and ??1UpdateLoop@Engine@@UEAA@XZ (0x1800dddc6). The six
+    // retail ones are NOT UpdateLoop functions at all — they are the
+    // BASE-SUBOBJECT stamps in the ctors and dtors of DERIVED loop classes:
+    //   ??0UpdateLoop@Engine@@QEAA@AEBV01@@Z  0x1800317ee  (copy ctor)
+    //   FUN_180031880                         0x18003189d
+    //   ??0LoaderLoop@Engine@@QEAA@AEBV01@@Z  0x18004d3be
+    //   ??0DialogLoopT@Engine@@QEAA@AEBV01@@Z 0x18004d7f3
+    //   ??1DialogLoopT@Engine@@UEAA@XZ        0x1800db394
+    //   ??1LoaderLoop@Engine@@UEAA@XZ         0x1800dc190
+    //
+    // Geometry's single retail stamper is a copy ctor and the split it causes
+    // is one object's vptr. This row's six are the base-class stamp of THREE
+    // OTHER CLASSES whose own tables (??_7LoaderLoop@ 6/12,
+    // ??_7DialogLoopT@ 10/12, ??_7DialogLoaderLoopT@ 8/12) are all INCOMPLETE
+    // and unpromoted. So promotion here puts OUR table in an UpdateLoop and
+    // RETAIL's in the base sub-object of every derived loop, across the
+    // hierarchy that runs the entire front end.
+    //
+    // WHAT THIS LANE DID **NOT** DETERMINE, said plainly rather than guessed:
+    // whether those six stamps are TRANSIENT (the ordinary MSVC sequence —
+    // base ctor stamps the base table, the derived ctor immediately overwrites
+    // it, so the split never outlives the constructor and is harmless) or
+    // FINAL. That is decidable by disassembling the six, and it is the whole
+    // question. Nothing above settles it, and a lane that promotes this row on
+    // the strength of `COMPLETE` will not have asked it.
+    //
+    // RT_UNPROMOTABLE is deliberately NOT written for this row: it is not a
+    // verdict that promotion is harmful, it is an admission that this lane did
+    // not finish the check. Tagging it would file an unfinished measurement as
+    // a permanent refusal, which is the error
+    // reference_unpromotable_is_route_scoped_not_permanent.md warns about from
+    // the other side.
+    //
+    // [SCOPE: DLL-PRESENT — at cutover there are no retail stampers and the
+    //  question dissolves; the row is then REQUIRED, because
+    //  runtime/src/engine/loops.cpp:313 resolves it BY NAME and ResolveExport
+    //  returns NULL for an unpublished row, so loops.cpp:414 and :583 would
+    //  stamp a NULL vptr.]
+    // [ADDRESSEE: the next lane that owns runtime/src/engine/loops.cpp, or
+    //  failing that the Wave 27 kickoff writer.]
+    // [CONDITION: disassemble the six retail stamp sites listed above and
+    //  record, per site, whether the UpdateLoop table is still in the object
+    //  when that function returns. If all six are transient, promote. If any
+    //  is final, write an RT_UNPROMOTABLE tag naming that site.]
+
+    // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted
     // ========================================================================
     //
