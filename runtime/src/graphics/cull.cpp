@@ -453,7 +453,7 @@ extern "C" void RtGraphics_Scene_AddCulledDrawItems(const void* selfv, void* ren
         Geometry* geo = list.data[i];
         using AddFn = void (*)(Geometry*, const Scene*, Renderer*);
         void** vt = *reinterpret_cast<void***>(geo);
-        reinterpret_cast<AddFn>(vt[3])(geo, self, renderer);   // vt + 0x18
+        reinterpret_cast<AddFn>(vt[RtGraphics::kVSlotAddDrawItems])(geo, self, renderer);
     }
 
     if (list.data != nullptr) RtMemFree(list.data);
