@@ -1048,15 +1048,15 @@ void* RtDelDtor_DialogController(void* self, unsigned flags) {
 void* RtDelDtor_DialogInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 21);
 }
-// Engine::LoaderLoop       ~LoaderLoop = 0x1800dc170  (still the DLL's)
+// Engine::LoaderLoop       ~LoaderLoop = 0x1800dc170  (PORTED, BATCH 8)
 void* RtDelDtor_LoaderLoop(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 22);
 }
-// Engine::DialogLoaderLoopT ~DialogLoaderLoopT = 0x1800db060  (still the DLL's)
+// Engine::DialogLoaderLoopT ~DialogLoaderLoopT = 0x1800db060  (PORTED, BATCH 8)
 void* RtDelDtor_DialogLoaderLoopT(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 23);
 }
-// Engine::DialogLoopT      ~DialogLoopT = 0x1800db340  (still the DLL's)
+// Engine::DialogLoopT      ~DialogLoopT = 0x1800db340  (PORTED, BATCH 8)
 void* RtDelDtor_DialogLoopT(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 24);
 }

@@ -260,5 +260,15 @@ int RtUtilityRegister() {
     RegisterRuntimeExport("??0PerlinNoise@Utility@@QEAA@MMHH@Z",
                           (void*)&RtUtility_PerlinNoise_Ctor); ++n;
     RegisterRuntimeAddr(0x180108c70, (void*)&RtUtility_PerlinNoise_Ctor);
+    // BATCH 8: SmoothNoise (above) has had a body since Wave 8 lane E but was
+    // deliberately left unregistered as "out of this lane's scope" — it is
+    // `private`/AEBA with no census row of its own, reached only by a direct
+    // CALL from Generate's own disassembly, which our Generate already calls
+    // in-TU rather than through the registry. Registered here anyway, by
+    // ADDRESS ONLY (it has no mangled export name to register under), so any
+    // OTHER caller that reaches 0x1801085c0 directly — including the DLL
+    // itself, should a hybrid boot ever call back into this address — gets
+    // this body rather than nothing.
+    RegisterRuntimeAddr(0x1801085c0, (void*)&SmoothNoise);
     return n;
 }
