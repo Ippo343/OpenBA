@@ -196,3 +196,66 @@ assert d2.count(NUL) == 0       # and ASSERT, because this is the failure that r
 population to every text file in the repo including `docs/`, and keep the assert
 form above in any tool that strips NULs. **CONDITION: the Wave 27 kickoff**, which
 will definitely be written.
+
+## RECONCILIATION: DOES THE DEFLATING STAMPER CENSUS INVALIDATE PROMOGFX'S VERDICTS?
+
+**No, and the answer is checkable rather than reassuring.**
+
+Lane PROMOIO measured that `tools/mint_stamper_census.py` buckets a stamp site as
+`UNATTRIBUTED (no .pdata) -- NOT OURS` in **45 of 47 cases wrongly**: MSVC emits no
+`.pdata` for a frameless leaf, which is the shape of every 3-instruction ctor/dtor.
+**It DEFLATES** — it makes work look impossible rather than cheap, which is the
+error direction that silently kills promotions.
+
+Lane PROMOGFX's stamper analyses ran on that same tool, so its held-back verdicts
+were candidates for being wrong in the deflating direction. They are not:
+
+> `??_7UpdateLoop@Engine@@6B@` — **ours-capable 2, retail 6, unattributed 0.**
+
+**`unattributed 0`.** The verdict rests entirely on sites the tool attributed by
+name, with addresses given (e.g. `??0UpdateLoop@Engine@@QEAA@AEBV01@@Z` at
+`0x1800317ee`). The defective bucket is empty for that row, so the defect cannot
+have reached the conclusion. Same for Geometry and AnimationEvent, whose stampers
+are named individually.
+
+**This is only a reconciliation because PROMOGFX printed the unattributed COUNT
+next to its verdict.** Had it printed only "2 ours, 6 retail", the question would
+have been unanswerable without re-running everything. A count of the bucket you
+did NOT use is what makes a verdict auditable after the instrument is impeached.
+
+## A LANE FIX THAT NEVER REACHED ITS BRANCH — NOT MERGED, DELIBERATELY
+
+```
+$ git -C .claude/worktrees/agent-<promoio> status --porcelain -- tools/mint_stamper_census.py
+ M tools/mint_stamper_census.py
+$ git log --oneline -1 wave26/promoio -- tools/mint_stamper_census.py
+52c23e6d Wave 21 lane CLASS: ...          <- untouched since Wave 21
+```
+
+Lane PROMOIO **modified the tool in its worktree and never committed it.** The lane
+reported the defect as diagnosed and the fix as recommended; a partial
+implementation exists that no branch carries and no merge could have picked up.
+
+**NOT MERGED, and the reason is not process pedantry:** the uncommitted version is
+flagged `"resolved_unattr" is possibly unbound` on three lines — it is incomplete.
+Merging an uncommitted, unreviewed, provably-unfinished change to a tool whose whole
+problem is that it reports confident wrong answers would replace a known deflation
+with an unknown one.
+
+**This project has the matching recorded lesson twice** — *a lane recorded CLOSED
+can be entirely UNMERGED*, and *a lane that keeps improving after it reports
+invalidates the integrator's build*. This is the first instance where the unmerged
+work is a FIX FOR THE INSTRUMENT THE SAME LANE IMPEACHED, which makes it worse than
+the usual case: the impeachment is in the wave record and the remedy is not.
+
+**STATE AS OF THIS COMMIT: `mint_stamper_census.py` IS STILL DEFLATING.** Every
+stamper ratio quoted anywhere in Wave 26 was produced by the defective tool; the
+ones that survive impeachment do so because their `unattributed` count is 0, and
+that must be checked per row, not assumed.
+
+**ADDRESSEE: the Wave 27 lane that does promotion work — named in the Wave 27
+kickoff, not left to "whoever notices".** Fix is known and stated in
+`WAVE26_LANE_PROMOIO.md` §2: resolve an UNATTRIBUTED stamp site against the export
+directory instead of against `.pdata`. **CONDITION: before any Wave 27 promotion
+verdict is written**, because a deflating stamper census does not produce a wrong
+promotion — it produces a promotion that never happens, and nothing detects that.
