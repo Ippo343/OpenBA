@@ -527,12 +527,33 @@ Two things worth carrying:
 
 * **The divergence was three bytes wide and at offset 0 on every class**, i.e.
   maximally consistent, which is what made it read as a real systematic defect
-  rather than an instrument fault. A uniform failure is evidence about the
-  instrument at least as often as about the subject.
-* The bug is inherited verbatim from FACTUI1's oracle, whose comment asserts
-  "the `??_7` export IS the slot". **That lane reports 26/26 and 14/14 passing**,
-  so either its tables store the dereferenced value consistently on both sides or
-  its wrapper shape hides it. **Addressee: lane FACTUI1 (messaged), and the Wave
-  28 integrator** — this is a question about FACTUI1's numbers, raised by this
-  lane, and it must not be quietly assumed to be benign there because it was
+  rather than an instrument fault. **A UNIFORM, MAXIMALLY-CONSISTENT FAILURE IS
+  EVIDENCE ABOUT THE INSTRUMENT AT LEAST AS OFTEN AS ABOUT THE SUBJECT** — the
+  very consistency that makes it look systematic is the tell. Corollary, from
+  FACTUI1's reply below and worth as much: when you then go to check a suspected
+  shared defect, **an equality test between the two sides cannot see a defect
+  both sides share**. Test the property that distinguishes them (here: which
+  SECTION the stored pointer lies in), not their agreement.
+* The line is inherited verbatim from FACTUI1's oracle, whose comment asserts
+  "the `??_7` export IS the slot", so this lane raised it as a question about
+  **that lane's** 26/26 rather than assuming it was benign there because it was
   benign to fix here.
+
+  **ANSWERED, AND THE ANSWER IS THAT FACTUI1'S NUMBERS STAND** (reported by that
+  lane, `wave28/factui1` `fa8c2919`; MEASURED by them, not re-measured here).
+  Their `VT()` helper carrying the deref **exists but is never called** — dead
+  code, and this lane inherited a line that lane never ran. Their live
+  `SK_VTABLE` branch has always been `(uint64_t)Sym(s.sym)`, the address, which
+  is what both ports and retail's `lea rax,[rip+X] ; mov rax,(rcx)` do. They then
+  added a vptr witness rather than rest on the source claim, and it prints
+  `ours == theirs` per class.
+
+  **The sharpest part of their reply is a correction to the check I asked for.**
+  I asked for a printf of ours-vs-theirs at +0x00. That would not have answered
+  the question: **if BOTH sides dereferenced, the witness would also print AGREE**
+  while comparing the wrong thing entirely. The discriminating half is the
+  ADDRESS RANGE — `.rdata` versus `.text` — not the equality. An equality check
+  between two sides that share a defect is the shadow-marker shape again, one
+  level down, and I proposed it without noticing.
+
+  **No residual. Nothing is owed to the integrator on this point.**
