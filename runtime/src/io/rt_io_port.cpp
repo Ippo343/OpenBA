@@ -118,6 +118,7 @@ extern int RtIoFileSystemFindRegister();     // filesystem_find_win.cpp (lane FI
 // removes both halves; if the probe is the problem, it is already gated on the
 // diff harness and a normal run does not run it.
 extern int RtIoPackageFileRegister();        // package_file.cpp (lane PKG2)
+extern int RtIoPackageFileDtorRegister();    // package_file_dtor.cpp (W25 BODY)
 // Wave 9 lane PKG2 rung 2: the IO::CompressedStream READ path (Read, SetWindow,
 // GetAvailableWindow, DecompressFromSource) — the stack ?ReadPackfile@ stands
 // on, and the thing that gives rung 1's Compression::Decompress its first real
@@ -280,6 +281,11 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_PKG"))         n += RtIoFileSystemPackagesRegister();
     if (RtWaveEnabled("BANISHED_RT_FIND"))        n += RtIoFileSystemFindRegister();
     if (RtWaveEnabled("BANISHED_RT_PKG2"))        n += RtIoPackageFileRegister();
+    // Wave 25 lane BODY. ~PackageFile on its OWN switch, NOT folded into PKG2:
+    // it is the first body in this class that FREES, so a defect here is a
+    // double free or a leak rather than a wrong value, and the integrator must
+    // be able to A/B it while keeping the ctor and the twenty accessors.
+    if (RtWaveEnabled("BANISHED_RT_PKGDTOR"))     n += RtIoPackageFileDtorRegister();
     if (RtWaveEnabled("BANISHED_RT_CSREAD"))      n += RtIoCompressedStreamReadRegister();
     if (RtWaveEnabled("BANISHED_RT_OPENFILE"))    n += RtIoFileSystemOpenFileRegister();
     if (RtWaveEnabled("BANISHED_RT_MEMSTREAM"))   n += RtIoMemoryStreamRegister();

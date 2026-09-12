@@ -91,7 +91,20 @@ struct PackageFileView {
     RtSystem::String name;         // +0x40
     RtSystem::String author;       // +0x48
     RtSystem::String description;  // +0x50
-    uint8_t  _unknown58[0x68 - 0x58];
+    // +0x58 and +0x60 — TWO MORE System::String fields, pinned Wave 25 lane
+    // BODY by the destructor (0x1800b4540): it releases FIVE slots with the
+    // inlined refcount idiom, at +0x60, +0x58, +0x50, +0x48 and +0x40, in that
+    // (descending) order. The idiom is unmistakable — `DEC [RAX-4]` on the
+    // refcount word, the freeing arm storing `data - 8` back into the slot and
+    // the sharing arm nulling it — so the TYPE of these two is settled.
+    //
+    // THEY ARE DELIBERATELY NOT NAMED. A destructor pins a field's TYPE and
+    // says nothing whatever about its MEANING, and no reader of either offset
+    // has been found. Inventing `url`/`tag`/`category` here would put a guess
+    // where the header everywhere else carries an instruction.
+    RtSystem::String _string58;    // +0x58 — purpose unknown; type from ~PackageFile
+    RtSystem::String _string60;    // +0x60 — purpose unknown; type from ~PackageFile
+
     int32_t  version;              // +0x68 — ?GetVersion@     0x1800253d0
     int32_t  userVersion;          // +0x6C — ?GetUserVersion@ 0x1800253e0
     // +0x70 — the SORT KEY, and the only field the packfile sort compares.
@@ -158,6 +171,10 @@ static_assert(offsetof(PackageFileView, author)      == 0x48,
               "GetAuthor 0x18002536a: `MOV RAX,qword ptr [RCX+0x48]`");
 static_assert(offsetof(PackageFileView, description) == 0x50,
               "GetDescription 0x1800253aa: `MOV RAX,qword ptr [RCX+0x50]`");
+static_assert(offsetof(PackageFileView, _string58)   == 0x58,
+              "~PackageFile 0x1800b45c0: the String release idiom on [RBX+0x58]");
+static_assert(offsetof(PackageFileView, _string60)   == 0x60,
+              "~PackageFile 0x1800b4599: the String release idiom on [RBX+0x60]");
 static_assert(offsetof(PackageFileView, version)     == 0x68,
               "GetVersion 0x1800253d0: `MOV EAX,dword ptr [RCX+0x68]`");
 static_assert(offsetof(PackageFileView, userVersion) == 0x6C,

@@ -52,6 +52,7 @@ extern int RtEngineLoopsRegister();     // loops.cpp            (lane A)  — 12
 extern int RtEngineCoreRegister();      // engine.cpp           (lane B)  — 3
 extern int RtEngineLifecycleRegister(); // engine_lifecycle.cpp (lane ENG) — 8
 extern int RtEngineMainLoopRunRegister();// mainloop_run.cpp    (lane ADDR)— 2
+extern int RtEngineMainLoopFrameRegister();//mainloop_frame.cpp  (W25 BODY)— 1
 extern int RtEngineMainLoopVideoRegister();// mainloop_video.cpp (lane VIDL)— 2
 extern int RtEnginePlatformRegister();  // engine_platform.cpp  (W23 ENGINE)— 1
 extern int RtEngineLoadResourcesRegister();// updateloop_loadresources.cpp  — 1
@@ -61,7 +62,7 @@ void RtEnginePortInit() {
         printf("[RtPort] BANISHED_RT_ENGINE=0 -- Engine namespace port disabled\n");
         return;
     }
-    int loops = 0, core = 0, life = 0, mlrun = 0, mlvid = 0;
+    int loops = 0, core = 0, life = 0, mlrun = 0, mlvid = 0, mlframe = 0;
     if (RtWaveEnabled("BANISHED_RT_ENGINELOOP")) loops = RtEngineLoopsRegister();
     if (RtWaveEnabled("BANISHED_RT_ENGINECORE")) core  = RtEngineCoreRegister();
     // Wave 9 lane ENG. Kept as its OWN switch rather than folded into
@@ -80,6 +81,13 @@ void RtEnginePortInit() {
     // divergence row to read, so the integrator needs to be able to A/B this
     // one function without also giving up the Engine lifecycle ports.
     if (RtWaveEnabled("BANISHED_RT_MAINLOOPRUN")) mlrun = RtEngineMainLoopRunRegister();
+    // Wave 25 lane BODY. MainLoop::Frame, on its OWN switch for the same reason
+    // lane ADDR gave Run one, only more so: Frame runs EVERY frame, drives the
+    // message pump, the audio channel sweep and the fixed-timestep update, and
+    // has NO ORACLE. If it is wrong the symptom is "the game misbehaves", with
+    // no divergence row to read, so the integrator must be able to A/B exactly
+    // this one function while keeping Run and Update.
+    if (RtWaveEnabled("BANISHED_RT_MAINLOOPFRAME")) mlframe = RtEngineMainLoopFrameRegister();
     // Wave 9 lane VIDL. MainLoop::OnVideoError + OnVideoRestart, the
     // device-lost pair, on their OWN switch for the same reason lane ADDR has
     // one: they run only after a real (or forced) device reset, so a defect
@@ -116,6 +124,11 @@ void RtEnginePortInit() {
            "(Run closes the ADDRESS door at game_main.cpp:176 and opens two NAME "
            "doors -- Input::Device::Update and MainLoop::Frame; Run has NO ORACLE "
            "by construction -- see WAVE9_LANE_ADDR.md)\n", mlrun);
+    printf("[RtPort]   MainLoop::Frame (lane BODY, W25): %d exports registered "
+           "(closes the NAME door lane ADDR opened; opens TWO name doors -- "
+           "MainLoop::Draw ord 2251 and Audio::Device::FreeChannelPlatform ord "
+           "2380. NO ORACLE: the site is named [ATTENDANCE] and its divergences "
+           "column carries no verdict -- see WAVE25_LANE_BODY.md)\n", mlframe);
     printf("[RtPort]   Engine lifecycle (lane ENG): %d exports registered "
            "(ctor/dtor/Startup/Shutdown + 4 helpers; Shutdown is UNVERIFIED, "
            "calls=0 by construction -- see WAVE9_LANE_ENG.md)\n", life);

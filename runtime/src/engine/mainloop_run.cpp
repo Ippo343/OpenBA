@@ -85,7 +85,9 @@
 //   0x18009fdf0  Application::PlatformUpdate  PORTED  rt_application_port.cpp:36-37
 //   0x1800e1490  Input::Device::Update        not ported — lane INPUT's, 61 instrs
 //   0x1800dd070  MainLoop::Update             PORTED HERE
-//   0x1800dd100  MainLoop::Frame              not ported — 683 bytes, own lane
+//   0x1800dd100  MainLoop::Frame              PORTED (W25 BODY) mainloop_frame.cpp
+//                                                and it is 684 bytes, not 683 —
+//                                                .pdata's entry fragment reads 123.
 //
 // So: closes 1 ADDRESS door (0x1800dd3c0) and opens 2 NAME doors
 // (Input::Device::Update ord 4482, MainLoop::Frame ord 2377). That exchange is
@@ -151,6 +153,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/MainLoop.h"
+#include "mainloop_internal.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -170,33 +173,15 @@ typedef bool  (*LoopUpdateFn)(void* self, const void* t);  // slot 3
 
 inline void** LoopVtable(void* loop) { return *reinterpret_cast<void***>(loop); }
 
-// Retail's inlined CurrentTimeTicks, reading the SAME globals the rest of the
-// process reads. See §2 for why this is not RtSystem_Timer_CurrentTimeTicks().
-int64_t CurrentTimeTicksViaGlobals() {
-    static int64_t* initialTick = reinterpret_cast<int64_t*>(
-        ResolveAddr(Module::Runtime, 0x1801fe738));   // _systemInitialTick
-    static int64_t* ticksPerSec = reinterpret_cast<int64_t*>(
-        ResolveAddr(Module::Runtime, 0x1801fe720));   // _ticksPerSecond
-    static int64_t* sysTicksPerSec = reinterpret_cast<int64_t*>(
-        ResolveAddr(Module::Runtime, 0x1801fe730));   // _systemTicksPerSecond
-
-    int64_t now = 0;
-    QueryPerformanceCounter(&now);
-
-    // Retail's IDIV faults on a zero divisor rather than returning anything, so
-    // this cannot be "made safe" by guarding — a zero here means PlatformStartup
-    // has not run, which is an ordering defect upstream and must not be papered
-    // over (attempt 09's NOTES.md records exactly this global reading zero).
-    // The guard below exists ONLY to turn a #DE into a message that names the
-    // cause; it is not a fallback and it does not let the boot continue
-    // pretending.
-    if (!initialTick || !ticksPerSec || !sysTicksPerSec || *sysTicksPerSec == 0) {
-        printf("[RtMainLoop] FATAL: Timer globals not initialised "
-               "(_systemTicksPerSecond=%lld) -- PlatformStartup has not run\n",
-               sysTicksPerSec ? (long long)*sysTicksPerSec : 0);
-        return 0;
-    }
-    return (now - *initialTick) * *ticksPerSec / *sysTicksPerSec;
+// Retail's inlined CurrentTimeTicks now has ONE definition, in
+// mainloop_frame.cpp, reached through mainloop_internal.h. It used to live here
+// in this anonymous namespace, which was right while it had one caller. Wave 25
+// lane BODY added `MainLoop::Frame`, which inlines the SAME four instructions
+// against the SAME three globals, and two copies of a clock that must agree on
+// an EPOCH is how the two-epoch bug §2 describes gets reintroduced by a later
+// edit to one copy. The reasoning in §2 is unchanged and still lives here.
+inline int64_t CurrentTimeTicksViaGlobals() {
+    return rtmainloop::CurrentTimeTicksViaGlobals();
 }
 
 }  // namespace
@@ -329,8 +314,14 @@ extern "C" void RtEngine_MainLoop_Run(MainLoop* self, void* loop) {
 
     RtEngine_MainLoop_Update(self, deltaTime);
 
-    // MainLoop::Frame — NOT ported (683 bytes, its own lane). By NAME, same
-    // reasoning as Input::Device::Update above.
+    // MainLoop::Frame — **PORTED, Wave 25 lane BODY** (mainloop_frame.cpp).
+    // The call stays a NAME resolve rather than becoming a direct C++ call:
+    // `RtResolveCached` consults the port registry first, so this already lands
+    // on our body, and converting the door would delete the row from the
+    // census's `called` column as a side effect of a cosmetic edit
+    // (reference_converting_a_door_is_not_satisfying_it.md). Retail reaches
+    // Frame by rel32 here, so a direct call would also be faithful; it is not
+    // worth moving a denominator to get it.
     //
     // The loop condition is tested BEFORE the first iteration (0x1800dd44a
     // JNE past the whole body) and again at the bottom (0x1800dd4be JE back to
