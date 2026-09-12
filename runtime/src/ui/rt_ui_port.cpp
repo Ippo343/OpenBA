@@ -184,6 +184,12 @@ extern int RtUiStringTableLifecycleDtorRegister(); // stringtable_lifecycle.cpp 
 // why it lives here: standalone/resolve_standalone.cpp:333 (RtUiPortInit)
 // precedes :406 (the mint). See docs/runtime_port/WAVE28_LANE_FACTUI1.md.
 extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
+// WAVE 28 lane FACTUI2: the CreateNewObject/CreateInPlaceObject pair for the UI
+// classes in the minted-BaseTypeInfo absent-factory roster sorting at or after
+// `ImageDescription`. SpriteSheet is the live cutover wall (attempt 30). Owns
+// BANISHED_RT_UIFACT2, DEFAULT ON -- see the file banner for why opt-in would
+// make the whole file worthless (dialog_factory.cpp has been dark since Wave 11).
+extern int RtUiFactory2Register();         // ui_factory_wave28.cpp (FACTUI2)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -223,5 +229,6 @@ void RtUiPortInit() {
     n += RtUiStringTableSlotsRegister();  // same switch (FRONTIER)
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
     n += RtUiFactory1Register();  // owns BANISHED_RT_UIFACT1 (FACTUI1)
+    n += RtUiFactory2Register();          // owns BANISHED_RT_UIFACT2 (FACTUI2)
     printf("[RtPort] UI: %d exports registered\n", n);
 }
