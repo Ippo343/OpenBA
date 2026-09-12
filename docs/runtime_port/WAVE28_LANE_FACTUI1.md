@@ -575,6 +575,161 @@ skipped `--derefbug`**, and this lane nearly used it.
   something makes it fire
   (`reference_absence_screen_must_be_handed_a_shape.md`).
 
+#### The exclusion was TESTED, not recorded — and it was firing too widely
+
+FACTREST raised the shared-premise risk (residual 4) and then, instead of
+recording it, **tested whether the premise fires.** That is the sharper
+question: *not whether a premise is true, but whether it BITES, and where.*
+Applied to this lane's exclusion it found a defect in the **opposite direction**
+to theirs.
+
+`handles` — the flag that skips +0x08..+0x0f — was `sp.baseCtor != nullptr`.
+That is a **different and wider question** than "is this object Internal-rooted",
+and only an Internal-rooted object has a handle id at all. It bit two classes it
+had no business biting: **`CheckDescription` and `ComboDescription` derive from
+`??0ButtonDescription@UI@@`, which stamps `??_7Base` then `??_7External`
+(0x1801547a0 at 0x180110b2b, read in the disassembly) and never reaches
+`Internal`.** Their +0x08..+0x0f is a plain nulled field, deterministic on both
+sides, and the screen was skipping it for nothing — **16 bytes of leniency
+across two classes.**
+
+Tightened to an explicit chain test. **All three passes still green with the 16
+bytes now compared**, and both armings still fire:
+
+```
+NORMAL      26/26   14/14   31/31      <- CheckDescription / ComboDescription OK
+--negative   0/26    0/14    4/31
+--derefbug   0/26    0/14    4/31
+```
+
+So the port was right and the screen was weak. **The two lanes' defects are
+mirror images:** FACTREST's premise never fired and left two whole bodies
+uncompared; this lane's fired where it did not apply and left bytes uncompared.
+Same question, opposite sign, and both answered by **measuring the premise
+against the SUBJECT** rather than assuming its scope.
+
+**FACTREST's check applied to this lane came back clean**, and is recorded
+because a negative result from a good question is still the question working:
+they asked whether `DialogInstance` and `Element` — the two UI rows whose slot 1
+is the shared `Internal` null stub — had an uncompared slot 0, as theirs did.
+They do not. **Pass 3 iterates the whole spec table and routes on `sp.size`, not
+on the in-place slot**, so `DialogInstance`'s real allocating body is compared
+(0xb8 bytes from the arena) and `Element`'s null return is checked. Verified by
+reading the pass-3 output for those two names, not by reasoning about the code.
+
+#### `NOEXCL=1` — arming the SCOPE, and a prediction that was 2/3 right
+
+FACTREST's third arming, and the only one that can see a scope error:
+`--negative` arms a store **value**, `--derefbug` arms address **resolution**,
+and **neither touches which classes the exclusion applies to** — which is where
+both lanes' defects lived. `NOEXCL=1` disables the exclusion outright. It
+settles both directions at once:
+
+* **too wide** — an excluded row that still PASSES with the exclusion off was
+  being skipped for nothing. **A row that passes with its exclusion disabled is
+  a row whose exclusion was doing nothing.** This would have caught this lane's
+  `CheckDescription`/`ComboDescription` defect automatically.
+* **too narrow** — an unflagged row that FAILS was wrongly compared.
+
+**The prediction was written and committed to a file before the run**
+(`noexcl_prediction.txt`). Two passes matched exactly; the third did not, and
+the mismatch is the finding:
+
+```
+              predicted   measured
+  pass 1        14/26       14/26   MATCH  (the 11 Element-derived + ComboDialog)
+  pass 2         7/14        7/14   MATCH  (the same 7 classes, by name)
+  pass 3        18/31       31/31   *** WRONG ***
+  every failure at first-differing offset +0x8, nothing outside +0x08..+0x0f
+  CheckDescription / ComboDescription / every *Description: UNMOVED, as required
+```
+
+**Why pass 3 did not move, and why it matters.** Pass 3 compares only the bytes
+**our store table claims to write** — retail's block is not poisoned, so it has
+no other subject. No Element-derived store table touches +0x08..+0x0f: those
+bytes are written by the *base ctor*, not by our rows (verified — the lowest
+offsets in `kAnimatedImageElement` are 0x000 then 0x0c0). **So pass 3's copy of
+the exclusion is dead code — a premise that never bites, which is FACTREST's
+exact defect class, sitting in this lane's pass 3.**
+
+**It is a dead predicate, not a coverage hole — and after FACTREST found the
+same narrow-subject shape in their pass 2, this claim was re-checked
+MECHANICALLY rather than by eye.** `coverage.py` derives the union from the
+committed spec table:
+
+```
+ABSTRACT (pass 3 checks both sides return null)          4
+CONCRETE covered at FULL WIDTH                          27
+   via pass 1 (in-place, both buffers poisoned)         26
+   via pass 2 only (no in-place slot of ours)            1   DialogInstance
+CONCRETE covered ONLY by the narrow pass 3            NONE
+```
+
+The first version of this paragraph said "checked rather than assumed" and the
+check was **a human reading two lines of output**. That is the weaker thing this
+whole section is about, so it was redone from the table.
+
+**Why full-width coverage settles the dropped-store question.** Passes 1 and 2
+poison BOTH buffers with DIFFERENT bytes, so the subject is *the bytes either
+side wrote*: a store retail makes that we DROPPED shows up as
+poison-vs-value, and one we make that retail does not shows up as
+value-vs-poison. **Set equality of the written bytes is therefore already
+established for all 27 concrete classes in THIS slice**, which is the property
+FACTREST had to build a new pass (2b) to obtain.
+
+**The joint claim, scoped by FACTREST rather than by this lane, because a
+flattering summary is the easiest thing to accept.** An earlier draft here said
+their pass 2b "showed the same thing on their roster", which is true and reads
+much wider than it is. Their correction:
+
+```
+full-width byte-set equality, both lanes
+   FACTUI1   27 of 31 concrete classes   (the other 4 are abstract)
+   FACTREST  13 of 35                    (11 shape-(b) + 2 via pass 2b)
+   TOTAL     40 concrete classes
+NOT covered by that claim, on their side
+   10 abstract-in-both-slots rows   -- return-null is a DIFFERENT claim
+    9 video-dependent rows          -- UNVERIFIED, retail's own ctor faults
+    3 wrapper-only rows             -- EXPLICITLY EXCLUDED: both sides call the
+                                       same ctor, so set equality is trivially
+                                       true and says nothing about transcription
+```
+
+That last exclusion is the one worth carrying: **a comparison both sides pass by
+construction is not evidence, and counting it would have inflated the joint
+figure with rows that could not have failed.** It is the shadow-marker shape
+appearing one final time, in the summary rather than in a screen.
+
+This is the one place in the exchange where the two harnesses genuinely
+CORROBORATE rather than agree — different subjects, different constructions,
+same conclusion. What the mismatch corrects is
+a claim never made explicitly before: **pass 3's subject is narrower than passes
+1–2's**, and it is the allocation-path check, not a third full-width comparison.
+
+**Writing the prediction down first is what produced this.** A run that agrees
+with an unwritten expectation teaches nothing; this one disagreed in exactly one
+place and that place was a real defect.
+
+**And the technique has its own failure mode, which is FACTREST's and is worth
+more than the technique:** *a run of hits makes the next prediction feel
+measured.* They had four of five prediction slots come back hits, and wrote the
+fifth — a `--derefbug` "KNOWN GAP", with plausible reasoning — straight into a
+draft without running it. It was false; the arming fires. Four confirmations in
+a row had converted invention into something that sounded like analysis.
+**The discipline is not predicting. It is running the row before writing the
+row, and most of all the row you are confident about.** This lane's own
+`NOEXCL` table was filled in from output for that reason, including the two
+rows that matched.
+
+**A second corroboration fell out of it.** The failures are **5 bytes** —
+`+0x08` plus `+0x0c..0x0f` — independently reproducing FACTREST's `--selfdiff`
+window from the opposite direction (ours-vs-theirs rather than theirs-vs-theirs).
+`ComboElement` showed **4**, not 5, because one byte of its handle id happened
+to coincide between the two runs. That is FACTREST's `_factoryIndex` point
+arriving unbidden in this lane: **the measured window is narrower than the true
+one whenever the values happen to agree**, so a window fitted to a measurement
+is a window that fails later for a reason the measurement could not show.
+
 **Excluded, with the reason:** `Object::Internal`'s handle id at +0x08..+0x0f of
 every Element-derived object. `??0Internal@Object@@` draws it from
 `?Rand@Random@System@@` and the factory hands the second caller a DIFFERENT one
@@ -777,6 +932,27 @@ In that word, per WAVE28_KICKOFF.md §4:
    are green and neither screen can see it.**
    **Addressee: the integrator**, as a sentence attached to the practice
    wherever it is adopted — not as a reason to decline it.
+
+   **AND THE PRACTICE BELONGS IN THE KICKOFF, NOT IN A LANE DOC.** Measured
+   across this wave's two factory lanes: **15 instrument defects, 0 in the
+   ports, 0 found by their own author** — between two lanes each demonstrably
+   capable of finding the other's. Every rule either lane derived came from a
+   defect the *other* lane surfaced. **The mechanism is a PAIRING, not a rule,
+   so no lane can adopt it alone**, and a lane doc is the one place it cannot
+   take effect. It needs to be a wave-level instruction that two lanes with
+   overlapping subjects are assigned to run each other's instruments.
+
+   **PARTIALLY DISCHARGED, and the discharge is the useful part.** Both lanes
+   then tested the named premise instead of leaving it recorded, and **both
+   found a defect in their own half of it** — FACTREST's exclusion had never
+   fired at all (leaving two bodies uncompared), this lane's fired on two
+   classes it did not apply to (leaving 16 bytes uncompared). The premise
+   itself survived; the SCOPE of it was wrong in both harnesses, in opposite
+   directions. So the practice needs a second clause, and it is a **different
+   action** from the first: cross-running instruments could not have found
+   either of these, because both harnesses agreed. **Measure the premise against
+   the SUBJECT, not against another instrument.** What remains genuinely
+   untested is a premise that is wrong *in the same way* in both lanes.
 
 5. **The scratchpad transcriber is not committed.** Per standing warning 1 this
    lane built no tooling; the interpreter lives in the session scratchpad and

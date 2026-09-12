@@ -1,0 +1,50 @@
+"""FACTUI1 coverage union, derived from the committed spec table.
+
+Claim under test, made in the lane doc and previously checked BY EYE:
+"every concrete class is compared at FULL WIDTH by pass 1 or pass 2, so pass 3's
+narrower subject is a dead predicate and not a coverage hole."
+
+Full-width passes (both buffers poisoned, subject = bytes EITHER side wrote,
+so a DROPPED store and an EXTRA store are both visible):
+    pass 1  runs when ipName   != nullptr and size != 0
+    pass 2  runs when ctorName != nullptr
+Narrow pass (only our side poisoned, subject = bytes OUR table writes):
+    pass 3  runs for every row
+"""
+import re, os
+
+ROOT = r"C:\code\GIT\untitled_rev_eng_project\.claude\worktrees\agent-a7c89f2954594f26e"
+src = open(os.path.join(ROOT, "runtime", "src", "ui", "factory_ui1_tables.inc"),
+           encoding="utf-8").read()
+spec = src[src.index("const Spec kSpecs[]"):]
+rows = re.findall(
+    r'\{ "(\w+)", (0x[0-9a-f]+)ull, \d+,\s*'
+    r'(?:"([^"]*)"|nullptr), (\w+),\s*[^,]+,\s*'
+    r'"([^"]*)", 0x[0-9a-f]+ull,\s*'
+    r'(?:"([^"]*)"|nullptr), (?:0x[0-9a-f]+|0)ull,\s*'
+    r'(?:"([^"]*)"|nullptr), (?:0x[0-9a-f]+|0)ull \},', spec)
+
+print("rows parsed:", len(rows))
+hole, abstract, p1, p2, only3 = [], [], [], [], []
+for cls, size, base, tbl, nname, ip, ctor in rows:
+    sz = int(size, 16)
+    if sz == 0:
+        abstract.append(cls); continue
+    full = []
+    if ip:   full.append("pass1")
+    if ctor: full.append("pass2")
+    if full:
+        (p1 if "pass1" in full else p2).append(cls)
+    else:
+        hole.append(cls)
+print()
+print("ABSTRACT (no body; pass 3 checks both sides return null): %d" % len(abstract))
+for c in abstract: print("   ", c)
+print()
+print("CONCRETE covered at FULL WIDTH: %d" % (len(p1) + len(p2)))
+print("   via pass 1 (in-place): %d" % len(p1))
+print("   via pass 2 only (no in-place slot of ours): %s" % (p2 or "none"))
+print()
+print("*** CONCRETE covered ONLY by the narrow pass 3: %s" % (hole or "NONE"))
+print()
+print("VERDICT:", "no coverage hole" if not hole else "COVERAGE HOLE -- investigate")

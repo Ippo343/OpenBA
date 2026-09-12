@@ -60,6 +60,51 @@ static void* Sym(const char* n) { return (void*)GetProcAddress(g_dll, n); }
 // The vptr witness below exists so that this is CHECKED, not asserted.
 
 static bool g_derefBug = false;   // --derefbug: arm the vptr witness
+
+// ---------------------------------------------------------------------------
+// Does this class's ctor chain reach ??0Internal@Object@@ ?
+// ---------------------------------------------------------------------------
+// ONLY an Internal-rooted object has the handle id at +0x08..+0x0f that the two
+// runs are entitled to write differently. The first version of this screen
+// asked `sp.baseCtor != nullptr`, which is a DIFFERENT question and a strictly
+// wider one.
+//
+// Found by applying lane FACTREST's rule -- ask not whether a premise is TRUE
+// but whether it BITES, and where -- to this lane's own exclusion. It bit two
+// classes it had no business biting: CheckDescription and ComboDescription
+// derive from ??0ButtonDescription@UI@@, which stamps ??_7Base then
+// ??_7External (0x1801547a0 at 0x180110b2b, read in the disassembly) and NEVER
+// reaches Internal. Their +0x08..+0x0f is a plain nulled field, deterministic
+// on both sides, and the screen was skipping it for no reason -- 16 bytes of
+// LENIENCY across two classes.
+//
+// This is the mirror of FACTREST's defect: theirs was a premise that never
+// fired and left bodies uncompared; this one fired where it did not apply and
+// left bytes uncompared. Both are the same question answered by MEASURING the
+// premise against the subject rather than assuming its scope.
+// NOEXCL=1 disables the exclusion entirely, ARMING ITS SCOPE. Lane FACTREST's
+// third arming, and the only one that can see a scope error: --negative arms a
+// store VALUE, --derefbug arms address RESOLUTION, and neither touches WHICH
+// CLASSES the exclusion applies to -- which is precisely where both lanes'
+// defects lived.
+//
+// It settles both directions in one run:
+//   TOO WIDE    an excluded row that still PASSES with the exclusion off was
+//               being skipped for nothing. **A row that passes with its
+//               exclusion disabled is a row whose exclusion was doing
+//               nothing.** That is exactly this lane's CheckDescription /
+//               ComboDescription defect, and this check would have caught it
+//               automatically.
+//   TOO NARROW  an unflagged row that FAILS was wrongly compared.
+static bool g_noExcl = false;
+
+static bool IsInternalRooted(const Spec& sp) {
+    if (g_noExcl) return false;
+    if (!sp.baseCtor) return false;
+    return strcmp(sp.baseCtor, "??0Element@UI@@QEAA@XZ") == 0 ||
+           strcmp(sp.baseCtor, "??0DialogInstance@UI@@QEAA@XZ") == 0 ||
+           strcmp(sp.baseCtor, "??0Internal@Object@@QEAA@XZ") == 0;
+}
 typedef void* (*CtorFn)(void*);
 
 // ---------------------------------------------------------------------------
@@ -140,6 +185,10 @@ static void OursCtor(const Spec& sp, void* self) {
 int main(int argc, char** argv) {
     bool neg = (argc > 1 && strcmp(argv[1], "--negative") == 0);
     g_derefBug = (argc > 1 && strcmp(argv[1], "--derefbug") == 0);
+    g_noExcl   = (getenv("NOEXCL") != nullptr);
+    if (g_noExcl) printf("*** NOEXCL: the +0x08..+0x0f handle-id exclusion is "
+                         "DISABLED. Internal-rooted rows MUST now fail, at +0x8, "
+                         "and NOTHING ELSE may move. ***\n");
     g_dll = LoadLibraryA("C:\\GOG Games\\Banished\\Runtime-x64.dll");
     if (!g_dll) { printf("LoadLibrary failed %lu\n", GetLastError()); return 2; }
 
@@ -185,7 +234,7 @@ int main(int argc, char** argv) {
         if (!theirs) { printf("%-24s SKIP (export missing)\n", sp.cls); ++skipped; continue; }
 
         // The handle-registering classes need the InternalFactory singleton up.
-        bool handles = sp.baseCtor != nullptr;
+        bool handles = IsInternalRooted(sp);
         if (handles && (!ifSlot || !*ifSlot)) {
             printf("%-24s SKIP (InternalFactory singleton not initialised in this "
                    "bare LoadLibrary process)\n", sp.cls);
@@ -280,7 +329,7 @@ int main(int argc, char** argv) {
         if (!sp.ctorName) continue;
         CtorFn theirsC = (CtorFn)Sym(sp.ctorName);
         if (!theirsC) { printf("%-24s SKIP (ctor export missing)\n", sp.cls); continue; }
-        bool handles = sp.baseCtor != nullptr;
+        bool handles = IsInternalRooted(sp);
         static unsigned char a[0x400], b[0x400];
         memset(a, 0xA5, sizeof(a));
         memset(b, 0x5A, sizeof(b));
@@ -356,7 +405,7 @@ int main(int argc, char** argv) {
         unsigned char* b = (unsigned char*)theirsN();
         if (!b) { printf("%-24s SKIP (retail allocation failed)\n", sp.cls); continue; }
         ++nchecked;
-        bool handles3 = sp.baseCtor != nullptr;
+        bool handles3 = IsInternalRooted(sp);
         int bad = 0, firstBad = -1;
         for (uint16_t k = 0; k < sp.nStores; ++k) {
             const Store& s = sp.stores[k];
