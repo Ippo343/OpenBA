@@ -139,6 +139,15 @@ using rt::io::Serializer;
 using rt::io::Stream;
 namespace rw_vtbl = rt::io::rw_vtbl;
 
+// 0x180059820 — Array<Math::Transform>::Serialize, already ported and
+// registered by runtime/src/graphics/animationstate.cpp. `extern "C"`
+// (matching that definition's linkage) and declared at NAMESPACE SCOPE, not
+// inside the anonymous namespace below or a function body: an `extern`
+// re-declaration inside this file's own anonymous namespace would pick up
+// C++ (mangled) linkage and silently bind to nothing, rather than to that
+// file's C-linkage symbol.
+extern "C" void RtGraphics_SerializeTransformArray(void* arrayv, Serializer* ser);
+
 namespace {
 
 template <typename Fn>
@@ -310,7 +319,6 @@ extern "C" void RtGraphics_AnimationGroup_SerializeClips(Serializer* ser, int co
         RwScalar(rw, rw_vtbl::kScalarInt, &c->i4c);
 
         // Already-ported Array<Math::Transform>::Serialize (animationstate.cpp).
-        extern void RtGraphics_SerializeTransformArray(void* arrayv, Serializer* ser);
         RtGraphics_SerializeTransformArray(&c->poseData, ser);
 
         rw = ser->readerWriter;
