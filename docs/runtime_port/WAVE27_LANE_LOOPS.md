@@ -261,9 +261,33 @@ FUN_180031880                    0x180031880 -> 0
 ```
 
 Each positive found exactly once, at exactly the predicted address. So the zeros are
-real: **none of the five copy ctors is named by any table or pointer anywhere in the
-binary.** Unreachable indirectly as well as directly. §3.4's claim now rests on two
-mechanisms that fail differently, not one.
+real.
+
+**THE LIMIT OF THIS SCREEN, and my first phrasing of it was wrong.** I originally wrote
+that the zeros mean "none of the five copy ctors is named by any table or pointer
+*anywhere in the binary*". **That is false**, and lane ACHIEVE named the reason while
+reproducing this screen: it matches **64-bit VAs**, so it cannot see the **PE export
+table, which stores 32-bit RVAs**. All five copy ctors *are* exports — §2 read their
+names out of that very table. So "absent from every section" must never be read as
+"nothing names it", and in particular never as "not exported"
+(`reference_aeaa_is_private_not_unexported.md`, from its other side).
+
+What the screen does license, stated to match: **no in-DLL dispatch structure names
+them** — no vtable, jump table, function-pointer global or static-init table, which are
+the routes an indirect *in-DLL* call must come from. The remaining route is an
+**external** caller reaching an export by name. That one is closed separately and by a
+different mechanism: a grep of `runtime/ standalone/ engine/ code/` for all five
+mangled names and all five addresses returns **nothing outside comments**. Two routes,
+two mechanisms, neither standing in for the other.
+
+So §3.4's claim now rests on three screens that fail differently — direct-call scan,
+in-DLL address presence, and a source grep for the external route.
+
+**Independently reproduced.** Lane ACHIEVE ran its own implementation of this screen
+against my two positives and found `?Run@Loader@` once at `0x180157a08` and the
+UpdateLoop deleting dtor once at `0x180155ba0` — my controls, my addresses, their code.
+That cross-checks my screen rather than only self-validating it, which is worth more
+than either run alone.
 
 ---
 
