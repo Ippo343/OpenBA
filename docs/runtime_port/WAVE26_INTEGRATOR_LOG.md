@@ -129,3 +129,70 @@ becomes the DEFAULT at the Wave 27 kickoff, when no lane is in flight.**
   reaches it" and "reaches it only via non-door in-DLL calls" are
   indistinguishable to that instrument. Same consequence for promotion; NOT
   proof the class is unused.
+
+## THE NUL BUG HAS A FOURTH INSTANCE, AND THE SCREENS FOR IT HAD THE WRONG POPULATION
+
+Found by the integrator during the PROMOIO merge, by accident:
+
+```
+$ grep -n "stampers" docs/runtime_port/WAVE26_LANE_PROMOGFX.md
+Binary file docs/runtime_port/WAVE26_LANE_PROMOGFX.md matches
+```
+
+**Lane PROMOGFX's own lane doc contained 2 NUL bytes** — in the sentence explaining
+the NUL bug. That is the third time in one wave the fix for this defect reproduced
+the defect, and the file it happened in is the one that records the lane's verdicts.
+
+### Why both screens missed it: the POPULATION, not the parser
+
+- `tools/phantom_symbol_scan.py`'s NUL screen examined **1546 source files** and
+  printed `none` with live positive and negative controls. The controls were
+  sound. **The population excluded `docs/`.**
+- The integrator's "independent corroboration" was
+  `grep -rlP '\x00' --include=*.cpp --include=*.h --include=*.py ...`, which
+  **also excluded `.md`**, and which — separately — **does not work at all**:
+  it returns empty even on a file that demonstrably contains NULs.
+
+**So the second method was not a second method.** It agreed with the first because
+it was blind in the same place, and it would have agreed anyway because it never
+detects anything. Reported to the user at the time as corroboration; it was not.
+
+This is the recorded denominator family: **a denominator failure is the WRONG
+POPULATION or the WRONG UNIT, not a missing one.** Both screens named a population
+(1546 files; a `--include` list) and both named the wrong one. A screen that
+reports `none` while excluding the directory where verdicts live is worse than no
+screen, because it licenses the belief that docs were checked.
+
+### The authoritative sweep, and what it found
+
+Python, every file type, no `--include`, 13,903 files examined: **exactly one
+offending text file in our own tree** — the PROMOGFX lane doc. The other ten hits
+are genuine binaries (a `.psd`, and third-party `renderdoc_build` artefacts).
+Fixed; the doc is now readable by `git grep`.
+
+### THE MECHANISM, DEMONSTRATED ON THE INTEGRATOR
+
+The first fix attempt **silently did nothing and reported success**:
+
+```python
+d.replace(b'\x00', b'\0')      # intended: NUL -> backslash-zero
+```
+
+Inside a `<<'PY'` heredoc the backslash is eaten, so `b'\0'` arrives as `b'\0'`,
+**which is itself a NUL**. The replacement was NUL -> NUL. `before: 2, after: 2`
+printed, and only re-reading the bytes caught it. The second attempt died with
+`SyntaxError: unterminated string literal` — the same eaten backslash, failing
+loudly this time purely by luck of where it landed.
+
+**The working form uses no escape sequence at all:**
+
+```python
+NUL  = bytes([0])
+REPL = bytes([92, 48])          # backslash, '0'
+assert d2.count(NUL) == 0       # and ASSERT, because this is the failure that reports success
+```
+
+**ADDRESSEE: whoever next edits `phantom_symbol_scan.py`.** Widen the NUL screen's
+population to every text file in the repo including `docs/`, and keep the assert
+form above in any tool that strips NULs. **CONDITION: the Wave 27 kickoff**, which
+will definitely be written.
