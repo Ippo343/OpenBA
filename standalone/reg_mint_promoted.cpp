@@ -1259,8 +1259,41 @@ int RtMintRegisterPromotedRows() {
     //            NONE, EVER, and the note must say what breaks.
     //
     // RT_UNPROMOTABLE: ??_7DialogController@UI@@6B@ | 11/11 | WAVE10E_LANE_FINAL.md §2 | NONE, EVER
-    // RT_UNPROMOTABLE: ??_7Dialog@UI@@6B@ | 9/9 | WAVE10E_LANE_FINAL.md §3 | either Dialog factory ported+registered
-    // RT_UNPROMOTABLE: ?_singleton@Application@1@0PEAV11@EA | n/a (scalar ptr) | WAVE12_APPLICATION.md §ceiling | NONE, EVER | HARMFUL
+    // RT_UNPROMOTABLE: ??_7Dialog@UI@@6B@ | 9/9 | WAVE10E_LANE_FINAL.md §3 + WAVE11 lane OBJINT (runtime/src/ui/dialog_factory.cpp banner) + WAVE23_LANE_TAIL.md §2 | NOT the factory alone -- ALL THREE of (a) a factory body REGISTERED UNGATED, (b) a creator holding a BaseTypeInfo whose factoryFn is OUR pointer, and (c) that minted node present in the AVL Factory::Startup walks; (c) is blocked by the ?_firstTypeInfo split brain [SCOPE: PERMANENT] (lane TAIL wrote 'DLL-PRESENT and cutover alike'; PERMANENT is the canonical token for that meaning) [ADDRESSEE: the Wave 24 kickoff writer -- do not re-scope a lane onto this row until the _firstTypeInfo split brain is closed] | HARMFUL
+    // RT_UNPROMOTABLE: ?_singleton@Application@1@0PEAV11@EA | n/a (scalar ptr) | WAVE12_APPLICATION.md §ceiling + WAVE23_LANE_TAIL.md §5 | NONE WHILE THE DLL IS PRESENT -- **INVERTS AT CUTOVER**, where the row is REQUIRED [SCOPE: DLL-PRESENT] (lane TAIL wrote 'the HARMFUL verdict is DLL-PRESENT ONLY'; same meaning, canonical token) [ADDRESSEE: the lane that first boots without Runtime-x64.dll -- this row must be minted then, and the 'EXPIRY: none' prose below was written before route scoping existed] | HARMFUL (DLL-present) / REQUIRED (cutover)
+    //
+    // ---- WAVE 23 LANE TAIL: the four Audio/Input singletons -------------
+    //
+    // These four carried NO TAG AT ALL before this wave, which is how each
+    // successive lane rediscovered them from scratch. Each was decided on ITS
+    // OWN xrefs and NOT by analogy with its sibling one namespace over -- the
+    // rule Wave 22 lane ERRCFG paid for by refuting the general split-brain
+    // story for 3 of its own 5 rows.
+    //
+    // METHOD, identical for all four and stated so the numbers can be
+    // re-derived: Ghidra get_xrefs_to on the slot, PLUS a decoder-independent
+    // scan of every disp32 window in .text whose RIP-relative target is the
+    // slot (imm widths 0/1/2/4, because `MOV qword ptr [rip+d],0` measures RIP
+    // past the imm32 -- the encoding that made the same scan under-report in
+    // reg_mint_promoted's SaveLoad section). THE TWO ROUTES AGREE EXACTLY on
+    // all four counts, and on Application's 26 as well. Readers were then
+    // classified by grepping RegisterRuntimeExport in runtime/ -- NOT by the
+    // census CSV, which is keyed on `called` and therefore reported SEVEN
+    // registered-but-uncalled bodies as absent (PauseEffect, StopEffect,
+    // OnFocusMessage, OnLostFocusMessage, OnMouseWheelMessage, WindowProc and
+    // Get@Application). That blind spot is recorded because it inflates the
+    // unported-reader count in the HARMFUL direction, i.e. towards the
+    // conclusion reached anyway -- it had to be removed before the conclusion
+    // could be trusted.
+    //
+    // EVERY ONE STILL HAS UNPORTED IN-DLL READERS after that correction, so
+    // every one is HARMFUL to promote today; and every one INVERTS at cutover,
+    // where those readers do not exist and nothing else supplies the storage.
+    //
+    // RT_UNPROMOTABLE: ?_singleton@Configuration@Audio@@0PEAV12@EA | n/a (scalar ptr) | WAVE23_LANE_TAIL.md §1 | 9 refs = 7 W + 2 R, and BOTH readers are unported (?Get@Configuration@Audio@@ has no body at all; ?Update@Scene@Audio@@ is held back this wave and runs every frame) [SCOPE: DLL-PRESENT] [ADDRESSEE: the lane that first boots without Runtime-x64.dll] | HARMFUL (DLL-present) / REQUIRED (cutover)
+    // RT_UNPROMOTABLE: ?_singleton@Device@Audio@@0PEAV12@EA | n/a (scalar ptr) | WAVE23_LANE_TAIL.md §1 | 8 refs = 1 W + 7 R; 3 readers ported (PauseEffect/StopEffect/StopAll), 4 NOT (??1SoundBuffer, ?Run@Stream, ?Get@Device@Audio, ?Update@Scene@Audio) [SCOPE: DLL-PRESENT] [ADDRESSEE: the lane that first boots without Runtime-x64.dll] | HARMFUL (DLL-present) / REQUIRED (cutover)
+    // RT_UNPROMOTABLE: ?_singleton@Configuration@Input@@0PEAV12@EA | n/a (scalar ptr) | WAVE23_LANE_TAIL.md §3 | 24 refs = 7 W + 16 R over 13 distinct readers; only 4 ported, and THREE of the unported readers are UNEXPORTED DLL INTERNALS (FUN_18000db80 / FUN_18000dd60 / FUN_1800a1dc0) which have no door and can never be ported by name [SCOPE: DLL-PRESENT] [ADDRESSEE: the lane that first boots without Runtime-x64.dll] | HARMFUL (DLL-present) / REQUIRED (cutover)
+    // RT_UNPROMOTABLE: ?_singleton@Device@Input@@0PEAV12@EA | n/a (scalar ptr) | WAVE23_LANE_TAIL.md §3 | 17 refs = 1 W + 16 R over 14 distinct readers; 4 ported, 7 not (incl. ?Released@KeyMap and ?GetNormalizedValue@KeyMap, whose SIBLINGS ?Pressed@ and ?GetValue@ ARE ported -- a half-ported reader set, which is why this row cannot be decided by looking at the class) [SCOPE: DLL-PRESENT] [ADDRESSEE: the lane that first boots without Runtime-x64.dll] | HARMFUL (DLL-present) / REQUIRED (cutover)
     // RT_UNPROMOTABLE: ??_7Base@Object@@6B@ | 2/2 (1 purecall) [CONV: M=NONPURECALL] [RE-DERIVED WAVE23 LANE OBJ: 3-slot table, adjacent-export UPPER bound, corroborated by layout congruence with the hard-bounded External/CompiledExternal rows] | WAVE11_LANE_OBJDATA.md §2 + WAVE23_LANE_OBJ.md §1 | NO-OP is a property of C++ and survives cutover, but NOT-PUBLISHING does not: 13 files in this tree reach this symbol by NAME and ResolveExport returns NULL for an unpublished row with no DLL loaded [SCOPE: DLL-PRESENT] [ADDRESSEE: the Wave 23 integrator, who carries the ten-row Object cutover-publish list from WAVE23_LANE_OBJ.md §6 into the Wave 24 kickoff]
     // RT_UNPROMOTABLE: ??_7External@Object@@6B@ | 4/4 (4 purecall) [CONV: M=NONPURECALL] [RE-DERIVED WAVE23 LANE OBJ: 8-slot table, HARD bound - slot 8 is the ASCII tail of "External", not a pointer] | WAVE11_LANE_OBJDATA.md §2 + WAVE23_LANE_OBJ.md §1 | as ??_7Base: NO-OP on every route, 13 by-name doors resolve NULL at cutover unless published [SCOPE: DLL-PRESENT] [ADDRESSEE: the Wave 23 integrator, who carries the ten-row Object cutover-publish list from WAVE23_LANE_OBJ.md §6 into the Wave 24 kickoff]
     // RT_UNPROMOTABLE: ??_7CompiledExternal@Object@@6B@ | 4/4 (4 purecall) [CONV: M=NONPURECALL] [RE-DERIVED WAVE23 LANE OBJ: 8-slot table, HARD bound - the qword after slot 7 is string data] | WAVE11_LANE_OBJDATA.md §2 + WAVE23_LANE_OBJ.md §1 | NO-OP on every route; ONE by-name door (runtime/src/video/buffers.cpp:445) resolves NULL at cutover unless published [SCOPE: DLL-PRESENT] [ADDRESSEE: the Wave 23 integrator, who carries the ten-row Object cutover-publish list from WAVE23_LANE_OBJ.md §6 into the Wave 24 kickoff]

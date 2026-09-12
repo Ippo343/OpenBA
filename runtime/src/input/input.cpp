@@ -677,8 +677,51 @@ void RtInput_Configuration_Save(void* self) {
 // ============================================================================
 // Register
 // ============================================================================
+// ---------------------------------------------------------------------------
+// Input::Configuration::~Configuration() - retail 0x1800E0E10, ord 555.
+// WAVE 23 LANE TAIL.
+//
+// The WHOLE retail body:
+//
+//   1800e0e10  MOV qword ptr [0x1801fe768],0x0
+//   1800e0e1b  RET
+//
+// The exact twin of `??1Configuration@Audio@@` (0x1800DE0D0) one namespace
+// over, down to the instruction encoding, differing only in which slot it
+// nulls. THEY WERE STILL READ SEPARATELY: this lane's brief forbids letting
+// one namespace's answer stand in for another's, and a two-instruction body is
+// exactly the shape where "same as the other one" would have been assumed
+// rather than checked. Both were disassembled at their own addresses.
+//
+// `QEAA`, the NON-VIRTUAL spelling, verified present in the export directory
+// with pefile; the `UEAA` virtual spelling is absent and would resolve NULL.
+//
+// The address written is `?_singleton@Configuration@Input@@0PEAV12@EA`
+// (0x1801FE768, ord 4802) - another of this lane's DATA rows - so the store
+// goes through RT_DATA_SLOT for the same reason the Audio twin's does. Note
+// that this file's existing `input_device_update.cpp` already documents
+// 0x1801FE768 under that name, which is an independent confirmation of the
+// identity rather than a second reading of the same source.
+// ---------------------------------------------------------------------------
+void RtInput_Configuration_Dtor(void* /*selfPtr - never read*/) {
+    RT_DIFF_BEGIN("Input::Configuration::~Configuration");
+    RT_DIFF_WORK(true);          // unconditional; there is no branch
+
+    *RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA") = nullptr;
+
+    RT_DIFF_SHADOW(true, "cleared Input::Configuration::_singleton",
+                   "no return value and one observable store");
+}
+
 int RtInputRegister() {
     int n = 0;
+    // WAVE 23 LANE TAIL. Reached by name from
+    // runtime/src/engine/engine_lifecycle.cpp's Engine::Shutdown teardown.
+    // Registered from HERE rather than from RtInputConfigStartupRegister(),
+    // which is gated behind BANISHED_RT_INPUTCFGSTART: a gated registration is
+    // not a port and tools/runtime_census.py will not count it.
+    RegisterRuntimeExport("??1Configuration@Input@@QEAA@XZ", (void*)&RtInput_Configuration_Dtor);
+    RegisterRuntimeAddr(0x1800e0e10, (void*)&RtInput_Configuration_Dtor); ++n;
 
     RegisterRuntimeExport("?ClearAll@KeyMap@Input@@QEAAXXZ", (void*)&RtInput_KeyMap_ClearAll);
     RegisterRuntimeAddr(0x1800a7d20, (void*)&RtInput_KeyMap_ClearAll); ++n;

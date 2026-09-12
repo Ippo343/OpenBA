@@ -842,6 +842,134 @@ void* RtUi_UIString_ToSystemString(const void* selfRaw, void* retval) {
 extern int RtUiSpriteContextRegister();
 
 // ============================================================================
+// ============================================================================
+// 0x1800034F0  UI::SpriteSheet::Set(int, int, String const&, String const&, bool)
+//              ord 3819.  WAVE 23 LANE TAIL
+// ============================================================================
+//
+// Five parameters, and the mangling `XHHAEBVString@System@@0_N` is what pins
+// their order: int, int, String const&, String const& (the `0` is MSVC's
+// back-reference meaning "same type as the previous argument"), bool.
+//
+// THE ARGUMENT MAPPING WAS READ OFF THE PROLOGUE, not assumed from the
+// mangling, because two of the five arrive on the stack. Retail saves four
+// registers into the shadow space, pushes R14 and subtracts 0x20, so the frame
+// has moved 0x28 by the time the stack arguments are read:
+//
+//   RCX          -> this
+//   EDX  -> R14D -> p1 (int)     stored to +0x48 at 0x1800035B1
+//   R8D  -> EBP  -> p2 (int)     stored to +0x4C at 0x1800035A6
+//   R9   -> RDI  -> p3 (String&) assigned to +0x38
+//   [RSP+0x50]   -> p4 (String&) assigned to +0x40   (caller slot +0x28 = arg5)
+//   [RSP+0x58]   -> p5 (bool)    stored to +0x50 at 0x1800035AE (caller +0x30)
+//
+// NOTE THE ORDER IS NOT SOURCE ORDER: the body assigns +0x40 from p4 FIRST
+// (0x1800034FF..0x180003558) and +0x38 from p3 SECOND. Reproduced.
+//
+// THIS ALSO NAMES THREE FIELDS runtime/types/ui/SpriteSheet.h left as
+// `m_field48` / `m_field4C` / `m_field50` "unknown". They are precisely this
+// function's two ints and its bool. The header is NOT renamed here - a name
+// needs more evidence than "the one setter that writes it", and this lane has
+// no reader to corroborate against. Recorded in the lane report instead.
+//
+// ---------------------------------------------------------------------------
+// THE STRING ASSIGN IDIOM, AND THE QUIRK IN IT
+// ---------------------------------------------------------------------------
+// `System::String` is a bare `char*` into a refcounted block: the refcount is
+// the dword at [data-4] and the allocation base is [data-8], which is the same
+// layout spritecapture.cpp's `StringRc` / `ReleaseString` helpers already use.
+// Retail's member-assign, per string (0x180003519..0x180003558):
+//
+//   old = this->field;
+//   if (old != *src) {                       ; pointer identity short-circuit
+//       if (old) {
+//           if (--*(int32_t*)(old - 4) == 0) {
+//               this->field -= 8;            ; *** the field itself is adjusted
+//               MemFree(this->field);        ; *** and THEN passed to MemFree
+//           } else {
+//               this->field = nullptr;       ; *** see below
+//           }
+//       }
+//       this->field = *src;
+//       if (this->field) ++*(int32_t*)(this->field - 4);
+//   }
+//
+// TWO THINGS HERE ARE DELIBERATE AND WOULD LOOK LIKE TRANSCRIPTION ERRORS:
+//
+//  * THE `else this->field = nullptr;` BRANCH (0x180003542 / 0x180003580).
+//    When the refcount is still non-zero retail NULLS the member before
+//    overwriting it two instructions later. The store is dead in every
+//    single-threaded reading of this function. It is reproduced because it is
+//    what the bytes do, and because a reader diffing this against the
+//    disassembly must not find a "simplification" they then have to re-derive.
+//  * THE FREE GOES THROUGH THE MEMBER, NOT A LOCAL. Retail writes
+//    `ADD qword ptr [this+0x40],-8` and then loads that same member back as
+//    MemFree's argument. Same value as `MemFree(old - 8)` would be, but it
+//    leaves the member transiently pointing at the allocation base, and this
+//    body reproduces the sequence rather than the shortcut.
+//
+// The only callee is `?MemFree@MemoryAllocator@System@@SAXPEAX@Z`
+// (0x1800C7AD0, confirmed by pefile against the export directory), which this
+// file already reaches through its existing MemFree door. No other call.
+// ---------------------------------------------------------------------------
+namespace {
+
+// Retail's member-assign, written once and used twice so the two call sites
+// cannot drift apart. `slot` is the MEMBER, taken by reference on purpose -
+// see "the free goes through the member" above.
+inline void RtUi_SpriteSheetAssignString(char*& slot, char* const* src) {
+    char* old = slot;
+    if (old == *src) return;                 // pointer identity short-circuit
+    if (old) {
+        if (--*reinterpret_cast<int32_t*>(old - 4) == 0) {
+            slot -= 8;                       // the member is adjusted...
+            // ...and then freed THROUGH the member. The door is
+            // RT_ORIGINAL_ONCE and not the port-aware RT_EXPORT_ONCE, to match
+            // `ReleaseStringRef` above and the other String sites in this
+            // file: every String block here is allocated and freed through the
+            // SAME door, and mixing doors inside one refcounted block is the
+            // hazard. rt_port.h's standing advice is the opposite
+            // (RT_EXPORT_ONCE for a dependency) and that tension is real - it
+            // is flagged to lane ALLOC in this lane's report rather than
+            // resolved here, because the allocator is ALLOC's subject and
+            // WAVE23_KICKOFF 1a puts it out of bounds for this lane.
+            using FreeFn = void (*)(void*);
+            FreeFn memFree = RT_ORIGINAL_ONCE(FreeFn,
+                "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
+            memFree(slot);
+        } else {
+            slot = nullptr;                  // dead store, faithful - see banner
+        }
+    }
+    slot = *src;
+    if (slot) ++*reinterpret_cast<int32_t*>(slot - 4);
+}
+
+}  // namespace
+
+extern "C" void RtUi_SpriteSheet_Set(void* selfRaw, int p1, int p2,
+                                     const void* p3Raw, const void* p4Raw,
+                                     bool p5) {
+    RT_DIFF_BEGIN("UI::SpriteSheet::Set");
+    RT_DIFF_WORK(true);          // no early-out at function scope
+
+    auto* self = static_cast<SpriteSheet*>(selfRaw);
+
+    // p4 -> +0x40 FIRST, then p3 -> +0x38. Retail's order, not source order.
+    RtUi_SpriteSheetAssignString(self->m_groupName,
+                                 static_cast<char* const*>(p4Raw));
+    RtUi_SpriteSheetAssignString(self->m_textureName,
+                                 static_cast<char* const*>(p3Raw));
+
+    // The three scalars, in retail's store order: +0x4C, then +0x50, then +0x48.
+    self->m_field4C = p2;
+    self->m_field50 = static_cast<uint8_t>(p5);
+    self->m_field48 = p1;
+
+    RT_DIFF_SHADOW(true, "assigned both strings and the three scalars",
+                   "no return value; the observable state is the object");
+}
+
 int RtUiSpriteRegister() {
     int n = 0;
 
@@ -859,6 +987,10 @@ int RtUiSpriteRegister() {
     RegisterRuntimeExport("?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z",
                           (void*)&RtUi_SpriteSheet_GetSpriteIndexFromName); ++n;
     RegisterRuntimeExport("?GetUVs@SpriteSheet@UI@@QEBAXHAEAM000@Z", (void*)&RtUi_SpriteSheet_GetUVs); ++n;
+    // WAVE 23 LANE TAIL. Reached by name from runtime/src/save/saveload_draw.cpp.
+    RegisterRuntimeExport("?Set@SpriteSheet@UI@@QEAAXHHAEBVString@System@@0_N@Z",
+                          (void*)&RtUi_SpriteSheet_Set); ++n;
+    RegisterRuntimeAddr(0x1800034f0, (void*)&RtUi_SpriteSheet_Set);
     // WAVE 10 LANE UI4 — the callee this wave's SpriteCapture::AddSprite opened.
     RegisterRuntimeExport("?GetSpriteNameFromIndex@SpriteSheet@UI@@QEBA?AVString@System@@H@Z",
                           (void*)&RtUi_SpriteSheet_GetSpriteNameFromIndex); ++n;

@@ -1270,10 +1270,58 @@ int RtAudioSceneRegister() {
     return n;
 }
 
+// ---------------------------------------------------------------------------
+// Audio::Configuration::~Configuration() - retail 0x1800DE0D0, ord 554.
+// WAVE 23 LANE TAIL.
+//
+// The WHOLE retail body, read at its real address in the shipped DLL:
+//
+//   1800de0d0  MOV qword ptr [0x1801fe758],0x0
+//   1800de0db  RET
+//
+// Two instructions. It destroys nothing - it clears the class's own singleton
+// pointer and returns. No base dtor, no member dtor, no free (the caller frees:
+// runtime/src/engine/engine_lifecycle.cpp does `dtor(p); MemFree(p);`, which is
+// what the exported `??1` spelling means).
+//
+// `QEAA` is the NON-VIRTUAL dtor spelling and it is the one the export table
+// carries; the virtual spelling `??1Configuration@Audio@@UEAA@XZ` does not
+// exist in this DLL and would resolve NULL silently
+// (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). Checked with pefile
+// against the export directory before this body was written, not assumed.
+//
+// THE ADDRESS IT WRITES IS `?_singleton@Configuration@Audio@@0PEAV12@EA`
+// (0x1801FE758, ord 4801) - one of this lane's own DATA rows. That identity is
+// not a guess: the export directory maps ord 4801 to exactly 0x1801FE758.
+//
+// SO THE STORE GOES THROUGH THE DOOR, not through a hard-coded address. With
+// the DATA row unpromoted the door IS the DLL's slot and this is byte-identical
+// to retail; if the row is ever promoted, this writer moves with it instead of
+// being stranded writing a slot nobody reads. That is the whole point of
+// porting a two-instruction function: it converts retail's un-interceptable
+// RIP-relative store into a door. See this lane's report for why the row is
+// NOT promoted today regardless.
+// ---------------------------------------------------------------------------
+void RtAudio_Configuration_Dtor(void* /*selfPtr - never read*/) {
+    RT_DIFF_BEGIN("Audio::Configuration::~Configuration");
+    RT_DIFF_WORK(true);          // unconditional; there is no branch
+
+    // `this` is genuinely unused - retail's two instructions never touch RCX.
+    *RT_DATA_SLOT(void**, "?_singleton@Configuration@Audio@@0PEAV12@EA") = nullptr;
+
+    RT_DIFF_SHADOW(true, "cleared Audio::Configuration::_singleton",
+                   "no return value and one observable store");
+}
+
 int RtAudioConfigurationRegister() {
     int n = 0;
     RegisterRuntimeExport("?Save@Configuration@Audio@@QEAAXXZ", (void*)&RtAudio_Configuration_Save); ++n;
     RegisterRuntimeExport("?Startup@Configuration@Audio@@QEAA_NXZ", (void*)&RtAudio_Configuration_Startup); ++n;
+    // WAVE 23 LANE TAIL. Reached by name from
+    // runtime/src/engine/engine_lifecycle.cpp's Engine::Shutdown teardown.
+    // Both doors, as everywhere else in this lane.
+    RegisterRuntimeExport("??1Configuration@Audio@@QEAA@XZ", (void*)&RtAudio_Configuration_Dtor);
+    RegisterRuntimeAddr(0x1800de0d0, (void*)&RtAudio_Configuration_Dtor); ++n;
     return n;
 }
 

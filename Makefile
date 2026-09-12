@@ -305,6 +305,37 @@ libm-sweep:
 	    runtime/src/crt/msvc_libm.cpp -o tools/libm_probe/sweep.exe
 	tools/libm_probe/sweep.exe $(LIBM_SWEEP_ARGS)
 
+# WAVE 23 LANE TAIL. An input-sweep oracle for the two ported UI bodies
+# ?EndAddingSprites@SpriteCapture@UI@@ and ?Set@SpriteSheet@UI@@, built from the
+# REAL wave sources plus an inert registration seam, so "theirs" can only ever
+# be the shipped export (GetProcAddress) and never our own body. It needs the
+# DLL present but NOT the game directory -- it LoadLibrary()s Runtime-x64.dll
+# read-only, which is why it could be run in a wave where the game-directory
+# lock was never free.
+#
+# Three controls, run by `endsprites-sweep-controls`, each with an EXACT
+# expected count rather than "some":
+#   --negctl=compared    corrupt a compared field      -> all 22 cases must fail
+#   --negctl=entry       corrupt a compared ENTRY field -> exactly 15 must fail
+#   --negctl=uncompared  corrupt an uncompared field   -> 0 must fail
+# The exe exits non-zero when any of those expectations is missed, so a control
+# that stops working is a build failure and not a line of prose nobody reads.
+ENDSPRITES_SWEEP_SRCS = tools/endsprites_probe/sweep.cpp \
+                        tools/endsprites_probe/seam_stub.cpp \
+                        runtime/src/ui/spritecapture.cpp \
+                        runtime/src/ui/sprite.cpp \
+                        runtime/src/system/string.cpp \
+                        runtime/funcs/rt_diff.cpp
+.PHONY: endsprites-sweep endsprites-sweep-controls
+endsprites-sweep:
+	$(CXX) -std=c++17 -O1 -g $(ENDSPRITES_SWEEP_SRCS) -o tools/endsprites_probe/sweep.exe
+	tools/endsprites_probe/sweep.exe
+
+endsprites-sweep-controls: endsprites-sweep
+	tools/endsprites_probe/sweep.exe --negctl=compared
+	tools/endsprites_probe/sweep.exe --negctl=entry
+	tools/endsprites_probe/sweep.exe --negctl=uncompared
+
 # Re-extract the coefficient tables from the shipped DLL. Only needed if the
 # table header is ever suspected of drift; the header is checked in.
 .PHONY: libm-tables

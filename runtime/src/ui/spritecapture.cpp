@@ -353,6 +353,100 @@ extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRa
 // rt_ui_port.cpp, whose header says not to edit it to add a lane — the same
 // route RtUiSpriteContextRegister() already takes. Own kill switch so this
 // lane can be A/B'd without disturbing the rest of the sprite family.
+// ============================================================================
+// 0x1800D8A60  UI::SpriteCapture::EndAddingSprites()      ord 2304
+// WAVE 23 LANE TAIL
+// ============================================================================
+//
+// A PURE function over `_entries`: no calls at all, no allocation, no
+// virtuals, nothing outside the object. That is unusual enough in this
+// namespace to state plainly, because it is what makes the body verifiable by
+// an INPUT SWEEP against the shipped export rather than by waiting for a
+// gameplay route (project_pure_functions_verify_by_sweep.md).
+//
+// Two passes over the same array:
+//
+//  1. BOUNDING BOX, over entries with `sheetIndex >= 0` only. Scissor entries
+//     (`AddScissor` stores -1 or -2 at +0x00) are SKIPPED by `JL` at
+//     0x1800D8A93 and contribute nothing to the extent.
+//  2. REBASE, over EVERY entry including the scissors, subtracting the box
+//     origin from all four coordinates.
+//
+// Retail:
+//   1800d8a64  if (_entries.size <= 0) skip pass 1 entirely
+//              minX = minY =  0x8000        ; +32768
+//              maxX = maxY = -0x8000        ; -32768
+//   1800d8a90  for each entry e:
+//                  if (e.sheetIndex < 0) continue;
+//                  minX = min(minX, e.x1);  maxX = max(maxX, e.x2);
+//                  minY = min(minY, e.y1);  maxY = max(maxY, e.y2);
+//   1800d8ac4  _width  = maxX - minX + 1;
+//   1800d8ad4  _height = maxY - minY + 1;
+//   1800d8af0  for each entry e (ALL of them):
+//                  e.x1 -= minX; e.x2 -= minX;
+//                  e.y1 -= minY; e.y2 -= minY;
+//
+// THE DEGENERATE CASE IS REPRODUCED, NOT REPAIRED. With zero entries - or with
+// entries that are ALL scissors, which pass 1 skips - the seeds survive
+// untouched and retail stores `_width = _height = -32768 - 32768 + 1 = -65535`.
+// That is what the shipped DLL does and it is what this body does. It is
+// exactly the shape CLAUDE.md's "don't fix a faithful crash with a null check"
+// rule is about: clamping it here would not restore retail's behaviour, it
+// would hide it from whatever reads `_width` next.
+//
+// THE SEEDS ARE SIGNED 32-BIT, and the min/max are `CMOVL`/`CMOVG` on dwords,
+// so the whole computation is `int32_t`. Written as `int32_t` rather than
+// `int` so the width there is stated, not inherited from the platform.
+//
+// THE TWO PASSES USE DIFFERENT CURSORS IN RETAIL (RAX walking the array in
+// pass 1, an `R9` byte offset re-reading `_entries.data` from `R10` every
+// iteration in pass 2). Both are just `entries[i]`; the second one's re-read
+// matters only if something could reallocate the array mid-loop, and nothing
+// in either pass calls anything at all. Written as one indexed loop each.
+// ---------------------------------------------------------------------------
+extern "C" void RtUi_SpriteCapture_EndAddingSprites(void* selfRaw) {
+    RT_DIFF_BEGIN("UI::SpriteCapture::EndAddingSprites");
+
+    auto* self = static_cast<SpriteCapture*>(selfRaw);
+    const int32_t count = self->_entries.size;
+    auto* entries = static_cast<CaptureEntry*>(self->_entries.data);
+
+    // The work verdict is "pass 1 actually saw a non-scissor entry". A capture
+    // with zero entries, or one holding nothing but scissors, runs the whole
+    // body and computes the degenerate extent - `calls=` would count that as
+    // exercised and it is not (reference_probe_needs_an_effectiveness_control.md).
+    int32_t contributed = 0;
+
+    int32_t minX =  0x8000, minY =  0x8000;
+    int32_t maxX = -0x8000, maxY = -0x8000;
+
+    for (int32_t i = 0; i < count; ++i) {
+        const CaptureEntry& e = entries[i];
+        if (e.sheetIndex < 0) continue;          // scissors excluded from the box
+        ++contributed;
+        if (e.x1 < minX) minX = e.x1;
+        if (e.x2 > maxX) maxX = e.x2;
+        if (e.y1 < minY) minY = e.y1;
+        if (e.y2 > maxY) maxY = e.y2;
+    }
+
+    self->_width  = maxX - minX + 1;
+    self->_height = maxY - minY + 1;
+
+    // Pass 2 rebases EVERY entry, scissors included - see the banner.
+    for (int32_t i = 0; i < count; ++i) {
+        CaptureEntry& e = entries[i];
+        e.x1 -= minX;
+        e.x2 -= minX;
+        e.y1 -= minY;
+        e.y2 -= minY;
+    }
+
+    RT_DIFF_WORK(contributed != 0);
+    RT_DIFF_SHADOW(true, "computed the extent and rebased every entry",
+                   "pure; an input sweep is the oracle, not a replay");
+}
+
 int RtUiSpriteCaptureRegister() {
     if (!RtWaveEnabled("BANISHED_RT_UISPRITECAP"))
         return 0;
@@ -372,6 +466,14 @@ int RtUiSpriteCaptureRegister() {
     RegisterRuntimeExport("?AddScissor@SpriteCapture@UI@@QEAAXHHHH_N@Z",
                           (void*)&RtUi_SpriteCapture_AddScissor); ++n;
     RegisterRuntimeAddr(0x1800d8ef0, (void*)&RtUi_SpriteCapture_AddScissor);
+
+    // WAVE 23 LANE TAIL. Reached by name from
+    // runtime/src/save/saveload_draw.cpp and runtime/src/ui/userinterface_draw.cpp
+    // (which spells it into the constant `kEndSprites`) - two live call sites,
+    // both of which flip onto this body. Both doors, as everywhere in this file.
+    RegisterRuntimeExport("?EndAddingSprites@SpriteCapture@UI@@QEAAXXZ",
+                          (void*)&RtUi_SpriteCapture_EndAddingSprites); ++n;
+    RegisterRuntimeAddr(0x1800d8a60, (void*)&RtUi_SpriteCapture_EndAddingSprites);
 
     // The oracle. No-op unless BANISHED_RT_DIFF and
     // BANISHED_RT_SPRITECAP_PROBE are both on; see spritecapture_probe.cpp.

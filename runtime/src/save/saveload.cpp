@@ -1153,6 +1153,74 @@ void RtSave_SavedState_Retrieve(SavedState* self, MemoryStream* stream) {
 // already counted, not extra ports. Incrementing here would inflate the census
 // figure the project treats as authoritative over any agent's claim.
 // ============================================================================
+// ---------------------------------------------------------------------------
+// Save::SaveLoad::Get() - retail 0x180030D40, ord 2425.  WAVE 23 LANE TAIL
+//
+// The WHOLE retail body:
+//
+//   180030d40  MOV RAX,qword ptr [0x1801fc6f0]
+//   180030d47  RET
+//
+// `SA` is the static-member spelling: no `this`, returns `SaveLoad*`.
+//
+// ---------------------------------------------------------------------------
+// WHY THIS ROW EXISTS AT ALL, SAID PLAINLY
+// ---------------------------------------------------------------------------
+// It is in the census's `called` column because standalone/rt_orphan_probe.cpp
+// NAMES IT AS A STRING LITERAL, and that file says so itself. Nothing in any
+// shipped binary calls it. Lane TAIL re-derived that independently rather than
+// inheriting it:
+//
+//   * Runtime-x64.dll: `get_xrefs_to(0x180030d40)` returns exactly two
+//     references, `0x1801B3028 [DATA]` (a .pdata unwind record) and the export
+//     directory. No call site.
+//   * Application-x64.exe (899 imports), VideoDX11-x64.dll (163) and
+//     VideoDX9-x64.dll (146): the name is in none of their import tables.
+//     Checked with pefile in this lane, not quoted from the prior record.
+//
+// SO THIS PORT CLOSES A ROW OUR OWN DIAGNOSTIC CREATED AND BUYS NO BEHAVIOUR
+// TODAY. That is stated rather than dressed up. It is landed anyway for one
+// reason that is NOT cosmetic:
+//
+//   `?_singleton@SaveLoad@Save@@0PEAV12@EA` IS PROMOTED (census ported=1), so
+//   our storage is the live one and the DLL's .data copy is stale. Retail's
+//   `Get` is an un-interceptable RIP-relative load of that stale copy - the
+//   very fact reg_mint_promoted.cpp leans on to argue the promotion is safe.
+//   Reading through RT_DATA_SLOT makes OUR `Get` return the live pointer, so
+//   the symbol is correct at cutover instead of resolving null.
+//
+// ---------------------------------------------------------------------------
+// THIS DOES NOT DARKEN THE ORACLE - CHECKED, NOT ASSUMED
+// ---------------------------------------------------------------------------
+// `ProbeSaveLoadSingleton` uses retail's `Get` as its oracle: it writes six
+// sentinels into the DLL's raw slot and requires `Get` to hand each back. That
+// is exactly the shape that went dark for five waves in Wave 5's Goal::Serialize
+// probe, where the ours-side reached the body BY ADDRESS and so compared retail
+// with itself (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
+//
+// It survives here because the probe resolves `Get` with **ResolveExportRaw**
+// (standalone/rt_orphan_probe.cpp, `retailGet`), which skips the port registry
+// by construction. Registering this body under the NAME door leaves that line
+// pointing at the shipped bytes. The ADDRESS door is registered too, and that
+// is the one that COULD have broken it - it does not, because the probe never
+// resolves 0x180030D40 by address. Both doors were checked against that file
+// before either was added.
+// ---------------------------------------------------------------------------
+SaveLoad* RtSave_SaveLoad_Get() {
+    RT_DIFF_BEGIN("Save::SaveLoad::Get");
+    RT_DIFF_WORK(true);          // unconditional; there is no branch
+
+    // `SaveLoadSingletonSlot()` is this file's existing door on 0x1801FC6F0 -
+    // the same one `SaveLoad_CtorLogic` publishes through (saveload.cpp:233).
+    // Retail dereferences the slot unconditionally; the null check here is NOT
+    // a behaviour guard but the slot-resolution contract RT_DATA_SLOT carries
+    // (a name that has not been minted yet returns null rather than a slot),
+    // and it is the same shape the three sibling accessors in
+    // saveload_internal.h use.
+    SaveLoad** slot = SaveLoadSingletonSlot();
+    return slot ? *slot : nullptr;
+}
+
 int RtSaveLoadRegister() {
     int n = 0;
     RegisterRuntimeExport("??0SaveLoad@Save@@QEAA@XZ", (void*)&RtSave_SaveLoad_Ctor); ++n;
@@ -1189,6 +1257,10 @@ int RtSaveLoadRegister() {
     RegisterRuntimeExport("?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ", (void*)&RtSave_SaveLoad_GenerateSaveName); ++n;
     RegisterRuntimeAddr(0x1800c1250, (void*)&RtSave_SaveLoad_GenerateSaveName);
     RegisterRuntimeExport("?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ", (void*)&RtSave_SaveLoad_GetOperation); ++n;
+    // WAVE 23 LANE TAIL. Both doors; the banner above records why neither
+    // breaks ProbeSaveLoadSingleton's oracle.
+    RegisterRuntimeExport("?Get@SaveLoad@Save@@SAPEAV12@XZ", (void*)&RtSave_SaveLoad_Get); ++n;
+    RegisterRuntimeAddr(0x180030d40, (void*)&RtSave_SaveLoad_Get);
     RegisterRuntimeAddr(0x1800c3c80, (void*)&RtSave_SaveLoad_GetOperation);
     // Wave 14 lane AUTONAME. Registered both ways from the start (not a
     // retrofit): saveload_update.cpp's UpdateSave/UpdateList already call
