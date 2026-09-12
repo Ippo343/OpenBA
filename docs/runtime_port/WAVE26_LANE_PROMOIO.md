@@ -189,6 +189,14 @@ so no run in any wave had ever produced a figure for it. That is **UNMEASURED,
 which is not `post=0`** — the same shape as Wave 19's `??_7Visitor@IO@@6B@` and
 Wave 23's `?_typeInfo@AnimationEvent@Graphics@@`.
 
+**TWO LANES TOUCHED `standalone/wave17_door_attend.cpp` THIS WAVE** — integrator,
+note this. I added the `??_7Thread@System@@6B@` watch row; lane ATTEND fixed the
+banner's stale `62 subject rows` literal (commit `813155ec`, deriving it from
+`kWatchCount-1` so the banner and the walk come from one expression). The two
+edits are in different places and should merge cleanly. ATTEND has recorded the
+subject-row progression **63 → 66 (lane DATA) → 68 (this lane)** so a later
+reader does not read a moving count as an instrument fault.
+
 I added it to `standalone/wave17_door_attend.cpp` and measured it in §5:
 **ATTENDED, `init=0 post=1`.** The door opens. That does not overturn SYSBODY's
 verdict — the verdict is about stamper ownership and benefit, not attendance —
@@ -369,9 +377,10 @@ every consumer caches in a function-local static. So this proves a consumer of
 each symbol RAN. It does not prove a slot body was dispatched; that is a separate
 tier and is not claimed.
 
-**Minor instrument nit, for whoever next touches that file:** the header prints
-`==== door attendance (62 subject rows + 1 control) ====` while the footer
-correctly counts 67. The 62 is a stale literal in the banner.
+**The banner's `62 subject rows` is a stale literal** (the footer correctly
+counted 67 on this run). **ALREADY FIXED by lane ATTEND in `813155ec`** — do not
+fix it again; it now derives from `kWatchCount-1`, so the banner and the walk
+come from the same expression.
 
 **IO's remaining vtable work, named by the same run:**
 
@@ -405,6 +414,21 @@ here are the two symbols ATTEND named.**
 > **[CONDITION: read the residue for those two symbols.]** If they no longer
 > appear as NULL, this is why. If the boot dies somewhere new, that is the
 > expected shape of progress, not a regression.
+
+**ATTEND's expectation-setting, kept verbatim in substance and marked as its
+INFERENCE, not its measurement** (it could not re-run a clean cutover arm on my
+branch): publishing these two unconditionally *should* remove exactly the two
+MISS lines that killed its arm C at `RtObject_External_Load+0x18f`. It will
+**not** produce a switch-free cutover boot — that arm publishes ~104 fewer rows
+than the blanket switch overall, and these two are two of them.
+
+And a datum that bounds the claim further, from ATTEND's attempt 28 (blanket
+switch ON, lane FACTORY merged): the boot gets past `External::Load+0x18f`
+entirely and dies at **`+0x33c`** on a missing `??_7StringTable@UI@@6B@`. **The
+same function has at least two distinct null-vtable failure points, and this
+lane addresses only the first.** Anyone reading "External::Load still dies"
+after attempt 27 should check the offset before concluding these promotions did
+nothing.
 
 ---
 
@@ -474,16 +498,46 @@ trade. The four vtable rows carry no such cost — their oracles are already imm
 
 > **[ADDRESSEE: the Wave 26 integrator.]**
 > **[CONDITION — a ROUTE condition, not a readiness one: promote when ONE run
-> reads this row `post>0` on ANY route.]** Two candidates, in cost order:
-> 1. call `RtIo_PackageFile_TypeName` once from `standalone/tool_harness.cpp`,
->    which already holds drivers of exactly this shape — needs no new route;
-> 2. the mods route would ask a PackageFile its type, and is blocked on the
->    `ModDialog_ToggleMod_Impl+0x43` crash CLAUDE.md records — blocked on that
->    crash, **not** on this row.
+> reads this row `post>0` on a route THE GAME DRIVES.]** The candidate is the
+> mods route, which asks a PackageFile its type; it is blocked on the
+> `ModDialog_ToggleMod_Impl+0x43` crash CLAUDE.md records — blocked on **that
+> crash**, not on anything about this row.
 >
 > **Do NOT re-derive the (a)/(b) question — it is measured.** What is missing is
 > a route, not an analysis. The `RT_DIFF_SCALAR` annotation must land in the same
 > commit as the promotion.
+
+### 7.1 A cheaper close I proposed, and why it is wrong (RETRACTED)
+
+The first version of this section — and of the block in
+`standalone/reg_mint_promoted.cpp`, and of my commit message on `d668f883` —
+named a second, cheaper candidate: *call `RtIo_PackageFile_TypeName` once from
+`standalone/tool_harness.cpp`, which needs no new route*, and said **"either one
+settles it"**. It does not settle it. Lane ATTEND declined it and is right; it
+is recorded here rather than quietly deleted, because **the bad recipe is more
+dangerous than the open row**.
+
+Criterion 2 is "a real boot", and what that criterion *buys* is **did a consumer
+run on the route**. A harness call makes our own test code the consumer. The
+counter would read `post=1`, the row would look promoted-on-evidence, and the
+evidence would be the measurement calling itself — and **in the log it is
+indistinguishable from the real thing**, which is what makes it dangerous rather
+than merely useless. It is this project's self-check-read-as-an-oracle family in
+its cheapest and most persuasive form.
+
+What such a run *would* legitimately establish is that the row's **door
+resolves** — the name is not a phantom and `RT_DATA_SLOT` returns non-null. If
+anyone runs it, record that as a **DOOR-WORKS** check under that name and never
+in the attendance column. It is also largely redundant with ATTEND's
+(a)-refutation, since sibling `?_typeInfo@` rows on the identical idiom read
+`post>0` in the same run.
+
+**The general rule is the part worth keeping: an attendance counter measures
+whether the GAME reached a symbol. Any close that works by adding a caller does
+not satisfy it — it defeats it, and leaves a number that reads exactly like the
+one it replaced.** I wrote §2 of this report about a screen that printed a
+verdict its evidence could not support, and then proposed one three sections
+later.
 
 ---
 

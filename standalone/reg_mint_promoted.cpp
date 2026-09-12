@@ -2519,15 +2519,44 @@ int RtMintRegisterPromotedRows() {
     //
     //   [ADDRESSEE: the Wave 26 integrator.]
     //   [CONDITION, and it is a ROUTE condition, not a readiness one: promote
-    //   this row when ONE run reads it post>0 on ANY route.  The cheapest
+    //   this row when ONE run reads it post>0 on a route THE GAME DRIVES.  The
     //   candidate is a route that asks a PackageFile for its type — the mods
     //   route would, and CLAUDE.md records that route crashing in
-    //   ModDialog_ToggleMod_Impl+0x43, so it is blocked on that crash and not
-    //   on this row.  A second, cheaper candidate that needs no new route: call
-    //   RtIo_PackageFile_TypeName once from standalone/tool_harness.cpp, which
-    //   already holds drivers of exactly this shape.  Either one settles it.]
+    //   ModDialog_ToggleMod_Impl+0x43, so this row is blocked on THAT CRASH and
+    //   not on anything about itself.]
     //   [DO NOT re-derive the (a)/(b) question — it is measured above.  What is
     //   missing is a ROUTE, not an analysis.]
+    //
+    //   A CHEAPER CLOSE WAS PROPOSED — BY ME — AND IT IS WRONG.  RETRACTED HERE
+    //   RATHER THAN QUIETLY DELETED, because the recipe is more dangerous than
+    //   the row.  The first version of this block named "call
+    //   RtIo_PackageFile_TypeName once from standalone/tool_harness.cpp, which
+    //   needs no new route" and said it SETTLES IT.  It does not.  Lane ATTEND
+    //   refused it and is right:
+    //
+    //     Criterion 2 is "a real boot", and what that criterion BUYS is *did a
+    //     consumer run on the route*.  A harness call makes OUR OWN TEST CODE
+    //     the consumer.  The counter would read post=1, the row would look
+    //     promoted-on-evidence, and the evidence would be the measurement
+    //     calling itself — and in the log it is INDISTINGUISHABLE from the real
+    //     thing.  That is what makes it dangerous rather than merely useless.
+    //     It is this project's self-check-read-as-an-oracle family
+    //     (reference_shadow_marker_is_not_an_oracle.md,
+    //     reference_a_probe_whose_ours_side_reaches_the_body_by_address…) in its
+    //     cheapest and most persuasive form.
+    //
+    //   WHAT SUCH A RUN WOULD LEGITIMATELY ESTABLISH, if anyone still wants it:
+    //   that the row's DOOR RESOLVES — the name is not a phantom and
+    //   RT_DATA_SLOT returns non-null.  Record that as a DOOR-WORKS check under
+    //   that name and NEVER in the attendance column.  It is also largely
+    //   redundant: ATTEND's (a)-refutation already covers it, because sibling
+    //   `?_typeInfo@` rows on the identical RT_DATA_SLOT idiom read post>0 in
+    //   the same run.
+    //
+    //   THE GENERAL RULE, which is the part worth keeping: AN ATTENDANCE
+    //   COUNTER MEASURES WHETHER THE GAME REACHED A SYMBOL.  Any close that
+    //   works by adding a caller does not satisfy it — it defeats it, and
+    //   leaves a number that reads exactly like the one it replaced.
     // ------------------------------------------------------------------------
 
     printf("[RtMint] promoted %d minted DATA row(s) -- live on every run\n", n);
