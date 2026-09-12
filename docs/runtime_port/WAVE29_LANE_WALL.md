@@ -245,8 +245,18 @@ partner MINT hit this independently and concluded, correctly, that the logs
 were not in the repo. Fixed forward: `cutover_attempt32.sh` writes
 `attest.txt`, and I copied both crash logs to `crash.txt`.
 
-**3. `tools/addr_door_audit.py`'s "UNREGISTERED 40" IS A FLOOR, NOT A CENSUS —
-AND IT MISSED THE WALL I ACTUALLY HIT. DEFLATING.**
+**3. `tools/addr_door_audit.py` CANNOT SEE A DATA-DRIVEN DOOR AT ALL; "UNREGISTERED
+40" IS A FLOOR, NOT A CENSUS, AND IT MISSED THE WALL I ACTUALLY HIT. DEFLATING.**
+
+> **SHARPENED BY MINT AFTER THIS DOC WAS FIRST WRITTEN — see §7.1.** My original
+> statement of this defect was "40 is a floor", i.e. *partial* blindness. MINT
+> applied the tool's stated failure mode to its own subject and showed the
+> blindness is **TOTAL over any door whose target comes from DATA rather than a
+> call-site literal**: `rt_data_mint.cpp` resolves every slot through `OurPort(s)`
+> driven by the `kMintVtables` table, so the audit would report **0 doors for a
+> file that describes 1312 of them**. **The mint is the largest data-driven door
+> table in the tree and the audit is blind to 100% of it.** If this lane's "40"
+> is quoted anywhere, that is the caveat that must travel with it.
 It harvests `ResolveAddr\(\s*Module::Runtime\s*,\s*(0x…)` literals. The next
 wall, `0x180061100`, is reached as `RtAddr<SerExtPtrFn>(0x180061100ull)` — the
 address is an ARGUMENT — so `grep -c 0x180061100` in its output returns **0**.
@@ -395,6 +405,58 @@ which invalidates MINT's stated md5-pinned A/B plan if either side is rebuilt.
 showed "queued behind 'WALL'", so priority was enforced by the tool and not only
 by agreement. I released the lock immediately after run 4 and told MINT.
 
+### 7.1 MINT'S FINAL MEASURED RESULT — added after this doc was first written
+
+Recorded here rather than left in a message, because three of its findings change
+what this lane may claim.
+
+**(a) MY ARM IS NOW CONFIRMED BY A THIRD RUN ON A DIFFERENT TREE.** MINT attested
+all four variables plus `grep -c "RtDiff] ON" == 0` on `wave29/base`, which does
+NOT contain my two registrations. §3.1's correction no longer rests on my
+artefact alone.
+
+**(b) MY WALL IS INDEPENDENT OF MINT'S REGENERATION — MEASURED, NOT GREPPED.**
+MINT's A/B (pre-regen 64 minted vtables vs post-regen 132, 553 unported traps all
+minted AND registered) produced the **identical** fault on both sides: same
+registers, and frames `+0x3D7CAA / +0x36B463 / +0x36A2C4`. Critically MINT did
+**not** compare raw offsets between two different images and call it a match — it
+symbolised each offset **in its own image**, both resolving to
+`RtUi_SpriteSheet_Serialize+0x1b7` → `External_Load+0x592` →
+`FindOrLoad+0x2b1`. So arming 68 additional vtables at cutover introduced no
+earlier fault and cleared nothing.
+
+**(c) THE 19 UNREGISTERED ExternalPtr ROWS CANNOT COLLIDE WITH MINT'S 68 BY
+CONSTRUCTION.** I had only checked one of them and flagged the rest as an open
+question for MINT. MINT answered it for all 19 with a better argument than mine:
+its 68 rows are `??_7` vtable rows in **`.rdata`** at
+`0x18015xxxx–0x1801592c0`, while the ExternalPtr family is **`.text`** at
+`0x18006xxxx`. Different sections — orthogonal by construction, not by
+inspection. §6's holdback is therefore unaffected by `wave29/mint`.
+
+**(d) MINT's discriminator warning, which I did not need but the next A/B will.**
+Proving two exes differ by `strings | grep "??_7ComboDialog@UI@@6B@"` is INVALID
+— the control returned 1, because the mangled name exists in the tree
+independently of the mint. The valid discriminator is a symbol that can only
+exist if the row exists: `nm | grep -c RtMintTrapStub_131_` gave 0 vs 7.
+
+**(e) BUILD NON-REPRODUCIBILITY: two independent hits, and a sharper
+consequence.** MINT hit §5 defect 4 separately (`0529bd9c` → `3ed328e6` from the
+committed tree) and adds the part I missed: `game_dir_lock.sh assert-held <lane>
+<exe>` compares md5, so it is sound for *"is the deployed file the file I just
+built"* and **UNSOUND for *"is the deployed file built from my source"***.
+Anyone reading that assert as a source-provenance check is wrong.
+
+**What I gave MINT, restated:** the two missing arm variables — without which
+`RegisterMintedData()` never runs and its entire A/B would have measured an
+unarmed mint — and the non-reproducible-build finding, which invalidated its
+stated md5-pinned plan if either side were rebuilt. MINT built each exe once and
+deployed from scratch, and says the correction saved the only measurement its
+lane exists to make.
+
+**Both of us hit the Bash-600s false-grant defect (§5 defect 5) independently in
+this wave.** That, plus the coordinator's separate report of lane GFXBODY hitting
+it, makes it three lanes on one tool defect — a wave-level item.
+
 ---
 
 ## 8. MY OWN ERRORS, PLAINLY
@@ -463,3 +525,11 @@ by agreement. I released the lock immediately after run 4 and told MINT.
   `BANISHED_RT_EXTPTR=0` reverts all six together.
 - **Three of the four runs used `BANISHED_AUTOSTART=1`**, because attempt 31
   did. No claim is made about a cutover boot without it.
+- **§7.1(b)'s independence result is about `wave29/mint` ONLY.** MINT measured
+  that its 68 regenerated vtable rows do not move this wall. That says nothing
+  about the other six Wave 29 lanes, none of which I ran against. A merged tip
+  has not been tested and this lane's attempt 32 is not a prediction for it.
+- **§7.1(c) proves non-collision by SECTION, which is narrower than it sounds.**
+  `.rdata` vtable rows cannot be the same addresses as `.text` bodies. That rules
+  out an address collision; it does not rule out MINT's rows changing which
+  bodies get REACHED, and neither of us tested that.
