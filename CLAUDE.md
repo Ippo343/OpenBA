@@ -412,3 +412,8 @@ When renaming functions and data, use the recovered namespace style:
 - `uv` v0.9.24 available for Python management
 - Node.js + npx available (for vscode MCP server)
 - MSYS2 packages are outdated (stale signatures) - avoid `pacman -S` for new installs
+- **Never run `find /`.** Three Wave 22 lanes each did, burned ~4,500 CPU-seconds, and
+  contaminated a perf A/B. Memory files are at a known path:
+  `~/.claude/projects/C--code-GIT-untitled-rev-eng-project/memory/` (index `MEMORY.md`,
+  topic indexes `INDEX_gameplay.md` / `INDEX_lessons.md`) and `~/.claude/memory/`.
+  Search the repo with Grep/Glob scoped to the worktree.
