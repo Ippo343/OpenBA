@@ -502,6 +502,22 @@ B_ENTRY(180005930, kD_Str_10)         // {String*, ExternalPtr} — lane Q's kSp
 B_ENTRY(1800059e0, kD_Str2_38)        // SpriteSheet's 0x38 entry — lane Q's kSpec_Sprite38
 B_ENTRY(180011010, kD_Str_08)         // UI: ComboElement::_strings — lane UIW's kSpec_StringRef
 B_ENTRY(180026b50, kD_Str_10)         // IO::PackageFile::Entry — lane Q's kSpec_PkgEntry
+// WAVE 26 LANE INT33 — the fifth, and it is one of "the eight ported but
+// deliberately unregistered" the banner above lists. The stated condition for
+// registering one of the eight is "when a caller exists", and one now does:
+// array.cpp's kSpec_ExtStr10at08 (0x180075d20's SetSize, ported in the same
+// commit) reaches it by address, exactly as retail's 0x180075d20 reaches it by
+// rel32. Offset re-read here rather than inherited: `LEA RBX,[RDX+0x8]` at
+// 0x18003966c, `ADD RBX,0x10` -- String at +0x08, stride 0x10 == kD_Str_10at08.
+B_ENTRY(180039640, kD_Str_10at08)     // UI: DialogNamedTemplate {ptr, String*}
+// ...and the sixth, on the same terms. `LEA RBX,[RDX+0x18]` at 0x1800395ac and
+// `ADD RBX,0x20` at 0x18003961e -- String at +0x18, stride 0x20 ==
+// kD_Str_20at18. Its caller is array.cpp's kSpec_CfgEntry20 (0x180075b20).
+// NOTE these two lines are the pair Wave 25 nearly got wrong: 0x180039640 and
+// 0x180039580 are called from bodies that share an opcode hash, and the hash
+// erases the CALL operand that tells them apart. Each offset above is read from
+// the HELPER's own disassembly, not from its caller's hash.
+B_ENTRY(180039580, kD_Str_20at18)     // UI: DialogControllerConfigEntry
 
 // ---------------------------------------------------------------------------
 // 0x180026b50 — WAVE 9 LANE DESTROY, and why it shares kD_Str_10 WITHOUT this
@@ -950,6 +966,11 @@ void RtCollectionDestroyPortInit() {
     // kSpec_PkgEntry reaches it by address from ReadPackfile's SetSize, and it
     // was the attempt-17 cutover wall (an EXEC of 0 with the DLL absent).
     RegisterRuntimeAddr(0x180026b50, (void*)&RtColl_DestroyStrings_180026b50);
+    // Wave 26 lane INT33: the fifth Body-B address. See the B_ENTRY line -- it
+    // is one of "the eight", and it is registered now because array.cpp's
+    // kSpec_ExtStr10at08 gives it the caller the banner says to wait for.
+    RegisterRuntimeAddr(0x180039640, (void*)&RtColl_DestroyStrings_180039640);
+    RegisterRuntimeAddr(0x180039580, (void*)&RtColl_DestroyStrings_180039580);
 
     // ---- the one element COPY-ASSIGN with no frontier at all ---------------
     // 37 instructions, zero callees. Its sibling 0x180051650 is NOT here: that

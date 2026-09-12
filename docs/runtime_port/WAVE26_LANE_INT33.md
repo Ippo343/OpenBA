@@ -7,31 +7,45 @@ Branch `wave26/int33`, cut from `wave26/base` at `7de42dd1`. Private worktree.
 > tip. Wave 21 published a wave number assembled from lane figures and it was
 > wrong in both directions.
 >
-> **MEASURED and INFERRED are separated throughout.** §1–§4 are measured. §7 is
-> inferred and says so.
+> **MEASURED and INFERRED are separated throughout.** §1–§4 and §6.1 are
+> measured (binary reads, tool controls, four instrumented game runs). §5's
+> `what it is` column is measured for section/extent/call-targets and INHERITED
+> from our own call-site comments for the type names — §6.2.5 says which is
+> which. §7 is inferred and says so.
 
 ---
 
 ## 0. HEADLINE
 
-**Three rows ported, `called` unmoved — and the bucket's remaining mystery is now
-closed by a STRUCTURAL fact rather than by a tool that does not exist.**
+**Eight rows ported across two batches, and the bucket's remaining mystery is
+now closed by a STRUCTURAL fact rather than by a tool that does not exist. Four
+clean game runs prove NONE of the eight has ever executed, and §6.1 says exactly
+why — that is a finding, not an omission.**
 
-| | at lane start | at lane end |
-|---|---:|---:|
-| `called` | 1333 | **1333** (unchanged — zero new address doors) |
-| `ported` | 1185 | **1188** |
-| ported % | 88.9% | **89.1%** |
-| gap rows | 148 | **145** |
-| `internal` gap | 33 | **30** |
-| UNKNOWN, `.text` half | 21 | **18** |
+| | at lane start | after batch 1 | at lane end |
+|---|---:|---:|---:|
+| `called` | 1333 | 1333 | **1335** |
+| `ported` | 1185 | 1188 | **1193** |
+| ported % | 88.9% | 89.1% | **89.4%** |
+| gap rows | 148 | 145 | **142** |
+| `internal` gap | 33 | 30 | **27** |
+| UNKNOWN, `.text` half | 21 | 18 | **15** |
 
 ```
 tools/runtime_census.py --namespace internal --unported     # run from THIS worktree
 tools/runtime_census.py --unported
 ```
 
-Two findings outlive the three ports:
+**READ THE `called` COLUMN, NOT ONLY `ported`.** Batch 1 (§4) moved it by **zero**.
+Batch 2 (§4.5) moved it by **+2**: registering three `SetSize` bodies required
+two per-element destroy helpers (`0x180039640`, `0x180039580`) that this tree
+already had ported but had never had a caller for, and reaching them is two new
+`ResolveAddr` literals. Both are **registered in the same commit**, so both enter
+`ported` as they enter `called` — but the surface grew and a lane that reported
+only "ported +8" would have hidden its own cost. The gap fell by 6, not 8, for
+exactly that reason.
+
+Two findings outlive the eight ports:
 
 1. **All 33 rows are genuinely unexported in retail — re-derived, not
    inherited**, by a screen carrying a *positive* AEAA specimen (§2). Wave 23's
@@ -335,6 +349,101 @@ tools/int33_export_screen.py          4/4 controls pass
 
 ---
 
+## 4.5 BATCH 2 — THREE `SetSize` ROWS (Wave 25 residual #1, part-paid)
+
+Wave 25 residual #1 listed eight `SetSize` rows and addressed them to *"Wave 26,
+a named lane"*. I am that lane. **Three of the eight are done; five are not**
+(§7 #7). Each was derived by Wave 25 §5.1's recipe, **from its own
+disassembly and nothing else**.
+
+### 4.5a `0x180078950` — `Array<UI::SpriteSheet::SpriteInfo>::SetSize`, and the trap it carries
+
+**IT DOES NOT TAKE `kSpec_Sprite38`, AND THAT IS THE WHOLE POINT OF THE ROW.**
+It and `0x180004e30` share the element type, the stride (0x38), the alignment
+(8), the **assign** helper (`0x180004220`) **and** the **destroy** helper
+(`0x1800059e0`) — every property a reader would use to decide they are the same
+spec. They differ in the one field reachable only through the two-argument form.
+
+`kSpec_Sprite38` has `init = nullptr`, which `array_internal.h` defines as *"retail
+leaves the new tail UNTOUCHED"*. That is **correct for `0x180004e30`**, because
+it is the three-argument form: every grown element takes the assign arm with the
+caller's `fill`, so its init arm is unreachable and was never written down.
+`0x180078950` has **no fill**, so its init arm is the **only** path a grown
+element takes — and retail zeroes 0x34 bytes there:
+
+```
+180078a0e  MOV [RCX],R8            +0x00      (R8 = 0)
+180078a11  MOV [RCX+0x08],R8       +0x08
+180078a15  MOV qword [RCX+0x10],0  +0x10
+180078a1d  MOV qword [RCX+0x18],0  +0x18
+180078a25  MOV qword [RCX+0x20],0  +0x20
+180078a2d  MOV qword [RCX+0x28],0  +0x28
+180078a35  MOV dword [RCX+0x30],R8D  +0x30    <- DWORD, not a qword
+```
+
+**Reusing `kSpec_Sprite38` would have left the new tail holding the previous
+allocation's bytes — including two `System::String` POINTERS that the next
+destroy would then release. Silently, with a clean build and a green census.**
+New spec `kSpec_Sprite38Z`; `+0x34..+0x37` is unwritten on BOTH arms, which is
+the same four bytes `SpriteSheet.h` calls `_pad34` and the same window already
+recorded against the assign arm — **two arms, two independent readings, one
+window**, rather than one inferred from the other.
+
+### 4.5b `0x180075d20` — `Array<UI::DialogNamedTemplate>::SetSize`
+
+Element `{ qword verbatim at +0x00, `String*` at +0x08 }`, stride 0x10. New spec
+`kSpec_ExtStr10at08`. **It is the MIRROR of the existing `AssignStringExt`, not a
+reuse of it**: that one has the String at +0x00 and the verbatim qword at +0x08.
+The two are indistinguishable by stride, alignment and element size, and swapping
+them would refcount-bump whatever integer sits at +0x00 and leak the real String
+— the same offset-vs-stride confusion `kD_Str_10` / `kD_Str_10at08` exists to
+prevent.
+
+No window on either arm, and both halves measured: the assign's store at +0x08 is
+an **unconditional zero BEFORE the null test** (`0x180075dcb`), so the range is
+written even when the source String is null; the init arm is two qword zero
+stores.
+
+### 4.5c `0x180075b20` — `Array<UI::DialogControllerConfigEntry>::SetSize`
+
+Element `{ int32 +0x00, HOLE +0x04..+0x07, qword +0x08, qword +0x10, String*
++0x18 }`, stride 0x20. New spec `kSpec_CfgEntry20`.
+
+**`+0x04..+0x07` IS NEVER WRITTEN BY EITHER ARM** — the first store is a DWORD and
+the next is at +0x08, on the assign (`0x180075bc8`) and on the init
+(`0x180075c00`) alike. An oracle comparing those four bytes would fail 100% of
+calls and read like a catastrophic port defect. Both windows were read
+separately; neither was assumed from the other.
+
+Seed-zero is `+0x18..+0x20` only. `+0x00..+0x17` is scalars and IS seeded
+non-zero — **which is exactly what makes the `+0x04` hole detectable instead of
+agreeing by accident on zeros.**
+
+### 4.5d The two helpers this required, and the +2 on `called`
+
+`0x180039640` (`kD_Str_10at08`) and `0x180039580` (`kD_Str_20at18`) are two of
+"the eight ported but deliberately unregistered" bodies in `array_destroy.cpp`.
+That file's stated condition for registering one is *"when a caller exists"*, and
+these three `SetSize` rows are that caller. Both are now `B_ENTRY` + registered.
+
+Each helper's offset and stride was **re-read from the helper's own
+disassembly** — `LEA RBX,[RDX+0x8]` / `ADD RBX,0x10` and `LEA RBX,[RDX+0x18]` /
+`ADD RBX,0x20` — and not taken from its caller, because these two are precisely
+the pair Wave 25 nearly got wrong: their callers share an opcode hash and the
+hash erases the `CALL` operand that tells them apart.
+
+All three `SetSize` rows are registered **unconditionally**, not behind
+`BANISHED_RT_ARRAY_NONTRIVIAL`. That switch exists because ITS three members call
+per-element helpers **by address into the DLL**; these three do not — every helper
+they use is ported and registered in this tree. Checked in `array_destroy.cpp`
+rather than inferred from the tier's name.
+
+```
+mingw32-make standalone-debug        CLEAN after each of the three
+```
+
+---
+
 ## 5. THE FULL TABLE — all 33, address → what it is → verdict → addressee
 
 `verdict` legend: **PORTED** this lane · **BODY** a function to reimplement ·
@@ -360,9 +469,9 @@ All "what it is" entries are MEASURED unless marked *(inferred)*.
 | 13 | `0x180034010` | .text | `Array<ModInfo>::SetSize`, helper `0x1800341e0` | **SPEC** | W27 lane ARRSPEC |
 | 14 | `0x18004bde0` | .text | `Array<…>::SetSize` stride 0x28, helper `0x18003f070` | **SPEC** | W27 lane ARRSPEC |
 | 15 | `0x180053f00` | .text | `Array<Array<uint8>>::SetSize`, helpers `0x180011220`, `0x18004ff80` | **SPEC** | W27 lane ARRSPEC |
-| 16 | `0x180075b20` | .text | `Array<DialogControllerConfigEntry>::SetSize`, destroy `0x180039580` = **`kD_Str_20at18`, already written** | **SPEC — cheapest of the eight** | W27 lane ARRSPEC |
-| 17 | `0x180075d20` | .text | `Array<DialogNamedTemplate>::SetSize`, destroy `0x180039640` = **`kD_Str_10at08`, already written** | **SPEC — cheapest of the eight** | W27 lane ARRSPEC |
-| 18 | `0x180078950` | .text | `Array<SpriteSheet::SpriteInfo>::SetSize`; assign `0x180004220` **and** destroy `0x1800059e0` are **BOTH already ported AND registered** | **SPEC — cheapest of all 33** | W27 lane ARRSPEC |
+| 16 | `0x180075b20` | .text | `Array<DialogControllerConfigEntry>::SetSize`, element `{i32, HOLE +0x04, q, q, String*@+0x18}` stride 0x20 | **PORTED** §4.5c | — |
+| 17 | `0x180075d20` | .text | `Array<DialogNamedTemplate>::SetSize`, element `{q, String*@+0x08}` stride 0x10 | **PORTED** §4.5b | — |
+| 18 | `0x180078950` | .text | `Array<SpriteSheet::SpriteInfo>::SetSize` stride 0x38, two-arg form | **PORTED** §4.5a | — |
 | 19 | `0x18007f050` | .text | MSVC `qsort`, 743 B | **CRT — out of scope** | nobody |
 | 20 | `0x18007f8a8` | .text | `noreturn` `exit(-1)` thunk | **CRT — out of scope** | nobody |
 | 21 | `0x18007fbfc` | .text | MSVC `_beginthreadex`, 237 B | **CRT — out of scope** | nobody |
@@ -383,23 +492,26 @@ All "what it is" entries are MEASURED unless marked *(inferred)*.
 
 | class | rows | is it a body to write? |
 |---|---:|---|
-| **PORTED this lane** | **3** | done |
+| **PORTED this lane** | **8** | done |
 | BODY — a real function to reimplement | **7** | **yes** |
-| SPEC — a registration against cores we already own | 8 | no |
+| SPEC — a registration against cores we already own | 5 | no |
 | DATA — vtables + storage | 8 | no |
 | NOT PORT WORK — SDK blobs, literals | 4 | no |
 | CRT — out of scope | 3 | no |
 
 > **The 33-row bucket contains SEVEN functions to write.** Not 33, and not the
-> 21 the `.text` hint suggests. A lane scoped on "33 unknown rows" is scoped
+> 21 the `.text` hint suggests. After this lane, 27 rows remain and the same
+> seven bodies are all of the body work in them. A lane scoped on "33 unknown rows" is scoped
 > against a population that does not exist — the same shape the Wave 26 kickoff
 > flags for the 148.
 
-### 5.2 The three cheapest rows left, each with the fact that makes it cheap
+### 5.2 The three cheapest rows — PAID THIS LANE (§4.5), kept here for the method
 
-Named because the kickoff's own §4 warns that a cheap-wins list is the stalest
-section of any handover. **Each of these carries the command that re-derives it**,
-so a Wave 27 lane checks rather than trusts:
+These were the lane's own cheap-wins list, and the kickoff's §4 warns that such a
+list is the stalest section of any handover. **So each was re-derived before it
+was acted on, and the re-derivation is what found the trap in §4.5a** — the
+"cheap" fact (both helpers already registered) was TRUE and led straight to the
+wrong spec. Cheapness and correctness are independent.
 
 ```
 python tools/int33_normdiff.py --map 0x180078950 0x180075d20 0x180075b20
@@ -411,29 +523,76 @@ python tools/int33_normdiff.py --map 0x180078950 0x180075d20 0x180075b20
 | `0x180075d20` | destroy `0x180039640` == `kD_Str_10at08`, written Wave 25 | that the spec row still exists |
 | `0x180075b20` | destroy `0x180039580` == `kD_Str_20at18`, written Wave 25 | ditto |
 
-All three still need their `assign` / `init` arms and their **per-arm written
-extents** read out of their own bodies (Wave 25 §5.1's recipe). **"Cheap" here
-means the destroy half is free, not that the row is free.**
+All three still needed their `assign` / `init` arms and their **per-arm written
+extents** read out of their own bodies (Wave 25 §5.1's recipe). **"Cheap" meant
+the destroy half was free, not that the row was free** — and two of the three
+turned out to need a NEW `ArraySpec` with a written-extent window that no
+existing row carried (§4.5a, §4.5c).
 
 ---
 
 ## 6. WHAT I DID NOT ESTABLISH — plainly
 
-1. **I RAN NO GAME.** No `game_dir_lock.sh` acquire, no exe md5 check, because
-   there was no launch to guard. **Nothing in this document claims any of these
-   three registrations has ever executed.** There is no `calls=` column, no
-   attendance figure and no divergence count for any of them. This is the single
-   largest gap in the lane and it is named first.
-   * `0x180004590` and `0x180010f00` each sit on an **existing oracle route**
-     (§4.2, §4.3), so the instrument to prove they run exists and was not run.
-     `0x180004590`'s is `BANISHED_RT_ACHMGR`; `0x180010f00`'s is the
-     `video_resources` probe.
-   * `0x1800269a0` is reached from `~PackageFile`, which
-     `package_file_dtor.cpp` §3 already probes. Same statement: not run here.
-2. **I wrote no new oracle.** All three rows route into bodies that already carry
-   probes (`ReleaseStringsCore`/`ArrayDtorImpl`, the ExternalPtr body,
-   `DestroyInterfaceRange`). **They therefore inherit whatever those probes do and
-   do not cover, and I did not re-audit that coverage.**
+### 6.1 FOUR RUNS. NOT ONE OF THE EIGHT REGISTRATIONS WAS EVER ENTERED.
+
+This is a **measured** result, not a missing measurement, and it is the most
+important sentence in the document. Lock held as `int33`; the exe md5 was checked
+against my own build **immediately before every launch** and is identical on all
+four:
+
+```
+build  c5b6a8edb3dc1f9776c84c568fa06793   standalone/build/reimpl-x64.exe
+deploy c5b6a8edb3dc1f9776c84c568fa06793   C:/GOG Games/Banished/reimpl-x64.exe
+```
+
+| # | run | rc | crash log | result for my rows |
+|---:|---|---:|---|---|
+| 1 | `AUTOSTART=1 AUTOQUIT=1 RT_DIFF=1` (menu only) | 0 | 0 bytes | none entered |
+| 2 | `AUTOSTART=1 RT_DIFF=1 PAUSEMENU=900 PAUSEMENU_QUIT=90` (full new game) | 0 | 0 bytes | none entered |
+| 3 | run 2 + `RT_ACHMGR=1 RT_GOAL=1` | 0 | 0 bytes | none entered |
+| 4 | run 3 + `SAVE_TEST=600` (a REAL autosave fired, `Auto.sav` written) | 0 | 0 bytes | none entered |
+
+Run 2 is not a weak run: `Array::SetSize @0x18005fb00` reports **36,065 calls**
+and `@0x180023830` 23,081 in the same table, so the instrument was live and the
+Collection lane was armed. **My six new `RtDiff` sites do not appear in the table
+at all**, which for a lazily-registering site means zero entries.
+
+**And the reason is the same for every one of them, which is why this is a
+finding and not a shrug: each row's ONLY caller is a body that retail reaches by
+an in-DLL `rel32` our registry cannot intercept, and our port of that caller did
+not run on these routes.**
+
+| row | its one caller | measured on run 2/4 |
+|---|---|---|
+| `0x180078950` | `?Serialize@SpriteSheet@UI@@` | **no `RtDiff` row at all** — our port of it never ran; retail's copy did, and retail's `rel32` goes to retail's `SetSize` |
+| `0x180075d20`, `0x180075b20` | the dialog-vtable serialize walkers (`0x18002f170`, `0x1800493d0` — **rows 6 and 7 of this very bucket, unported**) | ditto, and here the caller is *itself* a gap row |
+| `0x1800269a0` | `~PackageFile` | `PackageFile::PackageFile` calls=9, `ReadPackfile` calls=4 — **but no `~PackageFile` row**: nothing unmounts a package on a run that does not change mods |
+| `0x180004590` | `?Serialize@Achievement@1@` | 12 Achievement sites fired (`Goal::Goal` 139, `AchievementInstance::Update` 1401) but **not `Serialize`** — even with a real autosave |
+| `0x180010f00` | `??1Device@Video@@` | the device is not destroyed on a clean quit path that reached it |
+
+> **THE LESSON, STATED FOR THE NEXT LANE.** `reference_a_ported_row_can_be_
+> permanently_unpromotable` in its milder form: **a `Collection` instantiation
+> can only ever run once the body that CALLS it is ours.** Registering the leaf
+> is necessary and is not sufficient, and the census cannot tell the two apart —
+> all eight of these now read as `ported` and none of them executes. **Do not
+> read this lane's +8 as +8 bodies running.**
+
+### 6.2 The rest
+
+1. **I wrote no new oracle.** All eight rows route into bodies that already carry
+   probes (`SetSizeCore`, `ReleaseStringsCore`/`ArrayDtorImpl`, the ExternalPtr
+   body, `DestroyInterfaceRange`). **They therefore inherit whatever those probes
+   do and do not cover, and I did not re-audit that coverage.** In particular the
+   three new specs (`kSpec_Sprite38Z`, `kSpec_ExtStr10at08`, `kSpec_CfgEntry20`)
+   are **verified by TRANSCRIPTION from the disassembly only** — no probe has run
+   against a stride-0x20 element with a hole at +0x04, or against a String at
+   +0x08 in a 0x10 element. If one of those offsets is wrong, the build is clean,
+   the census is green, the game runs, and the corruption is silent.
+2. **I ran no CONTROL.** Runs 1–4 show 2 `ORACLE` divergences
+   (`SpriteSheet::TypeName`, `SpriteSheet::Construct`, both pointer-identity)
+   and 15 `UNCLASSED` ones. **I did not run `wave26/base` to establish a
+   baseline, so I cannot attribute any of them** — they are almost certainly
+   pre-existing, and "almost certainly" is not a measurement.
 3. **The `0x180010da0` double-port (§4.3) is REPORTED, NOT RESOLVED.** I did not
    diff the two ports against each other. If they disagree, my registration of
    `0x180010f00` makes the composed one reachable from a new entry point.
@@ -441,7 +600,8 @@ means the destroy half is free, not that the row is free.**
    did not try to raise them. §3.3 made that unnecessary for this question; it
    does **not** make them a usable tool for a cross-build question generally, and
    nobody should quote a miss from them without re-reading the control.
-5. **I did not re-derive the `what it is` column for rows 4–21 from scratch.** I
+5. **I did not re-derive the `what it is` column for the rows I did not port,
+   from scratch.** I
    re-derived the **section**, the **extent**, and the **call-target map** of
    every one of them (§5, `int33_normdiff.py --map`); the *type names* come from
    our own tree's call-site comments, as Wave 23 established. Where my measurement
@@ -470,10 +630,11 @@ satisfies a checklist and then waits forever.
 | 1 | **`0x180028760`, the `Array<Mod>` introsort, 1381 B.** Declined by Waves 23, 24, 25 and 26. Its stated blocker has never been re-checked by anyone; §6.7. **It is now the ONLY body in this bucket over 900 bytes**, and the other six are 195–843 B. | one body | **Wave 27, a lane named at kickoff — NOT "lane BODY"**, which is what Wave 25 wrote and which never fired |
 | 2 | **The profile build's 38 IO-codec slot names can name the slots of `0x1801554a8` (22) and `0x1801559f8` (12).** §3.4. Trap: the Encoding vtable OFFSETS DIFFER between builds, so take NAMES from profile and ORDER from retail. | those two vtables | **Wave 27 lane IOVT** |
 | 3 | **`0x180010da0` has TWO ports in this tree** and the open-coded one is the registered one, while the composed one is now reachable from my `0x180010f00`. Diff them; keep one. §4.3. | `video_resources.cpp` + `device_enum_types.cpp` | **Wave 27 lane PROMOGFX's successor**, i.e. whoever owns Video/Graphics at Wave 27 kickoff |
-| 4 | **None of my three ports has ever been shown to RUN.** §6.1. All three have an existing probe route and all three need one run each: `BANISHED_RT_ACHMGR`, the `video_resources` probe, and `package_file_dtor`'s. | 3 probe runs, one lock | **Wave 26 lane ATTEND** — it is already taking the lock for attempt 27 and for the W17 attendance run, so this is 3 env vars on a run it is making anyway |
+| 4 | **ALL EIGHT PORTS MEASURE ZERO ATTENDANCE over four clean runs (§6.1), and the cause is COMMON: each row's only caller is a body retail reaches by an in-DLL `rel32`.** The unblocking work is therefore NOT here — it is promoting `?Serialize@SpriteSheet@UI@@`, the two dialog-vtable walkers (rows 6 and 7 of this bucket), `~PackageFile`, `?Serialize@Achievement@1@` and `??1Device@Video@@`. Until one of those runs, my eight are registered and dead. | the CALLERS, not the leaves | **Wave 27 lanes ARRSPEC and UIWALK jointly** — and the Wave 26 integrator should NOT read this lane's +8 as +8 bodies running |
+| 4b | **The three new specs are verified by TRANSCRIPTION only** (§6.2.1). `kSpec_CfgEntry20`'s `+0x04..+0x07` hole and `kSpec_ExtStr10at08`'s String-at-+0x08 have never been through `array_probe.cpp`. Arming it needs `BANISHED_RT_ARRAY_DESTROY_PROBE` plus two new probe rows. | `runtime/src/collection/array_probe.cpp` | **Wave 27 lane ARRSPEC**, as its FIRST task, before it adds the remaining five |
 | 5 | **Wave 23 residual #3 (build the cross-build matcher) is DISCHARGED** — built, controlled, and shown by §3.3 to be the wrong instrument for the question. **Do not carry it forward.** Its recorded PATH was also wrong (§3.1) and is corrected here. | the record | **the Wave 26 integrator**, to stop it reappearing in the Wave 27 kickoff |
 | 6 | **The `internal` bucket refills every wave from other lanes' faithful ports** — 4, 2, 1, 1 over four waves. Wave 23 residual #2 (fold `internal_row_classify.py`'s SECTION/EXPORT/PDATA columns into the census) was addressed to the Wave 24 integrator and is **still not done** three waves later; the census now prints the SECTION hint but not the rest. `tools/int33_export_screen.py` is a second, controlled implementation of the EXPORT column and could be folded in cheaply. | `tools/runtime_census.py` | **the Wave 26 integrator**, explicitly — the previous addressee has been passed over three times |
-| 7 | **The eight `SetSize` rows (Wave 25 residual #1) are NOT done.** Its addressee was "Wave 26, a named lane". I am that lane and I did **three** of the bucket's rows, none of them a `SetSize`: each needs an `assign`, an `init` and its per-arm written extents, which is a body-reading job per row, not a registration. §5.2 names the three cheapest and the fact that makes each cheap. | `runtime/src/collection/array.cpp` only | **Wave 27 lane ARRSPEC**, to be created at kickoff |
+| 7 | **FIVE of Wave 25 residual #1's eight `SetSize` rows remain**: `0x18002c6a0`, `0x1800332d0`, `0x180034010`, `0x18004bde0`, `0x180053f00`. I paid three (§4.5). Each of the five needs an `assign`, an `init` and its per-arm written extents read from its OWN body, plus a per-element helper that is NOT yet in `array_destroy.cpp` (`0x1800067d0`/`0x180006ac0`, `0x180032f70`/`0x1800c3f40`, `0x1800341e0`, `0x18003f070`, `0x180011220`/`0x18004ff80`) — so unlike my three, each of the five WILL grow the cutover surface unless its helper is ported too. That is the honest cost estimate and it is higher than "five registrations". | `runtime/src/collection/array.cpp` + `array_destroy.cpp` | **Wave 27 lane ARRSPEC**, to be created at kickoff |
 
 ---
 
