@@ -63,6 +63,10 @@ extern int RtSystemSetupDirHelpersRegister();  // setupdir_helpers.cpp (lane FS)
 // the game loads. Its own switch, because a defect here is silent wrong data
 // rather than a crash and the integrator must be able to remove exactly it.
 extern int RtSystemCompressionRegister();      // compression.cpp    (lane PKG2)
+// Cutover closure (2026-09-12): System::CRC::Compute, the leaf the persistence
+// jobs reach by address. Unconditional (DIRECTION.md §2: a port registers
+// unconditionally; no new BANISHED_RT_* switch).
+extern int RtSystemCrcRegister();              // crc.cpp
 namespace RtSystem { void RtSystem_CompressionProbe(); void RtSystem_StrCompareProbe(); }
 
 // allocator.cpp -- the single owner of the 0x180009c30 registration; see the
@@ -103,6 +107,7 @@ void RtSystemPortInit() {
         n += RtSystemSetupDirHelpersRegister();
     }
     if (RtWaveEnabled("BANISHED_RT_COMPRESSION")) n += RtSystemCompressionRegister();
+    n += RtSystemCrcRegister();
     // NOTE: RtSystem_CompressionProbe() is NOT called here, and the first draft
     // of this lane calling it here is a defect the run found rather than
     // reasoning did. **RtSystemPortInit runs before System::MemoryAllocator has

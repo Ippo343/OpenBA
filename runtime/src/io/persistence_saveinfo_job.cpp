@@ -35,8 +35,9 @@
 //     question.
 //
 // Nothing is ported here that another file already owned. The one door this
-// body opens and does not close is `?Compute@CRC@System@@SAIPEBXHI@Z`
-// (0x1800c5490, ordinal 1752) — see its call site below.
+// body opens, `?Compute@CRC@System@@SAIPEBXHI@Z` (0x1800c5490, ordinal 1752),
+// was closed the same day by runtime/src/system/crc.cpp; the by-name resolve
+// below now lands on our body through the registry.
 //
 // ---------------------------------------------------------------------------
 // WHAT IT DOES — verify a save file's header and checksum without loading it
@@ -308,17 +309,11 @@ extern "C" void RtIo_PersistenceWorker_GetSaveInfo(void* worker) {
                         badFile = true;                       // 0x1800b67f1
                     } else if (static_cast<uint16_t>(p->fileHeader) == 2) {
                         // ---- 7. recompute the checksum --------------------
-                        // ADDRESS/NAME DOOR THIS BODY OPENS AND DOES NOT CLOSE:
-                        //   SYMBOL      ?Compute@CRC@System@@SAIPEBXHI@Z
-                        //               (ordinal 1752, retail 0x1800c5490)
-                        //   CONDITION   every version-2 save-info request.
-                        //   CONSEQUENCE at cutover it resolves NULL and this
-                        //               call faults. It is a 10-instruction
-                        //               leaf — the same running CRC-32 as the
-                        //               fold below with one final complement —
-                        //               and belongs to whoever takes the
-                        //               System::CRC row, not to this file.
-                        //   ADDRESSEE   the System namespace worklist.
+                        // By-name door onto ?Compute@CRC@System@@SAIPEBXHI@Z
+                        // (ordinal 1752, retail 0x1800c5490). Ported in
+                        // runtime/src/system/crc.cpp, so the registry
+                        // answers this resolve with our body; it was an open
+                        // door for the length of one afternoon.
                         uint32_t crc;
                         {
                             static void* cache = nullptr;
