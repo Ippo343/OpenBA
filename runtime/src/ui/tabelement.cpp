@@ -96,7 +96,8 @@ extern "C" void RtUi_TabElement_Ctor(void* self) {
     PTR(self, 0x00) = Vtable();
     I32(self, kTabCount) = 0;
     I32(self, kGap)      = 0;
-    for (int off : { kEdgeLeft, kEdgeMiddle, kEdgeRight }) {
+    const int edgeSprites[3] = { kEdgeLeft, kEdgeMiddle, kEdgeRight };
+    for (int off : edgeSprites) {
         PTR(self, off + kSpriteSheet) = nullptr;
         I32(self, off + kSpriteIndex) = -1;
     }

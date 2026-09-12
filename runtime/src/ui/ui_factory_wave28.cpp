@@ -682,10 +682,13 @@ extern "C" void* RtUiFact_NumberEditElement_CreateInPlaceObject(void* p) {
 //   ??0NumberElement@UI@@QEAA@XZ                                   0x180118c70 ord 287
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0NumberElement@UI@@QEAA@XZ.
-// The ctor is NOT ported: it calls ?CacheText@NumberElement@UI@@AEAAXXZ,
-// a private member this lane does not own and did not read. The factory
-// pair below therefore MOVES the cutover wall from the factory to the
-// ctor rather than clearing it. Recorded as a residual.
+// *** THAT RESIDUAL IS CLEARED. 2026-09-12. *** This note used to read "the
+// ctor is NOT ported: it calls ?CacheText@NumberElement@UI@@AEAAXXZ, a private
+// member this lane does not own and did not read... the factory pair MOVES the
+// cutover wall from the factory to the ctor rather than clearing it." Both the
+// ctor (0x180118C70) and that CacheText (0x1801189F0) are ported now, in
+// runtime/src/ui/numberelement.cpp, and both are registered by NAME — so the
+// `BASE(...)` below resolves to our body and the wall is cleared, not moved.
 void* Ctor_NumberElement(void* p) { BASE("??0NumberElement@UI@@QEAA@XZ", p); return p; }
 
 extern "C" void* RtUiFact_NumberElement_CreateNewObject() {

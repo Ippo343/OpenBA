@@ -64,7 +64,7 @@ struct DelDtorSpec {
 // stays true of it; the TABLE is the authority and this constant tracks it,
 // and the static_assert next to the table is what forces an appender to
 // notice (it caught CSTREAM's addition, at 41 vs 39).
-constexpr int kSpecCount = 85;   // 81-84: VTABLE BATCH 7 (AnimationGroup, ParticleSystem, SoundBuffer, SoundEffect); 71-80: VTABLE BATCH 1 -- UI::{Border,Button,Check,
+constexpr int kSpecCount = 99;   // 85-98: VTABLE BATCH 4 "elem_B" -- UI::{Layout,List,NumberEdit,Number,Page,Progress,Radio,Ribbon,Scroll,Slider,Spinner,Tab,Table,Text}Element (2026-09-12); 81-84: VTABLE BATCH 7 (AnimationGroup, ParticleSystem, SoundBuffer, SoundEffect); 71-80: VTABLE BATCH 1 -- UI::{Border,Button,Check,
                                  //     ClipRegion,Combo,Container,DocumentText,Edit,Graph,
                                  //     Label}Description (2026-09-12); renumbered at the
                                  //     merge, batch 9 keeps 61-66 and batch 8 67-70
