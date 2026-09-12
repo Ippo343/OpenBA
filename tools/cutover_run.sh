@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# tools/cutover_attempt32.sh -- Wave 29 lane WALL, cutover attempt 32
+# tools/cutover_run.sh -- the cutover boot gate (was cutover_attempt32.sh)
 # =============================================================================
 # Mechanically identical to tools/cutover_attempt30.sh (same DLL move-aside,
 # same hard gate, same unconditional restore trap, same md5-on-both-sides of
@@ -54,8 +54,8 @@
 #         DIFFERENT arm, use cutover_attempt30.sh, which takes one.)
 set -u
 G="/c/GOG Games/Banished"
-OUT="${1:?usage: cutover_attempt32.sh <outdir> <seconds> [exe]}"
-SECS="${2:?usage: cutover_attempt32.sh <outdir> <seconds> [exe]}"
+OUT="${1:?usage: cutover_run.sh <outdir> <seconds> [exe]}"
+SECS="${2:?usage: cutover_run.sh <outdir> <seconds> [exe]}"
 EXE="${3:-standalone/build/reimpl-x64.exe}"
 mkdir -p "$OUT"
 
@@ -67,21 +67,21 @@ ARM=(BANISHED_RT_NO_DLL=1
 restore() {
   if [ -f "$G/Runtime-x64.dll.absent" ]; then
     mv -f "$G/Runtime-x64.dll.absent" "$G/Runtime-x64.dll"
-    echo "[attempt32] Runtime-x64.dll RESTORED"
+    echo "[cutover] Runtime-x64.dll RESTORED"
   fi
   if [ -f "$G/Runtime-x64.dll" ]; then
-    echo "[attempt32] verified present: $(stat -c %s "$G/Runtime-x64.dll") bytes"
+    echo "[cutover] verified present: $(stat -c %s "$G/Runtime-x64.dll") bytes"
   else
-    echo "[attempt32] *** FATAL: Runtime-x64.dll IS MISSING ***"
+    echo "[cutover] *** FATAL: Runtime-x64.dll IS MISSING ***"
   fi
 }
 trap restore EXIT INT TERM
 
-echo "[attempt32] source exe : $EXE"
-echo "[attempt32] build md5  : $(md5sum "$EXE" | cut -d' ' -f1)"
+echo "[cutover] source exe : $EXE"
+echo "[cutover] build md5  : $(md5sum "$EXE" | cut -d' ' -f1)"
 cp -f "$EXE" "$G/reimpl-x64.exe"
-echo "[attempt32] deployed md5: $(md5sum "$G/reimpl-x64.exe" | cut -d' ' -f1)"
-echo "[attempt32] arm: ${ARM[*]}   (BANISHED_RT_DIFF deliberately UNSET)"
+echo "[cutover] deployed md5: $(md5sum "$G/reimpl-x64.exe" | cut -d' ' -f1)"
+echo "[cutover] arm: ${ARM[*]}   (BANISHED_RT_DIFF deliberately UNSET)"
 rm -f "$G/standalone_debug.log" "$G/standalone_error.log" "$G/standalone_crash.log" \
       "$G/standalone_boot_state.txt"
 
@@ -89,11 +89,11 @@ mv -f "$G/Runtime-x64.dll" "$G/Runtime-x64.dll.absent"
 # HARD GATE, inherited verbatim from attempt30.sh. A cutover attempt whose
 # defining condition silently did not hold is worse than no run.
 if [ -f "$G/Runtime-x64.dll" ]; then
-  echo "[attempt32] *** ABORT: Runtime-x64.dll is STILL PRESENT after the move."
-  echo "[attempt32] *** This would NOT have been a cutover run. Nothing launched."
+  echo "[cutover] *** ABORT: Runtime-x64.dll is STILL PRESENT after the move."
+  echo "[cutover] *** This would NOT have been a cutover run. Nothing launched."
   exit 2
 fi
-echo "[attempt32] DLL moved aside (verified absent); launching"
+echo "[cutover] DLL moved aside (verified absent); launching"
 
 cd "$G"
 env "${ARM[@]}" ./reimpl-x64.exe &
@@ -103,11 +103,11 @@ for i in $(seq 1 "$SECS"); do
   sleep 1
 done
 if kill -0 $PID 2>/dev/null; then
-  echo "[attempt32] still alive after ${SECS}s -- killing (HANG, treat as inconclusive)"
+  echo "[cutover] still alive after ${SECS}s -- killing (HANG, treat as inconclusive)"
   kill -9 $PID 2>/dev/null
 fi
 wait $PID 2>/dev/null
-echo "[attempt32] exit status: $?"
+echo "[cutover] exit status: $?"
 cd - >/dev/null
 
 for f in standalone_debug.log standalone_error.log standalone_crash.log standalone_boot_state.txt; do
@@ -124,4 +124,4 @@ done
   echo "== RtDiff ON count (MUST be 0) =="
   grep -hc "RtDiff] ON" "$OUT/standalone_error.log" "$OUT/standalone_debug.log" 2>/dev/null
 } > "$OUT/attest.txt"
-echo "[attempt32] logs + attest.txt copied to $OUT"
+echo "[cutover] logs + attest.txt copied to $OUT"

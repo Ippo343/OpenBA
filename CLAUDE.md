@@ -15,38 +15,15 @@ from `code/Game/`. VideoDX11-x64.dll is already fully replaced by `dx11/` (never
 The old proxy-DLL/hooking mode has been removed. Remaining exe functions not yet
 reimplemented are stubbed or registered individually via the address registry (see below).
 
-**Next phase (2026-09-06): port Runtime-x64.dll.** Review, facts, wave order, risks and the
-per-function recipe are in **[docs/runtime_port/PLAN.md](docs/runtime_port/PLAN.md)**. Read it
-before any runtime work.
-
-**Status 2026-09-12 — WAVE 29 CLOSED.** Eight lanes merged onto `wave29/base`.
-Board **1472 called / 1317 ported (89.5%)**, gap 155. **Read
-`docs/runtime_port/WAVE29_CLOSED.md` before quoting any figure** — and its §1 before
-comparing it to any earlier board: the census was fixed mid-wave, so the kickoff's
-1453/1294 and the close were produced by **different instruments**. The only
-like-for-like delta is 1460/1295 -> 1472/1317.
-
-**Real remaining BODY work is 14 functions, itemised in WAVE29_CLOSED §1.2** (21 BODY
-gap rows minus 7 `MemoryAllocator` rows that are written and gated behind
-`BANISHED_RT_ALLOC`). Work the list, never the count.
-
-**The cutover wall** (attempt 33, on the merged tip) is
-**`RtGraphics_MaterialInstance_Serialize+0x83`** -> `0x180061100` =
-`ExternalPtr<Graphics::Material>::Serialize`, the 7th of **25** instantiations of one
-template, 19 enumerated. Port the family, not the instance. Arm and procedure:
-`tools/cutover_attempt32.sh`. **`RtUnresolved = 0` does NOT exclude a missing
-registration** — it is blind to unregistered address doors.
-
-**Score a namespace on the IDENTITY, never the percentage.** `ceiling = (called -
-unpromotable) / called` has `called` in BOTH halves, and a faithful port that calls
-DLL internals grows `called`. The board has fallen or stayed flat in waves that
-succeeded; a minted row and a factory body cannot move it at all.
-
-**Two standing hazards for parallel lanes** (WAVE29_CLOSED §6): an isolated worktree
-may be checked out at a **stale commit** — pin the base sha and report the merge-base
-before working; and the Bash tool **auto-backgrounds any command at 600s**, which
-silently launders a blocking `tools/game_dir_lock.sh acquire` into a held-but-unnoticed
-lock. Use short acquires and `assert-held` before every launch.
+**Current phase: port Runtime-x64.dll so the exe stops loading it.**
+- **How work is chosen and measured:** [docs/runtime_port/DIRECTION.md](docs/runtime_port/DIRECTION.md).
+  The worklist is `docs/runtime_port/closure/WORKLIST.md` (regenerate with `tools/cutover_closure/`);
+  the gate is `make cutover`.
+- **Where things stand:** [docs/runtime_port/STATUS.md](docs/runtime_port/STATUS.md). **Do not put
+  status, counts or "current wall" text in this file.**
+- **Facts and the per-function recipe:** [docs/runtime_port/PLAN.md](docs/runtime_port/PLAN.md) §2, §3, §6.
+- No waves, lanes, new instruments or new `BANISHED_RT_*` flags (DIRECTION.md §2). A port
+  registers unconditionally.
 
 ## Target Binaries
 
@@ -215,14 +192,7 @@ is the path to use for verifying any rendering / gameplay / world-build change.
   `UI::ShowDialog` (which pumps its own loop no driver can reach) with `n`.
   Example, the Mods menu: `BANISHED_AUTOMENU_BUTTON=7
   BANISHED_AUTOMENU_CLICKS=1001,5001,d0,4001,101,m6 BANISHED_MODAL_ANSWER=1`.
-  **THIS EXAMPLE IS CURRENTLY BROKEN (verified 2026-09-10 on `3da1503` and on the
-  Wave 17 merge).** It dies ~5s in with an ACCESS_VIOLATION, `READ of 0xd0`, at
-  `reimpl-x64.exe+0x144575` (`ModDialog_ToggleMod_Impl+0x43`) <- `ModDialog_Slot8`
-  <- `AutoStart::TickMenu`. Found by Wave 17 lane CEIL with a control (same crash,
-  same address, with its own env var unset) and reproduced independently by the
-  integrator; evidence in `docs/runtime_port/wave17_modsroute_crash.txt`. Do not
-  plan a lane around this route until it is fixed, and per project doctrine the
-  fix is to find the upstream null, NOT to guard the deref.
+  Whether a route currently works is recorded in `docs/runtime_port/STATUS.md`, not here.
 
 ### Stress Test / Performance Baseline
 

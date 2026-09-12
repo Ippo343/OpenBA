@@ -1,5 +1,10 @@
 # Runtime-x64.dll Port — Review, Facts, and Plan
 
+> **PROCESS SUPERSEDED 2026-09-12.** The facts and the per-function recipe in this file
+> still hold. The wave/lane process, the census percentage and the "cutover wall" as a
+> planner do not: read **[DIRECTION.md](DIRECTION.md)** for how work is now chosen and
+> measured, and **[STATUS.md](STATUS.md)** for where things stand.
+
 Ground-truthed 2026-09-06 on branch `wave/upgrade-path-complete` (tip `d7023fa`, 382 commits
 ahead of `main`). Every number below came from a command or a live Ghidra query run that day;
 the source is named next to each. This document is the brief for agents working the runtime

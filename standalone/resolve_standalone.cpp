@@ -668,6 +668,14 @@ bool ResolveInit() {
                 "docs/runtime_port/WAVE9_CUTOVER_BOOT_RUNBOOK.md\n");
         g_modules[1].runtimeBase = 0;
         g_modules[1].delta = 0;
+        // A cutover boot has exactly one meaning: our mint owns every exported
+        // data symbol and our allocator owns the heap, because nothing else
+        // exists.  Those two are separate variables only for DLL-present
+        // experiments, so imply them here rather than making every cutover run
+        // reconstruct a four-variable arm (Wave 28 wasted three runs on that).
+        // Explicit =0 still wins, for the rare experiment that wants it.
+        if (!getenv("BANISHED_RT_MINT"))  _putenv_s("BANISHED_RT_MINT",  "1");
+        if (!getenv("BANISHED_RT_ALLOC")) _putenv_s("BANISHED_RT_ALLOC", "1");
     } else {
     g_modules[1].runtimeBase = reinterpret_cast<uintptr_t>(g_modules[1].handle);
     g_modules[1].delta = static_cast<intptr_t>(g_modules[1].runtimeBase)
