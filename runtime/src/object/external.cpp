@@ -238,6 +238,22 @@ uint32_t RtObject_External_Compile(External* self, const void* path) {
 // therefore cleared here even though Collection::Array's own SetSize never
 // shrinks it (WAVE2_COLLECTION.md §4 consequence 1) — this is a destructor, not
 // a resize, and it zeroes both halves of that qword in one store.
+// *** WAVE 27 LANE FRONTIER, 2026-09-12: 0x180006b80 AND 0x180006ac0 ARE NOW
+// PORTED AND REGISTERED *** in runtime/src/collection/array_destroy.cpp (as
+// `RtColl_ArrayDtorElem_180006b80` and `RtColl_DestroyStrings_180006ac0`, both
+// under kD_Str_10). Retail's ~External at 0x1800bc950 does not inline them - it
+// CALLs 0x180006b80 at 0x1800bc974 - so the loop below is now a SECOND live
+// copy of logic that also exists behind a registered address.
+//
+// It is deliberately LEFT AS IS rather than converted to a ResolveAddr call,
+// and the reason is not taste: the registered body sits behind
+// BANISHED_RT_COLLECTION + BANISHED_RT_ARRAY_DESTROY, and routing this dtor
+// through the registry would make it an EXEC-of-0 at cutover whenever either
+// gate is off, which is strictly worse than a duplicate. The two copies are
+// behaviourally identical (both are Body B with stride 0x10, slot at +0x00);
+// if they ever diverge, THIS comment is where to start, and the shape to
+// beware of is the shadowed-address defect array_destroy.cpp records against
+// lane UIW. ADDRESSEE: whoever arms the collection gates unconditionally.
 void RtObject_External_Dtor(External* self) {
     self->_vftable = VtableExternal();
 

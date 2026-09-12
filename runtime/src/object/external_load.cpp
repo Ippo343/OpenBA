@@ -147,8 +147,27 @@ using DeleteFn      = void* (*)(void* self, int flags);
 // `Collection::Array<ExternalArrayElement>::SetSize`, 0x18002c6a0. NOT exported
 // in either build, so this is a genuine ADDRESS door and the only one this file
 // adds to the cutover surface (reference_porting_can_grow_the_cutover_surface.md).
-// Nothing in the tree registers it today; at cutover it needs a body or this
-// call site needs to be revisited. Recorded rather than hidden behind a helper.
+//
+// *** THIS PREDICTION CAME TRUE AND IS NOW CLOSED. *** The sentence that stood
+// here - "nothing in the tree registers it today; at cutover it needs a body or
+// this call site needs to be revisited" - named its SYMBOL, its CONDITION and
+// its CONSEQUENCE, and cutover ATTEMPT 29 died exactly here, EXEC-of-0 at
+// ArraySetSize+0x4d.
+//
+// WAVE 27 LANE FRONTIER supplied the body. 0x18002c6a0 is registered by
+// runtime/src/collection/array.cpp (`kSpec_ExtArrayElem`, two-argument form),
+// and its two per-element helpers - 0x1800067d0 (Filename copy ctor, already
+// reached by kSpec_PkgEntry) and 0x180006ac0 (the range destroy, ported as
+// `RtColl_DestroyStrings_180006ac0` under kD_Str_10) - are registered too. So
+// ResolveAddr below is registry-first and lands on our body with the DLL
+// present or absent.
+//
+// THE DOOR IS STILL A DOOR. It resolves through the port registry, which means
+// it is only as good as those three registrations: they are all inside
+// `RtCollectionPortInit` / `RtCollectionDestroyPortInit`, gated on
+// BANISHED_RT_COLLECTION (and BANISHED_RT_ARRAY_DESTROY for the second). With
+// either gate off at cutover this call site is an EXEC-of-0 again, at the same
+// instruction, and the crash will look identical to attempt 29's.
 void ArraySetSize(void* arr, int32_t n) {
     using Fn = void* (*)(void*, int32_t);
     static Fn fn = nullptr;

@@ -162,6 +162,11 @@ extern int RtUiStringTableAccessorsRegister(); // stringtable_factory.cpp (FACTO
 // switch again, same reason. The row is 7/9 after these; slot 0 (the deleting
 // dtor) and Serialize are NOT ported and are named in WAVE26_LANE_FACTORY.md.
 extern int RtUiStringTableLifecycleRegister(); // stringtable_factory.cpp (FACTORY)
+// WAVE 27 lane FRONTIER, fourth pass: the LAST TWO ??_7StringTable@UI@@6B@
+// slots -- slot 0 (0x180002740, the scalar/vector deleting dtor) and slot 5
+// (?Serialize@, 0x18011d940). Takes the row to 9/9 on the static screen; it
+// does NOT promote it (see WAVE27_LANE_FRONTIER.md).
+extern int RtUiStringTableSlotsRegister(); // stringtable_factory.cpp (FRONTIER)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -198,5 +203,6 @@ void RtUiPortInit() {
     n += RtUiStringTableFactoryRegister();  // owns BANISHED_RT_UISTRTAB (FACTORY)
     n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
+    n += RtUiStringTableSlotsRegister();  // same switch (FRONTIER)
     printf("[RtPort] UI: %d exports registered\n", n);
 }

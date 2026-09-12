@@ -478,12 +478,14 @@ int RtUiStringTableAccessorsRegister() {
 // the unguarded deref is kept (CLAUDE.md: retail's unguarded derefs are
 // load-bearing).
 //
-// NOT PORTED, AND NAMED SO THE GAP IS NOT INVISIBLE: slot 0 (the scalar
-// deleting destructor at 0x180002740) and `?Serialize@StringTable@UI@@`
-// (0x18011d940). See the residuals section of
-// docs/runtime_port/WAVE26_LANE_FACTORY.md for who owns them and why they were
-// left. The row is therefore 7/9, still BLOCKED, and this file does not claim
-// otherwise.
+// *** WAVE 27 LANE FRONTIER CLOSED THE LAST TWO. *** The paragraph that stood
+// here said slot 0 (0x180002740) and `?Serialize@StringTable@UI@@` (0x18011d940)
+// were NOT PORTED and the row was 7/9. Both are below, in the FOURTH PASS
+// section at the bottom of this file. The row is now 9/9 on the STATIC screen.
+//
+// 9/9 IS NOT "PROMOTED". Promotion turns on owning the function that STAMPS the
+// table, which this lane did NOT establish - see the residual in
+// docs/runtime_port/WAVE27_LANE_FRONTIER.md, which names its addressee.
 // ============================================================================
 
 namespace {
@@ -532,5 +534,279 @@ int RtUiStringTableLifecycleRegister() {
     RegisterRuntimeExport("?Reconstruct@StringTable@UI@@UEAAPEAVExternal@Object@@XZ",
                           (void*)&RtUiStringTable_Reconstruct);
     RegisterRuntimeAddr(0x180002390ull, (void*)&RtUiStringTable_Reconstruct);     ++n;
+    return n;
+}
+
+
+// ============================================================================
+// WAVE 27 LANE FRONTIER, FOURTH PASS - the last two ??_7StringTable@UI@@6B@
+// slots: slot 0 (0x180002740) and slot 5 `?Serialize@` (0x18011d940)
+// ============================================================================
+//
+// *** THE ADDRESS IN THE HANDOVER WAS RIGHT AND GHIDRA DISAGREED. ***
+// WAVE26_CLOSED.md section 5 names slot 0 as 0x180002740. Ghidra's analysis of
+// the RETAIL dll places that address MID-INSTRUCTION inside a neighbouring
+// function, which reads exactly like a wrong address in a handover. It is not:
+// the vtable's own bytes, read straight out of the PE at RVA 0x154630 with
+// pefile, are
+//     +0x00 0x180002740   +0x08 0x180002190   +0x10 0x180002170
+//     +0x18 0x18011d930   +0x20 0x1800066e0   +0x28 0x18011d940
+//     +0x30 0x180002390   +0x38 0x180002460   +0x40 0x180002400
+// which is `kVSlots52` in standalone/rt_data_mint_tables.inc, entry for entry.
+// The disassembly below was then taken with an EXPLICIT program= argument (see
+// the INSTRUMENT DEFECT section of the lane doc - the MCP's notion of "current
+// program" was the PROFILE dll while every listing tool reported retail).
+//
+// ---------------------------------------------------------------------------
+// SLOT 0 - the scalar/vector deleting destructor, 0x180002740
+// ---------------------------------------------------------------------------
+// Transcribed from 0x180002740..0x1800027cd. flag is EDX:
+//   bit 1 (0x2) = this is an ARRAY block; bit 0 (0x1) = also FREE the storage.
+//
+//     TEST DL,0x2 ; JZ scalar
+//     ; --- vector arm ---
+//     LEA R9,[0x18011d8f0]            ??1StringTable@UI@@, the per-element dtor
+//     MOV R8D,[RCX-0x8]               the element COUNT, stored before the block
+//     MOV EDX,0x30                    sizeof(UI::StringTable)
+//     CALL 0x18007ec98                MSVC eh_vector_destructor_iterator
+//     TEST SIL,0x1 ; JZ .
+//     LEA RCX,[RBX-0x8] ; CALL 0x180006a10      free the block, INCLUDING the
+//                                               8-byte count header
+//     LEA RAX,[RBX-0x8] ; return
+//     ; --- scalar arm ---
+//     LEA RAX,[0x180154630] ; MOV [RCX],RAX     re-stamp OUR vptr
+//     ADD RCX,0x20 ; CALL 0x180004a90           ~Array<TextEntry>
+//     MOV RCX,RBX  ; CALL 0x1800bc950           ~External
+//     TEST SIL,0x1 ; JZ .
+//     MOV RCX,RBX  ; CALL 0x180002220           ??3StringTable@UI@@ (guarded free)
+//     MOV RAX,RBX  ; return
+//
+// The scalar arm is `??1StringTable@UI@@UEAA@XZ` (0x18011d8f0) INLINED - the two
+// were diffed instruction by instruction, not assumed equal: 0x18011d906..
+// 0x18011d922 is the same LEA/MOV/ADD/CALL/MOV/JMP sequence, with retail's
+// exported dtor tail-JMPing to ~External where slot 0 CALLs it and then falls
+// through to the free. So the port below calls the exported dtor rather than
+// re-transcribing its three steps, which is also what makes it follow a future
+// promotion of `??1StringTable@UI@@` instead of freezing today's body.
+//
+// *** THE VECTOR ARM OPENS ONE DOOR AND IT IS NAMED HERE, IN THE SHAPE WAVE 26
+// ASKED FOR (WAVE27_KICKOFF.md section 4 item 10). ***
+//   SYMBOL:      0x18007ec98, MSVC's `eh vector destructor iterator`.
+//   CONDITION:   nothing in this tree registers it today (grepped across
+//                runtime/ code/ standalone/ engine/ dx11/: it appears only in
+//                COMMENTS, in array_destroy.cpp and io/binary_writer.cpp).
+//   CONSEQUENCE: at cutover, a call that reaches the vector arm is an EXEC-of-0
+//                at this call site - the same failure attempt 29 took one level
+//                up in external_load.cpp.
+// It is left as an address door rather than hand-rolled because the iteration
+// ORDER and the EH semantics are the whole content of that helper and this lane
+// did not read it. The arm is believed unreachable in practice - UI::StringTable
+// is created only through `?CreateNewObject@`, which is a SINGLE-object
+// MemAlloc(0x30, 8) with no count header - but "believed unreachable" is why
+// the counter below exists rather than an assertion.
+// ADDRESSEE: the lane that ports MSVC's eh_vector helpers, or whichever cutover
+// attempt first reports an EXEC-of-0 at RtUiStringTable_ScalarDelete.
+//
+// ---------------------------------------------------------------------------
+// SLOT 5 - `?Serialize@StringTable@UI@@UEAA_NAEAVStream@IO@@@Z`, 0x18011d940
+// ---------------------------------------------------------------------------
+// The SAME `IO::Serializer` 16-byte facade `Object::External::Load` documents at
+// length (runtime/src/object/external_load.cpp) - a {Stream*, impl} pair on the
+// stack, handed to the Encoding's factory with only the stream filled in. That
+// file's account was used to SHAPE this one and every offset below was re-read
+// from 0x18011d940's own listing:
+//
+//     ser.stream = stream                       18011d957  [RSP+0x28]
+//     ser.impl   = 0                            18011d95c  [RSP+0x30]
+//     enc  = stream->encoding                   18011d965  [RDX+0x10]
+//     slot = (stream->direction == 0) ? +0x18 : +0x20      18011d96f/97a/97f
+//     ser.impl = enc->vtbl[slot](enc, &ser, 0)
+//     count = self->size                        18011d987  [RBX+0x28]
+//     ser.impl->vtbl[0xa0](impl, &count, 0)     18011d99e  the uint32 overload
+//     if (stream->direction == 0)               18011d9a9
+//         Array<TextEntry>::SetSize(&self->data, count)    18011d9b7 -> 0x180078c90
+//     e = self->data                            18011d9bc
+//     for (i = 0; i < count; ++i, e += 0x10) {
+//         String::Serialize(e,       &ser)      18011d9d8 -> 0x1800c9930
+//         String::Serialize(e + 0x8, &ser)      18011d9e6
+//     }
+//     if (ser.impl) ser.impl->vtbl[0](ser.impl, 1)         18011da06
+//     return true                               18011da08  MOV AL,0x1
+//
+// TWO THINGS THAT ARE EASY TO GET WRONG AND WERE READ, NOT ASSUMED:
+//   * the loop bound is the LOCAL `count` at [RSP+0x50] (`MOV EAX,[RSP+0x50]`
+//     at 18011d9c0), NOT `self->size` re-read. On the read path SetSize has
+//     just made them equal; on the WRITE path nothing changes either. It is
+//     transcribed as the local because that is what retail reads.
+//   * `e` is latched BEFORE the loop (`MOV RBX,[RBX+0x20]` at 18011d9bc), so a
+//     reallocation inside the loop would not be seen. Retail's own choice.
+//
+// RETURN IS UNCONDITIONALLY TRUE. There is no failure path: the only branches
+// are the direction test and the count loop. Not simplified - there is nothing
+// to simplify; recorded because "a Serialize returning bool" invites a guess.
+// ============================================================================
+
+namespace {
+
+// The count MSVC stores 8 bytes before an array-new block.
+using EhVecDtorFn = void  (*)(void* base, uint64_t size, int count, void (*dtor)(void*));
+using FreeFn      = void  (*)(void* p);
+using DtorFn      = void  (*)(void* self);
+using SerFactoryFn = void* (*)(void* encoding, void* ser, int flag);
+using SerU32Fn     = void  (*)(void* impl, uint32_t* v, const char* name);
+using DeleteFn     = void* (*)(void* self, int flag);
+using ArraySetSizeFn = void (*)(void* arr, int n);
+using StrSerFn       = void (*)(void* str, void* ser);
+
+uint64_t g_slot0Scalar = 0, g_slot0Vector = 0, g_slot0Freed = 0;
+uint64_t g_serEntries  = 0, g_serRead = 0, g_serElems = 0, g_serNullImpl = 0;
+
+// `IO::Serializer` - the 16-byte facade. Identical to the struct
+// external_load.cpp defines; duplicated rather than shared because that file
+// exposes no header, which is how every sibling in runtime/src/ is wired.
+struct SerializerPair {
+    void* stream;   // +0x00
+    void* impl;     // +0x08
+};
+static_assert(sizeof(SerializerPair) == 0x10, "the pair retail keeps on the stack");
+
+// ATTENDANCE, and the same disclaimer the factory report above carries: a zero
+// here means REGISTERED AND NOT REACHED, which is the expected reading with the
+// DLL present, and is NOT evidence either body is correct. The vector counter is
+// the one to watch: a non-zero g_slot0Vector on a cutover run means the door
+// named in the banner (0x18007ec98) is live after all.
+void StringTableSlotsReport() {
+    printf("[RtPort] UI::StringTable slot ATTENDANCE: slot0 scalar=%llu "
+           "vector=%llu freed=%llu | Serialize=%llu (read=%llu elems=%llu "
+           "nullImpl=%llu)\n",
+           (unsigned long long)g_slot0Scalar, (unsigned long long)g_slot0Vector,
+           (unsigned long long)g_slot0Freed,  (unsigned long long)g_serEntries,
+           (unsigned long long)g_serRead,     (unsigned long long)g_serElems,
+           (unsigned long long)g_serNullImpl);
+    if (g_serEntries != 0 && g_serElems == 0) {
+        printf("[RtPort] UI::StringTable Serialize: entered %llu times and "
+               "replayed ZERO elements -- the loop never ran, so `calls` here "
+               "says nothing about the element path "
+               "(reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).\n",
+               (unsigned long long)g_serEntries);
+    }
+    if (g_slot0Vector != 0) {
+        printf("[RtPort] UI::StringTable slot 0: THE VECTOR ARM RAN (%llu). The "
+               "0x18007ec98 door named in this file's banner is LIVE; it is "
+               "unregistered and is an EXEC-of-0 at cutover.\n",
+               (unsigned long long)g_slot0Vector);
+    }
+    fflush(stdout);
+}
+struct SlotsReport {
+    ~SlotsReport() {
+        if (g_slot0Scalar || g_slot0Vector || g_serEntries) StringTableSlotsReport();
+    }
+};
+SlotsReport g_slotsReport;
+
+// A slot of an object's own vtable, by BYTE offset, so the call site reads the
+// way the disassembly does.
+void* VSlotOf(const void* obj, size_t byteOffset) {
+    void** vtbl = *reinterpret_cast<void** const*>(obj);
+    return vtbl[byteOffset / sizeof(void*)];
+}
+
+}  // namespace
+
+// ---- slot 0 ----------------------------------------------------------------
+extern "C" void* RtUiStringTable_ScalarDelete(void* self, int flag) {
+    uint8_t* p = static_cast<uint8_t*>(self);
+
+    if (flag & 2) {                                          // 180002762
+        ++g_slot0Vector;
+        // THE DOOR. See the banner: 0x18007ec98 is unregistered in this tree.
+        EhVecDtorFn ehVec = reinterpret_cast<EhVecDtorFn>(
+            ResolveAddr(Module::Runtime, 0x18007ec98));
+        DtorFn elemDtor = reinterpret_cast<DtorFn>(
+            ResolveAddr(Module::Runtime, 0x18011d8f0));      // ??1StringTable@UI@@
+        const int count = *reinterpret_cast<const int32_t*>(p - 8);   // 18000276e
+        ehVec(p, kStringTableSize, count, elemDtor);         // 180002777
+        if (flag & 1) {                                      // 18000277c
+            ++g_slot0Freed;
+            reinterpret_cast<FreeFn>(ResolveAddr(Module::Runtime, 0x180006a10))(p - 8);
+        }
+        return p - 8;                                        // 18000278b
+    }
+
+    ++g_slot0Scalar;
+    // The scalar arm IS ??1StringTable@UI@@ inlined (banner). Going through the
+    // exported dtor keeps this slot following a promotion of that row instead of
+    // freezing today's three steps, and ResolveAddr is registry-first so it
+    // reaches our body the moment one exists.
+    reinterpret_cast<DtorFn>(ResolveAddr(Module::Runtime, 0x18011d8f0))(self);
+
+    if (flag & 1) {                                          // 1800027ad
+        ++g_slot0Freed;
+        // ??3StringTable@UI@@SAXPEAX@Z 0x180002220 - a null-guarded MemFree
+        // (TEST RCX,RCX / JZ ret, then the allocator Enter / Free / Leave
+        // triple). EXPORTED, so this is a NAME door, not an address one:
+        // AEAA/SAXPEAX means the access specifier, not "unexported"
+        // (reference_aeaa_is_private_not_unexported.md).
+        RT_EXPORT_ONCE(FreeFn, "??3StringTable@UI@@SAXPEAX@Z")(self);
+    }
+    return self;                                             // 1800027bb
+}
+
+// ---- slot 5 ----------------------------------------------------------------
+extern "C" bool RtUiStringTable_Serialize(void* selfV, void* streamV) {
+    ++g_serEntries;
+    UiStringTable* self = static_cast<UiStringTable*>(selfV);
+    uint8_t*       stream = static_cast<uint8_t*>(streamV);
+
+    SerializerPair ser;
+    ser.stream = stream;                                     // 18011d957
+    ser.impl   = nullptr;                                    // 18011d95c
+
+    void*    enc       = *reinterpret_cast<void**>(stream + 0x10);   // 18011d965
+    const int32_t dir  = *reinterpret_cast<const int32_t*>(stream + 0x8);
+    const size_t  slot = (dir == 0) ? 0x18 : 0x20;                   // 18011d96f
+    ser.impl = reinterpret_cast<SerFactoryFn>(VSlotOf(enc, slot))(enc, &ser, 0);
+
+    int32_t count = self->size;                              // 18011d987
+    reinterpret_cast<SerU32Fn>(VSlotOf(ser.impl, 0xa0))(
+        ser.impl, reinterpret_cast<uint32_t*>(&count), nullptr);     // 18011d99e
+
+    // The direction is RE-READ from the stream here, not cached from above:
+    // 18011d9a4 reloads [RSP+0x28] and 18011d9a9 tests [RAX+0x8] again.
+    if (*reinterpret_cast<const int32_t*>(stream + 0x8) == 0) {      // 18011d9a9
+        ++g_serRead;
+        reinterpret_cast<ArraySetSizeFn>(ResolveAddr(Module::Runtime, 0x180078c90))(
+            &self->data, count);                             // 18011d9b7
+    }
+
+    uint8_t* e = reinterpret_cast<uint8_t*>(self->data);     // 18011d9bc
+    StrSerFn strSer = reinterpret_cast<StrSerFn>(
+        ResolveAddr(Module::Runtime, 0x1800c9930));          // String::Serialize
+    for (int32_t i = 0; i < count; ++i, e += 0x10) {         // bound is the LOCAL
+        ++g_serElems;
+        strSer(e,       &ser);                               // 18011d9d8
+        strSer(e + 0x8, &ser);                               // 18011d9e6
+    }
+
+    if (ser.impl != nullptr) {                               // 18011d9f9
+        reinterpret_cast<DeleteFn>(VSlotOf(ser.impl, 0))(ser.impl, 1);   // 18011da06
+    } else {
+        ++g_serNullImpl;
+    }
+    return true;                                             // 18011da08
+}
+
+int RtUiStringTableSlotsRegister() {
+    const char* v = std::getenv("BANISHED_RT_UISTRTAB");
+    if (v && v[0] == '0') return 0;
+    int n = 0;
+    // SLOT 0 IS ADDRESS-ONLY, and that is checked rather than assumed: the
+    // retail export directory (pefile, 30 StringTable@UI symbols) contains no
+    // `??_G`/`??_E` entry for this class, so there is no name to register under.
+    RegisterRuntimeAddr(0x180002740ull, (void*)&RtUiStringTable_ScalarDelete);    ++n;
+    RegisterRuntimeExport("?Serialize@StringTable@UI@@UEAA_NAEAVStream@IO@@@Z",
+                          (void*)&RtUiStringTable_Serialize);
+    RegisterRuntimeAddr(0x18011d940ull, (void*)&RtUiStringTable_Serialize);       ++n;
     return n;
 }

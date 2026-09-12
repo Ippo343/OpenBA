@@ -667,6 +667,103 @@ void DestroyCfgEntry20(void* ignoredThis, uint8_t* base, int count) {
     fn(ignoredThis, base, count);
 }
 
+// --- WAVE 27 LANE FRONTIER: 0x18002c6a0's two element ops -------------------
+//
+// ASSIGN, read at 0x18002c76d..0x18002c77d:
+//     18002c76d  MOV RDX,RBX        src = old + i*0x10
+//     18002c770  MOV RCX,R14        dst = new + i*0x10
+//     18002c773  CALL 0x1800067d0   System::Filename's copy ctor
+//     18002c779  MOV RAX,[RBX+0x8]
+//     18002c77d  MOV [R14+0x8],RAX  the two int32s, copied as ONE qword
+//
+// *** IT DELEGATES TO 0x1800067d0 RATHER THAN INLINING THE STRING IDIOM, AND
+// THAT IS THE TRAP THIS FAMILY HAS NOW SPRUNG FIVE TIMES. *** `AssignPkgEntry`
+// above records the fourth: 0x1800067d0's LAST TWO ACTIONS are two calls to
+// `Filename::AdjustDelimiters` (0x18000682a, 0x180006832 - both re-read from
+// that body for this row rather than inherited from that note), so an element
+// assign hand-written as "null the slot, adopt, incref" is byte-identical for
+// the first eight bytes and leaves every dependency PATH with its separators
+// unnormalised. That breaks lookup for any dependency spelled with forward
+// slashes and breaks NOTHING otherwise - i.e. it passes a green run. This is
+// exactly the shape WAVE26_CLOSED.md section 6 item 1 warned would "compile,
+// run, and leak or double-release a refcount" with no byte oracle able to see
+// it.
+//
+// By ADDRESS, not as a direct call, for the reason `AssignGraphSeries` records:
+// ResolveAddr consults the port registry first, so the edge stays visible to
+// tools/addr_door_audit.py and tools/runtime_census.py.
+// --- WAVE 27 LANE FRONTIER: 0x180078c90's element ops -----------------------
+//
+// `Array<UI::StringTable::TextEntry>::SetSize(this, int)` - the array
+// `?Serialize@StringTable@UI@@` resizes on the READ path (0x18011d9b7).
+//
+// The assign is INLINED in retail, not a call, and it is the refcount-adopt
+// idiom run TWICE, read at 0x180078d33..0x180078d55:
+//     MOV [RAX],R14        (R14 = 0)      null dst +0x00 FIRST
+//     MOV RDX,[RCX] ; TEST ; MOV [RAX],RDX ; INC [RDX-0x4]
+//     MOV [RAX+0x8],R14                   null dst +0x08
+//     MOV RDX,[RCX+0x8] ; TEST ; MOV [RAX+0x8],RDX ; INC [RDX-0x4]
+// Both slots are zeroed before the adopt, and the whole 0x10 is written, so
+// there is no unwritten window on this arm.
+//
+// NOTE THE ORDER DIFFERENCE FROM THE DESTROY, which is not a contradiction and
+// is worth stating because it looks like one: the assign walks +0x00 then
+// +0x08, the destroy (0x180005570) walks +0x08 then +0x00. Each was read from
+// its own body; neither was inferred from the other.
+void AssignStringPair10(uint8_t* d, const uint8_t* s) {
+    void**       dp = reinterpret_cast<void**>(d);
+    void* const* sp = reinterpret_cast<void* const*>(s);
+    dp[0] = nullptr;                                        // 180078d33
+    if (void* a0 = sp[0]) {                                 // 180078d36
+        dp[0] = a0;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(a0) - 4));
+    }
+    dp[1] = nullptr;                                        // 180078d44
+    if (void* a1 = sp[1]) {                                 // 180078d48
+        dp[1] = a1;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(a1) - 4));
+    }
+}
+
+// The range destroy 0x180078c90 calls on BOTH arms - realloc (0x180078d82,
+// count = oldSize) and shrink-tail (0x180078ddb, base = old + newSize*0x10).
+// PORTED AND REGISTERED in array_destroy.cpp in this same commit as
+// `RtColl_DestroyStrings_180005570` under the NEW `kD_Str2_10` row: it releases
+// TWO slots per element, and reusing the one-slot kD_Str_10 (same stride) would
+// have leaked every entry's `text`.
+void DestroyStringPair10Range(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180005570));
+    fn(ignoredThis, base, count);
+}
+
+void AssignExtArrayElem(uint8_t* d, const uint8_t* s) {
+    using Fn = void* (*)(void*, const void*);
+    static Fn ctor = nullptr;            // cache a hit, retry a miss
+    if (!ctor) ctor = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800067d0));
+    ctor(d, s);                                                    // 18002c773
+    *reinterpret_cast<uint64_t*>(d + 0x8) =
+        *reinterpret_cast<const uint64_t*>(s + 0x8);               // 18002c779
+}
+
+// The range destroy 0x180006ac0 calls on BOTH arms. PORTED AND REGISTERED in
+// array_destroy.cpp in this same commit as `RtColl_DestroyStrings_180006ac0`
+// under `kD_Str_10` - the spec row that already serves 0x180005930 and
+// 0x180026b50, because 0x180006ac0 is instruction-for-instruction the same body
+// (the comparison is tabulated at that B_ENTRY line, not asserted here).
+//
+// So this ResolveAddr is registry-first and lands on our body with the DLL
+// present or absent. It does NOT open a new door onto an unported callee, which
+// is the failure mode reference_porting_can_grow_the_cutover_surface.md names
+// and which attempt 29 hit one level up.
+void DestroyExtArrayElemRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180006ac0));
+    fn(ignoredThis, base, count);
+}
+
 void AssignStringRef(uint8_t* d, const uint8_t* s) {
     void** dp = reinterpret_cast<void**>(d);
     void* const* sp = reinterpret_cast<void* const*>(s);
@@ -1242,6 +1339,85 @@ const ArraySpec kSpec_ExtStr10at08 = {            // 0x180075d20
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x08, 0x10 };
 
+// ============================================================================
+// WAVE 27 LANE FRONTIER - 0x18002c6a0, `Array<Object::ExternalArrayElement>`
+//
+// THIS IS THE ADDRESS CUTOVER ATTEMPT 29 DIED ON (EXEC-of-0 at
+// ArraySetSize+0x4d, from runtime/src/object/external_load.cpp:157). The whole
+// body was disassembled for this row; nothing below is inherited.
+//
+// *** THE WAVE 26 WARNING HELD, AND ITS REASONING WAS ONE STEP OFF. ***
+// WAVE26_CLOSED.md section 6 item 1 said the three ported siblings in
+// achievement_manager.cpp (Array<bool>, Array<Time>, Array<InternalPtr>) are
+// the WRONG TEMPLATE, because this element carries a refcounted String and
+// those are POD "realloc+memcpy" arrays. The CONCLUSION is right - reusing
+// kSpec_Bool / kSpec_U64Zero / kSpec_PtrZero here would leak a refcount on
+// every grow and skip the release on every shrink. The PREMISE is not: those
+// three are not a separate realloc+memcpy template at all, they are three
+// `kSpec_*` rows of the SAME SetSizeCore this row joins, and the machinery for
+// a non-trivial element (an `assign` that is a CALL, and a `destroy` that runs
+// on both the realloc and the shrink arm) has existed in this file since Wave 9
+// and already serves seven rows. So the danger was real and the remedy was
+// already written: one spec row, not a new template.
+//
+// Read out of 0x18002c6a0's own disassembly:
+//
+//   ARITY = TWO.  `MOV dword ptr [RSP+0x10],EDX` at 0x18002c6a0 homes arg2 and
+//     NOTHING homes or reads R8. Registering this behind the three-argument
+//     typedef and dereferencing R8 would read a register the caller never set
+//     (external_load.cpp:157 calls it with two arguments, which agrees).
+//   STRIDE 0x10.  `SHL RCX,0x4` at 0x18002c70a before MemAlloc, and again as
+//     `ADD RDI,0x10` at 0x18002c7a8 and `ADD R12,R12 ; LEA RDX,[RDI+R12*0x8]`
+//     at 0x18002c821 (the shrink-tail base = old + newSize*0x10).
+//   ALIGN 8.  `MOV EDX,0x8` at 0x18002c70e.
+//   GROWTH.  *** NOT capacity*=2, and WAVE26_CLOSED.md said so without saying
+//     what it IS. *** 0x18002c6ed..0x18002c703:
+//         capacity = newSize
+//         if (newSize == oldSize + 1 && oldSize != 0) capacity = newSize * 3
+//     (`LEA EAX,[R13+0x1]`, `LEA EAX,[R15+R15*0x2]`). That is byte-for-byte
+//     the rule SetSizeCore already implements for all 27 siblings - the family
+//     growth policy, not a per-instantiation one. This row inherits it by
+//     using SetSizeCore and adds nothing.
+//   ASSIGN = a CALL plus one qword (0x18002c76d..0x18002c77d), see below.
+//   INIT  = two zero qwords (0x18002c79a/0x18002c79d), whole stride covered.
+//   DESTROY = 0x180006ac0 on BOTH arms - realloc (0x18002c7d4, count=oldSize)
+//     and shrink-tail (0x18002c82b, count=oldSize-newSize).
+//
+// ELEMENT: `{System::Filename @+0x00, int32 @+0x08, int32 @+0x0c}`, and the two
+// halves of that were established by two writers that never saw each other -
+// external_load.cpp's dependency replay (which serializes a String then TWO
+// int32s at +0x08 and +0x0c) and this body (whose assign copies +0x08..+0x0f as
+// ONE qword). Both are true: the ARRAY does not care where the split is, and
+// the SERIALIZER does. runtime/types/object/External.h carries the struct.
+const ArraySpec kSpec_ExtArrayElem = {            // 0x18002c6a0
+    "Array<Object::ExternalArrayElement>", 0x10, 8,
+    &AssignExtArrayElem, &InitZero10, &DestroyExtArrayElemRange, false,
+    /*assign unwritten*/ 0,    0,      // CALL writes +0x00..+0x07, qword +0x08
+    /*init   unwritten*/ 0,    0,      // two qword zero stores cover 0x10
+    /*seed zero       */ 0x00, 0x08 }; // +0x00 is DEREFERENCED by both helpers
+
+// WAVE 27 LANE FRONTIER - 0x180078c90, `Array<UI::StringTable::TextEntry>`.
+// TWO-ARGUMENT (no R8 is homed or read; `MOVSXD RDI,EDX` at 0x180078cac is the
+// only parameter past `this`). Stride 0x10 (`SHL RCX,0x4` at 0x180078ce1,
+// `ADD RCX,0x10` at 0x180078d6e), align 8 (`MOV EDX,0x8` at 0x180078ce5), and
+// the same family growth rule (`LEA EAX,[RSI+0x1]` / `LEA EAX,[RDI+RDI*0x2]`
+// at 0x180078ccc..0x180078cd7).
+//
+// INIT arm = two zero qwords at 0x180078d64/0x180078d67, so InitZero10 is
+// exactly it and the whole stride is covered.
+//
+// *** IT IS NOT kSpec_ExtStr10at08 AND IT IS NOT kSpec_ExtArrayElem. *** All
+// three are stride 0x10, align 8, InitZero10, non-trivial, with a destroy on
+// both arms - every property a reader would use to decide they are the same
+// row. They differ in WHICH SLOTS carry a String: +0x08 only, +0x00 only, and
+// BOTH. Each wrong pairing leaks or double-releases exactly one refcount.
+const ArraySpec kSpec_StringPair10 = {            // 0x180078c90
+    "Array<UI::StringTable::TextEntry>", 0x10, 8,
+    &AssignStringPair10, &InitZero10, &DestroyStringPair10Range, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x10 }; // BOTH slots are dereferenced
+
 // 0x180075b20 — `Array<UI::DialogControllerConfigEntry>::SetSize(this, int)`.
 // See AssignCfgEntry20 above for the transcription and for the +0x04..+0x07
 // hole that both arms skip.
@@ -1779,6 +1955,12 @@ J3_ENTRY2(180005110, kSpec_U64Zero)     // Achievement: Array<ExternalPtr<Goal>>
 J3_ENTRY2(180078950, kSpec_Sprite38Z)   // UI: Array<SpriteSheet::SpriteInfo>
 J3_ENTRY2(180075d20, kSpec_ExtStr10at08) // UI: Array<DialogNamedTemplate>
 J3_ENTRY2(180075b20, kSpec_CfgEntry20)   // UI: Array<DialogControllerConfigEntry>
+// WAVE 27 LANE FRONTIER - the cutover frontier. Two-argument, read from the
+// body (see kSpec_ExtArrayElem): nothing homes or reads R8.
+J3_ENTRY2(18002c6a0, kSpec_ExtArrayElem) // Object: External::_refs, the dependency array
+// WAVE 27 LANE FRONTIER - the array ?Serialize@StringTable@UI@@ resizes on the
+// read path. Two-argument, read from the body (see kSpec_StringPair10).
+J3_ENTRY2(180078c90, kSpec_StringPair10) // UI: StringTable's TextEntry array
 
 #undef J3_ENTRY2
 
@@ -2009,6 +2191,13 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x18002f070, (void*)&RtColl_ArraySetSize_18002f070);
     RegisterRuntimeAddr(0x1800492d0, (void*)&RtColl_ArraySetSize_1800492d0);
     RegisterRuntimeAddr(0x180005110, (void*)&RtColl_ArraySetSize_180005110);
+    // WAVE 27 LANE FRONTIER - the address cutover attempt 29 died on. Its
+    // caller is runtime/src/object/external_load.cpp:157, whose door comment
+    // predicted this exact EXEC-of-0 and is updated in the same commit.
+    RegisterRuntimeAddr(0x18002c6a0, (void*)&RtColl_ArraySetSize_18002c6a0);
+    // WAVE 27 LANE FRONTIER - the read-path resize inside
+    // ?Serialize@StringTable@UI@@ (0x18011d9b7), ported in the same commit.
+    RegisterRuntimeAddr(0x180078c90, (void*)&RtColl_ArraySetSize_180078c90);
     // Wave 26 lane INT33 — Array<SpriteSheet::SpriteInfo>::SetSize, the
     // two-argument form. NON-TRIVIAL, and registered HERE rather than behind
     // BANISHED_RT_ARRAY_NONTRIVIAL, for the same reason 0x180034860 and

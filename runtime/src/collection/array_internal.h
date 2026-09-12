@@ -137,6 +137,15 @@ extern const ArraySpec kSpec_PkgEntry;    // 0x1800298f0   NON-TRIVIAL
 // this declaration.
 extern const ArraySpec kSpec_VideoResource;  // 0x18004f620   NON-TRIVIAL
 
+// Wave 27 lane FRONTIER. NON-TRIVIAL and TWO-ARGUMENT: the element is
+// {System::Filename, int32, int32}, the assign is a CALL to Filename's copy
+// ctor and the destroy runs on BOTH the realloc and the shrink arm. Declared
+// here so array_probe.cpp can drive it against the shipped 0x18002c6a0 through
+// the same machinery as the other rows; no probe case exists yet (residual in
+// docs/runtime_port/WAVE27_LANE_FRONTIER.md, addressee named there).
+extern const ArraySpec kSpec_ExtArrayElem;   // 0x18002c6a0   NON-TRIVIAL
+extern const ArraySpec kSpec_StringPair10;    // 0x180078c90   NON-TRIVIAL
+
 }  // namespace rtcoll
 
 // Runs the synthetic-subject replay probe. Driven by rtcoll::g_probePending —

@@ -87,12 +87,33 @@ static_assert(sizeof(ExternalPtr<void>) == 8, "ExternalPtr<T> is one pointer");
 // walk the object's resource references. See the FindOrLoad caching note in
 // runtime/src/object/external.cpp.
 // ============================================================
+// WAVE 27 LANE FRONTIER: the element is now pinned by THREE independent
+// writers, and they do not contradict each other - they split +0x08 differently
+// because they are doing different jobs.
+//   * FUN_180006ac0 (the range destroy, now ported as kD_Str_10) touches ONLY
+//     +0x00 and steps 0x10 (`ADD RBX,0x10` at 0x180006b5f).
+//   * FUN_18002c6a0 (`Array<ExternalArrayElement>::SetSize`, now ported as
+//     kSpec_ExtArrayElem) copies +0x00 through System::Filename's copy ctor
+//     0x1800067d0 and then +0x08..+0x0f as ONE qword (0x18002c779).
+//   * Object::External::Load's dependency replay serializes +0x00 as a String
+//     and then TWO int32s, at +0x08 and +0x0c (0x1800bc7fc / 0x1800bc811).
+// So the tail IS two int32s; the array simply never needs to know that. The
+// field stays spelled as one qword because that is what the ARRAY writes, and
+// external_load.cpp is where the split is made, with its own citation.
 struct ExternalArrayElement {
-    char*    owned;   // +0x00 — released with the String idiom by FUN_180006ac0
-    uint64_t opaque;  // +0x08 — never touched by the destructor
+    char*    owned;   // +0x00 — a System::Filename: released with the String
+                      //         idiom by FUN_180006ac0, copied (and delimiter-
+                      //         normalised) by 0x1800067d0
+    uint64_t opaque;  // +0x08 — two int32s to the serializer; never touched by
+                      //         the destructor, copied whole by SetSize
 };
 static_assert(sizeof(ExternalArrayElement) == 0x10,
-              "the destructor's element stride is 0x10 (FUN_180006ac0)");
+              "the destructor's element stride is 0x10 (FUN_180006ac0), and "
+              "SetSize's SHL RCX,0x4 at 0x18002c70a agrees");
+static_assert(offsetof(ExternalArrayElement, owned)  == 0x00,
+              "ExternalArrayElement::owned @ +0x00 (MOV RAX,[RBX] at 0x180006b0a)");
+static_assert(offsetof(ExternalArrayElement, opaque) == 0x08,
+              "ExternalArrayElement::opaque @ +0x08 (MOV [R14+0x8],RAX at 0x18002c77d)");
 
 struct External {
     void*                              _vftable;   // +0x00

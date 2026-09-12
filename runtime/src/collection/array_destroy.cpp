@@ -269,6 +269,13 @@ constexpr DestroySpec kD_Str_10 = { "String @+0x000, stride 0x010", 0x010, 1, { 
 constexpr DestroySpec kD_Str_48 = { "String @+0x000, stride 0x048", 0x048, 1, { 0x000 } };
 constexpr DestroySpec kD_Str_18 = { "String @+0x010, stride 0x018", 0x018, 1, { 0x010 } };
 constexpr DestroySpec kD_Str2_38 = { "2 Strings @+0x008,+0x000, stride 0x038", 0x038, 2, { 0x008, 0x000 } };
+// WAVE 27 LANE FRONTIER - UI::StringTable's TextEntry {name, text}, the element
+// of the array at StringTable+0x20. Read out of 0x180005570's own body:
+//   0x1800055a7  MOV RAX,[RBX+0x8]   the FIRST slot released is +0x08
+//   0x180005600  MOV RAX,[RBX]       the SECOND is +0x00
+//   0x180005655  ADD RBX,0x10        stride
+// so the order is DESCENDING, like kD_Str2_38, and the assert below enforces it.
+constexpr DestroySpec kD_Str2_10 = { "2 Strings @+0x008,+0x000, stride 0x010", 0x010, 2, { 0x008, 0x000 } };
 
 // ---- WAVE 25 LANE INTERNAL42: two more Body-B rows -------------------------
 // Both read out of their own helper's disassembly. The helpers walk a POINTER
@@ -319,6 +326,7 @@ RTCOLL_FITS(kD_Str_10, 1, 8u);
 RTCOLL_FITS(kD_Str_48, 1, 8u);
 RTCOLL_FITS(kD_Str_18, 1, 8u);
 RTCOLL_FITS(kD_Str2_38, 2, 8u);
+RTCOLL_FITS(kD_Str2_10, 2, 8u);
 static_assert(kD_Str2_38.offs[1] + 8u <= kD_Str2_38.stride, "offs[1]");
 
 // The three DESCENDING rows, asserted as descending. "Sorted them while tidying
@@ -331,6 +339,8 @@ static_assert(kD_InnerArr3_1f0.offs[0] > kD_InnerArr3_1f0.offs[1] &&
 static_assert(kD_InnerArr3_48.offs[0] > kD_InnerArr3_48.offs[1] &&
               kD_InnerArr3_48.offs[1] > kD_InnerArr3_48.offs[2],
               "0x18005bce0 walks 0x38, 0x28, 0x08 in that order");
+static_assert(kD_Str2_10.offs[0] > kD_Str2_10.offs[1],
+              "0x180005570 releases +0x08 BEFORE +0x00 (0x1800055a7 then 0x180005600)");
 static_assert(kD_Str2_38.offs[0] > kD_Str2_38.offs[1],
               "0x1800059e0 releases +0x08 BEFORE +0x00");
 
@@ -519,6 +529,46 @@ B_ENTRY(180039640, kD_Str_10at08)     // UI: DialogNamedTemplate {ptr, String*}
 // the HELPER's own disassembly, not from its caller's hash.
 B_ENTRY(180039580, kD_Str_20at18)     // UI: DialogControllerConfigEntry
 
+// ---- WAVE 27 LANE FRONTIER: the SIXTH Body-B address, 0x180006ac0 ----------
+//
+// `Object::ExternalArrayElement`'s range destroy -- the element-destroy arm of
+// `Collection::Array<ExternalArrayElement>::SetSize` (0x18002c6a0), which is
+// the wall cutover attempt 29 died on (EXEC-of-0 at ArraySetSize+0x4d).
+//
+// *** IT IS BODY B AND THAT IS MEASURED, NOT RESEMBLED. *** 0x180006ac0 was
+// disassembled in full and set beside 0x180005930, the row directly above.
+// They are identical instruction for instruction and in every resolved
+// absolute operand (0x1801fc718, 0x18014b390, 0x18014b388, 0x1800c6c00) --
+// the two differences are EXACTLY the pair array.cpp's banner already
+// tabulates between 0x180026b50 and 0x180005930 and that no caller can see:
+//     0x180006af2  NOP dword ptr [RAX + RAX*0x1]   alignment padding
+//     0x180006b05  MOV qword ptr [RSP+0x50],RBX    a DUPLICATED store into
+//                                                  this body's own SEH scope
+//                                                  slot (0x180006b00 makes it
+//                                                  first, with the same value)
+// The spec is read out of THIS body: `ADD RBX,0x10` at 0x180006b5f is the
+// stride, and the slot is `MOV RAX,qword ptr [RBX]` at 0x180006b0a -- offset
+// 0x00. That is kD_Str_10, no new row. Third instance of one body; the first
+// two are the two lines above.
+B_ENTRY(180006ac0, kD_Str_10)         // Object: ExternalArrayElement {Filename, 2x int32}
+
+// ---- WAVE 27 LANE FRONTIER: 0x180005570, the FIRST TWO-SLOT Body-B at 0x10 --
+//
+// `UI::StringTable`'s TextEntry range destroy. Reached from TWO places, and
+// both are ported in this same commit:
+//   * 0x180004a90, `~Array<TextEntry>` (the J2 entry below), which is what
+//     `??1StringTable@UI@@` calls on `this+0x20`;
+//   * 0x180078c90, `Array<TextEntry>::SetSize`, on BOTH of its destroy arms -
+//     array.cpp's kSpec_StringPair10.
+//
+// It is Body B with a TWO-OFFSET spec, which no previous Body-B row at stride
+// 0x10 has been: kD_Str_10 (0x180005930 / 0x180026b50 / 0x180006ac0) releases
+// ONE slot at +0x00 and this one releases TWO. Sharing kD_Str_10 by stride
+// would have left every TextEntry's `text` String leaked, silently, with a
+// clean build - the fifth time this family has offered a wrong answer by
+// resemblance. The spec is read out of THIS body (see kD_Str2_10 above).
+B_ENTRY(180005570, kD_Str2_10)        // UI: StringTable::TextEntry {name, text}
+
 // ---------------------------------------------------------------------------
 // 0x180026b50 — WAVE 9 LANE DESTROY, and why it shares kD_Str_10 WITHOUT this
 // being the fifth near-miss-by-resemblance this family has produced
@@ -668,6 +718,37 @@ J2_ENTRY(180039280, ReleaseStringsCounted,  kD_Str_20at18)   // CALL 0x180039580
 // not from a hash, because a hash erases exactly that operand (see the three
 // Wave 25 rows above, where two siblings sharing hash 089ee8 take two specs).
 J2_ENTRY(1800269a0, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x180026b50  Body B
+
+// ---- WAVE 27 LANE FRONTIER: the eleventh J2 address ------------------------
+//
+// 0x180006b80 -- `~Array<Object::ExternalArrayElement>`. Read out of its own
+// disassembly, not inferred from the neighbour:
+//     180006b9c  MOV R8D,dword ptr [RCX+0x8]     count  = _size
+//     180006ba0  MOV RDX,qword ptr [RCX]         base   = _data
+//     180006ba3  CALL 0x180006ac0                <-- the helper, by rel32
+//   then the allocator Enter / Free / Leave triple through 0x1801fc718+0x640,
+//   0x18014b390, 0x1800c6c00, 0x18014b388, and finally `XOR EAX,EAX` with the
+//   two stores at [RDI] and [RDI+0x8] -- which is ArrayDtorImpl exactly.
+// So: entry point for machinery that now exists, no new spec.
+//
+// It is REGISTERED rather than left as one of "the eight", because at cutover
+// it is how `Object::External`'s dependency array is torn down and retail's
+// rel32 to 0x180006ac0 will not exist. Registering both halves is the lesson
+// the 0x1800269a0 line above records.
+J2_ENTRY(180006b80, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x180006ac0  Body B
+
+// ---- WAVE 27 LANE FRONTIER: the twelfth J2 address -------------------------
+//
+// 0x180004a90 - `~Array<UI::StringTable::TextEntry>`, the member destroy in
+// `??1StringTable@UI@@` (0x18011d914 `ADD RCX,0x20 ; CALL 0x180004a90`). Read
+// out of its own disassembly, and its CALL operand is the field that decides
+// the spec (the Wave 25 lesson three lines of this file already carry):
+//     180004aac  MOV R8D,[RCX+0x8]      count = _size
+//     180004ab0  MOV RDX,[RCX]          base  = _data
+//     180004ab3  CALL 0x180005570       <-- kD_Str2_10, NOT kD_Str_10
+//   then the allocator Enter / Free / Leave triple and the two zero stores
+//   that are ArrayDtorImpl.
+J2_ENTRY(180004a90, ReleaseStringsCounted,  kD_Str2_10)      // CALL 0x180005570  Body B
 
 #undef J2_ENTRY
 
@@ -971,6 +1052,14 @@ void RtCollectionDestroyPortInit() {
     // kSpec_ExtStr10at08 gives it the caller the banner says to wait for.
     RegisterRuntimeAddr(0x180039640, (void*)&RtColl_DestroyStrings_180039640);
     RegisterRuntimeAddr(0x180039580, (void*)&RtColl_DestroyStrings_180039580);
+    // Wave 27 lane FRONTIER: the sixth Body-B address. array.cpp's
+    // kSpec_ExtArrayElem (0x18002c6a0) reaches it by address on BOTH of its
+    // destroy arms, and 0x180006b80 below reaches it as a direct call.
+    RegisterRuntimeAddr(0x180006ac0, (void*)&RtColl_DestroyStrings_180006ac0);
+    // Wave 27 lane FRONTIER: UI::StringTable's TextEntry range destroy. Two
+    // callers, both ported in this commit - 0x180004a90 below and array.cpp's
+    // kSpec_StringPair10 (0x180078c90).
+    RegisterRuntimeAddr(0x180005570, (void*)&RtColl_DestroyStrings_180005570);
 
     // ---- the one element COPY-ASSIGN with no frontier at all ---------------
     // 37 instructions, zero callees. Its sibling 0x180051650 is NOT here: that
@@ -996,6 +1085,14 @@ void RtCollectionDestroyPortInit() {
     // 0x1800269a0 called retail's 0x180026b50 by rel32 and our registration of
     // the helper could never be reached from ~PackageFile.
     RegisterRuntimeAddr(0x1800269a0, (void*)&RtColl_ArrayDtorElem_1800269a0);
+    // Wave 27 lane FRONTIER -- ~Array<Object::ExternalArrayElement>. Same
+    // both-halves rule as the line above: its helper 0x180006ac0 is registered
+    // in the block higher up, so at cutover this entry point and the helper are
+    // both ours.
+    RegisterRuntimeAddr(0x180006b80, (void*)&RtColl_ArrayDtorElem_180006b80);
+    // Wave 27 lane FRONTIER -- ~Array<UI::StringTable::TextEntry>, the member
+    // ??1StringTable@UI@@ destroys at this+0x20.
+    RegisterRuntimeAddr(0x180004a90, (void*)&RtColl_ArrayDtorElem_180004a90);
 
     // ---- J2b -------------------------------------------------------------
     RegisterRuntimeAddr(0x18001c8c0, (void*)&RtColl_ArrayDtorEhVec_18001c8c0);
