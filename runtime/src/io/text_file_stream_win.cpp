@@ -850,6 +850,114 @@ extern "C" bool RtIo_TextFileStream_Open(TextFileStream* self, const Filename* p
     return true;                                                // 1800ba8d0
 }
 
+// ============================================================================
+// WAVE 29 LANE IOLANE — the three NON-VTABLE `TextFileStream` accessors
+// ============================================================================
+// IO::TextFileStream::GetObjectVersion() const           retail 0x1800ba250
+// IO::TextFileStream::GetObjectType()    const           retail 0x1800ba260
+// IO::TextFileStream::GetObjectName()    const           retail 0x1800ba270
+//
+// THESE ARE NOT VTABLE SLOTS. All three are `QEBA` (public non-virtual const),
+// they appear nowhere in `??_7TextFileStream@IO@@6B@` (whose ten slots are
+// enumerated at the bottom of this file), and they are reached only by an
+// explicit call on a concrete TextFileStream.
+//
+// ---- RETAIL'S BYTES, read with objdump on the shipped retail DLL -----------
+// Not read out of Ghidra: Ghidra's decompiled C drops dereferences and prints
+// MOVSXD as a zero extension, and for a one-instruction body there is nothing
+// left to check it against.
+//
+//   1800ba250:  8b 41 50        mov    0x50(%rcx),%eax    ; GetObjectVersion
+//   1800ba253:  c3              ret
+//   1800ba260:  48 8d 41 60     lea    0x60(%rcx),%rax    ; GetObjectType
+//   1800ba264:  c3              ret
+//   1800ba270:  48 8d 41 58     lea    0x58(%rcx),%rax    ; GetObjectName
+//   1800ba274:  c3              ret
+//
+// Two instructions each, `int3` padding on both sides, no `.pdata` entry (leaf,
+// no prologue) — so every `.pdata`-driven extent instrument in `tools/` is
+// blind to all three, exactly as it is to GetSize/GetCurrentPos above. The
+// EXTENT here is DERIVED from the instruction stream (ret at +3 and +4), not
+// from `.pdata`, which for these three has nothing to understate.
+//
+// ---- THE RETURN CONVENTION, and why the wave's headline trap does NOT apply -
+// The kickoff and this lane's brief both warned that a `String` return means a
+// HIDDEN RDX RETURN SLOT and that an `fn_*` typedef omitting it is a wild write
+// that still returns the right answer. **That trap is not present on any of
+// these three, and the mangling says so before the bytes do:**
+//
+//     ?GetObjectName@...@QEBA AEBV String@System@@ XZ   AEBV = REF-to-const
+//     ?GetObjectType@...@QEBA AEBV String@System@@ XZ   AEBV = REF-to-const
+//     ?GetObjectVersion@...@QEBA H XZ                   H    = int
+//
+// `?AV` is the by-value spelling and is what carries the hidden slot; `AEBV` is
+// a reference and is returned in RAX like any pointer. The bytes agree
+// independently: neither body READS RDX at all, and a `?AV` body cannot avoid
+// reading it — it must copy the caller's slot address into RAX to return it.
+// Two mechanisms, same answer, and the second does not depend on my reading of
+// the first. So the correct C signature returns a POINTER and takes exactly one
+// argument. (`?GetSource@Stream@IO@@UEBA?AVString@System@@XZ`, already ported
+// in this tree, is the `?AV` shape and is the known positive I handed lane
+// AVBODY's screen.)
+//
+// ---- THE TWO FIELDS ARE THE OTHER WAY ROUND FROM THE NAMES ----------------
+// `GetObjectType` returns +0x60 and `GetObjectName` returns +0x58 — the LOWER
+// offset is the NAME. That is counter-intuitive and it is already established
+// twice over in runtime/types/io/FileStream.h:274-287 (from these three bodies
+// AND, independently, from `?SetObject@` writing its FIRST String argument to
+// +0x60 and its SECOND to +0x58). This port is transcription of what that
+// header already asserts with `static_assert`, so a layout drift breaks the
+// BUILD rather than these bodies.
+//
+// ---- RETAIL SHIPS EMPTY BODIES — checked, these are not that ---------------
+// Kickoff warning 5. An abstract/empty body is `ret` (or `xor eax,eax ; ret`)
+// and nothing else. All three of these DEREFERENCE `this` at a named offset and
+// two of them take its address, so each does observable work. Not empty.
+//
+// ---- THE ORACLE ------------------------------------------------------------
+// `RT_DIFF_SCALAR(ours, RtOriginal<...>)`: `RtOriginal` is `ResolveExportRaw`,
+// i.e. GetProcAddress against the SHIPPED DLL, which never consults the port
+// registry — so this compares OUR body with RETAIL'S body and not with itself
+// (reference_a_probe_whose_ours_side_reaches_the_body_by_address..., and
+// reference_shadow_marker_is_not_an_oracle.md). It costs a GetProcAddress per
+// call and that is only acceptable because `RT_DIFF_SCALAR` evaluates nothing
+// at all unless `BANISHED_RT_DIFF=1` (the Wave 2 5.6-point perf breach was
+// exactly this call OUTSIDE a diff guard).
+//
+// Read the `calls=` column and not only `divergences=`: a port with no caller
+// reports clean. And `calls=0` with `worked>0` would mean the body ran every
+// time and always took a branch the oracle does not cover — which here it
+// cannot, since these bodies have no branches at all.
+// ============================================================================
+using FnGetObjStr = char* const* (*)(const TextFileStream*);
+using FnGetObjVer = int32_t      (*)(const TextFileStream*);
+
+extern "C" int32_t RtIo_TextFileStream_GetObjectVersion(const TextFileStream* self) {
+    RT_DIFF_BEGIN("IO::TextFileStream::GetObjectVersion");
+    const int32_t ours = self->objectVersion;                   // 1800ba250  +0x50
+    RT_DIFF_SCALAR(ours, RtOriginal<FnGetObjVer>(
+        "?GetObjectVersion@TextFileStream@IO@@QEBAHXZ")(self));
+    return ours;                                                // 1800ba253
+}
+
+extern "C" char* const* RtIo_TextFileStream_GetObjectType(const TextFileStream* self) {
+    RT_DIFF_BEGIN("IO::TextFileStream::GetObjectType");
+    char* const* ours = &self->objectType;                      // 1800ba260  +0x60
+    RT_DIFF_SCALAR(static_cast<const void*>(ours),
+                   static_cast<const void*>(RtOriginal<FnGetObjStr>(
+        "?GetObjectType@TextFileStream@IO@@QEBAAEBVString@System@@XZ")(self)));
+    return ours;                                                // 1800ba264
+}
+
+extern "C" char* const* RtIo_TextFileStream_GetObjectName(const TextFileStream* self) {
+    RT_DIFF_BEGIN("IO::TextFileStream::GetObjectName");
+    char* const* ours = &self->objectName;                      // 1800ba270  +0x58
+    RT_DIFF_SCALAR(static_cast<const void*>(ours),
+                   static_cast<const void*>(RtOriginal<FnGetObjStr>(
+        "?GetObjectName@TextFileStream@IO@@QEBAAEBVString@System@@XZ")(self)));
+    return ours;                                                // 1800ba274
+}
+
 // Read by text_file_stream_probe.cpp so attendance prints beside the verdicts
 // and a reader cannot see one without the other.
 void RtIoTextFileStreamCounters(unsigned long long* out) {
@@ -958,13 +1066,46 @@ int RtIoTextFileStreamSlotsRegister() {
                           (void*)&RtIo_TextFileStream_Open); ++n;
     RegisterRuntimeAddr(0x1800ba640, (void*)&RtIo_TextFileStream_Open);
 
+    // ---- WAVE 29 LANE IOLANE ----------------------------------------------
+    // The three NON-VTABLE accessors. They are NOT slots of
+    // ??_7TextFileStream@IO@@6B@ and they do not change its 10/10 tally; the
+    // printf below therefore does not count them, and the line says so.
+    //
+    // Each mangled name was taken from the SHIPPED EXPORT DIRECTORY with
+    // pefile at the VA whose bytes are transcribed above, not assembled by
+    // analogy: `QEBA` here vs the `UEAA` of every slot in this file is exactly
+    // the kind of difference analogy gets wrong, and ResolveExport returns NULL
+    // SILENTLY for a name the DLL lacks while the ResolveAddr fallback hides it
+    // (reference_resolveexport_phantom_names.md,
+    //  reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+    //   ?GetObjectVersion@TextFileStream@IO@@QEBAHXZ                 0x1800ba250
+    //   ?GetObjectType@TextFileStream@IO@@QEBAAEBVString@System@@XZ  0x1800ba260
+    //   ?GetObjectName@TextFileStream@IO@@QEBAAEBVString@System@@XZ  0x1800ba270
+    // BY NAME *AND* BY ADDRESS for all three, because a caller arriving by
+    // address is invisible to a name-only registration and dies at cutover
+    // (reference_count_the_doors_not_the_calls.md). Each name is spelled on ONE
+    // line: tools/runtime_census.py cannot see a mangled name split across a
+    // string-literal concatenation.
+    RegisterRuntimeExport("?GetObjectVersion@TextFileStream@IO@@QEBAHXZ",
+                          (void*)&RtIo_TextFileStream_GetObjectVersion); ++n;
+    RegisterRuntimeAddr(0x1800ba250, (void*)&RtIo_TextFileStream_GetObjectVersion);
+
+    RegisterRuntimeExport("?GetObjectType@TextFileStream@IO@@QEBAAEBVString@System@@XZ",
+                          (void*)&RtIo_TextFileStream_GetObjectType); ++n;
+    RegisterRuntimeAddr(0x1800ba260, (void*)&RtIo_TextFileStream_GetObjectType);
+
+    RegisterRuntimeExport("?GetObjectName@TextFileStream@IO@@QEBAAEBVString@System@@XZ",
+                          (void*)&RtIo_TextFileStream_GetObjectName); ++n;
+    RegisterRuntimeAddr(0x1800ba270, (void*)&RtIo_TextFileStream_GetObjectName);
+
     // A count of what registered is a fact this line can state; a slot tally in
     // a printf is a comment on its way to becoming a lie, and this one already
     // was one (it still said "7/10, slots 0, 2, 8 still trap" three waves after
     // lane ENC closed slot 0). Corrected on the surface the next person REACHES
     // -- the log line -- not only in a doc (kickoff warning 15).
-    printf("[RtPort]   IO::TextFileStream vtable slots (waves 20 SAVETEXT, "
-           "21 ENC, 28 SLOTS): %d exports registered here; "
+    printf("[RtPort]   IO::TextFileStream (waves 20 SAVETEXT, 21 ENC, "
+           "28 SLOTS, 29 IOLANE): %d exports registered here, of which 3 are "
+           "the NON-VTABLE accessors GetObjectName/Type/Version; "
            "??_7TextFileStream@IO@@6B@ is 10/10 COMPLETE, NOT promoted\n", n);
     return n;
 }

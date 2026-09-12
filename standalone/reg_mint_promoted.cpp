@@ -1191,6 +1191,152 @@ int RtMintRegisterPromotedRows() {
     }
 
     // ========================================================================
+    // WAVE 29 LANE IOLANE — ??_7PackageFile@IO@@6B@
+    // ========================================================================
+    //
+    // IO's LAST PROMOTABLE VTABLE. (IO's other three gap rows are
+    // `??_7ReaderWriter@` and `??_7Stream@`, both tagged UNPROMOTABLE, and
+    // `??_7TextFileStream@`, which is 10/10 COMPLETE and measured NEVER
+    // ATTENDED — see the block after this one.)
+    //
+    // ---- WHAT WAS BLOCKING IT, AND THAT BLOCKER HAS EXPIRED ---------------
+    // The committed Wave 19 phase-0c evidence
+    // (docs/runtime_port/wave19_phase0c/run2_attend/exit.tbl:39) reads
+    //     BLOCKED ??_7PackageFile@IO@@6B@ slots= 9 ported= 5
+    // i.e. FOUR TRAPS. Waves 23/25/27 closed all four (slot 0 lane VTIO;
+    // slots 5/6/7 lane IOTEXT). The census on this tip prints the row
+    // 9 slots / 9 ours / COMPLETE. The blocker named a MISSING CAPABILITY and
+    // capability blockers expire (kickoff warning 3); this one has.
+    // PromoteVtableGuarded re-asks the trap question AT RUNTIME against the
+    // live registry, so this paragraph is not what the decision rests on.
+    //
+    // ---- ATTENDANCE: MEASURED TWICE ON THIS TIP, IN TWO ARMS --------------
+    // `BANISHED_W17_ATTEND=1`, ordinary `BANISHED_AUTOSTART=1` run with a
+    // clean self-quit, control `?_singleton@MainLoop@Engine@@` GREEN
+    // (init=1 post=3) in both:
+    //
+    //   arm A (probe + RT_DIFF + RT_STRICT armed)  ATTENDED init=0 post=1
+    //   arm B (NOTHING else armed)                 ATTENDED init=0 post=1
+    //
+    // ARM B IS THE ONE THAT COUNTS, and running it is not a formality. In the
+    // SAME pair of runs the neighbouring row
+    // `?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A` read post=1 in arm
+    // A and **post=0 in arm B** — i.e. its attendance was manufactured by the
+    // instrumentation, which is exactly the failure this file's own Wave 26
+    // retraction (search `A CHEAPER CLOSE WAS PROPOSED`) says reads
+    // indistinguishably from the real thing. Without arm B this lane would
+    // have reported that row's route condition satisfied. It is NOT satisfied
+    // and it is NOT promoted here.
+    //
+    // `post=1` is NOT "ran once" — it is "the door opened at least once after
+    // init", because consumers cache in a function-local static. The dispatch
+    // evidence is separate and much larger: in arm A,
+    // `IO::PackageFile::PackageFile` reports calls=14 entered=14 worked=14
+    // divergences=0, and the per-entry accessors 5836-9471 calls each, all
+    // divergences=0, over 4 real mounted packages.
+    //
+    // ---- STAMPER OWNERSHIP: 3 OF 4, AND THE FOURTH IS NAMED ---------------
+    // `python tools/mint_stamper_census.py --rows="??_7PackageFile@IO@@6B@"`
+    // on this tip:
+    //     STAMPERS 4 ; ours-capable 3 ; retail 1 ; unattributed 0
+    //       ?RefreshList@Modification@IO@@   0x1800af846  OURS
+    //       ??0PackageFile@IO@@QEAA@XZ       0x1800b447f  OURS
+    //       ??1PackageFile@IO@@UEAA@XZ       0x1800b455b  OURS
+    //       ??0PackageFile@IO@@QEAA@AEBV01@@Z 0x18002562c RETAIL (copy ctor,
+    //                                                     UNPORTED)
+    // So the population of live PackageFiles is MIXED: one built by retail's
+    // copy constructor carries the DLL's table, one built by any of the other
+    // three carries ours. That is NOT a hazard — both tables are correct and
+    // the nine bodies behind ours are the ones measured above — but it is the
+    // honest ROUTE SCOPE of this promotion and it is stated instead of a bare
+    // verdict. At cutover the retail copy ctor does not exist at all, so the
+    // mixture is a DLL-present phenomenon only. `ours-capable` is an UPPER
+    // BOUND (the tool says so); it is not read here as "every caller uses it".
+    //
+    // ---- THE COST, ANNOTATED IN THIS COMMIT AND NOT AFTER IT --------------
+    // Promoting this row changes what `PackageFileVtable()`
+    // (runtime/src/io/package_file.cpp:318, an `RT_DATA_SLOT`, registry-first)
+    // hands our constructor, so OUR ctor stamps the minted table while
+    // retail's stamps the DLL's. `RtIo_PackageFile_Ctor`'s `RT_DIFF_BYTES`
+    // oracle compares those two objects byte for byte and would therefore go
+    // permanently red at the vtable field — the "Construct divergence IS the
+    // vtable identity" shape this file already records for
+    // `?TypeName@SpriteSheet@UI@@`. That site is updated in the SAME commit
+    // (package_file.cpp) so no sweep reads it as a regression, and the
+    // divergent offsets there were MEASURED, not assumed.
+    //
+    // ⚠ THE SENTENCE THAT USED TO STAND HERE WAS WRONG, AND THE CORRECTION IS
+    // THE MOST USEFUL THING THIS LANE FOUND. It read: "The Destruct and
+    // Reconstruct memcmp oracles in the same file are NOT affected and this was
+    // checked rather than assumed: both build BOTH sides with
+    // `RtIo_PackageFile_Ctor`, so both sides get whichever table is live."
+    //
+    // Destruct is unaffected and still reads MATCH. **RECONSTRUCT DIVERGED on
+    // the very first promoted run**, and the reasoning above is where it broke:
+    // retail's `?Reconstruct@` destructs in place through the object's own
+    // vtable slot 0 — which with our table installed is OUR body — and then
+    // TAIL-JUMPS retail's constructor at 0x1800b4440 by an **in-DLL rel32**.
+    // An in-DLL rel32 is NOT A DOOR; no registration can intercept it; so
+    // retail's ctor re-stamps the DLL's table over an object we built.
+    //
+    // Two things generalise, and neither is about PackageFile:
+    //   * `reference_a_ported_row_can_be_permanently_unpromotable.md` is
+    //     usually read as "we cannot get our table IN". This is the mirror:
+    //     retail can put ITS table BACK, over an object of ours, at any time,
+    //     through a call our tree cannot see. A promotion therefore has a
+    //     LIFETIME as well as a route.
+    //   * The claim was written as "checked rather than assumed" and it was
+    //     assumed. What caught it was a print that ran regardless of what I
+    //     believed. The correction is left in place rather than deleted
+    //     (reference_a_prescription_read_as_a_completion.md).
+    //
+    // CONSEQUENCE FOR THE PROMOTION: none for correctness. The DLL's table and
+    // ours hold the same nine behaviours (all nine are oracle-verified, 0
+    // divergences), so an object retail re-stamps is not broken — it simply
+    // stops dispatching OUR bodies. It is a COVERAGE fact, not a hazard, and
+    // at cutover 0x1800b4440 is our body anyway. The Reconstruct oracle in
+    // package_file.cpp now excuses exactly the derived vtable slot and compares
+    // the other 232 bytes whole.
+    //
+    // A/B control: `BANISHED_RT_PROMOTE_PKGFILE=0`.
+    {
+        const char* off = getenv("BANISHED_RT_PROMOTE_PKGFILE");
+        if (off && strcmp(off, "0") == 0) {
+            printf("[RtMint] BANISHED_RT_PROMOTE_PKGFILE=0 -- "
+                   "??_7PackageFile@IO@@6B@ left on the DLL (A/B control)\n");
+        } else {
+            PromoteVtableGuarded("??_7PackageFile@IO@@6B@", 0x180155700ull, &n);
+        }
+    }
+
+    // ---- ??_7TextFileStream@IO@@6B@ — COMPLETE, and NOT PROMOTED ----------
+    //
+    // NOT an oversight and not a readiness problem. The row is 10/10 COMPLETE
+    // on this tip (Waves 20 SAVETEXT, 21 ENC, 28 SLOTS closed every slot).
+    // It is left on the DLL because BOTH halves of the case against it are
+    // measured and neither is about readiness:
+    //
+    //   * ATTENDANCE: `never init=0 post=0`, in BOTH arms of the pair of runs
+    //     described above, in a run whose control was GREEN and in which 40 of
+    //     67 subject rows DID read post>0. So this is a real absence and not a
+    //     dead instrument. It reproduces Wave 19 phase-0c exactly.
+    //   * STAMPERS: `mint_stamper_census.py` reports
+    //     `STAMPERS 8 ; ours-capable 3 ; retail 5 ; unattributed 0`. The five
+    //     in the DLL are `??0TextFileStream@IO@@QEAA@AEBV01@@Z`,
+    //     `??0TextFileStream@IO@@QEAA@XZ`, and TextFile's `Close` / `Create` /
+    //     `Open`. Wave 19 §5.1's criterion — a row is promotable insofar as we
+    //     own the function that STAMPS it — puts this row at 3/8, the weakest
+    //     ratio of any IO vtable, where `??_7CompressedFileStream@` at 0/6
+    //     drew "promote none".
+    //
+    // [ADDRESSEE: the lane that ports `??0TextFileStream@IO@@QEAA@XZ`
+    //  (0x1800ba530) and `?Open@TextFile@IO@@QEAA_NAEBVString@System@@@Z`
+    //  (0x1800b9fc0) — those two are the stampers on the `?SaveText@External@`
+    //  path, which is the one route that could give this row a post>0.]
+    // [DO NOT re-derive the attendance; it is measured twice above. What is
+    //  missing is STAMPER OWNERSHIP and a ROUTE, not a slot.]
+
+    // ========================================================================
     // WAVE 25 LANE VTGFX — ??_7MaterialInstance@Graphics@@6B@
     // ========================================================================
     //

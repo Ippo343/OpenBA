@@ -1,0 +1,84 @@
+# WAVE 29 lane IOLANE -- "is this symbol ALREADY registered?" for the four
+# targets, run over the working tree.
+#
+# SUBJECT and POPULATION are printed beside the verdict (kickoff warning 6).
+#
+# THE TWO BLIND SPOTS THIS IS BUILT AGAINST:
+#   * a mangled name SPLIT ACROSS LINES by C adjacent-string concatenation
+#     ("?Get" "Object..."), which lane SLOTS measured at 49 live call sites and
+#     which cost it a near-double-port. Handled by collapsing ALL whitespace and
+#     then deleting every `""` seam, so a concatenated literal becomes one token.
+#   * a COMMENT naming a symbol being read as code -- the prose most likely to
+#     name an address is a comment saying the code was deleted
+#     (reference_uncommented_checker_manufactures_work.md). Handled by stripping
+#     // and /* */ BEFORE the collapse.
+#
+# CONTROLS, scored SEPARATELY and never as a union:
+#   POSITIVE  a symbol known registered in this very file's neighbourhood.
+#   NEGATIVE  a fabricated symbol; a hit on it means the matcher is degenerate.
+#   CONCAT    a symbol that exists in the tree ONLY as a split literal, if one
+#             can be found -- hands the concat path a known positive. If the
+#             tree has none, that is reported as UNEXERCISED, not as a pass.
+import os, re, sys
+
+ROOTS = ("runtime", "standalone", "code", "engine", "dx11")
+TARGETS = [
+    ("?SetupFileSystem@Modification@IO@@QEAAXXZ",                  "0x1800aebb0", "target"),
+    ("?GetObjectName@TextFileStream@IO@@QEBAAEBVString@System@@XZ", "0x1800ba270", "target"),
+    ("?GetObjectType@TextFileStream@IO@@QEBAAEBVString@System@@XZ", "0x1800ba260", "target"),
+    ("?GetObjectVersion@TextFileStream@IO@@QEBAHXZ",                "0x1800ba250", "target"),
+    ("?Read@TextFileStream@IO@@UEAA_NHPEAX@Z",                      "0x1800ba900", "POSITIVE CONTROL"),
+    ("?NoSuchThing@Nowhere@IO@@QEAAXXZ",                            "n/a",         "NEGATIVE CONTROL"),
+]
+VERBS = ("RegisterRuntimeExport(", "RegisterRuntimeAddr(", "RegisterExeAddr(",
+         "RegisterDispatchSlot(")
+
+files = []
+for r in ROOTS:
+    for dp, dn, fn in os.walk(r):
+        for f in fn:
+            if f.endswith((".cpp", ".h", ".inc")):
+                files.append(os.path.join(dp, f))
+
+print("SUBJECT   %d symbols (4 lane targets + 2 controls)" % len(TARGETS))
+print("POPULATION %d source files under %s" % (len(files), "/".join(ROOTS)))
+print("MATCHER   comments stripped; whitespace collapsed; adjacent-string seams removed")
+print()
+
+hits = {t[0]: [] for t in TARGETS}
+concat_sites = 0
+for p in files:
+    try:
+        t = open(p, encoding="utf-8", errors="ignore").read()
+    except OSError:
+        continue
+    t = re.sub(r"/\*.*?\*/", "", t, flags=re.S)
+    t = "\n".join(re.sub(r"//.*$", "", l) for l in t.split("\n"))
+    flat = re.sub(r"\s+", "", t)
+    # count concatenation seams inside a Register* call, as evidence the
+    # concat path had something to chew on in this population at all
+    concat_sites += len(re.findall(r'RegisterRuntime\w+\(""', flat))
+    flat = flat.replace('""', '')
+    for sym, va, kind in TARGETS:
+        for v in VERBS:
+            if v + '"' + sym + '"' in flat:
+                hits[sym].append("%s  [%s by NAME]" % (p, v.rstrip("(")))
+        if va != "n/a":
+            for v in VERBS:
+                if (v + va).lower() in flat.lower():
+                    hits[sym].append("%s  [%s by ADDRESS %s]" % (p, v.rstrip("("), va))
+
+for sym, va, kind in TARGETS:
+    h = sorted(set(hits[sym]))
+    print("%-16s %-12s %s" % ("REGISTERED" if h else "not-registered", va, sym))
+    if kind != "target":
+        print("                 ^ %s" % kind)
+    for x in h:
+        print("                   " + x)
+print()
+print("CONCAT PATH: %d Register* call site(s) in this population begin with an "
+      "adjacent-string seam." % concat_sites)
+if concat_sites == 0:
+    print("  -> the concat branch of this matcher was UNEXERCISED on this run. "
+          "That is NOT a pass; it means this population happens to contain no "
+          "such site for a Register* verb, so the branch proved nothing here.")
