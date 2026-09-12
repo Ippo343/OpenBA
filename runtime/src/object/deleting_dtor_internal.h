@@ -64,7 +64,14 @@ struct DelDtorSpec {
 // stays true of it; the TABLE is the authority and this constant tracks it,
 // and the static_assert next to the table is what forces an appender to
 // notice (it caught CSTREAM's addition, at 41 vs 39).
-constexpr int kSpecCount = 61;   // 61: UI::ImageDescription + AnimatedImageDescription (2026-09-12)   // 59: UI::RibbonDescription (2026-09-12)   // 58: UI::GroupDescription (2026-09-12)   // 57: Video::ShaderProgram + VertexProgram + PixelProgram + RenderState (2026-09-12)   // 53: Video::VertexLayout (2026-09-12)   // 52: Video::VideoProgram (2026-09-12)   // 51: Graphics::Material (2026-09-12)
+constexpr int kSpecCount = 85;   // 81-84: VTABLE BATCH 7 (AnimationGroup, ParticleSystem, SoundBuffer, SoundEffect); 71-80: VTABLE BATCH 1 -- UI::{Border,Button,Check,
+                                 //     ClipRegion,Combo,Container,DocumentText,Edit,Graph,
+                                 //     Label}Description (2026-09-12); renumbered at the
+                                 //     merge, batch 9 keeps 61-66 and batch 8 67-70
+                                 //     Picking::PickingMesh (vtable batch 8, 2026-09-12); 61-66 batch 9
+                                 // 67-70: Collision2D::CollisionMesh/Surface, Pathfinding::PointList,
+                                 //     Picking::PickingMesh (vtable batch 8, 2026-09-12); 61-66 batch 9
+                                 // 61: UI::ImageDescription + AnimatedImageDescription (2026-09-12)   // 59: UI::RibbonDescription (2026-09-12)   // 58: UI::GroupDescription (2026-09-12)   // 57: Video::ShaderProgram + VertexProgram + PixelProgram + RenderState (2026-09-12)   // 53: Video::VertexLayout (2026-09-12)   // 52: Video::VideoProgram (2026-09-12)   // 51: Graphics::Material (2026-09-12)
                                  // (was 50)   // 45-47: Graphics::EdgeMesh / EdgeMeshInstance /
                                  // MeshInstance (Wave 27 lane GFXMESH)
                                  // 48-49: Graphics::Light / SunLight (Wave 27 lane GFXPART)

@@ -146,6 +146,20 @@ extern int RtUiGroupDescriptionRegister(); // groupdescription.cpp
 extern int RtUiRibbonDescriptionRegister(); // ribbondescription.cpp
 extern int RtUiImageDescriptionRegister();  // imagedescription.cpp
 extern int RtUiAnimatedImageDescriptionRegister(); // animatedimagedescription.cpp
+// VTABLE BATCH 1 (2026-09-12): the first half of the UI::*Description family,
+// ten whole classes, one file each, all sharing runtime/src/ui/
+// description_common.h. Registered unconditionally -- these are minted vtable
+// slots and a flag on them would only re-arm the trap (DIRECTION.md §2).
+extern int RtUiBorderDescriptionRegister();       // borderdescription.cpp
+extern int RtUiButtonDescriptionRegister();       // buttondescription.cpp (+ the shared applier)
+extern int RtUiCheckDescriptionRegister();        // checkdescription.cpp
+extern int RtUiClipRegionDescriptionRegister();   // clipregiondescription.cpp
+extern int RtUiComboDescriptionRegister();        // combodescription.cpp
+extern int RtUiContainerDescriptionRegister();    // containerdescription.cpp
+extern int RtUiDocumentTextDescriptionRegister(); // documenttextdescription.cpp (+ its applier)
+extern int RtUiEditDescriptionRegister();         // editdescription.cpp
+extern int RtUiGraphDescriptionRegister();        // graphdescription.cpp
+extern int RtUiLabelDescriptionRegister();        // labeldescription.cpp
 // Wave 24 lane SMALLBODY: ??2SpriteSheet@UI@@SAPEAX_K@Z (0x180002e60) -- the
 // class operator new, byte-identical to ToolTipDialog's and verified side by
 // side rather than by resemblance. Its own file and switch.
@@ -214,6 +228,9 @@ extern int RtUiSpinnerElementRegister();      // spinnerelement.cpp
 extern int RtUiTabElementRegister();          // tabelement.cpp
 extern int RtUiTableElementRegister();        // tableelement.cpp
 extern int RtUiTextElementRegister();         // textelement.cpp
+// VTABLE BATCH 9 (2026-09-12).
+extern int RtUiComboDialogRegister();             // combodialog.cpp
+extern int RtUiDialogControllerConfigRegister();   // dialogcontrollerconfig.cpp
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -251,6 +268,17 @@ void RtUiPortInit() {
     n += RtUiRibbonDescriptionRegister(); // UI::RibbonDescription, all nine bodies
     n += RtUiImageDescriptionRegister();  // UI::ImageDescription + the shared applier
     n += RtUiAnimatedImageDescriptionRegister(); // UI::AnimatedImageDescription
+    // VTABLE BATCH 1 — ten whole UI::*Description classes (2026-09-12)
+    n += RtUiBorderDescriptionRegister();
+    n += RtUiButtonDescriptionRegister();
+    n += RtUiCheckDescriptionRegister();
+    n += RtUiClipRegionDescriptionRegister();
+    n += RtUiComboDescriptionRegister();
+    n += RtUiContainerDescriptionRegister();
+    n += RtUiDocumentTextDescriptionRegister();
+    n += RtUiEditDescriptionRegister();
+    n += RtUiGraphDescriptionRegister();
+    n += RtUiLabelDescriptionRegister();
     n += RtUiStringTableFactoryRegister();  // owns BANISHED_RT_UISTRTAB (FACTORY)
     n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
@@ -274,6 +302,11 @@ void RtUiPortInit() {
     n += RtUiTabElementRegister();
     n += RtUiTableElementRegister();
     n += RtUiTextElementRegister();
+    // ---- VTABLE BATCH 9 (2026-09-12), unconditional -------------------------
+    //   combodialog.cpp             UI::ComboDialog
+    //   dialogcontrollerconfig.cpp  UI::DialogControllerConfig
+    n += RtUiComboDialogRegister();
+    n += RtUiDialogControllerConfigRegister();
 
     printf("[RtPort] UI: %d exports registered\n", n);
 }
