@@ -538,6 +538,32 @@ NORMAL                ours=…6060(.rdata) theirs=…6060(.rdata)
                       AGREE / .rdata BOTH                          both halves clean
 ```
 
+#### The arming is SPECIFIC, and that is a third check, not a detail
+
+Raised by FACTREST and **run here rather than predicted**: an arming aimed at
+vptrs must move the rows that stamp a vptr and **must NOT move the rows that do
+not.** Under `--derefbug`:
+
+```
+CREATENEWOBJECT: 4/31 byte-identical
+   DialogController / DialogControllerConfig / Element / ElementDescription
+      new OK (both null, abstract)     <- the 4 that stamp no vptr, UNMOVED
+   the other 27                        <- all fail
+```
+
+**4/31, not 0/31.** An arming that moves everything is corrupting the run rather
+than the subject, and would read as a working control while proving nothing
+about aim. This one moves exactly the 27 concrete classes.
+
+#### The two armings do not overlap, and assuming they did would have skipped one
+
+`--negative` corrupts a store **value in the table**; `--derefbug` corrupts
+**how a vtable address is resolved**, between the table and the buffer. The
+first is structurally incapable of detecting the second — it perturbs the data
+the screen reads, not the step the screen was suspected of getting wrong.
+**"I already have a negative control" is exactly the reasoning that would have
+skipped `--derefbug`**, and this lane nearly used it.
+
 **Two findings worth carrying, and the second is FACTREST's:**
 
 * **A uniform, maximally-consistent failure is evidence about the INSTRUMENT at
@@ -806,6 +832,22 @@ resolve doors and nothing in our tree resolves these symbols. See §11.0.
 Originally measured by lane FACTUI2; reproduced here independently and in the
 stronger direction (a zero delta measured *after* landing the rows).
 Not fixed.
+
+**7. AN EDIT THAT DOES NOT MATCH IS A SILENT NO-OP, AND IT LOOKS LIKE A FIX.**
+Not a tool defect, a method one, and it bit this lane at least four times:
+a shell heredoc rewrote `\` at end of line so two comment fixes did not apply
+and the `-Wcomment` warning survived two rebuilds; a section I believed I had
+added to this document (§7.0) was simply absent; two Python replacements matched
+nothing and reported success. FACTREST hit the same shape from the other side —
+their "ARMED" banner silently failed to insert, so an armed run printed `0/11`
+with nothing saying the failure was intended, which **in a log is
+indistinguishable from a genuine catastrophic regression.**
+FACTREST's `SectionOf` counterpart in this lane (§7.2 defect 2) is the same
+error in different clothes: **a fix that was written but never verified to have
+taken effect.**
+The only defence that worked anywhere in this lane was **checking the
+BEHAVIOUR changed, or grepping the file for the text**, never trusting the edit
+tool's success report. Worth a wave-level note; not fixed.
 
 **6. THE SESSION SCRATCHPAD IS A SHARED NAMESPACE AND A COLLISION IS SILENT.**
 Not a tool defect — a harness one, and it is live. This lane's `exp.py` was
