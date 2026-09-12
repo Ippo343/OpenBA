@@ -111,3 +111,14 @@ bool RtMintIsMintedTypeInfo(const void* p);
 // The predicate's positive control: `&kTypeInfoStorage[index]`, a pointer that
 // MUST test true. nullptr when `index` is out of range.
 const void* RtMintTypeInfoStorageProbe(int index);
+
+// ============================================================================
+// WAVE 24 lane TINFO -- enumerate the minted BaseTypeInfo rows
+// ============================================================================
+// The 104 `?_typeInfo@` rows, by index, for standalone/tinfo_door_screen.cpp.
+// `symbol` is the mangled name; `storage` is the minted node (the same pointer
+// RtMintPromotionStorage hands a promotion). Valid at any time -- the table is
+// link-time constant; the CONTENT of `storage` is only meaningful after
+// RtDataMintInit().
+int  RtMintTypeInfoRowCount();
+bool RtMintTypeInfoRowAt(int i, const char** symbol, void** storage);

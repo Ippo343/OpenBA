@@ -1574,3 +1574,20 @@ const void* RtMintTypeInfoStorageProbe(int index) {
     if (index < 0 || index >= kTypeInfoCount) return nullptr;
     return &kTypeInfoStorage[index];
 }
+
+// ============================================================================
+// WAVE 24 lane TINFO -- public enumeration of the minted BaseTypeInfo rows
+// ============================================================================
+// standalone/tinfo_door_screen.cpp needs to walk all 104 `?_typeInfo@` rows and
+// ask, per row, what OUR NAME DOOR hands a caller. There was no public
+// enumerator: every existing walk is a file-static loop in here. This exposes
+// the one the screen needs and nothing more (symbol + storage), so the screen
+// cannot reach into the table mutable internals.
+int RtMintTypeInfoRowCount() { return kTypeInfoCount; }
+
+bool RtMintTypeInfoRowAt(int i, const char** symbol, void** storage) {
+    if (i < 0 || i >= kTypeInfoCount) return false;
+    if (symbol)  *symbol  = kMintTypeInfos[i].symbol;
+    if (storage) *storage = (void*)kMintTypeInfos[i].storage;
+    return true;
+}
