@@ -1196,6 +1196,359 @@ void RtUiDialogInstance_OnElementEvent(DialogInstance* self, void** elementPtr,
 }
 
 // ============================================================================
+// UI::DialogInstance — frame leftovers (docs/runtime_port/closure/WORKLIST.md)
+// ============================================================================
+// Four bodies read from the disassembly (not the decompiled C, which drops the
+// implicit RDX argument on the `OnUpdate` vtable call and mis-shapes
+// `ComputeLayout`'s tail-call jump table — reference_ghidra_c_output_vs_
+// disassembly.md). Raw Element offsets are spelled out at the use site, same
+// convention runtime/types/ui/UserInterface.h states for a foreign class this
+// file does not own.
+//
+// Element vtable slots used below (runtime/types/ui/Element.h): 0x20
+// ComputeSize(), 0x28 ComputeLayout(x,y,w,h), 0x38 Update(...), 0x48
+// Contains(x,y,UserInterface*). DialogInstance's OWN vtable slots (this file's
+// tables above / tooltipdialog.cpp): 0x30 OnUpdateLayout(), 0x38 OnUpdate(time).
+
+// ?Contains@DialogInstance@UI@@QEBA_NHH@Z — retail 0x180114820, ord 1861.
+// Disassembly: flags bit2 -> always false; flags bit3 -> TAIL CALL into the
+// root Element's own Contains (vtable slot 9/+0x48) with (x, y, this->_ui);
+// otherwise a plain inclusive bounds test against the root's layout rect.
+bool RtUiDialogInstance_Contains(const DialogInstance* self, int32_t x, int32_t y) {
+    const uint8_t* root = static_cast<const uint8_t*>(self->_root);
+    if ((self->_flags >> 2) & 1) return false;
+    if ((self->_flags >> 3) & 1) {
+        void* const* const vtable = *reinterpret_cast<void* const* const*>(root);
+        using Fn = bool (*)(const void*, int32_t, int32_t, void*);
+        return vtable && reinterpret_cast<Fn>(vtable[9])(root, x, y, self->_ui);
+    }
+    const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
+    const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
+    const int32_t top    = *reinterpret_cast<const int32_t*>(root + 0x6c);
+    const int32_t bottom = *reinterpret_cast<const int32_t*>(root + 0x74);
+    return left <= x && x <= right && top <= y && y <= bottom;
+}
+
+// ?GetMouseCursorIndex@DialogInstance@UI@@QEBAHV?$InternalPtr@VElement@UI@@@Object@@HH@Z
+// Retail 0x180114010, ord 2798. Recurses depth-first over `elem`'s children
+// (Element::_children, +0xa0/+0xa8), keeping `elem`'s own cursor index
+// (+0x3c) as the default and overriding it with whichever child's bounds
+// [left,right) x [top,bottom) (+0x68/+0x70/+0x6c/+0x74, HALF-open, unlike
+// Contains' inclusive test above) contains (x,y) and whose flags low two bits
+// (+0x34 & 3) are both clear.
+extern "C" int32_t RtUiDialogInstance_GetMouseCursorIndex(const DialogInstance* self,
+                                               void** elementPtr,
+                                               int32_t x, int32_t y) {
+    const uint8_t* elem = static_cast<const uint8_t*>(*elementPtr);
+    int32_t result = *reinterpret_cast<const int32_t*>(elem + 0x3c);
+    const int32_t count = *reinterpret_cast<const int32_t*>(elem + 0xa8);
+    void* const* const children = *reinterpret_cast<void* const* const*>(elem + 0xa0);
+    for (int32_t i = 0; i < count; ++i) {
+        void* child = children ? children[i] : nullptr;
+        if (!child) continue;
+        const uint8_t* c = static_cast<const uint8_t*>(child);
+        if ((*reinterpret_cast<const uint8_t*>(c + 0x34) & 3) != 0) continue;
+        const int32_t left = *reinterpret_cast<const int32_t*>(c + 0x68);
+        const int32_t top  = *reinterpret_cast<const int32_t*>(c + 0x6c);
+        const int32_t right  = *reinterpret_cast<const int32_t*>(c + 0x70);
+        const int32_t bottom = *reinterpret_cast<const int32_t*>(c + 0x74);
+        if (left <= x && x < right && top <= y && y < bottom) {
+            void* childPtr = child;
+            result = RtUiDialogInstance_GetMouseCursorIndex(self, &childPtr, x, y);
+        }
+    }
+    return result;
+}
+
+// ?ComputeLayout@DialogInstance@UI@@QEAAXHHHH@Z — retail 0x180113d90, ord 1760.
+// Byte-faithful transcription of the disassembly (the decompiled C mis-shapes
+// the tail-call jump table into a 4-arg call and drops the 5th, stack-passed
+// argument -- see 0x180113fac's "WARNING: Could not recover jumptable").
+//   1. this->OnUpdateLayout() (own vtable slot 6/+0x30) — no extra args.
+//   2. root->ComputeSize(); clamp (x,y) into [0,w)x[0,h) against the root's
+//      computed size plus this->_upperLeftX/Y, then place the root inside the
+//      remaining space per its alignment (Element::_alignment, 9-way grid)
+//      and fill flags (Element::_flags bits 2/3).
+//   3. root->ComputeSize() AGAIN (retail calls it twice; reproduced even
+//      though it looks redundant -- byte-faithful first). Compute the root's
+//      total extent (layout size + padding, floored to its min size), and if
+//      flags bit 4 or 5 (0x30) is set, walk to the OUTERMOST ancestor via
+//      Element::_parent (+0x98) and re-derive width/height from
+//      Video::Device::_singleton's screen size times that ancestor's
+//      DialogInstance's UserInterface::_uiScale (bit 5 -> width, bit 4 ->
+//      height).
+//   4. TAIL-CALL root->ComputeLayout(x, y, x+w, y+h) (vtable slot 5/+0x28).
+void RtUiDialogInstance_ComputeLayout(DialogInstance* self, int32_t x, int32_t y,
+                                      int32_t w, int32_t h) {
+    {
+        void** vt = *reinterpret_cast<void***>(self);
+        reinterpret_cast<void (*)(DialogInstance*)>(vt[6])(self);
+    }
+
+    uint8_t* root = static_cast<uint8_t*>(self->_root);
+    auto ComputeSize = [&]() {
+        void** vt = *reinterpret_cast<void***>(root);
+        reinterpret_cast<void (*)(uint8_t*)>(vt[4])(root);
+    };
+    ComputeSize();
+
+    int32_t layoutW = *reinterpret_cast<int32_t*>(root + 0x60);
+    int32_t layoutH = *reinterpret_cast<int32_t*>(root + 0x64);
+    const int32_t alignment = *reinterpret_cast<int32_t*>(root + 0x30);
+    const uint8_t elemFlags = *reinterpret_cast<uint8_t*>(root + 0x34);
+    const int32_t leftPad   = *reinterpret_cast<int32_t*>(root + 0x18);
+    const int32_t rightPad  = *reinterpret_cast<int32_t*>(root + 0x1c);
+    const int32_t topPad    = *reinterpret_cast<int32_t*>(root + 0x20);
+    const int32_t bottomPad = *reinterpret_cast<int32_t*>(root + 0x24);
+
+    int32_t posX = self->_upperLeftX + x;
+    int32_t posY = self->_upperLeftY + y;
+    if (w < posX + layoutW) posX = w - layoutW;
+    if (h < posY + layoutH) posY = h - layoutH;
+
+    const int32_t availRight  = w - rightPad;
+    const int32_t availBottom = h - bottomPad;
+    posX += leftPad;
+    posY += topPad;
+    int32_t availW = availRight - posX;
+    int32_t availH = availBottom - posY;
+    if ((elemFlags >> 2) & 1) layoutW = availW;
+    if ((elemFlags >> 3) & 1) layoutH = availH;
+
+    switch (alignment) {
+        case 1: case 4: case 7: posX = posX + (availW >> 1) - (layoutW >> 1); break;
+        case 2: case 5: case 8: posX = availRight - layoutW; break;
+        default: break;   // left-aligned: posX unchanged
+    }
+    if (alignment > 2) {
+        if (alignment < 6)      posY = posY + (availH >> 1) - (layoutH >> 1);
+        else if (alignment < 9) posY = availBottom - layoutH;
+    }
+
+    ComputeSize();   // retail calls it a second time; reproduced as-is.
+    int32_t totalW = *reinterpret_cast<int32_t*>(root + 0x60) + rightPad + leftPad;
+    int32_t totalH = *reinterpret_cast<int32_t*>(root + 0x64) + bottomPad + topPad;
+    const int32_t minW = *reinterpret_cast<int32_t*>(root + 0x28);
+    const int32_t minH = *reinterpret_cast<int32_t*>(root + 0x2c);
+    if (totalW < minW) totalW = minW;
+    if (totalH < minH) totalH = minH;
+
+    const uint32_t rootFlags = *reinterpret_cast<uint32_t*>(root + 0x34);
+    if (rootFlags & 0x30) {
+        uint8_t* ancestor = root;
+        while (*reinterpret_cast<uint8_t**>(ancestor + 0x98) != nullptr)
+            ancestor = *reinterpret_cast<uint8_t**>(ancestor + 0x98);
+        // ancestor+0x90 is Element::_dialogParent (InternalPtr<DialogInstance>);
+        // its own +0x10 is DialogInstance::_ui (UserInterface*), whose +0xdc
+        // is UserInterface::_uiScale (runtime/types/ui/UserInterface.h).
+        uint8_t* dlgParent = *reinterpret_cast<uint8_t**>(ancestor + 0x90);
+        const float uiScale = dlgParent
+            ? *reinterpret_cast<float*>(*reinterpret_cast<uint8_t**>(dlgParent + 0x10) + 0xdc)
+            : 1.0f;
+        void** deviceSlot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+        const uint8_t* device = deviceSlot ? static_cast<uint8_t*>(*deviceSlot) : nullptr;
+        if (device) {
+            if (rootFlags & 0x20)
+                totalW = static_cast<int32_t>(static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * uiScale);
+            if (rootFlags & 0x10)
+                totalH = static_cast<int32_t>(static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * uiScale);
+        }
+    }
+
+    void** vt = *reinterpret_cast<void***>(root);
+    reinterpret_cast<void (*)(uint8_t*, int32_t, int32_t, int32_t, int32_t)>(vt[5])(
+        root, posX, posY, posX + totalW, posY + totalH);
+}
+
+// ?Update@DialogInstance@UI@@QEAAXAEBVTime@System@@PEAVUserInterface@2@AEAUUpdateState@Element@2@@Z
+// Retail 0x180113980, ord 4483. Read from the disassembly for one detail the
+// decompiler drops: the `OnUpdate` vtable call at +0x38 implicitly reuses RDX
+// (this function's own `time` argument, never reloaded between entry and the
+// call), i.e. it is `this->OnUpdate(time)`, not a bare `this->OnUpdate()`.
+//
+//   1. If ANY child dialog has flags bit1 set, skip straight to step 5 (the
+//      recursive per-child Update sweep) -- this dialog's own frame is
+//      suppressed while a child claims that bit.
+//   2. Otherwise: this->OnUpdate(time) (own vtable slot 7/+0x38). Then, unless
+//      UpdateState bytes +7/+8/+9 say a drag/other block is active: if
+//      UpdateState+0x20 is clear and Contains(mouseX,mouseY), accumulate hover
+//      time once the mouse has settled at the same position, arming
+//      `_hovering` past the tooltip delay; otherwise (some blocking bit set)
+//      and `_hovering` was set, clear it and push a "hover end" event (type
+//      0x11) via `UI::UserInterface::_events`.
+//   3. Walk `_timers` (stride 0x18): decrement the LIVE countdown at +0x08 —
+//      *** CORRECTION: DialogInstance.h's own comment calls +0x08 "_period,
+//      the reload value" and +0x00 "_remaining". This body proves the
+//      opposite is the live field: it is +0x08 that ticks down and fires the
+//      event, so +0x08 is the countdown and +0x00 the untouched reload copy.
+//      Both start equal (StartTimer writes the same value into both), which
+//      is why no consumer noticed until this port read the decrement. ***
+//      When a timer's countdown reaches <=0, push a "timer fired" event
+//      (type 0x13, data = the timer's +0x10 id) and swap the remaining
+//      timers down by one slot (retail does NOT re-visit the slot the swap
+//      just filled; reproduced as-is).
+//   4. root->Update(time, ui, &topDialog, updateState) (Element vtable slot
+//      7/+0x38, five arguments -- the decompiler shows only four; the fifth,
+//      UpdateState*, is passed on the stack, read from 0x180113ad9's
+//      `MOV [RSP+0x20],RDI`). Then, unless flags bit2 is set (always inside
+//      the root's own bounds): if flags bit3 is set, ask the root's own
+//      Contains(x,y,_dialog) [Element vtable slot 9]; otherwise a bounds test
+//      against the root's layout rect. On a miss, skip straight to step 5.
+//      On a hit, push up to three UI events (types 8/9/0xa) for
+//      UpdateState's own event bits (+1,+3,+2) with the mouse position
+//      (UpdateState+0x18) as payload, then clear those UpdateState bits and
+//      set UpdateState+0x20.
+//   5. Recurse: call this same function on every child dialog in `_children`.
+void RtUiDialogInstance_Update(DialogInstance* self, const void* time,
+                               void* ui, uint8_t* updateState) {
+    // The 0x30-byte record 0x180033690 (array.cpp's AssignCaptureEntry sibling
+    // AssignEvent30) copies field by field: +0x00 dialog ptr, +0x08 unused
+    // (always 0 from this caller), +0x10 event type, +0x14 event data,
+    // +0x18 an 8-byte payload (the mouse position pair, or 0), +0x20/+0x24
+    // unused, +0x28 unused. Built on the stack exactly as retail's five push
+    // sites do, then handed to the SAME by-address SetSize call retail makes.
+    struct EventRecord {
+        void*    dialog;
+        uint64_t _unused08;
+        int32_t  type;
+        int32_t  data;
+        uint64_t payload;
+        uint64_t _unused20_28[2];
+    };
+    static_assert(sizeof(EventRecord) == 0x30, "UI::UserInterface::Event stride");
+    auto PushEvent = [&](int32_t type, int32_t data, uint64_t payload) {
+        EventRecord rec{};
+        rec.dialog = self;
+        rec.type = type;
+        rec.data = data;
+        rec.payload = payload;
+        uint8_t* eventsHdr = static_cast<uint8_t*>(ui) + 0x48;  // UserInterface::_events
+        const int32_t newSize = *reinterpret_cast<int32_t*>(eventsHdr + 8) + 1;
+        using Fn = void (*)(void*, int32_t, const void*);
+        static Fn fn = nullptr;
+        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180033690));
+        fn(eventsHdr, newSize, &rec);
+    };
+
+    bool anyChildBit1 = false;
+    for (RtObject::InternalBasePtr* n = reinterpret_cast<RtObject::InternalBasePtr*>(self->_children._head);
+         n; ) {
+        // LinkedList<T>::Node is {T element; Node* prev; Node* next}, T=8 bytes,
+        // so `next` sits at +0x10 from the node's start.
+        uint8_t* node = reinterpret_cast<uint8_t*>(n);
+        DialogInstance* child = reinterpret_cast<DialogInstance*>(n->ptr);
+        anyChildBit1 = anyChildBit1 || ((child->_flags >> 1) & 1) != 0;
+        n = *reinterpret_cast<RtObject::InternalBasePtr**>(node + 0x10);
+    }
+
+    if (!anyChildBit1) {
+        {
+            void** vt = *reinterpret_cast<void***>(self);
+            reinterpret_cast<void (*)(DialogInstance*, const void*)>(vt[7])(self, time);
+        }
+
+        const uint8_t* us = updateState;
+        const int64_t timeTicks = *reinterpret_cast<const int64_t*>(time);
+        const double secondsPerTick = *RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
+        // DAT_1801616b8: a double, read directly out of the shipped DLL
+        // (0.25 seconds) — no export names it, so it is a literal here.
+        constexpr double kTooltipDelaySeconds = 0.25;
+
+        if (us[8] == 0 && us[9] == 0 && us[7] == 0) {
+            const int32_t mx = *reinterpret_cast<const int32_t*>(us + 0x18);
+            const int32_t my = *reinterpret_cast<const int32_t*>(us + 0x1c);
+            if (us[0x20] == 0 && RtUiDialogInstance_Contains(self, mx, my)) {
+                if (self->_upperLeftX == mx && self->_upperLeftY == my) {
+                    self->_hoverTime += timeTicks;
+                    if (self->_hoverTime > static_cast<int64_t>(kTooltipDelaySeconds / secondsPerTick))
+                        self->_hovering = 1;
+                }
+                self->_upperLeftX = mx;
+                self->_upperLeftY = my;
+            }
+        } else if (self->_hovering != 0) {
+            self->_hovering = 0;
+            PushEvent(0x11, 0, 0);
+            self->_hoverTime = 0;
+        }
+
+        // ---- timers ---------------------------------------------------------
+        if (self->_timers._size > 0) {
+            uint8_t* data = reinterpret_cast<uint8_t*>(self->_timers._data);
+            int32_t i = 0;
+            while (i < self->_timers._size) {
+                uint8_t* t = data + static_cast<size_t>(i) * 0x18;
+                // *** CORRECTION to DialogInstance.h: this proves +0x08 is the
+                // LIVE countdown and +0x00 the untouched reload copy, the
+                // opposite of that header's "_remaining"/"_period" naming.
+                // Both start equal (StartTimer seeds both), which is why the
+                // swap went unnoticed until this port read the decrement. ***
+                int64_t* remaining = reinterpret_cast<int64_t*>(t + 0x08);
+                *remaining -= timeTicks;
+                if (*remaining <= 0) {
+                    const int32_t timerId = *reinterpret_cast<int32_t*>(t + 0x10);
+                    PushEvent(0x13, timerId, 0);
+                    // swap the remaining timers down one slot (0x18 stride)
+                    for (int32_t k = i; k + 1 < self->_timers._size; ++k)
+                        std::memcpy(data + static_cast<size_t>(k) * 0x18,
+                                    data + static_cast<size_t>(k + 1) * 0x18, 0x18);
+                    --self->_timers._size;
+                    continue;   // retail does NOT re-visit the slot just filled
+                }
+                ++i;
+            }
+        }
+
+        // ---- root Element::Update -------------------------------------------
+        uint8_t* root = static_cast<uint8_t*>(self->_root);
+        DialogInstance* topDialog = self;
+        {
+            void** vt = *reinterpret_cast<void***>(root);
+            reinterpret_cast<void (*)(uint8_t*, const void*, void*, DialogInstance**, uint8_t*)>(
+                vt[7])(root, time, ui, &topDialog, updateState);
+        }
+
+        const int32_t mx2 = *reinterpret_cast<const int32_t*>(updateState + 0x18);
+        const int32_t my2 = *reinterpret_cast<const int32_t*>(updateState + 0x1c);
+        bool hit;
+        if ((self->_flags >> 2) & 1) {
+            hit = true;
+        } else if ((self->_flags >> 3) & 1) {
+            void** vt = *reinterpret_cast<void***>(root);
+            using Fn = bool (*)(uint8_t*, int32_t, int32_t, void*);
+            hit = reinterpret_cast<Fn>(vt[9])(root, mx2, my2, self->_dialog);
+        } else {
+            const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
+            const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
+            const int32_t top    = *reinterpret_cast<const int32_t*>(root + 0x6c);
+            const int32_t bottom = *reinterpret_cast<const int32_t*>(root + 0x74);
+            hit = left <= mx2 && mx2 <= right && top <= my2 && my2 <= bottom;
+        }
+        if (hit) {
+            const uint64_t mousePos = *reinterpret_cast<const uint64_t*>(updateState + 0x18);
+            if (updateState[1] != 0) PushEvent(8,  0, mousePos);
+            if (updateState[3] != 0) PushEvent(9,  0, mousePos);
+            if (updateState[2] != 0) PushEvent(0xa, 0, mousePos);
+            *reinterpret_cast<uint16_t*>(updateState + 7) = 0;
+            *reinterpret_cast<uint16_t*>(updateState + 1) = 0;
+            *reinterpret_cast<uint16_t*>(updateState + 4) = 0;
+            updateState[9] = 0;
+            updateState[3] = 0;
+            updateState[6] = 0;
+            updateState[0x20] = 1;
+        }
+    }
+
+    for (RtObject::InternalBasePtr* n = reinterpret_cast<RtObject::InternalBasePtr*>(self->_children._head);
+         n; ) {
+        uint8_t* node = reinterpret_cast<uint8_t*>(n);
+        DialogInstance* child = reinterpret_cast<DialogInstance*>(n->ptr);
+        RtUiDialogInstance_Update(child, time, ui, updateState);
+        n = *reinterpret_cast<RtObject::InternalBasePtr**>(node + 0x10);
+    }
+}
+
+// ============================================================================
 // UI::Dialog
 // ============================================================================
 
@@ -2643,6 +2996,25 @@ int RtUiDialogRegister() {
         "?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z",
         (void*)&RtUiDialogInstance_OnElementEvent);
     RegisterRuntimeAddr(0x180114ed0, (void*)&RtUiDialogInstance_OnElementEvent);       ++n;
+
+    // ---- UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) --------
+    RegisterRuntimeExport("?Contains@DialogInstance@UI@@QEBA_NHH@Z",
+                          (void*)&RtUiDialogInstance_Contains);
+    RegisterRuntimeAddr(0x180114820, (void*)&RtUiDialogInstance_Contains);            ++n;
+
+    RegisterRuntimeExport(
+        "?GetMouseCursorIndex@DialogInstance@UI@@QEBAHV?$InternalPtr@VElement@UI@@@Object@@HH@Z",
+        (void*)&RtUiDialogInstance_GetMouseCursorIndex);
+    RegisterRuntimeAddr(0x180114010, (void*)&RtUiDialogInstance_GetMouseCursorIndex); ++n;
+
+    RegisterRuntimeExport("?ComputeLayout@DialogInstance@UI@@QEAAXHHHH@Z",
+                          (void*)&RtUiDialogInstance_ComputeLayout);
+    RegisterRuntimeAddr(0x180113d90, (void*)&RtUiDialogInstance_ComputeLayout);       ++n;
+
+    RegisterRuntimeExport(
+        "?Update@DialogInstance@UI@@QEAAXAEBVTime@System@@PEAVUserInterface@2@AEAUUpdateState@Element@2@@Z",
+        (void*)&RtUiDialogInstance_Update);
+    RegisterRuntimeAddr(0x180113980, (void*)&RtUiDialogInstance_Update);              ++n;
 
     // ---- UI::Dialog ----
     RegisterRuntimeExport(
