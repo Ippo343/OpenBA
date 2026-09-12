@@ -214,6 +214,70 @@ int main(int argc, char** argv) {
     }
     printf("CTORS: %d/%d byte-identical\n", cpass, cchecked);
 
+    // ---- third pass: the ALLOCATING path, ?CreateNewObject@ ---------------
+    // Closes the one gap the first two passes leave. Ours = MemAlloc(size,8)
+    // through the SAME out-of-line wrapper the port calls (0x1800c7a50), then
+    // the ctor; theirs = the DLL's own CreateNewObject. Both blocks come from
+    // the same arena, so this also exercises the size and alignment arguments.
+    //
+    // Poison is applied to OUR block only -- theirs is written by their own
+    // allocator and must not be touched before their ctor runs -- so the
+    // subject here is narrower than pass 1: the bytes OUR table claims to
+    // write, compared for equality. A DROPPED store shows up (poison vs value);
+    // an EXTRA store cannot be seen by this pass, which pass 1 already covers.
+    //
+    // For the ABSTRACT classes the whole claim is "both return null", and that
+    // IS checked here -- it is the only pass that can, since they have no ctor.
+    printf("\n---- CreateNewObject (allocating path) ----\n");
+    typedef void* (*NewFn)();
+    typedef void* (*MemAllocFn)(unsigned long long, int);
+    MemAllocFn memalloc = (MemAllocFn)Sym("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
+    int nchecked = 0, npass = 0;
+    if (!memalloc) printf("?MemAlloc@ not found -- pass skipped entirely\n");
+    for (int i = 0; memalloc && i < kSpecCount; ++i) {
+        Spec sp = kSpecs[i];
+        NewFn theirsN = (NewFn)Sym(sp.newName);
+        if (!theirsN) { printf("%-24s SKIP (export missing)\n", sp.cls); continue; }
+        if (sp.size == 0) {
+            ++nchecked;
+            void* t = theirsN();
+            if (t == nullptr) { ++npass; printf("%-24s new OK (both null, abstract)\n", sp.cls); }
+            else printf("%-24s new FAIL: retail returned %p, we return null\n", sp.cls, t);
+            continue;
+        }
+        unsigned char* a = (unsigned char*)memalloc(sp.size, sp.align);
+        if (!a) { printf("%-24s SKIP (our allocation failed)\n", sp.cls); continue; }
+        memset(a, 0xA5, (size_t)sp.size);
+        static Store tmp3[512];
+        if (neg && sp.nStores) {
+            memcpy(tmp3, sp.stores, sp.nStores * sizeof(Store));
+            bool armed = false;
+            for (int k = sp.nStores - 1; k >= 0 && !armed; --k)
+                if (tmp3[k].kind == SK_IMM) { tmp3[k].imm ^= 1; armed = true; }
+            if (!armed) { tmp3[sp.nStores-1].kind = SK_IMM; tmp3[sp.nStores-1].imm = 0; }
+            sp.stores = tmp3;
+        }
+        OursCtor(sp, a);
+        unsigned char* b = (unsigned char*)theirsN();
+        if (!b) { printf("%-24s SKIP (retail allocation failed)\n", sp.cls); continue; }
+        ++nchecked;
+        bool handles3 = sp.baseCtor != nullptr;
+        int bad = 0, firstBad = -1;
+        for (uint16_t k = 0; k < sp.nStores; ++k) {
+            const Store& s = sp.stores[k];
+            for (int o = s.off; o < s.off + s.width; ++o) {
+                if (handles3 && o >= 0x08 && o < 0x10) continue;
+                if (a[o] != b[o]) { ++bad; if (firstBad < 0) firstBad = o; }
+            }
+        }
+        if (bad == 0) { ++npass; printf("%-24s new OK (0x%llx bytes from the arena)\n",
+                                        sp.cls, (unsigned long long)sp.size); }
+        else printf("%-24s new FAIL %d bytes, first +0x%x (ours %02x theirs %02x)\n",
+                    sp.cls, bad, firstBad, a[firstBad], b[firstBad]);
+    }
+    printf("CREATENEWOBJECT: %d/%d byte-identical\n", npass, nchecked);
+
+
     printf("\n%s: %d/%d classes byte-identical, %d skipped\n",
            neg ? "NEGATIVE CONTROL (every checked class MUST fail)" : "ORACLE",
            pass, checked, skipped);

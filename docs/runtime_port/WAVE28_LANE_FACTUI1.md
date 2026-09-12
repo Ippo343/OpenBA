@@ -22,8 +22,13 @@ this lane is **entirely at cutover**, and nobody has run a cutover with it.
 
 What this lane DID measure is a **two-sided byte oracle against the shipped
 DLL's own constructors**: **26/26 in-place bodies and 14/14 out-of-line
-constructors byte-identical, with a negative control at 0/26 and 0/14** (§7.2).
-That is a strong check on the *transcription*. It is not a check on the
+constructors byte-identical, and — in a third pass that exercises the ALLOCATING
+path — 31/31 `CreateNewObject` results identical, the four abstract ones by
+calling retail and observing that it really returns null. Negative control 0/26,
+0/14, 4/31 (the four survivors are exactly the abstract rows, whose claim has no
+free parameter to corrupt).** §7.2.
+
+That is a strong check on the *transcription*. It is **not** a check on the
 *cutover behaviour*, and nothing in this lane is.
 
 **Read §11 before looking for a board movement: `tools/runtime_census.py` CANNOT
@@ -359,8 +364,20 @@ the run.
   Wave 7's independently written `RtUi_Element_Ctor` (§3.3).
 * The `RtUiPortInit` :333 / `RtDataMintInit` :406 ordering, read in this
   worktree.
-* The build gate (§7) and the re-derived census (§7).
-* The control's fired/reachable counts (§7).
+* The build gate: `mingw32-make standalone-debug` exit 0, zero warnings (§7.1).
+* **The offline byte oracle, three passes and both directions: 26/26 in-place,
+  14/14 constructors, 31/31 `CreateNewObject` (allocating path) identical to the
+  shipped DLL's own; negative control 0/26, 0/14, 4/31** (§7.2).
+* That the committed store table re-derives byte-for-byte from a clean
+  regeneration in a lane-private directory (§7.0).
+* That `tools/runtime_census.py` contains **zero** `CreateNewObject` /
+  `CreateInPlaceObject` rows and its TOTAL is unchanged by this lane's 74
+  registrations (§11.0).
+* That `tools/mint_factory_census.py`'s slot-0 PRESENT count moves 2 -> 33, and
+  that the 31 new names are exactly the roster **as a set** (§11.1).
+* Zero duplicate registrations across all 74 (name, address) pairs (§11.1).
+* That `?Startup@MemoryAllocator@System@@` takes MEGABYTES and its second
+  argument is a maximum that must be >= the first (§7.2).
 
 **INFERRED** (reasoning, not a measurement — treat accordingly):
 
@@ -380,14 +397,60 @@ the run.
 
 ## 7. RESULTS
 
-### 7.1 BUILD GATE — MEASURED
+### 7.0 THE COMMITTED TABLE RE-DERIVES FROM SCRATCH — and it had to be checked
+
+**The session scratchpad is shared between all seven Wave 28 lanes, and one of
+this lane's analysis scripts was silently overwritten by a sibling lane
+mid-run.** Measured, not hypothetical: `exp.py` — the script that builds the
+export map through which every address, name and vtable symbol in the store
+table was resolved — was found holding *another lane's* content, a different
+program under the same basename.
+
+The integrator flagged the hazard generally; this lane then had to answer
+whether its committed artefact was contaminated. **The answer is no, and it was
+established by re-derivation rather than by argument.** The whole pipeline was
+re-run in a lane-private `scratchpad/factui1/` against a freshly built export
+map, and the result diffed against what had already been committed:
 
 ```
-mingw32-make standalone-debug      -> EXIT 0
-standalone/build/reimpl-x64.exe    33,434,116 bytes
-runtime__src__ui__factory_ui1.o    present in the link
-warnings under -Wall -Wextra       0
+regenerated  637 lines
+committed    637 lines
+diff         IDENTICAL, exit 0
 ```
+
+The §7.2 oracle was then rebuilt in that private directory against the committed
+table and re-run, reproducing 26/26 + 14/14 and 0/26 + 0/14.
+
+**The general form, which outlives this wave: a shared scratchpad makes a
+basename a shared global, and the collision is silent in BOTH directions** — the
+clobberer gets no error and the clobbered lane gets a confident wrong answer with
+no diagnostic. What cleared this lane is that its committed artefact is a pure
+function of two inputs, the retail DLL and the roster, so re-derivation was a
+one-command check. **An artefact that cannot be cheaply re-derived cannot be
+cleared of this at all**, and several lanes' outputs this wave are of that kind.
+
+### 7.1 BUILD GATE — MEASURED, AND THE ARTEFACT CHECKED, NOT JUST THE EXIT CODE
+
+A sibling lane measured a backgrounded `mingw32-make` writing a **zero-byte**
+output file and still reporting **exit 0**. An exit code alone is a gate that
+can pass vacuously, so this one names the artefact:
+
+```
+mingw32-make standalone-debug            -> EXIT 0   (FOREGROUND, not backgrounded)
+standalone/build/reimpl-x64.exe          33,434,116 bytes
+                                         mtime 2026-09-12 13:07:58
+newer-than-exe source files              NONE
+                                         (find <3 lane sources> -newer <exe> -> empty)
+warnings under -Wall -Wextra             0
+nm  | grep -c RtUiFactory1Register       2
+strings | grep -c 'CreateNewObject@GroupElement@UI'   2
+strings | grep -c '??0DialogInstance@UI@@QEAA@XZ'     1
+```
+
+The last three lines are the ones that matter: **the registered symbol names are
+IN THE LINKED IMAGE**, not merely in an object file that might not have been
+linked. This lane's FIRST build attempt was backgrounded and produced no output
+file at all, which is how the hazard was already known here.
 
 ### 7.2 THE OFFLINE BYTE ORACLE — MEASURED, AND TWO-SIDED
 
@@ -418,16 +481,35 @@ That is the ONLY field both sides write that they are required to write
 differently. **The vptr IS compared** — with the DLL present both sides must
 resolve the same `??_7` export, and a disagreement there would be real.
 
+**Three passes, because two of them leave a gap.** Pass 1 is
+`CreateInPlaceObject`; pass 2 is the exported constructor (the only door
+`DialogInstance` has here, since its slot 1 is FACTREST's); **pass 3 is the
+ALLOCATING `CreateNewObject` path** — ours allocates through the same
+out-of-line `?MemAlloc@` wrapper the port calls, theirs through its own inlined
+triple, from the same arena, and the two blocks are compared. Pass 3 exists
+because the allocation size and alignment arguments are otherwise only INFERRED,
+and because it is **the only pass that can check the 4 abstract classes** — it
+CALLS retail's `CreateNewObject` and observes that it really returns null,
+rather than reading two bytes and concluding it.
+
 ```
-ORACLE                     26/26 in-place bodies  byte-identical
-                           14/14 out-of-line ctors byte-identical
-NEGATIVE CONTROL            0/26                   0/14
+ORACLE   pass 1  in-place bodies      26/26 byte-identical
+         pass 2  out-of-line ctors    14/14 byte-identical
+         pass 3  CreateNewObject      31/31 byte-identical  (27 concrete +
+                                            4 abstract, both sides null)
+NEGATIVE CONTROL     0/26      0/14      4/31
    (one bit flipped in the last immediate store of each class; where a class
     has NO immediate store -- GroupElement, whose whole ctor is one vtable
     stamp -- the control corrupts the vtable value instead, because a control
     that cannot be ARMED on a subject says nothing about that subject. That
     fallback was added AFTER the first negative run scored 25/26 and named
     GroupElement as the one it could not arm.)
+
+    PASS 3's NEGATIVE IS 4/31, NOT 0/31, AND THAT IS HONEST, NOT A HOLE: the
+    four survivors are exactly the four ABSTRACT classes. Their claim is "both
+    sides return null" and it has no free parameter to corrupt, so the control
+    cannot be armed on them at all. They are carried by pass 3's POSITIVE arm,
+    which is a direct observation of retail's return value.
 ```
 
 5 classes are outside this screen: the 4 abstract ones (nothing to compare) and
