@@ -15,10 +15,16 @@ promoted, and that is the finding, not a shortfall.** All five `?_singleton@` ro
 decided individually on their own xrefs and all five came out HARMFUL-with-the-DLL and
 **REQUIRED at cutover** — the route-scope inversion, four rows at once.
 
-The lane's most transferable result is not a port. It is that **the census CSV cannot be
-used to ask "is this function ported?"** — it is keyed on `called`, so a body that is
-registered but never called by our tree reads as absent. That mis-classified **seven** of
-the readers this lane's DATA verdicts depend on. §6 has it.
+The lane's most transferable result is not a port. It is a **BIASED INSTRUMENT WHOSE BIAS
+WAS INVISIBLE BECAUSE THE ANSWER WAS RIGHT** — the census CSV cannot be used to ask "is
+this function ported?", it mis-classified **seven** of the readers this lane's DATA
+verdicts depend on, and **every single error pushed toward the conclusion the lane reached
+anyway**. A wrong instrument that agrees with you leaves no symptom. **§6 is the section to
+read**, and it is written for the future lane whose own tool happens to agree with it.
+
+Both ported UI bodies now have a real **input-sweep oracle** against the shipped exports,
+with **three** negative controls — the third added because the first one exposed a hole in
+itself. `make endsprites-sweep-controls`. §2.5.
 
 Branch-local census movement:
 
@@ -211,9 +217,8 @@ that are all scissors, which pass 1 skips — the seeds survive and retail store
 The whole layout was already in `runtime/types/ui/SpriteCapture.h` with `static_assert`s;
 this lane asserted no new offsets.
 
-**Verifiable by input sweep** rather than by waiting for a route
-(`project_pure_functions_verify_by_sweep.md`). **The sweep was NOT run** — it needs no game
-directory, so this is a gap in this lane's evidence and not a blocked one. §7.2.
+**VERIFIED BY INPUT SWEEP** against the shipped export — 16 cases, 0 divergences. See
+§2.5; this is no longer a residual.
 
 ### 2.2 `?Set@SpriteSheet@UI@@QEAAXHHAEBVString@System@@0_N@Z` — **PORTED** (0x1800034F0, ord 3819)
 
@@ -233,6 +238,9 @@ both reproduced and both commented in place:
 Only callee: `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800C7AD0, confirmed by
 `pefile`).
 
+**VERIFIED BY INPUT SWEEP** — 6 cases covering four of its five arms, 0 divergences. The
+fifth arm and why it is not covered are in §2.5.
+
 **BONUS, and deliberately not acted on.** This function *names* three fields that
 `runtime/types/ui/SpriteSheet.h` carries as `m_field48` / `m_field4C` / `m_field50`
 "unknown int / unknown int / unknown byte": they are precisely this setter's two ints and
@@ -241,6 +249,104 @@ its bool. **The header was NOT renamed.** One setter is not enough evidence for 
 lane has no reader to corroborate against. Recorded so a future lane starts from it.
 **[ADDRESSEE: the Wave 24 kickoff writer — hand this to whichever lane next reads
 SpriteSheet; it needs one reader, not a new disassembly.]**
+
+### 2.5 THE INPUT SWEEP — both UI bodies, verified against the shipped exports
+
+`tools/endsprites_probe/`, run by **`mingw32-make endsprites-sweep-controls`**. Modelled on
+the existing `libm-sweep` target, which already does exactly this for the CRT port.
+
+**It needs the DLL but NOT the game directory.** The harness `LoadLibrary`s
+Runtime-x64.dll read-only, which does not contend for the game directory the way a run
+does. That is the whole reason it could be built in a wave where the lock was never free —
+and it is why the lock does **not** excuse this gap the way it excuses the attendance gap.
+
+**It is an ORACLE, not a self-check.** The real wave sources are linked in, alongside an
+**inert** registration seam (`seam_stub.cpp`: `RegisterRuntimeExport` and friends are
+no-ops). So the port registry does not exist in that process and retail is reachable
+**only** by `GetProcAddress` on the shipped export table — there is no path by which our
+body could be compared with itself, which is the failure that left a Wave 5 probe dark for
+five waves.
+
+#### Results — what each input class produced, not just a divergence count
+
+**`?EndAddingSprites@SpriteCapture@UI@@` — 16 classes, 0 divergences.** The population was
+chosen against `reference_uniform_population_is_not_a_verification.md` (a ported
+`StrCompare` "worked" because every pair in its population shared a first byte), and the
+outputs show it genuinely discriminates rather than agreeing trivially:
+
+| class | count | w / h (both sides) | what it discriminates |
+|---|---|---|---|
+| empty | 0 | **−65535** | the `<= 0` gate; retail's degenerate extent |
+| all scissors | 3 | **−65535** | same extent by a *different* path — pass 1 runs and excludes everything |
+| at the seeds exactly | 1 | **−65535** | a *third* path to it: `0x8000`/`−0x8000` do not beat the seeds |
+| single at origin | 1 | 1 / 1 | the +1 |
+| single positive box | 1 | 21 / 21 | ordinary case |
+| single negative box | 1 | 21 / 21 | negative coordinates |
+| single straddling origin | 1 | 13 / 15 | sign crossing, w ≠ h |
+| mixed (scissor ±1000 + real) | 3 | **11 / 11** | **scissor EXCLUDED from the box** — were it included this would be ~2001 |
+| many, spread | 5 | 351 / 461 | multi-entry min/max |
+| repeats | 4 | 3 / 3 | a distinct-value population cannot see an accumulator bug |
+| across the seeds | 2 | **65539** | the seeds are beaten in both directions |
+| one past each seed | 2 | **65535** | the off-by-one either side of the seeds |
+| near INT32 extremes | 2 | **−294967294** | `max − min + 1` **overflows**, and both sides wrap identically |
+| inverted box (x2 < x1) | 1 | **−39** | retail does not normalise; neither do we |
+| scissor first / real second | 2 | 3 / 3 | order independence |
+| real first / scissor second | 2 | 3 / 3 | the mirror of the above |
+
+Three separate routes to the degenerate `−65535`, an arithmetic **overflow** that both
+sides wrap the same way, and a `−39` from an inverted box: these are the shapes a
+transcription slip would have broken, and they agree.
+
+Also compared, and worth stating because it is an extra class of defect: the four fields
+**neither** body writes (`sheetIndex`, `rotation`, `color`, `name`) are seeded with
+distinctive non-zero values and compared, so a **spurious write** would be caught. None
+occurred. This is safe here — and would not be in general — because both subjects are
+`memcpy`'d from one identical buffer, so unwritten fields are equal by construction rather
+than holding two different piles of poison
+(`reference_oracle_must_not_compare_unwritten_bytes.md` is about the opposite seeding).
+
+**`?Set@SpriteSheet@UI@@` — 6 classes, 0 divergences.** Compared: the three scalars, which
+input each member **landed on** (structurally — the two sides own different blocks, so raw
+pointer equality would fail by construction), and the **refcount delta of every block on
+both sides**. The ledger matched exactly in all six, including `(−1,−1,+1,+1)` on the
+replace case and `(0,0,0,0)` on the pointer-identity case.
+
+**The one arm NOT covered, and why — a result, not a refusal.** The refcount-reaches-**zero**
+path hands `data − 8` to the DLL's real `MemoryAllocator::MemFree`. Feeding that a static
+buffer corrupts the allocator's heap, and allocating a genuine block first needs a live
+`MemoryAllocator` singleton, which is created during Engine startup inside a game run —
+exactly what this lane could not get. So every case keeps the outgoing refcount above 1.
+**Four of the five arms are covered** (pointer-identity short-circuit, null-old, null-new,
+and the refcount-still-nonzero path *including* its dead `field = nullptr` store); the
+free arm is not. **[ADDRESSEE: the first lane to get a game-directory run — add one case
+with `rc == 1` and real allocator blocks; the harness is already written.]**
+
+#### The three negative controls, each with an EXACT expected count
+
+The exe **exits non-zero** when any expectation is missed, so a control that stops working
+is a build failure rather than a line of prose nobody re-reads.
+
+| control | corrupts | expected | observed |
+|---|---|---|---|
+| `--negctl=compared` | `ours._width` / `m_field4C` — **in** the compared set | all **22** fail | **22** ✅ |
+| `--negctl=entry` | `entry[0].x2` — a compared **entry** field | exactly **15** fail | **15** ✅ |
+| `--negctl=uncompared` | `ours._sprites.size` — deliberately **excluded** | **0** fail | **0** ✅ |
+
+**THE THIRD CONTROL EXISTS BECAUSE THE FIRST ONE EXPOSED A HOLE IN ITSELF, AND THE
+EFFECTIVENESS COUNTER IS WHAT SHOWED IT.** With `_width` corrupted, the comparison
+short-circuits *before* the entry loop, and that run printed **`entry-fields compared=0`**.
+So control 1, which passed 22/22 and looked like a complete validation, proved only that
+`_width` is read — while the **248 entry-field comparisons**, which are the bulk of what
+this sweep claims to do, were validated by **nothing**. A control can be green, correct,
+and still leave most of the instrument unproven. Control 2 (`entry`) corrupts a compared
+entry field and leaves `_width` alone, forcing the entry loop to do the catching: 15 of 22
+(16 `End` cases minus the empty one, which has no entry to corrupt; the 6 `Set` cases are
+untouched) and **120 entry fields compared**, so the loop is demonstrably live.
+
+Control 3 is the **mirror** — it corrupts a field the banner claims is *not* compared and
+requires **zero** catches. Had it been caught, the compared set would have been wider than
+documented and the documentation would have been the defect
+(`reference_a_control_can_corrupt_a_byte_that_should_not_be_compared.md`).
 
 ### 2.3 `??2SpriteSheet@UI@@SAPEAX_K@Z` — **HELD BACK, and handed to lane ALLOC**
 
@@ -429,8 +535,23 @@ Tag corrected in place to `HARMFUL (DLL-present) / REQUIRED (cutover)` with
 
 ## 6. THE FINDING THAT OUTLIVES THE LANE
 
-> **The census CSV cannot answer "is this function ported?", and it fails SILENTLY in the
-> direction that makes refusals look better-supported than they are.**
+> **A BIASED INSTRUMENT WHOSE BIAS HAPPENS TO AGREE WITH THE RIGHT ANSWER LEAVES NO
+> SYMPTOM. The census CSV cannot answer "is this function ported?", and every one of its
+> seven errors here pushed toward the conclusion the lane reached anyway.**
+
+**How to recognise this class**, because it is NOT the blind spot already in the index. A
+blind spot *hides* work and eventually something turns up missing. This one *manufactures
+agreement*: the tool was wrong, the answer was right, and the two matched. The recognition
+rule is therefore not "check the tool when it disagrees with you" — that never happened
+here — but:
+
+> **When a tool's output supports the conclusion you already expected, you have received no
+> evidence that the tool works.** Confirmation is the case in which an instrument is least
+> tested. Test it on the one row you can verify by hand, *especially* when it is agreeing.
+
+That is exactly how it was caught: not by a disagreement, but by hand-checking the count
+for one row (`?_singleton@Device@Audio@@`) against a direct grep of `audio.cpp`, where
+`PauseEffect` and `StopEffect` are plainly registered two lines apart.
 
 `tools/runtime_census.py --csv` emits one row per symbol **our tree calls**. A body that is
 written and `RegisterRuntimeExport`-ed but that our tree never *calls* is simply not in the
@@ -497,20 +618,29 @@ these six bodies has run.**
 The absence of a run is **not** an implied verdict on the ports and must not be read as
 one; equally, no verification is claimed from its absence.
 
-### 7.2 Checks that needed no game directory and were still not run
+### 7.2 Checks that needed no game directory — now CLOSED
 
-* **The `EndAddingSprites` input sweep.** It is a pure function and the sweep is the right
-  oracle (§2.1). It needs only the shipped export and a driver. **Not built, not run.**
-  This is the single largest gap in this lane's evidence and it is not excused by §7.1.
-  **[ADDRESSEE: the Wave 24 kickoff writer — a sweep harness for this one body is cheap and
-  would convert the lane's only pure port from unverified to measured.]**
-* **A negative control (rule 9).** None was run, because this lane built no probe to
-  control — the DATA work is static analysis, and the six ports have no oracle harness
-  attached. Rule 9 asks for a control on a *probe*; there is no probe here. Said explicitly
-  rather than left as an unexplained absence.
-* **No detour was installed** for any of the six, so the DLL's own internal callers still
-  reach the DLL's copies. Correct and intended for this wave; noted because it bounds what
-  "ported" means for these rows.
+The first draft of this report listed the `EndAddingSprites` sweep here as "not built, not
+run — the single largest gap in this lane's evidence". **It has since been built and run**
+(§2.5), together with a sweep for `Set@SpriteSheet`, and **three** negative controls. The
+game-directory lock excused the *attendance* gap; it never excused this one, and it is
+right that it did not ship as a residual.
+
+**What the sweep does and does not establish.** It proves the two bodies agree with the
+shipped exports over 22 discriminating input classes. It does **not** prove either body
+ever runs in a real game — that is the attendance question, and it is still open (§7.1).
+The two are different claims and the sweep only answers one.
+
+Still not done:
+
+* **No detour was installed** for any of the six ports, so the DLL's own internal callers
+  still reach the DLL's copies. Correct and intended for this wave; noted because it bounds
+  what "ported" means for these rows.
+* **The four non-UI ports have no oracle** — `Device::Stop` and `StopPlatform` end in a
+  stored completion callback and a COM stop/release (a replay is a second side effect, not
+  a comparison, §1.1); the two `Configuration` destructors and `SaveLoad::Get` are one
+  instruction of observable effect each, and their correctness is the disassembly. Those
+  four rest on transcription, and this report does not claim otherwise.
 
 ### 7.3 Scope not examined
 
@@ -534,6 +664,9 @@ one; equally, no verification is claimed from its absence.
 | `runtime/src/ui/sprite.cpp` | + `SpriteSheet::Set` + its assign helper, 1 registration |
 | `runtime/src/save/saveload.cpp` | + `SaveLoad::Get`, 1 registration |
 | `standalone/reg_mint_promoted.cpp` | 2 tags corrected (`??_7Dialog@UI@@6B@`, `?_singleton@Application@1@`), 4 tags added |
+| `tools/endsprites_probe/sweep.cpp` | NEW — the input-sweep oracle, 22 classes, 3 controls |
+| `tools/endsprites_probe/seam_stub.cpp` | NEW — the inert registration seam that keeps it an oracle |
+| `Makefile` | + `endsprites-sweep` / `endsprites-sweep-controls` targets |
 
 **No file owned by lane ALLOC was touched** (`allocator.cpp`, `allocator_win.cpp`,
 `rt_system_port.cpp`, `tools/runtime_census.py`) — verified against `WAVE23_KICKOFF.md` §1a.
@@ -549,6 +682,7 @@ one; equally, no verification is claimed from its absence.
 | 5 | All five `?_singleton@` rows must be **minted** at cutover (the inversion) | **the lane that first boots without Runtime-x64.dll** |
 | 6 | Both UI vtable **name doors** resolve `nullptr` at cutover and need publishing despite being unpromotable | **the lane that first boots without Runtime-x64.dll** |
 | 7 | `??_7Dialog@UI@@6B@` — do not re-scope a lane onto it until the `_firstTypeInfo` split brain is closed | **the Wave 24 kickoff writer** |
-| 8 | `EndAddingSprites` input sweep — cheap, needs no game directory, would convert this lane's only pure port to measured | **the Wave 24 kickoff writer** |
+| 8 | ~~`EndAddingSprites` input sweep~~ — **DONE this lane** (§2.5): `make endsprites-sweep-controls`, 22 classes, 0 divergences, 3 controls. Remaining sliver: `Set`'s refcount-zero arm needs a live allocator | **the first lane to get a game-directory run** |
 | 9 | `SpriteSheet` `m_field48/4C/50` are `Set`'s two ints and its bool — needs one reader to corroborate before renaming the header | **the Wave 24 kickoff writer** |
 | 10 | **Nothing in the tree detects a gated registration.** A grep for `RegisterRuntimeExport` finds code that never runs. This bit lane OBJ, Wave 22 ALLOC, and this lane's tag correction | **the Wave 24 kickoff writer — this wants a checker, not another lane rediscovering it** |
+| 11 | **Neither does anything detect the §6 class**: a tool consulted for a verdict it then agrees with. `tools/endsprites_probe/` is the shape of the answer — an exact expected count that fails the build when missed | **the Wave 24 kickoff writer — pair this with residual 10; they are the same defect seen from two sides** |
