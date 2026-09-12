@@ -211,6 +211,22 @@ void RtAudioPortInit();       // runtime/src/audio/ — Wave 8 lane C
 void RtInputPortInit();       // runtime/src/input/ — Wave 8 lane D
 void RtApplicationPortInit(); // runtime/src/application/ — Wave 8 lane E
 void RtUtilityPortInit();     // runtime/src/utility/ — Wave 8 lane E
+// Wave 28 lane FACTREST. The `?Create{New,InPlace}Object@` pair for the 35
+// NON-UI classes of the absent-factory roster (Graphics 11, Video 7, Object 6,
+// Achievement 4, Collision2D 2, Audio 2, IO 1, Pathfinding 1, Picking 1).
+// Cross-namespace on purpose: what the 35 share is the SHAPE and the fact that
+// the mint reaches every one of them through BaseTypeInfo::factoryFn, not a
+// namespace. Kill switch BANISHED_RT_FACTREST, DEFAULT ON — an opt-in switch
+// is why dialog_factory.cpp has cleared no trap since Wave 11.
+//
+// It must run BEFORE RtDataMintInit(), which is what reads these registrations
+// and decides whether each of the 70 slots is a port or an abort trap. It may
+// run in any position among the other *PortInit()s: nothing in our tree calls
+// any of these 70 names today (verified by grep over runtime/ code/ standalone/
+// engine/ dx11/ at the branch point), so its registrations change no live call
+// site.
+void RtFactoriesPortInit();   // runtime/src/*/rt_factories_*.cpp — Wave 28
+void RtFactoriesSummary();    // one attendance line; expected to read all zeros
 // Wave 9 lane Q. Collection::Array<T> is header-only with NO exports in either
 // build, so this wave registers only ADDRESSES (RegisterRuntimeAddr) — 27 of
 // them for two bodies. It must run LAST of the wave inits: registering
