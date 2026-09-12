@@ -292,6 +292,23 @@ constexpr DestroySpec kD_Str2_10 = { "2 Strings @+0x008,+0x000, stride 0x010", 0
 constexpr DestroySpec kD_Str_10at08 = { "String @+0x008, stride 0x010", 0x010, 1, { 0x008 } };
 constexpr DestroySpec kD_Str_20at18 = { "String @+0x018, stride 0x020", 0x020, 1, { 0x018 } };
 
+// ---- Cutover closure batch 2b (2026-09-12): two more rows ------------------
+// Both read out of their own helper's disassembly, not inherited from a stride
+// match (see the kD_Str_18 note above for why that distinction has bitten).
+//   0x180005680 (Collection_Array_Achievement_DestroyInnerArrays): TWO inner
+//       `Collection::Array<T>` per element. The walk seeds `RBX = base+0x10`
+//       and advances by four qwords, so stride 0x20; it frees +0x10 FIRST and
+//       then +0x00 (`puVar2[-2]`), and clears both 16-byte headers. Descending
+//       offsets, like every multi-offset row in this file.
+constexpr DestroySpec kD_InnerArr2_20 = { "2 inner Arrays @+0x010,+0x000, stride 0x020",
+                                          0x020, 2, { 0x010, 0x000 } };
+//   0x1800341e0 (Save_MetaDataEntry_DestroyStrings): TWO System::String per
+//       element at +0x08 then +0x00, stride 0x20 (`param_2 += 4` qwords). The
+//       element is Save's {String*, String*, int, int, int} — array.cpp's
+//       kSpec_MetaEntry20.
+constexpr DestroySpec kD_Str2_20 = { "2 Strings @+0x008,+0x000, stride 0x020",
+                                     0x020, 2, { 0x008, 0x000 } };
+
 // ---------------------------------------------------------------------------
 // Compile-time checks on the transcription.
 //
@@ -495,6 +512,9 @@ namespace rtcoll {
 // grep the address across both before porting a Collection helper.**
 A_ENTRY(180052110, kD_InnerArr_40)    // Audio::EffectSlot array (NOT Audio-gated — see banner)
 A_ENTRY(1800419b0, kD_InnerArr_18)    // UI: GraphElement::_graphs, the nested point Array
+// Cutover closure batch 2b: Achievement's two-inner-Array element destroy. It
+// has a caller registered in this same commit (0x180004b70's J2_ENTRY below).
+A_ENTRY(180005680, kD_InnerArr2_20)   // Achievement: {Array<T>, Array<T>} element
 
 #undef A_ENTRY
 
@@ -630,6 +650,11 @@ B_ENTRY(180005570, kD_Str2_10)        // UI: StringTable::TextEntry {name, text}
 // exactly the eight bytes Body B does not touch, and the `if (isSlot)` skip in
 // the probe's byte-for-byte check (step 3) covers them.
 
+// Cutover closure batch 2b: Save's metadata entry {String*, String*, 3 ints}.
+// Three callers land in this commit — array.cpp's kSpec_MetaEntry20 (0x180034010
+// and 0x180033080) and this file's 0x180033f30 operator=.
+B_ENTRY(1800341e0, kD_Str2_20)        // Save: Persistence metadata entry
+
 #undef B_ENTRY
 
 // ---- J2: the six ~Array bodies with an element-destroy prologue ------------
@@ -752,6 +777,16 @@ J2_ENTRY(180006b80, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x180006ac0
 //   then the allocator Enter / Free / Leave triple and the two zero stores
 //   that are ArrayDtorImpl.
 J2_ENTRY(180004a90, ReleaseStringsCounted,  kD_Str2_10)      // CALL 0x180005570  Body B
+
+// ---- Cutover closure batch 2b (2026-09-12) --------------------------------
+// 0x180004b70 -- `~Array<{Array<T>,Array<T>}>`. Read from its own body:
+// `CALL 0x180005680` with R8D=[RCX+8], RDX=[RCX], then the allocator triple and
+// the two zero stores. Body A, the new two-offset kD_InnerArr2_20 row.
+J2_ENTRY(180004b70, FreeInnerArraysCounted, kD_InnerArr2_20) // CALL 0x180005680  Body A
+// 0x180004d60 -- `CALL 0x180005930`, the ALREADY-REGISTERED Body B helper
+// (kD_Str_10, the {String*, ExternalPtr} element). A second caller for a row
+// this file has carried since Wave 9; no new spec.
+J2_ENTRY(180004d60, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x180005930  Body B
 
 #undef J2_ENTRY
 
@@ -1006,6 +1041,167 @@ void* RtColl_ArrayAssign_180003970(void* self, const void* src) {
     return a;
 }
 
+// ============================================================================
+// CUTOVER CLOSURE BATCH 2b (2026-09-12)
+//   * one more J2 whose helper is NEITHER Body A nor Body B
+//   * the generic J4 (`Array<T>::operator=`) and its three new instantiations
+// ============================================================================
+
+// ---- 0x1800109d0: a J2 with a COMPOUND element helper ----------------------
+//
+// Shape is J2 exactly — `R8D=[RCX+8]; RDX=[RCX]; CALL <helper>` then
+// ArrayDtorImpl — but the helper, 0x180010f00, is a THIRD body and not a member
+// of the A/B pair this file is built around. Per element (stride 0x18) it:
+//     CALL 0x180010da0(this, e[1], (int)e[2])   a sub-destroy of its own
+//     free(e[1]); e[1] = 0; e[2] = 0            Body-A-shaped, on a non-Array
+//                                               {ptr,count} pair
+//     release the System::String at e[0]        Body-B-shaped
+// Expressing that as a DestroySpec would need a THIRD core, and the helper is
+// not itself on the worklist, so it is reached by ADDRESS — the same door
+// kSpec_PkgEntry's DestroyPkgEntryRange uses, and registry-first, so the day
+// 0x180010f00 is ported this call lands on our body without an edit here.
+Site g_j2_1800109d0 = { { "Collection::Array::~Array(+elem) @0x1800109d0",
+                          0, 0, false, false }, 0x1800109d0 };
+void* RtColl_ArrayDtorElem_1800109d0(void* self) {
+    DProbeGate();
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);
+    {
+        using Fn = void (*)(void*, void*, int);
+        static Fn fn = nullptr;
+        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180010f00));
+        fn(a, a->_data, a->_size);       // retail passes RCX=this, ignored inside
+    }
+    void* r = ArrayDtorImpl(a);
+    if (RtDiffEnabled()) {
+        RtDiffRegister(&g_j2_1800109d0.d);
+        const bool ok = (a->_data == nullptr && a->_size == 0 && a->_capacity == 0);
+        char o[128];
+        std::snprintf(o, sizeof(o), "data=%p size=%d cap=%d",
+                      static_cast<void*>(a->_data), a->_size, a->_capacity);
+        RtDiffReport(&g_j2_1800109d0.d, ok, o, "data=0000000000000000 size=0 cap=0");
+    }
+    return r;
+}
+
+// ---- The generic J4 --------------------------------------------------------
+//
+// `RtColl_ArrayAssign_180003970` and `..._18001b1a0` above each write this body
+// out by hand because each was landed alone. Three arrive at once here, one of
+// them with a non-trivial element, so the body is parameterised by the same
+// `ArraySpec` the SetSize family uses plus a CLEAR callback — which is the one
+// thing that genuinely varies between instantiations (a plain `~Array` for the
+// trivial elements, a destroy-then-free for the refcounted one).
+//
+// Read out of 0x180014c70 and confirmed instruction-shape-identical at
+// 0x180005770 and 0x180033f30:
+//     if (this == &src) return this;          CMP RCX,RDX / JZ
+//     <clear>(this);                          CALL — leaves _size = 0
+//     _size = src._size;
+//     if (_size > _capacity) { grow; MemAlloc(cap * stride, align); }
+//     for (i = 0; i < _size; ++i) assign(data + i*stride, src.data + i*stride);
+//     return this;
+// The `_capacity = n*3` branch is DEAD here (it needs oldSize != 0 and the
+// clear has just zeroed it) and is reproduced anyway, because "dead" is a claim
+// about the clear, not about this function.
+//
+// NO OLD-BUFFER FREE AFTER THE COPY: the clear already freed it. A tidied
+// version that mirrored SetSizeCore's tail would double-free.
+using ArrayClearFn = void (*)(ArrayHdr*);
+
+void* ArrayAssignCore(ArrayHdr* a, const ArrayHdr* s, const ArraySpec* spec,
+                      ArrayClearFn clear, Site* site) {
+    DProbeGate();
+    if (a == s) return a;
+
+    clear(a);
+
+    const int32_t newSize = s->_size;
+    const int32_t oldSize = a->_size;          // always 0; clear zeroed it
+    a->_size = newSize;
+
+    bool realloced = false;
+    if (newSize > a->_capacity) {
+        a->_capacity = newSize;
+        if (newSize == static_cast<int32_t>(oldSize + 1) && oldSize != 0)
+            a->_capacity = static_cast<int32_t>(newSize * 3);   // dead; faithful
+        a->_data = static_cast<uint8_t*>(
+            MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity)) * spec->stride,
+                     spec->align));
+        realloced = true;
+    }
+
+    int copied = 0;
+    for (int32_t i = 0; i < a->_size; ++i) {
+        uint8_t* p = a->_data + static_cast<int64_t>(i) * spec->stride;
+        if (p == nullptr) continue;            // retail tests the COMPUTED address
+        spec->assign(p, s->_data + static_cast<int64_t>(i) * spec->stride);
+        ++copied;
+    }
+
+    if (site != nullptr && RtDiffEnabled()) {
+        RtDiffRegister(&site->d);
+        const bool ok = (a->_size == s->_size) &&
+                        (!spec->byteCopy || a->_size == 0 ||
+                         std::memcmp(a->_data, s->_data,
+                                     static_cast<size_t>(a->_size) * spec->stride) == 0);
+        char o[128];
+        std::snprintf(o, sizeof(o), "%s n=%d cap=%d copied=%d realloc=%d",
+                      spec->name, a->_size, a->_capacity, copied, realloced ? 1 : 0);
+        RtDiffReport(&site->d, ok, o, "prefix == src prefix");
+    }
+    return a;
+}
+
+// The trivial clear: retail's J1 body, which is what 0x180014d00, 0x180005800
+// and every other `~Array` in the trivial family is.
+void ArrayClearTrivial(ArrayHdr* a) { ArrayDtorImpl(a); }
+
+// 0x180033f30's clear is 0x1800331f0 — the J2 shape: release the two Strings in
+// every element (Body B, kD_Str2_20) and THEN the J1 body. Written out rather
+// than resolved by address so the element spec and the clear cannot drift apart.
+void ArrayClearMetaEntry20(ArrayHdr* a) {
+    ReleaseStringsCounted(a->_data, a->_size, &kD_Str2_20);
+    ArrayDtorImpl(a);
+}
+
+// The element operations live in array.cpp (one namespace, two files — see the
+// A_ENTRY banner). Declared rather than duplicated: a second copy of
+// AssignMetaEntry20 is exactly how this family produces divergences.
+void Assign8(uint8_t* d, const uint8_t* s);
+void AssignMetaEntry20(uint8_t* d, const uint8_t* s);
+
+// Element specs for the three J4 addresses. Only `stride`, `align` and `assign`
+// are consulted by ArrayAssignCore; the rest is filled so the row still reads
+// as an ArraySpec.
+//   0x180014c70  Graphics: Array<T*>, `MemAlloc(cap << 3, 8)`
+//   0x180005770  UI:       Array<T*>, `MemAlloc(cap << 3, 4)`  <-- ALIGN 4, and
+//                the ONLY difference from the row above. Read from its own
+//                `MOV EDX,0x4`; assuming 8 from the sibling would hand the
+//                allocator a wrong alignment on every UI list copy.
+//   0x180033f30  Save:     Array<Save::MetaDataEntry>, stride 0x20, align 8
+const ArraySpec kAsgn_Ptr8A8 = {
+    "Array<T*>", 8, 8, &Assign8, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+const ArraySpec kAsgn_Ptr8A4 = {
+    "Array<T*>(align 4)", 8, 4, &Assign8, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+const ArraySpec kAsgn_MetaEntry20 = {
+    "Array<Save::MetaDataEntry>", 0x20, 8, &AssignMetaEntry20, nullptr, nullptr,
+    false, 0x1c, 0x20, 0, 0, 0x00, 0x10 };
+
+#define J4_ENTRY(ADDR, SPEC, CLEAR)                                           \
+    Site g_j4_##ADDR = { { "Collection::Array::operator= @0x" #ADDR,           \
+                           0, 0, false, false }, 0x##ADDR };                  \
+    void* RtColl_ArrayAssign_##ADDR(void* self, const void* src) {            \
+        return ArrayAssignCore(static_cast<ArrayHdr*>(self),                  \
+                               static_cast<const ArrayHdr*>(src),             \
+                               &SPEC, &CLEAR, &g_j4_##ADDR);                  \
+    }
+
+J4_ENTRY(180014c70, kAsgn_Ptr8A8,      ArrayClearTrivial)       // clear 0x180014d00
+J4_ENTRY(180005770, kAsgn_Ptr8A4,      ArrayClearTrivial)       // clear 0x180005800
+J4_ENTRY(180033f30, kAsgn_MetaEntry20, ArrayClearMetaEntry20)   // clear 0x1800331f0
+
+#undef J4_ENTRY
+
 }  // namespace rtcoll
 
 // ============================================================================
@@ -1117,6 +1313,19 @@ void RtCollectionDestroyPortInit() {
     //                  (reference_uncalled_port_is_not_verified.md). Register it
     //                  the day a caller appears.
     //   0x180010110  — the other J4. See the note above RtColl_ArrayAssign.
+
+    // ---- Cutover closure batch 2b (2026-09-12) ----------------------------
+    // Element-destroy helpers (both have a caller registered just below).
+    RegisterRuntimeAddr(0x180005680, (void*)&RtColl_DestroyInner_180005680);
+    RegisterRuntimeAddr(0x1800341e0, (void*)&RtColl_DestroyStrings_1800341e0);
+    // J2.
+    RegisterRuntimeAddr(0x180004b70, (void*)&RtColl_ArrayDtorElem_180004b70);
+    RegisterRuntimeAddr(0x180004d60, (void*)&RtColl_ArrayDtorElem_180004d60);
+    RegisterRuntimeAddr(0x1800109d0, (void*)&RtColl_ArrayDtorElem_1800109d0);
+    // J4.
+    RegisterRuntimeAddr(0x180014c70, (void*)&RtColl_ArrayAssign_180014c70);
+    RegisterRuntimeAddr(0x180005770, (void*)&RtColl_ArrayAssign_180005770);
+    RegisterRuntimeAddr(0x180033f30, (void*)&RtColl_ArrayAssign_180033f30);
 
     rtcoll::g_dprobePending = RtCollectionDestroyProbeArmed();
 

@@ -471,6 +471,24 @@ void RuntimePortInit() {
     RtCollectionPortInit();   // Wave 9: Collection (lane Q)
     RtCollectionDestroyPortInit();  // Wave 9: Collection destroy half (lane D2)
 
+    // Cutover closure batch 2b (2026-09-12): the non-Collection half of one
+    // WORKLIST.md batch — the four `operator delete` COMDAT copies, the
+    // `operator new` copy, MemoryAllocator::Allocate's block-link encoder,
+    // System::String::GetLength's missing registration, two copy constructors,
+    // two serialize loops, a frustum support-vertex selector, Picking::Scene's
+    // shared grid initialiser, Engine::Application's scalar deleting
+    // destructor, Save::SavedState's delete and IO::Persistence's LOAD and
+    // DELETE worker jobs. ONE hook: runtime/src/system/closure_batch2b.cpp
+    // calls the other six namespaces' register functions.
+    //
+    // HERE, after the Collection inits, because two of its rows resolve
+    // Collection addresses (0x18001b1a0 for Geometry's nested array,
+    // 0x18007b960 for the Picking grid) — those are lazy, so the order is not
+    // load-bearing, but putting it after keeps the "registrations that
+    // redirect existing address doors" together at one point in the sequence.
+    extern void RtClosureBatch2bPortInit();
+    RtClosureBatch2bPortInit();
+
     // Wave 9 lane K: the 37 unnamed deleting destructors that are slot 0 of
     // (almost) every vtable the mint below is about to fill. Last of the port
     // inits, because it resolves each ~Class through the port registry and its
