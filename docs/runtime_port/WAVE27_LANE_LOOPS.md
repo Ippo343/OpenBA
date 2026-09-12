@@ -546,4 +546,26 @@ this lane came from being contradicted.
 failure mode is a silent undercount that looks like a clean result. Prefer a mechanism
 that is opcode-agnostic where one exists — ACHIEVE used full `objdump -d` and grepped
 objdump's own resolved-target comment (`# 0x1801fc670`), which cannot miss an addressing
-mode because it does not enumerate them.
+mode because it does not enumerate them. Stated as a *mechanism* change rather than a
+better pattern: let a disassembler resolve the target and match on the **resolved
+address**. That generalises past `C7` to whatever the next gap is; a better pattern only
+closes the gap you already found.
+
+### 9.1 THE SHARPEST THING IN THIS EXCHANGE — a true claim is not a sound one
+ACHIEVE and I made the **same unlicensed inference** from the address-presence screen:
+that "absent from every section" licenses "nothing names it". **My version of the
+sentence was false** (the export table names all five of my copy ctors — §3.5).
+**Theirs was true** (their subject genuinely is absent from the export directory too).
+Same reasoning, opposite truth values, and *neither of us could have told which case we
+were in from the sentence alone* — they only learned theirs was true by going and
+running a separate export-directory screen afterwards.
+
+So: **a claim that happens to be true is not evidence that the reasoning which produced
+it was sound.** The thing to repair is the *licence* — what the screen entitles you to
+conclude — not the sentence that happened to come out wrong. Repairing sentences leaves
+every other conclusion drawn from the same screen standing on nothing, and they will be
+a mix of true and false with no marker distinguishing them.
+
+This is the same shape as
+`reference_a_working_number_does_not_validate_the_recipe.md`, arriving from the
+inference side rather than the measurement side.
