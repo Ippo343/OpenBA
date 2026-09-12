@@ -2071,6 +2071,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // count separately from its entry count: its whole body sits behind one
     // equality test, so an entry count cannot tell you the copy happened.
     { extern void RtGraphicsWave23GfxbodySummary(); RtGraphicsWave23GfxbodySummary(); }
+    // Wave 27 lane GFXPART: attendance for the six particle vtable slot bodies.
+    // Unconditional for the same reason as the line above -- the number this lane
+    // needs most is the ZERO, and four of its six rows dispatch only through a
+    // vtable that is NOT promoted today, so a zero here is the EXPECTED reading
+    // and must be printed rather than inferred from silence.
+    { extern void RtGraphicsWave27GfxpartSummary(); RtGraphicsWave27GfxpartSummary(); }
     RtAllocShadowSummary();
     // Wave 9 lane H: 0 misses == every cached Runtime resolve found its symbol.
     // A non-zero count names the symbols that would be unminted at cutover.

@@ -64,8 +64,22 @@ struct DelDtorSpec {
 // stays true of it; the TABLE is the authority and this constant tracks it,
 // and the static_assert next to the table is what forces an appender to
 // notice (it caught CSTREAM's addition, at 41 vs 39).
-constexpr int kSpecCount = 47;   // 45-47: Graphics::EdgeMesh / EdgeMeshInstance /
+<<<<<<< HEAD
+constexpr int kSpecCount = 49;   // 45-47: Graphics::EdgeMesh / EdgeMeshInstance /
                                  // MeshInstance (Wave 27 lane GFXMESH)
+                                 // 48-49: Graphics::Light / SunLight (Wave 27 lane GFXPART)
+                                 //
+                                 // *** MERGE HAZARD, PAID FOR AT WAVE 27 INTEGRATION ***
+                                 // The table is POSITIONAL: DeletingDtorCore(self,
+                                 // flags, N) indexes kSpecs[N]. THREE Wave 27 lanes
+                                 // each appended starting at index 44 on their own
+                                 // branch. A keep-both merge silently gave two of
+                                 // them the FIRST lane's rows. The static_assert
+                                 // below checks the COUNT ONLY -- it cannot see an
+                                 // index collision, and a wrong index dispatches
+                                 // THE WRONG DESTRUCTOR with no diagnostic.
+                                 // If you append here, re-derive every appended
+                                 // lane's index after the merge, not before.
 
 // *** A Site MUST HAVE STATIC STORAGE DURATION. *** RtDiffRegister keeps the
 // POINTER and rt_diff.cpp re-reads it at summary time, so a stack Site dangles

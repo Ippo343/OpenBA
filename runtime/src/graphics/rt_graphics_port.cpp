@@ -65,6 +65,8 @@ extern int RtGraphicsWave21GfxbodyRegister(); // wave21_lane_gfxbody.cpp (Wave 2
 extern int RtGraphicsWave23GfxbodyRegister(); // wave23_lane_gfxbody.cpp (Wave 23 lane GFXBODY)
 extern int RtGraphicsWave24GfxmatRegister();  // wave24_lane_gfxmat.cpp (Wave 24 lane GFXMAT)
 extern int RtGraphicsWave27GfxbigRegister();  // wave27_lane_gfxbig.cpp (Wave 27 lane GFXBIG)
+
+extern int RtGraphicsWave27GfxpartRegister(); // wave27_lane_gfxpart.cpp (Wave 27 lane GFXPART)
 extern int RtGraphicsTypeInfoAccessorsRegister();
                                           // graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT)
 extern int RtGraphicsEdgeMeshVtableRegister();
@@ -159,6 +161,16 @@ void RtGraphicsPortInit() {
     printf("[RtPort] GFXEDGEVT (Wave 27 lane GFXMESH): %d EdgeMesh vtable slot "
            "bodies registered\n", gfxedgevt);
 
+    // WAVE 27 LANE GFXPART -- the particle vtable slot bodies: the last
+    // ??_7Particle@Graphics@@6B@ slot (Serialize) and four of
+    // ??_7ParticleInstance@'s, three of which are SHARED slots that close
+    // ??_7ParticleSystemInstance@ rows at the same time. Its own identity line is
+    // printed below for the reason every other lane line here gives: the on-disk
+    // md5 says which exe is on disk, not which one ran.
+    int gfxpart = 0;
+    if (RtWaveEnabled("BANISHED_RT_GFXPART")) gfxpart = RtGraphicsWave27GfxpartRegister();
+    n += gfxpart;
+
     // WAVE 9 LANE GFXD -- the bottom half of the Graphics::Renderer class
     // lane: Renderer::Reset, Renderer::AddScene, two more Graphics::Camera
     // constructors, and the seven unexported Collection::Array
@@ -188,4 +200,5 @@ void RtGraphicsPortInit() {
     // which one ran, and six lanes share one game directory.
     printf("[RtPort] Wave 9 lane GFXD: %d exports + 11 addresses registered\n", gfxd);
     printf("[RtPort] Wave 21 lane GFXVT: %d typeinfo-accessor exports registered\n", gfxti);
+    printf("[RtPort] Wave 27 lane GFXPART: %d particle exports registered\n", gfxpart);
 }
