@@ -311,6 +311,41 @@ uint32_t RtObject_Factory_GetTypeIdFromName(const void* factory, const char* nam
 }
 
 // ============================================================================
+// ?GetTypeFromNameCRC@Factory@Object@@AEBAIPEBD@Z   retail 0x1800c0930, ord 2989
+//
+//     unsigned int Factory::GetTypeFromNameCRC(char const* name) const
+//
+// BATCH 5 (2026-09-12). *** THE BODY WAS ALREADY HERE AND WAS NOT REACHABLE. ***
+// `TypeNameCRC` above is this function, transcribed by Wave 3 lane A as a
+// private helper for GetTypeIdFromName — but no entry point carried the retail
+// ABI and nothing registered the address, so `0x1800c0930` stayed on the
+// closure worklist as an unported engine function while its algorithm sat
+// twenty lines up. This adds the ABI shim and the two doors; it does NOT add a
+// second copy of the algorithm, which would be a place for the two to drift.
+//
+// `this` IS READ BY NOTHING. Retail's RCX is dead from the first instruction
+// (the body opens `LEA RAX,[RSP+0x...]` and never touches RCX again); the CRC
+// depends only on the name. The parameter is kept because the mangling is a
+// const member and the caller passes it.
+//
+// `AEBA` is PRIVATE, and private is not unexported: this DLL exports its
+// private members and the name above is ordinal 2989 in the retail export
+// directory, verified with pefile before this was written
+// (reference_aeaa_is_private_not_unexported.md). So the NAME door is real and
+// is registered alongside the address door.
+//
+// NO DIFF SITE. A `RT_DIFF_SCALAR` here would compare `TypeNameCRC` against
+// the shipped 0x1800c0930 — but `RtObject_Factory_GetTypeIdFromName`'s own
+// site already compares a value DERIVED from exactly this computation against
+// the shipped GetTypeIdFromName on every call, which is a strictly stronger
+// check on the same arithmetic and has run clean since Wave 3. Adding a second
+// site on the same bytes would inflate `calls=` without adding coverage.
+// ============================================================================
+uint32_t RtObject_Factory_GetTypeFromNameCRC(const void* /*factory*/, const char* name) {
+    return TypeNameCRC(name);
+}
+
+// ============================================================================
 // ?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z
 //                                        retail 0x1800c0ae0 / profile 0x18008cde0
 //
@@ -1252,6 +1287,12 @@ int RtObjectTypeSystemRegister() {
     // fallback is exactly how a port goes silently inert.
     RegisterRuntimeOrdinal(3089, (void*)&RtObject_Base_IsA);
     RegisterRuntimeOrdinal(2991, (void*)&RtObject_Factory_GetTypeIdFromName);
+
+    // BATCH 5 (2026-09-12): the private CRC helper. Both doors — the name is a
+    // real export (ordinal 2989) despite the `AEBA` private mangling.
+    RegisterRuntimeExport("?GetTypeFromNameCRC@Factory@Object@@AEBAIPEBD@Z",
+                          (void*)&RtObject_Factory_GetTypeFromNameCRC); ++n;
+    RegisterRuntimeAddr(0x1800c0930, (void*)&RtObject_Factory_GetTypeFromNameCRC);
 
     return n;
 }

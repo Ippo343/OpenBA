@@ -2521,6 +2521,147 @@ void RtColl_ArrayReserve_18005f980(void* a) {
     h->_size = oldSize;
 }
 
+// ============================================================================
+// BATCH 5 (2026-09-12) — three more SetSize instantiations, two element types
+//
+//   0x18002ae20  Array<IO::Persistence::SaveGameInfo>::SetSize(n, fill)
+//   0x18002aae0  the SAME array's SetSize(0), constant-folded to one argument
+//   0x180028cd0  Array<{uint32 typeId, Object::External*, System::Filename}>
+//                ::SetSize(n, fill) — IO::Modification::SetupFileSystem's
+//                reload list
+//
+// NEITHER ELEMENT TYPE MATCHES AN EXISTING ROW, and that was MEASURED before
+// either spec was written rather than assumed from the address neighbourhood:
+// each body was byte-compared against the twelve non-trivial rows already in
+// this file and the closest match differed in 187 of 333 / 242 of 364 bytes.
+// The specs below are read out of each body's own disassembly.
+//
+//   0x18002ae20   SHL RCX,0x4        -> stride 0x10
+//                 MOV EDX,0x8        -> align 8
+//                 MOV RAX,[RDX] / MOV [RCX],RAX            +0x00 verbatim
+//                 MOV [RCX+8],0 / TEST / store / INC [RAX-4]
+//                                                          +0x08 String adopt
+//                 == AssignExtStringAt08 exactly, the helper 0x180075d20's row
+//                 already uses. NO INIT ARM: the copy loop's source is a
+//                 `CMOVL` between the old element and the fill and there is no
+//                 third branch, so this address is only ever the 3-arg form.
+//                 destroy CALL 0x18002afc0 on both arms (kD_Str_10at08).
+//
+//   0x180028cd0   LEA RCX,[RAX+RAX*2] / SHL RCX,0x3 @0x180028d2d -> stride 0x18
+//                 MOV EDX,0x8        @0x180028d35             -> align 8
+//                 MOV EAX,[RDX] / MOV [RCX],EAX  @0x180028d8a  +0x00 DWORD
+//                 MOV RAX,[RDX+8] / MOV [RCX+8],RAX           +0x08 qword
+//                 ADD RCX,0x10 / ADD RDX,0x10 / CALL 0x1800067d0
+//                                                             +0x10 Filename
+//                 destroy CALL 0x180029190 @0x180028dcd (kD_Str_18).
+//
+//   *** 0x180028cd0's +0x04..+0x07 IS NEVER WRITTEN. *** The first store is a
+//   DWORD and the next is at +0x08. An oracle that compared those four bytes
+//   would fail 100% of calls and read like a catastrophic port defect
+//   (reference_oracle_must_not_compare_unwritten_bytes.md). Declared in the
+//   assign window below. There is no init arm, so there is no init window to
+//   read separately — the extent belongs to the ARM, and this element type has
+//   exactly one.
+//
+// SaveGameInfo's layout is corroborated by an INDEPENDENT witness:
+// runtime/types/io/Persistence.h has said since Wave 19 lane PERSIST that
+// `?GetSaveInfo@Persistence@IO@@` indexes the array at +0x80 with `SHL 4`,
+// i.e. a 0x10 stride, and the save-list job ported in this same commit fills
+// {timestamp, name} in that order. Derived here from the RESIZER, there from
+// the PRODUCER and the CONSUMER, with no shared premise.
+// ============================================================================
+
+// 0x180028cd0's element assign. The Filename copy constructor is reached BY
+// ADDRESS, not as a direct call, for the reason `AssignGraphSeries` above
+// records: retail's 0x180028d9e is a CALL to that address and the registry is
+// the door every other caller of it uses (runtime/src/io/modification.cpp and
+// runtime/src/collection/avl_trees.cpp both reach 0x1800067d0 the same way).
+void AssignModExternal18(uint8_t* d, const uint8_t* s) {
+    *reinterpret_cast<uint32_t*>(d + 0x00) = *reinterpret_cast<const uint32_t*>(s + 0x00);
+    /* +0x04..+0x07 deliberately not copied — retail's first store is a DWORD */
+    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
+
+    using FilenameCopyFn = void* (*)(void*, const void*);
+    static FilenameCopyFn copy = nullptr;          // cache a hit, retry a miss
+    if (!copy) copy = reinterpret_cast<FilenameCopyFn>(
+        ResolveAddr(Module::Runtime, 0x1800067d0));
+    copy(d + 0x10, s + 0x10);
+}
+
+// The two destroy ranges. Both are ported AND registered in array_destroy.cpp
+// in this same commit (`B_ENTRY(18002afc0, kD_Str_10at08)` and
+// `B_ENTRY(180029190, kD_Str_18)`), so these ResolveAddr calls are
+// registry-first and land on OUR bodies rather than opening a door onto an
+// unported callee — the failure mode
+// reference_porting_can_grow_the_cutover_surface.md names.
+void DestroySaveGameInfoRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18002afc0));
+    fn(ignoredThis, base, count);
+}
+void DestroyModExternal18Range(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180029190));
+    fn(ignoredThis, base, count);
+}
+
+// NOT kSpec_ExtStr10at08, and the difference is the two fields that decide
+// behaviour: that row has `init = InitZero10` and destroys through
+// 0x180039640. This one has NO init arm at all and destroys through
+// 0x18002afc0. Reusing it would zero a tail retail never writes and free
+// through the wrong instantiation's helper.
+const ArraySpec kSpec_SaveGameInfo = {           // 0x18002ae20, 0x18002aae0
+    "Array<IO::Persistence::SaveGameInfo>", 0x10, 8,
+    &AssignExtStringAt08, nullptr, &DestroySaveGameInfoRange, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x08, 0x10 };   // only the String slot is dereferenced
+
+const ArraySpec kSpec_ModExternal18 = {          // 0x180028cd0
+    "Array<{uint32, External*, Filename}>", 0x18, 8,
+    &AssignModExternal18, nullptr, &DestroyModExternal18Range, false,
+    /*assign unwritten*/ 0x04, 0x08,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x10, 0x18 };   // the Filename slot is dereferenced
+
+#define J3_ENTRY3(ADDR, SPEC)                                                 \
+    Site g_j3_##ADDR = { { "Collection::Array::SetSize @0x" #ADDR, 0, 0, false, false }, \
+                         0x##ADDR };                                          \
+    void RtColl_ArraySetSizeFill_##ADDR(void* a, int n, const void* fill) {   \
+        SetSizeCore(static_cast<ArrayHdr*>(a), n,                             \
+                    static_cast<const uint8_t*>(fill), &SPEC, &g_j3_##ADDR);  \
+    }
+
+J3_ENTRY3(18002ae20, kSpec_SaveGameInfo)   // IO: Persistence's save-list append
+J3_ENTRY3(180028cd0, kSpec_ModExternal18)  // IO: SetupFileSystem's reload list
+
+#undef J3_ENTRY3
+
+// 0x18002aae0 — the SAME Array<SaveGameInfo> with the new size folded to the
+// constant 0, exactly the one-argument shape 0x1800783d0 above has.
+//
+// IT IS NOT A MEMBER OF THE J1 `~Array` FAMILY and reading it as one would be
+// a live defect: `~Array` frees the buffer unconditionally, and this body's
+// grow test (`CMP dword [RCX+0xc],0 / JGE`, and capacity is never negative)
+// can never be taken with a new size of 0, so its MemFree is unreachable and
+// the buffer and capacity SURVIVE. What it DOES do — and what 0x1800783d0 does
+// not — is run the shrink-path destroy over the old elements
+// (`CALL 0x18002afc0` with count = the old size), which is how the save list
+// releases its filename Strings before it is refilled.
+//
+// SetSizeCore is still the implementation rather than a hand-written
+// `_size = 0`: it reproduces the same unreachable branches for the same
+// reasons, so if that reading is ever wrong the two disagree under the oracle
+// instead of agreeing by construction.
+Site g_j3_18002aae0 = { { "Collection::Array<SaveGameInfo>::SetSize(0) @0x18002aae0",
+                          0, 0, false, false }, 0x18002aae0 };
+void RtColl_ArraySetSize_18002aae0(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SaveGameInfo,
+                &g_j3_18002aae0);
+}
+
 }  // namespace rtcoll
 
 // ============================================================================
@@ -2801,5 +2942,28 @@ void RtCollectionPortInit() {
     // ARM the probe rather than running it. It runs on the first call into any
     // entry point above, because at THIS moment the DLL's MemoryAllocator is
     // constructed but not started — see array_internal.h's "Probe scheduling".
+    // ---- BATCH 5 (2026-09-12): the IO save-list and mod-reload arrays ------
+    // Callers: runtime/src/io/persistence_savelist_job.cpp (0x1800b6290) and
+    // runtime/src/io/modification_setupfilesystem.cpp (0x1800aebb0), both
+    // ported in this commit. Their two element-destroy helpers are registered
+    // by array_destroy.cpp in the same commit, so both halves are ours and
+    // neither of these three opens a door onto an unported callee.
+    RegisterRuntimeAddr(0x18002ae20, (void*)&RtColl_ArraySetSizeFill_18002ae20);
+    RegisterRuntimeAddr(0x18002aae0, (void*)&RtColl_ArraySetSize_18002aae0);
+    RegisterRuntimeAddr(0x180028cd0, (void*)&RtColl_ArraySetSizeFill_180028cd0);
+
+    // BATCH 5 — the seventh Collection::Set instantiation, the compiled-path →
+    // packfile-id map IO::Modification::SetupFileSystem builds on its stack.
+    // Called from here because this is the Collection namespace's one init
+    // hook, the same reasoning as the linked list and lane VID2's AVL
+    // primitives below. Registered UNCONDITIONALLY (DIRECTION.md §2: a port
+    // registers unconditionally; no new BANISHED_RT_* flag).
+    {
+        extern int RtCollectionSetAvlPathIdRegister();
+        const int pathId = RtCollectionSetAvlPathIdRegister();
+        printf("[RtPort]   Collection::Set<Filename,uint32> (batch 5): "
+                    "%d addresses registered\n", pathId);
+    }
+
     rtcoll::g_probePending = RtCollectionProbeArmed();
 }

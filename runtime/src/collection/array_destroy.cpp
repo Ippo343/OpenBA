@@ -686,6 +686,33 @@ B_ENTRY(18004fed0, kD_Str_10)         // Video: ShaderProgram::Parameter
 // at +0x00, stride 0x18, ~MaterialInstance's call). Has a caller from the
 // first commit (0x180004c80's J2_ENTRY below), so registered immediately.
 B_ENTRY(180005880, kD_Str_18at00)      // Graphics: Material parameter array
+// ---- BATCH 5 (2026-09-12): the two helpers the IO save-list / mod-reload ----
+//      arrays destroy through. Both are element-destroy helpers for SetSize
+//      instantiations ported in array.cpp in the same commit
+//      (kSpec_SaveGameInfo @0x18002ae20 / 0x18002aae0, and
+//       kSpec_ModExternal18 @0x180028cd0), so each gets the caller this file's
+//      banner says to wait for.
+//
+// THE SPEC IS READ OUT OF EACH HELPER'S OWN DISASSEMBLY, never from its
+// caller's element type and never from a hash — the Wave 25 lesson three
+// blocks up (0x18002ac40 / 0x180039360 / 0x180039280 share one opcode hash and
+// take two different specs, because the hash erases the one CALL operand that
+// decides the answer):
+//
+//   0x18002afc0   LEA RBX,[RDX+0x8]  @0x18002afec   -> String at +0x08
+//                 ADD RBX,0x10       @0x18002b05e   -> stride 0x10
+//                 == kD_Str_10at08, the row 0x180039640 already uses. NOT
+//                 kD_Str_10 (offset 0x00) and NOT kD_Str2_10 (two slots).
+//   0x180029190   LEA RBX,[RDX+0x10] @0x1800291bc   -> String at +0x10
+//                 ADD RBX,0x18       @0x180029233   -> stride 0x18
+//                 == kD_Str_18, the row 0x180034440 already uses.
+//
+// 0x18002afc0 was ALREADY REACHABLE from this file — `J2_ENTRY(18002ac40, …)`
+// above names it as the helper that entry point CALLs — but only as a rel32
+// inside retail's body. Registering it is what makes the SetSize arm reach
+// ours, and it is the both-halves rule the 0x1800269a0 line records.
+B_ENTRY(18002afc0, kD_Str_10at08)     // IO: Persistence::SaveGameInfo {DateTime, String*@+8}
+B_ENTRY(180029190, kD_Str_18)         // IO: SetupFileSystem's {typeId, External*, Filename@+0x10}
 
 #undef B_ENTRY
 
@@ -1291,6 +1318,14 @@ void RtCollectionDestroyPortInit() {
     //                  (reference_uncalled_port_is_not_verified.md). Register it
     //                  the day a caller appears.
     //   0x180010110  — the other J4. See the note above RtColl_ArrayAssign.
+
+    // BATCH 5 (2026-09-12): the two element-destroy helpers the IO save-list
+    // and mod-reload arrays call. Both callers are ported in array.cpp in the
+    // same commit and reach these BY ADDRESS, so registering here is what
+    // keeps the destroy arm out of the DLL — and at cutover retail's rel32 to
+    // them will not exist at all.
+    RegisterRuntimeAddr(0x18002afc0, (void*)&RtColl_DestroyStrings_18002afc0);
+    RegisterRuntimeAddr(0x180029190, (void*)&RtColl_DestroyStrings_180029190);
 
     rtcoll::g_dprobePending = RtCollectionDestroyProbeArmed();
 
