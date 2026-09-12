@@ -100,6 +100,24 @@ ORPHAN_VERDICTS = {
     #     (mesh.cpp, "keeps its zero-caller status ... still on the census
     #     orphan list") was corrected at the same time.
     #
+    #   ?StopEffect@Scene@Audio@@QEAAXI@Z
+    #     Retired 2026-09-12 by WAVE 29 lane INSTR. Wave 8.5's verdict read
+    #     "EXERCISED -- called from Scene::StopEffect3D; also swept by
+    #     ProbeAudioScene". It is now called from a PORT rather than a probe:
+    #     runtime/src/audio/audio_scene_update.cpp, the body Wave 28 exercised
+    #     799 times on a live route. So the row is no longer caller-less and a
+    #     verdict describing it as one is wrong. The verification it records is
+    #     not lost -- ProbeAudioScene is still in the tree and WAVE8_5.md S2
+    #     still holds the evidence; what is retired is the CLAIM that nothing
+    #     calls it.
+    #
+    #     THIS WAS THE ONLY ONE OF THE EIGHT "STALE" ROWS THAT WAS REALLY
+    #     STALE. The other seven were an artefact of the census counting
+    #     rt_orphan_probe.cpp -- the probe that verified them -- as a caller;
+    #     see the "A PROBE IS NOT A CALLER" block further down. Retiring those
+    #     seven, as the Wave 28 defect ledger's item 10 said to, would have
+    #     deleted the triage of seven ports nothing in the shipping tree calls.
+    #
     # --- Wave 8.5, docs/runtime_port/WAVE8_5.md section 2 -------------------
     "??0Quaternion@Math@@QEAA@AEBVVector3@1@00@Z": (
         "EXERCISED", "8.5", "called from RtMath_Transform_FromDirection (transform.cpp:770)"),
@@ -125,8 +143,6 @@ ORPHAN_VERDICTS = {
     "?PauseEffect@Scene@Audio@@QEAAXI@Z": (
         "EXERCISED", "8.5",
         "Scene::Pause calls it as retail does (not inlined); also swept by ProbeAudioScene"),
-    "?StopEffect@Scene@Audio@@QEAAXI@Z": (
-        "EXERCISED", "8.5", "called from Scene::StopEffect3D; also swept by ProbeAudioScene"),
 
     # --- Wave 12, docs/runtime_port/WAVE12_APPLICATION.md ------------------
     # These eleven are caller-less for ONE shared reason worth stating once:
@@ -472,6 +488,103 @@ def first_literal_after(text, pos, limit=400):
     if ')' in text[pos:i]:
         return None
     return i
+
+
+# WAVE 29 LANE INSTR -- THE MACRO DOORS' NAME ARGUMENT, DONE PROPERLY.
+#
+# first_literal_after() above has TWO failure modes and both are DEFLATING: a
+# dropped door removes a live cutover dependency from `called`, and a symbol
+# that is in `called` only through that door disappears from the board
+# entirely. Neither printed anything.
+#
+#   (a) IT BAILS ON ANY `)` BEFORE THE LITERAL. That is the case Wave 28 lane
+#       MISC proved by experiment -- an INLINE function-pointer type as the
+#       macro's first argument (`RT_EXPORT_ONCE(void (*)(int), "?X@@")`)
+#       contains two `)` and the door vanished; moving a typedef inline moved
+#       TOTAL 1434 -> 1435.
+#   (b) IT DEMANDS A LITERAL. The second argument is very often a NAMED
+#       CONSTANT (`RT_EXPORT_ONCE(PlayFn, kPlay)`) -- the exact idiom
+#       RE_NAME_CONST's comment ENCOURAGES, and the one RE_EXPORT_NONLITERAL
+#       already handles for the plain door. It was never applied to the macro
+#       doors. MEASURED on wave29/base: 36 of 780 macro-door sites were
+#       dropped in silence, 32 of them by (b), recovering 26 distinct names of
+#       which 7 were in `called` through NO other door.
+#
+# So this scans the macro's own argument list with PAREN DEPTH -- which cannot
+# be confused by a function-pointer type, a template argument list or a nested
+# call -- and returns either the literal or the second argument's identifier
+# for the caller to resolve through the same constant tables the plain door
+# uses. A site it still cannot read is RETURNED AS SUCH and printed, never
+# dropped: an instrument must name what it could not examine.
+MACRO_DOOR_SCAN_LIMIT = 2000
+
+# Identifiers that are MACRO PARAMETERS, not names -- rt_port.h's own macro
+# definitions and the two project macros that wrap them. Exempted for the same
+# reason scan() exempts `mangled`/`name`/`sym` on the plain door: they are the
+# declaration, not a call site. Listed explicitly so a NEW unreadable spelling
+# is reported rather than absorbed.
+MACRO_DOOR_PARAM_NAMES = frozenset((
+    "MANGLED", "mangled", "name", "sym", "symbol", "mangledName",
+    "mangledTypeInfo",
+))
+
+RE_PLAIN_IDENT = re.compile(r'[A-Za-z_][A-Za-z0-9_:]*\Z')
+
+
+def macro_door_name_arg(text, pos, limit=MACRO_DOOR_SCAN_LIMIT):
+    """Read the name argument of a macro door.
+
+    `pos` is the index just PAST the macro's opening `(`. Returns
+    ``("lit", index_of_opening_quote)``, ``("ident", identifier)`` or
+    ``("unreadable", reason)``. Never returns None: a caller that cannot tell
+    "no name here" from "a name I could not read" is how blind spot (b) above
+    survived five waves.
+    """
+    depth, i = 1, pos
+    stop = min(len(text), pos + limit)
+    args, cur = [], []
+    while i < stop:
+        c = text[i]
+        if c == '"':
+            if depth == 1:
+                return ("lit", i)
+            # A literal nested inside a parenthesised sub-expression is not the
+            # macro's own argument; skip the whole literal so its contents
+            # cannot be mistaken for structure.
+            m = STRING_LITERAL.match(text, i)
+            i = m.end() if m else i + 1
+            continue
+        if c == "'":                      # char literal, e.g. a ',' constant
+            j = i + 1
+            while j < stop and text[j] != "'":
+                j += 2 if text[j] == '\\' else 1
+            i = j + 1
+            continue
+        if c == '(':
+            depth += 1
+        elif c == ')':
+            depth -= 1
+            if depth == 0:
+                args.append("".join(cur).strip())
+                break
+        elif c == ',' and depth == 1:
+            args.append("".join(cur).strip())
+            cur = []
+            i += 1
+            continue
+        cur.append(c)
+        i += 1
+    else:
+        return ("unreadable", "argument list did not close within %d chars" % limit)
+    if len(args) < 2:
+        return ("unreadable", "only %d argument(s); no name argument" % len(args))
+    second = args[1]
+    if RE_PLAIN_IDENT.match(second or ""):
+        return ("ident", second)
+    return ("unreadable", "second argument is not a literal or a plain "
+                          "identifier: %r" % second[:60])
+
+
 RE_ORDINAL = re.compile(r'ResolveOrdinal(?:Raw)?\s*\(\s*(\d+)')
 RE_ADDR = re.compile(r'ResolveAddr\s*\(\s*Module::Runtime\s*,\s*(0x[0-9a-fA-F]+)')
 RE_ADDR_RAW = re.compile(r'ResolveRuntimeRaw\s*\(\s*(0x[0-9a-fA-F]+)')
@@ -1056,9 +1169,16 @@ def _st_report(name, checks):
     A positive control scored on the UNION of two screens reads 3/3 and hides
     that one screen caught 1/3 -- so each row is printed with its own verdict
     and the count is of ROWS, never of screens.
+
+    WAVE 29 lane INSTR: a check may be a 3-tuple (label, ok, what_was_seen).
+    The third field is APPENDED to the printed label, because a green line
+    that does not say what it examined is not evidence -- and a RED one that
+    does not say what it saw cannot be diagnosed without editing the tool.
     """
     bad = 0
     print("SUBJECT  : %s" % name)
+    checks = [(c[0] if len(c) == 2 else "%s  [%s]" % (c[0], c[2]), c[1])
+              for c in checks]
     for label, ok in checks:
         if not ok:
             bad += 1
@@ -2191,6 +2311,13 @@ def scan():
     phantom_blocked = []      # (file, ident, name) -- followed, but not in the DLL
     xfile_followed = []       # (file, ident, name) -- cross-file constant resolved
     wrapper_door_hits = {}    # name -> set(files), via WRAPPER_LOCAL_DOORS
+    # WAVE 29 LANE INSTR -- the macro doors' three bookkeeping lists. All
+    # PRINTED. The old code had exactly one behaviour for every one of these
+    # cases: `continue`.
+    macro_door_recovered = {}  # name -> set(files), reached via a name constant
+    macro_door_sites = [0]     # SITE count; the dict above collapses duplicates
+    macro_door_unread = []     # (file, line, why) -- READ but not resolvable
+    macro_door_params = []     # (file, line, ident) -- a macro DEFINITION
 
     gconsts = global_name_consts()
     dll_names = load_export_names()
@@ -2273,13 +2400,51 @@ def scan():
         # The macro doors (RT_EXPORT_ONCE / RT_DATA_SLOT / RtResolveCached).
         # These are live cutover dependencies exactly as ResolveExport is; see
         # RE_MACRO_DOOR above for what their invisibility cost.
+        # WAVE 29 LANE INSTR: paren-depth argument scan plus the same named
+        # constant resolution the plain door has had since Wave 10, plus a
+        # PRINTED list of the sites still unreadable. See macro_door_name_arg.
         for m in RE_MACRO_DOOR.finditer(text):
-            lit = first_literal_after(text, m.end())
-            if lit is None:
+            kind_, val = macro_door_name_arg(text, m.end())
+            line_no = text.count("\n", 0, m.start()) + 1
+            if kind_ == "lit":
+                name = concat_literal(text, val)
+                if name:
+                    called_exports.setdefault(name, set()).add(rel)
+                else:
+                    macro_door_unread.append(
+                        (rel, line_no, "empty string literal"))
                 continue
-            name = concat_literal(text, lit)
-            if name:
-                called_exports.setdefault(name, set()).add(rel)
+            if kind_ == "unreadable":
+                macro_door_unread.append((rel, line_no, val))
+                continue
+            bare = val.rsplit("::", 1)[-1]
+            if bare in MACRO_DOOR_PARAM_NAMES:
+                # The macro's own definition, or a project macro forwarding its
+                # parameter. Recognised, not resolved, and counted so that a
+                # NEW parameter spelling shows up as unreadable instead.
+                macro_door_params.append((rel, line_no, bare))
+                continue
+            resolved = name_consts.get(bare)
+            cross = False
+            if resolved is None:
+                resolved = gconsts.get(bare)
+                cross = resolved is not None
+            if resolved is None:
+                macro_door_unread.append(
+                    (rel, line_no, "identifier %s resolves to no `const char*` "
+                                   "name constant" % bare))
+                continue
+            # THE PHANTOM GUARD, same rule and same reason as the plain door:
+            # a name this script has only just learned to follow must not mint
+            # a board row for a symbol the DLL does not export.
+            if dll_names is not None and resolved not in dll_names:
+                phantom_blocked.append((rel, val, resolved))
+                continue
+            if cross:
+                xfile_followed.append((rel, val, resolved))
+            called_exports.setdefault(resolved, set()).add(rel)
+            macro_door_recovered.setdefault(resolved, set()).add(rel)
+            macro_door_sites[0] += 1
         for m in RE_RESOLVE_CACHED.finditer(text):
             name = concat_literal(text, m.end())
             if name:
@@ -2488,6 +2653,10 @@ def scan():
         phantom_blocked=phantom_blocked,
         xfile_followed=xfile_followed,
         wrapper_door_hits=wrapper_door_hits,
+        macro_door_recovered=macro_door_recovered,
+        macro_door_sites=macro_door_sites[0],
+        macro_door_unread=macro_door_unread,
+        macro_door_params=macro_door_params,
         guarded_folded=guarded_folded,
         nonliteral_regs=nonliteral_regs,
         nonliteral_calls=nonliteral_calls,
@@ -2707,10 +2876,330 @@ def selftest_site_census():
     return 0 if ok else 1
 
 
+# ===========================================================================
+# THE FACTORY FAMILY IS OUTSIDE THIS CENSUS'S POPULATION  (Wave 29 lane INSTR)
+# ===========================================================================
+# Wave 28 closed a 202-body factory family -- 103 of 103 minted slot-0 factory
+# names present in the tree -- and THIS BOARD DID NOT MOVE BY ONE ROW. Measured
+# two-sided by lane FACTUI2 and reproduced by the integrator: the CSV contains
+# ZERO rows matching `CreateNewObject`. Not Wave 28's 206, not Wave 26's
+# `StringTable@UI`, not Wave 11's `Dialog@UI`.
+#
+# WHY, and it is structural rather than a bug: `called` means "a DLL symbol our
+# tree RESOLVES", and nothing resolves a factory. A factory reaches the running
+# process as a slot-0 POINTER inside a minted `BaseTypeInfo`, which is a data
+# stamp and not a door. So there is no door for the scan to find, and folding
+# the family in would require `called` to mean something else entirely -- which
+# would move the published board by +103/+103 for zero new work.
+#
+# THIS LANE DELIBERATELY DID NOT DO THAT. What it did instead is make the
+# census SAY SO, and make the blindness a CHECKED property rather than an
+# assumed one:
+#
+#   * the family's size is read from the SAME artefact tools/mint_factory_
+#     census.py reads (standalone/rt_data_mint_tables.inc). That is a shared
+#     premise, NOT an independent check, and it is labelled as such in the
+#     output -- two checks sharing a hidden premise are one check.
+#   * the number of factory-shaped rows IN THIS CENSUS'S OWN POPULATION is
+#     counted every run. It is 0 today. If a future door ever brings one in,
+#     this screen says so instead of the family being silently double-counted.
+#   * an absence screen with no natural positive case is a dead parser waiting
+#     to happen, so --selftest-factory-blind hands it a synthetic factory row
+#     and requires a non-zero count.
+RE_FACTORY_SYMBOL = re.compile(r'^\?Create(?:New)?Object@')
+MINT_INC_REL = os.path.join("standalone", "rt_data_mint_tables.inc")
+
+
+def factory_family_rows(rows):
+    """Factory-shaped keys in THIS census's population. Expected: none."""
+    return sorted({key for kind, key, _ns, _p, _d, _f in rows
+                   if isinstance(key, str) and RE_FACTORY_SYMBOL.match(key)})
+
+
+def factory_family_size(repo=REPO):
+    """(n_rows_with_a_factory, n_rows, path) from the minted table, or Nones."""
+    path = os.path.join(repo, MINT_INC_REL)
+    try:
+        text = open(path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return (None, None, path)
+    n_rows = len(re.findall(r'&kTypeInfoStorage\[(\d+)\]', text))
+    n_fac = len(set(re.findall(r'"(\?Create(?:New)?Object@[^"]+)"', text)))
+    return (n_fac, n_rows, path)
+
+
+def factory_family_screen(rows, ported=None, repo=REPO, out=None):
+    """Print the out-of-population statement. Returns the in-population count.
+
+    `ported` is scan()'s ported_exports map, and passing it is what turns a
+    slogan into a measurement -- see the DECOMPOSITION comment in the body.
+    """
+    p = (lambda *a: print(*a, file=out)) if out is not None else print
+    inpop = factory_family_rows(rows)
+    reg = sorted(k for k in (ported or {}) if RE_FACTORY_SYMBOL.match(k))
+    n_fac, n_rows, path = factory_family_size(repo)
+    p()
+    p("OUT OF POPULATION BY CONSTRUCTION: THE FACTORY FAMILY  (Wave 29 lane INSTR)")
+    p("  subject: keys matching ^?Create(New|InPlace)?Object@, counted in TWO")
+    p("           places -- the %d-row board population, and scan()'s raw"
+      % len(rows))
+    p("           registration map before it is intersected with `called`.")
+    p("  IN THE BOARD POPULATION           : %d" % len(inpop))
+    for k in inpop:
+        p("      %s" % k)
+    p("  REGISTERED AND VISIBLE TO THE SCAN: %d" % len(reg))
+    if n_fac is None:
+        p("  *** could not read %s -- the family size is UNKNOWN, not zero." % path)
+    else:
+        p("  FAMILY SIZE (minted table %s): %d distinct ?CreateNewObject@ name(s)"
+          % (MINT_INC_REL, n_fac))
+        p("  across %d BaseTypeInfo row(s), plus their ?CreateInPlaceObject@ twins."
+          % n_rows)
+        p("  That artefact is ALSO tools/mint_factory_census.py's input, so this is")
+        p("  a SHARED PREMISE, not an independent corroboration.")
+    # ------------------------------------------------------------------
+    # THE DECOMPOSITION. "The census is structurally blind to the factory
+    # family" is TRUE OF THE BOARD and FALSE of the tool, and the difference is
+    # actionable. Corrected mid-wave after lane VERIFY measured, live, that 200
+    # factory rows ARE in the port registry (SILENT 102 + 98, ASKED 0).
+    # ------------------------------------------------------------------
+    p("  WHY THE BOARD SHOWS ZERO, IN TWO PARTS -- they have different fixes:")
+    p("   1. NOTHING RESOLVES A FACTORY. A factory reaches the process as a slot-0")
+    p("      POINTER in a minted BaseTypeInfo -- a data stamp, not a door -- so it")
+    p("      never enters `called`, and `ported` is intersected with `called` to")
+    p("      make the board. This is INTRINSIC. Lane VERIFY measured it live on an")
+    p("      in-game run: ?CreateNewObject@ SILENT 102 / ASKED 0. No door, no row.")
+    p("      Those %d registered rows are therefore on the ORPHAN list above, not" % len(reg))
+    p("      in the board -- caller-less ports, which is exactly what they are.")
+    p("   2. THE REST ARE REGISTERED THROUGH A ROSTER LOOP, and this script cannot")
+    p("      see a non-literal registration: runtime/src/object/rt_factories_core.cpp")
+    p("      registers `r.newName` / `r.inPlaceName` from a table. Those already")
+    p("      appear in the NON-LITERAL REGISTRATION warning below. This half is")
+    p("      MISSING CAPABILITY, not intrinsic, and it EXPIRES.")
+    p("      [ADDRESSEE: the Wave 30 kickoff writer -- decide whether the census")
+    p("       should follow a roster-table registration. It cannot move the board")
+    p("       either way while part 1 holds, so it is a bookkeeping question, and")
+    p("       it must NOT be sold as closing a gap.]")
+    p("  => A FLAT BOARD ACROSS A FACTORY WAVE IS THE CORRECT EXPECTATION, not a")
+    p("     shortfall. Score that work with tools/mint_factory_census.py and the")
+    p("     live `[RtMint] BaseTypeInfo factories:` line, never with this board.")
+    if inpop:
+        p("  *** IN THE BOARD POPULATION IS NON-ZERO. Some door now RESOLVES a")
+        p("  *** factory by name, so part 1 above no longer holds. The two")
+        p("  *** instruments now OVERLAP: re-read both and do not add them.")
+    return len(inpop)
+
+
+def selftest_factory_blind():
+    """Positive control for factory_family_screen.
+
+    The screen's normal answer is ZERO, which is exactly the shape a dead
+    parser produces, so it is handed a KNOWN POSITIVE: a synthetic population
+    containing one real factory name from the minted table. Scored as two
+    separate checks -- a control scored on the union of two screens hides a
+    blind one.
+    """
+    import io
+    checks = []
+    real = None
+    try:
+        text = open(os.path.join(REPO, MINT_INC_REL), encoding="utf-8",
+                    errors="replace").read()
+        m = re.search(r'"(\?Create(?:New)?Object@[^"]+)"', text)
+        real = m.group(1) if m else None
+    except OSError:
+        pass
+    checks.append(("a real factory name is readable from " + MINT_INC_REL,
+                   real is not None, real or "(none found)"))
+    synth = real or "?CreateNewObject@Synthetic@Wave29@@SAPEAVBase@Object@@XZ"
+
+    pop_pos = [("export", synth, "UI", 1, 0, ["synthetic"])]
+    buf = io.StringIO()
+    n_pos = factory_family_screen(pop_pos, {synth: {"synthetic"}}, out=buf)
+    checks.append(("HANDED ONE: a population containing %s reads 1" % synth[:40],
+                   n_pos == 1, "screen reported %d" % n_pos))
+    warn = "IN THE BOARD POPULATION IS NON-ZERO" in buf.getvalue()
+    checks.append(("...and the overlap warning FIRES when it does", warn,
+                   "warning present" if warn else "warning MISSING"))
+    # A SECOND POSITIVE, on the other half of the decomposition: the registered
+    # count must come from the `ported` map, not from the board population.
+    # Without this, a screen that read only `rows` would score green here.
+    checks.append(("the REGISTERED count reads the ported map, not the board",
+                   "REGISTERED AND VISIBLE TO THE SCAN: 1" in buf.getvalue(),
+                   "handed {1 registered}, screen printed it"))
+
+    pop_neg = [("export", "?Update@Scene@Audio@@QEAAXAEBVTime@System@@@Z",
+                "Audio", 1, 0, ["synthetic"])]
+    buf2 = io.StringIO()
+    n_neg = factory_family_screen(pop_neg, {}, out=buf2)
+    checks.append(("NEGATIVE: a population with no factory reads 0",
+                   n_neg == 0, "screen reported %d" % n_neg))
+
+    n_fac, n_rows, _ = factory_family_size()
+    checks.append(("the family size is read, not assumed",
+                   bool(n_fac) and n_fac > 50,
+                   "%s factory name(s) over %s row(s)" % (n_fac, n_rows)))
+    return _st_report("factory-family out-of-population screen", checks)
+
+
+def selftest_macro_doors():
+    """Positive control for macro_door_name_arg, BOTH failure shapes.
+
+    The old reader is kept in the tree (first_literal_after) purely so this
+    control can demonstrate the defect rather than assert it: every fixture
+    below is run through BOTH readers and the old one must DROP the ones the
+    new one resolves. A fix whose control only exercises the new code cannot
+    tell a fix from a no-op.
+    """
+    checks = []
+    # (label, source fixture, expected kind, expected value-ish)
+    F_FNPTR = 'RT_EXPORT_ONCE(void (*)(int, char), "?Fn@Ns@@QEAAXXZ")'
+    F_TMPL = 'RT_DATA_SLOT(Collection::Array<int, float>, "?Data@Ns@@2HA")'
+    F_CONST = 'RT_EXPORT_ONCE(PlayFn, kPlay)'
+    F_NESTED = 'RT_EXPORT_ONCE(Fn, kName)(self, Other("not a name"))'
+    F_NONAME = 'RT_EXPORT_ONCE(OnlyOneArg)'
+    F_QUAL = 'RT_DATA_SLOT(T, Ns::kQualified)'
+    # LANE VERIFY's caution, taken as a fixture rather than as reassurance: its
+    # own site scanner had 6 residual blind spots and ALL SIX were a mangled
+    # name split across two source lines. A single-line join would truncate the
+    # name and mint a phantom row. concat_literal() absorbs adjacent literals
+    # exactly as the preprocessor does; this proves it reaches the macro door.
+    F_SPLIT = ('RT_EXPORT_ONCE(Fn,\n'
+               '    "?Update@AnimationState@Graphics@@"\n'
+               '    "QEAAXAEBVTime@System@@@Z")')
+
+    def run(fixture):
+        i = fixture.index("(") + 1
+        return (macro_door_name_arg(fixture, i),
+                first_literal_after(fixture, i))
+
+    (k, v), old = run(F_FNPTR)
+    checks.append(("INLINE FUNCTION-POINTER TYPE: new reader finds the literal",
+                   k == "lit" and fixture_lit(F_FNPTR, v) == "?Fn@Ns@@QEAAXXZ",
+                   "%s %r" % (k, fixture_lit(F_FNPTR, v) if k == "lit" else v)))
+    checks.append(("...and the OLD reader dropped it (this is the Wave 28 defect)",
+                   old is None, "old reader returned %r" % old))
+
+    (k, v), old = run(F_TMPL)
+    checks.append(("TEMPLATE ARG WITH A COMMA: new reader finds the literal",
+                   k == "lit" and fixture_lit(F_TMPL, v) == "?Data@Ns@@2HA",
+                   "%s" % k))
+    checks.append(("...and the OLD reader handled this one too (no regression)",
+                   old is not None, "old reader returned %r" % old))
+
+    (k, v), old = run(F_CONST)
+    checks.append(("NAMED CONSTANT second argument: reported as an identifier",
+                   (k, v) == ("ident", "kPlay"), "%s %r" % (k, v)))
+    checks.append(("...and the OLD reader dropped it (32 live sites on wave29/base)",
+                   old is None, "old reader returned %r" % old))
+
+    (k, v), _ = run(F_NESTED)
+    checks.append(("A STRING INSIDE A NESTED CALL is not mistaken for the name",
+                   (k, v) == ("ident", "kName"), "%s %r" % (k, v)))
+
+    (k, v), _ = run(F_NONAME)
+    checks.append(("A one-argument call is UNREADABLE, never silently dropped",
+                   k == "unreadable", "%s %r" % (k, v)))
+
+    (k, v), _ = run(F_QUAL)
+    checks.append(("A QUALIFIED constant Ns::kQualified is read whole",
+                   (k, v) == ("ident", "Ns::kQualified"), "%s %r" % (k, v)))
+
+    (k, v), _ = run(F_SPLIT)
+    joined = fixture_lit(F_SPLIT, v) if k == "lit" else None
+    checks.append(("A MANGLED NAME SPLIT ACROSS TWO SOURCE LINES is joined, not "
+                   "truncated (lane VERIFY: 6 of its 6 residual blind spots "
+                   "were this)",
+                   joined == "?Update@AnimationState@Graphics@@QEAAXAEBVTime@"
+                             "System@@@Z",
+                   repr(joined)))
+
+    # NEGATIVE CONTROL on the resolver, not just the reader: an identifier that
+    # no name constant defines must land in the unreadable list rather than
+    # inventing a row. Exercised through the live scan below.
+    d = scan()
+    mdr = d.get("macro_door_recovered") or {}
+    mdu = d.get("macro_door_unread") or []
+    checks.append(("LIVE: the tree's own named-constant macro doors are recovered",
+                   len(mdr) > 0, "%d distinct symbol(s) recovered" % len(mdr)))
+    dll = load_export_names()
+    checks.append(("LIVE: every recovered name is a real DLL export "
+                   "(phantom guard)",
+                   dll is not None and all(n in dll for n in mdr),
+                   "%d name(s) checked against %s export(s)"
+                   % (len(mdr), len(dll) if dll is not None else "NO")))
+    # The unreadable list is ABSENCE-SHAPED: it is empty in a healthy tree, so
+    # a live "0" proves nothing on its own. Its positive case is F_NONAME
+    # above, which is why that fixture exists. Stated here rather than scored
+    # as if the live zero were a result.
+    checks.append(("LIVE: unreadable list is empty today; its POSITIVE case is "
+                   "the F_NONAME fixture above, not this line",
+                   isinstance(mdu, list),
+                   "%d unreadable, %d macro-definition site(s)"
+                   % (len(mdu), len(d.get("macro_door_params") or []))))
+    checks.append(("LIVE: the macro DEFINITION sites are recognised, so a new "
+                   "unreadable spelling cannot hide among them",
+                   len(d.get("macro_door_params") or []) > 0,
+                   "%d site(s)" % len(d.get("macro_door_params") or [])))
+    return _st_report("macro-door name argument", checks)
+
+
+def fixture_lit(fixture, idx):
+    return concat_literal(fixture, idx) if isinstance(idx, int) else None
+
+
+def selftest_csv_sink():
+    """Carried defect #9: `--csv > f.csv` used to exit 2 and leave the usage
+    message in f.csv. This runs the tool as a subprocess BOTH ways -- the same
+    channel a user drives -- and requires stdout to parse as the CSV.
+    """
+    import subprocess
+    import tempfile
+    checks = []
+    me = os.path.abspath(__file__)
+    r = subprocess.run([sys.executable, me, "--csv"], capture_output=True,
+                       text=True, cwd=REPO)
+    head = (r.stdout or "").splitlines()[:1]
+    checks.append(("bare `--csv` exits 0 (it used to exit 2)", r.returncode == 0,
+                   "rc=%d" % r.returncode))
+    checks.append(("stdout's first line is the CSV HEADER, not a usage message",
+                   head == ["kind,key,namespace,ported,detoured,callers,symbol_kind"],
+                   repr(head[:1])))
+    n = len((r.stdout or "").strip().splitlines())
+    checks.append(("stdout carries the whole row set", n > 1000,
+                   "%d line(s) including the header" % n))
+    checks.append(("the human report went to STDERR", "TOTAL" in (r.stderr or ""),
+                   "%d bytes on stderr" % len(r.stderr or "")))
+    with tempfile.TemporaryDirectory() as td:
+        p = os.path.join(td, "rows.csv")
+        r2 = subprocess.run([sys.executable, me, "--csv", p],
+                            capture_output=True, text=True, cwd=REPO)
+        got = open(p, encoding="utf-8").read().splitlines() if os.path.exists(p) else []
+        checks.append(("CONTROL: `--csv <path>` still writes the FILE and keeps "
+                       "the report on stdout",
+                       r2.returncode == 0 and len(got) > 1000
+                       and "TOTAL" in (r2.stdout or ""),
+                       "rc=%d, %d file line(s)" % (r2.returncode, len(got))))
+        checks.append(("...and both spellings produce the SAME row count",
+                       len(got) == n, "%d vs %d" % (len(got), n)))
+    return _st_report("--csv sink", checks)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--csv", help="write per-function rows to this CSV")
+    # WAVE 29 LANE INSTR, carried defect #9. `--csv` took a value, so the
+    # obvious `runtime_census.py --csv > rows.csv` died in argparse with exit 2
+    # -- AFTER the shell had already created rows.csv and filled it with the
+    # usage message. A reader then has a non-empty file whose first field is
+    # "usage:", which is worse than an empty one. Both spellings now work:
+    # with a path it writes the file; bare (or `-`) it writes the CSV to STDOUT
+    # and sends the human report to STDERR, so the redirect does what it looks
+    # like it does.
+    ap.add_argument("--csv", nargs="?", const="-",
+                    help="write per-function rows to this CSV. Bare `--csv` (or "
+                         "`--csv -`) writes the CSV to stdout and the report to "
+                         "stderr, so `--csv > rows.csv` works.")
     ap.add_argument("--unported", action="store_true",
                     help="list every called-but-not-ported function")
     ap.add_argument("--namespace", help="restrict the listings to one namespace")
@@ -2756,9 +3245,30 @@ def main():
     ap.add_argument("--selftest-guarded-promotions", action="store_true",
                     help="Wave 26 lane DOORS: the 11 registrations that were "
                          "live and invisible stay visible; with a control.")
+    ap.add_argument("--selftest-macro-doors", action="store_true",
+                    help="Wave 29 lane INSTR: the macro doors' name argument, "
+                         "both failure shapes, run through the OLD reader too "
+                         "so the control can show the defect rather than "
+                         "assert it.")
+    ap.add_argument("--selftest-factory-blind", action="store_true",
+                    help="Wave 29 lane INSTR: the factory family is out of "
+                         "population. Absence-shaped, so it is handed a "
+                         "synthetic factory row as a positive control.")
+    ap.add_argument("--selftest-csv-sink", action="store_true",
+                    help="Wave 29 lane INSTR: `--csv > f.csv` must produce a "
+                         "CSV, not an argparse usage message.")
     ap.add_argument("--selftest-all", action="store_true",
                     help="run every --selftest-* above and fail if any fails.")
     args = ap.parse_args()
+
+    # `--csv -` (or a bare `--csv`): the CSV owns stdout, so every print() in
+    # the report below must go to stderr. Rebinding sys.stdout does that for
+    # all ~300 of them, because print() looks its file up at CALL time.
+    real_stdout = sys.stdout
+    if args.csv == "-":
+        sys.stdout = sys.stderr
+        print("NOTE: --csv given with no filename; writing the CSV to STDOUT and "
+              "this report to STDERR.")
 
     if args.selftest_all:
         rc = 0
@@ -2766,13 +3276,20 @@ def main():
                    selftest_classifier, selftest_ordinal_fold,
                    selftest_site_census, selftest_wrapper_doors,
                    selftest_name_consts, selftest_phantom_guard,
-                   selftest_guarded_promotions):
+                   selftest_guarded_promotions, selftest_macro_doors,
+                   selftest_factory_blind, selftest_csv_sink):
             print("=" * 74)
             r = fn()
             rc |= (r or 0)
         print("=" * 74)
         print("SELFTEST-ALL: %s" % ("ALL GREEN" if rc == 0 else "*** SOMETHING FAILED ***"))
         return rc
+    if args.selftest_macro_doors:
+        return selftest_macro_doors()
+    if args.selftest_factory_blind:
+        return selftest_factory_blind()
+    if args.selftest_csv_sink:
+        return selftest_csv_sink()
     if args.selftest_wrapper_doors:
         return selftest_wrapper_doors()
     if args.selftest_name_consts:
@@ -3051,6 +3568,34 @@ def main():
                         if nm in vt_fold["folded_names"]}
     orphan_addrs = sorted(set(d["ported_addrs"]) - called_addr_set)
 
+    # ---- A PROBE IS NOT A CALLER, FOR THIS SECTION  (Wave 29 lane INSTR) ---
+    #
+    # THE DEFECT THIS FIXES, and it is the reason the carried ledger's item 10
+    # said "retire each": SEVEN of the eight STALE VERDICT rows on wave29/base
+    # were stale only because their single caller is
+    # `standalone/rt_orphan_probe.cpp` -- the probe that PRODUCED the verdict.
+    # The instrument was counting its own verification harness as a caller,
+    # dropping the row off the orphan list, and then reporting the verdict that
+    # describes it as out of date. Following the ledger literally would have
+    # DELETED the triage of seven ports that nothing in the shipping tree calls.
+    #
+    # The census already knows what an instrument file is (INSTRUMENT_FILE_
+    # MARKERS, Wave 26 lane DOORS) and already prints an INSTRUMENT-SOURCED
+    # row class. This applies the same rule here: for "is this port exercised
+    # by our tree?", a probe-only caller is no caller. A detour target or a
+    # promoted vtable slot is a real dispatch and is NOT affected.
+    #
+    # CHANGES NO COUNT in the board above. It changes the printed orphan
+    # population (+7 rows, all pre-existing) and the stale-verdict list
+    # (8 -> 1), and both are labelled where they print.
+    real_dispatch = detoured_names | vt_fold["folded_names"]
+    orphan_probe_only = sorted(
+        n for n in set(d["ported_exports"])
+        if n not in orphan_exports and n not in real_dispatch
+        and d["called_exports"].get(n)
+        and all(is_instrument_file(f) for f in d["called_exports"][n]))
+    orphan_exports = sorted(set(orphan_exports) | set(orphan_probe_only))
+
     per_ns = collections.defaultdict(lambda: {"called": 0, "ported": 0, "detoured": 0})
     for kind, key, ns, ported, detoured, files in rows:
         b = per_ns[ns]
@@ -3159,6 +3704,8 @@ def main():
           "non-namespaced internals)")
     print("called = distinct functions our tree resolves today, OR that retail's")
     print("         own callers reach through a detour or a PROMOTED minted vtable")
+
+    factory_family_screen(rows, d.get("ported_exports"))
 
     # ---- WRAPPER-DOOR SCREEN (Wave 21; defect found by lane GFXVT) --------
     # See RE_MANGLED_CALL. Changes no count; names what the door scan cannot
@@ -3799,6 +4346,48 @@ def main():
         for f, ident, name in sorted(set(xf)):
             print("      %-30s %-30s %s" % (f, ident, name))
 
+    # ------------------------------------------------------------------
+    # THE MACRO DOORS' NAME ARGUMENT  (Wave 29 lane INSTR)
+    #
+    # Printed unconditionally, INCLUDING the zero case, because every list
+    # here is absence-shaped and "nothing to report" is indistinguishable
+    # from a dead scan. The recovered-name list is the positive shape the
+    # section is handed on every run.
+    # ------------------------------------------------------------------
+    mdr = d.get("macro_door_recovered") or {}
+    mdu = d.get("macro_door_unread") or []
+    mdp = d.get("macro_door_params") or []
+    print()
+    print("MACRO DOORS: THE NAME ARGUMENT  (Wave 29 lane INSTR)")
+    print("  subject: every RT_EXPORT_ONCE / RT_DATA_SLOT site in %s,"
+          % "/".join(SCAN_DIRS))
+    print("           comment-stripped, argument list read by PAREN DEPTH.")
+    print("  %d site(s) whose name argument is a NAMED CONSTANT, recovering %d"
+          % (d.get("macro_door_sites", 0), len(mdr)))
+    print("  distinct symbol(s). Until this wave EVERY ONE of them was dropped in")
+    print("  silence: first_literal_after() bailed on the first `)` and demanded a")
+    print("  string literal, so a function-pointer type OR a `kName` constant made")
+    print("  the door invisible. DEFLATING -- a live cutover dependency vanished.")
+    for name in sorted(mdr):
+        print("      %-70s %s" % (name[:70], ", ".join(sorted(mdr[name]))[:60]))
+    if not mdr:
+        print("      *** NONE RECOVERED. The tree used 32 such sites on wave29/base,")
+        print("      *** so an empty list here means the scan is DEAD, not that the")
+        print("      *** idiom is gone. Run --selftest-macro-doors.")
+    print("  %d site(s) are a macro DEFINITION forwarding its own parameter"
+          % len(mdp))
+    print("  (recognised, not resolved -- these are declarations, not call sites):")
+    for f, ln, ident in sorted(set(mdp)):
+        print("      %s:%d  %s" % (f, ln, ident))
+    if mdu:
+        print("  *** %d site(s) STILL UNREADABLE. `called` understates by at least" % len(mdu))
+        print("  *** the number of DISTINCT symbols among them, and this script")
+        print("  *** cannot say what that is -- that is the point of printing them.")
+        for f, ln, why in sorted(set(mdu)):
+            print("      %s:%d  %s" % (f, ln, why))
+    else:
+        print("  0 site(s) unreadable.")
+
     nl = d.get("nonliteral_regs") or {}
     if nl:
         total = sum(len(v) for v in nl.values())
@@ -3861,14 +4450,21 @@ def main():
         print("Ports with no caller in our tree (%d exports, %d addresses) -- each row"
               "\ncarries a verdict below, or prints as UNTRIAGED:"
               % (len(orphan_exports), len(orphan_addrs)))
+        print("  of those exports, %d are called ONLY from a probe/selftest/screen/"
+              % len(orphan_probe_only))
+        print("  oracle file (Wave 29 lane INSTR). A probe is the instrument that")
+        print("  VERIFIED the port, not a consumer of it, so counting it as a caller")
+        print("  silently retired the port's own triage. Marked `probe-only` below.")
 
         # Bucket every orphan by its verdict. A row absent from
         # ORPHAN_VERDICTS is UNTRIAGED -- there is deliberately no state in
         # which a missing verdict reads as coverage.
         buckets = collections.defaultdict(list)
+        probe_only = set(orphan_probe_only)
         for n in orphan_exports:
             st, wave, note = ORPHAN_VERDICTS.get(n, ("UNTRIAGED", "", ""))
-            buckets[st].append(("export", n, wave, note))
+            buckets[st].append(("export" + (" probe-only" if n in probe_only
+                                            else ""), n, wave, note))
         for a in orphan_addrs:
             st, wave, note = ORPHAN_VERDICTS.get(a, ("UNTRIAGED", "", ""))
             buckets[st].append(("addr", "0x%x" % a, wave, note))
@@ -3959,8 +4555,13 @@ def main():
             print("  the moment its stated expiry condition is met.")
 
     if args.csv:
-        with open(args.csv, "w", newline="", encoding="utf-8") as fh:
-            w = csv.writer(fh)
+        import contextlib
+        if args.csv == "-":
+            sink = contextlib.nullcontext(real_stdout)
+        else:
+            sink = open(args.csv, "w", newline="", encoding="utf-8")
+        with sink as fh:
+            w = csv.writer(fh, lineterminator="\n")
             # symbol_kind is APPENDED, not inserted: every existing column keeps
             # its index, so an ad-hoc positional reader of the old five + callers
             # is unaffected. It is emitted for every row, ported or not, so a
@@ -3972,7 +4573,8 @@ def main():
                 w.writerow([kind, key, ns, int(ported), int(detoured),
                             ";".join(files), classify_symbol(key, kind)[0]])
         print()
-        print("wrote %s (%d rows)" % (args.csv, len(rows)))
+        print("wrote %s (%d rows)"
+              % ("<stdout>" if args.csv == "-" else args.csv, len(rows)))
 
     return 0
 

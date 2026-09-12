@@ -226,9 +226,11 @@ def main():
         print("*** kSpecCount says %d rows, deleting_dtor.cpp has %d" % (want, len(rows)))
         bad += 1
     k1 = k2 = 0
+    unrec = 0            # WAVE 29 lane INSTR: UNRECOGNISED, counted apart
     for addr, dtor, size, name in rows:
         r = scan(img, addr)
         problems = []
+        unknowns = []
         if r.get("err"):
             problems.append(r["err"])
         else:
@@ -269,16 +271,45 @@ def main():
                                        ("%x" % dv) if dv else "?"))
                 k2 += 1
             else:
-                problems.append("scalar branch neither calls 0x%x nor restamps a vtable"
-                                % dtor)
-        print("%s0x%09x  size=0x%-4x dtor=0x%09x  %s"
-              % ("OK  " if not problems else "BAD ", addr, size, dtor, name))
+                # WAVE 29 lane INSTR, carried defect #8 (Wave 27, hit again in
+                # Wave 28). This bare `else` used to append to `problems`, so a
+                # shape this reader does not KNOW printed exactly like a shape
+                # it had CHECKED AND REFUTED. That is an INFLATING defect: it
+                # manufactures work, and three live rows (EdgeMeshInstance,
+                # MeshInstance, Light) have been reading BAD on it.
+                #
+                # "I do not recognise this" and "this is wrong" are different
+                # verdicts and only one of them names a defect. It is still
+                # reported and still fails the run -- a --check tool that warns
+                # is a tool nobody reads -- but under its own label and its own
+                # count, so a reader can tell the two apart.
+                unknowns.append(
+                    "scalar branch neither calls 0x%x nor restamps a vtable: "
+                    "this reader knows two shapes (call-the-dtor, "
+                    "restamp-inline) and this is neither. UNRECOGNISED, not "
+                    "refuted -- read the disassembly before calling it a "
+                    "defect." % dtor)
+        status = "OK  "
+        if problems:
+            status = "BAD "
+        elif unknowns:
+            status = "UNREC"
+        print("%-6s0x%09x  size=0x%-4x dtor=0x%09x  %s"
+              % (status.strip(), addr, size, dtor, name))
         for p in problems:
             print("        %s" % p)
             bad += 1
+        for u in unknowns:
+            print("        %s" % u)
+            unrec += 1
     print("")
     print("call-the-dtor (K1): %d    restamp-inline (K2/K3): %d" % (k1, k2))
-    print("problems: %d" % bad)
+    print("problems: %d    unrecognised: %d" % (bad, unrec))
+    print("  problems     = a shape this reader CHECKED and the DLL contradicted.")
+    print("  unrecognised = a shape this reader does not know. NOT a defect and")
+    print("                 NOT a clean row. It fails the run so nobody ignores")
+    print("                 it, and it is counted apart so nobody ports against")
+    print("                 it. (Wave 29 lane INSTR, carried defect #8.)")
     if neg:
         if bad == 1:
             print("NEGATIVE CONTROL PASSED: the perturbed row was caught.")
@@ -286,7 +317,9 @@ def main():
         print("*** NEGATIVE CONTROL FAILED: a wrong element size produced %d "
               "problems, not 1. This checker does not check. ***" % bad)
         return 1
-    return 1 if bad else 0
+    # Both classes fail the run; the EXIT CODE does not distinguish them and is
+    # not the place to look. The printed counts above are.
+    return 1 if (bad or unrec) else 0
 
 
 if __name__ == "__main__":
