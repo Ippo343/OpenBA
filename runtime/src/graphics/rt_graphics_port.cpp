@@ -62,6 +62,7 @@ extern int RtGraphicsTypeInfoAccessorsRegister();
                                           // graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT)
 extern int RtGraphicsEdgeMeshVtableRegister();
                                           // edgemesh_vtable.cpp (Wave 27 lane GFXMESH)
+extern int RtGraphicsMeshVtableRegister(); // mesh.cpp (Wave 27 lane GFXMESH)
 
 void RtGraphicsPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_GRAPHICS")) {
@@ -113,6 +114,20 @@ void RtGraphicsPortInit() {
     if (RtWaveEnabled("BANISHED_RT_GFXEDGEVT"))
         gfxedgevt = RtGraphicsEdgeMeshVtableRegister();
     n += gfxedgevt;
+
+    // WAVE 27 LANE GFXMESH, second half -- four slot bodies on the two INSTANCE
+    // tables (EdgeMeshInstance Update + GetInstanceTransform, MeshInstance
+    // GetSubTransform + GetInstanceTransform). They live in mesh.cpp because
+    // MeshInstance::GetInstanceTransform reuses that file's RtInstancedPoolSlot
+    // helper, which carries the MOVSXD/SAR/second-deref corrections
+    // WAVE6_LANE_E.md paid for; a second copy is what this avoids.
+    int gfxmeshvt = 0;
+    if (RtWaveEnabled("BANISHED_RT_GFXMESHVT"))
+        gfxmeshvt = RtGraphicsMeshVtableRegister();
+    n += gfxmeshvt;
+    printf("[RtPort] GFXMESHVT (Wave 27 lane GFXMESH): %d instance vtable slot "
+           "bodies registered\n", gfxmeshvt);
+
     printf("[RtPort] GFXEDGEVT (Wave 27 lane GFXMESH): %d EdgeMesh vtable slot "
            "bodies registered\n", gfxedgevt);
 

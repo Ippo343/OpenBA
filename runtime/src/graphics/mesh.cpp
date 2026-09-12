@@ -1754,6 +1754,524 @@ static void RtGraphics_EdgeMeshInstance_SetMesh(void* self, ExternalPtr mesh, vo
 // The four functions in this lane's scope that are NOT registered are listed
 // below the register block, each with its reason.
 // ============================================================================
+// ============================================================================
+// WAVE 27 LANE GFXMESH — four more vtable slot bodies on the two instance
+// tables. Everything below this banner is that lane's; nothing above it moved.
+//
+// SUBJECT AND DENOMINATOR. The Wave 27 census prints
+//     ??_7EdgeMeshInstance@Graphics@@6B@   4 / 9      (5 / 9 after slot 0)
+//     ??_7MeshInstance@Graphics@@6B@       2 / 9      (3 / 9 after slot 0)
+// and the four ported here are
+//     ?Update@EdgeMeshInstance@               slot 1   0x1800a39b0  ord 4487
+//     ?GetInstanceTransform@EdgeMeshInstance@  slot 6   0x1800a3840  ord 2719
+//     ?GetSubTransform@MeshInstance@           slot 5   0x180101200  ord 2950
+//     ?GetInstanceTransform@MeshInstance@      slot 6   0x180101280  ord 2721
+// every address confirmed against the export directory BY VA with pefile
+// against the RETAIL Runtime-x64.dll, not by name pattern and not against the
+// profile build. They leave EdgeMeshInstance at 7/9 (slots 2 Draw and 3
+// AddDrawItems open) and MeshInstance at 6/9 (1 Update, 2 Draw, 3 AddDrawItems
+// open). Neither table is COMPLETE and neither is promoted here.
+//
+// ALL FOUR READ FROM THE DISASSEMBLY, never from Ghidra's C output. Two of the
+// four hinge on details that output actively hides — a MOVSXD that prints as a
+// zero extension, and a W-COLUMN THAT IS NOT PART OF THE MATRIX — and both are
+// called out at the body.
+//
+// THE CLASS-SPLIT BANNER AT THE TOP OF THIS FILE STILL APPLIES AND IS THE
+// REASON THESE FOUR ARE REGISTERED ANYWAY. These are virtual slots the DLL
+// dispatches out of its own table, so registering the export redirects nothing
+// that runs today — the value is that the four rows become PORTED, which is
+// what an unpromoted table's missing slots are (WAVE27_KICKOFF.md §1), and that
+// they are there when the table is promoted or the DLL is gone. `calls=` will
+// read 0 for all four on a normal run and that is not verification
+// (reference_uncalled_port_is_not_verified.md).
+//
+// KILL SWITCH: BANISHED_RT_GFXMESHVT=0 leaves all four on the DLL.
+// ============================================================================
+
+namespace {
+
+// Math::Quaternion::Lerp — retail 0x18001d500, ordinal 3191. Reached BY ADDRESS
+// through the port-aware resolver, exactly as scene.cpp's RtQuaternionLerp
+// does, because Wave 9 lane P registered BOTH the name and the address for its
+// port (runtime/src/math/wave9_lane_p.cpp:241) and the address form is the one
+// the other Graphics caller already uses — one spelling, one place to repoint.
+// HIDDEN RETURN SLOT: RCX = the FROM quaternion, RDX = the return buffer,
+// R8 = the TO quaternion, R9 = &t.
+typedef void* (*QuatLerpFn)(const void* from, void* ret, const void* to, const void* t);
+QuatLerpFn RtQuatLerp() {
+    static QuatLerpFn f = RtAddr<QuatLerpFn>(0x18001d500);
+    return f;
+}
+
+// Math::Transform::AsMatrix — retail 0x18001e5f0, ordinal 1619. Asked BY NAME,
+// for the reason scene.cpp:374 records in full: Wave 1 ported AsMatrix and
+// ResolveAddr consults the ADDRESS registry, so the by-address spelling sends
+// this through the shipped DLL instead of our own port — one port bypassing
+// another inside runtime/. HIDDEN RETURN SLOT in RDX.
+typedef void* (*AsMatrixFn)(const void* xf, void* ret);
+AsMatrixFn RtTransformAsMatrix() {
+    return RT_EXPORT_ONCE(AsMatrixFn, "?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ");
+}
+
+// ?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z
+//   SYMBOL:      retail 0x180016c20, ordinal 2814 — the (int, float)
+//                INTERPOLATED overload, and a DIFFERENT function from the
+//                (int) overload at 0x180016a40 this file already ports. Both
+//                are exported; the two mangled names differ only in the
+//                trailing `M`, which is exactly the kind of pair
+//                reference_resolveexport_phantom_names.md warns about, so the
+//                VA was confirmed against the export directory with pefile
+//                rather than the name being assumed to exist.
+//   CONDITION:   it is NOT ported anywhere in this tree — grepped by mangled
+//                name and by address before this door was opened. It is reached
+//                by NAME through the port-aware resolver, so it becomes OUR
+//                body the moment any lane registers that name.
+//   CONSEQUENCE: until then it is the DLL's, and
+//                ?GetInstanceTransform@EdgeMeshInstance@ below makes it newly
+//                `called` (reference_porting_can_grow_the_cutover_surface.md).
+//                It is NOT claimed as ported by this lane and is named in
+//                docs/runtime_port/WAVE27_LANE_GFXMESH.md §6 as inherited
+//                cutover work.
+// HIDDEN RETURN SLOT in RDX; node in R8D, t in XMM3.
+typedef void* (*NodeToWorldInterpFn)(const void* self, void* ret, int node, float t);
+NodeToWorldInterpFn RtNodeToWorldInterp() {
+    return RT_EXPORT_ONCE(NodeToWorldInterpFn,
+        "?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z");
+}
+
+// ?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z — retail
+// 0x1800155a0, ordinal 3992. PORTED and registered BY ADDRESS by
+// runtime/src/graphics/scene.cpp:1906, so this resolves to our own body.
+typedef void (*GeoSetTransformFn)(void* self, const void* xf);
+GeoSetTransformFn RtGeometrySetTransform() {
+    static GeoSetTransformFn f = RtAddr<GeoSetTransformFn>(0x1800155a0);
+    return f;
+}
+
+// ---------------------------------------------------------------------------
+// THE SHARED ARITHMETIC OF BOTH GetInstanceTransform BODIES.
+//
+// Both interpolate a PAIR of Math::Transforms — 0x38 bytes, `cur` at +0x00 and
+// `prev` at +0x1c — from prev towards cur by `t`, and both spell it the same way
+// the already-ported Graphics::Geometry::GetInstanceTransform (0x1800154a0,
+// scene.cpp:1285) spells it:
+//     rotation    = Quaternion::Lerp(prev.rotation, cur.rotation, t)
+//     translation = prev + (cur - prev) * t,  component by component, x then y
+//                                             then z, in the order the shipped
+//                                             SUBSS/MULSS/ADDSS triples emit
+// The ORDER of the three components is preserved because float arithmetic is
+// what it is, not because a comparator could see it: the three lanes do not
+// interact, so any order leaves the same bits. It is kept so the body reads as
+// a transcription.
+//
+// A NOTE ON WHICH HALF IS WHICH, because getting it backwards is invisible at
+// t = 0 and at t = 1 and wrong everywhere between. Retail loads the FROM
+// quaternion from pair+0x1c and the TO from pair+0x00 (`LEA RCX,[R8+0x1c]`
+// with R8 = pair, then R8 stays as the third argument), and subtracts
+// pair+0x2c.. from pair+0x10.. for the translation. So +0x00 is CURRENT and
+// +0x1c is PREVIOUS, and that matches Geometry's +0x84 `_transform` /
+// +0xa0 `_prevTransform` ordering in runtime/types/graphics/Geometry.h.
+// ---------------------------------------------------------------------------
+void RtLerpTransformPair(const uint8_t* pair, float t, Transform* out) {
+    const Transform* cur =
+        reinterpret_cast<const Transform*>(pair + 0x00);
+    const Transform* prev =
+        reinterpret_cast<const Transform*>(pair + 0x1c);
+
+    const Scalar s = { t };
+    RtQuatLerp()(&prev->rotation, &out->rotation, &cur->rotation, &s);
+
+    out->translation.x = prev->translation.x + (cur->translation.x - prev->translation.x) * t;
+    out->translation.y = prev->translation.y + (cur->translation.y - prev->translation.y) * t;
+    out->translation.z = prev->translation.z + (cur->translation.z - prev->translation.z) * t;
+}
+
+}  // namespace
+
+// ============================================================================
+// Graphics::EdgeMeshInstance::Update(const System::Time&)   [VIRTUAL, slot 1]
+// retail 0x1800a39b0, ordinal 4487
+//   ?Update@EdgeMeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z
+//
+// The whole body, transcribed:
+//
+//     MOV RDX,[RCX+0xc8] ; TEST RDX,RDX ; JZ out
+//     seven dwords from [RDX+0x84 .. +0x9c] into a 0x1c stack local
+//     LEA RDX,[local] ; CALL 0x1800155a0            (Geometry::SetTransform)
+//
+// So an EdgeMeshInstance FOLLOWS the MeshInstance it was attached to: each tick
+// it copies that instance's CURRENT Geometry transform (+0x84, the 0x1c
+// `_transform`, NOT the interpolated pair) onto itself through the ordinary
+// SetTransform setter — which is what raises the dirty bits, so the outline's
+// world box is recomputed by Clean like any other geometry's.
+//
+// THE `Time&` PARAMETER IS NEVER READ. Not an inference: RDX is overwritten by
+// the first instruction of the body, before anything could have used it. It is
+// kept in the signature because the vtable slot is still called with it.
+//
+// *** THE NULL TEST IS RETAIL'S OWN AND IS A REAL CASE, NOT A PARANOIA. ***
+// runtime/types/graphics/Mesh.h records that the default
+// ??0EdgeMeshInstance@ ctor leaves +0xc8 UNINITIALISED — only
+// EdgeMeshInstance::SetMesh fills it — so `_followed` here can be allocator
+// garbage on an instance that was default-constructed and never given a mesh.
+// Retail's `TEST RDX,RDX ; JZ` catches a NULL and nothing else; it does not and
+// cannot catch garbage. This port reproduces exactly that test and adds nothing
+// (CLAUDE.md, "Don't fix a faithful crash with a null check"): a non-null
+// garbage pointer faults here precisely as it faults in the DLL, and if it ever
+// does, the bug is the missing SetMesh upstream.
+//
+// ORACLE: NONE, and the reason is a WRITE. SetTransform mutates `this` — it
+// rolls _transform into _prevTransform and raises two dirty bits — so a
+// differential replay would roll the pair TWICE and hand the renderer a
+// previous transform that is one frame too new. That is the same refusal
+// wave24_lane_gfxmat.cpp makes for the Serialize pair, for the same structural
+// reason. Attendance is recorded; no comparison is emitted.
+// ============================================================================
+extern "C" void RtGraphics_EdgeMeshInstance_Update(void* selfv, const void* time) {
+    RT_DIFF_BEGIN("Graphics::EdgeMeshInstance::Update[NO-ORACLE]");
+    (void)time;   // RDX is clobbered by retail's first instruction
+
+    EdgeMeshInstance* emi = reinterpret_cast<EdgeMeshInstance*>(selfv);
+    MeshInstance* const followed = emi->_followed;
+    if (followed) {
+        Transform xf;
+        std::memcpy(&xf, &followed->_base._transform, 0x1c);   // seven dwords
+        RtGeometrySetTransform()(selfv, &xf);
+    }
+    RT_DIFF_WORK(true);
+}
+
+// ============================================================================
+// Graphics::MeshInstance::GetSubTransform(int) const        [VIRTUAL, slot 5]
+// retail 0x180101200, ordinal 2950
+//   ?GetSubTransform@MeshInstance@Graphics@@UEBA?AVTransform@Math@@H@Z
+//
+//     TEST R8D,R8D ; JNS  -> CALL 0x180016a40 (GetNodeToWorld(node)); return ret
+//     otherwise             copy seven dwords [RCX+0x84..+0x9c] -> ret
+//
+// The OVERRIDE of Geometry::GetSubTransform (0x1800a43c0, scene.cpp:1239), and
+// the difference is the whole point of the override: the base IGNORES the node
+// index and hands back the geometry's own transform, while MeshInstance looks
+// the node up in the mesh skeleton. A NEGATIVE index means "no node" and falls
+// back to the base's answer — which is why the base can ignore the argument at
+// all.
+//
+// `JNS`, not `JG`: node == 0 takes the LOOKUP path. Reading this as "> 0" would
+// send the root node down the fallback and be wrong only for the root, which is
+// the node most likely to look right by accident.
+//
+// GetNodeToWorld (0x180016a40) IS PORTED, in this same file, and is called
+// DIRECTLY rather than through a resolver: retail's own call is a rel32 into
+// that body and a direct call is the faithful spelling. Its own diff plumbing
+// rides along, which is instrumentation and not behaviour.
+//
+// HIDDEN RETURN SLOT in RDX, node index in R8D, RAX = RDX on return.
+//
+// ORACLE: FULL on the fallback arm only. The lookup arm is left to
+// GetNodeToWorld's own oracle rather than compared again here — running theirs
+// would call the DLL's GetNodeToWorld into a scratch buffer, which is exactly
+// the comparison that body already makes, and doing it twice would report one
+// divergence as two.
+// ============================================================================
+extern "C" void* RtGraphics_MeshInstance_GetSubTransform(const void* selfv, void* ret,
+                                                        int node) {
+    RT_DIFF_BEGIN("Graphics::MeshInstance::GetSubTransform");
+
+    if (node >= 0) {   // JNS: zero takes this arm
+        RT_DIFF_WORK(true);
+        return RtGraphics_MeshInstance_GetNodeToWorld(selfv, ret, node);
+    }
+
+    const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(selfv);
+    std::memcpy(ret, &mi->_base._transform, 0x1c);   // seven dwords
+
+    if (rt_diff_on__) {
+        uint8_t theirs[0x1c];
+        std::memset(theirs, 0xCD, sizeof(theirs));
+        typedef void* (*Fn)(const void*, void*, int);
+        Fn f = RT_ORIGINAL_ONCE(Fn,
+            "?GetSubTransform@MeshInstance@Graphics@@UEBA?AVTransform@Math@@H@Z");
+        if (f) {
+            f(selfv, theirs, node);
+            RT_DIFF_BYTES(ret, theirs, 0x1c);
+        }
+    }
+    RT_DIFF_WORK(true);
+    return ret;
+}
+
+// ============================================================================
+// Graphics::EdgeMeshInstance::GetInstanceTransform(int, float) const
+//                                                            [VIRTUAL, slot 6]
+// retail 0x1800a3840, ordinal 2719
+//   ?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+//
+// Returns Math::Matrix (64 bytes) BY VALUE: hidden return slot in RDX, a PACKED
+// int in R8D, the interpolation factor in XMM3.
+//
+// THE PACKED ARGUMENT, decoded from the shipped instructions and not guessed:
+//     MOV   EAX,R8D
+//     SHR   R8D,0xf          ; a LOGICAL shift of the 32-bit half
+//     AND   EAX,0x7fff       ; index    = packed & 0x7fff
+//     TEST  R8B,0x1          ; whichList = (packed >> 15) & 1
+// so this is a 15-bit index plus ONE selector bit — a different packing from
+// MeshInstance::GetInstanceTransform's 12 + 4 below, and the two were decoded
+// separately for exactly that reason.
+//
+//   whichList = 1 -> the EdgeMesh's _edgeLists     (+0x158)
+//   whichList = 0 -> the EdgeMesh's _triangleLists (+0x148)
+// and the entry is `data + index * 0x18`, the TriangleList stride this file
+// already uses for EdgeMesh::Set. `entry + 0x14` is the node index.
+//
+// *** THE NODE INDEX IS READ AS A PLAIN 32-BIT MOV HERE ***
+// (`MOV R8D,[RCX+0x14]`), where MeshInstance's body one function over reads the
+// same field with MOVSXD. Both are then tested with `TEST/JS`, so the SIGN is
+// what both use, and the difference does not change the branch — but it does
+// mean this body never widens the value, and the port does not widen it either.
+// The distinction is written down because the two neighbouring bodies disagree
+// and a reader will assume a transcription error.
+//
+// TWO ARMS:
+//   node >= 0 AND _followed != null:
+//       Transform t = _followed->GetNodeToWorld(node, tFactor);   (0x180016c20)
+//       AsMatrix(t, ret)
+//   otherwise:
+//       lerp this's OWN Geometry transform pair (+0x84 cur / +0xa0 prev) by t
+//       and AsMatrix that — which is Geometry::GetInstanceTransform's body,
+//       inlined by MSVC. It is reproduced through the shared helper above
+//       rather than by calling the ported Geometry body, because retail's
+//       instructions are here and not a call; the arithmetic is identical
+//       either way.
+//
+// NOTE WHAT THIS ARM DOES **NOT** DO: it does not touch a colour. Compare
+// MeshInstance's body below, which overwrites the matrix's fourth column with
+// four floats. EdgeMeshInstance has no such field and retail writes the matrix
+// AsMatrix produced, untouched. Two sibling overrides of one slot that differ in
+// their last four stores; carrying either body's ending over to the other would
+// be a silent, plausible, wrong port.
+//
+// ORACLE: FULL. Pure read on both arms; both sides write private Matrix buffers
+// and all 64 bytes are compared.
+// ============================================================================
+extern "C" void* RtGraphics_EdgeMeshInstance_GetInstanceTransform(const void* selfv,
+                                                                 void* ret,
+                                                                 int packed, float t) {
+    RT_DIFF_BEGIN("Graphics::EdgeMeshInstance::GetInstanceTransform");
+
+    const EdgeMeshInstance* emi = reinterpret_cast<const EdgeMeshInstance*>(selfv);
+    const int  index     = packed & 0x7fff;
+    const bool whichList = ((static_cast<uint32_t>(packed) >> 15) & 1u) != 0;
+
+    const uint8_t* const mesh = B(emi->_mesh.p);
+    const uint8_t* const listData =
+        B(Rd<void*>(mesh, whichList ? 0x158 : 0x148));
+    const uint8_t* const entry = listData + static_cast<int64_t>(index) * 0x18;
+    const int32_t node = Rd<int32_t>(entry, 0x14);   // plain MOV dword; see above
+
+    if (node >= 0 && emi->_followed != nullptr) {
+        Transform tmp;
+        void* const got = RtNodeToWorldInterp()(emi->_followed, &tmp, node, t);
+        RtTransformAsMatrix()(got, ret);
+    } else {
+        Transform xf;
+        RtLerpTransformPair(B(&emi->_base._transform), t, &xf);
+        RtTransformAsMatrix()(&xf, ret);
+    }
+
+    if (rt_diff_on__) {
+        uint8_t theirs[64];
+        std::memset(theirs, 0xCD, sizeof(theirs));
+        typedef void* (*Fn)(const void*, void*, int, float);
+        Fn f = RT_ORIGINAL_ONCE(Fn,
+            "?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z");
+        if (f) {
+            f(selfv, theirs, packed, t);
+            RT_DIFF_BYTES(ret, theirs, 64);
+        }
+    }
+    RT_DIFF_WORK(true);
+    return ret;
+}
+
+// ============================================================================
+// Graphics::MeshInstance::GetInstanceTransform(int, float) const
+//                                                            [VIRTUAL, slot 6]
+// retail 0x180101280, ordinal 2721
+//   ?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+//
+// Hidden return slot in RDX, a PACKED int in R8D, the factor in XMM3.
+//
+// THE PACKED ARGUMENT — 12 + 4, NOT 15 + 1, and NOT unsigned:
+//     MOVSXD R9,R8D          ; SIGN-extended to 64 bits first
+//     MOV    R8,R9
+//     AND    R9D,0xfff       ; element = packed & 0xfff
+//     SAR    R8,0xc          ; an ARITHMETIC shift of the SIGN-EXTENDED value
+//     AND    R8D,0xf         ; level   = (packed >> 12) & 0xf
+//     IMUL   R8,R8,0xb0      ; ... times the detail-level stride
+// The MOVSXD/SAR pair is the trap reference_ghidra_c_output_vs_disassembly.md
+// names and that this very file already hit once (the pool-id shift in
+// RtInstancedPoolSlot above): Ghidra prints the widening as `(ulonglong)`, which
+// reads as a zero extension, and a logical shift here would pick a different
+// detail level for any negative `packed`. The `AND 0xf` masks the result back
+// into range afterwards, so on THIS body the two spellings agree for every
+// input — which is worse, not better, because it means no test can tell them
+// apart and the next reader has to re-derive it. The port writes the arithmetic
+// shift and says so.
+//
+// THE ADDRESS CHAIN, transcribed:
+//     mesh   = this->_mesh                                   (+0xc0)
+//     levels = mesh->_detailLevels._data                     (mesh + 0x50)
+//     lists  = *(void**)(levels + level*0xb0 + 0x98)
+//     node   = *(int32*)(lists + element*0x18 + 0x14)        ; MOVSXD here
+// 0xb0 as the detail-level stride and +0x98 as the TriangleList array inside it
+// are what runtime/types/graphics/Mesh.h's GraphicsMeshView already records for
+// `_detailLevels`; 0x18 is the TriangleList stride EdgeMesh::Set uses. Nothing
+// in the chain is new to this tree.
+//
+// WHICH PAIR OF TRANSFORMS GETS LERPED — three cases, and the third is the one
+// that matters:
+//   node < 0                      -> this's own Geometry pair, +0x84 / +0xa0
+//   node >= 0, _animation._instanced == 0
+//                                 -> this->_nodes._data + node*0x38
+//   node >= 0, instanced          -> the animation pool slot + 0x38, then
+//                                    + node*0x38 — the SAME indirection
+//                                    RtInstancedPoolSlot above already
+//                                    reproduces for GetNodeToWorld, reused here
+//                                    rather than re-derived so there is one
+//                                    place holding the MOVSXD/SAR/second-deref
+//                                    corrections WAVE6_LANE_E.md §6.7-6.8 paid
+//                                    for.
+//
+// *** THE FOURTH COLUMN OF THE RETURNED MATRIX IS NOT PART OF THE MATRIX. ***
+// This is the finding of this body and nothing in the decompiled C says it. The
+// tail emits SIXTEEN separate MOVSS stores into the return slot, and only
+// TWELVE of them come from the matrix AsMatrix produced:
+//     ret+0x00,+0x04,+0x08   <- matrix+0x00,+0x04,+0x08
+//     ret+0x10,+0x14,+0x18   <- matrix+0x10,+0x14,+0x18
+//     ret+0x20,+0x24,+0x28   <- matrix+0x20,+0x24,+0x28
+//     ret+0x30,+0x34,+0x38   <- matrix+0x30,+0x34,+0x38
+//     ret+0x0c               <- this+0x10c     _color[0]
+//     ret+0x1c               <- this+0x110     _color[1]
+//     ret+0x2c               <- this+0x114     _color[2]
+//     ret+0x3c               <- this+0x118     _color[3]
+// The matrix's own +0x0c/+0x1c/+0x2c/+0x3c — which AsMatrix sets to 0,0,0,1 —
+// are DISCARDED and the instance colour is packed into that column instead. So
+// the returned "Matrix" is a transform whose w column carries RGBA, which is
+// how per-instance tint reaches the vertex shader in one buffer. A port that
+// copied 64 bytes and then wrote the colour would be RIGHT; a port that copied
+// 64 bytes and stopped would look right in every geometric test and render
+// everything untinted. The four `_color` floats are at exactly the offsets
+// runtime/types/graphics/Mesh.h already pins from the constructor's four
+// 0x3f800000 stores, which is the independent witness for this reading.
+//
+// The four column stores are UNCONDITIONAL — they happen on all three arms,
+// after the branch rejoins. Nothing about the node lookup changes them.
+//
+// ORACLE: FULL. Pure read; both sides write private Matrix buffers and all 64
+// bytes are compared, the colour column included — it is the half of the result
+// a geometric check cannot see.
+// ============================================================================
+extern "C" void* RtGraphics_MeshInstance_GetInstanceTransform(const void* selfv, void* ret,
+                                                             int packed, float t) {
+    RT_DIFF_BEGIN("Graphics::MeshInstance::GetInstanceTransform");
+
+    const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(selfv);
+
+    // MOVSXD then SAR: a SIGNED widening and an ARITHMETIC shift. See the banner.
+    const int64_t wide    = static_cast<int64_t>(packed);
+    const int64_t element = wide & 0xfff;
+    const int64_t level   = (wide >> 12) & 0xf;
+
+    const uint8_t* const mesh   = B(mi->_mesh.p);
+    const uint8_t* const levels = B(Rd<void*>(mesh, 0x50));
+    const uint8_t* const lists  = B(Rd<void*>(levels, level * 0xb0 + 0x98));
+    const int64_t node = Rd<int32_t>(lists, static_cast<size_t>(element) * 0x18 + 0x14);
+
+    const uint8_t* pair = nullptr;
+    if (node < 0) {
+        pair = B(&mi->_base._transform);          // +0x84 cur / +0xa0 prev
+    } else if (mi->_animation._instanced == 0) {
+        pair = B(mi->_nodes._data) + node * 0x38;
+    } else {
+        pair = B(Rd<void*>(RtInstancedPoolSlot(mi), 0x38)) + node * 0x38;
+    }
+
+    Transform xf;
+    RtLerpTransformPair(pair, t, &xf);
+
+    Matrix m;
+    RtTransformAsMatrix()(&xf, &m);
+
+    // The twelve matrix stores, then the four colour stores. Written as retail
+    // emits them: three floats of each row from the matrix, the fourth from
+    // _color. `m.m[3]`, `m.m[7]`, `m.m[11]` and `m.m[15]` are deliberately
+    // never read.
+    float* const out = reinterpret_cast<float*>(ret);
+    out[0]  = m.m[0];  out[1]  = m.m[1];  out[2]  = m.m[2];   out[3]  = mi->_color[0];
+    out[4]  = m.m[4];  out[5]  = m.m[5];  out[6]  = m.m[6];   out[7]  = mi->_color[1];
+    out[8]  = m.m[8];  out[9]  = m.m[9];  out[10] = m.m[10];  out[11] = mi->_color[2];
+    out[12] = m.m[12]; out[13] = m.m[13]; out[14] = m.m[14];  out[15] = mi->_color[3];
+
+    if (rt_diff_on__) {
+        uint8_t theirs[64];
+        std::memset(theirs, 0xCD, sizeof(theirs));
+        typedef void* (*Fn)(const void*, void*, int, float);
+        Fn f = RT_ORIGINAL_ONCE(Fn,
+            "?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z");
+        if (f) {
+            f(selfv, theirs, packed, t);
+            RT_DIFF_BYTES(ret, theirs, 64);
+        }
+    }
+    RT_DIFF_WORK(true);
+    return ret;
+}
+
+// ============================================================================
+// WAVE 27 LANE GFXMESH registration — by NAME and by ADDRESS, both.
+//
+// All four slots are RT_MINT_NAMED in standalone/rt_data_mint_tables.inc
+// (kVSlots23 and kVSlots40), so the NAME door is the one the two tables need to
+// count them. The ADDRESS door is registered as well so a by-address call site
+// reaches the same body (reference_resolveaddr_consults_port_registry_first.md).
+//
+// NONE OF THE FOUR ADDRESSES IS USED AS AN IDENTITY TOKEN IN THIS TREE —
+// grepped across runtime/ code/ standalone/ engine/ dx11/ before the address
+// doors were opened, because a registered identity token is the failure that
+// keeps ?AddDrawItems@MeshInstance@ (0x180100f20) unregisterable. That one
+// address IS such a token, at standalone/scene_watch.cpp:401, and it is NOT
+// touched here — see WAVE27_LANE_GFXMESH.md §7.
+//
+// Every address below is a LITERAL, deliberately
+// (reference_census_cannot_see_nonliteral_registrations.md).
+// ============================================================================
+int RtGraphicsMeshVtableRegister() {
+    int n = 0;
+
+    RegisterRuntimeExport("?Update@EdgeMeshInstance@Graphics@@UEAAXAEBVTime@System@@@Z",
+                          (void*)&RtGraphics_EdgeMeshInstance_Update); ++n;
+    RegisterRuntimeAddr(0x1800a39b0ull, (void*)&RtGraphics_EdgeMeshInstance_Update);
+
+    RegisterRuntimeExport("?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@"
+                          "Math@@HM@Z",
+                          (void*)&RtGraphics_EdgeMeshInstance_GetInstanceTransform); ++n;
+    RegisterRuntimeAddr(0x1800a3840ull,
+                        (void*)&RtGraphics_EdgeMeshInstance_GetInstanceTransform);
+
+    RegisterRuntimeExport("?GetSubTransform@MeshInstance@Graphics@@UEBA?AVTransform@Math@@H@Z",
+                          (void*)&RtGraphics_MeshInstance_GetSubTransform); ++n;
+    RegisterRuntimeAddr(0x180101200ull, (void*)&RtGraphics_MeshInstance_GetSubTransform);
+
+    RegisterRuntimeExport("?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@"
+                          "Math@@HM@Z",
+                          (void*)&RtGraphics_MeshInstance_GetInstanceTransform); ++n;
+    RegisterRuntimeAddr(0x180101280ull,
+                        (void*)&RtGraphics_MeshInstance_GetInstanceTransform);
+
+    return n;   // 4
+}
+
 int RtGraphicsMeshRegister() {
     int count = 0;
 
