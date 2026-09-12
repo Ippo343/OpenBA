@@ -118,8 +118,20 @@ void RtSystemPortInit() {
     // The RULE, for the next lane that adds one: a probe that ALLOCATES cannot
     // run from a *PortInit. Registration is fine there; execution is not.
     // Opt-in, not a kill switch: absent env means OFF.
+    //
+    // WAVE 22 LANE ALLOC: the UNARMED arm attests too, on stderr, for the same
+    // reason the armed one does (see AttestArming in allocator.cpp). An A/B
+    // whose control cannot be identified from its own artefacts is an A/A that
+    // nobody can tell apart from an A/B. Both arms now name themselves in
+    // standalone_error.log, in the perf build where every printf is compiled
+    // out.
     { const char* e = std::getenv("BANISHED_RT_ALLOC");
-      if (e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0)
-          n += RtSystemAllocatorRegister(); }
+      if (e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0) {
+          n += RtSystemAllocatorRegister();
+      } else {
+          fprintf(stderr, "[RtAlloc] ATTEST: UNARMED (BANISHED_RT_ALLOC=%s) -- "
+                          "the allocator port registered NOTHING\n", e ? e : "(unset)");
+          std::fflush(stderr);
+      } }
     printf("[RtPort] System: %d exports registered\n", n);
 }

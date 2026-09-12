@@ -1112,6 +1112,33 @@ void RtLaneXSingletonCtorProbe() {
 // and Engine::Startup inside the DLL. So every registration here is inert on a
 // live run and load-bearing only at cutover, which is precisely the property
 // that makes it safe to land the two unprobed ones.
+//
+// ⚠ CORRECTED 2026-09-11 (Wave 22 lane ALLOC). **The paragraph above is no
+// longer true of `??0MemoryAllocator@System@@`, and it was the load-bearing
+// argument for this whole block.** We have since ported `Engine::Engine`, and
+// `runtime/src/engine/engine_lifecycle.cpp:390` is
+//
+//     RT_EXPORT_ONCE(CtorFn, "??0MemoryAllocator@System@@QEAA@XZ")(&self->_allocator);
+//
+// — a call site in OUR tree, reaching `Ctor_MemoryAllocator` -> `rtalloc::
+// Construct`, on EVERY default run, because RtWaveEnabled() is a kill switch
+// (default ON). That registration is therefore NOT inert on a live run and is
+// not merely load-bearing at cutover.
+//
+// It is still SAFE, but for a different reason than the one stated above, and
+// the difference matters to anyone reasoning about the allocator gate:
+// `RtEngineLifecycleRegister()` (engine_lifecycle.cpp:1074) refuses to register
+// ANYTHING unless `RtLaneXEnsureAllocatorPlatform()` has filled `g_plat` first,
+// precisely so this path cannot be an EXEC-of-0 on a null `lockInit`. The body
+// is byte-faithful and publishes into the DLL's own `_singleton` slot, exactly
+// as retail's ctor does.
+//
+// The consequence worth writing down: "the allocator port is off unless
+// BANISHED_RT_ALLOC is set" is a claim about the REGISTRATION DOOR for the five
+// MemoryAllocator statics, not about every line of `rtalloc::`. Two of its
+// functions run unarmed on every boot. Corrected in place rather than deleted —
+// the conclusion (safe to land) still holds; its justification did not.
+// Evidence and the full crossing list: docs/runtime_port/WAVE22_LANE_ALLOC.md §2.2.
 // ---------------------------------------------------------------------------
 void RtSingletonCtorsPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_SINGLETON_CTORS")) {
