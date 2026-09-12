@@ -302,6 +302,19 @@ number for these three tables specifically instead of by an unrun tool.
 > the MAIN checkout's venv (see §8 defect 1) and look for
 > `STAMPERS n ; ours-capable n ; retail 0`.
 
+> **RESIDUAL 1b — ADDRESSEE: the Wave 28 integrator, on the MERGED tip, before
+> writing WAVE28_CLOSED.** The DECLINE above was re-derived by RUNNING
+> `mint_stamper_census.py` — not read out of a doc — but it was run on **this
+> branch alone**. Its ownership screen scans the tree's registrations, so a
+> SIBLING lane that ported and registered
+> `??0ParticleSystemInstance@Graphics@@QEAA@AEBV01@@Z` or
+> `??1ParticleSystemInstance@Graphics@@UEAA@XZ` would flip this verdict at merge
+> and nothing here would notice. **Re-run it on the merged tip.** Lane MISC
+> reports the same shape biting it and two factory lanes independently this wave
+> (`?Serialize@StringTable@UI@@` was handed on as an open trap after Wave 27 lane
+> FRONTIER had already closed it): *a verdict derived on a partial tree expires
+> at the merge that completes the tree.*
+
 ---
 
 ## 5. WHAT THE BODY ACTUALLY DOES, AND THE READINGS THAT ARE NOT OBVIOUS
@@ -572,14 +585,20 @@ this body is not a Serialize; the diff harness's `calls=` column would report
 `calls=0` on every site, which is not verification
 (`reference_uncalled_port_is_not_verified.md`).
 
-**The RNG measurement side of the MISC dependency is UNMEASURED either way.**
-Lane MISC ports and registers `?NextGroup@Random@System@@`; this body reaches it
-through `ResolveExport`, which is registry-aware, so after that merge the call
-lands in our body rather than the DLL's. MISC verified the two are the same
-algorithm. Since this lane's attendance is zero on both sides of that merge,
-there is no number here that changes — **but the fact is recorded because a
-future lane that DOES get attendance must say which side of the merge it
-measured on.**
+**The RNG dependency on lane MISC: MY CALL SITE is unmeasured either way — but
+the SYMBOL is not dark, and the distinction matters.** Lane MISC ports and
+registers `?NextGroup@Random@System@@`; this body reaches it through
+`ResolveExport`, which is registry-aware, so after that merge the call lands in
+our body rather than the DLL's. MISC verified the two are the same algorithm.
+
+This lane's attendance is zero on both sides of that merge, so **no number in
+this document changes** when it lands. That is a statement about *this call
+site*, not about the symbol: MISC reports `?Update@Scene@Audio@@` (which it also
+ported) inlining two draws that reach `0x1800c7dd0` directly, with measured
+`calls=799` on its own in-game run. **Writing "attendance 0 on both sides"
+without saying whose attendance would have been the wrong scope** — the
+half-truth that reads as "the symbol is dark". A future particle lane that DOES
+get attendance must still say which side of the merge it measured on.
 
 ### 6.1 THE RUN (MEASURED)
 
