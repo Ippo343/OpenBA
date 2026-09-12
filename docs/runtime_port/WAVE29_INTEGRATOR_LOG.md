@@ -1098,3 +1098,173 @@ It verified ownership with an **independent `assert-held` rather than the
 acquire's exit status, because it had piped that call and a pipeline exits with
 the LAST status.** Both §0.3 hazards live, both handled, and the mitigation I
 pushed mid-wave is confirmed effective by the lane that hit the exact failure.
+
+---
+
+## ENTRY 13 — VERIFY closed: the debt is MEASURED, and "attendance 0" meant SILENCE
+
+Closed at `wave29/verify` `28e8df93`. Its substantive report never reached me as
+a message — I read the deliverable directly, which is the correct fallback and is
+recorded so nobody later assumes I was briefed.
+
+Protected-path diff vs base: **585 insertions across 8 files** — a real code lane,
+including `standalone/factory_byte_oracle.cpp` (357 lines).
+
+### 13.1 DEFECT #7 WAS DEFLATING, AND IT HID FOUR LIVE BODIES
+
+Three lane `*Summary()` functions were written and **nothing called them**:
+`RtGraphicsWave24GfxmatSummary`, `RtGraphicsWave27GfxbigSummary`,
+`RtGraphicsWave28GfxbodySummary` — **18 registered rows across three waves**,
+every one behind a **default-on kill switch**, whose attendance line had never
+been printed by any run in this project's history. Each carries, directly above
+it, the standard comment promising *"a run that entered none of these says so
+rather than staying silent."*
+
+Wired. The numbers no run had ever printed:
+
+```
+[GFXBIG27]  Draw = 13,125  (entries 26,249  sorts 39,373)
+            AnimationState::Update = 17,950
+[GFXBODY28] BeginDrawGroup = 26,249
+            Camera::operator= = 52,486
+```
+
+> **Four of the 18 rows were LIVE and had never appeared in any published
+> figure.** The other 14 are genuine zeros — **and those zeros had never been
+> printed either**, including GFXMAT24's oracle *effectiveness* counter, the one
+> number that says its differential oracle compared nothing at all.
+
+**`Camera::operator=` is the row my §2.2 warns about by name** — the one that
+"writes three bytes retail leaves alone into a live Camera 3.3 million times a
+session". It runs **52,486** times a session and nobody had ever counted it.
+
+**And a second instance one level down:** `RtGraphicsWave28GfxbodySummary`'s
+`printf` covered 6 of its own lane's 8 rows; three counters were incremented by
+`Attend()` and **printed nowhere.** A summary can be wired and still silent.
+
+**Direction: DEFLATING.** A zero from an unreached `printf` and a zero from an
+unentered body are **the same character in a log** — the instrument could not
+express the difference. **Wave 28 §5's "GFXBODY: six of eight printed nothing" is
+partly silence, not zero**, and every wave that read "attendance 0" for a
+GFXMAT24 / GFXBIG27 / GFXBODY28 row read silence.
+
+VERIFY stated the mitigation rather than overclaiming: `Attend()` prints
+milestones at n = 1, 10, 1000 and every 100k, so those four rows were not
+*totally* invisible. What was invisible is the **totals**, the **zeros**, and
+every row with no milestone printer at all.
+
+### 13.2 THE DEBT: ~280 was never a work item, and now there is a number
+
+New per-row port-door attendance instrument (`BANISHED_RT_ATTEND=1`) splitting the
+live registry into asked/silent. In-game run: **816 of 1526 name rows and 1424 of
+1576 address rows were never asked for.** Decomposed by what the tree does with
+each literal:
+
+| class | name | addr | meaning |
+|---|---:|---:|---|
+| **A — NO DOOR EXISTS** (only site is a mint/factory table: a stamp, not a door) | 224 | 406 | silence carries **no information** |
+| **B — NO ROUTE WALKED THIS RUN** (a real consumer exists) | 471 | 420 | payable by building or running a route |
+| **C — ROUTE EXISTS in a harness/probe left unarmed** | 15 | 31 | **payable TODAY, by setting an env var** |
+| **D — NO CONSUMER SITE IN THE TREE AT ALL** | 106 | 567 | nothing consumes the row |
+
+> **"~280 unexecuted bodies" is not a work item of 280.** The real
+> "build or walk a route" set is **471** on the name door, dominated by
+> **IO (205) and UI (135)**. And **15 rows are payable today by arming a probe
+> that already exists.**
+
+This is `reference_a_namespace_gap_is_not_a_body_count.md` applied to the debt
+itself, and it is the first time the debt has had a decomposition instead of an
+estimate. **Class A is the important one: 224 name rows whose silence is
+structurally uninformative** — counting them as debt was always wrong.
+
+**On my multi-line-registration item (entries 1-3):** the attendance instrument is
+**IMMUNE BY CONSTRUCTION** — it reads the LIVE REGISTRY, not source, and a split
+literal is one string to the compiler and one key in the map. VERIFY's
+*source-side classifier* did have the blind spot, measured it at 6 rows with its
+own control, and fixed it. **The right answer to a source-parsing defect is an
+instrument that does not parse source.**
+
+### 13.3 THE ORACLE: PROMOTED, AND THE CHANGE IS THE WHOLE POINT
+
+> FACTUI1's ours-side **replays the table**. The port is a **second interpreter
+> over that same table**, so the oracle **could not see an interpreter defect.**
+
+`standalone/factory_byte_oracle.cpp` calls **the registered function pointer**
+instead. That converts a self-check into an oracle — the exact distinction
+`reference_shadow_marker_is_not_an_oracle.md` records, applied to the artefact I
+asked VERIFY to judge.
+
+**Placement was MEASURED, and the two obvious placements both failed:**
+
+| placement | outcome |
+|---|---|
+| process exit | **ACCESS_VIOLATION** in `MemAlloc` on the 3rd row — engine had torn its allocator down |
+| before `GameMain` | singleton does not exist yet; screen aborted having compared **0** rows |
+| bootstrap our own allocator at exit | `Startup` **returned 0 and the slot was populated anyway** — it *looked* like it worked and the next allocation died. **A populated singleton slot is not a started allocator.** |
+| **`ToolHarness_Tick`, in-game frame 120** | the engine's own allocator is live — **and it is the allocator these bodies use at cutover**, so it is the RIGHT one, not merely a working one |
+
+**Cost stated, not buried:** this inserts roster-class handles into a live
+`InternalFactory` mid-game. Half the original objection is defused (buffers are
+file-scope statics that outlive the process); **the other half is not**, and it is
+paid only on an explicitly armed run.
+
+**Coverage measured, and it is not 200:** the enumerable roster is FACTREST's 35
+non-UI classes — **25 concrete + 10 abstract, 0 skipped**; 1823 bytes compared,
+25 masked, over 1944. FACTUI1's 31 UI classes are **not** covered (no roster
+accessor in `factory_ui1.cpp`); **ADDRESSEE named** — a three-line accessor covers
+them with no other change.
+
+### 13.4 THE RESULT IT REFUSED TO CLAIM
+
+```
+  18 OK / 5 FAIL / 2 VACUOUS of 25 concrete rows
+  negative control 18/18 · abstract control 10/10
+```
+
+**VERIFY does NOT present the 5 FAILs as a defect list**, because the set is
+**unstable across runs of the same build** (7, then 3, then 5; EdgeMesh's
+first-bad byte moved from `+0x60` to passing to `+0x73`). A byte whose offset
+moves between runs is residual nondeterminism, not a port defect.
+
+What IS solid, and it is the finding: **FACTUI1's clean sheet does not reproduce
+when the ours-side is the real port.** The two VACUOUS rows are reported as **NOT
+VERIFIED rather than as passes** — 0 bytes compared, which is the
+`oracle_must_not_compare_unwritten_bytes` trap caught in the honest direction.
+
+**ADDRESSEE named:** before treating any of the 5 as a defect, run N times and
+keep only bytes that fail in EVERY run. **"The stability screen is the missing
+piece, not the comparison."**
+
+### 13.5 The pairing, scored honestly by BOTH sides
+
+INSTR's factory screen defect that VERIFY found was **inflating**; the one
+underneath it — found only while fixing VERIFY's own — was **deflating and
+larger**: INSTR's `RE_FACTORY_SYMBOL` **never matched `?CreateInPlaceObject@` at
+all while the subject line it printed claimed it did**, so it read 38 where the
+family is 74.
+
+> **A screen naming a subject it did not examine — inside the section of the tool
+> that quotes that very warning.**
+
+INSTR's §8.1 records that its doc's correct "74" came from a **scratch probe
+rather than from its own tool's output**, and that had it quoted the instrument it
+owns, it would have caught VERIFY's defect itself.
+
+Symmetrically: INSTR's design review of VERIFY's oracle named two failure modes,
+**both about retail's variance**; the defect that actually bit was on **our** side
+and neither listed it. INSTR also never upgraded its prose review to a code review
+after the oracle was committed, and **records that it claimed to have read a file
+it had not** — retracted in the same turn.
+
+### 13.6 INSTR's late edit — verified
+
+```
+$ git log --oneline 9776a690..wave29/instr
+  62985dc7 INSTR POST-REPORT EDIT: lane VERIFY found a defect in my own factory screen
+$ git diff --stat 9776a690 wave29/instr -- runtime/ standalone/ code/ engine/ dx11/
+  (EMPTY)
+```
+
+Self-labelled, protected paths untouched, board unmoved at 1460/1295. **Three
+lanes have now edited after reporting; all three declared it, all three were
+clean, and I verified each myself.**
