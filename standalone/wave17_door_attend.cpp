@@ -185,7 +185,13 @@ void Wave17DoorAttendReport() {
     if (!Enabled()) return;
     const unsigned ctrlPost = g_watch[0].post;
     const unsigned ctrlAny  = g_watch[0].post + g_watch[0].init;
-    printf("\n[W17Attend] ==== door attendance (62 subject rows + 1 control) ====\n");
+    // DERIVED, not a literal. This header read "(62 subject rows + 1 control)"
+    // for three waves after the table grew -- Wave 26 lane ATTEND found it at 66
+    // while the header still said 62. The computed line at the bottom was always
+    // right, so the two disagreed with no detector. A count in a banner must come
+    // from the same expression the table is walked with.
+    printf("\n[W17Attend] ==== door attendance (%d subject rows + 1 control) ====\n",
+           kWatchCount - 1);
     printf("[W17Attend] post>0 means the consumer RAN. post==1 does NOT mean "
            "'ran once' -- nearly every site caches in a function-local static.\n");
     printf("[W17Attend] CONTROL %s: init=%u post=%u -> %s\n",
