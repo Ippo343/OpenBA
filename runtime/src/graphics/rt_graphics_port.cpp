@@ -67,6 +67,7 @@ extern int RtGraphicsWave24GfxmatRegister();  // wave24_lane_gfxmat.cpp (Wave 24
 extern int RtGraphicsWave27GfxbigRegister();  // wave27_lane_gfxbig.cpp (Wave 27 lane GFXBIG)
 
 extern int RtGraphicsWave27GfxpartRegister(); // wave27_lane_gfxpart.cpp (Wave 27 lane GFXPART)
+extern int RtGraphicsWave28GfxbodyRegister(); // wave28_lane_gfxbody.cpp (Wave 28 lane GFXBODY)
 extern int RtGraphicsTypeInfoAccessorsRegister();
                                           // graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT)
 extern int RtGraphicsEdgeMeshVtableRegister();
@@ -170,6 +171,19 @@ void RtGraphicsPortInit() {
     int gfxpart = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXPART")) gfxpart = RtGraphicsWave27GfxpartRegister();
     n += gfxpart;
+
+    // WAVE 28 LANE GFXBODY -- the remaining named Graphics BODY rows, every one
+    // of them a CALLEE that Wave 27 lane GFXBIG's three bodies put into the
+    // `called` column. ITS OWN SWITCH because its blast radius is narrower than
+    // GFXBIG's but overlaps it exactly: with BANISHED_RT_GFXBIG=1 and this one
+    // 0, GFXBIG's bodies run and reach the DLL for these callees, which is the
+    // A/B that separates "the big body is wrong" from "one of its callees is".
+    // Sharing GFXBIG's variable would destroy that separation.
+    int gfxbody28 = 0;
+    if (RtWaveEnabled("BANISHED_RT_GFXBODY28")) gfxbody28 = RtGraphicsWave28GfxbodyRegister();
+    n += gfxbody28;
+    printf("[RtPort] GFXBODY28 (Wave 28 lane GFXBODY): %d Graphics body exports "
+           "registered\n", gfxbody28);
 
     // WAVE 9 LANE GFXD -- the bottom half of the Graphics::Renderer class
     // lane: Renderer::Reset, Renderer::AddScene, two more Graphics::Camera
