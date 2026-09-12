@@ -207,6 +207,10 @@ typedef void  (*GeometryCtorFn)(void* self);
 typedef void  (*GeometryCopyCtorFn)(void* self, const void* other);
 typedef void  (*GeometryDtorFn)(void* self);
 typedef void  (*GeometrySetBoundsFn)(void* self, const void* box);
+// NOTE: the "going to the DLL is the byte-faithful choice" sentence above is
+// about the CALL being a direct internal one in retail, not about which door
+// resolves it. Both animation names below are now PORTED and are resolved
+// through the port registry; see the note at RtAnimReset.
 typedef void  (*AnimResetFn)(void* animState);
 typedef void  (*AnimPlayFn)(void* animState, ExternalPtr group, int index,
                             const void* nodeArray, const void* startTime,
@@ -251,11 +255,27 @@ GeometrySetBoundsFn RtGeometrySetBounds() {
     return RT_EXPORT_ONCE(GeometrySetBoundsFn,
                           "?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z");
 }
+// RT_EXPORT_ONCE on both, not RT_ORIGINAL_ONCE (closure batch 3b, 2026-09-12),
+// for exactly the reason the four-door note above gives — and this pair is the
+// same defect one more time, found the same way.
+//
+// WHAT WAS BELIEVED: that these two names had no port, so the raw door and the
+// seam door led to the same place and the raw one was merely cheaper to spell.
+// WHAT IS TRUE NOW: `?ResetAnimationState@` was ported in closure batch 3
+// (runtime/src/graphics/animationstate.cpp, retail 0x1800fd930) and
+// `?PlayAnimation@AnimationState@` in batch 3b
+// (animationstate_transforms.cpp, retail 0x1800fdf50). From the moment each
+// landed these two lines were LIVE-PATH PORT BYPASSES, with nothing in this
+// file changing — which is the hazard WAVE9.md's bypass row states in as many
+// words ("re-run after every LANDING, not after every edit"). The diff oracle
+// cannot see it either: a bypassed port never runs, so it never disagrees, and
+// both bodies read `entered=0` in the summary while this file called the DLL's
+// copies hundreds of times a session.
 AnimResetFn RtAnimReset() {
-    return RT_ORIGINAL_ONCE(AnimResetFn, "?ResetAnimationState@AnimationState@Graphics@@QEAAXXZ");
+    return RT_EXPORT_ONCE(AnimResetFn, "?ResetAnimationState@AnimationState@Graphics@@QEAAXXZ");
 }
 AnimPlayFn RtAnimPlay() {
-    return RT_ORIGINAL_ONCE(AnimPlayFn,
+    return RT_EXPORT_ONCE(AnimPlayFn,
         "?PlayAnimation@AnimationState@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@AEBVTime@System@@2M_N@Z");
 }
 QuatMulFn RtQuatMul() {

@@ -298,4 +298,15 @@ void RtGraphicsPortInit() {
         const int sun  = RtGraphicsSunCameraRegister();
         printf("[RtPort] BATCH 4: %d cull + %d sun-camera entries registered\n", cull, sun);
     }
+
+    // BATCH 3b — the five animation bodies with hand-scheduled floating point:
+    // AnimationState::PlayAnimation / CopyInstancedToUnique / UpdateNodes,
+    // AnimationManager::GetInstanceId and MeshInstance::GetBones
+    // (runtime/src/graphics/animationstate_transforms.cpp). Registered
+    // unconditionally (DIRECTION.md §2.3); no switch.
+    {
+        extern int RtGraphicsAnimationTransformsRegister();
+        const int fp = RtGraphicsAnimationTransformsRegister();
+        printf("[RtPort] BATCH 3b: %d animation-transform exports registered\n", fp);
+    }
 }
