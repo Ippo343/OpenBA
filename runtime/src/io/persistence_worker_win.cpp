@@ -578,6 +578,157 @@ extern "C" void RtIo_PersistenceWorker_Dtor(void* worker) {
 }
 
 // ============================================================================
+// WAVE 28 LANE SLOTS — the worker's `Run()`, slot 0 of vtable 0x180155860
+// ============================================================================
+//
+//   0x1800b7260   49 bytes   ?Run@<unnamed worker>@ — UNEXPORTED, address only
+//
+// This is the ONE slot the census's `0x180155860  1 / 2` row was missing; slot
+// 1 (`?OnCompleted@Thread@System@@UEAAXXZ`, 0x18000c590) has been ours for
+// waves. With this body the row is 2 / 2 COMPLETE.
+//
+// THE SHIPPED BODY, from `objdump -d --start-address=0x1800b7260
+// --stop-address=0x1800b7292 "C:/GOG Games/Banished/Runtime-x64.dll"` — the
+// retail file on disk, true-VA addressing, no Ghidra involved:
+//
+//   1800b7260: 8b 51 3c        mov  0x3c(%rcx),%edx        worker->command
+//   1800b7263: 85 d2           test %edx,%edx
+//   1800b7265: 74 24           je   1800b728b -> jmp 0x1800b6e00     command 0
+//   1800b7267: ff ca           dec  %edx
+//   1800b7269: 74 1b           je   1800b7286 -> jmp 0x1800b6aa0     command 1
+//   1800b726b: ff ca           dec  %edx
+//   1800b726d: 74 12           je   1800b7281 -> jmp 0x1800b69c0     command 2
+//   1800b726f: ff ca           dec  %edx
+//   1800b7271: 74 09           je   1800b727c -> jmp 0x1800b65b0     command 3
+//   1800b7273: ff ca           dec  %edx
+//   1800b7275: 75 19           jne  1800b7290 -> repz ret            (default)
+//   1800b7277:                 jmp  0x1800b6290                      command 4
+//
+// It is a five-way jump table on ONE field and nothing else: no allocation, no
+// synchronisation, no state of its own. Every arm is a TAIL JMP, so the job
+// body inherits this frame and `Run`'s own contribution is the dispatch.
+//
+// ---------------------------------------------------------------------------
+// THE COMMAND ENCODING IS CORROBORATED BY AN INDEPENDENT WITNESS
+// ---------------------------------------------------------------------------
+// `runtime/types/io/Persistence.h` has said since Wave 19 lane PERSIST, from
+// reading the ENQUEUE side (`movl $3,0x4c(%rbx)` and friends in the public
+// entry points):
+//
+//     int32_t command;   // +0x4C — 1 load · 2 delete · 3 info · 4 list
+//
+// `worker+0x3c` IS `Persistence+0x4c` (the worker subobject starts at +0x10),
+// so the dispatch above assigns exactly that meaning to 1, 2, 3 and 4 — derived
+// here from the CONSUMER, there from the PRODUCER, and the two agree with no
+// shared premise. Command 0 is the one the header does not list, and this file
+// already names it: `RtIo_PersistenceWorker_EnqueueSave` (0x1800b75c0) is the
+// only enqueue path that does not write a non-zero command, i.e. **0 is SAVE**.
+// That is a reading of an ABSENCE and is labelled INFERRED, not measured.
+//
+// ---------------------------------------------------------------------------
+// WHAT THIS GROWS — five new address doors, declared, not discovered later
+// ---------------------------------------------------------------------------
+// reference_porting_can_grow_the_cutover_surface.md. Porting a dispatcher makes
+// its five arms OURS to satisfy at cutover. None of the five is exported —
+// checked individually against the retail export directory with pefile; the
+// nearest preceding export to every one of them is
+// `?Serialize@PackageFile@IO@@UEAA_NAEAVStream@2@@Z` several hundred bytes
+// back, i.e. none of them has a name to register under and all five need
+// ADDRESS doors. `AEAA` means private, not unexported, so "unexported" was
+// MEASURED rather than read off a mangling
+// (reference_aeaa_is_private_not_unexported.md).
+//
+//   SYMBOL      (unexported) 0x1800b6e00  the SAVE job
+//   SYMBOL      (unexported) 0x1800b6aa0  the LOAD job
+//   SYMBOL      (unexported) 0x1800b69c0  the DELETE job
+//   SYMBOL      (unexported) 0x1800b65b0  the GET-SAVE-INFO job
+//   SYMBOL      (unexported) 0x1800b6290  the GET-SAVE-LIST job
+//   CONDITION   each door is live the moment `Run` is dispatched out of a
+//               PROMOTED/minted 0x180155860 with the matching command pending.
+//   CONSEQUENCE with the DLL present each resolves to the shipped body and
+//               behaviour is unchanged. At cutover an unported arm resolves
+//               NULL and the worker thread executes address 0 — so these five
+//               are a cutover obligation this file CREATES and does not pay.
+//
+// Each address is spelled as a LITERAL inside its own `ResolveAddr` call, not
+// routed through a shared helper, because `tools/runtime_census.py` and
+// `tools/addr_door_audit.py` both find doors by grepping for that literal and
+// a door reached through a variable is invisible to both
+// (reference_literal_grep_blind_to_variables.md — and GFXMESH found a door
+// hidden this way in `mesh.cpp:201` for 21 waves).
+//
+// > **[ADDRESSEE — the five Persistence job bodies]** the Wave 29 lane scoped
+// > to IO's remaining `internal` address rows, or the cutover lane that finds
+// > them in the `[RtRawResidue]` list, whichever comes first. They are the
+// > save/load/delete/info/list workers themselves and each is several hundred
+// > bytes; they are NOT slot work and were deliberately not attempted here.
+//
+// ---------------------------------------------------------------------------
+// NO ORACLE — and the refusal is structural
+// ---------------------------------------------------------------------------
+// `Run` is the thread entry of a worker that is blocked on an event for the
+// whole of an ordinary run. Calling it a second time "for comparison" would
+// execute the pending save/load/delete a SECOND time — writing a file twice or
+// deleting an already-deleted one. There is nothing to compare and nothing safe
+// to replay. A `RT_DIFF_SHADOW` would also be dishonest here: the body has NO
+// post-condition of its own (it stores nothing), so a self-check could only
+// assert something the body never wrote
+// (reference_oracle_must_not_compare_unwritten_bytes.md). **No site is added.**
+//
+// UNVERIFIED: this body has not been observed executing.
+//
+// NO NULL TEST ON THE RESOLVED ARM, on purpose. Retail tail-JMPs into each job
+// with no check, and an `if (f)` here would convert "this arm is unported at
+// cutover" from a loud fault at address 0 into a SILENTLY SKIPPED SAVE. The
+// guard would not restore the behaviour, it would hide its absence — CLAUDE.md,
+// "Don't 'fix' a faithful crash with a null check". (Note this differs from the
+// `MemFree` helper at the top of this file, which guards because a missing
+// allocator is a tooling failure with no behaviour to preserve.)
+// ============================================================================
+extern "C" void RtIo_PersistenceWorker_Run(void* worker) {
+    Persistence* p = reinterpret_cast<Persistence*>(
+        reinterpret_cast<char*>(worker) - 0x10);
+
+    using JobFn = void (*)(void*);
+
+    switch (p->command) {
+        case 0: {   // SAVE — see the encoding note above (INFERRED, absence-based)
+            static JobFn f = reinterpret_cast<JobFn>(
+                ResolveAddr(Module::Runtime, 0x1800b6e00));
+            f(worker);   // retail tail-JMPs: NO null test, deliberately
+            return;
+        }
+        case 1: {   // LOAD
+            static JobFn f = reinterpret_cast<JobFn>(
+                ResolveAddr(Module::Runtime, 0x1800b6aa0));
+            f(worker);   // retail tail-JMPs: NO null test, deliberately
+            return;
+        }
+        case 2: {   // DELETE
+            static JobFn f = reinterpret_cast<JobFn>(
+                ResolveAddr(Module::Runtime, 0x1800b69c0));
+            f(worker);   // retail tail-JMPs: NO null test, deliberately
+            return;
+        }
+        case 3: {   // GET SAVE INFO
+            static JobFn f = reinterpret_cast<JobFn>(
+                ResolveAddr(Module::Runtime, 0x1800b65b0));
+            f(worker);   // retail tail-JMPs: NO null test, deliberately
+            return;
+        }
+        case 4: {   // GET SAVE LIST
+            static JobFn f = reinterpret_cast<JobFn>(
+                ResolveAddr(Module::Runtime, 0x1800b6290));
+            f(worker);   // retail tail-JMPs: NO null test, deliberately
+            return;
+        }
+        default:
+            // retail's `repz ret` — every other command value is a no-op.
+            return;
+    }
+}
+
+// ============================================================================
 // Registration — ADDRESSES ONLY (no mangled name exists; see the banner).
 // ============================================================================
 int RtIoPersistenceWorkerRegister() {
@@ -585,5 +736,10 @@ int RtIoPersistenceWorkerRegister() {
     RegisterRuntimeAddr(0x1800b7460, (void*)&RtIo_PersistenceWorker_EnqueueLoad);
     RegisterRuntimeAddr(0x1800b75c0, (void*)&RtIo_PersistenceWorker_EnqueueSave);
     RegisterRuntimeAddr(0x1800b7740, (void*)&RtIo_PersistenceWorker_Dtor);
-    return 4;
+    // Wave 28 lane SLOTS: slot 0 of the worker vtable 0x180155860. Registering
+    // the ADDRESS is what turns the minted table's RT_MINT_UNNAMED slot 0 from
+    // an abort trap into this body -- the same door encoding.cpp uses for the
+    // five slots of the unexported 0x1801554a8.
+    RegisterRuntimeAddr(0x1800b7260, (void*)&RtIo_PersistenceWorker_Run);
+    return 5;
 }

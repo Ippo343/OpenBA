@@ -19,6 +19,11 @@ extern int RtAudioConfigurationRegister();  // audio.cpp
 // audio.cpp must stay free of it (PLAN.md §4.1 decision 1).
 extern int RtAudioDeviceRegister();         // audio_device.cpp
 extern int RtAudioStreamRegister();         // audio_stream_win.cpp (Wave 24)
+// Wave 28 lane SLOTS: the 7 slots of the UNEXPORTED XAudio2 voice-callback
+// vtable 0x180157c60, one record per channel inside Audio::Device. Own file and
+// own switch: address doors only (nothing here is exported) and it needs
+// <windows.h> for SetEvent, which audio.cpp must stay free of.
+extern int RtAudioVoiceCallbackRegister();  // audio_voice_callback_win.cpp
 
 void RtAudioPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_AUDIO")) {
@@ -33,6 +38,7 @@ void RtAudioPortInit() {
     // 0x1800a0d90). Own file + own switch -- both bodies are KERNEL32
     // synchronisation and audio.cpp must stay free of <windows.h>.
     n += RtAudioStreamRegister();
+    n += RtAudioVoiceCallbackRegister();
     // The denominator was a hardcoded 22 -- Wave 8's own scope -- and Wave 9
     // lane W adding Scene::FindFree3DEffect made "20/22" arithmetic that no
     // longer resolves against the three-held-back / one-phantom / one-data
