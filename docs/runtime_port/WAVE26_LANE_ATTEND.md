@@ -184,10 +184,54 @@ Graphics — `Light` and `SunLight` ATTENDED; `Geometry`, `AnimationEvent`,
 `MaterialInstance`, `Particle`, `ParticleInstance`, `ParticleSystemInstance`
 `never`.
 
-**UNMEASURED, not zero:** `??_7Thread@System@@6B@` is **not in the watch table**,
-so no run has ever produced an attendance figure for it (raised by lane PROMOIO;
+**UNMEASURED, not zero:** `??_7Thread@System@@6B@` was **not in the watch table**,
+so no run had ever produced an attendance figure for it (raised by lane PROMOIO;
 confirmed here by reading the table). It appears as `[RtUnresolved]` at cutover
-in arms B/C, which is a different fact.
+in arms B/C, which is a different fact. **Since closed by PROMOIO**, who added
+the row and measured it `ATTENDED init=0 post=1` — see §1.6.
+
+### 1.6 INDEPENDENT REPRODUCTION — different lane, different exe, same numbers
+
+Lane PROMOIO ran the same route on its own branch (exe md5
+`a4f5607664f4c61d3f2a3bba16af472b`, same env plus `BANISHED_RT_MINT_SHADOW=1`,
+exit 0, 0-byte crash log, MainLoop control `init=1 post=2` GREEN) and reports
+**every IO and Video row matching this lane's figures exactly**, including all
+four `never` rows and `?_typeInfo@PackageFile@IO@@`.
+
+**Two runs, two exes, two lanes, identical numbers.** That is worth more than
+either run alone: it rules out a per-build accident, and it is the kind of
+corroboration this project usually discovers it lacked. They also added
+`??_7Thread@System@@6B@` to the table and measured it **ATTENDED init=0 post=1** —
+its first attendance figure ever. The table becomes **68 subject rows** once that
+branch merges; a reader comparing row counts across waves should expect
+63 → 66 (DATA) → 68 (PROMOIO), not treat a change as an instrument fault.
+
+Note for the integrator: PROMOIO and this lane both edited
+`standalone/wave17_door_attend.cpp` — they added a row, this lane derived the
+banner count (§1, cosmetic defect). The two edits are in different places and
+should merge cleanly, but they are in one file.
+
+### 1.7 A PROPOSED "CHEAP CLOSE" THAT WOULD HAVE BROKEN THE MEASUREMENT
+
+PROMOIO suggested closing `?_typeInfo@PackageFile@IO@@` by adding one call to
+`RtIo_PackageFile_TypeName` from `standalone/tool_harness.cpp`, which already
+holds drivers of that shape — no new route needed. It is genuinely cheap and I
+did **not** run it, because **it answers a different question than the one the
+criterion asks.**
+
+Lane DATA's criterion 2 is *a real boot*, and what that criterion is actually
+buying is: **did a CONSUMER run on the ROUTE?** A harness call makes our own test
+code the consumer. The counter would read `post=1` and the row would look
+promoted-on-evidence, while the evidence would be *the measurement calling
+itself*. That is this project's standing family — a self-check read as an oracle,
+a control that validates the instrument rather than the subject — in its cheapest
+and most persuasive form, because the number it produces is indistinguishable
+from the real thing in the log.
+
+**What such a run WOULD legitimately establish**, and it is not nothing: that the
+row's door resolves — i.e. the name is not a phantom and `RT_DATA_SLOT` returns
+non-null for it. That is a **DOOR-WORKS** check, and if anyone runs it, it must be
+recorded under that name and **never** in the attendance column.
 
 ---
 
