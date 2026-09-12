@@ -9,16 +9,25 @@
 // are in Runtime-x64-profile.dll, the ToolKit build, which is the source of
 // NAMES only (PLAN.md §6 step 1). Both were read in Ghidra on 2026-09-06.
 //
-// HELD BACK, deliberately, with the reasoning in the wave doc:
+// HELD BACK by Wave 5, deliberately, with the reasoning in the wave doc:
 //   ?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z (0x18009e910)
-//     — it inlines an IO::Serializer construction, and Wave 4 lane A measured
+//     -- it inlines an IO::Serializer construction, and Wave 4 lane A measured
 //       that a Serializer ctor CONSUMES OR EMITS A 12-BYTE STREAM HEADER
 //       (runtime/types/io/Serializer.h). So it has no runnable oracle of any
-//       kind: a second construction desyncs the save. It is also the one
-//       function here whose failure mode is a silent save/load desync that
-//       surfaces on an innocent later record — the exact family this project
-//       has lost the most time to (reference_slot3_wrapper_must_resolve_first.md).
-//       Unported, every caller keeps the DLL's version, unchanged.
+//       kind: a second construction desyncs the save.
+//
+// *** THAT HOLDBACK IS DISCHARGED. WAVE 23 LANE ACHIEVE, 2026-09-11. ***
+// The blocker was real when written and stopped being true in Wave 9, when lane
+// S built runtime/src/io/save_trace.h: it runs each side against its OWN
+// INDEPENDENT SYNTHETIC SINK, so there is no shared stream to desync and each
+// side constructs its own codec. Lane P discharged the IDENTICAL blocker, in
+// the identical words, for Goal::Serialize and GoalInstance::Persist
+// (runtime/src/achievement/goal_serialize.cpp). Persist is now ported in
+// runtime/src/achievement/achievement_serialize.cpp, under a PREFIX oracle
+// (stopAfter = 1) because its element loop mutates the global Object::Factory.
+// The paragraph above is kept rather than deleted: it is the evidence for
+// PLAN rule "re-check a stated blocker before acting on it", and this one
+// survived fourteen waves because nobody re-read it.
 //   ?_singleton@AchievementManager@Achievement@@0PEAV12@EA and the two
 //   ?_typeInfo@… symbols are DATA exports; they cannot be registered before
 //   cutover (same finding as Wave 4 lane D's FileSystem::_singleton).
@@ -157,12 +166,20 @@ IsDerivedFromFn IsDerivedFrom() {
     return fn;
 }
 
-// ---- The two AchievementManager members this lane does not port ------------
+// ---- Two AchievementManager members WAVE 5 did not port --------------------
 // ?ReadAchievements@… (0x18009eb90) re-reads every "Ach<i>" key out of
 // IO::Persistence into _completed; ?SetAchievementMet@… (0x18009eca0) sets one
 // flag, writes it back through Persistence::Set and calls WriteSettings, which
-// touches the player's real HKCU registry. Both are outside the 19 exports
-// this lane was given; neither is reimplemented here.
+// touches the player's real HKCU registry. Both were outside the 19 exports
+// Wave 5 lane B was given.
+//
+// *** BOTH ARE NOW PORTED. WAVE 23 LANE ACHIEVE, 2026-09-11. ***
+// runtime/src/achievement/achievement_state.cpp reimplements them and registers
+// both by name, so the two ResolveExport doors immediately below now land on
+// OUR bodies rather than the DLL's. The doors are kept exactly as they are:
+// ResolveExport consults the port registry first, so nothing about this file
+// needs to change, and leaving them means a run with BANISHED_RT_ACHMGR=0 still
+// reaches the DLL for these two.
 using ReadAchievementsFn  = void (*)(void* self);
 using SetAchievementMetFn = bool (*)(void* self, int index);
 
