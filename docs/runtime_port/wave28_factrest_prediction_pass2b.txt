@@ -1,0 +1,35 @@
+PREDICTION, written BEFORE implementing or running pass 2b.
+(Lane FACTUI1's technique: commit the prediction, then measure; the MISS is where
+the value is.)
+
+WHAT PASS 2B IS
+  Pass 2 compares ours (poisoned buffer) against retail's ALLOCATING
+  CreateNewObject, whose result comes from the arena and is therefore NOT
+  poisoned. So pass 2 can only compare bytes OURS wrote, and is structurally
+  incapable of seeing a store retail makes that WE DROPPED. That is a strictly
+  narrower subject than pass 1, and I had been letting "2/2" sit beside "11/11"
+  as though they were the same kind of number.
+
+  Pass 2b calls the separately-exported default constructor
+     ??0AchievementInstance@Achievement@@QEAA@XZ   0x18009e3b0
+     ??0GoalInstance@Achievement@@QEAA@XZ          0x18009ef00
+  on a DIFFERENTLY-poisoned buffer, restoring the full-width "bytes either side
+  wrote" subject of pass 1.
+
+PREDICTIONS
+  P1  pass 2b normal            2/2 PASS
+  P2  pass 2b NOEXCL=1          0/2, failing at +0x08, 5 bytes each
+  P3  pass 2b --negative        0/2
+  P4  pass 2 (allocating) is UNCHANGED at 2/2 by any of this
+  P5  the byte counts compared by 2b will be LARGER than pass 2's (32 and 20),
+      because 2b also counts bytes only RETAIL wrote -- if that number is the
+      SAME, then our table already covers every byte retail writes and the
+      weakness was theoretical on this roster.
+
+RISK TO THE PREDICTION, stated up front
+  R1  the exported out-of-line ctor is a DIFFERENT compilation of the same
+      source from the copy retail INLINED into CreateNewObject. If they differ
+      at all (padding, store order, a dead store kept in one and not the other),
+      2b fails and the failure would be about the two RETAIL bodies, not about
+      our port. If 2b fails, disassemble 0x18009e3b0 and compare it with the
+      inlined copy BEFORE concluding anything about the port.

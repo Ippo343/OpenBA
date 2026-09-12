@@ -756,3 +756,270 @@ the premise against the SUBJECT rather than against another instrument.
 result `CRASHED`, so a filter string matching no class — `Material::` does not
 occur in `Graphics::Material` — reads as a crash. Scratchpad only; nothing
 committed depends on it.)*
+
+---
+
+## 12. THE PREMISE WAS NEVER WRONG — ITS SCOPE WAS. MEASURED BOTH WAYS.
+
+Lane FACTUI1 found the mirror image of §11.1 in its own harness and the pair is
+the finding: its `handles` flag was `sp.baseCtor != nullptr`, which fired on two
+classes (`CheckDescription`, `ComboDescription`) that derive from
+`??0ButtonDescription@UI@@` and never reach `Internal` at all — 16 bytes skipped
+for nothing. Mine never fired where it should have.
+
+> **Neither is a premise that is wrong. Both are a correct premise applied to the
+> wrong SET.** (FACTUI1's formulation, and it is better than "shared premise":
+> the scary version — two harnesses believing the same false thing — remains
+> untested, while the version that actually bit us twice is milder and much more
+> common.)
+
+### 12.1 The two scope errors are opposite in sign AND in SAFETY
+
+This is the part that generalises, and it was not obvious until both specimens
+were on the table:
+
+| scope error | effect | how it fails |
+|---|---|---|
+| **too wide** (FACTUI1: any base ctor) | skips bytes that were never in question | **SILENT** — a pass you will not investigate |
+| **too narrow** (this lane: direct call only) | compares bytes that legitimately differ | **LOUD** — a false alarm you will investigate |
+
+So for an exclusion predicate, **when the scope is uncertain, err NARROW.** The
+two directions are not symmetric: a too-narrow exclusion hands you a failing row
+and an hour's work; a too-wide one hands you a green screen and nothing.
+
+### 12.2 `NOEXCL=1` — arming the SCOPE, not the value (MEASURED)
+
+`--negative` arms a store value and `--derefbug` arms address resolution; neither
+touches the exclusion's scope. `NOEXCL=1` turns the exclusion off entirely. The
+prediction, written before running it: *exactly the Internal-rooted classes must
+fail, only inside `+0x08..+0x0f`, and nothing else may move.*
+
+```
+NOEXCL=1 ./oracle.exe
+  Achievement::AchievementInstance slot-0 FAIL 5/40 compared, first +0x8 (ours 00 theirs 01)
+  Achievement::GoalInstance        slot-0 FAIL 5/28 compared, first +0x8 (ours 02 theirs 03)
+  pass 2: 0/2
+  shape (b) REAL store comparison : 11/11      <- unmoved
+  shape (a) abstract null return  : 12/12      <- unmoved
+```
+
+Both halves confirmed at once, and this is the check neither lane had:
+
+* **Not too wide.** If the exclusion were skipping bytes nothing disputes —
+  FACTUI1's defect — those rows would still PASS with it off. They fail. It is
+  load-bearing exactly where it fires.
+* **Not too narrow.** No unflagged class fails. Nothing else needs it.
+
+**And the failure is 5 bytes**, independently reproducing §11.2's `--selfdiff`
+measurement (`+0x08` plus `+0x0c..+0x0f`) from the opposite direction —
+ours-versus-theirs rather than theirs-versus-theirs. Two unrelated screens, same
+five bytes.
+
+The scope test remains narrow BY CONSTRUCTION (a direct `Call` step naming
+`Internal@Object@@`), which on this roster is exactly right — the mint's declared
+base is `Object::Internal` for precisely `AchievementInstance` and `GoalInstance`
+— but it is right *by roster*, not by derivation: a future class reaching
+`Internal` through an intermediate constructor would be missed. That is the safe
+direction per §12.1, and pass 2 now prints a named diagnostic when a failure
+lands inside the handle window on a class it did not flag, so the false alarm
+arrives already diagnosed instead of looking like a bad port.
+
+### 12.3 Residual, discharged and re-aimed
+
+§10's caveat is **partially discharged**: the specific candidate FACTUI1 named is
+tested and sound in both harnesses, and the two defects it exposed were scope,
+not truth. **The scary version — both harnesses believing the same false thing
+about retail — remains untested and is not dischargeable from inside either
+harness.** **Addressee: the Wave 28 integrator**, as the second clause on §10's
+practice:
+
+> Run each other's instruments — that found eight defects. AND measure each
+> instrument's premises against the SUBJECT — that found two more, of a class the
+> first action provably cannot reach. Two different actions; both needed.
+
+### 12.4 One item this lane is NOT the right owner of
+
+FACTUI1 proposes that §11.2's finding — *a measured nondeterminism window is a
+LOWER BOUND on the true one; the disassembly is the authority for extents* —
+belongs in the memory files beside
+`reference_pdata_is_a_lower_bound_on_function_extent.md`, which it matches in
+shape while arriving from a completely different direction. **This lane agrees
+and has deliberately not written it there:** the memory directory is not a lane's
+to edit on a sibling lane's suggestion. **Addressee: the Wave 28 integrator**, to
+promote or decline. The `_factoryIndex` specimen is the whole argument — the
+window passes today and fails at index 256, for a reason nothing in the
+measurement could reveal.
+
+---
+
+## 13. TWO NUMBERS THAT LOOKED ALIKE AND WERE NOT — AND A PREDICTION THAT MISSED
+
+Lane FACTUI1 predicted its three NOEXCL results in a committed file, matched two,
+missed the third, and the miss found a dead predicate plus a claim it had never
+made explicitly: **"pass 3's subject is narrower than passes 1–2's. I had been
+letting 31/31 sit beside 26/26 as though they were the same kind of number."**
+
+That shape was in this doc too, so it was checked rather than agreed with.
+
+### 13.1 Pass 2's subject WAS narrower, and §11.1 did not say so
+
+Retail's `CreateNewObject` returns an **arena block, which is not poisoned**, so
+pass 2 can only compare bytes **ours** wrote. It is structurally incapable of
+seeing a store retail makes that **we dropped** — the one failure mode pass 1
+catches with `ourW != theirW`. §11.1 reported `pass 2: 2/2` next to
+`shape (b) 11/11` with nothing marking the difference.
+
+### 13.2 Pass 2b — fixing it rather than documenting it
+
+Both classes export their own default constructor
+(`??0AchievementInstance@Achievement@@QEAA@XZ` `0x18009e3b0`,
+`??0GoalInstance@Achievement@@QEAA@XZ` `0x18009ef00`), so the full-width,
+both-poisoned subject of pass 1 is recoverable. **The predictions were written to
+`docs/runtime_port/wave28_factrest_prediction_pass2b.txt` and committed before the
+code was written** (FACTUI1's technique).
+
+| # | prediction | measured | |
+|---|---|---|---|
+| P1 | pass 2b normal `2/2` | `2/2` | HIT |
+| P2 | `NOEXCL=1` → `0/2`, first `+0x08`, 5 bytes | `5/40` and `5/28`, first `+0x8` | HIT |
+| P3 | `--negative` → `0/2` | `0/2` | HIT |
+| P4 | pass 2 unchanged at `2/2` | unchanged | HIT |
+| P5 | 2b compares **more** bytes than pass 2 (>32, >20) | **32 and 20 — IDENTICAL** | **MISS** |
+
+### 13.3 The miss is the finding
+
+P5 assumed the full-width subject would pull in bytes only retail wrote. It pulled
+in none: **our step tables write exactly the set of bytes retail writes — not a
+byte more, not a byte fewer.** So pass 2's structural blindness to a dropped
+store was real in principle and **provably vacuous on this roster**, and that is
+now measured in both directions rather than assumed in either.
+
+Two things follow, and neither was available before the prediction missed:
+
+* The caveat I was about to write — *"pass 2 is weaker, treat 2/2 with
+  suspicion"* — would have been **true and misleading**. The correct statement is
+  narrower and stronger: *pass 2 is weaker in principle and provably not weaker
+  here.*
+* **A number being a lower-bound-only subject is not the same as that subject
+  being incomplete.** Distinguishing them costs one measurement and is the
+  difference between a caveat and a fact.
+
+### 13.4 A fourth independent sighting of the same five bytes
+
+Under `NOEXCL=1` pass 2b's compared count rises 32 → 40 (the excluded 8 join) and
+**5 of them differ**, first at `+0x08`. That is the fourth screen to land on the
+same window — `--selfdiff` (retail vs retail), pass 2 under `NOEXCL`, pass 2b
+under `NOEXCL`, and FACTUI1's 12 Internal-rooted rows — from three different
+comparison directions.
+
+FACTUI1 also reports `ComboElement` showing **4** rather than 5, because one byte
+of its handle id happened to coincide between two runs. That is §11.2's
+`_factoryIndex` argument arriving a third time and making it sharper than either
+lane put it: **the measured window does not merely underestimate in principle, it
+visibly shrinks and grows run to run with the values.** Anyone fitting a window to
+a measurement would get a different answer depending which class they looked at.
+
+### 13.5 Screen states, ALL MEASURED — including one I nearly asserted
+
+```
+            shape(b)   pass 2   pass 2b   shape(a)
+NORMAL       11/11      2/2      2/2       12/12
+--negative    0/11      0/2      0/2        0/12
+--derefbug    0/11      0/2      0/2       12/12
+NOEXCL=1     11/11      0/2      0/2       12/12
+```
+
+**A second prediction missed, and it was mine, in the draft of this very
+section.** I had written `--derefbug` as `2/2` on passes 2 and 2b and labelled it
+a KNOWN GAP — reasoning that those two classes' subject is dominated by the
+`??0Internal` call and the zeroed tail, so a vtable-resolution arming would not
+reach them. Then I ran it before committing the table, because a section about
+not letting asserted numbers sit beside measured ones is the worst possible place
+to assert a number:
+
+```
+--derefbug  pass 2   AchievementInstance FAIL 3/32, first +0x0
+                     GoalInstance        FAIL 3/20, first +0x0
+            pass 2b  AchievementInstance FAIL 4/32, first +0x0
+                     GoalInstance        FAIL 4/20, first +0x0
+```
+
+It fires on both. **There is no gap, and the gap I was about to document into the
+lane record did not exist.** `shape(a)` holding at `12/12` is the only row the
+arming leaves alone, and correctly — those classes stamp no vptr (§9.5).
+
+The habit that caught it is the cheapest one in this whole exchange: **run the
+row before you write the row.** Four of the five prediction slots in §13.2 were
+hits and felt like confirmation; this one was invented reasoning that sounded
+plausible and was simply false.
+
+---
+
+## 14. THE ONE JOINT RESULT, SCOPED — AND THE LANE CLOSES
+
+Lane FACTUI1 closed the exchange with a claim about both harnesses. It is the
+only place in nine rounds where the two genuinely **corroborate** rather than
+merely agree — different subjects, different mechanisms, same answer — so it is
+worth stating exactly, and exactly no wider.
+
+### 14.1 The claim, and its real scope
+
+> **Our step tables write exactly the set of bytes retail writes — not one more,
+> not one fewer.**
+
+Established twice, independently:
+
+* **FACTUI1's construction:** both buffers poisoned with DIFFERENT bytes, so a
+  store retail makes that we dropped reads poison-vs-value and one we make that
+  retail does not reads value-vs-poison. Set equality falls out of the subject
+  itself, for its 27 concrete classes.
+* **This lane's construction:** the same property for the 11 shape-(b) classes
+  (pass 1 poisons both sides identically in spirit), plus §13's pass 2b, which
+  reached it from the other direction — a prediction that the full-width subject
+  would pull in extra bytes, **refuted** by pulling in zero.
+
+**SCOPE, because a flattering summary is the easiest thing to accept.** On THIS
+roster the joint result covers **13 of 35 classes** at full-width byte-set
+equality:
+
+| classes | status |
+|---|---|
+| **11** shape (b) | full-width set equality, pass 1 |
+| **2** AchievementInstance, GoalInstance | full-width set equality, pass 2b |
+| 10 abstract in both slots | return-null only — a different claim, not this one |
+| 3 wrapper-only | **excluded**: both sides call the same ctor, so set equality is trivially true and says nothing about our transcription |
+| 9 video-dependent | UNVERIFIED — retail's own ctor faults in the harness |
+
+So: **40 concrete classes across the two lanes, of which 13 are this lane's.** The
+claim does NOT extend to the 9 unverified rows, and it must not be read as
+covering the 3 wrapper-only ones, where the two sides share the body being
+compared.
+
+### 14.2 The closing observation, which outranks every rule either lane wrote
+
+FACTUI1's:
+
+> Neither of us found anything by looking harder at our own output. Every single
+> one came from the other lane asking a question we would not have thought to ask
+> ourselves.
+
+**15 instrument defects. 0 in the ports. 0 found by their own author.** Across two
+lanes each competent enough to find the other's. Every rule this exchange
+produced — err narrow, arm the scope, run the row before you write the row,
+prefer an accumulated count — was *derived from a defect the other lane surfaced*,
+never from self-review. The rules are worth keeping; the mechanism that produced
+them is worth more, and it is not a rule but a pairing.
+
+### 14.3 Lane closed
+
+Closing here, and for FACTUI1's reason rather than a schedule: **the ports have
+been stable at their final numbers since round four**, and the last three findings
+were about the *epistemic status* of results neither lane has changed since then.
+That is the correct point to stop — an exchange that keeps producing findings
+about its own findings has stopped producing findings about the subject.
+
+Final state of this lane is §0 and §6, unchanged by any of the instrument work:
+35 classes, 70 slots, 68 distinct functions, registered default-ON; live mint
+**2 → 74 PORTED** with a two-run control; 13 classes at full-width byte-set
+equality, 12 abstract rows return-null verified, 3 wrapper-only, **9 UNVERIFIED**;
+7 constructors and the manifest refresh as residuals, each with an addressee.

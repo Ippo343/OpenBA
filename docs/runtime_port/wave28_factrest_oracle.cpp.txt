@@ -42,6 +42,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <string>
 
 // ---- THIS LANE'S COMMITTED CONTRACT, copied verbatim from ------------------
 // runtime/src/object/rt_factories.h. A field-order mismatch here would be a
@@ -110,6 +111,16 @@ static const Group kGroups[] = {
 
 static HMODULE g_dll;
 static bool g_derefBug = false;   // --derefbug: arm the vptr screen
+static bool g_noExcl = false;     // NOEXCL=1: arm the EXCLUSION SCOPE itself
+// An exclusion's scope test can be wrong in two directions and they are NOT
+// equally safe. TOO WIDE (lane FACTUI1's `sp.baseCtor != nullptr`, which fired
+// on two classes that have no handle) skips bytes for nothing and fails SILENT.
+// TOO NARROW (this file's direct-call test, which would miss a class reaching
+// Internal through an intermediate ctor) compares bytes that legitimately
+// differ and fails LOUD. NOEXCL=1 turns the exclusion off entirely: exactly the
+// Internal-rooted classes must then fail, and only inside +0x08..+0x0f. Anything
+// else failing means the scope is too narrow; nothing failing means it is
+// unnecessary.
 static void* Sym(const char* n) { return (void*)GetProcAddress(g_dll, n); }
 typedef void* (*CtorFn)(void*);
 
@@ -171,6 +182,7 @@ int main(int argc, char** argv) {
     setvbuf(stdout, nullptr, _IONBF, 0);
     const bool neg = (argc > 1 && strcmp(argv[1], "--negative") == 0);
     for (int i = 1; i < argc; ++i) if (!strcmp(argv[i], "--derefbug")) g_derefBug = true;
+    if (getenv("NOEXCL")) g_noExcl = true;
     const bool runRisky = getenv("RISKY") != nullptr;
     g_dll = LoadLibraryA("C:\\GOG Games\\Banished\\Runtime-x64.dll");
     if (!g_dll) { printf("LoadLibrary failed %lu\n", GetLastError()); return 2; }
@@ -287,7 +299,7 @@ int main(int argc, char** argv) {
 
             int bad = 0, firstBad = -1;
             for (uint32_t o = 0; o < c.allocSize; ++o) {
-                if (handle && o >= 0x08 && o < 0x10) continue;   // Internal handle id
+                if (handle && !g_noExcl && o >= 0x08 && o < 0x10) continue;  // Internal handle id
                 bool ourW = (a[o] != 0xA5), theirW = (b[o] != 0x5A);
                 if (!ourW && !theirW) continue;
                 if (ourW != theirW || a[o] != b[o]) { ++bad; if (firstBad < 0) firstBad = (int)o; }
@@ -368,7 +380,7 @@ int main(int argc, char** argv) {
             const bool handle2 = ReachesInternal(c.newSteps);
             int bad = 0, firstBad = -1, cmped = 0;
             for (uint32_t o = 0; o < c.allocSize; ++o) {
-                if (handle2 && o >= 0x08 && o < 0x10) continue;   // see --selfdiff
+                if (handle2 && !g_noExcl && o >= 0x08 && o < 0x10) continue;  // see --selfdiff
                 if (a[o] == 0xA5) continue;            // ours did not write it
                 ++cmped;
                 if (a[o] != b2[o]) { ++bad; if (firstBad < 0) firstBad = (int)o; }
@@ -377,11 +389,100 @@ int main(int argc, char** argv) {
             if (!bad) { ++p2pass; printf("%-28s slot-0 OK   (0x%x bytes, %d compared%s)\n",
                                          c.typeName, c.allocSize, cmped,
                                          handle2 ? ", +0x08..0f excluded" : ""); }
-            else printf("%-28s slot-0 FAIL %d/%d compared, first +0x%x (ours %02x theirs %02x)\n",
-                        c.typeName, bad, cmped, firstBad, a[firstBad], b2[firstBad]);
+            else {
+                printf("%-28s slot-0 FAIL %d/%d compared, first +0x%x (ours %02x theirs %02x)\n",
+                       c.typeName, bad, cmped, firstBad, a[firstBad], b2[firstBad]);
+                if (!handle2 && !g_noExcl && firstBad >= 0x08 && firstBad < 0x10)
+                    printf("%-28s    ^ failure is INSIDE +0x08..+0x0f on a class this "
+                           "oracle did NOT flag as Internal-rooted. That is the signature "
+                           "of a SCOPE test that is too narrow, not of a bad port.\n",
+                           c.typeName);
+            }
         }
     }
     printf("  pass 2: %d/%d\n", p2pass, p2chk);
+
+    // ======================================================================
+    // PASS 2B -- THE SAME TWO CLASSES AT FULL WIDTH.
+    //
+    // Pass 2's subject is NARROWER than pass 1's and that was not stated until
+    // lane FACTUI1 caught the same shape in its own harness ("31/31 sitting
+    // beside 26/26 as though they were the same kind of number"). Retail's
+    // CreateNewObject returns an ARENA block, which is not poisoned, so pass 2
+    // can only compare bytes OURS wrote -- it is structurally incapable of
+    // seeing a store retail makes that we DROPPED.
+    //
+    // Pass 2b restores pass 1's subject by calling the separately-exported
+    // default constructor on a poisoned buffer. Note what changes with it: the
+    // comparison is now against a DIFFERENT COMPILATION of the same constructor
+    // (out-of-line) from the one retail INLINED into CreateNewObject and which
+    // our table transcribes. A failure here would be a statement about those two
+    // retail bodies first and about our port second.
+    printf("\n---- pass 2b: the same bodies at FULL WIDTH (exported ctor) ----\n");
+    int p2bchk = 0, p2bpass = 0;
+    for (const Group& g : kGroups) {
+        for (int i = 0; i < g.n; ++i) {
+            const RtFactoryReg& r = g.regs[i];
+            const RtFactoryClass& c = *r.cls;
+            const char* only4 = getenv("ONLY");
+            if (only4 && !strstr(c.typeName, only4)) continue;
+            if (c.inPlaceSteps || !c.newSteps) continue;
+            // the class's own out-of-line default ctor, if it exports one
+            const RtCtorStep* st = c.newSteps;
+            const char* ctorName = nullptr;
+            for (int k = 0; st[k].kind != RtFactOp::End; ++k)
+                if (st[k].kind == RtFactOp::Call) ctorName = st[k].name;   // base ctor
+            char own[256];
+            const char* colons = strstr(c.typeName, "::");
+            snprintf(own, sizeof own, "??0%s@%s@@QEAA@XZ", colons + 2,
+                     std::string(c.typeName, colons - c.typeName).c_str());
+            CtorFn ours2 = (CtorFn)Sym(own);
+            if (!ours2) { printf("%-28s SKIP (no exported default ctor %s)\n",
+                                 c.typeName, own); continue; }
+            (void)ctorName;
+
+            static unsigned char a[0x400], b[0x400];
+            memset(a, 0xA5, sizeof(a));
+            memset(b, 0x5A, sizeof(b));
+            const RtCtorStep* st2 = c.newSteps;
+            static RtCtorStep tmp3[512];
+            if (neg) {
+                int n = StepCount(st2);
+                memcpy(tmp3, st2, (n + 1) * sizeof(RtCtorStep));
+                bool armed = false;
+                for (int k = n - 1; k >= 0 && !armed; --k)
+                    if (tmp3[k].kind == RtFactOp::Imm) { tmp3[k].imm ^= 1; armed = true; }
+                if (!armed)
+                    for (int k = n - 1; k >= 0 && !armed; --k)
+                        if (tmp3[k].kind == RtFactOp::Vptr) {
+                            tmp3[k].kind = RtFactOp::Imm; tmp3[k].imm = 0; armed = true;
+                        }
+                st2 = tmp3;
+            }
+            if (!OursInPlace(st2, a, c.typeName)) continue;
+            ours2(b);
+
+            const bool h = ReachesInternal(c.newSteps);
+            int bad = 0, firstBad = -1, cmped = 0;
+            for (uint32_t o = 0; o < c.allocSize; ++o) {
+                if (h && !g_noExcl && o >= 0x08 && o < 0x10) continue;
+                bool ourW = (a[o] != 0xA5), theirW = (b[o] != 0x5A);
+                if (!ourW && !theirW) continue;
+                ++cmped;
+                if (ourW != theirW || a[o] != b[o]) { ++bad; if (firstBad < 0) firstBad = (int)o; }
+            }
+            ++p2bchk;
+            if (!bad) { ++p2bpass;
+                printf("%-28s ctor OK   (0x%x bytes, %d compared full-width)\n",
+                       c.typeName, c.allocSize, cmped); }
+            else printf("%-28s ctor FAIL %d/%d compared, first +0x%x (ours %02x theirs %02x)"
+                        "  -- compare 0x%llx with the INLINED copy before blaming the port\n",
+                        c.typeName, bad, cmped, firstBad, a[firstBad], b[firstBad],
+                        (unsigned long long)c.newVa);
+        }
+    }
+    printf("  pass 2b: %d/%d\n", p2bpass, p2bchk);
+
 
     // ======================================================================
     // --selfdiff -- IS THE EXCLUSION WINDOW THE RIGHT ONE?
