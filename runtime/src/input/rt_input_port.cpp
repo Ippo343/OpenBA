@@ -44,6 +44,10 @@ extern int RtCollectionSetAvlE24Register();       // collection/set_avl_e24.cpp
 // (0x1800E1E10). The fourth helper, PlatformUpdate, was already lane IOA's.
 // This is WAVE9.md row 16, the row two earlier lanes sized and declined.
 extern int RtInputDeviceUpdateRegister();         // input_device_update.cpp
+// Wave 24 lane SMALLBODY: Input::Device::PlatformShutdown -- the Win32/
+// DirectInput teardown half. Its own .cpp for the same <windows.h> seam
+// input_win.cpp sits behind, and its own kill switch.
+extern int RtInputPlatformShutdownRegister();     // input_platform_shutdown_win.cpp
 extern "C" void RtInputDeviceUpdateProbeArm(bool on);
 extern "C" void RtCollectionSetAvlE24ProbeArm(bool on);
 
@@ -61,6 +65,10 @@ void RtInputPortInit() {
     n += avl;
     const int upd = RtInputDeviceUpdateRegister();
     n += upd;
+    // Wave 24 lane SMALLBODY: Input::Device::PlatformShutdown (0x1800e1b50).
+    // Own switch: it is on the process SHUTDOWN path and should be
+    // bisectable without moving Device::Update and the KeyMap bodies.
+    n += RtInputPlatformShutdownRegister();  // owns BANISHED_RT_INPUTSHUTDOWN
 
     const char* p = std::getenv("BANISHED_RT_SETAVL24_PROBE");
     RtCollectionSetAvlE24ProbeArm(p && *p && std::strcmp(p, "0") != 0);
