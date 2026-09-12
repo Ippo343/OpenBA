@@ -64,7 +64,8 @@ struct DelDtorSpec {
 // stays true of it; the TABLE is the authority and this constant tracks it,
 // and the static_assert next to the table is what forces an appender to
 // notice (it caught CSTREAM's addition, at 41 vs 39).
-constexpr int kSpecCount = 44;   // 44th: IO::PackageFile (Wave 25 lane VTIO)
+constexpr int kSpecCount = 46;   // 45th/46th: Graphics::Light, Graphics::SunLight (Wave 27 lane GFXPART)
+                                 // 44th: IO::PackageFile (Wave 25 lane VTIO)
 
 // *** A Site MUST HAVE STATIC STORAGE DURATION. *** RtDiffRegister keeps the
 // POINTER and rt_diff.cpp re-reads it at summary time, so a stack Site dangles

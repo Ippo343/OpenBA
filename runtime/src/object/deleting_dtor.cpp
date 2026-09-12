@@ -550,6 +550,79 @@ static const DelDtorSpec kSpecs[] = {
     //
     // THIS DOES NOT PROMOTE THE ROW, and the table is still 6/9.
     RT_DELDTOR(0x1800259d0, 0x1800b4540, 0x0f0, "IO::PackageFile"),
+    // ---- WAVE 27 lane GFXPART -------------------------------------------------
+    // Slot 0 of `??_7Light@Graphics@@6B@` (0x180158d30) and slot 0 of
+    // `??_7SunLight@Graphics@@6B@` (0x180158e10) -- the ONE unported slot of the
+    // Light table (taking it 5/6 -> 6/6 COMPLETE) and the first of SunLight's six.
+    //
+    // Both constants disassembled from RETAIL Runtime-x64.dll for this lane:
+    //     0x180058dd0:  LEA R9,[0x180058d20]  ~Light     MOV EDX,0xc0   sizeof(Light)
+    //     0x180064620:  LEA R9,[0x180108160]  ~SunLight  MOV EDX,0x108  sizeof(SunLight)
+    // Both dtor VAs resolve in the export directory BY VA (not by name pattern) to
+    // `??1Light@Graphics@@UEAA@XZ` / `??1SunLight@Graphics@@UEAA@XZ` -- UEAA, the
+    // VIRTUAL spelling; QEAA would resolve NULL silently
+    // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). Both deleting-dtor
+    // addresses themselves are `<UNNAMED>` in that same export table, checked
+    // rather than inherited (`AEAA` means PRIVATE, not unexported --
+    // reference_aeaa_is_private_not_unexported.md).
+    //
+    // ONE DEPARTURE FROM THE FAMILY, IN THE Light ROW, AND IT IS BENIGN. This
+    // family's K1 shape has the scalar branch CALL the same address the array
+    // branch puts in R9. 0x180058dd0's scalar branch instead calls 0x1800a41c0
+    // (`??1Geometry@Graphics@@UEAA@XZ`) directly. That is not a second shape:
+    // ~Light (0x180058d20) disassembles to a bare frame set-up and
+    // `JMP 0x1800a41c0` -- Light adds no members over Geometry, so MSVC devirtualised
+    // the tail call in one branch and not the other. Calling ~Light in both
+    // branches, as DeletingDtorCore does, lands on the identical code. The
+    // sizes agree with that reading: 0xc0 here is exactly the Geometry row's 0xc0.
+    // SunLight's row has no such departure -- its scalar branch calls 0x180108160,
+    // the address its own array branch names.
+    //
+    // SunLight's scalar-branch `operator delete` is 0x1800643b0, an ELEVENTH
+    // per-TU copy not in this file's banner list of ten. Disassembled for this
+    // lane: `if (p) { Enter(cs); Free(_singleton, p); Leave(cs); }` -- the same
+    // body as the other ten and as ?MemFree@MemoryAllocator@System@@SAXPEAX@Z.
+    // Its ARRAY branch uses 0x180006a10, already in the banner's list. Nothing
+    // about the port changes; the banner's "ten" is an incomplete enumeration,
+    // as the UI::Dialog row above already noted for an exported twelfth.
+    //
+    // DECLARED SURFACE GROWTH: neither `??1Light@Graphics@@UEAA@XZ` nor
+    // `??1SunLight@Graphics@@UEAA@XZ` is ported, so these rows make 0x180058d20
+    // and 0x180108160 newly reachable through our thunks -- the same accepted
+    // growth as the UI::ToolTipDialog, IO::CompressedFileStream, IO::ReaderWriter
+    // and IO::PackageFile rows above
+    // (reference_porting_can_grow_the_cutover_surface.md). As the PackageFile row
+    // records, that growth is INVISIBLE to tools/runtime_census.py, because
+    // DeletingDtorCore reaches ~Class through a table field rather than a literal
+    // at a resolve call site. Recorded here rather than left to be rediscovered.
+    //
+    // NOT added to kProbeSubjects. ~Geometry (which both rows reach, Light
+    // directly and SunLight through ~SunLight's chain) destroys the Geometry
+    // member arrays; running it over a fabricated 0xc0/0x108-byte subject would
+    // free garbage pointers. A probe subject must be safe to run.
+    //
+    // APPENDED rather than inserted in address order (0x180058dd0 would sort
+    // among the twelve Video::*Data rows, and 0x180064620 just after them) for
+    // the reason every row above is appended: kProbeSubjects is a list of TABLE
+    // INDICES and a mid-table insert silently re-points those twelve subjects at
+    // the wrong rows.
+    //
+    // THIS COMPLETES ??_7Light@Graphics@@6B@ STATICALLY. It does not promote it;
+    // see WAVE27_LANE_GFXPART.md section 3 for the stamper question.
+    //
+    // EXPECTED RED, READ THIS BEFORE "FIXING" THE ROW: tools/rt_deleting_dtor_verify.py
+    // prints for the Light row (and only the Light row)
+    //     BAD 0x180058dd0 ... scalar branch neither calls 0x180058d20 nor restamps a vtable
+    // and ends `problems: 1`. That verdict is CORRECT ABOUT THE BYTES and WRONG
+    // ABOUT THE PORT. The verifier knows two shapes, K1 (scalar branch CALLs the
+    // R9 dtor) and K2/K3 (scalar branch INLINEs it, detected by the vtable
+    // restamp). Light is a third: the scalar branch calls ~Geometry directly
+    // because ~Light is nothing but `JMP ~Geometry` and there is no restamp to
+    // pattern-match. Per Wave 27's no-tooling rule the verifier was NOT extended;
+    // the defect is filed in WAVE27_LANE_GFXPART.md under INSTRUMENT DEFECT
+    // OBSERVED, NOT FIXED, with this file:line. ADDRESSEE for the fix: Wave 28.
+    RT_DELDTOR(0x180058dd0, 0x180058d20, 0x0c0, "Graphics::Light"),
+    RT_DELDTOR(0x180064620, 0x180108160, 0x108, "Graphics::SunLight"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -854,6 +927,14 @@ void* RtDelDtor_ReaderWriter(void* self, unsigned flags) {
 void* RtDelDtor_PackageFile(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 43);
 }
+// Graphics::Light          ~Light = 0x180058d20  (NOT ported)  [Wave 27 GFXPART]
+void* RtDelDtor_Light(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 44);
+}
+// Graphics::SunLight       ~SunLight = 0x180108160  (NOT ported)  [Wave 27 GFXPART]
+void* RtDelDtor_SunLight(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 45);
+}
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
@@ -941,6 +1022,8 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18002ba90, (void*)&RtDelDtor_TextFileStream);        // Wave 21 ENC
     RegisterRuntimeAddr(0x180023bd0, (void*)&RtDelDtor_ReaderWriter);          // Wave 21 ENC item 12
     RegisterRuntimeAddr(0x1800259d0, (void*)&RtDelDtor_PackageFile);           // Wave 25 VTIO
+    RegisterRuntimeAddr(0x180058dd0, (void*)&RtDelDtor_Light);                 // Wave 27 GFXPART
+    RegisterRuntimeAddr(0x180064620, (void*)&RtDelDtor_SunLight);              // Wave 27 GFXPART
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --

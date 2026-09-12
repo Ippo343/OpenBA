@@ -70,13 +70,48 @@ struct Particle {
     // C++'s natural alignment padding before _f24 happens to cover it, but
     // that is coincidence, not the reason -- retail's own asm skips it.
     int32_t  _f24;     // +0x24  ctor stores 1
+                       //        WAVE 27 LANE GFXPART, MEASURED: the POOL RECORD
+                       //        COUNT. ?Serialize@Particle@Graphics@@ (0x180103f00)
+                       //        passes it to Array<void*>::SetSize over +0x38 and
+                       //        then builds exactly that many records;
+                       //        ?SetParticle@ParticleInstance@ (0x180104a00) picks
+                       //        a record with `rng % this->_f24`.
     int32_t  _f28;     // +0x28  ctor stores 0xf (15)
+                       //        WAVE 27 LANE GFXPART, MEASURED: the PER-RECORD
+                       //        SUB-ARRAY SIZE. The record ctor (0x180103bf0)
+                       //        reads `particle[+0x28]` and hands it to a second
+                       //        SetSize over the record's own +0x18 array.
     // +0x2c..+0x2f: UNINITIALISED by the ctor (measured gap, see above);
     // C++'s natural alignment padding before _f30 happens to cover it too,
     // same caveat as +0x21..+0x23.
-    uint64_t _f30;     // +0x30  UNVERIFIED, zeroed by the ctor
-    uint64_t _f38;     // +0x38  UNVERIFIED, zeroed by the ctor
-    uint64_t _f40;     // +0x40  UNVERIFIED, zeroed by the ctor
+    // *** THE THREE "UNVERIFIED" QWORDS BELOW WERE MEASURED BY WAVE 27 LANE
+    // GFXPART. *** The names are LEFT ALONE on purpose: animation.cpp's ctor
+    // oracles compare byte RANGES of this struct, and renaming is free while
+    // re-shaping is not. Read the comments, not the identifiers.
+    uint64_t _f30;     // +0x30  ExternalPtr<Graphics::MaterialInstance>.
+                       //        TWO INDEPENDENT WITNESSES, which is why this is
+                       //        MEASURED and not inferred:
+                       //        (a) ?Serialize@Particle@Graphics@@ hands `&+0x30`
+                       //            to the Object::ExternalBasePtr<T>::Serialize
+                       //            instantiation at 0x180014520 -- the same body
+                       //            shape goal_serialize.cpp already reaches;
+                       //        (b) ?AddDrawItems@ParticleInstance@Graphics@@
+                       //            (0x180104700) loads `*(void**)(particle+0x30)`
+                       //            and passes it as Renderer::AddDrawItem's
+                       //            `const MaterialInstance*` argument.
+                       //        An ExternalPtr is one pointer wide and holds the
+                       //        pointee at +0x00, which is why (b) is a plain load.
+    uint64_t _f38;     // +0x38  Collection::Array<void*>::_data -- the pool-record
+                       //        pointer array. Serialize calls SetSize (0x180062110)
+                       //        on `&+0x38` and stores through `*(void**)(this+0x38)`;
+                       //        the PROFILE build's ~Particle (0x18011cdf0) walks
+                       //        `*(void**)(this+0x38) + i*8` and MemFrees each
+                       //        element's own +0x18 buffer, then the block.
+    uint64_t _f40;     // +0x40  that Array's _size (int32 @ +0x40) and _capacity
+                       //        (int32 @ +0x44) as one qword -- SetSize writes
+                       //        arr[+0x8] and arr[+0xc] with arr = this+0x38, and
+                       //        the profile ~Particle's loop bound is
+                       //        `*(int*)(this+0x40)`.
 };
 static_assert(sizeof(Particle) == 0x48, "Graphics::Particle base must be 0x48 bytes");
 static_assert(offsetof(Particle, _active) == 0x20, "Particle::_active @ +0x20");
@@ -98,9 +133,33 @@ static_assert(offsetof(Particle, _f40) == 0x40, "Particle::_f40 @ +0x40");
 // Pinned by ParticleInstance::Update (retail 0x180104180, decompiled): reads
 // and writes `*(int*)(record + 0x2c)`.
 // ============================================================================
+// *** SIZE CORRECTION, WAVE 27 LANE GFXPART, MEASURED. *** This record is
+// 0x40 BYTES, not 0x30. Both of retail's allocation sites ask for exactly 0x40
+// (the inlined `Enter/Allocate(0x40,8)/Leave` in ?Serialize@Particle@Graphics@@
+// at 0x180103fed, and the per-TU `operator new(0x40)` at 0x180061a80 that
+// ?SetParticle@ParticleInstance@ calls), and its constructor (0x180103bf0,
+// UNNAMED in the export directory) writes through +0x38. The constructor's full
+// store list, disassembled:
+//     +0x00..+0x0c = 1e8f  (Box::min seeded to +infinity-ish)
+//     +0x0c..+0x18 = -1e8f (Box::max seeded to -infinity-ish)
+//     +0x18 = 0            the live-particle Array's _data
+//     +0x20 = 0            that Array's _size (+0x24 its capacity)
+//     +0x28 = 0            the LIVE PARTICLE COUNT -- read by both Draw bodies
+//                          and by ?AddDrawItems@, which returns early on zero
+//     +0x2c = -1           the per-frame tag (CONFIRMS the field below)
+//     +0x30 = 0, +0x38 = 0
+//   then SetSize(this+0x18, particle[+0x28]) through a second unnamed
+//   instantiation at 0x180061bb0.
+// The `frameTag` reading below is CONFIRMED by that -1 seed and by
+// ?Update@ParticleSystemInstance@ comparing it against
+// ?_frameIndex@ParticleInstance@Graphics@@ (0x1801fe77c).
+// The struct is LEFT AT ITS OLD SHAPE deliberately -- widening it would change
+// nothing about the bytes and would move the row's ownership away from the lane
+// whose oracles compare it; wave27_lane_gfxpart.cpp uses named offset constants
+// (kPool_*) for the four fields it reads.
 struct ParticleBoundsRecord {
-    uint8_t opaque[0x2c];   // Box-shaped prefix (0x18) + 0x14 UNKNOWN bytes
-    int32_t frameTag;       // +0x2c
+    uint8_t opaque[0x2c];   // Box-shaped prefix (0x18) + array/count fields, see above
+    int32_t frameTag;       // +0x2c   ctor seeds -1
 };
 static_assert(offsetof(ParticleBoundsRecord, frameTag) == 0x2c, "ParticleBoundsRecord::frameTag @ +0x2c");
 
