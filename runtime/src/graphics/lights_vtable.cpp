@@ -1,0 +1,998 @@
+// ============================================================================
+// runtime/src/graphics/lights_vtable.cpp
+// ??_7AmbientLight@Graphics@@6B@ (0x180158cd0), ??_7SpotLight@ (0x180158db0)
+// and the two remaining ??_7SunLight@ slots.  Vtable batch 6.
+// ============================================================================
+//
+//   AmbientLight  slot 1 Update 0x1800fa7a0   slot 2 Draw          0x1800fa790
+//                 slot 3 AddDrawItems 0x1800fa890
+//                 slot 9 DrawShadowMap 0x1800fa880
+//                 slot10 Draw          0x1800fa7b0
+//                 ??0AmbientLight 0x1800fa940, ??1AmbientLight 0x180058f30
+//   SpotLight     slot 1 Update 0x180105950   slot 2 Draw          0x180105940
+//                 slot 3 AddDrawItems 0x180105e30
+//                 slot 9 DrawShadowMap 0x180105d00
+//                 slot10 Draw          0x180105960
+//                 ??0SpotLight 0x180106690, ??1SpotLight 0x180106270
+//   SunLight      slot 9 DrawShadowMap 0x180106bc0
+//                 slot10 Draw          0x1801067b0
+//                 (ctor/dtor/Set already ported in sunlight.cpp)
+//
+//   slot 0 of AmbientLight and SpotLight are ROWS in
+//   runtime/src/object/deleting_dtor.cpp, not bodies here.
+//
+// ---------------------------------------------------------------------------
+// FOUR THINGS THAT WOULD BE WRONG IF READ FROM THE DECOMPILER
+// ---------------------------------------------------------------------------
+// 1. `Renderer::DrawItemList` TAKES FIVE VALUES (this + four params), so its
+//    last int travels on the STACK at [RSP+0x20]. Three of the five bodies
+//    below reach it by a TAIL JMP and pass that int by WRITING THEIR OWN arg5
+//    HOME SLOT first (`MOV [RSP+0xa0],EAX`), and the two DrawShadowMaps pass
+//    their own arg5 THROUGH UNTOUCHED — the slot is already correct, so retail
+//    writes nothing. Both idioms are invisible in C output and both are spelled
+//    out as explicit arguments below.
+// 2. `??1AmbientLight@Graphics@@UEAA@XZ` (0x180058f30) IS A FIVE-INSTRUCTION
+//    THUNK that tail-jumps `??1Geometry@Graphics@@UEAA@XZ` (0x1800a41c0): the
+//    linker folded the two, and 0x180059080's SCALAR arm calls ~Geometry
+//    DIRECTLY while its VECTOR arm names the thunk. AmbientLight therefore has
+//    no destructor logic of its own, and the body below is the thunk.
+// 3. THE SHADOW-BIAS MATRICES ARE BUILT FROM IMMEDIATES, four `MOVAPS` rows at
+//    a time out of overlapping 8- and 4-byte stores. SunLight has TWO of them,
+//    chosen by a virtual query on `Video::Device::_singleton->[0x100]`;
+//    SpotLight has only the first, unconditionally. Getting the sign of the
+//    [1][1] term wrong flips every shadow vertically.
+// 4. `Video::ImageBuffer::Width()` / `Height()` ARE INLINED at six sites, as a
+//    three-way branch on the image's flags word that reads the Video::Device
+//    singleton. `ImageDim` below is that inlining, spelled once.
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include <cstring>
+
+#include "../../funcs/rt_port.h"
+
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
+namespace {
+
+// ---------------------------------------------------------------------------
+// Layout constants, all read from the bodies that use them.
+// ---------------------------------------------------------------------------
+// Graphics::Light (the shared base, 0xc0 and up) —
+//   +0x30   int    the "kind" word both constructors set to 0x8000
+//   +0x84   Math::Transform (0x1c), SpotLight's light-to-world
+//   +0xc0   Volume::Frustum, SpotLight's projection; AmbientLight's Vector4
+//
+// Graphics::AmbientLight — 0xd8
+//   +0xc0   Vector4  the ambient colour       (ctor: two zeroed qwords)
+//   +0xd0   float    10.0f (0x41200000)
+//
+// Graphics::SpotLight — 0x168
+//   +0xc0 .. +0x118  twelve zeroed qwords (the Frustum and what follows)
+//   +0x120  bool  = 1
+//   +0x128  float = 0.1f    (0x3dcccccd)
+//   +0x12c  float = 10.0f   (0x41200000)
+//   +0x130  float \  the two scalars Context::SetLight is handed
+//   +0x134  float /
+//   +0x138  Vector4  the light colour
+//   +0x148  Video::ImageBuffer*   the shadow map      (owned; deleting dtor)
+//   +0x150  Video::ImageBuffer*   the shadow depth    (owned; deleting dtor)
+//   +0x158  Video::RenderBuffer*  the shadow target   (owned; long-form dtor)
+//   +0x160  void*                 bound at Draw time into Context+0x50
+//
+// Graphics::SunLight — the three the two slots below touch:
+//   +0xc0 / +0xcc / +0xdc   the three vectors SetLight is handed
+//   +0xf8   Video::ImageBuffer*   the cascade shadow map
+//   +0x100  Video::RenderBuffer*  the cascade target
+//
+// Video::Context — the state block the Draw arms poke:
+//   +0x10   dirty mask       +0x18 / +0x1c  sub-masks
+//   +0x28   render target    +0x50 / +0x58  the two bound images
+//   +0x1d0  viewport (x, y, w, h)    +0x1e0  scissor (x, y, w, h)
+//   +0x1e78 a 4x4 Matrix (the shadow/texture matrix)
+//   +0x2160 the render-state object whose vtable slot 4 the shadow pass calls
+// ---------------------------------------------------------------------------
+constexpr uint32_t kCtxDirty       = 0x10;
+constexpr uint32_t kCtxDirty18     = 0x18;
+constexpr uint32_t kCtxTarget      = 0x28;
+constexpr uint32_t kCtxImage50     = 0x50;
+constexpr uint32_t kCtxImage58     = 0x58;
+constexpr uint32_t kCtxViewport    = 0x1d0;
+constexpr uint32_t kCtxScissor     = 0x1e0;
+constexpr uint32_t kCtxShadowMtx   = 0x1e78;
+constexpr uint32_t kCtxRenderState = 0x2160;
+
+constexpr uint32_t kDrawGroupStride = 0x1f0;   // IMUL RDI,RDI,0x1f0
+
+// The float immediates, as BIT PATTERNS. Read out of the image with
+// read_memory, not converted from decimal:
+//   0x18016169c = 0x3f800000 =  1.0f
+//   0x1801616d8 = 0x40000000 =  2.0f
+//   0x180161754 = 0xbf000000 = -0.5f
+//   0x180161768 = 0xc0000000 = -2.0f
+constexpr uint32_t kBits_0      = 0x00000000u;
+constexpr uint32_t kBits_half   = 0x3f000000u;
+constexpr uint32_t kBits_neghalf= 0xbf000000u;
+constexpr uint32_t kBits_one    = 0x3f800000u;
+
+float AsFloat(uint32_t bits) { float f; std::memcpy(&f, &bits, 4); return f; }
+
+// ---------------------------------------------------------------------------
+// Named dependencies. All are exported; RT_EXPORT_ONCE so a ported one is ours.
+// ---------------------------------------------------------------------------
+using VoidThisFn = void (*)(void*);
+
+// `??0Geometry@Graphics@@QEAA@XZ` 0x1800a4270 and `??1Geometry@…` 0x1800a41c0,
+// both PORTED. The two light constructors CALL the first; the AmbientLight
+// destructor thunk TAIL-JUMPS the second, and so does SpotLight's.
+void GeometryCtor(void* p) {
+    RT_EXPORT_ONCE(VoidThisFn, "??0Geometry@Graphics@@QEAA@XZ")(p);
+}
+void GeometryDtor(void* p) {
+    RT_EXPORT_ONCE(VoidThisFn, "??1Geometry@Graphics@@UEAA@XZ")(p);
+}
+
+// `?CreateTargets@SpotLight@Graphics@@AEAAXXZ` 0x180106050 — NOT PORTED, and
+// reached BY NAME because `AEAA` is PRIVATE, not unexported, and this DLL
+// exports its private members (reference_aeaa_is_private_not_unexported.md).
+// It allocates the shadow map / depth / render target trio the destructor then
+// owns; it stays on the DLL until the Video side of that is ported.
+void SpotLightCreateTargets(void* p) {
+    RT_EXPORT_ONCE(VoidThisFn, "?CreateTargets@SpotLight@Graphics@@AEAAXXZ")(p);
+}
+
+void RenderBufferPlatformDestruct(void* p) {
+    RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ")(p);
+}
+void RenderBufferOperatorDelete(void* p) {
+    RT_EXPORT_ONCE(VoidThisFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(p);
+}
+
+// `?SetLight@Context@Video@@QEAAXAEBVVector3@Math@@0AEBVVector4@4@1MMH@Z`
+// 0x18001a950 — NOT PORTED, exported, reached by name. All five Draw arms end
+// in it, and its EIGHT values (this + seven params) are what the whole of each
+// body exists to compute.
+using SetLightFn = void (*)(void* ctx, const float* v3a, const float* v3b,
+                            const float* v4c, const float* v4d,
+                            float e, float f, int32_t g);
+void ContextSetLight(void* ctx, const float* a, const float* b,
+                     const float* c, const float* d, float e, float f, int32_t g) {
+    RT_EXPORT_ONCE(SetLightFn,
+        "?SetLight@Context@Video@@QEAAXAEBVVector3@Math@@0AEBVVector4@4@1MMH@Z")
+        (ctx, a, b, c, d, e, f, g);
+}
+
+// `?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z` 0x180105240
+// — NOT PORTED, exported, reached by name. FIVE VALUES; see the banner.
+using DrawItemListFn = void (*)(void* renderer, void* ctx, int32_t, int32_t, int32_t);
+void RendererDrawItemList(void* renderer, void* ctx, int32_t a, int32_t b, int32_t c) {
+    RT_EXPORT_ONCE(DrawItemListFn,
+        "?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z")
+        (renderer, ctx, a, b, c);
+}
+
+// The five Math / Graphics helpers SpotLight and SunLight's Draw use. Every one
+// is already PORTED and every one is exported, so all five are name doors.
+//
+// THREE OF THEM RETURN A STRUCT BY VALUE FROM A NON-STATIC MEMBER, so the
+// hidden return slot is **RDX** with `this` in RCX — verified against the
+// disassembly at each call site rather than inferred from the mangling, which
+// is the check batch 4 documented for `GetSunCamera`:
+//   ?Inverse@Transform3@Math@@QEBA?AV12@XZ            0x180060040  (this, ret)
+//   ?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ     0x1800346e0  (this, ret)
+//   ??DMatrix@Math@@QEBA?AV01@AEBV01@@Z               0x18001d980  (this, ret, rhs)
+//   ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ 0x18001fcd0 (this, ret)
+// Each returns the slot in RAX, which the caller then uses as `this` for the
+// next call in the chain — the shape below preserves that exactly.
+using Ret1Fn = void* (*)(const void* self, void* ret);
+using Ret2Fn = void* (*)(const void* self, void* ret, const void* rhs);
+
+void* Transform3Inverse(const void* self, void* ret) {
+    return RT_EXPORT_ONCE(Ret1Fn, "?Inverse@Transform3@Math@@QEBA?AV12@XZ")(self, ret);
+}
+void* Transform3AsMatrix(const void* self, void* ret) {
+    return RT_EXPORT_ONCE(Ret1Fn, "?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ")(self, ret);
+}
+void* MatrixMultiply(const void* self, void* ret, const void* rhs) {
+    return RT_EXPORT_ONCE(Ret2Fn, "??DMatrix@Math@@QEBA?AV01@AEBV01@@Z")(self, ret, rhs);
+}
+void* TransformAsTransform3(const void* self, void* ret) {
+    return RT_EXPORT_ONCE(Ret1Fn,
+        "?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ")(self, ret);
+}
+
+// `??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`
+// 0x1800fe960 — PORTED (renderer.cpp). FOUR arguments; the bool is `MOV R9B,1`.
+using CameraFrustumCtorFn = void* (*)(void*, const void*, const void*, bool);
+void CameraFromFrustum(void* cam, const void* frustum, const void* xform, bool flag) {
+    RT_EXPORT_ONCE(CameraFrustumCtorFn,
+        "??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z")
+        (cam, frustum, xform, flag);
+}
+
+// The four Renderer / Scene entry points SpotLight::AddDrawItems drives. All
+// PORTED, all exported (`AEBA` on the two Scene ones is private, which this DLL
+// still exports).
+using AddLightFn   = void (*)(void*, const void*);
+using BeginGroupFn = int32_t (*)(void*, const void*, const void*, const void*,
+                                 int32_t, uint32_t);
+using EndGroupFn   = void (*)(void*, int32_t);
+using SceneAddFn   = void (*)(const void*, void*);
+
+void RendererAddLight(void* renderer, const void* light) {
+    RT_EXPORT_ONCE(AddLightFn, "?AddLight@Renderer@Graphics@@QEAAXPEBVLight@2@@Z")
+        (renderer, light);
+}
+int32_t RendererBeginDrawGroup(void* renderer, const void* target,
+                               const void* camA, const void* camB,
+                               int32_t a, uint32_t b) {
+    return RT_EXPORT_ONCE(BeginGroupFn,
+        "?BeginDrawGroup@Renderer@Graphics@@QEAAHPEBVRenderBuffer@Video@@AEBVCamera@2@1HI@Z")
+        (renderer, target, camA, camB, a, b);
+}
+void RendererEndDrawGroup(void* renderer, int32_t id) {
+    RT_EXPORT_ONCE(EndGroupFn, "?EndDrawGroup@Renderer@Graphics@@QEAAXH@Z")(renderer, id);
+}
+void SceneAddGlobalDrawItems(const void* scene, void* renderer) {
+    RT_EXPORT_ONCE(SceneAddFn, "?AddGlobalDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z")
+        (scene, renderer);
+}
+void SceneAddCulledDrawItems(const void* scene, void* renderer) {
+    RT_EXPORT_ONCE(SceneAddFn, "?AddCulledDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z")
+        (scene, renderer);
+}
+
+// The two unexported Collection::Array<T>::SetSize instantiations
+// AmbientLight::AddDrawItems drives. Both are ADDRESS doors (no export name in
+// either shipped build) and both are already ported.
+//   0x180023830  Array<int>::SetSize(n, const int&)          array.cpp kSpec_Fill4
+//   0x180063a80  Array<{Light*,int}>::SetSize(n, const T&)   (stride 0x10)
+void SetSizeWithFill(uintptr_t va, void* arr, int32_t n, const void* fill) {
+    using Fn = void (*)(void*, int32_t, const void*);
+    reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, va))(arr, n, fill);
+}
+
+// ---------------------------------------------------------------------------
+// The two Video singletons the dimension logic reads. Both are pointers TO the
+// object, so each read is a double indirection.
+// ---------------------------------------------------------------------------
+const uint8_t* VideoDevice() {
+    return *RT_DATA_SLOT(const uint8_t* const*, "?_singleton@Device@Video@@0PEAV12@EA");
+}
+const uint8_t* VideoConfiguration() {
+    return *RT_DATA_SLOT(const uint8_t* const*,
+                         "?_singleton@Configuration@Video@@0PEAV12@EA");
+}
+
+// ---------------------------------------------------------------------------
+// `Video::ImageBuffer::Width()` / `Height()`, INLINED — the three-way branch on
+// the image's flags word at +0x34 that appears at six sites in this file.
+//
+//     flags = image->[0x34];
+//     if (flags & (1 << 8))  return device->[devField];          // full screen
+//     if (flags & (1 << 9))  return device->[devField] / 2;       // half screen
+//     v = image->[imgField];
+//     if (flags & (1 << 6))  v >>= configuration->[0x2c];         // mip shift
+//     return v;
+//
+// `devField` is 0x04 with `imgField` 0x20 for WIDTH, and 0x08 with 0x24 for
+// HEIGHT — which is how runtime/types/video/ImageBuffer.h already describes
+// bits 8 and 9 ("read only by Width()/Height()"), independently recovered.
+//
+// THE HALVING IS A SIGNED ROUND-TOWARD-ZERO DIVIDE, NOT A SHIFT:
+// `CDQ; SUB EAX,EDX; SAR EAX,1`. For the non-negative values a device size can
+// hold the two agree, and the transcription keeps retail's form anyway because
+// "cannot be negative" is an argument about the caller, not about this code.
+//
+// The mip shift IS an arithmetic right shift by a variable count (`SAR EAX,CL`).
+// ---------------------------------------------------------------------------
+int32_t ImageDim(const void* image, uint32_t devField, uint32_t imgField) {
+    const uint8_t* const ib = static_cast<const uint8_t*>(image);
+    const int32_t flags = *reinterpret_cast<const int32_t*>(ib + 0x34);
+
+    if (flags & (1 << 8))
+        return *reinterpret_cast<const int32_t*>(VideoDevice() + devField);
+    if (flags & (1 << 9)) {
+        const int32_t v = *reinterpret_cast<const int32_t*>(VideoDevice() + devField);
+        return (v - (v >> 31)) >> 1;                 // CDQ / SUB / SAR 1
+    }
+    int32_t v = *reinterpret_cast<const int32_t*>(ib + imgField);
+    if ((flags >> 6) & 1) {
+        const int32_t shift = *reinterpret_cast<const int32_t*>(VideoConfiguration() + 0x2c);
+        v >>= shift;                                 // SAR EAX,CL
+    }
+    return v;
+}
+int32_t ImageWidth (const void* ib) { return ImageDim(ib, 0x04, 0x20); }
+int32_t ImageHeight(const void* ib) { return ImageDim(ib, 0x08, 0x24); }
+
+// ---------------------------------------------------------------------------
+// `if (ctx->rect != {x,y,w,h}) { ctx->dirty |= bit; ctx->rect = {x,y,w,h}; }`
+// The compare is FOUR separate dword compares in retail and the write is a
+// qword for the first pair plus two dwords; the observable effect is identical
+// and the dirty bit is only set when at least one term differs, which is the
+// part that matters.
+// ---------------------------------------------------------------------------
+void SetRect(void* ctx, uint32_t off, int32_t x, int32_t y, int32_t w, int32_t h,
+             uint32_t dirtyBit) {
+    int32_t* const r = reinterpret_cast<int32_t*>(static_cast<uint8_t*>(ctx) + off);
+    if (r[0] == x && r[1] == y && r[2] == w && r[3] == h) return;
+    *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(ctx) + kCtxDirty) |= dirtyBit;
+    r[0] = x; r[1] = y; r[2] = w; r[3] = h;
+}
+
+// The shadow pass's one virtual call: `obj = ctx->[0x2160];
+// obj->vtable[4](obj, 6, 0, 1.0f, 0)`. FIVE values — the float travels in XMM3
+// (the fourth register slot) and the trailing int at [RSP+0x20]. Ghidra prints
+// this with the float and the last int dropped.
+void RenderStateSlot4(void* ctx) {
+    void* const obj = *reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + kCtxRenderState);
+    void** const vt = *reinterpret_cast<void***>(obj);
+    using Fn = void (*)(void*, int32_t, int32_t, float, int32_t);
+    reinterpret_cast<Fn>(vt[4])(obj, 6, 0, AsFloat(kBits_one), 0);
+}
+
+// ---------------------------------------------------------------------------
+// The shadow bias matrix. TWO variants; SpotLight always uses A, SunLight picks
+// between them with a virtual query on the Device.
+//
+//   A (0x1800fa7... / 0x180105993 / 0x18010681f):   B (0x18010689d):
+//     [ 0.5   0    0   0 ]                            [ 0.5  0    0    0 ]
+//     [ 0   -0.5   0   0 ]                            [ 0    0.5  0    0 ]
+//     [ 0     0    1   0 ]                            [ 0    0    0.5  0 ]
+//     [ 0.5  0.5   0   1 ]                            [ 0.5  0.5  0.5  1 ]
+//
+// A maps a [-1,1] clip box with a top-left texture origin onto [0,1]x[0,1] and
+// leaves z alone (the DX10+ [0,1] depth range); B also remaps z from [-1,1],
+// which is the DX9 convention. That reading is offered as orientation only —
+// the numbers are the port.
+// ---------------------------------------------------------------------------
+void BiasMatrixA(float* m) {
+    for (int i = 0; i < 16; ++i) m[i] = AsFloat(kBits_0);
+    m[0]  = AsFloat(kBits_half);
+    m[5]  = AsFloat(kBits_neghalf);
+    m[10] = AsFloat(kBits_one);
+    m[12] = AsFloat(kBits_half);
+    m[13] = AsFloat(kBits_half);
+    m[15] = AsFloat(kBits_one);
+}
+void BiasMatrixB(float* m) {
+    for (int i = 0; i < 16; ++i) m[i] = AsFloat(kBits_0);
+    m[0]  = AsFloat(kBits_half);
+    m[5]  = AsFloat(kBits_half);
+    m[10] = AsFloat(kBits_half);
+    m[12] = AsFloat(kBits_half);
+    m[13] = AsFloat(kBits_half);
+    m[14] = AsFloat(kBits_half);
+    m[15] = AsFloat(kBits_one);
+}
+
+// ---------------------------------------------------------------------------
+// The shared tail of SpotLight::Draw and SunLight::Draw: take the draw group's
+// projection Matrix and its view Transform3, and write
+//
+//     ctx->shadowMatrix = AsMatrix(Inverse(viewTransform)) * projection * bias
+//
+// into Context+0x1e78, then raise the 0x2000 dirty bit.
+//
+// THE CHAIN'S SHAPE IS RETAIL'S, INCLUDING THE SCRATCH REUSE. Each call is
+// handed the RAX the previous one returned as its `this`, and the second
+// multiply writes back over the buffer the FIRST multiply read from. Written
+// out with the same three scratch buffers so no intermediate is kept alive that
+// retail frees.
+// ---------------------------------------------------------------------------
+void WriteShadowMatrix(void* ctx, const float* projection, const float* viewXform,
+                       const float* bias) {
+    float inverse[12];                 // Transform3, 0x30
+    float asMatrix[16];                // Matrix, 0x40
+    float product[16];
+    float result[16];
+
+    void* const inv = Transform3Inverse(viewXform, inverse);
+    void* const mat = Transform3AsMatrix(inv, asMatrix);
+    void* const p1  = MatrixMultiply(mat, product, projection);
+    MatrixMultiply(p1, result, bias);
+
+    std::memcpy(static_cast<uint8_t*>(ctx) + kCtxShadowMtx, result, sizeof result);
+    *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(ctx) + kCtxDirty) |= 0x2000u;
+}
+
+// `if (ctx->[off] != p) { ctx->dirty |= 2; ctx->[0x18] |= bit; ctx->[off] = p; }`
+void BindImage(void* ctx, uint32_t off, void* p, uint32_t subBit) {
+    void** const slot = reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + off);
+    if (*slot == p) return;
+    uint32_t* const c = reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(ctx));
+    c[kCtxDirty / 4]   |= 2u;
+    c[kCtxDirty18 / 4] |= subBit;
+    *slot = p;
+}
+
+// The draw-group record the two Draw arms index: `renderer->[0x10] + i * 0x1f0`.
+// 0x1f0 is the stride closure batch 2b pinned from the other end (its element
+// destructor and its copy constructor).
+const uint8_t* DrawGroup(const void* renderer, int32_t index) {
+    const uint8_t* const data =
+        *reinterpret_cast<const uint8_t* const*>(static_cast<const uint8_t*>(renderer) + 0x10);
+    return data + static_cast<int64_t>(index) * kDrawGroupStride;
+}
+
+}  // namespace
+
+// ############################################################################
+// Graphics::AmbientLight
+// ############################################################################
+
+// ============================================================================
+// ??0AmbientLight@Graphics@@QEAA@XZ                  retail 0x1800fa940
+//
+//     CALL 0x1800a4270                 ; ??0Geometry@Graphics@@
+//     LEA RAX,[0x180158d30]            ; ??_7Light@Graphics@@6B@       (dead)
+//     LEA RAX,[0x180158cd0]            ; ??_7AmbientLight@Graphics@@6B@
+//     [+0xc0] = 0 ; [+0xc8] = 0        ; the colour Vector4
+//     [+0xd0] = 0x41200000             ; 10.0f
+//     [+0x30] = 0x8000
+//     MOV RAX,RBX                      ; returns `this`
+// ============================================================================
+extern "C" void* RtGraphics_AmbientLight_Ctor(void* self) {
+    uint8_t* const d = static_cast<uint8_t*>(self);
+    GeometryCtor(self);
+    *reinterpret_cast<void**>(d) = reinterpret_cast<void*>(
+        ResolveAddr(Module::Runtime, 0x180158d30ull));       // dead, transcribed
+    *reinterpret_cast<void**>(d) = reinterpret_cast<void*>(
+        ResolveAddr(Module::Runtime, 0x180158cd0ull));
+    *reinterpret_cast<uint64_t*>(d + 0xc0) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0xc8) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0xd0) = 0x41200000u;    // 10.0f
+    *reinterpret_cast<uint32_t*>(d + 0x30) = 0x8000u;
+    return self;
+}
+
+// ============================================================================
+// ??1AmbientLight@Graphics@@UEAA@XZ                  retail 0x180058f30
+//
+//     MOV [RSP+8],RCX ; SUB RSP,0x38 ; MOV [RSP+0x20],-2 ; ADD RSP,0x38
+//     JMP 0x1800a41c0                  ; ??1Geometry@Graphics@@UEAA@XZ
+//
+// Five instructions, four of which are the MSVC unwind marker. AmbientLight
+// adds no destructible member, so the linker folded its destructor onto
+// ~Geometry and left this thunk behind. See the file banner.
+// ============================================================================
+extern "C" void RtGraphics_AmbientLight_Dtor(void* self) {
+    GeometryDtor(self);
+}
+
+// slot 1 — `RET`. Empty in the shipped build; an ambient light has nothing to
+// tick (reference_retail_ships_empty_bodies.md).
+extern "C" void RtGraphics_AmbientLight_Update(const void* self, const void* time) {
+    (void)self; (void)time;
+}
+
+// slot 2 — `RET`. The per-item Draw arm; an ambient light emits no draw items,
+// only the light state its slot-10 Draw sets.
+extern "C" void RtGraphics_AmbientLight_DrawItem(const void* self, void* ctx,
+                                                 const void* camera, void* material,
+                                                 float a, int32_t b, int32_t c, int32_t d) {
+    (void)self; (void)ctx; (void)camera; (void)material;
+    (void)a; (void)b; (void)c; (void)d;
+}
+
+// slot 9 — `RET`. An ambient light casts no shadow.
+extern "C" void RtGraphics_AmbientLight_DrawShadowMap(const void* self, void* ctx,
+                                                      void* renderer, int32_t a, int32_t b) {
+    (void)self; (void)ctx; (void)renderer; (void)a; (void)b;
+}
+
+// ============================================================================
+// slot 3 — ?AddDrawItems@AmbientLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+//                                                    retail 0x1800fa890
+// ============================================================================
+// TWO `Array<T>::SetSize(n + 1, fill)` calls and nothing else. THE SCENE
+// ARGUMENT IS NEVER READ — retail keeps `this` in RBX and the renderer in RDI
+// and touches RDX not once. Transcribed as such rather than "tidied" into a use.
+//
+//   1. `renderer->groups[renderer->[0x30]].lights` — the Array at +0x100 of the
+//      0x110-byte record at `renderer->[0x00] + index * 0x110` (the SAME array
+//      ReflectionImageBuffer::Render appends to, which is what pins 0x110 twice
+//      over) — grows by one, filled with `renderer->[0x28]`.
+//   2. `renderer->[0x20]`, the Array of {Light*, int} pairs, grows to
+//      `renderer->[0x28] + 1`, filled with `{ this, renderer->[0x38] }`.
+//
+// The two counts come from DIFFERENT places: the first is the target array's
+// own `_size`, the second is `renderer->[0x28]`. Swapping them would be
+// invisible at a single light and wrong at two.
+// ============================================================================
+extern "C" void RtGraphics_AmbientLight_AddDrawItems(void* self, const void* scene,
+                                                     void* renderer) {
+    (void)scene;                                   // retail never touches RDX
+    uint8_t* const r = static_cast<uint8_t*>(renderer);
+
+    const int32_t groupIndex = *reinterpret_cast<const int32_t*>(r + 0x30);
+    const int32_t lightId    = *reinterpret_cast<const int32_t*>(r + 0x28);
+
+    uint8_t* const groups = *reinterpret_cast<uint8_t**>(r);
+    uint8_t* const lights = groups + static_cast<int64_t>(groupIndex) * 0x110 + 0x100;
+
+    int32_t fill = lightId;                        // MOV [RSP+0x40],EAX
+    SetSizeWithFill(0x180023830ull, lights,
+                    *reinterpret_cast<const int32_t*>(lights + 8) + 1, &fill);
+
+    struct { void* light; int32_t tag; int32_t _pad; } pair;
+    pair.light = self;                             // MOV [RSP+0x20],RBX
+    pair.tag   = *reinterpret_cast<const int32_t*>(r + 0x38);
+    pair._pad  = 0;
+    SetSizeWithFill(0x180063a80ull, r + 0x20, lightId + 1, &pair);
+}
+
+// ============================================================================
+// slot 10 — ?Draw@AmbientLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z
+//                                                    retail 0x1800fa7b0
+// ============================================================================
+// Set the ambient light state on the Context, then tail-jump DrawItemList.
+//
+// SIX of `SetLight`'s seven parameters are CONSTANTS here — two zero Vector3s,
+// a zero Vector4, 0.0f, and the int 1 — and only two come from the object: the
+// colour at +0xc0 and the scalar at +0xd0. The three zero locals are built
+// exactly as retail builds them (a qword plus a dword each for the Vector3s,
+// two qwords for the Vector4) rather than as `= {}`, because the WIDTH of each
+// zero store is the evidence for the size of each parameter.
+//
+// THE TAIL: `DrawItemList(renderer, ctx, arg4, arg6, arg7)`. arg5 is NOT
+// forwarded — retail OVERWRITES its own arg5 home slot with arg7 to make the
+// stack argument land, which is the idiom the banner describes.
+// ============================================================================
+extern "C" void RtGraphics_AmbientLight_Draw(void* self, void* ctx, void* renderer,
+                                             int32_t a4, int32_t a5, int32_t a6, int32_t a7) {
+    (void)a5;                                      // consumed only as the ABI slot
+    uint8_t* const d = static_cast<uint8_t*>(self);
+
+    float zeroV3a[3] = { 0.0f, 0.0f, 0.0f };
+    float zeroV3b[3] = { 0.0f, 0.0f, 0.0f };
+    float zeroV4 [4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    ContextSetLight(ctx, zeroV3a, zeroV3b, zeroV4,
+                    reinterpret_cast<const float*>(d + 0xc0),
+                    0.0f,
+                    *reinterpret_cast<const float*>(d + 0xd0),
+                    1);
+
+    RendererDrawItemList(renderer, ctx, a4, a6, a7);
+}
+
+// ############################################################################
+// Graphics::SpotLight
+// ############################################################################
+
+// ============================================================================
+// ??0SpotLight@Graphics@@QEAA@XZ                     retail 0x180106690
+//
+// Geometry ctor, the two vptr stamps, TWELVE zeroed qwords from +0xc0 to
+// +0x118, the three literals, five more zeroed qwords, `CreateTargets()`, and
+// only THEN `[+0x30] = 0x8000` — the kind word is written AFTER the call, not
+// before, and the order is transcribed because CreateTargets reads the object.
+//
+// +0x158 is NOT zeroed by the ctor (the run of stores skips from +0x150 to
+// +0x160). CreateTargets fills it. Recorded, not helpfully zeroed.
+// ============================================================================
+extern "C" void* RtGraphics_SpotLight_Ctor(void* self) {
+    uint8_t* const d = static_cast<uint8_t*>(self);
+    GeometryCtor(self);
+    *reinterpret_cast<void**>(d) = reinterpret_cast<void*>(
+        ResolveAddr(Module::Runtime, 0x180158d30ull));       // ??_7Light@, dead
+    *reinterpret_cast<void**>(d) = reinterpret_cast<void*>(
+        ResolveAddr(Module::Runtime, 0x180158db0ull));       // ??_7SpotLight@
+
+    for (uint32_t o = 0xc0; o <= 0x118; o += 8)
+        *reinterpret_cast<uint64_t*>(d + o) = 0;
+
+    d[0x120] = 1;                                            // MOV byte,1
+    *reinterpret_cast<uint32_t*>(d + 0x128) = 0x3dcccccdu;   // 0.1f
+    *reinterpret_cast<uint32_t*>(d + 0x12c) = 0x41200000u;   // 10.0f
+
+    *reinterpret_cast<uint64_t*>(d + 0x138) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x140) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x148) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x150) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x160) = 0;             // +0x158 SKIPPED
+
+    SpotLightCreateTargets(self);
+    *reinterpret_cast<uint32_t*>(d + 0x30) = 0x8000u;        // AFTER the call
+    return self;
+}
+
+// ============================================================================
+// ??1SpotLight@Graphics@@UEAA@XZ                     retail 0x180106270
+//
+// Restamp, then the three owned resources in retail's order, then tail-jump
+// ~Geometry. TWO DESTROY IDIOMS again: the two ImageBuffers go through their
+// own vtable slot 0 with flags = 1 (destroy AND free), the RenderBuffer goes
+// the long way because it has no virtual destructor.
+// ============================================================================
+extern "C" void RtGraphics_SpotLight_Dtor(void* self) {
+    uint8_t* const d = static_cast<uint8_t*>(self);
+    *reinterpret_cast<void**>(d) = reinterpret_cast<void*>(
+        ResolveAddr(Module::Runtime, 0x180158db0ull));
+
+    static const uint32_t kOwnedImages[2] = { 0x148u, 0x150u };
+    for (uint32_t off : kOwnedImages) {
+        void* const img = *reinterpret_cast<void**>(d + off);
+        if (img == nullptr) continue;
+        void** const vt = *reinterpret_cast<void***>(img);
+        reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(img, 1u);
+    }
+    void* const rb = *reinterpret_cast<void**>(d + 0x158);
+    if (rb != nullptr) {
+        RenderBufferPlatformDestruct(rb);
+        RenderBufferOperatorDelete(rb);
+    }
+    GeometryDtor(self);                                      // JMP 0x1800a41c0
+}
+
+// slot 1 / slot 2 — both `RET`, like AmbientLight's.
+extern "C" void RtGraphics_SpotLight_Update(const void* self, const void* time) {
+    (void)self; (void)time;
+}
+extern "C" void RtGraphics_SpotLight_DrawItem(const void* self, void* ctx,
+                                              const void* camera, void* material,
+                                              float a, int32_t b, int32_t c, int32_t d) {
+    (void)self; (void)ctx; (void)camera; (void)material;
+    (void)a; (void)b; (void)c; (void)d;
+}
+
+// ============================================================================
+// slot 3 — ?AddDrawItems@SpotLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z
+//                                                    retail 0x180105e30
+// ============================================================================
+// Queue TWO draw groups: the shadow-map pass into the light's own render
+// target, then a second pass with a null target.
+//
+// THE WHOLE BODY IS BEHIND `_shadowMap && _shadowDepth` (+0x148 and +0x150,
+// both non-null). A spot light whose targets failed to allocate contributes
+// nothing rather than crashing, and that is retail's own guard, not one added
+// here.
+//
+// The camera is built from the light's Transform at +0x84 (through
+// `Transform::AsTransform3`) and its Frustum at +0xc0, with the bool argument
+// `MOV R9B,1`. It is passed as BOTH camera arguments of the first
+// BeginDrawGroup — retail really does put the same pointer in R8 and R9.
+//
+// The second BeginDrawGroup's first camera is `renderer->[0x10] + 8`, i.e. the
+// Camera embedded at +0x08 of draw group ZERO — the main view's camera — while
+// the second stays the light's. Its flags are 3/3 where the first pass used
+// 1/1, and its render target is NULL (`XOR EDX,EDX`).
+// ============================================================================
+extern "C" void RtGraphics_SpotLight_AddDrawItems(void* self, const void* scene,
+                                                  void* renderer) {
+    uint8_t* const d = static_cast<uint8_t*>(self);
+    if (*reinterpret_cast<void**>(d + 0x148) == nullptr) return;
+    if (*reinterpret_cast<void**>(d + 0x150) == nullptr) return;
+
+    float xform[7];                                 // Math::Transform, 0x1c
+    std::memcpy(xform, d + 0x84, sizeof xform);
+    float asT3[12];                                 // Math::Transform3, 0x30
+    void* const t3 = TransformAsTransform3(xform, asT3);
+
+    alignas(8) uint8_t camera[0xd8];
+    CameraFromFrustum(camera, d + 0xc0, t3, true);  // MOV R9B,1
+
+    RendererAddLight(renderer, self);
+
+    int32_t id = RendererBeginDrawGroup(renderer, *reinterpret_cast<void**>(d + 0x158),
+                                        camera, camera, 1, 1u);
+    SceneAddGlobalDrawItems(scene, renderer);
+    if (*reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(renderer) + 0x48) != 0)
+        SceneAddCulledDrawItems(scene, renderer);
+    RendererEndDrawGroup(renderer, id);
+
+    const uint8_t* const group0 =
+        *reinterpret_cast<uint8_t* const*>(static_cast<uint8_t*>(renderer) + 0x10);
+    id = RendererBeginDrawGroup(renderer, nullptr, group0 + 8, camera, 3, 3u);
+    SceneAddGlobalDrawItems(scene, renderer);
+    if (*reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(renderer) + 0x48) != 0)
+        SceneAddCulledDrawItems(scene, renderer);
+    RendererEndDrawGroup(renderer, id);
+}
+
+// ============================================================================
+// slot 9 — ?DrawShadowMap@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z
+//                                                    retail 0x180105d00
+// ============================================================================
+// Bind the light's render target, set the viewport to the shadow map's own
+// size, kick the render state, and hand the list to the renderer.
+//
+// THE FIFTH VALUE OF THE TAIL `DrawItemList` IS THIS FUNCTION'S OWN arg5,
+// PASSED THROUGH UNTOUCHED: retail tail-jumps without writing its arg5 home
+// slot, so the callee reads the very int this function was given. That is not
+// an omission, it is the calling convention being used as a pass-through, and
+// it is spelled as an explicit argument here.
+// ============================================================================
+extern "C" void RtGraphics_SpotLight_DrawShadowMap(void* self, void* ctx, void* renderer,
+                                                   int32_t a4, int32_t a5) {
+    uint8_t* const d = static_cast<uint8_t*>(self);
+
+    void* const target = *reinterpret_cast<void**>(d + 0x158);
+    void** const slot = reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + kCtxTarget);
+    if (*slot != target) {
+        *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(ctx) + kCtxDirty) |= 1u;
+        *slot = target;
+    }
+
+    const void* const image = *reinterpret_cast<void**>(d + 0x148);
+    const int32_t h = ImageHeight(image);           // read FIRST in retail
+    const int32_t w = ImageWidth(image);
+    SetRect(ctx, kCtxViewport, 0, 0, w, h, 0x200u);
+
+    RenderStateSlot4(ctx);
+    RendererDrawItemList(renderer, ctx, a4, 0, a5);
+}
+
+// ============================================================================
+// slot 10 — ?Draw@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z
+//                                                    retail 0x180105960
+// ============================================================================
+// The draw-group index is arg5 (`MOVSXD R13,[RBP+0xf0]`), NOT arg4 — arg4
+// arrives in R9D and is never read by this body. Both facts are transcribed.
+//
+// From the group record at `renderer->[0x10] + arg5 * 0x1f0`:
+//   +0x9c .. +0xd8   sixteen floats, the shadow projection Matrix
+//   +0x6c .. +0x98   twelve floats, the shadow view Transform3
+//   +0x78 / +0x7c / +0x80   ALSO read as a Vector3 for SetLight
+//   +0x90 / +0x94 / +0x98   ditto, as the other Vector3
+// The two Vector3s overlap the Transform3 on purpose: they are its third basis
+// row and its translation, re-read out of the group rather than out of the
+// local copy.
+//
+// The tail is `DrawItemList(renderer, ctx, arg5 + 1, arg6, arg7)` — note the
+// **+ 1**, which SunLight's tail does not have.
+// ============================================================================
+extern "C" void RtGraphics_SpotLight_Draw(void* self, void* ctx, void* renderer,
+                                          int32_t a4, int32_t a5, int32_t a6, int32_t a7) {
+    (void)a4;                                       // R9D, never read by retail
+    uint8_t* const d = static_cast<uint8_t*>(self);
+    const uint8_t* const g = DrawGroup(renderer, a5);
+
+    float bias[16];
+    BiasMatrixA(bias);
+
+    float projection[16];
+    std::memcpy(projection, g + 0x9c, sizeof projection);
+    float viewXform[12];
+    std::memcpy(viewXform, g + 0x6c, sizeof viewXform);
+
+    WriteShadowMatrix(ctx, projection, viewXform, bias);
+
+    BindImage(ctx, kCtxImage50, *reinterpret_cast<void**>(d + 0x160), 0x10u);
+    BindImage(ctx, kCtxImage58, *reinterpret_cast<void**>(d + 0x150), 0x20u);
+
+    const int32_t dim = ImageWidth(*reinterpret_cast<void**>(d + 0x150));
+
+    float v3a[3], v3b[3];
+    std::memcpy(v3a, g + 0x90, sizeof v3a);         // RDX
+    std::memcpy(v3b, g + 0x78, sizeof v3b);         // R8
+    const float zeroV4[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+    ContextSetLight(ctx, v3a, v3b,
+                    reinterpret_cast<const float*>(d + 0x138),
+                    zeroV4,
+                    *reinterpret_cast<const float*>(d + 0x130),
+                    *reinterpret_cast<const float*>(d + 0x134),
+                    dim);
+
+    RendererDrawItemList(renderer, ctx, a5 + 1, a6, a7);
+}
+
+// ############################################################################
+// Graphics::SunLight — the two slots sunlight.cpp did not port
+// ############################################################################
+
+// ============================================================================
+// slot 10 — ?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z
+//                                                    retail 0x1801067b0
+// ============================================================================
+// The same shape as SpotLight's, with three differences, all of them load-
+// bearing:
+//   * the bias matrix is CHOSEN, not fixed — `Video::Device::_singleton->[0x100]`
+//     is asked through its own vtable slot 7 (`CALL [RAX+0x38]`) and its bool
+//     answer picks matrix A over matrix B (see BiasMatrixA/B);
+//   * the group fields are at +0x174 (projection) and +0x144 (view), not +0x9c
+//     and +0x6c — SunLight's cascade record is laid out differently;
+//   * SetLight's two Vector3/Vector4 arguments come from the OBJECT (+0xc0,
+//     +0xcc, +0xdc) rather than from the group, its scalars are the literals
+//     0.0f and 1.0f, and the first argument is a ZERO Vector3.
+//
+// The tail is `DrawItemList(renderer, ctx, arg4, arg6, arg7)` — arg4 here,
+// where SpotLight used arg5 + 1, and arg5 is used only as the group index.
+// ============================================================================
+extern "C" void RtGraphics_SunLight_Draw(void* self, void* ctx, void* renderer,
+                                         int32_t a4, int32_t a5, int32_t a6, int32_t a7) {
+    uint8_t* const d = static_cast<uint8_t*>(self);
+    const uint8_t* const g = DrawGroup(renderer, a5);
+
+    // `MOV RCX,[Device+0x100]; MOV RAX,[RCX]; CALL [RAX+0x38]` — slot 7 of
+    // whatever hangs off the Device at +0x100, one argument, returns a bool in
+    // AL. Read BEFORE anything else in the body (0x1801067e9..0x18010680d).
+    bool modern;
+    {
+        void* const obj = *reinterpret_cast<void* const*>(VideoDevice() + 0x100);
+        void** const vt = *reinterpret_cast<void***>(obj);
+        modern = reinterpret_cast<bool (*)(void*)>(vt[7])(obj);
+    }
+
+    float bias[16];
+    if (modern) BiasMatrixA(bias); else BiasMatrixB(bias);
+
+    float projection[16];
+    std::memcpy(projection, g + 0x174, sizeof projection);
+    float viewXform[12];
+    std::memcpy(viewXform, g + 0x144, sizeof viewXform);
+
+    WriteShadowMatrix(ctx, projection, viewXform, bias);
+
+    BindImage(ctx, kCtxImage58, *reinterpret_cast<void**>(d + 0xf8), 0x20u);
+
+    const int32_t dim = ImageWidth(*reinterpret_cast<void**>(d + 0xf8));
+
+    const float zeroV3[3] = { 0.0f, 0.0f, 0.0f };
+    ContextSetLight(ctx, zeroV3,
+                    reinterpret_cast<const float*>(d + 0xc0),
+                    reinterpret_cast<const float*>(d + 0xcc),
+                    reinterpret_cast<const float*>(d + 0xdc),
+                    0.0f, 1.0f, dim);
+
+    RendererDrawItemList(renderer, ctx, a4, a6, a7);
+}
+
+// ============================================================================
+// slot 9 — ?DrawShadowMap@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z
+//                                                    retail 0x180106bc0
+// ============================================================================
+// Longer than SpotLight's because it sets THREE rectangles, not one, and the
+// third is inset by two pixels:
+//
+//   1. viewport (+0x1d0) = (0, 0, w, h)                     dirty bit 0x200
+//   2. scissor  (+0x1e0) = (0, 0, w, h)                     dirty bit 0x400
+//   3. the render state call
+//   4. viewport (+0x1d0) = (1, 1, w - 2, h - 2)             dirty bit 0x200
+//
+// Step 4 REWRITES the viewport step 1 just set, to a one-pixel border inside
+// the shadow map — the classic guard band that keeps a cascade's edge texels
+// from bleeding. `ADD EAX,-2` / `ADD R9D,-2` on BOTH dimensions, and the origin
+// becomes (1, 1), not (0, 0).
+//
+// *** THE IMAGE IS RE-READ FROM `this->[0xf8]` BEFORE EVERY ONE OF THE FOUR
+// DIMENSION QUERIES. *** Retail never caches it, and the queries themselves
+// re-read the Device singleton each time. Hoisting either would be one fewer
+// indirection than retail performs and would miss a target swapped mid-call.
+//
+// THE WHOLE BODY IS BEHIND `renderer->[0x3c] != 0` (`CMP dword [R8+0x3c],0 /
+// JZ`) — with no shadow-casting items queued there is nothing to draw and even
+// the Context is left untouched.
+// ============================================================================
+extern "C" void RtGraphics_SunLight_DrawShadowMap(void* self, void* ctx, void* renderer,
+                                                  int32_t a4, int32_t a5) {
+    uint8_t* const d = static_cast<uint8_t*>(self);
+    if (*reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(renderer) + 0x3c) == 0)
+        return;
+
+    void* const target = *reinterpret_cast<void**>(d + 0x100);
+    void** const slot = reinterpret_cast<void**>(static_cast<uint8_t*>(ctx) + kCtxTarget);
+    if (*slot != target) {
+        *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(ctx) + kCtxDirty) |= 1u;
+        *slot = target;
+    }
+
+    {
+        const void* const image = *reinterpret_cast<void**>(d + 0xf8);
+        const int32_t h = ImageHeight(image);
+        const int32_t w = ImageWidth(image);
+        SetRect(ctx, kCtxViewport, 0, 0, w, h, 0x200u);
+    }
+    {
+        const void* const image = *reinterpret_cast<void**>(d + 0xf8);   // re-read
+        const int32_t h = ImageHeight(image);
+        const int32_t w = ImageWidth(image);
+        SetRect(ctx, kCtxScissor, 0, 0, w, h, 0x400u);
+    }
+
+    RenderStateSlot4(ctx);
+
+    {
+        const void* const image = *reinterpret_cast<void**>(d + 0xf8);   // re-read
+        const int32_t h = ImageHeight(image) - 2;
+        const int32_t w = ImageWidth(image) - 2;
+        SetRect(ctx, kCtxViewport, 1, 1, w, h, 0x200u);
+    }
+
+    const int32_t dim = ImageWidth(*reinterpret_cast<void**>(d + 0xf8));  // re-read
+
+    const float zeroV3[3] = { 0.0f, 0.0f, 0.0f };
+    ContextSetLight(ctx, zeroV3,
+                    reinterpret_cast<const float*>(d + 0xc0),
+                    reinterpret_cast<const float*>(d + 0xcc),
+                    reinterpret_cast<const float*>(d + 0xdc),
+                    0.0f, 1.0f, dim);
+
+    RendererDrawItemList(renderer, ctx, a4, 0, a5);
+}
+
+// ============================================================================
+// Registration — name AND address for every body.
+// ============================================================================
+int RtGraphicsLightsVtableRegister() {
+    int n = 0;
+
+    // ---- Graphics::AmbientLight --------------------------------------------
+    RegisterRuntimeExport("??0AmbientLight@Graphics@@QEAA@XZ",
+                          (void*)&RtGraphics_AmbientLight_Ctor); ++n;
+    RegisterRuntimeAddr(0x1800fa940ull, (void*)&RtGraphics_AmbientLight_Ctor);
+
+    // BOTH doors for the destructor, and that matters here more than usual:
+    // deleting_dtor.cpp's AmbientLight row names the THUNK (0x180058f30) while
+    // 0x180059080's scalar arm calls ~Geometry (0x1800a41c0) directly. The
+    // thunk address is registered so the row lands on our body; ~Geometry's own
+    // address is NOT registered here — it belongs to the Geometry port.
+    RegisterRuntimeExport("??1AmbientLight@Graphics@@UEAA@XZ",
+                          (void*)&RtGraphics_AmbientLight_Dtor); ++n;
+    RegisterRuntimeAddr(0x180058f30ull, (void*)&RtGraphics_AmbientLight_Dtor);
+
+    RegisterRuntimeExport("?Update@AmbientLight@Graphics@@UEAAXAEBVTime@System@@@Z",
+                          (void*)&RtGraphics_AmbientLight_Update); ++n;
+    RegisterRuntimeAddr(0x1800fa7a0ull, (void*)&RtGraphics_AmbientLight_Update);
+
+    RegisterRuntimeExport("?Draw@AmbientLight@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z",
+                          (void*)&RtGraphics_AmbientLight_DrawItem); ++n;
+    RegisterRuntimeAddr(0x1800fa790ull, (void*)&RtGraphics_AmbientLight_DrawItem);
+
+    RegisterRuntimeExport("?AddDrawItems@AmbientLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
+                          (void*)&RtGraphics_AmbientLight_AddDrawItems); ++n;
+    RegisterRuntimeAddr(0x1800fa890ull, (void*)&RtGraphics_AmbientLight_AddDrawItems);
+
+    RegisterRuntimeExport("?DrawShadowMap@AmbientLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z",
+                          (void*)&RtGraphics_AmbientLight_DrawShadowMap); ++n;
+    RegisterRuntimeAddr(0x1800fa880ull, (void*)&RtGraphics_AmbientLight_DrawShadowMap);
+
+    RegisterRuntimeExport("?Draw@AmbientLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z",
+                          (void*)&RtGraphics_AmbientLight_Draw); ++n;
+    RegisterRuntimeAddr(0x1800fa7b0ull, (void*)&RtGraphics_AmbientLight_Draw);
+
+    // ---- Graphics::SpotLight -----------------------------------------------
+    RegisterRuntimeExport("??0SpotLight@Graphics@@QEAA@XZ",
+                          (void*)&RtGraphics_SpotLight_Ctor); ++n;
+    RegisterRuntimeAddr(0x180106690ull, (void*)&RtGraphics_SpotLight_Ctor);
+
+    RegisterRuntimeExport("??1SpotLight@Graphics@@UEAA@XZ",
+                          (void*)&RtGraphics_SpotLight_Dtor); ++n;
+    RegisterRuntimeAddr(0x180106270ull, (void*)&RtGraphics_SpotLight_Dtor);
+
+    RegisterRuntimeExport("?Update@SpotLight@Graphics@@UEAAXAEBVTime@System@@@Z",
+                          (void*)&RtGraphics_SpotLight_Update); ++n;
+    RegisterRuntimeAddr(0x180105950ull, (void*)&RtGraphics_SpotLight_Update);
+
+    RegisterRuntimeExport("?Draw@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z",
+                          (void*)&RtGraphics_SpotLight_DrawItem); ++n;
+    RegisterRuntimeAddr(0x180105940ull, (void*)&RtGraphics_SpotLight_DrawItem);
+
+    RegisterRuntimeExport("?AddDrawItems@SpotLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z",
+                          (void*)&RtGraphics_SpotLight_AddDrawItems); ++n;
+    RegisterRuntimeAddr(0x180105e30ull, (void*)&RtGraphics_SpotLight_AddDrawItems);
+
+    RegisterRuntimeExport("?DrawShadowMap@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z",
+                          (void*)&RtGraphics_SpotLight_DrawShadowMap); ++n;
+    RegisterRuntimeAddr(0x180105d00ull, (void*)&RtGraphics_SpotLight_DrawShadowMap);
+
+    RegisterRuntimeExport("?Draw@SpotLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z",
+                          (void*)&RtGraphics_SpotLight_Draw); ++n;
+    RegisterRuntimeAddr(0x180105960ull, (void*)&RtGraphics_SpotLight_Draw);
+
+    // ---- Graphics::SunLight -------------------------------------------------
+    RegisterRuntimeExport("?DrawShadowMap@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z",
+                          (void*)&RtGraphics_SunLight_DrawShadowMap); ++n;
+    RegisterRuntimeAddr(0x180106bc0ull, (void*)&RtGraphics_SunLight_DrawShadowMap);
+
+    RegisterRuntimeExport("?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z",
+                          (void*)&RtGraphics_SunLight_Draw); ++n;
+    RegisterRuntimeAddr(0x1801067b0ull, (void*)&RtGraphics_SunLight_Draw);
+
+    return n;
+}

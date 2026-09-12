@@ -909,6 +909,44 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180064ea0, 0x18010ca00, 0x030, "Collision2D::Surface"),
     RT_DELDTOR(0x1800713b0, 0x18010f8e0, 0x050, "Pathfinding::PointList"),
     RT_DELDTOR(0x180072050, 0x1801228a0, 0x048, "Picking::PickingMesh"),
+    // ---- Vtable batch 6 (2026-09-12): graphics buffers, meshes and lights ----
+    // INDICES 71-76, appended after batch 8's 67-70. The table is POSITIONAL and
+    // this batch counted the rows above rather than assuming a number, which is
+    // the merge hazard the banner and kSpecCount's comment both record.
+    //
+    // Every row's two constants were read from that deleting destructor's OWN
+    // bytes — the `LEA R9` of the vector arm and its `MOV EDX,imm`:
+    //     0x180059080  LEA R9,[0x180058f30]  MOV EDX,0xd8   Graphics::AmbientLight
+    //     0x18001eee0  LEA R9,[0x1800a3e40]  MOV EDX,0x70   Graphics::GeneratedImageBuffer
+    //     0x18001f260  LEA R9,[0x1800a3c80]  MOV EDX,0x88   Graphics::FrameCopyImageBuffer
+    //     0x180022600  LEA R9,[0x1800a70b0]  MOV EDX,0x90   Graphics::ReflectionImageBuffer
+    //     0x180012bd0  LEA R9,[0x1800ff270]  MOV EDX,0x98   Graphics::GraphicsMesh
+    //     0x1800642b0  LEA R9,[0x180106270]  MOV EDX,0x168  Graphics::SpotLight
+    //
+    // *** THE AmbientLight ROW'S dtorVa IS A THUNK, AND THAT IS DELIBERATE. ***
+    // `??1AmbientLight@Graphics@@UEAA@XZ` at 0x180058f30 is five instructions
+    // that tail-jump `??1Geometry@Graphics@@UEAA@XZ` (0x1800a41c0) — the linker
+    // folded the two — and 0x180059080's SCALAR arm calls 0x1800a41c0 directly
+    // while its VECTOR arm names the thunk. The row carries the thunk, because
+    // that is what `tools/rt_deleting_dtor_verify.py` reads out of the shipped
+    // bytes, and runtime/src/graphics/lights_vtable.cpp registers our port at
+    // BOTH addresses so either door lands on our body.
+    //
+    // Four of the five remaining destructors are ported by this batch
+    // (runtime/src/graphics/imagebuffer_derived.cpp, graphicsmesh_vtable.cpp,
+    // lights_vtable.cpp); ~FrameCopyImageBuffer was ported by Wave 23.
+    //
+    // NONE is a probe subject, on the UI::ElementDescription row's test: every
+    // one of them either releases a refcounted System::String (GraphicsMesh's
+    // name, TriangleList's name) or destroys GPU objects through a platform
+    // companion pointer. A fabricated subject would decrement a refcount nothing
+    // incremented and hand the driver a garbage handle.
+    RT_DELDTOR(0x180059080, 0x180058f30, 0x0d8, "Graphics::AmbientLight"),
+    RT_DELDTOR(0x18001eee0, 0x1800a3e40, 0x070, "Graphics::GeneratedImageBuffer"),
+    RT_DELDTOR(0x18001f260, 0x1800a3c80, 0x088, "Graphics::FrameCopyImageBuffer"),
+    RT_DELDTOR(0x180022600, 0x1800a70b0, 0x090, "Graphics::ReflectionImageBuffer"),
+    RT_DELDTOR(0x180012bd0, 0x1800ff270, 0x098, "Graphics::GraphicsMesh"),
+    RT_DELDTOR(0x1800642b0, 0x180106270, 0x168, "Graphics::SpotLight"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1337,6 +1375,26 @@ void* RtDelDtor_PointList(void* self, unsigned flags) {
 void* RtDelDtor_PickingMesh(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 70);
 }
+// Vtable batch 6 (2026-09-12): the graphics buffer / mesh / light slot-0 rows.
+// Indices 71-76, counted off the table above at merge time rather than assumed.
+void* RtDelDtor_AmbientLight(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 71);
+}
+void* RtDelDtor_GeneratedImageBuffer(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 72);
+}
+void* RtDelDtor_FrameCopyImageBuffer(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 73);
+}
+void* RtDelDtor_ReflectionImageBuffer(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 74);
+}
+void* RtDelDtor_GraphicsMesh(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 75);
+}
+void* RtDelDtor_SpotLight(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 76);
+}
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
@@ -1456,6 +1514,13 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180064ea0, (void*)&RtDelDtor_Collision2DSurface);  // vtable batch 8 SPATIAL
     RegisterRuntimeAddr(0x1800713b0, (void*)&RtDelDtor_PointList);           // vtable batch 8 SPATIAL
     RegisterRuntimeAddr(0x180072050, (void*)&RtDelDtor_PickingMesh);         // vtable batch 8 SPATIAL
+
+    RegisterRuntimeAddr(0x180059080, (void*)&RtDelDtor_AmbientLight);          // vtable batch 6
+    RegisterRuntimeAddr(0x18001eee0, (void*)&RtDelDtor_GeneratedImageBuffer);  // vtable batch 6
+    RegisterRuntimeAddr(0x18001f260, (void*)&RtDelDtor_FrameCopyImageBuffer);  // vtable batch 6
+    RegisterRuntimeAddr(0x180022600, (void*)&RtDelDtor_ReflectionImageBuffer); // vtable batch 6
+    RegisterRuntimeAddr(0x180012bd0, (void*)&RtDelDtor_GraphicsMesh);          // vtable batch 6
+    RegisterRuntimeAddr(0x1800642b0, (void*)&RtDelDtor_SpotLight);             // vtable batch 6
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --

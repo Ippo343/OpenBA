@@ -64,7 +64,12 @@ struct DelDtorSpec {
 // stays true of it; the TABLE is the authority and this constant tracks it,
 // and the static_assert next to the table is what forces an appender to
 // notice (it caught CSTREAM's addition, at 41 vs 39).
-constexpr int kSpecCount = 71;   // 67-70: Collision2D::CollisionMesh/Surface, Pathfinding::PointList,
+constexpr int kSpecCount = 77;   // 71-76: vtable batch 6 — Graphics::AmbientLight,
+                                 // GeneratedImageBuffer, FrameCopyImageBuffer,
+                                 // ReflectionImageBuffer, GraphicsMesh, SpotLight
+                                 // (2026-09-12; the six indices were COUNTED off the
+                                 // table after merging main, not assumed)
+                                 // 67-70: Collision2D::CollisionMesh/Surface, Pathfinding::PointList,
                                  //     Picking::PickingMesh (vtable batch 8, 2026-09-12); 61-66 batch 9
                                  // 61: UI::ImageDescription + AnimatedImageDescription (2026-09-12)   // 59: UI::RibbonDescription (2026-09-12)   // 58: UI::GroupDescription (2026-09-12)   // 57: Video::ShaderProgram + VertexProgram + PixelProgram + RenderState (2026-09-12)   // 53: Video::VertexLayout (2026-09-12)   // 52: Video::VideoProgram (2026-09-12)   // 51: Graphics::Material (2026-09-12)
                                  // (was 50)   // 45-47: Graphics::EdgeMesh / EdgeMeshInstance /
