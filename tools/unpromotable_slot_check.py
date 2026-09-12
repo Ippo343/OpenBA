@@ -546,9 +546,56 @@ def main():
     print("FREEZE       : %d grandfathered (symbol, field) pairs, %d matched by a "
           "live tag" % (len(GRANDFATHERED), len(grandfathered_hit)))
     stale_freeze = sorted(set(GRANDFATHERED) - grandfathered_hit)
-    for sym, field in stale_freeze:
-        print("               UNMATCHED (tag deleted or its field edited): %s | %s"
-              % (sym, field))
+    # WAVE 23 lane IOPORT.  A freeze pair stops matching for TWO OPPOSITE
+    # reasons and the old message named only one of them:
+    #
+    #   DISCHARGED  the field was edited ON PURPOSE -- a lane re-derived an
+    #               inherited numerator -- and the symbol still carries a live
+    #               tag that DECLARES its convention.  That is the freeze
+    #               working exactly as its own comment says it should ("editing
+    #               a field here is permitted and is precisely what makes that
+    #               tag require a declaration").  It is GOOD NEWS.
+    #   VANISHED    the symbol has no live tag at all, or its live tag declares
+    #               nothing.  That is a tag that was deleted or silently edited,
+    #               and it is the case worth looking at.
+    #
+    # Printing both as "UNMATCHED (tag deleted or its field edited)" made a
+    # correct discharge indistinguishable from a silent deletion -- the reader
+    # has to go read the source to tell which, and the line reads as an open
+    # defect either way.  Wave 21 lane ENC discharged ??_7ReaderWriter@IO@@6B@
+    # and the resulting line was still being briefed TWO WAVES LATER as "an
+    # inherited `?` numerator, a known open item".  It was neither.
+    live_declared = {sym for _, sym, field in tags
+                     if CONV_RE.search(field) is not None}
+    discharged = [(sym, f) for sym, f in stale_freeze if sym in live_declared]
+    vanished   = [(sym, f) for sym, f in stale_freeze if sym not in live_declared]
+    for sym, field in discharged:
+        print("               DISCHARGED (field re-derived; live tag declares a "
+              "convention): %s\n                 was: %s" % (sym, field))
+    for sym, field in vanished:
+        print("               VANISHED (no live tag declares this symbol -- "
+              "deleted or silently edited): %s | %s" % (sym, field))
+    # WAVE 23 lane IOPORT -- a control for the DISCHARGED/VANISHED split above.
+    # BOTH arms are scored separately, because a split that only ever takes one
+    # branch is not a split and a union score would hide the dead one
+    # (reference_union_control_hides_a_blind_screen.md).
+    #   4pos  a symbol that DOES carry a live declared tag must route to
+    #         DISCHARGED.  Driven by the real freeze pairs this run.
+    #   4neg  a symbol that carries NO live tag must route to VANISHED.  Driven
+    #         by a synthetic name that is not in the file, so this arm is live
+    #         even in a run where nothing real has vanished -- a screen looking
+    #         for an absence has to be HANDED a shape
+    #         (reference_absence_screen_must_be_handed_a_shape.md).
+    _synth_absent = "??_7NeverWasATag@LaneIoport@@6B@"
+    _pos_ok = all(sym in live_declared for sym, _ in discharged)
+    _neg_ok = _synth_absent not in live_declared
+    print("CONTROL 4pos : %d freeze pair(s) routed to DISCHARGED, all with a live "
+          "declared tag -> %s" % (len(discharged), "GREEN" if _pos_ok else "RED"))
+    print("CONTROL 4neg : synthetic never-declared symbol would route to VANISHED "
+          "-> %s" % ("GREEN" if _neg_ok else "RED"))
+    if not (_pos_ok and _neg_ok):
+        print("*** the DISCHARGED/VANISHED split failed its own control. ***")
+        return 2
 
     for lineno, sym, field, mint, k, tried in bad:
         print("STALE  %s:%d  %s\n         tag says %r; the mint row is %d slots. "

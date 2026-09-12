@@ -614,6 +614,102 @@ extern "C" bool RtIo_MemoryStream_Open(MemoryStream* self, int size) {
     return true;
 }
 
+// ?Create@MemoryStream@IO@@QEAA_NH@Z — 0x1800ae7f0.   WAVE 23 lane IOPORT.
+//
+// THE WRITE-SIDE TWIN OF Open ABOVE, and the ONLY difference is the direction.
+// This file's own probe comment (compressed_stream_probe.cpp:143) already said
+// so — "the same body except `MOV dword ptr [RBP+0x8],1` at 0x1800ae860" — and
+// that claim was RE-DERIVED from the shipped bytes this lane rather than
+// inherited. The full retail disassembly (Ghidra MCP, retail Runtime-x64.dll,
+// not the profile build) is 26 instructions and the five stores are:
+//
+//     1800ae852  MOV [RBP+0x18],RBX     _data    = MemAlloc(size, 4)
+//     1800ae856  MOV [RBP+0x28],ESI     _size    = size
+//     1800ae859  MOV [RBP+0x24],0       _cursor  = 0
+//     1800ae860  MOV [RBP+0x8],1        _direction = 1   <-- WRITING (Open: 0)
+//     1800ae867  MOV [RBP+0x20],1       _ownsData  = 1
+//     1800ae86b  MOV AL,1               return true, UNCONDITIONALLY
+//
+// STORE ORDER IS RETAIL'S, not tidied: _size before _cursor before _direction
+// before _ownsData. Nothing here reads what it wrote, so the order is not
+// load-bearing, but reordering would make a future byte-level diff lie.
+//
+// `MOVSXD RSI,EDX` at 1800ae80e sign-extends the int before it reaches
+// Allocate, so a negative size reaches the allocator as a huge unsigned value
+// rather than being clamped. `static_cast<uint64_t>(size)` reproduces exactly
+// that bit pattern (a negative int converts to uint64_t as 2^64+v), which is
+// why it is spelled this way and not with an intermediate size_t.
+//
+// THE UNCONDITIONAL `true` IS RETAIL'S AND IS REPRODUCED. Allocation failure is
+// not reported; a caller that trusts the return and writes into a null buffer
+// is behaving exactly as it does against the shipped DLL. Per CLAUDE.md this is
+// the deref NOT to guard — a guard here would skip retail's behaviour, not
+// restore it.
+//
+// WHY THIS ROW MATTERS BEYOND ITS SIZE. `?Open@MemoryStream@IO@@QEAA_NH@Z` is
+// the WRONG overload for a writer — it sets _direction = 0 — and the failure
+// mode when the two are confused is a `REP MOVSB` with RDI = 0 inside the DLL's
+// memcpy, two calls away from the mistake. That is documented in
+// compressed_stream_probe.cpp as having cost two runs to find. With both
+// overloads now ported under their own mangled names, the distinction is
+// visible in our source instead of only in the DLL.
+//
+// ORACLE: FULL, by replay into a scratch object — the SAME instrument the Open
+// port above uses, for the same reason. Create ALLOCATES, so running theirs
+// over the live object would leak the buffer ours just made and leave the
+// object pointing at a second one. Instead a scratch MemoryStream is built with
+// the DLL's own constructor, THEIR Create is run on it with the same size, and
+// every field the function writes EXCEPT the buffer pointer is compared —
+// _size, _cursor, _direction, _ownsData and the return value, i.e. all four
+// non-pointer stores. _data is deliberately NOT compared: two independent
+// allocations cannot share an address, so comparing it would fail 100% of calls
+// for a reason that is not a defect
+// (reference_oracle_must_not_compare_unwritten_bytes.md).
+//
+// THE CONTROL THIS ORACLE ACTUALLY RUNS. _direction is the one field that
+// distinguishes Create from Open, and it IS in the compared set — so if this
+// body were mistakenly written as a copy of Open (direction 0), the shadow
+// would fire on every call. That is not a hypothetical: it is the exact defect
+// the probe comment warns about, and this oracle is positioned to catch it.
+// What the oracle does NOT cover: the allocator call itself (size and alignment
+// reaching MemAlloc) is compared only indirectly, through _size.
+extern "C" bool RtIo_MemoryStream_Create(MemoryStream* self, int size) {
+    RT_DIFF_BEGIN("IO::MemoryStream::Create");
+
+    self->data = RT_EXPORT_ONCE(MemAllocFn,
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(static_cast<uint64_t>(size), 4);
+    self->size = static_cast<uint32_t>(size);
+    self->cursor = 0;
+    self->base.direction = 1;          // 1800ae860 — WRITING. Open stores 0 here.
+    self->ownsData = 1;
+
+    if (rt_diff_on__) {
+        alignas(16) unsigned char scratch[sizeof(MemoryStream)];
+        std::memset(scratch, 0, sizeof(scratch));
+        RT_ORIGINAL_ONCE(CtorFn, "??0MemoryStream@IO@@QEAA@XZ")(scratch);
+        MemoryStream* s = reinterpret_cast<MemoryStream*>(scratch);
+
+        using CreateFn = bool (*)(void*, int);
+        const bool theirsOk =
+            RT_ORIGINAL_ONCE(CreateFn, "?Create@MemoryStream@IO@@QEAA_NH@Z")(s, size);
+
+        const bool eq = theirsOk &&
+                        s->size == self->size &&
+                        s->cursor == self->cursor &&
+                        s->base.direction == self->base.direction &&
+                        s->ownsData == self->ownsData;
+        char a[160], b[160];
+        std::snprintf(a, sizeof(a), "ret=1 size=%u cursor=%u dir=%d owns=%u",
+                      self->size, self->cursor, self->base.direction, self->ownsData);
+        std::snprintf(b, sizeof(b), "ret=%d size=%u cursor=%u dir=%d owns=%u",
+                      theirsOk ? 1 : 0, s->size, s->cursor, s->base.direction, s->ownsData);
+        RT_DIFF_SHADOW(eq, a, b);
+
+        RT_ORIGINAL_ONCE(DtorFn, "??1MemoryStream@IO@@UEAA@XZ")(s);
+    }
+    return true;
+}
+
 // ??1MemoryStream@IO@@UEAA@XZ — 0x1800ae890.
 //
 // Retail, in order:
@@ -966,6 +1062,11 @@ int RtIoCompressedStreamRegister() {
     RegisterRuntimeExport("?Open@MemoryStream@IO@@QEAA_NH@Z",
                           (void*)&RtIo_MemoryStream_Open); ++n;
     RegisterRuntimeAddr(0x1800ae670, (void*)&RtIo_MemoryStream_Open);
+
+    // ---- Wave 23 lane IOPORT: the write-side twin of Open, above. ----
+    RegisterRuntimeExport("?Create@MemoryStream@IO@@QEAA_NH@Z",
+                          (void*)&RtIo_MemoryStream_Create); ++n;
+    RegisterRuntimeAddr(0x1800ae7f0, (void*)&RtIo_MemoryStream_Create);
 
     RegisterRuntimeExport("??1MemoryStream@IO@@UEAA@XZ",
                           (void*)&RtIo_MemoryStream_Dtor); ++n;

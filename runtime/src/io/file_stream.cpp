@@ -536,6 +536,239 @@ extern "C" TextFileStream* RtIo_TextFileStream_Ctor(TextFileStream* self,
 }
 
 // ============================================================================
+// IO::TextFileStream::SetObject(String const&, String const&, int)  0x1800ba280
+// ============================================================================
+// WAVE 23 lane IOPORT.  Ordinal 3930.  42 instructions.
+//
+// THE ARGUMENT ORDER IS THE WHOLE RISK IN THIS ROW, so it was derived from the
+// REGISTERS, not from the decompiler's parameter names and not from the callers:
+//
+//   1800ba29e  MOV RDI,RDX   arg1 ... 1800ba313  MOV [RBX+0x60],RAX  objectType
+//   1800ba29b  MOV RSI,R8    arg2 ... 1800ba2d2  MOV [RBX+0x58],RAX  objectName
+//   1800ba298  MOV EBP,R9D   arg3 ... 1800ba2de  MOV [RBX+0x50],EBP  objectVersion
+//
+// So SetObject(a, b, v) assigns objectTYPE = a and objectNAME = b: the FIRST
+// String is the type and the SECOND is the name.  That is the reverse of the
+// reading order the field layout suggests (+0x58 name comes before +0x60 type),
+// and this exact pair has been swapped in this project before —
+// runtime/types/io/FileStream.h records having carried them the wrong way round
+// until retail settled it.  Three independent confirmations of the orientation:
+//   1. the register trace quoted above (this lane, retail Runtime-x64.dll);
+//   2. RtIo_TextFileStream_Ctor immediately above already passes
+//      `(self, type, name, version)` in that order to reach 1800ba45e;
+//   3. ?GetObjectName@ returns +0x58 and ?GetObjectType@ returns +0x60
+//      (FileStream.h's static_asserts quote both LEAs).
+//
+// THE BODY, in retail's order — the version store sits BETWEEN the two string
+// assignments, not before or after both:
+//     objectName (+0x58) <- arg2      [release-then-addref, guarded]
+//     objectVersion (+0x50) <- arg3
+//     objectType (+0x60) <- arg1      [release-then-addref, guarded]
+//
+// THE SELF-ASSIGNMENT GUARD IS LOAD-BEARING AND IS REPRODUCED.  `CMP RAX,[R8] /
+// JZ` at 1800ba2a4 skips the ENTIRE release-and-addref when the incoming String
+// already holds the same char*.  Dropping it would release and re-add a
+// reference in the same breath: a no-op for a live string, but it frees the
+// buffer outright when the field holds the last reference, which is a
+// use-after-free the moment a caller passes a field back to itself.
+//
+// THE STRING IDIOM is System::String's one-pointer representation with the
+// refcount at [p-4] and the allocation base at p-8 — the shape avl_trees.cpp's
+// StringReleaseInline and a dozen other ported bodies already use.  It is
+// written out inline here rather than through that helper because retail's
+// spelling differs in one visible way: the assignment stores the new pointer
+// DIRECTLY (1800ba2cf `MOV RAX,[RSI] / MOV [RBX+0x58],RAX`) with no preceding
+// `slot = 0`, whereas StringAddRefInto stores the zero first.  Equivalent in
+// effect, NOT equivalent in bytes; this file follows the bytes.
+//
+// MemFree is 1800c7ad0 reached through RtSystem::RtMemFree, the port-aware door
+// lane E's allocator replaces when it arms — the door every other free here uses.
+static void TfsReleaseAssign(char** slot, char* const* incoming) {
+    char* cur = *slot;
+    if (cur == *incoming) return;                          // 1800ba2a4 / 1800ba2e5
+    if (cur != nullptr) {
+        if (--reinterpret_cast<int32_t*>(cur)[-1] == 0) {  // 1800ba2ae
+            *slot = cur - 8;                               // 1800ba2b7
+            RtSystem::RtMemFree(*slot);                    // 1800ba2c0
+        } else {
+            *slot = nullptr;                               // 1800ba2c7
+        }
+    }
+    char* nw = *incoming;                                  // 1800ba2cf
+    *slot = nw;
+    if (nw != nullptr) ++reinterpret_cast<int32_t*>(nw)[-1];  // 1800ba2db
+}
+
+// ---------------------------------------------------------------------------
+// ORACLE: A/B ON SYNTHETIC SUBJECTS, and why it is NOT a replay is the point.
+// ---------------------------------------------------------------------------
+// SetObject cannot be replayed over the live object.  Running theirs AFTER ours
+// is VACUOUS: ours has already stored the incoming pointers, so theirs takes
+// the self-assignment guard on both strings and does nothing, and the
+// comparison passes no matter what this body did.  That is the
+// "a predicate nobody evaluates" shape — permanently green, permanently blind.
+//
+// Running theirs on a scratch object whose fields ALIAS the real object's
+// strings is worse than vacuous: both bodies decrement the same refcount, which
+// double-releases a live string.
+//
+// So the subject is SYNTHETIC.  Each armed call builds independent
+// TextFileStream-shaped buffers and freshly allocated refcounted strings, runs
+// the DLL's body on one and this port's on the other with identical arguments,
+// and compares.  Nothing live is touched and nothing is aliased.
+//
+// WHAT IS COMPARED: all three written fields (+0x50, +0x58, +0x60) on both
+// subjects AND the refcount of every string involved.  The refcounts are the
+// half a field comparison alone would miss, and they are exactly where a
+// dropped addref or a doubled release shows up.
+//
+// WHICH BRANCHES IT COVERS — three cases per armed call:
+//   (a) old == nullptr            fresh assign, no release
+//   (b) old != new, refcount > 1  release-without-free      (1800ba2c7)
+//   (c) old == new                the self-assignment guard (1800ba2a7)
+// Case (d), release-WITH-free (refcount reaches 0, 1800ba2b7), is NOT
+// exercised: driving it means handing the DLL a string it will MemFree, and the
+// two subjects would then need separately-allocated-but-equal strings, at which
+// point the compared pointers legitimately differ and the comparison stops
+// meaning anything.  That branch is covered by STATIC BYTE READING ONLY and is
+// listed as such in docs/runtime_port/WAVE23_LANE_IOPORT.md rather than being
+// quietly folded into a green result.
+//
+// NEGATIVE CONTROL: BANISHED_RT_TFS_SETOBJ_CONTROL=1 makes the port's objectType
+// store write nullptr.  +0x60 IS in the compared set, so the control corrupts
+// something the oracle actually reads — the property a control needs.  A
+// control that corrupts an unobserved value reports NOT CAUGHT and indicts a
+// sound instrument; the mirror (corrupting a value that SHOULD differ)
+// exonerates a broken one.  Neither applies here: +0x60 must be EQUAL on both
+// subjects, because both are handed the same incoming pointer.
+namespace {
+
+// A refcounted System::String, built the way the allocator builds one: an
+// 8-byte header whose last dword is the refcount, then the characters.  The
+// returned pointer is what a String holds, i.e. base + 8.
+char* TfsMakeSynthString(const char* text, int32_t initialRefs) {
+    const size_t n = std::strlen(text) + 1;
+    char* base = static_cast<char*>(RtSystem::RtMemAlloc(8 + n, 8));
+    if (base == nullptr) return nullptr;
+    std::memset(base, 0, 8);
+    char* p = base + 8;
+    std::memcpy(p, text, n);
+    reinterpret_cast<int32_t*>(p)[-1] = initialRefs;
+    return p;
+}
+
+void TfsFreeSynthString(char* p) {
+    if (p != nullptr) RtSystem::RtMemFree(p - 8);
+}
+
+// One A/B case.  `seedText` is what both subjects start with at +0x58/+0x60
+// (nullptr for case (a)); `selfAssign` runs case (c) by passing the subject's
+// own current pointers back in.
+void TfsSetObjectCase(const char* caseName, const char* seedText, bool selfAssign) {
+    // Its OWN diff site: RT_DIFF_SHADOW below needs rt_diff_site__/rt_diff_on__
+    // in scope, and a per-case site also makes the three cases distinguishable
+    // in the report instead of collapsing into one counter.
+    RT_DIFF_BEGIN("IO::TextFileStream::SetObject/oracle");
+    alignas(16) unsigned char mine[sizeof(TextFileStream)];
+    alignas(16) unsigned char theirs[sizeof(TextFileStream)];
+    std::memset(mine, 0, sizeof(mine));
+    std::memset(theirs, 0, sizeof(theirs));
+    TextFileStream* A = reinterpret_cast<TextFileStream*>(mine);    // ours
+    TextFileStream* B = reinterpret_cast<TextFileStream*>(theirs);  // the DLL's
+
+    // Seeds: one per subject, so neither body can touch the other's refcount.
+    char* seedA = seedText ? TfsMakeSynthString(seedText, 2) : nullptr;
+    char* seedB = seedText ? TfsMakeSynthString(seedText, 2) : nullptr;
+    A->objectName = seedA; A->objectType = seedA;
+    B->objectName = seedB; B->objectType = seedB;
+
+    // Incoming: ONE pair, shared by both bodies.  Both add a reference to the
+    // same strings, so the expected final refcount is start + 2, and a body
+    // that forgets its addref shows up as a shortfall.
+    char* inType = TfsMakeSynthString("SynthType", 1);
+    char* inName = TfsMakeSynthString("SynthName", 1);
+    if (inType == nullptr || inName == nullptr) {
+        TfsFreeSynthString(seedA); TfsFreeSynthString(seedB);
+        TfsFreeSynthString(inType); TfsFreeSynthString(inName);
+        return;
+    }
+    const int32_t typeRefs0 = reinterpret_cast<int32_t*>(inType)[-1];
+    const int32_t nameRefs0 = reinterpret_cast<int32_t*>(inName)[-1];
+
+    char* aType = selfAssign ? A->objectType : inType;
+    char* aName = selfAssign ? A->objectName : inName;
+    char* bType = selfAssign ? B->objectType : inType;
+    char* bName = selfAssign ? B->objectName : inName;
+
+    // OURS.  Same two calls, same order, as the exported body above.
+    TfsReleaseAssign(&A->objectName, &aName);
+    A->objectVersion = 0x5A;
+    TfsReleaseAssign(&A->objectType, &aType);
+
+    // THEIRS — the raw DLL body, reached past the port registry on purpose.
+    using SetObjFn = void (*)(void*, char* const*, char* const*, int);
+    RT_ORIGINAL_ONCE(SetObjFn,
+        "?SetObject@TextFileStream@IO@@QEAAXAEBVString@System@@0H@Z")(
+            B, &bType, &bName, 0x5A);
+
+    const bool fieldsEq = A->objectVersion == B->objectVersion &&
+                          A->objectName    == B->objectName &&
+                          A->objectType    == B->objectType;
+    // Refcount agreement.  In the self-assign case both bodies must leave the
+    // incoming strings untouched; otherwise both must have added exactly one
+    // reference each for name and type.
+    const int32_t typeRefs = reinterpret_cast<int32_t*>(inType)[-1];
+    const int32_t nameRefs = reinterpret_cast<int32_t*>(inName)[-1];
+    const int32_t expectType = selfAssign ? typeRefs0 : typeRefs0 + 2;
+    const int32_t expectName = selfAssign ? nameRefs0 : nameRefs0 + 2;
+    const bool refsEq = typeRefs == expectType && nameRefs == expectName;
+
+    char a[220], b[220];
+    std::snprintf(a, sizeof(a),
+                  "%s ours ver=%d name=%p type=%p typeRefs=%d nameRefs=%d",
+                  caseName, A->objectVersion, (void*)A->objectName,
+                  (void*)A->objectType, (int)typeRefs, (int)nameRefs);
+    std::snprintf(b, sizeof(b),
+                  "%s dll  ver=%d name=%p type=%p expectTypeRefs=%d expectNameRefs=%d",
+                  caseName, B->objectVersion, (void*)B->objectName,
+                  (void*)B->objectType, (int)expectType, (int)expectName);
+    RT_DIFF_SHADOW(fieldsEq && refsEq, a, b);
+
+    // Tear down.  Each subject still holds whatever the body left in its two
+    // slots; the seeds are per-subject and the incoming pair is shared, so the
+    // shared pair is released once here rather than once per subject.
+    TfsFreeSynthString(seedA);
+    TfsFreeSynthString(seedB);
+    TfsFreeSynthString(inType);
+    TfsFreeSynthString(inName);
+}
+
+void RtIo_TextFileStream_SetObjectOracle() {
+    TfsSetObjectCase("fresh",      nullptr,  false);  // (a) no release
+    TfsSetObjectCase("rewrite",    "Seed",   false);  // (b) release, no free
+    TfsSetObjectCase("selfassign", "Seed",   true);   // (c) the guard
+}
+
+}  // namespace
+
+extern "C" void RtIo_TextFileStream_SetObject(TextFileStream* self,
+                                              char* const* type,
+                                              char* const* name,
+                                              int version) {
+    RT_DIFF_BEGIN("IO::TextFileStream::SetObject");
+
+    TfsReleaseAssign(&self->objectName, name);   // 1800ba294..ba2dd   arg2
+    self->objectVersion = version;               // 1800ba2de          arg3
+    TfsReleaseAssign(&self->objectType, type);   // 1800ba2e1..ba31e   arg1
+
+    // Negative control.  Corrupts +0x60, which the oracle compares.
+    static const char* const ctl = std::getenv("BANISHED_RT_TFS_SETOBJ_CONTROL");
+    if (ctl != nullptr && ctl[0] == '1') self->objectType = nullptr;
+
+    if (rt_diff_on__) RtIo_TextFileStream_SetObjectOracle();
+}
+
+// ============================================================================
 // IO::FileStream::Create(Filename const&)                retail 0x1800aa8f0
 // ============================================================================
 // PROTECTED (`IEAA`), which means PRIVATE-to-the-hierarchy, NOT unexported —
@@ -640,6 +873,14 @@ int RtIoFileStreamRegister() {
     RegisterRuntimeExport("?Create@FileStream@IO@@IEAA_NAEBVFilename@System@@@Z",
                           (void*)&RtIo_FileStream_Create); ++n;
     RegisterRuntimeAddr(0x1800aa8f0, (void*)&RtIo_FileStream_Create);
+
+    // ---- Wave 23 lane IOPORT ----
+    // RtIo_TextFileStream_Ctor above already CALLS this symbol through
+    // RT_EXPORT_ONCE, so registering it converts that existing call site from
+    // the DLL's body to ours with no edit at the call site.
+    RegisterRuntimeExport("?SetObject@TextFileStream@IO@@QEAAXAEBVString@System@@0H@Z",
+                          (void*)&RtIo_TextFileStream_SetObject); ++n;
+    RegisterRuntimeAddr(0x1800ba280, (void*)&RtIo_TextFileStream_SetObject);
 
     // UNEXPORTED — address only, and that is the ONLY door it has.
     RegisterRuntimeAddr(0x18000c180, (void*)&RtIo_FileInfo_Dtor);
