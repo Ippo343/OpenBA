@@ -1016,11 +1016,70 @@ static const DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x1800378a0, 0x1800cb840, 0x028, "UI::CharacterSet"),
     RT_DELDTOR(0x18003b3a0, 0x1800cd1c0, 0x030, "UI::Cursor"),
     RT_DELDTOR(0x18003ccf0, 0x1800d91b0, 0x058, "UI::SpriteCapture"),
+    // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ---------
+    // Slot 0 of the fourteen UI widget vtables ported by
+    // runtime/src/ui/<class>element.cpp. APPENDED, never inserted: the table is
+    // POSITIONAL and kProbeSubjects is a list of INDICES.
+    //
+    // Both constants per row were read out of RETAIL Runtime-x64.dll's own
+    // disassembly at the deleting destructor's address — the `LEA R9,[~Class]`
+    // and the `MOV EDX,sizeof` that the shared `eh vector destructor iterator`
+    // at 0x18007ec98 is handed:
+    //
+    //   0x180043570  LEA R9,[0x1800d32a0]  MOV EDX,0xd0    UI::LayoutElement
+    //   0x180045320  LEA R9,[0x1800d4530]  MOV EDX,0x100   UI::ListElement
+    //   0x180046540  LEA R9,[0x1800d4c40]  MOV EDX,0x100   UI::NumberEditElement
+    //   0x18004ab80  LEA R9,[0x180118ce0]  MOV EDX,0xe8    UI::NumberElement
+    //   0x180047540  LEA R9,[0x1800d5220]  MOV EDX,0xc8    UI::PageElement
+    //   0x180078150  LEA R9,[0x180077ef0]  MOV EDX,0x130   UI::ProgressElement
+    //   0x180047d50  LEA R9,[0x1800d5820]  MOV EDX,0xd8    UI::RadioElement
+    //   0x180044ac0  LEA R9,[0x1800d5d70]  MOV EDX,0xd8    UI::RibbonElement
+    //   0x18003adc0  LEA R9,[0x18011a900]  MOV EDX,0x178   UI::ScrollElement
+    //   0x18004a180  LEA R9,[0x180049ee0]  MOV EDX,0x130   UI::SliderElement
+    //   0x18004b3b0  LEA R9,[0x1800d8640]  MOV EDX,0xc8    UI::SpinnerElement
+    //   0x18004ca90  LEA R9,[0x1800da360]  MOV EDX,0x108   UI::TabElement
+    //   0x180079600  LEA R9,[0x18011e2a0]  MOV EDX,0xf0    UI::TableElement
+    //   0x1800422f0  LEA R9,[0x18011eda0]  MOV EDX,0x100   UI::TextElement
+    //
+    // ALL FOURTEEN ~Class bodies are PORTED by that batch and registered by
+    // name AND address, so ResolveAddr hands each row OUR destructor rather
+    // than the DLL's — these rows add nothing to the cutover surface.
+    //
+    // NOT added to kProbeSubjects: every one of them tail-calls ~Element,
+    // which releases a System::String and destroys the child Array, so running
+    // one on a fabricated object would be a manufactured crash, not a
+    // measurement.
+    //
+    // TWO OF THEM READ "UNREC" IN tools/rt_deleting_dtor_verify.py, AND THAT
+    // IS THE READER, NOT THE ROW. ProgressElement (0x180078150) and
+    // SliderElement (0x18004a180) are the two whose ~Class is a BARE TAIL JUMP
+    // to ~Element with no vtable restamp -- five instructions, e.g.
+    // 0x180077ef0: `MOV [RSP+8],RCX; SUB RSP,0x38; MOV [RSP+0x20],-2;
+    // ADD RSP,0x38; JMP 0x1801161a0`. Inlining that into the scalar branch
+    // leaves a plain `CALL 0x1801161a0` (checked at 0x1800781a1), which is
+    // neither of the reader's two known shapes ("calls the dtor" /
+    // "restamps then inlines"), so it declines to classify. The two constants
+    // it DOES check -- dtor VA and sizeof -- are re-derived and correct for
+    // both rows.
+    RT_DELDTOR(0x180043570, 0x1800d32a0, 0x0d0, "UI::LayoutElement"),
+    RT_DELDTOR(0x180045320, 0x1800d4530, 0x100, "UI::ListElement"),
+    RT_DELDTOR(0x180046540, 0x1800d4c40, 0x100, "UI::NumberEditElement"),
+    RT_DELDTOR(0x18004ab80, 0x180118ce0, 0x0e8, "UI::NumberElement"),
+    RT_DELDTOR(0x180047540, 0x1800d5220, 0x0c8, "UI::PageElement"),
+    RT_DELDTOR(0x180078150, 0x180077ef0, 0x130, "UI::ProgressElement"),
+    RT_DELDTOR(0x180047d50, 0x1800d5820, 0x0d8, "UI::RadioElement"),
+    RT_DELDTOR(0x180044ac0, 0x1800d5d70, 0x0d8, "UI::RibbonElement"),
+    RT_DELDTOR(0x18003adc0, 0x18011a900, 0x178, "UI::ScrollElement"),
+    RT_DELDTOR(0x18004a180, 0x180049ee0, 0x130, "UI::SliderElement"),
+    RT_DELDTOR(0x18004b3b0, 0x1800d8640, 0x0c8, "UI::SpinnerElement"),
+    RT_DELDTOR(0x18004ca90, 0x1800da360, 0x108, "UI::TabElement"),
+    RT_DELDTOR(0x180079600, 0x18011e2a0, 0x0f0, "UI::TableElement"),
+    RT_DELDTOR(0x1800422f0, 0x18011eda0, 0x100, "UI::TextElement"),
     // ---- Vtable batch 6 (2026-09-12): graphics buffers, meshes and lights ----
-    // INDICES 89-94, appended after batches 1/5/7's 71-88. The table is
-    // POSITIONAL and these six were RE-COUNTED after a second merge of main --
-    // they were 71-76 on this branch until batches 1, 5 and 7 landed there
-    // first. That is the merge hazard the banner and kSpecCount both record.
+    // INDICES 103-108, appended after batch 4 elem_B's 89-102. The table is
+    // POSITIONAL and these six have been RE-COUNTED TWICE: 71-76 -> 89-94 ->
+    // 103-108, once for batches 1/5/7 and once for batch 4. That is the merge
+    // hazard the banner and kSpecCount both record, met twice by one batch.
     //
     // Every row's two constants were read from that deleting destructor's OWN
     // bytes — the `LEA R9` of the vector arm and its `MOV EDX,imm`:
@@ -1576,28 +1635,46 @@ void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 84);
 }
 // Vtable batch 6 (2026-09-12): the graphics buffer / mesh / light slot-0 rows.
-// INDICES 89-94, RE-COUNTED OFF THE TABLE AFTER A SECOND MERGE OF main. They
-// were 71-76 on this branch; batches 1, 5 and 7 landed on main first and took
-// 71-88, so every one of these six moved. That is the positional-merge hazard
-// the banner and kSpecCount describe, happening for real.
+// INDICES 103-108, RE-COUNTED OFF THE TABLE AFTER THE THIRD MERGE OF main.
+// These six were 71-76, then 89-94, and are now 103-108: batches 1, 5 and 7
+// took 71-88 and batch 4 elem_B took 89-102 while this branch held them. That
+// is the positional-merge hazard the banner and kSpecCount describe, and it has
+// now bitten this one batch twice. RE-COUNT after every merge, never before.
 void* RtDelDtor_AmbientLight(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 89);
+    return DeletingDtorCore(self, flags, 103);
 }
 void* RtDelDtor_GeneratedImageBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 90);
+    return DeletingDtorCore(self, flags, 104);
 }
 void* RtDelDtor_FrameCopyImageBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 91);
+    return DeletingDtorCore(self, flags, 105);
 }
 void* RtDelDtor_ReflectionImageBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 92);
+    return DeletingDtorCore(self, flags, 106);
 }
 void* RtDelDtor_GraphicsMesh(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 93);
+    return DeletingDtorCore(self, flags, 107);
 }
 void* RtDelDtor_SpotLight(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 94);
+    return DeletingDtorCore(self, flags, 108);
 }
+
+// ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ------------
+// All fourteen ~Class bodies are PORTED (runtime/src/ui/<class>element.cpp).
+void* RtDelDtor_LayoutElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 89); }
+void* RtDelDtor_ListElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, 90); }
+void* RtDelDtor_NumberEditElement(void* self, unsigned flags) { return DeletingDtorCore(self, flags, 91); }
+void* RtDelDtor_NumberElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 92); }
+void* RtDelDtor_PageElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, 93); }
+void* RtDelDtor_ProgressElement(void* self, unsigned flags)   { return DeletingDtorCore(self, flags, 94); }
+void* RtDelDtor_RadioElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, 95); }
+void* RtDelDtor_RibbonElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 96); }
+void* RtDelDtor_ScrollElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 97); }
+void* RtDelDtor_SliderElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 98); }
+void* RtDelDtor_SpinnerElement(void* self, unsigned flags)    { return DeletingDtorCore(self, flags, 99); }
+void* RtDelDtor_TabElement(void* self, unsigned flags)        { return DeletingDtorCore(self, flags, 100); }
+void* RtDelDtor_TableElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, 101); }
+void* RtDelDtor_TextElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, 102); }
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
@@ -1748,6 +1825,22 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180022600, (void*)&RtDelDtor_ReflectionImageBuffer); // vtable batch 6
     RegisterRuntimeAddr(0x180012bd0, (void*)&RtDelDtor_GraphicsMesh);          // vtable batch 6
     RegisterRuntimeAddr(0x1800642b0, (void*)&RtDelDtor_SpotLight);             // vtable batch 6
+
+    // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
+    RegisterRuntimeAddr(0x180043570, (void*)&RtDelDtor_LayoutElement);
+    RegisterRuntimeAddr(0x180045320, (void*)&RtDelDtor_ListElement);
+    RegisterRuntimeAddr(0x180046540, (void*)&RtDelDtor_NumberEditElement);
+    RegisterRuntimeAddr(0x18004ab80, (void*)&RtDelDtor_NumberElement);
+    RegisterRuntimeAddr(0x180047540, (void*)&RtDelDtor_PageElement);
+    RegisterRuntimeAddr(0x180078150, (void*)&RtDelDtor_ProgressElement);
+    RegisterRuntimeAddr(0x180047d50, (void*)&RtDelDtor_RadioElement);
+    RegisterRuntimeAddr(0x180044ac0, (void*)&RtDelDtor_RibbonElement);
+    RegisterRuntimeAddr(0x18003adc0, (void*)&RtDelDtor_ScrollElement);
+    RegisterRuntimeAddr(0x18004a180, (void*)&RtDelDtor_SliderElement);
+    RegisterRuntimeAddr(0x18004b3b0, (void*)&RtDelDtor_SpinnerElement);
+    RegisterRuntimeAddr(0x18004ca90, (void*)&RtDelDtor_TabElement);
+    RegisterRuntimeAddr(0x180079600, (void*)&RtDelDtor_TableElement);
+    RegisterRuntimeAddr(0x1800422f0, (void*)&RtDelDtor_TextElement);
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --

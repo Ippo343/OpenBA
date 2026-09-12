@@ -64,14 +64,15 @@ struct DelDtorSpec {
 // stays true of it; the TABLE is the authority and this constant tracks it,
 // and the static_assert next to the table is what forces an appender to
 // notice (it caught CSTREAM's addition, at 41 vs 39).
-constexpr int kSpecCount = 95;   // 89-94: VTABLE BATCH 6 (Graphics::AmbientLight,
+constexpr int kSpecCount = 109;  // 103-108: VTABLE BATCH 6 (Graphics::AmbientLight,
                                  //     GeneratedImageBuffer, FrameCopyImageBuffer,
                                  //     ReflectionImageBuffer, GraphicsMesh, SpotLight;
-                                 //     2026-09-12). These six were 71-76 on their own
-                                 //     branch and were RE-COUNTED when batches 1, 5
-                                 //     and 7 reached main first — the hazard below,
-                                 //     for real, a second time.
-                                 // 85-88: VTABLE BATCH 5 (Font, CharacterSet, Cursor, SpriteCapture); 81-84: VTABLE BATCH 7 (AnimationGroup, ParticleSystem, SoundBuffer, SoundEffect); 71-80: VTABLE BATCH 1 -- UI::{Border,Button,Check,
+                                 //     2026-09-12). RE-COUNTED TWICE: these six were
+                                 //     71-76 on their own branch, then 89-94, and are
+                                 //     103-108 now that batches 1/5/7 (71-88) and
+                                 //     batch 4 elem_B (89-102) reached main first.
+                                 //     The hazard below, met twice by one batch.
+                                 // 89-102: VTABLE BATCH 4 elem_B (14 UI::*Element); 85-88: VTABLE BATCH 5 (Font, CharacterSet, Cursor, SpriteCapture); 81-84: VTABLE BATCH 7 (AnimationGroup, ParticleSystem, SoundBuffer, SoundEffect); 71-80: VTABLE BATCH 1 -- UI::{Border,Button,Check,
                                  //     ClipRegion,Combo,Container,DocumentText,Edit,Graph,
                                  //     Label}Description (2026-09-12); renumbered at the
                                  //     merge, batch 9 keeps 61-66 and batch 8 67-70

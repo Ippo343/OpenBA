@@ -456,14 +456,11 @@ extern "C" void* RtUiFact_LayoutDescription_CreateInPlaceObject(void* p) {
 //   ?CreateNewObject@LayoutElement@UI@@SAPEAVBase@Object@@XZ       0x180043380 ord 2080
 //   ?CreateInPlaceObject@LayoutElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180043420 ord 1943
 //   ??0LayoutElement@UI@@QEAA@XZ                                   0x1800d32e0 ord 252
-void* Ctor_LayoutElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7LayoutElement@UI@@6B@");
-    U64(self, 0xc0, 0);
-    U64(self, 0xc8, 0);
-    return p;
-}
+extern "C" void* RtUi_LayoutElement_Ctor(void* self);   // runtime/src/ui/layoutelement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0LayoutElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_LayoutElement(void* p) { return RtUi_LayoutElement_Ctor(p); }
 
 extern "C" void* RtUiFact_LayoutElement_CreateNewObject() {
     ++g_new;
@@ -532,20 +529,11 @@ extern "C" void* RtUiFact_ListDescription_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0ListElement@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_ListElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7ListElement@UI@@6B@");
-    U64(self, 0xc0, 0);
-    U32(self, 0xc8, 0xffffffffu);
-    U64(self, 0xd0, 0xffffffffff808080ull);
-    U64(self, 0xd8, 0xffffffffffffffffull);
-    U64(self, 0xe0, 0);
-    U64(self, 0xe8, 0);
-    U64(self, 0xf0, 0);
-    U64(self, 0xf8, 0);
-    return p;
-}
+extern "C" void* RtUi_ListElement_Ctor(void* self);   // runtime/src/ui/listelement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0ListElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_ListElement(void* p) { return RtUi_ListElement_Ctor(p); }
 
 extern "C" void* RtUiFact_ListElement_CreateNewObject() {
     ++g_new;
@@ -654,14 +642,11 @@ extern "C" void* RtUiFact_NumberEditDescription_CreateInPlaceObject(void* p) {
 //   ?CreateNewObject@NumberEditElement@UI@@SAPEAVBase@Object@@XZ   0x180046340 ord 2087
 //   ?CreateInPlaceObject@NumberEditElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x1800463e0 ord 1950
 //   ??0NumberEditElement@UI@@QEAA@XZ                               0x1800d4c70 ord 285
-void* Ctor_NumberEditElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0EditElement@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7NumberEditElement@UI@@6B@");
-    U32(self, 0xf8, 0xffff8001u);
-    U32(self, 0xfc, 0x8000u);
-    return p;
-}
+extern "C" void* RtUi_NumberEditElement_Ctor(void* self);   // runtime/src/ui/numbereditelement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0NumberEditElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_NumberEditElement(void* p) { return RtUi_NumberEditElement_Ctor(p); }
 
 extern "C" void* RtUiFact_NumberEditElement_CreateNewObject() {
     ++g_new;
@@ -682,23 +667,13 @@ extern "C" void* RtUiFact_NumberEditElement_CreateInPlaceObject(void* p) {
 //   ??0NumberElement@UI@@QEAA@XZ                                   0x180118c70 ord 287
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0NumberElement@UI@@QEAA@XZ.
-// *** THIS "NOT PORTED" NOTE IS OUT OF DATE AS OF 2026-09-12. ***
-// It used to read: "The ctor is NOT ported: it calls
-// ?CacheText@NumberElement@UI@@AEAAXXZ, a private member this lane does not
-// own and did not read. The factory pair below therefore MOVES the cutover
-// wall from the factory to the ctor rather than clearing it."
-// `??0NumberElement@UI@@QEAA@XZ` IS NOW PORTED, in
-// runtime/src/ui/element_bodies_b5.cpp, and registered under this exact name
-// AND at 0x180118c70 — so the `BASE(...)` call below, which resolves through
-// the port-aware `RtResolveCached`, reaches OUR body rather than the DLL's.
-// The stated blocker was also never about ownership: `AEBA`/`AEAA` means
-// PRIVATE, and this DLL exports its private members
-// (reference_aeaa_is_private_not_unexported.md).
-// WHAT REMAINS TRUE: `?CacheText@NumberElement@UI@@AEAAXXZ` (0x1801189f0) is
-// itself still unported — it is a DIFFERENT function from TextElement's
-// CacheText — so the ported ctor reaches it by address through the
-// registry-first `ResolveAddr`. That single callee is the residual now, not
-// this row.
+// *** THAT RESIDUAL IS CLEARED. 2026-09-12. *** This note used to read "the
+// ctor is NOT ported: it calls ?CacheText@NumberElement@UI@@AEAAXXZ, a private
+// member this lane does not own and did not read... the factory pair MOVES the
+// cutover wall from the factory to the ctor rather than clearing it." Both the
+// ctor (0x180118C70) and that CacheText (0x1801189F0) are ported now, in
+// runtime/src/ui/numberelement.cpp, and both are registered by NAME — so the
+// `BASE(...)` below resolves to our body and the wall is cleared, not moved.
 void* Ctor_NumberElement(void* p) { BASE("??0NumberElement@UI@@QEAA@XZ", p); return p; }
 
 extern "C" void* RtUiFact_NumberElement_CreateNewObject() {
@@ -764,14 +739,11 @@ extern "C" void* RtUiFact_PageDescription_CreateInPlaceObject(void* p) {
 //   ?CreateNewObject@PageElement@UI@@SAPEAVBase@Object@@XZ         0x180047360 ord 2091
 //   ?CreateInPlaceObject@PageElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180047400 ord 1954
 //   ??0PageElement@UI@@QEAA@XZ                                     0x1800d5260 ord 293
-void* Ctor_PageElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7GroupElement@UI@@6B@");
-    VPTR(self, "??_7PageElement@UI@@6B@");
-    U32(self, 0xc0, 0);
-    return p;
-}
+extern "C" void* RtUi_PageElement_Ctor(void* self);   // runtime/src/ui/pageelement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0PageElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_PageElement(void* p) { return RtUi_PageElement_Ctor(p); }
 
 extern "C" void* RtUiFact_PageElement_CreateNewObject() {
     ++g_new;
@@ -844,27 +816,11 @@ extern "C" void* RtUiFact_ProgressDescription_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0ProgressElement@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_ProgressElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7ProgressElement@UI@@6B@");
-    U64(self, 0xc0, 0);
-    U32(self, 0xc8, 0xffffffffu);
-    U64(self, 0xd0, 0);
-    U32(self, 0xd8, 0xffffffffu);
-    U64(self, 0xe0, 0);
-    U32(self, 0xe8, 0xffffffffu);
-    U64(self, 0xf0, 0);
-    U32(self, 0xf8, 0xffffffffu);
-    U64(self, 0x100, 0);
-    U32(self, 0x108, 0xffffffffu);
-    U64(self, 0x110, 0);
-    U32(self, 0x118, 0xffffffffu);
-    U32(self, 0x120, 0xffffffffu);
-    U32(self, 0x124, 0x3f800000u);
-    U32(self, 0x128, 0x3e800000u);
-    return p;
-}
+extern "C" void* RtUi_ProgressElement_Ctor(void* self);   // runtime/src/ui/progresselement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0ProgressElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_ProgressElement(void* p) { return RtUi_ProgressElement_Ctor(p); }
 
 extern "C" void* RtUiFact_ProgressElement_CreateNewObject() {
     ++g_new;
@@ -929,16 +885,11 @@ extern "C" void* RtUiFact_RadioDescription_CreateInPlaceObject(void* p) {
 //   ?CreateNewObject@RadioElement@UI@@SAPEAVBase@Object@@XZ        0x180047af0 ord 2100
 //   ?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180047ba0 ord 1963
 //   ??0RadioElement@UI@@QEAA@XZ                                    0x1800d5870 ord 333
-void* Ctor_RadioElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7GroupElement@UI@@6B@");
-    VPTR(self, "??_7RadioElement@UI@@6B@");
-    U64(self, 0xc0, 0);
-    U64(self, 0xc8, 0);
-    U32(self, 0xd0, 0xffffffffu);
-    return p;
-}
+extern "C" void* RtUi_RadioElement_Ctor(void* self);   // runtime/src/ui/radioelement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0RadioElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_RadioElement(void* p) { return RtUi_RadioElement_Ctor(p); }
 
 extern "C" void* RtUiFact_RadioElement_CreateNewObject() {
     ++g_new;
@@ -1000,16 +951,11 @@ extern "C" void* RtUiFact_RibbonDescription_CreateInPlaceObject(void* p) {
 //   ?CreateNewObject@RibbonElement@UI@@SAPEAVBase@Object@@XZ       0x1800447d0 ord 2104
 //   ?CreateInPlaceObject@RibbonElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x180044880 ord 1967
 //   ??0RibbonElement@UI@@QEAA@XZ                                   0x1800d5d10 ord 358
-void* Ctor_RibbonElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7RibbonElement@UI@@6B@");
-    U16(self, 0xc0, 0);
-    U32(self, 0xc4, 0);
-    U64(self, 0xc8, 0);
-    U64(self, 0xd0, 0);
-    return p;
-}
+extern "C" void* RtUi_RibbonElement_Ctor(void* self);   // runtime/src/ui/ribbonelement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0RibbonElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_RibbonElement(void* p) { return RtUi_RibbonElement_Ctor(p); }
 
 extern "C" void* RtUiFact_RibbonElement_CreateNewObject() {
     ++g_new;
@@ -1086,36 +1032,11 @@ extern "C" void* RtUiFact_ScrollDescription_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0ScrollElement@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_ScrollElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7ScrollElement@UI@@6B@");
-    U64(self, 0xc0, 0);
-    U32(self, 0xc8, 0xffffffffu);
-    U64(self, 0xd0, 0);
-    U32(self, 0xd8, 0xffffffffu);
-    U64(self, 0xe0, 0);
-    U32(self, 0xe8, 0xffffffffu);
-    U64(self, 0xf0, 0);
-    U32(self, 0xf8, 0xffffffffu);
-    U64(self, 0x100, 0);
-    U32(self, 0x108, 0xffffffffu);
-    U64(self, 0x110, 0);
-    U32(self, 0x118, 0xffffffffu);
-    U64(self, 0x120, 0);
-    U32(self, 0x128, 0xffffffffu);
-    U64(self, 0x130, 0);
-    U32(self, 0x138, 0xffffffffu);
-    U64(self, 0x140, 0);
-    U32(self, 0x148, 0xffffffffu);
-    U8(self, 0x150, 0x1u);
-    U64(self, 0x154, 0xffffffffffffffffull);
-    U32(self, 0x160, 0);
-    U32(self, 0x164, 0x3eaaaaabu);
-    U64(self, 0x168, 0x40800000ull);
-    U32(self, 0x170, 0);
-    return p;
-}
+extern "C" void* RtUi_ScrollElement_Ctor(void* self);   // runtime/src/ui/scrollelement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0ScrollElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_ScrollElement(void* p) { return RtUi_ScrollElement_Ctor(p); }
 
 extern "C" void* RtUiFact_ScrollElement_CreateNewObject() {
     ++g_new;
@@ -1190,28 +1111,11 @@ extern "C" void* RtUiFact_SliderDescription_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0SliderElement@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_SliderElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7SliderElement@UI@@6B@");
-    U64(self, 0xc0, 0);
-    U32(self, 0xc8, 0xffffffffu);
-    U64(self, 0xd0, 0);
-    U32(self, 0xd8, 0xffffffffu);
-    U64(self, 0xe0, 0);
-    U32(self, 0xe8, 0xffffffffu);
-    U64(self, 0xf0, 0);
-    U32(self, 0xf8, 0xffffffffu);
-    U64(self, 0x100, 0);
-    U32(self, 0x108, 0xffffffffu);
-    U64(self, 0x110, 0);
-    U32(self, 0x118, 0);
-    U32(self, 0x11c, 0x3f800000u);
-    U32(self, 0x120, 0xau);
-    U8(self, 0x124, 0);
-    U32(self, 0x128, 0x3e800000u);
-    return p;
-}
+extern "C" void* RtUi_SliderElement_Ctor(void* self);   // runtime/src/ui/sliderelement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0SliderElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_SliderElement(void* p) { return RtUi_SliderElement_Ctor(p); }
 
 extern "C" void* RtUiFact_SliderElement_CreateNewObject() {
     ++g_new;
@@ -1276,13 +1180,11 @@ extern "C" void* RtUiFact_SpinnerDescription_CreateInPlaceObject(void* p) {
 //   ?CreateNewObject@SpinnerElement@UI@@SAPEAVBase@Object@@XZ      0x18004b200 ord 2113
 //   ?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z 0x18004b290 ord 1976
 //   ??0SpinnerElement@UI@@QEAA@XZ                                  0x1800d8670 ord 395
-void* Ctor_SpinnerElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7SpinnerElement@UI@@6B@");
-    U32(self, 0xc0, 0x1u);
-    return p;
-}
+extern "C" void* RtUi_SpinnerElement_Ctor(void* self);   // runtime/src/ui/spinnerelement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0SpinnerElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_SpinnerElement(void* p) { return RtUi_SpinnerElement_Ctor(p); }
 
 extern "C" void* RtUiFact_SpinnerElement_CreateNewObject() {
     ++g_new;
@@ -1390,21 +1292,11 @@ extern "C" void* RtUiFact_TabDescription_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0TabElement@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_TabElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7TabElement@UI@@6B@");
-    U64(self, 0xc0, 0);
-    U64(self, 0xc8, 0);
-    U32(self, 0xd0, 0xffffffffu);
-    U64(self, 0xd8, 0);
-    U32(self, 0xe0, 0xffffffffu);
-    U64(self, 0xe8, 0);
-    U32(self, 0xf0, 0xffffffffu);
-    U64(self, 0xf8, 0);
-    U32(self, 0x100, 0);
-    return p;
-}
+extern "C" void* RtUi_TabElement_Ctor(void* self);   // runtime/src/ui/tabelement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0TabElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_TabElement(void* p) { return RtUi_TabElement_Ctor(p); }
 
 extern "C" void* RtUiFact_TabElement_CreateNewObject() {
     ++g_new;
@@ -1474,18 +1366,11 @@ extern "C" void* RtUiFact_TableDescription_CreateInPlaceObject(void* p) {
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0TableElement@UI@@QEAA@XZ.
 // That ctor IS ported below, so this row does not merely move the wall.
-void* Ctor_TableElement(void* p) {
-    uint8_t* self = static_cast<uint8_t*>(p);
-    BASE("??0Element@UI@@QEAA@XZ", self);
-    VPTR(self, "??_7TableElement@UI@@6B@");
-    U64(self, 0xc0, 0);
-    U32(self, 0xc8, 0);
-    U64(self, 0xd0, 0);
-    U64(self, 0xd8, 0);
-    U64(self, 0xe0, 0);
-    U64(self, 0xe8, 0);
-    return p;
-}
+extern "C" void* RtUi_TableElement_Ctor(void* self);   // runtime/src/ui/tableelement.cpp
+// The inlined stores that used to live here were a second copy of
+// ??0TableElement@UI@@QEAA@XZ; the class file owns the body since vtable
+// batch 4 (2026-09-12) and this factory pair forwards to it.
+void* Ctor_TableElement(void* p) { return RtUi_TableElement_Ctor(p); }
 
 extern "C" void* RtUiFact_TableElement_CreateNewObject() {
     ++g_new;
@@ -1672,8 +1557,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@LayoutElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_LayoutElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180043420ull, (void*)&RtUiFact_LayoutElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0LayoutElement@UI@@QEAA@XZ", (void*)&Ctor_LayoutElement);
-    RegisterRuntimeAddr(0x1800d32e0ull, (void*)&Ctor_LayoutElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@ListDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_ListDescription_CreateNewObject);
@@ -1690,8 +1573,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@ListElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_ListElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180045100ull, (void*)&RtUiFact_ListElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0ListElement@UI@@QEAA@XZ", (void*)&Ctor_ListElement);
-    RegisterRuntimeAddr(0x1800d4570ull, (void*)&Ctor_ListElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@NumberDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_NumberDescription_CreateNewObject);
@@ -1717,8 +1598,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@NumberEditElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_NumberEditElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x1800463e0ull, (void*)&RtUiFact_NumberEditElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0NumberEditElement@UI@@QEAA@XZ", (void*)&Ctor_NumberEditElement);
-    RegisterRuntimeAddr(0x1800d4c70ull, (void*)&Ctor_NumberEditElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@NumberElement@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_NumberElement_CreateNewObject);
@@ -1742,8 +1621,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@PageElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_PageElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180047400ull, (void*)&RtUiFact_PageElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0PageElement@UI@@QEAA@XZ", (void*)&Ctor_PageElement);
-    RegisterRuntimeAddr(0x1800d5260ull, (void*)&Ctor_PageElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@ProgressDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_ProgressDescription_CreateNewObject);
@@ -1760,8 +1637,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@ProgressElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_ProgressElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180077eb0ull, (void*)&RtUiFact_ProgressElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0ProgressElement@UI@@QEAA@XZ", (void*)&Ctor_ProgressElement);
-    RegisterRuntimeAddr(0x180119c40ull, (void*)&Ctor_ProgressElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@RadioDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_RadioDescription_CreateNewObject);
@@ -1778,8 +1653,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@RadioElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_RadioElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180047ba0ull, (void*)&RtUiFact_RadioElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0RadioElement@UI@@QEAA@XZ", (void*)&Ctor_RadioElement);
-    RegisterRuntimeAddr(0x1800d5870ull, (void*)&Ctor_RadioElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@RibbonDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_RibbonDescription_CreateNewObject);
@@ -1796,8 +1669,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@RibbonElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_RibbonElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180044880ull, (void*)&RtUiFact_RibbonElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0RibbonElement@UI@@QEAA@XZ", (void*)&Ctor_RibbonElement);
-    RegisterRuntimeAddr(0x1800d5d10ull, (void*)&Ctor_RibbonElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@ScrollDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_ScrollDescription_CreateNewObject);
@@ -1814,8 +1685,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@ScrollElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_ScrollElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x18003a9c0ull, (void*)&RtUiFact_ScrollElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0ScrollElement@UI@@QEAA@XZ", (void*)&Ctor_ScrollElement);
-    RegisterRuntimeAddr(0x18011a7f0ull, (void*)&Ctor_ScrollElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@SliderDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_SliderDescription_CreateNewObject);
@@ -1832,8 +1701,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@SliderElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_SliderElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180049e90ull, (void*)&RtUiFact_SliderElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0SliderElement@UI@@QEAA@XZ", (void*)&Ctor_SliderElement);
-    RegisterRuntimeAddr(0x1800d7570ull, (void*)&Ctor_SliderElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@SpinnerDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_SpinnerDescription_CreateNewObject);
@@ -1850,8 +1717,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@SpinnerElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_SpinnerElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x18004b290ull, (void*)&RtUiFact_SpinnerElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0SpinnerElement@UI@@QEAA@XZ", (void*)&Ctor_SpinnerElement);
-    RegisterRuntimeAddr(0x1800d8670ull, (void*)&Ctor_SpinnerElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@SpriteCapture@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_SpriteCapture_CreateNewObject);
@@ -1877,8 +1742,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@TabElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_TabElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x18004c870ull, (void*)&RtUiFact_TabElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0TabElement@UI@@QEAA@XZ", (void*)&Ctor_TabElement);
-    RegisterRuntimeAddr(0x1800da390ull, (void*)&Ctor_TabElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@TableDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_TableDescription_CreateNewObject);
@@ -1895,8 +1758,6 @@ int RtUiFactory2Register() {
     RegisterRuntimeExport("?CreateInPlaceObject@TableElement@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiFact_TableElement_CreateInPlaceObject);
     RegisterRuntimeAddr(0x180079440ull, (void*)&RtUiFact_TableElement_CreateInPlaceObject); ++n;
-    RegisterRuntimeExport("??0TableElement@UI@@QEAA@XZ", (void*)&Ctor_TableElement);
-    RegisterRuntimeAddr(0x18011e2f0ull, (void*)&Ctor_TableElement); ++n;
 
     RegisterRuntimeExport("?CreateNewObject@TextDescription@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiFact_TextDescription_CreateNewObject);

@@ -293,39 +293,6 @@ extern "C" void* RtUi_TextElement_Ctor(void* selfv) {
     return p;                                                      // 18011ebff
 }
 
-// ============================================================================
-// ??0NumberElement@UI@@QEAA@XZ                               retail 0x180118c70
-// ============================================================================
-// Same shape, a different base call target it does NOT have (see the banner:
-// it calls Element's ctor, not TextElement's) and a SHORTER written extent that
-// matches runtime/types/ui/NumberElement.h field for field:
-//     +0xc0  qword 0   Font*
-//     +0xc8  dword 0   _mode        (DWORD — the qword store is at +0xd0)
-//     +0xd0  qword 0   _cachedText  (the one thing the dtor releases)
-//     +0xd8  qword 0   _intValue and _floatValue in one store
-//     +0xe0  byte  0   _showSign
-// `??_7NumberElement@UI@@6B@` is retail 0x1801574d0, exported.
-extern "C" void* RtUi_NumberElement_Ctor(void* selfv) {
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-
-    CallElementCtor(p);                                              // 180118c86
-
-    SetPtr(p, 0x00, RT_DATA_SLOT(void*, "??_7NumberElement@UI@@6B@"));// 180118c93
-
-    SetPtr(p, 0xc0, nullptr);                                        // 180118c98
-    SetI32(p, 0xc8, 0);                                              // 180118c9f  DWORD
-    SetPtr(p, 0xd0, nullptr);                                        // 180118ca5
-    SetPtr(p, 0xd8, nullptr);                                        // 180118cac
-    p[0xe0] = 0;                                                     // 180118cb3  BYTE
-
-    // ?CacheText@NumberElement@UI@@AEAAXXZ (0x1801189f0) — a DIFFERENT function
-    // from TextElement's, and NOT PORTED. By address, through the registry-first
-    // resolver, so it flips the day it is ported.
-    using CacheTextFn = void (*)(void*);
-    RtAddr<CacheTextFn>(0x1801189f0ull)(p);                          // 180118cbc
-
-    return p;                                                        // 180118cc2
-}
 
 // ============================================================================
 // ?GetRowHeight@TableElement@UI@@QEAAHH@Z                    retail 0x18011e090
@@ -1007,9 +974,6 @@ int RtUiElementBodiesB5Register() {
                           (void*)&RtUi_TextElement_Ctor);                        ++n;
     RegisterRuntimeAddr(0x18011eb80ull, (void*)&RtUi_TextElement_Ctor);
 
-    RegisterRuntimeExport("??0NumberElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_NumberElement_Ctor);                      ++n;
-    RegisterRuntimeAddr(0x180118c70ull, (void*)&RtUi_NumberElement_Ctor);
 
     RegisterRuntimeExport("?GetRowHeight@TableElement@UI@@QEAAHH@Z",
                           (void*)&RtUi_TableElement_GetRowHeight);               ++n;
