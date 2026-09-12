@@ -1354,6 +1354,48 @@ def gated_block_spans(text, gate_vars):
     return spans
 
 
+def gated_func_spans(text, funcs):
+    """Byte spans of the bodies of the GATED_OFF_FUNCS functions in this file.
+
+    Same brace-matching discipline as gated_block_spans, and for the same
+    reason: strip_comments() has already run, so only a string literal can hide
+    a brace, and those are skipped. `funcs` is {name: gate}; only the names are
+    read here.
+
+    A function whose signature is not found yields NO span, which is the safe
+    direction (nothing is gated) but is SILENT -- gated_func_keys() is the
+    screen that says so out loud, and it is printed for exactly that reason.
+    """
+    spans = []
+    for fn in funcs:
+        for m in re.finditer(r'\b%s\s*\(' % re.escape(fn), text):
+            i = text.find("{", m.end())
+            if i < 0:
+                continue
+            # A forward DECLARATION has a ';' before any '{'; skip it, or the
+            # span would run from the declaration to the end of some unrelated
+            # later function.
+            semi = text.find(";", m.end())
+            if 0 <= semi < i:
+                continue
+            depth = 0
+            while i < len(text):
+                ch = text[i]
+                if ch == '"':
+                    lit = STRING_LITERAL.match(text, i)
+                    i = lit.end() if lit else i + 1
+                    continue
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        spans.append((m.start(), i))
+                        break
+                i += 1
+    return spans
+
+
 def strip_comments(text):
     """Blank out C/C++ comments, preserving length so byte offsets still line up.
 
@@ -1487,6 +1529,10 @@ def scan():
         # Registrations inside an opt-in `if (<flag>)` block are gated the same
         # way an opt-in FILE is -- see GATED_OFF_BLOCKS.
         block_spans = gated_block_spans(text, GATED_OFF_BLOCKS.get(rel, ()))
+        # ...and so is one inside a FUNCTION whose first statement is a guard
+        # clause on a global only the arming path sets -- the fourth gating
+        # shape, see GATED_OFF_FUNCS. Same predicate, same effect on the count.
+        block_spans += gated_func_spans(text, GATED_OFF_FUNCS.get(rel, {}))
         def in_gated_block(pos):
             return any(a <= pos <= b for a, b in block_spans)
         # A registration inside an OPT-IN file is NOT a live port: its
@@ -1552,10 +1598,22 @@ def scan():
         # started conferring `ported` it would have counted as a port too. An
         # instrument is not a port, and a census that says otherwise is the
         # thing this file exists to prevent.
+        #
+        # A DETOUR INSIDE A GATED FUNCTION IS NOT INSTALLED EITHER, and a
+        # detour target confers `ported`. Skipping it here is what stops the
+        # count from being restored through the back door after the
+        # registration side has been correctly excluded: `?Allocate@` and
+        # `?Free@` are registered ONLY in RtAllocSwapPostRegister and detoured
+        # ONLY in RtAllocSwapInstall, so gating one without the other would
+        # have moved nothing and looked like it had. (Wave 22 lane ALLOC.)
         for m in RE_DETOUR_ADDR.finditer(text):
+            if in_gated_block(m.start()):
+                continue
             _add_detour(detoured, instrument_detours, m.group(1),
                         int(m.group(2), 16), rel)
         for m in RE_DETOUR_EXPORT.finditer(text):
+            if in_gated_block(m.start()):
+                continue
             _add_detour(detoured, instrument_detours, m.group(1),
                         m.group(2), rel)
 
@@ -2221,58 +2279,98 @@ def main():
                  if (tot_called - tot_ported) else 0.0))
         print("     not by an absent body. Arm it, measure it, then move it.")
 
-    # ---- THE MIRROR: rows counted PORTED whose only registration is gated ---
-    # Every screen above asks "is an UNPORTED row secretly written?". This asks
-    # the opposite, on the same evidence, because a lane that finds an
-    # instrument wrong in one direction has not thereby checked the other --
-    # and on this subject the answer was yes both times.
+    # ---- THE FOURTH GATING SHAPE, AND WHETHER IT IS STILL ALIVE -----------
+    #
+    # Every screen above asks "is an UNPORTED row secretly written?". This one
+    # started life asking the opposite -- because a lane that finds an
+    # instrument wrong in one direction has not thereby checked the other, and
+    # on the allocator the answer was yes BOTH times -- and it found
+    # ?Allocate@/?Free@ counted PORTED while their only registrations sat
+    # inside a function opening `if (!g_swapTaken) return;`.
+    #
+    # GATED_OFF_FUNCS now feeds scan(), so those rows are EXCLUDED from
+    # `ported` like any other gated registration and this screen no longer has
+    # a suspect to report. Which is exactly why it must not print a bare
+    # "(none)": a screen whose success state and whose DEAD state print the
+    # same thing cannot be trusted in either. So it reports LIVENESS instead --
+    # what the declared spans actually matched, and where those keys ended up.
+    # A declaration that matches nothing is a dead declaration and says so.
     gf_keys, gf_unread = gated_func_keys(REPO)
-    gf_files = set(GATED_OFF_FUNCS)
-    suspect = []
-    for kind, key, ns, ported, detoured, files in rows:
-        if not ported:
-            continue
-        hit = gf_keys.get(key)
-        if hit is None:
-            continue
-        # NOT `files` -- that is the set of files that CALL the symbol, and a
-        # first draft of this screen tested it, which is why the screen read
-        # "(none)" with two known positives sitting in front of it. The
-        # question is where the symbol is REGISTERED, so ask the registration
-        # maps. A key also registered in a file that is NOT one of the
-        # gated-function files is genuinely ported and is not a suspect.
-        regs = set(d["ported_exports"].get(key, ()))
-        if kind == "addr":
-            try:
-                regs |= set(d["ported_addrs"].get(int(key, 16), ()))
-            except ValueError:
-                pass
-        if regs - gf_files:
-            continue
-        suspect.append((ns, kind, key, hit))
     print()
-    print("  THE MIRROR -- rows counted PORTED whose every registration is GATED")
-    print("  evidence    a fourth gating shape this script's scan cannot see: a")
-    print("              guard clause (`if (!g_swapTaken) return;`) at the top of")
-    print("              the registering function. Declared in GATED_OFF_FUNCS,")
-    print("              body located by brace-matching the comment-stripped text.")
-    print("  changes     NOTHING above -- deliberately. See GATED_OFF_FUNCS for why")
-    print("              a count that five lanes are quoting is not moved here.")
+    print("GATED-FUNCTION EXCLUSIONS -- the FOURTH gating shape (Wave 22 lane ALLOC)")
+    print("  shape       a registration inside a function whose first statement is a")
+    print("              guard clause on a global only the arming path sets:")
+    print("                  void RtAllocSwapPostRegister() {")
+    print("                      if (!g_swapTaken) return;          <-- the gate")
+    print("                      RegisterRuntimeExport(\"?Allocate@...\", ...);")
+    print("              GATED_OFF_FILES cannot see it (the file holds live ports too),")
+    print("              GATED_OFF_BLOCKS cannot see it (no `if (<flag>) { ... }`), and")
+    print("              it is not the mint. Declared in GATED_OFF_FUNCS; bodies are")
+    print("              brace-matched on the comment-stripped text.")
+    print("  effect      these keys ARE excluded from `ported` above, registration")
+    print("              side AND detour side. Gating one without the other would")
+    print("              have moved nothing and looked like it had.")
+    print("  LIVENESS    this is a positive-case report, NOT an all-clear. A bare")
+    print("              zero here would be indistinguishable from a dead parser.")
+    # TWO IMPLEMENTATIONS, DELIBERATELY, AND THEY CHECK EACH OTHER.
+    # gated_func_spans() runs inside scan() on scan's own text and is what
+    # actually MOVES the count; gated_func_keys() re-reads the file here and is
+    # what PRINTS. They share the declaration and nothing else. So the
+    # "excluded / LEAK" column below is not decoration: it is one
+    # implementation confirming the other's effect on the numbers. A bug in
+    # either shows up as a LEAK.
+    #
+    # Plus a synthetic pair, because agreement between two implementations that
+    # are BOTH dead is still agreement. The positive proves the span walk finds
+    # a body; the negative proves it does not swallow a forward declaration and
+    # run on to the end of the file, which is the failure that would silently
+    # gate everything after it.
+    _SYN = ('void SynGateFn();\n'                    # a declaration, not a body
+            'void Unrelated() { RegisterRuntimeExport("?NotGated@Syn@@YAXXZ", 0); }\n'
+            'void SynGateFn() {\n'
+            '    if (!g_synTaken) return;\n'
+            '    RegisterRuntimeExport("?Gated@Syn@@YAXXZ", 0);\n'
+            '}\n')
+    _spans = gated_func_spans(_SYN, {"SynGateFn": "synthetic"})
+    def _inside(needle):
+        pos = _SYN.index(needle)
+        return any(a <= pos <= b for a, b in _spans)
+    _pos_ok = len(_spans) == 1 and _inside("?Gated@Syn@@YAXXZ")
+    _neg_ok = not _inside("?NotGated@Syn@@YAXXZ")
+    print("  CONTROL     span walk, synthetic: positive (gated body found) -> %s;"
+          % ("GREEN" if _pos_ok else "*** RED ***"))
+    print("              negative (forward decl does NOT open a span, and an")
+    print("              unrelated registration before it stays ungated) -> %s"
+          % ("GREEN" if _neg_ok else "*** RED ***"))
+    if not (_pos_ok and _neg_ok):
+        print("  *** THE SPAN WALK IS BROKEN. Every `gated` verdict from")
+        print("  *** GATED_OFF_FUNCS is untrustworthy and the `ported` count with it.")
     if gf_unread:
         print("  *** COULD NOT READ: %s" % ", ".join(gf_unread))
-        print("  *** This is a REFUSAL, not a zero: treat the list below as")
-        print("  *** INCOMPLETE by an unknown amount.")
-    if not suspect:
-        print("    (none -- every ported row has at least one ungated registration)")
+        print("  *** A REFUSAL, not a zero: the list below is INCOMPLETE by an")
+        print("  *** unknown amount, and some keys may be counted PORTED that")
+        print("  *** should not be.")
+    if not GATED_OFF_FUNCS:
+        print("    (nothing declared)")
+    elif not gf_keys:
+        print("    *** %d function(s) DECLARED and ZERO keys matched. The"
+              % sum(len(v) for v in GATED_OFF_FUNCS.values()))
+        print("    *** declaration is DEAD -- a renamed function, a moved")
+        print("    *** registration, or a broken span walk. It is excluding")
+        print("    *** NOTHING, silently, and every figure above is as if this")
+        print("    *** list were empty.")
     else:
-        for ns, kind, key, (rel, fn, gate) in sorted(suspect):
-            print("    %-9s %-56s" % (ns, key))
-            print("              only in %s::%s -- %s" % (rel, fn, gate))
-        print("    => %d row(s) above are counted PORTED and would NOT be live on an"
-              % len(suspect))
-        print("       unarmed run. The printed `ported` figure OVERSTATES by that")
-        print("       many; the affected namespace(s): %s."
-              % ", ".join(sorted({x[0] for x in suspect})))
+        ported_names = set(d["ported_exports"])
+        for key, (rel, fn, gate) in sorted(gf_keys.items()):
+            state = "counted PORTED  <-- LEAK" if key in ported_names else "excluded"
+            print("    %-56s %s" % (key, state))
+            print("        in %s::%s -- %s" % (rel, fn, gate))
+        leaks = sum(1 for k in gf_keys if k in ported_names)
+        print("    => %d key(s) matched; %d excluded, %d still counted PORTED."
+              % (len(gf_keys), len(gf_keys) - leaks, leaks))
+        if leaks:
+            print("    A LEAK means a key this list names is reaching `ported` by some")
+            print("    OTHER registration -- find it before trusting the figure.")
 
     # ---- THE VTABLE FOLD-IN, REPORTED AS A SET-DIFF -----------------------
     # Never as a percentage delta: a percentage cannot say WHICH rows moved,

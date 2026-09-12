@@ -1362,6 +1362,35 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA | n/a (bool flag) | WAVE17_LANE_CEIL.md §3.2 | NONE, EVER | HARMFUL
     // RT_UNPROMOTABLE: ??_7Geometry@Graphics@@6B@ | 6/6 (3 purecall) [CONV: M=NONPURECALL] | WAVE21_LANE_GFXVT.md §5.2 | ROUTE-SCOPED (DLL-PRESENT ONLY); voids when statusicon_geometry.cpp:341 reads `i < 9`; REQUIRED at cutover [SCOPE: DLL-PRESENT] [ADDRESSEE: Wave 22 lane GEOM, which owns the statusicon_geometry.cpp:341 cutover blocker -- WAVE21_CLOSED.md §7 item 1] | HARMFUL
     //
+    // WAVE 22 LANE ALLOC. The row this whole FILE has cited as its canonical
+    // HARMFUL example since Wave 10 -- see the banner at the top, and line 1834
+    // -- and which had no tag of its own. Both halves of its verdict are
+    // OBSERVED here rather than derived, which is unusual and worth saying:
+    //
+    //   DLL PRESENT, promoting is HARMFUL: publishing our zeroed storage over
+    //   the DLL's live `_singleton` dies in EnterCriticalSection on a null self
+    //   before the UI exists. That is what makes BANISHED_RT_MINT=1 fatal and
+    //   is why per-row selectivity had to be built at all.
+    //
+    //   AT CUTOVER, the row is REQUIRED: engine/funcs/engine_funcs.cpp:1629
+    //   dereferences `ResolveAddr(Module::Runtime, 0x1801fc718)` with no guard,
+    //   and the first controlled DLL-absent boot faulted there precisely
+    //   because this row was unregistered (standalone/resolve_standalone.cpp
+    //   records it).
+    //
+    // So it is the same shape as ?_singleton@FileSystem@IO@@, and independently
+    // confirms Wave 22 lane TIMER's rule on this lane's own subject: unpromoted,
+    // our writer (rtalloc::Construct) publishes through RT_DATA_SLOT ->
+    // ResolveExport -> the DLL's real slot, so the many unported DLL internals
+    // that read 0x1801fc718 as a hard-coded RVA (`MOV RCX,[0x1801fc718]`,
+    // documented at runtime/src/collection/{array,linkedlist,avl_trees,
+    // set_avl_e24}.cpp and runtime/src/ui/dialog_factory.cpp) stay correct BY
+    // CONSTRUCTION. Promoting redirects our write to our own storage and
+    // freezes theirs. For an allocator that is not a clean crash: a DLL
+    // internal freeing against retail's arena a pointer our arena handed out is
+    // silent corruption.
+    // RT_UNPROMOTABLE: ?_singleton@MemoryAllocator@System@@0PEAV12@EA | n/a (scalar ptr) | WAVE22_LANE_ALLOC.md §5 | NONE while Runtime-x64.dll is present; REQUIRED at cutover, where the verdict INVERTS [SCOPE: DLL-PRESENT] [ADDRESSEE: the lane that next attempts a DLL-absent cutover boot -- it must register this row, and engine_funcs.cpp:1629 faults immediately if it does not] | HARMFUL
+    //
     //      ⚠ THIS TAG IS ROUTE-SCOPED AND ITS EXPIRY IS **NOT** "NONE, EVER".
     //      Wave 21 lane SHOT established that the existing vocabulary spells two
     //      opposite instructions the same way: ??_7Stream@IO@@6B@ is
