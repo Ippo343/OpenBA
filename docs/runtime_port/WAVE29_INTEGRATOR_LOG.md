@@ -719,3 +719,103 @@ moved TOTAL by 1) confirmed a real effect and misattributed it.
 - It declined VERIFY's bit-flip request because it requires editing `runtime/`,
   referring it to a body lane — correct refusal for an instrument lane whose
   whole claim is an empty protected-path diff.
+
+---
+
+## ENTRY 9 — IOLANE edited after reporting, declared it, and the declaration was RIGHT
+
+New tip `26896fb2`. IOLANE announced the late edit loudly per warning 18 and
+proved it mechanically. **I verified it independently rather than accepting the
+lane's own diff:**
+
+```
+$ git diff --stat ea8a2839 wave29/iolane -- runtime/ standalone/ code/ engine/ dx11/
+  (EMPTY)
+$ git diff --stat ea8a2839 wave29/iolane
+  docs/runtime_port/WAVE29_LANE_IOLANE.md          | 194 ++++--
+  .../wave29_iolane_retslot_screen.py.txt          |  67 ++-
+  2 files changed, 245 insertions(+), 16 deletions(-)
+```
+
+Documentation only; the code tree I will measure at merge is byte-identical to
+the reported commit. **This is Wave 28 §7.5's rule executing as designed for the
+first time** — there, a lane edited after reporting, the integrator did not
+detect it, and the lane's own second report did. Here the lane declared it
+unprompted, and the one `git diff --stat` separated "a late commit exists" from
+"a late commit invalidates the measurement".
+
+### 9.1 What the late edit FIXED, and it was a wrong prescription sent to a partner
+
+IOLANE had told AVBODY — and written into its own §7.1 — that their by-value
+`String` accessors need the hidden return slot as the **first parameter**. **That
+is the FREE-FUNCTION rule.** For a MEMBER function MSVC x64 leaves `this` in RCX
+and puts the return pointer in **RDX**.
+
+The prescription would have made the body dereference the caller's `String` slot
+as a `ShaderProgram` and write 8 bytes through `self` — **a wild write**, i.e.
+wrong in the worst available direction, and exactly the hazard the kickoff named
+for this pair. AVBODY refuted it; IOLANE **re-read `0x18004e4b0` itself rather
+than taking the correction on trust** (RCX dereferenced at +0x30, RDX stored
+through, RDX returned).
+
+### 9.2 THE FINDING — a present/absent control cannot validate an ORDERING claim
+
+AVBODY's diagnosis, and it is the sharpest instrument lesson of the wave:
+
+> **A control that scores a binary present/absent verdict cannot validate an
+> ORDERING claim derived beside it.**
+
+IOLANE's screen had two mechanisms, both answering *"IS there a hidden slot?"*,
+and **both were correct**. The ordering claim sat next to them and **inherited
+their credibility**. That is
+`reference_a_measured_number_beside_an_asserted_one.md` — and IOLANE walked into
+it *in the same message in which it was instructing AVBODY to control their own
+screen*. Fixed by adding a third column measuring **which register is
+dereferenced vs stored through**.
+
+### 9.3 And a second one INSIDE the fix, which generalises further
+
+The new column's first run scored the existing known positive as
+`this=? slot=rdx` and IOLANE nearly read that as a pass.
+**`?GetSource@Stream@IO@@` is the abstract base and never touches RCX at all**,
+so it is structurally incapable of exercising half the mechanism it controls.
+
+> **A known positive can be a genuine positive for one half of a screen and blind
+> to the other half.** This is the union-control defect appearing *inside a single
+> control* rather than across two screens — a case the existing rule
+> ("score each screen separately") does not cover, because there is only one
+> screen.
+
+Replaced with `?GetName@PackageFile@IO@@`, which derefs RCX at +0x40 **and**
+stores through RDX.
+
+### 9.4 Pairing score, reported honestly in the partner's favour
+
+```
+  defects IOLANE's own controls found in its work:   2  (both by a control
+                                                        firing, neither by review)
+  defects AVBODY found in IOLANE's work:             2  (the argument order;
+                                                        a weak size argument)
+  defects IOLANE found in AVBODY's work:             0  (corroboration of their
+                                                        subject by a different
+                                                        method -- not a defect)
+```
+
+The kickoff's pairing claim reproduces, and the lane scored it **against
+itself**. Note the asymmetry is the opposite of entry 8's, where INSTR reported a
+one-directional pairing against itself too. **Two lanes this wave have declined to
+round a pairing up.**
+
+### 9.5 One claim got WEAKER, recorded as a non-claim
+
+The retail `System::String` **RELEASE** idiom IOLANE transcribed still rests on
+**one** reading of the bytes; AVBODY has no body containing an inlined release and
+could not corroborate it. The **ADOPT** half is now corroborated across two
+namespaces. That makes IOLANE's reason #1 for declining
+`?SetupFileSystem@Modification@IO@@` — half of it is inlined release, where an
+error is a **non-reproducing use-after-free** — *stronger* than when written.
+
+**ADDRESSEE: whoever takes `SetupFileSystem` in Wave 30. Treat the release idiom
+as UNCONFIRMED.** A lane recording that its own supporting evidence got thinner,
+while the conclusion it supports got firmer, is the behaviour this log exists to
+capture.
