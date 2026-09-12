@@ -1981,6 +1981,101 @@ int RtMintRegisterPromotedRows() {
     //      on that line moving out of the DLL's data into our image, which is
     //      why the line prints the pointer and not just the value.
     // ------------------------------------------------------------------------
+    // WAVE 25 LANE DATA — the fourteen UNTAGGED DATA gap rows, adjudicated.
+    // ------------------------------------------------------------------------
+    //
+    // Full table, per-row evidence and the instrument's own controls are in
+    // docs/runtime_port/WAVE25_LANE_DATA.md.  Re-derive any row's counts with
+    //
+    //   python tools/runtime_census.py --unported --csv c.csv
+    //   python tools/rt_data_row_refs.py --census c.csv          # scalar rows
+    //   python tools/rt_data_row_refs.py --census c.csv --width 0x38   # aggregates
+    //   python tools/rt_indll_callers.py <name>=<va> ...
+    //
+    // THE MEASUREMENT THAT DECIDED TWELVE OF THESE FOURTEEN, and the one this
+    // lane would most like the next lane to inherit:
+    //
+    //   THE CENSUS `ported` COLUMN DOES NOT MEAN "EVERY READER GOES THROUGH OUR
+    //   BODY".  It means a door is registered for that export.  The DLL's own
+    //   copy of the same function still runs for every in-DLL rel32 call site,
+    //   and it still touches the DLL's statics.  `?SetText@Error@System@@` is
+    //   `ported`, and tools/rt_indll_callers.py finds **18 in-DLL rel32 call
+    //   sites** that reach retail's SetText without passing a door; `?Display@`
+    //   is `ported` and has 2.  So for the three Error/Debug rows, "all my
+    //   readers and writers are ported" was TRUE on the census and FALSE in the
+    //   process, and promoting them would have split the error-reporting state
+    //   exactly on the out-of-memory path that needs it.  A reader/writer
+    //   census over .text is necessary and NOT sufficient; the rel32 caller
+    //   count is the other half.
+    //
+    // WHY THE CLASS FIELD BELOW IS ONE HYPHENATED TOKEN AND NOT
+    // "HARMFUL (DLL-present) / REQUIRED (cutover)", WHICH READS BETTER.
+    // tools/runtime_census.py parses the class as `(\S+)` in an optional group
+    // ANCHORED AT END OF LINE, so a class field containing a space does not
+    // merely lose its class -- the whole regex fails and the ENTIRE TAG IS
+    // DROPPED.  Five tags already spell it the readable way
+    // (?_singleton@Application@1@, Configuration/Device @Audio@ and @Input@) and
+    // have therefore been invisible to the census for several waves while
+    // tools/unpromotable_slot_check.py counted them the whole time; the two
+    // instruments disagreed by five with no detector, because neither prints the
+    // other's count.  Found by Wave 25 lane MANIFEST.  These fourteen are spelled
+    // to be parsed by BOTH tools rather than to look nice in one of them.  If a
+    // later lane widens the census regex, the five may be re-spelled and so may
+    // these -- but not before, or the count silently moves again.
+    // RT_UNPROMOTABLE: ?_errorString@Error@System@@0PADA | n/a (char[0x2000] buffer) | WAVE25_LANE_DATA.md §3.1 | NONE while the DLL is present -- all 5 in-DLL refs sit in ?SetText@ and ?Display@, which the census calls PORTED, but tools/rt_indll_callers.py finds 18 in-DLL rel32 sites reaching retail's SetText and 2 reaching retail's Display, none of them a door; promoting moves our copy and leaves every one of those 20 writing/reading retail's buffer. At cutover all 20 are gone and the row is REQUIRED (error.cpp:175 resolves it by name and ResolveExport is NULL for an unpublished row) [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25, which carries the cutover publish list; and any later lane that drives the 18 rel32 SetText sites to 0 -- that, not the census `ported` column, is this tag's expiry condition] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_stopApplication@Error@System@@0_NA | n/a (bool) | WAVE25_LANE_DATA.md §3.1 | NONE while the DLL is present -- identical argument to ?_errorString@ above and the SAME 18+2 rel32 sites; the two writers are ?SetText@ (18 unreachable-by-door callers) and the reader is ?Display@ (2). At cutover REQUIRED, error.cpp:178 [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = the 18 rel32 SetText sites reaching 0] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_hideDisplay@Error@System@@0_NA | n/a (bool) | WAVE25_LANE_DATA.md §3.1 | NONE while the DLL is present -- same 18+2 rel32 argument. NOTE the blocker that is NOT the reason: its one unported writer ?HideErrorDisplay@Error@System@@ is DEAD (Wave 22 ERRCFG proved no call site in any of the four shipped binaries, four screens each with a live positive control), so the dependency-shaped objection is discharged and the row still fails on the rel32 sites. At cutover REQUIRED, error.cpp:184 and engine_lifecycle.cpp:289 [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = the 18 rel32 SetText sites reaching 0] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_disableHandler@Debug@System@@0_NA | n/a (bool) | WAVE25_LANE_DATA.md §3.2 | NONE while the DLL is present -- 1 in-DLL reader, ?ExceptionHandler@Debug@System@@ (UNPORTED and LIVE: it is the DLL's own top-level exception filter), against 5 writers of which only ?EnumerateVideoModes@Device@Video@@ is ours. Promoting makes our EnumerateVideoModes raise a flag retail's filter never sees, so retail swallows the probe exception it is supposed to re-raise. At cutover the filter is gone and the row is REQUIRED (enumerate_video_modes.cpp:112) [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ?ExceptionHandler@Debug@System@@ ported AND registered] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_secondsPerTick@Timer@System@@0NA | n/a (double) | WAVE25_LANE_DATA.md §3.3 | NONE while the DLL is present -- 96 in-DLL reads against 2 writes, and the readers are spread across the whole engine (ParticleSystemInstance::Update, four UI element Update bodies, Audio::Scene::Update, Device::Input::UpdateState, MainLoop::Frame/Draw, SaveLoad's five Update bodies), a MAJORITY of them unported. This is the ?_firstTypeInfo@ shape at 96:2. At cutover all 96 are gone and our timer.cpp is the only consumer, so REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = every in-DLL reader listed in the lane doc ported, which is engine-wide work and not a DATA-lane task] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_ticksPerSecond@Timer@System@@0_JA | n/a (int64) | WAVE25_LANE_DATA.md §3.3 | NONE while the DLL is present -- 12 in-DLL reads / 2 writes; 6 of the readers are unported (MainLoop::MarkFrameUpdateTime, Timer::CurrentTime, Timer::CurrentTimeTicks, MainLoop::Draw, MainLoop::Frame, Context::Finish). At cutover REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = those 6 readers ported] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_systemInitialTick@Timer@System@@0_JA | n/a (int64) | WAVE25_LANE_DATA.md §3.3 | NONE while the DLL is present -- 12 in-DLL reads, ZERO in-DLL writes through a RIP store (the only writer is ?PlatformStartup@Timer@System@@, which takes its ADDRESS by LEA and writes through the register -- a form no RIP-relative scan can see, recorded here so a later lane does not read `W=0` as `never written`); 6 readers unported, same six as ?_ticksPerSecond@. At cutover REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = those 6 readers ported] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_systemTicksPerSecond@Timer@System@@0_JA | n/a (int64) | WAVE25_LANE_DATA.md §3.3 | NONE while the DLL is present, and this row is HARMFUL IN BOTH DIRECTIONS AT ONCE: its ONE writer ?PlatformStartup@Timer@System@@ is UNPORTED, so a promoted slot is never written and stays 0, while 12 in-DLL readers reach it as `idiv qword ptr [rip]` -- a zero divisor is #DE, not a wrong number. This is the ?_singleton@InternalFactory@Object@@ shape (the harm is the WRITER) stacked on the ?_firstTypeInfo@ shape (the harm is the readers). At cutover REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ?PlatformStartup@Timer@System@@ ported AND registered, which must come FIRST for this row] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_systemSecondsPerTick@Timer@System@@0NA | n/a (double) | WAVE25_LANE_DATA.md §3.3 | NONE while the DLL is present -- exactly ONE in-DLL reference in the whole of .text and it is a WRITE, by the UNPORTED ?PlatformStartup@Timer@System@@. Zero in-DLL readers, so there is no split-brain to fear and the harm is purely the writer: a promoted slot is never written and runtime/src/system/timer.cpp reads 0.0. A one-reference row is the easiest kind to misread as trivially safe [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ?PlatformStartup@Timer@System@@ ported AND registered] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_singleton@MainLoop@Engine@@1PEAV12@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- 19 in-DLL reads against 1 write (the MainLoop ctor, which IS ported), the textbook Wave 23 GFXDATA shape: a ported writer is not progress toward promotability while readers remain. Unported readers include ?Draw@MainLoop@Engine@@ and ?Finish@Context@Video@@. At cutover REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = every in-DLL reader ported] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_singleton@Engine@1@0PEAV11@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- 4 in-DLL reads / 2 writes; both writers are ours (Engine ctor and dtor) and at least one reader, ?Run@Loader@Engine@@, is not. Same shape as ?_singleton@AnimationManager@Graphics@@, which Wave 23 GFXDATA re-derived and left HARMFUL on identical grounds. At cutover REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ?Run@Loader@Engine@@ and the other in-DLL readers ported] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_loader@LoaderLoop@Engine@@1VLoader@2@A | n/a (a Loader OBJECT, not a pointer) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- this row is an AGGREGATE and its consumers take its ADDRESS: 5 LEA and 2 stores, and ?Startup@LoaderLoop@Engine@@ (UNPORTED) does `lea rcx,[0x1801fe7b8]` and then works through the register. Promoting gives our doors a different object from the one that unported body constructs and runs. NOTE FOR ANY LANE RE-DERIVING THIS: a RIP-relative READ/WRITE census reports `R=0` here and that 0 is an ARTEFACT of the access pattern, not evidence of disuse. At cutover REQUIRED (engine/funcs/engine_funcs.cpp and runtime/src/engine/loops.cpp both resolve it by name) [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ?Startup@LoaderLoop@Engine@@ ported AND registered] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_singleton@Configuration@System@@0PEAV12@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- 4 in-DLL reads / 2 writes, and BOTH halves are split: the reader ?Get@Configuration@System@@ is unported AND the writer ??0Configuration@System@@ is unported, so a promoted slot is neither written by retail's ctor nor read by retail's accessor. At cutover REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ??0Configuration@System@@ ported AND registered, then ?Get@] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    // RT_UNPROMOTABLE: ?_singleton@AchievementManager@Achievement@@0PEAV12@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.5 | NONE while the DLL is present -- an INVERTED-SHAPE row: only 1 in-DLL read against 5 writes, and the harm is on the writer side. Two of the five writers, ??0AchievementManager@Achievement@@ and a store inside ??0DialogLoopT@Engine@@'s range, are UNPORTED, so retail constructs the manager into retail's slot and a promoted slot would hold whatever our ported Engine::Startup/Shutdown last wrote -- two owners, one object. A LOW READ COUNT IS NOT A SAFE ROW. At cutover REQUIRED (gameupdateloop_serialize.cpp and achievement_manager.cpp both resolve it by name) [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ??0AchievementManager@Achievement@@ ported AND registered] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    //
+    // THE SEVEN `?_typeInfo@` GAP ROWS ARE DELIBERATELY NOT TAGGED HERE.
+    // They are NOT unpromotable -- they are READY and BLOCKED ON ONE THING
+    // THIS LANE WAS NOT ALLOCATED, a run.  Stated so the next lane does not
+    // re-derive it:
+    //
+    //   ?_typeInfo@Achievement@1@ / @AchievementInstance@ / @GoalInstance@
+    //   ?_typeInfo@AnimationEvent@ / @MaterialInstance@ / @Particle@Graphics@
+    //   ?_typeInfo@PackageFile@IO@
+    //
+    //   * SAFE.  Each has ZERO mutable in-DLL state: measured at --width 0x38,
+    //     each node carries exactly TWO in-DLL writes, both in the CRT static
+    //     initialiser (`parentName` +0x10 and `next` +0x30), which run once at
+    //     DLL load into the DLL's own node and never again.  Every other in-DLL
+    //     reference is a `MOV r32, dword ptr [rip]` of +0x00 `typeId`, whose
+    //     minted value is measured EQUAL to the DLL's on 104/104 rows
+    //     (RtMintShadowReport("exit"), 624 field comparisons, 0 MISMATCH).
+    //     There is no chain to split.
+    //   * HAS A CONSUMER.  All seven have a live name door: package_file.cpp:327,
+    //     goal.cpp:169, achievement_manager.cpp:293, graphics_typeinfo_accessors
+    //     .cpp:132/136/140, gameupdateloop_load.cpp:75,
+    //     gameupdateloop_serialize.cpp:195, reg_unreg_lane3.cpp:164/195.
+    //   * BLOCKED ON CRITERION 2 AT THE TOP OF THIS FILE -- a real boot.  The
+    //     committed evidence says `never` for three of them
+    //     (docs/runtime_port/wave19_phase0c/run2_attend/: PackageFile init=0
+    //     post=0, MaterialInstance and Particle init=1 post=0) and says nothing
+    //     at all about the other four, because three of the four were not in
+    //     the watch table.  This lane added them (wave17_door_attend.cpp) so
+    //     the next armed run measures all seven.
+    //   * AND ONE THING TO ANNOTATE WITH THE PROMOTION, NOT AFTER IT: promoting
+    //     AnimationEvent / MaterialInstance / Particle / PackageFile makes their
+    //     `?TypeName@` bodies hand out OUR node's `name` POINTER, and those four
+    //     bodies compare that pointer against the DLL's with RT_DIFF_SCALAR.
+    //     They will read `divergences=N` forever after, exactly as
+    //     ?TypeName@SpriteSheet@UI@@ already does (see the top of this file).
+    //     That is the string twin of the vtable-identity divergence and it is
+    //     NOT a regression -- but an unannotated red line is how a sweep gets
+    //     misread.  Annotate beside each body in the same commit as the
+    //     promotion.
+    // ------------------------------------------------------------------------
 
     printf("[RtMint] promoted %d minted DATA row(s) -- live on every run\n", n);
     return n;
