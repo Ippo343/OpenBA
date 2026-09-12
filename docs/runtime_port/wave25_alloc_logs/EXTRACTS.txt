@@ -1,0 +1,131 @@
+WAVE 25 LANE ALLOC -- decisive lines per cell.
+Raw logs are gitignored; re-make with tools/wave25_alloc_extract.sh.
+
+=== w25_shadow_base ===
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAlloc] ATTEST: UNARMED (BANISHED_RT_ALLOC=(unset)) -- the allocator port registered NOTHING
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] armed (min=512MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 000000cec67feff0 (min=512MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] grow=0 — the arena-growth path did NOT run in this cell. Whatever `divergences` says, this run is not evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).
+[RtAllocShadow] GAPS checks=3091327 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 3091327 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=3091328 divergences=0 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+--- no crash log (clean exit) ---
+
+=== w25_gapctl ===
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAlloc] ATTEST: UNARMED (BANISHED_RT_ALLOC=(unset)) -- the allocator port registered NOTHING
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] GAP DETECTOR NEGATIVE CONTROL ACTIVE — every 100,000th post-op snapshot is perturbed by +1 allocCount; the gap count MUST track the injected count.
+[RtAllocShadow] armed (min=512MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 0000001c38fff650 (min=512MB max=0MB)
+[RtAllocShadow] GAP #1 at observed-op 99999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #2 at observed-op 199999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #3 at observed-op 299999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #4 at observed-op 399999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #5 at observed-op 499999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #6 at observed-op 599999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #7 at observed-op 699999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #8 at observed-op 799999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #9 at observed-op 899999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #10 at observed-op 999999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #11 at observed-op 1099999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #12 at observed-op 1199999: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=0 dRangeCount=0 dReserved=0
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] grow=0 — the arena-growth path did NOT run in this cell. Whatever `divergences` says, this run is not evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).
+[RtAllocShadow] GAPS checks=2467214 gaps=24 sum_dAllocCount=-24 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=24
+[RtAllocShadow] SUMMARY armed=1 observed=2467215 divergences=0 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+--- no crash log (clean exit) ---
+
+=== w25_negctl_size ===
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAlloc] ATTEST: UNARMED (BANISHED_RT_ALLOC=(unset)) -- the allocator port registered NOTHING
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] NEGATIVE CONTROL ACTIVE (size) — this run is REQUIRED to go red; a clean result here invalidates every other run.
+[RtAllocShadow] armed (min=512MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 0000009187bff3c0 (min=512MB max=0MB)
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] grow=0 — the arena-growth path did NOT run in this cell. Whatever `divergences` says, this run is not evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).
+[RtAllocShadow] GAPS checks=2470416 gaps=0 sum_dAllocCount=0 sum_dFreeTagCount=0 sum_dAllocatedBytes=0 ctl_injected=0
+[RtAllocShadow] gaps=0 over 2470416 checks -- NOTHING mutated the real arena outside the two patched entries in this cell.
+[RtAllocShadow] SUMMARY armed=1 observed=2470417 divergences=1870250 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+--- no crash log (clean exit) ---
+
+=== w25_legacy_directfree ===
+[RtAllocShadow] observe-only driver armed; waiting for Engine::Startup (which INLINES MemoryAllocator::Startup)
+[RtAlloc] ATTEST: UNARMED (BANISHED_RT_ALLOC=(unset)) -- the allocator port registered NOTHING
+[RtAllocShadow] Engine::Startup ENTRY (min=512MB max=0MB): real arena live=0 bytes=0 ranges=0, skipped so far=0
+[RtAllocShadow] armed (min=512MB max=0MB)
+[RtAllocShadow] observing MemoryAllocator 0000008ae3fff070 (min=512MB max=0MB)
+[RtAlloc] LEGACY CONTROL: 0x180009c30 calls rtalloc::MemFree DIRECTLY again — the ported Free runs on RETAIL's arena and the allocator shadow cannot observe it.
+[RtAllocShadow] GAP #1 at observed-op 2055554: the real arena moved with no hook entry between: dAllocCount=-2 dFreeTagCount=1 dAllocatedBytes=-72 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #2 at observed-op 2055608: the real arena moved with no hook entry between: dAllocCount=-2 dFreeTagCount=1 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #3 at observed-op 2380670: the real arena moved with no hook entry between: dAllocCount=-3 dFreeTagCount=2 dAllocatedBytes=-96 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #4 at observed-op 2386570: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=1 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #5 at observed-op 2386571: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=-1 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #6 at observed-op 2386573: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #7 at observed-op 2386579: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #8 at observed-op 2386582: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=1 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #9 at observed-op 2386588: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=0 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #10 at observed-op 2386591: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=-1 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #11 at observed-op 2386594: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=1 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] GAP #12 at observed-op 2386600: the real arena moved with no hook entry between: dAllocCount=-1 dFreeTagCount=1 dAllocatedBytes=-64 dRangeCount=0 dReserved=0
+[RtAllocShadow] COVERAGE ranges ours=1 theirs=1  reserved ours=512MB theirs=512MB
+[RtAllocShadow] GROWTH grow=0 tableCopy=0 crossRange=0
+[RtAllocShadow] grow=0 — the arena-growth path did NOT run in this cell. Whatever `divergences` says, this run is not evidence about multi-range behaviour (WAVE9_LANE_E2.md 5.1).
+[RtAllocShadow] GAPS checks=2402754 gaps=6761 sum_dAllocCount=-6770 sum_dFreeTagCount=-6 sum_dAllocatedBytes=-387136 ctl_injected=0
+[RtAllocShadow] SUMMARY armed=1 observed=2402755 divergences=347201 skipped_pre_startup=0 other_allocator=0 map_full=0 free_unmapped=0
+--- no crash log (clean exit) ---
+
+=== w25_armed_redzone_1 ===
+[RtAlloc] ATTEST: ARMED (atomic swap, DLL present) (exports=27)
+[REDZONE] WATCH-ONLY mode: no shim, watchdog=1ms
+[REDZONE-HEAP] watchdog thread started (interval=1ms)
+[REDZONE-HEAP] watchdog stopped at exit (acknowledged) after 2770 completed heap walks
+--- no crash log (clean exit) ---
+
+=== w25_armed_redzone_autoload ===
+[RtAlloc] ATTEST: ARMED (atomic swap, DLL present) (exports=27)
+[REDZONE] WATCH-ONLY mode: no shim, watchdog=1ms
+[REDZONE-HEAP] watchdog thread started (interval=1ms)
+--- crash log (first 14 lines) ---
+
+=== STANDALONE CRASH ===
+Exception: 0xC0000005 (ACCESS_VIOLATION)
+Address:   00007fffd2d949f6
+RAX=0000000000000000 RCX=00000009905FF550 RDX=00000000FFFFFFFA RBX=00000009905FF550
+RBP=00000009913FF600 RSI=0000000000000000 RDI=0000000000000000 R8 =0000000000000000
+R9 =00000009905FF500 R10=0000000000000000 R11=0000000000000246 R12=0000000000000000
+RIP=00007FFFD2D949F6 RSP=00000009913FF430
+Module:    ntdll.dll + 0x649F6  (base=00007fffd2d30000)
+Fault: WRITE of 0000000000000024
+Registry: 1618 registered, 50 stubs hit
+(heap-dump follows; also mirrored to standalone_debug.log)
+[REDZONE-DUMP] 'CrashHandler': allocator=00000009905fef10 ranges=000001cef531e2a0 cnt=7
+[REDZONE-DUMP] no tag corruption — validating free-list LINKS...
+
+=== w25_unarmed_redzone_autoload ===
+[RtAlloc] ATTEST: UNARMED (BANISHED_RT_ALLOC=(unset)) -- the allocator port registered NOTHING
+[REDZONE] WATCH-ONLY mode: no shim, watchdog=1ms
+[REDZONE-HEAP] watchdog thread started (interval=1ms)
+--- crash log (first 14 lines) ---
+
+=== STANDALONE CRASH ===
+Exception: 0xC0000005 (ACCESS_VIOLATION)
+Address:   00007fffd2d949f6
+RAX=0000000000000000 RCX=000000AF651FFAE0 RDX=00000000FFFFFFFA RBX=000000AF651FFAE0
+RBP=000000AF65FFF700 RSI=0000000000000000 RDI=0000000000000000 R8 =0000000000000000
+R9 =000000AF651FFA00 R10=0000000000000000 R11=0000000000000246 R12=0000000000000000
+RIP=00007FFFD2D949F6 RSP=000000AF65FFF510
+Module:    ntdll.dll + 0x649F6  (base=00007fffd2d30000)
+Fault: WRITE of 0000000000000024
+Registry: 1618 registered, 50 stubs hit
+(heap-dump follows; also mirrored to standalone_debug.log)
+[REDZONE-DUMP] 'CrashHandler': allocator=000000af651ff4a0 ranges=000001fd4dfda630 cnt=20
+[REDZONE-DUMP] range 0 [000001fd57028bb0..000001fd571f31b0): CORRUPT block @000001fd57028bb0 tag=0x000001fd56c90150 size=8750377469248
+

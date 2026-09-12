@@ -91,6 +91,27 @@ mkdir -p "$OUT"
 
 echo "== launching  label=$LABEL speed=${SPEED:-default} citizens=${CITIZENS:-default} sets=${SETS:-default} frames=$FRAMES_EFF debug=$DEBUG"
 echo "   results -> $OUT"
+
+# WAVE 22 LANE ALLOC residual 4, closed in Wave 25: this harness recorded everything
+# about the game and NOTHING about the machine, and two sessions of allocator A/B
+# measurements were destroyed by sibling lanes without the report saying a word. A
+# reader of report.txt alone could not distinguish a regression from a neighbour.
+# Sampled BEFORE and AFTER, because contamination here has been NON-STATIONARY (a
+# rising load aliases onto the treatment through run order) and one sample cannot
+# show a ramp. Never fatal: a missing load record must not cost a run.
+sample_load() {
+    # -ExecutionPolicy Bypass is REQUIRED: this box has script execution disabled, so a
+    # plain `-File` invocation fails with SecurityError and records no load at all. The
+    # first version of this hook did exactly that -- and was caught only because the
+    # failure is written into machine_load.txt rather than swallowed. A quiet sampler
+    # would have produced runs with no load record and no warning, which is the defect
+    # this whole hook exists to prevent.
+    powershell -NoProfile -ExecutionPolicy Bypass -File "$REPO/tools/machine_load.ps1" -Seconds "${LOAD_WINDOW:-3}" -Label "$1" \
+        >> "$OUT/machine_load.txt" 2>&1 || echo "[MachineLoad] sampler failed ($1)" >> "$OUT/machine_load.txt"
+}
+sample_load before
+echo "   machine load (before):"
+grep -E 'load=|busy_cores' "$OUT/machine_load.txt" | sed 's/^/   /'
 ( cd "$GAME_DIR" && ./reimpl-x64.exe ) &
 LAUNCH_PID=$!
 
@@ -105,6 +126,10 @@ fi
 echo "== running (timeout ${TIMEOUT}s; Ctrl-C leaves the game up)"
 start=$(date +%s)
 last_row=""
+# ONE mid-run sample, not continuous: the sampler itself costs ~0.1 core for its
+# window, so polling it every loop would perturb the very thing it measures. Taken
+# once the run is warm (after the 4th CSV row) so it lands inside the reported window.
+mid_taken=0
 while tasklist 2>/dev/null | grep -qi 'reimpl-x64.exe'; do
     if [ -s "$GAME_DIR/standalone_crash.log" ]; then
         echo "!! crash log appeared"; break
@@ -113,6 +138,9 @@ while tasklist 2>/dev/null | grep -qi 'reimpl-x64.exe'; do
         row="$(tail -n 1 "$GAME_DIR/standalone_stress.csv" | tr -d '\r')"
         if [ "$row" != "$last_row" ] && [ "${row:0:1}" != "#" ] && [ "${row:0:6}" != "wall_s" ]; then
             echo "   $row"; last_row="$row"
+        fi
+        if [ "$mid_taken" = 0 ] && [ "$(grep -vc '^#' "$GAME_DIR/standalone_stress.csv" 2>/dev/null)" -ge 5 ] 2>/dev/null; then
+            mid_taken=1; sample_load during
         fi
     fi
     if [ "$TIMEOUT" -gt 0 ] && [ $(( $(date +%s) - start )) -ge "$TIMEOUT" ]; then
@@ -125,6 +153,7 @@ while tasklist 2>/dev/null | grep -qi 'reimpl-x64.exe'; do
     sleep 5
 done
 wait $LAUNCH_PID 2>/dev/null
+sample_load after
 
 cp -f "$GAME_DIR"/standalone_stress*.* "$OUT/" 2>/dev/null
 cp -f "$GAME_DIR/standalone_error.log" "$OUT/" 2>/dev/null
@@ -159,6 +188,11 @@ if [ -n "$BASELINE" ]; then
     python tools/stress_report.py "$OUT/standalone_stress.csv" --compprof "$OUT/standalone_stress_compprof.txt" --baseline "$BASELINE" | tee "$OUT/report.txt"
 else
     python tools/stress_report.py "$OUT/standalone_stress.csv" --compprof "$OUT/standalone_stress_compprof.txt" | tee "$OUT/report.txt"
+fi
+if [ -s "$OUT/machine_load.txt" ]; then
+    echo "== machine load (before / during / after) -- NOT part of the report diff;"
+    echo "   a timing number without this is uninterpretable on a shared box."
+    grep -E 'label=|load=|busy_cores' "$OUT/machine_load.txt" | sed 's/^/   /' | tee -a "$OUT/report.txt"
 fi
 echo "== done: $OUT"
 [ "$TEARDOWN_CRASH" = 1 ] && exit 6

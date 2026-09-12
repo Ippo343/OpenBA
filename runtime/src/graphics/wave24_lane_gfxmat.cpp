@@ -809,7 +809,7 @@ int RtGraphicsWave24GfxmatRegister() {
 // "the body ran" for "the body was compared"
 // (reference_uncalled_port_is_not_verified.md).
 void RtGraphicsWave24GfxmatSummary() {
-    std::printf("[GFXMAT24] Construct=%llu Reconstruct=%llu Destruct=%llu "
+    printf("[GFXMAT24] Construct=%llu Reconstruct=%llu Destruct=%llu "
                 "MatSer=%llu (tex=%llu const=%llu) MeshSer=%llu AnimSer=%llu\n",
                 (unsigned long long)g_constructCalls,
                 (unsigned long long)g_reconstructCalls,
@@ -819,7 +819,7 @@ void RtGraphicsWave24GfxmatSummary() {
                 (unsigned long long)g_matSerConstants,
                 (unsigned long long)g_meshSerCalls,
                 (unsigned long long)g_animSerCalls);
-    std::printf("[GFXMAT24] differential-oracle runs (effectiveness counter) = %llu "
+    printf("[GFXMAT24] differential-oracle runs (effectiveness counter) = %llu "
                 "-- 0 means NOTHING WAS COMPARED, whatever the attendance line says\n",
                 (unsigned long long)g_oracleRuns);
 }
