@@ -2239,9 +2239,12 @@ extern "C" void* RtGraphics_MeshInstance_GetInstanceTransform(const void* selfv,
 // NONE OF THE FOUR ADDRESSES IS USED AS AN IDENTITY TOKEN IN THIS TREE —
 // grepped across runtime/ code/ standalone/ engine/ dx11/ before the address
 // doors were opened, because a registered identity token is the failure that
-// keeps ?AddDrawItems@MeshInstance@ (0x180100f20) unregisterable. That one
-// address IS such a token, at standalone/scene_watch.cpp:401, and it is NOT
-// touched here — see WAVE27_LANE_GFXMESH.md §7.
+// kept ?AddDrawItems@MeshInstance@ (0x180100f20) unregisterable. That one
+// address IS such a token, at standalone/scene_watch.cpp:401 — and this lane
+// REBUILT that token so it can no longer be blinded (the write-up is at the call
+// site and beside the retired tag at standalone/reg_mint_promoted.cpp:2257).
+// AddDrawItems is still not registered, because its body is not ported; see
+// WAVE27_LANE_GFXMESH.md §7.
 //
 // Every address below is a LITERAL, deliberately
 // (reference_census_cannot_see_nonliteral_registrations.md).
@@ -2374,6 +2377,20 @@ int RtGraphicsMeshRegister() {
 //    WAVE6_LANE_E.md); it depends on Graphics::Renderer::AddDrawItem, which is
 //    lane F's. If lane F ever needs it, it must first give scene_watch a
 //    different identity token.
+//
+//    *** REASON (b) IS DEAD AS OF WAVE 27 LANE GFXMESH. DO NOT REPEAT IT. ***
+//    `standalone/scene_watch.cpp` no longer asks ResolveAddr for that address.
+//    `IsMeshInstance` now matches vtable[3] against ResolveRuntimeRaw's
+//    registry-FREE answer -- what the DLL's constructor actually stamped, which
+//    no registration can move -- OR against RtPortLookupAddr's, our own port if
+//    one exists. So registering this symbol can no longer blind the LOD census,
+//    and the RT_UNPROMOTABLE tag at standalone/reg_mint_promoted.cpp:2257 is
+//    RETIRED (the retirement is recorded beside the tag, not only here).
+//    REASON (a) STILL STANDS UNCHANGED, and it is the one that keeps the body
+//    unwritten: it is a virtual the DLL dispatches, so a port of it has zero
+//    callers until ??_7MeshInstance@ is promoted or the DLL is gone. Lane
+//    GFXMESH removed the blocker and did NOT write the body; the addressee for
+//    the body itself is named at reg_mint_promoted.cpp:2288.
 //
 // 2. ?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z
 //    retail 0x1800ff680, ordinal 3707.

@@ -234,10 +234,35 @@ using ExtPtrSerializeFn = void (*)(void* extPtrSlot, SerializeCtx* ctx);
 using TriListArrayFn    = void (*)(SerializeCtx* ctx, int count, void* data);
 using ArrayResizeFn     = void (*)(void* array, int newSize);
 
-template <typename Fn>
-Fn RtAddrOnce(uintptr_t va, void** cache) {
-    if (!*cache) *cache = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, va));
-    return reinterpret_cast<Fn>(*cache);
+// THE ADDRESS LITERAL IS SPELLED AT THE ResolveAddr CALL, ONE ACCESSOR PER
+// HELPER, RATHER THAN PASSED INTO A SHARED `RtAddrOnce(va)` TEMPLATE. That is
+// not style. tools/addr_door_audit.py harvests by-address doors with the regex
+//     ResolveAddr\s*\(\s*Module::Runtime\s*,\s*(0x[0-9a-fA-F]+)
+// (addr_door_audit.py:47), so an address handed to a wrapper as a PARAMETER is
+// invisible to it -- the door exists and no audit can see it, which is the same
+// blind spot reference_literal_grep_blind_to_variables.md has now recorded four
+// times. Written this way, all four of these doors appear in that audit's
+// UNREGISTERED list, where they belong: three of them are unported DLL
+// internals and SHOULD be listed until somebody ports them.
+ExtPtrSerializeFn RtSerializeExternalPtrBase() {
+    static ExtPtrSerializeFn f = reinterpret_cast<ExtPtrSerializeFn>(
+        ResolveAddr(Module::Runtime, 0x180014230));
+    return f;
+}
+ExtPtrSerializeFn RtSerializeExternalPtrMaterial() {
+    static ExtPtrSerializeFn f = reinterpret_cast<ExtPtrSerializeFn>(
+        ResolveAddr(Module::Runtime, 0x180014520));
+    return f;
+}
+TriListArrayFn RtSerializeTriangleListArray() {
+    static TriListArrayFn f = reinterpret_cast<TriListArrayFn>(
+        ResolveAddr(Module::Runtime, 0x180014850));
+    return f;
+}
+ArrayResizeFn RtTriangleListArrayResize() {
+    static ArrayResizeFn f = reinterpret_cast<ArrayResizeFn>(
+        ResolveAddr(Module::Runtime, 0x1800136f0));
+    return f;
 }
 
 }  // namespace
@@ -366,11 +391,6 @@ extern "C" int32_t RtGraphics_EdgeMesh_Compile(void* self, const void* filename)
 extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
     RT_DIFF_BEGIN("Graphics::EdgeMesh::Serialize[NO-ORACLE]");
 
-    static void* s_extBase = nullptr;
-    static void* s_extMat  = nullptr;
-    static void* s_triList = nullptr;
-    static void* s_resize  = nullptr;
-
     uint8_t* const self = reinterpret_cast<uint8_t*>(selfv);
     uint8_t* const st   = reinterpret_cast<uint8_t*>(stream);
 
@@ -390,14 +410,10 @@ extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
         ctx.encoding = make(factory, &ctx, 0);
     }
 
-    ExtPtrSerializeFn extBase =
-        RtAddrOnce<ExtPtrSerializeFn>(0x180014230ull, &s_extBase);
-    ExtPtrSerializeFn extMat =
-        RtAddrOnce<ExtPtrSerializeFn>(0x180014520ull, &s_extMat);
-    TriListArrayFn triArray =
-        RtAddrOnce<TriListArrayFn>(0x180014850ull, &s_triList);
-    ArrayResizeFn arrayResize =
-        RtAddrOnce<ArrayResizeFn>(0x1800136f0ull, &s_resize);
+    ExtPtrSerializeFn extBase     = RtSerializeExternalPtrBase();
+    ExtPtrSerializeFn extMat      = RtSerializeExternalPtrMaterial();
+    TriListArrayFn    triArray    = RtSerializeTriangleListArray();
+    ArrayResizeFn     arrayResize = RtTriangleListArrayResize();
 
     extBase(self + 0x20, &ctx);
     extMat (self + 0x28, &ctx);

@@ -649,6 +649,48 @@ static const DelDtorSpec kSpecs[] = {
     // THESE ROWS DO NOT PROMOTE ANYTHING. They make slot 0 of each of the three
     // tables ported, which is what lets ??_7EdgeMesh@ reach 9/9 COMPLETE; see
     // docs/runtime_port/WAVE27_LANE_GFXMESH.md §5 for the promotion verdicts.
+    //
+    // *** tools/rt_deleting_dtor_verify.py PRINTS `BAD` FOR THE SECOND AND THIRD
+    // *** OF THESE THREE ROWS. THE ROWS ARE RIGHT AND THE TOOL HAS A BLIND SPOT.
+    // Read this before "fixing" the rows, because its verdict is the first thing
+    // the next person will see:
+    //
+    //     BAD 0x1800175d0 ... scalar branch neither calls 0x1800174d0 nor
+    //                         restamps a vtable
+    //     BAD 0x180017330 ... scalar branch neither calls 0x180017060 nor
+    //                         restamps a vtable
+    //
+    // The checker (tools/rt_deleting_dtor_verify.py:260-273) knows exactly TWO
+    // shapes for the scalar branch -- K1, it CALLS ~Class; K2/K3, it INLINES a
+    // ~Class that begins with a vtable RESTAMP, which the tool matches on -- and
+    // its third arm is a bare `else` that reports anything else as a problem.
+    // These two rows are a THIRD shape: the scalar branch inlines a ~Class whose
+    // own body contains NO restamp at all, so there is nothing for the tool to
+    // match and it cannot tell an inlined-correct row from a wrong one. It
+    // announces a verdict without being able to examine its subject
+    // (reference_a_screen_that_cannot_name_its_subject.md), and it INFLATES:
+    // two false positives, no false negatives.
+    //
+    // BOTH WERE THEREFORE CHECKED BY HAND, instruction by instruction, which is
+    // the check the tool is standing in for:
+    //   0x1800175d0 scalar branch (at 0x180017621) is `CALL 0x1800a41c0` and
+    //       nothing else, and ~EdgeMeshInstance (0x1800174d0) is 0x1a bytes
+    //       whose whole body is `JMP 0x1800a41c0`. Identical.
+    //   0x180017330 scalar branch (at 0x180017381) is, in order,
+    //       CALL 0x18001c550 on this+0xf0, CALL 0x18001c480 on this+0xd8+8,
+    //       CALL 0x180014d00 on this+0xc8, CALL 0x1800a41c0 on this -- and
+    //       ~MeshInstance (0x180017060) is those same four calls on those same
+    //       four offsets in that same order, the last as a tail JMP. Identical.
+    // The row's `dtor` field is what DeletingDtorCore CALLS, and calling ~Class
+    // in both branches is this family's one documented deliberate departure, so
+    // both rows compute what retail computes.
+    //
+    // NOT FIXED IN THE TOOL, deliberately: WAVE27_KICKOFF.md §4 #1 forbids this
+    // wave's lanes from touching instruments. Recorded with file and line in
+    // docs/runtime_port/WAVE27_LANE_GFXMESH.md under "INSTRUMENT DEFECT
+    // OBSERVED, NOT FIXED". [ADDRESSEE: whoever scopes a Wave 28 instruments
+    // lane -- the fix is a K4 arm that accepts a scalar branch whose call set
+    // equals the call set of the named ~Class.]
     RT_DELDTOR(0x1800134b0, 0x1800a2780, 0x180, "Graphics::EdgeMesh"),
     RT_DELDTOR(0x1800175d0, 0x1800174d0, 0x0d0, "Graphics::EdgeMeshInstance"),
     RT_DELDTOR(0x180017330, 0x180017060, 0x120, "Graphics::MeshInstance"),
