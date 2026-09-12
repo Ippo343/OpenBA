@@ -74,15 +74,17 @@
 //     0x1800ae020, which nothing in the tree registers. A lane that closes one
 //     door and opens one has not moved the count.
 //
-//   0x180028760  the Array<Mod> introsort — 422 instructions, and it opens TWO
-//     unregistered doors: 0x180028fc0 (its small-range insertion pass) and
-//     0x1800c98a0 (`String::Compare`, its tie-break). Its comparator is `order`
-//     ascending with a `name` tie-break over a population where every record
-//     can tie — the exact "which package wins" shape lane COLL's introsort.cpp
-//     banner warns is decided by the SWAP SEQUENCE, not by sortedness. Porting
-//     it needs its own replayed-permutation probe on a tie-heavy corpus, which
-//     is what introsort.cpp built for 0x1800264a0. That is a lane, not a
-//     footnote in this one.
+//   0x180028760  the Array<Mod> introsort — NO LONGER DECLINED. BATCH 8b
+//     ported it and its small-range pass (0x180028fc0) in
+//     runtime/src/io/modification_sort.cpp; the third door it named,
+//     0x1800c98a0 (`String::StrCompare`), was already ported in
+//     runtime/src/system/string.cpp. The objection recorded here — that the
+//     population ties and so the SWAP SEQUENCE, not sortedness, decides which
+//     record wins — was right, and is the reason that port TRANSCRIBES the
+//     shipped MSVC sort skeleton (../collection/introsort_msvc.h) rather than
+//     substituting one. What was wrong was the conclusion that a
+//     replayed-permutation probe had to come first: a transcription of the
+//     bytes needs no corpus to justify it.
 //
 // So with the DLL PRESENT this body is complete and diffable; at cutover it
 // moves the wall from `RefreshList` to those three. The set-diff is in
@@ -538,7 +540,7 @@ using FnMapFind          = void*    (*)(void*, const void*);            // 0x180
 using FnGetPathFilename  = Filename*(*)(const Filename*, Filename*, bool);  // 0x1800c6740
 using FnStrICmp          = int      (*)(const char*, const char*);      // 0x18007eefc
 using FnArrayFilenameFill= void     (*)(void*, int, const Filename*);   // 0x180026880
-using FnModSort          = void     (*)(void*, int, void*);             // 0x180028760 (declined)
+using FnModSort          = void     (*)(void*, int, void*);             // 0x180028760 (PORTED, BATCH 8b)
 
 // The `Mod` int columns, named from the PackageFile fields RefreshList copies
 // them out of (0x1800afaba..0x1800afade and 0x1800afc8e). Modification.h calls
@@ -1097,9 +1099,10 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
         }
     }
 
-    // 0x1800b0338 — the sort. DECLINED (see the banner); reached by address, so
-    // it goes to whatever owns 0x180028760. The third argument is a stack slot
-    // the callee never reads.
+    // 0x1800b0338 — the sort. PORTED (BATCH 8b,
+    // runtime/src/io/modification_sort.cpp); still reached by address, which is
+    // enough, because ResolveAddr consults the port registry first. The third
+    // argument is a stack slot the callee never reads.
     if (arr->size > 1) {
         void* scratch = nullptr;
         fnModSort(arr->data, arr->size, &scratch);

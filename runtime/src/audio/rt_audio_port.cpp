@@ -65,6 +65,11 @@ void RtAudioPortInit() {
     // (DIRECTION.md: a port registers unconditionally, no new kill switches).
     n += RtAudioStreamPlayRegister();
     n += RtAudioPlayPlatformRegister();
+    // BATCH 8b: the EffectSlot serialize pair (0x180052640 / 0x180051e00), the
+    // two address doors audio.cpp's Scene::Serialize banner left open.
+    // Unconditional, same reason as the two rows above.
+    extern int RtAudioEffectSlotSerializeRegister();  // audio_effectslot_serialize.cpp
+    n += RtAudioEffectSlotSerializeRegister();
     // Wave 29 lane AVBODY. The sweep needs no allocator, no gameplay route and
     // no caller: two of the three bodies are PURE (the `this` they are handed is
     // never read), and the third is fully synthesisable. It compares against the
