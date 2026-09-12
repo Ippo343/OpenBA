@@ -904,6 +904,15 @@ void RtGraphicsWave28GfxbodySummary() {
            g_findConstCalls, g_findConstHits, g_findTexCalls, g_findTexHits,
            g_applyEventsCalls, g_applyEventsFired,
            g_beginGroupCalls, g_beginGroupAppends);
+    // WAVE 29 LANE VERIFY: the printf above covered 6 of this lane's 8
+    // registered rows. `UpdateRootOnly` and `Camera::operator=` each had a
+    // counter that was incremented by `Attend()` and then printed NOWHERE — the
+    // same defect class as the unreached summary itself, one level down: a
+    // counter with no reader is indistinguishable from a body with no caller.
+    // Camera::operator= is the row Wave 29 §2.2 warns about by name, so its
+    // attendance is the one number that must never be inferred from silence.
+    printf("[GFXBODY28] UpdateRootOnly=%llu (layers=%llu) CameraAssign=%llu\n",
+           g_updateRootCalls, g_updateRootLayers, g_cameraAssignCalls);
 }
 
 }  // namespace rtgfxbody28

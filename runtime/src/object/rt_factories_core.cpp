@@ -171,9 +171,28 @@ void* RtFactoryInPlace(const RtFactoryClass& c, void* p) {
 // registration leaves any by-address consumer on the DLL; an address-only one
 // is invisible to tools/runtime_census.py
 // (reference_by_address_door_dies_at_cutover.md).
+// WAVE 29 LANE VERIFY — the roster, kept so something can VERIFY it.
+//
+// Each namespace's `kRegs` is file-static inside its own .inc, so until now the
+// only consumer of a row was the registration loop below and NOTHING COULD
+// ENUMERATE THE FAMILY at runtime. That is why the family's only evidence was an
+// OFFLINE oracle that re-implements the interpreter instead of calling it.
+// A flat array of pointers to the caller's static tables; no ownership, no copy.
+namespace {
+const RtFactoryReg* g_roster[256];
+size_t              g_rosterN = 0;
+}  // namespace
+size_t RtFactoryRoster(const RtFactoryReg** out, size_t cap) {
+    size_t n = g_rosterN < cap ? g_rosterN : cap;
+    for (size_t i = 0; i < n; ++i) out[i] = g_roster[i];
+    return g_rosterN;   // the TRUE size, so a caller can detect truncation
+}
+
 int RtFactoryRegisterAll(const RtFactoryReg* regs, size_t n) {
     for (size_t i = 0; i < n; ++i) {
         const RtFactoryReg& r = regs[i];
+        if (g_rosterN < sizeof(g_roster)/sizeof(g_roster[0]))
+            g_roster[g_rosterN++] = &regs[i];
         RegisterRuntimeExport(r.newName, r.newFn);
         RegisterRuntimeAddr(static_cast<uintptr_t>(r.newVa), r.newFn);
 

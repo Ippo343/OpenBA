@@ -90,6 +90,13 @@ void* RtFactoryInPlace(const RtFactoryClass& c, void* p);
 // registrars below.
 int RtFactoryRegisterAll(const RtFactoryReg* regs, size_t n);
 
+// WAVE 29 LANE VERIFY — enumerate the registered roster.
+// Fills `out` with up to `cap` row pointers and returns the TRUE row count, so
+// a caller that passed too small a buffer can SAY SO rather than silently
+// report on a prefix. Valid only after RtFactoriesPortInit() has run; returns 0
+// when FACTREST is disabled, which is the correct reading (nothing registered).
+size_t RtFactoryRoster(const RtFactoryReg** out, size_t cap);
+
 // Per-namespace registrars, all called from RtFactoriesPortInit().
 int RtFactoriesObjectRegister();
 int RtFactoriesGraphicsRegister();
