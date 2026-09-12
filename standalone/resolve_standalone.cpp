@@ -446,6 +446,14 @@ void RuntimePortInit() {
     RtAchievementPortInit();  // Wave 5: Achievement
     RtSavePortInit();     // Wave 5: Save
     RtPickingPortInit();  // Wave 5: Picking
+
+    // Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
+    // Pathfinding::PointList, Picking::PickingMesh. Each registers
+    // unconditionally (DIRECTION.md #2: no waves/lanes/flags for a port).
+    { extern int RtCollision2DCollisionMeshRegister(); RtCollision2DCollisionMeshRegister(); }
+    { extern int RtCollision2DSurfaceRegister();       RtCollision2DSurfaceRegister(); }
+    { extern int RtPathfindingPointListRegister();     RtPathfindingPointListRegister(); }
+    { extern int RtPickingPickingMeshRegister();       RtPickingPickingMeshRegister(); }
     RtVideoPortInit();    // Wave 6: Video
     RtGraphicsPortInit(); // Wave 6: Graphics
     RtUiPortInit();       // Wave 7: UI
