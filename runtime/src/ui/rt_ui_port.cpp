@@ -239,5 +239,21 @@ void RtUiPortInit() {
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
     n += RtUiFactory1Register();  // owns BANISHED_RT_UIFACT1 (FACTUI1)
     n += RtUiFactory2Register();          // owns BANISHED_RT_UIFACT2 (FACTUI2)
+
+    // ------------------------------------------------------------------
+    // 2026-09-12, the UI TEXT PIPELINE batch. No switches: a port registers
+    // unconditionally (DIRECTION.md §2 item 3). Declared here rather than at
+    // the top of the file so the whole batch is one contiguous block --
+    // eight agents are appending to this file in parallel today.
+    // ------------------------------------------------------------------
+    extern int RtUiClassOperatorDeleteRegister();  // ui_operator_delete.cpp
+    extern int RtUiCharacterSetRegister();         // characterset.cpp
+    extern int RtUiCursorRegister();               // cursor.cpp
+    extern int RtUiSpriteCaptureClassRegister();   // spritecapture_class.cpp
+    n += RtUiClassOperatorDeleteRegister();  // the 60 ??3<Class>@UI@@, one body
+    n += RtUiCharacterSetRegister();         // UI::CharacterSet, whole class
+    n += RtUiCursorRegister();               // UI::Cursor, whole class
+    n += RtUiSpriteCaptureClassRegister();   // UI::SpriteCapture vtable + Draw
+
     printf("[RtPort] UI: %d exports registered\n", n);
 }

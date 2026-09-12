@@ -867,6 +867,40 @@ static const DelDtorSpec kSpecs[] = {
     // Array<String> whose buffer came from the Runtime heap.
     RT_DELDTOR(0x1800361f0, 0x180118370, 0x080, "UI::ImageDescription"),
     RT_DELDTOR(0x1800369e0, 0x1800cb6b0, 0x098, "UI::AnimatedImageDescription"),
+    // 2026-09-12, the UI TEXT PIPELINE batch: the four classes of
+    // runtime/src/ui/{font,characterset,cursor,spritecapture_class}.cpp. Each
+    // row's two constants were read from the deleting destructor's OWN bytes
+    // (the `LEA R9` and `MOV EDX` of its array arm), not from the class header:
+    //     0x180032130  LEA R9,[0x1801175a0]  MOV EDX,0x90   UI::Font
+    //     0x1800378a0  LEA R9,[0x1800cb840]  MOV EDX,0x28   UI::CharacterSet
+    //     0x18003b3a0  LEA R9,[0x1800cd1c0]  MOV EDX,0x30   UI::Cursor
+    //     0x18003ccf0  LEA R9,[0x1800d91b0]  MOV EDX,0x58   UI::SpriteCapture
+    // All four destructors are ported and registered in runtime/src/ui/.
+    //
+    // THREE OF THE FOUR INLINE ~Class IN THE SCALAR ARM (CharacterSet, Cursor
+    // and SpriteCapture open-code the restamp, the member release and the
+    // `CALL ??1External`); UI::Font is the one that CALLS it (0x180032181).
+    // That is exactly the split this family handles by calling `~Class` on
+    // BOTH arms, and it cost nothing to check: the inlined code in each of the
+    // three IS the body of the destructor its own array arm names.
+    //
+    // Each also calls its CLASS-SPECIFIC `operator delete` in the scalar arm
+    // (??3Font 0x180031a50, ??3CharacterSet 0x1800374e0, ??3Cursor 0x18003b010,
+    // ??3SpriteCapture 0x18003c8a0) rather than the shared 0x180006a10. All
+    // four are now ported in runtime/src/ui/ui_operator_delete.cpp, which
+    // proves by byte comparison that all sixty UI class operator deletes are
+    // one function — so DeletingDtorCore's single MemFree IS retail's body
+    // here too, as it is for the GroupDescription and Video rows above.
+    //
+    // NOT ADDED to kProbeSubjects, on the UI::ElementDescription row's test:
+    // ~CharacterSet releases a refcounted String, ~SpriteCapture destroys
+    // three Arrays whose buffers came from the Runtime heap, and ~Font does
+    // both. A fabricated subject would decrement a refcount nothing
+    // incremented and free garbage pointers.
+    RT_DELDTOR(0x180032130, 0x1801175a0, 0x090, "UI::Font"),
+    RT_DELDTOR(0x1800378a0, 0x1800cb840, 0x028, "UI::CharacterSet"),
+    RT_DELDTOR(0x18003b3a0, 0x1800cd1c0, 0x030, "UI::Cursor"),
+    RT_DELDTOR(0x18003ccf0, 0x1800d91b0, 0x058, "UI::SpriteCapture"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
