@@ -294,6 +294,157 @@ WRAPPER_KNOWN_DOOR = {
     "ResolveExport", "ResolveExportRaw", "RtResolveCached",
     "RT_EXPORT_ONCE", "RT_DATA_SLOT", "InstallRuntimeDetourExport",
 }
+
+# ---- WAVE 26 LANE DOORS: the 70 unclassified sites, adjudicated ----------
+#
+# Wave 21 built the screen above and DELIBERATELY refused to judge what it
+# found, because a judgement mid-wave moves numbers other lanes quote. Wave 26
+# lane DOORS is the lane that gets to judge them, and this is the ruling.
+#
+# THE RULE APPLIED IS MECHANISM, NOT PURPOSE, because that is the rule this
+# script already uses everywhere else: `RE_EXPORT` matches
+# `ResolveExport(?:Raw)?` and counts a literal site toward `called` wherever it
+# stands -- a port, an oracle, a probe file. A wrapper is therefore a DOOR iff
+# its BODY reaches Runtime-x64.dll BY NAME with the caller's string
+# (ResolveExport / ResolveExportRaw / RtResolveCached), and is NOT a door if it
+# only queries our own registry, our own mint tables, or formats a message.
+#
+# Adopting a PURPOSE rule instead ("an instrument is not a door") was
+# considered and rejected: it would classify `VerifyBody("?X@...")` as not-a-
+# door while the identical `ResolveExportRaw("?X@...")` two files away still
+# counted, i.e. one file's literal in and its wrapper out. That inconsistency
+# is exactly the shape of defect this screen exists to find. The residual
+# question -- whether probe-only resolves belong in `called` AT ALL -- is
+# stated in docs/runtime_port/WAVE26_LANE_DOORS.md §6 with an addressee; it is
+# a change to EXISTING counted sites and is not this lane's to make silently.
+#
+# Each verdict below was taken by READING THE WRAPPER'S BODY, file:line given.
+WRAPPER_LOCAL_DOORS = {
+    # ident: (where the body is, what it does)
+    "RtVtable": (
+        "runtime/src/graphics/mesh.cpp:305",
+        "`return ResolveExport(mangled);` -- the wrapper Wave 21 already named "
+        "as the live example. 5 sites; 3 Graphics vtable rows reach the DLL "
+        "ONLY through it."),
+    "RT_VTABLE_ONCE": (
+        "runtime/src/save/saveload_meta.cpp:364",
+        "a macro whose body is `RtResolveCached((MANGLED), &cache)` -- the same "
+        "expansion RT_EXPORT_ONCE has, spelled for a DATA symbol. 6 sites."),
+    "Dx11ResolveRuntimeImport": (
+        "dx11/src/dx11_backend_access.cpp:9",
+        "`ResolveExport(mangled)` then the VideoDX11 IAT slot as fallback. "
+        "Already reached by RE_DX11_MANGLED, so this adds no row -- and that "
+        "is worth recording, because a classification that moves nothing is "
+        "still a classification."),
+    "RawVtable": (
+        "runtime/src/object/internal.cpp:274",
+        "`ResolveExportRaw(symbol)` when the raw pin is armed. Functional, not "
+        "diagnostic: VtblInternal()/VtblBase() feed the CONSTRUCTOR."),
+    "TypeIdOfStatic": (
+        "runtime/src/ui/dialog_create.cpp:417",
+        "`ResolveExport(mangled)` and reads the typeId out of the node."),
+    "RtResolveExportForProbe": (
+        "runtime/src/io/file_stream_probe.cpp:119",
+        "`ResolveExportRaw(mangled)`, aborting on a phantom name."),
+    "AppPair": (
+        "standalone/rt_orphan_probe.cpp:1254",
+        "resolves BOTH doors for one export: ResolveExport + ResolveExportRaw."),
+    "VerifyBody": (
+        "runtime/src/io/serializer.cpp:174",
+        "`ResolveExportRaw(mangled)` then memcmp against expected bytes."),
+}
+
+# The same 70 sites, the other verdict. Each of these was read too, and none of
+# them touches the DLL.
+WRAPPER_LOCAL_NOTDOORS = {
+    "PromoteVtableGuarded": (
+        "standalone/reg_mint_promoted.cpp:195",
+        "a REGISTRATION side: RtMintPromotionStorage + RegisterRuntimeExport + "
+        "RegisterRuntimeAddr. It publishes, it does not resolve. Its symbols "
+        "move the PORTED column instead -- see mint_promoted_symbols()."),
+    "RtPortLookupExport": (
+        "standalone/resolve_standalone.cpp:751",
+        "a residue-free registry query that DELIBERATELY does not fall through "
+        "to the DLL -- it answers 'is this ported', not 'give me something "
+        "callable'."),
+    "RuntimeExportIsRegistered": (
+        "standalone/resolve_standalone.cpp:275",
+        "registry membership test; never touches the export table."),
+    "RtMintVtableTrapCount": (
+        "standalone/rt_data_mint.cpp:306",
+        "reads OUR minted slot table. No DLL involved."),
+    "RtInternalVtblPinRow": (
+        "runtime/src/object/internal.cpp:1029",
+        "the literal is a printf LABEL; the real doors are the "
+        "ResolveExport/ResolveExportRaw arguments at the call site, already "
+        "counted as literals."),
+    "CallVideoCallback": (
+        "runtime/src/engine/engine.cpp:423",
+        "the literal is the name printed in the 'not available' warning; the "
+        "real door is the RT_EXPORT_ONCE in the SAME call, already counted."),
+    "VerifyFailed": (
+        "runtime/src/io/serializer.cpp:183",
+        "printf only."),
+}
+
+WRAPPER_KNOWN_DOOR |= set(WRAPPER_LOCAL_DOORS)
+
+# ---- INSTRUMENT-SOURCED ROWS (Wave 26 lane DOORS; CHANGES NO COUNT) -------
+#
+# The MECHANISM rule above is consistent, and it has a consequence worth
+# printing rather than discovering: three of the eight wrappers live in PROBE
+# files, so classifying them as doors put 13 rows into `called` whose only
+# caller is an instrument. Six of them are unported and therefore ENTER THE
+# GAP -- and a gap row is what a porting lane is sent after.
+#
+# A probe's resolve is a real dependency of our tree (that is why it counts)
+# and is NOT a port obligation (the probe is env-gated and dies with the DLL).
+# Both halves are true, so the row stays in the count and the census names the
+# population. This changes nothing and is the only defence against a future
+# lane spending itself on `?GetObjectVersion@TextFileStream@IO@@` because a
+# number said 6.
+INSTRUMENT_FILE_MARKERS = ("_probe.cpp", "rt_selftest.cpp", "_screen.cpp",
+                           "_oracle.cpp")
+
+
+def is_instrument_file(rel):
+    return any(rel.endswith(s) for s in INSTRUMENT_FILE_MARKERS)
+
+# The door wrappers, as a scan pattern. Built from the table above so a name
+# can never be classified in one place and matched in another -- the split-
+# brain that let PromoteVtableGuarded be a known helper and an invisible one at
+# the same time.
+RE_WRAPPER_DOOR = re.compile(
+    r'\b(?:' + "|".join(sorted(WRAPPER_LOCAL_DOORS, key=len, reverse=True)) +
+    r')\s*\(\s*(?=")')
+
+# ---- DELIBERATE FAKES: recognised and EXCLUDED, never silently folded -----
+#
+# Wave 26 lane DOORS teaches this script to follow a named constant ACROSS
+# files (see global_name_consts()). That reopens the exact hazard Wave 25 lane
+# VTIO found and lane SWEEP measured: a FABRICATED mangled name reaching the
+# census mints a permanent gap row for a symbol that does not exist, i.e. work
+# that can never be completed, inflating the denominator forever.
+#
+# Two of the identifiers in the "cannot follow" warning are deliberate negative
+# controls and MUST stay out of the board. They are named here -- per FILE, not
+# by bare identifier, so a real constant that happens to be called `phantom`
+# somewhere else is not silently swallowed -- and the census PRINTS the
+# exclusion rather than performing it in silence.
+#
+# This is a recognition list, not a filter of convenience: a name that is
+# absent from the DLL and NOT on this list is reported as a suspected phantom,
+# loudly (see PHANTOM GUARD below).
+DELIBERATE_FAKES = {
+    ("standalone/rt_selftest.cpp", "kFake"):
+        "?RtSelfTestOnly@@YAXXZ -- rt_selftest.cpp registers a fake name and "
+        "proves the port seam answers it. Verified ABSENT from the DLL's 4926 "
+        "named exports (pefile, Wave 26 lane DOORS).",
+    ("runtime/src/engine/loops.cpp", "phantom"):
+        "?NoSuchSlot@UpdateLoop@Engine@@UEAAXXZ, assembled at run time by "
+        "snprintf -- lane VTIO's S1 negative control, already fixed by VTIO so "
+        "no literal exists. Verified ABSENT (pefile, Wave 26 lane DOORS).",
+}
 WRAPPER_KNOWN_NOTDOOR = {
     # registration / minting sides: they publish, they do not resolve
     "RegisterRuntimeExport", "RegisterRuntimeAddr", "RegisterDispatchSlot",
@@ -302,6 +453,7 @@ WRAPPER_KNOWN_NOTDOOR = {
     "printf", "fprintf", "sprintf", "snprintf", "strcmp", "strncmp", "strstr",
     "puts", "fputs", "TRACE", "LOG", "Log", "assert",
 }
+WRAPPER_KNOWN_NOTDOOR |= set(WRAPPER_LOCAL_NOTDOORS)
 
 
 def first_literal_after(text, pos, limit=400):
@@ -371,8 +523,15 @@ RE_REG_EXPORT_NONLITERAL = re.compile(
 # code/Game/Dialog/mod_dialog_vtables.cpp use the constexpr form. Matching only
 # the first meant a file could name a symbol once, correctly, and still be
 # invisible to this script.
+#
+# THIRD SPELLING, and it was live (Wave 26 lane DOORS). `const char* kX = "?...";`
+# -- a const-to pointer that is not itself const -- is the shape
+# standalone/rt_orphan_probe.cpp:2327 uses for kGetValue/kPressed/kReleased,
+# and all three appeared in the "cannot follow" warning. Matching two of three
+# spellings is the same blind spot the comment above documents, one spelling
+# over, so all three are matched here.
 RE_NAME_CONST = re.compile(
-    r'\b(?:(?:static\s+)?const\s+char\s*\*\s*const|constexpr\s+const\s+char\s*\*)\s+'
+    r'\b(?:(?:static\s+)?const\s+char\s*\*\s*(?:const\s+)?|constexpr\s+const\s+char\s*\*)\s*'
     r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?=")')
 RE_REG_ORDINAL = re.compile(r'RegisterRuntimeOrdinal\s*\(\s*(\d+)')
 RE_REG_ADDR = re.compile(r'RegisterRuntimeAddr\s*\(\s*(0x[0-9a-fA-F]+)')
@@ -587,6 +746,27 @@ def load_export_addrs():
         raise
     except Exception as exc:
         return _bail("reading the DLL's export directory failed: %r" % exc)
+
+
+_EXPORT_NAME_CACHE = None
+
+
+def load_export_names():
+    """The DLL's named exports, as a SET. Used ONLY by the phantom guard.
+
+    Built from load_export_addrs() so there is exactly one parse of the export
+    directory and one degradation path -- two independent readers of the same
+    table is how two figures drift and then get argued about.
+
+    Returns None when the address map came back empty (the --allow-degraded
+    path). None is NOT an empty set: a guard that cannot look must say so
+    rather than report every name as a phantom.
+    """
+    global _EXPORT_NAME_CACHE
+    if _EXPORT_NAME_CACHE is None:
+        addrs = load_export_addrs()
+        _EXPORT_NAME_CACHE = set(addrs.values()) if addrs else False
+    return None if _EXPORT_NAME_CACHE is False else _EXPORT_NAME_CACHE
 
 
 def load_export_ordinals():
@@ -868,6 +1048,228 @@ def selftest_promoted_doors():
         return 1
     print("RESULT   : %d of %d checks correct" % (len(checks) - bad, len(checks)))
     return 1 if bad else 0
+
+
+def _st_report(name, checks):
+    """Shared scoring. Prints EVERY check, not a union verdict.
+
+    A positive control scored on the UNION of two screens reads 3/3 and hides
+    that one screen caught 1/3 -- so each row is printed with its own verdict
+    and the count is of ROWS, never of screens.
+    """
+    bad = 0
+    print("SUBJECT  : %s" % name)
+    for label, ok in checks:
+        if not ok:
+            bad += 1
+        print("  %-5s %s" % ("ok" if ok else "*RED*", label))
+    print("RESULT   : %d of %d checks correct" % (len(checks) - bad, len(checks)))
+    return 1 if bad else 0
+
+
+def selftest_wrapper_doors():
+    """Wave 26 lane DOORS: RE_WRAPPER_DOOR matches, and matches ONLY doors.
+
+    HANDED A SHAPE. The pattern is absence-shaped in one direction (a wrapper
+    that stops being called yields nothing, which is indistinguishable from a
+    dead regex), so the synthetic source below supplies a positive case for
+    every door wrapper in WRAPPER_LOCAL_DOORS and a negative case for every
+    not-door -- generated FROM the tables, so a wrapper added to either table
+    without a verdict cannot slip past this guard.
+
+    EFFECTIVENESS COUNTER: the live tree is also scanned, and this fails if
+    the eight wrappers yield ZERO symbols between them. "No matches" from a
+    screen nobody handed anything is not a measurement.
+    """
+    checks = []
+    for ident in sorted(WRAPPER_LOCAL_DOORS):
+        src = '%s("?Synthetic@%s@@QEAAXXZ", 0);' % (ident, ident)
+        m = RE_WRAPPER_DOOR.search(src)
+        got = concat_literal(src, m.end()) if m else None
+        checks.append(("POSITIVE door %-26s -> %s" % (ident, got),
+                       got == "?Synthetic@%s@@QEAAXXZ" % ident))
+    for ident in sorted(WRAPPER_LOCAL_NOTDOORS):
+        src = '%s("?Synthetic@%s@@QEAAXXZ", 0);' % (ident, ident)
+        checks.append(("NEGATIVE not-a-door %-22s must NOT match" % ident,
+                       RE_WRAPPER_DOOR.search(src) is None))
+    # A wrapper whose name merely CONTAINS a door name must not match, or the
+    # alternation would be a substring grep wearing a word boundary.
+    checks.append(("NEGATIVE MyRtVtableHelper(\"?X@@\") must NOT match",
+                   RE_WRAPPER_DOOR.search('MyRtVtableHelper("?X@Y@@QEAAXXZ");')
+                   is None))
+    # Both tables must be disjoint: one identifier cannot be door and not-door.
+    checks.append(("DISJOINT door and not-door tables",
+                   not (set(WRAPPER_LOCAL_DOORS) & set(WRAPPER_LOCAL_NOTDOORS))))
+    d = scan()
+    hits = d["wrapper_door_hits"]
+    checks.append(("EFFECTIVENESS: the live tree yields %d symbol(s) through "
+                   "these wrappers (0 would mean a dead scan)" % len(hits),
+                   len(hits) > 0))
+    # The three rows Wave 21 lane GFXVT proved reach the DLL ONLY through
+    # RtVtable. If any of them stops being visible, this lane's headline claim
+    # has silently expired.
+    for sym in ("??_7MeshInstance@Graphics@@6B@",
+                "??_7EdgeMeshInstance@Graphics@@6B@",
+                "??_7EdgeMesh@Graphics@@6B@"):
+        checks.append(("GFXVT row visible: %s" % sym, sym in hits))
+    return _st_report("RE_WRAPPER_DOOR / WRAPPER_LOCAL_* tables", checks)
+
+
+def selftest_name_consts():
+    """Wave 26 lane DOORS: all THREE `const char*` spellings, and cross-file.
+
+    Two of the three spellings were matched before this lane and the third --
+    plain `const char* kX = "?...";` -- was not, which is the literal-vs-
+    variable blind spot this file documents five times over, one spelling in.
+    Handed one positive case per spelling plus the ambiguity refusal, which is
+    the part with no live specimen at all.
+    """
+    checks = []
+    spellings = [
+        ("const char* const", 'const char* const kA = "?A@@QEAAXXZ";', "kA"),
+        ("static const char* const",
+         'static const char* const kB = "?B@@QEAAXXZ";', "kB"),
+        ("constexpr const char*", 'constexpr const char* kC = "?C@@QEAAXXZ";', "kC"),
+        ("const char*  (THE SPELLING THIS LANE ADDED)",
+         'const char* kD = "?D@@QEAAXXZ";', "kD"),
+    ]
+    for label, src, ident in spellings:
+        m = RE_NAME_CONST.search(src)
+        got = (m.group(1), concat_literal(src, m.end())) if m else None
+        checks.append(("POSITIVE %-42s -> %s" % (label, got),
+                       got == (ident, "?%s@@QEAAXXZ" % ident[1])))
+    # Adjacent-literal concatenation still joins, in the new spelling too.
+    src = 'const char* kE = "?E@" "@QEAAXXZ";'
+    m = RE_NAME_CONST.search(src)
+    checks.append(("POSITIVE concatenated literal joins",
+                   bool(m) and concat_literal(src, m.end()) == "?E@@QEAAXXZ"))
+    # NEGATIVE: a non-char pointer must not be harvested as a name constant.
+    checks.append(("NEGATIVE `const int* kF = ...` must NOT match",
+                   RE_NAME_CONST.search('const int* kF = "?F@@QEAAXXZ";') is None))
+    g = global_name_consts()
+    checks.append(("EFFECTIVENESS: the live tree defines %d name constant(s)"
+                   % len(g), len(g) > 0))
+    # The three live cross-file constants this lane found. Named individually:
+    # a check that asserts "at least one" cannot tell three from one.
+    for ident, sym in (("kVtblBase", "??_7Base@Object@@6B@"),
+                       ("kVtblExternal", "??_7External@Object@@6B@"),
+                       ("kVtblElementDescription",
+                        "??_7ElementDescription@UI@@6B@")):
+        checks.append(("CROSS-FILE %-24s -> %s" % (ident, g.get(ident)),
+                       g.get(ident) == sym))
+    # AMBIGUITY REFUSAL -- no live specimen, so it is handed one. Two files
+    # defining the same identifier differently must yield None, not a guess.
+    save = RE_NAME_CONST
+    amb = {}
+    for src in ('const char* kDup = "?One@@QEAAXXZ";',
+                'const char* kDup = "?Two@@QEAAXXZ";'):
+        m = save.search(src)
+        lit = concat_literal(src, m.end())
+        if "kDup" in amb and amb["kDup"] != lit:
+            amb["kDup"] = None
+        else:
+            amb.setdefault("kDup", lit)
+    checks.append(("AMBIGUOUS identifier resolves to None, not a guess",
+                   amb["kDup"] is None))
+    return _st_report("RE_NAME_CONST / global_name_consts()", checks)
+
+
+def selftest_phantom_guard():
+    """Wave 26 lane DOORS: the phantom guard, HANDED a fabricated name.
+
+    THE GUARD IS ABSENCE-SHAPED AND CURRENTLY REPORTS ZERO. Zero hits from a
+    guard nobody handed a phantom is indistinguishable from a dead lookup, so
+    this hands it both shapes and scores them separately.
+
+    THE CONTROL CORRUPTS WHAT THE CHECK COMPARES. The guard's subject is
+    membership in the DLL's export-name set, so the fabricated name is a name
+    that is really absent from it -- not a mangled string that merely looks
+    odd, which the guard does not examine and would report NOT CAUGHT for.
+    """
+    names = load_export_names()
+    checks = [("the export-name set is readable at all", names is not None)]
+    if names is None:
+        return _st_report("phantom guard", checks)
+    checks.append(("EFFECTIVENESS: the set has %d names" % len(names),
+                   len(names) > 1000))
+    fabricated = "?ThisSymbolCannotExist@NoSuchClass@@QEAAXXZ"
+    checks.append(("POSITIVE fabricated name is reported ABSENT",
+                   fabricated not in names))
+    real = sorted(names)[len(names) // 2]
+    checks.append(("NEGATIVE a name read OUT of the export table is PRESENT "
+                   "(%s)" % real[:40], real in names))
+    # The three real absentees this lane checked individually with pefile. Each
+    # is asserted on its own; a verification of one symbol must never be
+    # written up as covering a second one in the same file.
+    for sym in ("?RtSelfTestOnly@@YAXXZ",
+                "?NoSuchSlot@UpdateLoop@Engine@@UEAAXXZ",
+                "?OnElementEvent@DialogInstance@UI@@UEAAXAEBVElementEvent@2@@Z"):
+        checks.append(("ABSENT (verified individually): %s" % sym[:52],
+                       sym not in names))
+    # ...and its NEIGHBOUR in the same file IS exported, which is what proves
+    # the absence above is about the symbol and not about the file.
+    checks.append(("PRESENT neighbour ?OnUpdate@DialogInstance@UI@@ -- proves "
+                   "the absence above is per-symbol",
+                   "?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z" in names))
+    d = scan()
+    checks.append(("live scan blocked %d phantom(s) -- expected 0 on a clean "
+                   "tree" % len(d["phantom_blocked"]),
+                   len(d["phantom_blocked"]) == 0))
+    checks.append(("live scan recognised %d deliberate-fake site(s) (0 would "
+                   "mean the recognition table is dead)"
+                   % len(d["fakes_excluded"]), len(d["fakes_excluded"]) > 0))
+    return _st_report("phantom guard / DELIBERATE_FAKES", checks)
+
+
+def selftest_guarded_promotions():
+    """Wave 26 lane DOORS: the eleven invisible registrations stay visible.
+
+    THE NEGATIVE CONTROL CORRUPTS WHAT THIS CHECK COMPARES -- the promoted
+    SYMBOL SET, which is the single input to the fold. Corrupting anything
+    else (a slot, an address) would report NOT CAUGHT and indict a sound fold.
+    """
+    d = scan()
+    ported = d["ported_exports"]
+    guarded = ("??_7BinaryFileStream@IO@@6B@", "??_7BinaryReader@IO@@6B@",
+               "??_7BinaryWriter@IO@@6B@", "??_7MemoryStream@IO@@6B@",
+               "??_7Visitor@IO@@6B@", "??_7VisitorStream@IO@@6B@",
+               "??_7DialogInstance@UI@@6B@", "??_7Element@UI@@6B@",
+               "??_7SpriteSheet@UI@@6B@", "??_7ToolTipDialog@UI@@6B@",
+               "??_7ImageBuffer@Video@@6B@")
+    checks = [("PORTED %s" % s, s in ported) for s in guarded]
+    # THE FIXTURE THE DATA ALREADY CONTAINED. ??_7MaterialInstance@Graphics@@6B@
+    # is the ONE promoted vtable that Wave 25 lane VTGFX hand-spelled as a
+    # literal `RegisterRuntimeExport(...)` instead of routing through the
+    # guard, so it was the ONE promoted row NOT in the gap before this fix.
+    # Seen vs blind differed by exactly the literal. It must read PORTED on
+    # both sides of the fix -- if it ever flips, the LITERAL door has broken
+    # and the guarded fold is masking it.
+    checks.append(("CONTROL FIXTURE (literal door, unaffected by the fold): "
+                   "??_7MaterialInstance@Graphics@@6B@",
+                   "??_7MaterialInstance@Graphics@@6B@" in ported))
+    checks.append(("...and it is NOT one of the rows the fold moved (if it "
+                   "were, the literal door would be dead)",
+                   "??_7MaterialInstance@Graphics@@6B@"
+                   not in d["guarded_folded"]))
+    syms = mint_promoted_symbols(REPO)
+    checks.append(("both promotion doors still yield: %d symbol(s)"
+                   % (len(syms) if syms else 0), bool(syms)))
+    checks.append(("EFFECTIVENESS: the fold newly moved %d row(s) this run "
+                   "(0 would mean the fold is a no-op and this guard is "
+                   "vacuous)" % len(d["guarded_folded"]),
+                   len(d["guarded_folded"]) > 0))
+    # NEGATIVE CONTROL: drop one symbol from the promoted set and re-run the
+    # fold by hand. The row must fall back to unported.
+    victim = "??_7BinaryReader@IO@@6B@"
+    fake_promoted = set(syms or ()) - {victim}
+    rebuilt = {k: v for k, v in ported.items()}
+    for s in d["guarded_folded"]:
+        rebuilt.pop(s, None)
+    for s in sorted(fake_promoted):
+        rebuilt.setdefault(s, set()).add(MINT_PROMOTED_FILE)
+    checks.append(("CONTROL: with %s removed from the promoted set the row "
+                   "reads UNPORTED" % victim, victim not in rebuilt))
+    return _st_report("guarded-promotion fold", checks)
 
 
 def selftest_unpromotable_key():
@@ -1732,6 +2134,45 @@ def strip_comments(text):
     return ''.join(out)
 
 
+def global_name_consts():
+    """{ bare identifier -> mangled literal } for EVERY source file.
+
+    THE DEFECT THIS FIXES (Wave 26 lane DOORS). `name_consts` below is
+    SAME-FILE only, so three live doors in runtime/src/ui/dialog.cpp --
+
+        ResolveExport(RtUI::kVtblBase)
+        ResolveExport(RtUI::kVtblExternal)
+        ResolveExport(RtUI::kVtblElementDescription)
+
+    -- were reported as "an identifier this script cannot follow", because the
+    constants are defined one directory away in runtime/types/ui/
+    ElementDescription.h. `called`, and therefore `ported`, understated.
+
+    AMBIGUITY IS NOT RESOLVED BY GUESSING. If two files define the same bare
+    identifier with DIFFERENT literals the entry is set to None, the lookup
+    misses, and the site stays in the warning. A cross-file table that picks
+    the last writer would silently attribute one file's symbol to another
+    file's call, which is a worse failure than the one it fixes.
+    """
+    out = {}
+    for path in iter_sources():
+        try:
+            text = strip_comments(open(path, encoding="utf-8",
+                                       errors="replace").read())
+        except OSError:
+            continue
+        for m in RE_NAME_CONST.finditer(text):
+            lit = concat_literal(text, m.end())
+            if not lit:
+                continue
+            k = m.group(1)
+            if k in out and out[k] != lit:
+                out[k] = None          # ambiguous: refuse to choose
+            else:
+                out.setdefault(k, lit)
+    return out
+
+
 def scan():
     called_exports, called_addrs, called_ordinals = {}, {}, {}
     ported_exports, ported_addrs, ported_ordinals = {}, {}, {}
@@ -1742,6 +2183,17 @@ def scan():
     nonliteral_detours = {}  # same, for InstallRuntimeDetour* targets
     instrument_detours = {}  # probe:/selftest:/[allocshadow] -- NOT ports
     nfiles = 0               # the SUBJECT's size: what this scan actually read
+
+    # Wave 26 lane DOORS. Three bookkeeping sets, all PRINTED, because every
+    # one of them is a place where this script now makes a decision it did not
+    # make before, and a decision nobody can see is how a tool starts lying.
+    fakes_excluded = []       # (file, ident, why) -- deliberate negative controls
+    phantom_blocked = []      # (file, ident, name) -- followed, but not in the DLL
+    xfile_followed = []       # (file, ident, name) -- cross-file constant resolved
+    wrapper_door_hits = {}    # name -> set(files), via WRAPPER_LOCAL_DOORS
+
+    gconsts = global_name_consts()
+    dll_names = load_export_names()
 
     for path in iter_sources():
         nfiles += 1
@@ -1770,13 +2222,54 @@ def scan():
                 called_exports.setdefault(name, set()).add(rel)
         for m in RE_EXPORT_NONLITERAL.finditer(text):
             ident = m.group(1)
-            if ident in name_consts:
-                called_exports.setdefault(name_consts[ident], set()).add(rel)
-            elif ident not in ("mangled", "name", "sym", "symbol", "mangledName"):
-                # Those are PARAMETER names in the declarations and definitions
-                # of ResolveExport and of InstallRuntimeDetourExport, forwarding
-                # a caller's string -- not call sites naming a symbol.
+            bare = ident.rsplit("::", 1)[-1]
+            # THE PARAMETER-NAME EXEMPTION MUST COME FIRST. It used to sit in
+            # the `elif`, which was harmless while the constant table was
+            # same-file; a CROSS-FILE table makes it a defect immediately.
+            # `AppPair` forwards its `name` parameter to ResolveExport, some
+            # other file defines `const char* name = "?..."`, and the global
+            # table happily bound one to the other -- which is the "picks the
+            # last writer" failure global_name_consts() refuses by design, and
+            # it arrived through the back door. Measured: it fired twice on
+            # standalone/rt_orphan_probe.cpp before this line moved.
+            if bare in ("mangled", "name", "sym", "symbol", "mangledName"):
+                continue
+            if (rel, bare) in DELIBERATE_FAKES:
+                # RECOGNISED, NOT RESOLVED. See DELIBERATE_FAKES: a negative
+                # control must never mint a board row, and must never be
+                # dropped in silence either.
+                fakes_excluded.append((rel, ident, DELIBERATE_FAKES[(rel, bare)]))
+                continue
+            resolved = name_consts.get(bare)
+            cross = False
+            if resolved is None:
+                resolved = gconsts.get(bare)
+                cross = resolved is not None
+            if resolved is not None:
+                # THE PHANTOM GUARD. Applies to names this script has only just
+                # learned to follow, never to the literal sites whose counting
+                # predates this lane -- so the guard cannot silently remove an
+                # existing row while claiming to add ones.
+                if dll_names is not None and resolved not in dll_names:
+                    phantom_blocked.append((rel, ident, resolved))
+                    continue
+                if cross:
+                    xfile_followed.append((rel, ident, resolved))
+                called_exports.setdefault(resolved, set()).add(rel)
+            else:
+                # Parameter names were already filtered above -- they are
+                # PARAMETER names in the declarations and definitions of
+                # ResolveExport and of InstallRuntimeDetourExport, forwarding a
+                # caller's string, not call sites naming a symbol.
                 nonliteral_calls.setdefault(rel, []).append(ident)
+        # Project-local wrapper doors, adjudicated by Wave 26 lane DOORS. See
+        # WRAPPER_LOCAL_DOORS for the per-wrapper verdict and the rule used.
+        for m in RE_WRAPPER_DOOR.finditer(text):
+            name = concat_literal(text, m.end())
+            if not name:
+                continue
+            called_exports.setdefault(name, set()).add(rel)
+            wrapper_door_hits.setdefault(name, set()).add(rel)
         # The macro doors (RT_EXPORT_ONCE / RT_DATA_SLOT / RtResolveCached).
         # These are live cutover dependencies exactly as ResolveExport is; see
         # RE_MACRO_DOOR above for what their invisibility cost.
@@ -1842,6 +2335,15 @@ def scan():
             # than left to emit a permanent warning that trains readers to
             # ignore this block.
             if rel == "standalone/rt_selftest.cpp":
+                continue
+            # PromoteVtableGuarded's `RegisterRuntimeExport(symbol, st)`. The
+            # name is a PARAMETER here; the literal lives at the eleven
+            # PromoteVtableGuarded call sites and is folded into ported_exports
+            # at the end of scan(). Leaving it in the warning after that fold
+            # would train readers to ignore a block whose whole value is that it
+            # is rare -- and would say the numbers understate when they no
+            # longer do.
+            if rel == MINT_PROMOTED_FILE and m.group(1) == "symbol":
                 continue
             resolved = name_consts.get(m.group(1))
             if resolved:
@@ -1919,8 +2421,74 @@ def scan():
             else:
                 nonliteral_detours.setdefault(rel, []).append(target)
 
+    # ---- THE ONE INVISIBLE REGISTRATION (Wave 26 lane DOORS) --------------
+    #
+    # `standalone/reg_mint_promoted.cpp:214` is `RegisterRuntimeExport(symbol,
+    # st)` inside PromoteVtableGuarded -- the ONE non-literal registration the
+    # census warned about, and the warning's own words were "these ports are
+    # LIVE in the process but INVISIBLE to this census, so every number above
+    # UNDERSTATES". That was exactly right and it was worth ELEVEN ROWS.
+    #
+    # MEASURED before the fix: all eleven guarded promotions --
+    # ??_7BinaryFileStream@IO@@6B@, ??_7BinaryReader@IO@@6B@,
+    # ??_7BinaryWriter@IO@@6B@, ??_7MemoryStream@IO@@6B@, ??_7Visitor@IO@@6B@,
+    # ??_7VisitorStream@IO@@6B@, ??_7DialogInstance@UI@@6B@,
+    # ??_7Element@UI@@6B@, ??_7SpriteSheet@UI@@6B@, ??_7ToolTipDialog@UI@@6B@,
+    # ??_7ImageBuffer@Video@@6B@ -- printed under `--unported`, while
+    # RtMintRegisterPromotedRows() registers every one of them unconditionally.
+    # This is the Wave 4 lane D defect (IO reported 30/41 when 36 were
+    # registered) alive again, in the file that promotes rows.
+    #
+    # FIXED BY TEACHING THE CENSUS, NOT BY RESPELLING THE CALL SITE: the
+    # literal already IS at the call site -- `PromoteVtableGuarded("??_7...",
+    # va, &n)` -- and mint_promoted_symbols() already parses both promotion
+    # doors and is already controlled by --selftest-promoted-doors. Pushing the
+    # name down into the helper as a second literal would duplicate it and let
+    # the two drift, which is the failure RE_NAME_CONST's comment warns about.
+    #
+    # GATING: these sit in the same function, under the same DEFAULT-ON kill
+    # switch (BANISHED_RT_MINT_PROMOTED), as the twelve rows whose literal
+    # RegisterRuntimeExport call this script has always counted. Counting one
+    # group and not the other was never a gating judgement -- it was a regex.
+    #
+    # THE CAVEAT THIS INHERITS, STATED WHERE THE FIX LIVES RATHER THAN ABSORBED.
+    # The justification above is the census's own rule -- "registered on every
+    # run with no env var is the definition of a port" -- and applying it here
+    # is consistent. But this script ALREADY says, of the minted-SLOT fold-in,
+    # that the promotion figure is STATIC: it is what reg_mint_promoted.cpp
+    # registers IN SOURCE, and a run with BANISHED_RT_MINT_PROMOTED=0 registers
+    # NONE of them, for which run the fold is an OVERSTATEMENT. This fold
+    # extends exactly that caveat from SLOT rows to SYMBOL rows. A caveat
+    # silently carried from one section into another is how an overstatement
+    # becomes invisible, so it is restated in the VTABLE GAP, DECOMPOSED block
+    # that reads this, and printed there on every run.
+    #
+    # WHERE THIS SITS, AND WHY NOT AT THE VTABLE FOLD-IN. Lane PROMOGFX located
+    # the defect at the `promoted_vt = {...}` line inside the vtable fold-in;
+    # lane PROMOIO located it "at the fold, before the entity scan". Those are
+    # NOT the same place, and the difference matters more than the line number:
+    # the vtable fold-in only ever adds SLOT rows, so a fix there would have to
+    # special-case the row itself, and THREE other consumers -- the entity
+    # scan, the orphan screen, and the fold's own `registered` test -- read
+    # `ported_exports` directly and would each still disagree. Folding at the
+    # END of scan() feeds all of them from one place. Measured consequence of
+    # that choice: orphan exports 155 -> 147, because the rows became
+    # consistently visible rather than visible in one screen and not another.
+    promoted = mint_promoted_symbols(REPO)
+    guarded_folded = []
+    if promoted:
+        for sym in sorted(promoted):
+            if sym not in ported_exports:
+                guarded_folded.append(sym)
+            ported_exports.setdefault(sym, set()).add(MINT_PROMOTED_FILE)
+
     return dict(
         nfiles=nfiles,
+        fakes_excluded=fakes_excluded,
+        phantom_blocked=phantom_blocked,
+        xfile_followed=xfile_followed,
+        wrapper_door_hits=wrapper_door_hits,
+        guarded_folded=guarded_folded,
         nonliteral_regs=nonliteral_regs,
         nonliteral_calls=nonliteral_calls,
         nonliteral_detours=nonliteral_detours,
@@ -2176,8 +2744,43 @@ def main():
                     help="control for --diff-sites: hand the stripper a buffer "
                          "holding both forms of every macro and require the "
                          "split to be exact.")
+    ap.add_argument("--selftest-wrapper-doors", action="store_true",
+                    help="Wave 26 lane DOORS: RE_WRAPPER_DOOR matches every "
+                         "adjudicated door and no not-door, handed a shape.")
+    ap.add_argument("--selftest-name-consts", action="store_true",
+                    help="Wave 26 lane DOORS: all three `const char*` "
+                         "spellings, cross-file lookup, ambiguity refusal.")
+    ap.add_argument("--selftest-phantom-guard", action="store_true",
+                    help="Wave 26 lane DOORS: the phantom guard, handed a "
+                         "fabricated name (it is absence-shaped).")
+    ap.add_argument("--selftest-guarded-promotions", action="store_true",
+                    help="Wave 26 lane DOORS: the 11 registrations that were "
+                         "live and invisible stay visible; with a control.")
+    ap.add_argument("--selftest-all", action="store_true",
+                    help="run every --selftest-* above and fail if any fails.")
     args = ap.parse_args()
 
+    if args.selftest_all:
+        rc = 0
+        for fn in (selftest_unpromotable_key, selftest_promoted_doors,
+                   selftest_classifier, selftest_ordinal_fold,
+                   selftest_site_census, selftest_wrapper_doors,
+                   selftest_name_consts, selftest_phantom_guard,
+                   selftest_guarded_promotions):
+            print("=" * 74)
+            r = fn()
+            rc |= (r or 0)
+        print("=" * 74)
+        print("SELFTEST-ALL: %s" % ("ALL GREEN" if rc == 0 else "*** SOMETHING FAILED ***"))
+        return rc
+    if args.selftest_wrapper_doors:
+        return selftest_wrapper_doors()
+    if args.selftest_name_consts:
+        return selftest_name_consts()
+    if args.selftest_phantom_guard:
+        return selftest_phantom_guard()
+    if args.selftest_guarded_promotions:
+        return selftest_guarded_promotions()
     if args.selftest_unpromotable_key:
         return selftest_unpromotable_key()
     if args.selftest_promoted_doors:
@@ -2599,13 +3202,47 @@ def main():
         print("      %-34s %4d   first seen in %s" % (ident, c, wrap_where[ident]))
     if not unclass:
         print("      (none -- every identifier is classified)")
-    print("  CAVEAT      this screen CHANGES NO COUNT above. Whether an")
-    print("              unclassified identifier is really a door is a judgement")
-    print("              about that wrapper's semantics, and making it here would")
-    print("              move numbers other lanes quote mid-wave. Known live")
-    print("              example: RtVtable (runtime/src/graphics/mesh.cpp) IS a")
-    print("              door -- three Graphics vtable rows reach the DLL only")
-    print("              through it and are absent from `called` entirely.")
+    print("  ADJUDICATED (Wave 26 lane DOORS) -- the screen's 70 unclassified")
+    print("              sites across 15 identifiers were judged by READING each")
+    print("              wrapper's body. THIS SCREEN NOW CHANGES COUNTS: %d of the"
+          % len(WRAPPER_LOCAL_DOORS))
+    print("              15 are DOORS and their literals are counted in `called`;")
+    print("              %d are NOT. The rule is MECHANISM (does the body reach the"
+          % len(WRAPPER_LOCAL_NOTDOORS))
+    print("              DLL by name?), which is the rule RE_EXPORT already uses.")
+    for ident in sorted(WRAPPER_LOCAL_DOORS):
+        where, why = WRAPPER_LOCAL_DOORS[ident]
+        print("      DOOR     %-26s %s" % (ident, where))
+        for ln in textwrap.wrap(why, 62):
+            print("                                          %s" % ln)
+    for ident in sorted(WRAPPER_LOCAL_NOTDOORS):
+        where, why = WRAPPER_LOCAL_NOTDOORS[ident]
+        print("      NOT      %-26s %s" % (ident, where))
+        for ln in textwrap.wrap(why, 62):
+            print("                                          %s" % ln)
+    print("  symbols reached through a local wrapper door: %d"
+          % len(d["wrapper_door_hits"]))
+    for nm in sorted(d["wrapper_door_hits"]):
+        print("      %-60s %s" % (nm[:60],
+                                  ",".join(sorted(d["wrapper_door_hits"][nm]))[:40]))
+    if not d["wrapper_door_hits"]:
+        print("      *** NONE -- the wrapper-door scan matched NOTHING. That is a")
+        print("      *** DEAD PARSER, not a clean tree: RE_WRAPPER_DOOR is built")
+        print("      *** from a table with %d entries." % len(WRAPPER_LOCAL_DOORS))
+
+    # INSTRUMENT-SOURCED ROWS. Changes no count; see INSTRUMENT_FILE_MARKERS.
+    inst_rows = [(k, key, ns, p) for k, key, ns, p, det, f in rows
+                 if f and all(is_instrument_file(x) for x in f)]
+    inst_gap = [r for r in inst_rows if not r[3]]
+    print("  INSTRUMENT-SOURCED  %d row(s) whose EVERY caller is a probe/selftest/"
+          % len(inst_rows))
+    print("              screen/oracle file, %d of them UNPORTED and therefore in"
+          % len(inst_gap))
+    print("              the gap. A probe's resolve is a real dependency and NOT a")
+    print("              port obligation -- it is env-gated and dies with the DLL.")
+    print("              Named here so no lane is sent after one as body work.")
+    for _k, key, ns, _p in sorted(inst_gap, key=lambda r: (r[2], r[1])):
+        print("      GAP(instrument) %-10s %s" % (ns, key))
 
     # ---- GAP DECOMPOSITION BY SYMBOL KIND (Wave 21 lane CLASS) ------------
     # The doctrine this implements: a namespace gap figure is uninterpretable
@@ -2687,6 +3324,78 @@ def main():
             print("      %-28s %4d" % (s, n))
         print("      .text = code; .rdata/.data = data. So even the address-keyed")
         print("      half of the gap is NOT all port work either.")
+
+    # ---- VTABLE GAP, DECOMPOSED PER NAMESPACE (Wave 26 lane DOORS) --------
+    #
+    # THE STANDING LESSON THIS IMPLEMENTS: "a namespace gap of N is NOT N
+    # bodies", rediscovered every wave because the census printed no
+    # decomposition. Lane PROMOIO rediscovered it again in Wave 26 -- UI's
+    # entire 6-row VTABLE gap was 2 genuinely-unpromotable rows plus 4 that
+    # were already promoted and live, so a lane scoped on 6 is scoped against
+    # 2. Printing it is what stops the next wave paying for it a fourth time.
+    #
+    # FOUR BUCKETS, and they are different KINDS of work, not sizes of it:
+    #   UNPROMOTABLE  a lane PROVED nothing could dispatch this table. Not work.
+    #   PROMOTED      registered on every run -- should no longer be in the gap
+    #                 at all; a non-zero here means the promoted-symbol fold at
+    #                 the end of scan() has regressed.
+    #   MINTED        a minted row awaiting promotion: the PROMOTION BACKLOG
+    #                 below says how ready each one is. Promotion work.
+    #   NOT MINTED    not in the mint tables: harvest + mint work first.
+    vt_gap = collections.defaultdict(lambda: [0, 0, 0, 0, 0])
+    minted_syms = {s for s, _v, _sl in (mint_vtables or []) if s}
+    promoted_now = promoted_syms or set()
+    vt_unpromotable = []
+    for kind, key, ns, ported, detoured, files in rows:
+        if ported or classify_symbol(key, kind)[0] != "VTABLE":
+            continue
+        b = vt_gap[ns]
+        b[0] += 1
+        if key in unprom:
+            b[1] += 1
+            vt_unpromotable.append((ns, key))
+        elif key in promoted_now:
+            b[2] += 1
+        elif key in minted_syms:
+            b[3] += 1
+        else:
+            b[4] += 1
+    print()
+    print("VTABLE GAP, DECOMPOSED  (Wave 26 lane DOORS)")
+    print("  subject     the VTABLE rows of the gap above, and ONLY those.")
+    print("  evidence    the RT_UNPROMOTABLE tags, the promoted-symbol set and")
+    print("              the mint tables -- three sources, none of them the name.")
+    print("  %-13s %5s | %12s %9s %7s %10s"
+          % ("namespace", "vt gap", "UNPROMOTABLE", "PROMOTED", "MINTED", "NOT MINTED"))
+    print("  " + "-" * 76)
+    tot = [0, 0, 0, 0, 0]
+    for ns in sorted(vt_gap, key=lambda n: (-vt_gap[n][0], n)):
+        b = vt_gap[ns]
+        tot = [t + x for t, x in zip(tot, b)]
+        print("  %-13s %5d | %12d %9d %7d %10d"
+              % (ns, b[0], b[1], b[2], b[3], b[4]))
+    print("  " + "-" * 76)
+    print("  %-13s %5d | %12d %9d %7d %10d"
+          % ("TOTAL", tot[0], tot[1], tot[2], tot[3], tot[4]))
+    if not vt_gap:
+        print("  (no unported VTABLE rows at all -- verify that against the kind")
+        print("   table above before believing it; an empty table and a dead")
+        print("   classifier print the same thing)")
+    print("  REAL remaining vtable work = MINTED + NOT MINTED = %d, NOT %d."
+          % (tot[3] + tot[4], tot[0]))
+    if tot[2]:
+        print("  *** %d PROMOTED row(s) are still in the gap. The promoted-symbol"
+              % tot[2])
+        print("  *** fold at the end of scan() has REGRESSED -- these are")
+        print("  *** registered on every run. See WAVE26_LANE_DOORS.md §2.2.")
+    for ns, key in sorted(vt_unpromotable):
+        print("      UNPROMOTABLE %-10s %s" % (ns, key))
+    print("  CAVEAT, INHERITED AND NOT ABSORBED: PROMOTED counts a row as")
+    print("  registered because RtMintRegisterPromotedRows() registers it with no")
+    print("  env var set. Under BANISHED_RT_MINT_PROMOTED=0 it registers NONE of")
+    print("  them, and for THAT run this column -- and the slot fold-in above,")
+    print("  which has always had the same caveat -- OVERSTATE. The figure is")
+    print("  STATIC: it is what the source registers, not what a given run did.")
 
     # ---- GATED-BUT-WRITTEN, PER NAMESPACE  (Wave 22 lane ALLOC) -----------
     #
@@ -3037,6 +3746,59 @@ def main():
         print("      call site so that no special case in this script is needed.")
         print("  What remains true is that a minted row has no BODY to reimplement,")
         print("  so it is not a shortfall in the function port.")
+    # ---- WAVE 26 LANE DOORS: the decisions this scan now makes, PRINTED ----
+    gf = d.get("guarded_folded") or []
+    print()
+    print("GUARDED PROMOTIONS FOLDED INTO `ported`  (Wave 26 lane DOORS)")
+    print("  %d symbol(s) that RtMintRegisterPromotedRows() registers"
+          " unconditionally" % len(gf))
+    print("  through PromoteVtableGuarded's `RegisterRuntimeExport(symbol, st)`,")
+    print("  which no literal scan could see. Before this they printed under")
+    print("  --unported while being live in the process -- the Wave 4 lane D defect.")
+    for s in gf:
+        print("      %s" % s)
+    if not gf:
+        print("      (none newly folded -- every promoted symbol was already visible")
+        print("       through the direct RegisterRuntimeExport literal door)")
+    fk = d.get("fakes_excluded") or []
+    print()
+    print("DELIBERATE FAKES RECOGNISED AND EXCLUDED  (Wave 26 lane DOORS)")
+    print("  A negative control's fabricated name must never mint a gap row: that")
+    print("  is work that can never be completed. Each was checked INDIVIDUALLY")
+    print("  against the DLL's export directory with pefile; see DELIBERATE_FAKES.")
+    print("  %d call site(s), %d distinct constant(s):"
+          % (len(fk), len({(f, i) for f, i, _ in fk})))
+    for f, ident in sorted({(f, i) for f, i, _ in fk}):
+        why = next(w for ff, ii, w in fk if (ff, ii) == (f, ident))
+        print("      %s:%s" % (f, ident))
+        for ln in textwrap.wrap(why, 68):
+            print("          %s" % ln)
+    if not fk:
+        print("      *** NONE MATCHED. The recognition table has %d entries, so this"
+              % len(DELIBERATE_FAKES))
+        print("      *** is a DEAD LOOKUP unless both controls were deleted from the")
+        print("      *** tree. Re-check DELIBERATE_FAKES against the source.")
+    pb = d.get("phantom_blocked") or []
+    if pb:
+        print()
+        print("*** PHANTOM GUARD: %d followed constant(s) name a symbol the DLL does"
+              % len(pb))
+        print("*** NOT export. NOT counted -- a fabricated name inflates the")
+        print("*** denominator forever. Fix the name or add it to DELIBERATE_FAKES.")
+        for f, ident, name in pb:
+            print("      %-40s %s -> %s" % (f, ident, name))
+    xf = d.get("xfile_followed") or []
+    if xf:
+        print()
+        print("CROSS-FILE NAME CONSTANTS FOLLOWED  (Wave 26 lane DOORS): %d site(s),"
+              % len(xf))
+        print("  %d distinct constant(s). `const char*` constants defined in a HEADER"
+              % len(set(xf)))
+        print("  and used at a ResolveExport call site in a .cpp; the same-file")
+        print("  lookup this script has always had could not see any of them.")
+        for f, ident, name in sorted(set(xf)):
+            print("      %-30s %-30s %s" % (f, ident, name))
+
     nl = d.get("nonliteral_regs") or {}
     if nl:
         total = sum(len(v) for v in nl.values())
@@ -3062,6 +3824,11 @@ def main():
         print("*** cannot follow, so `called` -- and therefore `ported` -- UNDERSTATE.")
         for f in sorted(nlc):
             print("  %-44s %s" % (f, ", ".join(sorted(set(nlc[f])))))
+        print("  Same-file AND cross-file `const char*` constants are resolved now,")
+        print("  in all three spellings (Wave 26 lane DOORS). What is left here is a")
+        print("  name this script genuinely cannot follow -- read out of a table at")
+        print("  RUN TIME, or assembled. Those are not respellable; they need either")
+        print("  a literal at the call site or a deliberate entry in DELIBERATE_FAKES.")
 
     inst = d.get("instrument_detours") or {}
     if inst:

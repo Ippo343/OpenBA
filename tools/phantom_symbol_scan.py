@@ -81,10 +81,65 @@ def load_exports():
     return names
 
 
+def nul_byte_screen():
+    """A raw NUL in a text source silently DELETES that file from `git grep`.
+
+    WAVE 26. `runtime/src/graphics/scene.cpp` held one raw 0x00 at offset 7277
+    -- inside a COMMENT that pasted a literal NUL where it meant the two
+    characters backslash-zero. `git grep -h` then reports "Binary file <path>
+    matches" INSTEAD OF THE MATCHING LINES and says nothing else, so
+    tools/mint_slot_sweep.py was blind to all 38 registrations in that file and
+    INFLATED its headline by 29 -- it is an error direction that MANUFACTURES
+    port work, and there was no detector.
+
+    Measured independently by lane DOORS on wave26/doors:
+        git grep -h  -E "RegisterRuntime(Export|Addr)\\(" HEAD -- ...  2457 lines
+        git grep -ah -E  (same)                                       2495 lines
+    -- a 38-line suppression, from the one file below.
+
+    THIS SCREEN IS HANDED A SHAPE. It has no natural positive case (a clean
+    tree yields zero, which is indistinguishable from a dead loop), so it is
+    given a synthetic buffer with a NUL and one without, and BOTH verdicts are
+    printed. That is the same near-miss PROMOGFX recorded: its first control
+    compared `git grep -l` against `git grep -l -a` and saw no difference,
+    because `-l` prints only names and never suppresses -- a control that
+    cannot observe the suppressed channel EXONERATES the broken instrument.
+    """
+    ok_pos = bool([i for i, c in enumerate(b"ab\x00cd") if c == 0])
+    ok_neg = not [i for i, c in enumerate(b"abcd") if c == 0]
+    hits, files = [], 0
+    for top in ROOTS:
+        for dp, dn, fns in os.walk(os.path.join(REPO, top)):
+            dn[:] = [d for d in dn if d not in ('.git', 'build', 'build-perf',
+                                                'obj', '.venv', '__pycache__')]
+            for fn in fns:
+                if not fn.endswith(('.cpp', '.h', '.hpp', '.inc', '.inl', '.c')):
+                    continue
+                files += 1
+                blob = open(os.path.join(dp, fn), 'rb').read()
+                off = blob.find(b"\x00")
+                if off >= 0:
+                    hits.append((os.path.relpath(os.path.join(dp, fn), REPO)
+                                 .replace('\\', '/'), off, blob.count(b"\x00")))
+    print("NUL-BYTE SCREEN: %d source file(s) examined | CONTROLS pos=%s neg=%s -> %s"
+          % (files, ok_pos, ok_neg, "ALIVE" if (ok_pos and ok_neg) else "*** BROKEN ***"))
+    if hits:
+        print("  *** %d file(s) hold a raw NUL and are INVISIBLE to `git grep`"
+              " without -a:" % len(hits))
+        for p, off, n in hits:
+            print("      %-52s first at offset %d (%d total)" % (p, off, n))
+        print("  Every content-based grep over the tree silently skips these.")
+    else:
+        print("  none -- and the controls above are what make that a measurement")
+        print("  rather than a dead loop.")
+    return len(hits)
+
+
 def main():
     exports = load_exports()
     if exports is None:
         return 2
+    nul_byte_screen()
     files = 0
     literals = {}
     for top in ROOTS:
