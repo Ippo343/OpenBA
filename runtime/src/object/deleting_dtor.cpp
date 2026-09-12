@@ -867,6 +867,19 @@ static const DelDtorSpec kSpecs[] = {
     // Array<String> whose buffer came from the Runtime heap.
     RT_DELDTOR(0x1800361f0, 0x180118370, 0x080, "UI::ImageDescription"),
     RT_DELDTOR(0x1800369e0, 0x1800cb6b0, 0x098, "UI::AnimatedImageDescription"),
+    // Vtable batch 8 (2026-09-12), slot 0 of the four spatial classes' vtables.
+    // Both constants read from each deleting dtor's own bytes:
+    //     0x1800656b0  ~CollisionMesh 0x180065400  MOV EDX,0x70
+    //     0x180064ea0  ~Surface       0x18010ca00  MOV EDX,0x30 (scalar arm only; no vector arm)
+    //     0x1800713b0  ~PointList     0x18010f8e0  MOV EDX,0x50
+    //     0x180072050  ~PickingMesh   0x1801228a0  MOV EDX,0x48
+    // All four destructors are ported in runtime/src/collision2d/, pathfinding/, picking/.
+    // None is a probe subject: each releases owned Array buffers and/or refcounted
+    // Strings, so a fabricated subject would free/decrement garbage.
+    RT_DELDTOR(0x1800656b0, 0x180065400, 0x070, "Collision2D::CollisionMesh"),
+    RT_DELDTOR(0x180064ea0, 0x18010ca00, 0x030, "Collision2D::Surface"),
+    RT_DELDTOR(0x1800713b0, 0x18010f8e0, 0x050, "Pathfinding::PointList"),
+    RT_DELDTOR(0x180072050, 0x1801228a0, 0x048, "Picking::PickingMesh"),
 };
 static DtorFn g_dtorCache[kSpecCount];
 static Site   g_sites[kSpecCount];
@@ -1237,6 +1250,24 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 56);
 }
 
+// Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
+// Pathfinding::PointList, Picking::PickingMesh. Indices 57-60 are the
+// GroupDescription/RibbonDescription/ImageDescription/AnimatedImageDescription
+// rows above, appended to kSpecs by an earlier wave without a thunk or a
+// RegisterRuntimeAddr call -- left exactly as found; not this lane's row.
+void* RtDelDtor_CollisionMesh(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 61);
+}
+void* RtDelDtor_Collision2DSurface(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 62);
+}
+void* RtDelDtor_PointList(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 63);
+}
+void* RtDelDtor_PickingMesh(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 64);
+}
+
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
 const int* ProbeSubjects(int* count) {
     *count = static_cast<int>(sizeof(kProbeSubjects) / sizeof(kProbeSubjects[0]));
@@ -1338,6 +1369,11 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004e810, (void*)&RtDelDtor_VertexProgram);
     RegisterRuntimeAddr(0x18004eb90, (void*)&RtDelDtor_PixelProgram);
     RegisterRuntimeAddr(0x18004b9d0, (void*)&RtDelDtor_RenderState);
+
+    RegisterRuntimeAddr(0x1800656b0, (void*)&RtDelDtor_CollisionMesh);       // vtable batch 8 SPATIAL
+    RegisterRuntimeAddr(0x180064ea0, (void*)&RtDelDtor_Collision2DSurface);  // vtable batch 8 SPATIAL
+    RegisterRuntimeAddr(0x1800713b0, (void*)&RtDelDtor_PointList);           // vtable batch 8 SPATIAL
+    RegisterRuntimeAddr(0x180072050, (void*)&RtDelDtor_PickingMesh);         // vtable batch 8 SPATIAL
 
     // The count is taken from kSpecCount rather than typed, so a row added
     // without touching this line cannot make the log say the wrong number --
