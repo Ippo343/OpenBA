@@ -37,6 +37,14 @@ extern int RtAudioVoiceCallbackRegister();  // audio_voice_callback_win.cpp
 // ZERO. Own switch so the three can be bisected out together.
 extern int RtAudioWave29AvbodyRegister();   // wave29_lane_avbody.cpp
 extern int RtAudioWave29AvbodySweep();      // wave29_lane_avbody.cpp
+// batch 7 (Input/Audio platform leaves, 2026-09-12): Audio's last two
+// unported BODY rows. `Stream::Play` is its own `_win.cpp` (KERNEL32 sync
+// primitives, same <windows.h> seam as audio_stream_win.cpp);
+// `Device::PlayPlatform` is platform-neutral (pure XAudio2 vtable calls
+// through function pointers) and needs no <windows.h> of its own, matching
+// audio_scene_update.cpp's own file split.
+extern int RtAudioStreamPlayRegister();     // audio_stream_play_win.cpp
+extern int RtAudioPlayPlatformRegister();   // audio_play_platform.cpp
 
 void RtAudioPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_AUDIO")) {
@@ -53,6 +61,10 @@ void RtAudioPortInit() {
     // synchronisation and audio.cpp must stay free of <windows.h>.
     n += RtAudioStreamRegister();
     n += RtAudioVoiceCallbackRegister();
+    // batch 7: Audio's last two unported BODY rows. Registered unconditionally
+    // (DIRECTION.md: a port registers unconditionally, no new kill switches).
+    n += RtAudioStreamPlayRegister();
+    n += RtAudioPlayPlatformRegister();
     // Wave 29 lane AVBODY. The sweep needs no allocator, no gameplay route and
     // no caller: two of the three bodies are PURE (the `this` they are handed is
     // never read), and the third is fully synthesisable. It compares against the
