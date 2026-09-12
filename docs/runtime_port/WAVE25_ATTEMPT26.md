@@ -78,3 +78,70 @@ minted before this method was ported — the ordinary shape, and the ordinary fi
 
 **Do not read "one function" as "one function to cutover."** That is exactly the reasoning the
 gate cannot support.
+
+---
+
+# CORRECTION, 2026-09-12 (Wave 26 lane ATTEND; verified independently by the integrator)
+
+**§2 above is BACKWARDS on its central claim, and this section supersedes it.**
+
+§2 says the manifest generator "ran at cutover and detected DLL absence itself", that its
+`46 tagged gap rows` were "precisely the numbers MANIFEST projected", and that those numbers
+"held after lane DATA added 14 more tagged rows *after* MANIFEST had finished measuring —
+which is what the generator (rather than a list) was for."
+
+**The generator was never re-run.** `standalone/cutover_manifest.inc` was STALE at the moment
+attempt 26 ran, and was still stale on `wave26/base`:
+
+```
+$ git log --oneline -1 -- standalone/cutover_manifest.inc
+33206d7f Wave 25 lane MANIFEST: the tagged rows as a cutover publish manifest
+
+$ tools/ghidra_mcp/.venv/Scripts/python.exe tools/cutover_manifest.py --check
+STALE: standalone\cutover_manifest.inc does not match a fresh derivation
+cutover_manifest: 60 tagged gap rows -- CONDITIONAL 1, REQUIRED 58, WITHHELD 1
+```
+
+**46 was the PRE-DATA count.** The fresh derivation is **60** — missing rows are *exactly*
+lane DATA's 14. So the very fact §2 cites as proof the generator worked (the numbers matching
+MANIFEST's projection) is the symptom that it never ran: they matched **because they were the
+old numbers**.
+
+## Why this survived the wave
+
+Integrator-queue item C2 said, in as many words: *"Expect `published 44, withheld 1,
+conditional 1, unminted 0, failed 0`, and **re-derive rather than trusting those numbers**,
+since DATA's 14 tags landed after MANIFEST measured."*
+
+The instruction to re-derive was written, correct, and addressed to the integrator — **and the
+matching number was read as confirmation instead.** An expected figure that arrives on time is
+the hardest kind of staleness to see, because agreement with a prediction is exactly what a
+working generator would also produce.
+
+**This is a known family here** (`reference_a_prescription_read_as_a_completion`,
+`reference_a_generated_file_goes_stale_with_no_detector`): a generator whose input set is
+"what the tree references today" is a cache with no invalidation, and a wave doc naming a fix
+reads as proof the fix landed. The new member of the family is sharper: **a number that
+MATCHES its prediction can be matching because it is STALE, and the match is then evidence of
+the defect rather than against it.** `--check` existed the whole time and answers in one
+second; nobody ran it.
+
+## What else §1 and §2 must no longer be read as establishing
+
+- **Attempt 26 ran with `BANISHED_RT_MINT=1`** (`tools/cutover_attempt26.sh:42`), against
+  integrator-queue item **C3**. Lane ATTEND settled the mechanism from source:
+  `RegisterMintedData()` runs **22 lines before** the manifest and walks all three mint tables
+  **with no skip list**, so the blanket switch published `??_7Dialog@UI@@6B@` by name *and* by
+  address. The log's `registered 202 by name` sits **above** `withheld 1`.
+- Therefore §2's closing sentence — that a wall which "announces itself in advance and is then
+  ruled out is worth more than one diagnosed afterwards" — **ruled out nothing**. The WITHHELD
+  row's 5 by-name doors were never in force to begin with, because the row was published.
+- **The blanket switch and the manifest are not substitutes**: the switch publishes 202 rows,
+  the manifest covers only the 60 tagged ones. The gap is ~104 rows.
+
+## What still stands from attempt 26
+
+The **wall itself** is real and reproduced: `?CreateNewObject@StringTable@UI@@` is stable
+across 3 runs and 2 exes, and `BANISHED_RT_MAINLOOPFRAME=0` was measured NOT load-bearing
+(own control arm, identical wall with and without). The boot genuinely does reach deep into
+game init. None of that depended on the manifest.
