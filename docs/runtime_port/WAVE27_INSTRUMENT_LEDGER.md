@@ -18,6 +18,8 @@ happen, and **nothing detects it**. Deflating entries are the dangerous ones.
 | 1 | GhidraMCP program selection | **WRONG SOURCE** | FRONTIER | open |
 | 2 | `list_segments` section bounds | **WRONG SOURCE** | FRONTIER | open |
 | 3 | `rt_deleting_dtor_verify.py` scalar-branch check | INFLATING | GFXMESH | open, corrected in-source |
+| 4 | **`disassemble_function` serves the WRONG FUNCTION** | **WRONG SUBJECT** | GFXBIG | open, workaround in force |
+| 5 | `runtime_census.py --csv` column name | cosmetic | GFXBIG | open |
 
 ---
 
@@ -98,3 +100,62 @@ from the PE.** Ghidra is the documentation tool (CLAUDE.md), not the only source
 of truth for addresses and sizes. Two sources that share no mechanism are two
 sources; two Ghidra calls are one — see
 `reference_two_checks_one_hidden_premise.md`.
+
+---
+
+## 4. `disassemble_function` silently serves a DIFFERENT function — GFXBIG
+
+**This is the most dangerous entry in the ledger.** Two overlapping bodies at
+`0x1800fdb20`; the tool returned the wrong one under the requested address, with
+no warning. The listing was **internally consistent** and **relabelled with the
+address that was asked for**.
+
+**IT DEFEATS THE #1 DISCRIMINATOR.** Passing `program="Runtime-x64.dll"` does not
+help: you can be reading the correct binary and still be handed the wrong
+function out of it. #1 had a tell; this has none. It is also worse than the known
+`get_function_metrics` defect (ignores `address=`, falls back to a NAME lookup),
+because that one produces something recognisably about another symbol.
+
+**Worst where bodies are near-identical siblings** — template instantiations,
+paired classes, stream classes sharing a slot layout. A sibling's body reads as
+correct *because it nearly is*. Those are exactly Wave 27's lanes: LOOPS
+(`DialogLoopT`/`DialogLoaderLoopT`), ACHIEVE (`Achievement`/`AchievementInstance`,
+`Goal`/`GoalInstance`), IOTEXT (`TextFileStream`/`PackageFile`).
+
+**WORKAROUND IN FORCE, verified by the integrator rather than relayed unchecked:**
+
+```
+objdump -d --start-address=0x180002190 --stop-address=0x1800021a0         "C:/GOG Games/Banished/Runtime-x64.dll"
+  -> mov 0x1f8c79(%rip),%rax   # 0x1801fae10
+     ret
+```
+
+That is FRONTIER's retail discriminator reproduced through a **completely
+different mechanism**. objdump addresses by TRUE VA (image base `0x180000000`),
+so the address typed is the address disassembled, and it reads the retail file by
+explicit path, so #1 cannot apply either. Broadcast to all five running lanes.
+
+## 5. `runtime_census.py --csv` writes `key`, not `symbol` — GFXBIG
+
+Cosmetic, but it costs a lane one failed `awk` before it notices. Logged so the
+Wave 28 fix is one line rather than a rediscovery.
+
+---
+
+## THE PATTERN ACROSS #1, #2, #4 — three defects, ONE tool, one root shape
+
+All three are GhidraMCP, and all three have the same structure: **the tool
+answers a question about a SUBJECT it has not verified is the subject you named**
+— wrong program (#1), wrong section bounds (#2), wrong function (#4). That is the
+project's existing finding `reference_a_screen_that_cannot_name_its_subject.md`,
+now with a third instance and a new severity: #4 produces no anomaly at all.
+
+CLAUDE.md says Ghidra is the project's primary DOCUMENTATION tool. It is not a
+reliable oracle for addresses, extents or bodies. **The operating rule for the
+rest of this wave, and a Wave 28 doctrine candidate:**
+
+> Ghidra for names, comments, types and navigation.
+> `objdump` and `pefile` against the retail file on disk for any BYTE, ADDRESS,
+> EXTENT or BODY that a port depends on.
+
+Two sources that share no mechanism are two sources; two Ghidra calls are one.
