@@ -442,6 +442,11 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_StringTable,
 // 0x180005dc0 — Achievement::GoalInstance+0x18. The oracle route; see the banner.
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Goal,
              "?_typeInfo@Goal@Achievement@@0VBaseTypeInfo@Object@@A")
+// 0x180004590 — Achievement::Achievement+0x38 (WAVE 26 LANE INT33). The FIFTH,
+// and it is registered for the same reason the fourth was: it is on an ORACLE
+// route that already exists. See the registration block below.
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_SpriteSheet,
+             "?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A")
 
 #undef EXTPTR_THUNK
 
@@ -466,5 +471,38 @@ int RtObjectExternalPtrSerializeRegister() {
     RegisterRuntimeAddr(0x180076610, (void*)&RtObject_ExternalPtrSerialize_Dialog);            ++n;
     RegisterRuntimeAddr(0x1800042a0, (void*)&RtObject_ExternalPtrSerialize_StringTable);       ++n;
     RegisterRuntimeAddr(0x180005dc0, (void*)&RtObject_ExternalPtrSerialize_Goal);              ++n;
+
+    // ---- WAVE 26 LANE INT33: the fifth ------------------------------------
+    //
+    // 0x180004590 — `ExternalPtr<UI::SpriteSheet>`, `Achievement::Achievement`
+    // +0x38. It was one of the twenty-one this file deliberately left standing,
+    // and the stated reason for leaving them was specific and CHECKABLE, not a
+    // blanket: *"the oracle route below does not cover them"*. For this one that
+    // is no longer true, which is why it moves and the other twenty do not.
+    //
+    // THE ROUTE, and why it is an oracle and not a self-check. Wave 23 lane
+    // ACHIEVE built a FULL (stopAfter = 0, everything compared) write-path
+    // probe for `?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z`
+    // (0x18009e070), and that body CALLs 0x180004590 over +0x38 at 0x18009e0e6.
+    // `achievement_serialize.cpp:156` reaches it through
+    // `ResolveAddr(Module::Runtime, 0x180004590)`, which is registry-FIRST — so
+    // before this line the probe's OURS side and its THEIRS side both ran
+    // retail's copy of this body and compared retail with itself
+    // ([[reference_registering_an_address_converts_a_selfcheck_into_an_oracle]],
+    // where exactly this went undetected for five waves). After it, ours runs
+    // this file and theirs runs the DLL.
+    //
+    // MEASURED on this tip, not inherited from the Wave 10 table:
+    //   python tools/extptr_family_sweep.py
+    //     0x180004590 -> 0x1801fadd0 ?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A
+    //   and that export address re-derived independently with `pefile` straight
+    //   out of the export directory: 0x1801fadd0. Two readings, one answer.
+    //
+    // THE TYPE-INFO SYMBOL IS A PLAIN EXPORT. It is spelled `…0VBaseTypeInfo…A`
+    // (private static data), and `AEAA`/`0…A` mean PRIVATE, not unexported —
+    // this DLL exports its privates ([[reference_aeaa_is_private_not_unexported]]).
+    // So RT_DATA_SLOT opens a NAME door here, not an address door, and this
+    // registration adds ZERO to the cutover address surface.
+    RegisterRuntimeAddr(0x180004590, (void*)&RtObject_ExternalPtrSerialize_SpriteSheet); ++n;
     return n;
 }

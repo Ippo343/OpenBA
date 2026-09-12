@@ -627,6 +627,32 @@ J2_ENTRY(18002ac40, ReleaseStringsCounted,  kD_Str_10at08)   // CALL 0x18002afc0
 J2_ENTRY(180039360, ReleaseStringsCounted,  kD_Str_10at08)   // CALL 0x180039640  Body B
 J2_ENTRY(180039280, ReleaseStringsCounted,  kD_Str_20at18)   // CALL 0x180039580  Body B
 
+// ---- WAVE 26 LANE INT33: the tenth J2 address -----------------------------
+//
+// 0x1800269a0 — `~Array<IO::PackageFile::Entry>`, `~PackageFile`'s member at
+// +0xB0 (runtime/src/io/package_file_dtor.cpp:31 named it and recorded it as
+// "NOT PORTED <- the only one" of that dtor's seven callees).
+//
+// MEASURED, not inherited, with `tools/int33_normdiff.py` (9/9 controls):
+//
+//   0x1800269a0 vs 0x18002ac40   extent 127/127   raw byte diff 13
+//     the ONLY normalised difference is the one operand that decides the
+//     answer:  +0x23 CALL 0x180026b50   vs   +0x23 CALL 0x18002afc0
+//   0x1800269a0 --calls
+//     +0x23 CALL 0x180026b50     the element-destroy helper
+//     +0x46 CALL 0x18014b390  }
+//     +0x57 CALL 0x1800c6c00  }  the allocator Enter / Free / Leave triple,
+//     +0x60 CALL 0x18014b388  }  byte-for-byte the triple 0x180010ab0 makes
+//
+// The helper is ALREADY PORTED AND REGISTERED in this file as
+// `RtColl_DestroyStrings_180026b50` under `kD_Str_10`, and the B_ENTRY line for
+// it (above) already names its element as `IO::PackageFile::Entry`. So this is
+// an ENTRY POINT for machinery that exists, not a new body, and it needs NO new
+// DestroySpec row — which is asserted from 0x1800269a0's own CALL operand and
+// not from a hash, because a hash erases exactly that operand (see the three
+// Wave 25 rows above, where two siblings sharing hash 089ee8 take two specs).
+J2_ENTRY(1800269a0, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x180026b50  Body B
+
 #undef J2_ENTRY
 
 // ---- 0x18005bf60 / 0x18005c550: the one that is NEITHER body ---------------
@@ -943,6 +969,12 @@ void RtCollectionDestroyPortInit() {
     RegisterRuntimeAddr(0x18002ac40, (void*)&RtColl_ArrayDtorElem_18002ac40);
     RegisterRuntimeAddr(0x180039360, (void*)&RtColl_ArrayDtorElem_180039360);
     RegisterRuntimeAddr(0x180039280, (void*)&RtColl_ArrayDtorElem_180039280);
+    // Wave 26 lane INT33 — ~Array<PackageFile::Entry>, PackageFile+0xB0. Its
+    // helper 0x180026b50 is registered eight lines above, so this entry point
+    // and the helper now BOTH route through this file; before it, retail's
+    // 0x1800269a0 called retail's 0x180026b50 by rel32 and our registration of
+    // the helper could never be reached from ~PackageFile.
+    RegisterRuntimeAddr(0x1800269a0, (void*)&RtColl_ArrayDtorElem_1800269a0);
 
     // ---- J2b -------------------------------------------------------------
     RegisterRuntimeAddr(0x18001c8c0, (void*)&RtColl_ArrayDtorEhVec_18001c8c0);
