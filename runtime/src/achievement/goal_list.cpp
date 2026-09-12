@@ -1,0 +1,399 @@
+// ============================================================================
+// runtime/src/achievement/goal_list.cpp — WAVE 27 lane ACHIEVE
+// Achievement::GoalList::Initialize
+// ============================================================================
+//
+//   ?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@
+//       VGoal@Achievement@@@Object@@@Collection@@@Z          retail 0x18009f0e0
+//
+// One of the two BODY rows of the Wave 27 Achievement/Audio brief, and the one
+// the kickoff singled out for a specific trap. GREPPED BEFORE WRITTEN: the
+// mangled name and the address appear in this tree only as PROSE — Goal.h:161,
+// achievement_manager.cpp:211 and 657, code/Game/Game/gameupdateloop_load.cpp
+// :1660 — every one of them a comment saying "called, not reimplemented". No
+// body existed.
+//
+// ============================================================================
+// READ FROM THE SHIPPED BYTES, NOT FROM GHIDRA'S DISASSEMBLER
+// ============================================================================
+// `mcp__ghidra-mcp__disassemble_function(address="0x18009f0e0")` returns a
+// DIFFERENT FUNCTION — entry 0x18009f090, a body that allocates 0x100 bytes and
+// stamps vtable 0x1801a9310, nothing to do with GoalList — while
+// `get_function_by_address` on the SAME address correctly answers
+// `Initialize at 18009f0e0, body 18009f0e0-18009f264`. Same for 0x180009d70
+// (returns entry 0x180009c20). Recorded, NOT FIXED (kickoff §4 #1); see
+// WAVE27_LANE_ACHIEVE.md.
+//
+// So this body was decoded from `pefile` + `objdump -D -b binary -m
+// i386:x86-64 --adjust-vma=0x18009f0e0` over the shipped Runtime-x64.dll. The
+// 0x185 bytes that produced it:
+//
+//   0x18009f10a  8b 52 08              MOV EDX,[RDX+8]      ; src->_size
+//   0x18009f10d  e8 5e ac f6 ff        CALL 0x180009d70     ; SetSize(this, n)
+//   0x18009f112  45 33 e4              XOR R12D,R12D        ; i = 0
+//   0x18009f115  44 39 65 08           CMP [RBP+8],R12D     ; this->_size
+//   0x18009f119  0f 8e e2 00 00 00     JLE  tail
+//   loop (r15 = i*8):
+//   0x18009f130  49 8b 06              MOV RAX,[R14]        ; src->_data  RELOADED
+//   0x18009f133  49 8b 0c 07           MOV RCX,[R15+RAX]    ; Goal* goal = src[i]
+//   0x18009f137  48 8b 01              MOV RAX,[RCX]        ; goal's vtable
+//   0x18009f13a  48 8d 54 24 60        LEA RDX,[RSP+0x60]   ; hidden return slot
+//   0x18009f13f  ff 50 48              CALL [RAX+0x48]      ; GetInstanceType
+//   0x18009f142  8b 10                 MOV EDX,[RAX]        ; *slot = the typeId
+//   0x18009f144..0x18009f172           Factory::CreateObject, INLINED
+//   0x18009f175  48 8b f0              MOV RSI,RAX          ; the new instance
+//   0x18009f178  8b 3d c2 a7 15 00     MOV EDI,[0x1801f9940] ; GoalInstance typeId
+//   0x18009f17e..0x18009f1cd           Base::IsDerivedFrom, INLINED; on failure
+//                                      `XOR ESI,ESI` — the instance becomes NULL
+//   0x18009f1cf  48 8b 45 00           MOV RAX,[RBP+0]      ; this->_data RELOADED
+//   0x18009f1d3  49 89 34 07           MOV [R15+RAX],RSI    ; this->_data[i] = inst
+//   0x18009f1d7..0x18009f1e2           reload this->_data[i] and src->_data[i]
+//   0x18009f1e6  48 89 41 18           MOV [RCX+0x18],RAX   ; inst->_goal = goal
+//   0x18009f1ea  48 8b 01              MOV RAX,[RCX]
+//   0x18009f1ed  ff 50 20              CALL [RAX+0x20]      ; inst->Startup()
+//   0x18009f1f0  41 ff c4              INC R12D
+//   0x18009f1f3  49 83 c7 08           ADD R15,8
+//   0x18009f1f7  44 3b 65 08           CMP R12D,[RBP+8]     ; RE-READ every pass
+//   tail:
+//   0x18009f201  49 8b 3e              MOV RDI,[R14]        ; src->_data
+//   0x18009f204  48 85 ff / 74 36      TEST/JZ              ; skip if null
+//   0x18009f209..0x18009f239           Enter(alloc+0x640); Free(alloc, p); Leave
+//   0x18009f23f  49 c7 06 ...          MOV [R14],0
+//   0x18009f246  49 c7 46 08 ...       MOV [R14+8],0        ; _size AND _capacity
+//
+// ============================================================================
+// THE PARAMETER IS BY VALUE, AND THAT IS WHY THE BODY DESTROYS IT
+// ============================================================================
+// The mangling says `V?$Array@…@Collection@@` — an `Array<ExternalPtr<Goal>>`
+// BY VALUE. Under the MS x64 ABI an aggregate that is not 1/2/4/8 bytes is
+// passed by hidden reference to a CALLER-allocated temporary, and the CALLEE
+// owns it. So the teardown at 0x18009f201 is not a bug and not a courtesy: it
+// is the by-value parameter's destructor, inlined, and the port must run it.
+//
+// ============================================================================
+// THE REFCOUNT TRAP THE KICKOFF WARNED ABOUT — AND WHAT THE BYTES SAY
+// ============================================================================
+// The brief warned that `Array<ExternalPtr<Goal>>` is a REFCOUNTED-ELEMENT
+// array, that the POD-element `Array<T>` recipes in achievement_manager.cpp are
+// the wrong template for it, and that a port following the sibling recipe
+// "compiles, runs, and leaks or double-releases a refcount with no byte oracle
+// catching it".
+//
+// MEASURED ANSWER: **retail's teardown here IS the POD one, and copying the
+// refcounted recipe would have been the defect.** 0x18009f201-0x18009f24e is a
+// bare `if (p) { Enter; Free; Leave }` plus two zeroing stores. There is NO
+// per-element loop and NO release of any kind — compare
+// `Achievement::~Achievement`, which calls the real
+// `Array<ExternalPtr<Goal>>::~Array` (`ArrayFreeGoalPtrs`) precisely because
+// there the elements are still owned.
+//
+// WHY retail can do that here: 0x18009f1e6 MOVES each `Goal*` out of the source
+// array and into the GoalInstance's `_goal` field, with no addref and no
+// release. Ownership is TRANSFERRED element by element, and what is left at the
+// tail is a buffer of pointers nobody owns any more — a POD buffer. Releasing
+// them, which is what the refcounted recipe would do, would over-release every
+// Goal in the list.
+//
+// So the trap was real and it points the OPPOSITE way from the warning: the
+// hazard was not "reused the POD recipe", it was "reached for the refcounted
+// one because the element type looks refcounted". Both directions are settled
+// here by the same two instructions, and neither by the element type's name.
+//
+// ============================================================================
+// TWO INLINED Object HELPERS, CALLED THROUGH THEIR PORTED EXPORTS
+// ============================================================================
+// Retail inlines `Factory::CreateObject` and `Base::IsDerivedFrom` here. Both
+// are ALREADY PORTED in runtime/src/object/type_system.cpp (Wave 5 lane A) and
+// both are registered, so `ResolveExport` on either name hands back OUR body,
+// not the DLL's (reference_resolveaddr_consults_port_registry_first.md). They
+// are called rather than transcribed a third time:
+//
+//   * `FindNode` + `rec->info->factoryFn()` is `RtObject_Factory_CreateObject`
+//     instruction for instruction, INCLUDING the unguarded `MOV RCX,[RAX+0x10]`
+//     on a null node that faults on an unregistered type.
+//   * the `GetTypeId()` compare then the `parent`-chain walk is
+//     `RtObject_Base_IsDerivedFrom`, including its `ADD RAX,8`-on-null.
+//
+// A third transcription would be a third copy of two tree walks that must never
+// disagree — exactly what reference_grep_for_the_port_before_writing_it.md is
+// about, and what type_system.cpp's own banner says about FindNode being shared
+// by four callers.
+//
+// ============================================================================
+// THREE UNGUARDED DEREFS, ALL KEPT
+// ============================================================================
+//  1. `src->_data[i]` is dereferenced as a Goal with no null test.
+//  2. `this->_data[i]->_goal = goal` runs on the instance the dynamic cast may
+//     have just set to NULL (0x18009f1cd `XOR ESI,ESI`). Retail stores the null
+//     into the array and then writes through it. A cast failure is therefore a
+//     CRASH in retail, by construction: it means a Goal asked for an instance
+//     type that is not a GoalInstance, i.e. a broken resource.
+//  3. `Factory::CreateObject` faults on an unregistered type id.
+// None of the three is guarded here (CLAUDE.md "Don't 'fix' a faithful crash
+// with a null check"). If our standalone reaches any of them, the fault is
+// upstream — a Goal resource whose GetInstanceType returns a type the Factory
+// does not carry — and a guard would skip building the goal list rather than
+// restore it.
+//
+// ============================================================================
+// ORACLE — AND IT IS NOT A REPLAY
+// ============================================================================
+// There is NO second-opinion run of retail's copy, and the reason is not "no
+// oracle possible" (a claim this project has had wrong four times across three
+// waves). It is specific: every call of this body ALLOCATES `n` new
+// GoalInstances out of the global Object::InternalFactory, calls `Startup()` on
+// each, and FREES the caller's temporary buffer. Running retail's copy as a
+// second opinion would allocate a second set of instances into the one live
+// factory, leak them, Startup() them a second time, and then double-free the
+// temp. That is the "mutates the global factory" family save_trace.h names, one
+// level worse — there is no prefix that stops before the first mutation,
+// because the first iteration IS the first mutation.
+//
+// What runs instead is a SHADOW PREDICATE over the post-state, checking the
+// three invariants the body is supposed to establish, each naming its own
+// failing term (reference_shadow_predicate_must_name_its_failing_term.md):
+//   (a) `this->_size == n` and the source array is consumed (`_data == null`,
+//       `_size == 0`, `_capacity == 0`)
+//   (b) every element of `this->_data[0..n)` is non-null — i.e. no dynamic cast
+//       failed. A null here is the crash in (2) above and cannot be reached,
+//       so this term is a check on the SCREEN as much as on the body.
+//   (c) every instance's `_goal` (+0x18) holds the pointer the source array
+//       held at the same index, snapshotted BEFORE the buffer was freed.
+// (c) is the one that would catch the real failure mode — an off-by-one or a
+// transposed index in the move — and it is checkable without re-running
+// anything because it compares our own output against a snapshot of our own
+// input. It is NOT a comparison against retail, and this file does not claim
+// one.
+//
+// KILL SWITCH: BANISHED_RT_GOAL (with goal.cpp and goal_serialize.cpp) under
+// BANISHED_RT_ACHIEVEMENT — class atomicity, PLAN §4.1 decision 5.
+// ============================================================================
+
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+
+#include "../../funcs/rt_port.h"
+#include "../../types/achievement/Goal.h"
+#include "../../types/object/Internal.h"
+
+using RtAchievement::GoalList;
+namespace GoalInstanceVtbl = RtAchievement::GoalInstanceVtbl;
+namespace GoalVtbl = RtAchievement::GoalVtbl;
+
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
+// runtime/src/collection/array.cpp, Wave 9 lane Q. DECLARED rather than
+// #included: array_internal.h states in its own banner that exactly two files
+// include it, and it is another lane's header. This is a link-time reuse of one
+// function, not a shared-header dependency.
+//
+// It is `if (p) { Enter(alloc+0x640); Free(alloc, p); Leave; }` — the null test
+// is inside 0x1800c7ad0 — which is instruction for instruction the teardown
+// inlined at 0x18009f209..0x18009f239 here.
+namespace rtcoll { void MemFree(void* p); }
+
+extern "C" void RtAch_GoalList_Initialize(void*, void*);
+
+namespace {
+
+// `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` @ 0x1801f9940.
+// Retail reads its +0x00 (the typeId) INSIDE the loop, at 0x18009f178. Read
+// through RT_DATA_SLOT so this body follows a promotion of that row rather than
+// pinning the DLL's node — the same coupling
+// achievement_typeinfo_accessors.cpp documents.
+uint32_t GoalInstanceTypeId() {
+    const uint8_t* node = RT_DATA_SLOT(const uint8_t*,
+        "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A");
+    uint32_t v = 0;
+    std::memcpy(&v, node, sizeof v);      // BaseTypeInfo::typeId @ +0x00
+    return v;
+}
+
+// `?_singleton@Factory@Object@@0PEAV12@EA` @ 0x1801fc6e8. RT_DATA_SLOT yields
+// the ADDRESS of the pointer variable; retail's `MOV RBX,[RIP+…]` dereferences
+// it once, which is the extra `*` below.
+void* FactorySingleton() {
+    void** slot = RT_DATA_SLOT(void**, "?_singleton@Factory@Object@@0PEAV12@EA");
+    return *slot;
+}
+
+using CreateObjectFn   = void* (*)(const void* factory, uint32_t typeId);
+using IsDerivedFromFn  = bool  (*)(const void* self, uint32_t typeId);
+using GetInstanceTypeFn = void* (*)(const void* self, void* retSlot);
+using StartupFn        = void  (*)(void* self);
+using SetSizeFn        = void  (*)(void* array, int newSize);
+
+// Port-aware NAME doors: both of these are ported and registered in
+// runtime/src/object/type_system.cpp, so these resolve to OUR bodies.
+CreateObjectFn FactoryCreateObject() {
+    static void* f = nullptr;
+    return reinterpret_cast<CreateObjectFn>(
+        RtResolveCached("?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z", &f));
+}
+IsDerivedFromFn BaseIsDerivedFrom() {
+    static void* f = nullptr;
+    return reinterpret_cast<IsDerivedFromFn>(
+        RtResolveCached("?IsDerivedFrom@Base@Object@@QEBA_NI@Z", &f));
+}
+
+// ---- ADDRESS DOOR -----------------------------------------------------------
+// SYMBOL:      Collection::Array<Object::InternalPtr<Achievement::GoalInstance>>
+//              ::SetSize, Runtime 0x180009d70. An unexported template
+//              instantiation — there is no mangled name to ask for, so this is a
+//              genuine address door, not the "unexported" mislabel §4 #4 warns
+//              about. It is a DIFFERENT instantiation from the 0x180008d60 that
+//              achievement_serialize.cpp uses (Array<InternalPtr<
+//              AchievementInstance>>, which IS ported — Wave 9 lane Q), and
+//              from the generic Array<8> bodies in runtime/src/collection: a
+//              grep of runtime/src/collection for 0x180009d70 returns NOTHING,
+//              so nothing in this tree registers it.
+// CONDITION:   reached on EVERY call of GoalList::Initialize — unconditionally,
+//              not just on the read path as in achievement_vtable.cpp's copy of
+//              this same door.
+// CONSEQUENCE: at cutover this address resolves to nothing and this body calls
+//              null on the first goal list it builds, which is every
+//              achievement and every tutorial goal set. ADDRESSEE: whoever runs
+//              the cutover attempt that first loads a game with achievements
+//              mounted must port it (it is an `Array<8>` SetSize — the shape
+//              array.cpp already has eleven instantiations of) or accept a dead
+//              GoalList::Initialize. Named identically at
+//              achievement_vtable.cpp's ArraySetSizeGoalInstancePtrs().
+SetSizeFn ArraySetSizeGoalInstancePtrs() {
+    static SetSizeFn f = nullptr;
+    if (!f) f = reinterpret_cast<SetSizeFn>(ResolveAddr(Module::Runtime, 0x180009d70));
+    return f;
+}
+
+// The shadow predicate's input snapshot. Bounded so a pathological count cannot
+// turn a diagnostic into an allocation; a list longer than this is simply not
+// screened, and the report says so.
+constexpr int kMaxSnapshot = 64;
+
+}  // namespace
+
+// ============================================================================
+// void Achievement::GoalList::Initialize(Collection::Array<ExternalPtr<Goal>>)
+// ?Initialize@GoalList@Achievement@@QEAAX…@Z               retail 0x18009f0e0
+//
+// NON-virtual (QEAA). RCX = this, RDX = the caller's by-value temporary.
+// See the banner for the full byte listing, the by-value ownership rule, the
+// refcount finding and the limits of the shadow screen.
+// ============================================================================
+extern "C" void RtAch_GoalList_Initialize(void* selfRaw, void* srcRaw) {
+    RT_DIFF_BEGIN("Achievement::GoalList::Initialize");
+
+    GoalList* self = static_cast<GoalList*>(selfRaw);
+    // The source is an Array<ExternalPtr<Goal>>; ExternalPtr is one pointer
+    // (runtime/types/object/External.h static_asserts sizeof == 8), so the
+    // buffer is read as `void**` exactly as retail's `MOV RCX,[R15+RAX]` does.
+    Collection::Array<void*>* src = static_cast<Collection::Array<void*>*>(srcRaw);
+
+    // Snapshot the input BEFORE the loop moves it and the tail frees it. This
+    // is the only part of the screen that cannot be reconstructed afterwards.
+    void* snapGoals[kMaxSnapshot];
+    const int snapN = (src->_size >= 0 && src->_size <= kMaxSnapshot) ? src->_size : -1;
+    if (rt_diff_on__ && snapN > 0) {
+        for (int i = 0; i < snapN; ++i) snapGoals[i] = src->_data[i];
+    }
+    const int requested = src->_size;
+
+    ArraySetSizeGoalInstancePtrs()(self, src->_size);
+
+    // `CMP R12D,[RBP+8]` is re-read at the bottom of every pass, and both
+    // `this->_data` and `src->_data` are RELOADED inside the loop — Startup()
+    // may reallocate either. Kept.
+    for (int i = 0; i < self->_goals._size; ++i) {
+        void* goal = src->_data[i];
+
+        // Object::Type GetInstanceType() — a 4-byte class returned BY VALUE,
+        // so it takes a hidden return slot in RDX and hands the slot back in
+        // RAX. goal.cpp's RtAch_Goal_GetInstanceType records the same shape:
+        // getting it wrong here is a wild write, not a wrong value.
+        void* const* goalVt = *static_cast<void* const* const*>(goal);
+        uint32_t typeSlot = 0;
+        reinterpret_cast<GetInstanceTypeFn>(
+            goalVt[GoalVtbl::kGetInstanceType / 8])(goal, &typeSlot);
+        const uint32_t instanceTypeId = typeSlot;
+
+        void* inst = FactoryCreateObject()(FactorySingleton(), instanceTypeId);
+
+        // The inlined dynamic cast at 0x18009f17e..0x18009f1cd. On failure
+        // retail nulls the instance (`XOR ESI,ESI`) and then writes through it
+        // two instructions later. Faithful.
+        if (!BaseIsDerivedFrom()(inst, GoalInstanceTypeId())) inst = nullptr;
+
+        self->_goals._data[i].ptr = static_cast<RtObject::Internal*>(inst);
+
+        // Retail RELOADS both arrays here rather than reusing the registers it
+        // already has (0x18009f1d7..0x18009f1e2). Reproduced.
+        void* stored = self->_goals._data[i].ptr;
+        void* goalAgain = src->_data[i];
+
+        // GoalInstance::_goal @ +0x18 (runtime/types/achievement/Goal.h).
+        // UNGUARDED — see the banner's deref (2).
+        *reinterpret_cast<void**>(static_cast<uint8_t*>(stored) + 0x18) = goalAgain;
+
+        void* const* instVt = *static_cast<void* const* const*>(stored);
+        reinterpret_cast<StartupFn>(instVt[GoalInstanceVtbl::kStartup / 8])(stored);
+    }
+
+    // The by-value parameter's destructor, inlined by retail. POD teardown: the
+    // buffer only, NO per-element release — see the refcount section above.
+    rtcoll::MemFree(src->_data);
+    src->_data     = nullptr;
+    src->_size     = 0;    // retail zeroes _size and _capacity as ONE qword
+    src->_capacity = 0;
+
+    if (rt_diff_on__) {
+        bool ok = (self->_goals._size == requested)
+               && (src->_data == nullptr)
+               && (src->_size == 0) && (src->_capacity == 0);
+        int firstNullInstance = -1;
+        int firstWrongGoal    = -1;
+        if (ok && snapN >= 0) {
+            for (int i = 0; i < snapN; ++i) {
+                void* inst = self->_goals._data[i].ptr;
+                if (!inst) { if (firstNullInstance < 0) firstNullInstance = i; continue; }
+                void* held = *reinterpret_cast<void**>(
+                    reinterpret_cast<uint8_t*>(inst) + 0x18);
+                if (held != snapGoals[i] && firstWrongGoal < 0) firstWrongGoal = i;
+            }
+            if (firstNullInstance >= 0 || firstWrongGoal >= 0) ok = false;
+        }
+        char a[160], b[160];
+        std::snprintf(a, sizeof(a),
+                      "size=%d src={%p,%d,%d} firstNullInst=%d firstWrongGoal=%d snapN=%d",
+                      self->_goals._size, static_cast<void*>(src->_data),
+                      src->_size, src->_capacity,
+                      firstNullInstance, firstWrongGoal, snapN);
+        std::snprintf(b, sizeof(b),
+                      "size=%d src consumed, every inst non-null, every inst->_goal "
+                      "== the snapshotted src[i]%s",
+                      requested,
+                      (snapN < 0) ? "  [NOT SCREENED: count outside snapshot bound]" : "");
+        RT_DIFF_SHADOW(ok, a, b);
+    }
+}
+
+// ---- Registration ----------------------------------------------------------
+// By NAME and by ADDRESS. The name is what the census counts; the address is
+// what matters more here, because every consumer of this function found so far
+// reaches it BY ADDRESS — achievement_manager.cpp:657 transcribes
+// `CALL 0x18009f0e0` and code/Game/Game/gameupdateloop_load.cpp:1660 describes
+// the same call site. Registering the address converts those from
+// DLL-into-DLL calls into calls on this body
+// (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
+//
+// Gated by BANISHED_RT_GOAL with goal.cpp — this is lane A's class.
+int RtAchGoalListRegister() {
+    int n = 0;
+    RegisterRuntimeExport(
+        "?Initialize@GoalList@Achievement@@QEAAXV?$Array@V?$ExternalPtr@"
+        "VGoal@Achievement@@@Object@@@Collection@@@Z",
+        (void*)&RtAch_GoalList_Initialize); ++n;
+    RegisterRuntimeAddr(0x18009f0e0ull, (void*)&RtAch_GoalList_Initialize);
+    return n;
+}

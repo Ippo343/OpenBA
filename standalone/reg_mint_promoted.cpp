@@ -2907,6 +2907,87 @@ int RtMintRegisterPromotedRows() {
     // RT_UNPROMOTABLE: ?_loader@LoaderLoop@Engine@@1VLoader@2@A | n/a (a Loader OBJECT, not a pointer) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- this row is an AGGREGATE and its consumers take its ADDRESS: 5 LEA and 2 stores, and ?Startup@LoaderLoop@Engine@@ (UNPORTED) does `lea rcx,[0x1801fe7b8]` and then works through the register. Promoting gives our doors a different object from the one that unported body constructs and runs. NOTE FOR ANY LANE RE-DERIVING THIS: a RIP-relative READ/WRITE census reports `R=0` here and that 0 is an ARTEFACT of the access pattern, not evidence of disuse. At cutover REQUIRED (engine/funcs/engine_funcs.cpp and runtime/src/engine/loops.cpp both resolve it by name) [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ?Startup@LoaderLoop@Engine@@ ported AND registered] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
     // RT_UNPROMOTABLE: ?_singleton@Configuration@System@@0PEAV12@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.4 | NONE while the DLL is present -- 4 in-DLL reads / 2 writes, and BOTH halves are split: the reader ?Get@Configuration@System@@ is unported AND the writer ??0Configuration@System@@ is unported, so a promoted slot is neither written by retail's ctor nor read by retail's accessor. At cutover REQUIRED [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ??0Configuration@System@@ ported AND registered, then ?Get@] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
     // RT_UNPROMOTABLE: ?_singleton@AchievementManager@Achievement@@0PEAV12@EA | n/a (scalar ptr) | WAVE25_LANE_DATA.md §3.5 | NONE while the DLL is present -- an INVERTED-SHAPE row: only 1 in-DLL read against 5 writes, and the harm is on the writer side. Two of the five writers, ??0AchievementManager@Achievement@@ and a store inside ??0DialogLoopT@Engine@@'s range, are UNPORTED, so retail constructs the manager into retail's slot and a promoted slot would hold whatever our ported Engine::Startup/Shutdown last wrote -- two owners, one object. A LOW READ COUNT IS NOT A SAFE ROW. At cutover REQUIRED (gameupdateloop_serialize.cpp and achievement_manager.cpp both resolve it by name) [SCOPE: DLL-PRESENT] [ADDRESSEE: lane MANIFEST of Wave 25; expiry = ??0AchievementManager@Achievement@@ ported AND registered] | HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER
+    //   [WAVE 27 lane ACHIEVE -- THIS TAG'S REASONING IS WRONG IN BOTH HALVES.
+    //    ITS COUNT IS RIGHT. RE-DERIVED FROM THE SHIPPED RETAIL FILE, NOT FROM
+    //    GHIDRA: `objdump -d "C:/GOG Games/Banished/Runtime-x64.dll"` and grep
+    //    the resolved-target comment `# 0x1801fc670`. Complete site set, 6 of
+    //    them, exactly the 1 READ + 5 WRITES this tag claims:
+    //      R 0x1800079d0 ?Get@AchievementManager@   PORTED+registered
+    //                                               (achievement_manager.cpp:1143)
+    //      W 0x18004d946 FUN_18004d930              UNPORTED -- AND DEAD CODE
+    //      W 0x18009eac6 ??1AchievementManager@     PORTED (achievement_state.cpp)
+    //      W 0x18009eb35 ??0AchievementManager@     PORTED (engine_lifecycle.cpp:1101)
+    //      W 0x1800db698 ?Shutdown@Engine@1@        PORTED
+    //      W 0x1800dbe83 ?Startup@Engine@1@         PORTED
+    //
+    //    (a) "a store inside ??0DialogLoopT@Engine@@'s range" NAMES THE WRONG
+    //        FUNCTION. There is no store to this cell anywhere in that ctor.
+    //        Found by Wave 27 lane LOOPS, which read 0x1800db3f0..0x1800db452
+    //        instruction by instruction; the tag's attribution came from a
+    //        function extent stretched to the next export
+    //        (reference_adjacent_export_is_an_upper_bound.md). The fifth writer
+    //        is real but lives at 0x18004d930, ~0x8e000 away.
+    //    (b) BUT THE FIFTH WRITER IS NOT MISSING, AND A REFUTATION THAT COUNTED
+    //        ONLY 3 WRITES IS ALSO WRONG. A scan matching only MOV r/m,r and
+    //        MOV r,r/m (opcodes 89/8B) is BLIND to `MOV r/m, imm32` (opcode C7),
+    //        which is how BOTH 0x18004d946 and 0x18009eac6 spell `= nullptr`.
+    //        Two of the five writes are C7 stores.
+    //
+    //    THE ROW'S HAZARD IS NEVERTHELESS GONE, on a third set of facts:
+    //    FUN_18004d930 is the compiler-generated SCALAR DELETING DESTRUCTOR
+    //    (~AchievementManager then operator delete; byte-identical to the ported
+    //    0x18009eab0 plus a trailing CALL 0x180006a10) and it is UNREACHABLE --
+    //    ZERO rel32 call/jmp sites, and an 8-byte scan of EVERY section finds
+    //    its address nowhere, so NO IN-DLL DISPATCH STRUCTURE names it -- no
+    //    vtable, jump table, function-pointer global or static-init table,
+    //    which is where an indirect in-DLL call must get an address from. It is
+    //    ALSO absent from the export directory (checked separately, with a
+    //    control: ?Get@AchievementManager@ is found there at ordinal 2403 of
+    //    4926). So nothing reaches it by any route: it cannot run, and it
+    //    cannot write this cell.
+    //    GENERAL FORM, because the narrow form does not travel: "absent from
+    //    every section" licenses "no in-DLL dispatch structure names it" and
+    //    NOT "nothing names it" -- an 8-byte VA scan cannot see the export
+    //    directory, which stores 32-bit RVAs. Reading it as "not exported" is
+    //    reference_aeaa_is_private_not_unexported.md from its other side. The
+    //    export check above is a SECOND screen for that reason, not a
+    //    restatement of the first. ?Get@ likewise has ZERO in-DLL callers.
+    //    So NO in-DLL code path touches this cell at all, and the "two owners,
+    //    one object" hazard has no owner on the DLL side.
+    //    THAT LIMIT WAS THEN CLOSED, because "is this symbol the thing that
+    //    actually RUNS?" is the check these tags keep failing. It is not enough
+    //    that our copies of the four live writers are ported: if the DLL calls
+    //    its OWN copy of any of them, a promoted cell and the DLL's cell are
+    //    two owners again. Measured, both ways, for all four:
+    //      DIRECT   rel32 call/jmp sites in .text      ctor 0, dtor 0,
+    //                                                  Engine::Startup 0,
+    //                                                  Engine::Shutdown 0
+    //      INDIRECT 8-byte scan of EVERY PE section    all four: absent
+    //    (Engine::Startup 0x1800db8a0 and Engine::Shutdown 0x1800db4f0 were
+    //     confirmed as true function entries via get_function_by_address, not
+    //     derived by subtracting an offset.)
+    //
+    //    BOTH SCREENS WERE HANDED KNOWN POSITIVES FIRST, because a screen whose
+    //    normal answer is 0 is indistinguishable from a dead parser
+    //    (reference_absence_screen_must_be_handed_a_shape.md):
+    //      direct-call screen: 0x180009700 -> 5 sites, 0x1800ca4e0 -> 5 sites
+    //      address-presence  : ?Run@Loader@ 0x1800dbfc0 found once at
+    //                          0x180157a08, and the UpdateLoop deleting dtor
+    //                          0x180031900 found once at 0x180155ba0 -- the two
+    //                          positives Wave 27 lane LOOPS used, reproduced
+    //                          here independently at the same two addresses.
+    //    REMAINING LIMIT, stated: the address-presence screen matches 64-bit
+    //    VAs, so it cannot see the PE export table (which stores 32-bit RVAs).
+    //    That is not the question being asked -- the question is in-DLL dispatch
+    //    tables -- but "absent" here does not mean "not exported".
+    //
+    //    LANE ACHIEVE DID NOT PROMOTE THIS ROW and is not asking for it to be:
+    //    promotion is the mint/manifest owner's call and needs the cutover
+    //    manifest regenerated with it.
+    //    [ADDRESSEE: the Wave 28 kickoff writer, or whichever lane next owns the
+    //     mint tables. Re-run the two commands above before acting -- this note
+    //     is a measurement, and the thing it replaces was also once a
+    //     measurement.]
     //
     // THE SEVEN `?_typeInfo@` GAP ROWS ARE DELIBERATELY NOT TAGGED HERE.
     // They are NOT unpromotable -- they are READY and BLOCKED ON ONE THING
