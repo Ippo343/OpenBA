@@ -377,26 +377,7 @@ extern "C" void RtUi_EditElement_Dtor(void* selfv) {
     TailElementDtor(p);            // 1800d0ef9  JMP 0x1801161a0
 }
 
-// ============================================================================
-// ??1NumberElement@UI@@UEAA@XZ   retail 0x180118ce0
-// ============================================================================
-extern "C" void RtUi_NumberElement_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7NumberElement@UI@@6B@");       // 180118cf6
-    ReleaseStringField(p, 0xd0);   // 180118d00
-    TailElementDtor(p);            // 180118d3e  JMP 0x1801161a0
-}
 
-// ============================================================================
-// ??1TextElement@UI@@UEAA@XZ   retail 0x18011eda0
-// ============================================================================
-extern "C" void RtUi_TextElement_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7TextElement@UI@@6B@");         // 18011edb6
-    ReleaseStringField(p, 0xf8);   // 18011edc0
-    RtAddr<SubDtorFn>(0x180010ab0ull)(p + 0xc8);   // 18011edfd, ALREADY PORTED (ListCleanup)
-    TailElementDtor(p);            // 18011ee0b  JMP 0x1801161a0
-}
 
 // ============================================================================
 // Registration. Both doors for every row, exactly like groupdescription.cpp:
@@ -459,11 +440,7 @@ int RtUiDescriptionDtorsRegister() {
     RegisterRuntimeExport("??1EditElement@UI@@UEAA@XZ", (void*)&RtUi_EditElement_Dtor); ++n;
     RegisterRuntimeAddr(0x1800d0e50ull, (void*)&RtUi_EditElement_Dtor);
 
-    RegisterRuntimeExport("??1NumberElement@UI@@UEAA@XZ", (void*)&RtUi_NumberElement_Dtor); ++n;
-    RegisterRuntimeAddr(0x180118ce0ull, (void*)&RtUi_NumberElement_Dtor);
 
-    RegisterRuntimeExport("??1TextElement@UI@@UEAA@XZ", (void*)&RtUi_TextElement_Dtor); ++n;
-    RegisterRuntimeAddr(0x18011eda0ull, (void*)&RtUi_TextElement_Dtor);
 
     return n;
 }

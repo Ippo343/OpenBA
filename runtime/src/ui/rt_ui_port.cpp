@@ -210,6 +210,24 @@ extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
 // make the whole file worthless (dialog_factory.cpp has been dark since Wave 11).
 extern int RtUiFactory2Register();         // ui_factory_wave28.cpp (FACTUI2)
 
+// ---- CUTOVER VTABLE BATCH 4 "elem_B", 2026-09-12 --------------------------
+// Fourteen UI::*Element widget classes, one file each, every vtable slot plus
+// the ctor and dtor. Registered UNCONDITIONALLY (DIRECTION.md §2: a port
+// registers; no new BANISHED_RT_* flags).
+extern int RtUiLayoutElementRegister();       // layoutelement.cpp
+extern int RtUiListElementRegister();         // listelement.cpp
+extern int RtUiNumberEditElementRegister();   // numbereditelement.cpp
+extern int RtUiNumberElementRegister();       // numberelement.cpp
+extern int RtUiPageElementRegister();         // pageelement.cpp
+extern int RtUiProgressElementRegister();     // progresselement.cpp
+extern int RtUiRadioElementRegister();        // radioelement.cpp
+extern int RtUiRibbonElementRegister();       // ribbonelement.cpp
+extern int RtUiScrollElementRegister();       // scrollelement.cpp
+extern int RtUiSliderElementRegister();       // sliderelement.cpp
+extern int RtUiSpinnerElementRegister();      // spinnerelement.cpp
+extern int RtUiTabElementRegister();          // tabelement.cpp
+extern int RtUiTableElementRegister();        // tableelement.cpp
+extern int RtUiTextElementRegister();         // textelement.cpp
 // VTABLE BATCH 9 (2026-09-12).
 extern int RtUiComboDialogRegister();             // combodialog.cpp
 extern int RtUiDialogControllerConfigRegister();   // dialogcontrollerconfig.cpp
@@ -300,6 +318,21 @@ void RtUiPortInit() {
     n += RtUiComboDialogCtorRegister();      // ??0ComboDialog, ??2ComboDialog,
                                              // ??0DialogInstance (2nd overload)
 
+    // ---- CUTOVER VTABLE BATCH 4 "elem_B" ---------------------------------
+    n += RtUiLayoutElementRegister();
+    n += RtUiListElementRegister();
+    n += RtUiNumberEditElementRegister();
+    n += RtUiNumberElementRegister();
+    n += RtUiPageElementRegister();
+    n += RtUiProgressElementRegister();
+    n += RtUiRadioElementRegister();
+    n += RtUiRibbonElementRegister();
+    n += RtUiScrollElementRegister();
+    n += RtUiSliderElementRegister();
+    n += RtUiSpinnerElementRegister();
+    n += RtUiTabElementRegister();
+    n += RtUiTableElementRegister();
+    n += RtUiTextElementRegister();
     // ---- VTABLE BATCH 9 (2026-09-12), unconditional -------------------------
     //   combodialog.cpp             UI::ComboDialog
     //   dialogcontrollerconfig.cpp  UI::DialogControllerConfig
