@@ -72,6 +72,8 @@ extern int RtGraphicsWave28GfxbodyRegister(); // wave28_lane_gfxbody.cpp (Wave 2
 // above is C++-linkage. The spellings differ on purpose -- each matches its own
 // definition, and swapping either one to match the other is a link error.
 extern "C" int RtGraphicsWave28PartsysRegister(); // wave28_lane_partsys.cpp (Wave 28 lane PARTSYS)
+extern "C" int RtGraphicsWave29SlotsRegister();   // wave29_lane_slots.cpp (Wave 29 lane SLOTS)
+extern "C" void RtGraphicsWave29SlotsSummary();  // ditto -- WIRED below, kickoff warning 10
 extern int RtGraphicsTypeInfoAccessorsRegister();
                                           // graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT)
 extern int RtGraphicsEdgeMeshVtableRegister();
@@ -206,6 +208,15 @@ void RtGraphicsPortInit() {
     if (RtWaveEnabled("BANISHED_RT_PARTSYS")) partsys = RtGraphicsWave28PartsysRegister();
     n += partsys;
 
+    // WAVE 29 LANE SLOTS -- two slots of ??_7MeshInstance@Graphics@@6B@:
+    // ?Update@MeshInstance@ (slot 1) and ?SetSharedInstanceData@MeshInstance@
+    // (slot 7), taking the table 6/9 -> 8/9. DEFAULT ON, same kill-switch shape
+    // as PARTSYS above: BANISHED_RT_SLOTS29=0 leaves both calls on the DLL for
+    // an A/B, anything else arms them.
+    int slots29 = 0;
+    if (RtWaveEnabled("BANISHED_RT_SLOTS29")) slots29 = RtGraphicsWave29SlotsRegister();
+    n += slots29;
+
     int gfxd = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXD")) gfxd = RtGraphicsWave9GfxdRegister();
 
@@ -234,4 +245,11 @@ void RtGraphicsPortInit() {
     // lane line here gives: the on-disk md5 says which exe is on disk, not which
     // one ran, and seven lanes share one game directory.
     printf("[RtPort] Wave 28 lane PARTSYS: %d particle/sunlight exports registered\n", partsys);
+    // Wave 29 lane SLOTS' identity line, same reason as every other line here.
+    printf("[RtPort] Wave 29 lane SLOTS: %d MeshInstance vtable-slot exports registered\n", slots29);
+    // kickoff warning 10: a *Summary() nothing calls prints a zero that means
+    // "never printed", not "never called". It is WIRED here, at init, so a run
+    // that registers this lane provably emits the line even if neither body ever
+    // runs -- which is exactly the distinction warning 10 is about.
+    RtGraphicsWave29SlotsSummary();
 }
