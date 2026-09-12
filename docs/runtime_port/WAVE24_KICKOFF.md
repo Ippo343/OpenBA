@@ -139,6 +139,32 @@ non-determinism is SECONDARY; do not spend the lane on it.
 
 ### TINFO — settle handover item 1 before any further `?_typeInfo@` promotion
 
+> **CORRECTED 2026-09-11 BY LANE TINFO -- THIS SECTION'S PREMISE WAS FALSE, AND THE KICKOFF
+> WRITER ASSERTED IT AS "VERIFIED".** `kTypeInfoStorage[104]` **is** seeded: `MintTypeInfos()`
+> (`standalone/rt_data_mint.cpp:317`) stamps all six fields unconditionally inside
+> `RtDataMintInit()`, **before** `RtMintRegisterPromotedRows()`. Measured: 624 field
+> comparisons, 0 mismatch, all 104 rows agreeing with the live DLL. And the rows are **not
+> inert** -- 27 of 27 promoted rows have a name-door consumer, two of them default-on.
+>
+> **How the kickoff got it wrong, because the mechanism will recur:** the writer grepped the
+> literal `kTypeInfoStorage` and concluded nothing seeds it. `MintTypeInfos()` reaches the
+> array through `t.storage`, a pointer read out of the table entry -- **the same fact spelled
+> through a variable.** Both cited facts were individually true (the declaration IS bare;
+> `RtMintPromotionStorage` does NOT seed) and the conclusion drawn from them was still false,
+> because something else had already done the work. Sixth recorded instance of a literal grep
+> blind to a variable, and the first to reach a kickoff as "verified".
+>
+> **Consequence:** the ~10 further `?_typeInfo@` gap rows are NOT gated by a zero-seeding
+> defect. They need the ordinary warrant (READY + a consumer), nothing more.
+>
+> **Also corrected:** `factory_dispatch_probe.cpp` is sound and green, but all three of its
+> sites reach `info` by walking the Factory AVL tree and NONE resolves a `?_typeInfo@` symbol
+> by name -- so its `minted=0` is STRUCTURALLY unable to see a promotion. It was being read as
+> the answer to a question it cannot reach. Do not cite it for this.
+>
+> The original (false) framing follows, kept because the lane's report argues against it.
+
+
 `standalone/rt_data_mint_tables.inc:1607` is a bare `static RtObject::BaseTypeInfo
 kTypeInfoStorage[104];` — zero-initialised, and nothing seeds it. **Verified at kickoff, not
 quoted.** Rows are already promoted on that path and UI is not broken, so the standing reading
