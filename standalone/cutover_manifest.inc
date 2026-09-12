@@ -71,12 +71,12 @@ CUTOVER_ROW("?_disableHandler@Debug@System@@0_NA", CUTOVER_REQUIRED, true, 0x180
 CUTOVER_ROW("?_errorString@Error@System@@0PADA", CUTOVER_REQUIRED, true, 0x1801fc720ull, "System", 1)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=2  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_hideDisplay@Error@System@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc709ull, "System", 2)
-// System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=10  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_secondsPerTick@Timer@System@@0NA", CUTOVER_REQUIRED, true, 0x1801fe728ull, "System", 10)
+// System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=11  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_secondsPerTick@Timer@System@@0NA", CUTOVER_REQUIRED, true, 0x1801fe728ull, "System", 11)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=4  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_singleton@Configuration@System@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc6f8ull, "System", 4)
-// System  HARMFUL / DLL-PRESENT  doors=8  -- tag states the verdict inverts at cutover
-CUTOVER_ROW("?_singleton@MemoryAllocator@System@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc718ull, "System", 8)
+// System  HARMFUL / DLL-PRESENT  doors=9  -- tag states the verdict inverts at cutover
+CUTOVER_ROW("?_singleton@MemoryAllocator@System@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fc718ull, "System", 9)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=1  -- tag states the verdict inverts at cutover
 CUTOVER_ROW("?_stopApplication@Error@System@@0_NA", CUTOVER_REQUIRED, true, 0x1801fc70aull, "System", 1)
 // System  HARMFUL-DLL-PRESENT-REQUIRED-AT-CUTOVER / DLL-PRESENT  doors=1  -- tag states the verdict inverts at cutover
