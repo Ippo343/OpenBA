@@ -1951,6 +1951,124 @@ def load_unpromotable(root):
     return out
 
 
+# ===========================================================================
+# THE DIFF-HARNESS SITE CENSUS (Wave 25 lane SWEEP)
+# ===========================================================================
+# Until now the only way to count the harness was a grep, and every wave that
+# tried got a different answer:
+#
+#   Wave 24 kickoff quoted 354   -- an UNSCOPED, comment-counting grep
+#   Wave 24 lane DIFF measured 305 RT_DIFF_SHADOW occurrences IN CODE
+#                        and    630 sites in the armed RUN
+#
+# 354 = 305 code sites + 49 COMMENT LINES. The inflation is not random: the
+# comments most likely to name a macro are the ones explaining that a site is a
+# self-check, so the sites least able to catch anything were counted twice.
+#
+# SUBJECT: every *.cpp/*.h under SCAN_DIRS, comment- and string-stripped with
+# this file's own strip_comments(), which is the same stripper the port scan
+# uses. This counts SOURCE SITES. It is NOT the run-site count (630): a site in
+# a header expands once per includer, macros build names at runtime, and
+# hand-rolled `static RtDiffSite s = {...}` sites never mention a macro. The
+# two numbers are different questions and are printed as such.
+SITE_MACROS = ["RT_DIFF_BEGIN", "RT_DIFF_SHADOW", "RT_DIFF_SCALAR",
+               "RT_DIFF_FLOAT", "RT_DIFF_BYTES", "RT_DIFF_WORK",
+               "RT_DIFF_REPLAY_PRE", "RT_DIFF_REPLAY_POST"]
+
+
+def blank_string_contents(text):
+    """Blank the INSIDE of string/char literals, preserving length.
+
+    strip_comments() tracks literals so a "//" inside one is not a comment, but
+    it leaves their CONTENTS intact -- correct for its own job (it must not
+    destroy the mangled names the port scan reads out of literals) and wrong for
+    counting sites: a macro name quoted inside a string would be counted as
+    code. Measured on the fixture below: without this pass the control scores
+    2/4 and the failure looks like a miscount rather than a missing pass.
+    """
+    BS = chr(92)
+    out = list(text)
+    i, n = 0, len(text)
+    st = 0            # 0 code, 1 in "", 2 in ''
+    while i < n:
+        c = text[i]
+        if st == 0:
+            if c == '"':
+                st = 1
+            elif c == "'":
+                st = 2
+        else:
+            q = '"' if st == 1 else "'"
+            if c == BS:
+                out[i] = ' '
+                if i + 1 < n:
+                    out[i + 1] = ' '
+                i += 2
+                continue
+            if c == q:
+                st = 0
+            else:
+                out[i] = ' '
+        i += 1
+    return ''.join(out)
+
+
+def diff_site_census():
+    """Returns {macro: (code_occurrences, comment_or_string_occurrences)}."""
+    counts = {m: [0, 0] for m in SITE_MACROS}
+    counts["RtDiffSite{handrolled}"] = [0, 0]
+    files = 0
+    for path in iter_sources():
+        raw = open(path, encoding="utf-8", errors="replace").read()
+        code = blank_string_contents(strip_comments(raw))
+        files += 1
+        for m in SITE_MACROS:
+            c = code.count(m)
+            counts[m][0] += c
+            counts[m][1] += raw.count(m) - c
+        # The hand-rolled sites: `static RtDiffSite s = { "name", ... }`. A
+        # macro-only count reports ~101 live sites as absent.
+        c = len(re.findall(r'RtDiffSite\s+\w+\s*=\s*\{', code))
+        counts["RtDiffSite{handrolled}"][0] += c
+        counts["RtDiffSite{handrolled}"][1] += (
+            len(re.findall(r'RtDiffSite\s+\w+\s*=\s*\{', raw)) - c)
+    return counts, files
+
+
+def selftest_site_census():
+    """Control for diff_site_census, BOTH directions, on a handed shape.
+
+    An absence-shaped count ("how many are NOT in comments") has no natural
+    positive case: 0 comment hits is indistinguishable from a stripper that
+    blanks the whole file. So the stripper is handed a buffer that contains
+    BOTH forms of every macro and must split them exactly.
+    """
+    BS = chr(92)
+    fixture = (
+        "// RT_DIFF_BEGIN in a line comment\n"
+        "/* RT_DIFF_BEGIN in a block comment */\n"
+        'const char* s = "RT_DIFF_BEGIN in a string";' + "\n"
+        "void f() { RT_DIFF_BEGIN(\"real\"); RT_DIFF_SHADOW(a, b, c); }\n"
+        "static RtDiffSite g_s = { \"handrolled\", 0, 0, false, false };\n"
+    )
+    code = blank_string_contents(strip_comments(fixture))
+    checks = [
+        ("RT_DIFF_BEGIN code", code.count("RT_DIFF_BEGIN"), 1),
+        ("RT_DIFF_BEGIN prose", fixture.count("RT_DIFF_BEGIN") - code.count("RT_DIFF_BEGIN"), 3),
+        ("RT_DIFF_SHADOW code", code.count("RT_DIFF_SHADOW"), 1),
+        ("handrolled code", len(re.findall(r'RtDiffSite' + BS + r's+' + BS + r'w+' + BS + r's*=' + BS + r's*' + BS + r'{', code)), 1),
+    ]
+    ok = True
+    for (what, got, want) in checks:
+        good = (got == want)
+        ok = ok and good
+        print("   %-24s got %d want %d  %s" % (what, got, want, "ok" if good else "*** WRONG ***"))
+    print("   fixture: %d bytes, %d of them blanked by the stripper (effectiveness)"
+          % (len(fixture), sum(1 for i in range(len(fixture)) if fixture[i] != code[i])))
+    print("site-census selftest:", "ALIVE" if ok else "*** BROKEN ***")
+    return 0 if ok else 1
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1977,6 +2095,15 @@ def main():
                          "'unresolved' list is absence-shaped: in a real run "
                          "it is empty, and an empty list is indistinguishable "
                          "from a dead export-directory lookup.")
+    ap.add_argument("--diff-sites", action="store_true",
+                    help="count the diff-harness sites in SOURCE, with comments "
+                         "and string literals stripped, and exit. The number "
+                         "waves have been quoting came from an unscoped grep "
+                         "that counted prose as code (354 vs 305).")
+    ap.add_argument("--selftest-diff-sites", action="store_true",
+                    help="control for --diff-sites: hand the stripper a buffer "
+                         "holding both forms of every macro and require the "
+                         "split to be exact.")
     args = ap.parse_args()
 
     if args.selftest_unpromotable_key:
@@ -1985,6 +2112,34 @@ def main():
         return selftest_classifier()
     if args.selftest_ordinal_fold:
         return selftest_ordinal_fold()
+
+    if args.selftest_diff_sites:
+        return selftest_site_census()
+
+    if args.diff_sites:
+        counts, files = diff_site_census()
+        print("DIFF-HARNESS SITES IN SOURCE")
+        print("subject: %d *.cpp/*.h files under %s, comment- and string-stripped"
+              % (files, "/".join(SCAN_DIRS)))
+        print()
+        print("  %-26s %8s %8s" % ("macro", "code", "prose"))
+        code_total = prose_total = 0
+        for m, (c, p_) in counts.items():
+            print("  %-26s %8d %8d" % (m, c, p_))
+            code_total += c
+            prose_total += p_
+        print("  %-26s %8d %8d" % ("TOTAL", code_total, prose_total))
+        print()
+        print("`prose` is occurrences inside comments or string literals. They are")
+        print("NOT sites, and a grep that counts them inflates the harness: Wave 24's")
+        print("kickoff quoted 354 RT_DIFF_SHADOW where 305 are code and 49 are prose.")
+        print()
+        print("THIS IS NOT THE RUN-SITE COUNT. An armed BANISHED_RT_DIFF=1 run")
+        print("registered 630 sites; that number includes hand-rolled RtDiffSite")
+        print("statics and header sites expanded per includer, and excludes every")
+        print("source site no execution reached. Join the two with")
+        print("tools/rt_diff_run_join.py; never substitute one for the other.")
+        return 0
 
     global ALLOW_DEGRADED
     ALLOW_DEGRADED = args.allow_degraded

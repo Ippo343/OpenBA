@@ -1,0 +1,52 @@
+WAVE 25 lane SWEEP — the vtable promotion guard's NEGATIVE CONTROL, firing.
+
+PROVENANCE, stated because it is not a log file: this is the run's STDOUT as
+captured by the shell that launched it. The game directory's standalone_debug.log
+for this run was overwritten by the two BANISHED_RT_DIFF_CONTROL runs that
+followed it, and I had already released the game-dir lock when I noticed. The
+command below re-derives the whole thing in about twenty seconds; nothing here
+should be believed on the strength of this file when it can be re-run.
+
+    cd "C:/GOG Games/Banished"
+    BANISHED_RT_MINT_TRAP_CONTROL='*' BANISHED_AUTOQUIT=1 ./reimpl-x64.exe
+    # exit 0
+
+    grep -a "REFUSING to promote" standalone_error.log      # 11 lines
+    grep -a "vtable promotion guard" standalone_debug.log   # the counter line
+
+WHAT IT PROVES: RtMintVtableTrapCount() was made to report a synthetic trap
+count of 99 for every minted vtable symbol, and every one of the eleven
+promoted `??_7` rows REFUSED ITSELF rather than publishing a table of named
+abort traps into a live object's vptr. Before this run the refusal path had
+never executed (lane VTGFX said so when it added it). The boot still exits 0,
+because a refusal leaves the row on the DLL, which is the safe fallback.
+
+----------------------------------------------------------------------------
+[RtMint] TRAP CONTROL: reporting a synthetic trap count of 99 for
+         <symbol> -- its promotion MUST refuse.        (x12, one per lookup)
+
+[RtMint] REFUSING to promote ??_7SpriteSheet@UI@@6B@: RtMintVtableTrapCount()=99 (expected 0). ...
+[RtMint] REFUSING to promote ??_7Element@UI@@6B@: ...
+[RtMint] REFUSING to promote ??_7DialogInstance@UI@@6B@: ...
+[RtMint] REFUSING to promote ??_7ToolTipDialog@UI@@6B@: ...
+[RtMint] REFUSING to promote ??_7ImageBuffer@Video@@6B@: ...
+[RtMint] REFUSING to promote ??_7BinaryReader@IO@@6B@: ...
+[RtMint] REFUSING to promote ??_7Visitor@IO@@6B@: ...
+[RtMint] REFUSING to promote ??_7MemoryStream@IO@@6B@: ...
+[RtMint] REFUSING to promote ??_7VisitorStream@IO@@6B@: ...
+[RtMint] REFUSING to promote ??_7BinaryWriter@IO@@6B@: ...
+[RtMint] REFUSING to promote ??_7BinaryFileStream@IO@@6B@: ...
+[RtMint] REFUSING to promote ??_7MaterialInstance@Graphics@@6B@: ... (lane VTGFX's
+         own inline guard, which is a twelfth evaluation and not one of the
+         eleven the helper counts)
+
+[RtMint] vtable promotion guard: 11 row(s) evaluated, 11 refused,
+         12 synthetic trap injection(s) this run
+----------------------------------------------------------------------------
+
+The UNARMED half is every other run in this directory: run1_error.log and both
+BANISHED_RT_DIFF_CONTROL logs contain ZERO "REFUSING" lines and print
+`11 row(s) evaluated, 0 refused, 0 synthetic trap injection(s) this run
+(refusal path UNTESTED on this run -- ...)`. A guard that refuses everything
+would be as useless as one that refuses nothing; both halves are needed and
+both were observed.

@@ -179,6 +179,14 @@ void CallStreamCloseVirtual(MemoryStream* ms) {
 
 }  // namespace
 
+// Forward declarations for the three oracle helpers defined further down beside
+// ??0MemoryStream. Declared here because the FIRST byte-comparing ctor in this
+// file is the one immediately below, and all three of its vptr tags need them.
+static const void* VtblMemoryStream();
+void TagVptrIdentity(unsigned char* copy, size_t off, const void* expected,
+                     unsigned side);
+bool RtDiffControl(const char* which);
+
 // ============================================================================
 // ??0CompressedMemoryStream@IO@@QEAA@XZ   retail 0x1800a9520, profile 0x18005c240
 // ============================================================================
@@ -270,6 +278,14 @@ RtIo_CompressedMemoryStream_Ctor(CompressedMemoryStream* self) {
                 std::memcpy(p + off, &tag, sizeof(tag));
             }
         }
+        // The TWO vptrs: +0x00 (CompressedMemoryStream) and +0x68 (the embedded
+        // MemoryStream). The second one is ALREADY a promoted table, so this
+        // site was carrying the same latent 100%-red defect as
+        // IO::MemoryStream::MemoryStream. See TagVptrIdentity.
+        TagVptrIdentity(a, 0x00, VtblCompressedMemoryStream(), 0);
+        TagVptrIdentity(b, 0x00, ResolveExportRaw("??_7CompressedMemoryStream@IO@@6B@"), 1);
+        TagVptrIdentity(a, 0x68, VtblMemoryStream(), 0);
+        TagVptrIdentity(b, 0x68, ResolveExportRaw("??_7MemoryStream@IO@@6B@"), 1);
         for (const auto& g : kGaps) {
             std::memset(a + g.off, 0, g.len);
             std::memset(b + g.off, 0, g.len);
@@ -932,6 +948,69 @@ void TagEncodingPointer(unsigned char* copy, size_t off) {
     std::memcpy(copy + off, &tag, sizeof(tag));
 }
 
+// ===========================================================================
+// THE VPTR. Wave 25 lane SWEEP, from Wave 24 lane DIFF §3.1.
+//
+// `IO::MemoryStream::MemoryStream` reported divergences=18 out of calls=18 --
+// a 100% failure rate that reads like a catastrophic port defect and was
+// checking NOTHING. The oracle carefully neutralised the Encoding pointer at
+// +0x10 and three never-written gaps, and then compared the vptr at +0x00,
+// which MUST differ: `??_7MemoryStream@IO@@6B@` is PROMOTED, so ours resolves
+// to our own minted table and theirs is the DLL's. RtDiffReportBytes memcmps
+// the whole buffer and emits ONE verdict, so byte 0 decided every call and no
+// difference anywhere else in the object could change the answer.
+//
+// The fix is NOT to exclude the byte. An excluded byte is an unchecked byte,
+// and which table a ctor stamps is exactly the kind of thing a bad port gets
+// wrong. Instead each side's vptr is replaced by a VERDICT ON ITS OWN
+// IDENTITY: 1 when this side holds the table this side is supposed to hold, 0
+// when it does not. The byte stays compared and carries real information --
+// the two sides disagree exactly when one of them stamped the wrong vtable --
+// and it can no longer fail for the structural reason.
+//
+// `expected` for our side is whatever our ctor stamped (ResolveExport, which
+// follows the promotion); for the DLL's side it is ResolveExportRaw, i.e.
+// GetProcAddress, which is the shipped table whether or not we promoted it.
+// **ResolveExport would compare the port with itself** -- the Wave 21 trap.
+//
+// A `nullptr` expectation (the symbol did not resolve) writes a DIFFERENT
+// sentinel per side, so a resolution failure shows up as a divergence rather
+// than as two matching zeros. A tag that passes vacuously is the whole defect
+// being fixed here.
+void TagVptrIdentity(unsigned char* copy, size_t off, const void* expected,
+                     unsigned side) {
+    const void* got = nullptr;
+    std::memcpy(&got, copy + off, sizeof(got));
+    uint64_t verdict;
+    if (expected == nullptr) verdict = 0xE0ull | side;   // unresolved: loud
+    else                     verdict = (got == expected) ? 1ull : 0ull;
+    std::memcpy(copy + off, &verdict, sizeof(verdict));
+}
+
+// ---- THE NEGATIVE CONTROL FOR THE ABOVE ------------------------------------
+//
+// A fix to an oracle that could not fail needs proof that the oracle can now
+// fail, and the control must corrupt a subject the probe COMPARES (both
+// directions of that rule have produced false verdicts in this project).
+//
+//   BANISHED_RT_DIFF_CONTROL=memstream-vptr   corrupt OUR copy's vptr
+//        -> the identity verdict goes 1 -> 0 while theirs stays 1
+//        -> the site MUST report a divergence at +0x00 on every call.
+//           If it stays green the vptr byte is not being compared at all.
+//   BANISHED_RT_DIFF_CONTROL=memstream-field  corrupt OUR copy at +0x08
+//        (_direction, a field both sides write to 0)
+//        -> the site MUST report a divergence at +0x08.
+//           This is the effectiveness half: a green vptr control alone would
+//           leave the other 0x30 bytes untested, which is exactly how the
+//           original site scored "18/18" while testing one byte.
+//
+// It corrupts the COMPARISON COPY, never the live object, so an armed control
+// run is still a correct game.
+bool RtDiffControl(const char* which) {
+    const char* e = std::getenv("BANISHED_RT_DIFF_CONTROL");
+    return e && *e && std::strstr(e, which) != nullptr;
+}
+
 extern "C" MemoryStream* RtIo_MemoryStream_Ctor(MemoryStream* self) {
     RT_DIFF_BEGIN("IO::MemoryStream::MemoryStream");
 
@@ -961,6 +1040,13 @@ extern "C" MemoryStream* RtIo_MemoryStream_Ctor(MemoryStream* self) {
         std::memcpy(b, theirs, sizeof(b));
         TagEncodingPointer(a, 0x10);
         TagEncodingPointer(b, 0x10);
+        // +0x00: see TagVptrIdentity. This site was 18/18 red without it.
+        if (RtDiffControl("memstream-vptr"))
+            *reinterpret_cast<uint64_t*>(a) ^= 0x1000;      // control, copy only
+        if (RtDiffControl("memstream-field"))
+            *reinterpret_cast<uint32_t*>(a + 0x08) ^= 0x5a;  // control, copy only
+        TagVptrIdentity(a, 0x00, VtblMemoryStream(), 0);
+        TagVptrIdentity(b, 0x00, ResolveExportRaw("??_7MemoryStream@IO@@6B@"), 1);
         for (const auto& g : kGaps) {
             std::memset(a + g.off, 0, g.len);
             std::memset(b + g.off, 0, g.len);
@@ -1006,6 +1092,12 @@ extern "C" CompressedStream* RtIo_CompressedStream_Ctor(CompressedStream* self) 
         std::memcpy(b, theirs, sizeof(b));
         TagEncodingPointer(a, 0x10);
         TagEncodingPointer(b, 0x10);
+        // +0x00, for the same reason as MemoryStream above. This site is green
+        // TODAY only because `??_7CompressedStream@IO@@6B@` is not promoted;
+        // the day it is, this oracle would have gone permanently red exactly
+        // like MemoryStream's and reported a port defect that is not there.
+        TagVptrIdentity(a, 0x00, VtblCompressedStream(), 0);
+        TagVptrIdentity(b, 0x00, ResolveExportRaw("??_7CompressedStream@IO@@6B@"), 1);
         for (const auto& g : kGaps) {
             std::memset(a + g.off, 0, g.len);
             std::memset(b + g.off, 0, g.len);

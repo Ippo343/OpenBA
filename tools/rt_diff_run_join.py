@@ -126,9 +126,21 @@ for r in json.load(open(CLS)):
 # --- the run -----------------------------------------------------------------
 run = []
 for L in open(RUN, encoding='utf-8', errors='replace'):
-    m = re.match(r'\[RtDiff\]\s+(.*?)\s+calls=(\d+)\s+worked=(\S+)\s+divergences=(\d+)', L)
+    # WAVE 25 lane SWEEP widened this. RtDiffSummary now prints two more
+    # columns -- `entered=` (the entry counter) and `class=` (the per-site
+    # population, derived at runtime) -- BETWEEN `calls=` and `divergences=`.
+    # The old pattern required `worked=` to be followed immediately by
+    # `divergences=`, so on a new log it matched NOTHING and this tool would
+    # have printed a confident "0 sites" instead of failing. Both fields are
+    # optional so the tool still reads Wave 24's logs.
+    m = re.match(r'\[RtDiff\]\s+(.*?)\s+calls=(\d+)\s+'
+                 r'(?:entered=(\S+)\s+)?worked=(\S+)\s+'
+                 r'(?:class=(\S+)\s+)?divergences=(\d+)', L)
     if m:
-        run.append((m.group(1).strip(), int(m.group(2)), m.group(3), int(m.group(4))))
+        # groups: 1 name, 2 calls, 3 entered (may be None on a Wave 24 log),
+        #         4 worked, 5 class (may be None), 6 divergences
+        run.append((m.group(1).strip(), int(m.group(2)), m.group(4), int(m.group(6)),
+                    m.group(3), m.group(5)))
 
 
 def population(name):
@@ -147,7 +159,14 @@ def population(name):
 
 
 agg = collections.defaultdict(lambda: [0, 0, 0, 0, 0])  # sites, calls, div, calls0, calls0worked
-for (name, calls, worked, div) in run:
+# WAVE 25 lane SWEEP: the run now carries its OWN class token per site, derived
+# by RtDiffSummary from what the site actually did (entries vs comparisons vs
+# which macro fired). That is a SECOND, INDEPENDENT classification of the same
+# 630 rows, so the two can be crossed -- and a disagreement is a finding about
+# one of the two instruments, not a rounding error.
+crosstab = collections.defaultdict(int)
+entered_known = 0
+for (name, calls, worked, div, entered, runcls) in run:
     p = population(name)
     a = agg[p]
     a[0] += 1; a[1] += calls; a[2] += div
@@ -155,6 +174,9 @@ for (name, calls, worked, div) in run:
         a[3] += 1
         if worked not in ('?', '0'):
             a[4] += 1
+    if entered not in (None, '?'):
+        entered_known += 1
+    crosstab[(p, runcls or '(no class column)')] += 1
 
 print("THE ARMED RUN, SPLIT BY WHAT EACH SITE CAN ACTUALLY PROVE")
 print("(subject: the %d sites RtDiffSummary printed; joined BY NAME to source)" % len(run))
@@ -167,6 +189,20 @@ for p in order:
         print("%-16s %6d %14d %6d %8d %10d" % (p, a[0], a[1], a[2], a[3], a[4]))
 tot = [sum(agg[p][i] for p in agg) for i in range(5)]
 print("%-16s %6d %14d %6d %8d %10d" % ('TOTAL', *tot))
+
+print()
+print("SOURCE POPULATION (rows) x RUNTIME CLASS (columns) -- two independent")
+print("classifications of the same sites. The runtime column exists only on logs")
+print("from a Wave 25 or later build; on an older log it reads '(no class column)'")
+print("for every row, which is a MISSING INSTRUMENT and not agreement.")
+print("%d of %d rows carried an entry count." % (entered_known, len(run)))
+print()
+cols = sorted({c for (_, c) in crosstab})
+print("%-16s %s" % ('', ' '.join("%14s" % c[:14] for c in cols)))
+for pop in ['ORACLE', 'SELF-CHECK', 'ATTENDANCE', 'NO-COMPARISON', 'NO-SOURCE-MATCH']:
+    if not any((pop, c) in crosstab for c in cols):
+        continue
+    print("%-16s %s" % (pop, ' '.join("%14d" % crosstab.get((pop, c), 0) for c in cols)))
 
 print()
 print("NO-SOURCE-MATCH sites (site name in the run that no RT_DIFF_BEGIN literal")

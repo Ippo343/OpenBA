@@ -100,9 +100,25 @@ static_assert(offsetof(AnimationEvent, _f18) == 0x18, "AnimationEvent::_f18 @ +0
 // animation.cpp calls FUN_18005bf60 / FUN_18005c550 at their retail addresses
 // rather than reproducing them.
 //
+// *** DO-NOT-DELETE NOTE — checked by tools/check_standing_notes.py. ***
+// A cleanup pass that removes this paragraph, or the `UNVERIFIED` marker on
+// _f10 below, fails that checker. It is here because the note has already been
+// re-opened once on a guess.
+//
 // +0x10 is a fourth dword no body this project has read touches: not the ctor,
-// not the dtor, and not Update (which reads only +0x00 and +0x08). Serialize
-// (0x1800fc190) is still unported. Left UNVERIFIED.
+// not the dtor, and not Update (which reads only +0x00 and +0x08). Left
+// UNVERIFIED.
+//
+// WAVE 23 lane GFXBODY's residual R4 asked whoever ported
+// `?Serialize@AnimationManager@Graphics@@` (0x1800fc190) to settle this field,
+// on the guess that Serialize probably touches it. WAVE 24 lane GFXMAT ported
+// that body and ANSWERED R4: **no**. The only AnimationManager fields it reads
+// are +0x00 (_data) and +0x08 (_size) -- see the transcription above
+// `RtGraphics_AnimationManager_Serialize` in
+// runtime/src/graphics/wave24_lane_gfxmat.cpp. So the premise that used to
+// stand here -- "Serialize is still unported" -- is no longer true, and the
+// VERDICT is unchanged: +0x10 stays UNVERIFIED, and the body that was named as
+// its answer is not its answer. Do not re-open it on the same guess.
 // ============================================================================
 struct AnimationManager {
     void*    _groupData;       // +0x00  Collection::Array<AnimationGroup>::_data (stride 0x30)
