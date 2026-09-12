@@ -336,6 +336,14 @@ void RuntimePortInit() {
     RtInputPortInit();        // Wave 8: Input (lane D)
     RtApplicationPortInit();  // Wave 8: Application (lane E)
     RtUtilityPortInit();      // Wave 8: Utility (lane E)
+
+    // Wave 28 lane FACTREST: the 35 non-UI `?Create{New,InPlace}Object@` pairs.
+    // HERE, and the only constraint that matters is that it is BEFORE
+    // RtDataMintInit() below — that is the consumer of these registrations, and
+    // a registration made after it stays an abort trap for the whole run.
+    // Nothing in our tree calls any of these 70 names today, so its position
+    // relative to the other port inits is free.
+    RtFactoriesPortInit();    // Wave 28: non-UI object factories (lane FACTREST)
     // LAST, deliberately. Wave 9 lane Q registers 27 ADDRESSES for the two
     // header-only Collection::Array bodies (~Array and SetSize), and those
     // addresses are already called by name-less ResolveAddr from graphics,

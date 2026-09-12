@@ -1,0 +1,441 @@
+// WAVE 28 lane FACTREST — OFFLINE BYTE ORACLE for the 35 non-UI factory pairs.
+//
+// ADAPTED FROM lane FACTUI1's oracle (docs/runtime_port/wave28_factui1_oracle.cpp.txt).
+// The method is theirs; what changed is that this one includes THIS LANE'S OWN
+// COMMITTED TABLES verbatim (runtime/src/<ns>/rt_factories_<ns>.inc) rather than
+// a hand-copy of them, so the thing under test is the thing that shipped.
+//
+// WHAT IT COMPARES, AND WHAT THAT IS WORTH PER SHAPE — read this before the score
+// -----------------------------------------------------------------------------
+// Shape (b), the 13 classes with a fully inlined constructor: OUR transcribed
+//   step list runs on buffer A, the DLL's OWN ?CreateInPlaceObject@ runs on
+//   buffer B, and the bytes either side wrote are compared. THIS IS A REAL
+//   ORACLE — our store list is being checked against retail's stores.
+//
+// Shape (c), the 14 delegating classes: our body calls the DLL's ??0C@NS@@ and
+//   so does theirs, so the ctor's own stores CANNOT disagree. What is tested is
+//   only the WRAPPER — that we call the same constructor, add no store and drop
+//   none. Scored SEPARATELY below and labelled WRAPPER-ONLY. Counting these in
+//   with the real comparisons would be the shadow-marker defect
+//   (reference_shadow_marker_is_not_an_oracle.md): a check whose two sides share
+//   the body they are supposed to be comparing.
+//
+// Shape (a), the 10 abstract classes: both sides must return nullptr. Trivial,
+//   but it is the whole of retail's behaviour for those 20 slots, and the
+//   negative control below can still be armed on it.
+//
+// EXCLUDED FROM THE BYTE COMPARISON, with the reason:
+//   * +0x08..+0x0f of any object whose ctor chain reaches ??0Internal@Object@@
+//     (AchievementInstance, GoalInstance). That ctor calls ?Rand@Random@System@@
+//     and InternalFactory hands the SECOND caller a different handle id BY
+//     DESIGN. Comparing it would report a divergence that is correct behaviour.
+//   * Nothing else. The vptr IS compared.
+//
+// EFFECTIVENESS CONTROL: --negative corrupts one store value per class before
+// the comparison; every checked class must then FAIL. A screen that cannot be
+// made to fail is not a screen. Per FACTUI1's finding, a class with no
+// immediate store falls back to corrupting a vtable value, so no class is
+// silently left unarmed.
+
+#include <windows.h>
+#include <cstdio>
+#include <cstdint>
+#include <cstring>
+#include <cstdlib>
+
+// ---- THIS LANE'S COMMITTED CONTRACT, copied verbatim from ------------------
+// runtime/src/object/rt_factories.h. A field-order mismatch here would be a
+// silent misparse of the .inc, not a compile error, so it is copied whole.
+enum class RtFactOp : uint8_t { End = 0, Vptr, Imm, Self, Call };
+
+struct RtCtorStep {
+    RtFactOp    kind;
+    uint8_t     size;
+    uint16_t    off;
+    uint64_t    imm;
+    const char* name;
+    uint64_t    va;
+};
+
+struct RtFactoryClass {
+    const char*       typeName;
+    uint32_t          allocSize;
+    uint32_t          allocAlign;
+    const RtCtorStep* newSteps;
+    const RtCtorStep* inPlaceSteps;
+    uint64_t          newVa;
+    uint64_t          inPlaceVa;
+    uint64_t*         counters;
+};
+
+struct RtFactoryReg {
+    const char*           newName;
+    uint64_t              newVa;
+    void*                 newFn;
+    const char*           inPlaceName;
+    uint64_t              inPlaceVa;
+    void*                 inPlaceFn;
+    const RtFactoryClass* cls;
+};
+
+// The .inc files' extern "C" wrappers call these two; the oracle drives the
+// step lists directly, so these only need to link.
+static void* RtFactoryNew(const RtFactoryClass&) { return nullptr; }
+static void* RtFactoryInPlace(const RtFactoryClass&, void* p) { return p; }
+
+// Each .inc ends with its own `static const RtFactoryReg kRegs[]`, so each gets
+// its own namespace. Nothing else in them collides.
+#include "inc/rt_factories_object.inc.h"
+#include "inc/rt_factories_graphics.inc.h"
+#include "inc/rt_factories_video.inc.h"
+#include "inc/rt_factories_achievement.inc.h"
+#include "inc/rt_factories_collision2d.inc.h"
+#include "inc/rt_factories_audio.inc.h"
+#include "inc/rt_factories_io.inc.h"
+#include "inc/rt_factories_pathfinding.inc.h"
+#include "inc/rt_factories_picking.inc.h"
+
+struct Group { const char* name; const RtFactoryReg* regs; int n; };
+static const Group kGroups[] = {
+    { "Object",       f_object::kRegs,       (int)(sizeof(f_object::kRegs) / sizeof(RtFactoryReg)) },
+    { "Graphics",     f_graphics::kRegs,     (int)(sizeof(f_graphics::kRegs) / sizeof(RtFactoryReg)) },
+    { "Video",        f_video::kRegs,        (int)(sizeof(f_video::kRegs) / sizeof(RtFactoryReg)) },
+    { "Achievement",  f_achievement::kRegs,  (int)(sizeof(f_achievement::kRegs) / sizeof(RtFactoryReg)) },
+    { "Collision2D",  f_collision2d::kRegs,  (int)(sizeof(f_collision2d::kRegs) / sizeof(RtFactoryReg)) },
+    { "Audio",        f_audio::kRegs,        (int)(sizeof(f_audio::kRegs) / sizeof(RtFactoryReg)) },
+    { "IO",           f_io::kRegs,           (int)(sizeof(f_io::kRegs) / sizeof(RtFactoryReg)) },
+    { "Pathfinding",  f_pathfinding::kRegs,  (int)(sizeof(f_pathfinding::kRegs) / sizeof(RtFactoryReg)) },
+    { "Picking",      f_picking::kRegs,      (int)(sizeof(f_picking::kRegs) / sizeof(RtFactoryReg)) },
+};
+
+static HMODULE g_dll;
+static bool g_derefBug = false;   // --derefbug: arm the vptr screen
+static void* Sym(const char* n) { return (void*)GetProcAddress(g_dll, n); }
+typedef void* (*CtorFn)(void*);
+
+static int StepCount(const RtCtorStep* s) {
+    int n = 0;
+    if (!s) return 0;
+    while (s[n].kind != RtFactOp::End) ++n;
+    return n;
+}
+
+static bool HasCall(const RtCtorStep* s) {
+    for (int i = 0; s && s[i].kind != RtFactOp::End; ++i)
+        if (s[i].kind == RtFactOp::Call) return true;
+    return false;
+}
+
+static bool ReachesInternal(const RtCtorStep* s) {
+    for (int i = 0; s && s[i].kind != RtFactOp::End; ++i)
+        if (s[i].kind == RtFactOp::Call && strstr(s[i].name, "Internal@Object@@")) return true;
+    return false;
+}
+
+// OUR CreateInPlaceObject, exactly as rt_factories_core.cpp runs it.
+static bool OursInPlace(const RtCtorStep* steps, void* self, const char* cls) {
+    unsigned char* p = (unsigned char*)self;
+    for (int i = 0; steps[i].kind != RtFactOp::End; ++i) {
+        const RtCtorStep& s = steps[i];
+        if (s.kind == RtFactOp::Vptr) {
+            // The ??_7 export's ADDRESS is the vtable. Do NOT dereference it:
+            // that yields vtable[0], the first virtual function, and stamping
+            // that produced a 3-byte divergence at +0x00 on all eleven shape-(b)
+            // classes -- an instrument defect that read exactly like a
+            // catastrophic port. rt_factories_core.cpp stores ResolveExport()'s
+            // return value, which is this address, so this now matches the port.
+            // --derefbug REINTRODUCES the defect on OUR side only, so the screen
+            // is handed the shape it exists to detect. Without it the evidence
+            // that this screen catches a deref is an ANECDOTE about a run nobody
+            // can repeat (the accidental 0/11 in §9.4); with it, it is a command.
+            // A screen whose normal answer is "clean" is indistinguishable from a
+            // dead screen until something makes it fire (FACTUI1).
+            void* vt = g_derefBug ? *(void**)Sym(s.name) : Sym(s.name);
+            memcpy(p + s.off, &vt, 8);
+        } else if (s.kind == RtFactOp::Imm) {
+            uint64_t v = s.imm;
+            memcpy(p + s.off, &v, s.size);
+        } else if (s.kind == RtFactOp::Self) {
+            void* q = p + s.imm;
+            memcpy(p + s.off, &q, 8);
+        } else if (s.kind == RtFactOp::Call) {
+            CtorFn f = (CtorFn)Sym(s.name);
+            if (!f) { printf("  !! %s: ctor %s NOT FOUND\n", cls, s.name); return false; }
+            f(self);
+        }
+    }
+    return true;
+}
+
+int main(int argc, char** argv) {
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    const bool neg = (argc > 1 && strcmp(argv[1], "--negative") == 0);
+    for (int i = 1; i < argc; ++i) if (!strcmp(argv[i], "--derefbug")) g_derefBug = true;
+    const bool runRisky = getenv("RISKY") != nullptr;
+    g_dll = LoadLibraryA("C:\\GOG Games\\Banished\\Runtime-x64.dll");
+    if (!g_dll) { printf("LoadLibrary failed %lu\n", GetLastError()); return 2; }
+
+    void** allocSlot = (void**)Sym("?_singleton@MemoryAllocator@System@@0PEAV12@EA");
+    void** ifSlot    = (void**)Sym("?_singleton@InternalFactory@Object@@0PEAV12@EA");
+
+    if (allocSlot && !*allocSlot) {
+        void* store = calloc(1, 1 << 16);
+        typedef void* (*C0)(void*); typedef bool (*S2)(void*, size_t, size_t);
+        C0 c = (C0)Sym("??0MemoryAllocator@System@@QEAA@XZ");
+        S2 st = (S2)Sym("?Startup@MemoryAllocator@System@@QEAA_N_K0@Z");
+        // NOTE (FACTUI1): Startup's two arguments are in MEGABYTES -- it shifts
+        // them left by 20 -- and arg1 is a maximum that must be >= arg0, which
+        // is why passing byte counts makes it silently return false.
+        if (c && st) {
+            c(store);
+            size_t a0 = getenv("A0") ? strtoull(getenv("A0"), 0, 0) : 8;
+            size_t a1 = getenv("A1") ? strtoull(getenv("A1"), 0, 0) : 256;
+            printf("MemoryAllocator ctor+Startup(%llu,%llu) -> %d, singleton %p\n",
+                   (unsigned long long)a0, (unsigned long long)a1,
+                   (int)st(store, a0, a1), *allocSlot);
+        }
+    }
+    if (ifSlot && !*ifSlot && allocSlot && *allocSlot) {
+        void* store = calloc(1, 1 << 16);
+        typedef void* (*C0)(void*); typedef bool (*S0)(void*);
+        C0 c = (C0)Sym("??0InternalFactory@Object@@QEAA@XZ");
+        S0 st = (S0)Sym("?Startup@InternalFactory@Object@@QEAA_NXZ");
+        if (c && st) { c(store); printf("InternalFactory ctor+Startup -> %d, singleton %p\n",
+                                        (int)st(store), *ifSlot); }
+    }
+
+    int realChk = 0, realPass = 0;       // shape (b): a genuine store comparison
+    int wrapChk = 0, wrapPass = 0;       // shape (c): WRAPPER ONLY
+    int stubChk = 0, stubPass = 0;       // shape (a): both must return nullptr
+    int skipped = 0;
+
+    for (const Group& g : kGroups) {
+        for (int i = 0; i < g.n; ++i) {
+            const RtFactoryReg& r = g.regs[i];
+            const RtFactoryClass& c = *r.cls;
+            const char* only = getenv("ONLY");
+            if (only && !strstr(c.typeName, only)) continue;
+            CtorFn theirs = (CtorFn)Sym(r.inPlaceName);
+            if (!theirs) { printf("%-28s SKIP (export missing)\n", c.typeName); ++skipped; continue; }
+
+            // ---- shape (a): both sides must return null --------------------
+            if (!c.inPlaceSteps) {
+                static unsigned char z[0x400];
+                memset(z, 0xA5, sizeof(z));
+                void* t = theirs(z);
+                bool ours_null = true;           // our body returns nullptr by construction
+                if (neg) ours_null = false;      // the control: claim it returns the buffer
+                ++stubChk;
+                bool ok = (t == nullptr) && ours_null;
+                if (ok) ++stubPass;
+                printf("%-28s %s  (abstract: both return null)\n", c.typeName,
+                       ok ? "OK  " : "FAIL");
+                continue;
+            }
+
+            const bool deleg  = HasCall(c.inPlaceSteps);
+            const bool handle = ReachesInternal(c.inPlaceSteps);
+
+            // The five Video classes and EdgeMesh/FrameCopyImageBuffer reach
+            // ?PlatformConstruct@ on the video Device, which this bare
+            // LoadLibrary process has not stood up. Guarded behind RISKY=1 so a
+            // crash cannot be mistaken for a verdict, and a SKIP is never read
+            // as a pass (FACTUI1's warning 3).
+            static const char* kRisky[] = {
+                "Graphics::EdgeMesh", "Graphics::FrameCopyImageBuffer",
+                "Video::ImageBuffer", "Graphics::ReflectionImageBuffer",
+                "Video::PixelProgram", "Video::RenderState", "Video::VertexLayout",
+                "Video::VertexProgram", "Video::VideoProgram", "IO::PackageFile",
+                "Graphics::ParticleSystem", "Graphics::GraphicsMesh",
+            };
+            bool risky = false;
+            for (const char* k : kRisky) if (!strcmp(k, c.typeName)) risky = true;
+            if (risky && !runRisky) {
+                printf("%-28s SKIP (reaches an uninitialised subsystem; RISKY=1 to try) "
+                       "-- A SKIP IS NOT A PASS\n", c.typeName);
+                ++skipped; continue;
+            }
+
+            static unsigned char a[0x400], b[0x400];
+            memset(a, 0xA5, sizeof(a));
+            memset(b, 0x5A, sizeof(b));      // different poison on purpose
+
+            static RtCtorStep tmp[512];
+            // NEWSTEPS=1 runs the CreateNewObject table instead, compared
+            // against the same DLL in-place factory: the two retail bodies
+            // differ only by the allocation, so this verifies the OTHER table.
+            const RtCtorStep* steps = getenv("NEWSTEPS") && c.newSteps
+                                          ? c.newSteps : c.inPlaceSteps;
+            if (neg) {
+                int n = StepCount(steps);
+                memcpy(tmp, steps, (n + 1) * sizeof(RtCtorStep));
+                bool armed = false;
+                for (int k = n - 1; k >= 0 && !armed; --k)
+                    if (tmp[k].kind == RtFactOp::Imm) { tmp[k].imm ^= 1; armed = true; }
+                if (!armed)                       // no immediate: corrupt a vptr
+                    for (int k = n - 1; k >= 0 && !armed; --k)
+                        if (tmp[k].kind == RtFactOp::Vptr) {
+                            tmp[k].kind = RtFactOp::Imm; tmp[k].imm = 0; armed = true;
+                        }
+                if (!armed) printf("%-28s *** CONTROL COULD NOT BE ARMED\n", c.typeName);
+                steps = tmp;
+            }
+
+            if (!getenv("THEIRSONLY") && !OursInPlace(steps, a, c.typeName)) { ++skipped; continue; }
+            if (getenv("OURSONLY")) { printf("%-28s ours-side ran, no crash\n", c.typeName); continue; }
+            theirs(b);
+
+            int bad = 0, firstBad = -1;
+            for (uint32_t o = 0; o < c.allocSize; ++o) {
+                if (handle && o >= 0x08 && o < 0x10) continue;   // Internal handle id
+                bool ourW = (a[o] != 0xA5), theirW = (b[o] != 0x5A);
+                if (!ourW && !theirW) continue;
+                if (ourW != theirW || a[o] != b[o]) { ++bad; if (firstBad < 0) firstBad = (int)o; }
+            }
+            if (deleg) { ++wrapChk; if (!bad) ++wrapPass; }
+            else       { ++realChk; if (!bad) ++realPass; }
+            if (!bad)
+                printf("%-28s OK   (0x%x bytes)%s\n", c.typeName, c.allocSize,
+                       deleg ? "   [WRAPPER ONLY: both sides call the same ctor]" : "");
+            else
+                printf("%-28s FAIL %d/%u bytes, first +0x%x (ours %02x theirs %02x)%s\n",
+                       c.typeName, bad, c.allocSize, firstBad, a[firstBad], b[firstBad],
+                       deleg ? "   [wrapper]" : "");
+        }
+    }
+
+    // NAME THE ARMING IN THE OUTPUT. An armed run scores 0/11 and, without this
+    // line, is byte-for-byte indistinguishable in the log from a genuine
+    // catastrophic port regression -- which is the same defect class the arming
+    // exists to police (a screen that cannot name its own subject). The first
+    // attempt to add this line silently no-op'd and was caught only by grepping
+    // for it afterwards, which is the cheap habit that makes the difference.
+    if (g_derefBug)
+        printf("\n*** --derefbug ARMED: the vptr deref is REINTRODUCED on OUR side "
+               "only. Every shape-(b) row MUST now FAIL at +0x00. A clean run here "
+               "means the screen is DEAD, not that the port is good. ***\n");
+    // ======================================================================
+    // PASS 2 -- THE ALLOCATING CreateNewObject BODIES OF CLASSES WHOSE
+    // IN-PLACE SLOT IS THE ABSTRACT STUB.
+    //
+    // WHY THIS EXISTS: pass 1 routes on `inPlaceSteps`, so a class whose
+    // slot-1 is the shared `?CreateInPlaceObject@Internal@Object@@` null stub
+    // (AchievementInstance, GoalInstance) took the "abstract, both return null"
+    // branch and its slot-0 -- a REAL allocating body with an out-of-line ctor
+    // call -- was never compared by anything. It was reported only as an
+    // abstract pass, which is true of its OTHER slot. Found because lane FACTUI1
+    // asked whether a premise both harnesses share is sound, and the first
+    // question that asks of a premise is whether it FIRES at all.
+    //
+    // Here theirs ALLOCATES, so the comparison subject is the DLL's own heap
+    // object rather than a poisoned buffer; ours still runs on a poisoned one,
+    // and only bytes either side wrote are compared.
+    printf("\n---- pass 2: allocating slot-0 bodies skipped by pass 1 ----\n");
+    int p2chk = 0, p2pass = 0;
+    for (const Group& g : kGroups) {
+        for (int i = 0; i < g.n; ++i) {
+            const RtFactoryReg& r = g.regs[i];
+            const RtFactoryClass& c = *r.cls;
+            const char* only2 = getenv("ONLY");
+            if (only2 && !strstr(c.typeName, only2)) continue;
+            if (c.inPlaceSteps || !c.newSteps) continue;      // pass 1 covered it
+            typedef void* (*NewFn)();
+            NewFn theirsNew = (NewFn)Sym(r.newName);
+            if (!theirsNew) { printf("%-28s SKIP (slot-0 export missing)\n", c.typeName); continue; }
+
+            static unsigned char a[0x400];
+            memset(a, 0xA5, sizeof(a));
+            const RtCtorStep* st2 = c.newSteps;
+            static RtCtorStep tmp2[512];
+            if (neg) {
+                int n = StepCount(st2);
+                memcpy(tmp2, st2, (n + 1) * sizeof(RtCtorStep));
+                bool armed = false;
+                for (int k = n - 1; k >= 0 && !armed; --k)
+                    if (tmp2[k].kind == RtFactOp::Imm) { tmp2[k].imm ^= 1; armed = true; }
+                if (!armed)
+                    for (int k = n - 1; k >= 0 && !armed; --k)
+                        if (tmp2[k].kind == RtFactOp::Vptr) {
+                            tmp2[k].kind = RtFactOp::Imm; tmp2[k].imm = 0; armed = true;
+                        }
+                if (!armed) printf("%-28s *** CONTROL COULD NOT BE ARMED\n", c.typeName);
+                st2 = tmp2;
+            }
+            if (!OursInPlace(st2, a, c.typeName)) continue;
+            unsigned char* b2 = (unsigned char*)theirsNew();
+            if (!b2) { printf("%-28s SKIP (their slot-0 returned null)\n", c.typeName); continue; }
+
+            const bool handle2 = ReachesInternal(c.newSteps);
+            int bad = 0, firstBad = -1, cmped = 0;
+            for (uint32_t o = 0; o < c.allocSize; ++o) {
+                if (handle2 && o >= 0x08 && o < 0x10) continue;   // see --selfdiff
+                if (a[o] == 0xA5) continue;            // ours did not write it
+                ++cmped;
+                if (a[o] != b2[o]) { ++bad; if (firstBad < 0) firstBad = (int)o; }
+            }
+            ++p2chk;
+            if (!bad) { ++p2pass; printf("%-28s slot-0 OK   (0x%x bytes, %d compared%s)\n",
+                                         c.typeName, c.allocSize, cmped,
+                                         handle2 ? ", +0x08..0f excluded" : ""); }
+            else printf("%-28s slot-0 FAIL %d/%d compared, first +0x%x (ours %02x theirs %02x)\n",
+                        c.typeName, bad, cmped, firstBad, a[firstBad], b2[firstBad]);
+        }
+    }
+    printf("  pass 2: %d/%d\n", p2pass, p2chk);
+
+    // ======================================================================
+    // --selfdiff -- IS THE EXCLUSION WINDOW THE RIGHT ONE?
+    //
+    // Both this oracle and lane FACTUI1's exclude +0x08..+0x0f on the SAME
+    // reasoning: ??0Internal@Object@@ takes a handle id from Random::Rand and
+    // the InternalFactory hands the second caller a different one. That is a
+    // premise SHARED by two harnesses, so neither can catch it being wrong by
+    // running the other (reference_two_checks_one_hidden_premise.md) -- lane
+    // FACTUI1 named it as the live instance of exactly that shape.
+    //
+    // It is, however, directly MEASURABLE without either harness: construct the
+    // same class TWICE through the DLL and diff the two results. That yields the
+    // set of bytes retail itself does not reproduce, with no reference to our
+    // port at all. If that set == the excluded window, the premise is sound in
+    // both directions -- not too wide (we are not hiding a real divergence) and
+    // not too narrow (nothing else varies).
+    if (getenv("SELFDIFF")) {
+        printf("\n---- --selfdiff: DLL vs DLL, which bytes does RETAIL not reproduce? ----\n");
+        for (const Group& g : kGroups) {
+            for (int i = 0; i < g.n; ++i) {
+                const RtFactoryReg& r = g.regs[i];
+                const RtFactoryClass& c = *r.cls;
+                const char* only3 = getenv("ONLY");
+                if (only3 && !strstr(c.typeName, only3)) continue;
+                if (!c.allocSize) continue;
+                typedef void* (*NewFn)();
+                NewFn tn = (NewFn)Sym(r.newName);
+                if (!tn) continue;
+                unsigned char* x = (unsigned char*)tn();
+                unsigned char* y = (unsigned char*)tn();
+                if (!x || !y) continue;
+                char rng[256]; rng[0] = 0; int lo = -1;
+                for (uint32_t o = 0; o <= c.allocSize; ++o) {
+                    bool d = (o < c.allocSize) && (x[o] != y[o]);
+                    if (d && lo < 0) lo = (int)o;
+                    if (!d && lo >= 0) {
+                        char one[32]; snprintf(one, sizeof one, "+0x%x..0x%x ", lo, (int)o - 1);
+                        strncat(rng, one, sizeof(rng) - strlen(rng) - 1);
+                        lo = -1;
+                    }
+                }
+                printf("%-28s retail-vs-retail differs at: %s\n", c.typeName,
+                       rng[0] ? rng : "(nothing -- fully deterministic)");
+            }
+        }
+    }
+
+    printf("\n%s%s\n", neg ? "NEGATIVE CONTROL — every checked row MUST fail" : "ORACLE",
+           g_derefBug ? "   [DEREF-ARMED — failures below are INTENDED]" : "");
+    printf("  shape (b) REAL store comparison : %d/%d\n", realPass, realChk);
+    printf("  shape (c) WRAPPER ONLY          : %d/%d  (does NOT test the ctor)\n",
+           wrapPass, wrapChk);
+    printf("  shape (a) abstract null return  : %d/%d\n", stubPass, stubChk);
+    printf("  skipped                         : %d   (a SKIP is not a pass)\n", skipped);
+    return 0;
+}
