@@ -1,0 +1,2738 @@
+[
+ {
+  "file": "runtime/src/achievement/achievement_manager.cpp",
+  "line": 643,
+  "name": "Achievement::AchievementInstance::ctor",
+  "eq": "equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/achievement/achievement_manager.cpp",
+  "line": 686,
+  "name": "Achievement::AchievementInstance::SetAchievement",
+  "eq": "equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/achievement/achievement_manager.cpp",
+  "line": 732,
+  "name": "Achievement::AchievementInstance::Update",
+  "eq": "equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/achievement/achievement_manager.cpp",
+  "line": 750,
+  "name": "Achievement::AchievementManager::SetEventHandler",
+  "eq": "equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/achievement/achievement_manager.cpp",
+  "line": 794,
+  "name": "Achievement::AchievementManager::SetAchievements",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED",
+  "steps": 9,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/achievement/achievement_manager.cpp",
+  "line": 851,
+  "name": "Achievement::AchievementManager::Reset",
+  "eq": "equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/achievement/achievement_manager.cpp",
+  "line": 945,
+  "name": "Achievement::AchievementManager::Update",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED",
+  "steps": 4,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/achievement/achievement_manager.cpp",
+  "line": 1117,
+  "name": "Achievement::Achievement::dtor",
+  "eq": "equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/achievement/goal.cpp",
+  "line": 259,
+  "name": "Achievement::Goal::~Goal",
+  "eq": "vtOk && strOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/achievement/goal.cpp",
+  "line": 292,
+  "name": "Achievement::GoalInstance::GoalInstance",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/achievement/goal.cpp",
+  "line": 312,
+  "name": "Achievement::GoalInstance::~GoalInstance",
+  "eq": "*reinterpret_cast<void**>(self) == GoalInstanceVtable()",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/application_accessors.cpp",
+  "line": 176,
+  "name": "Application::Application::PlatformDestruct [retail body is empty]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/application_lifecycle.cpp",
+  "line": 323,
+  "name": "Application::Application::~Application ",
+  "eq": "freed == expected",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/application_lifecycle.cpp",
+  "line": 375,
+  "name": "Application::Application::Application(const Application&) ",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/application_lifecycle.cpp",
+  "line": 422,
+  "name": "Application::Application::operator= ",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/application_thunks.cpp",
+  "line": 59,
+  "name": "Application::Application::Update [tail-call thunk -> PlatformUpdate]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/application_thunks.cpp",
+  "line": 76,
+  "name": "Application::Application::Shutdown [tail-call thunk -> PlatformShutdown]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/application_thunks.cpp",
+  "line": 90,
+  "name": "Application::Application::Startup [tail-call thunk -> PlatformStartup]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/application_win.cpp",
+  "line": 108,
+  "name": "Application::Application::PlatformUpdate [no oracle: pumps the live message queue]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/application_win.cpp",
+  "line": 148,
+  "name": "Application::Application::SleepThread [no oracle: blocks the calling thread]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/application_win.cpp",
+  "line": 179,
+  "name": "Application::Application::YieldToThreads [no oracle: yields the calling thread]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/application_win.cpp",
+  "line": 379,
+  "name": "Application::Application::LaunchProcess [no oracle: spawns a real process / opens a real shell document]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/platform_startup_win.cpp",
+  "line": 387,
+  "name": "Application::Application::PlatformStartup [no oracle on the live path; see BANISHED_PLAT_ORACLE]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/platform_startup_win.cpp",
+  "line": 392,
+  "name": "Application::Application::PlatformStartup [no oracle on the live path; see BANISHED_PLAT_ORACLE]",
+  "eq": "false",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/platform_startup_win.cpp",
+  "line": 479,
+  "name": "Application::Application::PlatformStartup [no oracle on the live path; see BANISHED_PLAT_ORACLE]",
+  "eq": "differing == 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/application/platform_startup_win.cpp",
+  "line": 589,
+  "name": "Application::Application::PlatformShutdown ",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 246,
+  "name": "Audio::Scene::AddEmitter",
+  "eq": "oursCount == theirsCount",
+  "kind": "ORACLE-LINKED",
+  "steps": 6,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 271,
+  "name": "Audio::Scene::MoveEmitter",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 308,
+  "name": "Audio::Scene::RemoveEmitter",
+  "eq": "oursCount == theirsCount",
+  "kind": "ORACLE-LINKED",
+  "steps": 6,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 332,
+  "name": "Audio::Scene::SetEmitterVolume",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 427,
+  "name": "Audio::Scene::PlayEffect",
+  "eq": "handle == 0 || theirsPlaying",
+  "kind": "ORACLE-LINKED",
+  "steps": 7,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 619,
+  "name": "Audio::Scene::PlayEffect3D",
+  "eq": "handle == 0 || theirsFound == handle",
+  "kind": "ORACLE-LINKED",
+  "steps": 7,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 664,
+  "name": "Audio::Configuration::Save",
+  "eq": "ok",
+  "kind": "ORACLE-LINKED",
+  "steps": 17,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 962,
+  "name": "Audio::Scene::PauseEffect",
+  "eq": "matched == RT_ORIGINAL_ONCE(IsPlayingFn,\n                       \"                                       \")(self, handle)",
+  "kind": "ORACLE-LINKED",
+  "steps": 0,
+  "hop": 0
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 973,
+  "name": "Audio::Scene::PauseEffect",
+  "eq": "!anyLeft",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 10,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 993,
+  "name": "Audio::Scene::StopEffect",
+  "eq": "matched == isPlaying(self, handle)",
+  "kind": "ORACLE-LINKED",
+  "steps": 2,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 1005,
+  "name": "Audio::Scene::StopEffect",
+  "eq": "self->channels._data[idx].handleTag == 0",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 24,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 1085,
+  "name": "Audio::Scene::Pause",
+  "eq": "theirs == paused",
+  "kind": "ORACLE-LINKED",
+  "steps": 4,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 1136,
+  "name": "Audio::Scene::StopEffect3D",
+  "eq": "getCount(self, id) == 0",
+  "kind": "ORACLE-LINKED",
+  "steps": 2,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 1161,
+  "name": "Audio::Scene::StopEffect3D",
+  "eq": "getCount(self, id) == 0",
+  "kind": "ORACLE-LINKED",
+  "steps": 2,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 1220,
+  "name": "Audio::Scene::StopAll",
+  "eq": "ok",
+  "kind": "ORACLE-LINKED",
+  "steps": 48,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/audio/audio.cpp",
+  "line": 1312,
+  "name": "Audio::Configuration::~Configuration",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio_device.cpp",
+  "line": 208,
+  "name": "Audio::Device::FreeChannelPlatform",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio_device.cpp",
+  "line": 237,
+  "name": "Audio::Device::FreeChannelPlatform",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio_device.cpp",
+  "line": 291,
+  "name": "Audio::Device::Update",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio_device.cpp",
+  "line": 356,
+  "name": "Audio::Device::StopPlatform",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio_device.cpp",
+  "line": 384,
+  "name": "Audio::Device::StopPlatform",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio_device.cpp",
+  "line": 452,
+  "name": "Audio::Device::Stop",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio_platform_startup_win.cpp",
+  "line": 153,
+  "name": "Audio::Device::PlatformStartup [oracle behind BANISHED_PLAT_ORACLE]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio_platform_startup_win.cpp",
+  "line": 183,
+  "name": "Audio::Device::PlatformStartup [oracle behind BANISHED_PLAT_ORACLE]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio_platform_startup_win.cpp",
+  "line": 201,
+  "name": "Audio::Device::PlatformStartup [oracle behind BANISHED_PLAT_ORACLE]",
+  "eq": "false",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/audio/audio_platform_startup_win.cpp",
+  "line": 219,
+  "name": "Audio::Device::PlatformStartup [oracle behind BANISHED_PLAT_ORACLE]",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED",
+  "steps": 72,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/engine/engine.cpp",
+  "line": 592,
+  "name": "Engine::MainLoop::MainLoop",
+  "eq": "deltaOk && maxAccOk && singleOk && contextOk",
+  "kind": "ORACLE-LINKED",
+  "steps": 76,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/engine/engine.cpp",
+  "line": 675,
+  "name": "Engine::MainLoop::~MainLoop",
+  "eq": "contextOk && resOk && drawOk && updateOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/engine_lifecycle.cpp",
+  "line": 442,
+  "name": "Engine::Engine::Engine",
+  "eq": "singletonOk && handleOk && zeroedOk && allocOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/engine_lifecycle.cpp",
+  "line": 492,
+  "name": "Engine::Engine::~Engine",
+  "eq": "engineNulled && allocNulled",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/engine_lifecycle.cpp",
+  "line": 796,
+  "name": "Engine::Engine::Startup",
+  "eq": "completeOk && arenaOk && shiftOk && fieldsOk && singleOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/engine_lifecycle.cpp",
+  "line": 1028,
+  "name": "Engine::Engine::Shutdown",
+  "eq": "steps > 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/loops.cpp",
+  "line": 603,
+  "name": "Engine::UpdateLoop::dtor",
+  "eq": "vtableRestamped && bitReleased && cleanBitPublished",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/loops.cpp",
+  "line": 709,
+  "name": "Engine::Loader::Load",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/loops.cpp",
+  "line": 776,
+  "name": "Engine::DialogLoopT::Load",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/loops.cpp",
+  "line": 814,
+  "name": "Engine::DialogLoopT::Startup",
+  "eq": "self->_dialogInstance == dialog",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/loops.cpp",
+  "line": 913,
+  "name": "Engine::DialogLoaderLoopT::Load",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/loops.cpp",
+  "line": 944,
+  "name": "Engine::DialogLoaderLoopT::Startup",
+  "eq": "self->_dialogInstance == dialog",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/mainloop_run.cpp",
+  "line": 287,
+  "name": "Engine::MainLoop::Update",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/mainloop_video.cpp",
+  "line": 638,
+  "name": "Engine::MainLoop::OnVideoError",
+  "eq": "contextOk && typesOk && arrOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/mainloop_video.cpp",
+  "line": 798,
+  "name": "Engine::MainLoop::OnVideoRestart",
+  "eq": "clearedOk && contextOk && capKept",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/engine/singleton_ctors.cpp",
+  "line": 938,
+  "name": "Wave9X::System::MemoryAllocator::ctor",
+  "eq": "published",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 122,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/engine/singleton_ctors.cpp",
+  "line": 988,
+  "name": "Wave9X::System::MemoryAllocator::ctor",
+  "eq": "published",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 122,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/engine/singleton_ctors.cpp",
+  "line": 1016,
+  "name": "Wave9X::System::MemoryAllocator::ctor",
+  "eq": "published",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 122,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/engine/singleton_ctors.cpp",
+  "line": 1041,
+  "name": "Wave9X::System::MemoryAllocator::ctor",
+  "eq": "untouched",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 134,
+  "hop": 4
+ },
+ {
+  "file": "runtime/src/engine/singleton_ctors.cpp",
+  "line": 1069,
+  "name": "Wave9X::System::MemoryAllocator::ctor",
+  "eq": "published",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 122,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/engine/singleton_ctors.cpp",
+  "line": 1082,
+  "name": "Wave9X::System::MemoryAllocator::ctor",
+  "eq": "recurrenceOk",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 114,
+  "hop": 5
+ },
+ {
+  "file": "runtime/src/graphics/animation.cpp",
+  "line": 281,
+  "name": "Graphics::AnimationEvent::~AnimationEvent()",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/animation.cpp",
+  "line": 375,
+  "name": "Graphics::AnimationManager::~AnimationManager()",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/animation.cpp",
+  "line": 439,
+  "name": "Graphics::Particle::Particle()",
+  "eq": "ok",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 52,
+  "hop": 4
+ },
+ {
+  "file": "runtime/src/graphics/animation.cpp",
+  "line": 491,
+  "name": "Graphics::ParticleInstance::ParticleInstance()",
+  "eq": "ok",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 23,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/graphics/animation.cpp",
+  "line": 565,
+  "name": "Graphics::ParticleInstance::Update",
+  "eq": "ok",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 13,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/graphics/animation.cpp",
+  "line": 658,
+  "name": "Graphics::ParticleSystemInstance::ParticleSystemInstance()",
+  "eq": "inheritedOk && ownOk",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 34,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/graphics/mesh.cpp",
+  "line": 847,
+  "name": "Graphics::MeshInstance::UpdateHierarchy",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/mesh.cpp",
+  "line": 994,
+  "name": "Graphics::MeshInstance::SetMesh",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 29,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/graphics/mesh.cpp",
+  "line": 1081,
+  "name": "Graphics::MeshInstance::PlayAnimation",
+  "eq": "eq",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/mesh.cpp",
+  "line": 1161,
+  "name": "Graphics::MeshInstance::MeshInstance()",
+  "eq": "head && body && mid && tail",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 34,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/graphics/mesh.cpp",
+  "line": 1236,
+  "name": "Graphics::MeshInstance::MeshInstance(const&)",
+  "eq": "mesh && scal && inst && counts && vt",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/mesh.cpp",
+  "line": 1289,
+  "name": "Graphics::MeshInstance::~MeshInstance",
+  "eq": "nodes && layer && mats && attach",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/mesh.cpp",
+  "line": 1485,
+  "name": "Graphics::EdgeMesh::EdgeMesh()",
+  "eq": "vt && ext && mats && lists && box",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/mesh.cpp",
+  "line": 1582,
+  "name": "Graphics::EdgeMesh::Set",
+  "eq": "boxOk && sizes",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/mesh.cpp",
+  "line": 1630,
+  "name": "Graphics::EdgeMeshInstance::EdgeMeshInstance()",
+  "eq": "head && body && mesh",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 27,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/graphics/mesh.cpp",
+  "line": 1678,
+  "name": "Graphics::EdgeMeshInstance::EdgeMeshInstance(const&)",
+  "eq": "mesh && foll && vt",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/mesh.cpp",
+  "line": 1732,
+  "name": "Graphics::EdgeMeshInstance::SetMesh",
+  "eq": "head && body && tail",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 20,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/graphics/renderer.cpp",
+  "line": 473,
+  "name": "Graphics::Renderer::~Renderer",
+  "eq": "cleared",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/renderer.cpp",
+  "line": 657,
+  "name": "Graphics::MaterialInstance::AddTexture",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 703,
+  "name": "Graphics::Geometry::Geometry()",
+  "eq": "bad < 0",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 77,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 744,
+  "name": "Graphics::Geometry::~Geometry()",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 796,
+  "name": "Graphics::Geometry::Detach",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 871,
+  "name": "Graphics::Geometry::SetTransform",
+  "eq": "ok",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 48,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 938,
+  "name": "Graphics::Geometry::Attach",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1003,
+  "name": "Graphics::Geometry::UpdateAttached",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1106,
+  "name": "Graphics::Geometry::Clean",
+  "eq": "bad < 0",
+  "kind": "ORACLE-LINKED",
+  "steps": 44,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1154,
+  "name": "Graphics::Geometry::SetBounds",
+  "eq": "bad < 0",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 27,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1192,
+  "name": "Graphics::Geometry::GetTransform",
+  "eq": "bad < 0",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 26,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1235,
+  "name": "Graphics::Geometry::GetSubTransform",
+  "eq": "bad < 0",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 26,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1295,
+  "name": "Graphics::Geometry::GetInstanceTransform",
+  "eq": "bad < 0",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 26,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1415,
+  "name": "Graphics::Scene::Scene()",
+  "eq": "bad < 0",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 63,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1479,
+  "name": "Graphics::Scene::~Scene()",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1528,
+  "name": "Graphics::Scene::AddObject",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1590,
+  "name": "Graphics::Scene::RemoveObject",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1657,
+  "name": "Graphics::Scene::AddGlobalObject",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1722,
+  "name": "Graphics::Scene::RemoveGlobalObject",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/scene.cpp",
+  "line": 1816,
+  "name": "Graphics::Scene::Clean",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/sunlight.cpp",
+  "line": 490,
+  "name": "Graphics::SunLight::SunLight",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/sunlight.cpp",
+  "line": 515,
+  "name": "Graphics::SunLight::~SunLight",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/graphics/wave9_lane_gfx.cpp",
+  "line": 529,
+  "name": "Graphics::Renderer::AddDrawItem",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input.cpp",
+  "line": 172,
+  "name": "Input::KeyMap::ClearAll",
+  "eq": "km->_root == nullptr && km->_count == 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input.cpp",
+  "line": 188,
+  "name": "Input::KeyMap::ClearInput(id,slot)",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input.cpp",
+  "line": 212,
+  "name": "Input::KeyMap::ClearInput(id,device,inputId)",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input.cpp",
+  "line": 391,
+  "name": "Input::KeyMap::RegisterInput",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input.cpp",
+  "line": 539,
+  "name": "Input::KeyMap::SetInput",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input.cpp",
+  "line": 619,
+  "name": "Input::Device::ResetState",
+  "eq": "zeroed",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input.cpp",
+  "line": 674,
+  "name": "Input::Configuration::Save",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input.cpp",
+  "line": 712,
+  "name": "Input::Configuration::~Configuration",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_config_startup.cpp",
+  "line": 176,
+  "name": "Input::Configuration::Load",
+  "eq": "cleanBools",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_config_startup.cpp",
+  "line": 216,
+  "name": "Input::Configuration::Startup",
+  "eq": "allocOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_device_update.cpp",
+  "line": 376,
+  "name": "Input::Device::UpdateState",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_device_update.cpp",
+  "line": 434,
+  "name": "Input::Device::PlatformGetKeyboardState",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_device_update.cpp",
+  "line": 457,
+  "name": "Input::Device::PlatformGetKeyboardState",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_device_update.cpp",
+  "line": 467,
+  "name": "Input::Device::PlatformGetKeyboardState",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_device_update.cpp",
+  "line": 530,
+  "name": "Input::Device::PlatformGetMouseState",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_device_update.cpp",
+  "line": 566,
+  "name": "Input::Device::PlatformGetMouseState",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_device_update.cpp",
+  "line": 591,
+  "name": "Input::Device::PlatformGetMouseState",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_device_update.cpp",
+  "line": 619,
+  "name": "Input::Device::PlatformGetMouseState",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_device_update.cpp",
+  "line": 716,
+  "name": "Input::Device::Update",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_platform_startup_win.cpp",
+  "line": 373,
+  "name": "Input::Device::PlatformStartup [no oracle: creates real DirectInput devices]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_win.cpp",
+  "line": 142,
+  "name": "Input::Device::PlatformUpdate",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_win.cpp",
+  "line": 156,
+  "name": "Input::Device::PlatformUpdate",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/input_win.cpp",
+  "line": 190,
+  "name": "Input::Device::EnableMouseClipping",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/keymap_load.cpp",
+  "line": 297,
+  "name": "Input::KeyMap::Load",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/keymap_save.cpp",
+  "line": 348,
+  "name": "Input::KeyMap::Save",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/input/keymap_save.cpp",
+  "line": 441,
+  "name": "Input::KeyMap::~KeyMap (deleting, 0x180053440)",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/binary_writer_probe.cpp",
+  "line": 279,
+  "name": "IO::BinaryWriter record [probe]",
+  "eq": "pass",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/compressedstream.cpp",
+  "line": 340,
+  "name": "IO::CompressedMemoryStream::~CompressedMemoryStream",
+  "eq": "*reinterpret_cast<const void**>(self) == VtblStream() &&\n                       self->memoryStream.base.vptr == VtblStream()",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/compressedstream.cpp",
+  "line": 368,
+  "name": "IO::CompressedMemoryStream::Create",
+  "eq": "ok && self->base.base.direction == 1 &&\n                       self->base.source ==\n                           reinterpret_cast<Stream*>(&self->memoryStream) &&\n                       self->base.windowSize == 2 &&\n                       self->base.compression != nullptr",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/compressedstream.cpp",
+  "line": 402,
+  "name": "IO::CompressedMemoryStream::Open",
+  "eq": "self->base.base.direction == 0 &&\n                       self->base.source ==\n                           reinterpret_cast<Stream*>(&self->memoryStream) &&\n                       self->base.windowSize == 1",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/compressedstream.cpp",
+  "line": 440,
+  "name": "IO::CompressedMemoryStream::Close",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/compressedstream.cpp",
+  "line": 610,
+  "name": "IO::MemoryStream::Open",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED",
+  "steps": 12,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/io/compressedstream.cpp",
+  "line": 706,
+  "name": "IO::MemoryStream::Create",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED",
+  "steps": 12,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/io/compressedstream.cpp",
+  "line": 804,
+  "name": "IO::MemoryStream::~MemoryStream",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 49,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/io/compressed_stream_open_probe.cpp",
+  "line": 264,
+  "name": "IO::CompressedStream SetWindowCount/Open/Release [probe]",
+  "eq": "pass",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/compressed_stream_probe.cpp",
+  "line": 459,
+  "name": "IO::CompressedStream::ReadPath [lockstep probe]",
+  "eq": "false",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/compressed_stream_probe.cpp",
+  "line": 497,
+  "name": "IO::CompressedStream::ReadPath [lockstep probe]",
+  "eq": "pass",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/compressed_stream_read.cpp",
+  "line": 250,
+  "name": "IO::CompressedStream::GetAvailableWindow",
+  "eq": "best >= 0 && best < self->windowSize",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/compressed_stream_read.cpp",
+  "line": 298,
+  "name": "IO::CompressedStream::DecompressFromSource",
+  "eq": "w->end >= w->start && w->end - w->start <= kWin",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/compressed_stream_write_probe.cpp",
+  "line": 667,
+  "name": "IO::CompressedStream::WritePath [artefact oracle]",
+  "eq": "controlGreen && aCases > 0 && aPass == aCases && bPass == bCases",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 36,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/io/encoding_probe.cpp",
+  "line": 407,
+  "name": "IO::Encoding::Create{Reader,Writer} [probe]",
+  "eq": "pass",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/filesystem_openfile_probe.cpp",
+  "line": 177,
+  "name": "IO::FileSystem::OpenFile/ReadFile [lockstep probe]",
+  "eq": "false",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/filesystem_openfile_probe.cpp",
+  "line": 246,
+  "name": "IO::FileSystem::OpenFile/ReadFile [lockstep probe]",
+  "eq": "pass",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/filesystem_openfile_probe.cpp",
+  "line": 412,
+  "name": "IO::FileSystem::FileInfo::operator= [probe]",
+  "eq": "pass",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/filesystem_openfile_win.cpp",
+  "line": 235,
+  "name": "IO::FileSystem::FileInfo::FileInfo(const&)",
+  "eq": "dst->handle == src->handle && dst->size == src->size",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/filesystem_openfile_win.cpp",
+  "line": 305,
+  "name": "IO::FileSystem::FileInfo::operator=",
+  "eq": "dst->handle == src->handle && dst->cursor == src->cursor",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/filesystem_openfile_win.cpp",
+  "line": 324,
+  "name": "IO::PackageFile::GetFileInfo",
+  "eq": "ret->handle == src->handle",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/filesystem_packages.cpp",
+  "line": 550,
+  "name": "IO::FileSystem::GetPackDirectory",
+  "eq": "ret->data == theirs.data",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 8,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/io/filesystem_packages.cpp",
+  "line": 598,
+  "name": "IO::PackageFile::GetFileName",
+  "eq": "ret->data == theirs.data",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 8,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/io/filesystem_packages.cpp",
+  "line": 710,
+  "name": "IO::FileSystem::ClosePackages",
+  "eq": "self->packfiles == nullptr && self->packfileCount == 0 &&\n                       self->packfileIndexRoot == nullptr && self->packfileIndexCount == 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/filesystem_packages.cpp",
+  "line": 927,
+  "name": "IO::FileSystem::LoadPackages",
+  "eq": "self->packfileIndexCount == static_cast<int32_t>(inserted) &&\n                       (self->packfileCount == 0) == (self->packfiles == nullptr)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/filesystem_setupdirs_win.cpp",
+  "line": 309,
+  "name": "IO::FileSystem::GetRootDirectory",
+  "eq": "SameText(ret->data, theirs.data)",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 7,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/io/filesystem_setupdirs_win.cpp",
+  "line": 530,
+  "name": "IO::FileSystem::SetupDirectories",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 48,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/io/filesystem_setupdirs_win.cpp",
+  "line": 550,
+  "name": "IO::FileSystem::SetupDirectories",
+  "eq": "endsSep(s) && endsSep(d) && endsSep(p)",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 126,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/io/filesystem_startup.cpp",
+  "line": 147,
+  "name": "IO::FileSystem::Startup",
+  "eq": "gateOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/file_stream.cpp",
+  "line": 735,
+  "name": "IO::TextFileStream::SetObject/oracle",
+  "eq": "fieldsEq && refsEq",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 50,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/io/memory_stream_probe.cpp",
+  "line": 187,
+  "name": "IO::MemoryStream [probe]",
+  "eq": "pass",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/modification.cpp",
+  "line": 747,
+  "name": "IO::Modification::Swap",
+  "eq": "sharedOk && scalarOk && deepOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/modification_refresh.cpp",
+  "line": 1161,
+  "name": "IO::Modification::RefreshList",
+  "eq": "term == nullptr",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 203,
+  "hop": 4
+ },
+ {
+  "file": "runtime/src/io/package_file.cpp",
+  "line": 501,
+  "name": "IO::PackageFile::Construct",
+  "eq": "theirs == nullptr",
+  "kind": "ORACLE-LINKED",
+  "steps": 2,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/io/package_file.cpp",
+  "line": 517,
+  "name": "IO::PackageFile::Construct",
+  "eq": "ret == static_cast<void*>(theirs)",
+  "kind": "ORACLE-LINKED",
+  "steps": 2,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/io/package_file.cpp",
+  "line": 603,
+  "name": "IO::PackageFile::GetName",
+  "eq": "r.equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/package_file.cpp",
+  "line": 615,
+  "name": "IO::PackageFile::GetAuthor",
+  "eq": "r.equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/package_file.cpp",
+  "line": 627,
+  "name": "IO::PackageFile::GetDescription",
+  "eq": "r.equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/package_file_read_win.cpp",
+  "line": 939,
+  "name": "IO::PackageFile::ReadPackfile",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED",
+  "steps": 186,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/io/persistence.cpp",
+  "line": 223,
+  "name": "IO::Persistence::Set(int)",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED",
+  "steps": 10,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/io/persistence.cpp",
+  "line": 260,
+  "name": "IO::Persistence::Set(bool)",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED",
+  "steps": 10,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/io/persistence.cpp",
+  "line": 293,
+  "name": "IO::Persistence::GetSavePath",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 10,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/io/persistence_registry_win.cpp",
+  "line": 457,
+  "name": "IO::Registry::Registry(const char*)",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/persistence_registry_win.cpp",
+  "line": 1251,
+  "name": "IO::Persistence::WriteSettings",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/persistence_saves.cpp",
+  "line": 200,
+  "name": "IO::Persistence::GetSaveInfo",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 27,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/io/persistence_saves.cpp",
+  "line": 253,
+  "name": "IO::Persistence::GetSaveFilename",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 11,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/io/persistence_startup.cpp",
+  "line": 152,
+  "name": "IO::Persistence::Startup",
+  "eq": "pathOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/serializer.cpp",
+  "line": 239,
+  "name": "?",
+  "eq": "rw != nullptr && target != nullptr",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 27,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/io/serializer.cpp",
+  "line": 255,
+  "name": "?",
+  "eq": "rw != nullptr && target != nullptr",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 29,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/io/serializer.cpp",
+  "line": 336,
+  "name": "IO::Serializer::SerializeBytes",
+  "eq": "rw != nullptr && target != nullptr",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 28,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/io/serializer.cpp",
+  "line": 485,
+  "name": "IO::Serializer::Serializer(Stream&,int)",
+  "eq": "ok",
+  "kind": "ORACLE-LINKED",
+  "steps": 17,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/io/serializer.cpp",
+  "line": 512,
+  "name": "IO::Serializer::~Serializer [not diffable]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/io/serialize_family_probe.cpp",
+  "line": 673,
+  "name": "IO::{BinaryReader,BinaryWriter,Visitor}::Serialize family [probe]",
+  "eq": "pass",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/object/external_compiled.cpp",
+  "line": 472,
+  "name": "Object::ExternalFactory::GetCompiledPath",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 8,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/object/external_compiled.cpp",
+  "line": 582,
+  "name": "Object::ExternalFactory::FindOrLoad",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 11,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/object/external_find.cpp",
+  "line": 243,
+  "name": "Object::ExternalFactory::Find",
+  "eq": "mirror == result",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/object/external_path_win.cpp",
+  "line": 307,
+  "name": "System::Filename::GetPathExtension",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 18,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/object/external_path_win.cpp",
+  "line": 637,
+  "name": "Object::ExternalFactory::ExpandRelativePath",
+  "eq": "equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/object/internal.cpp",
+  "line": 924,
+  "name": "Object::Internal::Internal [shadow]",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/object/internal.cpp",
+  "line": 952,
+  "name": "Object::Internal::~Internal [shadow]",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/object/internal.cpp",
+  "line": 967,
+  "name": "Object::InternalFactory::ClearPersistState [shadow]",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/object/internal.cpp",
+  "line": 999,
+  "name": "Object::InternalFactory::ResetPersistState [shadow]",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/object/type_system.cpp",
+  "line": 393,
+  "name": "Object::Type::Serialize [not diffable]",
+  "eq": "rw != nullptr && vt != nullptr && vt[0x98 / 8] != nullptr",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/picking/scene.cpp",
+  "line": 583,
+  "name": "Picking::Scene::Scene()",
+  "eq": "bad < 0",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 68,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/picking/scene.cpp",
+  "line": 637,
+  "name": "Picking::Scene::~Scene()",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/picking/scene.cpp",
+  "line": 929,
+  "name": "Picking::Scene::AddMesh",
+  "eq": "bad < 0",
+  "kind": "ORACLE-LINKED",
+  "steps": 51,
+  "hop": 4
+ },
+ {
+  "file": "runtime/src/picking/scene.cpp",
+  "line": 1044,
+  "name": "Picking::Scene::RemoveMesh",
+  "eq": "bad < 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/picking/scene.cpp",
+  "line": 1250,
+  "name": "Picking::Scene::Intersect",
+  "eq": "bad < 0",
+  "kind": "ORACLE-LINKED",
+  "steps": 66,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/picking/scene.cpp",
+  "line": 1501,
+  "name": "Picking::Scene::Intersect",
+  "eq": "bad < 0",
+  "kind": "ORACLE-LINKED",
+  "steps": 66,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/save/saveload.cpp",
+  "line": 552,
+  "name": "Save::SaveLoad::GetAutoSaveName",
+  "eq": "same",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 7,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/save/saveload.cpp",
+  "line": 947,
+  "name": "Save::SaveLoad::Update [shadow]",
+  "eq": "self->_elapsed == expected",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/save/saveload.cpp",
+  "line": 1018,
+  "name": "Save::SavedState::~SavedState [no oracle]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/save/saveload_draw.cpp",
+  "line": 889,
+  "name": "Save::SaveLoad::Draw [pixels]",
+  "eq": "ours == nullptr && theirs == nullptr",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/system/allocator.cpp",
+  "line": 1078,
+  "name": "System::MemoryAllocator::Allocate [shadow]",
+  "eq": "equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/system/allocator.cpp",
+  "line": 1110,
+  "name": "System::MemoryAllocator::Free [shadow]",
+  "eq": "equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/system/compression.cpp",
+  "line": 655,
+  "name": "System::Compression::Decompress",
+  "eq": "mine == theirs && bytesEqual",
+  "kind": "ORACLE-LINKED",
+  "steps": 11,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/system/configuration.cpp",
+  "line": 310,
+  "name": "System::Configuration::SetCommandLine",
+  "eq": "mapOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/system/configuration.cpp",
+  "line": 453,
+  "name": "System::Configuration::ParseValue",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 27,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/system/configuration.cpp",
+  "line": 525,
+  "name": "System::Configuration::ParseCommand",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 38,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/system/configuration.cpp",
+  "line": 632,
+  "name": "System::Configuration::GetCommandLineString",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 32,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/system/error.cpp",
+  "line": 373,
+  "name": "System::Error::SetText",
+  "eq": "textOk && nlOk && stopOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/system/filename.cpp",
+  "line": 355,
+  "name": "System::Filename::GetPathFilename",
+  "eq": "SameText(ret, &theirs)",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 9,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/system/filename.cpp",
+  "line": 417,
+  "name": "System::Filename::GetPathIdentifer",
+  "eq": "SameText(ret, &theirs)",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 18,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/system/setupdir_helpers.cpp",
+  "line": 110,
+  "name": "System::Filename::GetPathDirectory",
+  "eq": "SameText(ret->data, theirs.data)",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 14,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/system/setupdir_helpers.cpp",
+  "line": 144,
+  "name": "System::Configuration::GetPlatformName",
+  "eq": "SameText(ret->data, theirs.data)",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 8,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/system/setupdir_helpers.cpp",
+  "line": 178,
+  "name": "System::Configuration::GetBuildName",
+  "eq": "SameText(ret->data, theirs.data)",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 8,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/system/string.cpp",
+  "line": 274,
+  "name": "System::operator+(String,String)",
+  "eq": "RtStringSameText(ret, &theirs)",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 4,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/system/string.cpp",
+  "line": 330,
+  "name": "System::operator+(String,char*)",
+  "eq": "RtStringSameText(ret, &theirs)",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 4,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/system/string.cpp",
+  "line": 541,
+  "name": "System::String::SubString",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 11,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/system/string.cpp",
+  "line": 874,
+  "name": "System::String::FormatParamList",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 9,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/system/string.cpp",
+  "line": 947,
+  "name": "System::String::Release [no oracle: mutates a shared refcount]",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/system/value_types.cpp",
+  "line": 165,
+  "name": "System::Random::Random(uint)",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 5,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/system/widestring.cpp",
+  "line": 312,
+  "name": "System::WideString::Set",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 13,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/system/widestring.cpp",
+  "line": 380,
+  "name": "System::WideString::AsUTF8",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 7,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/system/widestring.cpp",
+  "line": 448,
+  "name": "System::WideString::ctor(String)",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 17,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/system/widestring.cpp",
+  "line": 554,
+  "name": "System::WideString::ctor(const char*)",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 17,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/ui/dialog.cpp",
+  "line": 1762,
+  "name": "UI::Dialog::CreateElement",
+  "eq": "*ret == theirsSlot",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 5,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/ui/dialog_settings_probe.cpp",
+  "line": 344,
+  "name": "UI::DialogInstance::SaveSettings/OnClosed [probe]",
+  "eq": "pass",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/dialog_vtable.cpp",
+  "line": 461,
+  "name": "UI::Dialog::Construct",
+  "eq": "ret == static_cast<void*>(theirs)",
+  "kind": "ORACLE-LINKED",
+  "steps": 2,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/ui/element.cpp",
+  "line": 607,
+  "name": "UI::Element::ctor",
+  "eq": "self->_vtable != nullptr && self->_vtable == ElementVTable()",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 127,
+  "hop": 4
+ },
+ {
+  "file": "runtime/src/ui/element.cpp",
+  "line": 648,
+  "name": "UI::Element::AddChild",
+  "eq": "sizeOk && slotOk && parentOk && dirtyOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/element.cpp",
+  "line": 925,
+  "name": "UI::Element::GetAlignedPosition[static]",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 18,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/ui/element.cpp",
+  "line": 982,
+  "name": "UI::Element::GetAlignedPosition",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 18,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/ui/element.cpp",
+  "line": 1046,
+  "name": "UI::Element::GetPaddedSize",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 29,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/ui/element.cpp",
+  "line": 1177,
+  "name": "UI::Element::SetName",
+  "eq": "storedOk && acquiredOk && releaseOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/element.cpp",
+  "line": 1322,
+  "name": "UI::Element::SetToolTipString",
+  "eq": "storedOk && acquiredOk && releaseOk",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/element.cpp",
+  "line": 1413,
+  "name": "UI::ContainerElement::SetOffsets",
+  "eq": "clipOk && vOk && hOk",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 42,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/ui/element.cpp",
+  "line": 1878,
+  "name": "UI::Element::AdjustUpperLeft",
+  "eq": "off == 0",
+  "kind": "ORACLE-LINKED",
+  "steps": 15,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/ui/element_vtable.cpp",
+  "line": 462,
+  "name": "UI::Element::GetBorder",
+  "eq": "eq",
+  "kind": "ORACLE-LINKED",
+  "steps": 9,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/ui/sprite.cpp",
+  "line": 969,
+  "name": "UI::SpriteSheet::Set",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/spritecapture.cpp",
+  "line": 446,
+  "name": "UI::SpriteCapture::EndAddingSprites",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/spritecontext.cpp",
+  "line": 338,
+  "name": "UI::SpriteContext::AddSpriteDraw",
+  "eq": "agreed",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/spritecontext.cpp",
+  "line": 382,
+  "name": "UI::SpriteContext::FlushDeferred",
+  "eq": "agreed",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/spritecontext.cpp",
+  "line": 424,
+  "name": "UI::SpriteContext::AddLine",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/spritecontext_flush.cpp",
+  "line": 1323,
+  "name": "UI::SpriteContext::Flush",
+  "eq": "equal",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/spritesheet_vtable.cpp",
+  "line": 301,
+  "name": "UI::SpriteSheet::Construct",
+  "eq": "ret == static_cast<void*>(theirs)",
+  "kind": "ORACLE-LINKED",
+  "steps": 2,
+  "hop": 1
+ },
+ {
+  "file": "runtime/src/ui/widgets_input.cpp",
+  "line": 503,
+  "name": "UI::NumberEditElement::SetValue [no oracle: SetText mutates the live element]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/widgets_input.cpp",
+  "line": 871,
+  "name": "UI::ComboElement::AddItem [no oracle: appends + bumps a refcount]",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/widgets_input.cpp",
+  "line": 915,
+  "name": "UI::ComboElement::RemoveAllItems [no oracle: frees three buffers]",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/widgets_input.cpp",
+  "line": 1237,
+  "name": "UI::RadioElement::FindCheckBoxes(InternalPtr) [no oracle: appends + recurses]",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/widgets_input.cpp",
+  "line": 1423,
+  "name": "UI::SliderElement::SetParameter [no oracle: refcounted String swap on a shared child]",
+  "eq": "SlotSharesBuffer(slot, str)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/widgets_input.cpp",
+  "line": 1473,
+  "name": "UI::ProgressElement::SetProgressTextParameter [no oracle: refcounted String swap on a shared child]",
+  "eq": "SlotSharesBuffer(slot, str)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/widgets_input.cpp",
+  "line": 1561,
+  "name": "UI::ComboElement::UpdateText [no oracle: refcounted String swap on a shared child]",
+  "eq": "SlotSharesBuffer(slot, src)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/widgets_input.cpp",
+  "line": 1640,
+  "name": "UI::ComboElement::SetCurrentItem [no oracle: closes a dialog and rewrites a shared child]",
+  "eq": "self->_currentItem == (inRange ? index : 0)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/widgets_input.cpp",
+  "line": 1869,
+  "name": "UI::NumberElement::CacheText [redirected replay: the copy's _cachedText is nulled]",
+  "eq": "same",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 60,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/ui/widgets_layout.cpp",
+  "line": 1116,
+  "name": "UI::GraphElement::AddGraph [no oracle: appends a series]",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/ui/widgets_layout.cpp",
+  "line": 1177,
+  "name": "UI::Element::RemoveChildren [no oracle: destroys its children]",
+  "eq": "ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 411,
+  "name": "Video::ImageBuffer::ImageBuffer",
+  "eq": "self->width == 0 && self->height == 0 && self->dimension == 0 &&\n                       self->kind == 2 && self->format == 0 && self->flags == 0 &&\n                       self->filter == 1 && self->pixelData == nullptr",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 572,
+  "name": "Video::ImageBuffer::CopyToTexture",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 583,
+  "name": "Video::ImageBuffer::CopyFromTexture",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 626,
+  "name": "Video::ImageBuffer::Create",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1052,
+  "name": "Video::ImageBuffer::PlatformConstruct",
+  "eq": "LinksEqual(ours, theirs)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1090,
+  "name": "Video::ImageBuffer::PlatformDestruct",
+  "eq": "LinksEqual(ours, theirs)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1131,
+  "name": "Video::IndexBuffer::PlatformConstruct",
+  "eq": "LinksEqual(ours, theirs)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1164,
+  "name": "Video::IndexBuffer::PlatformDestruct",
+  "eq": "LinksEqual(ours, theirs)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1205,
+  "name": "Video::VertexBuffer::PlatformConstruct",
+  "eq": "LinksEqual(ours, theirs)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1236,
+  "name": "Video::VertexBuffer::PlatformDestruct",
+  "eq": "LinksEqual(ours, theirs)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1304,
+  "name": "Video::RenderBuffer::PlatformConstruct",
+  "eq": "LinksEqual(ours, theirs)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1343,
+  "name": "Video::RenderBuffer::PlatformDestruct",
+  "eq": "LinksEqual(ours, theirs)",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1361,
+  "name": "Video::IndexBuffer::IndexBuffer",
+  "eq": "self->size == 0 && self->dynamic == false",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1370,
+  "name": "Video::VertexBuffer::VertexBuffer",
+  "eq": "self->size == 0 && self->dynamic == false",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1379,
+  "name": "Video::IndexBuffer::Create",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1389,
+  "name": "Video::IndexBuffer::Set",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1399,
+  "name": "Video::VertexBuffer::Create",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/buffers.cpp",
+  "line": 1409,
+  "name": "Video::VertexBuffer::Set",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/companion_data.cpp",
+  "line": 260,
+  "name": "Video::IndexBuffer::Lock",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/companion_data.cpp",
+  "line": 271,
+  "name": "Video::IndexBuffer::Unlock",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/companion_data.cpp",
+  "line": 281,
+  "name": "Video::VertexBuffer::Lock",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/companion_data.cpp",
+  "line": 292,
+  "name": "Video::VertexBuffer::Unlock",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/companion_data.cpp",
+  "line": 316,
+  "name": "Video::ConstantBuffer::Bind",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/companion_data.cpp",
+  "line": 387,
+  "name": "Video::Device::DisplayMode::~DisplayMode",
+  "eq": "self->refreshData == nullptr && self->refreshCount == 0",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/context_bind.cpp",
+  "line": 299,
+  "name": "Video::Context::BindTextures[live]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/context_bind.cpp",
+  "line": 341,
+  "name": "Video::Context::BindResources[live]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/device.cpp",
+  "line": 398,
+  "name": "Video::Device::ValidateConfiguration",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 22,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/video/device.cpp",
+  "line": 460,
+  "name": "Video::Device::ApplyChangedSettings",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED",
+  "steps": 17,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/video/device.cpp",
+  "line": 737,
+  "name": "Video::Configuration::Save",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 35,
+  "hop": 3
+ },
+ {
+  "file": "runtime/src/video/device.cpp",
+  "line": 869,
+  "name": "Video::Configuration::Startup",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 73,
+  "hop": 4
+ },
+ {
+  "file": "runtime/src/video/enumerate_video_modes.cpp",
+  "line": 200,
+  "name": "Video::Device::EnumerateVideoModes [no oracle: see the banner; the sort pass is verified separately]",
+  "eq": "true",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/imagebuffer_vtable.cpp",
+  "line": 320,
+  "name": "Video::ImageBuffer::TypeName",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED",
+  "steps": 11,
+  "hop": 2
+ },
+ {
+  "file": "runtime/src/video/imagebuffer_vtable.cpp",
+  "line": 386,
+  "name": "Video::ImageBuffer::Destruct",
+  "eq": "self->vtable != vtBefore",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/imagebuffer_vtable.cpp",
+  "line": 425,
+  "name": "Video::ImageBuffer::Construct",
+  "eq": "self->kind == 2 && self->filter == 1 && self->width == 0 &&\n                       self->height == 0 && self->pixelData == nullptr",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/imagebuffer_vtable.cpp",
+  "line": 467,
+  "name": "Video::ImageBuffer::Reconstruct",
+  "eq": "self->kind == 2 && self->filter == 1 && self->width == 0 &&\n                       self->height == 0 && self->pixelData == nullptr",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/video_interfaces_win.cpp",
+  "line": 199,
+  "name": "Video::Device::GetDLLForInterface",
+  "eq": "equal",
+  "kind": "ORACLE-LINKED-OUTPARAM",
+  "steps": 59,
+  "hop": 4
+ },
+ {
+  "file": "runtime/src/video/video_interfaces_win.cpp",
+  "line": 206,
+  "name": "Video::Device::GetDLLForInterface",
+  "eq": "false",
+  "kind": "ATTENDANCE",
+  "steps": 0,
+  "hop": null
+ },
+ {
+  "file": "runtime/src/video/video_interfaces_win.cpp",
+  "line": 330,
+  "name": "Video::Device::InitializeInterfaces [no oracle: LoadLibrary on the live process]",
+  "eq": "dx11Ok",
+  "kind": "SELF-CHECK",
+  "steps": 0,
+  "hop": null
+ }
+]

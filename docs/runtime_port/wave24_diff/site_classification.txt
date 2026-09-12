@@ -1,0 +1,41 @@
+SUBJECT: *.cpp under runtime code standalone engine dx11 (repo root C:\code\GIT\untitled_rev_eng_project\.claude\worktrees\agent-a97998f39da4b0973); rt_diff.* excluded;
+         comments and string-literal
+         contents stripped.  305 RT_DIFF_SHADOW occurrences IN CODE, 1 unscoped.
+  UNSCOPED runtime/src/engine/singleton_ctors.cpp:845
+
+  ORACLE-LINKED      34
+  ORACLE-LINKED-OUTPARAM   71
+  ORACLE-UNLINKED     0
+  SELF-CHECK        124
+  ATTENDANCE         75
+  TOTAL             304
+
+CONTROLS (6 synthetic sites; each must land in its named population):
+  CTL::attendance      -> ATTENDANCE       PASS
+  CTL::selfcheck       -> SELF-CHECK       PASS
+  CTL::linkeddirect    -> ORACLE-LINKED    PASS
+  CTL::linkedhop       -> ORACLE-LINKED    PASS
+  CTL::linkedtwohop    -> ORACLE-LINKED    PASS
+  CTL::outparam        -> ORACLE-LINKED-OUTPARAM PASS
+  CTL::unlinked        -> ORACLE-UNLINKED  PASS
+  7/7 controls pass; 0 control sites unscoped
+
+EFFECTIVENESS -- how many REAL sites each test moved:
+  const-EQUAL test fired                 : 75
+  no-door test fired                     : 124
+  dataflow ran on                        : 105 sites, 105 reached a door, 0 did not
+  dataflow examined                      : 3610 assignment statements in total
+  (a dataflow that examined 0 statements would be a dead parser)
+
+LINK STRENGTH -- hops from EQUAL back to the DLL door (0 = the door call IS
+the EQUAL expression; higher = weaker evidence; a 6-hop closure inside a
+function that holds a door anywhere is close to vacuous):
+  hop 0      1
+  hop 1     25
+  hop 2     43
+  hop 3     28
+  hop 4      7
+  hop 5      1
+
+--- ORACLE-UNLINKED (hand-check queue: a door in the body, but the
+    dataflow does not see its answer reaching EQUAL) ---
