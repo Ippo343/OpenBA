@@ -1698,8 +1698,21 @@ def load_unpromotable(root):
                 # Collapsing these into one tag would have made "unpromotable"
                 # mean both "harmless to promote" and "dangerous to promote",
                 # which is the sort of conflation this project keeps paying for.
+                # WAVE 25 lane MANIFEST -- the REASON CLASS field was `(\S+)`,
+                # i.e. ONE whitespace-free token. Five rows spell their class
+                # as "HARMFUL (DLL-present) / REQUIRED (cutover)", and for
+                # those the optional group could not match, which made the
+                # WHOLE expression fail and dropped the tag entirely. The five
+                # rows then printed as ORDINARY unported work.
+                #
+                # The rows it hid were the worst possible five: a class that
+                # names both routes is precisely a lane declaring that the
+                # verdict INVERTS at cutover, so the instrument was blind to
+                # exactly the tags that said the most. Measured: 41 matches
+                # before, 46 after, with a positive control on both a
+                # single-token and a multi-token class.
                 m = re.search(r"RT_UNPROMOTABLE:\s*(\?\S+)\s*\|\s*([^|]+?)\s*\|"
-                              r"\s*([^|]+?)\s*\|\s*([^|]+?)\s*(?:\|\s*(\S+)\s*)?$", line)
+                              r"\s*([^|]+?)\s*\|\s*([^|]+?)\s*(?:\|\s*(\S.*?)\s*)?$", line)
                 if m:
                     out[m.group(1)] = (m.group(2), m.group(3), m.group(4),
                                        (m.group(5) or "NO-OP"))
@@ -2786,7 +2799,12 @@ def main():
                 # "PORTED" is only true of the NO-OP class. A HARMFUL row is
                 # deliberately NOT ported -- printing PORTED beside it would
                 # assert the opposite of the verdict it carries.
-                if cls == "HARMFUL":
+                # startswith, not ==: WAVE 25 lane MANIFEST widened the class
+                # field to admit "HARMFUL (DLL-present) / REQUIRED (cutover)".
+                # An == test would have sent those five rows down the PORTED
+                # branch, printing the exact assertion the comment above
+                # forbids.
+                if cls.upper().startswith("HARMFUL"):
                     tag = "   [ON THE DLL BY DESIGN · UNPROMOTABLE(HARMFUL) · %s]" % doc
                 else:
                     tag = "   [PORTED %s · UNPROMOTABLE(%s) · %s]" % (slots, cls, doc)

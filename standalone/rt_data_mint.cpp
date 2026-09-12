@@ -947,6 +947,18 @@ void RtDataMintInit() {
     // no-op rather than a different binding.
     RegisterMintedRowsFromEnv();
 
+    // WAVE 25 lane MANIFEST -- the 46 RT_UNPROMOTABLE-tagged gap rows, whose
+    // verdicts are ROUTE-SCOPED. 44 of them INVERT to REQUIRED once the DLL is
+    // gone; two must still be held. standalone/cutover_manifest.cpp publishes
+    // exactly the ones the generated manifest says to publish and NAMES the
+    // ones it holds, which the blanket BANISHED_RT_MINT switch cannot do.
+    //
+    // Placed HERE for the same reason RegisterMintedData() is placed above
+    // MintConstructedStatics(): registration must precede construction, or the
+    // Thread ctor inside ConstructLoader() caches a null for the life of the
+    // process (see the banner above RegisterMintedData).
+    RtCutoverPublishManifest(EnvOn("BANISHED_RT_CUTOVER_MANIFEST"));
+
     MintConstructedStatics();   // after MintStorage: it memsets the block
 
     printf("[RtMint] minted %d vtables (%d slots: %d ported, %d unported-trap, "

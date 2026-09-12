@@ -122,3 +122,21 @@ const void* RtMintTypeInfoStorageProbe(int index);
 // RtDataMintInit().
 int  RtMintTypeInfoRowCount();
 bool RtMintTypeInfoRowAt(int i, const char** symbol, void** storage);
+
+// ============================================================================
+// WAVE 25 lane MANIFEST -- the cutover publish manifest
+// ============================================================================
+// standalone/cutover_manifest.cpp. `RtCutoverDllAbsent()` is the cutover
+// detector (the same `GetModuleInfo(Module::Runtime)->handle` test the mint
+// shadow report uses, deliberately, so there is ONE answer to that question).
+//
+// `RtCutoverPublishManifest(force)` walks the generated
+// standalone/cutover_manifest.inc and registers every row the manifest marks
+// REQUIRED, naming every row it holds and every by-name door it knowingly
+// leaves resolving NULL. With the DLL present and `force` false it registers
+// nothing -- those rows' HARMFUL verdicts still apply on that route.
+// `force` is armed by BANISHED_RT_CUTOVER_MANIFEST=1 and is a measurement
+// knob: with the DLL loaded it deliberately creates the split brain the tags
+// warn about. Returns the number of rows registered.
+bool RtCutoverDllAbsent();
+int  RtCutoverPublishManifest(bool force);
