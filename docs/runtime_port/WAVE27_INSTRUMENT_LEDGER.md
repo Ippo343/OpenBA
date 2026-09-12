@@ -24,6 +24,7 @@ happen, and **nothing detects it**. Deflating entries are the dangerous ones.
 | 7 | `dialog.cpp:1471` phantom-address comment (since Wave 9) | INFLATING | IOTEXT | fixed in-source by IOTEXT |
 | 8 | **`addr_door_audit.py:47` blind to a wrapped address** | **DEFLATING** | GFXMESH | open — hid a door for 21 waves |
 | 9 | `get_function_metrics` ignores `address=` | WRONG SUBJECT | GFXMESH (known) | open, pre-existing |
+| 10 | `disassemble_function` wrong function — **3 more addresses** | **WRONG SUBJECT** | ACHIEVE, independently | open; `get_function_by_address` was CORRECT |
 
 ---
 
@@ -313,3 +314,54 @@ tool, and it caught an error that reading the code did not. It belongs in the Wa
 28 kickoff as a step, not as a lesson. Note what it implies about the reverse
 case too: the lane had to *attribute* its census delta to notice a row missing
 from it — an unexplained `called` movement is a finding, not noise.
+
+---
+
+## 10. The wrong-function defect, reproduced independently — ACHIEVE
+
+ACHIEVE hit ledger #4 at **three** further addresses — `0x18009f0e0`,
+`0x180009d70`, `0x180006d10` — and **found it BEFORE the integrator's broadcast
+arrived.** Two lanes, five addresses, no contact between them.
+
+**A new and useful fact: `get_function_by_address` was CORRECT at all three**
+while `disassemble_function` was wrong. So the defect is not "the server has lost
+track of the binary" — it is specific to the disassembly path, and a second
+GhidraMCP call can contradict the first. That does not make Ghidra self-checking
+(two Ghidra calls remain ONE source —
+`reference_two_checks_one_hidden_premise.md`), but it narrows the fault for
+whoever fixes it in Wave 28.
+
+**ACHIEVE also had a genuine CONTROL against the sibling-swap risk**, which is
+worth copying: its four `TypeName` bodies name four **distinct** `_typeInfo`
+nodes. A fabricated sibling listing would have **collapsed** them onto one. The
+control was a property of the subject matter, not an extra tool — the cheapest
+kind, and the kind this project keeps finding it had available and did not use.
+
+---
+
+## A WARNING THE INTEGRATOR RELAYED TWICE, WRONG BOTH TIMES
+
+Not an instrument defect — a **briefing** defect, and the second one this ledger
+records against the integrator (see #6).
+
+Wave 26 §6 item 1 warned that the `achievement_manager.cpp` `Array<T>` siblings
+are "the WRONG TEMPLATE" for a refcounted element. The integrator relayed it into
+FRONTIER's brief and then, after FRONTIER corrected it, relayed the *correction*
+into ACHIEVE's. **Both applications were wrong, in opposite directions:**
+
+| lane | what was actually true |
+|---|---|
+| FRONTIER | Not a separate template at all — same engine, seven rows since Wave 9. Correct action: **add one `ArraySpec` row**. |
+| ACHIEVE | For its array the **POD teardown is CORRECT**. `GoalList::Initialize`'s loop **MOVES** each `Goal*` into the `GoalInstance`, so the array owns nothing by teardown. The refcounted recipe would have **OVER-RELEASED every Goal**. |
+
+> **The element TYPE does not determine the teardown. OWNERSHIP does, and
+> ownership is a property of the CALL SITE.**
+
+`Array<ExternalPtr<Goal>>` looks unmistakably refcounted and is not, because a
+move-out loop consumed it. And the directions are **not symmetric**: under-release
+leaks, over-release frees a live object. **The "safe-looking" reflex — reach for
+the refcounted recipe — is the more dangerous error.**
+
+**ADDRESSEE: whoever writes the Wave 28 kickoff.** A hazard being real does not
+make any given instance of it real. Relay the *method* (read the consuming body
+and ask whether ownership leaves the array) and never the *verdict*.

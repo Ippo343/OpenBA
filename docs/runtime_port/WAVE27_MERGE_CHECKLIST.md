@@ -17,6 +17,20 @@ addressee keeps a list. Built as reports arrive, not at merge time.
       the lanes' individual figures.
 - [ ] **`rt_mint_gen.py --check`** and **`runtime_census.py --selftest-all`**.
 - [ ] **Cutover attempt 30.**
+- [ ] **Watch two ACHIEVE probes on the merge run** — every oracle it wired is
+      UNEXERCISED, because lane LOOPS held the game-dir lock for ACHIEVE's whole
+      600s window (verified: legitimately held, heartbeat current — ACHIEVE
+      misattributed it to the integrator, but handled it correctly by killing its
+      own blocking acquire rather than letting a grant go unnoticed):
+      - `Achievement::AchievementManager::ctor` — full byte oracle
+      - `Achievement::GoalList::Initialize` — shadow; **`firstWrongGoal >= 0`
+        means the ownership MOVE is transposed**
+- [ ] **Confirm `?_singleton@AchievementManager@Achievement@@` is still NOT
+      promoted.** ACHIEVE retired HALF the blocker (the ctor is ported and
+      registered with a full-byte oracle); the other writer is a store inside
+      `??0DialogLoopT@Engine@@`, which is lane LOOPS's table. **The tag STANDS and
+      the two-owners-one-object hazard is live.** ACHIEVE wrote the correction
+      beside the tag in `reg_mint_promoted.cpp` and messaged LOOPS directly.
 
 ## BOARD: PRESENT BY IDENTITY, NOT PERCENTAGE
 
@@ -60,6 +74,7 @@ KICKOFF §4 #10. None is a merge blocker; all are Wave 28 inputs.
 | `0x180029bb0` | ~680-byte array-of-String serializer, unexported | IOTEXT | IO cutover |
 | `0x18007ec98` | MSVC `eh_vector_destructor_iterator` | FRONTIER | counted at runtime, addressee named |
 | `0x1800136f0` | **unregistered door at `mesh.cpp:201` SINCE WAVE 6** | GFXMESH (found via ledger #8) | pre-existing, NOT opened by this wave — 21 waves invisible |
+| — | 5 new Runtime symbols referenced by ACHIEVE's 16 bodies | ACHIEVE | `called` +5, `ported` +2; attributed, not estimated |
 
 ## NAMED FOR WAVE 28, NOT DONE HERE
 
@@ -70,6 +85,16 @@ KICKOFF §4 #10. None is a merge blocker; all are Wave 28 inputs.
   unattended mod route is the broken `ModDialog_ToggleMod_Impl+0x43` one. Pair it
   with whoever fixes that route; doctrine says find the upstream null.
 - `Particle::Serialize`'s write-path `RtSaveTrace` oracle — available, not built.
+- **Audio: neither item ported** (`?Run@Stream@Audio@@` ~1800 b worker-thread file
+  IO; `?Update@Scene@Audio@@` ~1816 b). ACHIEVE re-checked both stated blockers and
+  reports them **out of budget, NOT newly blocked** — and that Wave 24 lane
+  SMALLBODY had already re-checked `Scene::Update`'s blocker as "NOT A WALL". The
+  brief's stored-callback hint described neither. Clean scope for a Wave 28 lane.
+- **`AchievementInstance::Persist` prefix oracle uses `stopAfter=1`, a FLOOR the
+  lane chose, not the index `save_trace.h` asks for.** It could not derive the
+  index and **declined to guess**. Tighten it in Wave 28. The body is the family's
+  outlier anyway: two nested codecs, outer version **1** where every sibling
+  passes 0, plus a real `GetVersion()==0` early return.
 - `?_typeInfo@ElementDescription@UI@@` is minted but not promoted; promoting it
   converts two by-construction ports into measured ones.
 - Every ledger entry — and **#8 first**, because it is the only DEFLATING one.
