@@ -1571,6 +1571,99 @@ const ArraySpec kSpec_InnerArrayU8 = {            // 0x180053f00
     /*seed zero       */ 0x00, 0x10 };
 
 // ============================================================================
+// 2026-09-12 - Graphics::MaterialInstance's two arrays, 0x180061880 and
+// 0x1800616c0.  Both are reached from ?Serialize@MaterialInstance@Graphics@@
+// (runtime/src/graphics/wave24_lane_gfxmat.cpp), which is ON THE CUTOVER BOOT
+// PATH: SpriteSheet::Serialize -> ExternalPtr<MaterialInstance>::Serialize ->
+// ExternalFactory::FindOrLoad -> External::Load -> MaterialInstance::Serialize.
+// Unregistered, each is `ResolveAddr(...) == 0` the moment the DLL is gone, and
+// the boot dies with EXEC-of-0 one instruction into the read path.  That is
+// exactly what it did.
+//
+// --- 0x180061880, Array<MaterialInstance::Texture> {String* name @+0x00,
+//     ExternalPtr<ImageBuffer> @+0x08}, stride 0x10 ---------------------------
+//
+// *** IT IS NOT kSpec_StringExt, AND THE DIFFERENCE IS THE ARITY. ***
+// 0x180061480 (kSpec_StringExt) is the THREE-argument `SetSize(this, n, fill)`
+// for the SAME element type -- Graphics::Material's copy of it -- and its
+// `init` is null because a caller that always passes a fill never takes an
+// else arm.  0x180061880 is TWO-argument (`MOVSXD RDI,EDX` at 0x18006189c is
+// the only parameter past `this`; nothing homes or reads R8) and it HAS an else
+// arm, at 0x18006194c/0x18006194f: two zero qword stores covering the whole
+// stride.  Reusing kSpec_StringExt would have left every newly grown slot
+// holding whatever the fresh MemAlloc block contained, and the next SetSize's
+// destroy arm would have decremented a refcount through that garbage -- the
+// same trap kSpec_StringRefZ's note records, on the same pair of arms.
+//
+// Everything else is read from 0x180061880's own disassembly and DOES agree
+// with kSpec_StringExt, so those parts are reused rather than duplicated:
+//   stride  0x10   `SHL RCX,0x4` at 0x1800618d1, `ADD RDX,0x10` at 0x180061956
+//   align   8      `MOV EDX,0x8` at 0x1800618d5
+//   assign  zero-then-adopt the String at +0x00 (`MOV [RCX],R14` /
+//           `MOV RAX,[RDX]` / `INC [RAX-0x4]`, 0x180061923..0x180061931) then
+//           the verbatim qword at +0x08 (0x180061934) == AssignStringExt
+//   destroy CALL 0x180005930 on BOTH arms -- realloc at 0x18006196a
+//           (count = oldSize) and shrink-tail at 0x1800619c3
+//           (count = oldSize - newSize) == DestroyStringExt
+const ArraySpec kSpec_MaterialTexture = {         // 0x180061880
+    "Array<MaterialInstance::Texture>", 0x10, 8, &AssignStringExt, &InitZero10,
+    &DestroyStringExt, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x08 };
+
+// --- 0x1800616c0, Array<MaterialInstance::Constant> {String* name @+0x00,
+//     float[4] @+0x08}, stride 0x18 ------------------------------------------
+//
+// TWO-ARGUMENT (`MOVSXD RDI,EDX` at 0x1800616dc; no R8 is homed or read).
+//   stride  0x18   `LEA RCX,[RAX+RAX*0x2]` / `SHL RCX,0x3` at
+//                  0x180061711..0x180061715, and `ADD RDX,0x18` at 0x1800617a0
+//   align   8      `MOV EDX,0x8` at 0x180061719
+//   assign  the same zero-then-adopt String at +0x00 as above
+//           (0x180061759..0x180061767) and then FOUR SEPARATE DWORD moves at
+//           +0x08/+0x0c/+0x10/+0x14 (0x18006176a..0x18006177f).  The four
+//           dwords are the float4 the serializer writes with the Encoding's
+//           +0x28 float-array slot; they are copied as dwords here because
+//           retail copies them as dwords, and the whole stride is covered.
+//   init    THREE zero qword stores at 0x180061792/0x180061795/0x180061799 --
+//           +0x00, +0x08, +0x10 -- so the whole 0x18 stride is zeroed.
+//   destroy CALL 0x180005880 on BOTH arms -- realloc at 0x1800617b4 and
+//           shrink-tail at 0x180061807.  0x180005880 is Body B with
+//           (stride 0x18, String @+0x00); it is ported and registered in
+//           array_destroy.cpp as kD_Str_18at00 in this same commit.  It is NOT
+//           kD_Str_18, which is the same stride with the String at +0x10.
+void AssignMaterialConstant(uint8_t* d, const uint8_t* s) {
+    void** dp = reinterpret_cast<void**>(d);
+    void* const* sp = reinterpret_cast<void* const*>(s);
+    dp[0] = nullptr;
+    void* str = sp[0];
+    if (str) {
+        dp[0] = str;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
+    }
+    std::memcpy(d + 0x08, s + 0x08, 4);
+    std::memcpy(d + 0x0c, s + 0x0c, 4);
+    std::memcpy(d + 0x10, s + 0x10, 4);
+    std::memcpy(d + 0x14, s + 0x14, 4);
+}
+void InitZero18(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+}
+void DestroyMaterialConstantRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180005880));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_MaterialConstant = {        // 0x1800616c0
+    "Array<MaterialInstance::Constant>", 0x18, 8, &AssignMaterialConstant, &InitZero18,
+    &DestroyMaterialConstantRange, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x08 };
+
+// ============================================================================
 // Live instrumentation.
 //
 // One RtDiffSite PER ADDRESS, not per body. That distinction is the whole risk
@@ -2083,6 +2176,10 @@ J3_ENTRY2(180078c90, kSpec_StringPair10) // UI: StringTable's TextEntry array
 // read from their own bodies; see the two spec rows above.
 J3_ENTRY2(180055db0, kSpec_ShaderParam)  // Video: ShaderProgram::_textures / _constants [NON-TRIVIAL]
 J3_ENTRY2(180053f00, kSpec_InnerArrayU8) // Video: ShaderProgram::_byteCode            [NON-TRIVIAL]
+// 2026-09-12 - Graphics::MaterialInstance's two. Both two-argument, read from
+// their own bodies; see the two spec rows above.
+J3_ENTRY2(180061880, kSpec_MaterialTexture)  // Graphics: MaterialInstance::_textures  [NON-TRIVIAL]
+J3_ENTRY2(1800616c0, kSpec_MaterialConstant) // Graphics: MaterialInstance::_constants [NON-TRIVIAL]
 
 #undef J3_ENTRY2
 
@@ -2320,6 +2417,11 @@ void RtCollectionPortInit() {
     // to zero the moment the DLL is gone.
     RegisterRuntimeAddr(0x180055db0, (void*)&RtColl_ArraySetSize_180055db0);
     RegisterRuntimeAddr(0x180053f00, (void*)&RtColl_ArraySetSize_180053f00);
+    // 2026-09-12 - Graphics::MaterialInstance's two, on the same terms and for
+    // the same reason: ?Serialize@MaterialInstance@Graphics@@ is the cutover
+    // boot path and an unregistered address there is a call to zero.
+    RegisterRuntimeAddr(0x180061880, (void*)&RtColl_ArraySetSize_180061880);
+    RegisterRuntimeAddr(0x1800616c0, (void*)&RtColl_ArraySetSize_1800616c0);
     RegisterRuntimeAddr(0x180008ff0, (void*)&RtColl_ArraySetSize_180008ff0);
     RegisterRuntimeAddr(0x18002fea0, (void*)&RtColl_ArraySetSize_18002fea0);
     RegisterRuntimeAddr(0x180059140, (void*)&RtColl_ArraySetSize_180059140);

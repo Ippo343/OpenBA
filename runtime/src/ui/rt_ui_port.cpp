@@ -133,14 +133,12 @@ extern int RtUiToolTipDialogRegister();    // tooltipdialog.cpp   (lane TIP)
 // of one drag, and a switch that moved both at once could not say which half a
 // regression came from.
 extern int RtUiDragStartRegister();        // userinterface_dragstart.cpp (DRAG)
-// WAVE 11 lane OBJINT: `?CreateNewObject@Dialog@UI@@` and
-// `?CreateInPlaceObject@Dialog@UI@@` -- the object-creation-path PROBE, not a
-// row. It owns its own switch INSIDE its register function
-// (BANISHED_RT_DLGFACTORY, opt-in and unset by default) and is called
-// unconditionally for that reason, exactly like the four lanes above it. Read
-// the file banner before arming it: it exists to TEST the published
-// `??_7Dialog@UI@@6B@` expiry, and it predicts that the expiry is WRONG.
-extern int RtUiDialogFactoryRegister();    // dialog_factory.cpp (lane OBJINT)
+// `?CreateNewObject@Dialog@UI@@` and `?CreateInPlaceObject@Dialog@UI@@`, the
+// two UI::Dialog factory steps. It used to be an opt-in PROBE behind
+// BANISHED_RT_DLGFACTORY; the 2026-09-12 cutover boot died on the minted
+// `?_typeInfo@Dialog@UI@@`'s unported-factoryFn trap because of that gate, so
+// both bodies now register unconditionally and the flag is gone.
+extern int RtUiDialogFactoryRegister();    // dialog_factory.cpp
 // Wave 24 lane SMALLBODY: ??2SpriteSheet@UI@@SAPEAX_K@Z (0x180002e60) -- the
 // class operator new, byte-identical to ToolTipDialog's and verified side by
 // side rather than by resemblance. Its own file and switch.
@@ -222,7 +220,7 @@ void RtUiPortInit() {
     // A/B can move it without moving ToolTipDialog's five bodies.
     n += RtUiSpriteSheetNewRegister();  // owns BANISHED_RT_UISPRITESHEETNEW
     n += RtUiDragStartRegister();      // owns BANISHED_RT_UIDRAGSTART
-    n += RtUiDialogFactoryRegister();  // owns BANISHED_RT_DLGFACTORY (lane OBJINT)
+    n += RtUiDialogFactoryRegister();  // UI::Dialog CreateNewObject / CreateInPlaceObject
     n += RtUiStringTableFactoryRegister();  // owns BANISHED_RT_UISTRTAB (FACTORY)
     n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)

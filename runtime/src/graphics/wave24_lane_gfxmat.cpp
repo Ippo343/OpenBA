@@ -661,7 +661,17 @@ extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv
 
     // BY NAME, through the port registry — BuildParameters is an EXPORT and is
     // already in the census `called` column, so this adds no address door and
-    // no census row. It is unported today and this call reaches the DLL's copy.
+    // no census row.
+    //
+    // CORRECTED 2026-09-12: this comment used to end "It is unported today and
+    // this call reaches the DLL's copy." Both halves are now false.
+    // `?BuildParameters@MaterialInstance@Graphics@@` (retail 0x1801033e0) is
+    // ported and registered, and the 2026-09-12 cutover boot ran it with the
+    // DLL ABSENT — `[GFXBIG27] MaterialInstance::BuildParameters calls=1`,
+    // followed by `[GFXBODY28] Material::GetTextureName calls=1` and
+    // `MaterialInstance::FindTexture calls=1`, then a completed
+    // `[SpriteSheetLoad] Dialog/SpriteSheet.rsc`. RT_EXPORT_ONCE resolves
+    // registry-first, so this call site needed no change to follow the port.
     if (!RT_GFXMAT_CORRUPT(4)) {
         using BuildParamsFn = void (*)(void*);
         RT_EXPORT_ONCE(BuildParamsFn, "?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ")(self);

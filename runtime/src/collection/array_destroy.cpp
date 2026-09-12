@@ -269,6 +269,14 @@ constexpr DestroySpec kD_Str_10 = { "String @+0x000, stride 0x010", 0x010, 1, { 
 constexpr DestroySpec kD_Str_48 = { "String @+0x000, stride 0x048", 0x048, 1, { 0x000 } };
 constexpr DestroySpec kD_Str_18 = { "String @+0x010, stride 0x018", 0x018, 1, { 0x010 } };
 constexpr DestroySpec kD_Str_20 = { "String @+0x000, stride 0x020", 0x020, 1, { 0x000 } };  // VertexLayout::Element (2026-09-12)
+// 0x180005880 - `Graphics::MaterialInstance::Constant` {String* name @+0x00,
+// float[4] @+0x08}, stride 0x18. Read out of 0x180005880's OWN disassembly and
+// NOT inherited from kD_Str_18, which has the same stride and the OPPOSITE
+// offset (String at +0x10): `MOV RAX,qword ptr [RBX]` at 0x1800058b7 is the
+// String load with NO displacement, and `ADD RBX,0x18` at 0x18000590c is the
+// stride. The body is Body B instruction for instruction against 0x180005930
+// (the row below), differing only in that one stride immediate. (2026-09-12)
+constexpr DestroySpec kD_Str_18at00 = { "String @+0x000, stride 0x018", 0x018, 1, { 0x000 } };
 constexpr DestroySpec kD_Str2_38 = { "2 Strings @+0x008,+0x000, stride 0x038", 0x038, 2, { 0x008, 0x000 } };
 // WAVE 27 LANE FRONTIER - UI::StringTable's TextEntry {name, text}, the element
 // of the array at StringTable+0x20. Read out of 0x180005570's own body:
@@ -341,6 +349,7 @@ RTCOLL_FITS(kD_Str_08, 1, 8u);
 RTCOLL_FITS(kD_Str_10, 1, 8u);
 RTCOLL_FITS(kD_Str_48, 1, 8u);
 RTCOLL_FITS(kD_Str_18, 1, 8u);
+RTCOLL_FITS(kD_Str_18at00, 1, 8u);   // 2026-09-12, MaterialInstance::Constant
 RTCOLL_FITS(kD_Str2_38, 2, 8u);
 RTCOLL_FITS(kD_Str2_10, 2, 8u);
 static_assert(kD_Str2_38.offs[1] + 8u <= kD_Str2_38.stride, "offs[1]");
@@ -533,6 +542,12 @@ B_ENTRY(1800059e0, kD_Str2_38)        // SpriteSheet's 0x38 entry — lane Q's k
 B_ENTRY(180011010, kD_Str_08)         // UI: ComboElement::_strings — lane UIW's kSpec_StringRef
 B_ENTRY(180026b50, kD_Str_10)         // IO::PackageFile::Entry — lane Q's kSpec_PkgEntry
 B_ENTRY(18004fe20, kD_Str_20)         // Video::VertexLayout::Element — array.cpp kSpec_VertexElement (2026-09-12)
+// 2026-09-12 - the element-destroy arm of `Array<MaterialInstance::Constant>::
+// SetSize` (0x1800616c0), which is on the cutover boot path through
+// ?Serialize@MaterialInstance@Graphics@@. Called on BOTH arms of that SetSize
+// (realloc 0x1800617b4, shrink-tail 0x180061807), exactly as 0x180005930 is
+// called on both arms of 0x180061880.
+B_ENTRY(180005880, kD_Str_18at00)     // Graphics: MaterialInstance::Constant {String*, float[4]}
 // WAVE 26 LANE INT33 — the fifth, and it is one of "the eight ported but
 // deliberately unregistered" the banner above lists. The stated condition for
 // registering one of the eight is "when a caller exists", and one now does:
@@ -1091,6 +1106,10 @@ void RtCollectionDestroyPortInit() {
     RegisterRuntimeAddr(0x1800419b0, (void*)&RtColl_DestroyInner_1800419b0);
     RegisterRuntimeAddr(0x180011010, (void*)&RtColl_DestroyStrings_180011010);
     RegisterRuntimeAddr(0x18004fe20, (void*)&RtColl_DestroyStrings_18004fe20);
+    // 2026-09-12: the MaterialInstance::Constant range destroy. Its caller is
+    // array.cpp's kSpec_MaterialConstant (0x1800616c0), ported in the same
+    // commit; unregistered it is a call to zero the moment the DLL is gone.
+    RegisterRuntimeAddr(0x180005880, (void*)&RtColl_DestroyStrings_180005880);
     // Wave 9 lane DESTROY: the packfile-entry range destroy. array.cpp's
     // kSpec_PkgEntry reaches it by address from ReadPackfile's SetSize, and it
     // was the attempt-17 cutover wall (an EXEC of 0 with the DLL absent).
