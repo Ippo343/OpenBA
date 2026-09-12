@@ -2662,6 +2662,37 @@ void RtColl_ArraySetSize_18002aae0(void* a) {
                 &g_j3_18002aae0);
 }
 
+
+// ============================================================================
+// BATCH 8b (2026-09-12) - 0x180052330, Audio::Scene::EffectSlot::positions
+// ============================================================================
+// `Collection::Array<Audio::EmitterInstance>::SetSize(int)`, the resize the
+// EffectSlot inner-array serialize (0x180051e00, ported in
+// runtime/src/audio/audio_effectslot_serialize.cpp) calls on the READING side.
+// Read out of the body at 0x180052330, not inferred from a sibling:
+//
+//   stride 0x10   SHL RCX,0x4                          at 0x180052391
+//   align  4      MOV R14D,0x4 / MOV EDX,R14D          at 0x18005236e/0x180052395
+//   assign        FOUR dword moves per element         at 0x180052411
+//   init          the `else` arm writes TWO ZERO QWORDS at 0x180052433, so the
+//                 whole stride is covered and there is no init window
+//   destroy       NONE - the shrink path frees the old buffer and destroys
+//                 nothing (0x180052557 goes straight to the locked free)
+//
+// It is NOT kSpec_Fill16A4 (0x180051aa0), which is the same stride and the same
+// align 4 but has NO init arm; reusing it would leave a tail retail zeroes.
+// It is NOT kSpec_Fill16 either, whose align is 8.
+const ArraySpec kSpec_EmitterInstance = {        // 0x180052330
+    "Array<Audio::EmitterInstance>", 0x10, 4, &Assign16, &InitZero10, nullptr,
+    true, 0, 0, 0, 0, 0, 0 };
+
+Site g_j3_180052330 = { { "Collection::Array::SetSize @0x180052330",
+                          0, 0, false, false }, 0x180052330 };
+void RtColl_ArraySetSize_180052330(void* a, int n) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_EmitterInstance,
+                &g_j3_180052330);
+}
+
 }  // namespace rtcoll
 
 // ============================================================================
@@ -2777,6 +2808,9 @@ void RtCollectionPortInit() {
     // Wave 25 lane INTERNAL42: Wave 24 lane INTERNAL8's two declared doors.
     RegisterRuntimeAddr(0x18002a9d0, (void*)&RtColl_ArraySetSize_18002a9d0);
     RegisterRuntimeAddr(0x18002a810, (void*)&RtColl_ArraySetSize_18002a810);
+    // BATCH 8b: Audio::Scene::EffectSlot::positions, the read-path resize
+    // inside the EffectSlot inner-array serialize (0x180051e00).
+    RegisterRuntimeAddr(0x180052330, (void*)&RtColl_ArraySetSize_180052330);
     RegisterRuntimeAddr(0x18002f070, (void*)&RtColl_ArraySetSize_18002f070);
     RegisterRuntimeAddr(0x1800492d0, (void*)&RtColl_ArraySetSize_1800492d0);
     RegisterRuntimeAddr(0x180005110, (void*)&RtColl_ArraySetSize_180005110);

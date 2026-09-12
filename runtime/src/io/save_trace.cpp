@@ -206,7 +206,8 @@ int   g_sinkSide = 0;
 //
 // The first run of this harness crashed with EXEC-of-0 on this vtable: retail
 // reaches an Encoding slot the caller's own disassembly never named, because
-// the bulk element pass (0x180052640) derives its own reader/writer from the
+// the bulk element pass (0x180052640 -- ported BATCH 8b,
+// runtime/src/audio/audio_effectslot_serialize.cpp) derives its own reader/writer from the
 // Stream rather than reusing the caller's. A null slot faults; a bound one
 // RECORDS, which turns "something crashed" into a line naming the slot. That is
 // the whole reason to bind the unknown ones rather than the known ones.

@@ -331,14 +331,19 @@ void RtIoPortInit() {
     //   modification_setupfilesystem.cpp ?SetupFileSystem@Modification@ 0x1800aebb0
     //
     // 0x1800b6290 pays one of the five address doors
-    // persistence_worker_win.cpp's `Run` opened and declared; the other four
-    // (SAVE / LOAD / DELETE / GET-SAVE-INFO) are still outstanding.
+    // persistence_worker_win.cpp's `Run` opened and declared; BATCH 8b's
+    // 0x1800b65b0 below pays a second, leaving LOAD and DELETE outstanding.
     extern int RtIoFileSystemTimeStampRegister();
     extern int RtIoPersistenceSaveListRegister();
     extern int RtIoModificationSetupFileSystemRegister();
     n += RtIoFileSystemTimeStampRegister();
     n += RtIoPersistenceSaveListRegister();
     n += RtIoModificationSetupFileSystemRegister();
+
+    // ---- BATCH 8b (2026-09-12), also unconditional -------------------------
+    //   persistence_saveinfo_job.cpp    worker command 3 (unexported)  0x1800b65b0
+    extern int RtIoPersistenceSaveInfoRegister();
+    n += RtIoPersistenceSaveInfoRegister();
     if (RtWaveEnabled("BANISHED_RT_CSWRITE"))     n += RtIoCompressedStreamWriteRegister();
     printf("[RtPort] IO: %d exports registered\n", n);
 }

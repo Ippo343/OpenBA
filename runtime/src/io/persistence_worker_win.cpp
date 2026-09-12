@@ -845,11 +845,17 @@ extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
 //   SYMBOL      (unexported) 0x1800b6aa0  the LOAD job
 //   SYMBOL      (unexported) 0x1800b69c0  the DELETE job
 //   SYMBOL      (unexported) 0x1800b65b0  the GET-SAVE-INFO job
+//                                         *** PAID 2026-09-12, BATCH 8b ***
+//                                         runtime/src/io/persistence_saveinfo_job.cpp
+//                                         registers this address.
 //   SYMBOL      (unexported) 0x1800b6290  the GET-SAVE-LIST job
 //                                         *** PAID 2026-09-12, batch 5 ***
 //                                         runtime/src/io/persistence_savelist_job.cpp
-//                                         registers this address. FOUR of the
-//                                         five remain open, not five.
+//                                         registers this address. With the SAVE
+//                                         job ported in this file and BATCH 8b
+//                                         above, TWO of the five remain open:
+//                                         LOAD (0x1800b6aa0) and DELETE
+//                                         (0x1800b69c0).
 //   CONDITION   each door is live the moment `Run` is dispatched out of a
 //               PROMOTED/minted 0x180155860 with the matching command pending.
 //   CONSEQUENCE with the DLL present each resolves to the shipped body and
