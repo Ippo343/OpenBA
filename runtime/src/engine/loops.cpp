@@ -221,6 +221,16 @@ UiCtorFn UserInterfaceCtor() {
         ResolveExport("??0UserInterface@UI@@QEAA@XZ"));
     return fn;
 }
+// BATCH 8: the three loop dtors below each embed a UI::UserInterface and
+// destroy it by calling this same exported dtor (0x180120b90, already ported
+// and registered — runtime/src/ui/userinterface.cpp's RtUi_UserInterface_Dtor
+// — so this reaches OUR body, not the DLL's).
+using UiDtorFn = void (*)(void*);
+UiDtorFn UserInterfaceDtor() {
+    static UiDtorFn fn = reinterpret_cast<UiDtorFn>(
+        ResolveExport("??1UserInterface@UI@@QEAA@XZ"));
+    return fn;
+}
 UiUpdateFn UserInterfaceUpdate() {
     static UiUpdateFn fn = reinterpret_cast<UiUpdateFn>(
         ResolveExport("?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z"));
@@ -619,6 +629,70 @@ extern "C" void RtEngine_UpdateLoop_Dtor(UpdateLoop* self) {
 
     // Tail call in retail: `LEA RCX,[RBX+0x10]; JMP 0x180010ab0`.
     ListCleanup()(&self->_internalListA);
+}
+
+// ============================================================================
+// BATCH 8: the three remaining family dtors — ~LoaderLoop, ~DialogLoopT,
+// ~DialogLoaderLoopT. All three end in exactly the base cleanup above (the
+// vtable restamp to UpdateLoop's own table, the ExternalFactory bit release,
+// the ListCleanup tail call); factored out so each dtor states only what it
+// adds over that base, matching how retail's decompile actually reads (see
+// the three functions below for the decompiled shape each one open-codes).
+// ============================================================================
+void UpdateLoopBaseTeardown(UpdateLoop* self) {
+    self->_vtable = VTableUpdateLoop();
+    const int32_t bit = self->_loadBit;
+    if (bit >= 0) {
+        RtObject::ExternalFactory* factory = Factory();
+        factory->_cleanBitIndex = bit;
+        ExternalFactoryClean()(factory);
+        factory->_cleanBitMask &= ~(1u << self->_loadBit);
+    }
+    ListCleanup()(&self->_internalListA);
+}
+
+// ---- ??1LoaderLoop@Engine@@UEAA@XZ  0x1800dc170 ord 626 ---------------------
+// Retail's decompile shows LoaderLoop's OWN vtable stamped and then
+// immediately overwritten with UpdateLoop's, with nothing observable between
+// the two stores: LoaderLoop adds no destructible members over UpdateLoop
+// (a raw pointer and three ints), so MSVC folded ~LoaderLoop's body straight
+// into ~UpdateLoop's rather than emitting a real call down to it. The net
+// effect is UpdateLoopBaseTeardown once LoaderLoop's own vtable has been
+// written, which is reproduced here as two statements rather than one,
+// exactly because retail's own listing has two stores.
+extern "C" void RtEngine_LoaderLoop_Dtor(LoaderLoop* self) {
+    RT_DIFF_BEGIN("Engine::LoaderLoop::dtor");
+    self->_base._vtable = VTableLoaderLoop();
+    UpdateLoopBaseTeardown(&self->_base);
+}
+
+// ---- ??1DialogLoopT@Engine@@UEAA@XZ  0x1800db340 ord 576 --------------------
+// Adds, over the base: destroy the embedded UI::UserInterface at +0x40 (its
+// own exported dtor, already ported — runtime/src/ui/userinterface.cpp), then
+// release `_dialogFilename` (+0x28) with the standard String release idiom
+// (StringRelease, above) BEFORE the base teardown restamps the vtable to
+// UpdateLoop's and runs the ExternalFactory/ListCleanup pair.
+extern "C" void RtEngine_DialogLoopT_Dtor(DialogLoopT* self) {
+    RT_DIFF_BEGIN("Engine::DialogLoopT::dtor");
+    self->_base._vtable = VTableDialogLoopT();
+    UserInterfaceDtor()(&self->_ui);
+    StringRelease(&self->_dialogFilename);
+    UpdateLoopBaseTeardown(&self->_base);
+}
+
+// ---- ??1DialogLoaderLoopT@Engine@@UEAA@XZ  0x1800db060 ord 575 --------------
+// Same shape as ~DialogLoopT, over the LoaderLoop base rather than UpdateLoop
+// directly: own vtable, destroy the UI at +0x60, release `_dialogFilename`
+// (+0x48), then tail into ~LoaderLoop(this) — reproduced here as the same
+// LoaderLoop-vtable restamp plus UpdateLoopBaseTeardown, per the note above
+// ~LoaderLoop on why those two collapse into one sequence.
+extern "C" void RtEngine_DialogLoaderLoopT_Dtor(DialogLoaderLoopT* self) {
+    RT_DIFF_BEGIN("Engine::DialogLoaderLoopT::dtor");
+    self->_base._base._vtable = VTableDialogLoaderLoopT();
+    UserInterfaceDtor()(&self->_ui);
+    StringRelease(&self->_dialogFilename);
+    self->_base._base._vtable = VTableLoaderLoop();
+    UpdateLoopBaseTeardown(&self->_base._base);
 }
 
 // ---- ?IsRunning@UpdateLoop@Engine@@QEBA_NXZ  0x1800dd7b0 ord 3160 -----------
@@ -1847,6 +1921,19 @@ int RtEngineLoopsRegister() {
     RegisterRuntimeExport("?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ",
                           (void*)&RtEngine_DialogLoaderLoopT_Startup); ++n;
     RegisterRuntimeAddr(0x1800db000, (void*)&RtEngine_DialogLoaderLoopT_Startup);
+
+    // ---- BATCH 8: the three remaining family dtors --------------------------
+    RegisterRuntimeExport("??1LoaderLoop@Engine@@UEAA@XZ",
+                          (void*)&RtEngine_LoaderLoop_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800dc170, (void*)&RtEngine_LoaderLoop_Dtor);
+
+    RegisterRuntimeExport("??1DialogLoopT@Engine@@UEAA@XZ",
+                          (void*)&RtEngine_DialogLoopT_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800db340, (void*)&RtEngine_DialogLoopT_Dtor);
+
+    RegisterRuntimeExport("??1DialogLoaderLoopT@Engine@@UEAA@XZ",
+                          (void*)&RtEngine_DialogLoaderLoopT_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800db060, (void*)&RtEngine_DialogLoaderLoopT_Dtor);
 
     // ---- WAVE 25 lane VTIO: the six shared UpdateLoop base slots ------------
     // Registered by NAME and by ADDRESS, like every other row in this file.

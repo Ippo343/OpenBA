@@ -210,6 +210,7 @@ const char* const kSetImageBuffer  = "?SetImageBuffer@Context@Video@@QEAAXPEBVIm
 const char* const kSetInverseScale = "?SetInverseScale@Context@Video@@QEAAXMMMM@Z";
 const char* const kSetRenderBuffer = "?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z";
 const char* const kSetTime         = "?SetTime@Context@Video@@QEAAXM@Z";
+const char* const kSetBones        = "?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z";
 const char* const kSetTransform    = "?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z";
 const char* const kSetTransformScale =
     "?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z";
@@ -378,6 +379,22 @@ inline bool MatrixNotEqual(const MatrixRaw* a, const MatrixRaw* b) {
 }
 
 } // namespace
+
+// ============================================================================
+// ??9Matrix@Math@@QEBA_NAEBV01@@Z  (Math::Matrix::operator!=)  retail
+// 0x18001d850, ordinal 1286  —  BATCH 8
+// ============================================================================
+// The export itself, wrapping the same `MatrixNotEqual` this file already
+// used inline for SetTransform's dirty check (comment above): sixteen `==`
+// comparisons with retail's own short-circuit nesting, reproduced exactly —
+// see mcp decompile of 0x18001d850 for the nested-if shape this flattens.
+// Registered by BOTH name and address: `Math::Matrix::operator!=` has no
+// other caller in this tree today, but a caller reaching it by address (the
+// shape every other door in this file worries about) gets the same body.
+// ============================================================================
+bool RtMath_Matrix_NotEqual(const MatrixRaw* self, const MatrixRaw* other) {
+    return MatrixNotEqual(self, other);
+}
 
 // ============================================================================
 // The ports
@@ -601,6 +618,36 @@ void RtVideo_Context_SetTransform(Context* self, int slot, const MatrixRaw* m) {
     if (rt_diff_on__) {
         using Fn = void (*)(Context*, int, const MatrixRaw*);
         RT_ORIGINAL_ONCE(Fn, kSetTransform)(replay, slot, m);
+        RT_DIFF_BYTES(self, replay, kContextSize);
+    }
+}
+
+// ---- ?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z  0x18001a780 -------
+// ---- ordinal 3835.  BATCH 8. ------------------------------------------------
+// Writes `count` to `_unknown0024` (the same "live counter" BindResources'
+// transform-dirty test already reads alongside `_transformCount`), then
+// copies `count` Matrix entries (0x40 bytes each) from `matrices` into
+// `_boneAndProjectionStaging` starting at its own +0x00 — i.e. bone i lands
+// at that array's byte offset `i * 0x40` — ORing the transform-constants
+// dirty bit into `_dirty` on every iteration (retail re-ORs it once per bone,
+// not once at the end; reproduced faithfully even though it is redundant
+// after the first iteration, since retail's own listing does exactly this).
+// A `count <= 0` call touches only `_unknown0024` and nothing else, matching
+// retail's `if (0 < param_1)` guard around the whole copy loop.
+void RtVideo_Context_SetBones(Context* self, int32_t count, const MatrixRaw* matrices) {
+    RT_DIFF_BEGIN("Video::Context::SetBones");
+    Context* replay = ReplaySnapshot(rt_diff_on__, self);
+
+    self->_unknown0024 = count;
+    for (int32_t i = 0; i < count; ++i) {
+        std::memcpy(self->_boneAndProjectionStaging + static_cast<size_t>(i) * sizeof(MatrixRaw),
+                    &matrices[i], sizeof(MatrixRaw));
+        self->_dirty |= RtVideo::kDirtyTransformConstants;
+    }
+
+    if (rt_diff_on__) {
+        using Fn = void (*)(Context*, int32_t, const MatrixRaw*);
+        RT_ORIGINAL_ONCE(Fn, kSetBones)(replay, count, matrices);
         RT_DIFF_BYTES(self, replay, kContextSize);
     }
 }
@@ -1047,6 +1094,14 @@ int RtVideoContextRegister() {
         RegisterRuntimeAddr(0x1800f2110, (void*)&RtVideo_Context_EndInstancedIndexedVertices);
         VerifyThunk(&site, "?EndInstancedIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z", RtVideo::kSlotEndInstancedIndexedVertices);
     }
+
+    // BATCH 8: Math::Matrix::operator!=, a non-virtual leaf with no slot to verify.
+    RegisterRuntimeExport("??9Matrix@Math@@QEBA_NAEBV01@@Z", (void*)&RtMath_Matrix_NotEqual); ++count;
+    RegisterRuntimeAddr(0x18001d850, (void*)&RtMath_Matrix_NotEqual);
+
+    // BATCH 8: SetBones — a plain public export, no vtable slot to verify.
+    RegisterRuntimeExport("?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z", (void*)&RtVideo_Context_SetBones); ++count;
+    RegisterRuntimeAddr(0x18001a780, (void*)&RtVideo_Context_SetBones);
 
     return count;
 }
