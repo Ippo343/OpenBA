@@ -227,6 +227,14 @@ void RtVideoPortInit() {
     // 2026-09-12: Video::VideoProgram, the whole class (videoprogram.cpp). No switch.
     { extern int RtVideoProgramRegister(); n += RtVideoProgramRegister(); }
     { extern int RtVideoVertexLayoutRegister(); n += RtVideoVertexLayoutRegister(); }
+    // 2026-09-12: the Video shader family, whole classes, no switch. ORDER
+    // MATTERS ONLY FOR READING: each register call is independent, but
+    // ShaderProgram is listed first because VertexProgram and PixelProgram
+    // reuse its ctor/dtor/Serialize bodies at link time.
+    { extern int RtVideoShaderProgramRegister(); n += RtVideoShaderProgramRegister(); }
+    { extern int RtVideoVertexProgramRegister(); n += RtVideoVertexProgramRegister(); }
+    { extern int RtVideoPixelProgramRegister();  n += RtVideoPixelProgramRegister(); }
+    { extern int RtVideoRenderStateRegister();   n += RtVideoRenderStateRegister(); }
 
     if (RtWaveEnabled("BANISHED_RT_VIDRES")) {
         extern int RtVideoResourcesRegister();
@@ -241,9 +249,14 @@ void RtVideoPortInit() {
         extern int RtVideoSaveImageRegister();
         if (RtWaveEnabled("BANISHED_RT_VIDSAVEIMG")) n += RtVideoSaveImageRegister();
         // Wave 18 lane VRES tranche 2. Its own switch for the same reason: it
-        // is the only row that reaches an unported Collection helper
+        // used to be the only row that reached an unported Collection helper
         // (0x180053f00), so an A/B that needs the rest of the lane on and this
         // one off has a switch for it.
+        // *** 2026-09-12: 0x180053f00 IS NOW PORTED *** —
+        // runtime/src/collection/array.cpp `kSpec_InnerArrayU8`, landed with
+        // Video::ShaderProgram, whose PlatformSerialize is its other caller.
+        // The switch is kept (it still isolates this row's OWN body) but the
+        // reason quoted above no longer applies.
         extern int RtVideoImageBufferSerializeRegister();
         if (RtWaveEnabled("BANISHED_RT_VIDIMGSER"))
             n += RtVideoImageBufferSerializeRegister();
