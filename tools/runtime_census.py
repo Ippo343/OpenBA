@@ -824,6 +824,52 @@ CLASSIFIER_FIXTURES = [
 ]
 
 
+def selftest_promoted_doors():
+    """Control for mint_promoted_symbols(): BOTH promotion doors must be seen.
+
+    WAVE 25 INTEGRATION, and the fifth instance of a literal-grep instrument
+    going blind to a fact spelled through a variable. Lane SWEEP's
+    PromoteVtableGuarded() refactor is an IMPROVEMENT -- it makes a row refuse
+    itself rather than stamp abort traps -- and it silently cut 111 rows out
+    of the census denominator by moving the symbol behind a parameter.
+
+    The screen is ABSENCE-shaped: when a door stops being seen the result is a
+    SMALLER SET, never an error. So it is HANDED a synthetic buffer holding
+    both spellings and requires BOTH, and it then corroborates against the
+    real file -- a fixture alone would pass while the thing it guards drifted.
+    """
+    fixture = "\n".join([
+        "void f() {",
+        '    st = RtMintPromotionStorage("?_typeInfo@Direct@UI@@0V@A", 0x1ull);',
+        '    PromoteVtableGuarded("??_7Guarded@UI@@6B@", 0x2ull, &n);',
+        '    // RtMintPromotionStorage("?_typeInfo@InAComment@UI@@0V@A", 0x3ull);',
+        "}",
+    ])
+    src = strip_comments(fixture)
+    direct = set(re.findall(r'RtMintPromotionStorage\(\s*"([^"]+)"', src))
+    guard = set(re.findall(r'PromoteVtableGuarded\(\s*"([^"]+)"', src))
+    got = direct | guard
+    checks = [
+        ("direct door seen", "?_typeInfo@Direct@UI@@0V@A" in got),
+        ("GUARDED door seen (the Wave 25 blind spot)", "??_7Guarded@UI@@6B@" in got),
+        ("comment stripped, not counted", "?_typeInfo@InAComment@UI@@0V@A" not in got),
+        ("EFFECTIVENESS: both doors yielded something", bool(direct) and bool(guard)),
+    ]
+    bad = 0
+    for name, ok in checks:
+        print(("  GREEN   " if ok else "  RED     ") + name)
+        bad += 0 if ok else 1
+    live = mint_promoted_symbols(REPO)
+    nvt = len([s for s in (live or ()) if s.startswith("??_7")])
+    nti = len([s for s in (live or ()) if s.startswith("?_typeInfo@")])
+    print("  LIVE FILE: %d vtable + %d typeInfo promoted symbol(s)" % (nvt, nti))
+    if live is None or nvt == 0 or nti == 0:
+        print("RESULT   : RED -- a live door yields ZERO; the scan has drifted")
+        return 1
+    print("RESULT   : %d of %d checks correct" % (len(checks) - bad, len(checks)))
+    return 1 if bad else 0
+
+
 def selftest_unpromotable_key():
     """Regression guard for BOTH defects in load_unpromotable()'s one regex.
 
@@ -1278,7 +1324,31 @@ def mint_promoted_symbols(repo):
             text = fh.read()
     except OSError:
         return None
-    return set(re.findall(r'RtMintPromotionStorage\(\s*"([^"]+)"', strip_comments(text)))
+    # WAVE 25 INTEGRATION -- the FIFTH recorded instance of this project's most
+    # repeated blind spot: an instrument that greps for a LITERAL is blind to
+    # the same fact spelled through a VARIABLE, and never announces it.
+    #
+    # Lane SWEEP routed all twelve promoted rows through ONE
+    # `PromoteVtableGuarded(symbol, va, &n)` helper so a row REFUSES itself
+    # rather than stamping abort traps into a live vptr. That is strictly
+    # better engineering. But the helper calls RtMintPromotionStorage with a
+    # VARIABLE, so this scan stopped seeing eleven of the twelve promotions.
+    # Measured at integration:
+    #
+    #     12 PROMOTED -> 1, the vtable fold-in 151 rows -> 9, and the BOARD
+    #     read 1333/1185 88.9% -> 1222/1074 87.9%, the gap GROWING 137 -> 148.
+    #
+    # Nothing was unported. A refactor that touched no port erased 111 rows
+    # from the denominator -- and it was caught ONLY because it pointed the
+    # unflattering way. A version of this that raised the percentage would
+    # have been believed and quoted.
+    #
+    # Both doors are matched. The literal still lives at each
+    # PromoteVtableGuarded call site, so this stays a source scan;
+    # --selftest-promoted-doors fails if either door stops yielding.
+    src = strip_comments(text)
+    return (set(re.findall(r'RtMintPromotionStorage\(\s*"([^"]+)"', src)) |
+            set(re.findall(r'PromoteVtableGuarded\(\s*"([^"]+)"', src)))
 
 
 def mint_promoted_count(repo):
@@ -2083,6 +2153,8 @@ def main():
                          "publish a number produced this way.")
     ap.add_argument("--selftest-unpromotable-key", action="store_true",
                     help="regression guard for load_unpromotable()'s symbol/class regex")
+    ap.add_argument("--selftest-promoted-doors", action="store_true",
+                    help="control: BOTH promotion doors must be visible to the scan")
     ap.add_argument("--selftest-classifier", action="store_true",
                     help="run the symbol-kind classifier against its fixture "
                          "table and exit. Includes a DELIBERATELY MALFORMED "
@@ -2108,6 +2180,8 @@ def main():
 
     if args.selftest_unpromotable_key:
         return selftest_unpromotable_key()
+    if args.selftest_promoted_doors:
+        return selftest_promoted_doors()
     if args.selftest_classifier:
         return selftest_classifier()
     if args.selftest_ordinal_fold:
