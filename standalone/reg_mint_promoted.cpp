@@ -2743,8 +2743,20 @@ int RtMintRegisterPromotedRows() {
     //    (~AchievementManager then operator delete; byte-identical to the ported
     //    0x18009eab0 plus a trailing CALL 0x180006a10) and it is UNREACHABLE --
     //    ZERO rel32 call/jmp sites, and an 8-byte scan of EVERY section finds
-    //    its address nowhere, so it is in no vtable and no table. It cannot run,
-    //    so it cannot write this cell. ?Get@ likewise has ZERO in-DLL callers.
+    //    its address nowhere, so NO IN-DLL DISPATCH STRUCTURE names it -- no
+    //    vtable, jump table, function-pointer global or static-init table,
+    //    which is where an indirect in-DLL call must get an address from. It is
+    //    ALSO absent from the export directory (checked separately, with a
+    //    control: ?Get@AchievementManager@ is found there at ordinal 2403 of
+    //    4926). So nothing reaches it by any route: it cannot run, and it
+    //    cannot write this cell.
+    //    GENERAL FORM, because the narrow form does not travel: "absent from
+    //    every section" licenses "no in-DLL dispatch structure names it" and
+    //    NOT "nothing names it" -- an 8-byte VA scan cannot see the export
+    //    directory, which stores 32-bit RVAs. Reading it as "not exported" is
+    //    reference_aeaa_is_private_not_unexported.md from its other side. The
+    //    export check above is a SECOND screen for that reason, not a
+    //    restatement of the first. ?Get@ likewise has ZERO in-DLL callers.
     //    So NO in-DLL code path touches this cell at all, and the "two owners,
     //    one object" hazard has no owner on the DLL side.
     //    THAT LIMIT WAS THEN CLOSED, because "is this symbol the thing that

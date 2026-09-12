@@ -325,6 +325,23 @@ Another instance of the family in
 `reference_literal_grep_blind_to_variables.md` — an instrument blind to the same
 fact spelled another way, announcing nothing.
 
+**GENERAL FORM, stated because a lesson filed as a fact about one row does not
+travel:** *an opcode-pattern scan for "who writes X" must enumerate the STORE
+FORMS, not the ones that came to mind.* On x86-64 a write to a RIP-relative
+global is at least `89` (reg), `C7` (imm32), and the read-modify-writes
+(`INC`/`AND`/`OR`/`XCHG`); `= 0` and `= nullptr` are the most common thing
+lifecycle code does to a singleton and they are exactly the form a `89|8B`
+pattern misses. The robust move is not a better pattern but a different
+mechanism: let a real disassembler resolve the target and match on the RESOLVED
+ADDRESS, which is opcode-agnostic by construction.
+
+**One bound in the other direction, from lane LOOPS, which tightens my own
+finding rather than softening it:** the C7 gap *cannot* affect a vtable-stamp
+census even in principle, because `C7` takes a sign-extended `imm32` and every
+vtable VA in this family exceeds `0x7FFFFFFF`, so MSVC must use `LEA`. That
+converts "LOOPS's other results happen to be unaffected" into "they could not
+have been affected", which is the stronger claim and the one worth carrying.
+
 **So a lane doc that said "the expiry clause has fired in full" would have been
 right by accident, from a writer set missing two entries.**
 
@@ -335,11 +352,28 @@ null the singleton, then the same three array-free leaves in the same order as
 the ported `??1AchievementManager@` (0x180009700 / 0x180008e80 / 0x180009560),
 then a trailing `CALL 0x180006a10` — `~AchievementManager(); operator delete(this)`.
 
-**It is unreachable.** Measured: **zero** rel32 `call`/`jmp` sites anywhere in
-`.text`, and an 8-byte scan of **every section** of the PE finds its address
-nowhere — so it is in no vtable and no dispatch table. It cannot execute, so it
-cannot write the cell. `?Get@` likewise has **zero in-DLL callers**: it is an
-exported accessor the EXE calls, and it is ported.
+**It is unreachable.** Measured on three screens that fail differently:
+
+* **zero** rel32 `call`/`jmp` sites anywhere in `.text`;
+* an 8-byte scan of **every section** of the PE finds its address nowhere — so
+  **no in-DLL dispatch structure names it** (no vtable, jump table,
+  function-pointer global or static-init table, which is where an indirect
+  in-DLL call must get an address from);
+* it is **absent from the export directory**, checked separately because the
+  second screen cannot see that — with a control: `?Get@AchievementManager@` is
+  found there at ordinal 2403 of 4926.
+
+It cannot execute, so it cannot write the cell. `?Get@` likewise has **zero
+in-DLL callers**: it is an exported accessor the EXE calls, and it is ported.
+
+**I wrote "in no vtable and no table" first, and tightened it after lane LOOPS
+hit the same overclaim in its own doc.** The general form, which is the part
+that travels: *"absent from every section" licenses "no in-DLL dispatch
+structure names it" and NOT "nothing names it"* — a 64-bit VA scan cannot see
+the export directory, which stores 32-bit RVAs. Reading it as "not exported" is
+`reference_aeaa_is_private_not_unexported.md` from its other side. My sentence
+turned out to be true for this subject, but only because I went and checked the
+export directory rather than because the scan had said so.
 
 **No in-DLL code path touches this cell at all.** The "two owners, one object"
 hazard has no owner on the DLL side.
