@@ -19,7 +19,7 @@ OUT = os.path.join(REPO, "docs", "runtime_port", "closure")
 # Names Ghidra gives to auto-identified C runtime code.  These do not need a
 # port: reimpl-x64.exe links its own CRT.  If a name here turns out to be an
 # engine function the fix is to rename it in Ghidra, not to edit this list.
-CRT_RE = re.compile(r"^(_|__|FID_conflict:|`eh_|doexit|free$|malloc$|memcpy$|qsort$|shortsort$|strlen$|strtol$|strtoxl$|wcs|mbtowc$|wctomb|isleadbyte|write_(char|string|multi_char)$|IsProcessorFeaturePresent$)")
+CRT_RE = re.compile(r"^(_|__|FID_conflict:|`eh_|doexit|free$|malloc$|memcpy$|memset$|qsort$|shortsort$|strlen$|strtol$|strtoxl$|wcs|mbtowc$|wctomb|isleadbyte|write_(char|string|multi_char)$|IsProcessorFeaturePresent$)")
 
 
 def main():

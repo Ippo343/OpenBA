@@ -262,6 +262,16 @@ void FileStreamCtorInline(FileStream* self) {
     fi->winHandle   = -1;                                                  // 1800a8268
 }
 
+// ??0FileStream@IO@@QEAA@XZ (0x1800aaa10, ordinal per list_exports) is exactly
+// the prologue above and nothing else -- eleven stores, `MOV RAX,RCX`, RET --
+// which is why every caller in this tree that constructs a FileStream on the
+// stack (io/closure_batch2b_win.cpp, the persistence jobs) reaches it by name.
+// Registered so those by-name resolves land here at cutover.
+extern "C" FileStream* RtIo_FileStream_Ctor(FileStream* self) {
+    FileStreamCtorInline(self);
+    return self;
+}
+
 // ---------------------------------------------------------------------------
 // The Encoding both constructors install at Stream::encoding (+0x10).
 //
@@ -1002,6 +1012,9 @@ int RtIoFileStreamRegister() {
     RegisterRuntimeExport("??0BinaryFileStream@IO@@QEAA@XZ",
                           (void*)&RtIo_BinaryFileStream_Ctor); ++n;
     RegisterRuntimeAddr(0x1800a8200, (void*)&RtIo_BinaryFileStream_Ctor);
+    RegisterRuntimeExport("??0FileStream@IO@@QEAA@XZ",
+                          (void*)&RtIo_FileStream_Ctor); ++n;
+    RegisterRuntimeAddr(0x1800aaa10, (void*)&RtIo_FileStream_Ctor);
 
     RegisterRuntimeExport("??1BinaryFileStream@IO@@UEAA@XZ",
                           (void*)&RtIo_BinaryFileStream_Dtor); ++n;

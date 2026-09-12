@@ -1326,6 +1326,50 @@ J4_ENTRY(180033f30, kAsgn_MetaEntry20, ArrayClearMetaEntry20)   // clear 0x18003
 
 #undef J4_ENTRY
 
+// ---- Cutover closure close-out (2026-09-12): the stride-0x38 Array family ---
+//
+// Three bodies, one element type, read out of their own disassembly:
+//   0x18001cd30  Array<blob0x38>::operator=   J4: clear (0x18001c650), then
+//                `_size = src._size`; grow if `_capacity < size` with the
+//                usual `(size == old+1 && old != 0) ? size*3 : size` rule,
+//                `MemAlloc(cap * 0x38, 8)`; then a per-element copy of SEVEN
+//                qwords (`MOV RAX,[RDX+0x00..0x30]` / `MOV [RCX+..],RAX`).
+//                No element ctor, no String adopt: a POD element.
+//   0x18001c620  Array<blob0x38>::Array(const Array&)   `_data = 0; _size =
+//                _capacity = 0;` then a CALL to 0x18001cd30 and `MOV RAX,RCX`.
+//   0x18001c650  Array<blob0x38>::~Array   the thirteenth copy of J1
+//                (allocator lock, Free, zero the three fields) — the same body
+//                array.cpp:1929 already named as the one ArrayDtorImpl IS.
+// The one caller of the copy ctor is the eh_vector copy iterator at
+// 0x18001bece (Graphics::DrawGroup's inner arrays, graphics/closure_batch2b.cpp
+// reaches it BY ADDRESS through InnerArrayCopyCtor), which is how the closure
+// found all three.
+void Assign56(uint8_t* d, const uint8_t* s) {
+    for (int i = 0; i < 7; ++i)
+        reinterpret_cast<uint64_t*>(d)[i] = reinterpret_cast<const uint64_t*>(s)[i];
+}
+const ArraySpec kAsgn_Blob38 = {
+    "Array<blob0x38>", 0x38, 8, &Assign56, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+Site g_j4_18001cd30 = { { "Collection::Array::operator= @0x18001cd30",
+                          0, 0, false, false }, 0x18001cd30 };
+void* RtColl_ArrayAssign_18001cd30(void* self, const void* src) {
+    return ArrayAssignCore(static_cast<ArrayHdr*>(self),
+                           static_cast<const ArrayHdr*>(src),
+                           &kAsgn_Blob38, &ArrayClearTrivial, &g_j4_18001cd30);
+}
+void* RtColl_ArrayCopyCtor_18001c620(void* self, const void* src) {
+    ArrayHdr* h = static_cast<ArrayHdr*>(self);
+    h->_data = nullptr;                                       // 18001c624
+    h->_size = 0;                                             // 18001c62b (qword:
+    h->_capacity = 0;                                         //   size + capacity)
+    RtColl_ArrayAssign_18001cd30(self, src);                  // 18001c635
+    return self;                                              // MOV RAX,RCX
+}
+void RtColl_ArrayDtor_18001c650(void* self) {
+    ArrayDtorImpl(static_cast<ArrayHdr*>(self));
+}
+
 // Cutover closure batch 2 (2026-09-12): 0x18001b1a0, `Array<Graphics::
 // Geometry*>::operator=`. Read out of its own body and IDENTICAL in shape to
 // 0x180003970 above -- dtor first (CALL 0x18001bf50, itself already ported as
@@ -1527,6 +1571,10 @@ void RtCollectionDestroyPortInit() {
     RegisterRuntimeAddr(0x180014c70, (void*)&RtColl_ArrayAssign_180014c70);
     RegisterRuntimeAddr(0x180005770, (void*)&RtColl_ArrayAssign_180005770);
     RegisterRuntimeAddr(0x180033f30, (void*)&RtColl_ArrayAssign_180033f30);
+    // Close-out: the stride-0x38 family (see the kAsgn_Blob38 block).
+    RegisterRuntimeAddr(0x18001cd30, (void*)&RtColl_ArrayAssign_18001cd30);
+    RegisterRuntimeAddr(0x18001c620, (void*)&RtColl_ArrayCopyCtor_18001c620);
+    RegisterRuntimeAddr(0x18001c650, (void*)&RtColl_ArrayDtor_18001c650);
     // BATCH 5 (2026-09-12): the two element-destroy helpers the IO save-list
     // and mod-reload arrays call. Both callers are ported in array.cpp in the
     // same commit and reach these BY ADDRESS, so registering here is what
