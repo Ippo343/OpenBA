@@ -73,6 +73,43 @@ def parse_rows(inc_path):
     return syms, facs
 
 
+def vtable_screen(inc_path):
+    """THE PARALLEL FAMILY, found by lane ATTEND's attempt 28.
+
+    Porting a factory is not enough: the object it constructs is stamped with
+    `??_7<Class>@<NS>@@6B@`, and if the mint carries no row for that vtable the
+    vptr is NULL and the next virtual call faults. Attempt 28 hit exactly that,
+    on the class this lane had just ported, at `GetTypeIdVirtual+0x1f`.
+
+    So the factory slots and the vtable rows are TWO gaps on the SAME 104
+    classes, and this screen sizes the second one.
+
+    Class key = the first mangled component, compared between `??_7X@...@6B@`
+    and `?_typeInfo@X@...@`. The two symbol kinds compress enclosing-namespace
+    back-references DIFFERENTLY (`?_typeInfo@Achievement@1@` vs
+    `??_7Achievement@0@6B@`), so a whole-symbol comparison would report a false
+    MISSING on every nested class -- that was found by inspection, not assumed.
+    """
+    txt = open(inc_path, encoding='utf-8', errors='replace').read()
+    vt = set(re.findall(r'"(\?\?_7[^"]+)"', txt))
+    vt_keys = {}
+    for s in vt:
+        body = s[4:-4] if s.endswith('@6B@') else s[4:]
+        vt_keys[body.split('@')[0]] = s
+    ti = re.findall(r'"\?_typeInfo@([^"]+?)@0VBaseTypeInfo', txt)
+    have = [t for t in ti if t.split('@')[0] in vt_keys]
+    miss = [t for t in ti if t.split('@')[0] not in vt_keys]
+    print('')
+    print('=== PARALLEL FAMILY: the vtable row each TI class needs ===')
+    print('minted vtable rows (by name)          : %d' % len(vt))
+    print('TI classes WITH a minted vtable row   : %d' % len(have))
+    print('TI classes WITHOUT a minted vtable row: %d' % len(miss))
+    print('--- missing (each is a null vptr waiting at cutover) ---')
+    for t in miss:
+        print('  ??_7%s@6B@' % t)
+    return len(miss)
+
+
 def load_sources(root):
     out = []
     for base in SOURCE_ROOTS:
@@ -93,6 +130,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--root', default='.')
     ap.add_argument('--self-test', action='store_true')
+    ap.add_argument('--vtables', action='store_true',
+                    help='also size the parallel gap: TI classes with no minted vtable row')
     ap.add_argument('--expect-ported', default='?CreateNewObject@Dialog@UI@@SAPEAVBase@Object@@XZ')
     ap.add_argument('--expect-unported', default=None,
                     help='a factory mangled name that MUST come back absent; '
@@ -127,6 +166,9 @@ def main():
     print('\n--- ABSENT (every one is a cutover wall of the attempt-26 shape) ---')
     for idx, _s, name, va, _h in absent:
         print('  [%3d] %-10s %s' % (idx, va, name))
+
+    if a.vtables:
+        vtable_screen(inc)
 
     if not a.self_test:
         return 0

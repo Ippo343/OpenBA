@@ -152,6 +152,16 @@ extern int RtUiSpriteSheetNewRegister();   // spritesheet_new.cpp (lane SMALLBOD
 // It must register BEFORE RtDataMintInit(), which is why it lives here at all:
 // standalone/resolve_standalone.cpp:333 (RtUiPortInit) precedes :406 (the mint).
 extern int RtUiStringTableFactoryRegister(); // stringtable_factory.cpp (FACTORY)
+// Same file, second pass: the three ??_7StringTable@UI@@6B@ slots that read the
+// class's own ?_typeInfo@ node (slots 1/2/3). Shares BANISHED_RT_UISTRTAB with
+// the factories deliberately -- they are one class and one cutover wall, and a
+// switch that could arm the factory without the vtable slots would produce the
+// exact state attempt 28 hit: a constructed object whose vptr nothing fills.
+extern int RtUiStringTableAccessorsRegister(); // stringtable_factory.cpp (FACTORY)
+// Same file, third pass: slots 6/7/8 (Reconstruct/Destruct/Construct). Same
+// switch again, same reason. The row is 7/9 after these; slot 0 (the deleting
+// dtor) and Serialize are NOT ported and are named in WAVE26_LANE_FACTORY.md.
+extern int RtUiStringTableLifecycleRegister(); // stringtable_factory.cpp (FACTORY)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -186,5 +196,7 @@ void RtUiPortInit() {
     n += RtUiDragStartRegister();      // owns BANISHED_RT_UIDRAGSTART
     n += RtUiDialogFactoryRegister();  // owns BANISHED_RT_DLGFACTORY (lane OBJINT)
     n += RtUiStringTableFactoryRegister();  // owns BANISHED_RT_UISTRTAB (FACTORY)
+    n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
+    n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
     printf("[RtPort] UI: %d exports registered\n", n);
 }

@@ -124,6 +124,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/StringTable.h"
@@ -320,5 +321,216 @@ int RtUiStringTableFactoryRegister() {
                    "NOTHING either way.\n");
         fflush(stdout);
     }
+    return n;
+}
+
+// ============================================================================
+// WAVE 26 LANE FACTORY, SECOND PASS — the three `?_typeInfo@`-reading slots
+// ============================================================================
+//
+// WHY THESE ARE HERE. Lane ATTEND ran cutover attempt 28 with the port above
+// merged. The `[RtMint] FATAL` on `?CreateNewObject@StringTable@UI@@` was GONE
+// and the screen read `2 PORTED, 204 ABORT-TRAP` from inside a real cutover
+// boot. The boot then died a few instructions further along THE SAME call path:
+//
+//   [RtUnresolved] ??_7StringTable@UI@@6B@
+//   Fault: READ of 0x10 at RtObject::GetTypeIdVirtual+0x1f
+//     <- RtObject_Base_IsDerivedFrom+0x4e <- RtObject_External_Load+0x33c
+//     <- ExternalFactory::FindOrLoad+0x2b1 <- Game::LoadInputNameTables+0x177
+//
+// `READ of 0x10` is a vtable read at +0x10, i.e. SLOT 2, through a null vptr —
+// our `CreateNewObject` had stamped the object with a vtable the mint did not
+// carry. Slot 2 of the regenerated `??_7StringTable@UI@@6B@` row
+// (standalone/rt_data_mint_tables.inc kVSlots52) is `?Type@StringTable@UI@@`,
+// which is exactly the function `GetTypeIdVirtual` is calling. The diagnosis
+// and the slot index agree, independently.
+//
+// THE VTABLE ROW NEEDED NO NEW HARVEST RULE. `rt_mint_gen.py`'s population rule
+// is "mint what our SOURCE names", and `StringTableVTable()` above names
+// `"??_7StringTable@UI@@6B@"` as a literal — so `--check` reported
+// `ENTERED (1): 0x180154630 ??_7StringTable@UI@@6B@` and a regeneration picked
+// it up. **A ported factory that stamps its class's vtable through
+// RT_DATA_SLOT drags that vtable into the mint for free.** That is a
+// general fact about this family, not a fact about StringTable, and it is the
+// single most useful thing this lane learned for Wave 27's generator.
+//
+// THE BODIES. Identical in shape to the eight in
+// runtime/src/graphics/graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT) and
+// the seven in object_typeinfo_accessors.cpp (Wave 11 lane OBJDATA). Read as
+// DISASSEMBLY; the node is `?_typeInfo@StringTable@UI@@` at 0x1801fae08:
+//
+//   ?Type@StringTable@UI@@UEBAIXZ           0x180002170
+//       MOV EAX,dword ptr [0x1801fae08]  / RET      = node+0x00  (typeId, DWORD)
+//   ?TypeName@StringTable@UI@@UEBAPEBDXZ    0x180002190
+//       MOV RAX,qword ptr [0x1801fae10]  / RET      = node+0x08  (name, QWORD)
+//   ?GetFileVersion@StringTable@UI@@UEBAHXZ 0x18011d930
+//       MOV EAX,0x1 / RET                            = the literal 1
+//
+// NONE OF THE THREE READS `this`. All three are declared with a `self`
+// parameter anyway because they are VIRTUAL slots and the caller passes one in
+// RCX; dropping the parameter would be a different function at the ABI level.
+// `self` is deliberately unnamed-but-unused rather than removed.
+//
+// GetFileVersion returning a literal 1 is not an accident of this class: it is
+// the Object::External file-version convention, and the value belongs to the
+// SERIALIZER, not to the object. It is transcribed, not derived.
+// ============================================================================
+
+namespace {
+// BaseTypeInfo's first two fields, the only two these bodies touch. Read with
+// memcpy rather than a struct cast so no alignment or strict-aliasing
+// assumption is made about storage that may be OURS (minted) or the DLL's,
+// depending on whether the `?_typeInfo@` row is promoted — the same reading
+// graphics_typeinfo_accessors.cpp uses, for the same reason.
+constexpr size_t kTiTypeIdOffset = 0x00;
+constexpr size_t kTiNameOffset   = 0x08;
+static_assert(kTiTypeIdOffset == 0, "BaseTypeInfo::typeId is at +0x00");
+static_assert(kTiNameOffset == 8,   "BaseTypeInfo::name is at +0x08");
+static_assert(sizeof(uint32_t) == 4, "typeId is a DWORD (MOV EAX, not MOV RAX)");
+static_assert(sizeof(const char*) == 8, "name is a QWORD (MOV RAX)");
+
+const uint8_t* StringTableTypeInfo() {
+    return RT_DATA_SLOT(const uint8_t*,
+                        "?_typeInfo@StringTable@UI@@0VBaseTypeInfo@Object@@A");
+}
+
+uint64_t g_typeEntries = 0, g_typeNameEntries = 0, g_fileVersionEntries = 0;
+}  // namespace
+
+// ---- ??_7StringTable@UI@@6B@ slot 2 ----------------------------------------
+extern "C" uint32_t RtUiStringTable_Type(const void* /*self*/) {
+    ++g_typeEntries;
+    const uint8_t* node = StringTableTypeInfo();
+    uint32_t v = 0;
+    if (node) std::memcpy(&v, node + kTiTypeIdOffset, sizeof v);
+    return v;
+}
+
+// ---- ??_7StringTable@UI@@6B@ slot 1 ----------------------------------------
+extern "C" const char* RtUiStringTable_TypeName(const void* /*self*/) {
+    ++g_typeNameEntries;
+    const uint8_t* node = StringTableTypeInfo();
+    const char* v = nullptr;
+    if (node) std::memcpy(&v, node + kTiNameOffset, sizeof v);
+    return v;
+}
+
+// ---- ??_7StringTable@UI@@6B@ slot 3 ----------------------------------------
+extern "C" int32_t RtUiStringTable_GetFileVersion(const void* /*self*/) {
+    ++g_fileVersionEntries;
+    return 1;                                       // 18011d930 MOV EAX,1
+}
+
+// THE `if (node)` IN THE TWO ACCESSORS IS NOT A FAITHFULNESS BREAK, and it is
+// the one place in this file where our standalone genuinely differs from retail
+// (CLAUDE.md "Don't 'fix' a faithful crash with a null check"). Retail's body is
+// a RIP-relative load from a FIXED address that always exists in its own image;
+// ours goes through RT_DATA_SLOT, which can legitimately return null when the
+// symbol is neither minted nor resolvable — a state retail has no equivalent
+// of. Returning 0/nullptr there is what the surrounding code already handles;
+// dereferencing null would report OUR resolve failure as a crash in a body that
+// is byte-correct. Stated here rather than left implicit.
+
+int RtUiStringTableAccessorsRegister() {
+    const char* v = std::getenv("BANISHED_RT_UISTRTAB");
+    if (v && v[0] == '0') return 0;
+    int n = 0;
+    RegisterRuntimeExport("?Type@StringTable@UI@@UEBAIXZ",
+                          (void*)&RtUiStringTable_Type);
+    RegisterRuntimeAddr(0x180002170ull, (void*)&RtUiStringTable_Type);            ++n;
+    RegisterRuntimeExport("?TypeName@StringTable@UI@@UEBAPEBDXZ",
+                          (void*)&RtUiStringTable_TypeName);
+    RegisterRuntimeAddr(0x180002190ull, (void*)&RtUiStringTable_TypeName);        ++n;
+    RegisterRuntimeExport("?GetFileVersion@StringTable@UI@@UEBAHXZ",
+                          (void*)&RtUiStringTable_GetFileVersion);
+    RegisterRuntimeAddr(0x18011d930ull, (void*)&RtUiStringTable_GetFileVersion);  ++n;
+    return n;
+}
+
+// ============================================================================
+// WAVE 26 LANE FACTORY, THIRD PASS — slots 6, 7, 8 of ??_7StringTable@UI@@6B@
+// ============================================================================
+//
+// After the second pass the row read `slots=9 ported=4 TRAP=5` (measured, run E,
+// BANISHED_RT_MINT_SHADOW=1). The five were slot 0 (the deleting destructor),
+// Serialize, Reconstruct, Destruct and Construct. Three of those five are
+// transcriptions of things this file already contains, and they are here:
+//
+//   ?Construct@StringTable@UI@@UEAAPEAVExternal@Object@@XZ    0x180002400  slot 8
+//   ?Destruct@StringTable@UI@@UEAAXXZ                         0x180002460  slot 7
+//   ?Reconstruct@StringTable@UI@@UEAAPEAVExternal@Object@@XZ  0x180002390  slot 6
+//
+// `?Construct@` IS `?CreateInPlaceObject@` — not "the same shape as", the same
+// instructions: null check on RCX, the eight ctor stores, MOV RAX,RCX. The two
+// were diffed instruction by instruction rather than assumed equal from their
+// matching lengths.
+//
+// `?Destruct@` is three instructions and it is a TAIL CALL THROUGH THE OBJECT'S
+// OWN VPTR, not a direct call to the destructor:
+//     MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]
+// i.e. `self->vtable[0](self, 0)` — slot 0 with flag 0, "destroy in place, do
+// not free". It MUST be reproduced as a virtual dispatch. Calling
+// `??1StringTable@UI@@` directly here would be the same thing only while slot 0
+// is retail's, and would silently stop following a promotion.
+//
+// `?Reconstruct@` is `self->vtable[0](self, 0)` followed by the same eight ctor
+// stores, returning self. It has NO null check — that is retail's choice, and
+// the unguarded deref is kept (CLAUDE.md: retail's unguarded derefs are
+// load-bearing).
+//
+// NOT PORTED, AND NAMED SO THE GAP IS NOT INVISIBLE: slot 0 (the scalar
+// deleting destructor at 0x180002740) and `?Serialize@StringTable@UI@@`
+// (0x18011d940). See the residuals section of
+// docs/runtime_port/WAVE26_LANE_FACTORY.md for who owns them and why they were
+// left. The row is therefore 7/9, still BLOCKED, and this file does not claim
+// otherwise.
+// ============================================================================
+
+namespace {
+// Vtable slot 0 of Object::Base is the scalar deleting destructor:
+//   flag 0 = destroy in place, flag 1 = destroy and free.
+// Same typedef, same comment, as runtime/src/graphics/wave24_lane_gfxmat.cpp.
+using StSlot0Fn = void* (*)(void* self, int flag);
+
+uint64_t g_constructEntries = 0, g_destructEntries = 0, g_reconstructEntries = 0;
+}  // namespace
+
+// ---- slot 8 ----------------------------------------------------------------
+extern "C" void* RtUiStringTable_Construct(void* self) {
+    ++g_constructEntries;
+    if (self == nullptr) return nullptr;            // 180002411 / 180002457
+    ConstructBody(static_cast<UiStringTable*>(self));
+    return self;                                    // 180002452 MOV RAX,RCX
+}
+
+// ---- slot 7 ----------------------------------------------------------------
+extern "C" void RtUiStringTable_Destruct(void* self) {
+    ++g_destructEntries;
+    StSlot0Fn* vt = *reinterpret_cast<StSlot0Fn**>(self);   // 180002460 MOV RAX,[RCX]
+    vt[0](self, 0);                                         // 180002465 JMP [RAX], EDX=0
+}
+
+// ---- slot 6 ----------------------------------------------------------------
+extern "C" void* RtUiStringTable_Reconstruct(void* self) {
+    ++g_reconstructEntries;
+    StSlot0Fn* vt = *reinterpret_cast<StSlot0Fn**>(self);   // 1800023a2
+    vt[0](self, 0);                                         // 1800023a7 CALL [RAX], EDX=0
+    ConstructBody(static_cast<UiStringTable*>(self));
+    return self;                                            // 1800023ea MOV RAX,RBX
+}
+
+int RtUiStringTableLifecycleRegister() {
+    const char* v = std::getenv("BANISHED_RT_UISTRTAB");
+    if (v && v[0] == '0') return 0;
+    int n = 0;
+    RegisterRuntimeExport("?Construct@StringTable@UI@@UEAAPEAVExternal@Object@@XZ",
+                          (void*)&RtUiStringTable_Construct);
+    RegisterRuntimeAddr(0x180002400ull, (void*)&RtUiStringTable_Construct);       ++n;
+    RegisterRuntimeExport("?Destruct@StringTable@UI@@UEAAXXZ",
+                          (void*)&RtUiStringTable_Destruct);
+    RegisterRuntimeAddr(0x180002460ull, (void*)&RtUiStringTable_Destruct);        ++n;
+    RegisterRuntimeExport("?Reconstruct@StringTable@UI@@UEAAPEAVExternal@Object@@XZ",
+                          (void*)&RtUiStringTable_Reconstruct);
+    RegisterRuntimeAddr(0x180002390ull, (void*)&RtUiStringTable_Reconstruct);     ++n;
     return n;
 }

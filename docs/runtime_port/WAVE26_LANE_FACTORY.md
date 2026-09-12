@@ -348,6 +348,23 @@ An expiry clause naming a condition but no addressee never fires
    is a one-line change this lane deliberately did NOT make, because it would
    have moved a second variable inside the same A/B that validates this port's
    own screen (`reference_probe_needs_an_effectiveness_control.md`).
+5. **To LANE DELDTOR / whoever owns `runtime/src/object/deleting_dtor.cpp`:**
+   `??_7StringTable@UI@@6B@` slot 0 (`0x180002740`, the scalar deleting
+   destructor) is now one of exactly TWO traps left on a row that is otherwise
+   7/9. It is a member of your family, not of this file. `?Serialize@StringTable@UI@@`
+   (`0x18011d940`) is the other and is unowned — this lane did not read it.
+6. **To the WAVE 27 GENERATOR AUTHOR, and this is the one that saves work:**
+   see §8.2. You do NOT need a second generator for the 82 missing vtable rows.
+   Emitting a factory whose vptr stamp goes through `RT_DATA_SLOT` with the
+   vtable's mangled name as a LITERAL makes `rt_mint_gen.py` harvest that vtable
+   on the next regeneration, because its population rule is "mint what our source
+   names". Verify it the way this lane did — `rt_mint_gen.py --check` should
+   report the row under `ENTERED`, before you regenerate.
+7. **To the WAVE 26 INTEGRATOR:** this lane REGENERATED
+   `standalone/rt_data_mint_tables.inc` (63 -> 64 vtables). That file is
+   generated, so resolve any conflict by re-running `tools/rt_mint_gen.py` on the
+   merged tree rather than by hand-merging, and check `--check` reads UP TO DATE
+   afterwards.
 4. **To this lane's reviewer:** the three ported bodies have **attendance 0 from
    the game** and there is no route to give them one with the DLL present (§3.4).
    If that is not an acceptable verification standard for a merge, the correct
@@ -379,3 +396,113 @@ either outcome; only its position in the queue changes.** Note also that the §2
 screen is unaffected either way: `MintTypeInfos()` fills the storage block
 unconditionally, so the roster prints in an ordinary run with no mint switch set
 (runs A/B/C above set none).
+
+---
+
+## 8. SECOND AND THIRD PASS — the wall moved one row, not one class (MEASURED)
+
+Lane ATTEND ran cutover attempt 28 with §1's port merged. **The `[RtMint] FATAL`
+on `?CreateNewObject@StringTable@UI@@` was gone**, and this lane's screen printed
+from inside a real cutover boot: `2 PORTED, 204 ABORT-TRAP`. So the registration
+reaches `RtDataMintInit()` on the cutover path, which is the half of my prediction
+that held.
+
+**The half that did not:** the wall did not move to another *factory*. It moved to
+a **missing vtable row on the class I had just ported** —
+`??_7StringTable@UI@@6B@` — as an ACCESS_VIOLATION, `READ of 0x10` at
+`RtObject::GetTypeIdVirtual+0x1f`, a few instructions further along the same
+`External::Load` path. My `CreateNewObject` ran, stamped a vptr the mint did not
+carry, and the next virtual call went through null.
+
+### 8.1 THE PARALLEL FAMILY, and it is the same 104 classes
+
+A ported factory needs its class's **vtable row** too. Sized with the new
+`--vtables` screen (`tools/mint_factory_census.py --vtables`):
+
+```
+before this lane's second pass:   TI classes WITHOUT a minted vtable row: 83
+after:                                                                    82
+```
+
+**So the cutover gap on these 104 classes is TWO gaps, not one:** 204 factory
+slots *and* 82 vtable rows, on the same population. §4's generator has to emit
+both or it produces exactly the state attempt 28 hit — a constructed object whose
+vptr nothing fills. The screen moving 83 → 82 in the expected direction on a
+known change is its own effectiveness check.
+
+### 8.2 THE FINDING THAT MOST CHANGES WAVE 27's DESIGN
+
+**The vtable row cost nothing to add.** `rt_mint_gen.py`'s population rule is
+"mint what our SOURCE names", and §1's `StringTableVTable()` already spells
+`"??_7StringTable@UI@@6B@"` as a literal for its vptr stamp. So `--check` came
+back `ENTERED (1): 0x180154630 ??_7StringTable@UI@@6B@` and a plain regeneration
+picked it up — no new harvest rule, no `EXTRA_VTABLES` entry, no hand-added row.
+
+**A ported factory that stamps its class's vtable through `RT_DATA_SLOT` drags
+that vtable into the mint for free.** That is a property of the generator's
+existing rule, not of StringTable, and it means the 82-row gap closes as a
+*side effect* of the factory generator rather than needing a second one.
+
+(`reference_mint_population_rule_blind_to_its_own_output.md` is the same rule
+seen from its failure side; this is the rule working.)
+
+### 8.3 What was ported in the second and third pass
+
+The regenerated row has 9 slots. Three read the class's own `?_typeInfo@` node
+and are the shape `graphics_typeinfo_accessors.cpp` and
+`object_typeinfo_accessors.cpp` already ported fifteen times between them:
+
+| slot | symbol | VA | body |
+|---|---|---|---|
+| 1 | `?TypeName@StringTable@UI@@UEBAPEBDXZ` | `0x180002190` | `MOV RAX,[0x1801fae10]` = node+0x08 |
+| 2 | `?Type@StringTable@UI@@UEBAIXZ` | `0x180002170` | `MOV EAX,[0x1801fae08]` = node+0x00 |
+| 3 | `?GetFileVersion@StringTable@UI@@UEBAHXZ` | `0x18011d930` | `MOV EAX,1` |
+
+**Slot 2 is the one `GetTypeIdVirtual` was calling.** The fault offset (`+0x10`)
+and the generated slot table (`kVSlots52[2]`) agree on that independently — the
+diagnosis was not fitted to the symptom.
+
+Three more are transcriptions of bodies §1 already contained:
+
+| slot | symbol | VA | body |
+|---|---|---|---|
+| 6 | `?Reconstruct@StringTable@UI@@` | `0x180002390` | `vt[0](this,0)` then the eight ctor stores |
+| 7 | `?Destruct@StringTable@UI@@` | `0x180002460` | 3 instructions: **tail call through the object's own vptr**, slot 0, flag 0 |
+| 8 | `?Construct@StringTable@UI@@` | `0x180002400` | instruction-for-instruction `?CreateInPlaceObject@`, diffed rather than assumed |
+
+`?Destruct@` is reproduced as a **virtual dispatch**, not a direct call to
+`??1StringTable@UI@@`. Those are the same thing only while slot 0 is retail's,
+and a direct call would silently stop following a promotion.
+
+### 8.4 Measured result
+
+`BANISHED_RT_MINT_SHADOW=1`, exe `60d3e9f7422fc40e0c737b2fb7df91ab`, md5-verified
+against the deployed copy, lock held, exit 0, 0-byte crash log:
+
+```
+run E (after pass 2): BLOCKED ??_7StringTable@UI@@6B@  slots=9 ported=4 TRAP=5
+run F (after pass 3): BLOCKED ??_7StringTable@UI@@6B@  slots=9 ported=7 TRAP=2
+[RtMint] minted 64 vtables (589 slots: 358 ported, 88 unported-trap, 143 purecall-trap)
+[RtMint] 41 of 64 vtables are COMPLETE
+```
+
+(The 4th of run E's "ported" is `?Compile@External@Object@@`, already in the tree
+— not one of mine. Saying so because a count that moves by the right amount for
+the wrong reason is this project's most repeated defect.)
+
+### 8.5 STILL BLOCKED, and by what — **do not read 7/9 as done**
+
+The two remaining traps are named rather than left to be rediscovered:
+
+* **slot 0** — the scalar deleting destructor at `0x180002740`. Not trivial: it
+  branches on the flag, calls `??1StringTable@UI@@` (`0x18011d8f0`) through the
+  array-destroy helper `0x18007ec98`, and ends in `operator delete`. It belongs
+  to the `deleting_dtor.cpp` family (`BANISHED_RT_DELDTOR`), not to this file.
+* **`?Serialize@StringTable@UI@@`** — `0x18011d940`. Not read this lane.
+
+**Honest prediction for attempt 29, stated so it can be wrong:** the boot should
+get *past* `GetTypeIdVirtual` (slot 2 is ours now) and, if it dies on this class
+again, should die on one of those two — most likely `Serialize`, since
+`External::Load` is a deserialisation path. If it dies somewhere else entirely
+that is the expected shape: a gate names what it reached
+(`reference_the_boot_is_a_gate_not_a_planner.md`), and one name is one name.
