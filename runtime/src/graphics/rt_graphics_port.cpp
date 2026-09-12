@@ -323,6 +323,13 @@ void RtGraphicsPortInit() {
     //   lights_vtable.cpp        AmbientLight / SpotLight whole tables + their
     //                            ctors and dtors, and SunLight's last two slots
     //   meshinstance_draw.cpp    ?Draw@MeshInstance@ and ?Draw@EdgeMeshInstance@
+    //
+    // CORRECTION to the "Wave 29 lane SLOTS" line printed above (PLAN.md §6
+    // step 8): it says that lane took ??_7MeshInstance@Graphics@@6B@ "6/9 ->
+    // 8/9". With ?Draw@MeshInstance@ (slot 2) ported here that table is 9/9,
+    // and ??_7EdgeMeshInstance@ is complete too — batch 6 closed slot 2, the
+    // last one either of them was missing. The older line is left as written so
+    // a reader who meets the 8/9 figure elsewhere recognises it.
     {
         extern int RtGraphicsImageBufferDerivedRegister();
         extern int RtGraphicsMeshVtableBatch6Register();

@@ -24,10 +24,22 @@
 //   | ?Update@ParticleInstance@Graphics@@...      | 0x180104180 | 4498 | PORTED   | idempotent replay|
 //   | ?IncrementInstanceIndex@ParticleInstance@...| 0x1800201f0 | 3065 | PORTED   | FULL             |
 //   | ??0ParticleSystemInstance@Graphics@@...     | 0x1800a55a0 |  304 | PORTED   | FULL (scratch)  |
-//   | ??0FrameCopyImageBuffer@Graphics@@QEAA@XZ   | 0x1800a3d10 |  198 | HELD BACK | -- see below   |
-//   | ??1FrameCopyImageBuffer@Graphics@@UEAA@XZ   | 0x1800a3c80 |  597 | HELD BACK | -- see below   |
-//   | ?Create@FrameCopyImageBuffer@Graphics@@...  | 0x1800a3b70 | 1877 | HELD BACK | -- see below   |
-//   | ?Generate@FrameCopyImageBuffer@Graphics@...  | 0x1800a3b20 | 2395 | HELD BACK | -- see below   |
+//   | ??0FrameCopyImageBuffer@Graphics@@QEAA@XZ   | 0x1800a3d10 |  198 | PORTED*  | see correction |
+//   | ??1FrameCopyImageBuffer@Graphics@@UEAA@XZ   | 0x1800a3c80 |  597 | PORTED*  | see correction |
+//   | ?Create@FrameCopyImageBuffer@Graphics@@...  | 0x1800a3b70 | 1877 | PORTED*  | see correction |
+//   | ?Generate@FrameCopyImageBuffer@Graphics@...  | 0x1800a3b20 | 2395 | PORTED*  | see correction |
+//
+// *** CORRECTION (2026-09-12, vtable batch 6; PLAN.md §6 step 8). *** The four
+// FrameCopyImageBuffer rows above said HELD BACK and the long "WHY 6 OF 15 CODE
+// FUNCTIONS ARE HELD BACK" section below still argues for holding them. THAT
+// DECISION WAS REVERSED: Wave 23 lane GFXBODY ported and registered all four in
+// runtime/src/graphics/wave23_lane_gfxbody.cpp, and vtable batch 6 has since
+// ported the REST of that class's table (slots 1/2/3/5/6/7/8/11) plus its two
+// siblings in runtime/src/graphics/imagebuffer_derived.cpp, reaching wave23's
+// ctor through the registry door. The four rows are marked PORTED* here rather
+// than rewritten so that a reader who meets the old claim elsewhere recognises
+// it. The prose below is kept as the HISTORICAL record of why the hold was made
+// and is NOT a current disposition.
 //
 // Every name above was checked against the shipped export directory of
 // C:\GOG Games\Banished\Runtime-x64.dll with pefile BEFORE any body was
