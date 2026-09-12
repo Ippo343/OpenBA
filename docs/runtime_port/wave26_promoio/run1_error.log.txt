@@ -1,0 +1,652 @@
+[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=0000020470570000, wrapper=00007ff68e528f54)
+[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=0000020470580000, wrapper=00007ff68e529136)
+[RtMathTransform] registered 31 functions (Matrix/Quaternion/Transform/Transform2/Transform3)
+[RtAlloc] ATTEST: UNARMED (BANISHED_RT_ALLOC=(unset)) -- the allocator port registered NOTHING
+[ElemTid] registered 21/21 element type-id slots
+[DlgCtrlVt] tables=38 unknown=0 inheritedSlotsFilled=166 keptOverride=10 unresolved=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b80
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c6c0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015fa00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f5a0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f980
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151ca8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b78
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b70
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c70e8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015be00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151488
+[CheckPtr] export=00007ff68e465dd2 body[0]=0x55 source=our port -> NOP (calls skipped)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529d0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151a90
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401528f0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401527f8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c400
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c3b0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140002280
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140160bf8
+[FNHook] detoured Video::Device::InitializeInterfaces @00007fff4fc279f0 (tramp=0000020470590000, 17-byte patch)
+[FNHook] detoured ExternalFactory::FindOrLoad @00007fff4fbef320 (tramp=00000204705a0000, 14-byte patch)
+[FNHook] detoured External::Load @00007fff4fbec620 (tramp=00000204705b0000, 18-byte patch)
+[ResLoad] serialized: FindOrLoad=00000204705a0000 External::Load=00000204705b0000 (recursive CS, target-resolution=RAW)
+[AutoStart] ENABLED (BANISHED_AUTOSTART="1") — will auto-open New Game after 60 menu frames, then auto-Start
+[Tornado] ParticleComponent type-id global 0x1401c4720 = 0xF42F66FC (ok)
+[Lane4TypeId] 30/30 slot(s) filled, 0 empty
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c42c0
+[CITID] c70e8(CitizenAI) reg=0000000000000000 val=1392079038 | c7158(Citizen) reg=00007ff68ef4dad4 val=2704017556 | c42c0(Happiness) reg=0000000000000000 val=709961609
+[TradeTid] TradeComponent=2459092736 TradeDescription=2350935396 ValueDescription=3341444357 ComponentDescription=2598635996 BoatComponent=1147571899
+[ElemTid] HelpButtonElem/ButtonElement     slot=00000001401514f8 typeInfo=00007fff4fd2a938 id=1393606052
+[ElemTid] ImageElement                     slot=0000000140151500 typeInfo=00007ff68ef505a8 id=893464662
+[ElemTid] TextElement                      slot=0000000140151508 typeInfo=00007ff68ef51028 id=438357726
+[ElemTid] TableElement                     slot=0000000140151510 typeInfo=00007fff4fd2ae78 id=3348628233
+[ElemTid] LabelElement                     slot=0000000140151668 typeInfo=00007ff68ef50650 id=1334204089
+[ElemTid] HelpComboElem/ComboElement       slot=0000000140151690 typeInfo=00007fff4fd2aa50 id=3545820999
+[ElemTid] ToolbarElement/CheckElement      slot=00000001401516a8 typeInfo=00007ff68ef4fd58 id=272235987
+[ElemTid] SpinnerElement(=NumberElement)   slot=00000001401516c8 typeInfo=00007fff4fd2acb8 id=475271278
+[ElemTid] SliderElement (the REAL one)     slot=00000001401516d0 typeInfo=00007fff4fd2a350 id=3664215698
+[ElemTid] HelpFirstElem/ScrollElement      slot=00000001401517e8 typeInfo=00007ff68ef50c70 id=476774394
+[ElemTid] HelpDocTextElem                  slot=00000001401517f0 typeInfo=00007fff4fd29ef0 id=289499821
+[ElemTid] HelpContainerElem                slot=00000001401517f8 typeInfo=00007fff4fd29dd8 id=3444093259
+[ElemTid] NumberEditElement                slot=0000000140151cb0 typeInfo=00007ff68ef50848 id=631391588
+[ElemTid] SliderElement(=SpinnerElement)   slot=0000000140151cf0 typeInfo=00007fff4fd2a3c0 id=644357809
+[ElemTid] Element (base)                   slot=0000000140151660 typeInfo=00007ff68ef501b8 id=2370443687
+[ElemTid] ProgressElement                  slot=00000001401515b8 typeInfo=00007fff4fd2ad28 id=1281602850
+[ElemTid] RibbonElement                    slot=0000000140151720 typeInfo=00007fff4fd2a2e0 id=2193694001
+[ElemTid] BorderElement                    slot=0000000140151a58 typeInfo=00007fff4fd2a8c8 id=3875203924
+[ElemTid] EditElement                      slot=0000000140151b50 typeInfo=00007fff4fd29f60 id=6894048
+[ElemTid] GraphElement                     slot=0000000140151dd8 typeInfo=00007fff4fd29fd0 id=3839563932
+[ElemTid] TabElement                       slot=0000000140151de0 typeInfo=00007fff4fd2a468 id=2123353554
+[TrackerTypeId] 0x1401c4b10 = 2570797389 (0x993B414D)
+[OrchardTypeId] 0x1401c46e8 = 3940668927 (0xEAE1D5FF)
+[OrchardTypeId] 0x1401c46b0 = 2843843441 (0xA9819B71)
+[MarketTypeId] 0x1401c44f0 = 1284470327 (0x4C8F7637)
+[MarketTypeId] 0x1401c4528 = 3142036116 (0xBB47AA94)
+[MarketTypeId] 0x1401c7ee8 = 4120633425 (0xF59BE051)
+[FoodTypeId] 0x1401c43a0 HerbalistComponent    = 3390714787 (0xCA1A33A3)
+[FoodTypeId] 0x1401c43d8 HerbalistDescription  = 4158245638 (0xF7D9CB06)
+[FoodTypeId] 0x1401c7510 CropFieldComponent    = 2748109570 (0xA3CCD302)
+[FoodTypeId] 0x1401c7548 CropFieldDescription  = 1222696611 (0x48E0DEA3)
+[FoodTypeId] 0x1401c7660 FishingComponent      = 2644177521 (0x9D9AF271)
+[FoodTypeId] 0x1401c7698 FishingDescription    = 627382911 (0x25651A7F)
+[FoodTypeId] 0x1401c7890 HuntComponent         = 2898427812 (0xACC27FA4)
+[FoodTypeId] 0x1401c78c8 HuntDescription       = 4273867873 (0xFEBE0C61)
+[FoodTypeId] 8/8 slot(s) filled, 0 empty
+[TutorialTypeId] 0x1401C6240 FinishTutorialGoal = 1089248897 (0x40EC9E81)
+[TutorialTypeId] 0x1401C6278 FinishTutorialInstance = 171997278 (0x0A40785E)
+[TutorialTypeId] 0x1401C6668 TutorialInstance = 3760546994 (0xE02564B2)
+[TutorialTypeId] 0x1401C5A98 Profession = 3983740233 (0xED730D49)
+[GrowthTypeId] 0x1401c77b0 = 1845779407 (0x6E045BCF)
+[ClearAreaTypeId] 0x1401c71c8 = 252740659 | 0x1401c7200 = 2607357058
+[GameSettings] Load: LastTerrain=0 LastMapSize=1 LastClimate=1 LastStart=2 LastDisaster=0 (UIScale=100 AutosaveInterval=1)
+[GameSettings] Load: StatusIconEnable=1 (settings+0xC) -- 0 hides EVERY status icon (citizen health, building warnings); it is the Options checkbox, persisted as GameStatusIconEnable under HKCU/Software/Shining Rock Software LLC/Banished
+[BootState] RUNNING (Engine::Startup returned at 1s)
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=0000020400123ea0 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=0000020400123ea0 =====
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=00000204000f1bf0 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=00000204000f1bf0 =====
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=00000204000f1bf0 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=00000204000f1bf0 =====
+[FrameLimiter] ceiling = 216.0 FPS (4.630 ms/frame) [refresh+headroom], hi-res timer=yes. External limiters (vsync/G-Sync/RTSS) at or below refresh are never affected.
+[PerfX] master=0 animCull=0 geomXfLastOnly=0 iconLastOnly=0 ambientThrottle=0 treeSnapshot=0 particleCull=0 pickCull=0 geomCull=0 iconCull=0 animBatchCulled=0 animBatchAll=0 terrainSidecar=0 margin=6.0 (build default 0)
+[AutoStart] menu settled (mainMenu=00000204000f1c88) — injecting New Game click
+[GameContainer] +0x00 'Game/Achievement/AchievementList.rsc' -> 0000020400110378
+[GameContainer] +0x08 'Game/Scenario/ScenarioList.rsc' -> 000002040062dd58
+[GameContainer] +0x10 'Game/Climate/ClimateList.rsc' -> 000002040018ce80
+[GameContainer] +0x18 'Game/StartCondition/StartConditions.rsc' -> 0000020400124f48
+[GameContainer] +0x20 'Game/Terrain/TerrainList.rsc' -> 0000020400830fa0
+[GameContainer] AchievementManager::SetAchievements(mgr=00000204000dc368, list=0000020400110378) -> count=36
+[NewGameDialog] town name generated: "Hubbuck" (maxLen=12)
+[NewGameDialog] BANISHED_SEED unset -> world seed RANDOMISED to 263382789
+[NewGameDialog] startCondition[0] name="HardName" visible=1
+[NewGameDialog] startCondition[1] name="MediumName" visible=1
+[NewGameDialog] startCondition[2] name="EasyName" visible=1
+[NewGameDialog] start condition FORCED to [2] (want="easy")
+[NewGameDialog] comboCondition items=3 selected=2
+[NewGameDialog] comboTerrain items=2 selected=0
+[NewGameDialog] comboTerrainSize items=3 selected=1
+[NewGameDialog] comboClimate items=3 selected=1
+[NewGameDialog] comboDisaster items=2 selected=0
+[AutoStart] NewGameDialog ready (self=0000020401580be0) — injecting Start click (buttonOk)
+[NewGameDialog::OnEvent] self=0000020401580be0 type=0x12 data=2
+[NewGameDialog] difficulty override -> listIdx=2 (0=Hard 1=Medium 2=Easy) mapGen=00000204007d13e8
+[NewGameDialog::StartGame] picks: condition[2]="EasyName" terrain[0]="Valleys" size=1 climate[1]="Fair" disaster[0]=ON seed=263382789 -> worldFlags=0x00
+[StartNewGame] ENTER worldSetup=00000204000f1c88 seed=263382789 size=1 disastersOff=0 scenarioIdx=-1 saved=0000000000000000 GameUpdateLoop_Vtable=00007ff68e629380
+[StartNewGame] loops built game=000002040158d9c8 dl=000002040158db30 outer=000002040158e6c8; ws+0xC0(loop)=0000020400123298 ws+0xB8(engine)=0000000000000000 -> SetDialogLoaderNextLoop(loop)
+[StartNewGame] EXIT — next loop set, transition pending
+[AutoStart] sequence fired — new-game transition queued; driver done
+[FrameLimiter] fps=215.9 (cap=216.0)
+[MenuDLT::Update] STAGE C entry: pendingLoop=000002040158e6c8 fade settled (rate=0) -> MainLoop::SetNextLoop
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000002040158db30 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000002040158db30 =====
+[Tornado/particle] Factory -> 000002040167c500 (slots 1/2/3/5/6/7/8/9 installed; the instance swirl runs on slot 1)
+[Tornado/particle] Serialize read: +0x48=20.00 +0x4c=75.00 +0x50=26.00 +0x54=30.00 +0x70=30.00 (ctor defaults were 4.00/20.00/5.00/45.00/30.00)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14001c3c0
+[GUL::Load] build owner = tid=29356 for loop=000002040158d9c8
+[GUL::Load] resolves: RandSeed=00007ff68e495d26 Picking=00007ff68e46e5fc UI=00007ff68e4c48e1 Anim=00007ff68e3eecec SaveLoad=00007ff68e47a0dd RandFull=00007ff68e495e1a
+[GUL::Load] ENTER self=000002040158d9c8 seed=263382789 mapSize=1 climateGen=00000204007e2718 terrainGen=0000020400a8be18 saved=0000000000000000
+[GUL::DiseaseList] gw+0xa8=00000204015504c8 (loaded=00000204015504c8 isExternalList=1 diseases=12)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::ProfList] gw+0xb0=00000204015505a0 defaultProf(+0x30)=0000020400231ed8 profRef2(+0x38)=00000204002321c0
+[GUL::UIMat] gw+0xb8=0000020401580a28 (loaded=0000020401580a28 isMaterial=1)
+[GUL::Help] gw+0xa0=000002040164fd60 (loaded=000002040164fd60 isExternalList=1 topics=66)
+[GUL::Weather] Environment.rsc envRes=000002040167c0e0 weatherDescCount=2
+[GUL::SkyMesh] built skyMesh=0000020401796d00 meshRes=0000020400f5d770 (SetMesh=00007ff68e3f2840 TimeCtor=00007ff68e4964c1)
+[GUL::Load] step29 event StringTables: events=0000020401679588 seasons=00000204006b7418 (tid=3224705508)
+[GUL::Load] step30 AchievementManager::SetEventHandler (mgr=00000204000dc368 handler=EventLog_OnAchievementAwarded)
+[GUL::Load] step30b AchievementManager::Reset(mgr=00000204000dc368) -> instances=36
+[worldgen] resolves: RandSeed=00007ff68e495d26 PerlinCtor=00007ff68e4d6d32 PerlinGen=00007ff68e4d6e13 RandTol=00007ff68e496311
+[worldgen] BuildTerrain ENTER wg=0000020401598ba0 gen=0000020400a8be18 sizeIdx=1 seed=263382789 sizeTable=0000020400a8bf70 dim=384
+[GUL::Load] redundant dispatch for loop=000002040158d9c8 tid=33424 — rejected (loop already owned/built by the first dispatcher)
+[worldgen] coastline resolves: RandFloatTol=00007ff68e4961f7 Rand1=00007ff68e495ee2 Rand2=00007ff68e495fd7 Vec2Norm=00007ff68e307a47(->00007ff68e307949) Vec2Len=00007ff68e3079ef Vec2LenSq=00007ff68e307a1b
+[worldgen] ranges resolves: Rand2=00007ff68e495fd7 RandFloatTol=00007ff68e4961f7 Vec2NormByVal=00007ff68e44e7a3 Rand1=00007ff68e495ee2 RandFloat=00007ff68e4960f0
+[water_contour] built: bodies(+0x1c8)=4 featRanges(+0x1d8)=3 verts(+0x1a8)=36739 idx(+0x1b8)=196158 VB=0000020401665d70 IB=00000204017938c0 (phase2=1)
+[worldgen::river] feature polylines: 4/4 path(s) copied, 3076 point(s) total
+[worldgen::river] halfWidth table (4 path(s)):  [0]=4.00(bank 6.00)  [1]=1.50(bank 3.50)  [2]=1.50(bank 3.50)  [3]=1.50(bank 3.50)
+[worldgen] BuildTerrain EXIT — wg=0000020401598ba0 dimX2=768 edge=769 hm16=0000020401843298 mat1=00000204007eddb8 blendTex=0000020402935338
+[worldgen]   waterMatA(+0x150)=00000204007c67f0 waterMatB(+0x158)=00000204007c68c8 overlayVB(+0x160)=000000000008f830 overlayCntA(+0x1c8)=4 overlayCntB(+0x1d8)=3
+[TownMgr] coarse cell index sized: dim=384 coarse=48 buckets=2304 base=0000020401963ea8 (FireWork water search indexes this; a null base faults at coarseCell*0x10)
+[PfSeed] pathfinder seeded @ game+0x68 = 0000020401633d10 (dim=384, cells=147456, ASYNC worker-thread mode)
+[RegionSeed] region map built: graph@0000020401633f10 coarseDim=48 regionNodes=1684 pairCache=000002040292e9e0
+[startTown::DIAG]   camPos = (0.50, 0.50, 0.01)
+[startTown::spawn] pools: simple(+0x98)=1 bldg(+0x88)=8 resource(+0x78)=3 citizenFam(+0x68)=6
+[startTown::spawn] fns: CreateEntity=00007ff68e296587 Register=00007ff68e2971cc IBPCtor=00007ff68e465c80 MemAlloc=00007fff4fbf6e60 ExtFactory=00000204000d6760
+[startTown::probe] citizenRef(+0x48) gen=0 tmpl=000002040078f1a8 name="Template\Citizen.rsc"
+[startTown::probe] resource(+0x70) gen=0 tmpl=00000204016424e8 name="Template\NaturalResourceRock.rsc"
+[startTown::probe] structure(+0x80) gen=0 tmpl=00000204003d7b68 name="Template\StorageBarn.rsc"
+[startTown::probe] simple(+0x90) gen=0 tmpl=000002040163f820 name="Template\PopulationDeer.rsc"
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529b0
+[WPCCensus] #1 wpc=000002040292f2a8 ctor-defaults APPLIED (+0x40=000002040292f2a8 +0x50=1)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152970
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140022480
+[SMC] tree-tick slot 8 LIVE — trans30 handlers now dispatch (retail 0x14012b640, Tick useAlt=0)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140164520
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140162920
+[startTown::struct] [0] complete-model variantIdx=0 modelVariant=0 (subCount=3 groups=1)  [retail frame 0 + instant-build path]
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c23d0
+[ModelComponent::OnAdded] self=000002040292ebc0 scene=0000020401796c40 modelVariant=0 sceneObjId=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c72e8
+[PickMesh] AddMesh entity=000002040292ea20 mesh=00000204003da3b8 userData=000002040292ea20 -> meshId=0 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.71,0.71,-0.50,9.00,0.00 | footprint=(189,197 5x8) => cellFromXform=(127.5,137.0)
+[WPCCtrl] state-0 (construction/f520) enter: comp=000002040292f2a8 key(+0x48)=0x0 roster(+0x60)=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140089470
+[DestroyWorkers] f520 re-seat wpc=000002040292f2a8: builderKey=204002321c0 capacity=4 roster=0 (buildComp=000002040292f228) workComp=000002040292ef30 workId(+0x28)=-1 -> nothing in flight to re-key
+[ModelComponent::OnAdded] self=000002040292ebc0 scene=0000020401796c40 modelVariant=2 sceneObjId=0
+[PickMesh] AddMesh entity=000002040292ea20 mesh=00000204003db5e8 userData=000002040292ea20 -> meshId=0 | variant=(0,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,-0.50,9.00,0.00 | footprint=(189,197 5x8) => cellFromXform=(127.5,137.0)
+[WPCCtrl] state-2 (built/edf0) enter: comp=000002040292f2a8 key(+0x48)=0x204002321c0 roster(+0x60)=0
+[startTown::struct] [0] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=60 (no fallback needed)
+[startTown::pickmap] marked 30 cells (10 free, 0 road) @ (189,197) 5x8 rot=90 shape=yes entity=000002040292ea20 mc=000002040292eb10
+[PickMesh] AddMesh entity=000002040292ea20 mesh=00000204003db5e8 userData=000002040292ea20 -> meshId=0 | variant=(0,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,-0.50,9.00,0.00 | footprint=(189,197 5x8) => cellFromXform=(127.5,137.0)
+[startTown::struct] [0] tmpl=00000204003d7b68 tile=(189,197) fp=5x8 rot=90 map=000002040292eb10
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c22d0
+[startTown::struct] [1] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=-1 (no fallback needed)
+[startTown::pickmap] marked 24 cells (0 free, 0 road) @ (195,198) 4x6 rot=0 shape=NONE(blanket) entity=000002040292f7c0 mc=000002040292f8a8
+[startTown::struct] [1] tmpl=00000204006b2f08 tile=(195,198) fp=4x6 rot=0 map=000002040292f8a8
+[WPCCensus] #2 wpc=0000020402930e58 ctor-defaults APPLIED (+0x40=0000020402930e58 +0x50=1)
+[startTown::struct] [2] complete-model variantIdx=4 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[ModelComponent::OnAdded] self=0000020402930870 scene=0000020401796c40 modelVariant=0 sceneObjId=1
+[PickMesh] AddMesh entity=000002040292fed0 mesh=00000204006d8138 userData=000002040292fed0 -> meshId=1 | variant=(4,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,-5.00,7.50,0.00 | footprint=(185,197 4x5) => cellFromXform=(123.0,135.5)
+[WPCCtrl] state-0 (construction/f520) enter: comp=0000020402930e58 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=0000020402930e58: builderKey=204002321c0 capacity=2 roster=0 (buildComp=0000020402930ec8) workComp=00000204029352f8 workId(+0x28)=-1 -> nothing in flight to re-key
+[ModelComponent::OnAdded] self=0000020402930870 scene=0000020401796c40 modelVariant=2 sceneObjId=1
+[PickMesh] AddMesh entity=000002040292fed0 mesh=00000204006d9040 userData=000002040292fed0 -> meshId=1 | variant=(4,2) xform[0..6]=-0.00,-0.00,-0.00,1.00,-5.00,7.50,0.00 | footprint=(185,197 4x5) => cellFromXform=(123.0,135.5)
+[TownRegistry] RegisterResidence ibp=2040292fed0 townMgr=0000020401795f48 count 0 -> 1 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=0000020402930fb8 entityIBP=2040292fed0 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=0000020402930e58 key(+0x48)=0x204002321c0 roster(+0x60)=0
+[startTown::struct] [2] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #0 captured, ownerIBP=2040292fed0)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (185,197) 4x5 rot=0 shape=yes entity=000002040292fed0 mc=00000204029351a8
+[PickMesh] AddMesh entity=000002040292fed0 mesh=00000204006d9040 userData=000002040292fed0 -> meshId=1 | variant=(4,2) xform[0..6]=-0.00,-0.00,-0.00,1.00,-5.00,7.50,0.00 | footprint=(185,197 4x5) => cellFromXform=(123.0,135.5)
+[startTown::struct] [2] tmpl=0000020400745ea0 tile=(185,197) fp=4x5 rot=0 map=00000204029351a8
+[WPCCensus] #3 wpc=00000204029316a0 ctor-defaults APPLIED (+0x40=00000204029316a0 +0x50=1)
+[startTown::struct] [3] complete-model variantIdx=2 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[ModelComponent::OnAdded] self=0000020402932050 scene=0000020401796c40 modelVariant=0 sceneObjId=2
+[PickMesh] AddMesh entity=0000020402931228 mesh=00000204006faa10 userData=0000020402931228 -> meshId=2 | variant=(2,0) xform[0..6]=-0.00,-0.00,-0.71,0.71,-9.50,3.00,0.01 | footprint=(180,193 5x4) => cellFromXform=(118.5,131.0)
+[WPCCtrl] state-0 (construction/f520) enter: comp=00000204029316a0 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=00000204029316a0: builderKey=204002321c0 capacity=2 roster=0 (buildComp=0000020402932568) workComp=00000204029313f8 workId(+0x28)=-1 -> nothing in flight to re-key
+[ModelComponent::OnAdded] self=0000020402932050 scene=0000020401796c40 modelVariant=2 sceneObjId=2
+[PickMesh] AddMesh entity=0000020402931228 mesh=00000204006fb9c8 userData=0000020402931228 -> meshId=2 | variant=(2,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,-9.50,3.00,0.01 | footprint=(180,193 5x4) => cellFromXform=(118.5,131.0)
+[TownRegistry] RegisterResidence ibp=20402931228 townMgr=0000020401795f48 count 1 -> 2 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=00000204029325e8 entityIBP=20402931228 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=00000204029316a0 key(+0x48)=0x204002321c0 roster(+0x60)=0
+[startTown::struct] [3] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #1 captured, ownerIBP=20402931228)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (180,193) 5x4 rot=90 shape=yes entity=0000020402931228 mc=0000020402931fa0
+[PickMesh] AddMesh entity=0000020402931228 mesh=00000204006fb9c8 userData=0000020402931228 -> meshId=2 | variant=(2,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,-9.50,3.00,0.01 | footprint=(180,193 5x4) => cellFromXform=(118.5,131.0)
+[startTown::struct] [3] tmpl=0000020400745ea0 tile=(180,193) fp=5x4 rot=90 map=0000020402931fa0
+[WPCCensus] #4 wpc=0000020401a97168 ctor-defaults APPLIED (+0x40=0000020401a97168 +0x50=1)
+[startTown::struct] [4] complete-model variantIdx=1 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[ModelComponent::OnAdded] self=0000020402932a00 scene=0000020401796c40 modelVariant=0 sceneObjId=3
+[PickMesh] AddMesh entity=0000020402932898 mesh=00000204007065d8 userData=0000020402932898 -> meshId=3 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.71,0.71,-9.50,-2.00,0.02 | footprint=(180,188 5x4) => cellFromXform=(118.5,126.0)
+[WPCCtrl] state-0 (construction/f520) enter: comp=0000020401a97168 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=0000020401a97168: builderKey=204002321c0 capacity=2 roster=0 (buildComp=0000020401a971d8) workComp=0000020402932dc0 workId(+0x28)=-1 -> nothing in flight to re-key
+[ModelComponent::OnAdded] self=0000020402932a00 scene=0000020401796c40 modelVariant=2 sceneObjId=3
+[PickMesh] AddMesh entity=0000020402932898 mesh=0000020400741550 userData=0000020402932898 -> meshId=3 | variant=(1,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,-9.50,-2.00,0.02 | footprint=(180,188 5x4) => cellFromXform=(118.5,126.0)
+[TownRegistry] RegisterResidence ibp=20402932898 townMgr=0000020401795f48 count 2 -> 3 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=0000020401a972c8 entityIBP=20402932898 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=0000020401a97168 key(+0x48)=0x204002321c0 roster(+0x60)=0
+[startTown::struct] [4] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #2 captured, ownerIBP=20402932898)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (180,188) 5x4 rot=90 shape=yes entity=0000020402932898 mc=0000020401a96cd0
+[PickMesh] AddMesh entity=0000020402932898 mesh=0000020400741550 userData=0000020402932898 -> meshId=3 | variant=(1,2) xform[0..6]=-0.00,-0.00,-0.71,0.71,-9.50,-2.00,0.02 | footprint=(180,188 5x4) => cellFromXform=(118.5,126.0)
+[startTown::struct] [4] tmpl=0000020400745ea0 tile=(180,188) fp=5x4 rot=90 map=0000020401a96cd0
+[WPCCensus] #5 wpc=0000020401a97cf0 ctor-defaults APPLIED (+0x40=0000020401a97cf0 +0x50=1)
+[startTown::struct] [5] complete-model variantIdx=5 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[ModelComponent::OnAdded] self=0000020401a984f0 scene=0000020401796c40 modelVariant=0 sceneObjId=4
+[PickMesh] AddMesh entity=0000020401a983c0 mesh=00000204006da908 userData=0000020401a983c0 -> meshId=4 | variant=(5,0) xform[0..6]=0.00,-0.00,-1.00,-0.00,-5.00,-6.50,0.11 | footprint=(185,183 4x5) => cellFromXform=(123.0,121.5)
+[WPCCtrl] state-0 (construction/f520) enter: comp=0000020401a97cf0 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=0000020401a97cf0: builderKey=204002321c0 capacity=2 roster=0 (buildComp=0000020401a97d60) workComp=0000020401a97a48 workId(+0x28)=-1 -> nothing in flight to re-key
+[ModelComponent::OnAdded] self=0000020401a984f0 scene=0000020401796c40 modelVariant=2 sceneObjId=4
+[PickMesh] AddMesh entity=0000020401a983c0 mesh=000002040079ce10 userData=0000020401a983c0 -> meshId=4 | variant=(5,2) xform[0..6]=0.00,-0.00,-1.00,-0.00,-5.00,-6.50,0.11 | footprint=(185,183 4x5) => cellFromXform=(123.0,121.5)
+[TownRegistry] RegisterResidence ibp=20401a983c0 townMgr=0000020401795f48 count 3 -> 4 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=0000020401a97e50 entityIBP=20401a983c0 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=0000020401a97cf0 key(+0x48)=0x204002321c0 roster(+0x60)=0
+[startTown::struct] [5] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #3 captured, ownerIBP=20401a983c0)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (185,183) 4x5 rot=180 shape=yes entity=0000020401a983c0 mc=0000020402932f60
+[PickMesh] AddMesh entity=0000020401a983c0 mesh=000002040079ce10 userData=0000020401a983c0 -> meshId=4 | variant=(5,2) xform[0..6]=0.00,-0.00,-1.00,-0.00,-5.00,-6.50,0.11 | footprint=(185,183 4x5) => cellFromXform=(123.0,121.5)
+[startTown::struct] [5] tmpl=0000020400745ea0 tile=(185,183) fp=4x5 rot=180 map=0000020402932f60
+[WPCCensus] #6 wpc=0000020401a98e88 ctor-defaults APPLIED (+0x40=0000020401a98e88 +0x50=1)
+[startTown::struct] [6] complete-model variantIdx=2 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[PickMesh] AddMesh entity=0000020401a99570 mesh=00000204006faa10 userData=0000020401a99570 -> meshId=5 | variant=(2,0) xform[0..6]=0.00,-0.00,-1.00,-0.00,0.00,-6.50,0.13 | footprint=(190,183 4x5) => cellFromXform=(128.0,121.5)
+[WPCCtrl] state-0 (construction/f520) enter: comp=0000020401a98e88 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=0000020401a98e88: builderKey=204002321c0 capacity=2 roster=0 (buildComp=0000020401a98ef8) workComp=0000020401a98be0 workId(+0x28)=-1 -> nothing in flight to re-key
+[PickMesh] AddMesh entity=0000020401a99570 mesh=00000204006fb9c8 userData=0000020401a99570 -> meshId=5 | variant=(2,2) xform[0..6]=0.00,-0.00,-1.00,-0.00,0.00,-6.50,0.13 | footprint=(190,183 4x5) => cellFromXform=(128.0,121.5)
+[TownRegistry] RegisterResidence ibp=20401a99570 townMgr=0000020401795f48 count 4 -> 5 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=0000020401a98fe8 entityIBP=20401a99570 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=0000020401a98e88 key(+0x48)=0x204002321c0 roster(+0x60)=0
+[startTown::struct] [6] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #4 captured, ownerIBP=20401a99570)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (190,183) 4x5 rot=180 shape=yes entity=0000020401a99570 mc=0000020401a97eb8
+[PickMesh] AddMesh entity=0000020401a99570 mesh=00000204006fb9c8 userData=0000020401a99570 -> meshId=5 | variant=(2,2) xform[0..6]=0.00,-0.00,-1.00,-0.00,0.00,-6.50,0.13 | footprint=(190,183 4x5) => cellFromXform=(128.0,121.5)
+[startTown::struct] [6] tmpl=0000020400745ea0 tile=(190,183) fp=4x5 rot=180 map=0000020401a97eb8
+[WPCCensus] #7 wpc=0000020401a97570 ctor-defaults APPLIED (+0x40=0000020401a97570 +0x50=1)
+[startTown::struct] [7] complete-model variantIdx=1 modelVariant=0 (subCount=3 groups=6)  [retail frame 0 + instant-build path]
+[PickMesh] AddMesh entity=0000020401a99b30 mesh=00000204007065d8 userData=0000020401a99b30 -> meshId=6 | variant=(1,0) xform[0..6]=0.00,-0.00,-0.71,-0.71,4.50,-2.00,0.00 | footprint=(194,188 5x4) => cellFromXform=(132.5,126.0)
+[WPCCtrl] state-0 (construction/f520) enter: comp=0000020401a97570 key(+0x48)=0x0 roster(+0x60)=0
+[DestroyWorkers] f520 re-seat wpc=0000020401a97570: builderKey=204002321c0 capacity=2 roster=0 (buildComp=0000020401a975e0) workComp=0000020401a991b0 workId(+0x28)=-1 -> nothing in flight to re-key
+[PickMesh] AddMesh entity=0000020401a99b30 mesh=0000020400741550 userData=0000020401a99b30 -> meshId=6 | variant=(1,2) xform[0..6]=0.00,-0.00,-0.71,-0.71,4.50,-2.00,0.00 | footprint=(194,188 5x4) => cellFromXform=(132.5,126.0)
+[TownRegistry] RegisterResidence ibp=20401a99b30 townMgr=0000020401795f48 count 5 -> 6 : APPENDED OK
+[Residence] state-2 enter FIRED: house comp=0000020402932308 entityIBP=20401a99b30 -> TownRegistry_RegisterResidence (see [TownRegistry] for outcome)
+[WPCCtrl] state-2 (built/edf0) enter: comp=0000020401a97570 key(+0x48)=0x204002321c0 roster(+0x60)=0
+[startTown::struct] [7] instant-path: state(+0x50)=2 pending(+0x52)=-1 delivered(+0x48)=30 (no fallback needed)
+[startTown::residence] ResidenceComponent::OnCreate fired (house #5 captured, ownerIBP=20401a99b30)
+[startTown::pickmap] marked 15 cells (5 free, 1 road) @ (194,188) 5x4 rot=270 shape=yes entity=0000020401a99b30 mc=0000020401a99050
+[PickMesh] AddMesh entity=0000020401a99b30 mesh=0000020400741550 userData=0000020401a99b30 -> meshId=6 | variant=(1,2) xform[0..6]=0.00,-0.00,-0.71,-0.71,4.50,-2.00,0.00 | footprint=(194,188 5x4) => cellFromXform=(132.5,126.0)
+[startTown::struct] [7] tmpl=0000020400745ea0 tile=(194,188) fp=5x4 rot=270 map=0000020401a99050
+[startTown::spawn] structures: spawned 8; entityList count 0 -> 8
+[startTown::citizen] spawn path = hand-rolled SpawnOneCitizen (BANISHED_LIVE_FOUNDING_SPAWN), familyLinks=0
+[startTown::citizen] variant model=00000204029319c0 variantIdx=0
+[startTown::citizen] spawnpos model=00000204029319c0 base=(0.5,0.5,0.0) jitter=3.00 -> pos=(1.0,-2.4,0.0) transform.pos=(1.0,-2.4,0.0)
+[PickMesh] AddMesh entity=0000020402931970 mesh=000002040078cb98 userData=0000020402931970 -> meshId=7 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,1.04,-2.38,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(129.0,125.6)
+[startTown::citizen] name='Killie' female=0
+[startTown::citizen] colorscale citizen=0000020402933090 mesh=00000204029319c0 same=1 colour=3 scale=1.00 age=3.29 thresh=2.00
+[CarryInit] VERIFY (slot6 live) citizen storage=00000204029307e8 capacity(+0x38)=100
+[startTown::citizen] variant model=00000204015567f8 variantIdx=1
+[startTown::citizen] spawnpos model=00000204015567f8 base=(0.5,0.5,0.0) jitter=3.00 -> pos=(1.9,-0.8,0.0) transform.pos=(1.9,-0.8,0.0)
+[PickMesh] AddMesh entity=0000020402933400 mesh=000002040078cb98 userData=0000020402933400 -> meshId=8 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,1.87,-0.78,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(129.9,127.2)
+[startTown::citizen] name='Arriet' female=1
+[startTown::citizen] colorscale citizen=0000020401a9fab8 mesh=00000204015567f8 same=1 colour=0 scale=1.00 age=3.04 thresh=2.00
+[CarryInit] VERIFY (slot6 live) citizen storage=0000020401556b08 capacity(+0x38)=100
+[startTown::citizen] variant model=0000020401aa0270 variantIdx=1
+[startTown::citizen] spawnpos model=0000020401aa0270 base=(0.5,0.5,0.0) jitter=3.00 -> pos=(-2.4,-2.5,0.0) transform.pos=(-2.4,-2.5,0.0)
+[PickMesh] AddMesh entity=0000020401556cf8 mesh=000002040078cb98 userData=0000020401556cf8 -> meshId=9 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,-2.38,-2.47,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(125.6,125.5)
+[startTown::citizen] name='Caylan' female=1
+[startTown::citizen] colorscale citizen=0000020401aa0738 mesh=0000020401aa0270 same=1 colour=2 scale=0.66 age=1.69 thresh=2.00 (child)
+[CarryInit] VERIFY (slot6 live) citizen storage=0000020401aa06f0 capacity(+0x38)=100
+[startTown::citizen] family[0] educated=1 maxKids=3 kids=1 spouseLink=0 ringKids=0
+[startTown::citizen] variant model=0000020401aa1018 variantIdx=0
+[startTown::citizen] spawnpos model=0000020401aa1018 base=(0.5,0.5,0.0) jitter=3.00 -> pos=(-0.3,1.3,0.0) transform.pos=(-0.3,1.3,0.0)
+[PickMesh] AddMesh entity=0000020401aa0f80 mesh=000002040078cb98 userData=0000020401aa0f80 -> meshId=10 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,-0.28,1.35,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(127.7,129.3)
+[startTown::citizen] name='Owen' female=0
+[startTown::citizen] colorscale citizen=0000020401aa14e0 mesh=0000020401aa1018 same=1 colour=3 scale=1.00 age=3.51 thresh=2.00
+[CarryInit] VERIFY (slot6 live) citizen storage=0000020401aa1498 capacity(+0x38)=100
+[startTown::citizen] variant model=0000020401aa1de8 variantIdx=1
+[startTown::citizen] spawnpos model=0000020401aa1de8 base=(0.5,0.5,0.0) jitter=3.00 -> pos=(0.8,-1.3,0.0) transform.pos=(0.8,-1.3,0.0)
+[PickMesh] AddMesh entity=0000020401aa1d50 mesh=000002040078cb98 userData=0000020401aa1d50 -> meshId=11 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,0.84,-1.31,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(128.8,126.7)
+[startTown::citizen] name='Sophronie' female=1
+[startTown::citizen] colorscale citizen=0000020401aa22b0 mesh=0000020401aa1de8 same=1 colour=5 scale=1.00 age=2.37 thresh=2.00
+[CarryInit] VERIFY (slot6 live) citizen storage=0000020401aa2268 capacity(+0x38)=100
+[startTown::citizen] variant model=0000020401aa2c60 variantIdx=0
+[startTown::citizen] spawnpos model=0000020401aa2c60 base=(0.5,0.5,0.0) jitter=3.00 -> pos=(0.1,2.9,0.0) transform.pos=(0.1,2.9,0.0)
+[PickMesh] AddMesh entity=0000020401aa2b48 mesh=000002040078cb98 userData=0000020401aa2b48 -> meshId=12 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,0.09,2.94,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(128.1,130.9)
+[startTown::citizen] name='Elber' female=0
+[startTown::citizen] colorscale citizen=0000020401aa2f30 mesh=0000020401aa2c60 same=1 colour=3 scale=0.66 age=1.52 thresh=2.00 (child)
+[CarryInit] VERIFY (slot6 live) citizen storage=0000020401aa2ee8 capacity(+0x38)=100
+[startTown::citizen] family[1] educated=1 maxKids=3 kids=1 spouseLink=0 ringKids=0
+[startTown::citizen] variant model=0000020401aa3860 variantIdx=0
+[startTown::citizen] spawnpos model=0000020401aa3860 base=(0.5,0.5,0.0) jitter=3.00 -> pos=(-2.3,1.6,0.0) transform.pos=(-2.3,1.6,0.0)
+[PickMesh] AddMesh entity=0000020401aa37c8 mesh=000002040078cb98 userData=0000020401aa37c8 -> meshId=13 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,-2.30,1.61,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(125.7,129.6)
+[startTown::citizen] name='Arlyle' female=0
+[startTown::citizen] colorscale citizen=0000020401aa3ce8 mesh=0000020401aa3860 same=1 colour=6 scale=1.00 age=2.66 thresh=2.00
+[startTown::citizen] variant model=0000020401aa4a70 variantIdx=1
+[startTown::citizen] spawnpos model=0000020401aa4a70 base=(0.5,0.5,0.0) jitter=3.00 -> pos=(-2.2,-1.1,0.0) transform.pos=(-2.2,-1.1,0.0)
+[PickMesh] AddMesh entity=0000020401556c50 mesh=000002040078cb98 userData=0000020401556c50 -> meshId=14 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,-2.19,-1.08,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(125.8,126.9)
+[startTown::citizen] name='Auretto' female=1
+[startTown::citizen] colorscale citizen=0000020401aa4f38 mesh=0000020401aa4a70 same=1 colour=4 scale=1.00 age=3.57 thresh=2.00
+[startTown::citizen] variant model=0000020401aa5840 variantIdx=1
+[PickMesh] AddMesh entity=0000020401aa57a8 mesh=000002040078cb98 userData=0000020401aa57a8 -> meshId=15 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,0.99,-1.25,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(129.0,126.7)
+[startTown::citizen] name='Sueller' female=1
+[startTown::citizen] colorscale citizen=0000020401aa5d08 mesh=0000020401aa5840 same=1 colour=2 scale=0.66 age=1.69 thresh=2.00 (child)
+[startTown::citizen] family[2] educated=1 maxKids=3 kids=1 spouseLink=0 ringKids=0
+[startTown::citizen] variant model=0000020401aa6638 variantIdx=0
+[PickMesh] AddMesh entity=0000020401aa65a0 mesh=000002040078cb98 userData=0000020401aa65a0 -> meshId=16 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,2.68,-0.68,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(130.7,127.3)
+[startTown::citizen] name='Lavares' female=0
+[startTown::citizen] colorscale citizen=0000020401aa6b00 mesh=0000020401aa6638 same=1 colour=3 scale=1.00 age=2.62 thresh=2.00
+[startTown::citizen] variant model=0000020401aa7430 variantIdx=1
+[PickMesh] AddMesh entity=0000020401aa7398 mesh=000002040078cb98 userData=0000020401aa7398 -> meshId=17 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,-1.22,1.27,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(126.8,129.3)
+[startTown::citizen] name='Racque' female=1
+[startTown::citizen] colorscale citizen=0000020401aa78f8 mesh=0000020401aa7430 same=1 colour=3 scale=1.00 age=3.68 thresh=2.00
+[startTown::citizen] variant model=0000020401aa8228 variantIdx=0
+[PickMesh] AddMesh entity=0000020401aa8190 mesh=000002040078cb98 userData=0000020401aa8190 -> meshId=18 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,-2.11,2.13,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(125.9,130.1)
+[startTown::citizen] name='Lillam' female=0
+[startTown::citizen] colorscale citizen=0000020401aa86f0 mesh=0000020401aa8228 same=1 colour=0 scale=0.66 age=1.76 thresh=2.00 (child)
+[startTown::citizen] family[3] educated=1 maxKids=3 kids=1 spouseLink=0 ringKids=0
+[PickMesh] AddMesh entity=0000020401aa8f88 mesh=000002040078cb98 userData=0000020401aa8f88 -> meshId=19 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,3.41,0.88,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(131.4,128.9)
+[PickMesh] AddMesh entity=0000020401aa9d80 mesh=000002040078cb98 userData=0000020401aa9d80 -> meshId=20 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,1.27,0.74,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(129.3,128.7)
+[PickMesh] AddMesh entity=0000020401a99d28 mesh=000002040078cb98 userData=0000020401a99d28 -> meshId=21 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,-0.24,1.17,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(127.8,129.2)
+[startTown::citizen] family[4] educated=1 maxKids=3 kids=1 spouseLink=0 ringKids=0
+[PickMesh] AddMesh entity=00000204029318f8 mesh=000002040078cb98 userData=00000204029318f8 -> meshId=22 | variant=(0,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,2.67,-1.42,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(130.7,126.6)
+[PickMesh] AddMesh entity=0000020401aadf18 mesh=000002040078cb98 userData=0000020401aadf18 -> meshId=23 | variant=(1,0) xform[0..6]=-0.00,-0.00,-0.00,1.00,0.55,1.90,0.01 | footprint=(-1,-1 -1x-1) => cellFromXform=(128.6,129.9)
+[startTown::citizen] family[5] educated=1 maxKids=3 kids=0 spouseLink=0 ringKids=0
+[startTown::housing] families=6 capturedHouses=6 tidCitizen=2704017556
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a70
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a08
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a10
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a18
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a20
+[startTown::housing] family[0] -> house#0 (IBP=2040292fed0): housed 3/3 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=3 slots=1 occupantCap(desc+0x24)=5; +0x248!=0 (should be 0) on 0 members
+[startTown::housing] family[1] -> house#1 (IBP=20402931228): housed 3/3 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=3 slots=1 occupantCap(desc+0x24)=5; +0x248!=0 (should be 0) on 0 members
+[startTown::housing] family[2] -> house#2 (IBP=20402932898): housed 3/3 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=3 slots=1 occupantCap(desc+0x24)=5; +0x248!=0 (should be 0) on 0 members
+[startTown::housing] family[3] -> house#3 (IBP=20401a983c0): housed 3/3 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=3 slots=1 occupantCap(desc+0x24)=5; +0x248!=0 (should be 0) on 0 members
+[startTown::housing] family[4] -> house#4 (IBP=20401a99570): housed 3/3 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=3 slots=1 occupantCap(desc+0x24)=5; +0x248!=0 (should be 0) on 0 members
+[startTown::housing] family[5] -> house#5 (IBP=20401a99b30): housed 2/2 members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=2 slots=1 occupantCap(desc+0x24)=5; +0x248!=0 (should be 0) on 0 members
+[startTown::spawn] citizens: spawned 17; entityList count 8 -> 25
+[startTown::laborer] seeded Laborer on 12/12 adults (of 17 citizens, laborerKey=0x20400231ed8)
+[startTown::registry] registered 0 founding citizens into townMgr+0xa0 (17 already registered by the OnAdd broadcast)
+[startTown::res] begin [0] name="Template\NaturalResourceRock.rsc"
+[startTown::res] [0] variants:has=0 count=0 thr=0.000 denom=1 (scatter div=3.00 thr=0.625 dens=0.350)
+[startTown::res] [0] tmpl=00000204016424e8 desc=0000020401642c58 thr=0.625 dens=0.350 h[0.00,0.25) slope>=0.99 -> 2591 zoneSkips=0
+[startTown::res] begin [1] name="Template\NaturalResourceOre.rsc"
+[startTown::res] [1] variants:has=0 count=0 thr=0.000 denom=1 (scatter div=5.00 thr=0.650 dens=0.400)
+[startTown::res] [1] tmpl=00000204016423e0 desc=00000204016427c0 thr=0.650 dens=0.400 h[0.00,1.00) slope>=0.75 -> 1529 zoneSkips=1
+[startTown::res] begin [2] name="Template\NaturalResourceTree.rsc"
+[startTown::res] [2] variants:has=1 count=3 thr=0.500 denom=5 (scatter div=30.00 thr=0.350 dens=0.400)
+[startTown::res]   spawnComp[1] sc=0000020402fb2658 desc=00000204002ce338 entries=5 array=00000204002f4938
+[startTown::res]   spawnComp[2] sc=0000020402fb2a08 desc=00000204002ce338 entries=5 array=00000204002f4938
+[startTown::res]   spawnComp[3] sc=0000020402fb2db8 desc=00000204002ce338 entries=5 array=00000204002f4938
+[startTown::res] [2] tmpl=00000204002ce0c0 desc=00000204002f5010 thr=0.350 dens=0.400 h[0.00,1.00) slope>=0.75 -> 16384 (CAPPED) zoneSkips=1
+[startTown::res] SpawnComponent carriers: 16384 of 20504 scattered resources have one, 16384 of those have a non-empty SpawnDescription (tid(SpawnComponent)=556532549)
+[DoSpawnCensus:worldgen-seed] calls=77087 -> CREATED=629 | bail: noWorld=0 worldBit=0 noTemplate=0 densityRoll=75768 offMap=0 cannotPlace=151 tileTaken=539 allocFailed=0 listClosed=0
+[dc20Census:worldgen-seed] evictions=136 skipSceneTeardown=0 noParticipatingComp=0
+[startTown::spawn] resources: spawned 20504; entityList count 25 -> 21158
+[startTown::env] emitters=363 ambient=576(chunk=16) global=1 (paths=4, emitterTmpl=0000020401679718 ambTmpl=000002040167a398 envTmpl=000002040167a470)
+[startTown::spawn] environment: spawned 940; entityList count 21158 -> 22098
+[startTown::spawn] simple[0] tmpl=000002040163f820
+[Herd] PopulationComponent::Startup: self=00000204041e83f8 mapDim=384 habDim=48 cells=2304 herdDim=6 herds=36 template=00000204016430d8
+[AnimalUpd] MoveTo: self=0000020401aa4850 dest=(-153.47, -147.77, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=00000204041fb6e8 dest=(-89.67, -148.62, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=00000204041fd920 dest=(-78.27, -152.39, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=00000204041ff270 dest=(-28.40, -128.51, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=0000020404201e68 dest=(-35.15, -134.63, 0.17) attempts=1
+[AnimalUpd] MoveTo: self=0000020404207d38 dest=(70.26, -159.54, -0.08) attempts=1
+[AnimalUpd] MoveTo: self=0000020404209f80 dest=(65.45, -151.37, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000002040420f3d8 dest=(142.36, -146.30, -0.17) attempts=2
+[WildAnimalRm] calls=1 noHerd=0 herd=000002040420dd30 members 7 -> 6
+[AnimalUpd] death #1: self=0000020404211f98 entity=0000020404211d20 age=2.64 deathAge=2.59
+[AnimalUpd] MoveTo: self=0000020401aaac68 dest=(142.87, -146.60, -0.17) attempts=5
+[AnimalUpd] MoveTo: self=00000204042150c0 dest=(-147.18, -115.60, 0.18) attempts=3
+[AnimalUpd] MoveTo: self=0000020404216938 dest=(-148.81, -114.29, 0.38) attempts=1
+[AnimalUpd] MoveTo: self=0000020404218c98 dest=(-98.27, -87.82, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=0000020404219b60 dest=(-100.74, -83.55, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000002040421ca10 dest=(-99.48, -82.74, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000002040421d8a0 dest=(-99.77, -85.74, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=000002040421fc00 dest=(-30.88, -117.74, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=0000020404221e38 dest=(-28.40, -119.69, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=0000020404223688 dest=(-25.59, -113.35, 0.00) attempts=1
+[AnimalUpd] MoveTo: self=0000020404224658 dest=(16.12, -129.37, -0.02) attempts=1
+[AnimalUpd] MoveTo: self=0000020404229a60 dest=(107.81, -79.68, -0.00) attempts=1
+[AnimalUpd] MoveTo: self=000002040422a8f0 dest=(114.55, -78.46, 0.14) attempts=1
+[AnimalUpd] death #2: self=000002040422b780 entity=000002040422b508 age=2.99 deathAge=2.89
+[AnimalUpd] MoveTo: self=000002040422c1c8 dest=(165.51, -86.36, 0.45) attempts=1
+[AnimalUpd] MoveTo: self=000002040422f790 dest=(167.41, -86.79, 0.66) attempts=1
+[AnimalUpd] MoveTo: self=000002040423a510 dest=(-113.78, -60.60, 0.00) attempts=1
+[AnimalUpd] death #3: self=00000204042544e0 entity=0000020404254290 age=2.71 deathAge=2.65
+[AnimalUpd] death #4: self=0000020404258428 entity=00000204042581b0 age=2.83 deathAge=2.66
+[AnimalUpd] death #5: self=000002040425dd00 entity=000002040425da88 age=2.86 deathAge=2.80
+[AnimalUpd] death #6: self=0000020404281db0 entity=000002040421b4d0 age=2.85 deathAge=2.70
+[AnimalUpd] death #7: self=00000204042845d8 entity=0000020404284360 age=2.61 deathAge=2.53
+[AnimalUpd] death #8: self=0000020404295fa0 entity=0000020404295d28 age=2.70 deathAge=2.61
+[AnimalUpd] death #9: self=0000020404299fc0 entity=0000020404299d48 age=2.91 deathAge=2.84
+[Herd] PopulationComponent::Startup: 36/36 herd entities created
+[startTown::spawn] simple pool: spawned 1 entities; entityList count 22098 -> 22386
+[Pasture] livestock 00000204042ac350 joined the free-roaming pool (now 1)
+[Pasture] livestock 00000204042aead8 joined the free-roaming pool (now 2)
+[Pasture] livestock 00000204042af388 joined the free-roaming pool (now 3)
+[Pasture] livestock 00000204042afbf0 joined the free-roaming pool (now 4)
+[Pasture] livestock 00000204042b2368 joined the free-roaming pool (now 5)
+[Pasture] livestock 00000204042b4ae0 joined the free-roaming pool (now 6)
+[Pasture] livestock 00000204042b5358 joined the free-roaming pool (now 7)
+[Pasture] livestock 00000204042b5c58 joined the free-roaming pool (now 8)
+[StartHerd] spawned 8/8 livestock from template 00000204004edab0 at (0.5,0.5) radius=4.0
+[AgriSeed] available-agriculture seeded: plants=2 trees=2 livestock=1; townMgr+0x120 count 0 -> 5
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=0000020402930b18 CLAMPED fuel seed 400 -> 205 units (cap=1000, food takes 78, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=0000020402930b18 residents=3 reqPerResident=25 threshold=75 seeded=78 -> GetResourceCount(res)=78 (SUFFICIENT: no Gather)
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=00000204029313b0 CLAMPED fuel seed 400 -> 205 units (cap=1000, food takes 78, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=00000204029313b0 residents=3 reqPerResident=25 threshold=75 seeded=78 -> GetResourceCount(res)=78 (SUFFICIENT: no Gather)
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=0000020402932d78 CLAMPED fuel seed 400 -> 205 units (cap=1000, food takes 78, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=0000020402932d78 residents=3 reqPerResident=25 threshold=75 seeded=78 -> GetResourceCount(res)=78 (SUFFICIENT: no Gather)
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=0000020401a97a00 CLAMPED fuel seed 400 -> 205 units (cap=1000, food takes 78, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=0000020401a97a00 residents=3 reqPerResident=25 threshold=75 seeded=78 -> GetResourceCount(res)=78 (SUFFICIENT: no Gather)
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=0000020401a98b98 CLAMPED fuel seed 400 -> 205 units (cap=1000, food takes 78, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=0000020401a98b98 residents=3 reqPerResident=25 threshold=75 seeded=78 -> GetResourceCount(res)=78 (SUFFICIENT: no Gather)
+[startTown::housing] seed budget: cap=1000 carry=100 fuelReserve=0 -> foodBudget=900 maxFoodUnits=900 (food-first ON)
+[startTown::housing] house storage=0000020401a98078 CLAMPED fuel seed 400 -> 212 units (cap=1000, food takes 52, keeping 100 free)
+[startTown::housing] house food(c7e78): storage=0000020401a98078 residents=2 reqPerResident=25 threshold=50 seeded=52 -> GetResourceCount(res)=52 (SUFFICIENT: no Gather)
+[startTown::housing] seeded food into 6/6 houses (8 units each, edibleTmpl=204015c1128 flags=0x22)
+[startTown::housing] seeded FIREWOOD STAND-IN into 6/6 houses (400 units each, fuelTmpl=204002ac5c0 flags=0xc0)
+[startTown::DIAG] mapGen(loop+0x40)=00000204007d13e8 game=0000020401796830 worldGeom=0000020401598ba0 playerCtrl=0000020401795c10
+[startTown::DIAG]   mapGen+0x3c(townSize)=13
+[startTown::DIAG]   pools: a0=00000204007d1980 a8(cnt)=7 | b0=00000204007d1b90 b8(cnt)=8 | c0=00000204007d1e18 c8(cnt)=8 | d0=00000204007d20a8 d8(cnt)=3 | e0=2 e4=2 e8=1
+[startTown::DIAG]   *game(dim)=384  tileGrid(*(game+0x80))=0000020401e52638  cnt=147456
+[startTown::DIAG]   tiles: buildable(2)=69112 shore(7)=6068 deepWater(8)=15553 mtnLo(10)=13244 mtnHi(6)=42706
+[startTown::DIAG]   worldGeom+0xc0(dim)=768
+[startTown::DIAG]   height@(0,0) = 0.012
+[startTown::DIAG]   height@(-100,0) = 0.008
+[startTown::DIAG]   height@(100,100) = 0.000
+[startTown::DIAG]   height@(-120,-120) = 0.000
+[GUL::Load] EXIT — world built: game=0000020401796830 ui=0000020401795e18 entityList=0000020401795d28 scene=0000020401796c40 sun=0000020401598dd8
+[HUD-DIAG] Startup CALLED self=000002040158d9c8 m_game=0000020401796830 m_userInterface=0000020401795e18 m_resourceList(+0x08)=0000020400123460
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401026a0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140101ee0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1400938d0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c4138
+[Startup] SetupUIRefs: fn=00007ff68e249c6c uiScale=1.000 sndButtonDown=00000204007d22c0 sndAlert=00000204007d2270
+[HUD-DIAG] probe: m_resourceList=0000020400123460 Find=00007ff68e455101 FilenameCtor=00007ff68e490275 Dtor=00007ff68e4903a8 DialogTypeId=00007ff68e8c3cc0(val=1338773611) ToolbarCtor=00007ff68e269321 UI_AddDialog=00007ff68e4c5642 IsDerivedFrom=00007ff68e3ab77c
+[HUD-DIAG] ExternalList::Find("Dialog/Toolbar.rsc") -> foundBase=00000204015ca810
+[HUD] ToolbarStandalone_Init: vtable=00007ff68e60cb00 [+18 Persist=00007ff68e49a8f9 +38 OnUpdate=00007ff68e49b56f +48 OnSerSet=00007ff68e49a908] Toolbar=3386704242 ToolbarDesc=2234433627 Button=1393606052 Image=893464662 Check=272235987 Text=438357726
+[HUD] Toolbar: foundBase=00000204015ca810 dialogRes=00000204015ca810 Ctor=00007ff68e269321 UI=0000020401795e18
+[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=000002040158dc28 itemCount(+0xD8)=10 buttonCount(+0xC8)=10 speedCount(+0x100)=6
+[HUD] EventNotify: foundBase=00000204015bc040 dialogRes=00000204015bc040 parentToolbar=000002040158dc28
+[HUD] EventNotify ribbon CONSTRUCTED + added to UI: 000002040158e528
+[Tools]   bridge node: CreateBridge=2272509727 -> BridgeTool=2765355081
+[Tools]   fenced node: CreateFenced=2515727256 -> FencedTool=3195986552
+[Tools]   drag node: CreateDrag=3893769075 -> DragPlacementTool=3938475504
+[Tools] BuildToolModeTree: entityUI=0000020401796a70 Tool=3890306084 ToolSetting=2850067769 node{CreatePlaced=4107504200 -> PlacementTool=4034384576} node{0 -> EditTool=3849818301} node{CreateRemoval=2744517967 -> RemovalTool=2865193925} node{CreatePath=4097193310 -> PathTool=1385140268} node{CreateRoad=1479859256 -> RoadTool=2419301037} count=8
+[ToolHarness] disabled (BANISHED_TOOL_HARNESS unset)
+[PauseMenu] ENABLED - open at frame 600, click id=6 120 frames later
+[PauseMenu] new world 000002040158d9c8 at frame 1 - rearmed
+[OrchardDiag] disabled (BANISHED_ORCHARD_DIAG unset)
+[CropStart] disabled (BANISHED_CROPFIELD_FORCE_START unset)
+[OrchardForceStart] disabled (BANISHED_ORCHARD_FORCE_START unset)
+[OrchardWorkers] disabled (BANISHED_ORCHARD_WORKERS unset)
+[FoodWorkers] disabled (BANISHED_FOOD_WORKERS unset)
+[OrchardCut] disabled (BANISHED_ORCHARD_CUT unset)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151718
+[Plague] BOOT: careMult(desc+0x128)=2.0000 healerProf(desc+0x30)=00000204004a1f18 maxHealth(+0x70)=10.000 durBase(+0x94)=1.000 durSpread(+0x98)=0.500 immunityMonths(+0x9c)=12.000 diseaseList(gw+0xa8)=00000204015504c8 tidDisease=461933471
+[Plague] BOOT: hospital census DEFERRED — attendance registry (townMgr+0x60/+0x68) is EMPTY, so there is nothing to search yet. buildings(townMgr+0x28)=6 citizens(+0xa8)=17 try=1. A building joins that registry only when its AttendanceComponent reaches state 2 (the OPEN transition), which is after StartTown. Re-arming.
+[Plague] ROLL-INPUTS citizen=0000020402933090 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.112156 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[SetupAgeMesh] citizen=0000020402933090 scale=1.00 colour=3 age=3.29 thresh=2.00 state208=0
+[HSR2] residence=20402930fb8 occupied=1 perOcc=8.0 have=205 -> sufficient
+[Plague] ROLL-INPUTS citizen=0000020401a9fab8 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.107676 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[SetupAgeMesh] citizen=0000020401a9fab8 scale=1.00 colour=0 age=3.04 thresh=2.00 state208=0
+[HSR2] residence=20402930fb8 occupied=1 perOcc=8.0 have=205 -> sufficient
+[Plague] ROLL-INPUTS citizen=0000020401aa0738 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.877460 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[SetupAgeMesh] citizen=0000020401aa0738 scale=0.66 colour=2 age=1.69 thresh=2.00 state208=0
+[HSR2] residence=20402930fb8 occupied=1 perOcc=8.0 have=205 -> sufficient
+[Plague] ROLL-INPUTS citizen=0000020401aa14e0 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.242266 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[SetupAgeMesh] citizen=0000020401aa14e0 scale=1.00 colour=3 age=3.51 thresh=2.00 state208=0
+[HSR2] residence=204029325e8 occupied=1 perOcc=8.0 have=205 -> sufficient
+[Plague] ROLL-INPUTS citizen=0000020401aa22b0 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.337674 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[SetupAgeMesh] citizen=0000020401aa22b0 scale=1.00 colour=5 age=2.37 thresh=2.00 state208=0
+[HSR2] residence=204029325e8 occupied=1 perOcc=8.0 have=205 -> sufficient
+[Plague] ROLL-INPUTS citizen=0000020401aa2f30 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.194072 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[SetupAgeMesh] citizen=0000020401aa2f30 scale=0.66 colour=3 age=1.52 thresh=2.00 state208=0
+[HSR2] residence=204029325e8 occupied=1 perOcc=8.0 have=205 -> sufficient
+[SetupAgeMesh] citizen=0000020401aa3ce8 scale=1.00 colour=6 age=2.66 thresh=2.00 state208=0
+[HSR2] residence=20401a972c8 occupied=1 perOcc=8.0 have=205 -> sufficient
+[SetupAgeMesh] citizen=0000020401aa4f38 scale=1.00 colour=4 age=3.57 thresh=2.00 state208=0
+[HSR2] residence=20401a972c8 occupied=1 perOcc=8.0 have=205 -> sufficient
+[SetupAgeMesh] citizen=0000020401aa5d08 scale=0.66 colour=2 age=1.69 thresh=2.00 state208=0
+[HSR2] residence=20401a972c8 occupied=1 perOcc=8.0 have=205 -> sufficient
+[SetupAgeMesh] citizen=0000020401aa6b00 scale=1.00 colour=3 age=2.62 thresh=2.00 state208=0
+[HSR2] residence=20401a97e50 occupied=1 perOcc=8.0 have=205 -> sufficient
+[SetupAgeMesh] citizen=0000020401aa78f8 scale=1.00 colour=3 age=3.68 thresh=2.00 state208=0
+[HSR2] residence=20401a97e50 occupied=1 perOcc=8.0 have=205 -> sufficient
+[SetupAgeMesh] citizen=0000020401aa86f0 scale=0.66 colour=0 age=1.76 thresh=2.00 state208=0
+[HSR2] residence=20401a97e50 occupied=1 perOcc=8.0 have=205 -> sufficient
+[SetupAgeMesh] citizen=0000020401aa94e8 scale=1.00 colour=0 age=2.83 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=0000020401aaa2e0 scale=1.00 colour=2 age=2.70 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=0000020401aab3e0 scale=0.66 colour=7 age=0.87 thresh=2.00 state208=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151428
+[MusicPlayer] MusicTracks.rsc -> 000002040164e458 tracks=15
+[MusicPlayer] PLAY track=4/15 ext=20401651408 scene=0000020400123818 -> handle=1536
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401517a8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152750
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151dd0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151758
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1400fcc90
+[AudioScene] windFactor(camera dist)=25.133
+[EntityCensus] frame=1 entities=22249
+[Vitals] frame=1 citizens=17  age mean=2.52 max=3.68 (maxAge[0]=103.29)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=17 busy=15 ibp238=17 ibp248=0
+[SetupAgeMesh] citizen=0000020401aad6d0 scale=1.00 colour=4 age=2.76 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=0000020401aae478 scale=1.00 colour=4 age=2.27 thresh=2.00 state208=0
+[AudioScene] windFactor(camera dist)=25.134
+[EntityCensus] frame=2 entities=22249
+[Vitals] frame=2 citizens=17  age mean=2.52 max=3.68 (maxAge[0]=103.29)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=17 busy=17 ibp238=17 ibp248=0
+[AudioScene] windFactor(camera dist)=25.135
+[EntityCensus] frame=5 entities=22249
+[Vitals] frame=5 citizens=17  age mean=2.52 max=3.68 (maxAge[0]=103.29)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=17 busy=17 ibp238=17 ibp248=0
+[EntityCensus] frame=10 entities=22249
+[Vitals] frame=10 citizens=17  age mean=2.52 max=3.68 (maxAge[0]=103.29)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=17 busy=17 ibp238=17 ibp248=0
+[EntityCensus] frame=30 entities=22249
+[Vitals] frame=30 citizens=17  age mean=2.52 max=3.68 (maxAge[0]=103.29)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=17 busy=17 ibp238=17 ibp248=0
+[EntityCensus] frame=60 entities=22249
+[Vitals] frame=60 citizens=17  age mean=2.52 max=3.68 (maxAge[0]=103.29)  hunger mean=0.0 max=0.0  thirst mean=0.0 max=0.0  char=17 busy=17 ibp238=17 ibp248=0
+[EntityCensus] frame=120 entities=22249
+[Vitals] frame=120 citizens=17  age mean=2.52 max=3.68 (maxAge[0]=103.29)  hunger mean=0.1 max=0.1  thirst mean=0.1 max=0.1  char=17 busy=17 ibp238=17 ibp248=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c5fe0
+[EntityCensus] frame=240 entities=22249
+[Vitals] frame=240 citizens=17  age mean=2.52 max=3.68 (maxAge[0]=103.29)  hunger mean=0.1 max=0.1  thirst mean=0.2 max=0.2  char=17 busy=17 ibp238=17 ibp248=0
+[Plague] CENSUS rolls=4000 fired=0 noWindow(B<=0)=0 epidemicBlocked=0 meanChance=0.00000000 maxChance=0.00000000
+[SetupAgeMesh] citizen=0000020401aa2f30 scale=0.66 colour=3 age=1.52 thresh=2.00 state208=0
+[Plague] BOOT: hospital census DEFERRED — attendance registry (townMgr+0x60/+0x68) is EMPTY, so there is nothing to search yet. buildings(townMgr+0x28)=6 citizens(+0xa8)=17 try=5000. A building joins that registry only when its AttendanceComponent reaches state 2 (the OPEN transition), which is after StartTown. Re-arming.
+[SetupAgeMesh] citizen=0000020401aae478 scale=1.00 colour=4 age=2.27 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=0000020401aa86f0 scale=0.66 colour=0 age=1.76 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=0000020401aab3e0 scale=0.66 colour=7 age=0.88 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=0000020401aa78f8 scale=1.00 colour=3 age=3.68 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=0000020401aae478 scale=1.00 colour=4 age=2.27 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=0000020401aa3ce8 scale=1.00 colour=6 age=2.66 thresh=2.00 state208=0
+[PlayAnimGuard] target=0000020401a99d28 vtable=00007ff68e60cc60 factIdx=737 gen=0x817d879e (live)
+[EntityCensus] frame=480 entities=22249
+[Vitals] frame=480 citizens=17  age mean=2.52 max=3.68 (maxAge[0]=103.29)  hunger mean=0.2 max=0.2  thirst mean=0.3 max=0.3  char=17 busy=17 ibp238=17 ibp248=0
+[Plague] CENSUS rolls=8000 fired=0 noWindow(B<=0)=0 epidemicBlocked=0 meanChance=0.00000000 maxChance=0.00000000
+[PauseMenu] frame 601 - opening (entityUI=0000020401796a70 ui=0000020401795e18 pausesGame=0)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140161f10
+[PauseMenu] pause dialog=00000204036865c8 vtable=00007ff68e60c5e0 (UI array index=1 of 2) pausesGame=0
+[PauseMenu] frame 721 - dialog=00000204036865c8 vtable=00007ff68e60c5e0 (was 00007ff68e60c5e0) UI array index=-1 of 0 pausesGame=1
+[PauseMenu] dispatching OnCommand(msg=0x12, id=6)
+[PauseMenu] OnCommand returned
+[GUL::Teardown] resolved: e320=00007ff68e3a72b2 14c30=00007ff68e3a7244 14b00=00007ff68e335b75 markRemoval=00007ff68e106580 removeEntity=00007ff68e29a094
+[Residence] ERASE via SLOT-7 removal hook: comp=0000020402930fb8
+[Unassign] #1 citizen=0000020402933090 oldWp=2040292fed0 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Unassign] #2 citizen=0000020401aa0738 oldWp=2040292fed0 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Unassign] #3 citizen=0000020401a9fab8 oldWp=2040292fed0 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=00000204029325e8
+[Unassign] #4 citizen=0000020401aa2f30 oldWp=20402931228 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Unassign] #5 citizen=0000020401aa14e0 oldWp=20402931228 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Unassign] #6 citizen=0000020401aa22b0 oldWp=20402931228 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=0000020401a972c8
+[Unassign] #7 citizen=0000020401aa3ce8 oldWp=20402932898 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Unassign] #8 citizen=0000020401aa5d08 oldWp=20402932898 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Unassign] #9 citizen=0000020401aa4f38 oldWp=20402932898 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=0000020401a97e50
+[Unassign] #10 citizen=0000020401aa86f0 oldWp=20401a983c0 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Unassign] #11 citizen=0000020401aa6b00 oldWp=20401a983c0 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Unassign] #12 citizen=0000020401aa78f8 oldWp=20401a983c0 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=0000020401a98fe8
+[Unassign] #13 citizen=0000020401aa94e8 oldWp=20401a99570 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Unassign] #14 citizen=0000020401aab3e0 oldWp=20401a99570 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Unassign] #15 citizen=0000020401aaa2e0 oldWp=20401a99570 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=0000020402932308
+[Unassign] #16 citizen=0000020401aad6d0 oldWp=20401a99b30 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[Unassign] #17 citizen=0000020401aae478 oldWp=20401a99b30 slot 0->-1 caller=00007ff68e1f280e (static 0x1400f280e)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151ca0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151550
+[NomadDlgWalk] #1 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #2 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #3 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #4 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #5 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #6 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #7 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #8 visited=4 closed=0 (no open panel bound to the removed entity)
+[WildAnimalRm] calls=11 noHerd=0 herd=000002040429d7f0 members 7 -> 6
+[WildAnimalRm] calls=21 noHerd=0 herd=00000204042a6c68 members 2 -> 1
+[WildAnimalRm] calls=31 noHerd=0 herd=000002040429d7f0 members 4 -> 3
+[WildAnimalRm] calls=41 noHerd=0 herd=0000020404295cc0 members 4 -> 3
+[WildAnimalRm] calls=51 noHerd=0 herd=000002040428b4e8 members 9 -> 8
+[WildAnimalRm] calls=61 noHerd=0 herd=0000020404285700 members 5 -> 4
+[WildAnimalRm] calls=71 noHerd=0 herd=0000020404254228 members 4 -> 3
+[WildAnimalRm] calls=81 noHerd=0 herd=0000020404276ab0 members 4 -> 3
+[WildAnimalRm] calls=91 noHerd=0 herd=000002040426f1b8 members 2 -> 1
+[WildAnimalRm] calls=101 noHerd=0 herd=0000020404265838 members 4 -> 3
+[WildAnimalRm] calls=111 noHerd=0 herd=00000204042606f0 members 1 -> 0
+[WildAnimalRm] calls=121 noHerd=0 herd=00000204041ef0c8 members 6 -> 5
+[WildAnimalRm] calls=131 noHerd=0 herd=00000204041faa38 members 1 -> 0
+[WildAnimalRm] calls=141 noHerd=0 herd=0000020404204898 members 5 -> 4
+[WildAnimalRm] calls=151 noHerd=0 herd=0000020404207a58 members 4 -> 3
+[WildAnimalRm] calls=161 noHerd=0 herd=000002040420dd30 members 2 -> 1
+[WildAnimalRm] calls=171 noHerd=0 herd=0000020404218010 members 5 -> 4
+[WildAnimalRm] calls=181 noHerd=0 herd=000002040421ef50 members 2 -> 1
+[WildAnimalRm] calls=191 noHerd=0 herd=0000020404227a08 members 2 -> 1
+[WildAnimalRm] calls=201 noHerd=0 herd=000002040422bee8 members 2 -> 1
+[WildAnimalRm] calls=211 noHerd=0 herd=0000020404237138 members 9 -> 8
+[WildAnimalRm] calls=221 noHerd=0 herd=000002040423d410 members 5 -> 4
+[WildAnimalRm] calls=231 noHerd=0 herd=0000020404246300 members 5 -> 4
+[WildAnimalRm] calls=241 noHerd=0 herd=0000020404249990 members 3 -> 2
+[WildAnimalRm] calls=251 noHerd=0 herd=0000020404254228 members 1 -> 0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015ef18
+[GameSettings] Save: LastTerrain=0 LastMapSize=1 LastClimate=1 LastStart=2 LastDisaster=0
+[SaveMetaOracle] bodyCalls=0 calls=0 sizeDiffs=0 byteDiffs=0
+[RtResolve] 0 misses — every cached resolve in this run found its symbol.
+[RtResolveEarly] 0 registry-aware resolves happened before RuntimePortInit() finished. The early-snapshot port-bypass class is NOT LIVE on this path.
+[RtSlotAudit] 0 names were resolved through the CACHING door (RtResolveCached / RT_DATA_SLOT / RT_EXPORT_ONCE) before RuntimePortInit() finished. Nothing could have frozen an early answer on this path.
+[RefTable] calls=0 -- the body never ran. That is EXPECTED on a run that neither saved nor loaded; it is NOT evidence the port is correct and it is NOT evidence it is dead (reference_uncalled_port_is_not_verified.md).
+[FNHook] census: ~Filename=0 operator=(String)=0 operator=(Filename)=0 Filename(String)=0
+[ResLoad] census: FindOrLoad=14375 External::Load=2838
+[ReadGuard] census: Read=0

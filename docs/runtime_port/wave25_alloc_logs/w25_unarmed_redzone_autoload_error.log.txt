@@ -1,0 +1,378 @@
+[AllocLock] MemoryAllocator::Allocate is now thread-safe (takes self+0x640, tramp=000001fd2a570000, wrapper=00007ff6137b2b54)
+[AllocLock] MemoryAllocator::Free is now thread-safe (takes self+0x640, tramp=000001fd2a580000, wrapper=00007ff6137b2d36)
+[RtMathTransform] registered 31 functions (Matrix/Quaternion/Transform/Transform2/Transform3)
+[RtAlloc] ATTEST: UNARMED (BANISHED_RT_ALLOC=(unset)) -- the allocator port registered NOTHING
+[ElemTid] registered 21/21 element type-id slots
+[DlgCtrlVt] tables=38 unknown=0 inheritedSlotsFilled=166 keptOverride=10 unresolved=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b80
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c6c0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015fa00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f5a0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f980
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151ca8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b78
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b70
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c70e8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015be00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151488
+[CheckPtr] export=00007ff6136f0eb2 body[0]=0x55 source=our port -> NOP (calls skipped)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529d0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151a90
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401528f0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401527f8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c400
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c3b0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140002280
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140160bf8
+[FNHook] detoured Video::Device::InitializeInterfaces @00007fff440379f0 (tramp=000001fd2a590000, 17-byte patch)
+[REDZONE] WATCH-ONLY mode: no shim, watchdog=1ms
+[FNHook] detoured ExternalFactory::FindOrLoad @00007fff43fff320 (tramp=000001fd2c900000, 14-byte patch)
+[FNHook] detoured External::Load @00007fff43ffc620 (tramp=000001fd2c910000, 18-byte patch)
+[ResLoad] serialized: FindOrLoad=000001fd2c900000 External::Load=000001fd2c910000 (recursive CS, target-resolution=RAW)
+[AutoStart] AUTOLOAD ENABLED — will click Load after 60 menu frames, then load save "Auto"
+[REDZONE-HEAP] watchdog thread started (interval=1ms)
+[Tornado] ParticleComponent type-id global 0x1401c4720 = 0xF42F66FC (ok)
+[Lane4TypeId] 30/30 slot(s) filled, 0 empty
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c42c0
+[CITID] c70e8(CitizenAI) reg=0000000000000000 val=1392079038 | c7158(Citizen) reg=00007ff6141ca714 val=2704017556 | c42c0(Happiness) reg=0000000000000000 val=709961609
+[TradeTid] TradeComponent=2459092736 TradeDescription=2350935396 ValueDescription=3341444357 ComponentDescription=2598635996 BoatComponent=1147571899
+[ElemTid] HelpButtonElem/ButtonElement     slot=00000001401514f8 typeInfo=00007fff4413a938 id=1393606052
+[ElemTid] ImageElement                     slot=0000000140151500 typeInfo=00007ff6141cd1e8 id=893464662
+[ElemTid] TextElement                      slot=0000000140151508 typeInfo=00007ff6141cdc68 id=438357726
+[ElemTid] TableElement                     slot=0000000140151510 typeInfo=00007fff4413ae78 id=3348628233
+[ElemTid] LabelElement                     slot=0000000140151668 typeInfo=00007ff6141cd290 id=1334204089
+[ElemTid] HelpComboElem/ComboElement       slot=0000000140151690 typeInfo=00007fff4413aa50 id=3545820999
+[ElemTid] ToolbarElement/CheckElement      slot=00000001401516a8 typeInfo=00007ff6141cc998 id=272235987
+[ElemTid] SpinnerElement(=NumberElement)   slot=00000001401516c8 typeInfo=00007fff4413acb8 id=475271278
+[ElemTid] SliderElement (the REAL one)     slot=00000001401516d0 typeInfo=00007fff4413a350 id=3664215698
+[ElemTid] HelpFirstElem/ScrollElement      slot=00000001401517e8 typeInfo=00007ff6141cd8b0 id=476774394
+[ElemTid] HelpDocTextElem                  slot=00000001401517f0 typeInfo=00007fff44139ef0 id=289499821
+[ElemTid] HelpContainerElem                slot=00000001401517f8 typeInfo=00007fff44139dd8 id=3444093259
+[ElemTid] NumberEditElement                slot=0000000140151cb0 typeInfo=00007ff6141cd488 id=631391588
+[ElemTid] SliderElement(=SpinnerElement)   slot=0000000140151cf0 typeInfo=00007fff4413a3c0 id=644357809
+[ElemTid] Element (base)                   slot=0000000140151660 typeInfo=00007ff6141ccdf8 id=2370443687
+[ElemTid] ProgressElement                  slot=00000001401515b8 typeInfo=00007fff4413ad28 id=1281602850
+[ElemTid] RibbonElement                    slot=0000000140151720 typeInfo=00007fff4413a2e0 id=2193694001
+[ElemTid] BorderElement                    slot=0000000140151a58 typeInfo=00007fff4413a8c8 id=3875203924
+[ElemTid] EditElement                      slot=0000000140151b50 typeInfo=00007fff44139f60 id=6894048
+[ElemTid] GraphElement                     slot=0000000140151dd8 typeInfo=00007fff44139fd0 id=3839563932
+[ElemTid] TabElement                       slot=0000000140151de0 typeInfo=00007fff4413a468 id=2123353554
+[TrackerTypeId] 0x1401c4b10 = 2570797389 (0x993B414D)
+[OrchardTypeId] 0x1401c46e8 = 3940668927 (0xEAE1D5FF)
+[OrchardTypeId] 0x1401c46b0 = 2843843441 (0xA9819B71)
+[MarketTypeId] 0x1401c44f0 = 1284470327 (0x4C8F7637)
+[MarketTypeId] 0x1401c4528 = 3142036116 (0xBB47AA94)
+[MarketTypeId] 0x1401c7ee8 = 4120633425 (0xF59BE051)
+[FoodTypeId] 0x1401c43a0 HerbalistComponent    = 3390714787 (0xCA1A33A3)
+[FoodTypeId] 0x1401c43d8 HerbalistDescription  = 4158245638 (0xF7D9CB06)
+[FoodTypeId] 0x1401c7510 CropFieldComponent    = 2748109570 (0xA3CCD302)
+[FoodTypeId] 0x1401c7548 CropFieldDescription  = 1222696611 (0x48E0DEA3)
+[FoodTypeId] 0x1401c7660 FishingComponent      = 2644177521 (0x9D9AF271)
+[FoodTypeId] 0x1401c7698 FishingDescription    = 627382911 (0x25651A7F)
+[FoodTypeId] 0x1401c7890 HuntComponent         = 2898427812 (0xACC27FA4)
+[FoodTypeId] 0x1401c78c8 HuntDescription       = 4273867873 (0xFEBE0C61)
+[FoodTypeId] 8/8 slot(s) filled, 0 empty
+[TutorialTypeId] 0x1401C6240 FinishTutorialGoal = 1089248897 (0x40EC9E81)
+[TutorialTypeId] 0x1401C6278 FinishTutorialInstance = 171997278 (0x0A40785E)
+[TutorialTypeId] 0x1401C6668 TutorialInstance = 3760546994 (0xE02564B2)
+[TutorialTypeId] 0x1401C5A98 Profession = 3983740233 (0xED730D49)
+[GrowthTypeId] 0x1401c77b0 = 1845779407 (0x6E045BCF)
+[ClearAreaTypeId] 0x1401c71c8 = 252740659 | 0x1401c7200 = 2607357058
+[GameSettings] Load: LastTerrain=0 LastMapSize=1 LastClimate=1 LastStart=2 LastDisaster=0 (UIScale=100 AutosaveInterval=1)
+[GameSettings] Load: StatusIconEnable=1 (settings+0xC) -- 0 hides EVERY status icon (citizen health, building warnings); it is the Options checkbox, persisted as GameStatusIconEnable under HKCU/Software/Shining Rock Software LLC/Banished
+[BootState] RUNNING (Engine::Startup returned at 2s)
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001fd2ca53ea0 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001fd2ca53ea0 =====
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001fd2ca21bf0 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001fd2ca21bf0 =====
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001fd2ca21bf0 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001fd2ca21bf0 =====
+[FrameLimiter] ceiling = 216.0 FPS (4.630 ms/frame) [refresh+headroom], hi-res timer=yes. External limiters (vsync/G-Sync/RTSS) at or below refresh are never affected.
+[PerfX] master=0 animCull=0 geomXfLastOnly=0 iconLastOnly=0 ambientThrottle=0 treeSnapshot=0 particleCull=0 pickCull=0 geomCull=0 iconCull=0 animBatchCulled=0 animBatchAll=0 terrainSidecar=0 margin=6.0 (build default 0)
+[FrameLimiter] fps=44.7 (cap=216.0)
+[AutoStart] menu settled (mainMenu=000001fd2ca21c88) — injecting Load click
+[GameContainer] +0x00 'Game/Achievement/AchievementList.rsc' -> 000001fd2ca40378
+[GameContainer] +0x08 'Game/Scenario/ScenarioList.rsc' -> 000001fd2cf5dd58
+[GameContainer] +0x10 'Game/Climate/ClimateList.rsc' -> 000001fd2cabce80
+[GameContainer] +0x18 'Game/StartCondition/StartConditions.rsc' -> 000001fd2ca54f48
+[GameContainer] +0x20 'Game/Terrain/TerrainList.rsc' -> 000001fd2d160fa0
+[GameContainer] AchievementManager::SetAchievements(mgr=000001fd2ca0c368, list=000001fd2ca40378) -> count=36
+[FrameLimiter] fps=54.7 (cap=216.0)
+[AutoStart] save list ready (13 entries) — selecting #0 ("Auto") and injecting Load click
+[AutoStart] AUTOLOAD sequence fired — load operation queued; driver done
+[FrameLimiter] fps=61.8 (cap=216.0)
+[RtPort] UI::UserInterface::CloseDialog ENTERED (first call) -- the port is LIVE on this route
+[FrameLimiter] fps=63.0 (cap=216.0)
+[MenuDLT::Update] STAGE C entry: pendingLoop=000001fd2df01d98 fade settled (rate=0) -> MainLoop::SetNextLoop
+===== [TRACE BEGIN] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001fd2df01230 =====
+===== [TRACE END] fn_DialogLoaderLoopT_Load (Stub_Load) self=000001fd2df01230 =====
+[Tornado/particle] Factory -> 000001fd2de3a438 (slots 1/2/3/5/6/7/8/9 installed; the instance swirl runs on slot 1)
+[Tornado/particle] Serialize read: +0x48=20.00 +0x4c=75.00 +0x50=26.00 +0x54=30.00 +0x70=30.00 (ctor defaults were 4.00/20.00/5.00/45.00/30.00)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14001c3c0
+[GUL::Load] build owner = tid=25744 for loop=000001fd2df010c8
+[GUL::Load] resolves: RandSeed=00007ff6137208f6 Picking=00007ff6136f959c UI=00007ff61374efb1 Anim=00007ff61367bd78 SaveLoad=00007ff61370500d RandFull=00007ff6137209d2
+[GUL::Load] ENTER self=000001fd2df010c8 seed=0 mapSize=0 climateGen=0000000000000000 terrainGen=0000000000000000 saved=000001fd2df83980
+[GUL::DiseaseList] gw+0xa8=000001fd2e8fdca0 (loaded=000001fd2e8fdca0 isExternalList=1 diseases=12)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::DiseaseList]   (retail tuning row elided)
+[GUL::ProfList] gw+0xb0=000001fd2e0975d0 defaultProf(+0x30)=000001fd2cb61ed8 profRef2(+0x38)=000001fd2cb621c0
+[GUL::UIMat] gw+0xb8=000001fd2deb0880 (loaded=000001fd2deb0880 isMaterial=1)
+[GUL::Help] gw+0xa0=000001fd2df03e38 (loaded=000001fd2df03e38 isExternalList=1 topics=66)
+[GUL::Weather] Environment.rsc envRes=000001fd2de39fe8 weatherDescCount=2
+[GUL::SkyMesh] built skyMesh=000001fd2e9139f0 meshRes=000001fd2d88d770 (SetMesh=00007ff61367f73c TimeCtor=00007ff613721079)
+[GUL::Load] step29 event StringTables: events=000001fd2dea0240 seasons=000001fd2cfe7418 (tid=3224705508)
+[GUL::Load] step30 AchievementManager::SetEventHandler (mgr=000001fd2ca0c368 handler=EventLog_OnAchievementAwarded)
+[GUL::Load] LOAD-FROM-SAVE branch: SaveRestore(load) state=000001fd2df83980
+[GUL::Serialize] resolved: refMode=00007ff6136df9d0 refTable=00007ff6136e84e4 persist=00007ff6136f1119/00007ff6136f1094 saveSettings=00007ff613751725 rand=00007ff613720fc9 achP=00007ff61364c2f9 anim=00007ff613691762 audio=00007ff61365652a cms=00007ff6136a5c7b/00007ff6136a6455 sst=00007ff613707001/00007ff613707259 subs: cit=00007ff61352fc1f grid=00007ff613539436 goals=00007ff6135520da citPost=00007ff613530805 envPtr=00007ff6135627fa
+[GUL::Serialize] LOAD ENTER self=000001fd2df010c8 stream=000000af65dff550
+[RefTable] calls=1 save=0 load=1 entries=5683 teardownNonEmpty=0 resFound=5678 resMissed=5 nullSearchKey=0 nullNodeKey=0 nullEncoding=0 nullRw=0
+[GUL::Load] redundant dispatch for loop=000001fd2df010c8 tid=26848 — rejected (loop already owned/built by the first dispatcher)
+[PreloadRefs] preloaded 5682/5683 referenced externals (0 not found) with reference mode off
+[GUL::Serialize] core done — subsystems...
+[CompEnt::Serialize] LOAD ent=000001fd2fa04348 desc=000001fd2cd07b68 compCount=19 arr=000001fd2fa043d0 cap=19
+[ModelComponent::OnAdded] self=000001fd2fa04520 scene=000001fd2e913970 modelVariant=2 sceneObjId=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c72e8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529b0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152970
+[SMC] tree-tick slot 8 LIVE — trans30 handlers now dispatch (retail 0x14012b640, Tick useAlt=0)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140164520
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140162920
+[WPCCensus] #1 wpc=000001fd2fa04cf0 ctor-defaults APPLIED (+0x40=000001fd2fa04cf0 +0x50=1)
+[CompEnt::Serialize] LOAD ent=000001fd2fa04e20 desc=000001fd2cfe2f08 compCount=13 arr=000001fd2fa04e70 cap=13
+[CompEnt::Serialize] LOAD ent=000001fd2fa054b0 desc=000001fd2d075ea0 compCount=19 arr=000001fd2fa05500 cap=19
+[ModelComponent::OnAdded] self=000001fd2fa05620 scene=000001fd2e913970 modelVariant=2 sceneObjId=1
+[WPCCensus] #2 wpc=000001fd2fa05e20 ctor-defaults APPLIED (+0x40=000001fd2fa05e20 +0x50=1)
+[CompEnt::Serialize] LOAD ent=000001fd2fa062d0 desc=000001fd2d0bf1a8 compCount=8 arr=000001fd2fa06358 cap=8
+[ModelComponent::OnAdded] self=000001fd2fa063a0 scene=000001fd2e913970 modelVariant=0 sceneObjId=2
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c5fe0
+[CompEnt::Serialize] LOAD ent=000001fd2fa077b0 desc=000001fd2d0bf1a8 compCount=8 arr=000001fd2fa07800 cap=8
+[ModelComponent::OnAdded] self=000001fd2fa07848 scene=000001fd2e913970 modelVariant=0 sceneObjId=3
+[CompEnt::Serialize] LOAD ent=000001fd2fa08a20 desc=000001fd2d075ea0 compCount=19 arr=000001fd2fa08a70 cap=19
+[ModelComponent::OnAdded] self=000001fd2fa08b90 scene=000001fd2e913970 modelVariant=2 sceneObjId=4
+[WPCCensus] #3 wpc=000001fd2fa09270 ctor-defaults APPLIED (+0x40=000001fd2fa09270 +0x50=1)
+[CompEnt::Serialize] LOAD ent=000001fd2fa09708 desc=000001fd2d0bf1a8 compCount=8 arr=000001fd2fa09790 cap=8
+[ModelComponent::OnAdded] self=000001fd2fa097d8 scene=000001fd2e913970 modelVariant=0 sceneObjId=5
+[CompEnt::Serialize] LOAD ent=000001fd2fa0abe8 desc=000001fd2d0bf1a8 compCount=8 arr=000001fd2fa0ac38 cap=8
+[ModelComponent::OnAdded] self=000001fd2fa0ac80 scene=000001fd2e913970 modelVariant=0 sceneObjId=6
+[ModelComponent::OnAdded] self=000001fd2fa0c058 scene=000001fd2e913970 modelVariant=2 sceneObjId=7
+[WPCCensus] #4 wpc=000001fd2fa0c768 ctor-defaults APPLIED (+0x40=000001fd2fa0c768 +0x50=1)
+[ModelComponent::OnAdded] self=000001fd2fa0ccf0 scene=000001fd2e913970 modelVariant=0 sceneObjId=8
+[ModelComponent::OnAdded] self=000001fd2fa0dd10 scene=000001fd2e913970 modelVariant=0 sceneObjId=9
+[WPCCensus] #5 wpc=000001fd2fa107b0 ctor-defaults APPLIED (+0x40=000001fd2fa107b0 +0x50=1)
+[WPCCensus] #6 wpc=000001fd2fa13728 ctor-defaults APPLIED (+0x40=000001fd2fa13728 +0x50=1)
+[WPCCensus] #7 wpc=000001fd2fa18ee0 ctor-defaults APPLIED (+0x40=000001fd2fa18ee0 +0x50=1)
+[TownCensus] LOAD enter: entA=0 entB=0 residence=0 entC=0 cemetery=0 happiness=0 attendance=0 healer=0 livestock=0 pasture=0 citizen=0 herd=0 population=0 build=0 well=0 disease=0
+[TownCensus] LOAD exit : entA=2 entB=0 residence=6 entC=0 cemetery=0 happiness=0 attendance=0 healer=0 livestock=8 pasture=0 citizen=15 herd=36 population=1 build=0 well=0 disease=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14009e8c0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140022480
+[SetupAgeMesh] citizen=000001fd2fa06000 scale=1.00 colour=1 age=2.61 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa07518 scale=1.00 colour=2 age=2.80 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa09438 scale=1.00 colour=4 age=2.85 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa0a950 scale=1.00 colour=0 age=2.71 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa0c950 scale=1.00 colour=1 age=2.70 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa0e978 scale=1.00 colour=0 age=2.87 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa0d9e0 scale=0.66 colour=5 age=0.72 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa10990 scale=1.00 colour=2 age=3.13 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa11a90 scale=1.00 colour=7 age=3.11 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa13918 scale=1.00 colour=2 age=3.91 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa17248 scale=1.00 colour=6 age=3.77 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa149e0 scale=0.66 colour=1 age=0.30 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa15dd8 scale=0.66 colour=2 age=0.37 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa190c0 scale=1.00 colour=3 age=2.33 thresh=2.00 state208=0
+[SetupAgeMesh] citizen=000001fd2fa1a5d8 scale=1.00 colour=0 age=2.53 thresh=2.00 state208=0
+[GUL::Serialize] LOAD DONE
+[GUL::Load] LOAD-FROM-SAVE done (out=0)
+[GUL::Load] post-load rebuild: game=000001fd2df76ed0 dim=384
+[PfSeed] pathfinder seeded @ game+0x68 = 000001fd31acb6f0 (dim=384, cells=147456, ASYNC worker-thread mode)
+[RegionSeed] region map built: graph@000001fd31acb8f0 coarseDim=48 regionNodes=1773 pairCache=000001fd2e47bdf8
+[GridProbe] tiles=000001fd312e2570 regionIds: [32000]=3/kind2 [32500]=4/kind2 [33000]=2/kind10 [33500]=0/kind6 [34000]=0/kind7 [34500]=2/kind2 [35000]=3/kind2
+[GUL::Load] EXIT — world built: game=000001fd2df76ed0 ui=000001fd2df764b8 entityList=000001fd2df763c8 scene=000001fd2e913970 sun=000001fd2df7f5f8
+[HUD-DIAG] Startup CALLED self=000001fd2df010c8 m_game=000001fd2df76ed0 m_userInterface=000001fd2df764b8 m_resourceList(+0x08)=000001fd2de798b8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401026a0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140101ee0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1400938d0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c4138
+[Startup] SetupUIRefs: fn=00007ff6134d9c6c uiScale=1.000 sndButtonDown=000001fd2d1022c0 sndAlert=000001fd2d102270
+[HUD-DIAG] probe: m_resourceList=000001fd2de798b8 Find=00007ff6136e0269 FilenameCtor=00007ff61371afd5 Dtor=00007ff61371b108 DialogTypeId=00007ff613b40cc0(val=1338773611) ToolbarCtor=00007ff6134f9321 UI_AddDialog=00007ff61374fcde IsDerivedFrom=00007ff61363b77c
+[HUD-DIAG] ExternalList::Find("Dialog/Toolbar.rsc") -> foundBase=000001fd2de73d90
+[HUD] ToolbarStandalone_Init: vtable=00007ff613895b00 [+18 Persist=00007ff613725459 +38 OnUpdate=00007ff6137260cf +48 OnSerSet=00007ff613725468] Toolbar=3386704242 ToolbarDesc=2234433627 Button=1393606052 Image=893464662 Check=272235987 Text=438357726
+[HUD] Toolbar: foundBase=000001fd2de73d90 dialogRes=000001fd2de73d90 Ctor=00007ff6134f9321 UI=000001fd2df764b8
+[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=000001fd2df01318 itemCount(+0xD8)=10 buttonCount(+0xC8)=10 speedCount(+0x100)=6
+[HUD] EventNotify: foundBase=000001fd2dfd4418 dialogRes=000001fd2dfd4418 parentToolbar=000001fd2df01318
+[HUD] EventNotify ribbon CONSTRUCTED + added to UI: 000001fd2df01c10
+[Tools]   bridge node: CreateBridge=2272509727 -> BridgeTool=2765355081
+[Tools]   fenced node: CreateFenced=2515727256 -> FencedTool=3195986552
+[Tools]   drag node: CreateDrag=3893769075 -> DragPlacementTool=3938475504
+[Tools] BuildToolModeTree: entityUI=000001fd2df77110 Tool=3890306084 ToolSetting=2850067769 node{CreatePlaced=4107504200 -> PlacementTool=4034384576} node{0 -> EditTool=3849818301} node{CreateRemoval=2744517967 -> RemovalTool=2865193925} node{CreatePath=4097193310 -> PathTool=1385140268} node{CreateRoad=1479859256 -> RoadTool=2419301037} count=8
+[ToolHarness] disabled (BANISHED_TOOL_HARNESS unset)
+[PauseMenu] ENABLED - open at frame 900, click id=6 60 frames later
+[PauseMenu] new world 000001fd2df010c8 at frame 1 - rearmed
+[OrchardDiag] disabled (BANISHED_ORCHARD_DIAG unset)
+[CropStart] disabled (BANISHED_CROPFIELD_FORCE_START unset)
+[OrchardForceStart] disabled (BANISHED_ORCHARD_FORCE_START unset)
+[OrchardWorkers] disabled (BANISHED_ORCHARD_WORKERS unset)
+[FoodWorkers] disabled (BANISHED_FOOD_WORKERS unset)
+[OrchardCut] disabled (BANISHED_ORCHARD_CUT unset)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151718
+[Plague] BOOT: careMult(desc+0x128)=2.0000 healerProf(desc+0x30)=000001fd2cdd1f18 maxHealth(+0x70)=10.000 durBase(+0x94)=1.000 durSpread(+0x98)=0.500 immunityMonths(+0x9c)=12.000 diseaseList(gw+0xa8)=000001fd2e8fdca0 tidDisease=461933471
+[Plague] BOOT: hospital census DEFERRED — attendance registry (townMgr+0x60/+0x68) is EMPTY, so there is nothing to search yet. buildings(townMgr+0x28)=6 citizens(+0xa8)=15 try=1. A building joins that registry only when its AttendanceComponent reaches state 2 (the OPEN transition), which is after StartTown. Re-arming.
+[Plague] ROLL-INPUTS citizen=000001fd2fa06000 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.043659 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[Plague] ROLL-INPUTS citizen=000001fd2fa07518 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.519123 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[Plague] ROLL-INPUTS citizen=000001fd2fa09438 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.407096 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[Plague] ROLL-INPUTS citizen=000001fd2fa0a950 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.207057 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[Plague] ROLL-INPUTS citizen=000001fd2fa0c950 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.381843 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[Plague] ROLL-INPUTS citizen=000001fd2fa0e978 elapsed=0.016666001s A=20.000000 B=500.000000 monthsPerYear=12.00 secsPerMonth=300.00 denom=36000000.000000 ratio=0.000000000 roll=0.135922 health(+0x50)=10.000 maxHealth(desc+0x70)=10.000 townMult(mgr+0x1a8)=0.000000
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151428
+[MusicPlayer] MusicTracks.rsc -> 000001fd2df035a8 tracks=15
+[MusicPlayer] PLAY track=6/15 ext=1fd2e8f51f8 scene=000001fd2e8fd590 -> handle=1024
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401517a8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152750
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151dd0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151758
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1400fcc90
+[AudioScene] windFactor(camera dist)=25.141
+[EntityCensus] frame=1 entities=22503
+[Vitals] frame=1 citizens=15  age mean=2.45 max=3.91 (maxAge[0]=102.61)  hunger mean=0.1 max=0.1  thirst mean=0.2 max=0.2  char=15 busy=15 ibp238=15 ibp248=0
+[AudioScene] windFactor(camera dist)=25.141
+[EntityCensus] frame=2 entities=22503
+[Vitals] frame=2 citizens=15  age mean=2.45 max=3.91 (maxAge[0]=102.61)  hunger mean=0.1 max=0.1  thirst mean=0.2 max=0.2  char=15 busy=15 ibp238=15 ibp248=0
+[AudioScene] windFactor(camera dist)=25.141
+[EntityCensus] frame=5 entities=22503
+[Vitals] frame=5 citizens=15  age mean=2.45 max=3.91 (maxAge[0]=102.61)  hunger mean=0.1 max=0.1  thirst mean=0.2 max=0.2  char=15 busy=15 ibp238=15 ibp248=0
+[EntityCensus] frame=10 entities=22503
+[Vitals] frame=10 citizens=15  age mean=2.45 max=3.91 (maxAge[0]=102.61)  hunger mean=0.1 max=0.1  thirst mean=0.2 max=0.2  char=15 busy=15 ibp238=15 ibp248=0
+[SetupAgeMesh] citizen=000001fd2fa0d9e0 scale=0.66 colour=5 age=0.72 thresh=2.00 state208=0
+[HSR2] residence=1fd2fa0c8c8 occupied=1 perOcc=8.0 have=204 -> sufficient
+[SetupAgeMesh] citizen=000001fd2fa0c950 scale=1.00 colour=1 age=2.70 thresh=2.00 state208=0
+[HSR2] residence=1fd2fa0c8c8 occupied=1 perOcc=8.0 have=204 -> sufficient
+[SetupAgeMesh] citizen=000001fd2fa1a5d8 scale=1.00 colour=0 age=2.53 thresh=2.00 state208=0
+[HSR2] residence=1fd2fa19040 occupied=1 perOcc=8.0 have=211 -> sufficient
+[EntityCensus] frame=30 entities=22503
+[Vitals] frame=30 citizens=15  age mean=2.45 max=3.91 (maxAge[0]=102.61)  hunger mean=0.2 max=0.2  thirst mean=0.2 max=0.2  char=15 busy=15 ibp238=15 ibp248=0
+[SetupAgeMesh] citizen=000001fd2fa10990 scale=1.00 colour=2 age=3.13 thresh=2.00 state208=0
+[HSR2] residence=1fd2fa10910 occupied=1 perOcc=8.0 have=211 -> sufficient
+[SetupAgeMesh] citizen=000001fd2fa13918 scale=1.00 colour=2 age=3.91 thresh=2.00 state208=0
+[HSR2] residence=1fd2fa13888 occupied=1 perOcc=8.0 have=198 -> sufficient
+[EntityCensus] frame=60 entities=22503
+[Vitals] frame=60 citizens=15  age mean=2.45 max=3.91 (maxAge[0]=102.61)  hunger mean=0.2 max=0.2  thirst mean=0.2 max=0.2  char=15 busy=15 ibp238=15 ibp248=0
+[SetupAgeMesh] citizen=000001fd2fa0c950 scale=1.00 colour=1 age=2.70 thresh=2.00 state208=0
+[HSR2] residence=1fd2fa0c8c8 occupied=1 perOcc=8.0 have=204 -> sufficient
+[SetupAgeMesh] citizen=000001fd2fa09438 scale=1.00 colour=4 age=2.85 thresh=2.00 state208=0
+[HSR2] residence=1fd2fa093d0 occupied=1 perOcc=8.0 have=211 -> sufficient
+[PlayAnimGuard] target=000001fd2fa0dc78 vtable=00007ff613895c60 factIdx=471 gen=0x4e718f01 (live)
+[SetupAgeMesh] citizen=000001fd2fa07518 scale=1.00 colour=2 age=2.80 thresh=2.00 state208=0
+[HSR2] residence=1fd2fa05f80 occupied=1 perOcc=8.0 have=211 -> sufficient
+[EntityCensus] frame=120 entities=22503
+[Vitals] frame=120 citizens=15  age mean=2.45 max=3.91 (maxAge[0]=102.61)  hunger mean=0.2 max=0.2  thirst mean=0.3 max=0.3  char=15 busy=15 ibp238=15 ibp248=0
+[SetupAgeMesh] citizen=000001fd2fa13918 scale=1.00 colour=2 age=3.91 thresh=2.00 state208=0
+[HSR2] residence=1fd2fa13888 occupied=1 perOcc=8.0 have=198 -> sufficient
+[HSR2] residence=1fd2fa13888 occupied=1 perOcc=8.0 have=198 -> sufficient
+[HSR2] residence=1fd2fa093d0 occupied=1 perOcc=8.0 have=211 -> sufficient
+[HSR2] residence=1fd2fa05f80 occupied=1 perOcc=8.0 have=211 -> sufficient
+[EntityCensus] frame=240 entities=22503
+[Vitals] frame=240 citizens=15  age mean=2.45 max=3.91 (maxAge[0]=102.61)  hunger mean=0.3 max=0.3  thirst mean=0.3 max=0.4  char=15 busy=15 ibp238=15 ibp248=0
+[PlayAnimGuard] target=000001fd2fa0cc20 vtable=00007ff613895c60 factIdx=458 gen=0x45d37c36 (live)
+[Plague] CENSUS rolls=4000 fired=0 noWindow(B<=0)=0 epidemicBlocked=0 meanChance=0.00000000 maxChance=0.00000000
+[PlayAnimGuard] target=000001fd2fa14c78 vtable=00007ff613895c60 factIdx=578 gen=0x7c0b8d8e (live)
+[Plague] BOOT: hospital census DEFERRED — attendance registry (townMgr+0x60/+0x68) is EMPTY, so there is nothing to search yet. buildings(townMgr+0x28)=6 citizens(+0xa8)=15 try=5000. A building joins that registry only when its AttendanceComponent reaches state 2 (the OPEN transition), which is after StartTown. Re-arming.
+[PlayAnimGuard] target=000001fd2fa077b0 vtable=00007ff613895c60 factIdx=376 gen=0xaa1e0f1b (live)
+[PlayAnimGuard] target=000001fd2fa1a870 vtable=00007ff613895c60 factIdx=652 gen=0x79bd9916 (live)
+[EntityCensus] frame=480 entities=22503
+[Vitals] frame=480 citizens=15  age mean=2.45 max=3.91 (maxAge[0]=102.61)  hunger mean=0.4 max=0.4  thirst mean=0.5 max=0.5  char=15 busy=15 ibp238=15 ibp248=0
+[Plague] CENSUS rolls=8000 fired=0 noWindow(B<=0)=0 epidemicBlocked=0 meanChance=0.00000000 maxChance=0.00000000
+[PlayAnimGuard] target=000001fd2fa11d28 vtable=00007ff613895c60 factIdx=531 gen=0x711cab34 (live)
+[PlayAnimGuard] target=000001fd2fa0ec10 vtable=00007ff613895c60 factIdx=484 gen=0x373dd37d (live)
+[PlayAnimGuard] target=000001fd2fa0abe8 vtable=00007ff613895c60 factIdx=424 gen=0x6074840c (live)
+[PlayAnimGuard] target=000001fd2fa13be8 vtable=00007ff613895c60 factIdx=565 gen=0x46ba92ff (live)
+[PlayAnimGuard] target=000001fd2fa09708 vtable=00007ff613895c60 factIdx=410 gen=0xe46d1d43 (live)
+[Plague] BOOT: hospital census DEFERRED — attendance registry (townMgr+0x60/+0x68) is EMPTY, so there is nothing to search yet. buildings(townMgr+0x28)=6 citizens(+0xa8)=15 try=10000. A building joins that registry only when its AttendanceComponent reaches state 2 (the OPEN transition), which is after StartTown. Re-arming.
+[PlayAnimGuard] target=000001fd2fa0dc78 vtable=00007ff613895c60 factIdx=471 gen=0x4e718f01 (live)
+[Plague] CENSUS rolls=12000 fired=0 noWindow(B<=0)=0 epidemicBlocked=0 meanChance=0.00000000 maxChance=0.00000000
+[PlayAnimGuard] target=000001fd2fa19390 vtable=00007ff613895c60 factIdx=638 gen=0x8916d750 (live)
+[PlayAnimGuard] target=000001fd2fa062d0 vtable=00007ff613895c60 factIdx=362 gen=0xa01c5721 (live)
+[PlayAnimGuard] target=000001fd2fa10c60 vtable=00007ff613895c60 factIdx=518 gen=0xd7ac0d8f (live)
+[EntityCensus] frame=900 entities=22503
+[Vitals] frame=900 citizens=15  age mean=2.45 max=3.91 (maxAge[0]=102.61)  hunger mean=0.6 max=0.6  thirst mean=0.6 max=0.7  char=15 busy=15 ibp238=15 ibp248=0
+[PauseMenu] frame 901 - opening (entityUI=000001fd2df77110 ui=000001fd2df764b8 pausesGame=0)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140161f10
+[PauseMenu] pause dialog=000001fd2f9cb2f0 vtable=00007ff6138955e0 (UI array index=1 of 2) pausesGame=0
+[PauseMenu] frame 961 - dialog=000001fd2f9cb2f0 vtable=00007ff6138955e0 (was 00007ff6138955e0) UI array index=-1 of 0 pausesGame=1
+[PauseMenu] dispatching OnCommand(msg=0x12, id=6)
+[PauseMenu] OnCommand returned
+[GUL::Teardown] resolved: e320=00007ff6136372b2 14c30=00007ff613637244 14b00=00007ff6135c5b75 markRemoval=00007ff613396580 removeEntity=00007ff61352a094
+[Residence] ERASE via SLOT-7 removal hook: comp=000001fd2fa05f80
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a70
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a08
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a10
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a18
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140152a20
+[Unassign] #1 citizen=000001fd2fa06000 oldWp=1fd2fa054b0 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Unassign] #2 citizen=000001fd2fa07518 oldWp=1fd2fa054b0 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=000001fd2fa093d0
+[Unassign] #3 citizen=000001fd2fa09438 oldWp=1fd2fa08a20 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Unassign] #4 citizen=000001fd2fa0a950 oldWp=1fd2fa08a20 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=000001fd2fa0c8c8
+[Unassign] #5 citizen=000001fd2fa0c950 oldWp=1fd2fa0bee8 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Unassign] #6 citizen=000001fd2fa0d9e0 oldWp=1fd2fa0bee8 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Unassign] #7 citizen=000001fd2fa0e978 oldWp=1fd2fa0bee8 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=000001fd2fa10910
+[Unassign] #8 citizen=000001fd2fa10990 oldWp=1fd2fa087a0 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Unassign] #9 citizen=000001fd2fa11a90 oldWp=1fd2fa087a0 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=000001fd2fa13888
+[Unassign] #10 citizen=000001fd2fa13918 oldWp=1fd2fa12eb0 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Unassign] #11 citizen=000001fd2fa149e0 oldWp=1fd2fa12eb0 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Unassign] #12 citizen=000001fd2fa15dd8 oldWp=1fd2fa12eb0 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Unassign] #13 citizen=000001fd2fa17248 oldWp=1fd2fa12eb0 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Residence] ERASE via SLOT-7 removal hook: comp=000001fd2fa19040
+[Unassign] #14 citizen=000001fd2fa190c0 oldWp=1fd2fa18668 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[Unassign] #15 citizen=000001fd2fa1a5d8 oldWp=1fd2fa18668 slot 0->-1 caller=00007ff61348280e (static 0x1400f280e)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151ca0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151550
+[NomadDlgWalk] #1 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #2 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #3 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #4 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #5 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #6 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #7 visited=4 closed=0 (no open panel bound to the removed entity)
+[NomadDlgWalk] #8 visited=4 closed=0 (no open panel bound to the removed entity)
+[WildAnimalRm] calls=1 noHerd=0 herd=000001fd2fa261e8 members 6 -> 5
+[WildAnimalRm] calls=11 noHerd=0 herd=000001fd2fa261e8 members 5 -> 4
+[WildAnimalRm] calls=21 noHerd=0 herd=000001fd2fb884b8 members 4 -> 3
+[WildAnimalRm] calls=31 noHerd=0 herd=000001fd2fc5e408 members 5 -> 4
+[WildAnimalRm] calls=41 noHerd=0 herd=000001fd2fa0fc38 members 2 -> 1
+[WildAnimalRm] calls=51 noHerd=0 herd=000001fd303716b0 members 8 -> 7
+[WildAnimalRm] calls=61 noHerd=0 herd=000001fd301fa8c8 members 5 -> 4
+[WildAnimalRm] calls=71 noHerd=0 herd=000001fd2faf2250 members 4 -> 3
+[WildAnimalRm] calls=81 noHerd=0 herd=000001fd306c65f0 members 5 -> 4
+[WildAnimalRm] calls=91 noHerd=0 herd=000001fd3078cae8 members 1 -> 0
+[WildAnimalRm] calls=101 noHerd=0 herd=000001fd2fea2290 members 4 -> 3
+[WildAnimalRm] calls=111 noHerd=0 herd=000001fd30a87cb0 members 1 -> 0
+[WildAnimalRm] calls=121 noHerd=0 herd=000001fd2fba4fd0 members 7 -> 6
+[WildAnimalRm] calls=131 noHerd=0 herd=000001fd30d51fb8 members 3 -> 2
+[WildAnimalRm] calls=141 noHerd=0 herd=000001fd30e45cd8 members 3 -> 2
+[WildAnimalRm] calls=151 noHerd=0 herd=000001fd30e4df10 members 5 -> 4
+[WildAnimalRm] calls=161 noHerd=0 herd=000001fd30e51668 members 5 -> 4
+[WildAnimalRm] calls=171 noHerd=0 herd=000001fd30e57450 members 4 -> 3
+[WildAnimalRm] calls=181 noHerd=0 herd=000001fd30e634c8 members 5 -> 4
+[WildAnimalRm] calls=191 noHerd=0 herd=000001fd30e670a8 members 1 -> 0
+[WildAnimalRm] calls=201 noHerd=0 herd=000001fd30e6fbe8 members 5 -> 4
+[WildAnimalRm] calls=211 noHerd=0 herd=000001fd30e75090 members 2 -> 1
+[WildAnimalRm] calls=221 noHerd=0 herd=000001fd30e7ea80 members 5 -> 4
+[WildAnimalRm] calls=231 noHerd=0 herd=000001fd30e82c80 members 1 -> 0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015ef18
+[GameSettings] Save: LastTerrain=0 LastMapSize=1 LastClimate=1 LastStart=2 LastDisaster=0
+[REDZONE-DUMP] 'CrashHandler': allocator=000000af651ff4a0 ranges=000001fd4dfda630 cnt=20
+[REDZONE-DUMP] range 0 [000001fd57028bb0..000001fd571f31b0): CORRUPT block @000001fd57028bb0 tag=0x000001fd56c90150 size=8750377469248
+[SaveMetaOracle] bodyCalls=0 calls=0 sizeDiffs=0 byteDiffs=0

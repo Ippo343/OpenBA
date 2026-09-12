@@ -1,0 +1,86 @@
+[Standalone] BANISHED_RT_NO_DLL=1 -- continuing with Runtime-x64.dll ABSENT.  This is the controlled cutover boot; a crash is the EXPECTED outcome and its location is the result.  See docs/runtime_port/WAVE9_CUTOVER_BOOT_RUNBOOK.md
+[AllocLock] could not resolve Allocate (0x1800c6e60)
+[AllocLock] could not resolve Free (0x1800c6c00)
+[RtMathTransform] registered 31 functions (Matrix/Quaternion/Transform/Transform2/Transform3)
+[RtAllocSwap] cutover arm: no detour installed (no DLL, so no DLL-internal callers to redirect); ?Allocate@/?Free@ will be the composed stubs, which take the allocator CS at self+0x640.
+[RtAlloc] ATTEST: ARMED (cutover, DLL absent) (exports=27)
+[ElemTid] registered 21/21 element type-id slots
+[DlgCtrlVt] tables=38 unknown=0 inheritedSlotsFilled=166 keptOverride=10 unresolved=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b80
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c6c0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015fa00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f5a0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f980
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151ca8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b78
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b70
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c70e8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015be00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151488
+[CheckPtr] export=00007ff7eb8592c2 body[0]=0x55 source=our port -> NOP (calls skipped)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529d0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151a90
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401528f0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401527f8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c400
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c3b0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140002280
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140160bf8
+[FNHook] could not resolve Video::Device::InitializeInterfaces
+[VideoInterface] detour not installed for Video::Device::InitializeInterfaces (0x1800F79F0) -- EXPECTED, NOT A FAULT.
+[VideoInterface]   The body is PORTED and registered, and our ?InitializeInterfaces@Device@Video@@QEAAXXZ calls VideoInterfaceFillDx11Slot() itself, so the DX11 slot is filled without a detour. At cutover there is also no 0x1800F79F0 in the process to patch, which is why this path is taken.
+[VideoInterface]   VideoInterfacePrefilled() is still the detector: if it reads false AFTER Engine::Startup, the slot really was not filled and THAT is the fault to chase.
+[FNHook] could not resolve ExternalFactory::FindOrLoad
+[FNHook] could not resolve External::Load
+[ResLoad] serialized: FindOrLoad=0000000000000000 External::Load=0000000000000000 (recursive CS, target-resolution=RAW)
+[AutoStart] ENABLED (BANISHED_AUTOSTART="1") — will auto-open New Game after 60 menu frames, then auto-Start
+[Tornado] ParticleComponent type-id global 0x1401c4720 = 0xF42F66FC (ok)
+[Lane4TypeId] 30/30 slot(s) filled, 0 empty
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c42c0
+[CITID] c70e8(CitizenAI) reg=0000000000000000 val=1392079038 | c7158(Citizen) reg=00007ff7ec36a7d4 val=2704017556 | c42c0(Happiness) reg=0000000000000000 val=709961609
+[TradeTid] TradeComponent=2459092736 TradeDescription=2350935396 ValueDescription=3341444357 ComponentDescription=2598635996 BoatComponent=1147571899
+[ElemTid] HelpButtonElem/ButtonElement     slot=00000001401514f8 typeInfo=00007ff7ec36ca10 id=1393606052
+[ElemTid] ImageElement                     slot=0000000140151500 typeInfo=00007ff7ec36d308 id=893464662
+[ElemTid] TextElement                      slot=0000000140151508 typeInfo=00007ff7ec36dd88 id=438357726
+[ElemTid] TableElement                     slot=0000000140151510 typeInfo=00007ff7ec36dd18 id=3348628233
+[ElemTid] LabelElement                     slot=0000000140151668 typeInfo=00007ff7ec36d3b0 id=1334204089
+[ElemTid] HelpComboElem/ComboElement       slot=0000000140151690 typeInfo=00007ff7ec36cc08 id=3545820999
+[ElemTid] ToolbarElement/CheckElement      slot=00000001401516a8 typeInfo=00007ff7ec36cab8 id=272235987
+[ElemTid] SpinnerElement(=NumberElement)   slot=00000001401516c8 typeInfo=00007ff7ec36d5e0 id=475271278
+[ElemTid] SliderElement (the REAL one)     slot=00000001401516d0 typeInfo=00007ff7ec36da78 id=3664215698
+[ElemTid] HelpFirstElem/ScrollElement      slot=00000001401517e8 typeInfo=00007ff7ec36d9d0 id=476774394
+[ElemTid] HelpDocTextElem                  slot=00000001401517f0 typeInfo=00007ff7ec36ce38 id=289499821
+[ElemTid] HelpContainerElem                slot=00000001401517f8 typeInfo=00007ff7ec36ccb0 id=3444093259
+[ElemTid] NumberEditElement                slot=0000000140151cb0 typeInfo=00007ff7ec36d5a8 id=631391588
+[ElemTid] SliderElement(=SpinnerElement)   slot=0000000140151cf0 typeInfo=00007ff7ec36db58 id=644357809
+[ElemTid] Element (base)                   slot=0000000140151660 typeInfo=00007ff7ec36cf18 id=2370443687
+[ElemTid] ProgressElement                  slot=00000001401515b8 typeInfo=00007ff7ec36d810 id=1281602850
+[ElemTid] RibbonElement                    slot=0000000140151720 typeInfo=00007ff7ec36d960 id=2193694001
+[ElemTid] BorderElement                    slot=0000000140151a58 typeInfo=00007ff7ec36c9a0 id=3875203924
+[ElemTid] EditElement                      slot=0000000140151b50 typeInfo=00007ff7ec36cee0 id=6894048
+[ElemTid] GraphElement                     slot=0000000140151dd8 typeInfo=00007ff7ec36d1b8 id=3839563932
+[ElemTid] TabElement                       slot=0000000140151de0 typeInfo=00007ff7ec36dca8 id=2123353554
+[TrackerTypeId] 0x1401c4b10 = 2570797389 (0x993B414D)
+[OrchardTypeId] 0x1401c46e8 = 3940668927 (0xEAE1D5FF)
+[OrchardTypeId] 0x1401c46b0 = 2843843441 (0xA9819B71)
+[MarketTypeId] 0x1401c44f0 = 1284470327 (0x4C8F7637)
+[MarketTypeId] 0x1401c4528 = 3142036116 (0xBB47AA94)
+[MarketTypeId] 0x1401c7ee8 = 4120633425 (0xF59BE051)
+[FoodTypeId] 0x1401c43a0 HerbalistComponent    = 3390714787 (0xCA1A33A3)
+[FoodTypeId] 0x1401c43d8 HerbalistDescription  = 4158245638 (0xF7D9CB06)
+[FoodTypeId] 0x1401c7510 CropFieldComponent    = 2748109570 (0xA3CCD302)
+[FoodTypeId] 0x1401c7548 CropFieldDescription  = 1222696611 (0x48E0DEA3)
+[FoodTypeId] 0x1401c7660 FishingComponent      = 2644177521 (0x9D9AF271)
+[FoodTypeId] 0x1401c7698 FishingDescription    = 627382911 (0x25651A7F)
+[FoodTypeId] 0x1401c7890 HuntComponent         = 2898427812 (0xACC27FA4)
+[FoodTypeId] 0x1401c78c8 HuntDescription       = 4273867873 (0xFEBE0C61)
+[FoodTypeId] 8/8 slot(s) filled, 0 empty
+[TutorialTypeId] 0x1401C6240 FinishTutorialGoal = 1089248897 (0x40EC9E81)
+[TutorialTypeId] 0x1401C6278 FinishTutorialInstance = 171997278 (0x0A40785E)
+[TutorialTypeId] 0x1401C6668 TutorialInstance = 3760546994 (0xE02564B2)
+[TutorialTypeId] 0x1401C5A98 Profession = 3983740233 (0xED730D49)
+[GrowthTypeId] 0x1401c77b0 = 1845779407 (0x6E045BCF)
+[ClearAreaTypeId] 0x1401c71c8 = 252740659 | 0x1401c7200 = 2607357058
+[REDZONE-DUMP] 'CrashHandler': allocator=000000bab37ff560 ranges=0000024b30be0000 cnt=1
+[REDZONE-DUMP] no tag corruption — validating free-list LINKS...
+[REDZONE-DUMP] free-list forward links also intact (corruption may be in the high-bit prev links or a bucket head)
