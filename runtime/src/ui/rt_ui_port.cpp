@@ -250,10 +250,22 @@ void RtUiPortInit() {
     extern int RtUiCharacterSetRegister();         // characterset.cpp
     extern int RtUiCursorRegister();               // cursor.cpp
     extern int RtUiSpriteCaptureClassRegister();   // spritecapture_class.cpp
+    extern int RtUiFontRegister();                 // font.cpp
+    extern int RtUiDescriptionDtorsRegister();     // description_dtors.cpp
+    extern int RtUiDocumentTextRegister();         // documenttext.cpp
+    extern int RtUiSpriteContextAddRegister();     // spritecontext_add.cpp
+    extern int RtUiElementBodiesB5Register();      // element_bodies_b5.cpp
+    extern int RtUiComboDialogRegister();          // combodialog.cpp
     n += RtUiClassOperatorDeleteRegister();  // the 60 ??3<Class>@UI@@, one body
     n += RtUiCharacterSetRegister();         // UI::CharacterSet, whole class
     n += RtUiCursorRegister();               // UI::Cursor, whole class
     n += RtUiSpriteCaptureClassRegister();   // UI::SpriteCapture vtable + Draw
+    n += RtUiFontRegister();                 // UI::Font, whole class + metrics
+    n += RtUiDescriptionDtorsRegister();     // 26 ??1<Class>@UI@@ destructors
+    n += RtUiDocumentTextRegister();         // UI::DocumentTextElement pipeline
+    n += RtUiSpriteContextAddRegister();     // SpriteContext AddSprite x3 + AddFont
+    n += RtUiElementBodiesB5Register();      // assorted *Element / *Description
+    n += RtUiComboDialogRegister();          // UI::ComboDialog + DialogInstance ctor
 
     printf("[RtPort] UI: %d exports registered\n", n);
 }

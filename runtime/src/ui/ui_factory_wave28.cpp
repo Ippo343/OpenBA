@@ -682,10 +682,23 @@ extern "C" void* RtUiFact_NumberEditElement_CreateInPlaceObject(void* p) {
 //   ??0NumberElement@UI@@QEAA@XZ                                   0x180118c70 ord 287
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0NumberElement@UI@@QEAA@XZ.
-// The ctor is NOT ported: it calls ?CacheText@NumberElement@UI@@AEAAXXZ,
-// a private member this lane does not own and did not read. The factory
-// pair below therefore MOVES the cutover wall from the factory to the
-// ctor rather than clearing it. Recorded as a residual.
+// *** THIS "NOT PORTED" NOTE IS OUT OF DATE AS OF 2026-09-12. ***
+// It used to read: "The ctor is NOT ported: it calls
+// ?CacheText@NumberElement@UI@@AEAAXXZ, a private member this lane does not
+// own and did not read. The factory pair below therefore MOVES the cutover
+// wall from the factory to the ctor rather than clearing it."
+// `??0NumberElement@UI@@QEAA@XZ` IS NOW PORTED, in
+// runtime/src/ui/element_bodies_b5.cpp, and registered under this exact name
+// AND at 0x180118c70 — so the `BASE(...)` call below, which resolves through
+// the port-aware `RtResolveCached`, reaches OUR body rather than the DLL's.
+// The stated blocker was also never about ownership: `AEBA`/`AEAA` means
+// PRIVATE, and this DLL exports its private members
+// (reference_aeaa_is_private_not_unexported.md).
+// WHAT REMAINS TRUE: `?CacheText@NumberElement@UI@@AEAAXXZ` (0x1801189f0) is
+// itself still unported — it is a DIFFERENT function from TextElement's
+// CacheText — so the ported ctor reaches it by address through the
+// registry-first `ResolveAddr`. That single callee is the residual now, not
+// this row.
 void* Ctor_NumberElement(void* p) { BASE("??0NumberElement@UI@@QEAA@XZ", p); return p; }
 
 extern "C" void* RtUiFact_NumberElement_CreateNewObject() {
@@ -1542,10 +1555,23 @@ extern "C" void* RtUiFact_TextDescription_CreateInPlaceObject(void* p) {
 //   ??0TextElement@UI@@QEAA@XZ                                     0x18011eb80 ord 437
 // SHAPE C: the factory pair is a bare `alloc / null test / call the
 // exported ctor`. The whole body lives in ??0TextElement@UI@@QEAA@XZ.
-// The ctor is NOT ported: it calls ?CacheText@TextElement@UI@@AEAAXXZ,
-// a private member this lane does not own and did not read. The factory
-// pair below therefore MOVES the cutover wall from the factory to the
-// ctor rather than clearing it. Recorded as a residual.
+// *** THIS "NOT PORTED" NOTE WAS WRONG WHEN WRITTEN AND IS CORRECTED
+// *** 2026-09-12. ***
+// It used to read: "The ctor is NOT ported: it calls
+// ?CacheText@TextElement@UI@@AEAAXXZ, a private member this lane does not own
+// and did not read. The factory pair below therefore MOVES the cutover wall
+// from the factory to the ctor rather than clearing it."
+// Both halves fail. `?CacheText@TextElement@UI@@AEAAXXZ` (0x18011ec10) has
+// been ported and registered since Wave 10, in
+// runtime/src/ui/textelement_cachetext.cpp, alongside
+// `?SetParameterCount@TextElement@UI@@AEAAXXZ` (0x18011e8e0) — so the named
+// blocker was already gone. And `AEAA` means PRIVATE, not unexported; this DLL
+// exports its private members (reference_aeaa_is_private_not_unexported.md),
+// so "does not own" was never a reason either.
+// `??0TextElement@UI@@QEAA@XZ` IS NOW PORTED, in
+// runtime/src/ui/element_bodies_b5.cpp, registered under this exact name and
+// at 0x18011eb80, so the `BASE(...)` below reaches OUR body. This row clears
+// the wall; it does not move it.
 void* Ctor_TextElement(void* p) { BASE("??0TextElement@UI@@QEAA@XZ", p); return p; }
 
 extern "C" void* RtUiFact_TextElement_CreateNewObject() {
