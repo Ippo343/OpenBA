@@ -59,6 +59,21 @@
 //     per-translation-unit copies of `operator delete`, and byte-identical to
 //     the exported `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800c7ad0)
 //     that lane Q already reaches. One constant, not a parameter.
+//
+//     CORRECTED 2026-09-12 (UI text-pipeline batch): "ten" and
+//     "per-translation-unit" were both too small a claim. Many of these are
+//     per-CLASS `operator delete`s with NAMES in the export directory
+//     (`??3<Class>@UI@@SAXPEAX@Z`), and SIXTY of the UI ones were read out of
+//     the shipped DLL and compared byte for byte for
+//     runtime/src/ui/ui_operator_delete.cpp: all sixty are 93 bytes, every
+//     difference between them is inside a RIP-relative displacement, and all
+//     sixty resolve to the same four targets (the allocator singleton,
+//     EnterCriticalSection, MemoryAllocator::Free, LeaveCriticalSection).
+//     So the conclusion this paragraph draws is unchanged and now rests on
+//     seventy measurements rather than ten — but the DESCRIPTION was wrong in
+//     the way reference_grep_cannot_tell_internal_from_unported_export.md is
+//     about, and the dialog_vtable.cpp banner already had to correct it once
+//     for `??3Dialog@UI@@`.
 //   * The ARITY does not vary. Lane Q's correction on `SetSize` — where eight
 //     instantiations took two arguments behind a three-argument typedef — was
 //     checked for here address by address: all 37 read RCX and EDX and nothing
