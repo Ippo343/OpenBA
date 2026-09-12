@@ -68,6 +68,17 @@
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 
+// The address seam, and `?ReadFile@FileSystem@IO@@` — both at GLOBAL scope,
+// above the namespace, because that is where their definitions live.
+// rt_port.h deliberately does not pull in standalone/resolve.h (its banner
+// explains: <windows.h> leaks `Rectangle` and the Win16 `near`/`far` into the
+// whole runtime tree), so every runtime/src file that needs the address door
+// re-declares this pair itself. Wave 28 lane SLOTS.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+extern "C" bool RtIo_FileSystem_ReadFile(RtIO::FileSystem*, RtIO::FileInfo*,
+                                         int32_t, void*);
+
 namespace RtIO {
 
 // THE TWO NAMESPACES ARE ONE LETTER APART AND BOTH EXIST. The stream TYPES live
@@ -87,6 +98,37 @@ using RtSystem::Filename;
 // site the cutover census has to carry
 // (reference_count_the_doors_not_the_calls.md).
 extern "C" bool RtIo_FileStream_Create(FileStream* self, const Filename* path);
+
+// ---- Wave 28 lane SLOTS: the callees slots 2 and 8 need -------------------
+// All three are PORTED and are called DIRECTLY rather than through a door, for
+// the reason stated above `RtIo_FileStream_Create`: a door would resolve to
+// these same bodies and add a resolve site the cutover census has to carry
+// (reference_count_the_doors_not_the_calls.md).
+//   ?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z  0x1800aac70  file_stream.cpp
+//   ?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z 0x1800ace00
+//                                                    filesystem_openfile_win.cpp
+//   ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z  0x1800accc0
+//                                                    filesystem_createfile_win.cpp
+// NOTE THE THREE DIFFERENT LINKAGES, and that they are NOT a style choice —
+// each declaration has to match the definition or the linker rejects it:
+//   RtIo_FileStream_Open      extern "C", global      (file_stream.cpp:1270)
+//   RtIo_FileSystem_ReadFile  extern "C", global      (file_stream.cpp:198 too)
+//   RtIo_FileSystem_CloseFile C++ linkage, namespace RtIO
+//                                        (filesystem_createfile_win.cpp:508)
+extern "C" bool RtIo_FileStream_Open(FileStream* self, const Filename* path);
+void RtIo_FileSystem_CloseFile(RtIO::FileSystem* self, RtIO::FileInfo* info);
+
+// The FileSystem singleton, read exactly where retail reads it
+// (`MOV RCX,[0x1801fc6a8]`). `?_singleton@FileSystem@IO@@0PEAV12@EA` is
+// EXPORTED DATA, ord 4811 — a `0` in the mangling means PRIVATE, not unexported
+// (reference_aeaa_is_private_not_unexported.md). Same helper file_stream.cpp
+// carries; duplicated rather than shared so this file's doors are visible to a
+// per-file audit.
+inline RtIO::FileSystem* Fs() {
+    RtIO::FileSystem** slot = RT_DATA_SLOT(RtIO::FileSystem**,
+                                           "?_singleton@FileSystem@IO@@0PEAV12@EA");
+    return slot ? *slot : nullptr;
+}
 
 // The two buffer-mode fields, reached by offset. See the header note on why
 // they are not spelled as members of `TextFileStream`.
@@ -118,6 +160,12 @@ struct TfsCounters {
     uint64_t getPosBuffer, getPosFile;         // slot 5, by arm
     uint64_t getSizeBuffer, getSizeFile;       // slot 6, by arm
     uint64_t create, createFailed, createBom;  // slot 9
+    // Wave 28 lane SLOTS. `Write` counts its two arms separately because they
+    // are two different functions sharing an entry point and their RETURN
+    // VALUES are not even comparable (see its banner); a run where
+    // `writeTranscode` reads 0 has exercised only the pass-through.
+    uint64_t write, writeDirect, writeTranscode;  // slot 2, by arm
+    uint64_t open, openFailed;                    // slot 8
 };
 TfsCounters g_tfs{};
 
@@ -404,6 +452,404 @@ extern "C" bool RtIo_TextFileStream_Create(TextFileStream* self, const Filename*
     return true;                                             // 1800ba9d6
 }
 
+// ============================================================================
+// WAVE 28 LANE SLOTS — the last two slots of ??_7TextFileStream@IO@@6B@
+// ============================================================================
+//
+//   slot [2] +0x10  ?Write@TextFileStream@IO@@UEAA_NHPEBX@Z         0x1800ba9f0
+//   slot [8] +0x40  ?Open@TextFileStream@IO@@UEAA_NAEBVFilename@
+//                     System@@W4Format@Text@4@@Z                    0x1800ba640
+//
+// With these the table is 10/10. See the DEFERRED block below, which is now the
+// history of these two rather than a live holdback: Wave 20 lane SAVETEXT and
+// Wave 27 lane IOTEXT both declined them as SIZE JUDGEMENTS with no premise to
+// expire, and a size judgement is exactly the kind a later lane is free to
+// overturn by doing the work.
+//
+// ---------------------------------------------------------------------------
+// THE SCOPE DECISION THIS LANE WAS ASKED TO MAKE, RECORDED AT THE CODE
+// ---------------------------------------------------------------------------
+// The census lists `?GetObjectName@`, `?GetObjectType@` and `?GetObjectVersion@`
+// as TextFileStream BODY rows reached only by `file_stream_probe.cpp`. **They
+// are NOT slots of this table and are NOT ported.** The table's ten slots were
+// dumped straight out of retail's `.rdata` with pefile — independently of
+// `rt_data_mint_tables.inc`, which is GENERATED and therefore one source, not
+// two — and none of the three appears in it. They are `QEBA` non-virtual const
+// accessors, a `LEA` and a `RET` each, and porting them would move three census
+// rows while satisfying nothing
+// (`reference_cheap_wins_list_is_the_stalest_section.md`).
+//
+// ---------------------------------------------------------------------------
+// THE FOUR HELPERS BOTH BODIES SHARE — all four UNEXPORTED, all four DOORS
+// ---------------------------------------------------------------------------
+// This lane does NOT reimplement the codec tables. Both bodies pass a RUNTIME
+// encoding id in 0..5 to two jump-table dispatchers, so a port from spec would
+// have to reproduce all six entries of both tables; `string.cpp`,
+// `widestring.cpp` and `package_file_read_win.cpp` each wrote only the ONE OR
+// TWO entries their caller could reach and said so. Here the id is a variable,
+// so the honest shape is a door.
+//
+//   0x1800c9d60  DetectFormat(src, len) -> format id
+//                Compares a 3-byte "EF BB BF" then a 2-byte "FF FE" then
+//                "FE FF" against the head of the buffer; returns 3, 4, 5 or 0.
+//   0x1800c9fc0  DecodeOne(fmt, src, end, &cp, fmt) -> bytes consumed
+//                A `JMP` through the table at 0x1800ca1b8 indexed by the FIFTH
+//                argument. **The format is passed TWICE — once in ECX and once
+//                as arg5** (`MOVSLQ 0x30(%rsp),%rax` selects the entry;
+//                `MOV %ECX,%R11D` is what some entries read). Both are
+//                reproduced; passing only one would index entry 0 for every
+//                encoding.
+//   0x1800c9b60  EncodeOne(cp, dst, fmt) -> bytes written
+//                `JMP` through the table at 0x1800c9d40 indexed by R8D.
+//   0x1800ca260  ConvertText(srcFmt, forceDetect, src, srcLen,
+//                            dstFmt, <scratch>, flagByte, dst, dstLen)
+//                Nine arguments. Arg6 (`[rsp+0x28]` at the call site) is NEVER
+//                WRITTEN BY THE CALLER and that is CORRECT, not a bug: the
+//                callee uses `0x88(%rsp)` — which is arg6's slot — as its own
+//                codepoint SCRATCH, writing `$0xffffffff` into it before every
+//                read. MSVC spilled a local into the incoming argument area.
+//                A port that "fixed" this by zeroing arg6 would change nothing;
+//                a port that omitted the slot would shift args 7, 8 and 9.
+//
+// Each is spelled as a LITERAL inside its own `ResolveAddr` call, never through
+// a shared wrapper: `runtime_census.py` and `addr_door_audit.py` both find doors
+// by grepping for that literal and a door reached through a variable is
+// invisible to both (`reference_literal_grep_blind_to_variables.md`).
+//
+//   CONDITION   live whenever slot 2 or slot 8 runs with a transcode to do.
+//   CONSEQUENCE with the DLL present each resolves to the shipped body.
+//               At cutover all four are NULL and both slots fault.
+//
+// > **[ADDRESSEE — the four text-codec internals 0x1800c9d60, 0x1800c9fc0,
+// > 0x1800c9b60, 0x1800ca260]** the Wave 29 lane that takes IO's remaining
+// > `internal` address rows, together with lane IOTEXT's residual #1
+// > (0x180029bb0, the array-of-String serializer, which is the same
+// > neighbourhood and the same transcoder family). The two dispatchers are jump
+// > tables with six entries each; `package_file_read_win.cpp` §94 has already
+// > transcribed decode entry 1 and encode entry 2, and `widestring.cpp` has
+// > decode 2/4 and encode 2/4 from spec — so roughly half of both tables is
+// > already written down in this tree and needs collecting, not deriving.
+//
+// ---------------------------------------------------------------------------
+// ONE TABLE, READ THREE TIMES, AGREEING — the BOM lengths
+// ---------------------------------------------------------------------------
+// Both bodies decide how many bytes of byte-order mark to SKIP with the same
+// ladder: format 3 -> 3 bytes, 4 -> 2, 5 -> 2, everything else -> 0. That is
+// the mirror of the table `?Create@TextFileStream@` above WRITES (3 -> EF BB BF,
+// 4 -> FF FE, 5 -> FE FF) and of the one `?SaveText@External@Object@@` carries.
+// `DetectFormat` itself returns 3 after matching EF BB BF and 4 after matching
+// FF FE, which is a FOURTH witness and the only one that is neither a writer
+// nor a skipper. Nothing here rests on a single reading.
+//
+// ---------------------------------------------------------------------------
+// NO ORACLE FOR EITHER, and the refusals are structural
+// ---------------------------------------------------------------------------
+// `Write` ends in a real `WriteFile` on a real handle; a replay would emit
+// every byte TWICE and advance the cursor twice. `Open` reads the whole file,
+// CLOSES it, and installs an owned buffer at `+0x70`; a replay would run
+// against a closed handle and leak the first buffer, and the second call could
+// not read the same bytes because the first one closed the file. Neither is
+// diffable in either direction. `RT_DIFF_WORK` records liveness only.
+//
+// UNVERIFIED: neither body has been observed executing.
+// ============================================================================
+
+// ---- the four unexported codec doors ---------------------------------------
+using FnDetectFormat = int32_t (*)(const void* src, int32_t len);
+using FnDecodeOne    = int32_t (*)(int32_t fmtEcx, const void* src, const void* end,
+                                   int32_t* cp, int32_t fmtArg5);
+using FnEncodeOne    = int32_t (*)(int32_t cp, void* dst, int32_t fmt);
+using FnConvertText  = int32_t (*)(int32_t srcFmt, uint8_t forceDetect, const void* src,
+                                   int32_t srcLen, int32_t dstFmt, int32_t scratch,
+                                   uint8_t flagByte, void* dst, int32_t dstLen);
+
+inline FnDetectFormat TfsDetectFormat() {
+    static FnDetectFormat f = reinterpret_cast<FnDetectFormat>(
+        ResolveAddr(Module::Runtime, 0x1800c9d60));
+    return f;
+}
+inline FnDecodeOne TfsDecodeOne() {
+    static FnDecodeOne f = reinterpret_cast<FnDecodeOne>(
+        ResolveAddr(Module::Runtime, 0x1800c9fc0));
+    return f;
+}
+inline FnEncodeOne TfsEncodeOne() {
+    static FnEncodeOne f = reinterpret_cast<FnEncodeOne>(
+        ResolveAddr(Module::Runtime, 0x1800c9b60));
+    return f;
+}
+inline FnConvertText TfsConvertText() {
+    static FnConvertText f = reinterpret_cast<FnConvertText>(
+        ResolveAddr(Module::Runtime, 0x1800ca260));
+    return f;
+}
+
+// The shared BOM-skip ladder. Retail inlines it three times (twice in `Open`,
+// once in `Write`) as `test / sub 2 / dec / dec / dec`, so every value outside
+// {3,4,5} — INCLUDING 1 and 6 — falls through to 0.
+inline int32_t TfsBomSkip(int32_t detected) {
+    switch (detected) {
+        case 3:  return 3;   // EF BB BF
+        case 4:  return 2;   // FF FE
+        case 5:  return 2;   // FE FF
+        default: return 0;
+    }
+}
+
+// `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` 0x1800c7a50 and
+// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` 0x1800c7ad0 — both EXPORTED, so
+// both reached BY NAME (`AEAA`/`SAXPEAX` are not evidence of anything being
+// unexported; this DLL exports its private members).
+using FnMemAlloc = void* (*)(size_t, int32_t);
+using FnMemFree  = void  (*)(void*);
+
+// ============================================================================
+// IO::TextFileStream::Write(int, void const*)            retail 0x1800ba9f0
+// ============================================================================
+// TWO BODIES IN ONE, and the discriminator is the FIRST thing it reads:
+//
+//     _requestedFormat (+0x68) == _activeEncoding (+0x6c)
+//         -> a straight WriteFile of the caller's bytes. No allocation, no
+//            codec, no buffer. 22 instructions.
+//         -> return (written == len)
+//     otherwise
+//         -> transcode: measure, allocate, convert, WriteFile, free.
+//         -> return (written == convertedLength)
+//
+// **The return values of the two arms are NOT comparable**: the fast arm
+// compares against the CALLER'S length and the slow arm against the CONVERTED
+// length, which is a different number whenever the encodings differ in width.
+// A port that hoisted one `return written == len` out of the branch would be
+// wrong on every UTF-8 -> UTF-16 write and right on every other.
+//
+// THE MEASURE PASS ENCODES INTO THE CODEPOINT SLOT ITSELF (`LEA 0x90(%rsp),%RDX`
+// is the same address it just read the codepoint from). Only the RETURNED
+// LENGTH is used, so the encoded bytes are deliberately thrown away — retail is
+// sizing the output, not producing it. Reproduced exactly; giving the measure
+// pass its own scratch would be harmless here and would hide that the second
+// pass (in `Open`) uses a DIFFERENT slot precisely because it does keep bytes.
+//
+// `_requestedFormat == 6` means "detect from the data" and only then is
+// `DetectFormat` consulted; the detected format both selects the decoder and
+// decides how many BOM bytes to skip.
+// ============================================================================
+extern "C" bool RtIo_TextFileStream_Write(TextFileStream* self, int32_t len,
+                                          const void* buf) {
+    RT_DIFF_BEGIN("IO::TextFileStream::Write");
+    ++g_tfs.write;
+
+    int32_t srcFormat = self->requestedFormat;                  // 1800baa03  +0x68
+    const int32_t dstFormat = self->activeEncoding;             // 1800baa06  +0x6c
+
+    // ---- fast arm: no transcode -------------------------------------------
+    if (srcFormat == dstFormat) {                               // 1800baa15
+        ++g_tfs.writeDirect;
+        DWORD written = 0;                                      // 1800baa28
+        ::WriteFile(reinterpret_cast<HANDLE>(self->base.file.winHandle),  // 1800baa1a
+                    buf, static_cast<DWORD>(len), &written, nullptr);     // 1800baa30
+        self->base.file.cursor += static_cast<int32_t>(written);          // 1800baa3d
+        const bool ok = (static_cast<int32_t>(written) == len);           // 1800baa41
+        RT_DIFF_WORK(ok);
+        return ok;                                              // 1800baa48
+    }
+
+    // ---- slow arm: transcode ----------------------------------------------
+    ++g_tfs.writeTranscode;
+    const uint8_t* const begin = static_cast<const uint8_t*>(buf);
+    const uint8_t* const end   = begin + len;                   // 1800baa70
+    const uint8_t* p           = begin;
+
+    if (srcFormat == 6) {                                       // 1800baa74
+        srcFormat = TfsDetectFormat()(buf, len);                // 1800baa7e
+        p = begin + TfsBomSkip(srcFormat);                      // 1800baaac
+    }
+
+    // Pass 1 — MEASURE. Nothing is kept but the byte count.
+    int32_t outBytes = 0;
+    while (p < end) {                                           // 1800baab2
+        int32_t cp = -1;                                        // 1800baac0
+        int32_t consumed;
+        if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800baacb
+            consumed = TfsDecodeOne()(srcFormat, p, end, &cp, srcFormat);  // 1800baae4
+        } else {
+            cp = -1; consumed = 1;                              // 1800baaf2
+        }
+        p += consumed;                                          // 1800baafc
+        if (cp >= 0) {                                          // 1800baaff
+            int32_t n = 0;
+            if (static_cast<uint32_t>(dstFormat) <= 5u)         // 1800bab03
+                n = TfsEncodeOne()(cp, &cp, dstFormat);         // 1800bab14
+            outBytes += n;                                      // 1800bab1d
+        }
+    }
+
+    // Pass 2 — CONVERT into a fresh block, write it, free it.
+    void* dst = RT_EXPORT_ONCE(FnMemAlloc,
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
+            static_cast<size_t>(outBytes), 4);                  // 1800bab2d
+    TfsConvertText()(self->requestedFormat, 0, buf, len,        // 1800bab5d
+                     self->activeEncoding, 0, 0, dst, outBytes);
+
+    DWORD written = 0;                                          // 1800bab74
+    ::WriteFile(reinterpret_cast<HANDLE>(self->base.file.winHandle),  // 1800bab62
+                dst, static_cast<DWORD>(outBytes), &written, nullptr);  // 1800bab80
+    self->base.file.cursor += static_cast<int32_t>(written);    // 1800bab8d
+    RT_EXPORT_ONCE(FnMemFree,
+        "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(dst);     // 1800bab94
+
+    const bool ok = (static_cast<int32_t>(written) == outBytes);  // 1800bab9e
+    RT_DIFF_WORK(ok);
+    return ok;
+}
+
+// ============================================================================
+// IO::TextFileStream::Open(Filename const&, Text::Format)  retail 0x1800ba640
+// ============================================================================
+// The largest body in the table, and the one that INSTALLS the buffer four of
+// the other bodies branch on. Eight steps, in retail's order:
+//
+//   1. `FileStream::Open(path)` (slot 7, 0x1800aac70, already ours). FALSE ->
+//      return FALSE immediately, with nothing allocated and no buffer installed.
+//   2. `raw = MemAlloc(file.size, 4)`; `file.cursor = 0`.
+//   3. If `file.handle` is -1 or -2 (UNSIGNED `CMP ..,-3 ; JBE` — the same
+//      idiom FileStream.h documents), `SetFilePointer(winHandle, 0, 0, FILE_BEGIN)`.
+//      A PACKED `(pack << 24) | index` descriptor skips the seek.
+//   4. `FileSystem::ReadFile(_singleton, &file, size, raw)` — THE WHOLE FILE,
+//      in one call, into a block sized from `file.size`.
+//   5. If `file.handle != -1`, `FileSystem::CloseFile(_singleton, &file)`.
+//      **The file is closed here, inside Open.** Everything after this point
+//      works on memory. This is why `Read` (slot 3) never touches the handle.
+//   6. Pass 1: detect the source format, skip its BOM, and MEASURE the output.
+//   7. `buffer = MemAlloc(outBytes, 4)` and `bufSize = outBytes`, stored at
+//      +0x70 / +0x78 — the two fields the rest of the class branches on.
+//   8. Pass 2: **`DetectFormat` IS CALLED A SECOND TIME**, on the same bytes,
+//      and its result is re-derived rather than carried in a register.
+//      Transcode into the new buffer, free `raw`, set `_activeEncoding` (+0x6c)
+//      to the requested format, return TRUE.
+//
+// THREE THINGS A PORT WRITTEN FROM THE SHAPE RATHER THAN THE BYTES GETS WRONG:
+//
+//  a) **Pass 2 encodes into a DIFFERENT scratch from pass 1.** Pass 1 uses the
+//     codepoint slot itself (it is only sizing); pass 2 uses a separate 4-byte
+//     slot and then `memmove`s exactly `n` bytes out of it into the buffer.
+//     Reusing the codepoint slot in pass 2 would work by accident today and is
+//     not what the machine does.
+//  b) **The copy is `memmove`, not `memcpy`** — 0x18008a290, established from
+//     its prologue by `runtime/src/system/error.cpp:152` and repeated by
+//     `saveload_loadmeta.cpp:342` and by `Read` above.
+//  c) **`_requestedFormat` (+0x68) IS NOT WRITTEN.** Only `_activeEncoding`
+//     (+0x6c) is, and only at the very end. A stream opened this way keeps
+//     whatever +0x68 the constructor left (6), which is exactly what makes a
+//     later `Write` take its transcoding arm. Absences are as load-bearing as
+//     presences.
+//
+// THE OVERFLOW GUARD IS RETAIL'S, NOT A PORT'S CAUTION: pass 2 stops copying
+// once the running total exceeds `bufSize`, and separately skips the copy when
+// the destination allocation came back NULL — but it keeps DECODING to the end
+// in both cases. The two passes can disagree about the output size only if
+// `DetectFormat` returns something different the second time, which on the same
+// bytes it cannot; the guard is there anyway and is reproduced anyway.
+// ============================================================================
+extern "C" bool RtIo_TextFileStream_Open(TextFileStream* self, const Filename* path,
+                                         int32_t format) {
+    RT_DIFF_BEGIN("IO::TextFileStream::Open");
+    ++g_tfs.open;
+
+    if (!RtIo_FileStream_Open(&self->base, path)) {             // 1800ba652
+        ++g_tfs.openFailed;
+        RT_DIFF_WORK(false);
+        return false;                                           // 1800ba659
+    }
+
+    const int32_t fileSize = self->base.file.size;              // 1800ba67f  +0x28
+    uint8_t* const raw = static_cast<uint8_t*>(
+        RT_EXPORT_ONCE(FnMemAlloc,
+            "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
+                static_cast<size_t>(fileSize), 4));             // 1800ba690
+    self->base.file.cursor = 0;                                 // 1800ba699  +0x2c
+
+    // UNSIGNED: -1 and -2 seek, a packed descriptor does not (FileStream.h).
+    if (static_cast<uint32_t>(self->base.file.handle) > 0xFFFFFFFDu)  // 1800ba695 JBE
+        ::SetFilePointer(reinterpret_cast<HANDLE>(self->base.file.winHandle),
+                         0, nullptr, FILE_BEGIN);               // 1800ba6b6
+
+    RtIo_FileSystem_ReadFile(Fs(), &self->base.file, fileSize, raw);  // 1800ba6cd
+    if (self->base.file.handle != -1)                           // 1800ba6d2
+        RtIo_FileSystem_CloseFile(Fs(), &self->base.file);      // 1800ba6e3
+
+    const uint8_t* const rawEnd = raw + fileSize;               // 1800ba6f0
+
+    // ---- pass 1: MEASURE ---------------------------------------------------
+    int32_t srcFormat = TfsDetectFormat()(raw, fileSize);       // 1800ba6f4
+    const uint8_t* p  = raw + TfsBomSkip(srcFormat);            // 1800ba721
+
+    int32_t outBytes = 0;
+    while (p < rawEnd) {                                        // 1800ba727
+        int32_t cp = -1;                                        // 1800ba730
+        int32_t consumed;
+        if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800ba73b
+            consumed = TfsDecodeOne()(srcFormat, p, rawEnd, &cp, srcFormat);  // 1800ba754
+        } else {
+            cp = -1; consumed = 1;                              // 1800ba762
+        }
+        p += consumed;                                          // 1800ba76c
+        if (cp >= 0) {                                          // 1800ba76f
+            int32_t n = 0;
+            if (static_cast<uint32_t>(format) <= 5u)            // 1800ba773
+                n = TfsEncodeOne()(cp, &cp, format);            // 1800ba784
+            outBytes += n;                                      // 1800ba78d
+        }
+    }
+
+    // ---- install the buffer ------------------------------------------------
+    *TfsBufSize(self) = outBytes;                               // 1800ba7a4  +0x78
+    uint8_t* const buffer = static_cast<uint8_t*>(
+        RT_EXPORT_ONCE(FnMemAlloc,
+            "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
+                static_cast<size_t>(outBytes), 4));             // 1800ba7a7
+    self->buffer = buffer;                                      // 1800ba7b1  +0x70
+    const int32_t bufSize = *TfsBufSize(self);                  // 1800ba7b5
+
+    // ---- pass 2: CONVERT ---------------------------------------------------
+    // DetectFormat is re-run on the same bytes — retail's, not a duplication.
+    srcFormat = TfsDetectFormat()(raw, fileSize);               // 1800ba7c4
+    p = raw + TfsBomSkip(srcFormat);                            // 1800ba7e4
+
+    uint8_t* out   = buffer;                                    // 1800ba7ec
+    int32_t written = 0;
+    while (p < rawEnd) {                                        // 1800ba7f2
+        int32_t cp = -1;                                        // 1800ba800
+        int32_t consumed;
+        if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800ba80b
+            consumed = TfsDecodeOne()(srcFormat, p, rawEnd, &cp, srcFormat);  // 1800ba827
+        } else {
+            cp = -1; consumed = 1;                              // 1800ba83c
+        }
+        p += consumed;                                          // 1800ba846
+        if (cp < 0) continue;                                   // 1800ba849
+
+        // Pass 2's OWN scratch — see note (a). Four bytes is the widest any
+        // table entry emits.
+        uint8_t scratch[4] = { 0, 0, 0, 0 };
+        int32_t n = 0;
+        if (static_cast<uint32_t>(format) <= 5u)                // 1800ba84d
+            n = TfsEncodeOne()(cp, scratch, format);            // 1800ba85b
+        written += n;                                           // 1800ba864
+        if (written > bufSize) continue;                        // 1800ba866  JG
+        if (buffer == nullptr) continue;                        // 1800ba86a
+        if (n > 0) {                                            // 1800ba872
+            std::memmove(out, scratch, static_cast<size_t>(n)); // 1800ba881
+            out += n;                                           // 1800ba886
+        }
+    }
+
+    RT_EXPORT_ONCE(FnMemFree,
+        "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(raw);     // 1800ba89e
+    self->activeEncoding = format;                              // 1800ba8cc  +0x6c
+    RT_DIFF_WORK(true);
+    return true;                                                // 1800ba8d0
+}
+
 // Read by text_file_stream_probe.cpp so attendance prints beside the verdicts
 // and a reader cannot see one without the other.
 void RtIoTextFileStreamCounters(unsigned long long* out) {
@@ -436,17 +882,27 @@ void RtIoTextFileStreamCounters(unsigned long long* out) {
 //       IT IS ALSO THE SOURCE OF A LAYOUT FACT ALREADY IN USE: its `MOV EDX,0x80`
 //       element stride is where FileStream.h's `sizeof(TextFileStream) == 0x80`
 //       comes from.
-//   [2] +0x10  0x1800ba9f0  Write — 462 bytes (`.pdata`). Branches on
-//       `_requestedFormat != _activeEncoding` into a TRANSCODER (0x1800c9d60, a
-//       format-detect helper) with its own five-way chain. NOT ATTEMPTED — this
-//       is a size judgement, not a blocker, and it has no premise to expire.
-//   [8] +0x40  0x1800ba640  Open(Filename, Text::Format) — 666 bytes, the
-//       largest body in the table, and the one that INSTALLS the buffer that
-//       four of the five bodies above branch on. NOT ATTEMPTED, same reason.
+//   [2] +0x10  0x1800ba9f0  Write — 462 bytes (`.pdata`). *** CLOSED, WAVE 28
+//       LANE SLOTS *** — see the WAVE 28 section above. The deferral said in
+//       terms that it was "a size judgement, not a blocker, and it has no
+//       premise to expire", and that was the correct reading: nothing expired,
+//       a later lane simply did the work. Note also that the `.pdata` figure
+//       quoted here is a LOWER bound — MSVC chains fragments through
+//       UNW_FLAG_CHAININFO — so "462 bytes" understated the job
+//       (reference_pdata_is_a_lower_bound_on_function_extent.md). Measured from
+//       the instruction listing the body runs 0x1800ba9f0..0x1800babbd = 462,
+//       which here happens to agree.
+//   [8] +0x40  0x1800ba640  Open(Filename, Text::Format) — 666 bytes.
+//       *** CLOSED, WAVE 28 LANE SLOTS *** — same section, same reason.
+//       Measured extent 0x1800ba640..0x1800ba8d9 = 666.
 //
-// So `??_7TextFileStream@IO@@6B@` goes from 2 ported / 10 slots to 7 / 10.
-// IT IS STILL NOT PROMOTABLE: three trap slots remain. This file claims the
-// slot count and nothing about promotion.
+// So `??_7TextFileStream@IO@@6B@` went 2/10 -> 7/10 (Wave 20 lane SAVETEXT)
+// -> 8/10 (Wave 21 lane ENC, slot 0) -> **10/10, WAVE 28 LANE SLOTS.**
+// COMPLETE IS NOT PROMOTABLE. It says only that promoting would put no trap in
+// the table; whether the row may be promoted turns on owning the function that
+// STAMPS it, which no source scan answers
+// (reference_a_green_readiness_screen_is_not_a_route.md). **Wave 28 lane SLOTS
+// did NOT promote this row and establishes nothing about its stamper.**
 // ============================================================================
 
 // ============================================================================
@@ -481,8 +937,34 @@ int RtIoTextFileStreamSlotsRegister() {
         (void*)&RtIo_TextFileStream_Create); ++n;
     RegisterRuntimeAddr(0x1800ba940, (void*)&RtIo_TextFileStream_Create);
 
-    printf("[RtPort]   IO::TextFileStream vtable slots (wave 20 lane SAVETEXT): "
-           "%d exports registered -- ??_7TextFileStream@ 2/10 -> 7/10 "
-           "(slots 0, 2, 8 still trap)\n", n);
+    // ---- WAVE 28 LANE SLOTS -----------------------------------------------
+    // Both mangled names were RE-DERIVED against the shipped export directory
+    // with pefile, at the VAs the vtable holds, rather than assembled by
+    // analogy with their neighbours: `UEAA` vs `QEAA`/`UEBA` by analogy cost
+    // Wave 27 a dark port, and `ResolveExport` returns NULL silently for a name
+    // the DLL lacks while the ResolveAddr fallback hides it
+    // (reference_resolveexport_phantom_names.md).
+    //   ?Write@TextFileStream@IO@@UEAA_NHPEBX@Z                  ord 4556
+    //   ?Open@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@@Z
+    //                                                            ord 3308
+    // Each is spelled ON ONE LINE because runtime_census.py cannot see a
+    // mangled name split across a string-literal concatenation
+    // (reference_census_three_blind_spots.md).
+    RegisterRuntimeExport("?Write@TextFileStream@IO@@UEAA_NHPEBX@Z",
+                          (void*)&RtIo_TextFileStream_Write); ++n;
+    RegisterRuntimeAddr(0x1800ba9f0, (void*)&RtIo_TextFileStream_Write);
+
+    RegisterRuntimeExport("?Open@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@@Z",
+                          (void*)&RtIo_TextFileStream_Open); ++n;
+    RegisterRuntimeAddr(0x1800ba640, (void*)&RtIo_TextFileStream_Open);
+
+    // A count of what registered is a fact this line can state; a slot tally in
+    // a printf is a comment on its way to becoming a lie, and this one already
+    // was one (it still said "7/10, slots 0, 2, 8 still trap" three waves after
+    // lane ENC closed slot 0). Corrected on the surface the next person REACHES
+    // -- the log line -- not only in a doc (kickoff warning 15).
+    printf("[RtPort]   IO::TextFileStream vtable slots (waves 20 SAVETEXT, "
+           "21 ENC, 28 SLOTS): %d exports registered here; "
+           "??_7TextFileStream@IO@@6B@ is 10/10 COMPLETE, NOT promoted\n", n);
     return n;
 }

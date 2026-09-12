@@ -96,24 +96,27 @@ again on the lane tip. Same tool, same two tips.
 |---|---|---|
 | `0x180157c60` | 0 / 7 | **7 / 7 COMPLETE** |
 | `0x180155860` | 1 / 2 | **2 / 2 COMPLETE** |
+| `??_7TextFileStream@IO@@6B@` | 8 / 10 | **10 / 10 COMPLETE** |
 
-Backlog totals: **175 bodies / 34 COMPLETE -> 183 bodies / 36 COMPLETE.**
+Backlog totals: **175 bodies / 34 COMPLETE -> 185 bodies / 37 COMPLETE.**
+**Ten slot bodies ported, three tables closed, nothing promoted.**
 
 `mingw32-make standalone-debug` exits 0 on the lane tip.
 
 ### The census delta, attributed ROW BY ROW (kickoff warning 5)
 
-| | `wave28/base` | lane tip | delta |
-|---|---|---|---|
-| called | 1430 | 1435 | **+5** |
-| ported | 1277 | 1277 | 0 |
-| TOTAL % | 89.3% | 89.0% | **down** |
-| `internal` called | 222 | 227 | **+5** |
+| | `wave28/base` | after the two unnamed tables | lane tip | delta |
+|---|---|---|---|---|
+| called | 1430 | 1435 | **1439** | **+9** |
+| ported | 1277 | 1277 | **1277** | **0** |
+| TOTAL % | 89.3% | 89.0% | **88.7%** | **down** |
+| `internal` called | 222 | 227 | **231** | **+9** |
 
-**The +5 is fully attributed, and it was checked as a SET, not as a count**
-(`reference_diff_the_set_not_the_count.md`). `runtime_census.py --unported` at
-the lane tip contains exactly these five rows, and none of them was in the
-`wave28/base` set:
+**Every one of the +9 is named, and the check was a SET DIFF of
+`runtime_census.py --unported` at each tip, not a comparison of counts**
+(`reference_diff_the_set_not_the_count.md`).
+
+The five from `0x180155860` slot 0 (§3.2), none of which was in the base set:
 
 ```
   addr     internal     0x1800b6290      Persistence GET-SAVE-LIST job
@@ -123,13 +126,33 @@ the lane tip contains exactly these five rows, and none of them was in the
   addr     internal     0x1800b6e00      Persistence SAVE job
 ```
 
-They are the five arms of the dispatcher this lane ported (§3.2). Nothing else
-moved: `ported` did not move at all, and **that is correct, not a
-disappointment** — all eight new bodies are slots of UNPROMOTED vtables, a
-population the census states in terms is "NOT counted above". **Score this lane
-on the two backlog rows, never on the TOTAL.** The percentage going DOWN while
-eight bodies were added is `reference_the_ceiling_percentage_is_a_moving_target.md`
-in its plainest form.
+The four from `??_7TextFileStream@IO@@6B@` slots 2 and 8 (§3.3):
+
+```
+  addr     internal     0x1800c9b60      EncodeOne dispatcher
+  addr     internal     0x1800c9d60      DetectFormat
+  addr     internal     0x1800c9fc0      DecodeOne dispatcher
+  addr     internal     0x1800ca260      ConvertText
+```
+
+The `0x180157c60` row contributed **ZERO** new `called` rows: all seven of its
+bodies are leaves (four are `ret`, one ORs a bit, one calls a KERNEL32 import,
+which the census does not count as a Runtime row).
+
+`ported` did not move at all, and **that is correct, not a disappointment** —
+all ten new bodies are slots of UNPROMOTED vtables, a population the census
+states in terms is "NOT counted above". **Score this lane on the three backlog
+rows, never on the TOTAL.** The percentage going DOWN while ten bodies were
+added is `reference_the_ceiling_percentage_is_a_moving_target.md` in its
+plainest form.
+
+A set diff also turned up two rows that look like new gap rows and are NOT:
+`0x1800ba640` and `0x1800ba9f0` appear in `--unported`'s **"Ports with no caller
+in our tree"** section, which lists addresses we REGISTERED that nothing in our
+tree reaches by address. That is the expected state for a vtable slot the DLL
+dispatches out of its own table, and it is a different list from the gap. Said
+here because the two sections look alike in the output and reading one for the
+other would have manufactured a finding.
 
 **There is no unexplained residue. Every row of the delta is named.**
 
@@ -237,9 +260,91 @@ this way in `mesh.cpp:201` for 21 waves). Each door carries a
 SYMBOL / CONDITION / CONSEQUENCE comment naming what it is, when it is live and
 what happens at cutover, per the brief.
 
-### 3.3 `??_7TextFileStream@IO@@6B@` — THE SCOPE QUESTION THE BRIEF ASKED
+### 3.3 `??_7TextFileStream@IO@@6B@` 8/10 -> 10/10 COMPLETE
 
-*(see §4)*
+The scope question the brief asked is answered in §4; this is the work.
+
+Both remaining slots ported into `runtime/src/io/text_file_stream_win.cpp`, the
+file that already owns five of the other eight:
+
+| slot | symbol | VA | size |
+|---|---|---|---|
+| 2 | `?Write@TextFileStream@IO@@UEAA_NHPEBX@Z` | 0x1800ba9f0 | 462 B |
+| 8 | `?Open@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@@Z` | 0x1800ba640 | 666 B |
+
+**Both deferrals were re-checked before being acted on and NEITHER had
+expired** — they had nothing to expire. Wave 20 lane SAVETEXT and Wave 27 lane
+IOTEXT both recorded them, in terms, as "size judgements, not blockers, with no
+premise that can expire". That is the honest form of a deferral and the reason
+this lane could simply do the work: there was no stale claim to fall over
+(`reference_holdback_blockers_are_stale_check_them_first.md` — the check came
+back NOT STALE, which still has to be reported as having happened).
+
+**The one thing a port written from the shape rather than the bytes gets wrong,
+and it is in BOTH bodies.** Each transcodes in TWO PASSES — measure, then
+convert — and the two passes encode into DIFFERENT scratch slots. Pass 1 encodes
+into the codepoint slot it just read from, because it only wants the returned
+LENGTH and throws the bytes away. Pass 2 (`Open` only) encodes into a separate
+4-byte slot and `memmove`s exactly `n` bytes out of it. Collapsing the two onto
+one scratch works by accident today and is not what the machine does.
+
+Three smaller ones, recorded so they are not re-derived:
+
+* **`Write`'s two arms return values that are not comparable.** The fast arm
+  (`_requestedFormat == _activeEncoding`) compares bytes written against the
+  CALLER'S length; the transcoding arm compares against the CONVERTED length.
+  Hoisting one `return written == len` out of the branch is right on every
+  same-encoding write and wrong on every UTF-8 -> UTF-16 one.
+* **`Open` does NOT write `_requestedFormat` (+0x68).** Only `_activeEncoding`
+  (+0x6c), and only at the very end. The stream keeps the constructor's 6 in
+  +0x68, which is exactly what makes a later `Write` take its transcoding arm.
+  An absence is as load-bearing as a presence.
+* **`Open` calls `DetectFormat` TWICE on the same bytes** rather than carrying
+  the first result in a register. Reproduced; it is retail's, and the second
+  call is what pass 2 branches on.
+
+**FOUR NEW ADDRESS DOORS, declared at the call site.** This lane does NOT
+reimplement the codec tables. Both bodies pass a RUNTIME encoding id in 0..5 to
+two jump-table dispatchers, so a port from spec would have to reproduce all six
+entries of both tables; `string.cpp`, `widestring.cpp` and
+`package_file_read_win.cpp` each wrote only the one or two entries THEIR caller
+could reach and each said so. Here the id is a variable, so the honest shape is
+a door. Each is spelled as a literal inside its own `ResolveAddr` call
+(`reference_literal_grep_blind_to_variables.md`) and carries a
+SYMBOL/CONDITION/CONSEQUENCE comment.
+
+**`ConvertText`'s arg6 is never written by the caller, and that is CORRECT.**
+`[rsp+0x28]` at the call site is left holding whatever was there. The callee
+uses that slot (`0x88(%rsp)` in its frame) as its own codepoint SCRATCH, writing
+`$0xffffffff` into it before every read — MSVC spilled a local into the incoming
+argument area. A port that "fixed" it by zeroing would change nothing; a port
+that OMITTED the slot would shift args 7, 8 and 9 and corrupt the call. This is
+the kind of thing that is only visible in the disassembly of the CALLEE, and
+reading only the caller would have produced an 8-argument signature that
+compiles.
+
+**ONE TABLE, READ FOUR TIMES, AGREEING.** Both bodies decide how many BOM bytes
+to skip with the same ladder (3 -> 3, 4 -> 2, 5 -> 2, else 0). That is the
+mirror of the table `?Create@TextFileStream@` WRITES (3 -> `EF BB BF`,
+4 -> `FF FE`, 5 -> `FE FF`), of the one `?SaveText@External@Object@@` carries,
+and of `DetectFormat`'s own returns (3 after matching `EF BB BF`, 4 after
+matching `FF FE` — read out of its disassembly here). Four witnesses, one
+written by a writer, two by skippers and one by a detector.
+
+**NO ORACLE for either, and both refusals are structural.** `Write` ends in a
+real `WriteFile` on a real handle; a replay emits every byte twice and advances
+the cursor twice. `Open` reads the whole file, **CLOSES it**, and installs an
+owned buffer at +0x70; a replay would run against a closed handle, leak the
+first buffer, and could not read the same bytes. `RT_DIFF_WORK` records liveness
+only. **UNVERIFIED: neither body has been observed executing.**
+
+**A STALE LOG LINE CORRECTED ON THE SURFACE THE NEXT PERSON REACHES.**
+`RtIoTextFileStreamSlotsRegister()` still printed
+`"??_7TextFileStream@ 2/10 -> 7/10 (slots 0, 2, 8 still trap)"` — three waves
+after lane ENC closed slot 0. A slot tally inside a `printf` is a comment on its
+way to becoming a lie, and this one already was one. It now reports the count it
+can actually state plus the current status, and it says NOT PROMOTED in those
+words (kickoff warning 15).
 
 ---
 
@@ -309,9 +414,45 @@ it**, that is a question about call sites, and this lane took no run
 
 ## 6. MEASURED vs INFERRED
 
+### 6.0 THE SHARED-SCRATCHPAD WARNING — EVERY LOAD-BEARING FACT RE-DERIVED
+
+Mid-lane the integrator reported that the session scratchpad is shared between
+all seven lanes and that sibling lanes had silently clobbered each other's
+`pefile` helper scripts by basename. **Four of this lane's five helper scripts
+lived in the shared root under exactly that kind of generic basename**
+(`vt.py`, `ex.py`, `xref.py`, `imp.py`). They have been moved to a lane-private
+`slots/` subdirectory, and — because a clobbered export dump would have produced
+a CONFIDENTLY WRONG identification, which the brief says is worse than an honest
+UNIDENTIFIED — every fact this lane rests on was **re-derived with `objdump`,
+which reads the PE directly and touches no scratchpad file at all**:
+
+| fact | re-derivation | result |
+|---|---|---|
+| the 7 slots of `0x180157c60` | `objdump -s -j .rdata` raw bytes at that VA | `180050200 1800501f0 1800501c0 180050210 1800501d0 180050220 180050230`, then non-pointer data — **identical, and the 7-slot extent confirmed by what follows it** |
+| the 2 slots of `0x180155860` | same | `1800b7260 18000c590`, then the ASCII `"true"` — **identical, 2 slots** |
+| the 10 slots of `??_7TextFileStream@IO@@6B@` | same | **identical to both the mint table and my earlier read** |
+| `0x1800de3a0` is the `Audio::Device` ctor | `objdump -p` export address table + name table | index 133 -> RVA `de3a0`, name `??0Device@Audio@@QEAA@XZ` — **confirmed** |
+| the 7 callback slots, the 5 Persistence jobs and the worker `Run` are UNEXPORTED | `objdump -p` export address table, grepped for each RVA | **0 hits for all 13** |
+| the two `TextFileStream` mangled names | `objdump -p` name table at the ordinals the vtable VAs resolve to | ord 3308 -> `?Open@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@@Z`, ord 4556 -> `?Write@TextFileStream@IO@@UEAA_NHPEBX@Z` — **byte-identical to what was registered; no phantom name** |
+| `0x18014b368` is `KERNEL32!SetEvent` | the IAT qword at that VA read raw with `objdump -s`, matched against `objdump -p`'s import listing | slot holds `0x1afd72`; `objdump -p` prints `1afd72 1127 SetEvent` — **confirmed**, and the neighbours `0x18014b360`/`0x18014b370` land on `CreateEventW`/`DeleteCriticalSection`, which is exactly what `audio_stream_win.cpp` recorded in Wave 24 from the other direction |
+
+**Nothing changed.** The re-derivation is reported as having happened precisely
+because it AGREED
+(`reference_a_matching_number_can_match_because_it_is_stale.md`), and because
+"my scripts were not clobbered" is not a claim a lane can make about a shared
+directory — only re-deriving through a different mechanism settles it.
+
+Note also point 1 of that correction, the census command: this lane used the
+MAIN-checkout absolute venv path
+(`C:\code\GIT\untitled_rev_eng_project\tools\ghidra_mcp\.venv\Scripts\python.exe`)
+from its first invocation, because the worktree path errored immediately with
+`No such file or directory` and an empty output file — a failure that is only
+harmless because it is LOUD. Every census figure in this document came from that
+absolute path.
+
 **MEASURED**
 
-* Both backlog rows, before and after, same tool, same two tips.
+* All three backlog rows, before and after, same tool, same tips.
 * The census delta above, and the five new `called` rows checked as a SET
   against `--unported` at both tips.
 * `mingw32-make standalone-debug` exit 0.
