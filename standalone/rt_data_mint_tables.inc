@@ -3,7 +3,7 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 63 vtables, 104 BaseTypeInfo, 39 storage symbols.
+// Counts: 64 vtables, 104 BaseTypeInfo, 39 storage symbols.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -502,8 +502,6 @@ RT_MINT_TRAP(52,5)
 RT_MINT_TRAP(52,6)
 RT_MINT_TRAP(52,7)
 RT_MINT_TRAP(52,8)
-RT_MINT_TRAP(52,9)
-RT_MINT_TRAP(52,10)
 RT_MINT_TRAP(53,0)
 RT_MINT_TRAP(53,1)
 RT_MINT_TRAP(53,2)
@@ -514,18 +512,19 @@ RT_MINT_TRAP(53,6)
 RT_MINT_TRAP(53,7)
 RT_MINT_TRAP(53,8)
 RT_MINT_TRAP(53,9)
+RT_MINT_TRAP(53,10)
 RT_MINT_TRAP(54,0)
 RT_MINT_TRAP(54,1)
+RT_MINT_TRAP(54,2)
+RT_MINT_TRAP(54,3)
+RT_MINT_TRAP(54,4)
+RT_MINT_TRAP(54,5)
+RT_MINT_TRAP(54,6)
+RT_MINT_TRAP(54,7)
+RT_MINT_TRAP(54,8)
+RT_MINT_TRAP(54,9)
 RT_MINT_TRAP(55,0)
 RT_MINT_TRAP(55,1)
-RT_MINT_TRAP(55,2)
-RT_MINT_TRAP(55,3)
-RT_MINT_TRAP(55,4)
-RT_MINT_TRAP(55,5)
-RT_MINT_TRAP(55,6)
-RT_MINT_TRAP(55,7)
-RT_MINT_TRAP(55,8)
-RT_MINT_TRAP(55,9)
 RT_MINT_TRAP(56,0)
 RT_MINT_TRAP(56,1)
 RT_MINT_TRAP(56,2)
@@ -536,8 +535,6 @@ RT_MINT_TRAP(56,6)
 RT_MINT_TRAP(56,7)
 RT_MINT_TRAP(56,8)
 RT_MINT_TRAP(56,9)
-RT_MINT_TRAP(56,10)
-RT_MINT_TRAP(56,11)
 RT_MINT_TRAP(57,0)
 RT_MINT_TRAP(57,1)
 RT_MINT_TRAP(57,2)
@@ -545,9 +542,18 @@ RT_MINT_TRAP(57,3)
 RT_MINT_TRAP(57,4)
 RT_MINT_TRAP(57,5)
 RT_MINT_TRAP(57,6)
+RT_MINT_TRAP(57,7)
+RT_MINT_TRAP(57,8)
+RT_MINT_TRAP(57,9)
+RT_MINT_TRAP(57,10)
+RT_MINT_TRAP(57,11)
 RT_MINT_TRAP(58,0)
 RT_MINT_TRAP(58,1)
 RT_MINT_TRAP(58,2)
+RT_MINT_TRAP(58,3)
+RT_MINT_TRAP(58,4)
+RT_MINT_TRAP(58,5)
+RT_MINT_TRAP(58,6)
 RT_MINT_TRAP(59,0)
 RT_MINT_TRAP(59,1)
 RT_MINT_TRAP(59,2)
@@ -557,29 +563,6 @@ RT_MINT_TRAP(60,2)
 RT_MINT_TRAP(61,0)
 RT_MINT_TRAP(61,1)
 RT_MINT_TRAP(61,2)
-RT_MINT_TRAP(61,3)
-RT_MINT_TRAP(61,4)
-RT_MINT_TRAP(61,5)
-RT_MINT_TRAP(61,6)
-RT_MINT_TRAP(61,7)
-RT_MINT_TRAP(61,8)
-RT_MINT_TRAP(61,9)
-RT_MINT_TRAP(61,10)
-RT_MINT_TRAP(61,11)
-RT_MINT_TRAP(61,12)
-RT_MINT_TRAP(61,13)
-RT_MINT_TRAP(61,14)
-RT_MINT_TRAP(61,15)
-RT_MINT_TRAP(61,16)
-RT_MINT_TRAP(61,17)
-RT_MINT_TRAP(61,18)
-RT_MINT_TRAP(61,19)
-RT_MINT_TRAP(61,20)
-RT_MINT_TRAP(61,21)
-RT_MINT_TRAP(61,22)
-RT_MINT_TRAP(61,23)
-RT_MINT_TRAP(61,24)
-RT_MINT_TRAP(61,25)
 RT_MINT_TRAP(62,0)
 RT_MINT_TRAP(62,1)
 RT_MINT_TRAP(62,2)
@@ -587,6 +570,32 @@ RT_MINT_TRAP(62,3)
 RT_MINT_TRAP(62,4)
 RT_MINT_TRAP(62,5)
 RT_MINT_TRAP(62,6)
+RT_MINT_TRAP(62,7)
+RT_MINT_TRAP(62,8)
+RT_MINT_TRAP(62,9)
+RT_MINT_TRAP(62,10)
+RT_MINT_TRAP(62,11)
+RT_MINT_TRAP(62,12)
+RT_MINT_TRAP(62,13)
+RT_MINT_TRAP(62,14)
+RT_MINT_TRAP(62,15)
+RT_MINT_TRAP(62,16)
+RT_MINT_TRAP(62,17)
+RT_MINT_TRAP(62,18)
+RT_MINT_TRAP(62,19)
+RT_MINT_TRAP(62,20)
+RT_MINT_TRAP(62,21)
+RT_MINT_TRAP(62,22)
+RT_MINT_TRAP(62,23)
+RT_MINT_TRAP(62,24)
+RT_MINT_TRAP(62,25)
+RT_MINT_TRAP(63,0)
+RT_MINT_TRAP(63,1)
+RT_MINT_TRAP(63,2)
+RT_MINT_TRAP(63,3)
+RT_MINT_TRAP(63,4)
+RT_MINT_TRAP(63,5)
+RT_MINT_TRAP(63,6)
 
 // (unexported, carried by address)  DLL 0x1801554a8  5 slots  [adjacent-export:??_7BinaryFileStream@IO@@6B@]
 static const RtMintVSlot kVSlots0[] = {
@@ -1386,8 +1395,23 @@ static const RtMintVSlot kVSlots51[] = {
 static void* kVTable51[7];
 static const RtMintTrapFn kVTraps51[] = { &RtMintTrapStub_51_0, &RtMintTrapStub_51_1, &RtMintTrapStub_51_2, &RtMintTrapStub_51_3, &RtMintTrapStub_51_4, &RtMintTrapStub_51_5, &RtMintTrapStub_51_6 };
 
-// ??_7SunLight@Graphics@@6B@  DLL 0x180158e10  11 slots  [tail-not-a-pointer]
+// ??_7StringTable@UI@@6B@  DLL 0x180154630  9 slots  [adjacent-export:??_7GoalInstance@Achievement@@6B@]
 static const RtMintVSlot kVSlots52[] = {
+    { nullptr, 0x180002740ull, RT_MINT_UNNAMED },
+    { "?TypeName@StringTable@UI@@UEBAPEBDXZ", 0x180002190ull, RT_MINT_NAMED },
+    { "?Type@StringTable@UI@@UEBAIXZ", 0x180002170ull, RT_MINT_NAMED },
+    { "?GetFileVersion@StringTable@UI@@UEBAHXZ", 0x18011d930ull, RT_MINT_NAMED },
+    { "?Compile@External@Object@@UEAA?AW4CompileResult@12@AEBVFilename@System@@@Z", 0x1800066e0ull, RT_MINT_NAMED },
+    { "?Serialize@StringTable@UI@@UEAA_NAEAVStream@IO@@@Z", 0x18011d940ull, RT_MINT_NAMED },
+    { "?Reconstruct@StringTable@UI@@UEAAPEAVExternal@Object@@XZ", 0x180002390ull, RT_MINT_NAMED },
+    { "?Destruct@StringTable@UI@@UEAAXXZ", 0x180002460ull, RT_MINT_NAMED },
+    { "?Construct@StringTable@UI@@UEAAPEAVExternal@Object@@XZ", 0x180002400ull, RT_MINT_NAMED },
+};
+static void* kVTable52[9];
+static const RtMintTrapFn kVTraps52[] = { &RtMintTrapStub_52_0, &RtMintTrapStub_52_1, &RtMintTrapStub_52_2, &RtMintTrapStub_52_3, &RtMintTrapStub_52_4, &RtMintTrapStub_52_5, &RtMintTrapStub_52_6, &RtMintTrapStub_52_7, &RtMintTrapStub_52_8 };
+
+// ??_7SunLight@Graphics@@6B@  DLL 0x180158e10  11 slots  [tail-not-a-pointer]
+static const RtMintVSlot kVSlots53[] = {
     { nullptr, 0x180064620ull, RT_MINT_UNNAMED },
     { "?Update@SunLight@Graphics@@UEAAXAEBVTime@System@@@Z", 0x1801067a0ull, RT_MINT_NAMED },
     { "?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEBVCamera@2@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@MHHH@Z", 0x180106790ull, RT_MINT_NAMED },
@@ -1400,11 +1424,11 @@ static const RtMintVSlot kVSlots52[] = {
     { "?DrawShadowMap@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HH@Z", 0x180106bc0ull, RT_MINT_NAMED },
     { "?Draw@SunLight@Graphics@@UEBAXAEAVContext@Video@@AEAVRenderer@2@HHHH@Z", 0x1801067b0ull, RT_MINT_NAMED },
 };
-static void* kVTable52[11];
-static const RtMintTrapFn kVTraps52[] = { &RtMintTrapStub_52_0, &RtMintTrapStub_52_1, &RtMintTrapStub_52_2, &RtMintTrapStub_52_3, &RtMintTrapStub_52_4, &RtMintTrapStub_52_5, &RtMintTrapStub_52_6, &RtMintTrapStub_52_7, &RtMintTrapStub_52_8, &RtMintTrapStub_52_9, &RtMintTrapStub_52_10 };
+static void* kVTable53[11];
+static const RtMintTrapFn kVTraps53[] = { &RtMintTrapStub_53_0, &RtMintTrapStub_53_1, &RtMintTrapStub_53_2, &RtMintTrapStub_53_3, &RtMintTrapStub_53_4, &RtMintTrapStub_53_5, &RtMintTrapStub_53_6, &RtMintTrapStub_53_7, &RtMintTrapStub_53_8, &RtMintTrapStub_53_9, &RtMintTrapStub_53_10 };
 
 // ??_7TextFileStream@IO@@6B@  DLL 0x180155980  10 slots  [ctor-stamped-neighbour: ??_7TextFileStream@IO@@6B@. adjacent-export bounds it at ??_7VisitorStream@ (0x180155a20) = 20 slots; the real table is 10, and 0x1801559d0 starts a separate UNEXPORTED IO::Encoding table. Proof: ??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z at 0x1800ba431 is LEA RAX,[0x1801559d0] -> MOV [RSI],RAX into a fresh allocation it then installs at Stream::encoding (+0x10); Ghidra's xrefs to 0x1801559d0 are that ctor and only that ctor. Slot 9 is ?Create@TextFileStream@IO@@ (0x1800ba940) and slot 10 would be 0x1800b9ab0, the head of a different descending method group. runtime/types/io/FileStream.h has said 10 since Wave 11.]
-static const RtMintVSlot kVSlots53[] = {
+static const RtMintVSlot kVSlots54[] = {
     { nullptr, 0x18002ba90ull, RT_MINT_UNNAMED },
     { "?GetSource@FileStream@IO@@UEBA?AVString@System@@XZ", 0x1800aab50ull, RT_MINT_NAMED },
     { "?Write@TextFileStream@IO@@UEAA_NHPEBX@Z", 0x1800ba9f0ull, RT_MINT_NAMED },
@@ -1416,19 +1440,19 @@ static const RtMintVSlot kVSlots53[] = {
     { "?Open@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@@Z", 0x1800ba640ull, RT_MINT_NAMED },
     { "?Create@TextFileStream@IO@@UEAA_NAEBVFilename@System@@W4Format@Text@4@1@Z", 0x1800ba940ull, RT_MINT_NAMED },
 };
-static void* kVTable53[10];
-static const RtMintTrapFn kVTraps53[] = { &RtMintTrapStub_53_0, &RtMintTrapStub_53_1, &RtMintTrapStub_53_2, &RtMintTrapStub_53_3, &RtMintTrapStub_53_4, &RtMintTrapStub_53_5, &RtMintTrapStub_53_6, &RtMintTrapStub_53_7, &RtMintTrapStub_53_8, &RtMintTrapStub_53_9 };
+static void* kVTable54[10];
+static const RtMintTrapFn kVTraps54[] = { &RtMintTrapStub_54_0, &RtMintTrapStub_54_1, &RtMintTrapStub_54_2, &RtMintTrapStub_54_3, &RtMintTrapStub_54_4, &RtMintTrapStub_54_5, &RtMintTrapStub_54_6, &RtMintTrapStub_54_7, &RtMintTrapStub_54_8, &RtMintTrapStub_54_9 };
 
 // ??_7Thread@System@@6B@  DLL 0x180155f20  2 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots54[] = {
+static const RtMintVSlot kVSlots55[] = {
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { "?OnCompleted@Thread@System@@UEAAXXZ", 0x18000c590ull, RT_MINT_NAMED },
 };
-static void* kVTable54[2];
-static const RtMintTrapFn kVTraps54[] = { &RtMintTrapStub_54_0, &RtMintTrapStub_54_1 };
+static void* kVTable55[2];
+static const RtMintTrapFn kVTraps55[] = { &RtMintTrapStub_55_0, &RtMintTrapStub_55_1 };
 
 // ??_7ToolTipDialog@UI@@6B@  DLL 0x180157880  10 slots  [adjacent-export:??_7DialogLoaderLoopT@Engine@@6B@]
-static const RtMintVSlot kVSlots55[] = {
+static const RtMintVSlot kVSlots56[] = {
     { nullptr, 0x18004d270ull, RT_MINT_UNNAMED },
     { "?TypeName@ToolTipDialog@UI@@UEBAPEBDXZ", 0x18004cfc0ull, RT_MINT_NAMED },
     { "?Type@ToolTipDialog@UI@@UEBAIXZ", 0x18004cfa0ull, RT_MINT_NAMED },
@@ -1440,11 +1464,11 @@ static const RtMintVSlot kVSlots55[] = {
     { "?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z", 0x180114ed0ull, RT_MINT_NAMED },
     { "?OnSerializeSettings@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z", 0x180115470ull, RT_MINT_NAMED },
 };
-static void* kVTable55[10];
-static const RtMintTrapFn kVTraps55[] = { &RtMintTrapStub_55_0, &RtMintTrapStub_55_1, &RtMintTrapStub_55_2, &RtMintTrapStub_55_3, &RtMintTrapStub_55_4, &RtMintTrapStub_55_5, &RtMintTrapStub_55_6, &RtMintTrapStub_55_7, &RtMintTrapStub_55_8, &RtMintTrapStub_55_9 };
+static void* kVTable56[10];
+static const RtMintTrapFn kVTraps56[] = { &RtMintTrapStub_56_0, &RtMintTrapStub_56_1, &RtMintTrapStub_56_2, &RtMintTrapStub_56_3, &RtMintTrapStub_56_4, &RtMintTrapStub_56_5, &RtMintTrapStub_56_6, &RtMintTrapStub_56_7, &RtMintTrapStub_56_8, &RtMintTrapStub_56_9 };
 
 // ??_7UpdateLoop@Engine@@6B@  DLL 0x180155ba0  12 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots56[] = {
+static const RtMintVSlot kVSlots57[] = {
     { nullptr, 0x180031900ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
@@ -1458,11 +1482,11 @@ static const RtMintVSlot kVSlots56[] = {
     { "?GetResourceFilename@UpdateLoop@Engine@@UEAAPEBDXZ", 0x180031780ull, RT_MINT_NAMED },
     { "?AllowsModChanges@UpdateLoop@Engine@@UEAA_NXZ", 0x180031790ull, RT_MINT_NAMED },
 };
-static void* kVTable56[12];
-static const RtMintTrapFn kVTraps56[] = { &RtMintTrapStub_56_0, &RtMintTrapStub_56_1, &RtMintTrapStub_56_2, &RtMintTrapStub_56_3, &RtMintTrapStub_56_4, &RtMintTrapStub_56_5, &RtMintTrapStub_56_6, &RtMintTrapStub_56_7, &RtMintTrapStub_56_8, &RtMintTrapStub_56_9, &RtMintTrapStub_56_10, &RtMintTrapStub_56_11 };
+static void* kVTable57[12];
+static const RtMintTrapFn kVTraps57[] = { &RtMintTrapStub_57_0, &RtMintTrapStub_57_1, &RtMintTrapStub_57_2, &RtMintTrapStub_57_3, &RtMintTrapStub_57_4, &RtMintTrapStub_57_5, &RtMintTrapStub_57_6, &RtMintTrapStub_57_7, &RtMintTrapStub_57_8, &RtMintTrapStub_57_9, &RtMintTrapStub_57_10, &RtMintTrapStub_57_11 };
 
 // ??_7VertexBufferData@Video@@6B@  DLL 0x180158ac0  7 slots  [adjacent-export:??_7IndexBufferData@Video@@6B@]
-static const RtMintVSlot kVSlots57[] = {
+static const RtMintVSlot kVSlots58[] = {
     { nullptr, 0x180058890ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
@@ -1471,38 +1495,38 @@ static const RtMintVSlot kVSlots57[] = {
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
-static void* kVTable57[7];
-static const RtMintTrapFn kVTraps57[] = { &RtMintTrapStub_57_0, &RtMintTrapStub_57_1, &RtMintTrapStub_57_2, &RtMintTrapStub_57_3, &RtMintTrapStub_57_4, &RtMintTrapStub_57_5, &RtMintTrapStub_57_6 };
+static void* kVTable58[7];
+static const RtMintTrapFn kVTraps58[] = { &RtMintTrapStub_58_0, &RtMintTrapStub_58_1, &RtMintTrapStub_58_2, &RtMintTrapStub_58_3, &RtMintTrapStub_58_4, &RtMintTrapStub_58_5, &RtMintTrapStub_58_6 };
 
 // ??_7VertexLayoutData@Video@@6B@  DLL 0x180158aa8  3 slots  [adjacent-export:??_7VertexBufferData@Video@@6B@]
-static const RtMintVSlot kVSlots58[] = {
-    { nullptr, 0x180058810ull, RT_MINT_UNNAMED },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
-};
-static void* kVTable58[3];
-static const RtMintTrapFn kVTraps58[] = { &RtMintTrapStub_58_0, &RtMintTrapStub_58_1, &RtMintTrapStub_58_2 };
-
-// ??_7VertexProgramData@Video@@6B@  DLL 0x180158a90  3 slots  [adjacent-export:??_7VertexLayoutData@Video@@6B@]
 static const RtMintVSlot kVSlots59[] = {
-    { nullptr, 0x180058790ull, RT_MINT_UNNAMED },
+    { nullptr, 0x180058810ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
 static void* kVTable59[3];
 static const RtMintTrapFn kVTraps59[] = { &RtMintTrapStub_59_0, &RtMintTrapStub_59_1, &RtMintTrapStub_59_2 };
 
-// ??_7VideoProgramData@Video@@6B@  DLL 0x180158a48  3 slots  [adjacent-export:??_7RenderStateData@Video@@6B@]
+// ??_7VertexProgramData@Video@@6B@  DLL 0x180158a90  3 slots  [adjacent-export:??_7VertexLayoutData@Video@@6B@]
 static const RtMintVSlot kVSlots60[] = {
-    { nullptr, 0x180058610ull, RT_MINT_UNNAMED },
+    { nullptr, 0x180058790ull, RT_MINT_UNNAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
 static void* kVTable60[3];
 static const RtMintTrapFn kVTraps60[] = { &RtMintTrapStub_60_0, &RtMintTrapStub_60_1, &RtMintTrapStub_60_2 };
 
-// ??_7Visitor@IO@@6B@  DLL 0x1801558b0  26 slots  [adjacent-export:??_7TextFileStream@IO@@6B@]
+// ??_7VideoProgramData@Video@@6B@  DLL 0x180158a48  3 slots  [adjacent-export:??_7RenderStateData@Video@@6B@]
 static const RtMintVSlot kVSlots61[] = {
+    { nullptr, 0x180058610ull, RT_MINT_UNNAMED },
+    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
+    { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
+};
+static void* kVTable61[3];
+static const RtMintTrapFn kVTraps61[] = { &RtMintTrapStub_61_0, &RtMintTrapStub_61_1, &RtMintTrapStub_61_2 };
+
+// ??_7Visitor@IO@@6B@  DLL 0x1801558b0  26 slots  [adjacent-export:??_7TextFileStream@IO@@6B@]
+static const RtMintVSlot kVSlots62[] = {
     { nullptr, 0x18002b710ull, RT_MINT_UNNAMED },
     { "?GetVersion@Visitor@IO@@UEBAHXZ", 0x18002b670ull, RT_MINT_NAMED },
     { "?Skip@Visitor@IO@@UEAAXXZ", 0x1800bacc0ull, RT_MINT_NAMED },
@@ -1530,11 +1554,11 @@ static const RtMintVSlot kVSlots61[] = {
     { "?Serialize@Visitor@IO@@UEAAXAEACPEBD@Z", 0x1800bae20ull, RT_MINT_NAMED },
     { "?SerializeBytes@Visitor@IO@@UEAAXHPEAXPEBD@Z", 0x1800bae30ull, RT_MINT_NAMED },
 };
-static void* kVTable61[26];
-static const RtMintTrapFn kVTraps61[] = { &RtMintTrapStub_61_0, &RtMintTrapStub_61_1, &RtMintTrapStub_61_2, &RtMintTrapStub_61_3, &RtMintTrapStub_61_4, &RtMintTrapStub_61_5, &RtMintTrapStub_61_6, &RtMintTrapStub_61_7, &RtMintTrapStub_61_8, &RtMintTrapStub_61_9, &RtMintTrapStub_61_10, &RtMintTrapStub_61_11, &RtMintTrapStub_61_12, &RtMintTrapStub_61_13, &RtMintTrapStub_61_14, &RtMintTrapStub_61_15, &RtMintTrapStub_61_16, &RtMintTrapStub_61_17, &RtMintTrapStub_61_18, &RtMintTrapStub_61_19, &RtMintTrapStub_61_20, &RtMintTrapStub_61_21, &RtMintTrapStub_61_22, &RtMintTrapStub_61_23, &RtMintTrapStub_61_24, &RtMintTrapStub_61_25 };
+static void* kVTable62[26];
+static const RtMintTrapFn kVTraps62[] = { &RtMintTrapStub_62_0, &RtMintTrapStub_62_1, &RtMintTrapStub_62_2, &RtMintTrapStub_62_3, &RtMintTrapStub_62_4, &RtMintTrapStub_62_5, &RtMintTrapStub_62_6, &RtMintTrapStub_62_7, &RtMintTrapStub_62_8, &RtMintTrapStub_62_9, &RtMintTrapStub_62_10, &RtMintTrapStub_62_11, &RtMintTrapStub_62_12, &RtMintTrapStub_62_13, &RtMintTrapStub_62_14, &RtMintTrapStub_62_15, &RtMintTrapStub_62_16, &RtMintTrapStub_62_17, &RtMintTrapStub_62_18, &RtMintTrapStub_62_19, &RtMintTrapStub_62_20, &RtMintTrapStub_62_21, &RtMintTrapStub_62_22, &RtMintTrapStub_62_23, &RtMintTrapStub_62_24, &RtMintTrapStub_62_25 };
 
 // ??_7VisitorStream@IO@@6B@  DLL 0x180155a20  7 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots62[] = {
+static const RtMintVSlot kVSlots63[] = {
     { nullptr, 0x18002bf80ull, RT_MINT_UNNAMED },
     { "?GetSource@Stream@IO@@UEBA?AVString@System@@XZ", 0x18000c6a0ull, RT_MINT_NAMED },
     { "?Write@VisitorStream@IO@@UEAA_NHPEBX@Z", 0x1800bb030ull, RT_MINT_NAMED },
@@ -1543,8 +1567,8 @@ static const RtMintVSlot kVSlots62[] = {
     { "?GetCurrentPos@VisitorStream@IO@@UEBAIXZ", 0x1800bb000ull, RT_MINT_NAMED },
     { "?GetSize@VisitorStream@IO@@UEBAIXZ", 0x1800baff0ull, RT_MINT_NAMED },
 };
-static void* kVTable62[7];
-static const RtMintTrapFn kVTraps62[] = { &RtMintTrapStub_62_0, &RtMintTrapStub_62_1, &RtMintTrapStub_62_2, &RtMintTrapStub_62_3, &RtMintTrapStub_62_4, &RtMintTrapStub_62_5, &RtMintTrapStub_62_6 };
+static void* kVTable63[7];
+static const RtMintTrapFn kVTraps63[] = { &RtMintTrapStub_63_0, &RtMintTrapStub_63_1, &RtMintTrapStub_63_2, &RtMintTrapStub_63_3, &RtMintTrapStub_63_4, &RtMintTrapStub_63_5, &RtMintTrapStub_63_6 };
 
 static RtMintVtable kMintVtables[] = {
     { nullptr, 0x1801554a8ull, 5, kVSlots0, kVTable0, kVTraps0, "adjacent-export:??_7BinaryFileStream@IO@@6B@" },
@@ -1599,17 +1623,18 @@ static RtMintVtable kMintVtables[] = {
     { "??_7SpriteSheet@UI@@6B@", 0x180154590ull, 9, kVSlots49, kVTable49, kVTraps49, "tail-not-a-pointer" },
     { "??_7Stream@Audio@@6B@", 0x180154950ull, 2, kVSlots50, kVTable50, kVTraps50, "adjacent-export:??_7FileStream@IO@@6B@" },
     { "??_7Stream@IO@@6B@", 0x1801549a0ull, 7, kVSlots51, kVTable51, kVTraps51, "tail-not-a-pointer" },
-    { "??_7SunLight@Graphics@@6B@", 0x180158e10ull, 11, kVSlots52, kVTable52, kVTraps52, "tail-not-a-pointer" },
-    { "??_7TextFileStream@IO@@6B@", 0x180155980ull, 10, kVSlots53, kVTable53, kVTraps53, "ctor-stamped-neighbour: ??_7TextFileStream@IO@@6B@. adjacent-export bounds it at ??_7VisitorStream@ (0x180155a20) = 20 slots; the real table is 10, and 0x1801559d0 starts a separate UNEXPORTED IO::Encoding table. Proof: ??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z at 0x1800ba431 is LEA RAX,[0x1801559d0] -> MOV [RSI],RAX into a fresh allocation it then installs at Stream::encoding (+0x10); Ghidra's xrefs to 0x1801559d0 are that ctor and only that ctor. Slot 9 is ?Create@TextFileStream@IO@@ (0x1800ba940) and slot 10 would be 0x1800b9ab0, the head of a different descending method group. runtime/types/io/FileStream.h has said 10 since Wave 11." },
-    { "??_7Thread@System@@6B@", 0x180155f20ull, 2, kVSlots54, kVTable54, kVTraps54, "tail-not-a-pointer" },
-    { "??_7ToolTipDialog@UI@@6B@", 0x180157880ull, 10, kVSlots55, kVTable55, kVTraps55, "adjacent-export:??_7DialogLoaderLoopT@Engine@@6B@" },
-    { "??_7UpdateLoop@Engine@@6B@", 0x180155ba0ull, 12, kVSlots56, kVTable56, kVTraps56, "tail-not-a-pointer" },
-    { "??_7VertexBufferData@Video@@6B@", 0x180158ac0ull, 7, kVSlots57, kVTable57, kVTraps57, "adjacent-export:??_7IndexBufferData@Video@@6B@" },
-    { "??_7VertexLayoutData@Video@@6B@", 0x180158aa8ull, 3, kVSlots58, kVTable58, kVTraps58, "adjacent-export:??_7VertexBufferData@Video@@6B@" },
-    { "??_7VertexProgramData@Video@@6B@", 0x180158a90ull, 3, kVSlots59, kVTable59, kVTraps59, "adjacent-export:??_7VertexLayoutData@Video@@6B@" },
-    { "??_7VideoProgramData@Video@@6B@", 0x180158a48ull, 3, kVSlots60, kVTable60, kVTraps60, "adjacent-export:??_7RenderStateData@Video@@6B@" },
-    { "??_7Visitor@IO@@6B@", 0x1801558b0ull, 26, kVSlots61, kVTable61, kVTraps61, "adjacent-export:??_7TextFileStream@IO@@6B@" },
-    { "??_7VisitorStream@IO@@6B@", 0x180155a20ull, 7, kVSlots62, kVTable62, kVTraps62, "tail-not-a-pointer" },
+    { "??_7StringTable@UI@@6B@", 0x180154630ull, 9, kVSlots52, kVTable52, kVTraps52, "adjacent-export:??_7GoalInstance@Achievement@@6B@" },
+    { "??_7SunLight@Graphics@@6B@", 0x180158e10ull, 11, kVSlots53, kVTable53, kVTraps53, "tail-not-a-pointer" },
+    { "??_7TextFileStream@IO@@6B@", 0x180155980ull, 10, kVSlots54, kVTable54, kVTraps54, "ctor-stamped-neighbour: ??_7TextFileStream@IO@@6B@. adjacent-export bounds it at ??_7VisitorStream@ (0x180155a20) = 20 slots; the real table is 10, and 0x1801559d0 starts a separate UNEXPORTED IO::Encoding table. Proof: ??0TextFileStream@IO@@QEAA@AEBVString@System@@0H@Z at 0x1800ba431 is LEA RAX,[0x1801559d0] -> MOV [RSI],RAX into a fresh allocation it then installs at Stream::encoding (+0x10); Ghidra's xrefs to 0x1801559d0 are that ctor and only that ctor. Slot 9 is ?Create@TextFileStream@IO@@ (0x1800ba940) and slot 10 would be 0x1800b9ab0, the head of a different descending method group. runtime/types/io/FileStream.h has said 10 since Wave 11." },
+    { "??_7Thread@System@@6B@", 0x180155f20ull, 2, kVSlots55, kVTable55, kVTraps55, "tail-not-a-pointer" },
+    { "??_7ToolTipDialog@UI@@6B@", 0x180157880ull, 10, kVSlots56, kVTable56, kVTraps56, "adjacent-export:??_7DialogLoaderLoopT@Engine@@6B@" },
+    { "??_7UpdateLoop@Engine@@6B@", 0x180155ba0ull, 12, kVSlots57, kVTable57, kVTraps57, "tail-not-a-pointer" },
+    { "??_7VertexBufferData@Video@@6B@", 0x180158ac0ull, 7, kVSlots58, kVTable58, kVTraps58, "adjacent-export:??_7IndexBufferData@Video@@6B@" },
+    { "??_7VertexLayoutData@Video@@6B@", 0x180158aa8ull, 3, kVSlots59, kVTable59, kVTraps59, "adjacent-export:??_7VertexBufferData@Video@@6B@" },
+    { "??_7VertexProgramData@Video@@6B@", 0x180158a90ull, 3, kVSlots60, kVTable60, kVTraps60, "adjacent-export:??_7VertexLayoutData@Video@@6B@" },
+    { "??_7VideoProgramData@Video@@6B@", 0x180158a48ull, 3, kVSlots61, kVTable61, kVTraps61, "adjacent-export:??_7RenderStateData@Video@@6B@" },
+    { "??_7Visitor@IO@@6B@", 0x1801558b0ull, 26, kVSlots62, kVTable62, kVTraps62, "adjacent-export:??_7TextFileStream@IO@@6B@" },
+    { "??_7VisitorStream@IO@@6B@", 0x180155a20ull, 7, kVSlots63, kVTable63, kVTraps63, "tail-not-a-pointer" },
 };
 
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from

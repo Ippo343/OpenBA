@@ -1,0 +1,607 @@
+# WAVE 26 LANE FACTORY
+
+Branch `wave26/factory` off `wave26/base` (`7de42dd1`).
+
+Scope: the named cutover wall of attempt 26, and the size of the family behind it.
+
+---
+
+## 0. THE HEADLINE
+
+**The wall is not one function. It is 206 factory slots, and on `wave26/base`
+*every single one of them* was an abort trap. MEASURED, not inferred.**
+
+```
+run A (wave26/base behaviour, BANISHED_RT_UISTRTAB=0):
+[RtMint] BaseTypeInfo factories: 104 rows x 2 slots = 208;
+           0 PORTED, 206 ABORT-TRAP, 2 absent in retail too (no factory name)
+run C (this lane's port, default env):
+           2 PORTED, 204 ABORT-TRAP, 2 absent in retail too
+```
+
+`?CreateNewObject@StringTable@UI@@` — the one name attempt 26 printed — is one of
+**104 minted `?_typeInfo@...@` rows**, each carrying **two** factory slots
+(`factoryFn` +0x20, `inPlaceFactoryFn` +0x28). Attempt 27 will hit the next one,
+attempt 28 the one after. **At one name per boot, enumerating this family costs
+~200 cutover attempts.** That is the finding this lane exists to hand forward;
+§4 says what to do with it.
+
+### 0.1 A number that disagrees with itself, and which one to believe
+
+The static screen (§2.1) says **2 present**; the live screen (§2.2) said **0
+ported** on the same tree state. **Both are right and the live one is the one to
+quote.** `Dialog@UI` — the only factory the tree held before this lane — is
+registered by `dialog_factory.cpp` **only under the opt-in `BANISHED_RT_DLGFACTORY`,
+which is unset by default**. So it is ported in SOURCE and absent from the
+REGISTRY, which is exactly the shape
+`reference_half_registered_port_reads_as_absent.md` warns about, arriving here
+from the opposite direction: a source grep reported a port the running process
+did not have.
+
+**Consequence for cutover, and it is not cosmetic:** had this lane ported 100
+factories behind opt-in switches, the cutover would have hit all 100 walls anyway
+and the static census would have read 100/104. The gate is the REGISTRY, not the
+tree.
+
+## 1. PART A — the one function (MEASURED)
+
+### 1.1 What was ported
+
+Three rows, all exported, all verified present in the export directory **by RVA
+with pefile**, not asserted from a comment
+(`reference_aeaa_is_private_not_unexported.md`):
+
+| symbol | retail VA | ord |
+|---|---|---|
+| `??0StringTable@UI@@QEAA@XZ` | `0x18011d890` | 421 |
+| `?CreateInPlaceObject@StringTable@UI@@SAPEAVBase@Object@@PEAX@Z` | `0x180002330` | 1979 |
+| `?CreateNewObject@StringTable@UI@@SAPEAVBase@Object@@XZ` | `0x180002280` | 2116 |
+
+Files:
+* `runtime/src/ui/stringtable_factory.cpp` — the three bodies + registration
+* `runtime/types/ui/StringTable.h` — extended with the full `UiStringTable`
+  layout (0x30 bytes, seven static_asserts)
+* `runtime/src/ui/rt_ui_port.cpp` — one `extern` + one call
+
+Kill switch `BANISHED_RT_UISTRTAB`, **default ON**. That differs deliberately
+from `dialog_factory.cpp`'s opt-in `BANISHED_RT_DLGFACTORY`: that file is a Wave
+11 *experiment*; this one's whole job is to be registered before
+`RtDataMintInit()` runs, and a registration that does not happen cannot clear a
+trap. `RtUiPortInit()` (`standalone/resolve_standalone.cpp:333`) precedes
+`RtDataMintInit()` (`:406`) — that ordering is what makes it work, and it was
+read, not assumed.
+
+### 1.2 Absence established before a line was written
+
+`reference_grep_for_the_port_before_writing_it.md` (three lanes in one wave
+re-ported what the tree already had) and
+`reference_half_registered_port_reads_as_absent.md`. Greps **scoped to the source
+roots**, both by NAME and by ADDRESS:
+
+```
+grep -rn 'StringTable@UI@@SAPEAVBase'  runtime/ code/ standalone/ engine/ dx11/
+    -> standalone/rt_data_mint_tables.inc ONLY (the minted row itself)
+grep -rn '18011d890\|180002280\|180002330' <same roots>
+    -> NOTHING
+```
+
+### 1.3 The bodies
+
+Read off the **disassembly**, not the decompiler
+(`reference_ghidra_c_output_vs_disassembly.md`). The full transcription with
+per-instruction addresses is in the file banner. Two things worth carrying here:
+
+* **The allocation size is read off the ALLOCATION, not inferred from the
+  stores.** `MOV EDX,0x30 / LEA R8D,[RDX-0x28]` at `0x1800022b1` gives size 0x30,
+  align 8. The eight ctor stores then cover `0x00..0x2f` with **no hole**, which
+  corroborates 0x30 rather than being its source. (A `.pdata` extent would have
+  been a *lower* bound — `reference_pdata_is_a_lower_bound_on_function_extent.md`
+  — and was not used.)
+* **`?CreateNewObject@StringTable@UI@@`'s lock/Allocate/unlock prologue was
+  compared instruction-by-instruction against `?CreateNewObject@Dialog@UI@@`'s**
+  rather than assumed to match from resemblance
+  (`reference_a_written_recipe_can_be_wrong.md`). The only differing bytes are
+  the size immediate and the LEA displacement that derives align 8 from it. So
+  `dialog_factory.cpp`'s transcription as a call to the out-of-line locked
+  wrapper `?MemAlloc@System@@` (`0x1800c7a50`) is exactly right here too.
+
+Retail's two null checks (`0x1800022da` allocation failure, `0x180002341`
+caller-supplied null) are **retail's own branches**, reproduced, not guards added
+by this lane. The two dead vptr stores (`??_7Base@`, then `??_7External@`, both
+overwritten unread by `??_7StringTable@`) are kept, for the reason
+`wave24_lane_gfxmat.cpp` states: a port that writes only the final one is a
+different function under any interruption, and a byte oracle would not notice.
+
+### 1.4 Verification — the trap goes quiet
+
+See §3. The measurement is a **two-run positive control** on the same exe.
+
+---
+
+## 2. PART B — the family, derived twice (MEASURED)
+
+Two independent derivations, one static and one live, and they are independent in
+the way that matters: the static one reads **source text**, the live one reads
+**the port registry through the mint's own doors**.
+
+### 2.1 Static derivation — `tools/mint_factory_census.py` (NEW)
+
+Parses `standalone/rt_data_mint_tables.inc` for all 104 minted BaseTypeInfo rows
+and their slot-0 factory names, then asks whether that literal appears anywhere
+in `runtime/ standalone/ code/ engine/` (1,528 files, the mint table itself
+excluded — including it would have turned "102 unported" into "0 unported").
+
+On `wave26/base`, before this lane's port:
+
+```
+BaseTypeInfo rows parsed: 104
+slot-0 factory NAME present somewhere in the tree:   1   (Dialog@UI)
+slot-0 factory NAME absent from the whole tree:    102
+rows with NO factory at all (nullptr in retail too):  1   (Base@Object)
+```
+
+On this branch, after it: **2 present, 101 absent** (the new row is
+`StringTable@UI` → `runtime/src/ui/stringtable_factory.cpp`).
+
+**Two blind spots, both stated.** It is a LITERAL grep, so it is blind to a
+registration spelled through a named constant
+(`reference_census_cannot_see_nonliteral_registrations.md`,
+`reference_literal_grep_blind_to_variables.md`); and a name that appears only in
+a **comment** reads as present
+(`reference_uncommented_checker_manufactures_work.md`), so "present" here is an
+UPPER bound on ported-ness. §0.1 is that upper bound being loose by 100%: it
+reported 2 where the running process had 0.
+
+### 2.2 Live derivation — `[RtMint] BaseTypeInfo factories:` (NEW)
+
+Added to `standalone/rt_data_mint.cpp` (`RtMintReportTypeInfoFactories()`, printed
+from `RtDataMintInit()`). It does **not** re-implement "is it ported?" — it
+re-reads the verdict `MintTypeInfos()` already wrote into the storage block, by
+comparing each row's `factoryFn`/`inPlaceFactoryFn` against that row's own trap
+stub address. It therefore **cannot disagree with the mint**, which is the point
+(`reference_two_checks_one_hidden_premise.md` is about two checks that *share* a
+premise and pretend to be independent; this one *declares* that it shares one).
+
+It names its subject explicitly (all 104 rows × 2 slots), because a screen that
+cannot name its subject manufactures work
+(`reference_a_screen_that_cannot_name_its_subject.md`).
+
+`BANISHED_RT_MINT_FACTORYLIST=1` prints the full roster of unported slots — the
+whole family in **one** run instead of one name per cutover attempt.
+
+Measured output: see §3.
+
+### 2.3 The bias check the brief asked for
+
+> *a screen that reports "0 unported factories" would be indistinguishable from a
+> dead parser.*
+
+The screen is exercised in **both** directions, on the same build:
+
+* **positive control** — a run with `BANISHED_RT_UISTRTAB=0` (the port compiled
+  in but *not registered*). The roster must still name
+  `?CreateNewObject@StringTable@UI@@`. §3 run A.
+* **negative control** — the default run, port registered. That row must
+  **leave** the roster and the trapped count must drop by exactly **2** (both
+  slots), not by 1 and not by some other number. Diffing the SET, not just the
+  count (`reference_diff_the_set_not_the_count.md`). §3 run B.
+
+The static screen gets the same treatment for free: it reports `Dialog@UI` as
+present (a factory known ported) and `StringTable@UI` as absent (a factory known
+unported) in the same pass.
+
+---
+
+## 3. THE RUNS (MEASURED)
+
+Three runs, one exe, `md5 cc1a396f5c5ea6fd9ff49f8a053dba63`, **verified against
+the deployed copy immediately before each launch** (WAVE26_KICKOFF standing
+warning 1). Game-dir lock held by `lane-FACTORY` for all three; acquired
+foreground and blocking (waited 330s behind lane ATTEND), never piped, never
+backgrounded. Released after run C.
+
+| run | env | `[RtMint] BaseTypeInfo factories` | exit | crash log |
+|---|---|---|---|---|
+| A | `BANISHED_RT_UISTRTAB=0` (port compiled in, **not registered**) | `0 PORTED, 206 ABORT-TRAP` | 0 | 0 bytes |
+| B | `BANISHED_RT_UISTRTAB=2` (registered + effectiveness control) | `2 PORTED, 204 ABORT-TRAP` | 0 | 0 bytes |
+| C | default (nothing set) | `2 PORTED, 204 ABORT-TRAP` | 0 | 0 bytes |
+
+All three `BANISHED_AUTOQUIT=1` menu-only runs.
+
+### 3.1 The trap went quiet — and the SET moved, not just the count
+
+`reference_diff_the_set_not_the_count.md`: a count that moves the right direction
+by the right amount can still hide a swap. The rosters were diffed as sets:
+
+```
+comm -23 rosterA rosterB   (cleared by the port)
+    ?CreateInPlaceObject@StringTable@UI@@SAPEAVBase@Object@@PEAX@Z
+    ?CreateNewObject@StringTable@UI@@SAPEAVBase@Object@@XZ
+comm -13 rosterA rosterB   (regressions)
+    <empty>
+```
+
+Exactly the two intended rows left, nothing else moved in either direction.
+`[RtPort] UI: 209 -> 212 exports registered` (+3: the ctor and both factories).
+
+### 3.2 The screen's bias check, both directions
+
+* **Positive control (run A).** The port is in the binary but unregistered; the
+  roster must still name it — and did, at lines 312-313:
+  `[RtMint]   [ 92] slot0 0x180002280  ?CreateNewObject@StringTable@UI@@...`.
+  A "0 unported" reading from this screen is therefore distinguishable from a
+  dead parser, because the screen was HANDED a shape and found it
+  (`reference_absence_screen_must_be_handed_a_shape.md`).
+* **Negative direction (runs B/C).** The same row disappears when, and only when,
+  the registration happens.
+* **Static screen (`--self-test`).** Both controls PASS: `Dialog@UI` in the
+  present bucket, `SpriteSheet@UI` in the absent bucket.
+
+### 3.3 The body's own effectiveness control (run B)
+
+```
+[RtPort] UI::StringTable CONTROL FIRED (attendance 0 -> 1, returned the buffer,
+         tail zeroed, vptr=00007fff243b4630)
+```
+
+`...4630` is `??_7StringTable@UI@@6B@` (`0x180154630`) at this run's ASLR slide —
+so the vptr stamp resolved through `RT_DATA_SLOT` to the real vtable, the tail
+`0x08..0x2f` came back zeroed, and `CreateInPlaceObject` returned its argument.
+
+### 3.4 What run B's attendance does NOT say
+
+```
+[RtPort] UI::StringTable factory ATTENDANCE: ctor=1 CreateNewObject=0 (null=0)
+         CreateInPlaceObject=1 (null=0) control=1
+[RtPort] UI::StringTable factory VERDICT: the ONLY entries were the control's own.
+```
+
+**This lane's bodies were never entered by the game.** That is EXPECTED with the
+DLL present and is stated by the instrument itself rather than left for a reader
+to notice: Wave 11 lane OBJINT measured that the DLL reaches its own factories
+through an in-module function pointer, which is not a door
+(`reference_a_ported_row_can_be_permanently_unpromotable.md`). A zero here is not
+"verified" (`reference_uncalled_port_is_not_verified.md`). The port is verified
+against the **disassembly** and against the **mint's trap**; it is *not* verified
+against a live route, and no run in this lane could have provided one.
+
+## 4. WHAT IT MEANS FOR CUTOVER (INFERENCE, labelled)
+
+**This wall is 204 remaining function bodies across ~102 classes, not one, and
+Wave 27's right answer is a GENERATOR, not a porting lane.** The brief asked for this verdict explicitly and
+the measurement supports the strong form of it.
+
+The inference, stated so it can be attacked:
+
+1. **The bodies are a family, not a hundred unrelated functions.** Every
+   `CreateNewObject` read so far is the same six-line shape: locked `MemAlloc(N,
+   8)`, retail's null check, an inlined ctor, return. Every `CreateInPlaceObject`
+   is the same four-line shape. The *variable* parts are (a) the allocation size,
+   (b) the vptr sequence the inlined ctor stamps, (c) the zeroed field extent —
+   all three of which are **readable from the disassembly mechanically**.
+2. **Therefore the marginal cost per row is dominated by the ctor, not the
+   factory.** `StringTable`'s ctor was 8 stores. `MaterialInstance`'s (already
+   ported, `wave24_lane_gfxmat.cpp`) was 16. A generator that emits the factory
+   pair and leaves the ctor as a named hole would close the *factory* half of all
+   206 slots and leave a much smaller, much more uniform residue.
+3. **The caveat that keeps this honest.** Wave 11 lane OBJINT measured that
+   porting and registering a factory does **not** put our body on the DLL's
+   creation path while the DLL is present — the DLL reaches its own factories
+   through an in-module function pointer stamped by a static initialiser, and
+   that is not a door
+   (`reference_a_ported_row_can_be_permanently_unpromotable.md`). So **every one
+   of these 204 rows will register with attendance 0 in an ordinary run.** That
+   is expected, not a defect, and it must not be read as "ported and verified"
+   (`reference_uncalled_port_is_not_verified.md`). The value of porting them is
+   *entirely* at cutover, where the minted BaseTypeInfo is the only node there
+   is. A lane that ports fifty of these and reports fifty green attendance zeros
+   has measured nothing.
+4. **Consequence for how Wave 27 should be scoped.** Not "port N factories" —
+   that population is real but unverifiable one row at a time. Scope it as: a
+   generator that emits all 206 slots from the disassembly, plus **one** cutover
+   attempt that either passes this wall entirely or names a wall of a *different
+   shape*. The pass/fail of the whole generator is a single boot.
+5. **And it must register by DEFAULT.** §0.1 is the trap waiting for that lane:
+   `Dialog@UI` has been ported since Wave 11 and contributed **nothing** to the
+   live count because its switch is opt-in. A generator that emits 204 bodies
+   behind opt-in switches would move the static census to 104/104 and the cutover
+   wall not at all.
+
+---
+
+## 5. WHAT THIS LANE DID **NOT** DO
+
+* It did **not** verify the ported bodies against a live route. There is none
+  with the DLL present (§4.3), and this lane did not fabricate one. The
+  `BANISHED_RT_UISTRTAB=2` effectiveness control exercises
+  `CreateInPlaceObject` on a stack buffer and checks the returned pointer and the
+  zeroed tail — that is a control on the *instrument*, **not** an oracle on the
+  body.
+* It did **not** run a cutover attempt. That is lane ATTEND's.
+* It did **not** port the other 204 slots.
+
+---
+
+## 6. RESIDUALS — each with an ADDRESSEE
+
+An expiry clause naming a condition but no addressee never fires
+(`reference_expiry_clause_needs_an_addressee.md`), so each of these names who.
+
+1. **To the WAVE 27 INTEGRATOR, before scoping a factory lane:** re-derive the
+   number, do not quote this document's. One command, no build:
+   `python tools/mint_factory_census.py --self-test --expect-unported
+   "?CreateNewObject@SpriteSheet@UI@@SAPEAVBase@Object@@XZ"`. If the
+   `--expect-unported` subject has since been ported the control will FAIL loudly
+   rather than pass vacuously — pick another absent row from the roster and say
+   which in the wave doc.
+2. **To LANE ATTEND, on attempt 27:** the wall should now move OFF
+   `StringTable@UI` (measured: its two slots are the only ones that left the
+   roster). If attempt 27 dies on a `[RtMint] FATAL: minted BaseTypeInfo::
+   factoryFn is not ported` naming *any other* symbol, that is this lane's
+   prediction coming true, not a regression. Add `BANISHED_RT_MINT_FACTORYLIST=1`
+   to `tools/cutover_attempt26.sh` and the whole remaining roster lands in one
+   log instead of one name per attempt.
+3. **To whoever next touches `dialog_factory.cpp`:** its opt-in
+   `BANISHED_RT_DLGFACTORY` is now the ONLY reason a factory ported nine waves
+   ago reads as unported to the live screen. That was correct while the file was
+   a Wave 11 experiment. It is a cutover blocker now. Flipping it to default-on
+   is a one-line change this lane deliberately did NOT make, because it would
+   have moved a second variable inside the same A/B that validates this port's
+   own screen (`reference_probe_needs_an_effectiveness_control.md`).
+5. **To LANE DELDTOR / whoever owns `runtime/src/object/deleting_dtor.cpp`:**
+   `??_7StringTable@UI@@6B@` slot 0 (`0x180002740`, the scalar deleting
+   destructor) is now one of exactly TWO traps left on a row that is otherwise
+   7/9. It is a member of your family, not of this file. `?Serialize@StringTable@UI@@`
+   (`0x18011d940`) is the other and is unowned — this lane did not read it.
+6. **To the WAVE 27 GENERATOR AUTHOR, and this is the one that saves work:**
+   see §8.2. You do NOT need a second generator for the 82 missing vtable rows.
+   Emitting a factory whose vptr stamp goes through `RT_DATA_SLOT` with the
+   vtable's mangled name as a LITERAL makes `rt_mint_gen.py` harvest that vtable
+   on the next regeneration, because its population rule is "mint what our source
+   names". Verify it the way this lane did — `rt_mint_gen.py --check` should
+   report the row under `ENTERED`, before you regenerate.
+7. **To the WAVE 26 INTEGRATOR:** this lane REGENERATED
+   `standalone/rt_data_mint_tables.inc` (63 -> 64 vtables). That file is
+   generated, so resolve any conflict by re-running `tools/rt_mint_gen.py` on the
+   merged tree rather than by hand-merging, and check `--check` reads UP TO DATE
+   afterwards.
+8. **To LANE INT33, or whoever the Wave 27 integrator gives the address-keyed
+   rows to:** `Collection::Array<ExternalArrayElement>::SetSize` (`0x18002c6a0`)
+   is the live cutover frontier as of attempt 29 and is an unexported
+   address-keyed row, i.e. your bucket, not FACTORY's. This lane read it and
+   deliberately did not adopt it. **Read §9.2 before pattern-matching it onto the
+   three ported sibling instantiations — they are POD-element arrays and this one
+   is not, and the difference is a refcount leak no byte oracle on `SetSize`
+   would catch.**
+4. **To this lane's reviewer:** the three ported bodies have **attendance 0 from
+   the game** and there is no route to give them one with the DLL present (§3.4).
+   If that is not an acceptable verification standard for a merge, the correct
+   response is to hold the merge, not to invent a route — and the right place to
+   get one is a cutover boot, which is lane ATTEND's.
+
+---
+
+## 7. CORROBORATION AND ONE CAVEAT FROM LANE ATTEND (not this lane's measurement)
+
+Lane ATTEND ran cutover attempt 27 on `wave26/base` **without** this lane's port
+(`docs/runtime_port/WAVE26_LANE_ATTEND.md`, `wave26/attend` `813155ec`). Reported
+to this lane, and recorded here as THEIR measurement, not mine:
+
+* **The wall is stable.** Reproduced 3 times across 2 exes, identical symbol.
+  `BANISHED_RT_MAINLOOPFRAME=0` is not load-bearing for it (own control arm).
+* **CAVEAT, and it narrows this lane's claim.** Without `BANISHED_RT_MINT=1` the
+  boot never reaches the factory wall at all — it dies earlier, in
+  `Game::LoadInputNameTables → ExternalFactory::FindOrLoad → RtObject_External_Load`,
+  on `??_7FileStream@IO@@6B@` / `??_7CompressedFileStream@IO@@6B@` resolving NULL.
+
+So the honest statement of this lane's scope is: **the 206-slot family is a wall
+for a cutover that publishes the minted rows.** The blanket `BANISHED_RT_MINT=1`
+is what publishes them today, and WAVE26_KICKOFF §"AN OPEN DISCREPANCY" plus
+integrator item **C3** propose not using it at cutover. If C3 wins, this family
+stops being the frontier until ~104 blanket-only mint rows get a publisher — and
+it becomes the frontier again the moment they do. **The work is not wasted under
+either outcome; only its position in the queue changes.** Note also that the §2.2
+screen is unaffected either way: `MintTypeInfos()` fills the storage block
+unconditionally, so the roster prints in an ordinary run with no mint switch set
+(runs A/B/C above set none).
+
+---
+
+## 8. SECOND AND THIRD PASS — the wall moved one row, not one class (MEASURED)
+
+Lane ATTEND ran cutover attempt 28 with §1's port merged. **The `[RtMint] FATAL`
+on `?CreateNewObject@StringTable@UI@@` was gone**, and this lane's screen printed
+from inside a real cutover boot: `2 PORTED, 204 ABORT-TRAP`. So the registration
+reaches `RtDataMintInit()` on the cutover path, which is the half of my prediction
+that held.
+
+**The half that did not:** the wall did not move to another *factory*. It moved to
+a **missing vtable row on the class I had just ported** —
+`??_7StringTable@UI@@6B@` — as an ACCESS_VIOLATION, `READ of 0x10` at
+`RtObject::GetTypeIdVirtual+0x1f`, a few instructions further along the same
+`External::Load` path. My `CreateNewObject` ran, stamped a vptr the mint did not
+carry, and the next virtual call went through null.
+
+### 8.1 THE PARALLEL FAMILY, and it is the same 104 classes
+
+A ported factory needs its class's **vtable row** too. Sized with the new
+`--vtables` screen (`tools/mint_factory_census.py --vtables`):
+
+```
+before this lane's second pass:   TI classes WITHOUT a minted vtable row: 83
+after:                                                                    82
+```
+
+**So the cutover gap on these 104 classes is TWO gaps, not one:** 204 factory
+slots *and* 82 vtable rows, on the same population. §4's generator has to emit
+both or it produces exactly the state attempt 28 hit — a constructed object whose
+vptr nothing fills. The screen moving 83 → 82 in the expected direction on a
+known change is its own effectiveness check.
+
+### 8.2 THE FINDING THAT MOST CHANGES WAVE 27's DESIGN
+
+**The vtable row cost nothing to add.** `rt_mint_gen.py`'s population rule is
+"mint what our SOURCE names", and §1's `StringTableVTable()` already spells
+`"??_7StringTable@UI@@6B@"` as a literal for its vptr stamp. So `--check` came
+back `ENTERED (1): 0x180154630 ??_7StringTable@UI@@6B@` and a plain regeneration
+picked it up — no new harvest rule, no `EXTRA_VTABLES` entry, no hand-added row.
+
+**A ported factory that stamps its class's vtable through `RT_DATA_SLOT` drags
+that vtable into the mint for free.** That is a property of the generator's
+existing rule, not of StringTable, and it means the 82-row gap closes as a
+*side effect* of the factory generator rather than needing a second one.
+
+(`reference_mint_population_rule_blind_to_its_own_output.md` is the same rule
+seen from its failure side; this is the rule working.)
+
+### 8.3 What was ported in the second and third pass
+
+The regenerated row has 9 slots. Three read the class's own `?_typeInfo@` node
+and are the shape `graphics_typeinfo_accessors.cpp` and
+`object_typeinfo_accessors.cpp` already ported fifteen times between them:
+
+| slot | symbol | VA | body |
+|---|---|---|---|
+| 1 | `?TypeName@StringTable@UI@@UEBAPEBDXZ` | `0x180002190` | `MOV RAX,[0x1801fae10]` = node+0x08 |
+| 2 | `?Type@StringTable@UI@@UEBAIXZ` | `0x180002170` | `MOV EAX,[0x1801fae08]` = node+0x00 |
+| 3 | `?GetFileVersion@StringTable@UI@@UEBAHXZ` | `0x18011d930` | `MOV EAX,1` |
+
+**Slot 2 is the one `GetTypeIdVirtual` was calling.** The fault offset (`+0x10`)
+and the generated slot table (`kVSlots52[2]`) agree on that independently — the
+diagnosis was not fitted to the symptom.
+
+Three more are transcriptions of bodies §1 already contained:
+
+| slot | symbol | VA | body |
+|---|---|---|---|
+| 6 | `?Reconstruct@StringTable@UI@@` | `0x180002390` | `vt[0](this,0)` then the eight ctor stores |
+| 7 | `?Destruct@StringTable@UI@@` | `0x180002460` | 3 instructions: **tail call through the object's own vptr**, slot 0, flag 0 |
+| 8 | `?Construct@StringTable@UI@@` | `0x180002400` | instruction-for-instruction `?CreateInPlaceObject@`, diffed rather than assumed |
+
+`?Destruct@` is reproduced as a **virtual dispatch**, not a direct call to
+`??1StringTable@UI@@`. Those are the same thing only while slot 0 is retail's,
+and a direct call would silently stop following a promotion.
+
+### 8.4 Measured result
+
+`BANISHED_RT_MINT_SHADOW=1`, exe `60d3e9f7422fc40e0c737b2fb7df91ab`, md5-verified
+against the deployed copy, lock held, exit 0, 0-byte crash log:
+
+```
+run E (after pass 2): BLOCKED ??_7StringTable@UI@@6B@  slots=9 ported=4 TRAP=5
+run F (after pass 3): BLOCKED ??_7StringTable@UI@@6B@  slots=9 ported=7 TRAP=2
+[RtMint] minted 64 vtables (589 slots: 358 ported, 88 unported-trap, 143 purecall-trap)
+[RtMint] 41 of 64 vtables are COMPLETE
+```
+
+(The 4th of run E's "ported" is `?Compile@External@Object@@`, already in the tree
+— not one of mine. Saying so because a count that moves by the right amount for
+the wrong reason is this project's most repeated defect.)
+
+### 8.5 STILL BLOCKED, and by what — **do not read 7/9 as done**
+
+The two remaining traps are named rather than left to be rediscovered:
+
+* **slot 0** — the scalar deleting destructor at `0x180002740`. Not trivial: it
+  branches on the flag, calls `??1StringTable@UI@@` (`0x18011d8f0`) through the
+  array-destroy helper `0x18007ec98`, and ends in `operator delete`. It belongs
+  to the `deleting_dtor.cpp` family (`BANISHED_RT_DELDTOR`), not to this file.
+* **`?Serialize@StringTable@UI@@`** — `0x18011d940`. Not read this lane.
+
+**Honest prediction for attempt 29, stated so it can be wrong:** the boot should
+get *past* `GetTypeIdVirtual` (slot 2 is ours now) and, if it dies on this class
+again, should die on one of those two — most likely `Serialize`, since
+`External::Load` is a deserialisation path. If it dies somewhere else entirely
+that is the expected shape: a gate names what it reached
+(`reference_the_boot_is_a_gate_not_a_planner.md`), and one name is one name.
+
+---
+
+## 9. ATTEMPT 29 — the wall left this lane's family (ATTEND's measurement)
+
+Lane ATTEND ran attempt 29 on `c1be6b7b`
+(`docs/runtime_port/WAVE26_LANE_ATTEND.md` §7.1, `wave26/attend` `d5da5f1b`).
+Recorded here as THEIR measurement.
+
+**§8.5's primary prediction held: the boot gets past `GetTypeIdVirtual`.**
+Progress is *within* `RtObject_External_Load`, `+0x33c` → `+0x470`:
+
+```
+Fault: EXEC of 0x0          (a null function POINTER was called)
+  #1 ArraySetSize+0x4d
+  #2 RtObject_External_Load+0x470
+  #3 ExternalFactory::FindOrLoad+0x2b1
+  #4 Game::LoadInputNameTables
+```
+
+**§8.5's secondary guess (`?Serialize@StringTable@UI@@`) did not hit, and the
+wall is no longer on this lane's class at all.** Both of the two slots this file
+left trapped — the `0x180002740` deleting dtor and `Serialize` — remain
+**untested** by this run. They are still open, and attempt 29 is not evidence
+either way about them.
+
+### 9.1 The new wall is NOT this lane's, and is not being adopted
+
+`Collection::Array<ExternalArrayElement>::SetSize`, retail `0x18002c6a0`.
+
+This lane read it before handing it on, so the handoff carries facts rather than
+a pointer — but deliberately **did not port it**. It is a different family
+(`Collection::Array<T>`), it is an unexported address-keyed row (lane INT33's
+bucket, not FACTORY's), and it is ~110 instructions with grow, shrink, per-element
+construct/destroy and a locked free. Porting it from this lane would be drift on
+exactly the kind of body that produces a confident wrong port.
+
+### 9.2 THE TRAP IN THE OBVIOUS RECIPE — read this before pattern-matching
+
+ATTEND correctly noted that a sibling family is already ported in
+`achievement_manager.cpp`: `Array<bool>` (`0x180008b90`), `Array<Time>`
+(`0x180008ff0`), `Array<InternalPtr>` (`0x180008d60`). **Those three are the
+wrong template to copy from**, and the reason is visible in the disassembly
+before a line is written (`reference_a_written_recipe_can_be_wrong.md`):
+
+* all three siblings have **POD elements**, so their grow/shrink path is a
+  realloc plus a memcpy and nothing else;
+* this instantiation's element is `0x10` bytes containing a **refcounted
+  `System::String`**, and its body therefore calls **two per-element helpers the
+  POD instantiations never touch**:
+  * `0x1800067d0` (37 instructions) — per-element move/copy on the grow path,
+    at `18002c773`, including the `[RBX+8] -> [R14+8]` second-field carry;
+  * `0x180006ac0` (49 instructions) — destroy-range on the shrink and
+    free paths, at `18002c7d4` and `18002c82b`.
+
+A port that follows the sibling recipe would compile, run, and **leak or
+double-release a refcount**, which is exactly the class of defect no byte oracle
+on `SetSize` itself would catch.
+
+Two further facts for whoever takes it:
+* the free path is the **locked** allocator triple (`[0x1801fc718]+0x640`,
+  `[0x18014b390]` / `[0x18014b388]`, `?Free@` at `0x1800c6c00`) — the same shape
+  §1.3 describes for the allocation side, and `runtime/src/ui/stringtable_factory.cpp`
+  already has the `MemAllocLocked` idiom to mirror;
+* growth policy is not `capacity *= 2`. At `18002c6f1`-`18002c703` it is: only
+  when `newSize == oldSize + 1` **and** `oldSize != 0`, set capacity to
+  `newSize * 3`. Transcribe it, do not infer it.
+
+### 9.3 THE POSITIVE COUNTER-EXAMPLE, and it deserves naming
+
+ATTEND's best find is not the symbol. `runtime/src/object/external_load.cpp:147`
+**predicted this exact failure, in a comment, at the call site**: not exported in
+either build, a genuine address door, nothing in the tree registers it, "at
+cutover it needs a body or this call site needs to be revisited." Every clause
+correct; it fired as written.
+
+This wave's own memory index is mostly a catalogue of residuals that went stale,
+named no addressee, or masked each other
+(`reference_expiry_clause_needs_an_addressee.md`,
+`reference_cheap_wins_list_is_the_stalest_section.md`). **A residual that names
+its symbol, its condition AND its consequence, and that lives at the call site
+rather than in a wave doc, is the shape that worked.** That is a cheaper lesson
+than any of the failures it contrasts with.
+
+### 9.4 One flat number that is NOT a failure
+
+`[RtMint] BaseTypeInfo factories: 2 PORTED, 204 ABORT-TRAP` is **unchanged**
+between attempts 28 and 29. That is expected: §8's passes added *vtable slots*,
+not *factory slots*, and this screen counts only the latter. Written down because
+a flat line beside a claim of progress is exactly what gets read as "the work did
+not land". The evidence that it landed is the moved wall, not this line.
