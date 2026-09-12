@@ -1202,6 +1202,22 @@ const ArraySpec kSpec_I32Neg1 = {                 // 0x18007b960  Array<int>, fi
 const ArraySpec kSpec_Fill8 = {                   // 0x18001f990  Array<T*>
     "Array<ptr>", 8, 8, &Assign8, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
+// BATCH 4 — 0x18000c300, `Array<T>::SetSize(4)` for a 0x8ba0-byte element, the
+// one-argument constant-folded shape. Read off its own body:
+//   IMUL / `(longlong)capacity * 0x8ba0` at the MemAlloc  -> stride 0x8ba0
+//   MOV EDX,0x4                                           -> align 4
+//   the element copy is `memcpy(dst, src, 0x8ba0)` (retail hand-unrolls a
+//   16-byte SSE loop when both pointers are 16-aligned and calls `memcpy`
+//   otherwise — same bytes either way, so one memcpy is faithful)
+//   the copy loop's `else` arm does not exist: elements in [oldSize, 4) are
+//   LEFT UNINITIALISED, so `init` stays null.
+// The element size is the only thing about the type this lane can state: the
+// sole caller is Engine::Play (0x1800a0d10) and nothing there names it.
+void AssignBlob8ba0(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x8ba0); }
+const ArraySpec kSpec_Blob8ba0 = {                // 0x18000c300
+    "Array<blob0x8ba0>", 0x8ba0, 4, &AssignBlob8ba0, nullptr, nullptr, true,
+    0, 0, 0, 0, 0, 0 };
+
 const ArraySpec kSpec_Fill8Z = {                  // 0x180076900, 0x18007a0d0
     "Array<InternalPtr>(fill)", 8, 8, &Assign8Z, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
@@ -1210,6 +1226,14 @@ const ArraySpec kSpec_Fill4 = {                   // 0x180023830  Array<uint32>
 
 const ArraySpec kSpec_Fill16 = {                  // 0x18004f790, 0x18004f8e0
     "Array<callback16>", 0x10, 8, &Assign16, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
+// 0x180051aa0 — Graphics::ParticleSystem::AddEmitter's emitter-slot array.
+// Same 16-byte element and Assign16 as kSpec_Fill16, but the body's own
+// `MemAlloc(n << 4, 4)` passes align=4, not 8 (read from the body, not
+// assumed from the sibling row above) — a distinct spec so the allocator call
+// stays byte-faithful.
+const ArraySpec kSpec_Fill16A4 = {                // 0x180051aa0
+    "Array<EmitterSlot16>", 0x10, 4, &Assign16, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
 // WAVE 9 LANE UIF — Array<UI::SpriteDraw>, the sprite batch behind
 // SpriteContext::AddSpriteDraw (append, 0x180078520) and
@@ -1448,6 +1472,43 @@ const ArraySpec kSpec_StringRef = {               // 0x180034860
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x00, 0x08 };
 
+// --- Cutover closure batch 2: Graphics::Material::_parameters, 0x1800616c0 --
+//
+// Two-argument `SetSize(this, int)`, stride 0x18. Read out of 0x1800616c0's
+// own body:
+//   ASSIGN (element in range): zero +0x00, then AssignStringRef's zero-then-
+//     addref-copy of the String* at +0x00; +0x08..+0x17 copied verbatim as
+//     four dwords (one memcpy, no refcounted field in that half).
+//   INIT (grown past old size): all three qwords (+0x00..+0x17) zeroed.
+//   DESTROY: 0x180005880 (Collection_Array_MaterialParam_DestroyStrings, this
+//     file's `kD_Str_18at00` in array_destroy.cpp), called on both the
+//     realloc arm and the shrink-tail arm — read from the disassembly, not
+//     assumed from kSpec_StringRef's shape.
+// MemAlloc's align argument is 8 (`MOV EDX,8` at 0x1800617d9).
+void AssignStringPlus16(uint8_t* d, const uint8_t* s) {
+    AssignStringRef(d, s);                        // +0x00: String* ref
+    std::memcpy(d + 0x08, s + 0x08, 0x10);         // +0x08..+0x17: raw copy
+}
+void InitZero18(uint8_t* d) {
+    std::memset(d, 0, 0x18);
+}
+// Reached by ADDRESS, not a direct call into array_destroy.cpp's translation
+// unit — same door DestroyStringRange/DestroyVertexElement already use, so a
+// caller elsewhere in the tree that registers 0x180005880 differently is
+// picked up here too.
+void DestroyMaterialParamStrings(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180005880));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_MaterialParam = {           // 0x1800616c0
+    "Array<Material::Parameter>", 0x18, 8, &AssignStringPlus16, &InitZero18,
+    &DestroyMaterialParamStrings, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x08 };
+
 // --- WAVE 10 LANE UIORACLE -------------------------------------------------
 //
 // 0x180029a80, the TWO-ARGUMENT sibling of 0x180034860 -- the one
@@ -1623,6 +1684,87 @@ const ArraySpec kSpec_GraphSeries = {             // 0x1800417d0
     /*assign unwritten*/ 0x04, 0x08,
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x08, 0x18 };
+
+// --- 2026-09-12: the two Video::ShaderProgram instantiations ---------------
+//
+// Both are reached from ?Serialize@ShaderProgram@Video@@ (0x1800f5110) and its
+// PlatformSerialize (0x1800f52b0) — runtime/src/video/shaderprogram.cpp — and
+// both were read out of their own bodies, not inferred from the element type.
+//
+// 0x180055db0, Array<ShaderProgram::Parameter>:
+//   stride 0x10 (`SHL RCX,0x4` at 0x180055e01), align 8 (`MOV EDX,0x8`)
+//   TWO-ARGUMENT: nothing in the body homes or reads R8.
+//   assign  String adopt at +0x00 (`dst=0; if (src) { dst=src; ++[src-4] }`
+//           at 0x180055e53..0x180055e61), then the int at +0x08 and the BYTE at
+//           +0x0c. +0x0d..+0x0f is NEVER WRITTEN by either arm.
+//   init    `MOV [RAX],R14(=0)` / `MOV [RAX+8],R14D` / `MOV byte [RAX+0xc],0`
+//           at 0x180055e81 — the tail IS zeroed, so `init` is not null.
+//   destroy 0x18004fed0, the String release loop at stride 0x10 offset 0
+//           (array_destroy.cpp kD_Str_10 — the SAME spec 0x180026b50 uses, and
+//           for the same reason: that row is (stride 0x10, offs {0x00}) and
+//           this body computes exactly those two numbers itself).
+void AssignShaderParam(uint8_t* d, const uint8_t* s) {
+    void** dp = reinterpret_cast<void**>(d);
+    void* const* sp = reinterpret_cast<void* const*>(s);
+    dp[0] = nullptr;
+    void* str = sp[0];
+    if (str) {
+        dp[0] = str;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(str) - 4));
+    }
+    std::memcpy(d + 0x08, s + 0x08, 4);   // Parameter::dest
+    d[0x0c] = s[0x0c];                    // Parameter::internal (a BYTE)
+}
+void InitShaderParam(uint8_t* d) {
+    std::memset(d, 0, 0x0d);
+}
+void DestroyShaderParamRange(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18004fed0));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_ShaderParam = {             // 0x180055db0
+    "Array<ShaderProgram::Parameter>", 0x10, 8, &AssignShaderParam, &InitShaderParam,
+    &DestroyShaderParamRange, false,
+    /*assign unwritten*/ 0x0d, 0x10,
+    /*init   unwritten*/ 0x0d, 0x10,
+    /*seed zero       */ 0x00, 0x08 };
+
+// 0x180053f00, Array<Collection::Array<uint8>> — an array OF arrays, which is
+// the byte-code-per-backend list at ShaderProgram+0x40.
+//   stride 0x10 (`SHL RCX,0x4` at 0x180053f63), align 8, TWO-ARGUMENT.
+//   assign  ZEROES BOTH QWORDS FIRST (`MOV [RCX],R8(=0)` /
+//           `MOV qword [RCX+8],0` at 0x180053fad) and only then, if dst != src,
+//           calls Array<uint8>::operator= (0x180011220, already ported in
+//           runtime/src/io/modification.cpp). The zero-first is not cosmetic:
+//           operator= opens with ~Array on the DESTINATION, so a non-zero
+//           garbage buffer pointer there would be handed to MemFree.
+//   init    the same two zero stores, no operator= — whole stride written.
+//   destroy 0x18004ff80, the inner-array free loop at stride 0x10 offset 0
+//           (array_destroy.cpp kD_InnerArr_10).
+void AssignInnerArrayU8(uint8_t* d, const uint8_t* s) {
+    void** dp = reinterpret_cast<void**>(d);
+    dp[0] = nullptr;
+    dp[1] = nullptr;
+    if (d == s) return;                   // retail's `CMP RCX,RSI; JE` skip
+    using AssignFn = void* (*)(void*, const void*);
+    static AssignFn fn = reinterpret_cast<AssignFn>(ResolveAddr(Module::Runtime, 0x180011220));
+    fn(d, s);
+}
+void InitInnerArrayU8(uint8_t* d) {
+    std::memset(d, 0, 0x10);
+}
+void DestroyInnerArrayU8Range(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18004ff80));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_InnerArrayU8 = {            // 0x180053f00
+    "Array<Array<uint8>>", 0x10, 8, &AssignInnerArrayU8, &InitInnerArrayU8,
+    &DestroyInnerArrayU8Range, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x10 };
 
 // ============================================================================
 // Live instrumentation.
@@ -2005,6 +2147,10 @@ J1_ENTRY(18002a930)   // IO:          Persistence's save-list Array<T>
 // `~Array`, and freeing a buffer does not need to know what is in it — the
 // reason stated at the top of this section for why J1 has no parameters.
 J1_ENTRY(18000c4a0)   // Audio:       Audio::Stream's +0x30 Array<T>
+// Cutover closure batch 2 (2026-09-12): 0x180051ef0 has no element-destroy
+// CALL at all — just the allocator Enter/Free/Leave triple and the two zero
+// stores. Same J1 body, no new spec.
+J1_ENTRY(180051ef0)   // Audio:       EffectSlot-adjacent Array<T>, trivial T
 
 #undef J1_ENTRY
 
@@ -2133,6 +2279,13 @@ J3_ENTRY2(18002c6a0, kSpec_ExtArrayElem) // Object: External::_refs, the depende
 // WAVE 27 LANE FRONTIER - the array ?Serialize@StringTable@UI@@ resizes on the
 // read path. Two-argument, read from the body (see kSpec_StringPair10).
 J3_ENTRY2(180078c90, kSpec_StringPair10) // UI: StringTable's TextEntry array
+// Cutover closure batch 2 (2026-09-12): Graphics::Material::_parameters,
+// ~MaterialInstance's array's sibling SetSize.
+J3_ENTRY2(1800616c0, kSpec_MaterialParam) // Graphics: Material::_parameters
+// 2026-09-12 — the two Video::ShaderProgram instantiations. Both two-argument,
+// read from their own bodies; see the two spec rows above.
+J3_ENTRY2(180055db0, kSpec_ShaderParam)  // Video: ShaderProgram::_textures / _constants [NON-TRIVIAL]
+J3_ENTRY2(180053f00, kSpec_InnerArrayU8) // Video: ShaderProgram::_byteCode            [NON-TRIVIAL]
 
 // UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — the two-argument
 // CaptureEntry and Sprite instantiations SpriteContext::Begin (0x18011d2b0)
@@ -2230,6 +2383,7 @@ J3_ENTRY3(180078520, kSpec_SpriteDraw)  // UI:          Array<SpriteDraw> append
 // the script and both runs are in docs/runtime_port/WAVE10_LANE_UI3.md §2.
 J3_ENTRY3(180076250, kSpec_Node18)      // UI:          DialogInstance::_timers append
 J3_ENTRY3(180076370, kSpec_Fill8Z)      // UI:          DialogInstance::_controllers append
+J3_ENTRY3(180051aa0, kSpec_Fill16A4)    // Graphics:    ParticleSystem::AddEmitter's emitter array
 
 // UI leftovers batch — the three-argument CaptureEntry and Event pushes:
 // SpriteContext::Begin's own callees build these with a fill value.
@@ -2319,6 +2473,54 @@ void RtColl_ArraySetSize_180079df0(void* a) {
                 &g_j3_18011fc90);
 }
 
+// ---- BATCH 4 (Graphics render/cull/sun-camera cluster) ---------------------
+// Two more one-argument constant-folded members, both reached from that
+// cluster. Each spec is read out of ITS OWN body; neither could have been
+// inferred from the caller's element type.
+//
+// 0x18000c300 — `SetSize(4)` over a 0x8ba0-byte element (Engine::Play's
+// per-something block array). See kSpec_Blob8ba0 above for the three reads.
+// The grow rule folds the same way every other member does, which is how the
+// generic core is known to fit: retail's `_capacity = 4; if (oldSize == 3)
+// _capacity = 12;` is `(newSize == oldSize + 1 && oldSize != 0) ? n*3 : n`
+// with n folded to 4.
+Site g_j3_18000c300 = { { "Collection::Array<blob0x8ba0>::SetSize(4) @0x18000c300",
+                          0, 0, false, false }, 0x18000c300 };
+void RtColl_ArraySetSize_18000c300(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 4, nullptr, &kSpec_Blob8ba0,
+                &g_j3_18000c300);
+}
+
+// 0x18005f980 — NOT a SetSize at all but a `Reserve(16384)`: SetSize(0x4000)
+// with the OLD size written straight back over it at the end
+// (`MOV [RCX+8],ESI` at the epilogue, where ESI is the size captured on
+// entry). The one caller is Graphics::Scene::AddCulledDrawItems (0x1801017a0),
+// which reserves room for the visible-object list up front so its inlined
+// per-object append never reallocates.
+//
+// *** REGISTERING THE PLAIN kSpec_Fill8 SetSize BODY HERE WOULD BE A DEFECT,
+// not a rounding error: it would leave `_size` at 16384 and the caller would
+// then dispatch Draw through 16384 uninitialised pointers. ***
+// The restore is therefore part of the port, outside SetSizeCore.
+//
+// Spec read off the body: `MemAlloc(capacity << 3, 8)` -> stride 8, align 8;
+// the copy is one qword move; the copy loop is bounded by the OLD size, so the
+// new tail is left UNINITIALISED. That is kSpec_Fill8 exactly — and it does not
+// matter that the tail is never initialised, because `_size` goes back to the
+// old value before anything can look at it.
+//
+// Retail also has no `newSize == oldSize` early return here (it was folded
+// away). SetSizeCore keeps one, and it is unobservable: the only state that
+// path would skip is `_size = 0x4000`, which the restore below undoes.
+Site g_j3_18005f980 = { { "Collection::Array<ptr>::Reserve(16384) @0x18005f980",
+                          0, 0, false, false }, 0x18005f980 };
+void RtColl_ArrayReserve_18005f980(void* a) {
+    ArrayHdr* h = static_cast<ArrayHdr*>(a);
+    const int32_t oldSize = h->_size;
+    SetSizeCore(h, 0x4000, nullptr, &kSpec_Fill8, &g_j3_18005f980);
+    h->_size = oldSize;
+}
+
 }  // namespace rtcoll
 
 // ============================================================================
@@ -2403,17 +2605,30 @@ void RtCollectionPortInit() {
     // call site is not attendance, and neither has been watched running.
     RegisterRuntimeAddr(0x18002a930, (void*)&RtColl_ArrayDtor_18002a930);
     RegisterRuntimeAddr(0x18000c4a0, (void*)&RtColl_ArrayDtor_18000c4a0);
+    RegisterRuntimeAddr(0x180051ef0, (void*)&RtColl_ArrayDtor_180051ef0);
 
     // ---- J3: SetSize, trivially-copyable elements --------------------------
     RegisterRuntimeAddr(0x180008b90, (void*)&RtColl_ArraySetSize_180008b90);
     RegisterRuntimeAddr(0x180008d60, (void*)&RtColl_ArraySetSize_180008d60);
     RegisterRuntimeAddr(0x1800604e0, (void*)&RtColl_ArraySetSize_1800604e0);
     RegisterRuntimeAddr(0x180056240, (void*)&RtColl_ArraySetSize_180056240);
+    // 2026-09-12 — Video::ShaderProgram's two. Registered UNCONDITIONALLY and
+    // NOT behind BANISHED_RT_ARRAY_NONTRIVIAL, even though both call unexported
+    // per-element helpers: they sit on ?Serialize@ShaderProgram@Video@@, which
+    // is on the cutover boot path, and an unregistered address there is a call
+    // to zero the moment the DLL is gone.
+    RegisterRuntimeAddr(0x180055db0, (void*)&RtColl_ArraySetSize_180055db0);
+    RegisterRuntimeAddr(0x180053f00, (void*)&RtColl_ArraySetSize_180053f00);
     RegisterRuntimeAddr(0x180008ff0, (void*)&RtColl_ArraySetSize_180008ff0);
     RegisterRuntimeAddr(0x18002fea0, (void*)&RtColl_ArraySetSize_18002fea0);
     RegisterRuntimeAddr(0x180059140, (void*)&RtColl_ArraySetSize_180059140);
     RegisterRuntimeAddr(0x1800764c0, (void*)&RtColl_ArraySetSize_1800764c0);
     RegisterRuntimeAddr(0x18007b960, (void*)&RtColl_ArraySetSize_18007b960);
+    // BATCH 4 (Graphics render/cull/sun-camera cluster), two one-argument
+    // constant-folded members. 0x18005f980 is a Reserve, not a SetSize — see
+    // the banner over RtColl_ArrayReserve_18005f980.
+    RegisterRuntimeAddr(0x18000c300, (void*)&RtColl_ArraySetSize_18000c300);
+    RegisterRuntimeAddr(0x18005f980, (void*)&RtColl_ArrayReserve_18005f980);
     RegisterRuntimeAddr(0x180029510, (void*)&RtColl_ArraySetSize_180029510);  // PKG2 4b
     RegisterRuntimeAddr(0x180029630, (void*)&RtColl_ArraySetSize_180029630);  // PKG2 4b
     RegisterRuntimeAddr(0x180024d70, (void*)&RtColl_ArraySetSize_180024d70);  // PKG2 4b-ii
@@ -2431,6 +2646,7 @@ void RtCollectionPortInit() {
     // WAVE 27 LANE FRONTIER - the read-path resize inside
     // ?Serialize@StringTable@UI@@ (0x18011d9b7), ported in the same commit.
     RegisterRuntimeAddr(0x180078c90, (void*)&RtColl_ArraySetSize_180078c90);
+    RegisterRuntimeAddr(0x1800616c0, (void*)&RtColl_ArraySetSize_1800616c0);
     // Wave 26 lane INT33 — Array<SpriteSheet::SpriteInfo>::SetSize, the
     // two-argument form. NON-TRIVIAL, and registered HERE rather than behind
     // BANISHED_RT_ARRAY_NONTRIVIAL, for the same reason 0x180034860 and
@@ -2497,6 +2713,7 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180033690, (void*)&RtColl_ArraySetSizeFill_180033690);
     RegisterRuntimeAddr(0x180079c90, (void*)&RtColl_ArraySetSize_180079c90);
     RegisterRuntimeAddr(0x180079df0, (void*)&RtColl_ArraySetSize_180079df0);
+    RegisterRuntimeAddr(0x180051aa0, (void*)&RtColl_ArraySetSizeFill_180051aa0);
     // 0x180011010, 0x180010ab0 and 0x1800419b0 are NOT registered here: all
     // three belong to runtime/src/collection/array_destroy.cpp, which already
     // registered 0x180010ab0 and, in this same commit, registers the other two

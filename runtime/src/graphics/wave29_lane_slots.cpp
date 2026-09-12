@@ -175,8 +175,8 @@ using GetBonesFn = int32_t (*)(const void* self, float t, const void* base, void
 
 // ?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z
 //   SYMBOL:      retail 0x18001a780, an ordinary public export.
-//   CONDITION:   NOT PORTED; same fall-through.
-//   CONSEQUENCE: null ⇒ the matrices computed above never reach the device.
+//   CONDITION:   PORTED (BATCH 8, runtime/src/video/context.cpp
+//                RtVideo_Context_SetBones). ResolveExport now reaches our body.
 using SetBonesFn = void (*)(void* ctx, int32_t count, const void* matrices);
 
 }  // namespace

@@ -4,8 +4,16 @@
 // ============================================================================
 //
 // THE PROBLEM. Runtime-x64.dll's math routines call its own statically-linked
-// MSVC CRT: FUN_180128110 (sqrtf), FUN_180127d90 (sinf), FUN_180126d10 (cosf),
-// FUN_180126680 (atan2f), FUN_180127560 (powf, added by Wave 8 lane E for
+// MSVC CRT. BATCH 4 named all six in retail Ghidra (they were FUN_ until then)
+// and registered every one at its retail address, so they are now ordinary
+// ported functions rather than a private arrangement of this file:
+//   0x180128110 Crt_sqrtf   0x180127d90 Crt_sinf    0x180126d10 Crt_cosf
+//   0x180126680 Crt_atan2f  0x180127560 Crt_powf    0x180127010 Crt_fmodf
+// `Crt_fmodf` has no seam entry below: its one caller (SunLight::GetSunCamera)
+// calls MsvcLibm::Fmodf directly, so BANISHED_RT_LIBM does not cover it.
+//
+// The five with seam entries below are still routed through it:
+// Crt_sqrtf, Crt_sinf, Crt_cosf, Crt_atan2f, Crt_powf (added by Wave 8 lane E for
 // Utility::PerlinNoise::Generate — the frequency/amplitude terms are
 // pow(2, i) and pow(persistence, i)). Our ports are compiled by MinGW GCC against a
 // different libm. Where the two disagree they disagree in the last bit or two,

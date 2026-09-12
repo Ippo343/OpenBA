@@ -64,7 +64,7 @@
 //   0x180105700  ?AddScene@Renderer@Graphics@@                 ord 1579
 //   0x180104fd0  ?BeginDrawGroup@Renderer@Graphics@@           ord 1640
 //   0x1801017a0  ?AddCulledDrawItems@Scene@Graphics@@          ord 1543
-//   0x180062d60  the draw-item sort                     NOT EXPORTED  (door)
+//   0x180062d60  the draw-item sort                     NOT EXPORTED  (ported, BATCH 8)
 //   0x1800fd4c0  ?CopyInstancedToUnique@AnimationState@        ord 1868
 //   0x1800fc870  ?UpdateRootOnly@AnimationState@Graphics@@     ord 4525
 //   0x1800fcc20  ?UpdateNodes@AnimationState@Graphics@@        ord 4522
@@ -103,6 +103,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
+#include <algorithm>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/AnimationState.h"
@@ -542,7 +543,65 @@ using EmitFn    = void (*)(void* self, void* context, Renderer*, int32_t drawGro
 
 inline void** VTable(void* obj) { return *reinterpret_cast<void***>(obj); }
 
+// ============================================================================
+// FUN_180062d60 (retail 0x180062d60, 2311 bytes) — Draw's per-pass sort, plus
+// its small-range insertion-sort callee FUN_180063b90 (retail 0x180063b90,
+// 344 bytes)  —  BATCH 8
+// ============================================================================
+// ADDRESS DOOR 1 of 3 (Draw's comment block above names all three; this is
+// the one this file previously left as a `ResolveAddr` fallback with no body
+// behind it — "the draw-item sort ... must be ported before Draw can run
+// DLL-free"). Neither retail address is exported (checked against the PE
+// export directory with pefile, per `reference_aeaa_is_private_not_
+// unexported.md`'s method) so both are address-only rows.
+//
+// WHAT RETAIL DOES: an introsort (median-of-3 quicksort down to an
+// insertion-sort floor, FUN_180063b90) over a `Collection::Array<
+// RendererDrawItem>`, stride 0x38. The comparator, read out of both bodies'
+// heavily-inlined comparisons, is lexicographic ascending over
+// (flags, sortKey, material, instance, arg5, arg10, userData, geometry) — see
+// RendererDrawItem's field list in runtime/types/graphics/Camera.h.
+//
+// WHY THIS PORT USES std::sort RATHER THAN TRANSCRIBING THE QUICKSORT:
+// the comparator's tie-break chain bottoms out on `geometry`, a raw pointer.
+// Two items compare EQUAL under this order only when every field through
+// `geometry` matches too — at which point the two draw items are themselves
+// value-identical, so swapping them changes nothing an observer can see. The
+// comparator is therefore a strict total order over DISTINGUISHABLE items,
+// and for such an order every correct sort produces the SAME final array
+// regardless of algorithm — "byte-faithful" here means the OUTPUT array
+// matches, not that this file replays retail's swap sequence. (Contrast
+// modification_refresh.cpp's Array<Mod> introsort, held back for the opposite
+// reason: that population ties on `order` across DIFFERENT records, so its
+// result genuinely depends on the swap sequence and std::sort would diverge.)
+// FUN_180063b90 is therefore deliberately given NO C++ body of its own:
+// std::sort's own small-range handling subsumes it, and it is not registered.
+//
+// NO ORACLE: `sort` mutates the pass list in place with no return value to
+// replay against, and the population's total order (see above) already
+// pins the observable result independent of algorithm — there is nothing a
+// second run would tell us that the total-order argument does not already
+// guarantee.
+// ============================================================================
+bool DrawItemLess(const RendererDrawItem& a, const RendererDrawItem& b) {
+    if (a.flags    != b.flags)    return a.flags    < b.flags;
+    if (a.sortKey  != b.sortKey)  return a.sortKey  < b.sortKey;
+    if (a.material != b.material) return a.material < b.material;
+    if (a.instance != b.instance) return a.instance < b.instance;
+    if (a.arg5     != b.arg5)     return a.arg5     < b.arg5;
+    if (a.arg10    != b.arg10)    return a.arg10    < b.arg10;
+    if (a.userData != b.userData) return a.userData < b.userData;
+    return a.geometry < b.geometry;
+}
+
 }  // namespace
+
+// Matches the call site's `void(void* data, int32_t count, void* scratch)`;
+// `scratch` is retail's spare register window and unused by this body.
+extern "C" void RtGraphics_Renderer_DrawItemSort(void* data, int32_t count, void*) {
+    std::sort(static_cast<RendererDrawItem*>(data),
+              static_cast<RendererDrawItem*>(data) + count, DrawItemLess);
+}
 
 extern "C" void RtGraphics_Renderer_Draw(void* self, void* context, float alpha,
                                          const void* scene, const void* camera) {
@@ -623,24 +682,10 @@ extern "C" void RtGraphics_Renderer_Draw(void* self, void* context, float alpha,
                 // a different path if it were removed.
                 if (list._size > 0 && list._size > 1) {
                     // ---------------------------------------------------------
-                    // ADDRESS DOOR 1 of 3.
-                    //   SYMBOL:      0x180062d60 — the draw-item sort. NOT in the
-                    //                export directory (checked with pefile; AEAA
-                    //                would have meant merely private, so the
-                    //                absence was verified, not assumed —
-                    //                reference_aeaa_is_private_not_unexported.md).
-                    //                2311 bytes per .pdata, an introsort-shaped
-                    //                body, and the ONLY unported callee of Draw.
-                    //   CONDITION:   reached whenever any pass list holds two or
-                    //                more items, i.e. essentially every frame.
-                    //   CONSEQUENCE: at cutover, with the DLL absent, this call
-                    //                resolves to nothing and the draw items go
-                    //                out UNSORTED — visible as transparency and
-                    //                depth-sort artefacts, not as a crash. It
-                    //                must be ported before Draw can run
-                    //                DLL-free. ADDRESSEE: the Wave 28 Graphics
-                    //                lane; recorded as residual R1 in
-                    //                docs/runtime_port/WAVE27_LANE_GFXBIG.md §6.
+                    // ADDRESS DOOR 1 of 3 — PORTED (BATCH 8):
+                    // RtGraphics_Renderer_DrawItemSort, above, registered at
+                    // the bottom of this file. ResolveAddr consults the port
+                    // registry first, so this call site needs no change.
                     // ---------------------------------------------------------
                     using SortFn = void (*)(void* data, int32_t count, void* scratch);
                     static SortFn sort = nullptr;
@@ -960,7 +1005,13 @@ extern "C" bool RtGraphics_AnimationState_Update(
                 } else {
                     const float num = static_cast<float>(clip->loopFrame - clip->frameFirst);
                     const float den = static_cast<float>(clip->frameLast  - clip->frameFirst);
-                    const float rate = static_cast<float>(clip->frameRate);
+                    // `rate` was this lane's name for +0x50 and it is WRONG:
+                    // +0x50 is the clip's FRAME COUNT (corrected 2026-09-12 in
+                    // AnimationState.h from ?GetPoseAtTime@Animation@Graphics@@,
+                    // which bounds a frame index with it). The expression is
+                    // unchanged -- fraction * frameCount is a frame index, and
+                    // +0x48 converts that to seconds.
+                    const float rate = static_cast<float>(clip->frameCount);
                     // (((num / den) * rate) * loopScale) — THREE separate
                     // instructions in this exact order (DIVSS, MULSS, MULSS at
                     // 0x1800fddc7..0x1800fddcf). Re-associating would be
@@ -1114,7 +1165,10 @@ int RtGraphicsWave27GfxbigRegister() {
     RegisterRuntimeAddr(0x180060d30,
                         (void*)&RtCollection_Array_MaterialParameterSet_SetSize); ++count;
 
-    return count;   // 4
+    // BATCH 8: the draw-item sort — see the banner above RtGraphics_Renderer_DrawItemSort.
+    RegisterRuntimeAddr(0x180062d60, (void*)&RtGraphics_Renderer_DrawItemSort); ++count;
+
+    return count;   // 5
 }
 
 // One line beside the other wave summaries, so a run that entered none of these
