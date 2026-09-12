@@ -496,3 +496,80 @@ Everything in §2 stands. Add one: **I did not review
 `28e8df93`.** VERIFY offered and I declined, in order to stop editing. The §4
 design review remains a review of a *description*, and §8.3 is the measured
 evidence that such a review is incomplete by construction.
+
+---
+
+## 9. SECOND POST-REPORT APPENDIX — SLOTS' REVISED EXPIRY, EVALUATED
+
+**Doc-only. No tool changed, no number moved.** Lane SLOTS sent a correction of
+record after reporting (its tree is clean at `caa5ff11`, so this document is the
+addressee) revising the expiry condition it set for me. Evaluated, not assumed.
+
+### 9.1 The expiry condition, each half scored separately
+
+SLOTS' mechanism sentence described **one** shape; there are **two**, and they
+defeat the old scan for **different reasons**:
+
+- **A — concatenation.** `wave28_lane_partsys.cpp:1084`. Two adjacent literals
+  split across lines; the line-wise regex captures only the **first fragment**,
+  so the name is **truncated into a phantom**.
+- **B — wrapped argument.** `wave27_lane_gfxpart.cpp:1135`. The name is entirely
+  on one line and is a **single literal**, nothing concatenated. It is invisible
+  because `git grep -h` emits only the lines that match, so the paren line enters
+  the stream and the line carrying the name never does. The name is not
+  truncated; it is **absent**.
+
+SLOTS notes B is load-bearing for its own headline —
+`?GetInstanceTransform@ParticleInstance@` is one of the nine phantom slots, so B
+is part of why `??_7ParticleInstance@Graphics@@6B@` read 4/10 when it is 10/10.
+
+Evaluated against `e3c09f5b`'s scanner, **both named sites, scored separately,
+each with its negative half** (either alone passes a half-fix):
+
+```
+  SHAPE A concatenation      PASS   ?Draw@SunLight@Graphics@@UEBAXAEAVContext@…
+  SHAPE B wrapped argument   PASS   ?GetInstanceTransform@ParticleInstance@Grap…
+  NEGATIVE half, A           PASS   (the old line-fragment channel MISSES it)
+  NEGATIVE half, B           PASS   (the old line-fragment channel MISSES it)
+```
+
+**The expiry condition is met.** It passes for the reason SLOTS gives — the fix
+reads **whole files**, so B's problem, which is upstream of the pattern, is
+closed along with A's. The tool needed no change and none was made.
+
+### 9.2 The A/B split: SLOTS withdrew its own, and §1.8's stands
+
+SLOTS wrote a post-report script to split the 67 and it printed **"A 28, B 0"** —
+zero against a case it could point at in the source. Its bug: it expressed *"the
+quote is on the same line as the paren"* as `RegisterRuntimeExport\(\s*"`, and
+**`\s*` spans newlines**, so every shape-B site scored as visible. SLOTS caught it
+only because it had a known positive to hand (warning 7), and correctly reported
+the number it trusts (67) while **withdrawing the decomposition**.
+
+**That leaves §1.8 as the only measured A/B split in the wave, and it was
+produced by a method immune to that specific bug** — it reads whole files and
+tests same-line-ness by looking for a literal `"\n"` in the span between the
+paren and the quote, never with `\s*`. Mapped onto SLOTS' vocabulary:
+
+| | sites |
+|---|---|
+| **A only** — starts on the paren line, continued on the next | **17** |
+| **B only** — name starts on the next line, single literal | **39** |
+| **both** — starts on the next line **and** concatenated | **11** |
+| **total invisible or truncated** | **67** |
+
+This is the same 67 from two independent scanners, and SLOTS' one proven shape-B
+instance is inside the 39. **Quote the split from here, not from SLOTS**, which
+is what SLOTS asked.
+
+### 9.3 The convergence worth recording
+
+`\s*` spanning newlines is the **same fact** that appears in §1.8's closing note
+— *the old pattern was never the bug; the input was.* SLOTS and I met it from
+opposite sides within one wave: it made SLOTS' measuring script report a false
+**zero** (DEFLATING), and it is the reason the sweep's original pattern would
+have read every one of the 67 correctly **had it been handed whole files**.
+Anyone who records this defect as *"a regex was too narrow"* will write it again;
+anyone who records it as *"`\s*` is dangerous"* will write the other half again.
+**The fact is: a pattern with `\s*` is line-agnostic, and a pipeline that feeds
+it single lines is not — the defect lives in the seam, not in either piece.**
