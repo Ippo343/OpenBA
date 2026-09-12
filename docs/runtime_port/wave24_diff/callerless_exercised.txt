@@ -1,0 +1,56 @@
+SUBJECT: 204 UNTRIAGED `export` rows; 629 sites in the armed run.
+MATCH RULE: the row's Class::Method appears in a site name AND that site
+            has calls>0 or worked>0 -- i.e. the body demonstrably RAN.
+
+CONTROL (a screen looking for matches must be shown it can miss AND hit):
+  absent name 'ZZZ_NOT_A_REAL_SYMBOL' matches: 0  (must be 0)
+  positive shape taken FROM THE RUN ('Matrix::Matrix(4 x const Vector4&)') matches: 1  (must be >0)
+
+EXERCISED candidates: 45 of 204 untriaged exports (22%)
+
+export                                                         site calls   worked   diverg
+?Lerp@Transform@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z             1800206        ?       0
+?GetPathExtension@Filename@System@@QEBA?AV12@XZ                      11074    11074       0
+?GetFileInfo@PackageFile@IO@@QEBA?AUFileInfo@FileSystem@2@XZ          9471     9471       0
+?GetFileOffset@PackageFile@IO@@QEBAIH@Z                               5836     5836       0
+?GetFileSize@PackageFile@IO@@QEBAIH@Z                                 5836     5836       0
+?GetAvailableWindow@CompressedStream@IO@@AEAAHXZ                      2918     2918       0
+?DecompressFromSource@CompressedStream@IO@@AEAA_NH@Z                    32       32       0
+?PlatformConstruct@ImageBuffer@Video@@AEAAXXZ                           11        ?       0
+?GetDLLForInterface@Device@Video@@QEBA?AVString@System@@H@Z              8        5       0
+?StopPlatform@Device@Audio@@AEAAXH@Z                                     5        5       0
+?CanOverride@PackageFile@IO@@QEBA_NXZ                                    4        4       0
+?Compile@PackageFile@IO@@UEAA?AW4CompileResult@External@Object           4        4       0
+?GetCRC@PackageFile@IO@@QEBAIXZ                                          4        4       0
+?GetFileCount@PackageFile@IO@@QEBAHXZ                                    4        4       0
+?GetFileVersion@PackageFile@IO@@UEBAHXZ                                  4        4       0
+?GetIconHeight@PackageFile@IO@@QEBAHXZ                                   4        4       0
+?GetIconWidth@PackageFile@IO@@QEBAHXZ                                    4        4       0
+?GetPlatform@PackageFile@IO@@QEBAHXZ                                     4        4       0
+?GetPriority@PackageFile@IO@@QEBAHXZ                                     4        4       0
+?GetUserVersion@PackageFile@IO@@QEBAHXZ                                  4        4       0
+?GetVersion@PackageFile@IO@@QEBAHXZ                                      4        4       0
+?Type@PackageFile@IO@@UEBAIXZ                                            4        4       0
+?TypeId@PackageFile@IO@@SAIXZ                                            4        4       0
+?TypeName@PackageFile@IO@@UEBAPEBDXZ                                     4        4       0
+?Construct@PackageFile@IO@@UEAAPEAVExternal@Object@@XZ                   2        1       0
+??1SunLight@Graphics@@UEAA@XZ                                            1        ?       0
+?GetBuildName@Configuration@System@@QEAA?AVString@2@W4Build@12           1        1       0
+?GetPlatformName@Configuration@System@@QEAA?AVString@2@W4Platf           1        1       0
+?GetRootDirectory@FileSystem@IO@@QEAA?AVFilename@System@@XZ              1        1       0
+?InitializeInterfaces@Device@Video@@QEAAXXZ                              1        1       0
+?PlatformDestruct@ImageBuffer@Video@@AEAAXXZ                             1        ?       0
+?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ                             1        ?       0
+?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ                            1        ?       0
+?TypeId@SpriteSheet@UI@@SAIXZ                                            1        1       0
+?Update@MainLoop@Engine@@QEAA_NAEBVTime@System@@@Z                       1        1       0
+?Write@CompressedStream@IO@@UEAA_NHPEBX@Z                                1        1       0
+?Close@CompressedStream@IO@@UEAAXXZ                                      0       24       0
+?FindCheckBoxes@RadioElement@UI@@AEAAXV?$InternalPtr@VElement@           0        1       0
+?GetCurrentPos@CompressedStream@IO@@UEBAIXZ                              0        1       0
+?GetSize@CompressedStream@IO@@UEBAIXZ                                    0        1       0
+?PlatformOpenFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFil           0        7       0
+?PreCommit@CompressedMemoryStream@IO@@UEAAXXZ                            0       24       0
+?Read@CompressedStream@IO@@UEAA_NHPEAX@Z                                 0    23641       0
+?RenderTextures@MaterialInstance@Graphics@@QEBAXAEAVRenderer@2           0   201103       0
+?SetCurrentPos@CompressedStream@IO@@UEAA_NH@Z                            0        1       0
