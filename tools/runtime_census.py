@@ -589,6 +589,68 @@ def load_export_addrs():
         return _bail("reading the DLL's export directory failed: %r" % exc)
 
 
+def load_export_ordinals():
+    """{ ordinal -> (mangled name, image address) } for the shipped DLL.
+
+    BLIND SPOT NINE (Wave 25 lane INTERNAL42). The census used to give every
+    `ResolveOrdinal(N)` call site a row of its own, keyed by the NUMBER, in a
+    pseudo-namespace called `ordinal`, and it could never mark such a row ported
+    unless somebody had also called `RegisterRuntimeOrdinal(N)`. That is the
+    same defect `load_export_addrs()` fixes for the ADDRESS door, one door
+    later: an ordinal, an address and a mangled name can all denote the SAME
+    function, and counting it once per door inflates `called` and deflates
+    `ported` simultaneously.
+
+    It is not hypothetical and it is not one row. On the Wave 25 base tip four
+    of the six `ordinal` rows printed as a gap:
+
+        443  -> ??0Thread@System@@QEAA@I@Z                     already ported
+        3214 -> ?Lock@Device@Video@@QEAAXXZ                    already ported
+        4462 -> ?Unlock@Device@Video@@QEAAXXZ                  already ported
+        2990 -> ?GetTypeIdForFileExtension@Factory@Object@@... ported Wave 24
+
+    The first three are PHANTOMS -- a second row for a function that already has
+    a ported `export` row. The fourth is a real function that belongs in
+    `Object`, ported and registered under both doors by Wave 24 lane INTERNAL8,
+    with no `export` row of its own because nothing in the tree resolves it BY
+    NAME: the two exe call sites use the ordinal.
+
+    And the ordinal door is not a dead end at runtime either --
+    `standalone/resolve_standalone.cpp:ResolveOrdinal` misses `RtOrdinalReg()`
+    and then falls through to `MangledForOrdinal()` + `RtExportReg()`, so a port
+    registered by NAME is reached by an ordinal caller. All four rows were live
+    ports printing as gap rows.
+
+    Degrades exactly like `load_export_addrs()` (same interpreter, same DLL,
+    same `--allow-degraded` contract): an empty map means every ordinal keeps
+    its own row, i.e. the old behaviour.
+    """
+    if ALLOW_DEGRADED:
+        try:
+            import pefile
+        except ImportError:
+            return {}
+        if not os.path.exists(RUNTIME_DLL):
+            return {}
+    else:
+        import pefile          # load_export_addrs() has already bailed if absent
+    try:
+        pe = pefile.PE(RUNTIME_DLL, fast_load=True)
+        pe.parse_data_directories(
+            directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_EXPORT"]])
+        base = pe.OPTIONAL_HEADER.ImageBase
+        out = {}
+        for e in pe.DIRECTORY_ENTRY_EXPORT.symbols:
+            # A NONAME export has an ordinal and no name; it cannot be folded,
+            # and it is left out so the caller's `unresolved` list stays honest.
+            if e.name:
+                out[e.ordinal] = (e.name.decode("utf-8", "replace"),
+                                  base + e.address)
+        return out
+    except Exception:
+        return {}
+
+
 def load_section_map():
     """[(name, lo, hi)] for the shipped DLL's sections, or None.
 
@@ -760,6 +822,88 @@ CLASSIFIER_FIXTURES = [
      "DELIBERATELY MALFORMED: an unterminated final fragment. This is the "
      "synthetic shape handed to the UNKNOWN branch."),
 ]
+
+
+def selftest_ordinal_fold():
+    """Controls for the ORDINAL FOLD-IN (Wave 25 lane INTERNAL42).
+
+    SUBJECT: `load_export_ordinals()` and the fold rule that consumes it.
+    It reads the shipped DLL's export directory and NOTHING from the tree.
+
+    Why this exists at all: the fold's "unresolved" list is ABSENCE-SHAPED.
+    Every ordinal this tree passes to ResolveOrdinal is nameable, so a real run
+    prints `UNNAMEABLE: (none)` -- which is exactly what a DEAD LOOKUP prints
+    too. Control 3 hands that path a positive shape so the two are
+    distinguishable, per the rule a Wave 22 screen was caught by.
+    """
+    print("ordinal fold-in controls")
+    print("SUBJECT : load_export_ordinals() + the fold rule. Reads the DLL's")
+    print("          export directory only; reads NO source file.")
+    print("=" * 78)
+    omap = load_export_ordinals()
+    bad = 0
+    eff = 0                      # EFFECTIVENESS: assertions that ran at all
+
+    def check(label, ok, detail):
+        nonlocal bad, eff
+        eff += 1
+        if not ok:
+            bad += 1
+        print("%-5s %-46s %s" % ("ok" if ok else "FAIL", label, detail))
+
+    # 1. POSITIVE, in-population. Each of these is an ordinal our own tree
+    #    actually passes to ResolveOrdinal, with the name taken from
+    #    standalone/resolve_standalone.cpp's kOrdinalNames -- an INDEPENDENT
+    #    transcription of the same export directory, written three waves
+    #    earlier by a different lane. If the two disagree, one is wrong and
+    #    this control says which pair.
+    expect = {
+        443:  "??0Thread@System@@QEAA@I@Z",
+        798:  "??2GroupDescription@UI@@SAPEAX_KPEAX@Z",
+        2990: "?GetTypeIdForFileExtension@Factory@Object@@QEBAIPEBD@Z",
+        2991: "?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z",
+        3089: "?IsA@Base@Object@@QEBA_NI@Z",
+        3214: "?Lock@Device@Video@@QEAAXXZ",
+        4462: "?Unlock@Device@Video@@QEAAXXZ",
+    }
+    for ordn in sorted(expect):
+        got = omap.get(ordn)
+        check("ordinal %d resolves" % ordn,
+              got is not None and got[0] == expect[ordn],
+              (got[0] if got else "<NO ROW>"))
+
+    # 2. The fold must MERGE, not duplicate: the name an ordinal resolves to
+    #    has to be the same string `namespace_of` sees for the export row, or
+    #    the fold would silently mint a second row instead of joining one.
+    check("2990 folds into Object",
+          omap.get(2990) and namespace_of(omap[2990][0]) == "Object",
+          "namespace_of(...) = %s"
+          % (namespace_of(omap[2990][0]) if omap.get(2990) else "n/a"))
+    check("3214 folds into Video",
+          omap.get(3214) and namespace_of(omap[3214][0]) == "Video",
+          "namespace_of(...) = %s"
+          % (namespace_of(omap[3214][0]) if omap.get(3214) else "n/a"))
+
+    # 3. NEGATIVE / HANDED-IN SHAPE. The unresolved path has no natural
+    #    positive case in this binary, so hand it one: an ordinal far past the
+    #    end of the export directory MUST come back unnameable. If this
+    #    returned a name, the map is fabricating rows; if the lookup were dead
+    #    it would return None for control 1 too, so the pair separates
+    #    "dead lookup" from "genuinely absent".
+    check("synthetic ordinal 65535 is UNNAMEABLE", 65535 not in omap,
+          "kept as its own `ordinal` row, as the fold's else-branch does")
+
+    # 4. The map must be big enough to be the real directory and not a stub.
+    check("export directory is fully read", len(omap) >= 4000,
+          "%d named ordinals" % len(omap))
+
+    print("=" * 78)
+    print("EFFECTIVENESS : %d assertions evaluated, %d failed" % (eff, bad))
+    print("NOT ESTABLISHED : this says nothing about whether any ordinal's")
+    print("                  function is ported -- only about the NAME it")
+    print("                  denotes. Portedness is decided by the three-door")
+    print("                  test in the fold block, which this does not run.")
+    return 1 if bad else 0
 
 
 def selftest_classifier():
@@ -1726,10 +1870,18 @@ def main():
                          "name, because the UNKNOWN bucket is absence-shaped: "
                          "'0 unparseable names' in a real run is otherwise "
                          "indistinguishable from a dead parser.")
+    ap.add_argument("--selftest-ordinal-fold", action="store_true",
+                    help="run the ORDINAL FOLD-IN controls and exit. Includes "
+                         "a SYNTHETIC unnameable ordinal, because the fold's "
+                         "'unresolved' list is absence-shaped: in a real run "
+                         "it is empty, and an empty list is indistinguishable "
+                         "from a dead export-directory lookup.")
     args = ap.parse_args()
 
     if args.selftest_classifier:
         return selftest_classifier()
+    if args.selftest_ordinal_fold:
+        return selftest_ordinal_fold()
 
     global ALLOW_DEGRADED
     ALLOW_DEGRADED = args.allow_degraded
@@ -1768,6 +1920,33 @@ def main():
                        detoured or (name in d["detoured"]), files)
         else:
             add_entity("addr", "0x%x" % addr, "internal", ported, detoured, files)
+
+    # ---- THE ORDINAL FOLD-IN (blind spot NINE, Wave 25 lane INTERNAL42) -----
+    # Modelled exactly on the address fold-in directly above, for the same
+    # reason: an ordinal and a mangled name can denote ONE function, and a row
+    # per door counts it twice. See load_export_ordinals() for the four rows
+    # this moved and why three of them were phantoms.
+    #
+    # `ported` consults ALL THREE doors, because ResolveOrdinal does: it checks
+    # RtOrdinalReg(), then falls through to the NAME registry, and a by-address
+    # registration of the same function is the third way the body is ours.
+    ordinal_to_export = load_export_ordinals()
+    ord_fold = {"resolved": {}, "unresolved": [],
+                "readable": bool(ordinal_to_export)}
+    for ordn, files in d["called_ordinals"].items():
+        ent = ordinal_to_export.get(ordn)
+        if ent is None:
+            # No export-directory row (a NONAME export, or a degraded run).
+            # Such an ordinal keeps its own row -- there is no name to fold to.
+            ord_fold["unresolved"].append(ordn)
+            continue
+        name, addr = ent
+        ported = ((ordn in d["ported_ordinals"])
+                  or (name in d["ported_exports"])
+                  or (addr in d["ported_addrs"]))
+        add_entity("export", name, namespace_of(name), ported,
+                   name in d["detoured"], files)
+        ord_fold["resolved"][ordn] = name
 
     # A DETOURED PORT IS NEVER CALLER-LESS, and before this it was invisible
     # twice over: absent from the namespace table and listed as a suspected
@@ -1891,11 +2070,18 @@ def main():
                                                   | set(vt_fold["newly_ported"]))
 
     rows = [(k, key, ns, p, det, sorted(f)) for k, key, ns, p, det, f in merged.values()]
-    for ordn, files in d["called_ordinals"].items():
-        # An ordinal carries no name, so no namespace can be inferred from it —
-        # its own bucket, not lumped in with names that failed to parse.
+    for ordn in ord_fold["unresolved"]:
+        # An ordinal the export directory cannot name carries no name, so no
+        # namespace can be inferred from it — its own bucket, not lumped in
+        # with names that failed to parse. Every ordinal this tree uses IS
+        # nameable today, so this list is normally empty; see the ORDINAL
+        # FOLD-IN block in main() and its --selftest-ordinal-fold control,
+        # which hands this path a synthetic unnameable ordinal precisely
+        # because "0 unresolved" is otherwise indistinguishable from a dead
+        # lookup.
         rows.append(("ordinal", str(ordn), "ordinal",
-                     ordn in d["ported_ordinals"], False, sorted(files)))
+                     ordn in d["ported_ordinals"], False,
+                     sorted(d["called_ordinals"][ordn])))
 
     # Ports with no caller in our tree are worth surfacing: for the exe port a
     # registration nobody asks for was usually a vestigial resolve, and the same
@@ -1982,8 +2168,22 @@ def main():
               % (vt_fold["vtables"] - vt_fold["promoted_vtables"]))
         print("    vtables are registered only under BANISHED_RT_MINT=1 and move")
         print("    NO column -- see PROMOTION BACKLOG below.")
+    # THE ORDINAL FOLD-IN, reported as a SET-DIFF and not a delta, so a reader
+    # can see WHICH rows moved rather than that a number changed. Before Wave
+    # 25 every one of these was a row of its own in a pseudo-namespace.
+    print("  %d ordinal call site(s), of which %d folded onto the export row"
+          % (len(d["called_ordinals"]), len(ord_fold["resolved"])))
+    if ord_fold["resolved"]:
+        for ordn in sorted(ord_fold["resolved"]):
+            print("      ord %-5d -> %s" % (ordn, ord_fold["resolved"][ordn]))
+    if ord_fold["unresolved"]:
+        print("      UNNAMEABLE (kept as its own row): %s"
+              % ", ".join(str(o) for o in sorted(ord_fold["unresolved"])))
+    elif not ord_fold["readable"]:
+        print("      (export ordinals NOT READ -- degraded; every ordinal")
+        print("       keeps its own row, which is the pre-Wave-25 behaviour)")
     print("  = %d rows total, of which %d are ordinal rows"
-          % (len(rows), len(d["called_ordinals"])))
+          % (len(rows), len(ord_fold["unresolved"])))
     print("=" * 78)
     unprom = load_unpromotable(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     unprom_per_ns = {}
