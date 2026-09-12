@@ -875,9 +875,42 @@ def iter_sources():
 # "System 95% ported" for a wave in which the allocator has never executed a
 # single instruction -- the same overstatement as a diff site reporting
 # divergences=0 on calls=0 (WAVE1.md defect 4). They are reported separately.
+#
+# WAVE 22 LANE ALLOC: this is now a MAPPING rather than a set, so the gate that
+# holds a file back can be NAMED in the output. The membership tests around it
+# (`rel in GATED_OFF_FILES`, `for f in sorted(GATED_OFF_FILES)`) read keys and
+# are unchanged by the switch.
 GATED_OFF_FILES = {
-    "runtime/src/system/allocator.cpp",       # BANISHED_RT_ALLOC, verdict NO-GO
-    "runtime/src/system/allocator_win.cpp",
+    "runtime/src/system/allocator.cpp":     "BANISHED_RT_ALLOC",
+    "runtime/src/system/allocator_win.cpp": "BANISHED_RT_ALLOC",
+}
+
+# A GATED FILE CAN STILL HOLD AN UNGATED REGISTRATION, and this one does.
+# Found 2026-09-11 by Wave 22 lane ALLOC, and found by the instrument that lane
+# was asked to BUILD rather than by reading: the new GATED-BUT-WRITTEN join
+# printed `internal / 0x180009c30 / BANISHED_RT_ALLOC`, which is a row this
+# lane knew to be live on every run. The file-level rule above is COARSE -- it
+# asks "which file?" and cannot ask "which Register function?" -- so it was
+# wrong by one row, in the UNDERSTATING direction, for as long as that
+# consolidation has existed.
+#
+#   0x180009c30 is FreeLockedIgnoringSelf, the two-argument Free wrapper whose
+#   first argument is ignored. Wave 9 lane VID2 found it registered THREE times
+#   by three lanes; Wave 10 consolidated it to one owner in allocator.cpp and
+#   registered it DELIBERATELY UNCONDITIONALLY, from
+#   RtSystemAllocatorRegisterSharedAddresses(), which rt_system_port.cpp:84
+#   calls outside every wave switch. Its own comment says why: its callers span
+#   the DLL-present path as well as cutover, and the two registrations it
+#   replaced were not gated either.
+#
+# So this row IS a port and is now counted as one. That moves `internal` and
+# TOTAL by exactly one row; it does NOT touch System, which is Wave 22's
+# subject. Keep this list minimal: every entry is a claim that a specific
+# registration in an opt-in file runs anyway, and it must be re-checked when
+# that file's Register plumbing changes. Keys are the exported NAME or the
+# lowercase `0x...` ADDRESS, exactly as the row is keyed.
+GATED_OFF_EXCEPTIONS = {
+    "runtime/src/system/allocator.cpp": frozenset({"0x180009c30"}),
 }
 
 # The same overstatement one level finer: a registration inside an `if (<flag>)`
@@ -910,6 +943,89 @@ GATED_OFF_FILES = {
 GATED_OFF_BLOCKS = {
     "runtime/src/object/internal.cpp": ("shadow", "checkPtr"),
 }
+
+# A FOURTH GATING SHAPE, and the first three cannot describe it either: a
+# registration inside a function whose FIRST STATEMENT is a guard clause on a
+# global that only the arming path sets.
+#
+#     extern "C" void RtAllocSwapPostRegister() {
+#         if (!g_swapTaken) return;                 <-- the gate
+#         RegisterRuntimeExport("?Allocate@MemoryAllocator@System@@...", ...);
+#
+# GATED_OFF_FILES cannot see it (the file registers plenty of live ports too),
+# GATED_OFF_BLOCKS cannot see it (there is no `if (<flag>) { ... }` around the
+# call), and it is not the mint. So `?Allocate@` and `?Free@` have been counted
+# PORTED while their ONLY registrations -- and their only two `[port]` detours,
+# in RtAllocSwapInstall, which the arming path is likewise the sole caller of --
+# run only under BANISHED_RT_ALLOC.
+#
+# Found 2026-09-11 by Wave 22 lane ALLOC, as the MIRROR of the understatement
+# that GATED_OFF_EXCEPTIONS fixes: having found the census wrong by one row in
+# the understating direction, the lane asked the same question in the other
+# direction on the same subject and found it wrong by two.
+#
+# THIS LIST DELIBERATELY MOVES NO COUNT. It drives a REPORT ONLY, for the
+# reason this script states about its own unclassified-door screen: these two
+# rows are in System, System is Wave 22's subject, and silently growing its gap
+# from 25 to 27 mid-wave would move a number five lanes are quoting. The screen
+# names them; an integrator decides. If that decision is taken, the honest
+# implementation is span-aware gating in scan(), not an entry here.
+#
+# file -> {function name: what actually gates it}
+GATED_OFF_FUNCS = {
+    "standalone/rt_alloc_swap.cpp": {
+        "RtAllocSwapPostRegister": "BANISHED_RT_ALLOC (guard: if (!g_swapTaken) return;)",
+        "RtAllocSwapInstall":      "BANISHED_RT_ALLOC (only the arming path calls it)",
+    },
+}
+
+
+def gated_func_keys(repo):
+    """Keys registered or detoured inside a GATED_OFF_FUNCS body.
+
+    Brace-matched from the function's opening `{`, on the comment-STRIPPED text,
+    so a `}` inside a comment or a string cannot end the body early -- the
+    defect class that made a previous checker pair across function boundaries.
+    Returns {key: (file, function, gate)}; an unreadable file yields nothing and
+    says so, rather than a silent zero.
+    """
+    out, unread = {}, []
+    for rel, funcs in GATED_OFF_FUNCS.items():
+        path = os.path.join(repo, rel)
+        try:
+            text = strip_comments(open(path, encoding="utf-8", errors="replace").read())
+        except OSError:
+            unread.append(rel)
+            continue
+        for fn, gate in funcs.items():
+            m = re.search(r'\b%s\s*\(' % re.escape(fn), text)
+            if not m:
+                unread.append("%s::%s (signature not found)" % (rel, fn))
+                continue
+            i = text.find("{", m.end())
+            if i < 0:
+                unread.append("%s::%s (no body)" % (rel, fn))
+                continue
+            depth, j = 0, i
+            while j < len(text):
+                if text[j] == "{":
+                    depth += 1
+                elif text[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            body = text[i:j]
+            for r in RE_REG_EXPORT.finditer(body):
+                nm = concat_literal(body, r.end())
+                if nm:
+                    out[nm] = (rel, fn, gate)
+            for r in RE_REG_ADDR.finditer(body):
+                out["0x%x" % int(r.group(1), 16)] = (rel, fn, gate)
+            for r in RE_DETOUR_ADDR.finditer(body):
+                out.setdefault("0x%x" % int(r.group(2), 16), (rel, fn, gate))
+    return out, unread
+
 
 # The MINT is a third gating shape and the first two could not describe it.
 #
@@ -1238,6 +1354,48 @@ def gated_block_spans(text, gate_vars):
     return spans
 
 
+def gated_func_spans(text, funcs):
+    """Byte spans of the bodies of the GATED_OFF_FUNCS functions in this file.
+
+    Same brace-matching discipline as gated_block_spans, and for the same
+    reason: strip_comments() has already run, so only a string literal can hide
+    a brace, and those are skipped. `funcs` is {name: gate}; only the names are
+    read here.
+
+    A function whose signature is not found yields NO span, which is the safe
+    direction (nothing is gated) but is SILENT -- gated_func_keys() is the
+    screen that says so out loud, and it is printed for exactly that reason.
+    """
+    spans = []
+    for fn in funcs:
+        for m in re.finditer(r'\b%s\s*\(' % re.escape(fn), text):
+            i = text.find("{", m.end())
+            if i < 0:
+                continue
+            # A forward DECLARATION has a ';' before any '{'; skip it, or the
+            # span would run from the declaration to the end of some unrelated
+            # later function.
+            semi = text.find(";", m.end())
+            if 0 <= semi < i:
+                continue
+            depth = 0
+            while i < len(text):
+                ch = text[i]
+                if ch == '"':
+                    lit = STRING_LITERAL.match(text, i)
+                    i = lit.end() if lit else i + 1
+                    continue
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        spans.append((m.start(), i))
+                        break
+                i += 1
+    return spans
+
+
 def strip_comments(text):
     """Blank out C/C++ comments, preserving length so byte offsets still line up.
 
@@ -1371,6 +1529,10 @@ def scan():
         # Registrations inside an opt-in `if (<flag>)` block are gated the same
         # way an opt-in FILE is -- see GATED_OFF_BLOCKS.
         block_spans = gated_block_spans(text, GATED_OFF_BLOCKS.get(rel, ()))
+        # ...and so is one inside a FUNCTION whose first statement is a guard
+        # clause on a global only the arming path sets -- the fourth gating
+        # shape, see GATED_OFF_FUNCS. Same predicate, same effect on the count.
+        block_spans += gated_func_spans(text, GATED_OFF_FUNCS.get(rel, {}))
         def in_gated_block(pos):
             return any(a <= pos <= b for a, b in block_spans)
         # A registration inside an OPT-IN file is NOT a live port: its
@@ -1378,12 +1540,14 @@ def scan():
         # returns 0 otherwise. Counting it would repeat the exact overstatement
         # this census exists to prevent -- see GATED_OFF_FILES.
         gated = rel in GATED_OFF_FILES
-
+        # ...EXCEPT for the keys GATED_OFF_EXCEPTIONS names. The file-level rule
+        # is COARSE and was wrong by one row; see the table's own banner.
+        exempt = GATED_OFF_EXCEPTIONS.get(rel, frozenset())
 
         for m in RE_REG_EXPORT.finditer(text):
             name = concat_literal(text, m.end())
             if name:
-                g = gated or in_gated_block(m.start())
+                g = (gated and name not in exempt) or in_gated_block(m.start())
                 (gated_exports if g else ported_exports).setdefault(name, set()).add(rel)
         for m in RE_REG_EXPORT_NONLITERAL.finditer(text):
             # `const` is the parameter type in the DECLARATIONS of
@@ -1414,8 +1578,9 @@ def scan():
         for m in RE_REG_ORDINAL.finditer(text):
             ported_ordinals.setdefault(int(m.group(1)), set()).add(rel)
         for m in RE_REG_ADDR.finditer(text):
-            g = gated or in_gated_block(m.start())
-            (gated_addrs if g else ported_addrs).setdefault(int(m.group(1), 16), set()).add(rel)
+            a = int(m.group(1), 16)
+            g = (gated and ("0x%x" % a) not in exempt) or in_gated_block(m.start())
+            (gated_addrs if g else ported_addrs).setdefault(a, set()).add(rel)
 
         # NOT EVERY DETOUR IS A PORT DETOUR, and counting them together
         # credited two instruments as ports.
@@ -1433,10 +1598,22 @@ def scan():
         # started conferring `ported` it would have counted as a port too. An
         # instrument is not a port, and a census that says otherwise is the
         # thing this file exists to prevent.
+        #
+        # A DETOUR INSIDE A GATED FUNCTION IS NOT INSTALLED EITHER, and a
+        # detour target confers `ported`. Skipping it here is what stops the
+        # count from being restored through the back door after the
+        # registration side has been correctly excluded: `?Allocate@` and
+        # `?Free@` are registered ONLY in RtAllocSwapPostRegister and detoured
+        # ONLY in RtAllocSwapInstall, so gating one without the other would
+        # have moved nothing and looked like it had. (Wave 22 lane ALLOC.)
         for m in RE_DETOUR_ADDR.finditer(text):
+            if in_gated_block(m.start()):
+                continue
             _add_detour(detoured, instrument_detours, m.group(1),
                         int(m.group(2), 16), rel)
         for m in RE_DETOUR_EXPORT.finditer(text):
+            if in_gated_block(m.start()):
+                continue
             _add_detour(detoured, instrument_detours, m.group(1),
                         m.group(2), rel)
 
@@ -1978,6 +2155,222 @@ def main():
             print("      %-28s %4d" % (s, n))
         print("      .text = code; .rdata/.data = data. So even the address-keyed")
         print("      half of the gap is NOT all port work either.")
+
+    # ---- GATED-BUT-WRITTEN, PER NAMESPACE  (Wave 22 lane ALLOC) -----------
+    #
+    # WHY THIS EXISTS. This script has printed, for many waves, both halves of
+    # a fact and never the join between them: a per-namespace GAP, and further
+    # down a flat count of "N registration(s) are present in the source but NOT
+    # counted above". Nothing connected the second to the first, so a reader
+    # could not tell which of a namespace's gap rows are UNWRITTEN and which
+    # are WRITTEN-AND-UNARMED. Those two are not the same work and are not even
+    # the same KIND of work: one is a port, the other is a risk decision.
+    #
+    # It cost a wave. WAVE22_PLAN.md's headline finding -- that System's
+    # "eleven bodies" are six, because five of them are MemoryAllocator bodies
+    # that have existed and been registered since Wave 2 behind
+    # BANISHED_RT_ALLOC -- was produced by a person grepping the file THIS
+    # SCRIPT ALREADY NAMES IN ITS OWN WARNING TEXT. The Wave 21 gap-kind
+    # decomposition could not have caught it: all five classify correctly as
+    # BODY. They are not unwritten, they are unarmed, and no instrument said so.
+    #
+    # WHAT IT IS. A join, nothing cleverer: for every called-but-not-ported row
+    # above, is that same key also registered somewhere this script has ruled
+    # GATED (an opt-in FILE in GATED_OFF_FILES, or an opt-in `if (<flag>)`
+    # BLOCK in GATED_OFF_BLOCKS)? If yes, the row is written; arming its gate
+    # would move it.
+    #
+    # WHAT IT IS NOT, and this is the load-bearing half:
+    #
+    #   * It does NOT move any count. A gated registration is not a port --
+    #     that rule is older than this section and this section does not
+    #     weaken it. Every figure above is unchanged.
+    #   * "Arming would move it" is a claim about the CENSUS, not about the
+    #     GAME. Whether the row is SAFE to arm is a separate question with a
+    #     separate answer, and for the allocator the standing verdict is
+    #     route-scoped (see WAVE22_LANE_ALLOC.md).
+    #   * Its denominator is the gap rows THIS SCRIPT CAN SEE. A function
+    #     reached only by a plain C++ call has no row here at all, so it can be
+    #     neither in the gap nor in this join. Corroborated twice in Wave 22:
+    #     `?PlatformStartup@Timer@System@@CA_NXZ` is registered, runs every
+    #     boot, writes three statics and appears in no row of this census.
+    #   * It reads OUR SOURCE only. It cannot tell a gate that is off by
+    #     accident from one that is off because arming it corrupts the heap.
+    gated_by_file = {}
+    for f, gv in GATED_OFF_FILES.items():
+        gated_by_file[f] = gv
+    for f, gates in GATED_OFF_BLOCKS.items():
+        gated_by_file[f] = "if(%s)" % (") / if(".join(gates))
+
+    def gate_for(files):
+        names = sorted({gated_by_file[f] for f in files if f in gated_by_file})
+        return ", ".join(names) if names else "(gated, source unnamed)"
+
+    gated_gap = collections.defaultdict(list)   # ns -> [(kind, key, gate)]
+    for kind, key, ns, ported, detoured, files in rows:
+        if ported:
+            continue
+        if kind == "export":
+            where = d["gated_exports"].get(key)
+        elif kind == "addr":
+            try:
+                where = d["gated_addrs"].get(int(key, 16))
+            except ValueError:
+                where = None
+        else:
+            where = None
+        if where:
+            gated_gap[ns].append((classify_symbol(key, kind)[0], key, gate_for(where)))
+
+    n_gated_gap = sum(len(v) for v in gated_gap.values())
+    print()
+    print("GATED-BUT-WRITTEN GAP ROWS, PER NAMESPACE  (Wave 22 lane ALLOC)")
+    print("  subject     the same %d called-but-NOT-ported rows decomposed above."
+          % (tot_called - tot_ported))
+    print("  question    which of them are not UNWRITTEN but WRITTEN-AND-UNARMED?")
+    print("  evidence    our source only: the row's key also appears at a")
+    print("              RegisterRuntime* call site inside a file or an if-block")
+    print("              this script has ruled opt-in. Not the DLL, not a run.")
+    print("  changes     NOTHING above. A gated registration is still not a port.")
+    print("  blind spot  a registration reached by a plain C++ call has no row in")
+    print("              this census at all, so it cannot appear here either.")
+    print()
+    if not n_gated_gap:
+        print("  (no gap row is gated-but-written)")
+        if gated_by_file:
+            print("  *** POSITIVE CONTROL FAILED. %d file(s)/block(s) are on the"
+                  % len(gated_by_file))
+            print("  *** opt-in lists and the flat count below is %d, yet this join"
+                  % (len(d["gated_exports"]) + len(d["gated_addrs"])))
+            print("  *** matched zero gap rows. Either every gated registration is")
+            print("  *** for a symbol our tree never CALLS -- possible, and then it")
+            print("  *** is not in the gap by construction -- or this screen is dead.")
+            print("  *** Do not read the zero as `nothing is gated` without checking")
+            print("  *** which (a screen with no natural positive case cannot tell")
+            print("  *** a true absence from a broken parser).")
+    else:
+        print("  %-13s %5s %7s | %s" % ("namespace", "gap", "gated",
+                                        " ".join("%8s" % k for k in KIND_ORDER)))
+        print("  " + "-" * 84)
+        gg_tot = collections.Counter()
+        for ns in sorted(gated_gap, key=lambda n: (-len(gated_gap[n]), n)):
+            c = collections.Counter(b for b, _, _ in gated_gap[ns])
+            gg_tot.update(c)
+            print("  %-13s %5d %7d | %s"
+                  % (ns, sum(gap_kinds[ns].values()), len(gated_gap[ns]),
+                     " ".join("%8d" % c[k] for k in KIND_ORDER)))
+        print("  " + "-" * 84)
+        print("  %-13s %5d %7d | %s"
+              % ("TOTAL", tot_called - tot_ported, n_gated_gap,
+                 " ".join("%8d" % gg_tot[k] for k in KIND_ORDER)))
+        print()
+        print("  ITEMISED -- the rows, and the gate that holds each one back.")
+        print("  Scoping a porting lane on these would scope work that is already")
+        print("  written. Read the gate name as the question to ask, not as a")
+        print("  cheap win: arming is a measurement and a risk decision.")
+        for ns in sorted(gated_gap):
+            print("    %s" % ns)
+            for bucket, key, gate in sorted(gated_gap[ns], key=lambda t: (t[0], t[1])):
+                print("      %-7s %-58s %s" % (bucket, key, gate))
+        print()
+        print("  => %d of %d gap rows (%.0f%%) are WRITTEN and held back by a gate,"
+              % (n_gated_gap, tot_called - tot_ported,
+                 100.0 * n_gated_gap / (tot_called - tot_ported)
+                 if (tot_called - tot_ported) else 0.0))
+        print("     not by an absent body. Arm it, measure it, then move it.")
+
+    # ---- THE FOURTH GATING SHAPE, AND WHETHER IT IS STILL ALIVE -----------
+    #
+    # Every screen above asks "is an UNPORTED row secretly written?". This one
+    # started life asking the opposite -- because a lane that finds an
+    # instrument wrong in one direction has not thereby checked the other, and
+    # on the allocator the answer was yes BOTH times -- and it found
+    # ?Allocate@/?Free@ counted PORTED while their only registrations sat
+    # inside a function opening `if (!g_swapTaken) return;`.
+    #
+    # GATED_OFF_FUNCS now feeds scan(), so those rows are EXCLUDED from
+    # `ported` like any other gated registration and this screen no longer has
+    # a suspect to report. Which is exactly why it must not print a bare
+    # "(none)": a screen whose success state and whose DEAD state print the
+    # same thing cannot be trusted in either. So it reports LIVENESS instead --
+    # what the declared spans actually matched, and where those keys ended up.
+    # A declaration that matches nothing is a dead declaration and says so.
+    gf_keys, gf_unread = gated_func_keys(REPO)
+    print()
+    print("GATED-FUNCTION EXCLUSIONS -- the FOURTH gating shape (Wave 22 lane ALLOC)")
+    print("  shape       a registration inside a function whose first statement is a")
+    print("              guard clause on a global only the arming path sets:")
+    print("                  void RtAllocSwapPostRegister() {")
+    print("                      if (!g_swapTaken) return;          <-- the gate")
+    print("                      RegisterRuntimeExport(\"?Allocate@...\", ...);")
+    print("              GATED_OFF_FILES cannot see it (the file holds live ports too),")
+    print("              GATED_OFF_BLOCKS cannot see it (no `if (<flag>) { ... }`), and")
+    print("              it is not the mint. Declared in GATED_OFF_FUNCS; bodies are")
+    print("              brace-matched on the comment-stripped text.")
+    print("  effect      these keys ARE excluded from `ported` above, registration")
+    print("              side AND detour side. Gating one without the other would")
+    print("              have moved nothing and looked like it had.")
+    print("  LIVENESS    this is a positive-case report, NOT an all-clear. A bare")
+    print("              zero here would be indistinguishable from a dead parser.")
+    # TWO IMPLEMENTATIONS, DELIBERATELY, AND THEY CHECK EACH OTHER.
+    # gated_func_spans() runs inside scan() on scan's own text and is what
+    # actually MOVES the count; gated_func_keys() re-reads the file here and is
+    # what PRINTS. They share the declaration and nothing else. So the
+    # "excluded / LEAK" column below is not decoration: it is one
+    # implementation confirming the other's effect on the numbers. A bug in
+    # either shows up as a LEAK.
+    #
+    # Plus a synthetic pair, because agreement between two implementations that
+    # are BOTH dead is still agreement. The positive proves the span walk finds
+    # a body; the negative proves it does not swallow a forward declaration and
+    # run on to the end of the file, which is the failure that would silently
+    # gate everything after it.
+    _SYN = ('void SynGateFn();\n'                    # a declaration, not a body
+            'void Unrelated() { RegisterRuntimeExport("?NotGated@Syn@@YAXXZ", 0); }\n'
+            'void SynGateFn() {\n'
+            '    if (!g_synTaken) return;\n'
+            '    RegisterRuntimeExport("?Gated@Syn@@YAXXZ", 0);\n'
+            '}\n')
+    _spans = gated_func_spans(_SYN, {"SynGateFn": "synthetic"})
+    def _inside(needle):
+        pos = _SYN.index(needle)
+        return any(a <= pos <= b for a, b in _spans)
+    _pos_ok = len(_spans) == 1 and _inside("?Gated@Syn@@YAXXZ")
+    _neg_ok = not _inside("?NotGated@Syn@@YAXXZ")
+    print("  CONTROL     span walk, synthetic: positive (gated body found) -> %s;"
+          % ("GREEN" if _pos_ok else "*** RED ***"))
+    print("              negative (forward decl does NOT open a span, and an")
+    print("              unrelated registration before it stays ungated) -> %s"
+          % ("GREEN" if _neg_ok else "*** RED ***"))
+    if not (_pos_ok and _neg_ok):
+        print("  *** THE SPAN WALK IS BROKEN. Every `gated` verdict from")
+        print("  *** GATED_OFF_FUNCS is untrustworthy and the `ported` count with it.")
+    if gf_unread:
+        print("  *** COULD NOT READ: %s" % ", ".join(gf_unread))
+        print("  *** A REFUSAL, not a zero: the list below is INCOMPLETE by an")
+        print("  *** unknown amount, and some keys may be counted PORTED that")
+        print("  *** should not be.")
+    if not GATED_OFF_FUNCS:
+        print("    (nothing declared)")
+    elif not gf_keys:
+        print("    *** %d function(s) DECLARED and ZERO keys matched. The"
+              % sum(len(v) for v in GATED_OFF_FUNCS.values()))
+        print("    *** declaration is DEAD -- a renamed function, a moved")
+        print("    *** registration, or a broken span walk. It is excluding")
+        print("    *** NOTHING, silently, and every figure above is as if this")
+        print("    *** list were empty.")
+    else:
+        ported_names = set(d["ported_exports"])
+        for key, (rel, fn, gate) in sorted(gf_keys.items()):
+            state = "counted PORTED  <-- LEAK" if key in ported_names else "excluded"
+            print("    %-56s %s" % (key, state))
+            print("        in %s::%s -- %s" % (rel, fn, gate))
+        leaks = sum(1 for k in gf_keys if k in ported_names)
+        print("    => %d key(s) matched; %d excluded, %d still counted PORTED."
+              % (len(gf_keys), len(gf_keys) - leaks, leaks))
+        if leaks:
+            print("    A LEAK means a key this list names is reaching `ported` by some")
+            print("    OTHER registration -- find it before trusting the figure.")
 
     # ---- THE VTABLE FOLD-IN, REPORTED AS A SET-DIFF -----------------------
     # Never as a percentage delta: a percentage cannot say WHICH rows moved,
