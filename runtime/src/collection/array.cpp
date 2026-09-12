@@ -1109,6 +1109,22 @@ const ArraySpec kSpec_I32Neg1 = {                 // 0x18007b960  Array<int>, fi
 const ArraySpec kSpec_Fill8 = {                   // 0x18001f990  Array<T*>
     "Array<ptr>", 8, 8, &Assign8, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
+// BATCH 4 — 0x18000c300, `Array<T>::SetSize(4)` for a 0x8ba0-byte element, the
+// one-argument constant-folded shape. Read off its own body:
+//   IMUL / `(longlong)capacity * 0x8ba0` at the MemAlloc  -> stride 0x8ba0
+//   MOV EDX,0x4                                           -> align 4
+//   the element copy is `memcpy(dst, src, 0x8ba0)` (retail hand-unrolls a
+//   16-byte SSE loop when both pointers are 16-aligned and calls `memcpy`
+//   otherwise — same bytes either way, so one memcpy is faithful)
+//   the copy loop's `else` arm does not exist: elements in [oldSize, 4) are
+//   LEFT UNINITIALISED, so `init` stays null.
+// The element size is the only thing about the type this lane can state: the
+// sole caller is Engine::Play (0x1800a0d10) and nothing there names it.
+void AssignBlob8ba0(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x8ba0); }
+const ArraySpec kSpec_Blob8ba0 = {                // 0x18000c300
+    "Array<blob0x8ba0>", 0x8ba0, 4, &AssignBlob8ba0, nullptr, nullptr, true,
+    0, 0, 0, 0, 0, 0 };
+
 const ArraySpec kSpec_Fill8Z = {                  // 0x180076900, 0x18007a0d0
     "Array<InternalPtr>(fill)", 8, 8, &Assign8Z, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
@@ -2138,6 +2154,54 @@ void RtColl_ArraySetSize_1800783d0(void* a) {
                 &g_j3_1800783d0);
 }
 
+// ---- BATCH 4 (Graphics render/cull/sun-camera cluster) ---------------------
+// Two more one-argument constant-folded members, both reached from that
+// cluster. Each spec is read out of ITS OWN body; neither could have been
+// inferred from the caller's element type.
+//
+// 0x18000c300 — `SetSize(4)` over a 0x8ba0-byte element (Engine::Play's
+// per-something block array). See kSpec_Blob8ba0 above for the three reads.
+// The grow rule folds the same way every other member does, which is how the
+// generic core is known to fit: retail's `_capacity = 4; if (oldSize == 3)
+// _capacity = 12;` is `(newSize == oldSize + 1 && oldSize != 0) ? n*3 : n`
+// with n folded to 4.
+Site g_j3_18000c300 = { { "Collection::Array<blob0x8ba0>::SetSize(4) @0x18000c300",
+                          0, 0, false, false }, 0x18000c300 };
+void RtColl_ArraySetSize_18000c300(void* a) {
+    SetSizeCore(static_cast<ArrayHdr*>(a), 4, nullptr, &kSpec_Blob8ba0,
+                &g_j3_18000c300);
+}
+
+// 0x18005f980 — NOT a SetSize at all but a `Reserve(16384)`: SetSize(0x4000)
+// with the OLD size written straight back over it at the end
+// (`MOV [RCX+8],ESI` at the epilogue, where ESI is the size captured on
+// entry). The one caller is Graphics::Scene::AddCulledDrawItems (0x1801017a0),
+// which reserves room for the visible-object list up front so its inlined
+// per-object append never reallocates.
+//
+// *** REGISTERING THE PLAIN kSpec_Fill8 SetSize BODY HERE WOULD BE A DEFECT,
+// not a rounding error: it would leave `_size` at 16384 and the caller would
+// then dispatch Draw through 16384 uninitialised pointers. ***
+// The restore is therefore part of the port, outside SetSizeCore.
+//
+// Spec read off the body: `MemAlloc(capacity << 3, 8)` -> stride 8, align 8;
+// the copy is one qword move; the copy loop is bounded by the OLD size, so the
+// new tail is left UNINITIALISED. That is kSpec_Fill8 exactly — and it does not
+// matter that the tail is never initialised, because `_size` goes back to the
+// old value before anything can look at it.
+//
+// Retail also has no `newSize == oldSize` early return here (it was folded
+// away). SetSizeCore keeps one, and it is unobservable: the only state that
+// path would skip is `_size = 0x4000`, which the restore below undoes.
+Site g_j3_18005f980 = { { "Collection::Array<ptr>::Reserve(16384) @0x18005f980",
+                          0, 0, false, false }, 0x18005f980 };
+void RtColl_ArrayReserve_18005f980(void* a) {
+    ArrayHdr* h = static_cast<ArrayHdr*>(a);
+    const int32_t oldSize = h->_size;
+    SetSizeCore(h, 0x4000, nullptr, &kSpec_Fill8, &g_j3_18005f980);
+    h->_size = oldSize;
+}
+
 }  // namespace rtcoll
 
 // ============================================================================
@@ -2233,6 +2297,11 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180059140, (void*)&RtColl_ArraySetSize_180059140);
     RegisterRuntimeAddr(0x1800764c0, (void*)&RtColl_ArraySetSize_1800764c0);
     RegisterRuntimeAddr(0x18007b960, (void*)&RtColl_ArraySetSize_18007b960);
+    // BATCH 4 (Graphics render/cull/sun-camera cluster), two one-argument
+    // constant-folded members. 0x18005f980 is a Reserve, not a SetSize — see
+    // the banner over RtColl_ArrayReserve_18005f980.
+    RegisterRuntimeAddr(0x18000c300, (void*)&RtColl_ArraySetSize_18000c300);
+    RegisterRuntimeAddr(0x18005f980, (void*)&RtColl_ArrayReserve_18005f980);
     RegisterRuntimeAddr(0x180029510, (void*)&RtColl_ArraySetSize_180029510);  // PKG2 4b
     RegisterRuntimeAddr(0x180029630, (void*)&RtColl_ArraySetSize_180029630);  // PKG2 4b
     RegisterRuntimeAddr(0x180024d70, (void*)&RtColl_ArraySetSize_180024d70);  // PKG2 4b-ii

@@ -275,4 +275,16 @@ void RtGraphicsPortInit() {
     // that registers this lane provably emits the line even if neither body ever
     // runs -- which is exactly the distinction warning 10 is about.
     RtGraphicsWave29SlotsSummary();
+
+    // BATCH 4 — the render/cull/sun-camera cluster. Registered unconditionally
+    // (DIRECTION.md §2.3: a port registers unconditionally; no new switches).
+    //   cull.cpp       Scene::AddCulledDrawItems + the two cull-stack helpers
+    //   sun_camera.cpp SunLight::GetSunCamera
+    {
+        extern int RtGraphicsCullRegister();
+        extern int RtGraphicsSunCameraRegister();
+        const int cull = RtGraphicsCullRegister();
+        const int sun  = RtGraphicsSunCameraRegister();
+        printf("[RtPort] BATCH 4: %d cull + %d sun-camera entries registered\n", cull, sun);
+    }
 }
