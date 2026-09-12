@@ -167,6 +167,14 @@ extern int RtUiStringTableLifecycleRegister(); // stringtable_factory.cpp (FACTO
 // (?Serialize@, 0x18011d940). Takes the row to 9/9 on the static screen; it
 // does NOT promote it (see WAVE27_LANE_FRONTIER.md).
 extern int RtUiStringTableSlotsRegister(); // stringtable_factory.cpp (FRONTIER)
+// WAVE 28 lane MISC, fifth pass, and the only one in its OWN file
+// (stringtable_lifecycle.cpp -- separate purely to keep three factory lanes off
+// stringtable_factory.cpp's tail this wave): ??1StringTable@UI@@UEAA@XZ
+// (0x18011d8f0) and ??3StringTable@UI@@SAXPEAX@Z (0x180002220), the wave's only
+// DTOR and only OPNEWDEL gap rows. SAME switch again, same reason as the three
+// passes above -- one class, one cutover wall. These are not vtable slots; the
+// row was already 9/9 before this wave.
+extern int RtUiStringTableLifecycleDtorRegister(); // stringtable_lifecycle.cpp (MISC)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -204,5 +212,6 @@ void RtUiPortInit() {
     n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
     n += RtUiStringTableSlotsRegister();  // same switch (FRONTIER)
+    n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
     printf("[RtPort] UI: %d exports registered\n", n);
 }

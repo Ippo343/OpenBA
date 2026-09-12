@@ -211,6 +211,8 @@ const char* const kSetInverseScale = "?SetInverseScale@Context@Video@@QEAAXMMMM@
 const char* const kSetRenderBuffer = "?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z";
 const char* const kSetTime         = "?SetTime@Context@Video@@QEAAXM@Z";
 const char* const kSetTransform    = "?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z";
+const char* const kSetTransformScale =
+    "?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z";
 const char* const kSetVertexBuffer = "?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z";
 const char* const kSetViewport     = "?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z";
 
@@ -603,6 +605,67 @@ void RtVideo_Context_SetTransform(Context* self, int slot, const MatrixRaw* m) {
     }
 }
 
+// ---- ?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z
+// ---- 0x18001a400, ordinal 3994.  WAVE 28 LANE MISC. ----------------------
+//
+// The name is a trap and the disassembly says so: there is NOT ONE `mulss` in
+// the whole body.  Nothing is scaled BY anything.  What retail does is build a
+// copy of `m` in which the FOURTH COLUMN (m[3], m[7], m[11], m[15] -- byte
+// offsets 0x0c/0x1c/0x2c/0x3c) is REPLACED wholesale by the four components of
+// `scale`, and then run the identical compare-store-dirty-highwater tail as
+// SetTransform above.
+//
+// This is exactly kickoff warning 3's shape ("count the STORES, not the
+// fields"), and it is the same w-column trap MeshInstance::GetInstanceTransform
+// set for Wave 28.  The obvious port -- multiply the matrix by the scale
+// vector, or scale the three basis rows -- passes every "it is a scale
+// function" reading and writes different bytes.  What pins it is the STORE
+// COUNT: sixteen `movss` into `rbx`, twelve sourced from `r8` (the matrix) and
+// FOUR sourced from `r9` (the vector), at precisely the four w-column offsets.
+// Traced store by store from objdump at 0x18001a5c4..0x18001a647 against the
+// scratch built at 0x18001a4c9..0x18001a5a7; both halves agree.
+//
+// Everything after the build is SetTransform's tail verbatim:
+//   * the compare is `??9Matrix@Math@@QEBA_NAEBV01@@Z` (0x18001d850, the call
+//     at 0x18001a5b7), i.e. MatrixNotEqual -- store only on a real change,
+//   * the dirty bit is 0x4000 (`or [rdi+0x10],0x4000`) = kDirtyTransformConstants,
+//   * and the high-water update of `_transformCount` is OUTSIDE the change
+//     test (the `je` at 0x18001a5be lands ON the cmovg at 0x18001a64e), so the
+//     count rises even when the matrix is unchanged.  Same asymmetry, same
+//     reason it must not be tidied.
+//
+// `scale` is a Math::Vector4; MatrixRaw/float[4] is the same four consecutive
+// floats retail reads at r9+0x0/0x4/0x8/0xc, which is why the parameter is
+// typed as a bare float pointer rather than pulling a Vector4 type into this
+// file (the sibling ports here already treat Matrix as `MatrixRaw`).
+void RtVideo_Context_SetTransformScale(Context* self, int slot,
+                                       const MatrixRaw* m, const float* scale) {
+    RT_DIFF_BEGIN("Video::Context::SetTransformScale");
+    Context* replay = ReplaySnapshot(rt_diff_on__, self);
+
+    MatrixRaw built;
+    for (int i = 0; i < 16; ++i) built.m[i] = m->m[i];
+    built.m[3]  = scale[0];
+    built.m[7]  = scale[1];
+    built.m[11] = scale[2];
+    built.m[15] = scale[3];
+
+    MatrixRaw* dst = &self->_transforms[slot];
+    if (MatrixNotEqual(&built, dst)) {
+        *dst = built;
+        self->_dirty |= RtVideo::kDirtyTransformConstants;
+    }
+    if (self->_transformCount < slot + 1) {
+        self->_transformCount = slot + 1;
+    }
+
+    if (rt_diff_on__) {
+        using Fn = void (*)(Context*, int, const MatrixRaw*, const float*);
+        RT_ORIGINAL_ONCE(Fn, kSetTransformScale)(replay, slot, m, scale);
+        RT_DIFF_BYTES(self, replay, kContextSize);
+    }
+}
+
 // ---- ?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z  0x18001a150 -----
 // _inverseView   = view.Inverse()
 // _viewProjection = _inverseView * projection      (in that order — the left
@@ -908,6 +971,12 @@ int RtVideoContextRegister() {
 
     RegisterRuntimeExport("?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z", (void*)&RtVideo_Context_SetTransform); ++count;
     RegisterRuntimeAddr(0x18001a6b0, (void*)&RtVideo_Context_SetTransform);
+
+    // WAVE 28 LANE MISC. Name spelled out as a literal, not kSetTransformScale,
+    // for the same reason the banner at the top of this file gives: the census
+    // cannot see through a named constant.
+    RegisterRuntimeExport("?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z", (void*)&RtVideo_Context_SetTransformScale); ++count;
+    RegisterRuntimeAddr(0x18001a400, (void*)&RtVideo_Context_SetTransformScale);
 
     RegisterRuntimeExport("?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z", (void*)&RtVideo_Context_SetCamera); ++count;
     RegisterRuntimeAddr(0x18001a150, (void*)&RtVideo_Context_SetCamera);
