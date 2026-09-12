@@ -59,7 +59,59 @@ static void* Sym(const char* n) { return (void*)GetProcAddress(g_dll, n); }
 // reads exactly like a catastrophic port rather than an instrument fault.
 // The vptr witness below exists so that this is CHECKED, not asserted.
 
+static bool g_derefBug = false;   // --derefbug: arm the vptr witness
 typedef void* (*CtorFn)(void*);
+
+// ---------------------------------------------------------------------------
+// Which PE section of the loaded module contains this address?
+// ---------------------------------------------------------------------------
+// This exists because of a defect lane FACTREST found in the vptr witness
+// BELOW, one level down from the one it found in the oracle itself.
+//
+// The witness compares ours-vs-theirs at +0x00 and prints AGREE. **If both
+// sides carried the same dereference defect it would ALSO print AGREE**, while
+// comparing vtable[0] on both sides -- an equality test between two sides that
+// share a defect cannot see the defect. The property that DISTINGUISHES a vptr
+// from a dereferenced vptr is not equality, it is the SECTION: a vtable lives
+// in .rdata, and vtable[0] points into .text.
+//
+// The first version of this witness printed the addresses and left a human to
+// read the range, which makes the discriminating half of the check a thing
+// nobody evaluates. This resolves the section by NAME so the screen states its
+// own verdict.
+// CALLER-PROVIDED BUFFER, and that is not a style choice.
+//
+// The first version returned `const char*` into a function-local `static char
+// name[16]`. The witness calls this twice -- once for our side, once for
+// retail's -- so BOTH pointers aliased the one buffer and both printed whatever
+// the SECOND call wrote. The predicate built on it,
+// `os == ".rdata" && ts == ".rdata"`, was therefore testing ONE value twice and
+// could not distinguish the two sides AT ALL.
+//
+// That is precisely the defect this whole witness exists to rule out, one level
+// down again, and it survived being written immediately after a comment
+// explaining the defect. **It was found by ARMING the screen (--derefbug), not
+// by reading it**: the armed run printed "*** DIFFER *** / .rdata BOTH", i.e.
+// the equality half fired and the discriminating half did not. Had the screen
+// only ever been run in its normal state it would have reported ".rdata BOTH"
+// forever and looked like a working check.
+static void SectionOf(const void* p, char out[16]) {
+    memset(out, 0, 16);
+    if (!p) { strcpy(out, "<null>"); return; }
+    const unsigned char* base = (const unsigned char*)g_dll;
+    const IMAGE_DOS_HEADER* dos = (const IMAGE_DOS_HEADER*)base;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) { strcpy(out, "<not a PE>"); return; }
+    const IMAGE_NT_HEADERS* nt = (const IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) { strcpy(out, "<not a PE>"); return; }
+    const IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
+    const size_t off = (const unsigned char*)p - base;
+    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+        size_t va = sec[i].VirtualAddress;
+        size_t sz = sec[i].Misc.VirtualSize;
+        if (off >= va && off < va + sz) { memcpy(out, sec[i].Name, 8); return; }
+    }
+    strcpy(out, "<outside>");
+}
 
 static void OursCtor(const Spec& sp, void* self) {
     if (sp.baseCtor) {
@@ -70,13 +122,24 @@ static void OursCtor(const Spec& sp, void* self) {
     unsigned char* p = (unsigned char*)self;
     for (uint16_t i = 0; i < sp.nStores; ++i) {
         const Store& s = sp.stores[i];
-        uint64_t v = (s.kind == SK_VTABLE) ? (uint64_t)Sym(s.sym) : s.imm;
+        uint64_t v;
+        if (s.kind == SK_VTABLE) {
+            // g_derefBug reintroduces FACTREST's defect ON OUR SIDE ONLY, so the
+            // vptr witness can be HANDED the shape it exists to detect. A screen
+            // whose normal answer is "clean" is indistinguishable from a dead
+            // screen until something makes it fire
+            // (reference_absence_screen_must_be_handed_a_shape.md).
+            v = g_derefBug ? *(uint64_t*)Sym(s.sym) : (uint64_t)Sym(s.sym);
+        } else {
+            v = s.imm;
+        }
         memcpy(p + s.off, &v, s.width);
     }
 }
 
 int main(int argc, char** argv) {
     bool neg = (argc > 1 && strcmp(argv[1], "--negative") == 0);
+    g_derefBug = (argc > 1 && strcmp(argv[1], "--derefbug") == 0);
     g_dll = LoadLibraryA("C:\\GOG Games\\Banished\\Runtime-x64.dll");
     if (!g_dll) { printf("LoadLibrary failed %lu\n", GetLastError()); return 2; }
 
@@ -113,7 +176,7 @@ int main(int argc, char** argv) {
                               (int)ok, *ifSlot); }
     }
 
-    int checked = 0, pass = 0, skipped = 0, vptrWitness = 0;
+    int checked = 0, pass = 0, skipped = 0, vptrWitness = 0, vptrWitnessFail = 0;
     for (int i = 0; i < kSpecCount; ++i) {
         Spec sp = kSpecs[i];
         if (sp.size == 0) { ++skipped; continue; }          // abstract
@@ -182,8 +245,22 @@ int main(int argc, char** argv) {
             ++vptrWitness;
             unsigned long long ov, tv;
             memcpy(&ov, a, 8); memcpy(&tv, b, 8);
-            printf("   [vptr witness] %-22s ours=%016llx theirs=%016llx  %s\n",
-                   sp.cls, ov, tv, ov == tv ? "AGREE" : "*** DIFFER ***");
+            char os[16], ts[16];
+            SectionOf((const void*)(uintptr_t)ov, os);
+            SectionOf((const void*)(uintptr_t)tv, ts);
+            // TWO predicates, and the SECOND is the discriminating one.
+            // Equality alone cannot see a defect both sides share; a vtable
+            // lives in .rdata and vtable[0] points into .text, so the section
+            // is what separates "the vptr" from "a dereferenced vptr".
+            const bool eq   = (ov == tv);
+            const bool rdat = (strcmp(os, ".rdata") == 0 && strcmp(ts, ".rdata") == 0);
+            printf("   [vptr witness] %-22s ours=%016llx(%s) theirs=%016llx(%s)  "
+                   "%s / %s\n",
+                   sp.cls, ov, os, tv, ts,
+                   eq   ? "AGREE"      : "*** DIFFER ***",
+                   rdat ? ".rdata BOTH" : "*** NOT .rdata -- A DEREFERENCED VPTR "
+                                          "WOULD LOOK LIKE THIS ***");
+            if (!eq || !rdat) ++vptrWitnessFail;
         }
         if (bad == 0) { ++pass; printf("%-24s OK   (0x%llx bytes)\n", sp.cls,
                                        (unsigned long long)sp.size); }

@@ -500,14 +500,54 @@ argued:
 [vptr witness] BorderDescription        ours=00007fff54976980 theirs=…6980  AGREE
 ```
 
-Those are `.rdata` addresses, not code addresses — which is the second half of
-the check, because a screen where BOTH sides dereferenced would also have
-reported AGREE while comparing the wrong thing.
+#### The witness then had to be armed, and arming it found TWO more defects
 
-**The finding FACTREST names is the one worth carrying: a uniform,
-maximally-consistent failure is evidence about the INSTRUMENT at least as often
-as about the subject.** The very consistency that makes it look systematic is
-the tell.
+FACTREST's sharper framing, which is theirs and is the better statement:
+**an equality test between two sides that share a defect cannot see the
+defect.** "Do ours and theirs agree at +0x00" could never have answered the
+question they asked, because a screen where BOTH sides dereferenced would print
+AGREE while comparing `vtable[0]` on both sides. The discriminating property is
+not equality, it is the **PE section**: a vtable lives in `.rdata`, and
+`vtable[0]` points into `.text`.
+
+Two defects came out of acting on that, and **both were found by ARMING the
+screen (`--derefbug` reintroduces the deref on our side only), not by reading
+it**:
+
+1. **The first witness printed the addresses and left a human to read the
+   range.** That makes the discriminating half of the check a predicate nobody
+   evaluates (`reference_a_predicate_nobody_evaluates.md`). It now resolves the
+   section BY NAME from the loaded module's headers and states its own verdict.
+2. **`SectionOf` returned a pointer into a function-local `static char` buffer.**
+   The witness calls it twice — ours, then theirs — so both pointers aliased the
+   one buffer and both printed what the SECOND call wrote. The predicate built
+   on it, `os == ".rdata" && ts == ".rdata"`, was **testing one value twice and
+   could not distinguish the two sides at all.** That is the same defect class
+   the witness exists to rule out, one level down again, and it survived being
+   written immediately below a comment explaining the defect.
+
+The armed run is what exposed #2: it printed `*** DIFFER *** / .rdata BOTH` —
+the equality half fired, the discriminating half did not. Run only in its normal
+state the screen would have said `.rdata BOTH` forever and looked like a working
+check.
+
+```
+ARMED  (--derefbug)   ours=…69e0(.text)  theirs=…6060(.rdata)
+                      *** DIFFER *** / *** NOT .rdata ***          both halves fire
+NORMAL                ours=…6060(.rdata) theirs=…6060(.rdata)
+                      AGREE / .rdata BOTH                          both halves clean
+```
+
+**Two findings worth carrying, and the second is FACTREST's:**
+
+* **A uniform, maximally-consistent failure is evidence about the INSTRUMENT at
+  least as often as about the subject.** The very consistency that makes it look
+  systematic is the tell.
+* **When checking for a defect the two sides might SHARE, test the property that
+  distinguishes them, not their agreement** — and then arm it, because a screen
+  whose normal answer is "clean" is indistinguishable from a dead screen until
+  something makes it fire
+  (`reference_absence_screen_must_be_handed_a_shape.md`).
 
 **Excluded, with the reason:** `Object::Internal`'s handle id at +0x08..+0x0f of
 every Element-derived object. `??0Internal@Object@@` draws it from
@@ -584,7 +624,12 @@ cp runtime/src/<ns>/<lane_tables>.inc /tmp/factory_ui1_tables.inc
 g++ -std=c++17 -O0 -g -o /tmp/oracle.exe /tmp/oracle.cpp
 A0=8 A1=256 /tmp/oracle.exe              # positive: expect N/N
 A0=8 A1=256 /tmp/oracle.exe --negative   # MUST be 0/N, or the screen is dead
+A0=8 A1=256 /tmp/oracle.exe --derefbug   # MUST fire BOTH halves of the vptr
+                                         # witness (DIFFER *and* NOT .rdata)
 ```
+
+`A0`/`A1` are the MemoryAllocator `Startup` arguments in MEGABYTES; `A1` is a
+maximum total and must be >= `A0`.
 
 **Run the negative pass every time.** Its first run here scored 25/26 and named
 the one class it could not arm; without it that class would have been counted as
