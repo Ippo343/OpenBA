@@ -65,6 +65,15 @@ extern int RtIoFileSystemRegister();    // filesystem.cpp    (lane D)
 // GetSavePath) which is on the boot path; these seven are on the save/load
 // menu path and must be removable without taking the settings with them.
 extern int RtIoPersistenceSavesRegister();  // persistence_saves{,_win}.cpp (lane PERSIST)
+// Wave 24 lane INTERNAL8: the four UNEXPORTED bodies of the worker Wave 19
+// left as address doors — the three enqueue helpers and the worker destructor.
+// OWN switch, deliberately NOT folded into BANISHED_RT_PERSAVES: these four
+// are reached by ADDRESS from Wave 19's already-ported Begin* bodies, so with
+// this switch off those callers fall straight back through ResolveAddr into
+// the shipped DLL and the A/B is exactly this lane's four bodies and nothing
+// else. The dtor in particular joins a real thread, and "the shutdown hangs"
+// has to be separable from "the save menu is wrong".
+extern int RtIoPersistenceWorkerRegister(); // persistence_worker_win.cpp (Wave 24 INTERNAL8)
 // Wave 9 lane ENG, iteration 2. Its own switch, not folded into
 // BANISHED_RT_FILESYSTEM: this one is on the process's single boot path
 // (Engine::Startup step 3), so the integrator must be able to A/B it without
@@ -262,6 +271,7 @@ void RtIoPortInit() {
     if (RtWaveEnabled("BANISHED_RT_STREAM"))      n += RtIoCompressedStreamRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSISTENCE")) n += RtIoPersistenceRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSAVES"))    n += RtIoPersistenceSavesRegister();
+    if (RtWaveEnabled("BANISHED_RT_PERSWORKER")) n += RtIoPersistenceWorkerRegister();
     if (RtWaveEnabled("BANISHED_RT_FILESYSTEM"))  n += RtIoFileSystemRegister();
     if (RtWaveEnabled("BANISHED_RT_FSSTARTUP"))   n += RtIoFileSystemStartupRegister();
     if (RtWaveEnabled("BANISHED_RT_PERSSTARTUP")) n += RtIoPersistenceStartupRegister();
