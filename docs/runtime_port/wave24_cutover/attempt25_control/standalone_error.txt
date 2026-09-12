@@ -1,0 +1,44 @@
+[Standalone] BANISHED_RT_NO_DLL=1 -- continuing with Runtime-x64.dll ABSENT.  This is the controlled cutover boot; a crash is the EXPECTED outcome and its location is the result.  See docs/runtime_port/WAVE9_CUTOVER_BOOT_RUNBOOK.md
+[AllocLock] could not resolve Allocate (0x1800c6e60)
+[AllocLock] could not resolve Free (0x1800c6c00)
+[RtMathTransform] registered 31 functions (Matrix/Quaternion/Transform/Transform2/Transform3)
+[RtAllocSwap] cutover arm: no detour installed (no DLL, so no DLL-internal callers to redirect); ?Allocate@/?Free@ will be the composed stubs, which take the allocator CS at self+0x640.
+[RtAlloc] ATTEST: ARMED (cutover, DLL absent) (exports=27)
+[RtUnresolved] ?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ  (asked by 00007ff75da57aee)
+[ElemTid] registered 21/21 element type-id slots
+[RtUnresolved] ?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z  (asked by 00007ff75da1ca23)
+[DlgCtrlVt] tables=38 unknown=0 inheritedSlotsFilled=166 keptOverride=10 unresolved=0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b80
+[RtUnresolved] ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z  (asked by 00007ff75d8adb78)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c6c0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015fa00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f5a0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015f980
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151ca8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b78
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151b70
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401c70e8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015be00
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151488
+[CheckPtr] export=00007ff75d95d552 body[0]=0x55 source=our port -> NOP (calls skipped)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401529d0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151a90
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401528f0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x1401527f8
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140151880
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c400
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x14015c3b0
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140002280
+[RtUnresolved] ?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z  (asked by 00007ff75d8b0a5b)
+[STANDALONE] NOT IMPLEMENTED: exe function at 0x140160bf8
+[FNHook] could not resolve Video::Device::InitializeInterfaces
+[VideoInterface] *** DETOUR FAILED *** Video::Device::InitializeInterfaces (0x1800F79F0) could not be resolved.
+[VideoInterface]   With the DLL PRESENT this means the pre-fill did not happen and Runtime will LoadLibrary VideoDX11-x64.dll, falling back to VideoDX9-x64.dll if it is missing.
+[VideoInterface]   With the DLL ABSENT (cutover) it means something MUST call VideoInterfaceFillDx11Slot() from the ported InitializeInterfaces -- nothing else fills the slot, and nothing loads VideoDX9 either. See dx11/README.md.
+[FNHook] could not resolve ExternalFactory::FindOrLoad
+[FNHook] could not resolve External::Load
+[ResLoad] serialized: FindOrLoad=0000000000000000 External::Load=0000000000000000 (recursive CS, target-resolution=RAW)
+[AutoStart] ENABLED (BANISHED_AUTOSTART="1") — will auto-open New Game after 60 menu frames, then auto-Start
+[RtUnresolved] ?PlatformConfigure@Engine@1@QEAA_N_NPEAX@Z  (asked by 00007ff75d8b84d7)
+[RtResolve] MISS "?PlatformConfigure@Engine@1@QEAA_N_NPEAX@Z" -> NULL. Nothing has registered it and the shipped DLL does not export it (or is absent). The null is NOT cached; the next call will retry. If this is cutover, this symbol still needs minting.
+[REDZONE-DUMP] no allocator singleton
