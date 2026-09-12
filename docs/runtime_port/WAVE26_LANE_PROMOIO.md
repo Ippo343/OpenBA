@@ -107,12 +107,39 @@ verdict its evidence could not support. It is the **deflating** variety, which i
 the one a lane is least likely to challenge, because it makes work look
 impossible rather than cheap.
 
-> **[ADDRESSEE: the next lane that runs `tools/mint_stamper_census.py`.]**
-> **[CONDITION: before its output is used to score ownership again.]**
-> Teach it to resolve an UNATTRIBUTED stamp site against the export directory
-> before printing NOT OURS — the check is four lines of `pefile` and 45 of 47
-> sites resolve exactly. Until that lands, treat its UNATTRIBUTED rows as
-> **UNSCORED**, never as retail.
+### 2.1 The warning now PRINTS (done here), the count fix does not (deliberate)
+
+A lane doc cannot reach the person about to misread the run, because that person
+is the one who did not open it — lane ATTEND's argument, and it applies to my
+finding as much as to its own. So `tools/mint_stamper_census.py` was changed to
+say this itself:
+
+* the per-site verdict now reads **`UNSCORED`**, not `NOT OURS`, and says whether
+  the nearest-export hint **resolves exactly** (`stamp VA == export VA`);
+* the per-row summary appends **`<- UNSCORED, NOT retail; see CAVEAT`** whenever
+  `unattributed` is non-zero;
+* a **CAVEAT block prints after the rows**, carrying the measured 45-of-47 and
+  24-of-47 figures and the instruction not to read `ours-capable` as ownership
+  while `unattributed` is non-zero;
+* the header paragraph that asserted *"An unattributed site is NOT OURS"* is
+  replaced, with the old sentence quoted so the correction is legible.
+
+**The tool's built-in check independently reproduces this lane's screen**: it
+computes the resolution from its own `.pdata`/export data rather than my
+`pefile` script, and prints **45 resolved, 2 not** — the same split, by
+different code. Third derivation of the same number.
+
+**COUNTS DELIBERATELY UNCHANGED.** Verified: the 63 `STAMPERS … ours-capable …
+retail … unattributed` summary lines are **byte-identical** before and after
+(`diff` of the full run, 63/63). Folding these sites into `ours-capable` is the
+real fix and it moves a number other lanes quote — that is a decision for a lane
+that owns the board, not a side effect of one lane's reading.
+
+> **[ADDRESSEE: the lane that owns the board — the same one landing the census
+> fold in §4, since this is the identical class of error in a second tool.]**
+> **[CONDITION: fold the resolved UNATTRIBUTED sites into the ownership score,
+> as one deliberate change with the delta stated.]** Until then the tool now
+> refuses to be misread rather than relying on anyone having read this file.
 
 ---
 

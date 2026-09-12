@@ -46,8 +46,31 @@ so it is said here and repeated in the output.
 UNATTRIBUTED SITES.  A stamp site outside every `.pdata` range cannot be
 attributed to a function at all (~6045 of ~15290 functions carry `.pdata`).
 Those print as `UNATTRIBUTED` with a nearest-export HINT, and are counted in
-their own column.  An unattributed site is NOT OURS -- you cannot own a
-function you cannot name.
+their own column.
+
+THAT PARAGRAPH USED TO END "An unattributed site is NOT OURS -- you cannot own a
+function you cannot name."  **THAT WAS WRONG, and it was wrong in the DEFLATING
+direction**, which makes work look impossible rather than cheap and is therefore
+the polarity least likely to be challenged.  Corrected by WAVE 26 lane PROMOIO:
+
+  * MSVC emits no `.pdata` for a FRAMELESS LEAF function -- which is the shape of
+    every three-instruction companion ctor/dtor in this DLL.  So `.pdata` absence
+    correlates with the exact function shape this tool is most often asked about.
+  * MEASURED on the full 63-row set: **45 of 47** unattributed stamp sites sit at
+    an address that IS an entry in the shipped export directory, and **24 of 47**
+    are registered in our tree by NAME AND ADDRESS -- i.e. OURS, while this tool
+    printed NOT OURS for every one.  The twelve `??_7*Data@Video@@6B@` rows read
+    `ours-capable 0`; the true figure is 2 of 5 per row.
+
+The per-site verdict now reads `UNSCORED`, says whether the hint RESOLVES
+EXACTLY, and a CAVEAT block is PRINTED after the rows -- printed, not merely
+documented, because the reader about to misread the column is the one who did not
+open this file.  You cannot score a function you cannot name; that is a reason to
+say UNSCORED, not to say NOT OURS.
+
+The COUNTS are deliberately unchanged: folding these into `ours-capable` would
+move a number other lanes quote, and that belongs to a lane that owns the board.
+Evidence: docs/runtime_port/WAVE26_LANE_PROMOIO.md S2.
 
 POSITIVE CONTROLS, both of which MUST read non-zero / must fire
 --------------------------------------------------------------
@@ -216,6 +239,7 @@ def main():
         print("SELECTED NOTHING -- I MEASURED NOTHING about any row.")
         return 2
 
+    resolved_unattr = 0
     for nm, va, slots in sel:
         sites = dis.get(va, [])
         byfn = {}
@@ -223,13 +247,29 @@ def main():
             k = owner(site)
             byfn.setdefault((k[0], k[1], k[2]), []).append((site, insn, k[3]))
         own = tot = unattr = 0
+        # resolved_unattr accumulates ACROSS rows (initialised before the loop):
+        # it is the subject count of the CAVEAT printed after the last row.
         print("\n%s   %#x   %d slots   %d stamp site(s) in %d function(s)"
               % (nm, va, slots, len(sites), len(byfn)))
         for (kind, fname, fva), ss in sorted(byfn.items(), key=lambda x: x[1][0][0]):
             tot += 1
             if kind == "UNATTRIBUTED":
                 unattr += 1
-                verdict = "UNATTRIBUTED (no .pdata) -- NOT OURS; nearest-export HINT only"
+                # WAVE 26 lane PROMOIO. This branch used to print "NOT OURS",
+                # which is a VERDICT this evidence cannot support, and it is
+                # wrong in 45 of 47 cases on the full row set. MSVC emits no
+                # .pdata for a FRAMELESS LEAF -- the shape of every
+                # three-instruction companion ctor/dtor -- so the hint is not a
+                # guess: when the stamp address IS the export's entry point, the
+                # site is that export. Tested here, with data already in scope.
+                hit = (exp_at.get(ss[0][0] - ib) == fname)
+                if hit:
+                    resolved_unattr += 1
+                    verdict = ("UNSCORED -- this site IS that export "
+                               "(stamp VA == export VA); .pdata-blind, see CAVEAT")
+                else:
+                    verdict = ("UNSCORED -- no .pdata AND the hint does not "
+                               "resolve; genuinely unattributed")
             else:
                 by = []
                 if kind == "EXPORT" and fname in names:
@@ -247,8 +287,36 @@ def main():
                 print("        %#x +%#-6x %s" % (site, off, insn))
             if len(ss) > 4:
                 print("        ... %d more site(s) in this function" % (len(ss) - 4))
-        print("   STAMPERS %d ; ours-capable %d ; retail %d ; unattributed %d"
-              % (tot, own, tot - own - unattr, unattr))
+        print("   STAMPERS %d ; ours-capable %d ; retail %d ; unattributed %d%s"
+              % (tot, own, tot - own - unattr, unattr,
+                 "  <- UNSCORED, NOT retail; see CAVEAT" if unattr else ""))
+
+    # ------------------------------------------------------------------
+    # THE CAVEAT, PRINTED RATHER THAN DOCUMENTED.  WAVE 26 lane PROMOIO.
+    #
+    # A comment cannot reach the person who is about to misread the run,
+    # because that person is precisely the one who did not open the file.
+    # The `unattributed` column is the one an ownership reading gets wrong,
+    # and it gets it wrong in the DEFLATING direction -- it makes work look
+    # IMPOSSIBLE rather than cheap, which is the polarity a lane is least
+    # likely to challenge.
+    # ------------------------------------------------------------------
+    if resolved_unattr:
+        print("\nCAVEAT -- THE `unattributed` COLUMN IS UNSCORED, NOT RETAIL")
+        print("  %d of the unattributed stamp site(s) above sit at an address that"
+              % resolved_unattr)
+        print("  IS an entry in the shipped export directory -- they ARE that export.")
+        print("  This tool cannot score them because it attributes by `.pdata`, and")
+        print("  MSVC emits no .pdata for a frameless leaf function.")
+        print("  MEASURED, Wave 26 lane PROMOIO, full 63-row set: 45 of 47 such")
+        print("  sites resolved exactly, and 24 of the 47 were registered in our")
+        print("  tree by NAME AND ADDRESS -- i.e. OURS, while this tool said NOT OURS.")
+        print("  So: do NOT read `ours-capable` as ownership when `unattributed` is")
+        print("  non-zero, and do NOT read `unattributed` as `retail`.")
+        print("  NOT FIXED HERE ON PURPOSE: folding these into `ours-capable` would")
+        print("  move a number other lanes quote. It is a deliberate decision for a")
+        print("  lane that owns the board, not a side effect of a reading.")
+        print("  Full evidence: docs/runtime_port/WAVE26_LANE_PROMOIO.md S2.")
     return 0
 
 
