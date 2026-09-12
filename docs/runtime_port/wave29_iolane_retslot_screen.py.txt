@@ -1,0 +1,181 @@
+# WAVE 29 lane IOLANE -- the HIDDEN-RETURN-SLOT screen, and the SELF-CONTROL
+# run of it (lane AVBODY had not reported when this was written).
+#
+# THE CLAIM IT TESTS, per symbol: "does this function return its String BY VALUE
+# through a hidden RDX return slot, so an fn_* typedef MUST carry that extra
+# first argument?"
+#
+# TWO INDEPENDENT MECHANISMS, scored SEPARATELY and never as a union
+# (kickoff warning 9):
+#
+#   M1  THE MANGLING.  `?AV<Class>@` in the return position is BY VALUE;
+#       `AEBV<Class>@` is a reference-to-const. This is a statement about the
+#       DECLARED type and it cannot be wrong -- but it is a statement about the
+#       export directory, not about the bytes, so it cannot catch a symbol whose
+#       name we mis-transcribed.
+#
+#   M2  THE BYTES.  A by-value return MUST move the caller's RDX into RAX before
+#       returning (the ABI makes the callee return the slot pointer), and it must
+#       WRITE THROUGH that slot. A reference return never touches RDX. So:
+#       "does the body reference RDX at all?" separates them from the
+#       instruction stream, with no reliance on the name.
+#
+#   They can DISAGREE, and a disagreement is the interesting output: it means
+#       either the name is not the body's name, or the body is a thunk.
+#
+# CONTROLS (each scored on its own line, per warning 9):
+#   KNOWN POSITIVE  ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ -- `?AV`,
+#                   by value, ALREADY PORTED in this tree. A screen that fails
+#                   to flag this one is dead, and "0 hits" would otherwise be
+#                   indistinguishable from a dead parser (warning 7).
+#   KNOWN NEGATIVE  ?GetObjectName@TextFileStream@IO@@ -- `AEBV`, by reference.
+#                   Must NOT be flagged.
+import re, subprocess, sys
+import pefile
+
+DLL = r"C:\GOG Games\Banished\Runtime-x64.dll"
+OBJDUMP = r"C:\msys64\ucrt64\bin\objdump.exe"
+
+SUBJECTS = [
+    # (symbol, role)
+    ("?GetSource@Stream@IO@@UEBA?AVString@System@@XZ",              "KNOWN POSITIVE for M1/M2 -- SLOT HALF OF M3 ONLY"),
+    # M3's OWN known positive, added after the first M3 run scored the line
+    # above as `this=? slot=rdx` and I nearly read that as a pass.
+    # `?GetSource@Stream@IO@@` is the ABSTRACT BASE: it writes a null String into
+    # the slot and returns, and NEVER TOUCHES RCX. So `this=?` there is a TRUE
+    # statement about the body, not a parser failure -- but it means that row
+    # cannot exercise M3's `this` half AT ALL, and a control that cannot reach
+    # half the mechanism it scores is the union-control defect again.
+    # `?GetName@PackageFile@IO@@` dereferences RCX at +0x40 AND stores through
+    # RDX, so it exercises BOTH halves and must read `this=rcx slot=rdx`.
+    ("?GetName@PackageFile@IO@@QEBA?AVString@System@@XZ",           "KNOWN POSITIVE for M3 (both halves)"),
+    ("?GetObjectName@TextFileStream@IO@@QEBAAEBVString@System@@XZ", "KNOWN NEGATIVE (by ref)"),
+    ("?GetObjectType@TextFileStream@IO@@QEBAAEBVString@System@@XZ", "IOLANE subject"),
+    ("?GetObjectVersion@TextFileStream@IO@@QEBAHXZ",                "IOLANE subject (int)"),
+    ("?GetConstantName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z", "AVBODY subject"),
+    ("?GetTextureName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z",  "AVBODY subject"),
+]
+
+pe = pefile.PE(DLL, fast_load=True)
+pe.parse_data_directories([pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_EXPORT"]])
+addr = {}
+for e in pe.DIRECTORY_ENTRY_EXPORT.symbols:
+    if e.name:
+        addr.setdefault(e.name.decode(), 0x180000000 + e.address)
+
+print("SUBJECT   %d symbols (2 controls + 4 lane/partner rows)" % len(SUBJECTS))
+print("EVIDENCE  M1 = the MSVC mangled return spelling; "
+      "M2 = does the body's instruction stream reference RDX")
+print("BINARY    %s" % DLL)
+print()
+print("%-6s %-6s %-10s %-12s %-6s  %s"
+      % ("M1", "M2", "extent", "M3 where", "agree", "symbol / role"))
+
+def extent(va):
+    # DERIVED extent: disassemble forward to the first int3 run after a ret.
+    # NOT `.pdata` -- lane SLOTS measured a 70.3x understatement there this wave.
+    out = subprocess.run([OBJDUMP, "-d",
+                          "--start-address=0x%x" % va,
+                          "--stop-address=0x%x" % (va + 0x400), DLL],
+                         capture_output=True, text=True).stdout
+    body, seen_ret = [], False
+    for line in out.split("\n"):
+        m = re.match(r"\s+([0-9a-f]+):\s+((?:[0-9a-f]{2} )+)\s*(.*)", line)
+        if not m:
+            continue
+        a, mn = int(m.group(1), 16), m.group(3).strip()
+        if mn.startswith("int3") and seen_ret:
+            return body, a - va
+        body.append((a, mn))
+        if mn.startswith("ret"):
+            seen_ret = True
+    return body, -1
+
+for sym, role in SUBJECTS:
+    if sym not in addr:
+        print("%-6s %-6s %-12s %-6s  %s  <-- NOT AN EXPORT: name is a phantom"
+              % ("?", "?", "-", "-", sym))
+        continue
+    va = addr[sym]
+    # M1: the return type sits between the calling-convention letters and the
+    # argument list.  `?AV` anywhere before the arg list == by value.
+    #
+    # *** THE FIRST VERSION OF THIS LINE WAS WRONG AND THE KNOWN POSITIVE
+    # *** CONTROL CAUGHT IT. It read
+    # ***     "?AV" in sym.split("@@")[-1] or "?AV" in sym[sym.rfind("QEBA"):]
+    # *** which for a `UEBA` symbol evaluates `sym.rfind("QEBA") == -1` and so
+    # *** inspects the LAST CHARACTER of the name. It reported the by-value
+    # *** ?GetSource@Stream@IO@@UEBA?AVString@System@@XZ as a REFERENCE -- a
+    # *** DEFLATING error, i.e. the direction that says "there is no hidden
+    # *** return slot here" when there is one, which is precisely the wild-write
+    # *** this screen exists to prevent. Nothing but the control could have
+    # *** found it: every other row it was asked about happened to be right.
+    #
+    # Correct rule: locate the CALLING-CONVENTION token that follows the
+    # qualified name, and look at what comes immediately after it -- that is the
+    # return type. `?AV` there is a by-value class return.
+    conv = None
+    for tok in ("QEBA", "QEAA", "UEBA", "UEAA", "AEBA", "AEAA",
+                "IEBA", "IEAA", "SA", "YA"):
+        i = sym.find("@@" + tok)
+        if i >= 0:
+            conv = i + 2 + len(tok)
+            break
+    m1 = conv is not None and sym[conv:conv + 3] == "?AV"
+    body, n = extent(va)
+    m2 = any(re.search(r"\brdx\b|\bedx\b", mn) for _, mn in body)
+
+    # ---- M3, ADDED AFTER LANE AVBODY REFUTED THE PRESCRIPTION THIS SCREEN
+    # ---- WAS USED TO JUSTIFY.  See the banner note at the bottom of the file.
+    #
+    # M1 and M2 both answer "IS there a hidden slot?".  NEITHER answers "WHERE
+    # does it sit?", and the known-positive/known-negative pair only exercises
+    # the first question -- so an ORDERING claim made beside them is asserted,
+    # not measured, and rides on their credibility.
+    #
+    # M3 answers the ordering question FROM THE BYTES, with the one asymmetry
+    # that cannot be faked: an OBJECT is DEREFERENCED (read through, at a member
+    # offset); a RETURN SLOT is STORED THROUGH (written to at offset 0).  Those
+    # two roles cannot be swapped and still produce the same instruction stream.
+    deref  = set()   # registers read through  -> candidate `this`
+    stored = set()   # registers written through -> candidate return slot
+    for _, mn in body:
+        # a source operand of the form  0xNN(%reg)  or  (%reg)  -> read through
+        for r in re.findall(r"(?:0x[0-9a-f]+)?\(%(r[a-z0-9]+)\),%", mn):
+            deref.add(r)
+        # a DESTINATION operand of that form -> written through
+        for r in re.findall(r",(?:0x[0-9a-f]+)?\(%(r[a-z0-9]+)\)\s*$", mn):
+            stored.add(r)
+        for r in re.findall(r"^\w+\s+\$?[^,]+,\(%(r[a-z0-9]+)\)$", mn):
+            stored.add(r)
+    thisReg = "rcx" if "rcx" in deref else ("rdx" if "rdx" in deref else "?")
+    slotReg = "rdx" if "rdx" in stored else ("rcx" if "rcx" in stored else "-")
+    m3 = "this=%s slot=%s" % (thisReg, slotReg) if m2 else "n/a (no slot)"
+
+    print("%-6s %-6s 0x%-8x %-12s %-6s  %s   [%s]  va=0x%x"
+          % ("BYVAL" if m1 else "ref", "BYVAL" if m2 else "ref", n, m3,
+             "yes" if m1 == m2 else "**NO**", sym, role, va))
+
+print()
+print("SCORING, per control, separately:")
+print("  the KNOWN POSITIVE must read BYVAL on BOTH M1 and M2;")
+print("  the KNOWN NEGATIVE must read ref on BOTH.")
+print("  M3 is scored on its OWN control: the known positive must read")
+print("  `this=rcx slot=rdx`, because MSVC x64 puts the return pointer of a")
+print("  MEMBER function in RDX and leaves `this` in RCX.")
+print("  Any **NO** row is the interesting output, not a failure of the screen.")
+print()
+print("WHY M3 EXISTS -- LANE AVBODY'S REFUTATION, RECORDED AT THE SITE.")
+print("  The first version of this screen had M1 and M2 only, and I used it to")
+print("  prescribe a typedef with `the hidden slot FIRST and this SECOND`.")
+print("  THAT WAS WRONG, AND WRONG IN THE WILD-WRITE DIRECTION: it is the")
+print("  FREE-FUNCTION rule. For a MEMBER function `this` stays in RCX and the")
+print("  return pointer goes in RDX. Confirmed from 0x18004e4b0's bytes by")
+print("  AVBODY and then independently by me:")
+print("     18004e4d0  add 0x30(%rcx),%rax   <- RCX DEREFERENCED  => this")
+print("     18004e4d4  mov %r9,(%rdx)        <- RDX STORED THROUGH => slot")
+print("     18004e4ec  mov %rdx,%rax         <- the slot is returned")
+print("  M1 and M2 were both CORRECT and the ordering claim was ASSERTED beside")
+print("  them; a measured number lent an asserted one its credibility, and no")
+print("  present/absent control can validate an ORDERING claim. That is the")
+print("  defect this column closes, and it was found by a PARTNER, not by me.")

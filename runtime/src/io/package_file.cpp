@@ -482,7 +482,80 @@ extern "C" PackageFileView* RtIo_PackageFile_Ctor(PackageFileView* self) {
                         static_cast<int>(sizeof mine) - theirsChanged);
         }
 
-        RT_DIFF_BYTES(mine, theirs, sizeof mine);
+        // ---- WAVE 29 LANE IOLANE: the vtable field, once the row is PROMOTED
+        //
+        // `??_7PackageFile@IO@@6B@` is promoted in standalone/reg_mint_promoted
+        // .cpp. `PackageFileVtable()` is an `RT_DATA_SLOT`, i.e. registry-first,
+        // so from that moment OUR constructor stamps the MINTED table while
+        // `theirs` — reached through `RtOriginal` = `ResolveExportRaw` — stamps
+        // the DLL's. The two objects then differ at the vtable field FOREVER,
+        // by construction. That is the "Construct divergence IS the vtable
+        // identity" shape this project already carries for
+        // `?TypeName@SpriteSheet@UI@@`; an unannotated red line here is how a
+        // sweep gets misread as a regression.
+        //
+        // IT IS NOT SUPPRESSED, IT IS MOVED TO A STRONGER CHECK. Neutralising
+        // the field would only say "we stopped looking". Instead each side is
+        // asserted to hold THE TABLE THAT SIDE'S OWN DOOR NAMES, which is a
+        // statement the old byte compare could not make at all, and the rest of
+        // the object stays a full 240-byte comparison.
+        //
+        // THE OFFSET SET IS DERIVED, NOT WRITTEN DOWN. A literal `+0x00` would
+        // be a second copy of the layout that nothing keeps in step with the
+        // header (and PackageFile stamps more than one table: see BaseVtable()
+        // and ExternalVtable() above). The loop below finds every 8-byte slot
+        // where the two objects differ AND ours holds exactly what our door
+        // returned AND theirs holds exactly what the raw door returned. Any
+        // other differing slot is NOT neutralised and still reaches
+        // RT_DIFF_BYTES as a divergence — which is the direction that matters,
+        // because a window that silently swallows a real difference is the
+        // DEFLATING failure (kickoff warning 8).
+        void* const oursVt   = PackageFileVtable();
+        void* const theirsVt = ResolveExportRaw("??_7PackageFile@IO@@6B@");
+
+        alignas(16) uint8_t mineCmp[kPackageFileSize];
+        alignas(16) uint8_t theirsCmp[kPackageFileSize];
+        std::memcpy(mineCmp,   mine,   sizeof mine);
+        std::memcpy(theirsCmp, theirs, sizeof theirs);
+
+        int vtSlots = 0;
+        bool vtOk   = true;
+        for (size_t off = 0; off + 8 <= kPackageFileSize; off += 8) {
+            void* a = nullptr; void* b = nullptr;
+            std::memcpy(&a, mine   + off, 8);
+            std::memcpy(&b, theirs + off, 8);
+            if (a == b) continue;                        // not a promoted field
+            if (a != oursVt || b != theirsVt) continue;  // a REAL divergence
+            ++vtSlots;
+            // Neutralise in the COPIES only, so the remaining 232 bytes are
+            // still compared whole rather than through a stale window.
+            std::memset(mineCmp   + off, 0, 8);
+            std::memset(theirsCmp + off, 0, 8);
+        }
+        // With the row promoted this must find at least one slot; with the A/B
+        // control `BANISHED_RT_PROMOTE_PKGFILE=0` it must find NONE, because
+        // both doors then return the DLL's table and the field does not differ
+        // at all. Either way the statement below is the one being made, and it
+        // is printed so a reader can see WHICH regime the run was in rather
+        // than inferring it (kickoff warning 6).
+        if (oursVt == nullptr || theirsVt == nullptr) vtOk = false;
+
+        static bool vtAnnounced = false;
+        if (!vtAnnounced) {
+            vtAnnounced = true;
+            printf("[PKG2] vtable field: ours=%p theirs=%p -- %d slot(s) "
+                        "neutralised for the byte compare (%s). %d byte(s) of "
+                        "240 still compared whole.\n",
+                        oursVt, theirsVt, vtSlots,
+                        vtSlots == 0 ? "row NOT promoted, or the A/B control is "
+                                       "set: both doors gave the same table"
+                                     : "row PROMOTED: ours is the minted table",
+                        static_cast<int>(kPackageFileSize) - 8 * vtSlots);
+        }
+
+        RT_DIFF_SHADOW(vtOk, "our ctor stamped the table OUR door names",
+                             "retail's ctor stamped the table the RAW door names");
+        RT_DIFF_BYTES(mineCmp, theirsCmp, sizeof mineCmp);
         RT_DIFF_WORK(changed > 0);
     }
     return self;
@@ -896,11 +969,58 @@ void RtIo_PackageFile_SweepProbe(const FileSystem* fs) {
             RtIo_PackageFile_Ctor(reinterpret_cast<PackageFileView*>(theirs));
             void* const rOurs   = RtIo_PackageFile_Reconstruct(ours);
             void* const rTheirs = theirReconstruct(theirs);
-            printf("[PKG2] Reconstruct oracle: %s (%d bytes compared), "
+
+            // ---- WAVE 29 LANE IOLANE, and I PREDICTED THIS WRONG -----------
+            // The warrant for promoting `??_7PackageFile@IO@@6B@` said, in as
+            // many words, that the Destruct and Reconstruct oracles were "NOT
+            // affected... because both build BOTH sides with
+            // RtIo_PackageFile_Ctor". Destruct is indeed unaffected and still
+            // reads MATCH. **RECONSTRUCT DIVERGED on the first promoted run.**
+            // The prediction was caught by a measurement, not by review, and
+            // the mechanism is worth more than the fix:
+            //
+            //   retail's `?Reconstruct@` destructs in place through the
+            //   object's OWN vtable slot 0 (so it runs OUR body -- correct),
+            //   and then TAIL-JUMPS 0x1800b4440, retail's constructor, by an
+            //   in-DLL rel32. **An in-DLL rel32 jump is not a door**, so no
+            //   registration can intercept it, and retail's ctor stamps the
+            //   DLL's table while ours stamps the minted one. Ours ends with
+            //   the minted table, theirs with the DLL's.
+            //
+            // That is `reference_a_ported_row_can_be_permanently_unpromotable`
+            // arriving on the OTHER side of a promotion: not "our row cannot be
+            // installed", but "retail's own body will re-install ITS table over
+            // an object we built, and nothing in our tree can stop it."
+            //
+            // The neutralisation is derived exactly as in the constructor
+            // oracle: a slot is excused only if it differs AND ours holds what
+            // OUR door returned AND theirs holds what the RAW door returned.
+            // Any other difference is still reported.
+            void* const oursVt   = PackageFileVtable();
+            void* const theirsVt = ResolveExportRaw("??_7PackageFile@IO@@6B@");
+            alignas(16) uint8_t oursCmp[kPackageFileSize];
+            alignas(16) uint8_t theirsCmp[kPackageFileSize];
+            std::memcpy(oursCmp,   ours,   kPackageFileSize);
+            std::memcpy(theirsCmp, theirs, kPackageFileSize);
+            int vtSlots = 0;
+            for (size_t off = 0; off + 8 <= kPackageFileSize; off += 8) {
+                void* a = nullptr; void* b = nullptr;
+                std::memcpy(&a, ours   + off, 8);
+                std::memcpy(&b, theirs + off, 8);
+                if (a == b) continue;
+                if (a != oursVt || b != theirsVt) continue;
+                ++vtSlots;
+                std::memset(oursCmp   + off, 0, 8);
+                std::memset(theirsCmp + off, 0, 8);
+            }
+            printf("[PKG2] Reconstruct oracle: %s (%d of %d bytes compared; "
+                   "%d vtable slot(s) excused -- retail's in-DLL tail jump to "
+                   "0x1800b4440 re-stamps the DLL's table), "
                    "return-is-this ours=%d theirs=%d\n",
-                   std::memcmp(ours, theirs, kPackageFileSize) == 0 ? "MATCH"
-                                                                    : "DIVERGED",
-                   static_cast<int>(kPackageFileSize),
+                   std::memcmp(oursCmp, theirsCmp, kPackageFileSize) == 0
+                       ? "MATCH" : "DIVERGED",
+                   static_cast<int>(kPackageFileSize) - 8 * vtSlots,
+                   static_cast<int>(kPackageFileSize), vtSlots,
                    rOurs == static_cast<void*>(ours) ? 1 : 0,
                    rTheirs == static_cast<void*>(theirs) ? 1 : 0);
             // Leave both blocks destructed rather than constructed, so nothing

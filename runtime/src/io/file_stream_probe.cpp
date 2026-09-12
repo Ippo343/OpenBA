@@ -140,7 +140,7 @@ int g_ctl = 0;
 
 // Attendance: incremented AT the perturbation site each control names. A catch
 // with att=0 is not credited.
-uint64_t g_att[6] = {0, 0, 0, 0, 0, 0};
+uint64_t g_att[7] = {0, 0, 0, 0, 0, 0, 0};
 
 int  g_checked = 0;
 int  g_failed  = 0;
@@ -203,6 +203,46 @@ size_t ClaimedSize(size_t real, int classId) {
 // not drive. Reported as NOT CAUGHT with that mechanism stated, rather than
 // dropped so the control table reads 5/5 (reference_union_control_hides_a_
 // blind_screen.md).
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// CONTROL 6 — WAVE 29 LANE IOLANE. The effectiveness control for SCREEN D.
+//
+// Screen D compares OUR three ported TextFileStream accessors against RETAIL'S
+// three, on the same object. Without a control, "0 failures" from screen D is
+// indistinguishable from a screen that compared nothing — and that is not a
+// hypothetical: its ours-side and its theirs-side both end up returning an
+// interior pointer into the same object, so a screen that accidentally called
+// retail on BOTH sides would also read green (this project's
+// reference_a_probe_whose_ours_side_reaches_the_body_by_address... family, and
+// reference_control_must_pick_a_compared_subject.md — a control that corrupts a
+// value NOTHING COMPARES indicts a sound instrument).
+//
+// The perturbation is applied ON THE OURS SIDE ONLY and NOT inside the ported
+// body: substituting a wrong-offset stand-in here proves screen D's comparison
+// is live, without putting a control knob in a body that ships.
+//
+// The offset chosen is +0x60 for the NAME accessor, i.e. the value a lane that
+// believed the field names would have written. That is not an arbitrary wrong
+// number — it is precisely the swap `FileStream.h:274-287` exists to warn about.
+// ---------------------------------------------------------------------------
+// OUR ported bodies, called DIRECTLY by their C symbol -- never through
+// ResolveExport, which would consult the port registry and could in principle
+// hand back something else, and never through ResolveExportRaw, which is the
+// THEIRS side. A direct call is the one spelling that cannot silently become
+// retail (reference_registering_an_address_converts_a_selfcheck_into_an_oracle).
+extern "C" char* const* RtIo_TextFileStream_GetObjectName(const RtIo::TextFileStream*);
+extern "C" char* const* RtIo_TextFileStream_GetObjectType(const RtIo::TextFileStream*);
+extern "C" int32_t      RtIo_TextFileStream_GetObjectVersion(const RtIo::TextFileStream*);
+
+char* const* OursNameUnderControl(const RtIo::TextFileStream* ts) {
+    if (g_ctl == 6) {
+        ++g_att[6];
+        // The believe-the-name defect: NAME read at +0x60 instead of +0x58.
+        return reinterpret_cast<char* const*>(
+            reinterpret_cast<const uint8_t*>(ts) + 0x60);
+    }
+    return RtIo_TextFileStream_GetObjectName(ts);
+}
 // ---------------------------------------------------------------------------
 const int32_t* TextRequestedFormat(const RtIo::TextFileStream* ts) {
     if (g_ctl == 5) { ++g_att[5]; return &ts->activeEncoding; }
@@ -461,6 +501,39 @@ void RunFileStreamLayoutProbe() {
         Check(retailName && std::strcmp(retailName, "IOSTREAM_NAME") == 0,
               "retail's objectName is SetObject's SECOND arg", 0, 0);
 
+        // ---- SCREEN D, WAVE 29 LANE IOLANE --------------------------------
+        // OURS vs THEIRS for the three accessors this lane ported. The two
+        // sides reach two DIFFERENT bodies by two different mechanisms:
+        //   ours   -- a direct call on the C symbol of our own function;
+        //   theirs -- RtResolveExportForProbe -> ResolveExportRaw, i.e.
+        //             GetProcAddress against the SHIPPED DLL, which never
+        //             consults the port registry.
+        // So this stays a real oracle after the ports are registered, which is
+        // exactly when screens of this shape usually go dark.
+        //
+        // The comparison is on the RETURNED POINTER, not on the string it
+        // points at, and that is the strong form here: both bodies compute
+        // `this + <offset>`, so equal pointers means the OFFSETS agree. A
+        // string comparison would pass even with both offsets wrong in the same
+        // direction. (Screens B/C above already cover the text.)
+        Check(OursNameUnderControl(ts) == getName(obj),
+              "ours GetObjectName() == retail's (same interior pointer)",
+              (uintptr_t)OursNameUnderControl(ts), (uintptr_t)getName(obj));
+        Check(RtIo_TextFileStream_GetObjectType(ts) == getType(obj),
+              "ours GetObjectType() == retail's (same interior pointer)",
+              (uintptr_t)RtIo_TextFileStream_GetObjectType(ts), (uintptr_t)getType(obj));
+        Check(RtIo_TextFileStream_GetObjectVersion(ts) == getVer(obj),
+              "ours GetObjectVersion() == retail's",
+              (uint32_t)RtIo_TextFileStream_GetObjectVersion(ts), (uint32_t)getVer(obj));
+
+        // AND THE NON-VACUITY CHECK, because the three above would ALL pass if
+        // our side had silently become retail's side. Retail's GetObjectName
+        // and GetObjectType return DIFFERENT pointers (+0x58 vs +0x60); if ours
+        // returned the same pointer for both, the two Checks above would still
+        // have to fail — but this states the premise rather than relying on it.
+        Check(RtIo_TextFileStream_GetObjectName(ts) != RtIo_TextFileStream_GetObjectType(ts),
+              "ours: Name and Type are DISTINCT fields", 0, 0);
+
         reinterpret_cast<CtorFn>(
             RtResolveExportForProbe("??1TextFileStream@IO@@UEAA@XZ"))(obj);
         RtSystem::RtString_ReleaseInline(&typeStr);
@@ -502,7 +575,11 @@ void RunFileStreamLayoutProbe() {
     }
 
     // ---------------------------------------------------------------- verdict
-    const uint64_t att = (g_ctl >= 1 && g_ctl <= 5) ? g_att[g_ctl] : 0;
+    // Range widened to 6 by WAVE 29 lane IOLANE. A control whose index falls
+    // outside this range silently scores att=0 and reads as "CAUGHT BUT NOT VIA
+    // ITS OWN MECHANISM", i.e. a DEFLATING misreport of a working control --
+    // so the bound is the thing to edit in the same commit as a new control.
+    const uint64_t att = (g_ctl >= 1 && g_ctl <= 6) ? g_att[g_ctl] : 0;
     if (g_ctl == 0) {
         printf("[IOStream] LAYOUT ctl=0 checked=%d failed=%d  %s\n",
                     g_checked, g_failed, g_failed == 0 ? "PASS" : "*** MISMATCH ***");
