@@ -1916,6 +1916,11 @@ static bool Init() {
 // Wave 9 lane ENG (runtime/src/engine/engine_lifecycle.cpp). A linkage
 // specification is not allowed at block scope, so it is declared here.
 extern "C" void RtEngineLifecycleSummary();
+// Wave 23 lane ENGINE. PlatformConfigure is the cutover boot wall and
+// LoadResources runs on the loader thread; both are boot/load-once bodies whose
+// only coverage question is "did it run, and which branch".
+extern "C" void RtEnginePlatformSummary();
+extern "C" void RtEngineLoadResourcesSummary();
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Redirect stdout/stderr to log files.
@@ -2048,6 +2053,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // harness's divergences= column says nothing on its own; this is the
     // effectiveness control. Always on -- it prints only if one of them ran.
     RtEngineLifecycleSummary();
+    RtEnginePlatformSummary();
+    RtEngineLoadResourcesSummary();
     RtAllocShadowSummary();
     // Wave 9 lane H: 0 misses == every cached Runtime resolve found its symbol.
     // A non-zero count names the symbols that would be unminted at cutover.

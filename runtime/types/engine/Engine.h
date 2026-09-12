@@ -104,8 +104,15 @@
 //            0x1800db51b:  if (cfg) *(bool*)cfg = (this->_startupComplete == 0);
 //
 // So the byte at offset 0 of `Video::Configuration` is set from this flag at
-// the very top of `Engine::Shutdown`, and `Video::Configuration::Shutdown`
+// the very top of `Engine::Shutdown`, and `Video::Configuration::Save`
 // (0x1800f6d10, called later in the same function) persists it. Neither the
+// -- CORRECTED by Wave 23 lane ENGINE: this comment previously named
+// 0x1800f6d10 `Video::Configuration::Shutdown`. pefile against the shipped
+// export directory says it is `?Save@Configuration@Video@@QEAAXXZ`, and
+// `Engine::PlatformConfigure` calls the same address twice (0x1800a1798,
+// 0x1800a17ee) on the persist path. The wrong name mattered because it made
+// the arming bit look like it was written by a teardown rather than by an
+// ordinary save that also runs mid-boot. --
 // bit's meaning nor its timing lives in `Engine::Startup`'s own body beyond
 // those two stores — which is why holding Startup and Shutdown back leaves
 // the harness guard's assumptions exactly as they are today.
