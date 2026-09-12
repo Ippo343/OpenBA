@@ -575,6 +575,48 @@ skipped `--derefbug`**, and this lane nearly used it.
   something makes it fire
   (`reference_absence_screen_must_be_handed_a_shape.md`).
 
+#### The exclusion was TESTED, not recorded — and it was firing too widely
+
+FACTREST raised the shared-premise risk (residual 4) and then, instead of
+recording it, **tested whether the premise fires.** That is the sharper
+question: *not whether a premise is true, but whether it BITES, and where.*
+Applied to this lane's exclusion it found a defect in the **opposite direction**
+to theirs.
+
+`handles` — the flag that skips +0x08..+0x0f — was `sp.baseCtor != nullptr`.
+That is a **different and wider question** than "is this object Internal-rooted",
+and only an Internal-rooted object has a handle id at all. It bit two classes it
+had no business biting: **`CheckDescription` and `ComboDescription` derive from
+`??0ButtonDescription@UI@@`, which stamps `??_7Base` then `??_7External`
+(0x1801547a0 at 0x180110b2b, read in the disassembly) and never reaches
+`Internal`.** Their +0x08..+0x0f is a plain nulled field, deterministic on both
+sides, and the screen was skipping it for nothing — **16 bytes of leniency
+across two classes.**
+
+Tightened to an explicit chain test. **All three passes still green with the 16
+bytes now compared**, and both armings still fire:
+
+```
+NORMAL      26/26   14/14   31/31      <- CheckDescription / ComboDescription OK
+--negative   0/26    0/14    4/31
+--derefbug   0/26    0/14    4/31
+```
+
+So the port was right and the screen was weak. **The two lanes' defects are
+mirror images:** FACTREST's premise never fired and left two whole bodies
+uncompared; this lane's fired where it did not apply and left bytes uncompared.
+Same question, opposite sign, and both answered by **measuring the premise
+against the SUBJECT** rather than assuming its scope.
+
+**FACTREST's check applied to this lane came back clean**, and is recorded
+because a negative result from a good question is still the question working:
+they asked whether `DialogInstance` and `Element` — the two UI rows whose slot 1
+is the shared `Internal` null stub — had an uncompared slot 0, as theirs did.
+They do not. **Pass 3 iterates the whole spec table and routes on `sp.size`, not
+on the in-place slot**, so `DialogInstance`'s real allocating body is compared
+(0xb8 bytes from the arena) and `Element`'s null return is checked. Verified by
+reading the pass-3 output for those two names, not by reasoning about the code.
+
 **Excluded, with the reason:** `Object::Internal`'s handle id at +0x08..+0x0f of
 every Element-derived object. `??0Internal@Object@@` draws it from
 `?Rand@Random@System@@` and the factory hands the second caller a DIFFERENT one
@@ -777,6 +819,18 @@ In that word, per WAVE28_KICKOFF.md §4:
    are green and neither screen can see it.**
    **Addressee: the integrator**, as a sentence attached to the practice
    wherever it is adopted — not as a reason to decline it.
+
+   **PARTIALLY DISCHARGED, and the discharge is the useful part.** Both lanes
+   then tested the named premise instead of leaving it recorded, and **both
+   found a defect in their own half of it** — FACTREST's exclusion had never
+   fired at all (leaving two bodies uncompared), this lane's fired on two
+   classes it did not apply to (leaving 16 bytes uncompared). The premise
+   itself survived; the SCOPE of it was wrong in both harnesses, in opposite
+   directions. So the practice needs a second clause, and it is a **different
+   action** from the first: cross-running instruments could not have found
+   either of these, because both harnesses agreed. **Measure the premise against
+   the SUBJECT, not against another instrument.** What remains genuinely
+   untested is a premise that is wrong *in the same way* in both lanes.
 
 5. **The scratchpad transcriber is not committed.** Per standing warning 1 this
    lane built no tooling; the interpreter lives in the session scratchpad and
