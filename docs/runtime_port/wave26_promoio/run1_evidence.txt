@@ -1,0 +1,161 @@
+122:[RtMint] promoted 44 minted DATA row(s) -- live on every run
+123:[RtMint] vtable promotion guard: 15 row(s) evaluated, 0 refused, 0 synthetic trap injection(s) this run  (refusal path UNTESTED on this run -- set BANISHED_RT_MINT_TRAP_CONTROL=* to test it)
+309:[RtMintShadow]   READY    ??_7BinaryFileStream@IO@@6B@                         slots= 8 ported= 8 TRAP= 0 purecall= 0  [PROMOTED]
+310:[RtMintShadow]   READY    ??_7BinaryReader@IO@@6B@                             slots=26 ported=26 TRAP= 0 purecall= 0  [PROMOTED]
+311:[RtMintShadow]   READY    ??_7BinaryWriter@IO@@6B@                             slots=26 ported=26 TRAP= 0 purecall= 0  [PROMOTED]
+313:[RtMintShadow]   READY    ??_7CompressedFileStream@IO@@6B@                     slots= 9 ported= 9 TRAP= 0 purecall= 0  [PROMOTED]
+314:[RtMintShadow]   READY    ??_7CompressedMemoryStream@IO@@6B@                   slots= 9 ported= 9 TRAP= 0 purecall= 0  [PROMOTED]
+315:[RtMintShadow]   READY    ??_7CompressedStream@IO@@6B@                         slots= 9 ported= 9 TRAP= 0 purecall= 0  [PROMOTED]
+321:[RtMintShadow]   READY    ??_7DialogInstance@UI@@6B@                           slots=10 ported=10 TRAP= 0 purecall= 0  [PROMOTED]
+348:[RtMintShadow]   READY    ??_7Element@UI@@6B@                                  slots=12 ported=11 TRAP= 0 purecall= 1  [PROMOTED]
+355:[RtMintShadow]   READY    ??_7FileStream@IO@@6B@                               slots= 8 ported= 8 TRAP= 0 purecall= 0  [PROMOTED]
+366:[RtMintShadow]   READY    ??_7ImageBuffer@Video@@6B@                           slots=10 ported=10 TRAP= 0 purecall= 0  [PROMOTED]
+382:[RtMintShadow]   READY    ??_7MaterialInstance@Graphics@@6B@                   slots= 9 ported= 9 TRAP= 0 purecall= 0  [PROMOTED]
+383:[RtMintShadow]   READY    ??_7MemoryStream@IO@@6B@                             slots= 8 ported= 8 TRAP= 0 purecall= 0  [PROMOTED]
+414:[RtMintShadow]   READY    ??_7SpriteSheet@UI@@6B@                              slots= 9 ported= 9 TRAP= 0 purecall= 0  [PROMOTED]
+430:[RtMintShadow]   READY    ??_7ToolTipDialog@UI@@6B@                            slots=10 ported=10 TRAP= 0 purecall= 0  [PROMOTED]
+436:[RtMintShadow]   READY    ??_7Visitor@IO@@6B@                                  slots=26 ported=26 TRAP= 0 purecall= 0  [PROMOTED]
+437:[RtMintShadow]   READY    ??_7VisitorStream@IO@@6B@                            slots= 7 ported= 7 TRAP= 0 purecall= 0  [PROMOTED]
+456:[RtMintShadow]   BLOCKED  ?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A       id=0x1039fdd3 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+458:[RtMintShadow]   BLOCKED  ?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A  id=0x352b9ada idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+467:[RtMintShadow]   BLOCKED  ?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A             id=0x4fcc106b idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+468:[RtMintShadow]   BLOCKED  ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A   id=0xf2c192b8 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+470:[RtMintShadow]   BLOCKED  ?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A     id=0xbe12e2eb idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+473:[RtMintShadow]   BLOCKED  ?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A     id=0x78e68d30 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+476:[RtMintShadow]   BLOCKED  ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+479:[RtMintShadow]   BLOCKED  ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A             id=0xe771f47f idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+481:[RtMintShadow]   BLOCKED  ?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A         id=0xb9f9bd84 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+483:[RtMintShadow]   BLOCKED  ?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0x741792d4 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+484:[RtMintShadow]   BLOCKED  ?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0xa1af3cd9 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+489:[RtMintShadow]   BLOCKED  ?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A id=0xe61c2ffe idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+492:[RtMintShadow]   BLOCKED  ?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A     id=0x84e6f2dd idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+494:[RtMintShadow]   BLOCKED  ?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A       id=0x35413056 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+497:[RtMintShadow]   BLOCKED  ?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A       id=0x4f8656b9 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+502:[RtMintShadow]   BLOCKED  ?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A     id=0x418398a4 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+506:[RtMintShadow]   BLOCKED  ?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A  id=0x25a24564 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+514:[RtMintShadow]   BLOCKED  ?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A    id=0xd91ccdf1 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+520:[RtMintShadow]   BLOCKED  ?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0x6ab5f8fc idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+521:[RtMintShadow]   BLOCKED  ?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A     id=0x779102e5 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+525:[RtMintShadow]   BLOCKED  ?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A      id=0x1c6afffa idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+534:[RtMintShadow]   BLOCKED  ?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A        id=0x1821d6a5 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+542:[RtMintShadow]   BLOCKED  ?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A        id=0x1a20cede idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+543:[RtMintShadow]   BLOCKED  ?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A      id=0x175c6265 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+544:[RtMintShadow]   BLOCKED  ?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A    id=0x48b28673 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+545:[RtMintShadow]   BLOCKED  ?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A   id=0x2515acc5 idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+546:[RtMintShadow]   BLOCKED  ?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A    id=0x7319bd9d idcmp=NO  strs=0 ptr=2 fac=2traps  [PROMOTED]
+548:[RtMintShadow]   ptr= (identity, scored SEPARATELY from strs=): 207 of 312 string fields hold a DIFFERENT POINTER than the DLL's node; 27 PROMOTED row(s) hand out at least one
+3990:[RtMintShadow]   READY    ??_7BinaryFileStream@IO@@6B@                         slots= 8 ported= 8 TRAP= 0 purecall= 0  [PROMOTED]
+3991:[RtMintShadow]   READY    ??_7BinaryReader@IO@@6B@                             slots=26 ported=26 TRAP= 0 purecall= 0  [PROMOTED]
+3992:[RtMintShadow]   READY    ??_7BinaryWriter@IO@@6B@                             slots=26 ported=26 TRAP= 0 purecall= 0  [PROMOTED]
+3994:[RtMintShadow]   READY    ??_7CompressedFileStream@IO@@6B@                     slots= 9 ported= 9 TRAP= 0 purecall= 0  [PROMOTED]
+3995:[RtMintShadow]   READY    ??_7CompressedMemoryStream@IO@@6B@                   slots= 9 ported= 9 TRAP= 0 purecall= 0  [PROMOTED]
+3996:[RtMintShadow]   READY    ??_7CompressedStream@IO@@6B@                         slots= 9 ported= 9 TRAP= 0 purecall= 0  [PROMOTED]
+4002:[RtMintShadow]   READY    ??_7DialogInstance@UI@@6B@                           slots=10 ported=10 TRAP= 0 purecall= 0  [PROMOTED]
+4029:[RtMintShadow]   READY    ??_7Element@UI@@6B@                                  slots=12 ported=11 TRAP= 0 purecall= 1  [PROMOTED]
+4036:[RtMintShadow]   READY    ??_7FileStream@IO@@6B@                               slots= 8 ported= 8 TRAP= 0 purecall= 0  [PROMOTED]
+4047:[RtMintShadow]   READY    ??_7ImageBuffer@Video@@6B@                           slots=10 ported=10 TRAP= 0 purecall= 0  [PROMOTED]
+4063:[RtMintShadow]   READY    ??_7MaterialInstance@Graphics@@6B@                   slots= 9 ported= 9 TRAP= 0 purecall= 0  [PROMOTED]
+4064:[RtMintShadow]   READY    ??_7MemoryStream@IO@@6B@                             slots= 8 ported= 8 TRAP= 0 purecall= 0  [PROMOTED]
+4095:[RtMintShadow]   READY    ??_7SpriteSheet@UI@@6B@                              slots= 9 ported= 9 TRAP= 0 purecall= 0  [PROMOTED]
+4111:[RtMintShadow]   READY    ??_7ToolTipDialog@UI@@6B@                            slots=10 ported=10 TRAP= 0 purecall= 0  [PROMOTED]
+4117:[RtMintShadow]   READY    ??_7Visitor@IO@@6B@                                  slots=26 ported=26 TRAP= 0 purecall= 0  [PROMOTED]
+4118:[RtMintShadow]   READY    ??_7VisitorStream@IO@@6B@                            slots= 7 ported= 7 TRAP= 0 purecall= 0  [PROMOTED]
+4132:[RtMintShadow]   READY    ?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A       id=0x1039fdd3 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4134:[RtMintShadow]   READY    ?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A  id=0x352b9ada idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4141:[RtMintShadow]   READY    ?_typeInfo@Dialog@UI@@0VBaseTypeInfo@Object@@A             id=0x4fcc106b idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4142:[RtMintShadow]   READY    ?_typeInfo@DialogController@UI@@0VBaseTypeInfo@Object@@A   id=0xf2c192b8 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4144:[RtMintShadow]   READY    ?_typeInfo@DialogInstance@UI@@0VBaseTypeInfo@Object@@A     id=0xbe12e2eb idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4147:[RtMintShadow]   READY    ?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A     id=0x78e68d30 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4150:[RtMintShadow]   READY    ?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A            id=0x8d4a19a7 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4152:[RtMintShadow]   READY    ?_typeInfo@External@Object@@0VBaseTypeInfo@2@A             id=0xe771f47f idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4153:[RtMintShadow]   READY    ?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A         id=0xb9f9bd84 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4155:[RtMintShadow]   READY    ?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0x741792d4 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4156:[RtMintShadow]   READY    ?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0xa1af3cd9 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4159:[RtMintShadow]   READY    ?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A id=0xe61c2ffe idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4162:[RtMintShadow]   READY    ?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A     id=0x84e6f2dd idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4164:[RtMintShadow]   READY    ?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A       id=0x35413056 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4166:[RtMintShadow]   READY    ?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A       id=0x4f8656b9 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4171:[RtMintShadow]   READY    ?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A     id=0x418398a4 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4174:[RtMintShadow]   READY    ?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A  id=0x25a24564 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4178:[RtMintShadow]   READY    ?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A    id=0xd91ccdf1 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4183:[RtMintShadow]   READY    ?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A id=0x6ab5f8fc idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4184:[RtMintShadow]   READY    ?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A     id=0x779102e5 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4188:[RtMintShadow]   READY    ?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A      id=0x1c6afffa idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4194:[RtMintShadow]   READY    ?_typeInfo@SpriteSheet@UI@@0VBaseTypeInfo@Object@@A        id=0x1821d6a5 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4201:[RtMintShadow]   READY    ?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A        id=0x1a20cede idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4202:[RtMintShadow]   READY    ?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A      id=0x175c6265 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4203:[RtMintShadow]   READY    ?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A    id=0x48b28673 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4204:[RtMintShadow]   READY    ?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A   id=0x2515acc5 idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4205:[RtMintShadow]   READY    ?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A    id=0x7319bd9d idcmp=yes strs=0 ptr=2 fac=2traps  [PROMOTED]
+4207:[RtMintShadow]   ptr= (identity, scored SEPARATELY from strs=): 207 of 312 string fields hold a DIFFERENT POINTER than the DLL's node; 27 PROMOTED row(s) hand out at least one
+4227:[W17Attend] ==== door attendance (62 subject rows + 1 control) ====
+4228:[W17Attend] post>0 means the consumer RAN. post==1 does NOT mean 'ran once' -- nearly every site caches in a function-local static.
+4229:[W17Attend] CONTROL ?_singleton@MainLoop@Engine@@1PEAV12@EA: init=1 post=2 -> GREEN
+4230:[W17Attend] ATTENDED init=0    post=1      ??_7ConstantBufferData@Video@@6B@
+4231:[W17Attend] ATTENDED init=0    post=1      ??_7ContextData@Video@@6B@
+4232:[W17Attend] ATTENDED init=0    post=1      ??_7DeviceData@Video@@6B@
+4233:[W17Attend] ATTENDED init=0    post=1      ??_7ImageBuffer@Video@@6B@
+4234:[W17Attend] ATTENDED init=0    post=2      ??_7ImageBufferData@Video@@6B@
+4235:[W17Attend] ATTENDED init=0    post=1      ??_7IndexBufferData@Video@@6B@
+4236:[W17Attend] ATTENDED init=0    post=1      ??_7PixelProgramData@Video@@6B@
+4237:[W17Attend] ATTENDED init=0    post=1      ??_7RenderBufferData@Video@@6B@
+4238:[W17Attend] ATTENDED init=0    post=2      ??_7RenderStateData@Video@@6B@
+4239:[W17Attend] ATTENDED init=0    post=1      ??_7VertexBufferData@Video@@6B@
+4240:[W17Attend] ATTENDED init=0    post=1      ??_7VertexLayoutData@Video@@6B@
+4241:[W17Attend] ATTENDED init=0    post=1      ??_7VertexProgramData@Video@@6B@
+4242:[W17Attend] ATTENDED init=0    post=1      ??_7VideoProgramData@Video@@6B@
+4243:[W17Attend] ATTENDED init=0    post=1      ?_firstBuffer@IndexBuffer@Video@@0PEAV12@EA
+4244:[W17Attend] ATTENDED init=0    post=1      ?_firstBuffer@VertexBuffer@Video@@0PEAV12@EA
+4245:[W17Attend] ATTENDED init=0    post=1      ?_firstRenderBuffer@RenderBuffer@Video@@0PEAV12@EA
+4246:[W17Attend] ATTENDED init=0    post=1      ?_firstSurface@ImageBuffer@Video@@0PEAV12@EA
+4247:[W17Attend] ATTENDED init=0    post=9      ?_singleton@Configuration@Video@@0PEAV12@EA
+4248:[W17Attend] ATTENDED init=1    post=12     ?_singleton@Device@Video@@0PEAV12@EA
+4249:[W17Attend] never    init=0    post=0      ?_typeInfo@ImageBuffer@Video@@0VBaseTypeInfo@Object@@A
+4250:[W17Attend] never    init=0    post=0      ?_typeInfo@PixelProgram@Video@@0VBaseTypeInfo@Object@@A
+4251:[W17Attend] never    init=0    post=0      ?_typeInfo@RenderState@Video@@0VBaseTypeInfo@Object@@A
+4252:[W17Attend] never    init=0    post=0      ?_typeInfo@VertexLayout@Video@@0VBaseTypeInfo@Object@@A
+4253:[W17Attend] never    init=0    post=0      ?_typeInfo@VertexProgram@Video@@0VBaseTypeInfo@Object@@A
+4254:[W17Attend] never    init=0    post=0      ?_typeInfo@VideoProgram@Video@@0VBaseTypeInfo@Object@@A
+4255:[W17Attend] ATTENDED init=0    post=2      ??_7BinaryFileStream@IO@@6B@
+4256:[W17Attend] never    init=0    post=0      ??_7BinaryReader@IO@@6B@
+4257:[W17Attend] never    init=0    post=0      ??_7BinaryWriter@IO@@6B@
+4258:[W17Attend] ATTENDED init=0    post=2      ??_7CompressedFileStream@IO@@6B@
+4259:[W17Attend] ATTENDED init=0    post=2      ??_7CompressedMemoryStream@IO@@6B@
+4260:[W17Attend] ATTENDED init=0    post=2      ??_7CompressedStream@IO@@6B@
+4261:[W17Attend] ATTENDED init=0    post=2      ??_7FileStream@IO@@6B@
+4262:[W17Attend] ATTENDED init=0    post=1      ??_7MemoryStream@IO@@6B@
+4263:[W17Attend] ATTENDED init=0    post=1      ??_7PackageFile@IO@@6B@
+4264:[W17Attend] never    init=0    post=0      ??_7ReaderWriter@IO@@6B@
+4265:[W17Attend] ATTENDED init=0    post=6      ??_7Stream@IO@@6B@
+4266:[W17Attend] never    init=0    post=0      ??_7TextFileStream@IO@@6B@
+4267:[W17Attend] ATTENDED init=0    post=2      ??_7VisitorStream@IO@@6B@
+4268:[W17Attend] ATTENDED init=1    post=10     ?_singleton@FileSystem@IO@@0PEAV12@EA
+4269:[W17Attend] ATTENDED init=0    post=2      ?_singleton@Modification@IO@@2PEAV12@EA
+4270:[W17Attend] ATTENDED init=0    post=12     ?_singleton@Persistence@IO@@0PEAV12@EA
+4271:[W17Attend] never    init=0    post=0      ?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A
+4272:[W17Attend] ATTENDED init=0    post=1      ??_7Thread@System@@6B@
+4273:[W17Attend] never    init=0    post=0      ??_7AnimationEvent@Graphics@@6B@
+4274:[W17Attend] never    init=0    post=0      ??_7Geometry@Graphics@@6B@
+4275:[W17Attend] ATTENDED init=0    post=1      ??_7Light@Graphics@@6B@
+4276:[W17Attend] never    init=0    post=0      ??_7MaterialInstance@Graphics@@6B@
+4277:[W17Attend] never    init=0    post=0      ??_7Particle@Graphics@@6B@
+4278:[W17Attend] never    init=0    post=0      ??_7ParticleInstance@Graphics@@6B@
+4279:[W17Attend] never    init=0    post=0      ??_7ParticleSystemInstance@Graphics@@6B@
+4280:[W17Attend] ATTENDED init=0    post=1      ??_7SunLight@Graphics@@6B@
+4281:[W17Attend] ATTENDED init=1    post=1      ?_frameIndex@ParticleInstance@Graphics@@1HA
+4282:[W17Attend] never    init=0    post=0      ?_rng@Particle@Graphics@@1VRandom@System@@A
+4283:[W17Attend] never    init=1    post=0      ?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA
+4284:[W17Attend] ATTENDED init=0    post=1      ?_singleton@AnimationManager@Graphics@@0PEAV12@EA
+4285:[W17Attend] never    init=0    post=0      ?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A
+4286:[W17Attend] never    init=0    post=0      ?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A
+4287:[W17Attend] never    init=0    post=0      ?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A
+4288:[W17Attend] ATTENDED init=0    post=1      ?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A
+4289:[W17Attend] never    init=1    post=0      ?_typeInfo@GraphicsMesh@Graphics@@0VBaseTypeInfo@Object@@A
+4290:[W17Attend] ATTENDED init=1    post=1      ?_typeInfo@Material@Graphics@@0VBaseTypeInfo@Object@@A
+4291:[W17Attend] never    init=1    post=0      ?_typeInfo@MaterialInstance@Graphics@@0VBaseTypeInfo@Object@@A
+4292:[W17Attend] never    init=1    post=0      ?_typeInfo@Particle@Graphics@@0VBaseTypeInfo@Object@@A
+4293:[W17Attend] never    init=0    post=0      ?_typeInfo@ReflectionImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A
+4294:[W17Attend] ATTENDED init=0    post=1      ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A
+4295:[W17Attend] never    init=0    post=0      ?_typeInfo@AchievementInstance@Achievement@@0VBaseTypeInfo@Object@@A
+4296:[W17Attend] ATTENDED init=0    post=1      ?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A
+4297:[W17Attend] 40 of 67 subject rows had their door opened AFTER init; 27 never did.

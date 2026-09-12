@@ -111,6 +111,24 @@ Watch g_watch[] = {
     { "?_singleton@Modification@IO@@2PEAV12@EA", 0, 0 },
     { "?_singleton@Persistence@IO@@0PEAV12@EA", 0, 0 },
     { "?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A", 0, 0 },
+    // ---- System: 1 vtable, added WAVE 26 lane PROMOIO ----------------------
+    // `??_7Thread@System@@6B@` is System's ONLY VTABLE gap row and it has never
+    // been in this table, so no run in any wave has produced an attendance
+    // figure for it. That is UNMEASURED, and UNMEASURED IS NOT post=0 — a
+    // distinction this instrument's own header makes and which a row that is
+    // simply absent from the subject list silently defeats (the same shape as
+    // Wave 19's `??_7Visitor@IO@@6B@`, recorded in reg_mint_promoted.cpp as
+    // "NOT IN THE INSTRUMENT'S SUBJECT", and as Wave 23 lane GFXDATA's
+    // `?_typeInfo@AnimationEvent@Graphics@@`).
+    //
+    // The row is NOT promoted and this lane did not change that: Wave 22 lane
+    // SYSBODY's route-scoped verdict (runtime/src/system/thread_win.cpp:150) is
+    // DO NOT PROMOTE while the DLL is present / REQUIRED at cutover, and this
+    // lane re-checked it rather than re-deriving it. Adding it here does not
+    // reopen that verdict; it makes the row's attendance a fact instead of a
+    // blank, which is what SYSBODY's "buys nothing" claim rests on and cannot
+    // currently be checked against.
+    { "??_7Thread@System@@6B@", 0, 0 },
     // ---- Graphics: 8 vtables ----
     { "??_7AnimationEvent@Graphics@@6B@", 0, 0 },
     { "??_7Geometry@Graphics@@6B@", 0, 0 },

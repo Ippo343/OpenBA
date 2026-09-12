@@ -1360,6 +1360,204 @@ int RtMintRegisterPromotedRows() {
     }
 
     // ========================================================================
+    // WAVE 26 LANE PROMOIO — the IO stream family: four rows, one warrant each
+    // ========================================================================
+    //
+    // SCOPE. This lane owned the IO / Video / System half of the promotion
+    // backlog: 19 COMPLETE rows. FIFTEEN of them are not promoted and the
+    // reason is a single structural fact stated once here rather than fifteen
+    // times: see the "COMPLETE(abstract-base)" block in the NOT-PROMOTED list
+    // below, and docs/runtime_port/WAVE26_LANE_PROMOIO.md §3.
+    //
+    // THE FOUR BELOW ARE THE ONLY ROWS IN THIS LANE'S SCOPE WHOSE TABLE IS THE
+    // FINAL TABLE OF A LIVE OBJECT. Each is COMPLETE (every non-purecall slot
+    // registered; PromoteVtableGuarded re-checks that at RUNTIME against the
+    // live registry, so a wave kill switch cannot turn one of these into a
+    // table of abort traps behind our back).
+    //
+    // THE THREE SCREENS A PROMOTION MUST PASS, all run this lane against all
+    // four rows. They are the three hazards this file has already paid for:
+    //
+    //   (a) FIXED-BOUND SLOT COPY — the ??_7Geometry@Graphics@ shape, where a
+    //       consumer memcpy's slots out of the stamped table with a hard-coded
+    //       count. Grepped runtime/ code/ standalone/ engine/ dx11/ for a
+    //       memcpy of any IO stream table: ZERO. No consumer copies slots out
+    //       of any of these four.
+    //
+    //   (b) IDENTITY-TOKEN CONSUMER — the standalone/scene_watch.cpp shape,
+    //       where something compares an object's vptr against the symbol.
+    //       THIS SCREEN FOUND A LIVE DEFECT, and not in these four rows:
+    //       runtime/src/io/file_stream_probe.cpp builds its subjects with
+    //       ResolveExportRaw (RETAIL's ctor, retail's absolute-LEA stamp) and
+    //       then compared the result against RT_DATA_SLOT, which consults the
+    //       PORT REGISTRY FIRST. Two of its three vptr checks have therefore
+    //       been structurally FALSE since `??_7VisitorStream@IO@@6B@` (Wave 19
+    //       lane IOBASE) and `??_7BinaryFileStream@IO@@6B@` (Wave 20 lane
+    //       PROMOTE) were promoted — and they do not read as "a promotion
+    //       happened", they read as a LAYOUT defect, which is the one thing
+    //       that probe exists to detect. It is opt-in
+    //       (BANISHED_RT_IOSTREAM_PROBE) so nothing ran it. Fixed in the same
+    //       commit as this block: those three checks now ask the DLL for the
+    //       address, which is what the object in front of them was stamped
+    //       with, and the claim they actually make (+0x00 and +0x68 are two
+    //       separately stamped tables) is preserved exactly.
+    //
+    //   (c) A PORTED CTOR WHOSE ORACLE BYTE-COMPARES THE VPTR — the "Construct
+    //       divergence is the vtable identity" shape. For three of these four
+    //       the oracle is runtime/src/io/compressedstream.cpp and it is
+    //       ALREADY IMMUNE: `TagVptrIdentity` normalises +0x00 on both sides,
+    //       and the comment at compressedstream.cpp:1096 predicted this exact
+    //       promotion in as many words. The fourth (CompressedFileStream) has
+    //       no ported ctor at all — `??0CompressedFileStream@IO@@QEAA@XZ` is
+    //       retail — so there is no oracle to redden.
+    //
+    // STAMPER OWNERSHIP, re-derived this lane with tools/mint_stamper_census.py
+    // (decoder control 3 of 3, ownership pos+neg green). READ THE NEXT
+    // PARAGRAPH BEFORE READING THESE NUMBERS:
+    //
+    //   ??_7FileStream@IO@@6B@              17 stampers,  6 ours, 11 retail
+    //   ??_7CompressedStream@IO@@6B@         9 stampers,  5 ours,  4 retail
+    //   ??_7CompressedMemoryStream@IO@@6B@   7 stampers,  5 ours,  2 retail
+    //   ??_7CompressedFileStream@IO@@6B@     8 stampers,  1 ours,  7 retail
+    //
+    // NONE OF THESE IS "FULLY OWNED", AND THAT IS NOT THE GATE. The gate is
+    // whether OUR OWN ported bodies reach the table through a DOOR, because
+    // only those objects can carry our table; retail's in-DLL stampers keep
+    // retail's, and both tables are the same nine (or eight) methods. A mixed
+    // population is a coverage limit, not a hazard — the position lane VTGFX
+    // took for MaterialInstance, restated rather than re-argued.
+    //
+    // THE DOORS ARE NAMED, not asserted. Each is an RT_DATA_SLOT /
+    // ResolveExport of the mangled `??_7` string, so each picks up whatever
+    // this file publishes:
+    //   CompressedFileStream   runtime/src/object/external_load.cpp:278, 458
+    //   CompressedStream       runtime/src/io/compressedstream.cpp:923
+    //                          (VtblCompressedStream(), used by the ported ctor)
+    //   CompressedMemoryStream runtime/src/io/compressedstream.cpp:162,
+    //                          runtime/src/io/package_file_read_win.cpp:288,
+    //                          runtime/src/save/saveload_meta.cpp:409, 602
+    //   FileStream             runtime/src/io/file_stream.cpp:252, 437, 1250,
+    //                          runtime/src/object/external_savetext_win.cpp:366
+    //
+    // THE WARRANTS ARE NOT EQUAL, and the difference is stated rather than
+    // averaged away:
+    //
+    //   CompressedFileStream — THE STRONGEST. `Object::External::Load` (ours,
+    //     ported, ~the whole object-load path) builds a CompressedFileStream as
+    //     a MOST-DERIVED, LIVE object, stamps this table through the door at
+    //     external_load.cpp:278, hands `&cfs.base.base` to a Serializer, and
+    //     the BinaryReader/Encoding on the other side then DISPATCHES Read /
+    //     GetCurrentPos / GetSize / SetCurrentPos VIRTUALLY through exactly
+    //     this table. That is a dispatch route, not a door count.
+    //
+    //   CompressedMemoryStream — same shape, different route: our ported
+    //     `??0CompressedMemoryStream@IO@@QEAA@XZ` stamps it, and
+    //     SaveLoad::SaveMetaData / LoadMetaData / PackageFile::ReadPackfile
+    //     (all ported) are the constructors' callers.
+    //
+    //   CompressedStream — our ported ctor stamps it; whether a MOST-DERIVED
+    //     CompressedStream (rather than one of its two subclasses) is ever
+    //     built on a live route is NOT MEASURED by this lane.
+    //
+    //   FileStream — DELIBERATELY THE WEAKEST WARRANT IN THIS BLOCK, and it is
+    //     the ??_7BinaryWriter@ precedent above: TRAP=0 plus a door argument,
+    //     with NO dispatch observation. Every stamp of this table our tree
+    //     makes is a TRANSIENT base-class stamp that the derived constructor
+    //     overwrites before anything can dispatch, or a destructor-chain stamp
+    //     on a dying object. `??0FileStream@IO@@QEAA@XZ` — the only ctor that
+    //     could leave this table FINAL in an object — is RETAIL and unported.
+    //     So the honest claim is: **this promotion probably changes nothing**,
+    //     and it is made anyway because TRAP=0 means no slot can abort, and
+    //     leaving a row unpromoted does not verify it, it only keeps the slots
+    //     unreachable. If a bare IO::FileStream is ever constructed through our
+    //     door, it gets eight ported slots instead of retail's.
+    //
+    // ATTENDANCE — MEASURED, BY LANE ATTEND, NOT BY THIS LANE. This lane never
+    // held the game-dir lock (ATTEND held it throughout), so the figures below
+    // are ATTEND's run and are attributed to it rather than restated as ours.
+    // Run: tip wave26/base 7de42dd1, exe md5 45c72978bfbc80f17935d9701fe58977,
+    // BANISHED_W17_ATTEND=1 BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600
+    // BANISHED_PAUSEMENU_QUIT=120, clean exit 0, 0-byte crash log. CONTROL
+    // GREEN: ?_singleton@MainLoop@Engine@@ init=1 post=2, so the zeros in that
+    // table are findings and not a dead instrument. Full table:
+    // docs/runtime_port/wave26_attend/run1_w17attend.txt (branch wave26/attend).
+    //
+    //   ??_7FileStream@IO@@6B@              ATTENDED  post=2
+    //   ??_7CompressedStream@IO@@6B@        ATTENDED  post=2
+    //   ??_7CompressedMemoryStream@IO@@6B@  ATTENDED  post=2
+    //   ??_7CompressedFileStream@IO@@6B@    ATTENDED  post=2
+    //
+    // All four doors open on an ordinary autostart route. `post` counts DOOR
+    // OPENS, not dispatches, and post==2 is NOT "ran twice" — every consumer
+    // caches in a function-local static. So this proves a consumer of each
+    // symbol RAN; it does not prove a slot body was dispatched. That is a
+    // separate tier and it is NOT claimed here.
+    //
+    // NOTE THIS CHANGES THE FileStream WARRANT'S STATUS, NOT ITS CONTENT: the
+    // door demonstrably opens, which was never in doubt — what remains
+    // unmeasured is whether any object keeps this table as its FINAL one.
+    //
+    // AND ONE CONSEQUENCE NOBODY PLANNED FOR, also ATTEND's measurement
+    // (WAVE26_LANE_ATTEND.md §4). In ATTEND's cutover arms,
+    // `??_7FileStream@IO@@6B@` and `??_7CompressedFileStream@IO@@6B@` resolve
+    // NULL and KILL THE BOOT inside Game::LoadInputNameTables ->
+    // ExternalFactory::FindOrLoad -> External::Load — but only when
+    // BANISHED_RT_MINT=1 is absent, because they are minted-but-unpromoted rows
+    // that nothing publishes except that blanket switch, and integrator item C3
+    // says the blanket switch is not what cutover should use. **Promoting them
+    // publishes both unconditionally**, which removes that particular null on
+    // the cutover path. This lane did not set out to move the cutover wall and
+    // does not claim to have moved it — attempt 27 is the only thing that can
+    // say — but the two symbols ATTEND named are two of the four promoted here.
+    // [ADDRESSEE: whoever runs cutover attempt 27] [CONDITION: if those two
+    // symbols no longer appear as NULL, this block is why; if the boot dies
+    // somewhere new, that is the expected shape of progress, not a regression.]
+    //
+    // A/B CONTROL: one env var per row, never the file-wide switch, so a
+    // comparison has ONE variable.
+    //
+    // FOUR BLOCKS RATHER THAN A TABLE AND A LOOP, for the reason this file's
+    // own header gives twice: a loop would pass `row.symbol`, and
+    // tools/runtime_census.py reads a LITERAL argument. A promotion registered
+    // through a variable is live in the process and invisible to the census —
+    // reference_census_cannot_see_nonliteral_registrations.md, which this file
+    // already cites and which a tidy loop here would have reproduced.
+    // PromoteVtableGuarded re-checks TRAP==0 against the LIVE registry and
+    // refuses loudly rather than publishing abort traps.
+    {
+        const char* rowOff = getenv("BANISHED_RT_PROMOTE_CFS");
+        if (rowOff && strcmp(rowOff, "0") == 0)
+            printf("[RtMint] BANISHED_RT_PROMOTE_CFS=0 -- "
+                   "??_7CompressedFileStream@IO@@6B@ left on the DLL (A/B control)\n");
+        else
+            PromoteVtableGuarded("??_7CompressedFileStream@IO@@6B@", 0x1801555f0ull, &n);
+    }
+    {
+        const char* rowOff = getenv("BANISHED_RT_PROMOTE_CMS");
+        if (rowOff && strcmp(rowOff, "0") == 0)
+            printf("[RtMint] BANISHED_RT_PROMOTE_CMS=0 -- "
+                   "??_7CompressedMemoryStream@IO@@6B@ left on the DLL (A/B control)\n");
+        else
+            PromoteVtableGuarded("??_7CompressedMemoryStream@IO@@6B@", 0x180155560ull, &n);
+    }
+    {
+        const char* rowOff = getenv("BANISHED_RT_PROMOTE_CS");
+        if (rowOff && strcmp(rowOff, "0") == 0)
+            printf("[RtMint] BANISHED_RT_PROMOTE_CS=0 -- "
+                   "??_7CompressedStream@IO@@6B@ left on the DLL (A/B control)\n");
+        else
+            PromoteVtableGuarded("??_7CompressedStream@IO@@6B@", 0x180155640ull, &n);
+    }
+    {
+        const char* rowOff = getenv("BANISHED_RT_PROMOTE_FS");
+        if (rowOff && strcmp(rowOff, "0") == 0)
+            printf("[RtMint] BANISHED_RT_PROMOTE_FS=0 -- "
+                   "??_7FileStream@IO@@6B@ left on the DLL (A/B control)\n");
+        else
+            PromoteVtableGuarded("??_7FileStream@IO@@6B@", 0x180154960ull, &n);
+    }
+
+    // ========================================================================
     // RT_UNPROMOTABLE — rows that are PORTED IN FULL and can NEVER be promoted
     // ========================================================================
     //
@@ -2274,6 +2472,62 @@ int RtMintRegisterPromotedRows() {
     //     NOT a regression -- but an unannotated red line is how a sweep gets
     //     misread.  Annotate beside each body in the same commit as the
     //     promotion.
+    //
+    // ---- WAVE 26 LANE PROMOIO: the IO one of those seven, adjudicated -------
+    //
+    //   ?_typeInfo@PackageFile@IO@@0VBaseTypeInfo@Object@@A
+    //       NOT PROMOTED.  STATUS: **ROUTE-UNDECIDED**, which is a THIRD state
+    //       and is neither "ready" nor "not ready".
+    //
+    //   THE MEASUREMENT (lane ATTEND, not this lane; same run and same GREEN
+    //   MainLoop control as the four vtable promotions above):
+    //       ?_typeInfo@PackageFile@IO@@   init=0  post=0   -- never
+    //
+    //   WHY THAT ZERO IS NOT A RED LIGHT, and this is the whole point of the
+    //   entry.  ATTEND was asked to separate (a) "the row is not ready" from
+    //   (b) "the route never reached it, so nothing ever fetched the table and
+    //   the silence is not evidence about the row at all".  It reported (b),
+    //   with evidence rather than assertion:
+    //     * the symbol's only consumers are the three reflection bodies
+    //       RtIo_PackageFile_Type/_TypeId/_TypeName (package_file.cpp:531/542/
+    //       552), all reading through PackageFileTypeInfo() at :325;
+    //     * in the SAME run `??_7PackageFile@IO@@6B@` reads ATTENDED post=1 —
+    //       so PackageFile objects ARE built through our door on that route,
+    //       and nothing on it asks one for its type;
+    //     * sibling `?_typeInfo@` rows read post>0 in the same run
+    //       (Material@Graphics, GeneratedImageBuffer@Graphics), so the zero
+    //       cannot be blamed on the RT_DATA_SLOT door mechanism;
+    //     * the consumer literal is byte-identical to the watch-table literal,
+    //       which excludes the one (a)-shaped failure available here — spelling
+    //       drift reading as post=0 while the door worked.
+    //   ATTEND's own caveat is kept rather than dropped: this counts DOORS, not
+    //   executions, and "route never reaches it" and "route reaches those
+    //   objects only through in-DLL calls that are not doors" are both
+    //   consistent with post=0 and it cannot separate them.
+    //
+    //   SO WHY NOT PROMOTE ANYWAY, given the four vtables above were promoted
+    //   on weaker attendance?  Because the cost is not symmetric.  A `?_typeInfo@`
+    //   promotion makes `?TypeName@PackageFile@IO@@` hand out OUR node's `name`
+    //   POINTER, and that body compares the pointer against the DLL's with
+    //   RT_DIFF_SCALAR — it would read `divergences=N` forever after, exactly as
+    //   ?TypeName@SpriteSheet@UI@@ already does.  That annotation must land in
+    //   the SAME COMMIT as the promotion (lane DATA's instruction, and the
+    //   reason is that an unannotated red line is how a sweep gets misread).
+    //   Writing a permanent red line into a body on the strength of a
+    //   measurement that is explicitly NOT ABOUT THE ROW is the wrong trade.
+    //   The vtable rows carry no such cost: their oracles are already immune.
+    //
+    //   [ADDRESSEE: the Wave 26 integrator.]
+    //   [CONDITION, and it is a ROUTE condition, not a readiness one: promote
+    //   this row when ONE run reads it post>0 on ANY route.  The cheapest
+    //   candidate is a route that asks a PackageFile for its type — the mods
+    //   route would, and CLAUDE.md records that route crashing in
+    //   ModDialog_ToggleMod_Impl+0x43, so it is blocked on that crash and not
+    //   on this row.  A second, cheaper candidate that needs no new route: call
+    //   RtIo_PackageFile_TypeName once from standalone/tool_harness.cpp, which
+    //   already holds drivers of exactly this shape.  Either one settles it.]
+    //   [DO NOT re-derive the (a)/(b) question — it is measured above.  What is
+    //   missing is a ROUTE, not an analysis.]
     // ------------------------------------------------------------------------
 
     printf("[RtMint] promoted %d minted DATA row(s) -- live on every run\n", n);
