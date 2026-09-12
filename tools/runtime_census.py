@@ -2906,7 +2906,28 @@ def selftest_site_census():
 #   * an absence screen with no natural positive case is a dead parser waiting
 #     to happen, so --selftest-factory-blind hands it a synthetic factory row
 #     and requires a non-zero count.
-RE_FACTORY_SYMBOL = re.compile(r'^\?Create(?:New)?Object@')
+# WAVE 29 LANE INSTR, POST-REPORT AMENDMENT. This was
+#     r'^\?Create(?:New)?Object@'
+# and it was wrong in BOTH directions at once, which is why neither error
+# cancelled the other out of the printed numbers:
+#
+#   INFLATING -- the OPTIONAL group also matched
+#   `?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z`, the AVL DISPATCHER. That
+#   is an ordinary door, not a per-class factory slot, and it put 1 row in the
+#   board population and FIRED THE "part 1 no longer holds" ALARM. Found by lane
+#   VERIFY, which corroborated both halves in one live run:
+#   ?CreateObject@Factory@ ASKED 2 (a real door, and not a factory) while
+#   ?CreateNewObject@ / ?CreateInPlaceObject@ were SILENT 200 / ASKED 0.
+#
+#   DEFLATING -- it never matched `?CreateInPlaceObject@` AT ALL, while the
+#   subject line this screen prints said `^?Create(New|InPlace)?Object@`. The
+#   registered count read 38 where the family is 74. THE SCREEN NAMED A SUBJECT
+#   IT DID NOT EXAMINE, which is the exact failure this wave's warning 6 is
+#   about, committed inside the section that quotes it.
+#
+# Neither group is optional now, and --selftest-factory-blind carries a fixture
+# for each: the dispatcher must NOT match, and an InPlace name MUST.
+RE_FACTORY_SYMBOL = re.compile(r'^\?Create(?:New|InPlace)Object@')
 MINT_INC_REL = os.path.join("standalone", "rt_data_mint_tables.inc")
 
 
@@ -2924,7 +2945,7 @@ def factory_family_size(repo=REPO):
     except OSError:
         return (None, None, path)
     n_rows = len(re.findall(r'&kTypeInfoStorage\[(\d+)\]', text))
-    n_fac = len(set(re.findall(r'"(\?Create(?:New)?Object@[^"]+)"', text)))
+    n_fac = len(set(re.findall(r'"(\?CreateNewObject@[^"]+)"', text)))
     return (n_fac, n_rows, path)
 
 
@@ -2940,7 +2961,7 @@ def factory_family_screen(rows, ported=None, repo=REPO, out=None):
     n_fac, n_rows, path = factory_family_size(repo)
     p()
     p("OUT OF POPULATION BY CONSTRUCTION: THE FACTORY FAMILY  (Wave 29 lane INSTR)")
-    p("  subject: keys matching ^?Create(New|InPlace)?Object@, counted in TWO")
+    p("  subject: keys matching %s, counted in TWO" % RE_FACTORY_SYMBOL.pattern)
     p("           places -- the %d-row board population, and scan()'s raw"
       % len(rows))
     p("           registration map before it is intersected with `called`.")
@@ -3028,6 +3049,20 @@ def selftest_factory_blind():
                    "REGISTERED AND VISIBLE TO THE SCAN: 1" in buf.getvalue(),
                    "handed {1 registered}, screen printed it"))
 
+    # THE DISPATCHER NEGATIVE, handed explicitly. `?CreateObject@Factory@` is a
+    # real door and NOT a factory slot; an optional (New|InPlace) group matched
+    # it and fired this screen's own alarm. Found by lane VERIFY.
+    disp = "?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z"
+    checks.append(("NEGATIVE: the AVL dispatcher %s is NOT a factory slot"
+                   % disp[:38],
+                   not RE_FACTORY_SYMBOL.match(disp),
+                   "regex %s" % RE_FACTORY_SYMBOL.pattern))
+    # ...and the InPlace half, which the old pattern silently excluded while the
+    # printed subject line claimed to cover it.
+    inpl = "?CreateInPlaceObject@Dialog@UI@@SAPEAVBase@Object@@PEAX@Z"
+    checks.append(("POSITIVE: an InPlace factory IS in the family (the old "
+                   "pattern excluded it while SAYING it did not)",
+                   bool(RE_FACTORY_SYMBOL.match(inpl)), inpl[:44]))
     pop_neg = [("export", "?Update@Scene@Audio@@QEAAXAEBVTime@System@@@Z",
                 "Audio", 1, 0, ["synthetic"])]
     buf2 = io.StringIO()

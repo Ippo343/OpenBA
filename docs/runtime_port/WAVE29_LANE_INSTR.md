@@ -373,3 +373,126 @@ tool.**
    in this repo have now independently re-implemented literal scanning and both
    got it wrong; the cross-tool screen at the bottom of `mint_slot_sweep.py` is
    the only thing that would have told you.
+
+---
+
+## 8. POST-REPORT AMENDMENT — I EDITED AFTER REPORTING, AND HERE IS WHY
+
+**Warning 18 says do not edit after reporting, and if you must, say so loudly.
+This is that.** The commit carrying this section lands after §0–§7 were written
+and after I reported to the coordinator. **The board did not move: TOTAL is still
+1460 / 1295 / 88.7%.** Only the factory screen and its controls changed.
+
+Lane VERIFY ran all four of my screens (`wave29/verify` `28e8df93`) and **found a
+defect in one of them**, which is the pairing working exactly as kickoff §2.1
+intends.
+
+### 8.1 The defect VERIFY found — and a second one under it that VERIFY did not see
+
+`RE_FACTORY_SYMBOL` was `^\?Create(?:New)?Object@`. It was **wrong in both
+directions at once**, which is why neither error cancelled the other out of the
+printed output:
+
+- **INFLATING (VERIFY's finding).** The optional group also matched
+  `?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z` — the **AVL dispatcher**, an
+  ordinary door and not a per-class factory slot. It put **1** row in the board
+  population and **fired my own `*** part 1 above no longer holds ***` alarm**.
+  A screen built to check a premise was reporting that the premise had failed, on
+  a row that is not in the family. VERIFY corroborated both halves in one live
+  run: `?CreateObject@Factory@` **ASKED 2** (a real door, not a factory), while
+  `?CreateNewObject@` / `?CreateInPlaceObject@` were **SILENT 200 / ASKED 0**.
+- **DEFLATING (found while fixing it, and worse).** The pattern **never matched
+  `?CreateInPlaceObject@` at all**, while the subject line the screen *prints*
+  read `^?Create(New|InPlace)?Object@`. The registered count read **38** where
+  the family is **74**. **The screen named a subject it did not examine** — this
+  wave's warning 6, committed inside the section that quotes it.
+
+Fixed to `^\?Create(?:New|InPlace)Object@`, neither group optional. The subject
+line is now generated from `RE_FACTORY_SYMBOL.pattern` itself, so it **cannot**
+disagree with the regex again. Two fixtures added, scored separately: the
+dispatcher must **not** match, an `InPlace` name **must**.
+`--selftest-factory-blind` is now 8 checks; `--selftest-all` remains ALL GREEN.
+
+```
+  IN THE BOARD POPULATION            :  1  ->  0     (the false alarm is gone)
+  REGISTERED AND VISIBLE TO THE SCAN : 38  -> 74
+```
+
+**§1.2 above quoted 74 before this fix, and that was luck, not accuracy**: I took
+it from my own scratch probe (a substring test) rather than from the tool's
+output, which said 38. Quoting a number the instrument does not print is how a
+screen's defect stays invisible while its documentation reads correct.
+
+### 8.2 VERIFY's screen results, scored separately as asked
+
+1. `--selftest-macro-doors` **14/14**; `F_SPLIT` confirmed to cover VERIFY's
+   residual-6 blind spot. **Q: any false doors among the 26 recovered names?
+   ZERO.** 11 confirmed **by execution** on a live in-game run
+   (`??0Camera@Graphics` ASKED 2, `??0Geometry` 5, `??1External@Object` 3,
+   `?AsUTF8@WideString` 3, `?CloseDialog` 1, `?CloseFile` 2,
+   `?Play@UserInterface` 2, `?Set@WideString` 2, `?SetBounds@Geometry` 2,
+   `?SetCamera@Context` 3, `?SetText@Error` 2); 5 silent; 10 UNREG, which a
+   registry-hit counter **cannot** see by construction. VERIFY states the screen
+   is structurally unable to produce a negative — so read this as *no false door
+   found*, not *no false door exists*.
+2. `--selftest-factory-blind` **6/6, and the live section defective** — §8.1.
+3. `mint_stamper_census.py --selftest` **5/5**; VERIFY has **no independent
+   evidence on the 24** and explicitly offers none. The fold-in rests on Wave
+   26's measurement plus my re-derivation, and on nothing else.
+4. `rt_deleting_dtor_verify.py` — **UNRECOGNISED is the right verdict, and there
+   are TWO REAL THIRD SHAPES**, read from the disassembly by VERIFY:
+   - `Graphics::EdgeMeshInstance 0x1800175d0`: the scalar branch at `0x180017621`
+     calls `0x1800a41c0`, not the `0x1800174d0` the array branch passes as its
+     element callback. `0x1800174d0` is a frame-setup **thunk** that tail-jumps
+     there (`0x1800174e6: jmp 0x1800a41c0`); the real dtor restamps `0x180154e60`
+     at `+0x00`. **Shape: the scalar branch calls the thunk's TARGET.**
+   - `Graphics::MeshInstance 0x180017330`: the scalar branch at `0x180017381`
+     **inlines the whole dtor body**, verbatim from `0x180017060`'s opening.
+     **Shape: there is no call to find.**
+   - `Light 0x180058dd0` is not a thunk; VERIFY did **not** read its scalar
+     branch and makes no claim about it.
+
+   **I did not implement either shape.** I have not read those bytes myself, and
+   a written recipe from a good lane can still be wrong. `UNREC` is exactly right
+   in the meantime: it says *unrecognised*, not *defective*.
+   **[ADDRESSEE: the Wave 30 lane that next touches `rt_deleting_dtor_verify.py`
+   — teach the reader to follow a one-instruction `jmp` tail, and to accept an
+   inlined dtor body, re-deriving both from the disassembly before trusting this
+   paragraph. That takes `unrecognised` 3 -> 1 and settles `Light`.]**
+
+### 8.3 What VERIFY did with my design review — and the failure direction we both missed
+
+VERIFY implemented the `masked=` line I asked for (per class, totalled in a
+COVERAGE line **above** the PASS count, with the "the negative control cannot see
+this" sentence attached): **1823 bytes compared, 25 masked, over 1944 object
+bytes.**
+
+**But the failure that actually bit was neither of the two we named.** The mask
+was **one-sided** — retail vs retail only. Across three runs `Graphics::EdgeMesh
++0x60` read ours = 98 / 90 / 60 while retail read 68 every time: *a byte OUR side
+varies and retail does not* was scored as a port divergence three runs running.
+**INFLATING.** Fixed by constructing OURS twice as well — which immediately broke
+the negative control (it flips only `g_ours`, so the victim byte then looked
+nondeterministic and was masked) and read **0/20 NOT CAUGHT, loudly**. Final:
+negative 18/18, abstract 10/10.
+
+**The lesson is sharper than my review was.** I reasoned that a mask built from
+the same side it scores is unsound and named two consequences — both about
+*retail's* variance. The live defect was on *our* side, which neither of us
+listed. **A design review from a description finds the failure modes the
+description mentions.**
+
+VERIFY's headline, recorded as VERIFY's and not folded into mine: **25 concrete
+factory rows, 18 byte-identical, 5 FAIL, 2 VACUOUS — and the 5 are NOT presented
+as defects**, because the set moved 7 -> 3 -> 5 across three runs of the same
+build and needs a stability screen. What is solid: **FACTUI1's clean sheet does
+not reproduce when the ours-side is the real port rather than a second copy of
+the interpreter.**
+
+### 8.4 One more thing §2 does not claim
+
+Everything in §2 stands. Add one: **I did not review
+`standalone/factory_byte_oracle.cpp` even after VERIFY committed it at
+`28e8df93`.** VERIFY offered and I declined, in order to stop editing. The §4
+design review remains a review of a *description*, and §8.3 is the measured
+evidence that such a review is incomplete by construction.
