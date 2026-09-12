@@ -155,6 +155,7 @@ extern int RtUiNumberEditDescriptionRegister();// numbereditdescription.cpp
 extern int RtUiNumberDescriptionRegister();    // numberdescription.cpp
 extern int RtUiSpinnerDescriptionRegister();   // spinnerdescription.cpp
 extern int RtUiSliderDescriptionRegister();    // sliderdescription.cpp
+extern int RtUiTabDescriptionRegister();       // tabdescription.cpp
 // Wave 24 lane SMALLBODY: ??2SpriteSheet@UI@@SAPEAX_K@Z (0x180002e60) -- the
 // class operator new, byte-identical to ToolTipDialog's and verified side by
 // side rather than by resemblance. Its own file and switch.
@@ -250,6 +251,7 @@ void RtUiPortInit() {
     n += RtUiNumberDescriptionRegister();      // UI::NumberDescription
     n += RtUiSpinnerDescriptionRegister();     // UI::SpinnerDescription
     n += RtUiSliderDescriptionRegister();      // UI::SliderDescription
+    n += RtUiTabDescriptionRegister();         // UI::TabDescription
     n += RtUiStringTableFactoryRegister();  // owns BANISHED_RT_UISTRTAB (FACTORY)
     n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)

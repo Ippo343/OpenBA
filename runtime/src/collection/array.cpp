@@ -1648,6 +1648,25 @@ const ArraySpec kSpec_StringPair10 = {            // 0x180078c90
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x00, 0x10 }; // BOTH slots are dereferenced
 
+// VTABLE BATCH 2 (2026-09-12) — 0x18004cdf0, the tab array of
+// UI::TabDescription: each element is a PAIR of ExternalPtr<ElementDescription>
+// (?Serialize@TabDescription@UI@@ runs 0x180038f90 over elem+0x00 and elem+0x08
+// in one loop, 0x1800da881/0x1800da88e), and ~TabDescription's array dtor
+// (0x18004cc90) frees the buffer WITHOUT visiting the elements. So TRIVIAL, and
+// no `destroy`.
+//
+// IT IS *NOT* kSpec_StringPair10, which has the same stride, the same align and
+// the same zeroed tail. That row's two slots are refcounted Strings and it
+// carries AssignStringPair10 and DestroyStringPair10Range; reusing it here would
+// take a reference on two ExternalPtrs on every grow and release them on every
+// shrink, against a class whose own destructor takes none. The three numbers
+// were read from 0x18004cdf0's own body (`<< 4` at the MemAlloc -> stride 0x10,
+// `MOV EDX,0x8` -> align 8, the else arm writing two zero qwords -> InitZero10),
+// not carried across from the lookalike.
+const ArraySpec kSpec_ExtPtrPair10 = {            // 0x18004cdf0
+    "Array<UI::TabDescription::Tab>", 0x10, 8, &Assign16, &InitZero10, nullptr, true,
+    0, 0, 0, 0, 0, 0 };
+
 // 0x180075b20 — `Array<UI::DialogControllerConfigEntry>::SetSize(this, int)`.
 // See AssignCfgEntry20 above for the transcription and for the +0x04..+0x07
 // hole that both arms skip.
@@ -2323,6 +2342,10 @@ J1_ENTRY(180024aa0)   // UI:          ComboElement::_userData (+0x108)
 // wrong reads as a finding about the subject.)
 J1_ENTRY(180009460)   // UI:          reached from ?AddController@DialogInstance@ 0x18011363f
 J1_ENTRY(180039440)   // UI:          reached from ?AddController@DialogInstance@ 0x180113649
+// VTABLE BATCH 2 (2026-09-12) — ~TabDescription's tab array (0x18004cc90).
+// The canonical J1 body: free _data, zero {data, size+cap}, no per-element
+// visit. Read from its own disassembly, not assumed from the element type.
+J1_ENTRY(18004cc90)   // UI:          UI::TabDescription's tab array
 // WAVE 9 LANE PKG2 rung 4b-iii — the two array dtors ?~CompressedStream@IO@@
 // (0x1800aa650) calls on its own members, at +0x40 and +0x30. NOT byte-identical
 // to the already-ported 0x180024aa0 it calls at +0x50 (first difference at byte
@@ -2531,6 +2554,8 @@ J3_ENTRY2(18005cc60, kSpec_Ptr8Zero)    // Graphics:    Array<T*>, plain copy, z
 J3_ENTRY2(1800136f0, kSpec_Tri18A4)     // Graphics:    EdgeMesh's TriangleList (align 4)
 J3_ENTRY2(180061880, kSpec_StringExtZ)  // Graphics:    Material's {String*,ExternalPtr}, zero tail
 J3_ENTRY2(180034010, kSpec_MetaEntry20) // Save:        Persistence metadata entries
+// VTABLE BATCH 2 (2026-09-12)
+J3_ENTRY2(18004cdf0, kSpec_ExtPtrPair10) // UI: TabDescription's tab array
 
 
 #undef J3_ENTRY2
@@ -3201,6 +3226,8 @@ void RtCollectionPortInit() {
     // byte identity to the canonical J1 body, and it is stated as such.
     RegisterRuntimeAddr(0x180009460, (void*)&RtColl_ArrayDtor_180009460);
     RegisterRuntimeAddr(0x180039440, (void*)&RtColl_ArrayDtor_180039440);
+    // VTABLE BATCH 2 (2026-09-12): ~TabDescription's tab array.
+    RegisterRuntimeAddr(0x18004cc90, (void*)&RtColl_ArrayDtor_18004cc90);
     // ---- EIGHTEENTH AND NINETEENTH (Wave 25 lane INTERNAL42) ---------------
     // The count above says "expect a seventeenth rather than be surprised by
     // it", and that held: both of these became visible because another lane
@@ -3271,6 +3298,8 @@ void RtCollectionPortInit() {
     // BANISHED_RT_ARRAY_NONTRIVIAL exists to switch off.
     RegisterRuntimeAddr(0x180075d20, (void*)&RtColl_ArraySetSize_180075d20);
     RegisterRuntimeAddr(0x180075b20, (void*)&RtColl_ArraySetSize_180075b20);
+    // VTABLE BATCH 2 (2026-09-12): TabDescription::Serialize's read-path resize.
+    RegisterRuntimeAddr(0x18004cdf0, (void*)&RtColl_ArraySetSize_18004cdf0);
     RegisterRuntimeAddr(0x1800298f0, (void*)&RtColl_ArraySetSizeFill_1800298f0);  // PKG2 4c-ii
     RegisterRuntimeAddr(0x18001f990, (void*)&RtColl_ArraySetSizeFill_18001f990);
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
