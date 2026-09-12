@@ -116,3 +116,51 @@ Each lane writes `docs/runtime_port/WAVE26_LANE_<NAME>.md` and commits on its ow
 branch. The integrator merges and runs attempt 27. Write your doc **as you go**,
 not at the end — Wave 25's integrator queue exists because a residual written
 after the fact names no addressee.
+
+---
+
+## CORRECTION TO THIS KICKOFF (integrator, 2026-09-12)
+
+**The PROMOIO brief above is wrong, and it is wrong in exactly the way this document
+warns against two paragraphs earlier.**
+
+It lists "the twelve COMPLETE Video `*Data` tables" (`ConstantBufferData`, `ContextData`,
+`DeviceData`, `ImageBufferData`, `IndexBufferData`, `PixelProgramData`, `RenderBufferData`,
+`RenderStateData`, `VertexBufferData`, `VertexLayoutData`, `VertexProgramData`,
+`VideoProgramData`) as promotion scope. **All twelve are tagged PERMANENTLY UNPROMOTABLE and
+have been since Wave 17**, re-measured from the shipped bytes by Wave 23 lane VIDVT:
+
+```
+standalone/reg_mint_promoted.cpp:1513
+// RT_UNPROMOTABLE: ??_7ConstantBufferData@Video@@6B@ | 1/1 (3 purecall)
+//   | WAVE17_LANE_CEIL.md §3.1 | NONE, EVER [SCOPE: PERMANENT]
+//   [ADDRESSEE: nobody need act -- Wave 23 lane VIDVT re-measured all 12 from the
+//    shipped bytes; a lane that adds a virtual call on a companion BASE between the
+//    two stamps must re-open it]
+```
+
+Lane DOORS' `VTABLE GAP, DECOMPOSED` block now prints this every run: **Video's entire
+12-row vtable gap is UNPROMOTABLE**, and real remaining vtable work board-wide is **27 rows,
+not 47**.
+
+**How the error was made:** the scope was built from the census's `COMPLETE` column without
+consulting the `RT_UNPROMOTABLE` tags — which live in `reg_mint_promoted.cpp`, the same file
+the promotions are written into. The tags were five waves old and never consulted.
+
+**The section immediately above says, in bold: "COMPLETE is the STATIC half of readiness
+ONLY... it does NOT say the row is promotable — that turns on owning the function that STAMPS
+the table."** The warning was written and then violated in the same document, for twelve rows,
+by the person who wrote it.
+
+That is the documented failure mode — *a handover's cheap-wins list is its stalest section and
+the first one acted on* — reproduced while quoting the rule against it. **Stating a trap is not
+the same as checking for it.** The check is one grep:
+
+```
+grep -n "RT_UNPROMOTABLE" standalone/reg_mint_promoted.cpp
+```
+
+**For future kickoffs: any table named as promotion scope must be filtered through the
+RT_UNPROMOTABLE tags BEFORE it reaches a lane brief, not after.** Lane DOORS' decomposition
+block now makes that automatic for whoever reads the census; nothing makes it automatic for
+whoever writes a brief.
