@@ -115,8 +115,25 @@ check-log-strip:
 standalone: SA_CXXFLAGS += -O3 -DNDEBUG -DBANISHED_PERF_EXPERIMENTAL=$(PERF_EXPERIMENTAL_RELEASE) $(STRIP_LOGS_FLAGS)
 standalone: check-log-strip $(SA_TARGET)
 
+# WAVE 25 INTEGRATION: standalone-debug now runs check-log-strip too.
+#
+# It did not, and `standalone` / `standalone-perf` did. Since standalone-debug
+# is the default development and integration path (it is what `sa-run` and the
+# integrator build), a qualified `std::printf` could be written, built, tested
+# and MERGED without anything complaining -- the guard only fired for the
+# log-stripped target that nobody built until a perf A/B was needed.
+#
+# It broke the perf build for an ENTIRE WAVE twice running: Wave 24's gfxmat
+# lane landed two, discovered by Wave 25 lane ALLOC when its A/B could not
+# build; Wave 25's BODY lane then landed two more, discovered at integration
+# minutes after the first pair was fixed. Both times every checker was green
+# and standalone-debug was clean, so "build clean, checkers green" was NOT
+# evidence the tree built.
+#
+# The guard is a fast source scan, so the cost here is negligible and it now
+# fails in the lane that wrote the line rather than in the wave that needs it.
 standalone-debug: SA_CXXFLAGS += -g -O0 -D_DEBUG
-standalone-debug: $(SA_TARGET)
+standalone-debug: check-log-strip $(SA_TARGET)
 
 # Fast-debug build: -Og with EVERYTHING else identical to standalone-debug —
 # logs kept (no STRIP_LOGS), _DEBUG on, CheckPtr left real. Own object dir so a

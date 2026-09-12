@@ -400,7 +400,7 @@ void RunOracleOnce() {
         std::snprintf(line, sizeof line, "[PKGDTOR] %-36s %-9s %s\n",
                       c.name, differ ? "DIVERGED" : "agreed",
                       verdictOk ? "" : "  <-- UNEXPECTED");
-        std::printf("%s", line);
+        printf("%s", line);
     }
 
     g_selfTestOk = (passed == 6);
@@ -441,7 +441,7 @@ int RtIoPackageFileDtorRegister() {
     int n = 0;
     RegisterRuntimeExport("??1PackageFile@IO@@UEAA@XZ", (void*)&RtIo_PackageFile_Dtor); ++n;
     RegisterRuntimeAddr(0x1800b4540, (void*)&RtIo_PackageFile_Dtor);
-    std::printf("[RtPort]   IO::PackageFile::~PackageFile (lane BODY, W25): %d "
+    printf("[RtPort]   IO::PackageFile::~PackageFile (lane BODY, W25): %d "
                 "export registered (opens ONE address door, 0x1800269a0; the "
                 "\"5 unported callees\" blocker was measured FALSE -- 6 of 7 are "
                 "ported -- and the \"no oracle\" blocker is answered by the "

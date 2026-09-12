@@ -294,7 +294,7 @@ int64_t CurrentTimeTicksViaGlobals() {
     // over. The guard exists ONLY to turn a #DE into a message that names the
     // cause; it is not a fallback.
     if (!initialTick || !ticksPerSec || !sysTicksPerSec || *sysTicksPerSec == 0) {
-        std::printf("[RtMainLoop] FATAL: Timer globals not initialised "
+        printf("[RtMainLoop] FATAL: Timer globals not initialised "
                     "(_systemTicksPerSecond=%lld) -- PlatformStartup has not run\n",
                     sysTicksPerSec ? (long long)*sysTicksPerSec : 0);
         return 0;
