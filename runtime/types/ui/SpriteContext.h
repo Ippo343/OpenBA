@@ -266,3 +266,62 @@ static_assert(sizeof(Collection::Array<SpriteDraw>) == 0x10,
               "Array<T> is data/size/capacity = 0x10");
 
 } // namespace UI
+
+// ============================================================================
+// APPENDED: what `_opaque50` is, read out of UI::SpriteContext::AddFont
+// (retail 0x18011ccb0) and the layout helper it calls.
+// ============================================================================
+//
+// The section above declines to model +0x50..+0x77 because "no body this lane
+// ported reads them". AddFont does, so the region is named here — but ONLY as
+// offsets plus one element struct, because that is all two bodies prove.
+//
+// AddFont hands `this + 0x50` to `ComputeStringLayout` (0x180116fd0) as its
+// ninth argument, and that callee's prologue writes exactly the three members
+// this header already deduced from `Save::SaveLoad::Draw`'s inlined ctor:
+//
+//   0x180117005  LEA RCX,[RDI+0x18] ; CALL 0x18002fea0   -> clear array @ +0x68
+//   0x180117010  LEA RCX,[RDI+0x08] ; CALL 0x180076a40   -> clear array @ +0x58
+//   0x180117021  MOV [RDI],RBX                           -> zero  qword @ +0x50
+//
+// So `_opaque50` is one layout object: a qword, then two Collection::Array<T>.
+// AddFont then walks the FIRST of those arrays — data at SpriteContext+0x58,
+// `_size` at +0x60 — with a stride of 0x10 (`ADD RDI,0x10`, 0x18011ceba),
+// reading three ints per element (0x18011cdea..0x18011cdf3):
+//   +0x00 the sprite index, +0x04 an x, +0x08 a y.
+//
+// NOTHING ELSE IS MODELLED. The array at +0x68 holds one int per line break
+// (0x180117191 appends the dword at ComputeStringLayout's own `[RSP+0xc0]`), the
+// qword at +0x50 is only ever zeroed, and a glyph's fourth dword at +0x0c is
+// never read by either body. Naming them would be a claim neither body supports.
+// These are OFFSETS INTO `_opaque50`, not a replacement for it — the struct
+// keeps its proven size either way.
+
+namespace UI {
+
+enum : size_t {
+    kSpriteContextLayout     = 0x50,   // the layout object AddFont passes on
+    kSpriteContextGlyphs     = 0x58,   // Array<FontGlyph>::_data
+    kSpriteContextGlyphCount = 0x60,   // Array<FontGlyph>::_size
+    kSpriteContextLineStarts = 0x68,   // Array<int32_t>, not read by any port
+};
+
+// One laid-out glyph. Stride 0x10, three ints read.
+struct FontGlyph {
+    int32_t spriteIndex;   // +0x00  index into the font's sheet; may be < 0
+    int32_t x;             // +0x04  pen x, before the caller's x offset
+    int32_t y;             // +0x08  pen y, before the caller's y offset
+    int32_t _unread0C;     // +0x0c  never read by AddFont; see the note above
+};
+static_assert(sizeof(FontGlyph) == 0x10, "FontGlyph stride is 0x10");
+static_assert(offsetof(FontGlyph, spriteIndex) == 0x00, "spriteIndex at +0x00");
+static_assert(offsetof(FontGlyph, x)           == 0x04, "x at +0x04");
+static_assert(offsetof(FontGlyph, y)           == 0x08, "y at +0x08");
+
+// The offsets above must land inside the region the struct already reserves.
+static_assert(offsetof(SpriteContext, _opaque50) == kSpriteContextLayout,
+              "_opaque50 begins at the layout object");
+static_assert(kSpriteContextLineStarts + 0x10 == offsetof(SpriteContext, _clipRegion),
+              "the line-start array is the last member before _clipRegion");
+
+} // namespace UI

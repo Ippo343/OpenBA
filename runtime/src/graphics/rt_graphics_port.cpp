@@ -251,6 +251,12 @@ void RtGraphicsPortInit() {
     { extern int RtGraphicsAnimationStateRegister();
       n += RtGraphicsAnimationStateRegister(); }
 
+    // VTABLE BATCH 7 (2026-09-12): Graphics::AnimationGroup and
+    // Graphics::ParticleSystem (vtbatch7_animgroup_particlesystem.cpp).
+    // NO SWITCH -- DIRECTION.md §2: a port registers unconditionally.
+    { extern int RtGraphicsBatch7AnimGroupParticleSystemRegister();
+      n += RtGraphicsBatch7AnimGroupParticleSystemRegister(); }
+
     int gfxd = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXD")) gfxd = RtGraphicsWave9GfxdRegister();
 

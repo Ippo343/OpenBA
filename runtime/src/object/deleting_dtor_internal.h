@@ -64,11 +64,17 @@ struct DelDtorSpec {
 // stays true of it; the TABLE is the authority and this constant tracks it,
 // and the static_assert next to the table is what forces an appender to
 // notice (it caught CSTREAM's addition, at 41 vs 39).
-constexpr int kSpecCount = 77;   // 71-76: vtable batch 6 — Graphics::AmbientLight,
-                                 // GeneratedImageBuffer, FrameCopyImageBuffer,
-                                 // ReflectionImageBuffer, GraphicsMesh, SpotLight
-                                 // (2026-09-12; the six indices were COUNTED off the
-                                 // table after merging main, not assumed)
+constexpr int kSpecCount = 95;   // 89-94: VTABLE BATCH 6 (Graphics::AmbientLight,
+                                 //     GeneratedImageBuffer, FrameCopyImageBuffer,
+                                 //     ReflectionImageBuffer, GraphicsMesh, SpotLight;
+                                 //     2026-09-12). These six were 71-76 on their own
+                                 //     branch and were RE-COUNTED when batches 1, 5
+                                 //     and 7 reached main first — the hazard below,
+                                 //     for real, a second time.
+                                 // 85-88: VTABLE BATCH 5 (Font, CharacterSet, Cursor, SpriteCapture); 81-84: VTABLE BATCH 7 (AnimationGroup, ParticleSystem, SoundBuffer, SoundEffect); 71-80: VTABLE BATCH 1 -- UI::{Border,Button,Check,
+                                 //     ClipRegion,Combo,Container,DocumentText,Edit,Graph,
+                                 //     Label}Description (2026-09-12); renumbered at the
+                                 //     merge, batch 9 keeps 61-66 and batch 8 67-70
                                  // 67-70: Collision2D::CollisionMesh/Surface, Pathfinding::PointList,
                                  //     Picking::PickingMesh (vtable batch 8, 2026-09-12); 61-66 batch 9
                                  // 61: UI::ImageDescription + AnimatedImageDescription (2026-09-12)   // 59: UI::RibbonDescription (2026-09-12)   // 58: UI::GroupDescription (2026-09-12)   // 57: Video::ShaderProgram + VertexProgram + PixelProgram + RenderState (2026-09-12)   // 53: Video::VertexLayout (2026-09-12)   // 52: Video::VideoProgram (2026-09-12)   // 51: Graphics::Material (2026-09-12)

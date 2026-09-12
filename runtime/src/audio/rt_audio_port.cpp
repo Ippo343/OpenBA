@@ -70,6 +70,10 @@ void RtAudioPortInit() {
     // Unconditional, same reason as the two rows above.
     extern int RtAudioEffectSlotSerializeRegister();  // audio_effectslot_serialize.cpp
     n += RtAudioEffectSlotSerializeRegister();
+    // VTABLE BATCH 7 (2026-09-12): Audio::SoundBuffer + Audio::SoundEffect
+    // (vtbatch7_soundbuffer_soundeffect.cpp). Unconditional, same reason.
+    extern int RtAudioBatch7SoundBufferSoundEffectRegister();
+    n += RtAudioBatch7SoundBufferSoundEffectRegister();
     // Wave 29 lane AVBODY. The sweep needs no allocator, no gameplay route and
     // no caller: two of the three bodies are PURE (the `this` they are handed is
     // never read), and the third is fully synthesisable. It compares against the

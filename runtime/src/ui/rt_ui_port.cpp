@@ -146,6 +146,20 @@ extern int RtUiGroupDescriptionRegister(); // groupdescription.cpp
 extern int RtUiRibbonDescriptionRegister(); // ribbondescription.cpp
 extern int RtUiImageDescriptionRegister();  // imagedescription.cpp
 extern int RtUiAnimatedImageDescriptionRegister(); // animatedimagedescription.cpp
+// VTABLE BATCH 1 (2026-09-12): the first half of the UI::*Description family,
+// ten whole classes, one file each, all sharing runtime/src/ui/
+// description_common.h. Registered unconditionally -- these are minted vtable
+// slots and a flag on them would only re-arm the trap (DIRECTION.md §2).
+extern int RtUiBorderDescriptionRegister();       // borderdescription.cpp
+extern int RtUiButtonDescriptionRegister();       // buttondescription.cpp (+ the shared applier)
+extern int RtUiCheckDescriptionRegister();        // checkdescription.cpp
+extern int RtUiClipRegionDescriptionRegister();   // clipregiondescription.cpp
+extern int RtUiComboDescriptionRegister();        // combodescription.cpp
+extern int RtUiContainerDescriptionRegister();    // containerdescription.cpp
+extern int RtUiDocumentTextDescriptionRegister(); // documenttextdescription.cpp (+ its applier)
+extern int RtUiEditDescriptionRegister();         // editdescription.cpp
+extern int RtUiGraphDescriptionRegister();        // graphdescription.cpp
+extern int RtUiLabelDescriptionRegister();        // labeldescription.cpp
 // Wave 24 lane SMALLBODY: ??2SpriteSheet@UI@@SAPEAX_K@Z (0x180002e60) -- the
 // class operator new, byte-identical to ToolTipDialog's and verified side by
 // side rather than by resemblance. Its own file and switch.
@@ -236,6 +250,17 @@ void RtUiPortInit() {
     n += RtUiRibbonDescriptionRegister(); // UI::RibbonDescription, all nine bodies
     n += RtUiImageDescriptionRegister();  // UI::ImageDescription + the shared applier
     n += RtUiAnimatedImageDescriptionRegister(); // UI::AnimatedImageDescription
+    // VTABLE BATCH 1 — ten whole UI::*Description classes (2026-09-12)
+    n += RtUiBorderDescriptionRegister();
+    n += RtUiButtonDescriptionRegister();
+    n += RtUiCheckDescriptionRegister();
+    n += RtUiClipRegionDescriptionRegister();
+    n += RtUiComboDescriptionRegister();
+    n += RtUiContainerDescriptionRegister();
+    n += RtUiDocumentTextDescriptionRegister();
+    n += RtUiEditDescriptionRegister();
+    n += RtUiGraphDescriptionRegister();
+    n += RtUiLabelDescriptionRegister();
     n += RtUiStringTableFactoryRegister();  // owns BANISHED_RT_UISTRTAB (FACTORY)
     n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
@@ -243,6 +268,37 @@ void RtUiPortInit() {
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
     n += RtUiFactory1Register();  // owns BANISHED_RT_UIFACT1 (FACTUI1)
     n += RtUiFactory2Register();          // owns BANISHED_RT_UIFACT2 (FACTUI2)
+
+    // ------------------------------------------------------------------
+    // 2026-09-12, the UI TEXT PIPELINE batch. No switches: a port registers
+    // unconditionally (DIRECTION.md §2 item 3). Declared here rather than at
+    // the top of the file so the whole batch is one contiguous block --
+    // eight agents are appending to this file in parallel today.
+    // ------------------------------------------------------------------
+    extern int RtUiClassOperatorDeleteRegister();  // ui_operator_delete.cpp
+    extern int RtUiCharacterSetRegister();         // characterset.cpp
+    extern int RtUiCursorRegister();               // cursor.cpp
+    extern int RtUiSpriteCaptureClassRegister();   // spritecapture_class.cpp
+    extern int RtUiFontRegister();                 // font.cpp
+    extern int RtUiDescriptionDtorsRegister();     // description_dtors.cpp
+    extern int RtUiDocumentTextRegister();         // documenttext.cpp
+    extern int RtUiSpriteContextAddRegister();     // spritecontext_add.cpp
+    extern int RtUiElementBodiesB5Register();      // element_bodies_b5.cpp
+    // combodialog_ctor.cpp, NOT combodialog.cpp: vtable batch 9 landed the
+    // class's slots in that file under the same register-function name, so
+    // the construction half took its own file at the merge. See its banner.
+    extern int RtUiComboDialogCtorRegister();      // combodialog_ctor.cpp
+    n += RtUiClassOperatorDeleteRegister();  // the 60 ??3<Class>@UI@@, one body
+    n += RtUiCharacterSetRegister();         // UI::CharacterSet, whole class
+    n += RtUiCursorRegister();               // UI::Cursor, whole class
+    n += RtUiSpriteCaptureClassRegister();   // UI::SpriteCapture vtable + Draw
+    n += RtUiFontRegister();                 // UI::Font, whole class + metrics
+    n += RtUiDescriptionDtorsRegister();     // 26 ??1<Class>@UI@@ destructors
+    n += RtUiDocumentTextRegister();         // UI::DocumentTextElement pipeline
+    n += RtUiSpriteContextAddRegister();     // SpriteContext AddSprite x3 + AddFont
+    n += RtUiElementBodiesB5Register();      // assorted *Element / *Description
+    n += RtUiComboDialogCtorRegister();      // ??0ComboDialog, ??2ComboDialog,
+                                             // ??0DialogInstance (2nd overload)
 
     // ---- VTABLE BATCH 9 (2026-09-12), unconditional -------------------------
     //   combodialog.cpp             UI::ComboDialog
