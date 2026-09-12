@@ -23,6 +23,14 @@ extern int RtAchManagerRegister();    // achievement_manager.cpp (lane B)
 // two stream members must flip together with the ctors/dtors that build the
 // objects they serialize.
 extern int RtAchGoalSerializeRegister();  // goal_serialize.cpp      (Wave 9 P)
+// Wave 23 lane ACHIEVE. Both gated by BANISHED_RT_ACHMGR with
+// achievement_manager.cpp: achievement_state.cpp ports five more members of the
+// SAME three classes (the manager dtor, RemoveAll, ReadAchievements,
+// SetAchievementMet and Achievement::CreateInstance) and
+// achievement_serialize.cpp the two stream members Wave 5 held back. Class
+// atomicity (PLAN §4.1 decision 5) puts them on one switch.
+extern int RtAchStateRegister();          // achievement_state.cpp     (Wave 23)
+extern int RtAchSerializeRegister();      // achievement_serialize.cpp (Wave 23)
 
 void RtAchievementPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_ACHIEVEMENT")) {
@@ -34,6 +42,10 @@ void RtAchievementPortInit() {
         n += RtAchGoalRegister();
         n += RtAchGoalSerializeRegister();
     }
-    if (RtWaveEnabled("BANISHED_RT_ACHMGR")) n += RtAchManagerRegister();
+    if (RtWaveEnabled("BANISHED_RT_ACHMGR")) {
+        n += RtAchManagerRegister();
+        n += RtAchStateRegister();
+        n += RtAchSerializeRegister();
+    }
     printf("[RtPort] Achievement: %d exports registered\n", n);
 }
