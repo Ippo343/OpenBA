@@ -125,6 +125,10 @@ Watch g_watch[] = {
     { "?_rng@Particle@Graphics@@1VRandom@System@@A", 0, 0 },
     { "?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA", 0, 0 },
     { "?_singleton@AnimationManager@Graphics@@0PEAV12@EA", 0, 0 },
+    // Added WAVE23 lane GFXDATA: WAVE21_LANE_GFXDATA.md §3.4 named this row
+    // (added mid-wave-21 by GFXVT's ??_7AnimationEvent@ closure) as READY but
+    // never wired into this watch table, so its attendance was never measured.
+    { "?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A", 0, 0 },
     { "?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A", 0, 0 },
     { "?_typeInfo@FrameCopyImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", 0, 0 },
     { "?_typeInfo@GeneratedImageBuffer@Graphics@@0VBaseTypeInfo@Object@@A", 0, 0 },
