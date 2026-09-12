@@ -1689,6 +1689,66 @@ const ArraySpec kSpec_TableCell10 = {             // 0x1800799a0
     "Array<UI::TableDescription::Cell>", 0x10, 8, &Assign16, &InitCellNeg1Ptr0,
     nullptr, true, 0, 0, 0, 0, 0, 0 };
 
+// VTABLE BATCH 2 (2026-09-12) — UI::LayoutDescription's entry array,
+// 0x180043d80. Element 0x38: an ExternalPtr<ElementDescription> at +0x00, THREE
+// refcounted Strings at +0x08/+0x10/+0x18, four scalars at +0x20..+0x2f and a
+// bool at +0x30. Stride 0x38 and align 8 read from the body's
+// `(longlong)capacity * 0x38` and `MOV EDX,0x8` at the MemAlloc.
+//
+// All three element ops are CALLS in retail and are reached BY ADDRESS here,
+// through the registry, for the reason AssignGraphSeries' comment gives: a
+// direct C++ call to the same instructions skips the registered entry point and
+// the diff site never fires.
+void AssignLayoutEntry(uint8_t* d, const uint8_t* s) {
+    using Fn = void* (*)(uint8_t*, const uint8_t*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180043980));
+    fn(d, s);
+}
+// 0x180043d80's `else` (new-tail) arm, transcribed. Note the UNALIGNED QWORD of
+// 1 at +0x24, which sets +0x24 to 1 AND +0x28 to 0 in one store, and that
+// +0x31..+0x37 are NEVER WRITTEN.
+void InitLayoutEntry(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;
+    *reinterpret_cast<uint32_t*>(d + 0x20) = 2;          // DWORD
+    __builtin_memcpy(d + 0x24, "       ", 8);  // UNALIGNED QWORD
+    *reinterpret_cast<uint32_t*>(d + 0x2c) = 0;          // DWORD
+    d[0x30] = 0;                                         // BYTE
+}
+// Retail has NO range helper for this element: 0x180044050 destroys ONE entry
+// and both callers loop around it. The loop IS the range form.
+// runtime/src/collection/array_destroy.cpp ports and registers 0x180044050.
+void DestroyLayoutEntryRange(void* /*ignoredThis*/, uint8_t* base, int count) {
+    using Fn = void (*)(uint8_t*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180044050));
+    for (int i = 0; i < count; ++i) fn(base + i * 0x38);
+}
+const ArraySpec kSpec_LayoutEntry38 = {           // 0x180043d80
+    "Array<UI::LayoutDescription::Entry>", 0x38, 8, &AssignLayoutEntry,
+    &InitLayoutEntry, &DestroyLayoutEntryRange, false,
+    /*assign unwritten*/ 0x31, 0x38,
+    /*init   unwritten*/ 0x31, 0x38,
+    /*seed zero       */ 0x00, 0x20 };  // ptr + 3 String slots are dereferenced
+
+// VTABLE BATCH 2 (2026-09-12) — UI::LayoutElement's per-cell info array,
+// 0x180043b40, the THREE-argument form. Element 0x44 and align 4 (`* 0x44` at
+// the MemAlloc, `MOV EDX,0x4`), copied as SEVENTEEN dwords with no refcount
+// touch anywhere, no destroy and no default-tail arm — TRIVIAL.
+//
+// The caller only ever writes the first 0x24 bytes of the fill record it passes
+// (LayoutDescription::CreateInstance, 0x1800d3568..0x1800d3581), so bytes
+// 0x24..0x43 of every appended element are whatever was on that frame. That is
+// retail's, and it is the CALLER's business, not this row's: the copy is 0x44
+// bytes wide either way.
+void AssignLayoutInfo44(uint8_t* d, const uint8_t* s) { std::memcpy(d, s, 0x44); }
+const ArraySpec kSpec_LayoutInfo44 = {            // 0x180043b40
+    "Array<UI::LayoutElement::Info>", 0x44, 4, &AssignLayoutInfo44,
+    nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+
 // 0x180075b20 — `Array<UI::DialogControllerConfigEntry>::SetSize(this, int)`.
 // See AssignCfgEntry20 above for the transcription and for the +0x04..+0x07
 // hole that both arms skip.
@@ -2580,6 +2640,7 @@ J3_ENTRY2(180034010, kSpec_MetaEntry20) // Save:        Persistence metadata ent
 // VTABLE BATCH 2 (2026-09-12)
 J3_ENTRY2(18004cdf0, kSpec_ExtPtrPair10) // UI: TabDescription's tab array
 J3_ENTRY2(1800799a0, kSpec_TableCell10)  // UI: TableDescription's cell array
+J3_ENTRY2(180043d80, kSpec_LayoutEntry38) // UI: LayoutDescription's entry array [NON-TRIVIAL]
 
 
 #undef J3_ENTRY2
@@ -2596,6 +2657,7 @@ J3_ENTRY2(1800799a0, kSpec_TableCell10)  // UI: TableDescription's cell array
 J3_ENTRY3(180004e30, kSpec_Sprite38)    // UI:       SpriteSheet's 0x38 element [NON-TRIVIAL]
 J3_ENTRY3(18001f990, kSpec_Fill8)       // Graphics: Array<Geometry*>
 J3_ENTRY3(180023830, kSpec_Fill4)       // Graphics: Array<uint32>
+J3_ENTRY3(180043b40, kSpec_LayoutInfo44) // UI: LayoutElement's per-cell info array
 J3_ENTRY3(18004f790, kSpec_Fill16)      // Engine:   MainLoop::_postDraw push
 J3_ENTRY3(18004f8e0, kSpec_Fill16)      // Engine:   MainLoop::_postUpdate push
 // WAVE 29 LANE GFXBODY — Array<RendererDrawable>::SetSize, the append behind
@@ -3326,6 +3388,8 @@ void RtCollectionPortInit() {
     // VTABLE BATCH 2 (2026-09-12): TabDescription::Serialize's read-path resize.
     RegisterRuntimeAddr(0x18004cdf0, (void*)&RtColl_ArraySetSize_18004cdf0);
     RegisterRuntimeAddr(0x1800799a0, (void*)&RtColl_ArraySetSize_1800799a0);
+    RegisterRuntimeAddr(0x180043d80, (void*)&RtColl_ArraySetSize_180043d80);
+    RegisterRuntimeAddr(0x180043b40, (void*)&RtColl_ArraySetSizeFill_180043b40);
     RegisterRuntimeAddr(0x1800298f0, (void*)&RtColl_ArraySetSizeFill_1800298f0);  // PKG2 4c-ii
     RegisterRuntimeAddr(0x18001f990, (void*)&RtColl_ArraySetSizeFill_18001f990);
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
