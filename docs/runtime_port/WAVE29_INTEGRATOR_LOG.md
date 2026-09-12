@@ -148,3 +148,101 @@ now two waves of evidence that pairing is the highest-yield rule in the kickoff.
 - ADDRESSEE for the propagation question: **lane INSTR, this wave.** If INSTR
   does not take it, it returns to the Wave 30 kickoff author as item 1, not to
   "a future lane".
+
+---
+
+## ENTRY 2 — IOLANE's interim check CORRECTS entry 1's mechanism
+
+Lane IOLANE reported a registration check (not yet closed). Its result was the
+negative one I asked for — all four IO targets confirmed unported at
+`wave29/base`, by four `Register*` verbs, by name AND by address, over 1581
+source files, with comments stripped before matching and both controls scored
+separately. But its **caveat** is the valuable part.
+
+### 2.1 The concat branch was UNEXERCISED, and saying so was the whole win
+
+IOLANE built its screen with a branch for the adjacent-string-concatenation shape
+entry 1 described, found **zero** instances in the whole population, and reported
+that branch **UNEXERCISED rather than passing** — kickoff warning 7, applied to
+itself. That one honest line is what exposed the error below. A lane that had
+written "concat shape: 0 found, clean" would have buried it.
+
+### 2.2 Re-derived: the mechanism in entry 1 is WRONG; the defect is BIGGER
+
+```
+A: split literal on ONE line
+   grep -rnE 'RegisterRuntime(Export|Addr)\([^)]*"[^"]*"\s*"'  ->    0
+B: open paren, literal on the NEXT line
+   grep -rnE 'RegisterRuntimeExport\(\s*$'                     ->   49
+C: what the sweep regex matches, line-by-line
+   grep -rhoE 'RegisterRuntimeExport\(\s*"[^"]+"'              -> 1355
+D: total call sites
+   grep -rhoE 'RegisterRuntimeExport\('                        -> 1442
+```
+
+- **There are ZERO adjacent-string-concatenated registration literals.** SLOTS'
+  stated mechanism — "a mangled name split across two source lines (C adjacent-
+  string concatenation)" — **does not occur in this tree.**
+- The real shape is **B**: open paren, literal on the FOLLOWING line.
+- The real size is **D − C = 87** call sites the line-by-line regex cannot match.
+
+**Three of us produced three different numbers for one defect — SLOTS 67, me 49,
+the derivation 87 — by each measuring a slightly different thing.** That is the
+cross-tool consistency problem from entry 1, reproduced *inside the investigation
+of the cross-tool consistency problem*, by the people who had just written it
+down. The defect's EXISTENCE was never in doubt; its shape and size were wrong in
+every account including mine.
+
+**87 is not yet decomposed and must not be quoted as "87 multi-line literals".**
+The population is "call sites where `RegisterRuntimeExport(` is not followed *on
+the same line* by a quoted literal", which folds together (a) the 49 open-paren-
+EOL sites, (b) first arguments that are a **named constant** — a *separate,
+already-known* census blind spot — and (c) variable first arguments. Decomposing
+it is INSTR's.
+
+### 2.3 My error, stated plainly
+
+Entry 1 says I "verified this independently rather than taking it". **I verified
+the CONCLUSION and inherited the PREMISE.** My grep `RegisterRuntimeExport\(\s*$`
+tests form B; SLOTS' claim was about form A. The two agree that the tool is
+blind, and they agree for *different reasons*, so my 49 was never a confirmation
+of what SLOTS actually said — and I wrote it up as one. This is
+`reference_two_checks_one_hidden_premise.md`: a check that reproduces someone
+else's answer while sharing none of their reasoning is not independent
+corroboration, it is a coincidence that reads as agreement.
+
+**The tell I missed:** SLOTS said 67 and I said 49 and I did not ask why. A
+number that lands close enough to feel confirmatory is exactly where this project
+has repeatedly stopped looking — and entry 1 §1.3 congratulates SLOTS for asking
+that question about 16 vs 18 in the same breath that I failed to ask it about 67
+vs 49.
+
+### 2.4 Consequential correction sent
+
+INSTR was building a fix against the mechanism I gave it. Corrected: a
+`"a" "b"` concat branch would be **dead code**; handle the next-line form, and
+note that a positive control for the concat shape must be **constructed**,
+because the tree contains none.
+
+### 2.5 IOLANE's other findings, recorded
+
+- **A DEFLATING bug in its own hidden-return-slot screen, caught only by its
+  known positive:** the mangling branch fell back to `sym.rfind("QEBA")` and so
+  read the last character of the name for any `UEBA` symbol, reporting a by-value
+  `String` return as a reference. Every other row it was asked about happened to
+  be right. Same failure family as the sweep's: a fallback that silently
+  mis-parses a *neighbouring* mangling.
+- **`SetupFileSystem`'s extent was DERIVED, not taken:** `0x1800aebb0..0x1800af5e8`
+  = **0xA39 = 2617 bytes** from the instruction stream (first int3 after the last
+  ret), agreeing with Wave 28 lane MISC to within one byte. **Not a `.pdata`
+  figure**, so entry 1's 70.3x understatement warning does not bite here. The
+  body is materially the size advertised — a handed-down figure that survived
+  re-derivation, which is worth recording as often as the ones that do not.
+
+### 2.6 Interim lane figures — NOT a board
+
+IOLANE reports IO 234/222 → 239/231 and TOTAL 1453/1294 → 1459/1304 (89.4%),
+IO gap 12 → 8, BODY 4 → 1. **Unverified by me and not a published board**: the
+lane has not closed, and per kickoff warning 18 no figure is final until I
+re-derive on the merged tip with every lane tip checked. Recorded as an interim
+claim only.
