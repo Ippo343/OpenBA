@@ -573,3 +573,110 @@ Anyone who records this defect as *"a regex was too narrow"* will write it again
 anyone who records it as *"`\s*` is dangerous"* will write the other half again.
 **The fact is: a pattern with `\s*` is line-agnostic, and a pipeline that feeds
 it single lines is not — the defect lives in the seam, not in either piece.**
+
+---
+
+## 10. FINAL APPENDIX — DENOMINATORS, ONE MORE DEFECT OF MINE, AND THE RULE
+
+**Doc-only, third and last post-report append. No tool changed, no number moved:
+board 1460 / 1295 / 88.7%, sweep 7. This document is closed after this section.**
+
+Lanes SLOTS and GFXBODY both sent read-only follow-ups after correctly closing
+their own trees. That is itself worth a ledger line, and GFXBODY made it: **the
+best generalisation of a wave can arrive after every lane has correctly stopped
+editing**, which is why it arrives by message and needs a doc that is still
+willing to receive it.
+
+### 10.1 GFXBODY's shape-A site — verified, and my verification was wrong first
+
+GFXBODY offered `?GetRootPoseAtTime@Animation@Graphics@@` (on `wave29/gfxbody`,
+not on my tip) as a shape-A test site. I read the file out of that branch and ran
+my reader over it rather than claiming coverage from the fact that the reader is
+whole-file:
+
+```
+  names recovered from that file : 4
+  GFXBODY shape-A site           : PASS
+    ?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@AEBVTime@System@@0@Z
+  NEGATIVE half (line channel)   : PASS — it holds only a PHANTOM
+    ?GetRootPoseAtTime@Animation@Graphics@@QEBA?AVTransform@Math@@   (20 chars short)
+```
+
+**My negative-half test printed `*RED*` on that PASS, and the bug is the wave's
+own shape one more time.** I tested it with `TARGET_SUB in n` — a **substring** —
+and the truncated prefix contains the substring too, so a site the fix **does**
+recover scored as a site the old channel **already had**. *The test could not
+tell a name from its own prefix.* Caught in under a minute only because the
+script also printed what the line channel actually saw, which is the one habit
+this lane has been arguing for all wave: **print the subject, not just the
+verdict.** Had it printed only PASS/RED I would have recorded a false failure
+against GFXBODY's site.
+
+### 10.2 SLOTS' denominator point — the cheap fix, applied
+
+Three shape-counts now exist and **look** comparable:
+
+| source | number | **denominator — this is the whole point** |
+|---|---|---|
+| §1.8 (mine) | A-involving **28**, B-involving **50**, total **67** | of the **67 invisible-or-truncated `RegisterRuntimeExport` sites** only |
+| GFXBODY | shape A **56**, shape B **78** | of **all 3260 door call sites carrying a literal** — every door, not just registrations, and visible sites included |
+
+**They are not the same population and must never be differenced or added.**
+SLOTS flagged that both gaps are 28 (56−28, 78−50) and called it "a coincidence
+or a tell"; **I did not resolve it and am not claiming either way.** Resolving it
+needs GFXBODY's scanner definition, which is on another branch, and a wrong
+reconciliation is worse than an open question. What is certain is that a single
+number with no denominator invites exactly the confident wrong reconciliation
+SLOTS' own §2 exists to prevent, one level down. **Quote every one of these
+numbers with its denominator attached or not at all.**
+
+### 10.3 The rule, in the two clauses GFXBODY and SLOTS arrived at
+
+GFXBODY sent a one-clause version and then corrected it, because SLOTS had a
+fourth instance the clause could not catch. Recorded as theirs:
+
+1. **When you know what a positive looks like**, an absence screen's zero is
+   meaningless until it has found one **of the same shape**. (Three instances:
+   SLOTS' `\s*` spanning newlines; GFXBODY's `^\[reg\]$` not matching objdump's
+   `DWORD PTR [rcx]`; GFXBODY's `.pdata` walker refusing a frameless leaf and
+   returning empty.)
+2. **When the screen's output IS the thing you are trying to learn**, no positive
+   exists to hand it — handing it a case whose answer you know means already
+   having the answer — and the only check is an **independent second derivation
+   of the same quantity by different means**. (SLOTS' 13-of-18, where a pattern
+   matching only the truncated section of `--unported` led briefly to the exact
+   opposite of the truth.)
+
+GFXBODY's structural note on why clause 2 is the expensive one is right and I
+would sharpen it: *"hand it a positive" is a step a checklist can tick, while
+"derive it twice by different means" is a decision to spend time*, so it loses to
+every schedule.
+
+**This lane is clause 2's best and worst example in the same wave.** Best: the
+stamper fold-in and the 67 both reproduced a second lane's figure by a different
+method, which is the only reason either is trustworthy. Worst: **my factory
+screen's `RE_FACTORY_SYMBOL` had a positive control from the day it was written,
+and the control was the wrong shape** — a `CreateNewObject` name, while the
+population being silently excluded was `CreateInPlaceObject`. Clause 1, violated
+by the lane that was writing controls for everyone else, and caught only when
+VERIFY hit the other end of the same regex (§8.1).
+
+### 10.4 What still is not claimed, and the close
+
+Everything in §2 stands. Add:
+
+- **I did not reconcile the 28/28 gap** (§10.2), and nobody should from these two
+  documents alone.
+- **I did not run GFXBODY's `gfxbody_regscan.py`**, and its 3260 / 56 / 78 are
+  recorded as GFXBODY's measurement, unverified by me.
+- **GFXBODY's result that 0 of Graphics' 8 BODY rows were already registered on
+  `wave29/base`** — i.e. that SLOTS' finding does **not** generalise from vtable
+  slots to body rows, and the census's `--unported` Graphics list is sound — is
+  GFXBODY's, measured on its branch, and is the one piece of independent evidence
+  that my census fixes did not leave the same defect in the other direction. I
+  did not re-derive it.
+
+**[ADDRESSEE: the Wave 29 integrator.]** This document is closed. Three
+post-report appends are two more than the rule allows in spirit; each was
+doc-only, each is flagged, and the board never moved. If anything else arrives
+for lane INSTR, it belongs in the wave close document, not here.
