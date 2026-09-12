@@ -1667,6 +1667,28 @@ const ArraySpec kSpec_ExtPtrPair10 = {            // 0x18004cdf0
     "Array<UI::TabDescription::Tab>", 0x10, 8, &Assign16, &InitZero10, nullptr, true,
     0, 0, 0, 0, 0, 0 };
 
+// VTABLE BATCH 2 (2026-09-12) — 0x1800799a0, the cell array of
+// UI::TableDescription: each element is {int32 col, int32 row,
+// ExternalPtr<ElementDescription>} (?Serialize@TableDescription@UI@@ runs
+// kScalarInt over elem+0x00 and elem+0x04 and 0x180038f90 over elem+0x08,
+// 0x18011e67f/0x18011e694/0x18011e6a2). ~TableDescription's array dtor
+// (0x180079870) frees the buffer without visiting the elements, so TRIVIAL.
+//
+// IT IS *NOT* kSpec_ExtPtrPair10 above, and the difference is the one thing a
+// spec even has beyond stride and align: the DEFAULT TAIL. That row's else arm
+// writes two ZERO qwords; this one writes `0xffffffffffffffff` then zero
+// (0x1800799a0's `*puVar7 = 0xffffffffffffffff`), i.e. a new cell starts at
+// col = -1, row = -1 — which is exactly the "wildcard" value
+// TableDescription::CreateInstance's three-tier fallback search tests for. A
+// zeroed tail would make every grown cell claim column 0, row 0.
+void InitCellNeg1Ptr0(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d)     = 0xffffffffffffffffull;
+    *reinterpret_cast<uint64_t*>(d + 8) = 0;
+}
+const ArraySpec kSpec_TableCell10 = {             // 0x1800799a0
+    "Array<UI::TableDescription::Cell>", 0x10, 8, &Assign16, &InitCellNeg1Ptr0,
+    nullptr, true, 0, 0, 0, 0, 0, 0 };
+
 // 0x180075b20 — `Array<UI::DialogControllerConfigEntry>::SetSize(this, int)`.
 // See AssignCfgEntry20 above for the transcription and for the +0x04..+0x07
 // hole that both arms skip.
@@ -2346,6 +2368,7 @@ J1_ENTRY(180039440)   // UI:          reached from ?AddController@DialogInstance
 // The canonical J1 body: free _data, zero {data, size+cap}, no per-element
 // visit. Read from its own disassembly, not assumed from the element type.
 J1_ENTRY(18004cc90)   // UI:          UI::TabDescription's tab array
+J1_ENTRY(180079870)   // UI:          UI::TableDescription's cell array
 // WAVE 9 LANE PKG2 rung 4b-iii — the two array dtors ?~CompressedStream@IO@@
 // (0x1800aa650) calls on its own members, at +0x40 and +0x30. NOT byte-identical
 // to the already-ported 0x180024aa0 it calls at +0x50 (first difference at byte
@@ -2556,6 +2579,7 @@ J3_ENTRY2(180061880, kSpec_StringExtZ)  // Graphics:    Material's {String*,Exte
 J3_ENTRY2(180034010, kSpec_MetaEntry20) // Save:        Persistence metadata entries
 // VTABLE BATCH 2 (2026-09-12)
 J3_ENTRY2(18004cdf0, kSpec_ExtPtrPair10) // UI: TabDescription's tab array
+J3_ENTRY2(1800799a0, kSpec_TableCell10)  // UI: TableDescription's cell array
 
 
 #undef J3_ENTRY2
@@ -3228,6 +3252,7 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180039440, (void*)&RtColl_ArrayDtor_180039440);
     // VTABLE BATCH 2 (2026-09-12): ~TabDescription's tab array.
     RegisterRuntimeAddr(0x18004cc90, (void*)&RtColl_ArrayDtor_18004cc90);
+    RegisterRuntimeAddr(0x180079870, (void*)&RtColl_ArrayDtor_180079870);
     // ---- EIGHTEENTH AND NINETEENTH (Wave 25 lane INTERNAL42) ---------------
     // The count above says "expect a seventeenth rather than be surprised by
     // it", and that held: both of these became visible because another lane
@@ -3300,6 +3325,7 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180075b20, (void*)&RtColl_ArraySetSize_180075b20);
     // VTABLE BATCH 2 (2026-09-12): TabDescription::Serialize's read-path resize.
     RegisterRuntimeAddr(0x18004cdf0, (void*)&RtColl_ArraySetSize_18004cdf0);
+    RegisterRuntimeAddr(0x1800799a0, (void*)&RtColl_ArraySetSize_1800799a0);
     RegisterRuntimeAddr(0x1800298f0, (void*)&RtColl_ArraySetSizeFill_1800298f0);  // PKG2 4c-ii
     RegisterRuntimeAddr(0x18001f990, (void*)&RtColl_ArraySetSizeFill_18001f990);
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
