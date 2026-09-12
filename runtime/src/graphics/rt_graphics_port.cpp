@@ -68,6 +68,10 @@ extern int RtGraphicsWave27GfxbigRegister();  // wave27_lane_gfxbig.cpp (Wave 27
 
 extern int RtGraphicsWave27GfxpartRegister(); // wave27_lane_gfxpart.cpp (Wave 27 lane GFXPART)
 extern int RtGraphicsWave28GfxbodyRegister(); // wave28_lane_gfxbody.cpp (Wave 28 lane GFXBODY)
+// PARTSYS defines this with C linkage (wave28_lane_partsys.cpp:1076); GFXBODY's
+// above is C++-linkage. The spellings differ on purpose -- each matches its own
+// definition, and swapping either one to match the other is a link error.
+extern "C" int RtGraphicsWave28PartsysRegister(); // wave28_lane_partsys.cpp (Wave 28 lane PARTSYS)
 extern int RtGraphicsTypeInfoAccessorsRegister();
                                           // graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT)
 extern int RtGraphicsEdgeMeshVtableRegister();
@@ -191,6 +195,17 @@ void RtGraphicsPortInit() {
     // instantiations underneath them. Registered but INERT -- no door in
     // the tree resolves any of them today, so this changes nothing in a
     // live run. Its oracle is its own probe, behind BANISHED_RT_GFXD_PROBE.
+    // WAVE 28 LANE PARTSYS -- ?Update@ParticleSystemInstance@ (the whole
+    // particle simulation, and the LAST unported slot of
+    // ??_7ParticleSystemInstance@Graphics@@6B@), ?RemoveState@ParticleInstance@,
+    // and three ??_7SunLight@Graphics@@6B@ slots. DEFAULT ON: RtWaveEnabled is a
+    // kill switch, so BANISHED_RT_PARTSYS=0 leaves every call on the DLL for an
+    // A/B and anything else arms it (kickoff §2.2 caveat 1 -- a lane that ports
+    // behind an opt-in switch moves the live count not at all).
+    int partsys = 0;
+    if (RtWaveEnabled("BANISHED_RT_PARTSYS")) partsys = RtGraphicsWave28PartsysRegister();
+    n += partsys;
+
     int gfxd = 0;
     if (RtWaveEnabled("BANISHED_RT_GFXD")) gfxd = RtGraphicsWave9GfxdRegister();
 
@@ -215,4 +230,8 @@ void RtGraphicsPortInit() {
     printf("[RtPort] Wave 9 lane GFXD: %d exports + 11 addresses registered\n", gfxd);
     printf("[RtPort] Wave 21 lane GFXVT: %d typeinfo-accessor exports registered\n", gfxti);
     printf("[RtPort] Wave 27 lane GFXPART: %d particle exports registered\n", gfxpart);
+    // Wave 28 lane PARTSYS's own identity line, for the same reason every other
+    // lane line here gives: the on-disk md5 says which exe is on disk, not which
+    // one ran, and seven lanes share one game directory.
+    printf("[RtPort] Wave 28 lane PARTSYS: %d particle/sunlight exports registered\n", partsys);
 }
