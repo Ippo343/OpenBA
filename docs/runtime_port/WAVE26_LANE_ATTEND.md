@@ -233,6 +233,26 @@ row's door resolves — i.e. the name is not a phantom and `RT_DATA_SLOT` return
 non-null for it. That is a **DOOR-WORKS** check, and if anyone runs it, it must be
 recorded under that name and **never** in the attendance column.
 
+**PROMOIO retracted it in place (`c9a56cb8`), and stated the rule better than I
+did**, in a form that generalises past the row it was written for:
+
+> An attendance counter measures whether **the game** reached a symbol. Any close
+> that works by **adding a caller** does not satisfy it — it defeats it, and
+> leaves a number that reads exactly like the one it replaced.
+
+They wrote the retraction *into* `standalone/reg_mint_promoted.cpp` rather than
+deleting the proposal, because a wrong recipe outlives the row it was written
+for — this project has a recorded case of a written recipe from a *good* lane
+being followed into a defect.
+
+> ⚠ **CITATION HAZARD, and it cannot be fixed in place.** The commit message on
+> **`d668f883` still carries the original bad recipe**; `c9a56cb8` is the
+> correction of record. A commit message is immutable, so the retraction can
+> never reach the artefact most likely to be read later by someone grepping for
+> the row. **Cite `c9a56cb8` for this disposition, never `d668f883`.** This is a
+> new member of the stale-artefact family: not a generated file with no
+> invalidation, but a *permanently uncorrectable* one.
+
 ---
 
 ## 2. RUN 2(a) — THE `BANISHED_RT_MINT=1` / C3 DISCREPANCY, SETTLED FROM SOURCE
@@ -349,6 +369,20 @@ names its own cause in the log immediately before the fault:
   `"??_7CompressedFileStream@IO@@6B@"`, then a null-vptr read.
   Stack: `WinMain → Game::RunGameMain+0x968 → Game::LoadInputNameTables+0x177 →
   ExternalFactory::FindOrLoad+0x2b1 → RtObject_External_Load+0x18f`.
+
+> ### ⚠ `RtObject_External_Load` HAS AT LEAST TWO DISTINCT NULL-VTABLE FAILURE POINTS — CHECK THE OFFSET
+>
+> Arm C dies at **`+0x18f`** on `??_7FileStream@IO@@6B@` /
+> `??_7CompressedFileStream@IO@@6B@`. Attempt 28 (§7) gets **past** `+0x18f`
+> entirely and dies at **`+0x33c`** on `??_7StringTable@UI@@6B@`. Same function,
+> same call path, **different rows and different progress**.
+>
+> Lane PROMOIO has since promoted both of arm C's rows. So a later arm will very
+> plausibly still print "died in `RtObject_External_Load`" — and reading that as
+> "the promotions did nothing" would be **wrong, and would get four good
+> promotions backed out**. The offset is the discriminator, not the function
+> name. PROMOIO raised this; it is recorded here as well as in their doc,
+> because this is the doc that holds both offsets.
 
 ### 4.3 THE STRUCTURAL FINDING — stated as a finding, not a plan
 
