@@ -250,13 +250,20 @@ per-component table, which cannot see libm/Runtime/walk time. Heap: `BANISHED_RE
 per-call `if (std::getenv("BANISHED_X_TRACE"))` in tick code is cheap; env changes must go
 through `_putenv_s` (wrapped, invalidates the cache).
 
-### Camera Pinning (deterministic screenshots)
+### Camera Pinning (stable framing — NOT a deterministic frame)
+
+> **⚠ PIN + SEED DO NOT GIVE A REPRODUCIBLE FRAME. Measured, Wave 23 lane GFXBODY:**
+> five runs at identical seed, pin and command line split into two clusters **~98%
+> apart**, and **the split was independent of the flag under test** (two *armed* runs
+> differed by 97.98%; an armed and an unarmed run by 0.79%). **A pixel diff between two
+> runs measures nothing.** This blocks every pixel-level verification until the
+> non-determinism is found — see `docs/runtime_port/WAVE23_CLOSED.md` §3.
 
 `BANISHED_CAMERA_PIN=x,y[,dist]` (`code/Game/Game/camera_input.cpp`) pins the camera
 focus to a world position every frame, overriding pan/follow — the autostart camera
-otherwise roams and lands differently every run, which makes screenshot comparisons
-meaningless. Use it to park the view on the thing under test, screenshot, and get the
-identical framing on every run of the same seed.
+otherwise roams and lands differently every run. It gives you **stable framing**, so a
+screenshot is of the thing you meant to look at. It does **not** make the frame
+reproducible, and screenshots remain useful for *looking at*, not for *diffing*.
 
 - **World coords**: `world = buildCell − mapDim/2` (e.g. small map: cell − 128). For a
   placed structure, take the tile from its `[startTown::…] tile=(x,y) fp=WxH` log line
