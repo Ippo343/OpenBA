@@ -24,6 +24,16 @@
 //                            onto the live Video::Context -- so an integration
 //                            run that sees the UI or the tile overlay render
 //                            wrong can halve the search space with one env var.
+//   BANISHED_RT_GFXBODY23=0  ... just the Wave 23 lane GFXBODY five: the four
+//                            Graphics::FrameCopyImageBuffer bodies (ctor, dtor,
+//                            Create, Generate) and AnimationManager::Update. Its
+//                            OWN switch, separate from BANISHED_RT_GFXBODY,
+//                            because the two sets have DISJOINT failure modes:
+//                            the FrameCopy four can only affect the screenshot /
+//                            save-thumbnail path, while AnimationManager::Update
+//                            runs every sim iteration and a defect in it freezes
+//                            every skinned citizen at bind pose. One env var
+//                            each keeps those two separable in an A/B.
 //   BANISHED_RT_GFX9=0       ... just the Wave 9 lane GFX four (Transform::Lerp,
 //                                InterpolatedState<Transform>::Lerp,
 //                                MaterialInstance::RenderTextures,
@@ -46,6 +56,7 @@ extern int RtGraphicsSunLightRegister();  // sunlight.cpp (Wave 9 lane GFX2)
 extern int RtGraphicsGridRegister();      // scene_grid.cpp (Wave 9 lane GFX3)
 extern int RtGraphicsWave9GfxdRegister(); // wave9_lane_gfxd.cpp (Wave 9 lane GFXD)
 extern int RtGraphicsWave21GfxbodyRegister(); // wave21_lane_gfxbody.cpp (Wave 21 lane GFXBODY)
+extern int RtGraphicsWave23GfxbodyRegister(); // wave23_lane_gfxbody.cpp (Wave 23 lane GFXBODY)
 extern int RtGraphicsTypeInfoAccessorsRegister();
                                           // graphics_typeinfo_accessors.cpp (Wave 21 lane GFXVT)
 
@@ -62,6 +73,14 @@ void RtGraphicsPortInit() {
     if (RtWaveEnabled("BANISHED_RT_GFX9"))      n += RtGraphicsWave9GfxRegister();
     if (RtWaveEnabled("BANISHED_RT_GFXSUN"))   n += RtGraphicsSunLightRegister();
     if (RtWaveEnabled("BANISHED_RT_GFXBODY")) n += RtGraphicsWave21GfxbodyRegister();
+
+    // WAVE 23 LANE GFXBODY. Counted into `n` and ALSO printed on its own line
+    // below, for the reason the GFXD and GFXVT lines give: a run log must carry
+    // a line only THIS build emits, because the on-disk md5 says which exe is on
+    // disk, not which one ran, and ten lanes share one game directory.
+    int gfxbody23 = 0;
+    if (RtWaveEnabled("BANISHED_RT_GFXBODY23")) gfxbody23 = RtGraphicsWave23GfxbodyRegister();
+    n += gfxbody23;
 
     // WAVE 21 LANE GFXVT — the eight ?Type@/?TypeName@/?GetFileVersion@ slot
     // bodies of ??_7AnimationEvent@ / ??_7MaterialInstance@ / ??_7Particle@.
