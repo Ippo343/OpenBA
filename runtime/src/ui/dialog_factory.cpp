@@ -82,25 +82,16 @@
 // code stamped from ANY route, including `??0Dialog@UI@@`, which has been
 // ported and live since Wave 10 lane DLG2.
 //
-// EFFECTIVENESS CONTROL. A counter that has only ever printed zero is
-// indistinguishable from a counter that is wired wrong
-// (reference_probe_needs_an_effectiveness_control.md). `BANISHED_RT_DLGFACTORY=2`
-// therefore calls `CreateInPlaceObject` ONCE on a private stack buffer at
-// registration time and requires the attendance counter to move. If the control
-// does not fire, the run's zero proves nothing and the report must say so.
-//
 // ----------------------------------------------------------------------------
-// ARMING — OPT-IN, and it stays opt-in in this wave
+// ARMING — NONE. BOTH BODIES REGISTER UNCONDITIONALLY. (corrected 2026-09-12)
 // ----------------------------------------------------------------------------
-//   (unset / 0)               nothing registers. The control half of the A/B.
-//   BANISHED_RT_DLGFACTORY=1  register both bodies (export AND address).
-//   BANISHED_RT_DLGFACTORY=2  ... and fire the effectiveness control.
-//
-// A gated registration is not a port and `tools/runtime_census.py` will not
-// count it. That is the correct accounting here for an independent reason:
-// both rows are `called = 0` — NOTHING IN OUR TREE RESOLVES EITHER NAME — so
-// they cannot move the `ported` column whether they are gated or not. Porting a
-// factory nobody calls changes no percentage, exactly as WAVE11.md says.
+// This file used to be opt-in behind `BANISHED_RT_DLGFACTORY` (=1 register,
+// =2 also fire an in-place "effectiveness control" on a stack buffer), on the
+// argument below that nothing could reach either body anyway. The cutover boot
+// disproved the premise — the MINTED `?_typeInfo@Dialog@UI@@` reaches it and
+// died on the unported-factory trap when the flag was unset — so the flag and
+// the control are gone. See the note above `RtUiDialogFactoryRegister` for the
+// full correction, and DIRECTION.md section 2.3 for the rule.
 //
 // ----------------------------------------------------------------------------
 // THE ABORT-TRAP RISK, ENUMERATED RATHER THAN FOOTNOTED
@@ -155,7 +146,6 @@ namespace {
 // ---- attendance ------------------------------------------------------------
 uint64_t g_attendNew     = 0;
 uint64_t g_attendInPlace = 0;
-uint64_t g_controlFired  = 0;
 
 // ---- `?MemAlloc@System@@YAPEAX_KH@Z` 0x1800c7a50 ---------------------------
 // BY ADDRESS on purpose, and the address is the LOCKED wrapper, not
@@ -255,36 +245,40 @@ namespace {
 // so the reading lands even on a route that exits without reaching a summary
 // hook — and so the two instruments report by the same mechanism.
 void DialogFactoryReport() {
-    const char* v = std::getenv("BANISHED_RT_DLGFACTORY");
-    const bool armed = v && v[0] != '\0' && v[0] != '0';
-    if (!armed) return;   // unarmed: nothing registered, nothing to say
-    printf("[DlgFactory] attendance: CreateNewObject=%llu CreateInPlaceObject=%llu "
-                "control=%llu\n",
+    printf("[DlgFactory] attendance: CreateNewObject=%llu CreateInPlaceObject=%llu\n",
                 (unsigned long long)g_attendNew,
-                (unsigned long long)g_attendInPlace,
-                (unsigned long long)g_controlFired);
-    if (g_controlFired == 0 && v[0] == '2') {
-        printf("[DlgFactory] *** CONTROL DID NOT FIRE — this run's zeros prove "
-                    "NOTHING about the route.\n");
-    } else if (g_attendNew + g_attendInPlace == g_controlFired) {
-        printf("[DlgFactory] VERDICT: the ONLY entries were the control's own. "
-                    "Nothing in the game reached either factory, so registering the "
-                    "mangled name did NOT redirect the DLL's creation path.\n");
-    } else {
-        printf("[DlgFactory] VERDICT: %llu REAL entries (attendance minus control). "
-                    "Something DOES reach the port through a door.\n",
-                    (unsigned long long)(g_attendNew + g_attendInPlace - g_controlFired));
-    }
+                (unsigned long long)g_attendInPlace);
 }
 
 struct FactoryReport { ~FactoryReport() { DialogFactoryReport(); } };
 FactoryReport g_factoryReport;
 }  // namespace
 
+// ----------------------------------------------------------------------------
+// THE PREDICTION IN THIS FILE'S HEADER IS NOW SETTLED, AND IT WAS RIGHT ABOUT
+// THE DLL-PRESENT ROUTE AND WRONG ABOUT THE ONE THAT MATTERS. (2026-09-12)
+//
+// The header argues that registering these two names cannot redirect anything,
+// because the only reference to either body is `?_typeInfo@Dialog@UI@@`'s
+// `factoryFn` field, written by the DLL's own static initialiser -- not a door.
+// That holds WHILE THE DLL IS PRESENT and nothing below contradicts it.
+//
+// At CUTOVER there is no DLL and no DLL-written `factoryFn`: the BaseTypeInfo
+// the creator walks is the MINTED one (standalone/rt_data_mint.cpp), whose
+// `factoryFn` is filled FROM THE PORT REGISTRY at mint time, by name first and
+// then by address -- exactly the two doors this function opens. So condition 2
+// and condition 3 of the header's three are both satisfied by the mint, and
+// registering here is not merely sufficient, it is REQUIRED.
+//
+// It was required on 2026-09-12: the cutover boot died with
+//     [RtMint] FATAL: minted BaseTypeInfo::factoryFn is not ported
+//     ?_typeInfo@Dialog@UI@@ slot 0 -> ?CreateNewObject@Dialog@UI@@
+// because this registration was behind `BANISHED_RT_DLGFACTORY`, which the
+// cutover arm does not set. The flag is gone (DIRECTION.md section 2.3: a port
+// registers unconditionally; per-probe flags are removed as files are touched),
+// and with it the in-place "effectiveness control", which existed only to
+// validate an attendance reading the flag also gated.
 int RtUiDialogFactoryRegister() {
-    const char* v = std::getenv("BANISHED_RT_DLGFACTORY");
-    if (!v || v[0] == '\0' || v[0] == '0') return 0;
-
     int n = 0;
     RegisterRuntimeExport("?CreateInPlaceObject@Dialog@UI@@SAPEAVBase@Object@@PEAX@Z",
                           (void*)&RtUiDialog_CreateInPlaceObject);
@@ -293,29 +287,5 @@ int RtUiDialogFactoryRegister() {
     RegisterRuntimeExport("?CreateNewObject@Dialog@UI@@SAPEAVBase@Object@@XZ",
                           (void*)&RtUiDialog_CreateNewObject);
     RegisterRuntimeAddr(0x180038530, (void*)&RtUiDialog_CreateNewObject);      ++n;
-
-    printf("[DlgFactory] ARMED — 2 factories registered (export AND address). "
-                "Read [DlgFactory] attendance AND [DlgTrip] foreignDispatch at exit.\n");
-
-    // ---- effectiveness control ---------------------------------------------
-    // In-place only: it allocates nothing, so it cannot perturb the arena of
-    // the run it is validating, and it is the half whose subject is entirely
-    // caller-owned. The buffer is 0x88 bytes, the ctor's exact written extent.
-    if (v[0] == '2') {
-        alignas(8) unsigned char scratch[kDialogSize];
-        const uint64_t before = g_attendInPlace;
-        void* got = RtUiDialog_CreateInPlaceObject(scratch);
-        // The object is a stack temporary that is never registered anywhere and
-        // never destroyed — deliberately. `??1Dialog@UI@@` FREES four arrays and
-        // a string, and on a freshly constructed object every one of those is
-        // null; running it would exercise a teardown this probe is not measuring
-        // and would put a free on the arena the run is using.
-        g_controlFired = (g_attendInPlace > before && got == scratch) ? 1u : 0u;
-        printf("[DlgFactory] CONTROL %s (attendance moved %llu -> %llu, "
-                    "returned %s the buffer)\n",
-                    g_controlFired ? "FIRED" : "*** DID NOT FIRE ***",
-                    (unsigned long long)before, (unsigned long long)g_attendInPlace,
-                    got == scratch ? "" : "NOT");
-    }
     return n;
 }
