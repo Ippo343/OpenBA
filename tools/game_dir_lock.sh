@@ -35,10 +35,44 @@
 # USAGE
 #
 #   tools/game_dir_lock.sh acquire <lane-name> [timeout-seconds]   # default 900
-#   tools/game_dir_lock.sh assert-held <lane-name>   # gate a step on ownership; see below
+#   tools/game_dir_lock.sh assert-held <lane-name> [your-build.exe]
+#                                    # gate a step on ownership; see below.
+#                                    # With a path, ALSO fails unless the exe
+#                                    # deployed in the game dir IS that build.
 #   tools/game_dir_lock.sh release <lane-name>
-#   tools/game_dir_lock.sh status
+#   tools/game_dir_lock.sh heartbeat <lane-name>   # "still here" during a long hold
+#   tools/game_dir_lock.sh status [lane-name]
+#   tools/game_dir_lock.sh ack-breach <lane-name>  # clear a breach record you have read
 #   tools/game_dir_lock.sh orphans   # is the dir usable? names an UNLOCKED run
+#
+# WAVE 26: STALENESS IS NO LONGER A WALL CLOCK, AND A BREAK IS NO LONGER SILENT
+#
+# Wave 25 lane ALLOC's lock was broken as stale at 1802s while its process was
+# ALIVE and had written to the protected directory 1s earlier, and ALLOC WAS
+# NEVER TOLD -- it learned from the integrator, after losing a measurement
+# pair. Two changes, both aimed at that:
+#
+#   * `STALE_AFTER` is a FLOOR, not a verdict. Past it the lock is examined
+#     against the liveness evidence `status` was already computing one function
+#     away -- holder heartbeat, live reimpl-x64.exe pids, held handles, last
+#     write to the game dir. A lock with any of those is NOT stale at any age
+#     below `STALE_HARD`. See the block above `STALE_AFTER` for what this costs
+#     and how `STALE_HARD` bounds it.
+#   * Breaking a lock leaves a BREACH RECORD naming the victim. `acquire`,
+#     `release`, `assert-held`, `heartbeat` and `status <lane>` all shout it,
+#     and `release` FAILS instead of printing "nothing to release".
+#
+# LONG HOLDS: if you hold the lock across a long analysis gap, call
+# `heartbeat <lane>` occasionally -- it is the only liveness signal
+# attributable to YOU rather than to the machine. `run` does it for you.
+#
+# IDENTITY, NOT JUST OWNERSHIP: `run` samples the deployed exe's md5 for the
+# life of the wrapped command and reports whether it changed WHILE A RUN WAS
+# LIVE (a clobber) as opposed to between idle samples (an ordinary deploy). It
+# exits 7 if the command succeeded but the identity check did not, and drops
+# `exe_identity.tsv` into `--snapshot`. That is ALLOC's per-launch md5 check,
+# which is the only reason its contamination question was answerable, turned
+# from per-lane discipline into part of the tool.
 #
 # "IS THE LOCK FREE?" AND "CAN I USE THE DIRECTORY?" ARE DIFFERENT QUESTIONS.
 # A process that outlives its run keeps reimpl-x64.exe and standalone_*.log
@@ -128,7 +162,45 @@ set -u
 
 GAME="${BANISHED_GAME_DIR:-C:/GOG Games/Banished}"
 LOCK="$GAME/.lane_lock"          # a DIRECTORY: mkdir is atomic on every fs here
-STALE_AFTER=1800                 # 30 min; a lane run that long is already wrong
+
+# ---- STALENESS: A WALL CLOCK IS NOT EVIDENCE OF DEATH ------------------------
+#
+# WAVE 25, LANE ALLOC. Its lock was broken as stale at **1802s** while its
+# process was ALIVE and had written to the protected directory **one second
+# before the staleness check ran**. During the unlocked window another lane
+# legitimately acquired the lock this script granted it and deployed over
+# ALLOC's exe. That lane did nothing wrong; the instrument did. And ALLOC WAS
+# NEVER TOLD -- its own words: "the lock was broken as stale WHILE MY RUN WAS
+# LIVE and I got no signal at all -- I only learned from your message." A
+# measurement pair was lost.
+#
+# THE FIX IS NOT A BIGGER NUMBER. `status` already computed, and printed, every
+# fact needed to know that holder was alive: live reimpl-x64.exe pids, held
+# handles, and the age of the last write to the game dir. The information
+# required NOT to expire a live lock was already inside the tool that expired
+# it, one function away, and was never consulted. So:
+#
+#   * STALE_AFTER is a FLOOR, not a verdict. Past it, the lock is EXAMINED.
+#   * A lock is stale only when the wall clock has passed AND every liveness
+#     signal is negative (see `lock_staleness`).
+#   * A breach is RECORDED where the wronged lane will see it (`record_breach`
+#     / `breach_notice`), so a broken lock can never again be silent to its
+#     holder.
+#
+# THE COST OF THE CONSERVATIVE DIRECTION, STATED PLAINLY: the liveness signals
+# are NOT ATTRIBUTABLE to the holder, except the heartbeat. A live
+# reimpl-x64.exe started by an UNRELATED lane running unlocked reads here as
+# "the holder is alive" and would keep a genuinely dead lock alive. Refusing to
+# break is the safe error -- it costs waiting, where the other error costs a
+# measurement -- but "safe" is not "forever", so STALE_HARD bounds it. Past the
+# hard ceiling the lock is broken on the wall clock alone, as loudly as this
+# script can manage, and the breach is still recorded.
+STALE_AFTER=3600                 # 60 min: the FLOOR past which evidence is consulted
+STALE_HARD=10800                 # 3 h: broken regardless of evidence (deadlock bound)
+STALE_IDLE_REQUIRED=600          # the game dir must have been QUIET this long
+HEARTBEAT_STALE=900              # a holder heartbeat newer than this means ALIVE, full stop
+BREACH_FILE="$GAME/.lane_lock_broken"
+BREACH_KEEP=86400                # forget a breach record after a day
 
 usage() { sed -n '/^# USAGE/,/^# ===/p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
@@ -137,22 +209,150 @@ now() { date +%s; }
 lock_owner()  { cat "$LOCK/owner" 2>/dev/null || echo "(unknown)"; }
 lock_started(){ cat "$LOCK/started" 2>/dev/null || echo 0; }
 
-# A lock older than STALE_AFTER is assumed to belong to a lane that died without
-# releasing. Say so LOUDLY when breaking one -- a silently stolen lock would
-# recreate the exact failure this script exists to prevent.
-break_if_stale() {
-    local started age
+lock_age() {
+    local started
     started=$(lock_started)
-    [ "$started" -eq 0 ] 2>/dev/null && started=$(now)
-    age=$(( $(now) - started ))
-    if [ "$age" -gt "$STALE_AFTER" ]; then
-        echo "[gamelock] WARNING: breaking a STALE lock held by '$(lock_owner)'" >&2
-        echo "[gamelock]   held for ${age}s (limit ${STALE_AFTER}s). If that lane is" >&2
-        echo "[gamelock]   still alive, BOTH runs are now unreliable -- discard them." >&2
-        rm -rf "$LOCK"
-        return 0
+    case "$started" in ''|*[!0-9]*) started=$(now) ;; esac
+    [ "$started" -eq 0 ] && started=$(now)
+    printf '%s' "$(( $(now) - started ))"
+}
+
+# Age of the holder's heartbeat in seconds, or -1 if it never wrote one. This
+# is the ONLY liveness signal attributable to the holder rather than to the
+# machine: `run` touches it every watch interval, so a lane using the preferred
+# path is protected even while it sits between launches analysing. A lane that
+# hand-rolls acquire/deploy/release writes no heartbeat and falls back to the
+# unattributable signals below, which is the pre-existing situation.
+heartbeat_age() {
+    local m
+    [ -f "$LOCK/heartbeat" ] || { printf '%s' -1; return; }
+    m=$(date -r "$LOCK/heartbeat" +%s 2>/dev/null) || { printf '%s' -1; return; }
+    case "$m" in ''|*[!0-9]*) printf '%s' -1; return ;; esac
+    printf '%s' "$(( $(now) - m ))"
+}
+
+# THE WHOLE POINT OF THIS FUNCTION: it is the evidence `status` already prints,
+# consulted by the code that expires the lock. Echoes one word on stdout --
+# YOUNG | ALIVE | STALE | STALE_HARD -- and the human-readable evidence on
+# stderr, so a caller can branch on the verdict while a person reads the facts.
+lock_staleness() {
+    local age hb pids idle
+    age=$(lock_age)
+    hb=$(heartbeat_age)
+    pids=$(live_exe_pids)
+    idle=$(game_dir_idle)
+
+    echo "[gamelock]   evidence: age=${age}s heartbeat=${hb}s exe_pids='${pids:-<none>}' last_write=${idle}s" >&2
+
+    if [ "$age" -le "$STALE_AFTER" ]; then
+        echo "[gamelock]   verdict: YOUNG (under the ${STALE_AFTER}s floor)" >&2
+        printf '%s' YOUNG; return
     fi
-    return 1
+    if [ "$age" -gt "$STALE_HARD" ]; then
+        echo "[gamelock]   verdict: STALE_HARD (past the ${STALE_HARD}s ceiling; evidence NOT consulted)" >&2
+        printf '%s' STALE_HARD; return
+    fi
+    if [ "$hb" -ge 0 ] && [ "$hb" -le "$HEARTBEAT_STALE" ]; then
+        echo "[gamelock]   verdict: ALIVE -- holder heartbeat is ${hb}s old (limit ${HEARTBEAT_STALE}s)" >&2
+        printf '%s' ALIVE; return
+    fi
+    if [ -n "$pids" ]; then
+        echo "[gamelock]   verdict: ALIVE -- reimpl-x64.exe is running (pids: $pids)" >&2
+        printf '%s' ALIVE; return
+    fi
+    if run_in_progress; then
+        echo "[gamelock]   verdict: ALIVE -- game-dir handles are held open" >&2
+        printf '%s' ALIVE; return
+    fi
+    if [ "$idle" -ge 0 ] && [ "$idle" -lt "$STALE_IDLE_REQUIRED" ]; then
+        echo "[gamelock]   verdict: ALIVE -- the game dir was written ${idle}s ago (quiet period ${STALE_IDLE_REQUIRED}s)" >&2
+        printf '%s' ALIVE; return
+    fi
+    echo "[gamelock]   verdict: STALE -- past the floor and every liveness signal is negative" >&2
+    printf '%s' STALE
+}
+
+# ---- TELLING THE HOLDER -----------------------------------------------------
+#
+# The second half of the Wave 25 defect, and the half a bigger STALE_AFTER
+# would not have touched: ALLOC got NO SIGNAL. A broken lock left nothing
+# behind, so the wronged lane's next `release` printed "not held; nothing to
+# release" and exited 0, and its `verify` said "no lock is held at all" as if
+# it had simply never acquired one. Both statements were true and neither
+# carried the fact that mattered.
+#
+# A breach record lives OUTSIDE $LOCK (which is what gets removed) and names
+# the victim, so every later command that mentions that lane can shout. It is
+# not cleared automatically -- a lane must `ack-breach` -- because the whole
+# failure was a signal nobody had to acknowledge.
+record_breach() {
+    local owner="$1" age="$2" breaker="$3" verdict="$4"
+    {
+        echo "owner=$owner"
+        echo "at=$(now)"
+        echo "at_human=$(date '+%Y-%m-%d %H:%M:%S')"
+        echo "held_for=$age"
+        echo "breaker=$breaker"
+        echo "verdict=$verdict"
+        echo "exe_md5=$(exe_md5)"
+    } > "$BREACH_FILE" 2>/dev/null
+}
+
+breach_field() { sed -n "s/^$1=//p" "$BREACH_FILE" 2>/dev/null | head -n 1; }
+
+# Loud, unmissable, and returns 0 only when there IS a breach naming $1. Called
+# from acquire (on grant), verify/assert-held, release and status -- i.e. from
+# every verb a wronged lane can plausibly run next.
+breach_notice() {
+    local who="$1" owner at age
+    [ -f "$BREACH_FILE" ] || return 1
+    at=$(breach_field at); case "$at" in ''|*[!0-9]*) at=0 ;; esac
+    if [ "$at" -gt 0 ] && [ $(( $(now) - at )) -gt "$BREACH_KEEP" ]; then
+        rm -f "$BREACH_FILE" 2>/dev/null; return 1
+    fi
+    owner=$(breach_field owner)
+    [ "$owner" = "$who" ] || return 1
+    age=$(breach_field held_for)
+    echo "[gamelock] ****************************************************************" >&2
+    echo "[gamelock] ** YOUR LOCK WAS BROKEN AS STALE -- lane '$who'" >&2
+    echo "[gamelock] **   when    : $(breach_field at_human) (held ${age}s)" >&2
+    echo "[gamelock] **   verdict : $(breach_field verdict)" >&2
+    echo "[gamelock] **   breaker : $(breach_field breaker)" >&2
+    echo "[gamelock] **   exe md5 at that moment: $(breach_field exe_md5)" >&2
+    echo "[gamelock] ** ANY RUN OF YOURS SPANNING THAT MOMENT IS SUSPECT: another lane" >&2
+    echo "[gamelock] ** was free to deploy over your exe and rewrite your logs. This is" >&2
+    echo "[gamelock] ** exactly what happened to Wave 25 lane ALLOC, which lost a" >&2
+    echo "[gamelock] ** measurement pair and was told by nothing." >&2
+    echo "[gamelock] ** Compare the deployed exe against your own build before believing" >&2
+    echo "[gamelock] ** any number, then: tools/game_dir_lock.sh ack-breach $who" >&2
+    echo "[gamelock] ****************************************************************" >&2
+    return 0
+}
+
+exe_md5() { md5sum "$GAME/reimpl-x64.exe" 2>/dev/null | cut -c1-32; }
+
+# A lock past STALE_AFTER whose holder shows NO sign of life is assumed to
+# belong to a lane that died without releasing. Say so LOUDLY when breaking one
+# -- and leave a breach record, because saying it here reaches the BREAKER, not
+# the victim.
+break_if_stale() {
+    local breaker="${1:-unknown}" age verdict owner
+    age=$(lock_age)
+    owner=$(lock_owner)
+    verdict=$(lock_staleness)
+    case "$verdict" in
+        YOUNG|ALIVE) return 1 ;;
+    esac
+    echo "[gamelock] WARNING: breaking a $verdict lock held by '$owner'" >&2
+    echo "[gamelock]   held for ${age}s (floor ${STALE_AFTER}s, ceiling ${STALE_HARD}s)." >&2
+    if [ "$verdict" = "STALE_HARD" ]; then
+        echo "[gamelock]   THIS IS THE WALL-CLOCK CEILING AND THE EVIDENCE WAS NOT CONSULTED." >&2
+        echo "[gamelock]   If that lane is still alive, BOTH runs are now unreliable --" >&2
+        echo "[gamelock]   discard them, and say so to the integrator." >&2
+    fi
+    record_breach "$owner" "$age" "$breaker" "$verdict"
+    rm -rf "$LOCK"
+    return 0
 }
 
 # Is a run IN PROGRESS right now? Lane UIW established the reliable test, after
@@ -173,6 +373,13 @@ run_in_progress() {
     # messages below can be exercised without stranding a real process on the
     # shared game directory. Never set in normal use.
     [ "${GAMELOCK_FAKE_RUN:-0}" = "1" ] && return 0
+    # Second test seam, needed because GAMELOCK_FAKE_RUN is fixed for the whole
+    # process and `acquire` REFUSES to grant while a run is live -- so an env
+    # var cannot express "the lock was granted, and THEN a run started", which
+    # is the only interval in which the exe-identity watcher's clobber case
+    # exists. A marker FILE can. Inert unless GAMELOCK_FAKE_RUN_FILE is set, so
+    # it cannot fire in normal use. Never set either in normal use.
+    [ -n "${GAMELOCK_FAKE_RUN_FILE:-}" ] && [ -f "$GAMELOCK_FAKE_RUN_FILE" ] && return 0
     for f in standalone_debug.log standalone_error.log; do
         [ -f "$GAME/$f" ] || continue
         # Try to move it aside and back: same open-handle test as a delete, but
@@ -251,6 +458,11 @@ run_in_progress() {
 
 # PIDs of every running reimpl-x64.exe, space separated. Empty if none.
 live_exe_pids() {
+    # Test seam: GAMELOCK_FAKE_PIDS supplies the answer so the staleness
+    # decision can be exercised on both sides without stranding a real process
+    # on the shared game directory. Empty string = "no live exe". Never set in
+    # normal use. Same shape as GAMELOCK_FAKE_RUN above.
+    if [ -n "${GAMELOCK_FAKE_PIDS+x}" ]; then printf '%s' "$GAMELOCK_FAKE_PIDS"; return; fi
     tasklist 2>/dev/null | grep -i 'reimpl-x64\.exe' | awk '{print $2}' | tr '\n' ' '
 }
 
@@ -258,6 +470,9 @@ live_exe_pids() {
 # age a suspected orphan: a live run writes its logs continuously.
 game_dir_idle() {
     local newest=0 f m
+    # Test seam: GAMELOCK_FAKE_IDLE supplies the answer (seconds, or -1 for
+    # "never written"). Never set in normal use.
+    if [ -n "${GAMELOCK_FAKE_IDLE+x}" ]; then printf '%s' "$GAMELOCK_FAKE_IDLE"; return; fi
     for f in standalone_debug.log standalone_error.log standalone_crash.log reimpl-x64.exe; do
         [ -f "$GAME/$f" ] || continue
         m=$(date -r "$GAME/$f" +%s 2>/dev/null) || continue
@@ -438,7 +653,12 @@ cmd_acquire() {
         if ! run_in_progress && mkdir "$LOCK" 2>/dev/null; then
             printf '%s' "$who"     > "$LOCK/owner"
             printf '%s' "$(now)"   > "$LOCK/started"
+            touch "$LOCK/heartbeat" 2>/dev/null
             ticket_drop "$who"
+            # If THIS lane is the one whose lock was broken, this is the first
+            # verb it runs afterwards -- so it is the first place it can be
+            # told. (ALLOC's acquire, release and verify were all silent.)
+            breach_notice "$who"
             echo "[gamelock] ACQUIRED by $who"
             echo "[gamelock] GRANT $who"
             return 0
@@ -448,7 +668,7 @@ cmd_acquire() {
             echo "[gamelock] already held by $who (re-entrant, not re-acquired)"
             return 0
         fi
-        break_if_stale && continue
+        break_if_stale "$who" && continue
         # THE CASE THAT USED TO PRINT `waiting for '(unknown)'`: no lock
         # directory exists, so nobody holds it, yet the grab above was refused
         # -- which can only mean run_in_progress() said a run is live. Waiting
@@ -482,6 +702,14 @@ cmd_acquire() {
 cmd_release() {
     local who="${1:?lane name required}"
     if [ ! -d "$LOCK" ]; then
+        # "nothing to release" was TRUE for ALLOC and told it nothing. If this
+        # lane's lock was taken away, say so here and FAIL, because a lane that
+        # reaches its own release believing it still held the lock has a run
+        # whose validity is now in question.
+        if breach_notice "$who"; then
+            echo "[gamelock] release: your lock was BROKEN, not released by you." >&2
+            return 1
+        fi
         echo "[gamelock] not held; nothing to release"
         return 0
     fi
@@ -527,8 +755,14 @@ cmd_orphans() {
 }
 
 cmd_status() {
+    local who="${1:-}"
+    [ -n "$who" ] && breach_notice "$who"
     if [ -d "$LOCK" ]; then
         echo "[gamelock] HELD by '$(lock_owner)' for $(( $(now) - $(lock_started) ))s"
+        # The evidence that decides expiry, printed by the command people
+        # actually run. Before Wave 26 this tool COMPUTED all of it here and
+        # the expiry path next door ignored every line of it.
+        echo "[gamelock] staleness verdict: $(lock_staleness)"
     elif run_in_progress; then
         # "free" alone was TRUE here and cost a lane 15 minutes on 2026-09-09,
         # because the honest answer to "is the lock free?" is not the answer to
@@ -580,6 +814,72 @@ cmd_status() {
     fi
 }
 
+# ---- THE PER-RUN IDENTITY CHECK, MADE AUTOMATIC -----------------------------
+#
+# Wave 25 lane ALLOC md5-verified the deployed exe against its own build
+# immediately before every launch, and all six of its completed runs recorded
+# the same hash. THAT CHECK IS THE ONLY REASON "was my measurement
+# contaminated?" was answerable at all -- without it the question would have
+# been an argument between two plausible stories. It was per-lane discipline,
+# which means it protected exactly one lane.
+#
+# So `run` now samples the deployed exe's md5 for the whole life of the wrapped
+# command and reports what it saw. The DISCRIMINATOR matters: the exe changing
+# is NORMAL -- `make sa-run` deploys, that is the point. What is not normal is
+# the exe changing WHILE A RUN IS LIVE. `run_in_progress` already answers "is a
+# run live" by the one test that cannot go stale between the check and the
+# answer, so a change seen after a live sample is a clobber and a change seen
+# between two idle samples is a deploy.
+#
+# RESIDUAL, STATED: if the game exits between two samples and a deploy lands in
+# the same interval, the previous sample still reads live and this reports a
+# clobber that was not one. It errs toward shouting. The full sample table is
+# printed with the summary (and copied into --snapshot), so the claim is always
+# checkable rather than a bare verdict.
+run_watch_loop() {
+    local who="$1" tsv="$2" stop="$3" iv="${GAMELOCK_WATCH_INTERVAL:-10}"
+    local prev="" prev_live=0 cur live owner
+    printf 'time\texe_md5\trun_live\towner\n' > "$tsv"
+    while [ ! -f "$stop" ]; do
+        cur=$(exe_md5); owner=$(lock_owner)
+        if run_in_progress; then live=1; else live=0; fi
+        printf '%s\t%s\t%s\t%s\n' "$(now)" "${cur:-<absent>}" "$live" "$owner" >> "$tsv"
+        if [ -n "$prev" ] && [ "$cur" != "$prev" ] && [ "$prev_live" = 1 ]; then
+            echo "[gamelock] !! CLOBBER: the deployed exe CHANGED while your run was live." >&2
+            echo "[gamelock] !!   was $prev  ->  now ${cur:-<absent>}" >&2
+            echo "[gamelock] !!   Your numbers are NOT from your binary. Discard this run." >&2
+            echo "CLOBBER" >> "$tsv.flag"
+        fi
+        if [ ! -d "$LOCK" ] || [ "$owner" != "$who" ]; then
+            echo "[gamelock] !! LOCK LOST: '$who' no longer owns the lock (now: '${owner:-<none>}')." >&2
+            echo "[gamelock] !!   Another lane may deploy over you at any moment." >&2
+            echo "LOCKLOST" >> "$tsv.flag"
+        fi
+        # Attributable proof of life, so a long legitimate run is never expired
+        # as stale the way ALLOC's was at 1802s.
+        [ -d "$LOCK" ] && touch "$LOCK/heartbeat" 2>/dev/null
+        prev="$cur"; prev_live="$live"
+        sleep "$iv"
+    done
+}
+
+run_watch_summary() {
+    local tsv="$1" n distinct first last flags
+    n=$(( $(wc -l < "$tsv" 2>/dev/null || echo 1) - 1 ))
+    distinct=$(tail -n +2 "$tsv" 2>/dev/null | cut -f2 | sort -u | wc -l)
+    first=$(tail -n +2 "$tsv" 2>/dev/null | head -n 1 | cut -f2)
+    last=$(tail -n 1 "$tsv" 2>/dev/null | cut -f2)
+    flags=$(sort -u "$tsv.flag" 2>/dev/null | tr '\n' ' ')
+    echo "[gamelock] exe identity: ${n} samples, ${distinct} distinct md5 (first=${first:-?} last=${last:-?})"
+    if [ -n "$flags" ]; then
+        echo "[gamelock] exe identity: FLAGGED -- $flags"
+        echo "[gamelock]   the sample table is in $tsv"
+        return 1
+    fi
+    echo "[gamelock] exe identity: clean -- no change while a run was live, lock never lost"
+    return 0
+}
+
 # The safe path, made the easy one. Acquire, run, release -- with the acquire's
 # exit status checked HERE, where no caller's pipe can discard it. Anything the
 # caller wants to pipe is this command's output, not the acquire's.
@@ -602,10 +902,20 @@ cmd_run() {
     # and from every other lane's side that is indistinguishable from a lane
     # legitimately holding it for a very long time -- which is what tonight's
     # 1000-second holds looked like from the outside.
-    trap 'cmd_release "$who" >/dev/null 2>&1; trap - INT TERM HUP; kill -INT $$' INT TERM HUP
+    local wdir wtsv wstop wpid
+    wdir="${TMPDIR:-/tmp}/gamelock_watch.$$"; mkdir -p "$wdir" 2>/dev/null
+    wtsv="$wdir/exe_identity.tsv"; wstop="$wdir/stop"
+    rm -f "$wstop" "$wtsv.flag" 2>/dev/null
+    run_watch_loop "$who" "$wtsv" "$wstop" &
+    wpid=$!
+    trap 'touch "$wstop" 2>/dev/null; cmd_release "$who" >/dev/null 2>&1; trap - INT TERM HUP; kill -INT $$' INT TERM HUP
     "$@"
     local rc=$?
     trap - INT TERM HUP
+    touch "$wstop" 2>/dev/null
+    wait "$wpid" 2>/dev/null
+    run_watch_summary "$wtsv"
+    local identity_rc=$?
     # Snapshot the logs BEFORE releasing. The lock protects the deploy+run
     # window; it says nothing about the ANALYSIS window, and reading
     # standalone_*.log after the release reads whichever lane ran next. That
@@ -620,9 +930,24 @@ cmd_run() {
         for f in standalone_debug.log standalone_error.log standalone_crash.log                  standalone_boot_state.txt; do
             [ -f "$GAME/$f" ] && cp "$GAME/$f" "$snapdir/$f" 2>/dev/null
         done
+        # The identity table goes WITH the logs. A snapshot that proves what you
+        # ran is worth little beside one that does not say which binary produced
+        # it -- that is the whole lesson of ALLOC's per-launch md5.
+        cp "$wtsv" "$snapdir/exe_identity.tsv" 2>/dev/null
+        [ -f "$wtsv.flag" ] && cp "$wtsv.flag" "$snapdir/exe_identity.FLAGGED" 2>/dev/null
         echo "[gamelock] logs snapshotted to $snapdir (taken BEFORE release, so they are yours)"
     fi
+    # Keep the sample table on disk when it flagged something: the message
+    # above names its path, and deleting the evidence a warning points at is
+    # how a warning becomes unfalsifiable.
+    [ "$identity_rc" -eq 0 ] && rm -rf "$wdir" 2>/dev/null
     cmd_release "$who"
+    # A contaminated run must not exit 0. The wrapped command succeeding says
+    # nothing about whether it measured your binary.
+    if [ "$identity_rc" -ne 0 ] && [ "$rc" -eq 0 ]; then
+        echo "[gamelock] run: the command succeeded but the identity check FAILED -- exiting 7." >&2
+        return 7
+    fi
     return $rc
 }
 
@@ -635,19 +960,83 @@ cmd_run() {
 # itself refuses to proceed on a stolen or expired lock, regardless of what
 # any earlier `acquire`'s exit code was read as.
 cmd_verify() {
-    local who="${1:?lane name required}" owner
+    local who="${1:?lane name required}" owner mine="${2:-}"
     if [ ! -d "$LOCK" ]; then
         echo "[gamelock] VERIFY FAILED: no lock is held at all (expected '$who')." >&2
+        breach_notice "$who"
         return 1
     fi
     owner=$(lock_owner)
     if [ "$owner" != "$who" ]; then
         echo "[gamelock] VERIFY FAILED: held by '$owner', not '$who'." >&2
+        breach_notice "$who"
         return 1
+    fi
+    breach_notice "$who"
+    # Ownership is necessary and not sufficient: the exe under the lock can
+    # have been replaced before you took it. If the caller names its own build,
+    # compare -- this is Wave 25 lane ALLOC's per-launch md5 discipline, which
+    # is the ONLY reason the contamination question was answerable at all,
+    # made part of the gate instead of per-lane habit.
+    if [ -n "$mine" ]; then
+        local want have
+        want=$(md5sum "$mine" 2>/dev/null | cut -c1-32)
+        have=$(exe_md5)
+        if [ -z "$want" ]; then
+            echo "[gamelock] VERIFY FAILED: cannot read your build at '$mine'." >&2
+            return 1
+        fi
+        if [ "$want" != "$have" ]; then
+            echo "[gamelock] VERIFY FAILED: the DEPLOYED exe is not your build." >&2
+            echo "[gamelock]   yours   : $want  ($mine)" >&2
+            echo "[gamelock]   deployed: ${have:-<absent>}" >&2
+            echo "[gamelock]   Deploy before launching, or you will measure somebody else's code." >&2
+            return 1
+        fi
+        echo "[gamelock] verified: held by $who AND the deployed exe is your build ($want)"
+        return 0
     fi
     echo "[gamelock] verified: still held by $who"
 }
 
+
+# Say "I am still here" without taking or giving up the lock. This is the ONE
+# liveness signal attributable to the HOLDER rather than to the machine, so a
+# lane that holds the lock across a long analysis gap should call it (or just
+# use `run`, which touches it automatically every watch interval).
+cmd_heartbeat() {
+    local who="${1:?lane name required}" owner
+    if [ ! -d "$LOCK" ]; then
+        echo "[gamelock] heartbeat: no lock is held (expected '$who')." >&2
+        breach_notice "$who"
+        return 1
+    fi
+    owner=$(lock_owner)
+    if [ "$owner" != "$who" ]; then
+        echo "[gamelock] heartbeat: lock is held by '$owner', not '$who'." >&2
+        breach_notice "$who"
+        return 1
+    fi
+    touch "$LOCK/heartbeat" 2>/dev/null
+    echo "[gamelock] heartbeat recorded for $who"
+}
+
+# Clear a breach record once the lane has SEEN it. Deliberately manual: the
+# whole Wave 25 defect was a signal nobody had to acknowledge.
+cmd_ack_breach() {
+    local who="${1:?lane name required}" owner
+    if [ ! -f "$BREACH_FILE" ]; then
+        echo "[gamelock] no breach record to acknowledge."
+        return 0
+    fi
+    owner=$(breach_field owner)
+    if [ "$owner" != "$who" ]; then
+        echo "[gamelock] REFUSING: the breach record names '$owner', not '$who'." >&2
+        return 1
+    fi
+    rm -f "$BREACH_FILE" 2>/dev/null
+    echo "[gamelock] breach acknowledged and cleared by $who"
+}
 
 # Test seam: GAMELOCK_NO_MAIN=1 sources this file for its functions (used by
 # tools/game_dir_lock_selftest.sh to exercise ticket_head/ticket_take/etc.
@@ -659,7 +1048,9 @@ case "${1:-}" in
     run)     shift; cmd_run "$@" ;;
     verify|assert-held) shift; cmd_verify "$@" ;;
     release) shift; cmd_release "$@" ;;
-    status)  cmd_status ;;
+    heartbeat) shift; cmd_heartbeat "$@" ;;
+    ack-breach) shift; cmd_ack_breach "$@" ;;
+    status)  shift; cmd_status "$@" ;;
     orphans) cmd_orphans ;;
     *)       usage ;;
 esac
