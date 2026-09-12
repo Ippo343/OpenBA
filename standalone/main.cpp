@@ -2080,6 +2080,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Wave 28 lane PARTSYS. UNCONDITIONAL, so the expected zeros are PRINTED
     // rather than inferred from silence (reference_uncalled_port_is_not_verified.md).
     { extern void RtGraphicsWave28PartsysSummary(); RtGraphicsWave28PartsysSummary(); }
+    // Wave 29 lane GFXBODY. UNCONDITIONAL, and WIRED ON PURPOSE: Wave 28 defect
+    // #7 is that every lane's *Summary() is written and nothing calls it, which
+    // makes a zero mean "never printed" rather than "never called" and made a
+    // lane unable to read its own BRANCH counters at all. This lane's doc
+    // reports that these lines were SEEN TO PRINT before any zero in them was
+    // believed (reference_uncalled_port_is_not_verified.md).
+    { extern void RtGraphicsWave29GfxbodySummary(); RtGraphicsWave29GfxbodySummary(); }
     RtAllocShadowSummary();
     // Wave 9 lane H: 0 misses == every cached Runtime resolve found its symbol.
     // A non-zero count names the symbols that would be unminted at cutover.

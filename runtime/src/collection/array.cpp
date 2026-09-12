@@ -1978,6 +1978,18 @@ J3_ENTRY3(18001f990, kSpec_Fill8)       // Graphics: Array<Geometry*>
 J3_ENTRY3(180023830, kSpec_Fill4)       // Graphics: Array<uint32>
 J3_ENTRY3(18004f790, kSpec_Fill16)      // Engine:   MainLoop::_postDraw push
 J3_ENTRY3(18004f8e0, kSpec_Fill16)      // Engine:   MainLoop::_postUpdate push
+// WAVE 29 LANE GFXBODY — Array<RendererDrawable>::SetSize, the append behind
+// ?AddLight@Renderer@Graphics@@ (0x1801051d0). kSpec_Fill16 is not inferred
+// from the element type: 0x180063a80 was compared against the known Fill16 site
+// 0x18004f790 under POSITION-INDEPENDENT normalisation (in-function branch
+// targets relative, external call and RIP targets ABSOLUTE — a raw byte diff of
+// two copies of one function reports ~23% different because rel32 encodes a
+// distance) and came out 79 of 79 instructions IDENTICAL, with a positive
+// control (a function against itself, 79/79) and a negative control (an
+// unrelated function, 0/79) run first. Both are 262-byte flags-0x2 .pdata rows.
+// Registering it matters at cutover: unregistered, 0x180063a80 resolves to
+// nothing and AddLight silently fails to append the light.
+J3_ENTRY3(180063a80, kSpec_Fill16)      // Graphics: Renderer::_drawables push (AddLight)
 J3_ENTRY3(180061480, kSpec_StringExt)   // Graphics: Material's {String*,ExternalPtr} [NON-TRIVIAL]
 J3_ENTRY3(180076900, kSpec_Fill8Z)      // UI:       Element::AddChild's child array
 J3_ENTRY3(18007a0d0, kSpec_Fill8Z)      // Engine:   the dialog pending-list push
@@ -2219,6 +2231,8 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180023830, (void*)&RtColl_ArraySetSizeFill_180023830);
     RegisterRuntimeAddr(0x18004f790, (void*)&RtColl_ArraySetSizeFill_18004f790);
     RegisterRuntimeAddr(0x18004f8e0, (void*)&RtColl_ArraySetSizeFill_18004f8e0);
+    // ---- Wave 29 lane GFXBODY: Renderer::_drawables (AddLight) -------------
+    RegisterRuntimeAddr(0x180063a80, (void*)&RtColl_ArraySetSizeFill_180063a80);
     RegisterRuntimeAddr(0x180076900, (void*)&RtColl_ArraySetSizeFill_180076900);
     RegisterRuntimeAddr(0x18007a0d0, (void*)&RtColl_ArraySetSizeFill_18007a0d0);
     // ---- Wave 9 lane GFX3: the Graphics::Scene node array ------------------
