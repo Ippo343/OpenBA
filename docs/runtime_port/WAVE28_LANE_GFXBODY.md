@@ -55,9 +55,14 @@ All ten names and all ten addresses were grepped across
 (standing warning 8). **No body existed for any of them.** What did exist:
 
 - **Ten `RT_EXPORT_ONCE` name doors inside `wave27_lane_gfxbig.cpp`**, one per
-  row. So these registrations are LIVE the moment they land — this lane has no
-  inert rows, and a zero attendance count from one of them is a finding, not an
-  expected null.
+  row.
+  > **CORRECTED BY §9.3, AND THE CORRECTION IS THE POINT.** This paragraph
+  > originally read "So these registrations are LIVE the moment they land — this
+  > lane has no inert rows." **The live run measured two of eight live and six at
+  > attendance zero.** A door is a RESOLUTION SITE; it is not a call. The
+  > inference was wrong in the same way Wave 27's was about `BuildParameters`,
+  > and it is left here struck through rather than deleted, because the deleted
+  > version is the one the next lane would have re-derived.
 - `runtime/types/graphics/Material.h` (Wave 6 lane F) and
   `runtime/types/graphics/Camera.h` (Wave 6 lane F) — both already pinned from
   the neighbouring bodies. Every field they name held against the disassembly.
@@ -71,20 +76,25 @@ All ten names and all ten addresses were grepped across
 
 ## 3. WHAT LANDED
 
-Seven of the ten bodies are ported and registered. §7 says what did not and why.
+Seven of the ten scoped bodies are ported and registered, plus one row this lane
+itself opened (§6). §7 says what did not land and why.
 
-| Row | State | Notes |
-|---|---|---|
-| `Material::GetConstantName` | PORTED, REGISTERED | §1 of the source |
-| `Material::GetTextureName` | PORTED, REGISTERED | §1 |
-| `MaterialInstance::FindConstant` | PORTED, REGISTERED | §2 |
-| `MaterialInstance::FindTexture` | PORTED, REGISTERED | §2 |
-| `Animation::ApplyEvents` | PORTED, REGISTERED | §3 |
-| `Renderer::BeginDrawGroup` | PORTED, REGISTERED | §4, one address door (R1) |
-| `AnimationState::UpdateRootOnly` | PORTED, REGISTERED | §5 |
-| `AnimationState::CopyInstancedToUnique` | NOT PORTED | §7 |
-| `AnimationState::UpdateNodes` | NOT PORTED | §7 |
-| `Scene::AddCulledDrawItems` | NOT PORTED | §7 |
+| Row | State | Live attendance (§9.2) | Notes |
+|---|---|---|---|
+| `Material::GetConstantName` | PORTED, REGISTERED | 0 — UNVERIFIED | §1 of the source |
+| `Material::GetTextureName` | PORTED, REGISTERED | 0 — UNVERIFIED | §1 |
+| `MaterialInstance::FindConstant` | PORTED, REGISTERED | 0 — UNVERIFIED | §2 |
+| `MaterialInstance::FindTexture` | PORTED, REGISTERED | 0 — UNVERIFIED | §2 |
+| `Animation::ApplyEvents` | PORTED, REGISTERED | 0 — UNVERIFIED | §3 |
+| `Renderer::BeginDrawGroup` | PORTED, REGISTERED | **1,600,000** | §4, one address door (R1) |
+| `AnimationState::UpdateRootOnly` | PORTED, REGISTERED | 0 — UNVERIFIED | §5 |
+| `Camera::operator=` | PORTED, REGISTERED | **3,300,000** | §6 — **not one of the ten**; this lane opened the row and closed it |
+| `AnimationState::CopyInstancedToUnique` | NOT PORTED | — | §7 |
+| `AnimationState::UpdateNodes` | NOT PORTED | — | §7 |
+| `Scene::AddCulledDrawItems` | NOT PORTED | — | §7 |
+
+**PORTED + REGISTERED IS NOT VERIFIED**, and the third column is here so the two
+cannot be read as one. Six of the eight carry a zero.
 
 Kill switch: **`BANISHED_RT_GFXBODY28=0`**. Its own variable, not shared with
 `BANISHED_RT_GFXBIG`, and the reason is an A/B that would otherwise be
@@ -251,35 +261,146 @@ lane does not redo the analysis.
   of `00 00 00 80`.
 - Whole-tree grep for all ten names and all ten addresses before writing (§2).
 
-### 9.2 NOT MEASURED — UNVERIFIED
+### 9.2 THE LIVE RUN — MEASURED
 
-**No runtime verification of any of the seven ported bodies was run. The game
-was not launched.** That word, plainly: the seven bodies in this lane are
-**UNVERIFIED**.
+`mingw32-make sa-deploy` then `BANISHED_AUTOSTART=1 reimpl-x64.exe`, under
+`tools/game_dir_lock.sh` held as `gfxbody` for the whole run and with
+`assert-held` verifying the deployed md5 was **this lane's** build
+(`50f6f970a5bfdc61d865212bb5d61621`) — because a clobbered run does not announce
+itself. Autostart reached the world build and ran to **frame 7200**
+(`[EntityCensus] frame=7200 entities=22328`, 19 citizens).
 
-Each has a live route and each is worth a different oracle, so the difference is
-recorded rather than flattened:
+```
+[GFXBODY28] Renderer::BeginDrawGroup calls=1600000
+[GFXBODY28] Camera::operator=        calls=3300000
+[GFXBIG27]  Renderer::Draw           calls= 800000     (lane GFXBIG's, for scale)
+[GFXBIG27]  AnimationState::Update   calls= 200000     (lane GFXBIG's)
+```
 
-- `FindConstant` / `FindTexture` / `GetConstantName` / `GetTextureName` run
-  inside `MaterialInstance::BuildParameters`, which Wave 27 recorded as having
-  **four name doors** and running during world build. A plain `sa-run` exercises
-  them heavily; the attendance counters in this file would report it in one run.
-- `BeginDrawGroup` runs from `Renderer::Draw`, the every-frame 3D dispatch.
-  `tools/trace_oracle/` compares the draw-call/pipeline-state COMMAND STREAM and
-  needs no frame determinism — it is the right instrument and it was not run.
-  **A pixel diff is not the alternative**: Wave 23 measured two runs at identical
-  seed and pin splitting ~98% apart independently of the flag under test.
-- `UpdateRootOnly` is reached only on the off-screen cheap path, so `calls=0` on
-  an autostart run would be an ordinary result and not evidence of a dark port;
-  `g_updateRootLayers` counts the blend arm separately for that reason.
-- `ApplyEvents` fires only when an animation event falls inside the frame's time
-  window. `g_applyEventsFired` is separate from `g_applyEventsCalls` because
-  `calls=N fired=0` and `calls=0` are different findings and an entry counter
-  alone cannot distinguish them
+**TWO OF THE EIGHT BODIES ARE MASSIVELY LIVE AND SIX PRINTED NOTHING AT ALL.**
+
+**The 2:1 ratio is a structural check, not a coincidence.** `Camera::operator=`
+is called **exactly twice** per `BeginDrawGroup` — and only on the REUSE path;
+the APPEND path uses the copy CTOR instead. 3,300,000 / 1,600,000 = 2.06, i.e.
+the reuse path is taken essentially every time after warm-up. That is
+independent confirmation of the two-path structure read out of the disassembly
+in §4 of the source, from a direction the disassembly could not supply.
+
+### 9.3 NOT MEASURED — UNVERIFIED, and a Wave 27 claim this run CORRECTS
+
+**Six of the eight ported bodies printed NO attendance line at all** and are
+therefore **UNVERIFIED** in that word:
+
+| Row | attendance in a 7200-frame autostart run |
+|---|---|
+| `Renderer::BeginDrawGroup` | **1,600,000** — live |
+| `Camera::operator=` | **3,300,000** — live |
+| `Material::GetConstantName` | **0** — UNVERIFIED |
+| `Material::GetTextureName` | **0** — UNVERIFIED |
+| `MaterialInstance::FindConstant` | **0** — UNVERIFIED |
+| `MaterialInstance::FindTexture` | **0** — UNVERIFIED |
+| `Animation::ApplyEvents` | **0** — UNVERIFIED |
+| `AnimationState::UpdateRootOnly` | **0** — UNVERIFIED |
+
+**THE FOUR MATERIAL ZEROS ARE NOT THIS LANE'S DEFECT, AND THE SAME RUN PROVES
+IT.** All four are reached only from `MaterialInstance::BuildParameters`, and
+**`BuildParameters` itself has attendance 0 in this run** — `grep -c
+BuildParameters standalone_debug.log` returns **0** while
+`[GFXBIG27] Renderer::Draw` and `[GFXBIG27] AnimationState::Update` both print,
+so lane GFXBIG is armed and its third body simply never runs.
+
+That **corrects a Wave 27 claim with a measurement.**
+`WAVE27_LANE_GFXBIG.md` §8.1 says of `BuildParameters`: *"four name doors
+already in the tree … This row goes live immediately; it is not one of the inert
+ones"*, and `rt_graphics_port.cpp:129` states that for lane GFXBIG *"a zero
+attendance count from this lane means something is wrong, not that the rows are
+unreachable."* **Measured on this tip: `BuildParameters` attendance is zero in a
+full autostart world-build run.** The inference was that four name doors implies
+live; the observation is that they are not reached on this route. Per warning 13
+the LICENCE is what needs repairing, not the sentence: **a door count is a count
+of RESOLUTION SITES, not of CALLS**, and it cannot establish attendance. The
+same faulty step also produced this lane's own expectation (§2) that its
+registrations are "LIVE the moment they land" — true for two of eight, false for
+six, and it was the same reasoning.
+
+**Addressee: the Wave 29 Graphics lane** — either find the route that drives
+`BuildParameters` (a material/shader reload, a mods remount, or the tool-side
+`Tools-x64` path) or record it as genuinely unreached in ordinary play. Until
+then all five rows are unexercised, not wrong.
+
+The other two zeros are **expected and were predicted before the run**:
+
+- `UpdateRootOnly` is the OFF-SCREEN cheap path. `AnimationState::Update`
+  (200,000 calls) is the on-screen one, so a zero here means every animated mesh
+  stayed in frustum, not that the port is dark.
+- `ApplyEvents` fires only when an animation event falls inside a frame's time
+  window; this town's clips evidently carry none. `g_applyEventsFired` is
+  separate from `g_applyEventsCalls` precisely because `calls=N fired=0` and
+  `calls=0` are different findings
   (`reference_calls_zero_can_mean_always_took_the_uncovered_branch.md`).
 
-When it is run, **read the census `calls=` column and not only
-`divergences=`** — a port with zero callers reports clean.
+Not run, and named rather than described as unavailable:
+**`tools/trace_oracle/` was NOT run on `BeginDrawGroup`.** It compares the
+draw-call/pipeline-state COMMAND STREAM and needs no frame determinism, which
+makes it the right instrument for the one body here that can change a pixel. **A
+pixel diff is not the alternative**: Wave 23 measured two runs at identical seed
+and pin splitting ~98% apart independently of the flag under test.
+
+`g_beginGroupAppends` — the count of APPEND-path entries — was **not read**; the
+summary function in this file is not wired to any caller (see §10.2). The 2:1
+ratio is the evidence that appends are rare, not a direct count.
+
+### 9.4 RE-VERIFICATION AFTER THE SHARED-SCRATCHPAD WARNING — MEASURED
+
+Mid-lane the integrator relayed that the session scratchpad is shared between all
+seven lanes and that a sibling lane had analysis files with generic basenames
+(`exp.py`, `pdata.py`, `exports.py`…) silently overwritten. Three of this lane's
+helpers had exactly that shape, and one of them sat in the **shared temp root**,
+not even the session scratchpad.
+
+**Every byte, address and extent in this document was re-derived** by a single
+lane-private script, `<scratchpad>/gfxbody/gfxbody_reverify.py`, which re-reads
+the DLL from scratch and consults no intermediate file from the first pass.
+
+**All eleven addresses, all eleven ordinals, all eleven extents, all four
+fragment counts, all fourteen callee classifications and both raw constants
+reproduced EXACTLY.** Nothing in §1, §6 or §8 changes.
+
+Two things the re-run added that the first pass had wrong or missing:
+
+1. **`0x1801fe728` IS A NAMED EXPORT** — `?_secondsPerTick@Timer@System@@0NA`,
+   ordinal **4797**. `WAVE27_LANE_GFXBIG.md` §4 describes it only as a runtime
+   global the tree resolves **by address** at
+   `engine/funcs/engine_funcs.cpp:1546`. Everything GFXBIG says about it is true
+   (it is in `.data`'s uninitialised tail — the re-run confirms `.data`'s raw
+   data ends at `0x1801fb400`, below `0x1801fe728`, while its virtual end is
+   `0x180200998`), but the conclusion "reach it by address" was drawn without
+   noticing it has a NAME. **`0NA` means private, not unexported**
+   (`reference_aeaa_is_private_not_unexported.md`) — that rule applied to a DATA
+   symbol, where it is easier to miss. Residual R5.
+2. **A blind spot in the re-verify script, caught by the script's own control.**
+   Its store-scanner matched `MOV [RCX+disp8],EAX` (`89 41 xx`) and
+   `MOV [RCX+disp32],EAX` (`89 81 …`) but **not** the no-displacement form
+   `MOV [RCX],EAX` (`89 01`), so it reported `+0x00..+0x03` as UNWRITTEN by
+   **both** Camera bodies — which is false, and the port writes it. It was caught
+   only because the same script ran over the copy CTOR as a control and produced
+   the same impossible hole in both. **A scanner that reports the same wrong
+   answer about two subjects looks consistent**; running the control is what made
+   the consistency suspicious. Corrected by hand against the objdump listing; the
+   dword counts then reconcile (52 matched + 1 unmatched = 53 for the ctor,
+   51 + 1 = 52 for `operator=`), which is what §6 of the source states.
+
+**And the analogy finding of §6 is now MECHANICAL rather than eyeballed.** The
+script computes the written-byte SET of both bodies and prints the difference:
+
+```
+Camera::operator=  UNWRITTEN: 0x61 0x62 0x63   0xd5 0xd6 0xd7
+??0Camera copyctor UNWRITTEN:                  0xd5 0xd6 0xd7
+DIFFERENCE ctor-writes-but-assign-does-not: 0x61 0x62 0x63
+```
+
+Exactly the three bytes, derived from the instruction stream rather than read off
+a listing by eye.
 
 ## 10. INSTRUMENT DEFECT OBSERVED, NOT FIXED
 
@@ -304,6 +425,121 @@ file has verified nothing at all.
 Not fixed, per warning 1. No project file/line is given because the defect is in
 the agent harness's background-task capture, not in a file this repo owns.
 
-## 11. CENSUS DELTA — attributed row by row
+### 10.2 Every wave lane's `*Summary()` is written and NOTHING CALLS IT
 
-Filled in on the closing run; see §12.
+`runtime/src/graphics/wave28_lane_gfxbody.cpp` (`RtGraphicsWave28GfxbodySummary`,
+near the end of the file) and `runtime/src/graphics/wave27_lane_gfxbig.cpp:1128`
+(`RtGraphicsWave27GfxbigSummary`) both define a one-line end-of-run attendance
+summary. **`grep -rn RtGraphicsWave27GfxbigSummary` outside its own file returns
+NOTHING** — no caller anywhere in `code/`, `engine/`, `runtime/` or
+`standalone/`.
+
+So the only attendance a run actually emits is the milestone ladder inside
+`Attend()` (1, 10, 1000, then every 100,000). **That is why §9.2 can report
+`BeginDrawGroup` at 1,600,000 and §9.3 cannot report `g_beginGroupAppends` at
+all**: a counter only the unwired summary prints is invisible, and a BRANCH
+counter that never prints cannot do the job it was added for — distinguishing
+`calls=N branch=0` from `calls=0`, which is the whole point of having one
+(`reference_calls_zero_can_mean_always_took_the_uncovered_branch.md`). Four of
+this lane's six branch counters are in that state.
+
+This lane added its own summary in the same shape as the existing one rather
+than wiring either, per warning 1.
+
+Addressee: the Wave 29 Graphics lane, or whoever next needs a branch count.
+
+### 10.3 The build gate prints a WARN and an OK about the same artefact
+
+`mingw32-make standalone-debug` on this tip emits, two lines apart:
+
+```
+GATE WARN: standalone\cutover_manifest.inc is stale in COSMETIC fields only
+           (a by-name door count moved -- some lane added or removed a door).
+cutover manifest gate: OK (60 rows; row set and every disposition match ...)
+```
+
+Both are correct, and the pair is legible only because the WARN explains itself
+at length. Recorded because **this lane caused it** — it added six by-name doors
+and removed none. Per Wave 26 defect 4 the manifest is regenerated on the MERGED
+tip, not per lane, so this lane deliberately did **not** run
+`python tools/cutover_manifest.py --inc`. The integrator should expect to.
+
+## 11. CENSUS DELTA — ATTRIBUTED ROW BY ROW
+
+Re-derived on the built tip. **NOTE FOR ANYONE REPEATING THIS: the kickoff's
+census command does not work in a lane worktree.** `tools/ghidra_mcp/.venv/` is
+not checked in — only `requirements.txt` is. The invocation that actually runs
+points at the MAIN checkout:
+
+```
+C:\code\GIT\untitled_rev_eng_project\tools\ghidra_mcp\.venv\Scripts\python.exe \
+    tools/runtime_census.py --namespace Graphics
+```
+
+A worktree-relative invocation fails, and **an empty result read as a clean gate
+is exactly this project's recurring defect** — this lane used the absolute path
+throughout and got real output, stated so the gate is not taken on trust.
+
+```
+namespace         total   called   ported   detour  called covered  ceiling
+Graphics            599      128      106        1   82.8%   96.1%
+TOTAL              4632     1435     1285        9   89.5%
+
+  namespace       gap |  BODY  CTOR  DTOR OPNEWDEL OPERATOR VTABLE  DATA  UNKNOWN
+  Graphics         22 |     6     0     0        0        0      8     8        0
+```
+
+Kickoff baseline for Graphics was **126 called / 98 ported / 77.8%**.
+
+**PORTED 98 -> 106 = +8, and every one is a row this lane wrote:**
+
+| # | Row | note |
+|---|---|---|
+| 1 | `?GetConstantName@Material@Graphics@@` | in scope |
+| 2 | `?GetTextureName@Material@Graphics@@` | in scope |
+| 3 | `?FindConstant@MaterialInstance@Graphics@@` | in scope |
+| 4 | `?FindTexture@MaterialInstance@Graphics@@` | in scope |
+| 5 | `?ApplyEvents@Animation@Graphics@@` | in scope |
+| 6 | `?BeginDrawGroup@Renderer@Graphics@@` | in scope |
+| 7 | `?UpdateRootOnly@AnimationState@Graphics@@` | in scope |
+| 8 | `??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z` | **NOT in the brief's ten** — see below |
+
+**CALLED 126 -> 128 = +2, and both are callees this lane's own ports
+introduced** (`reference_porting_can_grow_the_cutover_surface.md`):
+
+| Row | introduced by | kind | state |
+|---|---|---|---|
+| `?GetRootPoseAtTime@Animation@Graphics@@` (ord 2880, 495 bytes, 3 frags) | §5 `UpdateRootOnly` | BODY | unported — residual R6 |
+| `??4Camera@Graphics@@` (ord 1060, 460 bytes) | §4 `BeginDrawGroup` | OPERATOR | **ported in the same lane**, row 8 above |
+
+`??0Camera@Graphics@@QEAA@AEBV01@@Z` and
+`?_singleton@AnimationManager@Graphics@@` were **already** in the `called`
+column (`wave9_lane_gfxd.cpp` and `animation.cpp` respectively), so neither
+moved it. `?GetConstantName@ShaderProgram@Video@@` and
+`?GetTextureName@ShaderProgram@Video@@` are **Video**, not Graphics, so they do
+not appear in this namespace's delta at all — they may move Video's `called` by
+up to 2 and the integrator should not read that as unexplained.
+
+**The gap decomposition changes SHAPE, not just size.** Graphics' OPERATOR
+column went `1 -> 0` (row 8 closed the only one) while its BODY column stayed at
+**6** — because the three rows this lane did not land are still there and
+`?GetRootPoseAtTime@` replaced the one the ports removed. A reader diffing only
+the gap total sees `23 -> 22` and misses both movements.
+
+**The identity claim, and it is the only claim made about the board:** seven
+named Graphics BODY rows that were `ported==0` are now ported and registered;
+one Graphics OPERATOR row **this lane itself opened** is ported and registered
+with them; one new BODY row (`GetRootPoseAtTime`) is open and named.
+
+**Do not add these to the kickoff's TOTAL.** Six other lanes are landing on the
+same base, and `ceiling` has `called` in both halves so any lane opening a door
+moves it (`reference_the_ceiling_percentage_is_a_moving_target.md`). The
+integrator should re-derive on the merge.
+
+## 12. RESIDUALS ADDED AFTER §8
+
+| # | Item | Addressee |
+|---|---|---|
+| R5 | `0x1801fe728` is the named export `?_secondsPerTick@Timer@System@@0NA` (ord 4797), but `engine/funcs/engine_funcs.cpp:1546` reaches it **by address**. A name door is available and nobody has taken it. | Wave 29 Graphics lane, or whoever next audits address doors |
+| R6 | `?GetRootPoseAtTime@Animation@Graphics@@` (0x1800faaa0, ord 2880, 495 bytes across 3 chained fragments) entered `called` because of §5 and is unported. | Wave 29 Graphics lane |
+| R7 | `MaterialInstance::BuildParameters` has attendance **0** in a full autostart world-build run, contradicting Wave 27's "goes live immediately" (§9.3). Five ported rows hang off that route. | Wave 29 Graphics lane |

@@ -106,6 +106,7 @@ unsigned long long g_beginGroupCalls   = 0;
 unsigned long long g_beginGroupAppends = 0;   // BRANCH: the grow path, not reuse
 unsigned long long g_updateRootCalls   = 0;
 unsigned long long g_updateRootLayers  = 0;   // BRANCH: layers actually blended
+unsigned long long g_cameraAssignCalls = 0;
 
 // ============================================================================
 // §1.  Material::GetConstantName / Material::GetTextureName
@@ -801,6 +802,60 @@ extern "C" void RtGraphics_AnimationState_UpdateRootOnly(void* self, float dt, f
 }
 
 // ============================================================================
+// §6.  Camera::operator=  — retail 0x180017c40, ordinal 1060, 460 bytes.
+// ============================================================================
+// NOT ONE OF THIS LANE'S TEN ROWS. It is here because `BeginDrawGroup`'s reuse
+// path is the tree's FIRST caller of it, so porting §4 PUT THIS ROW INTO THE
+// `called` COLUMN (reference_porting_can_grow_the_cutover_surface.md). A lane
+// that opens a gap row and leaves it open has moved work, not done it — and
+// this one is 460 bytes of dword copies.
+//
+// *** THIS IS A MEASURED INSTANCE OF THE PORT-BY-ANALOGY WARNING, AND THE
+// SIBLING IS ALREADY IN OUR TREE. ***
+//
+// `RtGraphics_Camera_CopyCtor` (wave9_lane_gfxd.cpp:184) is the copy CTOR,
+// 0x180017a70, and its comment reads "FIFTY-THREE dword copies covering
+// +0x00..+0xd3, then ONE byte at +0xd4". That description is correct FOR THE
+// CTOR. `operator=` is NOT the same body:
+//
+//   copy ctor  0x180017afe:  MOV EAX,[RDX+0x60]      ; a DWORD
+//              0x180017b01:  MOV [RCX+0x60],EAX
+//   operator=  0x180017cce:  MOVZX EAX,BYTE [RDX+0x60] ; a BYTE
+//              0x180017cd2:  MOV BYTE [RCX+0x60],AL
+//              0x180017cd5:  MOV EAX,[RDX+0x64]      ; resumes at 0x64
+//
+// So the CTOR writes `+0x61..+0x63` and `operator=` DOES NOT. +0x60 is the
+// `bool` the default ctor sets with `MOV BYTE PTR [RCX+0x60],1`
+// (wave9_lane_gfxd.cpp:218), and the assignment operator respects its width
+// while the constructor — writing into raw memory, where the padding is
+// meaningless — does not.
+//
+// Writing this body as "the same 53-dword loop as the sibling" would write
+// three bytes retail leaves alone, into a live Camera, every frame. "I checked
+// the sibling" is not a check; the bytes are. THE WRITTEN EXTENT OF A COPY IS A
+// PROPERTY OF THE WRITER, NOT OF THE TYPE
+// (reference_never_written_needs_by_whom.md).
+//
+// The unwritten windows, stated so an oracle does not compare them:
+// `+0x61..+0x63` and `+0xd5..+0xd7` (sizeof is 0xd8; the last store is the byte
+// at +0xd4). Returns `this` (`MOV RAX,RCX` at 0x180017e08).
+// ----------------------------------------------------------------------------
+extern "C" void* RtGraphics_Camera_Assign(void* self, const void* src) {
+    Attend("Camera::operator=", g_cameraAssignCalls);
+
+    uint32_t* const       d = static_cast<uint32_t*>(self);
+    const uint32_t* const s = static_cast<const uint32_t*>(src);
+
+    for (int i = 0; i < 0x60 / 4; ++i) d[i] = s[i];          // +0x00..+0x5f
+    static_cast<uint8_t*>(self)[0x60] =
+        static_cast<const uint8_t*>(src)[0x60];              // +0x60, a BYTE
+    for (int i = 0x64 / 4; i <= 0xd0 / 4; ++i) d[i] = s[i];  // +0x64..+0xd3
+    static_cast<uint8_t*>(self)[0xd4] =
+        static_cast<const uint8_t*>(src)[0xd4];              // +0xd4, a BYTE
+    return self;
+}
+
+// ============================================================================
 // REGISTRATION
 //
 // Every mangled name below is its own STRING LITERAL, never a named constant:
@@ -831,6 +886,10 @@ int RtGraphicsWave28GfxbodyRegister() {
                           (void*)&RtGraphics_Renderer_BeginDrawGroup); ++count;
     RegisterRuntimeExport("?UpdateRootOnly@AnimationState@Graphics@@AEAAXMAEAVVector3@Math@@@Z",
                           (void*)&RtGraphics_AnimationState_UpdateRootOnly); ++count;
+    // Not one of the ten; see §6 -- porting BeginDrawGroup is what put this row
+    // into the `called` column, so this lane closes it rather than moving it.
+    RegisterRuntimeExport("??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z",
+                          (void*)&RtGraphics_Camera_Assign); ++count;
 
     return count;
 }
