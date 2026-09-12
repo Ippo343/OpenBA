@@ -214,12 +214,16 @@ Internal* RtObject_InternalFactory_PersistObject(InternalFactory* self,
                                 ? static_cast<Internal*>(created)
                                 : nullptr;                     // CMOVNZ RSI,RBX
 
-            // UNGUARDED on purpose — see the banner.
+            // UNGUARDED on purpose — see the banner. Retail reads
+            // `_factoryIndex` (+0x08) BEFORE it writes `_generation` (+0x0c);
+            // two distinct fields, so the order is unobservable, and it is
+            // kept because an unobservable order that is transcribed costs
+            // nothing while one that is tidied is a difference nobody can find.
+            const int32_t newIndex = obj->factoryIndex;        // 0x1800bffad
             obj->generation = generation;                      // 0x1800bffb0
             // `_persistIds` is RE-LOADED here (0x1800bffb4 / 0x1800bffbc):
             // the factory call can have grown the table.
-            reinterpret_cast<int32_t*>(self->persistIds._data)[i] =
-                obj->factoryIndex;
+            reinterpret_cast<int32_t*>(self->persistIds._data)[i] = newIndex;
             slot = reinterpret_cast<int32_t*>(self->persistIds._data)[i];
 
             SerializeVirtual(obj, stream);                     // 0x1800bffca
