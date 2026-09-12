@@ -849,3 +849,106 @@ to edit on a sibling lane's suggestion. **Addressee: the Wave 28 integrator**, t
 promote or decline. The `_factoryIndex` specimen is the whole argument — the
 window passes today and fails at index 256, for a reason nothing in the
 measurement could reveal.
+
+---
+
+## 13. TWO NUMBERS THAT LOOKED ALIKE AND WERE NOT — AND A PREDICTION THAT MISSED
+
+Lane FACTUI1 predicted its three NOEXCL results in a committed file, matched two,
+missed the third, and the miss found a dead predicate plus a claim it had never
+made explicitly: **"pass 3's subject is narrower than passes 1–2's. I had been
+letting 31/31 sit beside 26/26 as though they were the same kind of number."**
+
+That shape was in this doc too, so it was checked rather than agreed with.
+
+### 13.1 Pass 2's subject WAS narrower, and §11.1 did not say so
+
+Retail's `CreateNewObject` returns an **arena block, which is not poisoned**, so
+pass 2 can only compare bytes **ours** wrote. It is structurally incapable of
+seeing a store retail makes that **we dropped** — the one failure mode pass 1
+catches with `ourW != theirW`. §11.1 reported `pass 2: 2/2` next to
+`shape (b) 11/11` with nothing marking the difference.
+
+### 13.2 Pass 2b — fixing it rather than documenting it
+
+Both classes export their own default constructor
+(`??0AchievementInstance@Achievement@@QEAA@XZ` `0x18009e3b0`,
+`??0GoalInstance@Achievement@@QEAA@XZ` `0x18009ef00`), so the full-width,
+both-poisoned subject of pass 1 is recoverable. **The predictions were written to
+`docs/runtime_port/wave28_factrest_prediction_pass2b.txt` and committed before the
+code was written** (FACTUI1's technique).
+
+| # | prediction | measured | |
+|---|---|---|---|
+| P1 | pass 2b normal `2/2` | `2/2` | HIT |
+| P2 | `NOEXCL=1` → `0/2`, first `+0x08`, 5 bytes | `5/40` and `5/28`, first `+0x8` | HIT |
+| P3 | `--negative` → `0/2` | `0/2` | HIT |
+| P4 | pass 2 unchanged at `2/2` | unchanged | HIT |
+| P5 | 2b compares **more** bytes than pass 2 (>32, >20) | **32 and 20 — IDENTICAL** | **MISS** |
+
+### 13.3 The miss is the finding
+
+P5 assumed the full-width subject would pull in bytes only retail wrote. It pulled
+in none: **our step tables write exactly the set of bytes retail writes — not a
+byte more, not a byte fewer.** So pass 2's structural blindness to a dropped
+store was real in principle and **provably vacuous on this roster**, and that is
+now measured in both directions rather than assumed in either.
+
+Two things follow, and neither was available before the prediction missed:
+
+* The caveat I was about to write — *"pass 2 is weaker, treat 2/2 with
+  suspicion"* — would have been **true and misleading**. The correct statement is
+  narrower and stronger: *pass 2 is weaker in principle and provably not weaker
+  here.*
+* **A number being a lower-bound-only subject is not the same as that subject
+  being incomplete.** Distinguishing them costs one measurement and is the
+  difference between a caveat and a fact.
+
+### 13.4 A fourth independent sighting of the same five bytes
+
+Under `NOEXCL=1` pass 2b's compared count rises 32 → 40 (the excluded 8 join) and
+**5 of them differ**, first at `+0x08`. That is the fourth screen to land on the
+same window — `--selfdiff` (retail vs retail), pass 2 under `NOEXCL`, pass 2b
+under `NOEXCL`, and FACTUI1's 12 Internal-rooted rows — from three different
+comparison directions.
+
+FACTUI1 also reports `ComboElement` showing **4** rather than 5, because one byte
+of its handle id happened to coincide between two runs. That is §11.2's
+`_factoryIndex` argument arriving a third time and making it sharper than either
+lane put it: **the measured window does not merely underestimate in principle, it
+visibly shrinks and grows run to run with the values.** Anyone fitting a window to
+a measurement would get a different answer depending which class they looked at.
+
+### 13.5 Screen states, ALL MEASURED — including one I nearly asserted
+
+```
+            shape(b)   pass 2   pass 2b   shape(a)
+NORMAL       11/11      2/2      2/2       12/12
+--negative    0/11      0/2      0/2        0/12
+--derefbug    0/11      0/2      0/2       12/12
+NOEXCL=1     11/11      0/2      0/2       12/12
+```
+
+**A second prediction missed, and it was mine, in the draft of this very
+section.** I had written `--derefbug` as `2/2` on passes 2 and 2b and labelled it
+a KNOWN GAP — reasoning that those two classes' subject is dominated by the
+`??0Internal` call and the zeroed tail, so a vtable-resolution arming would not
+reach them. Then I ran it before committing the table, because a section about
+not letting asserted numbers sit beside measured ones is the worst possible place
+to assert a number:
+
+```
+--derefbug  pass 2   AchievementInstance FAIL 3/32, first +0x0
+                     GoalInstance        FAIL 3/20, first +0x0
+            pass 2b  AchievementInstance FAIL 4/32, first +0x0
+                     GoalInstance        FAIL 4/20, first +0x0
+```
+
+It fires on both. **There is no gap, and the gap I was about to document into the
+lane record did not exist.** `shape(a)` holding at `12/12` is the only row the
+arming leaves alone, and correctly — those classes stamp no vptr (§9.5).
+
+The habit that caught it is the cheapest one in this whole exchange: **run the
+row before you write the row.** Four of the five prediction slots in §13.2 were
+hits and felt like confirmation; this one was invented reasoning that sounded
+plausible and was simply false.
