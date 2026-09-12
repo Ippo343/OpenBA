@@ -1970,8 +1970,6 @@ int RtUiWidgetsInRegister() {
     // `?CacheText@NumberElement@UI@@AEAAXXZ` is `AEAA` — PRIVATE, and exported
     // anyway (ord 1679). The comment that used to sit at this function's
     // accessor called it "unexported" and that is why it was an address door.
-    RegisterRuntimeExport("?CacheText@NumberElement@UI@@AEAAXXZ",
-                          (void*)&RtUi_NumberElement_CacheText); ++count;
     // `??9String@System@@QEBA_NAEBV01@@Z` (0x18003ffe0), ported above as
     // StringNotEqualImpl. Registered under BOTH doors and NOT counted: `count`
     // is this lane file's tally of UI exports and this one is a System symbol.

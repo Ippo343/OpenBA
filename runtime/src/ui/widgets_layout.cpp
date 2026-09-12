@@ -1167,8 +1167,6 @@ int RtUiWidgetsLayRegister() {
     // its name and its address -- the convention that exists because lane B3
     // registered Element::RemoveChildren by name only and left the tree's one
     // address-door bypass (see the note further down this function).
-    RegisterRuntimeExport("?UpdateContainers@TabElement@UI@@AEAAXXZ",
-                          (void*)&RtTabElementUpdateContainers); ++n;
     // The live-coverage seam. OPT-IN, and it must be explicitly SET rather than
     // merely left unset -- runtime_detour.h: "Every detour gets an env kill
     // switch at its call site. Nothing goes default-on unproven." With it off,
