@@ -18,15 +18,20 @@ sections was taken from Ghidra MCP; see §1 for why.
 | Slot bodies ported + registered | **12 of 12** (the four tables' entire unported surface) |
 | BODY row `?Draw@MainLoop@Engine@@` | **ported, registered, and LIVE — 27,959 calls/run** |
 | `??_7UpdateLoop@` transient-vs-final question | **SETTLED — verdict PROMOTE.** Row promoted. |
-| `?_loader@LoaderLoop@` blocker | **NOT retired — the expiry condition was MIS-SPECIFIED.** Corrected in place. |
+| `?_loader@LoaderLoop@` blocker | **NOT retired — the expiry condition was MIS-SPECIFIED.** Corrected in place (twice; see §5). |
 | Three derived loop tables | Promotable and *proved safe*, but promotion **buys nothing measurable**; left opt-in with the measurement recorded |
-| `??_7Loader@Engine@@6B@` | **Blocked** — `??0Loader@Engine@@QEAA@XZ` retail+unported. Tagged. |
+| `??_7Loader@Engine@@6B@` | **Blocked by a DLL-load-time unexported thunk — no port can retire it.** Retires at cutover only. Tagged. |
 | Build / run | `standalone-debug` exit 0; three runs, all rc=0, all crash logs 0 bytes |
 
 The honest one-line summary: **one body row went live and is doing real work every
 frame; twelve slot bodies are written, registered and provably safe to route, and
-route nothing, for a reason that is not fixable by promotion.** §5 is the finding
-that outlives the lane.
+route nothing, for a reason that is not fixable by promotion.**
+
+**Two findings outlive the lane, and both are about expiry conditions and screens
+rather than about loops:** §5 (a satisfied expiry clause that retires nothing, which I
+then reproduced *myself*, in the section documenting it — §4.1) and §9 (a scanner of
+mine that was wrong, found because I asked another lane to re-derive rather than
+believe me). §3.5 and §4.1 exist only because of §9.
 
 ---
 
@@ -226,30 +231,89 @@ FUN_180031880                      0 callers
 "retail stamper" set is therefore an unreachable copy ctor plus a destruction-time
 stamp, with our own ported ctor as the only reachable stamper.
 
-### 3.5 THE LIMIT OF THAT SCAN — and it is why `??_7Loader@` is blocked
-A direct `E8`/`E9` scan **cannot see a call made through the CRT static-initialiser
-table**. So a `0` for a *static* object's constructor is an artefact, not a finding.
-`??0Loader@Engine@@QEAA@XZ` scores 0 for exactly that reason (`_loader` is a static)
-and is **not** cleared by it. I have written that caution beside the tag so the next
-lane does not read the 0 as I could have.
+### 3.5 THE LIMITS OF THAT SCAN, AND HOW THEY WERE CLOSED
+A direct `E8`/`E9` scan is blind to two things: a call through the CRT
+static-initialiser table, and any other **indirect** call through a stored pointer.
+Lane ACHIEVE made this point to me (in the course of correcting a different scan of
+mine — §9), and it is load-bearing here, because §3.4's "0 callers" is the evidence
+the promotion rests on.
+
+**Closed with a second, independent screen.** An indirect call has to get the address
+from *somewhere* — a vtable, a jump table, a function-pointer global, a static-init
+table — and all of those store it as a qword in some section. So: scan **every** PE
+section at **every** byte offset for each function's address as a little-endian qword.
+
+**The screen was handed two known positives first**, because an absence screen with no
+demonstrated ability to find anything is indistinguishable from a dead parser
+(`reference_absence_screen_must_be_handed_a_shape.md`). This mattered: my first control
+(`??0Loader@`) returned 0, which could have meant either "real" or "parser broken". The
+two positives resolved it:
+
+```
+POSITIVE ?Run@Loader@            0x1800dbfc0 -> 1 hit, .rdata @ 0x180157a08  (its vtable slot 0)
+POSITIVE UpdateLoop deldtor      0x180031900 -> 1 hit, .rdata @ 0x180155ba0  (its vtable slot 0)
+
+??0UpdateLoop@…@AEBV01@@Z        0x1800317d0 -> 0
+FUN_180031880                    0x180031880 -> 0
+??0LoaderLoop@…@AEBV01@@Z        0x18004d3a0 -> 0
+??0DialogLoopT@…@AEBV01@@Z       0x18004d7d0 -> 0
+??0DialogLoaderLoopT@…@AEBV01@@Z 0x18004d570 -> 0
+```
+
+Each positive found exactly once, at exactly the predicted address. So the zeros are
+real: **none of the five copy ctors is named by any table or pointer anywhere in the
+binary.** Unreachable indirectly as well as directly. §3.4's claim now rests on two
+mechanisms that fail differently, not one.
 
 ---
 
-## 4. `??_7Loader@Engine@@6B@` — BLOCKED, and newly tagged
+## 4. `??_7Loader@Engine@@6B@` — BLOCKED BY SOMETHING NO PORT CAN RETIRE
 
 Now 2/2 (slot 0 `?Run@Loader@Engine@@` is new this lane). **Not promoted.**
 
-It is the one table in my scope whose **only** stamper is retail and unported:
-`??0Loader@Engine@@QEAA@XZ` (`0x1800dc0f0`, stamp at +0x21). Every table I did promote
+It is the one table in my scope whose only stamper is retail. Every table I promoted
 has *our* ctor as its stamper — that is precisely what makes those safe and this one
-not. The single instance is the static `?_loader@LoaderLoop@Engine@@1VLoader@2@A`,
-built by the DLL's CRT static-init before any of our code runs, so promoting the symbol
-would publish our table to name-resolving readers while the live object keeps the
-DLL's — two tables, one object, and the loader thread is what dispatches through it.
+not.
 
-Tagged `RT_UNPROMOTABLE` with `[ADDRESSEE: the Wave 28 lane that owns
-runtime/src/engine/loops.cpp]` and `[CONDITION: expiry = ??0Loader@Engine@@QEAA@XZ
-ported AND registered]`.
+### 4.1 I FIRST GOT THE BLOCKER WRONG, AND CAUGHT IT BEFORE CLOSING
+My first tag named `??0Loader@Engine@@QEAA@XZ` (`0x1800dc0f0`) as the blocker, with
+expiry "that symbol ported AND registered". **That was the exact defect I criticise in
+§5** — a condition naming a symbol that is not the real blocker. I reproduced it within
+the same lane, one section after documenting it.
+
+What the address-presence screen (§3.5) forced me to look at: `??0Loader@` scores 0 on
+*both* screens — no direct call, and its address in no section. The exported body is
+never invoked. So what builds `_loader`?
+
+**An unexported static-init thunk at `0x180148fe0`, with the constructor INLINED**
+(objdump):
+
+```
+180148fe0:  sub    $0x38,%rsp
+180148fed:  mov    $0x40000,%edx              ; 256 KB stack
+180148ff2:  lea    0xb57bf(%rip),%rcx         ; 0x1801fe7b8 == &_loader
+180148ff9:  call   0x1800ca4e0                ; System::Thread::Thread(this, 0x40000)
+180148fff:  lea    0xea02(%rip),%rax          ; 0x180157a08 == ??_7Loader@
+180149006:  mov    %rax,0xb57ab(%rip)         ; stamp it into _loader
+18014900d:  movq   $0x0,0xb57d0(%rip)         ; 0x1801fe7e8 == _loader+0x30 == _loop
+180149018:  lea    0x1561(%rip),%rcx          ; the atexit destructor
+180149023:  jmp    0x1800801d0
+```
+
+This is the site my stamper scan reported and I had dismissed as spurious because it
+attributed to `??0Scene@Picking@@+0x2371f` — an offset so absurd it should have told me
+"unexported function", not "noise". `_loader+0x30 == _loop` confirms the identification
+independently against the type header.
+
+**It runs at DLL load, before any of our code exists. There is therefore no symbol to
+port that retires this row.** Corrected in both tags: the disposition is
+`[SCOPE: DLL-PRESENT]` route-scoped — while the DLL is present the row can *never* be
+promoted; at cutover the thunk does not exist, we construct `_loader` ourselves, and the
+row becomes REQUIRED. Addressee corrected to **the lane running the next cutover
+attempt, not a porting lane**, because no amount of porting reaches it.
+
+Note the `movq $0x0` at `0x18014900d` is a **`C7` store** — the exact opcode class
+§9 is about.
 
 ---
 
@@ -274,12 +338,25 @@ has since CHANGED, guarded by an expiry clause that names the changed premise.**
 the clause and the row reads green, while the real reason for the refusal is untouched
 and was never written down. The written condition, not the verdict, was the defect.
 
-Corrected in place at the row (not only here): corrected condition is
-`??0Loader@Engine@@QEAA@XZ` ported AND registered — the **same** blocker as
-`??_7Loader@Engine@@6B@` above, so the two rows share one blocker and should retire
-together. Corrected addressee: the Wave 28 lane owning `runtime/src/engine/loops.cpp`
-(the old addressee, "lane MANIFEST of Wave 25", is a closed wave and could no longer
-act — `reference_expiry_clause_needs_an_addressee.md`).
+**My first correction to this row was itself wrong, and I fixed it before closing.** I
+wrote the corrected condition as "`??0Loader@Engine@@QEAA@XZ` ported AND registered" —
+i.e. I replaced a condition naming the wrong symbol with *another* condition naming the
+wrong symbol, one section after writing down why that is a defect. §4.1 has the
+disassembly: the exported `??0Loader@` is never called, and `_loader` is really built by
+an unexported static-init thunk at `0x180148fe0` that runs at DLL load.
+
+**Final corrected disposition** (written at the row): there is **no symbol to port** that
+retires this. `[SCOPE: DLL-PRESENT]` is route-scoped — unpromotable for as long as the
+DLL is present, REQUIRED at cutover. Addressee: **the lane running the next cutover
+attempt**, not a porting lane. Same blocker and same disposition as
+`??_7Loader@Engine@@6B@`; the two rows retire together, at cutover. (The old addressee,
+"lane MANIFEST of Wave 25", is a closed wave and could no longer act —
+`reference_expiry_clause_needs_an_addressee.md`.)
+
+That this defect recurred *inside the section documenting it* is the lane's sharpest
+lesson: naming a plausible symbol feels like discharging the obligation, and the check
+that catches it is "is this symbol actually the thing that runs?", not "is this symbol
+related?".
 
 ---
 
@@ -384,12 +461,16 @@ entry in a list is reason to distrust the list, not just that entry.
 1. **The twelve bodies need a ROUTE, not more porting.** Make an exe-subclass stub
    delegate to the base (`standalone/loader_loop_stubs.cpp`,
    `standalone/menudialogloopt_stubs.cpp`), then arm that table's promotion. §6.2/§6.3.
-2. **`??0Loader@Engine@@QEAA@XZ` (0x1800dc0f0) is one small body that unblocks TWO
-   data/vtable rows at once** — `??_7Loader@Engine@@6B@` and
-   `?_loader@LoaderLoop@Engine@@`. It is the highest-leverage item left in this family.
-   *(Flagging per warning #6 that this is an INFERENCE about value, not a measurement —
-   and per `reference_cheap_wins_list_is_the_stalest_section.md`, re-derive it before
-   acting.)*
+2. ~~**`??0Loader@Engine@@QEAA@XZ` is one small body that unblocks TWO rows.**~~
+   **STRUCK OUT BY ITS OWN AUTHOR, BEFORE THIS LANE CLOSED. DO NOT DO THIS.** It was
+   the one "cheap win" I put on this list, and it was false: that exported body is
+   never called, and porting it would unblock nothing (§4.1). `??_7Loader@` and
+   `?_loader@LoaderLoop@` are blocked by a DLL-load-time unexported thunk and can only
+   be retired **at cutover**, by the cutover lane, with no port involved.
+   Left visible rather than deleted, because
+   `reference_cheap_wins_list_is_the_stalest_section.md` says this list is the stalest
+   section of any handover and the first one acted on — and here it went stale *within
+   the lane that wrote it*, which is the strongest available evidence for that rule.
 3. **Eleven of the twelve new bodies have no oracle.** They are byte-derived from
    `objdump` and they compile and link, but they have never executed. Do not read
    "ported + registered" as "verified".
@@ -397,3 +478,48 @@ entry in a list is reason to distrust the list, not just that entry.
 5. The `read_memory` / `inspect_memory_content` defect (§1.2) is worth a Wave 28
    tooling decision: it is silent, it is corroborated by a second tool, and any lane
    decoding a vtable through it may have decoded garbage.
+6. **If you reuse the throwaway scanners described here, read §9 first.** One of the
+   three had a real blind spot and it was found by someone else re-deriving rather than
+   believing me.
+
+---
+
+## 9. A SCANNER OF MINE WAS WRONG — and how that was found
+
+I published three throwaway raw-file scanners in the course of this lane. Lane ACHIEVE
+re-derived one of my results with a different mechanism, **because I asked them to
+rather than to take my numbers**, and found a genuine defect in it.
+
+**The bug.** A scanner matching `REX.W + (89|8B) + modrm(mod=00,rm=101) + rel32` covers
+`MOV r/m64, r64` and `MOV r64, r/m64`. It is **blind to `MOV r/m64, imm32` (opcode
+`C7`)** — and a `= nullptr` store is always `C7` (`48 c7 05 …`). So it silently
+undercounts exactly the stores lifecycle code makes to singletons. I reported "3 writes"
+to a cell that has 5; the count I was disputing was right and my refutation of it was
+wrong. (My *attribution* refutation stood — see below.)
+
+**Which of my conclusions this touches: none of them.** Stated precisely rather than
+asserted, because "my other results are fine" is what everyone says:
+
+| Scanner | Opcodes | Fed which conclusion |
+|---|---|---|
+| stamp scan | `LEA` (`8D`) | §3.1 stamper census |
+| call scan | `E8`/`E9` | §3.4 copy-ctor reachability |
+| address-presence scan | none (byte search) | §3.5 |
+| **writer scan (the buggy one)** | `89`/`8B` | **only lane ACHIEVE's question — no row of mine** |
+
+And the `C7` blind spot cannot affect the stamp scan even in principle: `C7` takes a
+**sign-extended imm32**, and every vtable VA here (`0x180155ba0`, `0x180157940`, …)
+exceeds `0x7FFFFFFF`, so a vtable address is not encodable that way. MSVC emits `LEA`.
+That is a reason, not a reassurance.
+
+**What it cost and what it bought.** It cost ACHIEVE a wrong number in a message. It
+bought: the `C7` lesson; the indirect-call gap in my *other* scanner, which I then
+closed properly with a controlled absence screen (§3.5); and, through that screen, the
+discovery that my own §4 tag named the wrong blocker (§4.1). The most valuable thing in
+this lane came from being contradicted.
+
+**The transferable rule:** an opcode-pattern scanner is a whitelist, and a whitelist's
+failure mode is a silent undercount that looks like a clean result. Prefer a mechanism
+that is opcode-agnostic where one exists — ACHIEVE used full `objdump -d` and grepped
+objdump's own resolved-target comment (`# 0x1801fc670`), which cannot miss an addressing
+mode because it does not enumerate them.
