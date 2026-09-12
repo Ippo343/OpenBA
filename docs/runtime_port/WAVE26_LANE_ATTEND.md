@@ -1,8 +1,10 @@
 # WAVE 26 — LANE ATTEND
 
-Two runs were asked for. **Both were done**, and the cutover half needed **five**
-runs (three arms plus two controls) rather than one, because the first clean arm
-moved the wall *backwards* and the reason had to be separated from the change.
+Two runs were asked for. **Both were done.** The cutover half needed **five**
+arms rather than one (three configurations plus two controls), because the first
+clean arm moved the wall *backwards* and the reason had to be separated from the
+change — and a **sixth**, attempt 28, was run after lane FACTORY reported, to
+settle their own prediction (§7).
 
 Branch `wave26/attend`, cut from `wave26/base` at `7de42dd1`.
 
@@ -69,6 +71,33 @@ reach it.** Not one is (a).
 | 5 | `?_typeInfo@AnimationEvent@Graphics@@0V…A` | `init=0 post=0` | `never` — **(b)** | see §1.4 |
 | 6 | `?_typeInfo@MaterialInstance@Graphics@@0V…A` | `init=1 post=0` | `never` — **(b)**, strongest case | see §1.4 |
 | 7 | `?_typeInfo@Particle@Graphics@@0V…A` | `init=1 post=0` | `never` — **(b)**, strongest case | see §1.4 |
+
+> ### ⚠ READ THIS BEFORE ACTING ON ANY ROW IN THE TABLE ABOVE
+>
+> **This instrument counts DOORS, NOT EXECUTIONS.** It increments on
+> `ResolveExport(<mangled>)` and on nothing else. Therefore:
+>
+> * **`never` cannot distinguish "the route never reaches this class" from "the
+>   route reaches it constantly, but only through calls that are not doors."**
+>   An in-DLL `rel32` call and a RIP-relative `LEA` stamp are not doors, and this
+>   project's standing trap is exactly that. For a *promotion* decision the
+>   consequence is the same — the zero is not evidence about the row — but
+>   **`never` is NOT proof that a class is unused**, and it must never be quoted
+>   as one.
+> * **A row whose only door is `ResolveAddr(Module::Runtime, <va>)` is
+>   STRUCTURALLY INVISIBLE here and prints the same `never` as a dead row.**
+>   Measured independently by lane PROMOGFX on its own boot:
+>   `??_7Geometry@Graphics@@6B@` and `??_7AnimationEvent@Graphics@@6B@` both read
+>   `never init=0 post=0` while being reached by address at `scene.cpp:212`
+>   (`0x180154e60`) and `animation.cpp:156` (`0x180154bf0`). The screen watches a
+>   channel those rows do not use. **Before reading any `never` in §1.5, check
+>   whether that row's consumers ask by NAME at all.**
+> * `post==1` does **not** mean "ran once" — nearly every consumer caches in a
+>   function-local static.
+>
+> What would lift the first limitation: an execution counter inside the consumer
+> bodies (for the three Graphics rows, `graphics_typeinfo_accessors.cpp:132/136/140`).
+> Re-running the autostart route will keep returning the same answer.
 
 **The general (a)-refutation, which applies to all five.** In this same run,
 rows reached through the *identical* `RT_DATA_SLOT → RtResolveCached →
@@ -343,20 +372,140 @@ No session time need be budgeted for it.
 
 ---
 
-## 7. MEASURED vs INFERRED
+## 7. ATTEMPT 28 — FACTORY MERGED. THE WALL MOVED, AND NAMED ONE SYMBOL.
+
+Run after lane FACTORY reported. **Scratch branch `wave26/attend-x28-scratch`**
+= `wave26/attend` + `wave26/factory` (`4d4402dd`), merged clean; the scratch
+branch is **not** part of this lane's deliverable and `wave26/attend` does not
+contain FACTORY's work. Exe md5 `386f64dc3a12b7c86ba7da243483b941`, md5-checked
+on both sides of the copy, lock held, DLL restored and verified at 2,762,752
+bytes. Env = attempt 26's, plus FACTORY's `BANISHED_RT_MINT_FACTORYLIST=1`.
+
+**FACTORY's registration reaches `RtDataMintInit` on the cutover path** — the
+log confirms their own screen from inside a real cutover boot:
+
+```
+[RtMint] BaseTypeInfo factories: 104 rows x 2 slots = 208; 2 PORTED, 204 ABORT-TRAP, 2 absent in retail too
+```
+
+**The StringTable FATAL is gone.** It is replaced by an ACCESS_VIOLATION further
+along the *same* call path, and the log names the cause on the line before it:
+
+```
+[RtUnresolved] ??_7StringTable@UI@@6B@
+[RtResolve] MISS "??_7StringTable@UI@@6B@" -> NULL. … If this is cutover, this symbol still needs minting.
+
+Fault: READ of 0x10 at RtObject::GetTypeIdVirtual+0x1f
+  <- RtObject_Base_IsDerivedFrom+0x4e
+  <- RtObject_External_Load+0x33c
+  <- ExternalFactory::FindOrLoad+0x2b1
+  <- Game::LoadInputNameTables+0x177
+```
+
+**Confirmed by source:** `standalone/rt_data_mint_tables.inc` carries
+`?_typeInfo@StringTable@UI@@` (line 2196) and its two factory slots, and carries
+**no `??_7StringTable@UI@@6B@` vtable row at all**. So the newly-ported
+`CreateNewObject` runs, its object is stamped with a **null vptr**, and the very
+next thing retail does — `IsDerivedFrom` → a virtual `GetTypeId` — reads through
+it. This is the Wave 24 `??_7Stream@Audio@@6B@` shape: **a row nothing owns.**
+
+**Against FACTORY's stated prediction:** they predicted the FATAL would move
+onto *another minted factory*. It moved **off** StringTable (their half is
+confirmed, and it is not their bug — their two slots are PORTED in a live
+cutover boot), but **not** onto another factory: onto the missing *vtable* row
+for the very class they ported. The next name is `??_7StringTable@UI@@6B@`.
+
+**ONE NAME. NOT A ROADMAP.** A cutover boot is a gate; it can only name what it
+reached. Nothing here says `??_7StringTable@UI@@6B@` is the last thing between
+the tree and a booting cutover, and it is not written as a plan.
+
+---
+
+## 8. THE DURABLE FIX — the stale `.inc` class is now UNMERGEABLE, not merely detectable
+
+§4.1 found a generated file that had gone stale with no detector wired to
+anything. `--check` existed the whole time and answers in a second; it did not
+help, because **a detector only helps someone who runs it.** Worse, the defect
+was *masked*: the blanket switch published the 14 missing rows anyway, so
+attempt 26 booted deep and `published 44, withheld 1` read as confirmation —
+**the number matched its prediction BECAUSE it was stale.**
+
+So the fix is not another detector. `tools/cutover_manifest.py` gains **`--gate`**
+and the Makefile gains **`check-cutover-manifest`**, on `standalone`,
+`standalone-debug` **and** `standalone-perf` — beside `check-log-strip`, which
+exists for the same reason and whose own history (Wave 25 integration) is that a
+guard missing from `standalone-debug` is a guard that does not fire.
+
+**Why `--gate` and not `--check`.** `--check` is content-exact, and part of that
+content is a tree-wide by-name **door count**. Any lane adding one
+`ResolveExport()` makes the file "stale" — **measured**: merging lane FACTORY
+moved `??_7Base@Object@@6B@` from `doors=16` to `17` and
+`??_7External@Object@@6B@` from `15` to `16`, with every row and every
+disposition identical. A gate that fails a six-lane wave's builds over a
+cosmetic count is a gate that gets commented out, and then the load-bearing case
+is unprotected again. **A check nobody can afford to leave on is worth the same
+as one nobody runs.** So `--gate` splits the file:
+
+| field | class | gate |
+|---|---|---|
+| row SET, each row's DISPOSITION, minted flag | what the process publishes at cutover | **FAIL** |
+| a REQUIRED row with no minted storage | a door that resolves NULL | **FAIL** |
+| an UNDECLARED scope | an unclosed tag | **FAIL** |
+| by-name door COUNT | feeds a printed prediction only | WARN, exit 0 |
+
+**Three positive controls, run, because a screen looking for the absence of a
+shape must be handed one — "0 hits" is otherwise indistinguishable from a dead
+parser:**
+
+| control | result |
+|---|---|
+| delete `?_singleton@MainLoop@Engine@@` (i.e. reproduce the Wave 25 defect) | `GATE FAIL: row MISSING …`, exit 1 |
+| flip one row `REQUIRED` → `WITHHELD` | `GATE FAIL: disposition/minting CHANGED …`, exit 1 |
+| change one door count 16 → 99 | `GATE WARN … the build is NOT failed`, exit 0 |
+| unmodified tree | `gate: OK (60 rows …)`, exit 0, and it prints inside a real `make standalone-debug` |
+
+A fresh derivation producing **zero** rows is treated as a parser failure and
+fails the gate rather than passing it — the "dead parser reads as a clean
+result" case, closed explicitly.
+
+**Re-run those three controls if anyone touches `_gate()`.** The Makefile
+comment carries them, so the addressee is whoever edits it, not a future wave.
+
+---
+
+## 9. MEASURED vs INFERRED
 
 **MEASURED** — every row of the run ledger; the 66-row watch table and its GREEN
 control; all seven per-row attendance figures; the `[GUL::Serialize]`,
 `[SaveMetaOracle]`, `[RefTable]` zeros; the `[RtMint] registered 202 by name`
 line preceding the manifest's `withheld 1`; `cutover_manifest.py --check`
-reading STALE at 46 vs 60 and clean after regeneration; all five walls and their
-symbolised stacks; A2-vs-D showing `MAINLOOPFRAME` is not load-bearing.
+reading STALE at 46 vs 60 and clean after regeneration; all six walls and their
+symbolised stacks; A2-vs-D showing `MAINLOOPFRAME` is not load-bearing; attempt
+28's `2 PORTED, 204 ABORT-TRAP`, its `??_7StringTable@UI@@6B@` MISS and the
+absence of that row from the mint table; the FACTORY-merge door-count drift
+(16→17, 15→16) with dispositions identical; all four `--gate` control results
+and the gate firing inside a real `make standalone-debug`.
 
 **INFERRED** — the (a)/(b) classification of the five `never` rows (inference
 from consumer-site reachability, with the evidence given per row and the limit
-stated in §1.4); the reading that ~104 rows have no cutover publisher (arithmetic
-on two measured registration counts, not a per-row enumeration); that lane
-FACTORY's port would move the arm-A wall (not run).
+boxed under §1.1); the reading that ~104 rows have no cutover publisher
+(arithmetic on two measured registration counts, not a per-row enumeration);
+that the null vptr in attempt 28 comes from the missing `??_7StringTable@UI@@6B@`
+row (strongly evidenced — the MISS line, the absent table row, the fault being a
+virtual call one frame after the factory — but I did not step the object's vptr
+in a debugger).
+
+**NOT DONE** — no per-row check that each of the ~104 blanket-only rows is
+actually needed at cutover; no arm combining the blanket switch with a
+`Dialog`-only exclusion; no saving/loading route to decide
+`?_typeInfo@AchievementInstance@` on its merits; **the `??_7StringTable@UI@@6B@`
+mint row is not written** (attempt 28 names it; nobody has ported it). Each is
+named with what it would take, not left as a condition with no addressee.
+
+**A NOTE ON `wave26/attend-x28-scratch`.** It exists only to carry the attempt-28
+measurement and merges FACTORY's branch. The integrator should merge
+`wave26/attend` and `wave26/factory` independently; the scratch branch is
+disposable and nothing depends on it.
 
 **NOT DONE** — no per-row check that each of the ~104 blanket-only rows is
 actually needed at cutover; no arm combining the blanket switch with a

@@ -369,6 +369,98 @@ def emit_table(rows):
     return "\n".join(L)
 
 
+# ---------------------------------------------------------------------------
+# THE BUILD GATE (--gate), WAVE 26 LANE ATTEND
+# ---------------------------------------------------------------------------
+# WHY A SECOND CHECK MODE EXISTS WHEN `--check` ALREADY WORKED.
+#
+# `--check` worked the whole time and answered in one second.  It still did not
+# stop Wave 25 from shipping a `.inc` that was FOURTEEN REQUIRED ROWS SHORT --
+# every one of lane DATA's rows -- through cutover attempt 26 and into Wave 26,
+# because a detector only helps someone who RUNS it, and nobody did.  The
+# staleness was additionally MASKED: `BANISHED_RT_MINT=1` published those 14
+# rows anyway, so the boot went deep and `published 44, withheld 1` read as
+# confirmation.  A generated file with no invalidation is a CACHE, and this one
+# had no detector wired to anything that runs by itself.
+#
+# WHY THE GATE IS NOT JUST `--check` IN THE MAKEFILE.
+#
+# `--check` is CONTENT-EXACT, and part of the emitted content is a per-row
+# BY-NAME DOOR COUNT derived from a grep over the whole tree.  So any lane that
+# adds one `ResolveExport("??_7Base@Object@@6B@")` anywhere makes the file
+# "stale" -- measured: merging lane FACTORY moved `??_7Base@Object@@6B@` from
+# doors=16 to 17 and `??_7External@Object@@6B@` from 15 to 16, with every row
+# and every disposition identical.  A gate that fails a six-lane wave's builds
+# for a cosmetic count is a gate that gets commented out, and then the load-
+# bearing case is unprotected again.  A check nobody can afford to leave on is
+# worth the same as one nobody runs.
+#
+# So the gate splits the file into what the PROCESS acts on and what it merely
+# prints:
+#
+#   LOAD-BEARING -> fails the build: the ROW SET, each row's DISPOSITION, a
+#                   REQUIRED row with no minted storage, an UNDECLARED scope.
+#                   These decide what gets published at cutover.  The Wave 25
+#                   defect was 14 missing ROWS and would have failed here.
+#   COSMETIC     -> prints WARN, exit 0: a door COUNT that moved.  The count
+#                   only feeds the manifest's printed prediction of how many
+#                   doors will resolve NULL.
+#
+# Run `--inc` to refresh either way; the WARN says so.
+def _rows_from_inc(text):
+    """Map symbol -> (disposition, minted, ns) from emitted .inc text.
+
+    Deliberately does NOT capture the trailing door count -- that is the field
+    this comparison is built to ignore."""
+    out = {}
+    for m in re.finditer(
+            r'CUTOVER_ROW\("([^"]+)",\s*(CUTOVER_\w+),\s*(true|false),'
+            r'\s*(0x[0-9a-fA-F]+)ull,\s*"([^"]*)",\s*(-?\d+)\)', text):
+        out[m.group(1)] = (m.group(2), m.group(3), m.group(5))
+    return out
+
+
+def _gate(have_text, want_text):
+    """Return (exit_code, lines). Fails only on load-bearing differences."""
+    L = []
+    have, want = _rows_from_inc(have_text), _rows_from_inc(want_text)
+    if not want:
+        return 1, ["GATE ERROR: a fresh derivation produced NO rows. That is "
+                   "the parser failing, not an empty manifest -- refusing to "
+                   "pass a build on it."]
+    missing = sorted(set(want) - set(have))
+    extra = sorted(set(have) - set(want))
+    changed = sorted(s for s in (set(have) & set(want)) if have[s] != want[s])
+    bad = 0
+    for s in missing:
+        L.append("GATE FAIL: row MISSING from %s: %s (%s, %s) -- it would not "
+                 "be published at cutover and its by-name doors resolve NULL"
+                 % (GEN_INC, s, want[s][2], want[s][0]))
+        bad = 1
+    for s in extra:
+        L.append("GATE FAIL: row in %s that a fresh derivation does NOT "
+                 "produce: %s" % (GEN_INC, s))
+        bad = 1
+    for s in changed:
+        L.append("GATE FAIL: disposition/minting CHANGED for %s: file says %s, "
+                 "fresh derivation says %s" % (s, have[s], want[s]))
+        bad = 1
+    if bad:
+        L.append("GATE: %d missing, %d extra, %d changed. Run "
+                 "`python tools/cutover_manifest.py --inc` and commit the "
+                 "result. This is the Wave 25 defect (14 REQUIRED rows short "
+                 "through attempt 26) made unmergeable." % (
+                     len(missing), len(extra), len(changed)))
+    elif have_text != want_text:
+        L.append("GATE WARN: %s is stale in COSMETIC fields only (a by-name "
+                 "door count moved -- some lane added or removed a door). Row "
+                 "set and every disposition match, so nothing the process acts "
+                 "on has changed and the build is NOT failed. Refresh with "
+                 "`python tools/cutover_manifest.py --inc` when convenient."
+                 % GEN_INC)
+    return bad, L
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -378,6 +470,12 @@ def main():
     ap.add_argument("--check", action="store_true",
                     help="fail if the checked-in .inc is stale or a REQUIRED "
                          "row is unminted")
+    ap.add_argument("--gate", action="store_true",
+                    help="BUILD GATE (see the block above main): fail only on "
+                         "LOAD-BEARING staleness -- a changed row set, a "
+                         "changed disposition, an unminted REQUIRED row or an "
+                         "undeclared scope. Cosmetic drift (a door COUNT that "
+                         "moved) is printed as a WARN and does not fail.")
     ap.add_argument("--census", help="reuse a saved runtime_census --unported "
                                      "capture instead of re-running it")
     ap.add_argument("--root", default=ROOT)
@@ -385,9 +483,33 @@ def main():
 
     rows, tags, gap, mint = build(args.root, args.census)
 
-    if args.inc or args.check:
+    if args.inc or args.check or args.gate:
         text = emit_inc(rows) + "\n"
         path = os.path.join(args.root, GEN_INC)
+        if args.gate:
+            have = ""
+            if os.path.exists(path):
+                have = open(path, "r", encoding="utf-8").read()
+            bad, lines = _gate(have, text)
+            for ln in lines:
+                print(ln)
+            # The UNMINTED / UNDECLARED screens are load-bearing too: they say a
+            # REQUIRED row has nothing to publish, which is the Wave 24
+            # ??_7Stream@Audio@@6B@ shape and a cutover fault waiting to happen.
+            for r in rows:
+                if r["disposition"] == "REQUIRED" and not r["mint"]:
+                    print("GATE FAIL: UNMINTED REQUIRED ROW: %s (%s) -- nothing "
+                          "owns it, so a cutover door on it resolves NULL"
+                          % (r["symbol"], r["ns"]))
+                    bad = 1
+                if r["disposition"] == "UNDECLARED":
+                    print("GATE FAIL: UNDECLARED SCOPE: %s (%s) -- close its "
+                          "tag with a [SCOPE:] token" % (r["symbol"], r["ns"]))
+                    bad = 1
+            if not bad:
+                print("cutover manifest gate: OK (%d rows; row set and every "
+                      "disposition match a fresh derivation)" % len(rows))
+            return bad
         if args.check:
             have = ""
             if os.path.exists(path):
