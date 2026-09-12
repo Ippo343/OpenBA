@@ -151,9 +151,21 @@ namespace MainLoopAddr {
     constexpr uintptr_t RemovePostUpdate    = 0x1800dceb0;
 
     // Internal, NOT exported.
+    //
+    // *** CORRECTED 2026-09-12, WAVE 27 lane LOOPS: `Draw` DOES NOT BELONG UNDER
+    // *** THIS HEADING. `?Draw@MainLoop@Engine@@QEAAXM@Z` is export ORDINAL 2251
+    // *** in the shipped Runtime-x64.dll, read straight out of the export
+    // *** directory with pefile. It is now a registered port
+    // *** (runtime/src/engine/loops.cpp, RtEngine_MainLoop_Draw) reached BY NAME.
+    // *** The other four names on this list were NOT re-checked by that lane, so
+    // *** treat them as unverified rather than as confirmed-internal: this is the
+    // *** AEAA trap in its other direction (a PUBLIC name assumed unexported),
+    // *** and one instance of it in a list is reason to distrust the list.
+    // *** Re-derive any of them with:
+    // ***   pefile.PE("Runtime-x64.dll").DIRECTORY_ENTRY_EXPORT.symbols
     constexpr uintptr_t Update              = 0x1800dd070;  // bool Update(const Time&)
     constexpr uintptr_t Frame               = 0x1800dd100;  // bool Frame(bool)
-    constexpr uintptr_t Draw                = 0x1800dcd40;
+    constexpr uintptr_t Draw                = 0x1800dcd40;  // EXPORTED, ord 2251
     constexpr uintptr_t CreateVideoContext  = 0x1800dd500;
     constexpr uintptr_t ReleaseVideoContext = 0x1800dd5e0;
 
