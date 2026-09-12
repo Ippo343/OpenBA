@@ -984,3 +984,117 @@ both myself rather than accepting the label.** Warning 18 is working, and the
 `git diff --stat` scoped to the source roots is doing exactly the job Wave 28
 §7.5 designed it for: separating "a late commit exists" from "a late commit
 invalidates the measurement".
+
+---
+
+## ENTRY 12 — AVBODY closed: VIDEO'S BODY SURFACE IS CLOSED
+
+Closed at `wave29/avbody` `db5cc9c4`, clean tree, no edits after report.
+Protected-path diff vs base: 4 files, 1361 insertions, all its own.
+
+**Five bodies ported and registered**, verified by **49 sweep comparisons against
+the SHIPPED exports** via `ResolveExportRaw` — **registry bypassed, so this is a
+real ours-vs-retail oracle and not a self-check** (the trap that left ~250
+`RT_DIFF_SHADOW` sites unable to catch a shared misunderstanding). **Zero
+divergences, 6/6 negative controls caught, scored SEPARATELY** rather than on a
+union.
+
+```
+  ?GetConstantName@ShaderProgram@Video@@  0x18004e4b0  ord 2507
+  ?GetTextureName@ShaderProgram@Video@@   0x18004e420  ord 2971
+  ?GetAttenuatedVolume@Scene@Audio@@      0x1800dfde0  ord 2453
+  ?OnSoundEnded@Scene@Audio@@             0x1800dffe0  ord 3283
+  ?GetVolumeForPosition@Scene@Audio@@     0x1800dfed0  ord 3027   <- NOT on my list
+```
+
+### 12.1 The identity, which is not the percentage
+
+```
+  Audio  35/29  82.9% ->  36/32  88.9%
+  Video 162/142 87.7% -> 162/144 88.9%   AT CEILING
+  TOTAL 1453/1294 89.1% -> 1454/1299 89.3%
+```
+
+> **Video's BODY surface is CLOSED.** Its entire remaining gap is the 18 rows
+> already proved unpromotable. Audio goes 3 bodies -> 1.
+
+**AVBODY refused to quote its board against INSTR's re-based 1460/1295**, on the
+grounds that its tree lacks INSTR's fix and doing so would compare two
+instruments. Same tool both sides, stated as such. That is the discipline entry 3
+says nothing in this project had — arriving from a body lane, unprompted.
+
+### 12.2 Ledger defect #7 reproduced CONCRETELY, on the counter that mattered
+
+`RtGraphicsWave28GfxbodySummary()` has **ZERO callers** — and it is the counter
+that would have reported AVBODY's own Video bodies' live route. **It would have
+read 0 and concluded "never called".**
+
+AVBODY's own summaries print from a **static destructor, UNCONDITIONALLY**, so
+"never ran" and "ran zero times" are **distinguishable**. By contrast
+`audio_scene_update.cpp`'s `if (g_updates)` guard collapses both into the same
+silence.
+
+> A summary guarded by the counter it reports **cannot distinguish zero from
+> never**. Print unconditionally, or the zero means nothing.
+
+This is warning 10 paying off with a named instance, and it retroactively
+qualifies attendance zeros in earlier waves.
+
+### 12.3 Its own error, and the best-stated control lesson of the wave
+
+AVBODY **asserted the `Camera::operator=` width trap applied to `OnSoundEnded`**,
+built a control for it, and the control reported **NOT CAUGHT**. The control was
+**right**: `OR` with the constant 2 is **width-invariant**, so the control
+corrupted nothing.
+
+> **Applying a kickoff warning as a blanket rule, rather than checking its
+> mechanism, MANUFACTURED a hazard.** And: **a not-caught control indicts the
+> CONTROL first** — here it correctly indicted the *premise* instead.
+
+This is the mirror of the recorded rule that a negative control corrupting a
+value nothing compares indicts a sound instrument. My §2.2 handed every body lane
+that trap as a standing warning; **AVBODY is the lane that checked whether the
+mechanism applied before obeying it.** Comment and control corrected in place.
+
+### 12.4 A faithful transcription that is NOT theoretical
+
+Retail's `OnSoundEnded` **not-found path writes `channel+0x5f`** — the MSB of
+`platformChannel[7]`, **one byte before the flags array it indexes**.
+**Transcribed, not guarded**, per the project's standing rule that retail's
+unguarded writes are load-bearing.
+
+Measured attendance proves it is live, not a curiosity: `OnSoundEnded=16` with
+`notFound=4` on an ordinary autostart run. Audio is properly exercised —
+`GetVolumeForPosition` = **1,052,286 calls**, the bonus export from entry 5 now
+shown to be one of the hottest bodies in the namespace.
+
+**AVBODY reports its two Video counts of 8 as ITS OWN SWEEP, not gameplay
+attendance**, explicitly. A lane distinguishing "my instrument called it" from
+"the game called it" without being asked.
+
+### 12.5 `PlayPlatform` declined, and a prerequisite that EXPIRED
+
+Declined as a stated **size-and-evidence judgement** (632 bytes, six indirect
+XAudio2 calls, effects in the driver), decoded in full regardless. §6.2 sketches
+a **fake-backend oracle** that would retire the "UNCOMPARABLE" verdict: synthesise
+the engine/voice vtables, call **RETAIL's** `PlayPlatform`, and it hands you the
+exact `XAUDIO2_BUFFER` it built — **no hardware required**. ADDRESSEE named.
+
+> **Half of `WAVE9_LANE_ENGIO`'s stated prerequisite has EXPIRED**: it asked for
+> `OnSoundEnded` first, and `OnSoundEnded` is now ported.
+
+Warning 3 firing on a twenty-wave-old holdback — a blocker naming a missing
+capability expires, and this one did.
+
+### 12.6 The lock warning worked, and was verified independently
+
+3 attempts, **~19 minutes** behind MINT and VERIFY. **Attempt 1 (900s) was
+auto-backgrounded by the harness at 600s exactly as warned — AVBODY KILLED it and
+confirmed with `assert-held` that it did not hold the lock.** Attempts 2 (240s,
+denied) and 3 (280s, granted at ~150s). Held ~7 min, released and verified
+released.
+
+It verified ownership with an **independent `assert-held` rather than the
+acquire's exit status, because it had piped that call and a pipeline exits with
+the LAST status.** Both §0.3 hazards live, both handled, and the mitigation I
+pushed mid-wave is confirmed effective by the lane that hit the exact failure.
