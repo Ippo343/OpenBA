@@ -158,6 +158,13 @@ enum GeometryDirty : uint32_t {
 // Vtable slot indices, for the three ported bodies that dispatch virtually.
 // ============================================================
 enum GeometryVSlot : int {
+    // BATCH 4: Scene::AddCulledDrawItems (0x1801017a0) ends by dispatching this
+    // slot on every surviving object as `(geometry, scene, renderer)` — the
+    // `CALL [RAX+0x18]` at 0x18010226e. `?AddDrawItems@SunLight@Graphics@@UEBAX
+    // AEBVScene@2@AEAVRenderer@2@@Z` (0x180106f50, ported in
+    // wave28_lane_partsys.cpp) is one override of it, which is the independent
+    // confirmation of both the index and the argument tuple.
+    kVSlotAddDrawItems         = 3,   // vt + 0x18
     kVSlotUpdateAttached       = 4,   // vt + 0x20
     kVSlotGetSubTransform      = 5,   // vt + 0x28
     kVSlotGetInstanceTransform = 6,   // vt + 0x30

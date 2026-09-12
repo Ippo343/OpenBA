@@ -32,6 +32,7 @@
 //   0x180126d10      Cosf
 //   0x180126680      Atan2f
 //   0x180127560      Powf
+//   0x180127010      Fmodf   (BATCH 4; only DLL caller is SunLight::GetSunCamera)
 //   0x18012a1a4      RemPio2 (Payne-Hanek helper shared by Sinf/Cosf)
 //
 // FAITHFULNESS BOUNDARY. The retail bodies also call the CRT's error reporting
@@ -56,6 +57,7 @@ float Sinf(float x);
 float Cosf(float x);
 float Atan2f(float y, float x);
 float Powf(float base, float exp);
+float Fmodf(float x, float y);            // retail 0x180127010 (BATCH 4)
 
 // ---------------------------------------------------------------------------
 // Branch-entry counters for the bit-exactness sweep's EFFECTIVENESS CONTROL.

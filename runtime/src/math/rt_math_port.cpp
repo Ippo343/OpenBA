@@ -83,4 +83,12 @@ void RtMathPortInit() {
            "Transform::AsTransform3)\n", RtMathWave9LanePRegister());
     printf("[RtMathPortInit] Wave 9 lane GFXR: %d exports registered (Matrix::Inverse)\n",
            RtMathWave9LaneGfxrRegister());
+
+    // BATCH 4 (Graphics render/cull/sun-camera cluster): Transform3::FromLookAt,
+    // runtime/src/math/from_lookat.cpp. Registered unconditionally.
+    {
+        extern int RtMathFromLookAtRegister();
+        printf("[RtMathPortInit] BATCH 4: %d exports registered (Transform3::FromLookAt)\n",
+               RtMathFromLookAtRegister());
+    }
 }

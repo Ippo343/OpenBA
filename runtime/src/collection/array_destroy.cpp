@@ -278,6 +278,18 @@ constexpr DestroySpec kD_Str2_38 = { "2 Strings @+0x008,+0x000, stride 0x038", 0
 // so the order is DESCENDING, like kD_Str2_38, and the assert below enforces it.
 constexpr DestroySpec kD_Str2_10 = { "2 Strings @+0x008,+0x000, stride 0x010", 0x010, 2, { 0x008, 0x000 } };
 
+// ---- Cutover closure batch 2 (2026-09-12): Graphics::Material's parameter
+// array and the shader-program compiled-blob array. Both read out of their own
+// callee bodies (0x180005880 / 0x18004ff80), not inherited from a sibling row
+// -- see the notes above kD_Str_18 for why an offset must never be assumed
+// from a stride match alone.
+//   0x180005880 (Collection_Array_MaterialParam_DestroyStrings): `*param_2`
+//       (offset +0x00) is the released String*, `param_2 += 3` -> stride 0x18.
+//       NOT kD_Str_18, which is String at +0x10.
+constexpr DestroySpec kD_Str_18at00 = { "String @+0x000, stride 0x018", 0x018, 1, { 0x000 } };
+//   0x18004ff80 (ShaderProgram::_byteCode inner destroy) was ported the same
+//       day by the ShaderProgram batch as kD_InnerArr_10 below; one row only.
+
 // ---- WAVE 25 LANE INTERNAL42: two more Body-B rows -------------------------
 // Both read out of their own helper's disassembly. The helpers walk a POINTER
 // rather than indexing (`LEA RBX,[RDX+off]` ... `ADD RBX,stride`), which is the
@@ -309,6 +321,28 @@ constexpr DestroySpec kD_InnerArr2_20 = { "2 inner Arrays @+0x010,+0x000, stride
 constexpr DestroySpec kD_Str2_20 = { "2 Strings @+0x008,+0x000, stride 0x020",
                                      0x020, 2, { 0x008, 0x000 } };
 
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — 0x18003f070,
+// the shrink/realloc destroy for `UI::SpriteCapture::_entries`
+// (Array<CaptureEntry>, runtime/types/ui/SpriteCapture.h). One String release
+// at +0x08 (the `name` slot), stride 0x28 — read out of the loop's own
+// `plVar3 = plVar3 + 5` (5 qwords = 0x28) with the release at `plVar3[0]`
+// where `plVar3` starts at `param_2 + 8`.
+constexpr DestroySpec kD_Str_28at08 = { "String @+0x008, stride 0x028", 0x028, 1, { 0x008 } };
+
+// ---- 2026-09-12: the Video::ShaderProgram byte-code array ------------------
+// A Body-A row at stride 0x10 — the first one this file has had. The element is
+// a whole Collection::Array<uint8> (data +0x00, size +0x08, capacity +0x0c), so
+// the inner header IS the element and the offset is 0. Read out of 0x18004ff80:
+//     18004ffb2  MOV RSI,[RBX]         the buffer at +0x00
+//     18004fff0  MOV [RBX],R14(=0)     both header qwords zeroed after the free
+//     18004fff3  MOV [RBX+0x8],R14
+//     18004fff7  ADD RBX,0x10          stride
+// NOT kD_Str_10, which has the same two numbers and the OPPOSITE rule: that row
+// is Body B (release a refcounted String) and this one is Body A (free a buffer
+// outright). The stride/offset pair does not identify the body — the CALL at
+// the top of the ~Array that reaches it does.
+constexpr DestroySpec kD_InnerArr_10 = { "inner Array @+0x000, stride 0x010", 0x010, 1, { 0x000 } };
+
 // ---------------------------------------------------------------------------
 // Compile-time checks on the transcription.
 //
@@ -332,6 +366,7 @@ RTCOLL_FITS(kD_InnerArr_110, 1, 16u);
 RTCOLL_FITS(kD_InnerArr_18,  1, 16u);
 RTCOLL_FITS(kD_InnerArr_40,  1, 16u);
 RTCOLL_FITS(kD_InnerArr_48,  1, 16u);
+RTCOLL_FITS(kD_InnerArr_10,  1, 16u);   // 2026-09-12, ShaderProgram::_byteCode
 RTCOLL_FITS(kD_InnerArr3_48, 3, 16u);
 static_assert(kD_InnerArr3_48.offs[1] + 16u <= kD_InnerArr3_48.stride, "offs[1]");
 static_assert(kD_InnerArr3_48.offs[2] + 16u <= kD_InnerArr3_48.stride, "offs[2]");
@@ -346,6 +381,7 @@ RTCOLL_FITS(kD_Str_18, 1, 8u);
 RTCOLL_FITS(kD_Str2_38, 2, 8u);
 RTCOLL_FITS(kD_Str2_10, 2, 8u);
 static_assert(kD_Str2_38.offs[1] + 8u <= kD_Str2_38.stride, "offs[1]");
+RTCOLL_FITS(kD_Str_28at08, 1, 8u);
 
 // The three DESCENDING rows, asserted as descending. "Sorted them while tidying
 // up" is a silent change to the order the ALLOCATOR sees, and no comparator in
@@ -512,6 +548,10 @@ namespace rtcoll {
 // grep the address across both before porting a Collection helper.**
 A_ENTRY(180052110, kD_InnerArr_40)    // Audio::EffectSlot array (NOT Audio-gated — see banner)
 A_ENTRY(1800419b0, kD_InnerArr_18)    // UI: GraphElement::_graphs, the nested point Array
+// 2026-09-12 — Video::ShaderProgram::_byteCode. Registered because array.cpp's
+// kSpec_InnerArrayU8 (0x180053f00's SetSize) reaches it through ResolveAddr on
+// both its destroy arms, which is this list's stated admission rule.
+A_ENTRY(18004ff80, kD_InnerArr_10)    // Video: ShaderProgram::_byteCode inner Array<uint8>
 // Cutover closure batch 2b: Achievement's two-inner-Array element destroy. It
 // has a caller registered in this same commit (0x180004b70's J2_ENTRY below).
 A_ENTRY(180005680, kD_InnerArr2_20)   // Achievement: {Array<T>, Array<T>} element
@@ -573,6 +613,12 @@ B_ENTRY(180039580, kD_Str_20at18)     // UI: DialogControllerConfigEntry
 // 0x00. That is kD_Str_10, no new row. Third instance of one body; the first
 // two are the two lines above.
 B_ENTRY(180006ac0, kD_Str_10)         // Object: ExternalArrayElement {Filename, 2x int32}
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — the SHRINK/
+// REALLOC destroy behind `UI::SpriteCapture::_entries`'s two SetSize
+// instantiations (array.cpp's kSpec_CaptureEntry / kSpec_CaptureEntryZ,
+// 0x18004bde0 / 0x18004ba90). One String release at +0x08, stride 0x28 — see
+// kD_Str_28at08 above for the read.
+B_ENTRY(18003f070, kD_Str_28at08)     // UI: SpriteCapture::_entries (CaptureEntry, name @+0x08)
 
 // ---- WAVE 27 LANE FRONTIER: 0x180005570, the FIRST TWO-SLOT Body-B at 0x10 --
 //
@@ -590,6 +636,12 @@ B_ENTRY(180006ac0, kD_Str_10)         // Object: ExternalArrayElement {Filename,
 // clean build - the fifth time this family has offered a wrong answer by
 // resemblance. The spec is read out of THIS body (see kD_Str2_10 above).
 B_ENTRY(180005570, kD_Str2_10)        // UI: StringTable::TextEntry {name, text}
+// 2026-09-12 — Video::ShaderProgram::Parameter {String name, int dest, bool}.
+// Same admission rule: array.cpp's kSpec_ShaderParam (0x180055db0's SetSize)
+// calls it by address. The row is kD_Str_10 — stride 0x10, one String at +0x00
+// — read out of 0x18004fed0's own `MOV RAX,[RBX]` / `ADD RBX,0x10`, not
+// inherited from the three other addresses that share that spec.
+B_ENTRY(18004fed0, kD_Str_10)         // Video: ShaderProgram::Parameter
 
 // ---------------------------------------------------------------------------
 // 0x180026b50 — WAVE 9 LANE DESTROY, and why it shares kD_Str_10 WITHOUT this
@@ -649,6 +701,11 @@ B_ENTRY(180005570, kD_Str2_10)        // UI: StringTable::TextEntry {name, text}
 // offset at +0x08, int32 size at +0x0c — so the two dwords in the tail are
 // exactly the eight bytes Body B does not touch, and the `if (isSlot)` skip in
 // the probe's byte-for-byte check (step 3) covers them.
+
+// Cutover closure batch 2: Graphics::Material's parameter array (String* name
+// at +0x00, stride 0x18, ~MaterialInstance's call). Has a caller from the
+// first commit (0x180004c80's J2_ENTRY below), so registered immediately.
+B_ENTRY(180005880, kD_Str_18at00)      // Graphics: Material parameter array
 
 // Cutover closure batch 2b: Save's metadata entry {String*, String*, 3 ints}.
 // Three callers land in this commit — array.cpp's kSpec_MetaEntry20 (0x180034010
@@ -777,6 +834,46 @@ J2_ENTRY(180006b80, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x180006ac0
 //   then the allocator Enter / Free / Leave triple and the two zero stores
 //   that are ArrayDtorImpl.
 J2_ENTRY(180004a90, ReleaseStringsCounted,  kD_Str2_10)      // CALL 0x180005570  Body B
+
+// UI leftovers batch (docs/runtime_port/closure/WORKLIST.md) — 0x180004f50,
+// `~Array<UI::SpriteSheet::SpriteInfo>`, the member destroy `~SpriteSheet`
+// (runtime/src/ui/spritesheet_new.cpp) calls on `this+0x20`. Read out of its
+// own disassembly:
+//     FUN_1800059e0(this, *(void**)this, *(int32*)(this+8));  // Body B
+//     free *(void**)this; zero the header                     // ArrayDtorImpl
+// 0x1800059e0 is ALREADY PORTED AND REGISTERED (B_ENTRY(1800059e0, kD_Str2_38)
+// above), so this is an entry point for existing machinery, no new spec.
+J2_ENTRY(180004f50, ReleaseStringsCounted,  kD_Str2_38)      // CALL 0x1800059e0  Body B
+
+// ---- Cutover closure batch 2 (2026-09-12): the thirteenth and fourteenth --
+//
+// 0x180004c80 -- `~Array<{String*,MaterialParam}>`, ~MaterialInstance's
+// parameter array. Read out of its own body: `MOV R8D,[RCX+8]` / `MOV
+// RDX,[RCX]` / `CALL 0x180005880` then the allocator triple and the two zero
+// stores -- the same J2 shape, a new (String, stride 0x18, offset 0x00) row.
+J2_ENTRY(180004c80, ReleaseStringsCounted,  kD_Str_18at00)   // CALL 0x180005880  Body B
+// 0x180051fe0 -- another `~Array` calling 0x180052110 (already ported/
+// registered above as A_ENTRY's Audio::EffectSlot row, kD_InnerArr_40). Read
+// from its own body: `CALL 0x180052110` then the same allocator triple.
+J2_ENTRY(180051fe0, FreeInnerArraysCounted, kD_InnerArr_40)  // CALL 0x180052110  Body A
+// ---- 2026-09-12: the two Video::ShaderProgram ~Array bodies ----------------
+//
+// ~ShaderProgram (0x1800f50b0) destroys three member arrays, through TWO
+// distinct entry points, and the pairing is exactly the trap the Wave 25 rows
+// above record — an address-normalised hash calls 0x18004fb00 and 0x18004fbd0
+// the same 127-byte body, and the one operand it erases is the CALL that picks
+// the spec AND the body:
+//     0x18004fb00  CALL 0x18004fed0   Body B, kD_Str_10      (_constants, _textures)
+//     0x18004fbd0  CALL 0x18004ff80   Body A, kD_InnerArr_10 (_byteCode)
+// Same stride, same offset, OPPOSITE rule: one releases a refcounted String,
+// the other frees an inner Array's buffer outright. Read from each body's own
+// rel32, both re-read for this commit:
+//     18004fb1c  MOV R8D,[RCX+0x8] / MOV RDX,[RCX] / CALL 0x18004fed0
+//     18004fbec  MOV R8D,[RCX+0x8] / MOV RDX,[RCX] / CALL 0x18004ff80
+// then in both cases the allocator Enter / Free / Leave triple and the two zero
+// stores that are ArrayDtorImpl.
+J2_ENTRY(18004fb00, ReleaseStringsCounted,  kD_Str_10)       // CALL 0x18004fed0  Body B
+J2_ENTRY(18004fbd0, FreeInnerArraysCounted, kD_InnerArr_10)  // CALL 0x18004ff80  Body A
 
 // ---- Cutover closure batch 2b (2026-09-12) --------------------------------
 // 0x180004b70 -- `~Array<{Array<T>,Array<T>}>`. Read from its own body:
@@ -1202,6 +1299,61 @@ J4_ENTRY(180033f30, kAsgn_MetaEntry20, ArrayClearMetaEntry20)   // clear 0x18003
 
 #undef J4_ENTRY
 
+// Cutover closure batch 2 (2026-09-12): 0x18001b1a0, `Array<Graphics::
+// Geometry*>::operator=`. Read out of its own body and IDENTICAL in shape to
+// 0x180003970 above -- dtor first (CALL 0x18001bf50, itself already ported as
+// array.cpp's `J1_ENTRY(18001bf50)`, a parameterless body so which address it
+// is does not matter), then the same realloc-and-copy loop, T a raw 8-byte
+// pointer with no refcount and no pre-zero. A second occurrence of one J4
+// body, not a new one — its own Site so the diff registry attributes
+// divergences to the right retail address.
+Site g_j4_18001b1a0 = { { "Collection::Array::operator= @0x18001b1a0", 0, 0, false, false },
+                        0x18001b1a0 };
+void* RtColl_ArrayAssign_18001b1a0(void* self, const void* src) {
+    DProbeGate();
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);
+    const ArrayHdr* s = static_cast<const ArrayHdr*>(src);
+    if (a == s) return a;
+
+    ArrayDtorImpl(a);                      // CALL 0x18001bf50 — a J1 body
+
+    const int32_t newSize = s->_size;
+    const int32_t oldSize = a->_size;      // always 0; dtor already zeroed it
+    a->_size = newSize;
+
+    bool realloced = false;
+    if (newSize > a->_capacity) {
+        a->_capacity = newSize;
+        if (newSize == static_cast<int32_t>(oldSize + 1) && oldSize != 0)
+            a->_capacity = static_cast<int32_t>(newSize * 3);   // dead; kept faithful
+        a->_data = static_cast<uint8_t*>(
+            MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(a->_capacity)) * 8, 8));
+        realloced = true;
+    }
+
+    int copied = 0;
+    for (int32_t i = 0; i < a->_size; ++i) {
+        uint8_t* p = a->_data + static_cast<int64_t>(i) * 8;
+        if (p == nullptr) continue;
+        *reinterpret_cast<void**>(p) =
+            *reinterpret_cast<void* const*>(s->_data + static_cast<int64_t>(i) * 8);
+        ++copied;
+    }
+
+    if (RtDiffEnabled()) {
+        RtDiffRegister(&g_j4_18001b1a0.d);
+        const bool ok = (a->_size == s->_size) &&
+                        (a->_size == 0 ||
+                         std::memcmp(a->_data, s->_data,
+                                     static_cast<size_t>(a->_size) * 8) == 0);
+        char o[128];
+        std::snprintf(o, sizeof(o), "n=%d cap=%d copied=%d realloc=%d",
+                      a->_size, a->_capacity, copied, realloced ? 1 : 0);
+        RtDiffReport(&g_j4_18001b1a0.d, ok, o, "prefix == src prefix");
+    }
+    return a;
+}
+
 }  // namespace rtcoll
 
 // ============================================================================
@@ -1260,6 +1412,9 @@ void RtCollectionDestroyPortInit() {
     // callers, both ported in this commit - 0x180004a90 below and array.cpp's
     // kSpec_StringPair10 (0x180078c90).
     RegisterRuntimeAddr(0x180005570, (void*)&RtColl_DestroyStrings_180005570);
+    // Cutover closure batch 2: Material parameter array element-destroy
+    // helper; its caller (0x180004c80) is registered just below.
+    RegisterRuntimeAddr(0x180005880, (void*)&RtColl_DestroyStrings_180005880);
 
     // ---- the one element COPY-ASSIGN with no frontier at all ---------------
     // 37 instructions, zero callees. Its sibling 0x180051650 is NOT here: that
@@ -1294,12 +1449,31 @@ void RtCollectionDestroyPortInit() {
     // Wave 27 lane FRONTIER -- ~Array<UI::StringTable::TextEntry>, the member
     // ??1StringTable@UI@@ destroys at this+0x20.
     RegisterRuntimeAddr(0x180004a90, (void*)&RtColl_ArrayDtorElem_180004a90);
+    // UI leftovers batch -- ~Array<UI::SpriteSheet::SpriteInfo>, the member
+    // ~SpriteSheet destroys at this+0x20 (runtime/src/ui/spritesheet_new.cpp).
+    RegisterRuntimeAddr(0x180004f50, (void*)&RtColl_ArrayDtorElem_180004f50);
+
+    // ---- the SpriteCapture entry range destroy (B_ENTRY, this batch) -------
+    RegisterRuntimeAddr(0x18003f070, (void*)&RtColl_DestroyStrings_18003f070);
+
+    // Cutover closure batch 2 -- ~Array<MaterialParam> (~MaterialInstance) and
+    // the Audio EffectSlot ~Array; the ~ShaderProgram pair is in the block below.
+    RegisterRuntimeAddr(0x180004c80, (void*)&RtColl_ArrayDtorElem_180004c80);
+    RegisterRuntimeAddr(0x180051fe0, (void*)&RtColl_ArrayDtorElem_180051fe0);
+    // 2026-09-12 — Video::ShaderProgram, both halves of each pair (the ~Array
+    // entry point AND the element-destroy helper it calls), for the reason the
+    // 0x1800269a0 note records: at cutover retail's rel32 will not exist.
+    RegisterRuntimeAddr(0x18004fb00, (void*)&RtColl_ArrayDtorElem_18004fb00);
+    RegisterRuntimeAddr(0x18004fbd0, (void*)&RtColl_ArrayDtorElem_18004fbd0);
+    RegisterRuntimeAddr(0x18004fed0, (void*)&RtColl_DestroyStrings_18004fed0);
+    RegisterRuntimeAddr(0x18004ff80, (void*)&RtColl_DestroyInner_18004ff80);
 
     // ---- J2b -------------------------------------------------------------
     RegisterRuntimeAddr(0x18001c8c0, (void*)&RtColl_ArrayDtorEhVec_18001c8c0);
 
     // ---- J4 (the half whose frontier is clean) ----------------------------
     RegisterRuntimeAddr(0x180003970, (void*)&RtColl_ArrayAssign_180003970);
+    RegisterRuntimeAddr(0x18001b1a0, (void*)&RtColl_ArrayAssign_18001b1a0);
 
     // NOT registered, deliberately, and NOT because they are hard:
     //   the eight helpers listed above the A_ENTRY block, including:

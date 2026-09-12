@@ -37,4 +37,16 @@ confirm against the retail DLL before porting one.
 
 ## Ported here
 
-_nothing yet_
+The "_nothing yet_" that stood here until 2026-09-12 was already false when it was
+written — this directory has held Context, Device, the buffer family and more for
+several waves. Whole CLASSES ported against the cutover closure, one file each:
+
+- `VideoProgram.cpp`   -> `video_program.cpp` + `videoprogram.cpp`
+- `VertexLayout.cpp`   -> `vertexlayout.cpp`
+- `ShaderProgram_win.cpp` -> `shaderprogram.cpp` (the abstract base: Serialize,
+  PlatformSerialize's three device-interface arms, the nine accessors)
+- `VertexProgram.h`    -> `vertexprogram.cpp`
+- `PixelProgram.h`     -> `pixelprogram.cpp`
+- `RenderState.h`      -> `renderstate.cpp` (with Stencil / Depth / AlphaBlend)
+
+Types: `runtime/types/video/ShaderProgram.h`, `runtime/types/video/RenderState.h`.

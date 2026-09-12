@@ -121,16 +121,95 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Persistence.h"
+#include "../../types/io/FileStream.h"
+#include "../../types/system/Filename.h"
 #include "../system/string.h"
 
 using RtIo::Persistence;
 using RtIo::SaveBlock;
+
+// ---- cross-TU doors onto already-ported bodies, BY NAME NOT ADDRESS --------
+// Every one of these five is an exported symbol this tree has already ported
+// (file_stream.cpp, filesystem_createfile_win.cpp, filename.cpp); declared
+// locally rather than by dragging in each file's own header, the same
+// technique modification_refresh.cpp and filesystem_find_win.cpp already use
+// for `RtSystem_Filename_AdjustDelimiters`.
+namespace RtSystem { void RtSystem_Filename_AdjustDelimiters(RtSystem::Filename* self); }
+extern "C" bool RtIo_FileStream_Create(RtIo::FileStream* self, const RtSystem::Filename* path);
+namespace RtIO {
+    void  RtIo_FileSystem_CloseFile(RtIO::FileSystem* self, RtIO::FileInfo* info);
+}
+using RtIo::BinaryFileStream;
+using RtIo::FileStream;
+extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self);
+extern "C" void              RtIo_BinaryFileStream_Dtor(BinaryFileStream* self);
 using RtSystem::String;
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+void*     ResolveExport(const char* mangled_name);
 
 namespace {
+
+// The FileSystem singleton, read exactly where retail reads it (the same
+// accessor file_stream.cpp's anonymous namespace already builds; duplicated
+// rather than shared across TUs — same reasoning as this file's other
+// doors).
+RtIO::FileSystem* Fs() {
+    RtIO::FileSystem** slot = RT_DATA_SLOT(RtIO::FileSystem**,
+                                           "?_singleton@FileSystem@IO@@0PEAV12@EA");
+    return slot ? *slot : nullptr;
+}
+
+// ---- CRC-32, reflected table (polynomial 0xEDB88320) -----------------------
+// System::CRC::_crcTable (exported DATA, retail 0x1801f9080) is the textbook
+// reflected CRC-32 table byte-for-byte (type_system.cpp already verified this
+// table against the DLL's copy for the type-id hash); generated here rather
+// than read out of the DLL so the SAVE job survives cutover with the DLL
+// absent (PLAN.md §4.1 decision 1). A second, independent generator from
+// type_system.cpp's rather than a shared one, for the same reason this file's
+// banner gives for not sharing ArrayClear helpers: the census greps for what
+// each file actually depends on.
+uint32_t* CrcTable() {
+    static uint32_t table[256];
+    static bool built = false;
+    if (!built) {
+        for (uint32_t i = 0; i < 256; ++i) {
+            uint32_t c = i;
+            for (int k = 0; k < 8; ++k) c = (c & 1u) ? ((c >> 1) ^ 0xEDB88320u) : (c >> 1);
+            table[i] = c;
+        }
+        built = true;
+    }
+    return table;
+}
+
+// The SAVE and GET-SAVE-INFO jobs both compute this same chunked-with-invert
+// checksum (Persistence.h's `fileHeader`/`magic`/`crc` banner): a plain
+// running CRC-32 over `data[0..len)`, EXCEPT that when `chunkCap != 0` the
+// accumulator is complemented (~) after every `chunkCap`-byte slice rather
+// than only once at the end. Read out of FUN_1800b6e00's payload loop
+// (chunkCap==0x8000, one reload of `crc` per SaveBlock, persisted across
+// blocks) and cross-checked against FUN_1800b65b0's disk-streaming twin,
+// which chunks identically at the same 0x8000 cap for the same reason: the
+// two must agree bit-for-bit for a save's own writer and reader to concur on
+// its checksum, which is the entire point of the field.
+uint32_t Crc32Chunked(uint32_t crc, const uint8_t* data, uint32_t len, uint32_t chunkCap) {
+    const uint32_t* table = CrcTable();
+    if (chunkCap == 0) {
+        for (uint32_t i = 0; i < len; ++i) crc = table[(crc & 0xFFu) ^ data[i]] ^ (crc >> 8);
+        return ~crc;
+    }
+    uint32_t remaining = len;
+    while (remaining > 0) {
+        const uint32_t chunk = remaining < chunkCap ? remaining : chunkCap;
+        for (uint32_t i = 0; i < chunk; ++i) crc = table[(crc & 0xFFu) ^ data[i]] ^ (crc >> 8);
+        crc = ~crc;
+        data += chunk;
+        remaining -= chunk;
+    }
+    return crc;
+}
 
 // ---- allocator boundary -----------------------------------------------------
 // 0x1800c7ad0 — ?MemFree@MemoryAllocator@System@@SAXPEAX@Z. Its first
@@ -432,17 +511,16 @@ extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const String* f
     ClearBlockDescs()(&p->blockDescData);   // 0x18002a930
     ClearBlockPtrs()(&p->blockPtrData);     // 0x180024aa0
 
-    // The unnamed 12-byte header at Persistence+0x54..0x5f. `_pad54` is
-    // declared as 0x0c bytes starting at +0x54, which is exactly this window.
-    static_assert(offsetof(Persistence, _pad54) == 0x54, "header stage @ +0x54");
-    static_assert(sizeof(Persistence::_pad54) == 0x0c,
-                  "the staged header is 0x0c bytes and must fit _pad54 exactly");
-    uint8_t* hdr = p->_pad54;                                    // == worker+0x44
-    *reinterpret_cast<uint16_t*>(hdr + 0x02) =
-        static_cast<uint16_t>(blockCount);                       // worker+0x46
-    *reinterpret_cast<uint16_t*>(hdr + 0x00) = 2;                // worker+0x44
-    *reinterpret_cast<uint64_t*>(hdr + 0x04) =
-        static_cast<uint64_t>(static_cast<int64_t>(-0x7f7f7f80));// worker+0x48
+    // The 12-byte header at Persistence+0x54..0x5f — BATCH 8 named these three
+    // fields (`fileHeader`/`magic`/`crc`, Persistence.h) from the SAVE job and
+    // GET-SAVE-INFO job that read them back; this site is the WRITE side and
+    // corroborates the same layout independently: version(u16) then
+    // blockCount(u16) packed into `fileHeader`, then ONE qword store spanning
+    // `magic` (low 32 bits, 0x80808080) and `crc` (high 32 bits, the seed
+    // 0xFFFFFFFF) — exactly retail's single 8-byte store.
+    p->fileHeader = (static_cast<uint32_t>(static_cast<uint16_t>(blockCount)) << 16) | 2u;
+    *reinterpret_cast<uint64_t*>(&p->magic) =
+        static_cast<uint64_t>(static_cast<int64_t>(-0x7f7f7f80));
 
     SetSizeBlockDescs()(&p->blockDescData, blockCount);   // 0x18002a810
     SetSizeBlockPtrs()(&p->blockPtrData,  blockCount);    // 0x18002a9d0
@@ -475,12 +553,11 @@ extern "C" void RtIo_PersistenceWorker_EnqueueSave(void* worker, const String* f
     std::snprintf(ours, sizeof(ours),
                   "status=0 command=0 hdr={2,%d,0x%llx} descs=%d endOffset=%u",
                   blockCount,
-                  (unsigned long long)*reinterpret_cast<uint64_t*>(hdr + 4),
+                  (unsigned long long)(*reinterpret_cast<uint64_t*>(&p->magic)),
                   wrote, offset);
     RT_DIFF_SHADOW(p->status == 0 && p->command == 0 &&
-                       *reinterpret_cast<uint16_t*>(hdr + 0) == 2 &&
-                       *reinterpret_cast<uint16_t*>(hdr + 2) ==
-                           static_cast<uint16_t>(blockCount) &&
+                       (p->fileHeader & 0xFFFFu) == 2 &&
+                       (p->fileHeader >> 16) == static_cast<uint16_t>(blockCount) &&
                        offset >= static_cast<uint32_t>(12 * (blockCount + 1)),
                    ours, "SELF-CHECK: no DLL side exists for this row");
 }
@@ -574,6 +651,132 @@ extern "C" void RtIo_PersistenceWorker_Dtor(void* worker) {
     RT_DIFF_SHADOW(p->workerVtable == kBaseThreadVtable &&
                        p->pendingFilename.data == expectFilename,
                    "SELF-CHECK base vtable restored, filename released",
+                   "SELF-CHECK: no DLL side exists for this row");
+}
+
+// ============================================================================
+// 0x1800b6e00 — the SAVE job, `Run`'s command-0 arm  (BATCH 8, io cluster)
+// ============================================================================
+// `worker` in, nothing out but the two fields every job writes: `status`
+// (1 ok / 2 I/O failure) and, on the way, `crc` (left holding the final
+// checksum — GET-SAVE-INFO's job to verify, not this one's).
+//
+// SHIPPED SEQUENCE, worker-relative offsets (Persistence-relative in
+// parentheses, this file's convention):
+//   1. Filename f = pendingFilename (+0x30 / P+0x40); AdjustDelimiters(f).
+//   2. BinaryFileStream::Create(f) on a stack BinaryFileStream. Failure ->
+//      status=2 and skip straight to teardown (retail's `bVar2` gate).
+//   3. magic (+0x48/P+0x58) = 0x80808080.
+//   4. crc (+0x4c/P+0x5c) = Crc32Chunked(seed=crc-as-read, blockDescData,
+//      blockDescCount*0xc, chunkCap=0) — ONE uncapped pass over the
+//      descriptor array, complemented once at the end. `crc` on entry is
+//      whatever the enqueuer (BeginSaveGame, not yet ported) preset; retail
+//      does not initialise it here.
+//   5. crc = Crc32Chunked(crc, block.data, block.size, chunkCap=0x8000) for
+//      each of the blockDescCount blocks in blockPtrData, IN ORDER, folding
+//      into the SAME accumulator (Persistence.h's banner explains why the
+//      per-block cap differs from step 4's uncapped pass).
+//   6. Write, in order: fileHeader (4 bytes), {magic,crc} together (8 bytes),
+//      the descriptor array (blockDescCount*0xc bytes), then each block's
+//      payload (blockDescData[i].size bytes from blockPtrData[i]). ANY short
+//      write aborts the remaining writes and sets status=2.
+//   7. On full success, CloseFile and status=1.
+//   8. Teardown: BinaryFileStream::~BinaryFileStream (closes the handle again
+//      if step 6 never reached CloseFile — retail's FileInfo dtor no-ops on
+//      an already--1 handle) and release the local Filename.
+//
+// NO ORACLE, same refusal as `Run`'s banner: this writes a real file through
+// a real HANDLE and there is nothing to replay it against without writing the
+// save twice. `RT_DIFF_SHADOW` asserts the one thing this body's contract
+// actually promises — status ends at 1 or 2, never left at whatever it was —
+// which catches a body that returns without touching it at all.
+// ============================================================================
+extern "C" void RtIo_PersistenceWorker_SaveJob(void* worker) {
+    RT_DIFF_BEGIN("[SELF-CHECK] IO::Persistence::worker::SaveJob @0x1800b6e00");
+    RT_DIFF_WORK(true);
+
+    Persistence* p = FromWorker(worker);
+
+    RtSystem::Filename f;
+    f.data = nullptr;
+    RtSystem::RtSystem_String_Set(reinterpret_cast<String*>(&f), p->pendingFilename.data);
+    RtSystem::RtSystem_Filename_AdjustDelimiters(&f);
+
+    BinaryFileStream bfs;
+    RtIo_BinaryFileStream_Ctor(&bfs);
+    const bool created = RtIo_FileStream_Create(&bfs.base, &f);
+
+    // Release the local Filename copy (the refcounted-String release idiom
+    // used throughout this file).
+    if (f.data) {
+        if (--RtSystem::StringRefCount(f.data) == 0) {
+            MemFree(f.data - 8);
+        }
+        f.data = nullptr;
+    }
+
+    bool wroteAll = false;
+    if (created) {
+        p->magic = 0x80808080u;
+
+        const int32_t descCount = p->blockDescCount;
+        const uint8_t* descBytes = reinterpret_cast<const uint8_t*>(p->blockDescData);
+        uint32_t crc = p->crc;
+        if (descCount > 0) {
+            crc = Crc32Chunked(crc, descBytes, static_cast<uint32_t>(descCount) * 0xC, 0);
+        }
+        p->crc = crc;
+
+        if (descCount > 0) {
+            void** blockPtrs = reinterpret_cast<void**>(p->blockPtrData);
+            for (int32_t i = 0; i < descCount; ++i) {
+                const uint32_t size = *reinterpret_cast<const uint32_t*>(descBytes + i * 0xC + 8);
+                if (size > 0) {
+                    crc = Crc32Chunked(p->crc, reinterpret_cast<const uint8_t*>(blockPtrs[i]),
+                                       size, 0x8000);
+                    p->crc = crc;
+                }
+            }
+        }
+
+        DWORD written = 0;
+        RtIO::FileInfo* file = &bfs.base.file;
+        BOOL ok = ::WriteFile(reinterpret_cast<HANDLE>(file->winHandle), &p->fileHeader, 4, &written, nullptr);
+        if (ok && written == 4) {
+            ok = ::WriteFile(reinterpret_cast<HANDLE>(file->winHandle), &p->magic, 8, &written, nullptr);
+            if (ok && written == 8) {
+                const DWORD descBytesLen = static_cast<DWORD>(descCount) * 0xC;
+                ok = ::WriteFile(reinterpret_cast<HANDLE>(file->winHandle), p->blockDescData, descBytesLen, &written, nullptr);
+                if (ok && written == descBytesLen) {
+                    wroteAll = true;
+                    void** blockPtrs = reinterpret_cast<void**>(p->blockPtrData);
+                    for (int32_t i = 0; i < descCount; ++i) {
+                        const uint32_t size =
+                            *reinterpret_cast<const uint32_t*>(descBytes + i * 0xC + 8);
+                        ok = ::WriteFile(reinterpret_cast<HANDLE>(file->winHandle), blockPtrs[i], size, &written, nullptr);
+                        if (!ok || written != size) { wroteAll = false; break; }
+                    }
+                }
+            }
+        }
+
+        p->status = wroteAll ? 1 : 2;
+    } else {
+        p->status = 2;
+    }
+
+    // Retail's ONE close-if-still-open check sits here, UNCONDITIONALLY,
+    // after the success/failure branches above rather than inside either of
+    // them: a failed Create left the handle at -1 (never opened) and this is
+    // a no-op; a full write success already matches (nothing above closed it
+    // yet, so this is where retail's real close happens); a short write
+    // leaves the handle open for this same check to close. One site, not
+    // three, exactly as FUN_1800b6e00's tail reads.
+    if (bfs.base.file.handle != -1) RtIO::RtIo_FileSystem_CloseFile(Fs(), &bfs.base.file);
+    RtIo_BinaryFileStream_Dtor(&bfs);
+
+    RT_DIFF_SHADOW(p->status == 1 || p->status == 2,
+                   "SELF-CHECK status settled to 1 or 2",
                    "SELF-CHECK: no DLL side exists for this row");
 }
 
@@ -692,12 +895,12 @@ extern "C" void RtIo_PersistenceWorker_Run(void* worker) {
     using JobFn = void (*)(void*);
 
     switch (p->command) {
-        case 0: {   // SAVE — see the encoding note above (INFERRED, absence-based)
-            static JobFn f = reinterpret_cast<JobFn>(
-                ResolveAddr(Module::Runtime, 0x1800b6e00));
-            f(worker);   // retail tail-JMPs: NO null test, deliberately
+        case 0:   // SAVE — see the encoding note above (INFERRED, absence-based)
+            // PORTED (BATCH 8): RtIo_PersistenceWorker_SaveJob, above. Called
+            // directly rather than through ResolveAddr — this file both
+            // defines the arm and dispatches to it now.
+            RtIo_PersistenceWorker_SaveJob(worker);
             return;
-        }
         case 1: {   // LOAD
             static JobFn f = reinterpret_cast<JobFn>(
                 ResolveAddr(Module::Runtime, 0x1800b6aa0));
@@ -741,5 +944,7 @@ int RtIoPersistenceWorkerRegister() {
     // an abort trap into this body -- the same door encoding.cpp uses for the
     // five slots of the unexported 0x1801554a8.
     RegisterRuntimeAddr(0x1800b7260, (void*)&RtIo_PersistenceWorker_Run);
-    return 5;
+    // BATCH 8: the SAVE job, `Run`'s command-0 arm.
+    RegisterRuntimeAddr(0x1800b6e00, (void*)&RtIo_PersistenceWorker_SaveJob);
+    return 6;
 }
