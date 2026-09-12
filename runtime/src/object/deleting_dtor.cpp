@@ -867,9 +867,34 @@ static const DelDtorSpec kSpecs[] = {
     // Array<String> whose buffer came from the Runtime heap.
     RT_DELDTOR(0x1800361f0, 0x180118370, 0x080, "UI::ImageDescription"),
     RT_DELDTOR(0x1800369e0, 0x1800cb6b0, 0x098, "UI::AnimatedImageDescription"),
-    // VTABLE BATCH 7 (2026-09-12): four more classes' slot0, read the same way
-    // as every row above (LEA R9,[~Class] / MOV EDX,sizeof from the deleting
-    // dtor's own bytes, objdump against retail):
+    // 2026-09-12 (VTABLE BATCH 9). Six rows for the object-misc batch, each
+    // read straight from the deleting destructor's own bytes:
+    //   0x180074a10  LEA R9,[0x180111cd0]  MOV EDX,0xd0   ~ComboDialog
+    //     (own body: stamp own vtable, tail into ~DialogInstance -- already
+    //     ported, runtime/src/ui/dialog.cpp)
+    RT_DELDTOR(0x180074a10, 0x180111cd0, 0x0d0, "UI::ComboDialog"),
+    //   0x18003b600  LEA R9,[0x18003b4f0]  MOV EDX,0x20   ~DialogControllerConfig
+    //     (own body: stamp own vtable, tail into ~External -- already ported,
+    //     runtime/src/object/external.cpp)
+    RT_DELDTOR(0x18003b600, 0x18003b4f0, 0x020, "UI::DialogControllerConfig"),
+    //   0x18002c300  LEA R9,[0x1800bcac0]  MOV EDX,0x08   ~ExtensionCompiler
+    //     (own body: stamp own vtable, then Base's -- no members beyond vptr)
+    RT_DELDTOR(0x18002c300, 0x1800bcac0, 0x008, "Object::ExtensionCompiler"),
+    //   0x18002c180  LEA R9,[0x1800bca90]  MOV EDX,0x08   ~ExternalCompiler
+    //     (same shape as ExtensionCompiler above)
+    RT_DELDTOR(0x18002c180, 0x1800bca90, 0x008, "Object::ExternalCompiler"),
+    //   0x180007800  LEA R9,[0x1800076c0]  MOV EDX,0x30   ~ExternalList
+    //     (own body: Array<ExternalPtr<External>>::~Array at +0x20 (0x180009460,
+    //     already ported), then ~External -- already ported)
+    RT_DELDTOR(0x180007800, 0x1800076c0, 0x030, "Object::ExternalList"),
+    //   0x1800245f0  LEA R9,[0x1800a92a0]  MOV EDX,0xc8   ~CompressedCopyFileStream
+    //     (own body: stamp own vtable, tail into ~CompressedFileStream, itself
+    //     an unported export reached by name through the port-aware door)
+    RT_DELDTOR(0x1800245f0, 0x1800a92a0, 0x0c8, "IO::CompressedCopyFileStream"),
+    // VTABLE BATCH 7 (2026-09-12), appended AFTER batch 9's six rows above --
+    // indices 67-70. Four more classes' slot0, read the same way as every row
+    // above (LEA R9,[~Class] / MOV EDX,sizeof from the deleting dtor's own
+    // bytes, objdump against retail):
     //   0x1800167f0  LEA R9,[0x1800fb620]  MOV EDX,0x58   Graphics::AnimationGroup
     //   0x180020a70  LEA R9,[0x1800a51c0]  MOV EDX,0x108  Graphics::ParticleSystem
     //   0x18000bef0  LEA R9,[0x1800e03b0]  MOV EDX,0x80   Audio::SoundBuffer
@@ -1250,26 +1275,55 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 56);
 }
 
-// VTABLE BATCH 7 (2026-09-12). Indices 61-64: kSpecs[57..60] (GroupDescription,
-// RibbonDescription, ImageDescription, AnimatedImageDescription) are an
-// EXISTING, PRE-EXISTING GAP -- present in the table with no entry point and
-// no registration -- left exactly as found; not this batch's four classes and
+// VTABLE BATCH 9 (2026-09-12). Indices 61-66, appended after the four rows
+// (57-60) that a concurrent lane added to the table without wiring a wrapper
+// or a RegisterRuntimeAddr call -- see the table comment above each row.
+// UI::ComboDialog          ~ComboDialog = 0x180111cd0             (PORTED, runtime/src/ui/combodialog.cpp)
+void* RtDelDtor_ComboDialog(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 61);
+}
+// UI::DialogControllerConfig ~DialogControllerConfig = 0x18003b4f0  (PORTED, runtime/src/ui/dialogcontrollerconfig.cpp)
+void* RtDelDtor_DialogControllerConfig(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 62);
+}
+// Object::ExtensionCompiler ~ExtensionCompiler = 0x1800bcac0      (PORTED, runtime/src/object/ext_compilers.cpp)
+void* RtDelDtor_ExtensionCompiler(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 63);
+}
+// Object::ExternalCompiler  ~ExternalCompiler = 0x1800bca90       (PORTED, runtime/src/object/ext_compilers.cpp)
+void* RtDelDtor_ExternalCompiler(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 64);
+}
+// Object::ExternalList      ~ExternalList = 0x1800076c0           (PORTED, runtime/src/object/external_list.cpp)
+void* RtDelDtor_ExternalList(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 65);
+}
+// IO::CompressedCopyFileStream ~CompressedCopyFileStream = 0x1800a92a0 (PORTED, runtime/src/io/compressedcopyfilestream.cpp)
+void* RtDelDtor_CompressedCopyFileStream(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 66);
+}
+
+// VTABLE BATCH 7 (2026-09-12). Indices 67-70, appended AFTER batch 9's six
+// rows above. kSpecs[57..60] (GroupDescription, RibbonDescription,
+// ImageDescription, AnimatedImageDescription) remain an EXISTING,
+// PRE-EXISTING GAP -- present in the table with no entry point and no
+// registration -- left exactly as found; not this batch's four classes and
 // not touched here.
 // Graphics::AnimationGroup  ~AnimationGroup = 0x1800fb620  (NOT ported)
 void* RtDelDtor_AnimationGroup(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 61);
+    return DeletingDtorCore(self, flags, 67);
 }
 // Graphics::ParticleSystem  ~ParticleSystem = 0x1800a51c0  (NOT ported)
 void* RtDelDtor_ParticleSystem(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 62);
+    return DeletingDtorCore(self, flags, 68);
 }
 // Audio::SoundBuffer        ~SoundBuffer = 0x1800e03b0     (NOT ported)
 void* RtDelDtor_SoundBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 63);
+    return DeletingDtorCore(self, flags, 69);
 }
 // Audio::SoundEffect        ~SoundEffect = 0x1800e0880     (NOT ported)
 void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 64);
+    return DeletingDtorCore(self, flags, 70);
 }
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
@@ -1373,6 +1427,14 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004e810, (void*)&RtDelDtor_VertexProgram);
     RegisterRuntimeAddr(0x18004eb90, (void*)&RtDelDtor_PixelProgram);
     RegisterRuntimeAddr(0x18004b9d0, (void*)&RtDelDtor_RenderState);
+
+    // VTABLE BATCH 9
+    RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
+    RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
+    RegisterRuntimeAddr(0x18002c300, (void*)&RtDelDtor_ExtensionCompiler);
+    RegisterRuntimeAddr(0x18002c180, (void*)&RtDelDtor_ExternalCompiler);
+    RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
+    RegisterRuntimeAddr(0x1800245f0, (void*)&RtDelDtor_CompressedCopyFileStream);
 
     // VTABLE BATCH 7 (2026-09-12).
     RegisterRuntimeAddr(0x1800167f0, (void*)&RtDelDtor_AnimationGroup);
