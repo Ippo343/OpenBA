@@ -167,6 +167,12 @@ extern int RtUiStringTableLifecycleRegister(); // stringtable_factory.cpp (FACTO
 // (?Serialize@, 0x18011d940). Takes the row to 9/9 on the static screen; it
 // does NOT promote it (see WAVE27_LANE_FRONTIER.md).
 extern int RtUiStringTableSlotsRegister(); // stringtable_factory.cpp (FRONTIER)
+// WAVE 28 lane FACTUI2: the CreateNewObject/CreateInPlaceObject pair for the UI
+// classes in the minted-BaseTypeInfo absent-factory roster sorting at or after
+// `ImageDescription`. SpriteSheet is the live cutover wall (attempt 30). Owns
+// BANISHED_RT_UIFACT2, DEFAULT ON -- see the file banner for why opt-in would
+// make the whole file worthless (dialog_factory.cpp has been dark since Wave 11).
+extern int RtUiFactory2Register();         // ui_factory_wave28.cpp (FACTUI2)
 
 void RtUiPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_UI")) {
@@ -204,5 +210,6 @@ void RtUiPortInit() {
     n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
     n += RtUiStringTableSlotsRegister();  // same switch (FRONTIER)
+    n += RtUiFactory2Register();          // owns BANISHED_RT_UIFACT2 (FACTUI2)
     printf("[RtPort] UI: %d exports registered\n", n);
 }
