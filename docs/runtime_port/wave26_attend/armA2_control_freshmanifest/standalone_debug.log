@@ -1,0 +1,537 @@
+[Standalone] Banished Reimplementation - Standalone EXE
+[Standalone] Build: Sep 12 2026 09:27:32
+[StartupInfo] dwFlags=0x00000100 USESHOWWINDOW=0 wShowWindow=0 (SW_HIDE)
+[Stall] Initialize: freq=10000000 Hz boot=2067154356951
+[RenderDoc] renderdoc.dll not loaded — running without graphics debugger. Launch reimpl-x64.exe via RenderDoc's UI to enable in-app capture.
+[VideoReg AT-BOOT]   VideoSettings      = "true" (type 1)
+[VideoReg AT-BOOT]   VideoInterface     = "1" (type 1)
+[VideoReg AT-BOOT]   VideoFullscreen    = "false" (type 1)
+[VideoReg AT-BOOT]   VideoWidth         = "2560" (type 1)
+[VideoReg AT-BOOT]   VideoHeight        = "1440" (type 1)
+[VideoReg AT-BOOT]   VideoWindowX       = "1265" (type 1)
+[VideoReg AT-BOOT]   VideoWindowY       = "188" (type 1)
+[VideoReg AT-BOOT]   VideoWindowWidth   = "1024" (type 1)
+[VideoReg AT-BOOT]   VideoWindowHeight  = "640" (type 1)
+[Standalone] HarnessGuard: VideoSettings true -> false (unattended run; suppresses the launcher dialog the previous abnormal exit armed)
+[BootTime] registry probe + harness guard               +    3.53ms   (t=    3.53ms)
+[Standalone] Resolving DLLs...
+[BootTime] (pre ResolveInit)                            +    0.19ms   (t=    3.72ms)
+[Resolve-Standalone] Standalone-EXE: base=0x7ff741340000 preferred=0x140000000 delta=+0
+[Resolve-Standalone] Runtime-x64.dll: not loaded
+[Resolve-Standalone] VideoDX11-x64.dll: not loaded
+[Resolve-Standalone] Address registry: 4 entries
+[BootTime] ResolveInit (LoadLibrary Runtime+DX11)       +    3.75ms   (t=    7.47ms)
+[Standalone] WARN: failed to hook Runtime!MessageBoxW; pure-virtual popups will block
+[BootTime] HookRuntimeMessageBoxW                       +    0.36ms   (t=    7.83ms)
+[RtMathPortInit] Lane 1 (Scalar/Vector2/Vector3/Vector4): 32 exports registered
+[RtMathPortInit] Wave 9 lane P: 2 exports registered (Quaternion::Lerp, Transform::AsTransform3)
+[RtMathPortInit] Wave 9 lane GFXR: 1 exports registered (Matrix::Inverse)
+[RtVolume] 12 exports registered (Box x5, Rectangle x1, Frustum x6)
+[RtPort]   System::String: 23 exports registered
+[SYSBODY/StrCompare] sweep SKIPPED: no shipped export (cutover build?)
+[RtPort]   System::Filename: 11 exports registered
+[RtPort]   System::WideString: 8 exports registered
+[RtPort]   Wave9 lane FS helpers: 3 exports registered
+[RtAlloc] cutover: 4 allocator ADDRESSES registered for by-address callers (rtcoll::MemAlloc and friends). See RegisterAllocatorAddresses.
+[RtAlloc] ARMED (cutover: Runtime-x64.dll absent) -- 27 exports registered, no detour installed because there are no DLL-internal callers to redirect. ?Allocate@/?Free@ point at the COMPOSED entry points, which take the allocator critical section.
+[RtPort] System: 122 exports registered
+[RtPort]   Object::Internal: TABLE mode ARMED by BANISHED_RT_NO_DLL (there is no other implementation) — our code now drives the handle table. Shadow gate step 1 was met in Wave 3 (93,387 calls each on the ctor/dtor, 0 divergences); step 2 (the encoding-factory arity) was closed 2026-09-08. ResetPersistState is VERIFIED (Wave 11 lane OBJINT: shadow calls=1 divergences=0, plus a synthetic A/B green on emissions and post-state) but this is its FIRST LIVE ARMING — watch the load path.
+[RtPort]   Object::Internal: 12 exports registered (INCLUDING the table tier)
+[RtPort]   External: 12 exports. The four rows this line used to call "deliberately NOT ported" -- Clean, FindOrLoad, SaveText, SerializeReferenceTable -- are ALL ported now, in external_set.cpp, external_compiled.cpp, external_savetext_win.cpp and external_reftable.cpp respectively.
+[ResSet] registered 13 doors (12 Set bodies + Clean by name and address, resource-tree-instantiation=0x18002xxx, probe=off)
+[ResPath] registered 4 doors + 4 addresses (detour=off negctl=0)
+[ResFind] registered 1 door + 1 address (detour=off negctl=0)
+[RtPort]   Object::factory dtors: 3 exports + 5 helper addresses registered. NOTE: their only caller in this tree is Engine::Shutdown, which itself has calls=0 -- see docs/runtime_port/WAVE11_LANE_OBJLIFE.md before reading a 0 here as a regression.
+[PathStack] registered 2 exports + 4 container addresses (negctl=0, probe=off)
+[Compiled] registered 2 exports (GetCompiledPath, FindOrLoad) negctl=0
+[RtPort]   Object::ExternalFactory::Add (wave 11f lane IOSTREAM): 1 export registered
+[RtPort]   Object::External::SaveText (wave 11f lane IOSTREAM): 1 export registered
+[RtPort]   Object::External::Load (wave 11f lane IOSTREAM): 1 export registered
+[RtPort]   Object::Set<ReferenceEntry>: 7 address doors registered (no export exists for any of them). Their only caller in this tree is SerializeReferenceTable's READ path, so a 0 here on a run that never loaded a save is expected -- see docs/runtime_port/WAVE11F_LANE_AVL.md.
+[RtPort]   Object::ExternalFactory::SerializeReferenceTable: 1 export + 1 address registered. Its live call site is code/Game/Game/gameupdateloop_serialize.cpp (by export name), so it runs once per save AND once per load.
+[RtPort] Object: 79 exports registered
+[RtIO/Serializer] 22 of 22 structural checks could not run (the symbol did not resolve). Registering ANYWAY: with no shipped body to compare against there is nothing to verify, and refusing here would leave the fallback path -- which is that same absent DLL -- as the only implementation.
+[RtIO/Serializer] 22 exports registered, all 22 retail bodies verified (ReaderWriter vtable slots match the DLL's own tail-jumps)
+[RtPort]   IO::CompressedMemoryStream: 11 exports registered (SAVE PATH ONLY -- a plain autostart session never reaches them; needs a save or a load, see WAVE4_LANE_B.md)
+[RtPort] IO::Persistence: 5/7 exports registered here; ReadSettings + WriteSettings + Registry::Registry are registered by persistence_registry_win.cpp
+[RtPort] IO::Persistence saves: 7/7 exports registered (6 here + 1 in the _win twin), each by name AND address
+[RtPort]   IO::FileSystem/Modification: 6 exports registered
+[RtPort]   IO::FileSystem find/exists: 3 exports registered
+[RtPort]   IO::PackageFile (lane PKG2): 21 exports registered
+[RtPort]   IO::PackageFile::~PackageFile (lane BODY, W25): 1 export registered (opens ONE address door, 0x1800269a0; the "5 unported callees" blocker was measured FALSE -- 6 of 7 are ported -- and the "no oracle" blocker is answered by the [ORACLE] site in package_file_dtor.cpp section 3)
+[RtPort]   IO::CompressedStream read path (lane PKG2): 4 exports registered
+[RtPort]   IO::FileSystem open/read (lane PKG2 rung 3): 4 exports registered
+[RtPort]   IO::MemoryStream virtuals (lane PKG2 rung 4b-ii): 6 exports registered
+[RtPort]   IO::CompressedStream Release/dtor (lane PKG2 rung 4b-iii, lane W's rows): 2 exports registered
+[RtPort]   IO::CompressedStream SetWindowCount/Open (lane PKG2 rung 4b-iii): 2 exports registered
+[RtPort]   IO::PackageFile::ReadPackfile (lane PKG3): 1 exports registered
+[RtPort]   IO::Modification (lane MOD): 5 exports + 14 addresses
+[RtPort]   IO::Modification::RefreshList (lane MOD2): 3 exports + 8 addresses
+[RtPort]   IO::CompressedStream write path (lane CSTREAM): 11 exports registered
+[RtPort]   IO::FileStream family (wave 19 lane FILE): 6 exports + 1 unexported address registered
+[RtPort]   IO::FileSystem create/close (wave 19 lane FILE): 6 exports registered
+[RtPort]   IO::FileStream vtable slots (wave 19 lane FILE, post-report): 8 exports + 2 unexported addresses registered -- clears ??_7FileStream@ and ??_7BinaryFileStream@ to TRAP=0
+[RtPort]   IO::TextFileStream vtable slots (wave 20 lane SAVETEXT): 5 exports registered -- ??_7TextFileStream@ 2/10 -> 7/10 (slots 0, 2, 8 still trap)
+[RtPort]   IO::CompressedStream write path (lane CSTREAM): 11 exports registered
+[RtPort] IO: 264 exports registered
+[RtPort] Achievement::Goal: 13/15 exports registered here (+2 in goal_serialize.cpp: Goal::Serialize, GoalInstance::Persist)
+[RtPort]   Achievement::AchievementManager/Instance/Achievement: 21/23 exports registered (AchievementManager::Persist and Achievement::Serialize held back -- both construct an IO::Serializer, which has no runnable oracle; see WAVE5_LANE_B.md)
+[RtPort] Achievement: 43 exports registered
+[RtPort] Save: 31 exports registered
+[RtPort] Picking: 9 exports + 19 grid addresses registered
+[RtPort] Video::ImageBuffer/IndexBuffer/VertexBuffer (lane C): 29 exports registered
+[LaneVID2] identity: device_startup.cpp built Sep 12 2026 09:27:22
+[ShaderLit] SKIP -- Runtime-x64.dll is not mapped (cutover). 45 lifted literals go UNCHECKED, which is expected: with no DLL our copy is the only copy.
+[LaneEVM] rev=EVM-r1 interfaces registered=2
+[LaneEVM] mode/refresh sort addresses registered=5
+[RtPort] Video resource lifecycle (Wave 18 lane VRES): 6 exports registered
+[RtPort] Video::ImageBuffer::SaveImageToFile (Wave 18 lane VRES): 1 export registered
+[RtPort] Video::ImageBuffer::PlatformSerialize (Wave 18 lane VRES): 1 export registered
+[RtPort] Video: 157 exports registered
+[RtPort] Graphics::SunLight (lane GFX2): 3 exports registered
+[RtPort] Graphics: 89 exports + 6 grid addresses registered
+[RtPort] Wave 9 lane GFXD: 4 exports + 11 addresses registered
+[RtPort] Wave 21 lane GFXVT: 8 typeinfo-accessor exports registered
+[RtPort]   WAVE9 LANE UID ARMED -- ~DialogInstance (0x180114d40) + LinkedList::Clear (0x1800325f0) + the Array<8>::SetSize address door (0x18002fca0). Shape oracles report under BANISHED_RT_DIFF=1; read the [negative control] line first.
+[RtPort] UI widgets(layout): 27 exports registered
+[RtPort] UI: 209 exports registered
+[RtPort]   Engine loop family (lane A): 18 exports registered (LoadResources held back -- no oracle, see WAVE8_LANE_A.md)
+[RtPort]   Engine::Engine + MainLoop (lane B): 3 exports registered (2 held back: both detour-required, plus _singleton which is DATA -- see WAVE8_LANE_B.md; Run is NO LONGER among them, see lane ADDR below)
+[RtPort]   MainLoop::Run + Update (lane ADDR): 2 exports registered (Run closes the ADDRESS door at game_main.cpp:176 and opens two NAME doors -- Input::Device::Update and MainLoop::Frame; Run has NO ORACLE by construction -- see WAVE9_LANE_ADDR.md)
+[RtPort]   MainLoop::Frame (lane BODY, W25): 0 exports registered (closes the NAME door lane ADDR opened; opens TWO name doors -- MainLoop::Draw ord 2251 and Audio::Device::FreeChannelPlatform ord 2380. NO ORACLE: the site is named [ATTENDANCE] and its divergences column carries no verdict -- see WAVE25_LANE_BODY.md)
+[RtPort]   Engine lifecycle (lane ENG): 8 exports registered (ctor/dtor/Startup/Shutdown + 4 helpers; Shutdown is UNVERIFIED, calls=0 by construction -- see WAVE9_LANE_ENG.md)
+[RtPort]   MainLoop device-lost pair (lane VIDL): 2 exports registered (OnVideoError + OnVideoRestart, plus Array<VideoResource>::SetSize 0x18004f620 and elem-destroy 0x180034440 by ADDRESS; OnVideoRestart OPENS THREE NAME DOORS -- Load@External, GetCompiledPath@ExternalFactory, OnVideoRestart@SaveLoad -- see WAVE9_LANE_VIDL.md §2)
+[RtPort]   Engine::PlatformConfigure (W23 lane ENGINE): 1 registered (THE CUTOVER BOOT WALL -- Half A ported, Half B is the launcher dialog and needs DLL resources; see WAVE23_LANE_ENGINE.md §1)
+[RtPort]   UpdateLoop::LoadResources (W23 lane ENGINE): 1 registered (Wave 8 lane A's oldest holdback, discharged; removes ONE of the two unported readers of ?_singleton@Configuration@System@@)
+[RtPort] Engine: 35 exports registered
+[RtPort] Audio: 27 exports registered (WAVE8_LANE_C.md for Wave 8's set, audio.cpp's header for the four that moved in Wave 8.5 and for Wave 9 lane W's FindFree3DEffect; the held-back set is listed in audio.cpp, not counted here)
+[RtPort] Input: 33 exports registered (lane INPUT: +2 KeyMap doors, +5 Set<E24> AVL addresses; lane ENGIO: +4 Device::Update bodies)
+[LanePLAT] rev=PLAT-r5 registered=10
+[RtPort] Application: 33 exports registered
+[RtPort] Utility: 2 exports registered
+[RtPort]   Collection::Set AVL: 4 addresses registered
+[RtPort]   Collection::Set Clear: 3 addresses registered
+[RtCrt] _stricmp locale flag: NOT CHECKED (the DLL is not mapped). The static argument stands on its own.
+[RtPort]   Collection keyed Set/Map + sort (lane COLL): 24 + 3 + 2 addresses registered
+[RtPort]   Collection::Array destroy (lane DESTROY): 0x180026b50 registered, built Sep 12 2026 09:27:10
+[RtDelDtor] 44 deleting destructors registered (one body, 44 rows); ~Class resolves lazily
+[RtPort] Wave9 lane X (singleton ctors): 15 exports registered
+[RtPort] runtime registry: 1169 exports, 1188 addrs, 2 ordinals
+[RtMint] seeded 2 storage row(s) with a known constant value
+[RtMint] registered 202 by name, 208 by address
+
+[CutoverManifest] ==== DLL ABSENT (cutover) ==== 60 tagged gap rows
+[CutoverManifest] CONDITIONAL Graphics  ?AddDrawItems@MeshInstance@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z  (no by-name door)
+[CutoverManifest] WITHHELD    UI        ??_7Dialog@UI@@6B@
+[CutoverManifest]   ^ NOT published, and 5 by-name door(s) in this tree WILL resolve NULL. If attempt 26 faults reaching this symbol, that is this line, not a new discovery.
+[CutoverManifest] published 58, withheld 1, conditional 1, unminted 0, failed 0 (of 60)
+[CutoverManifest] 5 by-name door(s) are KNOWINGLY left resolving NULL by the rows above. That is a published prediction, not an oversight.
+[RtMint] constructed 3 of the 3 statics the DLL's CRT builds at load
+[RtMint] minted 63 vtables (580 slots: 354 ported, 83 unported-trap, 143 purecall-trap), 104 BaseTypeInfo, 39 storage symbols (11344 bytes)
+[RtMint] 41 of 63 vtables are COMPLETE (every non-purecall slot is our port); registration is ON (BANISHED_RT_MINT=1)
+
+[RtMintShadow] ==== phase=init  DLL=ABSENT (post-cutover; oracle gone) ====
+[RtMintShadow] The DLL is not loaded, so there is nothing to compare
+[RtMintShadow] against. This is the expected state AFTER cutover and
+[RtMintShadow] the reason this check had to be run BEFORE it.
+[BootTime] RuntimePortInit                              +   28.31ms   (t=   36.14ms)
+[Standalone] Initializing address registry...
+[AddressRegistry] 1617 addresses registered
+[BootTime] AddressRegistryInit                          +    1.56ms   (t=   37.70ms)
+[BootTime] UIDialogControllerVtable::Apply              +    0.38ms   (t=   38.09ms)
+[Standalone] Resolving engine functions...
+[EngineFuncs] Player/Tool APIs resolved:
+  SceneAddObject            = 00007ff74163b14a
+  SceneRemoveObject         = 00007ff74163b490
+  Transform_FromYawPitch    = 00007ff74168ce1f
+  Geometry_SetTransform     = 00007ff74163893d
+  MeshInstance_UpdateHier   = 00007ff7416320eb
+  TileRender                = 00007ff7415834e0
+  TileValidityCheck         = 00007ff7415790a0
+  FencedPlacementParams     = 00007ff74157522d
+  HighlightRemove           = 00007ff7413e2520
+[EngineFuncs] MenuDLT static-mesh + particle helpers:
+  Scene::AddObject              = 00007ff74163b14a
+  GraphicsMesh::GetMaterialList = 00007ff741631786
+  MeshInstance::SetMatInstance  = 00007ff7416326f7
+  ParticleSystemInstance::Ctor  = 00007ff74162f7d5
+  ParticleInstance::IncrementInstanceIndex = 00007ff74162f6a7
+  Particle::Ctor                = 00007ff74162f070
+[EngineFuncs] Timer globals:
+  _ticksPerSecond       @ 00007ff742193da0 = 1000000
+  _secondsPerTick       @ 00007ff742193c10 = 0.000001
+  _systemTicksPerSecond @ 00007ff742193d90 = 0
+  _systemInitialTick    @ 00007ff742193d70 = 0
+[EngineFuncs] Functions:
+  Input::Device::Update     = 00007ff74164c976
+  Audio::Device::Update     = 00007ff741609016
+  Audio::FreeChannel        = 00007ff741608e3b
+  App::PlatformUpdate       = 00007ff7416023ae
+  VideoCtx::ClearResources  = 00007ff741740d00
+  VideoCtx::Reset           = 00007ff741722ad1
+  Loader::Load              = 00007ff74162605a
+  App::SleepThread          = 00007ff7416024cd
+  UI::Update                = 00007ff74170ceb4
+  UI::Draw                  = 00007ff74170b7d4
+  UI::CloseDialog           = 00007ff74170948a
+  DynArrayPush              = 00007ff74160c76f
+  String::Set               = 00007ff7416d236d
+  String::Format            = 00007ff7416d2e8d
+  String::~String           = 00007ff7416d22e5
+  String::String()          = 00007ff7416d225f
+  String::String(cstr)      = 00007ff7416d2278
+  String::String(copy)      = 00007ff7416d22ad
+  PostDrawPush              = 00007ff74160c66f
+  PostUpdatePush            = 00007ff74160c6af
+  VideoCtx::Ctor            = 00007ff74173b447
+  VideoCtx::Dtor            = 00007ff741740e5f
+  VideoCtx::Delete          = 00007ff741740cc2
+  MemAlloc                  = 00007ff7417a9764
+  MemAllocSingleton         = 0000000000000000
+  VideoDevice::_singleton   = 00007ff742193cb0 -> 0000000000000000
+  ExtFactory::_singleton    = 00007ff742193cd0 -> 0000000000000000
+  ExtFactory::FindOrLoad    = 00007ff741696c63
+  ExtFactory::Clean         = 00007ff7416a0a8c
+  IsDerivedFrom             = 00007ff7415eb77c
+  ExternalTypeId            = 00007ff74218ffe0 -> 0x4fcc106b
+  Filename::AdjustDelimiters= 00007ff7416d06ce
+  UpdateLoop::LoadResources = 00007ff74162e26b
+  ListCleanup               = 00007ff74160d9ac
+  ModEntry::CopyCtor        = 00007ff74166c289
+  ModEntry::Assign          = 00007ff74166c48f
+  ModEntry::Dtor            = 00007ff74166c664
+  Map::Find                 = 00007ff7416cdf14
+  Map::Insert               = 00007ff7416141fa
+  ParseCommand              = 00007ff7416ce973
+  ParseValue                = 00007ff7416ce5cb
+  Persistence::_singleton   = 00007ff742193d40 -> 0000000000000000
+  Persistence::SetBool      = 00007ff74167730b
+  Persistence::SetInt       = 00007ff741677099
+  Filename::GetPathFilename = 00007ff7416d09fd
+  ModArrayCopy              = 00007ff74166c83f
+[EngineFuncs] UI infrastructure:
+  DialogController::~Dtor   = 00007ff7416db961
+  MemFreeStatic             = 00007ff7416c99f1
+  FindElement               = 00007ff7416ea36f
+  TextElement::SetParameter = 00007ff741714e72
+  Element::GetUserData      = 00007ff7416eb679
+  InternalBasePtr::Ctor     = 00007ff7416a5cf0
+  KeyMap::GetInputForId     = 00007ff741649e8b
+  KeyMap::GetDeviceForId    = 00007ff741649cd1
+[EngineFuncs] Phase A1 — UI Widget Functions:
+  Elem::SetFlagsOnOff       = 00007ff7416ebb13
+  Elem::SetElementId        = 00007ff7416eb9b3
+  Elem::SetName             = 00007ff7416ebc15
+  Elem::SetToolTip          = 00007ff7416ec2f7
+  Elem::Child               = 00007ff7416e9df3
+  Elem::ChildCount          = 00007ff7416e9fa7
+  Elem::FindElementType     = 00007ff7416ea5f3
+  DI::FindElement           = 00007ff7416dad1f
+  DI::GetController         = 00007ff7416dab71
+  DI::FindElementType       = 00007ff7416dae63
+  DI::SetFlagsOnOff         = 00007ff7416dafa5
+  Combo::AddItem            = 00007ff741710ae0
+  Combo::SetCurrentItem     = 00007ff74171227e
+  Combo::GetItemCount       = 00007ff741710867
+  Combo::GetCurrentItem     = 00007ff7417106ed
+  Combo::RemoveAllItems     = 00007ff741710daa
+  Progress::SetTextParam    = 00007ff741711e2d
+  Progress::SetMaxValue     = 00007ff741711907
+  Progress::SetCurValue     = 00007ff741711b09
+  Table::SetSize            = 00007ff741713c2d
+  Table::SetChild(3)        = 00007ff741713b41
+  NumEdit::SetValue         = 00007ff74170f7b5
+  NumElem::SetValue(int)    = 00007ff7417110f1
+  Spinner::SetElementId     = 00007ff74171002b
+  Image::SetSprite          = 00007ff741714359
+  Label::SetSprite          = 00007ff741714be3
+  Text::SetText             = 00007ff741714f01
+[EngineFuncs] Phase A2 — Type IDs:
+  ComponentDescription      = 00007ff74218df6c -> 0x0
+  DestroyComponent          = 00007ff74218dc18 -> 0x0
+  MeshInstanceComponent     = 00007ff74218dbc4 -> 0x0
+[EngineFuncs] Phase A3 — Singletons:
+  GameWorld                 = 00007ff7420d53c8 -> 0000000000000000
+  KeyMap (container)        = 00007ff7420d53c0 -> 0000000000000000
+  KeyMap (object exref)     = 000002c4731c2c00 -> 00007ff741869020
+  EngineSingleton           = 00007ff742193d10 -> 0000000000000000
+[EngineFuncs] Phase A4 -- FindComponent type IDs (C++ reimpl):
+  MapComponent              = 00007ff74218dbb4 -> 0x0
+  CemeteryComponent         = 00007ff74218df44 -> 0x0
+[EngineFuncs] Video::ImageBuffer:
+  ImageBuffer::Ctor         = 00007ff741718528
+  ImageBuffer::Dtor         = 00007ff7417186b6
+  ImageBuffer::CopyToTex    = 00007ff741719605
+  ImageBuffer::CopyFromTex  = 00007ff7417196bd
+[EngineFuncs] Globals:
+  _loader                   = 00007ff7421931f0
+  _loader.m_flags           = 00007ff7421931f8 -> 0x0
+  _loader.m_completionEvent = 00007ff742193218 -> 00000000000002bc
+  App::_singleton           = 00007ff742193c40 -> 0000000000000000
+[EngineFuncs] Phase H: Factory::GetTypeIdFromName + IsA + Factory singleton resolved
+[EngineFuncs] Phase H: FindDialogByName_Impl, Game_TriggerDisasterByType_Impl, Game_SpawnResources_Impl now available as inline replacements
+[EngineFuncs] Phase I: Work class helpers resolved
+[EngineFuncs] Phase I+J: All work class + BuildStructure helpers resolved
+[EngineFuncs] Achievement Goal support resolved
+  Goal::~Goal         = 00007ff7415fdc25
+  Goal::Goal()        = 00007ff7415fdb2d
+  Goal::Serialize     = 00007ff7415ff6c9
+  GoalInst::~GoalInst = 00007ff7415fdf49
+  GoalInst::Persist   = 00007ff7415ff931
+  IBP::Serialize      = 00007ff7416a61ff
+  IsRunning           = 00007ff741625d73
+[EngineFuncs] Phase K: Tutorial goal helpers resolved
+  FindUIElementByPath   = 00007ff7415870eb
+  ObjectInternal::Ctor  = 00007ff7416a5eb0
+  TutorialTreeInsert    = 00007ff74158c48a
+  TutorialStepExecute   = 00007ff74158df62
+  TypeId_FTGoal         = 00007ff74218df80
+  SingletonExref_151a80 = 000002c4731c2740
+  TutInstVtable         = 0000000000000000
+[EngineFuncs] Phase L: ComponentEntity deps resolved
+  TypeId_ComponentBase  = 00007ff74218daa4
+  ExeArrayResizeFill    = 00007ff7415ec185
+[EngineFuncs] Phase L2: CitizenBehavior deps resolved
+  CountResources = 00007ff7414d1d3e
+  CollectStats   = 00007ff7414d2944
+[EngineFuncs] EntityList deps resolved:
+  IBPTreeInsert       = 00007ff7415e4b2b
+  IBPTreeRemove       = 00007ff7415e4cdd
+  Time::Serialize     = 00007ff7416d65bd
+  BucketTreeSerialize = 00007ff7414f8155
+[EngineFuncs] Path sub-functions resolved
+  NotificationEvent = 00007ff7414e322c
+[EngineFuncs] CitizenBehavior Find deps resolved
+  PathDistance       = 00007ff7415e805e
+  AssignHousing      = 00007ff7413cdf3c
+[EngineFuncs] M3.5 Path B session 2 (0x60B struct lifecycle) resolved
+  Struct60B_Resize        = 00007ff74151716e
+  Struct60B_CopyCtor      = 00007ff741517193
+  Struct60B_DtorRange     = 00007ff7415171b9
+  Struct60B_SubCopyS14    = 00007ff7415171ea
+  Struct60B_SubCopyS02    = 00007ff741517228
+[EngineFuncs] M3.5 Path B session 5 (geometry resize helpers) resolved
+  Array_Resize_Stride02       = 00007ff7415160eb
+  Array_Resize_Stride16A      = 00007ff74151611c
+  Array_Resize_ArrayOfArrays  = 00007ff7415163b9
+  Array_Resize_Stride16B      = 00007ff74151614d
+  Array_Resize_Stride04       = 00007ff74151617e
+[EngineFuncs] M3.5 MenuScene::Serialize helpers resolved
+  Geometry_Init           = 00007ff741510a70
+  Graphics_Geometry_Ctor  = 00007ff741637f17
+  Video_VertexBuffer_Ctor = 00007ff74171bced
+  Video_IndexBuffer_Ctor  = 00007ff74171bc3e
+  Transform_SerializeWrap = 00007ff741510d02
+  Math_Transform_Serial   = 00007ff74168d858
+  Math_Vector3_Serial     = 00007ff74168f79f
+  Math_Vector4_Serial     = 00007ff74168f8a3
+  System_Color_Serial     = 00007ff7416d6612
+  Serializer_Float        = 00007ff7416865f5
+  Array_Resize_S20/S08/S14= 00007ff741511199 / 00007ff7415111ca / 00007ff7415113eb
+  Array_Serialize_S20     = 00007ff741511671
+  ExtArr GraphicsMesh/Part= 00007ff741511ef4 / 00007ff741511f6b
+  ExtPtr Mesh/Weather     = 00007ff7415126c2 / 00007ff741512731
+  Serializer_GetEncoding  = 00007ff741687b67
+  Serializer_Serialize_U  = 00007ff741686455
+  EFactory_IsRefModeEn    = 00007ff7416947a1
+  EFactory_GetReferenceId = 00007ff741694ae7
+  EFactory_GetPathForRef  = 00007ff741694c26
+  Filename_AssignOp       = 00007ff7416d043f
+  TypeInfo Mesh/Particle  = 000002c4731a30c0 / 000002c4731a3820
+  TypeId Weather          = 00007ff741869a98
+  ExtPtr_Typed_7140       = 00007ff741512fd2
+  TypeInfo MaterialInst   = 000002c4731a37c0
+[EngineFuncs] M3.5 Path B session 4 (0x60B + typed-array serialize) resolved
+  Struct60B_Serialize             = 00007ff741518031
+  Array_Serialize_Ext_MatInstance = 00007ff741518061
+[EngineFuncs] M3.5 Path B session 6 (heightmap mesh build) resolved
+  TradeWork_sub_c1e0      = 00007ff7415151a0
+  TradeWork_FUN_ac880     = 00007ff7415151bf
+  TradeWork_helper_e270   = 00007ff741515204
+  Geometry_ChunkUpdate    = 00007ff74151523f
+[EngineFuncs] M3.5 Path B session 7 (image-buffer upload) resolved
+  TradeWork_sub_c780      = 00007ff741515bf8
+[EngineFuncs] M3.5 Path B session 8 (Geometry::Serialize) resolved
+  TradeWork_impl_04d0     = 00007ff7414ffccb
+  TradeWork_impl_f1a0     = 00007ff7414ffcf2
+  Ser slot SerInt_AC8     = 00007ff7416862b5
+  Ser slot SerByte_410    = 00007ff741685dd5
+  Ser slot SerFloat_A60   = 00007ff7416865f5
+  Ser slot SerUShortArr   = 00007ff741687005
+  Ser slot SerSizedRaw_3F8= 00007ff741686e55
+  Ser slot SerSizedRaw_400= 00007ff741686ca5
+  Ser slot SerByteArr_618 = 00007ff7416876c5
+[EngineFuncs] M3.5 Geometry vtable draw primitives resolved
+  Renderer_GetCullCamera   = 00007ff741636608
+  Renderer_AddDrawItem     = 00007ff741645682
+  Renderer_GetShader       = 00007ff7416366f3
+  Camera_GetFrustum        = 00007ff74163630e
+  Frustum_Contains         = 00007ff7417571f8
+  Frustum_MulTransform3    = 00007ff7417570dc
+  Geometry_GetTransform    = 00007ff741639d66
+  Transform_Inverse        = 00007ff74168bbe4
+  Transform_AsMatrix       = 00007ff74168b78f
+  Transform3_Copy_Ctor     = 00007ff74168ad4c
+  Vector3_FromFloats_Ctor  = 00007ff74168eb4a
+  InterpState_Trans_Lerp   = 00007ff741645408
+  Context_SetTransform     = 00007ff741722685
+  Context_SetColor         = 00007ff741721785
+  Context_SetVertexBuffer  = 00007ff74172220b
+  Context_SetImageBuffer   = 00007ff74172207d
+  Context_BeginIndexedVtx  = 00007ff7417234ca
+  Context_EndIndexedVtx    = 00007ff741723510
+  Context_DrawIndexed      = 00007ff7417233aa
+  Geometry_UpdateAttached  = 00007ff741639154
+  Geometry_GetSubTransform = 00007ff741639fe5
+  Geometry_GetInstanceTr   = 00007ff74163a26a
+  Geometry_SetSharedInst   = 00007ff74163a646
+  Geometry_Clean           = 00007ff741639504
+[RuntimeFuncs] Init (no internal function pointers yet)
+[BootTime] EngineFuncsInit + RuntimeFuncsInit           +   26.49ms   (t=   64.57ms)
+[Dx11Funcs] VideoDX11-x64.dll not loaded — nothing resolved
+[Dx11Seam] 84/84 slots ours, in 12 exe-owned vtables. VideoDX11-x64.dll is not required.
+[Dx11Seam]   DeviceData          -> 00007ff7420d41e8 (20 slots)
+[Dx11Seam]   ContextData         -> 00007ff7420d4290 (20 slots)
+[Dx11Seam]   ImageBufferData     -> 00007ff7420d4338 (7 slots)
+[Dx11Seam]   ConstantBufferData  -> 00007ff7420d43e0 (4 slots)
+[Dx11Seam]   IndexBufferData     -> 00007ff7420d4488 (7 slots)
+[Dx11Seam]   VertexBufferData    -> 00007ff7420d4530 (7 slots)
+[Dx11Seam]   VertexLayoutData    -> 00007ff7420d45d8 (3 slots)
+[Dx11Seam]   VertexProgramData   -> 00007ff7420d4680 (3 slots)
+[Dx11Seam]   PixelProgramData    -> 00007ff7420d4728 (3 slots)
+[Dx11Seam]   RenderStateData     -> 00007ff7420d47d0 (3 slots)
+[Dx11Seam]   VideoProgramData    -> 00007ff7420d4878 (3 slots)
+[Dx11Seam]   RenderBufferData    -> 00007ff7420d4920 (4 slots)
+[BootTime] Dx11FuncsInit + seam + prefill               +    3.18ms   (t=   67.75ms)
+[BootTime] redzone/alloc-lock/diagnostic installers     +    0.67ms   (t=   68.43ms)
+[Probe BEFORE InvokeAllRegistrations] _firstTypeInfo @ 0x7ff7421931c0, head=00007ff74218fbf0
+[Probe BEFORE InvokeAllRegistrations]   #0   name=Base                             parent=(null)
+[Probe BEFORE InvokeAllRegistrations]   #1   name=ExtensionCompiler                parent=Base
+[Probe BEFORE InvokeAllRegistrations]   #2   name=External                         parent=Base
+[Probe BEFORE InvokeAllRegistrations]   #3   name=ExternalCompiler                 parent=Base
+[Probe BEFORE InvokeAllRegistrations]   #4   name=ExternalList                     parent=External
+[Probe BEFORE InvokeAllRegistrations] FOUND #30 Dialog parent=External
+[Probe BEFORE InvokeAllRegistrations] FOUND #36 ElementDescription parent=External
+[Probe BEFORE InvokeAllRegistrations] FOUND #41 GroupDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #44 ImageDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #59 RibbonDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #73 TextDescription parent=ElementDescription
+[Probe BEFORE InvokeAllRegistrations] FOUND #78 AnimatedImageDescription parent=ImageDescription
+[Probe BEFORE InvokeAllRegistrations] Total: 104 entries, 7 Loading.rsc target descs found
+[BootTime] DumpFirstTypeInfo (before)                   +    2.81ms   (t=   71.23ms)
+[Standalone] Invoking factory registrations...
+[FactoryReg] Registered 312 types into Runtime _firstTypeInfo
+[BootTime] Object::InvokeAllRegistrations               +    0.59ms   (t=   71.82ms)
+[Probe AFTER InvokeAllRegistrations] _firstTypeInfo @ 0x7ff7421931c0, head=00007ff741b0f200
+[Probe AFTER InvokeAllRegistrations]   #0   name=TradeWork                        parent=Work
+[Probe AFTER InvokeAllRegistrations]   #1   name=TendArea                         parent=Work
+[Probe AFTER InvokeAllRegistrations]   #2   name=PlantOrchard                     parent=Work
+[Probe AFTER InvokeAllRegistrations]   #3   name=PlantArea                        parent=Work
+[Probe AFTER InvokeAllRegistrations]   #4   name=Pickup                           parent=Work
+[Probe AFTER InvokeAllRegistrations] FOUND #342 Dialog parent=External
+[Probe AFTER InvokeAllRegistrations] FOUND #348 ElementDescription parent=External
+[Probe AFTER InvokeAllRegistrations] FOUND #353 GroupDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #356 ImageDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #371 RibbonDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #385 TextDescription parent=ElementDescription
+[Probe AFTER InvokeAllRegistrations] FOUND #390 AnimatedImageDescription parent=ImageDescription
+[Probe AFTER InvokeAllRegistrations] Total: 416 entries, 7 Loading.rsc target descs found
+[BootTime] DumpFirstTypeInfo (after)                    +    2.84ms   (t=   74.66ms)
+[Standalone] Window-message hook installed (focus diag)
+[BootTime] WndMsgHook + AutoStart::Init                 +    0.57ms   (t=   75.23ms)
+[Standalone] Init complete.
+
+[Standalone] === INIT SUCCESS ===
+[AddressRegistry] 1617 addresses registered
+[Standalone] Coverage: 1617 / 582 exe addresses registered (277.8%)
+
+[Standalone] === ENTERING GameMain ===
+[GameMain] Engine ctor          = 00007ff74162106d
+[GameMain] Engine dtor          = 00007ff7416214fd
+[GameMain] Engine::Startup      = 00007ff741621caa
+[GameMain] Engine::Shutdown     = 00007ff741622df9
+[GameMain] Constructing Engine (storage=000000d4a0bff220)...
+[GameMain] Engine constructed.
+[BootTime] Init() -> RunGameMain entry + Engine ctor    +    1.30ms   (t=   76.52ms)
+[GameMain] Engine::Startup(cmdLine=000002c473115b26, 512, 0, false)...
+[Standalone] Swapped window class background brush from 0000000000000006 to BLACK_BRUSH (0000000000900011) on engine hwnd=0000000000240086
+[WndMsg] WM_GETMINMAXINFO     hwnd=0000000000240086 w=0 l=d4a0bfe310
+[WndMsg] WM_SIZE               hwnd=00000000002a0f04 type=0 0x0
+[VideoInterface] DX11 slot pre-filled on Device 000002c4000d8300: module=00007ff741340000 GetDeviceName=00007ff741761a52 CreateDeviceData=00007ff741761913 — Runtime will not LoadLibrary VideoDX11-x64.dll
+[BootTime]   DX11 CreateDevice: entry                   +  416.38ms   (t=  492.91ms)
+[BootTime]   DX11 DXGI factory + adapter + output enum  +    0.26ms   (t=  493.17ms)
+[BootWindow] armed: Configuration+0x42 set, hwnd=0000000000240086 stays hidden until the splash presents a frame
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000002a0f04 0,0 0x0 flags=0x13
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=00000000002a0f04 w=0 l=d4a0bfeb10
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000240086 1265,188 1040x679 flags=0x30
+[WndMsg] WM_WINDOWPOSCHANGING hwnd=0000000000240086 w=0 l=d4a0bfeb10
+[WndMsg] WM_GETMINMAXINFO     hwnd=0000000000240086 w=0 l=d4a0bfe630
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=00000000002a0f04 w=0 l=d4a0bfeb10
+[WndMsg] WM_WINDOWPOSCHANGED  hwnd=0000000000240086 w=0 l=d4a0bfeb10
+[WndMsg] WM_SIZE               hwnd=0000000000240086 type=0 1024x640
+[BootTime]   DX11 AdjustDisplay (window sized)          +    2.37ms   (t=  495.54ms)
+[BootTime]   DX11 D3D11CreateDevice                     +  108.92ms   (t=  604.46ms)
+[BootTime]   DX11 swapchain + color/depth buffers       +    1.20ms   (t=  605.66ms)
+[GameMain] Engine::Startup returned 1
+[BootTime] Engine::Startup                              +  123.20ms   (t=  728.87ms)
+[GameMain] Post-Startup _firstTypeInfo: 416 entries, 416 have non-FF typeId
+[GameMain]   typeId=0x4C6DC97E name=TradeWork
+[GameMain]   typeId=0x32010680 name=TendArea
+[GameMain]   typeId=0x071AE7EA name=PlantOrchard
+[GameMain]   typeId=0x91867ABF name=PlantArea
+[GameMain]   typeId=0x25D5C240 name=Pickup
+[GameMain]   typeId=0xD94735D5 name=PastureWork
+[GameMain]   typeId=0xB1EBC2E8 name=MarketWork
+[GameMain]   typeId=0x75232D30 name=LocationWork
+[GameMain]   typeId=0x00A5F817 name=HuntWork
+[GameMain]   typeId=0xD7F30414 name=HerbalistWork
+[BootTime] post-Startup typeinfo dump + typeId globals  +    2.39ms   (t=  731.25ms)
+[GameMain] MainLoop ctor      = 00007ff741620475
+[GameMain] MainLoop dtor      = 00007ff7416208c9
+[GameMain] MemAlloc/Free      = 00007ff7417a9764 / 00007ff7416c99f1
+[GameMain] MemAllocSingleton (fresh) = 000000d4a0bff220
+
+[Standalone] === Running factory self-tests ===
+
+[SelfTest StatGoal] start
+[SelfTest StatGoal]   refreshed g_pMemAllocSingleton = 000000d4a0bff220
+[SelfTest StatGoal]   found entry @ 00007ff741b05a60 (factoryFn=00007ff741550efe, parent=Goal)
+[SelfTest StatGoal]   factory returned 000002c4000dc260
+[SelfTest StatGoal]   vtable OK (00007ff74184d680)
+[SelfTest StatGoal] PASS (sizeof=128, 9 fields verified)
+
+[VideoProbe] Configuration::_singleton = 000002c4000d67b0
+[VideoProbe]   +0x04 interface = 1 (VideoDX11)
+[VideoProbe]   +0x08 adapter   = 0
+[VideoProbe]   +0x0c width     = 2560
+[VideoProbe]   +0x10 height    = 1440
+[VideoProbe]   +0x00 settings  = 1  (true => launcher dialog next boot)
+[VideoProbe]   +0x14 windowX   = 1265
+[VideoProbe]   +0x18 windowY   = 188
+[VideoProbe]   +0x1c windowW   = 1024
+[VideoProbe]   +0x20 windowH   = 640
+[VideoProbe]   +0x40 fullscreen= 0  +0x41 vsync=0  +0x42 skipShow=1
+[VideoProbe] Device::_singleton        = 000002c4000d8300
+[VideoProbe]   +0x48  interface count = 1
+[VideoProbe]   +0xf8  active idx  = 1
+[VideoProbe]   +0x100 active DeviceData = 000002c4000d9b68
+[VideoProbe]   slot0 DX9:  HMOD=0000000000000000 GetName=0000000000000000 Create=0000000000000000
+[VideoProbe]   slot1 DX11: HMOD=00007ff741340000 GetName=00007ff741761a52 Create=00007ff741761913
+[VideoProbe]   slot2 GL:   HMOD=0000000000000000
+[VideoProbe]   active DeviceData vtable = 00007ff7420d41e8
+[VideoProbe]   active vtable lives in: reimpl-x64.exe
+[SwapProbe AFTER_ENGINE_STARTUP] sc=000002c47bb398f0 vt=00007fffce33a000
+[SwapProbe AFTER_ENGINE_STARTUP]   GetFullscreenState hr=0x00000000 fs=0 output=0000000000000000
+[SwapProbe AFTER_ENGINE_STARTUP]   GetDesc hr=0x00000000 Windowed=1 1024x640 fmt=87 BufferCount=2 SwapEffect=0 Flags=0x2
+[SwapProbe AFTER_ENGINE_STARTUP]   hwnd=0000000000240086 visible=0 iconic=0 client=1024x640 window=1265,188 1040x679
+[Standalone] Boot mode: borderless/windowed
+[BootTime] RunStartupSelfTests + video probes           +   17.86ms   (t=  749.11ms)
+[GameMain] MainLoop alloc = 000002c4000dc2e8
+[GameMain] MainLoop constructed.
+[GameMain] Game alloc      = 000002c4000df9d8
+[BootTime] MainLoop ctor + Game ctor                    +    4.00ms   (t=  753.12ms)
+[GameMain] Game_Ctor done; KeyMap singleton -> 000002c4000df9d8
+[GameMain] InputConfig=000002c4000d6398  -> KeyMap=000002c4000d9570
+[InputBindings] Populating KeyMap 000002c4000d9570 with 50 default bindings...
+[InputBindings] Done — 50 bindings + Load applied.
+[InputBindings] StringTable typeId = 3224705508
