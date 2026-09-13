@@ -32,6 +32,28 @@
 // this+0xc0..0xc8 (8 bytes) is read by neither of this lane's two functions
 // and is NOT claimed here (LabelElement.h's old table guessed "font ptr" for
 // it; that guess is unverified by this lane and left alone).
+//
+// *** +0xC0 IS THE FONT, AND THE OLD GUESS WAS RIGHT. 2026-09-12, elem_B. ***
+// `?ComputeSize@TextElement@UI@@UEAAXXZ` (0x18011F060) loads +0xC0 into RCX and
+// calls `?ComputeStringLayout@Font@UI@@` on it; `?Draw@` (0x18011F280) loads
+// the same qword, reads its +0x50/+0x54 line metrics and passes it to
+// `?AddFont@SpriteContext@UI@@` as an ExternalPtr<UI::Font>. The rest of the
+// object, from the same two bodies and from ~TextElement (0x18011EDA0):
+//
+//   +0xE8  _drawShadow  bool   Draw's first, black, +1/+1 pass
+//   +0xE9  _wrap        bool   ComputeStringLayout / AddFont argument 3
+//   +0xEC  _lineSpacing int32  argument 4
+//   +0xF0  _maxWidth    int32  argument 5, and ComputeSize's width clamp when >0
+//   +0xF4  _justify     UI::Font::Justify
+//
+// sizeof(TextElement) == 0x100, from the vector deleting destructor's
+// `MOV EDX,0x100` at 0x18004230F. ~TextElement releases +0xF8 and then destroys
+// the +0xC8 parameter array through 0x180010AB0 — the element-destroying
+// `~Array` variant, which is the third independent witness that +0xC8 really
+// is an Array<System::String> and not the single owning pointer a
+// NumberElement has at its own +0xD0. The two-class contradiction the note
+// below warns about is therefore CLOSED: the two classes are unrelated and
+// both readings were right. See runtime/src/ui/textelement.cpp.
 
 #include <cstdint>
 #include "Element.h"

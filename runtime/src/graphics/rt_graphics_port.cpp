@@ -315,4 +315,39 @@ void RtGraphicsPortInit() {
         const int fp = RtGraphicsAnimationTransformsRegister();
         printf("[RtPort] BATCH 3b: %d animation-transform exports registered\n", fp);
     }
+
+    // VTABLE BATCH 6 — graphics buffers, meshes and lights. Registered
+    // unconditionally (DIRECTION.md §2.3: a port registers unconditionally; no
+    // new BANISHED_RT_* switches).
+    //   imagebuffer_derived.cpp  GeneratedImageBuffer / FrameCopyImageBuffer /
+    //                            ReflectionImageBuffer slots + ctors/dtors, and
+    //                            Math::Transform3::operator*
+    //   graphicsmesh_vtable.cpp  the whole ??_7GraphicsMesh@ table, its ctor and
+    //                            dtor, and TriangleList::Serialize — it also
+    //                            calls the Collection register below, so the
+    //                            four Array<T> bodies arrive with it
+    //   lights_vtable.cpp        AmbientLight / SpotLight whole tables + their
+    //                            ctors and dtors, and SunLight's last two slots
+    //   meshinstance_draw.cpp    ?Draw@MeshInstance@ and ?Draw@EdgeMeshInstance@
+    //
+    // CORRECTION to the "Wave 29 lane SLOTS" line printed above (PLAN.md §6
+    // step 8): it says that lane took ??_7MeshInstance@Graphics@@6B@ "6/9 ->
+    // 8/9". With ?Draw@MeshInstance@ (slot 2) ported here that table is 9/9,
+    // and ??_7EdgeMeshInstance@ is complete too — batch 6 closed slot 2, the
+    // last one either of them was missing. The older line is left as written so
+    // a reader who meets the 8/9 figure elsewhere recognises it.
+    {
+        extern int RtGraphicsImageBufferDerivedRegister();
+        extern int RtGraphicsMeshVtableBatch6Register();
+        extern int RtCollectionGraphicsMeshRegister();
+        extern int RtGraphicsLightsVtableRegister();
+        extern int RtGraphicsMeshInstanceDrawRegister();
+        const int buf   = RtGraphicsImageBufferDerivedRegister();
+        const int mesh  = RtGraphicsMeshVtableBatch6Register();
+        const int arr   = RtCollectionGraphicsMeshRegister();
+        const int light = RtGraphicsLightsVtableRegister();
+        const int draw  = RtGraphicsMeshInstanceDrawRegister();
+        printf("[RtPort] BATCH 6: %d image-buffer + %d mesh + %d array + %d light "
+               "+ %d instance-draw entries registered\n", buf, mesh, arr, light, draw);
+    }
 }

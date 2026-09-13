@@ -2524,6 +2524,22 @@ J1_ENTRY(180014d00)   // Graphics: 0x180014c70's operator= clears through this
 J1_ENTRY(180033bc0)   // Save:     Persistence metadata
 J1_ENTRY(180033de0)   // Save:     Persistence metadata
 J1_ENTRY(180062320)   // Graphics
+// ---- CUTOVER VTABLE BATCH 4 "elem_B", 2026-09-12 --------------------------
+// Two more copies of the parameterless `~Array` body, both surfaced the usual
+// way: nothing in our tree called them until a destructor that does was
+// ported (reference_porting_can_grow_the_cutover_surface.md).
+//   0x180043cb0 — the array `??1LayoutElement@UI@@` destroys at this+0xC0
+//                 (the per-child layout records, stride 0x44)
+//   0x1800490e0 — the array `??1RadioElement@UI@@`  destroys at this+0xC0
+//                 (RadioElement::_checkBoxes, Array<Element*>)
+// SAME BODY, and that is an instruction-level claim, not an eyeball one: both
+// were disassembled in full against the canonical 0x180033960 — 29
+// instructions each, 29 identical mnemonics and operands in the same order,
+// and all four external operands resolve to the SAME absolutes the J1 note
+// above pins (0x1801fc718 twice, 0x18014b390, 0x1800c6c00, 0x18014b388). The
+// only textual differences are the addresses of the instructions themselves.
+J1_ENTRY(180043cb0)   // UI:          LayoutElement::_rows       (+0xC0)
+J1_ENTRY(1800490e0)   // UI:          RadioElement::_checkBoxes  (+0xC0)
 
 
 #undef J1_ENTRY
@@ -3574,6 +3590,10 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x180033bc0, (void*)&RtColl_ArrayDtor_180033bc0);
     RegisterRuntimeAddr(0x180033de0, (void*)&RtColl_ArrayDtor_180033de0);
     RegisterRuntimeAddr(0x180062320, (void*)&RtColl_ArrayDtor_180062320);
+
+    // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
+    RegisterRuntimeAddr(0x180043cb0, (void*)&RtColl_ArrayDtor_180043cb0);
+    RegisterRuntimeAddr(0x1800490e0, (void*)&RtColl_ArrayDtor_1800490e0);
 
     // J3, two-argument.
     RegisterRuntimeAddr(0x180009d70, (void*)&RtColl_ArraySetSize_180009d70);

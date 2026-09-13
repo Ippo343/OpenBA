@@ -210,6 +210,44 @@ extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
 // make the whole file worthless (dialog_factory.cpp has been dark since Wave 11).
 extern int RtUiFactory2Register();         // ui_factory_wave28.cpp (FACTUI2)
 
+// 2026-09-12, VTABLE BATCH 3 - the UI::*Element widget runtime, first half.
+// Thirteen classes, one file each (runtime/src/ui/<class>element.cpp), each
+// owning its whole vtable: TypeName/Type, the behavioural slots, both
+// constructors and the destructor. A slot a subclass INHERITS keeps the base
+// class's address and is registered by the base class's file only.
+// No switch of their own: DIRECTION.md section 2 - a port registers
+// unconditionally.
+extern int RtUiImageElementRegister();
+extern int RtUiAnimatedImageElementRegister();
+extern int RtUiBorderElementRegister();
+extern int RtUiButtonElementRegister();
+extern int RtUiCheckElementRegister();
+extern int RtUiClipRegionElementRegister();
+extern int RtUiComboElementRegister();
+extern int RtUiContainerElementRegister();
+extern int RtUiDocumentTextElementRegister();
+extern int RtUiEditElementRegister();
+extern int RtUiGraphElementRegister();
+extern int RtUiGroupElementRegister();
+extern int RtUiLabelElementRegister();
+// ---- CUTOVER VTABLE BATCH 4 "elem_B", 2026-09-12 --------------------------
+// Fourteen UI::*Element widget classes, one file each, every vtable slot plus
+// the ctor and dtor. Registered UNCONDITIONALLY (DIRECTION.md §2: a port
+// registers; no new BANISHED_RT_* flags).
+extern int RtUiLayoutElementRegister();       // layoutelement.cpp
+extern int RtUiListElementRegister();         // listelement.cpp
+extern int RtUiNumberEditElementRegister();   // numbereditelement.cpp
+extern int RtUiNumberElementRegister();       // numberelement.cpp
+extern int RtUiPageElementRegister();         // pageelement.cpp
+extern int RtUiProgressElementRegister();     // progresselement.cpp
+extern int RtUiRadioElementRegister();        // radioelement.cpp
+extern int RtUiRibbonElementRegister();       // ribbonelement.cpp
+extern int RtUiScrollElementRegister();       // scrollelement.cpp
+extern int RtUiSliderElementRegister();       // sliderelement.cpp
+extern int RtUiSpinnerElementRegister();      // spinnerelement.cpp
+extern int RtUiTabElementRegister();          // tabelement.cpp
+extern int RtUiTableElementRegister();        // tableelement.cpp
+extern int RtUiTextElementRegister();         // textelement.cpp
 // VTABLE BATCH 9 (2026-09-12).
 extern int RtUiComboDialogRegister();             // combodialog.cpp
 extern int RtUiDialogControllerConfigRegister();   // dialogcontrollerconfig.cpp
@@ -268,7 +306,66 @@ void RtUiPortInit() {
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
     n += RtUiFactory1Register();  // owns BANISHED_RT_UIFACT1 (FACTUI1)
     n += RtUiFactory2Register();          // owns BANISHED_RT_UIFACT2 (FACTUI2)
+    n += RtUiImageElementRegister();          // vtable batch 3 (UI::*Element)
+    n += RtUiAnimatedImageElementRegister();
+    n += RtUiBorderElementRegister();
+    n += RtUiButtonElementRegister();
+    n += RtUiCheckElementRegister();
+    n += RtUiClipRegionElementRegister();
+    n += RtUiComboElementRegister();
+    n += RtUiContainerElementRegister();
+    n += RtUiDocumentTextElementRegister();
+    n += RtUiEditElementRegister();
+    n += RtUiGraphElementRegister();
+    n += RtUiGroupElementRegister();
+    n += RtUiLabelElementRegister();
 
+    // ------------------------------------------------------------------
+    // 2026-09-12, the UI TEXT PIPELINE batch. No switches: a port registers
+    // unconditionally (DIRECTION.md §2 item 3). Declared here rather than at
+    // the top of the file so the whole batch is one contiguous block --
+    // eight agents are appending to this file in parallel today.
+    // ------------------------------------------------------------------
+    extern int RtUiClassOperatorDeleteRegister();  // ui_operator_delete.cpp
+    extern int RtUiCharacterSetRegister();         // characterset.cpp
+    extern int RtUiCursorRegister();               // cursor.cpp
+    extern int RtUiSpriteCaptureClassRegister();   // spritecapture_class.cpp
+    extern int RtUiFontRegister();                 // font.cpp
+    extern int RtUiDescriptionDtorsRegister();     // description_dtors.cpp
+    extern int RtUiDocumentTextRegister();         // documenttext.cpp
+    extern int RtUiSpriteContextAddRegister();     // spritecontext_add.cpp
+    extern int RtUiElementBodiesB5Register();      // element_bodies_b5.cpp
+    // combodialog_ctor.cpp, NOT combodialog.cpp: vtable batch 9 landed the
+    // class's slots in that file under the same register-function name, so
+    // the construction half took its own file at the merge. See its banner.
+    extern int RtUiComboDialogCtorRegister();      // combodialog_ctor.cpp
+    n += RtUiClassOperatorDeleteRegister();  // the 60 ??3<Class>@UI@@, one body
+    n += RtUiCharacterSetRegister();         // UI::CharacterSet, whole class
+    n += RtUiCursorRegister();               // UI::Cursor, whole class
+    n += RtUiSpriteCaptureClassRegister();   // UI::SpriteCapture vtable + Draw
+    n += RtUiFontRegister();                 // UI::Font, whole class + metrics
+    n += RtUiDescriptionDtorsRegister();     // 26 ??1<Class>@UI@@ destructors
+    n += RtUiDocumentTextRegister();         // UI::DocumentTextElement pipeline
+    n += RtUiSpriteContextAddRegister();     // SpriteContext AddSprite x3 + AddFont
+    n += RtUiElementBodiesB5Register();      // assorted *Element / *Description
+    n += RtUiComboDialogCtorRegister();      // ??0ComboDialog, ??2ComboDialog,
+                                             // ??0DialogInstance (2nd overload)
+
+    // ---- CUTOVER VTABLE BATCH 4 "elem_B" ---------------------------------
+    n += RtUiLayoutElementRegister();
+    n += RtUiListElementRegister();
+    n += RtUiNumberEditElementRegister();
+    n += RtUiNumberElementRegister();
+    n += RtUiPageElementRegister();
+    n += RtUiProgressElementRegister();
+    n += RtUiRadioElementRegister();
+    n += RtUiRibbonElementRegister();
+    n += RtUiScrollElementRegister();
+    n += RtUiSliderElementRegister();
+    n += RtUiSpinnerElementRegister();
+    n += RtUiTabElementRegister();
+    n += RtUiTableElementRegister();
+    n += RtUiTextElementRegister();
     // ---- VTABLE BATCH 9 (2026-09-12), unconditional -------------------------
     //   combodialog.cpp             UI::ComboDialog
     //   dialogcontrollerconfig.cpp  UI::DialogControllerConfig
