@@ -5,8 +5,13 @@
 //   SetActiveTab(i)  0x18004c890  guard on this+0xf8 != i; sets this+0xf8=i;
 //                                 tail-calls the private (but exported)
 //                                 ?UpdateContainers@TabElement@UI@@AEAAXXZ
-//                                 (0x1800d9710), NOT reimplemented here --
-//                                 called via RT_ORIGINAL_ONCE.
+//                                 (0x1800d9710). *** THAT IS PORTED NOW ***
+//                                 (runtime/src/ui/tabelement.cpp, 2026-09-12,
+//                                 registered by name AND address), so the
+//                                 RT_ORIGINAL_ONCE call site in
+//                                 widgets_layout.cpp reaches OUR body. The old
+//                                 "NOT reimplemented here" was true of Wave 7
+//                                 lane E and is not any more.
 //   AddTab(...)      0x1800da130  HELD BACK -- see WAVE7_LANE_E.md sec2. Reads
 //                                 this+0xa0/+0xa8 (the shared Element/
 //                                 ContainerElement children Array, same field

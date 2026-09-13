@@ -51,10 +51,10 @@
 // ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 #include "../../types/ui/EditElement.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 static_assert(offsetof(UI::EditElement, _text)   == 0xC8, "");
 static_assert(offsetof(UI::EditElement, _flagE0) == 0xE0, "");
@@ -103,7 +103,7 @@ constexpr int kUiEventCount = 0x50;
 constexpr int32_t kEventEditFinished = 0x15;
 constexpr int kSlotFinalizeText = 12;   // +0x60
 
-RTUI_TYPE_SLOTS(EditElement)
+RTELEM_TYPE_SLOTS(EditElement)
 
 void** InputDeviceSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA");
@@ -208,7 +208,7 @@ void* BuildMask(int length) {
 
 }  // namespace
 
-RTUI_TYPE_BODIES(EditElement)
+RTELEM_TYPE_BODIES(EditElement)
 
 // ============================================================================
 // ?ComputeSize@EditElement@UI@@UEAAXXZ   0x1800d0c10

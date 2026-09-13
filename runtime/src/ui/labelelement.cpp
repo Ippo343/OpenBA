@@ -49,9 +49,9 @@
 // ported and registered, table-driven, by runtime/src/ui/ui_factory_wave28.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 namespace {
 
@@ -79,7 +79,7 @@ constexpr int kText        = 0xf8;   // System::String
 constexpr int kFontLineHeight = 0x50;
 constexpr int kFontBaseline   = 0x54;
 
-RTUI_TYPE_SLOTS(LabelElement)
+RTELEM_TYPE_SLOTS(LabelElement)
 
 // Owned by the UI-text agent; reached by address.
 //   ?ComputeStringLayout@Font@UI@@ 0x180116fd0
@@ -99,7 +99,7 @@ using TextDtorFn     = void  (*)(void* self);
 
 }  // namespace
 
-RTUI_TYPE_BODIES(LabelElement)
+RTELEM_TYPE_BODIES(LabelElement)
 
 namespace {
 

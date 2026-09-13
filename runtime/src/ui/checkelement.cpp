@@ -25,9 +25,9 @@
 // `_children[5]` is the tick mark: the only child index past ButtonElement's
 // five, drawn only while +0xd8 is set.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 namespace {
 
@@ -35,7 +35,7 @@ constexpr int kChecked   = 0xd8;   // uint8_t
 constexpr int kChildTick = 5;
 constexpr int kKeyIndex  = 0xc0;   // inherited from ButtonElement
 
-RTUI_TYPE_SLOTS(CheckElement)
+RTELEM_TYPE_SLOTS(CheckElement)
 void* VtButtonElementBase() { return RT_DATA_SLOT(void*, "??_7ButtonElement@UI@@6B@"); }
 
 using ElementCtorFn      = void* (*)(void* self);
@@ -52,7 +52,7 @@ constexpr int kStateKeyMap  = 0x28;
 
 }  // namespace
 
-RTUI_TYPE_BODIES(CheckElement)
+RTELEM_TYPE_BODIES(CheckElement)
 
 // ============================================================================
 // ?ComputeSize@CheckElement@UI@@UEAAXXZ   0x180111740

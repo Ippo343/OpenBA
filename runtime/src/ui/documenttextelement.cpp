@@ -68,10 +68,10 @@
 // ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 #include "../../types/ui/DocumentTextElement.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 namespace {
 
@@ -116,7 +116,7 @@ constexpr int kFontUnderlineTrim = 0x5c;
 
 constexpr int32_t kEventActivated = 0x12;
 
-RTUI_TYPE_SLOTS(DocumentTextElement)
+RTELEM_TYPE_SLOTS(DocumentTextElement)
 
 uint32_t SpriteCaptureTypeId() {
     const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
@@ -206,7 +206,7 @@ void PlayInline(void* ui, int soundField) {
 
 }  // namespace
 
-RTUI_TYPE_BODIES(DocumentTextElement)
+RTELEM_TYPE_BODIES(DocumentTextElement)
 
 // ============================================================================
 // ?ComputeSize@DocumentTextElement@UI@@UEAAXXZ   0x1800cdb60

@@ -39,10 +39,10 @@
 // ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 #include "../../types/ui/ComboElement.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 static_assert(offsetof(UI::ComboElement, _strings)    == 0xE8, "");
 static_assert(offsetof(UI::ComboElement, _sprites)    == 0xF8, "");
@@ -87,7 +87,7 @@ constexpr int kDialogSize = 0xd0;
 // row runtime/src/ui/groupdescription.cpp implements for its own class.
 constexpr int kSlotDescCreateInstance = 8;
 
-RTUI_TYPE_SLOTS(ComboElement)
+RTELEM_TYPE_SLOTS(ComboElement)
 void* VtButtonElementBase() { return RT_DATA_SLOT(void*, "??_7ButtonElement@UI@@6B@"); }
 
 uint32_t ListElementTypeId() {
@@ -125,7 +125,7 @@ using ArrayCopyFn      = void* (*)(void* dst, const void* src);
 
 }  // namespace
 
-RTUI_TYPE_BODIES(ComboElement)
+RTELEM_TYPE_BODIES(ComboElement)
 
 // ============================================================================
 // ?Update@ComboElement@UI@@   0x1801125d0

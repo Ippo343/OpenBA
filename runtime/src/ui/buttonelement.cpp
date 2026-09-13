@@ -48,9 +48,9 @@
 // only +0xc0 and +0xc4; the four colours come from ButtonDescription. Do not
 // byte-compare a freshly constructed ButtonElement past +0xc8.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 namespace {
 
@@ -64,7 +64,7 @@ constexpr int kColor3   = 0xd4;
 // `_children` indices this class dispatches on.
 constexpr int kChildLabel = 4;
 
-RTUI_TYPE_SLOTS(ButtonElement)
+RTELEM_TYPE_SLOTS(ButtonElement)
 
 using ElementCtorFn     = void* (*)(void* self);
 using ElementCopyCtorFn = void* (*)(void* self, const void* other);
@@ -112,7 +112,7 @@ constexpr int32_t kEventActivated = 0x12;
 
 }  // namespace
 
-RTUI_TYPE_BODIES(ButtonElement)
+RTELEM_TYPE_BODIES(ButtonElement)
 
 // ============================================================================
 // ?ComputeSize@ButtonElement@UI@@UEAAXXZ   0x180110d10

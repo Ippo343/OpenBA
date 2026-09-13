@@ -36,9 +36,9 @@
 // hold; +0xd0/+0xd4 are what `?SetOffsets@ContainerElement@UI@@` (0x1800cc1e0,
 // already ported in element.cpp) writes.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 namespace {
 
@@ -57,7 +57,7 @@ constexpr int kUiClipTop    = 0x100;
 constexpr int kUiClipRight  = 0x104;
 constexpr int kUiClipBottom = 0x108;
 
-RTUI_TYPE_SLOTS(ClipRegionElement)
+RTELEM_TYPE_SLOTS(ClipRegionElement)
 
 using ElementCtorFn     = void* (*)(void* self);
 using ElementCopyCtorFn = void* (*)(void* self, const void* other);
@@ -75,7 +75,7 @@ static_assert(sizeof(Viewport) == 16, "SetScissor's value type is four dwords");
 
 }  // namespace
 
-RTUI_TYPE_BODIES(ClipRegionElement)
+RTELEM_TYPE_BODIES(ClipRegionElement)
 
 // ============================================================================
 // ?ComputeSize@ClipRegionElement@UI@@UEAAXXZ   0x1800cbc60

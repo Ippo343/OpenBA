@@ -26,13 +26,13 @@
 // `sizeof(UI::Element)`. The class adds NO data, which is the third proof of
 // Element's size after the two in runtime/types/ui/Element.h.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 namespace {
 
-RTUI_TYPE_SLOTS(GroupElement)
+RTELEM_TYPE_SLOTS(GroupElement)
 
 using ElementCtorFn     = void* (*)(void* self);
 using ElementCopyCtorFn = void* (*)(void* self, const void* other);
@@ -40,7 +40,7 @@ using ElementDtorFn     = void  (*)(void* self);
 
 }  // namespace
 
-RTUI_TYPE_BODIES(GroupElement)
+RTELEM_TYPE_BODIES(GroupElement)
 
 // ============================================================================
 // ?ComputeSize@GroupElement@UI@@UEAAXXZ   0x180117f00

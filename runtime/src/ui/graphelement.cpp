@@ -38,10 +38,10 @@
 // ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 #include "../../types/ui/GraphElement.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 namespace {
 
@@ -58,7 +58,7 @@ constexpr int kSeriesCnt = UI::GraphElementOffsets::kGraphsCount;   // 0xf8
 static_assert(kSeries == 0xf0 && kSeriesCnt == 0xf8,
               "GraphElement.h must still pin the series Array at +0xf0");
 
-RTUI_TYPE_SLOTS(GraphElement)
+RTELEM_TYPE_SLOTS(GraphElement)
 
 // UI::SpriteContext::AddLine(ctx, const Sprite&, x0, y0, x1, y1, color)
 using AddLineFn = void (*)(void* ctx, const void* sprite,
@@ -76,7 +76,7 @@ constexpr float kOne  = 1.0f;
 
 }  // namespace
 
-RTUI_TYPE_BODIES(GraphElement)
+RTELEM_TYPE_BODIES(GraphElement)
 
 // ============================================================================
 // ?ComputeSize@GraphElement@UI@@UEAAXXZ   0x1800d1810

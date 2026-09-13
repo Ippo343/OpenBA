@@ -40,9 +40,9 @@
 // ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 namespace {
 
@@ -54,7 +54,7 @@ constexpr int kAccumTicks  = 0xf8;
 constexpr int kSprite      = 0xc0;   // the inherited UI::Sprite
 constexpr int kSpriteIndex = 0xc8;
 
-RTUI_TYPE_SLOTS(AnimatedImageElement)
+RTELEM_TYPE_SLOTS(AnimatedImageElement)
 void* VtImageElementBase() { return RT_DATA_SLOT(void*, "??_7ImageElement@UI@@6B@"); }
 
 // `System::Timer::_secondsPerTick`, an exported DOUBLE (ordinal 4797). The
@@ -74,7 +74,7 @@ using ElemUpdateFn  = void (*)(void* self, const void* time, void* ui,
 
 }  // namespace
 
-RTUI_TYPE_BODIES(AnimatedImageElement)
+RTELEM_TYPE_BODIES(AnimatedImageElement)
 
 // ============================================================================
 // ?Update@AnimatedImageElement@UI@@   0x1800cb290

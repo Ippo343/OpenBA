@@ -46,9 +46,9 @@
 // `Object::Base::IsDerivedFrom` (0x1800c0390), and a FAILED test yields a NULL
 // that retail then dereferences — see ComputeSize.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 namespace {
 
@@ -75,7 +75,7 @@ constexpr int kScrollRange    = 0x168;   // float, scrollable amount, clamped to
 // UI::Element::UpdateState
 constexpr int kStateWheel = 0x14;   // int32
 
-RTUI_TYPE_SLOTS(ContainerElement)
+RTELEM_TYPE_SLOTS(ContainerElement)
 
 uint32_t ClipRegionTypeId() {
     const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
@@ -113,7 +113,7 @@ const uint8_t* ScaleOwnerOf(void* e) {
 
 }  // namespace
 
-RTUI_TYPE_BODIES(ContainerElement)
+RTELEM_TYPE_BODIES(ContainerElement)
 
 // ============================================================================
 // ?ComputeSize@ContainerElement@UI@@UEAAXXZ   0x1800cc850

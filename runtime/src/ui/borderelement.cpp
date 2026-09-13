@@ -37,9 +37,9 @@
 // ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 namespace {
 
@@ -58,7 +58,7 @@ constexpr int kSizeOf      = 0x150;
 static_assert(kBottomRight + 0x10 == kSizeOf,
               "nine 0x10-byte UI::Sprite values fill BorderElement to 0x150");
 
-RTUI_TYPE_SLOTS(BorderElement)
+RTELEM_TYPE_SLOTS(BorderElement)
 
 // UI::SpriteContext, reached by address — it is the sprite lane's class.
 using AddSpritePtFn   = void (*)(void* ctx, const void* sprite, int x, int y, uint32_t color);
@@ -71,7 +71,7 @@ using ElementDtorFn     = void  (*)(void* self);
 
 }  // namespace
 
-RTUI_TYPE_BODIES(BorderElement)
+RTELEM_TYPE_BODIES(BorderElement)
 
 // ============================================================================
 // ?ComputeSize@BorderElement@UI@@UEAAXXZ   0x1801101d0

@@ -1,31 +1,34 @@
 #pragma once
 // ============================================================================
-// runtime/src/ui/widget_common.h — the four sequences every UI::*Element body
-// inlines, transcribed ONCE
+// runtime/src/ui/widget_common.h — shared plumbing for the UI::*Element bodies
 // ============================================================================
 //
-// 2026-09-12, vtable batch 3 (the first half of the `UI::*Element` widget
-// runtime: AnimatedImage, Border, Button, Check, ClipRegion, Combo, Container,
-// DocumentText, Edit, Graph, Group, Image, Label).
+// The fourteen widget classes ported in the "elem_B" batch (LayoutElement,
+// ListElement, NumberEditElement, NumberElement, PageElement, ProgressElement,
+// RadioElement, RibbonElement, ScrollElement, SliderElement, SpinnerElement,
+// TabElement, TableElement, TextElement) each get ONE .cpp next to this file.
+// What they all share lives here and nowhere else:
 //
-// Retail compiles `UI::Element`'s small helpers INTO every widget body, so the
-// same four sequences appear verbatim in a dozen `ComputeSize` / `ComputeLayout`
-// / `Draw` implementations. They are written once here rather than a dozen
-// times, because a transcription error in one copy would be invisible against
-// the other eleven. Each helper cites the instruction range of ONE of the
-// copies it was read from; every other copy was diffed against it.
+//   * the byte accessors every body needs (these objects are addressed by
+//     offset, not by a C++ struct, because most of the fourteen have no
+//     complete layout header and inventing one would be a guess),
+//   * the small set of Runtime functions they CALL rather than reimplement,
+//     each reached through ResolveAddr so a sibling port of the same address
+//     is picked up automatically
+//     (reference_resolveaddr_consults_port_registry_first.md),
+//   * `InlineGetPaddedSize`, which is `?GetPaddedSize@Element@UI@@`
+//     (0x180115f10) INLINED — the compiler inlined it into a dozen of these
+//     bodies and the inlined copy is what is transcribed, not a call.
 //
-// WHAT IS *NOT* HERE, deliberately:
-//   * anything that differs between widgets. `GroupElement::ComputeLayout`
-//     (0x180118050) uses a DIFFERENT alignment sequence — it stretches
-//     unconditionally and never consults flag bits 2/3 — so it is written out
-//     in groupelement.cpp instead of being bent into `ElementComputeAlignedRect`.
-//   * `ContainerElement`'s two ONE-AXIS copies of the padded-size sequence:
-//     they read only the width (or only the height) and the second half of
-//     `PaddedSizeInline` would be a read retail does not perform. They are
-//     written out in containerelement.cpp.
-//
-// PORTABILITY: no <windows.h> (PLAN.md §4.1 decision 1).
+// NOT here, deliberately: the UI text-layout helpers (Font::ComputeLineLayout
+// 0x180116c70, Font::ComputeStringLayout 0x180116fd0, DocumentTextElement's
+// GetNextItem/SelectCharacter family) and the per-class private helpers that
+// the batch brief assigns to other agents (LayoutElement::GetChildLayout
+// 0x1800d2dc0, ListElement::DrawHighlight 0x1800d3f70, ScrollElement::
+// GetBarLayout 0x18011a2d0, SliderElement::UpdateNumber 0x1800d6c20,
+// TableElement::GetRowHeight/GetColumnWidth 0x18011e090/0x18011e1a0,
+// SpriteContext::AddSprite/AddFont). Those are REACHED, by address, and the
+// address literal is written at each use so the census can see it.
 // ============================================================================
 
 #include <cstddef>
@@ -33,302 +36,361 @@
 
 #include "../../funcs/rt_port.h"
 
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — that header drags in <windows.h>, which PLAN.md §4.1 keeps out of
-// runtime/src/. This declaration must stay byte-identical to resolve.h's; the
-// linker checks the two.
+// ResolveAddr lives in standalone/resolve.h, which drags in <windows.h>; PLAN
+// §4.1 keeps that out of runtime/src. Declared here exactly as ~30 sibling
+// runtime files declare it; the linker checks the two agree.
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace rtui {
+
+// ---------------------------------------------------------------------------
+// Byte accessors.
+// ---------------------------------------------------------------------------
+inline uint8_t*  B(void* p, int off)       { return static_cast<uint8_t*>(p) + off; }
+inline const uint8_t* B(const void* p, int off) { return static_cast<const uint8_t*>(p) + off; }
+
+inline int32_t&  I32(void* p, int off) { return *reinterpret_cast<int32_t*>(B(p, off)); }
+inline uint32_t& U32(void* p, int off) { return *reinterpret_cast<uint32_t*>(B(p, off)); }
+inline float&    F32(void* p, int off) { return *reinterpret_cast<float*>(B(p, off)); }
+inline uint8_t&  U8 (void* p, int off) { return *reinterpret_cast<uint8_t*>(B(p, off)); }
+inline void*&    PTR(void* p, int off) { return *reinterpret_cast<void**>(B(p, off)); }
+
+inline int32_t  I32c(const void* p, int off) { return *reinterpret_cast<const int32_t*>(B(p, off)); }
+inline uint32_t U32c(const void* p, int off) { return *reinterpret_cast<const uint32_t*>(B(p, off)); }
+inline float    F32c(const void* p, int off) { return *reinterpret_cast<const float*>(B(p, off)); }
+inline uint8_t  U8c (const void* p, int off) { return *reinterpret_cast<const uint8_t*>(B(p, off)); }
+inline void*    PTRc(const void* p, int off) { return *reinterpret_cast<void* const*>(B(p, off)); }
+
+inline void** VTable(const void* o) {
+    return *reinterpret_cast<void** const*>(o);
+}
 
 template <typename Fn>
 inline Fn RtAddr(uintptr_t ghidra) {
     return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
 }
 
-inline void* const* VTableOf(const void* o) {
-    return *reinterpret_cast<void* const* const*>(o);
-}
-template <typename Fn>
-inline Fn VSlot(const void* o, int index) {
-    return reinterpret_cast<Fn>(VTableOf(o)[index]);
-}
+// ---------------------------------------------------------------------------
+// UI::Element field offsets. Every one of them is asserted against
+// runtime/types/ui/Element.h at the bottom of this header, so a change there
+// breaks the build here rather than silently mis-addressing fourteen widgets.
+// ---------------------------------------------------------------------------
+constexpr int kElLeftPad      = 0x18;
+constexpr int kElRightPad     = 0x1c;
+constexpr int kElTopPad       = 0x20;
+constexpr int kElBottomPad    = 0x24;
+constexpr int kElMinWidth     = 0x28;
+constexpr int kElMinHeight    = 0x2c;
+constexpr int kElAlignment    = 0x30;
+constexpr int kElFlags        = 0x34;
+constexpr int kElColor        = 0x38;
+constexpr int kElLayoutWidth  = 0x60;
+constexpr int kElLayoutHeight = 0x64;
+constexpr int kElLayoutLeft   = 0x68;
+constexpr int kElLayoutTop    = 0x6c;
+constexpr int kElLayoutRight  = 0x70;
+constexpr int kElLayoutBottom = 0x74;
+constexpr int kElElementId    = 0x88;
+constexpr int kElDialogParent = 0x90;
+constexpr int kElParent       = 0x98;
+constexpr int kElChildren     = 0xa0;   // Array<Element*>::_data
+constexpr int kElChildCount   = 0xa8;   // Array<Element*>::_size
+constexpr int kElBorder       = 0xb0;
 
-// ---- UI::Element vtable slot indices (runtime/types/ui/Element.h) ----------
-constexpr int kSlotDeletingDtor  = 0;
-constexpr int kSlotTypeName      = 1;
-constexpr int kSlotType          = 2;
-constexpr int kSlotComputeSize   = 4;   // +0x20
-constexpr int kSlotComputeLayout = 5;   // +0x28
-constexpr int kSlotDraw          = 6;   // +0x30
-constexpr int kSlotUpdate        = 7;   // +0x38
-constexpr int kSlotEnable        = 8;   // +0x40
-constexpr int kSlotContains      = 9;   // +0x48
-constexpr int kSlotSetColor      = 10;  // +0x50
-constexpr int kSlotGetBorder     = 11;  // +0x58
+// Element vtable byte offsets (Element.h's twelve-slot table).
+constexpr int kVtComputeSize   = 0x20;
+constexpr int kVtComputeLayout = 0x28;
+constexpr int kVtDraw          = 0x30;
+constexpr int kVtUpdate        = 0x38;
+constexpr int kVtEnable        = 0x40;
+constexpr int kVtSetColor      = 0x50;
 
-using ComputeSizeFn   = void (*)(void* self);
-using ComputeLayoutFn = void (*)(void* self, int x, int y, int w, int h);
-using DrawFn          = void (*)(const void* self, void* spriteContext, uint8_t alpha);
-using UpdateFn        = void (*)(void* self, const void* time, void* ui,
-                                 void** dialogInstance, const void* updateState);
-
-// ---- UI::Element field offsets, all proven in runtime/types/ui/Element.h ---
-constexpr int kElemName          = 0x10;
-constexpr int kElemLeftPad       = 0x18;
-constexpr int kElemRightPad      = 0x1c;
-constexpr int kElemTopPad        = 0x20;
-constexpr int kElemBottomPad     = 0x24;
-constexpr int kElemMinWidth      = 0x28;
-constexpr int kElemMinHeight     = 0x2c;
-constexpr int kElemAlignment     = 0x30;
-constexpr int kElemFlags         = 0x34;
-constexpr int kElemColor         = 0x38;
-constexpr int kElemLayoutWidth   = 0x60;
-constexpr int kElemLayoutHeight  = 0x64;
-constexpr int kElemLayoutLeft    = 0x68;
-constexpr int kElemLayoutTop     = 0x6c;
-constexpr int kElemLayoutRight   = 0x70;
-constexpr int kElemLayoutBottom  = 0x74;
-constexpr int kElemElementId     = 0x88;
-constexpr int kElemDialogParent  = 0x90;
-constexpr int kElemParent        = 0x98;
-constexpr int kElemChildData     = 0xa0;
-constexpr int kElemChildCount    = 0xa8;
-constexpr int kElemBorder        = 0xb0;
-
+// Element::_flags bits used by these bodies (names from Element.h).
 constexpr uint32_t kFlagHidden        = 0x00000001;
-constexpr uint32_t kFlagAlignArg1     = 0x00000004;
-constexpr uint32_t kFlagAlignArg2     = 0x00000008;
-constexpr uint32_t kFlagScreenH       = 0x00000010;
-constexpr uint32_t kFlagScreenW       = 0x00000020;
+constexpr uint32_t kFlagStretchX      = 0x00000004;
+constexpr uint32_t kFlagStretchY      = 0x00000008;
+constexpr uint32_t kFlagSizeToScreenH = 0x00000010;   // height <- screen height
+constexpr uint32_t kFlagSizeToScreenW = 0x00000020;   // width  <- screen width
 constexpr uint32_t kFlagDimColor      = 0x00040000;
-constexpr uint32_t kFlagDisabledMask  = 0x01800000;   // bits 23|24
+constexpr uint32_t kFlagInteractive   = 0x00020000;   // bit 17, tested by every
+                                                      // widget Update before it
+                                                      // will react to the mouse
+constexpr uint32_t kFlagWasActivated  = 0x00400000;   // bit 22
+constexpr uint32_t kFlagDragging      = 0x00200000;   // bit 21, set while a
+                                                      // slider/scroll thumb is
+                                                      // being dragged
 constexpr uint32_t kFlagNeedsSizeCalc = 0x08000000;
 
-inline int32_t&  I32(void* p, int off) { return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(p) + off); }
-inline uint32_t& U32(void* p, int off) { return *reinterpret_cast<uint32_t*>(static_cast<uint8_t*>(p) + off); }
-inline int32_t   I32c(const void* p, int off) { return *reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(p) + off); }
-inline uint32_t  U32c(const void* p, int off) { return *reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(p) + off); }
-inline void*&    P(void* p, int off) { return *reinterpret_cast<void**>(static_cast<uint8_t*>(p) + off); }
-inline void*     Pc(const void* p, int off) { return *reinterpret_cast<void* const*>(static_cast<const uint8_t*>(p) + off); }
-inline void*     Child(const void* self, int index) {
-    return reinterpret_cast<void* const*>(Pc(self, kElemChildData))[index];
+// ---------------------------------------------------------------------------
+// Element::SetNeedsSizeCalc (0x180035470), inlined everywhere.
+//   for (n = e; n; n = n->_parent) n->_flags |= 0x08000000;
+// The shipped form is a do/while that loads the parent slot into a temporary
+// first; identical, and the temporary costs nothing to drop.
+// ---------------------------------------------------------------------------
+inline void DirtyWalk(void* e) {
+    for (void* n = e; n != nullptr; n = PTR(n, kElParent))
+        U32(n, kElFlags) |= kFlagNeedsSizeCalc;
+}
+
+// Set/clear flag bits with retail's "only walk when bit 0 changed" guard.
+inline void SetFlags(void* e, uint32_t nf) {
+    const uint32_t of = U32(e, kElFlags);
+    U32(e, kElFlags) = nf;
+    if (((nf ^ of) & kFlagHidden) != 0) DirtyWalk(e);
 }
 
 // ---------------------------------------------------------------------------
-// `?SetNeedsSizeCalc@Element@UI@@` (0x180035470), inlined everywhere.
-// `OR dword [RCX+0x34],0x8000000 ; RCX = [RCX+0x98]` until the chain ends.
-// It is a DO-WHILE: `this` is always marked, even when `this` has no parent.
+// `?ComputeColor@Element@UI@@` (0x180035490), inlined into every widget Draw:
+//   if (flags & 0x00040000) alpha >>= 1;
+//   return ((c >> 8 & 0xffff0000) * alpha ^ c) & 0xffffff
+//          ^ (c >> 8 & 0xff0000) * alpha;
+// Transcribed exactly as the shipped expression, parenthesised the same way —
+// the two multiplies are by the (already halved) alpha byte and the xor
+// ordering is load-bearing.
 // ---------------------------------------------------------------------------
-inline void SetNeedsSizeCalc(void* self) {
-    void* n = self;
-    do {
-        U32(n, kElemFlags) |= kFlagNeedsSizeCalc;
-        n = P(n, kElemParent);
-    } while (n != nullptr);
+inline uint32_t ModulateColor(uint32_t c, uint8_t alpha) {
+    return ((((c >> 8) & 0xffff0000u) * alpha) ^ c) & 0xffffffu
+           ^ (((c >> 8) & 0xff0000u) * alpha);
 }
 
 // ---------------------------------------------------------------------------
-// `?SetFlagsOnOff@Element@UI@@` inlined: write the new flag word, and run the
-// dirty walk ONLY IF BIT 0 CHANGED (`XOR old,new ; TEST AL,1`). Every widget
-// Update that touches +0x34 uses this exact shape; getting the test wrong
-// (walking unconditionally) is invisible in a screenshot and costs a parent
-// walk per element per frame.
+// The Runtime functions these bodies call.
 // ---------------------------------------------------------------------------
-inline void StoreFlags(void* self, uint32_t newFlags) {
-    const uint32_t old = U32(self, kElemFlags);
-    U32(self, kElemFlags) = newFlags;
-    if (((old ^ newFlags) & 1u) != 0) SetNeedsSizeCalc(self);
+using ElementUpdateFn  = void (*)(void* self, const void* time, void* ui,
+                                  void* dlgInternalPtr, const void* updateState);
+using ElementCtorFn    = void (*)(void* self);
+using ElementDtorFn    = void (*)(void* self);
+using GetPaddedSizeFn  = void (*)(void* self, int32_t* w, int32_t* h);
+using AdjustUpperLeftFn= void (*)(void* self, int32_t dx, int32_t dy);
+using PlayFn           = void (*)(void* ui, int32_t soundId);
+using ArrayDtorFn      = void (*)(void* hdr);
+using ArraySetSizeFn   = void (*)(void* hdr, int32_t n);
+using ArraySetSizeFillFn = void (*)(void* hdr, int32_t n, const void* fill);
+using MemFreeFn        = void (*)(void* p);
+using ToIntegerFn      = int32_t (*)(const char* s);
+using IsDerivedFromFn  = bool (*)(const void* self, uint32_t typeId);
+using ComputeSizeSlotFn   = void (*)(void* self);
+using ComputeLayoutSlotFn = void (*)(void* self, int32_t x, int32_t y, int32_t r, int32_t b);
+using DrawSlotFn          = void (*)(const void* self, void* ctx, uint8_t alpha);
+using EnableSlotFn        = void (*)(void* self, bool on);
+using SetColorSlotFn      = void (*)(void* self, uint32_t color);
+
+// `?AddSprite@SpriteContext@UI@@QEAAXAEBVSprite@2@HHI@Z`      0x18011cf00
+using AddSprite3Fn = void (*)(void* ctx, const void* sprite, int32_t x, int32_t y, uint32_t c);
+// `?AddSprite@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z`    0x18011d3c0
+using AddSprite5Fn = void (*)(void* ctx, const void* sprite, int32_t x0, int32_t y0,
+                              int32_t x1, int32_t y1, uint32_t c);
+// `?AddFont@SpriteContext@UI@@QEAAXV?$ExternalPtr@VFont@UI@@@Object@@AEBVString@System@@
+//   _NHW4Justify@Font@2@HHHI@Z`                               0x18011ccb0
+using AddFontFn    = void (*)(void* ctx, void* font, const void* str, uint8_t wrap,
+                              int32_t a, int32_t justify, int32_t width,
+                              int32_t x, int32_t y, uint32_t c);
+
+inline void ElementUpdate(void* self, const void* time, void* ui, void* dlg, const void* st) {
+    RtAddr<ElementUpdateFn>(0x180116270ull)(self, time, ui, dlg, st);
+}
+inline void ElementCtor(void* self) { RtAddr<ElementCtorFn>(0x180115e50ull)(self); }
+inline void ElementDtor(void* self) { RtAddr<ElementDtorFn>(0x1801161a0ull)(self); }
+inline void MemFree(void* p)        { RtAddr<MemFreeFn>(0x1800c7ad0ull)(p); }
+
+// ---------------------------------------------------------------------------
+// System::String release, inlined by every one of these bodies that owns one.
+// The body pointer's refcount is the dword at [-4] and the block base is
+// [-8] (Element.h records the same shape for Element::_name):
+//     if (p) { if (--p[-1] == 0) { field = p - 8; MemFree(field); }
+//              else field = 0; }
+// Note the ELSE branch: retail nulls the field when the string SURVIVES and
+// leaves it pointing at the freed block when it does not. That looks backwards
+// and it is what the shipped code does — ~NumberElement, ~TextElement,
+// NumberEditElement::FinalizeText and NumberElement::CacheText all do it.
+// ---------------------------------------------------------------------------
+inline void ReleaseStringField(void* self, int off) {
+    uint8_t* p = static_cast<uint8_t*>(PTR(self, off));
+    if (p == nullptr) return;
+    int32_t* rc = reinterpret_cast<int32_t*>(p - 4);
+    if (--*rc == 0) {
+        PTR(self, off) = static_cast<uint8_t*>(PTR(self, off)) - 8;
+        MemFree(PTR(self, off));
+    } else {
+        PTR(self, off) = nullptr;
+    }
 }
 
-// ---------------------------------------------------------------------------
-// `Video::Device::_singleton` (exported data, retail 0x1801fe7a8). The screen
-// size lives at +0x04 / +0x08 of the pointed-to Device.
-// ---------------------------------------------------------------------------
-inline void* VideoDeviceSingleton() {
-    void** p = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
-    return p ? *p : nullptr;
+// The same release on a local (the temporary System::String a Format result
+// leaves on the stack).
+inline void ReleaseStringLocal(void** slot) {
+    uint8_t* p = static_cast<uint8_t*>(*slot);
+    if (p == nullptr) return;
+    int32_t* rc = reinterpret_cast<int32_t*>(p - 4);
+    if (--*rc == 0) { *slot = p - 8; MemFree(*slot); }
 }
 
-// ---------------------------------------------------------------------------
-// UI::Sprite (runtime/types/ui/ImageElement.h): {SpriteSheet* +0x00,
-// int index +0x08, int pad +0x0c}. A sprite's pixel size is read out of the
-// sheet's frame table: `sheet->[+0x20] + index*0x38`, width at +0x1c and
-// height at +0x20 of the entry.
-//
-// Read from `?ComputeSize@ImageElement@UI@@` 0x180118650:
-//     iVar2 = *(int*)(idx*0x38 + 0x1c + *(longlong*)(*(longlong*)(this+0xc0)+0x20))
-// A NEGATIVE index yields 0 AND DOES NOT TOUCH THE SHEET POINTER — retail
-// tests the index first, so a sprite with index -1 and a null sheet is legal.
-// ---------------------------------------------------------------------------
-inline int SpriteW(const void* sprite) {
-    const int32_t idx = I32c(sprite, 0x08);
-    if (idx < 0) return 0;
-    const uint8_t* sheet = static_cast<const uint8_t*>(Pc(sprite, 0x00));
-    const uint8_t* frames = static_cast<const uint8_t*>(Pc(sheet, 0x20));
-    return *reinterpret_cast<const int32_t*>(frames + static_cast<int64_t>(idx) * 0x38 + 0x1c);
-}
-inline int SpriteH(const void* sprite) {
-    const int32_t idx = I32c(sprite, 0x08);
-    if (idx < 0) return 0;
-    const uint8_t* sheet = static_cast<const uint8_t*>(Pc(sprite, 0x00));
-    const uint8_t* frames = static_cast<const uint8_t*>(Pc(sheet, 0x20));
-    return *reinterpret_cast<const int32_t*>(frames + static_cast<int64_t>(idx) * 0x38 + 0x20);
-}
-
-// ---------------------------------------------------------------------------
-// `?ComputeColor@Element@UI@@` (0x180035490), inlined by every Draw.
-// Read from 0x180118886..0x1801188d6 (ImageElement::Draw):
-//
-//    ECX = (color >> 8) & 0xffff0000 ; ECX *= alpha ; ECX ^= color
-//    ECX &= 0xffffff
-//    R8D = (color >> 8) & 0xff0000   ; R8D *= alpha ; ECX ^= R8D
-//
-// The two masks 0xffff0000 and 0xff0000 select the SAME bits once `color >> 8`
-// has already cleared the top byte, so both products are `alphaByte * alpha`
-// shifted into bits 16.., and the result is
-// `(color & 0xffffff) | (((alphaByte*alpha) >> 8) << 24)`. The shipped bit
-// juggling is transcribed rather than the simplification, because the
-// simplification is only equal while the top byte of `color >> 8` is zero and
-// nothing in this file enforces that.
-// ---------------------------------------------------------------------------
-inline uint32_t ComputeColor(uint32_t color, uint8_t alpha) {
-    uint32_t c = ((color >> 8) & 0xffff0000u) * static_cast<uint32_t>(alpha);
-    c ^= color;
-    c &= 0x00ffffffu;
-    const uint32_t hi = ((color >> 8) & 0x00ff0000u) * static_cast<uint32_t>(alpha);
-    return c ^ hi;
-}
-
-// The `TEST [this+0x34],0x40000 / SHR alpha,1` prologue every Draw runs.
-inline uint8_t DimAlpha(const void* self, uint8_t alpha) {
-    return (U32c(self, kElemFlags) & kFlagDimColor) ? static_cast<uint8_t>(alpha >> 1) : alpha;
-}
-
-// ---------------------------------------------------------------------------
-// `?GetPaddedSize@Element@UI@@` (0x180115f10), inlined.
-// Transcribed from `?ComputeSize@ButtonElement@UI@@` 0x180110d5a..0x180110e0a;
-// identical to the already-ported out-of-line body in runtime/src/ui/element.cpp.
-// ---------------------------------------------------------------------------
-inline void PaddedSizeInline(void* e, int* outW, int* outH) {
-    VSlot<ComputeSizeFn>(e, kSlotComputeSize)(e);
-
-    *outW = I32(e, kElemLayoutWidth)  + I32(e, kElemRightPad)  + I32(e, kElemLeftPad);
-    *outH = I32(e, kElemLayoutHeight) + I32(e, kElemBottomPad) + I32(e, kElemTopPad);
-    if (*outW < I32(e, kElemMinWidth))  *outW = I32(e, kElemMinWidth);
-    if (*outH < I32(e, kElemMinHeight)) *outH = I32(e, kElemMinHeight);
-
-    const uint32_t f = U32(e, kElemFlags);
-    if ((f & (kFlagScreenH | kFlagScreenW)) != 0) {
-        void* root = e;
-        while (P(root, kElemParent) != nullptr) root = P(root, kElemParent);
-        const uint8_t* dev = static_cast<const uint8_t*>(VideoDeviceSingleton());
-        if (f & kFlagScreenW) {
-            const uint8_t* owner = static_cast<const uint8_t*>(Pc(P(root, kElemDialogParent), 0x10));
-            *outW = static_cast<int>(static_cast<float>(*reinterpret_cast<const int32_t*>(dev + 0x04)) *
-                                     *reinterpret_cast<const float*>(owner + 0xdc));
-        }
-        if (f & kFlagScreenH) {
-            const uint8_t* owner = static_cast<const uint8_t*>(Pc(P(root, kElemDialogParent), 0x10));
-            *outH = static_cast<int>(static_cast<float>(*reinterpret_cast<const int32_t*>(dev + 0x08)) *
-                                     *reinterpret_cast<const float*>(owner + 0xdc));
+// Assign a System::String body pointer into a field with retail's identity
+// guard (`if (old != new)`), releasing the old and acquiring the new.
+inline void AssignStringField(void* self, int off, void* nv) {
+    uint8_t* old = static_cast<uint8_t*>(PTR(self, off));
+    if (old == nv) return;
+    if (old != nullptr) {
+        int32_t* rc = reinterpret_cast<int32_t*>(old - 4);
+        if (--*rc == 0) {
+            PTR(self, off) = static_cast<uint8_t*>(PTR(self, off)) - 8;
+            MemFree(PTR(self, off));
+        } else {
+            PTR(self, off) = nullptr;
         }
     }
+    PTR(self, off) = nv;
+    if (nv != nullptr) ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(nv) - 4);
 }
 
 // ---------------------------------------------------------------------------
-// The standard `ComputeLayout` body: the border forward, `ComputeSize` through
-// virtual slot 4, and the inlined member `?GetAlignedPosition@Element@UI@@`
-// (0x180115ff0 -> the static 0x1801158e0), writing the four layout fields.
+// A UI::Sprite's pixel size, as the widget Draw/ComputeSize bodies read it —
+// INLINE, never through `?Width@Sprite@UI@@` (0x180030bf0):
 //
-// Transcribed from `?ComputeLayout@ImageElement@UI@@` 0x1801186f0 and diffed
-// instruction for instruction against ButtonElement (0x180110e70),
-// ClipRegionElement (0x1800cba00), ContainerElement (0x1800cc620),
-// DocumentTextElement (0x1800cda00), EditElement (0x1800d0ab0),
-// GraphElement (0x1800d16b0) and LabelElement (0x1800d2330). The eight differ
-// only in the ORDER of the four stores at the end, which is register-allocation
-// noise: the values are identical and the fields do not alias.
+//     sheet   = *(SpriteSheet**)(sprite + 0x00)      runtime/types/ui/Sprite.h
+//     index   =  *(int32_t*)   (sprite + 0x08)
+//     entries = *(uint8_t**)   (sheet  + 0x20)       SpriteSheet::_sprites
+//     w = *(int32_t*)(entries + index*0x38 + 0x1c)
+//     h = *(int32_t*)(entries + index*0x38 + 0x20)
 //
-// TWO FAITHFULNESS TRAPS, the same two runtime/src/ui/element.cpp names for the
-// out-of-line copy:
-//   * the centring halves are ARITHMETIC shifts (`SAR`), not `/ 2`;
-//   * `sw`/`sh` are read, possibly REPLACED by the stretch, then read again by
-//     the placement — the order is load-bearing.
-//
-// The border call forwards the ORIGINAL x/y/w/h (EDX/R8D/R9D are untouched at
-// 0x18011872a and h is re-spilled to the outgoing slot), not the clamped ones.
+// The 0x38 stride and the +0x1c/+0x20 pair are runtime/types/ui/SpriteSheet.h's
+// SpriteInfo. Every call site guards with `if (index < 0) 0`, and the SHEET is
+// never null-checked — that unguarded deref is retail's and stays.
 // ---------------------------------------------------------------------------
-inline void ElementComputeAlignedRect(void* self, int x, int y, int w, int h) {
-    void* border = P(self, kElemBorder);
-    if (border != nullptr)
-        VSlot<ComputeLayoutFn>(border, kSlotComputeLayout)(border, x, y, w, h);
+constexpr int kSpriteSheet  = 0x00;
+constexpr int kSpriteIndex  = 0x08;
+constexpr int kSheetEntries = 0x20;
+constexpr int kSpriteInfoStride = 0x38;
+constexpr int kSpriteInfoW  = 0x1c;
+constexpr int kSpriteInfoH  = 0x20;
 
-    VSlot<ComputeSizeFn>(self, kSlotComputeSize)(self);
+inline int32_t SpriteWidth(const void* self, int spriteOff) {
+    const int32_t idx = I32c(self, spriteOff + kSpriteIndex);
+    if (idx < 0) return 0;
+    void* sheet = PTRc(self, spriteOff + kSpriteSheet);
+    uint8_t* entries = static_cast<uint8_t*>(PTR(sheet, kSheetEntries));
+    return *reinterpret_cast<int32_t*>(entries + idx * kSpriteInfoStride + kSpriteInfoW);
+}
+inline int32_t SpriteHeight(const void* self, int spriteOff) {
+    const int32_t idx = I32c(self, spriteOff + kSpriteIndex);
+    if (idx < 0) return 0;
+    void* sheet = PTRc(self, spriteOff + kSpriteSheet);
+    uint8_t* entries = static_cast<uint8_t*>(PTR(sheet, kSheetEntries));
+    return *reinterpret_cast<int32_t*>(entries + idx * kSpriteInfoStride + kSpriteInfoH);
+}
 
-    int sw = I32(self, kElemLayoutWidth);
-    int sh = I32(self, kElemLayoutHeight);
-    const int align = I32(self, kElemAlignment);
+// ---------------------------------------------------------------------------
+// `?_singleton@Device@Video@@0PEAV12@EA` — the symbol holds a Device*, so the
+// screen size is two loads: [singleton] then +4 / +8.
+// ---------------------------------------------------------------------------
+inline void* VideoDevice() {
+    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    return slot ? *slot : nullptr;
+}
+inline int32_t ScreenWidth()  { return I32(VideoDevice(), 4); }
+inline int32_t ScreenHeight() { return I32(VideoDevice(), 8); }
 
-    if (w < sw + x) x = w - sw;
-    if (h < sh + y) y = h - sh;
+// The UI scale of the element's ROOT dialog: walk _parent to the top, then
+// root->_dialogParent[+0x10] + 0xdc, read as float.
+inline float RootUiScale(void* e) {
+    void* n = e;
+    while (PTR(n, kElParent) != nullptr) n = PTR(n, kElParent);
+    return F32(PTR(PTR(n, kElDialogParent), 0x10), 0xdc);
+}
 
-    int cx = x + I32(self, kElemLeftPad);
-    int cy = y + I32(self, kElemTopPad);
-    const int availW = (w - I32(self, kElemRightPad))  - cx;
-    const int availH = (h - I32(self, kElemBottomPad)) - cy;
+// ---------------------------------------------------------------------------
+// `?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z` (0x180115f10), INLINED. The
+// compiler pasted this into a dozen of the bodies below; each one is
+// transcribed as a call to this function rather than a twelfth copy.
+//
+//   child->ComputeSize();                      // vtable slot 4
+//   w = child->_layoutWidth  + _leftPad + _rightPad;
+//   h = child->_layoutHeight + _topPad  + _bottomPad;
+//   if (w < _minWidth)  w = _minWidth;
+//   if (h < _minHeight) h = _minHeight;
+//   if (flags & 0x30) {  root walk;
+//       if (flags & 0x20) w = (int)((float)screenW * uiScale);
+//       if (flags & 0x10) h = (int)((float)screenH * uiScale); }
+//
+// A DEPARTURE, stated rather than hidden: several call sites use only w or
+// only h and the compiler dropped the other arm. Computing both is extra
+// READS only — no store, no call, no observable difference — and it keeps one
+// copy of a sequence that is otherwise pasted twelve times.
+// ---------------------------------------------------------------------------
+inline void InlineGetPaddedSize(void* child, int32_t* w, int32_t* h) {
+    void** vt = *reinterpret_cast<void***>(child);
+    reinterpret_cast<ComputeSizeSlotFn>(vt[kVtComputeSize / 8])(child);
 
-    const uint32_t flags = U32(self, kElemFlags);
-    if ((flags & kFlagAlignArg1) != 0) sw = availW;
-    if ((flags & kFlagAlignArg2) != 0) sh = availH;
-
-    switch (align) {
-    case 1: case 4: case 7: cx = ((availW >> 1) - (sw >> 1)) + cx;      break;
-    case 2: case 5: case 8: cx = (w - I32(self, kElemRightPad)) - sw;   break;
-    default: break;
+    const uint32_t flags = U32(child, kElFlags);
+    int32_t cw = I32(child, kElLayoutWidth)  + I32(child, kElLeftPad) + I32(child, kElRightPad);
+    int32_t ch = I32(child, kElLayoutHeight) + I32(child, kElTopPad)  + I32(child, kElBottomPad);
+    if (cw < I32(child, kElMinWidth))  cw = I32(child, kElMinWidth);
+    if (ch < I32(child, kElMinHeight)) ch = I32(child, kElMinHeight);
+    if ((flags & (kFlagSizeToScreenW | kFlagSizeToScreenH)) != 0) {
+        const float scale = RootUiScale(child);
+        if ((flags & kFlagSizeToScreenW) != 0)
+            cw = static_cast<int32_t>(static_cast<float>(ScreenWidth()) * scale);
+        if ((flags & kFlagSizeToScreenH) != 0)
+            ch = static_cast<int32_t>(static_cast<float>(ScreenHeight()) * scale);
     }
-    if (align > 2) {
-        if (align < 6)      cy = ((availH >> 1) - (sh >> 1)) + cy;
-        else if (align < 9) cy = (h - I32(self, kElemBottomPad)) - sh;
-    }
-
-    I32(self, kElemLayoutLeft)   = cx;
-    I32(self, kElemLayoutTop)    = cy;
-    I32(self, kElemLayoutRight)  = cx + sw;
-    I32(self, kElemLayoutBottom) = cy + sh;
+    *w = cw;
+    *h = ch;
 }
 
 // ---------------------------------------------------------------------------
-// `?Type@<Class>@UI@@` / `?TypeName@<Class>@UI@@`: the FIRST DWORD of the
-// class's `Object::BaseTypeInfo` static and the `const char*` at its +0x08.
-// Retail loads them as two separate globals (`?_typeInfo@ImageElement@UI@@` at
-// 0x1801fac48 and the label Ghidra prints as `PTR_s_ImageElement_1801fac50`,
-// which is that static + 8) — the same two fields runtime/types/object/TypeInfo.h
-// pins, and the same shape runtime/src/ui/groupdescription.cpp documents.
+// `?GetAlignedPosition@Element@UI@@` (0x180115ff0), inlined into every one of
+// the fourteen ComputeLayout bodies as the same switch on _alignment. The
+// shipped shape, transcribed once:
+//
+//   if (right  < w + x) x = right  - w;      // w/h are the element's own
+//   if (bottom < h + y) y = bottom - h;      //   _layoutWidth/_layoutHeight
+//   px = x + _leftPad;  py = y + _topPad;
+//   aw = (right  - _rightPad)  - px;
+//   ah = (bottom - _bottomPad) - py;
+//   if (flags & 4) w = aw;                   // "stretch X"
+//   if (flags & 8) h = ah;                   // "stretch Y"
+//   switch (align) { 1,4,7: px += (aw>>1) - (w>>1);
+//                    2,5,8: px  = (right - _rightPad) - w; }
+//   if (align > 2) { align < 6 : py += (ah>>1) - (h>>1);
+//                    align < 9 : py  = (bottom - _bottomPad) - h; }
+//
+// NOT every widget runs the whole thing: LayoutElement/ListElement/
+// ProgressElement/ScrollElement/SliderElement each drop one or both stretch
+// tests or one arm of the switch, so this helper is NOT shared — each body
+// spells out exactly the arms its own disassembly has. What IS shared is the
+// arithmetic order, which is why the derivation is written down here once.
 // ---------------------------------------------------------------------------
-inline uint32_t TypeIdOf(const uint8_t* typeInfo) {
-    uint32_t v = 0; __builtin_memcpy(&v, typeInfo, sizeof v); return v;
-}
-inline const char* TypeNameOf(const uint8_t* typeInfo) {
-    const char* v = nullptr; __builtin_memcpy(&v, typeInfo + 8, sizeof v); return v;
-}
 
 }  // namespace rtui
 
-// Every batch-3 class file defines these two accessors with RT_DATA_SLOT and
-// then expands this pair. `NAME` is the class's short name.
-#define RTUI_TYPE_SLOTS(NAME)                                                    \
-    static const uint8_t* NAME##TypeInfo() {                                     \
-        return RT_DATA_SLOT(const uint8_t*,                                      \
-            "?_typeInfo@" #NAME "@UI@@0VBaseTypeInfo@Object@@A");                \
-    }                                                                            \
-    static void* Vt##NAME() { return RT_DATA_SLOT(void*, "??_7" #NAME "@UI@@6B@"); }
-
-#define RTUI_TYPE_BODIES(NAME)                                                   \
-    extern "C" uint32_t RtUi_##NAME##_Type(const void*) {                        \
-        return rtui::TypeIdOf(NAME##TypeInfo());                                 \
-    }                                                                            \
-    extern "C" const char* RtUi_##NAME##_TypeName(const void*) {                 \
-        return rtui::TypeNameOf(NAME##TypeInfo());                               \
-    }
+// The offsets above are the header's, not a second opinion.
+#include "../../types/ui/Element.h"
+static_assert(rtui::kElLeftPad      == offsetof(UI::Element, _leftPad), "");
+static_assert(rtui::kElRightPad     == offsetof(UI::Element, _rightPad), "");
+static_assert(rtui::kElTopPad       == offsetof(UI::Element, _topPad), "");
+static_assert(rtui::kElBottomPad    == offsetof(UI::Element, _bottomPad), "");
+static_assert(rtui::kElMinWidth     == offsetof(UI::Element, _minWidth), "");
+static_assert(rtui::kElMinHeight    == offsetof(UI::Element, _minHeight), "");
+static_assert(rtui::kElAlignment    == offsetof(UI::Element, _alignment), "");
+static_assert(rtui::kElFlags        == offsetof(UI::Element, _flags), "");
+static_assert(rtui::kElColor        == offsetof(UI::Element, _color), "");
+static_assert(rtui::kElLayoutWidth  == offsetof(UI::Element, _layoutWidth), "");
+static_assert(rtui::kElLayoutHeight == offsetof(UI::Element, _layoutHeight), "");
+static_assert(rtui::kElLayoutLeft   == offsetof(UI::Element, _layoutLeft), "");
+static_assert(rtui::kElLayoutTop    == offsetof(UI::Element, _layoutTop), "");
+static_assert(rtui::kElLayoutRight  == offsetof(UI::Element, _layoutRight), "");
+static_assert(rtui::kElLayoutBottom == offsetof(UI::Element, _layoutBottom), "");
+static_assert(rtui::kElElementId    == offsetof(UI::Element, _elementId), "");
+static_assert(rtui::kElDialogParent == offsetof(UI::Element, _dialogParent), "");
+static_assert(rtui::kElParent       == offsetof(UI::Element, _parent), "");
+static_assert(rtui::kElChildren     == offsetof(UI::Element, _children), "");
+static_assert(rtui::kElChildCount   == offsetof(UI::Element, _children) + 8, "");
+static_assert(rtui::kElBorder       == offsetof(UI::Element, _border), "");
+static_assert(rtui::kFlagHidden        == UI::kElementFlagHidden, "");
+static_assert(rtui::kFlagNeedsSizeCalc == UI::kElementFlagNeedsSizeCalc, "");
+static_assert(rtui::kFlagDimColor      == UI::kElementFlagDimColor, "");
+static_assert(rtui::kFlagSizeToScreenH == UI::kElementFlagSizeToScreenH, "");
+static_assert(rtui::kFlagSizeToScreenW == UI::kElementFlagSizeToScreenW, "");
+static_assert(rtui::kFlagWasActivated  == UI::kElementFlagWasActivated, "");
+static_assert(sizeof(UI::Element) == 0xC0, "the fourteen widgets all start their own fields at +0xC0");

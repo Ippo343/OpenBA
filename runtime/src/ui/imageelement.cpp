@@ -41,10 +41,10 @@
 // ported and registered, table-driven, by runtime/src/ui/ui_factory_wave28.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
-#include "widget_common.h"
+#include "element_common.h"
 #include "../../types/ui/ImageElement.h"
 
-using namespace rtui;
+using namespace rtuielem;
 
 static_assert(sizeof(::ImageElement) == 0xE0, "UI::ImageElement is 0xE0 bytes");
 static_assert(offsetof(::ImageElement, spriteSheet) == 0xC0, "sprite sheet @ +0xC0");
@@ -61,7 +61,7 @@ constexpr int kRotation       = 0xd0;
 constexpr int kWidthOverride  = 0xd4;
 constexpr int kHeightOverride = 0xd8;
 
-RTUI_TYPE_SLOTS(ImageElement)
+RTELEM_TYPE_SLOTS(ImageElement)
 
 // `?AddSprite@SpriteContext@UI@@` — the ROTATED overload
 // (ctx, const Sprite&, left, top, right, bottom, color, float rotation).
@@ -78,7 +78,7 @@ using ElementDtorFn     = void  (*)(void* self);
 
 }  // namespace
 
-RTUI_TYPE_BODIES(ImageElement)
+RTELEM_TYPE_BODIES(ImageElement)
 
 // ============================================================================
 // ?ComputeSize@ImageElement@UI@@UEAAXXZ   0x180118650

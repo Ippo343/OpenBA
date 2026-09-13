@@ -254,7 +254,7 @@ EditSetTextFn EditElementSetText() {
 // ?CacheText@NumberElement@UI@@AEAAXXZ (0x1801189f0) — PORTED below as
 // RtUi_NumberElement_CacheText. Both NumberElement::SetValue bodies call it.
 // This forwarder keeps the name the two call sites already use.
-void RtUi_NumberElement_CacheText(void* self);
+extern "C" void RtUi_NumberElement_CacheText(void* self);   // numberelement.cpp (vtable batch 4)
 using CacheTextFn = void (*)(void*);
 inline CacheTextFn NumberElementCacheText() { return &RtUi_NumberElement_CacheText; }
 
@@ -1852,59 +1852,9 @@ bool StringNotEqualImpl(const void* lhsRaw, const void* rhsRaw) {
 // DLL's CacheText read `+0xE0` — the `_showSign` byte — off the end of a stack
 // replay and pick its format string from garbage. That is precisely this
 // function, and it is why the size is asserted here rather than assumed.
-void RtUi_NumberElement_CacheText(void* selfRaw) {
-    RT_DIFF_BEGIN("UI::NumberElement::CacheText [redirected replay: the copy's _cachedText is nulled]");
-
-    auto* self = static_cast<uint8_t*>(selfRaw);
-    auto* cached = reinterpret_cast<RtSystem::String*>(self + 0xd0);
-
-    // The oracle's scratch, built BEFORE our body runs.
-    alignas(16) uint8_t scratch[kNumberElementTrueSize];
-    if (rt_diff_on__) {
-        std::memcpy(scratch, self, kNumberElementTrueSize);
-        *reinterpret_cast<char**>(scratch + 0xd0) = nullptr;   // the redirect
-    }
-
-    RtSystem::String tmp{nullptr};
-    const int32_t mode      = *reinterpret_cast<const int32_t*>(self + 0xc8);
-    const bool    showSign  = *reinterpret_cast<const uint8_t*>(self + 0xe0) != 0;
-    if (mode == 0) {
-        const int32_t v = *reinterpret_cast<const int32_t*>(self + 0xd8);
-        RtSystem_String_Format(&tmp, showSign ? "%+i" : "%i", v);
-    } else {
-        const float f = *reinterpret_cast<const float*>(self + 0xdc);
-        RtSystem_String_Format(&tmp, showSign ? "%+.2f" : "%.2f", static_cast<double>(f));
-    }
-
-    const bool didWork = (cached->data != tmp.data);
-    RtSystem::RtSystem_String_Assign(cached, &tmp);   // retail's inlined operator=
-    RtSystem::RtString_ReleaseInline(&tmp);
-
-    if (rt_diff_on__) {
-        using Fn = void (*)(void*);
-        RT_ORIGINAL_ONCE(Fn, "?CacheText@NumberElement@UI@@AEAAXXZ")(scratch);
-        auto* theirs = reinterpret_cast<RtSystem::String*>(scratch + 0xd0);
-
-        // Compare the TEXT, not the pointer: the two sides allocated separate
-        // buffers by construction, so comparing addresses would fail 100% of
-        // calls and read as a catastrophic port
-        // (reference_oracle_must_not_compare_unwritten_bytes.md, the same
-        // mistake one hat over).
-        const char* o = cached->data;
-        const char* t = theirs->data;
-        bool same;
-        if (o == nullptr || t == nullptr) {
-            same = (o == t);
-        } else {
-            same = (RtSystem::StringLength(o) == RtSystem::StringLength(t)) &&
-                   RtSystem::RtString_StrCompare(o, t) == 0;
-        }
-        RT_DIFF_SHADOW(same, o ? o : "(null)", t ? t : "(null)");
-        RtSystem::RtString_ReleaseInline(theirs);     // the scratch owns it; free it
-    }
-
-    RT_DIFF_WORK(didWork);
-}
+// The body that lived here was a second copy of ?CacheText@NumberElement@UI@@
+// (0x1801189f0); runtime/src/ui/numberelement.cpp owns it since vtable batch 4
+// (2026-09-12), registered with both doors there. Declared extern "C" above.
 
 }  // namespace
 
@@ -2022,7 +1972,6 @@ int RtUiWidgetsInRegister() {
     // accessor called it "unexported" and that is why it was an address door.
     RegisterRuntimeExport("?CacheText@NumberElement@UI@@AEAAXXZ",
                           (void*)&RtUi_NumberElement_CacheText); ++count;
-    RegisterRuntimeAddr(0x1801189f0, (void*)&RtUi_NumberElement_CacheText);
     // `??9String@System@@QEBA_NAEBV01@@Z` (0x18003ffe0), ported above as
     // StringNotEqualImpl. Registered under BOTH doors and NOT counted: `count`
     // is this lane file's tally of UI exports and this one is a System symbol.

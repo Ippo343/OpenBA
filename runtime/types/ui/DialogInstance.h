@@ -280,4 +280,48 @@ constexpr size_t kDialogInstanceCtorExtent = 0xb4;
 // Not sizeof(DialogInstance) — see the size note at the top of this file.
 constexpr size_t kDialogInstanceAllocSize = 0xc0;
 
+
+// ============================================================
+// UI::ComboDialog — the drop-down list a UI::ComboElement opens.
+//
+// Derives from DialogInstance and adds exactly three pointers. Appended by the
+// lane that ported `??0ComboDialog@UI@@QEAA@…` (0x180111d00); the body that
+// pins every line below is runtime/src/ui/combodialog.cpp.
+//
+//   off   field           proven by
+//   ----  --------------  -------------------------------------------------
+//   0x00  DialogInstance  ctor's first act is to CALL the DialogInstance ctor
+//                         overload at 0x1801146b0 on `this`, then stamp
+//                         `??_7ComboDialog@UI@@6B@` (0x1801590e0) over +0x00.
+//   0xb8  _list           written null at 0x180111d60, then at 0x180111e17
+//                         with the ListElement found under the dialog's root.
+//                         Every later read in the ctor re-loads THIS field.
+//   0xc0  _parentDialog   ctor param 3, an InternalPtr<DialogInstance> passed
+//                         BY HIDDEN REFERENCE: 0x180111d6e is `MOV RAX,[RDI]`
+//                         where RDI is the incoming R9. *** It is NOT the
+//                         DialogInstance base's `_parent` (+0x28): the ctor
+//                         hands the base ctor a ZEROED local instead
+//                         (0x180111d31 / 0x180111d48), so a ComboDialog is
+//                         deliberately NOT linked into its parent's child
+//                         list, and keeps the parent here instead. ***
+//   0xc8  _combo          ctor param 4, InternalPtr<ComboElement>, also by
+//                         hidden reference (0x180111d7f-0x180111d8a).
+//
+// SIZE IS PROVEN, unlike the base's. `??2ComboDialog@UI@@SAPEAX_K@Z` is called
+// with `MOV ECX,0xd0` at 0x18011282b, and runtime/src/ui/factory_ui1_tables.inc
+// line 540 independently records 0xd0 for this class.
+// ============================================================
+struct ComboDialog {
+    DialogInstance _base;          // +0x00 .. +0xb7
+    void*          _list;          // +0xb8  InternalPtr<UI::ListElement>
+    void*          _parentDialog;  // +0xc0  InternalPtr<UI::DialogInstance>
+    void*          _combo;         // +0xc8  InternalPtr<UI::ComboElement>
+};
+static_assert(offsetof(ComboDialog, _list)         == 0xb8, "ComboDialog::_list @ +0xb8");
+static_assert(offsetof(ComboDialog, _parentDialog) == 0xc0, "ComboDialog::_parentDialog @ +0xc0");
+static_assert(offsetof(ComboDialog, _combo)        == 0xc8, "ComboDialog::_combo @ +0xc8");
+static_assert(sizeof(ComboDialog) == 0xd0,
+              "ComboDialog is 0xd0 bytes — `MOV ECX,0xd0` at 0x18011282b, the one "
+              "call site of ??2ComboDialog@UI@@SAPEAX_K@Z");
+
 }  // namespace RtUI
