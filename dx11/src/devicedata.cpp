@@ -1703,19 +1703,20 @@ void AdapterArraySetLength(GraphicsInterface* gi, int newCount,
 //   * On the probe-device path the original does NOT check the ID3D11Device
 //     out-pointer for null before calling through it.
 // ============================================================
-bool DeviceData_EnumerateInterfaces(DeviceData* self) {
-    const Imports* im = GetImports();
-    if (!im) return Orig<bool (*)(DeviceData*)>(1)(self);
-
-    CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
-    D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
-    if (!createFactory || !createDevice) return Orig<bool (*)(DeviceData*)>(1)(self);
-
+// The adapter/output/mode walk, factored out of DeviceData_EnumerateInterfaces
+// so the cutover-only DX9 placeholder below can list the SAME adapters under
+// its own name (on a retail machine the DX9 plugin enumerates the same GPUs and
+// modes through d3d9). Byte-for-byte the shipped walk; only `dev` and the
+// interface name are parameters now.
+static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
+                                       const Imports* im,
+                                       CreateDXGIFactory1_t createFactory,
+                                       D3D11CreateDevice_t  createDevice) {
     GraphicsInterface gi;
     im->GfxIfaceCtor(&gi);
     {
         StringStorage name;
-        im->StringCtorCStr(&name, "DirectX 11");
+        im->StringCtorCStr(&name, interfaceName);
         im->StringAssign(&gi, &name);
         im->StringDtor(&name);
     }
@@ -1883,7 +1884,6 @@ bool DeviceData_EnumerateInterfaces(DeviceData* self) {
 
     const bool any = gi.adapterCount > 0;
     if (any) {
-        void* dev = DeviceOf(self);
         void* arrayBase = static_cast<uint8_t*>(dev) + Dev::kInterfaces;
         GfxInterfaceArraySetLength(arrayBase,
                                    Field<int32_t>(dev, Dev::kInterfaceCount) + 1,
@@ -1892,6 +1892,18 @@ bool DeviceData_EnumerateInterfaces(DeviceData* self) {
 
     im->GfxIfaceDtor(&gi);
     return any;
+}
+
+bool DeviceData_EnumerateInterfaces(DeviceData* self) {
+    const Imports* im = GetImports();
+    if (!im) return Orig<bool (*)(DeviceData*)>(1)(self);
+
+    CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
+    D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
+    if (!createFactory || !createDevice) return Orig<bool (*)(DeviceData*)>(1)(self);
+
+    return EnumerateDxgiInterfaceInto(DeviceOf(self), "DirectX 11", im,
+                                      createFactory, createDevice);
 }
 
 // ============================================================
@@ -1905,13 +1917,10 @@ bool DeviceData_EnumerateInterfaces(DeviceData* self) {
 // GetInterface(cfgIndex) with no bounds check and reads past the array. Retail
 // never meets this because both plugin DLLs always load and each appends one
 // entry, so array index == slot index. This placeholder keeps that invariant:
-// it appends a "DirectX 9" interface with ZERO adapters. (A retail machine
-// whose DX9 plugin finds no adapters would NOT get one -- the plugin, like
-// ours above, skips the append on zero adapters -- so retail carries the same
-// latent bug; it is only the missing plugin that makes it fire every time.)
-// Selecting it in Options is then the same retail-shaped fault a real
-// zero-adapter interface gives; the fallback loop in Device::PlatformStartup
-// steps past it because Create() returns false. Filled only by
+// it appends a "DirectX 9" interface listing the SAME adapters and modes the
+// DX11 walk finds (which is what the real plugin reports on a machine that has
+// both). Its Create() returns false, so choosing it in Options leaves the
+// fallback loop in Device::PlatformStartup to step back to DX11. Filled only by
 // VideoInterfaceFillDx9Placeholder (standalone/video_interface.cpp), which the
 // ported InitializeInterfaces calls only when the DLL is absent.
 // ============================================================
@@ -1923,22 +1932,14 @@ void Dx9P_DeletingDtor(Dx9Placeholder* self, int flag) {   // vtable +0x00
 }
 bool Dx9P_EnumerateInterfaces(Dx9Placeholder* self) {       // vtable +0x08
     const Imports* im = GetImports();
-    if (!im) return false;
-    GraphicsInterface gi;
-    im->GfxIfaceCtor(&gi);
-    {
-        StringStorage name;
-        im->StringCtorCStr(&name, "DirectX 9");
-        im->StringAssign(&gi, &name);
-        im->StringDtor(&name);
-    }
-    void* dev = self->device;
-    void* arrayBase = static_cast<uint8_t*>(dev) + Dev::kInterfaces;
-    GfxInterfaceArraySetLength(arrayBase,
-                               Field<int32_t>(dev, Dev::kInterfaceCount) + 1,
-                               &gi, im);
-    im->GfxIfaceDtor(&gi);
-    return true;
+    CreateDXGIFactory1_t createFactory = GetCreateDXGIFactory1();
+    D3D11CreateDevice_t  createDevice  = GetD3D11CreateDevice();
+    if (!im || !createFactory || !createDevice) return false;
+    // The same adapters and modes DX11 lists, under the DX9 name: what the
+    // real plugin reports on this machine. A zero-adapter entry was tried
+    // first and selecting it in Options died in UserInterface::Draw.
+    return EnumerateDxgiInterfaceInto(self->device, "DirectX 9", im,
+                                      createFactory, createDevice);
 }
 bool Dx9P_Create(Dx9Placeholder*)  { return false; }        // vtable +0x10
 void Dx9P_Destroy(Dx9Placeholder*) {}                       // vtable +0x18

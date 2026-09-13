@@ -423,6 +423,7 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
                 // no matter how many layers exist.
                 if (pass == 0) {
                     int32_t x1 = 0, y1 = 0, x2 = width, y2 = height;
+                    uint32_t tint = 0;
 
                     const int32_t spriteIndex = *reinterpret_cast<int32_t*>(d + 0x60);
                     void* const   sheet0      = *reinterpret_cast<void**>(d + 0x58);
@@ -473,11 +474,19 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
                             y1 = mid - half;
                             y2 = mid + half;
                         }
-                    }
 
-                    // 0x180121e7c — UNGUARDED, and outside the sprite test.
-                    const uint32_t tint = *reinterpret_cast<uint32_t*>(
-                        *reinterpret_cast<uint8_t**>(d + 0x18) + 0x30);
+                        // 0x180121e7c — unguarded on +0x18, but INSIDE the
+                        // sprite test: Ghidra shows `local_248 = *(*(d+0x18)
+                        // +0x30)` after the letterbox arms and before the
+                        // sheet re-read, all under `spriteIndex >= 0 && sheet`.
+                        // A dialog with no backdrop sprite never reads it.
+                        // ComboDialog's ctor leaves +0x18 NULL by design and
+                        // has spriteIndex -1, so hoisting this out of the
+                        // block (as this port once did) faulted on the first
+                        // dropdown drawn DLL-absent (Options > Video, 2026-09-12).
+                        tint = *reinterpret_cast<uint32_t*>(
+                            *reinterpret_cast<uint8_t**>(d + 0x18) + 0x30);
+                    }
 
                     void* const sheet = *reinterpret_cast<void**>(d + 0x58);
                     if (sheet != nullptr && *reinterpret_cast<int32_t*>(d + 0x60) >= 0) {
