@@ -20,6 +20,15 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **Open defect (2026-09-13 evening, 3 h root-cause, stopped by the user):** the stress-town
+  teardown crash/hang is ONE stray 4-byte small-int store into allocator boundary-tag metadata
+  during a single `MarkForRemoval` cascade in `EntityList::Shutdown` (WorkComponent::OnRemove ->
+  RegisterWorkSlot -> 0x1400f8e30 -> MarketWork slot8 -> TaskListCleanup -> DropOffRawMaterial
+  cancel -> SpillAllStorage); the `rtalloc::Free` stack is the victim. Writer not yet proven; two
+  candidates named. Everything, incl. the recipe (3/5 at 6000 frames on the debug exe; reproduce on
+  the perf exe first) and the next experiment: `TEARDOWN_WILD_WRITE.md`. The loader race in
+  `ExternalFactory::Add` was not reached.
+
 The plan for what follows the gate is `ENDGAME.md`: A remove the DLL, C remove the flags,
 B fold the C bodies into real classes, in that order. **2026-09-13: A.1 and A.2 are done.**
 Tag `dll-present-last` (commit `86d28a73`) is the last commit where the exe still loaded
