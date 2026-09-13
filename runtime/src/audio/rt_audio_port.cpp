@@ -74,6 +74,12 @@ void RtAudioPortInit() {
     // (vtbatch7_soundbuffer_soundeffect.cpp). Unconditional, same reason.
     extern int RtAudioBatch7SoundBufferSoundEffectRegister();
     n += RtAudioBatch7SoundBufferSoundEffectRegister();
+    // VTABLE BATCH 7b (2026-09-12): ?Run@Stream@Audio@@ (0x1800a0f60), the
+    // streaming worker's thread body — the last unported member of the
+    // Audio::Stream trio whose ctor/dtor (audio_stream_win.cpp) and Play
+    // (audio_stream_play_win.cpp) were already ours. Unconditional.
+    { extern int RtAudioStreamRunRegister();
+      n += RtAudioStreamRunRegister(); }
     // Wave 29 lane AVBODY. The sweep needs no allocator, no gameplay route and
     // no caller: two of the three bodies are PURE (the `this` they are handed is
     // never read), and the third is fully synthesisable. It compares against the

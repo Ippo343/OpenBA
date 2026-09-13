@@ -66,10 +66,11 @@
 //                            Array<T>*, so size/cap are NOT a separate cache
 // Total 0x40.
 //
-// `Compile` (0x1800e09a0) is NOT fully reimplemented -- see its own comment;
-// only the outer shape (self->_offsetTicks reset, early return) is faithful.
-// It otherwise makes NO external calls at all -- a self-contained
-// duration/position recompute over the buffer array, ported faithfully below.
+// `Compile` (0x1800e09a0) IS fully reimplemented as of VTABLE BATCH 7b -- this
+// banner used to say "NOT fully reimplemented ... only the outer shape is
+// faithful", which was true of batch 7 and is no longer true of this file. The
+// whole body, including the two-level sample/variant walk, is transcribed and
+// its evidence is set out above the function.
 // `Serialize`'s two nested-array helpers (0x180053190 SetSize,
 // 0x180053300 element loop) are NOT ported by this batch: reached through
 // ResolveAddr (port registry first, DLL fallback), same reasoning as the
@@ -276,6 +277,11 @@ struct SoundEffect {
     float    f20;                // +0x20  default 1.0f (ctor stores both +0x20/+0x24
     float    f24;                 //        +0x24  default 0.0f  as ONE qword immediate 0x3f800000)
     int64_t  offsetTicks;          // +0x28
+    // The SAMPLE table. Element stride 0x18, pinned by Compile's outer loop
+    // (`ADD RDI,0x18` at 0x1800e0a53) and independently by
+    // audio_scene_update.cpp:149-158's reader: {float startSeconds @+0x00,
+    // variant table @+0x08, variant count @+0x10}. `buffer*` are batch 7's
+    // names, kept because Serialize hands SetSize the address of +0x30.
     void*    bufferData;            // +0x30  Array<T>::_data -- Serialize's own
     int32_t  bufferCount;             // +0x38  ::_size  (SetSize is handed &+0x30
     int32_t  bufferCap;                // +0x3c  ::_capacity  directly as the Array<T>*)
@@ -332,24 +338,114 @@ extern "C" void* RtAudio_SoundEffect_Reconstruct(void* selfv) {
 }
 extern "C" void RtAudio_SoundEffect_Destruct(void* selfv) { CallSlot0(selfv, 0); }
 
-// 0x1800e09a0 — NOT reimplemented byte-for-byte: the outer shape (n =
-// self->bufferCount, early return when n<=0, self->offsetTicks reset to
-// (int64)(0.0/secondsPerTick) up front) is faithful, but the per-buffer inner
-// loop -- which walks a SUB-TABLE reached through each record's own +0x08
-// pointer at a RUNNING BYTE OFFSET, comparing a per-entry float against a
-// running duration threshold and conditionally updating self->offsetTicks --
-// was read from the disassembly but not fully re-derived to certainty (the
-// inner table's element shape is inferred, not independently confirmed the
-// way every OTHER field in this batch is). Left as attendance-only rather than
-// risk a wrong write to self->offsetTicks on a field this port cannot verify.
-// Self-contained otherwise: makes no calls to anything outside this function.
-// NOT DONE — see the final report for what finishing this needs.
+// ============================================================================
+// 0x1800e09a0 — `?Compile@SoundEffect@Audio@@`, WHOLE, byte for byte.
+//
+// *** BATCH 7 LEFT THIS HALF-PORTED AND REGISTERED, WHICH IS WORSE THAN A TRAP.
+// *** Its banner said "the per-buffer inner loop ... was read from the
+// disassembly but not fully re-derived to certainty (the inner table's element
+// shape is inferred)". Batch 7b re-read the whole body (Ghidra
+// disassemble_function on retail 0x1800e09a0..0x1800e0a8b) and the inner
+// table's shape is NOT inferred — it has an independent second witness in this
+// tree, written months earlier by a READER:
+// runtime/src/audio/audio_scene_update.cpp:145-158 measured the same two levels
+// off `?PlayEffect@Scene@Audio@@` (0x1800df7e0 / 0x1800dfc42 / 0x1800df9fe):
+//
+//     SoundEffect  +0x28 int64 duration, +0x30 sample table, +0x38 sample count
+//     sample entry stride 0x18:  +0x00 float start SECONDS, +0x08 variant
+//                                table, +0x10 variant count
+//     variant entry stride 0x18: +0x00 ExternalPtr<SoundBuffer>, then floats
+//
+// This body (a WRITER) reaches exactly those offsets with exactly those
+// strides, and it dereferences the variant's +0x00 as a SoundBuffer, reading
+// +0x20 and +0x24 — which this same file's SoundBuffer struct above already
+// pins as `loopForever` and `loopDurationSeconds` from a third direction (that
+// class's own ctor and Serialize). Three independent witnesses; nothing here is
+// inferred from a shape.
+//
+// THE BODY, instruction for instruction:
+//
+//   1800e09a6  XORPS XMM0,XMM0 / DIVSD XMM0,[_secondsPerTick] / CVTTSD2SI
+//   1800e09bc  MOV [RCX+0x28],RAX            self->_durationTicks = (i64)(0.0/spt)
+//   1800e09c0  MOV EAX,[RCX+0x38] ; TEST ; JLE 1800e0a80 -> return 1
+//   1800e09d5  RDI = self->_samples ; EBP = count ; ESI = 1 ; R11B = 0
+//   1800e09e0  R9 = RDI+0x10 (&sample->variantCount)
+//   -- outer, back edge 1800e0a5e -> 1800e09e4, RDI/R9 both += 0x18 --
+//     1800e09e6  if (*R9 <= 0) skip the inner loop entirely
+//     1800e09eb  R10 = self->_durationTicks              (RELOADED per sample)
+//     -- inner, RDX = k*0x18 --
+//       1800e0a00  RAX = *(R9-8) = sample->_variants
+//       1800e0a04  XMM1 = 0.0f
+//       1800e0a07  R8 = *(SoundBuffer**)(RAX + RDX)
+//       1800e0a0e  if (R8 == 0) leave XMM1 at 0.0f
+//       1800e0a10  CMP [R8+0x20],0 / MOVSS XMM1,[R8+0x24] / ADDSS XMM1,[RDI]
+//       1800e0a23  CMOVNZ R11D,ESI            anyLoopForever |= buf->loopForever
+//       1800e0a2a  CVTSI2SS XMM0,R10 ; COMISS XMM1,XMM0 ; JBE skip
+//       1800e0a34  R10 = (i64)((double)XMM1 / spt) ; MOV [RBX+0x28],R10
+//   1800e0a6c  if (R11B) MOV qword [RBX+0x28],0
+//   1800e0a6a/80 EAX = 1 on both exits
+//
+// TWO THINGS THAT LOOK LIKE TRANSCRIPTION ERRORS AND ARE NOT:
+//
+//  1. `COMISS XMM1, (float)R10` compares a value in SECONDS against a value in
+//     TICKS. R10 starts at 0, so the first candidate always wins; after that
+//     R10 holds a tick count (typically 10^4..10^7) and no later per-buffer
+//     SECONDS value can exceed it, so in practice only the first non-zero
+//     candidate is ever taken. That is retail's arithmetic, reproduced as
+//     written. Fixing it would be a behaviour change, not a correction.
+//  2. The running maximum is cached in R10 but RELOADED from self->+0x28 at the
+//     top of every OUTER iteration (0x1800e09eb is inside the outer loop, past
+//     the `JLE`), and only when that sample has variants. A sample with zero
+//     variants therefore leaves the cache untouched — which is the same value,
+//     so the reload is observationally a no-op and is written that way below.
+//
+// `anyLoopForever` clears the duration to 0 — the "this effect never ends"
+// sentinel. It is set even for a buffer whose duration does NOT win the
+// comparison, because the CMOVNZ is before the COMISS.
+//
+// Self-contained: no calls at all, and one data read (_secondsPerTick).
+// ============================================================================
 extern "C" int32_t RtAudio_SoundEffect_Compile(void* selfv, const void* /*filename*/) {
     SoundEffect* self = static_cast<SoundEffect*>(selfv);
     double* secondsPerTickSlot = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
     const double secondsPerTick = secondsPerTickSlot ? *secondsPerTickSlot : 1.0;
-    self->offsetTicks = static_cast<int64_t>(0.0 / secondsPerTick);
-    return 1;  // External::CompileResult::Success -- retail always returns this
+    self->offsetTicks = static_cast<int64_t>(0.0 / secondsPerTick);   // 1800e09bc
+
+    const int32_t sampleCount = self->bufferCount;                     // 1800e09c0
+    if (sampleCount <= 0)
+        return 1;                                                      // 1800e0a80
+
+    uint8_t* sample = static_cast<uint8_t*>(self->bufferData);         // 1800e09d5
+    bool anyLoopForever = false;                                        // R11B
+
+    for (int32_t s = 0; s < sampleCount; ++s, sample += 0x18) {
+        const int32_t variantCount = *reinterpret_cast<const int32_t*>(sample + 0x10);
+        if (variantCount <= 0) continue;                                // 1800e09e9
+
+        int64_t running = self->offsetTicks;                            // 1800e09eb
+        uint8_t* const variants = *reinterpret_cast<uint8_t**>(sample + 0x08);
+        const float startSeconds = *reinterpret_cast<const float*>(sample + 0x00);
+
+        for (int32_t k = 0; k < variantCount; ++k) {
+            const SoundBuffer* buf = *reinterpret_cast<SoundBuffer* const*>(
+                variants + static_cast<int64_t>(k) * 0x18);             // 1800e0a07
+            float end = 0.0f;                                            // XMM1
+            if (buf) {                                                   // 1800e0a0e
+                end = buf->loopDurationSeconds + startSeconds;            // 1800e0a15/1f
+                if (buf->loopForever != 0) anyLoopForever = true;         // 1800e0a23
+            }
+            // Retail's own mixed-unit compare; see note 1 in the banner.
+            if (end > static_cast<float>(running)) {                     // 1800e0a2f
+                running = static_cast<int64_t>(static_cast<double>(end) / secondsPerTick);
+                self->offsetTicks = running;                             // 1800e0a44
+            }
+        }
+    }
+
+    if (anyLoopForever)                                                  // 1800e0a6f
+        self->offsetTicks = 0;                                           // 1800e0a71
+
+    return 1;  // External::CompileResult::Success — retail returns 1 on both exits
 }
 
 extern "C" bool RtAudio_SoundEffect_Serialize(void* selfv, void* streamv) {

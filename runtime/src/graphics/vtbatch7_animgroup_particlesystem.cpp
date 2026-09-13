@@ -72,22 +72,19 @@
 //                runtime/src/object/external_ptr_serialize.cpp (the shared
 //                748-byte ExternalPtr<T>::Serialize template, one more
 //                instantiation; typeInfo = ?_typeInfo@AnimationEvent@Graphics@@)
-//   0x180059e70  Array<AnimationClip>::SetSize          NOT ported by this
-//   0x18005a220  Array<{String,String,float}>::SetSize  batch -- reached
-//   0x18005a410  Array<float>::SetSize                  through ResolveAddr,
-//   0x180059930  Array<{int32,ExternalPtr}>::SetSize    which tries the port
-//                registry first and falls back to the shipped DLL body
-//                (reference_resolveaddr_consults_port_registry_first.md).
-//                Each is a self-contained Array<T>::SetSize with its own
-//                element ctor/dtor/assign, the same shape
-//                collection/array.cpp's kSpec_* rows already document for
-//                dozens of other T's; adding four more ArraySpec rows (with
-//                the assign/init/destroy-unwritten-window analysis that file's
-//                convention requires) is out of this batch's scope. Calling
-//                them by address is safe: ResolveAddr falls through to the
-//                DLL when nobody has registered the address, exactly as
-//                runtime/src/graphics/animationstate.cpp already does for its
-//                own SetSizeNodes/SetSizeStates/etc.
+//   0x180059e70  Array<AnimationClip>::SetSize          *** ALL FOUR ARE NOW
+//   0x18005a220  Array<{String,String,float}>::SetSize  PORTED AND REGISTERED
+//   0x18005a410  Array<float>::SetSize                  (VTABLE BATCH 7b) ***
+//   0x180059930  Array<{int32,ExternalPtr}>::SetSize    as J3 rows in
+//                runtime/src/collection/array.cpp: kSpec_AnimClip70,
+//                kSpec_TagStrStrF18, kSpec_I32 and kSpec_IdExtPtr10. The call
+//                sites below are UNCHANGED -- they already went through
+//                ResolveAddr, which consults the port registry first
+//                (reference_resolveaddr_consults_port_registry_first.md), so
+//                registering the four addresses is what moved them from the
+//                DLL to our bodies.
+//                (This banner used to end "adding four more ArraySpec rows ...
+//                is out of this batch's scope", which was true of batch 7.)
 //
 // ---------------------------------------------------------------------------
 // Graphics::ParticleSystem — ??_7ParticleSystem@Graphics@@6B@, 0x108 bytes
@@ -110,16 +107,18 @@
 // kPS_* offsets wave28_lane_partsys.cpp already measured as a READER
 // (ParticleSystemInstance::Update) -- two independent witnesses.
 //
-// `?ParticleSystem::ParticleSystem` (the real ctor, 0x1800a5320) and
-// `?CreateSystem@ParticleSystem@` (0x1800a5140, which allocates a
-// ParticleSystemInstance of size 0xe0 and calls ITS ctor 0x1800a55a0) are both
-// NOT reimplemented here: both are non-slot leaves whose own field/ctor work is
-// a separate class's scope (ParticleSystemInstance already has its own port,
-// wave28_lane_partsys.cpp / rt_graphics_port.cpp). Construct/Reconstruct/
-// CreateSystem are ported as THIN FORWARDING THUNKS that call these addresses
-// through ResolveAddr -- byte-identical to retail's own tail-jump to the same
-// address, and automatically picked up by the port registry if another lane
-// ports either function later.
+// *** VTABLE BATCH 7b PORTED BOTH OF THE BODIES BATCH 7 THUNKED. ***
+// `??0ParticleSystem@Graphics@@QEAA@XZ` (the real ctor, 0x1800a5320, ord 302)
+// and `?CreateSystem@ParticleSystem@Graphics@@` (0x1800a5140, ord 2134, which
+// allocates a ParticleInstance of size 0xe0 and calls ITS ctor 0x1800a55a0) are
+// both written out below, and Construct/Reconstruct/CreateSystem now call OUR
+// bodies rather than forwarding through ResolveAddr. The ctor is registered at
+// its own export name and address as well, so a caller that reaches it directly
+// (Object::External's factory path does) gets ours too.
+// (This banner used to say both "are NOT reimplemented here ... ported as THIN
+// FORWARDING THUNKS", which was true of batch 7.)
+// 0x1800a55a0, the ParticleInstance ctor, is still reached by address: it is a
+// different class's row (wave28_lane_partsys.cpp owns that class).
 // ============================================================================
 
 #include <cstddef>
@@ -454,22 +453,142 @@ extern "C" const char* RtGraphics_ParticleSystem_TypeName(const void*) {
 }
 extern "C" int32_t RtGraphics_ParticleSystem_GetFileVersion(const void*) { return 0x1001; }
 
-// The real ctor (0x1800a5320) and CreateSystem's ParticleSystemInstance
-// allocation (0x1800a5140) stay on the DLL / port registry -- see the banner.
+// ============================================================================
+// ??0ParticleSystem@Graphics@@QEAA@XZ — retail 0x1800a5320, ord 302.
+//
+// BATCH 7 LEFT THIS AS A THUNK ("stays on the DLL / port registry"); batch 7b
+// ports the body. It is 60 stores and one RET, no calls, and every value below
+// is transcribed from the disassembly — including MSVC's merged 8-byte stores
+// at misaligned offsets (+0x74, +0x7c, +0x84, +0xac, +0xb4, +0xc4, +0xd0,
+// +0xdc), which are written here as the two 4-byte fields they cover.
+//
+// FOUR vtable stamps, in retail's order (Object::Base, Object::External,
+// Graphics::Particle, Graphics::ParticleSystem). Retail stamps each with a
+// RIP-relative LEA, which is NOT a door; porting the ctor converts all four
+// into RT_DATA_SLOT lookups that resolve to the mint the day it has rows
+// (reference_a_ported_row_can_be_permanently_unpromotable.md).
+//
+// THE TWO .rdata DOUBLES WERE READ, NOT RECOGNISED (pefile, raw section bytes):
+//     0x180161760 = 00 00 00 00 00 00 f0 bf = -1.0
+//     0x1801616b8 = 00 00 00 00 00 00 d0 3f =  0.25
+// so +0x58 is `(int64)(-1.0 / _secondsPerTick)` — a NEGATIVE tick count, i.e.
+// the "no explicit duration" sentinel — and +0xe8/+0xf0 are both
+// `(int64)(0.25 / _secondsPerTick)`, computed by two separate DIVSDs off one
+// loaded XMM1 (0x1800a5470 and 0x1800a5484).
+// ============================================================================
+namespace {
+
+void* ParticleSystemVTable() { return RT_DATA_SLOT(void*, "??_7ParticleSystem@Graphics@@6B@"); }
+void* ParticleVTable()       { return RT_DATA_SLOT(void*, "??_7Particle@Graphics@@6B@"); }
+
+double SecondsPerTick() {
+    double* slot = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
+    return slot ? *slot : 1.0;
+}
+
+void ParticleSystemConstructBody(ParticleSystem* self) {
+    void** vp = reinterpret_cast<void**>(self);
+    *vp = BaseVTable();                                   // 1800a5338  0x180154788
+    *vp = ExternalVTable();                               // 1800a5342  0x1801547a0
+    self->base._f08 = 0;                                  // 1800a5350
+    self->base._f10 = 0;                                  // 1800a5353
+    self->base._f18 = 0;                                  // 1800a5357
+    *vp = ParticleVTable();                               // 1800a5362  0x180155130
+    self->base._active = 1;                               // 1800a5365  byte
+    self->base._f24    = 1;                               // 1800a5369
+    self->base._f28    = 0xf;                             // 1800a5370
+    self->base._f30    = 0;                               // 1800a5377
+    self->base._f38    = 0;                               // 1800a537b
+    self->base._f40    = 0;                               // 1800a537f
+    *vp = ParticleSystemVTable();                         // 1800a538a  0x180155090
+
+    const double spt = SecondsPerTick();
+
+    self->f48 = 5.0f;  self->f4c = 0.0f;                  // 1800a538d  one qword
+    self->f50 = 1.0f;                                     // 1800a5395
+    self->i58 = static_cast<int64_t>(-1.0 / spt);         // 1800a539c..b1
+    self->emitDirX = 0.0f; self->emitDirY = 0.0f;         // 1800a53b5  one qword
+    self->emitDirZ = 1.0f;                                // 1800a53b9
+    self->spreadX  = 1.0f;                                // 1800a53c0
+    self->spreadY  = 1.0f;                                // 1800a53c7
+    self->spreadZ  = 1.0f; self->f78 = 0.0f;              // 1800a53ce  one qword
+    self->f7c = 0.0f; self->f80 = 0.0f;                   // 1800a53d6  one qword
+    self->f84 = 1.0f; self->f88 = 0.0f;                   // 1800a53da  one qword
+    self->f8c = 0.0f;                                     // 1800a53e5
+    self->f90 = 1.0f; self->f94 = 0.0f;                   // 1800a53eb  one qword
+    self->f98 = 0.0f; self->f9c = 0.0f;                   // 1800a53f6  one qword
+    self->fa0 = 0.0f; self->fa4 = 0.0f;                   // 1800a53fd  one qword
+    self->fa8 = 1.0f;                                     // 1800a5404
+    self->fac = 3.0f; self->fb0 = 0.0f;                   // 1800a540e  one qword
+    self->fb4 = 1.0f; self->gravX = 0.0f;                 // 1800a5419  one qword
+    self->gravY = 0.0f;                                   // 1800a5424
+    self->gravZ = -9.8f;                                  // 1800a542a  0xc11ccccd
+    self->fc4 = 0.5f; self->fc8 = 0.0f;                   // 1800a5434  one qword
+    self->fcc = 0.0f;                                     // 1800a543f
+    self->fd0 = 1.0f; self->colorT0 = 0.0f;               // 1800a5445  one qword
+    self->colorT1 = 1.0f;                                 // 1800a5450
+    self->color0 = 0xffffffffu;                           // 1800a545a  one qword
+    self->color1 = 0xffffffffu;                           //            of -1
+    self->fadeInTicks  = static_cast<int64_t>(0.25 / spt);// 1800a5465..7d
+    self->fadeOutTicks = static_cast<int64_t>(0.25 / spt);// 1800a5484..91
+    std::memset(self->tail, 0, sizeof self->tail);        // 1800a5498/9f  +0xf8,+0x100
+}
+
+}  // namespace
+
+extern "C" void* RtGraphics_ParticleSystem_Ctor(void* selfv) {
+    // Retail has NO null check (`MOV [RCX],RAX` on the first instruction).
+    ParticleSystemConstructBody(static_cast<ParticleSystem*>(selfv));
+    return selfv;                                          // 1800a54a6  MOV RAX,RCX
+}
+
+// Construct/Reconstruct are the vtable slots; each is retail's `JMP 0x1800a5320`
+// (Construct) / `vtable[0](this,0)` then the same ctor (Reconstruct). They call
+// OUR ctor directly now rather than round-tripping through ResolveAddr.
 extern "C" void* RtGraphics_ParticleSystem_Construct(void* selfv) {
     if (!selfv) return nullptr;
-    using CtorFn = void* (*)(void*);
-    return RtAddr<CtorFn>(0x1800a5320ull)(selfv);
+    return RtGraphics_ParticleSystem_Ctor(selfv);
 }
 extern "C" void* RtGraphics_ParticleSystem_Reconstruct(void* selfv) {
     CallSlot0(selfv, 0);
-    using CtorFn = void* (*)(void*);
-    return RtAddr<CtorFn>(0x1800a5320ull)(selfv);
+    return RtGraphics_ParticleSystem_Ctor(selfv);
 }
 extern "C" void RtGraphics_ParticleSystem_Destruct(void* selfv) { CallSlot0(selfv, 0); }
-extern "C" void* RtGraphics_ParticleSystem_CreateSystem(void* selfv) {
-    using Fn = void* (*)(void*);
-    return RtAddr<Fn>(0x1800a5140ull)(selfv);
+
+// ============================================================================
+// ?CreateSystem@ParticleSystem@Graphics@@ — retail 0x1800a5140, ord 2134.
+//
+// Also a batch-7 thunk, also ported here. Eleven instructions:
+//
+//   1800a5154  RBX = *0x1801fc718 + 0x640          the allocator's own CS
+//   1800a516a  EnterCriticalSection(RBX)
+//   1800a5183  MemAlloc(_singleton, 0xe0, 8)       0x1800c6e60
+//   1800a518e  LeaveCriticalSection(RBX)
+//   1800a519c  if (result) 0x1800a55a0(result)     ParticleInstance's ctor
+//              else EAX = 0
+//   1800a51b5  RET (the allocation, or the ctor's return, which is the same
+//              pointer)
+//
+// `this` IS NEVER READ. Retail's CreateSystem ignores the ParticleSystem it is
+// called on entirely — the returned instance is bound to its system later, by
+// the caller. Reproduced, parameter deliberately unnamed.
+//
+// The Enter/Alloc/Leave triple goes through `rtcoll::MemAlloc` (array.cpp's
+// accessor, declared in deleting_dtor_internal.h), which IS that triple on the
+// same singleton, rather than re-opening four new address doors onto
+// 0x1801fc718 / 0x18014b390 / 0x1800c6e60 / 0x18014b388 that array.cpp already
+// owns. Same reasoning the Serialize tail below states for its own allocation.
+//
+// 0x1800a55a0 (`Graphics::ParticleInstance::ParticleInstance`) is NOT this
+// batch's row and is reached BY ADDRESS — ResolveAddr consults the port
+// registry first, so the day wave28_lane_partsys.cpp's class gets a ctor this
+// call site picks it up with no edit here.
+// ============================================================================
+extern "C" void* RtGraphics_ParticleSystem_CreateSystem(void* /*self, never read*/) {
+    void* inst = rtcoll::MemAlloc(0xe0, 8);                // 1800a5183
+    if (!inst) return nullptr;                             // 1800a519c -> XOR EAX,EAX
+    using CtorFn = void* (*)(void*);
+    return RtAddr<CtorFn>(0x1800a55a0ull)(inst);           // 1800a51a1
 }
 
 extern "C" bool RtGraphics_ParticleSystem_Serialize(void* selfv, void* streamv) {
@@ -512,34 +631,49 @@ extern "C" bool RtGraphics_ParticleSystem_Serialize(void* selfv, void* streamv) 
     rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarInt64, &self->fadeInTicks);
     rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarInt64, &self->fadeOutTicks);
 
-    // READ-ONLY tail: when the resource is active (Particle::_active, +0x20)
-    // and reading, retail rebuilds the per-instance pool array at self+0xf8,
-    // sized to Particle::_f24, allocating one 0x18-byte record per index via
-    // 0x180021220 (SetSize) / 0x180020e90 (record ctor). Both are non-slot
-    // leaves outside this batch's scope, reached by address (DLL fallback) --
-    // see the banner. Byte-faithful: the same two addresses retail itself
-    // calls here.
+    // READ-ONLY tail (retail 0x1800a505c..0x1800a5107): when reading and the
+    // resource is active (Particle::_active, +0x20), rebuild the pool-pointer
+    // array at self+0xf8 to Particle::_f24 entries and allocate one 0x18-byte
+    // record per index.
+    //
+    // *** BATCH 7 GOT TWO THINGS WRONG HERE AND BATCH 7b FIXES BOTH, at the
+    // source (PLAN.md §6 step 8). *** The old comment said 0x180020e90 is a
+    // "record ctor"; it is not. Both addresses are Collection::Array<T>::SetSize
+    // bodies of this tree's J3 family, and both are now PORTED AND REGISTERED
+    // (runtime/src/collection/array.cpp: kSpec_Fill8 for the stride-8 pointer
+    // array, kSpec_Rec14 for the record's own stride-0x14 inner array). So the
+    // second call is `SetSize(&record->innerArray, ParticleSystem::_f28)`, and
+    // these two ResolveAddr calls now land on OUR bodies rather than the DLL's.
+    //
+    // And the dword at record+0x10 is a RAW BIT COPY of self->+0x48
+    // (0x1800a50df `MOV EAX,dword ptr [RSI+0x48]` / `MOV [RDI+0x10],EAX`), NOT
+    // a float-to-int conversion. Batch 7 wrote `static_cast<int32_t>(self->f48)`,
+    // which for the ctor's default 5.0f stores 5 where retail stores
+    // 0x40a00000. Transcribed as a memcpy so the width and the bits both match.
+    //
+    // The allocation goes through `rtcoll::MemAlloc` (array.cpp's accessor,
+    // declared in deleting_dtor_internal.h), which IS retail's
+    // Enter/Allocate(0x18, align 8)/Leave triple on the same singleton, rather
+    // than re-opening address doors onto 0x1801fc718+0x640 / 0x18014b390 /
+    // 0x1800c6e60 / 0x18014b388 that array.cpp already owns.
     if (IsReading(stream) && self->base._active != 0) {
-        // Mirrors retail 0x1800a5066..0x1800a5109 exactly: SetSize the pool
-        // pointer array at self+0xf8 to Particle::_f24, then Enter/Alloc(0x18,
-        // align 8)/Leave one record per index through the SAME allocator door
-        // the rest of this tree already uses (rtcoll::MemAlloc, defined in
-        // collection/array.cpp and declared in deleting_dtor_internal.h),
-        // rather than re-opening a new address door onto the CS-guarded
-        // allocator wrapper (0x1801fc718+0x640 / 0x18014b390 / 0x18014b388 /
-        // 0x1800c6e60) that array.cpp already owns.
         using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x180021220ull)(reinterpret_cast<uint8_t*>(self) + 0xf8, self->base._f24);
+        RtAddr<SetSizeFn>(0x180021220ull)(reinterpret_cast<uint8_t*>(self) + 0xf8,
+                                          self->base._f24);            // 1800a507a
         uint8_t** poolArr = *reinterpret_cast<uint8_t***>(
-            reinterpret_cast<uint8_t*>(self) + 0xf8);
-        using RecCtorFn = void (*)(void*, int32_t);
-        RecCtorFn recCtor = RtAddr<RecCtorFn>(0x180020e90ull);
-        for (int32_t i = 0; i < self->base._f24; ++i) {
+            reinterpret_cast<uint8_t*>(self) + 0xf8);                   // 1800a50f1
+        SetSizeFn innerSetSize = RtAddr<SetSizeFn>(0x180020e90ull);
+        for (int32_t i = 0; i < self->base._f24; ++i) {                 // 1800a5103
             uint8_t* rec = static_cast<uint8_t*>(rtcoll::MemAlloc(0x18, 8));
-            std::memset(rec, 0, 0x10);
-            *reinterpret_cast<int32_t*>(rec + 0x10) = static_cast<int32_t>(self->f48);
-            recCtor(rec, self->base._f28);
-            poolArr[i] = rec;
+            if (rec) {                                                  // 1800a50d4
+                std::memset(rec, 0, 0x10);                              // 1800a50d8/db
+                std::memcpy(rec + 0x10,                                 // 1800a50df/e2
+                            reinterpret_cast<const uint8_t*>(self) + 0x48, 4);
+                innerSetSize(rec, self->base._f28);                     // 1800a50eb
+            }
+            // Retail stores RDI unconditionally, so a failed allocation parks a
+            // null in the slot rather than skipping the index.
+            poolArr[i] = rec;                                           // 1800a50f8
         }
     }
 
@@ -582,6 +716,9 @@ int RtGraphicsBatch7AnimGroupParticleSystemRegister() {
     RegisterRuntimeAddr  (0x180020590ull, (void*)&RtGraphics_ParticleSystem_Destruct);
     RegisterRuntimeExport("?CreateSystem@ParticleSystem@Graphics@@UEBAPEAVParticleInstance@2@XZ", (void*)&RtGraphics_ParticleSystem_CreateSystem); ++n;
     RegisterRuntimeAddr  (0x1800a5140ull, (void*)&RtGraphics_ParticleSystem_CreateSystem);
+    // VTABLE BATCH 7b — the real ctor, now a body rather than a thunk.
+    RegisterRuntimeExport("??0ParticleSystem@Graphics@@QEAA@XZ", (void*)&RtGraphics_ParticleSystem_Ctor); ++n;
+    RegisterRuntimeAddr  (0x1800a5320ull, (void*)&RtGraphics_ParticleSystem_Ctor);
     RegisterRuntimeExport("?Construct@ParticleSystem@Graphics@@UEAAPEAVExternal@Object@@XZ", (void*)&RtGraphics_ParticleSystem_Construct); ++n;
     RegisterRuntimeAddr  (0x180020580ull, (void*)&RtGraphics_ParticleSystem_Construct);
     return n;

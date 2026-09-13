@@ -5,8 +5,11 @@
 // ============================================================================
 //
 // `Audio::Stream` is a `System::Thread` SUBCLASS. These two are the whole of its
-// construction and destruction; the run body (`?Run@Stream@Audio@@`) is NOT in
-// this lane's scope and stays on the DLL.
+// construction and destruction. The run body (`?Run@Stream@Audio@@UEAAXXZ`,
+// 0x1800a0f60) used to be "NOT in this lane's scope and stays on the DLL"; it is
+// PORTED as of VTABLE BATCH 7b — runtime/src/audio/vtbatch7b_stream_run_win.cpp,
+// which is also what publishes this ctor's +0x48 event into the Device's
+// VoiceCallback record.
 //
 // Its own .cpp, and a `_win` one, because both bodies are almost entirely
 // KERNEL32 synchronisation primitives and PLAN.md §4.1 decision 1 keeps

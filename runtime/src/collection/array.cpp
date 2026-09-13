@@ -2029,6 +2029,147 @@ const ArraySpec kSpec_AudioChannel70 = {          // 0x180051020
 // and these sites are chosen at runtime, so the bodies below call
 // RtDiffRegister/RtDiffReport directly rather than through RT_DIFF_*.
 
+// ============================================================================
+// VTABLE BATCH 7b (2026-09-12) — the six Array<T>::SetSize bodies the batch-7
+// Graphics/Audio serializers reach BY ADDRESS. Every row below was read out of
+// its own disassembly (retail Runtime-x64.dll, Ghidra disassemble_function):
+// `stride` is the SHL/IMUL feeding MemAlloc, `align` the immediate in EDX, and
+// the element ops are the loop body — never inferred from the element type.
+//
+//   0x180059e70  Array<AnimationGroup::Clip>      stride 0x70 align 8  NON-TRIV
+//   0x18005a220  Array<{String,String,float}>     stride 0x18 align 8  NON-TRIV
+//   0x18005a410  Array<float>                     stride 4    align 4  = kSpec_I32
+//   0x180059930  Array<{int32,ExternalPtr}>       stride 0x10 align 8
+//   0x180021220  Array<ParticlePoolRecord*>       stride 8    align 8  = kSpec_Fill8
+//   0x180020e90  Array<{Array<T>,int32}>          stride 0x14 align 4
+//
+// The last two are the "pool rebuild" pair `?Serialize@ParticleSystem@Graphics@@`
+// calls at 0x1800a507a and 0x1800a50eb. *** 0x180020e90 IS NOT A RECORD
+// CONSTRUCTOR. *** vtbatch7_animgroup_particlesystem.cpp used to call it
+// `recCtor`; it is this family's SetSize over the record's OWN inner array
+// header at record+0x00, with `ParticleSystem::_f28` as the new size. That
+// comment is corrected at its source in the same commit (PLAN.md §6 step 8).
+// ----------------------------------------------------------------------------
+
+// --- 0x180059e70  Array<Graphics::AnimationGroup::Clip>, stride 0x70 --------
+// assign   CALL 0x1800160a0   (the clip's own operator=, reached by ADDRESS so
+//                              the port registry gets first refusal)
+// init     the inline default-construct at 0x180059f2d..0x180059f7b
+// destroy  CALL 0x1800fb290, ONE ELEMENT PER CALL, in a loop on both arms
+//          (0x180059fa3 realloc arm, 0x18005a005 shrink arm) — unlike every
+//          other destroy row in this file, which takes (base, count).
+void AssignAnimClip70(uint8_t* d, const uint8_t* s) {
+    using Fn = void* (*)(uint8_t*, const uint8_t*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800160a0));
+    fn(d, s);
+}
+void InitAnimClip70(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;   // 180059f2d  inner event array
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;   // 180059f30
+    *reinterpret_cast<uint64_t*>(d + 0x10) = 0;   // 180059f38  three String slots
+    *reinterpret_cast<uint64_t*>(d + 0x18) = 0;   // 180059f3c
+    *reinterpret_cast<uint64_t*>(d + 0x20) = 0;   // 180059f40
+    *reinterpret_cast<int32_t* >(d + 0x28) = 1;   // 180059f44  NOT zero
+    *reinterpret_cast<uint8_t* >(d + 0x2c) = 0;   // 180059f4b  byte, not dword
+    *reinterpret_cast<uint64_t*>(d + 0x30) = 0;   // 180059f4f
+    *reinterpret_cast<int32_t* >(d + 0x38) = 0;   // 180059f57
+    *reinterpret_cast<uint8_t* >(d + 0x3c) = 0;   // 180059f5b  byte, not dword
+    *reinterpret_cast<uint64_t*>(d + 0x40) = 0;   // 180059f5f
+    *reinterpret_cast<uint64_t*>(d + 0x48) = 0;   // 180059f67
+    *reinterpret_cast<int32_t* >(d + 0x50) = 0;   // 180059f6f
+    *reinterpret_cast<uint64_t*>(d + 0x58) = 0;   // 180059f73
+    *reinterpret_cast<uint64_t*>(d + 0x60) = 0;   // 180059f77  pose array header
+    *reinterpret_cast<uint64_t*>(d + 0x68) = 0;   // 180059f7b
+}
+void DestroyAnimClip70(void* /*ignoredThis*/, uint8_t* base, int count) {
+    using Fn = void (*)(uint8_t*);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800fb290));
+    for (int i = 0; i < count; ++i) fn(base + static_cast<int64_t>(i) * 0x70);
+}
+// THREE init holes, not one, and ArraySpec can name only one window. The one
+// named is the widest (+0x54..+0x57, the padding before the int64 at +0x58);
+// the other two are +0x2d..+0x2f and +0x3d..+0x3f, the padding after each of
+// the two BYTE stores above. All three are retail's holes, recorded here rather
+// than zeroed (reference_oracle_must_not_compare_unwritten_bytes.md). Nothing
+// drives this row through array_probe.cpp's table today, so the window is
+// documentation; it becomes load-bearing the day someone adds the row there.
+const ArraySpec kSpec_AnimClip70 = {              // 0x180059e70
+    "Array<Graphics::AnimationGroup::Clip>", 0x70, 8,
+    &AssignAnimClip70, &InitAnimClip70, &DestroyAnimClip70, false,
+    /*assign unwritten*/ 0,    0,      // an opaque called operator=; no claim
+    /*init   unwritten*/ 0x54, 0x58,   // plus 0x2d..0x2f and 0x3d..0x3f
+    /*seed zero       */ 0x00, 0x70 }; // every slot is dereferenced by the ops
+
+// --- 0x18005a220  Array<{String,String,float}>, stride 0x18 -----------------
+// AnimationGroup's +0x38 tag table. assign is AssignStringPair10's two
+// refcounted adopts (0x18005a2c8..0x18005a2ea, byte-identical shape) plus one
+// dword at +0x10; init zeroes both String slots and seeds the float with
+// 0x3dcccccd == 0.1f (0x18005a30a) — the SAME default AnimationGroup's own ctor
+// gives its +0x30. destroy is `CALL 0x18001cbf0` with (base, count) on both
+// arms (0x18005a328 realloc, 0x18005a37b shrink).
+void AssignTagStrStrF18(uint8_t* d, const uint8_t* s) {
+    AssignStringPair10(d, s);                                       // +0x00/+0x08
+    *reinterpret_cast<uint32_t*>(d + 0x10) =
+        *reinterpret_cast<const uint32_t*>(s + 0x10);               // 18005a2ed
+}
+void InitTagStrStrF18(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;                     // 18005a303
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;                     // 18005a306
+    *reinterpret_cast<uint32_t*>(d + 0x10) = 0x3dcccccdu;           // 18005a30a
+}
+void DestroyTagStrStrF18(void* ignoredThis, uint8_t* base, int count) {
+    using Fn = void (*)(void*, uint8_t*, int);
+    static Fn fn = nullptr;
+    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18001cbf0));
+    fn(ignoredThis, base, count);
+}
+const ArraySpec kSpec_TagStrStrF18 = {            // 0x18005a220
+    "Array<{String,String,float}>", 0x18, 8,
+    &AssignTagStrStrF18, &InitTagStrStrF18, &DestroyTagStrStrF18, false,
+    /*assign unwritten*/ 0x14, 0x18,   // the element is 0x14 wide in a 0x18 slot
+    /*init   unwritten*/ 0x14, 0x18,
+    /*seed zero       */ 0x00, 0x10 }; // both String slots are dereferenced
+
+// --- 0x180059930  Array<{int32 tag, ExternalPtr<AnimationEvent>}> -----------
+// The nested per-clip event array. stride 0x10 (`SHL RCX,0x4`), align 8
+// (`MOV EDX,0x8`), assign is two plain qword copies, and the init arm writes
+// only a DWORD at +0x00 and a QWORD at +0x08 (0x1800599d4/0x1800599d7), so
+// +0x04..+0x07 is left holding whatever the allocation contained. No destroy
+// call anywhere in the body — the ExternalPtr is not released on a shrink.
+void InitIdExtPtr10(uint8_t* d) {
+    *reinterpret_cast<uint32_t*>(d + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(d + 0x08) = 0;
+}
+const ArraySpec kSpec_IdExtPtr10 = {              // 0x180059930
+    "Array<{int32,ExternalPtr<AnimationEvent>}>", 0x10, 8,
+    &Assign16, &InitIdExtPtr10, nullptr, true,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0x04, 0x08,
+    /*seed zero       */ 0,    0 };
+
+// --- 0x180020e90  Array<{Array<T> header, int32}>, stride 0x14, ALIGN 4 -----
+// The inner array of one ParticleSystem pool record. FIVE dword copies
+// (0x180020f71..0x180020f93 and its three unrolled twins), and an init arm that
+// writes a QWORD then a DWORD — 12 of the 20 bytes — leaving +0x0c..+0x13
+// uninitialised. Align is 4 (`MOV EDX,R14D` with R14D seeded 4 at 0x180020ece),
+// NOT 8, which is why it cannot borrow any stride-0x14-adjacent row.
+void Assign14(uint8_t* d, const uint8_t* s) {
+    for (int k = 0; k < 5; ++k)
+        reinterpret_cast<uint32_t*>(d)[k] = reinterpret_cast<const uint32_t*>(s)[k];
+}
+void InitZero14Lo12(uint8_t* d) {
+    *reinterpret_cast<uint64_t*>(d + 0x00) = 0;   // 180020f9a
+    *reinterpret_cast<uint32_t*>(d + 0x08) = 0;   // 180020f9d
+}
+const ArraySpec kSpec_Rec14 = {                   // 0x180020e90
+    "Array<{Array,int32}:0x14>", 0x14, 4,
+    &Assign14, &InitZero14Lo12, nullptr, true,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0x0c, 0x14,
+    /*seed zero       */ 0,    0 };
+
 }  // namespace rtcoll
 
 // ============================================================================
@@ -2532,6 +2673,19 @@ J3_ENTRY2(1800136f0, kSpec_Tri18A4)     // Graphics:    EdgeMesh's TriangleList 
 J3_ENTRY2(180061880, kSpec_StringExtZ)  // Graphics:    Material's {String*,ExternalPtr}, zero tail
 J3_ENTRY2(180034010, kSpec_MetaEntry20) // Save:        Persistence metadata entries
 
+
+// ---- VTABLE BATCH 7b (2026-09-12) -----------------------------------------
+// Callers: runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp
+// (AnimationGroup::Serialize and ParticleSystem::Serialize, both already ours).
+// Each was reached BY ADDRESS before this commit and fell through to the DLL;
+// registering them closes six cutover doors and changes nothing while the DLL
+// is present, because ResolveAddr consults the port registry first either way.
+J3_ENTRY2(180059e70, kSpec_AnimClip70)   // Graphics: AnimationGroup::_clips  [NON-TRIVIAL]
+J3_ENTRY2(18005a220, kSpec_TagStrStrF18) // Graphics: AnimationGroup::_tags   [NON-TRIVIAL]
+J3_ENTRY2(18005a410, kSpec_I32)          // Graphics: AnimationGroup::_floats (Array<float>, tail UNINITIALISED)
+J3_ENTRY2(180059930, kSpec_IdExtPtr10)   // Graphics: AnimationGroup::Clip::_events
+J3_ENTRY2(180021220, kSpec_Fill8)        // Graphics: ParticleSystem pool pointer array
+J3_ENTRY2(180020e90, kSpec_Rec14)        // Graphics: one pool record's inner array
 
 #undef J3_ENTRY2
 
@@ -3470,6 +3624,17 @@ void RtCollectionPortInit() {
         printf("[RtPort]   Collection::Set<Filename,uint32> (batch 5): "
                     "%d addresses registered\n", pathId);
     }
+
+    // ---- VTABLE BATCH 7b (2026-09-12): six J3 two-argument addresses -------
+    // The Array<T>::SetSize bodies batch 7's AnimationGroup::Serialize and
+    // ParticleSystem::Serialize reach by address. Spelled as LITERALS so
+    // tools/runtime_census.py can see them.
+    RegisterRuntimeAddr(0x180059e70, (void*)&RtColl_ArraySetSize_180059e70);
+    RegisterRuntimeAddr(0x18005a220, (void*)&RtColl_ArraySetSize_18005a220);
+    RegisterRuntimeAddr(0x18005a410, (void*)&RtColl_ArraySetSize_18005a410);
+    RegisterRuntimeAddr(0x180059930, (void*)&RtColl_ArraySetSize_180059930);
+    RegisterRuntimeAddr(0x180021220, (void*)&RtColl_ArraySetSize_180021220);
+    RegisterRuntimeAddr(0x180020e90, (void*)&RtColl_ArraySetSize_180020e90);
 
     rtcoll::g_probePending = RtCollectionProbeArmed();
 }
