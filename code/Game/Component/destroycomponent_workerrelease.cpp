@@ -62,9 +62,6 @@
 #include <cstdint>
 #include <cstdio>
 
-// component_factory_base.h is not pulled in here; declare the one entry point needed.
-namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
-
 // ============================================================
 // Resolved closure
 // ============================================================

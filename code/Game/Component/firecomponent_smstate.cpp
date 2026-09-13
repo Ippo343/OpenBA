@@ -35,7 +35,6 @@
 //
 // Decompiled READ-ONLY from Application-x64.exe.
 
-#include "Component/fire_trace.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -70,7 +69,7 @@ void EnsureInit() {
 // StateMachineComponent and pump the machine until it settles.
 // `ownerIbpSlot` is the component's +0x10 InternalBasePtr slot.
 // ---------------------------------------------------------------------------
-void ForceSMState(void* ownerIbpSlot, int targetState, const char* who) {
+void ForceSMState(void* ownerIbpSlot, int targetState, const char* /*who*/) {
     EnsureInit();
     if (!s_findSMC || !s_smTick) return;
 
@@ -81,8 +80,6 @@ void ForceSMState(void* ownerIbpSlot, int targetState, const char* who) {
 
     uint8_t* L = reinterpret_cast<uint8_t*>(smcIbp);
     if (!L) {
-        FIRE_TRACE_N(4, "[Fire] ForceSMState(%s,%d): NO StateMachineComponent on the "
-                        "burning entity — state not requested\n", who, targetState);
         return;
     }
 
@@ -96,9 +93,6 @@ void ForceSMState(void* ownerIbpSlot, int targetState, const char* who) {
     // null crash that says nothing. Report the outcome and leave, rather than
     // pretending the state was requested.
     if (*node == nullptr) {
-        FIRE_TRACE_N(4, "[Fire] ForceSMState(%s,%d): SM chain EMPTY (sm[0]==0) — the "
-                        "owning ControllerComponent is inert; state not requested\n",
-                     who, targetState);
         return;
     }
 
@@ -122,9 +116,6 @@ void ForceSMState(void* ownerIbpSlot, int targetState, const char* who) {
         L[0x52] = static_cast<uint8_t>(out);
     }
 
-    FIRE_TRACE_N(8, "[Fire] ForceSMState(%s): asked state=%d transIdx=%d -> "
-                    "pending(+0x52)=%d cur(+0x50)=%d\n",
-                 who, targetState, r, (int)(int8_t)L[0x52], (int)(int8_t)L[0x50]);
 
     // The inlined tail == StateMachine::Tick(sm, Time(0), useAlt=0, doTransition=1).
     int64_t tZero = 0;
@@ -182,8 +173,6 @@ extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp, const int64
         if (buildIbp != 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildIbp);
             if (*reinterpret_cast<int32_t*>(buildIbp + 0x48) == 0) {
-                FIRE_TRACE_N(4, "[Fire] BeginBurning: building not finished "
-                                "(BuildComponent+0x48==0) — ignite refused\n");
                 return false;
             }
         }

@@ -146,7 +146,6 @@ inline bool Loading(void* stream) {
 
 void SerializeValidatedIBP(void* ibp, void* ser, uintptr_t addr) {
     const uint32_t* tid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, addr));
-    void* before = *reinterpret_cast<void**>(ibp);
     if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(ibp, ser);
     void* obj = *reinterpret_cast<void**>(ibp);
     const bool checked = (obj && fn_IsDerivedFrom && tid && *tid);
@@ -154,58 +153,6 @@ void SerializeValidatedIBP(void* ibp, void* ser, uintptr_t addr) {
     if (checked && !derived)
         *reinterpret_cast<uint64_t*>(ibp) = 0;
 
-    // [diag] BANISHED_IBP_TRACE — an IBP that reads null after a load has three
-    // possible stories that must be told apart: the stream held null,
-    // InternalBasePtr::Serialize could not resolve the persisted id, or the value
-    // arrived intact and this validation threw it away because the type-id global
-    // is wrong. Only the RAW value, before the null-out, distinguishes them.
-    static int s_on = -1;
-    if (s_on < 0) { const char* e = std::getenv("BANISHED_IBP_TRACE");
-                    s_on = (e && *e && e[0] != '0') ? 1 : 0; }
-    if (s_on) {
-        static int n = 0;
-        if (n < 40) {
-            ++n;
-            fprintf(stderr, "[IBPTrace] tid@%llx=%u  in=%p raw=%p checked=%d "
-                            "derived=%d out=%p\n",
-                    (unsigned long long)addr, tid ? *tid : 0u, before, obj,
-                    checked ? 1 : 0, derived ? 1 : 0,
-                    *reinterpret_cast<void**>(ibp));
-            fflush(stderr);
-        }
-    }
-}
-
-
-// ---------------------------------------------------------------------------
-// BANISHED_CITIZEN_CENSUS=1 — per-citizen assignment probe.
-//
-// The citizen panel reads its "home" and "job" straight off these fields, so if
-// it shows unassigned after a load, either the save leg wrote nulls or the load
-// leg failed to restore them. Dump the same fields on entry (save leg: the live
-// values about to be written) and on exit (load leg: what came back) and diff
-// the two legs. Capped so a big town does not flood the log.
-// ---------------------------------------------------------------------------
-void CitizenCensus(void* self, void* ser, const char* leg) {
-    static int s_on = -1;
-    if (s_on < 0) {
-        const char* e = std::getenv("BANISHED_CITIZEN_CENSUS");
-        s_on = (e && *e && e[0] != '0') ? 1 : 0;
-    }
-    if (!s_on) return;
-    static int s_saved = 0, s_loaded = 0;
-    int& n = (leg[0] == 'S') ? s_saved : s_loaded;
-    if (n >= 12) return;
-    ++n;
-    auto Q = [self](int off) {
-        return *reinterpret_cast<void* const*>(reinterpret_cast<const uint8_t*>(self) + off);
-    };
-    (void)ser;
-    fprintf(stderr, "[CitCensus] %s #%d self=%p prof1f0=%p prof1f8=%p "
-            "ibp208=%p ibp228=%p ibp230=%p ent238=%p ent248=%p desc288=%p\n",
-            leg, n, self, Q(0x1f0), Q(0x1f8), Q(0x208), Q(0x228), Q(0x230),
-            Q(0x238), Q(0x248), Q(0x288));
-    fflush(stderr);
 }
 
 } // namespace
@@ -219,10 +166,6 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
 
     uint8_t ser[24];
     g_fn_Serializer_Ctor(ser, stream, 3);
-
-    const bool loading =
-        (*reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(stream) + 8) == 0);
-    if (!loading) CitizenCensus(self, ser, "SAVE");
 
     if (g_fn_String_Serialize) g_fn_String_Serialize(At(self, 0x28), ser);
     if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x38), nullptr);
@@ -336,7 +279,6 @@ extern "C" void CitizenComponent_Serialize(void* self, void* stream) {
 
     if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, At(self, 0x34), nullptr);
 
-    if (loading) CitizenCensus(self, ser, "LOAD");
 
     g_fn_Serializer_Dtor(ser);
 }

@@ -34,7 +34,6 @@
 // listings; do not "improve" the behaviour.
 
 #include "Work/firework_funcs.h"
-#include "Component/fire_trace.h"
 #include "Component/firecomponent_funcs.h"
 #include "Object/factory_registration.h"
 #include "FireComponent.h"
@@ -139,8 +138,6 @@ uint32_t g_tid_FireComponent   = 0;   // 0x1401c41e0
 extern "C" void FillTypeIdGlobals_fire() {
     g_tid_FireDescription = ::Object::GetTypeIdByName("FireDescription");
     g_tid_FireComponent   = ::Object::GetTypeIdByName("FireComponent");
-    FIRE_TRACE("[Fire] type ids: FireDescription=0x%08x FireComponent=0x%08x\n",
-               g_tid_FireDescription, g_tid_FireComponent);
 }
 
 // The +0x18 description, validated the way retail validates it.
@@ -313,8 +310,6 @@ extern "C" void FireComponent_Extinguish_4c0(void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* ibpSlot = reinterpret_cast<void*>(s + 0x10);
 
-    const int64_t timerWas = *reinterpret_cast<int64_t*>(s + 0x30);
-    const int32_t buckets  = *reinterpret_cast<int32_t*>(s + 0x28);
 
     *reinterpret_cast<int64_t*>(s + 0x30) = 0;
     *reinterpret_cast<int64_t*>(s + 0x38) = 0;
@@ -380,9 +375,6 @@ extern "C" void FireComponent_Extinguish_4c0(void* self) {
     FireComp_MarkDanger_99c0(self, -1);
 
     // OUTCOME trace — say which of the two Slot15/Update conditions brought us here.
-    FIRE_TRACE("[Fire] EXTINGUISHED comp=%p buckets=%d timerAtEntry=%lld reason=%s\n",
-               self, (int)buckets, (long long)timerWas,
-               (timerWas < 1) ? "timer-expired" : "buckets-reached-threshold");
 }
 
 // ============================================================
@@ -404,11 +396,9 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     void* destroyComp = reinterpret_cast<void*>(destIbp);
 
     if (FireComponent_IsBeingDemolished_11e690(destroyComp)) {
-        FIRE_TRACE("[Fire] IGNITE REFUSED comp=%p reason=being-demolished\n", self);
         return;
     }
     if (s_gate11e710 && s_gate11e710(destroyComp)) {
-        FIRE_TRACE("[Fire] IGNITE REFUSED comp=%p reason=gate-11e710\n", self);
         return;
     }
 
@@ -425,7 +415,6 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     const int64_t burnHalf = MakeTime(burnSecs * Half());
 
     if (!FireComponent_BeginBurning_11e7b0(destroyComp, &burnHalf)) {
-        FIRE_TRACE("[Fire] IGNITE REFUSED comp=%p reason=begin-burning-declined\n", self);
         return;
     }
 
@@ -465,11 +454,9 @@ extern "C" void FireComponent_Ignite_610(void* self) {
     uint64_t workIbp = 0;
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIbp, work);
 
-    bool posted = false;
     if (s_postWork && workCompIbp) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         s_postWork(workCompIbp, 0x4000, 0, &workIbp);
-        posted = true;
     }
     if (s_removalCalc && workCompIbp) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
@@ -498,7 +485,6 @@ extern "C" void FireComponent_Ignite_610(void* self) {
             int64_t evt = *reinterpret_cast<int64_t*>(gw + 0x120);
             if (evt) *reinterpret_cast<uint32_t*>(evt + 0x34) = 1;
         }
-        FIRE_TRACE("[Fire] first fire in town — event banner posted (type 0x1f sev 3)\n");
     }
 
     // --- audio: move this entity's emitters to its world position, then start one ---
@@ -528,21 +514,12 @@ extern "C" void FireComponent_Ignite_610(void* self) {
 
     FireComp_MarkDanger_99c0(self, 1);
 
-    FIRE_TRACE("[Fire] IGNITED comp=%p burn=%.2fs spread=%.2fs work=%p posted=%s "
-               "cap=%d workComp=%p\n",
-               self, burnSecs,
-               *reinterpret_cast<float*>(d + FireDescriptionField::SpreadInterval),
-               work, posted ? "YES" : "NO(no WorkComponent on the burning entity)",
-               *reinterpret_cast<int*>(d + FireDescriptionField::MaxFirefighters),
-               (void*)workCompIbp);
 }
 
 // ============================================================
 // FireComponent_SpreadToNeighbors (0x140049130)
 // ============================================================
 // Spread census — see the comment at the roll site below.
-static int s_spreadTries = 0, s_spreadCaught = 0, s_spreadRolledNo = 0;
-static int s_spreadEmptyCell = 0, s_spreadNoFireComp = 0;
 
 extern "C" void FireComponent_Spread_130(void* self) {
     EnsureInit();
@@ -594,11 +571,6 @@ extern "C" void FireComponent_Spread_130(void* self) {
     do {
         if (*reinterpret_cast<int64_t*>(s + 0x38) > 0) break;
         if (++passes > kMaxPasses) {
-            FIRE_TRACE("[Fire] SPREAD ABORTED after %d passes — spread interval is "
-                       "zero (desc+0x30=%.4f); retail would spin here\n",
-                       kMaxPasses,
-                       *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(myDesc) +
-                                                 FireDescriptionField::SpreadInterval));
             break;
         }
 
@@ -650,32 +622,10 @@ extern "C" void FireComponent_Spread_130(void* self) {
 
             const float roll = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
             const bool caught = roll < chance;
-            ++s_spreadTries; if (caught) ++s_spreadCaught; else ++s_spreadRolledNo;
-            // A running census, not a first-N budget: 24 lines burn out inside the FIRST
-            // fire, so a soak that spreads for ten minutes looks identical in the log to
-            // one that never spreads at all (the same trap as the FireWork water search).
-            if (s_spreadTries <= 8 || (s_spreadTries % 100) == 0)
-                FIRE_TRACE("[Fire] spread #%d from=%p cell=(%d,%d) neighbour=%p "
-                           "chance=%.3f roll=%.3f -> %s  (census: caught=%d rolled-no=%d "
-                           "empty=%d no-firecomp=%d)\n",
-                           s_spreadTries, self, cx, cy, (void*)neighbourFire, chance, roll,
-                           caught ? "CAUGHT" : "no", s_spreadCaught, s_spreadRolledNo,
-                           s_spreadEmptyCell, s_spreadNoFireComp);
             if (caught) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&neighbourFire);
                 FireComponent_Ignite_610(reinterpret_cast<void*>(neighbourFire));
             }
-        } else {
-            ++s_spreadTries;
-            if (occupant == 0) ++s_spreadEmptyCell; else ++s_spreadNoFireComp;
-            if (s_spreadTries <= 8 || (s_spreadTries % 100) == 0)
-                FIRE_TRACE("[Fire] spread #%d from=%p cell=(%d,%d) -> %s  (census: "
-                           "caught=%d rolled-no=%d empty=%d no-firecomp=%d)\n",
-                           s_spreadTries, self, cx, cy,
-                           (occupant == 0) ? "empty cell"
-                                           : "occupant has NO FireComponent",
-                           s_spreadCaught, s_spreadRolledNo, s_spreadEmptyCell,
-                           s_spreadNoFireComp);
         }
     } while (*reinterpret_cast<int64_t*>(s + 0x30) > 0);
 
@@ -705,8 +655,6 @@ extern "C" void FireComponent_WaterApplied_090(void* self, int msg) {
     const int32_t buckets = *reinterpret_cast<int32_t*>(s + 0x28);
     const int64_t timer   = *reinterpret_cast<int64_t*>(s + 0x30);
 
-    FIRE_TRACE("[Fire] BUCKET comp=%p buckets=%d/%d timer=%lld (-%lld)\n",
-               self, (int)buckets, needed, (long long)timer, (long long)step);
 
     if (timer < 1 || needed <= buckets)
         FireComponent_Extinguish_4c0(self);

@@ -85,15 +85,6 @@ static void ResolveStates() {
     s_resolved = true;
 }
 
-static int s_trace = -1;
-static bool Trace() {
-    if (s_trace < 0) {
-        const char* e = std::getenv("BANISHED_CLEAR_TRACE");
-        s_trace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s_trace == 1;
-}
-
 // ============================================================
 // Grid area-status helpers (ports of FUN_14009d860 / dac0 / d930).
 // grid = int*; grid[0] = width; *(char*)grid+0x80 = tile array base; tile stride
@@ -243,30 +234,6 @@ static bool ClearArea_IsDone(void* comp) {
     const bool done = allEmptyBranch ? Grid_AllEmpty(grid, x1, y1, w, h, selfEntity)
                                      : Grid_NoTargetResource(grid, x1, y1, w, h, descRef);
 
-    // [diag] Which branch decides "done", over which rect, and what the grid holds there.
-    // NoTargetResource only counts NaturalResourceComponent occupants, so it ignores a
-    // harvest pile by design; AllEmpty tests cell+0x08 and so a registered pile holds the
-    // job open. Report the occupant slots to tell "pile outside the rect" apart from
-    // "wrong branch". Gated by BANISHED_CLEAR_TRACE.
-    if (Trace()) {
-        static int s_n = 0;
-        if (++s_n <= 24) {
-            const int width = *grid;
-            uintptr_t tiles = GridTiles(grid);
-            std::fprintf(stderr, "[ClearCtrl] IsDone comp=%p rect=(%d,%d)-(%dx%d) flags(0/1/2)=%d/%d/%d "
-                                 "branch=%s done=%d |", comp, x1, y1, w, h,
-                         (int)flag0, (int)flag1, (int)flag2,
-                         allEmptyBranch ? "AllEmpty" : "NoTargetResource", (int)done);
-            for (int row = y1; row < y1 + h; ++row)
-                for (int col = x1; col < x1 + w; ++col) {
-                    const int cell = width * row + col;
-                    std::fprintf(stderr, " cell[%d,%d]=%d occ+0x08=%p", col, row, cell,
-                                 *reinterpret_cast<void**>(tiles + (uintptr_t)cell * 0x30 + 8));
-                }
-            std::fprintf(stderr, "\n");
-            std::fflush(stderr);
-        }
-    }
     return done;
 }
 
@@ -463,7 +430,6 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
     *reinterpret_cast<int32_t*>(c + 0x48) = remaining;   // clearState bookkeeping (+0x48)
     if (remaining == 0 || ClearArea_IsDone(data)) {
         ::ControllerLive::RequestStateTransition(sm, 1);   // finish: 0 -> 1
-        if (Trace()) { std::fprintf(stderr, "[ClearCtrl] State0Enter: nothing to clear (remaining=%d) -> req state 1\n", remaining); std::fflush(stderr); }
         return 1;
     }
 
@@ -504,11 +470,6 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIBP);
     s_WorkSchedPost(static_cast<uintptr_t>(workCompIBP), kind, static_cast<char>(f3), &workIBP);
 
-    if (Trace()) {
-        std::fprintf(stderr, "[ClearCtrl] State0Enter: posted ClearArea work (kind=0x%x) for comp=%p owner=%p\n",
-                     kind, data, ownerEnt);
-        std::fflush(stderr);
-    }
     return 1;
 }
 
@@ -531,7 +492,6 @@ extern "C" char ClearArea_State0PerFrame(void* data, void* sm) {
     if (!data) return 1;
     if (ClearArea_IsDone(data)) {
         ::ControllerLive::RequestStateTransition(sm, 1);
-        if (Trace()) { std::fprintf(stderr, "[ClearCtrl] State0PerFrame: cleared -> req state 1 (comp=%p)\n", data); std::fflush(stderr); }
     }
     return 1;
 }
@@ -601,8 +561,6 @@ void ClearArea_Finalize8270(void* comp) {
     bool isCA = descObj && fn_IsDerivedFrom && fn_IsDerivedFrom(descObj, DerefTid(0x1401c7200));
     if (!isCA) return;
     uint8_t flag2c = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(descObj) + 0x2c);
-    if (Trace())
-        std::fprintf(stderr, "[ClearCtrl] Finalize8270 comp=%p desc+0x2c=%d\n", comp, (int)flag2c);
     if (flag2c == 0) return;
 
     // desc+0x2c set: terrain regrow over the footprint, then broadcast event 5.
@@ -633,31 +591,6 @@ void ClearArea_Finalize8270(void* comp) {
 extern "C" char ClearArea_State1Enter(void* data, void* sm) {
     ResolveStates();
     if (!data) return 1;
-    if (Trace()) { std::fprintf(stderr, "[ClearCtrl] State1Enter (finalize) comp=%p\n", data); std::fflush(stderr); }
-    // One-shot: dump the clear-job entity (comp+0x10 owner) components + removal flag so
-    // we can identify the icon component and see what removes it.
-    static bool s_dumpedJob = false;
-    if (Trace() && !s_dumpedJob) {
-        s_dumpedJob = true;
-        uintptr_t cc = reinterpret_cast<uintptr_t>(data);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(cc + 0x10));
-        void* owner = *reinterpret_cast<void**>(cc + 0x10);
-        uintptr_t oe = reinterpret_cast<uintptr_t>(owner);
-        int cn = *reinterpret_cast<int*>(oe + 0x38);
-        uintptr_t ca = *reinterpret_cast<uintptr_t*>(oe + 0x30);
-        uint32_t eflags = *reinterpret_cast<uint32_t*>(oe + 0x40);
-        std::fprintf(stderr, "[ClearCtrl] JOB owner=%p compCount=%d entityFlags=0x%x (removalBit0x400=%d)\n",
-                     owner, cn, eflags, (eflags >> 10) & 1);
-        for (int j = 0; j < cn && j < 24; ++j) {
-            void** slot = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(j) * 8);
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
-            void* comp = *slot;
-            uint32_t tid = comp ? reinterpret_cast<uint32_t(*)(void*)>((*(void***)comp)[2])(comp) : 0;
-            void* ev = comp ? *reinterpret_cast<void**>((*(uintptr_t*)comp) + 0x60) : nullptr;
-            std::fprintf(stderr, "[ClearCtrl]   job comp[%d]=%p tid=0x%08x eventSlot+0x60=%p\n", j, comp, tid, ev);
-        }
-        std::fflush(stderr);
-    }
     ClearArea_Finalize8270(data);
     ::ControllerLive::RequestStateTransition(sm, 2);   // 1 -> 2
     return 1;
@@ -673,7 +606,6 @@ extern "C" char ClearArea_State2Enter(void* data, void* /*sm*/) {
     if (!data) return 1;
     uintptr_t c = reinterpret_cast<uintptr_t>(data);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
-    if (Trace()) { std::fprintf(stderr, "[ClearCtrl] State2Enter (finalize event 1) comp=%p\n", data); std::fflush(stderr); }
     ClearArea_BroadcastEvent(*reinterpret_cast<void**>(c + 0x10), 1);
     return 1;
 }

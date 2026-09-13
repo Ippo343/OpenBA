@@ -398,10 +398,6 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
     }
 
     // -------- Phase C: raw-material / storage candidate list (param_1[0] / count param_1[1]) --------
-    // [M-D diag] per-gate rejection trace, env BANISHED_STORAGE_TRACE, first 16 lines.
-    static int s_e370Trace = -1;
-    if (s_e370Trace < 0) { const char* e = getenv("BANISHED_STORAGE_TRACE"); s_e370Trace = (e && e[0] && e[0] != '0') ? 16 : 0; }
-    #define E370C_TRACE(...) do { if (s_e370Trace > 0) { --s_e370Trace; fprintf(stderr, __VA_ARGS__); fflush(stderr); } } while (0)
     if (0 < static_cast<int>(param_1[1])) {
         int i = 0;
         int64_t off = 0;
@@ -410,15 +406,11 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
             int64_t candIBP = cand;
             uint32_t cell = s_fn_7fb0 ? s_fn_7fb0(&candIBP, nullptr) : 0;
             int cost = CellCost(mapGrid, cell, param_3);
-            if (cost >= best)
-                E370C_TRACE("[E370C] cand=%d cell=%u REJECT cost=%d best=%d\n", i, cell, cost, best);
             if (cost < best) {
                 int64_t candE = cand;
                 int64_t slotOut[2] = {0, 0};
                 if (s_fn_ef40) s_fn_ef40(reinterpret_cast<void*>(mapGrid), slotOut, &candE, 0);
                 int64_t slot = slotOut[0];
-                if (slot == 0)
-                    E370C_TRACE("[E370C] cand=%d REJECT ef40-no-slot\n", i);
                 if (slot != 0) {
                     // RawMaterialDescription on the ef40-picked slot's comp-list2 (slot+0x28 / +0x30)
                     void* rawMat = ScanCompList2(slot, s_tid_RawMaterialDesc);
@@ -429,8 +421,6 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                     int64_t storIBP = 0;
                     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&storIBP, storComp);
 
-                    if (storIBP == 0)
-                        E370C_TRACE("[E370C] cand=%d REJECT no-StorageLocationComp\n", i);
                     if (storIBP != 0) {
                         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storIBP);
                         int64_t storC = storIBP;
@@ -459,9 +449,6 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                             mask = s ? *reinterpret_cast<uint32_t*>(s + 0x3c) : 0;
                         }
                         uint32_t radiusFlags = rawMat ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rawMat) + 0x5c) : 0;
-                        if ((radiusFlags & mask) == 0)
-                            E370C_TRACE("[E370C] cand=%d REJECT mask rawMat=%p flags=0x%x mask=0x%x\n",
-                                        i, rawMat, radiusFlags, mask);
                         if ((radiusFlags & mask) != 0) {
                             float vec[4] = {0, 0, 0, 0};
                             // 2nd StorageLocationComponent scan over the entity (cost source)
@@ -472,9 +459,6 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
                             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&costIBP);
                             int64_t costSrc = costIBP;
                             int dcost = (costSrc && s_fn_d5d0) ? s_fn_d5d0(costSrc, param_3, vec, 0) : -1;
-                            if (dcost < 0 || dcost >= best)
-                                E370C_TRACE("[E370C] cand=%d REJECT d5d0 cost=%d best=%d costSrc=%p\n",
-                                            i, dcost, best, reinterpret_cast<void*>(costSrc));
                             if ((-1 < dcost) && (dcost < best)) {
                                 param_5[0] = vec[0];
                                 param_5[1] = vec[1];

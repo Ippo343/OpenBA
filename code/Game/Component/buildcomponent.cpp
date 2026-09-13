@@ -26,32 +26,8 @@
 
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 
-// Draw trace (BANISHED_BUILD_TRACE): confirms the per-frame Draw runs for build sites
-// and reports the mesh-list (+0x58/+0x60) fill. Shares the construction trace env var.
-static int s_bcDrawTrace = -1;
-static bool BCDraw_Trace() {
-    if (s_bcDrawTrace < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_TRACE");
-        s_bcDrawTrace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s_bcDrawTrace == 1;
-}
 extern "C" void* g_pConstructionDemoSite;
 
-// BANISHED_MODEL_TRACE — instrumentation for the slot-6 (OnAdded) verification pass.
-// g_BC_OnAddedCalls counts every invocation of BuildComponent_DrawReimpl;
-// g_BC_OnAddedCaller is 1 only while the wired vtable slot 6 is driving it, so an
-// on/off run can tell a real dispatch from the BC8_EnsureMeshList lazy fallback.
-static int s_bcModelTrace = -1;
-static bool BC_ModelTrace() {
-    if (s_bcModelTrace < 0) {
-        const char* e = std::getenv("BANISHED_MODEL_TRACE");
-        s_bcModelTrace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s_bcModelTrace == 1;
-}
-static int g_BC_OnAddedCalls = 0;
-static int g_BC_OnAddedCaller = 0;
 
 // ============================================================
 // Type ID globals needed by BuildComponent
@@ -398,25 +374,7 @@ void BuildComponent_DrawReimpl(void* selfP) {
     // would wrongly suppress that second caller, since it runs precisely when the bit IS
     // set — and that caller is the whole insta-build completion path.
 
-    // BANISHED_MODEL_TRACE — is this OnAdded one-shot invoked at all, and by whom?
-    // It is what fills the site's construction mesh list (+0x58/+0x60) that the
-    // state-8 frame ramp drives. g_BC_OnAddedCaller is set by the slot-6 vslot; any
-    // other entry is the lazy BC8_EnsureMeshList fallback.
-    const int entryCount = (int)((int64_t*)selfP)[0xc];
-    if (BC_ModelTrace()) {
-        ++g_BC_OnAddedCalls;
-        if (g_BC_OnAddedCalls <= 24)
-            std::fprintf(stderr, "[ModelTrace] BuildComponent::OnAdded ENTER #%d via=%s "
-                         "self=%p meshCount=%d\n", g_BC_OnAddedCalls,
-                         g_BC_OnAddedCaller ? "slot6" : "EnsureMeshList",
-                         selfP, entryCount);
-        std::fflush(stderr);
-    }
 
-    bool demoTrace = BCDraw_Trace() && g_pConstructionDemoSite && selfP == g_pConstructionDemoSite;
-    if (demoTrace)
-        std::fprintf(stderr, "[BuildTrace] Draw ENTER demo site=%p meshCount(+0x60)=%d\n",
-                     selfP, (int)self[0xc]);
 
     // --- Stage 1: append the site's own ModelComponent (whose +0x18 ModelDescription
     //     has a non-empty frame group) to the +0x58 mesh list / +0x68 storage list.
@@ -472,9 +430,6 @@ void BuildComponent_DrawReimpl(void* selfP) {
         }
     }
 
-    if (demoTrace)
-        std::fprintf(stderr, "[BuildTrace] Draw after fill: meshCount(+0x60)=%d (tid ModelDesc=%u ModelComp=%u)\n",
-                     (int)self[0xc], s_tid_ModelDesc, s_tid_ModelComp);
 
     // --- Stage 3: walk our collected Build list (+0xb / count +0xc), driving each
     //     child's job hosts; finalise Storage list entries via Entity_impl_8f50.
@@ -554,28 +509,6 @@ void BuildComponent_DrawReimpl(void* selfP) {
             *(int*)((uintptr_t)self + 0x4c) = wpMult;
     }
 
-    if (BC_ModelTrace() && g_BC_OnAddedCalls <= 24) {
-        std::fprintf(stderr, "[ModelTrace] BuildComponent::OnAdded EXIT  #%d self=%p "
-                     "meshCount %d->%d storeCount=%d mult(+0x4c)=%d\n",
-                     g_BC_OnAddedCalls, selfP, entryCount, (int)self[0xc],
-                     (int)self[0xe], *(int*)((uintptr_t)self + 0x4c));
-        // Per collected mesh element: modelVariant (+0x166) and the embedded
-        // MeshInstance's node array (+0x28+0xf0). This is the measurement that decides
-        // whether the tool_base_render.cpp EdgeMeshInstance guard is still load-bearing:
-        // a null nodes= here means running OnAdded did NOT give the model a mesh, so a
-        // selection outline over it would still fault.
-        int mc = (int)self[0xc];
-        for (int i = 0; i < mc && i < 8; ++i) {
-            uintptr_t slot = (uintptr_t)self[0xb] + (uintptr_t)i * 8;
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)slot);
-            uintptr_t me = *(uintptr_t*)slot;
-            if (!me) { std::fprintf(stderr, "[ModelTrace]   mesh[%d] = null\n", i); continue; }
-            std::fprintf(stderr, "[ModelTrace]   mesh[%d] model=%p variant(%d,%d) nodes@+0xf0=%p\n",
-                         i, (void*)me, (int)*(int16_t*)(me + 0x164), (int)*(int16_t*)(me + 0x166),
-                         *(void**)(me + 0x28 + 0xf0));
-        }
-        std::fflush(stderr);
-    }
 }
 
 // ============================================================
@@ -682,8 +615,6 @@ static void BuildComponent_MsgReceive(void* self, int msgCode,
     if (msgCode == 0) {
         int* prog = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(self) + 0x48);
         *prog += 1;
-        if (BCDraw_Trace())
-            std::fprintf(stderr, "[BuildTrace] MsgReceive: credited bc+0x48 -> %d\n", *prog);
     }
 }
 
@@ -768,9 +699,7 @@ static void BuildComponent_OnRemoveVSlot(void* s) {
 // created and appended, so Stage 2 collects every one.
 static void BuildComponent_OnAddedVSlot(void* s) {
     if (!s) return;
-    g_BC_OnAddedCaller = 1;
     BuildComponent_OnAddedThunk(s);
-    g_BC_OnAddedCaller = 0;
 }
 // Slot 3 = Shutdown/Serialize (0x140108d80). The body has been ported in this file
 // since the original wave (BuildComponent_Shutdown, above) but nothing ever wrote it
@@ -788,6 +717,7 @@ static void BuildComponent_ShutdownVSlot(void* self, void* stream) {
 static void BuildComponent_InstallMsgSlot() {
     BuildComponent_LiveVtable[15] = reinterpret_cast<void*>(&BuildComponent_MsgReceive);
     BuildComponent_LiveVtable[3] = reinterpret_cast<void*>(&BuildComponent_ShutdownVSlot);
+    BuildComponent_LiveVtable[6] = reinterpret_cast<void*>(&BuildComponent_OnAddedVSlot);
 
     // Slot 7 (+0x38) is the removed-from-world broadcast, NOT OnCreate — 0x140108cb0 is
     // misnamed in Ghidra exactly like CitizenComponent's 0x140113ca0 was. It removes the
@@ -803,6 +733,4 @@ static void BuildComponent_InstallMsgSlot() {
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILD_ONREMOVE"))
         BuildComponent_LiveVtable[7] = reinterpret_cast<void*>(&BuildComponent_OnRemoveVSlot);
 
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILD_ONADDED"))
-        BuildComponent_LiveVtable[6] = reinterpret_cast<void*>(&BuildComponent_OnAddedVSlot);
 }

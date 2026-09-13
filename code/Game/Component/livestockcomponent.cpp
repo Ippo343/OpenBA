@@ -46,40 +46,16 @@ static void EnsureHelpers() {
 // Reproduction timer: accumulates delta time, fires birth event
 // when threshold exceeded (configInterval * 300.0f seconds -> ticks).
 
-// PRODUCTION-CREDIT METER (BANISHED_PASTURE_TRACE=1). Everything the pasture
-// production panel shows starts here: this body is the ONLY writer of the pasture's
-// accumulator (+0x44). It has four independent early-outs and a panel reading 0 cannot
-// tell them apart, so report the arm taken, not just the outcome
-// (reference_diagnostics_must_report_outcomes).
-static bool Livestock_TraceOn() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_PASTURE_TRACE");
-                 s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s == 1;
-}
-static void Livestock_Report(int arm, const void* self, int64_t acc, int64_t thr) {
-    if (!Livestock_TraceOn()) return;
-    static const char* kArms[6] = {"CREDIT", "NO_PASTURE", "NO_HELPERS", "NO_CONFIG",
-                                   "CONFIG_DATA_0", "BELOW_THRESHOLD"};
-    static long long n[6] = {0, 0, 0, 0, 0, 0};
-    if ((n[arm]++ % 2000) != 0) return;
-    std::fprintf(stderr, "[Livestock] Update -> %s self=%p acc=%lld thr=%lld (n=%lld)\n",
-                 kArms[arm], self, (long long)acc, (long long)thr, n[arm]);
-    std::fflush(stderr);
-}
-
 void LivestockComponent_Update(LivestockComponent* self, int64_t deltaTime) {
     EnsureHelpers();
 
     // Early out: no herd component pointer
     if (self->data28 == 0) {
-        Livestock_Report(1, self, 0, 0);
         return;
     }
 
     // Verify fn_IsDerivedFrom and globals are available
     if (!fn_IsDerivedFrom || !s_pLivestockConfigTypeId || !s_pTimeMultiplier || !g_Timer_secondsPerTick) {
-        Livestock_Report(2, self, 0, 0);
         return;
     }
 
@@ -91,13 +67,11 @@ void LivestockComponent_Update(LivestockComponent* self, int64_t deltaTime) {
 
     // Check if config component has valid data at +0x20
     if (configComponent == nullptr) {
-        Livestock_Report(3, self, 0, 0);
         return;
     }
     int64_t configDataPtr = *reinterpret_cast<int64_t*>(
         reinterpret_cast<uintptr_t>(configComponent) + 0x20);
     if (configDataPtr == 0) {
-        Livestock_Report(4, self, 0, 0);
         return;
     }
 
@@ -114,8 +88,6 @@ void LivestockComponent_Update(LivestockComponent* self, int64_t deltaTime) {
         static_cast<double>(thresholdSeconds) / (*g_Timer_secondsPerTick));
 
     // Fire birth events while accumulator exceeds threshold
-    Livestock_Report(thresholdTicks < static_cast<int64_t>(self->data30) ? 0 : 5,
-                     self, (int64_t)self->data30, thresholdTicks);
     if (thresholdTicks < static_cast<int64_t>(self->data30)) {
         do {
             // Increment birth counter at herdComponent+0x44
@@ -244,7 +216,6 @@ static void LivestockComponent_SerializeVSlot(void* self, void* stream) {
 // (+0x28) and production timer (+0x30) reset to null/0 on load.
 static void LivestockComponent_InstallLive() {
     LivestockComponent_LiveVtable[3] = reinterpret_cast<void*>(&LivestockComponent_SerializeVSlot);
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_PASTURE")) return;
     LivestockComponent_LiveVtable[6] = reinterpret_cast<void*>(&LivestockComponent_OnAddVSlot);
     LivestockComponent_LiveVtable[7] = reinterpret_cast<void*>(&LivestockComponent_OnRemoveVSlot);
     LivestockComponent_LiveVtable[9] = reinterpret_cast<void*>(&LivestockComponent_UpdateVSlot);

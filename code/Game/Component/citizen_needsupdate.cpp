@@ -101,17 +101,6 @@ static void EnsureNeedsUpdateFuncs() {
     if (slot) s_fn_TimeCtorF = *reinterpret_cast<fn_TimeCtorFloat_t*>(slot);
 }
 
-// [EatMsg] trace gate (env BANISHED_STORAGE_TRACE — shared with the world-side
-// storage brick).
-static bool EatMsgTraceOn() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_STORAGE_TRACE");
-        s = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s == 1;
-}
-
 static void SkipTraceOnce(const char* which) {
     static int seen[3] = {0, 0, 0};
     int idx = (which[0] == 'f') ? 0 : (which[0] == '1' && which[1] == '7') ? 1 : 2;
@@ -208,14 +197,6 @@ void CitizenComp_helper_21e0(int64_t selfV, void* param_2) {
     if (!s_fn_2ac30) { SkipTraceOnce("2ac30"); return; }
     if (s_fn_2ac30(*reinterpret_cast<int64_t*>(r2))) {
         *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(selfV) + 0x48) = 0;
-        if (EatMsgTraceOn()) {
-            static int n = 0;
-            if (n < 8) { ++n;
-                fprintf(stderr, "[EatMsg] warm-house: citizen=%p thirst(+0x48) zeroed\n",
-                        reinterpret_cast<void*>(selfV));
-                fflush(stderr);
-            }
-        }
     }
 }
 
@@ -245,16 +226,6 @@ void CitizenComponent_NeedsUpdate(void* selfV, int msg, uint64_t* param_3,
     if (static_cast<unsigned>(msg) > 8) return;   // retail: CMP EDX,8 / JA ret
     uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
 
-    if (EatMsgTraceOn()) {
-        static int n = 0;
-        if (n < 24) { ++n;
-            fprintf(stderr, "[EatMsg] NeedsUpdate: citizen=%p msg=%d target=%p extra=%d\n",
-                    selfV, msg, param_3 ? reinterpret_cast<void*>(*param_3) : nullptr,
-                    param_4);
-            fflush(stderr);
-        }
-    }
-
     switch (msg) {
     case 0: {   // warm-house: zero thirst if target residence passes 2ac30
         uint64_t local = *param_3;
@@ -264,36 +235,11 @@ void CitizenComponent_NeedsUpdate(void* selfV, int msg, uint64_t* param_3,
     case 1: {   // happiness credit — helper_fde0 (0x14010fde0), now ported + registered
         if (s_fn_fde0) s_fn_fde0(reinterpret_cast<int64_t>(selfV), param_4);
         else SkipTraceOnce("fde0");
-        if (std::getenv("BANISHED_BUILD_TRACE")) {
-            static int n = 0;
-            if (n < 20) { ++n;
-                fprintf(stderr, "[HappyMsg] happiness credit: citizen=%p +0xac += %d -> %d\n",
-                        selfV, param_4, *reinterpret_cast<int32_t*>(p + 0xac));
-                fflush(stderr);
-            }
-        }
         return;
     }
     case 2: {   // EAT — drain hunger against the target's storage
         uint64_t local = *param_3;
-        if (EatMsgTraceOn()) {
-            static int n = 0;
-            if (n < 24) { ++n;
-                fprintf(stderr, "[EatMsg] msg2 EAT: citizen=%p hungerBefore=%.3f target=%p\n",
-                        selfV, *reinterpret_cast<float*>(p + 0x44),
-                        reinterpret_cast<void*>(local));
-                fflush(stderr);
-            }
-        }
         CitizenComp_EatFromStorage(reinterpret_cast<int64_t>(selfV), &local);
-        if (EatMsgTraceOn()) {
-            static int n = 0;
-            if (n < 24) { ++n;
-                fprintf(stderr, "[EatMsg] msg2 EAT done: citizen=%p hungerAfter=%.3f\n",
-                        selfV, *reinterpret_cast<float*>(p + 0x44));
-                fflush(stderr);
-            }
-        }
         return;
     }
     case 3: {   // +0x54 |= 0x200 ; +0x50 += DAT_140172114 (0.5f)

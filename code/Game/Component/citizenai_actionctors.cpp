@@ -245,16 +245,6 @@ static void PushMoveTo(void* param_1, int64_t* stack, uint32_t pathType, float* 
         int64_t fam = 0;
         if (s_fn_findFamily) s_fn_findFamily(static_cast<uintptr_t>(entityVal), &fam);
         float speed = Fc(s_pf_172280, -1.0f);
-        {
-            static int s_t = -1, s_n = 0;
-            if (s_t < 0) { const char* e = std::getenv("BANISHED_PF_TRACE"); s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
-            if (s_t == 1 && s_n < 60) { ++s_n;
-                fprintf(stderr, "[PushMoveTo] pathType=%u dest=(%.2f,%.2f,%.2f) mask=0x%x\n",
-                        pathType, dest ? dest[0] : -999.0f, dest ? dest[1] : -999.0f,
-                        dest ? dest[2] : -999.0f, mask);
-                fflush(stderr);
-            }
-        }
         act = s_fn_moveTo ? s_fn_moveTo(mem, &fam, pathType, 0, dest, mask, 0, speed) : mem;
     }
     int64_t ibp = 0;

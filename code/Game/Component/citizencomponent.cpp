@@ -126,30 +126,9 @@ void StatusIcon_Toggle(StatusIconComponent* self, int bit, bool setFlag);
 static void CitizenStatusIcon_SetFlag(void* icon, int flagIndex, char value) {
     if (icon)
         StatusIcon_Toggle(reinterpret_cast<StatusIconComponent*>(icon), flagIndex, value != 0);
-    // BANISHED_ICON_TRACE prints one line per icon that stays out of the scene — see
-    // StatusIcon_Toggle's SHOW-SKIPPED branch, which names the reason (vis=0 is the
-    // StatusIconEnable setting; everything else is a standalone wiring gap).
-    static const bool s_iconTrace = std::getenv("BANISHED_ICON_TRACE") != nullptr;   // PERF: was per call
-    if (s_iconTrace && flagIndex == 5 && value) {
-        static int budget = 6;
-        if (budget-- > 0) {
-            uintptr_t c = reinterpret_cast<uintptr_t>(icon);
-            fprintf(stderr, "[IconTrace] SICK icon=%p mask(+0xF0)=0x%08x sceneId(+0x100)=%d\n",
-                    icon, c ? *(uint32_t*)(c + 0xF0) : 0, c ? *(int32_t*)(c + 0x100) : -1);
-            fflush(stderr);
-        }
-    }
 }
 
 namespace ComponentFactory { bool LiveEnabled(const char* envVar); }  // fwd (full include is further down)
-
-static bool CitizenStatusIconEnabled() {
-    static int cached = -1;
-    if (cached < 0) {
-        cached = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_STATUSICON") ? 1 : 0;
-    }
-    return cached != 0;
-}
 
 // CitizenComponent_AssignWorkplace(self, workplaceIBP, slotIndex)
 // At 0x140114ca0
@@ -234,17 +213,6 @@ static uint32_t* s_DAT_1401722c0 = nullptr; // XOR mask for happiness timer
 
 static bool s_helpersResolved = false;
 
-// BANISHED_BIRTH_TRACE — narrate the delivery/conception path. Off by default; the
-// standalone soak fires a delivery only every few thousand frames, so this is quiet.
-static bool BirthTraceOn() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_BIRTH_TRACE");
-        s = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s != 0;
-}
-
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
 
@@ -287,10 +255,8 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401116f0));  // CitizenComponent::FindStorage (CALL @14011322b in Update)
     // 0x14012c3f0 is registered (reg_component_people.cpp) but these five call sites keep
     // routing through the StatusIcon_Toggle port, which resolves the citizen's own cached
-    // StatusIconComponent at +0x280 (default-off; see CitizenStatusIcon_SetFlag above).
-    s_fn_HealthSetFlag = CitizenStatusIconEnabled()
-                             ? reinterpret_cast<fn_HealthSetFlag_t>(&CitizenStatusIcon_SetFlag)
-                             : nullptr;
+    // StatusIconComponent at +0x280 (see CitizenStatusIcon_SetFlag above).
+    s_fn_HealthSetFlag = reinterpret_cast<fn_HealthSetFlag_t>(&CitizenStatusIcon_SetFlag);
     s_fn_AssignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(
         ResolveAddr(Module::Exe, 0x1401163d0));  // CitizenComponent::AssignWorkplace (7 CALLs in Update)
     s_fn_AssignHousing = reinterpret_cast<fn_AssignHousing_t>(
@@ -377,15 +343,8 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     *reinterpret_cast<float*>(p + 0x3C) = newAge;
 
     // --- Accumulate timers ---
-    // [DIAG HARNESS, default OFF] BANISHED_FUEL_ACCEL=<mult> scales ONLY the food/fuel
-    // timer accumulation so the ConsumeFood/ConsumeFuel (warmth) chain can be exercised
-    // in seconds instead of the ~15 real-minutes one 900s fuel interval needs. Unset/1 =>
-    // byte-identical accumulation.
-    static int64_t s_fuelAccel = -1;
-    if (s_fuelAccel < 0) { const char* e = getenv("BANISHED_FUEL_ACCEL");
-        s_fuelAccel = 1; if (e && e[0]) { long v = atol(e); if (v > 0) s_fuelAccel = v; } }
-    *reinterpret_cast<int64_t*>(p + 0x58) += dt_ticks * s_fuelAccel;   // food timer
-    *reinterpret_cast<int64_t*>(p + 0x90) += dt_ticks * s_fuelAccel;   // fuel timer
+    *reinterpret_cast<int64_t*>(p + 0x58) += dt_ticks;   // food timer
+    *reinterpret_cast<int64_t*>(p + 0x90) += dt_ticks;   // fuel timer
     *reinterpret_cast<int64_t*>(p + 0x1E8) -= dt_ticks;  // education countdown
     if (*reinterpret_cast<int64_t*>(p + 0x208) != 0) {
         *reinterpret_cast<int64_t*>(p + 0x218) += dt_ticks;  // school timer
@@ -436,20 +395,10 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     }
 
     // --- Hunger accumulation ---
-    // [DIAG HARNESS, default OFF] BANISHED_NEEDS_ACCEL=<mult> multiplies ONLY the
-    // hunger/thirst accumulation rate so the eat/drink chain can be exercised in
-    // seconds instead of ~10 sim-minutes (warn threshold ~16 at 0.028/s). Unset
-    // or 1 => byte-identical accumulation (Economy Brick M-D verification).
-    static float s_needsAccel = -1.0f;
-    if (s_needsAccel < 0.0f) {
-        const char* e = getenv("BANISHED_NEEDS_ACCEL");
-        s_needsAccel = 1.0f;
-        if (e && e[0]) { float v = (float)atof(e); if (v > 0.0f) s_needsAccel = v; }
-    }
     if ((gameFlags >> 1 & 1) == 0) {
         float hungerRate = *reinterpret_cast<float*>(desc + 0xC0);
         float hungerDiv = s_DAT_14017225c ? *s_DAT_14017225c : 1.0f;
-        *reinterpret_cast<float*>(p + 0x44) += (dt_sec * s_needsAccel * hungerRate) / hungerDiv;
+        *reinterpret_cast<float*>(p + 0x44) += (dt_sec * hungerRate) / hungerDiv;
     } else {
         *reinterpret_cast<uint32_t*>(p + 0x44) = 0;
     }
@@ -464,7 +413,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         // Thirst rate depends on clothing level (field at +0x1E4)
         int clothingLevel = *reinterpret_cast<int*>(p + 0x1E4);
         float thirstRate = *reinterpret_cast<float*>(desc + 0xDC + (int64_t)clothingLevel * 4);
-        *reinterpret_cast<float*>(p + 0x48) += (dt_sec * s_needsAccel * thirstRate) / fVar14;
+        *reinterpret_cast<float*>(p + 0x48) += (dt_sec * thirstRate) / fVar14;
     }
 
     // --- Handle life event from profession name ---
@@ -835,22 +784,6 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     // section only while it is -1 (no action in flight). A town where nobody ever marries
     // and nobody ever moves out looks identical whether the citizens are children, are
     // already partnered, or are simply never idle — so break the reason out here.
-    {
-        static int s_gateTrace = -1;
-        if (s_gateTrace < 0) s_gateTrace = std::getenv("BANISHED_MARRY_TRACE") ? 1 : 0;
-        if (s_gateTrace) {
-            static int s_n = 0, s_child = 0, s_busy = 0, s_pass = 0;
-            int aiIdx = -999;
-            if (s_fn_CheckPtr_slot) { s_fn_CheckPtr_slot(pCVar1);
-                aiIdx = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(pCVar1) + 0x60); }
-            if (isChildOrStudent) ++s_child; else if (aiIdx + 1 >= 1) ++s_busy; else ++s_pass;
-            if ((++s_n % 2000) == 0) {
-                fprintf(stderr, "[MarryGate] %d calls: child/partnered=%d aiBusy=%d PASS=%d "
-                        "(last aiIdx=%d)\n", s_n, s_child, s_busy, s_pass, aiIdx);
-                fflush(stderr);
-            }
-        }
-    }
     if (isChildOrStudent ||
         (s_fn_CheckPtr_slot && (s_fn_CheckPtr_slot(pCVar1),
          *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(pCVar1) + 0x60) + 1 >= 1)))
@@ -872,35 +805,6 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
                 s_fn_FindHousingAssigned(reinterpret_cast<int64_t>(self), &housingResult);
         }
         int64_t localRes8 = housingResult;
-        static const bool s_hnTrace = std::getenv("BANISHED_CITIZENAI_TRACE") != nullptr;   // was per call
-        if (s_hnTrace) {
-            static int s_hn = 0;
-            if (s_hn < 8) { ++s_hn;
-                uint8_t* gwB = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                    ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr;
-                int64_t mgr = gwB ? *reinterpret_cast<int64_t*>(gwB + 0xf0) : 0;
-                int bcount = (mgr) ? *reinterpret_cast<int*>(mgr + 0x68) : -1;
-                int64_t btree = (mgr) ? *reinterpret_cast<int64_t*>(mgr + 0x100) : 0;
-                // ffc0/0470 both key townMgr+0x100 on citizen+0x1f0 (the citizen's OWN
-                // profession). No workplace ever registers under the laborer/_default
-                // key (both TownRegistry_RegisterWorkplace and retail's edf0 bail on
-                // WPC+0x48 == 0), so a laborer MUST get findResult=0 — correctly, not
-                // as a bug. Print the two keys so that can be read off directly:
-                // czProf == laborerKey on every line => hypothesis proven, nothing to fix.
-                int64_t profList  = gwB ? *reinterpret_cast<int64_t*>(gwB + 0xb0) : 0;
-                int64_t laborerKey = profList
-                    ? *reinterpret_cast<int64_t*>(profList + 0x30) : 0;
-                int64_t czProf = *reinterpret_cast<int64_t*>(
-                    reinterpret_cast<uint8_t*>(self) + 0x1f0);
-                fprintf(stderr, "[HousingAssign] comp=%p findResult=%p (0=no workplace found)"
-                                " townMgr=%p bldgCount=%d profTreeRoot=%p"
-                                " czProf(+0x1f0)=0x%llx laborerKey=0x%llx isLaborer=%d\n",
-                        (void*)self, (void*)housingResult, (void*)mgr, bcount, (void*)btree,
-                        (unsigned long long)czProf, (unsigned long long)laborerKey,
-                        (int)(czProf == laborerKey && laborerKey != 0));
-                fflush(stderr);
-            }
-        }
         if (s_fn_AssignHousing) s_fn_AssignHousing(self, &localRes8);
     } else {
         // Check if should switch workplace (already reimplemented)
@@ -1006,28 +910,6 @@ FindWorkLabel:
                     void* result = s_fn_FindPartner(
                         reinterpret_cast<int64_t>(self), partnerBuf);
                     int64_t partnerIBP = *reinterpret_cast<int64_t*>(result);
-                    // [DIAG, default OFF] BANISHED_MARRY_TRACE=1 — the finder scan is the
-                    // one step the census cannot see: a citizen can clear every gate and
-                    // still get null back because no opposite-gender, unmarried candidate
-                    // sits inside the description's age window (desc+0x4c). Log the first
-                    // 40 calls with the caller's own gender/age so a null result can be
-                    // told apart from "never even asked".
-                    static int s_marryTrace = -1;
-                    if (s_marryTrace < 0)
-                        s_marryTrace = std::getenv("BANISHED_MARRY_TRACE") ? 1 : 0;
-                    if (s_marryTrace) {
-                        static int s_calls = 0, s_hits = 0;
-                        if (partnerIBP != 0) ++s_hits;
-                        if (++s_calls <= 40 || partnerIBP != 0) {
-                            fprintf(stderr, "[Marry] call %d comp=%p gender=%d age=%.2f "
-                                    "marryAge=%.2f window=%.2f -> partner=%p (hits=%d)\n",
-                                    s_calls, (void*)self, *reinterpret_cast<int*>(p + 0x38),
-                                    *reinterpret_cast<float*>(p + 0x3C), partnerAge,
-                                    *reinterpret_cast<float*>(desc + 0x4c),
-                                    (void*)partnerIBP, s_hits);
-                            fflush(stderr);
-                        }
-                    }
                     *reinterpret_cast<int64_t*>(pPartner) = partnerIBP;
                     if (partnerIBP != 0) {
                         *reinterpret_cast<uint32_t*>(p + 0x88) |= 0x200;
@@ -1134,12 +1016,6 @@ LAB_140113873:
                     float pMaternalDeath = (health / maxHealth) *
                                            (deathChanceAtMaxHealth - deathChanceAtZeroHealth) +
                                            deathChanceAtZeroHealth;
-                    if (BirthTraceOn())
-                        std::fprintf(stderr, "[Birth] DELIVERY citizen=%p health=%.2f/%.2f "
-                                     "pMaternalDeath=%.4f roll=%.4f -> %s\n",
-                                     reinterpret_cast<void*>(p), health, maxHealth,
-                                     pMaternalDeath, roll,
-                                     pMaternalDeath <= roll ? "LIVE BIRTH" : "MOTHER DIES");
                     if (pMaternalDeath <= roll) {
                         // Mother survives: deliver the baby.
                         typedef void (*fn_GiveBirth_t)(void* self);
@@ -1148,8 +1024,6 @@ LAB_140113873:
                             s_fn_GiveBirth = reinterpret_cast<fn_GiveBirth_t>(
                                 ResolveAddr(Module::Exe, 0x140111b90));
                         if (s_fn_GiveBirth) s_fn_GiveBirth(self);
-                        else if (BirthTraceOn())
-                            std::fprintf(stderr, "[Birth] 0x140111b90 UNRESOLVED — no baby\n");
 
                         // Post-partum recovery interval.
                         desc = GetDescription(self);
@@ -1967,14 +1841,6 @@ void* CitizenComp_helper_ff80(int64_t self, void* outIBP) {
 // set/clear bit `flagIndex` in the status mask (+0xf0 == param_1[0x1e]); when the mask
 // becomes empty/non-empty, add/remove the geometry from the scene and toggle the +0x20
 // scene id and the +4 "in scene" flag, then notify the owning entity.
-static long g_si_calls = 0, g_si_uninit = 0, g_si_suppressed = 0, g_si_added = 0;
-static int  g_si_prints = 0;
-static bool SiCensusOn() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_SI_CENSUS"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s == 1;
-}
-
 void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) {
     EnsureCallees();
     fn_InternalBasePtr_CheckPtr(param_1 + 2);
@@ -1996,18 +1862,6 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
         // every AddObject and the SceneWatch silence would mean the feature is off, not
         // healthy. So count uninitialised components separately from suppressed adds.
         // See [[reference_diagnostics_must_report_outcomes]].
-        if (SiCensusOn()) {
-            ++g_si_calls;
-            if (!inited) ++g_si_uninit;
-            if ((int)param_1[0x1e] != 0 && !inited) ++g_si_suppressed;
-            if (g_si_prints < 24) {   // this setter fires rarely; print every early call
-                ++g_si_prints;
-                std::fprintf(stderr, "[SIcensus] calls=%ld uninit(geomVtable==0)=%ld "
-                             "suppressedAdds=%ld addObjectDone=%ld\n",
-                             g_si_calls, g_si_uninit, g_si_suppressed, g_si_added);
-                std::fflush(stderr);
-            }
-        }
         if ((int)param_1[0x1e] == 0) {
             // [STANDALONE GUARD] A StatusIconComponent that never ran StartupInit still
             // carries the inert factory's zero-fill: the embedded geometry's vtable
@@ -2060,16 +1914,6 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
                                   : 0xffffffff;
                 *reinterpret_cast<uint32_t*>(param_1 + 0x20) = id;
                 SceneWatch_Note(id, reinterpret_cast<void*>(param_1 + 5), "StatusIcon(12c3f0)::Add");
-                ++g_si_added;
-                // Report the SET arm explicitly. The census above prints only the first
-                // N calls, so without this a registration that happens late would never
-                // appear and "no bad scene nodes" would stay ambiguous between "fixed"
-                // and "never registers anything".
-                if (SiCensusOn() && g_si_added <= 8) {
-                    std::fprintf(stderr, "[SIcensus] ADDOBJECT #%ld id=%u geomVtable=%p\n",
-                                 g_si_added, id, reinterpret_cast<void*>(param_1[5]));
-                    std::fflush(stderr);
-                }
             }
             int64_t timeVal = 0;
             if (s_fn_TimeFromFloat) s_fn_TimeFromFloat(&timeVal, 0.0f);
@@ -2156,9 +2000,6 @@ namespace Object { uint32_t GetTypeIdByName(const char* name); }
 // flag both parent + linked entity (+0x88 |= 0x100).
 void CitizenComp_helper_1b90(int64_t selfV) {
     EnsureCallees();
-    if (BirthTraceOn())
-        std::fprintf(stderr, "[Birth] helper_1b90 ENTER (mother=%p)\n",
-                     reinterpret_cast<void*>(selfV));
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     int64_t list = *reinterpret_cast<int64_t*>(gw + 0xf0);
@@ -2250,8 +2091,6 @@ void CitizenComp_helper_1b90(int64_t selfV) {
     fn_InternalBasePtr_CheckPtr(&aiIBP);
     if (s_fn_FUN_140117080)
         s_fn_FUN_140117080(aiIBP, pos, gender, '\x01', 0, '\0', &parentIBP, spawnArg);
-    else if (BirthTraceOn())
-        std::fprintf(stderr, "[Birth] 0x140117080 (per-citizen init) UNRESOLVED\n");
 
     fn_InternalBasePtr_CheckPtr(self + 0x10);
     int64_t addArg = childIBP;
@@ -2259,49 +2098,6 @@ void CitizenComp_helper_1b90(int64_t selfV) {
         int64_t desc = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(self + 0x10) + 0x28);
         s_fn_FUN_1400c48a0(*reinterpret_cast<void**>(gw + 0xe8), &addArg,
                            *reinterpret_cast<int*>(desc + 0x20));
-    } else if (BirthTraceOn()) {
-        std::fprintf(stderr, "[Birth] 0x1400c48a0 (EntityList register) UNRESOLVED — the "
-                     "newborn exists but is in no list\n");
-    }
-    if (BirthTraceOn()) {
-        int64_t tm = *reinterpret_cast<int64_t*>(gw + 0xf0);
-        std::fprintf(stderr, "[Birth] BABY BORN: parent=%p child=%p citizenComp=%p gender=%u "
-                     "pos=(%.1f,%.1f,%.1f) townCount(+0xa8)=%d\n",
-                     reinterpret_cast<void*>(selfV), child, aiComp, gender,
-                     pos[0], pos[1], pos[2],
-                     tm ? *reinterpret_cast<int*>(tm + 0xa8) : -1);
-        // Carry capacity of the NEWBORN, read after RegisterEntity — i.e. after
-        // ComponentEntity_OnAddedPass has broadcast vtable slot 6. This is the only place
-        // the birth arm of BANISHED_LIVE_STORAGE_ONADDED can be observed: the four
-        // starttown.cpp hand-calls only ever covered the founding cohort, so a newborn with
-        // capacity 0 is what freezes the game later (PickupStoredRawMaterial requests 0 ->
-        // AddItem appends a {resType,0} stack -> Pf_SpillAllStorage_7570 spins forever).
-        // Report it either way; "no line" must not be readable as "fine".
-        typedef void* (*fn_FindStorage_t)(uintptr_t, void*);
-        static fn_FindStorage_t s_findStorage = nullptr;
-        static bool s_findStorageTried = false;
-        if (!s_findStorageTried) {
-            s_findStorageTried = true;
-            s_findStorage = reinterpret_cast<fn_FindStorage_t>(
-                ResolveAddr(Module::Exe, 0x140006270));   // Entity_FindComponent_Storage
-        }
-        if (!s_findStorage) {
-            std::fprintf(stderr, "[Birth]   carry capacity UNKNOWN — 0x140006270 unresolved\n");
-        } else {
-            uintptr_t stIbp = 0;
-            s_findStorage(reinterpret_cast<uintptr_t>(child), &stIbp);
-            if (!stIbp) {
-                std::fprintf(stderr, "[Birth]   newborn has NO StorageComponent — it can "
-                             "carry nothing\n");
-            } else {
-                fn_InternalBasePtr_CheckPtr(&stIbp);
-                int cap = *reinterpret_cast<int*>(stIbp + 0x38);
-                std::fprintf(stderr, "[Birth]   newborn carry capacity(+0x38)=%d%s\n", cap,
-                             cap == 0 ? "  <-- ZERO: slot 6 did not run for the newborn"
-                                      : "  (slot 6 ran)");
-            }
-        }
-        std::fflush(stderr);
     }
     fn_InternalBasePtr_CheckPtr(&aiIBP);
     // Post "child born" (event type 8) for the newborn.
@@ -2351,14 +2147,6 @@ static int64_t StandaloneFindStorageComp(void* entity) {
     }
     return 0;
 }
-static bool EatStorageTraceOn() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_STORAGE_TRACE");
-        s = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s == 1;
-}
 void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
     EnsureCallees();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
@@ -2389,15 +2177,6 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
 
     float uv = s_pUVScale ? *s_pUVScale : 1.0f;
     float hours = *reinterpret_cast<float*>(self + 0x44);
-    if (EatStorageTraceOn()) {
-        static int n = 0;
-        if (n < 24) { ++n;
-            fprintf(stderr, "[EatMsg] EatFromStorage: citizen=%p hunger=%.3f store=%p step=%.3f\n",
-                    reinterpret_cast<void*>(selfV), hours,
-                    reinterpret_cast<void*>(storeIBP), uv);
-            fflush(stderr);
-        }
-    }
     do {
         if (hours <= 0.0f) return;
         int64_t arg = *reinterpret_cast<int64_t*>(param2);
@@ -2439,15 +2218,6 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
         // 0x20-byte stride, count at +0xC).
         fn_InternalBasePtr_CheckPtr(&storeIBP);
         if (s_fn_FUN_14012d150) s_fn_FUN_14012d150(storeIBP, work, 1);
-        if (EatStorageTraceOn()) {
-            static int n = 0;
-            if (n < 24) { ++n;
-                fprintf(stderr, "[EatMsg]   eat unit: material=%p hungerBefore=%.3f\n",
-                        reinterpret_cast<void*>(work),
-                        *reinterpret_cast<float*>(self + 0x44));
-                fflush(stderr);
-            }
-        }
         int64_t worldGrid = *reinterpret_cast<int64_t*>(
             reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
         if (s_fn_FUN_140088f90) {
@@ -2542,12 +2312,6 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     int64_t townMgr = *reinterpret_cast<int64_t*>(gw + 0xf0);
 
-    static int s_phase1Diag = -1;
-    if (s_phase1Diag < 0) {
-        const char* e = getenv("BANISHED_PHASE1_EMPLOY");
-        s_phase1Diag = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-
     // Component finder on an entry entity (comp list +0x30 array / +0x38 count,
     // GetTypeId via vtable+0x10, then IsDerivedFrom). Matches Entity_FindComponent_*.
     auto FindEntityComp = [](int64_t entity, uint32_t* typeIdPtr) -> void* {
@@ -2617,10 +2381,6 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
 
     int count = *reinterpret_cast<int*>(townMgr + 0x28);
     int* mapInfo = *reinterpret_cast<int**>(gw + 0xf8);
-    if (s_phase1Diag)
-        fprintf(stderr, "[Phase1Employ] sub_0e70 self=%p townMgr=%p regCount=%d param4=%d\n",
-                reinterpret_cast<void*>(param_1), reinterpret_cast<void*>(townMgr),
-                count, (int)param_4);
 
     // The original computes the home cell then loops the registry; when the registry
     // is empty the home block is dead (its result is only read inside the loop), so we
@@ -2700,9 +2460,6 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
                         if (*reinterpret_cast<int*>(resIBP + 0x58) == 1) {
                             *param_3 = slot;
                             *reinterpret_cast<int64_t*>(param_2) = entry;
-                            if (s_phase1Diag)
-                                fprintf(stderr, "[Phase1Employ] FULL-FREE entry=%p slot=%d\n",
-                                        reinterpret_cast<void*>(entry), slot);
                             return param_2;
                         }
                         fn_InternalBasePtr_CheckPtr(&resIBP);
@@ -2718,9 +2475,6 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
         if (bestPartial != 0) {
             *param_3 = bestSlot;
             *reinterpret_cast<int64_t*>(param_2) = bestPartial;
-            if (s_phase1Diag)
-                fprintf(stderr, "[Phase1Employ] PARTIAL entry=%p slot=%d\n",
-                        reinterpret_cast<void*>(bestPartial), bestSlot);
             return param_2;
         }
     }
@@ -2761,33 +2515,6 @@ char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2) {
     int regionId = s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&ibpVal, nullptr) : 0;
     uint32_t cellIdx = static_cast<uint32_t>(mapW * tileY + tileX);
     char res = s_fn_FUN_140a00f0 ? (char)s_fn_FUN_140a00f0(mapInfo, 0xe1f, cellIdx, regionId) : 0;
-    static const bool s_cwTrace = std::getenv("BANISHED_CITIZENAI_TRACE") != nullptr;   // was per call (every idle citizen, every tick)
-    if (s_cwTrace) {
-        static int s_cwn = 0;
-        if (s_cwn < 8) { ++s_cwn;
-            // The last gate in FUN_1400a00f0 is the per-cell region id (tile+0x26)
-            // in the stride-0x30 tile array at mapInfo+0x80; a same-cell query can
-            // only fail when that id is 0. Print both tiles' kind (+0x29) and
-            // region id so "positions are wrong" and "the grid was never stamped"
-            // stop looking alike.
-            const uint8_t* tiles = *reinterpret_cast<uint8_t* const*>(
-                reinterpret_cast<const uint8_t*>(mapInfo) + 0x80);
-            unsigned srcRegion = 0, dstRegion = 0, srcKind = 0, dstKind = 0;
-            if (tiles) {
-                const uint8_t* ts = tiles + (size_t)cellIdx * 0x30;
-                const uint8_t* td = tiles + (size_t)regionId * 0x30;
-                srcRegion = *reinterpret_cast<const uint16_t*>(ts + 0x26);
-                dstRegion = *reinterpret_cast<const uint16_t*>(td + 0x26);
-                srcKind = ts[0x29];
-                dstKind = td[0x29];
-            }
-            fprintf(stderr, "[CheckWP] citizenCell=%u workplaceCell=%d mapW=%d res=%d\n"
-                            "          tiles=%p srcRegion=%u dstRegion=%u srcKind=%u dstKind=%u\n",
-                    cellIdx, regionId, mapW, (int)res,
-                    (const void*)tiles, srcRegion, dstRegion, srcKind, dstKind);
-            fflush(stderr);
-        }
-    }
     return res;
 }
 
@@ -2947,7 +2674,6 @@ void CitizenComp_ConsumeFuel(CitizenComponent* param_1) {
 
     uint32_t f = *reinterpret_cast<uint32_t*>(p + 0x88);
     float* acc = reinterpret_cast<float*>(p + 0x80);
-    float warmBefore = *acc;   // [WarmTrace] snapshot before this tick's recompute
     if ((f & 2) != 0)    *acc -= c1a8;
     if ((f & 0x40) != 0) *acc -= c174;
     if ((char)f < 0)     *acc -= c194;   // bit 7 of low byte
@@ -3016,20 +2742,6 @@ void CitizenComp_ConsumeFuel(CitizenComponent* param_1) {
     float capA4 = *reinterpret_cast<float*>(desc + 0xa4);
     if (capA4 < *acc) *acc = capA4;
 
-    // [WarmTrace] gated on BANISHED_STORAGE_TRACE — verify houses/citizens stay warm.
-    // Prints warmth accumulator (+0x80) before/after, its cap (desc+0xa4), and the
-    // computed heating demand target (fVar5). Capped to avoid log spam.
-    {
-        static int s_wt = -1;
-        if (s_wt < 0) { const char* e = std::getenv("BANISHED_STORAGE_TRACE");
-                        s_wt = (e && e[0] && e[0] != '0') ? 40 : 0; }
-        if (s_wt > 0) { --s_wt;
-            fprintf(stderr, "[WarmTrace] citizen=%p warm %.3f->%.3f cap=%.3f target=%.3f home238=%p\n",
-                    (void*)param_1, warmBefore, *acc, capA4, fVar5,
-                    (void*)*reinterpret_cast<int64_t*>(p + 0x238));
-            fflush(stderr);
-        }
-    }
 }
 
 // ============================================================
@@ -3044,20 +2756,6 @@ void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
     EnsureCallees();
     uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
     int64_t* slot = reinterpret_cast<int64_t*>(p + 0x248);
-    // Trace THIS function's own caller. Tracing it from inside Detach only ever
-    // re-identified AssignHousing itself; the interesting frame is one level up, and
-    // guessing which of its call sites it was has been wrong three times. Fires only
-    // when a job is actually being dropped (*slot != 0 -> Detach).
-    static const bool s_seatTrace = std::getenv("BANISHED_SEAT_TRACE") != nullptr;
-    if (*slot != 0 && s_seatTrace) {
-        fprintf(stderr, "[SeatWho] AssignHousing citizen=%p oldJob=0x%llx newJob=0x%llx "
-                        "prof(+0x1f0)=0x%llx ret=%p\n",
-                (void*)param_1, (unsigned long long)*slot,
-                (unsigned long long)(param_2 ? *param_2 : 0),
-                (unsigned long long)*reinterpret_cast<int64_t*>(p + 0x1f0),
-                __builtin_return_address(0));
-        fflush(stderr);
-    }
     if (*slot != 0) {
         fn_InternalBasePtr_CheckPtr(slot);
         int64_t buildingIBP = 0;
@@ -3525,56 +3223,8 @@ static void CitizenComponent_BodyInit(CitizenComponent* self) {
         // zeroes it, and the Update old-age death check (maxAge <= age) would fire
         // immediately once a non-zero adult age is present. Default-off so a plain
         // BANISHED_LIVE_CITIZEN run stays byte-identical.
-        static int s_adults = -1;
-        if (s_adults < 0) {
-            const char* e = std::getenv("BANISHED_SPAWN_ADULTS");
-            s_adults = (e && e[0] && e[0] != '0') ? 1 : 0;
-        }
-        if (s_adults == 1) {
-            void* rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                ? *reinterpret_cast<void**>(
-                      reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xd8)
-                : nullptr;
-            float adultAge = *reinterpret_cast<float*>(d + 0x44);
-            float adultMin = *reinterpret_cast<float*>(d + 0x50);
-            float reproMax = *reinterpret_cast<float*>(d + 0x54);
-            float maxBase  = *reinterpret_cast<float*>(d + 0x38);
-            float maxTol   = *reinterpret_cast<float*>(d + 0x3c);
-            float r1 = (rng && fn_Random_RandFloat) ? fn_Random_RandFloat(rng) : 0.5f;
-            float r2 = (rng && fn_Random_RandFloat) ? fn_Random_RandFloat(rng) : 0.5f;
-            float age = r1 * (reproMax * 0.5f - adultMin) + adultMin;
-            if (age < adultAge) age = adultAge;                  // guarantee adult
-            float maxAge = r2 * maxTol + maxBase;
-            if (maxAge <= age) maxAge = age + maxTol + 1.0f;     // never born old
-            *reinterpret_cast<float*>(p + 0x3C) = age;
-            *reinterpret_cast<float*>(p + 0x40) = maxAge;
-
-            static int s_an = 0;
-            if (s_an < 6) { ++s_an;
-                fprintf(stderr, "[SpawnAdults] comp=%p age=%.2f adultAge=%.2f maxAge=%.2f\n",
-                        (void*)self, age, adultAge, maxAge);
-                fflush(stderr);
-            }
-        }
     }
 
-    // Bring-up trace (shared env with Brick 1).
-    {
-        static int s_traceState = -1;
-        static int s_traceCount = 0;
-        if (s_traceState < 0) {
-            const char* e = std::getenv("BANISHED_CITIZENAI_TRACE");
-            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_traceState == 1 && s_traceCount < 8) {
-            fprintf(stderr, "[CitizenBodyInit] comp=%p owner=%p desc=%p family=%p mesh=%p\n",
-                    (void*)self, (void*)owner, desc,
-                    *reinterpret_cast<void**>(p + 0x278),
-                    *reinterpret_cast<void**>(p + 0x280));
-            fflush(stderr);
-            s_traceCount++;
-        }
-    }
 }
 
 // ------------------------------------------------------------------
@@ -3586,35 +3236,15 @@ static void CitizenComponent_BodyInit(CitizenComponent* self) {
 // a citizen only gets Work (id 5) as a candidate once it is HOUSED (+0x68 != 0)
 // and/or EMPLOYED (+0x238 != 0) — both assigned here. Inert until now.
 //
-// Promoted STARTUP -> _S: Startup stays on BANISHED_LIVE_CITIZEN (unchanged); the
-// heavy Update runs only when the SEPARATE env BANISHED_LIVE_CITIZEN_UPDATE is set
-// (default-off => byte-identical to the Startup-only brick). Crash-safe guards bail
-// until the body is populated + the world singleton is live. ~25 sub-calls — expect
-// to chase dominoes; bring up incrementally.
+// Crash-safe guards bail until the body is populated + the world singleton is live.
 static void CitizenComponent_UpdateAdapter(CitizenComponent* self, int64_t* time) {
-    static int en = -1;
-    if (en < 0) {
-        en = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_UPDATE") ? 1 : 0;
-    }
-    if (!en || !self) return;
+    if (!self) return;
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
     // GUARD: Update derefs the CitizenDescription (+0x288, set by BodyInit), the
     // owner entity (+0x10), and the GameWorld weather (+0x130). Bail until ready.
     if (*reinterpret_cast<void**>(p + 0x288) == nullptr) return;
     if (*reinterpret_cast<void**>(p + 0x10)  == nullptr) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-
-    static int s_trace = -1, s_tn = 0;
-    if (s_trace < 0) {
-        const char* e = std::getenv("BANISHED_CITIZENAI_TRACE");
-        s_trace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    if (s_trace == 1 && s_tn < 6) { ++s_tn;
-        fprintf(stderr, "[CitizenUpdate] comp=%p house+0x68=%p workplace+0x238=%p\n",
-                (void*)self, *reinterpret_cast<void**>(p + 0x68),
-                *reinterpret_cast<void**>(p + 0x238));
-        fflush(stderr);
-    }
 
     CitizenComponent_Update(self, reinterpret_cast<void*>(time));
 }
@@ -3702,21 +3332,16 @@ static void CitizenComponent_FinishLiveVtable() {
     // SetupAgeMesh for citizens whose action stack is EMPTY, so busy ones never heal.
     CitizenComponent_LiveVtable[11] =
         reinterpret_cast<void*>(&CitizenComponent_PostLoadVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_ONADD"))
-        CitizenComponent_LiveVtable[6] =
-            reinterpret_cast<void*>(&CitizenComponent_OnAddVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_ONREMOVE"))
-        CitizenComponent_LiveVtable[7] =
-            reinterpret_cast<void*>(&CitizenComponent_OnRemoveVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN")) {
-        CitizenComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&CitizenComponent_StartupVSlot);
-        CitizenComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&CitizenComponent_UpdateVSlot);
-    }
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGE"))
-        CitizenComponent_LiveVtable[15] =
-            reinterpret_cast<void*>(&CitizenComponent_NeedsUpdateVSlot);
+    CitizenComponent_LiveVtable[6] =
+        reinterpret_cast<void*>(&CitizenComponent_OnAddVSlot);
+    CitizenComponent_LiveVtable[7] =
+        reinterpret_cast<void*>(&CitizenComponent_OnRemoveVSlot);
+    CitizenComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&CitizenComponent_StartupVSlot);
+    CitizenComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&CitizenComponent_UpdateVSlot);
+    CitizenComponent_LiveVtable[15] =
+        reinterpret_cast<void*>(&CitizenComponent_NeedsUpdateVSlot);
 }
 // Faithful port of the scalar half of CitizenComponent::CitizenComponent
 // (0x140114770). MUST run at CONSTRUCTION, not at Startup.
