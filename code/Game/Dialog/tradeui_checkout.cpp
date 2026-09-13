@@ -57,8 +57,8 @@
 // The gate BANISHED_LIVE_TRADE_CHECKOUT remains, because this function mutates
 // storage, town resource counters and the town availability pools, and that has
 // to be exercised before it can be trusted by default (the CLAUDE.md rule that
-// unproven features start outside kDefaultOnFlags). Once a run shows a purchase
-// committing correctly, this moves into kDefaultOnFlags and the flag becomes a
+// unproven features start outside the default-on table). Once a run shows a purchase
+// committing correctly, this moves into the default-on table and the flag becomes a
 // kill-switch.
 //
 // With the gate OFF the click is inert — which is exactly the "pressing Trade
@@ -109,17 +109,6 @@ void ResolveOnce() {
                                ResolveAddr(Module::Exe, 0x1401c7b68));
     s_tidLivestockDesc   = reinterpret_cast<const uint32_t*>(
                                ResolveAddr(Module::Exe, 0x1401c79a8));
-}
-
-// GRADUATED 2026-08-22 — routed through ComponentFactory::LiveEnabled, which consults
-// kDefaultOnFlags, so BANISHED_LIVE_TRADE_CHECKOUT is now a KILL-SWITCH (=0) rather than
-// an opt-in. This was a raw getenv() before, and a raw getenv() cannot see the table at
-// all: adding the name to kDefaultOnFlags without this change would have looked like a
-// graduation and changed nothing (the SPAWN_DOSPAWN trap).
-bool CheckoutEnabled() {
-    static int s_on = -1;
-    if (s_on < 0) s_on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_CHECKOUT") ? 1 : 0;
-    return s_on != 0;
 }
 
 // Probe a purchased entity's component array for an object of a given type-id.
@@ -248,17 +237,6 @@ extern "C" void TradeDescription_ExtendMerchantStay(void* tradeComp) {
 // pass zeroes, and it ignores them.
 extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/, int64_t /*p4*/) {
     if (!self) return;
-    if (!CheckoutEnabled()) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            s_warned = true;
-            fprintf(stderr, "[TradeUI] buttonTrade clicked but the checkout is OPT-IN: "
-                            "set BANISHED_LIVE_TRADE_CHECKOUT=1 to commit trades. "
-                            "Ignoring the click.\n");
-            fflush(stderr);
-        }
-        return;
-    }
     ResolveOnce();
 
     uintptr_t s = reinterpret_cast<uintptr_t>(self);

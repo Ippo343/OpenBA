@@ -242,15 +242,6 @@ void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
 // owner's MultiObject children. For each child's MapComponent (DAT_1401c7900),
 // scan its job hosts for an InteractComponent and append it to the +0x28 list.
 // Faithful port of the Ghidra decompilation.
-static bool IC_Trace() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_TRACE");
-        on = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return on == 1;
-}
-
 void InteractComponent_Draw(InteractComponent* self) {
     EnsureHelpers();
     uintptr_t selfA = (uintptr_t)self;
@@ -258,10 +249,6 @@ void InteractComponent_Draw(InteractComponent* self) {
     if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(selfA + 0x10));
     int64_t multiBuf = 0;
     if (s_fn_FindMultiObjComp) s_fn_FindMultiObjComp(*(uintptr_t*)(selfA + 0x10), &multiBuf);
-    if (IC_Trace())
-        std::fprintf(stderr, "[Interact] Draw self=%p owner=%p multiObj=%p findFn=%p\n",
-                     self, *(void**)(selfA + 0x10), (void*)multiBuf,
-                     (void*)s_fn_FindMultiObjComp);
     if (multiBuf == 0) return;
 
     // Clear the existing use-location array
@@ -327,9 +314,6 @@ void InteractComponent_Draw(InteractComponent* self) {
         }
         if (s_fn_CheckPtr) s_fn_CheckPtr(&multiBuf);
     }
-    if (IC_Trace())
-        std::fprintf(stderr, "[Interact] Draw self=%p children=%d from %d MultiObject "
-                     "entries\n", self, *(int*)(selfA + 0x30), childCount);
 }
 
 // ============================================================
@@ -373,7 +357,7 @@ void InteractComponent_InitFuncs() {
 // With the list empty, GatherRawMaterials bailed "no target pos (found==0)" on every tick
 // and no material was ever hauled to a bridge.
 //
-// Graduated default-on 2026-07-30 (kDefaultOnFlags; BANISHED_LIVE_INTERACT_ONADD=0 is the
+// Graduated default-on 2026-07-30 (the default-on table; BANISHED_LIVE_INTERACT_ONADD=0 is the
 // kill-switch). The same gap blocks a fenced PASTURE master, whose description carries zero
 // access points of its own (measured accessPts=0), so every haul bailed "no target pos" and
 // the site never took a single log. With the slot live the master rebuilds children=1 from
@@ -399,16 +383,8 @@ static void InteractComponent_ShutdownVSlot(void* self, void* stream) {
 static void InteractComponent_FinishVtable() {
     InteractComponent_InertVtable[3] =
         reinterpret_cast<void*>(&InteractComponent_ShutdownVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_INTERACT_ONADD")) {
-        InteractComponent_InertVtable[6] =
-            reinterpret_cast<void*>(&InteractComponent_OnAddedVSlot);
-        static bool once = false;
-        if (!once && IC_Trace()) {
-            once = true;
-            std::fprintf(stderr, "[Interact] slot6 OnAdded installed (vtable=%p)\n",
-                         (void*)InteractComponent_InertVtable);
-        }
-    }
+    InteractComponent_InertVtable[6] =
+        reinterpret_cast<void*>(&InteractComponent_OnAddedVSlot);
 }
 extern "C" void* InteractComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x81,

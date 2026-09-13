@@ -315,99 +315,6 @@ void WorkBase_Serialize_f7400(void* self, void* stream) {
     if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(ser);
 }
 
-// Reimpl of FUN_1400f7100 (Work::CanStartWork / ValidateTask) — does the given
-// CitizenAIComponent IBP currently own a CompleteTask whose id (+0x30) matches this
-// Work's task id (self+0x20)? The CitizenAIComponent's action container is at +0x278
-// (array base +0x48, count +0x60 inclusive). Returns 1 (+ the matching task IBP through
-// `out`) on the first match, else 0.
-// Caller signature: uint8_t fn(void* self, void* citizenAI, void* taskIBP, void** out)
-// ---- BANISHED_WORKVALIDATE_TRACE diagnostic helpers (see the call site below) ----
-// Runtime's Object::IsA (0x1800491c0) is  RAX=[RCX]; CALL [RAX+0x10]  -- it CALLS the
-// object's vtable slot 2. A work-area BST entry holding a dead citizen therefore EXECs
-// whatever sits in the recycled first qword. Retail's HarvestArea::Slot9 (0x1400ec930)
-// passes the same raw entry, so a bad object here means the 'BST entry => live citizen'
-// invariant was broken UPSTREAM; this probe names the entry instead of dying inside a
-// Runtime call with no frame of its own. Default off; byte-unchanged when unset.
-//
-// A dead object's vtable is a canonical, plausible-looking address (0x0000079700000552
-// in the observed crash), so no range test on the value can spot it. VirtualQuery is the
-// only reliable check: a real vtable lives on a COMMITTED, READABLE page.
-void* g_WorkValidateNode = nullptr;
-bool  g_WorkValidateTraceOn = false;
-
-static bool WorkValidate_TraceOn() {
-    static int on = -1;
-    if (on < 0) { const char* e = std::getenv("BANISHED_WORKVALIDATE_TRACE");
-                  on = (e && e[0] && e[0] != '0') ? 1 : 0; g_WorkValidateTraceOn = on != 0; }
-    return on != 0;
-}
-
-static bool WorkValidate_Readable(const void* p, size_t n) {
-    MEMORY_BASIC_INFORMATION mbi;
-    if (!p || !VirtualQuery(p, &mbi, sizeof(mbi))) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
-                           PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-    if (!(mbi.Protect & readable) || (mbi.Protect & PAGE_GUARD)) return false;
-    const uintptr_t end = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
-    return reinterpret_cast<uintptr_t>(p) + n <= end;
-}
-
-// VirtualQuery is a syscall and ValidateTask is a hot path -- querying on every call
-// perturbs timing enough to hide the very race being hunted (the first four probe runs
-// saw zero hits where an unprobed run had crashed). Every live citizen shares ONE
-// vtable, so a tiny cache of already-verified vtable pointers turns the common case
-// into a single compare and leaves the syscall for genuinely new values only.
-static bool WorkValidate_VtableOk(void* vt) {
-    static void* good[8] = {nullptr};
-    static int   nGood   = 0;
-    for (int i = 0; i < nGood; ++i) if (good[i] == vt) return true;
-    if (!WorkValidate_Readable(vt, 0x18)) return false;
-    if (nGood < 8) good[nGood++] = vt;
-    return true;
-}
-// Same cost argument for the object pointer itself: cache 64K-region readability in a
-// direct-mapped table so the steady state is a shift and one compare.
-static bool WorkValidate_RegionOk(const void* p) {
-    if (!p) return false;
-    const uintptr_t region = reinterpret_cast<uintptr_t>(p) >> 16;
-    static uintptr_t cache[128] = {0};
-    uintptr_t& slot = cache[region & 127];
-    if (slot == region) return true;
-    if (!WorkValidate_Readable(p, 8)) return false;
-    slot = region;
-    return true;
-}
-
-static void WorkValidate_ReportBadObject(void* self, void* taskIBP, void* obj) {
-    if (!WorkValidate_RegionOk(obj)) {
-        std::fprintf(stderr, "[WorkValidate] work=%p ibp=%p obj=%p UNREADABLE OBJECT\n",
-                     self, taskIBP, obj);
-        std::fflush(stderr);
-        return;
-    }
-    void* vt = *reinterpret_cast<void**>(obj);
-    if (WorkValidate_VtableOk(vt)) return;                // healthy vtable -- say nothing
-    std::fprintf(stderr, "[WorkValidate] work=%p ibp=%p obj=%p BAD VTABLE=%p\n",
-                 self, taskIBP, obj, vt);
-    if (g_WorkValidateNode && WorkValidate_RegionOk(g_WorkValidateNode)) {
-        const unsigned* n = reinterpret_cast<const unsigned*>(g_WorkValidateNode);
-        std::fprintf(stderr, "[WorkValidate]   node=%p key=%u ibp=%p parent=%p left=%p right=%p\n",
-                     g_WorkValidateNode, n[0],
-                     *reinterpret_cast<void* const*>(reinterpret_cast<const char*>(g_WorkValidateNode) + 0x08),
-                     *reinterpret_cast<void* const*>(reinterpret_cast<const char*>(g_WorkValidateNode) + 0x10),
-                     *reinterpret_cast<void* const*>(reinterpret_cast<const char*>(g_WorkValidateNode) + 0x18),
-                     *reinterpret_cast<void* const*>(reinterpret_cast<const char*>(g_WorkValidateNode) + 0x20));
-    }
-    if (WorkValidate_Readable(obj, 0x40)) {
-        const unsigned char* b = reinterpret_cast<const unsigned char*>(obj);
-        std::fprintf(stderr, "[WorkValidate]   obj[0x00..0x40]:");
-        for (int i = 0; i < 0x40; ++i)
-            std::fprintf(stderr, (i % 16) ? " %02x" : "  |%02x", b[i]);
-        std::fprintf(stderr, "\n");
-    }
-    std::fflush(stderr);
-}
 uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskIBP, void** out) {
     if (*reinterpret_cast<uintptr_t*>(taskIBP) == 0) return 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(taskIBP);
@@ -420,7 +327,6 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
     // and every registered haul task is judged invalid, driving the enqueue↔invalidate reset
     // loop that stops any construction haul from completing.
     if (!ciTid) { static uint32_t v = 0; if (!v) v = ::Object::GetTypeIdByName("CitizenComponent"); ciTid = v; }
-    if (WorkValidate_TraceOn()) WorkValidate_ReportBadObject(self, taskIBP, obj);
     if (!fn_IsA || !ciTid || !fn_IsA(obj, ciTid)) return 0;
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(taskIBP);

@@ -173,19 +173,6 @@ void ToolbarDescription_Serialize(void* self, void* stream) {
 
 #if defined(_DEBUG)
     if (loading && count > 0) {
-        if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
-            static int s_n = 0;
-            if (s_n < 8) {
-                ++s_n;
-                uint8_t* b = *(uint8_t**)(s + 0x50);
-                uint64_t s0 = (b && count > 0) ? *(uint64_t*)b : 0;
-                uint64_t s1 = (b && count > 1) ? *(uint64_t*)(b + 8) : 0;
-                std::fprintf(stderr, "[ToolbarDesc::load] self=%p arr@+0x50=%p count=%d "
-                             "str0=\"%.40s\" str1=\"%.40s\"\n", self, (void*)b, count,
-                             s0 ? (const char*)s0 : "", s1 ? (const char*)s1 : "");
-                std::fflush(stderr);
-            }
-        }
     }
 #endif
 }

@@ -80,17 +80,6 @@ static void RP_Resolve() {
     s_resolved = true;
 }
 
-// One-shot bring-up trace. Default off; BANISHED_RESOURCEPRODUCE_TRACE=1 enables.
-// Reports OUTCOMES (which state, whether the post/accept actually happened), never
-// just intent — a silent handler and an absent handler must not look the same.
-static bool RP_Trace() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_RESOURCEPRODUCE_TRACE");
-        s = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s == 1;
-}
 
 // The component's own vtable slot, by index. The RPC vtable is 22 slots wide; the
 // production hooks are 18..21. Slot 18 is _purecall in the base, so a subclass that
@@ -108,9 +97,6 @@ static char RP_State2Enter(void* self, void* sm) {
     const uint8_t paused = *reinterpret_cast<uint8_t*>(
         reinterpret_cast<uintptr_t>(self) + 0x48);
     const int target = paused ? 14 : 13;
-    if (RP_Trace())
-        std::fprintf(stderr, "[RPTrace] State2Enter self=%p paused=%u -> request %d\n",
-                     self, (unsigned)paused, target);
     ::ControllerLive::RequestStateTransition(sm, target);
     return 0;
 }
@@ -128,8 +114,6 @@ static char RP_State13Enter(void* self, void* sm) {
 
     // Entry trace as well as the outcome trace below: without it a crash anywhere in
     // this body is indistinguishable from the state never being entered at all.
-    if (RP_Trace())
-        std::fprintf(stderr, "[RPTrace] State13Enter ENTER self=%p\n", self);
 
     // The pause flag is the LOW BYTE of the qword at +0x48 (retail: `(char)param_1[9]`),
     // and nothing in our port ever writes it non-zero. So either something retail-side
@@ -137,18 +121,8 @@ static char RP_State13Enter(void* self, void* sm) {
     // left. Print the WHOLE qword: a clean 1 means a deliberate pause, anything
     // pointer-shaped means uninitialised memory. Log both arms, so "entered producing"
     // and "bounced to paused" are distinguishable.
-    if (std::getenv("BANISHED_SEAT_TRACE")) {
-        std::fprintf(stderr, "[RP13] self=%p qword(+0x48)=0x%016llx lowByte=%u -> %s\n",
-                     self,
-                     (unsigned long long)*reinterpret_cast<uint64_t*>(comp + 0x48),
-                     (unsigned)*reinterpret_cast<uint8_t*>(comp + 0x48),
-                     (*reinterpret_cast<uint8_t*>(comp + 0x48) != 0) ? "PAUSE(14)" : "produce");
-        std::fflush(stderr);
-    }
 
     if (*reinterpret_cast<uint8_t*>(comp + 0x48) != 0) {
-        if (RP_Trace())
-            std::fprintf(stderr, "[RPTrace] State13Enter self=%p paused -> request 14\n", self);
         ::ControllerLive::RequestStateTransition(sm, 14);
         return 1;
     }
@@ -161,37 +135,24 @@ static char RP_State13Enter(void* self, void* sm) {
     uintptr_t workIbp = 0;
     typedef uintptr_t* (*fn_CreateWork_t)(void* self, uintptr_t* outIBP);
     fn_CreateWork_t createWork = reinterpret_cast<fn_CreateWork_t>(RP_VSlot(self, 18));
-    if (RP_Trace())
-        std::fprintf(stderr, "[RPTrace]   step1 owner=%p createWork=%p\n",
-                     (void*)owner, (void*)createWork);
     if (createWork) {
         createWork(self, &workIbp);
-        if (RP_Trace()) std::fprintf(stderr, "[RPTrace]   step2 work=%p\n", (void*)workIbp);
-    } else if (RP_Trace()) {
-        std::fprintf(stderr, "[RPTrace] State13Enter self=%p has NO slot-18 CreateWork\n", self);
     }
 
     // Post it to the reservation ledger so an idle citizen claims it.
     uintptr_t workCompIbp = 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     if (s_findWork) s_findWork(owner, &workCompIbp);
-    if (RP_Trace())
-        std::fprintf(stderr, "[RPTrace]   step3 workComp=%p post=%p\n",
-                     (void*)workCompIbp, (void*)s_postWork);
-    bool posted = false;
     if (s_postWork && workCompIbp != 0 && workIbp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         s_postWork(workCompIbp, 1, 0, &workIbp);
-        posted = true;
     }
-    if (RP_Trace()) std::fprintf(stderr, "[RPTrace]   step4 posted=%d\n", (int)posted);
 
     // WorkPlaceComponent +0x50 = accepting. Without this the building has workers
     // assigned but every gather bails "no target": the same trap the pasture wave hit.
     uintptr_t wpcIbp = 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     if (s_findWpc) s_findWpc(owner, &wpcIbp);
-    bool accepted = false;
     if (wpcIbp != 0 && s_setAccepting) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
         // wpcIbp ALREADY holds the component pointer: the finder writes it into the
@@ -200,12 +161,8 @@ static char RP_State13Enter(void* self, void* sm) {
         // component's VTABLE pointer as the workplace — which is exactly what
         // crashed here first time round.
         s_setAccepting(wpcIbp, 1);
-        accepted = true;
     }
 
-    if (RP_Trace())
-        std::fprintf(stderr, "[RPTrace] State13Enter self=%p work=%p posted=%d accepting=%d\n",
-                     self, (void*)workIbp, (int)posted, (int)accepted);
 
     typedef char (*fn_Hook_t)(void* self);
     fn_Hook_t onEnter = reinterpret_cast<fn_Hook_t>(RP_VSlot(self, 19));
@@ -222,13 +179,11 @@ static char RP_State14Enter(void* self, void* /*sm*/) {
     uintptr_t workCompIbp = 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     if (s_findWork) s_findWork(owner, &workCompIbp);
-    bool released = false;
     if (workCompIbp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         // Same out-param convention as State13Enter: this local is the component.
         if (s_slotOccupied && s_slotRelease && s_slotOccupied(workCompIbp)) {
             s_slotRelease(workCompIbp);
-            released = true;
         }
     }
 
@@ -257,9 +212,6 @@ static char RP_State14Enter(void* self, void* /*sm*/) {
         s_setAccepting(wpcIbp, 0);
     }
 
-    if (RP_Trace())
-        std::fprintf(stderr, "[RPTrace] State14Enter self=%p releasedWork=%d\n",
-                     self, (int)released);
 
     typedef char (*fn_Hook_t)(void* self);
     fn_Hook_t onExit = reinterpret_cast<fn_Hook_t>(RP_VSlot(self, 20));
@@ -286,18 +238,11 @@ static void RP_Trans13to3(void* self) {
 }
 
 // ── event 3 on state 13 — 0x14012adf0 — panel PAUSE ───────────────────────────────
-static char RP_Event3Pause(void* self, void* sm) {
-    if (RP_Trace())
-        std::fprintf(stderr, "[RPTrace] Event3 on state13 self=%p -> request 14 (pause)\n", self);
+static char RP_Event3Pause(void* /*self*/, void* sm) {
     // Event 0 TOGGLES (13 -> pause, 14 -> resume), so a single stray post closes a
     // producing workplace: state 14 calls SetAccepting(false), which raises the
     // "work is disabled at this location" sign AND evicts the roster. Trace the
     // poster — an unasked-for pause is the whole bug.
-    if (std::getenv("BANISHED_SEAT_TRACE")) {
-        std::fprintf(stderr, "[RPPause] state13 -> 14 self=%p ret=%p\n",
-                     self, __builtin_return_address(0));
-        std::fflush(stderr);
-    }
     ::ControllerLive::RequestStateTransition(sm, 14);
     return 1;
 }
@@ -309,12 +254,7 @@ static char RP_Event3Resume(void* self, void* sm) {
     const uint8_t paused = *reinterpret_cast<uint8_t*>(
         reinterpret_cast<uintptr_t>(self) + 0x48);
     if (paused == 0) {
-        if (RP_Trace())
-            std::fprintf(stderr, "[RPTrace] Event3 on state14 self=%p -> request 13 (resume)\n", self);
         ::ControllerLive::RequestStateTransition(sm, 13);
-    } else if (RP_Trace()) {
-        std::fprintf(stderr, "[RPTrace] Event3 on state14 self=%p IGNORED (+0x48=%u)\n",
-                     self, (unsigned)paused);
     }
     return 1;
 }

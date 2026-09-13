@@ -49,7 +49,7 @@
 // BANISHED_LIVE_TUTORIALINSTANCE_VT=1 against a RETAIL-authored tutorial save
 // (BANISHED_AUTOLOAD, not BANISHED_AUTOTUTORIAL — the latter loads a different save).
 // If the retail save round-trips clean with the flag on, promote it to unconditional
-// / kDefaultOnFlags. See the lane-2 report for the other five verdicts.
+// / the default-on table. See the lane-2 report for the other five verdicts.
 
 #include <cstdint>
 #include <cstdio>
@@ -58,6 +58,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Tutorial/tutorialinstance_funcs.h"
+#include "options.h"
 
 namespace {
 
@@ -81,8 +82,7 @@ void* g_TutorialInstance_Vtable_SA[4] = {
 };
 
 bool Enabled() {
-    const char* v = std::getenv("BANISHED_LIVE_TUTORIALINSTANCE_VT");
-    return v && *v && v[0] != '0';
+    return Opt().liveTutorialInstVt;
 }
 
 }  // namespace

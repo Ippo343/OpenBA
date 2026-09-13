@@ -20,18 +20,6 @@
 #include <cstdlib>
 #include <cstring>
 
-// Component-scan / update diagnostics — gated: the open town-hall panel drives the
-// FindComponent scans below EVERY frame (per-frame slot → UpdateAll/UpdateInventory
-// over all entities), and unconditional logging at that rate tanks FPS (same failure
-// as the ResidenceUI/StorageUI per-frame logs — see BANISHED_DIALOG_TRACE).
-static bool TH_Trace() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_DIALOG_TRACE");
-        s = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s != 0;
-}
 
 // ============================================================
 // Helpers
@@ -1432,50 +1420,37 @@ static void* AgriBST_Next(void* node) {
 // Note: these entities use +0x28/+0x30 layout (not +0x30/+0x38 like ComponentEntity)
 static void* TownHall_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
     if (!entity) {
-        if (TH_Trace()) printf("[TH_FindComp] entity is NULL for typeId=0x%x\n", typeId);
         return nullptr;
     }
     void** compArray = *(void***)(entity + 0x28);
     int compCount = *(int*)(entity + 0x30);
 
     if (!compArray) {
-        if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx compArray is NULL (typeId=0x%x)\n",
-               (unsigned long long)entity, typeId);
         return nullptr;
     }
     if (compCount < 0 || compCount > 200) {
-        if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx bad compCount=%d (typeId=0x%x)\n",
-               (unsigned long long)entity, compCount, typeId);
         return nullptr;
     }
 
     for (int i = 0; i < compCount; i++) {
         void* comp = compArray[i];
         if ((uintptr_t)comp < 0x10000 || (uintptr_t)comp >= 0xFFFFFFFF00000000ULL) {
-            if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx SKIPPED (bad ptr, typeId=0x%x)\n",
-                   (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId);
             continue;
         }
         // vtable slot 2 (+0x10) = GetTypeId()
         void** vtable = *(void***)comp;
         if (!vtable) {
-            if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx NULL vtable (typeId=0x%x)\n",
-                   (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId);
             continue;
         }
         typedef int (*fn_GetTypeId_t)(void*);
         int id = ((fn_GetTypeId_t)vtable[2])(comp);
         if ((uint32_t)id == typeId) {
             bool derived = fn_IsDerivedFrom(comp, typeId);
-            if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx typeId MATCH=0x%x isDerived=%d\n",
-                   (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId, (int)derived);
             if (derived)
                 return comp;
             break;
         }
     }
-    if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx typeId=0x%x NOT FOUND (searched %d comps)\n",
-           (unsigned long long)entity, typeId, compCount);
     return nullptr;
 }
 
@@ -1484,20 +1459,15 @@ static void* TownHall_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
 // Each array element is an InternalBasePtr that needs CheckPtr before deref.
 static void* TownHall_FindComponentByTypeId_CE(uintptr_t entity, uint32_t typeId) {
     if (!entity) {
-        if (TH_Trace()) printf("[TH_FindComp_CE] entity is NULL for typeId=0x%x\n", typeId);
         return nullptr;
     }
     uintptr_t compArrayBase = *(uintptr_t*)(entity + 0x30);
     int compCount = *(int*)(entity + 0x38);
 
     if (!compArrayBase) {
-        if (TH_Trace()) printf("[TH_FindComp_CE] entity=0x%llx compArray is NULL (typeId=0x%x)\n",
-               (unsigned long long)entity, typeId);
         return nullptr;
     }
     if (compCount < 0 || compCount > 200) {
-        if (TH_Trace()) printf("[TH_FindComp_CE] entity=0x%llx bad compCount=%d (typeId=0x%x)\n",
-               (unsigned long long)entity, compCount, typeId);
         return nullptr;
     }
 
@@ -1515,15 +1485,11 @@ static void* TownHall_FindComponentByTypeId_CE(uintptr_t entity, uint32_t typeId
         int id = ((fn_GetTypeId_t)vtable[2])(comp);
         if ((uint32_t)id == typeId) {
             bool derived = fn_IsDerivedFrom(comp, typeId);
-            if (TH_Trace()) printf("[TH_FindComp_CE] entity=0x%llx comp[%d]=0x%llx typeId MATCH=0x%x isDerived=%d\n",
-                   (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId, (int)derived);
             if (derived)
                 return comp;
             break;
         }
     }
-    if (TH_Trace()) printf("[TH_FindComp_CE] entity=0x%llx typeId=0x%x NOT FOUND (searched %d comps)\n",
-           (unsigned long long)entity, typeId, compCount);
     return nullptr;
 }
 
@@ -1655,8 +1621,6 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
             // Find ValueDescription component on entity
             void* valDesc = TownHall_FindComponentByTypeId(entityPtr, *g_TypeInfo_ValueDescription);
             if (!valDesc) {
-                if (TH_Trace()) printf("[TH_UpdateProd] valDesc NULL for entity=0x%llx, skipping entry %d\n",
-                       (unsigned long long)entityPtr, i);
                 elemOff += 0x10;
                 continue;
             }
@@ -1827,8 +1791,6 @@ next_entity: ;
                 // Find SelectDescription component (DAT_1401c48a8) on entity
                 void* selectDesc = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_SelectDescription);
 
-                if (TH_Trace()) printf("[TH_Agri] entity=0x%llx found in tempBST, selectDesc=%p\n",
-                       (unsigned long long)entityPtr, selectDesc);
 
                 // Original always sets sprite/text when found in BST (even if selectDesc is NULL)
                 // Create sprite from SelectDescription+0x20/+0x28
@@ -1854,8 +1816,6 @@ next_entity: ;
                 fn_InternalBasePtr_CheckPtr((void*)labelPtr);
                 Element_VCall50(*(void**)labelPtr, (int)0xFFC0C0C0);
             } else {
-                if (TH_Trace()) printf("[TH_Agri] entity=0x%llx NOT found in tempBST (displayIdx=%d)\n",
-                       (unsigned long long)entityPtr, displayIdx);
             }
 
             // Show element (SetFlagsOnOff hide=0, show=1)
@@ -2569,7 +2529,6 @@ bool TownReady() {
 }
 
 static void Trace(const char* what, void* self) {
-    if (!TH_Trace()) return;
     fprintf(stderr, "[TownHallUI] %s self=%p ready=%d town=%d built=%d\n",
             what, self, Ready() ? 1 : 0, TownReady() ? 1 : 0,
             self ? *(int*)((uintptr_t)self + 0x48) : -1);
@@ -2846,8 +2805,6 @@ extern "C" void TownHallSA_Diag(int frameNum) {
     if (s_done || frameNum < 120) return;
     s_done = true;
     townhallui_sa::EnsureGlobals();   // load-bearing publish — deliberately ungated
-    if (std::getenv("BANISHED_TOWNHALL_DIAG"))
-        townhallui_sa::DiagPrint("world-build", nullptr);
 }
 
 REGISTER_TYPE(TownHallUI, "UI::DialogController",

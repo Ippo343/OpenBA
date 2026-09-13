@@ -35,17 +35,6 @@
 // 0x14001ca60 - the shared intrusive-AVL delete (registered by reg_work_cellbst).
 typedef void (*fn_BstRemove5d10_t)(uintptr_t* root, void* node);
 
-// Diagnostic helper for Pf_RegionPairCacheTick_5d10 (BANISHED_DIAG_PAIRCACHE=1).
-static void PairCacheDiag(int on, long calls, const int64_t* c, long evicted, long evictedAtEntry) {
-    if (!on) return;
-    if (calls != 1 && (calls % 2000) != 0 && evicted == evictedAtEntry) return;
-    fprintf(stderr, "[PairCache] call=%ld clock=%lld window=%lld readTail=%d writeHead=%d cap=%d evicted=%ld(+%ld)\n",
-            calls, (long long)c[0], (long long)c[1],
-            *(const int*)((const char*)c + 0x14), *(const int*)((const char*)c + 0x10),
-            *(const int*)((const char*)c + 0x20), evicted, evicted - evictedAtEntry);
-    fflush(stderr);
-}
-
 // ---- FUN_14001cca0: resize the region-pair ring buffer to 0x20000 entries (stride 0x18).
 // param_1 is the ring Vector header: [0]=base ptr, +0x08=count(int), +0x0c=capacity(int).
 void Pf_RegionPairRingResize_cca0(int64_t* param_1) {
@@ -188,26 +177,18 @@ void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2) {
     // 1) advance the cache clock.
     param_1[0] += *param_2;
 
-    // BANISHED_DIAG_PAIRCACHE=1 -> periodic one-line report (stderr). Diagnostic only.
-    static int s_diag = -1;
-    static long s_calls = 0, s_evicted = 0;
-    if (s_diag < 0) { const char* e = getenv("BANISHED_DIAG_PAIRCACHE"); s_diag = (e && *e && *e != '0') ? 1 : 0; }
-    const long evictedAtEntry = s_evicted;
-
     const int64_t window = param_1[1];
     int64_t ringBase = param_1[3];
     if (ringBase == 0) return;
 
     int head = *(int*)((int64_t)param_1 + 0x14);
     if (param_1[0] - *(int64_t*)(ringBase + (int64_t)head * 0x18 + 0x10) <= window) {
-        PairCacheDiag(s_diag, ++s_calls, param_1, s_evicted, evictedAtEntry);
         return;
     }
 
     do {
         // stop when the read tail catches the write head (+0x10)
         if (head == *(int*)((int64_t)param_1 + 0x10)) {
-            PairCacheDiag(s_diag, ++s_calls, param_1, s_evicted, evictedAtEntry);
             return;
         }
 
@@ -246,8 +227,6 @@ void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2) {
         slot[1] = ((uint64_t)pad << 32) | (uint64_t)0xffffffffu;
         slot[2] = 0;
 
-        ++s_evicted;
-
         // 2c) advance the read cursor, wrapping at capacity (cache+0x20)
         int next = *(int*)((int64_t)param_1 + 0x14) + 1;
         if (*(int*)(param_1 + 4) <= next) next = 0;
@@ -257,5 +236,4 @@ void Pf_RegionPairCacheTick_5d10(int64_t* param_1, const int64_t* param_2) {
         ringBase = param_1[3];
     } while (param_1[0] - *(int64_t*)(ringBase + (int64_t)head * 0x18 + 0x10) > window);
 
-    PairCacheDiag(s_diag, ++s_calls, param_1, s_evicted, evictedAtEntry);
 }

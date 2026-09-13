@@ -58,11 +58,6 @@ extern "C" void* TutWave_HighlightDialogCtor(void* self, void* ui, void* dialogE
 
 namespace {
 
-bool TutTrace() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_TUTORIAL_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s != 0;
-}
 
 // One-shot "this leg of the tutorial is not ported" notice. Distinct from a
 // null-check that papers over a faithful crash: these are functions we KNOW we
@@ -298,20 +293,6 @@ extern "C" void TutWave_SetAllDialogFlags(void* self, char show) {
         ++dialogs;
         node = reinterpret_cast<uint64_t*>(node[2]);   // iterator +0x10 = next
     }
-    // Print only on change: the tutorial re-applies every setup on EVERY tick
-    // (retail does the same — see the slot-9 loop in TutWave_StepExecute), so an
-    // unconditional line here is three flushed writes per frame and drags a
-    // traced run down to a few fps, which is slow enough to change what the
-    // thing under test does.
-    if (TutTrace()) {
-        static int s_lastShow = -1, s_lastDialogs = -1;
-        if ((int)show != s_lastShow || dialogs != s_lastDialogs) {
-            s_lastShow = (int)show;
-            s_lastDialogs = dialogs;
-            fprintf(stderr, "[Tutorial] SetAllDialogFlags show=%d dialogs=%d\n", (int)show, dialogs);
-            fflush(stderr);
-        }
-    }
 }
 
 // ===========================================================================
@@ -460,19 +441,6 @@ extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
             if (found2 && found2->payload) {
                 targetElem = reinterpret_cast<uint64_t*>(found2->payload)[index];
             }
-            // [diag] BANISHED_TUTORIAL_TRACE — which entity the world-arrow will
-            // point at. `key` is the resolved building Description; count is how
-            // many instances of it the town registry holds. A count that does not
-            // match the town, or an index past the intended one, means the arrow
-            // is aimed at the wrong building rather than mis-projected.
-            if (TutTrace()) {
-                fprintf(stderr, "[TutHL] branchA key=%016llX key2=%016llX count=%d index=%d "
-                                "-> entity=%016llX (payload=%p)\n",
-                        (unsigned long long)key, (unsigned long long)key2, count, index,
-                        (unsigned long long)targetElem,
-                        found2 ? found2->payload : nullptr);
-                fflush(stderr);
-            }
             branchA = true;
         }
     }
@@ -502,12 +470,6 @@ extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
 
     uint64_t dlgIBP = reinterpret_cast<uint64_t>(dlg);
     fn_UI_AddDialog(ui, &dlgIBP);
-    if (TutTrace()) {
-        fprintf(stderr, "[Tutorial] OpenHighlightDialog branch=%c dlg=%p elem=%p\n",
-                branchA ? 'A' : 'B', dlg,
-                reinterpret_cast<void*>(branchA ? targetElem : elemIBP));
-        fflush(stderr);
-    }
 }
 
 // ===========================================================================
@@ -644,11 +606,6 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(ui + 0x18));
             uintptr_t dlgIBP = *reinterpret_cast<uintptr_t*>(ui + 0x18);
             void* dialog = dlgIBP ? *reinterpret_cast<void**>(dlgIBP + 0x18) : nullptr;
-            if (TutTrace()) {
-                fprintf(stderr, "[Tutorial] RefreshStepUI images: ui=%p dlgIBP=%p dialog=%p n=%d\n",
-                        reinterpret_cast<void*>(ui), reinterpret_cast<void*>(dlgIBP), dialog, n);
-                fflush(stderr);
-            }
             for (int i = 0; i < n; ++i) {
                 void* img = *reinterpret_cast<void**>(data + static_cast<uintptr_t>(i) * 8);
                 if (!img) continue;
@@ -656,36 +613,10 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
                 int32_t row = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(img) + 0x2C);
                 void** vt = *reinterpret_cast<void***>(img);
                 if (!vt || !vt[9]) continue;
-                if (TutTrace()) {
-                    uint32_t tid = vt[2] ? reinterpret_cast<uint32_t (*)(void*)>(vt[2])(img) : 0;
-                    const char* nm = tid ? ::Object::GetTypeNameById(tid) : nullptr;
-                    fprintf(stderr, "[Tutorial]   image %d %s imageRef=%p row=%d col=%d\n",
-                            i, nm ? nm : "?",
-                            *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(img) + 0x20),
-                            row, col);
-                    fflush(stderr);
-                }
                 uint8_t retbuf[16] = {};
                 void* elemPtr = reinterpret_cast<void* (*)(void*, void*, void*)>(vt[9])(img, retbuf, dialog);
                 fn_TableElement_SetChild3(table, elemPtr ? elemPtr : retbuf, row, col);
             }
-        }
-        if (TutTrace()) {
-            fprintf(stderr, "[Tutorial] RefreshStepUI step=%d images=%d table=%p\n", idx, n, table);
-            // Census the table after the SetChild pass: a null or garbage child here
-            // is what the UI::UserInterface::Update walk dereferences next frame.
-            if (table && fn_Element_ChildCount && fn_Element_Child) {
-                int cc = fn_Element_ChildCount(table);
-                fprintf(stderr, "[Tutorial]   table childCount=%d\n", cc);
-                for (int c = 0; c < cc && c < 16; ++c) {
-                    uint64_t ch = 0;
-                    fn_Element_Child(table, &ch, c);
-                    void* vt0 = ch ? *reinterpret_cast<void**>(ch) : nullptr;
-                    fprintf(stderr, "[Tutorial]     child %d = %p vtable=%p\n",
-                            c, reinterpret_cast<void*>(ch), vt0);
-                }
-            }
-            fflush(stderr);
         }
     }
 }
@@ -766,53 +697,11 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
             }
         }
         *reinterpret_cast<uint64_t*>(s + 0x20) = reinterpret_cast<uint64_t>(controller);
-        if (TutTrace()) {
-            // `tutorialUI=0` on its own cannot distinguish "we bound the wrong dialog"
-            // from "the id lookup returned 0" from "GetController gave nothing" — three
-            // very different bugs. Name what we actually got: the controller's own
-            // GetTypeId (vtable +0x10) run back through the registration table.
-            uint32_t ctrlTid = 0;
-            if (ctrlRaw) {
-                void** vt = *reinterpret_cast<void***>(ctrlRaw);
-                if (vt && vt[2])
-                    ctrlTid = reinterpret_cast<uint32_t (*)(void*)>(vt[2])(ctrlRaw);
-            }
-            const char* ctrlName = ctrlTid ? ::Object::GetTypeNameById(ctrlTid) : nullptr;
-            fprintf(stderr, "[Tutorial] StepExecute bound dialog=%p ctrl=%p tid=%u (%s) "
-                            "wantTutorialUI=%u -> tutorialUI=%p\n",
-                    reinterpret_cast<void*>(dlg), ctrlRaw, ctrlTid,
-                    ctrlName ? ctrlName : "?", uiTid, controller);
-            fflush(stderr);
-        }
         TutWave_RefreshStepUI(self);
     }
 
     int stepIndex = *reinterpret_cast<int32_t*>(s + 0x10);
     int stepCount = *reinterpret_cast<int32_t*>(tutorial + 0x30);
-
-    // TEST HARNESS (BANISHED_TUTORIAL_STEP=<n>): jump straight to step n on the
-    // first tick. Every step past the first dozen costs a full manual play-through
-    // to reach, which makes a single-line change a twenty-click verification.
-    // Only the index moves: the skipped steps' setups are never applied and never
-    // undone, and the world state they would have built (a house, a road) is not
-    // there — so this is a probe for steps whose goal does not depend on earlier
-    // ones, not a way to "start the tutorial in the middle".
-    if (stepIndex == 0 && stepCount > 0) {
-        static int s_startStep = -2;
-        if (s_startStep == -2) {
-            const char* e = std::getenv("BANISHED_TUTORIAL_STEP");
-            s_startStep = (e && e[0]) ? std::atoi(e) : -1;
-        }
-        if (s_startStep > 0 && s_startStep < stepCount) {
-            stepIndex = s_startStep;
-            *reinterpret_cast<int32_t*>(s + 0x10) = stepIndex;
-            fprintf(stderr, "[Tutorial] HARNESS: BANISHED_TUTORIAL_STEP=%d — skipping "
-                            "straight to step %d/%d (earlier setups NOT applied)\n",
-                    s_startStep, stepIndex, stepCount);
-            fflush(stderr);
-            TutWave_RefreshStepUI(self);
-        }
-    }
 
     if (stepIndex >= stepCount) return;
 
@@ -848,28 +737,6 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
             else selfIBP = reinterpret_cast<uint64_t>(self);
             char ok = reinterpret_cast<char (*)(void*, void*, void*)>(vt[8])(obj, param2, &selfIBP);
             if (ok) ++passed;
-            if (TutTrace()) {
-                // Once per (step, goal, verdict) change. Without this, "the tutorial
-                // is stuck" and "the tutorial has no goals" look identical.
-                static int s_lastStep = -1, s_lastPassed = -1;
-                if (stepIndex != s_lastStep || passed != s_lastPassed) {
-                    uint32_t tid = 0;
-                    if (vt[2]) tid = reinterpret_cast<uint32_t (*)(void*)>(vt[2])(obj);
-                    const char* nm = tid ? ::Object::GetTypeNameById(tid) : nullptr;
-                    fprintf(stderr, "[Tutorial] step %d goal %d/%d %s -> %d\n",
-                            stepIndex, i, goalCount, nm ? nm : "?", (int)ok);
-                    fflush(stderr);
-                    s_lastStep = stepIndex; s_lastPassed = passed;
-                }
-            }
-        }
-        if (TutTrace()) {
-            static int s_seenStep = -1;
-            if (stepIndex != s_seenStep) {
-                s_seenStep = stepIndex;
-                fprintf(stderr, "[Tutorial] step %d has %d goal(s)\n", stepIndex, goalCount);
-                fflush(stderr);
-            }
         }
     }
 
@@ -925,11 +792,6 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
     }
 
     *reinterpret_cast<int32_t*>(s + 0x10) = stepIndex + 1;
-    if (TutTrace()) {
-        fprintf(stderr, "[Tutorial] step %d/%d complete (goals=%d)\n",
-                stepIndex + 1, stepCount, goalCount);
-        fflush(stderr);
-    }
 
     if (stepIndex + 1 < stepCount) {
         TutWave_RefreshStepUI(self);

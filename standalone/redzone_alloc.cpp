@@ -4,6 +4,7 @@
 #include "redzone_alloc.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "options.h"
 
 #include <cstdarg>
 #include <cstdint>
@@ -188,8 +189,7 @@ int ValidateAllLocked(const char* tag) {
         PrintHereBacktrace("trip-site");
         RZBoth("[REDZONE] checkpoint '%s': %d corrupted block(s), %zu live\n",
                tag ? tag : "?", bad, g_live->size());
-        const char* noAbort = getenv("BANISHED_REDZONE_ABORT");
-        if (!(noAbort && noAbort[0] == '0')) {
+        if (Opt().redzoneAbort) {
             RZBoth("[REDZONE] aborting cleanly at first corruption "
                    "(set BANISHED_REDZONE_ABORT=0 to continue)\n");
             ExitProcess(0x122);  // distinctive exit code for "redzone tripped"
@@ -286,8 +286,8 @@ static HANDLE g_mainThread = nullptr;
 static void RedzoneStartWatchdog() {
     g_watchThread = CreateThread(nullptr, 0, &RedzoneWatchdog, nullptr, 0, nullptr);
     atexit(&RedzoneStopWatchdog);
-    if (const char* st = getenv("BANISHED_REDZONE_SELFTEST")) {
-        int ms = atoi(st);
+    {
+        int ms = Opt().redzoneSelfTestMs;
         if (ms > 0) {
             printf("[REDZONE-SELFTEST] armed: will clobber one boundary tag at t=%dms\n", ms);
             fflush(stdout);
@@ -297,7 +297,7 @@ static void RedzoneStartWatchdog() {
 }
 
 void RedzoneAlloc_Install() {
-    const char* env = getenv("BANISHED_REDZONE");
+    const char* env = Opt().redzone;
     if (!env || env[0] == '0' || env[0] == 'f' || env[0] == 'F') {
         return;  // disabled — leave the real allocator pointers in place
     }
@@ -312,7 +312,7 @@ void RedzoneAlloc_Install() {
         g_mainTid = GetCurrentThreadId();
         g_mainThread = OpenThread(THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION,
                                   FALSE, g_mainTid);
-        if (const char* w = getenv("BANISHED_REDZONE_WATCH")) g_watchIntervalMs = atoi(w);
+        if (Opt().redzoneWatchMs != -1) g_watchIntervalMs = Opt().redzoneWatchMs;
         if (g_watchIntervalMs < 0) g_watchIntervalMs = 1;
         g_enabled = true;
         printf("[REDZONE] WATCH-ONLY mode: no shim, watchdog=%dms\n", g_watchIntervalMs);
@@ -331,20 +331,12 @@ void RedzoneAlloc_Install() {
     g_realAlloc = fn_MemAlloc;
     g_realFree  = fn_MemFreeStatic;
     g_exeBase   = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
-    if (const char* scan = getenv("BANISHED_REDZONE_SCAN")) {
-        int n = atoi(scan);
-        if (n > 0) g_scanEvery = (uint32_t)n;
+    if (Opt().redzoneScan > 0) g_scanEvery = (uint32_t)Opt().redzoneScan;
+    if (Opt().redzonePad > 0) g_pad = (size_t)((Opt().redzonePad + 7) & ~7);  // 8-byte multiple
+    if (Opt().redzoneWatchMs != -1) {
+        g_watchIntervalMs = Opt().redzoneWatchMs;  // 0 = tight spin
     }
-    if (const char* pad = getenv("BANISHED_REDZONE_PAD")) {
-        int n = atoi(pad);
-        if (n > 0) g_pad = (size_t)((n + 7) & ~7);  // 8-byte multiple
-    }
-    if (const char* w = getenv("BANISHED_REDZONE_WATCH")) {
-        g_watchIntervalMs = atoi(w);  // 0 = tight spin
-    }
-    if (const char* z = getenv("BANISHED_REDZONE_ZERO")) {
-        g_zeroOnAlloc = (z[0] && z[0] != '0' && z[0] != 'f' && z[0] != 'F');
-    }
+    g_zeroOnAlloc = Opt().redzoneZero;
     fn_MemAlloc      = &ShimAlloc;
     fn_MemFreeStatic = &ShimFree;
     // Rewire the static MemAlloc/MemFree dispatch slots too (see ShimAllocStatic
@@ -788,8 +780,7 @@ static int HeapCheckLocked(const char* tag, bool report) {
                        (unsigned long long)q[i], (unsigned long long)q[i + 1]);
         }
         fflush(stdout);
-        const char* noAbort = getenv("BANISHED_REDZONE_ABORT");
-        if (!(noAbort && noAbort[0] == '0')) {
+        if (Opt().redzoneAbort) {
             printf("[REDZONE-HEAP] aborting cleanly at heap corruption\n");
             fflush(stdout);
             ExitProcess(0x123);  // distinctive code for "heap walker tripped"
@@ -806,8 +797,7 @@ static int HeapCheckLocked(const char* tag, bool report) {
 // two teardown heap ops — this names the op right after it, with a backtrace.
 int g_teardownHeapCheck = 0;
 extern "C" void RedzoneAlloc_ArmTeardownCheck() {
-    const char* e = getenv("BANISHED_TEARDOWN_HEAPCHECK");
-    if (!g_enabled || !e || e[0] == '0') return;
+    if (!g_enabled || !Opt().teardownHeapCheck) return;
     g_teardownHeapCheck = 1;
     printf("[REDZONE-HEAP] teardown per-op heap check ARMED\n");
     fflush(stdout);

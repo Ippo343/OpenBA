@@ -22,6 +22,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Entity/entitylist_funcs.h"
+#include "options.h"
 #include "perf_experimental.h"   // [PerfX] TREE_SNAPSHOT walk
 #include "sampler.h"
 #include <vector>
@@ -30,7 +31,6 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (dying-entity dialog close)
 #include "stress_harness.h"               // g_compProfOn / CompProf_AddVtbl (BANISHED_STRESS)
-#include "hw_watch.h"                     // HwWatch_Arm � BANISHED_TREE_CATCH writer hunt
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -352,7 +352,7 @@ extern "C" void IBPTreeRemove_CppImpl(void* treeRootPtr, void* nodeV) {
 // PERF A/B (2026-09-04): BANISHED_TREE_GUARDS=0 turns the corruption guards into no-ops
 // so their walk cost can be measured against the faithful (unguarded) retail walk.
 static const bool g_treeGuards = [] {
-    const char* e = std::getenv("BANISHED_TREE_GUARDS");
+    const char* e = Opt().treeGuards;
     return !(e && e[0] == '0');
 }();
 static inline bool PtrCorrupt(uintptr_t p) {
@@ -374,7 +374,7 @@ static bool             g_treeCorrupt = false;
 // 2026-09-04 at 800x10: no prefetch 0.25 ms/iter, one level 0.26, two levels 0.27; the
 // extra TreeSuccessor walk costs more than the hidden miss. BANISHED_TREE_PREFETCH=1 enables.
 static const bool       g_treePrefetch = [] {
-    const char* e = std::getenv("BANISHED_TREE_PREFETCH");
+    const char* e = Opt().treePrefetch;
     return e && e[0] == '1';
 }();
 static const char*      g_treeCorruptSite = nullptr;   // which deref tripped
@@ -490,20 +490,6 @@ static void ReportTreeCorrupt(const char* walk, EntityList* self, EntityTreeNode
     // tutorial crash was UI::Element::Enable walking a child whose vtable had been
     // zeroed, with RCX=0x00000171_000045F6 — the identical half-written signature on
     // a UI object.
-    //
-    // The same victim gets re-corrupted on later frames (observed three times on one
-    // node, 0x6d86 -> 0x6d7f -> 0x6d63), so arming a debug register on the victim's
-    // low dword after the FIRST detection catches the next store red-handed with its
-    // RIP and register state. Only four debug registers exist, so arm once.
-    {
-        static bool armed = false;
-        static const char* env = std::getenv("BANISHED_TREE_CATCH");
-        if (!armed && env && env[0] && env[0] != '0' && f) {
-            armed = true;
-            HwWatch_Arm(reinterpret_cast<uint8_t*>(f) + 8, 4,
-                        "EntityTreeNode.parent low dword (TreeGuard victim)");
-        }
-    }
 }
 
 // ============================================================
@@ -962,25 +948,6 @@ static void EntityList_ClearToolSelectionForDyingEntities() {
 //   liveModel    — a ModelComponent-derived component whose modelId (+0x16c) is
 //                  >= 0, i.e. it is STILL registered in Graphics::Scene as the
 //                  allocation goes back to the heap. This is the dangling node.
-static bool DrainAudit() {
-    static int on = -1;
-    if (on < 0) { const char* e = std::getenv("BANISHED_DRAIN_AUDIT");
-                  on = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return on == 1;
-}
-
-long g_drainFreed        = 0;   // entities freed by the drain
-long g_drainUnmarked     = 0;   // ...whose 0x400 removal bit was gone again
-long g_drainLiveModel    = 0;   // ...still holding a Graphics::Scene object id
-long g_drainLiveUnmarked = 0;   // both at once (the crash shape)
-
-extern "C" void EntityList_ReportDrainAudit(const char* tag) {
-    std::fprintf(stderr,
-                 "[drainAudit:%s] freed=%ld unmarked=%ld liveSceneNode=%ld both=%ld\n",
-                 tag ? tag : "?", g_drainFreed, g_drainUnmarked, g_drainLiveModel,
-                 g_drainLiveUnmarked);
-    std::fflush(stderr);
-}
 
 // Audit + LAST-CHANCE SCENE UNLINK for one entity the drain is about to free.
 //
@@ -1006,8 +973,6 @@ static void AuditDyingEntity(int64_t entity) {
     if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFFu)
         s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
 
-    uint32_t flags   = *reinterpret_cast<uint32_t*>(entity + 0x40);
-    bool markStillSet = ((flags >> 10) & 1) != 0;
 
     int models = 0, live = 0;
     int   n   = *reinterpret_cast<int*>(entity + 0x38);
@@ -1029,21 +994,6 @@ static void AuditDyingEntity(int64_t entity) {
         }
     }
 
-    ++g_drainFreed;
-    if (!markStillSet) ++g_drainUnmarked;
-    if (live)          ++g_drainLiveModel;
-    if (live && !markStillSet) ++g_drainLiveUnmarked;
-
-    if ((live || !markStillSet) && DrainAudit()) {
-        static int s_lines = 0;
-        if (++s_lines <= 30) {
-            std::fprintf(stderr, "[drainAudit] entity=%p flags=0x%x mark0x400=%d "
-                         "models=%d liveSceneNodes=%d (unlinked)\n",
-                         reinterpret_cast<void*>(entity), flags, markStillSet ? 1 : 0,
-                         models, live);
-            std::fflush(stderr);
-        }
-    }
 }
 
 void EntityList_DrainRemovals(EntityList* self) {
@@ -1058,7 +1008,6 @@ void EntityList_DrainRemovals(EntityList* self) {
     EntityList_PreUpdate(self);
     EntityList_PostUpdateStaging(self);
 
-    const bool audit = DrainAudit();
     for (int64_t i = 0; i < removalCount; i++) {
         void* entityIBP = (void*)(*(int64_t*)((uintptr_t)self->removalList.data + i * 8));
         AuditDyingEntity(reinterpret_cast<int64_t>(entityIBP));
@@ -1067,10 +1016,6 @@ void EntityList_DrainRemovals(EntityList* self) {
 
     fn_ExeArrayResize(&self->removalList, 0);
 
-    if (audit) {
-        static int s_summaries = 0;
-        if (++s_summaries <= 200) EntityList_ReportDrainAudit("drain");
-    }
 }
 
 // ============================================================
@@ -1267,15 +1212,6 @@ void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
     fn_InternalBasePtr_CheckPtr(entityIBP);
     int64_t entity = *(int64_t*)entityIBP;
 
-    // Diagnostic (BANISHED_DESTROY_TRACE): the final DeletePtr below is what drops
-    // the last strong ref and frees the entity + its component block. Log the block
-    // so a post-crash fault address can be matched against the freed range
-    // (compCount/compArray give the component-block neighborhood).
-    if (std::getenv("BANISHED_DESTROY_TRACE")) {
-        std::fprintf(stderr, "[EntityDrain] freeing entity=%p compArray=%p compCount=%d\n",
-                     (void*)entity, *(void**)(entity + 0x30), *(int*)(entity + 0x38));
-        std::fflush(stderr);
-    }
 
     // Read bucket index from entity+0x1F
     int8_t bucketIdx = *(int8_t*)(entity + 0x1F);
@@ -1403,45 +1339,12 @@ void EntityList_FlagAggregation(void* entity) {
 //   9. Per-entity metadata: master index, bucket index, bucket ID, time
 //
 // Decompiled from 0x1400c44a0.
-// [diag] BANISHED_SAVE_TIMING - EntityList::Serialize owns ~99% of the save
-// snapshot freeze, so break its phases apart: removal drain, the per-entity
-// InternalBasePtr::Serialize loop, the bucket trees, and the metadata loop.
-static bool ElSaveTimingOn() {
-    static int on = -1;
-    if (on < 0) { const char* e = std::getenv("BANISHED_SAVE_TIMING");
-                  on = (e && *e && e[0] != 0x30) ? 1 : 0; }
-    return on != 0;
-}
-static long long ElQpc() { LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart; }
-static double ElQpcMs(long long d) {
-    static long long f = 0;
-    if (!f) { LARGE_INTEGER q; QueryPerformanceFrequency(&q); f = q.QuadPart; }
-    return f ? 1000.0 * (double)d / (double)f : 0.0;
-}
-
-// [diag] BANISHED_SAVE_TIMING also prints the stream cursor (CompressedMemoryStream
-// +0x1C) at each sub-stage boundary. Bytes-per-stage is the only way to tell a
-// stage that ran from one that was skipped: a skipped stage costs 0 bytes and
-// desyncs everything after it, while still logging a plausible sub-millisecond
-// timing.
-static void ElCur(void* stream, const char* stage, int count) {
-    if (!ElSaveTimingOn() || !stream) return;
-    static uint32_t s_prev = 0;
-    uint32_t cur = *(uint32_t*)((uintptr_t)stream + 0x1C);
-    fprintf(stderr, "[ElCur] %-16s cur=%u (+%d)  masterCount=%d\n",
-            stage, cur, (int)(cur - s_prev), count);
-    fflush(stderr);
-    s_prev = cur;
-}
 
 void EntityList_Serialize(EntityList* self, void* stream) {
     // Step 1: Construct Serializer (local buffer, 0x18 bytes)
     uint8_t serializerBuf[0x18];
     void* serializer = serializerBuf;
     g_fn_Serializer_Ctor(serializer, stream, 0);
-    const bool elTime = ElSaveTimingOn();
-    long long elT0 = elTime ? ElQpc() : 0;
-    long long elMark = elT0;
 
     // Step 2: Flush staging arrays
     EntityList_PreUpdate(self);
@@ -1460,11 +1363,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
         }
     }
 
-    // Step 4: Serialize time
-    if (elTime) { fprintf(stderr, "[ElTiming] removal-drain %8.2fms\n",
-                          ElQpcMs(ElQpc() - elMark)); fflush(stderr); elMark = ElQpc(); }
     g_fn_Time_Serialize(self, serializer);
-    ElCur(stream, "after-time", self->masterArray.count);
 
     // Step 5: Serialize master array count
     int32_t masterCount = self->masterArray.count;
@@ -1480,37 +1379,10 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     // Serialize each entity IBP in master array
     void* ibpIter = self->masterArray.data;
     int64_t ibpCount = (int64_t)serializedCount;
-    // The master loop is a plausible suspect whenever a PersistObject call made
-    // DIRECTLY from here reads an all-zero record: that is either a component
-    // under-read leaving the stream short, or this loop simply running past the
-    // last entity. Printing the count and the index the loop reaches separates
-    // the two without any byte forensics.
-    if (elTime) {
-        fprintf(stderr, "[ElLoop] masterCount(before)=%d serializedCount=%d data=%p\n",
-            masterCount, serializedCount, ibpIter);
-    fflush(stderr);
-    }
     if (ibpCount > 0) {
-        long long elBucketT0 = elTime ? ElQpc() : 0;
         for (int64_t j = 0; j < ibpCount; j++) {
             void* currentIBP = (void*)((uintptr_t)ibpIter + j * 8);
-            if (elTime && j + 8 >= ibpCount) {
-                fprintf(stderr, "[ElLoop] entity j=%lld of %lld\n",
-                        (long long)j, (long long)ibpCount);
-                fflush(stderr);
-            }
             fn_InternalBasePtr_Serialize(currentIBP, serializer);
-            // [diag] per-1000 slice: a FLAT cost means each entity is simply
-            // expensive; a RISING cost means something behind
-            // InternalBasePtr::Serialize scans a table that grows with every
-            // object already written (O(n^2)).
-            if (elTime && ((j + 1) % 1000 == 0 || j + 1 == ibpCount)) {
-                long long now = ElQpc();
-                fprintf(stderr, "[ElTiming]   ibp[%5d..%5d] %8.2fms\n",
-                        (int)(j / 1000) * 1000, (int)j, ElQpcMs(now - elBucketT0));
-                fflush(stderr);
-                elBucketT0 = now;
-            }
 
             // After loading, verify it's a ComponentEntity
             if (*(void**)currentIBP != nullptr) {
@@ -1523,16 +1395,9 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     }
 
     // Step 6: Serialize bucket trees via helper (5 buckets starting at +0x18)
-    if (elTime) { fprintf(stderr, "[ElTiming] ibp-loop      %8.2fms  entities=%d\n",
-                          ElQpcMs(ElQpc() - elMark), (int)serializedCount);
-                  fflush(stderr); elMark = ElQpc(); }
-    ElCur(stream, "after-ibploop", self->masterArray.count);
     fn_BucketTreeSerialize(serializer, nullptr, &self->buckets[0]);
-    ElCur(stream, "after-buckets", self->masterArray.count);
 
     // Step 7: Serialize processCount[5] and cursor[5] as bulk arrays
-    if (elTime) { fprintf(stderr, "[ElTiming] bucket-trees  %8.2fms\n",
-                          ElQpcMs(ElQpc() - elMark)); fflush(stderr); elMark = ElQpc(); }
     // Retail (0x1400c45d0 / 0x1400c45e8) calls dispatch slot 0x140151278 =
     // IO::Serializer::Serialize(int count, int* data, name) — the INT-array
     // overload, 20 bytes per call. We were calling slot 0x140152400
@@ -1558,12 +1423,10 @@ void EntityList_Serialize(EntityList* self, void* stream) {
         s_serIntArr(serializer, 5, self->processCount, nullptr);
         s_serIntArr(serializer, 5, self->cursor, nullptr);
     }
-    ElCur(stream, "after-bulk5", self->masterArray.count);
 
     // Step 8: Per-entity metadata serialization
     int32_t entityIdx = 0;
     int64_t ibpOffset = 0;
-    ElCur(stream, "pre-metadata", self->masterArray.count);
     if (self->masterArray.count > 0) {
         do {
             uintptr_t masterData = (uintptr_t)self->masterArray.data;
@@ -1611,10 +1474,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
             ibpOffset += 8;
         } while (entityIdx < self->masterArray.count);
     }
-    ElCur(stream, "after-metadata", self->masterArray.count);
 
     // Step 9: Destroy Serializer
-    if (elTime) { fprintf(stderr, "[ElTiming] metadata-loop %8.2fms  TOTAL %8.2fms\n",
-                          ElQpcMs(ElQpc() - elMark), ElQpcMs(ElQpc() - elT0)); fflush(stderr); }
     g_fn_Serializer_Dtor(serializer);
 }

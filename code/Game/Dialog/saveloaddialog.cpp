@@ -32,6 +32,7 @@
 //   +0x158 buttonDelete (InternalBasePtr)
 
 #include "Dialog/ui_dialogs.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "ui/Dialogs.h"
@@ -922,22 +923,14 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
 // True when a harness env var says nobody is at the keyboard. Same list as
 // HarnessGuardUnattendedBoot (standalone/main.cpp) -- kept in step deliberately: both
 // answer the question "may we take a decision retail would put to the player?".
-static bool SaveLoad_UnattendedRun() {
-    static const char* const kVars[] = {
-        "BANISHED_AUTOSTART", "BANISHED_AUTOQUIT", "BANISHED_AUTOLOAD",
-        "BANISHED_AUTOTUTORIAL", "BANISHED_AUTOMENU_BUTTON", "BANISHED_PAUSEMENU_BUTTON",
-    };
-    for (const char* n : kVars) {
-        const char* v = std::getenv(n);
-        if (v && v[0] && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0) return true;
-    }
-    return false;
-}
+// The same six drivers standalone/main.cpp's unattended-boot guard keys on;
+// options.cpp folds them into one field.
+static bool SaveLoad_UnattendedRun() { return Opt().unattendedBoot; }
 
 static int SaveLoad_ModalShowDialog(void* ui, void* dlgPtr, const char* what) {
-    const char* forced = std::getenv("BANISHED_MODAL_ANSWER");
-    if ((forced && *forced) || SaveLoad_UnattendedRun()) {
-        int answer = (forced && *forced) ? std::atoi(forced) : 2;
+    const bool forced = Opt().modalAnswer;
+    if (forced || SaveLoad_UnattendedRun()) {
+        int answer = forced ? Opt().modalAnswerValue : 2;
         printf("[SaveLoadDialog] unattended run: answering modal \"%s\" with %d "
                "(ShowDialog skipped; override with BANISHED_MODAL_ANSWER)\n",
                what ? what : "?", answer);

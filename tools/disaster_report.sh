@@ -119,15 +119,13 @@ BEGIN {
     # The disaster env surface, as reported by the harness + the four lanes. Listing it
     # explicitly means a gate that never logged at all is VISIBLE as "not observed",
     # instead of being invisible -- a silently-off gate is the likeliest way to misread
-    # a soak. Value: 1 = forced-trigger gate, 2 = feature gate, 3 = trace/demo gate.
+    # a soak. Value: 1 = forced-trigger gate, 3 = trace/demo gate. (The four
+    # BANISHED_LIVE_* feature gates graduated to unconditional code, ENDGAME C.2.)
     split("BANISHED_FORCE_FIRE BANISHED_FORCE_TORNADO BANISHED_FORCE_SICK BANISHED_FORCE_INFEST", a, " ")
     for (i in a) gate_roster[a[i]] = 1
-    split("BANISHED_LIVE_FIRE BANISHED_LIVE_DISEASELIST BANISHED_LIVE_CROPDISEASE BANISHED_LIVE_TORNADO", a, " ")
-    for (i in a) gate_roster[a[i]] = 2
     split("BANISHED_CROPDISEASE_TRACE BANISHED_PLAGUE_TRACE BANISHED_TORNADO_TRACE BANISHED_BUILD_DEMO_WELL BANISHED_BUILD_DEMO_HOSPITAL", a, " ")
     for (i in a) gate_roster[a[i]] = 3
     gate_order = "BANISHED_FORCE_FIRE BANISHED_FORCE_TORNADO BANISHED_FORCE_SICK BANISHED_FORCE_INFEST " \
-                 "BANISHED_LIVE_FIRE BANISHED_LIVE_DISEASELIST BANISHED_LIVE_CROPDISEASE BANISHED_LIVE_TORNADO " \
                  "BANISHED_CROPDISEASE_TRACE BANISHED_PLAGUE_TRACE BANISHED_TORNADO_TRACE BANISHED_BUILD_DEMO_WELL BANISHED_BUILD_DEMO_HOSPITAL"
 }
 function note(tag) { seen[tag] = 1 }
@@ -510,7 +508,7 @@ END {
     if (!seen["plague_load"]) {
         print "   [GUL::DiseaseList] tag never appeared -- the step-1 loader did not run."
     } else {
-        if (dl_off)      print "   GATE OFF: BANISHED_LIVE_DISEASELIST is not set -- gw+0xa8 is NULL"
+        if (dl_off)      print "   gw+0xa8 (disease list) is NULL"
         if (dl_skip!="") print "   " dl_skip
         if (dl_result != "") print "   " dl_result
         if (dl_count != "") print "   diseases loaded: " dl_count
@@ -572,7 +570,7 @@ END {
         } else print "   (no gw+0xD0 one-shot line found -- cannot confirm the noFire bit)"
         if (fire_tids != "")   print "   " fire_tids
         if (fire_vtable)       print "   FireComponent vtable LIVE (slots 3/9/15 installed)"
-        else                   print "   !! no vtable-LIVE line -- BANISHED_LIVE_FIRE off, so slots 9/15 are inert stubs."
+        else                   print "   !! no vtable-LIVE line -- FireComponent slots 9/15 are inert stubs."
         printf "   ignition roll: fired=%d missed=%d | IGNITED=%d (FireWork posted=%d, NOT posted=%d) refused=%d\n", \
                fire_roll_fired, fire_roll_miss, fire_ignite_ok, fire_work, fire_posted_no, fire_ignite_fail
         if (fire_refuse_list != "") print "   ignite refusal reasons: " fire_refuse_list
@@ -696,7 +694,7 @@ END {
 }
 
 function basis_plague(v) {
-    if (v == "NOT-ARMED")       return (seen["plague_load"] ? "BANISHED_LIVE_DISEASELIST off / list not loaded" : "no [GUL::DiseaseList] tag at all")
+    if (v == "NOT-ARMED")       return (seen["plague_load"] ? "disease list not loaded" : "no [GUL::DiseaseList] tag at all")
     if (v == "ARMED-BUT-INERT") return "list loaded, but 0 infections ever applied"
     if (v == "PARTIAL")         return (died + recovered + 0 == 0 ? "infected, but no illness ever resolved" : "resolved, but no citizen was ever linked to a hospital")
     return "infect -> spread -> care -> resolve all observed"

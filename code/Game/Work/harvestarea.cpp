@@ -344,19 +344,7 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
     // ACCEPTS a harvest cell is the last unmeasured link before a deposit, and an
     // Execute that finds nothing looks exactly like an Execute that is never called.
     {
-        static int s_t = -1;
-        if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
-                       s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
         ++g_ha_calls;
-        if (s_t && ((g_ha_calls % 20) == 0)) {
-            std::fprintf(stderr, "[HarvestArea] self=%p work-entity=%p | calls=%lld | autopickup=%lld atCapacity=%lld "
-                         "workerCap=%lld noMark=%lld inBst=%lld noEntity=%lld noPass=%lld "
-                         "noPath=%lld ACCEPTED=%lld\n",
-                         (void*)self, (void*)*(uintptr_t*)((uintptr_t)self + 0x10),
-                         g_ha_calls, g_ha_auto, g_ha_cap, g_ha_wcap, g_ha_nomark,
-                         g_ha_inbst, g_ha_noent, g_ha_nopass, g_ha_nopath, g_ha_ok);
-            std::fflush(stderr);
-        }
     }
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
@@ -401,17 +389,7 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
     // only question left is whether the raw material reaches STORAGE. Printing the stock
     // here answers it directly instead of by inference: a rising number IS the deposit.
     {
-        static int s_dt = -1;
-        if (s_dt < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
-                        s_dt = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        static int s_last = -1;
         const int cur = *(int*)(resEntry);
-        if (s_dt && cur != s_last) {
-            s_last = cur;
-            std::fprintf(stderr, "[CropStock] material %d: town stock = %d (limit %d)\n",
-                         materialIdx, cur, *(int*)(resEntry + 8));
-            std::fflush(stderr);
-        }
     }
 
     // Set mesh visibility (group 2) based on capacity
@@ -504,39 +482,6 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                 if (entityAtCell1 == 0) {
                     // No entity at cell -- mark as unavailable
                     ++g_ha_noent;
-                    // Print the CELL INDEX harvest is reading. CreateNaturalResource
-                    // verifies tile+8 is SET at its own cellIndex immediately after
-                    // registering, so if both sides are healthy they must be reading the
-                    // SAME cell. Compare these against [CNR-tile]'s "last cell=".
-                    {
-                        static int s_ct = -1;
-                        if (s_ct < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
-                                        s_ct = (e && e[0] && e[0] != '0') ? 1 : 0; }
-                        static int s_shown = 0;
-                        if (s_ct && s_shown < 8) {
-                            ++s_shown;
-                            // Recompute the SAME tile address the independent way the
-                            // crop field's own trace uses (gw+0xf8 -> +0x80), and count
-                            // how many of the field's cells hold an entity right now. If
-                            // this says the tile is non-null, or the field is full, then
-                            // the read above is looking at the wrong place rather than
-                            // the crops being gone.
-                            const uintptr_t gwc = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
-                            const uintptr_t mpc = gwc ? *(uintptr_t*)(gwc + 0xf8) : 0;
-                            const uintptr_t gdc = mpc ? *(uintptr_t*)(mpc + 0x80) : 0;
-                            const uintptr_t viaB = gdc ? *(uintptr_t*)(gdc + 8 + (uintptr_t)cellGridIdx * 0x30) : 0;
-                            int liveC = 0;
-                            if (gdc) for (int k = 0; k < fieldCellCount; ++k) {
-                                const int ck = *(int*)((uintptr_t)k * 0x20 + *(uintptr_t*)(cropDescIBP + 0x58));
-                                if (*(uintptr_t*)(gdc + 8 + (uintptr_t)ck * 0x30)) ++liveC;
-                            }
-                            std::fprintf(stderr, "[HarvestCell] slot=%d cell=%d viaHarvest=%p "
-                                         "viaGameWorld=%p gridSame=%d fieldLive=%d/%d\n",
-                                         i, cellGridIdx, (void*)entityAtCell1, (void*)viaB,
-                                         (int)(gridData == gdc), liveC, fieldCellCount);
-                            std::fflush(stderr);
-                        }
-                    }
                     validityArray[i] = 0;
                 } else {
                     if (pairedAvailable) {
@@ -783,16 +728,6 @@ int HarvestArea_Slot8_Impl(HarvestArea* self) {
     uintptr_t selfAddr = (uintptr_t)self;
     int count = *(int*)(selfAddr + 0x50);
 
-    // DIAGNOSTIC (BANISHED_WORKAREA_STALL_TRACE=1, default off — unset behaviour is
-    // byte-identical to retail, including the spin). Retail's 0x1400ed270 is this exact
-    // loop and relies on the invariant "every BST entry's citizen still holds the matching
-    // task", so that cancelling it drops self+0x50. When the invariant is broken the loop
-    // re-picks the SAME leftmost node forever at 100% CPU with no output — measured, the
-    // counter sat at 1 and the node/citizen pointers were identical across 12s of samples.
-    // This reports the stalled entry (and breaks out) instead of wedging the process.
-    const bool stallTrace = std::getenv("BANISHED_WORKAREA_STALL_TRACE") != nullptr;
-    int stalls = 0;
-
     while (count > 0) {
         // Find rightmost node in BST
         uintptr_t node = *(uintptr_t*)(selfAddr + 0x48);
@@ -811,23 +746,9 @@ int HarvestArea_Slot8_Impl(HarvestArea* self) {
         const int before = count;
         count = *(int*)(selfAddr + 0x50);
 
-        if (stallTrace && count == before) {
-            if (++stalls == 1) {
-                uintptr_t ai = *(uintptr_t*)(citizenEntity + 0x278);
-                std::fprintf(stderr,
-                    "[WorkAreaStall] area=%p count=%d node=%p citizen=%p "
-                    "flags=0x%08x deleted=%d masterIdx=%d compCount=%d ai=%p "
-                    "actionSlots=%d actionArray=%p\n",
-                    (void*)selfAddr, count, (void*)rightmost, (void*)citizenEntity,
-                    *(unsigned*)(citizenEntity + 0x40),
-                    (int)((*(unsigned*)(citizenEntity + 0x40) >> 10) & 1),
-                    *(int*)(citizenEntity + 0x18), *(int*)(citizenEntity + 0x38),
-                    (void*)ai,
-                    ai ? *(int*)(ai + 0x48 + 8) : -1,
-                    ai ? *(void**)(ai + 0x48) : nullptr);
-                std::fflush(stderr);
-            }
-            // Cancelling made no progress: retail would spin here forever.
+        // Cancelling made no progress: retail would spin here forever. The guard is a
+        // deliberate deviation (it can only fire in a state that would otherwise hang).
+        if (count == before) {
             break;
         }
     }
@@ -873,12 +794,6 @@ int HarvestArea_Slot9_Impl(HarvestArea* self, void* param2) {
     while (node != nullptr) {
         uintptr_t ibpData = *(uintptr_t*)(node + 2); // IBP at +0x8
 
-        // Diagnostic context for the BANISHED_WORKVALIDATE_TRACE probe: name the BST
-        // node an entry came from, so a bad object can be traced back to the node that
-        // stored it (is the node intact, or is the +0x8 pointer itself wrong?).
-        extern void* g_WorkValidateNode;
-        extern bool  g_WorkValidateTraceOn;
-        if (g_WorkValidateTraceOn) g_WorkValidateNode = (void*)node;
         uint8_t valid = s_fn_ValidateTask(selfAddr, (uintptr_t)param2, (void*)&ibpData, nullptr);
 
         if (valid == 0) {

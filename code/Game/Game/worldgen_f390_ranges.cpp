@@ -136,11 +136,6 @@ static float* vec2_normalize_real(float* self) {
     return self;
 }
 
-// [WATER-DIAG] TryPlacePath reject-reason counters (BANISHED_WATER_DIAG dump in
-// wg_f390_paths). Disambiguate which validation gate rejects candidates.
-static long s_rejSelf  = 0;   // self-intersection reject
-static long s_rejCross = 0;   // cross-path reject
-
 static void rg_EnsureInit() {
     if (s_rangesResolved) return;
     s_rangesResolved = true;
@@ -529,7 +524,7 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
                 float wx = ax - b0[0], wy = ay - b0[1];
                 float t = (dBx * wy - wx * dBy) / denom;   // fVar20
                 float u = (dAx * wy - wx * dAy) / denom;   // fVar18
-                if (t > 0.0f && t < kOne && u > 0.0f && u < kOne) { reject = true; ++s_rejSelf; }
+                if (t > 0.0f && t < kOne && u > 0.0f && u < kOne) { reject = true; }
             }
         }
         if (reject) break;
@@ -554,7 +549,7 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
                         float wx = ax - q0[0], wy = ay - q0[1];
                         float t = (dBx * wy - wx * dBy) / denom;   // fVar21
                         float u = (dAx * wy - wx * dAy) / denom;   // fVar20
-                        if (t > 0.0f && t < kOne && u > 0.0f && u < kOne) { reject = true; ++s_rejCross; }
+                        if (t > 0.0f && t < kOne && u > 0.0f && u < kOne) { reject = true; }
                     }
                 }
             }
@@ -706,8 +701,6 @@ extern "C" void wg_f390_paths(void* hf) {
     __builtin_memcpy(&u6, &P6, 4); __builtin_memcpy(&u7, &P7, 4);
     __builtin_memcpy(&u8, &P8, 4);
 
-    int placed = 0;                        // [WATER-DIAG]
-    int startCount = *(int*)((uint8_t*)hf + HF_PATHCOUNT);
     for (int i = 0; i < numSecondary; ++i) {
         for (int attempt = 0; attempt < 1000; ++attempt) {
             int pathCount = *(int*)((uint8_t*)hf + HF_PATHCOUNT);
@@ -717,18 +710,9 @@ extern "C" void wg_f390_paths(void* hf) {
             if (pathCount <= 0) break;
             float branchSel = (float)(fn_Random_Rand ? fn_Random_Rand(rng, (uint32_t)pathCount) : 0u);
             int ok = TryPlacePath(p, dim + 1, (float)dim, u4, u5, u6, u7, u8, branchSel);
-            if (ok) { ++placed; break; }
+            if (ok) break;
         }
         // re-read the loop bound each outer iteration (matches the original).
         numSecondary = *(int*)((uint8_t*)sizeRow + 0x20);
-    }
-
-    if (getenv("BANISHED_WATER_DIAG")) {
-        fprintf(stderr,
-            "[WATER-DIAG] ccf60 secondary paths: requested=%d placed=%d "
-            "patchList %d->%d  rejects(self=%ld cross=%ld)\n",
-            numSecondary, placed, startCount,
-            *(int*)((uint8_t*)hf + HF_PATHCOUNT), s_rejSelf, s_rejCross);
-        fflush(stderr);
     }
 }

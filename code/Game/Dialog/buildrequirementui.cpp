@@ -203,17 +203,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
         }
     }
 #if defined(_DEBUG)
-    if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
-        static int s_s4 = 0;
-        if (s_s4 < 10) { ++s_s4;
-            void* ds = *(void**)(s + 0x28);
-            int dsCompCount = ds ? *(int32_t*)((uintptr_t)ds + 0x30) : -1;
-            void* dsCompArr = ds ? *(void**)((uintptr_t)ds + 0x28) : nullptr;
-            fprintf(stderr, "[Slot4] self=%p dataSource(+0x28)=%p ds.compCount(+0x30)=%d ds.compArr(+0x28)=%p resolvedDesc(+0x30)=%p\n",
-                    (void*)s, ds, dsCompCount, dsCompArr, (void*)desc);
-            fflush(stderr);
-        }
-    }
 #endif
     if (!desc) return;
 
@@ -269,16 +258,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             // Create UI::String from ToolbarDescription: StringTable at +0x30, name at +0x38
             uintptr_t brc = (uintptr_t)buildReqComp;
 #if defined(_DEBUG)
-            if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
-                static int s_t = 0;
-                if (s_t < 8) { ++s_t;
-                    uint64_t nameKey = *(uint64_t*)(brc + 0x38);
-                    fprintf(stderr, "[title] brc=%p stringTable(brc+0x30)=%p nameKey=\"%.32s\"\n",
-                            (void*)brc, (void*)*(uint64_t*)(brc + 0x30),
-                            nameKey ? (const char*)nameKey : "");
-                    fflush(stderr);
-                }
-            }
 #endif
             uint8_t uiStr[16];
             fn_UIString_Ctor(uiStr, *(uint64_t*)(brc + 0x30), (void*)(brc + 0x38));

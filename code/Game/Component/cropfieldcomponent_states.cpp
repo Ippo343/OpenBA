@@ -266,17 +266,7 @@ void* CF_MakeAreaWork(uintptr_t comp, int size, uintptr_t vtableAddr,
 // Post a freshly built work to the reservation ledger, exactly as every state enter does.
 void CF_PostWork(uintptr_t comp, void* work) {
     CF_Resolve2();
-    // Report the OUTCOME, not the attempt. Every early return here looks identical from
-    // outside — the state enters, no work runs — and the crop field spent a whole round
-    // stuck at exactly that ambiguity. Gated on the crop trace so it costs nothing off.
-    static int s_t = -1;
-    if (s_t < 0) {
-        const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
-        s_t = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
     if (!work || !s_findWork || !s_postWork) {
-        if (s_t) std::fprintf(stderr, "[CropWork] POST SKIPPED work=%p findWork=%p post=%p\n",
-                              work, (void*)s_findWork, (void*)s_postWork);
         return;
     }
     uintptr_t workIbp = 0;
@@ -286,20 +276,11 @@ void CF_PostWork(uintptr_t comp, void* work) {
     uintptr_t workCompIbp = 0;
     s_findWork(*reinterpret_cast<uintptr_t*>(comp + 0x10), &workCompIbp);
     if (!workCompIbp) {
-        // The crop field entity carries no WorkComponent, so there is no ledger to post
-        // to and no citizen can ever claim the work. Distinct from "posted and ignored".
-        if (s_t) std::fprintf(stderr, "[CropWork] POST FAILED: the field entity has NO "
-                              "WorkComponent (finder 0x140003050 returned null) — nothing "
-                              "can claim this work\n");
         return;
     }
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
     s_postWork(workCompIbp, 1, 0, &workIbp);
     g_pCropPlantWork = work;   // watched by the citizen claim-walk probe
-    if (s_t)
-        std::fprintf(stderr, "[CropWork] POSTED work=%p to workComp=%p (assignedId=%d)\n",
-                     work, (void*)workCompIbp,
-                     *reinterpret_cast<int32_t*>(workCompIbp + 0x28));
 }
 
 // Release the held work slot if one is occupied (the 3050 -> ead0 -> eb50 idiom every
@@ -518,69 +499,6 @@ static char CropField_State9PerFrame(void* self, void* sm, void* /*time*/) {
     const int growing = CountSlots(comp, 1);
     const int done    = CountSlots(comp, 2);
 
-    // Slot-state histogram. Planting is measured to run to completion (64 cells, 64
-    // binds), so every slot should read 1 "growing" and the transition below should
-    // fire. It does not, and the two candidate causes need different fixes:
-    // ValidateEntityRefs (s_slotRefresh, 0x14011aa20) demoting slots whose entity fails
-    // validation, versus the transition request being dropped. The histogram separates
-    // them — it prints what the states ACTUALLY are, not what they should be.
-    {
-        static int s_h = -1;
-        if (s_h < 0) {
-            const char* he = std::getenv("BANISHED_CROPFIELD_TRACE");
-            s_h = (he && he[0] && he[0] != '0') ? 1 : 0;
-        }
-        static int s_n = 0;
-        if (s_h && (s_n % 600) == 0) {
-            int hist[8] = {0};
-            int other = 0;
-            for (int i = 0; i < total; ++i) {
-                uint8_t* sl = SlotAt(comp, i);
-                if (!sl) continue;
-                const int st = *reinterpret_cast<int32_t*>(sl + 0x04);
-                if (st >= 0 && st < 8) ++hist[st]; else ++other;
-            }
-            std::fprintf(stderr, "[CropSlots] total=%d growing=%d done=%d | state histogram "
-                         "0:%d 1:%d 2:%d 3:%d other:%d\n",
-                         total, growing, done, hist[0], hist[1], hist[2], hist[3], other);
-            // Which slots are still at 0? Contiguous tail indices mean a pairing/edge
-            // boundary; scattered indices mean individual plant actions failed.
-            {
-                char buf[512]; int n = 0;
-                for (int i = 0; i < total && n < (int)sizeof(buf) - 24; ++i) {
-                    uint8_t* sl = SlotAt(comp, i);
-                    if (!sl || *reinterpret_cast<int32_t*>(sl + 0x04) != 0) continue;
-                    n += std::snprintf(buf + n, sizeof(buf) - n, " %d(cell=%d,mark=%u)",
-                                       i, *reinterpret_cast<int32_t*>(sl + 0x00),
-                                       (unsigned)sl[0x18]);
-                }
-                std::fprintf(stderr, "[CropSlots] state0 slots:%s\n", n ? buf : " none");
-            // How many of this field's cells currently hold an entity on the MAP TILE?
-            // CreateNaturalResource verifies tile+8 is SET at plant time and HarvestArea
-            // finds it NULL later, at the SAME cell indices, with dc20 recording zero
-            // wipes. So the crops are being destroyed between the two. Sampling the live
-            // count each time this prints shows whether it starts full and decays, and
-            // roughly when.
-            {
-                const uintptr_t gwx = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
-                const uintptr_t mp = gwx ? *reinterpret_cast<uintptr_t*>(gwx + 0xf8) : 0;
-                const uintptr_t gd = mp ? *reinterpret_cast<uintptr_t*>(mp + 0x80) : 0;
-                int live = 0;
-                if (gd) for (int i = 0; i < total; ++i) {
-                    uint8_t* sl = SlotAt(comp, i);
-                    if (!sl) continue;
-                    const int c = *reinterpret_cast<int32_t*>(sl + 0x00);
-                    if (*reinterpret_cast<uintptr_t*>(gd + 8 + (uintptr_t)c * 0x30)) ++live;
-                }
-                std::fprintf(stderr, "[CropTiles] %d/%d field cells hold an entity on the map tile\n",
-                             live, total);
-                std::fflush(stderr);
-            }
-            }
-            std::fflush(stderr);
-        }
-        ++s_n;
-    }
     if (done == total) {
         CF_ReleaseWorkSlot(comp);
         std::fprintf(stderr, "[CropXition] state 9 -> 21 (all %d done)\n", total);
@@ -638,29 +556,6 @@ static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
     if (CountSlots(comp, 2) == total)
         ::ControllerLive::RequestStateTransition(sm, 21);
 
-    // Report WHICH guard stops the trigger. These five early returns all look identical
-    // from outside -- a silent state 10 says only "no harvest", not why -- and the
-    // [CropHarvest] census below can never print if one of them fires first.
-    {
-        static int s_gt = -1;
-        if (s_gt < 0) { const char* ge = std::getenv("BANISHED_CROPFIELD_TRACE");
-                        s_gt = (ge && ge[0] && ge[0] != '0') ? 1 : 0; }
-        static int s_g = 0;
-        if (s_gt && (s_g++ % 600) == 0) {
-            const uintptr_t gwd = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
-            std::fprintf(stderr, "[CropTrigger] switch(+0x48)=%d cropType(+0x49)=%d gw=%d "
-                         "consts=%d weather=%d season=%d\n",
-                         (int)*reinterpret_cast<char*>(comp + 0x48),
-                         (int)*reinterpret_cast<char*>(comp + 0x49), gwd != 0,
-                         (s_fTempMin?1:0)|(s_fYearSeconds?2:0)|(s_fYearMonths?4:0)
-                          |(s_fRipe?8:0)|(fn_Time_AsSeconds?16:0),
-                         gwd ? (*reinterpret_cast<uintptr_t*>(gwd + 0x130) != 0) : 0,
-                         gwd ? (*reinterpret_cast<uintptr_t*>(gwd + 0x128) != 0) : 0);
-            std::fflush(stderr);
-        }
-    }
-
     if (*reinterpret_cast<char*>(comp + 0x48) == 0) return 1;
     if (*reinterpret_cast<char*>(comp + 0x49) == 0) return 1;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
@@ -673,53 +568,15 @@ static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
     if (!weather || !seasonMgr) return 1;
 
     bool harvestNow = false;
-    bool seasonArm = false;
     int  monthDbg = -1;
     const float temp = *reinterpret_cast<float*>(weather + 0x18);
     if (temp >= *s_fTempMin) {
         const float secs = fn_Time_AsSeconds(reinterpret_cast<void*>(seasonMgr + 8));
         monthDbg = static_cast<int>((secs / *s_fYearSeconds) * *s_fYearMonths);
-        if (static_cast<uint32_t>(monthDbg - 6) <= 5u) { harvestNow = true; seasonArm = true; }
+        if (static_cast<uint32_t>(monthDbg - 6) <= 5u) { harvestNow = true; }
     }
     const float maturity = CF_Maturity(comp);
     if (!harvestNow && maturity > *s_fRipe) harvestNow = true;
-
-    // State 10 is the ONLY path to state 11, and it has two independent arms. If the
-    // field never harvests, the arms fail for different reasons and need different
-    // fixes: a maturity that never climbs means the growth tick (slot 15 msg 1) is not
-    // advancing the crops, whereas a maturity that climbs while the season arm stays
-    // shut means the year window is the blocker. Print both.
-    {
-        static int s_ht = -1;
-        if (s_ht < 0) {
-            const char* he = std::getenv("BANISHED_CROPFIELD_TRACE");
-            s_ht = (he && he[0] && he[0] != '0') ? 1 : 0;
-        }
-        static int s_n2 = 0;
-        if (s_ht && (s_n2++ % 600) == 0) {
-            // Carry the live tile count into state 10 as well. It reaches ~56-64 by the
-            // end of state 9 and is 0 by the time HarvestArea runs, so the crops are
-            // lost DURING TEND. Printing it alongside maturity says whether they vanish
-            // gradually (something consuming them) or all at once (a sweep).
-            const uintptr_t gwx2 = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
-            const uintptr_t mp2 = gwx2 ? *reinterpret_cast<uintptr_t*>(gwx2 + 0xf8) : 0;
-            const uintptr_t gd2 = mp2 ? *reinterpret_cast<uintptr_t*>(mp2 + 0x80) : 0;
-            const int tot2 = SlotCount(comp);
-            int live2 = 0;
-            if (gd2) for (int i = 0; i < tot2; ++i) {
-                uint8_t* sl = SlotAt(comp, i);
-                if (!sl) continue;
-                const int c = *reinterpret_cast<int32_t*>(sl + 0x00);
-                if (*reinterpret_cast<uintptr_t*>(gd2 + 8 + (uintptr_t)c * 0x30)) ++live2;
-            }
-            std::fprintf(stderr, "[CropHarvest] comp=%p entity=%p temp=%.1f (min %.1f) month=%d seasonArm=%d "
-                         "maturity=%.4f (ripe>%.4f) -> harvest=%d | tiles=%d/%d\n",
-                         (void*)comp, (void*)*reinterpret_cast<uintptr_t*>(comp + 0x10),
-                         temp, *s_fTempMin, monthDbg, (int)seasonArm,
-                         maturity, *s_fRipe, (int)harvestNow, live2, tot2);
-            std::fflush(stderr);
-        }
-    }
 
     if (harvestNow) CropField_Event4Harvest(self, sm);
     return 1;

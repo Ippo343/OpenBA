@@ -34,6 +34,7 @@
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -119,7 +120,7 @@ void UIDescription_Serialize(void* self, void* stream) {
         }
     }
     *(int32_t*)(s + 0x38) = count;
-    if (std::getenv("BANISHED_MAP_TRACE"))
+    if (Opt().mapTrace)
         printf("[UIDescSer] self=%p count=%d entries=%p cap->%d\n",
                self, count, *(void**)(s + 0x30), *(int32_t*)(s + 0x3c));
 

@@ -34,7 +34,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // GetTypeIdByName (dc20 eviction audit)
-#include "Component/component_factory_base.h"  // ComponentFactory::LiveEnabled
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -64,22 +64,6 @@ extern "C" void MapComponent_ReportDc20Evictions(const char* tag) {
 }
 
 namespace {
-
-// BANISHED_LIVE_WALKWAY_DROPCELLS — default-on deviation; the full rationale, the retail
-// bytes it contradicts, and the A/B numbers are on the flag in kDefaultOnFlags.
-static bool WalkwayDropCells() {
-    static int on = -1;
-    if (on < 0) on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_WALKWAY_DROPCELLS") ? 1 : 0;
-    return on == 1;
-}
-
-// BANISHED_DC20_TRACE=1 — log dc20's stale-occupant eviction decisions (see the branch).
-static bool DC20Trace() {
-    static int on = -1;
-    if (on < 0) { const char* e = std::getenv("BANISHED_DC20_TRACE");
-                  on = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return on == 1;
-}
 
 // --- registered exe sub-callees, resolved on first use ----------------------
 typedef int      (*fn_e2c0_t)(int* map, int cellIndex);                 // 0x14009e2c0 (this file)
@@ -179,77 +163,6 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                                int64_t* param_8, int param_9) {
     EnsureInit();
 
-    // ── Footprint-mask census (BANISHED_MAPSTAMP_TRACE) ──────────────────────────
-    // param_8 is the building's ASCII footprint stamp. Where its char is '.', the loop
-    // below writes a NULL into cell+8 instead of the owner — that is how a building
-    // leaves walkable/drop cells free inside its own bounding rect. If the stamp is
-    // absent or zero-length the mask branch is skipped entirely and EVERY cell in the
-    // rect is claimed, which silently converts those free cells into permanently
-    // occupied ones. For the fishing dock that is fatal: its drop spots live inside its
-    // own rect, and FishingWork only frees a spot when cell+8 reads 0, so the dock
-    // catches `spotCount` fish and then stalls forever. Print the stamp once per rect
-    // size so a missing mask is visible rather than inferred.
-    {
-        static int s_st = -1;
-        if (s_st < 0) { const char* e = std::getenv("BANISHED_MAPSTAMP_TRACE");
-                        s_st = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (s_st) {
-            static int s_n = 0;
-            if (s_n < 24) {
-                ++s_n;
-                const int64_t stamp = param_8 ? *param_8 : 0;
-                const int stampLen = stamp ? *reinterpret_cast<int*>(stamp - 8) : -1;
-                // WHO claimed. Retail has two distinct doors into 41b0 — slot 6 (spawn
-                // claim, gated on MapDescription+0x30) and slot 12 (ClearArea's state-2
-                // "message 1", i.e. claim-when-clearing-finishes) — and a harness/instant
-                // -build path can add a third that retail never walks. Which door ran
-                // decides whether an occupied cell is retail's behaviour or ours.
-                std::fprintf(stderr, "[MapStamp] rect=(%d,%d) %dx%d rot=%d stamp=%p len=%d "
-                             "caller=%p/%p",
-                             param_4, param_5, param_6, param_7, param_9,
-                             (void*)stamp, stampLen,
-                             __builtin_return_address(0),
-                             __builtin_extract_return_addr(__builtin_return_address(1)));
-                if (stamp && stampLen > 0) {
-                    std::fprintf(stderr, " \"");
-                    for (int k = 0; k < stampLen && k < 160; ++k) {
-                        const char c = *reinterpret_cast<char*>(stamp + k);
-                        std::fprintf(stderr, "%c", (c == '\n') ? '/' : (c >= 32 ? c : '?'));
-                    }
-                    std::fprintf(stderr, "\"");
-                } else {
-                    std::fprintf(stderr, "  <-- NO MASK: every cell in the rect is claimed");
-                }
-                std::fprintf(stderr, "\n");
-                // Which char the rotation math actually SAMPLES per grid cell. The stamp
-                // string alone cannot say whether the '.' cells land where the building
-                // expects them: the sampler assumes a row stride of (width+1), so any
-                // other separator (indentation, CRLF) silently shifts every row and the
-                // free cells end up somewhere else — indistinguishable from a correct
-                // stamp in the string dump above.
-                if (stamp && stampLen > 0) {
-                    for (int r = 0; r < param_7 && r < 32; ++r) {
-                        std::fprintf(stderr, "[MapStamp]   y=%3d ", param_5 + r);
-                        for (int c = 0; c < param_6 && c < 32; ++c) {
-                            const int dr = param_7 - 1 - r, dc = param_6 - 1 - c;
-                            int i11, i17, i8, i12;
-                            if (param_9 == 0x5a)      { i11 = param_6; i17 = param_7; i8 = dc; i12 = r;  }
-                            else if (param_9 == 0xb4) { i11 = param_7; i17 = param_6; i8 = dr; i12 = dc; }
-                            else if (param_9 == 0x10e){ i11 = param_6; i17 = param_7; i8 = c;  i12 = dr; }
-                            else                      { i11 = param_7; i17 = param_6; i8 = r;  i12 = c;  }
-                            const int idx = ((i11 - i8) - 1) * (i17 + 1) + i12;
-                            const char ch = (idx >= 0 && idx < stampLen)
-                                          ? *reinterpret_cast<char*>(stamp + idx) : '?';
-                            std::fprintf(stderr, "%c", (ch == '\n') ? '/' : (ch >= 32 ? ch : '?'));
-                        }
-                        std::fprintf(stderr, "\n");
-                    }
-                }
-                std::fflush(stderr);
-            }
-        }
-    }
-
     int iVar18 = 0;
     int iVar4 = param_7;
     if (0 < param_7) {
@@ -276,25 +189,6 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                             if (lVar2 != 0) {
                                 if (fn_InternalBasePtr_CheckPtr)
                                     fn_InternalBasePtr_CheckPtr(&local_68);
-                                // [diag] BANISHED_DC20_TRACE — this branch is retail DESTROYING
-                                // whatever already occupied the cell (MarkForRemoval + push onto
-                                // the world removal queue). User-observed retail behaviour is that
-                                // a building placed over trees does NOT remove them, so either this
-                                // branch is skipped (bit 0x400 already set) or the whole 41b0 chain
-                                // does not run at placement. Log which, with the deciding flags.
-                                if (DC20Trace()) {
-                                    static int s_ev = 0;
-                                    if (++s_ev <= 40) {
-                                        uint32_t f40 = *reinterpret_cast<uint32_t*>(local_68 + 0x40);
-                                        std::fprintf(stderr, "[dc20] cell=%d occupant=%p flags+0x40=0x%x "
-                                                     "removalBit0x400=%d -> %s\n",
-                                                     iVar15, reinterpret_cast<void*>(local_68), f40,
-                                                     (f40 >> 10) & 1,
-                                                     ((f40 >> 10) & 1) ? "SKIP (already marked)"
-                                                                       : "EVICT (MarkForRemoval + queue)");
-                                        std::fflush(stderr);
-                                    }
-                                }
                                 if ((*reinterpret_cast<uint32_t*>(local_68 + 0x40) >> 10 & 1) == 0) {
                                     // Always-on tally (the trace above is opt-in AND capped at
                                     // 40 lines, so nothing countable survived a default run).
@@ -303,46 +197,6 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                                     // spawned entity gets freed while its ModelComponent is
                                     // still linked into Graphics::Scene.
                                     ++g_dc20Evictions;
-                                    // [diag] BANISHED_DRAIN_AUDIT — was the victim's
-                                    // model ALREADY in Graphics::Scene when we marked it?
-                                    // A victim with modelId == -1 here gets nothing torn
-                                    // down by the +0x38 broadcast, so any LATER Draw on it
-                                    // registers a scene node no one will ever remove.
-                                    {
-                                        static int s_auditOn = -1;
-                                        if (s_auditOn < 0) { const char* e = std::getenv("BANISHED_DRAIN_AUDIT");
-                                                             s_auditOn = (e && e[0] && e[0] != '0') ? 1 : 0; }
-                                        if (s_auditOn == 1) {
-                                            static int s_n = 0;
-                                            if (++s_n <= 20) {
-                                                int n = *reinterpret_cast<int*>(local_68 + 0x38);
-                                                int64_t arr = *reinterpret_cast<int64_t*>(local_68 + 0x30);
-                                                std::fprintf(stderr, "[drainAudit] dc20 EVICT victim=%p claimant=%p cell=%d flags=0x%x comps=%d models:",
-                                                             reinterpret_cast<void*>(local_68),
-                                                             reinterpret_cast<void*>(*param_2), iVar15,
-                                                             *reinterpret_cast<uint32_t*>(local_68 + 0x40), n);
-                                                static uint32_t s_tidModel = 0;
-                                                if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFFu)
-                                                    s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
-                                                for (int ci = 0; ci < n && arr; ++ci) {
-                                                    int64_t c = *reinterpret_cast<int64_t*>(arr + (int64_t)ci * 8);
-                                                    if (c <= 0x10000) continue;
-                                                    bool isModel = s_tidModel && s_tidModel != 0xFFFFFFFFu &&
-                                                                   fn_IsDerivedFrom &&
-                                                                   fn_IsDerivedFrom(reinterpret_cast<void*>(c), s_tidModel);
-                                                    std::fprintf(stderr, " [%d]cf=0x%x%s", ci,
-                                                                 *reinterpret_cast<uint32_t*>(c + 0x20),
-                                                                 isModel ? "" : "");
-                                                    if (isModel)
-                                                        std::fprintf(stderr, "(MODEL id=%d var=%d)",
-                                                                     *reinterpret_cast<int32_t*>(c + 0x16c),
-                                                                     (int)*reinterpret_cast<int16_t*>(c + 0x166));
-                                                }
-                                                std::fprintf(stderr, "\n");
-                                                std::fflush(stderr);
-                                            }
-                                        }
-                                    }
                                     if ((*reinterpret_cast<uint32_t*>(local_68 + 0x40) & 2) == 0) {
                                         ++g_dc20EvictNoTeardown;   // scene geometry will dangle
                                     } else {
@@ -416,7 +270,7 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                         // cell+8 == 0. Class stamp and stale-occupant eviction are untouched;
                         // ownership for placement/picking lives in the ZONE raster (cell+0),
                         // which this does not affect. Full rationale on the flag.
-                        if (cVar1 == '_' && WalkwayDropCells()) {
+                        if (cVar1 == '_') {   // walkway drop-cells: a deliberate deviation from the retail bytes
                             bVar19 = false;
                         }
                     }
@@ -439,28 +293,6 @@ void MapComponent_overlay_dc20(int* param_1, int64_t* param_2, uint8_t param_3,
                         plVar9 = local_58;
                     }
                     iVar13 = iVar13 + 1;
-                    // Wipe census. dc20 writes either the owner entity or a NULL IBP
-                    // per cell (bVar19 picks, from the footprint mask). A building whose
-                    // mask says "walkable" therefore NULLS the tile -- and if a crop was
-                    // already standing there, the crop's tile entry is destroyed and
-                    // HarvestArea can never find it again. Count only the destructive
-                    // case: a cell that HELD something and is being cleared.
-                    {
-                        static int s_wt = -1;
-                        if (s_wt < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
-                                        s_wt = (e && e[0] && e[0] != '0') ? 1 : 0; }
-                        int64_t prev = *reinterpret_cast<int64_t*>(lVar14 + 8);
-                        static long long s_wipes = 0, s_n = 0;
-                        if (prev != 0 && *plVar9 == 0) {
-                            ++s_wipes;
-                            if (s_wt && ((s_n++ % 10) == 0)) {
-                                std::fprintf(stderr, "[TileWipe] dc20 NULLing a cell that held "
-                                             "an entity: cell=%d prev=%p wipes=%lld\n",
-                                             iVar15, (void*)prev, s_wipes);
-                                std::fflush(stderr);
-                            }
-                        }
-                    }
                     *reinterpret_cast<int64_t*>(lVar14 + 8) = *plVar9;
                 } while (iVar13 < param_6);
             }
@@ -481,26 +313,6 @@ void CreateNaturalResource_impl_dee0(int* param_1, void* param_2, int param_3,
                                      int param_4, int param_5, int param_6,
                                      int64_t* param_7, int param_8) {
     EnsureInit();
-
-    // [diag] BANISHED_MAPSTAMP_TRACE — the RELEASE side. dee0 nulls cell+8 over the whole
-    // rect unconditionally, so "was this rect ever released again after 41b0 claimed it?"
-    // is the question that decides whether a completed building still owns its footprint
-    // in the entity raster. Paired with the [MapStamp] claim line.
-    {
-        static int s_st = -1;
-        if (s_st < 0) { const char* e = std::getenv("BANISHED_MAPSTAMP_TRACE");
-                        s_st = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (s_st) {
-            static int s_n = 0;
-            if (s_n < 40) {
-                ++s_n;
-                std::fprintf(stderr, "[MapStamp] RELEASE rect=(%d,%d) %dx%d rot=%d "
-                             "(cell+8 nulled over the whole rect)\n",
-                             param_3, param_4, param_5, param_6, param_8);
-                std::fflush(stderr);
-            }
-        }
-    }
 
     int iVar16 = 0;
     int iVar3 = param_6;

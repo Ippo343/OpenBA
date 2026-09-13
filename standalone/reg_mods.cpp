@@ -55,7 +55,6 @@ extern "C" void* ModDialog_Ctor_Standalone(void* self, void* userInterface,
                                            void* externalRes, void* parentIBP,
                                            void* parentMenuIBP);
 extern "C" void ModDialog_CloseAndReload(void* self);          // 0x14006e9b0
-extern "C" void ModProbe_StartWatcher();                       // BANISHED_MOD_PROBE
 // code/Game/Dialog/moddialog.cpp
 extern "C" void ModDialog_RefreshDisplay(void* self);
 // code/Game/Game/worldsetup_reload.cpp
@@ -94,7 +93,6 @@ void RegisterModsBatch() {
     // Engine::Startup to publish IO::Modification::_singleton, then dumps the mod
     // list + the FileSystem package list. No click, no BANISHED_LIVE_MODDIALOG.
     // No-op unless BANISHED_MOD_PROBE is set.
-    ModProbe_StartWatcher();
 
     g_slot_ModificationSingleton = ResolveAddr(Module::Runtime, 0x1801fc6b0);
     RegisterExeAddr(0x1401519e8,

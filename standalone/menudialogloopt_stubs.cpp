@@ -39,7 +39,7 @@
 #include "modal_driver.h"
 #include "mouse_inject.h"
 #include "common.h"
-#include "Object/factory_registration.h"   // DumpSlot3Inventory (BANISHED_DUMP_SLOT3)
+#include "Object/factory_registration.h"
 
 // WAVE 11 LANE OBJLIFE — the synthesised factory-dtor oracle, called from
 // Stub_Draw. Declared at FILE SCOPE on purpose: a block-scope `extern` inside
@@ -396,11 +396,6 @@ void Stub_Shutdown(UpdateLoop* self) {
 
 bool Stub_Update(UpdateLoop* self, void* time) {
     StallDebug::Tick("MenuDLT::Update");
-    // One-shot slot-3 serializer inventory (BANISHED_DUMP_SLOT3=1, else no-op).
-    // Menu time is the earliest point where Object::Factory::Startup has run,
-    // so factory-cached type ids are real (pre-Startup they cache 0xFFFFFFFF).
-    { static bool s_dumped = false;
-      if (!s_dumped) { s_dumped = true; ::Object::DumpSlot3Inventory(); } }
     // Wave 10C lane ROUTES: install the DialogController inherited-slot route
     // (BANISHED_DLGCTRL_ROUTE=1|probe, else a silent no-op). Same placement
     // rationale as the line above -- Object::Factory::Startup has run, and no

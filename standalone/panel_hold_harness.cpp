@@ -42,6 +42,7 @@
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
 #include "Player/edittool_funcs.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -60,7 +61,7 @@ void PanelHoldClick(int frameNum) {
     static char  s_ctrl[64] = {0};
     static int   s_id = 0;
     if (s_every == -2) {
-        const char* c = std::getenv("BANISHED_PANEL_HOLD_CLICK");
+        const char* c = Opt().panelHoldClick;
         s_every = -1;
         if (c && c[0]) {
             const char* colon = std::strchr(c, ':');
@@ -68,7 +69,7 @@ void PanelHoldClick(int frameNum) {
                 std::memcpy(s_ctrl, c, static_cast<size_t>(colon - c));
                 s_ctrl[colon - c] = 0;
                 s_id = std::atoi(colon + 1);
-                const char* ev = std::getenv("BANISHED_PANEL_HOLD_CLICK_EVERY");
+                const char* ev = Opt().panelHoldClickEvery;
                 s_every = (ev && ev[0]) ? std::atoi(ev) : 300;
                 if (s_every < 1) s_every = 300;
             }
@@ -168,9 +169,9 @@ extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum) {
     static const char* s_want = nullptr;
 
     if (s_at == -2) {
-        s_want = std::getenv("BANISHED_PANEL_HOLD");
+        s_want = Opt().panelHold;
         if (!s_want || !s_want[0]) { s_at = -1; return; }
-        const char* f = std::getenv("BANISHED_PANEL_HOLD_FRAME");
+        const char* f = Opt().panelHoldFrame;
         s_at = (f && f[0]) ? std::atoi(f) : 3000;
         if (s_at < 1) s_at = 3000;
     }

@@ -819,11 +819,11 @@ extern "C" void OrchardComponent_Command(void* selfV, int cmdId) {
 //     diagnostic is the ENTITY-level StateMachine state, a different thing — do not
 //     conflate them.)
 //
-// GRADUATED 2026-08-10: BANISHED_LIVE_ORCHARD is in kDefaultOnFlags, so the env var is now
+// GRADUATED 2026-08-10: BANISHED_LIVE_ORCHARD is in the default-on table, so the env var is now
 // only a kill-switch (=0) for A/B runs. It was opt-in while the state table registered null
 // handlers; all six states (2/9/10/12/11/20) now carry real bodies, and the loop is measured
 // end to end — plant, tend, harvest, 6 piles x 50 reaching town STORAGE, and cut/replant.
-// See kDefaultOnFlags in component_factory_base.cpp for the evidence, and note that
+// See the default-on table in component_factory_base.cpp for the evidence, and note that
 // BANISHED_LIVE_GROWTH + BANISHED_LIVE_FRUIT graduated with it: without those two the trees
 // plant but never mature or bear, so the three are only meaningful together.
 #include "Object/factory_registration.h"
@@ -874,7 +874,6 @@ extern "C" void* ControllerLive_ScalarDeletingDtor(void*, unsigned int);  // slo
 static void OrchardCtrl_PopulateTableAndWireSlot15();
 
 CONTROLLER_LIVE_FACTORY_STATES(OrchardComponent, 0x68, 0x80, 0x28, 2,
-                               "BANISHED_LIVE_ORCHARD",
                                OrchardCtrl_NodeVtable, OrchardCtrl_PopulateTableAndWireSlot15)
 
 static void OrchardCtrl_PopulateTableAndWireSlot15() {

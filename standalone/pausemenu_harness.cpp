@@ -34,6 +34,7 @@
 // drives the front-end menu.
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -42,7 +43,6 @@
 // code/Game/Dialog/mod_dialog_vtables.cpp -- BANISHED_PAUSEMENU_CLICKS targets
 extern "C" void* ModDialog_LastOpened();
 extern "C" void* ModDetailsDialog_LastOpened();
-extern "C" void  ModProbe_DumpModList(const char* tag);
 
 extern "C" void* EntityUI_OpenPauseMenu(void* entityUI);  // code/Game/Dialog/toolbardialog.cpp
 
@@ -66,12 +66,10 @@ bool  s_feeding     = false;   // token feed in progress: survives a world reloa
 
 void Init() {
     if (s_openFrame >= 0) return;
-    const char* f = std::getenv("BANISHED_PAUSEMENU");
-    s_openFrame = (f && f[0]) ? std::atoi(f) : 0;
-    if (s_openFrame > 0 && s_openFrame < 600) s_openFrame = 600;
-    if (const char* d = std::getenv("BANISHED_PAUSEMENU_QUIT")) s_quitDelay = std::atoi(d);
-    if (const char* b = std::getenv("BANISHED_PAUSEMENU_BUTTON")) s_buttonId = std::atoi(b);
-    if (const char* c = std::getenv("BANISHED_PAUSEMENU_CLICKS")) {
+    s_openFrame = Opt().pausemenu;
+    s_quitDelay = Opt().pausemenuQuit;
+    s_buttonId  = Opt().pausemenuButton;
+    if (const char* c = Opt().pausemenuClicks) {
         std::strncpy(s_clicks, c, sizeof(s_clicks) - 1);
         s_clickCursor = s_clicks[0] ? s_clicks : nullptr;
     }
@@ -143,8 +141,6 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
             else       { s_clickCursor = nullptr; }
             if (tok[0] == 'w') {
                 std::fprintf(stderr, "[PauseMenu] CLICKS: wait (frame %d)\n", frameNum);
-            } else if (tok[0] == 'p') {
-                ModProbe_DumpModList("clicks");
             } else if (tok[0] == 'd') {
                 void* dlg = ModDetailsDialog_LastOpened();
                 int id = std::atoi(tok + 1);

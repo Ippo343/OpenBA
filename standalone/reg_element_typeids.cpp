@@ -69,7 +69,6 @@
 // BANISHED_LIVE_ELEMENT_TIDS=1. Gate off = no registration = byte-for-byte
 // identical to today.
 #include "resolve.h"
-#include "Component/component_factory_base.h"  // ComponentFactory::LiveEnabled
 #include <cstdint>
 #include <cstdio>
 
@@ -126,15 +125,7 @@ void RegisterElementTypeIds() {
     // Mirror everything to our own file, which has no such ordering dependency.
     FILE* rep = fopen("standalone_elemtid.log", "w");
 
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_ELEMENT_TIDS")) {
-        if (rep) {
-            fprintf(rep, "[ElemTid] GATE OFF (BANISHED_LIVE_ELEMENT_TIDS) - no element "
-                         "type-id slot registered\n");
-            fclose(rep);
-        }
-        return;
-    }
-    if (rep) fprintf(rep, "[ElemTid] gate ON - registering %d slots\n",
+    if (rep) fprintf(rep, "[ElemTid] registering %d slots\n",
                      kElementTypeSlotCount);
 
     int resolved = 0;
@@ -175,7 +166,6 @@ void RegisterElementTypeIds() {
 // is about. Any zero printed here means the double-deref reaches a live object
 // whose id was never assigned, which would be a real finding.
 extern "C" void ReportTypeIdGlobals_elements() {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_ELEMENT_TIDS")) return;
     for (int i = 0; i < kElementTypeSlotCount; i++) {
         if (!g_elementTypeInfo[i]) continue;
         fprintf(stderr, "[ElemTid] %-32s slot=%p typeInfo=%p id=%u\n",

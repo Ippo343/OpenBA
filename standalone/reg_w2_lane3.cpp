@@ -52,9 +52,6 @@ extern "C" void FillTypeIdGlobals_w2lane3() {
         std::fprintf(stderr,
             "[W2Lane3] ERROR: GetTypeIdByName(\"ParticleDescription\") returned 0 — "
             "slot 0x1401c4758 is live but EMPTY; every reader falls back by name\n");
-    } else if (std::getenv("BANISHED_W2LANE3_TRACE")) {
-        std::fprintf(stderr, "[W2Lane3] 0x1401c4758 ParticleDescription = %u (0x%08X)\n",
-                     g_tid_ParticleDescription, g_tid_ParticleDescription);
     }
     std::fflush(stderr);
 }
@@ -109,7 +106,7 @@ void RegisterW2Lane3TypeIds() {
 // 0x1401c42c0 (HappinessComponent) / 0x1401c70e8 (CitizenAIComponent) — ALREADY
 //   registered by reg_citizenai_typeids.cpp:83/85, but behind the still-opt-in gates
 //   BANISHED_LIVE_CITIZENAI_HAPPYID / _AIID (only the third of that trio, _CITID, has
-//   graduated into kDefaultOnFlags). That is why they still appear in the census.
+//   graduated into the default-on table). That is why they still appear in the census.
 //   Registering them from here would create a SECOND storage dword for the same
 //   address and split the slot on init order — the trap reg_food_typeid.cpp calls out
 //   for RadiusDescription. Graduating the two gates is that wave's call.

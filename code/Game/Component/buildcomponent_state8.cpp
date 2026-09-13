@@ -29,6 +29,7 @@
 // are resolved guarded; if one is unavailable the step is skipped.
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "resolve.h"
 #include "Component/controller_state_table.h"
 #include <cstdint>
@@ -37,7 +38,7 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled (default-on gates)
+#include "Component/component_factory_base.h"   // ComponentFactory::the live gate (default-on gates)
 
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
@@ -56,15 +57,7 @@ extern "C" int  CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity
 // Scene mesh-visual toggle, so seating a Builder does NOT swap the site's build mesh.
 extern bool g_wpcRosterOnly;
 
-// ---- trace / demo-force gates ----------------------------------------------------
-static int s_bc8_trace = -1;
-static bool BC8_Trace() {
-    if (s_bc8_trace < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_TRACE");
-        s_bc8_trace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s_bc8_trace == 1;
-}
+// ---- demo-force gate -------------------------------------------------------------
 // Brick-2a plumbing harness: fake the citizen half so the state chain can be validated
 // crash-free without live hauling/labor. When on, for the demo site only: State1Update
 // treats materials as present (force 1->8), and State8Update ramps progress(+0x48) toward
@@ -73,21 +66,12 @@ static bool BC8_Trace() {
 static int s_bc8_force = -1;
 static bool BC8_DemoForce() {
     if (s_bc8_force < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_DEMO_FORCE");
+        const char* e = Opt().buildDemoForce;
         s_bc8_force = (e && e[0] && e[0] != '0') ? 1 : 0;
     }
     return s_bc8_force == 1;
 }
 static bool BC8_IsDemo(void* bc) { return g_pConstructionDemoSite && bc == g_pConstructionDemoSite; }
-
-// Natural builder-flow gate. When on, the site was registered into townMgr+0x100 at
-// State1Enter and the tick-driven Builder pool (BuilderPool_Tick) seats builders via
-// FindAvailableBuilding — so State8Enter must NOT also run the hardcoded-entity direct
-// seat (CitizenEmploy_SeatWorkersAt), or the site would be double-staffed. Off (=0
-// kill-switch) = legacy path (direct seat here). Default-ON via kDefaultOnFlags (2026-07-22).
-static bool BC8_BuilderNatural() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_BUILDER_NATURAL");
-}
 
 // ---- type ids (runtime registry) ----------------------------
 static uint32_t BC8_TypeId(const char* name, uintptr_t rdataGlobal) {
@@ -255,9 +239,6 @@ static int BC8_Target(uintptr_t bc, void* matComp) {
 static void BC8_EnsureMeshList(uintptr_t bc) {
     if (*reinterpret_cast<int32_t*>(bc + 0x60) > 0) return;
     BuildComponent_DrawReimpl(reinterpret_cast<void*>(bc));
-    if (BC8_Trace())
-        std::fprintf(stderr, "[BuildTrace] BC8_EnsureMeshList: filled via Draw, count now %d\n",
-                     *reinterpret_cast<int32_t*>(bc + 0x60));
 }
 
 // ==================================================================================
@@ -272,13 +253,10 @@ extern "C" char BuildComponent_State1Update(void* buildComp, void* sm) {
     bool haveAll = BuildComponent_HaveAllMaterials(buildComp);
     if (!haveAll && BC8_DemoForce() && BC8_IsDemo(buildComp)) {
         haveAll = true;   // brick-2a harness: pretend materials arrived (real haul = 2b)
-        if (BC8_Trace()) std::fprintf(stderr, "[BuildTrace] (force) State1Update demo materials present -> 8\n");
     }
     if (haveAll) {
         BC8_StopWorker(bc);
         ::ControllerLive::RequestStateTransition(sm, 8);
-        if (BC8_Trace())
-            std::fprintf(stderr, "[BuildTrace] State1Update: materials present, requested 1->8 (self=%p)\n", buildComp);
     }
     return 1;
 }
@@ -334,10 +312,9 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
         // + CitizenAI_impl_ec60(worker, 0x2001, 1, &bsIBP) to enqueue the construct work,
         // so citizens claim it and do timed BuildStructure labor (BuildStructure::Execute
         // assigns each to a build position; PerformWork accumulates progress into bc+0x48).
-        // Faithful to sub_7ae0's STAGED tail. Default-ON via kDefaultOnFlags (2026-07-22);
-        // env var BANISHED_BUILD_LIVE_HAUL is a kill-switch (=0). Needs the live-citizen
-        // action stack + task manager (same as the gather post), both default-on.
-        if (::ComponentFactory::LiveEnabled("BANISHED_BUILD_LIVE_HAUL")) {
+        // Faithful to sub_7ae0's STAGED tail. Needs the live-citizen action stack +
+        // task manager (same as the gather post).
+        {
             void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
                             ? fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8) : nullptr;
             // Construct via the FULL retail ctor (0x1400e59c0): it routes base init through
@@ -354,17 +331,6 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             }
             if (bsWork) {
                 g_pBuildStructureWork = bsWork;   // 2c-B probe: correlate with 7b60 claim walk
-                if (BC8_Trace() && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-                    // 2c-B probe: the scheduler per-entity tree keys the build work under
-                    // BuildStructure::GetTarget = *(*(gw+0xb0)+0x38); the idle claim walk C looks
-                    // up *(*(gw+0xb0)+0x30) (gather's key). If +0x38 differs / is null, no idle
-                    // citizen reaches the build work.
-                    uintptr_t pc = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xb0);
-                    void* key30 = pc ? *reinterpret_cast<void**>(pc + 0x30) : nullptr;
-                    void* key38 = pc ? *reinterpret_cast<void**>(pc + 0x38) : nullptr;
-                    std::fprintf(stderr, "[BuildTrace] BuildTarget keys: gw+0xb0=%p +0x30(gather)=%p +0x38(build)=%p %s\n",
-                                 (void*)pc, key30, key38, key30 == key38 ? "SAME" : "DIFFER");
-                }
                 uintptr_t bsIBP = 0;
                 if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&bsIBP, bsWork);
                 // find the site WorkComponent (c8070) the work posts under
@@ -374,64 +340,14 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
                 if (s_postEc60 && workCompIBP != 0) {
                     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIBP);
                     s_postEc60(workCompIBP, 0x2001, 1, &bsIBP);
-                    if (BC8_Trace())
-                        std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: meshes reset (count=%d); BuildStructure work spawned+posted (work=%p workComp=%p buildPositions=%d)\n",
-                                     meshCount, bsWork, (void*)workCompIBP,
-                                     *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(bsWork) + 0x58));
 
-                    // ---- 2c-B: seat Builders now that the build work exists ----
-                    // Materials are delivered (state 1->8 passed) and the idle Laborers that
-                    // hauled them are free again, so NOW convert some to Builders to do the
-                    // labor. The employment tick (0x1400d43b0) only rebalances workplaces that
-                    // already have a worker; it never seats the FIRST builder. Retail's builders
-                    // come from the town's builder-profession COUNT (town-hall Professions UI ->
-                    // dd10 loops the FindAvailableBuilding + cbf0/ca20/c5f0/c4b0 cascade N times);
-                    // with no player in autostart we drive that exact cascade via the ported
-                    // headless driver, seating the site's builder capacity (WorkComponent+0x30,
-                    // lazily via CalcMaxWorkers 0x14012e5c0) so no iteration runs with avail==0.
-                    // Roster-only guard suppresses the site build-mesh toggle during the attach.
-                    uintptr_t gwB = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
-                    uintptr_t townMgrB = gwB ? *reinterpret_cast<uintptr_t*>(gwB + 0xf0) : 0;
-                    uintptr_t profRegB = gwB ? *reinterpret_cast<uintptr_t*>(gwB + 0xb0) : 0;
-                    uint64_t builderMarker = profRegB ? *reinterpret_cast<uint64_t*>(profRegB + 0x38) : 0;
-                    if (BC8_BuilderNatural()) {
-                        // Natural flow: the tick-driven Builder pool seats builders via the
-                        // townMgr+0x100 registration made at State1Enter — do NOT direct-seat here.
-                        if (BC8_Trace())
-                            std::fprintf(stderr, "[BuildTrace] State8Enter: natural flow -> deferring builder seat to BuilderPool_Tick (no direct SeatWorkersAt)\n");
-                    } else if (townMgrB && builderMarker) {
-                        static void* s_calcMaxWorkers = nullptr; static bool s_cmwRes = false;
-                        if (!s_cmwRes) { s_calcMaxWorkers = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14012e5c0)); s_cmwRes = true; }
-                        int builderCount = 0;
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIBP);
-                        int cap = *reinterpret_cast<int*>(workCompIBP + 0x30);
-                        if (cap <= 0 && s_calcMaxWorkers) {
-                            cap = reinterpret_cast<int(*)(void*)>(s_calcMaxWorkers)(reinterpret_cast<void*>(workCompIBP));
-                            *reinterpret_cast<int*>(workCompIBP + 0x30) = cap;
-                        }
-                        builderCount = cap > 0 ? cap : 1;
-                        if (const char* e = std::getenv("BANISHED_BUILDER_COUNT"); e && e[0]) builderCount = std::atoi(e);
-                        // site entity = *(BuildComponent+0x10) (the workplace the builders attach to)
-                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
-                        int64_t siteEntity = *reinterpret_cast<int64_t*>(bc + 0x10);
-                        bool prevRoster = g_wpcRosterOnly;
-                        g_wpcRosterOnly = true;
-                        int seated = siteEntity ? CitizenEmploy_SeatWorkersAt(static_cast<int64_t>(townMgrB), siteEntity, builderMarker, builderCount) : 0;
-                        g_wpcRosterOnly = prevRoster;
-                        if (BC8_Trace())
-                            std::fprintf(stderr, "[BuildTrace] State8Enter seated %d/%d Builder(s) at site=%p (builderMarker=0x%llx)\n",
-                                         seated, builderCount, (void*)siteEntity, (unsigned long long)builderMarker);
-                    }
-                } else if (BC8_Trace()) {
-                    std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: BuildStructure spawned but post skipped (postFn=%p workComp=%p)\n",
-                                 (void*)s_postEc60, (void*)workCompIBP);
+                    // Builders are seated by the tick-driven Builder pool
+                    // (BuilderPool_Tick) through the townMgr+0x100 registration made at
+                    // State1Enter — State8Enter must not also direct-seat, or the site
+                    // would be double-staffed.
                 }
-            } else if (BC8_Trace()) {
-                std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: BuildStructure alloc/ctor failed (mem=%p)\n", mem);
             }
-        } else
-        if (BC8_Trace())
-            std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: meshes reset (count=%d); BuildStructure work-spawn (liveLabor off)\n", meshCount);
+        }
     } else {
         // ---------------------------------------------------------------------------
         // INSTANT branch (gw+0xd0 bit 0) — retail's whole insta-build completion, ported
@@ -454,10 +370,6 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             uintptr_t me = BC8_MeshElem(bc, i);
             if (!me) continue;
             int finalFrame = BC8_MeshFrameCount(me, BC8_MeshModelDesc(me)) - 1;
-            if (BC8_Trace())
-                std::fprintf(stderr, "[BuildTrace]   INSTANT mesh[%d]=%p variant=%d frame %d -> %d\n",
-                             i, (void*)me, (int)*reinterpret_cast<int16_t*>(me + 0x164),
-                             (int)*reinterpret_cast<int16_t*>(me + 0x166), finalFrame);
             if (finalFrame == (int)*reinterpret_cast<int16_t*>(me + 0x166)) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(me + 0x10));
                 if (s_modelRefresh) s_modelRefresh(*reinterpret_cast<uintptr_t*>(me + 0x10), 0);
@@ -472,11 +384,6 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
             }
         }
         ::ControllerLive::RequestStateTransition(sm, 2);
-        if (BC8_Trace())
-            std::fprintf(stderr, "[BuildTrace] State8Enter INSTANT: meshes snapped to final (count=%d) "
-                         "delivered(+0x48)=%d mult(+0x4c)=%d -> requested 8->2 (self=%p)\n",
-                         meshCount, *reinterpret_cast<int32_t*>(bc + 0x48),
-                         *reinterpret_cast<int32_t*>(bc + 0x4c), buildComp);
     }
     return 1;
 }
@@ -509,7 +416,7 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
         // Override with BANISHED_BUILD_DEMO_FRAMES.
         static int rampFrames = -1;
         if (rampFrames < 0) {
-            const char* e = std::getenv("BANISHED_BUILD_DEMO_FRAMES");
+            const char* e = Opt().buildDemoFrames;
             rampFrames = (e && e[0]) ? std::atoi(e) : 600;
             if (rampFrames < 1) rampFrames = 600;
         }
@@ -520,15 +427,7 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
         // building visibly under construction (default 600 ≈ 10s; raise BANISHED_BUILD_DEMO_FRAMES
         // to e.g. 30000 for a leisurely click test). Real BuildStructure labor (2c) uses
         // the true target and is unaffected (this block is demo-force + demo-site only).
-        {
-            target = rampFrames;
-            static bool s_loggedTarget = false;
-            if (BC8_Trace() && !s_loggedTarget) {
-                s_loggedTarget = true;
-                std::fprintf(stderr, "[BuildTrace] (force) demo ramp: bc+0x4c=%d matComp=%p -> ramp over %d frames\n",
-                             *reinterpret_cast<int32_t*>(bc + 0x4c), matComp, rampFrames);
-            }
-        }
+        target = rampFrames;
         int inc = target / rampFrames; if (inc < 1) inc = 1;
         int p = *reinterpret_cast<int32_t*>(bc + 0x48) + inc;
         if (p > target) p = target;
@@ -539,14 +438,6 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
     int progress = *reinterpret_cast<int32_t*>(bc + 0x48);
     int meshCount = *reinterpret_cast<int32_t*>(bc + 0x60);
 
-    if (BC8_Trace()) {
-        static int s_lastProg = -999;
-        if (progress != s_lastProg) {
-            s_lastProg = progress;
-            std::fprintf(stderr, "[BuildTrace] State8Update progress=%d target=%d (bc+0x4c mult=%d meshCount=%d) self=%p\n",
-                         progress, target, *reinterpret_cast<int32_t*>(bc + 0x4c), meshCount, buildComp);
-        }
-    }
 
     if (progress < target) {
         // still building — advance each mesh to floor((progress/target)*frameCount),
@@ -595,9 +486,6 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
             }
         }
         ::ControllerLive::RequestStateTransition(sm, 2);
-        if (BC8_Trace())
-            std::fprintf(stderr, "[BuildTrace] State8Update: progress %d>=target %d -> requested 8->2 (self=%p)\n",
-                         progress, target, buildComp);
     }
     return 1;
 }
@@ -643,7 +531,6 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
             if (inst && s_meshFinalize) s_meshFinalize(reinterpret_cast<void*>(inst), 0, 0);
         }
     }
-    if (BC8_Trace()) std::fprintf(stderr, "[BuildTrace] State8OneShot: model mode 4 + dequeued (self=%p)\n", buildComp);
     return 1;
 }
 
@@ -652,51 +539,9 @@ extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm) {
 // Refund leftover site-storage materials to town stock (townMgr+0x170) + reconfigure the
 // site storage as OUTPUT storage.
 // ==================================================================================
-// workplacecomponent.cpp — the WorkPlaceComponent controller's state-2 ("built") enter
-// handler (0x14012edf0 -> f670): drop the Builder profession the construction phase
-// installed, reset WPC+0x48 to the building's own profession, release the builders, and
-// re-register under the new key. Our WorkPlaceComponent is inert (no controller node), so
-// the state machine cannot dispatch it — it is driven from the 8->2 completion below.
-extern "C" void WorkPlaceComponent_EnterBuiltState(void* workPlaceComp);
-
 // decalcomponent.cpp — retail DecalComponent Slot12(msg=1): ramp the finished building's
 // footprint decal from _initialAlpha to full opacity. Inert component, so driven here.
 extern "C" void DecalComponent_MarkOwnerBuilt(void* entity);
-
-// Run that state-2 enter on the finished building's WorkPlaceComponent. Without it the
-// Builder key survives completion and WorkPlaceUI (which shows the spinner iff
-// WPC+0x48 != 0) keeps the construction worker up/down buttons on a finished house.
-static void BuildComponent_ClearBuilderWorkplace(uintptr_t bc) {
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
-    uintptr_t entity = *reinterpret_cast<uintptr_t*>(bc + 0x10);
-    if (!entity) return;
-    uint32_t tidWpc = BC8_TypeId("WorkPlaceComponent", 0x1401c80e0);
-    if (!tidWpc) return;
-    int count = *reinterpret_cast<int32_t*>(entity + 0x38);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entity + 0x30);
-    if (!arr) return;
-    for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
-        void* comp = *slot;
-        if (!comp) continue;
-        typedef uint32_t (*GT_t)(void*);
-        if (((GT_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp) != tidWpc) continue;
-        uint64_t before = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x48);
-        WorkPlaceComponent_EnterBuiltState(comp);
-        if (BC8_Trace())
-            std::fprintf(stderr, "[BuildTrace] State8Finalize: WorkPlaceComponent state-2 enter "
-                         "(edf0) profession 0x%llx -> 0x%llx (0 = panel hides the builder spinner)\n",
-                         (unsigned long long)before,
-                         (unsigned long long)*reinterpret_cast<uint64_t*>(
-                             reinterpret_cast<uintptr_t>(comp) + 0x48));
-        return;
-    }
-}
-
-// workplacecomponent.cpp — true when the WPC live controller is enabled (its state-2
-// enter IS edf0, dispatched by the state machine on the 8->2 transition).
-extern "C" bool WorkPlaceComponent_ControllerLive();
 
 static void BuildComponent_State8Finalize(uintptr_t bc) {
     BC8_Resolve();
@@ -704,13 +549,11 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     // workplace hand-off happens alongside this storage reconfigure. Do it first and
     // unconditionally — the storage half below early-returns on several data shapes
     // (no StorageComponent, no StorageDescription) and the profession must clear anyway.
-    // RETIRED under BANISHED_LIVE_WPC_CONTROLLER: the live WorkPlaceComponent controller
-    // links a real state node, so the SAME 8->2 transition enters state 2 on it and the
-    // SM dispatches edf0 itself (the faithful path). Running the hook too would drive
-    // the enter twice (the register half dedups, but f670's worker release does not
-    // want a second pass). Hook kept only for the kill-switch configuration.
-    if (!WorkPlaceComponent_ControllerLive())
-        BuildComponent_ClearBuilderWorkplace(bc);
+    // The live WorkPlaceComponent controller links a real state node, so the SAME 8->2
+    // transition enters state 2 on it and the SM dispatches edf0 itself (the faithful
+    // path). BuildComponent_ClearBuilderWorkplace is NOT called here: running the hook
+    // too would drive the enter twice (the register half dedups, but f670's worker
+    // release does not want a second pass).
 
     // Same collapse for the ground decal: retail's DecalComponent Slot12(msg=1) fires on
     // the 8->2 completion and ramps the footprint from _initialAlpha (the translucent
@@ -782,9 +625,6 @@ static void BuildComponent_State8Finalize(uintptr_t bc) {
     if (s_storageClear) s_storageClear(reinterpret_cast<void*>(storage + 0x28), 0);
     *reinterpret_cast<int32_t*>(storage + 0x3c) = acceptTyp;
     *reinterpret_cast<int32_t*>(storage + 0x38) = perItem * mult;
-    if (BC8_Trace())
-        std::fprintf(stderr, "[BuildTrace] State8Finalize: storage reconfigured OUTPUT accept=0x%x cap=%d (mult=%d)\n",
-                     acceptTyp, perItem * mult, mult);
 }
 
 // sub_75e0 — the 8->2 transition ACTION (node slot +0x28 / our OnState). 1-arg (bc).

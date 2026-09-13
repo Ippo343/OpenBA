@@ -218,32 +218,7 @@ extern "C" void wg_f390_erosion(void* hfv) {
     if (!sizeRow) return;
     int iters = *(int32_t*)((uint8_t*)sizeRow + SIZEROW_ERODE_ITERS);
 
-    // Optional diagnostic: BANISHED_SUN_TRACE=1 logs the erode iteration count
-    // and a roughness metric (mean |Laplacian| over interior cells) before and
-    // after the droplet passes — confirms erosion actually runs + smooths.
-    static int s_eroTrace = -1;
-    if (s_eroTrace < 0) {
-        const char* e = std::getenv("BANISHED_SUN_TRACE");
-        s_eroTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    auto roughness = [&](void)->double {
-        float* hm = *(float**)(p + HF_HEIGHTMAP);
-        if (!hm || dim < 3) return -1.0;
-        double acc = 0.0; int n = 0;
-        for (int r = 1; r < dim; ++r)
-            for (int c = 1; c < dim; ++c) {
-                int i = r * edge + c;
-                float lap = hm[i-1] + hm[i+1] + hm[i-edge] + hm[i+edge] - 4.0f * hm[i];
-                acc += lap < 0 ? -lap : lap; ++n;
-            }
-        return n ? acc / n : -1.0;
-    };
-    if (s_eroTrace)
-        fprintf(stderr, "[erode] iters=%d dim=%d roughnessBefore=%.5f\n",
-                iters, dim, roughness());
-
     if (iters <= 0) {
-        if (s_eroTrace) fprintf(stderr, "[erode] SKIPPED (iters<=0)\n");
         return;
     }
 
@@ -309,8 +284,6 @@ extern "C" void wg_f390_erosion(void* hfv) {
         }
     }
 
-    if (s_eroTrace)
-        fprintf(stderr, "[erode] roughnessAfter=%.5f\n", roughness());
 }
 
 // ============================================================================

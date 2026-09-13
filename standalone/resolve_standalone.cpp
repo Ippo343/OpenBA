@@ -9,6 +9,7 @@
 
 
 #include "resolve.h"
+#include "options.h"
 #include "../runtime/funcs/rt_port.h"
 #include "rt_data_mint.h"
 #include <cstdio>
@@ -88,12 +89,7 @@ static std::unordered_map<uintptr_t, UnregEntry>& GetUnregCensus() {
     return c;
 }
 static bool CensusEnabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = getenv("BANISHED_UNREG_CENSUS");
-        on = (e && *e && strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return on != 0;
+    return Opt().unregCensus;
 }
 
 void SetUnregPhase(const char* phase) {
@@ -565,10 +561,6 @@ void* RtPortLookupAddr(uintptr_t ghidra_addr) {
 }
 
 void* ResolveExport(const char* mangled_name) {
-    // WAVE 17 LANE CEIL — door attendance. FIRST, before the registry
-    // short-circuit, so a row that IS registered is still counted; off unless
-    // BANISHED_W17_ATTEND=1, and one strcmp against a 63-entry list when on.
-    { extern void Wave17DoorAttendNote(const char*); Wave17DoorAttendNote(mangled_name); }
     if (mangled_name) {
         auto& reg = RtExportReg();
         auto it = reg.find(mangled_name);

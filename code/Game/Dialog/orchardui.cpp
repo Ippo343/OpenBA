@@ -18,7 +18,7 @@
 // IsDerivedFrom(elem, *g_TypeId_ProgressElement) before storing it at +0x38.
 // That exe-.rdata slot (0x1401515b8) is filled ONLY by
 // standalone/reg_element_typeids.cpp, which is gated on BANISHED_LIVE_ELEMENT_TIDS
-// and is NOT in kDefaultOnFlags — so on the default path it is null, and
+// and is NOT in the default-on table — so on the default path it is null, and
 // IsDerivedFrom(elem, 0) is always false. That would leave +0x38 null and turn the
 // unguarded `+0x124 = 1.0f` write two lines later into a null-deref crash.
 // See [[reference-gated-element-typeid-disables-controller]] — the same null field
@@ -166,13 +166,6 @@ void OrchardUI_Slot11(OrchardUI* self, int64_t param2) {
     uint64_t orchardComp = 0;
     fn_FindComponent_Orchard((void*)entityBasePtr, &orchardComp);
 
-    if (std::getenv("BANISHED_DIALOG_TRACE")) {
-        fprintf(stderr, "[OrchardUI] Slot11 self=%p entity=%p comp=%llx newType=%llx "
-                "cur(+0x60)=%llx\n", (void*)self, entity,
-                (unsigned long long)orchardComp, (unsigned long long)param2,
-                orchardComp ? (unsigned long long)*(int64_t*)(orchardComp + 0x60) : 0ull);
-        fflush(stderr);
-    }
 
     // SA guard (retail unguarded): fires from a combo event, which can only be
     // routed to an entity that has an OrchardComponent in retail.
@@ -289,7 +282,6 @@ void* Dtor(void* self, uint32_t flags) {
 }
 
 static void Trace(const char* what, void* self) {
-    if (!std::getenv("BANISHED_DIALOG_TRACE")) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     fprintf(stderr, "[OrchardUI] %s self=%p combo(+0x30)=%llx yield(+0x38)=%llx\n",
             what, self,

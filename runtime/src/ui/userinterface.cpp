@@ -988,18 +988,6 @@ extern "C" void RtUi_UserInterface_BringDialogToFront(UserInterface* self,
 //                                            not ours to satisfy either way.
 // ---------------------------------------------------------------------------
 
-// The negative-control knob itself, at file scope so both this file and
-// runtime/src/ui/dialog.cpp read ONE value. `std::getenv` is cached
-// process-wide (standalone/env_cache.h), and the result is cached again here.
-extern "C" int RtUiUifNegCtrl() {
-    static int v = -1;
-    if (v < 0) {
-        const char* e = std::getenv("BANISHED_UIF_NEGCTRL");
-        v = (e && e[0]) ? std::atoi(e) : 0;
-    }
-    return v;
-}
-
 namespace {
 
 // `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` 0x1800c7ad0 — retail's four
@@ -1049,8 +1037,6 @@ inline UiDeletingDtorFn UiDeletingDtorOf(void* obj) {
 // branch on a value read once.
 // Defined below at file scope so runtime/src/ui/dialog.cpp's CreateInstance can
 // use the same knob for control 2.
-inline int UifNegCtrl() { return RtUiUifNegCtrl(); }
-
 // The body, factored out so the twin oracle can run OUR implementation on a
 // synthetic subject without re-entering the diff wrapper.
 void UiDtorBody(UserInterface* self) {
@@ -1117,15 +1103,6 @@ void UiDtorBody(UserInterface* self) {
             *reinterpret_cast<void**>(node) = nullptr;
         }
     }
-    if (UifNegCtrl() == 1) {
-        // NEGATIVE CONTROL 1 — destroy the bit-5 dialogs phase 1 deliberately
-        // skipped. The twin's ordered log must change.
-        for (int i = 0; i < *reinterpret_cast<int32_t*>(p + 0x20); ++i) {
-            uint8_t** rd = *reinterpret_cast<uint8_t***>(p + 0x18);
-            if (rd && rd[i]) UiDeletingDtorOf(rd[i])(rd[i], 1);
-        }
-    }
-
     // ---- phase 3 ----------------------------------------------------------
     // Retail's order is events, addDialogs, removedDialogs, and each pair of
     // stores is two QWORDs — the second covers `_size` AND `_capacity`.
@@ -1490,9 +1467,7 @@ void UiSaveAllSettingsBody(UserInterface* self) {
             st.base.direction = 1;
             if (size >= 4) {
                 *reinterpret_cast<uint32_t*>(buf) = 0xdeadbeefu;
-                // NEGATIVE CONTROL 3 — skip the cursor advance, so everything
-                // the writer emits lands 4 bytes early, over the magic.
-                if (UifNegCtrl() != 3) st.cursor += 4;
+                st.cursor += 4;
             }
 
             // ---- 4. the top-level ReaderWriter ----------------------------

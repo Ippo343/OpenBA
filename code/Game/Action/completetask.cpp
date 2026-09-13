@@ -18,17 +18,6 @@
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (heal .rdata type-ids)
 
-// Gated construction-haul completion trace (BANISHED_BUILD_TRACE). Pinpoints whether
-// the citizen's delivery ever reaches CompleteTask::AbstractImpl and whether the task
-// manager (gameState+0x118) is live enough to drive work->OnComplete. Diagnostic only.
-static bool CT_Trace() {
-    static int t = -1;
-    if (t < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_TRACE");
-        t = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return t == 1;
-}
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -207,13 +196,6 @@ int CompleteTask_AbstractImpl_Impl(CompleteTask* self, void* actionStack) {
     (void)actionStack;
     // Lazy resolve (action built via exe ctor path -> ResolveFuncs never ran -> s_fn_* null).
     if (!CompleteTask_ResolveFuncs()) return 0;
-    if (CT_Trace()) {
-        void* gs = s_pGameState ? *s_pGameState : nullptr;
-        void* tm = gs ? *(void**)((uint8_t*)gs + 0x118) : nullptr;
-        std::fprintf(stderr, "[BuildTrace] CompleteTask::AbstractImpl self=%p gameState=%p taskMgr(+0x118)=%p taskIdx=%d taskParam=0x%x\n",
-                     (void*)self, gs, tm, self->taskIndex, (unsigned)self->taskParam);
-        std::fflush(stderr);
-    }
     // Task machinery (gameState+0x118) is inert in standalone; guard so this is a safe
     // no-op (the actual log production is in the PerformWork chop, not this bookkeeping).
     if (!s_pGameState || !*s_pGameState ||

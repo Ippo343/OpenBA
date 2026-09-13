@@ -13,6 +13,7 @@
 //                  Dialog\NewGameDialog.cpp
 
 #include "Dialog/ui_dialogs.h"
+#include "options.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "engine_funcs.h"
 #include <cctype>
@@ -267,7 +268,7 @@ static void GenerateRandomSeed(void* editSeedPtr, void* random) {
     // ~22KB), so no log could confirm the seed had been applied and a silent random
     // seed was indistinguishable from a pinned one. Every past "this run used seed N"
     // was an assumption.
-    const char* envSeed = std::getenv("BANISHED_SEED");
+    const char* envSeed = Opt().seed;
     if (envSeed && envSeed[0]) {
         uint32_t fixed = (uint32_t)strtoul(envSeed, nullptr, 0);
         if (maxVal > 0) fixed %= (uint32_t)(maxVal + 1);
@@ -293,7 +294,6 @@ static void UpdateDescription(NewGameDialog* self) {
     // Standalone safety: skip if the map-generator list/type-ID is unresolved
     // (covers both Slot4 and the OnEvent combo-change call site).
     if (!self->mapGeneratorList || !g_TypeId_MapGenerator) return;
-    uintptr_t s = (uintptr_t)self;
 
     fn_InternalBasePtr_CheckPtr(&self->comboCondition);
     void* condCombo = self->comboCondition;
@@ -332,11 +332,9 @@ static void UpdateDescription(NewGameDialog* self) {
 // NOTE: retail's StartGame treats combo+0x118 as a LIST index (all retail start
 // conditions are visible, so combo index == list index); we match that.
 static void SelectStartConditionOverride(NewGameDialog* self) {
-    const char* want = std::getenv("BANISHED_START_CONDITION");
+    const char* want = Opt().startCondition;
     if (!want || !want[0]) {
-        const char* as = std::getenv("BANISHED_AUTOSTART");
-        if (!as || !as[0] || std::strcmp(as, "0") == 0 ||
-            std::strcmp(as, "false") == 0)
+        if (!Opt().autostart)
             return;                       // manual run, no override requested
         want = "easy";                    // autostart default
     }
@@ -666,7 +664,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     // whatever the saved settings or index 0 give — the stress harness pins "fair" so the
     // seasonal temperature curve (and with it snow cover, fuel burn and field idling) is
     // the same town-to-town.
-    if (const char* envClimate = getenv("BANISHED_CLIMATE")) {
+    if (const char* envClimate = Opt().climate) {
         int want = -1;
         if (!strcmp(envClimate, "0") || !_stricmp(envClimate, "mild"))       want = 0;
         else if (!strcmp(envClimate, "1") || !_stricmp(envClimate, "fair"))  want = 1;
@@ -703,7 +701,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     //   (StorageBarn + StorageYard + 6 WoodHouses, 6 families) spawns.
     {
         int wantIdx = -1;
-        const char* envDiff = getenv("BANISHED_DIFFICULTY");
+        const char* envDiff = Opt().difficulty;
         if (envDiff) {
             if (!strcmp(envDiff, "2") || !strcmp(envDiff, "easy") || !strcmp(envDiff, "Easy"))
                 wantIdx = 2;
@@ -712,8 +710,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
             else if (!strcmp(envDiff, "0") || !strcmp(envDiff, "hard") || !strcmp(envDiff, "Hard"))
                 wantIdx = 0;
         } else {
-            const char* envAuto = getenv("BANISHED_AUTOSTART");
-            if (envAuto && strcmp(envAuto, "0") != 0 && strcmp(envAuto, "false") != 0)
+            if (Opt().autostart)
                 wantIdx = 2;  // Easy default for the autostart demo town
         }
         if (wantIdx >= 0 && self->mapGeneratorList && mapPtrArray) {
@@ -753,7 +750,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     // (Valleys.rsc / Mountains.rsc: 0 = 256 small, 1 = 384 medium, 2 = 512 large).
     // BANISHED_MAP_SIZE = small|medium|large (or 0|1|2). The stress harness sets
     // "medium" by default; unset leaves the combo's value alone.
-    if (const char* envSize = getenv("BANISHED_MAP_SIZE")) {
+    if (const char* envSize = Opt().mapSize) {
         int want = -1;
         if (!strcmp(envSize, "0") || !_stricmp(envSize, "small"))       want = 0;
         else if (!strcmp(envSize, "1") || !_stricmp(envSize, "medium")) want = 1;
@@ -960,7 +957,7 @@ extern "C" void StartNewGame_Reg(void* worldSetup, void* nameStr, void* seed,
                       mapGen, terrainGen, climateGen, scenarioResIdx, savedStateIBP);
 }
 
-void NewGameDialog_OnEvent(NewGameDialog* self, void* element, int eventType, int eventData) {
+void NewGameDialog_OnEvent(NewGameDialog* self, void* /*element*/, int eventType, int eventData) {
     uintptr_t s = (uintptr_t)self;
     fprintf(stderr, "[NewGameDialog::OnEvent] self=%p type=0x%x data=%d\n",
             (void*)self, eventType, eventData);

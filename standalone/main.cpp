@@ -10,6 +10,7 @@
 // stubs. As the address registry fills in, more gameplay systems come alive.
 
 
+#include "options.h"
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "runtime_funcs.h"
@@ -28,13 +29,11 @@
 #include "system/MemoryAllocator.h"   // RtSystemAllocatorSetCutoverArmer
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
-#include "Object/internal_factory_audit.h"   // ObjAudit::ReportLeaks from the crash handler
 #include "Dialog/dialog_controller_vtable.h" // Wave 10D: inherited base slots
 // WAVE 11 follow-up 5 (lane TINFO): the BaseTypeInfo::factoryFn dispatch census.
 
 // Wave 9 lane N's work-scheduler probe tally (code/Game/Action/action_base_complete.cpp).
 // Declared here rather than in a header: it has exactly one caller, the crash handler.
-extern "C" void WorkSchedProbe_Report();
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -215,13 +214,7 @@ static bool HarnessMemoryIsReadable(const void* p, size_t n) {
 // back to the -1 "no override" sentinel the Video::Configuration constructor
 // itself uses and let the engine pick the size.
 static void HarnessGuardUnattendedBoot() {
-    auto envSet = [](const char* n) {
-        const char* v = getenv(n);
-        return v && v[0] && strcmp(v, "0") != 0 && strcmp(v, "false") != 0;
-    };
-    const bool unattended = envSet("BANISHED_AUTOSTART") || envSet("BANISHED_AUTOQUIT") ||
-                            envSet("BANISHED_AUTOLOAD") || envSet("BANISHED_AUTOTUTORIAL") ||
-                            envSet("BANISHED_AUTOMENU_BUTTON") || envSet("BANISHED_PAUSEMENU_BUTTON");
+    const bool unattended = Opt().unattendedBoot;
     if (!unattended) {
         printf("[Standalone] Attended run — launcher dialog left to retail rules "
                "(it appears iff the last run did not finish Engine::Startup)\n");
@@ -568,14 +561,6 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     // session that dies on the way out is exactly the one whose "did any
     // shipped renderer code run?" answer is worth having.
     VideoDX11::Dx11SeamReport();
-
-    // Same reasoning, and Wave 9 lane N paid for it: the work-scheduler probe
-    // built to diagnose the TEARDOWN crash registered its tally with atexit, so
-    // the one run where it fired printed nothing at all. A diagnostic whose
-    // output is destroyed by the event it diagnoses is not a diagnostic. Both of
-    // these are no-ops unless their own env var is set.
-    WorkSchedProbe_Report();
-    ObjAudit::ReportLeaks("CrashHandler");
 
     CrashLogf("=== END CRASH ===\n");
     FlushLogsToDisk();
@@ -1384,15 +1369,6 @@ static bool Init() {
     printf("[Standalone] Initializing address registry...\n");
     AddressRegistryInit();
     StallDebug::Mark("AddressRegistryInit");
-    // WAVE 17 LANE CEIL — end of the REGISTRATION phase for door attendance.
-    // Placed here and not at the end of RuntimePortInit because
-    // reg_unreg_lane3.cpp, reached from AddressRegistryInit above, resolves
-    // four ?_typeInfo@…@Graphics@@ rows BY NAME to fill dispatch slots. Those
-    // are registrations, not consumers running; counting them as attendance
-    // would hand four rows a route they do not have. That those four now read
-    // init>0 while everything else reads init=0 is this boundary's own control:
-    // the quantity VARIES with the thing the boundary separates.
-    { extern void Wave17DoorAttendMarkInitDone(); Wave17DoorAttendMarkInitDone(); }
 
     // 3a. Wave 10D lane VTFID — make our UI::DialogController subclass vtables
     //     hold the INHERITED base entry in the slots the subclass does not
@@ -1533,9 +1509,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // tearing the crashing thread down before stderr buffers commit.
     OpenCrashLog();
 
-    // BANISHED_STRESS=1 expands into its env bundle (autostart, medium map, uncapped,
-    // pinned camera, demo buildings, in-game quit). Must run before ANY env reader —
-    // HarnessGuardUnattendedBoot below keys off BANISHED_AUTOSTART, which this sets.
+    // ENDGAME C.3: the ONE read of the environment. Every BANISHED_* flag lands
+    // in the Options struct here and nothing else in standalone/ calls getenv.
+    // It also expands BANISHED_STRESS=1 into its bundle (autostart, medium map,
+    // uncapped, pinned camera, demo buildings, in-game quit), which is why it
+    // must come before every other reader — HarnessGuardUnattendedBoot below
+    // keys off the autostart flag that bundle sets.
+    OptionsInit();
+
+    // The stress town's own state (home-loss watch, the [Stress] banner).
     StressHarness_Init();
 
     printf("[Standalone] Banished Reimplementation - Standalone EXE\n");
@@ -1577,11 +1559,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Wave 9 lane F: symbols that resolved to NOTHING. Always on, prints only
     // when the list is non-empty. After lane G this is the missing-symbol list.
     DumpUnresolvedSymbols();
-    // WAVE 17 LANE CEIL: door attendance for the 62 Video/IO/Graphics DATA rows
-    // (BANISHED_W17_ATTEND=1). Placed HERE, beside the mint shadow report and
-    // NOT in a static destructor, for the reason the paragraph above gives —
-    // an instrument outside its subject's live window prints a plausible zero.
-    { extern void Wave17DoorAttendReport(); Wave17DoorAttendReport(); }
     // WAVE 11 LANE OBJDATA: gate (b) for the four ??_7…@Object@@6B@ minted rows
     // — entries, and which table each entering object carried. Called HERE and
     // not from a static destructor because it asks the PORT REGISTRY which door

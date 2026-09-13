@@ -42,11 +42,6 @@ namespace {
 
 constexpr int kMaxParts = 8;   // retail's DynArray grows; no shipped path is longer
 
-bool PathTrace() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_TUTORIAL_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s != 0;
-}
 
 // A System::String is one pointer; its length lives at data[-8].
 inline const char* StrData(const void* str) { return *reinterpret_cast<const char* const*>(str); }
@@ -130,10 +125,6 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
     *out = 0;
 
     if (!pathStr || StrData(pathStr) == nullptr || StrLen(pathStr) == 0) {
-        if (PathTrace()) {
-            fprintf(stderr, "[Tutorial] FindUIElementByPath: EMPTY path string%s" , "\n");
-            fflush(stderr);
-        }
         return outElementIBP;
     }
 
@@ -141,14 +132,12 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
     int partCount = SplitPath(pathStr, parts);
     // Fewer than two parts is not a path — retail returns a null InternalBasePtr.
     if (partCount < 2) {
-        if (PathTrace()) { fprintf(stderr, "[Tutorial] FindUIElementByPath: only %d part(s)\n", partCount); fflush(stderr); }
         FreeParts(parts, partCount); return outElementIBP;
     }
 
     if (!g_pFactorySingleton || !*g_pFactorySingleton || !fn_Factory_GetTypeIdFromName ||
         !g_pGameWorldSingleton || !*g_pGameWorldSingleton ||
         !fn_UI_GetFirstDialog || !fn_IsA || !fn_InternalBasePtr_CheckPtr) {
-        if (PathTrace()) { fprintf(stderr, "[Tutorial] FindUIElementByPath: a prerequisite pointer is null\n"); fflush(stderr); }
         FreeParts(parts, partCount);
         return outElementIBP;
     }
@@ -157,7 +146,6 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
 
     uint32_t dialogTypeId = fn_Factory_GetTypeIdFromName(factory, StrData(parts[0]), true);
     if (dialogTypeId == 0) {
-        if (PathTrace()) { fprintf(stderr, "[Tutorial] FindUIElementByPath: no type id for dialog \"%s\"\n", StrData(parts[0])); fflush(stderr); }
         FreeParts(parts, partCount); return outElementIBP;
     }
 
@@ -168,7 +156,6 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
     void* ui = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
     if (!ui) {
-        if (PathTrace()) { fprintf(stderr, "[Tutorial] FindUIElementByPath: no UserInterface\n"); fflush(stderr); }
         FreeParts(parts, partCount); return outElementIBP;
     }
 
@@ -228,30 +215,6 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
     }
 
     *out = found;
-    // Print only when the answer changes. Every tutorial tick re-applies the
-    // step's setups, which re-resolves the same paths, so an unconditional line
-    // here costs a flushed write per path per frame — enough on its own to make
-    // a traced run stutter. A changed resolution is the only interesting event.
-    if (PathTrace()) {
-        // A set, not one slot: a step's setup resolves several paths per tick in
-        // rotation, and a single-slot cache is missed by every one of them.
-        static const void* s_path[8] = {};
-        static uint64_t    s_found[8] = {};
-        static int         s_next = 0;
-        const void* p = StrData(pathStr);
-        bool seen = false;
-        for (int i = 0; i < 8 && !seen; ++i)
-            seen = (s_path[i] == p && s_found[i] == found);
-        if (!seen) {
-            s_path[s_next]  = p;
-            s_found[s_next] = found;
-            s_next = (s_next + 1) & 7;
-            fprintf(stderr, "[Tutorial] FindUIElementByPath \"%s\" parts=%d dlgTid=%u ctrlTid=%u -> elem=%p\n",
-                    StrData(pathStr) ? StrData(pathStr) : "(null)", partCount,
-                    dialogTypeId, controllerTypeId, reinterpret_cast<void*>(found));
-            fflush(stderr);
-        }
-    }
     FreeParts(parts, partCount);
     return outElementIBP;
 }

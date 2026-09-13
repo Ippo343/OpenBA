@@ -442,8 +442,6 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
 
     // Key 0x13: Rotate counter-clockwise
     bool rotCCW = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 0x13) : false;
-    { const char* e = std::getenv("BANISHED_TOOL_DIAG");
-      if (e && e[0] && e[0] != '0' && rotCCW) { fprintf(stderr, "[OnKey] rotate-CCW key(0x13) PRESSED on this frame\n"); fflush(stderr); } }
     if (rotCCW) {
         // Access rotationIBP at self+0x48, CheckPtr, then decrement value at +0x10
         void* rotIBPAddr = (void*)(selfAddr + 0x48);
@@ -463,8 +461,6 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
     } else {
         // Key 0x14: Rotate clockwise
         bool rotCW = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 0x14) : false;
-        { const char* e = std::getenv("BANISHED_TOOL_DIAG");
-          if (e && e[0] && e[0] != '0' && rotCW) { fprintf(stderr, "[OnKey] rotate-CW key(0x14) PRESSED on this frame\n"); fflush(stderr); } }
         if (rotCW) {
             void* rotIBPAddr = (void*)(selfAddr + 0x48);
             if (s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr(rotIBPAddr);
@@ -494,17 +490,6 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
     // --- Placement confirmation (key 5, only when active) ---
     if (param2 != 0) {
         bool placeKey = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 5) : false;
-        {
-            static int s_ok = -1;
-            if (s_ok < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_ok = (e && e[0] && e[0] != '0') ? 1 : 0; }
-            if (s_ok) {
-                static bool s_once = false;
-                if (!s_once) { s_once = true;
-                    fprintf(stderr, "[OnKey] active: keyMap=%p KeyMapPressed=%p (place-confirm armed)\n",
-                            keyMap, (void*)s_fn_KeyMapPressed); fflush(stderr); }
-                if (placeKey) { fprintf(stderr, "[OnKey] key-5 PRESSED (left-click) — running confirm\n"); fflush(stderr); }
-            }
-        }
         if (placeKey) {
             // Calculate placement position
             int startCol = 0, startRow = 0, endCol = 0, endRow = 0;
@@ -514,59 +499,11 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
             if (s_fn_sub_da00) {
                 bool valid = s_fn_sub_da00(self, &startCol, &startRow,
                                             &endCol, &endRow, pos, yaw);
-                { const char* e = std::getenv("BANISHED_TOOL_DIAG");
-                  if (e && e[0] && e[0] != '0') {
-                    // The tutorial's TutorialSetupRestrictPlayer rect lives on the
-                    // PlayerController (tool+0x10): +0x98/+0x9c are LINEAR cell indices
-                    // (row*mapSize+col) and +0xa0 the required rotation. helper_d650
-                    // (0x1400FD650) rejects the placement unless all five match exactly,
-                    // so print both sides — "it won't place" is otherwise indistinguishable
-                    // from a terrain rejection inside helper_d580.
-                    uintptr_t pcTrace = *(uintptr_t*)((uintptr_t)self + 0x10);
-                    int mapSzTrace = **(int**)(GetGameWorld() + 0xf8);
-                    fprintf(stderr, "[OnKey] confirm: sub_da00 valid=%d cell=(%d,%d)-(%d,%d) yaw=%.2f "
-                            "helper_d650=%p | restrict=%d want=(%d,%d)-(%d,%d) wantRot=%d mapSz=%d\n",
-                            valid, startCol, startRow, endCol, endRow, yaw[0], (void*)s_fn_helper_d650,
-                            pcTrace ? *(unsigned char*)(pcTrace + 0x80) : 0,
-                            pcTrace ? *(int*)(pcTrace + 0x98) % mapSzTrace : -1,
-                            pcTrace ? *(int*)(pcTrace + 0x98) / mapSzTrace : -1,
-                            pcTrace ? *(int*)(pcTrace + 0x9c) % mapSzTrace : -1,
-                            pcTrace ? *(int*)(pcTrace + 0x9c) / mapSzTrace : -1,
-                            pcTrace ? *(int*)(pcTrace + 0xa0) : -1, mapSzTrace);
-                    // Which cells are OCCUPIED, and what the description's clearable
-                    // filter (desc+0x50) is. f5d0 (0x14009F5D0) accepts an occupied cell
-                    // only when `*(occupant+0x28) == desc+0x50`; a null filter rejects
-                    // EVERY occupied cell, so a footprint over trees can never be placed.
-                    {
-                        uintptr_t dc = (uintptr_t)self->descComponent;
-                        uintptr_t grid = (uintptr_t)*(int**)(GetGameWorld() + 0xf8);
-                        int width = grid ? *(int*)grid : 0;
-                        uintptr_t tiles = grid ? *(uintptr_t*)(grid + 0x80) : 0;
-                        fprintf(stderr, "[OnKey]   descComp=%p filter(+0x50)=%p mask(+0x20)=0x%x\n",
-                                (void*)dc, dc ? *(void**)(dc + 0x50) : nullptr,
-                                dc ? *(uint32_t*)(dc + 0x20) : 0);
-                        for (int r = startRow; r <= endRow && tiles && width; ++r) {
-                            char line[256]; int o = 0;
-                            o += snprintf(line + o, sizeof(line) - o, "[OnKey]   row %d:", r);
-                            for (int c = startCol; c <= endCol; ++c) {
-                                uintptr_t cellSlot = tiles + (uintptr_t)(width * r + c) * 0x30;
-                                void* occ = *(void**)cellSlot;
-                                void* occDesc = occ ? *(void**)((uintptr_t)occ + 0x28) : nullptr;
-                                o += snprintf(line + o, sizeof(line) - o, " (%d,%d)occ=%p desc=%p",
-                                              c, r, occ, occDesc);
-                            }
-                            fprintf(stderr, "%s\n", line);
-                        }
-                    }
-                    fflush(stderr); } }
                 if (valid) {
                     // Try to place via helper_d650
                     if (s_fn_helper_d650) {
                         bool placed = s_fn_helper_d650(self, startCol, startRow,
                                                         endCol, endRow, pos, yaw[0]);
-                        { const char* e = std::getenv("BANISHED_TOOL_DIAG");
-                          if (e && e[0] && e[0] != '0') {
-                            fprintf(stderr, "[OnKey] helper_d650 placed=%d\n", placed); fflush(stderr); } }
                         if (placed) {
                             // Placement success — finalize
                             if (s_fn_FUN_1401000f0) {
@@ -636,24 +573,6 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         valid = s_fn_sub_da00(self, &startCol, &startRow, &endCol, &endRow, pos, yaw);
     }
 
-    // Diagnostic (BANISHED_TOOL_DIAG=1): throttled log of the per-frame Serialize state.
-    // The ghost mesh is only in the scene while sub_da00 returns VALID (cursor over the
-    // map); an invalid frame removes it. This tells us whether the cursor→terrain pick
-    // actually resolves in-game (the linchpin for both the ghost AND operator_fc60).
-    {
-        static int s_diagOn = -1;
-        if (s_diagOn < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_diagOn = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (s_diagOn) {
-            static int s_frame = 0;
-            if ((s_frame++ % 30) == 0) {
-                fprintf(stderr, "[SerDiag] active=%d valid=%d cell=(%d,%d)-(%d,%d) pos=(%.2f,%.2f,%.2f) "
-                        "yaw=%.2f sceneObjIdx=%d mesh=%p\n",
-                        (int)param3, (int)valid, startCol, startRow, endCol, endRow,
-                        pos[0], pos[1], pos[2], yaw[0], (int)self->sceneObjectIdx, self->meshInstance);
-                fflush(stderr);
-            }
-        }
-    }
 
     if (!valid || param3 == 0) {
         // --- Invalid / inactive: remove scene object and highlight ---
@@ -796,28 +715,6 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     uintptr_t costResult = 0;
     if (s_fn_FUN_140005160) {
         s_fn_FUN_140005160(self->descriptionPtr, &costResult);
-    }
-    // Log each DISTINCT costResult (dedupe by pointer) so the trace captures the real
-    // building being placed, not just the first (often-empty) default tool state.
-    {
-        const char* e = std::getenv("BANISHED_TOOL_DIAG");
-        if (e && e[0] && e[0] != '0' && costResult) {
-            static uintptr_t s_seen[16] = {0};
-            static int s_seenN = 0;
-            bool known = false;
-            for (int k = 0; k < s_seenN; ++k) if (s_seen[k] == costResult) { known = true; break; }
-            if (!known && s_seenN < 16) {
-                s_seen[s_seenN++] = costResult;
-                int arrCount = *(int*)(costResult + 0x58);
-                uintptr_t arrBase = *(uintptr_t*)(costResult + 0x50);
-                uint64_t str0 = (arrBase && arrCount > 0) ? *(uint64_t*)(arrBase) : 0;
-                uint64_t str1 = (arrBase && arrCount > 1) ? *(uint64_t*)(arrBase + 8) : 0;
-                fprintf(stderr, "[cost] costResult(ToolbarDescription)=%p arr@+0x50=%p count@+0x58=%d "
-                        "str0=\"%.32s\" str1=\"%.32s\"\n", (void*)costResult, (void*)arrBase, arrCount,
-                        str0 ? (const char*)str0 : "", str1 ? (const char*)str1 : "");
-                fflush(stderr);
-            }
-        }
     }
 
     // Build cost string: index into string array at (costResult+0x50)

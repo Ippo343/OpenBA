@@ -219,18 +219,6 @@ bool CitizenAI_State_Wander(int64_t param_1) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
 
     int64_t target = *reinterpret_cast<int64_t*>(*self + 0x258);
-    // Brick 3b dispatch trace (env BANISHED_CITIZENAI_TRACE): confirm the handler is
-    // reached, and whether it bails (no guardian/anchor at +0x258 => faithful no-op).
-    {
-        static int s_ts = -1; static int s_n = 0;
-        if (s_ts < 0) { const char* e = getenv("BANISHED_CITIZENAI_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (s_ts == 1 && s_n < 6) {
-            fprintf(stderr, "[Wander] DISPATCH self=%p target(+0x258)=%p%s\n",
-                    reinterpret_cast<void*>(param_1), reinterpret_cast<void*>(target),
-                    target == 0 ? " -> bail(no anchor)" : "");
-            fflush(stderr); s_n++;
-        }
-    }
     if (target == 0) return false;
 
     void* rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
@@ -299,16 +287,6 @@ bool CitizenAI_State_Wander(int64_t param_1) {
     float animTime = r * (s_pf_1721a0 ? *s_pf_1721a0 : 7.0f) + (s_pf_172180 ? *s_pf_172180 : 3.0f);
     CitizenAI_PlayAnimationActionCtor5(&citizenIBP, worldPos, animTime);
 
-    // Brick 3b trace (env BANISHED_CITIZENAI_TRACE): report state entry a few times.
-    {
-        static int s_ts = -1; static int s_n = 0;
-        if (s_ts < 0) { const char* e = getenv("BANISHED_CITIZENAI_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (s_ts == 1 && s_n < 6) {
-            fprintf(stderr, "[Wander] self=%p ENTERED cell=%d world=(%.2f,%.2f,%.2f) animT=%.2f\n",
-                    reinterpret_cast<void*>(param_1), cell, worldPos[0], worldPos[1], worldPos[2], animTime);
-            fflush(stderr); s_n++;
-        }
-    }
     return true;
 }
 

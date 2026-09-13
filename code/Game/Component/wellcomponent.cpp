@@ -500,7 +500,6 @@ static void WellComponent_FinishLiveVtable(void* mem) {
     // body's bytes and desyncs the stream for EVERY object after it.
     // See reference_vtable_slot3_serialize_never_installed.
     WellComponent_LiveVtable[3]  = reinterpret_cast<void*>(&WellComponent_ShutdownVSlot);
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_WELL")) return;
     WellComponent_LiveVtable[7]  = reinterpret_cast<void*>(&WellComponent_OnRemoveVSlot);
     WellComponent_LiveVtable[16] = reinterpret_cast<void*>(&WellComponent_GetDefaultState);
     WellComponent_LiveVtable[17] = reinterpret_cast<void*>(&WellComponent_CreateState);

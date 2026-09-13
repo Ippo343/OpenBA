@@ -324,95 +324,9 @@ extern "C" void TradeUI_SmallSort_ByComponent_16920(void* first, void* last,
     SmallSort(static_cast<Elem>(first), static_cast<Elem>(last), ctx, &ComponentLess);
 }
 
-// ── Self-test: BANISHED_TRADE_SORT_SELFTEST=1 ────────────────────────────────
-// The panel is still gated on a520 + GetBuyEntries, so nothing CALLS these sorts
-// yet. A registered-but-never-executed port is exactly the failure this project has
-// hit before, and a subtly wrong introsort is the worst kind of wrong: it returns a
-// MOSTLY sorted array, which reads as working.
-//
-// So the driver is exercised here against a trivial integer comparator, which tests
-// the part that is actually risky — the median-of-3 + partition + smaller-side
-// recursion transcribed from retail's gotos — without needing live descriptors or
-// the engine String machinery. Sizes straddle the 8-element small-sort cutoff and
-// include the adversarial shapes for an unstable partition: all-equal, two distinct
-// values, already-sorted, and reversed.
-//
-// Output goes to stderr: stdout stalls in this build, and a self-test that prints
-// nothing is indistinguishable from one that never ran.
-namespace {
-uint64_t SelfTestRand(uint64_t* s) {         // xorshift; no dependency on rand()
-    uint64_t x = *s; x ^= x << 13; x ^= x >> 7; x ^= x << 17; return *s = x;
-}
-bool SelfTestLess(void* /*ctx*/, const void* a, const void* b) {
-    return *reinterpret_cast<const uint64_t*>(a) < *reinterpret_cast<const uint64_t*>(b);
-}
-bool RunOneSelfTest(int n, int shape, uint64_t* seed, const char** why) {
-    // Elements are the real 0x18 stride; the key is qword 0, the other two qwords
-    // are a tag we check to prove the swaps move whole elements, not just the key.
-    static uint64_t buf[64 * 3];
-    if (n > 64) { *why = "n too large"; return false; }
-    for (int i = 0; i < n; ++i) {
-        uint64_t k;
-        switch (shape) {
-            case 0:  k = SelfTestRand(seed) % 50; break;   // random, many duplicates
-            case 1:  k = 7;                       break;   // all equal
-            case 2:  k = (i & 1);                 break;   // two distinct values
-            case 3:  k = static_cast<uint64_t>(i); break;  // already sorted
-            default: k = static_cast<uint64_t>(n - i); break; // reversed
-        }
-        buf[i * 3 + 0] = k;
-        buf[i * 3 + 1] = 0xA5A5000000000000ull | static_cast<uint64_t>(i);
-        buf[i * 3 + 2] = 0x5A5A000000000000ull | static_cast<uint64_t>(i);
-    }
-    IntroSort(reinterpret_cast<Elem>(buf), n, nullptr, &SelfTestLess, &SmallSort);
-    for (int i = 1; i < n; ++i) {
-        if (buf[i * 3] < buf[(i - 1) * 3]) { *why = "not ordered"; return false; }
-    }
-    // Every element must still carry a matching tag pair, and each original index
-    // must appear exactly once — this catches a partition that duplicates or drops
-    // an element while still leaving the keys in order.
-    bool seen[64] = { false };
-    for (int i = 0; i < n; ++i) {
-        const uint64_t t1 = buf[i * 3 + 1], t2 = buf[i * 3 + 2];
-        if ((t1 & 0xFFFF000000000000ull) != 0xA5A5000000000000ull ||
-            (t2 & 0xFFFF000000000000ull) != 0x5A5A000000000000ull) {
-            *why = "tag corrupted (partial-element swap)"; return false;
-        }
-        const uint64_t idx = t1 & 0xFFFFull;
-        if ((t2 & 0xFFFFull) != idx) { *why = "tag halves disagree"; return false; }
-        if (idx >= static_cast<uint64_t>(n) || seen[idx]) {
-            *why = "element duplicated or lost"; return false;
-        }
-        seen[idx] = true;
-    }
-    return true;
-}
-} // namespace
+// The BANISHED_TRADE_SORT_SELFTEST introsort self-test was deleted with the flag
+// (ENDGAME C). standalone/reg_tradeui_leaves.cpp still calls it; the stub goes with it.
 
-extern "C" void TradeUI_SortSelfTest() {
-    const char* e = std::getenv("BANISHED_TRADE_SORT_SELFTEST");
-    if (!e || !e[0] || e[0] == '0') return;
-    static const char* kShape[] = { "random-dupes", "all-equal", "two-values",
-                                    "sorted", "reversed" };
-    uint64_t seed = 0x9E3779B97F4A7C15ull;
-    int pass = 0, fail = 0;
-    for (int shape = 0; shape < 5; ++shape) {
-        for (int n = 1; n <= 64; ++n) {
-            const char* why = "";
-            if (RunOneSelfTest(n, shape, &seed, &why)) {
-                ++pass;
-            } else {
-                ++fail;
-                std::fprintf(stderr, "[TradeSort] FAIL shape=%s n=%d: %s\n",
-                             kShape[shape], n, why);
-            }
-        }
-    }
-    std::fprintf(stderr, "[TradeSort] self-test: %d passed, %d FAILED "
-                 "(introsort driver + small-range sort, stride 0x18, "
-                 "sizes 1..64 across 5 shapes)\n", pass, fail);
-    std::fflush(stderr);
-}
 
 // 0x1400845d0 / 0x140084430 — the comparators, likewise registered.
 extern "C" bool TradeUI_NameLess_845d0(void* self, const void* a, const void* b) {

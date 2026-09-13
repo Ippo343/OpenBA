@@ -173,7 +173,7 @@ extern "C" void HuntComponent_ShutdownVSlot(void* selfP, void* stream) {
 // per-frame Update above. Size 0x58 and NodeOff 0x28 / DefState 2 come from the shared
 // ResourceProduceComponent ctor — see fishingcomponent.cpp for the byte derivation.
 //
-// DEFAULT-ON via kDefaultOnFlags (graduated 2026-08-17); the env var is now a
+// DEFAULT-ON via the default-on table (graduated 2026-08-17); the env var is now a
 // kill-switch (=0). The positive run: seed 12345, demo lodge staffed 3/3 and accepting
 // in both arms — OFF held progress(+0x50) at exactly 0 for 7200 frames and town storage
 // at 7 resource types; ON ticked progress 0 -> 9.57e16 and storage reached 11 types,
@@ -194,7 +194,6 @@ extern "C" void    ResourceProduceComponent_Command(void*);      // slot 14
 static void HuntCtrl_PopulateAndWireHooks();
 
 CONTROLLER_LIVE_FACTORY_STATES(HuntComponent, 0x58, 0x88, 0x28, 2,
-                               "BANISHED_LIVE_HUNTING",
                                RPCtrl_NodeVtable, HuntCtrl_PopulateAndWireHooks)
 
 static void HuntCtrl_PopulateAndWireHooks() {

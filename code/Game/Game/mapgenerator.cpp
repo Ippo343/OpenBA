@@ -311,36 +311,9 @@ void MG_ReadRefPool(void* serializer, void* header, void* countField) {
 }
 } // namespace
 
-// [diag] BANISHED_MAPGEN_TRACE=1 -- an ENTER and an EXIT line per Serialize pass
-// per instance, with the resource pool's first three names. This is what caught the
-// post-tutorial empty world: pass 1 (the New Game combo) printed the three
-// Template\NaturalResource*.rsc names and pass 2 (the tutorial's ScenarioDialog
-// re-requesting StartConditions.rsc) printed "(null) | (null) | (null)". Keep it --
-// a second pass wiping already-parsed data is silent everywhere else.
-static int MapGen_TraceOn() {
-    static int on = -1;
-    if (on < 0) { const char* e = std::getenv("BANISHED_MAPGEN_TRACE");
-                  on = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return on;
-}
-
 void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     EnsureFuncsResolved();
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    int passNo = 0;
-    if (MapGen_TraceOn()) {
-        // pass counter kept in a tiny fixed table keyed on the instance pointer
-        static void* seen[64]; static int cnt[64]; static int nSeen = 0;
-        int i = 0;
-        for (; i < nSeen; ++i) if (seen[i] == self) break;
-        if (i == nSeen && nSeen < 64) { seen[nSeen] = self; cnt[nSeen] = 0; ++nSeen; }
-        if (i < 64) passNo = ++cnt[i];
-        fprintf(stderr, "[MapGen] Serialize ENTER self=%p pass=%d stream=%p "
-                "resArr@0x70=%p cnt=%d name@0x28=%p\n",
-                (void*)self, passNo, stream, *(void**)(s + 0x70),
-                *(int32_t*)(s + 0x78), *(void**)(s + 0x28));
-        fflush(stderr);
-    }
     uint8_t serializer[24];
     if (!g_fn_Serializer_Ctor || !g_fn_String_Serialize || !g_fn_Serialize_Int ||
         !g_fn_Serialize_Bool || !fn_Serializer_Serialize_Float || !fn_ExternalPtr_Serialize2) {
@@ -417,17 +390,6 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     g_fn_String_Serialize(s + 0x158, serializer);       // descRef3 (vegetation)
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x170), nullptr);
 
-    if (MapGen_TraceOn()) {
-        uint8_t* pool = *(uint8_t**)(s + 0x70);
-        fprintf(stderr, "[MapGen] Serialize EXIT  self=%p pass=%d resArr=%p cnt=%d "
-                "names=[%.32s | %.32s | %.32s] name@0x28=\"%.24s\"\n",
-                (void*)self, passNo, (void*)pool, *(int32_t*)(s + 0x78),
-                (pool && *(int32_t*)(s+0x78) > 0 && *(char**)(pool))        ? *(char**)(pool)        : "(null)",
-                (pool && *(int32_t*)(s+0x78) > 1 && *(char**)(pool+0x18))   ? *(char**)(pool+0x18)   : "(null)",
-                (pool && *(int32_t*)(s+0x78) > 2 && *(char**)(pool+0x30))   ? *(char**)(pool+0x30)   : "(null)",
-                *(char**)(s + 0x28) ? *(char**)(s + 0x28) : "(null)");
-        fflush(stderr);
-    }
     if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
     return;
 }

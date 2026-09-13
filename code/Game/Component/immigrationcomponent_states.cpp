@@ -42,7 +42,7 @@
 //   +0x5c spawn distance from the map edge (10)
 //   +0x60/+0x64 disease seed written to townMgr+0x1a8 / +0x1a0 on accept
 //
-// Opt-in: BANISHED_LIVE_IMMIGRATION (or BANISHED_LIVE_COMPONENTS). Default off keeps
+// Opt-in: BANISHED_LIVE_IMMIGRATION (or the global live-components switch). Default off keeps
 // the component inert exactly as before this port.
 //
 // Test fixtures (all env-gated, byte-unchanged when unset — NOT retail behaviour):
@@ -128,34 +128,6 @@ uint32_t TidInteractDesc() {
     if (g_TypeId_InteractDescription_FC && *g_TypeId_InteractDescription_FC)
         return *g_TypeId_InteractDescription_FC;
     static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("InteractDescription"); return t;
-}
-
-// ---------------------------------------------------------------- env fixtures
-bool EnvSet(const char* n) {
-    const char* e = std::getenv(n);
-    return e && e[0] && std::strcmp(e, "0") != 0;
-}
-bool Trace() { static int v = -1; if (v < 0) v = EnvSet("BANISHED_NOMAD_TRACE") ? 1 : 0; return v == 1; }
-bool AnySeason() { static int v = -1; if (v < 0) v = EnvSet("BANISHED_NOMAD_ANY_SEASON") ? 1 : 0; return v == 1; }
-float TimerScale() {
-    static float v = -1.0f;
-    if (v < 0.0f) {
-        const char* e = std::getenv("BANISHED_NOMAD_TIMER_SCALE");
-        v = (e && e[0]) ? static_cast<float>(std::atof(e)) : 1.0f;
-        if (v <= 0.0f) v = 1.0f;
-    }
-    return v;
-}
-// <0 => unset. AutoAnswerEvent() is 7 (ALLOW) or 8 (DENY, from a negative value).
-int AutoAcceptTicks() {
-    static int v = -2;
-    if (v == -2) { const char* e = std::getenv("BANISHED_NOMAD_AUTOACCEPT"); v = (e && e[0]) ? std::abs(std::atoi(e)) : -1; }
-    return v;
-}
-int AutoAnswerEvent() {
-    static int v = 0;
-    if (v == 0) { const char* e = std::getenv("BANISHED_NOMAD_AUTOACCEPT"); v = (e && e[0] && std::atoi(e) < 0) ? 8 : 7; }
-    return v;
 }
 
 // ---------------------------------------------------------------- small accessors
@@ -385,7 +357,6 @@ extern "C" void Immigration_Spawn(void* compV) {
         if (cell >= 0) break;
     }
     if (cell < 0) {
-        if (Trace()) { std::fprintf(stderr, "[ImmCtrl] Spawn: no reachable edge cell after 10 tries\n"); std::fflush(stderr); }
         return;
     }
 
@@ -419,11 +390,6 @@ extern "C" void Immigration_Spawn(void* compV) {
     int n = extra + static_cast<int>(static_cast<float>(pop) * (fRand * (fHi - fLo) + fLo));
     if (n < 2) n = 2;
 
-    if (Trace()) {
-        std::fprintf(stderr, "[ImmCtrl] Spawn: edge (%d,%d) cell=%d hallCell=%d pop=%d emptySlots=%d -> group of %d\n",
-                     x, y, cell, hallCell, pop, emptySlots, n);
-        std::fflush(stderr);
-    }
 
     for (int k = 0; k < n; ++k) {
         int c = Immigration_FindSpawnCell(compV, x, y, hallCell);
@@ -475,11 +441,6 @@ extern "C" void Immigration_Spawn(void* compV) {
         int count = *reinterpret_cast<int*>(comp + 0x60);
         uint64_t pushIBP = entIBP;
         if (s_DynArray8) s_DynArray8(reinterpret_cast<void*>(comp + 0x58), count + 1, &pushIBP);
-        if (Trace() && k < 3) {
-            std::fprintf(stderr, "[ImmCtrl]   nomad #%d ent=%p nomadComp=%p cell=%d spawn=(%.1f,%.1f,%.1f) meet=(%.1f,%.1f,%.1f) pts=%u\n",
-                         k, ent, nomad, c, spawn[0], spawn[1], spawn[2], meet[0], meet[1], meet[2], nPts);
-            std::fflush(stderr);
-        }
     }
     *reinterpret_cast<uint32_t*>(comp + 0x50) = 0;
 }
@@ -492,7 +453,6 @@ extern "C" void Immigration_Dismiss(void* compV) {
     uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
     int n = *reinterpret_cast<int*>(comp + 0x60);
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(comp + 0x58);
-    if (Trace()) { std::fprintf(stderr, "[ImmCtrl] Dismiss: %d nomads sent home\n", n); std::fflush(stderr); }
     for (int i = 0; i < n; ++i) {
         uint64_t* slot = reinterpret_cast<uint64_t*>(arr + static_cast<uintptr_t>(i) * 8);
         CheckPtr(slot);
@@ -585,11 +545,6 @@ extern "C" void Immigration_Accept(void* compV) {
 
     const int n = *reinterpret_cast<int*>(comp + 0x60);
     *reinterpret_cast<int*>(TownMgr(gw) + 0x1b0) += n;
-    if (Trace()) {
-        std::fprintf(stderr, "[ImmCtrl] ACCEPT: %d nomads -> townMgr+0x1b0 (nomads admitted) = %d\n",
-                     n, *reinterpret_cast<int*>(TownMgr(gw) + 0x1b0));
-        std::fflush(stderr);
-    }
 
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(comp + 0x58);
     auto nomadAt = [&](int i) -> void* {
@@ -639,23 +594,11 @@ extern "C" void Immigration_Accept(void* compV) {
 // State handlers (data = the ImmigrationComponent, sm = its StateMachine)
 // ============================================================
 namespace {
-void TraceState(const char* what, uintptr_t comp) {
-    if (!Trace()) return;
-    uint8_t* gw = GW();
-    std::fprintf(stderr, "[ImmCtrl] %s comp=%p month=%d pop=%d group=%d arrived=%d canAccept=%d\n",
-                 what, (void*)comp, gw ? MonthOfYear(gw) : -1,
-                 gw ? *reinterpret_cast<int*>(TownMgr(gw) + 0xa8) : -1,
-                 *reinterpret_cast<int*>(comp + 0x60), *reinterpret_cast<int*>(comp + 0x50),
-                 Immigration_CanAccept(reinterpret_cast<void*>(comp)) ? 1 : 0);
-    std::fflush(stderr);
-}
-int s_autoAcceptCountdown = -1;
 }  // namespace
 
 // state 2 IDLE — enter 0x14004d290 (returns 0), tick 0x14004d220 (returns 1)
 extern "C" char Imm_State2_Enter(void* data, void* sm) {
     Resolve();
-    TraceState("state 2 (idle) enter", reinterpret_cast<uintptr_t>(data));
     if (Immigration_CanAccept(data)) ::ControllerLive::RequestStateTransition(sm, 0xf);
     return 0;
 }
@@ -674,11 +617,10 @@ extern "C" char Imm_StateF_Enter(void* data, void* /*sm*/) {
     if (!gw || !desc) return 0;
     float r = fn_Random_RandFloat ? fn_Random_RandFloat(Rng(gw)) : 0.5f;
     float months = r * *reinterpret_cast<float*>(desc + 0x4c) + *reinterpret_cast<float*>(desc + 0x48);
-    float secs = months * kSecondsPerMonth * TimerScale();
+    float secs = months * kSecondsPerMonth;
     int64_t t = 0;
     if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, secs);
     *reinterpret_cast<int64_t*>(comp + 0x48) = t;
-    if (Trace()) { std::fprintf(stderr, "[ImmCtrl] state 0xf (waiting) enter: timer=%.1f months (%.0f s, scale %.3f)\n", months, secs, TimerScale()); std::fflush(stderr); }
     return 0;
 }
 // tick 0x14004d0d0: countdown; in season -> 0x10 if CanAccept else 2
@@ -691,11 +633,10 @@ extern "C" char Imm_StateF_Tick(void* data, void* sm, void* time) {
     int64_t* timer = reinterpret_cast<int64_t*>(comp + 0x48);
     *timer -= time ? *reinterpret_cast<int64_t*>(time) : 0;
     int month = MonthOfYear(gw);
-    bool inSeason = AnySeason() ||
+    bool inSeason =
         (*reinterpret_cast<int*>(desc + 0x50) <= month && month <= *reinterpret_cast<int*>(desc + 0x54));
     if (*timer < 1 && inSeason) {
         bool ok = Immigration_CanAccept(data);
-        TraceState(ok ? "state 0xf timer expired -> 0x10 (arriving)" : "state 0xf timer expired but cannot accept -> 2", comp);
         ::ControllerLive::RequestStateTransition(sm, ok ? 0x10 : 2);
     }
     return 1;
@@ -710,7 +651,6 @@ extern "C" char Imm_State10_Enter(void* data, void* /*sm*/) {
     if (old && fn_MemFreeStatic) fn_MemFreeStatic(old);
     *reinterpret_cast<uint64_t*>(comp + 0x58) = 0;
     *reinterpret_cast<uint64_t*>(comp + 0x60) = 0;
-    TraceState("state 0x10 (arriving) enter", comp);
     Immigration_Spawn(data);
     return 1;
 }
@@ -725,7 +665,6 @@ extern "C" char Imm_State10_Event6_Arrived(void* data, void* sm) {
     Resolve();
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     uint32_t arrived = ++*reinterpret_cast<uint32_t*>(comp + 0x50);
-    if (Trace()) { std::fprintf(stderr, "[ImmCtrl] event 6: nomad arrived %u/%d\n", arrived, *reinterpret_cast<int*>(comp + 0x60)); std::fflush(stderr); }
     if (arrived == *reinterpret_cast<uint32_t*>(comp + 0x60)) ::ControllerLive::RequestStateTransition(sm, 0x11);
     return 1;
 }
@@ -745,8 +684,6 @@ extern "C" char Imm_State11_Enter(void* data, void* /*sm*/) {
         int64_t ownerIBP = *reinterpret_cast<int64_t*>(comp + 0x10);
         EventLog_AddEvent(eventLog, 0xe, 2, &ownerIBP);
     }
-    s_autoAcceptCountdown = AutoAcceptTicks();
-    TraceState("state 0x11 (waiting for answer) enter — NOMADS HAVE ARRIVED", comp);
     return 1;
 }
 // tick 0x14004ce00: past the leave month -> dismiss -> 2
@@ -756,22 +693,7 @@ extern "C" char Imm_State11_Tick(void* data, void* sm, void* /*time*/) {
     uint8_t* gw = GW();
     uint8_t* desc = ImmDesc(comp);
     if (!gw || !desc) return 1;
-    if (s_autoAcceptCountdown >= 0) {
-        if (s_autoAcceptCountdown-- == 0) {
-            // Post ALLOW/DENY through the SM node, exactly what the buttons do.
-            void* node = *reinterpret_cast<void**>(sm);
-            if (node) {
-                int ev = AutoAnswerEvent();
-                void** vt = *reinterpret_cast<void***>(node);
-                typedef char (*PostEvent_t)(void*, void*, int, int);
-                if (Trace()) { std::fprintf(stderr, "[ImmCtrl] AUTOACCEPT: posting event %d (%s)\n", ev, ev == 7 ? "ALLOW" : "DENY"); std::fflush(stderr); }
-                reinterpret_cast<PostEvent_t>(vt[2])(node, sm, static_cast<int>(*reinterpret_cast<int8_t*>(reinterpret_cast<uint8_t*>(sm) + 9)), ev);
-                return 1;
-            }
-        }
-    }
-    if (!AnySeason() && *reinterpret_cast<int*>(desc + 0x58) <= MonthOfYear(gw)) {
-        TraceState("state 0x11: leave month reached, nomads give up", comp);
+    if (*reinterpret_cast<int*>(desc + 0x58) <= MonthOfYear(gw)) {
         Immigration_Dismiss(data);
         ::ControllerLive::RequestStateTransition(sm, 2);
     }
@@ -780,7 +702,6 @@ extern "C" char Imm_State11_Tick(void* data, void* sm, void* /*time*/) {
 // event 7 0x14004cd90: ALLOW
 extern "C" char Imm_Event7_Allow(void* data, void* sm) {
     Resolve();
-    s_autoAcceptCountdown = -1;
     Immigration_Accept(data);
     ::ControllerLive::RequestStateTransition(sm, 2);
     return 1;
@@ -788,7 +709,6 @@ extern "C" char Imm_Event7_Allow(void* data, void* sm) {
 // event 8 0x14004cd20: DENY
 extern "C" char Imm_Event8_Deny(void* data, void* sm) {
     Resolve();
-    s_autoAcceptCountdown = -1;
     Immigration_Dismiss(data);
     ::ControllerLive::RequestStateTransition(sm, 2);
     return 1;

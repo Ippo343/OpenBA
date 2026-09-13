@@ -232,32 +232,6 @@ void FruitComponent_Update(FruitComponent* self, int64_t* pDeltaTime) {
     float newRipeness = dtSeconds * effRate * ripeningSpeed * growthFactor + *pRipeness;
     *pRipeness = newRipeness;
 
-    // Phase-1 bring-up verification trace (env BANISHED_FRUIT_TRACE, default off
-    // -> byte-unchanged). Follows ONE FruitComponent across ticks, printing its
-    // accumulating ripeness (self->field30 / +0x30). Confirms the live recipe
-    // end-to-end: Update entered via vtable +0x48, Startup populated field28@+0x28,
-    // and the value advances per tick.
-    {
-        static int s_traceState = -1;   // -1=unchecked, 0=off, 1=on
-        static int s_traceCount = 0;
-        static void* s_lockComp = nullptr;  // follow ONE component across ticks
-        if (s_traceState < 0) {
-            const char* e = std::getenv("BANISHED_FRUIT_TRACE");
-            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_traceState == 1 && s_lockComp == nullptr) s_lockComp = comp;
-        if (s_traceState == 1 && comp == s_lockComp && s_traceCount < 40) {
-            fprintf(stderr,
-                "[FruitTrace] comp=%p resData=%p flag=%d dt=%.5f speed=%.6f "
-                "temp=%.3f delta=%.4f gf=%.4f eff=%.4f -> ripe=%.6f\n",
-                (void*)comp, (void*)resData, (int)self->fruitFlag, dtSeconds,
-                ripeningSpeed, currentTemp, tempDelta, growthFactor, effRate,
-                newRipeness);
-            fflush(stderr);
-            s_traceCount++;
-        }
-    }
-
     // Clamp to [0.0, 1.0]: < 0 -> 0; > g_fUVScale -> exactly 1.0.
     if (*pRipeness < 0.0f)
         *pRipeness = 0.0f;
@@ -279,12 +253,12 @@ void FruitComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Phase 1 inert->live component bring-up) =====
-// ⚠ GRADUATED 2026-08-10: BANISHED_LIVE_FRUIT is now in kDefaultOnFlags, so this component
+// ⚠ GRADUATED 2026-08-10: BANISHED_LIVE_FRUIT is now in the default-on table, so this component
 // is LIVE by default and the env var is only a kill-switch (=0). The line below described
 // the pre-graduation default and is kept for the shape of the opt-in path.
 // By DEFAULT FruitComponent stays inert exactly like every other standalone
 // component (default run byte-for-byte unchanged). Set BANISHED_LIVE_FRUIT=1 (or
-// the global BANISHED_LIVE_COMPONENTS=1) to graduate it to a real per-type vtable:
+// the global the global live-components switch=1) to graduate it to a real per-type vtable:
 //   * slot 4 (+0x20 Startup) -> FruitComponent_Startup  (body-init field28@+0x28)
 //   * slot 9 (+0x48 Update)  -> FruitComponent_Update    (per-tick ripening sim)
 // Size 0x38, capability flags +0x20 = 0x88 (from FruitComponent_Ctor).
@@ -317,12 +291,10 @@ static void FruitComponent_SerializeVSlot(void* self, void* stream) {
 static void FruitComponent_FinishLiveVtable() {
     FruitComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&FruitComponent_SerializeVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_FRUIT")) {
-        FruitComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&FruitComponent_StartupVSlot);
-        FruitComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&FruitComponent_UpdateVSlot);
-    }
+    FruitComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&FruitComponent_StartupVSlot);
+    FruitComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&FruitComponent_UpdateVSlot);
 }
 extern "C" void* FruitComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x88,

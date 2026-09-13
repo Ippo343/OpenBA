@@ -114,7 +114,7 @@ void HerbalistComponent_InitFuncs() {
 // Retail's HerbalistComponent vtable overrides slot 18 ONLY; 19/20/21 stay the base
 // no-ops, so all production happens citizen-side in HerbalistWork.
 //
-// DEFAULT-ON via kDefaultOnFlags (graduated 2026-08-17); the env var is now a
+// DEFAULT-ON via the default-on table (graduated 2026-08-17); the env var is now a
 // kill-switch (=0). The positive run: seed 12345, demo hut staffed 4/4 and accepting in
 // both arms — OFF left the hut parked with GATHERABLE CLIMBING 15 -> 26 (the resources
 // were there and nobody was picking them); ON drained it 15 -> 2 and added resource
@@ -131,7 +131,6 @@ extern "C" void    ResourceProduceComponent_Command(void*);      // slot 14
 static void HerbalistCtrl_PopulateAndWireHooks();
 
 CONTROLLER_LIVE_FACTORY_STATES(HerbalistComponent, 0x50, 0x80, 0x28, 2,
-                               "BANISHED_LIVE_GATHERER",
                                RPCtrl_NodeVtable, HerbalistCtrl_PopulateAndWireHooks)
 
 static void HerbalistCtrl_PopulateAndWireHooks() {

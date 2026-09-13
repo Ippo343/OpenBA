@@ -52,6 +52,7 @@
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"     // ::Object::GetTypeIdByName
 #include "Component/orchardcomponent_funcs.h" // extern OrchardComponent_GetGrowth (do not modify that file)
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -67,7 +68,7 @@ void Init() {
     if (s_initialized) return;
     s_initialized = true;
 
-    const char* env = std::getenv("BANISHED_ORCHARD_DIAG");
+    const char* env = Opt().orchardDiag;
     if (!env || env[0] == '\0' ||
         std::strcmp(env, "0") == 0 || std::strcmp(env, "false") == 0) {
         s_enabled = false;

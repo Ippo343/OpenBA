@@ -18,6 +18,7 @@
 // after loading a tutorial scenario.
 
 #include "sampler.h"
+#include "options.h"
 #include "GameUpdateLoop.h"
 #include "Entity/entitylist_funcs.h"
 #include "Component/component_factory_base.h"
@@ -62,12 +63,6 @@ extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFl
 // Minimap terrain painter (code/Game/Game/minimap_paint.cpp) — standalone fallback for
 // the exe FUN_1400a5140 (ImageCapture::DrawCheck), wired into fn_ImageCapture_DrawCheck.
 extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGeom, void* sunLight);
-static bool LiveToolsEnabled() {
-    static int g = -1;
-    if (g < 0) { g = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_TOOLS") ? 1 : 0; }
-    return g != 0;
-}
-
 // In-app RenderDoc capture driver — ticked once per in-game rendered frame so a
 // delayed capture armed by OptionsDialog::ApplyVideoSettings (after an MSAA/res
 // apply) actually fires. No-op unless the exe was launched via RenderDoc's UI.
@@ -745,7 +740,6 @@ extern "C" void MarketOverstock_Tick(int frameNum);   // standalone/market_overs
 extern "C" void PanelStaffingDriver_Tick(void* entityUI, int frameNum);
 extern "C" void PanelHoldHarness_Tick(void* entityUI, int frameNum);  // standalone/panel_staffing_driver.cpp
 extern "C" void BuilderSeat_Tick(int frameNum);        // standalone/builder_seat_harness.cpp
-static void GameUpdateLoop_TryOpenDebugPanel(GameUpdateLoop* self);  // defined below
 extern "C" float AchClock_TimeScale();                 // standalone/ach_clock.cpp
 extern "C" void  AchClock_Tick(int frameNum);          // standalone/ach_clock.cpp
 extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum);  // standalone/trade_buy_harness.cpp
@@ -807,7 +801,7 @@ long long g_profSimIters = 0;
 
 inline bool SimProfOn() {
     if (g_simProfOn < 0) {
-        const char* e = std::getenv("BANISHED_SIMPROF");
+        const char* e = Opt().simprof;
         int n = (e && e[0] && e[0] != '0') ? std::atoi(e) : 0;
         if (e && e[0] && e[0] != '0' && n <= 1) n = 120;   // "1" => default interval
         g_simProfOn = n;
@@ -873,7 +867,7 @@ void SimProfReport(int speedMultiplier, long entCount) {
 int g_forceSpeed = -1;
 inline void ApplyForceSpeed(void* entityUIv) {
     if (g_forceSpeed < 0) {
-        const char* e = std::getenv("BANISHED_FORCE_SPEED");
+        const char* e = Opt().forceSpeed;
         g_forceSpeed = (e && e[0]) ? std::atoi(e) : 0;
     }
     if (g_forceSpeed > 0 && entityUIv) {
@@ -912,8 +906,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
         static int s_unregFrames = 0;
         static int s_unregDumpAt = -1;
         if (s_unregDumpAt < 0) {
-            const char* v = std::getenv("BANISHED_UNREG_CENSUS");
-            int n = (v && v[0]) ? std::atoi(v) : 0;
+            const int n = Opt().unregCensusFrames;
             s_unregDumpAt = (n > 1) ? n : 600;
         }
         if (++s_unregFrames == s_unregDumpAt) DumpUnregCensus();
@@ -951,25 +944,6 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     StressHarness_UpdateBegin(s_frameNum);   // [STRESS] no-op unless BANISHED_STRESS
     PerfX::BeginFrame(self->m_renderer);      // [PerfX] per-frame frustum + pause flush (no-op unless enabled)
 
-    // [OBJAUDIT] env BANISHED_OBJAUDIT: periodic InternalFactory handle-table integrity
-    // scan (table[i]+0x08 == i for every i) plus the running tally of objects freed while
-    // still registered. A growing `count` with a flat live-object count means stale entries
-    // are accumulating; `bad>0` means the table is already corrupt. Interval is
-    // BANISHED_OBJAUDIT_FRAMES (default 300).
-    if (ObjAudit::Enabled()) {
-        static int interval = 0;
-        if (interval == 0) {
-            const char* v = std::getenv("BANISHED_OBJAUDIT_FRAMES");
-            interval = (v && std::atoi(v) > 0) ? std::atoi(v) : 300;
-        }
-        if (s_frameNum % interval == 0) {
-            char tag[32];
-            std::snprintf(tag, sizeof(tag), "frame%d", s_frameNum);
-            ObjAudit::Scan(tag);
-            ObjAudit::ReportLeaks(tag);
-        }
-    }
-
     // [EVENTS] RETIRED: the BANISHED_LIVE_EVENTS resource-shortage scanner used to
     // run here (a second port of FUN_14008c100 via EventLog_CheckResourceShortages).
     // It is superseded by the registered tick path: CitizenBehavior_CheckThresholds
@@ -982,72 +956,6 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // The scenario/achievement popup (0x1a-0x1d) source op_6830 (0x140096830) and the
     // ribbon / EventPopupDialog paths are unaffected and stay live for any real event.
 
-    // [EVENT PROBE] env BANISHED_EVENT_PROBE_NAME: fire ONE scenario-style named
-    // event (0x1b "scenario won", sev 4) at frame 300. The real caller is
-    // GameUpdateLoop::OnScenarioComplete, which only runs when a scenario's
-    // Achievement is met/failed — that never happens in a sandbox autostart run, so
-    // this is the only way to exercise EventLog_AddEventWithName (0x140095750) and
-    // see its {2}=name substitution land in the ribbon. Diagnostic only, off by default.
-    {
-        static int s_probe = -1;
-        if (s_probe < 0) { const char* e = std::getenv("BANISHED_EVENT_PROBE_NAME"); s_probe = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (s_probe == 1 && s_frameNum == 300) {
-            s_probe = 0;  // one shot
-            void* eventLog = self ? self->m_eventNotifier : nullptr;
-            if (eventLog) {
-                uint8_t nameStr[8] = {0};
-                fn_String_Ctor_CStr(nameStr, "PROBE Achievement Title");
-                int64_t nullEntity[1] = {0};
-                fn_InternalBasePtr_Ctor(nullEntity, nullptr);
-                EventLog_AddEventWithName(eventLog, 0x1b, 4, nullEntity, nameStr);
-                fn_String_Dtor(nameStr);
-                fprintf(stderr, "[EventProbe] fired AddEventWithName type=0x1b sev=4\n");
-                fflush(stderr);
-            }
-        }
-    }
-
-    // [GOAL PROBE] env BANISHED_GOAL_PROBE: evaluate one synthetic BuildingGoal at
-    // frame 400 (see BuildingGoal_Probe). The base game ships no scenarios, so this
-    // is the only way to exercise the goal path without a mod. Value = template name
-    // (or "1" for the default). Diagnostic only, off by default.
-    {
-        static int s_goalProbe = -1;
-        static const char* s_goalName = nullptr;
-        if (s_goalProbe < 0) {
-            const char* e = std::getenv("BANISHED_GOAL_PROBE");
-            s_goalProbe = (e && e[0] && e[0] != '0') ? 1 : 0;
-            s_goalName = (e && e[0] && e[1]) ? e : "Template\\StorageBarn.rsc";
-        }
-        if (s_goalProbe == 1 && s_frameNum == 400) {
-            s_goalProbe = 0;  // one shot
-            BuildingGoal_Probe(s_goalName);
-        }
-    }
-
-    // [FPS TRACE] env BANISHED_FPS_TRACE: wall-clock fps over 120-frame windows (entry-to-
-    // entry period). Also reports the entity count so we can correlate fps with world size.
-    {
-        static int s_fpsOn = -1;
-        if (s_fpsOn < 0) { const char* e = std::getenv("BANISHED_FPS_TRACE"); s_fpsOn = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (s_fpsOn == 1) {
-            static unsigned long long s_lastMs = 0;
-            static int s_winFrames = 0;
-            if (s_lastMs == 0) s_lastMs = GetTickCount64();
-            if (++s_winFrames >= 120) {
-                unsigned long long now = GetTickCount64();
-                double secs = (double)(now - s_lastMs) / 1000.0;
-                double fps = secs > 0 ? s_winFrames / secs : 0.0;
-                long entCount = -1;
-                void* el = self->m_entityList;
-                if (el) entCount = *reinterpret_cast<int*>((uint8_t*)el + 0x30);  // EntityList count (approx)
-                fprintf(stderr, "[FPS] %.1f fps (%d frames / %.2fs) entityListCount~=%ld\n",
-                        fps, s_winFrames, secs, entCount);
-                fflush(stderr);
-                s_lastMs = now; s_winFrames = 0;
-            }
-        }
-    }
 
     // Drive a Player tool (env-gated, one-shot) so otherwise-dormant tool code
     // paths fire for debugger validation. No-op unless BANISHED_TOOL_HARNESS set.
@@ -1103,11 +1011,6 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // is set (standalone/disaster_harness.cpp).
     DisasterHarness_Tick(s_frameNum);
 
-    // Periodic house-food refill. Takes STARVATION out of a long demographic soak, which
-    // otherwise kills the whole cohort (~frame 6000-8000 at 25 citizens) long before any
-    // birth/marriage rate can be measured. No-op unless BANISHED_FOOD_TOPUP is set.
-    { extern void StartTown_FoodTopUp_Tick(int); StartTown_FoodTopUp_Tick(s_frameNum); }
-
     // One-shot pasture stocking for the animal-wave test rig. No-op unless
     // BANISHED_PASTURE_FILL is set (standalone/pasture_harness.cpp).
     PastureFillHarness_Tick(s_frameNum);
@@ -1129,8 +1032,6 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
 
     // Player stand-in for the town-hall Builder spinner. No-op unless BANISHED_BUILDERS.
     BuilderSeat_Tick(s_frameNum);
-    // The debug panel resource lives in a .pkm mounted after Startup; keep trying.
-    GameUpdateLoop_TryOpenDebugPanel(self);
     // Non-retail clock knobs for the time-gated achievements: advance the year
     // counter stat 26 reads. No-op unless BANISHED_ACH_YEAR_BOOST is set
     // (standalone/ach_clock.cpp).
@@ -1398,7 +1299,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                 int32_t  savedGate = 0;
                 static int s_ignoreMods = -1;
                 if (s_ignoreMods < 0) {
-                    const char* e = getenv("BANISHED_ACH_IGNORE_MODS");
+                    const char* e = Opt().achIgnoreMods;
                     s_ignoreMods = (e && e[0] && e[0] != '0') ? 1 : 0;
                 }
                 if (s_ignoreMods == 1) {
@@ -1543,7 +1444,7 @@ post_simulation:
             // Phase 3: tick the active player tool (the tool half of EntityUI::Update
             // that camera_input.cpp omitted) — OnKey (dialog + left-click confirm) +
             // Serialize (ghost preview) + cursor. -1 = no active tool -> keep default.
-            if (LiveToolsEnabled()) {
+            {
                 int toolCursor = EntityUI_ToolTick_SA(self->m_entityUI, noInputFocus ? 1 : 0, *(int64_t*)time);
                 if (toolCursor >= 0) cursorIndex = toolCursor;
             }
@@ -1571,63 +1472,6 @@ post_simulation:
     }
     TRACE("[GameUpdateLoop::Update] cursor set\n");
 
-            // [diag] BANISHED_AUDIO_PROBE — load the ambient sound resources DIRECTLY,
-            // with no save/load anywhere near, and report each one's SoundBuffer. The
-            // tutorial load showed RiverEffect.rsc and WindEffect.rsc with a null buffer
-            // while Environment.rsc's five effects were fine; running the same check in
-            // a fresh game separates "this .rsc never loads right" from "the save-load
-            // window broke it".
-            {
-                static int s_probed = ::ComponentFactory::LiveEnabled("BANISHED_AUDIO_PROBE") ? 0 : 1;
-                if (!s_probed) {
-                    s_probed = 1;
-                    typedef void* (*FnGetPath2_t)(void*, void*);
-                    FnGetPath2_t getPath = reinterpret_cast<FnGetPath2_t>(
-                        ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
-                    static const char* kFiles[] = {
-                        "Audio/Effects/RiverEffect.rsc",
-                        "Audio/Effects/WindEffect.rsc",
-                        "Audio/Effects/Environment.rsc",
-                    };
-                    for (int f = 0; f < 3; ++f) {
-                        if (!fn_Filename_CtorCStr_Local || !fn_ExternalFactory_FindOrLoad ||
-                            !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
-                            std::fprintf(stderr, "[AudioProbe] deps unresolved\n");
-                            break;
-                        }
-                        uint8_t fname[8];
-                        fn_Filename_CtorCStr_Local(fname, kFiles[f]);
-                        uint8_t* se = (uint8_t*)fn_ExternalFactory_FindOrLoad(
-                            *g_pExternalFactorySingleton, fname);
-                        if (!se) { std::fprintf(stderr, "[AudioProbe] %s -> NOT FOUND\n", kFiles[f]); continue; }
-                        const uint64_t* q = (const uint64_t*)se;
-                        uint8_t* arr = *(uint8_t**)(se + 0x30);
-                        int n = *(int32_t*)(se + 0x38);
-                        std::fprintf(stderr, "[AudioProbe] %s -> %p vt=%p elems=%d "
-                                "f20=%08x f24=%08x s28=%016llx\n",
-                                kFiles[f], (void*)se, (void*)q[0], n,
-                                *(uint32_t*)(se + 0x20), *(uint32_t*)(se + 0x24),
-                                (unsigned long long)q[5]);
-                        for (int k = 0; arr && k < n && k < 4; ++k) {
-                            uint8_t* el = arr + (size_t)k * 0x18;
-                            uint8_t* vars = *(uint8_t**)(el + 0x08);
-                            int vn = *(int32_t*)(el + 0x10);
-                            for (int v = 0; vars && v < vn && v < 4; ++v) {
-                                void* buf = *(void**)(vars + (size_t)v * 0x18);
-                                const char* bp = "";
-                                if (buf && getPath) {
-                                    void* bf[2] = { nullptr, nullptr };
-                                    getPath(buf, bf);
-                                    if (bf[0]) bp = (const char*)bf[0];
-                                }
-                                std::fprintf(stderr, "[AudioProbe]    elem %d var %d buf=%p %s%s\n",
-                                        k, v, buf, bp, buf ? "" : "  <-- NULL");
-                            }
-                        }
-                        std::fflush(stderr);
-                    }
-                }
-            }
     // Step 12: Audio::Scene::Update
     TRACE("[GameUpdateLoop::Update] calling Audio::Scene::Update...\n");
     {
@@ -1639,9 +1483,6 @@ post_simulation:
         float tx = *(float*)((uintptr_t)playerCtrl + 0x98);
         float ty = *(float*)((uintptr_t)playerCtrl + 0x9c);
         float tz = *(float*)((uintptr_t)playerCtrl + 0xa0);
-        float cx = *(float*)((uintptr_t)playerCtrl + 0x1c);
-        float cy = *(float*)((uintptr_t)playerCtrl + 0x20);
-        float cz = *(float*)((uintptr_t)playerCtrl + 0x24);
         listenerPos[0] = tx + 0.0f;
         listenerPos[1] = ty + 0.0f;
         listenerPos[2] = tz + 0.0f;
@@ -1667,90 +1508,6 @@ post_simulation:
                 if (s_once < 3) {
                     s_once++;
                     std::fprintf(stderr, "[AudioScene] windFactor(camera dist)=%.3f\n", windFactor);
-                    std::fflush(stderr);
-                }
-            }
-            // [diag] Audio::Scene::Update walks a 4096-entry x 0x40 table at
-            // scene+0x20; an entry is live when +0x24 != 0, and +0x10 is the
-            // SoundBuffer it hands to Device::PlayPlatform WITHOUT a null check
-            // (Runtime 0x1800de7a0 derefs buffer+0x54 as the WAVEFORMATEX). A
-            // load-restored scene faulted there, so report live entries whose
-            // sound pointer did not survive the restore.
-            {
-                // Runs EVERY frame until it catches a null: the 2D table is empty
-                // on frame 1 and only fills when something queues a sound, so a
-                // one-shot snapshot measures a world with no sound in it.
-                // Gated: the scan walks 4096 entries and, in a healthy world,
-                // never finds a null to stop on, so it must not run by default.
-                static int s_audited = ::ComponentFactory::LiveEnabled("BANISHED_AUDIO_AUDIT") ? 0 : 1;
-                if (!s_audited && self->m_audioScene) {
-                    uint8_t* tbl = *(uint8_t**)((uintptr_t)self->m_audioScene + 0x20);
-                    // Name the resource. Object::External::GetPath returns a
-                    // System::Filename BY VALUE (sret in RDX); Filename is a single
-                    // refcounted char* (refcount at str-4), so *(&out) is the path.
-                    // Leaked deliberately - this runs once, and taking the refcount
-                    // apart here would be more code than the diagnostic is worth.
-                    typedef void* (*FnGetPath_t)(void* self, void* out);
-                    static FnGetPath_t s_getPath = reinterpret_cast<FnGetPath_t>(
-                        ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
-                    uint8_t* snd2d = tbl;
-                    int live2 = 0, badVar = 0;
-                    if (snd2d) for (int i = 0; i < 4096; ++i) {
-                        uint8_t* e = snd2d + (size_t)i * 0x40;
-                        if (*(int32_t*)(e + 0x24) == 0) continue;
-                        ++live2;
-                        uint8_t* desc = *(uint8_t**)(e + 0x10);
-                        if (!desc) {
-                            std::fprintf(stderr, "[AudioScene] effect[%d] live but SoundEffect NULL\n", i);
-                            ++badVar; continue;
-                        }
-                        const char* path = "(no GetPath)";
-                        if (s_getPath) {
-                            void* fn[2] = { nullptr, nullptr };
-                            s_getPath(desc, fn);
-                            if (fn[0]) path = reinterpret_cast<const char*>(fn[0]);
-                        }
-                        uint8_t* arr = *(uint8_t**)(desc + 0x30);
-                        int n = *(int32_t*)(desc + 0x38);
-                        std::fprintf(stderr, "[AudioScene] effect[%d] SoundEffect=%p elems=%d \"%s\"\n",
-                                i, (void*)desc, n, path);
-                        const uint64_t* dq = reinterpret_cast<const uint64_t*>(desc);
-                        std::fprintf(stderr, "[AudioScene]   SE hdr: %016llx %016llx %016llx %016llx "
-                                "%016llx %016llx %016llx %016llx %016llx\n",
-                                (unsigned long long)dq[0], (unsigned long long)dq[1],
-                                (unsigned long long)dq[2], (unsigned long long)dq[3],
-                                (unsigned long long)dq[4], (unsigned long long)dq[5],
-                                (unsigned long long)dq[6], (unsigned long long)dq[7],
-                                (unsigned long long)dq[8]);
-                        for (int k = 0; arr && k < n; ++k) {
-                            uint8_t* el = arr + (size_t)k * 0x18;
-                            uint8_t* vars = *(uint8_t**)(el + 0x08);
-                            int vn = *(int32_t*)(el + 0x10);
-                            for (int v = 0; vars && v < vn; ++v) {
-                                void* buf = *(void**)(vars + (size_t)v * 0x18);
-                                const char* bp = "";
-                                if (buf && s_getPath) {
-                                    void* bf[2] = { nullptr, nullptr };
-                                    s_getPath(buf, bf);
-                                    if (bf[0]) bp = reinterpret_cast<const char*>(bf[0]);
-                                }
-                                if (!buf) ++badVar;
-                                std::fprintf(stderr, "[AudioScene]     elem %d/%d var %d/%d "
-                                        "SoundBuffer=%p %s%s\n", k, n, v, vn, buf, bp,
-                                        buf ? "" : "  <-- NULL");
-                                const uint64_t* eq = reinterpret_cast<const uint64_t*>(el);
-                                const uint64_t* vq = reinterpret_cast<const uint64_t*>(vars + (size_t)v * 0x18);
-                                std::fprintf(stderr, "[AudioScene]       elem raw: %016llx %016llx %016llx  "
-                                        "var raw: %016llx %016llx %016llx\n",
-                                        (unsigned long long)eq[0], (unsigned long long)eq[1],
-                                        (unsigned long long)eq[2], (unsigned long long)vq[0],
-                                        (unsigned long long)vq[1], (unsigned long long)vq[2]);
-                            }
-                        }
-                    }
-                    if (live2 > 0) std::fprintf(stderr, "[AudioScene] effect table: live=%d nullBuffers=%d\n",
-                            live2, badVar);
-                    if (badVar > 0 || live2 > 0) s_audited = 1;   // one snapshot with content
                     std::fflush(stderr);
                 }
             }
@@ -1786,7 +1543,7 @@ post_simulation:
         // BANISHED_CAMERA_PIN (which make framing reproducible run to run) this
         // turns a visual regression into a file two runs can diff.
         {
-            static const char* const ssEnv = std::getenv("BANISHED_SCREENSHOT_AT");
+            static const char* const ssEnv = Opt().screenshotAt;
             static const long ssAt = ssEnv ? std::atol(ssEnv) : -1;
             static long ssFrame = 0;
             static bool ssFired = false;
@@ -1809,31 +1566,7 @@ post_simulation:
     // Step 14: SaveLoad::Update if active
     if (self->m_saveLoad != nullptr && fn_SaveLoad_Update) {  // [GUARD-M5]
         TRACE("[GameUpdateLoop::Update] calling SaveLoad::Update...\n");
-        // [diag] BANISHED_SAVE_TIMING - a save that freezes the spinner and one
-        // that animates look identical in a text log unless we time the call and
-        // count the frames the operation spans.
-        static int s_saveTiming = -1;
-        if (s_saveTiming < 0) {
-            const char* e = std::getenv("BANISHED_SAVE_TIMING");
-            s_saveTiming = (e && e[0] && e[0] != 0x30) ? 1 : 0;
-        }
-        if (s_saveTiming && fn_SaveLoad_GetOperation) {
-            static int s_opFrames = 0;
-            int opBefore = fn_SaveLoad_GetOperation(self->m_saveLoad);
-            long long t0 = QpcNow();
-            fn_SaveLoad_Update(self->m_saveLoad, time);
-            long long t1 = QpcNow();
-            int opAfter = fn_SaveLoad_GetOperation(self->m_saveLoad);
-            if (opBefore != 0 || opAfter != 0) {
-                s_opFrames++;
-                fprintf(stderr, "[SaveTiming] frame=%d opFrame=%d op %d -> %d  SaveLoad::Update=%.2fms\n",
-                        s_frameNum, s_opFrames, opBefore, opAfter, QpcMs(t1 - t0));
-                fflush(stderr);
-                if (opAfter == 0) s_opFrames = 0;
-            }
-        } else {
-            fn_SaveLoad_Update(self->m_saveLoad, time);
-        }
+        fn_SaveLoad_Update(self->m_saveLoad, time);
         TRACE("[GameUpdateLoop::Update] SaveLoad::Update done\n");
     }
 
@@ -1963,7 +1696,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     {
         static int s_capArm = -2;      // -2=unread, -1=disabled, >=0 = countdown to arm
         if (s_capArm == -2) {
-            const char* e = std::getenv("BANISHED_CAPTURE_INGAME");
+            const char* e = Opt().captureIngame;
             s_capArm = (e && e[0]) ? (atoi(e) > 0 ? atoi(e) : 120) : -1;
         }
         if (s_capArm >= 0) {
@@ -1975,38 +1708,6 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     }
 
     TRACE("[GameUpdateLoop::Draw] ENTER (alpha=%.3f)\n", alpha);
-
-    // TEMP diagnostic: confirm the in-game render present runs per-frame + how many
-    // animation groups the AnimationManager holds (this+0x08) — i.e. whether any
-    // MeshInstance registered an animation (0 ⇒ AnimationManager::Update no-ops).
-    if (std::getenv("BANISHED_DRAW_TRACE")) {
-        static long s_drawN = 0;
-        if ((s_drawN % 120) == 0) {
-            int animGroups = self->m_animationManager
-                ? *reinterpret_cast<int*>((uint8_t*)self->m_animationManager + 0x08) : -1;
-            fprintf(stderr, "[DrawTick] frame=%ld alpha=%.3f paused=%d animGroups=%d\n",
-                    s_drawN, alpha, (int)fn_UI_PausesGame(self->m_userInterface), animGroups);
-            fflush(stderr);
-        }
-        ++s_drawN;
-    }
-    // [DRAW FPS] env BANISHED_FPS_TRACE: the RENDER framerate (Draw calls/sec). The sim Update
-    // runs fixed-timestep 60Hz (multiple steps per rendered frame to catch up), so the Update
-    // counter always reads ~60; THIS measures the visible frame rate. Compare to the [FPS]
-    // (Update) line: if Draw << Update, rendering is the bottleneck.
-    if (std::getenv("BANISHED_FPS_TRACE")) {
-        static unsigned long long s_dLastMs = 0;
-        static int s_dFrames = 0;
-        if (s_dLastMs == 0) s_dLastMs = GetTickCount64();
-        if (++s_dFrames >= 120) {
-            unsigned long long now = GetTickCount64();
-            double secs = (double)(now - s_dLastMs) / 1000.0;
-            fprintf(stderr, "[DRAW-FPS] %.1f fps (%d draws / %.2fs)\n",
-                    secs > 0 ? s_dFrames / secs : 0.0, s_dFrames, secs);
-            fflush(stderr);
-            s_dLastMs = now; s_dFrames = 0;
-        }
-    }
 
     // Step 1: Check pause — if paused, force alpha to 1.0 (no interpolation)
     bool paused = fn_UI_PausesGame(self->m_userInterface);
@@ -2100,33 +1801,11 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
                 static int s_forceSnow = -1;
                 static float s_snowVal = 0.0f;
                 if (s_forceSnow < 0) {
-                    const char* e = std::getenv("BANISHED_FORCE_SNOW");
+                    const char* e = Opt().forceSnow;
                     s_forceSnow = (e && e[0]) ? 1 : 0;
                     if (s_forceSnow) s_snowVal = (float)atof(e);
                 }
                 if (s_forceSnow) s0 = *reinterpret_cast<uint32_t*>(&s_snowVal);
-                // Optional verification trace: BANISHED_SUN_TRACE=1 dumps the four
-                // weather/terrain params (as floats) we push to the Context cbuffer
-                // every ~120 frames. s0 = snow coverage -> _pc_.userPosition.x.
-                {
-                    static int s_snowTrace = -1;
-                    if (s_snowTrace < 0) {
-                        const char* e = std::getenv("BANISHED_SUN_TRACE");
-                        s_snowTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
-                    }
-                    if (s_snowTrace) {
-                        static int s_k = 0;
-                        if ((s_k++ % 120) == 0) {
-                            fprintf(stderr, "[snow] coverage=%.3f fadeA=%.3f fadeB=%.3f "
-                                    "wxIntensity=%.3f (forceSnow=%d)\n",
-                                    *reinterpret_cast<float*>(&s0),
-                                    *reinterpret_cast<float*>(&s1),
-                                    *reinterpret_cast<float*>(&s2),
-                                    *reinterpret_cast<float*>(&s3), s_forceSnow);
-                            fflush(stderr);
-                        }
-                    }
-                }
                 *reinterpret_cast<uint32_t*>(ctx + 0x3b8) = s0;
                 *reinterpret_cast<uint32_t*>(ctx + 0x3bc) = s1;
                 *reinterpret_cast<uint32_t*>(ctx + 0x3c0) = s2;
@@ -2149,24 +1828,16 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     // `if (renderer+0x3c != 0)`; SunLight::Draw (0x1801067b0, main pass) is NOT — it always
     // runs Context::SetLight + Renderer::DrawItemList to light and render the terrain.
     {
-        void* engine = *g_pEngineSingleton;
-        uint32_t shadowMode = *(uint32_t*)((uintptr_t)engine + 0x30);
+        uint32_t shadowMode = 0;
         // The shadow-mode source field. The ORIGINAL GameUpdateLoop::Draw (exe 0x140096010)
         // sets renderer+0x3c from *(*g_pVideoConfigSingleton + 0x30) — the shadow-QUALITY
         // setting (index, 0=off, >0=on), NOT engine+0x30 (in standalone g_pEngineSingleton ==
-        // MainLoop, so engine+0x30 is garbage). Shadows are now DEFAULT-ON: mirror the
+        // MainLoop, so engine+0x30 is garbage). Shadows are DEFAULT-ON: mirror the
         // original and read VideoConfig+0x30 so SunLight::DrawShadowMap engages (verified
         // crash-free; terrain + buildings cast/receive). The day cycle is driven by
-        // Weather_SunUpdate above. BANISHED_DISABLE_SHADOWS=1 forces it off for A/B.
-        static int s_disableShadows = -1;
-        if (s_disableShadows < 0) {
-            const char* e = std::getenv("BANISHED_DISABLE_SHADOWS");
-            s_disableShadows = (e && e[0] && e[0] != '0') ? 1 : 0;
-        }
-        if (!s_disableShadows && g_pVideoConfigSingleton && *g_pVideoConfigSingleton) {
+        // Weather_SunUpdate above.
+        if (g_pVideoConfigSingleton && *g_pVideoConfigSingleton) {
             shadowMode = *(uint32_t*)((uintptr_t)*g_pVideoConfigSingleton + 0x30);
-        } else {
-            shadowMode = 0;
         }
         *(uint32_t*)((uintptr_t)self->m_renderer + 0x3c) = shadowMode;
     }
@@ -2376,88 +2047,6 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
 }
 
 
-// ============================================================
-// GameUpdateLoop::Startup (0x140097C00) — Initialize UI and game systems
-static void GameUpdateLoop_TryOpenDebugPanel(GameUpdateLoop* self) {
-
-    // RETRY, do not one-shot. The mod .pkm is mounted by
-    // IO::Modification::SetupFileSystem several SECONDS after Startup runs
-    // (measured with BANISHED_MOD_PROBE: packages=0 at startup, packages=1 holding
-    // 'DebugMenu.pkm' by t+10s). A single probe here therefore always looked for
-    // Debug.rsc before the package containing it existed, and reported the resource
-    // "not found / wrong type" as if the mod were missing. Retry on a budget.
-    static bool s_debugPanelOpened = false;
-    static int  s_debugPanelTries = 0;
-    const char* dbgEnv = getenv("BANISHED_DEBUG_PANEL");
-    const bool wantPanel = dbgEnv && dbgEnv[0] && !(dbgEnv[0] == '0' && dbgEnv[1] == '\0');
-    if (!s_debugPanelOpened && wantPanel && s_debugPanelTries < 240) {
-        ++s_debugPanelTries;
-        if (fn_Filename_CtorCStr_Local && fn_ExternalFactory_FindOrLoad &&
-            g_pExternalFactorySingleton && *g_pExternalFactorySingleton &&
-            fn_MemAlloc && g_pMemAllocSingleton && fn_DialogInstance_Ctor &&
-            fn_InternalBasePtr_Ctor && fn_UI_AddDialog && self->m_userInterface) {
-            // The package stores the leaf name ("Debug.rsc"); the folder the
-            // resource system prepends is uncertain (Toolbar/MainMenu live under
-            // "Dialog/"). Probe candidate paths and use the first that resolves.
-            static const char* kCandidates[] = {
-                "Dialog/Debug.rsc", "Debug.rsc", "Menu/Debug.rsc",
-                "Dialog/DebugMenu.rsc", "DebugMenu.rsc", "Dialog/Cheat.rsc",
-            };
-            void* found = nullptr;
-            for (const char* cand : kCandidates) {
-                uint8_t fnbuf[8];
-                fn_Filename_CtorCStr_Local(fnbuf, cand);
-                void* r = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnbuf);
-                if (fn_Filename_Dtor) fn_Filename_Dtor(fnbuf);
-                if (s_debugPanelTries == 1 || r)
-                    fprintf(stderr, "[DebugUI] auto-open probe: '%s' -> %p (try %d)\n",
-                            cand, r, s_debugPanelTries);
-                if (r) { found = r; break; }
-            }
-            // Accept the loaded resource if it is a Dialog (or External) — the
-            // guard mirrors the toolbar/eventnotify open paths. Permissive when
-            // the type-id slot is unregistered in standalone.
-            void* dialogRes = nullptr;
-            if (found &&
-                (!g_pDialogTypeId || fn_IsDerivedFrom(found, *g_pDialogTypeId) ||
-                 (g_pExternalTypeId && fn_IsDerivedFrom(found, *g_pExternalTypeId))))
-                dialogRes = found;
-            if (s_debugPanelTries == 1 || found)
-                fprintf(stderr, "[DebugUI] auto-open: Debug.rsc found=%p accepted=%p UI=%p\n",
-                        found, dialogRes, (void*)self->m_userInterface);
-            if (dialogRes) {
-                void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);  // DialogInstance base
-                if (mem) {
-                    int64_t nullParent[1] = {0};
-                    fn_InternalBasePtr_Ctor(nullParent, nullptr);
-                    // (self, ui, dialogRes, parent, dataSource, extraCtrlData, flags)
-                    void* dlg = fn_DialogInstance_Ctor(mem, self->m_userInterface,
-                                                       dialogRes, nullParent, nullptr, nullptr, 0);
-                    if (dlg) {
-                        int64_t dialogPtr[1];
-                        fn_InternalBasePtr_Ctor(dialogPtr, dlg);
-                        fn_UI_AddDialog(self->m_userInterface, dialogPtr);
-                        s_debugPanelOpened = true;
-                        fprintf(stderr, "[DebugUI] auto-open: DialogInstance added dlg=%p "
-                                "(Slot4 fires on first layout/update)\n", dlg);
-                    } else if (fn_MemFreeStatic) {
-                        fn_MemFreeStatic(mem);
-                        fprintf(stderr, "[DebugUI] auto-open: DialogInstance_Ctor returned null\n");
-                    }
-                }
-            } else if (s_debugPanelTries >= 240) {
-                fprintf(stderr, "[DebugUI] auto-open: Debug.rsc never resolved after %d "
-                        "tries -- is DebugMenu.pkm present AND enabled in WinData? "
-                        "(BANISHED_MOD_PROBE=1 prints the mounted package list)\n",
-                        s_debugPanelTries);
-            }
-            fflush(stderr);
-        } else {
-            fprintf(stderr, "[DebugUI] auto-open SKIPPED: a required engine fn/singleton is null\n");
-            fflush(stderr);
-        }
-    }
-}
 
 // ============================================================
 
@@ -2586,7 +2175,6 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         }
     }
 
-    const bool kCreateGameDialogs = false;
     // HUD bring-up — the in-game Toolbar (Keystone F). Gated behind the env var
     // BANISHED_LIVE_TOOLBAR (default OFF → the default build stays byte-identical).
     // When set, ToolbarStandalone_Init() (toolbar_vtable_standalone.cpp) builds the
@@ -2602,11 +2190,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // needs BANISHED_LIVE_TOOLBAR=1 *and* BANISHED_GAME_PRELOAD=1 — verified rendering
     // the real bottom-right toolbar bar on screen, crash-free. With LIVE_TOOLBAR alone
     // the dialog is present but empty (itemCount=0).
-    static int s_toolbarGate = -1;
-    if (s_toolbarGate < 0) {
-        s_toolbarGate = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_TOOLBAR") ? 1 : 0;
-    }
-    const bool kCreateToolbar = (s_toolbarGate != 0);
+    const bool kCreateToolbar = true;
 
     // Captured toolbar dialog — the EventNotify ribbon parents to it (positions the
     // ribbon just below the toolbar; see EventNotifyDialog_Update). Null if the
@@ -2679,34 +2263,13 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     }
     TRACE("[GameUpdateLoop::Startup] Toolbar dialog added\n");
 
-    // ----------------------------------------------------------------
-    // Debug/cheat panel auto-open (BANISHED_DEBUG_PANEL). One-shot: loads
-    // Dialog/Debug.rsc — whose Dialog resource declares DebugUI as its
-    // controller — and adds it to the in-game UI. fn_DialogInstance_Ctor
-    // (Runtime 0x180114870) instantiates the DebugUI controller via our promoted
-    // standalone factory (see code/Game/Dialog/debugui.cpp) and the framework
-    // dispatches its Slot4, binding the panel's combos/buttons/sliders/counters
-    // to live game data. Off by default so the normal build is byte-identical.
-    // The panel is otherwise opened in-game by the DebugMenu.pkm mod's trigger;
-    // this env just pops it automatically for testing. Grep the log for
-    // "[DebugUI]" to confirm the controller wired.
-    // Debug/cheat panel auto-open (BANISHED_DEBUG_PANEL) -- see
-    // GameUpdateLoop_TryOpenDebugPanel above. Called here AND from the per-frame
-    // Update, because the mod package it reads from is mounted seconds later.
-    GameUpdateLoop_TryOpenDebugPanel(self);
-
-
     // Create and add EventNotify ribbon (BANISHED_LIVE_EVENTS). Shows recent game
     // events as a strip below the toolbar. Uses the FindOrLoad fallback (empty
     // m_resourceList in standalone) like the toolbar, and parents to the toolbar
     // dialog so Update can position the ribbon. Skipped if the toolbar is absent
     // (the ribbon Update early-returns on a null parent anyway).
     TRACE("[GameUpdateLoop::Startup] creating EventNotify dialog...\n");
-    static int s_eventsGate = -1;
-    if (s_eventsGate < 0) {
-        s_eventsGate = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_EVENTS") ? 1 : 0;
-    }
-    if (s_eventsGate && g_ribbonParentToolbar != nullptr) {
+    if (g_ribbonParentToolbar != nullptr) {
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/EventNotify.rsc");
         void* foundBase = nullptr;
@@ -2748,7 +2311,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
 
     // Create and add AutoSave dialog
     TRACE("[GameUpdateLoop::Startup] creating AutoSave dialog...\n");
-    // BANISHED_LIVE_AUTOSAVE. The whole autosave FEATURE hangs off this dialog:
+    // The whole autosave FEATURE hangs off this dialog:
     // its timer (started by AutoSaveDialog::Slot4 from the Options interval) is the
     // only clock, and its timer-event handler (Slot8 -> Dialog_AutoSaveHandler) is the
     // only caller of SaveLoad::SetOperation(SAVE). While this block was hardcoded off
@@ -2756,10 +2319,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // Uses the ExternalFactory::FindOrLoad fallback like the toolbar/EventNotify,
     // since m_resourceList is empty in standalone. Parented to nothing (retail
     // passes a null parent IBP here too).
-    static int s_autosaveGate = -1;
-    if (s_autosaveGate < 0)
-        s_autosaveGate = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_AUTOSAVE") ? 1 : 0;
-    if (s_autosaveGate) {
+    {
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/AutoSave.rsc");
         void* foundBase = nullptr;
@@ -2808,7 +2368,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     if (fn_EntityUI_Startup) fn_EntityUI_Startup(self->m_entityUI);
     // Standalone: fn_EntityUI_Startup (0x140101ee0) is NULL, so build the tool-mode
     // tree ourselves (Phase 3) so a build-button click resolves the PlacementTool.
-    if (LiveToolsEnabled()) EntityUI_BuildToolModeTree_SA(self->m_entityUI);
+    EntityUI_BuildToolModeTree_SA(self->m_entityUI);
     // ...and its second half: open every dialog registered in the EntityUI+0x50 tree.
     // That tree is how a tutorial asks for its panel (FinishTutorialInstance::Slot4 ->
     // 0x1401001f0 only RECORDS the request); nothing else opens it. Empty on a plain
@@ -2825,7 +2385,6 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
 // ============================================================
 
 extern "C" void RedzoneAlloc_ArmTeardownCheck();   // standalone/redzone_alloc.cpp
-extern "C" void RedzoneAlloc_HeapDump(const char* tag);   // standalone/redzone_alloc.cpp
 extern "C"
 void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
     PerfX::Reset();   // [PerfX] drop cached model pointers before the world is freed
@@ -2922,41 +2481,10 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
     // a small integer landing on half of something live. Bracketing EntityList's
     // shutdown separates "the table was already corrupt when teardown started" from
     // "teardown corrupted it", which no run so far can tell apart.
-    if (ObjAudit::Enabled()) {
-        ObjAudit::Scan("shutdown-enter");
-        ObjAudit::ReportLeaks("shutdown-enter");
-    }
-
-    // [BANISHED_TEARDOWN_HEAPWALK] Wave 9 lane N, Finding 3 — THE TEST THAT
-    // SEPARATES THE TWO HYPOTHESES. Three different stacks have now been recorded
-    // for this fault, and "one wild write during the sim with a moving victim" and
-    // "several independent teardown-order faults" are both consistent with that.
-    // They differ in one observable: whether the heap is ALREADY corrupt when
-    // teardown begins. RedzoneAlloc_HeapDump walks the engine allocator's boundary
-    // tags and works on a fully native run, so bracketing teardown with it answers
-    // the question directly instead of inferring it from which victim died.
-    //   corrupt at shutdown-enter  => ONE latent wild write, laid down during the
-    //                                 sim; the three stacks are three victims.
-    //   clean here, corrupt later  => teardown itself creates it, and the stacks
-    //                                 are candidates for genuinely separate bugs.
-    {
-        const char* hw = std::getenv("BANISHED_TEARDOWN_HEAPWALK");
-        if (hw && *hw && hw[0] != '0') RedzoneAlloc_HeapDump("shutdown-enter");
-    }
-
     // EntityList shutdown
     TRACE("[GameUpdateLoop::Shutdown] calling EntityList::Shutdown...\n");
     fn_EntityList_Shutdown(self->m_entityList);
     TRACE("[GameUpdateLoop::Shutdown] EntityList::Shutdown done\n");
-
-    if (ObjAudit::Enabled()) {
-        ObjAudit::Scan("post-entitylist");
-        ObjAudit::ReportLeaks("post-entitylist");
-    }
-    {
-        const char* hw = std::getenv("BANISHED_TEARDOWN_HEAPWALK");
-        if (hw && *hw && hw[0] != '0') RedzoneAlloc_HeapDump("post-entitylist");
-    }
 
     // Remove global scene objects
     TRACE("[GameUpdateLoop::Shutdown] removing global scene objects...\n");

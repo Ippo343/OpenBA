@@ -15,6 +15,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Entity/componententity_funcs.h"
+#include "options.h"
 #include <windows.h>
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -307,22 +308,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
 
     // On load: resize component array to match serialized count
     if (encodingMode == 0) {
-        // [diag] BANISHED_COMPENT_LOAD_TRACE — the pre-resize roster count. A
-        // stream-restored entity that ALREADY has components was built from its
-        // description before the load, and whatever the resize does next decides
-        // whether the two sets merge or stack.
-        if (std::getenv("BANISHED_COMPENT_LOAD_TRACE")) {
-            fprintf(stderr, "[CompEnt::Load] ent=%p desc=%p preCount=%d preCap=%d "
-                    "streamCount=%u\n", (void*)self, self->description,
-                    *(int*)(s + 0x38), *(int*)(s + 0x3c), compCount);
-            fflush(stderr);
-        }
         fn_ExeArrayResize((void*)(s + 0x30), (int)compCount);
-        if (std::getenv("BANISHED_COMPENT_LOAD_TRACE")) {
-            fprintf(stderr, "[CompEnt::Load] ent=%p postResize count=%d cap=%d\n",
-                    (void*)self, *(int*)(s + 0x38), *(int*)(s + 0x3c));
-            fflush(stderr);
-        }
         // Save/load wave diagnostics: a garbage count (stream misalignment) or
         // a failed resize (data still null with count>0) crashes the IBP loop
         // below — log the state on the way in so the crash log has context.
@@ -349,41 +335,11 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
     if (cnt > 0) {
         for (int64_t i = 0; i < cnt; i++) {
             uintptr_t ibpAddr = ibpArr + (uintptr_t)i * 8;
-            // BANISHED_SER_DUMPCOMP=<n> -- destructive one-shot: before component n
-            // is read, pull the next 130 dwords straight off the stream and print
-            // them, then stop. The stream's +0x1C cursor is a LOGICAL decompressed
-            // position, not an index into any buffer in the header (all five
-            // candidate bases were checked and none holds the record), so the only
-            // way to see the actual bytes is to read them through the serializer.
-            // With the objIds running in sequence, finding the next one in this dump
-            // gives the record's true length -- i.e. exactly how many bytes our
-            // reader is short by -- instead of inferring it from where things crash.
-            {
-                static int s_dumpAt = -2;
-                if (s_dumpAt == -2) {
-                    const char* e = std::getenv("BANISHED_SER_DUMPCOMP");
-                    s_dumpAt = (e && e[0]) ? atoi(e) : -1;
-                }
-                if (s_dumpAt >= 0 && (int)i == s_dumpAt && g_fn_Serialize_Int) {
-                    void* strm2 = *(void**)serializer;
-                    fprintf(stderr, "[SerDump] comp %d cursor=%u — next 130 dwords:\n",
-                            s_dumpAt, strm2 ? *(uint32_t*)((uint8_t*)strm2 + 0x1C) : 0);
-                    for (int k = 0; k < 130; ++k) {
-                        uint32_t v = 0;
-                        g_fn_Serialize_Int(serializer, (void*)&v, nullptr);
-                        fprintf(stderr, "[SerDump]   [%2d] %08X (%u)\n", k, v, v);
-                    }
-                    fflush(stderr);
-                    fprintf(stderr, "[SerDump] done — exiting (stream is now consumed)\n");
-                    fflush(stderr);
-                    _exit(0);
-                }
-            }
             // Save/load wave debug (BANISHED_SERIALIZE_TRACE): per-component
             // progress marker so a stream desync pinpoints the last-good
             // component instead of a wild crash address.
             static int s_trace = -1;
-            if (s_trace < 0) { const char* e = std::getenv("BANISHED_SERIALIZE_TRACE"); s_trace = (e && e[0] && e[0] != '0') ? 1 : 0; }
+            if (s_trace < 0) { const char* e = Opt().serializeTrace; s_trace = (e && e[0] && e[0] != '0') ? 1 : 0; }
             if (s_trace == 1) {
                 fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld/%u begin raw=%p\n",
                         (void*)self, (long long)i, compCount, *(void**)ibpAddr);
@@ -535,21 +491,6 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
                 getTypeId((void*)compTemplate, &typeId);
 
                 if (typeId == 0) {
-                    // A description sub-block whose GetComponentTypeId (vtable+0x40)
-                    // yields 0 is invisible to this match loop. If the save's roster
-                    // DOES contain that component, every later description entry is
-                    // compared against the wrong survivor and the whole roster gets
-                    // duplicated — so name the culprit rather than silently skipping.
-                    if (std::getenv("BANISHED_COMPENT_LOAD_TRACE")) {
-                        typedef uint32_t (*fn_SelfTid_t)(void*);
-                        uint32_t selfTid =
-                            (*(fn_SelfTid_t*)(compVtable + 0x10))((void*)compTemplate);
-                        const char* selfName = ::Object::GetTypeNameById(selfTid);
-                        fprintf(stderr, "[CompEnt::Fill] ent=%p desc[%lld] typeId=0 "
-                                "SKIPPED (descType=%u %s)\n", (void*)self,
-                                (long long)descIdx, selfTid, selfName ? selfName : "?");
-                        fflush(stderr);
-                    }
                     continue;
                 }
 
@@ -565,16 +506,6 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
                     typedef uint32_t (*fn_GetId_t)(void*);
                     fn_GetId_t getId = *(fn_GetId_t*)(existVtable + 0x10);
                     uint32_t existTypeId = getId((void*)existComp);
-                    if (std::getenv("BANISHED_COMPENT_LOAD_TRACE")) {
-                        const char* wantName = ::Object::GetTypeNameById(typeId);
-                        const char* haveName = ::Object::GetTypeNameById(existTypeId);
-                        fprintf(stderr, "[CompEnt::Fill] ent=%p desc[%lld] want=%u(%s) "
-                                "at[%lld]=%u(%s) -> %s\n", (void*)self, (long long)descIdx,
-                                typeId, wantName ? wantName : "?", (long long)insertPos,
-                                existTypeId, haveName ? haveName : "?",
-                                existTypeId == typeId ? "MATCH" : "INSERT");
-                        fflush(stderr);
-                    }
                     if (existTypeId == typeId) {
                         // Already have this component -- skip
                         insertIdx++;
@@ -751,20 +682,6 @@ ComponentEntity* ComponentEntity_CtorDefault(ComponentEntity* self) {
     return self;
 }
 
-// ============================================================
-// Copy/Factory constructor (0x1400c3720)
-// ============================================================
-// Creates entity from description: counts valid components, allocates array,
-// creates each via Factory, sets owner/description, calls RefreshEntityFlags
-// then StartupComponents.
-static bool EntityRosterTraceOn() {
-    static int en = -1;
-    if (en < 0) {
-        const char* e = std::getenv("BANISHED_ENTITY_ROSTER");
-        en = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return en == 1;
-}
 
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr) {
     EnsureResolved();
@@ -827,50 +744,6 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
         }
     }
 
-    // [CtorFromDesc] HAPPINESS probe -- diagnostic only, opt-in via
-    // BANISHED_ENTITY_ROSTER=1. HappinessDescription instances exist in the world but
-    // their +0x40 GetComponentTypeId is never called. A plain first-N-entities dump
-    // cannot answer why: the budget is spent on trees and citizens long before the
-    // chapel is placed. So instead of dumping entities, this watches for the ONE thing
-    // in question -- a description sub-block whose own type is HappinessDescription --
-    // and dumps that entity's whole roster when it appears. If the run ends with
-    // happinessSubBlocksSeen == 0, the chapel's description list genuinely does not
-    // carry one and the fault is upstream of this ctor entirely.
-    if (EntityRosterTraceOn() && descCompCount > 0) {
-        static uint32_t tidHappinessDesc = 0;
-        if (tidHappinessDesc == 0)
-            tidHappinessDesc = ::Object::GetTypeIdByName("HappinessDescription");
-        bool hasHappiness = false;
-        for (int64_t i = 0; i < (int64_t)descCompCount && tidHappinessDesc; i++) {
-            uintptr_t descArr = *(uintptr_t*)(desc + 0x28);
-            uintptr_t compTemplate = *(uintptr_t*)(descArr + (uintptr_t)i * 8);
-            typedef uint32_t (*fn_SelfTypeId_t)(void*);
-            uint32_t selfTid = (*(fn_SelfTypeId_t*)(*(uintptr_t*)compTemplate + 0x10))((void*)compTemplate);
-            if (selfTid == tidHappinessDesc) { hasHappiness = true; break; }
-        }
-        static int nHit = 0;
-        if (hasHappiness && nHit < 6) {
-            ++nHit;
-            fprintf(stderr, "[CtorFromDesc] HAPPINESS-CARRIER entity=%p desc=%p "
-                    "descCompCount=%d validCount=%d\n",
-                    (void*)self, descriptionPtr, descCompCount, validCount);
-            for (int64_t i = 0; i < (int64_t)descCompCount; i++) {
-                uintptr_t descArr = *(uintptr_t*)(desc + 0x28);
-                uintptr_t compTemplate = *(uintptr_t*)(descArr + (uintptr_t)i * 8);
-                uintptr_t compVtable = *(uintptr_t*)compTemplate;
-                typedef uint32_t (*fn_SelfTypeId_t)(void*);
-                uint32_t selfTid = (*(fn_SelfTypeId_t*)(compVtable + 0x10))((void*)compTemplate);
-                typedef void (*fn_GetTypeId_t)(void*, uint32_t*);
-                uint32_t compTid = 0;
-                (*(fn_GetTypeId_t*)(compVtable + 0x40))((void*)compTemplate, &compTid);
-                const char* dn = ::Object::GetTypeNameById(selfTid);
-                const char* cn = ::Object::GetTypeNameById(compTid);
-                fprintf(stderr, "[CtorFromDesc]   [%d] descType=%s(%u) -> component=%s(%u)\n",
-                        (int)i, dn ? dn : "?", selfTid, cn ? cn : "(none)", compTid);
-            }
-            fflush(stderr);
-        }
-    }
 
     // Allocate component array
     fn_ExeArrayResize((void*)(s + 0x30), validCount);
@@ -996,21 +869,6 @@ static void ComponentEntity_RegisterUpdateDraw(ComponentEntity* self, uint32_t o
 // each component's vtable+0x30 (register-with-systems) for components whose
 // Component+0x20 bit 0 is set.
 static void ComponentEntity_OnAddedPass(ComponentEntity* self) {
-    // BANISHED_REGENTITY_TRACE — this pass is the only thing between "the entity
-    // was registered with the right description" (proven) and "a node for that
-    // description exists in townMgr+0x160" (does not happen for a drag-placed
-    // StorageYard, while the Clear zones in the same run register fine). Whichever
-    // component does that insert lives behind slot 6 here, and it only runs for
-    // components whose +0x20 bit 0 is set — so name every component and say
-    // whether the bit was set and the slot actually dispatched.
-    static int s_regTrace = -1;
-    if (s_regTrace < 0) s_regTrace = std::getenv("BANISHED_REGENTITY_TRACE") ? 1 : 0;
-    if (s_regTrace) {
-        fprintf(stderr, "[OnAdded] entity=%p flags=0x%08X components=%d%s\n",
-                (void*)self, self->entityFlags, self->componentCount,
-                (self->entityFlags & 1) == 0 ? "  SKIPPED (bit0 clear)" : "");
-        fflush(stderr);
-    }
 
     if ((self->entityFlags & 1) == 0) return;
     int count = self->componentCount;
@@ -1021,17 +879,6 @@ static void ComponentEntity_OnAddedPass(ComponentEntity* self) {
         uintptr_t compPtr = *(uintptr_t*)ibpAddr;
         if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
         const bool armed = (*(uint8_t*)(compPtr + 0x20) & 1) != 0;
-        if (s_regTrace) {
-            uintptr_t vt0 = *(uintptr_t*)compPtr;
-            uint32_t tid = 0;
-            if (vt0 && *(void**)(vt0 + 0x10))
-                tid = reinterpret_cast<uint32_t (*)(void*)>(*(void**)(vt0 + 0x10))((void*)compPtr);
-            const char* nm = tid ? ::Object::GetTypeNameById(tid) : nullptr;
-            fprintf(stderr, "[OnAdded]   [%d] %s (tid=%u) bit0=%d slot6=%p\n",
-                    i, nm ? nm : "?", tid, armed ? 1 : 0,
-                    vt0 ? *(void**)(vt0 + 0x30) : nullptr);
-            fflush(stderr);
-        }
         if (armed) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
             compPtr = *(uintptr_t*)ibpAddr;
@@ -1104,21 +951,6 @@ void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int cate
     ent = entity();
     ComponentEntity_OnAddedPass((ComponentEntity*)ent);
 
-    // BANISHED_REGENTITY_TRACE — the per-description registry (townMgr+0x160) is
-    // populated downstream of the OnAdded pass, and a drag-placed StorageYard has
-    // been observed placed-and-solid (later drags over it are rejected as occupied)
-    // while its description key never appears in that tree at all, over a 240-tick
-    // window. Log what actually reaches the registrar: whether it is called for
-    // that entity, under which category, and with which description pointer — the
-    // key the tree is keyed by.
-    if (std::getenv("BANISHED_REGENTITY_TRACE")) {
-        ent = entity();
-        fprintf(stderr, "[RegEntity] entity=%p category=%d desc(+0x28)=%p "
-                        "externals(+0x20)=%p flags(+0x1c)=0x%08X\n",
-                (void*)ent, category, *(void**)(ent + 0x28), *(void**)(ent + 0x20),
-                *(uint32_t*)(ent + 0x1C));
-        fflush(stderr);
-    }
 }
 
 // ============================================================

@@ -60,12 +60,6 @@ static void UpgradeUIConfig_Serialize(void* self, void* stream) {
         reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(self) + 0x20),
         serializer, g_TypeId_ComponentEntity, "ComponentEntity");
     g_fn_Serializer_Dtor(serializer);
-    if (std::getenv("BANISHED_DESTROY_TRACE")) {
-        std::fprintf(stderr, "[UpgradeUIConfig] Serialize: cfg=%p target(+0x20)=%p\n",
-                     self, *reinterpret_cast<void**>(
-                         reinterpret_cast<uint8_t*>(self) + 0x20));
-        std::fflush(stderr);
-    }
 }
 
 static void* UpgradeUIConfig_Dtor(void* self, uint32_t flags) {

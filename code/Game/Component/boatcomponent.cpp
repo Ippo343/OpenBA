@@ -317,13 +317,8 @@ static void BoatComponent_ShutdownVSlot(void* self, void* stream) {
 // rewrites the vtable slots and would erase anything written earlier.
 // See reference_live_vtable_slot_must_be_wired_in_installlive.
 static void BoatComponent_InstallController(void* mem) {
-    // Slot 3 (stream Shutdown/Serialize, retail 0x1400465d0) wired UNCONDITIONALLY —
-    // save/load wave 2026-08-28. Previously the boat controller fell through to the
-    // base Component_SerializeReimpl whenever BANISHED_LIVE_BOAT_CTRL was off, and
-    // even when on, this early-out skipped it entirely — a loaded save's boat kept
-    // its route/position/dock fields silently reset.
+    // Slot 3 (stream Shutdown/Serialize, retail 0x1400465d0).
     BoatComponent_LiveVtable[3] = reinterpret_cast<void*>(&BoatComponent_ShutdownVSlot);
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_BOAT_CTRL")) return;
     BoatComponent_LiveVtable[1]  = reinterpret_cast<void*>(&BoatComponent_LiveGetTypeInfo);
     BoatComponent_LiveVtable[16] = reinterpret_cast<void*>(&BoatComponent_GetDefaultState);
     BoatComponent_LiveVtable[17] = reinterpret_cast<void*>(&BoatComponent_CreateState);

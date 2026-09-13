@@ -39,6 +39,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -57,7 +58,7 @@ float s_step  = kDefaultStep;
 
 bool Enabled() {
     if (s_state >= 0) return s_state == 1;
-    const char* e = std::getenv("BANISHED_ORCHARD_GROW");
+    const char* e = Opt().orchardGrow;
     if (!e || !e[0] || std::strcmp(e, "0") == 0 || std::strcmp(e, "false") == 0) {
         s_state = 0;
         return false;

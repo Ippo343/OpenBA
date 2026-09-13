@@ -150,13 +150,6 @@ static inline uint32_t GetTypeId(void* obj) {
     return (*(uint32_t(**)(void*))(*(uintptr_t*)obj + 0x10))(obj);
 }
 
-// Standalone drop-target diagnostic (BANISHED_DROP_TRACE, default off).
-static bool Pf_DropTrace() {
-    static int t = -1;
-    if (t < 0) { const char* e = std::getenv("BANISHED_DROP_TRACE");
-        t = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return t == 1;
-}
 
 } // namespace
 
@@ -210,41 +203,11 @@ int Pf_IsDstReachable_f810(int* param_1, uint32_t param_2, uint32_t param_3, cha
     return -1;
 }
 
-// ============================================================
-// 0x14012cd80 — Pf_StorageCanAccept_cd80(storage, srcComp, qty) -> bool
-// ============================================================
-// Capacity check: can `storage` accept `qty` units of the resource carried by `srcComp`?
-// First a resource-limit/flag gate (12c560); if it fails, return that (0). Query the
-// storage's current count (StorageComponent::QueryCount — inline below as fn pointer path).
-// Then scan srcComp's component list (param_2+0x28 ptr array / +0x30 count) for the
-// RawMaterialDescription component (GetTypeId == DWORD_1401c7cb8, IsDerivedFrom-narrowed);
-// its per-unit size at +0x48. Return (size*qty + currentCount) <= storage capacity (+0x38).
-//
-// Faithfulness: QueryCount (StorageComponent_QueryCount) is reached via the same component
-// machinery the engine uses; we call the registered 12c560 for the flag gate and read the
-// fields directly. The Ghidra `uVar3 = QueryCount(...)` is the storage's current total; we
-// replicate by reading storage+0x34 is NOT correct — QueryCount is a method. We instead call
-// it through its exe address (StorageComponent_QueryCount). See note: QueryCount addr below.
-// Open C: this is the gate that decides whether a fetch-for-home load can be put down
-// at the house. It has two independent ways to say no — the flag/limit test (12c560) and
-// the volume test — and from the caller they are indistinguishable. Trace names which.
-static inline bool CanAcceptTraceOn() {
-    static int s = -1;
-    if (s < 0) { const char* e = getenv("BANISHED_DELIVER_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s == 1;
-}
 
 uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3) {
     EnsureFns();
     uint32_t uVar3 = s_ResLimitFlag(param_1, param_2);
     if ((char)uVar3 == '\0') {
-        if (CanAcceptTraceOn()) {
-            static int n = 0; if (n < 20) { ++n;
-            fprintf(stderr, "[CanAccept] storage=%llx REFUSE: flag/limit test (12c560) said no "
-                    "(acceptMask=0x%x)\n", (unsigned long long)param_1,
-                    *(uint32_t*)(param_1 + 0x3c));
-            fflush(stderr); }
-        }
         return uVar3;
     }
     // StorageComponent::QueryCount(self) — current stored total (0x14012cf10).
@@ -275,13 +238,6 @@ uint32_t Pf_StorageCanAccept_cd80(int64_t param_1, int64_t param_2, int param_3)
     const int unitVol = pvVar5 ? *(int*)((int64_t)pvVar5 + 0x48) : 0;
     const int need    = unitVol * param_3 + (int)uVar3;
     const int cap     = *(int*)(param_1 + 0x38);
-    if (CanAcceptTraceOn()) {
-        static int n = 0; if (n < 20) { ++n;
-        fprintf(stderr, "[CanAccept] storage=%llx rmDesc=%p unitVol=%d qty=%d used(QueryCount)=%d "
-                "need=%d cap(+0x38)=%d -> %s\n", (unsigned long long)param_1, pvVar5,
-                unitVol, param_3, (int)uVar3, need, cap, need <= cap ? "OK" : "REFUSE (volume)");
-        fflush(stderr); }
-    }
     return (uint32_t)(need <= cap ? 1 : 0);
 }
 
@@ -333,15 +289,6 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
         iVar15 = 0x7fffffff;
         int iVar6 = *(short*)(lVar10 + 0x2e) + 2 + iVar5;
         uint32_t local_res8 = 0xffffffff;
-        // [M-D diag, env BANISHED_STORAGE_TRACE] mode-A rejection detail (capped).
-        static int s_d5Trace = -1;
-        if (s_d5Trace < 0) { const char* e = getenv("BANISHED_STORAGE_TRACE"); s_d5Trace = (e && e[0] && e[0] != '0') ? 40 : 0; }
-        if (s_d5Trace > 0) { --s_d5Trace;
-            fprintf(stderr, "[D5D0] mapComp=%p fp x=%d y=%d w=%d h=%d goal=%u\n",
-                    (void*)lVar10, (int)*(short*)(lVar10 + 0x28), (int)*(short*)(lVar10 + 0x2a),
-                    (int)*(short*)(lVar10 + 0x2c), (int)*(short*)(lVar10 + 0x2e), param_2);
-            fflush(stderr);
-        }
         if (iVar5 <= iVar6) {
             do {
                 uint64_t uVar18 = (uint64_t)uVar16;
@@ -359,14 +306,6 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
                                 uint32_t uVar7 = 1 << (*(uint8_t*)(param_4 + 0x29 + lVar10b * 0x30) & 0x1f);
                                 uint32_t uVar11 = uVar7 | uVar17;
                                 uint32_t uVar12 = uVar11 | 0xe1f;
-                                if (s_d5Trace > 0) { --s_d5Trace;
-                                    fprintf(stderr, "[D5D0]  cell=%u pass zone=%d goalZone=%d flags=0x%x/0x%x\n",
-                                            uVar14,
-                                            (int)*(short*)(param_4 + 0x26 + lVar10b * 0x30),
-                                            (int)*(short*)(param_4 + 0x26 + (int64_t)(int)param_2 * 0x30),
-                                            uVar7, uVar17);
-                                    fflush(stderr);
-                                }
                                 if ((((uVar12 & uVar7) != 0) && ((uVar12 & uVar17) != 0)) &&
                                     (((uVar11 & 0x1e0) != 0 ||
                                       (((*(short*)(param_4 + 0x26 + lVar10b * 0x30) != 0 &&
@@ -375,10 +314,6 @@ int Pf_FindBestAdjacentCell_d5d0(int64_t param_1, uint32_t param_2, float* param
                                          *(short*)(param_4 + 0x26 + (int64_t)(int)param_2 * 0x30))))))) {
                                     uVar18 = (uint64_t)param_2;
                                     int iVar8 = s_CalcDistance(piVar3, uVar14, param_2);
-                                    if (s_d5Trace > 0) { --s_d5Trace;
-                                        fprintf(stderr, "[D5D0]  cell=%u ZONE-OK dist=%d\n", uVar14, iVar8);
-                                        fflush(stderr);
-                                    }
                                     if (iVar8 < iVar15) {
                                         uVar9 = (uint64_t)uVar14;
                                         iVar15 = iVar8;
@@ -412,14 +347,6 @@ LAB_14012d8ce:;
         int iVar6 = 0x7fffffff;
         CheckPtr(&local_70);
         int iVar4 = s_ChildSum(local_70, 0);
-        // [M-D diag, env BANISHED_STORAGE_TRACE] mode-B detail (capped).
-        static int s_d5TraceB = -1;
-        if (s_d5TraceB < 0) { const char* e = getenv("BANISHED_STORAGE_TRACE"); s_d5TraceB = (e && e[0] && e[0] != '0') ? 40 : 0; }
-        if (s_d5TraceB > 0) { --s_d5TraceB;
-            fprintf(stderr, "[D5D0B] posComp=%p pointCount=%d goal=%u\n",
-                    reinterpret_cast<void*>(local_70), iVar4, param_2);
-            fflush(stderr);
-        }
         iVar15 = 0;
         if (0 < iVar4) {
             do {
@@ -434,10 +361,6 @@ LAB_14012d8ce:;
                 if (iVar13 <= iVar5) iVar5 = iVar13 + -1;
                 uint32_t uVar16 = iVar13 * iVar5 + iVar4b;
                 uint64_t uVar9 = s_ValidateCell(piVar3, 0xe1f, (uint64_t)param_2, uVar16);
-                if (s_d5TraceB > 0) { --s_d5TraceB;
-                    fprintf(stderr, "[D5D0B]  pt=%d cell=%u valid=%d\n", iVar15, uVar16, (int)(char)uVar9);
-                    fflush(stderr);
-                }
                 if ((char)uVar9 != '\0') {
                     int iVar4c = Pf_IsDstReachable_f810(piVar3, param_2, uVar16, '\x01');
                     if (iVar4c < 0) {
@@ -663,9 +586,6 @@ FOUND_a8:
                         // standalone local_c0's description (+0x18) can be null/unresolved,
                         // and Runtime IsDerivedFrom has no null-check (crash READ 0x0).
                         void* pvVar13 = (pvVar3 && fn_IsDerivedFrom(pvVar3, *s_pTid_c7f20)) ? pvVar3 : (void*)0x0;
-                        if (Pf_DropTrace() && !pvVar13)
-                            std::fprintf(stderr, "[DropTrace] entity=%p StorLocDesc null (pvVar3=%p) -> flag=0 (inner-residence path)\n",
-                                         (void*)local_c8, pvVar3);
                         uint32_t uVar10 = pvVar13 ? *(uint32_t*)((int64_t)pvVar13 + 0x20) : 0;
                         if (uVar10 == 0) {
                             CheckPtr((void*)(lVar22 + 0x10));
@@ -701,9 +621,6 @@ FOUND_78:
                         // is non-null in the exe; standalone can leave it null. No source
                         // mask => the candidate can't accept this material => skip it.
                         uint32_t srcMask = pvVar19 ? *(uint32_t*)((int64_t)pvVar19 + 0x5c) : 0;
-                        if (Pf_DropTrace() && !pvVar19)
-                            std::fprintf(stderr, "[DropTrace] entity=%p pvVar19(src RawMatDesc) null -> skip candidate\n",
-                                         (void*)local_c8);
                         if ((srcMask & uVar10) == 0) goto LAB_14008db2a;
                     }
                     CheckPtr(&local_a8);

@@ -31,6 +31,7 @@
 //   +0x50: SpriteSheet*
 
 #include "ui/Dialogs.h"
+#include "options.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include <cstdint>
@@ -704,9 +705,8 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
         // own message loop until a button is pressed, which no driver can reach, so
         // the answer is injected here instead (1/2 = confirm, anything else = cancel).
         int result;
-        const char* forced = std::getenv("BANISHED_MODAL_ANSWER");
-        if (forced && *forced) {
-            result = std::atoi(forced);
+        if (Opt().modalAnswer) {
+            result = Opt().modalAnswerValue;
             printf("[ModDialog::Apply] BANISHED_MODAL_ANSWER=%d (reload dialog skipped)\n", result);
             fn_InternalBasePtr_DeletePtr(&dialogRef);
         } else {

@@ -13,7 +13,7 @@
 //                       because GetText(String&) and UI::String's by-name
 //                       ctor both call it, and it pins the entry layout a
 //                       second, independent way. This lane calls the DLL's
-//                       OWN GetIndexFromName via RtOriginal<>() rather than
+//                       OWN GetIndexFromName via the registry rather than
 //                       porting it -- see sprite.cpp.
 //
 // VTABLE: `??_7StringTable@UI@@6B@` IS EXPORTED (retail 0x180154630). Not

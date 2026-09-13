@@ -71,6 +71,13 @@ Mostly deletion. The coupling is centralised; the cost is losing the oracle.
    `make sa-run` + pause-menu quit; `BANISHED_AUTOQUIT`; `BANISHED_AUTOLOAD=Gate` (the gate);
    the Load Game dialog (`BANISHED_AUTOMENU_BUTTON=2`); the Mods route; `make sa-stress`
    on the perf exe. Screenshot pairs against the tagged build for the menu and the world.
+   `[done 2026-09-13: A CLOSED. On the phase-C-closed main (5fdd5715+) with all three DLL files
+   physically moved out of the game directory: sa-run + pause-menu quit, the Mods route and the
+   resave gate (PASS) all exit 0 with empty crash logs; AUTOQUIT, Load Game and sa-stress passed
+   the same day with the files present but never loaded. `grep -c RtOriginal` = 0 (3c19f083).
+   Screenshot pairs against the dll-present-last tag: docs/runtime_port/endgame_a_screens/
+   (menu identical; world same scene/assets/shadows/toolbar, ground tone slightly darker in the
+   current build, within the known frame variance).]`
 6. **What stays after A:** the registry seam (`RegisterRuntimeExport/Addr`, `ResolveExport`),
    the mint (`rt_data_mint.cpp`, `rt_export_addrs.inc`), the 155 `reg_*.cpp` files and the
    hand-built vtables. Ported bodies still find each other through them. They die in B.
@@ -104,6 +111,12 @@ Four tiers. Tier 1 is the same dead code as A.3/A.4 and is done in the same pass
 
 Acceptance: no `getenv` outside standalone/options.cpp; the flag list in options.h is the
 whole inventory and CLAUDE.md's harness section points at it.
+`[done 2026-09-13: C.2/C.3/C.4 closed on main 5fdd5715. getenv only in options.cpp; LiveEnabled,
+kDefaultOnFlags and BANISHED_LIVE_COMPONENTS gone; 96 default-on gates + the 12 dormant features
+graduated (proved by sa-run + two resave-gate PASSes with all 12 forced on), ~360 flags deleted,
+~21k lines removed. Verified on 5fdd5715: sa-run + pause-menu quit, AUTOQUIT, Load Game, sa-stress
+(+4.1% vs baseline, box busy), resave gate PASS. The inventory that drove it is
+docs/runtime_port/endgame_c/FLAGS.md (historical).]`
 
 ## B. Real classes
 
@@ -219,6 +232,10 @@ For one class `Ns::C` with retail vtable `??_7C@Ns@@6B@`:
 6. Build. The offset asserts catch layout drift; the linker catches every caller that still
    asked for the name.
 7. Run the gate (B.1.8). Merge.
+8. **Cast check.** The converted class's files have no `reinterpret_cast` left except in
+   the four legitimate categories below. Every other cast in the tree is a symptom of the
+   C-body shape and goes with the step that removes its cause; a class whose file still
+   has one is not converted.
 
 Callers in not-yet-converted files keep working through decision 1 and 2: they read the
 same offsets and dispatch through the same slot indices.
@@ -235,6 +252,25 @@ same offsets and dispatch through the same slot indices.
 6. `UI` (53 Description/Element classes, the largest batch, fully parallel).
 7. `Engine`, `Save`, `Achievement`, `Audio`, `Input`, `Pathfinding`, `Picking`.
 8. `code/Game`: components and dialogs, the 56 multiple-inheritance types last.
+
+### B.4 The casts are the progress metric
+
+Measured 2026-09-13: ~35,700 `reinterpret_cast` sites (code 24.7k, runtime 6.8k,
+standalone 3.1k, engine 1.0k, dx11 0.1k). Neither A nor C touches them; B removes almost
+all of them as a consequence, one kind per step, and the count per directory is a better
+measure of B's progress than "classes converted":
+
+| kind | example | removed by |
+|---|---|---|
+| resolved function pointers | `RT_EXPORT_ONCE(fn_X, "?M@C@Ns@@…")`, the `fn_*` typedefs | recipe step 3 (direct member call) and step 5 (registry rows gone); the linker proves it |
+| `self` from `void*` in slot thunks, factories, `*_LIVE_FACTORY` macros | `Name##_UpdateVSlot(void* s, …)` | decision 2: compiler-generated vtables, the thunks stop existing |
+| raw offset reads | `*(int*)((uint8_t*)self + 0x48)` and the per-file offset macros | recipe step 2/3: named members, `self->x` becomes `x` |
+| downcasts after a type check | `Object::Base*` to a component after `IsDerivedFrom` | stay, as `static_cast` or one typed `Cast<T>()` helper (what retail's compiler had) |
+
+What legitimately remains: COM interop in dx11/, the allocator, byte-level serializer
+reads, and the hardware-watchpoint code in standalone/. Acceptance for B adds:
+`grep -c reinterpret_cast` outside those files is zero, and no `static_cast` crosses an
+unrelated type.
 
 Every converted class shrinks the registry; when `standalone/address_registry.cpp`,
 `rt_data_mint*.inc` and `rt_export_addrs.inc` are empty they are deleted with

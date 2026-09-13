@@ -56,10 +56,6 @@ void* FindComp(void* entity, uint32_t tid);
 // from the area's MapComponent (+0x28 tileX/+0x2a tileY/+0x2c fpW/+0x2e fpH). Returns -1
 // if the area has no MapComponent or the world grid is unavailable.
 int WorkAreaCenterCell(void* area);
-
-// Read an env gate once (cached per name via the caller's static; this is a plain check).
-bool EnvOn(const char* name);
-
 // True when the citizen's CharacterComponent action stack is idle (ready for a new drive).
 // Returns false (not idle / not ready) if charComp or its fields aren't live yet.
 bool CitizenStackIdle(void* citizen);

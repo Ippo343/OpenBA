@@ -191,25 +191,6 @@ void TombstoneComponent_Update(TombstoneComponent* self, int64_t* pDeltaTime) {
     int64_t* pTimer = (int64_t*)&self->field28;
     *pTimer -= *pDeltaTime;
 
-    // Phase-1 bring-up verification trace (env BANISHED_TOMB_TRACE, default off →
-    // byte-unchanged): follows ONE component and prints its +0x28 countdown timer
-    // decreasing per tick. Confirms the live recipe end-to-end — Update entered via
-    // vtable +0x48, Startup populated +0x28, and the value advances monotonically.
-    {
-        static int s_st = -1, s_n = 0;
-        static void* s_lock = nullptr;
-        if (s_st < 0) {
-            const char* e = std::getenv("BANISHED_TOMB_TRACE");
-            s_st = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_st == 1 && s_lock == nullptr) s_lock = self;
-        if (s_st == 1 && self == s_lock && s_n < 20) {
-            fprintf(stderr, "[TombTrace] self=%p timer(+28)=%lld dt=%lld unk18=%p\n",
-                    (void*)self, (long long)*pTimer, (long long)*pDeltaTime,
-                    (void*)self->_unk18);
-            fflush(stderr); s_n++;
-        }
-    }
 
     if (*pTimer < 1) {
         void* entityPtr = self->owner;
@@ -284,13 +265,12 @@ void TombstoneComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-// Live bring-up (Phase 1, env BANISHED_LIVE_TOMBSTONE or global BANISHED_LIVE_COMPONENTS).
+// Live bring-up (Phase 1; graduated unconditional 2026-09-13).
 // Routes vtable slot 4 (+0x20) -> TombstoneComponent_Startup (populates the +0x28
 // random-lifetime timer at spawn, dispatched by ComponentEntity_StartupComponents) and
 // slot 9 (+0x48) -> TombstoneComponent_Update (per-tick countdown, the slot the
 // EntityList bucket round-robin calls — NOT +0x40/slot 8 = empty OnRemove 0x140118a70,
-// verified vs Ghidra vtable 0x14015a980). With the env OFF the factory is byte-identical
-// to the prior COMPONENT_INERT_FACTORY (default run unchanged). The only new exe-helper
+// verified vs Ghidra vtable 0x14015a980). The only new exe-helper
 // registration is the TombstoneDescription type-id global 0x1401c4a68
 // (reg_component_tombstone.cpp); every other helper was already registered.
 #include "Object/factory_registration.h"
@@ -319,12 +299,10 @@ static void TombstoneComponent_FinishLiveVtable() {
     // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
     TombstoneComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&TombstoneComponent_ShutdownVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TOMBSTONE")) {
-        TombstoneComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&TombstoneComponent_StartupVSlot);
-        TombstoneComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&TombstoneComponent_UpdateVSlot);
-    }
+    TombstoneComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&TombstoneComponent_StartupVSlot);
+    TombstoneComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&TombstoneComponent_UpdateVSlot);
 }
 extern "C" void* TombstoneComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x30, 0x88,

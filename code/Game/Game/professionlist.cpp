@@ -252,33 +252,6 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
     printf("[ProfessionList] Startup: %d professions in array (tid=0x%08x)\n",
            *(int*)(pl + 0x28), profTid);
 #endif
-
-    // One-shot diagnostic: dump the sorted array (name, sort-key +0x48, avail +0x4e)
-    // plus the 4 special refs (+0x30..+0x48) so we can compare SA order / the "none"
-    // profession (profList+0x30, whose UI button is hidden) against retail.
-    if (std::getenv("BANISHED_PROFESSION_TRACE")) {
-        auto nameOf = [](uintptr_t prof) -> const char* {
-            if (!prof) return "(null)";
-            char* d = *reinterpret_cast<char**>(prof + 0x30);   // System::String data ptr
-            return d ? d : "(noname)";
-        };
-        void* ref1 = *reinterpret_cast<void**>(pl + 0x30);
-        void* ref2 = *reinterpret_cast<void**>(pl + 0x38);
-        void* ref3 = *reinterpret_cast<void**>(pl + 0x40);
-        void* ref4 = *reinterpret_cast<void**>(pl + 0x48);
-        printf("[ProfList] refs +0x30=%p(%s) +0x38=%p(%s) +0x40=%p(%s) +0x48=%p(%s)\n",
-               ref1, nameOf((uintptr_t)ref1), ref2, nameOf((uintptr_t)ref2),
-               ref3, nameOf((uintptr_t)ref3), ref4, nameOf((uintptr_t)ref4));
-        int nn = *(int*)(pl + 0x28);
-        uintptr_t* aa = *(uintptr_t**)(pl + 0x20);
-        for (int i = 0; i < nn && aa; i++) {
-            printf("[ProfList]  [%2d] %p name='%s' sortKey(+0x48)=%d avail(+0x4e)=%d%s\n",
-                   i, (void*)aa[i], nameOf(aa[i]), *(int*)(aa[i] + 0x48),
-                   *(uint8_t*)(aa[i] + 0x4e),
-                   ((void*)aa[i] == ref1) ? "  <== profList+0x30 (none/hidden-button)" : "");
-        }
-        fflush(stdout);
-    }
 }
 
 // ============================================================

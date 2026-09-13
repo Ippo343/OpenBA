@@ -357,13 +357,6 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
         bool replaceable = (cur == nullptr) ||
                            (fn_IsA && s_tid_EditTool && fn_IsA(cur, s_tid_EditTool));
         if (replaceable) {
-            if (const char* e = std::getenv("BANISHED_TOOL_TRACE")) {
-                if (e[0] && e[0] != '0') {
-                    fprintf(stderr, "[ToolTrace] RESTRICT re-arm pc=%p tool=%p -> group=%p\n",
-                            (void*)pc, cur, *(void**)(pc + 0x88));
-                    fflush(stderr);
-                }
-            }
             EntityUI_SetEditMode_Impl(entityUI, *(uint64_t*)(pc + 0x88));
             if (*(void**)toolSlot == nullptr) return -1;
         }

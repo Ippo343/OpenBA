@@ -197,12 +197,6 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
         }
     }
 
-    static int s_marchDiag = -1;
-    if (s_marchDiag < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_marchDiag = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    static int s_marchN = 0;
-    bool diagThis = s_marchDiag && (s_marchN++ < 3);
-    int visited = 0, aa20calls = 0;
-    uintptr_t aa20dbg = ResolveAddr(Module::Exe, 0x1400aaa20);
     // Main DDA march.
     for (;;) {
         int axis = (tMax[1] <= tMax[0]) ? 1 : 0;   // SETBE: S[3] <= S[2]
@@ -215,24 +209,14 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
                 hit = reinterpret_cast<fn_aa20_t>(fn)(
                     param_1, cell[0], cell[1], param_3, param_2, param_4,
                     param_5, param_6, nullptr);
-                if (diagThis) aa20calls++;
             }
             if (hit) return 1;
         }
-        if (diagThis) visited++;
         // Advance along the chosen axis.
         float oldTMax = tMax[axis];
         cell[axis] += step[axis];
         tMax[axis] = oldTMax + tDelta[axis];
         if (oldTMax >= *param_4) {  // exceeded max parametric distance
-            if (diagThis) {
-                fprintf(stderr, "[March] width=%d normDir=(%.3f,%.3f) seedCell=(%d,%d) "
-                        "tEnter=%.2f tExit=%.2f aa20=%p visited=%d aa20calls=%d -> NO HIT (maxDist)\n",
-                        width, normDir[0], normDir[1],
-                        (int)(center + param_2[0]), (int)(center + param_2[1]),
-                        tEnter, tExit, (void*)aa20dbg, visited, aa20calls);
-                fflush(stderr);
-            }
             return 0;
         }
     }
@@ -275,19 +259,6 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
     int screenW = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(display) + 4);
     int screenH = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(display) + 8);
 
-    {
-        static int s_on = -1;
-        if (s_on < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_on = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (s_on) {
-            static bool s_once = false;
-            if (!s_once) { s_once = true;
-                fprintf(stderr, "[MouseRay] keyMap=%p display=%p screenW=%d screenH=%d mouseX=%d mouseY=%d "
-                        "gvFn=%p (display+4/+8 = Video::Device dims)\n",
-                        keyMap, display, screenW, screenH, (int)mouseX, (int)mouseY, (void*)fn_KeyMap_GetValue);
-                fflush(stderr);
-            }
-        }
-    }
     // Safety: garbage/zero screen dims would let the bounds check pass with junk and then
     // crash in the camera-ray math (writing a by-value result through a bad retbuf). Reject
     // implausible display sizes so sub_da00 returns invalid instead of hard-faulting.
@@ -367,20 +338,6 @@ extern "C" int PlayerRay_ScreenToCell_101270(uintptr_t param_1) {
     uint8_t hit = PlayerRay_TerrainMarch_aa530(
         map, origin, dir, &maxDist, hitPos, scratch);
 
-    {
-        static int s_on = -1;
-        if (s_on < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_on = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (s_on) {
-            static int s_n = 0;
-            if (s_n++ < 8) {
-                fprintf(stderr, "[ScreenToCell] ok=%d origin=(%.2f,%.2f,%.2f) dir=(%.2f,%.2f,%.2f) "
-                        "map=%p hit=%d hitPos=(%.2f,%.2f,%.2f)\n",
-                        (int)ok, origin[0], origin[1], origin[2], dir[0], dir[1], dir[2],
-                        (void*)map, (int)hit, hitPos[0], hitPos[1], hitPos[2]);
-                fflush(stderr);
-            }
-        }
-    }
 
     if (hit == 0)
         return -1;

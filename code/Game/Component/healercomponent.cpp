@@ -244,12 +244,11 @@ static void* HealerComponent_CreateState(void* self) {               // 0x140004
 static void HealerComponent_FinishLiveVtable(void* mem) {
     // Slot 3 is the STREAM SERIALIZER, not a gameplay slot: the save encoding
     // does not care whether this component's live feature is enabled. Wired
-    // UNCONDITIONALLY, ahead of the gate -- behind it, a disabled flag left the
-    // class falling through to base-only Component_Serialize, which skips this
-    // body's bytes and desyncs the stream for EVERY object after it.
+    // UNCONDITIONALLY -- behind a gate, a disabled flag left the class falling
+    // through to base-only Component_Serialize, which skips this body's bytes
+    // and desyncs the stream for EVERY object after it.
     // See reference_vtable_slot3_serialize_never_installed.
     HealerComponent_LiveVtable[3]  = reinterpret_cast<void*>(&HealerComponent_ShutdownVSlot);
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_HEALER")) return;
     HealerComponent_LiveVtable[7]  = reinterpret_cast<void*>(&HealerComponent_OnRemoveVSlot);
     HealerComponent_LiveVtable[16] = reinterpret_cast<void*>(&HealerComponent_GetDefaultState);
     HealerComponent_LiveVtable[17] = reinterpret_cast<void*>(&HealerComponent_CreateState);
@@ -268,14 +267,6 @@ extern "C" void* HealerComponent_Factory(void) {
         HealerComponent_LiveVtable,
         reinterpret_cast<void*>(&HealerComponent_LiveGetTypeId));
     HealerComponent_FinishLiveVtable(p);
-    {
-        static int n = 0;
-        if (n < 4) { ++n;
-            fprintf(stderr, "[Healer] HealerComponent CREATED (factory) comp=%p live=%d\n",
-                    p, ::ComponentFactory::LiveEnabled("BANISHED_LIVE_HEALER") ? 1 : 0);
-            fflush(stderr);
-        }
-    }
     return p;
 }
 static void* HealerComponent_CreateInPlace(void* mem) {
@@ -283,14 +274,6 @@ static void* HealerComponent_CreateInPlace(void* mem) {
         HealerComponent_LiveVtable,
         reinterpret_cast<void*>(&HealerComponent_LiveGetTypeId));
     HealerComponent_FinishLiveVtable(mem);
-    {
-        static int n = 0;
-        if (n < 4) { ++n;
-            fprintf(stderr, "[Healer] HealerComponent CREATED (in-place) comp=%p live=%d\n",
-                    mem, ::ComponentFactory::LiveEnabled("BANISHED_LIVE_HEALER") ? 1 : 0);
-            fflush(stderr);
-        }
-    }
     return mem;
 }
 

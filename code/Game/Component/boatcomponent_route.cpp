@@ -125,14 +125,6 @@ void ResolveOnce() {
     s_pHalfTileBias = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
 }
 
-bool RouteTrace() {
-    static int t = -1;
-    if (t < 0) {
-        const char* e = std::getenv("BANISHED_BOAT_TRACE");
-        t = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return t != 0;
-}
 
 }  // namespace
 
@@ -351,16 +343,6 @@ extern "C" int BoatRoute_FindWaterPath(int64_t terrain, void* /*unused2*/, uint3
     s_PfFlags(pf, 1, 0, 0);
     const int n = s_PfRun(reinterpret_cast<int64_t>(pf), fromCell, toCell & 0xffffffffu,
                           reinterpret_cast<void*>(0x380), outBuf, 0x1000);
-    if (RouteTrace()) {
-        const int size = *reinterpret_cast<int*>(terrain);
-        std::fprintf(stderr, "[BoatRoute]   A* pf=%p from=%u(%d,%d) to=%u(%d,%d) -> %d cells\n",
-                     pf, fromCell, size ? static_cast<int>(fromCell) % size : -1,
-                     size ? static_cast<int>(fromCell) / size : -1,
-                     static_cast<uint32_t>(toCell),
-                     size ? static_cast<int>(toCell) % size : -1,
-                     size ? static_cast<int>(toCell) / size : -1, n);
-        std::fflush(stderr);
-    }
     return n;
 }
 
@@ -421,319 +403,6 @@ inline int ToTileClamped(float coord, int mapSize) {
     return t;
 }
 
-// ── TEMPORARY DIAGNOSTIC (BANISHED_BOAT_TRACE only) ──────────────────────────────
-// Both real A* legs return 0 cells while a control probe on the polyline centreline
-// returns 53, so the failure is in the ENDPOINT cells, not the search. This dumps the
-// nav-grid facts that decide whether an endpoint can even be a search node:
-//   map+0x80 = fine-cell array (stride 0x30), cell+0x29 low 5 bits = terrain class,
-//   cell+0x26 (short) = region label. A boat's class mask is 0x380 (classes 7,8,9) —
-//   the `mode` word 56e0 hands the A* — so a cell whose class bit is outside 0x380 is
-//   not a navigable node for a boat, whatever its cost.
-// Prints BOTH arms for every cell it reports; a silent line means the dump did not run.
-constexpr uint32_t kBoatClassMask = 0x380u;
-
-inline uintptr_t CellAt(int* map, int cell) {
-    const uintptr_t base = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
-    return base ? base + static_cast<uintptr_t>(cell) * 0x30 : 0;
-}
-
-void DumpCell(int* map, const char* what, int tx, int ty) {
-    const int size = *map;
-    if (tx < 0 || ty < 0 || tx >= size || ty >= size) {
-        std::fprintf(stderr, "[BoatDiag] %-10s (%3d,%3d) OUT OF RANGE (size=%d)\n",
-                     what, tx, ty, size);
-        return;
-    }
-    const int cell = ty * size + tx;
-    const uintptr_t c = CellAt(map, cell);
-    if (!c) {
-        std::fprintf(stderr, "[BoatDiag] %-10s (%3d,%3d) cell=%d NO CELL ARRAY (map+0x80 == 0)\n",
-                     what, tx, ty, cell);
-        return;
-    }
-    const unsigned cls = *reinterpret_cast<uint8_t*>(c + 0x29) & 0x1fu;
-    const int      reg = *reinterpret_cast<int16_t*>(c + 0x26);
-    const bool     nav = ((1u << cls) & kBoatClassMask) != 0;
-    std::fprintf(stderr, "[BoatDiag] %-10s (%3d,%3d) cell=%-6d class=%2u region=%-5d "
-                         "boat-navigable=%s\n",
-                 what, tx, ty, cell, cls, reg, nav ? "YES" : "NO");
-}
-
-void DumpNavGrid(int* map, int dockTx, int dockTy, int entryTx, int entryTy,
-                 int exitTx, int exitTy) {
-    const int size = *map;
-    const uintptr_t base = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
-    const int cellCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(map) + 0x88);
-    std::fprintf(stderr, "[BoatDiag] map=%p size=%d cellArray=%p cellCount=%d mask=0x%x\n",
-                 (void*)map, size, (void*)base, cellCount, kBoatClassMask);
-    if (!base || size <= 0) {
-        std::fprintf(stderr, "[BoatDiag] NO GRID — nothing below this line ran\n");
-        std::fflush(stderr);
-        return;
-    }
-
-    // Whole-map class histogram + how many cells a boat could ever stand on.
-    int hist[32] = {0};
-    int navCells = 0;
-    for (int i = 0; i < size * size; ++i) {
-        const unsigned cls = *reinterpret_cast<uint8_t*>(base + (uintptr_t)i * 0x30 + 0x29) & 0x1fu;
-        hist[cls]++;
-        if ((1u << cls) & kBoatClassMask) navCells++;
-    }
-    std::fprintf(stderr, "[BoatDiag] class histogram:");
-    for (int i = 0; i < 32; ++i) if (hist[i]) std::fprintf(stderr, " %d=%d", i, hist[i]);
-    std::fprintf(stderr, "  | boat-navigable cells = %d of %d\n", navCells, size * size);
-
-    // Border navigability: retail's polyline enters on the map edge.
-    int b[4] = {0, 0, 0, 0};
-    for (int i = 0; i < size; ++i) {
-        const int idx[4] = {i, (size - 1) * size + i, i * size, i * size + (size - 1)};
-        for (int k = 0; k < 4; ++k) {
-            const unsigned cls =
-                *reinterpret_cast<uint8_t*>(base + (uintptr_t)idx[k] * 0x30 + 0x29) & 0x1fu;
-            if ((1u << cls) & kBoatClassMask) b[k]++;
-        }
-    }
-    std::fprintf(stderr, "[BoatDiag] border navigable: row0=%d row%d=%d col0=%d col%d=%d "
-                         "(of %d each)\n", b[0], size - 1, b[1], b[2], size - 1, b[3], size);
-
-    DumpCell(map, "DOCK",  dockTx,  dockTy);
-    DumpCell(map, "ENTRY", entryTx, entryTy);
-    DumpCell(map, "EXIT",  exitTx,  exitTy);
-
-    // How far is the dock from anything a boat can float on?
-    int bestD = 1 << 30, bx = -1, by = -1;
-    for (int y = 0; y < size; ++y) {
-        for (int x = 0; x < size; ++x) {
-            const unsigned cls =
-                *reinterpret_cast<uint8_t*>(base + ((uintptr_t)y * size + x) * 0x30 + 0x29) & 0x1fu;
-            if (!((1u << cls) & kBoatClassMask)) continue;
-            const int dx = x - dockTx, dy = y - dockTy;
-            const int d = dx * dx + dy * dy;
-            if (d < bestD) { bestD = d; bx = x; by = y; }
-        }
-    }
-    if (bx < 0) {
-        std::fprintf(stderr, "[BoatDiag] nearest boat-navigable cell to DOCK: NONE EXISTS\n");
-    } else {
-        std::fprintf(stderr, "[BoatDiag] nearest boat-navigable cell to DOCK (%d,%d) is "
-                             "(%d,%d) dist=%.2f tiles\n",
-                     dockTx, dockTy, bx, by, std::sqrt(static_cast<double>(bestD)));
-        DumpCell(map, "NEAREST", bx, by);
-    }
-    std::fflush(stderr);
-}
-
-// ── TEMPORARY DIAGNOSTIC part 2: the grid the A* ACTUALLY reads ──────────────────
-// The search does NOT read map cell+0x29. 0x1400a6430 case 5 hands the search
-// (0x14001ce00 -> 0x14001d040) the object at pf+0x78, which carries its OWN per-cell
-// class byte array at +0x158 and its grid width at +0xd8, synced from cell+0x29 by
-// 0x14009e8c0 (bits 0..6 = class, bit 7 = "zoned", from cell+0x00). The neighbour test
-// in 0x1400a5ec0 is purely `(mask >> (classByte & 0x1f)) & 1` — 8-neighbour, because
-// 0x14009ffc0 passes flag +0xd4 = 1. There is no region prefilter and no node cap, so a
-// 0-cell result means the open list was genuinely exhausted.
-// This dumps that array and floods it exactly the way the search would.
-const float* g_diagPoly = nullptr;
-int          g_diagPolyCount = 0;
-uintptr_t    g_diagPathArr = 0;      // worldGeom+0x1e0: stride 0x10 {const float* pts, int n}
-int          g_diagPathCount = 0;    // worldGeom+0x1e8
-
-void DumpSearcherGrid(int* map, int dockTx, int dockTy, int entryTx, int entryTy,
-                      int exitTx, int exitTy, int probeAx, int probeAy) {
-    const uintptr_t pf = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x68);
-    if (!pf) {
-        std::fprintf(stderr, "[BoatDiag2] pf (map+0x68) is NULL — no searcher grid to read\n");
-        std::fflush(stderr);
-        return;
-    }
-    // The searcher/grid object is pf+0x78. Within it: +0xd8 width, +0xe0 the class-byte
-    // array (which is pf+0x158 in pathfinder_seed.cpp's pf-relative numbering — the same
-    // slot, two bases). Reading +0x158 off the GRID base lands on unrelated bytes.
-    const uintptr_t s = pf + 0x78;
-    const int      sw = *reinterpret_cast<int*>(s + 0xd8);
-    uint8_t* const sc = *reinterpret_cast<uint8_t**>(s + 0xe0);
-    const int mapSize = *map;
-    std::fprintf(stderr, "[BoatDiag2] pf=%p searcher=%p width(+0xd8)=%d classArr(grid+0xe0)=%p "
-                         "mapSize=%d flags d4=%d d5=%d d6=%d\n",
-                 (void*)pf, (void*)s, sw, (void*)sc, mapSize,
-                 *reinterpret_cast<uint8_t*>(s + 0xd4), *reinterpret_cast<uint8_t*>(s + 0xd5),
-                 *reinterpret_cast<uint8_t*>(s + 0xd6));
-    if (!sc || sw <= 0) {
-        std::fprintf(stderr, "[BoatDiag2] NO SEARCHER GRID — nothing below this line ran\n");
-        std::fflush(stderr);
-        return;
-    }
-
-    // Does the searcher's copy agree with the map cells it was synced from?
-    const uintptr_t cellBase =
-        *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
-    int mismatch = 0, firstBad = -1;
-    int hist[32] = {0};
-    int nav = 0;
-    const int n = sw * sw;
-    for (int i = 0; i < n; ++i) {
-        const unsigned c = sc[i] & 0x1fu;
-        hist[c]++;
-        if ((1u << c) & kBoatClassMask) nav++;
-        if (cellBase && i < mapSize * mapSize) {
-            const unsigned m = *reinterpret_cast<uint8_t*>(cellBase + (uintptr_t)i * 0x30 + 0x29) & 0x1fu;
-            if (m != c) { if (firstBad < 0) firstBad = i; mismatch++; }
-        }
-    }
-    std::fprintf(stderr, "[BoatDiag2] searcher class histogram:");
-    for (int i = 0; i < 32; ++i) if (hist[i]) std::fprintf(stderr, " %d=%d", i, hist[i]);
-    std::fprintf(stderr, "  | navigable=%d of %d | mismatch-vs-map=%d firstBad=%d\n",
-                 nav, n, mismatch, firstBad);
-
-    // Flood the searcher grid exactly as 0x1400a5ec0 would: 8-neighbour, mask 0x380,
-    // square bounds from the searcher's own width. Label every component, then report
-    // which one each endpoint of the failing legs and of the WORKING control probe is in.
-    static int16_t lbl[256 * 256];
-    static int stack[256 * 256];
-    const int cap = 256 * 256;
-    if (n > cap) {
-        std::fprintf(stderr, "[BoatDiag2] grid %d cells exceeds diag buffer %d — flood skipped\n",
-                     n, cap);
-        std::fflush(stderr);
-        return;
-    }
-    for (int i = 0; i < n; ++i) lbl[i] = 0;
-    int nextLabel = 0;
-    int sizes[512] = {0};
-    for (int seed = 0; seed < n; ++seed) {
-        if (lbl[seed] || !((1u << (sc[seed] & 0x1fu)) & kBoatClassMask)) continue;
-        ++nextLabel;
-        int sp = 0, count = 0;
-        stack[sp++] = seed;
-        lbl[seed] = static_cast<int16_t>(nextLabel);
-        while (sp > 0) {
-            const int c = stack[--sp];
-            ++count;
-            const int cx = c % sw, cy = c / sw;
-            for (int dy = -1; dy <= 1; ++dy) {
-                for (int dx = -1; dx <= 1; ++dx) {
-                    if (!dx && !dy) continue;
-                    const int nx = cx + dx, ny = cy + dy;
-                    if (nx < 0 || ny < 0 || nx >= sw || ny >= sw) continue;
-                    const int ni = ny * sw + nx;
-                    if (lbl[ni]) continue;
-                    if (!((1u << (sc[ni] & 0x1fu)) & kBoatClassMask)) continue;
-                    lbl[ni] = static_cast<int16_t>(nextLabel);
-                    stack[sp++] = ni;
-                }
-            }
-        }
-        if (nextLabel < 512) sizes[nextLabel] = count;
-    }
-    std::fprintf(stderr, "[BoatDiag2] water components (8-neigh, mask 0x380): %d total;",
-                 nextLabel);
-    // three largest
-    for (int k = 0; k < 3; ++k) {
-        int bi = 0;
-        for (int i = 1; i < 512 && i <= nextLabel; ++i) if (sizes[i] > sizes[bi]) bi = i;
-        if (!bi) break;
-        std::fprintf(stderr, " #%d=%d", bi, sizes[bi]);
-        sizes[bi] = 0;
-    }
-    std::fprintf(stderr, "\n");
-
-    // Walk polyline 0 end to end and report which water component each centreline point
-    // sits in. If one component covers the whole in-map run, the channel is intact and a
-    // dock in another component is a SITING problem; if the run changes component (or
-    // leaves water entirely) partway, the water band itself is fragmented and worldgen is.
-    if (g_diagPoly && g_diagPolyCount > 0) {
-        int runComp = -2, runStart = -1, runs = 0, dryPoints = 0;
-        std::fprintf(stderr, "[BoatDiag2] polyline0 component runs (in-map points only):");
-        for (int i = 0; i < g_diagPolyCount; ++i) {
-            const float px = g_diagPoly[i * 2 + 0], py = g_diagPoly[i * 2 + 1];
-            const float half = static_cast<float>(sw >> 1);
-            const int tx = static_cast<int>(px + half), ty = static_cast<int>(py + half);
-            if (tx < 0 || ty < 0 || tx >= sw || ty >= sw) continue;
-            const int idx = ty * sw + tx;
-            const int comp = lbl[idx];
-            if (comp == 0) ++dryPoints;
-            if (comp != runComp) {
-                if (runComp != -2)
-                    std::fprintf(stderr, " [%d..%d]=c%d", runStart, i - 1, runComp);
-                runComp = comp; runStart = i; ++runs;
-            }
-        }
-        if (runComp != -2)
-            std::fprintf(stderr, " [%d..end]=c%d", runStart, runComp);
-        std::fprintf(stderr, "  | runs=%d nonWaterCentrelinePoints=%d\n", runs, dryPoints);
-    } else {
-        std::fprintf(stderr, "[BoatDiag2] polyline0 unavailable — centreline walk skipped\n");
-    }
-
-    // How far is the dock from the MAIN CHANNEL (the component the map-edge endpoints and
-    // the polyline-0 centreline are in)? That distance is the size of the siting error.
-    {
-        const int mainComp = (probeAx >= 0 && probeAy >= 0 && probeAx < sw && probeAy < sw)
-                           ? lbl[probeAy * sw + probeAx] : 0;
-        int bestD = 1 << 30, bx = -1, by = -1;
-        if (mainComp) {
-            for (int y = 0; y < sw; ++y)
-                for (int x = 0; x < sw; ++x)
-                    if (lbl[y * sw + x] == mainComp) {
-                        const int dx = x - dockTx, dy = y - dockTy;
-                        const int d = dx * dx + dy * dy;
-                        if (d < bestD) { bestD = d; bx = x; by = y; }
-                    }
-        }
-        if (bx < 0)
-            std::fprintf(stderr, "[BoatDiag2] main channel component unknown (probe cell "
-                                 "not water) — dock-to-channel distance NOT measured\n");
-        else
-            std::fprintf(stderr, "[BoatDiag2] DOCK (%d,%d) is %.1f tiles from the nearest "
-                                 "MAIN-CHANNEL cell (%d,%d) in component %d\n",
-                         dockTx, dockTy, std::sqrt(static_cast<double>(bestD)), bx, by, mainComp);
-    }
-
-    // Are the four water bodies the four FEATURE POLYLINES (four separate rivers), or one
-    // channel our worldgen fragmented? Report, per polyline, the components its in-map
-    // centreline visits and how many of its centreline points are not water at all.
-    for (int pi = 0; pi < g_diagPathCount; ++pi) {
-        const uintptr_t rec = g_diagPathArr + static_cast<uintptr_t>(pi) * 0x10;
-        const float* pts2 = *reinterpret_cast<const float**>(rec);
-        const int    n2   = *reinterpret_cast<int*>(rec + 8);
-        if (!pts2 || n2 <= 0) {
-            std::fprintf(stderr, "[BoatDiag2] path[%d] EMPTY (pts=%p n=%d)\n", pi, (const void*)pts2, n2);
-            continue;
-        }
-        int seen[8] = {0};
-        int inMap = 0, dry = 0;
-        for (int i = 0; i < n2; ++i) {
-            const float half = static_cast<float>(sw >> 1);
-            const int tx = static_cast<int>(pts2[i * 2 + 0] + half);
-            const int ty = static_cast<int>(pts2[i * 2 + 1] + half);
-            if (tx < 0 || ty < 0 || tx >= sw || ty >= sw) continue;
-            ++inMap;
-            const int c = lbl[ty * sw + tx];
-            if (c == 0) ++dry; else if (c < 8) seen[c] = 1;
-        }
-        std::fprintf(stderr, "[BoatDiag2] path[%d] inMapPts=%d nonWater=%d components={", pi, inMap, dry);
-        for (int c = 1; c < 8; ++c) if (seen[c]) std::fprintf(stderr, " c%d", c);
-        std::fprintf(stderr, " }\n");
-    }
-
-    struct { const char* n; int x, y; } pts[] = {
-        {"DOCK", dockTx, dockTy}, {"ENTRY", entryTx, entryTy}, {"EXIT", exitTx, exitTy},
-        {"PROBE-A", probeAx, probeAy},
-    };
-    for (auto& p : pts) {
-        if (p.x < 0 || p.y < 0 || p.x >= sw || p.y >= sw) {
-            std::fprintf(stderr, "[BoatDiag2] %-8s (%3d,%3d) OUT OF SEARCHER GRID\n",
-                         p.n, p.x, p.y);
-            continue;
-        }
-        const int idx = p.y * sw + p.x;
-        std::fprintf(stderr, "[BoatDiag2] %-8s (%3d,%3d) searcherClass=%2u (raw 0x%02x) "
-                             "component=%d\n",
-                     p.n, p.x, p.y, sc[idx] & 0x1fu, sc[idx], lbl[idx]);
-    }
-    std::fflush(stderr);
-}
-
 inline bool TileInMap(float x, float y, int mapSize) {
     const float half = static_cast<float>(mapSize >> 1);
     const int ix = static_cast<int>(x + half);
@@ -785,8 +454,8 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
     if (fn_String_Ctor_CStr) fn_String_Ctor_CStr(boatName, "boat");
     float* const destPos = reinterpret_cast<float*>(comp + 0x40);   // Vector3
     float* const destYaw = reinterpret_cast<float*>(comp + 0x4c);
-    const bool haveDock = BoatRoute_FindAttachPoint(reinterpret_cast<void*>(interactIBP[0]),
-                                                    boatName, destPos, destYaw);
+    BoatRoute_FindAttachPoint(reinterpret_cast<void*>(interactIBP[0]),
+                              boatName, destPos, destYaw);
     if (fn_String_Dtor) fn_String_Dtor(boatName);
 
     // The dock's facing, as a direction vector. Flipped at the end if the route
@@ -850,21 +519,6 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
     const int destTy  = ToTileClamped(destPos[1], mapSize);
     const int entryTx = ToTileClamped(entryX, mapSize);
     const int entryTy = ToTileClamped(entryY, mapSize);
-    if (RouteTrace()) {
-        const int exitTxD = ToTileClamped(exitX, mapSize);
-        const int exitTyD = ToTileClamped(exitY, mapSize);
-        DumpNavGrid(terrain, destTx, destTy, entryTx, entryTy, exitTxD, exitTyD);
-        g_diagPoly = polyPts;
-        g_diagPolyCount = polyCount;
-        g_diagPathArr = *reinterpret_cast<uintptr_t*>(wgeo + 0x1e0);
-        g_diagPathCount = *reinterpret_cast<int*>(wgeo + 0x1e8);
-        int pax = -1, pay = -1;
-        if (polyPts && polyCount > 260) {
-            pax = ToTileClamped(polyPts[200 * 2 + 0], mapSize);
-            pay = ToTileClamped(polyPts[200 * 2 + 1], mapSize);
-        }
-        DumpSearcherGrid(terrain, destTx, destTy, entryTx, entryTy, exitTxD, exitTyD, pax, pay);
-    }
 
     const int nIn = BoatRoute_FindWaterPath(reinterpret_cast<int64_t>(terrain), nullptr,
                                             static_cast<uint32_t>(mapSize * entryTy + entryTx),
@@ -888,22 +542,6 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
     // A non-zero result here means the A* is fine and the dock is the problem; a zero
     // means the water profile or the nav grid is, and the route builder is being blamed
     // for someone else's gap.
-    if (RouteTrace() && polyPts && polyCount > 260) {
-        static int s_probeCells[4096];
-        const int aIdx = 200, bIdx = 250;
-        const int ax = ToTileClamped(polyPts[aIdx * 2 + 0], mapSize);
-        const int ay = ToTileClamped(polyPts[aIdx * 2 + 1], mapSize);
-        const int bx = ToTileClamped(polyPts[bIdx * 2 + 0], mapSize);
-        const int by = ToTileClamped(polyPts[bIdx * 2 + 1], mapSize);
-        std::fprintf(stderr, "[BoatRoute] CONTROL water probe centreline[%d]->(%d,%d) "
-                             "centreline[%d]->(%d,%d):\n", aIdx, ax, ay, bIdx, bx, by);
-        DumpCell(terrain, "PROBE-A", ax, ay);
-        DumpCell(terrain, "PROBE-B", bx, by);
-        BoatRoute_FindWaterPath(reinterpret_cast<int64_t>(terrain), nullptr,
-                                static_cast<uint32_t>(mapSize * ay + ax),
-                                static_cast<uint64_t>(static_cast<uint32_t>(mapSize * by + bx)),
-                                nullptr, reinterpret_cast<int64_t>(s_probeCells));
-    }
 
     // BOTH legs or NEITHER — retail's gate at 140045e60.
     if (nIn > 0 && nOut > 0) {
@@ -960,13 +598,4 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
         *destYaw = s_Heading ? s_Heading(dockForward) : *destYaw;
     }
 
-    if (RouteTrace()) {
-        std::fprintf(stderr,
-            "[BoatRoute] dock=%s pos=(%.2f,%.2f,%.2f) yaw=%.3f | poly n=%d approach=%d "
-            "entry=(%.1f,%.1f) exit=(%.1f,%.1f) resume=%d | astar in=%d out=%d | route=%d\n",
-            haveDock ? "yes" : "NO", destPos[0], destPos[1], destPos[2], *destYaw,
-            polyCount, consumed ? consumed - 1 : 0, entryX, entryY, exitX, exitY, resumeIdx,
-            nIn, nOut, *reinterpret_cast<int*>(comp + 0x68));
-        std::fflush(stderr);
-    }
 }

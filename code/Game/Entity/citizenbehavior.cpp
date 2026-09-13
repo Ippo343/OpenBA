@@ -18,113 +18,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <windows.h>   // QueryPerformanceCounter — [CITPROF] sub-phase timing
+#include <windows.h>
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
 // is set. Called at the end of CitizenBehavior_Update.
 extern "C" void BuilderPool_Tick();
 
-// ============================================================
-// [CITPROF] Sub-phase profiler for CitizenBehavior::Update
-// ============================================================
-// BANISHED_CITPROF=<n> — break the ~3 ms CitizenList tick (reported by
-// BANISHED_SIMPROF as 92-95% of the frame) down into its callees, plus the
-// work counters that explain the cost. Reports every <n> ticks ("1" => 120).
-// Off (zero overhead beyond one predictable branch) unless the var is set.
-namespace {
-
-enum CitPhase {
-    kCpCountRes = 0, kCpCheckThresh, kCpProcessPaths, kCpBuildGraph,
-    kCpCollectStats, kCpBuilderPool, kCpTotal, kCpCount
-};
-const char* const kCitPhaseName[kCpCount] = {
-    "CountResources", "CheckThresholds", "ProcessPaths", "BuildPathGraph",
-    "CollectStats", "BuilderPool_Tick", "TOTAL Update"
-};
-
-int       g_citProfOn = -1;          // -1 = unresolved, 0 = off, else report interval
-long long g_citQpcFreq = 0;
-double    g_citSec[kCpCount]   = {0};
-int       g_citCalls[kCpCount] = {0};
-int       g_citTicks = 0;
-
-// Work counters — what the time is actually spent iterating.
-long long g_cntPathCost   = 0;   // fn_Map_CalcPathCost invocations (A* per pair)
-double    g_secPathCost   = 0;   // wall time inside fn_Map_CalcPathCost
-long long g_cntPairsDone  = 0;   // path pairs resolved
-long long g_cntPairsBuilt = 0;   // pairs emitted by BuildPathGraph
-long long g_cntStorages   = 0;   // storage entities visited by CountResources
-long long g_cntItems      = 0;   // storage item slots visited
-long long g_cntTypeIdCalls = 0;  // component GetTypeId virtual calls (the inner loop)
-long long g_cntReadGuard  = 0;   // CollectStats ForceWork::Readable guards (VirtualQuery pairs)
-double    g_secReadGuard  = 0;   // wall time inside those guards
-
-inline bool CitProfOn() {
-    if (g_citProfOn < 0) {
-        const char* e = std::getenv("BANISHED_CITPROF");
-        int n = (e && e[0] && e[0] != '0') ? std::atoi(e) : 0;
-        if (n == 1) n = 120;
-        g_citProfOn = n;
-        if (n) {
-            LARGE_INTEGER f;
-            QueryPerformanceFrequency(&f);
-            g_citQpcFreq = f.QuadPart;
-        }
-    }
-    return g_citProfOn > 0;
-}
-inline long long CitQpc() { LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart; }
-
-struct CitTimer {
-    int ph; long long t0; bool on;
-    explicit CitTimer(int p) : ph(p), t0(0), on(CitProfOn()) { if (on) t0 = CitQpc(); }
-    // Stop early (used for the TOTAL phase, so the report itself is excluded).
-    void Stop() {
-        if (on && g_citQpcFreq) {
-            g_citSec[ph] += (double)(CitQpc() - t0) / (double)g_citQpcFreq;
-            g_citCalls[ph]++;
-        }
-        on = false;
-    }
-    ~CitTimer() { Stop(); }
-};
-
-void CitProfReport() {
-    if (!CitProfOn()) return;
-    if (++g_citTicks < g_citProfOn) return;
-    const double total = g_citSec[kCpTotal];
-    const double ticks = (double)g_citTicks;
-    std::fprintf(stderr,
-        "[CITPROF] ticks=%d  %.3f ms/tick total\n", g_citTicks, total * 1000.0 / ticks);
-    for (int i = 0; i < kCpCount; i++) {
-        if (!g_citCalls[i]) continue;
-        std::fprintf(stderr,
-            "[CITPROF]   %-16s %8.3f ms/tick  %6.2f%%  calls/tick=%.2f  %.4f ms/call\n",
-            kCitPhaseName[i], g_citSec[i] * 1000.0 / ticks,
-            total > 0 ? g_citSec[i] * 100.0 / total : 0.0,
-            (double)g_citCalls[i] / ticks,
-            g_citSec[i] * 1000.0 / (double)g_citCalls[i]);
-    }
-    std::fprintf(stderr,
-        "[CITPROF]   work: pathCost=%.2f/tick (%.3f ms/tick, %.4f ms/call)  pairsDone=%.2f  "
-        "pairsBuilt=%.2f  storages=%.2f  items=%.2f  getTypeId=%.1f  "
-        "readGuard=%.1f (%.3f ms/tick, %.4f ms/call)\n",
-        (double)g_cntPathCost / ticks, g_secPathCost * 1000.0 / ticks,
-        g_cntPathCost ? g_secPathCost * 1000.0 / (double)g_cntPathCost : 0.0,
-        (double)g_cntPairsDone / ticks, (double)g_cntPairsBuilt / ticks,
-        (double)g_cntStorages / ticks, (double)g_cntItems / ticks,
-        (double)g_cntTypeIdCalls / ticks,
-        (double)g_cntReadGuard / ticks, g_secReadGuard * 1000.0 / ticks,
-        g_cntReadGuard ? g_secReadGuard * 1000.0 / (double)g_cntReadGuard : 0.0);
-    std::fflush(stderr);
-    for (int i = 0; i < kCpCount; i++) { g_citSec[i] = 0; g_citCalls[i] = 0; }
-    g_citTicks = 0;
-    g_cntPathCost = g_cntPairsDone = g_cntPairsBuilt = 0;
-    g_cntStorages = g_cntItems = g_cntTypeIdCalls = g_cntReadGuard = 0;
-    g_secPathCost = g_secReadGuard = 0;
-}
-
-}  // namespace
 
 // ============================================================
 // Internal helper addresses (resolved lazily)
@@ -302,7 +201,6 @@ CitizenBehaviorRaw* CitizenBehavior_Ctor(CitizenBehaviorRaw* self) {
 // Original: Entity_impl_c2b0
 void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
     EnsureResolved();
-    CitTimer ptTotal(kCpTotal);   // [CITPROF]
 
     int64_t* q = reinterpret_cast<int64_t*>(self->data);
 
@@ -312,14 +210,10 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
     q[0x34] -= *deltaTime;       // notifyTimer
 
     // CountResources — Entity_helper_9ed0(self)
-    { CitTimer pt(kCpCountRes);
     CitizenBehavior_CountResources(self);
-    }
 
     // CheckThresholds — Entity_helper_c100(self, deltaTime)
-    { CitTimer pt(kCpCheckThresh);
     CitizenBehavior_CheckThresholds(self, deltaTime);
-    }
 
     // Path graph processing
     // DAT_140172234 is the path graph interval (float seconds)
@@ -338,26 +232,15 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
         s_fn_Time_Ctor(&pathInterval, intervalSec);
     }
 
-    // TEST-ONLY accelerator: BANISHED_PATHGRAPH_FAST forces the path branch every
-    // tick (interval 0) so BuildPathGraph/ProcessPaths/AssignCitizens fire within
-    // seconds instead of after the 300s (0x140172234) gate. Remove after wiring #17.
-    {
-        static int s_fast = -1;
-        if (s_fast < 0) { const char* e = std::getenv("BANISHED_PATHGRAPH_FAST"); s_fast = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (s_fast) pathInterval = 0;
-    }
 
     if (pathInterval <= q[0x32]) {
         // Try to process pending paths
         bool pathsDone = false;
         PathGraph* pg = self->pathGraph();
-        { CitTimer pt(kCpProcessPaths);
         pathsDone = CitizenBehavior_ProcessPaths(pg);
-        }
 
         if (!pathsDone) {
             // Build new path graph
-            CitTimer pt(kCpBuildGraph);
             CitizenBehavior_BuildPathGraph(pg);
         } else if (pg && pg->m_pendingIdx < 0 && pathInterval < q[0x32]) {
             // Clamp accumulated time: subtract intervals until within one interval.
@@ -380,9 +263,7 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
 
     // Stats collection (periodic)
     if (q[0x33] < 1) {
-        { CitTimer pt(kCpCollectStats);
         CitizenBehavior_CollectStats(self);
-        }
         // Reset timer from DAT_1401721fc (float seconds)
         if (s_fn_Time_Ctor) {
             static float* statsInterval = reinterpret_cast<float*>(
@@ -407,12 +288,7 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
     // the natural flow is enabled. This is the headless stand-in for the player's town-hall
     // Builder count — the engine has no player-free first-builder seater (the periodic
     // employment allocator only rebalances already-staffed sites). See builder_pool_driver.cpp.
-    { CitTimer pt(kCpBuilderPool);
     BuilderPool_Tick();
-    }
-
-    ptTotal.Stop();        // stop the total before reporting so the report isn't in it
-    CitProfReport();       // [CITPROF] no-op unless BANISHED_CITPROF is set
 }
 
 // ============================================================
@@ -568,15 +444,8 @@ bool CitizenBehavior_ProcessPaths(PathGraph* pg) {
         // Compute path cost between cells
         uint32_t cost = 0;
         if (fn_Map_CalcPathCost) {
-            const bool prof = CitProfOn();                       // [CITPROF]
-            const long long t0 = prof ? CitQpc() : 0;
             cost = (uint32_t)fn_Map_CalcPathCost(mapGrid, (uint32_t)cellA, cellB, 0);
-            if (prof) {
-                g_secPathCost += (double)(CitQpc() - t0) / (double)g_citQpcFreq;
-                ++g_cntPathCost;
-            }
         }
-        ++g_cntPairsDone;                                        // [CITPROF]
 
         // If cost < 2 (unreachable or adjacent), fall back to Euclidean grid distance
         if (cost < 2) {
@@ -665,10 +534,6 @@ bool CitizenBehavior_ProcessPaths(PathGraph* pg) {
 
     // If all pairs processed, run post-processing
     if (pg->m_pendingIdx < 0) {
-        static int s_dbg = -1;
-        if (s_dbg < 0) { const char* e = std::getenv("BANISHED_BUILD_TRACE"); s_dbg = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (s_dbg) std::fprintf(stderr, "[BuildTrace] ProcessPaths: drained -> assign branch (Reassign=%p Assign=%p)\n",
-                                (void*)fn_PathGraph_ReassignWorkers, (void*)fn_PathGraph_AssignCitizens);
         // Worker reassignment based on computed distances
         if (fn_PathGraph_ReassignWorkers) {
             fn_PathGraph_ReassignWorkers(pg);
@@ -705,9 +570,7 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
         return;
     }
 
-    static int s_bpgDbg = -1;
-    if (s_bpgDbg < 0) { const char* e = std::getenv("BANISHED_BUILD_TRACE"); s_bpgDbg = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    int dbgEntities = 0, dbgEntRegionOk = 0, dbgBldRegionOk = 0, dbgPairsAdded = 0;
+    int dbgEntities = 0, dbgEntRegionOk = 0, dbgPairsAdded = 0;
 
     // Get key pointers from the game world singleton
     uint8_t* world = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
@@ -814,13 +677,6 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
     // Building list at citizenBehavior+0xb0 (via game world +0xb0)
     int profGroupCount = *reinterpret_cast<int*>(buildingList + 0x28);
 
-    // diag (trace-gated): how many collected building cells sit in a valid region
-    if (s_bpgDbg) {
-        for (int bi = 0; bi < cellCount && buildingCells; bi++) {
-            if (*reinterpret_cast<int*>(navData + 0x18 + (int64_t)buildingCells[bi] * 0x30) >= 0)
-                ++dbgBldRegionOk;
-        }
-    }
 
     for (int gi = 0; gi < profGroupCount; gi++) {
         // Get profession key from building list
@@ -952,7 +808,6 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
                         if (fn_MemFreeStatic) fn_MemFreeStatic(oldPairs);
                     }
                     ++dbgPairsAdded;
-                    ++g_cntPairsBuilt;   // [CITPROF]
 
                     // Insert placeholder into BST to prevent duplicate pairs
                     struct { int high; int low; int value; } bstKey;
@@ -979,12 +834,6 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
     // ---- Step 5: Set pending index ----
     pg->m_pendingIdx = (int)pg->m_pairCount - 1;
 
-    if (s_bpgDbg)
-        std::fprintf(stderr,
-            "[BuildTrace] BuildPathGraph: townEntities(+0x28)=%d cells=%d bldRegionOk=%d "
-            "profGroups=%d profEntities=%d entRegionOk=%d pairsAdded=%d -> pendingIdx=%d\n",
-            *reinterpret_cast<int*>(citizenBehavior + 0x28), cellCount, dbgBldRegionOk,
-            profGroupCount, dbgEntities, dbgEntRegionOk, dbgPairsAdded, pg->m_pendingIdx);
 
     // Free temporary building cells array
     if (buildingCells && fn_MemFreeStatic) {
@@ -1074,7 +923,6 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
             // vtable slot +0x10 (index 2) returns type ID
             void** vtable = *reinterpret_cast<void***>(comp);
             typedef int (*fn_GetTypeId_t)(void*);
-            ++g_cntTypeIdCalls;   // [CITPROF]
             int compTypeId = reinterpret_cast<fn_GetTypeId_t>(vtable[2])(comp);
             if (static_cast<uint32_t>(compTypeId) == targetId) {
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, targetId)) {
@@ -1187,9 +1035,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
             fn_InternalBasePtr_CheckPtr(&storageIBP);
         }
         int32_t itemCount = *reinterpret_cast<int32_t*>(storageIBP + 0x30);
-        ++g_cntStorages;                                   // [CITPROF]
         if (itemCount <= 0) continue;
-        g_cntItems += itemCount;                           // [CITPROF]
 
         bool hadNormalResources = false;
         bool hadDeadResources = false;
@@ -1208,7 +1054,6 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
             int64_t itemEntity = itemEntry[0];
             void* rawMat = nullptr;
             if (itemEntity) {
-                void** subCompArray = *reinterpret_cast<void***>(itemEntity + 0x28);
                 int subCompCount = *reinterpret_cast<int*>(itemEntity + 0x30);
                 uint32_t rawMatTypeId = g_TypeId_RawMaterialDescription ?
                     *g_TypeId_RawMaterialDescription : 0;
@@ -1218,7 +1063,6 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
                     if (!subComp) continue;
                     void** vtable = *reinterpret_cast<void***>(subComp);
                     typedef int (*fn_GetTypeId_t)(void*);
-                    ++g_cntTypeIdCalls;   // [CITPROF]
                     int compTypeId = reinterpret_cast<fn_GetTypeId_t>(vtable[2])(subComp);
                     if (static_cast<uint32_t>(compTypeId) == rawMatTypeId) {
                         if (fn_IsDerivedFrom && fn_IsDerivedFrom(subComp, rawMatTypeId)) {
@@ -1298,9 +1142,7 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
             fn_InternalBasePtr_CheckPtr(&storageIBP);
         }
         int32_t itemCount = *reinterpret_cast<int32_t*>(storageIBP + 0x30);
-        ++g_cntStorages;                                   // [CITPROF]
         if (itemCount <= 0) continue;
-        g_cntItems += itemCount;                           // [CITPROF]
 
         // Iterate storage items
         for (int32_t j = 0; j < itemCount; j++) {
@@ -1323,7 +1165,6 @@ void CitizenBehavior_CountResources(CitizenBehaviorRaw* self) {
                     if (!subComp) continue;
                     void** vtable = *reinterpret_cast<void***>(subComp);
                     typedef int (*fn_GetTypeId_t)(void*);
-                    ++g_cntTypeIdCalls;   // [CITPROF]
                     int compTypeId = reinterpret_cast<fn_GetTypeId_t>(vtable[2])(subComp);
                     if (static_cast<uint32_t>(compTypeId) == rawMatTypeId) {
                         if (fn_IsDerivedFrom && fn_IsDerivedFrom(subComp, rawMatTypeId)) {
@@ -1515,16 +1356,10 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         // CollectStats only AVERAGES — dropping a dead entry changes a statistic, never
         // simulation state, which is much cheaper than aborting the process. The stale
         // entry itself is the real bug; the log names it so it can be root-caused.
-        const bool guardProf = CitProfOn();                       // [CITPROF]
-        const long long guardT0 = guardProf ? CitQpc() : 0;
         const bool guardFailed =
             !ForceWork::Readable(reinterpret_cast<void*>(c), 0x28C) ||
             !ForceWork::Readable(
                 reinterpret_cast<void*>(*reinterpret_cast<uintptr_t*>(c + 0x288)), 0x11C);
-        if (guardProf) {
-            g_secReadGuard += (double)(CitQpc() - guardT0) / (double)g_citQpcFreq;
-            ++g_cntReadGuard;
-        }
         if (guardFailed) {
             static int s_reported = 0;
             if (s_reported++ < 20) {

@@ -566,7 +566,6 @@ extern "C" void*  ControllerLive_ScalarDeletingDtor(void*, unsigned int);
 static void AttendanceCtrl_PopulateAndWireSlots();
 
 CONTROLLER_LIVE_FACTORY_STATES(AttendanceComponent, 0x58, 0x8a, 0x38, 2,
-                               "BANISHED_LIVE_ATTENDANCE",
                                AttendanceCtrl_NodeVtable, AttendanceCtrl_PopulateAndWireSlots)
 
 static void AttendanceCtrl_PopulateAndWireSlots() {

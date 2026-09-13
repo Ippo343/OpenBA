@@ -164,11 +164,6 @@ using SetDataFormatFn = HRESULT (STDMETHODCALLTYPE*)(void*, const DIDATAFORMAT*)
 using SetCoopFn = HRESULT (STDMETHODCALLTYPE*)(void*, HWND, DWORD);
 using AcquireFn = HRESULT (STDMETHODCALLTYPE*)(void*);
 
-bool EnvOn(const char* name) {
-    const char* e = std::getenv(name);
-    return e && e[0] && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
-}
-
 }  // namespace
 
 // ============================================================================

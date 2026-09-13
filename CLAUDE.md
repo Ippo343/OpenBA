@@ -153,9 +153,8 @@ mingw32-make standalone-debug  # build debug standalone exe
 mingw32-make sa-deploy         # build debug + copy to Banished directory
 mingw32-make sa-run            # build debug + copy + launch (AUTO-STARTS a new game)
 mingw32-make sa-run-menu       # same, but stops at the main menu (no autostart)
-# Live features are DEFAULT-ON in code (kDefaultOnFlags in
-# code/Game/Component/component_factory_base.cpp). BANISHED_LIVE_* env vars are
-# kill-switches (=0) for A/B runs; new unproven features start opt-in outside the table.
+# There are no live-feature env gates (ENDGAME C.2, 2026-09-13). Every BANISHED_*
+# flag the exe honours is listed, with its reader, in standalone/options.h.
 # Output: standalone/build/reimpl-x64.exe
 
 mingw32-make clean     # remove all build artifacts (both modes)
@@ -216,9 +215,11 @@ harness: `BANISHED_MAP_SIZE=small|medium|large`, `BANISHED_CLIMATE=mild|fair|har
 (`standalone/sampler.cpp`, report with `tools/sample_report.py`) — use it before the
 per-component table, which cannot see libm/Runtime/walk time. Heap: `BANISHED_REDZONE=watch`
 (allocator watchdog, no shim) + `standalone/hw_watch.cpp` hardware write watchpoints.
-`getenv`/`std::getenv` are cached process-wide (`standalone/env_cache.h`, force-included), so a
-per-call `if (std::getenv("BANISHED_X_TRACE"))` in tick code is cheap; env changes must go
-through `_putenv_s` (wrapped, invalidates the cache).
+Every `BANISHED_*` flag the exe honours is listed, with its reader, in **`standalone/options.h`**
+(ENDGAME C.3/C.4): the environment is read once at boot into one `Options` struct and read
+everywhere else as `Opt().field`. **Nothing in the tree calls `getenv`** outside
+`standalone/options.cpp` — `code/`, `runtime/`, `dx11/`, `engine/` and `standalone/` all read
+`Opt()`, so a per-call `if (Opt().someTrace)` in tick code is a struct load.
 
 ### Camera Pinning (stable framing — NOT a deterministic frame)
 

@@ -415,40 +415,6 @@ extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void* self, uintptr_t* 
         obj = ConsumeProduceAction_Ctor(mem, &entity, &first, second);
     }
 
-    // BANISHED_TAVERN_RECIPE=<n> -- pick which of the seven ale recipes the building
-    // brews, by writing consumeResourceId (+0x50).
-    //
-    // This is a SUPPLY-SIDE test fixture, not a stand-in for the Product combo. The
-    // combo is separately proven: ConsumeProduceUI::Slot4 populates all seven entries
-    // and its Slot9 is the real writer of this same field. What this exists for is that
-    // the authored default is recipe 0, "Ale [Apple]", and an autostart town has no
-    // orchard -- so the tavern waits on a fruit that cannot exist and the happiness
-    // goods arm stays untestable for reasons that have nothing to do with the port.
-    //
-    // Recipes, dumped live from the description (all seven produce AleSmall, flags
-    // 0x20000 = the tavern happiness wantMask, so ANY of them satisfies the goods arm):
-    //   0 Apple  1 Berries  2 Cherry  3 Peach  4 Pear  5 Plum   (input flags 0x21)
-    //   6 Wheat                                                 (input flags 0x30)
-    // Berries (1) is the one a town can actually supply quickly -- wild food via
-    // BANISHED_BUILD_DEMO_GATHERERHUT, rather than waiting on orchard maturity.
-    {
-        static int s_want = -2;
-        if (s_want == -2) {
-            const char* e = std::getenv("BANISHED_TAVERN_RECIPE");
-            s_want = (e && e[0]) ? std::atoi(e) : -1;
-        }
-        if (s_want >= 0 && cpDesc) {
-            const int n = *reinterpret_cast<int*>(
-                reinterpret_cast<uintptr_t>(cpDesc) + 0x30);
-            int* sel = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x50);
-            if (s_want < n && *sel != s_want) {
-                fprintf(stderr, "[Recipes] BANISHED_TAVERN_RECIPE: %d -> %d\n",
-                        *sel, s_want);
-                fflush(stderr);
-                *sel = s_want;
-            }
-        }
-    }
 
     // Dump the recipe table once. "No materials" on the panel is ambiguous between
     // "the selected recipe eats something the town has none of" and "hauling never

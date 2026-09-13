@@ -192,10 +192,6 @@ void ZoneComponent_Draw(ZoneComponent* self) {
     if (fn_InternalBasePtr_CheckPtr)
         fn_InternalBasePtr_CheckPtr(&mapIBP);
     if (!mapIBP) {
-        if (std::getenv("BANISHED_REGENTITY_TRACE")) {
-            fprintf(stderr, "[ZoneAdd] self=%p ABORT: no MapComponent\n", (void*)self);
-            fflush(stderr);
-        }
         return;   // standalone-defensive: retail data guarantees the map comp
     }
 
@@ -214,18 +210,10 @@ void ZoneComponent_Draw(ZoneComponent* self) {
     // Trust the linked description — it comes straight from the entity template.
     void* desc = *reinterpret_cast<void**>(mapIBP + 0x18);
     if (!desc) {
-        if (std::getenv("BANISHED_REGENTITY_TRACE")) {
-            fprintf(stderr, "[ZoneAdd] self=%p ABORT: map+0x18 description is NULL\n", (void*)self);
-            fflush(stderr);
-        }
         return;
     }
 
     if (!s_pGameState || !*s_pGameState) {
-        if (std::getenv("BANISHED_REGENTITY_TRACE")) {
-            fprintf(stderr, "[ZoneAdd] self=%p ABORT: no game state\n", (void*)self);
-            fflush(stderr);
-        }
         return;
     }
     uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);
@@ -247,14 +235,6 @@ void ZoneComponent_Draw(ZoneComponent* self) {
     // Decal, Work, StateMachine) and the correct description, yet never gains a
     // node — so either one of the two early returns above fires for it, or this
     // add runs and does not insert. Say which.
-    if (std::getenv("BANISHED_REGENTITY_TRACE")) {
-        fprintf(stderr, "[ZoneAdd] self=%p owner=%p map=%p desc=%p rect=(%d,%d) %dx%d "
-                        "kind=%d townMgr=%p fnZoneMapAdd=%p\n",
-                (void*)self, (void*)*ownerSlot, (void*)mapIBP, desc,
-                (int)x, (int)y, (int)w, (int)h, kind,
-                *reinterpret_cast<void**>(world + 0xf0), (void*)s_fn_ZoneMapAdd);
-        fflush(stderr);
-    }
 }
 
 // ============================================================
@@ -404,27 +384,9 @@ static uint32_t ZoneComponent_InertGetTypeId(void*) {
     return cached;
 }
 static void* ZoneComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
-static bool ZoneRasterLive() {
-    // Default-on via kDefaultOnFlags (2026-07-28); BANISHED_LIVE_ZONE_RASTER=0 is
-    // the kill-switch for A/B runs.
-    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_ZONE_RASTER");
-}
-static void ZoneComponent_TraceRaster(void* s, const char* which) {
-    static bool s_trace = [](){ const char* e = std::getenv("BANISHED_ZONE_TRACE");
-                               return e && e[0] && e[0] != '0'; }();
-    if (!s_trace) return;
-    static int s_count = 0;
-    ++s_count;
-    if (s_count > 40 && (s_count % 200) != 0) return;
-    std::fprintf(stderr, "[ZoneRaster] #%d %s comp=%p live=%d\n",
-                 s_count, which, s, ZoneRasterLive() ? 1 : 0);
-    std::fflush(stderr);
-}
 static void ZoneComponent_OnAddedVSlot(void* s) {
     // slot 6 (+0x30) — flags 0x83 bit 0 puts every ZoneComponent in the
     // OnAddedPass dispatch, exactly as retail.
-    ZoneComponent_TraceRaster(s, "attach(Draw)");
-    if (!ZoneRasterLive()) return;
     ZoneComponent_Draw(reinterpret_cast<ZoneComponent*>(s));
 }
 static void ZoneComponent_DetachVSlot(void* s) {
@@ -432,8 +394,6 @@ static void ZoneComponent_DetachVSlot(void* s) {
     // building leaves a dangling entity ref in cell+0x00 (the exact
     // use-after-free shape MapComponent_DetachOccupancy_4750 exists to prevent
     // on the +0x08 layer).
-    ZoneComponent_TraceRaster(s, "detach(OnCreate)");
-    if (!ZoneRasterLive()) return;
     ZoneComponent_OnCreate(reinterpret_cast<ZoneComponent*>(s));
 }
 static void ZoneComponent_SerVSlot(void* s, void* stream) {

@@ -27,10 +27,6 @@
 // entity panel could stay pinned open. Gate them behind BANISHED_DIALOG_TRACE (cached
 // once). Kept inside _DEBUG so release builds are unchanged.
 #ifdef _DEBUG
-static bool ResDbgTrace() {
-    static const bool s_on = std::getenv("BANISHED_DIALOG_TRACE") != nullptr;
-    return s_on;
-}
 #endif
 
 // Range check for pointers a standalone citizen may leave uninitialized. A rostered
@@ -247,9 +243,6 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
     fn_InternalBasePtr_CheckPtr(&storageComp);
 
 #ifdef _DEBUG
-    if (ResDbgTrace())
-    printf("[ResidenceUI::Slot7] self=%p entity=%p resComp=0x%llx\n",
-           (void*)self, entity, (unsigned long long)storageComp);
 #endif
 
     float ageMul = *g_pAgeMultiplier;  // 5.0f
@@ -261,9 +254,6 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
     // Outer loop: iterate room groups (storageComp+0x58 = group count)
     int groupCount = *(int*)(storageComp + 0x58);
 #ifdef _DEBUG
-    if (ResDbgTrace())
-    printf("[ResidenceUI::Slot7] groupCount=%d totalRowSlots=%d\n",
-           groupCount, *(int*)(s + 0x38));
 #endif
 
     if (groupCount > 0) {
@@ -277,9 +267,6 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                 totalResidents += residentCount;
                 int endRow = rowIdx + residentCount;
 #ifdef _DEBUG
-                if (ResDbgTrace())
-                printf("[ResidenceUI::Slot7]   group[%d]: residentCount=%d rowIdx=%d\n",
-                       g, residentCount, rowIdx);
 #endif
 
                 for (int r = 0; r < residentCount; r++) {
@@ -330,15 +317,6 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     fn_InternalBasePtr_CheckPtr(&citizen);
 
 #ifdef _DEBUG
-                    if (ResDbgTrace()) {
-                        uintptr_t rowBase = *(uintptr_t*)(s + 0x30) + rowIdx * 0x30;
-                        void* imgM = *(void**)(rowBase + 0x00);
-                        void* imgF = *(void**)(rowBase + 0x08);
-                        void* txtN = *(void**)(rowBase + 0x10);
-                        printf("[ResidenceUI::Slot7]     r[%d] citizen=%p imgM=%p imgF=%p txtN=%p\n",
-                               r, (void*)citizen, imgM, imgF, txtN);
-                        fflush(stdout);
-                    }
 #endif
 
                     // Get row entry: 0x30-byte entries at self+0x30
@@ -677,15 +655,6 @@ static bool DataSourceAlive(void* self) {
 void W_Slot7(void* self) {
     EnsureGlobals();
     if (!self || !Ready() || !DataSourceAlive(self)) return;
-    if (std::getenv("BANISHED_DIALOG_TRACE")) {
-        static int n = 0;
-        if (n++ < 5) {
-            uintptr_t s = reinterpret_cast<uintptr_t>(self);
-            fprintf(stderr, "[ResidenceUI] Slot7 self=%p rowSlots(+0x38)=%d\n",
-                    self, *reinterpret_cast<int*>(s + 0x38));
-            fflush(stderr);
-        }
-    }
     ResidenceUI_Slot7(reinterpret_cast<ResidenceUI*>(self));
 }
 

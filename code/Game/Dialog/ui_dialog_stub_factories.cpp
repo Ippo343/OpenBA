@@ -35,6 +35,7 @@
 
 
 #include "Object/factory_registration.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"      // ResolveExport — HelpUI's Runtime BaseTypeInfo type-id heal
 #include <cstdint>
@@ -595,7 +596,6 @@ namespace uistub_HelpUI {
         return s_ok != 0;
     }
     void Trace(const char* slot, void* self) {
-        if (!std::getenv("BANISHED_HELP_TRACE")) return;
         static int n=0; if (n>=24) return; ++n;
         uintptr_t s=reinterpret_cast<uintptr_t>(self);
         void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
@@ -701,7 +701,6 @@ namespace uistub_ImmigrationUI {
     // stderr, not stdout: the perf build strips printf, and the Immigrants wave's
     // harness runs (tools/stress_run.sh) only keep standalone_error.log.
     void Trace(const char* slot, void* self) {
-        if (!std::getenv("BANISHED_NOMAD_TRACE")) return;
         static int n=0; if (n>=16) return; ++n;
         void* ent = self ? *reinterpret_cast<void**>((uintptr_t)self+0x28) : nullptr;
         fprintf(stderr, "[ImmigrationUI] %s self=%p entity(+0x28)=%p dlg(+0x18)=%p\n", slot, self, ent,
@@ -713,34 +712,11 @@ namespace uistub_ImmigrationUI {
         Trace("Slot4", self);
         ImmigrationUI_Slot4(reinterpret_cast<ImmigrationUI*>(self));
     }
-    // BANISHED_IMMUI_AUTOCLICK=<elementId> (39000 = Allow, 39001 = Deny), every
-    // BANISHED_IMMUI_AUTOCLICK_EVERY updates (default 100): press the button on the LIVE
-    // controller from inside its own update. The panel re-creates its controllers, so a
-    // pointer kept across frames by an outside harness goes stale (crashed at
-    // panel_hold_harness.cpp:132, Immigrants wave 2026-09-05); from here `self` is the
-    // instance the framework is updating right now. The event goes through the same
-    // Slot9 the framework calls for a real click; with no group waiting it is the same
-    // no-op as in retail. Test fixture: nothing runs unless the env var is set.
-    void HarnessAutoClick(void* self) {
-        static int s_id = -2, s_every = 100, s_n = 0;
-        if (s_id == -2) {
-            const char* e = std::getenv("BANISHED_IMMUI_AUTOCLICK");
-            s_id = (e && e[0]) ? std::atoi(e) : -1;
-            const char* ev = std::getenv("BANISHED_IMMUI_AUTOCLICK_EVERY");
-            if (ev && ev[0] && std::atoi(ev) > 0) s_every = std::atoi(ev);
-        }
-        if (s_id < 0) return;
-        if (++s_n % s_every != 0) return;
-        fprintf(stderr, "[ImmigrationUI] AUTOCLICK id=%d on self=%p (update #%d)\n", s_id, self, s_n);
-        fflush(stderr);
-        ImmigrationUI_Slot9(reinterpret_cast<ImmigrationUI*>(self), nullptr, 0x12, s_id, 0, 0);
-    }
     void Slot7(void* self) {
         EnsureGlobals();
         if (!self || !Ready()) return;
         Trace("Slot7", self);
         ImmigrationUI_Slot7(reinterpret_cast<ImmigrationUI*>(self));
-        HarnessAutoClick(self);
     }
     void Slot9(void* self, void* p2, int msg, int id, int p5, int p6) {
         EnsureGlobals();
@@ -792,7 +768,7 @@ namespace uistub_MapUI {
     void Slot4(void* self) {
         EnsureTypeIds();
         static bool s_logged = false;
-        if (!s_logged && std::getenv("BANISHED_MAP_TRACE")) {
+        if (!s_logged && Opt().mapTrace) {
             s_logged = true;
             void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
             void* mapObj = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x148) : nullptr;
@@ -867,7 +843,7 @@ struct StubMacroDlgCtrlReg {
 // In standalone the checkbox type id is null by default — the exe reads it through
 // .rdata exref 0x1401516a8, and that whole element-type-id table
 // (standalone/reg_element_typeids.cpp) is gated on BANISHED_LIVE_ELEMENT_TIDS,
-// which is NOT in kDefaultOnFlags. With g_TypeId_CheckboxElement null,
+// which is NOT in the default-on table. With g_TypeId_CheckboxElement null,
 // FindElementType(root, 0) can never match, +0x30 stays null, and Slot7 faults.
 // pagetoggleui.cpp therefore resolves a PRIVATE copy of the id by name (the
 // exref's import string, read out of exe .rdata at 0x1401b8ce8, is
@@ -1065,7 +1041,6 @@ namespace uistub_ProfessionUI {
         }
     }
     void Trace(const char* slot, void* self) {
-        if (!std::getenv("BANISHED_PROFESSION_TRACE")) return;
         static int n=0; if (n>=32) return; ++n;
         uintptr_t s=reinterpret_cast<uintptr_t>(self);
         uint32_t spinN = self?*reinterpret_cast<uint32_t*>(s+0x48):0;
@@ -1198,17 +1173,9 @@ namespace uistub_ResourceLimitUI {
             if (idx >= 0 && idx < 11) return idx;
         }
         int idx = IdxForFallback(self);
-        if (std::getenv("BANISHED_LIMIT_TRACE")) {
-            printf("[ResourceLimitUI] WARNING: config unbound (self=%p cfg=%p) — falling "
-                   "back to dispatch order, idx=%d. This path desyncs across dialog "
-                   "rebuilds; if you see it, the config promotion is not taking effect.\n",
-                   self, cfg, idx);
-            fflush(stdout);
-        }
         return idx;
     }
     void Trace(const char* slot, void* self, int idx) {
-        if (!std::getenv("BANISHED_LIMIT_TRACE")) return;
         static int n=0; if (n>=24) return; ++n;
         void* cfg = self ? *reinterpret_cast<void**>((uintptr_t)self+0x10) : nullptr;
         int cfgIdx = cfg ? *reinterpret_cast<int*>((uintptr_t)cfg+0x20) : -1;
@@ -1369,7 +1336,7 @@ namespace uistub_ToolUI {
             || !g_TypeId_ToolbarDescription_FC || !g_TypeId_UIDescription
             || !g_TypeId_TabElement) return;
         static bool s_logged=false;
-        if(!s_logged && std::getenv("BANISHED_MAP_TRACE")){ s_logged=true;
+        if(!s_logged && Opt().mapTrace){ s_logged=true;
             printf("[ToolUI::Slot4] dispatched self=%p ds(+0x28)=%p\n",
                    self, *reinterpret_cast<void**>((char*)self+0x28)); fflush(stdout); }
         ToolUI_Slot4(reinterpret_cast<ToolUI*>(self));
@@ -1511,7 +1478,6 @@ namespace uistub_TradeUI {
                *reinterpret_cast<void**>(s+0xD0)!=nullptr;     // tableBuy
     }
     void Trace(const char* slot, void* self) {
-        if (!std::getenv("BANISHED_TRADE_TRACE")) return;
         static int n=0; if (n>=32) return; ++n;
         uintptr_t s=reinterpret_cast<uintptr_t>(self);
         // stderr, NOT stdout — two independent reasons, both already project rules:
@@ -1656,14 +1622,6 @@ namespace uistub_BuildUI {
         if (IsSetUp(self)) return;
         BuildUI_Slot4(reinterpret_cast<BuildUI*>(self));
 #if defined(_DEBUG)
-        if (const char* e=std::getenv("BANISHED_BUILDUI_TRACE"); e && e[0] && e[0]!='0') {
-            static int n=0; if(n<8){++n;
-                fprintf(stderr,"[BuildUI] Slot4 self=%p progress(+0x40)=%p rows(+0x30)=%p rowCount(+0x38)=%d\n",
-                        self, *reinterpret_cast<void**>((uintptr_t)self+0x40),
-                        *reinterpret_cast<void**>((uintptr_t)self+0x30),
-                        *reinterpret_cast<int*>((uintptr_t)self+0x38)); fflush(stderr);
-            }
-        }
 #endif
     }
     void Slot7(void* self) {
@@ -1697,8 +1655,6 @@ DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "BuildUI", &StubNop);
         void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x50,8); if(!p) return nullptr;
         Zero(p); *reinterpret_cast<void**>(p)=g_vt;
 #if defined(_DEBUG)
-        if (const char* e=std::getenv("BANISHED_BUILDUI_TRACE"); e && e[0] && e[0]!='0') {
-            static int n=0; if(n<8){++n; fprintf(stderr,"[BuildUI] Factory -> %p\n",p); fflush(stderr);} }
 #endif
         return p;
     }

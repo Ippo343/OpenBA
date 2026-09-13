@@ -22,7 +22,7 @@
 // on why System::String is likewise never modeled here: it is Lane A's
 // (runtime/types/system/String.h), and every String this file produces is
 // built by calling the DLL's own String::Set/Format/operator+=/Release
-// through RtOriginal<>(), never by touching its refcount/length header.
+// through the registry door, never by touching its refcount/length header.
 // ============================================================================
 
 #include <cstdint>
@@ -58,7 +58,7 @@ static_assert(sizeof(Random) == 2500, "System::Random must be 2500 (0x9c4) bytes
 //   +0x00: int64 ticks
 // The float<->ticks conversion is Timer::SecondsToTicks/TicksToSeconds
 // (Timer is out of this lane's scope and not ported here); our ctor and
-// AsSeconds delegate to those two exports via RtOriginal<>() rather than
+// AsSeconds delegate to those two exports via the registry rather than
 // duplicating Timer::_secondsPerTick, which is a runtime-computed global
 // (QueryPerformanceFrequency-derived) and not a compile-time constant.
 // ============================================================

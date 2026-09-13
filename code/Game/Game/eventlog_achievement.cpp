@@ -49,26 +49,7 @@
 extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity,
                                           void* entityIBP, void* nameStr);
 
-// NB: BANISHED_ACH_TRACE is already the achievement CENSUS interval
-// (standalone/achievement_probe.cpp) — this toast gets its own name.
-static bool ToastTrace() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_ACH_TOAST_TRACE");
-        if (!e || !e[0]) e = std::getenv("BANISHED_EVENT_TRACE");
-        s = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s == 1;
-}
-
 extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
-    // Trace at ENTRY, not just at the end: every guard below is an early return,
-    // and a silent one is indistinguishable from "the handler was never called".
-    if (ToastTrace()) {
-        fprintf(stderr, "[AchToast] handler ENTER id=%d\n", achievementId);
-        fflush(stderr);
-    }
-
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) return;
     void* eventLog = *(void**)((uintptr_t)gameWorld + 0x138);
@@ -86,10 +67,6 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
     uint64_t achievement = 0;   // ExternalPtr<Achievement> (8 bytes, trivially destructible)
     fn_AchievementManager_GetAchievement(mgr, &achievement, achievementId);
     if (achievement == 0) {
-        if (ToastTrace()) {
-            fprintf(stderr, "[AchToast] GetAchievement(%d) -> null, no toast\n", achievementId);
-            fflush(stderr);
-        }
         return;
     }
 
@@ -114,13 +91,6 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
 
     int64_t nullEntity[1] = {0};
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(nullEntity, nullptr);
-
-    if (ToastTrace()) {
-        const char* t = *(const char**)titleText;
-        fprintf(stderr, "[AchToast] awarded id=%d title=\"%s\"\n",
-                achievementId, t ? t : "(null)");
-        fflush(stderr);
-    }
 
     EventLog_AddEventWithName(eventLog, /*eventType*/ 0x19, /*severity*/ 4,
                               nullEntity, titleText);

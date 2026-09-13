@@ -47,7 +47,7 @@
 //
 // Gating
 // ------
-// DEFAULT-ON since 2026-09-05 (BANISHED_LIVE_MODDIALOG is in kDefaultOnFlags);
+// DEFAULT-ON since 2026-09-05 (BANISHED_LIVE_MODDIALOG is in the default-on table);
 // set BANISHED_LIVE_MODDIALOG=0 to fall back to the inert no-op slots. Verified
 // unattended with BANISHED_AUTOMENU_BUTTON=7 + BANISHED_AUTOMENU_CLICKS (see
 // standalone/autostart.cpp): build, toggle, reorder, details, cancel-revert,
@@ -67,21 +67,8 @@
 
 // Exposed by moddialog.cpp so the retail address 0x14006eec0 can be registered.
 extern "C" void ModDialog_RefreshDisplay(void* self);
-extern "C" void ModProbe_DumpModList(const char* tag);
 
 namespace {
-
-// ---------------------------------------------------------------------------
-// Opt-in gate
-// ---------------------------------------------------------------------------
-// DEFAULT-ON since 2026-09-05 (kDefaultOnFlags in component_factory_base.cpp);
-// BANISHED_LIVE_MODDIALOG=0 is the kill-switch.
-bool ModDialogLive() {
-    static int s_state = -1;
-    if (s_state < 0)
-        s_state = ComponentFactory::LiveEnabled("BANISHED_LIVE_MODDIALOG") ? 1 : 0;
-    return s_state == 1;
-}
 
 // ---------------------------------------------------------------------------
 // Base UI::DialogInstance virtuals (resolved by export name, ASLR-safe)
@@ -170,7 +157,7 @@ uint32_t ModDetails_VTypeId(void*) {
 
 // --- ModDialog +0x20 / +0x40 ---------------------------------------------
 void ModDialog_VOnOpened(void* self) {
-    if (!self || !ModDialogLive()) return;
+    if (!self) return;
     printf("[ModDialog::OnOpened] self=%p building mod list\n", self);
     ::ModDialog_Slot4(reinterpret_cast<ModDialog*>(self));
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
@@ -183,7 +170,6 @@ void ModDialog_VOnOpened(void* self) {
 void ModDialog_VOnElementEvent(void* self, void* elemEvt, int msg, int id,
                                uint32_t p5, uint32_t p6, uint32_t p7, uint64_t p8) {
     if (!self) return;
-    if (!ModDialogLive()) return;
     if (msg == 0x12)
         printf("[ModDialog::OnEvent] click id=%d\n", id);
     ::ModDialog_Slot8(reinterpret_cast<ModDialog*>(self), elemEvt, msg, id, p5, p6, p7, p8);
@@ -203,7 +189,7 @@ void* ModDetails_VDtor(void* self, uint32_t flags) {
 }
 
 void ModDetails_VOnOpened(void* self) {
-    if (!self || !ModDialogLive()) return;
+    if (!self) return;
     s_lastModDetails = self;
     printf("[ModDetailsDialog::OnOpened] self=%p modIndex=%d\n", self,
                 *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0xC0));
@@ -211,7 +197,7 @@ void ModDetails_VOnOpened(void* self) {
 }
 
 void ModDetails_VOnElementEvent(void* self, uint64_t elemEvt, int msg, int id) {
-    if (!self || !ModDialogLive()) return;
+    if (!self) return;
     if (msg == 0x12)
         printf("[ModDetailsDialog::OnEvent] click id=%d\n", id);
     ::ModDetailsDialog_Slot8(reinterpret_cast<ModDetailsDialog*>(self), elemEvt, msg, id);
@@ -348,11 +334,6 @@ extern "C" void* ModDialog_Ctor_Standalone(void* self, void* userInterface,
 // itself the +0xD0 parent-menu back-pointer the Apply path reloads through.
 extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     if (!mainMenuSelf) return;
-    if (!ModDialogLive()) {
-        printf("[ModDialog] open requested but BANISHED_LIVE_MODDIALOG is not set "
-                    "— set it to 1 to enable the local mod list\n");
-        return;
-    }
     EnsureBaseSlots();
 
     if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_DialogInstance_Ctor ||
@@ -370,8 +351,6 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
                     (void*)g_ppModificationSingleton);
         return;
     }
-
-    ModProbe_DumpModList("dialog-open");
 
     void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mainMenuSelf) + 0x10);
     if (!ui) { printf("[ModDialog] open: UserInterface null\n"); return; }
@@ -458,310 +437,11 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
                                &nullIbp);
 }
 
-// ===========================================================================
-// Diagnostic probe — MEASURE the live IO::Modification list
-// ===========================================================================
-// Motivation: a run's log containing no `pkm` / `RefreshList` / `SetupFileSystem`
-// line proves NOTHING about whether mods mounted — all three live in
-// Runtime-x64.dll and print nothing at all. Absence of those words in our log is
-// a null test ([[reference-null-test-measures-a-world-without-the-feature]]).
-// This prints the actual state instead: how many mods the engine's own
-// RefreshList discovered, and which are enabled.
-//
-// It reads BOTH Runtime singletons DIRECTLY (not through the exe exrefs), so it
-// works regardless of which exe .rdata slots are registered:
-//   IO::Modification::_singleton  Runtime 0x1801fc6b0
-//   IO::FileSystem::_singleton    Runtime 0x1801fc6a8
-// Both verified in Runtime-x64.dll: `Modification::Get` (0x18000dab0) is
-// `MOV RAX,[0x1801fc6b0]; RET`, and `Modification::SetupFileSystem` loads
-// `[0x1801fc6a8]` into R15 at 0x1800aebe1 as its FileSystem*.
-//
-// Gated on BANISHED_MOD_PROBE alone. It is DIAGNOSTIC code, not a faithful retail
-// body, so the defensive null checks here are deliberate and do not fall under the
-// "don't guard a faithful crash" rule.
 
-// Runtime data-variable addresses (see above).
-constexpr uintptr_t kRVA_Modification_Singleton = 0x1801fc6b0;
-constexpr uintptr_t kRVA_FileSystem_Singleton   = 0x1801fc6a8;
 
-static bool ModProbeEnabled() {
-    static int s = -1;
-    if (s < 0) s = std::getenv("BANISHED_MOD_PROBE") ? 1 : 0;
-    return s == 1;
-}
-
-// IO::FileSystem layout used here, all read off Modification::SetupFileSystem:
-//   +0x08  m_dataDirectory (System::String) — GetPackfileId/ExistsInPackfile strip
-//          this prefix before looking a path up in the package index
-//   +0x18  gate byte for ExistsInPackfile   +0x19  gate byte for the loose-file path
-//   +0x20  packfile object array   +0x30  package FILENAME array (data ptr)
-//   +0x38  package filename count  +0x40  the path->packfile index (BST)
-static void ModProbe_DumpFileSystem(const char* tag) {
-    void** fsVar = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, kRVA_FileSystem_Singleton));
-    void* fs = fsVar ? *fsVar : nullptr;
-    if (!fs) {
-        printf("[ModProbe:%s] IO::FileSystem::_singleton NULL\n", tag);
-        return;
-    }
-    uintptr_t f = reinterpret_cast<uintptr_t>(fs);
-    const char* dataDir = *reinterpret_cast<const char**>(f + 0x08);
-    int pkgCount = *reinterpret_cast<int*>(f + 0x38);
-    printf("[ModProbe:%s] FileSystem=%p dataDir='%s' existsGate=%u looseGate=%u "
-                "packages=%d\n", tag, fs, dataDir ? dataDir : "(null)",
-                *reinterpret_cast<uint8_t*>(f + 0x18),
-                *reinterpret_cast<uint8_t*>(f + 0x19), pkgCount);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(f + 0x30);
-    for (int i = 0; arr && i < pkgCount && i < 64; ++i) {
-        const char* p = *reinterpret_cast<const char**>(arr + static_cast<uintptr_t>(i) * 8);
-        printf("[ModProbe:%s]   pkg[%d] '%s'\n", tag, i, p ? p : "(null)");
-    }
-}
-
-// --- The mounted package FILE TABLE -----------------------------------------
-// `fs+0x40` is the path -> packfile map that IO::FileSystem::LoadPackages builds:
-// for every packfile i in fs+0x20[0 .. fs+0x28), for every file j in
-// [0, pkg+0xB8), it inserts PackageFile::GetFileName(pkg, j) as the key with the
-// value CONCAT44(j, i). `GetPackfileId` and `ExistsInPackfile` are just lookups
-// into this same tree, so walking it IS the authoritative file table of every
-// mounted .pkg and .pkm.
-//
-// Node layout, read off the identical walks in GetPackfileId (0x1800ab050),
-// ExistsInPackfile (0x1800ab180) and LoadPackages (0x1800ab460), all of which do
-// `node = node[3]` / `node = node[4]` and read `*(uint*)(node + 1)`:
-//   +0x00 char* key (dataDir-relative path)   +0x08 u32 packfile index
-//   +0x0C u32 file index within that packfile +0x18 child   +0x20 child
-// (+0x10 is not touched by any of the three walks; ignored here.)
-//
-// PackageFile: +0xA8 = packfile id (what GetPackfileId returns), +0xAC = the
-// override byte LoadPackages tests to decide a later package may replace an
-// existing mapping — i.e. the mod-override flag. +0xB8 = file count.
-//
-// Diagnostic-only, so it is defensive: hard node budget, bounded depth, and a
-// crude pointer sanity check. It must never be the thing that crashes a run.
-static bool ModProbe_LooksLikePtr(const void* p) {
-    uintptr_t v = reinterpret_cast<uintptr_t>(p);
-    return v > 0x10000 && v < 0x7FFFFFFFFFFFull && (v & 7) == 0;
-}
-
-static void ModProbe_DumpPackageIndex(const char* tag) {
-    void** fsVar = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, kRVA_FileSystem_Singleton));
-    void* fs = fsVar ? *fsVar : nullptr;
-    if (!fs) return;
-    uintptr_t f = reinterpret_cast<uintptr_t>(fs);
-
-    int packCount = *reinterpret_cast<int*>(f + 0x28);
-    uintptr_t packArr = *reinterpret_cast<uintptr_t*>(f + 0x20);
-    if (packCount < 0 || packCount > 256 || !packArr) {
-        printf("[ModProbe:%s] packfile array unusable (count=%d arr=%p)\n",
-                    tag, packCount, (void*)packArr);
-        return;
-    }
-    // Per-packfile header first — this alone tells you which package is which.
-    int fileCount[256] = {};
-    for (int i = 0; i < packCount; ++i) {
-        void* pkg = *reinterpret_cast<void**>(packArr + static_cast<uintptr_t>(i) * 8);
-        if (!ModProbe_LooksLikePtr(pkg)) { fileCount[i] = -1; continue; }
-        uintptr_t k = reinterpret_cast<uintptr_t>(pkg);
-        fileCount[i] = *reinterpret_cast<int*>(k + 0xB8);
-        printf("[ModProbe:%s] packfile[%d] id=%u override=%u files=%d\n",
-                    tag, i, *reinterpret_cast<uint32_t*>(k + 0xA8),
-                    *reinterpret_cast<uint8_t*>(k + 0xAC), fileCount[i]);
-    }
-
-    // In-order-ish walk of the whole map. Only packages with a small file count
-    // get their names listed — the base .pkg holds thousands of entries and the
-    // mod .pkm is exactly the small one we care about.
-    void* stack[128];
-    int sp = 0;
-    void* root = *reinterpret_cast<void**>(f + 0x40);
-    if (ModProbe_LooksLikePtr(root)) stack[sp++] = root;
-
-    int visited = 0, listed = 0;
-    int perPack[256] = {};
-    while (sp > 0 && visited < 40000) {
-        void* n = stack[--sp];
-        ++visited;
-        uintptr_t node = reinterpret_cast<uintptr_t>(n);
-        const char* key = *reinterpret_cast<const char**>(node + 0x00);
-        uint32_t packIdx = *reinterpret_cast<uint32_t*>(node + 0x08);
-        uint32_t fileIdx = *reinterpret_cast<uint32_t*>(node + 0x0C);
-        if (packIdx < static_cast<uint32_t>(packCount)) {
-            ++perPack[packIdx];
-            // List the small packages' contents in full (mods), cap the output.
-            if (fileCount[packIdx] >= 0 && fileCount[packIdx] <= 256 &&
-                listed < 400 && key) {
-                printf("[ModProbe:%s]   file pack=%u idx=%u '%s'\n",
-                            tag, packIdx, fileIdx, key);
-                ++listed;
-            }
-        }
-        void* a = *reinterpret_cast<void**>(node + 0x18);
-        void* b = *reinterpret_cast<void**>(node + 0x20);
-        if (sp < 126) {
-            if (ModProbe_LooksLikePtr(a)) stack[sp++] = a;
-            if (ModProbe_LooksLikePtr(b)) stack[sp++] = b;
-        }
-    }
-    printf("[ModProbe:%s] package index: %d entries walked, listed %d\n",
-                tag, visited, listed);
-    for (int i = 0; i < packCount; ++i)
-        printf("[ModProbe:%s]   packfile[%d] owns %d mapped paths\n",
-                    tag, i, perPack[i]);
-}
-
-// --- GetPackfileId probe, with a known-good positive control ----------------
-// Retail's own "which package does this path come from" predicate. 0 == in no
-// package. Both functions strip the dataDir prefix internally, so the argument
-// must be the FULL path (dataDir + relative) — passing a bare relative path
-// silently returns 0 and would look identical to "missing".
-typedef unsigned int (*fn_GetPackfileId_t)(void* fs, const void* filename);
-
-static void ModProbe_TestPaths(const char* tag) {
-    static fn_GetPackfileId_t s_getId = nullptr;
-    if (!s_getId)
-        s_getId = reinterpret_cast<fn_GetPackfileId_t>(
-            ResolveExport("?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z"));
-    if (!s_getId || !fn_Filename_CtorCStr || !fn_Filename_Dtor) {
-        printf("[ModProbe:%s] GetPackfileId unavailable (fn=%p)\n",
-                    tag, (void*)s_getId);
-        return;
-    }
-    void** fsVar = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, kRVA_FileSystem_Singleton));
-    void* fs = fsVar ? *fsVar : nullptr;
-    if (!fs) return;
-    const char* dataDir =
-        *reinterpret_cast<const char**>(reinterpret_cast<uintptr_t>(fs) + 0x08);
-    if (!dataDir) return;
-
-    static const char* kPaths[] = {
-        "Dialog/Toolbar.rsc",        // POSITIVE CONTROL - known to resolve
-        "Dialog/StringTable.rsc",    // the 'Dialog\St' fragment candidate
-        "Dialog/StandardDialog.rsc", // the other 'Dialog\St' candidate
-        "Dialog/Debug.rsc",
-        "Debug.rsc",
-        "Dialog/DebugMenu.rsc",
-        "Dialog/DebugUI.rsc",
-    };
-    for (const char* rel : kPaths) {
-        char full[512];
-        std::snprintf(full, sizeof(full), "%s%s", dataDir, rel);
-        uint8_t fn[16] = {};
-        fn_Filename_CtorCStr(fn, full);
-        unsigned int id = s_getId(fs, fn);
-        fn_Filename_Dtor(fn);
-        printf("[ModProbe:%s] GetPackfileId('%s') = %u%s\n", tag, rel, id,
-                    id ? "" : "   (in NO package)");
-    }
-}
-
-extern "C" void ModProbe_DumpModList(const char* tag) {
-    if (!ModProbeEnabled()) return;
-    if (!tag) tag = "?";
-
-    void** modVar = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, kRVA_Modification_Singleton));
-    void* mod = modVar ? *modVar : nullptr;
-    if (!mod) {
-        printf("[ModProbe:%s] IO::Modification::_singleton NULL — "
-                    "Engine::Startup has not run yet\n", tag);
-        return;
-    }
-    uintptr_t m = reinterpret_cast<uintptr_t>(mod);
-    int count = *reinterpret_cast<int*>(m + 0x10);
-    // m_dirty (+0x00) gates SetupFileSystem ENTIRELY: its first instructions are
-    // `CMP byte ptr [RCX],0x0 / JZ <end>` (0x1800aebd8), and it clears the flag on
-    // the way out. m_savingEnabled (+0x01) is what Engine::Loader::Load flips 0->1
-    // to force the RefreshList that reads the ModEnabled_* registry values.
-    printf("[ModProbe:%s] Modification=%p dirty=%u savingEnabled=%u count=%d "
-                "(exeExref g_pp=%p)\n", tag, mod,
-                *reinterpret_cast<uint8_t*>(m + 0x00),
-                *reinterpret_cast<uint8_t*>(m + 0x01), count,
-                (void*)g_ppModificationSingleton);
-    uintptr_t mods = *reinterpret_cast<uintptr_t*>(m + 0x08);
-    for (int i = 0; mods && i < count && i < 64; ++i) {
-        uintptr_t p = mods + static_cast<uintptr_t>(i) * 0x80;   // sizeof(Mod)
-        const char* name = *reinterpret_cast<const char**>(p + 0x00);  // System::String COW ptr
-        const char* file = *reinterpret_cast<const char**>(p + 0x58);  // System::Filename
-        printf("[ModProbe:%s]   [%d] enabled=%u index=%d name='%s' file='%s'\n",
-                    tag, i, *reinterpret_cast<uint8_t*>(p + 0x50),
-                    *reinterpret_cast<int32_t*>(p + 0x20),
-                    name ? name : "(null)", file ? file : "(null)");
-    }
-    ModProbe_DumpFileSystem(tag);
-}
-
-// --- Startup watcher: fires with NO click and NO BANISHED_LIVE_MODDIALOG -----
-// The coordinator's runs are unattended (autostart drives menu -> New Game and
-// never opens the Mods dialog), so a probe hooked to the dialog opener can never
-// fire there. This thread polls the Runtime's own Modification singleton until
-// Engine::Startup publishes it, dumps, then re-dumps on a short schedule so the
-// post-`Loader::Load` (post-SetupFileSystem) state is captured too.
-//
-// A thread is used because nothing this lane owns runs on the main thread after
-// Engine::Startup, and the alternative was asking someone to hand-edit main.cpp.
-// It only ever READS, only under the env gate, and exits after the last dump.
-static DWORD WINAPI ModProbe_ThreadMain(LPVOID) {
-    void** modVar = reinterpret_cast<void**>(
-        ResolveAddr(Module::Runtime, kRVA_Modification_Singleton));
-    // Wait up to 120s for Engine::Startup to publish the singleton.
-    for (int i = 0; i < 1200; ++i) {
-        if (modVar && *modVar) break;
-        Sleep(100);
-    }
-    if (!modVar || !*modVar) {
-        printf("[ModProbe] singleton never appeared within 120s — "
-                    "Engine::Startup did not run\n");
-        std::fflush(stdout);
-        return 0;
-    }
-    // Let the Engine::Startup RefreshList finish before the first read.
-    Sleep(500);
-    ModProbe_DumpModList("startup");
-    std::fflush(stdout);
-    // Re-dump around the loader transitions, where Loader::Load runs
-    // RefreshList + SetupFileSystem (the actual .pkm mount).
-    int elapsed = 0;
-    for (int pass = 0; pass < 3; ++pass) {
-        Sleep(10000);
-        elapsed += 10;
-        char tag[32];
-        std::snprintf(tag, sizeof(tag), "t+%ds", elapsed);
-        ModProbe_DumpModList(tag);
-        // The deep dumps run ONLY on the last pass: by t+30s the mount has long
-        // settled (measured: packages=1 from t+10s on), so walking the package
-        // index and constructing Filenames is not racing the loader.
-        if (pass == 2) {
-            ModProbe_DumpPackageIndex(tag);
-            ModProbe_TestPaths(tag);
-        }
-        std::fflush(stdout);
-    }
-    return 0;
-}
-
-// Started from RegisterModsBatch() (standalone/reg_mods.cpp), which runs at
-// AddressRegistryInit -- i.e. after ResolveInit has run (so
-// ResolveAddr(Module::Runtime, ...) is valid) and long before Engine::Startup,
-// which is exactly what the thread waits for. No-op unless BANISHED_MOD_PROBE is set.
-extern "C" void ModProbe_StartWatcher() {
-    if (!ModProbeEnabled()) return;
-    static bool started = false;
-    if (started) return;
-    started = true;
-    HANDLE h = CreateThread(nullptr, 0, &ModProbe_ThreadMain, nullptr, 0, nullptr);
-    if (h) {
-        CloseHandle(h);
-        printf("[ModProbe] watcher armed (BANISHED_MOD_PROBE) -- will dump the "
-                    "IO::Modification + IO::FileSystem state at startup and at "
-                    "t+10s/t+20s/t+30s, no click required\n");
-    } else {
-        printf("[ModProbe] CreateThread failed (%lu)\n", GetLastError());
-    }
-    std::fflush(stdout);
-}
+// The BANISHED_MOD_PROBE IO::Modification / IO::FileSystem dump was deleted with the
+// flag (ENDGAME C). standalone/reg_mods.cpp and standalone/pausemenu_harness.cpp still
+// call these two entry points; the stubs go when those calls do.
 
 // ===========================================================================
 // Address-registry entry (called from standalone/reg_mods.cpp)

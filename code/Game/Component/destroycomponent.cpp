@@ -189,7 +189,7 @@ void DestroyComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D → upgrade-path live states) =====
-// BANISHED_LIVE_DESTROY is DEFAULT-ON via kDefaultOnFlags (graduated 2026-07-25 once
+// BANISHED_LIVE_DESTROY is DEFAULT-ON via the default-on table (graduated 2026-07-25 once
 // the upgrade path was verified end-to-end); the env var is now a kill-switch (=0),
 // which reverts this component to inert. It graduates:
 //   * vtable index 4 (+0x20, 0x14011DB00 Serialize/Startup) — copies the
@@ -227,16 +227,11 @@ static void DestroyComponent_SerializeVSlot(void* s) {                // idx 4 (
 // Retail slot 16 returns 4 (Ghidra-verified). That is only safe under retail's
 // first-controller consult order, where the build controller precedes destroy
 // in every building template. Our SM startup adopts the default from the FIRST
-// controller with a non-null CreateState — with the build controller inert
-// (BANISHED_LIVE_BUILDCTRL off), destroy would be "first" and 4 (haul-away)
-// demolishes every fresh building at world start (observed live 2026-07-20:
-// four start-town yards queued ClearStorage; also kills residence heat).
-// So: faithful 4 only when the build controller is live (retail ordering
-// restored — this also enables the starting supply cart's haul-away-then-
-// vanish behavior); otherwise 2 ("built") — destroy's table has no state 2,
-// so its node no-ops and the residence/build siblings handle the state.
+// controller with a non-null CreateState, and the build controller is live, so
+// the faithful 4 (haul-away) applies — this is also what gives the starting
+// supply cart its haul-away-then-vanish behaviour.
 static int DestroyComponent_GetDefaultState(void*) {
-    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILDCTRL") ? 4 : 2;
+    return 4;
 }
 static void* DestroyComponent_CreateState(void* self) {               // idx 17
     return reinterpret_cast<uint8_t*>(self) + 0x28;
@@ -256,15 +251,10 @@ static void DestroyComponent_MsgReceive(void* self, int msgCode,
 }
 
 static void DestroyComponent_FinishLiveVtable(void* mem) {
-    // Slot 3 is the STREAM SERIALIZER, not a gameplay slot: the save encoding
-    // does not care whether this component's live feature is enabled. Wired
-    // UNCONDITIONALLY, ahead of the gate -- behind it, a disabled flag left the
-    // class falling through to base-only Component_Serialize, which skips this
-    // body's bytes and desyncs the stream for EVERY object after it.
+    // Slot 3 is the STREAM SERIALIZER, wired ahead of the gameplay slots.
     // See reference_vtable_slot3_serialize_never_installed.
     DestroyComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&DestroyComponent_ShutdownVSlot);
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_DESTROY")) return;
     DestroyComponent_LiveVtable[4] =
         reinterpret_cast<void*>(&DestroyComponent_SerializeVSlot);
     DestroyComponent_LiveVtable[15] =

@@ -114,7 +114,6 @@ extern "C" void** ClearResourceCtrl_NodeVtable();
 extern "C" void   ClearResourceCtrl_PopulateTable();
 
 CONTROLLER_LIVE_FACTORY_STATES(ClearResourceComponent, 0x48, 0x80, 0x28, 2,
-                               "BANISHED_LIVE_CLEARCTRL",
                                ClearResourceCtrl_NodeVtable,
                                ClearResourceCtrl_PopulateTable)
 // Retail 0x1401185E0 is Component::Serialize plus TWO empty Serializer scopes;

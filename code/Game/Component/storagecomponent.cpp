@@ -290,11 +290,6 @@ void StorageComponent_Draw(StorageComponent* self) {
     // deposits a {resType, 0} stack that hangs the spill loop. Report the exit, don't
     // assume it: an empty log line here would otherwise read as "capacity was set fine".
     if (*(uint8_t*)(descAddr + 0x21) == 0) {
-        if (std::getenv("BANISHED_STORAGE_TRACE")) {
-            std::fprintf(stderr, "[StorageCap] SKIPPED (desc+0x21==0) self=%p desc=%p — "
-                         "capacity(+0x38) stays 0\n", self, storageDesc);
-            std::fflush(stderr);
-        }
         return;
     }
 
@@ -329,12 +324,6 @@ void StorageComponent_Draw(StorageComponent* self) {
     // Set computed values
     *(int*)(selfAddr + 0x38) = maxPerSlot * tileArea;
     *(uint32_t*)(selfAddr + 0x3c) = defaultType;
-    if (std::getenv("BANISHED_STORAGE_TRACE")) {
-        std::fprintf(stderr, "[StorageCap] self=%p capacity(+0x38)=%d (maxPerSlot=%d x tileArea=%d) "
-                     "defaultType=0x%x%s\n", self, maxPerSlot * tileArea, maxPerSlot, tileArea,
-                     defaultType, (maxPerSlot * tileArea == 0) ? "  <-- ZERO CAPACITY" : "");
-        std::fflush(stderr);
-    }
 
     // Iterate template storage entries
     uintptr_t templateArray = *(uintptr_t*)(descAddr + 0x30);
@@ -560,7 +549,6 @@ static void StorageComponent_ShutdownVSlot(void* self, void* stream) {
     StorageComponent_Shutdown(reinterpret_cast<StorageComponent*>(self), stream);
 }
 static void StorageComponent_FinishLiveVtable() {
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGE_ONADDED"))
         StorageComponent_LiveVtable[6] = reinterpret_cast<void*>(&StorageComponent_OnAddedVSlot);
     StorageComponent_LiveVtable[3] = reinterpret_cast<void*>(&StorageComponent_ShutdownVSlot);
 }

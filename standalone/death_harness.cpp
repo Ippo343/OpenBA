@@ -22,6 +22,7 @@
 // each teardown, and with BANISHED_OBJAUDIT=1 to watch the object tally.
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -57,21 +58,21 @@ bool s_firedMarry  = false;
 
 void Init() {
     if (s_count >= 0) return;
-    const char* n = std::getenv("BANISHED_KILL_CITIZENS");
+    const char* n = Opt().killCitizens;
     s_count = (n && n[0]) ? std::atoi(n) : 0;
-    const char* f = std::getenv("BANISHED_KILL_AT_FRAME");
+    const char* f = Opt().killAtFrame;
     if (f && f[0]) s_atFrame = std::atoi(f);
-    const char* c = std::getenv("BANISHED_FAMILY_CENSUS");
+    const char* c = Opt().familyCensus;
     s_censusEvery = (c && c[0]) ? std::atoi(c) : 0;
-    const char* kf = std::getenv("BANISHED_KILL_FAMILY");
+    const char* kf = Opt().killFamily;
     s_killFamily = (kf && kf[0]) ? std::atoi(kf) : 0;
-    const char* mh = std::getenv("BANISHED_MARRY_HARNESS");
+    const char* mh = Opt().marryHarness;
     s_marryHarness = (mh && mh[0]) ? std::atoi(mh) : 0;
-    const char* bt = std::getenv("BANISHED_BIRTH_TRACE");
+    const char* bt = Opt().birthTrace;
     s_birthTrace = (bt && bt[0]) ? std::atoi(bt) : 0;
-    const char* fb = std::getenv("BANISHED_FORCE_BIRTH");
+    const char* fb = Opt().forceBirth;
     s_forceBirth = (fb && fb[0]) ? std::atoi(fb) : 0;
-    const char* fbf = std::getenv("BANISHED_FORCE_BIRTH_FRAME");
+    const char* fbf = Opt().forceBirthFrame;
     if (fbf && fbf[0]) s_forceBirthFrame = std::atoi(fbf);
     if (s_forceBirth > 0)
         std::fprintf(stderr, "[BirthHarness] ENABLED — delivering %d baby(ies) at frame %d\n",
@@ -613,7 +614,7 @@ extern "C" void CitizenDeathHarness_Tick(int frameNum) {
     {
         static int s_waitCemetery = -1;
         if (s_waitCemetery < 0) {
-            const char* e = std::getenv("BANISHED_KILL_WHEN_CEMETERY_READY");
+            const char* e = Opt().killWhenCemeteryReady;
             s_waitCemetery = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
             if (s_waitCemetery)
                 std::fprintf(stderr, "[DeathHarness] kill DEFERRED until a cemetery with a "

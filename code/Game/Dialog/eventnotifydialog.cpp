@@ -68,11 +68,6 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
             // external context. g_pExternalTypeId is filled by EnsureGlobals each tick.
             if (found && (!g_pExternalTypeId || fn_IsDerivedFrom(found, *g_pExternalTypeId)))
                 s_popupRes = found;
-            if (std::getenv("BANISHED_EVENT_TRACE")) {
-                fprintf(stderr, "[EventNotify] popup resource load: found=%p accepted=%p\n",
-                        found, s_popupRes);
-                fflush(stderr);
-            }
         }
     }
     if (!s_popupRes) return nullptr;
@@ -87,11 +82,6 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
     int64_t dialogPtr[1];
     fn_InternalBasePtr_Ctor(dialogPtr, popup);
     fn_UI_AddDialog(ui, dialogPtr);
-    if (std::getenv("BANISHED_EVENT_TRACE")) {
-        fprintf(stderr, "[EventNotify] popup CREATED for eventIndex=%d dlg=%p\n",
-                eventIndex, popup);
-        fflush(stderr);
-    }
     return popup;
 }
 
@@ -1025,10 +1015,6 @@ void W_Load(void* self, void* p2) {
     int active = *(int*)((uintptr_t)self + 0xE0);
     if (active != s_lastActive) {
         s_lastActive = active;
-        if (std::getenv("BANISHED_EVENT_TRACE")) {
-            fprintf(stderr, "[EventNotify] ribbon activeEventCount=%d (displaying notifications)\n", active);
-            fflush(stderr);
-        }
     }
 }
 void W_OnEvent(void* self, void* e, int msg, int id) { if (self) EventNotifyDialog_OnEvent(reinterpret_cast<EventNotifyDialog*>(self), e, msg, id); }

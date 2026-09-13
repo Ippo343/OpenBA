@@ -445,26 +445,14 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
         // it coincided with the workplace/residence panels going inert, so it is gated
         // while that is confirmed: SetEditMode(pc, 0) tears down the live tool
         // controller at +0x28, which is what those panels' spinners hang off.
-        // BANISHED_LIVE_ENTITYUI_RESETTOOL=1 re-arms the retail behaviour.
         if (active != '\0' && s_fn_FUN_140102b60) {
-            static int s_armed = -1;
-            if (s_armed < 0) {
-                // Kill-switch, not opt-in: this is retail behaviour. It was gated
-                // OFF for one A/B while the workplace/residence panels were being
-                // diagnosed, and the trace proved it innocent — zero hits across a
-                // full session, so it cannot have caused those panels' symptoms
-                // (root cause was StartTown_SeedLaborerProfessions seeding nobody).
-                // Re-armed default-on; =0 disables for a future A/B.
-                const char* e = std::getenv("BANISHED_LIVE_ENTITYUI_RESETTOOL");
-                s_armed = (e && *e && e[0] == '0') ? 0 : 1;
-            }
             static int s_hits = 0;
             if (++s_hits <= 16) {
-                fprintf(stderr, "[NomadB60] entity-removed -> SetEditMode(pc,0) hit#%d armed=%d self=%p\n",
-                        s_hits, s_armed, (void*)param_1);
+                fprintf(stderr, "[NomadB60] entity-removed -> SetEditMode(pc,0) hit#%d self=%p\n",
+                        s_hits, (void*)param_1);
                 fflush(stderr);
             }
-            if (s_armed) s_fn_FUN_140102b60(param_1, 0);
+            s_fn_FUN_140102b60(param_1, 0);
         }
     }
 
@@ -606,7 +594,6 @@ void NomadComponent_InitFuncs() {
 extern "C" void** NomadCtrl_NodeVtable();
 extern "C" void   NomadCtrl_PopulateTable();
 CONTROLLER_LIVE_FACTORY_STATES(NomadComponent, 0x78, 0x82, 0x58, 0,
-                               "BANISHED_LIVE_IMMIGRATION",
                                NomadCtrl_NodeVtable, NomadCtrl_PopulateTable)
 CONTROLLER_INSTALL_SERIALIZE(NomadComponent, NomadComponent_Shutdown)
 REGISTER_TYPE(NomadComponent, "ControllerComponent",

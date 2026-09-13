@@ -23,18 +23,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-// Diagnostic gate for FindAvailableBuilding (shares BANISHED_BUILD_TRACE). Throttled so the
-// per-tick BuilderPool probe doesn't flood the log.
-static bool FAB_Trace() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_BUILD_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s == 1;
-}
-static bool FAB_TraceThrottle() {
-    static int n = 0;
-    return (++n % 40) == 1;   // ~1 in 40 calls
-}
-
 // Already-ported Keystone-A insert wrapper (0x140017230). Returns param_2 (&out);
 // *out = the found/created node. p4 = the empty array record {data=0, count/cap=0}.
 extern "C" void* ResidenceComponent_impl_7230(int64_t* p1, void** p2, uint64_t* p3, int64_t* p4);
@@ -180,7 +168,7 @@ extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceC
 // deterministic (always the first registered building with room). Registering it
 // makes seating random, which is retail-correct but is a real, observable change to
 // every seat decision. It is gated in reg_town_workplace_registry.cpp behind
-// BANISHED_LIVE_SEAT_SHUFFLE and is deliberately NOT in kDefaultOnFlags: unproven
+// BANISHED_LIVE_SEAT_SHUFFLE and is deliberately NOT in the default-on table: unproven
 // behaviour starts opt-in, and this one wants an explicit A/B before it graduates.
 // ============================================================
 extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t professionKey) {
@@ -252,20 +240,15 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         }
     }
 
-    const bool fabTrace = FAB_Trace() && FAB_TraceThrottle();
 
     // Key absent -> empty result.
     if (found == nullptr) {
-        if (fabTrace) { std::fprintf(stderr, "[FAB] key=0x%llx NOT FOUND in townMgr+0x100\n",
-                                     (unsigned long long)professionKey); std::fflush(stderr); }
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(out, nullptr);
         return out;
     }
 
     // Step 3: scan the profession node's building array (base +0x08, count +0x10).
     int count = static_cast<int>(found[2]);                // +0x10 count (low dword)
-    if (fabTrace) { std::fprintf(stderr, "[FAB] key=0x%llx node found, buildingCount=%d\n",
-                                 (unsigned long long)professionKey, count); std::fflush(stderr); }
     for (int i = 0; i < count; ++i) {
         // building entity ref (InternalBasePtr value) at node.arr[i].
         int64_t buildingIBP = *reinterpret_cast<int64_t*>(static_cast<int64_t>(found[1]) + (int64_t)i * 8);
@@ -318,16 +301,11 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
                     reachOk = (accepting != 0);
                 }
                 if (reachOk) {
-                    if (fabTrace) { std::fprintf(stderr, "[FAB]   bld[%d] PICKED wpc=%p workers=%d capRaw=%d cap=%d accepting=%d\n",
-                                                 i, (void*)wpcPtr, workerCount, capRaw, capacity, (int)accepting); std::fflush(stderr); }
                     *reinterpret_cast<int64_t*>(out) = building;   // *out = building entity ptr
                     return out;
                 }
             }
         }
-        if (fabTrace) { std::fprintf(stderr, "[FAB]   bld[%d] REJECT wpc=%p wc=%p workers=%d capRaw=%d cap=%d (workers<cap=%d) reachFn=%p accepting=%d\n",
-                                     i, (void*)wpcPtr, (void*)wcPtr, workerCount, capRaw, capacity,
-                                     (int)(workerCount < capacity), (void*)s_findReach, (int)accepting); std::fflush(stderr); }
     }
 
     // No qualifying building -> empty result.

@@ -289,30 +289,6 @@ void AmbientEmitterComponent_Draw(AmbientEmitterComponent* self) {
     // If building has audio flag at +0x20, set up the 3D ambient emitters.
     bool audioFlag = *(char*)((uintptr_t)building + 0x20) != '\0';
 
-    static int s_trace = -1;
-    if (s_trace < 0) { const char* e = getenv("BANISHED_AMBIENT_TRACE"); s_trace = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    if (s_trace) {
-        static int n = 0;
-        if (n++ < 16)
-            fprintf(stderr, "[ambientemit] Draw/OnAdded self=%p building=%p count=%d audioFlag=%d\n",
-                    (void*)self, building, count, audioFlag ? 1 : 0);
-        // Lane D census: the integrator's queued question for 0x140002280
-        // (Entity::FindComponent<AmbientEmitterComponent>) is not "does Draw run" but
-        // "does any description declare >= 2 emitters" -- CitizenComponent_helper_a710
-        // reads entry[1] at stride 0x10 with no bound check, so a description with 0 or
-        // 1 emitters faults the moment the finder starts returning a component. Sixteen
-        // capped lines cannot answer that; a histogram can.
-        static int c0 = 0, c1 = 0, c2 = 0, maxCount = 0, sinceReport = 0;
-        if (count <= 0) ++c0; else if (count == 1) ++c1; else ++c2;
-        if (count > maxCount) maxCount = count;
-        if (++sinceReport >= 500) {
-            sinceReport = 0;
-            fprintf(stderr, "[ambientemit] CENSUS calls=%d count0=%d count1=%d count2plus=%d max=%d\n",
-                    n, c0, c1, c2, maxCount);
-            fflush(stderr);
-        }
-    }
-
     if (audioFlag) {
         AmbientEmitterAudioSetup_Reimpl(self);
     }
@@ -388,10 +364,9 @@ void AmbientEmitterComponent_InitFuncs() {
 // to the real AmbientEmitterComponent::Draw (0x140042ba0). This is what seeds a
 // building's ambient audio: resize the emitter array from the description, and if
 // the description carries the audio flag (desc+0x20) play + AddEmitter the 3D
-// looping sounds. Opt-in under BANISHED_AMBIENT_AUDIO (default ON via the env
-// check; =0 restores the inert no-op for A/B).
+// looping sounds. Graduated 2026-09-13 (previously opt-in): always live.
 COMPONENT_LIVE_FACTORY_ONADDED(AmbientEmitterComponent, 0x48, 0xC3,
-                               "BANISHED_AMBIENT_AUDIO", AmbientEmitterComponent_Draw)
+                               AmbientEmitterComponent_Draw)
 // Slot 3 (+0x18): COMPONENT_LIVE_FACTORY_ONADDED does not fill it, so the ported
 // body above was dead code and every AmbientEmitterComponent record was read as
 // the bare Component base. Retail 0x140042f30 reads a Vector3, an emitter count

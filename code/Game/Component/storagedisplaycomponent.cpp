@@ -32,19 +32,6 @@
 // helpers below make the two raw-.rdata type-ids (ModelDescription, RawMaterial-
 // Description) resolvable in SA and provide a throttled diagnostic trace.
 
-// Diagnostic trace (BANISHED_STORAGEDISPLAY_TRACE) — throttled so the self-driven
-// per-frame Update cannot flood the log.
-static bool StorageDisplayTraceOn() {
-    static int v = -1;
-    if (v < 0) { const char* e = getenv("BANISHED_STORAGEDISPLAY_TRACE");
-                 v = (e && *e && e[0] != '0') ? 1 : 0; }
-    return v == 1;
-}
-static bool SDDBudget(int& counter, int cap) {
-    if (counter >= cap) return false;
-    ++counter;
-    return true;
-}
 
 // ModelDescription type-id (DAT_1401c7a88) — used by cbd0 to find a material entity's
 // display model. The raw .rdata slot resolves NULL in the standalone exe, so fall
@@ -320,24 +307,6 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
 
     // Anchor trace: the yard's OWN world position (tile->world of its origin cell), so
     // per-pile world positions below can be compared against where the yard sits.
-    if (StorageDisplayTraceOn()) {
-        static int s_yardBudget = 0;
-        if (SDDBudget(s_yardBudget, 20)) {
-            float ov[4] = {0,0,0,0}, ow[4] = {0,0,0,0};
-            if (s_fn_Vector3_Ctor && s_fn_TileToWorld) {
-                int oidx = mapSize * (int)tileY0 + (int)tileX0;
-                s_fn_Vector3_Ctor(ov, (float)(oidx % mapSize) - halfMap,
-                                      (float)(oidx / mapSize) - halfMap, 0.0f);
-                s_fn_TileToWorld(mapInfo, ow, ov, '\0', nullptr);
-            }
-            fprintf(stderr, "[StorageDisplay] Draw self=%p yardTile=(%d,%d) size=%dx%d "
-                    "yardWorld=(%.2f,%.2f,%.2f) displays=%d TileToWorld=%p FromYaw=%p SetXform=%p\n",
-                    (void*)selfAddr, (int)tileX0, (int)tileY0, colCount, height,
-                    ow[0], ow[1], ow[2], displayCount,
-                    (void*)s_fn_TileToWorld, (void*)s_fn_FromYawPitchOffset, (void*)s_fn_SetTransform);
-            fflush(stderr);
-        }
-    }
 
     for (int i = 0; i < displayCount; i++) {
         int row = i / colCount + (int)tileY0;
@@ -387,16 +356,6 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
             s_fn_SetTransform((void*)(displayArray + (uintptr_t)i * 0x128), transform);
         }
 
-        if (StorageDisplayTraceOn()) {
-            static int s_posBudget = 0;
-            if (SDDBudget(s_posBudget, 60)) {
-                fprintf(stderr, "[StorageDisplay]   pos i=%d tile=(%d,%d) world=(%.2f,%.2f,%.2f) "
-                        "yardOrigin=(%d,%d) yaw=%s\n",
-                        i, col, row, worldPos[0], worldPos[1], worldPos[2],
-                        (int)tileX0, (int)tileY0, ((row + col) & 1) ? "0" : "const");
-                fflush(stderr);
-            }
-        }
     }
 }
 
@@ -502,13 +461,6 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
         int displayCount = *(int*)(selfAddr + 0x30);
         const uint32_t rawMatTid = SDD_RawMatDescTypeId();
 
-        static int s_updBudget = 0;
-        if (StorageDisplayTraceOn() && SDDBudget(s_updBudget, 60)) {
-            fprintf(stderr, "[StorageDisplay] Update self=%p slots=%d totalWeight=%d displays=%d rawMatTid=0x%08x\n",
-                    (void*)selfAddr, slotCount, totalWeight, displayCount, rawMatTid);
-            fflush(stderr);
-        }
-
         if (slotCount > 0 && totalWeight > 0) {
             for (int slotIdx = 0; slotIdx < slotCount; slotIdx++) {
                 if (fn_InternalBasePtr_CheckPtr) {
@@ -523,13 +475,6 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
 
                 // Get material type entity from slot
                 uintptr_t materialType = *(uintptr_t*)slotEntry;
-
-                static int s_slotBudget = 0;
-                if (StorageDisplayTraceOn() && SDDBudget(s_slotBudget, 120)) {
-                    fprintf(stderr, "[StorageDisplay]   slot=%d material=%p itemCount=%d\n",
-                            slotIdx, (void*)materialType, itemCount);
-                    fflush(stderr);
-                }
 
                 // Find RawMaterialDescription on material type
                 // The decompilation does a manual component search with typeId check.
@@ -815,14 +760,6 @@ void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fra
     uint32_t newId = s_fn_SDC_SceneAdd ? s_fn_SDC_SceneAdd(scene, geom) : 0xffffffff;
     *(uint32_t*)((uintptr_t)geom + 0x120) = newId;
 
-    if (StorageDisplayTraceOn()) {
-        static int s_setBudget = 0;
-        if (SDDBudget(s_setBudget, 500)) {
-            fprintf(stderr, "[StorageDisplay]   setMesh idx=%d material=%p lodIdx=%d/%d mesh=%p objId=%u frac=%.3f\n",
-                    index, (void*)materialType, lodIdx, lodCount, (void*)meshPtr, newId, fraction);
-            fflush(stderr);
-        }
-    }
 }
 
 // ============================================================
@@ -894,17 +831,6 @@ static void StorageDisplayComponent_OnUpdate2VSlot(void* s) {
 // no-ops on an empty/never-populated display array, and teardown safety must
 // not depend on the display feature flag.
 static void StorageDisplayComponent_OnRemovedVSlot(void* s) {
-    if (std::getenv("BANISHED_DESTROY_TRACE")) {
-        uintptr_t a = reinterpret_cast<uintptr_t>(s);
-        int count = *reinterpret_cast<int*>(a + 0x30);
-        uintptr_t arr = *reinterpret_cast<uintptr_t*>(a + 0x28);
-        int live = 0;
-        for (int i = 0; i < count && arr; i++)
-            if (*reinterpret_cast<int32_t*>(arr + (uintptr_t)i * 0x128 + 0x120) >= 0) ++live;
-        std::fprintf(stderr, "[StorageDisplay] removed-from-world comp=%p entries=%d "
-                     "sceneObjs=%d\n", s, count, live);
-        std::fflush(stderr);
-    }
     StorageDisplayComponent_OnCreate(reinterpret_cast<StorageDisplayComponent*>(s));
 }
 static void StorageDisplayComponent_SerSlot3(void* s, void* stream) {
@@ -921,14 +847,12 @@ static void StorageDisplayComponent_FinishLiveVtable() {
         reinterpret_cast<void*>(&StorageDisplayComponent_SerSlot3);
     StorageDisplayComponent_LiveVtable[7]  =
         reinterpret_cast<void*>(&StorageDisplayComponent_OnRemovedVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGEDISPLAY")) {
-        StorageDisplayComponent_LiveVtable[6]  =
-            reinterpret_cast<void*>(&StorageDisplayComponent_DrawVSlot);
-        StorageDisplayComponent_LiveVtable[9]  =
-            reinterpret_cast<void*>(&StorageDisplayComponent_TickVSlot);
-        StorageDisplayComponent_LiveVtable[11] =
-            reinterpret_cast<void*>(&StorageDisplayComponent_OnUpdate2VSlot);
-    }
+    StorageDisplayComponent_LiveVtable[6]  =
+        reinterpret_cast<void*>(&StorageDisplayComponent_DrawVSlot);
+    StorageDisplayComponent_LiveVtable[9]  =
+        reinterpret_cast<void*>(&StorageDisplayComponent_TickVSlot);
+    StorageDisplayComponent_LiveVtable[11] =
+        reinterpret_cast<void*>(&StorageDisplayComponent_OnUpdate2VSlot);
 }
 extern "C" void* StorageDisplayComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x38, 0xCB,

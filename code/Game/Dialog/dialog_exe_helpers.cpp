@@ -96,16 +96,11 @@ static fn_UI_PausesGame_t s_fn_PausesGame = nullptr;
 static bool s_asInit = false;
 
 static void AsBail(const char* why, long v) {
-    if (!std::getenv("BANISHED_AUTOSAVE_TRACE")) return;
     fprintf(stderr, "[AutoSave] timer FIRED but bailed: %s (%ld)\n", why, v);
     fflush(stderr);
 }
 
 void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
-    if (std::getenv("BANISHED_AUTOSAVE_TRACE")) {
-        fprintf(stderr, "[AutoSave] timer FIRED (handler entered)\n");
-        fflush(stderr);
-    }
     if (!s_asInit) {
         s_fn_PausesGame = reinterpret_cast<fn_UI_PausesGame_t>(
             ResolveExport("?PausesGame@UserInterface@UI@@QEBA_NXZ"));
@@ -149,11 +144,6 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
     if (fn_SaveLoad_SetSaveName) fn_SaveLoad_SetSaveName(saveLoad, sysStrBuf, 2);
     if (fn_String_Dtor) fn_String_Dtor(sysStrBuf);
 
-    // BANISHED_AUTOSAVE_TRACE=1: fires once per actual autosave.
-    if (std::getenv("BANISHED_AUTOSAVE_TRACE")) {
-        fprintf(stderr, "[AutoSave] *** TRIGGERED - writing Auto.sav\n");
-        fflush(stderr);
-    }
 
     // Kick off the save operation (Operation 4, param -4).
     if (fn_SaveLoad_SetOperation) fn_SaveLoad_SetOperation(saveLoad, 4, -4);

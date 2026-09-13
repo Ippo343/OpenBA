@@ -199,18 +199,6 @@ void WorkComponent_Draw(WorkComponent* self) {
 void WorkComponent_OnRemove_CancelWork(WorkComponent* self) {
     EnsureHelpers();
 
-    // Report the OUTCOME, not the intent: a run with zero stranded Pickups
-    // proves nothing unless this hook is shown to have actually fired.
-    static int s_probe = -1;
-    if (s_probe < 0) s_probe = std::getenv("BANISHED_WORK_SER_PROBE") ? 1 : 0;
-    if (self && s_probe) {
-        static int n = 0;
-        if (n < 30) { ++n;
-            std::fprintf(stderr, "[WorkComp] slot7 removal hook: comp=%p workId=%d\n",
-                         (void*)self, (int)self->workId);
-            std::fflush(stderr);
-        }
-    }
 
     if (!self) return;
 
@@ -369,7 +357,6 @@ static void WorkComponent_OnRemoveVSlot(void* s) {
 static void WorkComponent_FinishVtable() {
     // Slot 3 unconditional — serializer wiring is not a feature flag.
     WorkComponent_LiveVtable[3] = reinterpret_cast<void*>(&WorkComponent_SerVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_WORKCOMP_ONREMOVE"))
         WorkComponent_LiveVtable[7] = reinterpret_cast<void*>(&WorkComponent_OnRemoveVSlot);
 }
 

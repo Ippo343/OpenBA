@@ -242,7 +242,6 @@ using RtUI::DialogNamedTemplate;   // WAVE 9 LANE UIC (?CreateElement@Dialog@)
 void* ResolveExport(const char* mangled_name);
 
 // WAVE 10 LANE UIF negative-control knob; defined in runtime/src/ui/userinterface.cpp.
-extern "C" int RtUiUifNegCtrl();
 
 // ResolveAddr, same reasoning and the same "must stay byte-identical to
 // resolve.h's" contract. WAVE 9 LANE UIC needs it for one unexported-by-us edge
@@ -2064,16 +2063,8 @@ void EdCreateInstanceBody(const ElementDescription* self, void** elemPtr) {
     *reinterpret_cast<int32_t*>(ED_ELEM + 0x28) = *reinterpret_cast<const int32_t*>(d + 0x30);
     *reinterpret_cast<int32_t*>(ED_ELEM + 0x2c) = *reinterpret_cast<const int32_t*>(d + 0x34);
     *reinterpret_cast<uint32_t*>(ED_ELEM + 0x34) |= *reinterpret_cast<const uint32_t*>(d + 0x44); // OR, never assign
-    // NEGATIVE CONTROL 2 (`BANISHED_UIF_NEGCTRL=2`, declared in
-    // runtime/src/ui/userinterface.cpp): drop the crossover, which is exactly
-    // the kind of transcription slip a byte oracle exists to catch.
-    if (RtUiUifNegCtrl() == 2) {
-        *reinterpret_cast<int32_t*>(ED_ELEM + 0x38) = *reinterpret_cast<const int32_t*>(d + 0x38);
-        *reinterpret_cast<int32_t*>(ED_ELEM + 0x3c) = *reinterpret_cast<const int32_t*>(d + 0x3c);
-    } else {
     *reinterpret_cast<int32_t*>(ED_ELEM + 0x38) = *reinterpret_cast<const int32_t*>(d + 0x3c);    // _id      -> +0x38
     *reinterpret_cast<int32_t*>(ED_ELEM + 0x3c) = *reinterpret_cast<const int32_t*>(d + 0x38);    // _tabOrder-> +0x3c
-    }
     *reinterpret_cast<uint64_t*>(ED_ELEM + 0x40) = *reinterpret_cast<const uint64_t*>(d + 0x50);
 
     // ---- 3. the tool-tip UIString -----------------------------------------

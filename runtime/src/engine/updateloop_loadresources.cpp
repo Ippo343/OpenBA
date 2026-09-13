@@ -204,13 +204,6 @@ extern "C" void RtEngine_UpdateLoop_LoadResources(RtEngine::UpdateLoop* self) {
     // no-op rather than a crash.
     void** vt = *reinterpret_cast<void***>(self);
     const char* root = reinterpret_cast<GetResourceFilenameFn>(vt[10])(self);
-    // NEGATIVE CONTROL, kept so it can be re-run rather than re-invented.
-    // BANISHED_LOADRES_NEGCONTROL=1 forces this block to be skipped, which
-    // drives ownList from 3 to 0. With the detour armed, the game STILL booted
-    // to a 24-citizen world and exited 0 — so the boot test is BLIND to this
-    // port's outputs, and any claim that "a green detoured boot verifies the
-    // body" is false. See standalone/loadresources_detour.cpp's banner.
-    if (std::getenv("BANISHED_LOADRES_NEGCONTROL")) root = nullptr;
     if (root != nullptr) {
         String spec{nullptr};
         RtSystem_String_Format(&spec, "%sResources.rsc", root);

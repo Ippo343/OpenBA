@@ -5,6 +5,7 @@
 
 
 #include "autostart.h"
+#include "options.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -126,17 +127,13 @@ void Init() {
     // Application::Quit -> MainLoop::Run returns -> Engine::Shutdown), which is
     // what runs Video::Configuration::Save + Persistence::WriteSettings. Use it
     // to verify settings actually round-trip to the registry.
-    if (const char* q = std::getenv("BANISHED_AUTOQUIT")) {
-        if (q[0] != '\0' && std::strcmp(q, "0") != 0 &&
-            std::strcmp(q, "false") != 0) {
-            int parsedQ = std::atoi(q);
-            if (parsedQ > 1) s_settleFrames = parsedQ;
-            s_enabled = true;
-            s_phase   = Phase::WaitQuit;
-            fprintf(stderr, "[AutoStart] AUTOQUIT ENABLED (BANISHED_AUTOQUIT=\"%s\") — will "
-                   "click Quit after %d menu frames\n", q, s_settleFrames);
-            return;
-        }
+    if (Opt().autoquit) {
+        if (Opt().autoquitFrames > 1) s_settleFrames = Opt().autoquitFrames;
+        s_enabled = true;
+        s_phase   = Phase::WaitQuit;
+        fprintf(stderr, "[AutoStart] AUTOQUIT ENABLED — will "
+               "click Quit after %d menu frames\n", s_settleFrames);
+        return;
     }
 
     // BANISHED_AUTOLOAD drives menu -> Load -> select save -> Load click, the
@@ -144,18 +141,15 @@ void Init() {
     // SetOperation(2), loader-loop chain, GameUpdateLoop::Load restore branch).
     // Value: a save NAME to load ("Auto", "Save0", ...); "1" defaults to the
     // autosave "Auto". (Save/load wave 2026-08-27.)
-    if (const char* l = std::getenv("BANISHED_AUTOLOAD")) {
-        if (l[0] != '\0' && std::strcmp(l, "0") != 0 &&
-            std::strcmp(l, "false") != 0) {
-            if (std::strcmp(l, "1") != 0) {
-                std::snprintf(s_loadName, sizeof(s_loadName), "%s", l);
-            }
-            s_enabled = true;
-            s_phase   = Phase::WaitLoadMenu;
-            fprintf(stderr, "[AutoStart] AUTOLOAD ENABLED — will click Load after %d "
-                   "menu frames, then load save \"%s\"\n", s_settleFrames, s_loadName);
-            return;
+    if (Opt().autoload) {
+        if (Opt().autoloadName) {
+            std::snprintf(s_loadName, sizeof(s_loadName), "%s", Opt().autoloadName);
         }
+        s_enabled = true;
+        s_phase   = Phase::WaitLoadMenu;
+        fprintf(stderr, "[AutoStart] AUTOLOAD ENABLED — will click Load after %d "
+               "menu frames, then load save \"%s\"\n", s_settleFrames, s_loadName);
+        return;
     }
 
     // BANISHED_AUTOTUTORIAL drives menu -> Tutorial -> select entry -> Load click.
@@ -163,55 +157,44 @@ void Init() {
     // inside WinData/*.pkg, and ScenarioDialog::LoadSelected swaps persistence+0x90
     // to the data directory so SaveLoad reads them. Value: the entry index to load
     // ("1" or empty means index 0).
-    if (const char* t = std::getenv("BANISHED_AUTOTUTORIAL")) {
-        if (t[0] != '\0' && std::strcmp(t, "0") != 0 &&
-            std::strcmp(t, "false") != 0) {
-            if (std::strcmp(t, "1") != 0) s_tutorialIndex = std::atoi(t);
-            s_enabled = true;
-            s_phase   = Phase::WaitTutorialMenu;
-            // This block RETURNS before BANISHED_AUTOSTART_GAMES is parsed below, so
-            // read it here and default to ZERO on the tutorial path. Defaulting to
-            // s_gamesLeft's initial 1 would silently make every existing AUTOTUTORIAL
-            // run start a New Game after a quit-to-menu, which is not what those runs
-            // have always meant.
-            s_gamesLeft = 0;
-            if (const char* g = std::getenv("BANISHED_AUTOSTART_GAMES")) {
-                const int n = std::atoi(g);
-                if (n > 0) {
-                    s_gamesLeft = n;
-                    fprintf(stderr, "[AutoStart] AUTOTUTORIAL + %d New Game(s) after a "
-                           "quit-to-menu (BANISHED_AUTOSTART_GAMES)\n", n);
-                }
-            }
-            fprintf(stderr, "[AutoStart] AUTOTUTORIAL ENABLED — will click Tutorial after "
-                   "%d menu frames, then load entry #%d\n",
-                   s_settleFrames, s_tutorialIndex);
-            return;
+    if (Opt().autotutorial) {
+        s_tutorialIndex = Opt().autotutorialIndex;
+        s_enabled = true;
+        s_phase   = Phase::WaitTutorialMenu;
+        // This block RETURNS before BANISHED_AUTOSTART_GAMES is parsed below, so
+        // read it here and default to ZERO on the tutorial path. Defaulting to
+        // s_gamesLeft's initial 1 would silently make every existing AUTOTUTORIAL
+        // run start a New Game after a quit-to-menu, which is not what those runs
+        // have always meant.
+        s_gamesLeft = 0;
+        if (Opt().autostartGames > 0) {
+            s_gamesLeft = Opt().autostartGames;
+            fprintf(stderr, "[AutoStart] AUTOTUTORIAL + %d New Game(s) after a "
+                   "quit-to-menu (BANISHED_AUTOSTART_GAMES)\n", s_gamesLeft);
         }
+        fprintf(stderr, "[AutoStart] AUTOTUTORIAL ENABLED — will click Tutorial after "
+               "%d menu frames, then load entry #%d\n",
+               s_settleFrames, s_tutorialIndex);
+        return;
     }
 
     // BANISHED_AUTOMENU_BUTTON=<id> clicks one front-end menu button and stops there,
     // leaving whatever it opened up for a screenshot (tools/capture_window.ps1).
-    if (const char* m = std::getenv("BANISHED_AUTOMENU_BUTTON")) {
-        if (m[0] != '\0' && std::strcmp(m, "0") != 0) {
-            s_menuButtonId = std::atoi(m);
-            s_enabled = true;
-            s_phase   = Phase::WaitMenuButton;
-            if (const char* c = std::getenv("BANISHED_AUTOMENU_CLICKS")) {
-                std::strncpy(s_menuClicks, c, sizeof(s_menuClicks) - 1);
-                s_menuClickCursor = s_menuClicks[0] ? s_menuClicks : nullptr;
-                if (s_menuClickCursor)
-                    fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS queued: %s\n", s_menuClicks);
-            }
-            fprintf(stderr, "[AutoStart] AUTOMENU_BUTTON ENABLED - will click menu id=%d "
-                   "after %d menu frames and stop there\n", s_menuButtonId, s_settleFrames);
-            return;
+    if (Opt().automenuButton != 0) {
+        s_menuButtonId = Opt().automenuButton;
+        s_enabled = true;
+        s_phase   = Phase::WaitMenuButton;
+        if (const char* c = Opt().automenuClicks) {
+            std::strncpy(s_menuClicks, c, sizeof(s_menuClicks) - 1);
+            s_menuClickCursor = s_menuClicks[0] ? s_menuClicks : nullptr;
+            if (s_menuClickCursor)
+                fprintf(stderr, "[AutoStart] AUTOMENU_CLICKS queued: %s\n", s_menuClicks);
         }
+        fprintf(stderr, "[AutoStart] AUTOMENU_BUTTON ENABLED - will click menu id=%d "
+               "after %d menu frames and stop there\n", s_menuButtonId, s_settleFrames);
+        return;
     }
-    const char* env = std::getenv("BANISHED_AUTOSTART");
-    if (!env || env[0] == '\0' ||
-        std::strcmp(env, "0") == 0 ||
-        std::strcmp(env, "false") == 0) {
+    if (!Opt().autostart) {
         s_enabled = false;
         s_phase   = Phase::Disabled;
         fprintf(stderr, "[AutoStart] disabled (BANISHED_AUTOSTART unset)\n");
@@ -219,23 +202,19 @@ void Init() {
     }
 
     // A numeric value overrides the menu settle-frame count.
-    int parsed = std::atoi(env);
-    if (parsed > 1) s_settleFrames = parsed;
+    if (Opt().autostartFrames > 1) s_settleFrames = Opt().autostartFrames;
 
-    if (const char* g = std::getenv("BANISHED_AUTOSTART_GAMES")) {
-        int n = std::atoi(g);
-        if (n > 1) {
-            s_gamesLeft = n;
-            fprintf(stderr, "[AutoStart] will start %d games this run "
-                   "(BANISHED_AUTOSTART_GAMES)\n", n);
-        }
+    if (Opt().autostartGames > 1) {
+        s_gamesLeft = Opt().autostartGames;
+        fprintf(stderr, "[AutoStart] will start %d games this run "
+               "(BANISHED_AUTOSTART_GAMES)\n", s_gamesLeft);
     }
 
     s_enabled = true;
     s_phase   = Phase::WaitMenuSettle;
-    fprintf(stderr, "[AutoStart] ENABLED (BANISHED_AUTOSTART=\"%s\") — will auto-open "
+    fprintf(stderr, "[AutoStart] ENABLED — will auto-open "
            "New Game after %d menu frames, then auto-Start\n",
-           env, s_settleFrames);
+           s_settleFrames);
 }
 
 bool Enabled() { return s_enabled; }

@@ -319,31 +319,9 @@ static int WorldToCell(int gridSize, float x, float z) {
     return gridSize * cz + cx;
 }
 
-// ============================================================
-// BuildStructure::Execute (0x1400E4FC0)
-// ============================================================
-//
-// Finds an unbuilt construction point on the building, checks walkability
-// between the building center and candidate points on the map grid,
-// optionally computes shortest path cost, then sets up the citizen's
-// action queue (move, show tool, perform work, complete task).
-//
-// Returns 1 (not ready / skip) or 2 (work assigned).
-//
-static int s_bs_trace = -1;
-static bool BS_Trace() {
-    if (s_bs_trace < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_TRACE");
-        s_bs_trace = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s_bs_trace == 1;
-}
-#define BS_TRACEF(...) do { if (BS_Trace()) std::fprintf(stderr, __VA_ARGS__); } while (0)
 
 int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     uintptr_t s = (uintptr_t)self;
-    BS_TRACEF("[BuildTrace] BuildStructure::Execute ENTER self=%p citizen=%p field_58=%d field_68=%d\n",
-              (void*)self, citizenPtr, self->field_58, self->field_68);
 
     // --- Phase 1: Validate building is enabled ---
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
@@ -371,7 +349,6 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
 
     // Check if building is enabled (byte at +0x50 of description)
     if (*(uint8_t*)(buildDescIBP + 0x50) == 0) {
-        BS_TRACEF("[BuildTrace] BuildStructure::Execute return 1 (building disabled, desc+0x50=0)\n");
         return 1;
     }
 
@@ -379,8 +356,6 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     fn_InternalBasePtr_CheckPtr(&posCompIBP);
     int totalPositions = fn_PositionComponent_Count(posCompIBP, 1);
     if (self->field_68 >= totalPositions) {
-        BS_TRACEF("[BuildTrace] BuildStructure::Execute return 1 (all built: field_68=%d >= total=%d)\n",
-                  self->field_68, totalPositions);
         return 1;
     }
 
@@ -463,10 +438,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     int chosenIndex = -1;
     int attemptCount = 0;
 
-    BS_TRACEF("[BuildTrace] BuildStructure::Execute phases: field_58=%d unbuiltCount=%d totalPositions=%d buildingCell=%d\n",
-              self->field_58, unbuiltCount, totalPositions, buildingCell);
     if (unbuiltCount <= 0) {
-        BS_TRACEF("[BuildTrace] BuildStructure::Execute return 1 (unbuiltCount<=0)\n");
         return 1;
     }
 
@@ -662,8 +634,6 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
                     // Mark build position as claimed
                     ((uint8_t*)self->field_50)[chosenIndex] = 1;
 
-                    BS_TRACEF("[BuildTrace] BuildStructure::Execute return 2 (ASSIGNED build pos %d, actions set up) self=%p\n",
-                              chosenIndex, (void*)self);
                     return 2;
                 }
             }
@@ -672,8 +642,6 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
         attemptCount++;
     }
 
-    BS_TRACEF("[BuildTrace] BuildStructure::Execute return 1 (no accessible unbuilt position after %d attempts)\n",
-              attemptCount);
     return 1;
 }
 

@@ -21,12 +21,11 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"          // GetTypeIdByName
-#include "Component/component_factory_base.h"     // LiveEnabled + inert factory helpers
+#include "Component/component_factory_base.h"     // the live gate + inert factory helpers
 #include <cstdint>
 #include <cstdio>
 
 // BANISHED_FLOOR_TRACE (code/Game/Game/mapquery.cpp) — shared with the consumer side.
-bool MapQuery_FloorTraceOn();
 
 // Standalone-safe type-id resolution. Both ids the retail bodies read live in raw
 // .rdata (DAT_1401c7708 FloorDescription, DWORD_1401c79e0 MapComponent); ResolveAddr
@@ -176,9 +175,6 @@ void FloorComponent_Draw(FloorComponent* self) {
 
     const uint32_t descTid = FloorTypeIdByName("FloorDescription", s_pFloorBuildingTypeId);
     if (!s_fn_IsDerivedFrom_d || !descTid) {
-        if (MapQuery_FloorTraceOn())
-            std::fprintf(stderr, "[Floor] Draw self=%p bailed: isDerivedFrom=%p descTid=%u\n",
-                         (void*)self, (void*)s_fn_IsDerivedFrom_d, descTid);
         return;
     }
 
@@ -191,17 +187,11 @@ void FloorComponent_Draw(FloorComponent* self) {
     // +0x18 IS a FloorDescription. Keep the null test — a standalone entity can carry
     // the component without the description surviving the copy-ctor.
     if (!building) {
-        if (MapQuery_FloorTraceOn())
-            std::fprintf(stderr, "[Floor] Draw self=%p: +0x18 (%p) is not a FloorDescription\n",
-                         (void*)self, obj);
         return;
     }
 
     // desc+0x28 is the FloorDescription bool — "this structure has a walkable floor".
     uint8_t flag = *(uint8_t*)((uintptr_t)building + 0x28);
-    if (MapQuery_FloorTraceOn())
-        std::fprintf(stderr, "[Floor] Draw self=%p desc=%p enabled=%u floorId=%d\n",
-                     (void*)self, building, (unsigned)flag, (int)self->floorId);
     if (flag != 0) {
         if (s_fn_FloorSubF390) {
             s_fn_FloorSubF390(self);
@@ -249,9 +239,6 @@ void FloorComponent_OnCreate(FloorComponent* self) {
                 s_fn_RemoveFloorMesh(pScene, (uint32_t)self->floorId,
                     (int)x, (int)y, (int)w, (int)h);
             }
-        } else if (MapQuery_FloorTraceOn()) {
-            std::fprintf(stderr, "[Floor] OnRemove self=%p: no MapComponent — mesh %d left "
-                                 "in the scene\n", (void*)self, (int)self->floorId);
         }
 
         self->floorId = -1;
@@ -381,9 +368,6 @@ void FloorComponent_SubF390(void* selfV) {
     // there. In standalone the find can miss (the type registry can lag), and a null here
     // would stamp cell records at address 0x28.
     if (resIBP == 0) {
-        if (MapQuery_FloorTraceOn())
-            std::fprintf(stderr, "[Floor] f390 self=%p: no MapComponent on the owner — "
-                                 "no footprint, floor NOT placed\n", selfV);
         return;
     }
     int16_t baseX = *reinterpret_cast<int16_t*>(resIBP + 0x28);
@@ -422,9 +406,6 @@ void FloorComponent_SubF390(void* selfV) {
         }
     }
     if (ent == 0) {
-        if (MapQuery_FloorTraceOn())
-            std::fprintf(stderr, "[Floor] f390 self=%p: no ModelComponent on the owner — "
-                                 "no transform, floor NOT placed\n", selfV);
         return;
     }
 
@@ -443,9 +424,6 @@ void FloorComponent_SubF390(void* selfV) {
     // bumping the per-cell counters would then make every f3e0 on those cells pay for a
     // ray-cast that can only miss — so bail before touching the grid.
     if (!mesh) {
-        if (MapQuery_FloorTraceOn())
-            std::fprintf(stderr, "[Floor] f390 self=%p: desc=%p descTid=%u — no floor mesh "
-                                 "(+0x20), floor NOT placed\n", selfV, building, descTid);
         return;
     }
 
@@ -466,11 +444,6 @@ void FloorComponent_SubF390(void* selfV) {
     *reinterpret_cast<uint8_t*>(self + 5) = 1;
     *reinterpret_cast<uint32_t*>(sb + 0x2c) = meshId;
 
-    if (MapQuery_FloorTraceOn())
-        std::fprintf(stderr, "[Floor] f390 PLACED self=%p tile=(%d,%d) fp=%dx%d "
-                             "deckZ=%.3f meshId=%u\n",
-                     selfV, (int)baseX, (int)baseY, (int)fw, (int)fh,
-                     *reinterpret_cast<float*>(&xform[6]), meshId);
 }
 
 // ============================================================
@@ -539,7 +512,7 @@ void FloorComponent_InitFuncs() {
 // Flags are 0x43 (FloorComponent_Ctor 0x14011f636: `OR EAX,0x43`). The previous 0xC3 here
 // had a spurious bit 7 and put the component in an update bucket retail never uses.
 //
-// Gated on BANISHED_LIVE_FLOOR, DEFAULT-ON since 2026-08-29 (kDefaultOnFlags) — the env
+// Gated on BANISHED_LIVE_FLOOR, DEFAULT-ON since 2026-08-29 (the default-on table) — the env
 // var is now a kill-switch (=0) for A/B runs. With it off this is byte-for-byte the old
 // inert component. What it turns on: docks/bridges register their
 // deck mesh into the map's Picking::Scene and bump each covered cell's floor counter
@@ -567,9 +540,6 @@ static void FloorComponent_OnRemoveVSlot(void* s) {
 // FloorComponent_Slot12 (0x14011f520): `if (msg != 1) return;` followed by a verbatim
 // inline copy of f390 — so delegate rather than duplicate the body.
 static void FloorComponent_Slot12VSlot(void* s, int msgId) {
-    if (MapQuery_FloorTraceOn())
-        std::fprintf(stderr, "[Floor] slot12 self=%p msg=%d floorId=%d\n",
-                     s, msgId, (int)reinterpret_cast<FloorComponent*>(s)->floorId);
     if (msgId != 1) return;
     FloorComponent_SubF390(s);
 }
@@ -581,9 +551,6 @@ static void FloorComponent_Slot11VSlot(void* s) {
     FloorComponent* fc = reinterpret_cast<FloorComponent*>(s);
     // Logged BEFORE the floorFlag test so the trace discriminates "hook never
     // dispatched" from "dispatched but floorFlag was lost in the serializer".
-    if (MapQuery_FloorTraceOn())
-        std::fprintf(stderr, "[Floor] slot11 postload self=%p floorFlag=%u floorId=%d\n",
-                     s, (unsigned)fc->floorFlag, (int)fc->floorId);
     if (fc->floorFlag == 0) return;
     FloorComponent_SubF390(s);
 }
@@ -592,12 +559,10 @@ static void FloorComponent_FinishVtable() {
     // Slot 3 is unconditional: serializer wiring is not a feature flag (a base-only
     // slot 3 silently resets floorFlag across a save/load).
     FloorComponent_LiveVtable[3] = reinterpret_cast<void*>(&FloorComponent_SerVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_FLOOR")) {
-        FloorComponent_LiveVtable[6]  = reinterpret_cast<void*>(&FloorComponent_OnAddedVSlot);
-        FloorComponent_LiveVtable[7]  = reinterpret_cast<void*>(&FloorComponent_OnRemoveVSlot);
-        FloorComponent_LiveVtable[11] = reinterpret_cast<void*>(&FloorComponent_Slot11VSlot);
-        FloorComponent_LiveVtable[12] = reinterpret_cast<void*>(&FloorComponent_Slot12VSlot);
-    }
+    FloorComponent_LiveVtable[6]  = reinterpret_cast<void*>(&FloorComponent_OnAddedVSlot);
+    FloorComponent_LiveVtable[7]  = reinterpret_cast<void*>(&FloorComponent_OnRemoveVSlot);
+    FloorComponent_LiveVtable[11] = reinterpret_cast<void*>(&FloorComponent_Slot11VSlot);
+    FloorComponent_LiveVtable[12] = reinterpret_cast<void*>(&FloorComponent_Slot12VSlot);
 }
 
 static void FloorComponent_InitBody(void* p) {

@@ -33,62 +33,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <windows.h>   // VirtualQuery — trace-only pointer validation (see TraceReadableStr)
 
-// ------------------------------------------------------------
-// BANISHED_TOOL_TRACE — diagnostic-only tracing for the toolbar-click ->
-// tool-activation path (why a building click activates no PlacementTool while
-// a road click activates a RoadTool). Off unless the env var is set, since
-// ShowGroup runs on every click and the scan loop is O(nodes * subitems).
-// ------------------------------------------------------------
-static bool ToolTraceOn() {
-    static int s_on = -1;
-    if (s_on < 0) {
-        const char* e = std::getenv("BANISHED_TOOL_TRACE");
-        s_on = (e && *e && e[0] != '0') ? 1 : 0;
-    }
-    return s_on != 0;
-}
-#define TOOLTRACE(...) do { if (ToolTraceOn()) { \
-    fprintf(stderr, "[ToolTrace] " __VA_ARGS__); fflush(stderr); } } while (0)
-
-// ------------------------------------------------------------
-// Trace-only: the .rsc path a Toolbar item was loaded from, which is the only
-// human-readable identity a toolbar button has (button indices are positional and
-// the display string is a localized UIString, not an identifier).
-//
-// A System::Filename is a single qword holding a pointer to the character data, so
-// the read is one deref — but this runs on a pointer we did not allocate, in a trace
-// path, so validate it with VirtualQuery first: a garbage qword must degrade to "?"
-// rather than take down a debug session that is mid-repro.
-// ------------------------------------------------------------
-static bool TraceReadableStr(const void* p) {
-    if (!p) return false;
-    MEMORY_BASIC_INFORMATION mbi;
-    if (VirtualQuery(p, &mbi, sizeof(mbi)) != sizeof(mbi)) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
-                           PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-    if (!(mbi.Protect & readable)) return false;
-    return !(mbi.Protect & PAGE_GUARD);
-}
-
-// Returns a pointer into `out` (never null). Caller keeps `out` alive while printing.
-static const char* ToolbarItemPath(uintptr_t item, char* out, size_t outSize) {
-    out[0] = '?'; out[1] = '\0';
-    if (!fn_External_GetPath) return out;
-    uintptr_t fnStorage = 0;
-    fn_External_GetPath((void*)item, &fnStorage);
-    const char* s = reinterpret_cast<const char*>(fnStorage);
-    if (TraceReadableStr(s)) {
-        size_t i = 0;
-        for (; i + 1 < outSize && s[i] >= 0x20 && s[i] < 0x7f; i++) out[i] = s[i];
-        out[i] = '\0';
-        if (i == 0) { out[0] = '?'; out[1] = '\0'; }
-    }
-    if (fn_Filename_Dtor) fn_Filename_Dtor(&fnStorage);
-    return out;
-}
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -377,8 +322,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     // difference between "the build tool does nothing" and a real tool failure.)
     if (*(uint8_t*)(pc + 0x80) != 0 && groupId != 0) {
         int64_t forced = *(int64_t*)(pc + 0x88);
-        TOOLTRACE("RESTRICT override pc=%p groupId=%p -> %p (tutorial restriction active)\n",
-                  (void*)pc, (void*)groupId, (void*)forced);
         groupId = forced;
     }
 
@@ -390,8 +333,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 
     // Step 3: Store new group, close existing controller if any
     *(int64_t*)(pc + 0x20) = groupId;
-    TOOLTRACE("SETGROUP pc=%p wrote +0x20=%p readback=%p (ctrl +0x28=%p)\n",
-              (void*)pc, (void*)groupId, *(void**)(pc + 0x20), *(void**)(pc + 0x28));
     if (*(int64_t*)(pc + 0x28) != 0) {
         // CheckPtr on the InternalBasePtr
         fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
@@ -404,30 +345,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
         fn_InternalBasePtr_DeletePtr((void*)(pc + 0x28));
     }
 
-    // Trace the inputs to the component-scan: a building click that activates no
-    // tool means either groupData==0 or none of its components matched a tree node.
-    if (ToolTraceOn()) {
-        int64_t gd = *(int64_t*)(pc + 0x20);
-        TOOLTRACE("ShowGroup ENTER gameSubsys=%p groupId=%p treeRoot=%p\n",
-                  gameSubsys, (void*)groupId, *(void**)(pc + 0x10));
-        if (gd != 0) {
-            int32_t n = *(int32_t*)(gd + 0x30);
-            void** arr = *(void***)(gd + 0x28);
-            TOOLTRACE("  groupData=%p subCount=%d subArray=%p\n", (void*)gd, n, arr);
-            for (int i = 0; i < n && i < 32; i++) {
-                void* sub = arr[i];
-                uint32_t tid = 0;
-                if (sub) {
-                    typedef uint32_t (*GetTypeId_t)(void*);
-                    tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)sub + 0x10)))(sub);
-                }
-                const char* tn = ::Object::GetTypeNameById(tid);
-                TOOLTRACE("    sub[%d]=%p typeId=%u(%s)\n", i, sub, tid, tn ? tn : "?");
-            }
-        } else {
-            TOOLTRACE("  groupData=NULL — scan will find nothing (tool cleared)\n");
-        }
-    }
 
     // Step 4: In-order BST traversal to find the matching tool node typeId.
     // The BST at pc+0x10 maps typeIds to tool factory/setting info.
@@ -515,13 +432,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
             break;
         }
     }
-    TOOLTRACE("ShowGroup SCAN RESULT foundTypeId=%u(%s) foundNode=%p%s\n",
-              foundTypeId,
-              ::Object::GetTypeNameById(foundTypeId)
-                  ? ::Object::GetTypeNameById(foundTypeId) : "?",
-              (void*)foundNode,
-              foundTypeId == 0 ? "  <-- no group match: falls through to the key-0"
-                                 " node (default EditTool)" : "");
 
     // DELIBERATE DIVERGENCE FROM RETAIL (per CLAUDE.md: a guard is legitimate only
     // where our standalone genuinely differs from retail). Retail does NOT test the
@@ -543,13 +453,6 @@ void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     bool isToolCtrl = fn_IsDerivedFrom(newObj, *g_TypeId_ToolController);
     void* toolController = isToolCtrl ? newObj : nullptr;
 
-    TOOLTRACE("ShowGroup CREATE toolTypeId=%u(%s) -> obj=%p isToolController=%d%s\n",
-              factoryTypeId,
-              ::Object::GetTypeNameById(factoryTypeId)
-                  ? ::Object::GetTypeNameById(factoryTypeId) : "?",
-              newObj, (int)isToolCtrl,
-              newObj == nullptr ? "  <-- factory returned NULL (type not registered)"
-                                : (!isToolCtrl ? "  <-- NOT a ToolController, discarded" : ""));
 
     // Store as InternalBasePtr at pc+0x28
     uint64_t ctrlRef = 0;
@@ -1288,15 +1191,6 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 
         // Determine template index based on action type
         int32_t actionType = *(int32_t*)(item + 0x48);
-        // BANISHED_TOOLBAR_ITEMS=1 lists what the bar was actually built from.
-        // Worth having: "the button does nothing" and "there is no such button"
-        // look identical from outside, and action type 3 (open the in-game pause
-        // menu, the only in-game route to Quit) is a single item on the top bar.
-        if (const char* dumpEnv = std::getenv("BANISHED_TOOLBAR_ITEMS")) {
-            if (dumpEnv[0] && dumpEnv[0] != '0')
-                printf("[Toolbar] item[%d] actionType=%d%s\n", i, actionType,
-                       actionType == 3 ? "  <- opens the in-game pause menu" : "");
-        }
         int templateIndex;
         if (actionType == 10) {
             templateIndex = 0;  // SpeedDisplay: plain text template
@@ -1618,9 +1512,6 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
                     // silently unchecked from the per-frame update, which is what a
                     // "the button un-clicks itself" report looks like from outside.
                     // It fires only on the 1->0 transition, so it cannot flood.
-                    TOOLTRACE("UNCHECK item=%d gameSys=%p activeDialog=%p groupId=%p elem=%p\n",
-                              i, (void*)gameSys, (void*)activeDialog, (void*)groupId,
-                              (void*)localRef);
                     *(uint8_t*)(localRef + 0xD8) = 0;
                 }
             }
@@ -1750,16 +1641,6 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         int32_t actionType = *(int32_t*)(item + 0x48);
 
         char pathBuf_trace[128];
-        TOOLTRACE("OnEvent CLICK tutUndoDepth=%d tutUndoIdx=%d ret=%p\n",
-                  g_TutUndoDepth, g_TutUndoIndex, __builtin_return_address(0));
-        TOOLTRACE("OnEvent CLICK self=%p btn=%d item=%p path=%s actionType=%d "
-                  "item+0x4C=%d item+0x58=%p elem=%p checked(+0xD8)=%d\n",
-                  self, buttonIndex, (void*)item,
-                  ToolTraceOn() ? ToolbarItemPath(item, pathBuf_trace, sizeof pathBuf_trace) : "",
-                  actionType,
-                  *(int32_t*)(item + 0x4C), *(void**)(item + 0x58),
-                  (void*)localElemRef,
-                  localElemRef ? *(uint8_t*)(localElemRef + 0xD8) : -1);
 
         switch (actionType) {
         case 0: {
@@ -1922,8 +1803,6 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
             void* parentDialog = *(void**)(s + 0x28);
             bool isDerivedParent = fn_IsDerivedFrom(parentDialog, *g_TypeId_ToolbarDialogParent);
             void* typedParent = isDerivedParent ? parentDialog : nullptr;
-            TOOLTRACE("CenterOnPoint self=%p parentSlot(+0x28)=%p tid=%u isDerived=%d\n",
-                      self, parentDialog, *g_TypeId_ToolbarDialogParent, (int)isDerivedParent);
             // No null guard: retail's FUN_1400b9730 derefs param_1+0xe8 unguarded, so
             // this cast is expected to always succeed. It used to fail because our
             // ToolbarDialog vtable's GetTypeId slot forwarded to the DialogInstance

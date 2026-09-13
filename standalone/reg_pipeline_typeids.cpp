@@ -34,7 +34,6 @@
 // FillPipelineTypeIds() into game_main.cpp (after the Engine::Startup CRC probe).
 #include "resolve.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
-#include "Component/component_factory_base.h" // ComponentFactory::LiveEnabled
 #include <cstdint>
 
 // Backing storage for the pipeline type-id .rdata globals (filled after
@@ -86,12 +85,9 @@ extern "C" void FillPipelineTypeIds() {
 }
 
 void RegisterPipelineTypeIds() {
-    // GATED ON LIVE OPT-IN so a default (env-off) run is byte-for-byte unchanged:
-    // seeding ModelComponent's type-id un-dormants the shared FindComponent(ModelComponent)
-    // finder (0x140003f60) for EVERY caller, not just the decal. LiveEnabled returns true
-    // when BANISHED_LIVE_DECAL (the primary consumer) OR the global BANISHED_LIVE_COMPONENTS
-    // is set; with all envs off ResolveAddr stays null exactly as before.
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_DECAL")) return;
+    // Seeding ModelComponent's type-id un-dormants the shared
+    // FindComponent(ModelComponent) finder (0x140003f60) for EVERY caller, not just
+    // the decal. Unconditional since 2026-09-13 (the decal gate graduated).
     RegisterExeAddr(0x1401c7468, reinterpret_cast<uintptr_t>(&g_tid_CreatePlacedDescription));
     RegisterExeAddr(0x1401c7a50, reinterpret_cast<uintptr_t>(&g_tid_ModelComponent));
     RegisterExeAddr(0x1401c7a88, reinterpret_cast<uintptr_t>(&g_tid_ModelDescription));

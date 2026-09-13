@@ -19,6 +19,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include <cstdint>
 #include <cstdio>
@@ -57,7 +58,6 @@ extern void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 uint64_t g_uidescEntries = 0, g_uidescFound = 0, g_uidescTab = 0;
 
 extern "C" void UIDescTabCensusDump() {
-    if (!std::getenv("BANISHED_UIDESC_CENSUS")) return;
     fprintf(stderr,
         "[UIDescCensus] controller entries seen=%llu  named-element found=%llu  "
         "TAB PATH (calls AddTab)=%llu%s\n",
@@ -84,7 +84,7 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
     if (count <= 0) return;
 
     uintptr_t entries = *(uintptr_t*)(desc + 0x30);
-    if (std::getenv("BANISHED_MAP_TRACE")) {
+    if (Opt().mapTrace) {
         printf("[UIDescAdd] uiDesc=%p count=%d entries=%p dataSource=%p\n",
                uiDesc, count, (void*)entries, dataSource);
         for (int j = 0; j < count && j < 4; j++) {
@@ -324,7 +324,7 @@ void ToolUI_Slot4(ToolUI* self) {
         void* desc = *(void**)(s + 0x30);
         int descCount = *(int*)((uintptr_t)desc + 0x30);
         uintptr_t descArray = *(uintptr_t*)((uintptr_t)desc + 0x28);
-        if (std::getenv("BANISHED_MAP_TRACE"))
+        if (Opt().mapTrace)
             printf("[ToolUI_Slot4] desc(self+0x30)=%p descCount=%d uiDescTid=%u\n",
                    desc, descCount, g_TypeId_UIDescription ? *g_TypeId_UIDescription : 0);
 
@@ -333,7 +333,7 @@ void ToolUI_Slot4(ToolUI* self) {
             typedef int (*fn_GetTypeId_t)(void*);
             void** vtbl = *(void***)entry;
             int typeId = ((fn_GetTypeId_t)vtbl[2])(entry);
-            if (std::getenv("BANISHED_MAP_TRACE"))
+            if (Opt().mapTrace)
                 printf("[ToolUI_Slot4]   descEntry[%d]=%p tid=%d\n", i, entry, typeId);
 
             if (typeId == (int)*g_TypeId_UIDescription) {

@@ -16,6 +16,7 @@
 //   GetTarget (vtable slot 10, 0x1400ec510)
 //
 
+#include "options.h"
 #include "Work/gatherrawmaterials_funcs.h"
 #include "BuildActions.h"
 #include "engine_funcs.h"
@@ -167,15 +168,6 @@ static bool s_resolved = false;
 // gather work bails before enqueuing a real town->site haul. Diagnostic only.
 #include <cstdlib>
 #include <cstring>
-static int s_grm_trace = -1;
-static bool GRM_Trace() {
-    if (s_grm_trace < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_TRACE");
-        s_grm_trace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s_grm_trace == 1;
-}
-#define GRM_TRACEF(...) do { if (GRM_Trace()) { std::fprintf(stderr, "[GRMExec] " __VA_ARGS__); std::fflush(stderr); } } while (0)
 
 // ============================================================
 // Resolution -- called once during hook installation
@@ -484,7 +476,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
     // GatherRawMaterials_Ctor_Impl (state-1 spawner), which does not — leaving every
     // s_fn_* NULL and the first `call *s_fn_FindComp_Position` faulting at RIP=0.
     GatherRawMaterials_ResolveFuncs();
-    GRM_TRACEF("ENTER self=%p entityIBP=%p\n", (void*)self, entityIBP);
 
     // --- Find PositionComponent on work entity (self+0x10) ---
     fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
@@ -509,7 +500,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
     void* wpExtIBP = s_fn_FindComp_WpExt(*(uintptr_t*)(descComp + 0x10), (void*)&param3);
     fn_InternalBasePtr_CheckPtr(wpExtIBP);
     if (*(char*)(*(uintptr_t*)wpExtIBP + 0x50) == '\0') {
-        GRM_TRACEF("BAIL: workplace disabled (wpExt+0x50==0)\n");
         return 1;  // Workplace disabled
     }
 
@@ -538,40 +528,13 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
 
     // --- Iterate material slots ---
     int numSlots = (int)selfQ[10]; // self->field_50 count
-    GRM_TRACEF("past wp-check; numSlots=%d citizenCell=%u\n", numSlots, citizenCell);
     if (numSlots < 1) {
-        GRM_TRACEF("BAIL: numSlots<1\n");
         return 1;
     }
 
     uintptr_t gatherDescAddr = (uintptr_t)gatherDesc;
     uintptr_t slotOffset = 0;      // +0x00, +0x10, +0x20, ...  (stride 0x10 per slot)
     uintptr_t intOffset = 0;       // +0x00, +0x04, +0x08, ...  (stride 4 per slot)
-
-    // [DELIVERED-SYNC BRIDGE] (BANISHED_BUILD_SYNC_DELIVERED, default-off / faithful).
-    // In retail, field_48[slot] (delivered-per-material) is credited by the work's
-    // OnComplete (vtable +0x30), invoked when a citizen's haul CompleteTask action runs
-    // through the task manager (gameState+0x118). In the standalone exe the citizen's
-    // action executor never advances from DropOff to the CompleteTask node (deep
-    // CitizenAI state-machine gap, phase3_keystone_d), so OnComplete never fires and
-    // field_48 stays 0 forever — GRM re-hauls slot 0 (already over-delivered) and never
-    // advances to slot 1, so the site never receives the 2nd material and state 1 never
-    // reaches 8. The site StorageComponent IS the ground truth (physical DropOff deposits
-    // into it, and BuildComponent_HaveAllMaterials reads it for the 1->8 gate). This
-    // bridge re-syncs field_48[slot] from the live site storage each Execute — exactly
-    // what GatherRawMaterials_Ctor_Impl seeds it to at construction, and what OnComplete
-    // would keep it at — so GRM's per-slot "already fulfilled" check reflects reality and
-    // advances through materials as they are physically delivered.
-    static int s_syncDelivered = -1;
-    if (s_syncDelivered < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_SYNC_DELIVERED");
-        s_syncDelivered = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    uintptr_t siteStorageIBP = 0;
-    if (s_syncDelivered) {
-        fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
-        s_fn_FindComp_Storage(selfQ[2], &siteStorageIBP);
-    }
 
     for (int slotIdx = 0; slotIdx < numSlots; slotIdx++) {
         // Get material description data for this slot
@@ -581,57 +544,12 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
         fn_InternalBasePtr_CheckPtr(&descCompIBP);
         int targetAmount = *(int*)(slotOffset + matDescBase + 8) * *(int*)(descCompIBP + 0x4c);
 
-        // [DELIVERED-SYNC BRIDGE] re-seed field_48[slot] from the live site storage
-        // delivered amount (total - reserved) for this slot's material type, mirroring
-        // GatherRawMaterials_Ctor_Impl's seeding. Keeps GRM's slot accounting in step with
-        // what the citizens have physically deposited, standing in for the OnComplete credit
-        // the inert standalone task manager never delivers.
-        if (s_syncDelivered && siteStorageIBP) {
-            uint64_t matTypeSync = *(uint64_t*)(slotOffset + *(uintptr_t*)(gatherDescAddr + 0x20));
-            fn_InternalBasePtr_CheckPtr(&siteStorageIBP);
-            uintptr_t st = siteStorageIBP;
-            int deliveredSync = 0;
-            int slotCountSync = *(int*)(st + 0x30);
-            uintptr_t* slotsSync = *(uintptr_t**)(st + 0x28);
-            if (slotsSync) {
-                for (int s2 = 0; s2 < slotCountSync; s2++) {
-                    if (slotsSync[s2 * 2] == matTypeSync) {
-                        int total = (int)slotsSync[s2 * 2 + 1];
-                        int reserved = *(int*)((uintptr_t)slotsSync + (uintptr_t)s2 * 0x10 + 0xc);
-                        deliveredSync = total - reserved;
-                        break;
-                    }
-                }
-            }
-            // [DELIVERED-SYNC + IN-TRANSIT RECONCILE] The fulfilled check below is
-            // `field_58[slot] (in-transit) + field_48[slot] (delivered) >= target`. In retail
-            // OnComplete moves a completed haul FROM in-transit TO delivered (field_58 -= amt;
-            // field_48 += amt), keeping the sum == total committed. The standalone executor
-            // never reaches OnComplete, so field_58 keeps every enqueued amount forever while
-            // this bridge also credits the SAME physical units into field_48 — double-counting
-            // them (e.g. enqueue 9 -> build=9; deliver 9 -> assign=9; 9+9=18 >= 16 target, so
-            // GRM stops at 9/16 and never hauls the remaining 7). Reconcile here exactly as
-            // OnComplete would: as delivered rises, subtract the delta from in-transit so the
-            // gather keeps enqueuing until the site PHYSICALLY holds the full requirement.
-            {
-                int oldDelivered = *(int*)(intOffset + selfQ[9]);       // field_48[slot] (prev)
-                int delta = deliveredSync - oldDelivered;
-                if (delta > 0) {
-                    int* inTransit = (int*)(intOffset + selfQ[0xb]);    // field_58[slot]
-                    *inTransit -= delta;
-                    if (*inTransit < 0) *inTransit = 0;
-                }
-            }
-            *(int*)(intOffset + selfQ[9]) = deliveredSync;  // field_48[slot] = site delivered
-        }
 
         // Check: buildCount[slotIdx] + field_48[slotIdx] < targetAmount
         int buildCount = *(int*)(intOffset + selfQ[0xb]);      // self->field_58[slotIdx]
         int assignCount = *(int*)(intOffset + selfQ[9]);        // self->field_48[slotIdx]
-        GRM_TRACEF("slot[%d] target=%d build=%d assign=%d\n", slotIdx, targetAmount, buildCount, assignCount);
         if (buildCount + assignCount >= targetAmount) {
             // This slot is already fulfilled
-            GRM_TRACEF("slot[%d] SKIP already-fulfilled\n", slotIdx);
             goto next_slot;
         }
 
@@ -649,10 +567,8 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 *(uint64_t*)(slotOffset + matDescBase), 1, '\0', searchPos,
                 (void*)&excludeIBP);
 
-            GRM_TRACEF("slot[%d] FindStorageForResource -> foundEntity=%p\n", slotIdx, (void*)foundEntity);
             if (foundEntity == 0) {
                 // No storage found for this slot
-                GRM_TRACEF("slot[%d] SKIP no-source-storage\n", slotIdx);
                 goto next_slot;
             }
 
@@ -672,20 +588,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 fn_InternalBasePtr_CheckPtr(&citizenStorageIBP);
                 int currentStored = s_fn_StorageQueryCount((void*)citizenStorageIBP);
 
-                // [CARRY-DIAG] when capacity is 0, dump the carry-storage's StorageDescription
-                // state to tell "no description" from "description present, Draw never ran".
-                if (GRM_Trace() && capacity == 0) {
-                    uintptr_t stComp = citizenStorageIBP;
-                    uintptr_t stDesc = stComp ? *(uintptr_t*)(stComp + 0x18) : 0;
-                    std::fprintf(stderr,
-                        "[GRMExec] CARRY-DIAG storageComp=%p carryEntity=%p desc=%p avail(+0x21)=%d maxPerSlot(+0x24)=%d areaBased(+0x20)=%d slotCount(+0x30)=%d\n",
-                        (void*)stComp, (void*)*(uintptr_t*)(citizenEnt + 0x10), (void*)stDesc,
-                        stDesc ? *(uint8_t*)(stDesc + 0x21) : -1,
-                        stDesc ? *(int*)(stDesc + 0x24) : -1,
-                        stDesc ? *(uint8_t*)(stDesc + 0x20) : -1,
-                        stComp ? *(int*)(stComp + 0x30) : -1);
-                    std::fflush(stderr);
-                }
 
                 int carryWeight = *(int*)((uintptr_t)rawMatComp + 0x48);
                 if (capacity - currentStored < carryWeight * remaining) {
@@ -695,11 +597,8 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                     remaining = remCapacity / carryWeight;
                 }
 
-                GRM_TRACEF("slot[%d] remaining(pre-clamp)=%d carryWeight=%d cap=%d stored=%d\n",
-                           slotIdx, remaining, carryWeight, capacity, currentStored);
                 if (remaining == 0) {
                     // Can't carry anything -- replan
-                    GRM_TRACEF("slot[%d] BAIL: remaining==0 -> LongTermPlan replan\n", slotIdx);
                     fn_InternalBasePtr_CheckPtr(entityIBP);
                     s_fn_LongTermPlan(*(void**)entityIBP);
                     return 2;
@@ -713,7 +612,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
 
                 uintptr_t storageComp = *(uintptr_t*)retIBP;
                 int storageSlotCount = *(int*)(storageComp + 0x30);
-                int foundSlotIdx = -1;
                 int availableAmount = 0;
 
                 // Search storage slots for matching material type
@@ -777,10 +675,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                     // is the multi-part fallback (posComp+0x28/+0x30). Log both counts so a
                     // "site is unreachable" bail is distinguishable from "site has no
                     // access points at all".
-                    GRM_TRACEF("slot[%d] BAIL: no target pos (found==0, posDesc=%p "
-                               "accessPts=%d children=%d)\n", slotIdx, posDesc,
-                               posDesc ? *(int*)((uintptr_t)posDesc + 0x40) : -1,
-                               *(int*)((uintptr_t)posCompIBP + 0x30));
                     return 1;
                 }
 
@@ -799,10 +693,7 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 uint64_t validated = s_fn_ValidateWorkAssign(selfAddr, &citizenRef,
                     targetCell, citizenCell, (void*)param3);
 
-                GRM_TRACEF("slot[%d] validateWorkAssign=%d availAmt=%d remaining(clamped)=%d targetCell=%d\n",
-                           slotIdx, (int)(char)validated, availableAmount, remaining, targetCell);
                 if ((char)validated == '\0') {
-                    GRM_TRACEF("slot[%d] BAIL: validateWorkAssign failed\n", slotIdx);
                     return 0;
                 }
 
@@ -853,23 +744,7 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 int* buildCountPtr = (int*)(selfQ[0xb] + (int64_t)slotIdx * 4);
                 *buildCountPtr += remaining;
 
-                GRM_TRACEF("slot[%d] ENQUEUED HAUL remaining=%d buildCount->%d (return 2)\n",
-                           slotIdx, remaining, *buildCountPtr);
 
-                // [CHAIN-DIAG] Did PathfindingFindPath actually push the pickup->dropoff->
-                // CompleteTask chain onto this citizen's action list? CanStartWork walks
-                // citizenAIComp(+0x278)+0x48 (count +0x60) for a CompleteTask whose taskId
-                // (+0x30) == work+0x20. Dump the list size + the work taskId so we can tell
-                // "chain never pushed" (count 0) from "pushed but state machine won't run it".
-                if (GRM_Trace()) {
-                    uintptr_t cz = *(uintptr_t*)entityIBP;
-                    uintptr_t aic = cz ? *(uintptr_t*)(cz + 0x278) : 0;
-                    int actCount = aic ? *(int*)(aic + 0x60) : -999;
-                    void* actList = aic ? *(void**)(aic + 0x48) : nullptr;
-                    std::fprintf(stderr, "[GRMExec] CHAIN-DIAG citizen=%p citizenAIComp=%p actList=%p actCount(+0x60)=%d workTaskId(self+0x20)=%d citEnt+0x30=%d\n",
-                                 (void*)cz, (void*)aic, actList, actCount, (int)selfQ[4], *(int32_t*)(citizenFinal + 0x30));
-                    std::fflush(stderr);
-                }
                 return 2;
             }
         }
@@ -879,7 +754,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
         slotOffset += 0x10;
     }
 
-    GRM_TRACEF("EXIT: no work enqueued (all slots skipped) return 1\n");
     return 1;  // No work found
 }
 
@@ -910,8 +784,6 @@ int GatherRawMaterials_OnComplete_Impl(GatherRawMaterials* self, void* param2,
     int* assignCountPtr = (int*)(selfQ[9] + (uintptr_t)slotIdx * 4);
     *assignCountPtr += amount;
 
-    GRM_TRACEF("OnComplete self=%p slot=%u amount=%d -> field_58[slot]=%d field_48[slot]=%d\n",
-               (void*)self, slotIdx, amount, *buildCountPtr, *assignCountPtr);
 
     return (uintptr_t)selfQ[9] & 0xFFFFFF00;  // Original returns uVar3 & 0xffffffffffffff00
 }
@@ -938,8 +810,6 @@ int GatherRawMaterials_OnCancel_Impl(GatherRawMaterials* self, void* param2,
     // Decrement field_58[slotIdx] only (cancel = don't credit the work)
     int* buildCountPtr = (int*)(selfQ[0xb] + (uintptr_t)slotIdx * 4);
     *buildCountPtr -= amount;
-    GRM_TRACEF("OnCancel self=%p slot=%u amount=%d -> field_58[slot]=%d (NO field_48 credit)\n",
-               (void*)self, slotIdx, amount, *buildCountPtr);
     return 0;
 }
 
@@ -1118,8 +988,6 @@ int GatherRawMaterials_Validate_Impl(GatherRawMaterials* self, void* param2) {
             for (int i = 0; i < numSlots; i++) {
                 *(int*)(selfQ[0xb] + (uintptr_t)i * 4) = 0;
             }
-            GRM_TRACEF("Validate self=%p REMOVED %u invalid task(s) -> field_58[0..%d] RESET to 0\n",
-                       (void*)self, invalidCount, numSlots - 1);
         }
     }
 

@@ -31,13 +31,6 @@
 
 namespace Game {
 
-// Env-gated one-shot-per-element trace to verify the shortcut->key chain
-// resolves valid data in standalone. Set BANISHED_HOTKEY_TRACE=1.
-static bool HotKeyTraceOn() {
-    static int s = -1;
-    if (s < 0) { const char* e = getenv("BANISHED_HOTKEY_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s == 1;
-}
 
 // Controller layout (shared DialogController base, see buildrequirementui.cpp):
 //   +0x18 = dialog instance (InternalBasePtr<DialogInstance>)
@@ -147,18 +140,6 @@ void HotKeyToolTipUI_Slot4(void* self) {
     void* keyMap = GetActualKeyMap();
     if (!keyMap) return;
 
-    if (HotKeyTraceOn()) {
-        int input  = fn_KeyMap_GetInputForId(keyMap, shortcutId, 0);
-        int device = fn_KeyMap_GetDeviceForId(keyMap, shortcutId, 0);
-        void* cont = GetKeyMapContainer();
-        void* keyNames = cont ? *(void**)((uintptr_t)cont + 0xD0) : nullptr;
-        static int s_count = 0;
-        if (s_count < 24) {
-            printf("[HotKey] self=%p shortcutId=%d device=%d input=%d keyNames=%p\n",
-                   self, shortcutId, device, input, keyNames);
-            s_count++;
-        }
-    }
 
     FillHotKeyText(self, "textToolTip", 1, keyMap, shortcutId);
     FillHotKeyText(self, "textHotKey",  0, keyMap, shortcutId);

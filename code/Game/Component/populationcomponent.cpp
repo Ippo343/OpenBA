@@ -87,23 +87,6 @@ void PopulationComponent_Update(PopulationComponent* self, int64_t* pDeltaTime) 
     int64_t* pAccum = reinterpret_cast<int64_t*>(&self->field60);
     *pAccum += *pDeltaTime;
 
-    // Phase-1 bring-up verification trace (env BANISHED_POP_TRACE, default off →
-    // byte-unchanged): follows ONE PopulationComponent and prints its accumulating
-    // +0x60 timer to confirm the live recipe routes a second component through +0x48.
-    {
-        static int s_st = -1, s_n = 0;
-        static void* s_lock = nullptr;
-        if (s_st < 0) {
-            const char* e = std::getenv("BANISHED_POP_TRACE");
-            s_st = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_st == 1 && s_lock == nullptr) s_lock = self;
-        if (s_st == 1 && self == s_lock && s_n < 12) {
-            fprintf(stderr, "[PopTrace] self=%p accum(+60)=%lld owner(+28)=%p\n",
-                    (void*)self, (long long)*pAccum, (void*)self->field28);
-            fflush(stderr); s_n++;
-        }
-    }
 
     // Convert smoothing interval (300.0f seconds) to engine ticks
     int64_t smoothInterval;
@@ -541,11 +524,6 @@ void PopulationComponent_OnAdd(void* selfV) {
     s_fn_ArrResizeFill(reinterpret_cast<int64_t*>(townMgr + 0xc0),
                        *reinterpret_cast<int*>(townMgr + 0xc8) + 1, &selfRef);
 
-    if (std::getenv("BANISHED_DEBUG_PANEL")) {
-        fprintf(stderr, "[PopReg] OnAdd self=%p -> town population count=%d\n",
-                selfV, *reinterpret_cast<int*>(townMgr + 0xc8));
-        fflush(stderr);
-    }
 }
 
 // ============================================================
@@ -612,7 +590,7 @@ void PopulationComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-// Live bring-up (env BANISHED_LIVE_POPULATION or global BANISHED_LIVE_COMPONENTS).
+// Live bring-up (env BANISHED_LIVE_POPULATION or global the global live-components switch).
 // Slot 4 Startup does the body init retail does at spawn — description at +0x28,
 // habitability grid at +0x38/+0x40, herd grid dim at +0x48 — and, crucially,
 // creates the wild-animal herd entities. Slot 9 Update then has the +0x28 owner
@@ -648,18 +626,16 @@ static void PopulationComponent_SerializeVSlot(void* self, void* stream) {
     PopulationComponent_Serialize_Real(self, stream);
 }
 static void PopulationComponent_FinishLiveVtable() {
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_POPULATION")) {
-        PopulationComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&PopulationComponent_StartupVSlot);
-        PopulationComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&PopulationComponent_UpdateVSlot);
-        // Town-registry membership (retail slots 6/7). Installed as a pair: slot 7
-        // is the only remover of what slot 6 appends.
-        PopulationComponent_LiveVtable[6] =
-            reinterpret_cast<void*>(&PopulationComponent_OnAddVSlot);
-        PopulationComponent_LiveVtable[7] =
-            reinterpret_cast<void*>(&PopulationComponent_OnRemoveVSlot);
-    }
+    PopulationComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&PopulationComponent_StartupVSlot);
+    PopulationComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&PopulationComponent_UpdateVSlot);
+    // Town-registry membership (retail slots 6/7). Installed as a pair: slot 7
+    // is the only remover of what slot 6 appends.
+    PopulationComponent_LiveVtable[6] =
+        reinterpret_cast<void*>(&PopulationComponent_OnAddVSlot);
+    PopulationComponent_LiveVtable[7] =
+        reinterpret_cast<void*>(&PopulationComponent_OnRemoveVSlot);
     PopulationComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&PopulationComponent_SerializeVSlot);
 }

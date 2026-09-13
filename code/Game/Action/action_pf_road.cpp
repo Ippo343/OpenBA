@@ -1093,26 +1093,9 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
 
                 // ---- flush each batch's buffer B into its mesh record (fa80) when counter>0 ----
                 if (0 < batchCount) {
-                    static int s_trace = -1;
-                    if (s_trace < 0) {
-                        const char* e = std::getenv("BANISHED_ROAD_TRACE");
-                        s_trace = (e && *e && *e != '0') ? 1 : 0;
-                    }
                     uintptr_t recBase = static_cast<uintptr_t>(local_108[0]);
                     for (int b = 0; b < batchCount; b++) {
                         if (0 < *reinterpret_cast<int*>(recBase + 0x10)) {
-                            if (s_trace) {
-                                // Sanity check on the culling AABB: minX<=maxX and minY<=maxY,
-                                // rect anchored at block+vtxOff spanning cellSize. An inverted
-                                // or zero max here is the disappearing-road culling bug.
-                                int mnx = *reinterpret_cast<int*>(recBase + 0x2c);
-                                int mny = *reinterpret_cast<int*>(recBase + 0x30);
-                                int mxx = *reinterpret_cast<int*>(recBase + 0x34);
-                                int mxy = *reinterpret_cast<int*>(recBase + 0x38);
-                                fprintf(stderr, "[Road] MeshFlush batch=%d verts=%d aabb=(%d,%d)-(%d,%d)%s\n",
-                                        b, *reinterpret_cast<int*>(recBase + 0x10), mnx, mny, mxx, mxy,
-                                        (mnx <= mxx && mny <= mxy) ? "" : "  <-- INVERTED AABB");
-                            }
                             if (s_fn_GrowElemDup) s_fn_GrowElemDup(meshRecArr, static_cast<int>(meshRecArr[1]) + 1, reinterpret_cast<void*>(recBase));
                         }
                         recBase += 0x60;

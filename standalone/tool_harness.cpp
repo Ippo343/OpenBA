@@ -18,6 +18,7 @@
 
 #include "tool_harness.h"
 #include "resolve.h"
+#include "options.h"
 #include "engine_funcs.h"   // fn_String_Ctor_CStr/Dtor for the operator_fc60 probe
 #include "Object/factory_registration.h"  // ::Object::GetTypeIdByName (pinpanel controller lookup)
 #include <cstdio>
@@ -54,7 +55,6 @@ extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param);
 // Map-render bring-up: create + upload the minimap GPU ImageBuffers
 // (gameWorld+0x148 +0x08 terrain / +0x10 overlay) from the raw pixel arrays.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
-extern "C" void TradeUI_PriceProbeReport(void);   // code/Game/Dialog/tradeui_price.cpp
 // Drive a named controller's Slot4 (+0x20 SetupImage) on the just-opened dialog.
 extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName, int slotIndex);
 // Open the in-game "Map" menu dialog (buttonMap id 11 → MapParamsDialog).
@@ -116,7 +116,7 @@ void Init() {
     if (s_initialized) return;
     s_initialized = true;
 
-    const char* env = std::getenv("BANISHED_TOOL_HARNESS");
+    const char* env = Opt().toolHarness;
     if (!env || env[0] == '\0' ||
         std::strcmp(env, "0") == 0 || std::strcmp(env, "false") == 0) {
         s_enabled = false;
@@ -216,7 +216,7 @@ void FirePlacementTool() {
     // missing TOOL (PlacementTool is fully ported and its CreatePlacedDescription
     // node is in the tool-mode tree), but a missing way to point it at them.
     const char* kTemplate = "Template\\WoodHouse.rsc";
-    if (const char* e = std::getenv("BANISHED_PLACEMENT_TEMPLATE")) {
+    if (const char* e = Opt().placementTemplate) {
         if (e[0]) kTemplate = e;
     }
     fprintf(stderr, "[ToolHarness] resolving building template \"%s\"...\n", kTemplate);
@@ -258,12 +258,12 @@ void FirePlacementTool() {
     // tool ACCEPTS, and say which cell won. A run that exhausts the ring is a real
     // failure; a run that succeeds at radius 9 is not.
     int centerRow = 124, centerCol = 124;
-    if (const char* pc = std::getenv("BANISHED_PLACEMENT_CELL")) {
+    if (const char* pc = Opt().placementCell) {
         int r = 0, c = 0;
         if (std::sscanf(pc, "%d,%d", &r, &c) == 2) { centerRow = r; centerCol = c; }
     }
     int maxR = 24;
-    if (const char* mr = std::getenv("BANISHED_PLACEMENT_RADIUS")) {
+    if (const char* mr = Opt().placementRadius) {
         int v = std::atoi(mr); if (v > 0) maxR = v;
     }
     int placed = 0, usedRow = -1, usedCol = -1, tried = 0;
@@ -309,7 +309,7 @@ void FireActivatePlacement(void* entityUI) {
     // the one placeable carrying a RadiusDescription, which arms PlacementTool's
     // HighlightAdd path (see Player_HighlightAdd_55430).
     const char* kTemplate = "Template\\WoodHouse.rsc";
-    if (const char* e = std::getenv("BANISHED_PLACEMENT_TEMPLATE")) {
+    if (const char* e = Opt().placementTemplate) {
         if (e[0]) kTemplate = e;
     }
     fprintf(stderr, "[ToolHarness] resolving building template \"%s\"...\n", kTemplate);
@@ -356,7 +356,7 @@ void FireRoadTool(void* entityUI) {
     // work item with a non-null material (+0x50), i.e. the resource-fetch branch repro.
     const char* kTemplates[] = { "Template\\DirtRoad.rsc", "Template\\StoneRoad.rsc" };
     {
-        const char* pref = std::getenv("BANISHED_ROAD_TEMPLATE");
+        const char* pref = Opt().roadTemplate;
         if (pref && (pref[0] == 's' || pref[0] == 'S')) {
             kTemplates[0] = "Template\\StoneRoad.rsc";
             kTemplates[1] = "Template\\DirtRoad.rsc";
@@ -462,9 +462,9 @@ void FireRoadTool(void* entityUI) {
     }
 
     int wantRuns = 1;
-    if (const char* rr = std::getenv("BANISHED_ROAD_RUNS")) { int v = std::atoi(rr); if (v > 0) wantRuns = v; }
+    if (const char* rr = Opt().roadRuns) { int v = std::atoi(rr); if (v > 0) wantRuns = v; }
     int runLen = 5;
-    if (const char* rl = std::getenv("BANISHED_ROAD_LEN")) { int v = std::atoi(rl); if (v > 0) runLen = v; }
+    if (const char* rl = Opt().roadLen) { int v = std::atoi(rl); if (v > 0) runLen = v; }
     int laid = 0, tiles = 0;
     for (int run = 0; run < wantRuns; ++run) {
         const int kRun = runLen;
@@ -549,7 +549,7 @@ void FirePastureTool(void* entityUI) {
     // spawned-complete fields are seated by StartTown_ActivateWorkplace, so only a
     // TOOL-placed field reproduces the missing-profession case.
     const char* kTemplate = "Template\\Pasture.rsc";
-    if (const char* e = std::getenv("BANISHED_PLACEMENT_TEMPLATE")) {
+    if (const char* e = Opt().placementTemplate) {
         if (e[0]) kTemplate = e;
     }
     fprintf(stderr, "[ToolHarness][pasture] resolving template \"%s\"...\n", kTemplate);
@@ -593,7 +593,7 @@ void FirePastureTool(void* entityUI) {
     // builders must footprint-clear the site before it can build. CalcCost still
     // passes: naturals occupy cell+8, its occupancy check reads only cell+0x00.
     const bool wantNaturals = [] {
-        const char* e = std::getenv("BANISHED_PASTURE_OVER_NATURALS");
+        const char* e = Opt().pastureOverNaturals;
         return e && *e && *e != '0';
     }();
     auto cellHasNatural = [&](int row, int col) -> bool {
@@ -612,9 +612,9 @@ void FirePastureTool(void* entityUI) {
     // this port reported NO GRAVE. One 8x8 fenced cemetery already yields graves;
     // Tombstone wants 400 of them, so the area has to be repeatable and bigger.
     int fencedRuns = 1;
-    if (const char* fr = std::getenv("BANISHED_FENCED_RUNS")) { int v = std::atoi(fr); if (v > 0) fencedRuns = v; }
+    if (const char* fr = Opt().fencedRuns) { int v = std::atoi(fr); if (v > 0) fencedRuns = v; }
     int fencedSide = 8;
-    if (const char* fs = std::getenv("BANISHED_FENCED_SIDE")) { int v = std::atoi(fs); if (v > 0) fencedSide = v; }
+    if (const char* fs = Opt().fencedSide) { int v = std::atoi(fs); if (v > 0) fencedSide = v; }
     int fencedPlaced = 0;
     // Site the areas around the TOWN, not the map centre. Two things depend on it:
     // Cemetery_FindNearestWithSlot needs ValidateCell(0xe1f) region reachability from
@@ -796,7 +796,7 @@ void FirePreviewPlacement(void* entityUI) {
 // template as the param — proving open + subsequent-frame render are crash-free
 // without a live cursor/click. Template overridable via BANISHED_UTILITY_TEMPLATE.
 void FireUtilityDialog() {
-    const char* tmplName = std::getenv("BANISHED_UTILITY_TEMPLATE");
+    const char* tmplName = Opt().utilityTemplate;
     if (!tmplName || tmplName[0] == '\0') tmplName = "Template\\UtilityMap.rsc";
     fprintf(stderr, "[ToolHarness] resolving utility template \"%s\"...\n", tmplName);
     void* desc = StartTown_ResolveTemplateByPath(tmplName);
@@ -819,7 +819,7 @@ void FireUtilityDialog() {
         uintptr_t gw = reinterpret_cast<uintptr_t>(gameWorld);
         void* mapObj = *reinterpret_cast<void**>(gw + 0x148);
         bool isMap = std::strstr(tmplName, "Map") != nullptr;
-        const char* tp = std::getenv("BANISHED_MAP_TESTPATTERN");
+        const char* tp = Opt().mapTestPattern;
         bool testPattern = isMap && !(tp && (tp[0] == '0'));  // default ON for map
         if (mapObj && isMap) {
             uintptr_t m = reinterpret_cast<uintptr_t>(mapObj);
@@ -1242,7 +1242,7 @@ void FirePinPanel(void* entityUI) {
 // this route exists for had never executed once.
 static void DlgSettings_InstallBuffer(void* entity, int idx) {
     if (!entity || !fn_MemAlloc || !g_pMemAllocSingleton) return;
-    const char* e = std::getenv("BANISHED_DLGSETTINGS_ROUTE");
+    const char* e = Opt().dlgSettingsRoute;
     if (!e || !*e || std::strcmp(e, "0") == 0) return;
     int bytes = std::atoi(e);
     if (bytes <= 1) bytes = 256;
@@ -1317,7 +1317,7 @@ void FireHousePanel(void* entityUI) {
     // picks a specific one instead.
     int houses = StartTown_GetFoundingHouseCount();
     int want = -1;
-    if (const char* e = std::getenv("BANISHED_HOUSEPANEL_INDEX")) want = std::atoi(e);
+    if (const char* e = Opt().housePanelIndex) want = std::atoi(e);
     void* house = nullptr; int opened = 0; int pickedIdx = -1;
     for (int i = 0; i < houses && !opened; ++i) {
         if (want >= 0 && i != want) continue;
@@ -1340,7 +1340,7 @@ void FireHousePanel(void* entityUI) {
     // Wave 10C lane ROUTES: the close-and-reopen leg. No-op unless
     // BANISHED_DLGSETTINGS_ROUTE is set.
     {
-        const char* re = std::getenv("BANISHED_DLGSETTINGS_ROUTE");
+        const char* re = Opt().dlgSettingsRoute;
         if (re && *re && std::strcmp(re, "0") != 0) {
             void* other = nullptr;
             for (int i = 0; i < houses; ++i) {
@@ -1416,7 +1416,7 @@ static void FireUIComponentCensus() {
 
     int entities = 0, compsWalked = 0, withUI = 0, withBuffer = 0, shown = 0;
     int maxShow = 40;
-    if (const char* m = std::getenv("BANISHED_UICOMP_CENSUS_SHOW")) {
+    if (const char* m = Opt().uiCompCensusShow) {
         int v = std::atoi(m); if (v >= 0) maxShow = v;
     }
 
@@ -1691,7 +1691,7 @@ void FirePasturePanel(void* entityUI) {
     // a combo change (msg 0x14, element id 500) into PastureUI slot 9, which
     // reads the combo's current item and dispatches Slot11 (SetLivestockType).
     // This is the REAL UI path end-to-end; it retires AUTOTYPE for testing.
-    const char* selEnv = std::getenv("BANISHED_PASTUREPANEL_SELECT");
+    const char* selEnv = Opt().pasturePanelSelect;
     if (selEnv && *selEnv && dialog) {
         int wantItem = std::atoi(selEnv);
         uint32_t tidPUI = ::Object::GetTypeIdByName("PastureUI");
@@ -1858,7 +1858,7 @@ void FireOrchardPanel(void* entityUI) {
     // BANISHED_ORCHARDPANEL_SELECT=<item> — the real combo-change event the
     // DialogInstance routes on a player pick (msg 0x14, element id 500) into
     // OrchardUI slot 9 (SelectResourceUI::Slot9), which dispatches Slot11.
-    const char* selEnv = std::getenv("BANISHED_ORCHARDPANEL_SELECT");
+    const char* selEnv = Opt().orchardPanelSelect;
     if (selEnv && *selEnv) {
         int wantItem = std::atoi(selEnv);
         if (combo && items > 0) {
@@ -1977,7 +1977,6 @@ void FireTradePanel(void* entityUI) {
     // runs unconditionally at the end of the tradepanel harness rather than on a
     // sample threshold, so that "the panel opened and a520 was never called" prints
     // as an explicit NOT-A-PASS instead of as silence.
-    TradeUI_PriceProbeReport();
 }
 
 // Track A: footprint-clear on placement. Runs ClearAreaComponent_FootprintSweep
@@ -2294,19 +2293,19 @@ int          s_up_armFrame   = 0;
 int          s_up_openFrame  = 0;
 
 int UpgradeWaitFrames() {
-    const char* e = std::getenv("BANISHED_UPGRADE_WAIT_FRAMES");
+    const char* e = Opt().upgradeWaitFrames;
     int n = (e && e[0]) ? std::atoi(e) : 36000;
     return n < 60 ? 36000 : n;
 }
 // BANISHED_UPGRADE_FORCE_FRAME — see the note at the UP_WAIT_BUILT force branch.
 // 0/unset = normal behaviour (wait for the build to finish).
 int ForceUpgradeFrame() {
-    const char* e = std::getenv("BANISHED_UPGRADE_FORCE_FRAME");
+    const char* e = Opt().upgradeForceFrame;
     int n = (e && e[0]) ? std::atoi(e) : 0;
     return n > 0 ? n : 0;
 }
 int UpgradeClickDelay() {
-    const char* e = std::getenv("BANISHED_UPGRADE_CLICK_DELAY");
+    const char* e = Opt().upgradeClickDelay;
     int n = (e && e[0]) ? std::atoi(e) : 15;
     return n < 1 ? 15 : n;
 }
@@ -2534,19 +2533,19 @@ int         s_br_dragUntil = 0;
 void BridgeCommit(void* tool, int startCell, int endCell);
 
 int BridgeDragFrames() {
-    const char* e = std::getenv("BANISHED_BRIDGE_DRAG_FRAMES");
+    const char* e = Opt().bridgeDragFrames;
     if (!e || !e[0]) return 0;
     int n = std::atoi(e);
     return (n > 0) ? n : 0;
 }
 
 int BridgePollPeriod() {
-    const char* e = std::getenv("BANISHED_BRIDGE_POLL");
+    const char* e = Opt().bridgePoll;
     int n = (e && e[0]) ? std::atoi(e) : 600;
     return n < 30 ? 600 : n;
 }
 int BridgeWaitFrames() {
-    const char* e = std::getenv("BANISHED_BRIDGE_WAIT_FRAMES");
+    const char* e = Opt().bridgeWaitFrames;
     int n = (e && e[0]) ? std::atoi(e) : 60000;
     return n < 600 ? 60000 : n;
 }
@@ -2620,7 +2619,7 @@ void BridgeDumpEntity(const char* what, void* ent) {
 void FireBridgeTool(void* entityUI) {
     if (!entityUI) { fprintf(stderr, "[ToolHarness][bridge] ERROR: entityUI null\n"); return; }
 
-    const char* tmplPath = std::getenv("BANISHED_BRIDGE_TEMPLATE");
+    const char* tmplPath = Opt().bridgeTemplate;
     if (!tmplPath || !tmplPath[0]) tmplPath = "Template\\WoodBridge.rsc";
     fprintf(stderr, "[ToolHarness][bridge] resolving template \"%s\"...\n", tmplPath);
     void* tmpl = StartTown_ResolveTemplateByPath(tmplPath);
@@ -2721,7 +2720,7 @@ void FireBridgeTool(void* entityUI) {
     // opt-in so the ordinary bridge test keeps choosing the convenient crossing.
     const int kMaxAttempts = 400;
     int  wantLongest = 0;
-    if (const char* e = std::getenv("BANISHED_BRIDGE_LONGEST")) {
+    if (const char* e = Opt().bridgeLongest) {
         const int v = std::atoi(e);
         if (v > 0) wantLongest = v;
     }
@@ -2878,7 +2877,7 @@ void BridgeCommit(void* tool, int startCell, int endCell) {
 extern "C" void HighlightSelect_Impl(void*);
 
 int BridgeSelectDelay() {
-    const char* e = std::getenv("BANISHED_BRIDGE_SELECT");
+    const char* e = Opt().bridgeSelect;
     if (!e || !e[0] || std::strcmp(e, "0") == 0 || std::strcmp(e, "false") == 0) return -1;
     int n = std::atoi(e);
     return (n > 1) ? n : 120;
@@ -3048,7 +3047,7 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         s_rescanned = true;
         if (std::strcmp(s_toolName, "utility") == 0 ||
             std::strcmp(s_toolName, "scan") == 0) {
-            const char* tmpl = std::getenv("BANISHED_UTILITY_TEMPLATE");
+            const char* tmpl = Opt().utilityTemplate;
             bool isProf = tmpl && std::strstr(tmpl, "Profession") != nullptr;
             fprintf(stderr, "[ToolHarness] DELAYED rescan at frame %d (looking for %s content)...\n",
                    frameNum, isProf ? "profession" : "minimap");
@@ -3111,7 +3110,7 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     } else if (std::strcmp(s_toolName, "pasturefull") == 0) {
         FirePastureTool(entityUI);
         int delay = 240;
-        if (const char* d = std::getenv("BANISHED_PASTUREFULL_DELAY")) {
+        if (const char* d = Opt().pastureFullDelay) {
             int v = std::atoi(d); if (v > 0) delay = v;
         }
         s_pf_panelFrame = frameNum + delay;

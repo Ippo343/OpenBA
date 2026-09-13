@@ -26,7 +26,6 @@
 // on. Any one flag suffices — the type ids are shared by all three lanes.
 #include "resolve.h"
 #include "Object/factory_registration.h"      // Object::GetTypeIdByName
-#include "Component/component_factory_base.h" // ComponentFactory::LiveEnabled
 #include <cstdint>
 
 static uint32_t g_tid_HerdDescription      = 0;  // 0x1401c7858
@@ -37,15 +36,7 @@ static uint32_t g_tid_LivestockComponent   = 0;  // 0x1401c7970
 static uint32_t g_tid_LivestockDescription = 0;  // 0x1401c79a8
 static float    g_f_HerdSpawnSpread        = 180.0f;  // 0x140172220
 
-static bool AnimalWaveEnabled() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMALS")
-        || ::ComponentFactory::LiveEnabled("BANISHED_LIVE_HERD")
-        || ::ComponentFactory::LiveEnabled("BANISHED_LIVE_PASTURE")
-        || ::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMAL_UPDATE");
-}
-
 extern "C" void FillComponentTypeIdGlobals_animal() {
-    if (!AnimalWaveEnabled()) return;
     g_tid_HerdDescription      = ::Object::GetTypeIdByName("HerdDescription");
     g_tid_HerdComponent        = ::Object::GetTypeIdByName("HerdComponent");
     g_tid_AnimalComponent      = ::Object::GetTypeIdByName("AnimalComponent");
@@ -55,7 +46,6 @@ extern "C" void FillComponentTypeIdGlobals_animal() {
 }
 
 void RegisterComponentBatch_animal() {
-    if (!AnimalWaveEnabled()) return;
     RegisterExeAddr(0x1401c7858, reinterpret_cast<uintptr_t>(&g_tid_HerdDescription));
     RegisterExeAddr(0x1401c7820, reinterpret_cast<uintptr_t>(&g_tid_HerdComponent));
     RegisterExeAddr(0x1401c6f98, reinterpret_cast<uintptr_t>(&g_tid_AnimalComponent));

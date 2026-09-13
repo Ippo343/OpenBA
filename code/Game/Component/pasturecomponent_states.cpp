@@ -43,7 +43,6 @@
 
 // Spawn side (pasturecomponent_spawn.cpp).
 extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP);
-extern "C" bool Pasture_AutoAssignType(void* pasture);
 
 // ============================================================
 // Resolved helpers
@@ -169,14 +168,6 @@ void Resolve() {
     s_pQuarterTurn    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172204));
 }
 
-int s_trace = -1;
-bool Trace() {
-    if (s_trace < 0) {
-        const char* e = std::getenv("BANISHED_PASTURE_TRACE");
-        s_trace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s_trace == 1;
-}
 
 inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline uint64_t MakeIBP(void* obj) {
@@ -283,9 +274,6 @@ extern "C" void Pasture_BindAnimal(void* animalComp, void* pastureIBP) {
         if (s_Append) s_Append(reinterpret_cast<void*>(t + 0x30),
                                *reinterpret_cast<int*>(t + 0x38) + 1, &againIBP);
         if (s_Reassign) s_Reassign(a);
-        if (Trace())
-            std::fprintf(stderr, "[Pasture] bind animal=%p -> pasture=%p (count=%d cap=%d)\n",
-                         animalComp, target, PastureCount(target), PastureCap(target));
     } else if (gs && s_Append) {
         s_Append(reinterpret_cast<void*>(gs + 0x80),
                  *reinterpret_cast<int*>(gs + 0x88) + 1, &againIBP);
@@ -346,9 +334,6 @@ extern "C" void Pasture_AdoptWanderers(void* pasture) {
         Pasture_BindAnimal(candidates[i], &pastureIBP);
         if (PastureCount(pasture) >= capacity) break;
     }
-    if (Trace())
-        std::fprintf(stderr, "[Pasture] adopt: pasture=%p took %d free-roaming animals "
-                     "(count=%d cap=%d)\n", pasture, nCand, PastureCount(pasture), capacity);
 }
 
 // ============================================================
@@ -380,19 +365,6 @@ extern "C" void Pasture_Reproduce(void* pasture) {
 
         uintptr_t an = static_cast<uintptr_t>(animalIBP);
         uint32_t oldFlags = *reinterpret_cast<uint32_t*>(an + 0x20);
-        // Breed-chain diagnostic: the latch that sets bit 21 requires +0x40!=0
-        // AND flag bit 23 (0x800000, data-driven from the livestock template's
-        // Component flags). Log each animal's state so a soak shows which
-        // precondition fails when births stay at 0.
-        static uint32_t s_breedCheckCalls = 0;
-        if (Trace() && (s_breedCheckCalls++ % 4096) == 0) {
-            std::fprintf(stderr, "[Pasture] breed-check: animal=%p flags=0x%08x "
-                         "sex40=%d age=%.2f\n",
-                         reinterpret_cast<void*>(an), oldFlags,
-                         (int)*reinterpret_cast<uint8_t*>(an + 0x40),
-                         *reinterpret_cast<float*>(an + 0x44));
-            std::fflush(stderr);
-        }
         if ((oldFlags & 0x200000u) == 0) continue;          // not ready to breed
 
         uint32_t newFlags = oldFlags & ~0x200000u;
@@ -458,11 +430,6 @@ extern "C" void Pasture_MsgReceive(void* pasture, int msg) {
     if (((newF ^ oldF) & 0xffffu) != 0 && *reinterpret_cast<int64_t*>(an + 0x10) != 0) {
         CheckPtr(reinterpret_cast<void*>(an + 0x10));
         if (s_FlagNotify) s_FlagNotify(*reinterpret_cast<void**>(an + 0x10));
-    }
-    if (Trace() && (oldF & 0x800000u) == 0) {
-        std::fprintf(stderr, "[Pasture] breed-tag: pasture=%p animal=%p flags 0x%08x -> 0x%08x\n",
-                     pasture, reinterpret_cast<void*>(an), oldF, newF);
-        std::fflush(stderr);
     }
 }
 
@@ -553,14 +520,6 @@ extern "C" char Pasture_State2Enter(void* data, void* /*sm*/) {
     CheckPtr(&wpc);
     if (wpc && s_ActivateWP) s_ActivateWP(static_cast<int64_t>(wpc), 0);
 
-    // Bring-up only, opt-in: retail relies on the pasture dialog to set the type, so
-    // an untyped pasture would adopt nothing. No-op unless BANISHED_PASTURE_AUTOTYPE.
-    // MUST run AFTER the workplace deactivation above: SetLivestockType fires the
-    // slot-14 cmd-2 herder TOGGLE, whose retail invariant is accepting==0 at first
-    // type assignment (the dialog can only run once the pasture is operational).
-    // With the call before the zeroing, the toggle flipped the builder-path leftover
-    // 1 -> 0 ("herder OFF") and the herder never spawned.
-    if (PastureType(data) == nullptr) Pasture_AutoAssignType(data);
     return 0;
 }
 
@@ -606,20 +565,6 @@ extern "C" char Pasture_State3Enter(void* data, void* /*sm*/) {
 // ============================================================
 namespace {
 
-// DROP-OUTCOME METER (BANISHED_PASTURE_TRACE=1). The accumulator is spent BEFORE the
-// three skip tests below, so a pasture can consume production every cycle and still
-// place nothing and upsert nothing — which reads on the panel exactly like 'no
-// production at all'. Name the arm.
-void PastureDropReport(int arm, void* self) {
-    if (!Trace()) return;
-    static const char* kArms[5] = {"DROPPED", "NO_STOCKTABLE", "STOCK_AT_LIMIT",
-                                   "NO_POS_OR_HELPERS", "NO_FREE_CELL"};
-    static long long n[5] = {0, 0, 0, 0, 0};
-    if ((n[arm]++ % 20) != 0) return;
-    std::fprintf(stderr, "[Pasture] produce-drop -> %s pasture=%p (n=%lld)\n",
-                 kArms[arm], self, n[arm]);
-    std::fflush(stderr);
-}
 
 void PastureProduce(void* self) {
     if (!s_FindMapComp || !s_Capacity || !s_FindRawDesc) return;
@@ -667,25 +612,15 @@ void PastureProduce(void* self) {
     // first question is whether the accumulator is moving at all (it is credited by
     // LivestockComponent::Update, one tick per pastured animal per interval), not
     // whether the drop path works. Report both numbers, not just the outcome.
-    if (Trace()) {
-        static long long nProd = 0;
-        if ((nProd++ % 600) == 0) {
-            std::fprintf(stderr, "[Pasture] produce-check: pasture=%p accum(+0x44)=%d "
-                         "perUnit=%d animals=%d\n",
-                         self, PastureAccum(self), perUnit, PastureCount(self));
-            std::fflush(stderr);
-        }
-    }
 
     int rounds = 0;
     while (PastureAccum(self) > perUnit && ++rounds <= 16) {
         PastureAccum(self) -= perUnit;
-        if (!stockTable) { PastureDropReport(1, self); continue; }
+        if (!stockTable) { continue; }
         const int limit = *reinterpret_cast<int*>(stockTable + (uintptr_t)resIdx * 0x20 + 8);
         const int stock = *reinterpret_cast<int*>(stockTable + (uintptr_t)resIdx * 0x20);
-        if (stock >= limit) { PastureDropReport(2, self); continue; }
+        if (stock >= limit) { continue; }
         if (!posIBP || !s_FootprintN || !s_FootprintAt || !s_EntityCopy) {
-            PastureDropReport(3, self);
             continue;
         }
 
@@ -713,96 +648,12 @@ void PastureProduce(void* self) {
             if (occ == 0) { placedCell = cell; break; }
         }
         if (placedCell < 0) {
-            PastureDropReport(4, self);
             // OCCUPANT DUMP: name what actually holds every candidate cell. cell+8 is
             // the ENTITY raster; a pasture whose own footprint claim (or its own
             // livestock) sits on every drop cell can never place a pile, and the panel
             // then reads identically to 'no production'.
-            if (Trace()) {
-                static long long nDump = 0;
-                if ((nDump++ % 20) == 0) {
-                    uintptr_t tiles = *reinterpret_cast<uintptr_t*>(
-                        reinterpret_cast<uintptr_t>(grid) + 0x80);
-                    std::fprintf(stderr, "[Pasture] drop-cells: pasture=%p nCells=%d\n",
-                                 self, nCells);
-                    // nCells comes from Pf_RecursiveChildSum_123070(pos, 2): the kind-2
-                    // count on the position component's InteractDescription (+0x50),
-                    // summed over child entities. Zero has three different causes -- no
-                    // description, a description that fails the InteractDescription cast
-                    // (a silently-zeroed seed), or a genuinely empty point list. Print
-                    // all three inputs so they can never be confused again.
-                    // MEASURED 2026-08-19: a pasture's own InteractDescription is empty
-                    // in Pasture.rsc; every create point comes from the AnimalShelter
-                    // SECTION, reached through the master's interact CHILD list, which
-                    // InteractComponent slot 6 rebuilds from the MultiObject children.
-                    // children=0 therefore means the pasture has no sections at all --
-                    // i.e. it was spawned by BANISHED_BUILD_DEMO_PASTURE rather than
-                    // placed with the fenced tool. Not a defect in this file.
-                    {
-                        uintptr_t pc = static_cast<uintptr_t>(posIBP);
-                        void* desc = pc ? *reinterpret_cast<void**>(pc + 0x18) : nullptr;
-                        const char* dn = "<none>";
-                        uint32_t dt = 0;
-                        if (desc) {
-                            dt = reinterpret_cast<uint32_t(*)(void*)>((*(void***)desc)[2])(desc);
-                            const char* n = ::Object::GetTypeNameById(dt);
-                            if (n) dn = n;
-                        }
-                        std::fprintf(stderr, "  pos=%p desc=%p type=%s(0x%x) "
-                                     "kinds[0/1/2]=%d/%d/%d children=%d\n",
-                                     reinterpret_cast<void*>(pc), desc, dn, dt,
-                                     desc ? *reinterpret_cast<int*>((uintptr_t)desc + 0x30) : -1,
-                                     desc ? *reinterpret_cast<int*>((uintptr_t)desc + 0x40) : -1,
-                                     desc ? *reinterpret_cast<int*>((uintptr_t)desc + 0x50) : -1,
-                                     pc ? *reinterpret_cast<int*>(pc + 0x30) : -1);
-                        // and the point-list external the three arrays are parsed
-                        // from (InteractDescription+0x20): an empty child list means
-                        // the model carried no named points at all, which is a
-                        // different failure from 'no CREATE points'.
-                        void* ext = desc ? *reinterpret_cast<void**>((uintptr_t)desc + 0x20)
-                                         : nullptr;
-                        std::fprintf(stderr, "  pointList ext=%p children=%d\n",
-                                     ext,
-                                     ext ? *reinterpret_cast<int*>((uintptr_t)ext + 0x38) : -1);
-                    }
-                    for (int c = 0; c < nCells && c < 8 && tiles; ++c) {
-                        float xy[3] = {0, 0, 0};
-                        CheckPtr(&posIBP);
-                        s_FootprintAt(static_cast<int64_t>(posIBP), xy, 2, c, nullptr);
-                        const int dim = *grid;
-                        int gx = static_cast<int>(xy[0] + static_cast<float>(dim >> 1));
-                        int gy = static_cast<int>(xy[1] + static_cast<float>(dim >> 1));
-                        if (gx < 0) gx = 0; if (gx >= dim) gx = dim - 1;
-                        if (gy < 0) gy = 0; if (gy >= dim) gy = dim - 1;
-                        const int cell = dim * gy + gx;
-                        uint64_t occ = *reinterpret_cast<uint64_t*>(
-                            tiles + (uintptr_t)cell * 0x30 + 8);
-                        const char* what = "?";
-                        if (occ) {
-                            uintptr_t ent = static_cast<uintptr_t>(occ);
-                            int nc = *reinterpret_cast<int*>(ent + 0x38);
-                            uintptr_t arr = *reinterpret_cast<uintptr_t*>(ent + 0x30);
-                            if (nc > 0 && arr) {
-                                void* comp = *reinterpret_cast<void**>(arr);
-                                if (comp) {
-                                    uint32_t t = reinterpret_cast<uint32_t(*)(void*)>(
-                                        (*(void***)comp)[2])(comp);
-                                    const char* n = ::Object::GetTypeNameById(t);
-                                    if (n) what = n;
-                                }
-                            }
-                        }
-                        std::fprintf(stderr, "  cell[%d] idx=%d occ=%p firstComp=%s%s\n",
-                                     c, cell, reinterpret_cast<void*>(occ), what,
-                                     (occ == (uint64_t)(uintptr_t)PastureOwner(self))
-                                         ? "  <- THE PASTURE ITSELF" : "");
-                    }
-                    std::fflush(stderr);
-                }
-            }
             break;
         }
-        PastureDropReport(0, self);
 
         void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
         void* ent = mem ? s_EntityCopy(mem, produced) : nullptr;
@@ -1000,11 +851,6 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
     const uint64_t can = (vt && vt[13])
         ? reinterpret_cast<uint64_t (*)(void*, int)>(vt[13])(pasture, cmd) : 0;
     if ((can & 1) == 0) {
-        if (Trace()) {
-            std::fprintf(stderr, "[Pasture] command %d refused by slot13 (mask=0x%llx) on %p\n",
-                         cmd, (unsigned long long)can, pasture);
-            std::fflush(stderr);
-        }
         return;
     }
 
@@ -1033,11 +879,6 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
             if (s_StopWork) s_StopWork(static_cast<uintptr_t>(wcIBP));
             CheckPtr(&wpcIBP);
             s_ActivateWP(static_cast<int64_t>(wpcIBP), 0);
-            if (Trace()) {
-                std::fprintf(stderr, "[Pasture] herder OFF: pasture=%p work slot stopped\n",
-                             pasture);
-                std::fflush(stderr);
-            }
         } else {
             uint64_t entRef = *reinterpret_cast<uint64_t*>(selfB + 0x10);
             void* work = PastureWork_CreateForEntity(&entRef);
@@ -1046,11 +887,6 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
             if (s_PostWork) s_PostWork(static_cast<uintptr_t>(wcIBP), 1, 1, &workIBP);
             CheckPtr(&wpcIBP);
             s_ActivateWP(static_cast<int64_t>(wpcIBP), 1);
-            if (Trace()) {
-                std::fprintf(stderr, "[Pasture] herder ON: pasture=%p PastureWork=%p posted "
-                             "(code=1)\n", pasture, work);
-                std::fflush(stderr);
-            }
         }
         return;
     }
@@ -1096,11 +932,6 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
         CheckPtr(&p);
         if (PastureType(p) != PastureType(pasture)) continue;
         transferInto(p);
-    }
-    if (Trace()) {
-        std::fprintf(stderr, "[Pasture] cmd %d: moved %d animal(s) out of %p (keep=%d, "
-                     "now %d)\n", cmd, moved, pasture, keep, PastureCount(pasture));
-        std::fflush(stderr);
     }
 }
 

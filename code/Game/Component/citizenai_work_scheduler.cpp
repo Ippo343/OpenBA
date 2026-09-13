@@ -70,15 +70,6 @@ static void* WS_Alloc(size_t n) {
     return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, (int)n, 8) : nullptr;
 }
 
-static int s_ws_trace = -1;
-static bool WS_Trace() {
-    if (s_ws_trace < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_TRACE");
-        s_ws_trace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s_ws_trace == 1;
-}
-
 // ==================================================================================
 // FUN_14002cfb0 — recursive deep-copy of a 0x30-node subtree. param_1 = ctx (unused
 // beyond being threaded through recursion); src = source node. Returns the copy.
@@ -517,12 +508,6 @@ extern "C" int CitizenAI_WorkScheduler_Insert(int* sched, void* pWorkIBP, uint32
     // than inferred from the re-key's downstream "NOT in the sched+0x30 id-map" miss. NB most
     // posts reach this function DIRECTLY (exe 0x1400f88a0), not through the ec60 wrapper — a
     // trace placed only in the wrapper sees nothing.
-    if (WS_Trace())
-        std::fprintf(stderr, "[BuildTrace] WorkScheduler_Insert id=%d prio=%d code=0x%x "
-                     "-> primary+cats+entity trees; idMap(sched+0x30) root=%p count=%d\n",
-                     id, prio, code,
-                     (void*)*reinterpret_cast<uint8_t**>(schedB + 0x30),
-                     *reinterpret_cast<int*>(schedB + 0x38));
     return id;
 }
 
@@ -578,13 +563,6 @@ extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, 
     // ("NOT in the sched+0x30 id-map"). Report the map's own state next to the lookup result
     // so "the id-map never populates" is a measured fact and not an inference from a
     // downstream symptom.
-    if (WS_Trace())
-        std::fprintf(stderr, "[BuildTrace] WorkScheduler_Post workComp=%p code=0x%x -> id=%d "
-                     "idMap(root=%p count=%d) payload=%p prio(+0x2c)=%d\n",
-                     (void*)workComp, code, assignedId,
-                     (void*)*reinterpret_cast<uint8_t**>(schedB + 0x30),
-                     *reinterpret_cast<int*>(schedB + 0x38), (void*)payload,
-                     *reinterpret_cast<int*>(workComp + 0x2c));
 }
 
 // ==================================================================================
@@ -625,22 +603,11 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
         else break;
     }
     if (!idNode) {
-        if (WS_Trace()) {
-            uint8_t* root = *reinterpret_cast<uint8_t**>(schedB + 0x30);
-            // FAITHFUL NO-OP, not a failure (open D closed 2026-07-26): retail never
-            // resets workComp+0x28 when work completes (ctor 0x14012e820 seeds -1 and
-            // ec60 is the only writer), so the edf0/f670 completion site calls this
-            // re-key with a stale id and retail ALSO finds nothing — the sched+0x30
-            // lookup IS the engine's liveness test (same early-out in ead0). Keep the
-            // wording neutral so a normal path stops reading like a defect.
-            std::fprintf(stderr, "[BuildTrace] Rekey id=%d: no live work item in the "
-                         "sched+0x30 id-map (stale workComp+0x28 — faithful no-op; "
-                         "root=%p rootId=%d count=%d buckets=%d)\n", key,
-                         (void*)root, root ? *reinterpret_cast<int*>(root) : -1,
-                         *reinterpret_cast<int*>(schedB + 0x38),
-                         *reinterpret_cast<int*>(schedB + 0x128));
-            std::fflush(stderr);
-        }
+        // FAITHFUL NO-OP, not a failure (open D closed 2026-07-26): retail never
+        // resets workComp+0x28 when work completes (ctor 0x14012e820 seeds -1 and
+        // ec60 is the only writer), so the edf0/f670 completion site calls this
+        // re-key with a stale id and retail ALSO finds nothing — the sched+0x30
+        // lookup IS the engine's liveness test (same early-out in ead0).
         return;
     }
 
@@ -661,9 +628,6 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
         void* noSubtree[2] = { nullptr, nullptr };
         uint64_t k = oldKey;
         WS_cb50(outer, &out, &k, noSubtree);
-        if (WS_Trace()) std::fprintf(stderr, "[BuildTrace] Rekey id=%d: no bucket for oldKey "
-                                     "%llx — created it empty, nothing filed to move\n", key,
-                                     (unsigned long long)oldKey), std::fflush(stderr);
         return;
     }
 
@@ -676,9 +640,6 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
         else break;
     }
     if (!item) {
-        if (WS_Trace()) std::fprintf(stderr, "[BuildTrace] Rekey id=%d: not filed under oldKey "
-                                     "%llx (bucket=%p) — nothing to move\n", key,
-                                     (unsigned long long)oldKey, (void*)oldBucket), std::fflush(stderr);
         return;
     }
 
@@ -727,11 +688,6 @@ extern "C" void CitizenAI_WorkScheduler_Rekey(uintptr_t sched, uint32_t workId,
     pair.payload = *reinterpret_cast<uint64_t*>(idNode + 0x08);
     void* outSlot = nullptr;
     if (s_9a40) s_9a40(newBucket + 0x08, &outSlot, reinterpret_cast<uint32_t*>(&pair));
-
-    if (WS_Trace())
-        std::fprintf(stderr, "[BuildTrace] WorkScheduler_Rekey id=%d %llx -> %llx\n", key,
-                     static_cast<unsigned long long>(oldKey),
-                     static_cast<unsigned long long>(newKey));
 }
 
 #include "address_registry.h"

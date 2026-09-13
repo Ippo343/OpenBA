@@ -471,73 +471,27 @@ void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value) {
         fn_MemFreeStatic(oldBuf);
 }
 
-// ============================================================
-// FUN_140088ef0 (CreateRawMaterial_helper_8ef0) — RegisterRawMaterial.
-// ============================================================
-// If sourceIBP resolves non-null and placeNear set: find its resource-cache component
-// (013320), and if present upsert {descEntity, quantity} into it (58fd0). Then classify
-// the resource category (88f90) and add `quantity` to entityList's per-category bucket
-// (entityList+0x170, stride 0x20, int field +0x10). Closure satisfied (013320/58fd0 here,
-// 88f90 registered).
-// TRACKER OUTCOME METER (BANISHED_TRACKER_TRACE=1). The upsert below is the ONLY thing
-// that fills the per-building production statistics ProductionUI shows ("this year" /
-// "prev year" on the hunting-cabin, crop-field, orchard... panels). It is silently
-// skipped on three independent conditions and a panel reading 0 cannot tell them apart,
-// so report every arm by outcome (reference_diagnostics_must_report_outcomes).
-static bool ActRm_TrackerTraceOn() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_TRACKER_TRACE");
-                 s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s == 1;
-}
 
 void ActRm_RegisterRawMaterial_88ef0(int64_t entityList, void* sourceIBP,
                                      char placeNear, int64_t descEntity, int quantity) {
     int64_t target = entityList;  // lVar3
-    int outcome = 3;              // 0=UPSERT 1=NO_TRACKER_COMP 2=PLACENEAR_0 3=NO_SOURCE
-    int64_t srcObjSeen = 0;
     if (sourceIBP && *reinterpret_cast<int64_t*>(sourceIBP) != 0 && placeNear != '\0') {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(sourceIBP);
         int64_t srcObj = *reinterpret_cast<int64_t*>(sourceIBP);
-        srcObjSeen = srcObj;
         uintptr_t foundIBP[2] = {0, 0};
         ActRm_FindComp_013320(static_cast<uintptr_t>(srcObj), &foundIBP);
         if (foundIBP[0] != 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&foundIBP);
             ActRm_ArrayUpsert_58fd0(static_cast<uintptr_t>(foundIBP[0]), descEntity, quantity);
             target = static_cast<int64_t>(foundIBP[0]);
-            outcome = 0;
-        } else {
-            outcome = 1;          // source entity carries no TrackerComponent
         }
-    } else if (sourceIBP && *reinterpret_cast<int64_t*>(sourceIBP) != 0) {
-        outcome = 2;              // source present but placeNear gated the upsert out
-    }
-    if (ActRm_TrackerTraceOn()) {
-        static const char* kNames[4] = {"UPSERT", "NO_TRACKER_COMP", "PLACENEAR_0", "NO_SOURCE"};
-        static long long n[4] = {0, 0, 0, 0};
-        ++n[outcome];
-        int liveKeys = (outcome == 0)
-            ? *reinterpret_cast<int*>(static_cast<uintptr_t>(target) + 0x30) : -1;
-        fprintf(stderr, "[TrackerUpsert] %s src=%p desc=%p qty=%d liveKeys=%d "
-                        "(UPSERT=%lld NO_TRACKER=%lld PLACENEAR0=%lld NO_SOURCE=%lld)\n",
-                kNames[outcome], reinterpret_cast<void*>(srcObjSeen),
-                reinterpret_cast<void*>(descEntity), quantity, liveKeys,
-                n[0], n[1], n[2], n[3]);
-        fflush(stderr);
     }
     int cat = ActRm_GetResourceCategory_88f90(reinterpret_cast<void*>(target),
                                               static_cast<uintptr_t>(descEntity));
     if (cat >= 0) {
         int* bucket = reinterpret_cast<int*>(static_cast<int64_t>(cat) * 0x20 + 0x10 +
                                              *reinterpret_cast<int64_t*>(entityList + 0x170));
-        int before = *bucket;
         *bucket += quantity;
-        if (std::getenv("BANISHED_FORESTER_SCAN_TRACE")) {
-            fprintf(stderr, "[ORGANIC-PRODUCE] RegisterRawMaterial cat=%d qty=%d stock %d->%d\n",
-                    cat, quantity, before, *bucket);
-            fflush(stderr);
-        }
     }
 }
 

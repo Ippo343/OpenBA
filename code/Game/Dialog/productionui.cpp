@@ -89,7 +89,7 @@ static void PushElementPair(uintptr_t self, int arrayOffset,
 // misnomer, see standalone/reg_element_typeids.cpp:35).
 //
 // That element-type-id table is registered by reg_element_typeids.cpp, gated on
-// BANISHED_LIVE_ELEMENT_TIDS. That gate GRADUATED into kDefaultOnFlags 2026-08-22, so by
+// BANISHED_LIVE_ELEMENT_TIDS. That gate GRADUATED into the default-on table 2026-08-22, so by
 // default both globals are now POPULATED; they are null only when someone A/Bs with
 // BANISHED_LIVE_ELEMENT_TIDS=0. We resolve PRIVATE copies by name rather than filling
 // g_TypeId_LabelElement / g_TypeId_SpinnerElement, because those globals are
@@ -250,23 +250,7 @@ void ProductionUI_Slot4(ProductionUI* self) {
 //
 // Original helper: 0x140075A50.
 
-// PANEL-READ METER (BANISHED_TRACKER_TRACE=1). Pairs with [TrackerUpsert] on the writer
-// side: this reports what the panel actually FINDS, so "0 shown" can be told apart from
-// "0 written". listIndex 0 reads tracker+0x28/+0x30 (the live/this-year array the upsert
-// fills), listIndex 1 reads +0x38/+0x40 (the previous-year archive).
-static bool ProductionUI_TraceOn() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_TRACKER_TRACE");
-                 s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s == 1;
-}
 
-static bool ProductionUI_FlickerOn() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_PRODUI_FLICKER");
-                 s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s == 1;
-}
 
 static void UpdateProductionList(uintptr_t self, int listIndex) {
     // Get entity from controller data (+0x28)
@@ -292,13 +276,6 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
     // there is nothing to show. Do NOT widen this into "null checks everywhere":
     // if the pasture/crop entity itself lacks a tracker, that is an upstream bug.
     if (!tracker) {
-        if (ProductionUI_TraceOn()) {
-            static long long nNull = 0;
-            if ((++nNull % 600) == 1)
-                fprintf(stderr, "[ProductionUI] list=%d NO_TRACKER entity=%p (n=%lld)\n",
-                        listIndex, entityPtr, nNull);
-            fflush(stderr);
-        }
         return;
     }
 
@@ -311,9 +288,6 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
         *(uint64_t*)(tracker + 0x28) = 0;
         *(uint64_t*)(tracker + 0x30) = 0;
         *(int*)(tracker + 0x48) = gameItemCount;
-        if (ProductionUI_FlickerOn())
-            fprintf(stderr, "[ProdFlicker] list=%d YEAR-ROLL archive: gen=%d tracker=%p\n",
-                    listIndex, gameItemCount, (void*)tracker);
     }
 
     // Get item count for this list
@@ -328,26 +302,6 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
     uintptr_t elemArrayPtr = *(uintptr_t*)(self + ((int64_t)listIndex + 3) * 0x10);
     int elemCount = *(int*)(self + (int64_t)listIndex * 0x10 + 0x38);
 
-    if (ProductionUI_TraceOn()) {
-        static long long nTick = 0;
-        if ((++nTick % 1200) < 2)
-            fprintf(stderr, "[ProductionUI] list=%d entity=%p tracker=%p items=%d "
-                            "elems=%d gen=%d stamp=%d\n",
-                    listIndex, entityPtr, (void*)tracker, itemCount, elemCount,
-                    gameItemCount, *(int*)(tracker + 0x48));
-        fflush(stderr);
-    }
-
-    // FLICKER METER (BANISHED_PRODUI_FLICKER=1). The panel is redrawn from scratch every
-    // frame; a value the player sees blinking must be CHANGING between frames. Build a
-    // per-list signature of exactly what this pass will show and log only transitions,
-    // so a steady panel prints nothing and a flickering one prints its whole cycle.
-    char sig[320];
-    int sigLen = 0;
-    const bool flickerOn = ProductionUI_FlickerOn();
-    if (flickerOn)
-        sigLen = snprintf(sig, sizeof(sig), "items=%d elems=%d tracker=%p arr=%p |",
-                          itemCount, elemCount, (void*)tracker, (void*)elemArrayPtr);
 
     int i = 0;
     while (i < itemCount) {
@@ -392,11 +346,6 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
             itemArray = *(uintptr_t*)(tracker + 0x38);
         }
         int count = *(int*)(itemArray + (uintptr_t)i * 0x10 + 0x08);
-
-        if (flickerOn && sigLen > 0 && sigLen < (int)sizeof(sig) - 40)
-            sigLen += snprintf(sig + sigLen, sizeof(sig) - sigLen, " [%d]desc=%p n=%d",
-                               i, resourceDesc, count);
-
         // Create sprite from ResourceDescription
         uintptr_t rd = (uintptr_t)resourceDesc;
         uint8_t spriteBuf[16];
@@ -444,21 +393,6 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
         fn_Element_SetFlagsOnOff(numberElem, 1, 0);
 
         i++;
-    }
-
-    if (flickerOn) {
-        static char s_prev[2][320] = {{0}, {0}};
-        static long long s_frame[2] = {0, 0};
-        static int s_changes[2] = {0, 0};
-        const int L = (listIndex == 0) ? 0 : 1;
-        ++s_frame[L];
-        if (strcmp(s_prev[L], sig) != 0) {
-            if (++s_changes[L] <= 200)
-                fprintf(stderr, "[ProdFlicker] list=%d frame#%lld gen=%d stamp=%d %s\n",
-                        listIndex, s_frame[L], gameItemCount, *(int*)(tracker + 0x48), sig);
-            snprintf(s_prev[L], sizeof(s_prev[L]), "%s", sig);
-            fflush(stderr);
-        }
     }
 }
 

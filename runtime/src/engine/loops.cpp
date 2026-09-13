@@ -93,7 +93,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
-#include <cstdlib>   // std::getenv for the Wave 25 lane VTIO oracle gate
+#include <cstdlib>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/UpdateLoop.h"

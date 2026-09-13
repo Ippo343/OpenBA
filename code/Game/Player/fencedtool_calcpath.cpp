@@ -87,11 +87,6 @@ void EnsureFuncs() {
     if (slot) s_setUserData = *reinterpret_cast<fn_setMeshUserData_t*>(slot);
 }
 
-bool TraceOn() {
-    static int en = -1;
-    if (en < 0) { const char* e = std::getenv("BANISHED_TOOL_TRACE"); en = (e && *e && *e != '0') ? 1 : 0; }
-    return en != 0;
-}
 
 inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 
@@ -341,9 +336,6 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
     EnsureFuncs();
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gw || !s_ctorFromDesc || !s_anchorCalc || !fn_MemAlloc || !self->fencedDesc) {
-        if (TraceOn())
-            fprintf(stderr, "[FencedTool] CalcPath: missing deps (gw=%p ctor=%p anchor=%p desc=%p)\n",
-                    gw, (void*)s_ctorFromDesc, (void*)s_anchorCalc, self->fencedDesc);
         return 0;
     }
 
@@ -355,7 +347,6 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
     int rc = calcCost(self, static_cast<int>(startCell), static_cast<int>(endCell),
                       &dummyW, &rectW, &rectH, &segCount);
     if (rc != 0) {
-        if (TraceOn()) fprintf(stderr, "[FencedTool] CalcPath: CalcCost=%d — abort\n", rc);
         return 0;
     }
 
@@ -374,7 +365,6 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
         int sc = *reinterpret_cast<int32_t*>(editObj + 0x98);
         int ec = *reinterpret_cast<int32_t*>(editObj + 0x9c);
         if (minCol != sc % W || minRow != sc / W || maxCol != ec % W || maxRow != ec / W) {
-            if (TraceOn()) fprintf(stderr, "[FencedTool] CalcPath: edit-rect mismatch — abort\n");
             return 0;
         }
     }
@@ -481,10 +471,5 @@ extern "C" uint64_t FencedTool_CalcPath_Port(FencedTool* self, int64_t startCell
                       &val, prio);
     }
 
-    if (TraceOn())
-        fprintf(stderr, "[FencedTool] CalcPath COMMIT rect=(%d,%d)-(%d,%d) %dx%d "
-                "shelter=(%d,%d)-(%d,%d) yaw=%d master=%p\n",
-                minCol, minRow, maxCol, maxRow, rectW, rectH,
-                sMinX, sMinY, sMaxX, sMaxY, yawI, master);
     return 1;
 }

@@ -38,6 +38,7 @@
 
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "resolve.h"
 #include "force_work.h"                     // generic ForceWork core (probes + drive)
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
@@ -68,7 +69,7 @@ extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP);
 static bool ForceForesterEnvOn() {
     static int s = -1;
     if (s < 0) {
-        const char* e = std::getenv("BANISHED_FORCE_FORESTERWORK");
+        const char* e = Opt().forceForesterWork;
         s = (e && e[0] && e[0] != '0') ? 1 : 0;
     }
     return s == 1;

@@ -11,7 +11,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/workplacecomponent_funcs.h"
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (ProfKeyOwnerClass diagnostic)
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -243,17 +243,6 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     EnsureHelpers();
     EnsureWpcBodyHelpers();
 
-    // The roster decrement lives in RemoveFromList below. ee60 is NOT the only drain
-    // (measured: a seat vanished with zero [SeatDrain] hits), so trace the unseat at
-    // its true source, with the caller's return address. Uncapped; symbolize with
-    // tools/symbolize.py.
-    if (std::getenv("BANISHED_SEAT_TRACE")) {
-        fprintf(stderr, "[SeatDrain] Detach wpc=%p roster(+0x60)=%d key(+0x48)=0x%llx ret=%p\n",
-                (void*)comp, *(int*)(comp + 0x60),
-                (unsigned long long)*(uint64_t*)(comp + 0x48),
-                __builtin_return_address(0));
-        fflush(stderr);
-    }
 
     if (s_fn_WPC_RemoveFromList) s_fn_WPC_RemoveFromList((int64_t*)(comp + 0x58), workerIbp);
     // Build-time roster-only mode (see g_wpcRosterOnly): stop after the roster removal,
@@ -445,9 +434,6 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
 // garbage have been REMOVED rather than left as permanent scar tissue, since with the
 // correct component every operand is a live object (verified live: two pause clicks, real
 // citizens evicted, zero guard trips).
-// component_factory_base.h is only included further down (factory section), so declare the
-// one entry point needed here.
-namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
 
 static void WorkPlaceComponent_EvictRoster(int64_t comp) {
     EnsureWpcBodyHelpers();
@@ -456,7 +442,6 @@ static void WorkPlaceComponent_EvictRoster(int64_t comp) {
     const bool savedRosterOnly = g_wpcRosterOnly;
     g_wpcRosterOnly = true;
 
-    const bool trace = std::getenv("BANISHED_DESTROY_TRACE") != nullptr;
     int guard = 0;
     while (*(int*)(comp + 0x60) > 0) {
         int before = *(int*)(comp + 0x60);
@@ -477,12 +462,6 @@ static void WorkPlaceComponent_EvictRoster(int64_t comp) {
         // Re-read the roster base — the finders above can reallocate it.
         int64_t* rosterNow = *(int64_t**)(comp + 0x58);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(rosterNow);
-        if (trace) {
-            std::fprintf(stderr, "[WorkPlace] evict: comp=%p worker=%p cur(+0x248)=%p "
-                         "target=%p roster=%d\n", (void*)comp, (void*)*rosterNow,
-                         (void*)*(int64_t*)(*rosterNow + 0x248), (void*)newWorkplaceIbp, before);
-            std::fflush(stderr);
-        }
         s_fn_WPC_AssignHousing((void*)*rosterNow, &newWorkplaceIbp);
 
         if (*(int*)(comp + 0x60) >= before || ++guard > 4096) {
@@ -539,31 +518,9 @@ void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
     EnsureHelpers();
     EnsureWpcBodyHelpers();
 
-    // accepting=false is the PAUSE path: it raises the "work is disabled at this
-    // location" indicator AND evicts the whole roster. Trace its caller — this is the
-    // level that actually decides a workplace should close.
-    if (std::getenv("BANISHED_SEAT_TRACE") && !accepting) {
-        fprintf(stderr, "[SetAccept] CLOSE wpc=%p was(+0x50)=%d roster(+0x60)=%d "
-                        "key(+0x48)=0x%llx ret=%p\n",
-                (void*)comp, (int)*(char*)(comp + 0x50), *(int*)(comp + 0x60),
-                (unsigned long long)*(uint64_t*)(comp + 0x48),
-                __builtin_return_address(0));
-        fflush(stderr);
-    }
 
     *(char*)(comp + 0x50) = accepting ? 1 : 0;
 
-    // BANISHED_LIVE_WPC_PAUSE — DEFAULT-ON via kDefaultOnFlags (graduated 2026-07-25); the
-    // env var is a kill-switch (=0). The three live faults this path hit when first landed
-    // were ALL downstream of BuildUI_Slot9 passing the wrong component type (a c8070
-    // StorageLocationComponent instead of the c80e0 WorkPlaceComponent — see the history
-    // note on EvictRoster above); fixed at the source in buildui.cpp. Verified live: pause
-    // on a staffed workplace evicts real citizens with zero guard trips, and the closed
-    // indicator renders both above the building and in the dialog status bar.
-    static int s_pauseEnabled = -1;
-    if (s_pauseEnabled < 0)
-        s_pauseEnabled = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_WPC_PAUSE") ? 1 : 0;
-    if (!accepting && !s_pauseEnabled) return;   // kill-switch: flag-only, pre-port behaviour
 
     // Locate the building's StatusIconComponent (the "mesh" the icon toggles hang off).
     uint64_t meshIbp = 0;
@@ -676,17 +633,6 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
     EnsureEe60Helpers();
     uintptr_t self = (uintptr_t)selfP;
 
-    // ee60 is THE roster drain (the loop below runs to +0x60 == 0) and it has five
-    // retail callers (f670, f520, ed60, OnRemove x2) plus vtable slots. When a seat
-    // silently disappears, the only useful fact is WHICH caller drained it — so log
-    // the return address, uncapped. Symbolize with tools/symbolize.py.
-    if (std::getenv("BANISHED_SEAT_TRACE") && *(int*)(self + 0x60) > 0) {
-        fprintf(stderr, "[SeatDrain] ee60 wpc=%p roster(+0x60)=%d key(+0x48)=0x%llx ret=%p\n",
-                selfP, *(int*)(self + 0x60),
-                (unsigned long long)*(uint64_t*)(self + 0x48),
-                __builtin_return_address(0));
-        fflush(stderr);
-    }
 
     while (*(int*)(self + 0x60) > 0) {
         // Termination depends on the detach below removing worker[0] from this
@@ -752,68 +698,7 @@ void WorkPlaceComponent_OnCreateInit(void* selfP) {
 // bucket for `key` in the town BST (townMgr+0x100), creating the bucket if absent.
 extern "C" void ResidenceComponent_impl_95a0(int64_t townMgr, void* ownerRefLocal, uint64_t key);
 
-// ============================================================
-// WorkPlaceComponent_impl_f670 (0x14012f670) — leave the BUILDER profession
-// ============================================================
-// The construction half of a building's life makes its WorkPlaceComponent a BUILDER
-// workplace: BuildComponent state-1 sets WPC+0x48 = the Builder key and registers the
-// owner into the town profession BST (townMgr+0x100) so laborers can be seated as
-// builders. f670 is the undo: gated on "+0x48 is CURRENTLY the Builder key"
-// (*(gameWorld+0xb0)+0x38), it removes the owner from the Builder bucket, refreshes the
-// WorkComponent capacity, hands any pending work over to the natural profession, resets
-// +0x48 to the WorkPlaceDescription's own profession (+0x20 — zero for a house), and
-// releases every seated worker (ee60).
-//
-// Callers in retail (Ghidra xrefs): the DestroyComponent state-5 tick (0x14011c120) and
-// its bcc0 transition action, plus edf0 below.
-//
-// FUN_1400f8400 (the work-scheduler re-key: move the pending task node from the old
-// profession bucket to the new one, mgr+0x120 keyed by the work id) is NOT ported. It is
-// reachable only when the WorkComponent still holds a work id (+0x28 >= 0); at build
-// completion State8OneShot has already dequeued the BuildStructure work, so there is
-// normally nothing to re-key. Logged once if the branch is ever taken.
-// BANISHED_PROFKEY_TRACE - low-noise trace of the two events that decide whether a
-// finished building ever gets a profession key in WPC+0x48. That field gates the whole
-// workPlace ribbon (worker up/down spinner + stop sign) in WorkplaceUI_Startup, so a
-// building that misses both events silently has no worker arrows. BUILD_TRACE covers
-// this ground too but floods ~60k lines and slows the sim; these fire once per building.
-static bool ProfKeyTrace() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_PROFKEY_TRACE");
-        on = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return on == 1;
-}
 
-// Name the building a [ProfKey] line refers to, by scanning the owner entity's
-// component array for a recognisable gameplay component. Diagnostic only.
-static const char* ProfKeyOwnerClass(uintptr_t self) {
-    static const char* kNames[] = {
-        "CropFieldComponent", "OrchardComponent", "PastureComponent",
-        "FishingComponent", "HuntComponent", "HerbalistComponent",
-        "ForesterComponent", "MarketComponent", "AttendanceComponent",
-        "ConsumeProduceComponent", "ResidenceComponent", "StorageComponent",
-    };
-    int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
-    if (!ownerRef) return "?";
-    uintptr_t ent = static_cast<uintptr_t>(ownerRef);
-    int count = *reinterpret_cast<int*>(ent + 0x38);
-    int64_t arr = *reinterpret_cast<int64_t*>(ent + 0x30);
-    if (!arr || count <= 0 || count > 256) return "?";
-    for (unsigned k = 0; k < sizeof(kNames)/sizeof(kNames[0]); k++) {
-        uint32_t want = ::Object::GetTypeIdByName(kNames[k]);
-        if (!want) continue;
-        for (int i = 0; i < count; i++) {
-            void* comp = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(arr + (int64_t)i * 8));
-            if (!comp) continue;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-            if (tid == want) return kNames[k];
-        }
-    }
-    return "(other)";
-}
 
 extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
     EnsureHelpers();
@@ -826,15 +711,8 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
     uintptr_t profReg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
     uint64_t builderKey = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
     if (key == 0 || key != builderKey) {
-        if (ProfKeyTrace())
-            std::fprintf(stderr, "[ProfKey] LeaveBuilder BAILED wpc=%p key(+0x48)=0x%llx builderKey=0x%llx"
-                         " -- natural profession NOT assigned; ribbon stays hidden\n",
-                         selfP, (unsigned long long)key, (unsigned long long)builderKey);
         return;   // not a construction workplace
     }
-    if (ProfKeyTrace())
-        std::fprintf(stderr, "[ProfKey] LeaveBuilder ENTER wpc=%p key(+0x48)=0x%llx == builderKey\n",
-                     selfP, (unsigned long long)key);
 
     // Remove the owner entity from the Builder bucket in the profession BST.
     int64_t ownerRef = *reinterpret_cast<int64_t*>(self + 0x10);
@@ -912,16 +790,6 @@ extern "C" void WorkPlaceComponent_LeaveBuilderProfession(void* selfP) {
     }
 
     *reinterpret_cast<uint64_t*>(self + 0x48) = naturalKey;
-    if (ProfKeyTrace())
-        std::fprintf(stderr, "[ProfKey] LeaveBuilder SET %-22s wpc=%p desc(+0x18)=%p descIsWPDesc=%d natural(+0x48)=0x%llx%s\n",
-                     ProfKeyOwnerClass(self), selfP, desc,
-                     (desc && fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc && *s_TypeId_WorkPlaceDesc)
-                         ? (int)fn_IsDerivedFrom(desc, *s_TypeId_WorkPlaceDesc) : -1,
-                     (unsigned long long)naturalKey,
-                     naturalKey == 0
-                         ? (desc ? "  <-- desc PRESENT but its +0x20 profession is 0"
-                                 : "  <-- desc is NULL (WPC+0x18 never linked)")
-                         : "");
     WorkPlaceComponent_OnCreateInit(selfP);   // ee60 — release every seated worker
 }
 
@@ -1019,9 +887,6 @@ extern "C" void WorkPlaceComponent_EnterBuiltState_Full(void* selfP) {
         }
     }
 
-    if (ProfKeyTrace())
-        std::fprintf(stderr, "[ProfKey] SEATED NATURAL %-22s wpc=%p desc=%p +0x48=0x%llx (no construction hand-off ran)\n",
-                     ProfKeyOwnerClass(self), selfP, desc, (unsigned long long)natural);
 }
 
 // ============================================================
@@ -1089,27 +954,6 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
     // Serialize each worker InternalBasePtr and validate type
     void* workerArray = *(void**)((uintptr_t)self + 0x58);
     int64_t count = (int64_t)countBuf;
-    // BANISHED_COMP_VALIDATE=1 — the worker loop is the prime suspect for the
-    // save/load desync: each worker IBP can pull a whole entity inline, so a leg
-    // that skips the loop consumes far fewer bytes than the leg that ran it.
-    // Report BOTH arms (see reference_diagnostics_must_report_outcomes): the
-    // `workerArray` guard silently turns a failed resize into a skipped read.
-    {
-        static int s_wpc = -1;
-        if (s_wpc < 0) { const char* e = std::getenv("BANISHED_COMP_VALIDATE");
-                         s_wpc = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        static int n = 0;
-        if (s_wpc && n < 40) { ++n;
-            fprintf(stderr, "[WPCSer] %s self=%p count=%d arr=%p -> %s\n",
-                    loadingLeg ? "LOAD" : "SAVE",
-                    (void*)self, (int)count, workerArray,
-                    (count == 0) ? "no workers (nothing to read)"
-                                 : (workerArray ? "LOOP RUNS"
-                                                : "LOOP SKIPPED — ASYMMETRIC, "
-                                                  "count>0 but array null"));
-            fflush(stderr);
-        }
-    }
     if (count > 0 && workerArray) {
         uintptr_t ptr = (uintptr_t)workerArray;
         for (int64_t i = 0; i < count; i++) {
@@ -1276,7 +1120,7 @@ static void WorkPlaceComponent_FinishVtable() {
         reinterpret_cast<void*>(&WorkPlaceComponent_ShutdownVSlot);
 }
 
-// ── LIVE controller (BANISHED_LIVE_WPC_CONTROLLER, opt-in until soak-verified) ──
+// ── LIVE controller ──
 // Retail wiring, Ghidra-verified against vtable 0x140164d30 + ctor 0x14012f2e0 + the
 // state-table builder WorkPlaceDescription_helper_f3a0 (0x14012f3a0):
 //   * GetDefaultState (slot 16, 0x140003730) returns 0.
@@ -1354,63 +1198,6 @@ static void* WorkPlaceComponent_CreateState(void* self) {            // 0x140004
     return reinterpret_cast<uint8_t*>(self) + 0x28;
 }
 
-// Query used by the retired hook sites (buildcomponent_state8.cpp, starttown.cpp).
-extern "C" bool WorkPlaceComponent_ControllerLive() {
-    static int s = -1;
-    if (s < 0)
-        s = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_WPC_CONTROLLER") ? 1 : 0;
-    return s == 1;
-}
-
-// BANISHED_LIVE_WPC_BORN_ACCEPTING — DEFAULT-ON via kDefaultOnFlags (graduated
-// 2026-07-31); the env var is now only a kill-switch (=0).
-//
-// Retail's WorkPlaceComponent_Ctor (0x14012f2e0) sets the accepting byte
-// UNCONDITIONALLY, as a plain ctor-body default:
-//     *(Internal **)(param_1 + 0x40) = param_1;
-//     *(undefined8 *)(param_1 + 0x48) = 0;
-//     param_1[0x50] = (Internal)0x1;      <-- born accepting, always
-//     *(undefined8 *)(param_1 + 0x58) = 0;
-//     *(undefined8 *)(param_1 + 0x60) = 0;
-//
-// Our port had that write INSIDE the controller-gated block below, so on the default
-// path (BANISHED_LIVE_WPC_CONTROLLER is opt-in) it never ran and every workplace was
-// born accepting=0. That is a faithfulness bug, not a controller feature: +0x50 has no
-// dependency on the controller node — it was swept into the gate only because retail's
-// ctor happens to set it adjacent to the +0x28/+0x40 controller-node fields.
-//
-// Symptom it produces: a sweep of a default start town finds every WPC with
-// +0x40..+0x5F entirely zero (no back-pointer, no accepting byte) — the whole tail of
-// the un-run block — and FindAvailableBuilding, which requires +0x50 != 0, can never
-// return any building that did not get an explicit SetAccepting(true) from elsewhere.
-//
-// Graduated 2026-07-31 on a two-arm soak (release build, identical seed and settings,
-// the town-health recipe minus the seed knobs that over-cap houses):
-//   * the WPC census reports 8/8 constructions taking the ctor defaults, and the sweep
-//     flips accepting=0 -> 8 / accepting=1 -> 8. Every workplace in the game is reached;
-//     there is no second construction path (proven by the census cross-check, which
-//     reported live-but-NOT-ours=0).
-//   * both arms hold a stable town — 27 citizens (+0) at frames 1500 / 3000 / 4500 —
-//     with zero guard trips and no new error pattern in the flag-on arm.
-//   * both arms then die IDENTICALLY just past frame 4500: ACCESS_VIOLATION, READ of
-//     0000000140152a90, same seven stack frames (NomadComp_FUN_140103480 <-
-//     CitizenComponent_OnRemove <- MarkEntityRemoval <- HandleLifeEvent <-
-//     CitizenComponent_Update). That is a PRE-EXISTING default-path crash on the
-//     citizen-death teardown, present with this flag off, so — exactly as for
-//     BANISHED_LIVE_DESTROY above — it is not a reason to hold this flag. It is
-//     tracked separately; do not read this note as "the soak was clean".
-//
-// Blast radius at defaults is nil in a start town: all 8 workplaces carry profKey 0, so
-// none is in a profession bucket and FindAvailableBuilding never reads their accepting
-// byte. The flag matters for workplaces that reach a bucket without passing
-// BuildComponent state-1 or StartTown_ActivateWorkplace — instant-built employers,
-// force/harness-placed buildings, upgrade replacements, load-from-save entities.
-static bool WorkPlaceComponent_BornAcceptingOn() {
-    static int s = -1;
-    if (s < 0)
-        s = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_WPC_BORN_ACCEPTING") ? 1 : 0;
-    return s == 1;
-}
 
 // ── WPC construction census (UNCONDITIONAL, diagnostic only) ────────────────
 // Every WorkPlaceComponent in the standalone exe is built by the two entry points
@@ -1455,7 +1242,7 @@ static void WorkPlaceComponent_FinishLiveVtable(void* mem) {
     }
 
     // Retail ctor-body default, independent of the controller node (see above).
-    if (mem && WorkPlaceComponent_BornAcceptingOn()) {
+    if (mem) {
         // +0x40 = self and +0x50 = 1 are BOTH plain ctor-body defaults in retail
         // (Ghidra 0x14012f2e0, verified 2026-07-30) and are set here together. Only
         // +0x50 has a known reader on the default path (FindAvailableBuilding's
@@ -1468,17 +1255,15 @@ static void WorkPlaceComponent_FinishLiveVtable(void* mem) {
         reinterpret_cast<uint8_t*>(mem)[0x50] = 1;
     }
     // Unthrottled: a run constructs a few dozen of these at most, and the throttle
-    // is what made the previous run unreadable. Printed for BOTH flag states so
-    // "flag on, nothing changed" can never be confused with "the write never ran".
+    // is what made the previous run unreadable.
+    // the write is unconditional.
     if (mem)
-        std::fprintf(stderr, "[WPCCensus] #%d wpc=%p ctor-defaults %s (+0x40=%p +0x50=%d)\n",
+        std::fprintf(stderr, "[WPCCensus] #%d wpc=%p ctor-defaults (+0x40=%p +0x50=%d)\n",
                      s_wpcCensusCount, mem,
-                     WorkPlaceComponent_BornAcceptingOn() ? "APPLIED" : "skipped (flag off)",
                      *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x40),
                      (int)reinterpret_cast<uint8_t*>(mem)[0x50]);
     std::fflush(stderr);
 
-    if (!WorkPlaceComponent_ControllerLive()) return;
     WorkPlaceComponent_InertVtable[16] =
         reinterpret_cast<void*>(&WorkPlaceComponent_GetDefaultState);
     WorkPlaceComponent_InertVtable[17] =

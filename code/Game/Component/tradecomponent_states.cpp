@@ -65,7 +65,7 @@
 // (today NOTHING posts trade work except the player clicking the toggle) and a
 // deliberately visible stopping point, not a silent partial.
 //
-// GATED: BANISHED_LIVE_TRADE_CTRL. GRADUATED 2026-08-22 into kDefaultOnFlags, so it is
+// GATED: BANISHED_LIVE_TRADE_CTRL. GRADUATED 2026-08-22 into the default-on table, so it is
 // now a KILL-SWITCH (=0), not an opt-in. Proven end to end: timer -> merchant spawn ->
 // route -> dock -> manifest -> auto-trade delivering goods.
 
@@ -162,16 +162,6 @@ void* TradeDesc(uintptr_t comp) {
     return fn_IsDerivedFrom(raw, *g_TypeInfo_TradeDescription) ? raw : nullptr;
 }
 
-// Merchant-spawn trace (BANISHED_BOAT_TRACE, shared with the route builder so one env
-// var lights the whole arrival path).
-bool TradeSpawnTrace() {
-    static int t = -1;
-    if (t < 0) {
-        const char* e = std::getenv("BANISHED_BOAT_TRACE");
-        t = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return t != 0;
-}
 
 // Rate-limited outcome trace for the state-2 enter. Prints on EVERY branch, including
 // the ones that post nothing, so a silent log means the handler never ran rather than
@@ -237,18 +227,6 @@ extern "C" void TradeComponent_ArmMerchantTimer(void* selfV) {
     float seconds = (tol * *reinterpret_cast<float*>(rec + 8) +
                            *reinterpret_cast<float*>(rec + 4)) * 300.0f;
 
-    // TEST HARNESS, opt-in: BANISHED_TRADE_MERCHANT_SECONDS overrides the countdown.
-    // Retail's first merchant is ~5700 game-seconds out, which is far past the end of any
-    // reasonable unattended run — so without this the arrival path can only be verified by
-    // a soak, and "nothing happened" would be indistinguishable from "it is broken".
-    // Unset (or <= 0) leaves the retail value untouched, so a normal run is byte-identical.
-    {
-        const char* ov = std::getenv("BANISHED_TRADE_MERCHANT_SECONDS");
-        if (ov && ov[0]) {
-            const float f = static_cast<float>(std::atof(ov));
-            if (f > 0.0f) seconds = f;
-        }
-    }
 
     if (!s_TimeCtor) return;
     uint64_t t[4] = {0, 0, 0, 0};
@@ -543,13 +521,6 @@ extern "C" char TradeCtrl_State2_Tick(void* selfV, void* smV, void* deltaTime) {
 
     // OUTCOME, not intent: the route point count is the only thing that says the boat can
     // actually sail. "A boat was allocated" and "a boat has a route" are different claims.
-    if (TradeSpawnTrace()) {
-        std::fprintf(stderr,
-            "[TradeCtrl] merchant spawn: desc=%p boat=%p boatComp=%p routePts=%d -> state 0x12\n",
-            desc, boat, reinterpret_cast<void*>(boatCompPtr),
-            boatCompPtr ? *reinterpret_cast<int*>(static_cast<uintptr_t>(boatCompPtr) + 0x68) : -1);
-        std::fflush(stderr);
-    }
 
     // Retail ticks the machine once first when it has no current state yet
     // (`if (*(char*)(sm+9) < 0)` at 14005ab6a), then requests 0x12.

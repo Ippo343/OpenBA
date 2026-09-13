@@ -127,18 +127,6 @@ void TutorialHighlightDialog_UpdateElement(TutorialHighlightDialog* self) {
     // — one deref short lands on the holder and reads garbage dimensions, which
     // is exactly what mis-sizes and mis-places the glow ring.
     int screenW = 0, screenH = 0;
-    if (const char* dbg = std::getenv("BANISHED_TUTORIAL_TRACE")) {
-        if (dbg[0] && dbg[0] != '0') {
-            static int once = 0;
-            if (!once) { once = 1;
-                void* holder = g_pSingletonExref_151a80 ? *g_pSingletonExref_151a80 : nullptr;
-                void* dev = holder ? *reinterpret_cast<void**>(holder) : nullptr;
-                fprintf(stderr, "[Tutorial] display exref=%p holder=%p dev=%p uiHolder=%p\n",
-                        (void*)(void*)g_pSingletonExref_151a80, holder, dev,
-                        *reinterpret_cast<void**>(s + 0x10));
-                fflush(stderr); }
-        }
-    }
     if (g_pSingletonExref_151a80) {
         if (void* holder = *g_pSingletonExref_151a80) {
             if (void* device = *reinterpret_cast<void**>(holder)) {
@@ -160,22 +148,6 @@ void TutorialHighlightDialog_UpdateElement(TutorialHighlightDialog* self) {
                               padTop,
                               (static_cast<int>(static_cast<float>(screenH) * scale) - padTop) - height - 0x1A);
         if (fn_Element_SetNeedsSizeCalc) fn_Element_SetNeedsSizeCalc(glowGroup);
-        if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
-            if (e[0] && e[0] != '0') {
-                static int s_n = 0;
-                if (s_n < 3) {
-                    ++s_n;
-                    fprintf(stderr, "[Tutorial] glow rect=(%d,%d) %dx%d screen=%dx%d scale=%f "
-                                    "pad=(%d,%d,%d,%d)\n",
-                            left, top, width, height, screenW, screenH, (double)scale,
-                            padLeft,
-                            (int)((int)((float)screenW * scale) - padLeft) - width - 0x1A,
-                            padTop,
-                            (int)((int)((float)screenH * scale) - padTop) - height - 0x1A);
-                    fflush(stderr);
-                }
-            }
-        }
     }
 
     // Arrow: corner + sign pair chosen by the rotation.
@@ -229,12 +201,6 @@ typedef void* (*fn_FindComp_t)(uintptr_t entity, void* outIBP);
 typedef float* (*fn_GridToWorld_t)(int* grid, float* out, float* in, char flag, void* extra);
 
 void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
-    static int enabled = -1;
-    if (enabled < 0) {
-        const char* e = std::getenv("BANISHED_TUTHL_DIAG");
-        enabled = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    if (!enabled || !entity) return;
 
     static fn_FindComp_t    findModel = nullptr;
     static fn_FindComp_t    findMap   = nullptr;

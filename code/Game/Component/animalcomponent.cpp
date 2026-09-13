@@ -249,17 +249,6 @@ int s_traceMoveTo      = 0;
 int s_traceMissing     = 0;
 constexpr int kTraceCap = 24;
 
-// Population-stability soaks need every death, not the first 24; HERD_TRACE
-// already marks a run as a herd diagnostic, so it lifts the cap.
-inline bool HerdTraceEnv() {
-    static int on = -1;
-    if (on < 0) {
-        const char* v = getenv("BANISHED_HERD_TRACE");
-        on = (v && *v && *v != '0') ? 1 : 0;
-    }
-    return on != 0;
-}
-
 } // namespace
 
 // ============================================================
@@ -528,7 +517,7 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
         // "24 deaths" against a 47-animal drain and hid the fact that old age
         // accounts for the whole thing. Print a total every 10.
         ++s_traceDeath;
-        if (HerdTraceEnv() || s_traceDeath <= kTraceCap || (s_traceDeath % 10) == 0) {
+        if (s_traceDeath <= kTraceCap || (s_traceDeath % 10) == 0) {
             fprintf(stderr, "[AnimalUpd] death #%d: self=%p entity=%p age=%.2f deathAge=%.2f\n",
                     s_traceDeath, static_cast<void*>(self),
                     reinterpret_cast<void*>(entity), age, deathAge);
@@ -801,7 +790,7 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
                 if (s_fnActStackPush) s_fnActStackPush(stack, &actionIBP);
                 At<int64_t>(self, 0x30) = 0;
 
-                if (HerdTraceEnv() || s_traceMoveTo++ < kTraceCap) {
+                if (s_traceMoveTo++ < kTraceCap) {
                     fprintf(stderr, "[AnimalUpd] MoveTo: self=%p dest=(%.2f, %.2f, %.2f) attempts=%d\n",
                             static_cast<void*>(self), dest[0], dest[1], dest[2], attempts);
                 }
@@ -925,15 +914,12 @@ static void AnimalComponent_SerializeVSlot(void* self, void* stream) {
     AnimalComponent_Serialize(self, stream);
 }
 static void AnimalComponent_FinishLiveVtable() {
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMAL_UPDATE")) {
-        AnimalComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&AnimalComponent_StartupVSlot);
-        AnimalComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&AnimalComponent_UpdateVSlot);
-    }
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMAL_UPDATE"))
-        AnimalComponent_LiveVtable[6] =
-            reinterpret_cast<void*>(&AnimalComponent_OnAddedVSlot);
+    AnimalComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&AnimalComponent_StartupVSlot);
+    AnimalComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&AnimalComponent_UpdateVSlot);
+    AnimalComponent_LiveVtable[6] =
+        reinterpret_cast<void*>(&AnimalComponent_OnAddedVSlot);
     AnimalComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&AnimalComponent_SerializeVSlot);
 }

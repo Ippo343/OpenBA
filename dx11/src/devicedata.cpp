@@ -758,14 +758,6 @@ inline bool DegenerateSize(int w, int h) {
     return w < kMinSaneWindowDim || h < kMinSaneWindowDim;
 }
 
-bool WindowGuardEnabled() {
-    static const bool on = [] {
-        const char* v = getenv("BANISHED_WINDOW_GUARD");
-        return !(v && (strcmp(v, "0") == 0 || strcmp(v, "false") == 0));
-    }();
-    return on;
-}
-
 // Last size that could plausibly be a render target. The guard restores this
 // when it catches a collapse, so it must only ever hold a sane pair.
 int g_lastGoodW = 0;
@@ -892,7 +884,7 @@ int DeviceData_Resize(DeviceData* self) {
     // player minimizes. Treat it like the not-visible case: leave
     // kResetPending set and rebuild when the window comes back. Doing this
     // before the guard below also stops us fighting a deliberate minimize.
-    if (WindowGuardEnabled() && IsIconic(Field<HWND>(dev, Dev::kHwnd)))
+    if (IsIconic(Field<HWND>(dev, Dev::kHwnd)))
         return 0;
 
     ID3D11DeviceContext* ctx = static_cast<ID3D11DeviceContext*>(self->d3dContext);
@@ -934,8 +926,7 @@ int DeviceData_Resize(DeviceData* self) {
     // runs. Replacing it with a sane size now means AdjustDisplay's SetWindowPos
     // pushes the window back open instead of nailing it shut, and the
     // GetClientRect it latches afterwards is the good value.
-    if (WindowGuardEnabled() &&
-        DegenerateSize(Field<int32_t>(dev, Dev::kWidth),
+    if (DegenerateSize(Field<int32_t>(dev, Dev::kWidth),
                        Field<int32_t>(dev, Dev::kHeight))) {
         int gw = 0, gh = 0;
         PickGoodSize(cfg, mode, &gw, &gh);
@@ -965,7 +956,7 @@ int DeviceData_Resize(DeviceData* self) {
     // that Video::Configuration::Save would persist. The window itself may stay
     // collapsed — we do not keep fighting for it — but the renderer survives
     // and the settings stay clean.
-    if (WindowGuardEnabled()) {
+    {
         int gw = 0, gh = 0;
         PickGoodSize(cfg, mode, &gw, &gh);
         if (DegenerateSize(Field<int32_t>(dev, Dev::kWidth),

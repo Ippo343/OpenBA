@@ -42,10 +42,7 @@ extern "C" void* Pf_RegionPairCache_Build();                                    
 // --- already-ported region chunk flush (action_pf_region.cpp) ---
 extern void  Pf_FlushDirtyChunks_8a90(int64_t param_1);                                // 0x1400a8a90
 
-namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
-
 extern "C" void Region_Seed(void* gameObjV, int dim) {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_REGIONMAP")) return;
     if (!gameObjV || dim <= 0 || !fn_MemAlloc) return;
 
     uint8_t* map = reinterpret_cast<uint8_t*>(gameObjV);   // the Map/Game object (gameWorld+0xf8)

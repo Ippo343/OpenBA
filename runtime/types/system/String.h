@@ -67,7 +67,7 @@
 // -------------------------
 // Strings cross the DLL boundary constantly (the DLL makes them, we destroy
 // them, and vice versa), so every allocation and free MUST go through
-// Runtime-x64.dll's own System::MemoryAllocator, resolved with RtOriginal<>()
+// Runtime-x64.dll's own System::MemoryAllocator, resolved through the registry (historically the raw door)
 // — never ResolveExport, which would hand back a registered port. See
 // runtime/src/system/string.cpp.
 // ============================================================================

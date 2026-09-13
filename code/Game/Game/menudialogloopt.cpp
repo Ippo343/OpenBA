@@ -17,6 +17,7 @@
 // but is correct for an MVP scene background.
 
 #include "Game/menudialogloopt_funcs.h"
+#include "options.h"
 #include "MenuScene.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -675,8 +676,8 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // the otherwise-random MenuScene/SceneN.rsc choice becomes deterministic.
     // Lets us reproduce the intermittent menu heap-overflow per-scene instead
     // of waiting for the RNG to land on the bad one. Unset = normal random pick.
-    if (const char* pin = std::getenv("BANISHED_MENU_SCENE")) {
-        unsigned forced = static_cast<unsigned>(std::atoi(pin)) % 10u;
+    if (Opt().menuScene >= 0) {
+        unsigned forced = static_cast<unsigned>(Opt().menuScene) % 10u;
         printf("[MenuDLT::LoadScene] BANISHED_MENU_SCENE pinned scene %u "
                "(rng would have picked %u)\n", forced, variant);
         variant = forced;

@@ -139,6 +139,7 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
+#include "options.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
@@ -305,7 +306,7 @@ void DlgCtrlRoute_Arm() {
     if (s_done) return;
     s_done = true;
 
-    const char* e = std::getenv("BANISHED_DLGCTRL_ROUTE");
+    const char* e = Opt().dlgCtrlRoute;
     if (!e || !*e || std::strcmp(e, "0") == 0) return;   // silent when unset
     g_armed = true;
     g_patchMode = (std::strcmp(e, "probe") != 0);

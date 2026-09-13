@@ -33,6 +33,7 @@
 // upload this mirrors.
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -95,7 +96,7 @@ void* CreateAndUploadOne(uint8_t* map, int dstOff, int srcOff, int width,
 extern "C" void Minimap_CreateAndUpload(void* mapObj) {
     if (!mapObj) return;
 
-    static bool s_trace = std::getenv("BANISHED_MAP_TRACE") != nullptr;
+    static bool s_trace = Opt().mapTrace != nullptr;
 
     if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_ImageBuffer_Ctor ||
         !fn_ImageBuffer_CopyToTexture || !fn_VideoDevice_Lock ||

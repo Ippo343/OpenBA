@@ -24,11 +24,11 @@
 #include "GameUpdateLoop.h"
 #include "engine_funcs.h"
 #include "resolve.h"
-#include "Component/component_factory_base.h"  // ComponentFactory::LiveEnabled
+#include "Component/component_factory_base.h"  // ComponentFactory::the live gate
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <cstdlib>     // getenv (BANISHED_LIVE_PROFESSIONLIST / BANISHED_PROFLIST_MODE)
+#include <cstdlib>
 #include <cmath>
 #include <atomic>
 #include <windows.h>  // GetCurrentThreadId (double-dispatch diagnostic)
@@ -75,16 +75,6 @@ static void EnsureAchievementFuncs() {
         ResolveExport("?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A");
 }
 
-// Kill switch for an A/B run; the step-32 block is already inert on a new game.
-static bool ScenarioGoalsEnabled() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_SCENARIO_GOALS");
-        s = (e && e[0] == '0') ? 0 : 1;
-    }
-    return s != 0;
-}
-
 typedef void* (*fn_Random_Seeded_Ctor_t)(void* self, uint32_t seed);
 static fn_Random_Seeded_Ctor_t s_fn_Random_Seeded_Ctor = nullptr;   // ??0Random@System@@QEAA@I@Z
 typedef void* (*fn_Picking_Scene_Ctor_t)(void* self);
@@ -127,59 +117,16 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId);
 // primitive StartTown_ResolveTemplate / LoadDialogResource use successfully — rather
 // than ExternalList::Find(param_1[1]); the global-factory load works in standalone and
 // Profession resource resolution is already proven (CropField/Orchard/Pasture).
-static bool ProfListEnvOn() {
-    static int en = -1;
-    if (en < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_PROFESSIONLIST");
-        // DEFAULT ON: the ProfessionList keystone now loads crash-free (the real blocker
-        // was a missing fn-pointer null-check in GameUpdateLoop_Startup, not the object —
-        // see professionlist.cpp / gameupdateloop.cpp:1296). gw+0xb0 carries the default
-        // profession (+0x30) + profRef2 (+0x38) the citizen-economy finders key on. Opt OUT
-        // with BANISHED_LIVE_PROFESSIONLIST=0.
-        en = (e && e[0] == '0') ? 0 : 1;
-    }
-    return en == 1;
-}
+// The ProfessionList keystone loads crash-free (the real blocker was a missing
+// fn-pointer null-check in GameUpdateLoop_Startup, not the object — see
+// professionlist.cpp). gw+0xb0 carries the default profession (+0x30) + profRef2
+// (+0x38) the citizen-economy finders key on.
 
 // Standalone ProfessionList factory (professionlist.cpp) — allocates the 0x50
 // External object + Init (vtable + zeroed fields), NO FindOrLoad/Serialize.
 extern "C" void* ProfessionList_Factory(void);
 
-// BISECTION of the [REDZONE-DUMP] heap corruption (BANISHED_PROFLIST_MODE):
-//   unset/1 = full FindOrLoad("Game/Profession/Profession.rsc") — faithful; the
-//             Runtime External::Load deserializes + runs the factory cascade.
-//   2       = ProfessionList_Factory() ONLY (empty 0x50 object) — stored at +0xB0.
-//             Isolates "object construction + storage" from the load cascade.
-//   3       = ProfessionList_Factory() ONLY but stored as NULL at +0xB0.
-//             Isolates pure CONSTRUCTION (alloc + base ctor) from any gw+0xb0 CONSUMER.
-//             MODE 2 redzone but MODE 3 clean ⇒ a world-build consumer of gw+0xb0
-//             corrupts on our bare object (the slot to fix). MODE 3 also corrupt ⇒
-//             construction itself (MemAlloc/base ctor) is the corruptor.
-static int ProfListMode() {
-    static int m = -2;
-    if (m == -2) {
-        const char* e = std::getenv("BANISHED_PROFLIST_MODE");
-        m = (e && e[0]) ? atoi(e) : 1;
-    }
-    return m;
-}
-
 static void LoadProfessionList_Step2(uint8_t* p) {
-    // Default (env off): leave +0xB0 null — byte-identical to prior behavior.
-    if (!ProfListEnvOn()) { *(void**)(p + 0xB0) = nullptr; return; }
-
-    const int mode = ProfListMode();
-
-    // Mode 2/3 — factory-only bisection: construct without any load.
-    if (mode == 2 || mode == 3) {
-        void* profList = ProfessionList_Factory();
-        // Mode 3 stores null (isolate construction from gw+0xb0 consumers).
-        *(void**)(p + 0xB0) = (mode == 2) ? profList : nullptr;
-        fprintf(stderr, "[GUL::ProfList] MODE%d factory-only built=%p stored=%p (no FindOrLoad)\n",
-                mode, profList, *(void**)(p + 0xB0));
-        fflush(stderr);
-        return;
-    }
 
     if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
@@ -310,29 +257,14 @@ static void LoadHelpTopics_Step4(uint8_t* p) {
 // ExternalList::GetResourceCount on it), exactly like gw+0xA0 — whereas gw+0xB0 is a
 // ProfessionList External. Same FindOrLoad primitive, same retail type gate.
 //
-// DEFAULT-ON (BANISHED_LIVE_DISEASELIST is now in kDefaultOnFlags; set it to 0 as a
-// kill-switch for an A/B). Retail always performs this Find — leaving gw+0xA8 null is
+// Retail always performs this Find — leaving gw+0xA8 null is
 // a deviation, and it silently deletes every reader of the list: CatchDisease returns
 // immediately, and DebugUI::Slot4's diseaseCombo loop is bounded by
 // ExternalList::GetResourceCount(null-guarded to 0), so the debug panel's Disaster tab
-// showed an EMPTY disease dropdown with no error anywhere. Routed through
-// ComponentFactory::LiveEnabled so the flag obeys the same explicit-setting-wins rule
-// as every other graduated gate.
-static bool DiseaseListEnvOn() {
-    static int en = -1;
-    if (en < 0) en = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_DISEASELIST") ? 1 : 0;
-    return en == 1;
-}
+// showed an EMPTY disease dropdown with no error anywhere.
 
 static void LoadDiseaseList_Step1(uint8_t* p) {
     *(void**)(p + 0xA8) = nullptr;
-
-    if (!DiseaseListEnvOn()) {
-        fprintf(stderr, "[GUL::DiseaseList] OFF — gw+0xa8=NULL (set BANISHED_LIVE_DISEASELIST=1 "
-                "to load Game/Disease/Diseases.rsc; citizens cannot fall ill while null)\n");
-        fflush(stderr);
-        return;
-    }
 
     if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
@@ -884,13 +816,6 @@ typedef void (*fn_MeshInstance_SetMesh_t)(void* self, void* meshExtPtr);
 typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
 
 static void BuildSkyMesh_Step28(uint8_t* p) {
-    static int s_off = -1;
-    if (s_off < 0) {
-        const char* e = std::getenv("BANISHED_NO_SKYMESH");
-        s_off = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    if (s_off) { *(void**)(p + 0x108) = nullptr; return; }
-
     static bool s_res = false;
     static fn_MeshInstance_Ctor_t    s_Ctor     = nullptr;
     static fn_MeshInstance_SetMesh_t s_SetMesh  = nullptr;
@@ -1126,17 +1051,11 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // it holds the 12 lighting keyframes AND the rain/snow Weather descriptor
     // array (envRes+0x28) that the particle engine builds effects from. Retail's
     // GameUpdateLoop::Load FindOrLoads it and passes it to FUN_140093e30; we do
-    // the same. Gated by BANISHED_WEATHER_PARTICLES (default ON): the particle
-    // path is inert without a real envRes, and a partial/failed load degrades
-    // gracefully to null (weather sim still runs its temperature/snow half).
+    // the same. A partial/failed load degrades gracefully to null (the weather
+    // sim still runs its temperature/snow half).
     if (*(void**)(p + 0x130)) {
         void* envRes = nullptr;
-        static int s_wxParticles = -1;
-        if (s_wxParticles < 0) {
-            const char* e = std::getenv("BANISHED_WEATHER_PARTICLES");
-            s_wxParticles = (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) ? 0 : 1;
-        }
-        if (s_wxParticles && fn_Filename_CtorCStr && fn_ExternalFactory_FindOrLoad &&
+        if (fn_Filename_CtorCStr && fn_ExternalFactory_FindOrLoad &&
             fn_Filename_Dtor && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
             uint8_t fname[16] = {0};
             fn_Filename_CtorCStr(fname, "Environment/Environment.rsc");
@@ -1400,17 +1319,6 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         void* terrainGen = *(void**)(p + 0x48);
         int   sizeIdx    = *(int32_t*)(p + 0x34);
         uint32_t seed    = *(uint32_t*)(p + 0x30);
-        // BANISHED_MAP_SEED=<uint> forces a deterministic map seed (testing —
-        // lock onto a known map, e.g. one with a river). Default: the random
-        // seed the NewGameDialog wrote to GUL+0x30.
-        {
-            const char* e = std::getenv("BANISHED_MAP_SEED");
-            if (e && e[0]) {
-                seed = (uint32_t)strtoul(e, nullptr, 0);
-                fprintf(stderr, "[worldgen] BANISHED_MAP_SEED override: seed=%u\n", seed);
-                fflush(stderr);
-            }
-        }
         if (worldGeom && terrainGen) {
             WorldGen_BuildTerrain(worldGeom, terrainGen, sizeIdx, seed);
 
@@ -1675,7 +1583,7 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // The block is inert on a new game (id == -1), which is why it is default-on;
     // BANISHED_LIVE_SCENARIO_GOALS=0 is the kill switch for an A/B run.
     *(void**)(p + 0x150) = nullptr;
-    if (achievementId >= 0 && ScenarioGoalsEnabled()) {
+    if (achievementId >= 0) {
         EnsureAchievementFuncs();
         if (!s_fn_AchievementInstance_Ctor || !s_fn_AchievementInstance_SetAchievement ||
             !fn_MemAlloc || !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor ||

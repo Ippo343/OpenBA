@@ -31,7 +31,7 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled (default-on gates)
+#include "Component/component_factory_base.h"   // ComponentFactory::the live gate (default-on gates)
 #include "Component/controller_state_table.h"   // ControllerLive::RequestStateTransition
 #include "Component/clearareacomponent_funcs.h" // ClearArea_Finalize8270 (port of ModelComponent_impl_8270)
 
@@ -87,24 +87,10 @@ static void* BCS1_FindRawMatDesc(uintptr_t matEntity, uint32_t tid) {
     return nullptr;
 }
 
-static int  s_bcs1_trace = -1;
-static bool BCS1_Trace() {
-    if (s_bcs1_trace < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_TRACE");
-        s_bcs1_trace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s_bcs1_trace == 1;
-}
-
-// Natural builder-flow gate (opt-in). When set, construction sites are registered into
-// the townMgr+0x100 profession BST under the Builder key at construction start (faithful
-// to retail's WPC OnCreate FUN_14012f520), so the tick-driven Builder pool (BuilderPool_Tick)
-// finds them via FindAvailableBuilding and seats idle laborers as Builders — instead of the
-// State8Enter hardcoded-entity direct seat. Off = the existing direct-seat/force-harness path.
-// Default-ON via kDefaultOnFlags (graduated 2026-07-22); env var is a kill-switch (=0).
-static bool BCS1_BuilderNatural() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_BUILDER_NATURAL");
-}
+// Natural builder-flow: construction sites are registered into the townMgr+0x100
+// profession BST under the Builder key at construction start (faithful to retail's WPC
+// OnCreate FUN_14012f520), so the tick-driven Builder pool (BuilderPool_Tick) finds them
+// via FindAvailableBuilding and seats idle laborers as Builders.
 
 // ---- Construction-demo gating (standalone) ---------------------------------------
 // StartTown force-completes every start-town building (advances its ModelComponent to
@@ -205,9 +191,6 @@ extern "C" void BuildComponent_MarkLiveSite(void* bc) {
     }
     // Table full: fall back to the heuristic for this site rather than evicting a
     // live one (worst case = the pre-fix behaviour, never a wrong "is complete").
-    if (BCS1_Trace())
-        std::fprintf(stderr, "[BuildTrace] WARN: live-site table full (%d) — site %p "
-                     "falls back to the model-complete heuristic\n", kMaxLiveSites, bc);
 }
 extern "C" void BuildComponent_ClearLiveSite(void* bc) {
     if (!bc) return;
@@ -227,8 +210,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     uintptr_t self = reinterpret_cast<uintptr_t>(buildComp);
     if (!self) return 1;
 
-    if (BCS1_Trace())
-        std::fprintf(stderr, "[BuildTrace] === State1Enter ENTERED self=%p smNode=%p ===\n", buildComp, smNode);
 
     // resolve helpers once
     static BCS1_FindComp_t     s_find4740 = nullptr;
@@ -262,9 +243,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     // ---- Construction-demo gate (see g_pConstructionDemoSite header note) ----------
     // Must run BEFORE any mutation (multiplier write / model reset / storage reset).
     if (BuildComponent_DemoGateSkip(buildComp)) {
-        if (BCS1_Trace())
-            std::fprintf(stderr, "[BuildTrace] State1Enter SKIP self=%p (demoSite=%p)\n",
-                         buildComp, g_pConstructionDemoSite);
         return 1;
     }
 
@@ -312,8 +290,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         if (idx < 0 && s_arrayAdd) {
             int newCount = *reinterpret_cast<int*>(townMgr + 0xd8) + 1;
             s_arrayAdd(reinterpret_cast<void*>(townMgr + 0xd0), newCount, &siteIbp);
-            if (BCS1_Trace())
-                std::fprintf(stderr, "[BuildTrace] site registered into townMgr+0xd0 (count now %d)\n", newCount);
         }
     }
 
@@ -336,8 +312,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         }
         uintptr_t workIbp = 0;
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIbp, work);
-        if (BCS1_Trace())
-            std::fprintf(stderr, "[BuildTrace] GatherRawMaterials work constructed=%p\n", work);
 
         // find the WorkComponent (0x1401c8070) the work posts under
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
@@ -348,18 +322,10 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         // gather work into the gw+0x118 priority AVL (via 0x1400f88a0) keyed by the
         // WorkComponent, so an idle citizen claims it and runs GatherRawMaterials::Execute
         // (the town->site haul). Exe: CitizenAI_impl_ec60(*pWorkCompIBP, 0x2001, 1, &workIBP).
-        // Default-ON via kDefaultOnFlags (graduated 2026-07-22); env var is a kill-switch (=0).
-        // Needs the live-citizen action stack + pathfinder (both default-on).
-        const bool liveHaul = ::ComponentFactory::LiveEnabled("BANISHED_BUILD_LIVE_HAUL");
-        if (liveHaul && s_postEc60 && workCompIbp != 0) {
+        // Needs the live-citizen action stack + pathfinder.
+        if (s_postEc60 && workCompIbp != 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
             s_postEc60(workCompIbp, 0x2001, 1, &workIbp);
-            if (BCS1_Trace())
-                std::fprintf(stderr, "[BuildTrace] posted gather work to ledger via ec60 (code 0x2001), workComp=%p work=%p\n",
-                             (void*)workCompIbp, work);
-        } else if (BCS1_Trace()) {
-            std::fprintf(stderr, "[BuildTrace] (gather post skipped: liveHaul=%d postFn=%p workComp=%p)\n",
-                         (int)liveHaul, (void*)s_postEc60, (void*)workCompIbp);
         }
 
         // configure the site StorageComponent accept-mask + capacity
@@ -402,9 +368,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&storageIbp);
             *reinterpret_cast<int*>(storageIbp + 0x38) = totalQty;
 
-            if (BCS1_Trace())
-                std::fprintf(stderr, "[BuildTrace] storage configured: matCount=%d found=%d acceptMask=0x%x totalQty=%d multiplier=%d\n",
-                             matCount, found, acceptMask, totalQty, multiplier);
         }
 
     } else {
@@ -430,10 +393,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         // their final frame and stamps +0x48 = target. See StartTown_SpawnStructures and
         // notes/BRIDGE_HIGHLIGHT_DIALOG_BRIEF.md.
         ::ControllerLive::RequestStateTransition(smNode, 8);
-        if (BCS1_Trace())
-            std::fprintf(stderr, "[BuildTrace] materials present/instant (haveAll=%d instant=%d) -> requested 1->8 (self=%p mult=%d)\n",
-                         (int)haveAll, (int)instant, buildComp,
-                         *reinterpret_cast<int32_t*>(self + 0x4c));
     }
 
     // ===========================================================================
@@ -494,11 +453,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
             void* wpc = *reinterpret_cast<void**>(&wpcIbp);
             if (wpc) {
-                char prev = *reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(wpc) + 0x50);
                 *reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(wpc) + 0x50) = 1;
-                if (BCS1_Trace())
-                    std::fprintf(stderr, "[BuildTrace] WorkPlaceComponent accepting enabled (wpc=%p +0x50 %d->1)\n",
-                                 wpc, (int)prev);
                 // 2c-B: mark the site's WorkPlaceComponent as a "Builder workplace" —
                 // WPC+0x48 = Builder marker = *(*(gw+0xb0)+0x38). Retail's construction-start
                 // handler FUN_14012f520 does this (the inert WPC controller never runs it in
@@ -527,21 +482,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                 uint64_t builderMarker = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
                 if (builderMarker != 0)
                     *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x48) = builderMarker;
-                // BANISHED_PROFKEY_TRACE - pairs with the [ProfKey] lines in
-                // workplacecomponent.cpp. If this never prints for a building, State1Enter
-                // did not run for it, so LeaveBuilderProfession bails at completion and
-                // WPC+0x48 stays 0 - the workPlace ribbon is hidden for the entity's life.
-                {
-                    static int s_pkTrace = -1;
-                    if (s_pkTrace < 0) {
-                        const char* pe = std::getenv("BANISHED_PROFKEY_TRACE");
-                        s_pkTrace = (pe && pe[0] && pe[0] != '0') ? 1 : 0;
-                    }
-                    if (s_pkTrace)
-                        std::fprintf(stderr, "[ProfKey] State1Enter INSTALLED builder key wpc=%p +0x48=0x%llx\n",
-                                     wpc, (unsigned long long)builderMarker);
-                }
-
                 // NATURAL builder flow (BANISHED_BUILDER_NATURAL): register the site into
                 // the townMgr+0x100 profession BST keyed Builder — the step retail does at
                 // WPC OnCreate (FUN_14012f520 → AddWorkplaceToProfessionTree 0x1400895a0).
@@ -551,19 +491,10 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                 // CalcMaxWorkers; accepting (WPC+0x50) was set just above. The employment
                 // allocator's AssignHousing churn (which townMgr+0x100 population activates)
                 // is freeze-guarded by g_wpcRosterOnly inside CitizenAssignCitizens.
-                // Off = the legacy path (no register; State8Enter direct-seats the builders).
-                if (BCS1_BuilderNatural() && townMgr) {
+                if (townMgr) {
                     TownRegistry_RegisterWorkplace(static_cast<int64_t>(townMgr), wpc);
-                    if (BCS1_Trace())
-                        std::fprintf(stderr, "[BuildTrace] site WorkPlaceComponent -> Builder + REGISTERED townMgr+0x100 (WPC+0x48=0x%llx, natural flow)\n",
-                                     (unsigned long long)builderMarker);
-                } else if (BCS1_Trace()) {
-                    std::fprintf(stderr, "[BuildTrace] site WorkPlaceComponent -> Builder (WPC+0x48=0x%llx, no townMgr+0x100 register; seat in State8Enter)\n",
-                                 (unsigned long long)builderMarker);
                 }
             }
-        } else if (BCS1_Trace()) {
-            std::fprintf(stderr, "[BuildTrace] (no WorkPlaceComponent on site to enable)\n");
         }
     }
 

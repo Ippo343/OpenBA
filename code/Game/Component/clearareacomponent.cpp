@@ -206,7 +206,7 @@ int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
 // LIVE factory (Track A step 2): de-inert the ClearAreaComponent so it clears its
 // building's footprint AUTOMATICALLY, without any harness.
 // ============================================================
-// Opt-in via BANISHED_CLEAR_FOOTPRINT (or the global BANISHED_LIVE_COMPONENTS); default
+// Opt-in via BANISHED_CLEAR_FOOTPRINT (or the global the global live-components switch); default
 // OFF → byte-for-byte unchanged inert run. When ON:
 //   * component capability flags get bit 0x8 (needs-Update-tick) added to 0x80, so the
 //     EntityList bucket round-robin (entitylist.cpp: component+0x20 bit 3) ticks it.
@@ -224,40 +224,10 @@ static uint32_t ClearAreaComponent_LiveGetTypeId(void*) {
 }
 static void* ClearAreaComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
-static void ClearAreaComponent_UpdateVSlot(void* self, void* /*deltaTime*/) {
-    // Prove the EntityList is ticking our live component (once, on the first call).
-    static bool s_firstTick = false;
-    if (!s_firstTick) {
-        s_firstTick = true;
-        printf("[ClearArea LIVE] first Update tick from EntityList — component=%p is now "
-               "auto-sweeping its footprint each frame\n", self);
-        fflush(stdout);
-    }
-    int marked = ClearAreaComponent_FootprintSweep(reinterpret_cast<ClearAreaComponent*>(self));
-    if (marked > 0) {
-        static int s_logged = 0;
-        if (s_logged < 12) {
-            ++s_logged;
-            printf("[ClearArea LIVE] component=%p auto-swept footprint: marked %d resource(s) "
-                   "for removal\n", self, marked);
-            fflush(stdout);
-        }
-    }
-}
-
-// Instant-clear path (Track A step 2, verified): the component's OWN Update tick
-// (vtable slot 9) marks the footprint for removal → EntityList destroys next frame.
-static bool ClearAreaComponent_InstantOn() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_CLEAR_FOOTPRINT");
-}
-// Harvest-over-time path (Track A refinement #1, faithful): the entity's
-// StateMachineComponent links this component's embedded state node (at +0x28) and
-// ticks its clearing state machine, which posts a ClearArea work-action to a citizen
-// so the footprint resources are chopped over time (logs/stone/iron). Requires the
-// StateMachineComponent to be live (BANISHED_LIVE_STATEMACHINE).
-static bool ClearAreaComponent_SMOn() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CLEARCTRL");
-}
+// Harvest-over-time path (faithful): the entity's StateMachineComponent links this
+// component's embedded state node (at +0x28) and ticks its clearing state machine,
+// which posts a ClearArea work-action to a citizen so the footprint resources are
+// chopped over time (logs/stone/iron).
 
 // State-machine hooks defined in clearareacomponent_states.cpp.
 extern "C" void** ClearAreaCtrl_NodeVtable();
@@ -272,34 +242,27 @@ static void ClearAreaComponent_ShutdownVSlot(void* self, void* stream) {
 }
 
 // Install the live vtable slots (re-run every instance: InitInertTyped re-stubs the
-// shared vtable). SM path takes precedence over the instant path when both are set.
+// shared vtable).
 static void ClearAreaComponent_FinishLiveVtable(void* mem) {
     // Slot 3 (stream Shutdown/Serialize, retail 0x140117ec0) wired UNCONDITIONALLY,
     // save/load wave 2026-08-28 — previously the class fell through to base-only
     // Component_SerializeReimpl and clearState silently reset on load.
     ClearAreaComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&ClearAreaComponent_ShutdownVSlot);
-    if (ClearAreaComponent_SMOn()) {
-        ClearAreaComponent_LiveVtable[16] = reinterpret_cast<void*>(&ClearAreaComponent_GetDefaultState);
-        ClearAreaComponent_LiveVtable[17] = reinterpret_cast<void*>(&ClearAreaComponent_CreateState);
-        ClearAreaCtrl_PopulateTable();
-        if (mem) {
-            // Embedded node: vtable at +0x28, back-pointer (node+0x18) = the component.
-            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28) =
-                reinterpret_cast<void*>(ClearAreaCtrl_NodeVtable());
-            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28 + 0x18) = mem;
-        }
-    } else if (ClearAreaComponent_InstantOn()) {
-        ClearAreaComponent_LiveVtable[9] = reinterpret_cast<void*>(&ClearAreaComponent_UpdateVSlot);
+    ClearAreaComponent_LiveVtable[16] = reinterpret_cast<void*>(&ClearAreaComponent_GetDefaultState);
+    ClearAreaComponent_LiveVtable[17] = reinterpret_cast<void*>(&ClearAreaComponent_CreateState);
+    ClearAreaCtrl_PopulateTable();
+    if (mem) {
+        // Embedded node: vtable at +0x28, back-pointer (node+0x18) = the component.
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28) =
+            reinterpret_cast<void*>(ClearAreaCtrl_NodeVtable());
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28 + 0x18) = mem;
     }
 }
 
-// Capability flags: SM path uses the plain ControllerComponent flags (0x80) — the SM
-// ticks the node, so the component needs no self-tick bit. Instant path adds 0x8 so
-// the EntityList ticks the component's own Update.
+// Capability flags: the SM path uses the plain ControllerComponent flags (0x80) — the
+// SM ticks the node, so the component needs no self-tick bit.
 static uint32_t ClearAreaComponent_Flags() {
-    if (ClearAreaComponent_SMOn())      return 0x80u;
-    if (ClearAreaComponent_InstantOn()) return 0x88u;
     return 0x80u;
 }
 

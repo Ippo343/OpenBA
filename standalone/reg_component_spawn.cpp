@@ -21,7 +21,6 @@
 // FillComponentTypeIdGlobals_spawn() into game_main.cpp (after the Engine::Startup probe).
 #include "resolve.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
-#include "Component/component_factory_base.h" // ComponentFactory::LiveEnabled
 #include <cstdint>
 
 // Backing storage for the SpawnComponent type-id .rdata globals (filled after
@@ -36,13 +35,9 @@ extern "C" void FillComponentTypeIdGlobals_spawn() {
 }
 
 void RegisterComponentBatch_spawn() {
-    // GATED ON LIVE OPT-IN so a default (env-off) run is byte-for-byte unchanged:
-    // these two type-id globals are also read by other (currently-null-guarded)
-    // consumers (TileFree 0x140120c30, ForesterWork), so we only publish real values
-    // when SpawnComponent is actually being brought live (BANISHED_LIVE_SPAWN or the
-    // global BANISHED_LIVE_COMPONENTS). When off, ResolveAddr stays null exactly as
-    // before and SpawnComponent's Update slot is never graduated anyway.
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_SPAWN")) return;
+    // These two type-id globals are also read by other (currently-null-guarded)
+    // consumers (TileFree 0x140120c30, ForesterWork). Published unconditionally
+    // since 2026-09-13 (the SpawnComponent live gate graduated).
     RegisterExeAddr(0x1401c4918, reinterpret_cast<uintptr_t>(&g_tid_SpawnDescription));
     RegisterExeAddr(0x1401c77e8, reinterpret_cast<uintptr_t>(&g_tid_GrowthDescription));
 }

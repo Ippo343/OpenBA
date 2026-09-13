@@ -617,12 +617,7 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
     }
 
     // Water level (int16, x256 fixed-point). Default -192 = -0.75 world.
-    int waterQ = -192;
-    {
-        const char* e = std::getenv("BANISHED_WATER_LEVEL");
-        if (e && e[0]) waterQ = static_cast<int>(static_cast<float>(atof(e)) * 256.0f);
-    }
-    const int16_t kWaterLevelQ = static_cast<int16_t>(waterQ);
+    const int16_t kWaterLevelQ = -192;
     const int16_t halfGrid = static_cast<int16_t>(gridSize >> 1);
 
     // Normal-map tiling (wave size). The water VS (hash a73d5785) scales the
@@ -643,12 +638,8 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
     // squarely in the measured retail range. int16 wraps every 64 tiles
     // (65536/1024) so tiling stays seamless; the lower step also pushes the
     // int16-overflow seam from col 128 out to col ~410 (fewer/no seams on a
-    // 512 grid). Tune live with BANISHED_WATER_UV.
-    int uvStep = 80;
-    {
-        const char* e = std::getenv("BANISHED_WATER_UV");
-        if (e && e[0]) uvStep = atoi(e);
-    }
+    // 512 grid).
+    const int uvStep = 80;
 
     // Flat up-normal (0,0,1) packed to bytes like the terrain builder.
     const uint8_t nB0 = static_cast<uint8_t>(static_cast<int>((0.0f + kUVScale) * kByteScale)); // 127
@@ -779,27 +770,6 @@ void GeometryChunkUpdate_Body(void* self) {
 
     uint8_t* selfBytes = reinterpret_cast<uint8_t*>(self);
 
-    // [QUARRY-DIAG] one-shot call/dirty telemetry (BANISHED_QUARRY_TRACE).
-    {
-        static int s_trc = -1;
-        if (s_trc < 0) { const char* e = getenv("BANISHED_QUARRY_TRACE"); s_trc = (e && *e && *e != '0') ? 1 : 0; }
-        if (s_trc) {
-            static long s_calls = 0;
-            static long s_dirtyHits = 0;
-            ++s_calls;
-            const int dirty = *reinterpret_cast<int32_t*>(selfBytes + 0xF0);
-            if (dirty && s_dirtyHits < 5) {
-                ++s_dirtyHits;
-                fprintf(stderr, "[ChunkUpd] DIRTY hit #%ld at call %ld self=%p\n", s_dirtyHits, s_calls, self);
-                fflush(stderr);
-            }
-            if (s_calls == 1 || s_calls == 600) {
-                fprintf(stderr, "[ChunkUpd] alive: calls=%ld self=%p dirtyFlag=%d\n", s_calls, self, dirty);
-                fflush(stderr);
-            }
-        }
-    }
-
     // self+0xF0 is the "dirty tree non-empty" flag (4 bytes). The original
     // tests this as the first thing — when no chunks are dirty, return.
     if (*reinterpret_cast<int32_t*>(selfBytes + 0xF0) == 0) return;
@@ -868,27 +838,6 @@ void GeometryChunkUpdate_Body(void* self) {
         int byteOffset = (row * chunksPerSide + col) * vertsPerChunk * 0x10;
         s_VertexBufferSet(selfBytes + 0x100, byteSize, byteOffset, vertScratch);
 
-        // [QUARRY-DIAG] per-rebuilt-chunk telemetry (BANISHED_QUARRY_TRACE):
-        // chunk index/coords and the min height in the regenerated block, so a
-        // carve that reached the upload is provable from the log.
-        {
-            static int s_trc = -1;
-            if (s_trc < 0) { const char* e = getenv("BANISHED_QUARRY_TRACE"); s_trc = (e && *e && *e != '0') ? 1 : 0; }
-            static long s_logged = 0;
-            if (s_trc && s_logged < 40) {
-                ++s_logged;
-                int16_t hmin = 32767, hmax = -32768;
-                for (int v = 0; v < vertsPerChunk; ++v) {
-                    int16_t h = vertScratch[v * 8 + 2];
-                    if (h < hmin) hmin = h;
-                    if (h > hmax) hmax = h;
-                }
-                fprintf(stderr, "[ChunkUpd]   rebuilt chunk=%d (col=%d,row=%d) cells[%d..%d)x[%d..%d) hmin=%d hmax=%d\n",
-                        chunkIdx, col, row, col * chunkSize, col * chunkSize + vertsPerSide,
-                        row * chunkSize, row * chunkSize + vertsPerSide, (int)hmin, (int)hmax);
-                fflush(stderr);
-            }
-        }
     };
 
     // Iterative in-order walk to avoid std::function or recursive lambdas.

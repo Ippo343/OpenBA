@@ -58,7 +58,7 @@
 //     null. Our action vtables are partially-filled arrays, not the exe's, so an
 //     unported slot must not be called — retail's are all real functions.
 //
-// DEFAULT-ON via kDefaultOnFlags (graduated 2026-08-23 on a fire soak: 3 buildings
+// DEFAULT-ON via the default-on table (graduated 2026-08-23 on a fire soak: 3 buildings
 // collapsed 2 -> 1 -> 0 over 8 rubble steps, empty crash log). BANISHED_LIVE_DESTROY_COLLAPSE
 // is now a kill-switch (=0) for A/B runs.
 
@@ -69,16 +69,9 @@
 #include <cstdio>
 #include <cstdlib>
 
-namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
-
 // ============================================================
-// Gate + tracing
+// Tracing
 // ============================================================
-static bool CollapseOn() {
-    static const int s = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_DESTROY_COLLAPSE") ? 1 : 0;
-    return s == 1;
-}
-
 // Milestone lines are deliberately NOT behind the feature flag or a trace env: a
 // gate that only speaks when the feature is enabled goes silent exactly when the
 // feature starts working. Budgeted so a long burn cannot flood the log.
@@ -509,17 +502,6 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
 // fire's own state machine forces state 7 when the burn ends.
 extern "C" char Destroy_State6Enter_d4d0(void* data, void* /*sm*/) {
     EnsureResolved();
-    if (!CollapseOn()) {
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            std::fprintf(stderr, "[DestroySM] state-6 collapse/rubble DISABLED by "
-                                 "BANISHED_LIVE_DESTROY_COLLAPSE=0 — burning buildings will "
-                                 "keep their intact mesh (0x14011d4d0/d400/d490)\n");
-            std::fflush(stderr);
-        }
-        return 0;
-    }
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     void* entitySlot = reinterpret_cast<void*>(comp + 0x10);
 
@@ -581,7 +563,6 @@ extern "C" char Destroy_State6Enter_d4d0(void* data, void* /*sm*/) {
 // coin flip — so both can fire in the same call. Kept as-is.
 extern "C" char Destroy_State6Update_d400(void* data, void* /*sm*/) {
     EnsureResolved();
-    if (!CollapseOn()) return 1;
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
     void* entitySlot = reinterpret_cast<void*>(comp + 0x10);
 
@@ -609,7 +590,6 @@ extern "C" char Destroy_State6Update_d400(void* data, void* /*sm*/) {
 // zero, clamp it and take the rubble step that puts the building in its final state.
 extern "C" char Destroy_State6Tick_d490(void* data, void* /*sm*/, void* time) {
     EnsureResolved();
-    if (!CollapseOn()) return 1;
     uintptr_t comp = reinterpret_cast<uintptr_t>(data);
 
     int64_t remaining = *reinterpret_cast<int64_t*>(comp + 0x48);

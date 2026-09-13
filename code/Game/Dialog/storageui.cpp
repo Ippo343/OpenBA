@@ -25,10 +25,6 @@
 // second entity panel could stay open (pin). Gate them behind BANISHED_DIALOG_TRACE
 // (cached once) so they're opt-in. Kept inside _DEBUG so release builds are unchanged.
 #ifdef _DEBUG
-static bool StorageDbgTrace() {
-    static const bool s_on = std::getenv("BANISHED_DIALOG_TRACE") != nullptr;
-    return s_on;
-}
 #endif
 
 // Helper: find element by name in parent, returns raw pointer
@@ -224,9 +220,6 @@ void StorageUI_Startup(StorageUI* self) {
     fn_InternalBasePtr_CheckPtr(&storageComp);
 
 #ifdef _DEBUG
-    if (StorageDbgTrace())
-    printf("[StorageUI::Startup] self=%p entity=%p storageComp=0x%llx\n",
-           (void*)self, entity, (unsigned long long)storageComp);
 #endif
 
     // Build temp array of storage items
@@ -237,14 +230,6 @@ void StorageUI_Startup(StorageUI* self) {
 
     int smEntryCount = storageComp ? *(int*)(storageComp + 0x30) : 0;
 #ifdef _DEBUG
-    if (StorageDbgTrace()) {
-    printf("[StorageUI::Startup] smEntryCount=%d (comp+0x28=%p comp+0x30=%d comp+0x38=%d)\n",
-           smEntryCount,
-           storageComp ? (void*)*(uintptr_t*)(storageComp + 0x28) : nullptr,
-           storageComp ? *(int*)(storageComp + 0x30) : -1,
-           storageComp ? *(int*)(storageComp + 0x38) : -1);
-    fflush(stdout);
-    }
 #endif
     if (smEntryCount > 0) {
         uintptr_t entryOffset = 0;
@@ -262,9 +247,6 @@ void StorageUI_Startup(StorageUI* self) {
                 int compCount = *(int*)(resEntry + 0x30);
                 void* resType = nullptr;
 #ifdef _DEBUG
-                if (StorageDbgTrace())
-                printf("[StorageUI::Startup]   entry[%d]: count=%d resEntry=%p compCount=%d\n",
-                       i, count, (void*)resEntry, compCount);
 #endif
                 for (int c = 0; c < compCount; c++) {
                     void* comp = *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8);
@@ -329,11 +311,6 @@ void StorageUI_Startup(StorageUI* self) {
 
     // Populate table rows with sorted items
 #ifdef _DEBUG
-    if (StorageDbgTrace()) {
-    printf("[StorageUI::Startup] itemCount=%d totalRows=%d sortedItems=%p\n",
-           itemCount, *(int*)(s + 0x38), sortedItems);
-    fflush(stdout);
-    }
 #endif
     int rowIdx = 0;
     if (itemCount > 0) {
@@ -348,13 +325,6 @@ void StorageUI_Startup(StorageUI* self) {
             int count = *(int*)itemPtr;  // item[2] = count
 
 #ifdef _DEBUG
-            if (StorageDbgTrace()) {
-                fn_InternalBasePtr_CheckPtr((void*)rowBase);
-                void* labelE = *(void**)rowBase;
-                printf("[StorageUI::Startup]   row[%d]: resType=%p count=%d labelElem=%p\n",
-                       rowIdx, (void*)resType, count, labelE);
-                fflush(stdout);
-            }
 #endif
 
             // Set sprite from resource type
@@ -693,7 +663,6 @@ bool Ready() {
 }
 
 static void Trace(const char* what, void* self) {
-    if (!std::getenv("BANISHED_DIALOG_TRACE")) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     fprintf(stderr, "[StorageUI] %s self=%p ready=%d rows(+0x38)=%d\n",
             what, self, Ready() ? 1 : 0,

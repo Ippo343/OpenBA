@@ -524,11 +524,6 @@ void DestroyUI_Slot9(DestroyUI* self, uint64_t /*param2*/, int param3, int param
     // Find DestroyComponent on entity
     void* destroyComp = nullptr;
     fn_FindComponent_Destroy(entityInternal, &destroyComp);
-    if (std::getenv("BANISHED_DESTROY_TRACE")) {
-        std::fprintf(stderr, "[DestroyUI] click id=0x%x destroyComp=%p\n",
-                     param4, destroyComp);
-        std::fflush(stderr);
-    }
     if (!destroyComp) return;  // SA-guard
 
     // Dispatch based on button ID

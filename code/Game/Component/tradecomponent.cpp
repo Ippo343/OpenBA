@@ -609,7 +609,6 @@ static void* TradeComponent_LiveGetTypeInfo(void*) {
 // (FillTypedVtable rewrites the vtable slots, erasing anything written earlier) —
 // see reference_live_vtable_slot_must_be_wired_in_installlive.
 static void TradeComponent_InstallController(void* mem) {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_CTRL")) return;
     TradeComponent_LiveVtable[1]  = reinterpret_cast<void*>(&TradeComponent_LiveGetTypeInfo);
     TradeComponent_LiveVtable[16] = reinterpret_cast<void*>(&TradeComponent_GetDefaultState);
     TradeComponent_LiveVtable[17] = reinterpret_cast<void*>(&TradeComponent_CreateState);
@@ -632,16 +631,14 @@ static void TradeComponent_FinishLiveVtable() {
     // merchant table / item lists on every load.
     TradeComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&TradeComponent_SerializeVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_COMPONENT")) {
-        TradeComponent_LiveVtable[6] =
-            reinterpret_cast<void*>(&TradeComponent_OnAddedVSlot);
-        // 13 and 14 go in together — see the note on the pair above. A live query
-        // over a stub toggle reports a state nothing can change.
-        TradeComponent_LiveVtable[13] =
-            reinterpret_cast<void*>(&TradeComponent_Slot13VSlot);
-        TradeComponent_LiveVtable[14] =
-            reinterpret_cast<void*>(&TradeComponent_Slot14VSlot);
-    }
+    TradeComponent_LiveVtable[6] =
+        reinterpret_cast<void*>(&TradeComponent_OnAddedVSlot);
+    // 13 and 14 go in together — see the note on the pair above. A live query
+    // over a stub toggle reports a state nothing can change.
+    TradeComponent_LiveVtable[13] =
+        reinterpret_cast<void*>(&TradeComponent_Slot13VSlot);
+    TradeComponent_LiveVtable[14] =
+        reinterpret_cast<void*>(&TradeComponent_Slot14VSlot);
 }
 
 extern "C" void* TradeComponent_Factory(void) {
@@ -649,10 +646,7 @@ extern "C" void* TradeComponent_Factory(void) {
         TradeComponent_LiveVtable,
         reinterpret_cast<void*>(&TradeComponent_LiveGetTypeId));
     TradeComponent_FinishLiveVtable();
-    // Gated with the slot so the two never disagree: a live OnAdded on a body
-    // whose sentinel is still 0 is the state that just crashed.
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_COMPONENT"))
-        TradeComponent_CtorInit(p);
+    TradeComponent_CtorInit(p);
     TradeComponent_InstallController(p);
     return p;
 }
@@ -662,8 +656,7 @@ static void* TradeComponent_CreateInPlace(void* mem) {
         TradeComponent_LiveVtable,
         reinterpret_cast<void*>(&TradeComponent_LiveGetTypeId));
     TradeComponent_FinishLiveVtable();
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_COMPONENT"))
-        TradeComponent_CtorInit(mem);
+    TradeComponent_CtorInit(mem);
     TradeComponent_InstallController(mem);
     return mem;
 }

@@ -118,6 +118,7 @@
 #include <cmath>
 
 #include "resolve.h"
+#include "options.h"
 // FULL PATHS ON PURPOSE. `engine/types/` also has a `ui/DialogInstance.h`,
 // and `-Iengine/types` precedes `-Iruntime/types` on the standalone command
 // line, so the short spelling silently picks up the WRONG header -- which
@@ -219,7 +220,7 @@ void ReadConfig() {
     if (g_cfgRead) return;
     g_cfgRead = true;
 
-    const char* script = std::getenv("BANISHED_MOUSE_INJECT");
+    const char* script = Opt().mouseInject;
     if (!script || !*script || !std::strcmp(script, "0")) return;
 
     // steps
@@ -236,20 +237,20 @@ void ReadConfig() {
     }
     if (g_cfg.stepCount == 0) return;
 
-    if (const char* h = std::getenv("BANISHED_MOUSE_HOLD"))
+    if (const char* h = Opt().mouseHold)
         if (int v = std::atoi(h)) g_cfg.hold = v;
-    if (const char* f = std::getenv("BANISHED_MOUSE_START"))
+    if (const char* f = Opt().mouseStart)
         if (int v = std::atoi(f)) g_cfg.startFrame = v;
-    g_cfg.trace = std::getenv("BANISHED_MOUSE_TRACE") != nullptr;
+    g_cfg.trace = Opt().mouseTrace != nullptr;
 
-    if (const char* ts = std::getenv("BANISHED_MOUSE_TIPSTR")) {
+    if (const char* ts = Opt().mouseTipStr) {
         if (*ts && std::strcmp(ts, "0") != 0) {
             std::snprintf(g_cfg.tipStr, sizeof(g_cfg.tipStr), "%s", ts);
             g_cfg.haveTipStr = true;
         }
     }
 
-    if (const char* c = std::getenv("BANISHED_MOUSE_CONTROL")) {
+    if (const char* c = Opt().mouseControl) {
         if (!std::strcmp(c, "nowrite"))        g_cfg.control = Control::NoWrite;
         else if (!std::strcmp(c, "badscale"))  g_cfg.control = Control::BadScale;
         else if (!std::strcmp(c, "offtarget")) g_cfg.control = Control::OffTarget;
@@ -260,7 +261,7 @@ void ReadConfig() {
         }
     }
 
-    const char* t = std::getenv("BANISHED_MOUSE_TARGET");
+    const char* t = Opt().mouseTarget;
     if (t && *t) {
         if (t[0] == '#') {
             g_cfg.byName = true;
@@ -678,23 +679,7 @@ void StartDrag(UI::UserInterface* ui, const Target& t) {
     void* dlgLocal  = t.dlg;
     void* elemLocal = t.elem;
 
-    // ---- Wave 10E lane DRAG: BANISHED_MOUSE_DRAGSKEW=dx,dy -----------------
-    // FindTarget always aims at the element CENTRE, so the grab offsets it
-    // produces are width/2 and height/2 -- and on the toolbar button this lane
-    // uses as its subject that is 20 and 20. A SQUARE subject makes the field
-    // oracle blind to the one defect it was built for: transposing the +0x80
-    // and +0x84 stores leaves 20,20 as 20,20
-    // (reference_uniform_population_is_not_a_verification.md).
-    //
-    // This shifts the drag's aim point by a deliberately ASYMMETRIC delta so
-    // that grabX != grabY and the comparison has something to compare. It
-    // applies to the BeginDragDrop arguments only, identically in every cell,
-    // so it changes what the oracle can SEE and not what either side computes.
     int32_t dragX = t.cx, dragY = t.cy;
-    if (const char* sk = std::getenv("BANISHED_MOUSE_DRAGSKEW")) {
-        int dx = 0, dy = 0;
-        if (sscanf(sk, "%d,%d", &dx, &dy) == 2) { dragX += dx; dragY += dy; }
-    }
     fn(ui, &dlgLocal, &elemLocal, dragX, dragY, 0x4D4F5553u /*'MOUS'*/, nullptr);
     ++g_s.dragStarted;
     printf("[MouseInject] BeginDragDrop(dlg=%p, x=%d, y=%d) -> _dragDropDialog=%p\n",

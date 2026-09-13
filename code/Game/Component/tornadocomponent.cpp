@@ -32,7 +32,7 @@
 // inside Game_SpawnTornado (0x14005fd20), whose only caller is the debug panel.
 // That function is already ported at code/Game/Dialog/debugui.cpp (command 329).
 //
-// GATE: BANISHED_LIVE_TORNADO — DEFAULT-ON since 2026-08-22 (kDefaultOnFlags); the
+// GATE: BANISHED_LIVE_TORNADO — DEFAULT-ON since 2026-08-22 (the default-on table); the
 // env var is now a kill-switch (=0). Trace tag [Tornado] on stderr.
 //
 // The particle half is done too: Tornado vtable slots 1/2/3/5/6/7/8/9 and
@@ -41,6 +41,7 @@
 // than by a dormant one.
 
 #include "Component/tornadocomponent_funcs.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -176,7 +177,7 @@ T ResolveSlotPtr(uintptr_t slotAddr) {
 int g_trace = -1;
 bool TraceOn() {
     if (g_trace < 0) {
-        const char* v = std::getenv("BANISHED_TORNADO_TRACE");
+        const char* v = Opt().tornadoTrace;
         g_trace = (v && (std::strcmp(v, "0") == 0 || std::strcmp(v, "false") == 0)) ? 0 : 1;
     }
     return g_trace != 0;
@@ -1154,7 +1155,6 @@ void TornadoComponent_FinishLiveVtable() {
     // See reference_slot3_wrapper_must_resolve_first.
     g_TornadoComponent_LiveVtable[3] = reinterpret_cast<void*>(&TC_SerializeVSlot);
 
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_TORNADO")) return;
     g_TornadoComponent_LiveVtable[4] = reinterpret_cast<void*>(&TC_StartupVSlot);
     g_TornadoComponent_LiveVtable[8] = reinterpret_cast<void*>(&TC_UpdateVSlot);
 }

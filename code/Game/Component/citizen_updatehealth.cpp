@@ -38,6 +38,7 @@
 // 0x14017214c=1.0f, DAT_140172174=2.0f, DAT_140172280=-1.0f (inlined bit-exact).
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
@@ -145,7 +146,7 @@ static inline int64_t TimeFromSeconds(float secs) {
 static bool PlagueTraceOn() {
     static int en = -1;
     if (en < 0) {
-        const char* e = std::getenv("BANISHED_PLAGUE_TRACE");
+        const char* e = Opt().plagueTrace;
         en = (e && (e[0] == '0' || std::strcmp(e, "false") == 0)) ? 0 : 1;
     }
     return en == 1;

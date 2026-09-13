@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Player/edittool_funcs.h"
+#include "options.h"
 #include "EditTool.h"
 #include "Tool.h"
 #include "engine_funcs.h"
@@ -25,7 +26,7 @@
 // BANISHED_SELECT_DIAG=1 traces the live EditTool pick path (A/B-safe: off by default).
 static int SelDiagOn() {
     static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_SELECT_DIAG"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    if (s < 0) { const char* e = Opt().selectDiag; s = (e && e[0] && e[0] != '0') ? 1 : 0; }
     return s;
 }
 
@@ -1118,13 +1119,6 @@ extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
         printf("[EditSel] citizen select entity=%p -> dialog=%p (%s)\n",
                userData, dlg, dlg ? "OPENED" : "no dialog");
         if (dlg) {
-            if (std::getenv("BANISHED_DIALOG_TRACE")) {
-                void* root = *(void**)((uintptr_t)dlg + 0x50);
-                printf("[CitTree] dialog=%p root=%p — element tree:\n", dlg, root);
-                int counter = 0;
-                DumpCitizenElemTree(root, 0, &counter);
-                printf("[CitTree] (%d elements)\n", counter);
-            }
             return 1;
         }
     }

@@ -20,6 +20,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/citizenaicomponent_funcs.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -34,7 +35,6 @@ extern void* g_pForceWorkBuilding;
 // Phase B production harness (production_harness.cpp, env BANISHED_LIVE_PRODUCTION).
 // One-shot: drives a faithful log-production accounting event at the ForesterLodge and
 // proves the town stock count increments. Self-gated; no-op when the env is unset.
-extern "C" void StartTown_DriveProduction();
 
 // Phase B-real force-ForesterWork driver (forester_force_harness.cpp, env
 // BANISHED_FORCE_FORESTERWORK). Constructs + pushes a ForesterWork action onto ONE
@@ -482,16 +482,6 @@ void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP) {
             break;
         }
     }
-    static const bool s_fsTrace = std::getenv("BANISHED_CITIZENAI_TRACE") != nullptr;   // was a getenv PER CALL (hot: every CitizenComponent_Update)
-    if (s_fsTrace) {
-        static int s_fs = 0;
-        if (s_fs < 6) { ++s_fs;
-            fprintf(stderr, "[FindStorage] entity=%p compCount=%d want(Residence)=%u found=%p\n",
-                    (void*)entity, count,
-                    s_TypeId_ResidenceComponent ? *s_TypeId_ResidenceComponent : 0, found);
-            fflush(stderr);
-        }
-    }
     fn_InternalBasePtr_Ctor(outIBP, found);
     return outIBP;
 }
@@ -833,30 +823,6 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
         czChar   = *reinterpret_cast<void**>(cz + 0x278);  // CharacterComponent (alive flag)
     }
 
-    // Bring-up trace (env BANISHED_CITIZENAI_TRACE, default off => byte-unchanged):
-    // follows ONE component across ticks, reporting the +0x48 entry and whether the
-    // sibling citizen + description are populated (i.e. whether Brick 2 has landed).
-    {
-        static int s_traceState = -1;
-        static int s_traceCount = 0;
-        static void* s_lockComp = nullptr;
-        if (s_traceState < 0) {
-            const char* e = std::getenv("BANISHED_CITIZENAI_TRACE");
-            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_traceState == 1 && s_lockComp == nullptr) s_lockComp = self;
-        if (s_traceState == 1 && self == s_lockComp && s_traceCount < 20) {
-            fprintf(stderr,
-                "[CitizenAITrace] comp=%p citizen=%p entity=%p desc=%p aiState=%u %s\n",
-                (void*)self, citizen, czEntity, czDesc,
-                *reinterpret_cast<uint32_t*>(base + 0x28),
-                (citizen && czEntity && czDesc && czChar) ? "RUN"
-                    : "noop(citizen inert / not found)");
-            fflush(stderr);
-            s_traceCount++;
-        }
-    }
-
     // --- FORCE-WORK HARNESS (env BANISHED_FORCE_WORK, default off) -------------
     // The town-manager building registry is empty in standalone, so AssignHousing/
     // FindWorkplace never find a residence/job -> the citizen stays unhoused +
@@ -871,7 +837,7 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     if (citizen) {
         static int s_force = -1;
         if (s_force < 0) {
-            const char* e = std::getenv("BANISHED_FORCE_WORK");
+            const char* e = Opt().forceWork;
             s_force = (e && e[0] && e[0] != '0') ? 1 : 0;
         }
         if (s_force == 1 && g_pForceWorkBuilding) {
@@ -896,7 +862,6 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     // Phase B of the economy WORK-half: drive ONE faithful log-production accounting
     // event at the force-worked ForesterLodge and prove the town stock count
     // increments. One-shot (self-gated inside). See production_harness.cpp.
-    StartTown_DriveProduction();
 
     // GUARD (crash-safe): Update derefs citizen / its entity(+0x10) / its
     // CitizenDescription(+0x288) / its CharacterComponent(+0x278, Phase-8 alive
@@ -940,15 +905,12 @@ static void CitizenAIComponent_SerializeVSlot(void* s, void* stream) {
     CitizenAIComponent_Serialize(s, stream);
 }
 static void CitizenAIComponent_FinishLiveVtable() {
-    // Serialize round-trip is not an opt-in feature: wired before the env gate.
     CitizenAIComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&CitizenAIComponent_SerializeVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZENAI")) {
-        CitizenAIComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&CitizenAIComponent_StartupVSlot);
-        CitizenAIComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&CitizenAIComponent_UpdateVSlot);
-    }
+    CitizenAIComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&CitizenAIComponent_StartupVSlot);
+    CitizenAIComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&CitizenAIComponent_UpdateVSlot);
 }
 extern "C" void* CitizenAIComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0xd0, 0x89,

@@ -300,45 +300,6 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
         (void)acc;
     }
 
-    // ── One-shot operand dump (BANISHED_DECAL_TRACE) — pin the V-negation bug ────────
-    // The retail decal's diffuse V is POSITIVE (+0.156) but ours emits NEGATIVE int16 V
-    // (-640). operator*(Vector2/Transform2) + the chain are verified faithful, so a single
-    // operand float must differ. Dump flip/uvRect/scale + the composed T_1f0 (all as the
-    // [f0,f1,f2,f3,f4,f5] = {basisX,basisY,trans} layout) for the first few tiled decals
-    // (cVar1==0). Expected for a variant-2 house: flip=[1,0,0,-1,0,1], uvRect≈[0.125,0,0,
-    // 0.156,0.25,0]; T_1f0*corner must give POSITIVE V. Whichever is off is the bug.
-    {
-        static int s_opDump = -1;
-        if (s_opDump < 0) { const char* e = getenv("BANISHED_DECAL_TRACE");
-                            s_opDump = (e && *e && e[0] != '0') ? 0 : 999; }
-        if (s_opDump < 6 && cVar1 == '\0') {
-            ++s_opDump;
-            const float* t1f0 = reinterpret_cast<const float*>(T_1f0);
-            const float* p108 = reinterpret_cast<const float*>(T_108);   // ctor3 (−0.5 seed)
-            const float* p168 = reinterpret_cast<const float*>(T_168);   // yawOff (rotation)
-            const float* p138 = reinterpret_cast<const float*>(T_138);   // ctor1 (+0.5 seed)
-            const float div = *reinterpret_cast<float*>(lVar16 + 0x48);
-            fprintf(stderr,
-                "[ace40::op] desc=%p div=%.1f uvRaw=(%.1f,%.1f,%.1f,%.1f) fUV=%.3f yawDeg=%.2f\n"
-                "[ace40::op]   TF_flip  =[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n"
-                "[ace40::op]   TF_uvRect=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n"
-                "[ace40::op]   r108(-.5)=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n"
-                "[ace40::op]   r168(yaw)=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n"
-                "[ace40::op]   r138(+.5)=[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]\n"
-                "[ace40::op]   T_1f0    =[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f]  (out.y=x*f1+y*f3+f5)\n",
-                reinterpret_cast<void*>(lVar16), div,
-                *reinterpret_cast<float*>(lVar16 + 0x4c), *reinterpret_cast<float*>(lVar16 + 0x50),
-                *reinterpret_cast<float*>(lVar16 + 0x54), *reinterpret_cast<float*>(lVar16 + 0x58),
-                fUV, local_29c,
-                TF_flip[0], TF_flip[1], TF_flip[2], TF_flip[3], TF_flip[4], TF_flip[5],
-                TF_uvRect[0], TF_uvRect[1], TF_uvRect[2], TF_uvRect[3], TF_uvRect[4], TF_uvRect[5],
-                p108[0], p108[1], p108[2], p108[3], p108[4], p108[5],
-                p168[0], p168[1], p168[2], p168[3], p168[4], p168[5],
-                p138[0], p138[1], p138[2], p138[3], p138[4], p138[5],
-                t1f0[0], t1f0[1], t1f0[2], t1f0[3], t1f0[4], t1f0[5]);
-            fflush(stderr);
-        }
-    }
 
     // 4 unit-quad corners via operator*(Vector2). Packed corner cycles {0,0},{1,0},{1,1},{0,1}.
     uint64_t* corner = reinterpret_cast<uint64_t*>(cornerBuf);

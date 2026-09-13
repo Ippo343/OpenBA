@@ -56,7 +56,7 @@ SA_TARGET = $(SA_BUILD_DIR)/reimpl-x64.exe
 # load: at -O2+ it proved CitizenAI_ActionExecutor_c4c50's pop loop could never exit and
 # emitted a literal `jmp .` self-loop, which froze the game in-world with the citizens
 # T-posing (the sim tick never returned). Do not remove.
-SA_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-type -MMD -MP -include standalone/env_cache.h
+SA_CXXFLAGS = -std=c++17 -fno-strict-aliasing -Wall -Wextra -Wno-cast-function-type -MMD -MP
 SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
 # -lshell32: runtime/src/io/filesystem_win.cpp (Wave 4 lane D) calls SHGetFolderPathW
 # for FileSystem::GetSaveDirectory. Behind the _win seam per PLAN.md §4.1 decision 1.
@@ -285,22 +285,20 @@ sa-deploy: standalone-debug
 	rm -f "$(BANISHED_DIR)/standalone_debug.log"
 	@echo "Deployed to $(BANISHED_DIR)/reimpl-x64.exe"
 
-# 2026-07-19: the former SA_LIVE_ENV flag block is GONE — every verified live
-# feature is now DEFAULT-ON in code (kDefaultOnFlags in
-# code/Game/Component/component_factory_base.cpp). Env vars remain as
-# kill-switches only: `BANISHED_LIVE_CITIZENAI=0 mingw32-make sa-run` disables
-# one feature for an A/B run. New features start opt-in (NOT in the table) and
-# get promoted into kDefaultOnFlags once verified.
+# 2026-09-13 (ENDGAME C.2): there are no live-feature env gates left. Every
+# BANISHED_LIVE_* flag either graduated to unconditional code or was deleted
+# with its feature. The full inventory of the flags the exe still honours --
+# harness drivers, world setup, perf knobs -- is standalone/options.h.
 
 sa-run: sa-deploy
 	cd "$(BANISHED_DIR)" && BANISHED_AUTOSTART=1 start reimpl-x64.exe
-	@echo "Launched standalone reimpl (autostart; live features default-on)"
+	@echo "Launched standalone reimpl (autostart)"
 
 # Same as sa-run but stops at the main menu (no auto-new-game). Use when you
 # want to exercise the menu itself.
 sa-run-menu: sa-deploy
 	cd "$(BANISHED_DIR)" && start reimpl-x64.exe
-	@echo "Launched standalone reimpl (menu only; live features default-on)"
+	@echo "Launched standalone reimpl (menu only)"
 
 # -Og variants of the three above. Same logs, same env vars, ~10x the frame rate.
 sa-deploy-og: standalone-og

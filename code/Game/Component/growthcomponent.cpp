@@ -153,28 +153,6 @@ static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAm
     // of tile-record 0 and wrote to ~0x10 → access violation (misattributed to a
     // "missing resourceMgr grid"; the grid exists — see maptilegrid.cpp).
     uintptr_t gridBase = *reinterpret_cast<uintptr_t*>(resourceMgr + 0x80);
-    // M-A verification (env BANISHED_GROWTH_TRACE, default off → byte-unchanged):
-    // confirm the harvest-reset grid write is reached with a valid grid + in-bounds
-    // index. If gridBase were null / resIdx out of bounds this is where the old
-    // extra-deref faulted; printing once proves the fix runs crash-free.
-    {
-        static int s_hrState = -1;
-        static int s_hrCount = 0;
-        if (s_hrState < 0) {
-            const char* e = std::getenv("BANISHED_GROWTH_TRACE");
-            s_hrState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_hrState == 1 && s_hrCount < 8) {
-            fprintf(stderr,
-                "[GrowthHarvest] DoHarvestReset resMgr=%p gridBase=%p resIdx=%d "
-                "-> &cell=%p ownerPos=%llx\n",
-                (void*)resourceMgr, (void*)gridBase, resIdx,
-                (void*)(gridBase + 0x10 + (int64_t)resIdx * 0x30),
-                (unsigned long long)ownerPos);
-            fflush(stderr);
-            s_hrCount++;
-        }
-    }
     *reinterpret_cast<uint64_t*>(
         gridBase + 0x10 + (int64_t)resIdx * 0x30) = ownerPos;
 
@@ -205,48 +183,6 @@ void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
     EnsureHelpers();
 
     uint8_t* comp = reinterpret_cast<uint8_t*>(self);
-
-    // BANISHED_GROWTH_TRACE — ENROLMENT census. ApplyVisualScale only runs for a
-    // component the post-update pass actually reaches, and EntityList's dispatcher
-    // (0x1400c2c70) needs BOTH gates open: the ENTITY's flag 0x10 at entity+0x40 and
-    // the COMPONENT's flag 0x10 at comp+0x20. The [GrowthGate] trace lives inside
-    // ApplyVisualScale, so it only sees components that already passed both — it cannot
-    // count the ones that never arrive. Update runs for everything, so count them here.
-    //
-    // This is the whole "trees pop" question in two numbers: until a plant is enrolled
-    // its MeshInstance visualScale keeps the ctor default (1,1,1,1) = FULLY GROWN, and
-    // the frame it finally enrols it snaps to its real size in ONE frame.
-    {
-        static int s_te = -1;
-        if (s_te < 0) { const char* e = std::getenv("BANISHED_GROWTH_TRACE");
-                        s_te = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0; }
-        if (s_te) {
-            static void* s_firstE = nullptr;
-            static int s_passE = 0, nE = 0, nComp = 0, nEnt = 0, nBoth = 0, nScaled = 0;
-            if (!s_firstE) s_firstE = self;
-            if (self == s_firstE && nE > 0) {
-                if ((s_passE % 30) == 0) {
-                    std::fprintf(stderr,
-                        "[GrowthEnrol] pass=%d growthComps=%d compFlag0x10=%d "
-                        "entFlag0x10=%d BOTH(dispatched)=%d modelScaleWritten=%d\n",
-                        s_passE, nE, nComp, nEnt, nBoth, nScaled);
-                    std::fflush(stderr);
-                }
-                ++s_passE; nE = nComp = nEnt = nBoth = nScaled = 0;
-            }
-            ++nE;
-            const bool cf = (*reinterpret_cast<uint32_t*>(comp + 0x20) & 0x10) != 0;
-            void* ownerE = *reinterpret_cast<void**>(comp + 0x10);
-            const bool ef = ownerE &&
-                (*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(ownerE) + 0x40) & 0x10) != 0;
-            if (cf) ++nComp;
-            if (ef) ++nEnt;
-            if (cf && ef) ++nBoth;
-            void* mdl = *reinterpret_cast<void**>(comp + 0x30);
-            if (mdl && *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(mdl) + 0x134) != 1.0f)
-                ++nScaled;
-        }
-    }
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
     // body is zeroed unless Startup ran. config(+0x38) and the resource
@@ -337,32 +273,6 @@ void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
 
     // Accumulate growth
     float newGrowth = currentGrowth + dtSeconds * growthRate * tempModifier;
-
-    // Phase-1 bring-up verification trace (env BANISHED_GROWTH_TRACE, default off
-    // → byte-unchanged): follows ONE GrowthComponent across ticks and prints its
-    // accumulating growth value (resource+0x28). Confirms the live recipe
-    // end-to-end — Update entered via vtable +0x48, body-init populated
-    // config@+0x38/resource@+0x28, and the value advances monotonically per tick.
-    {
-        static int s_traceState = -1;  // -1=unchecked, 0=off, 1=on
-        static int s_traceCount = 0;
-        static void* s_lockComp = nullptr;  // follow ONE component across ticks
-        if (s_traceState < 0) {
-            const char* e = std::getenv("BANISHED_GROWTH_TRACE");
-            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_traceState == 1 && s_lockComp == nullptr) s_lockComp = comp;
-        if (s_traceState == 1 && comp == s_lockComp && s_traceCount < 40) {
-            fprintf(stderr,
-                "[GrowthTrace] comp=%p config=%p res=%p dt=%.5f rate=%.6f temp=%.3f "
-                "cur=%.6f -> new=%.6f scale=%.3f\n",
-                (void*)comp, (void*)config, (void*)resourceComp, dtSeconds,
-                growthRate, tempModifier, currentGrowth, newGrowth,
-                *reinterpret_cast<float*>(comp + 0x4c));
-            fflush(stderr);
-            s_traceCount++;
-        }
-    }
 
     if (newGrowth >= 0.0f ||
         (s_fn_CheckPtr(comp + 0x28),
@@ -491,33 +401,6 @@ void GrowthComponent_ApplyVisualScale(GrowthComponent* self) {
     const bool gated = (*reinterpret_cast<uintptr_t*>(c + 0x28) == 0 ||
                         *reinterpret_cast<uintptr_t*>(c + 0x38) == 0 ||
                         *reinterpret_cast<uintptr_t*>(c + 0x30) == 0);
-    // BANISHED_GROWTH_TRACE: count the GATED ones too. The census further down only
-    // sees components that got past this guard, so a world where most trees never
-    // reach it looks identical to a world with few trees. A gated component NEVER has
-    // its model visualScale written, so it draws at the mesh default (1,1,1,1) — and
-    // the moment something lazily runs its Startup it snaps to its real scale. That
-    // snap is exactly what "models popping" looks like, so the gated count is the
-    // number that can still pop.
-    {
-        static int s_t = -1;
-        if (s_t < 0) { const char* e = std::getenv("BANISHED_GROWTH_TRACE");
-                       s_t = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0; }
-        if (s_t) {
-            static void* s_first = nullptr;
-            static int s_pass = 0, seen = 0, nGated = 0;
-            if (!s_first) s_first = self;
-            if (self == s_first && seen > 0) {
-                if ((s_pass % 30) == 0) {
-                    std::fprintf(stderr, "[GrowthGate] pass=%d seen=%d gated=%d live=%d\n",
-                                 s_pass, seen, nGated, seen - nGated);
-                    std::fflush(stderr);
-                }
-                ++s_pass; seen = 0; nGated = 0;
-            }
-            ++seen;
-            if (gated) ++nGated;
-        }
-    }
     if (gated) return;
 
     const float kOne          = s_fOne ? *s_fOne : 1.0f;
@@ -569,94 +452,6 @@ void GrowthComponent_ApplyVisualScale(GrowthComponent* self) {
             *reinterpret_cast<uint32_t*>(model + 0x138) = v[1];
             *reinterpret_cast<uint32_t*>(model + 0x13c) = v[2];
             *reinterpret_cast<uint32_t*>(model + 0x140) = v[3];
-        }
-    }
-
-    // BANISHED_GROWTH_TRACE — proof the post-update dispatch reaches this body and that
-    // the displayed scale actually eases toward growth. Follows ONE component.
-    {
-        static int s_t = -1;
-        if (s_t < 0) { const char* e = std::getenv("BANISHED_GROWTH_TRACE");
-                       s_t = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0; }
-        static void* s_lock = nullptr;
-        static int s_n = 0;
-        if (s_t && !s_lock) s_lock = self;
-        // s_n counts calls FOR THE LOCKED COMPONENT ONLY. It used to increment on every
-        // component's call while the print also required self == s_lock, so with a few
-        // hundred growth components in a world the two conditions coincided almost never
-        // and the trace emitted ~1 line for a whole run — which reads exactly like "the
-        // ramp stopped running" when it is in fact still ticking every frame. Do not
-        // move the ++ back outside this block.
-        if (s_t && self == s_lock && (s_n % 200) == 0 && s_n < 4000) {
-            std::fprintf(stderr, "[ScaleTrace] comp=%p growth=%.4f target=%.4f "
-                         "displayed=%.4f model visualScale=(%.3f %.3f %.3f %.3f)%s\n",
-                         (void*)self, *reinterpret_cast<float*>(resource + 0x28), target,
-                         scale, *reinterpret_cast<float*>(model + 0x134),
-                         *reinterpret_cast<float*>(model + 0x138),
-                         *reinterpret_cast<float*>(model + 0x13c),
-                         *reinterpret_cast<float*>(model + 0x140),
-                         converged ? " CONVERGED" : "");
-            std::fflush(stderr);
-        }
-        if (s_t && self == s_lock) ++s_n;
-
-        // The locked component is whichever one ticked first — in a fresh world that is
-        // a world-gen tree, already mature and CONVERGED, which tells us nothing about a
-        // sapling that will not grow. So also follow the components that are actively
-        // RAMPING (not yet converged): those are the young plants, i.e. exactly the ones
-        // a "never reaches full size" report is about. Rate-limited so a forest of
-        // saplings cannot flood the log.
-        // Sample rate, NOT a budget: an early cap here was silently exhausted by the
-        // world-gen saplings in the first minute, so a forester planted later produced
-        // no lines at all — indistinguishable from "the forester's trees never ramp".
-        // Keep the trickle running for the whole session; the cap is only a runaway stop.
-        static int s_rampSeen = 0, s_rampPrinted = 0;
-        if (s_t && !converged && s_rampPrinted < 4000 && (s_rampSeen % 600) == 0) {
-            std::fprintf(stderr, "[ScaleRamp] comp=%p growth=%.4f target=%.4f "
-                         "displayed=%.4f floor(desc+0x60)=%.4f cropForm=%d\n",
-                         (void*)self, *reinterpret_cast<float*>(resource + 0x28), target,
-                         scale, descFloor,
-                         (int)*reinterpret_cast<int8_t*>(desc + 0x64));
-            std::fflush(stderr);
-            ++s_rampPrinted;
-        }
-        if (s_t && !converged) ++s_rampSeen;
-
-        // POPULATION CENSUS. The two traces above follow individual components, which
-        // cannot answer the only question a "the trees are regenerating after a load"
-        // report actually asks: how many of them are ramping AT ONCE, and from what.
-        // A healthy loaded world is ~entirely CONVERGED within a frame or two — retail
-        // saves the growth value, so a restored mature tree should come back at
-        // displayed==target==1. A wave of `ramping` with target≈1 and a low mean
-        // displayed IS the regeneration: the models were restored at scale ~0 and are
-        // easing back up at 1%/frame (kSmoothNew), which reads on screen as trees
-        // popping in over several seconds.
-        //
-        // Accumulated across one full pass (one line per kCensusEvery passes). The
-        // pass boundary is "self == the first component we ever saw", which is stable
-        // because EntityList iterates in a fixed order.
-        if (s_t) {
-            static void* s_first = nullptr;
-            static int   s_pass = 0;
-            static int   n = 0, nRamp = 0;
-            static float sumDisp = 0.0f, sumTarget = 0.0f, minDisp = 1e9f;
-            if (!s_first) s_first = self;
-            if (self == s_first && n > 0) {
-                constexpr int kCensusEvery = 30;
-                if ((s_pass % kCensusEvery) == 0) {
-                    std::fprintf(stderr,
-                        "[GrowthCensus] pass=%d comps=%d ramping=%d meanDisplayed=%.3f "
-                        "meanTarget=%.3f minDisplayed=%.3f\n",
-                        s_pass, n, nRamp, sumDisp / (float)n, sumTarget / (float)n, minDisp);
-                    std::fflush(stderr);
-                }
-                ++s_pass;
-                n = nRamp = 0; sumDisp = sumTarget = 0.0f; minDisp = 1e9f;
-            }
-            ++n;
-            if (!converged) ++nRamp;
-            sumDisp += scale; sumTarget += target;
-            if (scale < minDisp) minDisp = scale;
         }
     }
 
@@ -846,21 +641,6 @@ void GrowthComponent_Startup(GrowthComponent* self) {
             r = s_fn_RandFloatTol(rng);
         }
         *reinterpret_cast<float*>(comp + 0x4c) = r * range + minScale;
-    }
-
-    // M-A verification harness (env BANISHED_GROWTH_FORCE_HARVEST, default off →
-    // byte-unchanged): force a tiny positive growthScale so the very next live tick
-    // crosses the harvest threshold and deterministically exercises the
-    // DoHarvestReset grid write (resourceMgr+0x80 = Game+0x80 cell grid), without
-    // waiting for slow natural growth to reach the ~5.0 threshold. Proves the
-    // extra-deref fix runs crash-free against the (already-built) tile grid.
-    {
-        static int s_force = -1;
-        if (s_force < 0) {
-            const char* e = std::getenv("BANISHED_GROWTH_FORCE_HARVEST");
-            s_force = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_force == 1) *reinterpret_cast<float*>(comp + 0x4c) = 0.001f;
     }
 }
 
@@ -1072,14 +852,14 @@ void GrowthComponent_InitFuncs() {
 // DEFAULT GrowthComponent is inert exactly like every other standalone component
 // (all 48 vtable slots no-op stubs except +0x00 dtor / +0x10 GetTypeId).
 //
-// ⚠ GRADUATED 2026-08-10: BANISHED_LIVE_GROWTH is now in kDefaultOnFlags, so the default
+// ⚠ GRADUATED 2026-08-10: BANISHED_LIVE_GROWTH is now in the default-on table, so the default
 // run is NO LONGER byte-for-byte unchanged — this component is LIVE by default and the env
 // var is only a kill-switch (=0). It went live together with BANISHED_LIVE_FRUIT and
 // BANISHED_LIVE_ORCHARD, on a measured orchard loop that ends with fruit in town storage.
 // This one is the broadest of the three: it drives EVERY runtime-spawned natural resource,
 // not just orchard trees.
 //
-// Set BANISHED_LIVE_GROWTH=1 (or the global BANISHED_LIVE_COMPONENTS=1) to graduate
+// Set BANISHED_LIVE_GROWTH=1 (or the global the global live-components switch=1) to graduate
 // it to a REAL per-type vtable. The COMPONENT_LIVE_FACTORY_S macro (the generalized
 // form of this very pattern — see component_factory_base.h) routes:
 //   * slot 4 (+0x20 Startup) -> GrowthComponent_Startup — body-init at spawn
@@ -1127,14 +907,12 @@ static void GrowthComponent_SerializeVSlot(void* self, void* stream) {
 static void GrowthComponent_FinishLiveVtable() {
     GrowthComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&GrowthComponent_SerializeVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_GROWTH")) {
-        GrowthComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&GrowthComponent_StartupVSlot);
-        GrowthComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&GrowthComponent_UpdateVSlot);
-        GrowthComponent_LiveVtable[10] =
-            reinterpret_cast<void*>(&GrowthComponent_PostUpdateVSlot);
-    }
+    GrowthComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&GrowthComponent_StartupVSlot);
+    GrowthComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&GrowthComponent_UpdateVSlot);
+    GrowthComponent_LiveVtable[10] =
+        reinterpret_cast<void*>(&GrowthComponent_PostUpdateVSlot);
 }
 extern "C" void* GrowthComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x50, 0xcb,

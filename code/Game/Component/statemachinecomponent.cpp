@@ -618,85 +618,9 @@ static void StateMachineComponent_BodyInit(StateMachineComponent* self) {
     const uint32_t stateBefore = *reinterpret_cast<uint32_t*>(base + 0x50);
     if (stateBefore == 0x00000000u) {
         *reinterpret_cast<uint32_t*>(base + 0x50) = 0xff00ffff;
-    } else if (stateBefore != 0xff00ffffu) {
-        if (const char* e = std::getenv("BANISHED_SM_TRACE")) {
-            if (e[0] && e[0] != '0') {
-                fprintf(stderr, "[SMTrace] BodyInit KEEPS restored state sm=%p "
-                        "+0x50..53=%08x (active=%u pending=0x%02x)\n",
-                        (void*)self, stateBefore,
-                        (unsigned)*(base + 0x51), (unsigned)*(base + 0x52));
-                fflush(stderr);
-            }
-        }
     }
 }
 
-// Standalone variant of the controller-linker (real linker =
-// StateMachineComponent_Startup 0x14012b6a0). Walks the owner entity's components
-// and links each *live* ControllerComponent's embedded state node into the SM
-// chain (a live controller = CreateState (vtable +0x88) returns a non-null,
-// non-self node; inert components' +0x88 stub returns null and links nothing).
-//
-// DEFAULT-STATE selection: retail 0x14012b6a0 reads GetDefaultState (+0x80) from
-// the FIRST component in array order that IsDerivedFrom(ControllerComponent) —
-// liveness is not a concept there. In standalone most controllers are inert
-// (their +0x80 is Inert_Stub), so we keep taking the default from the first
-// LIVE controller — with one retail-ordering constraint that fixes the
-// 2026-07-20 stockpile regression: a live DESTROYCOMPONENT may supply the
-// default ONLY when it is also the first ControllerComponent-derived component
-// in array order (registry-chain test, Object::IsTypeDerivedFromByName). The old
-// first-LIVE rule made DestroyComponent "first" on a stockpile and its default of
-// 4 booted the fresh entity straight into haul-away demolition. Retail gives
-// destroy's 4 only to entities where destroy genuinely is the first controller
-// (the starting supply cart's haul-away-then-vanish); for a destroy-preceded-by-
-// inert entity we leave +0x52 = 0 (BodyInit value) — a state no live table
-// registers, so every node stays dormant until a real request (the removal tool's
-// state-3 pump) arrives. +0x52 is the Tick block's PENDING field: whatever lands
-// here is ENTERED (enter-handler and all) on the first tick, which is why a wrong
-// default here demolishes buildings.
-//
-// MEASURED 2026-07-27 (BANISHED_SM_TRACE LINK-DECIDE, start-town entities) — what
-// retail's first-in-order rule ACTUALLY yields, with each GetDefaultState read out
-// of the shipped exe vtable rather than inferred:
-//   * 19-component buildings (StorageBarn + all 6 WoodHouses): first controller is
-//     [14] ClearAreaComponent, +0x80 = 0x140003730 = `xor eax,eax; ret` -> 0.
-//     BuildComponent (default 1, vtable +0x80 = 0x14002f2f0) is only [15], so its 1
-//     is NEVER the linker-supplied default in retail.
-//   * 13-component stockpile (StorageYard): first controller is [9]
-//     AbsorbResourceComponent, also 0x140003730 -> 0. StorageLocationComponent
-//     (default 2, +0x80 = 0x1400026c0) is LAST at [12].
-// So retail's linker stamps 0 on every one of these entities, and the real spawn
-// states (build's 1, storage's 2) are posted by something else. Our first-LIVE rule
-// is therefore a DEVIATION that happens to reproduce the visible outcome for
-// buildings — not a degraded copy of retail. Do not "fix" it toward first-in-order
-// expecting the stockpile to gain state 2: in this build that reads Inert_Stub's 0,
-// and in retail it reads a genuine 0.
-// Resolve a runtime component type-id back to a readable name by matching it
-// against the type registry (diagnostics only; "?" when the type is not one of
-// the names we register). Shared by the linker's decision trace and the
-// per-tick owner dump below.
-static const char* SMTrace_ComponentName(uint32_t tid) {
-    static const char* const kCandidates[] = {
-        "StateMachineComponent", "StorageLocationComponent", "StorageComponent",
-        "WorkPlaceComponent", "ResidenceComponent", "AttendanceComponent",
-        "HappinessComponent", "HealerComponent", "CemeteryComponent",
-        "ImmigrationComponent", "MarketLocationComponent", "NomadComponent",
-        "OrchardComponent", "TradeComponent", "WellComponent",
-        "AbsorbResourceComponent", "BuildComponent", "ClearAreaComponent",
-        "ClearResourceComponent", "CropFieldComponent", "DestroyComponent",
-        "MultiObjectComponent", "PastureComponent", "ResourceProduceComponent",
-        "CitizenComponent", "CitizenAIComponent", "CharacterComponent",
-        "StorageDisplayComponent", "RawMaterialComponent", "ModelComponent",
-        "GrowthComponent", "FlammableComponent", "DecalComponent",
-        "MapComponent", "PickingComponent", "InteractComponent",
-        "HighlightComponent", "NaturalResourceComponent", "UIComponent",
-        "ParticleComponent", "WorkComponent", "StatusIconComponent",
-    };
-    if (tid == 0) return "?";
-    for (const char* cand : kCandidates)
-        if (::Object::GetTypeIdByName(cand) == tid) return cand;
-    return "?";
-}
 
 static void StateMachineComponent_LinkControllers_Standalone(StateMachineComponent* self) {
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
@@ -770,50 +694,11 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
     const bool streamRestored = (active51 != 0xff);
     if (streamRestored && !gotDefault) {
         gotDefault = true;
-        if (const char* e = std::getenv("BANISHED_SM_TRACE")) {
-            if (e[0] && e[0] != '0') {
-                fprintf(stderr, "[SMTrace] LINK sm=%p RESTORED (activeState=%u, "
-                        "pending=0x%02x) — keeping stream state, no default written\n",
-                        (void*)self, (unsigned)active51, (unsigned)pending52);
-                fflush(stderr);
-            }
-        }
     }
     bool sawEarlierController = false;      // any ControllerComponent-derived comp seen
     uint32_t tidDestroy = ::Object::GetTypeIdByName("DestroyComponent");
     int linked = 0;
 
-    // Decision trace (BANISHED_SM_TRACE, default off => byte-unchanged). Dumps the
-    // owner's components IN ARRAY ORDER with the three facts the default-state rule
-    // turns on — controller-derived?, live?, GetDefaultState — plus what retail's
-    // first-in-order rule would have taken versus what we took. Bounded to the first
-    // kSMTraceEntities entities so a full town does not flood the log.
-    static const int kSMTraceEntities = 24;
-    static int s_decideTraceState = -1;
-    static int s_decideTraceCount = 0;
-    static void* s_decideSeen[kSMTraceEntities] = {};
-    if (s_decideTraceState < 0) {
-        const char* e = std::getenv("BANISHED_SM_TRACE");
-        s_decideTraceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    // Once per SM, not once per call: an SM that links nothing keeps firstChild
-    // null and re-enters this linker every single tick, which would otherwise
-    // burn the whole budget on the first entity.
-    bool decideTrace = false;
-    if (s_decideTraceState == 1 && s_decideTraceCount < kSMTraceEntities) {
-        decideTrace = true;
-        for (int s = 0; s < s_decideTraceCount; ++s)
-            if (s_decideSeen[s] == (void*)self) { decideTrace = false; break; }
-    }
-    int retailFirstDefault = -1;    // GetDefaultState of the FIRST controller in order
-    int retailFirstIdx = -1;
-    if (decideTrace) {
-        s_decideSeen[s_decideTraceCount++] = (void*)self;
-        fprintf(stderr, "[SMTrace] LINK-DECIDE sm=%p owner=%p comps=%d pending(+0x52)=0x%02x%s\n",
-                (void*)self, owner, cnt, pending52,
-                gotDefault ? " (already decided)" : "");
-        fflush(stderr);
-    }
     for (int i = 0; i < cnt; ++i) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
         owner = *reinterpret_cast<void**>(base + 0x10);
@@ -836,24 +721,6 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
         void* node = cs ? cs(comp) : nullptr;
         bool isLive = (node != nullptr && node != comp);
 
-        if (decideTrace) {
-            // GetDefaultState on an INERT component is safe: MakeInertTyped fills
-            // every slot but 0/0x10 with Inert_Stub, which returns null (=> 0). That
-            // zero is the whole point of this line — it shows that applying retail's
-            // first-in-order rule verbatim would read 0 off an inert controller, not
-            // the real default that component's exe code returns.
-            typedef int (*GetDefaultState_t)(void*);
-            auto gdT = *reinterpret_cast<GetDefaultState_t*>(vt + 0x80);
-            int dT = gdT ? gdT(comp) : 0;
-            if (isController && retailFirstIdx < 0) {
-                retailFirstIdx = i;
-                retailFirstDefault = dT;
-            }
-            fprintf(stderr, "[SMTrace]   [%d] %-26s tid=0x%08x ctrl=%d live=%d default=%d\n",
-                    i, SMTrace_ComponentName(tid), tid, isController ? 1 : 0,
-                    isLive ? 1 : 0, dT);
-            fflush(stderr);
-        }
 
         if (!gotDefault && isLive) {
             // Retail-order constraint (destroy only): skip a live destroy that
@@ -909,154 +776,8 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
         ++linked;
     }
 
-    if (decideTrace) {
-        fprintf(stderr, "[SMTrace] LINK-RESULT sm=%p linked=%d ours(+0x52)=%u "
-                        "retailFirstCtrl=[%d]->default=%d\n",
-                (void*)self, linked, *(base + 0x52), retailFirstIdx, retailFirstDefault);
-        fflush(stderr);
-    }
 
-    if (linked > 0) {
-        static int s_traceState = -1;
-        if (s_traceState < 0) {
-            const char* e = std::getenv("BANISHED_SM_TRACE");
-            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_traceState == 1) {
-            fprintf(stderr, "[SMTrace] LINKED %d controller state node(s) into SM %p "
-                            "(firstChild=%p defaultState=%u)\n",
-                    linked, (void*)self, *reinterpret_cast<void**>(base + 0x38),
-                    *(base + 0x52));
-            fflush(stderr);
-        }
-    }
 }
-
-// ------------------------------------------------------------------
-// State-2 ("built") workplace hand-off -- see the call site in the Update
-// adapter below for why this lives here rather than on the WPC controller.
-// Opt-in while unproven, per the project's new-feature rule; graduate into
-// kDefaultOnFlags once a soak confirms it.
-extern "C" void WorkPlaceComponent_EnterBuiltState_Full(void* workPlaceComp);
-// RETIRED under BANISHED_LIVE_WPC_CONTROLLER (graduated 2026-08-20). The live WPC
-// controller carries retail's own state table -- state 0 enter = f520 (become a Builder
-// workplace), state 2 enter = edf0 (leave Builder, re-key to the natural profession) --
-// so the SM dispatches the hand-off at the right STATE instead of on first tick.
-// This stand-in has no state gate at all, and that is a visible fault, not a cosmetic
-// one: a player-placed crop field has no BuildComponent (so the guard below misses it)
-// and its natural Farmer key landed at state 0, i.e. while the tile was still being
-// cleared. WorkPlaceUI_OnCreate (0x140087080) shows the whole workPlace ribbon whenever
-// +0x48 != 0, so the panel offered farmer worker arrows on a site under construction --
-// retail shows the BUILDER there. Kept only for the kill-switch configuration.
-extern "C" bool WorkPlaceComponent_ControllerLive();
-
-static bool SMBuiltTrace() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_SM_STATE_TRACE");
-        on = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return on == 1;
-}
-
-// MUST go through ComponentFactory::LiveEnabled, not a raw getenv: only LiveEnabled
-// consults kDefaultOnFlags, so a raw getenv is INVISIBLE to graduation and the
-// feature stays off no matter what the table says (the env var then reads as an
-// explicit override, which is exactly backwards).
-static bool SMBuiltHookEnabled() {
-    static int on = -1;
-    if (on < 0) on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_SM_BUILT_HOOK") ? 1 : 0;
-    return on == 1;
-}
-
-// Which gameplay class does this entity represent? Names checked OUTER so the
-// distinctive component wins over Storage/Residence, which ride along on nearly
-// every building and would otherwise answer for all of them.
-static const char* SMOwnerClass(StateMachineComponent* self) {
-    static const char* kNames[] = {
-        "CropFieldComponent", "OrchardComponent", "PastureComponent",
-        "FishingComponent", "HuntComponent", "HerbalistComponent",
-        "ForesterComponent", "ResidenceComponent", "StorageComponent",
-    };
-    int64_t ownerRef = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0x10);
-    if (!ownerRef) return "?";
-    uintptr_t ent = static_cast<uintptr_t>(ownerRef);
-    int count = *reinterpret_cast<int*>(ent + 0x38);
-    int64_t arr = *reinterpret_cast<int64_t*>(ent + 0x30);
-    if (!arr || count <= 0 || count > 256) return "?";
-    for (unsigned k = 0; k < sizeof(kNames)/sizeof(kNames[0]); k++) {
-        uint32_t want = ::Object::GetTypeIdByName(kNames[k]);
-        if (!want) continue;
-        for (int i = 0; i < count; i++) {
-            void* comp = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(arr + (int64_t)i * 8));
-            if (!comp) continue;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-            if (tid == want) return kNames[k];
-        }
-    }
-    return "(other)";
-}
-
-// BANISHED_SM_STATE_TRACE - every state transition for the food/production classes,
-// so the "built" state index can be MEASURED rather than assumed. Residence/storage
-// are excluded to keep the volume readable.
-static bool SMStateTraceEnabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_SM_STATE_TRACE");
-        on = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return on == 1;
-}
-
-static void StateMachineComponent_SeatWorkplaceOnBuilt(StateMachineComponent* self) {
-    if (!self) return;
-    if (WorkPlaceComponent_ControllerLive()) return;   // the real controller owns the key
-    int64_t ownerRef = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0x10);
-    if (!ownerRef) return;
-    uintptr_t ent = static_cast<uintptr_t>(ownerRef);
-    int count  = *reinterpret_cast<int*>(ent + 0x38);
-    int64_t arr = *reinterpret_cast<int64_t*>(ent + 0x30);
-    if (!arr || count <= 0 || count > 256) return;
-    const uint32_t want  = ::Object::GetTypeIdByName("WorkPlaceComponent");
-    const uint32_t build = ::Object::GetTypeIdByName("BuildComponent");
-    if (!want) return;
-    void* wpc = nullptr;
-    bool hasBuild = false;
-    for (int i = 0; i < count; i++) {
-        void* comp = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(arr + (int64_t)i * 8));
-        if (!comp) continue;
-        typedef uint32_t (*GetTypeId_t)(void*);
-        uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-        if (tid == want)  wpc = comp;
-        if (build && tid == build) hasBuild = true;
-    }
-    // Report the decision once per component: a silent skip is indistinguishable
-    // from "never ran", and that ambiguity has already cost two blind rounds.
-    static void* s_said[128];
-    static int s_saidN = 0;
-    bool said = false;
-    for (int i = 0; i < s_saidN; i++) if (s_said[i] == self) { said = true; break; }
-    const char* why = nullptr;
-    if (!wpc)          why = "no WorkPlaceComponent on entity";
-    else if (hasBuild) why = "entity has a BuildComponent - construction owns the key";
-    if (!said && s_saidN < 128 && SMBuiltTrace()) {
-        s_said[s_saidN++] = self;
-        uint64_t key = wpc ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x48) : 0;
-        void* d = wpc ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(wpc) + 0x18) : nullptr;
-        uint64_t nat = d ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20) : 0;
-        std::fprintf(stderr, "[SMSeat] %-22s sm=%p wpc=%p key=0x%llx desc=%p natural=0x%llx -> %s\n",
-                     SMOwnerClass(self), (void*)self, wpc,
-                     (unsigned long long)key, d, (unsigned long long)nat,
-                     why ? why : (key ? "key already set (nothing to do)"
-                                      : (nat ? "SEATING NOW" : "description declares no profession")));
-        std::fflush(stderr);
-    }
-    if (why) return;
-    WorkPlaceComponent_EnterBuiltState_Full(wpc);
-}
-
 // Recipe step 1 (Update), routed to slot +0x48 (the per-tick slot the EntityList
 // bucket round-robin calls). Signature matches COMPONENT_LIVE_FACTORY's
 // UpdateVSlot adapter: (self, int64_t* time). The Time pointer is forwarded
@@ -1083,158 +804,15 @@ static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
 
     void* firstChild = *reinterpret_cast<void**>(base + 0x38);
 
-    // Bring-up trace (env BANISHED_SM_TRACE, default off => byte-unchanged):
-    // confirms the +0x48 slot is entered live and reports whether a state node
-    // is linked yet (firstChild). Follows ONE component across ticks.
-    {
-        static int s_traceState = -1;
-        static int s_traceCount = 0;
-        static void* s_lockComp = nullptr;
-        if (s_traceState < 0) {
-            const char* e = std::getenv("BANISHED_SM_TRACE");
-            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_traceState == 1 && s_lockComp == nullptr) {
-            s_lockComp = self;
-            // One-time owner-entity component dump: identify which components
-            // sit alongside this StateMachineComponent (esp. ControllerComponents
-            // the SM links via CreateState). Match each component's runtime
-            // type-id against candidate names via Object::GetTypeIdByName.
-            static const char* kCandidates[] = {
-                "StateMachineComponent", "StorageLocationComponent",
-                "WorkPlaceComponent", "ResidenceComponent", "AttendanceComponent",
-                "HappinessComponent", "HealerComponent", "CemeteryComponent",
-                "ImmigrationComponent", "MarketLocationComponent", "NomadComponent",
-                "OrchardComponent", "TradeComponent", "WellComponent",
-                "AbsorbResourceComponent", "BuildComponent", "ClearAreaComponent",
-                "ClearResourceComponent", "CropFieldComponent", "DestroyComponent",
-                "MultiObjectComponent", "PastureComponent", "ResourceProduceComponent",
-                "CitizenComponent", "CitizenAIComponent", "CharacterComponent",
-                "StorageDisplayComponent", "RawMaterialComponent", "ModelComponent",
-                "GrowthComponent", "FlammableComponent",
-            };
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
-            void* owner = *reinterpret_cast<void**>(base + 0x10);
-            if (owner) {
-                int cnt = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(owner) + 0x38);
-                uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uint8_t*>(owner) + 0x30);
-                fprintf(stderr, "[SMTrace] === owner=%p compCount=%d ===\n", owner, cnt);
-                for (int ci = 0; ci < cnt && ci < 32; ++ci) {
-                    void** ibp = reinterpret_cast<void**>(arr + (uintptr_t)ci * 8);
-                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
-                    void* comp = *ibp;
-                    uint32_t tid = 0;
-                    if (comp) {
-                        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-                        typedef uint32_t (*getType_t)(void*);
-                        auto gt = *reinterpret_cast<getType_t*>(vt + 0x10);
-                        if (gt) tid = gt(comp);
-                    }
-                    const char* nm = "?";
-                    for (const char* cand : kCandidates) {
-                        if (tid != 0 && ::Object::GetTypeIdByName(cand) == tid) { nm = cand; break; }
-                    }
-                    fprintf(stderr, "[SMTrace]   [%d] comp=%p tid=0x%08x %s\n", ci, comp, tid, nm);
-                }
-                fflush(stderr);
-            }
-        }
-        if (s_traceState == 1 && self == s_lockComp && s_traceCount < 20) {
-            fprintf(stderr,
-                "[SMTrace] comp=%p ctrlSelf=%p firstChild=%p stateFlags=%08x "
-                "%s\n",
-                (void*)self, *reinterpret_cast<void**>(base + 0x48),
-                firstChild, *reinterpret_cast<uint32_t*>(base + 0x50),
-                firstChild ? "TICK" : "noop(no state linked)");
-            fflush(stderr);
-            s_traceCount++;
-        }
-    }
 
-    // GUARD: no child state node linked yet -> nothing to tick. Skipping is
-    // correct (the engine's SM does nothing until a ControllerComponent links a
-    // state) and avoids the bare-root Step(-1) parent-walk null deref.
-    // BANISHED_SM_STATE_TRACE: report ONCE per component whether this entity's SM
-    // actually has a linked controller node. Without one the adapter returns here
-    // and the SM never ticks at all - so no state transition, and no state-2 built
-    // hook, can ever fire for that entity.
-    if (SMStateTraceEnabled()) {
-        static void* s_seen[128];
-        static int s_seenCount = 0;
-        bool known = false;
-        for (int i = 0; i < s_seenCount; i++) if (s_seen[i] == self) { known = true; break; }
-        if (!known && s_seenCount < 128) {
-            const char* cls = SMOwnerClass(self);
-            if (std::strcmp(cls, "?") != 0 && std::strcmp(cls, "(other)") != 0 &&
-                std::strcmp(cls, "ResidenceComponent") != 0 &&
-                std::strcmp(cls, "StorageComponent") != 0) {
-                s_seen[s_seenCount++] = self;
-                std::fprintf(stderr, "[SMState] FIRST TICK %-22s sm=%p firstChild=%p state(+0x51)=%d pending(+0x52)=%d%s\n",
-                             cls, (void*)self, firstChild, (int)*(base + 0x51), (int)*(base + 0x52),
-                             firstChild ? "" : "  <-- NO CONTROLLER NODE LINKED: this SM never ticks");
-                std::fflush(stderr);
-            }
-        }
-    }
 
     if (firstChild == nullptr) return;
 
-    // First-tick seat attempt. A completed but UNPLANTED crop field sits in state 0
-    // forever (measured: 0 transitions until a crop is chosen), so a transition-only
-    // trigger can never give it a profession - yet the panel should show its worker
-    // arrows the moment it is built. Idempotent: once the key is seated the callee
-    // returns immediately.
-    if (SMBuiltHookEnabled()) {
-        static void* s_first[128];
-        static int s_firstN = 0;
-        bool seen = false;
-        for (int i = 0; i < s_firstN; i++) if (s_first[i] == self) { seen = true; break; }
-        if (!seen && s_firstN < 128) {
-            s_first[s_firstN++] = self;
-            StateMachineComponent_SeatWorkplaceOnBuilt(self);
-        }
-    }
 
     // Forward the Time pointer opaquely as the int64 param (Tick passes it
     // straight through to the Transition virtuals; nothing in this path derefs
     // it as a value).
-    //
-    // BANISHED_LIVE_SM_BUILT_HOOK: watch for the entity state machine ENTERING
-    // state 2 ("built"). Retail dispatches the WorkPlaceComponent controller's
-    // state-2 enter (edf0) here, which is what seats a finished building's
-    // profession into WPC+0x48 -- the field WorkplaceUI_Startup uses to show or
-    // hide the whole workPlace ribbon. Our WPC is inert, so that dispatch was
-    // collapsed into BuildComponent_State8Finalize; a player-placed crop field or
-    // orchard has no BuildComponent completion and so never got a profession at
-    // all (measured: 0 shown / 5466 HIDDEN on a hand-built field). Edge-triggered
-    // so it fires once per completion, not every tick.
-    const uint8_t stateBefore = *(base + 0x51);
     StateMachineComponent_Update(self, reinterpret_cast<int64_t>(time));
-    const uint8_t stateAfter = *(base + 0x51);
-    if (stateAfter != stateBefore && SMStateTraceEnabled()) {
-        const char* cls = SMOwnerClass(self);
-        if (std::strcmp(cls, "ResidenceComponent") != 0 &&
-            std::strcmp(cls, "StorageComponent") != 0 &&
-            std::strcmp(cls, "?") != 0 && std::strcmp(cls, "(other)") != 0) {
-            std::fprintf(stderr, "[SMState] %-22s sm=%p state %d -> %d\n",
-                         cls, (void*)self, (int)stateBefore, (int)stateAfter);
-            std::fflush(stderr);
-        }
-    }
-    // Seat the natural profession on ANY state change, not on a fixed index.
-    // MEASURED 2026-08-18: a player-built crop field goes 0 -> 1 on crop selection
-    // and NEVER visits state 2, so the retail WPC controller's "state 2 -> edf0"
-    // index does not exist in a field's own state space. Keying off index 2 (or any
-    // single index) is therefore the wrong shape for this family.
-    //
-    // The seat itself is guarded inside the callee: it fires only when WPC+0x48 is 0
-    // AND the description declares a profession, so houses/storage (+0x20 == 0) are
-    // skipped and any building that already holds a key is untouched. The remaining
-    // hazard is CONSTRUCTION: a site under construction must read Builder, not its
-    // natural profession, so entities that own a BuildComponent are left entirely to
-    // the existing State1Enter / LeaveBuilderProfession hand-off.
-    if (stateAfter != stateBefore && SMBuiltHookEnabled())
-        StateMachineComponent_SeatWorkplaceOnBuilt(self);
 }
 
 // ------------------------------------------------------------------
@@ -1249,14 +827,14 @@ static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
 // dispatches slot 6 below. With lazy linking the first tick is a frame later, by which
 // time StartTown has cleared the instant-build bit and the site takes the staged path.
 //
-// Gated (BANISHED_LIVE_SM_ONADDED) together with the slot-6 tick: on its own, earlier
+// Together with the slot-6 tick: on its own, earlier
 // linking only moves the +0x52 default-state write earlier, but that write is what the
 // 2026-07-20 stockpile regression turned on, so it does not go live independently.
 static void StateMachineComponent_StartupSlot(StateMachineComponent* self) {
     if (!self) return;
     StateMachineComponent_InstallTreeTickSlot();
     StateMachineComponent_BodyInit(self);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_SM_ONADDED") &&
+    if (
         *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(self) + 0x38) == nullptr) {
         StateMachineComponent_ResolveHelpers();
         StateMachineComponent_LinkControllers_Standalone(self);
@@ -1322,13 +900,10 @@ static void StateMachineComponent_ShutdownVSlot(void* self, void* stream) {
     StateMachineComponent_Shutdown(reinterpret_cast<StateMachineComponent*>(self), stream);
 }
 static void StateMachineComponent_FinishLiveVtable() {
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STATEMACHINE")) {
-        StateMachineComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&StateMachineComponent_StartupVSlot);
-        StateMachineComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&StateMachineComponent_UpdateVSlot);
-    }
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_SM_ONADDED"))
+    StateMachineComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&StateMachineComponent_StartupVSlot);
+    StateMachineComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&StateMachineComponent_UpdateVSlot);
         StateMachineComponent_LiveVtable[6] =
             reinterpret_cast<void*>(&StateMachineComponent_OnAddedVSlotImpl);
     StateMachineComponent_LiveVtable[3] =
@@ -1390,7 +965,6 @@ static void StateMachineComponent_InstallTreeTickSlot() {
     static bool s_done = false;
     if (s_done) return;
     s_done = true;
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_BOAT_CTRL")) return;
     StateMachineComponent_LiveVtable[8] =
         reinterpret_cast<void*>(&StateMachineComponent_TreeTickVSlot);
     std::fprintf(stderr, "[SMC] tree-tick slot 8 LIVE — trans30 handlers now dispatch "

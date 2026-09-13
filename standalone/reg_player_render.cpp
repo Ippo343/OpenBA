@@ -12,7 +12,7 @@
 //   0x14004c4a0  Entity_impl_c4a0  -> HighlightRepaint_Impl  (rebuild+resubmit mesh)
 //   0x1400fcb40  Entity_impl_cb40  -> HighlightClear_Impl    (clear highlight flag)
 //
-// *** DEFAULT ON — BANISHED_SELECTION_OUTLINE is in kDefaultOnFlags ***
+// *** DEFAULT ON — BANISHED_SELECTION_OUTLINE is in the default-on table ***
 // (component_factory_base.cpp). The env var is now only a KILL-SWITCH: set it to 0
 // to un-register the three entry points, which makes s_fn_c9e0/s_fn_cb40 in
 // edittool_select.cpp null and reduces the select path to "info dialog opens, no
@@ -21,7 +21,7 @@
 // This comment used to say DEFAULT OFF and was stale — it cost real debugging time
 // on 2026-07-26, when the bridge info-dialog crash was initially ruled out as
 // "the outline can't be running, it's opt-in". It was running. Whenever a gate is
-// graduated into kDefaultOnFlags, fix its registrar's header too.
+// graduated into the default-on table, fix its registrar's header too.
 //
 // The caution the old note recorded still applies and is why the flag matters:
 // b930 mutates the live Graphics::Scene, so a wrong tessellation is silent
@@ -35,17 +35,12 @@
 #include <cstdint>
 #include <cstdlib>
 
-// central live-feature gate (default-on table + env kill-switch)
-namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
-
 extern "C" void HighlightSelect_Impl(void*);    // 0x1400fc9e0
 extern "C" void HighlightClear_Impl(void*);     // 0x1400fcb40
 extern "C" void HighlightRepaint_Impl(void*);   // 0x14004c4a0
 extern "C" void HighlightDeselect_Impl(void*);  // 0x1400fcc90
 
 void RegisterPlayerRenderBatch() {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_SELECTION_OUTLINE")) return;  // kill-switch: =0
-
     RegisterExeAddr(0x1400fc9e0, reinterpret_cast<uintptr_t>(&HighlightSelect_Impl));
     RegisterExeAddr(0x1400fcb40, reinterpret_cast<uintptr_t>(&HighlightClear_Impl));
     RegisterExeAddr(0x14004c4a0, reinterpret_cast<uintptr_t>(&HighlightRepaint_Impl));

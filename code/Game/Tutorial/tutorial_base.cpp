@@ -152,18 +152,6 @@ extern "C" void TutBase_ResolveToolbarRef(void* stringField) {
     *reinterpret_cast<void**>(s + 0x10)  = result;
     *reinterpret_cast<int32_t*>(s + 0x08) = factoryGen;
 
-    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
-        if (e[0] && e[0] != '0') {
-            static int n = 0;
-            if (n < 8) {
-                ++n;
-                const char* nm = *reinterpret_cast<const char* const*>(s);
-                fprintf(stderr, "[Tutorial] ResolveToolbarRef \"%s\" -> %p\n",
-                        nm ? nm : "(empty)", result);
-                fflush(stderr);
-            }
-        }
-    }
 }
 
 // ============================================================

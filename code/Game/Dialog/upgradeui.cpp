@@ -257,13 +257,6 @@ bool ConfigOk(void* self) {
     return *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cfg) + 0x20) != nullptr;
 }
 
-static bool Trace() {
-    static const bool t = [] {
-        const char* e = std::getenv("BANISHED_DESTROY_TRACE");
-        return e && e[0] && e[0] != '0';
-    }();
-    return t;
-}
 
 // idx4 (+0x20): bind the upgrade button, set its icon from the target
 // template's ToolbarDescription.
@@ -271,28 +264,9 @@ void W_Serialize(void* self) {
     EnsureGlobals();
     if (!self || !Ready()) return;
     if (!ConfigOk(self)) {
-        if (Trace()) {
-            static int n = 0;
-            if (n++ < 3) {
-                uintptr_t s = reinterpret_cast<uintptr_t>(self);
-                void* cfg = *reinterpret_cast<void**>(s + 0x10);
-                std::fprintf(stderr, "[UpgradeUI] Serialize blocked: cfg=%p "
-                             "isCfg=%d target(+0x20)=%p\n", cfg,
-                             cfg ? (int)fn_IsDerivedFrom(cfg, *g_TypeId_UpgradeUIConfig) : -1,
-                             cfg ? *reinterpret_cast<void**>(
-                                 reinterpret_cast<uintptr_t>(cfg) + 0x20) : nullptr);
-                std::fflush(stderr);
-            }
-        }
         return;
     }
     UpgradeUI_Serialize(reinterpret_cast<UpgradeUI*>(self));
-    if (Trace()) {
-        uintptr_t s = reinterpret_cast<uintptr_t>(self);
-        std::fprintf(stderr, "[UpgradeUI] Serialize OK: button(+0x30)=%llx\n",
-                     (unsigned long long)*reinterpret_cast<uint64_t*>(s + 0x30));
-        std::fflush(stderr);
-    }
 }
 
 // idx8 (+0x40): per-frame self-heal — run Serialize once if the button ref at
@@ -308,13 +282,6 @@ void W_OnUpdate(void* self, void* /*time*/) {
 void W_OnRemove(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
     EnsureGlobals();
     if (!self || !p2 || !Ready()) return;
-    if (Trace() && msg == 0x12) {
-        uintptr_t s = reinterpret_cast<uintptr_t>(self);
-        std::fprintf(stderr, "[UpgradeUI] click msg=0x%x id=%d src=%p "
-                     "button(+0x30)=%llx\n", msg, id, *reinterpret_cast<void**>(p2),
-                     (unsigned long long)*reinterpret_cast<uint64_t*>(s + 0x30));
-        std::fflush(stderr);
-    }
     UpgradeUI_OnRemove(reinterpret_cast<UpgradeUI*>(self), p2, msg, id);
 }
 

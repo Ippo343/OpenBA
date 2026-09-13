@@ -119,15 +119,6 @@ void EnsureResolved() {
 inline void Ck(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 inline void Ctor(void* dst, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(dst, obj); }
 
-bool Trace() {
-    static int cached = -1;
-    if (cached < 0) {
-        cached = (std::getenv("BANISHED_ONREMOVE_TRACE") || std::getenv("BANISHED_DESTROY_TRACE"))
-                     ? 1 : 0;
-    }
-    return cached == 1;
-}
-
 // The family/roster ring is doubly linked through member +0x268 (next) / +0x270
 // (prev) with the head cached at host +0x260 — see CitizenComp_LeaveRoster_2040 /
 // CitizenComp_JoinRoster_68a0 (citizencomponent_lifecycle.cpp). Each pass of the
@@ -170,17 +161,6 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
     if (!selfV) return;
     EnsureResolved();
     uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
-
-    if (Trace()) {
-        std::fprintf(stderr, "[CitizenOnRemove] comp=%p owner=%p desc=%p partner(+0x208)=%p "
-                     "host(+0x258)=%p spouse(+0x250)=%p ring(+0x260)=%p house(+0x248)=%p "
-                     "prof(+0x1f0)=%p\n",
-                     selfV, *reinterpret_cast<void**>(p + 0x10), *reinterpret_cast<void**>(p + 0x288),
-                     *reinterpret_cast<void**>(p + 0x208), *reinterpret_cast<void**>(p + 0x258),
-                     *reinterpret_cast<void**>(p + 0x250), *reinterpret_cast<void**>(p + 0x260),
-                     *reinterpret_cast<void**>(p + 0x248), *reinterpret_cast<void**>(p + 0x1f0));
-        std::fflush(stderr);
-    }
 
     // ---- 1. prologue teardown -------------------------------------------------
     // DEVIATION (uninitialized-body guard): HideTool walks +0x278 -> +0x68 -> +0x28
@@ -337,15 +317,5 @@ extern "C" void CitizenComponent_OnRemove(void* selfV) {
         int64_t townMgr = *reinterpret_cast<int64_t*>(gw + 0xf0);
         if (s_listErase && townMgr)
             s_listErase(reinterpret_cast<int64_t*>(townMgr + 0xa0), &selfIBP);
-
-        if (Trace()) {
-            std::fprintf(stderr, "[CitizenOnRemove] comp=%p done; townMgr+0xa0 count=%d\n",
-                         selfV, townMgr ? *reinterpret_cast<int*>(townMgr + 0xa8) : -1);
-            std::fflush(stderr);
-        }
-    } else if (Trace()) {
-        std::fprintf(stderr, "[CitizenOnRemove] comp=%p: no GameWorld — steps 6-8 skipped\n",
-                     selfV);
-        std::fflush(stderr);
     }
 }

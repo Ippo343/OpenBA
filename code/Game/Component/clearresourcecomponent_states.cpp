@@ -92,25 +92,6 @@ static void EnsureResolved() {
         ResolveAddr(Module::Exe, 0x140003110));
 }
 
-// Shares BANISHED_CLEAR_TRACE with clearareacomponent_states.cpp / cleararea.cpp.
-static bool Trace() {
-    static const bool t = [] {
-        const char* e = std::getenv("BANISHED_CLEAR_TRACE");
-        return e && e[0] && e[0] != '0';
-    }();
-    return t;
-}
-
-// A/B opt-out for the destroy specifically, so the harvest can still be exercised
-// with the job (and its icon) left standing. Default ON when the controller is up.
-static bool DestroyEnabled() {
-    static const bool on = [] {
-        const char* e = std::getenv("BANISHED_CLEAR_DESTROY");
-        return !(e && e[0] == '0');
-    }();
-    return on;
-}
-
 // ============================================================
 // ClearResourceDescription_helper_17f0_sub_8560 (0x140118560) — state-2 ENTER.
 // Deletes the finished clear-job entity; the DecalComponent's terrain decal (the
@@ -144,21 +125,6 @@ extern "C" char ClearResource_State2Enter(void* data, void* /*sm*/) {
     // Idempotence guard (bit 0x400 at entity+0x40) — see the header note: this is
     // what keeps the sibling `destroy` controller from double-pushing the entity.
     if (((*reinterpret_cast<uint32_t*>(entity + 0x40) >> 10) & 1) != 0) {
-        if (Trace()) {
-            std::fprintf(stderr, "[ClearCtrl] State2Enter (clearresource) entity=%p "
-                                 "already marked -- skip\n", reinterpret_cast<void*>(entity));
-            std::fflush(stderr);
-        }
-        return 1;
-    }
-
-    if (!DestroyEnabled()) {
-        if (Trace()) {
-            std::fprintf(stderr, "[ClearCtrl] State2Enter (clearresource) entity=%p "
-                                 "SKIPPED (BANISHED_CLEAR_DESTROY=0)\n",
-                         reinterpret_cast<void*>(entity));
-            std::fflush(stderr);
-        }
         return 1;
     }
 
@@ -168,13 +134,6 @@ extern "C" char ClearResource_State2Enter(void* data, void* /*sm*/) {
         s_DynArrInsert(reinterpret_cast<int64_t*>(entityList + 0xd0),
                        *reinterpret_cast<int*>(entityList + 0xd8) + 1, &entity);
 
-    if (Trace()) {
-        std::fprintf(stderr, "[ClearCtrl] State2Enter (clearresource) DESTROY entity=%p "
-                             "-> removalList.count=%d (icon decal released via +0x38)\n",
-                     reinterpret_cast<void*>(entity),
-                     *reinterpret_cast<int*>(entityList + 0xd8));
-        std::fflush(stderr);
-    }
     return 1;
 }
 

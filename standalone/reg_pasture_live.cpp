@@ -60,8 +60,6 @@ void LivestockComponent_OnRemove(LivestockComponent* self);
 static float g_f_QuarterTurn = 90.0f;
 
 void RegisterPastureLive() {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_PASTURE")) return;
-
     RegisterExeAddr(0x140172204, reinterpret_cast<uintptr_t>(&g_f_QuarterTurn));
 
     // Spawn / stocking

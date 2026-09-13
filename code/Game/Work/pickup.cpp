@@ -22,16 +22,6 @@
 #include <cstdlib>
 #include "Object/factory_registration.h"  // Object::GetTypeIdByName (.rdata tid fallback)
 
-// ============================================================
-// BANISHED_RAWMAT_PICKUP_TRACE -- shared diagnostic gate.
-// ============================================================
-static bool PickupTrace() {
-    static const bool t = [] {
-        const char* e = std::getenv("BANISHED_RAWMAT_PICKUP_TRACE");
-        return e && e[0] && e[0] != '0';
-    }();
-    return t;
-}
 
 // ============================================================
 // Local function pointers (resolved once by Pickup_ResolveFuncs)
@@ -393,16 +383,6 @@ static void Pickup_ResolveExecFuncs() {
     s_x_pTid_Pickup = reinterpret_cast<const uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c6be0));
 
-    if (PickupTrace()) {
-        fprintf(stderr,
-            "[RawMatPickup] Execute deps: wantsRes(8d3c0)=%p "
-            "performWork(c0ad0)=%p findStoreRes(8d590)=%p checkAssign(f6ef0)=%p "
-            "ltp(115e60)=%p memAlloc=%p v3ctor=%p\n",
-            (void*)s_x_wantsRes, (void*)s_x_performWork,
-            (void*)s_x_findStoreRes, (void*)s_x_checkAssign,
-            (void*)s_x_longTermPlan, (void*)s_x_memAlloc, (void*)s_x_v3ctor);
-        fflush(stderr);
-    }
 }
 
 // DAT_140172114 = 0x3f000000 = 0.5f. Raw .rdata -> NULL in standalone; real-value
@@ -465,12 +445,6 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
         !s_x_gridToWorld || !s_x_memAlloc || !s_x_memFree || !s_x_v3ctor ||
         !fn_InternalBasePtr_CheckPtr || !fn_InternalBasePtr_Ctor ||
         !fn_IsDerivedFrom || !g_pGameWorldSingleton) {
-        if (PickupTrace()) {
-            static int warned = 0;
-            if (++warned <= 3)
-                fprintf(stderr, "[RawMatPickup] Execute INERT: unresolved dep(s)\n");
-            fflush(stderr);
-        }
         return 1;
     }
 
@@ -744,12 +718,6 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
                         worldPos, p->cell, first);
         first = 0;
 
-        if (PickupTrace()) {
-            fprintf(stderr, "[RawMatPickup] PerformWork dispatched cand=%d/%d "
-                            "cell=%d access=%d dist=%d typeId=%d\n",
-                    i, count, p->cell, p->accessCell, p->distance, p->typeId);
-            fflush(stderr);
-        }
 
         // Mark this resource type's Pickup work as claimed by our citizen.
         void* wIBP = nullptr;
@@ -816,16 +784,11 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
 //
 // When s_fn_Slot4_Original resolves (address registered) the dispatcher calls it;
 // otherwise the port runs — the address is unregistered and the old fallback
-// silently returned 1 ("no work") forever. Set BANISHED_PICKUP_PORT=1 to force the
-// port even when the original resolves, for A/B comparison against it.
+// silently returned 1 ("no work") forever.
 // ============================================================
 int Pickup_Slot4_Impl(Pickup* self, void* entityIBP, uint64_t param3, uint64_t param4) {
     (void)param4;  // exe reads only RCX/RDX/R8; param4 is not part of the ABI here
-    static const bool forcePort = [] {
-        const char* e = std::getenv("BANISHED_PICKUP_PORT");
-        return e && e[0] && e[0] != '0';
-    }();
-    if (s_fn_Slot4_Original && !forcePort) {
+    if (s_fn_Slot4_Original) {
         return s_fn_Slot4_Original(self, entityIBP, param3, param4);
     }
     return Pickup_Execute_Port(self, entityIBP, reinterpret_cast<void*>(param3));
@@ -845,19 +808,6 @@ int Pickup_Slot4_Impl(Pickup* self, void* entityIBP, uint64_t param3, uint64_t p
 // 5. Return false (keep executing)
 // ============================================================
 int Pickup_Execute_Impl(Pickup* self, void* entityIBP, void* param3) {
-    // [diag] Did a laborer actually claim the Pickup work that RawMaterialComponent::Draw
-    // posted for a harvest pile? BANISHED_RAWMAT_PICKUP_TRACE.
-    {
-        static const bool trace = [] { const char* e = std::getenv("BANISHED_RAWMAT_PICKUP_TRACE");
-                                       return e && e[0] && e[0] != '0'; }();
-        static int n = 0;
-        if (trace && ++n <= 12) {
-            fprintf(stderr, "[RawMatPickup] Pickup::Execute #%d self=%p status=%d citizen=%p\n",
-                    n, (void*)self, (int)self->status, (void*)self->citizenIBP);
-            fflush(stderr);
-        }
-    }
-
     // Check status != 0 and citizenIBP != null
     if (self->status == 0 || self->citizenIBP == nullptr) {
         return 0;

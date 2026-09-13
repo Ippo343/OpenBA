@@ -370,30 +370,6 @@ inline int32_t Encode2(int32_t cp, uint8_t* dst) {
     return 0;                                            // the 0x1800c9d3b error arm
 }
 
-// ---- branch census, §96 ---------------------------------------------------
-// Counted INSIDE the body, one increment per arm actually entered. Not derived
-// from anything observable outside the function.
-struct Census {
-    long long calls        = 0;
-    long long earlyOut     = 0;   // _fileInfo.handle == -1
-    long long armCompressed = 0;  // header sign bit set
-    long long armPlain      = 0;  // header sign bit clear (the 0x1800b5b25 else)
-    long long armV2Block    = 0;  // formatVersion >= 2  (the +0x90 / +0x98 pair)
-    long long armMetaUtf16  = 0;  // formatVersion <= 2  PATH A
-    long long armMetaRaw    = 0;  // formatVersion >  2  PATH B
-    long long armNameUtf16  = 0;  // per entry, formatVersion <= 2
-    long long armNameRaw    = 0;  // per entry, formatVersion >  2
-    long long entries       = 0;
-    long long strNonDet     = 0;  // strings excluded by §95's terminator rule
-    long long strTotal      = 0;
-    long long commitTaken   = 0;  // §70 says PROVABLY zero; measured, not assumed
-} g_census;
-
-bool CensusWanted() {
-    static const int on = std::getenv("BANISHED_PKG3_CENSUS") ? 1 : 0;
-    return on != 0;
-}
-
 // ---- the String tail every one of the six metadata groups and the entry
 //      loop share (0x1800b4fce..0x1800b509d and its five clones) -------------
 //
@@ -524,7 +500,6 @@ bool TextEqual(const char* a, const char* b) {
 // ============================================================================
 extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
                                               const Filename* name) {
-    ++g_census.calls;
 
     // ---- the re-entrancy flag (0x1800b46e8..0x1800b4795) -------------------
     // `fs->platformExistsGate` (+0x19) is Exists()'s second gate. ReadPackfile
@@ -553,7 +528,6 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
     fs->platformExistsGate = savedGate;                        // 1800b4792
 
     if (fi->handle == -1) {                                    // 1800b4795  CMP [RDI],-1
-        ++g_census.earlyOut;
         return false;                                          // 1800b479a  XOR AL,AL
     }
 
@@ -606,7 +580,6 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
     int32_t formatVersion = 0;                                 // 1800b48e9
 
     if (compressed >= 1) {                                     // 1800b48f0  CMP/JL
-        ++g_census.armCompressed;
 
         RtIo::RtIo_CompressedStream_Read(cs, 4, &formatVersion);      // 1800b48fa
         RtIo::RtIo_CompressedStream_Read(cs, 4, &self->version);      // 1800b4979  +0x68
@@ -630,7 +603,6 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
             cs, ArrSize(self, 0x88) * 4, ArrData(self, 0x80)); // 1800b4d56  REAL CALL
 
         if (formatVersion >= 2) {                              // 1800b4d62  CMP 2 / JL
-            ++g_census.armV2Block;
             int32_t* const n90 =
                 reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(self) + 0x90);
             RtIo::RtIo_CompressedStream_Read(cs, 4, n90);      // 1800b4d6c  +0x90
@@ -643,46 +615,35 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
         String tmp;
         if (formatVersion <= 2) {
             // ---- PATH A (§81): UTF-16 metadata, with the §76 over-read -----
-            ++g_census.armMetaUtf16;
-            bool d;
-            d = ReadStringUtf16(cs, buf60, buf860, &tmp);      // 1800b4e1f  group 1
+            ReadStringUtf16(cs, buf60, buf860, &tmp);      // 1800b4e1f  group 1
             AssignStringField(&self->name, &tmp);              // 1800b5044  +0x40
             RtString_ReleaseInline(&tmp);                      // 1800b507b
-            ++g_census.strTotal; if (!d) ++g_census.strNonDet;
 
-            d = ReadStringUtf16(cs, buf60, buf860, &tmp);      // 1800b530d  group 2
+            ReadStringUtf16(cs, buf60, buf860, &tmp);      // 1800b530d  group 2
             AssignStringField(&self->author, &tmp);            // 1800b52b4  +0x48
             RtString_ReleaseInline(&tmp);
-            ++g_census.strTotal; if (!d) ++g_census.strNonDet;
 
-            d = ReadStringUtf16(cs, buf60, buf860, &tmp);      // group 3
+            ReadStringUtf16(cs, buf60, buf860, &tmp);      // group 3
             AssignStringField(&self->description, &tmp);       // 1800b5536  +0x50
             RtString_ReleaseInline(&tmp);
-            ++g_census.strTotal; if (!d) ++g_census.strNonDet;
             // 1800b558e / 559a  JMP 0x1800b5b6c  (reloads formatVersion; §92(c))
         } else {
             // ---- PATH B (§81): the bytes are already UTF-8 -----------------
-            ++g_census.armMetaRaw;
-            bool d;
-            d = ReadStringRaw(cs, buf60, &tmp);                // 1800b559f  group 4
+            ReadStringRaw(cs, buf60, &tmp);                // 1800b559f  group 4
             AssignStringField(&self->name, &tmp);              // 1800b5726  +0x40
             RtString_ReleaseInline(&tmp);
-            ++g_census.strTotal; if (!d) ++g_census.strNonDet;
 
-            d = ReadStringRaw(cs, buf60, &tmp);                // 1800b5783  group 5
+            ReadStringRaw(cs, buf60, &tmp);                // 1800b5783  group 5
             AssignStringField(&self->author, &tmp);            // 1800b58f6  +0x48
             RtString_ReleaseInline(&tmp);
-            ++g_census.strTotal; if (!d) ++g_census.strNonDet;
 
-            d = ReadStringRaw(cs, buf60, &tmp);                // 1800b5953  group 6
+            ReadStringRaw(cs, buf60, &tmp);                // 1800b5953  group 6
             AssignStringField(&self->description, &tmp);       // 1800b5ac6  +0x50
             RtString_ReleaseInline(&tmp);
-            ++g_census.strTotal; if (!d) ++g_census.strNonDet;
             // 1800b5b1a / 5b23  JMP 0x1800b5b73
         }
     } else {
         // ---- the uncompressed default, 0x1800b5b25. §92(b): SEVEN stores. --
-        ++g_census.armPlain;
         self->version = 0x010007ff;                            // 1800b5b25  dword
         // `MOV qword ptr [R13+0x70],0x2710` — one store, two fields.
         self->priority = 0x2710;                               // 1800b5b2d
@@ -702,7 +663,6 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
         uint8_t* const entriesArr = reinterpret_cast<uint8_t*>(self) + 0xb0;  // 1800b5b86
 
         for (int32_t i = fileCount; i != 0; --i) {             // 1800b5b99 / 601a
-            ++g_census.entries;
 
             int32_t nameLen = 0;
             RtIo::RtIo_CompressedStream_Read(cs, 4, &nameLen); // 1800b5ba0 group
@@ -710,20 +670,13 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
             // THE SAME SELECTOR AS THE METADATA BLOCK, WITH THE ARMS IN THE
             // OPPOSITE ORDER — raw first at 0x1800b5c1f, jumping over the
             // UTF-16 arm at 0x1800b5c9d. §86.
-            bool nameDeterministic;
             if (formatVersion > 2) {                           // 1800b5c19  CMP 2 / JLE
-                ++g_census.armNameRaw;
                 if (nameLen > 0)                               // 1800b5c29
                     RtIo::RtIo_CompressedStream_Read(cs, nameLen, buf60);  // 1800b5c25
-                nameDeterministic = (nameLen > 0) && RawTerminatorInRead(buf60, nameLen);
                 // 1800b5c98  JMP 0x1800b5de3 — NO terminator is written here.
             } else {
-                ++g_census.armNameUtf16;
                 if (nameLen > 0)                               // 1800b5cae
                     RtIo::RtIo_CompressedStream_Read(cs, nameLen, buf860); // 1800b5ca7
-                nameDeterministic =
-                    (nameLen <= 0) || Utf16TerminatorInRead(buf860, nameLen);
-
                 const uint8_t* src       = buf860;             // 1800b5d22
                 const uint8_t* const end =
                     buf860 + 2 * static_cast<int64_t>(nameLen);// 1800b5d1c/d32
@@ -778,8 +731,6 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
             RtString_ReleaseInline(&entry.name);               // 1800b5fc4..5fe9
             RtString_ReleaseInline(&tmp);                      // 1800b5fed..6015
 
-            ++g_census.strTotal;
-            if (!nameDeterministic) ++g_census.strNonDet;
         }
     }
 
@@ -789,7 +740,6 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
     // transcribed and the arm is COUNTED, so "provably dead" is measured on
     // every run rather than asserted once.
     if (cs->headerSize > 0 && cs->base.direction == 1) {       // 1800b6023/29
-        ++g_census.commitTaken;
         RT_EXPORT_ONCE(VoidThisFn, "?Commit@CompressedStream@IO@@QEAAXXZ")(cs);  // 1800b6035
     }
     CallStreamClose(&cms.memoryStream);                        // 1800b603a  slot 7
@@ -797,23 +747,6 @@ extern "C" bool RtIo_PackageFile_ReadPackfile(PackageFileView* self,
     RtIo::RtIo_CompressedMemoryStream_Dtor(&cms);              // 1800b604f
     const bool ours = true;                                    // 1800b6059  MOV AL,1
 
-    // ========================================================================
-    // The oracle, §95
-    // ========================================================================
-
-    if (CensusWanted()) {
-        printf("[PKG3] ReadPackfile \"%.60s\" -> %d | calls=%lld early=%lld "
-                    "| compressed=%lld plain=%lld | v2block=%lld "
-                    "| meta: utf16=%lld raw=%lld | names: utf16=%lld raw=%lld "
-                    "| entries=%lld | strings=%lld nondet=%lld | commit=%lld\n",
-                    name && name->data ? name->data : "(null)", (int)ours,
-                    g_census.calls, g_census.earlyOut,
-                    g_census.armCompressed, g_census.armPlain, g_census.armV2Block,
-                    g_census.armMetaUtf16, g_census.armMetaRaw,
-                    g_census.armNameUtf16, g_census.armNameRaw,
-                    g_census.entries, g_census.strTotal, g_census.strNonDet,
-                    g_census.commitTaken);
-    }
     return ours;
 }
 

@@ -3,16 +3,11 @@
 // (0x1400a1040) and the per-family arithmetic of CitizenComponent_impl_0dd0
 // (0x1400a0dd0), which together create the start-town population.
 //
-// This REPLACES the hand-rolled SpawnOneCitizen in starttown.cpp (open H of
-// notes/NEXT_SESSION_BRIEF.md, section 4). SpawnOneCitizen reproduces most of
-// FUN_140117080's effects piecemeal (gender, mesh variant, spawn transform, name,
-// colour, age, lifespan); running both would double-apply them and burn two RNG
-// streams, so the two paths are mutually exclusive — see StartTown_FoundingSpawnEnabled
-// and the branch at the family loop in starttown.cpp.
-//
-// Gate: BANISHED_LIVE_FOUNDING_SPAWN (OPT-IN — deliberately NOT in kDefaultOnFlags
-// until a soak shows the retail path produces a town at least as healthy as the
-// hand-rolled one).
+// This REPLACED the hand-rolled SpawnOneCitizen in starttown.cpp (open H of
+// notes/NEXT_SESSION_BRIEF.md, section 4), which reproduced most of FUN_140117080's
+// effects piecemeal (gender, mesh variant, spawn transform, name, colour, age,
+// lifespan) and burned a second RNG stream. Graduated unconditional 2026-09-13 and
+// the hand-rolled path deleted; this is now the only founding-colonist spawner.
 //
 // ---------------------------------------------------------------------------
 // Retail sub_1040 (0x1400a1040), signature
@@ -73,7 +68,6 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -99,17 +93,8 @@ typedef void (*fn_DeferredInit_117080_t)(int64_t self, void* pos, uint32_t gende
                                          char isChild, float age, char educated,
                                          int64_t* parentIBP, int64_t laborerProf);
 
-// ---------------------------------------------------------------------------
-// Gate
-// ---------------------------------------------------------------------------
-extern "C" bool StartTown_FoundingSpawnEnabled() {
-    static int en = -1;
-    if (en < 0) en = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_FOUNDING_SPAWN") ? 1 : 0;
-    return en == 1;
-}
-
 static int  s_trace = 0;
-static bool TraceOn() { return s_trace < 24; }   // first-N; the flag itself is opt-in
+static bool TraceOn() { return s_trace < 24; }   // first-N
 
 // ---------------------------------------------------------------------------
 // Type ids — exe global first (retail's DWORD_), name lookup as the standalone
