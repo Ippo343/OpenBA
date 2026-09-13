@@ -50,18 +50,24 @@
 //
 // It is ported anyway, and it is ported as retail wrote it — including the
 // ExternalPtr<VertexLayout> that is read and dropped. Five of the helpers it
-// calls are unexported, unported internals reached through ResolveAddr, which
-// is the same door runtime/src/io/package_file_serialize.cpp already holds open
-// for 0x180029bb0:
+// calls are unexported internals reached through ResolveAddr, which is the same
+// door runtime/src/io/package_file_serialize.cpp already holds open for
+// 0x180029bb0:
 //     0x1800567d0  SetSize, stride 0x18 {String, String, uint, int}
 //     0x180056960  ~Array of that element
 //     0x180056af0  SetSize, the second legacy element type
 //     0x180056db0  the per-element serialize loop for it
 //     0x180056cb0  ~Array of it
-// With the DLL gone those five resolve to nothing, so a version-0 asset would
-// call address zero. That is a conscious limit of this port, not an oversight:
-// no shipped asset is version 0, and inventing a guard retail does not have
-// would silently change what the stream cursor does.
+//
+// CORRECTION (cutover closure batch D1, 2026-09-12). This banner used to read
+// "five ... UNPORTED internals ... with the DLL gone those five resolve to
+// nothing, so a version-0 asset would call address zero". ALL FIVE ARE NOW
+// PORTED AND REGISTERED — 0x1800567d0 / 0x180056af0 as `kSpec_VtxElement18` and
+// `kSpec_VtxStream18` in runtime/src/collection/array.cpp, 0x180056960 and
+// 0x180056cb0 in array_destroy.cpp, and 0x180056db0 at the bottom of THIS file.
+// ResolveAddr is registry-first, so the five calls above already land on our
+// bodies, and they will keep working with the DLL gone. What remains true is
+// that the block is unreachable for any shipped asset (every one is version 1).
 // ============================================================================
 #include <cstddef>
 #include <cstdint>
@@ -327,8 +333,58 @@ extern "C" bool RtVideo_VertexProgram_Serialize(void* selfv, void* streamv) {
     return true;
 }
 
+// ============================================================================
+// The legacy Stream element serialize loop   0x180056db0   (batch D1)
+// ============================================================================
+// SerializeLegacyV0 above calls this by address. The element is
+// {Collection::Array<Element> @+0x00, System::String* @+0x10}, stride 0x18 —
+// the layout array.cpp's kSpec_VtxStream18 and array_destroy.cpp's
+// 0x180056cb0 row independently agree on.
+//
+//   180056de0  n = elem->inner._size                      (e+0x08)
+//   180056df6  kScalarInt(&n)                             — a LOCAL, not the field
+//   180056dfc  if (ser->stream->direction == reading)
+//   180056e0c      0x1800567d0(&elem->inner, n)           SetSize
+//   180056e15  p = elem->inner._data                      (e+0x00)
+//   180056e22  per inner element (stride 0x18):
+//                 String::Serialize(p+0x00) / (p+0x08)
+//                 kScalarUInt(p+0x10) / kScalarInt(p+0x14)
+//   180056e6e  String::Serialize(elem+0x10)
+//
+// The count that drives the inner loop is the LOCAL read back at 0x180056e11,
+// not `elem->inner._size` re-read after the SetSize. On the write path they are
+// the same number; on the read path of a truncated stream they are not, and
+// retail uses the local.
+extern "C" void RtVideo_VertexProgram_SerializeStreams(void* serv, int count, void* basev) {
+    if (count <= 0) return;                                  // 180056db0 TEST/JLE
+    Serializer* ser = static_cast<Serializer*>(serv);
+    uint8_t*    e   = static_cast<uint8_t*>(basev);
+
+    for (int i = 0; i < count; ++i, e += 0x18) {
+        int32_t n = *reinterpret_cast<int32_t*>(e + 0x08);   // 180056de0
+        RwInt(ser->readerWriter, &n);                        // 180056df6
+
+        if (ser->stream->direction == rt::io::kDirectionReading)   // 180056dfc
+            RtAddr<SetSizeFn>(0x1800567d0ull)(e + 0x00, n);        // 180056e0c
+
+        uint8_t* p = *reinterpret_cast<uint8_t**>(e + 0x00); // 180056e15
+        for (int32_t k = 0; k < n; ++k, p += 0x18) {         // 180056e22
+            RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(p + 0x00, ser);
+            RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(p + 0x08, ser);
+            RwUInt(ser->readerWriter, p + 0x10);
+            RwInt (ser->readerWriter, p + 0x14);
+        }
+
+        RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(e + 0x10, ser);
+    }
+}
+
 int RtVideoVertexProgramRegister() {
     int n = 0;
+
+    // Batch D1: unexported in both builds, address door only.
+    RegisterRuntimeAddr  (0x180056db0ull, (void*)&RtVideo_VertexProgram_SerializeStreams); ++n;
+
     RegisterRuntimeExport("?Type@VertexProgram@Video@@UEBAIXZ",        (void*)&RtVideo_VertexProgram_Type);     ++n;
     RegisterRuntimeAddr  (0x18004e540ull,                              (void*)&RtVideo_VertexProgram_Type);
     RegisterRuntimeExport("?TypeId@VertexProgram@Video@@SAIXZ",        (void*)&RtVideo_VertexProgram_TypeId);   ++n;

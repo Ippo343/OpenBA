@@ -1018,8 +1018,48 @@ extern "C" void RtUi_DocumentTextElement_GenerateItems(void* selfv) {
 // is what a ported caller's ResolveAddr literal asks for). Unconditional — no
 // kill switch, no env gate.
 // ============================================================================
+// ============================================================================
+// UI::DocumentTextElement::Link::operator=   0x18003c760   (batch D1)
+// ============================================================================
+// The compiler-generated copy assignment for the 0x18-byte Link record
+// {System::String* @+0x00, int32 @+0x08, int32 @+0x0c, bool @+0x10}. EndLink
+// above already calls it by address; this is that body.
+//
+//   180013c76a  RAX = self->text
+//   180013c773  if (RAX != src->text) {            <-- the self-assign test
+//   180013c77d      release RAX through the SAME asymmetric arms ReleaseString
+//                   implements (slot keeps text-8 when the count hits zero,
+//                   slot is NULLED when it does not)
+//   180013c79b      self->text = src->text; if (it) ++refcount
+//               }
+//   180013c7a9  the three trailing fields, ALWAYS — the early jump lands here,
+//               not at the return
+//   180013c7bc  return self
+//
+// The String half is `AssignString` verbatim (test, release, adopt), which is
+// why it is called rather than re-inlined: the two must not drift.
+extern "C" void* RtUi_DocumentTextElement_LinkAssign(void* dstv, const void* srcv) {
+    uint8_t*       d = reinterpret_cast<uint8_t*>(dstv);
+    const uint8_t* s = reinterpret_cast<const uint8_t*>(srcv);
+
+    AssignString(reinterpret_cast<char**>(d),
+                 *reinterpret_cast<char* const*>(s));          // 18003c76a..18003c7a8
+
+    I32(d, 0x08) = I32(s, 0x08);                               // 18003c7a9
+    I32(d, 0x0c) = I32(s, 0x0c);                               // 18003c7af
+    U8 (d, 0x10) = *reinterpret_cast<const uint8_t*>(s + 0x10);// 18003c7b5
+    return d;                                                  // 18003c7bc  MOV RAX,RBX
+}
+
 int RtUiDocumentTextRegister() {
     int n = 0;
+
+    // Batch D1: the Link record's assignment operator. No exported name in
+    // either build (a compiler-generated member of a private nested struct), so
+    // the address door is the only one.
+    RegisterRuntimeAddr(0x18003c760ull, (void*)&RtUi_DocumentTextElement_LinkAssign);
+    ++n;
+
 
     RegisterRuntimeExport("?FindNextWhiteSpace@DocumentTextElement@UI@@AEAAHXZ",
                           (void*)&RtUi_DocumentTextElement_FindNextWhiteSpace);   ++n;
