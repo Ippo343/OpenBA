@@ -19,6 +19,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -32,7 +33,7 @@ int  s_frame = 3000;   // late enough that a demo orchard has planted its grid
 void Init() {
     if (s_init) return;
     s_init = true;
-    const char* env = std::getenv("BANISHED_ORCHARD_CUT");
+    const char* env = Opt().orchardCut;
     if (!env || !env[0] || std::strcmp(env, "0") == 0 || std::strcmp(env, "false") == 0) {
         std::fprintf(stderr, "[OrchardCut] disabled (BANISHED_ORCHARD_CUT unset)\n");
         return;

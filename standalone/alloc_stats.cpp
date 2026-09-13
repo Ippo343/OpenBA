@@ -10,6 +10,8 @@
 #include <cstring>
 #include <cstdlib>
 
+#include "options.h"
+
 namespace {
 
 // [ALLOCSTATS] env BANISHED_ALLOC_STATS — engine-heap accounting (diagnostic).
@@ -174,11 +176,9 @@ namespace {
 
 bool StatsOn() {
     if (g_statsOn < 0) {
-        const char* e = getenv("BANISHED_ALLOC_STATS");
-        g_statsOn = (e && e[0] && e[0] != '0') ? 1 : 0;
+        g_statsOn = Opt().allocStats ? 1 : 0;
         if (g_statsOn) {
-            const char* b = getenv("BANISHED_ALLOC_BIG");
-            g_bigThreshold = b ? strtoull(b, nullptr, 0) : 0;
+            g_bigThreshold = Opt().allocBig;
             g_blocks = reinterpret_cast<BlockRec*>(VirtualAlloc(
                 nullptr, kBlkSlots * sizeof(BlockRec), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
             g_callers = reinterpret_cast<CallerRec*>(VirtualAlloc(

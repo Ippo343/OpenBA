@@ -37,6 +37,7 @@
 // unchanged whether the probe is on or off.
 
 #include "resolve.h"
+#include "options.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -46,12 +47,7 @@
 namespace {
 
 bool ValidateOn() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_COMP_VALIDATE");
-        s = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s != 0;
+    return Opt().compValidate;
 }
 
 bool Readable(const void* p, size_t n) {

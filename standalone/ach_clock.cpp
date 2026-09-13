@@ -37,6 +37,7 @@
 //   BANISHED_ACH_YEAR_MAX=<n>     stop boosting at n years (default 250)
 
 #include "engine_funcs.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -54,7 +55,7 @@ int   s_lastLoggedYear = -1;
 extern "C" float AchClock_TimeScale() {
     if (s_timeScale < 0.0f) {
         s_timeScale = 1.0f;
-        if (const char* e = std::getenv("BANISHED_ACH_TIME_SCALE")) {
+        if (const char* e = Opt().achTimeScale) {
             const float v = (float)std::atof(e);
             if (v > 0.0f) s_timeScale = v;
         }
@@ -71,11 +72,11 @@ extern "C" float AchClock_TimeScale() {
 extern "C" void AchClock_Tick(int frameNum) {
     if (s_yearBoost < 0) {
         s_yearBoost = 0;
-        if (const char* e = std::getenv("BANISHED_ACH_YEAR_BOOST")) {
+        if (const char* e = Opt().achYearBoost) {
             const int v = std::atoi(e);
             if (v > 0) s_yearBoost = v;
         }
-        if (const char* e = std::getenv("BANISHED_ACH_YEAR_MAX")) {
+        if (const char* e = Opt().achYearMax) {
             const int v = std::atoi(e);
             if (v > 0) s_yearMax = v;
         }

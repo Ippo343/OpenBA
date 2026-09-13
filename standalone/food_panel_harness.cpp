@@ -31,6 +31,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "options.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -53,9 +54,9 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 
 namespace {
 
-// Shared env test: set and not "0"/"false".
-bool EnvOn(const char* name) {
-    const char* v = std::getenv(name);
+// Shared truthy test over an already-read RAW value (from Opt()): set and not
+// "0"/"false" — the same test this file has always applied to the environment.
+bool ValOn(const char* v) {
     return v && v[0] && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
 }
 
@@ -104,10 +105,10 @@ int      s_nextFollow = 0;
 void Init() {
     if (s_init) return;
     s_init = true;
-    const char* e = std::getenv("BANISHED_FOOD_PANEL");
+    const char* e = Opt().foodPanel;
     if (!e || !e[0] || std::strcmp(e, "0") == 0) return;
     std::snprintf(s_want, sizeof(s_want), "%s", e);
-    if (const char* f = std::getenv("BANISHED_FOOD_PANEL_FRAME")) {
+    if (const char* f = Opt().foodPanelFrame) {
         int v = std::atoi(f);
         if (v > 0) s_fireFrame = v;
     }
@@ -235,7 +236,7 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
         // Attendance, but the Forester override reads it, so send id 1 (its "plant"
         // toggle) rather than 0 — id 0 would be a no-op on the forester and would make
         // a working slot 14 look dead.
-        if (doCmd && EnvOn("BANISHED_FOOD_PANEL_CLICK")) {
+        if (doCmd && ValOn(Opt().foodPanelClick)) {
             const uint8_t was = r[1];
             reinterpret_cast<void (*)(void*, int)>(doCmd)(comp, 1);
             const uint8_t now = reinterpret_cast<uint8_t (*)(void*, int)>(canCmd)(comp, 1);
@@ -315,7 +316,7 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     // explicit end-to-end measurement rather than a code read: dispatch the slot and
     // report the roster DELTA. Everything downstream ("no teacher" -> "no students")
     // hangs off this one dispatch.
-    if (EnvOn("BANISHED_FOOD_PANEL_SEAT")) {
+    if (ValOn(Opt().foodPanelSeat)) {
         void* wpc = FindCompOnEntity(ent, Tid("WorkPlaceComponent"));
         void* wc  = FindCompOnEntity(ent, Tid("WorkComponent"));
         if (!wpc) {
@@ -438,7 +439,7 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     //       not call RadiusDisplay_Remove again on a slot it no longer owns.
     //
     // Pair with BANISHED_DIALOG_TRACE=1 to see the `[RadiusUI] Slot6 ... overlay=N` lines.
-    if (!EnvOn("BANISHED_FOOD_PANEL_CLOSE")) return;
+    if (!ValOn(Opt().foodPanelClose)) return;
 
     const uint32_t tidRadius = Tid("RadiusUI");
     void* radius = nullptr;
@@ -481,8 +482,7 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
     // panel"), and it differs from the harness close in one way that matters: it
     // reaches Impl_cb40 through the ACTIVE tool it looks up itself, instead of the
     // tool the caller already holds.
-    if (std::getenv("BANISHED_FOOD_PANEL_CLOSE") &&
-        std::getenv("BANISHED_FOOD_PANEL_CLOSE")[0] == '2') {
+    if (Opt().foodPanelClose && Opt().foodPanelClose[0] == '2') {
         const uint32_t tidToolUI = Tid("ToolUI");
         void* toolUi = nullptr;
         for (int i = 0; ctrlArr && i < cnt; ++i) {
@@ -497,7 +497,7 @@ void ProbeClass(void* entityUI, const FoodClass& fc) {
         // crash was reported from: EntityUI+0x28 now holds a FencedTool, whose +0x30 is
         // the drag endCell pair rather than a selected entity, and the close handler
         // used to hand it to Entity_impl_cb40 regardless of type.
-        if (EnvOn("BANISHED_FOOD_PANEL_ARM_BUILDTOOL")) {
+        if (ValOn(Opt().foodPanelArmBuildTool)) {
             void* tmpl = StartTown_ResolveTemplateByPath("Template\\Pasture.rsc");
             if (!tmpl) {
                 std::fprintf(stderr, "[FoodPanel]   teardown: Pasture template unresolved — "

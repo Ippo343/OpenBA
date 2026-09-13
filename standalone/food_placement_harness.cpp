@@ -34,6 +34,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "options.h"
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include <cstdint>
@@ -136,10 +137,10 @@ int  s_fireFrame = 900;
 void Init() {
     if (s_init) return;
     s_init = true;
-    const char* e = std::getenv("BANISHED_FOOD_PLACE");
+    const char* e = Opt().foodPlace;
     if (!e || !e[0] || std::strcmp(e, "0") == 0) return;
     std::snprintf(s_want, sizeof(s_want), "%s", e);
-    if (const char* f = std::getenv("BANISHED_FOOD_PLACE_FRAME")) {
+    if (const char* f = Opt().foodPlaceFrame) {
         int v = std::atoi(f);
         if (v > 0) s_fireFrame = v;
     }

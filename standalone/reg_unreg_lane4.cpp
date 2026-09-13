@@ -346,12 +346,6 @@ extern "C" void FillTypeIdGlobals_lane4() {
     }
     std::fprintf(stderr, "[Lane4TypeId] %d/%d slot(s) filled, %d empty\n",
                  filled, kSlotCount, empty);
-    if (std::getenv("BANISHED_LANE4_TRACE")) {
-        for (int i = 0; i < kSlotCount; ++i)
-            std::fprintf(stderr, "[Lane4TypeId] 0x%llx %-24s = %u (0x%08X)\n",
-                         (unsigned long long)g_slots[i].addr, g_slots[i].name,
-                         g_slots[i].value, g_slots[i].value);
-    }
     std::fflush(stderr);
 }
 

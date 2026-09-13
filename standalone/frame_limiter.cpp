@@ -3,6 +3,7 @@
 
 
 #include "frame_limiter.h"
+#include "options.h"
 
 #include <windows.h>
 #include <cstdio>
@@ -69,7 +70,7 @@ void Init() {
     double targetFps = 0.0;
     bool   capFromEnv = false;
 
-    if (const char* capEnv = getenv("BANISHED_FPS_CAP")) {
+    if (const char* capEnv = Opt().fpsCap) {
         if (_stricmp(capEnv, "off") == 0 || _stricmp(capEnv, "false") == 0) {
             g_enabled = false;
         } else {
@@ -88,7 +89,7 @@ void Init() {
         if (refresh <= 0) refresh = 60;     // safe default if the query fails
 
         double headroomPct = 50.0;          // default: ceiling = refresh * 1.5
-        if (const char* hrEnv = getenv("BANISHED_FPS_HEADROOM")) {
+        if (const char* hrEnv = Opt().fpsHeadroom) {
             double h = atof(hrEnv);
             if (h >= 0.0) headroomPct = h;
         }

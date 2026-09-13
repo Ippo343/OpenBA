@@ -20,6 +20,7 @@
 // Value: 1/on = dump every 600 frames, or a frame count. Test-only, opt-in.
 
 #include "resolve.h"
+#include "options.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -40,7 +41,7 @@ bool s_seeded = false;
 void Init() {
     if (s_init) return;
     s_init = true;
-    const char* e = std::getenv("BANISHED_FOOD_STOCK");
+    const char* e = Opt().foodStock;
     if (!e || !e[0] || std::strcmp(e, "0") == 0) return;
     s_period = std::atoi(e);
     if (s_period <= 1) s_period = 600;

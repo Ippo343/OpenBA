@@ -16,6 +16,7 @@
 //   GetTarget (vtable slot 10, 0x1400ec510)
 //
 
+#include "options.h"
 #include "Work/gatherrawmaterials_funcs.h"
 #include "BuildActions.h"
 #include "engine_funcs.h"
@@ -562,13 +563,9 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
     // what GatherRawMaterials_Ctor_Impl seeds it to at construction, and what OnComplete
     // would keep it at — so GRM's per-slot "already fulfilled" check reflects reality and
     // advances through materials as they are physically delivered.
-    static int s_syncDelivered = -1;
-    if (s_syncDelivered < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_SYNC_DELIVERED");
-        s_syncDelivered = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
+    const bool syncDelivered = Opt().buildSyncDelivered;
     uintptr_t siteStorageIBP = 0;
-    if (s_syncDelivered) {
+    if (syncDelivered) {
         fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
         s_fn_FindComp_Storage(selfQ[2], &siteStorageIBP);
     }
@@ -586,7 +583,7 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
         // GatherRawMaterials_Ctor_Impl's seeding. Keeps GRM's slot accounting in step with
         // what the citizens have physically deposited, standing in for the OnComplete credit
         // the inert standalone task manager never delivers.
-        if (s_syncDelivered && siteStorageIBP) {
+        if (syncDelivered && siteStorageIBP) {
             uint64_t matTypeSync = *(uint64_t*)(slotOffset + *(uintptr_t*)(gatherDescAddr + 0x20));
             fn_InternalBasePtr_CheckPtr(&siteStorageIBP);
             uintptr_t st = siteStorageIBP;

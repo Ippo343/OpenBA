@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "hw_watch.h"
+#include "options.h"
 
 static HANDLE g_mainThread = nullptr;   // from HwWatch_Init (SUSPEND_RESUME + GET_CONTEXT)
 
@@ -191,11 +192,10 @@ void Sampler_Flush() {
 }
 
 void Sampler_Init() {
-    const char* e = std::getenv("BANISHED_SAMPLE");
-    if (!e || !e[0] || e[0] == '0') return;
+    const int hz = Opt().sample;
+    if (hz == 0) return;
     g_mainThread = (HANDLE)HwWatch_MainThreadHandle();
     if (!g_mainThread) { std::fprintf(stderr, "[Sampler] no main-thread handle (HwWatch_Init first)\n"); return; }
-    const int hz = std::atoi(e);
     if (hz > 1) g_hz = hz;
     InitializeCriticalSection(&g_lock);
     g_samples.reserve(1 << 16);
