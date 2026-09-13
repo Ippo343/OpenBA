@@ -16,6 +16,7 @@
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -429,20 +430,14 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         // which is Achievement::GoalList::AreGoalsMetExcept — unregistered in
         // standalone, so the conversion silently no-opped and localRes8 stayed
         // empty. Use the resolved engine export directly (retval into localRes8).
-        int64_t localRes8 = 0;
-        int64_t localRes18 = 0;
+        System::String localRes8;
         if (fn_UIString_ToSystemString) fn_UIString_ToSystemString(localStr, &localRes8);
 
         // Copy construct System::String from localStr result
-        void* strCopy = fn_String_Ctor_Copy ? fn_String_Ctor_Copy(&localRes18, &localRes8) : nullptr;
-        char* strPtr = strCopy ? reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(strCopy)) : nullptr;
+        System::String localRes18(localRes8);
+        char* strPtr = localRes18._data;
 
         char eventResult = s_fn_HandleLifeEvent ? s_fn_HandleLifeEvent(self, 7, strPtr) : 0;
-
-        if (fn_String_Dtor) {
-            fn_String_Dtor(&localRes18);
-            fn_String_Dtor(&localRes8);
-        }
 
         if (eventResult != 0) return;
     }
@@ -482,7 +477,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     char healthOk = s_fn_UpdateHealth ? s_fn_UpdateHealth(self, deltaTime) : 1;
     if (healthOk == 0) {
         // Citizen died from health — get death cause string
-        int64_t localRes8 = 0;
+        System::String localRes8;
         int64_t profData = *reinterpret_cast<int64_t*>(p + 0x68);
         if (profData) {
             void* stringTable = *reinterpret_cast<void**>(profData + 0x20);
@@ -490,9 +485,8 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
                 // GetText(self, retval, textIndex) — Ghidra drops R8 (textIndex)
                 // textIndex is likely 0 for single-entry profession name tables
                 fn_StringTable_GetText(stringTable, &localRes8, 0);
-                char* deathStr = reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(&localRes8));
+                char* deathStr = localRes8._data;
                 char r = s_fn_HandleLifeEvent ? s_fn_HandleLifeEvent(self, 3, deathStr) : 0;
-                if (fn_String_Dtor) fn_String_Dtor(&localRes8);
                 if (r != 0) return;
             }
         }

@@ -41,6 +41,8 @@
 #include "options.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
+#include "math/Math.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -66,13 +68,10 @@ static fn_AddCitizenEvent_t s_addCitizenEvent = nullptr;
 
 // ---- Runtime engine calls via exe .rdata dispatch slots (export fallback) ---
 // Original call sites use these slots: V3 ctor3 0x140152a30, V3 splat 0x140151320,
-// Dot 0x140151298, Box::Intersect 0x140151e80, StringTable::GetText(String&) 0x140151718.
-typedef void  (*fn_V3Ctor3_t)(void* self, float x, float y, float z);
-typedef void  (*fn_V3Dot_t)(const void* self, void* retbuf, const void* other);
+// Dot 0x140151298 (both now direct Math::Vector3 calls), Box::Intersect 0x140151e80,
+// StringTable::GetText(String&) 0x140151718.
 typedef bool  (*fn_BoxIntersect_t)(const void* self, const void* other);
 typedef void* (*fn_GetTextByName_t)(void* table, void* retStr, const void* nameStr);
-static fn_V3Ctor3_t      s_v3ctor3       = nullptr;
-static fn_V3Dot_t        s_v3dot         = nullptr;
 static fn_BoxIntersect_t s_boxIntersect  = nullptr;
 static fn_GetTextByName_t s_getTextByName = nullptr;
 
@@ -103,12 +102,6 @@ static void EnsureInit() {
     s_qsubdiv        = reinterpret_cast<fn_QSubdiv_t>(ResolveAddr(Module::Exe, 0x140018880));
     s_addCitizenEvent = reinterpret_cast<fn_AddCitizenEvent_t>(ResolveAddr(Module::Exe, 0x140094e00));
 
-    s_v3ctor3 = reinterpret_cast<fn_V3Ctor3_t>(RSlot(0x140152a30));
-    if (!s_v3ctor3) s_v3ctor3 = reinterpret_cast<fn_V3Ctor3_t>(
-        ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
-    s_v3dot = reinterpret_cast<fn_V3Dot_t>(RSlot(0x140151298));
-    if (!s_v3dot) s_v3dot = reinterpret_cast<fn_V3Dot_t>(
-        ResolveExport("?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z"));
     s_boxIntersect = reinterpret_cast<fn_BoxIntersect_t>(RSlot(0x140151e80));
     if (!s_boxIntersect) s_boxIntersect = reinterpret_cast<fn_BoxIntersect_t>(
         ResolveExport("?Intersect@Box@Volume@@QEBA_NAEBV12@@Z"));
@@ -378,7 +371,7 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
     EnsureInit();
     if (out) *out = nullptr;
     if (!map || !pos || !radius || !outArr || !s_qinit || !s_qsubdiv ||
-        !s_v3ctor3 || !s_v3dot || !s_boxIntersect)
+        !s_boxIntersect)
         return out;
 
     // 0x2430-byte walker (0xFF records * 0x24 + header + map ptr at +0x2428).
@@ -441,12 +434,10 @@ extern "C" void* Map_RadiusQuery_92990(float* map, void** out, float* pos, float
                     uintptr_t link = linkIBP;
                     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(link + 0x68));
                     uintptr_t model = *(uintptr_t*)(link + 0x68);
-                    float diff[3];
-                    s_v3ctor3(diff, *(float*)(model + 0x158) - pos[0],
-                                    *(float*)(model + 0x15c) - pos[1],
-                                    *(float*)(model + 0x160) - pos[2]);
-                    float dist2 = 0.0f;
-                    s_v3dot(diff, &dist2, diff);
+                    Math::Vector3 diff(*(float*)(model + 0x158) - pos[0],
+                                       *(float*)(model + 0x15c) - pos[1],
+                                       *(float*)(model + 0x160) - pos[2]);
+                    float dist2 = diff.Dot(diff).v;
                     if (dist2 < r2) {
                         // inline 8-byte grow-array push (×3 capacity rule)
                         int count = *(int*)((uintptr_t)arr + 8);
@@ -527,18 +518,17 @@ extern "C" void CitizenComp_Infect(void* self, void* disease) {
         // including the drop-to-1x-speed tail on the settings +0x17 byte.
         void* eventLog = *(void**)((uintptr_t)gw + 0x138);
         void* nameTable = *(void**)((uintptr_t)disease + 0x20);
-        u8 diseaseName[8] = {0};
+        System::String diseaseName;
         bool haveName = false;
         if (nameTable && s_getTextByName) {
-            s_getTextByName(nameTable, diseaseName, (u8*)disease + 0x28);
+            s_getTextByName(nameTable, &diseaseName, (u8*)disease + 0x28);
             haveName = true;
         }
         if (s_addCitizenEvent && eventLog) {
             // {3}/{4} unused by the type-0xb template; AddCitizenEvent maps null -> "".
             s_addCitizenEvent(eventLog, 0xb, 3, nullptr,
-                              haveName ? diseaseName : nullptr, nullptr, nullptr);
+                              haveName ? &diseaseName : nullptr, nullptr, nullptr);
         }
-        if (haveName && fn_String_Dtor) fn_String_Dtor(diseaseName);
     }
 
     *(void**)(s + 0x68) = disease;

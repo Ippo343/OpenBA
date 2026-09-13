@@ -37,6 +37,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
@@ -278,18 +279,13 @@ extern "C" void Entity_PlaceAtCell_7b20(void* tombCompV, int cell, float yawDeg)
     float half = static_cast<float>(size >> 1) - 0.5f;
     float inXY[3] = { static_cast<float>(cell % size) - half,
                       static_cast<float>(cell / size) - half, 0.0f };
-    float terr[3] = {0.0f, 0.0f, 0.0f};
-    if (s_terrainPos) s_terrainPos(map, terr, inXY, '\0', nullptr);
+    Math::Vector3 terr(0.0f, 0.0f, 0.0f);
+    if (s_terrainPos) s_terrainPos(map, &terr.x, inXY, '\0', nullptr);
     ChkPtr(&modelIBP);
-    float pitch = 0.0f;
-    float yawF = yawDeg;
-    uint8_t xform[80] = {0};
-    if (fn_Transform_FromYawPitchOffset) {
-        fn_Transform_FromYawPitchOffset(xform, &yawF, &pitch, terr);
-        const uint32_t* pv = reinterpret_cast<const uint32_t*>(xform);
-        uint32_t* dst = reinterpret_cast<uint32_t*>(modelIBP + 0x148);
-        for (int i = 0; i < 7; i++) dst[i] = pv[i];
-    }
+    Math::Scalar pitch(0.0f);
+    Math::Scalar yawF(yawDeg);
+    Math::Transform xform = Math::Transform::FromYawPitchOffset(yawF, pitch, terr);
+    *reinterpret_cast<Math::Transform*>(modelIBP + 0x148) = xform;   // B.3.1 bridge (7-dword copy)
     *reinterpret_cast<float*>(modelIBP + 0x168) = yawDeg;
     if (fn_Geometry_SetTransform)
         fn_Geometry_SetTransform(reinterpret_cast<void*>(modelIBP + 0x28),

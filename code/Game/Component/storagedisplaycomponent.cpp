@@ -17,6 +17,7 @@
 #include "Component/storagedisplaycomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -90,18 +91,9 @@ static fn_FindComponent_Map_t s_fn_FindComponent_Map = nullptr;
 typedef void (*fn_MeshArrayResize_t)(void* arrayBase, int newCount);
 static fn_MeshArrayResize_t s_fn_MeshArrayResize = nullptr;
 
-// Math::Vector3::Vector3(out, x, y, z) — matches engine_funcs.h typedef
-typedef float* (*fn_Vector3_Ctor_local_t)(float* self, float x, float y, float z);
-static fn_Vector3_Ctor_local_t s_fn_Vector3_Ctor = nullptr;
-
 // CharacterComponent_impl_f3e0 — map tile to world position
 typedef void (*fn_TileToWorld_t)(void* mapInfo, float* outPos, float* inPos, char param4, void* param5);
 static fn_TileToWorld_t s_fn_TileToWorld = nullptr;
-
-// Math::Transform::FromYawPitchOffset — via dispatch slot 0x140151288
-// Real: static Transform FromYawPitchOffset(Scalar& yaw, Scalar& pitch, Vector3& offset)
-typedef void* (*fn_FromYawPitchOffset_t)(void* out, const void* yaw, const void* pitch, const void* offset);
-static fn_FromYawPitchOffset_t s_fn_FromYawPitchOffset = nullptr;
 
 // Graphics::Geometry::SetTransform — via dispatch slot 0x1401512e0
 typedef void (*fn_SetTransform_t)(void* geometry, void* transform);
@@ -149,20 +141,9 @@ static void EnsureHelpers() {
     s_fn_MeshArrayResize = reinterpret_cast<fn_MeshArrayResize_t>(
         ResolveAddr(Module::Exe, 0x14000ca10));
 
-    // Math::Vector3::Vector3 — resolved via export
-    s_fn_Vector3_Ctor = reinterpret_cast<fn_Vector3_Ctor_local_t>(
-        ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
-    if (!s_fn_Vector3_Ctor) {
-        // Fallback: dispatch slot
-        slot = ResolveAddr(Module::Exe, 0x140151230);
-        if (slot) s_fn_Vector3_Ctor = *reinterpret_cast<fn_Vector3_Ctor_local_t*>(slot);
-    }
-
     s_fn_TileToWorld = reinterpret_cast<fn_TileToWorld_t>(
         ResolveAddr(Module::Exe, 0x14009f3e0));  // CharacterComponent_impl_f3e0 tile->world (CALL @140056869 in StorageDisplayComponent::Draw)
 
-    slot = ResolveAddr(Module::Exe, 0x140151288);
-    if (slot) s_fn_FromYawPitchOffset = *reinterpret_cast<fn_FromYawPitchOffset_t*>(slot);
 
     slot = ResolveAddr(Module::Exe, 0x1401512e0);
     if (slot) s_fn_SetTransform = *reinterpret_cast<fn_SetTransform_t*>(slot);
@@ -314,19 +295,15 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
         int tileIndex = mapSize * row + col;
 
         // Build position vector from tile
-        float vec3Buf[4];
-        if (s_fn_Vector3_Ctor) {
-            s_fn_Vector3_Ctor(vec3Buf,
-                (float)(tileIndex % mapSize) - halfMap,
-                (float)(tileIndex / mapSize) - halfMap,
-                0.0f);
-        }
+        Math::Vector3 vec3Buf((float)(tileIndex % mapSize) - halfMap,
+                              (float)(tileIndex / mapSize) - halfMap,
+                              0.0f);
 
         // Convert tile to world position (f3e0). worldPos[0]/[1] are the world X/Y
         // on the yard footprint; the original drops worldPos[2] and uses z=0.
         float worldPos[4] = {0.f, 0.f, 0.f, 0.f};
         if (s_fn_TileToWorld) {
-            s_fn_TileToWorld(mapInfo, worldPos, (float*)vec3Buf, '\0', nullptr);
+            s_fn_TileToWorld(mapInfo, worldPos, &vec3Buf.x, '\0', nullptr);
         }
 
         // Build transform with yaw rotation
@@ -338,22 +315,20 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
         }
 
         uintptr_t displayArray = *(uintptr_t*)(selfAddr + 0x28);
-        uint8_t transformBuf[72];
-        void* transform = nullptr;
         // FromYawPitchOffset(retbuf, yaw=&pitchBits, pitch=&yawBits[=0], offset).
         // (Names are swapped to match the original's arg order.) The OFFSET is the
         // per-cell world position {worldPos.x, worldPos.y, 0} — verified in the real
         // Draw disassembly (0x1400568c9/cf write worldPos.x/.y into the offset vec,
         // 0x1400568ba forces offset.z=0). The prior port passed a ZERO offset here,
         // which placed every pile mesh at the world origin (invisible on the yard).
-        float offset[3] = { worldPos[0], worldPos[1], 0.0f };
-        if (s_fn_FromYawPitchOffset) {
-            transform = s_fn_FromYawPitchOffset(transformBuf, &pitchBits, &yawBits, offset);
-        }
+        Math::Vector3 offset(worldPos[0], worldPos[1], 0.0f);
+        Math::Transform transform = Math::Transform::FromYawPitchOffset(
+            *reinterpret_cast<const Math::Scalar*>(&pitchBits),
+            *reinterpret_cast<const Math::Scalar*>(&yawBits), offset);   // B.3.1 bridge
 
         // Apply transform to geometry
-        if (s_fn_SetTransform && transform) {
-            s_fn_SetTransform((void*)(displayArray + (uintptr_t)i * 0x128), transform);
+        if (s_fn_SetTransform) {
+            s_fn_SetTransform((void*)(displayArray + (uintptr_t)i * 0x128), &transform);
         }
 
     }

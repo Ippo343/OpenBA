@@ -75,6 +75,7 @@
 
 #include "Component/tradecomponent_funcs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // TradeComponent's own array-resize helpers (tradecomponent.cpp, file-scope,
@@ -398,7 +399,7 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     {
         uint8_t* elem = *reinterpret_cast<uint8_t**>(At(self, 0x30));
         for (int32_t i = 0; i < nameCount && elem; ++i, elem += 0x20) {
-            if (g_fn_String_Serialize) g_fn_String_Serialize(elem + 0x0, ser);
+            reinterpret_cast<System::String*>(elem + 0x0)->Serialize(ser);   // B.3.1 bridge
             int32_t innerCount = *reinterpret_cast<int32_t*>(elem + 0x18);
             fn_Ser_Slot_SerInt_AC8(ser, &innerCount, nullptr);
             if (Loading(ser) && fn_ExeArrayResize3)

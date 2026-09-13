@@ -15,6 +15,7 @@
 
 #include "Work/huntwork_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -39,7 +40,6 @@ typedef int   (*HuW_CalcMaxWorkers_t)(uintptr_t matDesc);
 typedef void* (*HuW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
 typedef int   (*HuW_StorageQueryCount_t)(void* storageComp);
 typedef int   (*HuW_Random_RandTol_t)(void* rng, int range);
-typedef float*(*HuW_Vector3_Ctor_t)(float* self, float x, float y, float z);
 typedef float*(*HuW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
                                      char param4, uint32_t* outNormal);
 typedef void  (*HuW_CreateHuntAction_t)(void* citizenEntityIBP, int priority, void* huntCompIBP,
@@ -89,7 +89,6 @@ static HuW_CalcMaxWorkers_t              s_fn_CalcMaxWorkers = nullptr;
 static HuW_FindComp_Storage_t            s_fn_FindComp_Storage = nullptr;
 static HuW_StorageQueryCount_t           s_fn_StorageQueryCount = nullptr;
 static HuW_Random_RandTol_t              s_fn_Random_RandTol = nullptr;
-static HuW_Vector3_Ctor_t               s_fn_Vector3_Ctor = nullptr;
 static HuW_GetTerrainPos_t              s_fn_GetTerrainPos = nullptr;
 static HuW_CreateHuntAction_t          s_fn_CreateHuntAction = nullptr;
 static HuW_CitizenAI_RegisterWork_t     s_fn_CitizenAI_RegisterWork = nullptr;
@@ -197,9 +196,6 @@ bool HuntWork_ResolveFuncs() {
     uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
     if (iatRandTol)
         s_fn_Random_RandTol = *reinterpret_cast<HuW_Random_RandTol_t*>(iatRandTol);
-    uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);
-    if (iatVec3Ctor)
-        s_fn_Vector3_Ctor = *reinterpret_cast<HuW_Vector3_Ctor_t*>(iatVec3Ctor);
 
     // Serializer ctor/dtor from dispatch slots
     uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140152ad8);
@@ -241,7 +237,7 @@ bool HuntWork_ResolveFuncs() {
               s_fn_FindComp_MeshInstance && s_fn_MeshInstance_SetVisible &&
               s_fn_CalcMaxWorkers && s_fn_FindComp_Storage &&
               s_fn_StorageQueryCount && s_fn_Random_RandTol &&
-              s_fn_Vector3_Ctor && s_fn_GetTerrainPos &&
+              s_fn_GetTerrainPos &&
               s_fn_CreateHuntAction && s_fn_CitizenAI_RegisterWork &&
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Hunt &&
               s_fn_GetAreaComponent && s_fn_Map_CalcDistance &&
@@ -268,7 +264,6 @@ bool HuntWork_ResolveFuncs() {
         if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
         if (!s_fn_Random_RandTol) printf("  MISSING: Random_RandTol\n");
-        if (!s_fn_Vector3_Ctor) printf("  MISSING: Vector3_Ctor\n");
         if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
         if (!s_fn_CreateHuntAction) printf("  MISSING: PerformWork_Ctor3\n");
         if (!s_fn_CitizenAI_RegisterWork) printf("  MISSING: CitizenAI_RegisterWork\n");
@@ -504,15 +499,14 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
         // Valid hunt target — create hunt action at terrain position
         // -------------------------------------------------------
         float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
-        float huntPos[3];
-        s_fn_Vector3_Ctor(huntPos,
+        Math::Vector3 huntPos(
             (float)((int)testCell % *mapGrid) - halfOffset,
             (float)((int)testCell / *mapGrid) - halfOffset,
             0.0f);
 
         // Get terrain height
         float pathPos[3];
-        s_fn_GetTerrainPos(mapGrid, pathPos, huntPos, 0, nullptr);
+        s_fn_GetTerrainPos(mapGrid, pathPos, &huntPos.x, 0, nullptr);
 
         fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
         uintptr_t citizenEntRef = *(uintptr_t*)citizenIBP;

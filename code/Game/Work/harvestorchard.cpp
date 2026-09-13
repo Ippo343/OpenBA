@@ -21,6 +21,7 @@
 
 #include "Work/harvestorchard_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -46,7 +47,6 @@ typedef int   (*HO_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int des
 typedef bool  (*HO_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
 typedef float*(*HO_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
                                      char param4, uint32_t* outNormal);
-typedef float*(*HO_Vector3_Ctor_t)(float* self, float x, float y, float z);
 typedef void* (*HO_FindComp_RawMaterial_t)(uintptr_t compList, void* outPtr);
 
 // FUN_1400bb7b0 -- builds the gather-raw-material action chain on the citizen's AI task list.
@@ -91,7 +91,6 @@ static HO_CalcMaxWorkers_t s_fn_CalcMaxWorkers = nullptr;
 static HO_Map_FindNearestPassable_t s_fn_Map_FindNearestPassable = nullptr;
 static HO_Map_CanPathTo_t s_fn_Map_CanPathTo = nullptr;
 static HO_GetTerrainPos_t s_fn_GetTerrainPos = nullptr;
-static HO_Vector3_Ctor_t s_fn_Vector3_Ctor = nullptr;
 static HO_FindComp_RawMaterial_t s_fn_FindComp_RawMaterial = nullptr;
 static HO_BST_Insert_t s_fn_BST_Insert = nullptr;
 static HO_BST_Remove_t s_fn_BST_Remove = nullptr;
@@ -187,10 +186,6 @@ bool HarvestOrchard_ResolveFuncs() {
         s_fn_ObjectInternal_Dtor = *reinterpret_cast<HO_ObjectInternal_Dtor_t*>(iatInternalDtor);
 
     // Dispatch slot IATs
-    uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);
-    if (iatVec3Ctor)
-        s_fn_Vector3_Ctor = *reinterpret_cast<HO_Vector3_Ctor_t*>(iatVec3Ctor);
-
     uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
     if (iatSerCtor)
         s_fn_Serializer_Ctor = *reinterpret_cast<HO_Serializer_Ctor_t*>(iatSerCtor);
@@ -238,7 +233,7 @@ bool HarvestOrchard_ResolveFuncs() {
               s_fn_FindComp_NatRes && s_fn_FindComp_DescComp &&
               s_fn_MeshInstance_SetVisible && s_fn_CalcMaxWorkers &&
               s_fn_Map_FindNearestPassable && s_fn_Map_CanPathTo &&
-              s_fn_GetTerrainPos && s_fn_Vector3_Ctor &&
+              s_fn_GetTerrainPos &&
               s_fn_FindComp_RawMaterial && s_fn_OrchardHarvest_Ctor &&
               s_fn_BST_Insert && s_fn_BST_Remove && s_fn_BST_Serialize &&
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
@@ -269,7 +264,6 @@ bool HarvestOrchard_ResolveFuncs() {
         HO_MISS(s_fn_Map_FindNearestPassable, "Map_FindNearestPassable");
         HO_MISS(s_fn_Map_CanPathTo, "Map_CanPathTo");
         HO_MISS(s_fn_GetTerrainPos, "GetTerrainPos");
-        HO_MISS(s_fn_Vector3_Ctor, "Vector3_Ctor (slot 0x140152a30)");
         HO_MISS(s_fn_FindComp_RawMaterial, "FindComp_RawMaterial");
         HO_MISS(s_fn_OrchardHarvest_Ctor, "OrchardHarvest_Ctor");
         HO_MISS(s_fn_BST_Insert, "BST_Insert");
@@ -491,14 +485,13 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
 
                                 // Calculate world position
                                 float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
-                                float targetPos[3];
-                                s_fn_Vector3_Ctor(targetPos,
+                                Math::Vector3 targetPos(
                                     (float)(nearestCell % *mapGrid) - halfOffset,
                                     (float)(nearestCell / *mapGrid) - halfOffset,
                                     0.0f);
 
                                 float pathPos[4];
-                                s_fn_GetTerrainPos(mapGrid, pathPos, targetPos, 0, nullptr);
+                                s_fn_GetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
 
                                 // Get entity ref from orchard description
                                 fn_InternalBasePtr_CheckPtr(orchardDescIBP);

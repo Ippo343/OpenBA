@@ -28,6 +28,7 @@
 // Decompiled READ-ONLY from Application-x64.exe.
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -61,7 +62,7 @@ static void TradeDescription_Init(void* self) {
 void TradeDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
-        !g_fn_String_Serialize || !fn_Serializer_Serialize_Float ||
+        !fn_Serializer_Serialize_Float ||
         !fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 1);
@@ -76,7 +77,7 @@ void TradeDescription_Serialize(void* self, void* stream) {
         uint8_t* m = *(uint8_t**)(s + 0x48);
         for (int i = 0; i < merchN && m; ++i, m += 0x48) {
             fn_ExternalPtr_BuildSerialize(m + 0x00, serializer);  // ExternalPtr
-            g_fn_String_Serialize(m + 0x08, serializer);          // String
+            reinterpret_cast<System::String*>(m + 0x08)->Serialize(serializer);          // B.3.1 bridge: String
             // ext-ref array @ m+0x20 (count @ m+0x28, stride 8)
             g_fn_Serialize_Int(serializer, m + 0x28, nullptr);
             int extN = *(int32_t*)(m + 0x28);
@@ -122,8 +123,8 @@ void TradeDescription_Serialize(void* self, void* stream) {
         uint8_t* sp = *(uint8_t**)(s + 0x38);
         for (int i = 0; i < spN && sp; ++i, sp += 0x18) {
             SerializerEncodingVCall(serializer, 0x98, sp + 0x00); // enum @+0x00
-            g_fn_String_Serialize(sp + 0x08, serializer);         // String @+0x08
-            g_fn_String_Serialize(sp + 0x10, serializer);         // String @+0x10
+            reinterpret_cast<System::String*>(sp + 0x08)->Serialize(serializer);         // B.3.1 bridge: String @+0x08
+            reinterpret_cast<System::String*>(sp + 0x10)->Serialize(serializer);         // B.3.1 bridge: String @+0x10
         }
     }
 
@@ -144,7 +145,7 @@ void* TradeDescription_Dtor(void* self, uint32_t flags) {
             for (int i = 0; i < merchN; ++i, m += 0x48) {
                 if (*(void**)(m + 0x20)) fn_MemFreeStatic(*(void**)(m + 0x20));
                 if (*(void**)(m + 0x30)) fn_MemFreeStatic(*(void**)(m + 0x30));
-                if (fn_String_Dtor) fn_String_Dtor(m + 0x08);
+                reinterpret_cast<System::String*>(m + 0x08)->~String();  // B.3.1 bridge
             }
             fn_MemFreeStatic(*(void**)(s + 0x48));
         }
@@ -153,7 +154,7 @@ void* TradeDescription_Dtor(void* self, uint32_t flags) {
         uint8_t* sp = *(uint8_t**)(s + 0x38);
         if (sp) {
             for (int i = 0; i < spN; ++i, sp += 0x18) {
-                if (fn_String_Dtor) { fn_String_Dtor(sp + 0x08); fn_String_Dtor(sp + 0x10); }
+                reinterpret_cast<System::String*>(sp + 0x08)->~String(); reinterpret_cast<System::String*>(sp + 0x10)->~String();  // B.3.1 bridge
             }
             fn_MemFreeStatic(*(void**)(s + 0x38));
         }

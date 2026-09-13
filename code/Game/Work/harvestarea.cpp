@@ -27,6 +27,7 @@
 
 #include "Work/harvestarea_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -69,10 +70,6 @@ static HA_Map_CanPathTo_t s_fn_Map_CanPathTo = nullptr;                     // 0
 typedef float* (*HA_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
                                      char param4, uint32_t* outNormal);
 static HA_GetTerrainPos_t s_fn_GetTerrainPos = nullptr; // 0x14009f3e0
-
-// Math::Vector3::Vector3 -- IAT dispatch
-typedef float* (*HA_Vector3_Ctor_t)(float* self, float x, float y, float z);
-static HA_Vector3_Ctor_t s_fn_Vector3_Ctor = nullptr;
 
 // ShowTool_Action_Ctor4 -- creates harvest action chain for crop areas
 // Signature: (citizenIBP, priority, harvestMode, targetIBP, position, packedCellInfo, ???)
@@ -208,10 +205,6 @@ bool HarvestArea_ResolveFuncs() {
         s_fn_ObjectInternal_Dtor = *reinterpret_cast<HA_ObjectInternal_Dtor_t*>(iatInternalDtor);
 
     // Dispatch slot IATs
-    uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);
-    if (iatVec3Ctor)
-        s_fn_Vector3_Ctor = *reinterpret_cast<HA_Vector3_Ctor_t*>(iatVec3Ctor);
-
     uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
     if (iatSerCtor)
         s_fn_Serializer_Ctor = *reinterpret_cast<HA_Serializer_Ctor_t*>(iatSerCtor);
@@ -253,7 +246,7 @@ bool HarvestArea_ResolveFuncs() {
               s_fn_FindComp_NatRes && s_fn_MeshInstance_SetVisible &&
               s_fn_CalcMaxWorkers && s_fn_Map_FindNearestPassable &&
               s_fn_Map_CanPathTo && s_fn_GetTerrainPos &&
-              s_fn_Vector3_Ctor && s_fn_ShowTool_Action_Ctor4 &&
+              s_fn_ShowTool_Action_Ctor4 &&
               s_fn_BST_Insert && s_fn_BST_Remove && s_fn_BST_Serialize &&
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
               s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
@@ -278,7 +271,6 @@ bool HarvestArea_ResolveFuncs() {
         if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
         if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
         if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
-        if (!s_fn_Vector3_Ctor) printf("  MISSING: Vector3_Ctor\n");
         if (!s_fn_ShowTool_Action_Ctor4) printf("  MISSING: ShowTool_Action_Ctor4\n");
         if (!s_fn_BST_Insert) printf("  MISSING: BST_Insert\n");
         if (!s_fn_BST_Remove) printf("  MISSING: BST_Remove\n");
@@ -548,14 +540,13 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                             if (!((*(uint32_t*)(natResIBP1 + 0x20) >> 20) & 1)) {
                                 // Valid cell -- create harvest action
                                 float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
-                                float targetPos[3];
-                                s_fn_Vector3_Ctor(targetPos,
+                                Math::Vector3 targetPos(
                                     (float)(nearestCell % *mapGrid) - halfOffset,
                                     (float)(nearestCell / *mapGrid) - halfOffset,
                                     0.0f);
 
                                 float pathPos[4]; // extra padding for GetTerrainPos
-                                s_fn_GetTerrainPos(mapGrid, pathPos, targetPos, 0, nullptr);
+                                s_fn_GetTerrainPos(mapGrid, pathPos, &targetPos.x, 0, nullptr);
 
                                 // Create the harvest action
                                 void* pCitizenIBP = citizenIBP;

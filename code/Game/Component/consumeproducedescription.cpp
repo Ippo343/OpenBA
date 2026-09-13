@@ -38,6 +38,7 @@
 // which would desync the stream — register/wire slot 0x1401516b0 if needed.
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 
@@ -67,7 +68,7 @@ static void ConsumeProduceDescription_Init(void* self) {
 void ConsumeProduceDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
-        !g_fn_String_Serialize || !fn_Serializer_Serialize_Float ||
+        !fn_Serializer_Serialize_Float ||
         !fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
@@ -101,7 +102,7 @@ void ConsumeProduceDescription_Serialize(void* self, void* stream) {
             }
             fn_ExternalPtr_BuildSerialize(e + 0x10, serializer);      // ExternalPtr +0x10
             SerializerEncodingVCall(serializer, 0x98, e + 0x18);      // enum +0x18
-            g_fn_String_Serialize(e + 0x20, serializer);              // String +0x20
+            reinterpret_cast<System::String*>(e + 0x20)->Serialize(serializer);              // B.3.1 bridge: String +0x20
         }
     }
 
@@ -135,7 +136,7 @@ void* ConsumeProduceDescription_Dtor(void* self, uint32_t flags) {
         for (int i = 0; i < outerN; ++i, e += 0x28) {
             void* inner = *(void**)(e + 0x00);
             if (inner) fn_MemFreeStatic(inner);
-            if (fn_String_Dtor) fn_String_Dtor(e + 0x20);
+            reinterpret_cast<System::String*>(e + 0x20)->~String();  // B.3.1 bridge
         }
         fn_MemFreeStatic(*(void**)(s + 0x28));
     }

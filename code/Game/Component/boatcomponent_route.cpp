@@ -50,6 +50,8 @@
 // the controller's shared teardown. Nothing else in the build calls it.
 
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -67,15 +69,6 @@ typedef void  (*fn_PfSetCost_t)(void* pf, int idx, int cost, uint64_t ctx); // 0
 typedef void  (*fn_PfFlags_t)(void* pf, char a, char b, char c);           // 0x1400a68b0
 typedef int   (*fn_PfRun_t)(int64_t pf, uint32_t from, uint64_t to,
                             void* mode, int64_t outBuf, int maxLen);       // 0x1400a6e30
-typedef void* (*fn_Vec3Normalize_t)(const void* self, void* ret);          // slot 0x1401512c0
-typedef float (*fn_Vec3Heading_t)(const void* self);                       // slot 0x1401512d8
-typedef void* (*fn_Vec3FromYawPitch_t)(void* ret, const float* yaw,
-                                       const float* pitch);                // slot 0x1401512a0
-typedef void* (*fn_TransformCopy_t)(void* self, const void* src);          // slot 0x140151418
-typedef void* (*fn_TransformMul_t)(const void* self, void* ret,
-                                   const void* vec);                       // slot 0x140151470
-typedef void* (*fn_QuatRotate_t)(const void* self, void* ret,
-                                 const void* vec);                         // slot 0x1401525f0
 
 fn_Find3ea0_t         s_Find3ea0       = nullptr;
 fn_FindInteract_t     s_FindInteract   = nullptr;
@@ -83,12 +76,6 @@ fn_GridToWorld_t      s_GridToWorld    = nullptr;
 fn_PfSetCost_t        s_PfSetCost      = nullptr;
 fn_PfFlags_t          s_PfFlags        = nullptr;
 fn_PfRun_t            s_PfRun          = nullptr;
-fn_Vec3Normalize_t    s_Normalize      = nullptr;
-fn_Vec3Heading_t      s_Heading        = nullptr;
-fn_Vec3FromYawPitch_t s_FromYawPitch   = nullptr;
-fn_TransformCopy_t    s_TransformCopy  = nullptr;
-fn_TransformMul_t     s_TransformMul   = nullptr;
-fn_QuatRotate_t       s_QuatRotate     = nullptr;
 const uint32_t*       s_pTid_InteractDescription = nullptr;   // 0x1401c7938
 const uint32_t*       s_pTid_ModelComponent      = nullptr;   // 0x1401c7a50
 const uint32_t*       s_pTid_BoatComponent       = nullptr;   // 0x1401c4020
@@ -110,12 +97,6 @@ void ResolveOnce() {
     s_PfSetCost     = reinterpret_cast<fn_PfSetCost_t>(ResolveAddr(Module::Exe, 0x1400a6a30));
     s_PfFlags       = reinterpret_cast<fn_PfFlags_t>(ResolveAddr(Module::Exe, 0x1400a68b0));
     s_PfRun         = reinterpret_cast<fn_PfRun_t>(ResolveAddr(Module::Exe, 0x1400a6e30));
-    s_Normalize     = SlotFn<fn_Vec3Normalize_t>(0x1401512c0);
-    s_Heading       = SlotFn<fn_Vec3Heading_t>(0x1401512d8);
-    s_FromYawPitch  = SlotFn<fn_Vec3FromYawPitch_t>(0x1401512a0);
-    s_TransformCopy = SlotFn<fn_TransformCopy_t>(0x140151418);
-    s_TransformMul  = SlotFn<fn_TransformMul_t>(0x140151470);
-    s_QuatRotate    = SlotFn<fn_QuatRotate_t>(0x1401525f0);
     s_pTid_InteractDescription =
         reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7938));
     s_pTid_ModelComponent =
@@ -169,7 +150,8 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
         for (int i = 0; i < n; ++i) {
             const uintptr_t entry = *reinterpret_cast<uintptr_t*>(table + 0x30) +
                                     static_cast<uintptr_t>(i) * 0x18;
-            if (fn_String_Equal && fn_String_Equal(reinterpret_cast<const void*>(entry), nameStr)) {
+            if (*reinterpret_cast<const System::String*>(entry) ==
+                *reinterpret_cast<const System::String*>(nameStr)) {   // B.3.1 bridge
                 hit = i;
                 break;
             }
@@ -223,26 +205,25 @@ extern "C" bool BoatRoute_FindAttachPoint(void* compV, const void* nameStr,
                             static_cast<uintptr_t>(hit) * 0x18;
 
     // worldPos = modelTransform * entry.localPos   (the transform lives at model+0x148)
-    uint8_t xform[0x1c] = {};
-    if (s_TransformCopy) s_TransformCopy(xform, reinterpret_cast<const void*>(m + 0x148));
-    float worldPos[3] = {0.0f, 0.0f, 0.0f};
-    if (s_TransformMul) s_TransformMul(xform, worldPos, reinterpret_cast<const void*>(entry + 0x08));
-    outPos[0] = worldPos[0];
-    outPos[1] = worldPos[1];
-    outPos[2] = worldPos[2];
+    // Transform copy-ctor (slot 0x140151418), Transform::operator*(Vector3) (slot 0x140151470).
+    const Math::Transform xform = *reinterpret_cast<const Math::Transform*>(m + 0x148);   // B.3.1 bridge
+    const Math::Vector3 worldPos =
+        xform * *reinterpret_cast<const Math::Vector3*>(entry + 0x08);   // B.3.1 bridge
+    outPos[0] = worldPos.x;
+    outPos[1] = worldPos.y;
+    outPos[2] = worldPos.z;
 
     // worldYaw = Heading(modelRotation * FromYawPitch(entry.localYaw, 0)).
     // Retail copies model+0x148..+0x160 (7 floats: quaternion + translation) and hands
     // Quaternion::Rotate the head of that copy, so the rotate sees the quaternion only.
+    // Vector3::FromYawPitch slot 0x1401512a0, Quaternion::Rotate slot 0x1401525f0,
+    // Vector3::Heading slot 0x1401512d8.
     const float localYaw  = *reinterpret_cast<const float*>(entry + 0x14);
     const float zeroPitch = 0.0f;
-    float rot[7];
-    for (int i = 0; i < 7; ++i) rot[i] = *reinterpret_cast<const float*>(m + 0x148 + i * 4);
-    float yawVec[3] = {0.0f, 0.0f, 0.0f};
-    if (s_FromYawPitch) s_FromYawPitch(yawVec, &localYaw, &zeroPitch);
-    float rotated[3] = {0.0f, 0.0f, 0.0f};
-    if (s_QuatRotate) s_QuatRotate(rot, rotated, yawVec);
-    *outYaw = s_Heading ? s_Heading(rotated) : 0.0f;
+    const Math::Transform rot = *reinterpret_cast<const Math::Transform*>(m + 0x148);   // B.3.1 bridge
+    const Math::Vector3 yawVec = Math::Vector3::FromYawPitch(localYaw, zeroPitch);
+    const Math::Vector3 rotated = rot.rotation.Rotate(yawVec);
+    *outYaw = rotated.Heading();
     return true;
 }
 
@@ -450,19 +431,16 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
     if (s_FindInteract) s_FindInteract(*reinterpret_cast<int64_t*>(comp + 0x28), interactIBP);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(interactIBP);
 
-    uint8_t boatName[8] = {};
-    if (fn_String_Ctor_CStr) fn_String_Ctor_CStr(boatName, "boat");
+    System::String boatName("boat");
     float* const destPos = reinterpret_cast<float*>(comp + 0x40);   // Vector3
     float* const destYaw = reinterpret_cast<float*>(comp + 0x4c);
     BoatRoute_FindAttachPoint(reinterpret_cast<void*>(interactIBP[0]),
-                              boatName, destPos, destYaw);
-    if (fn_String_Dtor) fn_String_Dtor(boatName);
+                              &boatName, destPos, destYaw);
 
     // The dock's facing, as a direction vector. Flipped at the end if the route
-    // approaches from the opposite side.
+    // approaches from the opposite side. (Vector3::FromYawPitch, slot 0x1401512a0.)
     const float zeroPitch = 0.0f;
-    float dockForward[3] = {0.0f, 0.0f, 0.0f};
-    if (s_FromYawPitch) s_FromYawPitch(dockForward, destYaw, &zeroPitch);
+    Math::Vector3 dockForward = Math::Vector3::FromYawPitch(*destYaw, zeroPitch);
 
     void* gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
     if (!gw) return;
@@ -584,18 +562,17 @@ extern "C" void BoatComponent_SetDestination(int64_t compI, int64_t* destEntityI
     if (route) {
         const float* a = route + static_cast<size_t>(nearest) * 3;
         const float* b = route + static_cast<size_t>(nearest - 2) * 3;
-        float dir[3] = {a[0] - b[0], a[1] - b[1], 0.0f};
-        float normalized[3] = {0.0f, 0.0f, 0.0f};
-        if (s_Normalize) s_Normalize(dir, normalized);
-        const float dot = normalized[0] * dockForward[0] +
-                          normalized[1] * dockForward[1] +
-                          normalized[2] * dockForward[2];
+        const Math::Vector3 dir(a[0] - b[0], a[1] - b[1], 0.0f);
+        const Math::Vector3 normalized = dir.Normalize();   // slot 0x1401512c0
+        const float dot = normalized.x * dockForward.x +
+                          normalized.y * dockForward.y +
+                          normalized.z * dockForward.z;
         if (dot < 0.0f) {
-            dockForward[0] = -dockForward[0];
-            dockForward[1] = -dockForward[1];
-            dockForward[2] = -dockForward[2];
+            dockForward.x = -dockForward.x;
+            dockForward.y = -dockForward.y;
+            dockForward.z = -dockForward.z;
         }
-        *destYaw = s_Heading ? s_Heading(dockForward) : *destYaw;
+        *destYaw = dockForward.Heading();   // slot 0x1401512d8
     }
 
 }

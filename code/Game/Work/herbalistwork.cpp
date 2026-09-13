@@ -15,6 +15,7 @@
 
 #include "Work/herbalistwork_funcs.h"
 #include "engine_funcs.h"
+#include "math/Math.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -48,7 +49,6 @@ typedef void  (*HW_CitizenAI_LongTermPlan_t)(void* citizenEntity);
 typedef void* (*HW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
 typedef int   (*HW_StorageQueryCount_t)(void* storageComp);
 typedef int   (*HW_Random_RandTol_t)(void* rng, int range);
-typedef float*(*HW_Vector3_Ctor_t)(float* self, float x, float y, float z);
 
 // Work::Serialize
 typedef void  (*HW_Work_Serialize_t)(void* self, void* stream);
@@ -99,7 +99,6 @@ static HW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
 static HW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
 static HW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
 static HW_Random_RandTol_t             s_fn_Random_RandTol = nullptr;
-static HW_Vector3_Ctor_t              s_fn_Vector3_Ctor = nullptr;
 static HW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
 static HW_Serializer_Ctor_t            s_fn_Serializer_Ctor = nullptr;
 static HW_Serializer_Dtor_t            s_fn_Serializer_Dtor = nullptr;
@@ -207,9 +206,6 @@ bool HerbalistWork_ResolveFuncs() {
     uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
     if (iatRandTol)
         s_fn_Random_RandTol = *reinterpret_cast<HW_Random_RandTol_t*>(iatRandTol);
-    uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);
-    if (iatVec3Ctor)
-        s_fn_Vector3_Ctor = *reinterpret_cast<HW_Vector3_Ctor_t*>(iatVec3Ctor);
     // CheckPtr already from engine_funcs.h (no local copy needed)
 
     // Serializer ctor/dtor from dispatch slots (verified from original disasm at 0x1400EEBB0)
@@ -267,7 +263,7 @@ bool HerbalistWork_ResolveFuncs() {
               s_fn_PlayAnimation_Ctor && s_fn_CitizenAI_RegisterWork &&
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Storage &&
               s_fn_StorageQueryCount && s_fn_Random_RandTol &&
-              s_fn_Vector3_Ctor && s_fn_Work_Serialize &&
+              s_fn_Work_Serialize &&
               s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
               s_fn_Serializer_SerializeInt &&
               s_fn_ValidateEntity && s_fn_BSTRemove &&
@@ -303,7 +299,6 @@ bool HerbalistWork_ResolveFuncs() {
         if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
         if (!s_fn_Random_RandTol) printf("  MISSING: Random_RandTol\n");
-        if (!s_fn_Vector3_Ctor) printf("  MISSING: Vector3_Ctor\n");
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
         if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
@@ -656,14 +651,13 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                 // Valid herb found — create PerformWork action
                 // -------------------------------------------------------
                 float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
-                float cutPos[3];
-                s_fn_Vector3_Ctor(cutPos,
+                Math::Vector3 cutPos(
                     (float)(nearestCell % *mapGrid) - halfOffset,
                     (float)(nearestCell / *mapGrid) - halfOffset,
                     0.0f);
 
                 float pathPos[3];
-                s_fn_GetTerrainPos(mapGrid, pathPos, cutPos, 0, nullptr);
+                s_fn_GetTerrainPos(mapGrid, pathPos, &cutPos.x, 0, nullptr);
 
                 fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                 uintptr_t targetRef = *(uintptr_t*)natResCompIBP2;

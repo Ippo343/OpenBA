@@ -30,6 +30,8 @@
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
 
 #include "engine_funcs.h"
+#include "system/String.h"
+#include <new>
 #include "resolve.h"
 #include <cstdint>
 
@@ -75,7 +77,7 @@ extern "C" void* ParticleDescription_Ctor_Impl(void* mem) {
 // Serialize (vtable +0x28, exe 0x140053460)
 extern "C" void ParticleDescription_Serialize(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !g_fn_Serialize_Bool ||
-        !g_fn_String_Serialize || !g_fn_Time_Serialize || !fn_ExternalPtr_Serialize3) {
+        !g_fn_Time_Serialize || !fn_ExternalPtr_Serialize3) {
         return;
     }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
@@ -92,8 +94,7 @@ extern "C" void ParticleDescription_Serialize(void* self, void* stream) {
         for (int i = 0; i < count; ++i) {
             uint8_t* el = e + i * 0x28;
             *(uint64_t*)(el + 0x00) = 0;       // ref
-            if (fn_String_Ctor_Default) fn_String_Ctor_Default(el + 0x08);
-            else *(uint64_t*)(el + 0x08) = 0;  // String
+            ::new (static_cast<void*>(el + 0x08)) System::String();  // B.3.1 bridge: String
             *(uint8_t*)(el + 0x10) = 0;
             *(uint8_t*)(el + 0x11) = 1;
             *(uint8_t*)(el + 0x12) = 1;
@@ -107,7 +108,7 @@ extern "C" void ParticleDescription_Serialize(void* self, void* stream) {
 
     for (int i = 0; i < count; ++i, e += 0x28) {
         fn_ExternalPtr_Serialize3(e + 0x00, ser);           // ref (elem+0)
-        g_fn_String_Serialize(e + 0x08, ser);               // String (elem+8)
+        reinterpret_cast<System::String*>(e + 0x08)->Serialize(ser);               // B.3.1 bridge: String (elem+8)
         g_fn_Serialize_Bool(ser, e + 0x10, nullptr);
         g_fn_Serialize_Bool(ser, e + 0x11, nullptr);
         g_fn_Serialize_Bool(ser, e + 0x12, nullptr);
@@ -132,9 +133,7 @@ extern "C" void* ParticleDescription_Dtor(void* self, uint32_t flags) {
     uint8_t* e = *(uint8_t**)(s + 0x28);
     int count = *(int32_t*)(s + 0x30);
     if (e) {
-        if (fn_String_Dtor) {
-            for (int i = 0; i < count; ++i) fn_String_Dtor(e + i * 0x28 + 0x08);
-        }
+        for (int i = 0; i < count; ++i) reinterpret_cast<System::String*>(e + i * 0x28 + 0x08)->~String();  // B.3.1 bridge
         if (fn_MemFreeStatic) fn_MemFreeStatic(e);
     }
     *(uint64_t*)(s + 0x28) = 0;

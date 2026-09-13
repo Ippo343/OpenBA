@@ -30,6 +30,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "math/Math.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -71,10 +72,9 @@ typedef void  (*fn_GridToWorld_t)(int* mapGrid, float* out3, float* in2, char fl
 
 // Dispatch-slot helpers (CALL qword ptr [0x140xxxxxx] in the original): read the runtime fn-ptr
 // out of the .rdata slot (the moveto.cpp / autosavedialog.cpp idiom).
-typedef void  (*fn_QuatRotate_t)(void* quat, float* outVec3, const float* inVec3);               // [0x1401525f0] (3-arg — R8 = input vec; Ghidra dropped it)
-typedef float (*fn_Vec3Heading_t)(void* vec3);                                                   // [0x1401512d8]
-typedef void* (*fn_TransformMul_t)(void* transform, void* retVec3, void* inVec3);                // [0x140151470] member-ABI
-typedef void* (*fn_Vec3CtorScalar_t)(void* self, void* scalar);                                  // [0x140151320]
+// B.3.1: Math::Quaternion::Rotate [0x1401525f0] (3-arg — R8 = input vec; Ghidra dropped it),
+// Math::Vector3::Heading [0x1401512d8], Math::Transform::operator*(Vector3) [0x140151470]
+// and the Math::Vector3 splat ctor [0x140151320] are now direct members of the real classes.
 typedef uint32_t (*fn_RandomRand_t)(void* rng, uint32_t range);                                  // [0x1401512e8]
 
 static fn_RoadNormal_t        s_fn_RoadNormal      = nullptr;  // ae270
@@ -97,10 +97,6 @@ static fn_ValidateCell_t      s_fn_ValidateCell    = nullptr;  // a00f0
 static fn_FindNearestCell_t   s_fn_FindNearestCell = nullptr;  // 008830
 static fn_GridToWorld_t       s_fn_GridToWorld     = nullptr;  // 9f3e0
 
-static fn_QuatRotate_t        s_fn_QuatRotate      = nullptr;  // [0x1401525f0]
-static fn_Vec3Heading_t       s_fn_Vec3Heading     = nullptr;  // [0x1401512d8]
-static fn_TransformMul_t      s_fn_TransformMul    = nullptr;  // [0x140151470]
-static fn_Vec3CtorScalar_t    s_fn_Vec3CtorScalar  = nullptr;  // [0x140151320]
 static fn_RandomRand_t        s_fn_RandomRand      = nullptr;  // [0x1401512e8]
 
 // Type-ID global + float .rdata constants used by the ports below.
@@ -138,10 +134,6 @@ static void EnsureInit() {
     s_fn_GridToWorld     = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x1401525f0); if (slot) s_fn_QuatRotate     = *reinterpret_cast<fn_QuatRotate_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x1401512d8); if (slot) s_fn_Vec3Heading    = *reinterpret_cast<fn_Vec3Heading_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140151470); if (slot) s_fn_TransformMul   = *reinterpret_cast<fn_TransformMul_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140151320); if (slot) s_fn_Vec3CtorScalar = *reinterpret_cast<fn_Vec3CtorScalar_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x1401512e8); if (slot) s_fn_RandomRand     = *reinterpret_cast<fn_RandomRand_t*>(slot);
 
     s_pTid_1c7938 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7938));
@@ -621,8 +613,7 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
                          self, buildRaw, tid);
             std::fflush(stderr);
         }
-        int zero = 0;
-        if (s_fn_Vec3CtorScalar) s_fn_Vec3CtorScalar(retVec3, &zero);
+        *reinterpret_cast<Math::Vector3*>(retVec3) = Math::Vector3(Math::Scalar(0.0f));   // B.3.1 bridge (splat 0)
         return retVec3;
     }
 
@@ -651,8 +642,7 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
                 local_68 += n;
             } while (i < *reinterpret_cast<int*>(s + 0x30));
         }
-        int zero = 0;
-        if (s_fn_Vec3CtorScalar) s_fn_Vec3CtorScalar(retVec3, &zero);   // Math::Vector3::Vector3(ret,&scalar0)
+        *reinterpret_cast<Math::Vector3*>(retVec3) = Math::Vector3(Math::Scalar(0.0f));   // B.3.1 bridge: Math::Vector3::Vector3(ret,&scalar0)
         return retVec3;
     }
 
@@ -701,27 +691,23 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
                                        static_cast<size_t>(p3) * 0x10)
         : nullptr;
     uint8_t* node = nodeArr ? nodeArr + static_cast<size_t>(p4) * 0x18 : nullptr;
-    static const float kZero3[3] = {0, 0, 0};
+    static const Math::Vector3 kZero3(0, 0, 0);
 
     if (p5 != nullptr) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
-        uint32_t xform[8];   // local_50..local_38 = 7 dwords copied from obj+0x148
-        for (int k = 0; k < 7; k++)
-            xform[k] = *reinterpret_cast<uint32_t*>(ibp + 0x148 + k * 4);
-        float dir[4] = {0, 0, 0, 0};   // local_60 (Vector3 out)
-        if (s_fn_QuatRotate)
-            s_fn_QuatRotate(xform, dir, node ? reinterpret_cast<float*>(node + 0xc) : kZero3);
-        float h = s_fn_Vec3Heading ? s_fn_Vec3Heading(dir) : 0.0f;
+        // local_50..local_38 = 7 dwords copied from obj+0x148 (a Math::Transform)
+        Math::Transform xform = *reinterpret_cast<const Math::Transform*>(ibp + 0x148);   // B.3.1 bridge
+        // local_60 (Vector3 out) = quaternion.Rotate(node.dir)
+        Math::Vector3 dir = xform.rotation.Rotate(
+            node ? *reinterpret_cast<const Math::Vector3*>(node + 0xc) : kZero3);          // B.3.1 bridge
+        float h = dir.Heading();
         *p5 = h;
     }
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
-    uint32_t xform2[8];
-    for (int k = 0; k < 7; k++)
-        xform2[k] = *reinterpret_cast<uint32_t*>(ibp + 0x148 + k * 4);
-    if (s_fn_TransformMul)
-        s_fn_TransformMul(xform2, retVec3,
-                          node ? reinterpret_cast<float*>(node) : const_cast<float*>(kZero3));
+    Math::Transform xform2 = *reinterpret_cast<const Math::Transform*>(ibp + 0x148);       // B.3.1 bridge
+    *reinterpret_cast<Math::Vector3*>(retVec3) =
+        xform2 * (node ? *reinterpret_cast<const Math::Vector3*>(node) : kZero3);          // B.3.1 bridge
     return retVec3;
 }
 

@@ -34,6 +34,7 @@
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
 
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "options.h"
 #include "resolve.h"
 #include <cstdint>
@@ -74,8 +75,7 @@ void UIDescription_Serialize(void* self, void* stream) {
     EnsureResolved();
     uintptr_t s = (uintptr_t)self;
     uint8_t serializer[24];
-    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !g_fn_String_Serialize ||
-        !fn_ExternalPtr_Serialize2) {
+    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int || !fn_ExternalPtr_Serialize2) {
         return;
     }
     g_fn_Serializer_Ctor(serializer, stream, 0);
@@ -133,7 +133,7 @@ void UIDescription_Serialize(void* self, void* stream) {
             fn_ExternalPtr_Serialize2(e + 0x08, serializer);
             fn_ExternalPtr_Serialize2(e + 0x10, serializer);
             fn_ExternalPtr_Serialize2(e + 0x18, serializer);
-            g_fn_String_Serialize(e + 0x20, serializer);
+            reinterpret_cast<System::String*>(e + 0x20)->Serialize(serializer);  // B.3.1 bridge
         }
     }
 
@@ -152,9 +152,9 @@ void* UIDescription_Dtor(void* self, uint32_t flags) {
 
     uint8_t* buf = *(uint8_t**)(s + 0x30);
     int n = *(int32_t*)(s + 0x38);
-    if (buf && fn_String_Dtor) {
+    if (buf) {
         uint8_t* e = buf;
-        for (int i = 0; i < n; ++i, e += 0x28) fn_String_Dtor(e + 0x20);
+        for (int i = 0; i < n; ++i, e += 0x28) reinterpret_cast<System::String*>(e + 0x20)->~String();  // B.3.1 bridge
     }
     if (fn_MemFreeStatic) fn_MemFreeStatic(buf);
     *(uint64_t*)(s + 0x30) = 0;
