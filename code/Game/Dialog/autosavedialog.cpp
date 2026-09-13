@@ -3,6 +3,7 @@
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -250,18 +251,18 @@ void* Ctor(void* self, void* ui, void* extRes, void* parentIBP) {
     *(uint64_t*)(s + 0xC0) = 0;
 
     if (fn_DialogInstance_FindElement) {
-        uint8_t nameBuf[8];
         uint64_t found = 0;
-        fn_String_Ctor_CStr(nameBuf, "savingImage");
-        fn_DialogInstance_FindElement(self, &found, nameBuf);
-        *(uint64_t*)(s + 0xB8) = found;
-        fn_String_Dtor(nameBuf);
-
+        {
+            System::String nameStr("savingImage");
+            fn_DialogInstance_FindElement(self, &found, &nameStr);
+            *(uint64_t*)(s + 0xB8) = found;
+        }
         found = 0;
-        fn_String_Ctor_CStr(nameBuf, "animatedImage");
-        fn_DialogInstance_FindElement(self, &found, nameBuf);
-        *(uint64_t*)(s + 0xC0) = found;
-        fn_String_Dtor(nameBuf);
+        {
+            System::String nameStr("animatedImage");
+            fn_DialogInstance_FindElement(self, &found, &nameStr);
+            *(uint64_t*)(s + 0xC0) = found;
+        }
     }
     *(uint32_t*)(s + 0xC8) = 0;   // spinner angle
     return self;

@@ -34,6 +34,8 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -162,11 +164,10 @@ void TradeUI_Slot6(TradeUI* self) {
 
 // Helper: find named element in dialog, cast via IsDerivedFrom, return raw ptr
 static void* TradeUI_FindTypedElement(void* dialogElem, const char* name, uint32_t* typeId) {
-    uint64_t strBuf[2] = {0, 0};
-    fn_String_Ctor_CStr(strBuf, name);
+    System::String strBuf(name);
     fn_InternalBasePtr_CheckPtr((void*)dialogElem);
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)dialogElem, foundBuf, strBuf);
+    fn_FindElement(*(void**)dialogElem, foundBuf, &strBuf);
     fn_InternalBasePtr_CheckPtr(foundBuf);
     void* elem = *(void**)foundBuf;
     void* result = nullptr;
@@ -176,7 +177,6 @@ static void* TradeUI_FindTypedElement(void* dialogElem, const char* name, uint32
     }
     uint64_t ibpBuf[1] = {0};
 
-    fn_String_Dtor(strBuf);
     return result;
 }
 
@@ -292,14 +292,11 @@ static void SetSpinnerIncrement(void* spinner)
 // ============================================================
 static void SetElementNameFromExternal(void* element, void* externalPtr)
 {
-    uint8_t pathBuf[8];
-    fn_External_GetPath(externalPtr, pathBuf);
-    uint8_t filenameBuf1[16] = {0};
-    void* nameStr = fn_Filename_GetPathFilename(pathBuf, filenameBuf1, false);
+    System::Filename pathBuf;
+    fn_External_GetPath(externalPtr, &pathBuf);
+    System::Filename nameStr = pathBuf.GetPathFilename(false);
     fn_InternalBasePtr_CheckPtr(&element);
-    fn_Element_SetName(element, nameStr);
-    fn_Filename_Dtor(filenameBuf1);
-    fn_Filename_Dtor(pathBuf);
+    fn_Element_SetName(element, &nameStr);
 }
 
 // ============================================================
@@ -658,11 +655,10 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
     // Phase 2: Set order header text elements
     for (int ti = 0; ti < 2; ti++) {
         const char* elemName = (ti == 0) ? "textName" : "textOrder";
-        uint8_t nameStr[8] = {0};
-        fn_String_Ctor_CStr(nameStr, elemName);
+        System::String nameStr(elemName);
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
         uint8_t foundBuf[16] = {0};
-        fn_FindElement(*(void**)(s + 0x20), foundBuf, nameStr);
+        fn_FindElement(*(void**)(s + 0x20), foundBuf, &nameStr);
         fn_InternalBasePtr_CheckPtr(foundBuf);
 
         // IsDerivedFrom TextElement
@@ -673,7 +669,6 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
         }
         uint64_t textIbp[1] = {0};
         fn_InternalBasePtr_Ctor(textIbp, textElem);
-        fn_String_Dtor(nameStr);
 
         // Set text parameters based on current order
         fn_InternalBasePtr_CheckPtr(&buildingPtr);
@@ -689,22 +684,20 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
             // Set parameter 0: order name string
             fn_InternalBasePtr_CheckPtr(&buildingPtr);
-            uint8_t orderNameBuf[8] = {0};
-            fn_Building_GetOrderName((void*)buildingPtr[0], orderNameBuf);
+            System::String orderNameBuf;
+            fn_Building_GetOrderName((void*)buildingPtr[0], &orderNameBuf);
             fn_InternalBasePtr_CheckPtr(textIbp);
-            fn_TextElement_SetParameter((void*)*textIbp, 0, orderNameBuf);
-            fn_String_Dtor(orderNameBuf);
+            fn_TextElement_SetParameter((void*)*textIbp, 0, &orderNameBuf);
 
             // Set parameter 1: UI string from order entry
             uint8_t uiStrBuf[16] = {0};
             fn_UIString_Ctor(uiStrBuf, *(uint64_t*)orderEntry,
                             (void*)(orderEntry + 8));
             // Convert to System::String
-            uint8_t sysStrBuf[8] = {0};
-            fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
+            System::String sysStrBuf;
+            fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
             fn_InternalBasePtr_CheckPtr(textIbp);
-            fn_TextElement_SetParameter((void*)*textIbp, 1, sysStrBuf);
-            fn_String_Dtor(sysStrBuf);
+            fn_TextElement_SetParameter((void*)*textIbp, 1, &sysStrBuf);
         }
 
         // Show/hide text element based on order validity
@@ -1250,15 +1243,13 @@ void TradeUI_Serialize(TradeUI* self) {
     int storageCellCount = fn_Element_ChildCount(tableStorage);
     for (int i = 0; i < storageCellCount; i++) {
         // Find "ribbonStorageRow" in cell
-        uint64_t strBuf[2] = {0, 0};
-        fn_String_Ctor_CStr(strBuf, "ribbonStorageRow");
+        System::String strBuf("ribbonStorageRow");
         uint64_t cellBuf[2] = {0, 0};
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xD8));
         fn_Element_Child(*(void**)(s + 0xD8), cellBuf, i);
         fn_InternalBasePtr_CheckPtr(cellBuf);
         uint64_t rowBuf[2] = {0, 0};
-        fn_FindElement(*(void**)cellBuf, rowBuf, strBuf);
-        fn_String_Dtor(strBuf);
+        fn_FindElement(*(void**)cellBuf, rowBuf, &strBuf);
 
         // Get 3 child elements from row: child(0), child(1), child(2)
         fn_InternalBasePtr_CheckPtr(rowBuf);
@@ -1313,15 +1304,13 @@ void TradeUI_Serialize(TradeUI* self) {
     tableSell = *(void**)(s + 0xC8);
     int sellCellCount = *(int*)((uintptr_t)tableSell + 0xC0);
     for (int i = 0; i < sellCellCount; i++) {
-        uint64_t strBuf[2] = {0, 0};
-        fn_String_Ctor_CStr(strBuf, "ribbonSellRow");
+        System::String strBuf("ribbonSellRow");
         uint64_t cellBuf[2] = {0, 0};
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xC8));
         fn_Element_Child(*(void**)(s + 0xC8), cellBuf, i);
         fn_InternalBasePtr_CheckPtr(cellBuf);
         uint64_t rowBuf[2] = {0, 0};
-        fn_FindElement(*(void**)cellBuf, rowBuf, strBuf);
-        fn_String_Dtor(strBuf);
+        fn_FindElement(*(void**)cellBuf, rowBuf, &strBuf);
 
         fn_InternalBasePtr_CheckPtr(rowBuf);
         void* rowElem = *(void**)rowBuf;
@@ -1381,15 +1370,13 @@ void TradeUI_Serialize(TradeUI* self) {
     tableBuy = *(void**)(s + 0xD0);
     int buyCellCount = *(int*)((uintptr_t)tableBuy + 0xC0);
     for (int i = 0; i < buyCellCount; i++) {
-        uint64_t strBuf[2] = {0, 0};
-        fn_String_Ctor_CStr(strBuf, "ribbonBuyRow");
+        System::String strBuf("ribbonBuyRow");
         uint64_t cellBuf[2] = {0, 0};
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xD0));
         fn_Element_Child(*(void**)(s + 0xD0), cellBuf, i);
         fn_InternalBasePtr_CheckPtr(cellBuf);
         uint64_t rowBuf[2] = {0, 0};
-        fn_FindElement(*(void**)cellBuf, rowBuf, strBuf);
-        fn_String_Dtor(strBuf);
+        fn_FindElement(*(void**)cellBuf, rowBuf, &strBuf);
 
         fn_InternalBasePtr_CheckPtr(rowBuf);
         void* rowElem = *(void**)rowBuf;
@@ -1594,11 +1581,9 @@ void TradeUI_Startup(TradeUI* self) {
     // --- Show/hide warning texts ---
     if (bOverBought) {
         // Buy value exceeds sell value — show "not enough" text with difference
-        uint64_t strBuf[2] = {0, 0};
-        fn_String_Format(strBuf, "%d", (unsigned)(displayBuyTotal - displaySellTotal));
+        System::String strBuf = System::String::Format("%d", (unsigned)(displayBuyTotal - displaySellTotal));
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x120));
-        fn_TextElement_SetParameter(*(void**)(s + 0x120), 0, strBuf);
-        fn_String_Dtor(strBuf);
+        fn_TextElement_SetParameter(*(void**)(s + 0x120), 0, &strBuf);
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x110));
         fn_Element_SetFlagsOnOff(*(void**)(s + 0x110), 1, 0);  // hide textNoStorage
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x118));
@@ -1623,11 +1608,9 @@ void TradeUI_Startup(TradeUI* self) {
         fn_Element_SetFlagsOnOff(*(void**)(s + 0x120), 1, 0);  // hide textNotEnough
     } else {
         // Sell value exceeds buy value — show "too much" text with difference
-        uint64_t strBuf[2] = {0, 0};
-        fn_String_Format(strBuf, "%d", (unsigned)(displaySellTotal - displayBuyTotal));
+        System::String strBuf = System::String::Format("%d", (unsigned)(displaySellTotal - displayBuyTotal));
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x118));
-        fn_TextElement_SetParameter(*(void**)(s + 0x118), 0, strBuf);
-        fn_String_Dtor(strBuf);
+        fn_TextElement_SetParameter(*(void**)(s + 0x118), 0, &strBuf);
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x110));
         fn_Element_SetFlagsOnOff(*(void**)(s + 0x110), 1, 0);  // hide textNoStorage
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x118));
@@ -1871,12 +1854,11 @@ void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
     uintptr_t s = (uintptr_t)self;
 
     // Find "tradeTabs" TabElement
-    uint64_t strBuf[2] = {0, 0};
-    fn_String_Ctor_CStr(strBuf, "tradeTabs");
+    System::String strBuf("tradeTabs");
 
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
 
     fn_InternalBasePtr_CheckPtr(foundBuf);
     void* element = *(void**)foundBuf;
@@ -1890,8 +1872,6 @@ void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
 
     uint64_t tabIBP = 0;
     fn_InternalBasePtr_Ctor(&tabIBP, tabElement);
-
-    fn_String_Dtor(strBuf);
 
     // Read current tab index from TabElement (+0xf8)
     fn_InternalBasePtr_CheckPtr(&tabIBP);
@@ -2832,14 +2812,11 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         fn_SpinnerElement_SetMinMax(*(void**)spinSlot, 0, 9999);
 
         // Set spinner element name to resource path filename
-        uint8_t pathBuf[8];
-        fn_External_GetPath((void*)entry[0], pathBuf);
-        uint64_t filenameBuf[4] = {0};
-        fn_Filename_GetPathFilename(pathBuf, filenameBuf, false);
+        System::Filename pathBuf;
+        fn_External_GetPath((void*)entry[0], &pathBuf);
+        System::Filename filenameBuf = pathBuf.GetPathFilename(false);
         fn_InternalBasePtr_CheckPtr(spinSlot);
-        fn_Element_SetName(*(void**)spinSlot, filenameBuf);
-        fn_Filename_Dtor(filenameBuf);
-        fn_Filename_Dtor(pathBuf);
+        fn_Element_SetName(*(void**)spinSlot, &filenameBuf);
     }
 
     // --- Clear remaining UI rows beyond data ---

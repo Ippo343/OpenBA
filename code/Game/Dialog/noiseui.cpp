@@ -19,6 +19,8 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
@@ -27,12 +29,12 @@ extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
 
 // Helper: find element by name in parent element, cast to InternalBasePtr
 static uint64_t NoiseUI_FindElemAsBasePtr(void* parentElem, const char* name) {
-    uint8_t nameStr[8], retBuf[16], bpBuf[8];
+    uint8_t retBuf[16], bpBuf[8];
 
-    fn_String_Ctor_CStr(nameStr, name);
+    System::String nameStr(name);
 
     // fn_FindElement: member function, RCX=parentElem, RDX=retBuf, R8=nameStr
-    fn_FindElement(parentElem, retBuf, nameStr);
+    fn_FindElement(parentElem, retBuf, &nameStr);
 
     // Check the InternalBasePtr result
     fn_InternalBasePtr_CheckPtr(retBuf);
@@ -43,7 +45,6 @@ static uint64_t NoiseUI_FindElemAsBasePtr(void* parentElem, const char* name) {
     fn_InternalBasePtr_Ctor(bpBuf, raw);
     uint64_t result = *(uint64_t*)bpBuf;
 
-    fn_String_Dtor(nameStr);
     return result;
 }
 
@@ -74,11 +75,11 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     *materialOut = materialPtr;
 
     // --- Load UIMaterialNoBlend resource ---
-    uint8_t filenameBuf[16];
-    fn_String_Ctor_CStr(filenameBuf, "Material/UI/UIMaterialNoBlend.rsc");
-    fn_Filename_AdjustDelimiters(filenameBuf);
+    // Filename's ctor already normalises delimiters, so the separate
+    // AdjustDelimiters call retail made on the raw buffer is redundant here.
+    System::Filename filename("Material/UI/UIMaterialNoBlend.rsc");
 
-    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filename);
     void* material = nullptr;
     if (ext) {
         if (g_TypeId_Material && fn_IsDerivedFrom(ext, *g_TypeId_Material)) {
@@ -86,13 +87,10 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
         }
     }
     fn_MaterialInstance_SetMaterial(*materialOut, material);
-    fn_String_Dtor(filenameBuf);
 
     // --- Add ImageBuffer as "diffuse" texture ---
-    uint8_t diffuseStr[8];
-    fn_String_Ctor_CStr(diffuseStr, "diffuse");
-    fn_MaterialInstance_AddTexture(*materialOut, diffuseStr, imageBuffer);
-    fn_String_Dtor(diffuseStr);
+    System::String diffuseStr("diffuse");
+    fn_MaterialInstance_AddTexture(*materialOut, &diffuseStr, imageBuffer);
 
     fn_MaterialInstance_BuildParameters(*materialOut);
 
@@ -115,22 +113,20 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
 
     // Set sprite sheet name/group strings (empty) and dimensions
     uintptr_t ss = (uintptr_t)*spriteSheetOut;
-    uint64_t emptyStr1 = 0, emptyStr2 = 0;
-    fn_String_Assign((void*)(ss + 0x40), &emptyStr1);
-    fn_String_Assign((void*)(ss + 0x38), &emptyStr2);
+    System::String emptyStr1;
+    System::String emptyStr2;
+    *reinterpret_cast<System::String*>(ss + 0x40) = emptyStr1;  // B.3.1 bridge
+    *reinterpret_cast<System::String*>(ss + 0x38) = emptyStr2;  // B.3.1 bridge
     *(int*)(ss + 0x48) = imgW;
     *(int*)(ss + 0x4c) = imgH;
     *(uint8_t*)(ss + 0x50) = 0;
-    fn_String_Dtor(&emptyStr2);
-    fn_String_Dtor(&emptyStr1);
 
     // Add sprite info: empty name, empty group, full image rect
     imgW = fn_ImageBuffer_Width(imageBuffer);
     imgH = fn_ImageBuffer_Height(imageBuffer);
-    uint64_t nameEmpty = 0, groupEmpty = 0;
+    System::String nameEmpty;
+    System::String groupEmpty;
     fn_SpriteSheet_AddSpriteInfo(*spriteSheetOut, &nameEmpty, &groupEmpty, 0, 0, imgW, imgH);
-    fn_String_Dtor(&nameEmpty);
-    fn_String_Dtor(&groupEmpty);
 
     // Set sprite info with UV scale
     imgW = fn_ImageBuffer_Width(imageBuffer);
@@ -139,13 +135,12 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     fn_SpriteSheet_SetSpriteInfo(*spriteSheetOut, 0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);
 
     // --- Find "noiseImage" element and set sprite ---
-    uint8_t elemNameStr[8];
-    fn_String_Ctor_CStr(elemNameStr, "noiseImage");
+    System::String elemNameStr("noiseImage");
 
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     void* dialogElem = *(void**)(s + 0x20);
     uint64_t foundElem = 0;
-    fn_FindElement(dialogElem, &foundElem, elemNameStr);
+    fn_FindElement(dialogElem, &foundElem, &elemNameStr);
 
     fn_InternalBasePtr_CheckPtr((void*)&foundElem);
     void* rawElem = (void*)foundElem;
@@ -157,7 +152,6 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     }
     uint64_t imageElemPtr = 0;
     fn_InternalBasePtr_Ctor((void*)&imageElemPtr, imageElem);
-    fn_String_Dtor(elemNameStr);
 
     // Create Sprite from SpriteSheet (index 0) and set on element
     uint8_t spriteBuf[16];
@@ -181,21 +175,22 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
 //
 // Original: FUN_1400711D0
 
-// PerlinNoise, Random, String::ToFloat function pointers are resolved
-// globally in engine_funcs.cpp (fn_PerlinNoise_Ctor, fn_PerlinNoise_Generate,
-// fn_Random_Default_Ctor, fn_Random_RandTol, fn_String_ToFloat).
+// PerlinNoise and Random function pointers are resolved globally in
+// engine_funcs.cpp (fn_PerlinNoise_Ctor, fn_PerlinNoise_Generate,
+// fn_Random_Default_Ctor, fn_Random_RandTol). Float parsing now goes through
+// System::String::ToFloat directly.
 
 // Helper: read float value from a slider element's text (+0xC8)
 static float NoiseUI_ReadSliderFloat(uintptr_t sliderPtr) {
     fn_InternalBasePtr_CheckPtr((void*)&sliderPtr);
     uintptr_t elem = *(uintptr_t*)&sliderPtr;
     const char* text = *(const char**)(elem + 0xC8);
-    return fn_String_ToFloat(text);
+    return System::String::ToFloat(text);
 }
 
 void NoiseUI_GenerateNoise(void* self) {
     if (!fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate ||
-        !fn_Random_Default_Ctor || !fn_Random_RandTol || !fn_String_ToFloat)
+        !fn_Random_Default_Ctor || !fn_Random_RandTol)
         return;
 
     uintptr_t s = (uintptr_t)self;
@@ -329,15 +324,13 @@ void NoiseUI_Slot4(NoiseUI* self) {
     *(uint64_t*)(s + 0x68) = NoiseUI_FindElemAsBasePtr(dialogElem, "noiseGradient");
 
     // Find "buttonGenerate" button, set element ID to 1000
-    uint8_t nameStr[8], retBuf[16], bpBuf[8];
-    fn_String_Ctor_CStr(nameStr, "buttonGenerate");
+    uint8_t retBuf[16], bpBuf[8];
+    System::String nameStr("buttonGenerate");
 
-    fn_FindElement(dialogElem, retBuf, nameStr);
+    fn_FindElement(dialogElem, retBuf, &nameStr);
     fn_InternalBasePtr_CheckPtr(retBuf);
     void* raw = *(void**)retBuf;
     fn_InternalBasePtr_Ctor(bpBuf, raw);
-
-    fn_String_Dtor(nameStr);
 
     // Set element ID on the button
     fn_InternalBasePtr_CheckPtr(bpBuf);

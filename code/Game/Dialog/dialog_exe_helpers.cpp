@@ -12,6 +12,8 @@
 #include "dialog_exe_helpers.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -69,13 +71,11 @@ void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
 // string-table external (keymap+0xd8). Sub-callee of the autosave handler.
 //   String local("Autosave"); UIString::Ctor(retbuf, *(keymap+0xd8), local); ~local;
 static void* Dialog_AutoSaveBuildName(void* keymap, void* retUIString) {
-    uint8_t nameStr[8];
-    if (fn_String_Ctor_CStr) fn_String_Ctor_CStr(nameStr, "Autosave");
+    System::String nameStr("Autosave");
     if (fn_UIString_Ctor)
         fn_UIString_Ctor(retUIString,
                          *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(keymap) + 0xd8),
-                         nameStr);
-    if (fn_String_Dtor) fn_String_Dtor(nameStr);
+                         &nameStr);
     return retUIString;
 }
 
@@ -139,10 +139,9 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
     // Localized "Autosave" name → System::String → SetSaveName(slot 2).
     uint8_t uiStrBuf[16];
     Dialog_AutoSaveBuildName(reinterpret_cast<void*>(keymap), uiStrBuf);
-    uint8_t sysStrBuf[8];
-    if (fn_UIString_ToSystemString) fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
-    if (fn_SaveLoad_SetSaveName) fn_SaveLoad_SetSaveName(saveLoad, sysStrBuf, 2);
-    if (fn_String_Dtor) fn_String_Dtor(sysStrBuf);
+    System::String sysStr;
+    if (fn_UIString_ToSystemString) fn_UIString_ToSystemString(uiStrBuf, &sysStr);
+    if (fn_SaveLoad_SetSaveName) fn_SaveLoad_SetSaveName(saveLoad, &sysStr, 2);
 
 
     // Kick off the save operation (Operation 4, param -4).
@@ -179,8 +178,7 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
 void GameContainer_EnsureLists() {
     if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !fn_ExternalFactory_FindOrLoad || !fn_String_Ctor_CStr ||
-        !fn_String_Dtor || !fn_Filename_AdjustDelimiters) return;
+        !fn_ExternalFactory_FindOrLoad) return;
 
     char* container = reinterpret_cast<char*>(*g_pKeyMapSingleton);
 
@@ -196,11 +194,8 @@ void GameContainer_EnsureLists() {
     for (const Entry& e : kEntries) {
         void** slot = reinterpret_cast<void**>(container + e.off);
         if (*slot) continue;                       // already loaded
-        uint8_t fnameBuf[8];
-        fn_String_Ctor_CStr(fnameBuf, e.path);
-        fn_Filename_AdjustDelimiters(fnameBuf);
-        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf);
-        fn_String_Dtor(fnameBuf);
+        System::Filename fnameObj(e.path);   // ctor already normalises delimiters
+        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fnameObj);
         *slot = ext;
         fprintf(stderr, "[GameContainer] +0x%02zx '%s' -> %p\n", e.off, e.path, ext);
     }

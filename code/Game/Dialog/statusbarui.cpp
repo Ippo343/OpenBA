@@ -15,6 +15,7 @@
 #include "Dialog/ui_panels.h"
 #include "Dialog/citizen_icon_helpers.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -37,16 +38,14 @@ static constexpr float kFtoC_Den        = 9.0f;    // DAT_1401721ac
 // ============================================================
 static void* FindElement(void* dialogController, const char* name) {
     uintptr_t s = (uintptr_t)dialogController;
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, name);
+    System::String nameStr(name);
 
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
     void* dialog = *(void**)(s + 0x18);
 
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(dialog, retBuf, nameStr);
+    fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
     void* elem = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
     return elem;
 }
 
@@ -79,15 +78,13 @@ void StatusBarUI_Draw(StatusBarUI* self) {
 
     // --- Custom resource counters (numberCustom0..9) ---
     for (int i = 0; i < 10; i++) {
-        uint8_t fmtStr[8];
-        fn_String_Format((char*)fmtStr, "numberCustom%i", (uint64_t)i);
+        System::String fmtStr = System::String::Format("numberCustom%i", (uint64_t)i);
 
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, fmtStr);
+        fn_DialogInstance_FindElement(dialog, retBuf, &fmtStr);
         self->numberCustom[i] = *(void**)retBuf;
-        fn_String_Dtor(fmtStr);
     }
 
     // --- Status icons (imageStatus*) ---
@@ -124,12 +121,11 @@ void StatusBarUI_Draw(StatusBarUI* self) {
 
     // --- Hearts/Stars icon groups ---
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "groupHearts");
+        System::String nameStr("groupHearts");
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, nameStr);
+        fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
 
         // NOTE: retail type-checks the group against a UI type-info whose decompiled
         // label ("g_TypeId_HelpButtonElem" = ButtonElement) is wrong for these ribbon
@@ -141,32 +137,28 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         uint8_t groupPtr[16];
         fn_InternalBasePtr_Ctor(groupPtr, typedGroup);
         CitizenUI_BuildIconArray_Impl(s + 0x108, (uintptr_t)groupPtr);
-        fn_String_Dtor(nameStr);
     }
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "groupStars");
+        System::String nameStr("groupStars");
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, nameStr);
+        fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
 
         fn_InternalBasePtr_CheckPtr(retBuf);
         void* typedGroup = *(void**)retBuf;
         uint8_t groupPtr[16];
         fn_InternalBasePtr_Ctor(groupPtr, typedGroup);
         CitizenUI_BuildIconArray_Impl(s + 0x128, (uintptr_t)groupPtr);
-        fn_String_Dtor(nameStr);
     }
 
     // --- Title label ---
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "labelTitleParam");
+        System::String nameStr("labelTitleParam");
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, nameStr);
+        fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
 
         // Same wrong-label situation as the hearts/stars groups above: retail checks
         // against the LabelElement type-info, not ButtonElement — accept directly.
@@ -174,17 +166,14 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         uint8_t labelPtr[16];
         fn_InternalBasePtr_Ctor(labelPtr, *(void**)retBuf);
         self->labelTitleParam = *(void**)labelPtr;
-        fn_String_Dtor(nameStr);
     }
 
     // --- Set initial title text from map name ---
     void* gameWorld = *g_pGameWorldSingleton;
-    uint8_t mapName[8];
-    fn_String_Ctor_Copy(mapName, (void*)((uintptr_t)gameWorld + 0x28));  // FUN_140011f90: copies gameWorld+0x28 String
+    System::String mapName(*reinterpret_cast<const System::String*>((uintptr_t)gameWorld + 0x28));  // B.3.1 bridge; FUN_140011f90: copies gameWorld+0x28 String
     fn_InternalBasePtr_CheckPtr(&self->labelTitleParam);
     if (self->labelTitleParam)
-        fn_TextElement_SetParameter(self->labelTitleParam, 0, mapName);
-    fn_String_Dtor(mapName);
+        fn_TextElement_SetParameter(self->labelTitleParam, 0, &mapName);
 }
 
 // ============================================================
@@ -346,11 +335,9 @@ found_happiness:
         fn_Element_SetFlagsOnOff(*(void**)pNum, hideFlag, showFlag);
 
         // Set count text as parameter 0
-        uint8_t countStr[8];
-        fn_String_Format((char*)countStr, "%i", (uint64_t)*pCounts);
+        System::String countStr = System::String::Format("%i", (uint64_t)*pCounts);
         fn_InternalBasePtr_CheckPtr((void*)pNum);
-        fn_TextElement_SetParameter(*(void**)pNum, 0, countStr);
-        fn_String_Dtor(countStr);
+        fn_TextElement_SetParameter(*(void**)pNum, 0, &countStr);
 
         mask = (mask << 1) | (uint32_t)((int32_t)mask < 0);  // rotate left
         pNum += 8;
@@ -360,25 +347,19 @@ found_happiness:
 
     // --- Update population text (3 params: adults, dying, building) ---
     {
-        uint8_t str[8];
-        fn_String_Format((char*)str, "%i", (uint64_t)adultCount);
+        System::String str = System::String::Format("%i", (uint64_t)adultCount);
         fn_InternalBasePtr_CheckPtr(&self->textPopulation);
-        fn_TextElement_SetParameter(self->textPopulation, 0, str);
-        fn_String_Dtor(str);
+        fn_TextElement_SetParameter(self->textPopulation, 0, &str);
     }
     {
-        uint8_t str[8];
-        fn_String_Format((char*)str, "%i", (uint64_t)dyingCount);
+        System::String str = System::String::Format("%i", (uint64_t)dyingCount);
         fn_InternalBasePtr_CheckPtr(&self->textPopulation);
-        fn_TextElement_SetParameter(self->textPopulation, 1, str);
-        fn_String_Dtor(str);
+        fn_TextElement_SetParameter(self->textPopulation, 1, &str);
     }
     {
-        uint8_t str[8];
-        fn_String_Format((char*)str, "%i", (uint64_t)buildingCount);
+        System::String str = System::String::Format("%i", (uint64_t)buildingCount);
         fn_InternalBasePtr_CheckPtr(&self->textPopulation);
-        fn_TextElement_SetParameter(self->textPopulation, 2, str);
-        fn_String_Dtor(str);
+        fn_TextElement_SetParameter(self->textPopulation, 2, &str);
     }
 
     // --- Update year ---
@@ -393,8 +374,7 @@ found_happiness:
     if ((int)monthIdx > 11) monthIdx = 0;
 
     {
-        uint8_t monthKey[8];
-        fn_String_Format((char*)monthKey, "Month%i", (uint64_t)monthIdx);
+        System::String monthKey = System::String::Format("Month%i", (uint64_t)monthIdx);
 
         fn_InternalBasePtr_CheckPtr(&self->textSeason);
         void* seasonElem = self->textSeason;
@@ -406,7 +386,7 @@ found_happiness:
             uint8_t uiStr[16];
             uint64_t* pResult = (uint64_t*)fn_UIString_Ctor(uiStr,
                                   *(uint64_t*)((uintptr_t)seasonElem + 0xD8),
-                                  monthKey);
+                                  &monthKey);
             // Copy UIString result to local for SetText (16 bytes: text + string table ref)
             uint64_t localUIStr[2];
             localUIStr[0] = pResult[0];
@@ -415,7 +395,6 @@ found_happiness:
             fn_InternalBasePtr_CheckPtr(&self->textSeason);
             fn_TextElement_SetText(self->textSeason, localUIStr);
         }
-        fn_String_Dtor(monthKey);
     }
 
     // --- Update temperature ---
@@ -515,12 +494,10 @@ found_happiness:
     } while (resOffset < 0x2A0);
 
     // --- Update title text (map name) ---
-    uint8_t mapName[8];
-    fn_String_Ctor_Copy(mapName, (void*)((uintptr_t)gameWorld + 0x28));  // FUN_140011f90: copies gameWorld+0x28 String
+    System::String mapName(*reinterpret_cast<const System::String*>((uintptr_t)gameWorld + 0x28));  // B.3.1 bridge; FUN_140011f90: copies gameWorld+0x28 String
     fn_InternalBasePtr_CheckPtr(&self->labelTitleParam);
     if (self->labelTitleParam)
-        fn_TextElement_SetParameter(self->labelTitleParam, 0, mapName);
-    fn_String_Dtor(mapName);
+        fn_TextElement_SetParameter(self->labelTitleParam, 0, &mapName);
 }
 
 // ============================================================
@@ -766,8 +743,7 @@ void EnsureGlobals() {
 // Every function/global the Draw+Startup+event paths dereference unguarded must
 // be live, or a null-deref faults (no SEH under MinGW).
 bool Ready() {
-    if (!(fn_String_Ctor_CStr && fn_String_Ctor_Copy && fn_String_Format &&
-          fn_String_Dtor && fn_DialogInstance_FindElement && fn_FindElement &&
+    if (!(fn_DialogInstance_FindElement && fn_FindElement &&
           fn_Element_Child && fn_Element_ChildCount && fn_Element_SetElementId &&
           fn_Element_SetFlagsOnOff && fn_TextElement_SetParameter &&
           fn_TextElement_SetText && fn_NumberElement_SetValueInt &&

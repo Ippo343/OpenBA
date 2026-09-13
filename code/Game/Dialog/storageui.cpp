@@ -14,6 +14,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -30,12 +31,11 @@
 // Helper: find element by name in parent, returns raw pointer
 // Original pattern: FindElement → CheckPtr → deref
 static void* StorageUI_FindChildElem(void* parentElem, const char* name) {
-    uint8_t nameStr[8], retBuf[16];
-    fn_String_Ctor_CStr(nameStr, name);
-    fn_FindElement(parentElem, retBuf, nameStr);
+    uint8_t retBuf[16];
+    System::String nameStr(name);
+    fn_FindElement(parentElem, retBuf, &nameStr);
     fn_InternalBasePtr_CheckPtr(retBuf);  // resolve IBP before deref
     void* result = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
     return result;
 }
 
@@ -65,11 +65,10 @@ void StorageUI_Serialize(StorageUI* self) {
     // Find "storageTable", fallback to "storageTable2"
     void* tableRaw = StorageUI_FindChildElem(dialogElem, "storageTable");
     if (!tableRaw) {
-        uint8_t nameBuf[8], retBuf[16];
-        fn_String_Ctor_CStr(nameBuf, "storageTable2");
-        fn_FindElement(dialogElem, retBuf, nameBuf);
+        uint8_t retBuf[16];
+        System::String nameBuf("storageTable2");
+        fn_FindElement(dialogElem, retBuf, &nameBuf);
         tableRaw = *(void**)retBuf;
-        fn_String_Dtor(nameBuf);
     }
 
     // Wrap table as InternalBasePtr
@@ -399,27 +398,18 @@ static bool StorageUI_CompareItems(const uint64_t* a, const uint64_t* b) {
     // Build UIString -> convert to System::String for item A
     uint8_t uiStrA[16];
     fn_UIString_Ctor(uiStrA, *(uint64_t*)(resA + 0x28), (void*)(resA + 0x30));
-    uint8_t tempA[8] = {};
-    fn_UIString_ToSystemString(uiStrA, tempA);  // UIString → System::String conversion
-    uint8_t sysStrA[8];
-    fn_String_Ctor_Copy(sysStrA, tempA);
-    fn_String_Dtor(tempA);
+    System::String tempA;
+    fn_UIString_ToSystemString(uiStrA, &tempA);  // UIString → System::String conversion
+    System::String sysStrA(tempA);
 
     // Build UIString -> convert to System::String for item B
     uint8_t uiStrB[16];
     fn_UIString_Ctor(uiStrB, *(uint64_t*)(resB + 0x28), (void*)(resB + 0x30));
-    uint8_t tempB[8] = {};
-    fn_UIString_ToSystemString(uiStrB, tempB);  // UIString → System::String conversion
-    uint8_t sysStrB[8];
-    fn_String_Ctor_Copy(sysStrB, tempB);
-    fn_String_Dtor(tempB);
+    System::String tempB;
+    fn_UIString_ToSystemString(uiStrB, &tempB);  // UIString → System::String conversion
+    System::String sysStrB(tempB);
 
-    bool result = fn_String_LessThan(sysStrA, sysStrB);
-
-    fn_String_Dtor(sysStrB);
-    fn_String_Dtor(sysStrA);
-
-    return result;
+    return sysStrA < sysStrB;
 }
 
 // Swap two 0x18-byte items (3 uint64_t)

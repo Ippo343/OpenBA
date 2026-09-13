@@ -46,6 +46,7 @@
 // would be invisible in testing.
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -80,37 +81,31 @@ inline void Swap24(Elem a, Elem b) {
 // Note retail never destroys the UIString itself — only the System::String temps.
 // That is reproduced rather than "fixed": adding a dtor call retail does not make
 // would be a behaviour change smuggled in under the heading of correctness.
-bool BuildNameKey(const void* elem, uint64_t* outString) {
-    if (!fn_UIString_Ctor || !fn_UIString_ToSystemString || !fn_String_Ctor_Copy ||
-        !fn_String_Dtor) {
-        *outString = 0;
+bool BuildNameKey(const void* elem, System::String* outString) {
+    if (!fn_UIString_Ctor || !fn_UIString_ToSystemString) {
         return false;
     }
     const uint8_t* p = *reinterpret_cast<const uint8_t* const*>(
         reinterpret_cast<const uint8_t*>(elem) + 8);
-    if (!p) { *outString = 0; return false; }
+    if (!p) { return false; }
 
     alignas(8) uint8_t uiBuf[64];
     void* ui = fn_UIString_Ctor(uiBuf,
                                 *reinterpret_cast<const uint64_t*>(p + 0x28),
                                 p + 0x30);
-    uint64_t tmp = 0;
+    System::String tmp;
     fn_UIString_ToSystemString(ui, &tmp);
-    *outString = 0;
-    fn_String_Ctor_Copy(outString, &tmp);
-    fn_String_Dtor(&tmp);
+    *outString = tmp;
     return true;
 }
 
 // 0x1400845d0 — ByName comparator. `ctx` is the ignored functor `this`.
 bool NameLess(void* /*ctx*/, const void* a, const void* b) {
-    uint64_t sa = 0, sb = 0;
+    System::String sa, sb;
     const bool okA = BuildNameKey(a, &sa);
     const bool okB = BuildNameKey(b, &sb);
     bool result = false;
-    if (okA && okB && fn_String_LessThan) result = fn_String_LessThan(&sa, &sb);
-    if (okB && fn_String_Dtor) fn_String_Dtor(&sb);
-    if (okA && fn_String_Dtor) fn_String_Dtor(&sa);
+    if (okA && okB) result = sa < sb;
     return result;
 }
 

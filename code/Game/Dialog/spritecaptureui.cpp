@@ -15,6 +15,8 @@
 
 #include "ui/Panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 
 // ============================================================
@@ -24,12 +26,12 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // --- Find "editCapture" element, check IsDerivedFrom(EditElement) ---
-    uint64_t strBuf[2] = {0, 0};
-    fn_String_Ctor_CStr(strBuf, "editCapture");
-
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    {
+        System::String nameStr("editCapture");
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
+        fn_FindElement(*(void**)(s + 0x20), foundBuf, &nameStr);
+    }
 
     fn_InternalBasePtr_CheckPtr(foundBuf);
     void* elem = *(void**)foundBuf;
@@ -43,15 +45,14 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     uint64_t tempIBP = 0;
     fn_InternalBasePtr_Ctor(&tempIBP, editElem);
     *(uint64_t*)(s + 0x30) = tempIBP;
-    fn_String_Dtor(strBuf);
 
     // --- Find "buttonCapture" element, check IsDerivedFrom(ButtonElement) ---
-    strBuf[0] = 0; strBuf[1] = 0;
-    fn_String_Ctor_CStr(strBuf, "buttonCapture");
-
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     foundBuf[0] = 0; foundBuf[1] = 0;
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    {
+        System::String nameStr("buttonCapture");
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
+        fn_FindElement(*(void**)(s + 0x20), foundBuf, &nameStr);
+    }
 
     fn_InternalBasePtr_CheckPtr(foundBuf);
     elem = *(void**)foundBuf;
@@ -65,15 +66,14 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     tempIBP = 0;
     fn_InternalBasePtr_Ctor(&tempIBP, buttonElem);
     *(uint64_t*)(s + 0x38) = tempIBP;
-    fn_String_Dtor(strBuf);
 
     // --- Find "captureBox" element, check IsDerivedFrom(CaptureBoxElement) ---
-    strBuf[0] = 0; strBuf[1] = 0;
-    fn_String_Ctor_CStr(strBuf, "captureBox");
-
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     foundBuf[0] = 0; foundBuf[1] = 0;
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    {
+        System::String nameStr("captureBox");
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
+        fn_FindElement(*(void**)(s + 0x20), foundBuf, &nameStr);
+    }
 
     fn_InternalBasePtr_CheckPtr(foundBuf);
     elem = *(void**)foundBuf;
@@ -87,18 +87,17 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     tempIBP = 0;
     fn_InternalBasePtr_Ctor(&tempIBP, captureBoxElem);
     *(uint64_t*)(s + 0x40) = tempIBP;
-    fn_String_Dtor(strBuf);
 
     // --- Set button element ID to 1000 ---
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
     fn_Element_SetElementId(*(void**)(s + 0x38), 1000);
 
     // --- Set default capture path in edit element ---
-    strBuf[0] = 0; strBuf[1] = 0;
-    fn_String_Ctor_CStr(strBuf, "Game/Help/Dialog/");
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
-    fn_EditElement_SetText(*(void**)(s + 0x30), strBuf);
-    fn_String_Dtor(strBuf);
+    {
+        System::String pathStr("Game/Help/Dialog/");
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
+        fn_EditElement_SetText(*(void**)(s + 0x30), &pathStr);
+    }
 
     // --- Initialize capture state fields ---
     *(uint64_t*)(s + 0x48) = 0;       // curX=0, curY=0
@@ -177,9 +176,9 @@ check_pressed:
 
             // b. Get source directory as System::String (non-trivial return: RCX=this, RDX=retval)
             void* fsInstance = g_pFileSystemSingleton ? *g_pFileSystemSingleton : nullptr;
-            uint64_t sourceDirStr[2] = {0, 0};
+            System::String sourceDirStr;
             if (fsInstance)
-                fn_FileSystem_GetSourceDirectory(fsInstance, sourceDirStr);
+                fn_FileSystem_GetSourceDirectory(fsInstance, &sourceDirStr);
 
             // c. Get edit element text (String at editCapture + 0xC8)
             fn_InternalBasePtr_CheckPtr(&self->editCapture);
@@ -189,34 +188,21 @@ check_pressed:
             // d. Concat: sourceDir + editText -> concatStr1
             //    Then: concatStr1 + ".rsc" literal -> concatStr2
             //    Filename ctor from concatStr2 -> pathFilename
-            // ABI: RCX=retval, RDX=lhs, R8=rhs (free function, non-trivial return)
-            uint64_t concatStr1[2] = {0, 0};
-            uint64_t concatStr2[2] = {0, 0};
-            uint64_t filenameRsc[2] = {0, 0};   // Filename for "resource" subdir
-            uint64_t pathFilename[2] = {0, 0};  // Filename for full path
-
-            if (fn_String_ConcatSS && editText)
-                fn_String_ConcatSS(concatStr1, sourceDirStr, editText);
+            System::String concatStr1;
+            if (editText)
+                concatStr1 = sourceDirStr + *reinterpret_cast<System::String*>(editText);  // B.3.1 bridge
 
             // ".rsc" string literal lives at 0x14015d424 in the exe .rdata
-            const void* rscLiteral = (const void*)0x14015d424;
-            if (fn_String_Concat)
-                fn_String_Concat(concatStr2, concatStr1, rscLiteral);
+            const char* rscLiteral = (const char*)0x14015d424;
+            System::String concatStr2 = concatStr1 + rscLiteral;
 
-            if (fn_Filename_CtorString)
-                fn_Filename_CtorString(pathFilename, concatStr2);
-
-            // Cleanup intermediate strings
-            fn_String_Dtor(concatStr2);
-            fn_String_Dtor(concatStr1);
-            fn_String_Dtor(sourceDirStr);
+            System::Filename pathFilename(concatStr2);
 
             // e. Build subdir Filename from "resource" literal at 0x14015d430
-            if (fn_Filename_CtorCStr)
-                fn_Filename_CtorCStr(filenameRsc, "resource");
+            System::Filename filenameRsc("resource");
 
             // f. Save: External::SaveText(this, pathFilename, subdirFilename)
-            fn_External_SaveText(pending, pathFilename, filenameRsc);
+            fn_External_SaveText(pending, &pathFilename, &filenameRsc);
 
             // g. Call vtable[0] on the External object (scalar dtor with flag=1, frees it)
             typedef void (*fn_VtableDtor_t)(void* self, uint32_t flags);
@@ -233,11 +219,7 @@ check_pressed:
             if (box)
                 fn_Element_SetFlagsOnOff(box, 0, 1);
 
-            // j. Cleanup filenames
-            if (fn_Filename_Dtor) {
-                fn_Filename_Dtor(filenameRsc);
-                fn_Filename_Dtor(pathFilename);
-            }
+            // j. filenameRsc/pathFilename release via their destructors (System::Filename).
         } else {
             // Not yet at frame 1: increment counter
             self->saveFrameCount++;

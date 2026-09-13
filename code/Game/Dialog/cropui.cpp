@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -109,8 +110,8 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
                                             *(uint64_t*)((uintptr_t)subObj + 0x30),
                                             (void*)((uintptr_t)subObj + 0x38));
                             // Convert to System::String
-                            uint8_t sysStrBuf[8];
-                            fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
+                            System::String sysStr;
+                            fn_UIString_ToSystemString(uiStrBuf, &sysStr);
 
                             // Create Sprite from SelectDescription icon
                             uint8_t spriteBuf[16];
@@ -119,9 +120,8 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
                                           (void*)((uintptr_t)subObj + 0x28));
 
                             // Add item to combo with index as userData
-                            fn_ComboElement_AddItem(combo, spriteBuf, sysStrBuf,
+                            fn_ComboElement_AddItem(combo, spriteBuf, &sysStr,
                                                     (void*)(intptr_t)comboIdx);
-                            fn_String_Dtor(sysStrBuf);
 
                             // Check if this is the currently selected resource
                             if (resType == currentResource) {
@@ -200,13 +200,11 @@ void CropUI_Slot4(CropUI* self) {
     void* dialogInst = *(void**)((uintptr_t)self + 0x18);
 
     // Find "selectResource" element
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, "selectResource");
+    System::String nameBuf("selectResource");
 
     uint8_t elemBuf[8] = {0};
-    fn_DialogInstance_FindElement(dialogInst, elemBuf, nameBuf);
+    fn_DialogInstance_FindElement(dialogInst, elemBuf, &nameBuf);
     void* foundElem = *(void**)elemBuf;
-    fn_String_Dtor(nameBuf);
 
     // Wrap in InternalBasePtr, store at +0x30
     uint8_t basePtrBuf[8];

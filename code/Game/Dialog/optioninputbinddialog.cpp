@@ -14,6 +14,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -21,11 +22,9 @@
 // Helper: Find element by name in dialog instance
 // ============================================================
 static void* FindDialogElem(void* dialogInst, const char* name) {
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, name);
+    System::String nameStr(name);
     uint64_t result = 0;
-    fn_DialogInstance_FindElement(dialogInst, &result, nameStr);
-    fn_String_Dtor(nameStr);
+    fn_DialogInstance_FindElement(dialogInst, &result, &nameStr);
     return (void*)result;
 }
 

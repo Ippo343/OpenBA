@@ -21,6 +21,7 @@
 #include "Dialog/ui_panels.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -240,13 +241,12 @@ void ToolUI_Slot4(ToolUI* self) {
 
     // Find "labelTitle" element via DialogInstance
     {
-        uint8_t nameStr[8], retBuf[16];
-        fn_String_Ctor_CStr(nameStr, "labelTitle");
+        uint8_t retBuf[16];
+        System::String nameStr("labelTitle");
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, nameStr);
+        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
         *(void**)(s + 0x38) = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // Set title text from ToolbarDescription in description
@@ -280,13 +280,12 @@ void ToolUI_Slot4(ToolUI* self) {
 
     // Find "buttonClose" element, set ID 1
     {
-        uint8_t nameStr[8], retBuf[16];
-        fn_String_Ctor_CStr(nameStr, "buttonClose");
+        uint8_t retBuf[16];
+        System::String nameStr("buttonClose");
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, nameStr);
+        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
         void* closeBtn = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
 
         if (closeBtn != nullptr) {
             fn_InternalBasePtr_CheckPtr(&closeBtn);
@@ -297,13 +296,12 @@ void ToolUI_Slot4(ToolUI* self) {
     // Find "borderTitle" element — drag handle
     {
         void* borderTitle = nullptr;
-        uint8_t nameStr[8], retBuf[16];
-        fn_String_Ctor_CStr(nameStr, "borderTitle");
+        uint8_t retBuf[16];
+        System::String nameStr("borderTitle");
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, nameStr);
+        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
         borderTitle = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
 
         if (borderTitle == nullptr) {
             *(uint8_t*)(s + 0x40) = 0;

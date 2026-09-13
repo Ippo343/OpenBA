@@ -10,6 +10,7 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
+#include "system/String.h"
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -49,13 +50,11 @@ void OrchardUI_Slot4(OrchardUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Find "yield" progress element in parent element at +0x20
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, "yield");
+    System::String nameStr("yield");
 
     void* parentElem = *(void**)(s + 0x20);
     uint64_t findResult = 0;
-    fn_FindElement(parentElem, &findResult, nameBuf);
-    fn_String_Dtor(nameBuf);
+    fn_FindElement(parentElem, &findResult, &nameStr);
 
     // Store yield element at +0x38, faithful to retail: the find result is kept only
     // if it really is a ProgressElement (see the type-id note at the top of the file —
@@ -125,12 +124,10 @@ void OrchardUI_Slot7(OrchardUI* self) {
 
     // Format percentage text: (int)(growth * 100.0f + 0.5f)
     int percent = (int)(growth * 100.0f + 0.5f);
-    uint8_t textBuf[16];
-    fn_String_Format((char*)textBuf, "%i", (uint64_t)(uint32_t)percent);
+    System::String textStr = System::String::Format("%i", (uint64_t)(uint32_t)percent);
 
     // Set progress text parameter
-    fn_ProgressElement_SetProgressTextParameter(yieldElem, 0, textBuf);
-    fn_String_Dtor(textBuf);
+    fn_ProgressElement_SetProgressTextParameter(yieldElem, 0, &textStr);
 
     // Enable/disable combo based on item count (SelectResourceUI base logic)
     void* combo = (void*)*(uint64_t*)(s + 0x30);

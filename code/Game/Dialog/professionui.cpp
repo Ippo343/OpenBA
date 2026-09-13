@@ -34,6 +34,8 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -290,11 +292,9 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
 
     // Find "professionTable" element
     void* dialogElem = *(void**)(s + 0x20);
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, "professionTable");
+    System::String nameStr("professionTable");
     uint64_t tableResult = 0;
-    fn_FindElement(dialogElem, &tableResult, nameBuf);
-    fn_String_Dtor(nameBuf);
+    fn_FindElement(dialogElem, &tableResult, &nameStr);
 
     void* tableElem = (void*)tableResult;
 
@@ -395,15 +395,12 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         void* profDesc = *(void**)((uintptr_t)profArray + (uintptr_t)i * 8);
 
         // Set element name from profession file path
-        if (fn_External_GetPath && fn_Filename_GetPathIdentifier) {
-            uint8_t pathBuf[8];
-            fn_External_GetPath(profDesc, pathBuf);
-            uint8_t identBuf[8];
-            fn_Filename_GetPathIdentifier(pathBuf, identBuf);
+        if (fn_External_GetPath) {
+            System::Filename pathObj;
+            fn_External_GetPath(profDesc, &pathObj);
+            System::Filename identObj = pathObj.GetPathIdentifer();
             fn_InternalBasePtr_CheckPtr((void*)&spinnerBuf);
-            fn_Element_SetName((void*)spinnerBuf, identBuf);
-            fn_Filename_Dtor(identBuf);
-            fn_Filename_Dtor(pathBuf);
+            fn_Element_SetName((void*)spinnerBuf, &identObj);
         }
 
         // BST insert: key=profDesc, value=idBase-300 (=i)

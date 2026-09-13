@@ -1,5 +1,6 @@
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // MessageDialog::Slot4 (0x14006D140) — Setup
@@ -17,12 +18,10 @@ void MessageDialog_Slot4(MessageDialog* self) {
     };
 
     for (auto& btn : buttons) {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, btn.name);
+        System::String nameStr(btn.name);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         void* elem = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
 
         if (elem) {
             fn_Element_SetElementId(elem, btn.id);
