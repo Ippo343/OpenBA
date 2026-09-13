@@ -37,14 +37,31 @@ void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, SerializerLite* s
 bool RtObject_Base_IsDerivedFrom(const void* self, uint32_t typeId);
 }
 
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.1 step 1. The body is now
+// `Object::InternalPtr<T>::SerializeArray` (runtime/types/object/Internal.h),
+// one template body for both instantiations — re-verified 2026-09-13,
+// function-size-bounded, at identical=55 / position-only=2 / REAL=1, the one
+// REAL instruction being the `_typeInfo` load. `T`'s type id is still supplied
+// by the caller through the mangled-name door, because none of the two `T`s is
+// a C++ class in this tree yet.
+//
+// The `IsDerivedFrom` customization point the class declares: `Object::Base` is
+// unconverted (SMARTPTR_INVENTORY.md §4), so it stays reached through the same
+// ported body the C form called.
+// ---------------------------------------------------------------------------
+namespace Object {
+bool InternalPtrIsDerivedFrom(const void* obj, uint32_t typeId) {
+    return RtObject::RtObject_Base_IsDerivedFrom(obj, typeId);
+}
+}  // namespace Object
+
 extern "C" void RtObject_InternalPtrArray_Serialize(SerializerLite* ser, int count,
                                                     InternalBasePtr* elems, uint32_t typeId) {
-    for (int i = 0; i < count; ++i) {
-        RtObject::RtObject_InternalBasePtr_Serialize(&elems[i], ser);
-        void* obj = *reinterpret_cast<void**>(&elems[i]);
-        if (obj != nullptr && !RtObject::RtObject_Base_IsDerivedFrom(obj, typeId))
-            *reinterpret_cast<void**>(&elems[i]) = nullptr;
-    }
+    // TRANSITIONAL CAST (B31_RULES "not-yet-converted structs"): the callers
+    // still spell the POD; it goes with the POD in step 2.
+    using TypedPtr = ::Object::InternalPtr<RtObject::Internal>;
+    TypedPtr::SerializeArray(*ser, count, reinterpret_cast<TypedPtr*>(elems), typeId);
 }
 
 #define INTPTR_ARRAY_THUNK(fnName, mangledTypeInfo)                             \

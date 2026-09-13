@@ -405,6 +405,21 @@ int PredictCapacity(int oldSize, int oldCapacity, int newSize) {
     return newSize;
 }
 
+// ---- ENDGAME B.3.1 step 1: the bridge to the real class ---------------------
+//
+// `Object::InternalBasePtr` (runtime/types/object/Internal.h) now owns every
+// body in this family. The `RtObject_InternalBasePtr_*` functions below stay —
+// they are the registered symbols and their callers have not moved yet — and
+// each is now a ONE-LINE shim onto the class, running over the same eight
+// bytes. The cast is the transitional kind B31_RULES sanctions for a
+// not-yet-converted POD; it disappears with the POD in step 2.
+inline ::Object::InternalBasePtr* AsClass(InternalBasePtr* p) {
+    return reinterpret_cast< ::Object::InternalBasePtr*>(p);
+}
+inline const ::Object::InternalBasePtr* AsClass(const InternalBasePtr* p) {
+    return reinterpret_cast<const ::Object::InternalBasePtr*>(p);
+}
+
 }  // namespace
 
 // ============================================================================
@@ -413,10 +428,10 @@ int PredictCapacity(int oldSize, int oldCapacity, int newSize) {
 
 // ??0InternalBasePtr@Object@@QEAA@XZ   retail 0x1800062c0, profile 0x180023900
 // One instruction: `mov qword ptr [rcx], 0`.
+// B.3.1: the body is `Object::InternalBasePtr::InternalBasePtr()`; this is the
+// registered shim.
 void* RtObject_InternalBasePtr_Ctor(InternalBasePtr* self) {
-    InternalBasePtr ours;
-    ours.ptr = nullptr;
-    *self = ours;
+    new (AsClass(self)) ::Object::InternalBasePtr();
     return self;   // MSVC constructors return `this` in RAX.
 }
 
@@ -424,9 +439,7 @@ void* RtObject_InternalBasePtr_Ctor(InternalBasePtr* self) {
 //                                      retail 0x1800062a0, profile 0x1800238e0
 // One instruction: `mov qword ptr [rcx], rdx`.
 void* RtObject_InternalBasePtr_CtorPtr(InternalBasePtr* self, Internal* p) {
-    InternalBasePtr ours;
-    ours.ptr = p;
-    *self = ours;
+    new (AsClass(self)) ::Object::InternalBasePtr(p);
     return self;
 }
 
@@ -435,9 +448,9 @@ void* RtObject_InternalBasePtr_CtorPtr(InternalBasePtr* self, Internal* p) {
 // One instruction pair: `mov rax,[rdx]; mov [rcx],rax`. NOT refcounted — this
 // really is a raw 8-byte copy, and the two InternalBasePtrs are then aliases.
 void RtObject_InternalBasePtr_Copy(InternalBasePtr* self, const InternalBasePtr* other) {
-    InternalBasePtr ours;
-    ours.ptr = other->ptr;
-    *self = ours;
+    // `Copy` is PROTECTED in retail (`IEAA`), so the shim goes through the
+    // class's one-line static forwarder rather than widening its access.
+    ::Object::InternalBasePtr::Shim_Copy(AsClass(self), AsClass(other));
 }
 
 // ?CheckPtr@InternalBasePtr@Object@@IEBAXXZ
@@ -482,7 +495,10 @@ void RtObject_InternalBasePtr_Copy(InternalBasePtr* self, const InternalBasePtr*
 //
 // the old DLL-era switch is retained only as a positive assertion in
 // the log; it no longer gates anything.
-void RtObject_InternalBasePtr_CheckPtr(const InternalBasePtr*) {
+// B.3.1: still empty, and `Object::InternalBasePtr::CheckPtr` it forwards to is
+// empty too. NEVER ADD VALIDATION TO EITHER.
+void RtObject_InternalBasePtr_CheckPtr(const InternalBasePtr* self) {
+    ::Object::InternalBasePtr::Shim_CheckPtr(AsClass(self));
 }
 
 // ?Persist@Internal@Object@@UEAAXAEAVStream@IO@@@Z
@@ -508,12 +524,7 @@ void RtObject_Internal_Persist(Internal*, void* /*IO::Stream&*/) {
 // twice. The evidence for this one is code inspection of five instructions, not
 // a measurement, and the write-up says so.
 void RtObject_InternalBasePtr_DeletePtr(InternalBasePtr* self) {
-    Internal* p = self->ptr;
-    if (p != nullptr) {
-        void** vtbl = *reinterpret_cast<void***>(p);
-        reinterpret_cast<void (*)(Internal*, int)>(vtbl[0])(p, 1);
-        self->ptr = nullptr;
-    }
+    AsClass(self)->DeletePtr();
 }
 
 // ============================================================================
@@ -742,49 +753,101 @@ void RtObject_InternalFactory_ResetPersistState(InternalFactory* self, void* str
 // lane S UNGATED the registration (see the registration function below) and
 // VERIFIED it with the emission-sequence oracle — 4 emissions on the non-null
 // branch and 1 on the null branch, identical to the shipped body.
+// B.3.1: the body moved to `Object::InternalBasePtr::Serialize`, whose
+// out-of-line half (`Object::InternalBasePtrSerializeBody`) sits at the bottom
+// of this file, next to `Factory()` and the `PersistObject` name door it needs.
+// This is the registered shim.
 void RtObject_InternalBasePtr_Serialize(InternalBasePtr* self, SerializerLite* ser) {
-    void*  enc     = ser->readerWriter;
+    AsClass(self)->Serialize(*ser);
+}
+
+}  // namespace RtObject
+
+// ============================================================================
+// ENDGAME B.3.1 step 1 — the real class's out-of-line body.
+//
+// `?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z`
+//   retail 0x1800c0180, profile 0x18008c460.
+//
+// Moved here from `RtObject_InternalBasePtr_Serialize` unchanged except for the
+// member spelling: it needs this file's `Factory()` and the `PersistObject`
+// name door, and `IO::Serializer`, `Object::Internal`'s vtable and
+// `InternalFactory` are all still unconverted, so it reaches them through
+// exactly the doors the C body used (SMARTPTR_INVENTORY.md §4). No new casts.
+//
+//     bool present = (_ptr != 0);
+//     rw->Serialize(present);                      // rw vtbl +0x78
+//     if (!present) { _ptr = 0; return; }
+//     index = _ptr ? _ptr->_factoryIndex : 0;
+//     type  = _ptr ? _ptr->Type() : 0xffffffff;    // Internal vtbl slot 2
+//     gen   = _ptr ? _ptr->_generation : 0;
+//     rw->Serialize(index);                        // +0xa0, int
+//     rw->Serialize(gen);                          // +0x98, uint
+//     rw->Serialize(type);                         // +0x98, uint
+//     _ptr = InternalFactory::PersistObject(_singleton, ser.stream, gen, index, type);
+//
+// The redundant `_ptr ? … : …` guards are retail's: `present` already proved
+// the pointer non-null and the compiler kept the tests anyway.
+//
+// *** THE READERWRITER VTABLE OFFSETS ARE BUILD-SPECIFIC. *** These are the
+// RETAIL numbers (0x78 / 0x98 / 0xa0, agreeing with the forwarder table in
+// runtime/src/io/serializer.cpp). The PROFILE build uses 0x90 / 0xb0 / 0xb8 for
+// the same three calls; transcribing those writes the right values through the
+// wrong slots and desyncs every save.
+//
+// NOT DIFFABLE and NOT SHADOWED by the byte oracle: the call advances a stream,
+// so a second run would consume or emit the record twice. Wave 9 lane S
+// VERIFIED it with the emission-sequence oracle — 4 emissions on the non-null
+// branch and 1 on the null branch, identical to the shipped body.
+// ============================================================================
+namespace Object {
+
+void InternalBasePtrSerializeBody(RtObject::Internal** self,
+                                  RtObject::SerializerLite& ser) {
+    void*  enc     = ser.readerWriter;
     void** encVtbl = *reinterpret_cast<void***>(enc);
 
-    char present = (self->ptr != nullptr) ? 1 : 0;
-    reinterpret_cast<void (*)(void*, char*, const char*)>(encVtbl[kEncSerializeBool / 8])(
-        enc, &present, nullptr);
+    char present = (*self != nullptr) ? 1 : 0;
+    reinterpret_cast<void (*)(void*, char*, const char*)>(
+        encVtbl[RtObject::kEncSerializeBool / 8])(enc, &present, nullptr);
     if (present == 0) {
-        self->ptr = nullptr;
+        *self = nullptr;
         return;
     }
 
     int      index;
     uint32_t type;
-    Internal* p = self->ptr;
+    RtObject::Internal* p = *self;
     if (p == nullptr) {
         index = 0;
         type  = 0xffffffffu;
     } else {
         index = p->factoryIndex;
         void** pv = *reinterpret_cast<void***>(p);
-        type = reinterpret_cast<uint32_t (*)(Internal*)>(pv[kInternalVtblType / 8])(p);
+        type = reinterpret_cast<uint32_t (*)(RtObject::Internal*)>(
+            pv[RtObject::kInternalVtblType / 8])(p);
     }
-    const uint32_t gen = (self->ptr != nullptr) ? self->ptr->generation : 0u;
+    const uint32_t gen = (*self != nullptr) ? (*self)->generation : 0u;
 
-    reinterpret_cast<void (*)(void*, int*, const char*)>(encVtbl[kEncSerializeInt / 8])(
-        enc, &index, nullptr);
-    reinterpret_cast<void (*)(void*, uint32_t*, const char*)>(encVtbl[kEncSerializeUint / 8])(
-        enc, const_cast<uint32_t*>(&gen), nullptr);
-    reinterpret_cast<void (*)(void*, uint32_t*, const char*)>(encVtbl[kEncSerializeUint / 8])(
-        enc, &type, nullptr);
+    reinterpret_cast<void (*)(void*, int*, const char*)>(
+        encVtbl[RtObject::kEncSerializeInt / 8])(enc, &index, nullptr);
+    reinterpret_cast<void (*)(void*, uint32_t*, const char*)>(
+        encVtbl[RtObject::kEncSerializeUint / 8])(enc, const_cast<uint32_t*>(&gen), nullptr);
+    reinterpret_cast<void (*)(void*, uint32_t*, const char*)>(
+        encVtbl[RtObject::kEncSerializeUint / 8])(enc, &type, nullptr);
 
     // The REGISTRY door, not the raw DLL door: PersistObject is ported
     // (internalfactory_persist.cpp) and with the DLL absent the raw door is
     // NULL. First DLL-absent Load Game (2026-09-12) died here, EXEC-of-0, with
     // the InternalFactory in RCX -- the same wall as video/buffers.cpp MemFree.
-    using PersistObjectFn = Internal* (*)(InternalFactory*, void*, uint32_t, int, uint32_t);
+    using PersistObjectFn = RtObject::Internal* (*)(RtObject::InternalFactory*, void*,
+                                                    uint32_t, int, uint32_t);
     PersistObjectFn persist = RT_EXPORT_ONCE(PersistObjectFn,
         "?PersistObject@InternalFactory@Object@@QEAAPEAVInternal@2@AEAVStream@IO@@IHI@Z");
-    self->ptr = persist(Factory(), ser->stream, gen, index, type);
+    *self = persist(RtObject::Factory(), ser.stream, gen, index, type);
 }
 
-}  // namespace RtObject
+}  // namespace Object
 
 // ============================================================================
 // Registration

@@ -306,8 +306,19 @@ constexpr uint32_t kNoReferenceId = 0xFFFFFFFFu;
 // `GetReferenceId` derefs the node `Set::Find` returned with no null test — that
 // is the callee's business and its own port already transcribes it.
 // ============================================================================
-extern "C" void RtObject_ExternalPtr_Serialize(External** self, Serializer* ser,
-                                               const void* typeInfo) {
+// ENDGAME B.3.1 step 1: this IS `Object::ExternalPtr<T>::Serialize` now — the
+// one template body, declared in runtime/types/object/External.h and defined
+// here because of the dependency doors above. The per-T difference is the
+// `typeInfo` argument and nothing else; the clone check across all 22
+// single-pointer addresses (2026-09-13, function-size-bounded) reports
+// identical=193 / position-only=20 / REAL=2 for every pair, both REALs being
+// the type-info load.
+namespace Object {
+
+void ExternalPtrSerializeBody(External** self, Serializer& serRef,
+                              const void* typeInfo) {
+    Serializer* const ser = &serRef;   // the helpers above take the pointer
+
     // ---- mode 1: encoding type 3 (0x1800042ce) -----------------------------
     if (EncodingType(ser) == 3) {
         External* cur = *self;
@@ -401,6 +412,29 @@ extern "C" void RtObject_ExternalPtr_Serialize(External** self, Serializer* ser,
     }
 
     RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&path));
+}
+
+// The array form of the same template — 818 bytes, eight instantiations, and
+// retail's loop body is the single-pointer body above with `elems[i]` in place
+// of `*self` (0x18005d4a0: every branch is instruction-for-instruction the
+// same, indexed by R14). Clone check 2026-09-13: 8/8 at identical=212 /
+// position-only=20 / REAL=2.
+void ExternalPtrSerializeArrayBody(Serializer& ser, int count, External** elems,
+                                   const void* typeInfo) {
+    for (int i = 0; i < count; ++i)
+        ExternalPtrSerializeBody(&elems[i], ser, typeInfo);
+}
+
+}  // namespace Object
+
+// ---- the registered C shims -------------------------------------------------
+// B31_RULES step 1: every existing vocabulary keeps working. These two keep
+// their signatures and their registry rows; they are one line each now.
+// TRANSITIONAL CAST (B31_RULES "not-yet-converted structs"): callers still hand
+// us the eight bytes as an `External**`; it goes when they move in step 2.
+extern "C" void RtObject_ExternalPtr_Serialize(External** self, Serializer* ser,
+                                               const void* typeInfo) {
+    reinterpret_cast< ::Object::ExternalPtr<External>*>(self)->Serialize(*ser, typeInfo);
 }
 
 // ============================================================================
@@ -544,20 +578,23 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_ExternalList,
 #undef EXTPTR_THUNK
 
 // ============================================================================
-// The ARRAY form of the same template — 818 bytes, four instantiations.
+// The ARRAY form of the same template — 818 bytes, eight instantiations.
 //
 //     void (Serializer* ser, int count, External** elems)      RCX, EDX, R8
 //
-// Retail's loop body is the single-pointer body above with `elems[i]` in place
-// of `*self` (0x18005d4a0: the encoding-type-3 branch, the path/reference
+// Retail's loop body is the single-pointer body with `elems[i]` in place of
+// `*self` (0x18005d4a0: the encoding-type-3 branch, the path/reference
 // branches, the FindOrLoad + IsDerivedFrom tail and the String release are all
 // instruction-for-instruction the same, indexed by R14). R9 is spilled to its
 // home slot and never read. So the port is the loop, calling the shared body.
+//
+// B.3.1 step 1: the loop is `Object::ExternalPtr<T>::SerializeArray` above;
+// this is the registered shim, with the same transitional cast.
 // ============================================================================
 extern "C" void RtObject_ExternalPtrArray_Serialize(Serializer* ser, int count,
                                                     External** elems, const void* typeInfo) {
-    for (int i = 0; i < count; ++i)
-        RtObject_ExternalPtr_Serialize(&elems[i], ser, typeInfo);
+    using Ptr = ::Object::ExternalPtr<External>;
+    Ptr::SerializeArray(*ser, count, reinterpret_cast<Ptr*>(elems), typeInfo);
 }
 
 #define EXTPTR_ARRAY_THUNK(fnName, mangledTypeInfo)                            \
