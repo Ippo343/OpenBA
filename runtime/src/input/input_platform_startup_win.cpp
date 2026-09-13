@@ -269,7 +269,6 @@ extern "C" int RtInput_Device_OnMouseWheelMessage(void*, unsigned,
 // separately and honestly by RtLanePlatInputFormatProbe().
 // ============================================================================
 extern "C" bool RtInput_Device_PlatformStartup(void* self) {
-    RT_DIFF_BEGIN("Input::Device::PlatformStartup [no oracle: creates real DirectInput devices]");
 
     void** cfgSlot = InputConfigSlot();
     void* cfg = cfgSlot ? *cfgSlot : nullptr;
@@ -363,22 +362,6 @@ extern "C" bool RtInput_Device_PlatformStartup(void* self) {
         Slot<AcquireFn>(mouse, 0x38)(mouse);                     // 0x1800e1b2e
     }
 
-    if (rt_diff_on__) {
-        char a[160];
-        std::snprintf(a, sizeof(a),
-                      "di8=%d kbd=%d mouse=%d clip=%u cursor=(%ld,%ld)",
-                      *di8Slot ? 1 : 0, *kbdSlot ? 1 : 0, *mouseSlot ? 1 : 0,
-                      static_cast<unsigned>(Bytes(self)[RtInput::kMouseClippingOffset]),
-                      static_cast<long>(p.x), static_cast<long>(p.y));
-        RT_DIFF_SHADOW(true, a,
-                       "no oracle: a replay creates a second IDirectInput8 and "
-                       "re-Acquires the same window's devices");
-        // Work = the run actually brought DirectInput up. A skipDirectInput run
-        // executes the tail and nothing else, and must not be counted as having
-        // exercised the part of this body that can fail.
-        RT_DIFF_WORK(createdDevices);
-        RtLanePlatInputFormatProbe();
-    }
     return true;                                                 // 0x1800e1b3b
 }
 

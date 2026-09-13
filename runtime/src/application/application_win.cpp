@@ -20,7 +20,7 @@
 //     PM_REMOVE) — a second call would eat the NEXT message, not the same one.
 //   * SleepThread and YieldToThreads block/yield the calling thread; calling
 //     the DLL's copy afterward would sleep or yield a second time for real.
-// All three are registered anyway (RT_DIFF_SHADOW(true, …), matching the
+// All three are registered anyway (, matching the
 // ~SavedState precedent in runtime/src/save/saveload.cpp — a site that is
 // counted by `calls=` but never compared) because each is unambiguous, short,
 // and reproduces retail's own Win32 call sequence exactly rather than
@@ -36,7 +36,7 @@
 //   * LaunchProcess spawns a real process or opens a real shell document; a
 //     predicting oracle cannot help because the state it changes (the OS
 //     process table, or whatever ShellExecuteW launches) is not a memory
-//     region either side could snapshot or restore. It is RT_DIFF_SHADOW'd
+//     region either side could snapshot or restore. It is the diff oracle'd
 //     like the three above, for the same reason: calling the DLL's copy
 //     afterward would launch (or open) a SECOND time for real.
 // ============================================================================
@@ -46,7 +46,7 @@
 #include <cstdint>
 #include <cstring>
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_predict.h"
+#include "../../funcs/rt_predict.h"   // RtSink, the write sink EnableCursorBody takes
 #include "../../types/application/Application.h"
 #include "../collection/set_avl.h"
 #include "../system/timer.h"
@@ -55,15 +55,11 @@
 using RtApplication::Application;
 using RtSystem::WideString;
 
-// Wave 12 lane B's synthetic-subject probe (application_lifecycle_probe.cpp).
-// A no-op unless BANISHED_RT_APPB_PROBE armed it.
-extern "C" void RtApp_LifecycleProbeMaybeRun();
-
 namespace {
 
 // System::Timer's four data exports.
 //
-// These were four RAW-DOOR data reads (`RT_ORIGINAL_ONCE(double*, "?_secondsPerTick@…")`
+// These were four RAW-DOOR data reads (`the raw DLL door(double*, "?_secondsPerTick@…")`
 // and its three siblings) — WAVE9_LANE_V.md §4's DATA READ row for
 // `?_secondsPerTick@Timer@System@@0NA` names this file at :45. Wave 9 lane B3
 // ported System::Timer and the port OWNS the storage behind all five statics
@@ -104,17 +100,6 @@ int64_t QpcToEngineTicks(int64_t qpc) {
 //   return false;
 // ============================================================================
 bool RtApp_PlatformUpdate(Application* self) {
-    RT_DIFF_BEGIN("Application::Application::PlatformUpdate [no oracle: pumps the live message queue]");
-    RT_DIFF_SHADOW(true, "pumped", "not diffable");
-
-    // Wave 12 lane B's lifecycle probe, self-scheduled here for the same reason
-    // set_avl_probe.cpp self-schedules on the first RegisterMessageCallback: it
-    // ALLOCATES, and at RuntimePortInit() time System::MemoryAllocator has been
-    // constructed but not started. The first frame is provably past that. A
-    // single load-and-branch when the probe is not armed, which is every run
-    // that has not set BANISHED_RT_APPB_PROBE.
-    RtApp_LifecycleProbeMaybeRun();
-
     if (self->_quitRequested) PostQuitMessage(0);
 
     MSG msg;
@@ -144,8 +129,6 @@ bool RtApp_PlatformUpdate(Application* self) {
 // signature fidelity.
 // ============================================================================
 void RtApp_SleepThread(Application* /*self*/, int ms) {
-    RT_DIFF_BEGIN("Application::Application::SleepThread [no oracle: blocks the calling thread]");
-    RT_DIFF_SHADOW(true, "slept", "not diffable");
 
     LARGE_INTEGER t0;
     QueryPerformanceCounter(&t0);
@@ -175,8 +158,6 @@ void RtApp_SleepThread(Application* /*self*/, int ms) {
 // is not read.
 // ============================================================================
 void RtApp_YieldToThreads(Application* /*self*/) {
-    RT_DIFF_BEGIN("Application::Application::YieldToThreads [no oracle: yields the calling thread]");
-    RT_DIFF_SHADOW(true, "yielded", "not diffable");
     SwitchToThread();
 }
 
@@ -270,29 +251,8 @@ void EnableCursorBody(Application* self, bool enabled, RtSink& out) {
 }  // namespace
 
 void RtApp_EnableCursor(Application* self, bool enabled) {
-    RT_PREDICT_SITE("Application::Application::EnableCursor");
-
-    if (!RT_PREDICT_ON) {
-        RtSink live;
-        EnableCursorBody(self, enabled, live);
-        return;
-    }
-
-    RtPredictRound round(&rt_predict_site__);
-    round.Watch(&self->_cursorEnabled, sizeof(self->_cursorEnabled),
-               "Application._cursorEnabled");
-
-    EnableCursorBody(self, enabled, round.sink());   // predicts, writes nothing
-
-    // THEIRS, for real, on the still-pristine object — this IS the live side
-    // effect for this call (the toggle, and any WM_SETCURSOR dispatch, happen
-    // here, exactly once). RT_ORIGINAL_ONCE, not RT_EXPORT_ONCE: by the time
-    // this runs our own body is registered under this export name, and
-    // RT_EXPORT_ONCE would resolve to ourselves and recurse.
-    using Fn = void (*)(Application*, bool);
-    RT_ORIGINAL_ONCE(Fn, "?EnableCursor@Application@1@QEAAX_N@Z")(self, enabled);
-
-    round.Verify();
+    RtSink live;
+    EnableCursorBody(self, enabled, live);
 }
 
 // ============================================================================
@@ -367,7 +327,7 @@ void RtApp_EnableCursor(Application* self, bool enabled) {
 // effect lands in any memory region either implementation could snapshot or
 // restore, so rt_predict.h's technique (which needs an in-object post-state
 // to compare) does not apply here the way it does to EnableCursor.
-// RT_DIFF_SHADOW'd like PlatformUpdate/SleepThread/YieldToThreads above, for
+// the diff oracle'd like PlatformUpdate/SleepThread/YieldToThreads above, for
 // the identical reason.
 // ============================================================================
 namespace {
@@ -375,8 +335,6 @@ constexpr char kLaunchVerbOpen[] = "open";  // literal @ 0x180154900
 }  // namespace
 
 bool RtApp_LaunchProcess(Application* /*self*/, const char* cmd, bool wait) {
-    RT_DIFF_BEGIN("Application::Application::LaunchProcess [no oracle: spawns a real process / opens a real shell document]");
-    RT_DIFF_SHADOW(true, "launched", "not diffable");
 
     bool ok;
     if (wait) {
@@ -461,31 +419,7 @@ bool RtApp_LaunchProcess(Application* /*self*/, const char* cmd, bool wait) {
 // a reinterpret_cast is undefined behaviour GCC is entitled to reorder.
 // ============================================================================
 extern "C" void RtApp_PlatformConstruct(Application* self, void* platformHandle) {
-    RT_DIFF_BEGIN("Application::Application::PlatformConstruct");
 
-    if (rt_diff_on__) {
-        // A real scratch-copy diff: three stores, no side effects, no
-        // allocation. Both scratches are pre-filled with 0xCD so a byte NEITHER
-        // side writes (+0x12..+0x2f) stays 0xCD in both and compares equal —
-        // the symmetric fill singleton_ctors.cpp uses, and the inverse of the
-        // Wave 6 trap (reference_oracle_must_not_compare_unwritten_bytes.md).
-        using Fn = void (*)(Application*, void*);
-        alignas(8) uint8_t ours[sizeof(Application)];
-        alignas(8) uint8_t theirs[sizeof(Application)];
-        std::memset(ours,   0xCD, sizeof(ours));
-        std::memset(theirs, 0xCD, sizeof(theirs));
-
-        Application* o = reinterpret_cast<Application*>(ours);
-        o->_windowHandle   = nullptr;
-        o->_platformHandle = platformHandle;
-        const uint16_t stateWord = 0x0100;
-        std::memcpy(&o->_cursorEnabled, &stateWord, sizeof(stateWord));
-
-        RT_ORIGINAL_ONCE(Fn, "?PlatformConstruct@Application@1@AEAAXPEAX@Z")(
-            reinterpret_cast<Application*>(theirs), platformHandle);
-        RT_DIFF_BYTES(ours, theirs, sizeof(Application));
-        RT_DIFF_WORK(true);
-    }
 
     self->_windowHandle   = nullptr;                 // 0x18009fbe0
     self->_platformHandle = platformHandle;          // 0x18009fbe7

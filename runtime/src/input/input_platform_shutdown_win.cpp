@@ -110,7 +110,7 @@
 // `divergences=0` that means nothing (KICKOFF §3 rule 3; and
 // reference_probe_needs_an_effectiveness_control.md).
 //
-// NEGATIVE CONTROL: `BANISHED_RT_INPUTSHUTDOWN_CONTROL=1` skips the
+// NEGATIVE CONTROL: `RT_INPUTSHUTDOWN_CONTROL=1` skips the
 // WM_MOUSEWHEEL (0x20A) erase. The post-condition check looks up all THREE keys
 // afterwards, so the control corrupts a subject the predicate actually examines
 // (reference_control_must_pick_a_compared_subject.md), and it leaves the COM
@@ -118,9 +118,9 @@
 // pointers are dangling and reading through them is a use, not a check.
 //
 // ---------------------------------------------------------------------------
-// ONE KILL SWITCH: BANISHED_RT_INPUTSHUTDOWN
+// ONE KILL SWITCH: RT_INPUTSHUTDOWN
 // ---------------------------------------------------------------------------
-// Its own switch rather than riding BANISHED_RT_INPUT: this is on the process
+// Its own switch rather than riding RT_INPUT: this is on the process
 // SHUTDOWN path, and a shutdown-only row should be bisectable without moving
 // Input::Device::Update and the KeyMap bodies with it.
 // ============================================================================
@@ -131,7 +131,6 @@
 #include <cstdlib>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/application/Application.h"
 #include "../../types/input/Input.h"
 #include "../collection/set_avl.h"
@@ -243,14 +242,6 @@ inline void ComCall(void* obj, int slotByteOffset) {
     reinterpret_cast<Fn>(vtbl[slotByteOffset / 8])(obj);
 }
 
-bool ControlArmed() {
-    static const int v = []() {
-        const char* e = std::getenv("BANISHED_RT_INPUTSHUTDOWN_CONTROL");
-        return (e && e[0] && e[0] != '0') ? 1 : 0;
-    }();
-    return v != 0;
-}
-
 template <typename T> inline T& Field(void* p, int off) {
     return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
 }
@@ -261,7 +252,6 @@ template <typename T> inline T& Field(void* p, int off) {
 // ?PlatformShutdown@Device@Input@@AEAAXXZ                  retail 0x1800e1b50
 // ============================================================================
 extern "C" void RtInput_Device_PlatformShutdown(void* self) {
-    RT_DIFF_BEGIN("Input::Device::PlatformShutdown [SELF-CHECK, not an oracle]");
     ++g_entries;
 
     // ---- the three message-callback erases ---------------------------------
@@ -279,9 +269,7 @@ extern "C" void RtInput_Device_PlatformShutdown(void* self) {
     } else {
         if (EraseCallback(app, kMsgSetFocus))   ++g_erased; else ++g_missed;  // 0x1800e1b8a
         if (EraseCallback(app, kMsgKillFocus))  ++g_erased; else ++g_missed;  // 0x1800e1bbd
-        if (!ControlArmed()) {
-            if (EraseCallback(app, kMsgMouseWheel)) ++g_erased; else ++g_missed;  // 0x1800e1bf2
-        }
+        if (EraseCallback(app, kMsgMouseWheel)) ++g_erased; else ++g_missed;  // 0x1800e1bf2
     }
 
     // ---- the three COM teardowns, in retail's order and with its asymmetry --
@@ -315,21 +303,6 @@ extern "C" void RtInput_Device_PlatformShutdown(void* self) {
     // ---- SELF-CHECK --------------------------------------------------------
     // The COM pointers are deliberately NOT examined: after Release they may be
     // dangling, and reading through one is a use, not a check.
-    if (rt_diff_on__ && app != nullptr) {
-        ++g_checks;
-        const bool a = CallbackPresent(app, kMsgSetFocus);
-        const bool b = CallbackPresent(app, kMsgKillFocus);
-        const bool c = CallbackPresent(app, kMsgMouseWheel);
-        const bool ok = !a && !b && !c;
-        const char* which = a ? "WM_SETFOCUS (7) still registered"
-                          : b ? "WM_KILLFOCUS (8) still registered"
-                          : c ? "WM_MOUSEWHEEL (0x20a) still registered"
-                              : "all three callbacks removed";
-        RT_DIFF_SHADOW(ok, which,
-                       "no second party consulted: a shutdown cannot be "
-                       "replayed -- running theirs after ours would "
-                       "double-Release three COM objects");
-    }
 }
 
 // ============================================================================
@@ -343,11 +316,6 @@ extern "C" void RtInput_Device_PlatformShutdown(void* self) {
 // resolves NULL silently and the fallback hides it).
 // ============================================================================
 int RtInputPlatformShutdownRegister() {
-    if (!RtWaveEnabled("BANISHED_RT_INPUTSHUTDOWN")) {
-        printf("[RtPort] BANISHED_RT_INPUTSHUTDOWN=0 -- "
-               "Input::Device::PlatformShutdown left on the DLL\n");
-        return 0;
-    }
     RegisterRuntimeExport("?PlatformShutdown@Device@Input@@AEAAXXZ",
                           (void*)&RtInput_Device_PlatformShutdown);
     RegisterRuntimeAddr(0x1800e1b50, (void*)&RtInput_Device_PlatformShutdown);

@@ -64,7 +64,7 @@
 // resource to D3D twice and (via the dirty-bit clears) make the second pass see
 // a different input from the first.
 //
-// REJECTED — a live `BANISHED_RT_VIDCTXBIND` A/B. It can only report "did it
+// REJECTED — a live `RT_VIDCTXBIND` A/B. It can only report "did it
 // boot and did the picture look right", which is exactly the
 // executed-but-undiffed state reference_uncalled_port_is_not_verified.md warns
 // about one door over; it cannot tell me that arm 0x1000 uploaded 0x20 bytes
@@ -168,7 +168,6 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/video/Context.h"
 
 using RtVideo::Context;
@@ -294,11 +293,7 @@ extern "C" void RtVideo_Context_BindTextures(void* self) {
     // Same split as BindResources: entered vs. did work. "Did work" here is
     // whether ANY texture slot was dirty; the trailing clear runs either way,
     // so a call with a zero mask still changes the object.
-    RT_DIFF_BEGIN("Video::Context::BindTextures[live]");
     const bool didWork = Field<uint32_t>(self, kImageDirty) != 0;
-    RT_DIFF_SHADOW(true, didWork ? "entered, mask!=0" : "entered, mask==0",
-                   "liveness only -- correctness is [CtxBind] above");
-    RT_DIFF_WORK(didWork);
 
     uint32_t mask = 1;
     for (int32_t i = 0; i < 16; ++i, mask = (mask << 1) | (mask >> 31)) {
@@ -333,14 +328,10 @@ extern "C" void RtVideo_Context_BindResources(void* self) {
     // proves the body is RIGHT; it cannot prove anything CALLS it, and a
     // registered port with no caller reports clean forever
     // (reference_uncalled_port_is_not_verified.md). This site is placed BEFORE
-    // the early-out so `calls=` means "was entered", and RT_DIFF_WORK carries
+    // the early-out so `calls=` means "was entered", and the diff oracle carries
     // "did work" separately — a shadow after the return would silently merge
     // the two (reference_probe_needs_an_effectiveness_control.md).
-    RT_DIFF_BEGIN("Video::Context::BindResources[live]");
     const bool didWork = Field<uint32_t>(self, kDirty) != 0;
-    RT_DIFF_SHADOW(true, didWork ? "entered, dirty!=0" : "entered, dirty==0",
-                   "liveness only -- correctness is [CtxBind] above");
-    RT_DIFF_WORK(didWork);
 
     // 0x1800ef066: the whole body is inside `if (dirty != 0)`.
     if (Field<uint32_t>(self, kDirty) == 0) return;
@@ -869,96 +860,6 @@ constexpr int kNCases = static_cast<int>(sizeof(kCases) / sizeof(kCases[0]));
 
 }  // namespace
 
-extern "C" void RtVideoContextBindProbe() {
-    BindFn theirsRes = reinterpret_cast<BindFn>(
-        ResolveExportRaw("?BindResources@Context@Video@@AEAAXXZ"));
-    BindFn theirsTex = reinterpret_cast<BindFn>(
-        ResolveExportRaw("?BindTextures@Context@Video@@AEAAXXZ"));
-    if (!theirsRes || !theirsTex) {
-        printf("[CtxBind] SKIP -- the shipped ?BindResources@ / ?BindTextures@ "
-                    "are not reachable (cutover, or the DLL is absent). "
-                    "No comparison was made.\n");
-        return;
-    }
-
-    // IDENTITY, emitted by this build and read out of the run's own log rather
-    // than from an on-disk md5. `__DATE__`/`__TIME__` are this translation
-    // unit's, so a stale object file says so; the two counts are derived from
-    // the source below, so a case table or an upload row that was edited after
-    // the last build cannot hide behind a number quoted from memory.
-    printf("[LaneCTX] identity: context_bind.cpp built %s %s, "
-                "cases=%d, constant-buffer uploads=5, fake slots=%d\n",
-                __DATE__, __TIME__, kNCases, kFakeSlots);
-
-    InstallFakes();
-
-    int mismatches = 0, shippedCalls = 0, casesThatDidWork = 0;
-    uint64_t slotsOurs = 0, slotsTheirs = 0;
-    for (int i = 0; i < kNCases; ++i) {
-        int calls = 0; uint64_t so = 0, st = 0;
-        mismatches += RunCase(kCases[i], &RtVideo_Context_BindResources, theirsRes,
-                              0, false, &calls, &so, &st);
-        shippedCalls += calls;
-        if (calls > 0) ++casesThatDidWork;
-        slotsOurs |= so; slotsTheirs |= st;
-    }
-    printf("[CtxBind] BindResources: cases=%d mismatches=%d\n",
-                kNCases, mismatches);
-    // EFFECTIVENESS, counted INSIDE the function: how many backend calls the
-    // SHIPPED body made, and how many cases made any at all. "0 mismatches"
-    // over 0 calls has measured nothing.
-    printf("[CtxBind] effectiveness: shipped-body backend calls=%d across "
-                "%d/%d cases that did work\n",
-                shippedCalls, casesThatDidWork, kNCases);
-    printf("[CtxBind] vtable slot INDEXES observed: ours=0x%016llx "
-                "theirs=0x%016llx %s\n",
-                (unsigned long long)slotsOurs, (unsigned long long)slotsTheirs,
-                slotsOurs == slotsTheirs ? "MATCH" : "*** DIFFER ***");
-
-    // --- BindTextures driven directly, so its arms are not hidden inside 0x2 --
-    {
-        static const Case kTex[] = {
-            { "tex mask ffff", 0u, 0xffffu, 0u, 0, 0, false, false, false },
-            { "tex mask a5a5", 0u, 0xa5a5u, 0u, 0, 0, false, false, false },
-            { "tex mask 0",    0u, 0u,      0u, 0, 0, false, false, false },
-            { "tex null objs", 0u, 0xffffu, 0u, 0, 0, true,  false, false },
-        };
-        int bad = 0, calls = 0, worked = 0;
-        for (const Case& c : kTex) {
-            int n = 0;
-            bad += RunCase(c, &RtVideo_Context_BindTextures, theirsTex,
-                           0, false, &n, nullptr, nullptr);
-            calls += n;
-            if (n > 0) ++worked;
-        }
-        printf("[CtxBind] BindTextures: cases=4 mismatches=%d "
-                    "(shipped-body calls=%d across %d/4 cases that did work)\n",
-                    bad, calls, worked);
-        mismatches += bad;
-    }
-
-    // --- negative controls ---------------------------------------------------
-    // Each is a real defect on a real branch INSIDE the port, and each is aimed
-    // at a DIFFERENT half of the oracle: 1 is invisible to the byte comparison,
-    // 2 is invisible to the call log, 3 is invisible to both unless the
-    // arguments are compared.
-    struct NC { int id; const char* what; };
-    static const NC kNC[] = {
-        { 1, "bind the vertex LAYOUT before the streams (order only)" },
-        { 2, "clear only the dword at +0x20, not the qword"           },
-        { 3, "upload 0x20 bytes of global constants instead of 0xd0"  },
-    };
-    const Case& ncAll = kCases[kNCases - 2];   // "ALL bits, objects present"
-    for (const NC& n : kNC) {
-        const int bad = RunCase(ncAll, &RtVideo_Context_BindResources, theirsRes,
-                                n.id, true, nullptr, nullptr, nullptr);
-        printf("[CtxBind] negative-control %d (%s): %s\n",
-                    n.id, n.what, bad ? "CAUGHT" : "*** UNCAUGHT ***");
-        if (!bad) ++mismatches;
-    }
-
-    printf("[CtxBind] TOTAL mismatches=%d\n", mismatches);
-}
 
 // ============================================================================
 // Registration — BOTH DOORS for both symbols.

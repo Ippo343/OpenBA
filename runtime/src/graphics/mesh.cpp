@@ -73,9 +73,9 @@
 //    CALL, not through the export table: Geometry's ctor/copy-ctor/dtor and
 //    SetBounds, AnimationState's ResetAnimationState / PlayAnimation, and
 //    Quaternion::operator* / Quaternion::Rotate. These are resolved ONCE with
-//    RT_ORIGINAL_ONCE and then called through the cached pointer.
+//    the raw DLL door and then called through the cached pointer.
 //
-//    Why RT_ORIGINAL_ONCE (the DLL) and not ResolveExport (whatever is
+//    Why the raw DLL door (the DLL) and not ResolveExport (whatever is
 //    registered)? Because retail's `MeshInstance::UpdateHierarchy` contains a
 //    direct `CALL 0x18001e280`, so calling the DLL's body IS the byte-faithful
 //    thing, and it removes a registration-ORDER dependency between lanes that
@@ -83,12 +83,12 @@
 //    a divergence reported here is this lane's, not a neighbour's.
 //
 //    *** NO GetProcAddress SITS ON A HOT PATH IN THIS FILE. *** rt_port.h is
-//    explicit that RtOriginal IS GetProcAddress — an export-table binary search
+//    explicit that the raw DLL door IS GetProcAddress — an export-table binary search
 //    under the loader lock — and that two of them inside System::Time's body
 //    cost 5.6 percentage points of sim time while hiding as ntdll self time
 //    (reference_rtoriginal_is_getprocaddress.md, WAVE3_LANE_P.md). Every
-//    resolution in this file is either inside an `if (rt_diff_on__)` guard (the
-//    oracle, which no shipping run enters) or wrapped in RT_ORIGINAL_ONCE /
+//    resolution in this file is either inside an `if (the diff-oracle guard)` guard (the
+//    oracle, which no shipping run enters) or wrapped in the raw DLL door /
 //    a function-local static, which resolves once per call site for the life of
 //    the process. `MeshInstance::UpdateHierarchy` and `IsAnimating` in
 //    particular execute nothing per call that retail did not.
@@ -218,17 +218,22 @@ typedef void  (*AnimPlayFn)(void* animState, ExternalPtr group, int index,
 typedef void* (*QuatMulFn)(const void* self, void* ret, const void* other);
 typedef void* (*QuatRotateFn)(const void* self, void* ret, const void* vec);
 
-// RT_EXPORT_ONCE on the four below, not RT_ORIGINAL_ONCE (Wave 9 lane R,
-// 2026-09-07). All four names are PORTED, and the raw door skips the port
-// registry by design -- so MeshInstance::UpdateHierarchy was running the DLL's
-// Quaternion::operator* on every node of every model, while Wave 1's port of it
-// sat registered, bit-exact over millions of diffed calls, and unreached.
-// Raw belongs in an oracle; a dependency belongs on the seam.
+// RT_EXPORT_ONCE on the four below (Wave 9 lane R, 2026-09-07). All four names
+// are PORTED, and the raw door skipped the port registry by design -- so
+// MeshInstance::UpdateHierarchy was running the DLL's Quaternion::operator* on
+// every node of every model while Wave 1's port of it sat registered and
+// unreached. A dependency belongs on the seam.
 GeometryCtorFn RtGeometryCtor() {
     return RT_EXPORT_ONCE(GeometryCtorFn, "??0Geometry@Graphics@@QEAA@XZ");
 }
 GeometryCopyCtorFn RtGeometryCopyCtor() {
-    return RT_ORIGINAL_ONCE(GeometryCopyCtorFn, "??0Geometry@Graphics@@QEAA@AEBV01@@Z");
+    // A3: was the raw DLL door (the raw door) while every sibling here was
+    // already on the registry seam. It is a DEPENDENCY call, not an oracle --
+    // MeshInstance/EdgeMeshInstance copy-construct their Geometry base through
+    // it -- and the body is ported (closure_batch2b.cpp registers this exact
+    // name at 0x180015b60), so the raw door was both a port bypass and a call
+    // through null the moment Runtime-x64.dll went away.
+    return RT_EXPORT_ONCE(GeometryCopyCtorFn, "??0Geometry@Graphics@@QEAA@AEBV01@@Z");
 }
 GeometryDtorFn RtGeometryDtor() {
     return RT_EXPORT_ONCE(GeometryDtorFn, "??1Geometry@Graphics@@UEAA@XZ");
@@ -239,7 +244,7 @@ GeometryDtorFn RtGeometryDtor() {
 // WORK of EdgeMeshInstance::SetMesh (mesh.cpp:1678), not an oracle readback. On
 // the raw door it was a live-path port BYPASS: our own registered, diffed body
 // sat unreached while every EdgeMeshInstance built its bounds through the DLL,
-// and at cutover ResolveExportRaw is GetProcAddress on a module that is gone.
+// and at cutover the raw DLL door is GetProcAddress on a module that is gone.
 //
 // tools/port_bypass_audit.py --by-name could NOT see this one and still cannot.
 // It reported OK-RESOLVE-ONLY: the accessor stores the pointer and RETURNS it,
@@ -255,7 +260,7 @@ GeometrySetBoundsFn RtGeometrySetBounds() {
     return RT_EXPORT_ONCE(GeometrySetBoundsFn,
                           "?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z");
 }
-// RT_EXPORT_ONCE on both, not RT_ORIGINAL_ONCE (closure batch 3b, 2026-09-12),
+// RT_EXPORT_ONCE on both, not the raw DLL door (closure batch 3b, 2026-09-12),
 // for exactly the reason the four-door note above gives — and this pair is the
 // same defect one more time, found the same way.
 //
@@ -314,7 +319,7 @@ BufferPlatformCtorFn RtIndexBufferPlatformCtor() {
 // ONLY writer of slot 0, and every virtual the DLL then dispatches is a DLL
 // body this lane did not port.
 // PORT-AWARE, and it must be. This helper feeds the vtable a ported ctor
-// stamps into slot 0. ResolveExportRaw is GetProcAddress: at cutover it returns
+// stamps into slot 0. the raw DLL door is GetProcAddress: at cutover it returns
 // NULL for a symbol the Wave 9 mint carries correctly just as much as for one
 // it has never heard of, so a raw door here writes a NULL vtable into every
 // object of these classes and the first virtual call is an EXEC-of-0.
@@ -382,18 +387,11 @@ template <typename T> T  Rd(const void* p, size_t off) {
 // directly.
 // ============================================================================
 static const void* RtGraphics_GraphicsMesh_GetMaterialList(const void* self, int index) {
-    RT_DIFF_BEGIN("Graphics::GraphicsMesh::GetMaterialList");
 
     const GraphicsMeshView* mesh = reinterpret_cast<const GraphicsMeshView*>(self);
     const void* ours = reinterpret_cast<const uint8_t*>(mesh->_materialLists)
                      + static_cast<int64_t>(index) * 0x10;
 
-    if (rt_diff_on__) {
-        typedef const void* (*Fn)(const void*, int);
-        const void* theirs = RtOriginal<Fn>(
-            "?GetMaterialList@GraphicsMesh@Graphics@@QEBAAEBV?$Array@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Collection@@H@Z")(self, index);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -420,7 +418,6 @@ static const void* RtGraphics_GraphicsMesh_GetMaterialList(const void* self, int
 // ORACLE: FULL. Const, no side effects.
 // ============================================================================
 static int RtGraphics_GraphicsMesh_GetNodeIndexFromName(const void* self, const char* name) {
-    RT_DIFF_BEGIN("Graphics::GraphicsMesh::GetNodeIndexFromName");
 
     const GraphicsMeshView* mesh = reinterpret_cast<const GraphicsMeshView*>(self);
     const int count = mesh->_nodes._size;
@@ -447,11 +444,6 @@ static int RtGraphics_GraphicsMesh_GetNodeIndexFromName(const void* self, const 
         if (static_cast<int>(nodeName[k]) - static_cast<int>(name[k]) == 0) { ours = i; break; }
     }
 
-    if (rt_diff_on__) {
-        typedef int (*Fn)(const void*, const char*);
-        int theirs = RtOriginal<Fn>("?GetNodeIndexFromName@GraphicsMesh@Graphics@@QEBAHPEBD@Z")(self, name);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -476,7 +468,6 @@ static int RtGraphics_GraphicsMesh_GetNodeIndexFromName(const void* self, const 
 // ORACLE: FULL. Const, no side effects.
 // ============================================================================
 static bool RtGraphics_MeshInstance_IsAnimating(const void* self) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::IsAnimating");
 
     const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(self);
     bool ours;
@@ -495,11 +486,6 @@ static bool RtGraphics_MeshInstance_IsAnimating(const void* self) {
             ours = layerTime < Rd<int64_t>(anim, 0x58);
     }
 
-    if (rt_diff_on__) {
-        typedef bool (*Fn)(const void*);
-        bool theirs = RtOriginal<Fn>("?IsAnimating@MeshInstance@Graphics@@QEBA_NXZ")(self);
-        RT_DIFF_SCALAR(ours, theirs);
-    }
     return ours;
 }
 
@@ -606,11 +592,10 @@ const uint8_t* RtInstancedPoolSlot(const MeshInstance* mi) {
 //
 // ORACLE: FULL, through a scratch buffer. Ours writes the caller's real slot,
 // theirs writes a private 0x1c-byte buffer, and the two are compared byte for
-// byte — rt_diff.h's "functions that write through an out-parameter" case.
+// byte — the diff-oracle header's "functions that write through an out-parameter" case.
 // Never let the original write into live state.
 // ============================================================================
 static void* RtGraphics_MeshInstance_GetNodeToWorld(const void* self, void* ret, int node) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::GetNodeToWorld");
 
     const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(self);
     uint8_t* out = B(ret);
@@ -650,14 +635,6 @@ static void* RtGraphics_MeshInstance_GetNodeToWorld(const void* self, void* ret,
         std::memcpy(out, q, 16);
     }
 
-    if (rt_diff_on__) {
-        uint8_t scratch[0x1c];
-        std::memset(scratch, 0xcd, sizeof(scratch));
-        typedef void* (*Fn)(const void*, void*, int);
-        RtOriginal<Fn>("?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@H@Z")(
-            self, scratch, node);
-        RT_DIFF_BYTES(out, scratch, sizeof(scratch));
-    }
     return ret;
 }
 
@@ -683,7 +660,6 @@ static void* RtGraphics_MeshInstance_GetNodeToWorld(const void* self, void* ret,
 // ORACLE: FULL, through a scratch buffer, same shape as GetNodeToWorld.
 // ============================================================================
 static void RtGraphics_MeshInstance_RootAnimationOffset(const void* self, void* ret) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::RootAnimationOffset");
 
     const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(self);
     uint8_t* out = B(ret);
@@ -694,14 +670,6 @@ static void RtGraphics_MeshInstance_RootAnimationOffset(const void* self, void* 
         std::memcpy(out, RtInstancedPoolSlot(mi) + 0x18, 12);
     }
 
-    if (rt_diff_on__) {
-        uint8_t scratch[12];
-        std::memset(scratch, 0xcd, sizeof(scratch));
-        typedef void (*Fn)(const void*, void*);
-        RtOriginal<Fn>("?RootAnimationOffset@MeshInstance@Graphics@@QEBA?AVVector3@Math@@XZ")(
-            self, scratch);
-        RT_DIFF_BYTES(out, scratch, sizeof(scratch));
-    }
 }
 
 // ============================================================================
@@ -722,14 +690,14 @@ static void RtGraphics_MeshInstance_RootAnimationOffset(const void* self, void* 
 // standalone/perf_experimental.cpp's default-on ANIM_BATCH path reads
 // MeshInstance state every frame. Three things this port does about that:
 //   * It resolves NOTHING per call. `RtQuatMul()` is a function-local static
-//     resolved once for the life of the process (RT_ORIGINAL_ONCE); calling
-//     RtOriginal directly here would be the recorded 5.6-point defect.
+//     resolved once for the life of the process (the raw DLL door); calling
+//     the raw DLL door directly here would be the recorded 5.6-point defect.
 //   * It does not touch `_rootOnlyUpdates`, which retail's UpdateHierarchy does
 //     not read either. The flag is read by MeshInstance::Update, which stays in
 //     the DLL, so perf_experimental's save/clear/restore of it keeps working
 //     unchanged.
 //   * The whole oracle, including its allocation, sits inside `if
-//     (rt_diff_on__)`. A shipping run executes the loop and nothing else.
+//     (the diff-oracle guard)`. A shipping run executes the loop and nothing else.
 //
 // THE FLOAT MATH IS TRANSCRIBED, NOT REDERIVED. The position half is retail's
 // own INLINED quaternion rotate — including the two `* 0.0f` terms, which are
@@ -750,7 +718,7 @@ static void RtGraphics_MeshInstance_RootAnimationOffset(const void* self, void* 
 //
 // The trade WAS made, and the comment outlived it. `RtQuatMul()` at line 261 now
 // resolves with RT_EXPORT_ONCE, which DOES consult the port registry (unlike
-// RT_ORIGINAL_ONCE / ResolveExportRaw, which is GetProcAddress and is always the
+// the raw DLL door / the raw DLL door, which is GetProcAddress and is always the
 // DLL), and it is called at lines 629 and 816. So the Wave 1 port that
 // reference_uncalled_port_is_not_verified.md was written about IS exercised now,
 // and it is NO LONGER on the census orphan list.
@@ -771,7 +739,6 @@ static void RtGraphics_MeshInstance_RootAnimationOffset(const void* self, void* 
 // used for Picking::Scene::SetTransform.
 // ============================================================================
 static void RtGraphics_MeshInstance_UpdateHierarchy(void* self) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::UpdateHierarchy");
 
     MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
     const int count = mi->_nodes._size;
@@ -854,19 +821,6 @@ static void RtGraphics_MeshInstance_UpdateHierarchy(void* self) {
         }
     }
 
-    if (rt_diff_on__) {
-        const size_t n = static_cast<size_t>(count) * 0x38;
-        uint8_t* ours = n ? static_cast<uint8_t*>(std::malloc(n)) : nullptr;
-        if (ours) {
-            std::memcpy(ours, mi->_nodes._data, n);
-            typedef void (*Fn)(void*);
-            RtOriginal<Fn>("?UpdateHierarchy@MeshInstance@Graphics@@QEAAXXZ")(self);
-            RT_DIFF_BYTES(ours, mi->_nodes._data, n);
-            std::free(ours);
-        } else {
-            RT_DIFF_SHADOW(true, "nodes=0", "nodes=0");
-        }
-    }
 }
 
 // ============================================================================
@@ -882,19 +836,10 @@ static void RtGraphics_MeshInstance_UpdateHierarchy(void* self) {
 // writes the same qword to the same slot and the comparison is real.
 // ============================================================================
 static void RtGraphics_MeshInstance_SetMaterialInstance(void* self, int index, ExternalPtr value) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::SetMaterialInstance");
 
     MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
     mi->_materials._data[index] = value;
 
-    if (rt_diff_on__) {
-        void* ours = mi->_materials._data[index].p;
-        typedef void (*Fn)(void*, int, ExternalPtr);
-        RtOriginal<Fn>(
-            "?SetMaterialInstance@MeshInstance@Graphics@@QEAAXHV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Z")(
-            self, index, value);
-        RT_DIFF_SCALAR(ours, mi->_materials._data[index].p);
-    }
 }
 
 // ============================================================================
@@ -930,7 +875,6 @@ static void RtGraphics_MeshInstance_SetMaterialInstance(void* self, int index, E
 // heap buffers are snapshotted, theirs runs, and the two are compared.
 // ============================================================================
 static void RtGraphics_MeshInstance_SetMesh(void* self, ExternalPtr mesh) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::SetMesh");
 
     MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
 
@@ -976,45 +920,6 @@ static void RtGraphics_MeshInstance_SetMesh(void* self, ExternalPtr mesh) {
         mi->_base._dirtyFlags |= 2u;
     }
 
-    if (rt_diff_on__) {
-        const size_t nodeBytes = static_cast<size_t>(mi->_nodes._size) * 0x38;
-        const size_t matBytes  = static_cast<size_t>(mi->_materials._size) * 8;
-        uint8_t  obj[0x120];
-        uint8_t* nodeCopy = nodeBytes ? static_cast<uint8_t*>(std::malloc(nodeBytes)) : nullptr;
-        uint8_t* matCopy  = matBytes  ? static_cast<uint8_t*>(std::malloc(matBytes))  : nullptr;
-        std::memcpy(obj, self, sizeof(obj));
-        if (nodeCopy) std::memcpy(nodeCopy, mi->_nodes._data, nodeBytes);
-        if (matCopy)  std::memcpy(matCopy,  mi->_materials._data, matBytes);
-
-        typedef void (*Fn)(void*, ExternalPtr);
-        RtOriginal<Fn>(
-            "?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z")(
-            self, mesh);
-
-        // The Array headers themselves may legitimately differ in _data if the
-        // replay reallocated, so compare the object EXCEPT the two buffer
-        // pointers, then compare the buffer CONTENTS separately.
-        bool eq = std::memcmp(obj, self, 0xc8) == 0
-               && std::memcmp(obj + 0xd0, B(self) + 0xd0, 0x20) == 0
-               && std::memcmp(obj + 0xf8, B(self) + 0xf8, 0x120 - 0xf8) == 0
-               && (!nodeCopy || std::memcmp(nodeCopy, mi->_nodes._data, nodeBytes) == 0)
-               && (!matCopy  || std::memcmp(matCopy,  mi->_materials._data, matBytes) == 0);
-        char a[96], b[96];
-        // The verdict is a FIVE-term conjunction and the message names all five,
-        // because a message that describes fewer terms than the predicate is how
-        // Wave 5 spent a day on RemoveMesh
-        // (reference_shadow_predicate_must_name_its_failing_term.md).
-        std::snprintf(a, sizeof(a), "head=%d mid=%d tail=%d nodes=%d mats=%d",
-                      std::memcmp(obj, self, 0xc8) == 0,
-                      std::memcmp(obj + 0xd0, B(self) + 0xd0, 0x20) == 0,
-                      std::memcmp(obj + 0xf8, B(self) + 0xf8, 0x120 - 0xf8) == 0,
-                      !nodeCopy || std::memcmp(nodeCopy, mi->_nodes._data, nodeBytes) == 0,
-                      !matCopy  || std::memcmp(matCopy,  mi->_materials._data, matBytes) == 0);
-        std::snprintf(b, sizeof(b), "head=1 mid=1 tail=1 nodes=1 mats=1");
-        RT_DIFF_SHADOW(eq, a, b);
-        std::free(nodeCopy);
-        std::free(matCopy);
-    }
 }
 
 // ============================================================================
@@ -1050,56 +955,11 @@ static void RtGraphics_MeshInstance_SetMesh(void* self, ExternalPtr mesh) {
 static void RtGraphics_MeshInstance_PlayAnimation(void* self, ExternalPtr group, int index,
                                                   const void* startTime, const void* blendTime,
                                                   float weight) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::PlayAnimation");
 
     MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
     RtAnimPlay()(&mi->_animation, group, index, B(mi->_mesh.p) + 0x60,
                  startTime, blendTime, weight, true);
 
-    if (rt_diff_on__) {
-        // *** THE NEW LAYER IS layers[0], NOT layers[count-1]. ***
-        // AnimationState::PlayAnimation (0x1800fdf50) grows the array by one and
-        // then walks it DOWNWARD copying `layer[i] = layer[i-1]`, i.e. it
-        // INSERTS AT THE FRONT. Reading the last layer read the layer being
-        // pushed out, so this predicate reported the PREVIOUS animation's index
-        // — 187 of 453 calls, with `ours anim=0 theirs anim=1` on a matching
-        // group pointer. The PORT was correct; the ORACLE read the wrong end
-        // (WAVE6_LANE_E.md §6.10).
-        //
-        // Corroboration that front-insertion is the convention and not a
-        // one-off: `MeshInstance::IsAnimating` (0x1800ff7d0) decides whether the
-        // instance is still animating from `layers[0]` and nothing else.
-        //
-        // Two retail paths this predicate now also covers, which the old one did
-        // not model at all:
-        //  * index < 0 CLEARS every layer (`FUN_18005c8a0(this+8, 0)` on the
-        //    early-return branch) — so the correct expectation is an EMPTY
-        //    array, and reading layers[0] there would have been out of bounds.
-        //  * re-playing the same (group, index) on a LOOPING animation returns
-        //    early after writing 1.0f to layers[0]+0x10, adding no layer.
-        //    layers[0] still carries the right group and index, so the same
-        //    check holds.
-        char a[112], b[112];
-        const int32_t n = mi->_animation._layers._size;
-        bool eq;
-        if (index < 0) {
-            eq = (n == 0);
-            std::snprintf(a, sizeof(a), "index<0 layers=%d", n);
-            std::snprintf(b, sizeof(b), "index<0 layers=0");
-        } else if (n > 0) {
-            const MeshAnimationLayer* top =
-                reinterpret_cast<const MeshAnimationLayer*>(mi->_animation._layers._data);
-            eq = top->_group.p == group.p && top->_animIndex == index;
-            std::snprintf(a, sizeof(a), "layers=%d group=%p anim=%d",
-                          n, top->_group.p, top->_animIndex);
-            std::snprintf(b, sizeof(b), "layers>0 group=%p anim=%d", group.p, index);
-        } else {
-            eq = false;
-            std::snprintf(a, sizeof(a), "layers=0 (no layer written)");
-            std::snprintf(b, sizeof(b), "layers>0 group=%p anim=%d", group.p, index);
-        }
-        RT_DIFF_SHADOW(eq, a, b);
-    }
 }
 
 // ============================================================================
@@ -1127,7 +987,6 @@ static void RtGraphics_MeshInstance_PlayAnimation(void* self, ExternalPtr group,
 // hold.
 // ============================================================================
 static void* RtGraphics_MeshInstance_Ctor(void* self) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::MeshInstance()");
 
     MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
     RtGeometryCtor()(self);
@@ -1153,33 +1012,6 @@ static void* RtGraphics_MeshInstance_Ctor(void* self) {
     mi->_color[3] = 1.0f;
     mi->_sortBias = 0;
 
-    if (rt_diff_on__) {
-        uint8_t scratch[0x120];
-        std::memset(scratch, 0xcd, sizeof(scratch));
-        typedef void* (*Fn)(void*);
-        RtOriginal<Fn>("??0MeshInstance@Graphics@@QEAA@XZ")(scratch);
-        // THREE uninitialised gaps are excluded, not two. Geometry leaves
-        // +0x14..+0x17 and +0xbc..+0xbf (lane D's header records those), and
-        // MeshInstance leaves +0xd9..+0xdf — the seven bytes of padding between
-        // the AnimationState bool and its layer Array. The disassembly is
-        // explicit: `LEA RAX,[RBX+0xd8]`, then `MOV byte ptr [RAX],CL`, then
-        // `MOV qword ptr [RAX+0x8],RCX` — nothing writes RAX+1..RAX+7. Plus the
-        // trailing pad at +0x11e..+0x11f.
-        //
-        // Comparing that gap is what made this site report a divergence on
-        // 30130 of 30130 calls: `scratch` is memset to 0xcd and the live object
-        // holds whatever the allocator left, so the two can never agree there.
-        // The PORT was correct; the ORACLE was reading uninitialised memory
-        // (WAVE6_LANE_E.md §6.9).
-        bool head = std::memcmp(B(self) + 0x00, scratch + 0x00, 0x14) == 0;
-        bool body = std::memcmp(B(self) + 0x18, scratch + 0x18, 0xbc - 0x18) == 0;
-        bool mid  = std::memcmp(B(self) + 0xc0, scratch + 0xc0, 0xd9 - 0xc0) == 0;
-        bool tail = std::memcmp(B(self) + 0xe0, scratch + 0xe0, 0x11e - 0xe0) == 0;
-        char a[96], b[96];
-        std::snprintf(a, sizeof(a), "head=%d body=%d mid=%d tail=%d", head, body, mid, tail);
-        std::snprintf(b, sizeof(b), "head=1 body=1 mid=1 tail=1");
-        RT_DIFF_SHADOW(head && body && mid && tail, a, b);
-    }
     return self;
 }
 
@@ -1201,13 +1033,12 @@ static void* RtGraphics_MeshInstance_Ctor(void* self) {
 // runs `Geometry::~Geometry` — and Geometry's copy ctor copied the ATTACH ARRAY,
 // so the scratch object's dtor would walk live sibling geometries and clear
 // their parent link and their sceneId. That is corruption of live state to run
-// an oracle, which rt_diff.h forbids in as many words ("Never let the original
+// an oracle, which the diff-oracle header forbids in as many words ("Never let the original
 // write into live state"). The check therefore verifies that every field this
 // port itself writes equals the source's, plus that the three copied arrays
 // have the source's element counts.
 // ============================================================================
 static void* RtGraphics_MeshInstance_CopyCtor(void* self, const void* other) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::MeshInstance(const&)");
 
     MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
     const MeshInstance* src = reinterpret_cast<const MeshInstance*>(other);
@@ -1241,20 +1072,6 @@ static void* RtGraphics_MeshInstance_CopyCtor(void* self, const void* other) {
     mi->_color[3] = src->_color[3];
     mi->_sortBias = src->_sortBias;
 
-    if (rt_diff_on__) {
-        bool mesh   = mi->_mesh.p == src->_mesh.p;
-        bool scal   = std::memcmp(B(self) + 0x100, B(other) + 0x100, 0x11e - 0x100) == 0;
-        bool inst   = mi->_animation._instanced == src->_animation._instanced;
-        bool counts = mi->_materials._size == src->_materials._size
-                   && mi->_animation._layers._size == src->_animation._layers._size
-                   && mi->_nodes._size == src->_nodes._size;
-        bool vt     = mi->_base._vtable == RtMeshInstanceVtable();
-        char a[128], b[128];
-        std::snprintf(a, sizeof(a), "mesh=%d scalars=%d instanced=%d counts=%d vtable=%d",
-                      mesh, scal, inst, counts, vt);
-        std::snprintf(b, sizeof(b), "mesh=1 scalars=1 instanced=1 counts=1 vtable=1");
-        RT_DIFF_SHADOW(mesh && scal && inst && counts && vt, a, b);
-    }
     return self;
 }
 
@@ -1289,7 +1106,6 @@ static void* RtGraphics_MeshInstance_CopyCtor(void* self, const void* other) {
 // wrong-offset port would get wrong.
 // ============================================================================
 static void RtGraphics_MeshInstance_Dtor(void* self) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::~MeshInstance");
 
     MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
     RtNodeArrayFree()(&mi->_nodes);
@@ -1297,17 +1113,6 @@ static void RtGraphics_MeshInstance_Dtor(void* self) {
     RtMatArrayFree()(&mi->_materials);
     RtGeometryDtor()(self);
 
-    if (rt_diff_on__) {
-        bool nodes = mi->_nodes._data == nullptr && mi->_nodes._size == 0;
-        bool layer = mi->_animation._layers._data == nullptr && mi->_animation._layers._size == 0;
-        bool mats  = mi->_materials._data == nullptr && mi->_materials._size == 0;
-        bool attach = mi->_base._attached._data == nullptr && mi->_base._attached._size == 0;
-        char a[112], b[112];
-        std::snprintf(a, sizeof(a), "nodes=%d layers=%d materials=%d attached=%d",
-                      nodes, layer, mats, attach);
-        std::snprintf(b, sizeof(b), "nodes=1 layers=1 materials=1 attached=1");
-        RT_DIFF_SHADOW(nodes && layer && mats && attach, a, b);
-    }
 }
 
 // ============================================================================
@@ -1324,7 +1129,6 @@ static void RtGraphics_MeshInstance_Dtor(void* self) {
 // ORACLE: FULL, through a scratch buffer. No side effects.
 // ============================================================================
 static void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec3) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::TriangleVertex::TriangleVertex");
 
     TriangleVertex* tv = reinterpret_cast<TriangleVertex*>(self);
     tv->x = static_cast<int16_t>(static_cast<int>(Rd<float>(vec3, 0) * kEdgeMeshVertexScale));
@@ -1332,13 +1136,6 @@ static void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec
     tv->z = static_cast<int16_t>(static_cast<int>(Rd<float>(vec3, 8) * kEdgeMeshVertexScale));
     tv->w = 0;
 
-    if (rt_diff_on__) {
-        TriangleVertex scratch;
-        std::memset(&scratch, 0xcd, sizeof(scratch));
-        typedef void* (*Fn)(void*, const void*);
-        RtOriginal<Fn>("??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z")(&scratch, vec3);
-        RT_DIFF_BYTES(tv, &scratch, sizeof(scratch));
-    }
     return self;
 }
 
@@ -1357,7 +1154,6 @@ static void* RtGraphics_EdgeMesh_TriangleVertex_Ctor(void* self, const void* vec
 // ORACLE: FULL, through a scratch buffer. No side effects.
 // ============================================================================
 static void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, const void* b, int flags) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::EdgeVertex::EdgeVertex");
 
     EdgeVertex* ev = reinterpret_cast<EdgeVertex*>(self);
     const TriangleVertex* ta = reinterpret_cast<const TriangleVertex*>(a);
@@ -1370,14 +1166,6 @@ static void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, cons
     ev->b.z = tb->z;
     ev->b.w = 0;
 
-    if (rt_diff_on__) {
-        EdgeVertex scratch;
-        std::memset(&scratch, 0xcd, sizeof(scratch));
-        typedef void* (*Fn)(void*, const void*, const void*, int);
-        RtOriginal<Fn>("??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z")(
-            &scratch, a, b, flags);
-        RT_DIFF_BYTES(ev, &scratch, sizeof(scratch));
-    }
     return self;
 }
 
@@ -1399,7 +1187,6 @@ static void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, cons
 // ============================================================================
 static void RtGraphics_EdgeMesh_SetMaterials(void* self, ExternalPtr m0, ExternalPtr m1,
                                              ExternalPtr m2, ExternalPtr m3) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::SetMaterials");
 
     EdgeMesh* em = reinterpret_cast<EdgeMesh*>(self);
     em->_material0 = m0;    // +0x28  <- arg 1
@@ -1407,15 +1194,6 @@ static void RtGraphics_EdgeMesh_SetMaterials(void* self, ExternalPtr m0, Externa
     em->_material1 = m2;    // +0x30  <- arg 3   (crossed, see above)
     em->_material3 = m3;    // +0x40  <- arg 4
 
-    if (rt_diff_on__) {
-        uint8_t ours[0x20];
-        std::memcpy(ours, B(self) + 0x28, sizeof(ours));
-        typedef void (*Fn)(void*, ExternalPtr, ExternalPtr, ExternalPtr, ExternalPtr);
-        RtOriginal<Fn>(
-            "?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@000@Z")(
-            self, m0, m1, m2, m3);
-        RT_DIFF_BYTES(ours, B(self) + 0x28, sizeof(ours));
-    }
 }
 
 // ============================================================================
@@ -1440,13 +1218,12 @@ static void RtGraphics_EdgeMesh_SetMaterials(void* self, ExternalPtr m0, Externa
 // BUFFER INTO THE DEVICE'S GLOBAL INTRUSIVE LIST (`_firstBuffer`, under the
 // device's critical section). Running the original into a scratch buffer would
 // therefore register eight phantom buffers in a live global list and create
-// eight orphan dx11 companions — real corruption of live state, which rt_diff.h
+// eight orphan dx11 companions — real corruption of live state, which the diff-oracle header
 // forbids. The check verifies the fields THIS port writes, and states plainly
 // that the eight PlatformConstruct calls are unchecked because they are the
 // DLL's own, called unchanged.
 // ============================================================================
 static void* RtGraphics_EdgeMesh_Ctor(void* self) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::EdgeMesh()");
 
     EdgeMesh* em = reinterpret_cast<EdgeMesh*>(self);
 
@@ -1486,24 +1263,6 @@ static void* RtGraphics_EdgeMesh_Ctor(void* self) {
     for (int i = 0; i < 3; ++i) std::memcpy(&bounds[i],     &kPlus,  4);
     for (int i = 0; i < 3; ++i) std::memcpy(&bounds[3 + i], &kMinus, 4);
 
-    if (rt_diff_on__) {
-        bool vt   = em->_vtable == RtEdgeMeshVtable();
-        bool ext  = em->_externalA == nullptr && em->_externalB == nullptr
-                 && em->_externalC == nullptr && em->_reserved20 == nullptr;
-        bool mats = em->_material0.p == nullptr && em->_material1.p == nullptr
-                 && em->_material2.p == nullptr && em->_material3.p == nullptr;
-        bool lists = em->_triangleLists._data == nullptr && em->_triangleLists._size == 0
-                  && em->_edgeLists._data == nullptr && em->_edgeLists._size == 0;
-        uint8_t wantBounds[24];
-        for (int i = 0; i < 3; ++i) std::memcpy(wantBounds + i * 4,        &kPlus,  4);
-        for (int i = 0; i < 3; ++i) std::memcpy(wantBounds + 12 + i * 4,   &kMinus, 4);
-        bool box = std::memcmp(bounds, wantBounds, sizeof(wantBounds)) == 0;
-        char a[128], b[128];
-        std::snprintf(a, sizeof(a), "vtable=%d external=%d materials=%d lists=%d bounds=%d",
-                      vt, ext, mats, lists, box);
-        std::snprintf(b, sizeof(b), "vtable=1 external=1 materials=1 lists=1 bounds=1");
-        RT_DIFF_SHADOW(vt && ext && mats && lists && box, a, b);
-    }
     return self;
 }
 
@@ -1553,7 +1312,6 @@ static bool RtGraphics_EdgeMesh_Set(void* self,
                                     uint16_t* ib2, int v2s, void* vb2, int v2n, int v2x,
                                     uint16_t* ib3, int v3s, void* vb3, int v3n,
                                     const void* box) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::Set");
 
     EdgeMesh* em = reinterpret_cast<EdgeMesh*>(self);
 
@@ -1592,15 +1350,6 @@ static bool RtGraphics_EdgeMesh_Set(void* self,
             && fill(buf, uploads[i].bytes, 0, uploads[i].data);
     }
 
-    if (rt_diff_on__) {
-        bool boxOk = std::memcmp(B(self) + 0x168, box, 24) == 0;
-        bool sizes = em->_triangleLists._size == triCount && em->_edgeLists._size == edgeCount;
-        char a[112], b[112];
-        std::snprintf(a, sizeof(a), "bounds=%d sizes=%d uploads=%d(unchecked)",
-                      boxOk, sizes, ours);
-        std::snprintf(b, sizeof(b), "bounds=1 sizes=1 uploads=%d(unchecked)", ours);
-        RT_DIFF_SHADOW(boxOk && sizes, a, b);
-    }
     return ours;
 }
 
@@ -1626,7 +1375,6 @@ static bool RtGraphics_EdgeMesh_Set(void* self,
 // them would report a divergence on every single call.
 // ============================================================================
 static void* RtGraphics_EdgeMeshInstance_Ctor(void* self) {
-    RT_DIFF_BEGIN("Graphics::EdgeMeshInstance::EdgeMeshInstance()");
 
     EdgeMeshInstance* emi = reinterpret_cast<EdgeMeshInstance*>(self);
     RtGeometryCtor()(self);
@@ -1634,21 +1382,6 @@ static void* RtGraphics_EdgeMeshInstance_Ctor(void* self) {
     emi->_mesh.p = nullptr;
     // NO STORE TO _followed (+0xc8). See the banner.
 
-    if (rt_diff_on__) {
-        uint8_t scratch[0xd0];
-        std::memset(scratch, 0xcd, sizeof(scratch));
-        typedef void* (*Fn)(void*);
-        RtOriginal<Fn>("??0EdgeMeshInstance@Graphics@@QEAA@XZ")(scratch);
-        // Skip Geometry's uninitialised gaps (+0x14, +0xbc) and _followed (+0xc8).
-        bool head = std::memcmp(B(self) + 0x00, scratch + 0x00, 0x14) == 0;
-        bool body = std::memcmp(B(self) + 0x18, scratch + 0x18, 0xbc - 0x18) == 0;
-        bool mesh = std::memcmp(B(self) + 0xc0, scratch + 0xc0, 8) == 0;
-        char a[112], b[112];
-        std::snprintf(a, sizeof(a), "head=%d body=%d mesh=%d followed=skipped(uninit)",
-                      head, body, mesh);
-        std::snprintf(b, sizeof(b), "head=1 body=1 mesh=1 followed=skipped(uninit)");
-        RT_DIFF_SHADOW(head && body && mesh, a, b);
-    }
     return self;
 }
 
@@ -1678,7 +1411,6 @@ static void* RtGraphics_EdgeMeshInstance_Ctor(void* self) {
 // array shared with the source and clear live siblings' parent links.
 // ============================================================================
 static void* RtGraphics_EdgeMeshInstance_CopyCtor(void* self, const void* other) {
-    RT_DIFF_BEGIN("Graphics::EdgeMeshInstance::EdgeMeshInstance(const&)");
 
     EdgeMeshInstance* emi = reinterpret_cast<EdgeMeshInstance*>(self);
     const EdgeMeshInstance* src = reinterpret_cast<const EdgeMeshInstance*>(other);
@@ -1688,15 +1420,6 @@ static void* RtGraphics_EdgeMeshInstance_CopyCtor(void* self, const void* other)
     emi->_mesh = src->_mesh;
     emi->_followed = src->_followed;
 
-    if (rt_diff_on__) {
-        bool mesh = emi->_mesh.p == src->_mesh.p;
-        bool foll = emi->_followed == src->_followed;
-        bool vt   = emi->_base._vtable == RtEdgeMeshInstanceVtable();
-        char a[112], b[112];
-        std::snprintf(a, sizeof(a), "mesh=%d followed=%d vtable=%d", mesh, foll, vt);
-        std::snprintf(b, sizeof(b), "mesh=1 followed=1 vtable=1");
-        RT_DIFF_SHADOW(mesh && foll && vt, a, b);
-    }
     return self;
 }
 
@@ -1720,7 +1443,6 @@ static void* RtGraphics_EdgeMeshInstance_CopyCtor(void* self, const void* other)
 // — so a second call changes nothing.
 // ============================================================================
 static void RtGraphics_EdgeMeshInstance_SetMesh(void* self, ExternalPtr mesh, void* followed) {
-    RT_DIFF_BEGIN("Graphics::EdgeMeshInstance::SetMesh");
 
     EdgeMeshInstance* emi = reinterpret_cast<EdgeMeshInstance*>(self);
     emi->_followed = reinterpret_cast<MeshInstance*>(followed);
@@ -1735,22 +1457,6 @@ static void RtGraphics_EdgeMeshInstance_SetMesh(void* self, ExternalPtr mesh, vo
 
     RtGeometrySetBounds()(self, B(mesh.p) + 0x168);
 
-    if (rt_diff_on__) {
-        uint8_t ours[0xd0];
-        std::memcpy(ours, self, sizeof(ours));
-        typedef void (*Fn)(void*, ExternalPtr, void*);
-        RtOriginal<Fn>(
-            "?SetMesh@EdgeMeshInstance@Graphics@@QEAAXV?$ExternalPtr@VEdgeMesh@Graphics@@@Object@@PEAVMeshInstance@2@@Z")(
-            self, mesh, followed);
-        // Skip Geometry's two uninitialised gaps (+0x14, +0xbc).
-        bool head = std::memcmp(ours + 0x00, self, 0x14) == 0;
-        bool body = std::memcmp(ours + 0x18, B(self) + 0x18, 0xbc - 0x18) == 0;
-        bool tail = std::memcmp(ours + 0xc0, B(self) + 0xc0, 0x10) == 0;
-        char a[112], b[112];
-        std::snprintf(a, sizeof(a), "head=%d body=%d tail=%d", head, body, tail);
-        std::snprintf(b, sizeof(b), "head=1 body=1 tail=1");
-        RT_DIFF_SHADOW(head && body && tail, a, b);
-    }
 }
 
 // ============================================================================
@@ -1806,7 +1512,7 @@ static void RtGraphics_EdgeMeshInstance_SetMesh(void* self, ExternalPtr mesh, vo
 // read 0 for all four on a normal run and that is not verification
 // (reference_uncalled_port_is_not_verified.md).
 //
-// KILL SWITCH: BANISHED_RT_GFXMESHVT=0 leaves all four on the DLL.
+// KILL SWITCH: RT_GFXMESHVT=0 leaves all four on the DLL.
 // ============================================================================
 
 namespace {
@@ -1962,7 +1668,6 @@ void RtLerpTransformPair(const uint8_t* pair, float t, Transform* out) {
 // reason. Attendance is recorded; no comparison is emitted.
 // ============================================================================
 extern "C" void RtGraphics_EdgeMeshInstance_Update(void* selfv, const void* time) {
-    RT_DIFF_BEGIN("Graphics::EdgeMeshInstance::Update[NO-ORACLE]");
     (void)time;   // RDX is clobbered by retail's first instruction
 
     EdgeMeshInstance* emi = reinterpret_cast<EdgeMeshInstance*>(selfv);
@@ -1972,7 +1677,6 @@ extern "C" void RtGraphics_EdgeMeshInstance_Update(void* selfv, const void* time
         std::memcpy(&xf, &followed->_base._transform, 0x1c);   // seven dwords
         RtGeometrySetTransform()(selfv, &xf);
     }
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -2009,28 +1713,14 @@ extern "C" void RtGraphics_EdgeMeshInstance_Update(void* selfv, const void* time
 // ============================================================================
 extern "C" void* RtGraphics_MeshInstance_GetSubTransform(const void* selfv, void* ret,
                                                         int node) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::GetSubTransform");
 
     if (node >= 0) {   // JNS: zero takes this arm
-        RT_DIFF_WORK(true);
         return RtGraphics_MeshInstance_GetNodeToWorld(selfv, ret, node);
     }
 
     const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(selfv);
     std::memcpy(ret, &mi->_base._transform, 0x1c);   // seven dwords
 
-    if (rt_diff_on__) {
-        uint8_t theirs[0x1c];
-        std::memset(theirs, 0xCD, sizeof(theirs));
-        typedef void* (*Fn)(const void*, void*, int);
-        Fn f = RT_ORIGINAL_ONCE(Fn,
-            "?GetSubTransform@MeshInstance@Graphics@@UEBA?AVTransform@Math@@H@Z");
-        if (f) {
-            f(selfv, theirs, node);
-            RT_DIFF_BYTES(ret, theirs, 0x1c);
-        }
-    }
-    RT_DIFF_WORK(true);
     return ret;
 }
 
@@ -2090,7 +1780,6 @@ extern "C" void* RtGraphics_MeshInstance_GetSubTransform(const void* selfv, void
 extern "C" void* RtGraphics_EdgeMeshInstance_GetInstanceTransform(const void* selfv,
                                                                  void* ret,
                                                                  int packed, float t) {
-    RT_DIFF_BEGIN("Graphics::EdgeMeshInstance::GetInstanceTransform");
 
     const EdgeMeshInstance* emi = reinterpret_cast<const EdgeMeshInstance*>(selfv);
     const int  index     = packed & 0x7fff;
@@ -2112,18 +1801,6 @@ extern "C" void* RtGraphics_EdgeMeshInstance_GetInstanceTransform(const void* se
         RtTransformAsMatrix()(&xf, ret);
     }
 
-    if (rt_diff_on__) {
-        uint8_t theirs[64];
-        std::memset(theirs, 0xCD, sizeof(theirs));
-        typedef void* (*Fn)(const void*, void*, int, float);
-        Fn f = RT_ORIGINAL_ONCE(Fn,
-            "?GetInstanceTransform@EdgeMeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z");
-        if (f) {
-            f(selfv, theirs, packed, t);
-            RT_DIFF_BYTES(ret, theirs, 64);
-        }
-    }
-    RT_DIFF_WORK(true);
     return ret;
 }
 
@@ -2207,7 +1884,6 @@ extern "C" void* RtGraphics_EdgeMeshInstance_GetInstanceTransform(const void* se
 // ============================================================================
 extern "C" void* RtGraphics_MeshInstance_GetInstanceTransform(const void* selfv, void* ret,
                                                              int packed, float t) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::GetInstanceTransform");
 
     const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(selfv);
 
@@ -2246,18 +1922,6 @@ extern "C" void* RtGraphics_MeshInstance_GetInstanceTransform(const void* selfv,
     out[8]  = m.m[8];  out[9]  = m.m[9];  out[10] = m.m[10];  out[11] = mi->_color[2];
     out[12] = m.m[12]; out[13] = m.m[13]; out[14] = m.m[14];  out[15] = mi->_color[3];
 
-    if (rt_diff_on__) {
-        uint8_t theirs[64];
-        std::memset(theirs, 0xCD, sizeof(theirs));
-        typedef void* (*Fn)(const void*, void*, int, float);
-        Fn f = RT_ORIGINAL_ONCE(Fn,
-            "?GetInstanceTransform@MeshInstance@Graphics@@UEBA?AVMatrix@Math@@HM@Z");
-        if (f) {
-            f(selfv, theirs, packed, t);
-            RT_DIFF_BYTES(ret, theirs, 64);
-        }
-    }
-    RT_DIFF_WORK(true);
     return ret;
 }
 
@@ -2330,7 +1994,6 @@ extern "C" void* RtGraphics_MeshInstance_GetInstanceTransform(const void* selfv,
 // ============================================================================
 extern "C" void* RtGraphics_MeshInstance_GetNodeToWorldInterp(const void* self, void* ret,
                                                              int node, float t) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::GetNodeToWorld(int,float)");
 
     const MeshInstance* mi = reinterpret_cast<const MeshInstance*>(self);
     uint8_t* out = reinterpret_cast<uint8_t*>(ret);
@@ -2362,18 +2025,6 @@ extern "C" void* RtGraphics_MeshInstance_GetNodeToWorldInterp(const void* self, 
         std::memcpy(out, q, 16);
     }
 
-    if (rt_diff_on__) {
-        uint8_t scratch[0x1c];
-        std::memset(scratch, 0xcd, sizeof(scratch));
-        typedef void* (*Fn)(const void*, void*, int, float);
-        Fn f = RT_ORIGINAL_ONCE(Fn,
-            "?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z");
-        if (f) {
-            f(self, scratch, node, t);
-            RT_DIFF_BYTES(out, scratch, sizeof(scratch));
-        }
-    }
-    RT_DIFF_WORK(true);
     return ret;
 }
 
@@ -2571,7 +2222,6 @@ uint64_t g_addDrawItemsEdgeQ  = 0;
 extern "C" void RtGraphics_MeshInstance_AddDrawItems(const MeshInstance* self,
                                                      const void* scene,
                                                      void* renderer) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::AddDrawItems");
     (void)scene;                      // RDX is overwritten at 0x180100f65
     ++g_addDrawItemsMesh;
 
@@ -2669,7 +2319,6 @@ extern "C" void RtGraphics_MeshInstance_AddDrawItems(const MeshInstance* self,
             0.0f, arg7, arg8, meshNow, arg10);                 // 18010119e
         ++g_addDrawItemsMeshQ;
     }
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -2703,7 +2352,6 @@ extern "C" void RtGraphics_MeshInstance_AddDrawItems(const MeshInstance* self,
 extern "C" void RtGraphics_EdgeMeshInstance_AddDrawItems(const EdgeMeshInstance* self,
                                                          const void* scene,
                                                          void* renderer) {
-    RT_DIFF_BEGIN("Graphics::EdgeMeshInstance::AddDrawItems");
     (void)scene;
     ++g_addDrawItemsEdge;
 
@@ -2756,7 +2404,6 @@ extern "C" void RtGraphics_EdgeMeshInstance_AddDrawItems(const EdgeMeshInstance*
             ++g_addDrawItemsEdgeQ;
         }
     }
-    RT_DIFF_WORK(true);
 }
 
 // WAVE 27 LANE GFXMESH registration — by NAME and by ADDRESS, both.
@@ -2880,7 +2527,7 @@ int RtGraphicsMeshVtableRegister() {
 //
 // > **[ADDRESSEE — wiring these four counters to a printer]** the Wave 29
 // > verification lane, which the Wave 28 kickoff §4 says is the wave that pays
-// > the "registered and never executed" debt. `RT_DIFF_WORK` already records
+// > the "registered and never executed" debt. `the diff oracle` already records
 // > liveness for both bodies; these four separate CALLS ENTERED from ITEMS
 // > QUEUED, which is the distinction that tells a silent-drop apart from a
 // > no-op (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).

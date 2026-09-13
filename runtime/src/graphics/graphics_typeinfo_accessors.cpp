@@ -92,7 +92,7 @@
 // COMPLETE with this file; `??_7MaterialInstance@` reaches 5/9 and
 // `??_7Particle@` reaches 5/6, both still incomplete.
 //
-// KILL SWITCH: BANISHED_RT_GFXTI=0 leaves all eight on the DLL.
+// KILL SWITCH: RT_GFXTI=0 leaves all eight on the DLL.
 // ============================================================================
 
 #include <cstddef>
@@ -160,44 +160,24 @@ const char* ReadTypeName(const uint8_t* node) {
 // ---- ??_7AnimationEvent@Graphics@@6B@  slots 2 and 1 -----------------------
 
 extern "C" uint32_t RtGraphics_AnimationEvent_Type(const void* self) {
-    RT_DIFF_BEGIN("Graphics::AnimationEvent::Type");
     const uint32_t ours = ReadTypeId(AnimationEventTypeInfo());
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(U32ThisFn,
-                       "?Type@AnimationEvent@Graphics@@UEBAIXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 extern "C" const char* RtGraphics_AnimationEvent_TypeName(const void* self) {
-    RT_DIFF_BEGIN("Graphics::AnimationEvent::TypeName");
     const char* const ours = ReadTypeName(AnimationEventTypeInfo());
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RT_ORIGINAL_ONCE(CStrThisFn,
-                           "?TypeName@AnimationEvent@Graphics@@UEBAPEBDXZ")(self)));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 // ---- ??_7MaterialInstance@Graphics@@6B@  slots 2, 1 and 3 ------------------
 
 extern "C" uint32_t RtGraphics_MaterialInstance_Type(const void* self) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::Type");
     const uint32_t ours = ReadTypeId(MaterialInstanceTypeInfo());
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(U32ThisFn,
-                       "?Type@MaterialInstance@Graphics@@UEBAIXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 extern "C" const char* RtGraphics_MaterialInstance_TypeName(const void* self) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::TypeName");
     const char* const ours = ReadTypeName(MaterialInstanceTypeInfo());
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RT_ORIGINAL_ONCE(CStrThisFn,
-                           "?TypeName@MaterialInstance@Graphics@@UEBAPEBDXZ")(self)));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -207,33 +187,19 @@ extern "C" const char* RtGraphics_MaterialInstance_TypeName(const void* self) {
 // track OUR format if this class's Serialize is ever revised, and retail's
 // does not.
 extern "C" int32_t RtGraphics_MaterialInstance_GetFileVersion(const void* self) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::GetFileVersion");
     const int32_t ours = 4;
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(I32ThisFn,
-                       "?GetFileVersion@MaterialInstance@Graphics@@UEBAHXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 // ---- ??_7Particle@Graphics@@6B@  slots 2, 1 and 3 --------------------------
 
 extern "C" uint32_t RtGraphics_Particle_Type(const void* self) {
-    RT_DIFF_BEGIN("Graphics::Particle::Type");
     const uint32_t ours = ReadTypeId(ParticleTypeInfo());
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(U32ThisFn,
-                       "?Type@Particle@Graphics@@UEBAIXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 extern "C" const char* RtGraphics_Particle_TypeName(const void* self) {
-    RT_DIFF_BEGIN("Graphics::Particle::TypeName");
     const char* const ours = ReadTypeName(ParticleTypeInfo());
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RT_ORIGINAL_ONCE(CStrThisFn,
-                           "?TypeName@Particle@Graphics@@UEBAPEBDXZ")(self)));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -241,11 +207,7 @@ extern "C" const char* RtGraphics_Particle_TypeName(const void* self) {
 // MaterialInstance's 4. The two were decoded separately and the difference is
 // the reason each is written as its own literal here.
 extern "C" int32_t RtGraphics_Particle_GetFileVersion(const void* self) {
-    RT_DIFF_BEGIN("Graphics::Particle::GetFileVersion");
     const int32_t ours = 0x1000;
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(I32ThisFn,
-                       "?GetFileVersion@Particle@Graphics@@UEBAHXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 

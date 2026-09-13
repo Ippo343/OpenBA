@@ -94,7 +94,6 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
@@ -144,7 +143,6 @@ void GrowStreamBuffers(void* headerPtr) {
 // Audio::Stream::Play(int,int) -- retail 0x1800a0d10, ord 3417
 // ============================================================================
 extern "C" void RtAudio_Stream_Play(void* selfPtr, int32_t a, int32_t b) {
-    RT_DIFF_BEGIN("Audio::Stream::Play [attendance only, no oracle]");
     ++g_calls;
     auto* self = static_cast<uint8_t*>(selfPtr);
 
@@ -165,9 +163,6 @@ extern "C" void RtAudio_Stream_Play(void* selfPtr, int32_t a, int32_t b) {
     ResetEvent(Field<HANDLE>(self, kThreadFinishedEvent));                  // 1800a0d65
     SetEvent(Field<HANDLE>(self, kThreadStartEvent));                       // tail, 1800a0d7e
 
-    RT_DIFF_SHADOW(true, midPass ? "drained the current pass and requeued"
-                                 : "requeued directly",
-                   "not diffable (wakes a real streaming thread)");
 }
 
 // ============================================================================

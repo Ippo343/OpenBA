@@ -32,14 +32,8 @@
 //   ?_typeInfo@… symbols are DATA exports; they cannot be registered before
 //   cutover (same finding as Wave 4 lane D's FileSystem::_singleton).
 //
-// STATE, and what that does to the oracle. Only nine of these functions are
-// pure reads; the other nine mutate the live singleton, a live instance, or
-// the Windows registry. Running the DLL's copy of a mutator as a differential
-// oracle would perform the mutation TWICE (rt_diff.h's third bullet), so those
-// use RT_DIFF_SHADOW: ours does the real work, and the macro's verdict is an
-// INVARIANT WE CHECK AFTERWARDS, in several cases by asking the DLL to read
-// the state back. Each site says exactly what its verdict proves and what it
-// does not. Read them as "this held", never as "ours == theirs".
+// STATE. Only nine of these functions are pure reads; the other nine mutate
+// the live singleton, a live instance, or the Windows registry.
 //
 // NO ADDED NULL GUARDS. Retail derefs `_achievements` in GetAchievementCount,
 // `_completed._data` in Update and `_instances._data` in Reset without
@@ -178,7 +172,7 @@ IsDerivedFromFn IsDerivedFrom() {
 // both by name, so the two ResolveExport doors immediately below now land on
 // OUR bodies rather than the DLL's. The doors are kept exactly as they are:
 // ResolveExport consults the port registry first, so nothing about this file
-// needs to change, and leaving them means a run with BANISHED_RT_ACHMGR=0 still
+// needs to change, and leaving them means a run with RT_ACHMGR=0 still
 // reaches the DLL for these two.
 using ReadAchievementsFn  = void (*)(void* self);
 using SetAchievementMetFn = bool (*)(void* self, int index);
@@ -329,18 +323,10 @@ bool UserPackFilesEnabled(const RtIO::FileSystem* fs) {
 // Full oracle: reads one DLL global, mutates nothing.
 // ============================================================================
 AchievementManager* RtAch_AchievementManager_Get() {
-    RT_DIFF_BEGIN("Achievement::AchievementManager::Get");
 
     AchievementManager** cell = ManagerSingletonCell();
     AchievementManager* ours = cell ? *cell : nullptr;
 
-    if (rt_diff_on__) {
-        using GetFn = AchievementManager* (*)();
-        RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                       static_cast<const void*>(
-                           RT_ORIGINAL_ONCE(GetFn,
-                               "?Get@AchievementManager@Achievement@@SAPEAV12@XZ")()));
-    }
     return ours;
 }
 
@@ -354,16 +340,9 @@ AchievementManager* RtAch_AchievementManager_Get() {
 // recorded symptom and the only signal that the list is missing.
 // ============================================================================
 int RtAch_AchievementManager_GetAchievementCount(const AchievementManager* self) {
-    RT_DIFF_BEGIN("Achievement::AchievementManager::GetAchievementCount");
 
     const int ours = self->achievements->_count;
 
-    if (rt_diff_on__) {
-        using CountFn = int (*)(const void*);
-        RT_DIFF_SCALAR(ours,
-                       RT_ORIGINAL_ONCE(CountFn,
-                           "?GetAchievementCount@AchievementManager@Achievement@@QEBAHXZ")(self));
-    }
     return ours;
 }
 
@@ -373,17 +352,9 @@ int RtAch_AchievementManager_GetAchievementCount(const AchievementManager* self)
 // One byte out of _completed._data. No bounds check in retail; none here.
 // ============================================================================
 bool RtAch_AchievementManager_IsAchievementAwarded(const AchievementManager* self, int index) {
-    RT_DIFF_BEGIN("Achievement::AchievementManager::IsAchievementAwarded");
 
     const bool ours = self->completed._data[index] != 0;
 
-    if (rt_diff_on__) {
-        using AwardedFn = bool (*)(const void*, int);
-        RT_DIFF_SCALAR(ours,
-                       RT_ORIGINAL_ONCE(AwardedFn,
-                           "?IsAchievementAwarded@AchievementManager@Achievement@@QEBA_NH@Z")(
-                               self, index));
-    }
     return ours;
 }
 
@@ -404,20 +375,11 @@ bool RtAch_AchievementManager_IsAchievementAwarded(const AchievementManager* sel
 // ============================================================================
 void* RtAch_AchievementManager_GetAchievement(const AchievementManager* self,
                                               void* retval, int index) {
-    RT_DIFF_BEGIN("Achievement::AchievementManager::GetAchievement");
 
     void* obj = self->achievements->_resources[index];
     void* ours = IsDerivedFrom()(obj, AchievementTypeId()) ? obj : nullptr;
     *static_cast<void**>(retval) = ours;
 
-    if (rt_diff_on__) {
-        using GetAchFn = void* (*)(const void*, void*, int);
-        void* theirs = reinterpret_cast<void*>(~uintptr_t(0));
-        RT_ORIGINAL_ONCE(GetAchFn,
-            "?GetAchievement@AchievementManager@Achievement@@QEBA?AV?$ExternalPtr@"
-            "VAchievement@1@@Object@@H@Z")(self, &theirs, index);
-        RT_DIFF_SCALAR(static_cast<const void*>(ours), static_cast<const void*>(theirs));
-    }
     return retval;
 }
 
@@ -433,19 +395,10 @@ void* RtAch_AchievementManager_GetAchievement(const AchievementManager* self,
 // ============================================================================
 void* RtAch_AchievementManager_GetAchievementInstance(const AchievementManager* self,
                                                       void* retval, int index) {
-    RT_DIFF_BEGIN("Achievement::AchievementManager::GetAchievementInstance");
 
     AchievementInstance* ours = self->instances._data[index];
     *static_cast<AchievementInstance**>(retval) = ours;
 
-    if (rt_diff_on__) {
-        using GetInstFn = void* (*)(const void*, void*, int);
-        void* theirs = reinterpret_cast<void*>(~uintptr_t(0));
-        RT_ORIGINAL_ONCE(GetInstFn,
-            "?GetAchievementInstance@AchievementManager@Achievement@@QEBA?AV?$InternalPtr@"
-            "VAchievementInstance@Achievement@@@Object@@H@Z")(self, &theirs, index);
-        RT_DIFF_SCALAR(static_cast<const void*>(ours), static_cast<const void*>(theirs));
-    }
     return retval;
 }
 
@@ -454,17 +407,9 @@ void* RtAch_AchievementManager_GetAchievementInstance(const AchievementManager* 
 // retail 0x180001960 — `return this + 0x10;` (a reference, not a copy)
 // ============================================================================
 const GoalListView* RtAch_AchievementInstance_GetGoalList(const AchievementInstance* self) {
-    RT_DIFF_BEGIN("Achievement::AchievementInstance::GetGoalList");
 
     const GoalListView* ours = &self->goalList;
 
-    if (rt_diff_on__) {
-        using GetGoalListFn = const void* (*)(const void*);
-        RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                       RT_ORIGINAL_ONCE(GetGoalListFn,
-                           "?GetGoalList@AchievementInstance@Achievement@@QEBAAEBVGoalList@2@XZ")(
-                               self));
-    }
     return ours;
 }
 
@@ -478,7 +423,6 @@ const GoalListView* RtAch_AchievementInstance_GetGoalList(const AchievementInsta
 // order anyway.
 // ============================================================================
 bool RtAch_AchievementInstance_IsMet(const AchievementInstance* self) {
-    RT_DIFF_BEGIN("Achievement::AchievementInstance::IsMet");
 
     const int count = self->goalList.goals._size;
     bool ours = true;
@@ -493,12 +437,6 @@ bool RtAch_AchievementInstance_IsMet(const AchievementInstance* self) {
         }
     }
 
-    if (rt_diff_on__) {
-        using IsMetFn = bool (*)(const void*);
-        RT_DIFF_SCALAR(ours,
-                       RT_ORIGINAL_ONCE(IsMetFn,
-                           "?IsMet@AchievementInstance@Achievement@@QEBA_NXZ")(self));
-    }
     return ours;
 }
 
@@ -507,7 +445,6 @@ bool RtAch_AchievementInstance_IsMet(const AchievementInstance* self) {
 // True if ANY goal has bit 1 set. An empty list has not failed.
 // ============================================================================
 bool RtAch_AchievementInstance_HasFailed(const AchievementInstance* self) {
-    RT_DIFF_BEGIN("Achievement::AchievementInstance::HasFailed");
 
     bool ours = false;
     const int count = self->goalList.goals._size;
@@ -516,12 +453,6 @@ bool RtAch_AchievementInstance_HasFailed(const AchievementInstance* self) {
         if ((goals[i]->flags & RtAchievement::goalflags::kFailed) != 0) { ours = true; break; }
     }
 
-    if (rt_diff_on__) {
-        using HasFailedFn = bool (*)(const void*);
-        RT_DIFF_SCALAR(ours,
-                       RT_ORIGINAL_ONCE(HasFailedFn,
-                           "?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ")(self));
-    }
     return ours;
 }
 
@@ -533,58 +464,31 @@ bool RtAch_AchievementInstance_HasFailed(const AchievementInstance* self) {
 // RCX=this, RDX=retval. All three are the identical three-instruction body on
 // a different field:
 //     *retval = 0; if (field) { *retval = field; ++field[-4]; }
-// i.e. an ADDREF. That makes them impure in exactly one way: running the DLL's
-// copy as an oracle bumps the refcount a second time, so the oracle RELEASES
-// its own temporary afterwards — the shape Wave 4 lane C used for
-// Persistence::GetSavePath. The comparison is on the pointer, which is what
-// the function actually computes; the refcount is verified by the release not
-// destroying a live string.
+// i.e. an ADDREF.
 // ============================================================================
 namespace {
-void* AchievementStringGetter(RtDiffSite* site, bool diffOn,
-                              const Achievement* self, void* retval,
-                              char* field, const char* mangled) {
+void* AchievementStringGetter(const Achievement* self, void* retval, char* field) {
+    (void)self;
     String* ret = static_cast<String*>(retval);
     ret->data = nullptr;
     if (field) {
         ret->data = field;
         ++StringRefCount(field);
     }
-
-    if (diffOn) {
-        using GetStringFn = void* (*)(const void*, void*);
-        String theirs{};
-        reinterpret_cast<GetStringFn>(ResolveExportRaw(mangled))(self, &theirs);
-        const bool equal = (ret->data == theirs.data);
-        char a[80], b[80];
-        std::snprintf(a, sizeof(a), "\"%s\"", ret->data ? ret->data : "(null)");
-        std::snprintf(b, sizeof(b), "\"%s\"", theirs.data ? theirs.data : "(null)");
-        RtDiffReport(site, equal, a, b);
-        RtSystem::RtString_ReleaseInline(&theirs);   // undo the oracle's own AddRef
-    }
     return retval;
 }
 }  // namespace
 
 void* RtAch_Achievement_GetTitle(const Achievement* self, void* retval) {
-    RT_DIFF_BEGIN("Achievement::Achievement::GetTitle");
-    return AchievementStringGetter(&rt_diff_site__, rt_diff_on__, self, retval,
-                                   self->title.data,
-                                   "?GetTitle@Achievement@1@QEBA?AVString@System@@XZ");
+    return AchievementStringGetter(self, retval, self->title.data);
 }
 
 void* RtAch_Achievement_GetDescription(const Achievement* self, void* retval) {
-    RT_DIFF_BEGIN("Achievement::Achievement::GetDescription");
-    return AchievementStringGetter(&rt_diff_site__, rt_diff_on__, self, retval,
-                                   self->description.data,
-                                   "?GetDescription@Achievement@1@QEBA?AVString@System@@XZ");
+    return AchievementStringGetter(self, retval, self->description.data);
 }
 
 void* RtAch_Achievement_GetSpriteName(const Achievement* self, void* retval) {
-    RT_DIFF_BEGIN("Achievement::Achievement::GetSpriteName");
-    return AchievementStringGetter(&rt_diff_site__, rt_diff_on__, self, retval,
-                                   self->spriteName.data,
-                                   "?GetSpriteName@Achievement@1@QEBA?AVString@System@@XZ");
+    return AchievementStringGetter(self, retval, self->spriteName.data);
 }
 
 // ############################################################################
@@ -614,11 +518,10 @@ void* RtAch_Achievement_GetSpriteName(const Achievement* self, void* retval) {
 // GoalList and achievement pointer are zero, and the base constructor left a
 // non-zero generation. That proves the object is shaped like retail's; it does
 // NOT prove the handle-table entry is right — Wave 3's opt-in
-// BANISHED_RT_INTERNAL_SHADOW oracle is what covers that, and this port goes
+// RT_INTERNAL_SHADOW oracle is what covers that, and this port goes
 // through the registry precisely so that oracle still sees this object.
 // ============================================================================
 AchievementInstance* RtAch_AchievementInstance_Ctor(AchievementInstance* self) {
-    RT_DIFF_BEGIN("Achievement::AchievementInstance::ctor");
 
     InternalCtor()(self);
 
@@ -629,19 +532,6 @@ AchievementInstance* RtAch_AchievementInstance_Ctor(AchievementInstance* self) {
     self->goalList.goals._capacity = 0;
     self->achievement              = nullptr;
 
-    if (rt_diff_on__) {
-        const bool equal = (self->base.vptr == vtable) && (vtable != nullptr) &&
-                           (self->goalList.goals._data == nullptr) &&
-                           (self->achievement == nullptr) &&
-                           (self->base.generation != 0);
-        char a[96], b[96];
-        std::snprintf(a, sizeof(a), "vtbl=%p gen=%u goals=%p ach=%p",
-                      self->base.vptr, self->base.generation,
-                      static_cast<void*>(self->goalList.goals._data),
-                      static_cast<void*>(self->achievement));
-        std::snprintf(b, sizeof(b), "exported ??_7AchievementInstance=%p, zeroed tail", vtable);
-        RT_DIFF_SHADOW(equal, a, b);
-    }
     return self;
 }
 
@@ -667,7 +557,6 @@ AchievementInstance* RtAch_AchievementInstance_Ctor(AchievementInstance* self) {
 // without a second Initialize.
 // ============================================================================
 void RtAch_AchievementInstance_SetAchievement(AchievementInstance* self, Achievement* achievement) {
-    RT_DIFF_BEGIN("Achievement::AchievementInstance::SetAchievement");
 
     self->achievement = achievement;
 
@@ -675,16 +564,6 @@ void RtAch_AchievementInstance_SetAchievement(AchievementInstance* self, Achieve
     ArrayAssignGoalPtrs()(&temp, &achievement->goals);
     GoalListInitialize()(&self->goalList, &temp);
 
-    if (rt_diff_on__) {
-        const bool equal = (self->achievement == achievement) &&
-                           (self->goalList.goals._size == achievement->goals._size);
-        char a[96], b[96];
-        std::snprintf(a, sizeof(a), "ach=%p goals=%d",
-                      static_cast<void*>(self->achievement), self->goalList.goals._size);
-        std::snprintf(b, sizeof(b), "expected ach=%p goals=%d",
-                      static_cast<void*>(achievement), achievement->goals._size);
-        RT_DIFF_SHADOW(equal, a, b);
-    }
 }
 
 // ============================================================================
@@ -707,7 +586,6 @@ void RtAch_AchievementInstance_SetAchievement(AchievementInstance* self, Achieve
 // (reference_uncalled_port_is_not_verified.md).
 // ============================================================================
 void RtAch_AchievementInstance_Update(AchievementInstance* self, const ::Time* time) {
-    RT_DIFF_BEGIN("Achievement::AchievementInstance::Update");
 
     using GoalUpdateFn = void (*)(void* self, const ::Time* time, const void* goalList);
     constexpr int kGoalInstanceUpdateSlot = 0x28;
@@ -724,13 +602,6 @@ void RtAch_AchievementInstance_Update(AchievementInstance* self, const ::Time* t
         ++visited;
     }
 
-    if (rt_diff_on__) {
-        const bool equal = (visited == count);
-        char a[64], b[64];
-        std::snprintf(a, sizeof(a), "dispatched %d goal(s)", visited);
-        std::snprintf(b, sizeof(b), "goalList._size = %d", count);
-        RT_DIFF_SHADOW(equal, a, b);
-    }
 }
 
 // ============================================================================
@@ -738,17 +609,9 @@ void RtAch_AchievementInstance_Update(AchievementInstance* self, const ::Time* t
 // One store to +0x28. Shadow verdict is the readback of the field.
 // ============================================================================
 void RtAch_AchievementManager_SetEventHandler(AchievementManager* self, void (*handler)(int)) {
-    RT_DIFF_BEGIN("Achievement::AchievementManager::SetEventHandler");
 
     self->eventHandler = handler;
 
-    if (rt_diff_on__) {
-        const bool equal = (self->eventHandler == handler);
-        char a[48], b[48];
-        std::snprintf(a, sizeof(a), "+0x28 = %p", reinterpret_cast<void*>(self->eventHandler));
-        std::snprintf(b, sizeof(b), "argument = %p", reinterpret_cast<void*>(handler));
-        RT_DIFF_SHADOW(equal, a, b);
-    }
 }
 
 // ============================================================================
@@ -774,25 +637,12 @@ void RtAch_AchievementManager_SetEventHandler(AchievementManager* self, void (*h
 // is the DLL's, so `_completed`'s CONTENTS are the DLL's work, not ours.
 // ============================================================================
 void RtAch_AchievementManager_SetAchievements(AchievementManager* self, void* list) {
-    RT_DIFF_BEGIN("Achievement::AchievementManager::SetAchievements");
 
     self->achievements = static_cast<RtObject::ExternalList*>(list);
     ArraySetSizeTime()(&self->updateTimes, self->achievements->_count);
     ArraySetSizeBool()(&self->completed, self->achievements->_count);
     ReadAchievements()(self);
 
-    if (rt_diff_on__) {
-        using CountFn = int (*)(const void*);
-        const int theirCount = RT_ORIGINAL_ONCE(CountFn,
-            "?GetAchievementCount@AchievementManager@Achievement@@QEBAHXZ")(self);
-        const bool equal = (theirCount == self->completed._size) &&
-                           (theirCount == self->updateTimes._size);
-        char a[96], b[96];
-        std::snprintf(a, sizeof(a), "completed=%d updateTimes=%d",
-                      self->completed._size, self->updateTimes._size);
-        std::snprintf(b, sizeof(b), "DLL GetAchievementCount=%d", theirCount);
-        RT_DIFF_SHADOW(equal, a, b);
-    }
 }
 
 // ============================================================================
@@ -818,7 +668,6 @@ void RtAch_AchievementManager_SetAchievements(AchievementManager* self, void* li
 // that does not free the old objects.
 // ============================================================================
 void RtAch_AchievementManager_Reset(AchievementManager* self) {
-    RT_DIFF_BEGIN("Achievement::AchievementManager::Reset");
 
     ArraySetSizeInternalPtr()(&self->instances, self->achievements->_count);
 
@@ -833,23 +682,6 @@ void RtAch_AchievementManager_Reset(AchievementManager* self) {
         self->instances._data[i] = static_cast<AchievementInstance*>(created);
     }
 
-    if (rt_diff_on__) {
-        bool equal = (self->instances._size == self->achievements->_count);
-        int firstBad = -1;
-        for (int i = 0; equal && i < self->instances._size; ++i) {
-            AchievementInstance* inst = self->instances._data[i];
-            if (!inst || static_cast<void*>(inst->achievement) !=
-                             static_cast<void*>(self->achievements->_resources[i])) {
-                equal = false;
-                firstBad = i;
-            }
-        }
-        char a[96], b[96];
-        std::snprintf(a, sizeof(a), "instances=%d firstBad=%d", self->instances._size, firstBad);
-        std::snprintf(b, sizeof(b), "achievements=%d, each instance->_achievement matching",
-                      self->achievements->_count);
-        RT_DIFF_SHADOW(equal, a, b);
-    }
 }
 
 // ============================================================================
@@ -889,7 +721,6 @@ void RtAch_AchievementManager_Reset(AchievementManager* self) {
 // honestly, most ticks prove very little here.
 // ============================================================================
 void RtAch_AchievementManager_Update(AchievementManager* self, const ::Time* time) {
-    RT_DIFF_BEGIN("Achievement::AchievementManager::Update");
 
     RtIO::FileSystem** fsCell = FileSystemSingletonCell();
     if (UserPackFilesEnabled(*fsCell)) return;
@@ -930,20 +761,6 @@ void RtAch_AchievementManager_Update(AchievementManager* self, const ::Time* tim
     ++self->lastAchievementUpdate;
     if (self->lastAchievementUpdate >= self->instances._size) self->lastAchievementUpdate = 0;
 
-    if (rt_diff_on__) {
-        bool equal = (self->lastAchievementUpdate >= 0) &&
-                     (self->lastAchievementUpdate < self->instances._size);
-        if (awarded) {
-            using AwardedFn = bool (*)(const void*, int);
-            equal = equal && RT_ORIGINAL_ONCE(AwardedFn,
-                "?IsAchievementAwarded@AchievementManager@Achievement@@QEBA_NH@Z")(self, index);
-        }
-        char a[96], b[96];
-        std::snprintf(a, sizeof(a), "cursor=%d awarded=%d idx=%d",
-                      self->lastAchievementUpdate, static_cast<int>(awarded), index);
-        std::snprintf(b, sizeof(b), "count=%d, DLL IsAchievementAwarded readback", count);
-        RT_DIFF_SHADOW(equal, a, b);
-    }
 }
 
 // ############################################################################
@@ -997,7 +814,6 @@ void RtAch_AchievementManager_Update(AchievementManager* self, const ::Time* tim
 // and proves every byte rather than an invariant.
 // ============================================================================
 void* RtAch_Achievement_Ctor(void* selfRaw) {
-    RT_DIFF_BEGIN("Achievement::Achievement::ctor");
 
     uint8_t* self = static_cast<uint8_t*>(selfRaw);
     auto qword = [](uint8_t* p, size_t off) -> void*& {
@@ -1018,15 +834,6 @@ void* RtAch_Achievement_Ctor(void* selfRaw) {
     qword(self, 0x48) = nullptr;
     qword(self, 0x50) = nullptr;
 
-    if (rt_diff_on__) {
-        using CtorFn = void* (*)(void*);
-        alignas(16) uint8_t scratch[sizeof(Achievement)];
-        // Poisoned, so a byte the DLL's ctor writes and ours does not shows up
-        // as a divergence instead of accidentally matching a zero.
-        std::memset(scratch, 0xCD, sizeof(scratch));
-        RT_ORIGINAL_ONCE(CtorFn, "??0Achievement@0@QEAA@XZ")(scratch);
-        RT_DIFF_BYTES(self, scratch, sizeof(Achievement));
-    }
     return self;
 }
 
@@ -1036,16 +843,9 @@ void* RtAch_Achievement_Ctor(void* selfRaw) {
 // own override ORs 0x600 onto it (Scenario_Slot3, exe 0x1400a9460).
 // ============================================================================
 int RtAch_Achievement_GetFileVersion(const void* self) {
-    RT_DIFF_BEGIN("Achievement::Achievement::GetFileVersion");
 
     const int ours = 3;
 
-    if (rt_diff_on__) {
-        using VersionFn = int (*)(const void*);
-        RT_DIFF_SCALAR(ours,
-                       RT_ORIGINAL_ONCE(VersionFn,
-                           "?GetFileVersion@Achievement@1@UEBAHXZ")(self));
-    }
     return ours;
 }
 
@@ -1080,16 +880,11 @@ int RtAch_Achievement_GetFileVersion(const void* self) {
 // code runs either way.
 // ============================================================================
 void RtAch_Achievement_Dtor(void* selfRaw) {
-    RT_DIFF_BEGIN("Achievement::Achievement::dtor");
 
     Achievement* self = static_cast<Achievement*>(selfRaw);
 
     char*   beforeData[3] = { self->spriteName.data, self->description.data, self->title.data };
     int32_t beforeRc[3]   = { 0, 0, 0 };
-    if (rt_diff_on__) {
-        for (int i = 0; i < 3; ++i)
-            if (beforeData[i]) beforeRc[i] = StringRefCount(beforeData[i]);
-    }
 
     self->base._vftable = VtableAchievement();
     ArrayFreeGoalPtrs()(&self->goals);
@@ -1098,24 +893,6 @@ void RtAch_Achievement_Dtor(void* selfRaw) {
     RtSystem::RtString_ReleaseInline(&self->title);
     ExternalDtor()(self);
 
-    if (rt_diff_on__) {
-        String* fields[3] = { &self->spriteName, &self->description, &self->title };
-        bool equal = (self->goals._data == nullptr) && (self->goals._size == 0);
-        int  firstBad = -1;
-        for (int i = 0; i < 3; ++i) {
-            if (!beforeData[i]) continue;
-            const bool ok = (beforeRc[i] > 1)
-                ? (fields[i]->data == nullptr && StringRefCount(beforeData[i]) == beforeRc[i] - 1)
-                : (fields[i]->data == beforeData[i] - 8);
-            if (!ok && firstBad < 0) { firstBad = i; equal = false; }
-        }
-        char a[112], b[112];
-        std::snprintf(a, sizeof(a), "goals={%p,%d} firstBadString=%d",
-                      static_cast<void*>(self->goals._data), self->goals._size, firstBad);
-        std::snprintf(b, sizeof(b), "rc before {%d,%d,%d}, each -1 or freed",
-                      beforeRc[0], beforeRc[1], beforeRc[2]);
-        RT_DIFF_SHADOW(equal, a, b);
-    }
 }
 
 // ============================================================================

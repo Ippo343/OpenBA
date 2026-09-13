@@ -264,12 +264,6 @@ extern "C" void RtAudio_VoiceCallback_OnVoiceError(void* self, void* bufferConte
 // ============================================================================
 int RtAudioVoiceCallbackRegister() {
     using namespace RtAudio;
-    if (!RtWaveEnabled("BANISHED_RT_AUDIOVOICECB")) {
-        printf("[RtPort] BANISHED_RT_AUDIOVOICECB=0 -- the 7 slots of the "
-               "unexported XAudio2 voice-callback vtable 0x180157c60 left on "
-               "the DLL\n");
-        return 0;
-    }
     int n = 0;
     RegisterRuntimeAddr(0x180050200,
         (void*)&RtAudio_VoiceCallback_OnVoiceProcessingPassStart); ++n;

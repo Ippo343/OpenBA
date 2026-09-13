@@ -234,7 +234,6 @@ using SetBonesFn = void (*)(void* ctx, int32_t count, const void* matrices);
 // (+0x18 data, +0x20 count) and call each child's vtable slot 1 (`+0x8`).
 // ============================================================================
 extern "C" void RtGraphics_MeshInstance_Update(MeshInstance* self, const void* time) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::Update");
     ++g_miUpdate;
 
     uint8_t* const me = B(static_cast<void*>(self));
@@ -339,7 +338,6 @@ extern "C" void RtGraphics_MeshInstance_Update(MeshInstance* self, const void* t
         ++g_miUpdateChild;
     }
 
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -409,7 +407,6 @@ extern "C" void RtGraphics_MeshInstance_Update(MeshInstance* self, const void* t
 // ============================================================================
 extern "C" int32_t RtGraphics_MeshInstance_SetSharedInstanceData(
         const MeshInstance* self, void* ctx, int32_t packed, float t) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::SetSharedInstanceData");
     ++g_miSSID;
 
     const uint8_t* const me = B(static_cast<const void*>(self));
@@ -427,7 +424,6 @@ extern "C" int32_t RtGraphics_MeshInstance_SetSharedInstanceData(
     // (CLAUDE.md, "Don't 'fix' a faithful crash with a null check").
     if (Rd<int32_t>(rec, static_cast<size_t>(lo) * 24u + 0x14u) >= 0) {
         ++g_miSSIDskip;
-        RT_DIFF_WORK(true);
         return 0;                                            // 0x1801016a7  JGE
     }
 
@@ -449,14 +445,12 @@ extern "C" int32_t RtGraphics_MeshInstance_SetSharedInstanceData(
                                  "GetBones=%p SetBones=%p -- a skinned mesh will "
                                  "render in its bind pose\n",
                                  (void*)getBones, (void*)setBones); }
-        RT_DIFF_WORK(true);
         return 0;
     }
 
     const int32_t n = getBones(me, t, ident, bones);         // 0x180101759
     setBones(ctx, n, bones);                                 // 0x180101768
 
-    RT_DIFF_WORK(true);
     return 0;                                                // ALWAYS 0 — see banner
 }
 

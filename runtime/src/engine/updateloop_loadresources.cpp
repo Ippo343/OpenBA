@@ -54,7 +54,7 @@
 // THREE. A typedef that omits either the return slot or the key is a wild
 // write that still returns a plausible answer. Both are spelled out below.
 //
-// Kill switch: BANISHED_RT_ENGINELOADRES=0.
+// Kill switch: RT_ENGINELOADRES=0.
 // ============================================================================
 
 #include <cstdint>
@@ -329,7 +329,7 @@ int RtEngineLoadResourcesRegister() {
                           (void*)&RtEngine_UpdateLoop_LoadResources);
     RegisterRuntimeAddr(0x1800dd7d0, (void*)&RtEngine_UpdateLoop_LoadResources);
 
-    // OPT-IN (BANISHED_RT_ENGINELOADRES_DETOUR=1). Not default-on: boot depends
+    // OPT-IN (RT_ENGINELOADRES_DETOUR=1). Not default-on: boot depends
     // on this load, so a defective port fails the boot rather than degrading,
     // and that risk must not ride along on another lane's run.
     if (RtEngineLoadResourcesDetourOptedIn())

@@ -158,65 +158,6 @@ const char* const kRemoveMesh   = "?RemoveMesh@Scene@Picking@@QEAAXI@Z";
 //   DAT_18016177c = 0xccbebc20 = -1.0e8f    (RtMathConst::kBigNeg)
 //   DAT_1801617c0 = 0x80000000              (sign-flip mask, i.e. unary minus)
 // ============================================================================
-// ============================================================================
-// WAVE 9 LANE N — THE DETERMINISTIC RAY FIXTURE FOR Picking::Scene::Intersect
-// ============================================================================
-// Lane M found 90 divergences over 20,868 calls in ONE stress run of FOUR, and
-// correctly refused to call the clean runs an exoneration: the call COUNTS
-// differ between runs (20,868 vs 22,668), so the runs are not the same runs.
-// `Picking::Scene::Intersect` is driven by where the ray is cast, which on the
-// stress route depends on the real mouse cursor, so a clean re-run only means
-// those rays were not cast — the calls=0-reads-as-clean failure
-// (reference_uncalled_port_is_not_verified.md) wearing a different costume.
-//
-// This fixture removes the cursor from the experiment. On the Nth real call it
-// casts a RAY SET BUILT FROM CONSTANTS over the live scene, through this very
-// function, so every ray is diffed by the ordinary oracle. Same seed, same
-// flags, same frame => the same rays, the same count, every run. That makes
-// the DENOMINATOR stable, which is the precondition for any verdict at all.
-//
-//   BANISHED_PICK_SWEEP=<n>       fire after the nth real Intersect call
-//   BANISHED_PICK_SWEEP_HALF=<f>  sweep half-extent in world units (default 60)
-//   BANISHED_PICK_SWEEP_STEP=<f>  spacing (default 6) => (2*half/step+1)^2 origins
-//   BANISHED_PICK_SWEEP_Z=<f>     ray origin height (default 200)
-//   BANISHED_PICK_SWEEP_DIST=<f>  maxDist (default 600)
-//   BANISHED_PICK_NEGCTL=1        NEGATIVE CONTROL, see below
-//
-// The five directions are near-vertical by design: the observed divergence had
-// outPos.x and .y BIT-IDENTICAL and only .z moved, by 3.8e-6 — which is what a
-// ~1-ULP difference in hitT does to a ray whose dir.z dominates (z moves by
-// delta, x by delta*dir.x, which stays inside one ULP of x ~ 41.5). Rays of
-// that shape are the ones worth casting.
-//
-// EFFECTIVENESS CONTROL: the summary prints `hits=`, not just `rays=`. A sweep
-// that hits nothing has tested nothing, however green it looks — the same
-// mistake as reading divergences= without calls=.
-//
-// NEGATIVE CONTROL: BANISHED_PICK_NEGCTL=1 moves ONE association in the hitT
-// expression — `(a + b + c)` becomes `(a + (b + c))` — which is precisely the
-// defect class the port's own no-tolerance comment is guarding against
-// ("anything less than bit-exact means a term was moved"). If the sweep comes
-// back green under the control, the fixture cannot fail and proves nothing;
-// lane E2 found exactly such a control this wave.
-// ============================================================================
-int PickSweepAfterCalls() {
-    static int n = -1;
-    if (n < 0) { const char* e = getenv("BANISHED_PICK_SWEEP"); n = e ? atoi(e) : 0; }
-    return n;
-}
-float PickSweepEnvF(const char* name, float dflt) {
-    const char* e = getenv(name);
-    return (e && *e) ? (float)atof(e) : dflt;
-}
-int PickNegCtl() {
-    static int on = -1;
-    if (on < 0) { const char* e = getenv("BANISHED_PICK_NEGCTL"); on = e ? atoi(e) : 0; }
-    return on;
-}
-RtDiffSite* g_pickIntersectSite = nullptr;
-bool        g_pickSweepRunning  = false;
-bool        g_pickSweepFired    = false;
-long long   g_pickRealCalls     = 0;
 
 const float kOne       =  1.0f;
 const float kCellSize  = 16.0f;
@@ -225,8 +166,8 @@ const float kBigNeg    = -1.0e8f;
 
 // ============================================================================
 // The six DLL internals this port calls, each resolved once per call site.
-// ResolveAddr and NOT ResolveExport/RtOriginal: none of these is exported, and
-// RtOriginal is GetProcAddress, which must never sit on a normal-run path
+// ResolveAddr and NOT ResolveExport: none of these is exported, and the raw
+// door is GetProcAddress, which must never sit on a normal-run path
 // (reference_rtoriginal_is_getprocaddress.md — two such calls cost Wave 2 five
 // points of sim time, invisible to both profilers).
 // ============================================================================
@@ -493,7 +434,6 @@ inline int32_t LinkNext(Scene* s, int32_t link)  { return s->_links._data[link].
 // oracle below does.
 // ============================================================================
 extern "C" Scene* RtPicking_Scene_Ctor(Scene* self) {
-    RT_DIFF_BEGIN("Picking::Scene::Scene()");
 
     self->_cellSize    = kCellSize;
     self->_invCellSize = kOne / kCellSize;
@@ -528,63 +468,6 @@ extern "C" Scene* RtPicking_Scene_Ctor(Scene* self) {
     // "every field except the four Array _data pointers, plus the 10,000
     // bucket heads by content". Theirs is destroyed with the DLL's own dtor
     // so the scratch does not leak its 40 KB on every construction.
-    if (rt_diff_on__) {
-        Scene theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        typedef Scene* (*CtorFn)(Scene*);
-        RtOriginal<CtorFn>(kSceneCtor)(&theirs);
-
-        // Every term names itself, so a failure says WHICH field differed
-        // rather than printing two strings that agree (see RtFirstFailure).
-        // The four Array _data pointers are excluded on purpose -- they are
-        // different heap allocations -- except that the bucket buffer's
-        // CONTENT is compared element by element as its own term.
-        const long long headsDiff =
-            (self->_cellHeads._data && theirs._cellHeads._data &&
-             self->_cellHeads._size == theirs._cellHeads._size)
-                ? RtFirstIntDiff(self->_cellHeads._data, theirs._cellHeads._data,
-                                 self->_cellHeads._size)
-                : ((self->_cellHeads._data == nullptr) ==
-                   (theirs._cellHeads._data == nullptr) ? -1 : -2);
-        const PostCheck checks[] = {
-            { "_cellSize(bits)",      (long long)*(const uint32_t*)&self->_cellSize,
-                                      (long long)*(const uint32_t*)&theirs._cellSize },
-            { "_invCellSize(bits)",   (long long)*(const uint32_t*)&self->_invCellSize,
-                                      (long long)*(const uint32_t*)&theirs._invCellSize },
-            { "_cellHeads._size",     self->_cellHeads._size,     theirs._cellHeads._size },
-            { "_cellHeads._capacity", self->_cellHeads._capacity, theirs._cellHeads._capacity },
-            { "_cellHeads[i] first differing i", headsDiff, -1 },
-            { "_cells._data",     (long long)(intptr_t)self->_cells._data,
-                                  (long long)(intptr_t)theirs._cells._data },
-            { "_cells._size",     self->_cells._size,     theirs._cells._size },
-            { "_cells._capacity", self->_cells._capacity, theirs._cells._capacity },
-            { "_freeCell",        self->_freeCell,        theirs._freeCell },
-            { "_links._data",     (long long)(intptr_t)self->_links._data,
-                                  (long long)(intptr_t)theirs._links._data },
-            { "_links._size",     self->_links._size,     theirs._links._size },
-            { "_links._capacity", self->_links._capacity, theirs._links._capacity },
-            { "_freeLink",        self->_freeLink,        theirs._freeLink },
-            { "_entries._data",   (long long)(intptr_t)self->_entries._data,
-                                  (long long)(intptr_t)theirs._entries._data },
-            { "_entries._size",     self->_entries._size,     theirs._entries._size },
-            { "_entries._capacity", self->_entries._capacity, theirs._entries._capacity },
-            { "_freeEntry",       self->_freeEntry,       theirs._freeEntry },
-            { "_queryStamp",      self->_queryStamp,      theirs._queryStamp },
-        };
-        char a[96], b[96];
-        const int bad = RtFirstFailure(checks, (int)(sizeof(checks) / sizeof(checks[0])),
-                                       a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "cell=%g inv=%g heads=%d", self->_cellSize,
-                          self->_invCellSize, self->_cellHeads._size);
-            std::snprintf(b, sizeof(b), "cell=%g inv=%g heads=%d", theirs._cellSize,
-                          theirs._invCellSize, theirs._cellHeads._size);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-
-        typedef void (*DtorFn)(Scene*);
-        RtOriginal<DtorFn>(kSceneDtor)(&theirs);
-    }
     return self;   // retail returns `this` in RAX (MOV RAX,RBX at 0x180125904)
 }
 
@@ -605,37 +488,12 @@ extern "C" Scene* RtPicking_Scene_Ctor(Scene* self) {
 // only the allocator watchdog (BANISHED_REDZONE=watch) can say that.
 // ============================================================================
 extern "C" void RtPicking_Scene_Dtor(Scene* self) {
-    RT_DIFF_BEGIN("Picking::Scene::~Scene()");
 
     RtFreeArrayEntry(&self->_entries);   // +0x48
     RtFreeArrayLink(&self->_links);      // +0x30
     RtFreeArrayCell(&self->_cells);      // +0x18
     RtFreeArrayInt(&self->_cellHeads);   // +0x08
 
-    if (rt_diff_on__) {
-        const PostCheck checks[] = {
-            { "_entries._data",     (long long)(intptr_t)self->_entries._data,   0 },
-            { "_entries._size",     self->_entries._size,      0 },
-            { "_entries._capacity", self->_entries._capacity,  0 },
-            { "_links._data",       (long long)(intptr_t)self->_links._data,     0 },
-            { "_links._size",       self->_links._size,        0 },
-            { "_links._capacity",   self->_links._capacity,    0 },
-            { "_cells._data",       (long long)(intptr_t)self->_cells._data,     0 },
-            { "_cells._size",       self->_cells._size,        0 },
-            { "_cells._capacity",   self->_cells._capacity,    0 },
-            { "_cellHeads._data",   (long long)(intptr_t)self->_cellHeads._data, 0 },
-            { "_cellHeads._size",   self->_cellHeads._size,    0 },
-            { "_cellHeads._capacity", self->_cellHeads._capacity, 0 },
-        };
-        char a[96], b[96];
-        const int bad = RtFirstFailure(checks, (int)(sizeof(checks) / sizeof(checks[0])),
-                                       a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "all four arrays cleared");
-            std::snprintf(b, sizeof(b), "all four arrays cleared");
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================
@@ -649,16 +507,7 @@ extern "C" void RtPicking_Scene_Dtor(Scene* self) {
 // ORACLE: full. Pure read, so both run and the pointers are compared.
 // ============================================================================
 extern "C" void* RtPicking_Scene_GetUserData(const Scene* self, uint32_t id) {
-    RT_DIFF_BEGIN("Picking::Scene::GetUserData");
     void* ours = self->_entries._data[id]._userData;
-    if (rt_diff_on__) {
-        typedef void* (*Fn)(const Scene*, uint32_t);
-        void* theirs = RtOriginal<Fn>(kGetUserData)(self, id);
-        char a[64], b[64];
-        RtDiffFormat(a, sizeof(a), (const void*)ours);
-        RtDiffFormat(b, sizeof(b), (const void*)theirs);
-        RtDiffReport(&rt_diff_site__, ours == theirs, a, b);
-    }
     return ours;
 }
 
@@ -678,16 +527,7 @@ extern "C" void* RtPicking_Scene_GetUserData(const Scene* self, uint32_t id) {
 // ============================================================================
 extern "C" const Collection::Array<Vector3>*
 RtPicking_PickingMesh_Vertices(const RtPicking::PickingMesh* self, int subMesh) {
-    RT_DIFF_BEGIN("Picking::PickingMesh::Vertices");
     const Collection::Array<Vector3>* ours = &self->_nodes[subMesh]._vertices;
-    if (rt_diff_on__) {
-        typedef const Collection::Array<Vector3>* (*Fn)(const RtPicking::PickingMesh*, int);
-        const Collection::Array<Vector3>* theirs = RtOriginal<Fn>(kVertices)(self, subMesh);
-        char a[64], b[64];
-        RtDiffFormat(a, sizeof(a), (const void*)ours);
-        RtDiffFormat(b, sizeof(b), (const void*)theirs);
-        RtDiffReport(&rt_diff_site__, ours == theirs, a, b);
-    }
     return ours;
 }
 
@@ -714,7 +554,6 @@ RtPicking_PickingMesh_Vertices(const RtPicking::PickingMesh* self, int subMesh) 
 extern "C" void RtPicking_Scene_SetMeshUserData(Scene* self, uint32_t id, void* userData,
                                                 int userValue, int userValue2,
                                                 HitCallback callback) {
-    RT_DIFF_BEGIN("Picking::Scene::SetMeshUserData");
 
     Entry* e = &self->_entries._data[id];
     e->_userData   = userData;
@@ -722,13 +561,6 @@ extern "C" void RtPicking_Scene_SetMeshUserData(Scene* self, uint32_t id, void* 
     e->_userValue2 = userValue2;
     e->_callback   = callback;
 
-    if (rt_diff_on__) {
-        uint8_t before[sizeof(Entry)];
-        std::memcpy(before, e, sizeof(Entry));
-        typedef void (*Fn)(Scene*, uint32_t, void*, int, int, HitCallback);
-        RtOriginal<Fn>(kSetMeshUD)(self, id, userData, userValue, userValue2, callback);
-        RT_DIFF_BYTES(before, e, sizeof(Entry));
-    }
 }
 
 // ============================================================================
@@ -748,7 +580,6 @@ extern "C" void RtPicking_Scene_SetMeshUserData(Scene* self, uint32_t id, void* 
 // ============================================================================
 extern "C" void RtPicking_Scene_SetTransform(Scene* self, uint32_t id,
                                              const ::Transform* xform) {
-    RT_DIFF_BEGIN("Picking::Scene::SetTransform");
 
     uint32_t* dst = reinterpret_cast<uint32_t*>(self->_entries._data[id]._transforms._data);
     const uint32_t* src = reinterpret_cast<const uint32_t*>(xform);
@@ -756,18 +587,6 @@ extern "C" void RtPicking_Scene_SetTransform(Scene* self, uint32_t id,
     dst[4] = src[4]; dst[5] = src[5]; dst[6] = src[6];
     RtGridReindex(self, id);
 
-    if (rt_diff_on__) {
-        Entry* e = &self->_entries._data[id];
-        uint8_t before[sizeof(Entry) + sizeof(::Transform)];
-        std::memcpy(before, e, sizeof(Entry));
-        std::memcpy(before + sizeof(Entry), e->_transforms._data, sizeof(::Transform));
-        typedef void (*Fn)(Scene*, uint32_t, const ::Transform*);
-        RtOriginal<Fn>(kSetTransform)(self, id, xform);
-        uint8_t after[sizeof(Entry) + sizeof(::Transform)];
-        std::memcpy(after, e, sizeof(Entry));
-        std::memcpy(after + sizeof(Entry), e->_transforms._data, sizeof(::Transform));
-        RT_DIFF_BYTES(before, after, sizeof(before));
-    }
 }
 
 // ============================================================================
@@ -790,38 +609,16 @@ extern "C" void RtPicking_Scene_SetTransform(Scene* self, uint32_t id,
 // the DLL's own ctor) and the two entries' transform arrays are compared
 // bit-for-bit, after which the scratch entry is removed again so the scratch
 // stays bounded. The scratch Scene itself leaks one 0x60 object plus its
-// buckets for the life of the process, under BANISHED_RT_DIFF only.
+// buckets for the life of the process, under the diff-oracle flag only.
 // ============================================================================
 namespace {
 // Lazily constructed by the DLL's own ctor, so the oracle never depends on the
-// port under test. Diff-mode only.
-Scene* DiffScratchScene() {
-    // Guard the helper ITSELF, not just its callers.  Every caller today is a
-    // diff path and the comment above says so -- but that invariant lives in
-    // several places, and the RtOriginal below is the RAW door: an unguarded
-    // call is a live cross-DLL call on an ordinary run and a call through NULL
-    // once Runtime-x64.dll is gone.  Identical to the repair made to
-    // RtDiffRandomShadow in value_types.cpp, and rawdoor_audit recognises this
-    // early-out as a guard (its diff_only_fn_depth idiom) where it cannot
-    // recognise one living in the CALLER.
-    if (!RtDiffEnabled()) return nullptr;
-
-    static Scene* scratch = nullptr;
-    if (!scratch) {
-        static Scene storage;
-        typedef Scene* (*CtorFn)(Scene*);
-        RtOriginal<CtorFn>(kSceneCtor)(&storage);
-        scratch = &storage;
-    }
-    return scratch;
-}
 }  // namespace
 
 extern "C" uint32_t RtPicking_Scene_AddMesh(Scene* self, void* mesh,
                                             const ::Transform* rootXform, void* userData,
                                             int userValue, int userValue2,
                                             HitCallback callback) {
-    RT_DIFF_BEGIN("Picking::Scene::AddMesh");
 
     const RtPicking::PickingMesh* pm = reinterpret_cast<const RtPicking::PickingMesh*>(mesh);
 
@@ -885,52 +682,6 @@ extern "C" uint32_t RtPicking_Scene_AddMesh(Scene* self, void* mesh,
     const uint32_t id = RtGridAdd(self, &desc);
 
     // ---- ORACLE, before the scratch is released -------------------------
-    if (rt_diff_on__) {
-        Scene* scratch = DiffScratchScene();
-        typedef uint32_t (*AddFn)(Scene*, void*, const ::Transform*, void*, int, int,
-                                  HitCallback);
-        const uint32_t theirId = RtOriginal<AddFn>(kAddMesh)(
-            scratch, mesh, rootXform, userData, userValue, userValue2, callback);
-
-        const Entry* ourEntry   = &self->_entries._data[id];
-        const Entry* theirEntry = &scratch->_entries._data[theirId];
-        // Same self-describing shape as the other shadow sites: the first
-        // failing term names itself. The transform arrays live at different
-        // addresses, so their CONTENT is compared as one term reporting the
-        // byte offset of the first difference.
-        long long xformDiff = -1;
-        if (ourEntry->_transforms._size == theirEntry->_transforms._size &&
-            ourEntry->_transforms._size > 0) {
-            const uint8_t* x = (const uint8_t*)ourEntry->_transforms._data;
-            const uint8_t* y = (const uint8_t*)theirEntry->_transforms._data;
-            const size_t n = (size_t)ourEntry->_transforms._size * sizeof(::Transform);
-            for (size_t k = 0; k < n; ++k)
-                if (x[k] != y[k]) { xformDiff = (long long)k; break; }
-        }
-        const PostCheck checks[] = {
-            { "_transforms._size", ourEntry->_transforms._size, theirEntry->_transforms._size },
-            { "transforms first differing byte", xformDiff, -1 },
-            { "_mesh",       (long long)(intptr_t)ourEntry->_mesh,
-                             (long long)(intptr_t)theirEntry->_mesh },
-            { "_userData",   (long long)(intptr_t)ourEntry->_userData,
-                             (long long)(intptr_t)theirEntry->_userData },
-            { "_userValue",  ourEntry->_userValue,  theirEntry->_userValue },
-            { "_userValue2", ourEntry->_userValue2, theirEntry->_userValue2 },
-            { "_callback",   (long long)(intptr_t)ourEntry->_callback,
-                             (long long)(intptr_t)theirEntry->_callback },
-        };
-        char a[96], b[96];
-        const int bad = RtFirstFailure(checks, (int)(sizeof(checks) / sizeof(checks[0])),
-                                       a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "id=%u nodes=%d", id, ourEntry->_transforms._size);
-            std::snprintf(b, sizeof(b), "id=%u nodes=%d", theirId, theirEntry->_transforms._size);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-
-        typedef void (*RemoveFn)(Scene*, uint32_t);
-        RtOriginal<RemoveFn>(kRemoveMesh)(scratch, theirId);
-    }
 
     RtFreeScratchTransforms(&desc._transforms);   // see the helper's comment
     return id;
@@ -971,9 +722,8 @@ extern "C" uint32_t RtPicking_Scene_AddMesh(Scene* self, void* mesh,
 // here rather than left implied.
 // ============================================================================
 extern "C" void RtPicking_Scene_RemoveMesh(Scene* self, uint32_t id) {
-    RT_DIFF_BEGIN("Picking::Scene::RemoveMesh");
 
-    const int32_t prevFree = rt_diff_on__ ? self->_freeEntry : 0;
+
 
     Entry* e = &self->_entries._data[id];
     const uint16_t w = e->_cellW;
@@ -981,68 +731,6 @@ extern "C" void RtPicking_Scene_RemoveMesh(Scene* self, uint32_t id) {
     RtGridUnthread(self, &e->_cellX, w, h, (int32_t)id);
     RtGridFreeEntry(self, id);
 
-    if (rt_diff_on__) {
-        // *** ONE TERM OF THIS PREDICATE USED TO BE WRONG ABOUT RETAIL. ***
-        // It asserted `_userValue2 == 0` and reported 16 divergences in 17
-        // calls on a tutorial run while every field it PRINTED agreed. The port
-        // was right and the predicate was wrong, and the reason is in retail's
-        // own bytes rather than in ours.
-        //
-        // 0x18007b390 builds an all-zero 0x48 Entry on its stack at RSP+0x28
-        // and copies it over the entry. Its eleven initialising stores are, in
-        // order (bytes read out of the shipped DLL at 0x18007b3af):
-        //
-        //   89 4C 24 28              [RSP+0x28] = 0        template +0x00
-        //   C7 44 24 2C FFFFFFFF     [RSP+0x2c] = -1       template +0x04
-        //   49 89 4B B8              [R11-0x48] = 0 (q)    template +0x08
-        //   89 4C 24 38              [RSP+0x38] = 0        template +0x10
-        //   49 89 4B C8/D0/D8/E0     four qwords = 0       template +0x18..+0x37
-        //   89 4C 24 60              [RSP+0x60] = 0        template +0x38
-        //   49 89 4B F0              [R11-0x10] = 0 (q)    template +0x40
-        //
-        // The dword at RSP+0x64 -- template +0x3c, `_userValue2` -- is NEVER
-        // WRITTEN. And 0x18007b590, the field-by-field Entry copy, DOES copy it
-        // (`MOV EAX,[RBX+0x3c]; MOV [RDI+0x3c],EAX` at 0x18007b5e5). So every
-        // retail RemoveMesh stores an UNINITIALISED STACK DWORD into
-        // `Entry::_userValue2`. That is retail's behaviour, not a port defect,
-        // and it is why call #1 passed (a fresh stack slot that happened to be
-        // zero) and #2 onward failed.
-        //
-        // It is harmless, which is presumably why it shipped: `_userValue2` has
-        // no exported getter -- `GetUserValue` (0x1800722e0) reads +0x38, not
-        // +0x3c -- and the entry allocator 0x18007b210 overwrites +0x3c from
-        // the descriptor before the slot is handed out again. Nothing can
-        // observe the garbage. So the term is DROPPED, not weakened: there is
-        // no value it could assert.
-        //
-        // +0x14 is likewise not checked, for a different reason: 0x18007b590
-        // skips +0x14..+0x17 entirely, so the entry KEEPS its old bytes there.
-        const PostCheck checks[] = {
-            { "scene._freeEntry",           self->_freeEntry,               (long long)id },
-            { "entry._nextFree",            e->_nextFree,                   prevFree },
-            { "entry._queryStamp",          e->_queryStamp,                 0 },
-            { "entry._cellX",               e->_cellX,                      0 },
-            { "entry._cellY",               e->_cellY,                      0 },
-            { "entry._cellW",               e->_cellW,                      0 },
-            { "entry._cellH",               e->_cellH,                      0 },
-            { "entry._mesh",                (long long)(intptr_t)e->_mesh,  0 },
-            { "entry._transforms._data",    (long long)(intptr_t)e->_transforms._data, 0 },
-            { "entry._transforms._size",    e->_transforms._size,           0 },
-            { "entry._transforms._capacity", e->_transforms._capacity,      0 },
-            { "entry._userData",            (long long)(intptr_t)e->_userData, 0 },
-            { "entry._userValue",           e->_userValue,                  0 },
-            { "entry._callback",            (long long)(intptr_t)e->_callback, 0 },
-            // _userValue2 (+0x3c) deliberately absent -- see above.
-        };
-        char a[96], b[96];
-        const int bad = RtFirstFailure(checks, (int)(sizeof(checks) / sizeof(checks[0])),
-                                       a, sizeof(a), b, sizeof(b));
-        if (bad < 0) {
-            std::snprintf(a, sizeof(a), "id=%u released, free list head", id);
-            std::snprintf(b, sizeof(b), "id=%u released, free list head", id);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
 }
 
 // ============================================================================
@@ -1080,117 +768,14 @@ extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* star
                                          const Vector3* dir, const Scalar* maxDist,
                                          Vector3* outPos, Vector3* outNormal);
 
-namespace {
-// The deterministic ray fixture; see the header block above kOne. Casts a ray
-// set built entirely from constants through the real Intersect, so the oracle
-// diffs each one and the denominator is identical on every run of the same
-// seed. Re-entrancy is blocked by g_pickSweepRunning, so the sweep's own calls
-// do not re-arm it.
-void RtPickingRunSweep(Scene* self) {
-    g_pickSweepRunning = true;
-
-    const float cx   = PickSweepEnvF("BANISHED_PICK_SWEEP_CX",    0.0f);
-    const float cy   = PickSweepEnvF("BANISHED_PICK_SWEEP_CY",    0.0f);
-    const float half = PickSweepEnvF("BANISHED_PICK_SWEEP_HALF", 60.0f);
-    const float step = PickSweepEnvF("BANISHED_PICK_SWEEP_STEP", 6.0f);
-    const float z0   = PickSweepEnvF("BANISHED_PICK_SWEEP_Z",   200.0f);
-    const float dist = PickSweepEnvF("BANISHED_PICK_SWEEP_DIST", 600.0f);
-
-    // CAMERA-SHAPED RAYS, not vertical drops. The first version of this fixture
-    // fired 2,205 straight-down rays and its effectiveness control said so —
-    // 8 hits. The second aimed them at the right place and got 525 hits and no
-    // divergences, which was still the wrong experiment: a real pick ray comes
-    // from an oblique camera, and the one diverging ray recorded on this route
-    // hit a face whose normal was (0.464, 0, 0.886) — 27.7 degrees off vertical.
-    // So the ray set is now an ORIGIN RING crossed with a TARGET GRID: 24
-    // origins on a hemisphere of radius `ringR` (3 elevations x 8 azimuths),
-    // each aimed at every point of the target grid. That is the shape of a
-    // camera pick, and it is still built entirely from constants.
-    static const float kElevCos[3] = { 0.86602539f, 0.70710678f, 0.5f };  // 30/45/60 deg
-    static const float kElevSin[3] = { 0.5f, 0.70710678f, 0.86602539f };
-    static const float kAzC[8] = { 1.0f, 0.70710678f, 0.0f, -0.70710678f,
-                                  -1.0f, -0.70710678f, 0.0f, 0.70710678f };
-    static const float kAzS[8] = { 0.0f, 0.70710678f, 1.0f, 0.70710678f,
-                                   0.0f, -0.70710678f, -1.0f, -0.70710678f };
-    const float ringR = PickSweepEnvF("BANISHED_PICK_SWEEP_RING", 60.0f);
-
-    long long rays = 0, hits = 0;
-    const unsigned long long divBefore =
-        g_pickIntersectSite ? g_pickIntersectSite->divergences : 0;
-    int printed = 0;
-
-    for (int d = 0; d < 24; ++d) {
-        const int el = d / 8, az = d % 8;
-        // Origin on the ring: horizontal offset ringR*cosElev, height ringR*sinElev.
-        const Vector3 org = { cx + ringR * kElevCos[el] * kAzC[az],
-                              cy + ringR * kElevCos[el] * kAzS[az],
-                              z0 + ringR * kElevSin[el] };
-        const int n = (int)(2.0f * half / step) + 1;
-        for (int iy = 0; iy < n; ++iy) {
-            for (int ix = 0; ix < n; ++ix) {
-                // Integer-stepped so the grid is identical bit for bit on every
-                // run; a `for (float x = -half; x <= half; x += step)` loop
-                // accumulates rounding and can even change its trip count.
-                const float x = cx - half + (float)ix * step;
-                const float y = cy - half + (float)iy * step;
-                const float vx = x - org.x, vy = y - org.y, vz = 0.0f - org.z;
-                const float vlen = RtSqrtf(vx * vx + vy * vy + vz * vz);
-                Vector3 dir   = { vx / vlen, vy / vlen, vz / vlen };
-                Vector3 start = org;
-                Scalar  md    = { dist };
-                Vector3 p = { 0.0f, 0.0f, 0.0f }, n = { 0.0f, 0.0f, 0.0f };
-                const unsigned long long before =
-                    g_pickIntersectSite ? g_pickIntersectSite->divergences : 0;
-                const int id = RtPicking_Scene_Intersect(self, &start, &dir, &md, &p, &n);
-                ++rays;
-                if (id >= 0) ++hits;
-                const unsigned long long after =
-                    g_pickIntersectSite ? g_pickIntersectSite->divergences : 0;
-                if (after != before && printed < 12) {
-                    ++printed;
-                    std::fprintf(stderr,
-                        "[PickSweep] DIVERGED ray#%lld dir=(%.9g,%.9g,%.9g) "
-                        "start=(%.9g,%.9g,%.9g) maxDist=%.9g id=%d "
-                        "ours p=(%.9g,%.9g,%.9g)\n",
-                        rays, dir.x, dir.y, dir.z, start.x, start.y, start.z,
-                        md.v, id, p.x, p.y, p.z);
-                }
-            }
-        }
-    }
-
-    const unsigned long long divAfter =
-        g_pickIntersectSite ? g_pickIntersectSite->divergences : 0;
-    // Self-evidencing output: only a binary built from THIS tree can print it.
-    std::fprintf(stderr,
-        "[PickSweep] fired after %lld real calls: rays=%lld hits=%lld "
-        "divergences=%llu c=(%.9g,%.9g) half=%.9g step=%.9g z=%.9g dist=%.9g negctl=%d\n",
-        g_pickRealCalls, rays, hits, divAfter - divBefore,
-        cx, cy, half, step, z0, dist, PickNegCtl());
-    std::fflush(stderr);
-
-    g_pickSweepRunning = false;
-}
-}  // namespace
 
 extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* start,
                                          const Vector3* dir, const Scalar* maxDist,
                                          Vector3* outPos, Vector3* outNormal) {
-    RT_DIFF_BEGIN("Picking::Scene::Intersect");
     Scene* self = const_cast<Scene*>(cself);
 
-    if (rt_diff_on__ && !g_pickSweepRunning) {
-        g_pickIntersectSite = &rt_diff_site__;
-        ++g_pickRealCalls;
-        const int arm = PickSweepAfterCalls();
-        if (arm > 0 && !g_pickSweepFired && g_pickRealCalls >= arm) {
-            g_pickSweepFired = true;
-            RtPickingRunSweep(self);
-        }
-    }
 
     Vector3 theirPos{}, theirNormal{};
-    if (rt_diff_on__) { theirPos = *outPos; theirNormal = *outNormal; }
 
     // ---- the ray's XY extent, clamped into the +/-1e8 world box ---------
     float oy = start->y;
@@ -1229,26 +814,6 @@ extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* star
     RtCellIterAdvance(&it);
     if (it.link >= 0) EntryAt(self, LinkEntry(self, it.link))->_queryStamp = stamp;
     if (it.link == -1) {
-        if (rt_diff_on__) {
-            typedef int (*Fn)(const Scene*, const Vector3*, const Vector3*, const Scalar*,
-                              Vector3*, Vector3*);
-            const int theirs = RtOriginal<Fn>(kIntersect)(cself, start, dir, maxDist,
-                                                          &theirPos, &theirNormal);
-            const PostCheck checks[] = {
-                { "return", -1, theirs },
-                { "outPos first differing byte",
-                  RtFirstByteDiff(outPos, &theirPos, sizeof(Vector3)), -1 },
-                { "outNormal first differing byte",
-                  RtFirstByteDiff(outNormal, &theirNormal, sizeof(Vector3)), -1 },
-            };
-            char a[96], b[96];
-            const int bad = RtFirstFailure(checks, 3, a, sizeof(a), b, sizeof(b));
-            if (bad < 0) {
-                std::snprintf(a, sizeof(a), "miss (-1), out-params untouched");
-                std::snprintf(b, sizeof(b), "miss (-1), out-params untouched");
-            }
-            RT_DIFF_SHADOW(bad < 0, a, b);
-        }
         return -1;
     }
 
@@ -1359,29 +924,6 @@ extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* star
                         // `a + b + c` means in C. The port matches.
                         float hitT = (q20 * e2y + q23 * e2x + q32 * e2z) * (kOne / det);
 
-                        // NEGATIVE CONTROLS, off by default. See the fixture
-                        // header above kOne for why there are TWO of them.
-                        //   =1  ONE-ULP BUMP of hitT. Cannot be absorbed by any
-                        //       geometry, and it is the EXACT magnitude of the
-                        //       real defect (lane N measured Δz = 2^-18 on all
-                        //       three observations, which is one ULP of hitT at
-                        //       these ranges). This is the control that decides
-                        //       whether the fixture can see the thing it hunts.
-                        //   =2  the association move `(a+b+c)` -> `(a+(b+c))`.
-                        //       Kept because it is the hypothesis under test,
-                        //       NOT because it is a valid control: at 525 hits
-                        //       it came back green, and an effect whose rate is
-                        //       1 in 23,654 is expected 0.02 times in 525. It
-                        //       is UNDERPOWERED, not disproved.
-                        const int negctl = PickNegCtl();
-                        if (negctl == 1) {
-                            uint32_t bits;
-                            std::memcpy(&bits, &hitT, 4);
-                            bits += 1;                       // next float up
-                            std::memcpy(&hitT, &bits, 4);
-                        } else if (negctl == 2) {
-                            hitT = (q20 * e2y + (q23 * e2x + q32 * e2z)) * (kOne / det);
-                        }
                         // *** THE TIE-BREAK IS `<=`, AND IT MATCHES RETAIL. ***
                         // Lane M's cheapest hypothesis for its Finding 2 was
                         // that retail might use `<` here, so two coplanar
@@ -1458,48 +1000,6 @@ extern "C" int RtPicking_Scene_Intersect(const Scene* cself, const Vector3* star
         if (it.link == -1) break;
     }
 
-    if (rt_diff_on__) {
-        typedef int (*Fn)(const Scene*, const Vector3*, const Vector3*, const Scalar*,
-                          Vector3*, Vector3*);
-        const int theirs = RtOriginal<Fn>(kIntersect)(cself, start, dir, maxDist,
-                                                      &theirPos, &theirNormal);
-        // Three terms, each named. The out-NORMAL used to be compared but never
-        // printed, so a normal-only divergence would have rendered two
-        // identical strings -- the same defect that made RemoveMesh's failure
-        // unreadable.
-        const PostCheck checks[] = {
-            { "hit id", bestId, theirs },
-            { "outPos first differing byte",
-              RtFirstByteDiff(outPos, &theirPos, sizeof(Vector3)), -1 },
-            { "outNormal first differing byte",
-              RtFirstByteDiff(outNormal, &theirNormal, sizeof(Vector3)), -1 },
-        };
-        char a[96], b[96];
-        const int bad = RtFirstFailure(checks, 3, a, sizeof(a), b, sizeof(b));
-        if (bad == 0) {
-            std::snprintf(a, sizeof(a), "id=%d t-best", bestId);
-            std::snprintf(b, sizeof(b), "id=%d", theirs);
-        } else if (bad > 0) {
-            // A value divergence: show the numbers, not just the byte offset.
-            // Rendered through scratch buffers -- snprintf'ing a buffer into
-            // itself is undefined behaviour, not a shortcut.
-            char at[96], bt[96];
-            std::snprintf(at, sizeof(at), "%s p=(%.9g,%.9g,%.9g) n=(%.9g,%.9g,%.9g)", a,
-                          outPos->x, outPos->y, outPos->z,
-                          outNormal->x, outNormal->y, outNormal->z);
-            std::snprintf(bt, sizeof(bt), "%s p=(%.9g,%.9g,%.9g) n=(%.9g,%.9g,%.9g)", b,
-                          theirPos.x, theirPos.y, theirPos.z,
-                          theirNormal.x, theirNormal.y, theirNormal.z);
-            std::memcpy(a, at, sizeof(a));
-            std::memcpy(b, bt, sizeof(b));
-        } else {
-            std::snprintf(a, sizeof(a), "id=%d p=(%.9g,%.9g,%.9g)", bestId,
-                          outPos->x, outPos->y, outPos->z);
-            std::snprintf(b, sizeof(b), "id=%d p=(%.9g,%.9g,%.9g)", theirs,
-                          theirPos.x, theirPos.y, theirPos.z);
-        }
-        RT_DIFF_SHADOW(bad < 0, a, b);
-    }
     return bestId;
 }
 

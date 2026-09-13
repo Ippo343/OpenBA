@@ -139,25 +139,6 @@
 // ?BeginCommands@, the private ?Bind*@ family, …) are not in this lane's scope
 // because our tree never calls them; they stay in the DLL untouched.
 //
-// ---------------------------------------------------------------------------
-// TWO ORACLES
-// ---------------------------------------------------------------------------
-// (a) REPLAY, for the fourteen state mutators. Snapshot the live 0x2168-byte
-//     Context into a scratch copy BEFORE our body runs, run our body on the
-//     real object, then run the DLL's body on the scratch copy and compare all
-//     0x2168 bytes. `RtDiffReportBytes` names the first differing offset, and
-//     the table in Context.h turns that offset straight into a field name.
-//     This is a FULL oracle, not a spot check: it catches a wrong offset, a
-//     missed dirty bit, a reassociated float and a stray write into padding.
-//
-// (b) THUNK, for the nine backend forwarders. Those cannot be replayed —
-//     running them twice would issue the draw twice. But a forwarder has
-//     exactly one thing that can be wrong: which vtable slot it jumps to.
-//     `VerifyThunk` below decodes the shipped three-instruction body
-//     (`MOV RCX,[RCX+0x2160] / MOV RAX,[RCX] / JMP [RAX+off]`) at registration
-//     time and reports, through a normal diff site, whether the offset our
-//     port uses is the offset the DLL uses. It also re-derives Context+0x2160
-//     from the same bytes. Each check appears in `RtDiffSummary()` as one call.
 // ============================================================================
 
 #include <cstddef>
@@ -188,133 +169,6 @@ using RtVideo::kContextSize;
 void* ResolveExport(const char* mangled_name);
 
 namespace {
-
-// ============================================================================
-// Mangled names.
-//
-// The registrations at the bottom of this file deliberately repeat each name
-// as its own string literal instead of using these constants:
-// tools/runtime_census.py cannot see through a NAMED CONSTANT and would
-// under-count the lane, which is how Wave 3's Object count stood at 21/41 when
-// it was really 27/41 (reference_census_cannot_see_nonliteral_registrations.md).
-// These constants exist only for the diff oracle's RT_ORIGINAL_ONCE lookups.
-// ============================================================================
-const char* const kAddVertex       = "?AddVertex@Context@Video@@QEAAXPEBX@Z";
-const char* const kAddVertices     = "?AddVertices@Context@Video@@QEAAXHPEBX@Z";
-const char* const kReset           = "?Reset@Context@Video@@QEAAXXZ";
-const char* const kSetCamera       = "?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z";
-const char* const kSetColor        = "?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z";
-const char* const kSetDefaultRB    = "?SetDefaultRenderBuffer@Context@Video@@QEAAXPEAVRenderBuffer@2@@Z";
-const char* const kSetFog          = "?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z";
-const char* const kSetImageBuffer  = "?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z";
-const char* const kSetInverseScale = "?SetInverseScale@Context@Video@@QEAAXMMMM@Z";
-const char* const kSetRenderBuffer = "?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z";
-const char* const kSetTime         = "?SetTime@Context@Video@@QEAAXM@Z";
-const char* const kSetBones        = "?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z";
-const char* const kSetTransform    = "?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z";
-const char* const kSetTransformScale =
-    "?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z";
-const char* const kSetVertexBuffer = "?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z";
-const char* const kSetViewport     = "?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z";
-
-// ============================================================================
-// The replay oracle
-// ============================================================================
-// One file-scope scratch object, not a stack buffer: 0x2168 bytes is 8.5 KB
-// and every one of these functions would reserve it on entry whether diffing
-// is on or not. It is safe as a single shared buffer because
-//
-//   * rendering is single-threaded (the DLL's Context is created and driven
-//     only from Engine::MainLoop's thread), and
-//   * no ported body below calls another ported body, so a replay can never
-//     nest. The one function that calls out at all is SetCamera, and it calls
-//     Math::Matrix routines, which do not touch a Context.
-//
-// If either stops being true this must become a per-call allocation. It is
-// only ever touched inside `if (rt_diff_on__)`, so a normal run never pays for
-// it and never even reads it.
-alignas(16) uint8_t g_replayScratch[kContextSize];
-
-// Snapshot the live object so the DLL's implementation can be replayed against
-// a private copy. Returns the copy, or nullptr when diffing is off.
-inline Context* ReplaySnapshot(bool on, const Context* live) {
-    if (!on) return nullptr;
-    std::memcpy(g_replayScratch, live, kContextSize);
-    return reinterpret_cast<Context*>(g_replayScratch);
-}
-
-// ============================================================================
-// The thunk oracle
-// ============================================================================
-// Nine Context methods are three-instruction tail-jumps into the backend:
-//
-//   488b8960210000   MOV RCX,[RCX+0x2160]      ; this->_contextData
-//   488b01           MOV RAX,[RCX]             ; (or 4c8b09 / 4c8b11 — the
-//                                             ;  destination register varies)
-//   48ffa080000000   JMP qword ptr [RAX+0x80]  ; (or a disp8 form, and the
-//                                             ;  REX/rm bits follow the reg)
-//
-// Decode both displacements out of the shipped bytes and compare them with
-// what the port uses. This is the whole failure surface of a forwarder: get
-// the slot wrong and you call a different backend method with this method's
-// arguments, which is a crash at best and silent wrong rendering at worst.
-struct ThunkFacts {
-    bool     ok;         // the body matched the expected shape at all
-    uint32_t ctxOffset;  // displacement of the MOV RCX,[RCX+disp32]
-    uint32_t slotOffset; // displacement of the JMP [reg+disp]
-};
-
-ThunkFacts DecodeThunk(const uint8_t* p) {
-    ThunkFacts f = { false, 0, 0 };
-    if (!p) return f;
-
-    // MOV RCX,[RCX+disp32]  =  48 8b 89 <disp32>
-    if (p[0] != 0x48 || p[1] != 0x8b || p[2] != 0x89) return f;
-    std::memcpy(&f.ctxOffset, p + 3, 4);
-
-    // MOV <reg>,[RCX]  =  <REX> 8b <modrm with mod=00, rm=001>
-    const uint8_t* q = p + 7;
-    if ((q[0] & 0xf8) != 0x48 || q[1] != 0x8b || (q[2] & 0xc7) != 0x01) return f;
-
-    // JMP qword ptr [<reg> + disp]  =  <REX> ff <modrm, reg field == 4>
-    const uint8_t* r = q + 3;
-    if ((r[0] & 0xf8) != 0x48 || r[1] != 0xff) return f;
-    const uint8_t modrm = r[2];
-    if (((modrm >> 3) & 7) != 4) return f;
-    const uint8_t mod = static_cast<uint8_t>(modrm >> 6);
-    if (mod == 1) {
-        f.slotOffset = r[3];
-    } else if (mod == 2) {
-        std::memcpy(&f.slotOffset, r + 3, 4);
-    } else {
-        return f;
-    }
-    f.ok = true;
-    return f;
-}
-
-// One diff site per forwarder, filled in at registration time. Declared here
-// so each Register* line reads as "port, then prove it".
-void VerifyThunk(RtDiffSite* site, const char* mangled, unsigned expectedSlot) {
-    if (!RtDiffEnabled()) return;
-    RtDiffRegister(site);
-
-    const uint8_t* body = static_cast<const uint8_t*>(ResolveExportRaw(mangled));
-    const ThunkFacts f = DecodeThunk(body);
-
-    char ours[64], theirs[96];
-    std::snprintf(ours, sizeof(ours), "ctx+0x%x slot+0x%x",
-                  (unsigned)offsetof(Context, _contextData), expectedSlot);
-    if (!f.ok) {
-        std::snprintf(theirs, sizeof(theirs), "unrecognised thunk shape at %p", (const void*)body);
-        RtDiffReport(site, false, ours, theirs);
-        return;
-    }
-    std::snprintf(theirs, sizeof(theirs), "ctx+0x%x slot+0x%x", f.ctxOffset, f.slotOffset);
-    const bool equal = (f.ctxOffset == offsetof(Context, _contextData)) &&
-                       (f.slotOffset == expectedSlot);
-    RtDiffReport(site, equal, ours, theirs);
-}
 
 // Call the backend through the ContextData vtable, exactly as the retail thunk
 // does: `this` becomes the ContextData, every other argument is untouched.
@@ -406,8 +260,6 @@ bool RtMath_Matrix_NotEqual(const MatrixRaw* self, const MatrixRaw* other) {
 
 // ---- ?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z  0x18001a8e0 -------
 void RtVideo_Context_SetColor(Context* self, const Vector4Raw* color) {
-    RT_DIFF_BEGIN("Video::Context::SetColor");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     if (self->_color.x != color->x || self->_color.y != color->y ||
         self->_color.z != color->z || self->_color.w != color->w) {
@@ -415,17 +267,10 @@ void RtVideo_Context_SetColor(Context* self, const Vector4Raw* color) {
         self->_dirty |= RtVideo::kDirtyMaterialConstants;
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, const Vector4Raw*);
-        RT_ORIGINAL_ONCE(Fn, kSetColor)(replay, color);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetInverseScale@Context@Video@@QEAAXMMMM@Z  0x18001a880 --------------
 void RtVideo_Context_SetInverseScale(Context* self, float x, float y, float z, float w) {
-    RT_DIFF_BEGIN("Video::Context::SetInverseScale");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     if (x != self->_inverseScale.x || y != self->_inverseScale.y ||
         z != self->_inverseScale.z || w != self->_inverseScale.w) {
@@ -436,19 +281,12 @@ void RtVideo_Context_SetInverseScale(Context* self, float x, float y, float z, f
         self->_dirty |= RtVideo::kDirtyMaterialConstants;
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, float, float, float, float);
-        RT_ORIGINAL_ONCE(Fn, kSetInverseScale)(replay, x, y, z, w);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetTime@Context@Video@@QEAAXM@Z  0x18001a330 ------------------------
 // Note there is no compare-first here: retail writes the four floats and ORs
 // the dirty bit unconditionally, and it shares bit 0x800 with SetCamera.
 void RtVideo_Context_SetTime(Context* self, float time) {
-    RT_DIFF_BEGIN("Video::Context::SetTime");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     self->_time.x = time;
     self->_time.y = 0.0f;
@@ -456,11 +294,6 @@ void RtVideo_Context_SetTime(Context* self, float time) {
     self->_time.w = 0.0f;
     self->_dirty |= RtVideo::kDirtyGlobalConstants;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, float);
-        RT_ORIGINAL_ONCE(Fn, kSetTime)(replay, time);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z  0x18001a360 ------
@@ -472,8 +305,6 @@ void RtVideo_Context_SetTime(Context* self, float time) {
 // 0x80000000 quad), not `0 - nearZ`. Reproduced bitwise so that a fog plane at
 // exactly 0.0f yields -0.0f here, the same as retail.
 void RtVideo_Context_SetFog(Context* self, float nearZ, float farZ, const Vector4Raw* color) {
-    RT_DIFF_BEGIN("Video::Context::SetFog");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     uint32_t nearBits;
     std::memcpy(&nearBits, &nearZ, 4);
@@ -494,17 +325,10 @@ void RtVideo_Context_SetFog(Context* self, float nearZ, float farZ, const Vector
 
     self->_dirty |= (RtVideo::kDirtyGlobalConstants | RtVideo::kDirtyPixelConstants);
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, float, float, const Vector4Raw*);
-        RT_ORIGINAL_ONCE(Fn, kSetFog)(replay, nearZ, farZ, color);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z  0x18001a060 ------
 void RtVideo_Context_SetViewport(Context* self, const Viewport* vp) {
-    RT_DIFF_BEGIN("Video::Context::SetViewport");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     if (self->_viewport.x != vp->x || self->_viewport.y != vp->y ||
         self->_viewport.width != vp->width || self->_viewport.height != vp->height) {
@@ -514,19 +338,12 @@ void RtVideo_Context_SetViewport(Context* self, const Viewport* vp) {
         self->_viewport = *vp;
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, const Viewport*);
-        RT_ORIGINAL_ONCE(Fn, kSetViewport)(replay, vp);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z  0x180019ed0 -
 // `1 << (slot & 0x1f)` is retail's own masking; with 16 slots it never wraps,
 // but the AND is in the shipped code and is kept.
 void RtVideo_Context_SetImageBuffer(Context* self, const void* image, int slot) {
-    RT_DIFF_BEGIN("Video::Context::SetImageBuffer");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     if (image != self->_imageBuffers[slot]) {
         self->_dirty |= RtVideo::kDirtyImageBuffers;
@@ -534,18 +351,11 @@ void RtVideo_Context_SetImageBuffer(Context* self, const void* image, int slot) 
         self->_imageBuffers[slot] = const_cast<void*>(image);
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, const void*, int);
-        RT_ORIGINAL_ONCE(Fn, kSetImageBuffer)(replay, image, slot);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z  0x180019f20
 void RtVideo_Context_SetVertexBuffer(Context* self, const void* vb, int slot,
                                      int offset, int stride) {
-    RT_DIFF_BEGIN("Video::Context::SetVertexBuffer");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     if (vb != self->_vertexBuffers[slot] || offset != self->_vertexOffsets[slot] ||
         stride != self->_vertexStrides[slot]) {
@@ -556,28 +366,16 @@ void RtVideo_Context_SetVertexBuffer(Context* self, const void* vb, int slot,
         self->_vertexStrides[slot] = stride;
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, const void*, int, int, int);
-        RT_ORIGINAL_ONCE(Fn, kSetVertexBuffer)(replay, vb, slot, offset, stride);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z  0x1800f2100
 void RtVideo_Context_SetRenderBuffer(Context* self, const void* rb) {
-    RT_DIFF_BEGIN("Video::Context::SetRenderBuffer");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     if (self->_renderBuffer != rb) {
         self->_dirty |= RtVideo::kDirtyRenderBuffer;
         self->_renderBuffer = const_cast<void*>(rb);
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, const void*);
-        RT_ORIGINAL_ONCE(Fn, kSetRenderBuffer)(replay, rb);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetDefaultRenderBuffer@Context@Video@@QEAAXPEAVRenderBuffer@2@@Z  0x1800ef3c0
@@ -586,16 +384,9 @@ void RtVideo_Context_SetRenderBuffer(Context* self, const void* rb) {
 // deliberately, because the caller owns the buffer it hands in. Faithfully
 // reproduced; do not add a delete here.
 void RtVideo_Context_SetDefaultRenderBuffer(Context* self, void* rb) {
-    RT_DIFF_BEGIN("Video::Context::SetDefaultRenderBuffer");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     self->_defaultRenderBuffer = rb;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, void*);
-        RT_ORIGINAL_ONCE(Fn, kSetDefaultRB)(replay, rb);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z  0x18001a6b0 ---
@@ -603,8 +394,6 @@ void RtVideo_Context_SetDefaultRenderBuffer(Context* self, void* rb) {
 // high-water mark even when the matrix is unchanged. That asymmetry is the
 // kind of thing a "tidied" port silently drops.
 void RtVideo_Context_SetTransform(Context* self, int slot, const MatrixRaw* m) {
-    RT_DIFF_BEGIN("Video::Context::SetTransform");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     MatrixRaw* dst = &self->_transforms[slot];
     if (MatrixNotEqual(m, dst)) {
@@ -615,11 +404,6 @@ void RtVideo_Context_SetTransform(Context* self, int slot, const MatrixRaw* m) {
         self->_transformCount = slot + 1;
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, int, const MatrixRaw*);
-        RT_ORIGINAL_ONCE(Fn, kSetTransform)(replay, slot, m);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z  0x18001a780 -------
@@ -635,8 +419,6 @@ void RtVideo_Context_SetTransform(Context* self, int slot, const MatrixRaw* m) {
 // A `count <= 0` call touches only `_unknown0024` and nothing else, matching
 // retail's `if (0 < param_1)` guard around the whole copy loop.
 void RtVideo_Context_SetBones(Context* self, int32_t count, const MatrixRaw* matrices) {
-    RT_DIFF_BEGIN("Video::Context::SetBones");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     self->_unknown0024 = count;
     for (int32_t i = 0; i < count; ++i) {
@@ -645,11 +427,6 @@ void RtVideo_Context_SetBones(Context* self, int32_t count, const MatrixRaw* mat
         self->_dirty |= RtVideo::kDirtyTransformConstants;
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, int32_t, const MatrixRaw*);
-        RT_ORIGINAL_ONCE(Fn, kSetBones)(replay, count, matrices);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z
@@ -687,8 +464,6 @@ void RtVideo_Context_SetBones(Context* self, int32_t count, const MatrixRaw* mat
 // file (the sibling ports here already treat Matrix as `MatrixRaw`).
 void RtVideo_Context_SetTransformScale(Context* self, int slot,
                                        const MatrixRaw* m, const float* scale) {
-    RT_DIFF_BEGIN("Video::Context::SetTransformScale");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     MatrixRaw built;
     for (int i = 0; i < 16; ++i) built.m[i] = m->m[i];
@@ -706,11 +481,6 @@ void RtVideo_Context_SetTransformScale(Context* self, int slot,
         self->_transformCount = slot + 1;
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, int, const MatrixRaw*, const float*);
-        RT_ORIGINAL_ONCE(Fn, kSetTransformScale)(replay, slot, m, scale);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z  0x18001a150 -----
@@ -721,8 +491,6 @@ void RtVideo_Context_SetTransformScale(Context* self, int slot,
 //                                                   local result)
 // _cameraPosition = view row 3
 void RtVideo_Context_SetCamera(Context* self, const MatrixRaw* view, const MatrixRaw* projection) {
-    RT_DIFF_BEGIN("Video::Context::SetCamera");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     MatrixRaw scratch;
     self->_inverseView = *MatrixInverse()(view, &scratch);
@@ -735,11 +503,6 @@ void RtVideo_Context_SetCamera(Context* self, const MatrixRaw* view, const Matri
 
     self->_dirty |= RtVideo::kDirtyGlobalConstants;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, const MatrixRaw*, const MatrixRaw*);
-        RT_ORIGINAL_ONCE(Fn, kSetCamera)(replay, view, projection);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?Reset@Context@Video@@QEAAXXZ  0x1800f1e50 ---------------------------
@@ -753,8 +516,6 @@ void RtVideo_Context_SetCamera(Context* self, const MatrixRaw* view, const Matri
 // fires when only the offset or stride is non-zero, while the image-slot test
 // looks at the pointer alone.
 void RtVideo_Context_Reset(Context* self) {
-    RT_DIFF_BEGIN("Video::Context::Reset");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     self->_dirty = RtVideo::kDirtyAllConstants;
 
@@ -848,11 +609,6 @@ void RtVideo_Context_Reset(Context* self) {
         self->_renderState = nullptr;
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*);
-        RT_ORIGINAL_ONCE(Fn, kReset)(replay);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?AddVertex@Context@Video@@QEAAXPEBX@Z  0x18001ad40 -------------------
@@ -868,18 +624,11 @@ void RtVideo_Context_Reset(Context* self) {
 // in this lane where the original touches something outside the scratch copy,
 // and it is deliberate: the alternative is no oracle at all.
 void RtVideo_Context_AddVertex(Context* self, const void* vertex) {
-    RT_DIFF_BEGIN("Video::Context::AddVertex");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     const size_t stride = static_cast<size_t>(self->_dynamicVertexStride);
     std::memcpy(self->_dynamicVertexCursor, vertex, stride);
     self->_dynamicVertexCursor += stride;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, const void*);
-        RT_ORIGINAL_ONCE(Fn, kAddVertex)(replay, vertex);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ---- ?AddVertices@Context@Video@@QEAAXHPEBX@Z  0x18001ad70 ----------------
@@ -888,18 +637,11 @@ void RtVideo_Context_AddVertex(Context* self, const void* vertex) {
 // sign-extending move). A count large enough to overflow would wrap the same
 // way in both. Reproduced rather than promoted to 64-bit.
 void RtVideo_Context_AddVertices(Context* self, int count, const void* vertices) {
-    RT_DIFF_BEGIN("Video::Context::AddVertices");
-    Context* replay = ReplaySnapshot(rt_diff_on__, self);
 
     const int32_t bytes = count * self->_dynamicVertexStride;
     std::memcpy(self->_dynamicVertexCursor, vertices, static_cast<size_t>(bytes));
     self->_dynamicVertexCursor += bytes;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Context*, int, const void*);
-        RT_ORIGINAL_ONCE(Fn, kAddVertices)(replay, count, vertices);
-        RT_DIFF_BYTES(self, replay, kContextSize);
-    }
 }
 
 // ============================================================================
@@ -1039,60 +781,42 @@ int RtVideoContextRegister() {
 
     // ---- backend forwarders (thunk oracle) ---------------------------------
     // Each site is static so it survives past this function and shows up in
-    // RtDiffSummary() with the one call VerifyThunk makes.
+    // with the one call VerifyThunk makes.
     {
-        static RtDiffSite site = { "Video::Context::Clear[slot]", 0, 0, false, false };
         RegisterRuntimeExport("?Clear@Context@Video@@QEAAXIIMH@Z", (void*)&RtVideo_Context_Clear); ++count;
         RegisterRuntimeAddr(0x1800f23f0, (void*)&RtVideo_Context_Clear);
-        VerifyThunk(&site, "?Clear@Context@Video@@QEAAXIIMH@Z", RtVideo::kSlotClear);
     }
     {
-        static RtDiffSite site = { "Video::Context::DrawIndexed[slot]", 0, 0, false, false };
         RegisterRuntimeExport("?DrawIndexed@Context@Video@@QEAAXW4PrimitiveType@12@HHHHH@Z", (void*)&RtVideo_Context_DrawIndexed); ++count;
         RegisterRuntimeAddr(0x1800f2410, (void*)&RtVideo_Context_DrawIndexed);
-        VerifyThunk(&site, "?DrawIndexed@Context@Video@@QEAAXW4PrimitiveType@12@HHHHH@Z", RtVideo::kSlotDrawIndexed);
     }
     {
-        static RtDiffSite site = { "Video::Context::GetMaxDynamicInstances[slot]", 0, 0, false, false };
         RegisterRuntimeExport("?GetMaxDynamicInstances@Context@Video@@QEBAHHHH@Z", (void*)&RtVideo_Context_GetMaxDynamicInstances); ++count;
         RegisterRuntimeAddr(0x1800f21d0, (void*)&RtVideo_Context_GetMaxDynamicInstances);
-        VerifyThunk(&site, "?GetMaxDynamicInstances@Context@Video@@QEBAHHHH@Z", RtVideo::kSlotGetMaxDynamicInstances);
     }
     {
-        static RtDiffSite site = { "Video::Context::BeginVertices[slot]", 0, 0, false, false };
         RegisterRuntimeExport("?BeginVertices@Context@Video@@QEAA_NHH@Z", (void*)&RtVideo_Context_BeginVertices); ++count;
         RegisterRuntimeAddr(0x1800f21b0, (void*)&RtVideo_Context_BeginVertices);
-        VerifyThunk(&site, "?BeginVertices@Context@Video@@QEAA_NHH@Z", RtVideo::kSlotBeginVertices);
     }
     {
-        static RtDiffSite site = { "Video::Context::EndVertices[slot]", 0, 0, false, false };
         RegisterRuntimeExport("?EndVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z", (void*)&RtVideo_Context_EndVertices); ++count;
         RegisterRuntimeAddr(0x1800f2190, (void*)&RtVideo_Context_EndVertices);
-        VerifyThunk(&site, "?EndVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z", RtVideo::kSlotEndVertices);
     }
     {
-        static RtDiffSite site = { "Video::Context::BeginIndexedVertices[slot]", 0, 0, false, false };
         RegisterRuntimeExport("?BeginIndexedVertices@Context@Video@@QEAA_NHHH@Z", (void*)&RtVideo_Context_BeginIndexedVertices); ++count;
         RegisterRuntimeAddr(0x1800f2170, (void*)&RtVideo_Context_BeginIndexedVertices);
-        VerifyThunk(&site, "?BeginIndexedVertices@Context@Video@@QEAA_NHHH@Z", RtVideo::kSlotBeginIndexedVertices);
     }
     {
-        static RtDiffSite site = { "Video::Context::EndIndexedVertices[slot]", 0, 0, false, false };
         RegisterRuntimeExport("?EndIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z", (void*)&RtVideo_Context_EndIndexedVertices); ++count;
         RegisterRuntimeAddr(0x1800f2150, (void*)&RtVideo_Context_EndIndexedVertices);
-        VerifyThunk(&site, "?EndIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z", RtVideo::kSlotEndIndexedVertices);
     }
     {
-        static RtDiffSite site = { "Video::Context::BeginInstancedIndexedVertices[slot]", 0, 0, false, false };
         RegisterRuntimeExport("?BeginInstancedIndexedVertices@Context@Video@@QEAA_NHHHH@Z", (void*)&RtVideo_Context_BeginInstancedIndexedVertices); ++count;
         RegisterRuntimeAddr(0x1800f2130, (void*)&RtVideo_Context_BeginInstancedIndexedVertices);
-        VerifyThunk(&site, "?BeginInstancedIndexedVertices@Context@Video@@QEAA_NHHHH@Z", RtVideo::kSlotBeginInstancedIndexedVertices);
     }
     {
-        static RtDiffSite site = { "Video::Context::EndInstancedIndexedVertices[slot]", 0, 0, false, false };
         RegisterRuntimeExport("?EndInstancedIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z", (void*)&RtVideo_Context_EndInstancedIndexedVertices); ++count;
         RegisterRuntimeAddr(0x1800f2110, (void*)&RtVideo_Context_EndInstancedIndexedVertices);
-        VerifyThunk(&site, "?EndInstancedIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z", RtVideo::kSlotEndInstancedIndexedVertices);
     }
 
     // BATCH 8: Math::Matrix::operator!=, a non-virtual leaf with no slot to verify.

@@ -140,7 +140,7 @@ inline void WP (void* p, size_t o, const void* v) { std::memcpy(static_cast<uint
 // The fourteen singleton slots, each through RT_DATA_SLOT — the PORT-AWARE
 // door. While the DLL is loaded these resolve to the DLL's own .data; at
 // cutover they resolve to the storage lane C2's mint owns. THAT SWITCH IS THE
-// WHOLE POINT: a body that reached the slot by `ResolveExportRaw`, or by
+// WHOLE POINT: a body that reached the slot by `the raw DLL door`, or by
 // `ResolveAddr(Module::Runtime, 0x1801fc6b0)`, would keep writing the DLL's
 // copy and leave the minted row zero forever — the exact failure this lane
 // exists to close.
@@ -788,9 +788,9 @@ void* Ctor_AudioDevice(void* self) {
 //     acceptance criterion of this entire lane, checked per class rather than
 //     assumed from the presence of a `Publish()` call in the source.
 //
-// It runs only when the diff harness is on (`if (!RtDiffEnabled()) return;`),
+// It runs only when the diff harness is on (`if (!the diff oracle()) return;`),
 // which is both the correct semantics — it IS an oracle — and what keeps its
-// `RT_ORIGINAL_ONCE` calls off a normal run's path for tools/rawdoor_audit.py.
+// `the raw DLL door` calls off a normal run's path for tools/rawdoor_audit.py.
 //
 // THE SINGLETON SLOTS ARE SAVED AND RESTORED. Both constructors publish, so
 // without the restore the probe would leave every live `_singleton` pointing at
@@ -833,7 +833,7 @@ void ControlMustDetect(size_t n) {
 // process-wide `?_singleton@X@` points at a 0xCD scratch buffer. For twelve of
 // the thirteen subjects that is merely wrong; for MemoryAllocator it means THE
 // PROCESS ALLOCATOR IS A SCRATCH BUFFER, and any MemAlloc/MemFree in that
-// window -- inside RtDiffReportBytes, inside a printf that touches the engine
+// window -- inside the diff oracle, inside a printf that touches the engine
 // heap, inside a lazy resolve -- lands on an allocator with `ranges == nullptr`
 // and frees a real pointer into a fake one.
 //
@@ -845,25 +845,21 @@ void ControlMustDetect(size_t n) {
 // ---------------------------------------------------------------------------
 #define LANEX_PROBE(LABEL, SIZE, SLOTFN, CTORNAME, OURFN)                      \
     do {                                                                       \
-        RT_DIFF_BEGIN(LABEL);                                                  \
+                                                  \
         using CtorFn = void* (*)(void*);                                       \
         void** slot__ = SLOTFN();                                              \
         void*  saved__ = slot__ ? *slot__ : nullptr;                           \
         std::memset(g_ours,   0xCD, (SIZE));                                   \
         std::memset(g_theirs, 0xCD, (SIZE));                                   \
-        if (rt_diff_on__) {                                                    \
-            RT_ORIGINAL_ONCE(CtorFn, CTORNAME)(g_theirs);                      \
-            if (slot__) *slot__ = saved__;                                     \
-        }                                                                      \
+                                                                      \
         OURFN(g_ours);                                                         \
         const bool published__ = (slot__ != nullptr &&                         \
                                   *slot__ == static_cast<void*>(g_ours));      \
         if (slot__) *slot__ = saved__;                                         \
         if (published__) ++g_singletonOk;                                      \
-        RT_DIFF_SHADOW(published__, "_singleton == our object",                \
-                       "the ctor must publish the slot");                      \
-        RT_DIFF_BYTES(g_ours, g_theirs, (SIZE));                               \
-        RT_DIFF_WORK(true);                                                    \
+                      \
+                               \
+                                                    \
         ControlMustDetect((SIZE));                                             \
         ++g_probed;                                                            \
     } while (0)
@@ -888,238 +884,17 @@ void ControlMustDetect(size_t n) {
 // Not hypothetical: the first version of this file probed from inside PortInit,
 // and [RtResolveEarly] reported ELEVEN of these names resolving before
 // RtResolvePortInitDone(). They were reported `benign` only because the mint
-// registers nothing unless BANISHED_RT_MINT=1 -- i.e. benign on every run we do
+// registers nothing unless RT_MINT=1 -- i.e. benign on every run we do
 // today and wrong on the first run that matters. Moving the call is the whole
 // fix, and it also makes the probe verify the door against the storage the
 // constructors will actually be handed.
 // ---------------------------------------------------------------------------
 void RtLaneXSingletonCtorProbe() {
-    if (!RtDiffEnabled()) return;
-
-    // =======================================================================
-    // MemoryAllocator. Lane E3's row, and the reason this lane exists in the
-    // shape it does.
-    //
-    // THE PLATFORM SEAM MUST BE INSTALLED FIRST, AND IT IS NOT INSTALLED BY
-    // DEFAULT. `rtalloc::Construct` opens with `g_plat.lockInit(self->lock)`
-    // (allocator.cpp:635), and `g_plat` is a function-pointer table populated
-    // ONLY by RtSystemAllocatorInstallPlatform(), which on a normal run is
-    // called from just two places -- RtAllocShadowStartup() and
-    // RtSystemAllocatorRegister() -- both opt-in and both disarmed here.
-    //
-    // allocator.cpp's contract is that nothing under `rtalloc::` ever runs on a
-    // half-built seam: RtSystemAllocatorRegister() REFUSES to register anything
-    // when `!g_platInstalled`, and says so. The first draft of this probe walked
-    // around that refusal by calling rtalloc::Construct directly, and paid for
-    // it with an EXEC-of-0 on a null g_plat.lockInit -- the fault landing on
-    // `g_ours + 0x640`, the CRITICAL_SECTION, which is why the crash handler's
-    // "VCALL-of-0 / vtable=cdcdcdcd" line was a heuristic misread: a
-    // CRITICAL_SECTION has no vtable, and MemoryAllocator has no vtable either.
-    //
-    // So the seam is installed here, deliberately and only under the diff gate.
-    // This is NOT arming the allocator port: InstallPlatform fills g_plat and
-    // nothing else -- no export registered, no detour installed, both of which
-    // are RtSystemAllocatorRegister()'s job and separately gated. The two
-    // functions that consume the seam re-install it themselves when it is
-    // absent, so pre-installing is a no-op for them, and `g_platInstalled` is
-    // read nowhere else in the tree.
-    //
-    // If the install does not take we REFUSE this one subject and say which
-    // symbol is missing. That is not the guard the fix must not be: a guard
-    // around the deref would turn a hard fault into lane E3's silent skip. This
-    // refuses to run the oracle at all, loudly, and the summary line's arithmetic
-    // moves so a reader cannot miss it.
-    // =======================================================================
-    if (!RtLaneXEnsureAllocatorPlatform()) {
-        printf("[RtPort] Wave9 lane X: REFUSING to probe "
-               "System::MemoryAllocator::ctor -- RtSystemAllocatorInstallPlatform() "
-               "left g_plat.lockInit null, so rtalloc::Construct cannot run. "
-               "See runtime/src/system/allocator_win.cpp\n");
-    } else {
-        // Compare AROUND the CRITICAL_SECTION at +0x640.
-        RT_DIFF_BEGIN("Wave9X::System::MemoryAllocator::ctor");
-        using CtorFn = void* (*)(void*);
-        constexpr size_t kLockAt  = offsetof(rt::system::MemoryAllocator, lock);
-        constexpr size_t kAfterAt = offsetof(rt::system::MemoryAllocator, pageSize);
-        void** slot = SlotMemoryAllocator();
-        void*  saved = slot ? *slot : nullptr;
-        std::memset(g_ours,   0xCD, kSizeMemoryAllocator);
-        std::memset(g_theirs, 0xCD, kSizeMemoryAllocator);
-        if (rt_diff_on__) {
-            RT_ORIGINAL_ONCE(CtorFn, "??0MemoryAllocator@System@@QEAA@XZ")(g_theirs);
-            if (slot) *slot = saved;   // the process allocator, back at once
-        }
-        Ctor_MemoryAllocator(g_ours);
-        const bool published = (slot != nullptr && *slot == static_cast<void*>(g_ours));
-        if (slot) *slot = saved;       // and again, before anything can allocate
-        if (published) ++g_singletonOk;
-        RT_DIFF_SHADOW(published, "_singleton == our object",
-                       "the ctor must publish the slot");
-        RT_DIFF_BYTES(g_ours, g_theirs, kLockAt);
-        RT_DIFF_BYTES(g_ours + kAfterAt, g_theirs + kAfterAt,
-                      kSizeMemoryAllocator - kAfterAt);
-        RT_DIFF_WORK(true);
-        ControlMustDetect(kLockAt);
-        RtLaneXPlatformLockDelete(g_ours   + kLockAt);
-        RtLaneXPlatformLockDelete(g_theirs + kLockAt);
-        ++g_probed;
-    }
-
-    LANEX_PROBE("Wave9X::IO::Modification::ctor", kSizeModification,
-                SlotModification, "??0Modification@IO@@QEAA@XZ", Ctor_Modification);
-    LANEX_PROBE("Wave9X::Object::Factory::ctor", kSizeFactory,
-                SlotFactory, "??0Factory@Object@@QEAA@XZ", Ctor_Factory);
-    LANEX_PROBE("Wave9X::Object::ExternalFactory::ctor", kSizeExternalFactory,
-                SlotExternalFactory, "??0ExternalFactory@Object@@QEAA@XZ",
-                Ctor_ExternalFactory);
-    LANEX_PROBE("Wave9X::IO::FileSystem::ctor", kSizeFileSystem,
-                SlotFileSystem, "??0FileSystem@IO@@QEAA@XZ", Ctor_FileSystem);
-    LANEX_PROBE("Wave9X::Video::Configuration::ctor", kSizeVideoConfig,
-                SlotVideoConfig, "??0Configuration@Video@@QEAA@XZ",
-                Ctor_VideoConfiguration);
-    LANEX_PROBE("Wave9X::Input::Device::ctor", kSizeInputDevice,
-                SlotInputDevice, "??0Device@Input@@QEAA@XZ", Ctor_InputDevice);
-    LANEX_PROBE("Wave9X::Input::Configuration::ctor", kSizeInputConfig,
-                SlotInputConfig, "??0Configuration@Input@@QEAA@XZ",
-                Ctor_InputConfiguration);
-    LANEX_PROBE("Wave9X::Audio::Configuration::ctor", kSizeAudioConfig,
-                SlotAudioConfig, "??0Configuration@Audio@@QEAA@XZ",
-                Ctor_AudioConfiguration);
-
-    // ---- Application: a second argument (the HINSTANCE) -------------------
-    {
-        RT_DIFF_BEGIN("Wave9X::Application::Application::ctor");
-        using CtorFn = void* (*)(void*, void*);
-        void* const kArg = reinterpret_cast<void*>(static_cast<uintptr_t>(0x0badc0deull));
-        void** slot = SlotApplication();
-        void*  saved = slot ? *slot : nullptr;
-        std::memset(g_ours,   0xCD, kSizeApplication);
-        std::memset(g_theirs, 0xCD, kSizeApplication);
-        if (rt_diff_on__) {
-            RT_ORIGINAL_ONCE(CtorFn, "??0Application@0@QEAA@PEAX@Z")(g_theirs, kArg);
-            if (slot) *slot = saved;
-        }
-        Ctor_Application(g_ours, kArg);
-        const bool published = (slot != nullptr && *slot == static_cast<void*>(g_ours));
-        if (slot) *slot = saved;
-        if (published) ++g_singletonOk;
-        RT_DIFF_SHADOW(published, "_singleton == our object",
-                       "the ctor must publish the slot");
-        RT_DIFF_BYTES(g_ours, g_theirs, kSizeApplication);
-        RT_DIFF_WORK(true);
-        ControlMustDetect(kSizeApplication);
-        ++g_probed;
-    }
-
-    // ---- Video::Device: type 0 publishes, any other type MUST NOT ---------
-    // The second call is this lane's per-class negative control. The retail
-    // CMOVE only takes `this` when the DeviceType argument is 0, so a port that
-    // published unconditionally would look correct on every check above and
-    // would silently hand `?_singleton@Device@Video@@` to a secondary device.
-    {
-        RT_DIFF_BEGIN("Wave9X::Video::Device::ctor(type=0)");
-        using CtorFn = void* (*)(void*, int32_t);
-        void** slot = SlotVideoDevice();
-        void*  saved = slot ? *slot : nullptr;
-        std::memset(g_ours,   0xCD, kSizeVideoDevice);
-        std::memset(g_theirs, 0xCD, kSizeVideoDevice);
-        if (rt_diff_on__) {
-            RT_ORIGINAL_ONCE(CtorFn, "??0Device@Video@@QEAA@W4DeviceType@01@@Z")(g_theirs, 0);
-            if (slot) *slot = saved;
-        }
-        Ctor_VideoDevice(g_ours, 0);
-        const bool published = (slot != nullptr && *slot == static_cast<void*>(g_ours));
-        if (slot) *slot = saved;
-        if (published) ++g_singletonOk;
-        RT_DIFF_SHADOW(published, "_singleton == our object",
-                       "DeviceType 0 must publish the slot");
-        // The CRITICAL_SECTION at +0x60 holds a DebugInfo pointer and an owner
-        // thread id that InitializeCriticalSection fills from live state, so
-        // the two copies legitimately differ there. Compare the two ranges
-        // AROUND it -- everything the constructor's own stores produced. The
-        // +0x88/+0x8c pair immediately after the lock is Lock()'s bookkeeping,
-        // which the ctor does not write either (Device.h says so), so the
-        // second range starts at +0x90.
-        RT_DIFF_BYTES(g_ours, g_theirs, offsetof(RtVideo::Device, lock));
-        RT_DIFF_BYTES(g_ours + 0x90, g_theirs + 0x90, kSizeVideoDevice - 0x90);
-        RT_DIFF_WORK(true);
-        ControlMustDetect(offsetof(RtVideo::Device, lock));
-        RtLaneXPlatformLockDelete(g_ours + offsetof(RtVideo::Device, lock));
-        RtLaneXPlatformLockDelete(g_theirs + offsetof(RtVideo::Device, lock));
-        ++g_probed;
-    }
-    {
-        RT_DIFF_BEGIN("Wave9X::Video::Device::ctor(type=1, must NOT publish)");
-        void** slot = SlotVideoDevice();
-        void*  saved = slot ? *slot : nullptr;
-        std::memset(g_ours, 0xCD, kSizeVideoDevice);
-        Ctor_VideoDevice(g_ours, 1);
-        const bool untouched = (slot == nullptr || *slot == saved);
-        if (slot) *slot = saved;
-        RT_DIFF_SHADOW(untouched, "_singleton unchanged",
-                       "a non-zero DeviceType must leave the slot alone");
-        RT_DIFF_WORK(true);
-        RtLaneXPlatformLockDelete(g_ours + offsetof(RtVideo::Device, lock));
-        ++g_probed;
-    }
-
-    // ---- InternalFactory: deterministic prefix + a self-consistent MT -----
-    // The shipped constructor seeds from wall-clock seconds, so the 624-word
-    // state legitimately differs between two calls. Compared here: the bytes
-    // BEFORE the seed (+0x00..+0x23, which includes Random::index), plus a
-    // check that the 623-word recurrence in OUR copy really follows from OUR
-    // mt[0]. That is what is checkable; claiming more would be a lie.
-    {
-        RT_DIFF_BEGIN("Wave9X::Object::InternalFactory::ctor");
-        using CtorFn = void* (*)(void*);
-        void** slot = SlotInternalFactory();
-        void*  saved = slot ? *slot : nullptr;
-        std::memset(g_ours,   0xCD, kSizeInternalFactory);
-        std::memset(g_theirs, 0xCD, kSizeInternalFactory);
-        if (rt_diff_on__) {
-            RT_ORIGINAL_ONCE(CtorFn, "??0InternalFactory@Object@@QEAA@XZ")(g_theirs);
-            if (slot) *slot = saved;
-        }
-        Ctor_InternalFactory(g_ours);
-        const bool published = (slot != nullptr && *slot == static_cast<void*>(g_ours));
-        if (slot) *slot = saved;
-        if (published) ++g_singletonOk;
-        RT_DIFF_SHADOW(published, "_singleton == our object",
-                       "the ctor must publish the slot");
-        RT_DIFF_BYTES(g_ours, g_theirs, 0x24);   // everything up to mt[0]
-
-        bool recurrenceOk = true;
-        for (int i = 1; i < 624; ++i) {
-            uint32_t prev = 0, cur = 0;
-            std::memcpy(&prev, g_ours + 0x24 + (i - 1) * 4, 4);
-            std::memcpy(&cur,  g_ours + 0x24 + i * 4,       4);
-            const uint32_t want = (prev ^ (prev >> 30)) * 0x6c078965u
-                                + static_cast<uint32_t>(i);
-            if (cur != want) { recurrenceOk = false; break; }
-        }
-        RT_DIFF_SHADOW(recurrenceOk, "mt[1..623] follows from mt[0]",
-                       "init_genrand recurrence (seed is wall-clock, not diffed)");
-        RT_DIFF_WORK(true);
-        ControlMustDetect(0x24);
-        ++g_probed;
-    }
-
-    // EFFECTIVENESS CONTROL, printed rather than assumed. `subjects executed`
-    // is the calls= this lane would otherwise not have at all, `published` is
-    // the acceptance criterion met per subject, and the corruption control
-    // proves the byte comparison can still FAIL — a memcmp over two identically
-    // 0xCD-filled buffers is exactly the shape that passes when a size or a
-    // pointer is wrong. `control caught` MUST equal `control run`.
-    const bool ok = (g_probed == 13 && g_singletonOk == 12 &&
-                     g_controlRun == 12 && g_controlCaught == 12);
-    printf("[RtPort] Wave9 lane X probe: %d subjects executed, "
-           "%d published their singleton, control caught %d of %d corruptions "
-           "-- expected 13 / 12 / 12 of 12: %s\n",
-           g_probed, g_singletonOk, g_controlCaught, g_controlRun,
-           ok ? "PASS" : "*** FAIL ***");
-    printf("[RtPort] Wave9 lane X: IO::Persistence and Audio::Device are "
-           "REGISTERED but NOT probed -- their base ctor starts a suspended "
-           "worker thread (see their banners in singleton_ctors.cpp)\n");
+    // A3/A4: this was the lane X differential probe -- every ported singleton
+    // constructor run once against the SHIPPED one reached through the raw
+    // door. With Runtime-x64.dll gone there is no shipped side, so the whole
+    // comparison is dead. The symbol stays because standalone/resolve_
+    // standalone.cpp still calls it (rt_port.h declares it).
 }
 
 // ---------------------------------------------------------------------------
@@ -1139,7 +914,7 @@ void RtLaneXSingletonCtorProbe() {
 //     RT_EXPORT_ONCE(CtorFn, "??0MemoryAllocator@System@@QEAA@XZ")(&self->_allocator);
 //
 // — a call site in OUR tree, reaching `Ctor_MemoryAllocator` -> `rtalloc::
-// Construct`, on EVERY default run, because RtWaveEnabled() is a kill switch
+// Construct`, on EVERY default run, because the wave kill switch is a kill switch
 // (default ON). That registration is therefore NOT inert on a live run and is
 // not merely load-bearing at cutover.
 //
@@ -1152,17 +927,13 @@ void RtLaneXSingletonCtorProbe() {
 // as retail's ctor does.
 //
 // The consequence worth writing down: "the allocator port is off unless
-// BANISHED_RT_ALLOC is set" is a claim about the REGISTRATION DOOR for the five
+// RT_ALLOC is set" is a claim about the REGISTRATION DOOR for the five
 // MemoryAllocator statics, not about every line of `rtalloc::`. Two of its
 // functions run unarmed on every boot. Corrected in place rather than deleted —
 // the conclusion (safe to land) still holds; its justification did not.
 // Evidence and the full crossing list: docs/runtime_port/WAVE22_LANE_ALLOC.md §2.2.
 // ---------------------------------------------------------------------------
 void RtSingletonCtorsPortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_SINGLETON_CTORS")) {
-        printf("[RtPort] BANISHED_RT_SINGLETON_CTORS=0 -- lane X unregistered\n");
-        return;
-    }
     int n = 0;
     RegisterRuntimeExport("??0MemoryAllocator@System@@QEAA@XZ",       (void*)&Ctor_MemoryAllocator);     ++n;
     RegisterRuntimeExport("??1MemoryAllocator@System@@QEAA@XZ",       (void*)&Dtor_MemoryAllocator);     ++n;

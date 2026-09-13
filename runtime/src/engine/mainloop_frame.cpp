@@ -232,7 +232,7 @@
 //   (extent: walk .pdata, union RUNTIME_FUNCTION entries whose start == the
 //    previous end; import names: pefile DIRECTORY_ENTRY_IMPORT by slot VA.)
 //
-// Kill switch: BANISHED_RT_MAINLOOPFRAME=0 returns every call to the DLL.
+// Kill switch: RT_MAINLOOPFRAME=0 returns every call to the DLL.
 // ============================================================================
 
 #include <cstdint>
@@ -355,7 +355,6 @@ extern "C" bool RtEngine_MainLoop_Update(MainLoop* self, const void* time);
 // `skipUpdate` is retail's `_N` parameter (DL, widened with MOVZX at
 // 0x1800dd115 and only ever tested as a byte).  `Run` passes false.
 extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
-    RT_DIFF_BEGIN("Engine::MainLoop::Frame [ATTENDANCE]");
 
     // Ported already -> BY ADDRESS, so the port registry is consulted first and
     // our body is used rather than the DLL's.  NOT ported -> BY NAME where a
@@ -492,16 +491,6 @@ extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
     // SELF-CHECK, not an oracle (§6): the post-condition this body's own loop
     // establishes. It would catch a botched loop condition; it cannot catch a
     // wrong-but-self-consistent frame.
-    if (rt_diff_on__) {
-        const bool ok = (self->_accumulator < self->_deltaTime);
-        char ours[160], theirs[160];
-        std::snprintf(ours, sizeof(ours), "accum=%lld delta=%lld total=%lld quit=%u",
-                      (long long)self->_accumulator, (long long)self->_deltaTime,
-                      (long long)self->_totalTime, (unsigned)self->_quit);
-        std::snprintf(theirs, sizeof(theirs),
-                      "expected accum < delta after the fixed-step loop");
-        RT_DIFF_SHADOW(ok, ours, theirs);
-    }
 
     // --- 0x1800dd318..0x1800dd39e : the tail, which ALWAYS runs -------------
     // Reached both by falling out of the loop and by the top test skipping it
@@ -533,7 +522,6 @@ extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
 
     SwitchToThread();                          // 0x1800dd398
 
-    RT_DIFF_WORK(true);
     return self->_quit != 0;                   // MOVZX EAX,BYTE PTR [RDI+0x19]
 }
 

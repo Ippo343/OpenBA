@@ -169,7 +169,6 @@ extern "C" void RtVideo_Context_SetLight(void* self,
                                          const void* colour, const void* position,
                                          float nearPlane, float farPlane,
                                          int32_t shadowResolution) {
-    RT_DIFF_BEGIN("Video::Context::SetLight");
 
     SetLightBody(self,
                  static_cast<const float*>(direction),
@@ -183,29 +182,6 @@ extern "C" void RtVideo_Context_SetLight(void* self,
     // again on the same object, and compare. Safe precisely because this body
     // touches nothing but those windows and the dirty mask — which is an OR of
     // a constant, so re-running it cannot change it either.
-    if (rt_diff_on__) {
-        uint8_t ours[kLightStageLen + kPixelColourLen + kPixelShadowLen];
-        uint8_t theirs[sizeof ours];
-        std::memcpy(ours, At(self, kLightStage), kLightStageLen);
-        std::memcpy(ours + kLightStageLen, At(self, kPixelColour), kPixelColourLen);
-        std::memcpy(ours + kLightStageLen + kPixelColourLen,
-                    At(self, kPixelShadow), kPixelShadowLen);
-
-        SetLightFn orig = RT_ORIGINAL_ONCE(SetLightFn,
-            "?SetLight@Context@Video@@QEAAXAEBVVector3@Math@@0AEBVVector4@4@1MMH@Z");
-        if (orig != nullptr) {
-            orig(self, static_cast<const float*>(direction),
-                 static_cast<const float*>(attenuation),
-                 static_cast<const uint32_t*>(colour),
-                 static_cast<const uint32_t*>(position),
-                 nearPlane, farPlane, shadowResolution);
-            std::memcpy(theirs, At(self, kLightStage), kLightStageLen);
-            std::memcpy(theirs + kLightStageLen, At(self, kPixelColour), kPixelColourLen);
-            std::memcpy(theirs + kLightStageLen + kPixelColourLen,
-                        At(self, kPixelShadow), kPixelShadowLen);
-            RT_DIFF_BYTES(ours, theirs, sizeof ours);
-        }
-    }
 }
 
 // ============================================================================

@@ -239,7 +239,6 @@ void RecreateFromFields(::ImageBuffer* self, int32_t kind, void* initialData) {
 // save-trace oracle recorded NO ENTRY at all for the seven ImageBuffer vtable
 // slots, which is the calls=0 column and not a pass. Static storage duration,
 // per array.cpp's 144-dangling-registrations note.
-RtDiffSite g_site = { "Video::ImageBuffer::PlatformSerialize", 0, 0, false, false };
 
 }  // namespace
 
@@ -259,19 +258,9 @@ extern "C" void Video_ImageBuffer_PlatformSerialize(::ImageBuffer* self, void* s
     // exactly kind == 4 || kind == 5, i.e. IsGenerated() || IsRendered().
     if (static_cast<uint32_t>(kindAtEntry - 4) <= 1u) {
         if (StreamDirection(stream) != 0) {          // 0x1800f32d5: saving
-            if (RtDiffEnabled()) {
-                RtDiffRegister(&g_site);
-                RtDiffReport(&g_site, true, "generated/rendered, SAVING: no-op",
-                             "generated/rendered, SAVING: no-op");
-            }
             return;
         }
         RecreateFromFields(self, kindAtEntry, nullptr);
-        if (RtDiffEnabled()) {
-            RtDiffRegister(&g_site);
-            RtDiffReport(&g_site, true, "generated/rendered, LOADING: Create(initialData=null)",
-                         "generated/rendered, LOADING: Create(initialData=null)");
-        }
         return;
     }
 
@@ -279,11 +268,6 @@ extern "C" void Video_ImageBuffer_PlatformSerialize(::ImageBuffer* self, void* s
     void* encoding = *reinterpret_cast<void**>(static_cast<uint8_t*>(stream) + kStreamEncoding);
     void** encVt = *reinterpret_cast<void***>(encoding);
     if (!reinterpret_cast<EncodingGateFn>(encVt[0])(encoding)) {
-        if (RtDiffEnabled()) {
-            RtDiffRegister(&g_site);
-            RtDiffReport(&g_site, true, "encoding slot 0 said NO: no pixel data",
-                         "encoding slot 0 said NO: no pixel data");
-        }
         return;
     }
 
@@ -321,15 +305,6 @@ extern "C" void Video_ImageBuffer_PlatformSerialize(::ImageBuffer* self, void* s
                                 levelCount, &kV_LevelBlob);
     rtcoll::ArrayDtorImpl(&levels);
 
-    if (RtDiffEnabled()) {
-        char line[160];
-        std::snprintf(line, sizeof(line),
-                      "%s levels=%d (destroyed, then block freed)",
-                      StreamDirection(ser->stream) == 0 ? "LOADING" : "SAVING",
-                      levelCount);
-        RtDiffRegister(&g_site);
-        RtDiffReport(&g_site, true, line, line);
-    }
 }
 
 // ============================================================================

@@ -152,7 +152,6 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
 
@@ -319,7 +318,6 @@ void ReleaseString(String* s) {                          // 0x1800a10c6..0x1800a
 // Audio::Stream::Run() — retail 0x1800a0f60, ord 3602
 // ============================================================================
 extern "C" void RtAudio_Stream_Run(void* selfPtr) {
-    RT_DIFF_BEGIN("Audio::Stream::Run [attendance only, no oracle]");
     ++g_calls;
 
     uint8_t* const self = static_cast<uint8_t*>(selfPtr);
@@ -547,8 +545,6 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
 
     RT_EXPORT_ONCE(VoidThisFn, "??1FileStream@IO@@UEAA@XZ")(st);        // 1800a14b3..1654
 
-    RT_DIFF_SHADOW(true, opened ? "streamed a track" : "asset open failed",
-                   "not diffable (blocking thread body, live XAudio2 voice)");
 }
 
 // ============================================================================

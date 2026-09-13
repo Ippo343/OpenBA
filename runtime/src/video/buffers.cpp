@@ -26,7 +26,6 @@
 // held-back function (SaveImageToFile — see its own comment).
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"   // RtDiffSite/RtDiffReport for the [branch:] counters
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/video/Buffers.h"
 #include "../../types/video/Device.h"   // Wave 9 lane W: the lock and +0x100
@@ -35,57 +34,15 @@
 #include <cstddef>
 #include <cstdint>
 
-// ============================================================================
-// Resolving the DLL's own helpers this lane's bodies call into but does not
-// reimplement (out of scope — see each call site). RT_ORIGINAL_ONCE resolves
-// once per call site and caches (rt_port.h); these are never on a hot path
-// except the buffer/image trampolines, which is exactly why they are cached
-// rather than resolved per call.
-// ============================================================================
-
 // runtime/src/video/buffers_win.cpp — see the note at their use site below.
 void RtVideoDeviceLock(void** deviceSingleton);
 void RtVideoDeviceUnlock(void** deviceSingleton);
 
 namespace {
 
-using PlatformConstructFn = void (*)(void*);
-using PlatformDestructFn  = void (*)(void*);
 using DtorFn              = void (*)(void*);
 using MemFreeFn           = void (*)(void*);
 
-// Video::ImageBuffer::PlatformConstruct/PlatformDestruct (0x1800f2f40 /
-// 0x1800f3020) — allocate/release the dx11::ImageBufferData at +0x60 through
-// Video::Device's factory. Not in this lane's 22-function scope (that factory
-// call belongs to Video::Device, lane B), so the retail implementation is
-// called through rather than duplicated.
-PlatformConstructFn ImageBufferPlatformConstruct() {
-    return RT_ORIGINAL_ONCE(PlatformConstructFn, "?PlatformConstruct@ImageBuffer@Video@@AEAAXXZ");
-}
-PlatformDestructFn ImageBufferPlatformDestruct() {
-    return RT_ORIGINAL_ONCE(PlatformDestructFn, "?PlatformDestruct@ImageBuffer@Video@@AEAAXXZ");
-}
-PlatformConstructFn IndexBufferPlatformConstruct() {
-    return RT_ORIGINAL_ONCE(PlatformConstructFn, "?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ");
-}
-PlatformDestructFn IndexBufferPlatformDestruct() {
-    return RT_ORIGINAL_ONCE(PlatformDestructFn, "?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ");
-}
-PlatformConstructFn VertexBufferPlatformConstruct() {
-    return RT_ORIGINAL_ONCE(PlatformConstructFn, "?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ");
-}
-PlatformDestructFn VertexBufferPlatformDestruct() {
-    return RT_ORIGINAL_ONCE(PlatformDestructFn, "?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ");
-}
-// Wave 9 lane GFX2 — the FOURTH member of this family. RT_ORIGINAL_ONCE (the
-// shipped body) because these two are used as the diff oracle's "theirs", never
-// as a dependency call.
-PlatformConstructFn RenderBufferPlatformConstruct() {
-    return RT_ORIGINAL_ONCE(PlatformConstructFn, "?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ");
-}
-PlatformDestructFn RenderBufferPlatformDestruct() {
-    return RT_ORIGINAL_ONCE(PlatformDestructFn, "?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ");
-}
 
 // Object::External::~External — the base class ImageBuffer's dtor tail-calls
 // after this lane's own body finishes. Wave 3 (Object) territory, not this
@@ -96,7 +53,7 @@ DtorFn ObjectExternalDtor() {
     return RT_EXPORT_ONCE(DtorFn, "??1External@Object@@UEAA@XZ");
 }
 
-// REGISTRY door, not RT_ORIGINAL_ONCE. The raw door reads the DLL's export
+// REGISTRY door, not the raw DLL door. The raw door reads the DLL's export
 // table directly and is NULL with the DLL absent: the 2026-09-12 cutover walk
 // died here on the first ImageBuffer with a name (Environment\RainTexture.png)
 // once the quit path reached ExternalFactory::Clean.
@@ -143,7 +100,7 @@ void** ConfigurationSingletonPtr() {
 // DLL's own storage, so our linkage and the DLL's still-unported
 // ImageBuffer::RecreateDynamic / ReleaseDynamic (0x1800f2d90 / 0x1800f2e80,
 // which walk the same list) agree on ONE list. At cutover the mint owns the
-// bytes and the walkers are ours. ResolveExportRaw would be null at cutover and
+// bytes and the walkers are ours. the raw DLL door would be null at cutover and
 // every link write would land at offset 0 of nothing.
 void** ImageBufferFirstSurface() {
     static void** p = reinterpret_cast<void**>(
@@ -204,11 +161,7 @@ inline void** LinkField(void* self, size_t off) {
     return reinterpret_cast<void**>(static_cast<uint8_t*>(self) + off);
 }
 
-// Returns the branch taken, so the caller can COUNT it. `calls=` on the port
-// itself only says the body was entered; a green summary over six calls that
-// all took the same branch leaves the other one unexercised, which is the
-// SetValueInt trap (12,896 calls, ten of which did any work). See the
-// [branch:...] sites in the RtDiff summary.
+// Returns the branch taken.
 enum class LinkBranch { FirstInList, Appended };
 
 LinkBranch ListLink(void* self, void** first, ListLinks L) {
@@ -248,25 +201,6 @@ UnlinkBranch ListUnlink(void* self, void** first, ListLinks L) {
         return UnlinkBranch::ListEmptied;
     }
     return UnlinkBranch::Unlinked;
-}
-
-// Count one branch as a zero-divergence "call" on its own RtDiffSite, so it
-// appears in the ordinary summary next to the port it belongs to. Using the
-// existing machinery rather than a private counter means the number is printed
-// by the same code that prints every other number in that report.
-// REGISTER UNCONDITIONALLY, then report. The first version of this was
-//     if (taken) RtDiffReport(...); else RtDiffRegister(...);
-// on the theory that the report would register the site for us. `RtDiffReport`
-// does NOT register (rt_diff.cpp:82 — it only bumps `calls`), so an
-// ALWAYS-taken branch never entered the site list and never printed, while a
-// NEVER-taken one printed `calls=0`. The output was exactly inverted: the
-// branches that did all the work were the invisible ones. Recorded rather than
-// silently fixed, because it is the probe-defect shape
-// reference_probe_needs_an_effectiveness_control.md warns about — a
-// coverage instrument that is itself wrong reads as coverage.
-void CountBranch(RtDiffSite* site, bool taken) {
-    RtDiffRegister(site);
-    if (taken) RtDiffReport(site, true, "taken", "taken");
 }
 
 constexpr ListLinks kImageLinks  = { 0x50, 0x58 };
@@ -366,7 +300,7 @@ void* MakeCompanion(void* self, size_t vtSlot) {
 // ----------------------------------------------------------------------------
 // Wave 9 lane W ports, defined further down. Forward-declared so the three
 // ctors and ~ImageBuffer above reach OUR bodies rather than the DLL's: they
-// used to call ImageBufferPlatformConstruct() &co, which is ResolveExportRaw
+// used to call ImageBufferPlatformConstruct() &co, which is the raw DLL door
 // and therefore a call through null the moment Runtime-x64.dll is gone. Those
 // four resolvers survive as the diff oracle's door and nothing else.
 // ----------------------------------------------------------------------------
@@ -385,11 +319,10 @@ void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self);
 // lane does not call the real ctor for diffing (PlatformConstruct's factory
 // call links into Video::Device's live buffer/tracking state; invoking it a
 // second time on a throwaway scratch object would corrupt shared state, not
-// verify anything). RT_DIFF_SHADOW instead asserts the constants we just
+// verify anything). the diff oracle instead asserts the constants we just
 // wrote are exactly what retail writes.
 // ============================================================================
 void Video_ImageBuffer_Ctor(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::ImageBuffer");
 
     self->vtable = ImageBufferVtable();       // Base->External->CompiledExternal->ImageBuffer chain,
                                                // collapsed: only the final vtable is observable.
@@ -412,10 +345,6 @@ void Video_ImageBuffer_Ctor(ImageBuffer* self) {
 
     Video_ImageBuffer_PlatformConstruct(self);
 
-    RT_DIFF_SHADOW(self->width == 0 && self->height == 0 && self->dimension == 0 &&
-                       self->kind == 2 && self->format == 0 && self->flags == 0 &&
-                       self->filter == 1 && self->pixelData == nullptr,
-                   "ctor fields set", "retail constants (0,0,0,2,0,0,1,null)");
 }
 
 // ============================================================================
@@ -456,7 +385,6 @@ void Video_ImageBuffer_Dtor(ImageBuffer* self) {
 // ============================================================================
 
 int Video_ImageBuffer_Width(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::Width");
     void** device = DeviceSingletonPtr();
     void** config = ConfigurationSingletonPtr();
     int ours;
@@ -472,12 +400,10 @@ int Video_ImageBuffer_Width(ImageBuffer* self) {
         }
     }
     using Fn = int (*)(void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?Width@ImageBuffer@Video@@QEBAHXZ")(self));
     return ours;
 }
 
 int Video_ImageBuffer_Height(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::Height");
     void** device = DeviceSingletonPtr();
     void** config = ConfigurationSingletonPtr();
     int ours;
@@ -493,63 +419,48 @@ int Video_ImageBuffer_Height(ImageBuffer* self) {
         }
     }
     using Fn = int (*)(void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?Height@ImageBuffer@Video@@QEBAHXZ")(self));
     return ours;
 }
 
 int Video_ImageBuffer_GetLevelCount(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::GetLevelCount");
     int ours = self->GetLevelCount();
     using Fn = int (*)(void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?GetLevelCount@ImageBuffer@Video@@QEBAHXZ")(self));
     return ours;
 }
 
 bool Video_ImageBuffer_IsCompressed(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::IsCompressed");
     bool ours = self->IsCompressed();
     using Fn = bool (*)(void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?IsCompressed@ImageBuffer@Video@@QEBA_NXZ")(self));
     return ours;
 }
 
 bool Video_ImageBuffer_IsDepthBuffer(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::IsDepthBuffer");
     bool ours = self->IsDepthBuffer();
     using Fn = bool (*)(void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?IsDepthBuffer@ImageBuffer@Video@@QEBA_NXZ")(self));
     return ours;
 }
 
 bool Video_ImageBuffer_IsDynamic(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::IsDynamic");
     bool ours = self->IsDynamic();
     using Fn = bool (*)(void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?IsDynamic@ImageBuffer@Video@@QEBA_NXZ")(self));
     return ours;
 }
 
 bool Video_ImageBuffer_IsGenerated(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::IsGenerated");
     bool ours = self->IsGenerated();
     using Fn = bool (*)(void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?IsGenerated@ImageBuffer@Video@@QEBA_NXZ")(self));
     return ours;
 }
 
 bool Video_ImageBuffer_IsRenderBuffer(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::IsRenderBuffer");
     bool ours = self->IsRenderBuffer();
     using Fn = bool (*)(void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?IsRenderBuffer@ImageBuffer@Video@@QEBA_NXZ")(self));
     return ours;
 }
 
 bool Video_ImageBuffer_IsRendered(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::IsRendered");
     bool ours = self->IsRendered();
     using Fn = bool (*)(void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?IsRendered@ImageBuffer@Video@@QEBA_NXZ")(self));
     return ours;
 }
 
@@ -563,29 +474,23 @@ bool Video_ImageBuffer_IsRendered(ImageBuffer* self) {
 // slots 5 and 6). Calling "the DLL's original CopyToTexture" and "our
 // CopyToTexture" reach the *same* dx11 vtable slot either way — there is no
 // second implementation on the other side of this trampoline to diverge
-// from. RT_DIFF_SHADOW registers the site (so it is visible in the census
+// from. the diff oracle registers the site (so it is visible in the census
 // and the diff summary) without invoking the original a second time, which
 // would upload/download the texture twice.
 // ============================================================================
 bool Video_ImageBuffer_CopyToTexture(ImageBuffer* self, void* data, int width, int height) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::CopyToTexture");
     using Fn = bool (*)(void*, void*, int, int);
     ImageBufferData* pd = static_cast<ImageBufferData*>(self->platformData);
     Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(pd->vtable) + 0x28);
     bool ours = slot(pd, data, width, height);
-    RT_DIFF_SHADOW(true, "trampoline into dx11::ImageBufferData slot 5 (ours)",
-                   "same dx11::ImageBufferData slot 5 (retail's own trampoline)");
     return ours;
 }
 
 bool Video_ImageBuffer_CopyFromTexture(ImageBuffer* self, void* data, int width, int height) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::CopyFromTexture");
     using Fn = bool (*)(void*, void*, int, int);
     ImageBufferData* pd = static_cast<ImageBufferData*>(self->platformData);
     Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(pd->vtable) + 0x30);
     bool ours = slot(pd, data, width, height);
-    RT_DIFF_SHADOW(true, "trampoline into dx11::ImageBufferData slot 6 (ours)",
-                   "same dx11::ImageBufferData slot 6 (retail's own trampoline)");
     return ours;
 }
 
@@ -596,7 +501,7 @@ bool Video_ImageBuffer_CopyFromTexture(ImageBuffer* self, void* data, int width,
 // register-preserving trampoline like the pair above — into
 // dx11::ImageBufferData's slot 3 (ImageBufferData_Create in
 // dx11/src/imagebufferdata.cpp). Same "already our own vtable on the far
-// side" situation as CopyToTexture/CopyFromTexture, so RT_DIFF_SHADOW rather
+// side" situation as CopyToTexture/CopyFromTexture, so the diff oracle rather
 // than a second live call.
 //
 // Enum parameters (ImageType/Usage/Format/FilterMode/AddressMode) are plain
@@ -611,7 +516,6 @@ bool Video_ImageBuffer_Create(ImageBuffer* self, int32_t imageType, int32_t usag
                                uint32_t flags, int width, int height, int32_t filter,
                                int32_t addressU, int32_t addressV, int32_t addressW,
                                ImageLevelArray* levels) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::Create");
     self->dimension = imageType;
     self->width = width;
     self->kind = usage;
@@ -627,8 +531,6 @@ bool Video_ImageBuffer_Create(ImageBuffer* self, int32_t imageType, int32_t usag
     ImageBufferData* pd = static_cast<ImageBufferData*>(self->platformData);
     Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(pd->vtable) + 0x18);
     bool ours = slot(pd, levels);
-    RT_DIFF_SHADOW(true, "fields stamped + dx11::ImageBufferData slot 3 (ours)",
-                   "same fields + same dx11::ImageBufferData slot 3 (retail's own dispatch)");
     return ours;
 }
 
@@ -656,9 +558,9 @@ void Video_ImageBufferData_Dtor(ImageBufferData* self) {
 //   0x1800f58c0  ?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ    ord 3373
 //
 // WHY THEY ARE HERE NOW. Wave 6 lane C left these "out of scope" and called the
-// DLL through RT_ORIGINAL_ONCE from the three ctors and ~ImageBuffer above.
+// DLL through the raw DLL door from the three ctors and ~ImageBuffer above.
 // Wave 9 lane V's residue census reads four of the six as REAL DEPENDENCY on
-// the RAW door: at cutover `ResolveExportRaw` is `GetProcAddress` on a module
+// the RAW door: at cutover `the raw DLL door` is `GetProcAddress` on a module
 // that is not there, so every one of those becomes a call through null on the
 // first buffer the renderer builds. (The Index/Vertex PlatformDestruct pair is
 // not in lane V's 25 for the only reason that its resolver is DEFINED and never
@@ -710,7 +612,7 @@ void Video_ImageBufferData_Dtor(ImageBufferData* self) {
 // LINKAGE — the part that is retail logic we transcribed, with the two branch
 // oddities transcribed with it — is what is compared, on every call.
 //
-// A note on reading the result: RT_DIFF_SHADOW here reports on every call that
+// A note on reading the result: the diff oracle here reports on every call that
 // reaches it, so `calls=` counts real work rather than entry
 // (reference_probe_needs_an_effectiveness_control.md). A `calls=0` on these six
 // means the renderer built no buffers, not that the port agreed with retail.
@@ -775,39 +677,19 @@ struct BufferClass {
     bool        nullAfterRelease;  // Index/Vertex null it; ImageBuffer does not
     ListLinks   links;
     void**    (*head)();           // the exported class-static list head
-    PlatformConstructFn (*theirCtor)();
-    PlatformDestructFn  (*theirDtor)();
-    RtDiffSite* siteLink;          // [PROBE:first-in-list]
-    RtDiffSite* siteUnlink;        // [PROBE:list-emptied]
 };
 
-RtDiffSite g_probeImgLink   = { "Video::ImageBuffer::PlatformConstruct[PROBE:first-in-list]",  0, 0, false, false };
-RtDiffSite g_probeImgUnlink = { "Video::ImageBuffer::PlatformDestruct[PROBE:list-emptied]",    0, 0, false, false };
-RtDiffSite g_probeIdxLink   = { "Video::IndexBuffer::PlatformConstruct[PROBE:first-in-list]",  0, 0, false, false };
-RtDiffSite g_probeIdxUnlink = { "Video::IndexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]", 0, 0, false, false };
-RtDiffSite g_probeVtxLink   = { "Video::VertexBuffer::PlatformConstruct[PROBE:first-in-list]", 0, 0, false, false };
-RtDiffSite g_probeVtxUnlink = { "Video::VertexBuffer::PlatformDestruct[PROBE:list-emptied, and the ONLY execution this port gets]", 0, 0, false, false };
-RtDiffSite g_probeRbLink    = { "Video::RenderBuffer::PlatformConstruct[PROBE:first-in-list]", 0, 0, false, false };
-RtDiffSite g_probeRbUnlink  = { "Video::RenderBuffer::PlatformDestruct[PROBE:list-emptied]", 0, 0, false, false };
 
-const BufferClass kImageClass  = { 0x50, 0x60, false, kImageLinks,  &ImageBufferFirstSurface,
-                                   &ImageBufferPlatformConstruct,  &ImageBufferPlatformDestruct,
-                                   &g_probeImgLink, &g_probeImgUnlink };
-const BufferClass kIndexClass  = { 0x60, 0x08, true,  kBufferLinks, &IndexBufferFirstBuffer,
-                                   &IndexBufferPlatformConstruct,  &IndexBufferPlatformDestruct,
-                                   &g_probeIdxLink, &g_probeIdxUnlink };
-const BufferClass kVertexClass = { 0x68, 0x08, true,  kBufferLinks, &VertexBufferFirstBuffer,
-                                   &VertexBufferPlatformConstruct, &VertexBufferPlatformDestruct,
-                                   &g_probeVtxLink, &g_probeVtxUnlink };
+const BufferClass kImageClass  = { 0x50, 0x60, false, kImageLinks,  &ImageBufferFirstSurface };
+const BufferClass kIndexClass  = { 0x60, 0x08, true,  kBufferLinks, &IndexBufferFirstBuffer };
+const BufferClass kVertexClass = { 0x68, 0x08, true,  kBufferLinks, &VertexBufferFirstBuffer };
 // Wave 9 lane GFX2. Slot 0x98 == dx11::DeviceData vtable index 19, which
 // dx11/src/devicedata.cpp registers as Factory_RenderBufferData — so this
 // dispatch lands in this project on both sides of the port, exactly as the other
 // three do. `nullAfterRelease = false`: 0x1800f4400 releases the companion at
 // +0x28 and leaves the freed pointer there, the ImageBuffer asymmetry, not the
 // Index/Vertex one.
-const BufferClass kRenderClass = { 0x98, 0x28, false, kRenderLinks, &RenderBufferFirstRenderBuffer,
-                                   &RenderBufferPlatformConstruct, &RenderBufferPlatformDestruct,
-                                   &g_probeRbLink, &g_probeRbUnlink };
+const BufferClass kRenderClass = { 0x98, 0x28, false, kRenderLinks, &RenderBufferFirstRenderBuffer };
 
 // The descriptors' offsets are the structs', bound here so a header change
 // breaks the build rather than silently mis-linking.
@@ -818,427 +700,79 @@ static_assert(offsetof(RtVideo::RenderBuffer, platformData) == 0x28, "kRenderCla
 static_assert(offsetof(RtVideo::RenderBuffer, next) == 0x18, "kRenderLinks.next");
 static_assert(offsetof(RtVideo::RenderBuffer, prev) == 0x20, "kRenderLinks.prev");
 
-// ============================================================================
-// THE EMPTY-LIST PROBE — the branch cutover takes FIRST
-// ============================================================================
-//
-// WHAT IT CLOSES. Lane W's execution report (WAVE9_LANE_W.md §9 finding 2)
-// measured `ListLink`'s **first-in-list** branch and `ListUnlink`'s
-// **list-emptied** branch at calls=0 in all four harness cells, for all three
-// classes: 31 construct calls all took `appended`, 10 destruct calls all took
-// `unlinked`. The cause is structural, not luck — no detour is installed on
-// these six, so the DLL's own constructors never reach our ports, and by the
-// time ours runs the shipped `Video::Device` startup has already put objects on
-// those lists. **At cutover that inverts**: the mint owns the three heads, they
-// start NULL, and every construct in the process is ours, so the FIRST buffer
-// the renderer builds takes the branch that has never been compared against
-// retail — on the first frame, with no retail body left to compare against.
-//
-// WHY A PRIVATE HEAD DOES NOT WORK, checked rather than assumed. Our side takes
-// its head by pointer (`void** first`), so a private head would cost us nothing.
-// The SHIPPED body does not: `?PlatformConstruct@ImageBuffer@Video@@` reads
-// `_firstSurface` RIP-relative, hardcoded. A private head therefore gives
-// ours-against-ours, which is not an oracle. The synthetic-subject lesson still
-// applies and IS applied — the SUBJECT is synthetic, a scratch node, and no live
-// object's fields are ever written — but the HEAD has to be the real one,
-// briefly.
-//
-// WHY BORROWING THE REAL HEAD IS SAFE. This is the fact that made the probe
-// buildable rather than impossible, and it was read out of the shipped bodies
-// rather than assumed: every other reader of these lists inside the DLL takes
-// the SAME Device lock, with the same recursion idiom, before touching the head:
-//
-//   ?RecreateDynamic@ImageBuffer@Video@@SAXXZ   0x1800f2d90
-//   ?ReleaseDynamic@ImageBuffer@Video@@SAXXZ    0x1800f2e80
-//   ... and the Index / Vertex / RenderBuffer twins at 0x1800f3500 / 0x1800f35d0,
-//       0x1800f5660 / 0x1800f5730, 0x1800f4030 / 0x1800f40c0
-//
-// each opening with `EnterCriticalSection(Device::_singleton + 0x60)`. Holding
-// that lock for the whole probe therefore excludes every DLL walker. Better:
-// both walkers open with `if (_firstSurface != nullptr)` and skip their loop
-// entirely, so a NULL head is a state the shipped code is already written for
-// rather than one this probe invents.
-//
-// The window is bounded — head nulled and restored inside one lock acquisition,
-// no live object touched, saved head put back before the lock is released.
-//
-// WHAT IS COMPARED, per class, on an EMPTY list:
-//   1. OURS runs the full `PlatformConstructBody` on a zeroed scratch node.
-//   2. Ours' companion is released and the head re-nulled, so THEIRS starts from
-//      an identical state — the same rewind the live oracle does.
-//   3. THEIRS' shipped `PlatformConstruct` runs on a re-zeroed scratch node.
-//   4. The three link words are compared, plus OUR branch tag  -> FIRST-IN-LIST.
-//   5. From theirs' resulting single-element list, OURS' full
-//      `PlatformDestructBody` runs; its result is captured; the state is
-//      restored and the companion field nulled so theirs' own
-//      `if (companion != nullptr)` guard skips a second release of memory ours
-//      already freed; THEIRS' shipped `PlatformDestruct` runs.
-//   6. The three link words are compared, plus our branch tag -> LIST-EMPTIED.
-//
-// Exactly one companion is created and released per side, by the same code that
-// does it on the live path.
-//
-// AND IT CLOSES THE OTHER OPEN ITEM. Step 5 calls `PlatformDestructBody` through
-// the shared descriptor for ALL THREE classes — including the two whose
-// registered ports have no caller anywhere in the process
-// (`Video::{Index,Vertex}Buffer::PlatformDestruct`, never entered in any of the
-// four cells). Those two now execute against the shipped body with the same
-// argument tuple their registered ports use, and their `nullAfterRelease = true`
-// asymmetry — the one line where they differ from ImageBuffer in the shipped
-// bytes — is exercised here and nowhere else in the process.
-//
-// COST AND BLAST RADIUS. Once per class per process, only when
-// `BANISHED_RT_DIFF` is on; `BANISHED_RT_EMPTYLIST_PROBE=0` disables it. Fired
-// from the first diffed `PlatformConstruct` of each class, which guarantees
-// `Video::Device` and its DeviceData exist — a probe run before that would
-// compare two null companions and prove less than it appears to.
-// ============================================================================
-
-bool ProbeNegativeControl();
-
-void ProbeEmptyList(const BufferClass& C) {
-    void** first = C.head();
-    if (first == nullptr)
-        return;   // head unresolved: nothing to borrow and nothing to prove
-
-    alignas(16) uint8_t node[0x80];
-
-    RtVideoDeviceLock(DeviceSingletonPtr());
-    void* const savedHead = *first;
-
-    // ---- 1. FIRST-IN-LIST -------------------------------------------------
-    *first = nullptr;
-    std::memset(node, 0, sizeof(node));
-    const LinkBranch br = PlatformConstructBody(node, C.vtSlot, C.companionOff, first, C.links);
-    void* oursHead = *first;
-    void* oursNext = *LinkField(node, C.links.next);
-    void* const oursPrev = *LinkField(node, C.links.prev);
-    if (ProbeNegativeControl())
-        oursNext = static_cast<uint8_t*>(oursNext) + 8;   // must make the probe go RED
-    ReleaseCompanion(*LinkField(node, C.companionOff));
-
-    *first = nullptr;
-    std::memset(node, 0, sizeof(node));
-    C.theirCtor()(node);
-    void* const theirsHead = *first;
-    void* const theirsNext = *LinkField(node, C.links.next);
-    void* const theirsPrev = *LinkField(node, C.links.prev);
-
-    {
-        const bool eq = oursHead == theirsHead && oursNext == theirsNext &&
-                        oursPrev == theirsPrev && br == LinkBranch::FirstInList;
-        char a[192], b[192];
-        std::snprintf(a, sizeof(a), "head=%p next=%p prev=%p branch=%s",
-                      oursHead, oursNext, oursPrev,
-                      br == LinkBranch::FirstInList ? "first-in-list" : "APPENDED(WRONG)");
-        std::snprintf(b, sizeof(b), "head=%p next=%p prev=%p", theirsHead, theirsNext, theirsPrev);
-        RtDiffRegister(C.siteLink);
-        RtDiffReport(C.siteLink, eq, a, b);
-    }
-
-    // ---- 2. LIST-EMPTIED --------------------------------------------------
-    // State here is THEIRS': head == node and the node's links point at itself.
-    // Snapshot it so ours and theirs both unlink from the identical
-    // single-element list.
-    void* const sHead = *first;
-    void* const sNext = *LinkField(node, C.links.next);
-    void* const sPrev = *LinkField(node, C.links.prev);
-
-    const UnlinkBranch ubr = PlatformDestructBody(node, C.companionOff,
-                                                  C.nullAfterRelease, first, C.links);
-    void* const oursHead2 = *first;
-    void* oursNext2 = *LinkField(node, C.links.next);
-    void* const oursPrev2 = *LinkField(node, C.links.prev);
-    if (ProbeNegativeControl())
-        oursNext2 = static_cast<uint8_t*>(oursNext2) + 8;
-
-    *first = sHead;
-    *LinkField(node, C.links.next) = sNext;
-    *LinkField(node, C.links.prev) = sPrev;
-    // The companion was released by OUR destruct body just above. Null the field
-    // so theirs' own guard skips a second release of freed memory. ImageBuffer's
-    // shipped destructor does not null it itself, which is why this is explicit.
-    *LinkField(node, C.companionOff) = nullptr;
-
-    C.theirDtor()(node);
-    void* const theirsHead2 = *first;
-    void* const theirsNext2 = *LinkField(node, C.links.next);
-    void* const theirsPrev2 = *LinkField(node, C.links.prev);
-
-    {
-        const bool eq = oursHead2 == theirsHead2 && oursNext2 == theirsNext2 &&
-                        oursPrev2 == theirsPrev2 && ubr == UnlinkBranch::ListEmptied;
-        char a[192], b[192];
-        std::snprintf(a, sizeof(a), "head=%p next=%p prev=%p branch=%s",
-                      oursHead2, oursNext2, oursPrev2,
-                      ubr == UnlinkBranch::ListEmptied ? "list-emptied"
-                      : ubr == UnlinkBranch::Unlinked  ? "UNLINKED(WRONG)"
-                                                       : "NOT-LINKED(WRONG)");
-        std::snprintf(b, sizeof(b), "head=%p next=%p prev=%p", theirsHead2, theirsNext2, theirsPrev2);
-        RtDiffRegister(C.siteUnlink);
-        RtDiffReport(C.siteUnlink, eq, a, b);
-    }
-
-    // ---- restore ----------------------------------------------------------
-    *first = savedHead;
-    RtVideoDeviceUnlock(DeviceSingletonPtr());
-}
-
-bool ProbeEnabled() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_RT_EMPTYLIST_PROBE");
-        s = (e && (e[0] == '0' || std::strcmp(e, "false") == 0)) ? 0 : 1;
-    }
-    return s != 0;
-}
-
-// NEGATIVE CONTROL. `BANISHED_RT_EMPTYLIST_PROBE=neg` perturbs OUR link by one
-// word before the comparison, so a run can show the probe going RED. Without it
-// a green result cannot be distinguished from a probe that compares nothing --
-// which is the defect this lane already found once in its own branch counter.
-bool ProbeNegativeControl() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_RT_EMPTYLIST_PROBE");
-        s = (e && std::strcmp(e, "neg") == 0) ? 1 : 0;
-    }
-    return s != 0;
-}
-
-void ProbeOnce(const BufferClass& C, bool& done) {
-    if (done || !ProbeEnabled()) return;
-    done = true;   // set BEFORE running: the probe calls the ported bodies, and
-                   // a re-entry would recurse into itself.
-    ProbeEmptyList(C);
-}
-
 
 }  // namespace
 
 void Video_ImageBuffer_PlatformConstruct(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::PlatformConstruct");
     void** first = ImageBufferFirstSurface();
 
     LinkState pre{};
     void* preCompanion = nullptr;
-    if (rt_diff_on__) {
-        pre = CaptureLinks(self, first, kImageLinks);
-        preCompanion = self->platformData;
-    }
 
-    static RtDiffSite brFirst = { "Video::ImageBuffer::PlatformConstruct[branch:first-in-list]", 0, 0, false, false };
-    static RtDiffSite brAppend = { "Video::ImageBuffer::PlatformConstruct[branch:appended]", 0, 0, false, false };
     const LinkBranch br = PlatformConstructBody(self, 0x50, offsetof(ImageBuffer, platformData), first, kImageLinks);
-    if (rt_diff_on__) {
-        CountBranch(&brFirst,  br == LinkBranch::FirstInList);
-        CountBranch(&brAppend, br == LinkBranch::Appended);
-    }
 
     // The empty-list probe, once. Fired from HERE rather than from init because
     // this is the earliest point at which Video::Device and its DeviceData are
     // guaranteed to exist -- see ProbeEmptyList's header.
-    if (rt_diff_on__) {
-        static bool probed = false;
-        ProbeOnce(kImageClass, probed);
-    }
 
-    if (rt_diff_on__) {
-        LinkState ours = ReadLinksAt(self, first, kImageLinks, pre);
-        ReleaseCompanion(self->platformData);
-        self->platformData = preCompanion;
-        RestoreLinks(self, first, kImageLinks, pre);
-        ImageBufferPlatformConstruct()(self);
-        LinkState theirs = ReadLinksAt(self, first, kImageLinks, pre);
-        char a[128], b[128];
-        DescribeLinks(a, sizeof(a), ours);
-        DescribeLinks(b, sizeof(b), theirs);
-        RT_DIFF_SHADOW(LinksEqual(ours, theirs), a, b);
-    }
 }
 
 void Video_ImageBuffer_PlatformDestruct(ImageBuffer* self) {
-    RT_DIFF_BEGIN("Video::ImageBuffer::PlatformDestruct");
     void** first = ImageBufferFirstSurface();
 
     LinkState pre{};
-    if (rt_diff_on__)
-        pre = CaptureLinks(self, first, kImageLinks);
 
-    static RtDiffSite brNone = { "Video::ImageBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]", 0, 0, false, false };
-    static RtDiffSite brUn = { "Video::ImageBuffer::PlatformDestruct[branch:unlinked]", 0, 0, false, false };
-    static RtDiffSite brEmpty = { "Video::ImageBuffer::PlatformDestruct[branch:list-emptied]", 0, 0, false, false };
     const UnlinkBranch br = PlatformDestructBody(self, offsetof(ImageBuffer, platformData),
                                                  /*nullCompanionAfterRelease=*/false, first, kImageLinks);
-    if (rt_diff_on__) {
-        CountBranch(&brNone,  br == UnlinkBranch::NotLinked);
-        CountBranch(&brUn,    br == UnlinkBranch::Unlinked);
-        CountBranch(&brEmpty, br == UnlinkBranch::ListEmptied);
-    }
 
-    if (rt_diff_on__) {
-        LinkState ours = ReadLinksAt(self, first, kImageLinks, pre);
-        RestoreLinks(self, first, kImageLinks, pre);
-        // Retail leaves the freed companion pointer at +0x60. Null it so its own
-        // `if (pc != nullptr)` skips a second release of memory ours already
-        // freed, then put the dangling value back so the post-state this
-        // function leaves behind is byte-identical to retail's.
-        void* dangling = self->platformData;
-        self->platformData = nullptr;
-        ImageBufferPlatformDestruct()(self);
-        LinkState theirs = ReadLinksAt(self, first, kImageLinks, pre);
-        self->platformData = dangling;
-        char a[128], b[128];
-        DescribeLinks(a, sizeof(a), ours);
-        DescribeLinks(b, sizeof(b), theirs);
-        RT_DIFF_SHADOW(LinksEqual(ours, theirs), a, b);
-    }
 }
 
 void Video_IndexBuffer_PlatformConstruct(IndexBuffer* self) {
-    RT_DIFF_BEGIN("Video::IndexBuffer::PlatformConstruct");
     void** first = IndexBufferFirstBuffer();
 
     LinkState pre{};
     void* preCompanion = nullptr;
-    if (rt_diff_on__) {
-        pre = CaptureLinks(self, first, kBufferLinks);
-        preCompanion = self->platformData;
-    }
 
-    static RtDiffSite brFirst = { "Video::IndexBuffer::PlatformConstruct[branch:first-in-list]", 0, 0, false, false };
-    static RtDiffSite brAppend = { "Video::IndexBuffer::PlatformConstruct[branch:appended]", 0, 0, false, false };
     const LinkBranch br = PlatformConstructBody(self, 0x60, offsetof(IndexBuffer, platformData), first, kBufferLinks);
-    if (rt_diff_on__) {
-        CountBranch(&brFirst,  br == LinkBranch::FirstInList);
-        CountBranch(&brAppend, br == LinkBranch::Appended);
-    }
 
     // The empty-list probe, once. Fired from HERE rather than from init because
     // this is the earliest point at which Video::Device and its DeviceData are
     // guaranteed to exist -- see ProbeEmptyList's header.
-    if (rt_diff_on__) {
-        static bool probed = false;
-        ProbeOnce(kIndexClass, probed);
-    }
 
-    if (rt_diff_on__) {
-        LinkState ours = ReadLinksAt(self, first, kBufferLinks, pre);
-        ReleaseCompanion(self->platformData);
-        self->platformData = preCompanion;
-        RestoreLinks(self, first, kBufferLinks, pre);
-        IndexBufferPlatformConstruct()(self);
-        LinkState theirs = ReadLinksAt(self, first, kBufferLinks, pre);
-        char a[128], b[128];
-        DescribeLinks(a, sizeof(a), ours);
-        DescribeLinks(b, sizeof(b), theirs);
-        RT_DIFF_SHADOW(LinksEqual(ours, theirs), a, b);
-    }
 }
 
 void Video_IndexBuffer_PlatformDestruct(IndexBuffer* self) {
-    RT_DIFF_BEGIN("Video::IndexBuffer::PlatformDestruct");
     void** first = IndexBufferFirstBuffer();
 
     LinkState pre{};
-    if (rt_diff_on__)
-        pre = CaptureLinks(self, first, kBufferLinks);
 
-    static RtDiffSite brNone = { "Video::IndexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]", 0, 0, false, false };
-    static RtDiffSite brUn = { "Video::IndexBuffer::PlatformDestruct[branch:unlinked]", 0, 0, false, false };
-    static RtDiffSite brEmpty = { "Video::IndexBuffer::PlatformDestruct[branch:list-emptied]", 0, 0, false, false };
     const UnlinkBranch br = PlatformDestructBody(self, offsetof(IndexBuffer, platformData),
                                                  /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
-    if (rt_diff_on__) {
-        CountBranch(&brNone,  br == UnlinkBranch::NotLinked);
-        CountBranch(&brUn,    br == UnlinkBranch::Unlinked);
-        CountBranch(&brEmpty, br == UnlinkBranch::ListEmptied);
-    }
 
-    if (rt_diff_on__) {
-        LinkState ours = ReadLinksAt(self, first, kBufferLinks, pre);
-        RestoreLinks(self, first, kBufferLinks, pre);
-        // Already null (retail nulls it too), so theirs' own guard skips the
-        // second release and the post-state matches with no restore.
-        IndexBufferPlatformDestruct()(self);
-        LinkState theirs = ReadLinksAt(self, first, kBufferLinks, pre);
-        char a[128], b[128];
-        DescribeLinks(a, sizeof(a), ours);
-        DescribeLinks(b, sizeof(b), theirs);
-        RT_DIFF_SHADOW(LinksEqual(ours, theirs), a, b);
-    }
 }
 
 void Video_VertexBuffer_PlatformConstruct(VertexBuffer* self) {
-    RT_DIFF_BEGIN("Video::VertexBuffer::PlatformConstruct");
     void** first = VertexBufferFirstBuffer();
 
     LinkState pre{};
     void* preCompanion = nullptr;
-    if (rt_diff_on__) {
-        pre = CaptureLinks(self, first, kBufferLinks);
-        preCompanion = self->platformData;
-    }
 
-    static RtDiffSite brFirst = { "Video::VertexBuffer::PlatformConstruct[branch:first-in-list]", 0, 0, false, false };
-    static RtDiffSite brAppend = { "Video::VertexBuffer::PlatformConstruct[branch:appended]", 0, 0, false, false };
     const LinkBranch br = PlatformConstructBody(self, 0x68, offsetof(VertexBuffer, platformData), first, kBufferLinks);
-    if (rt_diff_on__) {
-        CountBranch(&brFirst,  br == LinkBranch::FirstInList);
-        CountBranch(&brAppend, br == LinkBranch::Appended);
-    }
 
     // The empty-list probe, once. Fired from HERE rather than from init because
     // this is the earliest point at which Video::Device and its DeviceData are
     // guaranteed to exist -- see ProbeEmptyList's header.
-    if (rt_diff_on__) {
-        static bool probed = false;
-        ProbeOnce(kVertexClass, probed);
-    }
 
-    if (rt_diff_on__) {
-        LinkState ours = ReadLinksAt(self, first, kBufferLinks, pre);
-        ReleaseCompanion(self->platformData);
-        self->platformData = preCompanion;
-        RestoreLinks(self, first, kBufferLinks, pre);
-        VertexBufferPlatformConstruct()(self);
-        LinkState theirs = ReadLinksAt(self, first, kBufferLinks, pre);
-        char a[128], b[128];
-        DescribeLinks(a, sizeof(a), ours);
-        DescribeLinks(b, sizeof(b), theirs);
-        RT_DIFF_SHADOW(LinksEqual(ours, theirs), a, b);
-    }
 }
 
 void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self) {
-    RT_DIFF_BEGIN("Video::VertexBuffer::PlatformDestruct");
     void** first = VertexBufferFirstBuffer();
 
     LinkState pre{};
-    if (rt_diff_on__)
-        pre = CaptureLinks(self, first, kBufferLinks);
 
-    static RtDiffSite brNone = { "Video::VertexBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]", 0, 0, false, false };
-    static RtDiffSite brUn = { "Video::VertexBuffer::PlatformDestruct[branch:unlinked]", 0, 0, false, false };
-    static RtDiffSite brEmpty = { "Video::VertexBuffer::PlatformDestruct[branch:list-emptied]", 0, 0, false, false };
     const UnlinkBranch br = PlatformDestructBody(self, offsetof(VertexBuffer, platformData),
                                                  /*nullCompanionAfterRelease=*/true, first, kBufferLinks);
-    if (rt_diff_on__) {
-        CountBranch(&brNone,  br == UnlinkBranch::NotLinked);
-        CountBranch(&brUn,    br == UnlinkBranch::Unlinked);
-        CountBranch(&brEmpty, br == UnlinkBranch::ListEmptied);
-    }
 
-    if (rt_diff_on__) {
-        LinkState ours = ReadLinksAt(self, first, kBufferLinks, pre);
-        RestoreLinks(self, first, kBufferLinks, pre);
-        VertexBufferPlatformDestruct()(self);
-        LinkState theirs = ReadLinksAt(self, first, kBufferLinks, pre);
-        char a[128], b[128];
-        DescribeLinks(a, sizeof(a), ours);
-        DescribeLinks(b, sizeof(b), theirs);
-        RT_DIFF_SHADOW(LinksEqual(ours, theirs), a, b);
-    }
 }
 
 // ============================================================================
@@ -1271,81 +805,25 @@ void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self) {
 // ============================================================================
 
 void Video_RenderBuffer_PlatformConstruct(RtVideo::RenderBuffer* self) {
-    RT_DIFF_BEGIN("Video::RenderBuffer::PlatformConstruct");
     void** first = RenderBufferFirstRenderBuffer();
 
     LinkState pre{};
     void* preCompanion = nullptr;
-    if (rt_diff_on__) {
-        pre = CaptureLinks(self, first, kRenderLinks);
-        preCompanion = self->platformData;
-    }
 
-    static RtDiffSite brFirst = { "Video::RenderBuffer::PlatformConstruct[branch:first-in-list]", 0, 0, false, false };
-    static RtDiffSite brAppend = { "Video::RenderBuffer::PlatformConstruct[branch:appended]", 0, 0, false, false };
     const LinkBranch br = PlatformConstructBody(self, 0x98, offsetof(RtVideo::RenderBuffer, platformData),
                                                 first, kRenderLinks);
-    if (rt_diff_on__) {
-        CountBranch(&brFirst,  br == LinkBranch::FirstInList);
-        CountBranch(&brAppend, br == LinkBranch::Appended);
-    }
 
-    if (rt_diff_on__) {
-        static bool probed = false;
-        ProbeOnce(kRenderClass, probed);
-    }
 
-    if (rt_diff_on__) {
-        LinkState ours = ReadLinksAt(self, first, kRenderLinks, pre);
-        ReleaseCompanion(self->platformData);
-        self->platformData = preCompanion;
-        RestoreLinks(self, first, kRenderLinks, pre);
-        RenderBufferPlatformConstruct()(self);
-        LinkState theirs = ReadLinksAt(self, first, kRenderLinks, pre);
-        char a[128], b[128];
-        DescribeLinks(a, sizeof(a), ours);
-        DescribeLinks(b, sizeof(b), theirs);
-        RT_DIFF_SHADOW(LinksEqual(ours, theirs), a, b);
-    }
 }
 
 void Video_RenderBuffer_PlatformDestruct(RtVideo::RenderBuffer* self) {
-    RT_DIFF_BEGIN("Video::RenderBuffer::PlatformDestruct");
     void** first = RenderBufferFirstRenderBuffer();
 
     LinkState pre{};
-    if (rt_diff_on__)
-        pre = CaptureLinks(self, first, kRenderLinks);
 
-    static RtDiffSite brNone = { "Video::RenderBuffer::PlatformDestruct[branch:NOT-LINKED, early-out, verifies nothing]", 0, 0, false, false };
-    static RtDiffSite brUn = { "Video::RenderBuffer::PlatformDestruct[branch:unlinked]", 0, 0, false, false };
-    static RtDiffSite brEmpty = { "Video::RenderBuffer::PlatformDestruct[branch:list-emptied]", 0, 0, false, false };
     const UnlinkBranch br = PlatformDestructBody(self, offsetof(RtVideo::RenderBuffer, platformData),
                                                  /*nullCompanionAfterRelease=*/false, first, kRenderLinks);
-    if (rt_diff_on__) {
-        CountBranch(&brNone,  br == UnlinkBranch::NotLinked);
-        CountBranch(&brUn,    br == UnlinkBranch::Unlinked);
-        CountBranch(&brEmpty, br == UnlinkBranch::ListEmptied);
-    }
 
-    if (rt_diff_on__) {
-        LinkState ours = ReadLinksAt(self, first, kRenderLinks, pre);
-        RestoreLinks(self, first, kRenderLinks, pre);
-        // Retail leaves the freed companion pointer at +0x28 (it does NOT null
-        // it — the ImageBuffer asymmetry). Null it so retail's own
-        // `if (pc != nullptr)` skips a second release of memory ours already
-        // freed, then put the dangling value back so the post-state this
-        // function leaves is byte-identical to retail's.
-        void* dangling = self->platformData;
-        self->platformData = nullptr;
-        RenderBufferPlatformDestruct()(self);
-        LinkState theirs = ReadLinksAt(self, first, kRenderLinks, pre);
-        self->platformData = dangling;
-        char a[128], b[128];
-        DescribeLinks(a, sizeof(a), ours);
-        DescribeLinks(b, sizeof(b), theirs);
-        RT_DIFF_SHADOW(LinksEqual(ours, theirs), a, b);
-    }
 }
 
 // ============================================================================
@@ -1358,60 +836,42 @@ void Video_RenderBuffer_PlatformDestruct(RtVideo::RenderBuffer* self) {
 // ============================================================================
 
 void Video_IndexBuffer_Ctor(IndexBuffer* self) {
-    RT_DIFF_BEGIN("Video::IndexBuffer::IndexBuffer");
     self->size = 0;
     self->dynamic = false;
     Video_IndexBuffer_PlatformConstruct(self);
-    RT_DIFF_SHADOW(self->size == 0 && self->dynamic == false, "ctor fields set",
-                   "retail constants (0, false)");
 }
 
 void Video_VertexBuffer_Ctor(VertexBuffer* self) {
-    RT_DIFF_BEGIN("Video::VertexBuffer::VertexBuffer");
     self->size = 0;
     self->dynamic = false;
     Video_VertexBuffer_PlatformConstruct(self);
-    RT_DIFF_SHADOW(self->size == 0 && self->dynamic == false, "ctor fields set",
-                   "retail constants (0, false)");
 }
 
 bool Video_IndexBuffer_Create(IndexBuffer* self, int count, bool dynamic, void* data) {
-    RT_DIFF_BEGIN("Video::IndexBuffer::Create");
     using Fn = bool (*)(void*, int, bool, void*);
     Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x08);
     bool ours = slot(self->platformData, count, dynamic, data);
-    RT_DIFF_SHADOW(true, "trampoline into dx11::IndexBufferData slot 1 (ours)",
-                   "same dx11::IndexBufferData slot 1 (retail's own trampoline)");
     return ours;
 }
 
 bool Video_IndexBuffer_Set(IndexBuffer* self, int offset, int count, void* data) {
-    RT_DIFF_BEGIN("Video::IndexBuffer::Set");
     using Fn = bool (*)(void*, int, int, void*);
     Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x10);
     bool ours = slot(self->platformData, offset, count, data);
-    RT_DIFF_SHADOW(true, "trampoline into dx11::IndexBufferData slot 2 (ours)",
-                   "same dx11::IndexBufferData slot 2 (retail's own trampoline)");
     return ours;
 }
 
 bool Video_VertexBuffer_Create(VertexBuffer* self, int count, bool dynamic, void* data) {
-    RT_DIFF_BEGIN("Video::VertexBuffer::Create");
     using Fn = bool (*)(void*, int, bool, void*);
     Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x08);
     bool ours = slot(self->platformData, count, dynamic, data);
-    RT_DIFF_SHADOW(true, "trampoline into dx11::VertexBufferData slot 1 (ours)",
-                   "same dx11::VertexBufferData slot 1 (retail's own trampoline)");
     return ours;
 }
 
 bool Video_VertexBuffer_Set(VertexBuffer* self, int offset, int count, void* data) {
-    RT_DIFF_BEGIN("Video::VertexBuffer::Set");
     using Fn = bool (*)(void*, int, int, void*);
     Fn slot = *reinterpret_cast<Fn*>(static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x10);
     bool ours = slot(self->platformData, offset, count, data);
-    RT_DIFF_SHADOW(true, "trampoline into dx11::VertexBufferData slot 2 (ours)",
-                   "same dx11::VertexBufferData slot 2 (retail's own trampoline)");
     return ours;
 }
 

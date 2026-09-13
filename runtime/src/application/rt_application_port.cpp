@@ -2,7 +2,7 @@
 // runtime/src/application/rt_application_port.cpp — RtApplicationPortInit()
 //                                                    Wave 8 lane E
 // ============================================================================
-//   BANISHED_RT_APP=0   leave the whole Application namespace on the DLL
+//   RT_APP=0   leave the whole Application namespace on the DLL
 // ============================================================================
 
 #include <cstdio>
@@ -52,14 +52,7 @@ extern "C" void          RtApp_SetDestroyTree(void* self, rtsetavl::Node* n);
 extern "C" rtsetavl::Node* RtApp_SetCloneTree(void* self, const rtsetavl::Node* src);
 extern "C" void          RtApp_SetClear(rtsetavl::Set* set);
 
-// application_lifecycle_probe.cpp — Wave 12 lane B's oracle
-extern "C" void RtApp_LifecycleProbeArm(bool on);
-
 void RtApplicationPortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_APP")) {
-        printf("[RtPort] BANISHED_RT_APP=0 -- Application namespace port disabled\n");
-        return;
-    }
     int n = 0;
 
     RegisterRuntimeExport("?IsPaused@Application@1@QEAA_NXZ", (void*)&RtApp_IsPaused); ++n;
@@ -168,14 +161,6 @@ void RtApplicationPortInit() {
     RegisterRuntimeAddr(0x18000a530, (void*)&RtApp_SetCloneTree);
     RegisterRuntimeAddr(0x18000a440, (void*)&RtApp_SetClear);
 
-    // Lane B's oracle. Opt-in, and it ALLOCATES, so it cannot run here — it is
-    // self-scheduled from the first Application::PlatformUpdate, by which point
-    // System::MemoryAllocator has been started. See its banner.
-    {
-        const char* p = std::getenv("BANISHED_RT_APPB_PROBE");
-        RtApp_LifecycleProbeArm(p && *p && std::strcmp(p, "0") != 0);
-    }
-
     // ?_singleton@Application@1@0PEAV11@EA @ 0x1801fc678 — a DATA export, not
     // a function. THE REASON RECORDED HERE UNTIL WAVE 12 WAS WRONG. It used to
     // read "the seam maps names to functions, so it cannot be redirected before
@@ -200,7 +185,7 @@ void RtApplicationPortInit() {
     // the EXPORTED NAME through RT_DATA_SLOT, i.e. it reads the very slot
     // retail writes, and Wave 12 lane VERIFY swept it against the shipped ?Get@
     // through 6 sentinels written into that slot: 6/6 identical. That probe
-    // refuses to run under BANISHED_RT_MINT=1 and reports SPLIT instead — which
+    // refuses to run under RT_MINT=1 and reports SPLIT instead — which
     // is the guard against someone later minting this row without reading this.
     //
     // This row is therefore the Application namespace's CEILING on the census
@@ -215,10 +200,8 @@ void RtApplicationPortInit() {
     // blocker for ?PlatformStartup@Device@Video@@ (the next cutover boot wall
     // after the IO chain) AND two of the seventeen unsatisfied rows in
     // dx11/src/devicedata.cpp's all-or-nothing import table.
-    if (RtWaveEnabled("BANISHED_RT_APPMSGCB")) {
-        extern int RtApplicationMessageCallbacksRegister();
-        n += RtApplicationMessageCallbacksRegister();
-    }
+    extern int RtApplicationMessageCallbacksRegister();
+    n += RtApplicationMessageCallbacksRegister();
 
     // Wave 9 lane PLAT: the PlatformStartup family and the WindowProc that one
     // of them installs. CROSS-NAMESPACE ON PURPOSE — Achievement, Object and
@@ -228,10 +211,8 @@ void RtApplicationPortInit() {
     //
     // `?PlatformStartup@Application@1@AEAA_NXZ` is the live cutover wall:
     // engine_lifecycle.cpp:638 calls it and a null there is EXEC-of-0.
-    if (RtWaveEnabled("BANISHED_RT_PLAT")) {
-        extern int RtApplicationPlatformStartupRegister();
-        n += RtApplicationPlatformStartupRegister();
-    }
+    extern int RtApplicationPlatformStartupRegister();
+    n += RtApplicationPlatformStartupRegister();
 
     printf("[RtPort] Application: %d exports registered\n", n);
 }

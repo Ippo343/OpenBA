@@ -129,11 +129,6 @@ const char kErrCreate[]   = "Application: The application failed to create windo
 // object — retail passes RBX for both CreateWindowExW arguments.
 const char kClassName[]   = "Banished";
 
-bool EnvOn(const char* name) {
-    const char* e = std::getenv(name);
-    return e && e[0] && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
-}
-
 }  // namespace
 
 // ============================================================================
@@ -168,11 +163,6 @@ bool EnvOn(const char* name) {
 //   * `CMP RSI,0x79` at 0x18009f9b9 is a SIXTY-FOUR-BIT compare of the whole
 //     WPARAM against VK_F10, not a compare of its low dword.
 //
-// NO ORACLE ON THE LIVE PATH, and none is possible: calling the shipped
-// WindowProc afterwards would dispatch every message a second time — a second
-// PostQuitMessage, a second callback invocation. It is instead covered in full
-// by RtLanePlatWindowProcProbe() at the bottom of this file, which drives BOTH
-// implementations over a synthetic Application and compares.
 // ============================================================================
 extern "C" LRESULT CALLBACK RtApp_WindowProc(HWND hwnd, UINT msg,
                                              WPARAM wParam, LPARAM lParam) {
@@ -226,36 +216,6 @@ extern "C" LRESULT CALLBACK RtApp_WindowProc(HWND hwnd, UINT msg,
     return DefWindowProcW(hwnd, msg, wParam, lParam);       // 0x18009f9e0
 }
 
-// ---------------------------------------------------------------------------
-// The oracle's replay of retail's PlatformStartup, and its teardown.
-// Declared here, defined at the bottom; only ever called under
-// BANISHED_PLAT_ORACLE=1.
-// ---------------------------------------------------------------------------
-namespace {
-struct PlatOracleSnapshot {
-    bool      classInfoOk;
-    WNDCLASSW wc;
-    bool      windowOk;
-    LONG_PTR  style;
-    LONG_PTR  exStyle;
-    LONG      width;
-    LONG      height;
-    wchar_t   className[64];
-    // A SECOND reading of the same field by a different API. GetClassInfoW and
-    // GetClassLongPtrW disagree about system-colour brushes on some builds, and
-    // when they do it is the READBACK that differs, not what was registered.
-    ULONG_PTR classBrushFromWindow;
-};
-bool PlatOracleRunTheirs(void* platformHandle, PlatOracleSnapshot* out,
-                         const char** why);
-void IdentifySystemBrush(void* theirsBrush, void* oursBrush, void* platformHandle);
-}  // namespace
-extern "C" void RtLanePlatWindowProcProbe(void* hwndOpaque);
-namespace {
-void PlatOracleSnapshotClass(void* platformHandle, HWND hwnd,
-                             PlatOracleSnapshot* out);
-}  // namespace
-
 // ============================================================================
 // Application::Application::PlatformStartup()
 // ?PlatformStartup@Application@1@AEAA_NXZ              retail 0x18009fc10
@@ -303,25 +263,8 @@ void PlatOracleSnapshotClass(void* platformHandle, HWND hwnd,
 // own ported dtor directly, rather than through the seam, is the faithful
 // spelling: retail makes no call there at all.
 //
-// ORACLE: none on the live path, and the reason is structural rather than
-// awkward — the class name is a hardcoded literal, so a second run of the pair
-// necessarily has its RegisterClassW fail with ERROR_CLASS_ALREADY_EXISTS and
-// measures nothing. A real comparison IS available and is implemented below,
-// behind its own switch (BANISHED_PLAT_ORACLE=1) rather than behind
-// BANISHED_RT_DIFF alone: it runs the SHIPPED body FIRST on a scratch object,
-// reads the registered class back out of USER32 with GetClassInfoW, tears that
-// class and window down, and only then lets this body run for real. It is kept
-// off the ordinary diff runs deliberately, because its teardown is the one step
-// that could break a live boot if it ever failed.
 // ============================================================================
 extern "C" bool RtApp_PlatformStartup(Application* self) {
-    RT_DIFF_BEGIN("Application::Application::PlatformStartup [no oracle on the live path; see BANISHED_PLAT_ORACLE]");
-
-    const bool oracle = rt_diff_on__ && EnvOn("BANISHED_PLAT_ORACLE");
-    PlatOracleSnapshot theirs = {};
-    const char* oracleWhy = "not requested";
-    bool theirsOk = false;
-    if (oracle) theirsOk = PlatOracleRunTheirs(self->_platformHandle, &theirs, &oracleWhy);
 
     WideString className;
     RtSystem::RtSystem_WideString_CtorFromChars(&className, kClassName);  // 0x18009fc39
@@ -337,18 +280,6 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
     wc.hbrBackground = reinterpret_cast<HBRUSH>(static_cast<uintptr_t>(6));  // 0x180161780
     wc.lpszMenuName  = nullptr;
     wc.lpszClassName = className.data;                             // 0x18009fc8a
-
-    // The negative control for the class oracle below. It perturbs exactly one
-    // field the oracle compares; a run with it set MUST report a divergence,
-    // and a control that cannot fire is worse than none
-    // (reference_probe_needs_an_effectiveness_control.md).
-    // It perturbs `style`, which IS one of the compared readback fields, rather
-    // than hbrBackground, which stopped being one once the readback artefact
-    // above was measured. A control aimed at a field nobody compares cannot
-    // fire, and a control that cannot fire is worse than none
-    // (reference_probe_needs_an_effectiveness_control.md).
-    if (EnvOn("BANISHED_PLAT_NEGCTL"))
-        wc.style = CS_HREDRAW;
 
     bool ok;
     if (RegisterClassW(&wc) == 0) {                                 // 0x18009fc97
@@ -382,119 +313,6 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
     // 0x18009fd29..0x18009fd51 — the inlined WideString release.
     RtSystem::RtSystem_WideString_Dtor(&className);
 
-    if (rt_diff_on__) {
-        if (!oracle) {
-            RT_DIFF_SHADOW(true, "registered class + created window",
-                           "no oracle: the class name is a literal, so a replay "
-                           "collides with our own registration");
-            RT_DIFF_WORK(ok);
-        } else if (!theirsOk) {
-            RT_DIFF_SHADOW(false, "ours ran", oracleWhy);
-            RT_DIFF_WORK(true);
-        } else {
-            PlatOracleSnapshot ours = {};
-            PlatOracleSnapshotClass(self->_platformHandle,
-                                    static_cast<HWND>(self->_windowHandle), &ours);
-
-            // Compare only what BOTH sides caused USER32 to write. lpfnWndProc
-            // is EXCLUDED and reported separately: it MUST differ (theirs is
-            // the DLL's 0x18009f930, ours is RtApp_WindowProc) and comparing it
-            // would fail 100% of calls for the one reason that is correct
-            // (reference_oracle_must_not_compare_unwritten_bytes.md).
-            // lpszClassName / lpszMenuName are excluded too: GetClassInfoW does
-            // not fill either, so neither side ever wrote them.
-            int compared = 0, differing = 0, nonTrivial = 0;
-            char detail[256];
-            detail[0] = 0;
-            auto cmpPtr = [&](const char* label, const void* a, const void* b) {
-                ++compared;
-                if (a != nullptr || b != nullptr) ++nonTrivial;
-                if (a != b) {
-                    ++differing;
-                    char one[80];
-                    std::snprintf(one, sizeof(one), "%s ours=%p theirs=%p; ",
-                                  label, a, b);
-                    std::strncat(detail, one, sizeof(detail) - std::strlen(detail) - 1);
-                }
-            };
-            auto cmpLong = [&](const char* label, long long a, long long b) {
-                ++compared;
-                if (a != 0 || b != 0) ++nonTrivial;
-                if (a != b) {
-                    ++differing;
-                    char one[80];
-                    std::snprintf(one, sizeof(one), "%s ours=%lld theirs=%lld; ",
-                                  label, a, b);
-                    std::strncat(detail, one, sizeof(detail) - std::strlen(detail) - 1);
-                }
-            };
-
-            cmpLong("classInfoOk", ours.classInfoOk, theirs.classInfoOk);
-            cmpLong("style",       ours.wc.style,       theirs.wc.style);
-            cmpLong("cbClsExtra",  ours.wc.cbClsExtra,  theirs.wc.cbClsExtra);
-            cmpLong("cbWndExtra",  ours.wc.cbWndExtra,  theirs.wc.cbWndExtra);
-            cmpPtr ("hInstance",   ours.wc.hInstance,   theirs.wc.hInstance);
-            cmpPtr ("hIcon",       ours.wc.hIcon,       theirs.wc.hIcon);
-            cmpPtr ("hCursor",     ours.wc.hCursor,     theirs.wc.hCursor);
-            // hbrBackground is NOT compared through GetClassInfoW. Measured
-            // 2026-09-08: our class reads back 0x6 and the shipped class reads
-            // back a real brush handle (0x900011) from the SAME API, while the
-            // per-window GetClassLongPtrW reading and every other field agree.
-            // Both registrations pass the SAME VALUE — the line below compares
-            // what is actually registered, by reading retail's own constant out
-            // of the shipped .rdata at 0x180161780 (`06 00 00 00`, i.e.
-            // COLOR_WINDOW+1) and checking our literal against it. That is the
-            // question the port has to answer; the readback disagreement is a
-            // USER32 reporting artefact this lane could not explain and does not
-            // pretend to (WAVE9_LANE_PLAT.md §7).
-            {
-                const uint32_t* theirConst = reinterpret_cast<const uint32_t*>(
-                    ResolveAddr(Module::Runtime, 0x180161780));
-                const unsigned long long theirsVal = theirConst ? *theirConst : 0xFFFFFFFFull;
-                cmpLong("hbrBackgroundConstant", 6, static_cast<long long>(theirsVal));
-            }
-            cmpLong("classBrushFromWindow",
-                    static_cast<long long>(ours.classBrushFromWindow),
-                    static_cast<long long>(theirs.classBrushFromWindow));
-            cmpLong("windowOk",    ours.windowOk,       theirs.windowOk);
-            cmpLong("winStyle",    ours.style,          theirs.style);
-            cmpLong("winExStyle",  ours.exStyle,        theirs.exStyle);
-            cmpLong("winWidth",    ours.width,          theirs.width);
-            cmpLong("winHeight",   ours.height,         theirs.height);
-            ++compared;
-            if (std::wcscmp(ours.className, theirs.className) != 0) {
-                ++differing;
-                std::strncat(detail, "className; ",
-                             sizeof(detail) - std::strlen(detail) - 1);
-            }
-            if (ours.className[0]) ++nonTrivial;
-
-            char a[256], b[160];
-            std::snprintf(a, sizeof(a),
-                          "compared=%d differing=%d nonTrivial=%d wndproc=%p %s",
-                          compared, differing, nonTrivial,
-                          reinterpret_cast<void*>(&RtApp_WindowProc), detail);
-            std::snprintf(b, sizeof(b), "theirs wndproc=%p (the one field that MUST differ)",
-                          reinterpret_cast<void*>(theirs.wc.lpfnWndProc));
-            RT_DIFF_SHADOW(differing == 0, a, b);
-            // Effectiveness: a comparison in which every compared field was
-            // zero on both sides proves nothing.
-            RT_DIFF_WORK(nonTrivial >= 3);
-            printf("[PlatOracle] compared=%d differing=%d nonTrivial=%d %s\n",
-                        compared, differing, nonTrivial, detail);
-            printf("[PlatOracle]   hbrBackground readback: GetClassInfoW ours=%p theirs=%p "
-                        "| GetClassLongPtrW ours=0x%llX theirs=0x%llX\n",
-                        (void*)ours.wc.hbrBackground, (void*)theirs.wc.hbrBackground,
-                        (unsigned long long)ours.classBrushFromWindow,
-                        (unsigned long long)theirs.classBrushFromWindow);
-            IdentifySystemBrush(theirs.wc.hbrBackground, ours.wc.hbrBackground,
-                                self->_platformHandle);
-        }
-        // The WindowProc's own oracle. It needs a live HWND, which does not
-        // exist until the line above created one, so this is the earliest point
-        // it can run. No-ops unless BANISHED_PLAT_ORACLE=1.
-        RtLanePlatWindowProcProbe(self->_windowHandle);
-    }
     return ok;
 }
 
@@ -554,10 +372,6 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
 // That is an EXECUTION record, not a comparison, and is labelled as one.
 // ============================================================================
 extern "C" void RtApp_PlatformShutdown(Application* self) {
-    RT_DIFF_BEGIN("Application::Application::PlatformShutdown "
-                  "[NO ORACLE POSSIBLE: DestroyWindow/UnregisterClassW are "
-                  "one-shot, so a replay measures the first run's success as a "
-                  "failure. This site records EXECUTION, not a comparison]");
 
     BOOL destroyed = FALSE;
     DWORD destroyErr = 0;
@@ -576,22 +390,6 @@ extern "C" void RtApp_PlatformShutdown(Application* self) {
 
     RtSystem::RtSystem_WideString_Dtor(&className);              // 0x18009fdb0..fde1
 
-    if (rt_diff_on__) {
-        char a[192];
-        std::snprintf(a, sizeof(a),
-                      "hwnd=%p destroyed=%d(err=%lu) unregistered=%d(err=%lu) "
-                      "hinstance=%p class=\"%s\"",
-                      self->_windowHandle, static_cast<int>(destroyed),
-                      static_cast<unsigned long>(destroyErr),
-                      static_cast<int>(unregistered),
-                      static_cast<unsigned long>(unregisterErr),
-                      self->_platformHandle, kClassName);
-        RT_DIFF_SHADOW(true, a, "no oracle: one-shot Win32 teardown");
-        // Effectiveness: a run in which the window handle was already null and
-        // the class was not ours proves nothing about this body.
-        RT_DIFF_WORK(self->_windowHandle != nullptr);
-        printf("[AppShutdown] %s\n", a);
-    }
 }
 
 // ============================================================================
@@ -640,267 +438,6 @@ extern "C" bool RtObject_ExternalFactory_PlatformStartup(void* /*self*/) {
 extern "C" bool RtEngine_Engine_PlatformStartup(void* /*self*/) {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     return true;
-}
-
-// ============================================================================
-// The oracle: run the SHIPPED PlatformStartup first, read what it built out of
-// USER32, then take it back down.
-// ============================================================================
-// Off unless BANISHED_PLAT_ORACLE=1 AND the diff harness is on. Kept off the
-// ordinary BANISHED_RT_DIFF runs on purpose: the teardown below is the single
-// step whose failure would break a live boot (our RegisterClassW would then hit
-// ERROR_CLASS_ALREADY_EXISTS, which is retail's own `return false` path and
-// ends Engine::Startup at g_startupFailAt == 6). Every failure mode reports a
-// reason instead of proceeding.
-namespace {
-
-void PlatOracleSnapshotClass(void* platformHandle, HWND hwnd,
-                             PlatOracleSnapshot* out) {
-    std::memset(out, 0, sizeof(*out));
-    out->classInfoOk =
-        GetClassInfoW(static_cast<HINSTANCE>(platformHandle), L"Banished", &out->wc) != 0;
-    if (hwnd != nullptr && IsWindow(hwnd)) {
-        out->windowOk = true;
-        out->style    = GetWindowLongPtrW(hwnd, GWL_STYLE);
-        out->exStyle  = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        RECT r = {};
-        if (GetWindowRect(hwnd, &r)) {
-            out->width  = r.right - r.left;
-            out->height = r.bottom - r.top;
-        }
-        GetClassNameW(hwnd, out->className,
-                      static_cast<int>(sizeof(out->className) / sizeof(wchar_t)));
-        out->classBrushFromWindow =
-            static_cast<ULONG_PTR>(GetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND));
-    }
-}
-
-bool PlatOracleRunTheirs(void* platformHandle, PlatOracleSnapshot* out,
-                         const char** why) {
-    using Fn = bool (*)(Application*);
-    Fn fn = RtOriginal<Fn>("?PlatformStartup@Application@1@AEAA_NXZ");
-    if (!fn) { *why = "oracle skipped: shipped body did not resolve"; return false; }
-
-    // A SCRATCH Application, never published as the singleton. Only +0x00 and
-    // +0x08 are read by the body under test.
-    Application scratch = {};
-    scratch._platformHandle = platformHandle;
-    if (!fn(&scratch)) {
-        *why = "oracle skipped: shipped body returned false";
-        return false;
-    }
-    PlatOracleSnapshotClass(platformHandle, static_cast<HWND>(scratch._windowHandle), out);
-
-    // TEARDOWN. DestroyWindow sends WM_DESTROY to the DLL's own WindowProc,
-    // which calls PostQuitMessage(0) — so a WM_QUIT lands in THIS THREAD's
-    // queue and `Application::PlatformUpdate` would read it a few frames later
-    // and quit the game. It is drained here, and the drain is CHECKED rather
-    // than assumed: the peek must succeed or the oracle refuses to continue.
-    if (scratch._windowHandle) DestroyWindow(static_cast<HWND>(scratch._windowHandle));
-    MSG quitMsg;
-    const bool drained =
-        PeekMessageW(&quitMsg, nullptr, WM_QUIT, WM_QUIT, PM_REMOVE) != 0;
-    if (!drained) {
-        *why = "oracle ABORTED: WM_QUIT was not in the queue after DestroyWindow";
-        // Still try to unregister so a later run is not poisoned.
-        UnregisterClassW(L"Banished", static_cast<HINSTANCE>(platformHandle));
-        return false;
-    }
-    if (!UnregisterClassW(L"Banished", static_cast<HINSTANCE>(platformHandle))) {
-        *why = "oracle ABORTED: UnregisterClassW failed";
-        return false;
-    }
-    // Prove the teardown, do not assume it: our own RegisterClassW is about to
-    // depend on the class being gone.
-    WNDCLASSW probe;
-    if (GetClassInfoW(static_cast<HINSTANCE>(platformHandle), L"Banished", &probe)) {
-        *why = "oracle ABORTED: class still registered after UnregisterClassW";
-        return false;
-    }
-    *why = "oracle ok";
-    return true;
-}
-
-// ---------------------------------------------------------------------------
-// What IS the value the shipped class reads back?
-// ---------------------------------------------------------------------------
-// The oracle measured that both classes are registered with the SAME constant
-// (retail's own `06 00 00 00` at 0x180161780, compared directly) and yet read
-// back different `hbrBackground` values through BOTH GetClassInfoW and
-// GetClassLongPtrW. Rather than leave that as folklore, this identifies the
-// value: it walks the system colour brushes looking for a match, and registers
-// a THIRD class from OUR module with the same constant to show whether the
-// difference tracks the value or the registering module.
-// ---------------------------------------------------------------------------
-void IdentifySystemBrush(void* theirsBrush, void* oursBrush, void* platformHandle) {
-    int matched = -1;
-    for (int i = 0; i <= 30; ++i) {
-        if (reinterpret_cast<void*>(GetSysColorBrush(i)) == theirsBrush) { matched = i; break; }
-    }
-    // A third registration from OUR module, same constant, different name.
-    WNDCLASSW probe;
-    std::memset(&probe, 0, sizeof(probe));
-    probe.lpfnWndProc   = DefWindowProcW;
-    probe.hInstance     = static_cast<HINSTANCE>(platformHandle);
-    probe.hbrBackground = reinterpret_cast<HBRUSH>(static_cast<uintptr_t>(6));
-    probe.lpszClassName = L"BanishedPlatProbe";
-    void* readBack = nullptr;
-    bool registered = RegisterClassW(&probe) != 0;
-    if (registered) {
-        WNDCLASSW got;
-        std::memset(&got, 0, sizeof(got));
-        if (GetClassInfoW(static_cast<HINSTANCE>(platformHandle), L"BanishedPlatProbe", &got))
-            readBack = got.hbrBackground;
-        UnregisterClassW(L"BanishedPlatProbe", static_cast<HINSTANCE>(platformHandle));
-    }
-    printf("[PlatOracle]   theirs=%p is %s ; GetSysColorBrush(COLOR_WINDOW=5)=%p ; "
-                "third class from OUR module with the same constant 6 reads back %p (registered=%d) ; ours=%p\n",
-                theirsBrush,
-                matched >= 0 ? "GetSysColorBrush(index below)" : "NOT any system colour brush",
-                reinterpret_cast<void*>(GetSysColorBrush(COLOR_WINDOW)),
-                readBack, registered ? 1 : 0, oursBrush);
-    if (matched >= 0)
-        printf("[PlatOracle]   matched system colour index = %d\n", matched);
-}
-
-// ---------------------------------------------------------------------------
-// The WindowProc probe's negative control: a DELIBERATELY WRONG copy of the
-// body. Exactly one case in the table must diverge when it is used.
-//
-// MEASURED 2026-09-08: THE FIRST VERSION OF THIS CONTROL COULD NOT FIRE, and
-// the probe caught it — `differing=0` on a run whose whole point was to
-// disagree. That version swallowed VK_F11 instead of VK_F10, so on the
-// `WM_SYSKEYDOWN wp=VK_F10` case the wrong body fell through to DefWindowProcW
-// — which ALSO returns 0 for that message. The two are indistinguishable by
-// return value, so the perturbation was invisible.
-//
-// That is a fact about the SUBJECT, not just about the control, and it is
-// recorded in WAVE9_LANE_PLAT.md: the VK_F10 branch of the real WindowProc
-// cannot be told apart from its default path by anything this probe can
-// observe. `branches=6` counts branches REACHED, not branches DISCRIMINATED.
-//
-// The perturbation below writes the WRONG VALUE to `_running` on WM_SETFOCUS,
-// which the probe compares directly and which therefore cannot hide.
-// ---------------------------------------------------------------------------
-int64_t NegControlWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
-                             Application* app) {
-    switch (msg) {
-        case WM_DESTROY:    PostQuitMessage(0); return 0;
-        case WM_SETFOCUS:   if (app) app->_running = 0; break;   // WRONG: should be 1
-        case WM_KILLFOCUS:  if (app) app->_running = 0; break;
-        case WM_ERASEBKGND: return 0;
-        case WM_SYSKEYDOWN: if (wParam == 0x79) return 0; break;
-        default: break;
-    }
-    return DefWindowProcW(hwnd, msg, wParam, lParam);
-}
-
-}  // namespace
-
-// ============================================================================
-// RtLanePlatWindowProcProbe — the WindowProc's real oracle
-// ============================================================================
-// The live WindowProc cannot be diffed (a replay dispatches everything twice),
-// so it is covered here instead: drive OURS and the SHIPPED body over the same
-// synthetic message table, against the same synthetic Application, and compare
-// the return value AND the one byte either of them writes.
-//
-// HOW IT STAYS SAFE
-//   * `Application::_singleton` is repointed at a SCRATCH object for the
-//     duration and restored afterwards, so neither side can touch the real one.
-//   * the scratch's callback Set is EMPTY, so no registered callback runs. The
-//     tree-descent branch is therefore NOT covered by this probe, and that is
-//     stated in WAVE9_LANE_PLAT.md rather than glossed.
-//   * WM_DESTROY posts a WM_QUIT per side; both are drained.
-//
-// EFFECTIVENESS CONTROL: `branches` counts how many DISTINCT branches of the
-// switch the table actually reached, and the probe prints it. A run reporting
-// `cases=N differing=0` with `branches` below 6 has not tested what it claims.
-// ============================================================================
-extern "C" void RtLanePlatWindowProcProbe(void* hwndOpaque) {
-    if (!RtDiffEnabled() || !EnvOn("BANISHED_PLAT_ORACLE")) return;
-
-    using Fn = int64_t (*)(HWND, UINT, WPARAM, LPARAM);
-    Fn theirs = RtOriginal<Fn>("?WindowProc@Application@1@CA_JPEAUHWND__@@I_K_J@Z");
-    if (!theirs) {
-        printf("[PlatProbe] WindowProc probe SKIPPED: shipped body did not resolve\n");
-        return;
-    }
-    HWND hwnd = static_cast<HWND>(hwndOpaque);
-    if (!hwnd || !IsWindow(hwnd)) {
-        printf("[PlatProbe] WindowProc probe SKIPPED: no live window\n");
-        return;
-    }
-    Application** slot = AppSingletonSlot();
-    if (!slot) {
-        printf("[PlatProbe] WindowProc probe SKIPPED: no Application singleton slot\n");
-        return;
-    }
-
-    const bool neg = EnvOn("BANISHED_PLAT_NEGCTL");
-
-    struct Case { UINT msg; WPARAM wp; LPARAM lp; int branch; };
-    static const Case cases[] = {
-        { WM_DESTROY,    0,     0, 0 },
-        { WM_SETFOCUS,   0,     0, 1 },
-        { WM_KILLFOCUS,  0,     0, 2 },
-        { WM_ERASEBKGND, 0,     0, 3 },
-        { WM_SYSKEYDOWN, 0x79,  0, 4 },   // VK_F10  — swallowed
-        { WM_SYSKEYDOWN, 0x70,  0, 5 },   // VK_F1   — NOT swallowed, default path
-        { WM_SYSKEYDOWN, 0x179, 0, 5 },   // low dword == 0x79 but the 64-bit
-                                          // compare must reject it
-        { WM_NULL,       0,     0, 5 },
-        { WM_MOUSEMOVE,  0,     0, 5 },
-        { WM_SIZE,       0,     0, 5 },
-    };
-
-    Application* const saved = *slot;
-    Application scratchA = {};
-    Application scratchB = {};
-    int differing = 0, cases_n = 0;
-    unsigned branchMask = 0;
-    char detail[320];
-    detail[0] = 0;
-
-    for (const Case& c : cases) {
-        std::memset(&scratchA, 0, sizeof(scratchA));
-        std::memset(&scratchB, 0, sizeof(scratchB));
-        scratchA._running = 0x5A;   // a value NEITHER branch produces, so an
-        scratchB._running = 0x5A;   // untouched byte is distinguishable from 0/1
-
-        *slot = &scratchA;
-        const int64_t ra = neg
-            ? NegControlWindowProc(hwnd, c.msg, c.wp, c.lp, &scratchA)
-            : static_cast<int64_t>(RtApp_WindowProc(hwnd, c.msg, c.wp, c.lp));
-
-        *slot = &scratchB;
-        const int64_t rb = theirs(hwnd, c.msg, c.wp, c.lp);
-
-        // One WM_QUIT per side for the WM_DESTROY case; drain both.
-        MSG m;
-        while (PeekMessageW(&m, nullptr, WM_QUIT, WM_QUIT, PM_REMOVE)) { /* drained */ }
-
-        ++cases_n;
-        branchMask |= (1u << c.branch);
-        if (ra != rb || scratchA._running != scratchB._running) {
-            ++differing;
-            char one[112];
-            std::snprintf(one, sizeof(one),
-                          "msg=0x%X wp=0x%llX ours=(%lld,%u) theirs=(%lld,%u); ",
-                          c.msg, static_cast<unsigned long long>(c.wp),
-                          static_cast<long long>(ra),
-                          static_cast<unsigned>(scratchA._running),
-                          static_cast<long long>(rb),
-                          static_cast<unsigned>(scratchB._running));
-            std::strncat(detail, one, sizeof(detail) - std::strlen(detail) - 1);
-        }
-    }
-    *slot = saved;
-
-    int branches = 0;
-    for (unsigned b = branchMask; b; b >>= 1) branches += (b & 1u);
-    printf("[PlatProbe] WindowProc%s cases=%d differing=%d branches=%d %s\n",
-                neg ? " NEGATIVE-CONTROL" : "", cases_n, differing, branches, detail);
 }
 
 // ============================================================================

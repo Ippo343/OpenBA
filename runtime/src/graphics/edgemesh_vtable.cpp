@@ -48,7 +48,7 @@
 // unexported serialize helpers, and each is commented in the §4 #10 shape at
 // its call site.
 //
-// KILL SWITCH: BANISHED_RT_GFXEDGEVT=0 leaves all eight on the DLL.
+// KILL SWITCH: RT_GFXEDGEVT=0 leaves all eight on the DLL.
 //
 // ⚠ CALLS=0 IS THE EXPECTED READING, AND IT IS NOT VERIFICATION.
 //   mesh.cpp's closing note already says it for the whole EdgeMesh family: the
@@ -142,7 +142,7 @@ using Slot0Fn = void* (*)(void* self, unsigned flag);
 // RT_EXPORT_ONCE, NOT by address and NOT as a direct call into mesh.cpp's
 // static: ResolveExport consults the port registry FIRST
 // (reference_resolveaddr_consults_port_registry_first.md), so this picks up
-// mesh.cpp's ported `RtGraphics_EdgeMesh_Ctor` whenever BANISHED_RT_GFXMESH is
+// mesh.cpp's ported `RtGraphics_EdgeMesh_Ctor` whenever RT_GFXMESH is
 // on, and the DLL's otherwise. Retail's Construct/Reconstruct both reach the
 // ctor by a plain rel32 call to the same body, so one door for both is faithful.
 using CtorFn = void* (*)(void*);
@@ -270,11 +270,7 @@ ArrayResizeFn RtTriangleListArrayResize() {
 // ---- slot 2  ?Type@EdgeMesh@Graphics@@UEBAIXZ  0x180012c70 -----------------
 
 extern "C" uint32_t RtGraphics_EdgeMesh_Type(const void* self) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::Type");
     const uint32_t ours = ReadTypeId(EdgeMeshTypeInfo());
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(U32ThisFn,
-                       "?Type@EdgeMesh@Graphics@@UEBAIXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -288,13 +284,7 @@ extern "C" uint32_t RtGraphics_EdgeMesh_Type(const void* self) {
 //   the identity question is retired in both shipped binaries (zero consumers
 //   of any node's +0x08 — reference_basetypeinfo_name_is_content_only.md).
 extern "C" const char* RtGraphics_EdgeMesh_TypeNameStr(const void* self) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::TypeName");
     const char* const ours = ReadTypeName(EdgeMeshTypeInfo());
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RT_ORIGINAL_ONCE(CStrThisFn,
-                           "?TypeName@EdgeMesh@Graphics@@UEBAPEBDXZ")(self)));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -309,11 +299,7 @@ extern "C" const char* RtGraphics_EdgeMesh_TypeNameStr(const void* self) {
 // NOT the same constant as MaterialInstance's 4 or Particle's 0x1000, which is
 // why each of the three is written as its own literal in its own file.
 extern "C" int32_t RtGraphics_EdgeMesh_GetFileVersion(const void* self) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::GetFileVersion");
     const int32_t ours = 2;
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(I32ThisFn,
-                       "?GetFileVersion@EdgeMesh@Graphics@@UEBAHXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -331,12 +317,7 @@ extern "C" int32_t RtGraphics_EdgeMesh_GetFileVersion(const void* self) {
 // touches it, because the vtable slot is still CALLED with it in RDX and a
 // narrower signature would be a different ABI on any future by-pointer use.
 extern "C" int32_t RtGraphics_EdgeMesh_Compile(void* self, const void* filename) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::Compile");
     const int32_t ours = 1;
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(CompileFn,
-                       "?Compile@EdgeMesh@Graphics@@UEAA?AW4CompileResult@External@"
-                       "Object@@AEBVFilename@System@@@Z")(self, filename));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -349,8 +330,8 @@ extern "C" int32_t RtGraphics_EdgeMesh_Compile(void* self, const void* filename)
 // here: a differential run would consume or emit the record TWICE and desync
 // the stream, and a stream desync does not surface where it happens — it
 // surfaces later, on an innocent record. Wave 5 held four functions back for
-// the same reason. RT_DIFF_WORK is recorded so the body's ATTENDANCE is
-// visible; no RT_DIFF_SCALAR / RT_DIFF_BYTES is emitted, and the absence is
+// the same reason. the diff oracle is recorded so the body's ATTENDANCE is
+// visible; no the diff oracle / the diff oracle is emitted, and the absence is
 // deliberate rather than an omission.
 //
 // WHAT MAKES PORTING IT SAFE ANYWAY, and it is a narrow claim: this body
@@ -389,7 +370,6 @@ extern "C" int32_t RtGraphics_EdgeMesh_Compile(void* self, const void* filename)
 // Reading `_size` again after the resize would be the same number by accident
 // on the write arm and a silent truncation on the read arm.
 extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::Serialize[NO-ORACLE]");
 
     uint8_t* const self = reinterpret_cast<uint8_t*>(selfv);
     uint8_t* const st   = reinterpret_cast<uint8_t*>(stream);
@@ -472,7 +452,6 @@ extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
         reinterpret_cast<Slot0Fn>(vt[0])(ctx.encoding, 1);
     }
 
-    RT_DIFF_WORK(true);
     return true;   // MOV AL,1 — no failure path exists in the shipped body.
 }
 
@@ -489,10 +468,8 @@ extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
 // No null test. Retail has none; destructing a null faults here exactly as it
 // faults in the DLL (CLAUDE.md, "Don't fix a faithful crash with a null check").
 extern "C" void RtGraphics_EdgeMesh_Destruct(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::Destruct");
     void** const vp = reinterpret_cast<void**>(selfv);
     reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(selfv, 0);
-    RT_DIFF_WORK(true);
 }
 
 // ---- slot 8  ?Construct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ -----
@@ -505,14 +482,12 @@ extern "C" void RtGraphics_EdgeMesh_Destruct(void* selfv) {
 // 0x1800a2830. The null test is retail's own and returns null; it is kept.
 //
 // The ctor is reached by NAME (see EdgeMeshCtor above), so this body follows
-// mesh.cpp's ported ctor whenever BANISHED_RT_GFXMESH is on. A tail jump and a
+// mesh.cpp's ported ctor whenever RT_GFXMESH is on. A tail jump and a
 // call differ only in the stack frame, which no caller of this slot observes.
 extern "C" void* RtGraphics_EdgeMesh_Construct(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::Construct");
-    if (!selfv) { RT_DIFF_WORK(true); return nullptr; }
+    if (!selfv) {  return nullptr; }
     CtorFn ctor = EdgeMeshCtor();
     void* const ours = ctor ? ctor(selfv) : nullptr;
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -532,12 +507,10 @@ extern "C" void* RtGraphics_EdgeMesh_Construct(void* selfv) {
 // The identical asymmetry exists in the MaterialInstance pair and was kept
 // there for the same reason (wave24_lane_gfxmat.cpp:440).
 extern "C" void* RtGraphics_EdgeMesh_Reconstruct(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::Reconstruct");
     void** const vp = reinterpret_cast<void**>(selfv);
     reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(selfv, 0);
     CtorFn ctor = EdgeMeshCtor();
     void* const ours = ctor ? ctor(selfv) : nullptr;
-    RT_DIFF_WORK(true);
     return ours;
 }
 

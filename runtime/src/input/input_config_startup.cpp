@@ -29,7 +29,7 @@
 // candidates that are off it, this is the one whose whole transitive closure is
 // already ported bar ONE function.
 //
-// Kill switch: `BANISHED_RT_INPUTCFGSTART=0`.
+// Kill switch: `RT_INPUTCFGSTART=0`.
 //
 // ---------------------------------------------------------------------------
 // STARTUP (0x1800e0d30)
@@ -142,7 +142,6 @@ const char kMouseDisplay[]  = "MouseDisplay";   // 0x180157d48
 // (Was labelled UNEXPORTED here. It is not -- see the banner.)
 // ============================================================================
 extern "C" void RtInput_Configuration_Load(Configuration* self) {
-    RT_DIFF_BEGIN("Input::Configuration::Load");
 
     // Unguarded, exactly as retail: `MOV RCX,[RCX]` then straight into the call.
     RT_EXPORT_ONCE(VoidThisFn, "?Load@KeyMap@Input@@QEAAXXZ")(self->keyMap);
@@ -160,29 +159,12 @@ extern "C" void RtInput_Configuration_Load(Configuration* self) {
         get(persistence, kSection, kMouseDisplay,  &self->mouseDisplay);
     }
 
-    if (rt_diff_on__) {
-        // A bool that is neither 0 nor 1 means Persistence::Get wrote past the
-        // byte it was handed -- the only failure this body can actually have,
-        // since it computes nothing itself.
-        const uint8_t a = *reinterpret_cast<uint8_t*>(&self->mouseClipping);
-        const uint8_t b = *reinterpret_cast<uint8_t*>(&self->legacy);
-        const uint8_t c = *reinterpret_cast<uint8_t*>(&self->mouseDisplay);
-        const bool cleanBools = a <= 1 && b <= 1 && c <= 1;
-        char ours[96], theirs[128];
-        std::snprintf(ours, sizeof(ours), "clip=%u legacy=%u display=%u", a, b, c);
-        std::snprintf(theirs, sizeof(theirs),
-                      "three bools in {0,1} [cleanBools=%d]",
-                      static_cast<int>(cleanBools));
-        RT_DIFF_SHADOW(cleanBools, ours, theirs);
-        RT_DIFF_WORK(true);
-    }
 }
 
 // ============================================================================
 // ?Startup@Configuration@Input@@QEAA_NXZ                   retail 0x1800e0d30
 // ============================================================================
 extern "C" bool RtInput_Configuration_Startup(Configuration* self) {
-    RT_DIFF_BEGIN("Input::Configuration::Startup");
 
     if (self->keyMap != nullptr) {
         // 0x1800e0d54. An unnamed scalar deleting destructor; no export in
@@ -206,16 +188,6 @@ extern "C" bool RtInput_Configuration_Startup(Configuration* self) {
 
     RtInput_Configuration_Load(self);
 
-    if (rt_diff_on__) {
-        const bool allocOk = self->keyMap != nullptr;
-        char ours[96], theirs[128];
-        std::snprintf(ours, sizeof(ours), "keyMap=%p", self->keyMap);
-        std::snprintf(theirs, sizeof(theirs),
-                      "a 0x18-byte KeyMap was allocated and stored [allocOk=%d]",
-                      static_cast<int>(allocOk));
-        RT_DIFF_SHADOW(allocOk, ours, theirs);
-        RT_DIFF_WORK(true);
-    }
 
     return true;
 }

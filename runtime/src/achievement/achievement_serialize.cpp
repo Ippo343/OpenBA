@@ -100,7 +100,7 @@ namespace {
 // The shared prologue/epilogue, transcribed identically to
 // goal_serialize.cpp's MakeCodec/DestroyCodec. Deliberately duplicated rather
 // than hoisted into a header: these two files are gated by DIFFERENT env
-// switches (BANISHED_RT_GOAL vs BANISHED_RT_ACHMGR), and a shared helper would
+// switches (RT_GOAL vs RT_ACHMGR), and a shared helper would
 // make one lane's kill-switch silently affect the other's bodies.
 //
 //   Serializer ser{ &stream, nullptr };
@@ -264,27 +264,6 @@ bool PortIsLive(const char* mangled, const void* ours) {
 // thunk and never returns 3.
 // ============================================================================
 bool RtAch_Achievement_Serialize(Achievement* self, Stream* stream) {
-    static int probes = 0;
-    if (RtSaveTrace::Enabled() && !g_probing && probes < 16) {
-        ++probes;
-        ProbeGuard guard__;
-        static const char* const kMangled =
-            "?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z";
-        auto theirs = reinterpret_cast<StreamMemberFn>(ResolveExportRaw(kMangled));
-        if (theirs && PortIsLive(kMangled, (const void*)&RtAch_Achievement_Serialize)) {
-            RtSaveTrace::Compare(
-                "Achievement::Achievement::Serialize", self,
-                [](void* obj, void* ser) {
-                    RtAch_Achievement_Serialize(static_cast<Achievement*>(obj), StreamOf(ser));
-                },
-                [](void* obj, void* ser) {
-                    reinterpret_cast<StreamMemberFn>(ResolveExportRaw(
-                        "?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z"))(
-                            obj, StreamOf(ser));
-                });
-        }
-    }
-
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
@@ -336,29 +315,6 @@ bool RtAch_Achievement_Serialize(Achievement* self, Stream* stream) {
 // only, because the element loop mutates the global Object::Factory.
 // ============================================================================
 void RtAch_AchievementManager_Persist(AchievementManager* self, Stream* stream) {
-    static int probes = 0;
-    if (RtSaveTrace::Enabled() && !g_probing && probes < 16) {
-        ++probes;
-        ProbeGuard guard__;
-        static const char* const kMangled =
-            "?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z";
-        auto theirs = reinterpret_cast<StreamMemberFn>(ResolveExportRaw(kMangled));
-        if (theirs && PortIsLive(kMangled, (const void*)&RtAch_AchievementManager_Persist)) {
-            RtSaveTrace::Compare(
-                "Achievement::AchievementManager::Persist", self,
-                [](void* obj, void* ser) {
-                    RtAch_AchievementManager_Persist(
-                        static_cast<AchievementManager*>(obj), StreamOf(ser));
-                },
-                [](void* obj, void* ser) {
-                    reinterpret_cast<StreamMemberFn>(ResolveExportRaw(
-                        "?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z"))(
-                            obj, StreamOf(ser));
-                },
-                /*stopAfter=*/1);
-        }
-    }
-
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
@@ -382,7 +338,7 @@ void RtAch_AchievementManager_Persist(AchievementManager* self, Stream* stream) 
 }
 
 // ---- Registration ----------------------------------------------------------
-// Gated by BANISHED_RT_ACHMGR with achievement_manager.cpp and
+// Gated by RT_ACHMGR with achievement_manager.cpp and
 // achievement_state.cpp — class atomicity (PLAN §4.1 decision 5).
 //
 // `?Persist@AchievementManager@…` is a LIVE door today:

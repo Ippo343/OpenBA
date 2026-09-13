@@ -532,7 +532,6 @@ Vec3f QuatRotate(float qx, float qy, float qz, float qw, const Vec3f& v) {
 //   * `this->_emitter` is dereferenced with no test.
 // ============================================================================
 extern "C" void RtGraphics_ParticleSystemInstance_Update(void* selfv, const void* timev) {
-    RT_DIFF_BEGIN("Graphics::ParticleSystemInstance::Update [ATTENDANCE]");
     ++g_psiUpdate;
 
     uint8_t* self = B(selfv);
@@ -708,7 +707,7 @@ extern "C" void RtGraphics_ParticleSystemInstance_Update(void* selfv, const void
         // Retail calls the DLL's own sinf/cosf (0x180127d90 / 0x180126d10) in
         // this exact order: sin(B), sin(A), cos(B), cos(A). RtLibm is the
         // project's seam for exactly these two (runtime/funcs/rt_libm.h) and
-        // BANISHED_RT_LIBM=dll routes it back to the DLL's CRT for an A/B.
+        // RT_LIBM=dll routes it back to the DLL's CRT for an A/B.
         const float sinB = RtLibm::Sin(angleB);
         const float sinA = RtLibm::Sin(angleA);
         const float cosB = RtLibm::Cos(angleB);
@@ -941,7 +940,6 @@ extern "C" void RtGraphics_ParticleSystemInstance_Update(void* selfv, const void
 // funclet's state slot and has no effect on the object.
 // ============================================================================
 extern "C" void RtGraphics_ParticleInstance_RemoveState(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::ParticleInstance::RemoveState [ATTENDANCE]");
     ++g_piRemoveState;
 
     uint8_t* self = B(selfv);
@@ -982,14 +980,12 @@ extern "C" void RtGraphics_ParticleInstance_RemoveState(void* selfv) {
 // nothing (SunLight's real work is in DrawShadowMap and the four-int Draw).
 // ============================================================================
 extern "C" void RtGraphics_SunLight_Update(void* /*self*/, const void* /*time*/) {
-    RT_DIFF_BEGIN("Graphics::SunLight::Update [ATTENDANCE]");
     ++g_sunUpdate;
 }
 
 extern "C" void RtGraphics_SunLight_Draw_MHHH(void* /*self*/, void* /*context*/,
                                               const void* /*camera*/, void* /*material*/,
                                               float /*alpha*/, int /*a*/, int /*b*/, int /*c*/) {
-    RT_DIFF_BEGIN("Graphics::SunLight::Draw(…MHHH) [ATTENDANCE]");
     ++g_sunDrawMhhh;
 }
 
@@ -1029,7 +1025,6 @@ extern "C" void RtGraphics_SunLight_Draw_MHHH(void* /*self*/, void* /*context*/,
 // `Renderer&` is pushed out to R8.
 // ============================================================================
 extern "C" void RtGraphics_SunLight_AddDrawItems(void* selfv, const void* scenev, void* rendererv) {
-    RT_DIFF_BEGIN("Graphics::SunLight::AddDrawItems [ATTENDANCE]");
     ++g_sunAddDrawItems;
 
     uint8_t* self = B(selfv);

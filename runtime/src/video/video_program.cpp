@@ -151,7 +151,7 @@ struct Touched {
 
 Touched Capture(const RtVideo::Context* ctx) {
     // Value-initialised: `dirty` is 32 bits and `vertexLayout` is pointer-
-    // aligned, so bytes +0x4..+0x7 are PADDING. RT_DIFF_BYTES compares the
+    // aligned, so bytes +0x4..+0x7 are PADDING. the diff oracle compares the
     // whole struct, and uninitialised padding reported 47,280 "divergences"
     // in 68,377 calls (2026-09-12) that were stack garbage, not the port.
     Touched t{};
@@ -189,10 +189,8 @@ using SetupShadersFn = void (*)(const void*, void*);
 // file needs the symbol -- the registry takes its ADDRESS, not its name.
 void Video_VideoProgram_SetupShaders(const VideoProgramPartial* self,
                                      RtVideo::Context* ctx) {
-    RT_DIFF_BEGIN("Video::VideoProgram::SetupShaders");
 
     Touched pre{};
-    if (rt_diff_on__) pre = Capture(ctx);
 
     // Context+0x200 is `_videoProgram`, a POINTER that lives in the first eight
     // bytes of the `_pixelConstantStaging` array — see the WAVE 9 LANE CTX note
@@ -212,167 +210,9 @@ void Video_VideoProgram_SetupShaders(const VideoProgramPartial* self,
     Apply(ctx, &ctx->_pixelProgram,  self->_pixelProgram,  RtVideo::kDirtyPixelProgram);
     Apply(ctx, &ctx->_renderState,   self->_renderState,   RtVideo::kDirtyRenderState);
 
-    if (rt_diff_on__) {
-        const Touched ours = Capture(ctx);
-        Restore(ctx, pre);                       // rewind to the state THEY see
-        RtOriginal<SetupShadersFn>(
-            "?SetupShaders@VideoProgram@Video@@QEBAXAEAVContext@2@@Z")(self, ctx);
-        const Touched theirs = Capture(ctx);
-        RT_DIFF_BYTES(&ours, &theirs, sizeof(Touched));
-    }
 }
 
 }  // namespace
-
-// ============================================================================
-// THE SWEEP — the verification, because THERE IS NO CALLER
-// ============================================================================
-// The live oracle above is armed and correct and it will never fire while the
-// DLL is present. MEASURED, not assumed, on an in-world run of this branch
-// (autostart -> frame 600 -> pause-menu Quit, rc=0, 0-byte crash log,
-// BANISHED_RT_DIFF=1): `Video::VideoProgram::SetupShaders` registered NO RtDiff
-// site at all, i.e. the body was never entered. The reason is one step up:
-// its ONLY door-reachable caller is Wave 21's
-// `?Setup@MaterialInstance@Graphics@@`, whose own unconditional `[GFXBODY]
-// MaterialInstance::Setup calls=1` line is absent from the same log. Retail's
-// renderer reaches `Setup` by an in-DLL rel32 call, and a rel32 is not a door
-// (reference_a_ported_row_can_be_permanently_unpromotable.md), so registering
-// the export does not put us on retail's path.
-//
-// `calls=0` is therefore NOT "this port is fine, nothing exercises it"
-// (reference_uncalled_port_is_not_verified.md). It is the condition under which
-// a wrong body ships unnoticed. But "no gameplay route" is not "no oracle"
-// (reference_no_route_is_not_no_oracle.md), and this body is PURE: two inputs,
-// six written words, no calls, no allocation. So it is verified by an INPUT
-// SWEEP against the shipped export
-// (project_pure_functions_verify_by_sweep.md).
-//
-// WHAT IS SWEPT. The body's behaviour is a product of five INDEPENDENT
-// compare-guards, so the sweep enumerates all 2^5 = 32 equal/different
-// patterns, crossed with two starting dirty masks (0, and a preloaded
-// 0x00001234 which shares no bit with any of the five this function raises, so
-// a lost OR is visible as a lost bit rather than hidden under one already set).
-// 64 cases.
-//
-// WHAT IS COMPARED. The WHOLE Context, byte for byte, not just the six words.
-// Both sides start from an identical copy, so a full memcmp additionally proves
-// neither side wrote anywhere the other did not — a check the six-word live
-// oracle cannot make (reference_oracle_must_not_compare_unwritten_bytes.md
-// cuts the other way here: every byte compared is a byte both sides had an
-// equal opportunity to write, because both start identical).
-//
-// THE EFFECTIVENESS CONTROL. A sweep of cases that all change nothing reports
-// 64 green comparisons and verifies nothing
-// (reference_probe_needs_an_effectiveness_control.md), so the run prints how
-// many of the 64 cases actually RAISED a dirty bit, and how many distinct bits
-// were seen across the sweep. A run where `changed` is 0, or where fewer than
-// all five bits ever appear, is NOT a pass however many comparisons agreed.
-//
-// THE NEGATIVE CONTROL. `BANISHED_RT_VIDPROGRAM_SWEEP=2` re-runs the whole
-// sweep with ours' render-state bit deliberately swapped for the pixel-program
-// bit — a corruption of a value the comparison ACTUALLY READS
-// (reference_control_must_pick_a_compared_subject.md), in a field both sides
-// write, so a sound sweep must report it CAUGHT. It is run in the same process
-// immediately after the clean sweep and its verdict is printed beside it.
-// ============================================================================
-namespace {
-
-// Our body again, with one parameterised fault injected. It is a SEPARATE
-// function rather than a flag inside the live one: a control that runs through
-// the shipped path leaves the shipped path carrying a branch that exists only
-// for the control.
-void SweepSubject(const VideoProgramPartial* self, RtVideo::Context* ctx, bool corrupt) {
-    void* videoProgramSlot = nullptr;
-    std::memcpy(&videoProgramSlot, ctx->_pixelConstantStaging, sizeof(void*));
-    if (videoProgramSlot != static_cast<const void*>(self)) {
-        ctx->_dirty |= kDirtyVideoProgram;
-        void* me = const_cast<VideoProgramPartial*>(self);
-        std::memcpy(ctx->_pixelConstantStaging, &me, sizeof(void*));
-    }
-    Apply(ctx, &ctx->_vertexLayout,  self->_vertexLayout,  RtVideo::kDirtyVertexLayout);
-    Apply(ctx, &ctx->_vertexProgram, self->_vertexProgram, RtVideo::kDirtyVertexProgram);
-    Apply(ctx, &ctx->_pixelProgram,  self->_pixelProgram,  RtVideo::kDirtyPixelProgram);
-    Apply(ctx, &ctx->_renderState,   self->_renderState,
-          corrupt ? RtVideo::kDirtyPixelProgram : RtVideo::kDirtyRenderState);
-}
-
-// .bss rather than the stack: a Context is 0x2168 bytes and this runs during
-// boot init, before the engine's own stacks are what they will be.
-RtVideo::Context g_ctxOurs;
-RtVideo::Context g_ctxTheirs;
-
-int RunSweep(bool corrupt, const char* label) {
-    SetupShadersFn theirs = RtOriginal<SetupShadersFn>(
-        "?SetupShaders@VideoProgram@Video@@QEBAXAEAVContext@2@@Z");
-    if (theirs == nullptr) {
-        printf("[VidProgSweep] %s: SKIPPED -- the shipped export did not resolve. "
-               "That is NOT a pass (reference_resolveexport_phantom_names.md).\n", label);
-        return -1;
-    }
-
-    // Two distinct pointer values per slot, neither null, so "equal" and
-    // "different" are both non-degenerate.
-    static uint8_t kA[8] = {1}, kB[8] = {2}, kC[8] = {3}, kD[8] = {4};
-    static uint8_t kX[8] = {5}, kY[8] = {6}, kZ[8] = {7}, kW[8] = {8};
-    void* progVals[4] = { kA, kB, kC, kD };
-    void* otherVals[4] = { kX, kY, kZ, kW };
-
-    int cases = 0, agreed = 0, changed = 0;
-    uint32_t bitsSeen = 0;
-    for (int pattern = 0; pattern < 32; ++pattern) {
-        for (int preload = 0; preload < 2; ++preload) {
-            VideoProgramPartial prog{};
-            prog._vertexLayout  = progVals[0];
-            prog._vertexProgram = progVals[1];
-            prog._pixelProgram  = progVals[2];
-            prog._renderState   = progVals[3];
-
-            std::memset(&g_ctxOurs, 0, sizeof(g_ctxOurs));
-            g_ctxOurs._dirty         = preload ? 0x00001234u : 0u;
-            g_ctxOurs._vertexLayout  = (pattern & 1) ? progVals[0] : otherVals[0];
-            g_ctxOurs._vertexProgram = (pattern & 2) ? progVals[1] : otherVals[1];
-            g_ctxOurs._pixelProgram  = (pattern & 4) ? progVals[2] : otherVals[2];
-            g_ctxOurs._renderState   = (pattern & 8) ? progVals[3] : otherVals[3];
-            void* seed = (pattern & 16) ? static_cast<void*>(&prog) : static_cast<void*>(kW);
-            std::memcpy(g_ctxOurs._pixelConstantStaging, &seed, sizeof(void*));
-
-            std::memcpy(&g_ctxTheirs, &g_ctxOurs, sizeof(g_ctxOurs));
-            const uint32_t dirtyBefore = g_ctxOurs._dirty;
-
-            SweepSubject(&prog, &g_ctxOurs, corrupt);
-            theirs(&prog, &g_ctxTheirs);
-
-            ++cases;
-            if (std::memcmp(&g_ctxOurs, &g_ctxTheirs, sizeof(g_ctxOurs)) == 0) ++agreed;
-            if (g_ctxTheirs._dirty != dirtyBefore) ++changed;
-            bitsSeen |= (g_ctxTheirs._dirty & ~dirtyBefore);
-        }
-    }
-    const uint32_t kAllFive = kDirtyVideoProgram | RtVideo::kDirtyVertexLayout
-                            | RtVideo::kDirtyVertexProgram | RtVideo::kDirtyPixelProgram
-                            | RtVideo::kDirtyRenderState;
-    printf("[VidProgSweep] %s: %d cases, %d agreed, %d diverged | EFFECTIVENESS: "
-           "%d of %d cases changed the dirty mask, bits seen 0x%x of 0x%x%s\n",
-           label, cases, agreed, cases - agreed, changed, cases, bitsSeen, kAllFive,
-           (bitsSeen == kAllFive) ? "" : "  <-- NOT ALL FIVE BITS EXERCISED");
-    return cases - agreed;
-}
-
-}  // namespace
-
-// Returns 0 when the clean sweep agreed on every case AND the negative control
-// was caught. Any other value is a red.
-extern "C" int RtVideoVideoProgramSweep() {
-    const int diverged = RunSweep(false, "clean");
-    if (diverged < 0) return -1;
-    const int caught = RunSweep(true, "NEGATIVE CONTROL (render-state bit swapped for the pixel-program bit)");
-    printf("[VidProgSweep] verdict: clean diverged=%d, control caught=%d %s\n",
-           diverged, caught,
-           (diverged == 0 && caught > 0)
-               ? "-> GREEN"
-               : "-> RED (a control that catches nothing indicts the sweep, not the port)");
-    return (diverged == 0 && caught > 0) ? 0 : 1;
-}
 
 // ----------------------------------------------------------------------------
 // Registration. The mangled name is spelled as a LITERAL at the

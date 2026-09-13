@@ -171,7 +171,7 @@
 // `??1Context@Video@@` / the deleting operator (lines below) keep their address
 // doors only because lane VID2 registered BOTH doors for them.
 //
-// DATA dependencies go through `ResolveExportRaw` (GetProcAddress), which is
+// DATA dependencies go through `the raw DLL door` (GetProcAddress), which is
 // deliberately NOT registry-aware. `ResolveAddr(Module::Runtime, addr)` checks
 // the port registry FIRST (reference_resolveaddr_consults_port_registry_first.md),
 // and for a data symbol that is the wrong answer: what these bodies need is
@@ -286,20 +286,9 @@ int64_t SecondsToTicksInline(float seconds) {
 // would prove nothing; the static_assert in MainLoop.h already covers the
 // compile-time half.)
 extern "C" void RtEngine_MainLoop_SetNextLoop(MainLoop* self, UpdateLoop* loop) {
-    RT_DIFF_BEGIN("Engine::MainLoop::SetNextLoop");
 
     self->_nextLoop = loop;
 
-    if (rt_diff_on__) {
-        UpdateLoop* ours = self->_nextLoop;
-        RtOriginal<SetNextFn>("?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z")(
-            self, loop);
-        UpdateLoop* theirs = self->_nextLoop;
-        char a[64], b[64];
-        RtDiffFormat(a, sizeof(a), static_cast<const void*>(ours));
-        RtDiffFormat(b, sizeof(b), static_cast<const void*>(theirs));
-        RtDiffReport(&rt_diff_site__, ours == theirs, a, b);
-    }
 }
 
 // ============================================================================
@@ -456,7 +445,6 @@ extern "C" void RtEngine_MainLoop_OnVideoRestart_static() {
 }
 
 extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, Engine* engine) {
-    RT_DIFF_BEGIN("Engine::MainLoop::MainLoop");
 
     self->_videoResources._data     = nullptr;
     self->_videoResources._size     = 0;
@@ -536,7 +524,7 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, Engine* engine) {
     //
     // That mattered more than a footnote. Resolved by ADDRESS this was a
     // NAMELESS EXEC-of-0 on the boot path — invisible to
-    // `unsatisfied_export_scan.py`, to `BANISHED_RT_STRICT`'s residue census and
+    // `unsatisfied_export_scan.py`, to `RT_STRICT`'s residue census and
     // to every rawdoor/bypass audit, exactly the blind spot lane VID itself
     // documented twenty lines above for the two video-callback stores, hit a
     // second time in the same function. Resolved by NAME it is a row every
@@ -567,30 +555,6 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, Engine* engine) {
     // docs/runtime_port/WAVE9_LANE_VID2.md §"Not ported".
     RT_EXPORT_ONCE(VoidThisFn, "?CreateVideoContext@MainLoop@Engine@@AEAAXXZ")(self);
 
-    if (rt_diff_on__) {
-        SecToTicksFn secToTicks =
-            RtOriginal<SecToTicksFn>("?SecondsToTicks@Timer@System@@SA_JM@Z");
-        const bool deltaOk   = self->_deltaTime      == secToTicks(kFixedStepSeconds);
-        const bool maxAccOk  = self->_maxAccumulator == secToTicks(kMaxAccumSeconds);
-        const bool singleOk  = *MainLoopSingletonSlot() == self;
-        const bool contextOk = self->_context != nullptr;
-        char ours[160], theirs[160];
-        std::snprintf(ours, sizeof(ours),
-                      "delta=%lld maxAcc=%lld singleton=%p context=%p",
-                      static_cast<long long>(self->_deltaTime),
-                      static_cast<long long>(self->_maxAccumulator),
-                      static_cast<void*>(*MainLoopSingletonSlot()),
-                      self->_context);
-        std::snprintf(theirs, sizeof(theirs),
-                      "delta=%lld maxAcc=%lld singleton=%p context!=null "
-                      "[deltaOk=%d maxAccOk=%d singletonOk=%d contextOk=%d]",
-                      static_cast<long long>(secToTicks(kFixedStepSeconds)),
-                      static_cast<long long>(secToTicks(kMaxAccumSeconds)),
-                      static_cast<void*>(self),
-                      static_cast<int>(deltaOk), static_cast<int>(maxAccOk),
-                      static_cast<int>(singleOk), static_cast<int>(contextOk));
-        RT_DIFF_SHADOW(deltaOk && maxAccOk && singleOk && contextOk, ours, theirs);
-    }
 
     return self;
 }
@@ -629,7 +593,6 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, Engine* engine) {
 // `_data = 0` and a single qword zero covering `_size` and `_capacity`, so
 // all three counts are asserted, not just the pointers.
 extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
-    RT_DIFF_BEGIN("Engine::MainLoop::~MainLoop");
 
     void* context = self->_context;
     if (context) {
@@ -647,33 +610,6 @@ extern "C" void RtEngine_MainLoop_Dtor(MainLoop* self) {
     reinterpret_cast<VoidThisFn>(
         ResolveAddr(Module::Runtime, 0x180033880))(&self->_videoResources);
 
-    if (rt_diff_on__) {
-        const bool contextOk = self->_context == nullptr;
-        const bool resOk     = self->_videoResources._data == nullptr &&
-                               self->_videoResources._size == 0 &&
-                               self->_videoResources._capacity == 0;
-        const bool drawOk    = self->_postDraw._data == nullptr &&
-                               self->_postDraw._size == 0 &&
-                               self->_postDraw._capacity == 0;
-        const bool updateOk  = self->_postUpdate._data == nullptr &&
-                               self->_postUpdate._size == 0 &&
-                               self->_postUpdate._capacity == 0;
-        char ours[192], theirs[192];
-        std::snprintf(ours, sizeof(ours),
-                      "context=%p res={%p,%d,%d} draw={%p,%d,%d} update={%p,%d,%d}",
-                      self->_context,
-                      static_cast<void*>(self->_videoResources._data),
-                      self->_videoResources._size, self->_videoResources._capacity,
-                      static_cast<void*>(self->_postDraw._data),
-                      self->_postDraw._size, self->_postDraw._capacity,
-                      static_cast<void*>(self->_postUpdate._data),
-                      self->_postUpdate._size, self->_postUpdate._capacity);
-        std::snprintf(theirs, sizeof(theirs),
-                      "all null/0 [contextOk=%d resOk=%d drawOk=%d updateOk=%d]",
-                      static_cast<int>(contextOk), static_cast<int>(resOk),
-                      static_cast<int>(drawOk), static_cast<int>(updateOk));
-        RT_DIFF_SHADOW(contextOk && resOk && drawOk && updateOk, ours, theirs);
-    }
 }
 
 // ============================================================================

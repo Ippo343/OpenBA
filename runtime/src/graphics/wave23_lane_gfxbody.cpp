@@ -113,7 +113,7 @@ unsigned long long g_animUpdStates  = 0;   // inner-loop iterations; 0 == "ran, 
 // Resolved by ADDRESS through ResolveAddr, which consults the port registry
 // FIRST (reference_resolveaddr_consults_port_registry_first.md) — the door
 // runtime/src/video/context_ctor.cpp:105 and wave21_lane_gfxbody.cpp:143
-// already use. Never RtOriginal: that is GetProcAddress
+// already use. Never the raw DLL door: that is GetProcAddress
 // (reference_rtoriginal_is_getprocaddress.md).
 void* MemAlloc(uint64_t bytes, int align) {
     using Fn = void* (*)(uint64_t, int);
@@ -129,7 +129,7 @@ void* MemAlloc(uint64_t bytes, int align) {
 // is the hazard; here it is measured and it is zero). The one place this lane
 // DOES grow the surface is AnimationState::Update — see its own note below.
 //
-// RT_EXPORT_ONCE, not RT_ORIGINAL_ONCE: these calls are the WORK, so they must
+// RT_EXPORT_ONCE, not the raw DLL door: these calls are the WORK, so they must
 // reach our ports where ports exist.
 // ---------------------------------------------------------------------------
 using VoidThisFn  = void (*)(void*);

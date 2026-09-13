@@ -2,12 +2,12 @@
 // runtime/src/input/rt_input_port.cpp — RtInputPortInit()  Wave 8 lane D
 // ============================================================================
 // Kill switches (PLAN.md §4.1 decision 3; unset = ON):
-//   BANISHED_RT_INPUT=0   leave the whole Input namespace on the DLL
+//   RT_INPUT=0   leave the whole Input namespace on the DLL
 //
 // Mirrors runtime/src/video/rt_video_port.cpp. This lane is a single file
 // (input.cpp), so there is only one namespace-level switch, not a per-lane
 // one — a future lane splitting KeyMap/Device/Configuration further can add
-// BANISHED_RT_INPUT_KEYMAP etc. the way Wave 6's Video did.
+// RT_INPUT_KEYMAP etc. the way Wave 6's Video did.
 // ============================================================================
 
 #include <cstdio>
@@ -48,17 +48,12 @@ extern int RtInputDeviceUpdateRegister();         // input_device_update.cpp
 // DirectInput teardown half. Its own .cpp for the same <windows.h> seam
 // input_win.cpp sits behind, and its own kill switch.
 extern int RtInputPlatformShutdownRegister();     // input_platform_shutdown_win.cpp
-extern "C" void RtInputDeviceUpdateProbeArm(bool on);
 
 void RtInputPortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_INPUT")) {
-        printf("[RtPort] BANISHED_RT_INPUT=0 -- Input namespace port disabled\n");
-        return;
-    }
     int n = RtInputRegister();
     n += RtInputWinRegister();
     n += RtInputKeyMapLoadRegister();
-    if (RtWaveEnabled("BANISHED_RT_INPUTCFGSTART")) n += RtInputConfigStartupRegister();
+    n += RtInputConfigStartupRegister();
     n += RtInputKeyMapSaveRegister();
     const int avl = RtCollectionSetAvlE24Register();
     n += avl;
@@ -67,10 +62,7 @@ void RtInputPortInit() {
     // Wave 24 lane SMALLBODY: Input::Device::PlatformShutdown (0x1800e1b50).
     // Own switch: it is on the process SHUTDOWN path and should be
     // bisectable without moving Device::Update and the KeyMap bodies.
-    n += RtInputPlatformShutdownRegister();  // owns BANISHED_RT_INPUTSHUTDOWN
-
-    const char* q = std::getenv("BANISHED_RT_INPUTUPD_PROBE");
-    RtInputDeviceUpdateProbeArm(q && *q && std::strcmp(q, "0") != 0);
+    n += RtInputPlatformShutdownRegister();
 
     // The identity line this lane gates its runs on. `tools/game_dir_lock.sh`
     // is advisory and six lanes were running when this landed: the on-disk md5

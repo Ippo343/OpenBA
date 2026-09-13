@@ -72,17 +72,4 @@ void GridThread(Scene* self, int32_t id);
 // lock, then clear {head, tail, count}. Scene::~Scene's first call.
 void FreeGlobals(GlobalList* list);
 
-// ---------------------------------------------------------------------------
-// Probe scheduling — the same contract array_internal.h and picking's grid use,
-// and for the same reason: the probe ALLOCATES, and a probe that allocates
-// cannot run from a *PortInit (WAVE9.md, lane PKG2's `null+0x640` crash — the
-// allocator's critical section taken before the allocator exists). So the init
-// only ARMS this flag and the first call into any registered body runs it, at
-// a moment that is provably safe because the caller is itself building a Scene.
-// ---------------------------------------------------------------------------
-extern bool g_probePending;
-
 }  // namespace rtgfxgrid
-
-// Runs the lockstep synthetic-subject oracle. Driven by g_probePending.
-void RtGraphicsGridProbe();

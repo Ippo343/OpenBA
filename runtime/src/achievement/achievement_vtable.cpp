@@ -380,29 +380,6 @@ extern "C" void* RtAch_Achievement_Construct(void* self) {
 // PORTING THIS COMPLETES ??_7AchievementInstance@Achievement@@6B@ at 4/4.
 // ============================================================================
 extern "C" void RtAch_AchievementInstance_Persist(AchievementInstance* self, Stream* stream) {
-    static int probes = 0;
-    if (RtSaveTrace::Enabled() && !g_probing && probes < 16) {
-        ++probes;
-        ProbeGuard guard__;
-        static const char* const kMangled =
-            "?Persist@AchievementInstance@Achievement@@UEAAXAEAVStream@IO@@@Z";
-        auto theirs = reinterpret_cast<StreamMemberFn>(ResolveExportRaw(kMangled));
-        if (theirs && PortIsLive(kMangled, (const void*)&RtAch_AchievementInstance_Persist)) {
-            RtSaveTrace::Compare(
-                "Achievement::AchievementInstance::Persist", self,
-                [](void* obj, void* ser) {
-                    RtAch_AchievementInstance_Persist(
-                        static_cast<AchievementInstance*>(obj), StreamOf(ser));
-                },
-                [](void* obj, void* ser) {
-                    reinterpret_cast<StreamMemberFn>(ResolveExportRaw(
-                        "?Persist@AchievementInstance@Achievement@@UEAAXAEAVStream@IO@@@Z"))(
-                            obj, StreamOf(ser));
-                },
-                /*stopAfter=*/1);
-        }
-    }
-
     // The OUTER codec, version 1. See the banner: every sibling in this family
     // passes 0 here and this one does not.
     Serializer outer;
@@ -443,7 +420,7 @@ extern "C" void RtAch_AchievementInstance_Persist(AchievementInstance* self, Str
 }
 
 // ---- Registration ----------------------------------------------------------
-// All four are gated by BANISHED_RT_ACHMGR with achievement_manager.cpp,
+// All four are gated by RT_ACHMGR with achievement_manager.cpp,
 // achievement_state.cpp and achievement_serialize.cpp — class atomicity
 // (PLAN §4.1 decision 5).
 //

@@ -234,11 +234,10 @@ extern "C" void RtGraphics_AnimationState_PlayAnimation(
     void* selfv, void* group, int animIndex, const void* nodesv,
     const int64_t* startTime, const int64_t* /*fadeTime, unread*/,
     float /*speed, unread*/, bool instanced) {
-    RT_DIFF_BEGIN("Graphics::AnimationState::PlayAnimation");
     // NOT DIFFABLE against the DLL. The body mutates the layer array AND the
     // AnimationManager's shared instance pool (reference counts, SetSize);
     // running the original a second time on the same inputs would double every
-    // one of those. rt_diff.h names this case explicitly. The site is still
+    // one of those. the diff-oracle header names this case explicitly. The site is still
     // registered so the summary carries its `entered` count.
 
     uint8_t* self = static_cast<uint8_t*>(selfv);
@@ -399,7 +398,6 @@ extern "C" void RtGraphics_AnimationState_PlayAnimation(
 // layers scores 0.0f, which wins outright.
 extern "C" int RtGraphics_AnimationManager_GetInstanceId(
     void* selfv, void* group, int animIndex, const void* nodesv) {
-    RT_DIFF_BEGIN("Graphics::AnimationManager::GetInstanceId");
     // NOT DIFFABLE: the body allocates instances, bakes poses into them and
     // moves reference counts. A second run against the DLL would create a
     // second instance and double every count.
@@ -713,7 +711,6 @@ extern "C" int RtGraphics_AnimationManager_GetInstanceId(
 extern "C" void RtGraphics_AnimationState_CopyInstancedToUnique(
     const void* /*self, unread*/, const void* nodesv, const void* rootv,
     void* interpv, int handle) {
-    RT_DIFF_BEGIN("Graphics::AnimationState::CopyInstancedToUnique");
 
     const ArrayHdr* nodes = static_cast<const ArrayHdr*>(nodesv);
     const uint8_t* root = static_cast<const uint8_t*>(rootv);
@@ -725,9 +722,6 @@ extern "C" void RtGraphics_AnimationState_CopyInstancedToUnique(
     std::vector<uint8_t> replay;
     const size_t replayBytes =
         static_cast<size_t>(nodes->_size > 0 ? nodes->_size : 0) * kInterpStride;
-    if (rt_diff_on__ && replayBytes != 0) {
-        replay.assign(interp, interp + replayBytes);
-    }
 
     const uint8_t* instData = AnimationManagerSingleton()->_instances._data;
     const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(
@@ -861,15 +855,6 @@ extern "C" void RtGraphics_AnimationState_CopyInstancedToUnique(
         dst[6] = wz;
     }
 
-    if (rt_diff_on__ && replayBytes != 0) {
-        using OrigFn = void (*)(const void*, const void*, const void*, void*, int);
-        RT_ORIGINAL_ONCE(OrigFn,
-            "?CopyInstancedToUnique@AnimationState@Graphics@@AEBAXAEBV?$Array@UNode@"
-            "GraphicsMesh@Graphics@@@Collection@@AEBVTransform@Math@@PEAV"
-            "?$InterpolatedState@VTransform@Math@@@2@H@Z")(
-                nullptr, nodesv, rootv, replay.data(), handle);
-        RT_DIFF_BYTES(interp, replay.data(), replayBytes);
-    }
 }
 
 // ============================================================================
@@ -899,7 +884,6 @@ extern "C" void RtGraphics_AnimationState_CopyInstancedToUnique(
 extern "C" void RtGraphics_AnimationState_UpdateNodes(
     void* selfv, float speed, const void* nodesv, const void* rootv,
     void* interpv, void* posev, float* rootOffset) {
-    RT_DIFF_BEGIN("Graphics::AnimationState::UpdateNodes");
 
     uint8_t* self = static_cast<uint8_t*>(selfv);
     const ArrayHdr* nodes = static_cast<const ArrayHdr*>(nodesv);
@@ -916,11 +900,6 @@ extern "C" void RtGraphics_AnimationState_UpdateNodes(
     float replayOffset[3] = { 0.0f, 0.0f, 0.0f };
     const size_t poseBytes   = static_cast<size_t>(nodeCount > 0 ? nodeCount : 0) * kTransformStride;
     const size_t interpBytes = static_cast<size_t>(nodeCount > 0 ? nodeCount : 0) * kInterpStride;
-    if (rt_diff_on__ && poseBytes != 0) {
-        replayPose.assign(pose, pose + poseBytes);
-        replayInterp.assign(interp, interp + interpBytes);
-        std::memcpy(replayOffset, rootOffset, sizeof(replayOffset));
-    }
 
     // ---- phase 1: the last layer ----
     {
@@ -1224,18 +1203,6 @@ extern "C" void RtGraphics_AnimationState_UpdateNodes(
         dst[6] = rz;
     }
 
-    if (rt_diff_on__ && poseBytes != 0) {
-        using OrigFn = void (*)(void*, float, const void*, const void*, void*, void*, float*);
-        RT_ORIGINAL_ONCE(OrigFn,
-            "?UpdateNodes@AnimationState@Graphics@@AEAAXMAEBV?$Array@UNode@GraphicsMesh@"
-            "Graphics@@@Collection@@AEBVTransform@Math@@PEAV?$InterpolatedState@"
-            "VTransform@Math@@@2@PEAV56@AEAVVector3@6@@Z")(
-                selfv, speed, nodesv, rootv, replayInterp.data(), replayPose.data(),
-                replayOffset);
-        RT_DIFF_BYTES(pose, replayPose.data(), poseBytes);
-        RT_DIFF_BYTES(interp, replayInterp.data(), interpBytes);
-        RT_DIFF_BYTES(rootOffset, replayOffset, sizeof(replayOffset));
-    }
 }
 
 // ============================================================================
@@ -1261,7 +1228,6 @@ extern "C" void RtGraphics_AnimationState_UpdateNodes(
 // accumulators are SEEDED with.
 extern "C" int RtGraphics_MeshInstance_GetBones(
     const void* selfv, float t, const void* rootv, void* outv) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::GetBones");
 
     const uint8_t* self = static_cast<const uint8_t*>(selfv);
     const uint8_t* mesh = *reinterpret_cast<const uint8_t* const*>(self + 0xc0);
@@ -1272,7 +1238,6 @@ extern "C" int RtGraphics_MeshInstance_GetBones(
     // the bone count. Nothing it reads is modified.
     std::vector<uint8_t> replay;
     const size_t replayBytes = static_cast<size_t>(boneCount > 0 ? boneCount : 0) * 0x40;
-    if (rt_diff_on__ && replayBytes != 0) replay.assign(replayBytes, 0);
 
     float identity[7];
     float inverse[7];
@@ -1484,14 +1449,6 @@ extern "C" int RtGraphics_MeshInstance_GetBones(
             reinterpret_cast<uint32_t*>(dst)[w] = reinterpret_cast<const uint32_t*>(m)[w];
     }
 
-    if (rt_diff_on__ && replayBytes != 0) {
-        using OrigFn = int (*)(const void*, float, const void*, void*);
-        const int theirs = RT_ORIGINAL_ONCE(OrigFn,
-            "?GetBones@MeshInstance@Graphics@@QEBAHMAEBVTransform@Math@@PEAVMatrix@4@@Z")(
-                selfv, t, rootv, replay.data());
-        RT_DIFF_SCALAR(boneCount, theirs);
-        RT_DIFF_BYTES(out, replay.data(), replayBytes);
-    }
 
     return boneCount;
 }

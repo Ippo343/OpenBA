@@ -2,7 +2,7 @@
 // runtime/src/audio/rt_audio_port.cpp — RtAudioPortInit()   Wave 8, lane C
 // ============================================================================
 // Kill switches (PLAN.md §4.1 decision 3; unset = ON):
-//   BANISHED_RT_AUDIO=0   leave the whole Audio namespace on the DLL
+//   RT_AUDIO=0   leave the whole Audio namespace on the DLL
 //
 // One .cpp owns this lane's whole scope (Audio::Scene + Audio::Configuration),
 // so there is only one Register function to aggregate, mirroring
@@ -14,7 +14,7 @@
 
 extern int RtAudioSceneRegister();          // audio.cpp
 // WAVE 28 lane MISC: ?Update@Scene@Audio@@ (0x1800df6c0, 1816 bytes), the one
-// unported Audio BODY row. Its OWN switch, BANISHED_RT_AUDIOSCENEUPDATE
+// unported Audio BODY row. Its OWN switch, RT_AUDIOSCENEUPDATE
 // (default ON, owned inside the file), so this single large per-frame body can
 // be bisected out without taking audio.cpp's sixteen ports with it.
 extern int RtAudioSceneUpdateRegister();     // audio_scene_update.cpp
@@ -36,7 +36,6 @@ extern int RtAudioVoiceCallbackRegister();  // audio_voice_callback_win.cpp
 // it by name rather than inlining it keeps this lane's address-door count at
 // ZERO. Own switch so the three can be bisected out together.
 extern int RtAudioWave29AvbodyRegister();   // wave29_lane_avbody.cpp
-extern int RtAudioWave29AvbodySweep();      // wave29_lane_avbody.cpp
 // batch 7 (Input/Audio platform leaves, 2026-09-12): Audio's last two
 // unported BODY rows. `Stream::Play` is its own `_win.cpp` (KERNEL32 sync
 // primitives, same <windows.h> seam as audio_stream_win.cpp);
@@ -56,13 +55,9 @@ void RtAudioPortInit() {
         printf("[RtPort] BATCH C: %d audio leaves registered\n",
                RtAudioBatchCLeavesRegister());
     }
-    if (!RtWaveEnabled("BANISHED_RT_AUDIO")) {
-        printf("[RtPort] BANISHED_RT_AUDIO=0 -- Audio namespace port disabled\n");
-        return;
-    }
     int n = 0;
     n += RtAudioSceneRegister();
-    n += RtAudioSceneUpdateRegister();   // owns BANISHED_RT_AUDIOSCENEUPDATE
+    n += RtAudioSceneUpdateRegister();   // owns RT_AUDIOSCENEUPDATE
     n += RtAudioConfigurationRegister();
     n += RtAudioDeviceRegister();
     // Wave 24 lane SMALLBODY: Audio::Stream's ctor and dtor (0x1800a0e30 /
@@ -89,17 +84,8 @@ void RtAudioPortInit() {
     // (audio_stream_play_win.cpp) were already ours. Unconditional.
     { extern int RtAudioStreamRunRegister();
       n += RtAudioStreamRunRegister(); }
-    // Wave 29 lane AVBODY. The sweep needs no allocator, no gameplay route and
-    // no caller: two of the three bodies are PURE (the `this` they are handed is
-    // never read), and the third is fully synthesisable. It compares against the
-    // SHIPPED export through ResolveExportRaw, so it is a real oracle rather
-    // than a self-check. Opt-in because it is a verification step, not boot work.
-    if (RtWaveEnabled("BANISHED_RT_AVBODY29")) {
-        n += RtAudioWave29AvbodyRegister();
-        const char* sw = std::getenv("BANISHED_RT_AVBODY29_SWEEP");
-        if (sw && *sw && std::strcmp(sw, "0") != 0)
-            RtAudioWave29AvbodySweep();
-    }
+    // Wave 29 lane AVBODY.
+    n += RtAudioWave29AvbodyRegister();
     // The denominator was a hardcoded 22 -- Wave 8's own scope -- and Wave 9
     // lane W adding Scene::FindFree3DEffect made "20/22" arithmetic that no
     // longer resolves against the three-held-back / one-phantom / one-data

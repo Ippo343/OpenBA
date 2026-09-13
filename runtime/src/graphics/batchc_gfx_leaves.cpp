@@ -30,10 +30,10 @@
 // ---------------------------------------------------------------------------
 // ⚠ ATTENDANCE IS ZERO ON A DLL-PRESENT RUN, AND THAT IS STRUCTURAL
 // ---------------------------------------------------------------------------
-// MEASURED, 2026-09-12, one `BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1
+// MEASURED, 2026-09-12, one `BANISHED_AUTOSTART=1 the diff oracle armed
 // BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120` run to the in-game world
 // and a clean self-quit (exit 0, empty standalone_crash.log, 154 `startTown`
-// lines): NONE of the ten sites below entered, so none appears in the RtDiff
+// lines): NONE of the ten sites below entered, so none appears in the diff oracle
 // summary at all.
 //
 // THAT IS NOT "the ports are dead code". It is what the seam does while the DLL
@@ -51,7 +51,7 @@
 //
 // So these ten are verified by TRANSCRIPTION against the disassembly, and their
 // first execution will be at cutover, where the mint's vtable rows are ours.
-// A reader who meets a green RtDiff summary must not read it as coverage of
+// A reader who meets a green the diff oracle summary must not read it as coverage of
 // this file (reference_uncalled_port_is_not_verified.md).
 //
 // ---------------------------------------------------------------------------
@@ -273,19 +273,16 @@ extern "C" void RtGraphics_Particle_Dtor(void* selfv);
 //     texture is seen.
 //
 // ORACLE: none. The dispatch renders into a GPU target; running the shipped
-// body afterwards would render a second time. RT_DIFF_WORK is the effectiveness
+// body afterwards would render a second time. the diff oracle is the effectiveness
 // control — almost every call returns at the +0x24 test.
 // ############################################################################
 extern "C" void RtGraphics_MaterialInstance_GenerateTextures(const void* selfv,
                                                              void* ctx, int32_t arg) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::GenerateTextures");
     const MaterialInstance* self = static_cast<const MaterialInstance*>(selfv);
 
     const bool didWork = (self->hasRenderTexture != 0) && (self->textures._size > 0);
-    RT_DIFF_WORK(didWork);
 
     if (self->hasRenderTexture == 0) {
-        RT_DIFF_SHADOW(true, "no render-texture bound", "attendance only");
         return;
     }
 
@@ -305,7 +302,6 @@ extern "C" void RtGraphics_MaterialInstance_GenerateTextures(const void* selfv,
         reinterpret_cast<Slot50>(vt[0x50 / 8])(obj, ctx, arg);
     }
 
-    RT_DIFF_SHADOW(true, "generated every kind-4 texture", "attendance only");
 }
 
 // ############################################################################
@@ -326,7 +322,6 @@ extern "C" void RtGraphics_MaterialInstance_GenerateTextures(const void* selfv,
 // (CLAUDE.md: a guard skips the behaviour rather than restoring it).
 // ############################################################################
 extern "C" void RtGraphics_ParticleSystemInstance_Dtor(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::ParticleSystemInstance::~ParticleSystemInstance");
     uint8_t* const self = static_cast<uint8_t*>(selfv);
 
     *reinterpret_cast<void**>(self) = VtParticleSystemInstance();
@@ -348,7 +343,6 @@ extern "C" void RtGraphics_ParticleSystemInstance_Dtor(void* selfv) {
     ParticleInstanceRemoveState(self);
     GeometryDtor(self);                                 // JMP 0x1800a41c0
 
-    RT_DIFF_SHADOW(true, "instance torn down", "not diffable (frees the object)");
 }
 
 // ############################################################################
@@ -374,7 +368,6 @@ extern "C" void RtGraphics_ParticleSystemInstance_Dtor(void* selfv) {
 // rtcoll::MemFree reproduces it, including its own internal null test.
 // ############################################################################
 extern "C" void RtGraphics_ParticleSystem_Dtor(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::ParticleSystem::~ParticleSystem");
     uint8_t* const self = static_cast<uint8_t*>(selfv);
 
     *reinterpret_cast<void**>(self) = VtParticleSystem();
@@ -396,7 +389,6 @@ extern "C" void RtGraphics_ParticleSystem_Dtor(void* selfv) {
 
     RtGraphics_Particle_Dtor(self);                      // JMP 0x180103c70
 
-    RT_DIFF_SHADOW(true, "system torn down", "not diffable (frees the object)");
 }
 
 // ############################################################################
@@ -427,7 +419,6 @@ extern "C" void RtGraphics_ParticleSystem_Dtor(void* selfv) {
 // are not the same function and a call would stamp the External vtable twice.
 // ############################################################################
 extern "C" void RtGraphics_Particle_Dtor(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::Particle::~Particle");
     uint8_t* const self = static_cast<uint8_t*>(selfv);
 
     *reinterpret_cast<void**>(self) = VtParticle();
@@ -470,7 +461,6 @@ extern "C" void RtGraphics_Particle_Dtor(void* selfv) {
 
     *reinterpret_cast<void**>(self) = VtObjectBase();
 
-    RT_DIFF_SHADOW(true, "particle torn down", "not diffable (frees the object)");
 }
 
 // ############################################################################
@@ -502,7 +492,6 @@ extern "C" void RtGraphics_Particle_Dtor(void* selfv) {
 // it would make our copy differ from retail's on a byte retail never writes.
 // ############################################################################
 extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
-    RT_DIFF_BEGIN("Graphics::Animation::Animation(const Animation&)");
     uint8_t* const self = static_cast<uint8_t*>(selfv);
     const uint8_t* const src = static_cast<const uint8_t*>(srcv);
 
@@ -545,7 +534,6 @@ extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
     *reinterpret_cast<uint64_t*>(self + 0x68) = 0;
     RtAddr<ArrayAssignFn>(0x18001b360ull)(self + 0x60, src + 0x60);
 
-    RT_DIFF_SHADOW(true, "animation copied", "not diffable (aliases the source's strings)");
     return self;                                          // MOV RAX,RBX
 }
 
@@ -564,7 +552,6 @@ extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
 // nothing. Graphics::Animation is plain data, like AnimationManager.
 // ############################################################################
 extern "C" void RtGraphics_Animation_Dtor(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::Animation::~Animation");
     uint8_t* const self = static_cast<uint8_t*>(selfv);
 
     RtAddr<PtrThisFn>(0x18001c100ull)(self + 0x60);
@@ -575,7 +562,6 @@ extern "C" void RtGraphics_Animation_Dtor(void* selfv) {
 
     RtAddr<PtrThisFn>(0x18001c020ull)(self);              // JMP 0x18001c020
 
-    RT_DIFF_SHADOW(true, "animation torn down", "not diffable (releases strings)");
 }
 
 // ############################################################################
@@ -596,7 +582,6 @@ extern "C" void RtGraphics_Animation_Dtor(void* selfv) {
 // reverse of the constructor's build order (Mesh.h's EdgeMesh banner).
 // ############################################################################
 extern "C" void RtGraphics_EdgeMesh_Dtor(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::EdgeMesh::~EdgeMesh");
     EdgeMesh* const self = static_cast<EdgeMesh*>(selfv);
 
     self->_vtable = VtEdgeMesh();
@@ -617,7 +602,6 @@ extern "C" void RtGraphics_EdgeMesh_Dtor(void* selfv) {
 
     ExternalDtor(self);                                   // JMP 0x1800bc950
 
-    RT_DIFF_SHADOW(true, "edge mesh torn down", "not diffable (releases GPU buffers)");
 }
 
 // ############################################################################
@@ -653,7 +637,6 @@ extern "C" void RtGraphics_EdgeMesh_Dtor(void* selfv) {
 // Retail faults there; so does this.
 // ############################################################################
 extern "C" void RtGraphics_SpotLight_CreateTargets(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::SpotLight::CreateTargets");
     uint8_t* const self = static_cast<uint8_t*>(selfv);
 
     using CreateFn = bool (*)(void*, int32_t, int32_t, int32_t, uint32_t,
@@ -698,8 +681,6 @@ extern "C" void RtGraphics_SpotLight_CreateTargets(void* selfv) {
                        *reinterpret_cast<void**>(self + 0x148),
                        *reinterpret_cast<void**>(self + 0x150));   // JMP 0x1800f3f10
 
-    RT_DIFF_SHADOW(true, "shadow map / depth / target built",
-                   "not diffable (allocates GPU resources)");
 }
 
 // ############################################################################
@@ -795,7 +776,6 @@ void SerializeBufferSlot(uint8_t* level, uint32_t off, Serializer* sub) {
 }  // namespace
 
 extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* serv) {
-    RT_DIFF_BEGIN("Graphics::GraphicsMesh::PlatformSerialize");
     uint8_t* const self = static_cast<uint8_t*>(selfv);
     Serializer* const outer = static_cast<Serializer*>(serv);
 
@@ -805,12 +785,9 @@ extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* ser
         void** encVt = *reinterpret_cast<void***>(outer->stream->encoding);
         using CarriesPlatformDataFn = bool (*)(void*);
         if (!reinterpret_cast<CarriesPlatformDataFn>(encVt[0])(outer->stream->encoding)) {
-            RT_DIFF_WORK(false);
-            RT_DIFF_SHADOW(true, "stream carries no platform data", "attendance only");
             return;
         }
     }
-    RT_DIFF_WORK(true);
 
     const int32_t levelCount = *reinterpret_cast<const int32_t*>(self + 0x58);
 
@@ -879,8 +856,6 @@ extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* ser
         DeleteRw(rw);
     }
 
-    RT_DIFF_SHADOW(true, "both device arms streamed",
-                   "not diffable (a replay would move the stream cursor)");
 }
 
 // ############################################################################
@@ -933,14 +908,13 @@ extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* ser
 //
 // ORACLE: NONE, and that is stated rather than faked. Every arm of this body
 // ends in a real GPU draw through the geometry's vtable; running the shipped
-// copy afterwards would submit every draw a second time. RT_DIFF_WORK records
+// copy afterwards would submit every draw a second time. the diff oracle records
 // how many calls reached a Draw at all, which is the number that matters — a
 // green `calls=` column on a body that dropped every item would mean nothing.
 // ############################################################################
 extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
                                                  int32_t groupIndex, int32_t listIndex,
                                                  int32_t shaderIndex) {
-    RT_DIFF_BEGIN("Graphics::Renderer::DrawItemList");
     const Renderer* const self = static_cast<const Renderer*>(selfv);
 
     uint8_t* const groupBase = reinterpret_cast<uint8_t*>(self->drawGroups._data);
@@ -975,8 +949,6 @@ extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
 
     const int32_t count = items->_size;
     if (count <= 0) {
-        RT_DIFF_WORK(false);
-        RT_DIFF_SHADOW(true, "empty item list", "attendance only");
         return;
     }
 
@@ -1087,9 +1059,6 @@ extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
         i += step;
     }
 
-    RT_DIFF_WORK(drawn != 0);
-    RT_DIFF_SHADOW(true, "item list submitted",
-                   "not diffable (a replay would submit every draw twice)");
 }
 
 // ============================================================================

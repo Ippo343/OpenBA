@@ -20,7 +20,7 @@
 //
 // PlatformShutdown (0x18009fd70) landed with Wave 12 lane B
 // (platform_startup_win.cpp:556). Lane A had to leave a TEMPORARY SEAM here
-// that forwarded through RT_ORIGINAL_ONCE into the shipped DLL body, because
+// that forwarded through the raw DLL door into the shipped DLL body, because
 // lane B's row was not in lane A's worktree. THE INTEGRATOR RE-POINTED IT at
 // the merge: Shutdown() now calls our own RtApp_PlatformShutdown, exactly as
 // Update/Startup call their siblings.
@@ -55,9 +55,6 @@ extern "C" void RtApp_PlatformShutdown(Application* self);
 // records that the delegation happened and forwards.
 // ============================================================================
 bool RtApp_Update(Application* self) {
-    RT_DIFF_BEGIN("Application::Application::Update [tail-call thunk -> PlatformUpdate]");
-    RT_DIFF_SHADOW(true, "delegated to PlatformUpdate (diffed at its own site)",
-                    "not independently diffable: PlatformUpdate has no oracle");
     return RtApp_PlatformUpdate(self);
 }
 
@@ -67,14 +64,11 @@ bool RtApp_Update(Application* self) {
 // ----------------------------------------------------------------------------
 // Same shape as Update: PlatformShutdown (platform_startup_win.cpp:556)
 // carries its own site, so this wrapper forwards without diffing again. The
-// RT_DIFF_SHADOW below is an ATTENDANCE MARKER, not a comparison -- it reports
+// the diff oracle below is an ATTENDANCE MARKER, not a comparison -- it reports
 // equal=true without ever consulting the DLL, so its `divergences=0` proves
 // nothing and only its `calls=` is meaningful.
 // ============================================================================
 void RtApp_Shutdown(Application* self) {
-    RT_DIFF_BEGIN("Application::Application::Shutdown [tail-call thunk -> PlatformShutdown]");
-    RT_DIFF_SHADOW(true, "delegated to our PlatformShutdown (diffed at its own site)",
-                    "attendance marker only: nothing compared here");
     RtApp_PlatformShutdown(self);
 }
 
@@ -86,8 +80,5 @@ void RtApp_Shutdown(Application* self) {
 // (platform_startup_win.cpp), so this wrapper forwards without diffing again.
 // ============================================================================
 bool RtApp_Startup(Application* self) {
-    RT_DIFF_BEGIN("Application::Application::Startup [tail-call thunk -> PlatformStartup]");
-    RT_DIFF_SHADOW(true, "delegated to PlatformStartup (diffed at its own site)",
-                    "not independently diffable");
     return RtApp_PlatformStartup(self);
 }

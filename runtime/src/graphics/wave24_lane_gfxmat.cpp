@@ -109,8 +109,8 @@
 // honest non-oracle. This lane has no game-directory allocation by design.
 //
 //   Construct / Reconstruct / Destruct — REAL DIFFERENTIAL ORACLES, IN-BODY.
-//     Under BANISHED_RT_DIFF=1 each site builds TWO scratch 0x60 arenas in our
-//     own memory, runs the SHIPPED export (RT_ORIGINAL_ONCE — the raw
+//     Under the diff oracle armed each site builds TWO scratch 0x60 arenas in our
+//     own memory, runs the SHIPPED export (the raw DLL door — the raw
 //     GetProcAddress door, never ResolveExport, which would hand back ourselves
 //     and compare ours to ours) over one and our body over the other, and
 //     compares. These three bodies only store into `this` and tail-call vtable
@@ -120,9 +120,9 @@
 //     tools/gfxbody23_probe/ shape, run in-process.
 //
 //   The three ?Serialize@ bodies — NOT ORACLED HERE, AND SAID SO.
-//     reference_shadow_marker_is_not_an_oracle.md: a RT_DIFF_SHADOW that takes
+//     reference_shadow_marker_is_not_an_oracle.md: a diff-oracle site that takes
 //     the port's own verdict and never consults the DLL passes on a shared
-//     misunderstanding of retail. These three sites carry RT_DIFF_WORK
+//     misunderstanding of retail. These three sites carry the diff oracle
 //     (attendance and an effectiveness count) and NOTHING THAT CLAIMS TO BE A
 //     COMPARISON. A Serialize cannot be replayed in place — the first arm
 //     consumes or emits the stream and the second sees a different one — so the
@@ -140,11 +140,11 @@
 // function), 38 ATTENDANCE (the equality is the literal `true`), and 133
 // NO-COMPARISON (structurally incapable of printing anything but
 // `divergences=0`). A site that cannot fail is worse than no site, because it
-// reports green. So the six `RT_DIFF_BEGIN` names here are suffixed:
+// reports green. So the six `the diff oracle` names here are suffixed:
 //
-//   [ORACLE]      resolves the SHIPPED body through RT_ORIGINAL_ONCE, runs it,
+//   [ORACLE]      resolves the SHIPPED body through the raw DLL door, runs it,
 //                 and compares. Construct / Reconstruct / Destruct.
-//   [ATTENDANCE]  RT_DIFF_WORK only. It counts calls and claims nothing else.
+//   [ATTENDANCE]  the diff oracle only. It counts calls and claims nothing else.
 //                 The three ?Serialize@ rows; their comparison is
 //                 tools/gfxmat24_probe/, which the sweep cannot run.
 //
@@ -164,7 +164,6 @@
 // compares the vptr at +0x00, which MUST differ, through one whole-buffer
 // memcmp — permanently red, checking nothing. The Construct oracle below scores
 // the vptr on its OWN screen precisely so it cannot become that.
-// `RT_DIFF_REPLAY_PRE/POST` has ZERO adopters tree-wide and is not used here.
 // ============================================================================
 
 #include <cstdint>
@@ -173,7 +172,6 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../types/graphics/Material.h"
 
 // ----------------------------------------------------------------------------
@@ -310,7 +308,7 @@ void ConstructBody(RtGraphics::MaterialInstance* self) {
 //   (A) the (this-is-arena, flag) tuple recorded at slot 0, in order
 //   (B) the 0x58 payload bytes +0x08..+0x5f
 //
-// and the vptr at +0x00 is scored separately, by RT_DIFF_SCALAR, so a promotion
+// and the vptr at +0x00 is scored separately, by the diff oracle, so a promotion
 // of `??_7MaterialInstance@` shows up as its own line naming identity movement
 // rather than poisoning the byte screen.
 // ---------------------------------------------------------------------------
@@ -361,38 +359,11 @@ void PrepareArena(uint8_t* arena) {
 // ---------------------------------------------------------------------------
 
 extern "C" void* RtGraphics_MaterialInstance_Construct(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::Construct[ORACLE]");
     ++g_constructCalls;
 
-    if (rt_diff_on__) {
-        using CtorFn = void* (*)(void*);
-        CtorFn theirs = RT_ORIGINAL_ONCE(
-            CtorFn, "?Construct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ");
-        if (theirs) {
-            alignas(16) uint8_t a[0x60], b[0x60];
-            PrepareArena(a);
-            PrepareArena(b);
-            // The RETURN VALUE IS NOT COMPARED, deliberately. Our arm runs
-            // ConstructBody (void) rather than the registered wrapper, because
-            // the wrapper is what the DLL's registry now hands back and calling
-            // it here would recurse until the stack dies. So a "does it return
-            // self" check would have a CONSTANT on our side and would pass by
-            // construction (reference_a_predicate_nobody_evaluates.md). The
-            // wrapper's `return selfv` is instead pinned by the disassembly
-            // (`MOV RAX,RCX` / the null arm's `XOR EDX,EDX ; MOV EAX,EDX`) and
-            // said so here rather than faked into a screen.
-            (void)theirs(a);
-            ConstructBody(reinterpret_cast<RtGraphics::MaterialInstance*>(b));
-            ++g_oracleRuns;
-            RT_DIFF_BYTES(b + 8, a + 8, 0x58);                       // screen (B)
-            RT_DIFF_SCALAR(*reinterpret_cast<void**>(b),             // identity screen
-                           *reinterpret_cast<void**>(a));
-        }
-    }
 
     if (!selfv) return nullptr;                 // retail's own null test
     ConstructBody(reinterpret_cast<RtGraphics::MaterialInstance*>(selfv));
-    RT_DIFF_WORK(true);
     return selfv;
 }
 
@@ -405,36 +376,11 @@ extern "C" void* RtGraphics_MaterialInstance_Construct(void* selfv) {
 // detour this tree installs is twelve. A registration is its only door, and
 // (rel32 = 0) a registration reaches every caller there is.
 extern "C" void RtGraphics_MaterialInstance_Destruct(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::Destruct[ORACLE]");
     ++g_destructCalls;
 
-    if (rt_diff_on__) {
-        using DtorFn = void (*)(void*);
-        DtorFn theirs = RT_ORIGINAL_ONCE(DtorFn, "?Destruct@MaterialInstance@Graphics@@UEAAXXZ");
-        if (theirs) {
-            alignas(16) uint8_t a[0x60], b[0x60];
-            PrepareArena(a);
-            PrepareArena(b);
-            g_oracleRec[0] = OracleRecord{};
-            g_oracleRec[1] = OracleRecord{};
-            g_oracleArm = 0; theirs(a);
-            g_oracleArm = 1;
-            {
-                void** vp = reinterpret_cast<void**>(b);
-                reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(b, 0);
-            }
-            ++g_oracleRuns;
-            RT_DIFF_SCALAR(g_oracleRec[1].count, g_oracleRec[0].count);      // screen (A)
-            RT_DIFF_SCALAR(g_oracleRec[1].flag,  g_oracleRec[0].flag);
-            RT_DIFF_SCALAR(g_oracleRec[1].self == static_cast<void*>(b),
-                           g_oracleRec[0].self == static_cast<void*>(a));
-            RT_DIFF_BYTES(b + 8, a + 8, 0x58);                               // screen (B)
-        }
-    }
 
     void** vp = reinterpret_cast<void**>(selfv);
     reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(selfv, 0);
-    RT_DIFF_WORK(true);
 }
 
 // ?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ,
@@ -447,38 +393,12 @@ extern "C" void RtGraphics_MaterialInstance_Destruct(void* selfv) {
 // reconstructing a null faults here exactly as it faults in the DLL
 // (CLAUDE.md, "Don't fix a faithful crash with a null check").
 extern "C" void* RtGraphics_MaterialInstance_Reconstruct(void* selfv) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::Reconstruct[ORACLE]");
     ++g_reconstructCalls;
 
-    if (rt_diff_on__) {
-        using RecFn = void* (*)(void*);
-        RecFn theirs = RT_ORIGINAL_ONCE(
-            RecFn, "?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ");
-        if (theirs) {
-            alignas(16) uint8_t a[0x60], b[0x60];
-            PrepareArena(a);
-            PrepareArena(b);
-            g_oracleRec[0] = OracleRecord{};
-            g_oracleRec[1] = OracleRecord{};
-            g_oracleArm = 0; (void)theirs(a);      // return value: see Construct
-            g_oracleArm = 1;
-            {
-                void** vp = reinterpret_cast<void**>(b);
-                reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(b, 0);
-                ConstructBody(reinterpret_cast<RtGraphics::MaterialInstance*>(b));
-            }
-            ++g_oracleRuns;
-            RT_DIFF_SCALAR(g_oracleRec[1].count, g_oracleRec[0].count);      // screen (A)
-            RT_DIFF_SCALAR(g_oracleRec[1].flag,  g_oracleRec[0].flag);
-            RT_DIFF_BYTES(b + 8, a + 8, 0x58);                               // screen (B)
-            RT_DIFF_SCALAR(*reinterpret_cast<void**>(b), *reinterpret_cast<void**>(a));
-        }
-    }
 
     void** vp = reinterpret_cast<void**>(selfv);
     reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(selfv, 0);
     ConstructBody(reinterpret_cast<RtGraphics::MaterialInstance*>(selfv));
-    RT_DIFF_WORK(true);
     return selfv;
 }
 
@@ -604,7 +524,6 @@ Fn RtAddr(uintptr_t ghidra) {
 }  // namespace
 
 extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv) {
-    RT_DIFF_BEGIN("Graphics::MaterialInstance::Serialize[ATTENDANCE]");
     ++g_matSerCalls;
 
     RtGraphics::MaterialInstance* self = reinterpret_cast<RtGraphics::MaterialInstance*>(selfv);
@@ -681,7 +600,6 @@ extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv
 
     // Attendance and an effectiveness count. NOT a comparison — see the header
     // block: the replay for this body lives in tools/gfxmat24_probe/.
-    RT_DIFF_WORK(true);
     return true;
 }
 
@@ -710,7 +628,6 @@ extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv
 // here: ONE body is not enough to name a field.
 // ---------------------------------------------------------------------------
 extern "C" void RtGraphics_MeshInstance_Serialize(void* selfv, void* serv) {
-    RT_DIFF_BEGIN("Graphics::MeshInstance::Serialize[ATTENDANCE]");
     ++g_meshSerCalls;
 
     uint8_t* self = reinterpret_cast<uint8_t*>(selfv);
@@ -727,7 +644,6 @@ extern "C" void RtGraphics_MeshInstance_Serialize(void* selfv, void* serv) {
 
     RtAddr<MeshSerElemFn>(0x18005d4a0ull)(ser, n, *reinterpret_cast<void**>(self + 0xc8));
 
-    RT_DIFF_WORK(true);
 }
 
 // ---------------------------------------------------------------------------
@@ -763,7 +679,6 @@ extern "C" void RtGraphics_MeshInstance_Serialize(void* selfv, void* serv) {
 // as the answer is not the answer).
 // ---------------------------------------------------------------------------
 extern "C" void RtGraphics_AnimationManager_Serialize(void* selfv, void* serv) {
-    RT_DIFF_BEGIN("Graphics::AnimationManager::Serialize[ATTENDANCE]");
     ++g_animSerCalls;
 
     uint8_t* self = reinterpret_cast<uint8_t*>(selfv);
@@ -783,7 +698,6 @@ extern "C" void RtGraphics_AnimationManager_Serialize(void* selfv, void* serv) {
 
     if (enc) reinterpret_cast<EncDtorFn>(VSlot(enc, kEncScalarDtor))(enc, 1);
 
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================

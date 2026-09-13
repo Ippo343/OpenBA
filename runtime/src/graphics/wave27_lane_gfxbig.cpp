@@ -1200,7 +1200,7 @@ extern "C" bool RtGraphics_AnimationState_Update(
 //                       sim iteration that has an animated mesh registered.
 //
 // Because Draw and AnimationState::Update both go live the moment they are
-// registered, they share a kill switch (BANISHED_RT_GFXBIG) with
+// registered, they share a kill switch (RT_GFXBIG) with
 // BuildParameters and each is separately attributable in the log through its
 // own attendance counter.
 // ============================================================================

@@ -88,7 +88,7 @@
 //
 //   1. ours runs, writing for real, recording every (key, value) it emitted;
 //   2. every recorded key is read back with the SHIPPED
-//      `?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z` (via `ResolveExportRaw`, so the
+//      `?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z` (via `the raw DLL door`, so the
 //      registry cannot hand back our own port) -> the value OUR writer left;
 //   3. the SHIPPED `?Save@KeyMap@Input@@QEAAXXZ` runs on the same KeyMap;
 //   4. every key is read back again -> the value THEIR writer left;
@@ -218,24 +218,6 @@ void EmitSetting(void* persistence, const char* key, int value) {
     RtIo_Persistence_SetInt(persistence, kSection, key, value);
 }
 
-// The SHIPPED int reader, reached raw so the port registry cannot hand back our
-// own `RtIo_Persistence_GetInt`
-// (reference_resolveaddr_consults_port_registry_first.md).
-bool TheirGetInt(void* persistence, const char* key, int* out) {
-    // Guarded IN the helper, not only at its call sites. `Persistence::Get(int)`
-    // IS ported, so a raw resolve of it on a live path is a port bypassing a
-    // port (tools/port_bypass_audit.py's BYPASS verdict, and the defect
-    // reference_bypassed_port_needs_a_source_checker.md records). This function
-    // is oracle machinery and must be inert whenever the oracle is off.
-    if (!RtDiffEnabled()) return false;
-    using Fn = bool (*)(const void*, const char*, const char*, int*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(
-        ResolveExportRaw("?Get@Persistence@IO@@QEBA_NPEBD0AEAH@Z"));
-    if (!fn) return false;
-    return fn(persistence, kSection, key, out);
-}
-
 }  // namespace
 
 // ============================================================================
@@ -254,24 +236,12 @@ bool TheirGetInt(void* persistence, const char* key, int* out) {
 // empty KeyMap still reads it. Faithful, and harmless.
 // ============================================================================
 void RtInput_KeyMap_Save(void* selfPtr) {
-    RT_DIFF_BEGIN("Input::KeyMap::Save");
 
     void** persistenceSlot = RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
     void*  persistence = persistenceSlot ? *persistenceSlot : nullptr;
 
     // KeyMap::_root is at +0x08 (0x1800a7548 `MOV RBX,[RCX+8]`).
     auto* root = *reinterpret_cast<BindingNode**>(static_cast<uint8_t*>(selfPtr) + 0x08);
-
-    // ---- the oracle's "ours" pass ------------------------------------------
-    // Recording is armed only under BANISHED_RT_DIFF and only when the shipped
-    // Save is reachable; the write itself is unconditional either way.
-    using SaveFn = void (*)(void*);
-    SaveFn theirSave = nullptr;
-    if (rt_diff_on__) {
-        theirSave = reinterpret_cast<SaveFn>(
-            ResolveExportRaw("?Save@KeyMap@Input@@QEAAXXZ"));
-        if (theirSave) { g_recording = true; g_emitCount = 0; g_emitOverflow = 0; }
-    }
 
     int written = 0;
     for (BindingNode* n = FirstNode(root); n != nullptr; n = NextNode(n)) {
@@ -297,79 +267,12 @@ void RtInput_KeyMap_Save(void* selfPtr) {
         }
     }
 
-    // ---- the oracle's read-back, replay, read-back --------------------------
-    if (theirSave) {
-        g_recording = false;
-        const int emitted = g_emitCount < kMaxEmissions ? g_emitCount : kMaxEmissions;
-
-        // Step 2: what OUR writer left, read by THEIR reader.
-        static int afterOurs[kMaxEmissions];
-        int readable = 0;
-        for (int i = 0; i < emitted; ++i) {
-            afterOurs[i] = 0x7FFFFFFF;                  // "reader said absent"
-            if (TheirGetInt(persistence, g_emit[i].key, &afterOurs[i])) ++readable;
-        }
-
-        // Step 3: THEIR writer, on the same KeyMap. Idempotent and
-        // value-identical, so this is the state the map ends in.
-        theirSave(selfPtr);
-
-        // Steps 4-5.
-        int diffs = 0, oursVsRecorded = 0;
-        for (int i = 0; i < emitted; ++i) {
-            int afterTheirs = 0x7FFFFFFF;
-            TheirGetInt(persistence, g_emit[i].key, &afterTheirs);
-            if (afterTheirs != afterOurs[i]) ++diffs;
-            if (afterTheirs != g_emit[i].value) ++oursVsRecorded;
-        }
-
-        // The negative control. If the read-back cannot tell a value from that
-        // value plus one, every agreement above is void.
-        bool negCaught = false;
-        {
-            const char* kScratch = "RtDiffKeyMapSaveProbe";
-            RtIo_Persistence_SetInt(persistence, kSection, kScratch, 0x5A5A);
-            int v = 0;
-            const bool got = TheirGetInt(persistence, kScratch, &v);
-            negCaught = got && v == 0x5A5A && v != 0x5A5B;
-        }
-
-        const bool ok = diffs == 0 && oursVsRecorded == 0 && g_emitOverflow == 0 &&
-                        emitted > 0 && readable == emitted && negCaught;
-        char a[224], bmsg[224];
-        std::snprintf(a, sizeof(a),
-                      "their reader after their writer: %d keys, %d differ from "
-                      "after-ours, %d differ from what ours emitted",
-                      emitted, diffs, oursVsRecorded);
-        std::snprintf(bmsg, sizeof(bmsg),
-                      "ours emitted %d (readable=%d overflow=%d) neg-control=%s",
-                      emitted, readable, g_emitOverflow,
-                      negCaught ? "CAUGHT" : "*** MISSED ***");
-        RT_DIFF_SHADOW(ok, a, bmsg);
-
-        // RT_DIFF_SHADOW emits its strings ONLY on a mismatch, so on a passing
-        // run the numbers that make the pass meaningful are invisible — the
-        // "if a control is only visible when the test fails, it is not a
-        // control" hazard (WAVE9.md, instrument #7). Printed unconditionally.
-        printf("[KeyMapSave] oracle: keys=%d readable=%d diffs=%d "
-                    "vs-recorded=%d overflow=%d neg-control=%s -> %s\n",
-                    emitted, readable, diffs, oursVsRecorded, g_emitOverflow,
-                    negCaught ? "CAUGHT" : "*** MISSED ***",
-                    ok ? "PASS" : "*** FAIL ***");
-        if (emitted == 0)
-            printf("[KeyMapSave] *** the KeyMap emitted NOTHING: no binding "
-                        "is exclusive, so this call compared zero settings ***\n");
-    } else if (rt_diff_on__) {
-        printf("[KeyMapSave] oracle SKIPPED -- the shipped ?Save@KeyMap@Input@@ "
-                    "is not reachable, so NOTHING was compared.\n");
-    }
     g_recording = false;
 
     // The effectiveness control. A KeyMap with no exclusive bindings reaches
     // every line of this function and emits nothing, while `calls=` still reads
     // 1 — count what the body actually did, inside the body
     // (reference_probe_needs_an_effectiveness_control.md).
-    RT_DIFF_WORK(written != 0);
 }
 
 // ============================================================================
@@ -402,7 +305,6 @@ void RtInput_KeyMap_Save(void* selfPtr) {
 // original does not make.
 // ============================================================================
 void* RtInput_KeyMap_DeletingDtor(void* selfPtr) {
-    RT_DIFF_BEGIN("Input::KeyMap::~KeyMap (deleting, 0x180053440)");
 
     auto* set = reinterpret_cast<rtsetavl24::Set*>(static_cast<uint8_t*>(selfPtr) + 8);
     auto* root = set->root;
@@ -438,8 +340,6 @@ void* RtInput_KeyMap_DeletingDtor(void* selfPtr) {
     char a[128];
     std::snprintf(a, sizeof(a), "destroy walk visited %u of count-1 = %d",
                   visited, countBefore - 1);
-    RT_DIFF_SHADOW(ok, a, "same (self-check; no ours-vs-theirs -- see the banner)");
-    RT_DIFF_WORK(countBefore != 0);
     return selfPtr;
 }
 

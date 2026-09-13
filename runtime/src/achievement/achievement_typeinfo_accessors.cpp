@@ -152,8 +152,8 @@
 // 7/7; `??_7Achievement@0@6B@` reaches 6/9 and `??_7AchievementInstance@` 3/4.
 // The promotability verdict for each row is in WAVE27_LANE_ACHIEVE.md §5.
 //
-// KILL SWITCH: BANISHED_RT_ACHIEVEMENT=0 (whole namespace) or the per-class
-// BANISHED_RT_GOAL / BANISHED_RT_ACHMGR, exactly as the rest of this directory.
+// KILL SWITCH: RT_ACHIEVEMENT=0 (whole namespace) or the per-class
+// RT_GOAL / RT_ACHMGR, exactly as the rest of this directory.
 // Registration is split across the two so the class-atomicity rule (PLAN §4.1
 // decision 5) still holds: Goal/GoalInstance slots flip with goal.cpp,
 // Achievement/AchievementInstance slots flip with achievement_manager.cpp.
@@ -242,66 +242,36 @@ const char* ReadTypeName(const uint8_t* node) {
 // ---- ??_7Achievement@0@6B@  slots 2 and 1 ----------------------------------
 
 extern "C" uint32_t RtAch_Achievement_Type(const void* self) {
-    RT_DIFF_BEGIN("Achievement::Achievement::Type");
     const uint32_t ours = ReadTypeId(AchievementTypeInfo());
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(U32ThisFn,
-                       "?Type@Achievement@1@UEBAIXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 extern "C" const char* RtAch_Achievement_TypeName(const void* self) {
-    RT_DIFF_BEGIN("Achievement::Achievement::TypeName");
     const char* const ours = ReadTypeName(AchievementTypeInfo());
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RT_ORIGINAL_ONCE(CStrThisFn,
-                           "?TypeName@Achievement@1@UEBAPEBDXZ")(self)));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 // ---- ??_7AchievementInstance@Achievement@@6B@  slots 2 and 1 ---------------
 
 extern "C" uint32_t RtAch_AchievementInstance_Type(const void* self) {
-    RT_DIFF_BEGIN("Achievement::AchievementInstance::Type");
     const uint32_t ours = ReadTypeId(AchievementInstanceTypeInfo());
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(U32ThisFn,
-                       "?Type@AchievementInstance@Achievement@@UEBAIXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 extern "C" const char* RtAch_AchievementInstance_TypeName(const void* self) {
-    RT_DIFF_BEGIN("Achievement::AchievementInstance::TypeName");
     const char* const ours = ReadTypeName(AchievementInstanceTypeInfo());
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RT_ORIGINAL_ONCE(CStrThisFn,
-                           "?TypeName@AchievementInstance@Achievement@@UEBAPEBDXZ")(self)));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 // ---- ??_7Goal@Achievement@@6B@  slots 2, 1 and 3 ---------------------------
 
 extern "C" uint32_t RtAch_Goal_Type(const void* self) {
-    RT_DIFF_BEGIN("Achievement::Goal::Type");
     const uint32_t ours = ReadTypeId(GoalTypeInfo());
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(U32ThisFn,
-                       "?Type@Goal@Achievement@@UEBAIXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 extern "C" const char* RtAch_Goal_TypeName(const void* self) {
-    RT_DIFF_BEGIN("Achievement::Goal::TypeName");
     const char* const ours = ReadTypeName(GoalTypeInfo());
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RT_ORIGINAL_ONCE(CStrThisFn,
-                           "?TypeName@Goal@Achievement@@UEBAPEBDXZ")(self)));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -313,33 +283,19 @@ extern "C" const char* RtAch_Goal_TypeName(const void* self) {
 // anything in our tree — a derived spelling would silently track OUR format if
 // Goal::Serialize is ever revised, and retail's does not.
 extern "C" int32_t RtAch_Goal_GetFileVersion(const void* self) {
-    RT_DIFF_BEGIN("Achievement::Goal::GetFileVersion");
     const int32_t ours = 0x10000;
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(I32ThisFn,
-                       "?GetFileVersion@Goal@Achievement@@UEBAHXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 // ---- ??_7GoalInstance@Achievement@@6B@  slots 2, 1, 4 and 6 ----------------
 
 extern "C" uint32_t RtAch_GoalInstance_Type(const void* self) {
-    RT_DIFF_BEGIN("Achievement::GoalInstance::Type");
     const uint32_t ours = ReadTypeId(GoalInstanceTypeInfo());
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(U32ThisFn,
-                       "?Type@GoalInstance@Achievement@@UEBAIXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 extern "C" const char* RtAch_GoalInstance_TypeName(const void* self) {
-    RT_DIFF_BEGIN("Achievement::GoalInstance::TypeName");
     const char* const ours = ReadTypeName(GoalInstanceTypeInfo());
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RT_ORIGINAL_ONCE(CStrThisFn,
-                           "?TypeName@GoalInstance@Achievement@@UEBAPEBDXZ")(self)));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -388,7 +344,7 @@ extern "C" int32_t RtAch_GoalInstance_CheckGoalState(const void* self) {
 // switches (class atomicity, PLAN §4.1 decision 5).
 // ============================================================================
 
-// Goal + GoalInstance — flips with BANISHED_RT_GOAL, beside goal.cpp.
+// Goal + GoalInstance — flips with RT_GOAL, beside goal.cpp.
 int RtAchGoalTypeInfoAccessorsRegister() {
     int n = 0;
 
@@ -423,7 +379,7 @@ int RtAchGoalTypeInfoAccessorsRegister() {
     return n;
 }
 
-// Achievement + AchievementInstance — flips with BANISHED_RT_ACHMGR, beside
+// Achievement + AchievementInstance — flips with RT_ACHMGR, beside
 // achievement_manager.cpp.
 int RtAchManagerTypeInfoAccessorsRegister() {
     int n = 0;

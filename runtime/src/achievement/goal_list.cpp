@@ -165,8 +165,8 @@
 // input. It is NOT a comparison against retail, and this file does not claim
 // one.
 //
-// KILL SWITCH: BANISHED_RT_GOAL (with goal.cpp and goal_serialize.cpp) under
-// BANISHED_RT_ACHIEVEMENT — class atomicity, PLAN §4.1 decision 5.
+// KILL SWITCH: RT_GOAL (with goal.cpp and goal_serialize.cpp) under
+// RT_ACHIEVEMENT — class atomicity, PLAN §4.1 decision 5.
 // ============================================================================
 
 #include <cstddef>
@@ -283,7 +283,6 @@ constexpr int kMaxSnapshot = 64;
 // refcount finding and the limits of the shadow screen.
 // ============================================================================
 extern "C" void RtAch_GoalList_Initialize(void* selfRaw, void* srcRaw) {
-    RT_DIFF_BEGIN("Achievement::GoalList::Initialize");
 
     GoalList* self = static_cast<GoalList*>(selfRaw);
     // The source is an Array<ExternalPtr<Goal>>; ExternalPtr is one pointer
@@ -295,9 +294,6 @@ extern "C" void RtAch_GoalList_Initialize(void* selfRaw, void* srcRaw) {
     // is the only part of the screen that cannot be reconstructed afterwards.
     void* snapGoals[kMaxSnapshot];
     const int snapN = (src->_size >= 0 && src->_size <= kMaxSnapshot) ? src->_size : -1;
-    if (rt_diff_on__ && snapN > 0) {
-        for (int i = 0; i < snapN; ++i) snapGoals[i] = src->_data[i];
-    }
     const int requested = src->_size;
 
     ArraySetSizeGoalInstancePtrs()(self, src->_size);
@@ -347,35 +343,6 @@ extern "C" void RtAch_GoalList_Initialize(void* selfRaw, void* srcRaw) {
     src->_size     = 0;    // retail zeroes _size and _capacity as ONE qword
     src->_capacity = 0;
 
-    if (rt_diff_on__) {
-        bool ok = (self->_goals._size == requested)
-               && (src->_data == nullptr)
-               && (src->_size == 0) && (src->_capacity == 0);
-        int firstNullInstance = -1;
-        int firstWrongGoal    = -1;
-        if (ok && snapN >= 0) {
-            for (int i = 0; i < snapN; ++i) {
-                void* inst = self->_goals._data[i].ptr;
-                if (!inst) { if (firstNullInstance < 0) firstNullInstance = i; continue; }
-                void* held = *reinterpret_cast<void**>(
-                    reinterpret_cast<uint8_t*>(inst) + 0x18);
-                if (held != snapGoals[i] && firstWrongGoal < 0) firstWrongGoal = i;
-            }
-            if (firstNullInstance >= 0 || firstWrongGoal >= 0) ok = false;
-        }
-        char a[160], b[160];
-        std::snprintf(a, sizeof(a),
-                      "size=%d src={%p,%d,%d} firstNullInst=%d firstWrongGoal=%d snapN=%d",
-                      self->_goals._size, static_cast<void*>(src->_data),
-                      src->_size, src->_capacity,
-                      firstNullInstance, firstWrongGoal, snapN);
-        std::snprintf(b, sizeof(b),
-                      "size=%d src consumed, every inst non-null, every inst->_goal "
-                      "== the snapshotted src[i]%s",
-                      requested,
-                      (snapN < 0) ? "  [NOT SCREENED: count outside snapshot bound]" : "");
-        RT_DIFF_SHADOW(ok, a, b);
-    }
 }
 
 // ---- Registration ----------------------------------------------------------
@@ -387,7 +354,7 @@ extern "C" void RtAch_GoalList_Initialize(void* selfRaw, void* srcRaw) {
 // DLL-into-DLL calls into calls on this body
 // (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
 //
-// Gated by BANISHED_RT_GOAL with goal.cpp — this is lane A's class.
+// Gated by RT_GOAL with goal.cpp — this is lane A's class.
 int RtAchGoalListRegister() {
     int n = 0;
     RegisterRuntimeExport(

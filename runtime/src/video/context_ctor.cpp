@@ -40,7 +40,7 @@
 //      used for Video::Configuration) so that the ported PlatformConstructs
 //      find it too.
 //
-// A live `BANISHED_RT_VIDCONSTBUF` A/B was the alternative and was REJECTED: it
+// A live `RT_VIDCONSTBUF` A/B was the alternative and was REJECTED: it
 // can only report "did it boot", which is precisely the executed-but-undiffed
 // state, and it cannot compare a single field of the object under construction.
 //

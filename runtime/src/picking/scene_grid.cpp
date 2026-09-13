@@ -152,20 +152,8 @@ void  MemFree(void* p);
 
 namespace rtpickgrid {
 
-// Armed at registration; see the note in scene_grid.h for why the probe cannot
-// run there.
-bool g_probePending = false;
-bool g_probeRunning = false;
 
 namespace {
-
-void ProbeGate() {
-    if (!g_probePending || g_probeRunning) return;
-    g_probePending = false;
-    g_probeRunning = true;
-    RtPickingGridProbe();
-    g_probeRunning = false;
-}
 
 // ---------------------------------------------------------------------------
 // The .rdata constants, read out of the shipped DLL with pefile rather than
@@ -908,7 +896,6 @@ int32_t EntryAlloc(Scene* scene, const AddDesc* desc, const int32_t* xy,
 // so a rectangle wider than 65535 cells wraps. Reproduced as a uint16_t
 // subtraction rather than an int one.
 uint32_t GridAdd(Scene* scene, const AddDesc* desc) {
-    ProbeGate();
     float rect[4];
     MeshBoundsXY(desc, rect);
 
@@ -944,7 +931,6 @@ uint32_t GridAdd(Scene* scene, const AddDesc* desc) {
 // then write the new rectangle into the entry. Writing it first would unthread
 // from cells the entry was never in.
 void GridReindex(Scene* scene, uint32_t id) {
-    ProbeGate();
     uint8_t* entries = reinterpret_cast<uint8_t*>(scene->_entries._data);
     uint8_t* entry   = entries + static_cast<size_t>(id) * 0x48;
 
@@ -1001,7 +987,6 @@ void GridReindex(Scene* scene, uint32_t id) {
 // every one of them exists), which is why it is left unguarded.
 void GridUnthread(Scene* scene, int32_t* cellXY, uint16_t w, uint16_t h,
                   int32_t id) {
-    ProbeGate();
     const int32_t x0 = cellXY[0];
     int32_t y = cellXY[1];
     const int32_t xLimit = static_cast<int32_t>(w) + x0;
@@ -1059,7 +1044,6 @@ void GridUnthread(Scene* scene, int32_t* cellXY, uint16_t w, uint16_t h,
 // `_nextFree` is -1 in the temporary and is immediately overwritten by the
 // free-list push, so the -1 is never observable. It is written anyway.
 void GridFreeEntry(Scene* scene, uint32_t id) {
-    ProbeGate();
     uint8_t tmp[0x48];
     const int32_t zero = 0;
     const int32_t minusOne = -1;
@@ -1104,7 +1088,6 @@ void GridFreeEntry(Scene* scene, uint32_t id) {
 // bucket index that was just proved non-negative, and the redundant `_firstLink
 // < 0` test. They cost nothing and their absence would be an unproved claim.
 void CellIterAdvance(CellIter* it) {
-    ProbeGate();
     const int32_t maxX = it->maxX;
 
     for (;;) {

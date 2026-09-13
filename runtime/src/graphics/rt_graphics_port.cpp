@@ -2,13 +2,13 @@
 // runtime/src/graphics/rt_graphics_port.cpp — RtGraphicsPortInit()  Wave 6
 // ============================================================================
 // Kill switches (PLAN.md §4.1 decision 3; unset = ON):
-//   BANISHED_RT_GRAPHICS=0   leave the whole Graphics namespace on the DLL
-//   BANISHED_RT_GFXSCENE=0   ... just Graphics::Geometry + Scene       (lane D)
-//   BANISHED_RT_GFXMESH=0    ... just MeshInstance/GraphicsMesh/EdgeMesh (lane E)
-//   BANISHED_RT_GFXRENDER=0  ... just Camera/Renderer/SunLight/Material* (lane F)
-//   BANISHED_RT_GFXANIM=0    ... just Animation*/Particle*/FrameCopy     (lane G)
-//   BANISHED_RT_GFXSUN=0     ... just Graphics::SunLight ctor/Set/dtor  (lane GFX2)
-//   BANISHED_RT_GFXGRID=0    ... just Graphics::Scene's quadtree grid   (lane GFX3):
+//   RT_GRAPHICS=0   leave the whole Graphics namespace on the DLL
+//   RT_GFXSCENE=0   ... just Graphics::Geometry + Scene       (lane D)
+//   RT_GFXMESH=0    ... just MeshInstance/GraphicsMesh/EdgeMesh (lane E)
+//   RT_GFXRENDER=0  ... just Camera/Renderer/SunLight/Material* (lane F)
+//   RT_GFXANIM=0    ... just Animation*/Particle*/FrameCopy     (lane G)
+//   RT_GFXSUN=0     ... just Graphics::SunLight ctor/Set/dtor  (lane GFX2)
+//   RT_GFXGRID=0    ... just Graphics::Scene's quadtree grid   (lane GFX3):
 //                            the five by-address cutover doors scene.cpp reaches
 //                            plus GridThread. Its OWN switch on purpose — it is
 //                            the part of this namespace that ALLOCATES and
@@ -16,7 +16,7 @@
 //                            sees a new failure can halve the search space with
 //                            one env var. With it off, scene.cpp's five
 //                            forwarders go back to the DLL exactly as before.
-//   BANISHED_RT_GFXBODY=0    ... just the Wave 21 lane GFXBODY three
+//   RT_GFXBODY=0    ... just the Wave 21 lane GFXBODY three
 //                            (MaterialInstance::Setup and the two class
 //                            operator news). Its OWN switch because Setup is
 //                            the only one of the three that can change a
@@ -24,27 +24,27 @@
 //                            onto the live Video::Context -- so an integration
 //                            run that sees the UI or the tile overlay render
 //                            wrong can halve the search space with one env var.
-//   BANISHED_RT_GFXBODY23=0  ... just the Wave 23 lane GFXBODY five: the four
+//   RT_GFXBODY23=0  ... just the Wave 23 lane GFXBODY five: the four
 //                            Graphics::FrameCopyImageBuffer bodies (ctor, dtor,
 //                            Create, Generate) and AnimationManager::Update. Its
-//                            OWN switch, separate from BANISHED_RT_GFXBODY,
+//                            OWN switch, separate from RT_GFXBODY,
 //                            because the two sets have DISJOINT failure modes:
 //                            the FrameCopy four can only affect the screenshot /
 //                            save-thumbnail path, while AnimationManager::Update
 //                            runs every sim iteration and a defect in it freezes
 //                            every skinned citizen at bind pose. One env var
 //                            each keeps those two separable in an A/B.
-//   BANISHED_RT_GFXBIG=0     ... just the Wave 27 lane GFXBIG three:
+//   RT_GFXBIG=0     ... just the Wave 27 lane GFXBIG three:
 //                            MaterialInstance::BuildParameters, Renderer::Draw
 //                            and AnimationState::Update. THE WIDEST BLAST RADIUS
 //                            OF ANY SWITCH IN THIS FILE -- Renderer::Draw is the
 //                            entire 3D frame dispatch -- so it gets its own
 //                            variable rather than sharing one.
-//   BANISHED_RT_GFX9=0       ... just the Wave 9 lane GFX four (Transform::Lerp,
+//   RT_GFX9=0       ... just the Wave 9 lane GFX four (Transform::Lerp,
 //                                InterpolatedState<Transform>::Lerp,
 //                                MaterialInstance::RenderTextures,
 //                                Renderer::AddDrawItem)
-//   BANISHED_RT_GFXTI=0      ... just the eight ?Type@/?TypeName@/?GetFileVersion@
+//   RT_GFXTI=0      ... just the eight ?Type@/?TypeName@/?GetFileVersion@
 //                                vtable-slot accessors of AnimationEvent /
 //                                MaterialInstance / Particle    (Wave 21 lane GFXVT)
 // ============================================================================
@@ -90,30 +90,26 @@ void RtGraphicsPortInit() {
     // BATCH C — the ten named Graphics leaves of batchc_gfx_leaves.cpp.
     // Registered BEFORE the namespace kill switch and outside every per-lane
     // switch, because DIRECTION.md §2.3 says a port registers unconditionally
-    // and this batch adds no BANISHED_RT_* variable of its own.
+    // and this batch adds no environment switch of its own.
     {
         printf("[RtPort] BATCH C: %d graphics leaves registered\n",
                RtGraphicsBatchCLeavesRegister());
     }
-    if (!RtWaveEnabled("BANISHED_RT_GRAPHICS")) {
-        printf("[RtPort] BANISHED_RT_GRAPHICS=0 -- Graphics namespace port disabled\n");
-        return;
-    }
     int n = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXSCENE"))  n += RtGraphicsSceneRegister();
-    if (RtWaveEnabled("BANISHED_RT_GFXMESH"))   n += RtGraphicsMeshRegister();
-    if (RtWaveEnabled("BANISHED_RT_GFXRENDER")) n += RtGraphicsRendererRegister();
-    if (RtWaveEnabled("BANISHED_RT_GFXANIM"))   n += RtGraphicsAnimationRegister();
-    if (RtWaveEnabled("BANISHED_RT_GFX9"))      n += RtGraphicsWave9GfxRegister();
-    if (RtWaveEnabled("BANISHED_RT_GFXSUN"))   n += RtGraphicsSunLightRegister();
-    if (RtWaveEnabled("BANISHED_RT_GFXBODY")) n += RtGraphicsWave21GfxbodyRegister();
+    n += RtGraphicsSceneRegister();
+    n += RtGraphicsMeshRegister();
+    n += RtGraphicsRendererRegister();
+    n += RtGraphicsAnimationRegister();
+    n += RtGraphicsWave9GfxRegister();
+    n += RtGraphicsSunLightRegister();
+    n += RtGraphicsWave21GfxbodyRegister();
 
     // WAVE 23 LANE GFXBODY. Counted into `n` and ALSO printed on its own line
     // below, for the reason the GFXD and GFXVT lines give: a run log must carry
     // a line only THIS build emits, because the on-disk md5 says which exe is on
     // disk, not which one ran, and ten lanes share one game directory.
     int gfxbody23 = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXBODY23")) gfxbody23 = RtGraphicsWave23GfxbodyRegister();
+    gfxbody23 = RtGraphicsWave23GfxbodyRegister();
     n += gfxbody23;
 
     // WAVE 21 LANE GFXVT — the eight ?Type@/?TypeName@/?GetFileVersion@ slot
@@ -122,7 +118,7 @@ void RtGraphicsPortInit() {
     // per-lane count is printed separately below for the same reason lane
     // GFXD's is (a run log must carry a line only THIS build emits).
     int gfxti = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXTI")) gfxti = RtGraphicsTypeInfoAccessorsRegister();
+    gfxti = RtGraphicsTypeInfoAccessorsRegister();
     n += gfxti;
 
     // WAVE 24 LANE GFXMAT -- the four remaining ??_7MaterialInstance@ slot
@@ -131,7 +127,7 @@ void RtGraphicsPortInit() {
     // reason every other lane line here gives: the on-disk md5 says which exe
     // is on disk, not which one ran.
     int gfxmat = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXMAT")) gfxmat = RtGraphicsWave24GfxmatRegister();
+    gfxmat = RtGraphicsWave24GfxmatRegister();
     n += gfxmat;
 
     // WAVE 27 LANE GFXBIG -- the three large Graphics BODY rows
@@ -152,7 +148,7 @@ void RtGraphicsPortInit() {
     // attendance count from this lane means something is wrong, not that the
     // rows are unreachable.
     int gfxbig = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXBIG")) gfxbig = RtGraphicsWave27GfxbigRegister();
+    gfxbig = RtGraphicsWave27GfxbigRegister();
     n += gfxbig;
 
     // WAVE 27 LANE GFXMESH -- the eight non-slot-0 bodies of
@@ -162,8 +158,7 @@ void RtGraphicsPortInit() {
     // the reason every other lane line here gives: the on-disk md5 says which
     // exe is on disk, not which one ran, and several lanes share one game dir.
     int gfxedgevt = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXEDGEVT"))
-        gfxedgevt = RtGraphicsEdgeMeshVtableRegister();
+    gfxedgevt = RtGraphicsEdgeMeshVtableRegister();
     n += gfxedgevt;
 
     // WAVE 27 LANE GFXMESH, second half -- four slot bodies on the two INSTANCE
@@ -173,8 +168,7 @@ void RtGraphicsPortInit() {
     // helper, which carries the MOVSXD/SAR/second-deref corrections
     // WAVE6_LANE_E.md paid for; a second copy is what this avoids.
     int gfxmeshvt = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXMESHVT"))
-        gfxmeshvt = RtGraphicsMeshVtableRegister();
+    gfxmeshvt = RtGraphicsMeshVtableRegister();
     n += gfxmeshvt;
     printf("[RtPort] GFXMESHVT (Wave 27 lane GFXMESH): %d instance vtable slot "
            "bodies registered\n", gfxmeshvt);
@@ -189,18 +183,18 @@ void RtGraphicsPortInit() {
     // printed below for the reason every other lane line here gives: the on-disk
     // md5 says which exe is on disk, not which one ran.
     int gfxpart = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXPART")) gfxpart = RtGraphicsWave27GfxpartRegister();
+    gfxpart = RtGraphicsWave27GfxpartRegister();
     n += gfxpart;
 
     // WAVE 28 LANE GFXBODY -- the remaining named Graphics BODY rows, every one
     // of them a CALLEE that Wave 27 lane GFXBIG's three bodies put into the
     // `called` column. ITS OWN SWITCH because its blast radius is narrower than
-    // GFXBIG's but overlaps it exactly: with BANISHED_RT_GFXBIG=1 and this one
+    // GFXBIG's but overlaps it exactly: with RT_GFXBIG=1 and this one
     // 0, GFXBIG's bodies run and reach the DLL for these callees, which is the
     // A/B that separates "the big body is wrong" from "one of its callees is".
     // Sharing GFXBIG's variable would destroy that separation.
     int gfxbody28 = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXBODY28")) gfxbody28 = RtGraphicsWave28GfxbodyRegister();
+    gfxbody28 = RtGraphicsWave28GfxbodyRegister();
     n += gfxbody28;
     printf("[RtPort] GFXBODY28 (Wave 28 lane GFXBODY): %d Graphics body exports "
            "registered\n", gfxbody28);
@@ -213,11 +207,11 @@ void RtGraphicsPortInit() {
     // PARTSYS: with PARTSYS armed and this at 0, PARTSYS's
     // SunLight::AddDrawItems runs and reaches the DLL for exactly these
     // callees, which separates "the caller is wrong" from "a callee is".
-    // DEFAULT ON -- RtWaveEnabled is a kill switch, so =0 disarms and anything
+    // DEFAULT ON -- the wave kill switch is a kill switch, so =0 disarms and anything
     // else arms (a lane that ports behind an opt-in switch moves the live count
     // not at all).
     int gfxbody29 = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXBODY29")) gfxbody29 = RtGraphicsWave29GfxbodyRegister();
+    gfxbody29 = RtGraphicsWave29GfxbodyRegister();
     n += gfxbody29;
     printf("[RtPort] GFXBODY29 (Wave 29 lane GFXBODY): %d Graphics body exports "
            "registered\n", gfxbody29);
@@ -227,25 +221,25 @@ void RtGraphicsPortInit() {
     // constructors, and the seven unexported Collection::Array
     // instantiations underneath them. Registered but INERT -- no door in
     // the tree resolves any of them today, so this changes nothing in a
-    // live run. Its oracle is its own probe, behind BANISHED_RT_GFXD_PROBE.
+    // live run. Its oracle is its own probe, behind RT_GFXD_PROBE.
     // WAVE 28 LANE PARTSYS -- ?Update@ParticleSystemInstance@ (the whole
     // particle simulation, and the LAST unported slot of
     // ??_7ParticleSystemInstance@Graphics@@6B@), ?RemoveState@ParticleInstance@,
-    // and three ??_7SunLight@Graphics@@6B@ slots. DEFAULT ON: RtWaveEnabled is a
-    // kill switch, so BANISHED_RT_PARTSYS=0 leaves every call on the DLL for an
+    // and three ??_7SunLight@Graphics@@6B@ slots. DEFAULT ON: the wave kill switch is a
+    // kill switch, so RT_PARTSYS=0 leaves every call on the DLL for an
     // A/B and anything else arms it (kickoff §2.2 caveat 1 -- a lane that ports
     // behind an opt-in switch moves the live count not at all).
     int partsys = 0;
-    if (RtWaveEnabled("BANISHED_RT_PARTSYS")) partsys = RtGraphicsWave28PartsysRegister();
+    partsys = RtGraphicsWave28PartsysRegister();
     n += partsys;
 
     // WAVE 29 LANE SLOTS -- two slots of ??_7MeshInstance@Graphics@@6B@:
     // ?Update@MeshInstance@ (slot 1) and ?SetSharedInstanceData@MeshInstance@
     // (slot 7), taking the table 6/9 -> 8/9. DEFAULT ON, same kill-switch shape
-    // as PARTSYS above: BANISHED_RT_SLOTS29=0 leaves both calls on the DLL for
+    // as PARTSYS above: RT_SLOTS29=0 leaves both calls on the DLL for
     // an A/B, anything else arms them.
     int slots29 = 0;
-    if (RtWaveEnabled("BANISHED_RT_SLOTS29")) slots29 = RtGraphicsWave29SlotsRegister();
+    slots29 = RtGraphicsWave29SlotsRegister();
     n += slots29;
 
     // 2026-09-12: Graphics::Material, the whole vtable (material.cpp). No switch.
@@ -269,18 +263,10 @@ void RtGraphicsPortInit() {
       n += RtGraphicsBatch7AnimGroupParticleSystemRegister(); }
 
     int gfxd = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXD")) gfxd = RtGraphicsWave9GfxdRegister();
+    gfxd = RtGraphicsWave9GfxdRegister();
 
     int grid = 0;
-    if (RtWaveEnabled("BANISHED_RT_GFXGRID")) {
-        grid = RtGraphicsGridRegister();
-        // ARM the probe rather than running it. This init runs right after
-        // ResolveInit()'s LoadLibrary, where the DLL's MemoryAllocator is
-        // CONSTRUCTED but not STARTED; a probe that allocates there takes the
-        // allocator's critical section before the allocator exists and faults
-        // on null+0x640 (WAVE9.md, lane PKG2). See scene_grid.h.
-        rtgfxgrid::g_probePending = true;
-    }
+    grid = RtGraphicsGridRegister();
     // The grid count is printed SEPARATELY and names this lane, so a run log
     // carries an identity line only this build emits — the acceptance test that
     // works when six lanes share one game directory (the on-disk md5 says which
@@ -329,7 +315,7 @@ void RtGraphicsPortInit() {
 
     // VTABLE BATCH 6 — graphics buffers, meshes and lights. Registered
     // unconditionally (DIRECTION.md §2.3: a port registers unconditionally; no
-    // new BANISHED_RT_* switches).
+    // new environment switches).
     //   imagebuffer_derived.cpp  GeneratedImageBuffer / FrameCopyImageBuffer /
     //                            ReflectionImageBuffer slots + ctors/dtors, and
     //                            Math::Transform3::operator*

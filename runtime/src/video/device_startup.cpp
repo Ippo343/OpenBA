@@ -619,32 +619,7 @@ extern "C" bool RtVideo_Device_CreateVideoInterface(Device* self, int32_t index)
 // The two message callbacks are registered only on the success path, and their
 // ids are 5 (WM_SIZE) and 0x232 (WM_EXITSIZEMOVE).
 // ============================================================================
-extern "C" void RtVideoDeviceStartupProbeMaybeRun();
-extern "C" void RtVideoAssignConstantsProbeMaybeRun();   // constant_buffer.cpp
-extern "C" void RtVideoContextCtorProbeMaybeRun();       // context_ctor.cpp
-extern "C" void RtVideoDeviceEnumTypesProbeMaybeRun();   // device_enum_types_probe.cpp
-
 extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
-    // Self-scheduled probe (lane Q's pattern, and the same reason): it
-    // allocates through the Array assignments, and at RuntimePortInit() time the
-    // MemoryAllocator is constructed but not STARTED. Here it is, because
-    // Engine::Startup ran the allocator's own bring-up eleven steps ago.
-    //
-    // It runs BEFORE this function reads anything, and it borrows and restores
-    // the Video::Configuration singleton slot. No-op unless armed.
-    RtVideoDeviceStartupProbeMaybeRun();
-    // Phase 3's AssignConstants oracle rides the same hook for exactly the same
-    // reason: it allocates ~124 Strings, and at RuntimePortInit() time the
-    // allocator singleton is constructed but not STARTED. Running it there
-    // faulted inside the DLL's MemAlloc with "no allocator singleton" in the
-    // redzone dump -- a defect in the PROBE's placement, not in the port.
-    RtVideoAssignConstantsProbeMaybeRun();
-    RtVideoContextCtorProbeMaybeRun();
-    // Wave 18 lane GFXIF. Rides the same hook for the same reason: it allocates
-    // Strings and grows arrays, and at RuntimePortInit() time the allocator
-    // singleton is constructed but not STARTED.
-    RtVideoDeviceEnumTypesProbeMaybeRun();
-
     // 0x1800f8266: the HWND comes from Application::_singleton[0].
     self->windowHandle = *reinterpret_cast<void**>(*AppSlot());
 

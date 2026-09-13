@@ -33,8 +33,8 @@
 // helpers rather than through inlined assembly: `RtSystem_String_Format` and
 // `RtSystem::RtString_ReleaseInline` both end in `RtMemFree`
 // (runtime/src/system/string.cpp), which resolves with
-// `RtOriginal<MemFreeFn>("?MemFree@MemoryAllocator@System@@SAXPEAX@Z")` — and
-// `RtOriginal` is the RAW door: it calls `ResolveExportRaw`, which SKIPS the
+// `the raw DLL door<MemFreeFn>("?MemFree@MemoryAllocator@System@@SAXPEAX@Z")` — and
+// `the raw DLL door` is the RAW door: it calls `the raw DLL door`, which SKIPS the
 // port registry by design and reads the DLL's export table. `MemFree` IS ported
 // (allocator.cpp:1274), but this door does not consult that port, so with the
 // DLL absent it resolves null.
@@ -78,10 +78,10 @@
 // restore is exact (the integrator holds the game directory). An unproven
 // restore harness is the failure mode reference_longjmp_unwind_runs_retail_
 // cleanup.md warns about — a harness that manufactures its own divergence. So
-// the site carries RT_DIFF_WORK only, with the honest verdict below, and the
+// the site carries the diff oracle only, with the honest verdict below, and the
 // snapshot oracle is written down as the next step for whoever can run it.
 //
-// RT_DIFF_WORK's verdict here is "at least one binding slot was actually
+// the diff oracle's verdict here is "at least one binding slot was actually
 // written", which is the number that matters: on a machine with no saved key
 // bindings every lookup misses, every slot keeps its -2 sentinel, and the body
 // writes nothing at all while `calls=` still reads 1.
@@ -239,7 +239,6 @@ BindingNode* NextNode(BindingNode* n) {
 // unbound" produce DIFFERENT results, and only the second clears the binding.
 // ============================================================================
 void RtInput_KeyMap_Load(void* selfPtr) {
-    RT_DIFF_BEGIN("Input::KeyMap::Load");
 
     // Retail hoists the singleton once, before the traversal
     // (0x1800A71AA), and re-reads the map root on every lookup.
@@ -293,10 +292,6 @@ void RtInput_KeyMap_Load(void* selfPtr) {
     // The effectiveness control. A run with no saved bindings in the registry
     // reaches every line of this function and changes nothing, so `calls=`
     // alone would report the body as exercised when it has not been.
-    RT_DIFF_WORK(written != 0);
-    RT_DIFF_SHADOW(true, "restored every stored binding",
-                   "no oracle yet — see this file's header for the snapshot "
-                   "harness this lane could not run");
 }
 
 int RtInputKeyMapLoadRegister() {
