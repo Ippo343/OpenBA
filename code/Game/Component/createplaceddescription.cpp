@@ -151,21 +151,6 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
         SerializerEncodingVCall(serializer, 0x98, e);   // enum element
     }
 
-    // Diagnostic: the per-element enum reads below feed the placement tile-validity
-    // mask override in ToolTile_FootprintValidity_d580 (0x14009D580). All-zero elements
-    // there mean no terrain type is ever allowed and nothing can be placed.
-    if (const char* dbg = std::getenv("BANISHED_TOOL_DIAG")) {
-        if (dbg[0] && dbg[0] != '0') {
-            std::fprintf(stderr, "[CreatePlaced] Serialize self=%p enc=%p placeBits(+0x20)=0x%x "
-                         "count=%d arr=%p [", self, *(void**)((uintptr_t)serializer + 8),
-                         *(uint32_t*)(s + 0x20), count, (void*)arr);
-            for (int i = 0; i < count && i < 8 && arr; ++i)
-                std::fprintf(stderr, "%s0x%x", i ? "," : "", *(uint32_t*)(arr + i * 4));
-            std::fprintf(stderr, "]\n");
-            std::fflush(stderr);
-        }
-    }
-
     g_fn_String_Serialize(s + 0x28, serializer);                   // String +0x28
     g_fn_Serialize_Int(serializer, s + 0x44, nullptr);             // int    +0x44
     g_fn_Serialize_Int(serializer, s + 0x48, nullptr);             // int    +0x48

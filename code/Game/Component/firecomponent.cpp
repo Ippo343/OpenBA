@@ -23,7 +23,6 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/fire_trace.h"
 #include "Component/firecomponent_funcs.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
@@ -80,13 +79,8 @@ void FireComponent_Update(FireComponent* self, int64_t* pDeltaTime) {
         // 0xF0 (bits 4-7 => fire OFF). It is never left uninitialised.
         const uint32_t worldFlags = *reinterpret_cast<uint32_t*>(gw + 0xD0);
         if ((worldFlags >> 6) & 1) {
-            FIRE_TRACE_N(1, "[Fire] tick suppressed: GameWorld+0xD0=0x%08x has bit 6 "
-                            "(noFire) SET — disasters were switched off for this game\n",
-                         worldFlags);
             return;
         }
-        FIRE_TRACE_N(1, "[Fire] tick live: GameWorld+0xD0=0x%08x (bit 6 clear — fire enabled)\n",
-                     worldFlags);
 
         *pAccum += dt;
 
@@ -102,8 +96,6 @@ void FireComponent_Update(FireComponent* self, int64_t* pDeltaTime) {
             reinterpret_cast<uintptr_t>(desc) + FireDescriptionField::IgniteChance0);
 
         const bool fired = s_probCheck(pAccum, pair, rng);
-        FIRE_TRACE_N(12, "[Fire] ignition roll comp=%p pair={%.4f,%.4f} -> %s\n",
-                     (void*)self, pair[0], pair[1], fired ? "FIRED" : "no");
         if (fired) {
             FireComponent_Ignite_610(self);
             return;
@@ -205,16 +197,8 @@ static void FireComponent_FinishLiveVtable() {
     // so such an A/B could "prove" something that was really a desync.
     // See reference_slot3_wrapper_must_resolve_first.
     g_FireComponent_LiveVtable[3]  = reinterpret_cast<void*>(&FireComponent_SerializeVSlot);
-
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_FIRE")) return;
     g_FireComponent_LiveVtable[9]  = reinterpret_cast<void*>(&FireComponent_UpdateVSlot);
     g_FireComponent_LiveVtable[15] = reinterpret_cast<void*>(&FireComponent_WaterVSlot);
-    static bool announced = false;
-    if (!announced) {
-        announced = true;
-        FIRE_TRACE("[Fire] FireComponent vtable LIVE: slot3=Serialize slot9=Update "
-                   "slot15=WaterApplied\n");
-    }
 }
 
 extern "C" void* FireComponent_Factory(void) {

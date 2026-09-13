@@ -163,28 +163,6 @@ static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldS
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 static inline int64_t* ListPair() { return *reinterpret_cast<int64_t**>(GW() + 0xf0); }
 
-static inline bool TraceOn() {
-    static int s_ts = -1;
-    if (s_ts < 0) { const char* e = getenv("BANISHED_CITIZENAI_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s_ts == 1;
-}
-
-// [diag] BANISHED_DELIVER_TRACE — watch the haul-to-storage leg (LongTermPlan):
-// carry rows, d590 barn selection, and the Ctor4 dispatch that sends the citizen off.
-static inline bool DeliverTraceOn() {
-    static int s_ts = -1;
-    if (s_ts < 0) { const char* e = getenv("BANISHED_DELIVER_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s_ts == 1;
-}
-
-// citizen CharacterComponent (+0x278) -> ModelComponent (+0x68).
-static int64_t CitizenModel(int64_t citizen) {
-    CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
-    int64_t ch = *reinterpret_cast<int64_t*>(citizen + 0x278);
-    CheckPtr(reinterpret_cast<void*>(ch + 0x68));
-    return *reinterpret_cast<int64_t*>(ch + 0x68);
-}
-
 // model world pos (+0x158/+0x15c) -> clamped grid cell (row*w + col).
 static uint32_t ModelCell(int64_t model, int* mapGrid) {
     int w = *mapGrid;
@@ -245,14 +223,6 @@ static void* ScanForType(int64_t node, uint32_t typeId,
         }
     }
     return nullptr;
-}
-
-// success epilogue: set the action-state flags on the CitizenComponent and return 1.
-static uint64_t Pushed(int64_t cz) {
-    *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);
-    *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;
-    *reinterpret_cast<int32_t*>(cz + 0xb0) = 0;
-    return (static_cast<uint64_t>(cz) & 0xffffffffffffff00ULL) | 1;  // CONCAT71(cz>>8, 1)
 }
 
 } // namespace
@@ -321,7 +291,7 @@ extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint
         if (wpIBP != 0 && *reinterpret_cast<int*>(wpIBP + 0x60) != 0) {
             CheckPtr(&entity);
             int64_t posBuf[2] = {0, 0};
-            void* pp = s_findPos ? s_findPos(entity, posBuf) : nullptr;
+            if (s_findPos) s_findPos(entity, posBuf);
             CheckPtr(posBuf);
             float wpos[4] = {0, 0, 0, 0};
             if (posBuf[0] && s_2e20) s_2e20(posBuf[0], wpos, 0, 0, nullptr);
@@ -382,14 +352,6 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
     // each row is 0x10 bytes: [+0] entity-ptr, [+8] occupancy count).
     CheckPtr(&citStorNode);
     int rowCount = (citStorNode != 0) ? *reinterpret_cast<int*>(citStorNode + 0x30) : 0;
-    if (DeliverTraceOn()) {
-        static int n = 0;
-        if (n < 20) {
-            fprintf(stderr, "[Deliver] LTP ENTER citizen=%p carryRows=%d homeCell=%u\n",
-                    reinterpret_cast<void*>(param_1), rowCount, homeCell);
-            fflush(stderr); n++;
-        }
-    }
     bool committed = false;        // matched cd80 → break to commit
     for (int row = 0; row < rowCount; ++row) {
         CheckPtr(&citStorNode);
@@ -429,17 +391,6 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
                            static_cast<uint64_t>(*reinterpret_cast<int64_t*>(rowBase)),
                            *reinterpret_cast<int*>(rowBase + 8), '\x01',
                            outVec, &matchIBP);
-        if (DeliverTraceOn()) {
-            static int n = 0;
-            if (n < 40) {
-                fprintf(stderr, "[Deliver] LTP row=%d occ=%d d590 dest=%p pos=(%.1f,%.1f,%.1f)\n",
-                        row, occ, reinterpret_cast<void*>(outBest),
-                        *reinterpret_cast<float*>(&outVec[0]),
-                        *reinterpret_cast<float*>(&outVec[1]),
-                        *reinterpret_cast<float*>(&outVec[2]));
-                fflush(stderr); n++;
-            }
-        }
         if (outBest == 0) {
             // d590 found nothing for this row → treat as committed-with-empty (the original
             // jumps to the no-more-rows path that sets up the action push from whatever was
@@ -525,13 +476,6 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
         *reinterpret_cast<uint32_t*>(param_1 + 0x54) |= 4;
         *reinterpret_cast<int32_t*>(param_1 + 0xb0) = 0;
 
-        if (DeliverTraceOn()) {
-            fprintf(stderr, "[Deliver] LTP DISPATCH citizen=%p candidates=%d -> Ctor4 chain "
-                            "(MoveTo storage + DropOffRawMaterial)\n",
-                    reinterpret_cast<void*>(param_1), arrACount);
-            fflush(stderr);
-        }
-
         int64_t timeStamp = 0;
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeStamp, 0.0f);
         CheckPtr(reinterpret_cast<void*>(param_1 + 0x278));
@@ -543,17 +487,10 @@ extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
     }
 
     // free the dynamic arrays (LAB_140116387 epilogue).
-    int tracedCount = arrACount;    // capture before the frees zero it
     if (arrB && fn_MemFreeStatic) fn_MemFreeStatic(arrB);
     arrB = nullptr; arrBCount = 0;
     if (arrA && fn_MemFreeStatic) fn_MemFreeStatic(arrA);
     arrA = nullptr; arrACount = 0;
-
-    if (TraceOn()) {
-        static int n = 0;
-        if (n < 6) { fprintf(stderr, "[LongTermPlan] citizen=%p candidates=%d\n",
-                             reinterpret_cast<void*>(param_1), tracedCount); fflush(stderr); n++; }
-    }
 }
 
 // ============================================================
@@ -594,11 +531,6 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
         CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
         CitizenAI_State_LongTermPlan(*reinterpret_cast<int64_t*>(param_1 + 0x38));
         *reinterpret_cast<int32_t*>(param_1 + 0x2c) = 4;
-        if (TraceOn()) {
-            static int n = 0;
-            if (n < 6) { fprintf(stderr, "[GrowUp] self=%p -> LongTermPlan (mature)\n",
-                                 reinterpret_cast<void*>(param_1)); fflush(stderr); n++; }
-        }
         return (static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL) | 1;
     }
 
@@ -716,13 +648,6 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
                     if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&cd2, wt * s_walkScale);
                     *reinterpret_cast<int64_t*>(param_1 + 0x60) = cd2;
 
-                    if (TraceOn()) {
-                        static int n = 0;
-                        if (n < 6) { fprintf(stderr, "[GrowUp] self=%p EAT source=%p wp=%p\n",
-                                             reinterpret_cast<void*>(param_1),
-                                             reinterpret_cast<void*>(found),
-                                             reinterpret_cast<void*>(dstIBP)); fflush(stderr); n++; }
-                    }
                     return (static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL) | 1;
                 }
             }

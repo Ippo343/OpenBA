@@ -217,14 +217,6 @@ void Resolve() {
     std::fflush(stderr);
 }
 
-bool TraceEnabled() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_BOAT_TRACE");
-        s = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s == 1;
-}
 
 // ── Small shared shapes ──────────────────────────────────────────────────────────
 
@@ -278,9 +270,6 @@ void PostEventToDestination(uintptr_t boat, int eventId) {
     if (s_CheckPtr) s_CheckPtr(out);
     const uintptr_t smc = out ? *reinterpret_cast<uintptr_t*>(out) : 0;
     if (!smc) {
-        if (TraceEnabled())
-            std::fprintf(stderr, "[BoatCtrl] event %d NOT posted: destination entity %p has "
-                                 "no StateMachineComponent\n", eventId, (void*)destEntity);
         return;
     }
 
@@ -291,10 +280,7 @@ void PostEventToDestination(uintptr_t boat, int eventId) {
     if (!vt || !vt[2]) return;
     const int curIdx = *reinterpret_cast<int8_t*>(smc + 0x51);
     typedef char (*PostEvent_t)(void*, void*, int, int);
-    const char taken = reinterpret_cast<PostEvent_t>(vt[2])(node, sm, curIdx, eventId);
-    if (TraceEnabled())
-        std::fprintf(stderr, "[BoatCtrl] posted event %d to destination smc=%p curIdx=%d "
-                             "-> handled=%d\n", eventId, (void*)smc, curIdx, (int)taken);
+    reinterpret_cast<PostEvent_t>(vt[2])(node, sm, curIdx, eventId);
 }
 
 // Retail's "the boat is finished — delete it" tail, shared verbatim by 5250 and 4c40
@@ -316,10 +302,6 @@ void DeleteBoatEntity(uintptr_t boat) {
     if (s_ArrResize) {
         void* arr = reinterpret_cast<void*>(entityList + 0xd0);
         s_ArrResize(arr, *reinterpret_cast<int32_t*>(entityList + 0xd8) + 1, &entIBP);
-    }
-    if (TraceEnabled()) {
-        std::fprintf(stderr, "[BoatCtrl] boat entity marked for removal\n");
-        std::fflush(stderr);
     }
 }
 
@@ -555,54 +537,8 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
     // route builder's own entry/exit points are outside the grid) and are skipped, while
     // both A* legs must be 100% water or the pathfinder and the renderer disagree.
     // Water mask 0x380 = the boat pathfinder's own terrain class set.
-    if (TraceEnabled()) {
-        void* gwv = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton
-                                                                      : nullptr;
-        uint8_t* mapObj = gwv ? *reinterpret_cast<uint8_t**>(
-                                    reinterpret_cast<uint8_t*>(gwv) + 0xf8) : nullptr;
-        uint8_t* grid   = mapObj ? *reinterpret_cast<uint8_t**>(mapObj + 0x80) : nullptr;
-        const int width = mapObj ? *reinterpret_cast<int32_t*>(mapObj) : 0;
-        const int n     = *reinterpret_cast<int32_t*>(boat + 0x68);
-        if (grid && width > 0) {
-            const int half = width / 2;
-            const uint32_t mask = 0x380u;
-            int offMap = 0, water = 0, land = 0, firstLand = -1;
-            for (int i = 0; i < n; ++i) {
-                const float* pt = route + (size_t)i * 3;
-                const int cx = (int)(pt[0] + (float)half);
-                const int cy = (int)(pt[1] + (float)half);
-                if (cx < 0 || cy < 0 || cx >= width || cy >= width) { ++offMap; continue; }
-                const uint8_t t = *(grid + (size_t)(cy * width + cx) * 0x30 + 0x29);
-                if ((mask >> (t & 0x1f)) & 1) { ++water; }
-                else { ++land; if (firstLand < 0) firstLand = i; }
-            }
-            std::fprintf(stderr,
-                "[BoatCtrl] route audit: n=%d offMap=%d water=%d LAND=%d%s\n",
-                n, offMap, water, land,
-                land ? "   <-- the route crosses non-water cells; the boat will sail "
-                       "over ground there" : "");
-            if (firstLand >= 0) {
-                const float* pt = route + (size_t)firstLand * 3;
-                std::fprintf(stderr, "[BoatCtrl]   first land point idx=%d world=(%.2f,%.2f) "
-                                     "tile=(%d,%d)\n", firstLand, pt[0], pt[1],
-                             (int)(pt[0] + (float)half), (int)(pt[1] + (float)half));
-            }
-            std::fflush(stderr);
-        }
-    }
 
     SetAnim(boat, 1);
-    if (TraceEnabled()) {
-        std::fprintf(stderr, "[BoatCtrl] state 0 ENTER: model=%p char=%p route=%p n=%d "
-                             "idx=%d wp=(%.2f,%.2f)\n",
-                     *reinterpret_cast<void**>(boat + 0x30),
-                     *reinterpret_cast<void**>(boat + 0x38),
-                     (const void*)route, *reinterpret_cast<int32_t*>(boat + 0x68),
-                     *reinterpret_cast<int32_t*>(boat + 0x70),
-                     *reinterpret_cast<float*>(boat + 0x50),
-                     *reinterpret_cast<float*>(boat + 0x54));
-        std::fflush(stderr);
-    }
     return 1;
 }
 
@@ -669,30 +605,8 @@ extern "C" char BoatCtrl_State0_Tick(void* selfV, void* smV, void* /*time*/) {
     // Bring-up trace: reports OUTCOMES, not intent — the first call proves trans30 is
     // dispatched at all, and the periodic lines show whether the hull is actually moving
     // (model pos changing) as opposed to being steered at a target it never approaches.
-    if (TraceEnabled()) {
-        static int n = 0;
-        if (n < 3 || (n % 240) == 0) {
-            const Vec3* wp = reinterpret_cast<const Vec3*>(boat + 0x50);
-            const uintptr_t chr = *reinterpret_cast<uintptr_t*>(boat + 0x38);
-            std::fprintf(stderr, "[BoatCtrl] tick#%d model=(%.2f,%.2f) wp=(%.2f,%.2f) "
-                                 "idx=%d dock=(%.2f,%.2f) dist2=%.1f chrMove=%d "
-                                 "chrSpeed=%.3f\n",
-                         n, mp->x, mp->y, wp->x, wp->y,
-                         *reinterpret_cast<int32_t*>(boat + 0x70),
-                         dockPos->x, dockPos->y, dist2,
-                         chr ? (int)*reinterpret_cast<uint8_t*>(chr + 0x28) : -1,
-                         chr ? *reinterpret_cast<float*>(chr + 0x38) : -1.0f);
-            std::fflush(stderr);
-        }
-        ++n;
-    }
 
     if (s_fApproach && *s_fApproach > dist2) {
-        if (TraceEnabled()) {
-            std::fprintf(stderr, "[BoatCtrl] state 0 -> 1 (dist^2=%.3f < %.3f)\n",
-                         dist2, *s_fApproach);
-            std::fflush(stderr);
-        }
         RequestTransition(smV, 1);
     }
     return 1;
@@ -704,7 +618,6 @@ extern "C" char BoatCtrl_State0_Tick(void* selfV, void* smV, void* /*time*/) {
 extern "C" char BoatCtrl_State1_Enter(void* selfV) {
     Resolve();
     SetAnim(reinterpret_cast<uintptr_t>(selfV), 2);
-    if (TraceEnabled()) { std::fprintf(stderr, "[BoatCtrl] state 1 ENTER\n"); std::fflush(stderr); }
     return 1;
 }
 
@@ -749,11 +662,6 @@ extern "C" char BoatCtrl_State1_Tick(void* selfV, void* smV, void* /*time*/) {
                              *reinterpret_cast<const float*>(boat + 0x4c), speed);
 
     if (s_fDockRange && *s_fDockRange > dist) {
-        if (TraceEnabled()) {
-            std::fprintf(stderr, "[BoatCtrl] state 1 -> 2 DOCKED (dist=%.3f < %.3f)\n",
-                         dist, *s_fDockRange);
-            std::fflush(stderr);
-        }
         RequestTransition(smV, 2);
     }
     return 1;
@@ -785,7 +693,6 @@ extern "C" char BoatCtrl_State2_Enter(void* selfV) {
 extern "C" char BoatCtrl_State2_Event0(void* /*selfV*/, void* smV) {
     Resolve();
     RequestTransition(smV, 3);
-    if (TraceEnabled()) { std::fprintf(stderr, "[BoatCtrl] event 0 -> state 3\n"); std::fflush(stderr); }
     return 1;
 }
 
@@ -795,7 +702,6 @@ extern "C" char BoatCtrl_State2_Event0(void* /*selfV*/, void* smV) {
 extern "C" char BoatCtrl_Event1_Abort(void* /*selfV*/, void* smV) {
     Resolve();
     RequestTransition(smV, 4);
-    if (TraceEnabled()) { std::fprintf(stderr, "[BoatCtrl] event 1 -> state 4\n"); std::fflush(stderr); }
     return 1;
 }
 
@@ -810,7 +716,6 @@ extern "C" char BoatCtrl_State3_Enter(void* selfV) {
         const float f = s_fSpeedBase ? *s_fSpeedBase : 1.0f;
         ActMv_SetAnimation_a1f0(chr, 3, f, f);
     }
-    if (TraceEnabled()) { std::fprintf(stderr, "[BoatCtrl] state 3 ENTER (departing)\n"); std::fflush(stderr); }
     return 1;
 }
 
@@ -861,11 +766,6 @@ extern "C" char BoatCtrl_State3_Tick(void* selfV, void* smV, void* /*time*/) {
     }
 
     if (s_fArrive && *s_fArrive > gate) {
-        if (TraceEnabled()) {
-            std::fprintf(stderr, "[BoatCtrl] state 3 -> 4 (gate=%.3f < %.3f)\n",
-                         gate, *s_fArrive);
-            std::fflush(stderr);
-        }
         RequestTransition(smV, 4);
     }
     return 1;
@@ -877,7 +777,6 @@ extern "C" char BoatCtrl_State3_Tick(void* selfV, void* smV, void* /*time*/) {
 extern "C" char BoatCtrl_State4_Enter(void* selfV) {
     Resolve();
     SetAnim(reinterpret_cast<uintptr_t>(selfV), 1);
-    if (TraceEnabled()) { std::fprintf(stderr, "[BoatCtrl] state 4 ENTER (leaving map)\n"); std::fflush(stderr); }
     return 1;
 }
 

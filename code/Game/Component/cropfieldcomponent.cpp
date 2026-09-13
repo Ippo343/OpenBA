@@ -181,17 +181,6 @@ void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
         int id = *(int*)entry;
         void* obj = *(void**)(*(uintptr_t*)(map + 0x80) + 8 + (int64_t)id * 0x30);
         bool keep = false;
-        // Reject-reason census. This function is byte-faithful to retail 0x14011aa20
-        // (verified), so a demotion here is legitimate — the question is WHICH of the
-        // four conditions the planted entity stops satisfying. All four look identical
-        // from outside: the slot silently becomes "done".
-        static int s_vt = -1;
-        if (s_vt < 0) {
-            const char* ve = std::getenv("BANISHED_CROPFIELD_TRACE");
-            s_vt = (ve && ve[0] && ve[0] != '0') ? 1 : 0;
-        }
-        static long long s_cellEmpty = 0, s_notEntity = 0, s_noBuildComp = 0,
-                         s_mismatch = 0, s_kept = 0, s_dumps = 0;
         if (obj != nullptr) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&obj);
             if (s_fn_Base_IsA && s_pTypeId_ComponentEntity &&
@@ -204,18 +193,7 @@ void CropFieldComponent_ValidateEntityRefs(uintptr_t self) {
                     if (fn_InternalBasePtr_CheckPtr)
                         fn_InternalBasePtr_CheckPtr((void*)(entry + 0x8));
                     if (obj == *(void**)(entry + 0x8)) keep = true;
-                    else if (s_vt) ++s_mismatch;
-                } else if (s_vt) ++s_noBuildComp;
-            } else if (s_vt) ++s_notEntity;
-        } else if (s_vt) ++s_cellEmpty;
-        if (s_vt) {
-            if (keep) ++s_kept;
-            if ((++s_dumps % 16) == 0 && s_dumps <= 160) {
-                std::fprintf(stderr, "[CropValidate] kept=%lld | demoted: cellEmpty=%lld "
-                             "notComponentEntity=%lld noBuildStateComp=%lld "
-                             "entityMismatch=%lld\n",
-                             s_kept, s_cellEmpty, s_notEntity, s_noBuildComp, s_mismatch);
-                std::fflush(stderr);
+                }
             }
         }
         if (keep) continue;
@@ -486,26 +464,6 @@ extern "C" void CropFieldComponent_OnMessageVSlot(void* selfV, int msgId,
     const uintptr_t entity = *reinterpret_cast<uintptr_t*>(grid + 8 + (uintptr_t)cell * 0x30);
 
     if (msgId == 0) {
-        // Plant-bind census: PlantArea claims cells in PAIRS and clears both marks, so
-        // a pair that delivers only one msg-0 loses the other cell permanently. Count
-        // arrivals against distinct slots — a duplicate index is the paired action
-        // addressing the same slot twice.
-        {
-            static int s_t = -1;
-            if (s_t < 0) { const char* e = std::getenv("BANISHED_PLANTAREA_TRACE");
-                           s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
-            if (s_t) {
-                static unsigned char s_seen[4096] = {0};
-                static long long s_total = 0, s_dup = 0;
-                ++s_total;
-                if (slotIdx < 4096) { if (s_seen[slotIdx]) ++s_dup; else s_seen[slotIdx] = 1; }
-                if ((s_total % 20) == 0) {
-                    std::fprintf(stderr, "[CropBind] msg0 arrivals=%lld duplicates=%lld\n",
-                                 s_total, s_dup);
-                    std::fflush(stderr);
-                }
-            }
-        }
         uintptr_t nrIbp = 0;
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)&entity);
         if (s_fn_FindComp_BS_local) s_fn_FindComp_BS_local((int64_t)entity, &nrIbp);

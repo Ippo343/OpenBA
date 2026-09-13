@@ -155,12 +155,6 @@ static inline int64_t CellArrayBase(int* mapGrid) {
     return *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
 }
 
-static inline bool TraceOn() {
-    static int s_ts = -1;
-    if (s_ts < 0) { const char* e = getenv("BANISHED_CITIZENAI_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s_ts == 1;
-}
-
 // Virtual GetTypeId: original is `(**(code**)(**slot + 0x10))()` where slot is &entry,
 // *slot is the object, **slot is its vtable, vtable+0x10 (index 2) is GetTypeId, called
 // with the object as `this`. Returns the runtime type id of the object at *slot.
@@ -284,7 +278,6 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
     if (s_sqrtf == nullptr) s_sqrtf = reinterpret_cast<fn_sqrtf_132010_t>(ResolveAddr(Module::Exe, 0x140132010));
 
     int* mapGrid = MapGrid();
-    void* outArr = nullptr;       // local_58 (grown candidate array)
     uint32_t outCap = 0;          // (local_50 high dword)
     int matchCount = 0;           // pvVar18 / pvVar19 (entries written)
     void* curArr = nullptr;       // pvVar21 / pvVar6 (current array ptr)
@@ -813,16 +806,6 @@ LAB_14010ae8a:
             *reinterpret_cast<int32_t*>(cz + 0xb0) = 0;
             *reinterpret_cast<int64_t*>(param_1 + 0xc0) = 0;
             uVar41 = 1;
-
-            if (TraceOn()) {
-                static int n = 0;
-                if (n < 6) { fprintf(stderr, "[Leisure] self=%p ENTERED cell=%d happiness=%d\n",
-                                     reinterpret_cast<void*>(param_1), chosenCell, happinessMode ? 1 : 0); fflush(stderr); n++; }
-            }
-        } else if (TraceOn()) {
-            static int n = 0;
-            if (n < 6) { fprintf(stderr, "[Leisure] self=%p -> no candidate cell (bail)\n",
-                                 reinterpret_cast<void*>(param_1)); fflush(stderr); n++; }
         }
 
         if (local_c8 != nullptr) {

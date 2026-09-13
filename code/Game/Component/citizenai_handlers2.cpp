@@ -134,13 +134,6 @@ static void EnsureInit() {
 static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline float Fc(const float* p, float dflt) { return p ? *p : dflt; }
 
-// Brick 3b dispatch trace (env BANISHED_CITIZENAI_TRACE).
-static inline bool TraceOn() {
-    static int s_ts = -1;
-    if (s_ts < 0) { const char* e = getenv("BANISHED_CITIZENAI_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s_ts == 1;
-}
-
 } // namespace
 
 // ============================================================
@@ -208,11 +201,6 @@ extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
         CheckPtr(self);
         int64_t cz2 = *self;
         *reinterpret_cast<uint32_t*>(cz2 + 0x88) |= 4;
-        if (TraceOn()) {
-            static int n = 0;
-            if (n < 6) { fprintf(stderr, "[Education] self=%p -> no target (bail)\n",
-                                 reinterpret_cast<void*>(param_1)); fflush(stderr); n++; }
-        }
         return static_cast<uint64_t>(cz2) & 0xffffffffffffff00ULL;  // low byte 0
     }
 
@@ -228,11 +216,6 @@ extern "C" uint64_t CitizenAI_State_Education(int64_t param_1) {
     *reinterpret_cast<int32_t*>(cz3 + 0xb0) = 0;
     *reinterpret_cast<int32_t*>(cz3 + 0x30) = static_cast<int32_t>(0xffffffff);
 
-    if (TraceOn()) {
-        static int n = 0;
-        if (n < 6) { fprintf(stderr, "[Education] self=%p ENTERED dest=(%.2f,%.2f,%.2f)\n",
-                             reinterpret_cast<void*>(param_1), dest[0], dest[1], dest[2]); fflush(stderr); n++; }
-    }
     return 1;  // CONCAT71(.., 1) -> low byte 1
 }
 
@@ -364,11 +347,6 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
                 }
             }
         }
-        if (TraceOn()) {
-            static int n = 0;
-            if (n < 6) { fprintf(stderr, "[SeekHappiness] self=%p -> no target (hide-render)\n",
-                                 reinterpret_cast<void*>(param_1)); fflush(stderr); n++; }
-        }
         return retLow & 0xffffffffffffff00ULL;  // low byte 0
     }
 
@@ -384,11 +362,6 @@ extern "C" uint64_t CitizenAI_State_SeekHappiness(int64_t param_1) {
     *reinterpret_cast<int32_t*>(cz3 + 0xb0) = 0;
     *reinterpret_cast<int32_t*>(cz3 + 0x30) = static_cast<int32_t>(0xffffffff);
 
-    if (TraceOn()) {
-        static int n = 0;
-        if (n < 6) { fprintf(stderr, "[SeekHappiness] self=%p ENTERED dest=(%.2f,%.2f,%.2f)\n",
-                             reinterpret_cast<void*>(param_1), dest[0], dest[1], dest[2]); fflush(stderr); n++; }
-    }
     return 1;
 }
 
@@ -473,21 +446,11 @@ extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1) {
         *reinterpret_cast<int32_t*>(cz2 + 0x30) = static_cast<int32_t>(0xffffffff);
         *reinterpret_cast<int32_t*>(cz2 + 0xb0) = 0;
 
-        if (TraceOn()) {
-            static int n = 0;
-            if (n < 6) { fprintf(stderr, "[FindWork] self=%p ENTERED dest=(%.2f,%.2f,%.2f)\n",
-                                 reinterpret_cast<void*>(param_1), outVec[0], outVec[1], outVec[2]); fflush(stderr); n++; }
-        }
         return 1;
     }
 
     CheckPtr(self);
     uint64_t r = s_fn_115a50 ? s_fn_115a50(reinterpret_cast<void*>(*self), '\x01') : 0;
-    if (TraceOn()) {
-        static int n = 0;
-        if (n < 6) { fprintf(stderr, "[FindWork] self=%p -> no walkable (reroll)\n",
-                             reinterpret_cast<void*>(param_1)); fflush(stderr); n++; }
-    }
     return r & 0xffffffffffffff00ULL;  // low byte 0
 }
 

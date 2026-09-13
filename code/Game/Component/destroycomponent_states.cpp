@@ -186,90 +186,14 @@ extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, ui
 // (C++ linkage — declared to match the definition's mangled symbol.)
 void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP);
 
-static bool Trace() {
-    static const bool t = [] {
-        const char* e = std::getenv("BANISHED_DESTROY_TRACE");
-        return e && e[0] && e[0] != '0';
-    }();
-    return t;
-}
-
 // ============================================================
-// Worker release / builder re-seat gate (BANISHED_LIVE_DESTROY_WORKERS)
+// Worker release / builder re-seat
 // ============================================================
 // The WorkPlaceComponent half of a demolition: state-4 enter re-seats the workplace onto
 // the BUILDER profession (FUN_14012f520) and the state-5 tick takes it back off before the
-// old entity dies (FUN_14012f670). Both are now ported+registered (see
-// destroycomponent_workerrelease.cpp and reg_destroy_workers.cpp) but stay OPT-IN: they
-// drive live citizens through the release path mid-demolish, which is exactly the churn
-// that has faulted before. With the flag unset the calls are skipped as they were, and the
-// roster is left as-is — the state that produced the "READ of 0x8 walking a paused
-// workplace roster" crash on 2026-07-25. Graduate into kDefaultOnFlags once a staffed
-// building can be demolished AND upgraded repeatedly without a fault.
-// component_factory_base.h isn't included in this TU; declare the one entry point.
-namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
-static bool DestroyWorkersOn() {
-    static const int s = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_DESTROY_WORKERS") ? 1 : 0;
-    return s == 1;
-}
+// old entity dies (FUN_14012f670). Both are ported+registered (see
+// destroycomponent_workerrelease.cpp and reg_destroy_workers.cpp).
 
-// ============================================================
-// Demolition-labor progress bridge — RETIRED 2026-08-23, now OPT-IN
-// (BANISHED_DESTROY_SYNC_LABOR=1).
-//
-// In retail, DestroyComponent+0x54 (demolition progress) is raised one unit per
-// completed builder demolish-PerformWork, which posts a SendComponentMessage carrying
-// the DestroyComponent type-id → vtable slot 15 (DestroyComponent_MsgReceive
-// 0x14011daf0) → ++comp+0x54. This bridge existed because the standalone CitizenAI
-// executor was believed never to reach that completion node, leaving +0x54 at 0 and
-// wedging the state-5 tick (0x14011c120) on its progress<target gate.
-//
-// That premise is now FALSE, and measured so: with the bridge disabled, a Remove
-// clicked on a burnt building recruited real builders and drove +0x54 to its target
-// through the genuine message path, all the way to worker-release + spawn/scatter.
-// The bridge was no longer standing in for a missing mechanism — it was RACING a
-// working one and masking it, auto-filling the panel's progress bar in ~10s with no
-// citizen involved (which is exactly how it was noticed: "does it need a citizen to
-// work on it?"). Default-ON scaffolding that outlives its gap hides the real thing.
-//
-// Kept, opt-in, for bisecting a future regression in the labor path — set
-// BANISHED_DESTROY_SYNC_LABOR=1 to auto-credit +0x54 again (ramped over
-// BANISHED_DESTROY_DEMO_FRAMES, default 600 ≈ 10s). Inverse of
-// [feedback_no_env_flags_for_working_features]: a verified feature goes default-on, so
-// the stand-in it replaces must come default-off.
-static bool DemoSyncLaborOn() {
-    static const int s = [] {
-        const char* e = std::getenv("BANISHED_DESTROY_SYNC_LABOR");
-        return (e && e[0] && e[0] != '0') ? 1 : 0;   // default OFF; only "=1" enables
-    }();
-    return s == 1;
-}
-static void CreditDemolitionProgress(uintptr_t comp) {
-    int target = static_cast<int>(*reinterpret_cast<uint32_t*>(comp + 0x58));
-    if (target <= 0) return;   // no labor requirement (e.g. REMOVE branch) → nothing to credit
-
-    static const int rampFrames = [] {
-        const char* e = std::getenv("BANISHED_DESTROY_DEMO_FRAMES");
-        int n = (e && e[0]) ? std::atoi(e) : 600;
-        return n < 1 ? 600 : n;
-    }();
-    int inc = target / rampFrames;
-    if (inc < 1) inc = 1;
-    int* prog = reinterpret_cast<int*>(comp + 0x54);
-    int before = *prog;
-    int p = before + inc;
-    if (p > target) p = target;
-    *prog = p;
-    if (Trace()) {
-        static int s_last = -0x7fffffff;
-        if (p != s_last) {
-            s_last = p;
-            std::fprintf(stderr, "[DestroySM] demo-labor bridge comp+0x54 %d -> %d / target %d (inc %d)\n",
-                         before, p, target, inc);
-            std::fflush(stderr);
-        }
-    }
-}
 
 // Owner-entity value from the component's IBP at +0x10.
 static int64_t OwnerEntity(uintptr_t comp) {
@@ -578,12 +502,6 @@ static void Destroy_ScatterContents_c530(int64_t comp, int baseX, int baseY,
         } while (row != depth && remaining > 0);
     }
 
-    if (Trace()) {
-        std::fprintf(stderr, "[DestroySM] scatter c530: %zu type(s), placed %d pile(s) "
-                             "over footprint (%d,%d) %dx%d\n",
-                     list.size(), placed, baseX, baseY, width, depth);
-        std::fflush(stderr);
-    }
 }
 
 // Mark the owner entity for removal + push onto the EntityList removal drain —
@@ -638,12 +556,6 @@ extern "C" char Destroy_State3Enter_d7b0(void* data, void* sm) {
     int nextState = (*reinterpret_cast<int8_t*>(comp + 0x50) == 0) ? 4 : 6;
     ::ControllerLive::RequestStateTransition(sm, nextState);
 
-    if (Trace()) {
-        std::fprintf(stderr, "[DestroySM] state-3 enter comp=%p target(+0x60)=%llx -> %d\n",
-                     data, static_cast<unsigned long long>(
-                         *reinterpret_cast<int64_t*>(comp + 0x60)), nextState);
-        std::fflush(stderr);
-    }
     // RETURN 0, NOT 1 — this is the state-machine ENTER WALK's stop bit, not a
     // success flag. StateMachine::Tick walks tail->parent through EVERY controller
     // node while handlers return 0 and STOPS at the first non-zero. Retail
@@ -674,26 +586,13 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
     int64_t entity = OwnerEntity(comp);
 
     // Re-seat the workplace onto the BUILDER profession (retail FUN_14012f520 on the 2e10
-    // comp) — ported in destroycomponent_workerrelease.cpp, opt-in per DestroyWorkersOn().
+    // comp) — ported in destroycomponent_workerrelease.cpp.
     int64_t wp = FindOn(entity, s_find2e10);
     if (wp) {
         typedef void (*fn_f520_t)(int64_t);
         static fn_f520_t f520 = reinterpret_cast<fn_f520_t>(
             ResolveAddr(Module::Exe, 0x14012f520));
-        if (f520 && DestroyWorkersOn()) {
-            f520(wp);
-        } else {
-            static bool warned = false;
-            if (!warned) {
-                warned = true;
-                std::fprintf(stderr, "[DestroySM] FUN_14012f520 (state-4 workplace re-seat) "
-                             "SKIPPED — %s. The workplace keeps its pre-demolition profession "
-                             "and roster.\n",
-                             f520 ? "BANISHED_LIVE_DESTROY_WORKERS is not set (opt-in)"
-                                  : "NOT REGISTERED (resolved to 0)");
-                std::fflush(stderr);
-            }
-        }
+        if (f520) f520(wp);
     }
 
     int64_t prod = FindOn(entity, s_findD6c0);
@@ -731,12 +630,6 @@ extern "C" char Destroy_State4Enter_cfd0(void* data, void* sm) {
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIBP, mem);
             else workIBP = reinterpret_cast<int64_t>(mem);
             s_ec60(yard, 1, 0, &workIBP);
-            if (Trace()) {
-                std::fprintf(stderr, "[DestroySM] state-4 enter: queued ClearStorage "
-                                     "work=%p on yard=%llx\n",
-                             mem, static_cast<unsigned long long>(yard));
-                std::fflush(stderr);
-            }
         }
     }
     // Retail 0x14011cfd0 ends `return uVar3 & 0xffffffffffffff00` — AL zeroed, walk
@@ -756,10 +649,6 @@ extern "C" char Destroy_State4Tick_cec0(void* data, void* sm, void* /*time*/) {
     if (!Destroy_ReclaimPending_ea20(yard)) {
         ::ControllerLive::RequestStateTransition(sm, 5);
         if (yard && s_eb50) s_eb50(yard);
-        if (Trace()) {
-            std::fprintf(stderr, "[DestroySM] state-4 tick: storage drained -> 5\n");
-            std::fflush(stderr);
-        }
     }
     return 1;
 }
@@ -780,15 +669,6 @@ extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
     // fall to the ELSE branch: scatter + immediate mark-for-removal, NO spawn — the
     // "building just vanishes" symptom. Log the decision inputs so a live upgrade
     // shows exactly why (prod null vs Delivered==0).
-    if (Trace()) {
-        std::fprintf(stderr, "[DestroySM] state-5 enter DECIDE: buildComp(d6c0)=%llx "
-                     "delivered(+0x48)=%d required=%d target(+0x60)=%llx -> %s branch\n",
-                     static_cast<unsigned long long>(prod),
-                     Yard_Delivered(prod), Yard_Required(prod),
-                     static_cast<unsigned long long>(*reinterpret_cast<int64_t*>(comp + 0x60)),
-                     (prod && Yard_Delivered(prod) != 0) ? "REFUND+BUILD" : "REMOVE(no-spawn)");
-        std::fflush(stderr);
-    }
 
     if (prod && Yard_Delivered(prod) != 0) {
         // Half-materials refund into +0x58.
@@ -813,11 +693,6 @@ extern "C" char Destroy_State5Enter_cc70(void* data, void* sm) {
                 else workIBP = reinterpret_cast<int64_t>(mem);
                 s_ec60(yard, 0x2001, 0, &workIBP);
             }
-        }
-        if (Trace()) {
-            std::fprintf(stderr, "[DestroySM] state-5 enter: refund=%d, queued "
-                                 "BuildStructure\n", recovered);
-            std::fflush(stderr);
         }
     } else {
         // Nothing recoverable: scatter old contents (over the footprint) + notify
@@ -860,23 +735,8 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
     // (observed live 2026-07-20: instant mark-for-removal froze the open panel
     // via the 0x400 bit and the upgrade spawn logic misfired).
     //
-    // Executor-gap bridge: the organic +0x54 credit (a completed builder demolish
-    // PerformWork → SendComponentMessage → slot 15) never fires in standalone, so
-    // credit it here toward the target, standing in for the missing labor message.
-    if (DemoSyncLaborOn()) CreditDemolitionProgress(comp);
-
     if (*reinterpret_cast<int*>(comp + 0x54) <
         static_cast<int>(*reinterpret_cast<uint32_t*>(comp + 0x58))) {
-        if (Trace()) {
-            static int throttle = 0;
-            if ((throttle++ & 0x3f) == 0) {
-                std::fprintf(stderr, "[DestroySM] state-5 tick: waiting demolition "
-                                     "progress %d/%u\n",
-                             *reinterpret_cast<int*>(comp + 0x54),
-                             *reinterpret_cast<uint32_t*>(comp + 0x58));
-                std::fflush(stderr);
-            }
-        }
         return 1;
     }
 
@@ -929,24 +789,11 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
 
     // 2) Release workers from the old workplace, i.e. leave the BUILDER profession
     //    (FUN_14012f670 = workplacecomponent.cpp WorkPlaceComponent_LeaveBuilderProfession,
-    //    registered by reg_destroy_workers.cpp). Opt-in per DestroyWorkersOn(). Skipping it
-    //    is what leaves the roster half-torn-down on the entity we are about to remove.
+    //    registered by reg_destroy_workers.cpp). Skipping it is what would leave the
+    //    roster half-torn-down on the entity we are about to remove.
     int64_t wp = FindOn(entity, s_find2e10);
     if (wp) {
-        if (s_f670 && DestroyWorkersOn()) {
-            s_f670(wp);
-        } else {
-            static bool warned = false;
-            if (!warned) {
-                warned = true;
-                std::fprintf(stderr, "[DestroySM] FUN_14012f670 (worker release) SKIPPED — %s. "
-                             "The removed entity keeps its workers and its Builder-bucket "
-                             "registration.\n",
-                             s_f670 ? "BANISHED_LIVE_DESTROY_WORKERS is not set (opt-in)"
-                                    : "NOT REGISTERED (resolved to 0)");
-                std::fflush(stderr);
-            }
-        }
+        if (s_f670) s_f670(wp);
     }
 
     // 3) Trade notify + mark the old entity for removal.
@@ -1026,12 +873,6 @@ extern "C" char Destroy_State5Tick_c120(void* data, void* sm, void* /*time*/) {
                         int64_t newProd = FindOn(reinterpret_cast<int64_t>(newEntity), s_findD6c0);
                         g_pConstructionDemoSite   = reinterpret_cast<void*>(newProd);
                         g_pConstructionDemoEntity = newEntity;
-                        if (Trace()) {
-                            std::fprintf(stderr, "[DestroySM] demo site handed to the "
-                                         "replacement: buildComp=%llx entity=%p\n",
-                                         static_cast<unsigned long long>(newProd), newEntity);
-                            std::fflush(stderr);
-                        }
                     }
 
                     std::fprintf(stderr, "[DestroySM] UPGRADE SPAWN: new entity=%p from "
@@ -1096,20 +937,7 @@ static void Destroy_ReseatWorkplaceOnBuilder(int64_t entity) {
     typedef void (*fn_f520_t)(int64_t);
     static fn_f520_t f520 = reinterpret_cast<fn_f520_t>(
         ResolveAddr(Module::Exe, 0x14012f520));
-    if (f520 && DestroyWorkersOn()) {
-        f520(wp);
-        return;
-    }
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        std::fprintf(stderr, "[DestroySM] FUN_14012f520 (panel-button workplace re-seat) "
-                     "SKIPPED — %s. The button still requests state 5; the workplace just "
-                     "keeps its old profession and roster.\n",
-                     f520 ? "BANISHED_LIVE_DESTROY_WORKERS is not set (opt-in)"
-                          : "NOT REGISTERED (resolved to 0)");
-        std::fflush(stderr);
-    }
+    if (f520) f520(wp);
 }
 
 // State 7 event 0 — 0x14011d2a0. "Rebuild" (buttonRebuild) and "Reclaim"
@@ -1140,13 +968,6 @@ extern "C" char Destroy_State7Event0_Rebuild_d2a0(void* data, void* sm) {
     // RequestStateTransition bounds-checks the index instead, so a not-yet-settled
     // machine simply defers the request by one tick. See the note on that helper.
     ::ControllerLive::RequestStateTransition(sm, 5);
-    if (Trace()) {
-        std::fprintf(stderr, "[DestroySM] state-7 event 0 (REBUILD) comp=%llx entity=%llx "
-                             "-> request state 5\n",
-                     static_cast<unsigned long long>(comp),
-                     static_cast<unsigned long long>(entity));
-        std::fflush(stderr);
-    }
     return 1;
 }
 
@@ -1165,14 +986,6 @@ extern "C" char Destroy_State7Event1_Remove_d1a0(void* data, void* sm) {
     if (prod) *reinterpret_cast<int8_t*>(comp + 0x51) = 1;
 
     ::ControllerLive::RequestStateTransition(sm, 5);
-    if (Trace()) {
-        std::fprintf(stderr, "[DestroySM] state-7 event 1 (REMOVE) comp=%llx entity=%llx "
-                             "build=%llx -> request state 5\n",
-                     static_cast<unsigned long long>(comp),
-                     static_cast<unsigned long long>(entity),
-                     static_cast<unsigned long long>(prod));
-        std::fflush(stderr);
-    }
     return 1;
 }
 
@@ -1187,10 +1000,6 @@ extern "C" char Destroy_State7Event1_Remove_d1a0(void* data, void* sm) {
 // registration exists in dd00, so the handler does too.
 extern "C" char Destroy_State6Event2_ToRubble_d390(void* /*data*/, void* sm) {
     ::ControllerLive::RequestStateTransition(sm, 7);
-    if (Trace()) {
-        std::fprintf(stderr, "[DestroySM] state-6 event 2 -> request state 7\n");
-        std::fflush(stderr);
-    }
     return 1;
 }
 
@@ -1228,12 +1037,6 @@ extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm) {
         int64_t wp = FindOn(entity, s_find2e10);
         if (wp && s_f670) s_f670(wp);
         ::ControllerLive::RequestStateTransition(sm, 7);
-        if (Trace()) {
-            std::fprintf(stderr, "[DestroySM] state-4/5 event 0 (CANCEL) comp=%llx "
-                                 "+0x50 set -> request state 7\n",
-                         static_cast<unsigned long long>(comp));
-            std::fflush(stderr);
-        }
         return 1;
     }
 
@@ -1276,14 +1079,6 @@ extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm) {
     int64_t wp = FindOn(entity, s_find2e10);
     if (wp && s_f670) s_f670(wp);
 
-    if (Trace()) {
-        std::fprintf(stderr, "[DestroySM] state-4/5 event 0 (CANCEL) comp=%llx entity=%llx "
-                             "build=%llx -> request state %d\n",
-                     static_cast<unsigned long long>(comp),
-                     static_cast<unsigned long long>(entity),
-                     static_cast<unsigned long long>(build), next);
-        std::fflush(stderr);
-    }
     return 1;
 }
 

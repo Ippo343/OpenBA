@@ -70,22 +70,6 @@ static inline bool MoveTickTraceOn() {
     return s_mtTrace == 1;
 }
 
-// Per-action executor diagnostic (BANISHED_EXEC_TRACE). Default-off. Logs each
-// action-stack transition (a main-slot return != 1 = the action popped/pushed
-// rather than "stay") with the acting stack, the surviving top index, the action's
-// vtable address, and the return code. Lets us follow a citizen's pushed sequence
-// (e.g. the forester cut gauntlet MoveTo→PerformWork→…→CreateRawMaterial) and see
-// exactly which action completes vs aborts without producing.
-static int s_execTrace = -1;
-static inline bool ExecTraceOn() {
-    if (s_execTrace < 0) {
-        const char* e = std::getenv("BANISHED_EXEC_TRACE");
-        s_execTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s_execTrace == 1;
-}
-static int s_execTraceCount = 0;
-
 // ---------------------------------------------------------------------------
 // Action vtable slot signatures (return INT — bug #7).
 //   precheck (+0x20): (node, stack)
@@ -199,14 +183,6 @@ LAB_d17:
                              local_res8 = reinterpret_cast<int64_t*>(local_res8[2])) {
                             CheckPtr(&local_res8);
                             iVar3 = CallMain(local_res8, param_1, param_2);
-                            if (ExecTraceOn() && iVar3 != 1 && s_execTraceCount < 400) {
-                                ++s_execTraceCount;
-                                fprintf(stderr,
-                                    "[Exec] stack=%p top=%d action_vt=%p ret=%d\n",
-                                    (void*)param_1, static_cast<int>(param_1[3]),
-                                    *reinterpret_cast<void**>(local_res8), iVar3);
-                                fflush(stderr);
-                            }
                             if (iVar3 != 1) goto LAB_d85;
                             CheckPtr(&local_res8);
                         }
@@ -699,22 +675,15 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         CheckPtr(self + 0x70);
         uint32_t pickId = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(self + 0x70) + 0x28);
         // First time through (pick-id still unregistered) register the citizen mesh in
-        // the Picking::Scene so it becomes clickable — env-gated default-off so the
-        // default build / non-picking flows stay byte-identical.
+        // the Picking::Scene so it becomes clickable.
         if (static_cast<int>(pickId) < 0) {
-            static int s_pickOn = -1;
-            if (s_pickOn < 0) {
-                s_pickOn = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_PICKING") ? 1 : 0;
-            }
-            if (s_pickOn == 1) {
-                int newId = RegisterCitizenPickMesh(self);
-                pickId = static_cast<uint32_t>(newId);
-                if (MoveTickTraceOn()) {
-                    static int s_pickLog = 0;
-                    if (s_pickLog < 8) { ++s_pickLog;
-                        fprintf(stderr, "[PickReg] self=%p pickId=%d\n", (void*)self, newId);
-                        fflush(stderr);
-                    }
+            int newId = RegisterCitizenPickMesh(self);
+            pickId = static_cast<uint32_t>(newId);
+            if (MoveTickTraceOn()) {
+                static int s_pickLog = 0;
+                if (s_pickLog < 8) { ++s_pickLog;
+                    fprintf(stderr, "[PickReg] self=%p pickId=%d\n", (void*)self, newId);
+                    fflush(stderr);
                 }
             }
         }

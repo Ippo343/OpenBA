@@ -113,18 +113,6 @@
 #include <set>
 #include <vector>
 
-// ---------------------------------------------------------------------------
-// trace gate (shares BANISHED_BUILD_TRACE with the construction pipeline)
-// ---------------------------------------------------------------------------
-static int s_cac_trace = -1;
-static bool CAC_Trace() {
-    if (s_cac_trace < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_TRACE");
-        s_cac_trace = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s_cac_trace == 1;
-}
-
 namespace {
 
 // ---- leaf helper typedefs --------------------------------------------------
@@ -243,28 +231,7 @@ void NormalizeMismatched(void* citizenV, uintptr_t reg) {
     // (so citizens can be assigned to build it) plus the production one. FindWorkplaceComp
     // returns whichever the type scan hits FIRST, so if that is the construction seat the
     // comparison below is against the wrong profession and a correctly-seated worker gets
-    // reset to laborer. Dump every WPC on the entity so the trace shows which was picked.
-    if (std::getenv("BANISHED_SEAT_TRACE") && reqProf != curProf) {
-        fprintf(stderr, "[SeatReset] citizen=%p picked wpComp=%p reqProf=0x%llx curProf=0x%llx\n",
-                citizenV, wpComp, (unsigned long long)reqProf, (unsigned long long)curProf);
-        uintptr_t ent = reinterpret_cast<uintptr_t>(assigned);
-        int cnt = *reinterpret_cast<int*>(ent + 0x38);
-        uintptr_t arr = *reinterpret_cast<uintptr_t*>(ent + 0x30);
-        for (int i = 0; arr && i < cnt; ++i) {
-            void* comp = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-            if (!comp) continue;
-            uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
-            if (!vt) continue;
-            uint32_t tid = reinterpret_cast<uint32_t(*)(void*)>(
-                *reinterpret_cast<void**>(vt + 0x10))(comp);
-            fprintf(stderr, "[SeatReset]   comp[%d]=%p tid=0x%x +0x48=0x%llx%s\n",
-                    i, comp, tid,
-                    (unsigned long long)*reinterpret_cast<uint64_t*>(
-                        reinterpret_cast<uintptr_t>(comp) + 0x48),
-                    comp == wpComp ? "  <-- PICKED" : "");
-        }
-        fflush(stderr);
-    }
+    // reset to laborer.
 
     if (reqProf == curProf) return;                     // already matches
 
@@ -354,12 +321,9 @@ extern bool g_wpcRosterOnly;
 // CitizenComponent_impl_43b0 (0x1400d43b0)
 // ===========================================================================
 extern "C" void CitizenAssignCitizens(void* ctxV) {
-    if (CAC_Trace()) std::fprintf(stderr, "[BuildTrace] AssignCitizens: ENTER\n");
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     EnsureResolved();
     if (!s_assignHousing || !s_findWorkplace || !s_cellOf) {
-        if (CAC_Trace()) std::fprintf(stderr, "[BuildTrace] AssignCitizens: early-return (helpers ah=%p fw=%p cell=%p)\n",
-                                      (void*)s_assignHousing, (void*)s_findWorkplace, (void*)s_cellOf);
         return;
     }
     (void)ctxV;   // ctx (PathGraph) — its cache is subsumed by ComputeCost
@@ -516,20 +480,6 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
             // It was not: measured, this arm never fired for that case. The real cause
             // was an unguarded b310 in ConsumeProduce_Execute pausing the building
             // (see consumeproduce.cpp).
-            if (std::getenv("BANISHED_SEAT_TRACE") &&
-                *reinterpret_cast<int64_t*>(cb + 0x248) != 0) {
-                int64_t defKey = *reinterpret_cast<int64_t*>(
-                    reinterpret_cast<uint8_t*>(reg) + 0x30);
-                fprintf(stderr, "[Seat5B] STRIP citizen=%p prof(+0x1f0)=0x%llx "
-                                "job(+0x248)=0x%llx newKey=0x%llx laborerKey=0x%llx%s\n",
-                        c,
-                        (unsigned long long)*reinterpret_cast<int64_t*>(cb + 0x1f0),
-                        (unsigned long long)*reinterpret_cast<int64_t*>(cb + 0x248),
-                        (unsigned long long)key, (unsigned long long)defKey,
-                        *reinterpret_cast<int64_t*>(cb + 0x1f0) != defKey
-                            ? "  (employed, not a laborer — retail does this too)" : "");
-                fflush(stderr);
-            }
             int64_t nullWp = 0;
             s_assignHousing(c, &nullWp);
             *reinterpret_cast<int64_t*>(cb + 0x1f0) = key;
@@ -540,11 +490,6 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
     }
 
     g_wpcRosterOnly = prevRoster;
-
-    if (CAC_Trace())
-        std::fprintf(stderr,
-            "[BuildTrace] AssignCitizens: %zu needs, assigned %d worker(s)\n",
-            needs.size(), assignedTotal);
 }
 
 // ===========================================================================

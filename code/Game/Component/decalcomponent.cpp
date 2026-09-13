@@ -79,10 +79,6 @@ static bool s_initialized = false;
 // the slot's owner ptr (+0), and shrink the two sub-lists embedded at +8 and
 // +0x18 to zero length. 1:1 port of the exe body.
 void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId) {
-    // [diag] BANISHED_DECAL_TRACE — release visibility (stale-icon hunt).
-    static int s_relTrace = -1;
-    if (s_relTrace < 0) { const char* e = getenv("BANISHED_DECAL_TRACE");
-                          s_relTrace = (e && e[0] && e[0] != '0') ? 1 : 0; }
     uintptr_t base = *(uintptr_t*)((uintptr_t)terrainDecalSys + 0x1f0);
     uintptr_t slot = base + (uintptr_t)decalId * 0x60;
     if (*(int*)(slot + 0x28) == decalId) {
@@ -92,14 +88,6 @@ void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId) {
             s_fn_ResizeStride14((void*)(slot + 8), 0);
         if (s_fn_ResizeStride2)
             s_fn_ResizeStride2((void*)(slot + 0x18), 0);
-        if (s_relTrace) {
-            fprintf(stderr, "[Decal] Release id=%d FREED (sys=%p)\n", decalId, terrainDecalSys);
-            fflush(stderr);
-        }
-    } else if (s_relTrace) {
-        fprintf(stderr, "[Decal] Release id=%d MISMATCH slot.id=%d -- slot NOT freed\n",
-                decalId, *(int*)(slot + 0x28));
-        fflush(stderr);
     }
 }
 
@@ -198,13 +186,6 @@ typedef void (*fn_EntityFlagUpdate_t)(void* entity);
 static fn_EntityFlagUpdate_t s_fn_EntityFlagUpdate = nullptr;
 static bool s_drawHelpersInit = false;
 
-static bool DecalTraceOn() {
-    static int v = -1;
-    if (v < 0) { const char* e = getenv("BANISHED_DECAL_TRACE");
-                 v = (e && *e && e[0] != '0') ? 1 : 0; }
-    return v == 1;
-}
-
 // DecalDescription type-id (DAT_1401c75b8). That .rdata address resolves NULL in the
 // standalone exe, so fall back to the runtime type
 // registry (valid after Object::Factory::Startup) — same approach as StorageDisplayComponent.
@@ -252,10 +233,6 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
     if (ownerEnt && s_fn_FindComp_Model) {
         uintptr_t exeBuf[2] = {0, 0};
         s_fn_FindComp_Model(ownerEnt, exeBuf);
-        static int s_pathLog = 0;
-        if (DecalTraceOn() && s_pathLog < 4) { ++s_pathLog;
-            fprintf(stderr, "[Decal::Find] exe 0x140003f60 -> %p (seeded-typeid path %s)\n",
-                    (void*)exeBuf[0], exeBuf[0] ? "OK" : "FAILED->fallback"); fflush(stderr); }
         if (exeBuf[0]) {
             if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(exeBuf);
             return reinterpret_cast<void*>(exeBuf[0]);
@@ -286,14 +263,7 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
 
 void DecalComponent_Draw(DecalComponent* self) {
     EnsureDrawHelpers();
-    static int s_dbg = 0;
-    bool trc = DecalTraceOn() && (s_dbg < 30);
-    if (trc) { ++s_dbg;
-        fprintf(stderr, "[Decal] Draw ENTER self=%p gs=%p findMap=%p findModel=%p\n",
-                (void*)self, s_pGameStateDraw ? *s_pGameStateDraw : nullptr,
-                (void*)s_fn_FindComp_Map, (void*)s_fn_FindComp_Model); fflush(stderr); }
     if (!self || !s_pGameStateDraw || !*s_pGameStateDraw) {
-        if (trc) { fprintf(stderr, "[Decal]   bail: no gamestate\n"); fflush(stderr); }
         return;
     }
     uintptr_t selfA = reinterpret_cast<uintptr_t>(self);
@@ -305,7 +275,6 @@ void DecalComponent_Draw(DecalComponent* self) {
     if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(mapBuf);
     uintptr_t mapComp = mapBuf[0];
     if (!mapComp) {
-        if (trc) { fprintf(stderr, "[Decal]   bail: no MapComponent\n"); fflush(stderr); }
         return;
     }
 
@@ -320,19 +289,11 @@ void DecalComponent_Draw(DecalComponent* self) {
     // retail); it selects which atlas cell of the tiled-decal material this building's
     // foundation samples. Defaults to 0 if no ModelComponent is found.
     int variant = 0;
-    float mdlPos[3] = {0, 0, 0};   // building's rendered world pos (ModelComponent+0x148 Transform +0x10..0x18)
-    int mdlVar166 = -1;
-    void* mdlDesc = nullptr;
     if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(reinterpret_cast<void*>(selfA + 0x10));
     void* modelComp = FindModelComponentOnOwner(*reinterpret_cast<void**>(selfA + 0x10));
     if (modelComp != nullptr) {
         uintptr_t mc = reinterpret_cast<uintptr_t>(modelComp);
         variant   = *reinterpret_cast<int16_t*>(mc + 0x164);
-        mdlVar166 = *reinterpret_cast<int16_t*>(mc + 0x166);
-        mdlPos[0] = *reinterpret_cast<float*>(mc + 0x148 + 0x10);
-        mdlPos[1] = *reinterpret_cast<float*>(mc + 0x148 + 0x14);
-        mdlPos[2] = *reinterpret_cast<float*>(mc + 0x148 + 0x18);
-        mdlDesc   = *reinterpret_cast<void**>(mc + 0x18);
     }
 
     // DecalDescription = IsDerivedFrom(self+0x18, DecalDescription typeId) ? self+0x18 : null.
@@ -343,8 +304,6 @@ void DecalComponent_Draw(DecalComponent* self) {
         s_fn_IsDerivedFrom_dispatch(obj, decalTid))
         decalDesc = obj;
     if (!decalDesc) {
-        if (trc) { fprintf(stderr, "[Decal]   bail: obj=%p not DecalDescription (tid=0x%08x)\n",
-                           obj, decalTid); fflush(stderr); }
         return;
     }
     uintptr_t dd = reinterpret_cast<uintptr_t>(decalDesc);
@@ -387,15 +346,12 @@ void DecalComponent_Draw(DecalComponent* self) {
     uintptr_t gs = reinterpret_cast<uintptr_t>(*s_pGameStateDraw);
     uintptr_t decalSys = *reinterpret_cast<uintptr_t*>(gs + 0x110);
     if (!decalSys) {
-        if (trc) { fprintf(stderr, "[Decal]   bail: no decalSys (gs+0x110)\n"); fflush(stderr); }
         return;
     }
 
     // material = DecalDescription material-array[decalState].
     uintptr_t matArray = *reinterpret_cast<uintptr_t*>(dd + 0x28);
     if (!matArray) {
-        if (trc) { fprintf(stderr, "[Decal]   bail: no material array (dd+0x28) state=%u\n",
-                           self->decalState); fflush(stderr); }
         return;
     }
     int64_t material = *reinterpret_cast<int64_t*>(matArray + static_cast<uintptr_t>(self->decalState) * 8);
@@ -414,105 +370,6 @@ void DecalComponent_Draw(DecalComponent* self) {
         *reinterpret_cast<uint32_t*>(&uv[2]), *reinterpret_cast<uint32_t*>(&uv[3]),
         '\0', 0, 0, 0, p19);
     self->decalId = id;
-
-    // Diagnostic (BANISHED_DECAL_TRACE) — throttled. Confirms the decal path fires and
-    // whether AddDecal placed a slot (id>=0) or bailed (id==-1, e.g. null material).
-    static int s_traceOn = -1;
-    if (s_traceOn < 0) { const char* e = getenv("BANISHED_DECAL_TRACE");
-                         s_traceOn = (e && *e && e[0] != '0') ? 1 : 0; }
-    if (s_traceOn) {
-        static int s_budget = 0;
-        if (s_budget < 40) {
-            ++s_budget;
-            // Read back the tessellated slot geometry (slot = decalSys+0x1f0 base + id*0x60):
-            //   +0x08 vtx base, +0x10 vtxCount, +0x18 idx base, +0x20 idxCount.
-            // First vertex position shorts at vtx+0x00/+0x02/+0x04 (from caa0).
-            // Also read the DIFFUSE UV int16 pair (vtx+0x08/+0x0A) for the first 3 verts — this
-            // is what the tessellator T_1f0 transform writes; it must span ~0..4096 across the
-            // footprint (VS scales by 1/4096). If it reads (0,0/1) the UV collapsed (the bug);
-            // non-zero spread confirms the ace40 chain fix (uvRect + 4096 scale restored).
-            long vtxCount = -1, idxCount = -1; int px = 0, py = 0, pz = 0; void* vb = nullptr;
-            int uv0u = -1, uv0v = -1, uv1u = -1, uv1v = -1, uv2u = -1, uv2v = -1; int stride = 0x14;
-            // texcoord.zw (vtx +0xC/+0xE) — the tiled-mask atlas rect written by cc10 from the
-            // DAT_1401c23d0 LUT. For a tiled decal (tiled=1) these must be non-zero (~128..3968);
-            // if 0 the LUT fallback didn't fire and the TiledDecal mask samples empty -> invisible.
-            int zw0z = -1, zw0w = -1, zw1z = -1, zw1w = -1;
-            // Objective geometry-health scan (confirms the ace40 dedup-index fix): the
-            // maximum index must be < vtxCount (no out-of-range fetch) and the vertex
-            // position bbox must hug the footprint (no stray vertex at the origin, which
-            // was the "sliver to map center" signature).
-            int maxIdx = -1, oobCount = -1; int vminX = 0, vmaxX = 0, vminY = 0, vmaxY = 0;
-            if (id >= 0) {
-                uintptr_t sbase = *reinterpret_cast<uintptr_t*>(decalSys + 0x1f0);
-                if (sbase) {
-                    uintptr_t slot = sbase + static_cast<uintptr_t>(id) * 0x60;
-                    vb       = *reinterpret_cast<void**>(slot + 0x08);
-                    vtxCount = *reinterpret_cast<int32_t*>(slot + 0x10);
-                    idxCount = *reinterpret_cast<int32_t*>(slot + 0x20);
-                    if (vb) { px = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x00);
-                              py = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x02);
-                              pz = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x04);
-                              uv0u = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x08);
-                              uv0v = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x0A);
-                              uv1u = *reinterpret_cast<int16_t*>((uintptr_t)vb + stride + 0x08);
-                              uv1v = *reinterpret_cast<int16_t*>((uintptr_t)vb + stride + 0x0A);
-                              uv2u = *reinterpret_cast<int16_t*>((uintptr_t)vb + 2*stride + 0x08);
-                              uv2v = *reinterpret_cast<int16_t*>((uintptr_t)vb + 2*stride + 0x0A);
-                              zw0z = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x0C);
-                              zw0w = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x0E);
-                              zw1z = *reinterpret_cast<int16_t*>((uintptr_t)vb + stride + 0x0C);
-                              zw1w = *reinterpret_cast<int16_t*>((uintptr_t)vb + stride + 0x0E);
-                              vminX = vmaxX = px; vminY = vmaxY = py;
-                              for (long vi = 0; vi < vtxCount && vi < 4096; ++vi) {
-                                  int x = *reinterpret_cast<int16_t*>((uintptr_t)vb + vi*stride + 0x00);
-                                  int y = *reinterpret_cast<int16_t*>((uintptr_t)vb + vi*stride + 0x02);
-                                  if (x < vminX) vminX = x; if (x > vmaxX) vmaxX = x;
-                                  if (y < vminY) vminY = y; if (y > vmaxY) vmaxY = y;
-                              } }
-                    uint16_t* ib = *reinterpret_cast<uint16_t**>(slot + 0x18);
-                    if (ib && idxCount > 0) { maxIdx = 0; oobCount = 0;
-                        for (long ii = 0; ii < idxCount && ii < 4096; ++ii) {
-                            int v = ib[ii]; if (v > maxIdx) maxIdx = v;
-                            if (v >= vtxCount) ++oobCount;
-                        } }
-                    // stored slot footprint (b0d80 wrote iVar2+tile here) + the decal
-                    // system's centering fields (0xc0 = map dim, 0xc4 = ?). caa0 renders
-                    // each vertex at storedTile - (0xc0>>1); if 0xc4 != 0xc0 the decal is
-                    // shifted off its building by iVar2 = (0xc0-0xc4)>>1.
-                    int c0 = *reinterpret_cast<int32_t*>(decalSys + 0xc0);
-                    int c4 = *reinterpret_cast<int32_t*>(decalSys + 0xc4);
-                    fprintf(stderr, "[Decal]   slotFP min(%d,%d) max(%d,%d) | f0xc0=%d f0xc4=%d "
-                            "iVar2=%d  (tile min was %d,%d) | mdlPos=(%.1f,%.1f,%.1f) "
-                            "decalV0world=(%d,%d) [expect ~mdlPos.x/z]\n",
-                            *reinterpret_cast<int32_t*>(slot + 0x2c), *reinterpret_cast<int32_t*>(slot + 0x30),
-                            *reinterpret_cast<int32_t*>(slot + 0x34), *reinterpret_cast<int32_t*>(slot + 0x38),
-                            c0, c4, (c0 - c4) >> 1, minX, minY,
-                            mdlPos[0], mdlPos[1], mdlPos[2], px, py);
-                }
-            }
-            // p10 = dd+0x48 is the tessellator's UV *divisor* (ace40 cVar1==0 branch,
-            // fVar_div): the per-tile UV is (uvRect / p10) * 4096. If p10 is large (or the
-            // uvRect is the normalized {0,0,1,1} default while p10 expects texel units) the
-            // UV collapses toward texel (0,0) -> the decal samples the empty corner of the
-            // dirt-splat atlas -> transparent black. Logged to pin the exact bad input.
-            float p10f = *reinterpret_cast<float*>(&p10);
-            fprintf(stderr, "[Decal] Draw self=%p tile=(%d,%d %dx%d) rot=%d tiled=%d "
-                    "mat=%p variant=%d/%d alpha=%d uv=(%.3f,%.3f,%.3f,%.3f) p10=%g(0x%08x) sys=%p id=%d "
-                    "| MDL model=%p desc=%p var166=%d "
-                    "| vtx=%ld idx=%ld vb=%p v0pos=(%d,%d,%d) uvINT16=[(%d,%d)(%d,%d)(%d,%d)] "
-                    "zwINT16=[(%d,%d)(%d,%d)] "
-                    "maxIdx=%d oob=%d posBBox=x[%d,%d]y[%d,%d]\n",
-                    (void*)self, minX, minY, width, height, (int)rotation, (int)tiledFlag,
-                    (void*)material, variant, variantCount, alpha,
-                    uv[0], uv[1], uv[2], uv[3], p10f, p10, (void*)decalSys, id,
-                    modelComp, mdlDesc, mdlVar166,
-                    vtxCount, idxCount, vb, px, py, pz,
-                    uv0u, uv0v, uv1u, uv1v, uv2u, uv2v,
-                    zw0z, zw0w, zw1z, zw1w,
-                    maxIdx, oobCount, vminX, vmaxX, vminY, vmaxY);
-            fflush(stderr);
-        }
-    }
 }
 
 // ============================================================
@@ -523,17 +380,6 @@ void DecalComponent_OnCreate(DecalComponent* self) {
     // lazy-resolve (nothing calls InitFuncs; without this the terrain-decal remover
     // stays null and every released clear-job icon persists on screen forever)
     DecalComponent_InitFuncs();
-    // [diag] BANISHED_DECAL_TRACE — detach visibility (stale-icon hunt): decalId=-1
-    // here means this component never owned a placed decal (the visible icon belongs
-    // to some other placement path).
-    static int s_relTrace = -1;
-    if (s_relTrace < 0) { const char* e = getenv("BANISHED_DECAL_TRACE");
-                          s_relTrace = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    if (s_relTrace) {
-        fprintf(stderr, "[Decal] OnCreate(detach) self=%p decalId=%d remover=%p\n",
-                (void*)self, self->decalId, (void*)s_fn_TerrainDecalRemove);
-        fflush(stderr);
-    }
     if (self->decalId >= 0) {
         // Remove decal from terrain decal subsystem
         if (s_fn_TerrainDecalRemove && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
@@ -651,10 +497,6 @@ static void DecalComponent_SetDrawFlag(void* s, bool on) {
 // index 4 — Startup(self): bucket the owner so the tree walk drives the build-once.
 static void DecalComponent_StartupVSlot(void* s) {
     DecalComponent_SetDrawFlag(s, true);
-    if (DecalTraceOn()) {
-        static int n = 0;
-        if (n < 8) { ++n; fprintf(stderr, "[Decal] Startup bucketed self=%p\n", s); fflush(stderr); }
-    }
 }
 // index 6 — Draw(self): build + submit the terrain decal.
 static void DecalComponent_DrawVSlot(void* s) {
@@ -687,10 +529,6 @@ extern "C" void DecalComponent_EnterBuiltState(void* s) {
     cc->decalScale = 1.0f;
     DecalComponent_OnCreate(cc);                 // release the current slot (decalId = -1)
     DecalComponent_SetDrawFlag(s, true);         // re-bucket: the tick rebuilds it at 1.0
-    if (DecalTraceOn()) {
-        fprintf(stderr, "[Decal] EnterBuiltState self=%p -> alpha 1.0, rebuilding\n", s);
-        fflush(stderr);
-    }
 }
 
 // Find the owner entity's DecalComponent and run the completion ramp on it.
@@ -723,12 +561,10 @@ static void DecalComponent_FinishLiveVtable() {
     // save/load wave 2026-08-28 — previously the class fell through to base-only
     // Component_SerializeReimpl and decalScale/decalState silently reset on load.
     DecalComponent_LiveVtable[3] = reinterpret_cast<void*>(&DecalComponent_ShutdownVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_DECAL")) {
-        DecalComponent_LiveVtable[4] = reinterpret_cast<void*>(&DecalComponent_StartupVSlot);
-        DecalComponent_LiveVtable[6] = reinterpret_cast<void*>(&DecalComponent_DrawVSlot);
-        DecalComponent_LiveVtable[7] = reinterpret_cast<void*>(&DecalComponent_OnCreateVSlot);
-        DecalComponent_LiveVtable[8] = reinterpret_cast<void*>(&DecalComponent_TickVSlot);
-    }
+    DecalComponent_LiveVtable[4] = reinterpret_cast<void*>(&DecalComponent_StartupVSlot);
+    DecalComponent_LiveVtable[6] = reinterpret_cast<void*>(&DecalComponent_DrawVSlot);
+    DecalComponent_LiveVtable[7] = reinterpret_cast<void*>(&DecalComponent_OnCreateVSlot);
+    DecalComponent_LiveVtable[8] = reinterpret_cast<void*>(&DecalComponent_TickVSlot);
 }
 // Retail ctor-body scalar defaults (DecalComponent_Ctor, exe 0x14011b8f0):
 //     c7 43 28 00000000   mov [rbx+0x28], 0        decalState = 0

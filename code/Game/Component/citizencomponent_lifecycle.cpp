@@ -395,40 +395,12 @@ extern "C" void CitizenComponent_PostLoadApply(void* selfV) {
         if (s_fn_SetupAdult) s_fn_SetupAdult(p);
     }
 
-    // ⚠ KNOWN DEVIATION, opt-in via BANISHED_LIVE_CITIZEN_POSTLOAD_TOOL.
-    // Retail's 0x1401140f0 unconditionally re-shows the carried tool here
-    // (Entity_impl_73b0 0x1401173b0) when the restored toolId != -1. Our port of
-    // 73b0 CRASHES on that path at post-load time: it walks the tool description
-    // chain (MeshInstance+0x28 -> deref -> deref) and faults on a READ of
-    // 0x100000001, i.e. that link is not yet valid when the load-only slot-11 pass
-    // runs. 73b0's own header already notes this is "the crash-prone path the
-    // ShowTool call site deliberately guards off", so the gap is in 73b0, not here.
-    // The colour/scale re-apply above is the part that fixes the reported bug and is
-    // safe; leaving the tool re-show on by default would trade a cosmetic bug for a
-    // crash. Turn this on once 73b0's description lookup is fixed, then delete the
-    // flag and this comment.
-    const int32_t toolId = *reinterpret_cast<int32_t*>(p + 0x1d8);
-
-    // [diag] Census of what this pass actually sees, so a quiet run cannot be mistaken
-    // for "the tool re-show is fine". Prints how many restored citizens carried a tool
-    // (+0x1d8 != -1) and hence how many would take the deferred branch -- a save whose
-    // citizens were all empty-handed is a NULL TEST for this open, not a pass.
-    // See [[reference_null_test_measures_a_world_without_the_feature]].
-    {
-        static int s_seen = 0, s_withTool = 0, s_reported = 0;
-        ++s_seen;
-        if (toolId != -1) ++s_withTool;
-        if (s_seen - s_reported >= 24) {
-            s_reported = s_seen;
-            std::fprintf(stderr, "[PostLoadTool] citizens=%d withTool(+0x1d8!=-1)=%d "
-                         "lastToolId=%d showFn=%p enabled=%d\n",
-                         s_seen, s_withTool, toolId, (void*)s_fn_ShowToolOnEntity,
-                         (int)::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_POSTLOAD_TOOL"));
-            std::fflush(stderr);
-        }
-    }
-
-    if (toolId != -1 && s_fn_ShowToolOnEntity &&
-        ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_POSTLOAD_TOOL"))
-        s_fn_ShowToolOnEntity(p, toolId);
+    // ⚠ KNOWN DEVIATION. Retail's 0x1401140f0 unconditionally re-shows the carried tool
+    // here (Entity_impl_73b0 0x1401173b0) when the restored toolId != -1. Our port of
+    // 73b0 CRASHES on that path at post-load time: it walks the tool description chain
+    // (MeshInstance+0x28 -> deref -> deref) and faults on a READ of 0x100000001, i.e.
+    // that link is not yet valid when the load-only slot-11 pass runs. 73b0's own header
+    // already notes this is "the crash-prone path the ShowTool call site deliberately
+    // guards off", so the gap is in 73b0, not here. Restore the re-show once 73b0's
+    // description lookup is fixed.
 }

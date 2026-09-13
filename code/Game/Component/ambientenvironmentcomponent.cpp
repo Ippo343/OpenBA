@@ -116,14 +116,6 @@ void PlayNewSlot(void* comp, int slot) {
         const void* pos = reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
         fn_Audio_Scene_AddEmitter(scene, handle, pos, *reinterpret_cast<float*>(entry + 4));
     }
-    static int s_trace = -1;
-    if (s_trace < 0) { const char* e = std::getenv("BANISHED_AMBIENT_TRACE"); s_trace = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    if (s_trace) {
-        static int n = 0;
-        if (n++ < 12)
-            fprintf(stderr, "[ambientenv] PlayNewSlot comp=%p slot=%d soundRef=%llx handle=%u vol=%.3f\n",
-                    comp, slot, (unsigned long long)*soundRef, handle, *reinterpret_cast<float*>(entry + 4));
-    }
 }
 
 // ---- sub_2a10: set slot `slot` of the emitter component to `soundRef` @ `vol`. ----
@@ -217,28 +209,9 @@ void* FindSiblingEmitter(void* self) {
 // ============================================================
 // The component Update ABI is (self, Time*); the original reads only `self`.
 void AmbientEnvironmentComponent_Update(AmbientEnvironmentComponent* selfC, int64_t* /*time*/) {
-    // Opt-in: the Update vtable slot is only wired when BANISHED_AMBIENT_AUDIO
-    // (or the global BANISHED_LIVE_COMPONENTS) is set, so reaching here already
-    // means enabled. Secondary guard keeps a =0 override inert.
-    static int s_enabled = -1;
-    if (s_enabled < 0) {
-        const char* e = std::getenv("BANISHED_AMBIENT_AUDIO");
-        s_enabled = (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) ? 0 : 1;
-    }
-    if (!s_enabled || !selfC) return;
+    if (!selfC) return;
 
     EnsureResolved();
-
-    static int s_dbg = -1;
-    if (s_dbg < 0) { const char* e = std::getenv("BANISHED_AMBIENT_TRACE"); s_dbg = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    static int s_calls = 0;
-    if (s_dbg && s_calls < 6) {
-        ++s_calls;
-        void* dr = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(selfC) + 0x18);
-        fprintf(stderr, "[ambientenv] ENTER self=%p desc=%p tidEnv=%u tidEmC=%u tidEmD=%u\n",
-                (void*)selfC, dr, s_tidEnvDesc, s_tidEmitterComp, s_tidEmitterDesc);
-        fflush(stderr);
-    }
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     if (!fn_IsDerivedFrom || !s_tidEnvDesc || !fn_MemAlloc || !g_pMemAllocSingleton) return;
@@ -354,22 +327,6 @@ void AmbientEnvironmentComponent_Update(AmbientEnvironmentComponent* selfC, int6
         SetSlot(emitter, 0, daySound,   f);
         SetSlot(emitter, 1, nightSound, unit - f);
     }
-
-    static int s_trace = -1;
-    if (s_trace < 0) {
-        const char* e = std::getenv("BANISHED_AMBIENT_TRACE");
-        s_trace = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    if (s_trace) {
-        static int n = 0;
-        if ((n++ % 120) == 0) {
-            fprintf(stderr, "[ambientenv] region=(%d,%d,%d,%d) count=%d dominant=%d "
-                    "f=%.3f emitter=%p cells=%p\n",
-                    gridX, gridY, rw, rh, count, dominant, f, emitter, (void*)cells);
-            fflush(stderr);
-        }
-    }
-
     if (hist && fn_MemFreeStatic) fn_MemFreeStatic(hist);
 }
 
@@ -428,16 +385,6 @@ void AmbientEnvironmentComponent_InitRegion(AmbientEnvironmentComponent* selfC,
         *reinterpret_cast<float*>(e + 0x2c) = worldY;
         *reinterpret_cast<float*>(e + 0x30) = 0.0f;
     }
-
-    static int s_trace = -1;
-    if (s_trace < 0) { const char* en = std::getenv("BANISHED_AMBIENT_TRACE"); s_trace = (en && en[0] && en[0] != '0') ? 1 : 0; }
-    if (s_trace) {
-        static int n = 0;
-        if (n++ < 12)
-            fprintf(stderr, "[ambientenv] InitRegion self=%p region=(%d,%d,%d,%d) "
-                    "pos=(%.1f,%.1f,0) emitter=%p\n",
-                    (void*)selfC, gridX, gridY, rw, rh, worldX, worldY, emitter);
-    }
 }
 
 // ============================================================
@@ -452,14 +399,11 @@ void AmbientEnvironmentComponent_InitFuncs() {
 #include "Component/component_factory_base.h"
 
 // Route the per-tick Update slot (vtable +0x48 / index 9) to the biome-ambient
-// reimpl when BANISHED_AMBIENT_AUDIO (or the global BANISHED_LIVE_COMPONENTS) is
-// set — default ON via the env check inside Update.
+// reimpl.
 //
 // Hand-expanded from COMPONENT_LIVE_FACTORY (rather than using the macro as-is)
 // to ALSO wire slot 3 (stream Serialize, retail 0x1400437e0 — see
-// ambientenvironmentcomponent_serialize.cpp) UNCONDITIONALLY: serialize
-// round-trip is not an opt-in feature the way the biome-audio Update is
-// (save/load wave 2026-08-28). The write happens inside the factory function
+// ambientenvironmentcomponent_serialize.cpp). The write happens inside the factory function
 // body, never at namespace scope, so FillTypedVtable's per-instance vtable
 // copy (which runs before this) can't erase it.
 extern "C" void AmbientEnvironmentComponent_Serialize(void* self, void* stream);
@@ -480,7 +424,6 @@ static void AmbientEnvironmentComponent_SerializeVSlot(void* s, void* stream) {
 static void AmbientEnvironmentComponent_FinishLiveVtable() {
     AmbientEnvironmentComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&AmbientEnvironmentComponent_SerializeVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_AMBIENT_AUDIO"))
         AmbientEnvironmentComponent_LiveVtable[9] =
             reinterpret_cast<void*>(&AmbientEnvironmentComponent_UpdateVSlot);
 }

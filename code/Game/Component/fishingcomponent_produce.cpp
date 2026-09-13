@@ -45,15 +45,6 @@ void Resolve() {
     s_resolved = true;
 }
 
-bool FishTrace() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_FISHING_TRACE");
-        s = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s == 1;
-}
-
 // Walk the owning entity's component list (entity+0x28) for the RadiusDescription and
 // return its radius (+0x28). Retail inlines this scan in both eed0 and the tick; it
 // breaks at the FIRST slot whose GetTypeId matches, then re-validates with
@@ -109,18 +100,12 @@ void StampCoverage(uintptr_t comp, short delta) {
     int cx = 0, cy = 0;
     if (r < 0 || !TileCentre(comp, &cx, &cy) || !s_brush ||
         !g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
-        if (FishTrace())
-            std::fprintf(stderr, "[FishTrace] StampCoverage SKIPPED comp=%p r=%d delta=%d\n",
-                         (void*)comp, r, (int)delta);
         return;
     }
     int* mgr = *reinterpret_cast<int**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
     if (!mgr) return;
     s_brush(mgr, kFishingCoverageState, cx, cy, r, delta);
-    if (FishTrace())
-        std::fprintf(stderr, "[FishTrace] StampCoverage comp=%p tile=(%d,%d) r=%d delta=%d\n",
-                     (void*)comp, cx, cy, r, (int)delta);
 }
 
 }  // namespace
@@ -175,16 +160,6 @@ extern "C" char FishingComponent_ProduceTick(void* self, void* /*time*/) {
     const float rate = (total > 0) ? (float)matching / ((float)total * 0.5f) : 0.0f;
     *reinterpret_cast<float*>(comp + 0x54) = rate;
 
-    if (FishTrace()) {
-        static int n = 0;
-        if (n < 8) {
-            std::fprintf(stderr, "[FishTrace] ProduceTick comp=%p tile=(%d,%d) r=%d "
-                         "mask=0x%08x matching=%d/%d rate=%.3f\n",
-                         self, cx, cy, r, mask, matching, total, rate);
-            std::fflush(stderr);
-            ++n;
-        }
-    }
     return 0;
 }
 
@@ -195,9 +170,6 @@ extern "C" char FishingComponent_OnEnterProducing(void* self) {
     StampCoverage(comp, +1);
     FishingComponent_ProduceTick(self, nullptr);                   // retail: Time(0.0)
     *reinterpret_cast<uint8_t*>(comp + 0x50) = 1;
-    if (FishTrace())
-        std::fprintf(stderr, "[FishTrace] OnEnterProducing comp=%p rate=%.3f\n",
-                     self, *reinterpret_cast<float*>(comp + 0x54));
     return 0;
 }
 
@@ -207,7 +179,5 @@ extern "C" char FishingComponent_OnExitProducing(void* self) {
     if (*reinterpret_cast<uint8_t*>(comp + 0x50) == 0) return 0;   // not registered
     StampCoverage(comp, -1);
     *reinterpret_cast<uint8_t*>(comp + 0x50) = 0;
-    if (FishTrace())
-        std::fprintf(stderr, "[FishTrace] OnExitProducing comp=%p\n", self);
     return 0;
 }
