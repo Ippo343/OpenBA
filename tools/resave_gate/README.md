@@ -50,6 +50,12 @@ golden and run twice. The `.bin` files are git-ignored; the golden's md5 is comm
   delegated to the DLL as a "named cutover blocker". Ported 2026-09-13
   (runtime/src/io/compressed_stream_read.cpp). Every save takes it; the cutover gate never
   saved, so it never showed.
+- Intermittent (2026-09-13, seen once in five full runs on the same exe): `DIFF vs golden`
+  with exactly ONE differing byte, the reference-table `count` at +0x18 one higher (5689 vs
+  5688) and no extra row, sizes identical. The next four runs of the identical command
+  passed. So the count field can include one resource the row loop does not write, and
+  which resource is resident is not fully deterministic even with the picks pinned. A
+  one-byte diff at +0x18 is this; re-run before reading it as a serializer change.
 - Intermittent, not fixed, both pre-existing: (1) one run in ~12 crashed in
   `ExternalFactory::Add`'s AVL rotate during the loader, with a `[GUL::Load] redundant
   dispatch` line just before it (two loader dispatchers racing; see the guard comment in
