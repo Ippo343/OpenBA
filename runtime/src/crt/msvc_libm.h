@@ -13,7 +13,7 @@
 //     Math::Vector3::FromYawPitch                 calls=3838   divergences=16
 //     Math::Transform::FromYawPitchOffset(...)    calls=45473  divergences=88
 //
-// Both went silent under BANISHED_RT_LIBM=dll, which proved the divergence was
+// Both went silent when routed to the DLL's own CRT, which proved the divergence was
 // libm rounding and nothing else -- but that escape hatch calls into the DLL by
 // address, so it dies at cutover and takes the fix with it. Porting the five
 // bodies fixes the divergence AND removes five ResolveRuntimeRaw dependencies.

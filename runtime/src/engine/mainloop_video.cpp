@@ -415,19 +415,12 @@ const ArraySpec kSpec_VideoResource = {           // 0x18004f620
     /*init   unwritten*/ 0,    0,
     /*seed zero       */ 0x10, 0x18 };
 
-// One Site per registered address — see array.cpp's "Live instrumentation".
-// STATIC STORAGE DURATION IS LOAD-BEARING: RtDiffRegister keeps the POINTER and
-// re-reads it at summary time, so a stack Site is reported as harness
-// corruption.
-Site g_j3_18004f620 = { { "Collection::Array::SetSize @0x18004f620", 0, 0, false, false },
-                        0x18004f620 };
-
 }  // namespace rtcoll
 
 extern "C" void RtColl_ArraySetSizeFill_18004f620(void* a, int n, const void* fill) {
     rtcoll::SetSizeCore(static_cast<rtcoll::ArrayHdr*>(a), n,
                         static_cast<const uint8_t*>(fill),
-                        &rtcoll::kSpec_VideoResource, &rtcoll::g_j3_18004f620);
+                        &rtcoll::kSpec_VideoResource);
 }
 
 // ============================================================================
@@ -500,7 +493,7 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     for (int i = 0; i < 10; ++i) {
         rtcoll::SetSizeCore(&types, types._size + 1,
                             reinterpret_cast<const uint8_t*>(&ids[i]),
-                            &rtcoll::kSpec_I32, nullptr);
+                            &rtcoll::kSpec_I32);
     }
 
     // ---- 2. clear _videoResources --------------------------------------------

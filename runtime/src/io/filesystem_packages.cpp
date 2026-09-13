@@ -348,13 +348,6 @@ namespace RtIo { void RtIo_SerializeFamilyProbe(); }  // lane SERIAL (serialize_
 namespace RtUi { void RtUi_DialogSettingsProbe(); }   // lane ENC-2 (dialog_settings_probe.cpp)
 void RtUiElementUpdateProbe();                        // WAVE 10E lane VERIFY (element_update_probe.cpp)
 void RtUiElementPersistProbe();                       // WAVE 10E lane VERIFY (element_persist_probe.cpp)
-// Lane PKG2 iteration 2's codec probe. Declared here for the same reason and
-// called from the same place — see the call site at the tail of LoadPackages.
-namespace RtSystem { void RtSystem_CompressionProbe(); void RtSystem_CompressProbe(); }
-// value_types.cpp defines its bodies at FILE scope, not inside namespace
-// RtSystem (the RtSystem_ prefix is in the name, not a namespace), so this one
-// is declared here the way it is defined there.
-void RtSystem_DateTimeProbe();
 namespace RtIO {
 
 using RtSystem::String;
@@ -937,24 +930,6 @@ extern "C" void RtIo_FileSystem_LoadPackages(FileSystem* self) {
         // and a normal run must not pay for it. Declared here rather than in a
         // header because it is one symbol used at one site.
         RtIo_PackageFile_SweepProbe(self);
-
-        // Wave 9 lane PKG2 iteration 2. Same reasoning, one level down: the
-        // Compression probe builds a System::Compression through the DLL's ctor,
-        // which ALLOCATES. It cannot run from RtSystemPortInit, where the
-        // allocator singleton at 0x1801fc718 is still null (a first draft did,
-        // and crashed writing to 0x648 with nothing in the dump naming it).
-        // Here the heap is provably live — the body above allocated a 0xF0
-        // PackageFile per package to get this far.
-        RtSystem::RtSystem_CompressionProbe();
-
-        // WAVE 22 LANE SYSBODY. Same placement and EXACTLY the same reason as
-        // the line above: both of these ALLOCATE (the Compress sweep builds
-        // two System::Compression objects, the DateTime sweep builds four
-        // Strings per case), so neither can run from a *PortInit where the
-        // allocator singleton is still null. This is the first point on the
-        // boot path where the heap is provably live.
-        RtSystem::RtSystem_CompressProbe();
-        RtSystem_DateTimeProbe();
 
         // Rung 2's lockstep probe. Same placement and the same reason as the
         // two above: it builds two CompressedMemoryStreams, which ALLOCATE, so

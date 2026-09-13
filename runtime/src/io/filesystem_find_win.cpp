@@ -487,18 +487,9 @@ static const rtcoll::ArraySpec kSpec_Filename = {
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0x00, 0x08 };
 
-// `= { { NAME }, ADDR }`, not an explicit field list — see RT_DIFF_BEGIN's own
-// comment in rt_diff.h: value-initialising the rest of RtDiffSite stays correct
-// when fields are appended, where a five-field list silently starts tripping
-// -Wmissing-field-initializers.
-rtcoll::Site g_j3_180026880 = {
-    { "Collection::Array<Filename>::SetSize @0x180026880" },
-    0x180026880 };
-
 void RtColl_ArraySetSizeFill_180026880(void* a, int n, const void* fill) {
     rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(a), n,
-                        static_cast<const uint8_t*>(fill), &kSpec_Filename,
-                        &g_j3_180026880);
+                        static_cast<const uint8_t*>(fill), &kSpec_Filename);
 }
 
 static void AppendFilename(FilenameArray* out, const Filename* value) {

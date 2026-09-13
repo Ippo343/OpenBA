@@ -53,17 +53,7 @@
 // ------
 // None of these five can be verified by an ours-then-theirs replay at a live
 // call site: each mutates the one shared tree, so the second implementation
-// starts from the state the first left. `set_avl_e24_probe.cpp` runs the
-// LOCKSTEP SYNTHETIC-SUBJECT probe instead — two private `Input::KeyMap`s, the
-// same script, ours through these bodies (reached because our ported
-// `KeyMap::RegisterInput` calls them through `ResolveAddr`, which consults the
-// port registry first) and theirs through the shipped `?RegisterInput@` reached
-// with `ResolveExportRaw`, compared AFTER EVERY STEP.
-//
-// Comparing only at the end is not enough and the reason is specific: **AVL
-// defects cancel.** A rotation wrong in one direction and wrong again in the
-// other leaves the same key set and frequently the same final shape while every
-// intermediate state differed.
+// starts from the state the first left.
 //
 // `DestroySubtree` is the one body with no ours-vs-theirs comparison available
 // at all, and that is stated rather than papered over — see its banner.

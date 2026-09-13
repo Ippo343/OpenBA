@@ -19,24 +19,10 @@
 // read a String's PUBLIC content (its data pointer used as a plain
 // null-terminated C string), never its private refcount/length header.
 //
-// UPDATED Wave 9 lane B3: those calls now go through RT_EXPORT_ONCE, not
-// RtOriginal<>. Set / Format / operator+= / Release are all PORTED, and
-// RtOriginal deliberately skips the port registry, so every one of them was a
-// live-path port bypass. The
-// local `StrSlot` type below is deliberately an opaque 8-byte pass-through
-// (not a port of System::String) used only to give these calls a typed
-// hidden-return-slot argument.
-//
-// DIFF HARNESS NOTE FOR System::Random: Random carries state (index + a
-// 624-word array) that every non-ctor member mutates. Running the original
-// on the SAME live object would advance it twice; running it on an
-// independent copy seeded fresh would test a different RNG stream. The
-// correct shape (docs/runtime_port/WAVE1.md's "oracle must not corrupt its
-// own experiment"): snapshot the state BEFORE our call runs, let ours mutate
-// the live object, then replay the original on a scratch copy of the
-// snapshot and compare both the return value and the resulting state.
-// RtDiffRandomShadow() below does exactly that and is used by every
-// state-mutating Random member.
+// Those calls go through RT_EXPORT_ONCE. Set / Format / operator+= / Release
+// are all PORTED. The local `StrSlot` type below is deliberately an opaque
+// 8-byte pass-through (not a port of System::String) used only to give these
+// calls a typed hidden-return-slot argument.
 // ============================================================================
 
 #include <cstdio>
@@ -104,39 +90,6 @@ uint32_t RandImpl(Random* self) {
     return y ^ (y >> 18);
 }
 
-// Shared shadow-diff step for every stateful Random member. `before` is a
-// snapshot the caller took BEFORE its own call ran; this replays the mangled
-// original on an independent copy and reports both the return value and the
-// resulting state as one comparison. Called only under `if (rt_diff_on__)`,
-// so it costs nothing in a normal run.
-template <typename T, typename Fn, typename... Args>
-void RtDiffRandomShadow(RtDiffSite* site, Random* self, const Random& before,
-                         const char* mangled, T ours, Args... args) {
-    // Guard the helper ITSELF, not just its six call sites.  Every caller today
-    // wraps this in `if (rt_diff_on__)` and the comment above says so -- but
-    // that invariant lives in six places and a seventh caller only has to
-    // forget once.  What it would cost is not a wasted comparison: the
-    // RtOriginal below is the RAW door, so an unguarded call is a live
-    // cross-DLL call into retail on an ordinary run, and a call through NULL
-    // once Runtime-x64.dll is gone.  That is precisely the shape lane V2 found
-    // escaped in GraphElement::RemoveGraphs, which had sat between
-    // RT_DIFF_BEGIN and RT_DIFF_SCALAR calling retail every frame.
-    //
-    // rt_diff_on__ is a macro-local of RT_DIFF_BEGIN and is not in scope here;
-    // RtDiffEnabled() is the same predicate.  rawdoor_audit.py recognises this
-    // early-out as a guard (its diff_only_fn_depth idiom), which it cannot do
-    // for a guard that lives in the CALLER.
-    if (!RtDiffEnabled()) return;
-
-    Random scratch = before;
-    T theirs = RtOriginal<Fn>(mangled)(&scratch, args...);
-    bool eq = (ours == theirs) && std::memcmp(self, &scratch, sizeof(Random)) == 0;
-    char a[32], b[32];
-    RtDiffFormat(a, sizeof(a), ours);
-    RtDiffFormat(b, sizeof(b), theirs);
-    RtDiffReport(site, eq, a, b);
-}
-
 }  // namespace
 
 // ============================================================
@@ -157,13 +110,6 @@ Random* RtSystem_Random_Ctor(Random* self) {
 // ??0Random@System@@QEAA@I@Z  retail 0x1800c7ed0
 Random* RtSystem_Random_CtorSeed(Random* self, uint32_t seed) {
     SeedMT(self, seed);
-    RT_DIFF_BEGIN("System::Random::Random(uint)");
-    if (rt_diff_on__) {
-        Random theirs;
-        RtOriginal<void(*)(Random*, uint32_t)>("??0Random@System@@QEAA@I@Z")(&theirs, seed);
-        bool eq = std::memcmp(self, &theirs, sizeof(Random)) == 0;
-        RT_DIFF_SHADOW(eq, "seeded", "seeded");
-    }
     return self;
 }
 
@@ -180,26 +126,12 @@ Random* RtSystem_Random_CtorSeed(Random* self, uint32_t seed) {
 // (?NextGroup@Random@System@@AEAAXXZ, 0x1800c7dd0, ord 3245).  Registering the
 // name is therefore the plain door, not a workaround.
 //
-// NOT DIFFED, deliberately.  Every other Random member here compares through
-// RtDiffRandomShadow, which replays the original on a scratch COPY of a
-// pre-call snapshot.  That shape works because those members RETURN a value.
-// NextGroup returns void and its entire effect is the 624-word state, which
-// `RtDiffRandomShadow`'s memcmp of `self` against the scratch already covers on
-// every Rand* call that triggers a twist -- i.e. this body is under continuous
-// comparison through its only retail caller, and a second oracle wrapped around
-// the same bytes would be the self-check shape
-// (reference_shadow_marker_is_not_an_oracle.md), not a new screen.
 extern "C" void RtSystem_Random_NextGroup(Random* self) { NextGroupImpl(self); }
 
 // ?Rand@Random@System@@QEAAIXZ  retail 0x1800c7f90
 uint32_t RtSystem_Random_Rand(Random* self) {
-    RT_DIFF_BEGIN("System::Random::Rand");
     Random before;
-    if (rt_diff_on__) before = *self;
     uint32_t ours = RandImpl(self);
-    if (rt_diff_on__)
-        RtDiffRandomShadow<uint32_t, uint32_t(*)(Random*)>(
-            &rt_diff_site__, self, before, "?Rand@Random@System@@QEAAIXZ", ours);
     return ours;
 }
 
@@ -207,26 +139,16 @@ uint32_t RtSystem_Random_Rand(Random* self) {
 // to 0 WITHOUT drawing — state must stay untouched, hence the ternary rather
 // than an early `if`+call).
 uint32_t RtSystem_Random_RandBound(Random* self, uint32_t bound) {
-    RT_DIFF_BEGIN("System::Random::Rand(uint)");
     Random before;
-    if (rt_diff_on__) before = *self;
     uint32_t ours = (bound == 0) ? 0u : (RandImpl(self) % bound);
-    if (rt_diff_on__)
-        RtDiffRandomShadow<uint32_t, uint32_t(*)(Random*, uint32_t)>(
-            &rt_diff_site__, self, before, "?Rand@Random@System@@QEAAII@Z", ours, bound);
     return ours;
 }
 
 // ?Rand@Random@System@@QEAAHHH@Z  retail 0x1800c7d70
 int32_t RtSystem_Random_RandRange(Random* self, int32_t lo, int32_t hi) {
-    RT_DIFF_BEGIN("System::Random::Rand(int,int)");
     Random before;
-    if (rt_diff_on__) before = *self;
     uint32_t r = RandImpl(self);
     int32_t ours = lo + static_cast<int32_t>(r % (static_cast<uint32_t>(hi - lo) + 1u));
-    if (rt_diff_on__)
-        RtDiffRandomShadow<int32_t, int32_t(*)(Random*, int32_t, int32_t)>(
-            &rt_diff_site__, self, before, "?Rand@Random@System@@QEAAHHH@Z", ours, lo, hi);
     return ours;
 }
 
@@ -235,39 +157,24 @@ int32_t RtSystem_Random_RandRange(Random* self, int32_t lo, int32_t hi) {
 // 32-bit draw to [0,1).
 namespace { constexpr float kRandUnit = 2.3283064365386963e-10f; }  // 0x2f800000
 float RtSystem_Random_RandFloat(Random* self) {
-    RT_DIFF_BEGIN("System::Random::RandFloat");
     Random before;
-    if (rt_diff_on__) before = *self;
     float ours = static_cast<float>(RandImpl(self)) * kRandUnit;
-    if (rt_diff_on__)
-        RtDiffRandomShadow<float, float(*)(Random*)>(
-            &rt_diff_site__, self, before, "?RandFloat@Random@System@@QEAAMXZ", ours);
     return ours;
 }
 
 // ?RandFloatTol@Random@System@@QEAAMXZ  retail 0x1800c8000
 // return 1.0f - (u * (1/2^32)) * 2.0f, left-associated exactly as retail.
 float RtSystem_Random_RandFloatTol(Random* self) {
-    RT_DIFF_BEGIN("System::Random::RandFloatTol");
     Random before;
-    if (rt_diff_on__) before = *self;
     float ours = 1.0f - (static_cast<float>(RandImpl(self)) * kRandUnit) * 2.0f;
-    if (rt_diff_on__)
-        RtDiffRandomShadow<float, float(*)(Random*)>(
-            &rt_diff_site__, self, before, "?RandFloatTol@Random@System@@QEAAMXZ", ours);
     return ours;
 }
 
 // ?RandTol@Random@System@@QEAAHH@Z  retail 0x1800c7da0
 int32_t RtSystem_Random_RandTol(Random* self, int32_t tol) {
-    RT_DIFF_BEGIN("System::Random::RandTol");
     Random before;
-    if (rt_diff_on__) before = *self;
     uint32_t r = RandImpl(self);
     int32_t ours = static_cast<int32_t>(r % (static_cast<uint32_t>(tol) * 2u + 1u)) - tol;
-    if (rt_diff_on__)
-        RtDiffRandomShadow<int32_t, int32_t(*)(Random*, int32_t)>(
-            &rt_diff_site__, self, before, "?RandTol@Random@System@@QEAAHH@Z", ours, tol);
     return ours;
 }
 
@@ -299,14 +206,6 @@ void RtSystem_Random_Serialize(Random* self, void* serializer) {
 // (runtime/src/system/timer.cpp), so diffing it again would count the same
 // comparison twice under a second name.
 //
-// **RT_EXPORT_ONCE, not RT_ORIGINAL_ONCE, since Wave 9 lane B3.** The
-// paragraph this replaced said Timer was out of scope because
-// `_secondsPerTick` is "a runtime QPC-derived global, not a constant we can
-// hardcode". Reading Timer::Startup's disassembly shows that is not so — it is
-// the constant 1e-6, written by a store, with no QPC anywhere in it — and
-// System::Timer is now ported. Leaving RT_ORIGINAL_ONCE here would have made
-// the hottest value type in the engine a port bypass on the day the port
-// landed, which is the exact shape WAVE9_LANE_V.md §1c catalogues.
 Time* RtSystem_Time_Ctor(Time* self, float seconds) {
     using SecondsToTicksFn = int64_t(*)(float);
     // Resolved ONCE per call site either way: this body runs on every
@@ -370,22 +269,9 @@ struct StrSlot { void* p; };  // opaque 8-byte pass-through, NOT a String port
 // exported (0x1800c56a0 / 0x1800c55b0), so `this` (DateTime) never needs a
 // layout here — it is only ever handed straight through to them.
 // WAVE 9 LANE V2, 2026-09-07: every raw door in the three functions below is
-// now RT_EXPORT_ONCE. None of them was an oracle -- they are the work these
-// bodies do -- and two things were wrong with the raw spelling:
-//   * `?Release@String@System@@AEAAXXZ` HAS BEEN PORTED (lane B3,
-//     string.cpp:1113). All three of its uses here were live-path port
-//     BYPASSES; port_bypass_audit.py named exactly these three. Nothing in
-//     this file changed to cause that -- the port landed elsewhere, which is
-//     why that gate says re-run after every LANDING, not after every edit.
-//   * DateAsString / TimeAsString are unported, but the raw door is
-//     ResolveExportRaw, which returns NULL once Runtime-x64.dll is absent. A
-//     null call at cutover is a crash; a registry miss is a named row.
-//     WAVE 22 LANE SYSBODY: "unported" is no longer true -- both are ported
-//     and registered below, so these two RT_EXPORT_ONCE lines now reach our
-//     own bodies. The RT_EXPORT_ONCE spelling is what makes that automatic
-//     and is why it is left exactly as it is; only this sentence changed.
-// RT_EXPORT_ONCE also removes a GetProcAddress per call, which bare RtOriginal
-// was paying on every one of these.
+// RT_EXPORT_ONCE. `?Release@String@System@@AEAAXXZ`, DateAsString and
+// TimeAsString are all ported and registered below, so these lines reach our
+// own bodies through the registry.
 StrSlot* RtSystem_DateTime_AsString(const void* self, StrSlot* ret) {
     using SubStringFn = StrSlot*(*)(const void*, StrSlot*);
     StrSlot dateStr{};
@@ -393,8 +279,7 @@ StrSlot* RtSystem_DateTime_AsString(const void* self, StrSlot* ret) {
     StrSlot timeStr{};
     RT_EXPORT_ONCE(SubStringFn, "?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &timeStr);
 
-    // RT_EXPORT_ONCE: String::Format is ported (string.cpp), and bare RtOriginal is
-    // GetProcAddress on every call as well as a port bypass.
+    // String::Format is ported (string.cpp).
     using FormatFn = StrSlot*(*)(StrSlot*, const char*, const char*, const char*);
     RT_EXPORT_ONCE(FormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(
         ret, "%s %s", static_cast<const char*>(dateStr.p), static_cast<const char*>(timeStr.p));
@@ -516,164 +401,6 @@ StrSlot* RtSystem_DateTime_TimeAsString(const void* self, StrSlot* ret) {
     return RtSystem_DateTime_FormatPart(self, ret, /*timePart=*/true);
 }
 
-// ============================================================================
-// WAVE 22 LANE SYSBODY — the DateAsString / TimeAsString sweep
-// ============================================================================
-// AN INPUT SWEEP, FOR THE SAME REASON THE COMPRESS ONE IS. Given a FILETIME
-// these two are pure within a process: same locale, same clock, same answer.
-// So they do not have to wait for a caller to be verified, and waiting would
-// be a poor plan anyway — AsString (their only in-tree caller) is reached from
-// save-file metadata, which an autostart run may or may not touch, and a
-// `calls=0` row is not a verified row.
-//
-// WHAT IS COMPARED: the RESULTING STRING'S CHARACTERS, ours against the
-// shipped export's, for the same FILETIME. Not the pointer (two calls
-// necessarily allocate two buffers) and not the length alone.
-//
-// THE EFFECTIVENESS CONTROL, and it is the specific trap this row invites.
-// A date formatter fed a narrow input range returns THE SAME STRING every
-// time, and N identical agreeing answers is the uniform population that reads
-// as a thorough test (reference_uniform_population_is_not_a_verification.md).
-// A body that ignored `this` entirely and formatted the current time would
-// pass such a sweep on the date half and fail nothing visibly. So the sweep
-// spans FILETIMEs decades apart AND counts how many DISTINCT strings each side
-// produced; fewer than half a dozen distinct values is reported as a failure
-// of the sweep rather than a pass of the port.
-//
-// WHAT THIS DOES NOT CHECK, stated rather than left implied: the sweep runs
-// under ONE locale (whatever the test machine has), so it cannot distinguish
-// our GetDateFormatW flag `1` from any other flag that happens to render the
-// same under that locale. The flags are read off the disassembly instead
-// (0x1800c56fc `LEA EDX,[R9+0x1]`, 0x1800c560c `LEA EDX,[R9+0x2]`), which is a
-// stronger source than a single-locale comparison would be.
-namespace {
-
-int RtDateTimeDistinct(char (*seen)[64], int seenCount, const char* s) {
-    for (int i = 0; i < seenCount; ++i)
-        if (std::strcmp(seen[i], s) == 0) return seenCount;
-    if (seenCount < 32) {
-        std::strncpy(seen[seenCount], s, 63);
-        seen[seenCount][63] = '\0';
-        ++seenCount;
-    }
-    return seenCount;
-}
-
-}  // namespace
-
-void RtSystem_DateTimeProbe() {
-    if (!RtDiffEnabled()) return;
-
-    using PartFn = StrSlot* (*)(const void*, StrSlot*);
-    using ReleaseFn = void (*)(StrSlot*);
-    // RT_RAW_OK: ORACLE. RtOriginal is ResolveExportRaw, so these reach the
-    // SHIPPED bodies even though ours are registered under the same names by
-    // the time this runs. ResolveExport here would compare our body with
-    // itself and the probe would be dark.
-    PartFn theirDate = RtOriginal<PartFn>("?DateAsString@DateTime@System@@QEBA?AVString@2@XZ");
-    PartFn theirTime = RtOriginal<PartFn>("?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ");
-    if (!theirDate || !theirTime) {
-        printf("[SYSBODY/DateTime] sweep SKIPPED: no shipped exports (cutover build?)\n");
-        return;
-    }
-    // The releases are the WORK of the probe, not an oracle readback, so they
-    // go through the registry to our ported String::Release.
-    ReleaseFn release = RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ");
-
-    long long cases = 0, dateDiff = 0, timeDiff = 0, uncomparable = 0;
-    char seenDate[32][64]; int seenDateCount = 0;
-    char seenTime[32][64]; int seenTimeCount = 0;
-
-    // FILETIME is 100ns ticks since 1601-01-01. These span ~1601 to ~2100 and
-    // sub-day steps, so both halves vary.
-    static const unsigned long long kTicks[] = {
-        0ULL,
-        116444736000000000ULL,                       // 1970-01-01
-        116444736000000000ULL + 36000000000ULL,      // +1h
-        116444736000000000ULL + 863990000000ULL,     // +23:59:59
-        128000000000000000ULL,                       // ~2006
-        131000000000000000ULL,                       // ~2016
-        131000000000000000ULL + 5000000000000ULL,
-        150000000000000000ULL,                       // ~2076
-        157000000000000000ULL,                       // ~2098
-        131500000000000000ULL, 132000000000000000ULL, 132500000000000000ULL,
-    };
-    const int kN = static_cast<int>(sizeof(kTicks) / sizeof(kTicks[0]));
-
-    for (int i = 0; i < kN; ++i) {
-        FILETIME ft;
-        ft.dwLowDateTime  = static_cast<DWORD>(kTicks[i] & 0xffffffffULL);
-        ft.dwHighDateTime = static_cast<DWORD>(kTicks[i] >> 32);
-
-        // Is this input COMPARABLE at all? Both bodies ignore the two BOOLs
-        // and format from an UNINITIALISED stack buffer when the conversion
-        // fails, so on a rejected FILETIME there is no deterministic answer on
-        // EITHER side and a reported "divergence" would be two different
-        // stacks, not a defect. The probe re-runs the conversions ITSELF to
-        // decide, rather than inferring it from the answers -- a class derived
-        // from the output would agree with any body by construction
-        // (reference_recheck_must_match_its_own_proof.md). Both bodies are
-        // still CALLED on these inputs, so "neither faults on a rejected
-        // FILETIME" stays exercised; only the comparison is withheld, and the
-        // count is printed rather than folded away.
-        FILETIME probeLocal;
-        SYSTEMTIME probeSt;
-        const bool convertible =
-            FileTimeToLocalFileTime(&ft, &probeLocal) != 0 &&
-            FileTimeToSystemTime(&probeLocal, &probeSt) != 0;
-
-        StrSlot ourD{}, theirD{}, ourT{}, theirT{};
-        RtSystem_DateTime_DateAsString(&ft, &ourD);
-        theirDate(&ft, &theirD);
-        RtSystem_DateTime_TimeAsString(&ft, &ourT);
-        theirTime(&ft, &theirT);
-        ++cases;
-
-        const char* od = static_cast<const char*>(ourD.p);
-        const char* td = static_cast<const char*>(theirD.p);
-        const char* ot = static_cast<const char*>(ourT.p);
-        const char* tt = static_cast<const char*>(theirT.p);
-        // Null on one side only is itself a divergence, so test that before
-        // dereferencing either.
-        const bool dOk = (od == nullptr) == (td == nullptr) &&
-                         (od == nullptr || std::strcmp(od, td) == 0);
-        const bool tOk = (ot == nullptr) == (tt == nullptr) &&
-                         (ot == nullptr || std::strcmp(ot, tt) == 0);
-        if (!convertible) {
-            ++uncomparable;
-            release(&ourD); release(&theirD); release(&ourT); release(&theirT);
-            continue;
-        }
-        if (!dOk) {
-            if (dateDiff < 6)
-                printf("[SYSBODY/DateTime] DATE DIVERGENCE i=%d ours='%s' theirs='%s'\n",
-                       i, od ? od : "(null)", td ? td : "(null)");
-            ++dateDiff;
-        }
-        if (!tOk) {
-            if (timeDiff < 6)
-                printf("[SYSBODY/DateTime] TIME DIVERGENCE i=%d ours='%s' theirs='%s'\n",
-                       i, ot ? ot : "(null)", tt ? tt : "(null)");
-            ++timeDiff;
-        }
-        if (od) seenDateCount = RtDateTimeDistinct(seenDate, seenDateCount, od);
-        if (ot) seenTimeCount = RtDateTimeDistinct(seenTime, seenTimeCount, ot);
-
-        release(&ourD); release(&theirD); release(&ourT); release(&theirT);
-    }
-
-    printf("[SYSBODY/DateTime] sweep: %lld cases (%lld compared, %lld UNCOMPARABLE -- the "
-           "Win32 conversion rejects the FILETIME and BOTH bodies then format from an "
-           "uninitialised stack buffer), date divergences=%lld, time divergences=%lld\n",
-           cases, cases - uncomparable, uncomparable, dateDiff, timeDiff);
-    const bool varied = seenDateCount >= 6 && seenTimeCount >= 4;
-    printf("[SYSBODY/DateTime] control: %d distinct dates, %d distinct times -- %s; %s\n",
-           seenDateCount, seenTimeCount,
-           varied ? "population NOT UNIFORM" : "*** UNIFORM: the sweep proves little ***",
-           (dateDiff == 0 && timeDiff == 0 && varied) ? "VERIFIED"
-                                                      : "*** NOT a verification ***");
-}
-
 // ?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ  retail 0x1800c4c60
 // Builds a 6-character stamp "<last 2 digits of year><2-letter month><day,
 // zero-padded>" from the DLL's own compiled-in date string (e.g.
@@ -751,11 +478,7 @@ StrSlot* RtSystem_Configuration_GetVersionString(StrSlot* ret, uint32_t version,
     using ReleaseFn  = void(*)(StrSlot*);
     StrSlot tmp{};
     RT_EXPORT_ONCE(OpAppendFn, "??YString@System@@QEAA?AV01@PEBD@Z")(ret, &tmp, text);   // ported
-    // RT_EXPORT_ONCE, not RtOriginal: String::Release is PORTED (Wave 9 lane B3), and
-    // RtOriginal deliberately skips the port registry so the diff oracle can reach the
-    // shipped body. Using it here ran the DLL's Release while our port sat registered,
-    // counted by the census and reported clean by the oracle -- invisible to both.
-    // Caught by tools/port_bypass_audit.py, which is the only instrument that can see it.
+    // String::Release is PORTED (string.cpp).
     using ReleaseFn = void (*)(StrSlot*);
     RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ")(&tmp);
     return ret;
@@ -766,8 +489,7 @@ StrSlot* RtSystem_Configuration_CurrentVersion(StrSlot* ret) {
 }
 
 // ============================================================
-// RtSystemValueRegister — called from RtSystemPortInit() under
-// BANISHED_RT_VALUE (rt_system_port.cpp).
+// RtSystemValueRegister — called from RtSystemPortInit() (rt_system_port.cpp).
 // ============================================================
 int RtSystemValueRegister() {
     int n = 0;

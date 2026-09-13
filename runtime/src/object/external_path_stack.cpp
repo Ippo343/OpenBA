@@ -374,13 +374,6 @@ const ArraySpec kSpec_PathStack = {                // 0x18002e220
     /*init   unwritten*/ 0, 0,
     /*seed zero       */ 0x00, 0x10 };
 
-// STATIC STORAGE DURATION IS LOAD-BEARING: RtDiffRegister keeps the POINTER and
-// re-reads it at summary time, so a stack Site is reported as harness
-// corruption (array_internal.h).
-Site g_pathstack_18002e220 = {
-    { "Collection::Array<PathStackEntry>::SetSize @0x18002e220", 0, 0, false, false },
-    0x18002e220 };
-
 }  // namespace rtcoll
 
 // ============================================================================
@@ -400,7 +393,7 @@ extern "C" void RtObject_PathStackSetSize_18002e220(void* a, int n, const void* 
                         // ucrtbase reading a garbage `char*`.
                         // See WAVE11_LANE_OBJEXT.md §10.
                         static_cast<const uint8_t*>(fill),
-                        &rtcoll::kSpec_PathStack, &rtcoll::g_pathstack_18002e220);
+                        &rtcoll::kSpec_PathStack);
 }
 
 // ============================================================================

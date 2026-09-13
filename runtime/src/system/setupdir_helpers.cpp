@@ -75,7 +75,6 @@ bool SameText(const char* a, const char* b) {
 // (reference_ghidra_c_output_vs_disassembly.md), which would have made an
 // empty string walk off the front instead of taking the `JS` at 0x1800c68c6.
 Filename* RtSystem_Filename_GetPathDirectory(const Filename* self, Filename* ret) {
-    RT_DIFF_BEGIN("System::Filename::GetPathDirectory");
 
     const char* d = self->data;
     if (d == nullptr) {
@@ -103,16 +102,6 @@ Filename* RtSystem_Filename_GetPathDirectory(const Filename* self, Filename* ret
     // `self` is const and untouched, and the shipped body allocates its own
     // buffer, so the replay is safe and only the TEXT can be compared (ours
     // and theirs never share a pointer).
-    if (rt_diff_on__ && ret != self) {
-        Filename theirs{nullptr};
-        RtOriginal<Filename* (*)(const Filename*, Filename*)>(
-            "?GetPathDirectory@Filename@System@@QEBA?AV12@XZ")(self, &theirs);
-        RT_DIFF_SHADOW(SameText(ret->data, theirs.data),
-                       ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RT_DIFF_WORK(true);
-        RtString_ReleaseInline(reinterpret_cast<String*>(&theirs));
-    }
     return ret;
 }
 
@@ -129,24 +118,12 @@ Filename* RtSystem_Filename_GetPathDirectory(const Filename* self, Filename* ret
 // what makes this call safe for SetupDirectories to make while
 // `?_singleton@Configuration@System@@0PEAV12@EA` is still an unminted slot.
 String* RtSystem_Configuration_GetPlatformName(void* self, String* ret, int platform) {
-    RT_DIFF_BEGIN("System::Configuration::GetPlatformName");
     (void)self;   // retail never reads it
 
     ret->data = nullptr;
     if (platform == 0)
         RtSystem_String_Set(ret, "Win");
 
-    if (rt_diff_on__) {
-        String theirs{nullptr};
-        RtOriginal<String* (*)(void*, String*, int)>(
-            "?GetPlatformName@Configuration@System@@QEAA?AVString@2@W4Platform@12@@Z")(
-                self, &theirs, platform);
-        RT_DIFF_SHADOW(SameText(ret->data, theirs.data),
-                       ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RT_DIFF_WORK(true);
-        RtString_ReleaseInline(&theirs);
-    }
     return ret;
 }
 
@@ -163,24 +140,12 @@ String* RtSystem_Configuration_GetPlatformName(void* self, String* ret, int plat
 // = "<install>\WinData\", which is exactly the directory the shipped game
 // ships (verified on disk).
 String* RtSystem_Configuration_GetBuildName(void* self, String* ret, int build) {
-    RT_DIFF_BEGIN("System::Configuration::GetBuildName");
     (void)self;   // retail never reads it
 
     ret->data = nullptr;
     if (build == 0)      RtSystem_String_Set(ret, "Data");
     else if (build == 1) RtSystem_String_Set(ret, "Eval");
 
-    if (rt_diff_on__) {
-        String theirs{nullptr};
-        RtOriginal<String* (*)(void*, String*, int)>(
-            "?GetBuildName@Configuration@System@@QEAA?AVString@2@W4Build@12@@Z")(
-                self, &theirs, build);
-        RT_DIFF_SHADOW(SameText(ret->data, theirs.data),
-                       ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RT_DIFF_WORK(true);
-        RtString_ReleaseInline(&theirs);
-    }
     return ret;
 }
 

@@ -137,7 +137,6 @@ namespace rtgfxd {
 
 using rtcoll::ArrayHdr;
 using rtcoll::ArraySpec;
-using rtcoll::Site;
 
 // ============================================================================
 // The two DLL internals this lane CALLS rather than ports.
@@ -384,32 +383,17 @@ const ArraySpec kSpec_Drawable = {            // 0x180062c40
 // them.
 // ============================================================================
 
-Site g_site_180062ae0 = { { "Array<SceneEntry>::SetSize(0) @0x180062ae0", 0, 0, false, false },
-                          0x180062ae0 };
-Site g_site_180062c40 = { { "Array<Drawable>::SetSize(0) @0x180062c40", 0, 0, false, false },
-                          0x180062c40 };
-Site g_site_1800637b0 = { { "Array<SceneEntry>::SetSize(n,fill) @0x1800637b0", 0, 0, false, false },
-                          0x1800637b0 };
-// ONE site, THREE SetSizeCore calls per invocation — so this site's `calls=` is
-// three times the number of DrawGroups cleared, and it is named that way so the
-// summary is not read as a per-call count.
-Site g_site_1800626a0 = { { "DrawGroup pass-clear @0x1800626a0 (3 arrays per call)",
-                            0, 0, false, false }, 0x1800626a0 };
-
 extern "C" void RtGfxd_SceneArraySetSize0(void* a) {
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SceneEntry,
-                        &g_site_180062ae0);
+    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SceneEntry);
 }
 
 extern "C" void RtGfxd_DrawableArraySetSize0(void* a) {
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Drawable,
-                        &g_site_180062c40);
+    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Drawable);
 }
 
 extern "C" void RtGfxd_SceneArraySetSizeFill(void* a, int n, const void* fill) {
     rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n,
-                        static_cast<const uint8_t*>(fill), &kSpec_SceneEntry,
-                        &g_site_1800637b0);
+                        static_cast<const uint8_t*>(fill), &kSpec_SceneEntry);
 }
 
 extern "C" void RtGfxd_SceneEntryDestroyRange(void* ignoredThis, uint8_t* base, int count) {
@@ -425,7 +409,7 @@ extern "C" void RtGfxd_DrawGroupClearPasses(void* group) {
     uint8_t* const g = static_cast<uint8_t*>(group);
     for (int i = 0; i < 3; ++i)
         rtcoll::SetSizeCore(reinterpret_cast<ArrayHdr*>(g + 0x1c0 + i * 0x10), 0,
-                            nullptr, &kSpec_DrawItem, &g_site_1800626a0);
+                            nullptr, &kSpec_DrawItem);
     std::memset(g, 0, 8);
 }
 

@@ -159,23 +159,10 @@
 // the exported 0x1800c7ad0, which IS `if (p) { Enter; Free(_singleton, p);
 // Leave; }`, instruction for instruction the tail of each of these loops. This
 // file adds no new Runtime address beyond the ones it registers, and it does
-// NOT arm the allocator: BANISHED_RT_ALLOC is lane E's and carries a standing
+// NOT arm the allocator: the allocator port is lane E's and carries a standing
 // NO-GO. A heap cannot be half-ours. Lane Q's LANE E DEPENDENCY note in
 // array.cpp covers this file too — repointing rtcoll::MemAlloc/MemFree at lane
 // E's allocator repoints these bodies with it.
-//
-// ---------------------------------------------------------------------------
-// KILL SWITCHES
-// ---------------------------------------------------------------------------
-//   BANISHED_RT_COLLECTION=0        the whole Collection lane, Q's and this
-//   BANISHED_RT_ARRAY_DESTROY=0     only this file's 18 addresses
-//   BANISHED_RT_ARRAY_DESTROY_PROBE=1|neg   the oracle (off by default)
-//
-// Lane Q's `BANISHED_RT_ARRAY_NONTRIVIAL=0` still halves ITS three, and now
-// also matters here: with it off, lane Q's specs keep pointing at 0x180052110,
-// 0x1800059e0 and 0x180005930 by address — which this file registers — so the
-// two switches are not independent. The bisection order is stated in
-// docs/runtime_port/WAVE9_LANE_D2.md.
 // ============================================================================
 
 #include <cstdint>
@@ -411,56 +398,6 @@ static_assert(kD_Str2_38.offs[0] > kD_Str2_38.offs[1],
 
 #undef RTCOLL_FITS
 
-// ============================================================================
-// Live instrumentation — a COVERAGE COUNTER, and one real check
-// ============================================================================
-//
-// One RtDiffSite per REGISTERED ADDRESS, not per body, for lane Q's reason:
-// five addresses share Body B, so a run that exercises the body proves nothing
-// about the other four REGISTRATIONS, and per-address `calls=` is the only
-// thing that says which of the eighteen a run actually reached.
-//
-// What is checked live is deliberately weak and is labelled as such. For Body A
-// the post-state is all-zero headers, which restates the rule; for Body B it is
-// the arm each slot took, which restates it too. THE INDEPENDENT ORACLE IS THE
-// SYNTHETIC-SUBJECT REPLAY in array_destroy_probe.cpp, which compares against
-// the SHIPPED body. Do not read a green [RtDiff] summary here as verification —
-// reference_uncalled_port_is_not_verified.md is about exactly this file's
-// shape, where nine of the eighteen addresses are teardown-only.
-//
-// *** A Site MUST HAVE STATIC STORAGE DURATION *** — array.cpp §"Live
-// instrumentation" records what a stack Site cost the integrator (144 dangling
-// registrations reported as "a stray write hit the harness's own statics").
-// Every Site below is file-scope.
-
-// The probe self-schedules for the same reason lane Q's does: RtCollection*Init
-// runs immediately after ResolveInit()'s LoadLibrary, when the DLL's
-// MemoryAllocator is CONSTRUCTED BUT NOT STARTED. The first call into any entry
-// point below is a moment we know is safe, because the caller is itself in the
-// middle of destroying an Array.
-bool g_dprobePending = false;
-static bool g_dprobeRunning = false;
-
-static inline void DProbeGate() {
-    if (!g_dprobePending || g_dprobeRunning) return;
-    g_dprobeRunning = true;
-    RtCollectionDestroyProbeRun();
-    g_dprobePending = false;
-    g_dprobeRunning = false;
-}
-
-// Reports how many slots the call actually touched, so `calls=` can be read as
-// "did work" and not merely "was entered"
-// (reference_probe_needs_an_effectiveness_control.md).
-static void ReportDestroy(Site* site, const DestroySpec* s, int count, int freed) {
-    if (!site || !RtDiffEnabled()) return;
-    RtDiffRegister(&site->d);
-    char ours[128];
-    std::snprintf(ours, sizeof(ours), "%s n=%d slots=%d freed=%d",
-                  s->name, count, count * s->nOffs, freed);
-    RtDiffReport(&site->d, true, ours, ours);
-}
-
 // Counting wrappers. These do the work AND the counting in one pass rather than
 // re-walking the buffer afterwards, because after Body A the slots are zeroed
 // and after Body B they are the answer — a second pass could not tell what the
@@ -503,14 +440,10 @@ namespace rtcoll {
 // arity, not a cleaned-up one.
 
 #define A_ENTRY(ADDR, SPEC)                                                   \
-    Site g_da_##ADDR = { { "Collection::Array elem-destroy(inner Array) @0x" #ADDR, \
-                           0, 0, false, false }, 0x##ADDR };                  \
     void RtColl_DestroyInner_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
-        DProbeGate();                                                         \
         const int freed = FreeInnerArraysCounted(                             \
             static_cast<uint8_t*>(base), count, &SPEC);                       \
-        ReportDestroy(&g_da_##ADDR, &SPEC, count, freed);                     \
     }
 
 // ONLY THE HELPERS OUR TREE ACTUALLY RESOLVES GET AN ENTRY POINT.
@@ -570,14 +503,10 @@ A_ENTRY(180005680, kD_InnerArr2_20)   // Achievement: {Array<T>, Array<T>} eleme
 #undef A_ENTRY
 
 #define B_ENTRY(ADDR, SPEC)                                                   \
-    Site g_db_##ADDR = { { "Collection::Array elem-destroy(String) @0x" #ADDR, \
-                           0, 0, false, false }, 0x##ADDR };                  \
     void RtColl_DestroyStrings_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
-        DProbeGate();                                                         \
         const int n = ReleaseStringsCounted(                                  \
             static_cast<uint8_t*>(base), count, &SPEC);                       \
-        ReportDestroy(&g_db_##ADDR, &SPEC, count, n);                         \
     }
 
 B_ENTRY(180005930, kD_Str_10)         // {String*, ExternalPtr} — lane Q's kSpec_StringExt
@@ -764,25 +693,11 @@ B_ENTRY(1800341e0, kD_Str2_20)        // Save: Persistence metadata entry
 // function and would hide the edge from tools/runtime_census.py.
 
 #define J2_ENTRY(ADDR, CORE, SPEC)                                            \
-    Site g_j2_##ADDR = { { "Collection::Array::~Array(+elem) @0x" #ADDR,       \
-                           0, 0, false, false }, 0x##ADDR };                  \
     void* RtColl_ArrayDtorElem_##ADDR(void* self) {                           \
-        DProbeGate();                                                         \
         ArrayHdr* a = static_cast<ArrayHdr*>(self);                           \
         /* retail: R8D=[RCX+8], RDX=[RCX], RCX unchanged, then CALL helper */  \
         const int freed = CORE(a->_data, a->_size, &SPEC);                    \
         void* r = ArrayDtorImpl(a);                                           \
-        if (RtDiffEnabled()) {                                                \
-            RtDiffRegister(&g_j2_##ADDR.d);                                   \
-            const bool ok = (a->_data == nullptr && a->_size == 0 &&          \
-                             a->_capacity == 0);                              \
-            char o[128];                                                      \
-            std::snprintf(o, sizeof(o), "elems=%d data=%p size=%d cap=%d",    \
-                          freed, static_cast<void*>(a->_data), a->_size,      \
-                          a->_capacity);                                      \
-            RtDiffReport(&g_j2_##ADDR.d, ok, o,                               \
-                         "data=0000000000000000 size=0 cap=0");               \
-        }                                                                     \
         return r;                                                             \
     }
 
@@ -805,12 +720,8 @@ J2_ENTRY(18004fa30, ReleaseStringsCounted,  kD_Str_20)       // CALL 0x18004fe20
 // it. So the entry point below is the SINGLE-element form, which is why it does
 // not use A_ENTRY/B_ENTRY: those are (this, base, count) because retail's
 // helpers are.
-Site g_de_180044050 = { { "Collection::Array elem-destroy(3 Strings) @0x180044050",
-                          0, 0, false, false }, 0x180044050 };
 void RtColl_DestroyElem_180044050(void* elem) {
-    DProbeGate();
     const int n = ReleaseStringsCounted(static_cast<uint8_t*>(elem), 1, &kD_Str3_38at08);
-    ReportDestroy(&g_de_180044050, &kD_Str3_38at08, 1, n);
 }
 J2_ENTRY(180043a00, ReleaseStringsCounted,  kD_Str3_38at08)  // UI: ~LayoutDescription's entry array
 
@@ -989,21 +900,10 @@ static int DestroyNestedPair(uint8_t* base, int count) {
     return freed;
 }
 
-Site g_j2_18005bf60 = { { "Collection::Array::~Array(+nested elem) @0x18005bf60",
-                          0, 0, false, false }, 0x18005bf60 };
 void* RtColl_ArrayDtorElem_18005bf60(void* self) {
-    DProbeGate();
     ArrayHdr* a = static_cast<ArrayHdr*>(self);
     const int freed = DestroyNestedPair(a->_data, a->_size);   // CALL 0x18005c550
     void* r = ArrayDtorImpl(a);
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_j2_18005bf60.d);
-        const bool ok = (a->_data == nullptr && a->_size == 0 && a->_capacity == 0);
-        char o[128];
-        std::snprintf(o, sizeof(o), "nested=%d data=%p size=%d cap=%d", freed,
-                      static_cast<void*>(a->_data), a->_size, a->_capacity);
-        RtDiffReport(&g_j2_18005bf60.d, ok, o, "data=0000000000000000 size=0 cap=0");
-    }
     return r;
 }
 
@@ -1011,21 +911,10 @@ void* RtColl_ArrayDtorElem_18005bf60(void* self) {
 // Body A with offs {0x1e0,0x1d0,0x1c0}, stride 0x1f0 — see the banner for the
 // two hops (0x18001b960 is a 5-byte JMP thunk to a twelfth copy of J1) that
 // make it Body A and not a CRT dependency.
-Site g_j2b_18001c8c0 = { { "Collection::Array::~Array(eh_vector) @0x18001c8c0",
-                           0, 0, false, false }, 0x18001c8c0 };
 void* RtColl_ArrayDtorEhVec_18001c8c0(void* self) {
-    DProbeGate();
     ArrayHdr* a = static_cast<ArrayHdr*>(self);
     const int freed = FreeInnerArraysCounted(a->_data, a->_size, &kD_InnerArr3_1f0);
     void* r = ArrayDtorImpl(a);
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_j2b_18001c8c0.d);
-        const bool ok = (a->_data == nullptr && a->_size == 0 && a->_capacity == 0);
-        char o[128];
-        std::snprintf(o, sizeof(o), "elems=%d data=%p size=%d cap=%d", freed,
-                      static_cast<void*>(a->_data), a->_size, a->_capacity);
-        RtDiffReport(&g_j2b_18001c8c0.d, ok, o, "data=0000000000000000 size=0 cap=0");
-    }
     return r;
 }
 
@@ -1067,10 +956,7 @@ void* RtColl_ArrayDtorEhVec_18001c8c0(void* self) {
 // lane, with no ability to run lane Q's probe, would be the change that looks
 // harmless and silently stops comparing bytes that should be compared. The
 // finding is filed in docs/runtime_port/WAVE9_LANE_D2.md as lane Q's to make.
-Site g_da_180004220 = { { "SpriteSheet elem operator= @0x180004220", 0, 0, false, false },
-                        0x180004220 };
 void* RtColl_SpriteEntryAssign_180004220(void* dst, const void* src) {
-    DProbeGate();
     uint8_t* d = static_cast<uint8_t*>(dst);
     const uint8_t* s = static_cast<const uint8_t*>(src);
 
@@ -1086,18 +972,6 @@ void* RtColl_SpriteEntryAssign_180004220(void* dst, const void* src) {
         *reinterpret_cast<uint32_t*>(d + off) = *reinterpret_cast<const uint32_t*>(s + off);
     /* +0x34 .. +0x37 deliberately untouched — retail does not write them */
 
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_da_180004220.d);
-        // Independent: bytes 0x00..0x33 of dst must now equal src. This compares
-        // against data we did not write, unlike the header-algebra checks
-        // elsewhere in this lane, which restate the rule they are checking.
-        // 0x34 and not 0x38 — see the note above about the four unwritten bytes.
-        const bool ok = std::memcmp(d, s, 0x34) == 0;
-        char o[96];
-        std::snprintf(o, sizeof(o), "str0=%p str1=%p",
-                      *reinterpret_cast<void**>(d), *reinterpret_cast<void**>(d + 8));
-        RtDiffReport(&g_da_180004220.d, ok, o, "dst[0x00..0x33] == src[0x00..0x33]");
-    }
     return dst;
 }
 
@@ -1115,10 +989,7 @@ void* RtColl_SpriteEntryAssign_180004220(void* dst, const void* src) {
 // byte later: an oracle that memcmps 0x38 bytes after this runs compares seven
 // bytes of allocator fill. array.cpp's kSpec_LayoutEntry38 carries that exact
 // window as `assignUnwritten = [0x31, 0x38)` so its probe does not.
-Site g_da_180043980 = { { "LayoutDescription entry operator= @0x180043980", 0, 0, false, false },
-                        0x180043980 };
 void* RtColl_LayoutEntryAssign_180043980(void* dst, const void* src) {
-    DProbeGate();
     uint8_t* d = static_cast<uint8_t*>(dst);
     const uint8_t* s = static_cast<const uint8_t*>(src);
 
@@ -1137,16 +1008,6 @@ void* RtColl_LayoutEntryAssign_180043980(void* dst, const void* src) {
     d[0x30] = s[0x30];
     /* +0x31 .. +0x37 deliberately untouched -- retail does not write them */
 
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_da_180043980.d);
-        const bool ok = std::memcmp(d, s, 0x31) == 0;
-        char o[96];
-        std::snprintf(o, sizeof(o), "str0=%p str1=%p str2=%p",
-                      *reinterpret_cast<void**>(d + 0x08),
-                      *reinterpret_cast<void**>(d + 0x10),
-                      *reinterpret_cast<void**>(d + 0x18));
-        RtDiffReport(&g_da_180043980.d, ok, o, "dst[0x00..0x30] == src[0x00..0x30]");
-    }
     return dst;
 }
 
@@ -1192,10 +1053,7 @@ void* RtColl_LayoutEntryAssign_180043980(void* dst, const void* src) {
 // calls 0x1800101e0 (`ModEntry_CopyCtor`), which is lane D's J9 IO::Mod cluster
 // and reaches ExpandRelativePath / FindOrLoad / BinaryFileStream. Porting it
 // would create a J9 row, which is the trade J9 exists to avoid taking piecemeal.
-Site g_j4_180003970 = { { "Collection::Array::operator= @0x180003970", 0, 0, false, false },
-                        0x180003970 };
 void* RtColl_ArrayAssign_180003970(void* self, const void* src) {
-    DProbeGate();
     ArrayHdr* a = static_cast<ArrayHdr*>(self);
     const ArrayHdr* s = static_cast<const ArrayHdr*>(src);
     if (a == s) return a;
@@ -1225,20 +1083,6 @@ void* RtColl_ArrayAssign_180003970(void* self, const void* src) {
         ++copied;
     }
 
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_j4_180003970.d);
-        // The one INDEPENDENT thing available at a live call site: the copied
-        // extent must equal the SOURCE buffer, which is not a restatement of
-        // our own growth rule but a comparison against data we did not write.
-        const bool ok = (a->_size == s->_size) &&
-                        (a->_size == 0 ||
-                         std::memcmp(a->_data, s->_data,
-                                     static_cast<size_t>(a->_size) * 8) == 0);
-        char o[128];
-        std::snprintf(o, sizeof(o), "n=%d cap=%d copied=%d realloc=%d",
-                      a->_size, a->_capacity, copied, realloced ? 1 : 0);
-        RtDiffReport(&g_j4_180003970.d, ok, o, "prefix == src prefix");
-    }
     return a;
 }
 
@@ -1261,10 +1105,7 @@ void* RtColl_ArrayAssign_180003970(void* self, const void* src) {
 // not itself on the worklist, so it is reached by ADDRESS — the same door
 // kSpec_PkgEntry's DestroyPkgEntryRange uses, and registry-first, so the day
 // 0x180010f00 is ported this call lands on our body without an edit here.
-Site g_j2_1800109d0 = { { "Collection::Array::~Array(+elem) @0x1800109d0",
-                          0, 0, false, false }, 0x1800109d0 };
 void* RtColl_ArrayDtorElem_1800109d0(void* self) {
-    DProbeGate();
     ArrayHdr* a = static_cast<ArrayHdr*>(self);
     {
         using Fn = void (*)(void*, void*, int);
@@ -1273,14 +1114,6 @@ void* RtColl_ArrayDtorElem_1800109d0(void* self) {
         fn(a, a->_data, a->_size);       // retail passes RCX=this, ignored inside
     }
     void* r = ArrayDtorImpl(a);
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_j2_1800109d0.d);
-        const bool ok = (a->_data == nullptr && a->_size == 0 && a->_capacity == 0);
-        char o[128];
-        std::snprintf(o, sizeof(o), "data=%p size=%d cap=%d",
-                      static_cast<void*>(a->_data), a->_size, a->_capacity);
-        RtDiffReport(&g_j2_1800109d0.d, ok, o, "data=0000000000000000 size=0 cap=0");
-    }
     return r;
 }
 
@@ -1310,8 +1143,7 @@ void* RtColl_ArrayDtorElem_1800109d0(void* self) {
 using ArrayClearFn = void (*)(ArrayHdr*);
 
 void* ArrayAssignCore(ArrayHdr* a, const ArrayHdr* s, const ArraySpec* spec,
-                      ArrayClearFn clear, Site* site) {
-    DProbeGate();
+                      ArrayClearFn clear) {
     if (a == s) return a;
 
     clear(a);
@@ -1339,17 +1171,6 @@ void* ArrayAssignCore(ArrayHdr* a, const ArrayHdr* s, const ArraySpec* spec,
         ++copied;
     }
 
-    if (site != nullptr && RtDiffEnabled()) {
-        RtDiffRegister(&site->d);
-        const bool ok = (a->_size == s->_size) &&
-                        (!spec->byteCopy || a->_size == 0 ||
-                         std::memcmp(a->_data, s->_data,
-                                     static_cast<size_t>(a->_size) * spec->stride) == 0);
-        char o[128];
-        std::snprintf(o, sizeof(o), "%s n=%d cap=%d copied=%d realloc=%d",
-                      spec->name, a->_size, a->_capacity, copied, realloced ? 1 : 0);
-        RtDiffReport(&site->d, ok, o, "prefix == src prefix");
-    }
     return a;
 }
 
@@ -1389,12 +1210,10 @@ const ArraySpec kAsgn_MetaEntry20 = {
     false, 0x1c, 0x20, 0, 0, 0x00, 0x10 };
 
 #define J4_ENTRY(ADDR, SPEC, CLEAR)                                           \
-    Site g_j4_##ADDR = { { "Collection::Array::operator= @0x" #ADDR,           \
-                           0, 0, false, false }, 0x##ADDR };                  \
     void* RtColl_ArrayAssign_##ADDR(void* self, const void* src) {            \
         return ArrayAssignCore(static_cast<ArrayHdr*>(self),                  \
                                static_cast<const ArrayHdr*>(src),             \
-                               &SPEC, &CLEAR, &g_j4_##ADDR);                  \
+                               &SPEC, &CLEAR);                  \
     }
 
 J4_ENTRY(180014c70, kAsgn_Ptr8A8,      ArrayClearTrivial)       // clear 0x180014d00
@@ -1428,12 +1247,10 @@ void Assign56(uint8_t* d, const uint8_t* s) {
 const ArraySpec kAsgn_Blob38 = {
     "Array<blob0x38>", 0x38, 8, &Assign56, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
 
-Site g_j4_18001cd30 = { { "Collection::Array::operator= @0x18001cd30",
-                          0, 0, false, false }, 0x18001cd30 };
 void* RtColl_ArrayAssign_18001cd30(void* self, const void* src) {
     return ArrayAssignCore(static_cast<ArrayHdr*>(self),
                            static_cast<const ArrayHdr*>(src),
-                           &kAsgn_Blob38, &ArrayClearTrivial, &g_j4_18001cd30);
+                           &kAsgn_Blob38, &ArrayClearTrivial);
 }
 void* RtColl_ArrayCopyCtor_18001c620(void* self, const void* src) {
     ArrayHdr* h = static_cast<ArrayHdr*>(self);
@@ -1455,10 +1272,7 @@ void RtColl_ArrayDtor_18001c650(void* self) {
 // pointer with no refcount and no pre-zero. A second occurrence of one J4
 // body, not a new one — its own Site so the diff registry attributes
 // divergences to the right retail address.
-Site g_j4_18001b1a0 = { { "Collection::Array::operator= @0x18001b1a0", 0, 0, false, false },
-                        0x18001b1a0 };
 void* RtColl_ArrayAssign_18001b1a0(void* self, const void* src) {
-    DProbeGate();
     ArrayHdr* a = static_cast<ArrayHdr*>(self);
     const ArrayHdr* s = static_cast<const ArrayHdr*>(src);
     if (a == s) return a;
@@ -1488,17 +1302,6 @@ void* RtColl_ArrayAssign_18001b1a0(void* self, const void* src) {
         ++copied;
     }
 
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_j4_18001b1a0.d);
-        const bool ok = (a->_size == s->_size) &&
-                        (a->_size == 0 ||
-                         std::memcmp(a->_data, s->_data,
-                                     static_cast<size_t>(a->_size) * 8) == 0);
-        char o[128];
-        std::snprintf(o, sizeof(o), "n=%d cap=%d copied=%d realloc=%d",
-                      a->_size, a->_capacity, copied, realloced ? 1 : 0);
-        RtDiffReport(&g_j4_18001b1a0.d, ok, o, "prefix == src prefix");
-    }
     return a;
 }
 
@@ -1528,14 +1331,10 @@ static_assert(kD_Str2_18.offs[0] > kD_Str2_18.offs[1],
               "0x18001cbf0 releases +0x08 BEFORE +0x00");
 
 #define D1_A_ENTRY(ADDR, SPEC)                                                \
-    Site g_da_##ADDR = { { "Collection::Array elem-destroy(inner Array) @0x" #ADDR, \
-                           0, 0, false, false }, 0x##ADDR };                  \
     void RtColl_DestroyInner_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
-        DProbeGate();                                                         \
         const int freed = FreeInnerArraysCounted(                             \
             static_cast<uint8_t*>(base), count, &SPEC);                       \
-        ReportDestroy(&g_da_##ADDR, &SPEC, count, freed);                     \
     }
 
 // 0x180052220: `LEA RBX,[RDX+0x8]` at 0x18005224c, the two zero stores at
@@ -1547,14 +1346,10 @@ D1_A_ENTRY(180052220, kD_InnerArr_18)  // Audio: SoundEffect::Buffer's nested Ar
 #undef D1_A_ENTRY
 
 #define D1_B_ENTRY(ADDR, SPEC)                                                \
-    Site g_db_##ADDR = { { "Collection::Array elem-destroy(String) @0x" #ADDR, \
-                           0, 0, false, false }, 0x##ADDR };                  \
     void RtColl_DestroyStrings_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
-        DProbeGate();                                                         \
         const int n = ReleaseStringsCounted(                                  \
             static_cast<uint8_t*>(base), count, &SPEC);                       \
-        ReportDestroy(&g_db_##ADDR, &SPEC, count, n);                         \
     }
 
 // 0x18003e3e0: `MOV RBX,RDX` (no +off seed) and `ADD RBX,0x18` at 0x18003e46c
@@ -1572,24 +1367,10 @@ D1_B_ENTRY(180056960, kD_Str2_18)     // Video: VertexProgram::Element
 #undef D1_B_ENTRY
 
 #define D1_J2_ENTRY(ADDR, CORE, SPEC)                                         \
-    Site g_j2_##ADDR = { { "Collection::Array::~Array(+elem) @0x" #ADDR,       \
-                           0, 0, false, false }, 0x##ADDR };                  \
     void* RtColl_ArrayDtorElem_##ADDR(void* self) {                           \
-        DProbeGate();                                                         \
         ArrayHdr* a = static_cast<ArrayHdr*>(self);                           \
         const int freed = CORE(a->_data, a->_size, &SPEC);                    \
         void* r = ArrayDtorImpl(a);                                           \
-        if (RtDiffEnabled()) {                                                \
-            RtDiffRegister(&g_j2_##ADDR.d);                                   \
-            const bool ok = (a->_data == nullptr && a->_size == 0 &&          \
-                             a->_capacity == 0);                              \
-            char o[128];                                                      \
-            std::snprintf(o, sizeof(o), "elems=%d data=%p size=%d cap=%d",    \
-                          freed, static_cast<void*>(a->_data), a->_size,      \
-                          a->_capacity);                                      \
-            RtDiffReport(&g_j2_##ADDR.d, ok, o,                               \
-                         "data=0000000000000000 size=0 cap=0");               \
-        }                                                                     \
         return r;                                                             \
     }
 
@@ -1613,11 +1394,8 @@ D1_J2_ENTRY(180056610, ReleaseStringsCounted,  kD_Str2_18)     // CALL 0x1800569
 // Step 2 is what makes it composite: Body A frees the inner buffer but never
 // destroys the inner ELEMENTS, and every inner element here holds two Strings.
 // Expressing it as a DestroySpec would need a third core, so it is written out.
-Site g_dc_180056cb0 = { { "Collection::Array elem-destroy(Stream) @0x180056cb0",
-                          0, 0, false, false }, 0x180056cb0 };
 void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count) {
     (void)ignoredThis;
-    DProbeGate();
     if (count <= 0) return;                       // TEST R8D,R8D / JLE
     uint8_t* base = static_cast<uint8_t*>(basev);
     const int64_t n = static_cast<int64_t>(count);   // MOVSXD
@@ -1632,7 +1410,6 @@ void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count
         *reinterpret_cast<uint64_t*>(e + 0x00) = 0; // 0x180056d89
         *reinterpret_cast<uint64_t*>(e + 0x08) = 0; // 0x180056d8c
     }
-    ReportDestroy(&g_dc_180056cb0, &kD_Str2_18, count, freed);
 }
 
 // ---- 0x18001c1e0: ~Array<Graphics::Animation> ------------------------------
@@ -1644,10 +1421,7 @@ void RtColl_DestroyVtxStream_180056cb0(void* ignoredThis, void* basev, int count
 // `Graphics::~Animation`, which is a row of the sibling gfx batch and is
 // therefore reached BY ADDRESS — registry-first, so the day it lands this call
 // goes to our body with no edit here.
-Site g_j2_18001c1e0 = { { "Collection::Array<Animation>::~Array @0x18001c1e0",
-                          0, 0, false, false }, 0x18001c1e0 };
 void* RtColl_ArrayDtorAnim_18001c1e0(void* self) {
-    DProbeGate();
     ArrayHdr* a = static_cast<ArrayHdr*>(self);
     const int32_t n = a->_size;
     uint8_t* p = a->_data;
@@ -1658,14 +1432,6 @@ void* RtColl_ArrayDtorAnim_18001c1e0(void* self) {
         for (int32_t i = 0; i < n; ++i, p += 0x70) fn(p);
     }
     void* r = ArrayDtorImpl(a);
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_j2_18001c1e0.d);
-        const bool ok = (a->_data == nullptr && a->_size == 0 && a->_capacity == 0);
-        char o[128];
-        std::snprintf(o, sizeof(o), "elems=%d data=%p size=%d cap=%d", n,
-                      static_cast<void*>(a->_data), a->_size, a->_capacity);
-        RtDiffReport(&g_j2_18001c1e0.d, ok, o, "data=0000000000000000 size=0 cap=0");
-    }
     return r;
 }
 
@@ -1703,12 +1469,10 @@ const ArraySpec kAsgn_Blk18A8 = {
     true, 0, 0, 0, 0, 0, 0 };
 
 #define D1_J4_ENTRY(ADDR, SPEC, CLEAR)                                        \
-    Site g_j4_##ADDR = { { "Collection::Array::operator= @0x" #ADDR,           \
-                           0, 0, false, false }, 0x##ADDR };                  \
     void* RtColl_ArrayAssign_##ADDR(void* self, const void* src) {            \
         return ArrayAssignCore(static_cast<ArrayHdr*>(self),                  \
                                static_cast<const ArrayHdr*>(src),             \
-                               &SPEC, &CLEAR, &g_j4_##ADDR);                  \
+                               &SPEC, &CLEAR);                  \
     }
 
 D1_J4_ENTRY(180013640, kAsgn_Tri18A4, ArrayClearTrivial)  // clear 0x180013e70
@@ -1755,14 +1519,10 @@ static_assert(kD_InnerArr2_28.offs[0] > kD_InnerArr2_28.offs[1], "descending");
 
 // ---- 0x1800664c0: a Body-A range destroy ----------------------------------
 #define A_ENTRY(ADDR, SPEC)                                                   \
-    Site g_da_##ADDR = { { "Collection::Array elem-destroy(inner Array) @0x" #ADDR, \
-                           0, 0, false, false }, 0x##ADDR };                  \
     void RtColl_DestroyInner_##ADDR(void* ignoredThis, void* base, int count) { \
         (void)ignoredThis;                                                    \
-        DProbeGate();                                                         \
         const int freed = FreeInnerArraysCounted(                             \
             static_cast<uint8_t*>(base), count, &SPEC);                       \
-        ReportDestroy(&g_da_##ADDR, &SPEC, count, freed);                     \
     }
 
 A_ENTRY(1800664c0, kD_InnerArr2_28)   // Collision2D: ~Face's two inner arrays
@@ -1786,8 +1546,6 @@ A_ENTRY(1800664c0, kD_InnerArr2_28)   // Collision2D: ~Face's two inner arrays
 //
 // DESCENDING through the arrays and the String LAST -- the same shape as
 // 0x1800109d0's compound helper, and the reason that one is written out too.
-Site g_da_180073ee0 = { { "Collection::Array elem-destroy(SubMesh) @0x180073ee0",
-                          0, 0, false, false }, 0x180073ee0 };
 static int DestroySubMesh80Counted(uint8_t* base, int count) {
     if (count <= 0) return 0;                       // TEST R8D,R8D / JLE
     int touched = 0;
@@ -1809,47 +1567,23 @@ static int DestroySubMesh80Counted(uint8_t* base, int count) {
 }
 void RtColl_DestroySubMesh_180073ee0(void* ignoredThis, void* base, int count) {
     (void)ignoredThis;
-    DProbeGate();
     const int touched = DestroySubMesh80Counted(static_cast<uint8_t*>(base), count);
-    ReportDestroy(&g_da_180073ee0, &kD_Str_18at00, count, touched);
 }
 
 // ---- the two J2 entry points ----------------------------------------------
 // Shape is J2 exactly (`R8D=[RCX+8]; RDX=[RCX]; CALL helper`, then the J1
 // body); only the helper differs.
-Site g_j2_180065d40 = { { "Collection::Array::~Array(+elem) @0x180065d40",
-                          0, 0, false, false }, 0x180065d40 };
 void* RtColl_ArrayDtorElem_180065d40(void* self) {          // ~Array<Face>
-    DProbeGate();
     ArrayHdr* a = static_cast<ArrayHdr*>(self);
     const int freed = FreeInnerArraysCounted(a->_data, a->_size, &kD_InnerArr2_28);
     void* r = ArrayDtorImpl(a);
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_j2_180065d40.d);
-        const bool ok = (a->_data == nullptr && a->_size == 0 && a->_capacity == 0);
-        char o[128];
-        std::snprintf(o, sizeof(o), "elems=%d data=%p size=%d cap=%d",
-                      freed, static_cast<void*>(a->_data), a->_size, a->_capacity);
-        RtDiffReport(&g_j2_180065d40.d, ok, o, "data=0000000000000000 size=0 cap=0");
-    }
     return r;
 }
 
-Site g_j2_180073720 = { { "Collection::Array::~Array(+elem) @0x180073720",
-                          0, 0, false, false }, 0x180073720 };
 void* RtColl_ArrayDtorElem_180073720(void* self) {          // ~Array<SubMesh>
-    DProbeGate();
     ArrayHdr* a = static_cast<ArrayHdr*>(self);
     const int touched = DestroySubMesh80Counted(a->_data, a->_size);
     void* r = ArrayDtorImpl(a);
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_j2_180073720.d);
-        const bool ok = (a->_data == nullptr && a->_size == 0 && a->_capacity == 0);
-        char o[128];
-        std::snprintf(o, sizeof(o), "elems=%d data=%p size=%d cap=%d",
-                      touched, static_cast<void*>(a->_data), a->_size, a->_capacity);
-        RtDiffReport(&g_j2_180073720.d, ok, o, "data=0000000000000000 size=0 cap=0");
-    }
     return r;
 }
 
@@ -1912,12 +1646,10 @@ const ArraySpec kAsgnD2_VPParam18 = {
     /*seed zero       */ 0x00, 0x10 };   // both String slots are dereferenced
 
 #define J4_ENTRY(ADDR, SPEC, CLEAR)                                           \
-    Site g_j4_##ADDR = { { "Collection::Array::operator= @0x" #ADDR,           \
-                           0, 0, false, false }, 0x##ADDR };                  \
     void* RtColl_ArrayAssign_##ADDR(void* self, const void* src) {            \
         return ArrayAssignCore(static_cast<ArrayHdr*>(self),                  \
                                static_cast<const ArrayHdr*>(src),             \
-                               &SPEC, &CLEAR, &g_j4_##ADDR);                  \
+                               &SPEC, &CLEAR);                  \
     }
 
 J4_ENTRY(180066b30, kAsgnD2_Blk8A2,    ArrayClearTrivial)     // clear 0x180066cd0
@@ -1954,9 +1686,6 @@ J4_ENTRY(1800571b0, kAsgnD2_VPParam18, ArrayClearVPParam18)   // clear 0x1800566
 // for their destroy step, and array.cpp's row table saying they do is corrected
 // in the same change.
 void RtCollectionDestroyPortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_COLLECTION")) return;
-    if (!RtWaveEnabled("BANISHED_RT_ARRAY_DESTROY")) return;
-
     using namespace rtcoll;
 
     // ---- the three element-destroy helpers our tree reaches ---------------
@@ -2137,8 +1866,6 @@ void RtCollectionDestroyPortInit() {
     RegisterRuntimeAddr(0x180073dc0, (void*)&RtColl_ArrayAssign_180073dc0);
     RegisterRuntimeAddr(0x1800741b0, (void*)&RtColl_ArrayAssign_1800741b0);
     RegisterRuntimeAddr(0x1800571b0, (void*)&RtColl_ArrayAssign_1800571b0);
-
-    rtcoll::g_dprobePending = RtCollectionDestroyProbeArmed();
 
     // A LANE-OWNED IDENTITY MARKER (the idiom lane PKG2 established in
     // package_file.cpp). This lane's gate for "the exe that RAN is the one I

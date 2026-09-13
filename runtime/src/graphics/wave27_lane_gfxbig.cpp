@@ -287,7 +287,7 @@ const ArraySpec kSpec_Binding8 = {                // INLINED into BuildParameter
 
 // Retail 0x180060d30, 420 bytes, NOT EXPORTED. Registered BY ADDRESS below.
 extern "C" void RtCollection_Array_MaterialParameterSet_SetSize(void* a, int n) {
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_MatPass, nullptr);
+    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_MatPass);
 }
 
 // ============================================================================
@@ -424,7 +424,7 @@ extern "C" void RtGraphics_MaterialInstance_BuildParameters(void* self) {
             rtcoll::SetSizeCore(reinterpret_cast<ArrayHdr*>(&set->textures),
                                 set->textures._size + 1,
                                 reinterpret_cast<const uint8_t*>(&v),
-                                &kSpec_Binding8, nullptr);
+                                &kSpec_Binding8);
             ++g_buildParamBinds;
         }
 
@@ -455,7 +455,7 @@ extern "C" void RtGraphics_MaterialInstance_BuildParameters(void* self) {
             rtcoll::SetSizeCore(reinterpret_cast<ArrayHdr*>(&set->constants),
                                 set->constants._size + 1,
                                 reinterpret_cast<const uint8_t*>(&v),
-                                &kSpec_Binding8, nullptr);
+                                &kSpec_Binding8);
             ++g_buildParamBinds;
         }
     }

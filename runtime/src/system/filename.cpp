@@ -155,7 +155,6 @@ static int StriCmpAscii(const char* a, const char* b) {
 }
 
 bool RtSystem_Filename_Less(const Filename* self, const Filename* other) {
-    RT_DIFF_BEGIN("System::Filename::operator<");
     bool ours;
     if (other->data == nullptr)
         ours = false;
@@ -164,9 +163,6 @@ bool RtSystem_Filename_Less(const Filename* self, const Filename* other) {
     else
         ours = StriCmpAscii(self->data, other->data) < 0;
 
-    RT_DIFF_SCALAR(ours,
-        RtOriginal<bool (*)(const Filename*, const Filename*)>(
-            "??MFilename@System@@QEBA_NAEBV01@@Z")(self, other));
     return ours;
 }
 
@@ -287,7 +283,6 @@ bool SameText(const Filename* a, const Filename* b) {
 // whole leaf. So `GetPathFilename(true)` on an extension-less path yields
 // nothing at all.
 Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret, bool stripExt) {
-    RT_DIFF_BEGIN("System::Filename::GetPathFilename");
 
     const char* d = self->data;
     if (d == nullptr) {
@@ -348,14 +343,6 @@ Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
 
     // `ret != self`: see the same guard in String::SubString — the oracle must
     // not be handed an input our own run has already overwritten.
-    if (rt_diff_on__ && ret != self) {
-        Filename theirs{nullptr};
-        RtOriginal<Filename* (*)(const Filename*, Filename*, bool)>(
-            "?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z")(self, &theirs, stripExt);
-        RT_DIFF_SHADOW(SameText(ret, &theirs), ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RtString_ReleaseInline(AsString(&theirs));
-    }
     return ret;
 }
 
@@ -369,7 +356,6 @@ Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
 // is empty: an identifier is a bare name, and anything that looks like a path
 // or a file with an extension has no identifier.
 Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret) {
-    RT_DIFF_BEGIN("System::Filename::GetPathIdentifer");
 
     const char* d = self->data;
     if (d == nullptr) {
@@ -410,14 +396,6 @@ Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret
         }
     }
 
-    if (rt_diff_on__ && ret != self) {
-        Filename theirs{nullptr};
-        RtOriginal<Filename* (*)(const Filename*, Filename*)>(
-            "?GetPathIdentifer@Filename@System@@QEBA?AV12@XZ")(self, &theirs);
-        RT_DIFF_SHADOW(SameText(ret, &theirs), ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RtString_ReleaseInline(AsString(&theirs));
-    }
     return ret;
 }
 

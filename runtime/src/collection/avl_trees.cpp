@@ -716,7 +716,6 @@ TypeNode** TypeSetInsert(RtObject::Factory* set, TypeNode** outSlot,
     // The probe ALLOCATES, so it cannot run from a *PortInit (WAVE9.md, lane
     // PKG2). It self-schedules here instead: this moment is provably safe
     // because the caller is itself about to allocate a node.
-    RtCollectionAvlProbeMaybeRun();
     // Not zero-initialised as a whole: retail writes exactly +0x00, +0x08,
     // +0x10, +0x18 and the two Array qwords and leaves +0x04 untouched. A
     // `{}` here would write a byte retail never writes, and the probe compares
@@ -969,7 +968,6 @@ Node** StringMapInsert(Set* map, Node** outSlot,
     // The probe ALLOCATES, so it cannot run from a *PortInit (WAVE9.md, lane
     // PKG2). It self-schedules here instead: this moment is provably safe
     // because the caller is itself about to allocate a node.
-    RtCollectionAvlProbeMaybeRun();
     StringPair temp;
     StringAddRefInto(&temp.key,   *key);
     StringAddRefInto(&temp.value, *value);
@@ -1134,7 +1132,6 @@ Node** FilenameSetInsert(Set* set, Node** outSlot,
     // The probe ALLOCATES, so it cannot run from a *PortInit (WAVE9.md, lane
     // PKG2). It self-schedules here instead: this moment is provably safe
     // because the caller is itself about to allocate a node.
-    RtCollectionAvlProbeMaybeRun();
     uint8_t temp[0x10];
 
     using FilenameCopyFn = void* (*)(void*, const void*);
@@ -1213,7 +1210,7 @@ void SubtreeFree(void* ignoredThis, Node* node) {
 // NOTHING PATCHES ANY OF THESE ADDRESSES. Grepped across standalone/, code/,
 // engine/, dx11/ and runtime/ before writing: the only textual hits for the
 // fifteen were the comment blocks that named them as unported. So they register
-// unconditionally behind one kill switch, `BANISHED_RT_AVLTREES`.
+// unconditionally.
 //
 // THE SIX RE-REGISTRATIONS ARE DELIBERATE AND ARE NOT SHADOWS. A duplicate
 // `RegisterRuntimeAddr` for the SAME address is last-binding-wins and silently

@@ -49,7 +49,6 @@ extern int RtInputDeviceUpdateRegister();         // input_device_update.cpp
 // input_win.cpp sits behind, and its own kill switch.
 extern int RtInputPlatformShutdownRegister();     // input_platform_shutdown_win.cpp
 extern "C" void RtInputDeviceUpdateProbeArm(bool on);
-extern "C" void RtCollectionSetAvlE24ProbeArm(bool on);
 
 void RtInputPortInit() {
     if (!RtWaveEnabled("BANISHED_RT_INPUT")) {
@@ -69,9 +68,6 @@ void RtInputPortInit() {
     // Own switch: it is on the process SHUTDOWN path and should be
     // bisectable without moving Device::Update and the KeyMap bodies.
     n += RtInputPlatformShutdownRegister();  // owns BANISHED_RT_INPUTSHUTDOWN
-
-    const char* p = std::getenv("BANISHED_RT_SETAVL24_PROBE");
-    RtCollectionSetAvlE24ProbeArm(p && *p && std::strcmp(p, "0") != 0);
 
     const char* q = std::getenv("BANISHED_RT_INPUTUPD_PROBE");
     RtInputDeviceUpdateProbeArm(q && *q && std::strcmp(q, "0") != 0);

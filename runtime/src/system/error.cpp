@@ -40,8 +40,7 @@
 //        array-as-pointer encoding, see ?SetText@ 0x1800c5fa0", ... }
 //
 // i.e. size 8192 == 0x2000 and a description that names the array, exactly the
-// change §2 demanded. `BANISHED_RT_ERROR=0` is consequently NOT required for
-// this reason any more; it remains an ordinary A/B kill-switch.
+// change §2 demanded.
 //
 // A blocking warning that no longer applies is worse than no warning, because
 // the next lane obeys it and stops. Recorded here as the mirror of the defect
@@ -77,12 +76,6 @@
 // (`ResolveAddr(Module::Runtime, 0x1801fc720)`) rather than by name, so the
 // reader needs the mint's address registration too — which the row already
 // carries.
-//
-// ~~Until that lands, hold this file with `BANISHED_RT_ERROR=0`.~~ **THAT LAND-
-// ED; see the discharge note at the top of §2. Do not hold this file.** The
-// rest of the sentence is still true and is not struck: DLL-present is
-// unaffected either way, because the slot resolves to the DLL's own 0x2000-byte
-// buffer and the port is byte-faithful.
 //
 // This file does NOT edit the mint table. Widening a row changes every
 // `kStorageBytes` offset after it, which is lane C2's generator's business, and
@@ -213,8 +206,6 @@ void DisplayStopIfRequested() {
     RtSystem_ErrorDisplayFallbackExit();
 }
 
-typedef char* (*StrAppendFn)(char*, int, const char*);
-
 // Retail's strlen, written as its own do-while so the `dst[0] == 0` fast path
 // (0x1800c9034 / 0x1800c5fd4) is visible rather than folded away.
 int RetailStrLen(const char* s) {
@@ -253,14 +244,6 @@ int RetailStrLen(const char* s) {
 //     therefore the faithful substitute; `std::memcpy` would be a different
 //     function on an overlapping append, which this signature permits.
 extern "C" char* RtSystem_String_StrAppend(char* dst, int capacity, const char* src) {
-    RT_DIFF_BEGIN("System::String::StrAppend");
-
-    // Snapshot BEFORE our write: `dst` is both input and output.
-    // reference_oracle_must_snapshot_aliased_inputs.md.
-    char  theirsBuf[kErrorStringCapacity];
-    char* theirsRet = nullptr;
-    bool  canDiff = rt_diff_on__ && capacity > 0 && capacity <= kErrorStringCapacity;
-    if (canDiff) std::memcpy(theirsBuf, dst, static_cast<size_t>(capacity));
 
     const int dstLen = RetailStrLen(dst);
     const int room   = capacity - dstLen;
@@ -274,24 +257,6 @@ extern "C" char* RtSystem_String_StrAppend(char* dst, int capacity, const char* 
         std::memmove(end, src, static_cast<size_t>(cnt));
         if (n > room) end[room - 1] = '\0';
         result = end;
-    }
-
-    if (canDiff) {
-        StrAppendFn theirs = RtOriginal<StrAppendFn>(
-            "?StrAppend@String@System@@SAPEADPEADHPEBD@Z");
-        if (theirs) {
-            theirsRet = theirs(theirsBuf, capacity, src);
-            const bool offsetOk = (result - dst) == (theirsRet - theirsBuf);
-            const bool bytesOk  = std::memcmp(dst, theirsBuf,
-                                              static_cast<size_t>(capacity)) == 0;
-            char a[96], b[128];
-            std::snprintf(a, sizeof(a), "ret=+%lld", static_cast<long long>(result - dst));
-            std::snprintf(b, sizeof(b), "ret=+%lld [offsetOk=%d bytesOk=%d]",
-                          static_cast<long long>(theirsRet - theirsBuf),
-                          static_cast<int>(offsetOk), static_cast<int>(bytesOk));
-            RtDiffReport(&rt_diff_site__, offsetOk && bytesOk, a, b);
-            RT_DIFF_WORK(true);
-        }
     }
     return result;
 }
@@ -322,7 +287,6 @@ extern "C" char* RtSystem_String_StrAppend(char* dst, int capacity, const char* 
 // two arms retail put them on. Note the flag is written on BOTH arms, so a
 // caller that fills the buffer still gets the stop behaviour.
 extern "C" void RtSystem_Error_SetText(const char* text, bool stopApplication) {
-    RT_DIFF_BEGIN("System::Error::SetText");
 
     char* buf = ErrorStringBuffer();
     bool* stop = StopApplicationSlot();
@@ -351,28 +315,6 @@ extern "C" void RtSystem_Error_SetText(const char* text, bool stopApplication) {
         if (stop) *stop = stopApplication;
     }
 
-    if (rt_diff_on__) {
-        // Read back what StrAppend and the inlined second append PRODUCED --
-        // this body computed none of it directly.
-        const int textLen = RetailStrLen(text);
-        const int now     = RetailStrLen(buf);
-        const bool textOk = room <= 0 ||
-                            (now >= textLen + 1 &&
-                             std::memcmp(buf + now - textLen - 1, text,
-                                         static_cast<size_t>(textLen)) == 0);
-        const bool nlOk   = room <= 0 || (now >= 1 && buf[now - 1] == '\n');
-        const bool stopOk = (stop == nullptr) || (*stop == stopApplication);
-        char a[128], b[160];
-        std::snprintf(a, sizeof(a), "len=%d tail=%c stop=%d", now,
-                      now ? buf[now - 1] : '?', stop ? static_cast<int>(*stop) : -1);
-        std::snprintf(b, sizeof(b),
-                      "text then newline at the end, stop==arg "
-                      "[textOk=%d nlOk=%d stopOk=%d]",
-                      static_cast<int>(textOk), static_cast<int>(nlOk),
-                      static_cast<int>(stopOk));
-        RT_DIFF_SHADOW(textOk && nlOk && stopOk, a, b);
-        RT_DIFF_WORK(true);
-    }
 }
 
 // ============================================================================
@@ -553,12 +495,11 @@ void Utf8ToUtf16Clamped(uint8_t* dst, int limitBytes, const char* src) {
 }  // namespace
 
 extern "C" void RtSystem_Error_Display() {
-    RT_DIFF_BEGIN("System::Error::Display");
 
     // 0x1800c6077 — retail's own kill switch, tested FIRST and skipping the
     // whole box. `_stopApplication` is still honoured below.
     if (const bool* hide = HideDisplaySlot()) {
-        if (*hide) { DisplayStopIfRequested(); RT_DIFF_WORK(false); return; }
+        if (*hide) { DisplayStopIfRequested(); return; }
     }
 
     // RBP-0x40 and RBP+0x7c0 in retail: 0x800 bytes of text followed by 0x800
@@ -595,7 +536,6 @@ extern "C" void RtSystem_Error_Display() {
     // EFFECTIVENESS CONTROL. `work` counts the calls that actually reached the
     // message box; a run whose Display rows are all work=0 took the
     // `_hideDisplay` arm every time and has exercised none of the above.
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================

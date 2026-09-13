@@ -83,12 +83,9 @@
 // runtime/src/ per PLAN.md §4.1, which is the reason
 // runtime/src/picking/scene.cpp had to leave one such free in the DLL.
 //
-// CALLED BY ADDRESS, NOT BY NAME, and that is deliberate. Wave 2 registers
-// ports under both mangled names (runtime/src/system/allocator.cpp) behind
-// `BANISHED_RT_ALLOC`, which carries a standing NO-GO verdict
-// (docs/runtime_port/WAVE2_ALLOCATOR.md). Going by name would make these
-// buffers come from whichever allocator that switch happened to select while
-// the DLL's own code keeps freeing them into the other one. A heap cannot be
+// CALLED BY ADDRESS, NOT BY NAME, and that is deliberate. Going by name would
+// make these buffers come from whichever allocator the name happened to resolve
+// to while another body frees them into the other one. A heap cannot be
 // half-ours. runtime/src/graphics/scene.cpp:206 made the same call for the same
 // reason and this file follows it.
 //
@@ -132,14 +129,6 @@
 // must stay byte-identical to resolve.h's; the linker checks the two.
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
-// Wave 9 lane VID2 — the Collection::Set AVL probe's arming hook. Declared at
-// file scope because `extern "C"` cannot appear inside a function body.
-extern "C" void RtCollectionSetAvlProbeArm(bool on);
-extern "C" void RtCollectionSetClearProbeArm(bool on);
-// Wave 9 lane COLL — the keyed Set/Map probe's arming hook. Same file-scope
-// reason: `extern "C"` cannot appear inside a function body.
-void RtCollectionAvlProbeArm(bool on);
 
 namespace rtcoll {
 
@@ -530,10 +519,6 @@ void InitSpriteIndexNeg1(uint8_t* d) {
 // registrations with no ordering requirement between the two inits, and
 // spelling the address as a literal is what keeps tools/runtime_census.py able
 // to see the edge.
-//
-// This tier has its own kill switch, `BANISHED_RT_ARRAY_NONTRIVIAL=0`, so an
-// integration run can A/B the thirteen safe instantiations against these three
-// without disarming the whole lane.
 // ============================================================================
 
 // EVERY ONE OF THE FIVE HELPER CALLS BELOW SPELLS ITS ADDRESS AS A LITERAL
@@ -2084,52 +2069,6 @@ const ArraySpec kSpec_AudioChannel70 = {          // 0x180051020
     /*seed zero       */ 0,    0 };
 
 // ============================================================================
-// Live instrumentation.
-//
-// One RtDiffSite PER ADDRESS, not per body. That distinction is the whole risk
-// of this lane: eleven addresses share one J1 body, so a run that exercises the
-// body proves nothing about the other ten REGISTRATIONS, and a mistyped address
-// would leave a call site quietly on the DLL (harmless today, a missing symbol
-// at cutover). Per-address `calls=` in the RtDiff summary is how a run says
-// which of the 27 it actually reached.
-//
-// These sites are a COVERAGE COUNTER AND A CHEAP INVARIANT, NOT AN INDEPENDENT
-// ORACLE. The header check below re-derives retail's own growth rule, so a port
-// that got the rule wrong would agree with it. The independent oracle is the
-// synthetic-subject replay in array_probe.cpp, which compares against the
-// SHIPPED body. Do not read a green summary here as a verified port; read
-// `[RtArrayProbe]` for that. The one genuinely independent thing checked here
-// is the copy prefix (see below), which compares the new buffer against the old
-// one before the old one is freed.
-// ============================================================================
-
-// *** A Site MUST HAVE STATIC STORAGE DURATION. ***
-// RtDiffRegister stores the POINTER in rt_diff.cpp's `g_sites[]` and reads it
-// back at RtDiffSummary() time, so a Site on the stack is a dangling pointer by
-// the time the summary runs. It does not merely print rubbish: the summary's
-// plausibility check reports it as "sites were CORRUPTED -- a stray write hit
-// the harness's own statics", which is this project's most alarming diagnostic
-// and names its worst failure family. The first draft of the probe passed a
-// LOCAL Site from inside its per-case loop, and 16 targets x 9 cases produced
-// 144 registrations of one stack address and one such line. A harness that
-// cries wild-write for a benign cause is worse than one that says nothing.
-//
-// Every Site in this file is therefore a file-scope object, one per registered
-// address, and SetSizeCore/ArrayDtorSited accept a NULL site for callers that
-// want the body without the instrumentation.
-//
-// Two related facts about rt_diff.cpp, worth knowing before adding sites in
-// bulk: registration is an UNSYNCHRONISED `g_sites[g_siteCount++]`, and it is
-// bounds-checked against kMaxSites = 1024 by silently dropping anything past
-// the cap. 27 static sites from this lane is not near it; 144 dynamic ones per
-// run would have been on the way there.
-//
-// `struct Site { RtDiffSite d; uintptr_t addr; }` is declared in
-// array_internal.h. The RtDiff macros want a `rt_diff_site__` in lexical scope
-// and these sites are chosen at runtime, so the bodies below call
-// RtDiffRegister/RtDiffReport directly rather than through RT_DIFF_*.
-
-// ============================================================================
 // VTABLE BATCH 7b (2026-09-12) — the six Array<T>::SetSize bodies the batch-7
 // Graphics/Audio serializers reach BY ADDRESS. Every row below was read out of
 // its own disassembly (retail Runtime-x64.dll, Ghidra disassemble_function):
@@ -2277,28 +2216,9 @@ const ArraySpec kSpec_Rec14 = {                   // 0x180020e90
 // ============================================================================
 namespace rtcoll {
 
-// Armed at init by RtCollectionPortInit; see array_internal.h for why the probe
-// cannot run there. `g_probeRunning` breaks the recursion, because the probe
-// drives SetSizeCore itself.
-bool g_probePending = false;
-bool g_probeRunning = false;
+void ArrayDtorSited(ArrayHdr* a) {
+    ArrayDtorImpl(a);
 
-inline void ProbeGate() {
-    if (!g_probePending || g_probeRunning) return;
-    g_probeRunning = true;
-    RtCollectionProbeRun();
-    g_probePending = false;
-    g_probeRunning = false;
-}
-
-// `site` may be NULL, and the probe passes NULL. See the "A Site must have
-// static storage duration" note above: a null site means "do the work, touch
-// nothing in the diff registry".
-void ArrayDtorSited(ArrayHdr* a, Site* site) {
-    ProbeGate();
-    if (!site || !RtDiffEnabled()) { ArrayDtorImpl(a); return; }
-
-    RtDiffRegister(&site->d);
     // Ours writes, and the post-state is the whole observable effect on the
     // object: retail's last two stores are `_data = 0` and one qword covering
     // _size and _capacity. A wrong pointer handed to Free is not visible here
@@ -2310,7 +2230,6 @@ void ArrayDtorSited(ArrayHdr* a, Site* site) {
     std::snprintf(ours, sizeof(ours), "data=%p size=%d cap=%d",
                   static_cast<void*>(a->_data), a->_size, a->_capacity);
     std::snprintf(theirs, sizeof(theirs), "data=0000000000000000 size=0 cap=0");
-    RtDiffReport(&site->d, ok, ours, theirs);
 }
 
 // ---------------------------------------------------------------------------
@@ -2324,45 +2243,10 @@ void ArrayDtorSited(ArrayHdr* a, Site* site) {
 // at the branch itself (WAVE9.md "count branches taken INSIDE the function
 // under test, not proxies observed from outside it").
 //
-// One Site per ARM, so the RtDiff summary's per-site `calls=` IS the arm count
-// -- the same idiom array_destroy.cpp uses to get per-ADDRESS counts out of one
-// shared body. Both Sites carry the entry-point address they lead to so a
-// summary line names something greppable.
-//
-// Scoped to kSpec_PkgEntry on purpose. A generic version would add a Site pair
-// per spec or, worse, sum every spec's arms into one pair and report a number
-// that is true of nothing. This lane's subject is one spec; when another spec
-// needs arm coverage it gets its own pair, not a widened predicate here.
-Site g_pkgArmRealloc = { { "kSpec_PkgEntry destroy arm: REALLOC (0x180029a0e -> 0x180026b50)",
-                           0, 0, false, false }, 0x180026b50 };
-Site g_pkgArmShrink  = { { "kSpec_PkgEntry destroy arm: SHRINK-TAIL (0x180029a68 -> 0x180026b50)",
-                           0, 0, false, false }, 0x180026b50 };
-
-static void NotePkgEntryDestroyArm(const ArraySpec* spec, bool reallocArm, int count) {
-    if (spec != &kSpec_PkgEntry || !RtDiffEnabled()) return;
-    Site* s = reallocArm ? &g_pkgArmRealloc : &g_pkgArmShrink;
-    RtDiffRegister(&s->d);
-    // Not a comparison and it does not pretend to be one: the predicate is the
-    // one thing the branch itself guarantees (retail never calls the destroy
-    // with count <= 0 from either arm -- the realloc arm passes oldSize, which
-    // is 0 only when there was nothing to destroy, and the shrink arm passes
-    // oldSize-newSize under `oldSize > newSize`). The VALUE of this Site is
-    // `calls=`, and it is labelled so nobody reads it as an oracle.
-    char ours[96];
-    std::snprintf(ours, sizeof(ours), "arm=%s n=%d",
-                  reallocArm ? "realloc" : "shrink-tail", count);
-    RtDiffReport(&s->d, count >= 0, ours, "coverage only (n >= 0)");
-}
-
 // The core. `fill` non-null selects the three-argument form; otherwise the
 // spec's `init` (which may itself be null) supplies the new tail.
 void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
-                 const ArraySpec* spec, Site* site) {
-    ProbeGate();
-    // NULL `site` = no diff-registry traffic at all. The probe passes NULL, both
-    // because its own comparator is strictly stronger than the live checks below
-    // and because a probe-owned site would have to be a static per case.
-    const bool diff = (site != nullptr) && RtDiffEnabled();
+                 const ArraySpec* spec) {
     const uint32_t stride = spec->stride;
 
     const int32_t oldSizeI = a->_size;
@@ -2372,10 +2256,6 @@ void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
         // summary can tell "entered" from "did work" — a shadow placed after an
         // early return makes calls= mean the wrong thing
         // (reference_probe_needs_an_effectiveness_control.md).
-        if (diff) {
-            RtDiffRegister(&site->d);
-            RtDiffReport(&site->d, true, "noop(n==size)", "noop(n==size)");
-        }
         return;
     }
 
@@ -2408,24 +2288,13 @@ void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
     // old buffer is not freed yet. This does NOT re-derive our own rule — it
     // compares against the source data — but it only means anything when the
     // element assignment is a pure byte copy, so `byteCopy` gates it.
-    if (diff && realloced && old && spec->byteCopy) {
-        RtDiffRegister(&site->d);
-        const int64_t n = (oldSize < newSize ? oldSize : newSize) * stride;
-        const bool ok = (n <= 0) || std::memcmp(a->_data, old, static_cast<size_t>(n)) == 0;
-        char ours[128], theirs[128];
-        std::snprintf(ours,   sizeof(ours),   "%s copied %lld bytes", spec->name, (long long)n);
-        std::snprintf(theirs, sizeof(theirs), "%s source  %lld bytes", spec->name, (long long)n);
-        RtDiffReport(&site->d, ok, ours, theirs);
-    }
 
     if (realloced) {
         if (spec->destroy) {
-            NotePkgEntryDestroyArm(spec, /*reallocArm=*/true, oldSizeI);
             spec->destroy(nullptr, old, oldSizeI);
         }
         MemFree(old);                             // null-guarded inside 0x1800c7ad0
     } else if (spec->destroy && oldSizeI > newSize) {
-        NotePkgEntryDestroyArm(spec, /*reallocArm=*/false, oldSizeI - newSize);
         spec->destroy(nullptr, old + static_cast<int64_t>(newSize) * stride,
                       oldSizeI - newSize);
     }
@@ -2433,20 +2302,6 @@ void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
     // Header algebra. WEAK BY CONSTRUCTION (it restates the rule this function
     // implements) and kept for its coverage value: a non-zero calls= on this
     // site is what says the address was reached at all.
-    if (diff) {
-        RtDiffRegister(&site->d);
-        int32_t wantCap = oldCap;
-        if (newSize > oldCap) {
-            wantCap = newSize;
-            if (newSize == static_cast<int32_t>(oldSizeI + 1) && oldSizeI != 0)
-                wantCap = static_cast<int32_t>(newSize * 3);
-        }
-        const bool ok = (a->_size == newSize && a->_capacity == wantCap);
-        char ours[128], theirs[128];
-        std::snprintf(ours,   sizeof(ours),   "size=%d cap=%d", a->_size, a->_capacity);
-        std::snprintf(theirs, sizeof(theirs), "size=%d cap=%d", newSize, wantCap);
-        RtDiffReport(&site->d, ok, ours, theirs);
-    }
 }
 
 }  // namespace rtcoll
@@ -2454,22 +2309,18 @@ void SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
 // ============================================================================
 // The 27 registered entry points.
 //
-// One free function per ADDRESS. They are thin — a tail call in a normal run,
-// because RtDiffEnabled() is false and every diff block compiles to a
-// predictable branch — and they exist so that each address owns an RtDiffSite
-// and so a run can report per-address `calls=`.
+// One free function per ADDRESS: a tail call into the shared body, so that each
+// registered address has its own entry point.
 //
-// The naming is `RtColl_<Job>_<address>` on purpose: when the diff summary or a
-// crash log names one of these, the address is right there.
+// The naming is `RtColl_<Job>_<address>` on purpose: when a crash log names one
+// of these, the address is right there.
 // ============================================================================
 
 namespace rtcoll {
 
 #define J1_ENTRY(ADDR)                                                        \
-    Site g_j1_##ADDR = { { "Collection::Array::~Array @0x" #ADDR, 0, 0, false, false }, \
-                         0x##ADDR };                                          \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a), &g_j1_##ADDR);              \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));              \
         return nullptr;                                                       \
     }
 
@@ -2651,41 +2502,17 @@ J1_ENTRY(1800490e0)   // UI:          RadioElement::_checkBoxes  (+0xC0)
 #undef J1_ENTRY
 
 // 0x18001cdf0 — `Array<int32>::operator=`. Body and evidence above.
-Site g_uiw_18001cdf0 = { { "Collection::Array<int32>::operator= @0x18001cdf0",
-                           0, 0, false, false }, 0x18001cdf0 };
 void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src) {
-    ProbeGate();
     void* r = RtColl_I32ArrayAssign(static_cast<uint8_t*>(dst),
                                     static_cast<const uint8_t*>(src));
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_uiw_18001cdf0.d);
-        // INDEPENDENT of the rule this body implements: it compares the copied
-        // buffer against the SOURCE, which this function did not write. It is
-        // silent when dst == src (retail's early return) and when the size is
-        // zero, so the `worked` flag distinguishes "entered" from "did work"
-        // (reference_probe_needs_an_effectiveness_control.md).
-        const ArrayHdr* d = static_cast<const ArrayHdr*>(dst);
-        const ArrayHdr* s = static_cast<const ArrayHdr*>(src);
-        if (dst != src && d->_size > 0) {
-            const size_t n = static_cast<size_t>(d->_size) * 4;
-            const bool ok = (d->_size == s->_size) &&
-                            std::memcmp(d->_data, s->_data, n) == 0;
-            char ours[96], theirs[96];
-            std::snprintf(ours,   sizeof(ours),   "copied %d int32", d->_size);
-            std::snprintf(theirs, sizeof(theirs), "source %d int32", s->_size);
-            RtDiffReport(&g_uiw_18001cdf0.d, ok, ours, theirs);
-        }
-    }
     return r;
 }
 
 
 // --- J3: the two-argument form, `SetSize(this, int n)` ----------------------
 #define J3_ENTRY2(ADDR, SPEC)                                                 \
-    Site g_j3_##ADDR = { { "Collection::Array::SetSize @0x" #ADDR, 0, 0, false, false }, \
-                         0x##ADDR };                                          \
     void RtColl_ArraySetSize_##ADDR(void* a, int n) {                         \
-        SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &SPEC, &g_j3_##ADDR); \
+        SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &SPEC); \
     }
 
 J3_ENTRY2(180008b90, kSpec_Bool)        // Achievement: Array<bool>, tail UNINITIALISED
@@ -2817,11 +2644,9 @@ J3_ENTRY2(180020e90, kSpec_Rec14)        // Graphics: one pool record's inner ar
 
 // --- J3: the three-argument form, `SetSize(this, int n, const T* fill)` -----
 #define J3_ENTRY3(ADDR, SPEC)                                                 \
-    Site g_j3_##ADDR = { { "Collection::Array::SetSize @0x" #ADDR, 0, 0, false, false }, \
-                         0x##ADDR };                                          \
     void RtColl_ArraySetSizeFill_##ADDR(void* a, int n, const void* fill) {   \
         SetSizeCore(static_cast<ArrayHdr*>(a), n,                             \
-                    static_cast<const uint8_t*>(fill), &SPEC, &g_j3_##ADDR);  \
+                    static_cast<const uint8_t*>(fill), &SPEC);  \
     }
 
 J3_ENTRY3(180004e30, kSpec_Sprite38)    // UI:       SpriteSheet's 0x38 element [NON-TRIVIAL]
@@ -2927,11 +2752,8 @@ J3_ENTRY3(1800638e0, kSpec_DrawGroup1f0)// Graphics: Renderer::BeginDrawGroup's 
 // `MOV [RCX+0xc],0x7530` (the folded 3 * 10000) and `MOV [RDX],0xffffffff`.
 // It takes ONE argument. Registering it behind the two- or three-argument
 // signature would read a register the caller never set.
-Site g_j3_18007b960 = { { "Collection::Array::SetSize(10000,-1) @0x18007b960", 0, 0, false, false },
-                        0x18007b960 };
 void RtColl_ArraySetSize_18007b960(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 10000, nullptr, &kSpec_I32Neg1,
-                &g_j3_18007b960);
+    SetSizeCore(static_cast<ArrayHdr*>(a), 10000, nullptr, &kSpec_I32Neg1);
 }
 
 // WAVE 9 LANE UIF — 0x1800783d0 is `Array<UI::SpriteDraw>::SetSize(0)`, the
@@ -2960,11 +2782,8 @@ void RtColl_ArraySetSize_18007b960(void* a) {
 // it reproduces the same unreachable branches for the same reasons, so if the
 // reasoning above is ever wrong the two disagree under the diff oracle instead
 // of agreeing by construction.
-Site g_j3_1800783d0 = { { "Collection::Array<SpriteDraw>::SetSize(0) @0x1800783d0", 0, 0, false, false },
-                        0x1800783d0 };
 void RtColl_ArraySetSize_1800783d0(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SpriteDraw,
-                &g_j3_1800783d0);
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SpriteDraw);
 }
 
 // ============================================================================
@@ -2993,17 +2812,11 @@ void RtColl_ArraySetSize_1800783d0(void* a) {
 // `kSpec_Fill8` exactly. So the spec framework is reused and only the control
 // flow is new. One address today; the job is written parameterised because the
 // family has never had exactly one instantiation of anything.
-void ReserveCore(ArrayHdr* a, int newSize, const ArraySpec* spec, Site* site) {
-    ProbeGate();
-    const bool diff = (site != nullptr) && RtDiffEnabled();
+void ReserveCore(ArrayHdr* a, int newSize, const ArraySpec* spec) {
     const uint32_t stride = spec->stride;
 
     const int32_t oldSizeI = a->_size;
     if (oldSizeI >= newSize) {
-        if (diff) {
-            RtDiffRegister(&site->d);
-            RtDiffReport(&site->d, true, "noop(n<=size)", "noop(n<=size)");
-        }
         return;
     }
 
@@ -3030,20 +2843,10 @@ void ReserveCore(ArrayHdr* a, int newSize, const ArraySpec* spec, Site* site) {
 
     a->_size = oldSizeI;                     // *** the whole point of Reserve ***
 
-    if (diff) {
-        RtDiffRegister(&site->d);
-        const bool ok = (a->_size == oldSizeI && a->_capacity >= newSize);
-        char ours[128], theirs[128];
-        std::snprintf(ours,   sizeof(ours),   "size=%d cap=%d", a->_size, a->_capacity);
-        std::snprintf(theirs, sizeof(theirs), "size=%d cap>=%d", oldSizeI, newSize);
-        RtDiffReport(&site->d, ok, ours, theirs);
-    }
 }
 
-Site g_j5_18002fd90 = { { "Collection::Array::Reserve @0x18002fd90", 0, 0, false, false },
-                        0x18002fd90 };
 void RtColl_ArrayReserve_18002fd90(void* a, int n) {
-    ReserveCore(static_cast<ArrayHdr*>(a), n, &kSpec_Fill8, &g_j5_18002fd90);
+    ReserveCore(static_cast<ArrayHdr*>(a), n, &kSpec_Fill8);
 }
 
 // CUTOVER CLOSURE BATCH 2b — 0x180051020, the THIRD constant-folded one-argument
@@ -3052,11 +2855,8 @@ void RtColl_ArrayReserve_18002fd90(void* a, int n) {
 // loop bound `CMP R..,0x7000` is 256 * 0x70 written as a byte offset. It takes
 // ONE argument; a two-argument registration would read a register the caller
 // never set.
-Site g_j3_180051020 = { { "Collection::Array<Audio::Channel>::SetSize(256) @0x180051020",
-                          0, 0, false, false }, 0x180051020 };
 void RtColl_ArraySetSize_180051020(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0x100, nullptr, &kSpec_AudioChannel70,
-                &g_j3_180051020);
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0x100, nullptr, &kSpec_AudioChannel70);
 }
 
 
@@ -3086,10 +2886,7 @@ void RtColl_ArraySetSize_180051020(void* a) {
 // No ArraySpec: the element operations are inlined constants in this body (a
 // three-float compare and a four-dword move), not a parameter, so a spec row
 // would be a table with one entry and one user.
-Site g_j6_180050e00 = { { "Collection::Array<Vec3+pad>::Remove @0x180050e00",
-                          0, 0, false, false }, 0x180050e00 };
 void RtColl_ArrayRemove_180050e00(void* self, const float* value) {
-    ProbeGate();
     ArrayHdr* a = static_cast<ArrayHdr*>(self);
 
     int32_t  size = a->_size;
@@ -3134,22 +2931,6 @@ void RtColl_ArrayRemove_180050e00(void* self, const float* value) {
         } while (i + 1 < size);
     }
 
-    if (RtDiffEnabled()) {
-        RtDiffRegister(&g_j6_180050e00.d);
-        // Coverage plus the one invariant the body itself guarantees: no
-        // element equal to the key may survive. Weak (it restates the goal),
-        // and labelled as such; its value is `calls=`.
-        bool ok = true;
-        for (int32_t j = 0; j < a->_size; ++j) {
-            const uint8_t* e = a->_data + static_cast<int64_t>(j) * 0x10;
-            if (*reinterpret_cast<const float*>(e)     == value[0] &&
-                *reinterpret_cast<const float*>(e + 4) == value[1] &&
-                *reinterpret_cast<const float*>(e + 8) == value[2]) { ok = false; break; }
-        }
-        char ours[96];
-        std::snprintf(ours, sizeof(ours), "removed=%d size=%d", removed, a->_size);
-        RtDiffReport(&g_j6_180050e00.d, ok, ours, "no surviving element == key");
-    }
 }
 
 // UI leftovers batch — the SAME one-argument `SetSize(0)` shape as
@@ -3173,18 +2954,12 @@ void RtColl_ArrayRemove_180050e00(void* self, const float* value) {
 // SetSizeCore is still the right implementation, for the same reason
 // 0x1800783d0 gives: if the "always dead" reasoning is ever wrong for either
 // spec, the two disagree under the diff oracle instead of silently agreeing.
-Site g_j3_18011f7f8 = { { "Collection::Array<DialogInstancePtr>::SetSize(0) @0x180079c90", 0, 0, false, false },
-                        0x180079c90 };
 void RtColl_ArraySetSize_180079c90(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_PtrZero,
-                &g_j3_18011f7f8);
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_PtrZero);
 }
 
-Site g_j3_18011fc90 = { { "Collection::Array<UI::UserInterface::Event>::SetSize(0) @0x180079df0", 0, 0, false, false },
-                        0x180079df0 };
 void RtColl_ArraySetSize_180079df0(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Event30,
-                &g_j3_18011fc90);
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Event30);
 }
 
 // ---- BATCH 4 (Graphics render/cull/sun-camera cluster) ---------------------
@@ -3198,11 +2973,8 @@ void RtColl_ArraySetSize_180079df0(void* a) {
 // generic core is known to fit: retail's `_capacity = 4; if (oldSize == 3)
 // _capacity = 12;` is `(newSize == oldSize + 1 && oldSize != 0) ? n*3 : n`
 // with n folded to 4.
-Site g_j3_18000c300 = { { "Collection::Array<blob0x8ba0>::SetSize(4) @0x18000c300",
-                          0, 0, false, false }, 0x18000c300 };
 void RtColl_ArraySetSize_18000c300(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 4, nullptr, &kSpec_Blob8ba0,
-                &g_j3_18000c300);
+    SetSizeCore(static_cast<ArrayHdr*>(a), 4, nullptr, &kSpec_Blob8ba0);
 }
 
 // 0x18005f980 — NOT a SetSize at all but a `Reserve(16384)`: SetSize(0x4000)
@@ -3226,12 +2998,10 @@ void RtColl_ArraySetSize_18000c300(void* a) {
 // Retail also has no `newSize == oldSize` early return here (it was folded
 // away). SetSizeCore keeps one, and it is unobservable: the only state that
 // path would skip is `_size = 0x4000`, which the restore below undoes.
-Site g_j3_18005f980 = { { "Collection::Array<ptr>::Reserve(16384) @0x18005f980",
-                          0, 0, false, false }, 0x18005f980 };
 void RtColl_ArrayReserve_18005f980(void* a) {
     ArrayHdr* h = static_cast<ArrayHdr*>(a);
     const int32_t oldSize = h->_size;
-    SetSizeCore(h, 0x4000, nullptr, &kSpec_Fill8, &g_j3_18005f980);
+    SetSizeCore(h, 0x4000, nullptr, &kSpec_Fill8);
     h->_size = oldSize;
 }
 
@@ -3341,11 +3111,9 @@ const ArraySpec kSpec_ModExternal18 = {          // 0x180028cd0
     /*seed zero       */ 0x10, 0x18 };   // the Filename slot is dereferenced
 
 #define J3_ENTRY3(ADDR, SPEC)                                                 \
-    Site g_j3_##ADDR = { { "Collection::Array::SetSize @0x" #ADDR, 0, 0, false, false }, \
-                         0x##ADDR };                                          \
     void RtColl_ArraySetSizeFill_##ADDR(void* a, int n, const void* fill) {   \
         SetSizeCore(static_cast<ArrayHdr*>(a), n,                             \
-                    static_cast<const uint8_t*>(fill), &SPEC, &g_j3_##ADDR);  \
+                    static_cast<const uint8_t*>(fill), &SPEC);  \
     }
 
 J3_ENTRY3(18002ae20, kSpec_SaveGameInfo)   // IO: Persistence's save-list append
@@ -3369,11 +3137,8 @@ J3_ENTRY3(180028cd0, kSpec_ModExternal18)  // IO: SetupFileSystem's reload list
 // `_size = 0`: it reproduces the same unreachable branches for the same
 // reasons, so if that reading is ever wrong the two disagree under the oracle
 // instead of agreeing by construction.
-Site g_j3_18002aae0 = { { "Collection::Array<SaveGameInfo>::SetSize(0) @0x18002aae0",
-                          0, 0, false, false }, 0x18002aae0 };
 void RtColl_ArraySetSize_18002aae0(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SaveGameInfo,
-                &g_j3_18002aae0);
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SaveGameInfo);
 }
 
 
@@ -3400,11 +3165,8 @@ const ArraySpec kSpec_EmitterInstance = {        // 0x180052330
     "Array<Audio::EmitterInstance>", 0x10, 4, &Assign16, &InitZero10, nullptr,
     true, 0, 0, 0, 0, 0, 0 };
 
-Site g_j3_180052330 = { { "Collection::Array::SetSize @0x180052330",
-                          0, 0, false, false }, 0x180052330 };
 void RtColl_ArraySetSize_180052330(void* a, int n) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_EmitterInstance,
-                &g_j3_180052330);
+    SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_EmitterInstance);
 }
 
 
@@ -3665,10 +3427,8 @@ const ArraySpec kSpec_SfxSample18 = {             // 0x180052e60
     /*seed zero       */ 0,    0 };
 
 #define D1_J1_ENTRY(ADDR)                                                     \
-    Site g_j1_##ADDR = { { "Collection::Array::~Array @0x" #ADDR, 0, 0, false, false }, \
-                         0x##ADDR };                                          \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a), &g_j1_##ADDR);              \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));              \
         return nullptr;                                                       \
     }
 
@@ -3690,10 +3450,8 @@ D1_J1_ENTRY(1800527a0)   // Audio:    SoundEffect's Array<Sample>, 0x180052700's
 #undef D1_J1_ENTRY
 
 #define D1_J3_ENTRY2(ADDR, SPEC)                                              \
-    Site g_j3_##ADDR = { { "Collection::Array::SetSize @0x" #ADDR, 0, 0, false, false }, \
-                         0x##ADDR };                                          \
     void RtColl_ArraySetSize_##ADDR(void* a, int n) {                         \
-        SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &SPEC, &g_j3_##ADDR); \
+        SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &SPEC); \
     }
 
 D1_J3_ENTRY2(18003e600, kSpec_PtrZero)        // UI: DocumentTextDescription +0xb0
@@ -3709,11 +3467,9 @@ D1_J3_ENTRY2(180052e60, kSpec_SfxSample18)    // Audio: SoundEffect::Buffer::_sa
 #undef D1_J3_ENTRY2
 
 #define D1_J3_ENTRY3(ADDR, SPEC)                                              \
-    Site g_j3_##ADDR = { { "Collection::Array::SetSize @0x" #ADDR, 0, 0, false, false }, \
-                         0x##ADDR };                                          \
     void RtColl_ArraySetSizeFill_##ADDR(void* a, int n, const void* fill) {   \
         SetSizeCore(static_cast<ArrayHdr*>(a), n,                             \
-                    static_cast<const uint8_t*>(fill), &SPEC, &g_j3_##ADDR);  \
+                    static_cast<const uint8_t*>(fill), &SPEC);  \
     }
 
 D1_J3_ENTRY3(18003df80, kSpec_DocItem24)      // UI: DocumentTextElement::_items append
@@ -3732,17 +3488,11 @@ D1_J3_ENTRY3(18003e1a0, kSpec_Link18)         // UI: DocumentTextElement::_links
 // 0x18003d430's shrink arm IS reachable and is the whole point of the call:
 // it runs 0x18003e3e0 over the old elements, which is how the link table
 // releases its Strings before it is rebuilt.
-Site g_j3_18003d1c0 = { { "Collection::Array<DocumentItem>::SetSize(0) @0x18003d1c0",
-                          0, 0, false, false }, 0x18003d1c0 };
 void RtColl_ArraySetSize_18003d1c0(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_DocItem24,
-                &g_j3_18003d1c0);
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_DocItem24);
 }
-Site g_j3_18003d430 = { { "Collection::Array<Link>::SetSize(0) @0x18003d430",
-                          0, 0, false, false }, 0x18003d430 };
 void RtColl_ArraySetSize_18003d430(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Link18,
-                &g_j3_18003d430);
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Link18);
 }
 
 
@@ -3796,10 +3546,8 @@ void RtColl_ArraySetSize_18003d430(void* a) {
 // So the "no parameters at all, not even a stride" conclusion covers them
 // unchanged and one body still serves them all.
 #define J1_ENTRY(ADDR)                                                        \
-    Site g_j1_##ADDR = { { "Collection::Array::~Array @0x" #ADDR, 0, 0, false, false }, \
-                         0x##ADDR };                                          \
     void* RtColl_ArrayDtor_##ADDR(void* a) {                                  \
-        ArrayDtorSited(static_cast<ArrayHdr*>(a), &g_j1_##ADDR);              \
+        ArrayDtorSited(static_cast<ArrayHdr*>(a));              \
         return nullptr;                                                       \
     }
 
@@ -4099,10 +3847,8 @@ const ArraySpec kSpecD2_Emit58 = {                // 0x180061bb0
 
 // ---- the entry points ------------------------------------------------------
 #define J3_ENTRY2(ADDR, SPEC)                                                 \
-    Site g_j3_##ADDR = { { "Collection::Array::SetSize @0x" #ADDR, 0, 0, false, false }, \
-                         0x##ADDR };                                          \
     void RtColl_ArraySetSize_##ADDR(void* a, int n) {                         \
-        SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &SPEC, &g_j3_##ADDR); \
+        SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &SPEC); \
     }
 
 J3_ENTRY2(180062110, kSpec_Fill8)          // Graphics:    Particle record ptrs
@@ -4126,11 +3872,9 @@ J3_ENTRY2(18007aa40, kSpecD2_SubMesh80)    // Picking:     _nodes   [NON-TRIVIAL
 // it. Same spec as 0x180077330; different arity, so a separate entry point,
 // because registering it behind the two-argument signature would read a
 // register the caller never set.
-Site g_j3_180076d10 = { { "Collection::Array::SetSize @0x180076d10", 0, 0, false, false },
-                        0x180076d10 };
 void RtColl_ArraySetSizeFill_180076d10(void* a, int n, const void* fill) {
     SetSizeCore(static_cast<ArrayHdr*>(a), n,
-                static_cast<const uint8_t*>(fill), &kSpecD2_Glyph10A4, &g_j3_180076d10);
+                static_cast<const uint8_t*>(fill), &kSpecD2_Glyph10A4);
 }
 
 // 0x180076a40 -- the SAME glyph array with the new size folded to the constant
@@ -4147,11 +3891,8 @@ void RtColl_ArraySetSizeFill_180076d10(void* a, int n, const void* fill) {
 // this freed. SetSizeCore is still the implementation rather than a written-out
 // `_size = 0`, so that if this reading is ever wrong the two disagree under the
 // oracle instead of agreeing by construction.
-Site g_j3_180076a40 = { { "Collection::Array<Glyph16>::SetSize(0) @0x180076a40",
-                          0, 0, false, false }, 0x180076a40 };
 void RtColl_ArraySetSize_180076a40(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpecD2_Glyph10A4,
-                &g_j3_180076a40);
+    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpecD2_Glyph10A4);
 }
 
 // ---- the two element COPY CONSTRUCTORS, at their own addresses -------------
@@ -4194,8 +3935,6 @@ void* RtColl_ElemCopyCtor_1800734a0(void* dst, const void* src) {
 // these. Several of those files carried comments asserting the opposite; they
 // are corrected in the same commit. If this lane is reverted, revert those too.
 void RtCollectionPortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_COLLECTION")) return;
-
     using namespace rtcoll;
 
     // ---- J1: Array<T>::~Array, one body, eleven addresses ------------------
@@ -4266,7 +4005,7 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x1800604e0, (void*)&RtColl_ArraySetSize_1800604e0);
     RegisterRuntimeAddr(0x180056240, (void*)&RtColl_ArraySetSize_180056240);
     // 2026-09-12 — Video::ShaderProgram's two. Registered UNCONDITIONALLY and
-    // NOT behind BANISHED_RT_ARRAY_NONTRIVIAL, even though both call unexported
+    // In the non-trivial tier, even though both call unexported
     // per-element helpers: they sit on ?Serialize@ShaderProgram@Video@@, which
     // is on the cutover boot path, and an unregistered address there is a call
     // to zero the moment the DLL is gone.
@@ -4305,7 +4044,7 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x1800616c0, (void*)&RtColl_ArraySetSize_1800616c0);
     // Wave 26 lane INT33 — Array<SpriteSheet::SpriteInfo>::SetSize, the
     // two-argument form. NON-TRIVIAL, and registered HERE rather than behind
-    // BANISHED_RT_ARRAY_NONTRIVIAL, for the same reason 0x180034860 and
+    // the non-trivial tier, for the same reason 0x180034860 and
     // 0x1800417d0 below are: that switch exists because ITS three members call
     // per-element helpers by address INTO THE DLL, and this one's two do not.
     // 0x180004220 (the assign) and 0x1800059e0 (the destroy) are BOTH ported
@@ -4316,7 +4055,7 @@ void RtCollectionPortInit() {
     // Wave 26 lane INT33 — Array<DialogNamedTemplate>::SetSize. Same reasoning
     // as the line above: its one per-element helper (0x180039640) is ported and
     // registered by array_destroy.cpp in this commit, so it is not in the tier
-    // BANISHED_RT_ARRAY_NONTRIVIAL exists to switch off.
+    // the non-trivial tier covers.
     RegisterRuntimeAddr(0x180075d20, (void*)&RtColl_ArraySetSize_180075d20);
     RegisterRuntimeAddr(0x180075b20, (void*)&RtColl_ArraySetSize_180075b20);
     // VTABLE BATCH 2 (2026-09-12): the three read-path resizes of the
@@ -4341,7 +4080,7 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x18004bfc0, (void*)&RtColl_ArraySetSizeFill_18004bfc0);
     RegisterRuntimeAddr(0x180048fe0, (void*)&RtColl_ArraySetSizeFill_180048fe0);
     // The two NON-TRIVIAL ones are registered HERE, unconditionally, and NOT
-    // behind BANISHED_RT_ARRAY_NONTRIVIAL. That switch exists because its three
+    // in the non-trivial tier. That tier is called out because its three
     // members call unexported per-element helpers BY ADDRESS INTO THE DLL, so
     // turning them off returns three whole element types to retail. These two
     // do not: every element operation they use — AssignStringRef,
@@ -4387,17 +4126,13 @@ void RtCollectionPortInit() {
     // unexported per-element helpers by address (five new lane-D rows) and the
     // only ones with a shrink-path destroy. An integration run that sees a new
     // failure can halve the search space with one env var.
-    if (RtWaveEnabled("BANISHED_RT_ARRAY_NONTRIVIAL")) {
-        RegisterRuntimeAddr(0x180004e30, (void*)&RtColl_ArraySetSizeFill_180004e30);
-        RegisterRuntimeAddr(0x180051390, (void*)&RtColl_ArraySetSize_180051390);
-        RegisterRuntimeAddr(0x180061480, (void*)&RtColl_ArraySetSizeFill_180061480);
-    }
+    RegisterRuntimeAddr(0x180004e30, (void*)&RtColl_ArraySetSizeFill_180004e30);
+    RegisterRuntimeAddr(0x180051390, (void*)&RtColl_ArraySetSize_180051390);
+    RegisterRuntimeAddr(0x180061480, (void*)&RtColl_ArraySetSizeFill_180061480);
 
     // ---- Wave 9 lane UIC: Collection::LinkedList's three helpers -----------
-    // In their own file with their own kill switch (BANISHED_RT_LINKEDLIST) —
-    // see runtime/src/collection/linkedlist.cpp for why that separation is
-    // deliberate rather than tidiness. Called from here because this is the
-    // Collection namespace's one init hook.
+    // In their own file — see runtime/src/collection/linkedlist.cpp. Called
+    // from here because this is the Collection namespace's one init hook.
     extern int RtCollLinkedListRegister();
     RtCollLinkedListRegister();
 
@@ -4406,13 +4141,9 @@ void RtCollectionPortInit() {
     // this is the Collection namespace's one init hook. They are the recorded
     // blocker for Video::Device::PlatformStartup; see
     // runtime/src/collection/set_avl.cpp and docs/runtime_port/WAVE9_LANE_VID2.md.
-    if (RtWaveEnabled("BANISHED_RT_SETAVL")) {
+    {
         extern int RtCollectionSetAvlRegister();
         const int setAvl = RtCollectionSetAvlRegister();
-        // Armed, not run — the probe allocates. It self-schedules on the first
-        // call into Application::RegisterMessageCallback.
-        const char* p = std::getenv("BANISHED_RT_SETAVL_PROBE");
-        RtCollectionSetAvlProbeArm(p && *p && std::strcmp(p, "0") != 0);
         printf("[RtPort]   Collection::Set AVL: %d addresses registered\n", setAvl);
     }
 
@@ -4421,14 +4152,9 @@ void RtCollectionPortInit() {
     // again — this is the Collection namespace's one init hook. They are the
     // boot-path door under the ported IO::Persistence::ReadSettings; see
     // runtime/src/collection/set_clear.cpp and docs/runtime_port/WAVE9_LANE_SAVE2.md.
-    if (RtWaveEnabled("BANISHED_RT_SETCLEAR")) {
+    {
         extern int RtCollectionSetClearRegister();
         const int setClear = RtCollectionSetClearRegister();
-        // Armed, not run — the probe allocates, and a probe that allocates
-        // cannot run from a *PortInit (lane PKG2's null+0x640). It
-        // self-schedules on the first real call into Clear.
-        const char* pc = std::getenv("BANISHED_RT_SETCLEAR_PROBE");
-        RtCollectionSetClearProbeArm(pc && *pc && std::strcmp(pc, "0") != 0);
         printf("[RtPort]   Collection::Set Clear: %d addresses registered\n", setClear);
     }
 
@@ -4441,7 +4167,7 @@ void RtCollectionPortInit() {
     // It registers SIX addresses to lane VID2's bodies (the sibling retraces
     // and rotations, byte-verified equal against the shipped DLL); those are
     // distinct addresses, not a duplicate registration of one.
-    if (RtWaveEnabled("BANISHED_RT_AVLTREES")) {
+    {
         extern int RtCollectionAvlTreesRegister();
         extern int RtCollectionSortRegister();
         const int avl  = RtCollectionAvlTreesRegister();
@@ -4454,8 +4180,6 @@ void RtCollectionPortInit() {
         extern void RtCrtStrICmpCheckLocaleFlag();
         const int icmp = RtCrtStrICmpRegister();
         RtCrtStrICmpCheckLocaleFlag();
-        const char* p = std::getenv("BANISHED_RT_AVLTREES_PROBE");
-        RtCollectionAvlProbeArm(p && *p && std::strcmp(p, "0") != 0);
         printf("[RtPort]   Collection keyed Set/Map + sort (lane COLL): "
                     "%d + %d + %d addresses registered\n", avl, sort, icmp);
     }
@@ -4521,7 +4245,7 @@ void RtCollectionPortInit() {
     // Called from here because this is the Collection namespace's one init
     // hook, the same reasoning as the linked list and lane VID2's AVL
     // primitives below. Registered UNCONDITIONALLY (DIRECTION.md §2: a port
-    // registers unconditionally; no new BANISHED_RT_* flag).
+    // registers unconditionally).
     {
         extern int RtCollectionSetAvlPathIdRegister();
         const int pathId = RtCollectionSetAvlPathIdRegister();
@@ -4606,6 +4330,4 @@ void RtCollectionPortInit() {
     RegisterRuntimeAddr(0x1800734a0, (void*)&RtColl_ElemCopyCtor_1800734a0);
     // J3, constant-folded one-argument.
     RegisterRuntimeAddr(0x180076a40, (void*)&RtColl_ArraySetSize_180076a40);
-
-    rtcoll::g_probePending = RtCollectionProbeArmed();
 }

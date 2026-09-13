@@ -12,7 +12,7 @@
 
 namespace RtSystem {
 
-// Runtime-x64.dll's own allocator, resolved once with RtOriginal<>() (NOT
+// The one registered System::MemoryAllocator, resolved once (NOT
 // ResolveExport). Strings cross the DLL boundary, so both sides must use the
 // same heap. Init happens lazily on first use.
 void* RtMemAlloc(uint64_t size, int align);

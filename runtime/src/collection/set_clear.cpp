@@ -93,7 +93,6 @@
 #include "set_avl.h"
 #include "array_destroy_internal.h"
 
-extern "C" void RtCollectionSetClearProbeMaybeRun();
 
 namespace rtsetclear {
 
@@ -177,7 +176,6 @@ void Clear(Set* set) {
     // *PortInit, because that runs before the allocator publishes its
     // singleton. The first real Clear is provably past that point — the caller
     // is IO::Persistence::ReadSettings, inside Engine::Startup.
-    RtCollectionSetClearProbeMaybeRun();
 
     Node* n = set->root;
     if (n) {

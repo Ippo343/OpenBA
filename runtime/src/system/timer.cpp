@@ -304,25 +304,17 @@ float RtSystem_Timer_CurrentTime() {
 //   / CVTTSD2SI RAX,XMM1
 // float widened to double, divided in double, then TRUNCATED toward zero.
 int64_t RtSystem_Timer_SecondsToTicks(float seconds) {
-    RT_DIFF_BEGIN("Timer::SecondsToTicks");
     int64_t ours = static_cast<int64_t>(static_cast<double>(seconds) / g_secondsPerTick);
     using Fn = int64_t (*)(float);
-    RT_DIFF_SCALAR(ours, RtOriginal<Fn>("?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds));
     return ours;
 }
 
 // ?TicksToSeconds@Timer@System@@SAM_J@Z  retail 0x1800ca820
 //   CVTSI2SD XMM0,RCX / MULSD XMM0,[_secondsPerTick] / CVTPD2PS XMM0,XMM0
 // SIGNED widening (CVTSI2SD, not the unsigned pair), multiply in double, one
-// rounding to float at the end. Bit-exactness is the expectation here, so the
-// diff below is RT_DIFF_SCALAR on the float — an exact compare — and not
-// RT_DIFF_FLOAT with a tolerance.
+// rounding to float at the end.
 float RtSystem_Timer_TicksToSeconds(int64_t ticks) {
-    RT_DIFF_BEGIN("Timer::TicksToSeconds");
-    float ours = static_cast<float>(static_cast<double>(ticks) * g_secondsPerTick);
-    using Fn = float (*)(int64_t);
-    RT_DIFF_SCALAR(ours, RtOriginal<Fn>("?TicksToSeconds@Timer@System@@SAM_J@Z")(ticks));
-    return ours;
+    return static_cast<float>(static_cast<double>(ticks) * g_secondsPerTick);
 }
 
 // ??4Timer@System@@QEAAAEAV01@AEBV01@@Z  retail 0x180007890
@@ -333,8 +325,7 @@ float RtSystem_Timer_TicksToSeconds(int64_t ticks) {
 void* RtSystem_Timer_Assign(void* self, const void* /*other*/) { return self; }
 
 // ============================================================
-// RtSystemTimerRegister — called from RtSystemPortInit() under
-// BANISHED_RT_TIMER (rt_system_port.cpp).
+// RtSystemTimerRegister — called from RtSystemPortInit() (rt_system_port.cpp).
 // ============================================================
 int RtSystemTimerRegister() {
     int n = 0;

@@ -256,7 +256,6 @@ void RtSystem_WideString_SetLength(WideString* self, int len) {
 //     as written rather than folded, because folding it would silently change
 //     what happens if a caller ever mutated `src` between the two walks.
 void RtSystem_WideString_Set(WideString* self, const wchar_t* src) {
-    RT_DIFF_BEGIN("System::WideString::Set");
 
     // Snapshot BEFORE we touch `self`: the oracle below replays onto a scratch
     // object, and a replay whose input our own write has already destroyed is
@@ -296,23 +295,6 @@ void RtSystem_WideString_Set(WideString* self, const wchar_t* src) {
         }
     }
 
-    if (rt_diff_on__) {
-        // Replay on a SCRATCH object seeded with the same `before` buffer (and
-        // its refcount bumped, because the shipped body will release it). The
-        // shipped body allocates its own storage, so ours and theirs never
-        // share a pointer and only the TEXT can be compared.
-        WideString theirs{before};
-        if (before != nullptr) ++reinterpret_cast<int32_t*>(before)[-1];
-        RtOriginal<void (*)(WideString*, const wchar_t*)>(
-            "?Set@WideString@System@@QEAAXPEB_W@Z")(&theirs, src);
-        const bool equal = SameWide(self->data, theirs.data);
-        char a[96], b[96];
-        std::snprintf(a, sizeof(a), "len=%d", WideLength(self->data));
-        std::snprintf(b, sizeof(b), "len=%d", WideLength(theirs.data));
-        RT_DIFF_SHADOW(equal, a, b);
-        RT_DIFF_WORK(true);
-        WideReleaseInline(&theirs);
-    }
 }
 
 // ============================================================================
@@ -330,7 +312,6 @@ void RtSystem_WideString_Set(WideString* self, const wchar_t* src) {
 // matters: a lone surrogate encodes to ZERO bytes, so a malformed UTF-16
 // buffer loses that character rather than corrupting the output.
 String* RtSystem_WideString_AsUTF8(const WideString* self, String* ret) {
-    RT_DIFF_BEGIN("System::WideString::AsUTF8");
 
     const uint8_t* p   = reinterpret_cast<const uint8_t*>(self->data);
     const uint8_t* end = p + static_cast<size_t>(WideLength(self->data)) * 2;
@@ -372,16 +353,6 @@ String* RtSystem_WideString_AsUTF8(const WideString* self, String* ret) {
     // `self` is const and nothing in the body touches it, so the shipped body
     // runs on identical input. Its result is a freshly allocated String, so
     // ours and theirs never share a pointer — compare by TEXT.
-    if (rt_diff_on__ && ret != nullptr) {
-        String theirs{nullptr};
-        RtOriginal<String* (*)(const WideString*, String*)>(
-            "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ")(self, &theirs);
-        const bool equal = SameText(ret->data, theirs.data);
-        RT_DIFF_SHADOW(equal, ret->data ? ret->data : "(null)",
-                       theirs.data ? theirs.data : "(null)");
-        RT_DIFF_WORK(true);
-        RtString_ReleaseInline(&theirs);
-    }
     return ret;
 }
 
@@ -396,7 +367,6 @@ String* RtSystem_WideString_AsUTF8(const WideString* self, String* ret) {
 // correctly costs TWO characters, and the terminator is written at
 // `data[bytes/2]`.
 WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* src) {
-    RT_DIFF_BEGIN("System::WideString::ctor(String)");
 
     self->data = nullptr;
 
@@ -437,18 +407,6 @@ WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* s
     }
     self->data[chars] = 0;
 
-    if (rt_diff_on__) {
-        WideString theirs{nullptr};
-        RtOriginal<WideString* (*)(WideString*, const String*)>(
-            "??0WideString@System@@QEAA@AEBVString@1@@Z")(&theirs, src);
-        const bool equal = SameWide(self->data, theirs.data);
-        char a[96], b[96];
-        std::snprintf(a, sizeof(a), "chars=%d", WideLength(self->data));
-        std::snprintf(b, sizeof(b), "chars=%d", WideLength(theirs.data));
-        RT_DIFF_SHADOW(equal, a, b);
-        RT_DIFF_WORK(true);
-        WideReleaseInline(&theirs);
-    }
     return self;
 }
 
@@ -493,7 +451,6 @@ WideString* RtSystem_WideString_CtorFromString(WideString* self, const String* s
 // ported four of this class's constructors and left this one, because nothing
 // in the tree called it then.
 WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src) {
-    RT_DIFF_BEGIN("System::WideString::ctor(const char*)");
 
     self->data = nullptr;
 
@@ -543,21 +500,6 @@ WideString* RtSystem_WideString_CtorFromChars(WideString* self, const char* src)
     }
     self->data[chars] = 0;                    // 0x1800cb275
 
-    if (rt_diff_on__) {
-        WideString theirs{nullptr};
-        RtOriginal<WideString* (*)(WideString*, const char*)>(
-            "??0WideString@System@@QEAA@PEBD@Z")(&theirs, src);
-        const bool equal = SameWide(self->data, theirs.data);
-        char a[96], b[96];
-        std::snprintf(a, sizeof(a), "chars=%d", WideLength(self->data));
-        std::snprintf(b, sizeof(b), "chars=%d", WideLength(theirs.data));
-        RT_DIFF_SHADOW(equal, a, b);
-        // The effectiveness control: a call that produced NO characters cannot
-        // distinguish a correct port from one that never wrote anything, so
-        // `worked=` counts only the calls that actually converted something.
-        RT_DIFF_WORK(chars > 0);
-        WideReleaseInline(&theirs);
-    }
     return self;
 }
 

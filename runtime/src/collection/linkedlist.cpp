@@ -82,10 +82,7 @@
 //   runtime/src/input/input.cpp:139      RtInput_KeyMap_ClearAll's freeNode
 //
 // That redirection is the POINT, not a side effect: all three were an
-// unregistered address door, i.e. a null call after cutover. It is also why
-// this file has its own kill switch, `BANISHED_RT_LINKEDLIST=0`, separate from
-// BANISHED_RT_COLLECTION — an integration run that regresses in the graphics or
-// input path can take this out without giving up the Array ports.
+// unregistered address door, i.e. a null call after cutover.
 //
 // ---------------------------------------------------------------------------
 // ORACLE
@@ -99,18 +96,12 @@
 // in the disposition lane M established and lanes UIF/Z reused: a NO-ORACLE
 // port with NO call into the shipped body at all.
 //
-// What they do carry is liveness: RT_DIFF_WORK reports how many entered calls
-// actually unlinked / actually allocated. `calls=` will read 0 at these sites
-// because nothing is compared — `worked=` is the whole signal here, exactly as
-// WAVE9_LANE_UIF.md §5 records for its own three no-oracle bodies.
-//
 // PORTABILITY: no <windows.h>, per PLAN.md §4.1 decision 1.
 // ============================================================================
 
 #include <cstddef>
 #include <cstdint>
 
-#include "../../funcs/rt_diff.h"
 #include "../../funcs/rt_port.h"
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -182,9 +173,7 @@ void MemFreeLocked(void* p) {
 // identical first instruction (`TEST RCX,RCX; JZ ret` at 0x1800c7ad0) — this is
 // not a null check added to paper over a crash.
 extern "C" void RtColl_FreeLocked_180009c30(void* /*ignoredThis*/, void* p) {
-    RT_DIFF_BEGIN("Collection::FreeLocked(0x180009c30)");
     MemFreeLocked(p);
-    RT_DIFF_WORK(p != nullptr);
 }
 
 // ---- 0x180032750 — LinkedList node allocate + initialise -------------------
@@ -214,17 +203,15 @@ extern "C" void RtColl_FreeLocked_180009c30(void* /*ignoredThis*/, void* p) {
 // difference nobody then looks for.
 extern "C" void* RtColl_LinkedListNewNode_180032750(void* /*neverRead*/,
                                                     void* const* value) {
-    RT_DIFF_BEGIN("Collection::LinkedList::NewNode(0x180032750)");
 
     LlNode* node = static_cast<LlNode*>(MemAllocLocked(0x18, 8));
-    if (!node) { RT_DIFF_WORK(false); return nullptr; }
+    if (!node) { return nullptr; }
 
     node->element = nullptr;     // retail's dead store, kept — see above
     node->element = *value;
     node->prev    = nullptr;
     node->next    = nullptr;
 
-    RT_DIFF_WORK(true);
     return node;
 }
 
@@ -252,17 +239,16 @@ extern "C" void* RtColl_LinkedListNewNode_180032750(void* /*neverRead*/,
 // independent corroboration of the field offsets, not the evidence for them.
 extern "C" void RtColl_LinkedListRemove_18007a010(void* listPtr,
                                                   void* const* value) {
-    RT_DIFF_BEGIN("Collection::LinkedList::Remove(0x18007a010)");
 
     LlList* list = static_cast<LlList*>(listPtr);
     LlNode* head = list->head;
-    if (!head) { RT_DIFF_WORK(false); return; }
+    if (!head) { return; }
 
     void*   want = *value;
     LlNode* n    = head;
     while (n->element != want) {
         n = n->next;
-        if (!n) { RT_DIFF_WORK(false); return; }
+        if (!n) { return; }
     }
 
     if (n == head)       list->head = n->next;   // the ORIGINAL head — see above
@@ -273,7 +259,6 @@ extern "C" void RtColl_LinkedListRemove_18007a010(void* listPtr,
     n->next = nullptr;
     --list->count;
 
-    RT_DIFF_WORK(true);
 
     // Retail's tail JMP 0x180009c30, with RCX still holding the list. Called
     // directly rather than through ResolveAddr: this IS the body registered at
@@ -322,9 +307,6 @@ extern "C" void RtColl_LinkedListRemove_18007a010(void* listPtr,
 // replay walks a chain whose every node has already been freed and frees each
 // one a second time. Two things stand in for it, and neither is dressed up as
 // more than it is:
-//   * `RT_DIFF_WORK` liveness — how many entered calls actually had a node to
-//     free. `calls=` will read 0 here because nothing is compared, so `worked=`
-//     is the whole signal (reference_uncalled_port_is_not_verified.md).
 //   * A SHAPE CHECK against the shipped bytes, `VerifyListClearShape` in
 //     runtime/src/ui/dialog.cpp, run beside the `??1DialogInstance` shape check.
 //     The entire failure surface of this body is four displacements — the
@@ -332,11 +314,9 @@ extern "C" void RtColl_LinkedListRemove_18007a010(void* listPtr,
 //     literal displacements in the shipped instruction stream, so all four are
 //     compared against the DLL while the DLL is still there.
 extern "C" void RtColl_LinkedListClear_1800325f0(void* listPtr) {
-    RT_DIFF_BEGIN("Collection::LinkedList::Clear(0x1800325f0)");
 
     LlList* list = static_cast<LlList*>(listPtr);
     LlNode* n    = list->head;
-    RT_DIFF_WORK(n != nullptr);
 
     while (n) {
         LlNode* next = n->next;   // read BEFORE the free — see above
@@ -359,8 +339,6 @@ extern "C" void RtColl_LinkedListClear_1800325f0(void* listPtr) {
 // through a named constant
 // (reference_census_cannot_see_nonliteral_registrations.md).
 int RtCollLinkedListRegister() {
-    if (!RtWaveEnabled("BANISHED_RT_LINKEDLIST")) return 0;
-
     int n = 0;
     // 0x180009c30 is NOT registered here any more. It was registered by THREE
     // files (this one, io/modification.cpp, system/allocator.cpp), the registry's

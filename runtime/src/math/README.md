@@ -18,10 +18,8 @@ confirm against the retail DLL before porting one.
 
 - `vector.cpp` / `vector.h` — Math::Scalar, Math::Vector2, Math::Vector3, Math::Vector4
   (Wave 1 Lane 1). 28 retail functions registered from `rt_math_port.cpp`'s
-  `RtMathPortInit()`. Byte-faithful; diffable functions wrapped in
-  `RT_DIFF_*`, the three `Serialize` methods are not (they mutate the live
-  `IO::Serializer` stream).
-- `rt_math_port.cpp` — `RtMathPortInit()`, the `BANISHED_RT_MATH` wave entry
+  `RtMathPortInit()`. Byte-faithful.
+- `rt_math_port.cpp` — `RtMathPortInit()`, the Math namespace entry
   point. Registers Lane 1's exports then calls Lane 2's
   `RtMathTransformRegister()` (Matrix/Quaternion/Transform family).
 - `transform.cpp` / `transform.h` — Math::Matrix, Math::Quaternion,
@@ -29,8 +27,7 @@ confirm against the retail DLL before porting one.
   retail functions registered (25 assigned + 3 dependencies that are genuine
   Math:: exports in their own right: `Quaternion::operator*(Quaternion)`,
   the 3-`Vector3` basis `Quaternion` ctor, and `Transform::FromDirection`).
-  Byte-faithful, diffable functions wrapped in `RT_DIFF_*`; `Transform::
-  Serialize` is not diffed (mutates the live `IO::Serializer` stream).
+  Byte-faithful.
   `Graphics::InterpolatedState<Transform>::Lerp` (0x18001aff0) was left
   unported — its call site does not pin `InterpolatedState<T>`'s layout or
   `Transform::Lerp`'s own signature unambiguously; see the comment above
