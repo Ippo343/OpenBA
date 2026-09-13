@@ -111,6 +111,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 #include "../../types/ui/Element.h"
 #include "../../types/system/String.h"
 
@@ -204,15 +205,6 @@ using InternalCtorFn = void* (*)(void*);
 InternalCtorFn ObjectInternalCtor() {
     static InternalCtorFn fn =
         reinterpret_cast<InternalCtorFn>(ResolveExport("??0Internal@Object@@QEAA@XZ"));
-    return fn;
-}
-
-// ?StrCompare@String@System@@SAHPEBD0@Z (0x1800c98a0) — the byte compare
-// FindElement uses. Static, two char* arguments.
-using StrCompareFn = int (*)(const char*, const char*);
-StrCompareFn StrCompare() {
-    static StrCompareFn fn =
-        reinterpret_cast<StrCompareFn>(ResolveExport("?StrCompare@String@System@@SAHPEBD0@Z"));
     return fn;
 }
 
@@ -523,8 +515,7 @@ void* FindElementImpl(Element* self, void** ret, const char* const* name) {
             if (!mine || RtSystem::StringLength(mine) == 0) {
                 equal = true;
             } else {
-                StrCompareFn cmp = StrCompare();
-                equal = cmp && cmp(mine, q) == 0;
+                equal = System::String::StrCompare(mine, q) == 0;
             }
             if (equal) { *ret = self; return ret; }
         }

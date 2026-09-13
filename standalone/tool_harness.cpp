@@ -19,7 +19,8 @@
 #include "tool_harness.h"
 #include "resolve.h"
 #include "options.h"
-#include "engine_funcs.h"   // fn_String_Ctor_CStr/Dtor for the operator_fc60 probe
+#include "engine_funcs.h"
+#include "system/String.h"   // -Iruntime/types; the operator_fc60 probe
 #include "Object/factory_registration.h"  // ::Object::GetTypeIdByName (pinpanel controller lookup)
 #include <cstdio>
 #include <cstdlib>
@@ -772,13 +773,11 @@ void FirePreviewPlacement(void* entityUI) {
                 typedef void* (*getxf_t)(void*, void*);
                 (*reinterpret_cast<getxf_t*>(slot))(mesh, xf);
             }
-            uint8_t costStr[8] = {};   // empty System::String
-            if (fn_String_Ctor_CStr) fn_String_Ctor_CStr(costStr, "");
+            System::String costStr("");   // empty System::String
             fprintf(stderr, "[ToolHarness] driving operator_fc60 (CreateBar populate+position) "
                    "controller=%p mesh=%p...\n", controller, mesh);
-            fc60(controller, 0, 0, costStr, /*valid*/1, /*p6*/1, /*p7*/0, /*p8*/1,
+            fc60(controller, 0, 0, &costStr, /*valid*/1, /*p6*/1, /*p7*/0, /*p8*/1,
                  /*startCell*/-1, /*endCell*/-1, box, xf);
-            if (fn_String_Dtor) fn_String_Dtor(costStr);
             fprintf(stderr, "[ToolHarness] operator_fc60 returned — CreateBar populate ran crash-free\n");
         } else {
             fprintf(stderr, "[ToolHarness] operator_fc60 probe skipped (fc60=%p controller=%p mesh=%p "

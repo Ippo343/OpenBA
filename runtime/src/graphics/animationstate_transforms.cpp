@@ -83,6 +83,7 @@
 #include <vector>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/math/Math.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/graphics/AnimationManager.h"
 
@@ -138,26 +139,43 @@ ArrayAssignFn AssignStates() { static ArrayAssignFn f = RtAddr<ArrayAssignFn>(0x
 ArrayDtorFn DtorNodes()  { static ArrayDtorFn f = RtAddr<ArrayDtorFn>(0x180014090); return f; }
 ArrayDtorFn DtorStates() { static ArrayDtorFn f = RtAddr<ArrayDtorFn>(0x18005bbb0); return f; }
 
-// Math. All five carry a hidden return slot; see the banner.
-using QuatMulFn    = const float* (*)(const void* self, void* ret, const void* rhs);
-using QuatRotateFn = const float* (*)(const void* self, void* ret, const void* v);
-using QuatLerpFn   = const float* (*)(const void* from, void* ret, const void* to, const float* t);
-using XformFn      = const float* (*)(const void* self, void* ret);
-
-QuatMulFn QuaternionMul() {
-    return RT_EXPORT_ONCE(QuatMulFn, "??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z");
+// Math. ENDGAME B.3.1 step 2: all five are members of the real Math classes
+// now (runtime/types/math/Math.h). They keep the `(self, ret, …) -> const
+// float*` SHAPE, because every call site in this file works in raw float
+// pointers into the untyped pose / node / interpolated-state storage that
+// Graphics::AnimationState keeps; those B.3.1 bridges go when THAT class is
+// converted (B.2), not here. The hidden return slot the banner describes is
+// gone — each member returns by value and the assignment below is the store
+// retail made through RDX.
+inline const float* QuaternionMul(const void* self, void* ret, const void* rhs) {
+    *static_cast<Math::Quaternion*>(ret) =
+        *static_cast<const Math::Quaternion*>(self) *
+        *static_cast<const Math::Quaternion*>(rhs);
+    return static_cast<const float*>(ret);
 }
-QuatRotateFn QuaternionRotate() {
-    return RT_EXPORT_ONCE(QuatRotateFn, "?Rotate@Quaternion@Math@@QEBA?AVVector3@2@AEBV32@@Z");
+inline const float* QuaternionRotate(const void* self, void* ret, const void* v) {
+    *static_cast<Math::Vector3*>(ret) =
+        static_cast<const Math::Quaternion*>(self)->Rotate(
+            *static_cast<const Math::Vector3*>(v));
+    return static_cast<const float*>(ret);
 }
-QuatLerpFn QuaternionLerp() {
-    return RT_EXPORT_ONCE(QuatLerpFn, "?Lerp@Quaternion@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z");
+inline const float* QuaternionLerp(const void* from, void* ret, const void* to,
+                                   const float* t) {
+    *static_cast<Math::Quaternion*>(ret) =
+        static_cast<const Math::Quaternion*>(from)->Lerp(
+            *static_cast<const Math::Quaternion*>(to),
+            *reinterpret_cast<const Math::Scalar*>(t));
+    return static_cast<const float*>(ret);
 }
-XformFn TransformInverse() {
-    return RT_EXPORT_ONCE(XformFn, "?Inverse@Transform@Math@@QEBA?AV12@XZ");
+inline const float* TransformInverse(const void* self, void* ret) {
+    *static_cast<Math::Transform*>(ret) =
+        static_cast<const Math::Transform*>(self)->Inverse();
+    return static_cast<const float*>(ret);
 }
-XformFn TransformAsMatrix() {
-    return RT_EXPORT_ONCE(XformFn, "?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ");
+inline const float* TransformAsMatrix(const void* self, void* ret) {
+    *static_cast<Math::Matrix*>(ret) =
+        static_cast<const Math::Transform*>(self)->AsMatrix();
+    return static_cast<const float*>(ret);
 }
 
 // The three cluster bodies these five call. By ADDRESS, because that is where
@@ -613,7 +631,7 @@ extern "C" int RtGraphics_AnimationManager_GetInstanceId(
                         wz = wz + rz;
 
                         float qret[4];
-                        const float* q = QuaternionMul()(parentXform, qret, nd + nodeOff + 0x0c);
+                        const float* q = QuaternionMul(parentXform, qret, nd + nodeOff + 0x0c);
 
                         float* dst = reinterpret_cast<float*>(ipArr + interpOff);
                         dst[0] = q[0];
@@ -731,7 +749,7 @@ extern "C" void RtGraphics_AnimationState_CopyInstancedToUnique(
 
     // ---- node 0, through the two real calls ----
     float rotated[3];
-    const float* rot = QuaternionRotate()(root, rotated, pose + 0x10);
+    const float* rot = QuaternionRotate(root, rotated, pose + 0x10);
 
     float ry = *reinterpret_cast<const float*>(root + 0x14);
     float rz = *reinterpret_cast<const float*>(root + 0x18);
@@ -741,7 +759,7 @@ extern "C" void RtGraphics_AnimationState_CopyInstancedToUnique(
     rx = rx + *reinterpret_cast<const float*>(root + 0x10);
 
     float q0ret[4];
-    const float* q0 = QuaternionMul()(root, q0ret, pose);
+    const float* q0 = QuaternionMul(root, q0ret, pose);
 
     Copy7Dwords(interp + kTransformStride, interp);
     {
@@ -841,7 +859,7 @@ extern "C" void RtGraphics_AnimationState_CopyInstancedToUnique(
         wz = wz + rzi;
 
         float qret[4];
-        const float* q = QuaternionMul()(parentXform, qret, posei);
+        const float* q = QuaternionMul(parentXform, qret, posei);
 
         uint8_t* slot = interp + static_cast<int64_t>(i) * kInterpStride;
         Copy7Dwords(slot + kTransformStride, slot);
@@ -998,7 +1016,7 @@ extern "C" void RtGraphics_AnimationState_UpdateNodes(
                 bz = bz + from[6];
 
                 float qret[4];
-                const float* q = QuaternionLerp()(from, qret, dst, &t);
+                const float* q = QuaternionLerp(from, qret, dst, &t);
                 reinterpret_cast<uint32_t*>(dst)[0] = reinterpret_cast<const uint32_t*>(q)[0];
                 reinterpret_cast<uint32_t*>(dst)[1] = reinterpret_cast<const uint32_t*>(q)[1];
                 reinterpret_cast<uint32_t*>(dst)[2] = reinterpret_cast<const uint32_t*>(q)[2];
@@ -1093,7 +1111,7 @@ extern "C" void RtGraphics_AnimationState_UpdateNodes(
         rz = rz + *reinterpret_cast<const float*>(root + 0x18);
 
         float qret[4];
-        const float* q = QuaternionMul()(root, qret, pose);
+        const float* q = QuaternionMul(root, qret, pose);
 
         Copy7Dwords(interp + kTransformStride, interp);
         float* dst = reinterpret_cast<float*>(interp);
@@ -1189,7 +1207,7 @@ extern "C" void RtGraphics_AnimationState_UpdateNodes(
         rz = rz + tz;
 
         float qret[4];
-        const float* q = QuaternionMul()(parentXform, qret, posek);
+        const float* q = QuaternionMul(parentXform, qret, posek);
 
         uint8_t* slot = interp + k * kInterpStride;
         Copy7Dwords(slot + kTransformStride, slot);
@@ -1248,7 +1266,7 @@ extern "C" int RtGraphics_MeshInstance_GetBones(
         identity[4] = 0.0f; identity[5] = 0.0f; identity[6] = 0.0f;
         rootT = identity;
     } else {
-        rootT = TransformInverse()(rootv, inverse);
+        rootT = TransformInverse(rootv, inverse);
     }
 
     const float rqx = rootT[0];
@@ -1308,7 +1326,7 @@ extern "C" int RtGraphics_MeshInstance_GetBones(
         sz = sz + fz;
 
         float lqret[4];
-        const float* lq = QuaternionLerp()(ip + kTransformStride, lqret, ip, &t);
+        const float* lq = QuaternionLerp(ip + kTransformStride, lqret, ip, &t);
 
         const uint8_t* bind =
             *reinterpret_cast<const uint8_t* const*>(mesh + 0x60) + k * kNodeStride + 0x28;
@@ -1380,7 +1398,7 @@ extern "C" int RtGraphics_MeshInstance_GetBones(
 
         const float lerped[7] = { lqx, lqy, lqz, lqw, sx, sy, sz };
         float q1ret[4];
-        const float* q1 = QuaternionMul()(lerped, q1ret, bind);
+        const float* q1 = QuaternionMul(lerped, q1ret, bind);
         const float composedQ[4] = { q1[0], q1[1], q1[2], q1[3] };
 
         // ---- stage 2: the same shape again against the root rotation. The
@@ -1438,11 +1456,11 @@ extern "C" int RtGraphics_MeshInstance_GetBones(
         Rz = Rz + rtz;
 
         float q2ret[4];
-        const float* q2 = QuaternionMul()(rootXform, q2ret, composedQ);
+        const float* q2 = QuaternionMul(rootXform, q2ret, composedQ);
 
         const float finalXform[7] = { q2[0], q2[1], q2[2], q2[3], Rx, Ry, Rz };
         float matrix[16];
-        const float* m = TransformAsMatrix()(finalXform, matrix);
+        const float* m = TransformAsMatrix(finalXform, matrix);
 
         uint8_t* dst = out + k * 0x40;
         for (int w = 0; w < 16; ++w)

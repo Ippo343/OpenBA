@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include "math/Math.h"       // -Iruntime/types
 
 namespace PerfX {
 
@@ -109,7 +110,7 @@ void ResolveRootOnly() {
 void RefreshFrustum(void* renderer) {
     s_haveFrustum = false;
     if (!renderer || !fn_Renderer_GetCullCamera || !fn_Camera_GetFrustum ||
-        !fn_Frustum_MulTransform3 || !fn_Transform3_Copy_Ctor) return;
+        !fn_Frustum_MulTransform3) return;
     void* camera = fn_Renderer_GetCullCamera(renderer);
     // Renderer::GetCullCamera returns a reference into the camera object; before the first
     // Draw the pointer it adjusts is null, so the "reference" is a small negative address
@@ -118,10 +119,13 @@ void RefreshFrustum(void* renderer) {
         reinterpret_cast<uintptr_t>(camera) >= 0x00007fffffff0000ull) return;
     alignas(16) uint8_t camFrustum[256] = {0};
     alignas(16) uint8_t worldFrustum[256] = {0};
-    alignas(16) uint8_t camXf3[48] = {0};
     fn_Camera_GetFrustum(camera, camFrustum);
-    fn_Transform3_Copy_Ctor(camXf3, reinterpret_cast<const uint8_t*>(camera) + 0x64);
-    fn_Frustum_MulTransform3(camFrustum, worldFrustum, camXf3);
+    // B.3.1 bridge: Graphics::Camera keeps its world transform at +0x64 and is
+    // not a converted class yet; the copy is Math::Transform3's copy ctor.
+    Math::Transform3 camXf3 =
+        *reinterpret_cast<const Math::Transform3*>(
+            reinterpret_cast<const uint8_t*>(camera) + 0x64);
+    fn_Frustum_MulTransform3(camFrustum, worldFrustum, &camXf3);
     std::memcpy(s_planes, worldFrustum, sizeof(s_planes));
     // Sanity: a zero frustum (renderer not yet drawn) must not cull everything.
     float mag = 0.0f;

@@ -124,6 +124,7 @@
 // line, so the short spelling silently picks up the WRONG header -- which
 // compiles far enough to be confusing (it has no RtUI namespace) and would
 // have been a wrong field layout if it had.
+#include "runtime/types/system/String.h"
 #include "runtime/types/ui/UserInterface.h"
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/DialogInstance.h"
@@ -575,9 +576,7 @@ bool FindTarget(UI::UserInterface* ui, Target* out, bool dump) {
 // verifies is the ported bodies on that arm, not that gameplay reaches it.
 //
 // Off by default: unset (or `0`, or empty) writes nothing and prints nothing.
-using StringCtorCStrFn = void* (*)(void* self, const char* s);
-using StringDtorFn     = void  (*)(void* self);
-using SetTipStringFn   = void  (*)(void* elem, void* const* str);
+using SetTipStringFn   = void  (*)(void* elem, const System::String* str);
 
 // Applied ONCE per (element) so a 20-frame hold does not re-release and
 // re-acquire the same string 20 times — SetToolTipString's release arm is real
@@ -588,37 +587,33 @@ void ApplyToolTipString(UI::Element* elem) {
     static UI::Element* applied = nullptr;
     if (applied == elem) return;
 
+    // ENDGAME B.3.1 step 2: the String ctor and dtor are System::String's own,
+    // so only UI::Element::SetToolTipString is still a resolve.
     static SetTipStringFn   setFn  = nullptr;
-    static StringCtorCStrFn ctorFn = nullptr;
-    static StringDtorFn     dtorFn = nullptr;
     static bool tried = false;
     if (!tried) {
         tried  = true;
         setFn  = reinterpret_cast<SetTipStringFn>(ResolveExport(
             "?SetToolTipString@Element@UI@@QEAAXAEBVString@System@@@Z"));
-        ctorFn = reinterpret_cast<StringCtorCStrFn>(
-            ResolveExport("??0String@System@@QEAA@PEBD@Z"));
-        dtorFn = reinterpret_cast<StringDtorFn>(
-            ResolveExport("??1String@System@@QEAA@XZ"));
     }
-    if (!setFn || !ctorFn || !dtorFn) {
-        fprintf(stderr, "[MouseInject/tipstr] set=%p ctor=%p dtor=%p -- one did "
-                        "not resolve, +0x58 left alone\n",
-                (void*)setFn, (void*)ctorFn, (void*)dtorFn);
+    if (!setFn) {
+        fprintf(stderr, "[MouseInject/tipstr] set=%p -- did not resolve, "
+                        "+0x58 left alone\n", (void*)setFn);
         return;
     }
 
     void* const before = elem->_toolTipString;
-    void* str = nullptr;                       // System::String is one pointer
-    ctorFn(&str, g_cfg.tipStr);
-    if (!str) {
-        fprintf(stderr, "[MouseInject/tipstr] String ctor produced null -- "
-                        "+0x58 left alone\n");
-        return;
+    {
+        const System::String str(g_cfg.tipStr);
+        if (!str._data) {
+            fprintf(stderr, "[MouseInject/tipstr] String ctor produced null -- "
+                            "+0x58 left alone\n");
+            return;
+        }
+        setFn(elem, &str);
+        // Our local reference is released here; the element now holds the only
+        // one — `str`'s destructor, at the end of this scope.
     }
-    setFn(elem, &str);
-    // Our local reference is released; the element now holds the only one.
-    dtorFn(&str);
     applied = elem;
 
     printf("[MouseInject/tipstr] elem=%p name=%s  +0x58 %p -> %p [%s]  "

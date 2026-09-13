@@ -152,6 +152,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/Filename.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
 
@@ -238,11 +239,9 @@ static_assert(offsetof(Xa2BufferWma, packetCount) == 0x08,
 
 using VoidThisFn  = void  (*)(void*);
 using CtorFn      = void* (*)(void*);
-using OpenFn      = bool  (*)(void*, const String*);
+using OpenFn      = bool  (*)(void*, const System::Filename*);
 using ReadFileFn  = bool  (*)(void*, FileInfo*, int, void*);
 using CloseFileFn = void  (*)(void*, FileInfo*);
-using GetDirFn    = String* (*)(void* self, String* ret);   // HIDDEN RETURN SLOT
-using ConcatFn    = String* (*)(String* ret, const String* a, const String* b);
 using GetStateFn  = void  (*)(void* voice, Xa2VoiceState* out);
 using SubmitFn    = int32_t (*)(void* voice, const Xa2Buffer*, const Xa2BufferWma*);
 
@@ -287,30 +286,9 @@ void* FileSystemSingleton() {
 // leaves the slot holding `str-8` and the surviving branch nulls it — retail's
 // 0x1800a10cf..0x1800a10ef, and the same shape collection/array_destroy.cpp's
 // Body B documents.
-void MemFreeAt(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    fn(p);
-}
-void AdoptString(String* dst, const String* src) {      // 0x1800a1096..0x1800a10a6
-    dst->data = nullptr;
-    if (char* s = src->data) {
-        dst->data = s;
-        ++*(reinterpret_cast<int32_t*>(s) - 1);
-    }
-}
-void ReleaseString(String* s) {                          // 0x1800a10c6..0x1800a10ef
-    if (!s->data) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(s->data) - 1;
-    --*rc;
-    if (*rc == 0) {
-        s->data -= 8;
-        MemFreeAt(s->data);
-    } else {
-        s->data = nullptr;
-    }
-}
+// ENDGAME B.3.1 step 2: the adopt at 0x1800a1096..0x1800a10a6 and the three
+// releases at 0x1800a10c6 / 0x1800a10ef / 0x1800a1118 are System::String's own
+// AddRef and destructor; the hand-written copies that lived here are gone.
 
 }  // namespace
 
@@ -357,22 +335,36 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
     RT_EXPORT_ONCE(CtorFn, "??0FileStream@IO@@QEAA@XZ")(st);            // 1800a100c..6a
 
     void* const fsys = FileSystemSingleton();
-    String dataDir{};
-    RT_EXPORT_ONCE(GetDirFn,
-        "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
-            fsys, &dataDir);                                            // 1800a107f
-    String joined{};
-    RT_EXPORT_ONCE(ConcatFn, "??HSystem@@YA?AVString@0@AEBV10@0@Z")(
-        &joined, &dataDir,
-        reinterpret_cast<const String*>(buf + kSbPath));                // 1800a1090
-    String path{};
-    AdoptString(&path, &joined);                                        // 1800a1096
-    RT_EXPORT_ONCE(VoidThisFn, "?AdjustDelimiters@Filename@System@@AEAAXXZ")(&path);
-    const bool opened = RT_EXPORT_ONCE(OpenFn,
-        "?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z")(st, &path);// 1800a10bc
-    ReleaseString(&path);                                               // 1800a10c6
-    ReleaseString(&joined);                                             // 1800a10ef
-    ReleaseString(&dataDir);                                            // 1800a1118
+
+    // The three temporaries are declared so that reverse-order destruction is
+    // retail's release order — path (1800a10c6), joined (1800a10ef), dataDir
+    // (1800a1118) — and the inner scope ends them where retail ends them.
+    bool opened;
+    {
+        // IO::FileSystem is another batch's class, so GetDataDirectory stays a
+        // name lookup; its result is a real System::Filename.
+        using GetDirFn = System::Filename* (*)(void* self, System::Filename* ret);
+        System::Filename dataDir;
+        RT_EXPORT_ONCE(GetDirFn,
+            "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
+                fsys, &dataDir);                                        // 1800a107f
+
+        // B.3.1 bridge: `buf + kSbPath` is a POD String slot on the sound
+        // buffer record, which is not a converted class yet.
+        const System::String joined =
+            dataDir.AsString() +
+            *reinterpret_cast<const System::String*>(buf + kSbPath);    // 1800a1090
+
+        System::Filename path;
+        if (char* const d = joined._data) {                             // 1800a1096
+            path._data = d;
+            ++RtSystem::StringRefCount(d);
+        }
+        System::FilenamePrivateAccess::AdjustDelimiters(path);
+
+        opened = RT_EXPORT_ONCE(OpenFn,
+            "?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z")(st, &path);// 1800a10bc
+    }
 
     if (opened) {                                                       // 1800a1147
         ++g_opened;

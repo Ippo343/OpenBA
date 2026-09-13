@@ -40,13 +40,6 @@
 #include "../../types/graphics/Camera.h"
 #include "../../types/graphics/Material.h"
 
-// wave9_lane_p.cpp (Wave 9 lane P) — the ported Quaternion::Lerp. Called
-// DIRECTLY, exactly as retail's Transform::Lerp calls 0x18001d500, because a
-// resolve-by-address here would walk past lane P's own name registration and
-// land in the DLL (reference_bypassed_port_needs_a_source_checker.md).
-Quaternion* RtMath_Quaternion_Lerp(const Quaternion* self, Quaternion* ret,
-                                   const Quaternion* other, const Scalar* t);
-
 using RtGraphics::MaterialInstance;
 using RtGraphics::Renderer;
 using RtGraphics::RendererDrawGroup;
@@ -213,35 +206,14 @@ void DrawItemArrayResize(Collection::Array<RendererDrawItem>* self,
 // This port keeps that property: the three translation floats are computed into
 // locals and the quaternion into a local before anything is written.
 // ============================================================================
+// ENDGAME B.3.1 step 2: the body MOVED onto `Math::Transform::Lerp` (declared
+// in runtime/types/math/Math.h, defined in runtime/src/math/transform.cpp).
+// What is left is the one-line shim the registry rows at the bottom of this
+// file still bind; the aliasing hazard the old hidden-return-slot signature
+// carried is gone with the by-value return.
 Transform* RtMath_Transform_Lerp(const Transform* self, Transform* ret,
                                  const Transform* other, const Scalar* t) {
-
-    // The oracle runs the shipped body AFTER ours has written `ret`, and `ret`
-    // is allowed to be `self` or `other`. Without these snapshots the original
-    // is handed input we just destroyed and "diverges" on nearly every call —
-    // the artefact that nearly got a CORRECT Transform::operator* deregistered
-    // (reference_oracle_must_snapshot_aliased_inputs.md).
-    Transform selfSnap{}, otherSnap{};
-    Scalar    tSnap{};
-
-    const float tv = t->v;
-
-    const float ax = self->translation.x;
-    const float ay = self->translation.y;
-    const float az = self->translation.z;
-
-    const float rx = ax + tv * (other->translation.x - ax);   // 0x18001d6d8/e1/ed
-    const float ry = ay + (other->translation.y - ay) * tv;   // 0x18001d6dd/e5/f2
-    const float rz = az + (other->translation.z - az) * tv;   // 0x18001d6e9/f6/fa
-
-    Quaternion rot{};
-    RtMath_Quaternion_Lerp(&self->rotation, &rot, &other->rotation, t);
-
-    ret->rotation = rot;            // the four-dword copy at 0x18001d703..716
-    ret->translation.x = rx;        // 0x18001d71c/728/732, in that register order
-    ret->translation.y = ry;
-    ret->translation.z = rz;
-
+    *ret = self->Lerp(*other, *t);
     return ret;   // retail returns the hidden slot in RAX
 }
 
@@ -274,15 +246,11 @@ Transform* RtGraphics_InterpolatedStateTransform_Lerp(const void* self,
                                                       Transform* ret,
                                                       const Scalar* t) {
 
-    // Same aliasing rule as above — `ret` may point into `self`'s own 0x38.
-    uint8_t selfSnap[0x38];
-    Scalar  tSnap{};
-
+    // `ret` may point into `self`'s own 0x38; Transform::Lerp returns by value
+    // and reads every input before the assignment, so that is safe.
     const uint8_t* base = static_cast<const uint8_t*>(self);
-    RtMath_Transform_Lerp(reinterpret_cast<const Transform*>(base + 0x1c),
-                          ret,
-                          reinterpret_cast<const Transform*>(base),
-                          t);
+    *ret = reinterpret_cast<const Transform*>(base + 0x1c)
+               ->Lerp(*reinterpret_cast<const Transform*>(base), *t);
 
     return ret;
 }

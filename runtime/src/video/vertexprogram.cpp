@@ -74,6 +74,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/video/ShaderProgram.h"
 
@@ -123,7 +124,6 @@ void CallSlot0(void* self, int flag) {
 using ScalarFn  = void (*)(ReaderWriter*, void*, const char*);
 using VersionFn = int  (*)(ReaderWriter*);
 using SetSizeFn = void (*)(void*, int);
-using StrSerFn  = void (*)(void* str, Serializer* ser);
 using LoopFn    = void (*)(Serializer* ser, int count, void* data);
 using DestroyFn = void (*)(void* ignoredThis, void* base, int count);
 using ExtPtrSerFn = void (*)(void* field, Serializer* ser);
@@ -198,8 +198,9 @@ void SerializeLegacyV0(Serializer* ser) {
     {
         uint8_t* e = static_cast<uint8_t*>(elements.data);
         for (int32_t i = 0; i < n; ++i, e += 0x18) {
-            RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(e + 0x00, ser);
-            RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(e + 0x08, ser);
+            // B.3.1 bridge: untyped array storage, two System::Strings per element.
+            reinterpret_cast<System::String*>(e + 0x00)->Serialize(ser);
+            reinterpret_cast<System::String*>(e + 0x08)->Serialize(ser);
             RwUInt(rw, e + 0x10);
             RwInt (rw, e + 0x14);
         }
@@ -369,13 +370,14 @@ extern "C" void RtVideo_VertexProgram_SerializeStreams(void* serv, int count, vo
 
         uint8_t* p = *reinterpret_cast<uint8_t**>(e + 0x00); // 180056e15
         for (int32_t k = 0; k < n; ++k, p += 0x18) {         // 180056e22
-            RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(p + 0x00, ser);
-            RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(p + 0x08, ser);
+            // B.3.1 bridge: untyped array storage, two System::Strings per element.
+            reinterpret_cast<System::String*>(p + 0x00)->Serialize(ser);
+            reinterpret_cast<System::String*>(p + 0x08)->Serialize(ser);
             RwUInt(ser->readerWriter, p + 0x10);
             RwInt (ser->readerWriter, p + 0x14);
         }
 
-        RT_EXPORT_ONCE(StrSerFn, "?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z")(e + 0x10, ser);
+        reinterpret_cast<System::String*>(e + 0x10)->Serialize(ser);   // B.3.1 bridge
     }
 }
 

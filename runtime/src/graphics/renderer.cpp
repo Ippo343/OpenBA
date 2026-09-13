@@ -151,11 +151,11 @@ Matrix* RtFrustumProjection(const Frustum* self, Matrix* ret, bool zeroToOneDept
 // which is what we want: it was proved bit-exact over millions of diffed calls,
 // and routing through the registry keeps one implementation of the multiply in
 // the process rather than two.
+// ENDGAME B.3.1 step 2: `Math::Matrix::operator*`, called as the operator it
+// is; the hidden return slot the shape carries is the caller's storage.
 Matrix* RtMatrixMul(const Matrix* lhs, Matrix* ret, const Matrix* rhs) {
-    using Fn = Matrix* (*)(const Matrix*, Matrix*, const Matrix*);
-    static Fn fn = reinterpret_cast<Fn>(
-        ResolveExport("??DMatrix@Math@@QEBA?AV01@AEBV01@@Z"));
-    return fn(lhs, ret, rhs);
+    *ret = *lhs * *rhs;
+    return ret;
 }
 
 // System::MemoryAllocator::MemFree(void*) — the STATIC one-argument overload,

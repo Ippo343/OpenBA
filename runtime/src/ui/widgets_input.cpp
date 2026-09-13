@@ -170,16 +170,6 @@ uint32_t NumberEditElementTypeId() {
     return p ? *p : 0;
 }
 
-// `?ToInteger@String@System@@SAHPEBD@Z` (0x18003f620, ord 4137, exported,
-// static). Takes the raw char* a System::String IS at the ABI level in this
-// engine (see EditElement.h), not a String object.
-using ToIntegerFn = int (*)(const char*);
-ToIntegerFn StringToInteger() {
-    static ToIntegerFn fn = reinterpret_cast<ToIntegerFn>(
-        ResolveExport("?ToInteger@String@System@@SAHPEBD@Z"));
-    return fn;
-}
-
 // `?SetValue@NumberEditElement@UI@@QEAAXH@Z` (0x1800d4bb0), used as a
 // dependency by SpinnerElement::SetMinMax/SetValue and
 // NumberEditElement::SetMinMax.
@@ -204,7 +194,7 @@ NumberEditSetValueFn RealNumberEditElementSetValue() {
 // ?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z  (0x1800d0db0) -- exported,
 // not ported by any wave; SetValue's second call. Resolved through the port
 // registry so a later port of it is reached without editing this line.
-using EditSetTextFn = void (*)(void*, const RtSystem::String*);
+using EditSetTextFn = void (*)(void*, const System::String*);
 EditSetTextFn EditElementSetText() {
     static EditSetTextFn fn = reinterpret_cast<EditSetTextFn>(
         ResolveExport("?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z"));
@@ -286,16 +276,6 @@ constexpr size_t kNumberElementTrueSize = 0xE8;
 static_assert(sizeof(NumberElement) <= kNumberElementTrueSize,
               "NumberElement grew past the 0xE8 CreateNewObject allocates");
 }  // namespace  (reopened immediately below)
-
-// `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730) — PORTED in Wave 2 and
-// registered by address in runtime/src/system/string.cpp, but NOT exposed by
-// runtime/src/system/string.h (no caller outside that file needed it until
-// now). Declared locally rather than by editing that lane's header, exactly as
-// runtime/src/io/filesystem_win.cpp:70-82 already does and for the same stated
-// reason. This declaration must stay identical to string.cpp's definition.
-namespace RtSystem {
-String* RtSystem_String_Format(String* ret, const char* fmt, ...);   // 0x1800c9730
-}  // namespace RtSystem
 
 namespace {
 
@@ -471,16 +451,12 @@ void NumberEditElement_SetValue(NumberEditElement* self, int value) {
         if (value > self->_max) clamped = self->_max;
     }
 
-    using FormatFn = RtSystem::String* (*)(RtSystem::String*, const char*, int);
-    RtSystem::String tmp{nullptr};
-    RT_EXPORT_ONCE(FormatFn, "?Format@String@System@@SA?AV12@PEBDZZ")(&tmp, "%i", clamped);
+    const System::String tmp = System::String::Format("%i", clamped);
 
     EditElementSetText()(self, &tmp);
 
     // retail's inlined String::Release, the asymmetric one (runtime/types/
-    // system/String.h): the freeing branch leaves `data - 8` in the object.
-    using ReleaseFn = void (*)(RtSystem::String*);
-    RT_EXPORT_ONCE(ReleaseFn, "?Release@String@System@@AEAAXXZ")(&tmp);
+    // system/String.h), is `tmp`'s destructor at the end of this body.
 
     // An EXECUTION WITNESS, not a verdict. A shadow predicate here would have
     // to be a second spelling of the clamp three lines above, and two spellings
@@ -520,15 +496,16 @@ inline TextCacheTextFn TextElementCacheText() {
     return RT_EXPORT_ONCE(TextCacheTextFn, "?CacheText@TextElement@UI@@AEAAXXZ");
 }
 
-// ??4String@System@@QEAAAEAV01@AEBV01@@Z (0x1800c9810) — System::String's
-// refcounted assignment, PORTED in Wave 2 (runtime/src/system/string.cpp
-// registers it under both name and address). Reached through the port registry
-// so this file does not walk past our own body into the DLL's
-// (reference_bypassed_port_needs_a_source_checker.md). Its post-condition,
-// `dst->data == src->data`, is what the shadow predicates below assert.
-using StringAssignFn = void* (*)(void*, const void*);
-inline StringAssignFn StringAssign() {
-    return RT_EXPORT_ONCE(StringAssignFn, "??4String@System@@QEAAAEAV01@AEBV01@@Z");
+// ??4String@System@@QEAAAEAV01@AEBV01@@Z (0x1800c9810) is now
+// `System::String::operator=` (ENDGAME B.3.1). Its post-condition,
+// `dst->_data == src->_data`, is what the shadow predicates below assert.
+//
+// B.3.1 bridge: both sides are slots in untyped array storage on classes that
+// are not converted yet (the TextElement parameter array, ComboElement's
+// `_strings`), so the two call sites cast the eight bytes at the use site.
+inline void StringAssign(void* dst, const void* src) {
+    *reinterpret_cast<System::String*>(dst) =
+        *reinterpret_cast<const System::String*>(src);
 }
 
 // ?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z
@@ -643,7 +620,7 @@ int RtUi_SpinnerElement_GetMaxValue(SpinnerElement* self) {
 // ---- ?GetValue@SpinnerElement@UI@@QEBAHXZ  0x1800d7cf0 ---------------------
 int RtUi_SpinnerElement_GetValue(SpinnerElement* self) {
     NumberEditElement* child = FirstChildAs<NumberEditElement>(&self->base, NumberEditElementTypeId());
-    int ours = StringToInteger()(child->base._text);
+    int ours = System::String::ToInteger(child->base._text);
     return ours;
 }
 
@@ -684,7 +661,7 @@ void RtUi_SpinnerElement_SetMinMax(SpinnerElement* self, int minVal, int maxVal)
     NumberEditElement* child = FirstChildAs<NumberEditElement>(&self->base, NumberEditElementTypeId());
     child->_min = minVal;
     child->_max = maxVal;
-    int clamped = StringToInteger()(child->base._text);
+    int clamped = System::String::ToInteger(child->base._text);
     RealNumberEditElementSetValue()(child, clamped);
 
 }
@@ -818,7 +795,7 @@ void RtUi_ComboElement_RemoveAllItems(ComboElement* self) {
 
 // ---- ?GetValue@NumberEditElement@UI@@QEBAHXZ  0x1800d4b50 ------------------
 int RtUi_NumberEditElement_GetValue(NumberEditElement* self) {
-    int ours = StringToInteger()(self->base._text);
+    int ours = System::String::ToInteger(self->base._text);
     return ours;
 }
 
@@ -838,7 +815,7 @@ void RtUi_NumberEditElement_SetMinMax(NumberEditElement* self, int minVal, int m
 
     self->_min = minVal;
     self->_max = maxVal;
-    int clamped = StringToInteger()(self->base._text);
+    int clamped = System::String::ToInteger(self->base._text);
     RealNumberEditElementSetValue()(self, clamped);
 }
 
@@ -1194,7 +1171,7 @@ namespace {
 void* WrappedTextSetParam(void* child, int32_t index, const void* str) {
     MarkNeedsSizeCalcUpToRoot(reinterpret_cast<Element*>(child));
     void* slot = TextParamSlot(child, index);
-    StringAssign()(slot, str);
+    StringAssign(slot, str);
     TextElementCacheText()(child);
     return slot;
 }
@@ -1366,7 +1343,7 @@ void RtUi_ComboElement_UpdateText(ComboElement* self) {
         void* slot = TextParamSlot(found, 0);
         const void* src = reinterpret_cast<const uint8_t*>(self->_strings._data)
                         + static_cast<size_t>(self->_currentItem) * 8;
-        StringAssign()(slot, src);
+        StringAssign(slot, src);
         TextElementCacheText()(found);
         didWork = true;
     }
@@ -1483,21 +1460,16 @@ namespace {
 // so it is.
 bool StringNotEqualImpl(const void* lhsRaw, const void* rhsRaw) {
 
-    const char* a = *static_cast<const char* const*>(lhsRaw);
-    const char* b = *static_cast<const char* const*>(rhsRaw);
-
-    const int32_t lenA = a ? RtSystem::StringLength(a) : 0;
-    const int32_t lenB = b ? RtSystem::StringLength(b) : 0;
-
-    bool equal;
-    if (lenA != lenB) {
-        equal = false;
-    } else if (a == nullptr || lenA == 0) {
-        equal = true;                       // 0x180040039: MOV AL,1
-    } else {
-        equal = (RtSystem::RtString_StrCompare(a, b) == 0);
-    }
-    const bool ours = !equal;
+    // ENDGAME B.3.1 step 2: the length-compare-then-StrCompare body IS
+    // `System::String::operator==` (runtime/src/system/string.cpp, retail
+    // 0x1800063d0) negated, expression for expression — so this is now the
+    // one-line shim the two registry rows at the bottom of this file bind.
+    // Those rows belong in string.cpp with the class; the closing pass moves
+    // them, because moving a registration and converting a caller in the same
+    // commit is how two lanes end up with a duplicate binding.
+    const bool ours =
+        *static_cast<const System::String*>(lhsRaw) !=
+        *static_cast<const System::String*>(rhsRaw);
 
     // DID-WORK here means "reached the byte compare", i.e. both operands were
     // non-empty and the same length. Every other path is decided by the lengths

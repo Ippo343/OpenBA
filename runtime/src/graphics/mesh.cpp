@@ -215,8 +215,22 @@ typedef void  (*AnimResetFn)(void* animState);
 typedef void  (*AnimPlayFn)(void* animState, ExternalPtr group, int index,
                             const void* nodeArray, const void* startTime,
                             const void* blendTime, float weight, bool flag);
-typedef void* (*QuatMulFn)(const void* self, void* ret, const void* other);
-typedef void* (*QuatRotateFn)(const void* self, void* ret, const void* vec);
+// ENDGAME B.3.1 step 2: Math::Quaternion's operator* and Rotate, called as
+// members. The `(self, ret, arg)` SHAPE is kept because the call sites below
+// work on raw offsets into GraphicsMesh's untyped node/pool storage; those
+// B.3.1 bridges go when THAT class is converted.
+inline void* QuaternionMultiply(const void* self, void* ret, const void* other) {
+    *static_cast<Math::Quaternion*>(ret) =
+        *static_cast<const Math::Quaternion*>(self) *
+        *static_cast<const Math::Quaternion*>(other);
+    return ret;
+}
+inline void* QuaternionRotate(const void* self, void* ret, const void* vec) {
+    *static_cast<Math::Vector3*>(ret) =
+        static_cast<const Math::Quaternion*>(self)->Rotate(
+            *static_cast<const Math::Vector3*>(vec));
+    return ret;
+}
 
 // RT_EXPORT_ONCE on the four below (Wave 9 lane R, 2026-09-07). All four names
 // are PORTED, and the raw door skipped the port registry by design -- so
@@ -283,13 +297,6 @@ AnimPlayFn RtAnimPlay() {
     return RT_EXPORT_ONCE(AnimPlayFn,
         "?PlayAnimation@AnimationState@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@AEBVTime@System@@2M_N@Z");
 }
-QuatMulFn RtQuatMul() {
-    return RT_EXPORT_ONCE(QuatMulFn, "??DQuaternion@Math@@QEBA?AV01@AEBV01@@Z");
-}
-QuatRotateFn RtQuatRotate() {
-    return RT_EXPORT_ONCE(QuatRotateFn, "?Rotate@Quaternion@Math@@QEBA?AVVector3@2@AEBV32@@Z");
-}
-
 // Video buffer platform constructors, called eight times by EdgeMesh's ctor.
 //
 // RT_EXPORT_ONCE (Wave 9 lane W, 2026-09-08). BOTH NAMES ARE NOW PORTED —
@@ -624,14 +631,14 @@ static void* RtGraphics_MeshInstance_GetNodeToWorld(const void* self, void* ret,
 
         // translation = geom.translation + Rotate(geom.rotation, pool.translation)
         uint8_t rotated[16];
-        RtQuatRotate()(geomXf /* rotation at +0x00 */, rotated, poolXf + 0x10);
+        QuaternionRotate(geomXf /* rotation at +0x00 */, rotated, poolXf + 0x10);
         for (int i = 0; i < 3; ++i) {
             const float t = Rd<float>(geomXf, 0x10 + i * 4) + Rd<float>(rotated, i * 4);
             std::memcpy(out + 0x10 + i * 4, &t, 4);
         }
         // rotation = geom.rotation * pool.rotation
         uint8_t q[16];
-        RtQuatMul()(geomXf, q, poolXf);
+        QuaternionMultiply(geomXf, q, poolXf);
         std::memcpy(out, q, 16);
     }
 
@@ -689,7 +696,7 @@ static void RtGraphics_MeshInstance_RootAnimationOffset(const void* self, void* 
 // (project_stress_perf_rootonly_and_libcalls.md), and
 // standalone/perf_experimental.cpp's default-on ANIM_BATCH path reads
 // MeshInstance state every frame. Three things this port does about that:
-//   * It resolves NOTHING per call. `RtQuatMul()` is a function-local static
+//   * It resolves NOTHING per call. `QuaternionMultiply` is a function-local static
 //     resolved once for the life of the process (the raw DLL door); calling
 //     the raw DLL door directly here would be the recorded 5.6-point defect.
 //   * It does not touch `_rootOnlyUpdates`, which retail's UpdateHierarchy does
@@ -716,7 +723,7 @@ static void RtGraphics_MeshInstance_RootAnimationOffset(const void* self, void* 
 // Switching this call to ResolveExport would flip it and finally exercise it --
 // but that trade is the wave lead's to make, not lane E's."
 //
-// The trade WAS made, and the comment outlived it. `RtQuatMul()` at line 261 now
+// The trade WAS made, and the comment outlived it. `QuaternionMultiply` at line 261 now
 // resolves with RT_EXPORT_ONCE, which DOES consult the port registry (unlike
 // the raw DLL door / the raw DLL door, which is GetProcAddress and is always the
 // DLL), and it is called at lines 629 and 816. So the Wave 1 port that
@@ -810,7 +817,7 @@ static void RtGraphics_MeshInstance_UpdateHierarchy(void* self) {
 
             // world.rotation = parentRotation * nodeLocalRotation
             uint8_t q[16];
-            RtQuatMul()(p, q, localXf);
+            QuaternionMultiply(p, q, localXf);
 
             uint8_t* dst = xf + static_cast<int64_t>(i) * 0x38;
             std::memcpy(dst + 0x00, q, 16);
@@ -1530,14 +1537,13 @@ QuatLerpFn RtQuatLerp() {
     return f;
 }
 
-// Math::Transform::AsMatrix — retail 0x18001e5f0, ordinal 1619. Asked BY NAME,
-// for the reason scene.cpp:374 records in full: Wave 1 ported AsMatrix and
-// ResolveAddr consults the ADDRESS registry, so the by-address spelling sends
-// this through the shipped DLL instead of our own port — one port bypassing
-// another inside runtime/. HIDDEN RETURN SLOT in RDX.
-typedef void* (*AsMatrixFn)(const void* xf, void* ret);
-AsMatrixFn RtTransformAsMatrix() {
-    return RT_EXPORT_ONCE(AsMatrixFn, "?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ");
+// Math::Transform::AsMatrix — retail 0x18001e5f0, ordinal 1619. ENDGAME B.3.1
+// step 2: a direct member call; there is no door left to bypass. The
+// `(xf, ret)` shape is kept for the same reason as the two above.
+inline void* TransformAsMatrix(const void* xf, void* ret) {
+    *static_cast<Math::Matrix*>(ret) =
+        static_cast<const Math::Transform*>(xf)->AsMatrix();
+    return ret;
 }
 
 // ?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@HM@Z
@@ -1567,16 +1573,19 @@ NodeToWorldInterpFn RtNodeToWorldInterp() {
 }
 
 // ?Lerp@Transform@Math@@QEBA?AV12@AEBV12@AEBVScalar@2@@Z — retail 0x18001d690,
-// ordinal 3193. PORTED and registered BY ADDRESS by
-// runtime/src/graphics/wave9_lane_gfx.cpp:555, so this resolves to our own body.
-// HIDDEN RETURN SLOT: RCX = the FROM transform, RDX = the return buffer,
-// R8 = the TO transform, R9 = &t — the argument order wave9_lane_gfx.cpp:271
-// records from the shipped call site.
-typedef void* (*TransformLerpFn)(const void* from, void* ret, const void* to,
-                                 const void* t);
-TransformLerpFn RtTransformLerp() {
-    static TransformLerpFn f = RtAddr<TransformLerpFn>(0x18001d690);
-    return f;
+// ordinal 3193. ENDGAME B.3.1 step 2: `Math::Transform::Lerp`, called as the
+// member it is; there is no address door left to resolve. RCX = the FROM
+// transform, R8 = the TO transform, R9 = &t — the argument order
+// wave9_lane_gfx.cpp records from the shipped call site, kept in the shape
+// below because the caller works on raw offsets into the interpolated-state
+// pair (a B.3.1 bridge that goes with Graphics::MeshInstance).
+inline void* TransformLerp(const void* from, void* ret, const void* to,
+                           const void* t) {
+    *static_cast<Math::Transform*>(ret) =
+        static_cast<const Math::Transform*>(from)->Lerp(
+            *static_cast<const Math::Transform*>(to),
+            *static_cast<const Math::Scalar*>(t));
+    return ret;
 }
 
 // ?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z — retail
@@ -1794,11 +1803,11 @@ extern "C" void* RtGraphics_EdgeMeshInstance_GetInstanceTransform(const void* se
     if (node >= 0 && emi->_followed != nullptr) {
         Transform tmp;
         void* const got = RtNodeToWorldInterp()(emi->_followed, &tmp, node, t);
-        RtTransformAsMatrix()(got, ret);
+        TransformAsMatrix(got, ret);
     } else {
         Transform xf;
         RtLerpTransformPair(B(&emi->_base._transform), t, &xf);
-        RtTransformAsMatrix()(&xf, ret);
+        TransformAsMatrix(&xf, ret);
     }
 
     return ret;
@@ -1910,7 +1919,7 @@ extern "C" void* RtGraphics_MeshInstance_GetInstanceTransform(const void* selfv,
     RtLerpTransformPair(pair, t, &xf);
 
     Matrix m;
-    RtTransformAsMatrix()(&xf, &m);
+    TransformAsMatrix(&xf, &m);
 
     // The twelve matrix stores, then the four colour stores. Written as retail
     // emits them: three floats of each row from the matrix, the fourth from
@@ -2001,7 +2010,7 @@ extern "C" void* RtGraphics_MeshInstance_GetNodeToWorldInterp(const void* self, 
     if (mi->_animation._instanced == 0) {
         const uint8_t* pair = B(mi->_nodes._data) + static_cast<int64_t>(node) * 0x38;
         const Scalar s = { t };
-        RtTransformLerp()(pair + 0x1c, ret, pair + 0x00, &s);
+        TransformLerp(pair + 0x1c, ret, pair + 0x00, &s);
     } else {
         Transform geomXf;
         RtLerpTransformPair(B(self) + 0x84, t, &geomXf);
@@ -2015,13 +2024,13 @@ extern "C" void* RtGraphics_MeshInstance_GetNodeToWorldInterp(const void* self, 
         std::memcpy(out + 0x0c, &one, 4);
 
         uint8_t rotated[16];
-        RtQuatRotate()(&geomXf.rotation, rotated, &poolXf.translation);
+        QuaternionRotate(&geomXf.rotation, rotated, &poolXf.translation);
         for (int i = 0; i < 3; ++i) {
             const float v = Rd<float>(&geomXf, 0x10 + i * 4) + Rd<float>(rotated, i * 4);
             std::memcpy(out + 0x10 + i * 4, &v, 4);
         }
         uint8_t q[16];
-        RtQuatMul()(&geomXf, q, &poolXf);
+        QuaternionMultiply(&geomXf, q, &poolXf);
         std::memcpy(out, q, 16);
     }
 

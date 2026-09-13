@@ -64,8 +64,8 @@
 #include "../system/widestring.h"
 #include "video_interface.h"   // -Istandalone; this header is windows.h-free
 
-using RtSystem::String;
 using RtSystem::WideString;
+using System::String;
 using RtVideo::Device;
 using RtVideo::InterfaceSlot;
 
@@ -92,28 +92,11 @@ inline InterfaceSlot* SlotAt(Device* self, int i) {
         reinterpret_cast<uint8_t*>(self) + kSlot0 + static_cast<uintptr_t>(i) * 0x18);
 }
 
-// Retail's inlined `String::operator=(const String&)` at 0x1800f7b7a (and the
-// two identical copies at 0x1800f7bc9 / 0x1800f7c16). Written out rather than
-// folded into RtString_ReleaseInline + RtString_AdoptInline because the
-// SELF-ASSIGNMENT GUARD comes FIRST and neither helper has it: with `old ==
-// new` retail touches nothing at all, where release-then-adopt would decrement
-// a refcount it is about to re-increment. Equivalent for a live string,
-// different for one whose refcount is 1.
-void StringAssign(String* dst, char* src) {
-    char* const old = dst->data;
-    if (old == src) return;                       // 0x1800f7b81 CMP / JZ
-    if (old != nullptr) {                         // 0x1800f7b86 TEST / JZ
-        if (--RtSystem::StringRefCount(old) != 0) {
-            dst->data = nullptr;                  // 0x1800f7ba1 sharing branch
-        } else {
-            // 0x1800f7b93: `ADD qword [RDI],-8` then free THROUGH the slot.
-            dst->data = old - 8;
-            RtSystem::RtMemFree(dst->data);
-        }
-    }
-    dst->data = src;                              // 0x1800f7ba4
-    if (src != nullptr) ++RtSystem::StringRefCount(src);   // 0x1800f7bac
-}
+// ENDGAME B.3.1 step 2: retail's inlined `String::operator=(const String&)` at
+// 0x1800f7b7a (and the two identical copies at 0x1800f7bc9 / 0x1800f7c16) IS
+// `System::String::operator=`, self-assignment guard first and all — compare
+// runtime/src/system/string.cpp. The hand-written copy that used to live here
+// is gone; the call sites below use the operator.
 
 }  // namespace
 
@@ -147,34 +130,28 @@ void StringAssign(String* dst, char* src) {
 extern "C" String* RtVideo_Device_GetDLLForInterface(const Device* /*this, never read*/,
                                                      String* ret, int32_t index) {
 
-    ret->data = nullptr;                          // 0x1800f7b44
+    // The hidden return slot stays in the SIGNATURE because this body is still
+    // reached through its two registry rows below; retail constructs into an
+    // uninitialised slot, so the first thing it does is null it.
+    ret->_data = nullptr;                         // 0x1800f7b44
 
-    String tmp{nullptr};                          // the [RBP+0x38] local
     const char* base = nullptr;
     if (index == 0)      base = kNameDX9;         // 0x1800f7c01
     else if (index == 1) base = kNameDX11;        // 0x1800f7bb4
     else if (index == 2) base = kNameGL;          // 0x1800f7b65
 
     if (base != nullptr) {
-        RtSystem::RtSystem_String_Set(&tmp, base);   // 0x1800c95d0
-        StringAssign(ret, tmp.data);                 // the inlined operator=
-        RtSystem::RtString_ReleaseInline(&tmp);      // 0x1800f7c4c
-    }
+        String tmp;                               // the [RBP+0x38] local
+        tmp.Set(base);                            // 0x1800c95d0
+        *ret = tmp;                               // the inlined operator=
+    }                                             // 0x1800f7c4c — tmp's release
 
     // 0x1800f7c6c and 0x1800f7ca2 — two `operator+=(const char*)` calls whose
     // RETURNED TEMPORARIES ARE DISCARDED. Retail materialises each into the
-    // same [RBP+0x38] slot and releases it immediately; that is what the two
-    // scratch Strings below are, and dropping them would leak a reference.
-    {
-        String discarded{nullptr};
-        RtSystem::RtSystem_String_AppendAssignCStr(ret, &discarded, kSuffixArch);
-        RtSystem::RtString_ReleaseInline(&discarded);
-    }
-    {
-        String discarded{nullptr};
-        RtSystem::RtSystem_String_AppendAssignCStr(ret, &discarded, kSuffixExt);
-        RtSystem::RtString_ReleaseInline(&discarded);
-    }
+    // same [RBP+0x38] slot and releases it immediately; discarding the by-value
+    // result of `operator+=` is exactly that, temporary and release included.
+    *ret += kSuffixArch;
+    *ret += kSuffixExt;
 
     return ret;                                   // 0x1800f7cd8 MOV RAX,RDI
 }
@@ -269,14 +246,15 @@ extern "C" void RtVideo_Device_InitializeInterfaces(Device* self) {
 
         SetErrorMode(SEM_FAILCRITICALERRORS);         // 0x1800f7a23, ECX = 1
 
-        String name{nullptr};
+        String name;
         RtVideo_Device_GetDLLForInterface(self, &name, i);   // 0x1800f7a34
 
         // 0x1800f7a44..0x1800f7ac9 was the WideString conversion, the
         // LoadLibraryW, the two GetProcAddress calls and the FreeLibrary
         // rejection path. All deleted: see the banner above. `loaded` and
         // `rejected` therefore stay 0, which is the truth about what happened.
-        RtSystem::RtString_ReleaseInline(&name);      // 0x1800f7ad0..0x1800f7afd
+        // 0x1800f7ad0..0x1800f7afd — `name`'s destructor, at the end of the
+        // loop body, which is where retail's inlined release is.
     }
 
     // ---- CUTOVER-ONLY -----------------------------------------------------

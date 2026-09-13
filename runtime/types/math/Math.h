@@ -230,6 +230,11 @@ public:
 
     Matrix  operator*(const Matrix& other) const;                   // 0x18001d980
     Vector4 operator*(const Vector4& v) const;                      // 0x18007d030
+    // Sixteen `==` comparisons with retail's short-circuit structure. Retail
+    // ships no `operator==` counterpart, so this is not spelled as `!(*this ==
+    // other)`. (ENDGAME B.3.1 step 2: body moved out of
+    // runtime/src/video/context.cpp, where it was a C free function.)
+    bool    operator!=(const Matrix& other) const;                  // 0x18001d850
     Matrix  Inverse() const;                                        // 0x1800bb310
     static Matrix Identity();                                       // 0x18002c030
 };
@@ -255,6 +260,9 @@ public:
 
     Vector3    operator*(const Vector3& v) const;                   // 0x18001e200
     Transform  operator*(const Transform& other) const;             // 0x18001e3c0
+    // ENDGAME B.3.1 step 2: body moved out of
+    // runtime/src/graphics/wave9_lane_gfx.cpp.
+    Transform  Lerp(const Transform& other, const Scalar& t) const; // 0x18001d690
     Matrix     AsMatrix() const;                                    // 0x18001e5f0
     Transform3 AsTransform3() const;                                // 0x18001fcd0
     Transform  Inverse() const;                                     // 0x18005db50
@@ -315,6 +323,10 @@ public:
     Transform3& operator=(const Transform3&) = default;
 
     Vector3    operator*(const Vector3& v) const;                   // 0x18001fbc0
+    // ENDGAME B.3.1 step 2: body moved out of
+    // runtime/src/graphics/imagebuffer_derived.cpp, where it lived as a
+    // non-slot helper for ReflectionImageBuffer::Render.
+    Transform3 operator*(const Transform3& other) const;            // 0x180022680
     Matrix     AsMatrix() const;                                    // 0x1800346e0
     Transform3 Inverse() const;                                     // 0x180060040
     Vector3    Rotate(const Vector3& v) const;                      // 0x18001e470
