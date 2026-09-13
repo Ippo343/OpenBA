@@ -68,8 +68,7 @@
 //   reference_oracle_must_not_compare_unwritten_bytes.md warns about, one step
 //   over. On this branch the pointer prediction is declared with `Exclude()`,
 //   which makes the round record it in the `unverifiable=` column instead of
-//   comparing it, and the CONTENT of the two strings is compared instead
-//   against a separate RtDiff site. The hole is counted, never silent.
+//   comparing it. The hole is counted, never silent.
 // ============================================================================
 
 #include <cstdint>
@@ -79,7 +78,6 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_diff.h"
 #include "../../funcs/rt_predict.h"
 #include "../../types/ui/TextElement.h"
 
@@ -112,10 +110,8 @@ inline int32_t Length(const void* data) {
 
 // ---- The callees. Every one goes through the port registry ----------------
 //
-// RT_EXPORT_ONCE, never RT_ORIGINAL_ONCE: these are REAL DEPENDENCIES (the body
-// calls them to do work, not to compare against), and the raw door is
-// ResolveExportRaw, which returns NULL once Runtime-x64.dll is gone and which
-// walks straight past our own ports while it is present
+// RT_EXPORT_ONCE: these are REAL DEPENDENCIES (the body calls them to do work),
+// so they go through the port registry
 // (reference_bypassed_port_needs_a_source_checker.md).
 
 // ??BString@UI@@QEBA?AV0System@@XZ (0x180035020) — PORTED, runtime/src/ui/
@@ -322,106 +318,6 @@ void CacheTextBody(void* self, RtSink& out, Str* outNew) {
     ReleaseInto(&tmp);
 }
 
-// ============================================================================
-// The CONTENT oracle for the format branch.
-// ============================================================================
-//
-// It is a REAL oracle, not an RT_DIFF_SHADOW: `theirs` is read out of the
-// element AFTER the shipped DLL's own CacheText has run on pristine state, and
-// `ours` is the string our predictor built. Nothing here consults our own
-// expectation (reference_shadow_marker_is_not_an_oracle.md).
-//
-// TWO CONTROLS, reported separately, because a green board with neither means
-// nothing:
-//
-//  * EFFECTIVENESS. `changed` counts rounds where the predicted text DIFFERS
-//    from the text the element already held. A round where the cache was
-//    already correct is satisfied by retail doing nothing at all, and a site
-//    whose lifetime `changed` is 0 is reported UNPROVEN, exactly the rule
-//    RtPredict::Verify() applies to its own predictions
-//    (reference_probe_needs_an_effectiveness_control.md).
-//
-//  * NEGATIVE CONTROL. Under BANISHED_RT_PREDICT_SELFTEST the predicted text
-//    is corrupted by one byte before the comparison, and the comparison must
-//    then fail. A round whose predicted text is EMPTY has no byte to corrupt;
-//    those are counted as `notApplicable` rather than as passes, because a
-//    control that could not have fired is not evidence
-//    (reference_diagnostic_field_cannot_express_the_answer.md).
-RtDiffSite g_textSite = { "UI::TextElement::CacheText [text content vs DLL]" };
-
-struct TextControl {
-    uint64_t rounds = 0;
-    // *** THE VERDICT, AND IT WAS INVISIBLE IN THE FIRST DRAFT. *** The
-    // divergence was registered with RtDiffReport only, and the [RtDiff]
-    // summary prints under BANISHED_RT_DIFF -- a DIFFERENT switch from the
-    // BANISHED_RT_PREDICT this oracle runs under. So on a predict-only run
-    // every column of this instrument printed except the one that says whether
-    // it FAILED: a board that could not express a failure
-    // (reference_diagnostic_field_cannot_express_the_answer.md). Counted here
-    // and printed unconditionally now.
-    uint64_t wrong = 0;
-    uint64_t changed = 0;        // predicted text != the text already cached
-    uint64_t selfTestSeen = 0;
-    uint64_t selfTestCaught = 0;
-    uint64_t selfTestNotApplicable = 0;
-    uint64_t selfTestMissed = 0;  // corrupted on purpose and STILL agreed
-    uint64_t naMismatch = 0;      // mismatch on a self-test round the control could not touch
-    uint64_t interned = 0;        // rounds that took the _size == 0 branch
-    uint64_t formatted = 0;       // rounds that took the FormatParamList branch
-    bool     summaryArmed = false;
-} g_text;
-
-void TextSummary() {
-    std::fprintf(stderr,
-        "[UiOracle] TextElement::CacheText content oracle: rounds=%llu "
-        "WRONG=%llu interned=%llu formatted=%llu changed=%llu/%llu "
-        "selftest=%llu/%llu (n/a %llu missed %llu na-mismatch %llu)%s\n",
-        (unsigned long long)g_text.rounds,
-        (unsigned long long)g_text.wrong,
-        (unsigned long long)g_text.interned,
-        (unsigned long long)g_text.formatted,
-        (unsigned long long)g_text.changed, (unsigned long long)g_text.rounds,
-        (unsigned long long)g_text.selfTestCaught,
-        (unsigned long long)g_text.selfTestSeen,
-        (unsigned long long)g_text.selfTestNotApplicable,
-        (unsigned long long)g_text.selfTestMissed,
-        (unsigned long long)g_text.naMismatch,
-        g_text.changed == 0 ? "  *** UNPROVEN: no round changed anything ***" : "");
-    std::fflush(stderr);
-}
-
-// A private copy of the predicted text, so the comparison survives our own
-// release. 4 KB covers every UI string in this game by a wide margin; a longer
-// one is reported as TRUNCATED rather than compared, so the cap can never
-// quietly manufacture a pass.
-char  g_ourText[4096];
-bool  g_ourTruncated = false;
-
-// The PRE text, copied before the round. See the effectiveness note at its use:
-// `pre` itself is the buffer retail may free, so it cannot be read afterwards.
-// g_preLen < 0 means "there was no cached text at all".
-char  g_preText[4096];
-int   g_preLen = -1;
-
-void SnapshotPre(const char* p) {
-    if (!p) { g_preLen = -1; g_preText[0] = '\0'; return; }
-    size_t n = std::strlen(p);
-    if (n >= sizeof(g_preText)) n = sizeof(g_preText) - 1;
-    std::memcpy(g_preText, p, n);
-    g_preText[n] = '\0';
-    g_preLen = static_cast<int>(n);
-}
-
-void SnapshotOurs(const char* p) {
-    g_ourTruncated = false;
-    if (!p) { g_ourText[0] = '\0'; return; }
-    const size_t n = std::strlen(p);
-    if (n >= sizeof(g_ourText)) { g_ourTruncated = true; }
-    const size_t c = g_ourTruncated ? sizeof(g_ourText) - 1 : n;
-    std::memcpy(g_ourText, p, c);
-    g_ourText[c] = '\0';
-}
-
 } // namespace
 
 // ============================================================================
@@ -430,8 +326,8 @@ void SnapshotOurs(const char* p) {
 
 extern "C" void RtUi_TextElement_SetParameterCount(void* self) {
     // NO ORACLE, and the reason is not laziness. Its whole effect is
-    // 0x180029a80's, which HAS one — the Collection probe and the per-address
-    // RtDiff site array.cpp registers for it. A shadow predicate here would
+    // 0x180029a80's, which HAS one — the Collection probe array.cpp registers
+    // for it. A shadow predicate here would
     // re-derive FormatParamCount's answer in a second spelling and agree with
     // itself by construction, which is the vacuous shape
     // reference_probe_needs_an_effectiveness_control.md rules out. The CacheText
@@ -442,152 +338,8 @@ extern "C" void RtUi_TextElement_SetParameterCount(void* self) {
 }
 
 extern "C" void RtUi_TextElement_CacheText(void* self) {
-    RT_PREDICT_SITE("UI::TextElement::CacheText");
-
-    if (!RT_PREDICT_ON) {
-        RtSink live;
-        CacheTextBody(self, live, nullptr);
-        return;
-    }
-
-    // ---- The predicting round ---------------------------------------------
-    Str ours{nullptr};
-    char* pre = *reinterpret_cast<char**>(B(self, TE::kCachedText));
-    bool  formatted = false;
-    SnapshotPre(pre);   // BEFORE the round -- retail may free this buffer
-
-    {
-        RtPredictRound round(&rt_predict_site__);
-
-        // Coverage. Watch the whole tail of the element that either body could
-        // touch, so a retail write we did not predict is REPORTED rather than
-        // ignored — predictions alone are only a lower bound.
-        round.Watch(B(self, 0xc0), 0x40, "TextElement +0xC0..+0xFF");
-
-        // SetParameterCount's footprint: the parameter Array header. Ours runs
-        // that call FOR REAL (see CacheTextBody's banner), so these bytes are
-        // out of the prediction model by construction and are declared, which
-        // is what keeps the hole in the `excluded=` column instead of silent.
-        round.Exclude(B(self, TE::kParamArrayData), 0x10,
-                      "SetParameterCount runs for real (idempotent); its Array "
-                      "header is not modelled");
-
-        // THE OLD BUFFER'S REFCOUNT IS PREDICTED BUT DELIBERATELY NOT WATCHED,
-        // and the reason is a false positive this lane walked into and backed
-        // out of. Predictions are compared whether or not a Watch covers them;
-        // Watch exists only to report changes NOTHING predicted. The predictor
-        // has to keep one reference on its own answer alive across retail's run
-        // so the content comparison does not read a released buffer — and when
-        // the cache was already correct that answer IS this same block, so the
-        // held reference moves this word by +1 for a reason that belongs to the
-        // instrument, not to either body. Watching it would have reported the
-        // harness's own bookkeeping as an unpredicted retail write, which is
-        // the artefact class RtPredictSite's `superseded`/`unverifiable`
-        // columns were appended for in the first place.
-        //
-        // When retail is about to FREE the block (pre-refcount 1) the location
-        // stops existing, so the body makes no prediction for it and the hole
-        // is declared here so it prints in `excluded=` rather than vanishing.
-        if (pre && RefCount(pre) == 1) {
-            round.Exclude(pre - 4, 4,
-                          "retail FREES this block (pre-refcount 1); the word "
-                          "does not survive the round and is not predicted");
-        }
-
-        // Is this the FRESH-ALLOCATION branch? Decided before the body runs so
-        // the Exclude can be in place; the body re-reads the same field after
-        // SetParameterCount, and SetParameterCount is idempotent, so the two
-        // reads agree except on the very first call for a given format — which
-        // is why the flag is re-read afterwards and the round is only used for
-        // bookkeeping when they disagree.
-        SetParameterCountBody(self);   // makes _size authoritative for both
-        formatted = (*reinterpret_cast<int32_t*>(B(self, TE::kParamCount)) != 0);
-
-        if (formatted) {
-            // A fresh allocation: ours and retail get different blocks, so the
-            // POINTER is not comparable and predicting it would fail every
-            // call. Declared, so the prediction lands in `unverifiable=` and
-            // the content oracle below carries the branch instead.
-            round.Exclude(B(self, TE::kCachedText), 8,
-                          "FormatParamList allocates; ours and retail get "
-                          "different blocks. Content compared separately.");
-        }
-
-        CacheTextBody(self, round.sink(), &ours);   // predicts, writes nothing
-
-        // THEIRS. RT_ORIGINAL_ONCE and not RT_EXPORT_ONCE: this call must reach
-        // the shipped DLL, and by the time it runs our body is registered under
-        // this very name — RT_EXPORT_ONCE would resolve to ourselves and
-        // recurse. There is no detour on 0x18011ec10 (it has no exe callers to
-        // capture and ten DLL-internal ones we deliberately leave alone), so
-        // the raw export IS retail here.
-        using Fn = void (*)(void*);
-        RT_ORIGINAL_ONCE(Fn, "?CacheText@TextElement@UI@@AEAAXXZ")(self);
-
-        round.Verify();
-    }
-
-    // ---- The content oracle ------------------------------------------------
-    if (!g_text.summaryArmed) {
-        g_text.summaryArmed = true;
-        RtDiffRegister(&g_textSite);
-        std::atexit(&TextSummary);
-    }
-    g_text.rounds++;
-    formatted ? g_text.formatted++ : g_text.interned++;
-
-    SnapshotOurs(ours.data);
-
-    // EFFECTIVENESS. `preText` was copied BEFORE the round, and that is not
-    // fussiness: `pre` is the buffer retail is about to RELEASE, and on the
-    // freeing arm retail hands it to MemFree. Comparing against `pre` HERE --
-    // which the first draft did -- reads freed memory, and it showed: two runs
-    // of the identical 27,198-round route reported changed=4384 and changed=7540
-    // from the same deterministic input. A counter that disagrees with itself
-    // across a control pair is measuring the allocator, not the port.
-    const bool changed = (g_preLen < 0) ? (ours.data != nullptr)
-                                        : (std::strcmp(g_preText, g_ourText) != 0);
-    if (changed) g_text.changed++;
-
-    // The negative control, and note WHEN it is applied: after `changed`, so
-    // corrupting the string cannot inflate the effectiveness number.
-    const bool armed = RtPredict::SelfTestArmed();
-    bool corrupted = false;
-    if (armed) {
-        g_text.selfTestSeen++;
-        if (g_ourText[0] == '\0') g_text.selfTestNotApplicable++;
-        else { g_ourText[0] = static_cast<char>(g_ourText[0] ^ 0x20); corrupted = true; }
-    }
-
-    const char* theirs = *reinterpret_cast<const char**>(B(self, TE::kCachedText));
-    const bool equal = g_ourTruncated
-                         ? false
-                         : (theirs == nullptr ? g_ourText[0] == '\0'
-                                              : std::strcmp(theirs, g_ourText) == 0);
-    if (corrupted) {
-        if (!equal) g_text.selfTestCaught++;
-        else        g_text.selfTestMissed++;   // corrupted and STILL agreed
-    } else if (armed) {
-        // Armed but not applicable to this round (empty predicted text). The
-        // comparison still ran, but calling a mismatch here a "real divergence"
-        // was WRONG in the first draft: it reported WRONG=4 on the self-test run
-        // against WRONG=0 on the identical clean run, i.e. it attributed to the
-        // port a difference that only the control run had. Counted apart.
-        if (!equal) g_text.naMismatch++;
-    } else if (!equal) {
-        g_text.wrong++;                        // A REAL DIVERGENCE.
-    }
-
-    char oursDesc[160], theirsDesc[160];
-    std::snprintf(oursDesc, sizeof(oursDesc), "%s\"%.100s\"",
-                  g_ourTruncated ? "TRUNCATED " : "", g_ourText);
-    std::snprintf(theirsDesc, sizeof(theirsDesc), "\"%.100s\"",
-                  theirs ? theirs : "");
-    RtDiffReport(&g_textSite, equal, oursDesc, theirsDesc);
-
-    // OUR reference goes back only now — the comparison above read a buffer
-    // both sides were still holding.
-    ReleaseInto(&ours);
+    RtSink live;
+    CacheTextBody(self, live, nullptr);
 }
 
 // ============================================================================

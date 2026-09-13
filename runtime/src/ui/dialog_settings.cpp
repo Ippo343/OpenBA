@@ -343,9 +343,7 @@ extern "C" void RtUi_DialogInstance_OnClosed(DialogInstance* self) {
 // ??_7DialogInstance@UI@@6B@ promotion, and NOT a verification of anything.
 // Without it, "the candidate boot reached the same place as the control" cannot
 // distinguish a safe promotion from one that was never exercised. Counts
-// ENTRIES, on every build; deliberately not an RtDiff site, because an RtDiff
-// site's `calls` moves only from inside a comparison and would print 0 for a
-// body that ran (reference_calls_zero_can_mean_always_took_the_uncovered_branch).
+// ENTRIES, on every build.
 // The three sub-counters split the body's three exits, so an entry that always
 // bailed on the magic cannot read as full coverage.
 namespace {

@@ -165,11 +165,9 @@ inline void ReleaseString(char* data) {
 // change to the instruction stream made for no reason.
 extern "C" void RtUi_SpriteCapture_AddScissor(void* selfRaw, int x, int y,
                                               int right, int bottom, bool fullScreen) {
-    RT_DIFF_BEGIN("UI::SpriteCapture::AddScissor");
     // Every call does work -- this body has no early-out. The COMPARISON lives
     // in spritecapture_probe.cpp, so `calls=` here counts live invocations
     // (zero until a capture is armed) plus the probe's own.
-    RT_DIFF_WORK(true);
     auto* self = static_cast<SpriteCapture*>(selfRaw);
 
     CaptureEntry e;
@@ -237,8 +235,7 @@ extern "C" void RtUi_SpriteCapture_AddScissor(void* selfRaw, int x, int y,
 extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRaw,
                                              int x1, int y1, int x2, int y2,
                                              float rotation, uint32_t color) {
-    RT_DIFF_BEGIN("UI::SpriteCapture::AddSprite");
-    RT_DIFF_WORK(true);          // no early-out; see AddScissor
+          // no early-out; see AddScissor
     auto* self   = static_cast<SpriteCapture*>(selfRaw);
     const auto* sprite = static_cast<const Sprite*>(spriteRaw);
 
@@ -405,7 +402,6 @@ extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRa
 // in either pass calls anything at all. Written as one indexed loop each.
 // ---------------------------------------------------------------------------
 extern "C" void RtUi_SpriteCapture_EndAddingSprites(void* selfRaw) {
-    RT_DIFF_BEGIN("UI::SpriteCapture::EndAddingSprites");
 
     auto* self = static_cast<SpriteCapture*>(selfRaw);
     const int32_t count = self->_entries.size;
@@ -442,15 +438,9 @@ extern "C" void RtUi_SpriteCapture_EndAddingSprites(void* selfRaw) {
         e.y2 -= minY;
     }
 
-    RT_DIFF_WORK(contributed != 0);
-    RT_DIFF_SHADOW(true, "computed the extent and rebased every entry",
-                   "pure; an input sweep is the oracle, not a replay");
 }
 
 int RtUiSpriteCaptureRegister() {
-    if (!RtWaveEnabled("BANISHED_RT_UISPRITECAP"))
-        return 0;
-
     int n = 0;
     // The other half of lane UI4: the seven SpriteSheet virtual-table slot
     // bodies that were NAMED TRAPS in the already-minted
@@ -474,15 +464,6 @@ int RtUiSpriteCaptureRegister() {
     RegisterRuntimeExport("?EndAddingSprites@SpriteCapture@UI@@QEAAXXZ",
                           (void*)&RtUi_SpriteCapture_EndAddingSprites); ++n;
     RegisterRuntimeAddr(0x1800d8a60, (void*)&RtUi_SpriteCapture_EndAddingSprites);
-
-    // The oracle. No-op unless BANISHED_RT_DIFF and
-    // BANISHED_RT_SPRITECAP_PROBE are both on; see spritecapture_probe.cpp.
-    // ARMED here, FIRED from the first live SpriteSheet::GetUVs — the
-    // MemoryAllocator singleton does not exist yet at registration time and
-    // every path through these two bodies allocates. The banner in
-    // spritecapture_probe.cpp carries the crash that proved it.
-    extern void RtUiSpriteCaptureProbeArm();
-    RtUiSpriteCaptureProbeArm();
 
     // BOTH doors on purpose. spritecontext.cpp reaches these two by ADDRESS
     // (0x1800d8b20 / 0x1800d8ef0, its two capture doors), so a name-only

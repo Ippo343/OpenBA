@@ -141,7 +141,6 @@ constexpr size_t kElementSize = sizeof(Element);   // 0xC0, static_assert'd in t
 // tools/runtime_census.py cannot see through a NAMED CONSTANT and would
 // under-count the lane, which is how Wave 3's Object count stood at 21/41 when
 // it was really 27/41 (reference_census_cannot_see_nonliteral_registrations.md).
-// These constants exist only for the diff oracle's RT_ORIGINAL_ONCE lookups.
 // ============================================================================
 const char* const kCtor         = "??0Element@UI@@QEAA@XZ";
 const char* const kDtor         = "??1Element@UI@@UEAA@XZ";
@@ -191,7 +190,7 @@ const char* const kAdjustUL     = "?AdjustUpperLeft@Element@UI@@QEAAXHH@Z";
 //    destructor close its cutover row instead of moving it one frame deeper.
 //    Believing the old sentence would have made that port look useless.
 //
-// Every one of these is looked up ONCE and cached. RtOriginal / ResolveExport
+// Every one of these is looked up ONCE and cached. ResolveExport
 // are GetProcAddress and cost like a syscall — two of them in the body of
 // System::Time cost 5.6 points of sim time in Wave 2 and were invisible to both
 // profilers (reference_rtoriginal_is_getprocaddress.md).
@@ -328,133 +327,6 @@ inline Fn VSlot(const void* obj, int index) {
     return reinterpret_cast<Fn>((*reinterpret_cast<void* const* const*>(obj))[index]);
 }
 
-// ============================================================================
-// The replay oracle
-// ============================================================================
-// Snapshot the live 0xC0-byte Element into a private scratch copy BEFORE our
-// body runs; run our body on the real object; run the DLL's body on the copy;
-// memcmp all 0xC0 bytes. RtDiffReportBytes names the first differing offset,
-// and Element.h's table turns that offset straight into a field name.
-//
-// This is a FULL oracle for every function whose only writes land inside
-// `this`: it catches a wrong offset, a missed flag bit, an early-out taken
-// when retail would not have taken it, and a stray write into padding.
-//
-// THE ONE THING IT DOES NOT COVER, STATED PLAINLY. Five functions here
-// (SetNeedsSizeCalc, SetFlagsOnOff, Hide, and — through them — SetMinSize-style
-// callers) walk `_parent` to the root and OR flag bit 27 into every ancestor.
-// The scratch copy's `_parent` is the REAL parent, so the replayed original
-// walks the real chain and ORs bit 27 a second time. That is safe, and the
-// reason is specific rather than hopeful: OUR body has already set exactly
-// those bits on exactly those objects, so the replay's writes are a bitwise-OR
-// of a bit that is already 1 — idempotent, not a second, different mutation.
-// If a future edit makes the walk do anything other than OR a set bit, this
-// argument dies with it.
-//
-// One shared file-scope scratch, not an 0xC0 stack buffer per function.
-// A depth counter makes that safe even if a replay ever nests (it does not
-// today: FindElement/FindElementType recurse through a private helper that does
-// no diffing, and no other ported body calls another ported body).
-alignas(16) uint8_t g_replayScratch[kElementSize];
-int g_replayDepth = 0;
-
-struct ReplayGuard {
-    Element* copy;
-    bool     held;
-    ReplayGuard(bool on, const Element* live) : copy(nullptr), held(false) {
-        if (!on) return;
-        if (g_replayDepth != 0) return;          // nested: skip the oracle, never corrupt it
-        ++g_replayDepth;
-        held = true;
-        std::memcpy(g_replayScratch, live, kElementSize);
-        copy = reinterpret_cast<Element*>(g_replayScratch);
-    }
-    ~ReplayGuard() { if (held) --g_replayDepth; }
-    ReplayGuard(const ReplayGuard&) = delete;
-    ReplayGuard& operator=(const ReplayGuard&) = delete;
-};
-
-// ============================================================================
-// The thunk oracle (ComputeLayout / Draw)
-// ============================================================================
-// Both are five-instruction forwarders that load `this->_border` and tail-jump
-// through THAT object's vtable. A forwarder cannot be replayed — running Draw
-// twice submits the geometry twice — but it has exactly two things that can be
-// wrong: the FIELD offset it loads and the SLOT it jumps to, and getting either
-// wrong calls a different method with this method's arguments.
-//
-// So at registration time the port decodes the shipped bodies out of the loaded
-// image and reports, through an ordinary diff site, whether the DLL's field
-// displacement and jump slot are the ones the port uses. The shapes, verified
-// byte-for-byte against the on-disk image:
-//
-//   ComputeLayout 0x1801168d0:
-//     48 8b 89 b0 00 00 00   MOV RCX,[RCX+0xb0]
-//     48 85 c9               TEST RCX,RCX
-//     74 07                  JZ  +7
-//     4c 8b 11               MOV R10,[RCX]
-//     49 ff 62 28            JMP qword ptr [R10+0x28]
-//   Draw 0x1801168f0:
-//     48 8b 89 b0 00 00 00 / 48 85 c9 / 74 07
-//     48 8b 01               MOV RAX,[RCX]
-//     48 ff 60 30            JMP qword ptr [RAX+0x30]
-//
-// An unrecognised shape is REPORTED, not silently passed — the right failure
-// direction, but note in WAVE7_LANE_A.md §7 that it is an untested path.
-bool DecodeBorderThunk(const uint8_t* p, uint32_t* outField, uint8_t* outSlot) {
-    // MOV RCX,[RCX+disp32]
-    if (!(p[0] == 0x48 && p[1] == 0x8b && p[2] == 0x89)) return false;
-    std::memcpy(outField, p + 3, 4);
-    // TEST RCX,RCX ; JZ rel8
-    if (!(p[7] == 0x48 && p[8] == 0x85 && p[9] == 0xc9 && p[10] == 0x74)) return false;
-    const uint8_t* q = p + 12;
-    // MOV R10,[RCX] (4c 8b 11) then JMP [R10+disp8] (49 ff 62 xx)
-    if (q[0] == 0x4c && q[1] == 0x8b && q[2] == 0x11 &&
-        q[3] == 0x49 && q[4] == 0xff && q[5] == 0x62) {
-        *outSlot = q[6];
-        return true;
-    }
-    // MOV RAX,[RCX] (48 8b 01) then JMP [RAX+disp8] (48 ff 60 xx)
-    if (q[0] == 0x48 && q[1] == 0x8b && q[2] == 0x01 &&
-        q[3] == 0x48 && q[4] == 0xff && q[5] == 0x60) {
-        *outSlot = q[6];
-        return true;
-    }
-    return false;
-}
-
-// NOTE, and it is a trap worth naming: the shipped bytes are located with
-// RtOriginal (= ResolveExportRaw = GetProcAddress), NOT with
-// ResolveAddr(Module::Runtime, …). This lane calls RegisterRuntimeAddr on both
-// forwarder addresses, and ResolveAddr(Module::Runtime, …) consults that
-// registry FIRST (standalone/resolve_standalone.cpp:325) — so it would hand
-// back OUR function and the decoder would report "unrecognised thunk shape"
-// against our own prologue. Only the raw export lookup is guaranteed to reach
-// the DLL.
-void VerifyBorderThunk(RtDiffSite* site, const char* mangled,
-                       uint32_t expectField, uint8_t expectSlot) {
-    if (!RtDiffEnabled()) return;
-    RtDiffRegister(site);
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(RtOriginal<const void*>(mangled));
-    char ours[64], theirs[64];
-    if (!p) {
-        std::snprintf(ours,   sizeof(ours),   "field=+0x%x slot=+0x%x", expectField, expectSlot);
-        std::snprintf(theirs, sizeof(theirs), "<export did not resolve>");
-        RtDiffReport(site, false, ours, theirs);
-        return;
-    }
-    uint32_t field = 0; uint8_t slot = 0;
-    const bool ok = DecodeBorderThunk(p, &field, &slot);
-    std::snprintf(ours,   sizeof(ours),   "field=+0x%x slot=+0x%x", expectField, expectSlot);
-    if (!ok) {
-        std::snprintf(theirs, sizeof(theirs), "<unrecognised thunk shape>");
-        RtDiffReport(site, false, ours, theirs);
-        return;
-    }
-    std::snprintf(theirs, sizeof(theirs), "field=+0x%x slot=+0x%x", field, slot);
-    RtDiffReport(site, field == expectField && slot == expectSlot, ours, theirs);
-}
-
 // ---- the parent dirty walk -------------------------------------------------
 // `?SetNeedsSizeCalc@` (0x180035470) verbatim, and the tail every mutator in
 // this class shares. Note the shape: the OR happens BEFORE the null test, so it
@@ -494,7 +366,6 @@ inline void NeedsSizeCalcWalk(Element* e) {
 // diffing bytes neither side wrote
 // (reference_oracle_must_not_compare_unwritten_bytes.md).
 void* RtUi_Element_Ctor(Element* self) {
-    RT_DIFF_BEGIN("UI::Element::ctor");
 
     InternalCtorFn base = ObjectInternalCtor();
     if (base) base(self);
@@ -552,8 +423,8 @@ void* RtUi_Element_Ctor(Element* self) {
     //                shape reference_oracle_must_not_compare_unwritten_bytes.md
     //                warns about, one step over (a field both sides write, that
     //                they are *required* to write differently).
-    //                Measured, not predicted: with BANISHED_RT_MINT_ROWS=
-    //                ??_7Element@UI@@6B@ this site reported exactly one
+    //                Measured, not predicted: with the minted
+    //                ??_7Element@UI@@6B@ row this site reported exactly one
     //                DIVERGENCE, at +0x0, ours=<exe .data> theirs=<Runtime
     //                .rdata>, and nothing else in the run changed.
     //                NOTHING IS LOST BY EXCLUDING IT: the field is checked
@@ -565,48 +436,6 @@ void* RtUi_Element_Ctor(Element* self) {
     //   +0x08, +0x0c  the handle index/id — necessarily different for two
     //                distinct live objects; that they differ is correct.
     //   +0x54, +0x60, +0x64, +0x7c, +0x8c  never written by either ctor.
-    if (rt_diff_on__ && g_replayDepth == 0) {
-        ++g_replayDepth;
-        using CtorFn = void* (*)(void*);
-        using DtorFn = void  (*)(void*);
-        CtorFn theirCtor = RT_ORIGINAL_ONCE(CtorFn, kCtor);
-        DtorFn theirDtor = RT_ORIGINAL_ONCE(DtorFn, kDtor);
-        if (theirCtor && theirDtor) {
-            std::memset(g_replayScratch, 0, kElementSize);
-            theirCtor(g_replayScratch);
-
-            uint8_t a[kElementSize], b[kElementSize];
-            std::memcpy(a, self, kElementSize);
-            std::memcpy(b, g_replayScratch, kElementSize);
-            static const struct { size_t off, len; } kSkip[] = {
-                { 0x00, 8 },   // _vtable — see the block above
-                { 0x08, 8 },   // _handleIndex + _handleId
-                { 0x54, 4 },   // UI::String tail padding
-                { 0x60, 8 },   // _layoutWidth + _layoutHeight
-                { 0x7c, 4 },
-                { 0x8c, 4 },
-            };
-            for (const auto& s : kSkip) {
-                std::memset(a + s.off, 0, s.len);
-                std::memset(b + s.off, 0, s.len);
-            }
-            RT_DIFF_BYTES(a, b, kElementSize);
-            theirDtor(g_replayScratch);
-        }
-        --g_replayDepth;
-
-        // The compensating check for the +0x00 exclusion above. SELF-CHECK, and
-        // labelled one: it does not consult the DLL, so it cannot tell us that
-        // the table we publish is the right table — only that the ctor wrote
-        // the one this tree resolves, which is the invariant the byte compare
-        // can no longer express. A null here is the failure that used to show
-        // up as a divergence and would otherwise go silent.
-        char ours[64], theirs[64];
-        std::snprintf(ours,   sizeof(ours),   "_vtable=%p", self->_vtable);
-        std::snprintf(theirs, sizeof(theirs), "ElementVTable()=%p", ElementVTable());
-        RT_DIFF_SHADOW(self->_vtable != nullptr && self->_vtable == ElementVTable(),
-                       ours, theirs);
-    }
     return self;
 }
 
@@ -620,7 +449,6 @@ void* RtUi_Element_Ctor(Element* self) {
 // buffer. The predicate below names EVERY term it checks, so a failure message
 // says which one broke (reference_shadow_predicate_must_name_its_failing_term.md).
 void RtUi_Element_AddChild(Element* self, void** child) {
-    RT_DIFF_BEGIN("UI::Element::AddChild");
 
     const int  oldSize = self->_children._size;
     Element* const c   = reinterpret_cast<Element*>(*child);
@@ -630,23 +458,6 @@ void RtUi_Element_AddChild(Element* self, void** child) {
     if (grow) grow(&self->_children, self->_children._size + 1, child);
     NeedsSizeCalcWalk(self);
 
-    if (rt_diff_on__) {
-        const bool sizeOk   = (self->_children._size == oldSize + 1);
-        const bool slotOk   = sizeOk && self->_children._data != nullptr &&
-                              self->_children._data[oldSize] == c;
-        const bool parentOk = (c == nullptr) || (c->_parent == self);
-        const bool dirtyOk  = (self->_flags & UI::kElementFlagNeedsSizeCalc) != 0;
-        char ours[160], theirs[160];
-        std::snprintf(ours, sizeof(ours),
-                      "size %d->%d, data[%d]=%p, child->_parent=%p, dirty=%d",
-                      oldSize, self->_children._size, oldSize,
-                      (slotOk && self->_children._data) ? (void*)self->_children._data[oldSize] : nullptr,
-                      c ? (void*)c->_parent : nullptr, dirtyOk ? 1 : 0);
-        std::snprintf(theirs, sizeof(theirs),
-                      "expected size %d, data[%d]=%p, child->_parent=%p, dirty=1",
-                      oldSize + 1, oldSize, (void*)c, (void*)self);
-        RT_DIFF_SHADOW(sizeOk && slotOk && parentOk && dirtyOk, ours, theirs);
-    }
 }
 
 // ---- ?Child@  0x180035540 --------------------------------------------------
@@ -654,27 +465,15 @@ void RtUi_Element_AddChild(Element* self, void** child) {
 // R8D. NO BOUNDS CHECK, and the index is SIGN-extended (MOVSXD RCX,R8D) — a
 // negative index reads before the buffer, exactly as retail does.
 void* RtUi_Element_Child(Element* self, void** ret, int index) {
-    RT_DIFF_BEGIN("UI::Element::Child");
 
     *ret = self->_children._data[static_cast<intptr_t>(index)];
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(Element*, void**, int);
-        void* theirs = nullptr;
-        RT_ORIGINAL_ONCE(Fn, kChild)(self, &theirs, index);
-        RT_DIFF_SCALAR(static_cast<const void*>(*ret), static_cast<const void*>(theirs));
-    }
     return ret;
 }
 
 // ---- ?ChildCount@  0x180035530 ---------------------------------------------
 int RtUi_Element_ChildCount(const Element* self) {
-    RT_DIFF_BEGIN("UI::Element::ChildCount");
     const int ours = self->_children._size;
-    if (rt_diff_on__) {
-        using Fn = int (*)(const Element*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, kChildCount)(self));
-    }
     return ours;
 }
 
@@ -712,9 +511,7 @@ void RtUi_Element_Draw(const Element* self, void* spriteContext, unsigned char a
 //     length 0 against a length-0 query would have matched, but the query
 //     length test above has already excluded that case.
 //
-// The recursion goes through this private helper so that under
-// BANISHED_RT_DIFF=1 the oracle runs ONCE per top-level call instead of
-// doubling the work at every level of the tree.
+// The recursion goes through this private helper.
 namespace {
 void* FindElementImpl(Element* self, void** ret, const char* const* name) {
     const char* q = *name;
@@ -745,14 +542,7 @@ void* FindElementImpl(Element* self, void** ret, const char* const* name) {
 } // namespace
 
 void* RtUi_Element_FindElement(Element* self, void** ret, const char* const* name) {
-    RT_DIFF_BEGIN("UI::Element::FindElement");
     FindElementImpl(self, ret, name);
-    if (rt_diff_on__) {
-        using Fn = void* (*)(Element*, void**, const char* const*);
-        void* theirs = nullptr;
-        RT_ORIGINAL_ONCE(Fn, kFindElement)(self, &theirs, name);
-        RT_DIFF_SCALAR(static_cast<const void*>(*ret), static_cast<const void*>(theirs));
-    }
     return ret;
 }
 
@@ -777,14 +567,7 @@ void* FindElementTypeImpl(Element* self, void** ret, uint32_t typeId) {
 } // namespace
 
 void* RtUi_Element_FindElementType(Element* self, void** ret, uint32_t typeId) {
-    RT_DIFF_BEGIN("UI::Element::FindElementType");
     FindElementTypeImpl(self, ret, typeId);
-    if (rt_diff_on__) {
-        using Fn = void* (*)(Element*, void**, uint32_t);
-        void* theirs = nullptr;
-        RT_ORIGINAL_ONCE(Fn, kFindElemType)(self, &theirs, typeId);
-        RT_DIFF_SCALAR(static_cast<const void*>(*ret), static_cast<const void*>(theirs));
-    }
     return ret;
 }
 
@@ -896,7 +679,6 @@ void RtUi_Element_GetAlignedPositionStatic(
         int leftPad, int rightPad, int topPad, int bottomPad,
         int* outX, int* outY, int* outW, int* outH,
         bool stretchX, bool stretchY) {
-    RT_DIFF_BEGIN("UI::Element::GetAlignedPosition[static]");
 
     // Snapshot BEFORE ours runs -- see the oracle note above.
     const int inW = outW ? *outW : 0;
@@ -907,23 +689,6 @@ void RtUi_Element_GetAlignedPositionStatic(
         leftPad, rightPad, topPad, bottomPad,
         outX, outY, outW, outH, stretchX, stretchY);
 
-    if (rt_diff_on__) {
-        int tx = 0, ty = 0, tw = inW, th = inH;
-        RT_ORIGINAL_ONCE(GetAlignedStaticFn, kGetAlignedStatic)(
-            alignment, x, y, containerW, containerH, offsetX, offsetY,
-            leftPad, rightPad, topPad, bottomPad,
-            &tx, &ty, &tw, &th, stretchX, stretchY);
-
-        const bool eq = (*outX == tx && *outY == ty && *outW == tw && *outH == th);
-        // A stretch or a re-centre is what makes a call informative; a call that
-        // only copies the cursor through exercises almost nothing.
-        RT_DIFF_WORK(stretchX || stretchY || (alignment >= 1 && alignment <= 8));
-        char ours[96], theirs[96];
-        std::snprintf(ours,   sizeof(ours),   "x=%d y=%d w=%d h=%d",
-                      *outX, *outY, *outW, *outH);
-        std::snprintf(theirs, sizeof(theirs), "x=%d y=%d w=%d h=%d", tx, ty, tw, th);
-        RT_DIFF_SHADOW(eq, ours, theirs);
-    }
 }
 
 // ---- ?GetAlignedPosition@ (member)  0x180115ff0 ----------------------------
@@ -951,7 +716,6 @@ void RtUi_Element_GetAlignedPositionStatic(
 void RtUi_Element_GetAlignedPosition(Element* self, int a, int b, int c, int d,
                                      int e, int f, int* outX, int* outY,
                                      int* outW, int* outH, bool stretchX, bool stretchY) {
-    RT_DIFF_BEGIN("UI::Element::GetAlignedPosition");
 
     using ComputeSizeFn = void (*)(Element*);
     VSlot<ComputeSizeFn>(self, kSlotComputeSize)(self);
@@ -969,18 +733,6 @@ void RtUi_Element_GetAlignedPosition(Element* self, int a, int b, int c, int d,
            outX, outY, outW, outH, bx, by);
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Element*, int, int, int, int, int, int,
-                            int*, int*, int*, int*, bool, bool);
-        int tx = 0, ty = 0, tw = 0, th = 0;
-        RT_ORIGINAL_ONCE(Fn, kGetAligned)(self, a, b, c, d, e, f,
-                                          &tx, &ty, &tw, &th, stretchX, stretchY);
-        const bool eq = (*outX == tx && *outY == ty && *outW == tw && *outH == th);
-        char ours[96], theirs[96];
-        std::snprintf(ours,   sizeof(ours),   "x=%d y=%d w=%d h=%d", *outX, *outY, *outW, *outH);
-        std::snprintf(theirs, sizeof(theirs), "x=%d y=%d w=%d h=%d", tx, ty, tw, th);
-        RT_DIFF_SHADOW(eq, ours, theirs);
-    }
 }
 
 // ---- ?GetPaddedSize@  0x180115f10 ------------------------------------------
@@ -1001,7 +753,6 @@ void RtUi_Element_GetAlignedPosition(Element* self, int a, int b, int c, int d,
 //
 // ORACLE — OUTPUTS ONLY, same argument as GetAlignedPosition above.
 void RtUi_Element_GetPaddedSize(Element* self, int* outW, int* outH) {
-    RT_DIFF_BEGIN("UI::Element::GetPaddedSize");
 
     using ComputeSizeFn = void (*)(Element*);
     VSlot<ComputeSizeFn>(self, kSlotComputeSize)(self);
@@ -1035,27 +786,11 @@ void RtUi_Element_GetPaddedSize(Element* self, int* outW, int* outH) {
         }
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Element*, int*, int*);
-        int tw = 0, th = 0;
-        RT_ORIGINAL_ONCE(Fn, kGetPadded)(self, &tw, &th);
-        const bool eq = (*outW == tw && *outH == th);
-        char ours[64], theirs[64];
-        std::snprintf(ours,   sizeof(ours),   "w=%d h=%d", *outW, *outH);
-        std::snprintf(theirs, sizeof(theirs), "w=%d h=%d", tw, th);
-        RT_DIFF_SHADOW(eq, ours, theirs);
-    }
 }
 
 // ---- ?GetUserData@  0x180115550 --------------------------------------------
 void* RtUi_Element_GetUserData(Element* self) {
-    RT_DIFF_BEGIN("UI::Element::GetUserData");
     void* ours = self->_userData;
-    if (rt_diff_on__) {
-        using Fn = void* (*)(Element*);
-        RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                       static_cast<const void*>(RT_ORIGINAL_ONCE(Fn, kGetUserData)(self)));
-    }
     return ours;
 }
 
@@ -1065,8 +800,6 @@ void* RtUi_Element_GetUserData(Element* self) {
 // builds this branchlessly out of SETZ/SETNZ/NOT; the mask is
 // `hide ? 0xFFFFFFFF : ~1`, so the AND is a no-op on the hide path.
 void RtUi_Element_Hide(Element* self, bool hide) {
-    RT_DIFF_BEGIN("UI::Element::Hide");
-    ReplayGuard replay(rt_diff_on__, self);
 
     const uint32_t old = self->_flags;
     const uint32_t setMask   = hide ? 1u : 0u;
@@ -1075,23 +808,11 @@ void RtUi_Element_Hide(Element* self, bool hide) {
     self->_flags = next;
     if ((next ^ old) & 1u) NeedsSizeCalcWalk(self);
 
-    if (replay.copy) {
-        using Fn = void (*)(Element*, bool);
-        RT_ORIGINAL_ONCE(Fn, kHide)(replay.copy, hide);
-        RT_DIFF_BYTES(self, replay.copy, kElementSize);
-    }
 }
 
 // ---- ?SetElementId@  0x180115820 -------------------------------------------
 void RtUi_Element_SetElementId(Element* self, int id) {
-    RT_DIFF_BEGIN("UI::Element::SetElementId");
-    ReplayGuard replay(rt_diff_on__, self);
     self->_elementId = id;
-    if (replay.copy) {
-        using Fn = void (*)(Element*, int);
-        RT_ORIGINAL_ONCE(Fn, kSetElementId)(replay.copy, id);
-        RT_DIFF_BYTES(self, replay.copy, kElementSize);
-    }
 }
 
 // ---- ?SetFlagsOnOff@  0x180116160 ------------------------------------------
@@ -1102,19 +823,12 @@ void RtUi_Element_SetElementId(Element* self, int id) {
 // every other bit; this lane renamed them to (setFlags, clearFlags).
 // See WAVE7_LANE_A.md §6.
 void RtUi_Element_SetFlagsOnOff(Element* self, uint32_t on, uint32_t off) {
-    RT_DIFF_BEGIN("UI::Element::SetFlagsOnOff");
-    ReplayGuard replay(rt_diff_on__, self);
 
     const uint32_t old = self->_flags;
     const uint32_t next = (old | on) & ~off;
     self->_flags = next;
     if ((next ^ old) & 1u) NeedsSizeCalcWalk(self);
 
-    if (replay.copy) {
-        using Fn = void (*)(Element*, uint32_t, uint32_t);
-        RT_ORIGINAL_ONCE(Fn, kSetFlags)(replay.copy, on, off);
-        RT_DIFF_BYTES(self, replay.copy, kElementSize);
-    }
 }
 
 // ---- ?SetName@  0x1801154f0 ------------------------------------------------
@@ -1135,7 +849,6 @@ void RtUi_Element_SetFlagsOnOff(Element* self, uint32_t on, uint32_t off) {
 // calls this the shadow case. So the check below is a postcondition predicate
 // that names each term it tests.
 void RtUi_Element_SetName(Element* self, void* const* str) {
-    RT_DIFF_BEGIN("UI::Element::SetName");
 
     char* const incoming = reinterpret_cast<char*>(*str);
     char* const previous = reinterpret_cast<char*>(self->_name);
@@ -1158,36 +871,11 @@ void RtUi_Element_SetName(Element* self, void* const* str) {
         if (incoming) ++RtSystem::StringRefCount(incoming);
     }
 
-    if (rt_diff_on__) {
-        const bool storedOk  = (self->_name == incoming);
-        const bool acquiredOk = (incoming == nullptr) ||
-                                (RtSystem::StringRefCount(incoming) >= 1);
-        const bool releaseOk  = (previous == incoming) || (previous == nullptr) ||
-                                freedPrev || prevRefAfter >= 1;
-        char ours[176], theirs[176];
-        std::snprintf(ours, sizeof(ours),
-                      "_name=%p (stored=%d), new refcount=%d (acquired=%d), "
-                      "old=%p freed=%d refAfter=%d (released=%d)",
-                      (void*)self->_name, storedOk ? 1 : 0,
-                      incoming ? RtSystem::StringRefCount(incoming) : 0, acquiredOk ? 1 : 0,
-                      (void*)previous, freedPrev ? 1 : 0, prevRefAfter, releaseOk ? 1 : 0);
-        std::snprintf(theirs, sizeof(theirs),
-                      "expected _name=%p, new refcount>=1, old released exactly once",
-                      (void*)incoming);
-        RT_DIFF_SHADOW(storedOk && acquiredOk && releaseOk, ours, theirs);
-    }
 }
 
 // ---- ?SetNeedsSizeCalc@  0x180035470 ---------------------------------------
 void RtUi_Element_SetNeedsSizeCalc(Element* self) {
-    RT_DIFF_BEGIN("UI::Element::SetNeedsSizeCalc");
-    ReplayGuard replay(rt_diff_on__, self);
     NeedsSizeCalcWalk(self);
-    if (replay.copy) {
-        using Fn = void (*)(Element*);
-        RT_ORIGINAL_ONCE(Fn, kSetNeedsCalc)(replay.copy);
-        RT_DIFF_BYTES(self, replay.copy, kElementSize);
-    }
 }
 
 // ---- ?SetPadding@  0x180115480 ---------------------------------------------
@@ -1203,19 +891,12 @@ void RtUi_Element_SetNeedsSizeCalc(Element* self) {
 // related SetMinSize (0x1801154a0) does. Not an omission — the walk is simply
 // not in the shipped body.
 void RtUi_Element_SetPadding(Element* self, int left, int right, int top, int bottom) {
-    RT_DIFF_BEGIN("UI::Element::SetPadding");
-    ReplayGuard replay(rt_diff_on__, self);
 
     self->_leftPad   = left;
     self->_rightPad  = right;
     self->_bottomPad = bottom;   // retail writes +0x24 BEFORE +0x20; same bytes
     self->_topPad    = top;
 
-    if (replay.copy) {
-        using Fn = void (*)(Element*, int, int, int, int);
-        RT_ORIGINAL_ONCE(Fn, kSetPadding)(replay.copy, left, right, top, bottom);
-        RT_DIFF_BYTES(self, replay.copy, kElementSize);
-    }
 }
 
 // ---- ?SetToolTip@  0x180035740 ---------------------------------------------
@@ -1252,8 +933,6 @@ void RtUi_Element_SetPadding(Element* self, int left, int right, int top, int bo
 //     and because the replay would report its absence as a divergence the day
 //     someone changes the masks.
 void RtUi_Element_SetToolTip(Element* self, const UIString* tip) {
-    RT_DIFF_BEGIN("UI::Element::SetToolTip");
-    ReplayGuard replay(rt_diff_on__, self);
 
     const bool hadDialog = (self->_toolTipDialog != nullptr);
     std::memcpy(&self->_toolTip, tip, sizeof(UIString));
@@ -1269,18 +948,12 @@ void RtUi_Element_SetToolTip(Element* self, const UIString* tip) {
     self->_flags = next;
     if ((next ^ old) & 1u) NeedsSizeCalcWalk(self);
 
-    if (replay.copy) {
-        using Fn = void (*)(Element*, const UIString*);
-        RT_ORIGINAL_ONCE(Fn, kSetToolTip)(replay.copy, tip);
-        RT_DIFF_BYTES(self, replay.copy, kElementSize);
-    }
 }
 
 // ---- ?SetToolTipString@  0x1800356e0 ---------------------------------------
 // Byte-for-byte the same release/acquire as SetName, on +0x58 instead of +0x10.
 // Same shadow oracle, for the same reason.
 void RtUi_Element_SetToolTipString(Element* self, void* const* str) {
-    RT_DIFF_BEGIN("UI::Element::SetToolTipString");
 
     char* const incoming = reinterpret_cast<char*>(*str);
     char* const previous = reinterpret_cast<char*>(self->_toolTipString);
@@ -1303,36 +976,11 @@ void RtUi_Element_SetToolTipString(Element* self, void* const* str) {
         if (incoming) ++RtSystem::StringRefCount(incoming);
     }
 
-    if (rt_diff_on__) {
-        const bool storedOk   = (self->_toolTipString == incoming);
-        const bool acquiredOk = (incoming == nullptr) ||
-                                (RtSystem::StringRefCount(incoming) >= 1);
-        const bool releaseOk  = (previous == incoming) || (previous == nullptr) ||
-                                freedPrev || prevRefAfter >= 1;
-        char ours[176], theirs[176];
-        std::snprintf(ours, sizeof(ours),
-                      "_toolTipString=%p (stored=%d), new refcount=%d (acquired=%d), "
-                      "old=%p freed=%d refAfter=%d (released=%d)",
-                      (void*)self->_toolTipString, storedOk ? 1 : 0,
-                      incoming ? RtSystem::StringRefCount(incoming) : 0, acquiredOk ? 1 : 0,
-                      (void*)previous, freedPrev ? 1 : 0, prevRefAfter, releaseOk ? 1 : 0);
-        std::snprintf(theirs, sizeof(theirs),
-                      "expected _toolTipString=%p, new refcount>=1, old released exactly once",
-                      (void*)incoming);
-        RT_DIFF_SHADOW(storedOk && acquiredOk && releaseOk, ours, theirs);
-    }
 }
 
 // ---- ?SetUserData@  0x180115560 --------------------------------------------
 void RtUi_Element_SetUserData(Element* self, void* userData) {
-    RT_DIFF_BEGIN("UI::Element::SetUserData");
-    ReplayGuard replay(rt_diff_on__, self);
     self->_userData = userData;
-    if (replay.copy) {
-        using Fn = void (*)(Element*, void*);
-        RT_ORIGINAL_ONCE(Fn, kSetUserData)(replay.copy, userData);
-        RT_DIFF_BYTES(self, replay.copy, kElementSize);
-    }
 }
 
 // ---- ?SetOffsets@ContainerElement@UI@@QEAAXHH@Z  0x1800cc1e0 ---------------
@@ -1362,7 +1010,6 @@ void RtUi_Element_SetUserData(Element* self, void* userData) {
 // makes at an offset ours never touched. Stated as a limitation in
 // WAVE7_LANE_A.md §7 rather than dressed up.
 void RtUi_ContainerElement_SetOffsets(Element* self, int x, int y) {
-    RT_DIFF_BEGIN("UI::ContainerElement::SetOffsets");
 
     IsDerivedFromFn isA = IsDerivedFrom();
 
@@ -1389,29 +1036,6 @@ void RtUi_ContainerElement_SetOffsets(Element* self, int x, int y) {
             static_cast<float>(x);
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(Element*, int, int);
-        RT_ORIGINAL_ONCE(Fn, kSetOffsets)(self, x, y);
-
-        const bool clipOk = (*reinterpret_cast<const int32_t*>(clipBytes + 0xd0) == x) &&
-                            (*reinterpret_cast<const int32_t*>(clipBytes + 0xd4) == y);
-        const bool vOk = !vscroll ||
-            *reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(vscroll) + 0x160)
-                == static_cast<float>(y);
-        const bool hOk = !hscroll ||
-            *reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(hscroll) + 0x160)
-                == static_cast<float>(x);
-        char ours[192], theirs[192];
-        std::snprintf(ours, sizeof(ours),
-                      "clip=%p +0xd0/+0xd4 held (%d), vscroll=%p +0x160 held (%d), "
-                      "hscroll=%p +0x160 held (%d)",
-                      (void*)clip, clipOk ? 1 : 0, (void*)vscroll, vOk ? 1 : 0,
-                      (void*)hscroll, hOk ? 1 : 0);
-        std::snprintf(theirs, sizeof(theirs),
-                      "after the original: expected clip +0xd0=%d +0xd4=%d, "
-                      "vscroll +0x160=%d, hscroll +0x160=%d", x, y, y, x);
-        RT_DIFF_SHADOW(clipOk && vOk && hOk, ours, theirs);
-    }
 }
 
 // ============================================================================
@@ -1440,7 +1064,6 @@ void RtUi_ContainerElement_SetOffsets(Element* self, int x, int y) {
 // same after-the-fact ResolveExport the other four use — no change needed
 // here, but the sentence had to go rather than stay and be wrong.)
 //
-// The kill switch is BANISHED_RT_UIELEMENT=0, applied by
 // runtime/src/ui/rt_ui_port.cpp before this function is called.
 // ============================================================================
 
@@ -1529,16 +1152,9 @@ void RtUi_ContainerElement_SetOffsets(Element* self, int x, int y) {
 // Z reused four rows over in runtime/src/ui/userinterface.cpp: a real body,
 // registered, with NO call into the shipped body at all.
 //
-// WHAT THE INSTRUMENT DOES AND DOES NOT SAY. `RT_DIFF_WORK` below reports, in a
-// BANISHED_RT_DIFF=1 run while the DLL is still present, how many calls got
-// past the two release guards and actually freed something — so a dead port is
-// distinguishable from a live one. Note that this site will print `calls=0`:
-// `calls` is bumped by RtDiffReport, and there is no comparison to report. The
-// `worked=` column is the whole liveness signal here, and it is a LIVENESS
-// instrument, not a correctness one. Nothing in this file is evidence that the
-// body is right; the evidence is the disassembly transcribed above.
+// Nothing in this file is evidence that the body is right; the evidence is the
+// disassembly transcribed above.
 void RtUi_Element_Dtor(Element* self) {
-    RT_DIFF_BEGIN("UI::Element::~Element");
     bool didWork = false;
 
     // Retail's vtable restamp. Resolved by name so our objects and the DLL's
@@ -1603,7 +1219,6 @@ void RtUi_Element_Dtor(Element* self) {
         }
     }
 
-    RT_DIFF_WORK(didWork);
 
     // 0x1800bfdb0 ~Internal — a TAIL CALL in retail, a normal call here. That
     // is the one deliberate departure: it costs a stack frame and changes
@@ -1652,241 +1267,29 @@ void RtUi_Element_Dtor(Element* self) {
 // (`?SetUpperLeft@DialogInstance@` 0x180114a60 and this body itself) both test
 // before calling. CLAUDE.md's rule — the deref is load-bearing.
 namespace {
-// NEGATIVE CONTROL. `BANISHED_RT_ADJUSTUL_NEGCTL=<mode>` injects a defect of a
-// shape a real port would plausibly have, so a green run can be distinguished
-// from an oracle that cannot fail
-// (reference_probe_needs_an_effectiveness_control.md — a probe needs to be
-// shown going red on a KNOWN-BAD input, or "0 divergences" is unfalsifiable):
-//
-//   swap      — translate by (dy,dx). Invisible on every case where dx == dy,
-//               which is why the sweep includes one-axis and asymmetric pairs.
-//   noborder  — skip the `_border` chain. The single most likely real mistake,
-//               because the border is a LOOP at the bottom of the body rather
-//               than an obvious recursive call.
-//   nochild   — skip the children. The other half of the same mistake.
-//   once      — do the first border iteration only (i.e. treat the `while` as
-//               an `if`), which is what a careless transcription produces.
-//
-// Read once, cached. Costs one predictable branch per node in a diff run and
-// nothing at all in a normal one, because the whole sweep is inside
-// `if (rt_diff_on__)`.
-enum class AdjustNeg { None, Swap, NoBorder, NoChild, Once };
-AdjustNeg AdjustNegMode() {
-    static AdjustNeg mode = []() {
-        const char* e = std::getenv("BANISHED_RT_ADJUSTUL_NEGCTL");
-        if (!e) return AdjustNeg::None;
-        if (std::strcmp(e, "swap")     == 0) return AdjustNeg::Swap;
-        if (std::strcmp(e, "noborder") == 0) return AdjustNeg::NoBorder;
-        if (std::strcmp(e, "nochild")  == 0) return AdjustNeg::NoChild;
-        if (std::strcmp(e, "once")     == 0) return AdjustNeg::Once;
-        return AdjustNeg::None;
-    }();
-    return mode;
-}
-
-// The recursive core. `neg` is passed down rather than re-read per node so that
-// `Swap` swaps ONCE at the top — re-reading it inside the recursion would swap
-// again at every level and cancel itself out below the root, which would make
-// the control a much weaker defect than the one it claims to inject.
-void AdjustUpperLeftCore(Element* self, int32_t dx, int32_t dy, AdjustNeg neg) {
-    bool firstBorderPass = true;
+// The recursive core.
+void AdjustUpperLeftCore(Element* self, int32_t dx, int32_t dy) {
     while (self) {
-        if (!firstBorderPass && neg == AdjustNeg::Once) return;
-        firstBorderPass = false;
         self->_layoutLeft   += dx;
         self->_layoutRight  += dx;
         self->_layoutTop    += dy;
         self->_layoutBottom += dy;
-        if (neg != AdjustNeg::NoChild) {
-            for (int32_t i = 0; i < self->_children._size; ++i) {
-                Element* child = self->_children._data[i];
-                if (child) AdjustUpperLeftCore(child, dx, dy, neg);
-            }
+        for (int32_t i = 0; i < self->_children._size; ++i) {
+            Element* child = self->_children._data[i];
+            if (child) AdjustUpperLeftCore(child, dx, dy);
         }
-        if (neg == AdjustNeg::NoBorder) return;
         self = static_cast<Element*>(self->_border);
     }
 }
 
 void AdjustUpperLeftImpl(Element* self, int32_t dx, int32_t dy) {
-    const AdjustNeg neg = AdjustNegMode();
-    if (neg == AdjustNeg::Swap) { const int32_t t = dx; dx = dy; dy = t; }
-    AdjustUpperLeftCore(self, dx, dy, neg);
+    AdjustUpperLeftCore(self, dx, dy);
 }
 
-// ---------------------------------------------------------------------------
-// THE ORACLE: INVERTIBILITY, not replay.
-// ---------------------------------------------------------------------------
-// A plain replay is useless here — running ours then theirs translates the tree
-// by 2*(dx,dy) and compares nothing. But the function is EXACTLY INVERTIBLE, so
-// there is a real two-sided check available:
-//
-//     snapshot the subtree
-//     OURS(dx, dy)
-//     THEIRS(-dx, -dy)          <- the shipped body, undoing it
-//     compare against the snapshot        <- the verification
-//     THEIRS(dx, dy)            <- apply for real, so the caller sees retail's
-//                                  result and not ours
-//
-// This is strictly stronger than a field-by-field replay of a single node. A
-// node OURS FAILS TO VISIT is left at -(dx,dy) by the undo; a node OURS VISITS
-// TWICE is left at +(dx,dy); a swapped dx/dy shows on any node with dx != dy.
-// So it checks the visit MULTIPLICITY over the whole subtree, which is the part
-// of this function that can actually be wrong.
-//
-// WHAT IT DOES NOT CHECK, stated rather than glossed: the snapshot is taken by
-// a breadth-first walk written here, over the same {children, border} closure
-// retail's depth-first walk covers. If retail reached a node through some edge
-// this walk does not know about, that node is neither snapshotted nor compared.
-// The two walks agreeing on the NODE SET is an assumption; everything else is
-// measured.
-//
-// EFFECTIVENESS CONTROL (reference_probe_needs_an_effectiveness_control.md).
-// A call with dx == dy == 0 passes trivially, and so does a call on a single
-// childless element. The reported string therefore always carries the visited
-// node count and the delta, so a run whose sites all read `nodes=1 d=(0,0)` is
-// visibly a population that could not have failed rather than a clean pass.
-constexpr size_t kAdjustSnapMax = 512;   // 512 nodes = 12 KB of snapshot
-struct AdjustSnap { Element* e; int32_t l, t, r, b; };
-AdjustSnap g_adjustSnap[kAdjustSnapMax];
-
-// Breadth-first over {children, border}, deliberately a DIFFERENT traversal
-// order from the body under test. Returns the node count, or SIZE_MAX if the
-// subtree does not fit — in which case the call is simply NOT DIFFED, rather
-// than reported as a divergence. "The oracle's buffer was too small" is not a
-// fact about the port (the same disposition WAVE7_LANE_B.md §4 records for
-// StopTimer's timer buffer).
-size_t AdjustSnapshot(Element* root) {
-    size_t n = 0;
-    if (!root) return 0;
-    g_adjustSnap[n++] = { root, 0, 0, 0, 0 };
-    for (size_t head = 0; head < n; ++head) {
-        Element* e = g_adjustSnap[head].e;
-        g_adjustSnap[head].l = e->_layoutLeft;
-        g_adjustSnap[head].t = e->_layoutTop;
-        g_adjustSnap[head].r = e->_layoutRight;
-        g_adjustSnap[head].b = e->_layoutBottom;
-        for (int32_t i = 0; i < e->_children._size; ++i) {
-            Element* c = e->_children._data[i];
-            if (!c) continue;
-            if (n >= kAdjustSnapMax) return SIZE_MAX;
-            g_adjustSnap[n++] = { c, 0, 0, 0, 0 };
-        }
-        if (Element* b = static_cast<Element*>(e->_border)) {
-            if (n >= kAdjustSnapMax) return SIZE_MAX;
-            g_adjustSnap[n++] = { b, 0, 0, 0, 0 };
-        }
-    }
-    return n;
-}
-
-size_t AdjustCompare(size_t n) {
-    size_t bad = 0;
-    for (size_t i = 0; i < n; ++i) {
-        const AdjustSnap& s = g_adjustSnap[i];
-        if (s.e->_layoutLeft   != s.l || s.e->_layoutTop    != s.t ||
-            s.e->_layoutRight  != s.r || s.e->_layoutBottom != s.b) ++bad;
-    }
-    return bad;
-}
-
-// Write the snapshot back. WITHOUT THIS THE SWEEP IS UNSOUND, and the negative
-// control is what proved it rather than reasoning.
-//
-// `BANISHED_RT_ADJUSTUL_NEGCTL=noborder` should have failed all 13 non-zero
-// cases; it failed exactly 10. The four that passed were `(0,0)` — vacuous, as
-// designed — plus `(0,-1)`, `(-1,-1)` and `(-1,1)`, and those three are the
-// exact inverses of cases that ran earlier in the sweep. A case that leaves
-// residue leaves it for the NEXT case, whose comparison is against the same
-// original snapshot, so a later case can CANCEL an earlier case's error and
-// report clean. That is a defect hiding inside the oracle, not inside the port.
-//
-// Restoring after every case makes the cases independent, which is what the
-// sweep claimed to be all along. Cheap: n integer stores.
-void AdjustRestore(size_t n) {
-    for (size_t i = 0; i < n; ++i) {
-        const AdjustSnap& s = g_adjustSnap[i];
-        s.e->_layoutLeft   = s.l;
-        s.e->_layoutTop    = s.t;
-        s.e->_layoutRight  = s.r;
-        s.e->_layoutBottom = s.b;
-    }
-}
 }  // namespace
 
 void RtUi_Element_AdjustUpperLeft(Element* self, int32_t dx, int32_t dy) {
-    RT_DIFF_BEGIN("UI::Element::AdjustUpperLeft");
-
-    if (!rt_diff_on__) {
-        AdjustUpperLeftImpl(self, dx, dy);
-        RT_DIFF_WORK(dx != 0 || dy != 0);
-        return;
-    }
-
-    using Fn = void (*)(Element*, int32_t, int32_t);
-    Fn theirs = RT_ORIGINAL_ONCE(Fn, kAdjustUL);
-
-    const size_t n = AdjustSnapshot(self);
-    if (n == 0 || n == SIZE_MAX || !theirs) {
-        // Not diffable: no subtree, does not fit, or the original did not
-        // resolve. Do the work and report no comparison rather than a pass.
-        AdjustUpperLeftImpl(self, dx, dy);
-        RT_DIFF_WORK(dx != 0 || dy != 0);
-        return;
-    }
-
-    // THE SWEEP. The live population for this function is tiny — its only
-    // caller is `?SetUpperLeft@DialogInstance@`, and a whole 115-second tutorial
-    // run produced exactly ONE call. One comparison is not a verification
-    // (reference_uniform_population_is_not_a_verification.md), and the fix is
-    // not a longer run: it is a CALLER
-    // (reference_const_reader_needs_a_caller_not_a_human.md).
-    //
-    // Because each (dx,dy) is applied by ours and then undone by theirs, every
-    // extra pair is SELF-CANCELLING and leaves the tree exactly as it found it.
-    // So one live call can carry a whole sweep at no cost to the game state:
-    // both signs on each axis, one axis at a time (which is what catches a
-    // swapped dx/dy), a large value, and the caller's own delta last.
-    //
-    // (0,0) is deliberately INCLUDED and deliberately NOT COUNTED as effective:
-    // it is the negative-space case, and it also proves the harness itself does
-    // not perturb the tree.
-    static const int32_t kSweep[][2] = {
-        {  0,   0}, {  1,   0}, {  0,   1}, { -1,   0}, {  0,  -1},
-        {  1,   1}, { -1,  -1}, {  1,  -1}, { -1,   1},
-        { 37,   0}, {  0,  37}, {-37,  91}, {1024, -2048},
-    };
-    // ONE RtDiffReport PER CASE, not one for the whole sweep. That is the whole
-    // reason `calls=` exists: an aggregated report makes fourteen comparisons
-    // look like one, and a reader checking `calls=` cannot then tell a sweep
-    // that ran from a sweep that was skipped. `calls=` on this site is the
-    // literal number of invertibility checks performed.
-    size_t effective = 0;
-    auto oneCase = [&](int32_t cdx, int32_t cdy) -> size_t {
-        AdjustSnapshot(self);          // re-read: cases must be independent
-        AdjustUpperLeftImpl(self, cdx, cdy);
-        theirs(self, -cdx, -cdy);
-        const size_t off = AdjustCompare(n);
-        AdjustRestore(n);              // and leave no residue for the next case
-        if (cdx != 0 || cdy != 0) ++effective;
-        char a[192], b[192];
-        std::snprintf(a, sizeof(a),
-                      "ours(%d,%d) then theirs(%d,%d) over %zu nodes: %zu off",
-                      cdx, cdy, -cdx, -cdy, n, off);
-        std::snprintf(b, sizeof(b),
-                      "expected all %zu nodes back at their snapshot", n);
-        RT_DIFF_SHADOW(off == 0, a, b);
-        return off;
-    };
-
-    for (const auto& d : kSweep) oneCase(d[0], d[1]);
-
-    // The caller's own delta, checked the same way and then applied for real,
-    // so the caller receives RETAIL's result rather than ours.
-    oneCase(dx, dy);
-    theirs(self, dx, dy);
-
-    RT_DIFF_WORK(effective != 0);
+    AdjustUpperLeftImpl(self, dx, dy);
 }
 
 int RtUiElementRegister() {
@@ -1924,14 +1327,6 @@ int RtUiElementRegister() {
     // in widgets_layout.cpp).
     RegisterRuntimeExport(kGetAlignedStatic, (void*)&RtUi_Element_GetAlignedPositionStatic); ++count;
     RegisterRuntimeAddr(0x1801158e0, (void*)&RtUi_Element_GetAlignedPositionStatic);
-    // The input sweep that actually verifies the static overload. It exists
-    // because the port reported calls=0 in a menu run AND in a 16.9M-call
-    // in-game run: nothing our tree runs reaches it, and a clean board from a
-    // port with no callers is not evidence. The function is PURE, so the sweep
-    // feeds both implementations the same inputs rather than waiting for the
-    // game to produce any. BANISHED_RT_ALIGNED_PROBE=1.
-    { extern void RtUiElementAlignedProbe(); RtUiElementAlignedProbe(); }
-
     RegisterRuntimeExport("?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z", (void*)&RtUi_Element_GetPaddedSize); ++count;
     RegisterRuntimeAddr(0x180115f10, (void*)&RtUi_Element_GetPaddedSize);
 
@@ -1967,15 +1362,6 @@ int RtUiElementRegister() {
 
     RegisterRuntimeExport("?SetOffsets@ContainerElement@UI@@QEAAXHH@Z", (void*)&RtUi_ContainerElement_SetOffsets); ++count;
     RegisterRuntimeAddr(0x1800cc1e0, (void*)&RtUi_ContainerElement_SetOffsets);
-
-    // The two forwarders' oracle, run once here rather than per call. Each site
-    // is a file-scope static so it appears in RtDiffSummary() exactly once.
-    static RtDiffSite computeLayoutThunkSite = { "UI::Element::ComputeLayout[thunk]", 0, 0, false, false };
-    static RtDiffSite drawThunkSite          = { "UI::Element::Draw[thunk]",          0, 0, false, false };
-    VerifyBorderThunk(&computeLayoutThunkSite,
-                      "?ComputeLayout@Element@UI@@UEAAXHHHH@Z", 0xb0, 0x28);
-    VerifyBorderThunk(&drawThunkSite,
-                      "?Draw@Element@UI@@UEBAXAEAVSpriteContext@2@E@Z", 0xb0, 0x30);
 
     // WAVE 9 LANE UIF: both Wave 7 hold-backs are now landed. RemoveChildren
     // went in with Wave 9 lane B3 (runtime/src/ui/widgets_layout.cpp); the

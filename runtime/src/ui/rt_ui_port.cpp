@@ -1,17 +1,6 @@
 // ============================================================================
 // runtime/src/ui/rt_ui_port.cpp — RtUiPortInit()  Wave 7 (UI)
 // ============================================================================
-// Kill switches (PLAN.md §4.1 decision 3; unset = ON):
-//   BANISHED_RT_UI=0            leave the whole UI namespace on the DLL
-//   BANISHED_RT_UIELEMENT=0     ... just UI::Element + ContainerElement  (lane A)
-//   BANISHED_RT_UIDIALOG=0      ... just DialogInstance/Dialog/
-//                                   DialogController/ElementDescription  (lane B)
-//   BANISHED_RT_UIMANAGER=0     ... just UI::UserInterface               (lane C)
-//   BANISHED_RT_UIWIDGETSIN=0   ... just the input/value widgets         (lane D)
-//   BANISHED_RT_UIWIDGETSLAY=0  ... just the layout/content widgets      (lane E)
-//   BANISHED_RT_UISPRITE=0      ... just Sprite/SpriteSheet/
-//                                   SpriteContext/StringTable/UI::String (lane F)
-//
 // Each lane owns exactly one .cpp and exposes one Register function returning
 // the number of RegisterRuntime* calls it made. THIS FILE IS OWNED BY NO LANE
 // and is complete as written: a lane with nothing landed yet returns 0 from the
@@ -36,108 +25,72 @@ extern int RtUiSpriteRegister();      // sprite.cpp          (lane F)
 extern int RtUiDialogSettingsRegister();   // dialog_settings.cpp (lane ENC-2)
 
 // Wave 10 lane EXTPTR: ?Serialize@ElementDescription@, the row lanes B, UIW2
-// and UIW2-again declined. Own file and own switch (BANISHED_RT_ELEMDESCSER),
-// because it lands on the UIDescription parse path of every .rsc in the game
-// and must be A/B-able without turning the rest of UI::Dialog off.
+// and UIW2-again declined. Own file, because it lands on the UIDescription
+// parse path of every .rsc in the game.
 extern int RtUiElementDescriptionSerializeRegister();  // elementdescription_serialize.cpp
-// Wave 10 lane UI1: ?Update@UserInterface@UI@@, the class's frame half. Its own
-// switch (BANISHED_RT_UIFRAME) because it is the first UI body that can be given
-// a code detour into the DLL, and a bisect must be able to isolate it from the
-// rest of lane C's UserInterface port.
+// Wave 10 lane UI1: ?Update@UserInterface@UI@@, the class's frame half.
 extern int RtUiFrameRegister();            // userinterface_frame.cpp (lane UI1)
 // Wave 10 lane UI3: the four ALLOCATING DialogInstance rows Wave 7 lane B held
-// back (ctor, both AddController overloads, StartTimer). Own switch because
-// they sit on the construction path of every dialog in the game and because the
-// blocker they cleared -- the allocator -- is still opt-in for its own port.
+// back (ctor, both AddController overloads, StartTimer). They sit on the
+// construction path of every dialog in the game.
 extern int RtUiDialogCreateRegister();     // dialog_create.cpp   (lane UI3)
 // Wave 10 lane UIDRAW: ?Draw@UserInterface@UI@@, the other half of the frame
-// pair. Its own switch (BANISHED_RT_UIDRAW) for the same reason as UI1's: it is
-// the second body that can be given a code detour into the DLL, and a bisect
-// must be able to isolate the DRAW half from the UPDATE half.
+// pair.
 extern int RtUiDrawRegister();             // userinterface_draw.cpp (lane UIDRAW)
 // Wave 10 lane CLOSEDLG: ?CloseDialog@UserInterface@UI@@, the last of lane C's
-// four UserInterface rows that had a live route. Own switch because its oracle
-// is deliberately PARTIAL (see the file banner) and a bisect must be able to
-// isolate it from lane UI1's Update, which calls it.
+// four UserInterface rows that had a live route.
 extern int RtUiCloseDialogRegister();      // userinterface_close.cpp (lane CLOSEDLG)
 // Wave 10 lane DLG2: ??0Dialog@UI@@ and ??1Dialog@UI@@, the two rows that
 // ENTERED the census when UI3 replaced retail's INLINED UI::Dialog temporary
-// with a call to the out-of-line exports. Own switch (BANISHED_RT_DLGCTOR)
-// because the dtor frees and because a bisect must be able to separate it from
-// lane UI3's own switch, which is what put the calls there.
+// with a call to the out-of-line exports.
 extern int RtUiDialogCtorDtorRegister();   // dialog_ctor_dtor.cpp (lane DLG2)
 // Wave 10B lane SHOW: ?ShowDialog@UserInterface@UI@@, the last UI CODE row.
-// Own switch (BANISHED_RT_UISHOW) because it is the only body in the namespace
-// that re-enters Engine::MainLoop::Frame and mutates MainLoop's callback
-// arrays, and because its instrument -- the twin-subject differential in
-// standalone/modal_driver.cpp -- needs to A/B exactly this one symbol with
-// everything else held fixed.
+// It is the only body in the namespace that re-enters
+// Engine::MainLoop::Frame and mutates MainLoop's callback arrays.
 extern int RtUiShowDialogRegister();       // userinterface_showdialog.cpp (lane SHOW)
 // Wave 10B lane ELEM: the eight remaining slots of ??_7Element@UI@@6B@
 // (TypeName, Type, Persist, Update, Enable, Contains, SetColor, GetBorder).
-// Own switch (BANISHED_RT_ELEMVTABLE) rather than sharing lane A's
-// BANISHED_RT_UIELEMENT, because ?Update@Element@ is dispatched by the DLL's
-// own UserInterface::Update for every element every frame: an A/B of THAT must
-// not also turn off the 21 already-verified lane-A bodies it shares a file
-// family with.
+// ?Update@Element@ is dispatched for every element every frame.
 extern int RtUiElementVtableRegister();    // element_vtable.cpp  (lane ELEM)
 // Wave 10B lane DLGV: all NINE remaining slots of ??_7DialogController@UI@@6B@
-// (seven empty base virtuals plus the TypeName/Type pair). Own switch
-// (BANISHED_RT_DLGCTRL) because registering them is what unlocks promoting that
-// minted vtable in standalone/reg_mint_promoted.cpp, and the A/B behind that
-// promotion has to be able to turn the bodies off independently of lane B's
-// DialogInstance port.
+// (seven empty base virtuals plus the TypeName/Type pair). Registering them is
+// what unlocks promoting that minted vtable in standalone/reg_mint_promoted.cpp.
 extern int RtUiDialogControllerRegister(); // dialog_controller_base.cpp (DLGV)
 // Wave 10C lane DLG8: the seven remaining CODE slots of ??_7Dialog@UI@@6B@
 // (TypeName, Type, GetFileVersion, Serialize, Reconstruct, Destruct, Construct),
-// plus the ?TypeId@Dialog@ static twin. Own switch (BANISHED_RT_DLGVTABLE)
-// rather than lane B's BANISHED_RT_UIDIALOG, because registering these is what
-// unlocks promoting that minted vtable in standalone/reg_mint_promoted.cpp, and
-// the A/B behind the promotion must be able to move exactly this group with
-// lane B's 20-odd already-verified Dialog/DialogInstance bodies held fixed.
+// plus the ?TypeId@Dialog@ static twin. Registering these is what unlocks
+// promoting that minted vtable in standalone/reg_mint_promoted.cpp.
 // NOTE the eighth slot is NOT here: slot 0 is the unexported vector deleting
-// destructor and is row 38 of the family in runtime/src/object/deleting_dtor.cpp,
-// under BANISHED_RT_DELDTOR. Turning THAT off re-traps slot 0.
+// destructor and is row 38 of the family in runtime/src/object/deleting_dtor.cpp.
 extern int RtUiDialogVtableRegister();     // dialog_vtable.cpp   (lane DLG8)
 // Wave 10C lane UIF6: the four ORDINARY-MEMBER callees that entered the census
 // when lanes ELEM and CLOSEDLG resolved them by NAME (IsInsideClipRegion,
-// EndDragDrop, EndHover, BeginToolTip). This file owns TWO switches, not one:
-// BANISHED_RT_UIHOVER for the three small non-allocating rows and
-// BANISHED_RT_UITOOLTIP for BeginToolTip, which is a different risk class --
-// it allocates a ToolTipDialog, runs the DLL's DialogInstance ctor on it and
-// stamps a vtable. Both are checked INSIDE the register function so the two can
-// be bisected apart. Called unconditionally for that reason.
+// EndDragDrop, EndHover, BeginToolTip). BeginToolTip is a different risk class
+// from the other three -- it allocates a ToolTipDialog, runs the DLL's
+// DialogInstance ctor on it and stamps a vtable.
 extern int RtUiHoverRegister();            // userinterface_hover.cpp (lane UIF6)
 // Wave 10C lane UIF6: the two PRIVATE STATIC callbacks ShowDialog installs into
 // MainLoop+0x80/+0x90, which entered the census when lane SHOW resolved them by
-// NAME. Own switch (BANISHED_RT_UISTANDALONE) because they only run while a
-// modal nested UI is up -- an A/B of them must not disturb the normal frame.
+// NAME. They only run while a modal nested UI is up.
 extern int RtUiStandAloneRegister();       // userinterface_standalone.cpp (UIF6)
 // Wave 10D lane TIP: the three `UI::ToolTipDialog` census rows lane UIF6's
 // BeginToolTip created (class operator new, Element::GetToolTipString,
 // ToolTipDialog::SetText), plus vtable slots 1 and 2 (TypeName/Type) so that
 // `??_7ToolTipDialog@UI@@6B@` reads TRAP=0 the moment tools/rt_mint_gen.py is
 // re-run. Slot 0 is the vector deleting destructor and is row 39 of the family
-// in runtime/src/object/deleting_dtor.cpp, under BANISHED_RT_DELDTOR.
-// Own switch (BANISHED_RT_UITOOLTIPDLG) rather than UIF6's
-// BANISHED_RT_UITOOLTIP, because that one owns BeginToolTip, which ALLOCATES
-// the object these five bodies operate on -- an A/B that can only move both
-// ends of the same path at once cannot say which end a difference came from.
+// in runtime/src/object/deleting_dtor.cpp. BeginToolTip (lane UIF6) ALLOCATES
+// the object these five bodies operate on.
 extern int RtUiToolTipDialogRegister();    // tooltipdialog.cpp   (lane TIP)
 // Wave 10E lane DRAG: `?BeginDragDrop@UserInterface@UI@@`, the LAST genuine
 // port in the UI namespace. It entered the census in Wave 10D when lane MOUSE's
 // injector resolved it by NAME rather than through a silent address door.
 // Fifteen straight-line instructions, no branches, tail-JMP to the
-// already-ported Play. Own switch (BANISHED_RT_UIDRAGSTART) rather than lane
-// UIF6's BANISHED_RT_UIHOVER, which owns EndDragDrop: they are the two halves
-// of one drag, and a switch that moved both at once could not say which half a
-// regression came from.
+// already-ported Play. EndDragDrop, its other half, is lane UIF6's.
 extern int RtUiDragStartRegister();        // userinterface_dragstart.cpp (DRAG)
 // `?CreateNewObject@Dialog@UI@@` and `?CreateInPlaceObject@Dialog@UI@@`, the
-// two UI::Dialog factory steps. It used to be an opt-in PROBE behind
-// BANISHED_RT_DLGFACTORY; the 2026-09-12 cutover boot died on the minted
-// `?_typeInfo@Dialog@UI@@`'s unported-factoryFn trap because of that gate, so
-// both bodies now register unconditionally and the flag is gone.
+// two UI::Dialog factory steps. It used to be an opt-in PROBE; the 2026-09-12
+// cutover boot died on the minted `?_typeInfo@Dialog@UI@@`'s unported-factoryFn
+// trap because of that gate, so both bodies now register unconditionally.
 extern int RtUiDialogFactoryRegister();    // dialog_factory.cpp
 // UI::GroupDescription, the whole class (2026-09-12). The cutover boot stopped
 // on ??_7GroupDescription@UI@@6B@ slot 2; the two factory steps were already
@@ -177,20 +130,18 @@ extern int RtUiGraphDescriptionRegister();        // graphdescription.cpp
 extern int RtUiLabelDescriptionRegister();        // labeldescription.cpp
 // Wave 24 lane SMALLBODY: ??2SpriteSheet@UI@@SAPEAX_K@Z (0x180002e60) -- the
 // class operator new, byte-identical to ToolTipDialog's and verified side by
-// side rather than by resemblance. Its own file and switch.
+// side rather than by resemblance. Its own file.
 extern int RtUiSpriteSheetNewRegister();   // spritesheet_new.cpp (lane SMALLBODY)
 // WAVE 26 lane FACTORY: `??0StringTable@UI@@`, `?CreateNewObject@StringTable@UI@@`
 // and `?CreateInPlaceObject@StringTable@UI@@` -- the three rows cutover attempt
-// 26 died on. Owns BANISHED_RT_UISTRTAB (DEFAULT ON, unlike the OBJINT probe
-// above) and is called unconditionally so that its own switch is the only one.
-// It must register BEFORE RtDataMintInit(), which is why it lives here at all:
+// 26 died on. It must register BEFORE RtDataMintInit(), which is why it lives
+// here at all:
 // standalone/resolve_standalone.cpp:333 (RtUiPortInit) precedes :406 (the mint).
 extern int RtUiStringTableFactoryRegister(); // stringtable_factory.cpp (FACTORY)
 // Same file, second pass: the three ??_7StringTable@UI@@6B@ slots that read the
-// class's own ?_typeInfo@ node (slots 1/2/3). Shares BANISHED_RT_UISTRTAB with
-// the factories deliberately -- they are one class and one cutover wall, and a
-// switch that could arm the factory without the vtable slots would produce the
-// exact state attempt 28 hit: a constructed object whose vptr nothing fills.
+// class's own ?_typeInfo@ node (slots 1/2/3). One class, one cutover wall:
+// a factory without the vtable slots produces the exact state attempt 28 hit,
+// a constructed object whose vptr nothing fills.
 extern int RtUiStringTableAccessorsRegister(); // stringtable_factory.cpp (FACTORY)
 // Same file, third pass: slots 6/7/8 (Reconstruct/Destruct/Construct). Same
 // switch again, same reason. The row is 7/9 after these; slot 0 (the deleting
@@ -211,18 +162,14 @@ extern int RtUiStringTableSlotsRegister(); // stringtable_factory.cpp (FRONTIER)
 extern int RtUiStringTableLifecycleDtorRegister(); // stringtable_lifecycle.cpp (MISC)
 // WAVE 28 lane FACTUI1: the `?CreateNewObject@`/`?CreateInPlaceObject@` pair for
 // the 31 UI classes of the absent-factory roster sorting strictly before
-// `ImageDescription`, plus the 14 out-of-line constructors they call. Owns
-// BANISHED_RT_UIFACT1 (DEFAULT ON, like FACTORY's switch and deliberately not
-// like the OBJINT probe's opt-in one) and is called unconditionally so its own
-// switch is the only one. It must register BEFORE RtDataMintInit(), which is
+// `ImageDescription`, plus the 14 out-of-line constructors they call. It must
+// register BEFORE RtDataMintInit(), which is
 // why it lives here: standalone/resolve_standalone.cpp:333 (RtUiPortInit)
 // precedes :406 (the mint). See docs/runtime_port/WAVE28_LANE_FACTUI1.md.
 extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
 // WAVE 28 lane FACTUI2: the CreateNewObject/CreateInPlaceObject pair for the UI
 // classes in the minted-BaseTypeInfo absent-factory roster sorting at or after
-// `ImageDescription`. SpriteSheet is the live cutover wall (attempt 30). Owns
-// BANISHED_RT_UIFACT2, DEFAULT ON -- see the file banner for why opt-in would
-// make the whole file worthless (dialog_factory.cpp has been dark since Wave 11).
+// `ImageDescription`. SpriteSheet is the live cutover wall (attempt 30).
 extern int RtUiFactory2Register();         // ui_factory_wave28.cpp (FACTUI2)
 
 // 2026-09-12, VTABLE BATCH 3 - the UI::*Element widget runtime, first half.
@@ -248,7 +195,7 @@ extern int RtUiLabelElementRegister();
 // ---- CUTOVER VTABLE BATCH 4 "elem_B", 2026-09-12 --------------------------
 // Fourteen UI::*Element widget classes, one file each, every vtable slot plus
 // the ctor and dtor. Registered UNCONDITIONALLY (DIRECTION.md §2: a port
-// registers; no new BANISHED_RT_* flags).
+// registers; no new env flags).
 extern int RtUiLayoutElementRegister();       // layoutelement.cpp
 extern int RtUiListElementRegister();         // listelement.cpp
 extern int RtUiNumberEditElementRegister();   // numbereditelement.cpp
@@ -268,36 +215,32 @@ extern int RtUiComboDialogRegister();             // combodialog.cpp
 extern int RtUiDialogControllerConfigRegister();   // dialogcontrollerconfig.cpp
 
 void RtUiPortInit() {
-    if (!RtWaveEnabled("BANISHED_RT_UI")) {
-        printf("[RtPort] BANISHED_RT_UI=0 -- UI namespace port disabled\n");
-        return;
-    }
     int n = 0;
-    if (RtWaveEnabled("BANISHED_RT_UIELEMENT"))    n += RtUiElementRegister();
-    if (RtWaveEnabled("BANISHED_RT_UIDIALOG"))     n += RtUiDialogRegister();
-    if (RtWaveEnabled("BANISHED_RT_UIMANAGER"))    n += RtUiManagerRegister();
-    if (RtWaveEnabled("BANISHED_RT_UIWIDGETSIN"))  n += RtUiWidgetsInRegister();
-    if (RtWaveEnabled("BANISHED_RT_UIWIDGETSLAY")) n += RtUiWidgetsLayRegister();
-    if (RtWaveEnabled("BANISHED_RT_UISPRITE"))     n += RtUiSpriteRegister();
-    if (RtWaveEnabled("BANISHED_RT_DLGSETTINGS")) n += RtUiDialogSettingsRegister();
-    if (RtWaveEnabled("BANISHED_RT_ELEMDESCSER")) n += RtUiElementDescriptionSerializeRegister();
-    if (RtWaveEnabled("BANISHED_RT_UIFRAME"))     n += RtUiFrameRegister();
-    if (RtWaveEnabled("BANISHED_RT_DLGCREATE"))  n += RtUiDialogCreateRegister();
-    if (RtWaveEnabled("BANISHED_RT_UIDRAW"))      n += RtUiDrawRegister();
-    if (RtWaveEnabled("BANISHED_RT_UICLOSE"))    n += RtUiCloseDialogRegister();
-    if (RtWaveEnabled("BANISHED_RT_DLGCTOR"))    n += RtUiDialogCtorDtorRegister();
-    if (RtWaveEnabled("BANISHED_RT_UISHOW"))     n += RtUiShowDialogRegister();
-    if (RtWaveEnabled("BANISHED_RT_ELEMVTABLE")) n += RtUiElementVtableRegister();
-    if (RtWaveEnabled("BANISHED_RT_DLGCTRL"))    n += RtUiDialogControllerRegister();
-    if (RtWaveEnabled("BANISHED_RT_DLGVTABLE")) n += RtUiDialogVtableRegister();
-    n += RtUiHoverRegister();          // owns BANISHED_RT_UIHOVER + _UITOOLTIP
-    n += RtUiStandAloneRegister();     // owns BANISHED_RT_UISTANDALONE
-    n += RtUiToolTipDialogRegister();  // owns BANISHED_RT_UITOOLTIPDLG
+    n += RtUiElementRegister();
+    n += RtUiDialogRegister();
+    n += RtUiManagerRegister();
+    n += RtUiWidgetsInRegister();
+    n += RtUiWidgetsLayRegister();
+    n += RtUiSpriteRegister();
+    n += RtUiDialogSettingsRegister();
+    n += RtUiElementDescriptionSerializeRegister();
+    n += RtUiFrameRegister();
+    n += RtUiDialogCreateRegister();
+    n += RtUiDrawRegister();
+    n += RtUiCloseDialogRegister();
+    n += RtUiDialogCtorDtorRegister();
+    n += RtUiShowDialogRegister();
+    n += RtUiElementVtableRegister();
+    n += RtUiDialogControllerRegister();
+    n += RtUiDialogVtableRegister();
+    n += RtUiHoverRegister();
+    n += RtUiStandAloneRegister();
+    n += RtUiToolTipDialogRegister();
     // Wave 24 lane SMALLBODY: ??2SpriteSheet@UI@@SAPEAX_K@Z (0x180002e60),
     // the last UI operator-new row in the census gap. Its own switch so an
     // A/B can move it without moving ToolTipDialog's five bodies.
-    n += RtUiSpriteSheetNewRegister();  // owns BANISHED_RT_UISPRITESHEETNEW
-    n += RtUiDragStartRegister();      // owns BANISHED_RT_UIDRAGSTART
+    n += RtUiSpriteSheetNewRegister();
+    n += RtUiDragStartRegister();
     n += RtUiDialogFactoryRegister();  // UI::Dialog CreateNewObject / CreateInPlaceObject
     n += RtUiGroupDescriptionRegister();  // UI::GroupDescription, all nine bodies
     n += RtUiRibbonDescriptionRegister(); // UI::RibbonDescription, all nine bodies
@@ -329,13 +272,13 @@ void RtUiPortInit() {
     n += RtUiEditDescriptionRegister();
     n += RtUiGraphDescriptionRegister();
     n += RtUiLabelDescriptionRegister();
-    n += RtUiStringTableFactoryRegister();  // owns BANISHED_RT_UISTRTAB (FACTORY)
+    n += RtUiStringTableFactoryRegister();
     n += RtUiStringTableAccessorsRegister();  // same switch (FACTORY)
     n += RtUiStringTableLifecycleRegister();  // same switch (FACTORY)
     n += RtUiStringTableSlotsRegister();  // same switch (FRONTIER)
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
-    n += RtUiFactory1Register();  // owns BANISHED_RT_UIFACT1 (FACTUI1)
-    n += RtUiFactory2Register();          // owns BANISHED_RT_UIFACT2 (FACTUI2)
+    n += RtUiFactory1Register();
+    n += RtUiFactory2Register();
     n += RtUiImageElementRegister();          // vtable batch 3 (UI::*Element)
     n += RtUiAnimatedImageElementRegister();
     n += RtUiBorderElementRegister();

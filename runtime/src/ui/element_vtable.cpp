@@ -112,8 +112,7 @@ constexpr size_t kElementSize = sizeof(Element);   // 0xC0, static_assert'd in t
 // Mangled names. Repeated as literals at the registrations at the bottom for
 // the reason element.cpp:139 gives — tools/runtime_census.py cannot see through
 // a named constant and would under-count the lane
-// (reference_census_cannot_see_nonliteral_registrations.md). These constants
-// exist only for the oracles' RT_ORIGINAL_ONCE lookups.
+// (reference_census_cannot_see_nonliteral_registrations.md).
 // ---------------------------------------------------------------------------
 const char* const kTypeName  = "?TypeName@Element@UI@@UEBAPEBDXZ";
 const char* const kType      = "?Type@Element@UI@@UEBAIXZ";
@@ -302,44 +301,6 @@ constexpr int kSlotContains = 9;   // +0x48
 // ---------------------------------------------------------------------------
 // For the two bodies that cannot be replayed, this is what is actually
 // measured: FNV-1a-64 over the shipped body as it sits in the LOADED image,
-// against the hash of the bytes this port was transcribed from.
-//
-// It answers exactly one question — "is the code I read the code that runs?" —
-// and it is stated as that rather than as a verification of behaviour. The
-// hashes were taken from C:/GOG Games/Banished/Runtime-x64.dll on 2026-09-09
-// and the ranges were checked against the base-relocation directory: NONE of
-// the eight bodies contains a relocation, so the loaded bytes are the file
-// bytes and the constant is stable under ASLR.
-//
-// Located with RtOriginal (= ResolveExportRaw = GetProcAddress), NOT with
-// ResolveAddr(Module::Runtime, …): this file registers every one of these
-// addresses, and ResolveAddr consults that registry FIRST, so it would hand
-// back OUR prologue and the pin would hash our own code. element.cpp:425
-// names the same trap for VerifyBorderThunk.
-uint64_t Fnv1a64(const uint8_t* p, size_t n) {
-    uint64_t h = 0xcbf29ce484222325ull;
-    for (size_t i = 0; i < n; ++i) { h ^= p[i]; h *= 0x100000001b3ull; }
-    return h;
-}
-
-void PinShippedBody(RtDiffSite* site, const char* mangled, size_t n, uint64_t expect) {
-    if (!RtDiffEnabled()) return;
-    RtDiffRegister(site);
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(RtOriginal<const void*>(mangled));
-    char ours[64], theirs[64];
-    std::snprintf(ours, sizeof(ours), "fnv1a64=0x%016llx over 0x%zx bytes",
-                  static_cast<unsigned long long>(expect), n);
-    if (!p) {
-        std::snprintf(theirs, sizeof(theirs), "<export did not resolve>");
-        RtDiffReport(site, false, ours, theirs);
-        return;
-    }
-    const uint64_t got = Fnv1a64(p, n);
-    std::snprintf(theirs, sizeof(theirs), "fnv1a64=0x%016llx",
-                  static_cast<unsigned long long>(got));
-    RtDiffReport(site, got == expect, ours, theirs);
-}
-
 }  // namespace
 
 // ============================================================================
@@ -354,15 +315,9 @@ void PinShippedBody(RtDiffSite* site, const char* mangled, size_t n, uint64_t ex
 // ---- slot 2  ?Type@Element@UI@@UEBAIXZ  0x180035420 ------------------------
 //   MOV EAX,dword ptr [0x1801fab30] / RET     — RCX is never read.
 extern "C" uint32_t RtUi_Element_Type(const void* self) {
-    RT_DIFF_BEGIN("UI::Element::Type");
     (void)self;
     uint32_t ours = 0;
     std::memcpy(&ours, ElementTypeInfo(), sizeof ours);
-    if (rt_diff_on__) {
-        using Fn = uint32_t (*)(const void*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, kType)(self));
-        RT_DIFF_WORK(true);
-    }
     return ours;
 }
 
@@ -379,13 +334,6 @@ extern "C" uint32_t RtUi_Element_Type(const void* self) {
 //  1. Reading the field does NOT avoid the pointer difference it warns about.
 //     `?_typeInfo@Element@UI@@` is a PROMOTED minted row, so `ElementTypeInfo()`
 //     resolves to OUR node and `ours` is a literal in OUR image just the same.
-//     The RT_DIFF_SCALAR below compares pointers, so it WILL report a
-//     divergence the first time this body is dispatched — see the measured twin
-//     at UI::SpriteSheet::TypeName (spritesheet_vtable.cpp), which does exactly
-//     that: divergences=1 with the row promoted, 0 with it off, calls=1 in both.
-//     Today this site reports NOTHING (only the `[bytes]` pin does), i.e.
-//     calls=0 — reference_uncalled_port_is_not_verified.md — so the red line is
-//     ahead of whoever next drives an Element through slot 1, not behind them.
 //  2. "Fails silently and late" is not what the pointer difference does, and
 //     the reason is now a census rather than a worry: NOTHING in either shipped
 //     binary consumes a BaseTypeInfo::name by pointer. All 525 exe references
@@ -397,16 +345,9 @@ extern "C" uint32_t RtUi_Element_Type(const void* self) {
 // Reading the field is still the right body — it is what the two instructions
 // do — but it is right because it is FAITHFUL, not because it dodges identity.
 extern "C" const char* RtUi_Element_TypeName(const void* self) {
-    RT_DIFF_BEGIN("UI::Element::TypeName");
     (void)self;
     const char* ours = nullptr;
     std::memcpy(&ours, ElementTypeInfo() + 8, sizeof ours);
-    if (rt_diff_on__) {
-        using Fn = const char* (*)(const void*);
-        RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                       static_cast<const void*>(RT_ORIGINAL_ONCE(Fn, kTypeName)(self)));
-        RT_DIFF_WORK(true);
-    }
     return ours;
 }
 
@@ -421,19 +362,11 @@ extern "C" const char* RtUi_Element_TypeName(const void* self) {
 // PRE-state and all 0xC0 bytes are compared, so a wrong offset or a stray
 // write into padding is caught, not just the field we meant to write.
 extern "C" void RtUi_Element_SetColor(Element* self, uint32_t color) {
-    RT_DIFF_BEGIN("UI::Element::SetColor");
 
     alignas(16) uint8_t before[kElementSize];
-    if (rt_diff_on__) std::memcpy(before, self, kElementSize);
 
     self->_color = color;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(void*, uint32_t);
-        RT_ORIGINAL_ONCE(Fn, kSetColor)(before, color);
-        RT_DIFF_BYTES(self, before, kElementSize);
-        RT_DIFF_WORK(true);
-    }
 }
 
 // ---- slot 11  ?GetBorder@Element@UI@@UEBA…  0x180035630 --------------------
@@ -446,22 +379,9 @@ extern "C" void RtUi_Element_SetColor(Element* self, uint32_t color) {
 // defect (reference_hidden_retslot_wild_write.md), so the oracle compares both
 // the value written into the slot AND the returned pointer.
 extern "C" void** RtUi_Element_GetBorder(const Element* self, void** ret) {
-    RT_DIFF_BEGIN("UI::Element::GetBorder");
 
     *ret = self->_border;
 
-    if (rt_diff_on__) {
-        using Fn = void** (*)(const Element*, void**);
-        void* theirsSlot = nullptr;
-        void** theirsRet = RT_ORIGINAL_ONCE(Fn, kGetBorder)(self, &theirsSlot);
-        const bool eq = (*ret == theirsSlot) && (theirsRet == &theirsSlot);
-        char ours[96], theirs[96];
-        std::snprintf(ours,   sizeof(ours),   "slot=%p ret=this-slot", *ret);
-        std::snprintf(theirs, sizeof(theirs), "slot=%p ret=%s", theirsSlot,
-                      theirsRet == &theirsSlot ? "this-slot" : "OTHER");
-        RT_DIFF_SHADOW(eq, ours, theirs);
-        RT_DIFF_WORK(true);
-    }
     return ret;
 }
 
@@ -506,18 +426,9 @@ extern "C" void** RtUi_Element_GetBorder(const Element* self, void** ret) {
 //     six-instruction child loop is covered by the shipped-byte pin and by the
 //     live A/B, and this comment is the only place that says so.
 extern "C" void RtUi_Element_Enable(Element* self, bool enable) {
-    RT_DIFF_BEGIN("UI::Element::Enable");
 
     alignas(16) uint8_t oursCopy[kElementSize];
     alignas(16) uint8_t theirsCopy[kElementSize];
-    if (rt_diff_on__) {
-        std::memcpy(oursCopy,   self, kElementSize);
-        std::memcpy(theirsCopy, self, kElementSize);
-        Element* a = reinterpret_cast<Element*>(oursCopy);
-        Element* b = reinterpret_cast<Element*>(theirsCopy);
-        a->_children._data = nullptr; a->_children._size = 0; a->_children._capacity = 0;
-        b->_children._data = nullptr; b->_children._size = 0; b->_children._capacity = 0;
-    }
 
     const uint32_t old = self->_flags;
     if (enable) self->_flags = old & ~UI::kElementFlagDisabled;
@@ -532,18 +443,6 @@ extern "C" void RtUi_Element_Enable(Element* self, bool enable) {
         VSlot<Fn>(child, kSlotEnable)(child, enable);
     }
 
-    if (rt_diff_on__) {
-        Element* a = reinterpret_cast<Element*>(oursCopy);
-        const uint32_t oldA = a->_flags;
-        if (enable) a->_flags = oldA & ~UI::kElementFlagDisabled;
-        else        a->_flags = oldA |  UI::kElementFlagDisabled;
-        if (((a->_flags ^ oldA) & UI::kElementFlagHidden) != 0) NeedsSizeCalcWalk(a);
-
-        using Fn = void (*)(void*, bool);
-        RT_ORIGINAL_ONCE(Fn, kEnable)(theirsCopy, enable);
-        RT_DIFF_BYTES(oursCopy, theirsCopy, kElementSize);
-        RT_DIFF_WORK(true);
-    }
 }
 
 // ---- slot 9  ?Contains@Element@UI@@UEBA_NHHPEAVUserInterface@2@@Z  0x1801169e0
@@ -580,7 +479,6 @@ extern "C" void RtUi_Element_Enable(Element* self, bool enable) {
 // exists (`?Contains@ClipRegionElement@UI@@UEBA…`, 0x1800cbcc0).
 extern "C" bool RtUi_Element_Contains(const Element* self, int32_t x, int32_t y,
                                       void* ui) {
-    RT_DIFF_BEGIN("UI::Element::Contains");
 
     bool ours;
     if ((self->_flags & (UI::kElementFlagHidden | UI::kElementFlagNoHitTest)) != 0) {
@@ -610,11 +508,6 @@ extern "C" bool RtUi_Element_Contains(const Element* self, int32_t x, int32_t y,
         }
     }
 
-    if (rt_diff_on__) {
-        using Fn = bool (*)(const Element*, int32_t, int32_t, void*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, kContains)(self, x, y, ui));
-        RT_DIFF_WORK(true);
-    }
     return ours;
 }
 
@@ -656,25 +549,8 @@ extern "C" bool RtUi_Element_Contains(const Element* self, int32_t x, int32_t y,
 // ---------------------------------------------------------------------------
 // ATTENDANCE COUNTERS for Persist and Update -- Wave 10C lane ROUTES
 // ---------------------------------------------------------------------------
-// ADDED BECAUSE THE READING THAT WAS BEING QUOTED COULD NOT EXPRESS THE ANSWER.
-// WAVE10B_LANE_ELEM.md records "Update ... calls=0" as evidence that Update was
-// never entered. There is no RtDiff site named "UI::Element::Update" anywhere in
-// this tree -- the only site with that stem is the SHIPPED-BYTE PIN below,
-// "UI::Element::Update[bytes]", and RtDiffReport increments site->calls
-// (runtime/funcs/rt_diff.cpp:84), so under BANISHED_RT_DIFF that row prints
-// calls=1 for the one-off boot hash check whether or not the body ever ran.
-// A run in which Update executed ten thousand times and a run in which it never
-// executed printed IDENTICAL text. That is a field being read for something it
-// is structurally incapable of carrying
-// (reference_diagnostic_field_cannot_express_the_answer.md), and no route work
-// is measurable until it is fixed.
-//
 // These count ENTRIES, unconditionally, on every build -- the
-// runtime/src/io/encoding.cpp / dialog_controller_base.cpp idiom. They are
-// deliberately NOT RtDiff sites: an RtDiff site's `calls` moves only from inside
-// a comparison, so a body that ran but never compared prints calls=0, which
-// reads as "never ran" and means the opposite
-// (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
+// runtime/src/io/encoding.cpp / dialog_controller_base.cpp idiom.
 //
 // NEITHER COUNTER IS A VERIFICATION. Both bodies remain PORTED, NOT
 // DIFFERENTIALLY VERIFIED for the reasons their own headers give (neither is
@@ -999,37 +875,6 @@ int RtUiElementVtableRegister() {
     RegisterRuntimeExport("?GetBorder@Element@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@XZ",
                           (void*)&RtUi_Element_GetBorder); ++n;
     RegisterRuntimeAddr(0x180035630, (void*)&RtUi_Element_GetBorder);
-
-    // ---- the shipped-byte pins (see PinShippedBody) ------------------------
-    // Only under BANISHED_RT_DIFF; PinShippedBody returns immediately otherwise.
-    // The pin is applied to ALL EIGHT, not just the two that need it as their
-    // only oracle: on the six replayed rows a pin failure and a replay pass
-    // together would say "the DLL moved under us", which one instrument alone
-    // cannot say.
-    static RtDiffSite pinTypeName  = { "UI::Element::TypeName[bytes]", 0, 0, false, false };
-    static RtDiffSite pinType      = { "UI::Element::Type[bytes]",     0, 0, false, false };
-    static RtDiffSite pinPersist   = { "UI::Element::Persist[bytes]",  0, 0, false, false };
-    static RtDiffSite pinUpdate    = { "UI::Element::Update[bytes]",   0, 0, false, false };
-    static RtDiffSite pinEnable    = { "UI::Element::Enable[bytes]",   0, 0, false, false };
-    static RtDiffSite pinContains  = { "UI::Element::Contains[bytes]", 0, 0, false, false };
-    static RtDiffSite pinSetColor  = { "UI::Element::SetColor[bytes]", 0, 0, false, false };
-    static RtDiffSite pinGetBorder = { "UI::Element::GetBorder[bytes]",0, 0, false, false };
-
-    PinShippedBody(&pinTypeName,  kTypeName,  0x008, 0x56567a0a9ff3016dull);
-    PinShippedBody(&pinType,      kType,      0x007, 0xe27e6d66a574a98bull);
-    PinShippedBody(&pinPersist,   kPersist,   0x04b, 0x49c9975e392f9b59ull);
-    PinShippedBody(&pinUpdate,    kUpdate,    0x5ec, 0x0cce220f4b968d5full);
-    PinShippedBody(&pinEnable,    kEnable,    0x0c8, 0x69cd6e183d859f62ull);
-    PinShippedBody(&pinContains,  kContains,  0x101, 0x16caaae869a71b59ull);
-    PinShippedBody(&pinSetColor,  kSetColor,  0x004, 0x12e6cae42d470c22ull);
-    PinShippedBody(&pinGetBorder, kGetBorder, 0x00e, 0x1d241bd73ce5cd0cull);
-
-    // WAVE 10E lane VERIFY — the synthetic-subject differential for slot 7 is
-    // in element_update_probe.cpp. It is NOT invoked from here: it pushes real
-    // records through the DLL's own Array<UI::Event>::SetSize, so it ALLOCATES,
-    // and a *Register runs while the allocator singleton at 0x1801fc718 is
-    // still null. It is invoked from the same place the four IO probes are,
-    // for the same stated reason (filesystem_packages.cpp:955).
 
     return n;
 }

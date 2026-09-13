@@ -74,15 +74,7 @@ inline void WalkDirty(void* self) {
 // reference_rtoriginal_is_getprocaddress.md), or an internal, unexported
 // Collection::Array<T> template instantiation (resolved by address, same idiom
 // runtime/src/graphics/scene.cpp already uses for the same reason: these are
-// not exported at all, so ResolveExport/ResolveExportRaw cannot reach them).
-//
-// WAVE 9 LANE V2, 2026-09-07: the four export-by-name helpers below moved from
-// RT_ORIGINAL_ONCE to RT_EXPORT_ONCE. Every one of them is a REAL DEPENDENCY
-// -- the ported bodies call them to do work, not to compare against -- and the
-// raw door is ResolveExportRaw, which returns NULL with Runtime-x64.dll absent.
-// `?MemFree@…` in particular is already registered by the allocator port, so
-// raw meant this file could free on a different heap from the ~20 code/ sites
-// that resolve the same name through ResolveExport.
+// not exported at all, so ResolveExport cannot reach them).
 
 // ?RemoveChildren@Element@UI@@QEAAXXZ (0x180115570) -- PORTED by Wave 9 lane B3
 // as Element_RemoveChildren, near the end of this namespace. Wave 7 left it on
@@ -168,18 +160,14 @@ void ReleaseElement(void* elem) {
 using namespace UI::TableElementOffsets;
 
 int32_t TableElement_GetColumnCount(const void* self) {
-    RT_DIFF_BEGIN("UI::TableElement::GetColumnCount");
     int32_t ours = *reinterpret_cast<const int32_t*>(B(const_cast<void*>(self), kColCount));
     using Fn = int32_t (*)(const void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?GetColumnCount@TableElement@UI@@QEBAHXZ")(self));
     return ours;
 }
 
 int32_t TableElement_GetRowCount(const void* self) {
-    RT_DIFF_BEGIN("UI::TableElement::GetRowCount");
     int32_t ours = *reinterpret_cast<const int32_t*>(B(const_cast<void*>(self), kRowCount));
     using Fn = int32_t (*)(const void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?GetRowCount@TableElement@UI@@QEBAHXZ")(self));
     return ours;
 }
 
@@ -225,12 +213,7 @@ void TableElement_SetChild3(void* self, void** elemSlot, int32_t col, int32_t ro
 }
 
 void TableElement_SetSize(void* self, int32_t rows, int32_t cols) {
-    RT_DIFF_BEGIN("UI::TableElement::SetSize");
     int32_t pristineRows = 0, pristineCols = 0;
-    if (rt_diff_on__) {
-        pristineRows = *reinterpret_cast<int32_t*>(B(self, kRowCount));
-        pristineCols = *reinterpret_cast<int32_t*>(B(self, kColCount));
-    }
 
     *reinterpret_cast<int32_t*>(B(self, kRowCount)) = rows;
     *reinterpret_cast<int32_t*>(B(self, kColCount)) = cols;
@@ -259,22 +242,6 @@ void TableElement_SetSize(void* self, int32_t rows, int32_t cols) {
     // double-run RemoveChildren over live children (the array is already
     // empty by then, so a second call is genuinely a no-op, not a repaired
     // one).
-    if (rt_diff_on__) {
-        int32_t oursRows = *reinterpret_cast<int32_t*>(B(self, kRowCount));
-        int32_t oursCols = *reinterpret_cast<int32_t*>(B(self, kColCount));
-        *reinterpret_cast<int32_t*>(B(self, kRowCount)) = pristineRows;
-        *reinterpret_cast<int32_t*>(B(self, kColCount)) = pristineCols;
-
-        using Fn = void (*)(void*, int32_t, int32_t);
-        RT_ORIGINAL_ONCE(Fn, "?SetSize@TableElement@UI@@QEAAXHH@Z")(self, rows, cols);
-
-        RT_DIFF_SCALAR(oursRows, *reinterpret_cast<int32_t*>(B(self, kRowCount)));
-        RT_DIFF_SCALAR(oursCols, *reinterpret_cast<int32_t*>(B(self, kColCount)));
-
-        // Leave OUR result live regardless of the compare's outcome.
-        *reinterpret_cast<int32_t*>(B(self, kRowCount)) = oursRows;
-        *reinterpret_cast<int32_t*>(B(self, kColCount)) = oursCols;
-    }
 }
 
 // ============================================================================
@@ -288,42 +255,18 @@ void TableElement_SetSize(void* self, int32_t rows, int32_t cols) {
 // the full 16 bytes is the width retail itself moves and the width this
 // comparison is entitled to. See WAVE7_LANE_E.md sec4b.
 void* ImageElement_GetSprite(const void* self, void* retval) {
-    RT_DIFF_BEGIN("UI::ImageElement::GetSprite");
     uint64_t* r = reinterpret_cast<uint64_t*>(retval);
     const uint8_t* s = reinterpret_cast<const uint8_t*>(self);
     r[0] = *reinterpret_cast<const uint64_t*>(s + 0xC0);
     r[1] = *reinterpret_cast<const uint64_t*>(s + 0xC8);
-    char scratch[16] = {};
-    using Fn = void* (*)(const void*, void*);
-    // The CALL is inside the guard, not just the resolve (Wave 9 lane R,
-    // 2026-09-07). It used to sit outside it, so an ordinary run -- one with
-    // BANISHED_RT_DIFF unset -- paid a cross-DLL call whose result it then threw
-    // away, and at cutover it becomes a call through a null pointer. Storing the
-    // pointer outside a guard is harmless; CALLING outside one is not.
-    if (rt_diff_on__) {
-        RT_ORIGINAL_ONCE(Fn, "?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ")(self, scratch);
-    }
-    RT_DIFF_BYTES(r, scratch, 16);
     return retval;
 }
 
 void ImageElement_SetRotation(void* self, float angle) {
-    RT_DIFF_BEGIN("UI::ImageElement::SetRotation");
-    float pristine = 0.f;
-    if (rt_diff_on__) pristine = *reinterpret_cast<float*>(B(self, 0xD0));
-
     *reinterpret_cast<float*>(B(self, 0xD0)) = angle;
     // No dirty-flag walk in retail -- confirmed from the disassembly, not
     // assumed by analogy with the other setters in this file.
 
-    if (rt_diff_on__) {
-        float ours = *reinterpret_cast<float*>(B(self, 0xD0));
-        *reinterpret_cast<float*>(B(self, 0xD0)) = pristine;  // undo, so retail runs on the real pre-call state
-        using Fn = void (*)(void*, float);
-        RT_ORIGINAL_ONCE(Fn, "?SetRotation@ImageElement@UI@@QEAAXM@Z")(self, angle);
-        RT_DIFF_SCALAR(ours, *reinterpret_cast<float*>(B(self, 0xD0)));
-        *reinterpret_cast<float*>(B(self, 0xD0)) = ours;  // OUR result stays live either way
-    }
 }
 
 // 16 bytes throughout (write, snapshot and compare), not Sprite.h's
@@ -334,13 +277,8 @@ void ImageElement_SetRotation(void* self, float angle) {
 // byte-faithful; narrowing it to 12 would leave retail's own +0xCC..+0xCF
 // unwritten by us. See WAVE7_LANE_E.md sec4b.
 void ImageElement_SetSprite(void* self, const void* spriteVal) {
-    RT_DIFF_BEGIN("UI::ImageElement::SetSprite");
     uint8_t pristine[16];
     uint32_t pristineDirty = 0;
-    if (rt_diff_on__) {
-        std::memcpy(pristine, B(self, 0xC0), 16);
-        pristineDirty = DirtyFlags(self, kDirtyFlags);
-    }
 
     const uint64_t* sv = reinterpret_cast<const uint64_t*>(spriteVal);
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
@@ -350,39 +288,11 @@ void ImageElement_SetSprite(void* self, const void* spriteVal) {
     *reinterpret_cast<uint64_t*>(s + 0xC0) = sv[0];
     *reinterpret_cast<uint64_t*>(s + 0xC8) = sv[1];
 
-    if (rt_diff_on__) {
-        uint8_t oursSprite[16];
-        std::memcpy(oursSprite, s + 0xC0, 16);
-        uint32_t oursDirty = DirtyFlags(self, kDirtyFlags);
-
-        // Undo, so retail's own "did the sprite change" guard -- and, if it
-        // fires, its WalkDirty, the riskiest part of this function -- runs
-        // for real instead of seeing "already equal" and taking retail's own
-        // no-op path (the trap lane C's EnableCursor finding named: our own
-        // prior write makes the SECOND implementation's guard vacuous).
-        std::memcpy(s + 0xC0, pristine, 16);
-        DirtyFlags(self, kDirtyFlags) = pristineDirty;
-
-        using Fn = void (*)(void*, const void*);
-        RT_ORIGINAL_ONCE(Fn, "?SetSprite@ImageElement@UI@@QEAAXVSprite@2@@Z")(self, spriteVal);
-
-        RT_DIFF_BYTES(oursSprite, s + 0xC0, 16);
-        RT_DIFF_SCALAR(oursDirty, DirtyFlags(self, kDirtyFlags));
-
-        std::memcpy(s + 0xC0, oursSprite, 16);           // OUR result stays live
-        DirtyFlags(self, kDirtyFlags) = oursDirty;
-    }
 }
 
 void ImageElement_SetWidthHeight(void* self, int32_t w, int32_t h) {
-    RT_DIFF_BEGIN("UI::ImageElement::SetWidthHeight");
     int32_t pristineW = 0, pristineH = 0;
     uint32_t pristineDirty = 0;
-    if (rt_diff_on__) {
-        pristineW = *reinterpret_cast<int32_t*>(B(self, 0xD4));
-        pristineH = *reinterpret_cast<int32_t*>(B(self, 0xD8));
-        pristineDirty = DirtyFlags(self, kDirtyFlags);
-    }
 
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     bool differs = (*reinterpret_cast<int32_t*>(s + 0xD4) != w) ||
@@ -393,28 +303,6 @@ void ImageElement_SetWidthHeight(void* self, int32_t w, int32_t h) {
         WalkDirty(self);
     }
 
-    if (rt_diff_on__) {
-        int32_t oursW = *reinterpret_cast<int32_t*>(s + 0xD4);
-        int32_t oursH = *reinterpret_cast<int32_t*>(s + 0xD8);
-        uint32_t oursDirty = DirtyFlags(self, kDirtyFlags);
-
-        // Undo, so retail's own "did it change" guard and WalkDirty run for
-        // real against the true pre-call state (see SetSprite above).
-        *reinterpret_cast<int32_t*>(s + 0xD4) = pristineW;
-        *reinterpret_cast<int32_t*>(s + 0xD8) = pristineH;
-        DirtyFlags(self, kDirtyFlags) = pristineDirty;
-
-        using Fn = void (*)(void*, int32_t, int32_t);
-        RT_ORIGINAL_ONCE(Fn, "?SetWidthHeight@ImageElement@UI@@QEAAXHH@Z")(self, w, h);
-
-        RT_DIFF_SCALAR(oursW, *reinterpret_cast<int32_t*>(s + 0xD4));
-        RT_DIFF_SCALAR(oursH, *reinterpret_cast<int32_t*>(s + 0xD8));
-        RT_DIFF_SCALAR(oursDirty, DirtyFlags(self, kDirtyFlags));
-
-        *reinterpret_cast<int32_t*>(s + 0xD4) = oursW;    // OUR result stays live
-        *reinterpret_cast<int32_t*>(s + 0xD8) = oursH;
-        DirtyFlags(self, kDirtyFlags) = oursDirty;
-    }
 }
 
 // ============================================================================
@@ -425,17 +313,12 @@ void ImageElement_SetWidthHeight(void* self, int32_t w, int32_t h) {
 // ImageElement_GetSprite above; retail's copy (0x1800429d0) is likewise two
 // unconditional 8-byte MOV pairs.
 void* LabelElement_GetSprite(const void* self, void* retval) {
-    RT_DIFF_BEGIN("UI::LabelElement::GetSprite");
     uint64_t* r = reinterpret_cast<uint64_t*>(retval);
     const uint8_t* s = reinterpret_cast<const uint8_t*>(self);
     r[0] = *reinterpret_cast<const uint64_t*>(s + 0x100);
     r[1] = *reinterpret_cast<const uint64_t*>(s + 0x108);
     char scratch[16] = {};
     using Fn = void* (*)(const void*, void*);
-    if (rt_diff_on__) {   // call inside the guard; see ImageElement_GetSprite above
-        RT_ORIGINAL_ONCE(Fn, "?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ")(self, scratch);
-    }
-    RT_DIFF_BYTES(r, scratch, 16);
     return retval;
 }
 
@@ -443,13 +326,8 @@ void* LabelElement_GetSprite(const void* self, void* retval) {
 // ImageElement_SetSprite above; retail's copy (0x180042980) is likewise two
 // unconditional 8-byte MOV pairs.
 void LabelElement_SetSprite(void* self, const void* spriteVal) {
-    RT_DIFF_BEGIN("UI::LabelElement::SetSprite");
     uint8_t pristine[16];
     uint32_t pristineDirty = 0;
-    if (rt_diff_on__) {
-        std::memcpy(pristine, B(self, 0x100), 16);
-        pristineDirty = DirtyFlags(self, kDirtyFlags);
-    }
 
     const uint64_t* sv = reinterpret_cast<const uint64_t*>(spriteVal);
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
@@ -459,23 +337,6 @@ void LabelElement_SetSprite(void* self, const void* spriteVal) {
     *reinterpret_cast<uint64_t*>(s + 0x100) = sv[0];
     *reinterpret_cast<uint64_t*>(s + 0x108) = sv[1];
 
-    if (rt_diff_on__) {
-        uint8_t oursSprite[16];
-        std::memcpy(oursSprite, s + 0x100, 16);
-        uint32_t oursDirty = DirtyFlags(self, kDirtyFlags);
-
-        std::memcpy(s + 0x100, pristine, 16);   // undo, so retail's guard/WalkDirty run for real
-        DirtyFlags(self, kDirtyFlags) = pristineDirty;
-
-        using Fn = void (*)(void*, const void*);
-        RT_ORIGINAL_ONCE(Fn, "?SetSprite@LabelElement@UI@@QEAAXVSprite@2@@Z")(self, spriteVal);
-
-        RT_DIFF_BYTES(oursSprite, s + 0x100, 16);
-        RT_DIFF_SCALAR(oursDirty, DirtyFlags(self, kDirtyFlags));
-
-        std::memcpy(s + 0x100, oursSprite, 16);  // OUR result stays live
-        DirtyFlags(self, kDirtyFlags) = oursDirty;
-    }
 }
 
 // ============================================================================
@@ -532,7 +393,6 @@ void TextElement_SetText(void* self, const void* uiStringVal) {
 namespace DTE = UI::DocumentTextElementOffsets;
 
 void* DocumentTextElement_GetLink(const void* self, void* retval, int32_t index) {
-    RT_DIFF_BEGIN("UI::DocumentTextElement::GetLink");
     void* linkData = *reinterpret_cast<void* const*>(B(const_cast<void*>(self), DTE::kLinkArrayData));
     *reinterpret_cast<uint64_t*>(retval) = 0;
     void* entryStr = *reinterpret_cast<void**>(
@@ -542,27 +402,6 @@ void* DocumentTextElement_GetLink(const void* self, void* retval, int32_t index)
         *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(entryStr) - 4) += 1;
     }
 
-    // Oracle: replay, WITH an explicit extra-refcount release. GetLink hands
-    // back an owning reference (it bumps the refcount), so calling retail a
-    // second time for the diff acquires a SECOND reference to the same
-    // string that our own caller will never release. We read retail's
-    // content for the comparison, then release exactly that extra reference
-    // ourselves so the diff call is refcount-neutral.
-    char scratch[8] = {};
-    using Fn = void* (*)(const void*, void*, int32_t);
-    // Call inside the guard; see ImageElement_GetSprite above. This one also took
-    // a STRING REFERENCE on every ordinary run, released a few lines below only
-    // when rt_diff_on__ -- so the leak was silent and permanent.
-    if (rt_diff_on__) {
-        RT_ORIGINAL_ONCE(Fn, "?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z")(self, scratch, index);
-    }
-    void* theirsPtr = *reinterpret_cast<void**>(scratch);
-    RT_DIFF_SCALAR(entryStr, theirsPtr);
-    if (rt_diff_on__ && theirsPtr) {
-        int32_t* rc = reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(theirsPtr) - 4);
-        *rc -= 1;
-        if (*rc == 0) RtMemFree(reinterpret_cast<uint8_t*>(theirsPtr) - 8);
-    }
     return retval;
 }
 
@@ -580,26 +419,13 @@ void DocumentTextElement_SetText_UiString(void* self, const void* uiStringVal) {
     // above. Narrowing this one to 12 bytes because it happens to hold a
     // UI::String rather than a UI::Sprite would drop 4 bytes retail itself
     // writes. See WAVE7_LANE_E.md sec4b.
-    RT_DIFF_BEGIN("UI::DocumentTextElement::SetText[UI::String]");
     uint8_t pristine[16];
-    if (rt_diff_on__) std::memcpy(pristine, B(self, DTE::kUiStringValue), 16);
 
     const uint64_t* sv = reinterpret_cast<const uint64_t*>(uiStringVal);
     *reinterpret_cast<uint64_t*>(B(self, DTE::kUiStringValue))     = sv[0];
     *reinterpret_cast<uint64_t*>(B(self, DTE::kUiStringValue + 8)) = sv[1];
     WalkDirty(self);
 
-    if (rt_diff_on__) {
-        uint8_t ours[16];
-        std::memcpy(ours, B(self, DTE::kUiStringValue), 16);
-        std::memcpy(B(self, DTE::kUiStringValue), pristine, 16);  // undo, so retail runs on the real pre-call state
-
-        using Fn = void (*)(void*, const void*);
-        RT_ORIGINAL_ONCE(Fn, "?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z")(self, uiStringVal);
-
-        RT_DIFF_BYTES(ours, B(self, DTE::kUiStringValue), 16);
-        std::memcpy(B(self, DTE::kUiStringValue), ours, 16);      // OUR result stays live
-    }
 }
 
 void DocumentTextElement_SetText_StringRef(void* self, const void* strRef) {
@@ -667,10 +493,6 @@ namespace PGE = UI::PageElementOffsets;
 //     green having tested nothing. Lane C named this exact shape on
 //     EnableCursor: "the object compare would pass while the only thing that
 //     can go wrong went untested."
-//
-// Under BANISHED_RT_PREDICT=1 this body writes NOTHING; retail runs on
-// pristine state, its guard fires exactly as in a normal frame, and we compare
-// what it left against what we predicted.
 //
 // ---- Layout facts, all from the disassembly at 0x1800d9710 ----------------
 //
@@ -748,28 +570,6 @@ static void TabElement_UpdateContainers_Body(void* self, RtSink& out) {
     }
 }
 
-// The detour seam. standalone/ui_detour.cpp patches 0x1800d9710 so the DLL's
-// OWN callers -- including a real tab click, which is handled inside the DLL --
-// reach this port. Opt-in; see that file for why, and for the prologue table.
-extern "C" bool  RtUiUpdateContainersInstallDetour(void* ourFn);
-extern "C" void* RtUiUpdateContainersTrampoline();
-
-// Retail's body, whichever door is currently correct.
-//
-// WITH A DETOUR INSTALLED THE RAW EXPORT IS NO LONGER RETAIL -- it is a jump
-// back into us. RT_ORIGINAL_ONCE resolves through ResolveExportRaw, i.e. exactly
-// that patched address, so an oracle using it here would not diverge, it would
-// recurse until the stack died. The trampoline is the only correct "theirs" once
-// the detour is in, and the raw export is the only correct one before it.
-static void CallRetailUpdateContainers(void* self) {
-    using Fn = void (*)(void*);
-    if (void* tramp = RtUiUpdateContainersTrampoline()) {
-        reinterpret_cast<Fn>(tramp)(self);
-        return;
-    }
-    RT_ORIGINAL_ONCE(Fn, "?UpdateContainers@TabElement@UI@@AEAAXXZ")(self);
-}
-
 extern "C" void RtUi_TabElement_UpdateContainers(void* self);   // tabelement.cpp
 // The body that lived here was a second copy of ?UpdateContainers@TabElement@UI@@
 // (0x1800d9710); runtime/src/ui/tabelement.cpp owns it since vtable batch 4
@@ -777,43 +577,23 @@ extern "C" void RtUi_TabElement_UpdateContainers(void* self);   // tabelement.cp
 void RtTabElementUpdateContainers(void* self) { RtUi_TabElement_UpdateContainers(self); }
 
 void TabElement_SetActiveTab(void* self, int32_t tab) {
-    RT_DIFF_BEGIN("UI::TabElement::SetActiveTab");
     int32_t pristine = 0;
-    if (rt_diff_on__) pristine = *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab));
 
     if (tab != *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab))) {
         *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab)) = tab;
         RtTabElementUpdateContainers(self);
     }
 
-    if (rt_diff_on__) {
-        int32_t ours = *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab));
-        // Undo, so retail's own "did it change" guard is satisfied for real
-        // and it actually calls UpdateContainers -- not the vacuous shape
-        // (our prior write means retail's own guard sees "no change" and
-        // calls nothing). UpdateContainers has no free/refcount step (it
-        // recomputes child visibility), so re-running it for real here is
-        // safe, just possibly redundant with the one ours already triggered.
-        *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab)) = pristine;
-        using Fn = void (*)(void*, int32_t);
-        RT_ORIGINAL_ONCE(Fn, "?SetActiveTab@TabElement@UI@@QEAAXH@Z")(self, tab);
-        RT_DIFF_SCALAR(ours, *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab)));
-        *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab)) = ours;  // OUR result stays live
-    }
 }
 
 int32_t PageElement_GetActivePage(const void* self) {
-    RT_DIFF_BEGIN("UI::PageElement::GetActivePage");
     int32_t ours = *reinterpret_cast<const int32_t*>(B(const_cast<void*>(self), PGE::kActivePage));
     using Fn = int32_t (*)(const void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?GetActivePage@PageElement@UI@@QEBAHXZ")(self));
     return ours;
 }
 
 void PageElement_SetActivePage(void* self, int32_t page) {
-    RT_DIFF_BEGIN("UI::PageElement::SetActivePage");
     int32_t pristine = 0;
-    if (rt_diff_on__) pristine = *reinterpret_cast<int32_t*>(B(self, PGE::kActivePage));
 
     int32_t count = *reinterpret_cast<int32_t*>(B(self, PGE::kChildrenCount));
     int32_t current = *reinterpret_cast<int32_t*>(B(self, PGE::kActivePage));
@@ -833,28 +613,6 @@ void PageElement_SetActivePage(void* self, int32_t page) {
         }
     }
 
-    if (rt_diff_on__) {
-        int32_t ours = *reinterpret_cast<int32_t*>(B(self, PGE::kActivePage));
-        // Undo OUR OWN field, so retail's top-level "did it change" guard is
-        // satisfied for real -- otherwise retail sees "already == page" and
-        // skips its ENTIRE per-child hidden-bit loop, the part of this
-        // function most likely to be wrong, exactly as flagged. Retail then
-        // re-runs that loop for real against the live children: each
-        // per-child bit toggle is a flag write, not a free, so this is safe,
-        // even though it duplicates work ours already did (idempotent — same
-        // target index, same resulting bit pattern).
-        *reinterpret_cast<int32_t*>(B(self, PGE::kActivePage)) = pristine;
-        using Fn = void (*)(void*, int32_t);
-        RT_ORIGINAL_ONCE(Fn, "?SetActivePage@PageElement@UI@@QEAAXH@Z")(self, page);
-        RT_DIFF_SCALAR(ours, *reinterpret_cast<int32_t*>(B(self, PGE::kActivePage)));
-        *reinterpret_cast<int32_t*>(B(self, PGE::kActivePage)) = ours;  // OUR result stays live
-
-        // The per-child hidden-bit outcome itself is NOT independently
-        // re-verified: after both calls, every child ends up in the state
-        // retail's own second pass just computed, which folds ours and
-        // retail's answers together rather than comparing them. See
-        // WAVE7_LANE_E.md sec4a.
-    }
 }
 
 // ============================================================================
@@ -876,28 +634,6 @@ void GraphElement_RemoveGraphs(void* self) {
     // offset the way GetRowCount's true replay would, because a wrong offset
     // reading garbage that happens to be zero would still pass.
     //
-    // WAVE 9 LANE V2, 2026-09-07 — ORACLE-ONLY, and it had ESCAPED ITS GUARD.
-    // The RT_ORIGINAL_ONCE call below sat between RT_DIFF_BEGIN and
-    // RT_DIFF_SCALAR, so it ran on EVERY call on a normal, non-diffing run:
-    // a live cross-DLL call into retail's RemoveGraphs, and a call through
-    // NULL the moment Runtime-x64.dll is absent. It is the third instance of
-    // exactly the shape lane V found twice by hand and rawdoor_audit.py was
-    // written to catch. Now inside `if (rt_diff_on__)` with the comparison it
-    // exists to feed.
-    //
-    // It stays on the RAW door and MUST NOT become RT_EXPORT_ONCE: this
-    // function IS the registered port of `?RemoveGraphs@GraphElement@UI@@…`
-    // (see the registration below), so resolving that name through the port
-    // registry would resolve to THIS function and recurse until the stack
-    // dies. An oracle for a port of X is the one case where the raw door is
-    // the only correct door — which is also why it is compiled out at cutover
-    // rather than converted.
-    RT_DIFF_BEGIN("UI::GraphElement::RemoveGraphs");
-    if (rt_diff_on__) {
-        using Fn = void (*)(void*);
-        RT_ORIGINAL_ONCE(Fn, "?RemoveGraphs@GraphElement@UI@@QEAAXXZ")(self);
-        RT_DIFF_SCALAR(*reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount)), 0);
-    }
 }
 
 // ============================================================================
@@ -949,11 +685,8 @@ void GraphElement_RemoveGraphs(void* self) {
 // would append the point a SECOND time — the array is grown from its own
 // current size, so running the shipped body after ours yields size+2 with a
 // duplicated tail, which is a second side effect and not a comparison
-// (and it would also reallocate, invalidating the buffer). `RT_DIFF_WORK(true)`
-// records liveness: this body has no early-out, so every entered call does the
-// whole append. `calls=` stays 0 because there is nothing to report.
+// (and it would also reallocate, invalidating the buffer).
 void GraphElement_AddGraphPoint(void* self, int32_t graph, int32_t value) {
-    RT_DIFF_BEGIN("UI::GraphElement::AddGraphPoint");
 
     uint8_t* seriesData = *reinterpret_cast<uint8_t**>(B(self, GRE::kGraphsData));
     // record = data + graph*0x18; the point Array header sits at record + 8.
@@ -964,7 +697,6 @@ void GraphElement_AddGraphPoint(void* self, int32_t graph, int32_t value) {
     static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180023830));
     if (fn) fn(pointArray, newSize, &value);
 
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -1024,7 +756,6 @@ void GraphElement_AddGraphPoint(void* self, int32_t graph, int32_t value) {
 // grew by exactly one and the new element carries the colour the CALLER passed,
 // which is a value this body did not derive from its own rule.
 void GraphElement_AddGraph(void* self, uint32_t colour) {
-    RT_DIFF_BEGIN("UI::GraphElement::AddGraph [no oracle: appends a series]");
 
     uint8_t* graphs = B(self, GRE::kGraphsData);          // &_graphs, the Array header
     const int64_t old = *reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount));  // MOVSXD
@@ -1048,18 +779,6 @@ void GraphElement_AddGraph(void* self, uint32_t colour) {
     uint8_t* data = *reinterpret_cast<uint8_t**>(graphs);
     *reinterpret_cast<uint32_t*>(data + old * 0x18) = colour;
 
-    if (rt_diff_on__) {
-        const int32_t now = *reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount));
-        const bool ok = (now == static_cast<int32_t>(old) + 1) &&
-                        (*reinterpret_cast<uint32_t*>(data + old * 0x18) == colour);
-        char oursDesc[96], theirsDesc[96];
-        std::snprintf(oursDesc,   sizeof(oursDesc),   "size=%d colour=0x%08x", now,
-                      *reinterpret_cast<uint32_t*>(data + old * 0x18));
-        std::snprintf(theirsDesc, sizeof(theirsDesc), "size=%d colour=0x%08x",
-                      static_cast<int32_t>(old) + 1, colour);
-        RT_DIFF_SHADOW(ok, oursDesc, theirsDesc);
-        RT_DIFF_WORK(true);
-    }
 }
 
 // ============================================================
@@ -1101,7 +820,6 @@ void GraphElement_AddGraph(void* self, uint32_t colour) {
 // guarantees (the array is empty), which is a weaker claim than a diff and is
 // labelled as one.
 void Element_RemoveChildren(void* selfRaw) {
-    RT_DIFF_BEGIN("UI::Element::RemoveChildren [no oracle: destroys its children]");
 
     auto* self = static_cast<uint8_t*>(selfRaw);
     uint8_t* childArray = self + 0xa0;              // Collection::Array<Element*>
@@ -1118,7 +836,6 @@ void Element_RemoveChildren(void* selfRaw) {
     RtArrayCellsSetSize(childArray, 0);
 
     const bool ok = *reinterpret_cast<const int32_t*>(self + 0xa8) == 0;
-    RT_DIFF_SHADOW(ok, "children cleared", "not diffable");
 }
 
 // The forwarder declared at the top of this namespace.
@@ -1167,16 +884,6 @@ int RtUiWidgetsLayRegister() {
     // its name and its address -- the convention that exists because lane B3
     // registered Element::RemoveChildren by name only and left the tree's one
     // address-door bypass (see the note further down this function).
-    // The live-coverage seam. OPT-IN, and it must be explicitly SET rather than
-    // merely left unset -- runtime_detour.h: "Every detour gets an env kill
-    // switch at its call site. Nothing goes default-on unproven." With it off,
-    // this port keeps only its three exe callers and the DLL keeps its own copy
-    // for everything else, which is a split brain we are choosing knowingly
-    // rather than one we failed to notice.
-    if (std::getenv("BANISHED_RT_UITAB_DETOUR") != nullptr &&
-        RtWaveEnabled("BANISHED_RT_UITAB_DETOUR")) {
-        RtUiUpdateContainersInstallDetour((void*)&RtTabElementUpdateContainers);
-    }
     // WAVE 10 LANE UIORACLE: the AddTab hold-back is spent. Its stated blocker
     // ("constructs a temporary ElementDescription/DialogInstance") was a
     // misreading of the frame -- the temporary is a default-constructed

@@ -16,7 +16,7 @@
 //
 // Vtable slot 0 (0x18004d270, the unexported VECTOR deleting destructor) is NOT
 // here: it is row 39 of the one-body family in
-// runtime/src/object/deleting_dtor.cpp, under BANISHED_RT_DELDTOR, exactly as
+// runtime/src/object/deleting_dtor.cpp, exactly as
 // lane DLG8 put `??_7Dialog@UI@@6B@`'s slot 0 there. That file's table is
 // re-derived from the shipped DLL by tools/rt_deleting_dtor_verify.py, which is
 // the whole reason a 39th hand-written copy does not belong in this file.
@@ -75,14 +75,6 @@
 // 0x1801578d0 == `??_7DialogLoaderLoopT@Engine@@6B@`.
 //
 // ---------------------------------------------------------------------------
-// ONE KILL SWITCH: BANISHED_RT_UITOOLTIPDLG
-// ---------------------------------------------------------------------------
-// Separate from lane UIF6's BANISHED_RT_UITOOLTIP (which owns `BeginToolTip`
-// itself) so the two ends of the same path can be bisected apart: UIF6's body
-// ALLOCATES the object these five bodies then operate on, and an A/B that can
-// only move both at once cannot say which end a difference came from.
-//
-// ---------------------------------------------------------------------------
 // EVERY BODY BELOW WAS READ FROM THE DISASSEMBLY
 // ---------------------------------------------------------------------------
 // Ghidra's decompiled C drops dereferences and prints MOVSXD as a zero
@@ -116,10 +108,7 @@ namespace TE = UI::TextElementOffsets;
 // ENTRY COUNTERS — attendance, and NOT a verification of anything.
 // ---------------------------------------------------------------------------
 // These count ENTRIES, unconditionally, on every build, and print
-// unconditionally at exit. They are deliberately NOT RtDiff sites: an RtDiff
-// site increments `calls` only from inside a comparison, so a body that ran but
-// never compared prints `calls=0`, which reads as "never ran" and means the
-// opposite (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
+// unconditionally at exit.
 //
 // They exist because a green readiness screen is not a route. `READY / TRAP=0`
 // on the minted vtable says the table is safe to stamp, not that anything
@@ -459,12 +448,6 @@ extern "C" uint32_t RtUi_ToolTipDialog_Type(const void* /*self*/) {
 // (reference_census_cannot_see_nonliteral_registrations.md).
 // ============================================================================
 int RtUiToolTipDialogRegister() {
-    if (!RtWaveEnabled("BANISHED_RT_UITOOLTIPDLG")) {
-        printf("[RtPort] BANISHED_RT_UITOOLTIPDLG=0 -- ToolTipDialog "
-               "operator new / GetToolTipString / SetText / TypeName / Type "
-               "left on the DLL\n");
-        return 0;
-    }
     int n = 0;
 
     RegisterRuntimeExport("??2ToolTipDialog@UI@@SAPEAX_K@Z",

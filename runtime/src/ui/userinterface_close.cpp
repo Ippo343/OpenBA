@@ -137,14 +137,6 @@
 // as a raw byte offset with the retail address that proves it, deliberately —
 // pin to addresses, never to field names, anywhere near this class.
 //
-// ---------------------------------------------------------------------------
-// GATES
-// ---------------------------------------------------------------------------
-//   BANISHED_RT_UICLOSE=0          fall back to the DLL (wave switch, default ON)
-//   BANISHED_RT_UICLOSE_DETOUR=1   patch 0x180120f20 so the DLL's OWN callers
-//                                  reach the port (OPT-IN, per runtime_detour.h)
-//   BANISHED_RT_PREDICT=1          run the predictive oracle
-//   BANISHED_RT_PREDICT_SELFTEST=1 the negative control
 // ============================================================================
 
 #include <cstdint>
@@ -232,11 +224,6 @@ struct EventRecord {
 };
 static_assert(sizeof(EventRecord) == 0x30, "UI::Event stride");
 
-// Calls the round could not be armed for. See the banner: this number is part
-// of the coverage claim, not a footnote to it.
-uint64_t g_indeterminate = 0;
-uint64_t g_armed         = 0;
-
 // THE INVOCATION COUNTER — the evidence that the ported body RAN AT ALL.
 //
 // It is separate from every oracle counter on purpose. `calls=` on an
@@ -260,12 +247,6 @@ struct CloseDlgSummary {
     ~CloseDlgSummary() {
         printf("[RtPort] UI::UserInterface::CloseDialog  entries=%llu\n",
                (unsigned long long)g_entries);
-        if (!RtPredict::Enabled()) { std::fflush(stdout); return; }
-        printf("[RtPredict] UI::UserInterface::CloseDialog  armed=%llu  "
-               "indeterminate=%llu (recursive: child dialogs or the tooltip arm; "
-               "handed straight to the DLL, NOT verified)\n",
-               (unsigned long long)g_armed,
-               (unsigned long long)g_indeterminate);
         std::fflush(stdout);
     }
 };
@@ -581,40 +562,9 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out,
     // the epilogue at 0x1801213a7.
 }
 
-// The detour is OPT-IN, not a kill switch: `RtWaveEnabled` is default-ON and
-// that is the wrong default for a code patch into the shipped DLL.
-inline bool DetourOptedIn() {
-    const char* e = std::getenv("BANISHED_RT_UICLOSE_DETOUR");
-    return e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
-}
-
-} // namespace
-
-// ---------------------------------------------------------------------------
-// The detour seam
-// ---------------------------------------------------------------------------
-extern "C" bool  RtUiCloseDialogInstallDetour(void* ourFn);
-extern "C" void* RtUiCloseDialogTrampoline();
-
-namespace {
-
-// Retail's body, through whichever door is correct RIGHT NOW.
-//
-// WITH THE DETOUR IN, THE RAW EXPORT IS NOT RETAIL — it is a jump back into us,
-// so `RT_ORIGINAL_ONCE` here would not diverge, it would RECURSE until the stack
-// died (reference_detour_machinery_exists_wave7_zero_is_stale.md). A null
-// trampoline means "no detour", never "no original".
-void CallRetailCloseDialog(UserInterface* self, void** dlgPtr) {
-    if (void* tramp = RtUiCloseDialogTrampoline())
-        return reinterpret_cast<CloseFn>(tramp)(self, dlgPtr);
-    RT_ORIGINAL_ONCE(CloseFn, kCloseDialog)(self, dlgPtr);
-}
-
 } // namespace
 
 extern "C" void RtUi_UserInterface_CloseDialog(UserInterface* self, void** dlgPtr) {
-    RT_PREDICT_SITE("UI::UserInterface::CloseDialog");
-
     // THE PROBE GATE. `g_entries` is printed by a static destructor, so it only
     // reaches the log when the process EXITS CLEANLY — and the only unattended
     // route that reaches this body in-game (the pause menu's Resume button)
@@ -627,61 +577,6 @@ extern "C" void RtUi_UserInterface_CloseDialog(UserInterface* self, void** dlgPt
             "[RtPort] UI::UserInterface::CloseDialog ENTERED (first call) -- the "
             "port is LIVE on this route\n");
         std::fflush(stderr);
-    }
-
-    if (RT_PREDICT_ON) {
-        uint8_t* const S   = reinterpret_cast<uint8_t*>(self);
-        uint8_t* const dlg = *reinterpret_cast<uint8_t**>(dlgPtr);
-
-        // THE ARMING PREDICATE. Both recursions must be provably not entered,
-        // because a suppressed recursive call decrements nothing and the child
-        // loop's bound IS what the recursion decrements. Read from the same
-        // words the body reads, with nothing in between.
-        const bool hasChildren = *reinterpret_cast<int32_t*>(dlg + 0x48) > 0;
-        const bool tipArm =
-            (*reinterpret_cast<void**>(S + 0x40) != nullptr) &&
-            (*dlgPtr == *reinterpret_cast<void**>(S + 0x38));
-
-        if (hasChildren || tipArm) {
-            ++g_indeterminate;                 // counted, printed, and NOT verified
-            CallRetailCloseDialog(self, dlgPtr);
-            return;
-        }
-        ++g_armed;
-
-        RT_PREDICT_ROUND(round) {
-            // COVERAGE CONTROL: watch the whole object, so any byte retail
-            // changes that we neither predicted nor excluded is REPORTED.
-            // Predictions on their own are only a lower bound. The graph
-            // outside `this` — the parent's list header, the neighbour nodes,
-            // the `_addDialogs` storage and the audio channel — is watched from
-            // INSIDE the body, once the walk has found it.
-            round.Watch(self, 0x128, "UI::UserInterface");
-
-            // The declared holes. Each names the suppressed callee that owns it.
-            round.Exclude(S + 0x000, 0x18,
-                          "_dialogs: the suppressed OnClosed and UpdateEvents "
-                          "can unlink here; this body never writes it");
-            round.Exclude(S + 0x018, 0x10,
-                          "_removedDialogs: the suppressed DynArrayPush appends "
-                          "at an address the allocator chose");
-            round.Exclude(S + 0x048, 0x10,
-                          "_events: the suppressed UpdateEvents drains it and the "
-                          "suppressed Array<UI::Event>::SetSize grows it");
-
-            // Tighter than an unconditional exclude: with no drag in flight
-            // nothing in this block is written by anybody, so it stays under
-            // comparison and a stray write there would be reported.
-            if (*reinterpret_cast<void**>(S + 0x60) != nullptr) {
-                round.Exclude(S + 0x060, 0x2a,
-                              "drag-drop block: written by the suppressed "
-                              "EndDragDrop on the drag-cancel arm");
-            }
-
-            CloseDialogBody(self, dlgPtr, round.sink(), &round);  // predicts, writes nothing
-            CallRetailCloseDialog(self, dlgPtr);                  // the authority runs for real
-        }
-        return;
     }
 
     RtSink live;
@@ -700,9 +595,6 @@ int RtUiCloseDialogRegister() {
     // clean-looking oracle over nothing.
     RegisterRuntimeExport(kCloseDialog, (void*)&RtUi_UserInterface_CloseDialog); ++count;
     RegisterRuntimeAddr(0x180120f20, (void*)&RtUi_UserInterface_CloseDialog);
-
-    if (DetourOptedIn())
-        RtUiCloseDialogInstallDetour((void*)&RtUi_UserInterface_CloseDialog);
 
     return count;
 }

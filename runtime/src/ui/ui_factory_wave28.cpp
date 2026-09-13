@@ -62,14 +62,6 @@
 // 29 of 35 cases.
 //
 // ---------------------------------------------------------------------------
-// KILL SWITCH — DEFAULT ON, DELIBERATELY
-// ---------------------------------------------------------------------------
-// `BANISHED_RT_UIFACT2=0` disables. Default ON follows
-// `stringtable_factory.cpp`, NOT `dialog_factory.cpp`: the latter's opt-in
-// `BANISHED_RT_DLGFACTORY` is why `Dialog@UI` has been ported since Wave 11 and
-// has contributed nothing to the live factory count for seventeen waves. A
-// registration that does not happen cannot clear a trap.
-//
 // Registration runs from `RtUiPortInit()` (standalone/resolve_standalone.cpp
 // line 333), which precedes `RtDataMintInit()` (line 406). That ordering is
 // what makes a registration clear a trap; it was READ in this worktree on this
@@ -159,7 +151,7 @@ inline void RtStore(uint8_t* p, size_t off, T v) { std::memcpy(p + off, &v, size
 // An out-of-line base-class ctor call, exactly as retail makes it.
 //
 // Resolved through ResolveExport (the PORT-REGISTRY-AWARE resolver), NOT by
-// address and NOT through ResolveExportRaw: that is what lets a port of the
+// address: that is what lets a port of the
 // base ctor be reached instead of the DLL's copy
 // (reference_resolveaddr_consults_port_registry_first.md,
 //  reference_bypassed_port_needs_a_source_checker.md). Cached, because
@@ -1219,7 +1211,6 @@ extern "C" void* RtUiFact_ToolTipDialog_CreateInPlaceObject(void* p) {
 }
 
 int RtUiFactory2Register() {
-    if (!RtWaveEnabled("BANISHED_RT_UIFACT2")) return 0;
     int n = 0;
 
     RegisterRuntimeExport("?CreateNewObject@SpriteSheet@UI@@SAPEAVBase@Object@@XZ",

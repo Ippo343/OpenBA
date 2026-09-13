@@ -16,8 +16,7 @@
 //     `RegisterRuntimeAddr(0x180154590, …)`. The census cannot see either,
 //     because both spell the symbol through a STRUCT FIELD rather than a
 //     literal (reference_census_cannot_see_nonliteral_registrations.md), and
-//     the mint is additionally gated behind `BANISHED_RT_MINT=1` until cutover.
-//     So the row is a census artefact twice over, not unwritten data.
+//     So the row is a census artefact, not unwritten data.
 //
 //   * What IS unwritten is the table's CONTENTS. A minted slot is filled from
 //     the port registry at RtDataMintInit() time and is a NAMED TRAP until the
@@ -152,12 +151,9 @@ void ConstructInPlace(uint8_t* self) {
 // ---- slot 2  ?Type@SpriteSheet@UI@@UEBAIXZ  0x180002e30 --------------------
 //   MOV EAX,dword ptr [0x1801fadd0] / RET     — RCX is never read.
 extern "C" uint32_t RtUi_SpriteSheet_Type(const void* self) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::Type");
     (void)self;
     uint32_t ours = 0;
     std::memcpy(&ours, SheetTypeInfo(), sizeof ours);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(U32ThisFn, "?Type@SpriteSheet@UI@@UEBAIXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -165,73 +161,27 @@ extern "C" uint32_t RtUi_SpriteSheet_Type(const void* self) {
 // (0x180002e40). Registered separately because it is a separate export with a
 // separate call surface; sharing the body is what the DLL does too.
 extern "C" uint32_t RtUi_SpriteSheet_TypeId() {
-    RT_DIFF_BEGIN("UI::SpriteSheet::TypeId");
     uint32_t ours = 0;
     std::memcpy(&ours, SheetTypeInfo(), sizeof ours);
     using Fn = uint32_t (*)();
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?TypeId@SpriteSheet@UI@@SAIXZ")());
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 // ---- slot 1  ?TypeName@SpriteSheet@UI@@UEBAPEBDXZ  0x180002e50 -------------
 //   MOV RAX,qword ptr [0x1801fadd8] / RET     — typeInfo + 8, RCX unread.
 //
-// ⚠ THIS ORACLE REPORTS ONE PERMANENT DIVERGENCE, BY DESIGN. READ THIS BEFORE
-//   TREATING IT AS A REGRESSION.  (WAVE 10C lane TIDENT)
-//
-//     [RtDiff] UI::SpriteSheet::TypeName  calls=1 worked=1 divergences=1
-//     [RtDiff] DIVERGENCE ... ours=00007ff60aa4612c theirs=00007ffcab5e4578
-//
-// RT_DIFF_SCALAR below compares the returned `const char*` AS A POINTER.
-// `?_typeInfo@SpriteSheet@UI@@` is a PROMOTED minted row, so `SheetTypeInfo()`
-// resolves to OUR node, whose `name` is a string literal in our image; the
-// shipped export returns the DLL's. Same characters, different object. It is
-// the string twin of the "Construct divergence is the vtable identity"
-// paragraph in standalone/reg_mint_promoted.cpp, and it went unnamed for two
-// waves because the only string screen anywhere was a strcmp.
-//
-// MEASURED, not argued (2026-09-09, debug, DLL present, under game_dir_lock):
-//   promoted ON   UI::SpriteSheet::TypeName  calls=1 divergences=1
-//   promoted OFF  UI::SpriteSheet::TypeName  calls=1 divergences=0
-//   both halves   IO::PackageFile::TypeName  calls=4 divergences=0
-// `calls=1` on BOTH sides, so what moved is the VALUE and not the coverage;
-// PackageFile is the same code shape on an UNPROMOTED row and does not move,
-// which is what rules out "the oracle is broken".
-//
-// AND IT IS HARMLESS, measured in the shipped binaries rather than assumed:
-// nothing anywhere consumes a BaseTypeInfo::name BY POINTER. In Runtime-x64.dll
-// the only static readers of any node's +0x08 are the 103 ?TypeName@ accessors,
-// none of which is called anywhere in the DLL; Factory::Startup CRCs the string
-// and Factory::GetTypeName has no caller in the DLL and is not imported by the
-// exe. In Application-x64.exe all 525 references to the 42 imported
-// ?_typeInfo@ slots read the dword at +0x00 and NOT ONE reads +0x08. The full
-// census with addresses is docs/runtime_port/WAVE10C_LANE_TIDENT.md.
-//
-// The comparison is deliberately LEFT AS A POINTER. Relaxing it to strcmp would
-// silence the one screen in the tree that can still see identity change.
 extern "C" const char* RtUi_SpriteSheet_TypeName(const void* self) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::TypeName");
     (void)self;
     const char* ours = nullptr;
     std::memcpy(&ours, SheetTypeInfo() + 8, sizeof ours);
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RT_ORIGINAL_ONCE(CStrThisFn,
-                           "?TypeName@SpriteSheet@UI@@UEBAPEBDXZ")(self)));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
 // ---- slot 3  ?GetFileVersion@SpriteSheet@UI@@UEBAHXZ  0x18011d710 ----------
 //   MOV EAX,6 / RET. The sheet resource's on-disk format version.
 extern "C" int RtUi_SpriteSheet_GetFileVersion(const void* self) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::GetFileVersion");
     (void)self;
     const int ours = 6;
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(IntThisFn,
-        "?GetFileVersion@SpriteSheet@UI@@UEBAHXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -240,14 +190,9 @@ extern "C" int RtUi_SpriteSheet_GetFileVersion(const void* self) {
 //   an Object::External::CompileResult and 1 is the constant answer. Not a
 //   stub of ours: those two instructions are the whole shipped body.
 extern "C" int RtUi_SpriteSheet_Compile(void* self, const void* filename) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::Compile");
     (void)self; (void)filename;
     const int ours = 1;
     using Fn = int (*)(void*, const void*);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn,
-        "?Compile@SpriteSheet@UI@@UEAA?AW4CompileResult@External@Object@@AEBVFilename@System@@@Z")
-        (self, filename));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -264,8 +209,6 @@ extern "C" int RtUi_SpriteSheet_Compile(void* self, const void* filename) {
 // whatever the sheet owns. This is the one body in the file where the replay
 // argument fails, and it is stated rather than quietly skipped.
 extern "C" void RtUi_SpriteSheet_Destruct(void* self) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::Destruct");
-    RT_DIFF_WORK(true);
     void** const vt = *reinterpret_cast<void***>(self);
     reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(self, 0);
 }
@@ -274,34 +217,12 @@ extern "C" void RtUi_SpriteSheet_Destruct(void* self) {
 //   if (this) { <the constructor, inlined>; return this; } else return nullptr;
 // The null test is retail's own (0x180003114), not a guard added here.
 extern "C" void* RtUi_SpriteSheet_Construct(void* self) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::Construct");
     if (!self) {
-        if (rt_diff_on__) {
-            void* theirs = RT_ORIGINAL_ONCE(PtrThisFn,
-                "?Construct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ")(nullptr);
-            RT_DIFF_SCALAR(static_cast<void*>(nullptr), theirs);
-        }
-        RT_DIFF_WORK(false);          // the null arm does no work, and says so
+          // the null arm does no work, and says so
         return nullptr;
     }
     ConstructInPlace(static_cast<uint8_t*>(self));
 
-    if (rt_diff_on__) {
-        // A PRIVATE scratch object, so the shipped body never writes the live
-        // one. Poisoned first, and compared over kSpriteSheetWrittenBytes
-        // (0x51) rather than sizeof — +0x51..+0x57 is never stored by either
-        // side and comparing it reports allocator residue
-        // (reference_oracle_must_not_compare_unwritten_bytes.md; this exact
-        // window cost the Wave 7 run a 100% false divergence).
-        alignas(16) uint8_t theirs[sizeof(SpriteSheet)];
-        std::memset(theirs, 0xCD, sizeof theirs);
-        void* const ret = RT_ORIGINAL_ONCE(PtrThisFn,
-            "?Construct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ")(theirs);
-        RT_DIFF_BYTES(self, theirs, kSpriteSheetWrittenBytes);
-        RT_DIFF_SHADOW(ret == static_cast<void*>(theirs),
-                       "returns this", "returns this");
-        RT_DIFF_WORK(true);
-    }
     return self;
 }
 
@@ -314,8 +235,6 @@ extern "C" void* RtUi_SpriteSheet_Construct(void* self) {
 // NOT REPLAYED, for Destruct's reason: the destructor half runs on the live
 // object and cannot be run twice.
 extern "C" void* RtUi_SpriteSheet_Reconstruct(void* self) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::Reconstruct");
-    RT_DIFF_WORK(true);
     void** const vt = *reinterpret_cast<void***>(self);
     reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(self, 0);
     ConstructInPlace(static_cast<uint8_t*>(self));
@@ -530,40 +449,8 @@ void RecFloatVia(Serializer* ser, float* v) {
     reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarFloat / 8])(rw, v, nullptr);
 }
 
-// ---- probe scaffolding (same contract as elementdescription_serialize.cpp) --
-Stream* StreamOf(void* serializer) {
-    return static_cast<Serializer*>(serializer)->stream;
-}
-
-bool g_probing = false;
-struct ProbeGuard {
-    ProbeGuard()  { g_probing = true;  }
-    ~ProbeGuard() { g_probing = false; }
-};
-
 const char* const kSerializeMangled =
     "?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z";
-
-// `Compare` defends against `ours == theirs` by comparing function pointers,
-// and the lambda adapters below defeat that check — so the equivalent check is
-// made on the thing that matters: does the registry hand OUR body back?
-bool PortIsLive(const void* ours) {
-    void* viaRegistry = ResolveExport(kSerializeMangled);
-    if (viaRegistry == ours) return true;
-    std::fprintf(stderr,
-                 "[RtSaveTrace] FAIL %s: the port is NOT registered (registry -> %p, "
-                 "ours %p), so this comparison would prove nothing\n",
-                 kSerializeMangled, viaRegistry, ours);
-    return false;
-}
-
-// No detour is installed on this row, so the RAW export address IS retail's
-// body. (If one is ever added, this must become a trampoline lookup or
-// RT_ORIGINAL_ONCE will recurse into the patched prologue —
-// reference_detour_machinery_exists_wave7_zero_is_stale.md.)
-StreamMemberFn RetailBody() {
-    return RT_ORIGINAL_ONCE(StreamMemberFn, kSerializeMangled);
-}
 
 }  // namespace
 
@@ -670,22 +557,6 @@ extern "C" void RtUi_SpriteSheet_SerializeEntries(Serializer* ser,
 }
 
 extern "C" bool RtUi_SpriteSheet_Serialize(SpriteSheet* self, Stream* stream) {
-    static int probes = 0;
-    if (RtSaveTrace::Enabled() && !g_probing && probes < 16) {
-        ++probes;
-        ProbeGuard guard__;
-        StreamMemberFn theirs = RetailBody();
-        if (theirs && PortIsLive((const void*)&RtUi_SpriteSheet_Serialize)) {
-            RtSaveTrace::Compare(
-                "UI::SpriteSheet::Serialize", self,
-                [](void* obj, void* ser) {
-                    RtUi_SpriteSheet_Serialize(static_cast<SpriteSheet*>(obj),
-                                               StreamOf(ser));
-                },
-                [](void* obj, void* ser) { RetailBody()(obj, StreamOf(ser)); });
-        }
-    }
-
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
@@ -712,10 +583,7 @@ extern "C" bool RtUi_SpriteSheet_Serialize(SpriteSheet* self, Stream* stream) {
 }
 
 // ============================================================================
-// Registration — called from RtUiSpriteCaptureRegister(), under the same
-// BANISHED_RT_UISPRITECAP switch, because the two halves of lane UI4 are
-// verified by the same run and an A/B that could split them would be a third
-// state nobody wants to reason about.
+// Registration — called from RtUiSpriteCaptureRegister().
 // ============================================================================
 int RtUiSpriteSheetVtableRegister() {
     int n = 0;

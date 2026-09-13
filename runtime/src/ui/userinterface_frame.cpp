@@ -139,10 +139,6 @@
 // difference would be correct rather than a defect. The detour returns RETAIL's
 // value in predict mode, which is also what keeps the frame correct.
 //
-// GATE: the port is registered under `BANISHED_RT_UIFRAME` (default ON like
-// every other wave switch, `=0` to fall back to the DLL). The DETOUR is
-// separately OPT-IN under `BANISHED_RT_UIFRAME_DETOUR`, per runtime_detour.h's
-// rule that "nothing goes default-on unproven".
 // ============================================================================
 
 #include <cstdint>
@@ -285,9 +281,7 @@ static_assert(sizeof(Node) == 0x18, "MemAlloc(0x18, 8) in the drain");
 // ============================================================================
 // The body. ONE body, two modes — the rt_predict.h contract.
 // ============================================================================
-// `out` is a live sink in a normal frame (every write is a store, every
-// `Call` returns true) and a predicting sink under BANISHED_RT_PREDICT (every
-// write is recorded, every `Call` returns false).
+// `out` is a live sink: every write is a store, every `Call` returns true.
 //
 // Reads of locations THIS BODY WRITES go through `out.ReadU*` so the predictor
 // is self-consistent; reads of locations it never writes stay plain loads. The
@@ -550,97 +544,9 @@ int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
     return cursor(self, mx, my);
 }
 
-// The detour is OPT-IN, not a kill switch: `RtWaveEnabled` is default-ON and
-// that is the wrong default for a code patch into the shipped DLL.
-inline bool DetourOptedIn() {
-    const char* e = std::getenv("BANISHED_RT_UIFRAME_DETOUR");
-    return e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
-}
-
-} // namespace
-
-// ---------------------------------------------------------------------------
-// The detour seam
-// ---------------------------------------------------------------------------
-// standalone/ui_detour.cpp patches 0x1801213c0 so the DLL's OWN caller —
-// `Engine::MainLoop`'s frame, which is the ONLY caller that matters for this
-// function — reaches the port. Without it `RegisterRuntimeExport` redirects our
-// call sites only and the DLL keeps running its own `Update` on an object our
-// `AddDialog`/`SetCursor`/`BringDialogToFront` ports already reshape. That is
-// the split brain Wave 7 lane C named, and it EXISTS TODAY because those three
-// mutators shipped in Wave 9 while `Update` did not.
-extern "C" bool  RtUiUserInterfaceUpdateInstallDetour(void* ourFn);
-extern "C" void* RtUiUserInterfaceUpdateTrampoline();
-
-namespace {
-
-// Retail's body, through whichever door is correct RIGHT NOW.
-//
-// WITH THE DETOUR IN, THE RAW EXPORT IS NOT RETAIL — it is a jump back into us.
-// `RT_ORIGINAL_ONCE` resolves through `ResolveExportRaw`, i.e. exactly the
-// address we patched, so an oracle that used it here would not diverge, it
-// would RECURSE until the stack died
-// (reference_detour_machinery_exists_wave7_zero_is_stale.md). The trampoline is
-// the only correct "theirs" once the detour is installed, and the raw export is
-// the only correct one before it. A null trampoline means "no detour", never
-// "no original".
-int32_t CallRetailUpdate(UserInterface* self, const void* time) {
-    using Fn = int32_t (*)(void*, const void*);
-    if (void* tramp = RtUiUserInterfaceUpdateTrampoline())
-        return reinterpret_cast<Fn>(tramp)(self, time);
-    return RT_ORIGINAL_ONCE(Fn, "?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z")(self, time);
-}
-
 } // namespace
 
 extern "C" int32_t RtUi_UserInterface_Update(UserInterface* self, const void* time) {
-    RT_PREDICT_SITE("UI::UserInterface::Update");
-
-    if (RT_PREDICT_ON) {
-        int32_t theirs = 0;
-        RT_PREDICT_ROUND(round) {
-            uint8_t* const S = reinterpret_cast<uint8_t*>(self);
-
-            // COVERAGE CONTROL: watch the whole object, so any byte retail
-            // changes that we neither predicted nor excluded is REPORTED.
-            // Predictions on their own are only a lower bound.
-            round.Watch(self, 0x128, "UI::UserInterface");
-
-            // The declared holes. Each names the suppressed callee that owns it.
-            round.Exclude(S + 0x000, 0x18,
-                          "_dialogs: CleanRemovedDialogs x3 unlinks here, and the "
-                          "drain's node pointers are addresses MemAlloc chose");
-            round.Exclude(S + 0x018, 0x10,
-                          "_removedDialogs: cleared by CleanRemovedDialogs");
-            round.Exclude(S + 0x038, 0x10,
-                          "_toolTipOwner/_toolTipDialog: written by the suppressed "
-                          "CloseDialog arm");
-            round.Exclude(S + 0x048, 0x10,
-                          "_events: UpdateEvents + CleanRemovedDialogs + the two "
-                          "suppressed Array<Event>::SetSize pushes");
-            round.Exclude(S + 0x0d9, 1,
-                          "_mouseCaptured EXIT store is UpdateState+0x20, written "
-                          "by the suppressed DialogInstance::Update");
-
-            // The drag-drop block is only excluded when the condition that
-            // governs it is unknowable — i.e. when there is at least one dialog
-            // for the suppressed DialogInstance::Update to have rewritten
-            // UpdateState+0x07. With an EMPTY list the byte is ours and the
-            // whole block stays under comparison.
-            if (*reinterpret_cast<void**>(S + 0x08) != nullptr) {
-                round.Exclude(S + 0x060, 0x2a,
-                              "drag-drop end: gated on UpdateState+0x07, which "
-                              "DialogInstance::Update writes back and predict mode "
-                              "suppresses");
-            }
-
-            UpdateBody(self, time, round.sink());   // predicts, writes nothing
-            theirs = CallRetailUpdate(self, time);  // the authority runs for real
-        }
-        // Retail's return value, because retail's body is the one that ran.
-        return theirs;
-    }
-
     RtSink live;
     return UpdateBody(self, time, live);
 }
@@ -658,13 +564,6 @@ int RtUiFrameRegister() {
     RegisterRuntimeExport("?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z",
                           (void*)&RtUi_UserInterface_Update); ++count;
     RegisterRuntimeAddr(0x1801213c0, (void*)&RtUi_UserInterface_Update);
-
-    // OPT-IN, per runtime_detour.h: "Every detour gets an env kill-switch at its
-    // call site. Nothing goes default-on unproven." With it off the port keeps
-    // only our own call sites and the DLL's MainLoop keeps its own body — i.e.
-    // exactly the split brain that exists today, unchanged.
-    if (DetourOptedIn())
-        RtUiUserInterfaceUpdateInstallDetour((void*)&RtUi_UserInterface_Update);
 
     return count;
 }
