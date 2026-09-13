@@ -57,7 +57,16 @@ extern int RtAchGoalListRegister();
 // owned the CALLER. A directory-scoped grep cannot see a port filed under its
 // caller's namespace. Grep the MANGLED NAME across the whole tree.
 
+// BATCH C registration entry point (batchc_*.cpp).
+extern "C" int RtAchBatchCGoalListDtorRegister();
+
 void RtAchievementPortInit() {
+    // BATCH C — Achievement::GoalList::~GoalList. Unconditional, see
+    // DIRECTION.md §2.3.
+    {
+        printf("[RtPort] BATCH C: %d achievement leaf registered\n",
+               RtAchBatchCGoalListDtorRegister());
+    }
     if (!RtWaveEnabled("BANISHED_RT_ACHIEVEMENT")) {
         printf("[RtPort] BANISHED_RT_ACHIEVEMENT=0 -- Achievement namespace port disabled\n");
         return;

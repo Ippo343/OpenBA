@@ -502,8 +502,7 @@ extern "C" bool RtAudio_SoundEffect_Serialize(void* selfv, void* streamv) {
 
 // ============================================================================
 // The `_buffers` element serialize walk   0x180053300   (batch D1)
-// ============================================================================
-// Serialize above calls this by address. Element {float @+0x00,
+// =====================================================================// Serialize above calls this by address. Element {float @+0x00,
 // Collection::Array<Sample> @+0x08}, stride 0x18:
 //
 //   18005333e  kScalarFloat  e+0x00
@@ -547,12 +546,33 @@ extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count,
     }
 }
 
+// ============================================================================
+// BATCH C (2026-09-12): ?PlatformSerialize@SoundBuffer@Audio@@ (retail
+// 0x1800e05c0, ordinal 3389) BECOMES A REGISTERED PORT.
+//
+// The BODY already existed — `PlatformSerialize` above, written by this batch's
+// predecessor as a file-local helper for `SoundBuffer::Serialize`. It was never
+// registered, so every OTHER caller (and the census) still reached the DLL's
+// copy. Registration is the whole of the port; a second body would be exactly
+// the duplication this file's family exists to prevent, so there is one body
+// and this is a thin extern "C" door onto it.
+//
+// `AEAA` = PRIVATE, which this DLL still exports
+// (reference_aeaa_is_private_not_unexported.md), so the NAME door is real.
+// ============================================================================
+extern "C" void RtAudio_SoundBuffer_PlatformSerialize(void* selfv, void* serv) {
+    PlatformSerialize(static_cast<SoundBuffer*>(selfv), static_cast<Serializer*>(serv));
+}
+
 int RtAudioBatch7SoundBufferSoundEffectRegister() {
     int n = 0;
 
     // Batch D1: unexported in both builds, address door only.
     RegisterRuntimeAddr  (0x180053300ull, (void*)&RtAudio_SoundEffect_SerializeBuffers); ++n;
 
+    RegisterRuntimeExport("?PlatformSerialize@SoundBuffer@Audio@@AEAAXAEAVSerializer@IO@@@Z",
+                          (void*)&RtAudio_SoundBuffer_PlatformSerialize); ++n;
+    RegisterRuntimeAddr  (0x1800e05c0ull, (void*)&RtAudio_SoundBuffer_PlatformSerialize);
     RegisterRuntimeExport("?TypeName@SoundBuffer@Audio@@UEBAPEBDXZ", (void*)&RtAudio_SoundBuffer_TypeName); ++n;
     RegisterRuntimeAddr  (0x18000b8b0ull, (void*)&RtAudio_SoundBuffer_TypeName);
     RegisterRuntimeExport("?Type@SoundBuffer@Audio@@UEBAIXZ", (void*)&RtAudio_SoundBuffer_Type); ++n;

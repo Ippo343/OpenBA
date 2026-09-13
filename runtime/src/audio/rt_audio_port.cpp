@@ -46,7 +46,16 @@ extern int RtAudioWave29AvbodySweep();      // wave29_lane_avbody.cpp
 extern int RtAudioStreamPlayRegister();     // audio_stream_play_win.cpp
 extern int RtAudioPlayPlatformRegister();   // audio_play_platform.cpp
 
+// BATCH C registration entry point (batchc_*.cpp).
+extern "C" int RtAudioBatchCLeavesRegister();
+
 void RtAudioPortInit() {
+    // BATCH C — ~SoundBuffer and Device::OnSoundBufferDeleted. Unconditional,
+    // see DIRECTION.md §2.3.
+    {
+        printf("[RtPort] BATCH C: %d audio leaves registered\n",
+               RtAudioBatchCLeavesRegister());
+    }
     if (!RtWaveEnabled("BANISHED_RT_AUDIO")) {
         printf("[RtPort] BANISHED_RT_AUDIO=0 -- Audio namespace port disabled\n");
         return;
