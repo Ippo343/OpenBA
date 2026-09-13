@@ -27,3 +27,14 @@ UNIT_TREE_SRCS += \
 # only out-of-line body (Serialize) needs the live serializer + factory and is
 # covered by the real run, not by make unit. No tree sources to link.
 UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.2 LIST core (tests/unit/list_test.cpp): Collection::LinkedList<T>
+# and the two ported introsorts. linkedlist.cpp holds the node-allocation seam
+# the header template calls through (and, under -DBANISHED_UNIT_TEST, the
+# counting test allocator behind it — B31_RULES class rule 6); introsort.cpp
+# holds rtsort::SortByKey70 (0x1800264a0). The shared MSVC sort skeleton is
+# header-only (runtime/src/collection/introsort_msvc.h). Both files reach
+# ResolveAddr, stubbed in tests/unit/rt_port_stub.cpp.
+UNIT_TREE_SRCS += \
+  runtime/src/collection/linkedlist.cpp \
+  runtime/src/collection/introsort.cpp

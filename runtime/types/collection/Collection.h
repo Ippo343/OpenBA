@@ -155,8 +155,39 @@ struct Array {
 };
 
 // ============================================================
+// Collection::detail — the LinkedList node allocation seam.
+//
+// The node allocator and the node free are the two halves of retail's
+// 0x180032750 / 0x180009c30, which each open-code
+// `Enter(_singleton+0x640); Allocate/Free(_singleton, …); Leave` inline. Both
+// are defined ONCE in runtime/src/collection/linkedlist.cpp, where the argument
+// that they are the same instruction sequence as the ported
+// `System::MemoryAllocator::MemAlloc`/`MemFree` (0x1800c7a50 / 0x1800c7ad0) is
+// written out in full. They are declared here — and not defined inline — so
+// this header stays free of the address-resolution seam and of <windows.h>
+// (PLAN.md §4.1 decision 1).
+// ============================================================
+namespace detail {
+void* ListNodeAlloc(uint64_t bytes, int align);
+void  ListNodeFree(void* p);
+}  // namespace detail
+
+// ============================================================
 // Collection::LinkedList<T, Allocator> — doubly linked, head + tail + count.
 //
+// ENDGAME B.3.2 step 1 (LIST core): this WAS a plain layout struct; it is now
+// the real class template, with the four ported bodies of
+// runtime/src/collection/linkedlist.cpp moved onto it as members and the
+// registered free functions there reduced to one-line shims. Nothing about the
+// LAYOUT changed — every static_assert below is the one that was already here,
+// and the class is still standard-layout with public data (see "STEP 1 KEEPS
+// THE FIELDS PUBLIC" below), so every `offsetof` in the three headers that
+// embed it still holds:
+//     runtime/types/ui/UserInterface.h   _dialogs  (LinkedList<DialogInstancePtr>)
+//     runtime/types/ui/DialogInstance.h  _children (LinkedList<InternalBasePtr>)
+//     runtime/types/graphics/Scene.h     _globals  (LinkedList<Geometry*>)
+//
+// LAYOUT EVIDENCE (unchanged, Wave 2):
 // Pinned by UI::UserInterface::CleanRemovedDialogs (0x18011f790), which unlinks
 // a node from the dialog list embedded at UserInterface+0x00. Every branch of
 // that unlink names one field:
@@ -179,9 +210,56 @@ struct Array {
 // Node allocation/free goes through DefaultAllocator exactly like Set's does —
 // CleanRemovedDialogs frees the unlinked node with MemoryAllocator::Free under
 // the +0x640 critical section.
+//
+// ---------------------------------------------------------------------------
+// WHAT THE MEMBERS ARE, AND WHERE EACH BODY CAME FROM
+// ---------------------------------------------------------------------------
+// Retail ships ONE instantiation of this template (T = an 8-byte pointer), and
+// MSVC monomorphised it, so the "retail address" of each member below is the
+// address of that one instantiation's copy. The template reproduces it
+// byte-for-byte at T = 8; the generic spelling only replaces the baked-in
+// `0x18` / `+0x8` / `+0x10` immediates with `sizeof(Node)` and the field names.
+//
+//   | member     | retail      | notes                                        |
+//   |------------|-------------|----------------------------------------------|
+//   | NewNode    | 0x180032750 | MemAlloc(sizeof(Node), 8) + init; first arg  |
+//   |            |             | NEVER READ by retail (see linkedlist.cpp)    |
+//   | FreeNode   | 0x180009c30 | MemFree with an ignored leading argument     |
+//   | Remove     | 0x18007a010 | find by VALUE, unlink, free; a miss is SILENT|
+//   | Clear      | 0x1800325f0 | free every node, zero head/tail/count        |
+//   | Add        | inlined at  | append at the TAIL. Retail never emitted it  |
+//   |            | 0x180120440 | out of line; the same sequence is inlined in |
+//   |            |             | UI::UserInterface::BringDialogToFront and in |
+//   |            |             | Graphics::Scene's global-geometry add.       |
+//   | GetFirst   | 0x180031150 | `*(void**)retval = *(void**)this` — the head |
+//   | GetCount   | inline      | the `_count` field; no out-of-line body      |
+//
+// THERE IS NO DESTRUCTOR, DELIBERATELY. Retail's callers call Clear() by hand
+// (UI::UserInterface's dtor tail-JMPs to 0x1800325f0; ~DialogInstance calls it
+// on `_children`), and every ported body that owns a list still does the same.
+// Declaring `~LinkedList()` here would run a SECOND Clear on those same bytes
+// after the manual one — the identical double-free trap B31_RULES records for
+// System::String's release asymmetry. The destructor arrives when the last
+// hand-written Clear() call site is converted, not before.
+//
+// LIKEWISE NO USER-PROVIDED DEFAULT CTOR (B31_RULES class rule 5): the three
+// embedders above are zero-initialised by their own ported constructors, which
+// write head/tail/count as explicit stores, and a `LinkedList() {}` here would
+// silently turn `Foo f = {};` in every one of them into "links uninitialised".
+//
+// STEP 1 KEEPS THE FIELDS PUBLIC. Three files outside this batch still touch
+// `_head`/`_tail`/`_count` directly, and B.3.2 step 2 (callers) is what moves
+// them onto Add/Remove/Clear:
+//     runtime/src/graphics/scene.cpp          (RtSceneFreeGlobals, AddGlobal,
+//                                              RemoveGlobal, the draw walk)
+//     runtime/src/graphics/wave29_lane_gfxbody.cpp
+//     runtime/src/ui/combodialog_ctor.cpp
+// Making them private now would break three files this batch does not own, for
+// no layout benefit — all-public and all-private are both standard-layout.
 // ============================================================
 template <class T, class Allocator = DefaultAllocator>
-struct LinkedList {
+class LinkedList {
+ public:
     struct Node {
         T     element;   // +0x00
         Node* prev;      // align8(sizeof(T)) + 0x00
@@ -189,8 +267,200 @@ struct LinkedList {
     };
     struct Iterator {
         Node* node;      // +0x00 — the entire iterator
+
+        // Sugar only; retail's iterator is the bare pointer and every retail
+        // walk is `for (n = list->_head; n; n = n->next)`. These add no state
+        // and no member, which the sizeof assert below keeps honest.
+        T&        operator*()  const { return node->element; }
+        T*        operator->() const { return &node->element; }
+        Iterator& operator++()       { node = node->next; return *this; }
+        bool operator==(const Iterator& o) const { return node == o.node; }
+        bool operator!=(const Iterator& o) const { return node != o.node; }
+        explicit operator bool() const { return node != nullptr; }
     };
 
+    // ---- 0x180032750 — allocate and initialise one node --------------------
+    //
+    // Retail, for the T=8 instantiation:
+    //     MOV RSI,RDX                  ; RDX = &value.  RCX IS NEVER READ.
+    //     ... Enter ; node = Allocate(_singleton, 0x18, 8) ; Leave ...
+    //     TEST RDI,RDI / JZ -> return 0
+    //     XOR ECX,ECX
+    //     MOV [RDI],RCX                ; node->element = 0   <- DEAD, and kept
+    //     MOV RAX,[RSI] / MOV [RDI],RAX; node->element = *value
+    //     MOV [RDI+0x8],RCX            ; node->prev = 0
+    //     MOV [RDI+0x10],RCX           ; node->next = 0
+    //
+    // `0x18` is `sizeof(Node)`; the alignment argument is the literal 8 retail
+    // passes (this header's DefaultAllocator block: Set nodes pass 8 too, and
+    // the argument is alignof(T), not sizeof(T)). Both evaluate to retail's
+    // immediates at T=8. The dead `element = T()` store before the real one is
+    // retail's and is kept.
+    //
+    // STATIC because retail's first argument is never read: the body is not a
+    // member call at all, and BringDialogToFront calls it without setting RCX.
+    static Node* NewNode(const T& value) {
+        // The raw MemAlloc plus field stores below construct no object, and
+        // Clear/Remove free a node without destroying one. That is retail's own
+        // shape and it is sound only for a T whose copy is a byte copy and
+        // whose destruction is a no-op — which retail's single instantiation
+        // (a pointer) is, and which COLLECTION_INVENTORY.md §5.1 requires
+        // Object::ExternalPtr/InternalBasePtr to stay. Asserted inside the
+        // member rather than in the class body so an instantiation that never
+        // allocates a node is not constrained by it.
+        static_assert(__is_trivially_copyable(T),
+                      "LinkedList nodes are raw-allocated: T must be trivially copyable");
+        static_assert(__has_trivial_destructor(T),
+                      "LinkedList nodes are raw-freed: T must be trivially destructible");
+
+        Node* node = static_cast<Node*>(detail::ListNodeAlloc(sizeof(Node), 8));
+        if (!node) { return nullptr; }
+
+        node->element = T();     // retail's dead store, kept — see above
+        node->element = value;
+        node->prev    = nullptr;
+        node->next    = nullptr;
+        return node;
+    }
+
+    // ---- 0x180009c30 — free one node ---------------------------------------
+    //
+    //     TEST RDX,RDX / JZ ret        ; the null test is on the SECOND argument
+    //     ... Enter / Free(_singleton, RDX) / Leave ...
+    //
+    // The first argument is the container: retail homes it at [RSP+0x8] and
+    // never reads it back, which is why this is a member whose `this` goes
+    // unused. The null test is retail's own (MemFree's own first instruction),
+    // not a guard added to paper over a crash.
+    void FreeNode(Node* node) const { detail::ListNodeFree(node); }
+
+    // ---- append at the TAIL ------------------------------------------------
+    //
+    // Inlined by retail at UI::UserInterface::BringDialogToFront 0x180120440,
+    // transcribed arm for arm including which store increments `_count` first:
+    //
+    //     180120469  MOV RCX,[RBX+0x8]     ; tail
+    //     180120472  MOV [RCX+0x10],RAX    ; tail->next = node
+    //     18012047a  MOV [RAX+0x8],RCX     ; node->prev = tail
+    //     18012047e  INC [RBX+0x10] / MOV [RBX+0x8],RAX
+    //   (tail was null:)
+    //     180120490  INC [RBX+0x10] / MOV [RBX],RAX / MOV [RBX+0x8],RAX
+    //
+    // `_head` is the BACKMOST dialog and `_tail` the frontmost, per
+    // runtime/types/ui/UserInterface.h — so "add" is "bring to the front" for
+    // that consumer and "append" for Graphics::Scene's global list, which
+    // inlines the same three stores (runtime/src/graphics/scene.cpp:1239).
+    void Add(const T& value) {
+        Node* node = NewNode(value);
+        if (Node* t = _tail) {
+            t->next    = node;
+            node->prev = t;
+            ++_count;
+            _tail = node;
+        } else {
+            ++_count;
+            _head = node;
+            _tail = node;
+        }
+    }
+
+    // ---- 0x18007a010 — Remove(&value) --------------------------------------
+    //
+    // Find the node whose ELEMENT equals `value`, unlink it, zero its links,
+    // decrement the count, and tail-jump into 0x180009c30 to free it.
+    //
+    // Three details that a tidier rewrite would get wrong:
+    //
+    //  * THE HEAD TEST COMPARES AGAINST THE ORIGINAL HEAD, held in R8 from
+    //    before the search (`MOV R8,[RCX]` at 0x18007a010, `CMP RDX,R8` at
+    //    0x18007a031), not against a re-read of `_head`. Nothing in this body
+    //    can change the head in between, so the two agree — but writing
+    //    `if (n == _head)` would make that an assumption instead of a
+    //    transcription.
+    //  * THE SEARCH IS BY VALUE, not by node, AND ONLY THE FIRST MATCH GOES:
+    //    `value` is loaded ONCE, before the walk (0x18007a01e), the walk stops
+    //    on the first equal element, and the body returns after the single free
+    //    without resuming. A list holding the same value twice keeps the second.
+    //  * A MISS IS SILENT. If the head is null, or the walk runs off the end,
+    //    the body simply returns: no free, no count change.
+    //    BringDialogToFront relies on that — it calls Remove unconditionally on
+    //    a dialog that may not be in the list yet.
+    //
+    // The unlink itself matches, branch for branch, the one this header pins
+    // from UI::UserInterface::CleanRemovedDialogs (0x18011f790).
+    void Remove(const T& value) {
+        Node* head = _head;
+        if (!head) { return; }
+
+        const T want = value;          // loaded ONCE, before the walk
+        Node*   n    = head;
+        while (!(n->element == want)) {
+            n = n->next;
+            if (!n) { return; }
+        }
+
+        if (n == head)  _head = n->next;      // the ORIGINAL head — see above
+        if (n == _tail) _tail = n->prev;
+        if (Node* prev = n->prev) prev->next = n->next;
+        if (Node* next = n->next) next->prev = n->prev;
+        n->prev = nullptr;
+        n->next = nullptr;
+        --_count;
+
+        FreeNode(n);                          // retail's tail JMP 0x180009c30
+    }
+
+    // ---- 0x1800325f0 — Clear() ---------------------------------------------
+    //
+    // Retail, in full:
+    //
+    //     MOV R14,RCX / MOV RSI,[RCX]        ; n = list->head
+    //     TEST RSI,RSI / JZ done
+    //   loop:
+    //     MOV RDI,[RSI+0x10]                 ; next = n->next  -- READ BEFORE THE FREE
+    //     ... Enter ; Free(_singleton, RSI) ; Leave ...
+    //     MOV RSI,RDI / TEST RDI,RDI / JNZ loop
+    //   done:
+    //     XOR EAX,EAX
+    //     MOV [R14+0x8],RAX                  ; tail  = 0
+    //     MOV [R14],RAX                      ; head  = 0
+    //     MOV dword [R14+0x10],EAX           ; count = 0
+    //
+    // Three things a tidier rewrite would get wrong, all load-bearing:
+    //
+    //  * `next` IS READ BEFORE THE NODE IS FREED. Reading it after would be a
+    //    use-after-free that works for exactly as long as the allocator does
+    //    not reuse the block.
+    //  * IT FREES NODES, NOT ELEMENTS. No refcount and no destructor is
+    //    touched. Adding one would be a second release of a handle somebody
+    //    else still owns — for `_children` the elements are child dialogs that
+    //    UI::UserInterface owns, not the parent.
+    //  * THE THREE STORES ARE UNCONDITIONAL — they happen on an already-empty
+    //    list too — `_count` is a DWORD store, and `_pad14` is NOT written.
+    void Clear() {
+        Node* n = _head;
+        while (n) {
+            Node* next = n->next;   // read BEFORE the free — see above
+            FreeNode(n);
+            n = next;
+        }
+        _tail  = nullptr;
+        _head  = nullptr;
+        _count = 0;
+    }
+
+    // ---- 0x180031150 — the head, as an Iterator ----------------------------
+    // `UI::UserInterface::GetFirstDialog` returns LinkedList<...>::Iterator by
+    // value and its entire body is `*(void**)retval = *(void**)this`.
+    Iterator GetFirst() const { return Iterator{_head}; }
+    Iterator GetLast()  const { return Iterator{_tail}; }
+    Iterator GetEnd()   const { return Iterator{nullptr}; }
+
+    // The `_count` field. Retail emitted no out-of-line body for it; every
+    // reader loads +0x10 directly.
+    int32_t GetCount() const { return _count; }
+
+    // ---- the fields, still public in step 1 (see the block comment) --------
     Node*   _head;       // +0x00
     Node*   _tail;       // +0x08
     int32_t _count;      // +0x10

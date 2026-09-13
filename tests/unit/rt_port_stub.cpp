@@ -29,3 +29,17 @@
 void RegisterRuntimeExport(const char* /*mangled_name*/, void* /*our_fn*/) {}
 void RegisterRuntimeAddr(uintptr_t /*ghidra_addr*/, void* /*our_fn*/) {}
 void* ResolveExport(const char* /*mangled_name*/) { return nullptr; }
+
+// The BY-ADDRESS half of the same seam, added by the B.3.2 LIST core because
+// runtime/src/collection/{linkedlist,introsort}.cpp reach the allocator and the
+// element-assign helpers through it. Every runtime/src file that declares it
+// spells the enum out locally rather than including standalone/resolve.h (which
+// drags in <windows.h>); this declaration must stay byte-identical to theirs and
+// to resolve.h's — the linker checks all of them against each other.
+//
+// SHARED, like the three above: any batch that links a runtime/src file needing
+// ResolveAddr wants THIS definition, not a second one. Answering 0 is the same
+// deliberate inertness — every resolve-or-fall-back site takes its fallback,
+// which is the ported body under test.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module /*mod*/, uintptr_t /*ghidra_addr*/) { return 0; }
