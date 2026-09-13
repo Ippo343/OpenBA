@@ -145,11 +145,13 @@ void MemFree(void* p) {
 }
 
 // `?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z` —
-// retail 0x1800a48e0. NOT PORTED, and reached BY NAME because it IS exported
-// (`QEAA`, public). Exactly the arrangement imagebuffer_vtable.cpp uses for
-// `ImageBuffer::PlatformSerialize`: it drives the GPU buffer upload and is a
-// Video-side body, so it stays on the DLL until that side is ported. This is
-// the one dependency in this file that the cutover still needs.
+// retail 0x1800a48e0. **PORTED** (runtime/src/graphics/batchc_gfx_leaves.cpp,
+// BATCH C 2026-09-12) and reached BY NAME because it IS exported (`QEAA`,
+// public). This comment used to say "NOT PORTED ... it stays on the DLL until
+// that [Video] side is ported ... the one dependency in this file that the
+// cutover still needs": the body is two device-interface arms of the shape
+// runtime/src/video/shaderprogram.cpp already spelled out, and every helper it
+// drives (0x1800136f0, 0x180014850) was already ported.
 void PlatformSerialize(void* self, Serializer* ser) {
     RT_EXPORT_ONCE(SerMemberFn,
         "?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z")(self, ser);

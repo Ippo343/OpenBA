@@ -1368,7 +1368,8 @@ void* RtDelDtor_Geometry(void* self, unsigned flags) {
 void* RtDelDtor_ImageBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 13);
 }
-// Graphics::Particle       ~Particle = 0x180103c70  (still the DLL's)
+// Graphics::Particle       ~Particle = 0x180103c70  (PORTED, BATCH C 2026-09-12,
+//                          graphics/batchc_gfx_leaves.cpp; was "still the DLL's")
 void* RtDelDtor_Particle(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 14);
 }
@@ -1376,7 +1377,9 @@ void* RtDelDtor_Particle(void* self, unsigned flags) {
 void* RtDelDtor_ParticleInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 15);
 }
-// Graphics::ParticleSystemInstance ~ParticleSystemInstance = 0x1800a5520  (still the DLL's)
+// Graphics::ParticleSystemInstance ~ParticleSystemInstance = 0x1800a5520  (PORTED,
+//                          BATCH C 2026-09-12, graphics/batchc_gfx_leaves.cpp;
+//                          was "still the DLL's")
 void* RtDelDtor_ParticleSystemInstance(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 16);
 }
@@ -1692,11 +1695,15 @@ void* RtDelDtor_LabelDescription(void* self, unsigned flags) {
 void* RtDelDtor_AnimationGroup(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 81);
 }
-// Graphics::ParticleSystem  ~ParticleSystem = 0x1800a51c0  (NOT ported)
+// Graphics::ParticleSystem  ~ParticleSystem = 0x1800a51c0  (PORTED, BATCH C
+//                          2026-09-12, graphics/batchc_gfx_leaves.cpp; was
+//                          "NOT ported")
 void* RtDelDtor_ParticleSystem(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 82);
 }
-// Audio::SoundBuffer        ~SoundBuffer = 0x1800e03b0     (NOT ported)
+// Audio::SoundBuffer        ~SoundBuffer = 0x1800e03b0     (PORTED, BATCH C
+//                          2026-09-12, audio/batchc_audio_leaves.cpp; was
+//                          "NOT ported")
 void* RtDelDtor_SoundBuffer(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 83);
 }

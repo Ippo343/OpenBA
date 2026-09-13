@@ -1,0 +1,1126 @@
+// ============================================================================
+// runtime/src/graphics/batchc_gfx_leaves.cpp
+//   BATCH C — the named Graphics leaves today's vtable batches left on the DLL
+// ============================================================================
+//
+// Ten bodies, every one of them a leaf of the cutover closure and every one of
+// them previously reached BY NAME from a ported caller (the "NOT PORTED,
+// reached by name" comments in lights_vtable.cpp / graphicsmesh_vtable.cpp).
+// Those comments are corrected AT THEIR SOURCE by this batch (PLAN.md §6
+// step 8); see the end of this banner for the list.
+//
+//   retail       ord   export name
+//   -----------  ----  ---------------------------------------------------
+//   0x180105240  2279  ?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z
+//   0x1800a48e0  3386  ?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z
+//   0x180106050  2135  ?CreateTargets@SpotLight@Graphics@@AEAAXXZ
+//   0x180103c70   643  ??1Particle@Graphics@@UEAA@XZ
+//   0x1800a51c0   645  ??1ParticleSystem@Graphics@@UEAA@XZ
+//   0x1800160a0    38  ??0Animation@Graphics@@QEAA@AEBV01@@Z   (the COPY ctor)
+//   0x1800fb290   525  ??1Animation@Graphics@@QEAA@XZ
+//   0x1800a2780   580  ??1EdgeMesh@Graphics@@UEAA@XZ
+//   0x180102eb0  2402  ?GenerateTextures@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z
+//   0x1800a5520   646  ??1ParticleSystemInstance@Graphics@@UEAA@XZ
+//
+// Every one read from the shipped retail Runtime-x64.dll's DISASSEMBLY
+// (ghidra-mcp disassemble_function, program="Runtime-x64.dll"), never from
+// Ghidra's decompiled C. Every export name was read back out of the export
+// directory by VA with pefile before this file was written.
+//
+// ---------------------------------------------------------------------------
+// FIVE THINGS THAT WOULD BE WRONG IF READ FROM THE DECOMPILER
+// ---------------------------------------------------------------------------
+// 1. `Renderer::DrawItemList` TAKES FIVE VALUES (this + four ints) and the
+//    fifth lives in its own home slot at [RBP+0xc0]. It is the SHADER INDEX:
+//    the body indexes `item->material->_programs[arg5]` with it and hands it to
+//    `MaterialInstance::Setup` and, as the 7th argument, to the geometry's
+//    `Draw`. lights_vtable.cpp's banner already recorded the five-value fact
+//    for the three Draw arms that tail-jump here; this body is what those five
+//    values are FOR.
+// 2. The two 4x4 matrices DrawItemList hands `Context::SetCamera` are BUILT ON
+//    THE STACK, not copied: the first is the cull camera's `Transform3`
+//    (camera+0x64, twelve floats) EXPANDED to a Matrix with an explicit
+//    (0,0,0,1) fourth column written as three zeroed floats and one 1.0f read
+//    from 0x18016169c; the second is the camera's projection, sixteen dwords
+//    copied verbatim. Getting the expansion wrong silently transposes the view.
+// 3. `??1Animation@` and `??1Particle@` release `System::String`s with retail's
+//    OWN asymmetry: on the LAST reference the slot is left holding `str-8`
+//    (a dangling pointer into the freed block) and only on a SURVIVING
+//    reference is it nulled. `~Particle` additionally branches on the ZF of the
+//    `ADD qword [slot],-8` itself, so a string whose data pointer was exactly 8
+//    is not freed. Both are reproduced; neither is a transcription slip.
+// 4. `~EdgeMesh` destroys its eight Video buffer headers in DESCENDING address
+//    order and alternates IndexBuffer/VertexBuffer PlatformDestruct — the
+//    pairs are (verts, indices) in memory but (indices, verts) in teardown.
+// 5. `GraphicsMesh::PlatformSerialize` has TWO device-interface arms over the
+//    same stream, the shape runtime/src/video/shaderprogram.cpp spells out:
+//    each arm builds its OWN ReaderWriter and, when its interface is not the
+//    active one, calls `Skip()` so the stream still advances past that
+//    backend's blob. The arms are NOT interchangeable: arm 0 hands the whole
+//    triangle array to the shared helper 0x180014850, arm 1/2 emits the same
+//    six dwords per element inline. Collapsing them into one loop would emit
+//    the right bytes for the wrong backend.
+// ============================================================================
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+
+#include "../../funcs/rt_port.h"
+#include "../../types/graphics/Camera.h"
+#include "../../types/graphics/Material.h"
+#include "../../types/graphics/Mesh.h"
+#include "../../types/io/Serializer.h"
+
+// standalone/resolve.h is deliberately NOT included: it drags in <windows.h>,
+// whose <wingdi.h> declares a function called `Rectangle` and whose <windef.h>
+// still #defines `near`/`far` away, both of which collide with engine type and
+// member names. Same local declaration shaderprogram.cpp and array.cpp carry,
+// for the same PLAN.md §4.1 reason; the linker checks the two spellings agree.
+enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+
+namespace rtcoll { void MemFree(void* p); }   // runtime/src/collection/array.cpp
+
+using rt::io::ReaderWriter;
+using rt::io::Serializer;
+using rt::io::Stream;
+using RtGraphics::Camera;
+using RtGraphics::MaterialInstance;
+using RtGraphics::Renderer;
+using RtGraphics::RendererDrawGroup;
+using RtGraphics::RendererDrawItem;
+using RtGraphics::EdgeMesh;
+
+namespace {
+
+template <typename Fn>
+Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
+
+using VoidThisFn = void  (*)(void*);
+using PtrThisFn  = void* (*)(void*);
+
+// ---------------------------------------------------------------------------
+// Retail vtable constants. Resolved through the NAME (all five are exported
+// data symbols — checked by VA with pefile), so a minted/promoted row is used
+// where one exists and the DLL's own table otherwise.
+// ---------------------------------------------------------------------------
+void* VtParticle()                { return RT_DATA_SLOT(void*, "??_7Particle@Graphics@@6B@"); }
+void* VtParticleSystem()          { return RT_DATA_SLOT(void*, "??_7ParticleSystem@Graphics@@6B@"); }
+void* VtParticleInstance()        { return RT_DATA_SLOT(void*, "??_7ParticleInstance@Graphics@@6B@"); }
+void* VtParticleSystemInstance()  { return RT_DATA_SLOT(void*, "??_7ParticleSystemInstance@Graphics@@6B@"); }
+void* VtEdgeMesh()                { return RT_DATA_SLOT(void*, "??_7EdgeMesh@Graphics@@6B@"); }
+void* VtObjectExternal()          { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
+void* VtObjectBase()              { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
+
+// ---------------------------------------------------------------------------
+// Named dependencies. RT_EXPORT_ONCE (port-registry first) for everything with
+// an export name; the three unexported template instantiations go through
+// ResolveAddr, which is also registry-first, with the address literal spelled
+// at the ResolveAddr call so tools/addr_door_audit.py can see the door.
+// ---------------------------------------------------------------------------
+
+// `??1Geometry@Graphics@@UEAA@XZ` 0x1800a41c0 — PORTED (scene.cpp).
+void GeometryDtor(void* p) { RT_EXPORT_ONCE(VoidThisFn, "??1Geometry@Graphics@@UEAA@XZ")(p); }
+
+// `??1External@Object@@UEAA@XZ` 0x1800bc950 — PORTED AND REGISTERED BY BOTH
+// DOORS (external.cpp:753/778). ~EdgeMesh tail-jumps it.
+void ExternalDtor(void* p) { RT_EXPORT_ONCE(VoidThisFn, "??1External@Object@@UEAA@XZ")(p); }
+
+// `?RemoveState@ParticleInstance@Graphics@@IEAAXXZ` 0x1801040b0 — PORTED
+// (wave28_lane_partsys.cpp). IEAA is PROTECTED, and this DLL exports its
+// protected members (reference_aeaa_is_private_not_unexported.md).
+void ParticleInstanceRemoveState(void* p) {
+    RT_EXPORT_ONCE(VoidThisFn, "?RemoveState@ParticleInstance@Graphics@@IEAAXXZ")(p);
+}
+
+// Video::{Index,Vertex}Buffer::PlatformDestruct — 0x1800f3760 / 0x1800f58c0,
+// both PORTED (video/buffers.cpp) and registered by name and address.
+void IndexBufferPlatformDestruct(void* p) {
+    RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ")(p);
+}
+void VertexBufferPlatformDestruct(void* p) {
+    RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ")(p);
+}
+
+// `??2ImageBuffer@Video@@SAPEAX_K@Z` / `??2RenderBuffer@Video@@SAPEAX_K@Z` —
+// the class operator news. CreateTargets INLINES both (Enter(alloc+0x640);
+// Allocate(alloc, n, 8); Leave), which is instruction for instruction what
+// these two exported statics are; imagebuffer_derived.cpp reaches the identical
+// inlining the same way.
+using NewFn = void* (*)(uint64_t);
+void* ImageBufferOperatorNew(uint64_t n) {
+    return RT_EXPORT_ONCE(NewFn, "??2ImageBuffer@Video@@SAPEAX_K@Z")(n);
+}
+void* RenderBufferOperatorNew(uint64_t n) {
+    return RT_EXPORT_ONCE(NewFn, "??2RenderBuffer@Video@@SAPEAX_K@Z")(n);
+}
+void ImageBufferCtor(void* p) { RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")(p); }
+void RenderBufferPlatformConstruct(void* p) {
+    RT_EXPORT_ONCE(VoidThisFn, "?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ")(p);
+}
+using RbCreateFn = bool (*)(void*, const void*, const void*);
+bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
+    return RT_EXPORT_ONCE(RbCreateFn,
+        "?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z")(rb, colour, depth);
+}
+
+// Video::Context setters DrawItemList drives. Both PORTED (video/context.cpp)
+// and registered by name and address.
+using SetCameraFn    = void (*)(void*, const void*, const void*);
+using SetTransformFn = void (*)(void*, int32_t, const void*);
+void ContextSetCamera(void* ctx, const void* view, const void* proj) {
+    RT_EXPORT_ONCE(SetCameraFn,
+        "?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z")(ctx, view, proj);
+}
+void ContextSetTransform(void* ctx, int32_t slot, const void* m) {
+    RT_EXPORT_ONCE(SetTransformFn,
+        "?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z")(ctx, slot, m);
+}
+
+// `?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z` 0x180102c90 —
+// PORTED (wave21_lane_gfxbody.cpp).
+using MatSetupFn = void (*)(const void*, void*, int32_t);
+void MaterialInstanceSetup(const void* mi, void* ctx, int32_t shader) {
+    RT_EXPORT_ONCE(MatSetupFn,
+        "?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z")(mi, ctx, shader);
+}
+
+// The `1.0f` at 0x18016169c, as a BIT PATTERN read out of the image rather
+// than converted from decimal (lights_vtable.cpp's rule).
+constexpr uint32_t kBits_one = 0x3f800000u;
+float AsFloat(uint32_t bits) { float f; std::memcpy(&f, &bits, 4); return f; }
+
+// ---------------------------------------------------------------------------
+// The System::String release idiom, spelled once. Retail open-codes it at four
+// sites in this file.
+//
+//   if (!s) return;
+//   if (--s[-1] != 0) { *slot = nullptr; return; }     // a reference survives
+//   *slot = s - 8;                                      // LAST reference:
+//   MemFree(*slot);                                     // slot keeps str-8
+//
+// THE SLOT IS DELIBERATELY LEFT DANGLING ON THE FREE ARM. That is what
+// 0x1800fb2c2/0x1800e040e/0x180103e17 do, and vtbatch7b_stream_run_win.cpp's
+// ReleaseString already records the same shape. `checkZeroAfterAdjust` is
+// ~Particle's extra twist: it branches on the ZF of the `ADD qword [slot],-8`
+// and skips the free when the adjusted pointer is zero.
+// ---------------------------------------------------------------------------
+void ReleaseString(void** slot, bool checkZeroAfterAdjust) {
+    uint8_t* s = static_cast<uint8_t*>(*slot);
+    if (s == nullptr) return;
+    int32_t* rc = reinterpret_cast<int32_t*>(s - 4);
+    --(*rc);
+    if (*rc != 0) { *slot = nullptr; return; }
+    uint8_t* blk = s - 8;
+    *slot = blk;                                 // ADD qword [slot],-8
+    if (checkZeroAfterAdjust && blk == nullptr) return;   // JZ on that ADD's ZF
+    rtcoll::MemFree(blk);
+}
+
+}  // namespace
+
+// ~Particle is defined below; ~ParticleSystem TAIL-JUMPS it (0x1800a530d
+// `JMP 0x180103c70`). Called DIRECTLY rather than through ResolveAddr, because
+// a resolve-by-address here would be a port reaching past its own sibling
+// registration into the DLL (reference_bypassed_port_needs_a_source_checker.md).
+extern "C" void RtGraphics_Particle_Dtor(void* selfv);
+
+// ############################################################################
+// Graphics::MaterialInstance::GenerateTextures
+// ?GenerateTextures@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z
+// retail 0x180102eb0, ordinal 2402
+// ############################################################################
+//
+// The render-TO-texture sibling of `RenderTextures` (0x180102df0, ported in
+// wave9_lane_gfx.cpp): same walk over `_textures` (0x10 stride, count at
+// +0x58), but gated on `hasRenderTexture` (+0x24, not +0x25), selecting
+// entries whose kind is 4 (not 5) and dispatching vtable slot +0x50 (not
+// +0x58) with (Context&, int).
+//
+// THE SAME TWO FAITHFUL UGLINESSES AS ITS SIBLING, both kept:
+//   * `obj->+0x2c` is dereferenced BEFORE `obj` is null-checked (0x180102eea
+//     vs 0x180102f02). A null entry faults in retail and faults here.
+//   * the loop bound `*(int*)(this+0x58)` is RE-READ every iteration
+//     (0x180102f1c), not hoisted, so a slot-0x50 handler that appends a
+//     texture is seen.
+//
+// ORACLE: none. The dispatch renders into a GPU target; running the shipped
+// body afterwards would render a second time. RT_DIFF_WORK is the effectiveness
+// control — almost every call returns at the +0x24 test.
+// ############################################################################
+extern "C" void RtGraphics_MaterialInstance_GenerateTextures(const void* selfv,
+                                                             void* ctx, int32_t arg) {
+    RT_DIFF_BEGIN("Graphics::MaterialInstance::GenerateTextures");
+    const MaterialInstance* self = static_cast<const MaterialInstance*>(selfv);
+
+    const bool didWork = (self->hasRenderTexture != 0) && (self->textures._size > 0);
+    RT_DIFF_WORK(didWork);
+
+    if (self->hasRenderTexture == 0) {
+        RT_DIFF_SHADOW(true, "no render-texture bound", "attendance only");
+        return;
+    }
+
+    for (int32_t i = 0; i < self->textures._size; ++i) {
+        const uint8_t* entry =
+            reinterpret_cast<const uint8_t*>(self->textures._data) +
+            static_cast<int64_t>(i) * 0x10;
+        void* obj = *reinterpret_cast<void* const*>(entry + 8);
+
+        if (*reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(obj) + 0x2c) != 4)
+            continue;
+        if (obj == nullptr)                      // retail's order: after the deref
+            continue;
+
+        void** vt = *reinterpret_cast<void***>(obj);
+        using Slot50 = void (*)(void*, void*, int32_t);
+        reinterpret_cast<Slot50>(vt[0x50 / 8])(obj, ctx, arg);
+    }
+
+    RT_DIFF_SHADOW(true, "generated every kind-4 texture", "attendance only");
+}
+
+// ############################################################################
+// Graphics::ParticleSystemInstance::~ParticleSystemInstance
+// ??1ParticleSystemInstance@Graphics@@UEAA@XZ   retail 0x1800a5520, ordinal 646
+// ############################################################################
+//
+//   this->vtable = ??_7ParticleSystemInstance@
+//   if (this->_resource->[0x20] == 0 && this->_f_d8)      // UNGUARDED deref
+//       { ArrayDtor(_f_d8); operator delete(_f_d8); }
+//   this->vtable = ??_7ParticleInstance@
+//   ParticleInstance::RemoveState(this)
+//   tail ~Geometry(this)
+//
+// `this->_resource` (+0xc0) IS DEREFERENCED WITHOUT A NULL TEST (0x1800a5545).
+// The ctor initialises it to null, so a ParticleSystemInstance destroyed before
+// anything attached a resource faults in retail. Reproduced, not guarded
+// (CLAUDE.md: a guard skips the behaviour rather than restoring it).
+// ############################################################################
+extern "C" void RtGraphics_ParticleSystemInstance_Dtor(void* selfv) {
+    RT_DIFF_BEGIN("Graphics::ParticleSystemInstance::~ParticleSystemInstance");
+    uint8_t* const self = static_cast<uint8_t*>(selfv);
+
+    *reinterpret_cast<void**>(self) = VtParticleSystemInstance();
+
+    const uint8_t* const resource = *reinterpret_cast<const uint8_t* const*>(self + 0xc0);
+    if (resource[0x20] == 0) {
+        void* const owned = *reinterpret_cast<void**>(self + 0xd8);
+        if (owned != nullptr) {
+            // 0x180021490: ~Array<T> for a trivially destructible T — frees
+            // [0] and zeroes [0]/[8]. 0x180020600: the matching class
+            // operator delete. Both unexported template instantiations; both
+            // still the DLL's, reached registry-first by address.
+            RtAddr<PtrThisFn>(0x180021490ull)(owned);
+            RtAddr<VoidThisFn>(0x180020600ull)(owned);
+        }
+    }
+
+    *reinterpret_cast<void**>(self) = VtParticleInstance();
+    ParticleInstanceRemoveState(self);
+    GeometryDtor(self);                                 // JMP 0x1800a41c0
+
+    RT_DIFF_SHADOW(true, "instance torn down", "not diffable (frees the object)");
+}
+
+// ############################################################################
+// Graphics::ParticleSystem::~ParticleSystem
+// ??1ParticleSystem@Graphics@@UEAA@XZ           retail 0x1800a51c0, ordinal 645
+// ############################################################################
+//
+//   this->vtable = ??_7ParticleSystem@
+//   for (i = 0; i < this->[0x100]; ++i) {         // bound RE-READ each pass
+//       e = ((void**)this->[0xf8])[i];            // base RE-READ each pass
+//       if (!e) continue;
+//       if (e[0]) MemFree(e[0]);
+//       e[0] = 0; e[1] = 0;
+//       MemFree(e);
+//   }
+//   if (this->[0xf8]) MemFree(this->[0xf8]);
+//   this->[0xf8] = 0; this->[0x100] = 0;          // ONE qword: size AND capacity
+//   tail ~Particle(this)
+//
+// i.e. an `Array<Array<T>*>` of OWNED inner arrays. The lock/Free/unlock triple
+// retail inlines at each of the four free sites IS `MemFree` (0x1800c7ad0)
+// instruction for instruction — goal_list.cpp:194 already records that — so
+// rtcoll::MemFree reproduces it, including its own internal null test.
+// ############################################################################
+extern "C" void RtGraphics_ParticleSystem_Dtor(void* selfv) {
+    RT_DIFF_BEGIN("Graphics::ParticleSystem::~ParticleSystem");
+    uint8_t* const self = static_cast<uint8_t*>(selfv);
+
+    *reinterpret_cast<void**>(self) = VtParticleSystem();
+
+    for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(self + 0x100); ++i) {
+        void** const data = *reinterpret_cast<void***>(self + 0xf8);
+        void** const e = static_cast<void**>(data[i]);
+        if (e == nullptr) continue;
+        if (e[0] != nullptr) rtcoll::MemFree(e[0]);
+        e[0] = nullptr;
+        e[1] = nullptr;
+        rtcoll::MemFree(e);
+    }
+
+    if (*reinterpret_cast<void**>(self + 0xf8) != nullptr)
+        rtcoll::MemFree(*reinterpret_cast<void**>(self + 0xf8));
+    *reinterpret_cast<void**>(self + 0xf8) = nullptr;
+    *reinterpret_cast<uint64_t*>(self + 0x100) = 0;      // _size AND _capacity
+
+    RtGraphics_Particle_Dtor(self);                      // JMP 0x180103c70
+
+    RT_DIFF_SHADOW(true, "system torn down", "not diffable (frees the object)");
+}
+
+// ############################################################################
+// Graphics::Particle::~Particle
+// ??1Particle@Graphics@@UEAA@XZ                 retail 0x180103c70, ordinal 643
+// ############################################################################
+//
+//   this->vtable = ??_7Particle@
+//   for (i = 0; i < this->[0x40]; ++i) {          // same owned-array walk as
+//       e = ((uint8**)this->[0x38])[i];           // ~ParticleSystem's, except
+//       if (!e) continue;                         // the inner Array lives at
+//       if (e[0x18]) MemFree(e[0x18]);            // element+0x18, not +0x00
+//       e[0x18] = 0; e[0x20] = 0;
+//       MemFree(e);
+//   }
+//   if (this->[0x38]) MemFree(this->[0x38]);
+//   this->[0x38] = 0; this->[0x40] = 0;
+//   -- Object::External::~External, FULLY INLINED (not called): --
+//   this->vtable = ??_7External@Object@@6B@
+//   DestroyRefRange(this, this->_refs._data, this->_refs._size)   ; 0x180006ac0
+//   if (this->_refs._data) MemFree(...)
+//   this->_refs._data = 0; this->_refs._size/_capacity = 0
+//   ReleaseString(&this->_path)
+//   this->vtable = ??_7Base@Object@@6B@
+//
+// The External teardown is INLINED by the shipped compiler, so it is
+// transcribed here rather than delegated to the ported ??1External — the two
+// are not the same function and a call would stamp the External vtable twice.
+// ############################################################################
+extern "C" void RtGraphics_Particle_Dtor(void* selfv) {
+    RT_DIFF_BEGIN("Graphics::Particle::~Particle");
+    uint8_t* const self = static_cast<uint8_t*>(selfv);
+
+    *reinterpret_cast<void**>(self) = VtParticle();
+
+    for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(self + 0x40); ++i) {
+        uint8_t** const data = *reinterpret_cast<uint8_t***>(self + 0x38);
+        uint8_t* const e = data[i];
+        if (e == nullptr) continue;
+        void** const inner = reinterpret_cast<void**>(e + 0x18);
+        if (inner[0] != nullptr) rtcoll::MemFree(inner[0]);
+        inner[0] = nullptr;                               // e+0x18
+        *reinterpret_cast<void**>(e + 0x20) = nullptr;    // e+0x20
+        rtcoll::MemFree(e);
+    }
+
+    if (*reinterpret_cast<void**>(self + 0x38) != nullptr)
+        rtcoll::MemFree(*reinterpret_cast<void**>(self + 0x38));
+    *reinterpret_cast<void**>(self + 0x38) = nullptr;
+    *reinterpret_cast<uint64_t*>(self + 0x40) = 0;
+
+    // ---- Object::External::~External, inlined by retail --------------------
+    *reinterpret_cast<void**>(self) = VtObjectExternal();
+
+    // 0x180006ac0 — the 0x10-stride range destroy. PORTED AND REGISTERED
+    // (array_destroy.cpp, Body B / kD_Str_10); ResolveAddr is registry-first so
+    // this reaches our body.
+    {
+        using RangeDtorFn = void (*)(void*, void*, int32_t);
+        RtAddr<RangeDtorFn>(0x180006ac0ull)(
+            self,
+            *reinterpret_cast<void**>(self + 0x10),
+            *reinterpret_cast<const int32_t*>(self + 0x18));
+    }
+    if (*reinterpret_cast<void**>(self + 0x10) != nullptr)
+        rtcoll::MemFree(*reinterpret_cast<void**>(self + 0x10));
+    *reinterpret_cast<void**>(self + 0x10) = nullptr;
+    *reinterpret_cast<uint64_t*>(self + 0x18) = 0;
+
+    ReleaseString(reinterpret_cast<void**>(self + 0x08), /*checkZeroAfterAdjust=*/true);
+
+    *reinterpret_cast<void**>(self) = VtObjectBase();
+
+    RT_DIFF_SHADOW(true, "particle torn down", "not diffable (frees the object)");
+}
+
+// ############################################################################
+// Graphics::Animation::Animation(const Animation&)
+// ??0Animation@Graphics@@QEAA@AEBV01@@Z         retail 0x1800160a0, ordinal 38
+// ############################################################################
+//
+// The COPY constructor, not the default one. Returns `this` in RAX.
+//
+//   this->[0x00] = 0; this->[0x08] = 0;  ArrayAssign_18001b270(this,   &src)
+//   AcquireString(&this->[0x10], src->[0x10])     ; +0 then ++refcount
+//   AcquireString(&this->[0x18], src->[0x18])
+//   AcquireString(&this->[0x20], src->[0x20])
+//   +0x28 int, +0x2c byte, +0x30/+0x34/+0x38 int, +0x3c byte,
+//   +0x40/+0x44/+0x48/+0x4c/+0x50 int, +0x58 qword   — all plain copies
+//   this->[0x60] = 0; this->[0x68] = 0;  ArrayAssign_18001b360(this+0x60, src+0x60)
+//   return this
+//
+// THE TWO ARRAY MEMBERS ARE ZEROED BEFORE THE ASSIGN, not after: the assign
+// helper reads the destination's `_data`/`_size` to decide whether to reuse the
+// buffer, so a copy ctor that did not clear them first would free the SOURCE
+// object's memory. Both helpers are unexported template instantiations still on
+// the DLL (0x18001b270 for the +0x00 element type, 0x18001b360 for the +0x60
+// one — the latter is the `TransformArrayAssign` picking/scene_grid.cpp names).
+//
+// +0x54 IS NOT COPIED. Retail copies +0x50 as a dword and then +0x58 as a
+// qword, leaving the four bytes at +0x54 holding whatever the allocator handed
+// back. Left alone here for the reason Camera.h's `_pad24` note gives: zeroing
+// it would make our copy differ from retail's on a byte retail never writes.
+// ############################################################################
+extern "C" void* RtGraphics_Animation_CopyCtor(void* selfv, const void* srcv) {
+    RT_DIFF_BEGIN("Graphics::Animation::Animation(const Animation&)");
+    uint8_t* const self = static_cast<uint8_t*>(selfv);
+    const uint8_t* const src = static_cast<const uint8_t*>(srcv);
+
+    using ArrayAssignFn = void (*)(void*, const void*);
+
+    *reinterpret_cast<uint64_t*>(self + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(self + 0x08) = 0;
+    RtAddr<ArrayAssignFn>(0x18001b270ull)(self, src);
+
+    // The three refcounted names, ASCENDING — the mirror of the destructor's
+    // descending release. Each slot is zeroed first and only then overwritten,
+    // exactly as retail does it (`MOV [RBX+off],RSI` with RSI == 0, then the
+    // conditional store and `INC dword [RAX-4]`).
+    const uint32_t kStrOffsets[3] = { 0x10u, 0x18u, 0x20u };
+    for (int k = 0; k < 3; ++k) {
+        const uint32_t off = kStrOffsets[k];
+        *reinterpret_cast<void**>(self + off) = nullptr;
+        uint8_t* s = *reinterpret_cast<uint8_t* const*>(src + off);
+        if (s != nullptr) {
+            *reinterpret_cast<uint8_t**>(self + off) = s;
+            ++(*reinterpret_cast<int32_t*>(s - 4));
+        }
+    }
+
+    *reinterpret_cast<int32_t*>(self + 0x28) = *reinterpret_cast<const int32_t*>(src + 0x28);
+    self[0x2c] = src[0x2c];
+    *reinterpret_cast<int32_t*>(self + 0x30) = *reinterpret_cast<const int32_t*>(src + 0x30);
+    *reinterpret_cast<int32_t*>(self + 0x34) = *reinterpret_cast<const int32_t*>(src + 0x34);
+    *reinterpret_cast<int32_t*>(self + 0x38) = *reinterpret_cast<const int32_t*>(src + 0x38);
+    self[0x3c] = src[0x3c];
+    *reinterpret_cast<int32_t*>(self + 0x40) = *reinterpret_cast<const int32_t*>(src + 0x40);
+    *reinterpret_cast<int32_t*>(self + 0x44) = *reinterpret_cast<const int32_t*>(src + 0x44);
+    *reinterpret_cast<int32_t*>(self + 0x48) = *reinterpret_cast<const int32_t*>(src + 0x48);
+    *reinterpret_cast<int32_t*>(self + 0x4c) = *reinterpret_cast<const int32_t*>(src + 0x4c);
+    *reinterpret_cast<int32_t*>(self + 0x50) = *reinterpret_cast<const int32_t*>(src + 0x50);
+    // +0x54 deliberately untouched — see the banner.
+    *reinterpret_cast<uint64_t*>(self + 0x58) = *reinterpret_cast<const uint64_t*>(src + 0x58);
+
+    *reinterpret_cast<uint64_t*>(self + 0x60) = 0;
+    *reinterpret_cast<uint64_t*>(self + 0x68) = 0;
+    RtAddr<ArrayAssignFn>(0x18001b360ull)(self + 0x60, src + 0x60);
+
+    RT_DIFF_SHADOW(true, "animation copied", "not diffable (aliases the source's strings)");
+    return self;                                          // MOV RAX,RBX
+}
+
+// ############################################################################
+// Graphics::Animation::~Animation
+// ??1Animation@Graphics@@QEAA@XZ                retail 0x1800fb290, ordinal 525
+// ############################################################################
+//
+//   ArrayDtor_18001c100(this + 0x60)        ; the Transform array
+//   ReleaseString(&this->[0x20])            ; the three names, in DESCENDING
+//   ReleaseString(&this->[0x18])            ; offset order — the mirror of the
+//   ReleaseString(&this->[0x10])            ; copy ctor's ascending acquire
+//   tail ArrayDtor_18001c020(this)          ; the +0x00 array
+//
+// NO VTABLE: `??1Animation@...QEAA@XZ` is a Q, not a U, and the body stamps
+// nothing. Graphics::Animation is plain data, like AnimationManager.
+// ############################################################################
+extern "C" void RtGraphics_Animation_Dtor(void* selfv) {
+    RT_DIFF_BEGIN("Graphics::Animation::~Animation");
+    uint8_t* const self = static_cast<uint8_t*>(selfv);
+
+    RtAddr<PtrThisFn>(0x18001c100ull)(self + 0x60);
+
+    ReleaseString(reinterpret_cast<void**>(self + 0x20), /*checkZeroAfterAdjust=*/false);
+    ReleaseString(reinterpret_cast<void**>(self + 0x18), /*checkZeroAfterAdjust=*/false);
+    ReleaseString(reinterpret_cast<void**>(self + 0x10), /*checkZeroAfterAdjust=*/false);
+
+    RtAddr<PtrThisFn>(0x18001c020ull)(self);              // JMP 0x18001c020
+
+    RT_DIFF_SHADOW(true, "animation torn down", "not diffable (releases strings)");
+}
+
+// ############################################################################
+// Graphics::EdgeMesh::~EdgeMesh
+// ??1EdgeMesh@Graphics@@UEAA@XZ                 retail 0x1800a2780, ordinal 580
+// ############################################################################
+//
+//   this->vtable = ??_7EdgeMesh@
+//   ArrayDtor_180013e70(&_edgeLists)      +0x158
+//   ArrayDtor_180013e70(&_triangleLists)  +0x148
+//   IndexBuffer::PlatformDestruct (+0x128)   VertexBuffer::PlatformDestruct (+0x108)
+//   IndexBuffer::PlatformDestruct (+0x0e8)   VertexBuffer::PlatformDestruct (+0x0c8)
+//   IndexBuffer::PlatformDestruct (+0x0a8)   VertexBuffer::PlatformDestruct (+0x088)
+//   IndexBuffer::PlatformDestruct (+0x068)   VertexBuffer::PlatformDestruct (+0x048)
+//   tail ~External(this)
+//
+// DESCENDING ADDRESS ORDER, INDICES BEFORE VERTS within each pair — the exact
+// reverse of the constructor's build order (Mesh.h's EdgeMesh banner).
+// ############################################################################
+extern "C" void RtGraphics_EdgeMesh_Dtor(void* selfv) {
+    RT_DIFF_BEGIN("Graphics::EdgeMesh::~EdgeMesh");
+    EdgeMesh* const self = static_cast<EdgeMesh*>(selfv);
+
+    self->_vtable = VtEdgeMesh();
+
+    // 0x180013e70 — Array<T>::~Array for the two list arrays. An unexported
+    // template instantiation, still the DLL's, reached registry-first.
+    RtAddr<PtrThisFn>(0x180013e70ull)(&self->_edgeLists);
+    RtAddr<PtrThisFn>(0x180013e70ull)(&self->_triangleLists);
+
+    IndexBufferPlatformDestruct(&self->_extraIndices);
+    VertexBufferPlatformDestruct(&self->_extraVerts);
+    IndexBufferPlatformDestruct(&self->_capIndices);
+    VertexBufferPlatformDestruct(&self->_capVerts);
+    IndexBufferPlatformDestruct(&self->_edgeIndices);
+    VertexBufferPlatformDestruct(&self->_edgeVerts);
+    IndexBufferPlatformDestruct(&self->_triIndices);
+    VertexBufferPlatformDestruct(&self->_triVerts);
+
+    ExternalDtor(self);                                   // JMP 0x1800bc950
+
+    RT_DIFF_SHADOW(true, "edge mesh torn down", "not diffable (releases GPU buffers)");
+}
+
+// ############################################################################
+// Graphics::SpotLight::CreateTargets
+// ?CreateTargets@SpotLight@Graphics@@AEAAXXZ    retail 0x180106050, ordinal 2135
+// ############################################################################
+//
+// Builds the shadow-map trio lights_vtable.cpp's SpotLight banner describes:
+// +0x148 the colour image, +0x150 the depth image, +0x158 the render target.
+//
+//   p = ImageBuffer::operator new(0x68); this->_shadowMap = p ? (ImageBuffer(p), p) : 0
+//   this->_shadowMap->vt[9](this->_shadowMap, 0, 0, 5, 0x40, 0x400, 0x400, 1,1,1,1, null)
+//   p = ImageBuffer::operator new(0x68); this->_shadowDepth = p ? (ImageBuffer(p), p) : 0
+//   this->_shadowDepth->vt[9](..., 0, 1, 7, 0x40, 0x400, 0x400, 1,1,1,1, null)
+//   p = RenderBuffer::operator new(0x30)
+//   if (p) { p[0]=p[1]=p[2]=0; RenderBuffer::PlatformConstruct(p); }
+//   this->_shadowTarget = p
+//   tail RenderBuffer::Create(p, this->_shadowMap, this->_shadowDepth)
+//
+// The eleven Create arguments are in RETAIL'S OWN ORDER, read from the stack
+// stores at 0x1801060d5..0x180106112 — NOT assumed from the field order, which
+// they do not follow (the trap imagebuffer_derived.cpp documents for
+// ReflectionImageBuffer::Serialize). `usage` 1 + `format` 7 on the second call
+// is what makes it the DEPTH buffer; 0x400 x 0x400 is the 1024² shadow map.
+//
+// THE CTOR'S RETURN VALUE IS NOT USED. Retail stores the ctor's RAX
+// (`MOV RCX,RAX ; MOV [RSI+0x148],RCX`), and the ctor returns `this`, so the
+// stored pointer is the allocation either way — spelled with the allocation
+// here for the reason wave23_lane_gfxbody.cpp gives.
+//
+// AN UNGUARDED DEREF, KEPT: when `operator new` returns null the field is set
+// to null and `MOV RAX,[RCX]` at 0x1801060d2 immediately reads through it.
+// Retail faults there; so does this.
+// ############################################################################
+extern "C" void RtGraphics_SpotLight_CreateTargets(void* selfv) {
+    RT_DIFF_BEGIN("Graphics::SpotLight::CreateTargets");
+    uint8_t* const self = static_cast<uint8_t*>(selfv);
+
+    using CreateFn = bool (*)(void*, int32_t, int32_t, int32_t, uint32_t,
+                              int32_t, int32_t, int32_t,
+                              int32_t, int32_t, int32_t, void*);
+
+    // ---- +0x148, the shadow colour image ----------------------------------
+    {
+        void* p = ImageBufferOperatorNew(0x68);
+        if (p != nullptr) ImageBufferCtor(p);
+        *reinterpret_cast<void**>(self + 0x148) = p;
+        void* const img = *reinterpret_cast<void**>(self + 0x148);
+        void** const vt = *reinterpret_cast<void***>(img);      // faithful: unguarded
+        reinterpret_cast<CreateFn>(vt[9])(img, 0, 0, 5,
+                                          0x40u, 0x400, 0x400,
+                                          1, 1, 1, 1, nullptr);
+    }
+
+    // ---- +0x150, the shadow depth image ------------------------------------
+    {
+        void* p = ImageBufferOperatorNew(0x68);
+        if (p != nullptr) ImageBufferCtor(p);
+        *reinterpret_cast<void**>(self + 0x150) = p;
+        void* const img = *reinterpret_cast<void**>(self + 0x150);
+        void** const vt = *reinterpret_cast<void***>(img);
+        reinterpret_cast<CreateFn>(vt[9])(img, 0, 1, 7,
+                                          0x40u, 0x400, 0x400,
+                                          1, 1, 1, 1, nullptr);
+    }
+
+    // ---- +0x158, the render target -----------------------------------------
+    void* rb = RenderBufferOperatorNew(0x30);
+    if (rb != nullptr) {
+        reinterpret_cast<uint64_t*>(rb)[0] = 0;
+        reinterpret_cast<uint64_t*>(rb)[1] = 0;
+        reinterpret_cast<uint64_t*>(rb)[2] = 0;
+        RenderBufferPlatformConstruct(rb);
+    }
+    *reinterpret_cast<void**>(self + 0x158) = rb;
+
+    RenderBufferCreate(rb,
+                       *reinterpret_cast<void**>(self + 0x148),
+                       *reinterpret_cast<void**>(self + 0x150));   // JMP 0x1800f3f10
+
+    RT_DIFF_SHADOW(true, "shadow map / depth / target built",
+                   "not diffable (allocates GPU resources)");
+}
+
+// ############################################################################
+// Graphics::GraphicsMesh::PlatformSerialize
+// ?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z
+// retail 0x1800a48e0, ordinal 3386
+// ############################################################################
+//
+// TWO device-interface arms over one stream, the shape
+// runtime/src/video/shaderprogram.cpp spells out. Arm 0 runs when
+// `Video::Device::_singleton->activeInterface == 0`; arm 1 runs when it is 1 or
+// 2. Each builds its OWN ReaderWriter; the arm whose interface is not active
+// calls `Skip()` so the stream still advances past that backend's blob.
+//
+// The detail level is the 0xb0-stride record Mesh.h's GraphicsMeshView pins
+// (data at mesh+0x50, count at mesh+0x58). Within it:
+//   +0x20 / +0x40 / +0x60 / +0x80  four Video buffer objects, each serialized
+//                                  through ITS OWN vtable slot +0x30, and in
+//                                  the order 0x40, 0x20, 0x80, 0x60 — NOT
+//                                  ascending, and not a transcription slip
+//                                  (the same crossed order EdgeMesh::SetMaterials
+//                                  has, Mesh.h's note).
+//   +0x98 / +0xa0                  Collection::Array<Triangle>, 0x18 stride
+//   +0xa8                          a trailing int
+//
+// THE VERSION GATE READS THE **OUTER** READER/WRITER, not the arm's own
+// (0x1800a4961: `MOV RCX,[R15+8]`). When it says >= 1 each arm emits one extra
+// int whose value is DISCARDED on read — a local initialised to zero.
+// ############################################################################
+namespace {
+
+constexpr uint32_t kLvlStride   = 0xb0;
+constexpr uint32_t kLvlBuf20    = 0x20;
+constexpr uint32_t kLvlBuf40    = 0x40;
+constexpr uint32_t kLvlBuf60    = 0x60;
+constexpr uint32_t kLvlBuf80    = 0x80;
+constexpr uint32_t kLvlTriData  = 0x98;
+constexpr uint32_t kLvlTriCount = 0xa0;
+constexpr uint32_t kLvlTail     = 0xa8;
+static_assert(kLvlTail + 4 <= kLvlStride, "detail-level fields must fit the 0xb0 stride");
+static_assert(kLvlTriCount == kLvlTriData + 8,
+              "the triangle Array's _size must follow its _data, Collection::Array shape");
+
+using ScalarFn   = void (*)(ReaderWriter*, void*, const char*);
+using VersionFn  = int  (*)(ReaderWriter*);
+using SkipFn     = void (*)(ReaderWriter*);
+using SetSizeFn  = void (*)(void*, int32_t);
+using SerNFn     = void (*)(Serializer*, int32_t, void*);
+using BufSerFn   = void (*)(void*, Serializer*);
+
+void RwInt(ReaderWriter* rw, void* p) {
+    reinterpret_cast<ScalarFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, p, nullptr);
+}
+int RwVersion(ReaderWriter* rw) {
+    return reinterpret_cast<VersionFn>(rw->vtable[rt::io::rw_vtbl::kGetVersion / 8])(rw);
+}
+void DeleteRw(ReaderWriter* rw) {
+    if (rw == nullptr) return;
+    using DeleteFn = void (*)(ReaderWriter*, int);
+    reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
+}
+bool IsReading(const Stream* s) { return s->direction == rt::io::kDirectionReading; }
+
+ReaderWriter* MakeReaderWriter(Serializer* ser) {
+    Stream* stream = ser->stream;
+    void** encVt = *reinterpret_cast<void***>(stream->encoding);
+    const int slot = IsReading(stream) ? rt::io::encoding_vtbl::kCreateReader
+                                       : rt::io::encoding_vtbl::kCreateWriter;
+    using MakeRwFn = ReaderWriter* (*)(void*, Serializer*, int);
+    ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, ser, 0);
+    ser->readerWriter = rw;
+    return rw;
+}
+
+// `?_singleton@Device@Video@@0PEAV12@EA` @ 0x1801fe7a8; Device+0xF8 is
+// `activeInterface` (runtime/types/video/Device.h). Same accessor
+// shaderprogram.cpp carries, including the null test's justification: retail's
+// own static could not be null, but RT_DATA_SLOT can hand back an unfilled mint
+// slot.
+int32_t ActiveInterface() {
+    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    void* device = slot ? *slot : nullptr;
+    if (!device) return -1;
+    return *reinterpret_cast<int32_t*>(static_cast<uint8_t*>(device) + 0xF8);
+}
+
+void SerializeBufferSlot(uint8_t* level, uint32_t off, Serializer* sub) {
+    void* obj = *reinterpret_cast<void**>(level + off);
+    void** vt = *reinterpret_cast<void***>(obj);            // faithful: unguarded
+    reinterpret_cast<BufSerFn>(vt[0x30 / 8])(obj, sub);
+}
+
+}  // namespace
+
+extern "C" void RtGraphics_GraphicsMesh_PlatformSerialize(void* selfv, void* serv) {
+    RT_DIFF_BEGIN("Graphics::GraphicsMesh::PlatformSerialize");
+    uint8_t* const self = static_cast<uint8_t*>(selfv);
+    Serializer* const outer = static_cast<Serializer*>(serv);
+
+    // `if (!stream->encoding->vtable[0](encoding)) return;` — the encoding
+    // policy object's "does this stream carry platform data at all" slot.
+    {
+        void** encVt = *reinterpret_cast<void***>(outer->stream->encoding);
+        using CarriesPlatformDataFn = bool (*)(void*);
+        if (!reinterpret_cast<CarriesPlatformDataFn>(encVt[0])(outer->stream->encoding)) {
+            RT_DIFF_WORK(false);
+            RT_DIFF_SHADOW(true, "stream carries no platform data", "attendance only");
+            return;
+        }
+    }
+    RT_DIFF_WORK(true);
+
+    const int32_t levelCount = *reinterpret_cast<const int32_t*>(self + 0x58);
+
+    for (int arm = 0; arm < 2; ++arm) {
+        Serializer sub = { outer->stream, nullptr };
+        ReaderWriter* rw = MakeReaderWriter(&sub);
+
+        const int32_t iface = ActiveInterface();
+        const bool active = (arm == 0) ? (iface == 0) : (iface == 1 || iface == 2);
+        if (!active) {
+            reinterpret_cast<SkipFn>(rw->vtable[rt::io::rw_vtbl::kSkip / 8])(rw);
+            DeleteRw(rw);
+            continue;
+        }
+
+        // The gate reads the OUTER reader/writer — see the banner.
+        if (RwVersion(outer->readerWriter) >= 1) {
+            int32_t discarded = 0;
+            RwInt(rw, &discarded);
+        }
+
+        for (int32_t i = 0; i < levelCount; ++i) {
+            // `this->[0x50]` is RE-READ every iteration (0x1800a49a0 /
+            // 0x1800a4b30), so a slot-0x30 handler that reallocates the level
+            // array is seen. Not hoisted.
+            uint8_t* const level =
+                *reinterpret_cast<uint8_t**>(self + 0x50) +
+                static_cast<int64_t>(i) * kLvlStride;
+
+            int32_t n = *reinterpret_cast<const int32_t*>(level + kLvlTriCount);
+            RwInt(rw, &n);
+            if (IsReading(sub.stream))
+                RtAddr<SetSizeFn>(0x1800136f0ull)(level + kLvlTriData, n);   // Array<Triangle>::SetSize
+
+            void* triData = *reinterpret_cast<void**>(level + kLvlTriData);
+            if (arm == 0) {
+                // 0x180014850 SerializeTriangleListArray(ctx, count, data) —
+                // PORTED (closure_batch2b.cpp) and registered by address.
+                RtAddr<SerNFn>(0x180014850ull)(&sub, n, triData);
+            } else {
+                // The same six dwords per element, emitted inline by retail on
+                // this arm (0x1800a4b90..0x1800a4c0e, stride 0x18).
+                uint8_t* e = static_cast<uint8_t*>(triData);
+                for (int32_t j = 0; j < n; ++j, e += 0x18) {
+                    RwInt(rw, e + 0x00);
+                    RwInt(rw, e + 0x04);
+                    RwInt(rw, e + 0x08);
+                    RwInt(rw, e + 0x0c);
+                    RwInt(rw, e + 0x10);
+                    RwInt(rw, e + 0x14);
+                }
+            }
+
+            uint8_t* const lvl2 = *reinterpret_cast<uint8_t**>(self + 0x50) +
+                                  static_cast<int64_t>(i) * kLvlStride;
+            SerializeBufferSlot(lvl2, kLvlBuf40, &sub);
+            SerializeBufferSlot(lvl2, kLvlBuf20, &sub);
+            SerializeBufferSlot(lvl2, kLvlBuf80, &sub);
+            SerializeBufferSlot(lvl2, kLvlBuf60, &sub);
+
+            uint8_t* const lvl3 = *reinterpret_cast<uint8_t**>(self + 0x50) +
+                                  static_cast<int64_t>(i) * kLvlStride;
+            RwInt(rw, lvl3 + kLvlTail);
+        }
+
+        DeleteRw(rw);
+    }
+
+    RT_DIFF_SHADOW(true, "both device arms streamed",
+                   "not diffable (a replay would move the stream cursor)");
+}
+
+// ############################################################################
+// Graphics::Renderer::DrawItemList
+// ?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z
+// retail 0x180105240, ordinal 2279
+// ############################################################################
+//
+// FIVE VALUES: (this, Context&, int group, int list, int shader). The fifth
+// travels in its own home slot at [RBP+0xc0] and is the SHADER INDEX — see
+// point 1 of this file's banner, and lights_vtable.cpp's own note about the
+// three Draw arms that write their arg5 home slot before tail-jumping here.
+//
+// SHAPE
+//   group = this->_drawGroups._data + group*0x1f0
+//   SetCamera(ctx, Matrix(group->cullCamera.cameraToWorld), group->cullCamera.projection)
+//   items = group->items[list]                  ; group + 0x1c0 + list*0x10
+//   for (i = 0; i < items._size; ) {
+//       item = items._data + i*0x38
+//       step = 1
+//       if (shader >= 0 && shader < item->material->_programCount) {
+//           prog = item->material->_programs[shader]
+//           if (prog->[0x20] && prog->[0x28] && prog->[0x28]->[0x48] > 0
+//                            && prog->[0x30] && prog->[0x30]->[0x48] > 0) {
+//               if (shader == 0 && item->instance->hasRenderTexture)
+//                   GenerateTextures(item->instance, ctx, this->contextSerial)
+//               MaterialInstance::Setup(item->instance, ctx, shader)
+//               if (item->arg8 > 1) { ...the instancing batch, below... }
+//               item->geometry->vt[2](geometry, ctx, &group->cullCamera,
+//                                     item->instance, this->frameAlpha,
+//                                     item->arg5, shader, batchCount)
+//           }
+//       }
+//       emitted += step; i += step
+//   }
+//
+// THE FIVE SILENT DROPS are AddDrawItem's own list (wave9_lane_gfx.cpp) read
+// from the other end: a negative or out-of-range shader index, and a selected
+// VideoProgram with a null +0x20, a null-or-empty +0x28, or a null-or-empty
+// +0x30. On every one of them `step` stays 1 and nothing is drawn.
+//
+// THE INSTANCING BATCH (`item->arg8 > 1`) is the part no decompile shows
+// honestly. It calls the geometry's slot 7 to reserve N instance transform
+// slots, then walks forward over CONSECUTIVE items that agree on all four of
+// (instance, arg5, userData, arg10), asking each one's slot 6 for a Matrix and
+// pushing it with Context::SetTransform. It stops on the first mismatch, on
+// `item->arg8` items, or when the running index would pass the list's size.
+// `step` is then the number of items consumed, so the outer loop skips the
+// whole batch and the single Draw below carries them all.
+//
+// ORACLE: NONE, and that is stated rather than faked. Every arm of this body
+// ends in a real GPU draw through the geometry's vtable; running the shipped
+// copy afterwards would submit every draw a second time. RT_DIFF_WORK records
+// how many calls reached a Draw at all, which is the number that matters — a
+// green `calls=` column on a body that dropped every item would mean nothing.
+// ############################################################################
+extern "C" void RtGraphics_Renderer_DrawItemList(const void* selfv, void* ctx,
+                                                 int32_t groupIndex, int32_t listIndex,
+                                                 int32_t shaderIndex) {
+    RT_DIFF_BEGIN("Graphics::Renderer::DrawItemList");
+    const Renderer* const self = static_cast<const Renderer*>(selfv);
+
+    uint8_t* const groupBase = reinterpret_cast<uint8_t*>(self->drawGroups._data);
+    const int64_t groupOffset = static_cast<int64_t>(groupIndex) * sizeof(RendererDrawGroup);
+    const Camera* const cam =
+        reinterpret_cast<const Camera*>(groupBase + groupOffset +
+                                        offsetof(RendererDrawGroup, cullCamera));
+
+    // ---- the two matrices, built on the stack ------------------------------
+    // view = the cull camera's Transform3 expanded to a 4x4 with an explicit
+    // (0,0,0,1) fourth column: three zeroed floats and the 1.0f at 0x18016169c.
+    float view[16];
+    {
+        const float* t = reinterpret_cast<const float*>(cam) + (0x64 / 4);
+        view[0] = t[0];  view[1] = t[1];  view[2]  = t[2];  view[3]  = 0.0f;
+        view[4] = t[3];  view[5] = t[4];  view[6]  = t[5];  view[7]  = 0.0f;
+        view[8] = t[6];  view[9] = t[7];  view[10] = t[8];  view[11] = 0.0f;
+        view[12] = t[9]; view[13] = t[10]; view[14] = t[11];
+        view[15] = AsFloat(kBits_one);
+    }
+    // proj = the camera's projection matrix, sixteen dwords copied verbatim.
+    uint32_t proj[16];
+    std::memcpy(proj, reinterpret_cast<const uint8_t*>(cam) + 0x94, sizeof proj);
+
+    ContextSetCamera(ctx, view, proj);
+
+    // ---- the item list ------------------------------------------------------
+    const Collection::Array<RendererDrawItem>* const items =
+        reinterpret_cast<const Collection::Array<RendererDrawItem>*>(
+            groupBase + groupOffset + offsetof(RendererDrawGroup, items) +
+            static_cast<int64_t>(listIndex) * 0x10);
+
+    const int32_t count = items->_size;
+    if (count <= 0) {
+        RT_DIFF_WORK(false);
+        RT_DIFF_SHADOW(true, "empty item list", "attendance only");
+        return;
+    }
+
+    using GeomReserveFn = int32_t (*)(const void*, void*, uint16_t, float);
+    using GeomMatrixFn  = const void* (*)(const void*, const float*, uint16_t, float);
+    using GeomDrawFn    = void (*)(const void*, void*, const void*, const void*,
+                                   float, int32_t, int32_t, int32_t);
+
+    int32_t emitted = 0;
+    int32_t drawn = 0;
+    int64_t i = 0;
+    while (i < count) {
+        const uint8_t* const itemBase = reinterpret_cast<const uint8_t*>(items->_data);
+        int64_t itemOff = i * 0x38;
+        const RendererDrawItem* const item =
+            reinterpret_cast<const RendererDrawItem*>(itemBase + itemOff);
+
+        int32_t step = 1;
+        int32_t batchCount = 1;
+
+        // `item->material` is dereferenced BEFORE the shader-index tests
+        // (0x1801054f5 vs 0x1801054f9). Faithful.
+        const uint8_t* const material = static_cast<const uint8_t*>(item->material);
+        bool draw = false;
+
+        if (shaderIndex >= 0 &&
+            shaderIndex < *reinterpret_cast<const int32_t*>(material + 0x30)) {
+            const uint8_t* const* const programs =
+                *reinterpret_cast<const uint8_t* const* const*>(material + 0x28);
+            const uint8_t* const prog = programs[shaderIndex];
+
+            const uint8_t* const sub28 = *reinterpret_cast<const uint8_t* const*>(prog + 0x28);
+            const uint8_t* const sub30 = *reinterpret_cast<const uint8_t* const*>(prog + 0x30);
+            if (*reinterpret_cast<const void* const*>(prog + 0x20) != nullptr &&
+                sub28 != nullptr && *reinterpret_cast<const int32_t*>(sub28 + 0x48) > 0 &&
+                sub30 != nullptr && *reinterpret_cast<const int32_t*>(sub30 + 0x48) > 0) {
+                draw = true;
+            }
+        }
+
+        if (draw) {
+            // shader 0 only, and only when the instance has a render texture:
+            // `CMP byte [instance+0x24], R15B` with R15B known zero.
+            if (shaderIndex == 0 &&
+                *(static_cast<const uint8_t*>(item->instance) + 0x24) != 0) {
+                RtGraphics_MaterialInstance_GenerateTextures(item->instance, ctx,
+                                                             self->contextSerial);
+            }
+            MaterialInstanceSetup(item->instance, ctx, shaderIndex);
+
+            if (item->arg8 > 1) {
+                // ---- the instancing batch ---------------------------------
+                const void* const geom0 = item->geometry;
+                void** const gvt0 = *reinterpret_cast<void** const*>(geom0);
+                int32_t slotIndex = reinterpret_cast<GeomReserveFn>(gvt0[0x38 / 8])(
+                    geom0, ctx, item->arg5, self->frameAlpha);
+                const int32_t base = emitted - slotIndex;
+
+                batchCount = 0;
+                for (;;) {
+                    const uint8_t* const cur =
+                        reinterpret_cast<const uint8_t*>(items->_data) + itemOff;
+                    ++batchCount;
+                    itemOff += 0x38;
+
+                    const void* const g = *reinterpret_cast<const void* const*>(cur);
+                    void** const gvt = *reinterpret_cast<void** const*>(g);
+                    const uint16_t sub = *reinterpret_cast<const uint16_t*>(cur + 0x1a);
+                    const void* m = reinterpret_cast<GeomMatrixFn>(gvt[0x30 / 8])(
+                        g, view, sub, self->frameAlpha);
+                    ContextSetTransform(ctx, slotIndex, m);
+
+                    ++slotIndex;
+                    if (base + slotIndex >= count) break;
+                    if (batchCount >= item->arg8) break;
+
+                    const uint8_t* const nxt =
+                        reinterpret_cast<const uint8_t*>(items->_data) + itemOff;
+                    if (*reinterpret_cast<const void* const*>(nxt + 0x10) != item->instance) break;
+                    if (*reinterpret_cast<const uint16_t*>(nxt + 0x1a) != item->arg5) break;
+                    if (*reinterpret_cast<const void* const*>(nxt + 0x28) != item->userData) break;
+                    if (*reinterpret_cast<const uint32_t*>(nxt + 0x30) != item->arg10) break;
+                }
+                // ESI and R15 are the SAME count in retail (both bumped once
+                // per consumed item at 0x1801055c4/0x1801055c6), and both are
+                // what the outer counters advance by at 0x1801056b4/0x1801056bd.
+                step = batchCount;
+            } else {
+                // 0x18010569c: a non-instanced item is one item, one instance.
+                batchCount = 1;
+                step = 1;
+            }
+
+            const void* const geom = item->geometry;
+            void** const gvt = *reinterpret_cast<void** const*>(geom);
+            reinterpret_cast<GeomDrawFn>(gvt[0x10 / 8])(
+                geom, ctx,
+                groupBase + groupOffset + offsetof(RendererDrawGroup, cullCamera),
+                item->instance,
+                self->frameAlpha,
+                static_cast<int32_t>(item->arg5),
+                shaderIndex,
+                batchCount);
+            ++drawn;
+        }
+
+        emitted += step;
+        i += step;
+    }
+
+    RT_DIFF_WORK(drawn != 0);
+    RT_DIFF_SHADOW(true, "item list submitted",
+                   "not diffable (a replay would submit every draw twice)");
+}
+
+// ============================================================================
+// Registration — BOTH DOORS for every one of the ten, unconditionally
+// (DIRECTION.md §2.3).
+//
+// THE ADDRESS DOORS WERE CHECKED BEFORE THEY WERE WRITTEN. Every one of the ten
+// addresses was grepped across code/, engine/, runtime/, standalone/ and dx11/.
+// None is used as an IDENTITY TOKEN the way standalone/scene_watch.cpp compares
+// `?AddDrawItems@MeshInstance@`'s address against a live vtable slot
+// (wave21_lane_gfxbody.cpp:311), so registering all ten is safe. Three of them
+// (0x180103c70, 0x1800a51c0, 0x1800a5520, 0x1800a2780) appear as RT_DELDTOR
+// rows in runtime/src/object/deleting_dtor.cpp, which reaches them through
+// ResolveAddr — registry-first — so those rows now land on the bodies above,
+// which is the intent.
+// ============================================================================
+extern "C" int RtGraphicsBatchCLeavesRegister() {
+    int n = 0;
+
+    RegisterRuntimeExport("?GenerateTextures@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z",
+                          (void*)&RtGraphics_MaterialInstance_GenerateTextures); ++n;
+    RegisterRuntimeAddr(0x180102eb0ull, (void*)&RtGraphics_MaterialInstance_GenerateTextures);
+
+    RegisterRuntimeExport("??1ParticleSystemInstance@Graphics@@UEAA@XZ",
+                          (void*)&RtGraphics_ParticleSystemInstance_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800a5520ull, (void*)&RtGraphics_ParticleSystemInstance_Dtor);
+
+    RegisterRuntimeExport("??1ParticleSystem@Graphics@@UEAA@XZ",
+                          (void*)&RtGraphics_ParticleSystem_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800a51c0ull, (void*)&RtGraphics_ParticleSystem_Dtor);
+
+    RegisterRuntimeExport("??1Particle@Graphics@@UEAA@XZ",
+                          (void*)&RtGraphics_Particle_Dtor); ++n;
+    RegisterRuntimeAddr(0x180103c70ull, (void*)&RtGraphics_Particle_Dtor);
+
+    RegisterRuntimeExport("??0Animation@Graphics@@QEAA@AEBV01@@Z",
+                          (void*)&RtGraphics_Animation_CopyCtor); ++n;
+    RegisterRuntimeAddr(0x1800160a0ull, (void*)&RtGraphics_Animation_CopyCtor);
+
+    RegisterRuntimeExport("??1Animation@Graphics@@QEAA@XZ",
+                          (void*)&RtGraphics_Animation_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800fb290ull, (void*)&RtGraphics_Animation_Dtor);
+
+    RegisterRuntimeExport("??1EdgeMesh@Graphics@@UEAA@XZ",
+                          (void*)&RtGraphics_EdgeMesh_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800a2780ull, (void*)&RtGraphics_EdgeMesh_Dtor);
+
+    RegisterRuntimeExport("?CreateTargets@SpotLight@Graphics@@AEAAXXZ",
+                          (void*)&RtGraphics_SpotLight_CreateTargets); ++n;
+    RegisterRuntimeAddr(0x180106050ull, (void*)&RtGraphics_SpotLight_CreateTargets);
+
+    RegisterRuntimeExport("?PlatformSerialize@GraphicsMesh@Graphics@@QEAAXAEAVSerializer@IO@@@Z",
+                          (void*)&RtGraphics_GraphicsMesh_PlatformSerialize); ++n;
+    RegisterRuntimeAddr(0x1800a48e0ull, (void*)&RtGraphics_GraphicsMesh_PlatformSerialize);
+
+    RegisterRuntimeExport("?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z",
+                          (void*)&RtGraphics_Renderer_DrawItemList); ++n;
+    RegisterRuntimeAddr(0x180105240ull, (void*)&RtGraphics_Renderer_DrawItemList);
+
+    return n;
+}

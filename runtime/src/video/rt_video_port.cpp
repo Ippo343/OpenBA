@@ -57,7 +57,15 @@ extern int      RtVideoVideoProgramRegister();              // video_program.cpp
 extern "C" int  RtVideoVideoProgramSweep();                 // video_program.cpp (Wave 23 lane VIDVT)
 extern "C" void RtVideoDeviceEnumTypesProbeArm(bool on);   // device_enum_types_probe.cpp
 
+// BATCH C registration entry point (batchc_*.cpp).
+extern "C" int RtVideoBatchCSetLightRegister();
+
 void RtVideoPortInit() {
+    // BATCH C — Video::Context::SetLight. Unconditional, see DIRECTION.md §2.3.
+    {
+        printf("[RtPort] BATCH C: %d video leaf registered\n",
+               RtVideoBatchCSetLightRegister());
+    }
     if (!RtWaveEnabled("BANISHED_RT_VIDEO")) {
         printf("[RtPort] BANISHED_RT_VIDEO=0 -- Video namespace port disabled\n");
         return;

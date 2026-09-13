@@ -83,7 +83,18 @@ extern int RtGraphicsMeshVtableRegister(); // mesh.cpp (Wave 27 lane GFXMESH)
 
 extern int RtGraphicsMaterialRegister();   // material.cpp
 
+// BATCH C registration entry point (batchc_*.cpp).
+extern "C" int RtGraphicsBatchCLeavesRegister();
+
 void RtGraphicsPortInit() {
+    // BATCH C — the ten named Graphics leaves of batchc_gfx_leaves.cpp.
+    // Registered BEFORE the namespace kill switch and outside every per-lane
+    // switch, because DIRECTION.md §2.3 says a port registers unconditionally
+    // and this batch adds no BANISHED_RT_* variable of its own.
+    {
+        printf("[RtPort] BATCH C: %d graphics leaves registered\n",
+               RtGraphicsBatchCLeavesRegister());
+    }
     if (!RtWaveEnabled("BANISHED_RT_GRAPHICS")) {
         printf("[RtPort] BANISHED_RT_GRAPHICS=0 -- Graphics namespace port disabled\n");
         return;

@@ -134,11 +134,15 @@ void GeometryDtor(void* p) {
     RT_EXPORT_ONCE(VoidThisFn, "??1Geometry@Graphics@@UEAA@XZ")(p);
 }
 
-// `?CreateTargets@SpotLight@Graphics@@AEAAXXZ` 0x180106050 — NOT PORTED, and
-// reached BY NAME because `AEAA` is PRIVATE, not unexported, and this DLL
-// exports its private members (reference_aeaa_is_private_not_unexported.md).
+// `?CreateTargets@SpotLight@Graphics@@AEAAXXZ` 0x180106050 — **PORTED**
+// (runtime/src/graphics/batchc_gfx_leaves.cpp, BATCH C 2026-09-12), reached BY
+// NAME because `AEAA` is PRIVATE, not unexported, and this DLL exports its
+// private members (reference_aeaa_is_private_not_unexported.md).
 // It allocates the shadow map / depth / render target trio the destructor then
-// owns; it stays on the DLL until the Video side of that is ported.
+// owns. This comment used to say "NOT PORTED ... it stays on the DLL until the
+// Video side of that is ported"; the Video side it named (ImageBuffer /
+// RenderBuffer operator new, ctor, PlatformConstruct and Create) was already
+// ported, which is what made the port possible.
 void SpotLightCreateTargets(void* p) {
     RT_EXPORT_ONCE(VoidThisFn, "?CreateTargets@SpotLight@Graphics@@AEAAXXZ")(p);
 }
@@ -151,9 +155,10 @@ void RenderBufferOperatorDelete(void* p) {
 }
 
 // `?SetLight@Context@Video@@QEAAXAEBVVector3@Math@@0AEBVVector4@4@1MMH@Z`
-// 0x18001a950 — NOT PORTED, exported, reached by name. All five Draw arms end
-// in it, and its EIGHT values (this + seven params) are what the whole of each
-// body exists to compute.
+// 0x18001a950 — **PORTED** (runtime/src/video/batchc_context_setlight.cpp,
+// BATCH C 2026-09-12; it used to read "NOT PORTED"), exported, reached by name.
+// All five Draw arms end in it, and its EIGHT values (this + seven params) are
+// what the whole of each body exists to compute.
 using SetLightFn = void (*)(void* ctx, const float* v3a, const float* v3b,
                             const float* v4c, const float* v4d,
                             float e, float f, int32_t g);
@@ -165,7 +170,10 @@ void ContextSetLight(void* ctx, const float* a, const float* b,
 }
 
 // `?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z` 0x180105240
-// — NOT PORTED, exported, reached by name. FIVE VALUES; see the banner.
+// — **PORTED** (runtime/src/graphics/batchc_gfx_leaves.cpp, BATCH C
+// 2026-09-12; it used to read "NOT PORTED"), exported, reached by name.
+// FIVE VALUES; see the banner. The fifth is the SHADER INDEX — that body is
+// where the three arms' `MOV [RSP+0xa0],EAX` finally lands.
 using DrawItemListFn = void (*)(void* renderer, void* ctx, int32_t, int32_t, int32_t);
 void RendererDrawItemList(void* renderer, void* ctx, int32_t a, int32_t b, int32_t c) {
     RT_EXPORT_ONCE(DrawItemListFn,
