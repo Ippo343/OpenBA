@@ -20,6 +20,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/citizenaicomponent_funcs.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -34,7 +35,6 @@ extern void* g_pForceWorkBuilding;
 // Phase B production harness (production_harness.cpp, env BANISHED_LIVE_PRODUCTION).
 // One-shot: drives a faithful log-production accounting event at the ForesterLodge and
 // proves the town stock count increments. Self-gated; no-op when the env is unset.
-extern "C" void StartTown_DriveProduction();
 
 // Phase B-real force-ForesterWork driver (forester_force_harness.cpp, env
 // BANISHED_FORCE_FORESTERWORK). Constructs + pushes a ForesterWork action onto ONE
@@ -837,7 +837,7 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     if (citizen) {
         static int s_force = -1;
         if (s_force < 0) {
-            const char* e = std::getenv("BANISHED_FORCE_WORK");
+            const char* e = Opt().forceWork;
             s_force = (e && e[0] && e[0] != '0') ? 1 : 0;
         }
         if (s_force == 1 && g_pForceWorkBuilding) {
@@ -862,7 +862,6 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     // Phase B of the economy WORK-half: drive ONE faithful log-production accounting
     // event at the force-worked ForesterLodge and prove the town stock count
     // increments. One-shot (self-gated inside). See production_harness.cpp.
-    StartTown_DriveProduction();
 
     // GUARD (crash-safe): Update derefs citizen / its entity(+0x10) / its
     // CitizenDescription(+0x288) / its CharacterComponent(+0x278, Phase-8 alive

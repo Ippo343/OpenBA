@@ -84,11 +84,9 @@ void PickingComponent_Shutdown(PickingComponent* self, void* stream) {
 
 void PickingComponent_OnCreate(PickingComponent* self) {
     if ((int)self->pickingId >= 0) {
-        bool removed = false;
         if (s_fn_RemoveMesh && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
             void* pickingScene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);
             s_fn_RemoveMesh(pickingScene, (uint32_t)self->pickingId);
-            removed = true;
         }
         self->pickingId = -1;
     }

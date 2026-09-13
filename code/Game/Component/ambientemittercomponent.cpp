@@ -364,10 +364,9 @@ void AmbientEmitterComponent_InitFuncs() {
 // to the real AmbientEmitterComponent::Draw (0x140042ba0). This is what seeds a
 // building's ambient audio: resize the emitter array from the description, and if
 // the description carries the audio flag (desc+0x20) play + AddEmitter the 3D
-// looping sounds. Opt-in under BANISHED_AMBIENT_AUDIO (default ON via the env
-// check; =0 restores the inert no-op for A/B).
+// looping sounds. Graduated 2026-09-13 (previously opt-in): always live.
 COMPONENT_LIVE_FACTORY_ONADDED(AmbientEmitterComponent, 0x48, 0xC3,
-                               "BANISHED_AMBIENT_AUDIO", AmbientEmitterComponent_Draw)
+                               AmbientEmitterComponent_Draw)
 // Slot 3 (+0x18): COMPONENT_LIVE_FACTORY_ONADDED does not fill it, so the ported
 // body above was dead code and every AmbientEmitterComponent record was read as
 // the bare Component base. Retail 0x140042f30 reads a Vector3, an emitter count

@@ -12,6 +12,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Work/foresterwork_funcs.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -901,7 +902,7 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                             // block invokes the real produce helper directly on the tree the real forester
                             // scan just found + validated. It mirrors RemoveNaturalResource::Main's flag
                             // setup (natResComp+0x2d harvestable, +0x2c mature) then calls 0x1401260f0.
-                            if (std::getenv("BANISHED_FORCE_HARVEST")) {
+                            if (Opt().forceHarvest) {
                                 typedef void (*RemoveNatRes_t)(void* natResComp, void* workIBP, char flag);
                                 static RemoveNatRes_t s_forceProduce =
                                     reinterpret_cast<RemoveNatRes_t>(ResolveAddr(Module::Exe, 0x1401260f0));

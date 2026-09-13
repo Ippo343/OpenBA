@@ -35,6 +35,7 @@
 
 
 #include "Object/factory_registration.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"      // ResolveExport — HelpUI's Runtime BaseTypeInfo type-id heal
 #include <cstdint>
@@ -767,7 +768,7 @@ namespace uistub_MapUI {
     void Slot4(void* self) {
         EnsureTypeIds();
         static bool s_logged = false;
-        if (!s_logged && std::getenv("BANISHED_MAP_TRACE")) {
+        if (!s_logged && Opt().mapTrace) {
             s_logged = true;
             void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
             void* mapObj = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x148) : nullptr;
@@ -842,7 +843,7 @@ struct StubMacroDlgCtrlReg {
 // In standalone the checkbox type id is null by default — the exe reads it through
 // .rdata exref 0x1401516a8, and that whole element-type-id table
 // (standalone/reg_element_typeids.cpp) is gated on BANISHED_LIVE_ELEMENT_TIDS,
-// which is NOT in kDefaultOnFlags. With g_TypeId_CheckboxElement null,
+// which is NOT in the default-on table. With g_TypeId_CheckboxElement null,
 // FindElementType(root, 0) can never match, +0x30 stays null, and Slot7 faults.
 // pagetoggleui.cpp therefore resolves a PRIVATE copy of the id by name (the
 // exref's import string, read out of exe .rdata at 0x1401b8ce8, is
@@ -1335,7 +1336,7 @@ namespace uistub_ToolUI {
             || !g_TypeId_ToolbarDescription_FC || !g_TypeId_UIDescription
             || !g_TypeId_TabElement) return;
         static bool s_logged=false;
-        if(!s_logged && std::getenv("BANISHED_MAP_TRACE")){ s_logged=true;
+        if(!s_logged && Opt().mapTrace){ s_logged=true;
             printf("[ToolUI::Slot4] dispatched self=%p ds(+0x28)=%p\n",
                    self, *reinterpret_cast<void**>((char*)self+0x28)); fflush(stdout); }
         ToolUI_Slot4(reinterpret_cast<ToolUI*>(self));

@@ -1,5 +1,8 @@
 # BANISHED_* environment flag inventory (code/, runtime/, dx11/)
 
+> **HISTORICAL (2026-09-13).** This was the input to the ENDGAME C.2/C.4 batches and
+> describes the tree as it was BEFORE them. The live inventory is `standalone/options.h`.
+
 Read-only inventory for ENDGAME.md section C. Scope: every `BANISHED_*` token read in
 `code/`, `runtime/`, `dx11/` (standalone/ is owned by another agent and excluded here).
 Generated 2026-09-13 by grepping `code runtime dx11` for `BANISHED_[A-Z0-9_]*`, then

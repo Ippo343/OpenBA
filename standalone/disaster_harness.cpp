@@ -64,7 +64,7 @@
 //   <EACH>_PERIOD=<f>              re-fire every f frames (default 0 = one shot)
 //   BANISHED_FORCE_SICK_DISEASE=<i> which DiseaseDescription to use (default 0 = first)
 //
-// All opt-in. NOT in kDefaultOnFlags. Unset ⇒ byte-unchanged run.
+// All opt-in. NOT in the default-on table. Unset ⇒ byte-unchanged run.
 //
 // EACH ARM ALSO DEPENDS ON ITS LANE'S LIVE GATE — but NOT all in the same way, and the
 // difference decides which failures a gate can and cannot explain.

@@ -12,6 +12,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/charactercomponent_funcs.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -235,13 +236,13 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
             // entity ptr correlates with [Herd]/[Pasture] SPAWN traces to prove whether
             // ANIMAL characters ever register (the [MoveTick] trace caps at 4 subjects
             // and cannot answer that).
-            if (std::getenv("BANISHED_MOVETICK_TRACE")) {
+            if (Opt().movetickTrace) {
                 fprintf(stderr, "[CharIdx] idx=%d char=%p entity=%p model=%p\n",
                         *reinterpret_cast<int32_t*>(p + 0x40), (void*)self,
                         (void*)owner, (void*)model);
             }
         }
-        else if (std::getenv("BANISHED_MOVETICK_TRACE")) {
+        else if (Opt().movetickTrace) {
             fprintf(stderr, "[CharIdx] SKIPPED char=%p entity=%p model=%p charMgr=%p\n",
                     (void*)self, (void*)owner, (void*)*reinterpret_cast<int64_t*>(p + 0x68),
                     (void*)charMgr);
@@ -278,11 +279,11 @@ static void CharacterComponent_UpdateAdapter(CharacterComponent* self, int64_t* 
 // Fifth-priority animals (quota 2/frame, ~120 animals) at ~1/60 speed —
 // visually frozen. Slot 8 full-rate dispatch is the fix (2026-07-30).
 // Slot 9's faithful body (CharacterComponent_Update -> action +0x30 tick) is
-// GRADUATED (2026-08-18): BANISHED_LIVE_CHARACTER_UPDATE9 is in kDefaultOnFlags and
+// GRADUATED (2026-08-18): BANISHED_LIVE_CHARACTER_UPDATE9 is in the default-on table and
 // the env var is now a kill-switch (=0). It is the ONLY dispatcher of an action's
 // +0x30 slot, so while it was opt-in every action's Enter was dead code — most
 // visibly HuntAnimal::Enter, which is the kill step: hunters chased deer forever and
-// the hunting cabin's production panel read 0. A/B evidence is in kDefaultOnFlags.
+// the hunting cabin's production panel read 0. A/B evidence is in the default-on table.
 static uint32_t CharacterComponent_LiveGetTypeId(void*) {
     static uint32_t cached = 0;
     if (cached == 0) cached = ::Object::GetTypeIdByName("CharacterComponent");

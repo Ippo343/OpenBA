@@ -189,7 +189,7 @@ void DestroyComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D → upgrade-path live states) =====
-// BANISHED_LIVE_DESTROY is DEFAULT-ON via kDefaultOnFlags (graduated 2026-07-25 once
+// BANISHED_LIVE_DESTROY is DEFAULT-ON via the default-on table (graduated 2026-07-25 once
 // the upgrade path was verified end-to-end); the env var is now a kill-switch (=0),
 // which reverts this component to inert. It graduates:
 //   * vtable index 4 (+0x20, 0x14011DB00 Serialize/Startup) — copies the

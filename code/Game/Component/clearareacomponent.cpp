@@ -206,7 +206,7 @@ int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
 // LIVE factory (Track A step 2): de-inert the ClearAreaComponent so it clears its
 // building's footprint AUTOMATICALLY, without any harness.
 // ============================================================
-// Opt-in via BANISHED_CLEAR_FOOTPRINT (or the global BANISHED_LIVE_COMPONENTS); default
+// Opt-in via BANISHED_CLEAR_FOOTPRINT (or the global the global live-components switch); default
 // OFF → byte-for-byte unchanged inert run. When ON:
 //   * component capability flags get bit 0x8 (needs-Update-tick) added to 0x80, so the
 //     EntityList bucket round-robin (entitylist.cpp: component+0x20 bit 3) ticks it.

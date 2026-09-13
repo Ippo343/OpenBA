@@ -57,8 +57,8 @@
 // The gate BANISHED_LIVE_TRADE_CHECKOUT remains, because this function mutates
 // storage, town resource counters and the town availability pools, and that has
 // to be exercised before it can be trusted by default (the CLAUDE.md rule that
-// unproven features start outside kDefaultOnFlags). Once a run shows a purchase
-// committing correctly, this moves into kDefaultOnFlags and the flag becomes a
+// unproven features start outside the default-on table). Once a run shows a purchase
+// committing correctly, this moves into the default-on table and the flag becomes a
 // kill-switch.
 //
 // With the gate OFF the click is inert — which is exactly the "pressing Trade

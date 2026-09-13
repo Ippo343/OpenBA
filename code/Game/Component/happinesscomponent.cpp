@@ -606,12 +606,9 @@ static void* HappinessComponent_CreateState(void* self) {               // 0x140
 static void HappinessComponent_FinishLiveVtable(void* mem) {
     // Slot 3 (Shutdown/Serialize, 0x14004aa80) is wired UNCONDITIONALLY (save/load
     // wave 2026-08-28), same rationale as GrowthComponent/ResidenceComponent/
-    // StorageComponent: the stream round-trip of happinessFlag (+0x28) is not an
-    // opt-in feature the way the live registrar state machine (BANISHED_LIVE_HAPPINESS)
-    // is. Without this, a loaded save's HappinessComponent kept the base-Component
-    // no-op serialize and happinessFlag came back zeroed.
+    // StorageComponent: without this, a loaded save's HappinessComponent kept the
+    // base-Component no-op serialize and happinessFlag came back zeroed.
     HappinessComponent_LiveVtable[3] = reinterpret_cast<void*>(&HappinessComponent_ShutdownVSlot);
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_HAPPINESS")) return;
     HappinessComponent_LiveVtable[7]  = reinterpret_cast<void*>(&HappinessComponent_OnRemoveVSlot);
     HappinessComponent_LiveVtable[16] = reinterpret_cast<void*>(&HappinessComponent_GetDefaultState);
     HappinessComponent_LiveVtable[17] = reinterpret_cast<void*>(&HappinessComponent_CreateState);

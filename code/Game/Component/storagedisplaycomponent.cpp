@@ -461,8 +461,6 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
         int displayCount = *(int*)(selfAddr + 0x30);
         const uint32_t rawMatTid = SDD_RawMatDescTypeId();
 
-        static int s_updBudget = 0;
-
         if (slotCount > 0 && totalWeight > 0) {
             for (int slotIdx = 0; slotIdx < slotCount; slotIdx++) {
                 if (fn_InternalBasePtr_CheckPtr) {
@@ -477,8 +475,6 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
 
                 // Get material type entity from slot
                 uintptr_t materialType = *(uintptr_t*)slotEntry;
-
-                static int s_slotBudget = 0;
 
                 // Find RawMaterialDescription on material type
                 // The decompilation does a manual component search with typeId check.

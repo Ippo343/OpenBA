@@ -61,11 +61,6 @@ extern "C" bool  BuildStructure_DepsReady();
 // machine uses to transition 1 -> 8.
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);
 
-// The DropOff→CompleteTask executor gap is bridged by Options::buildSyncDelivered,
-// which OptionsInit derives from this same flag (standalone/options.cpp): with
-// BANISHED_FORCE_CONSTRUCT on, GatherRawMaterials::Execute re-syncs delivered from
-// the live site storage. That used to be a mid-run `_putenv_s` here, racing the
-// cached read on the other side; it is decided once, at boot, now.
 static bool ForceConstructEnvOn() {
     return Opt().forceConstruct;
 }
@@ -95,7 +90,7 @@ static void CreditBuildProgress(void* bc) {
 
     static int rampFrames = -1;
     if (rampFrames < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_DEMO_FRAMES");
+        const char* e = Opt().buildDemoFrames;
         rampFrames = (e && e[0]) ? std::atoi(e) : 600;
         if (rampFrames < 1) rampFrames = 600;
     }

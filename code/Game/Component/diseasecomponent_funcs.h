@@ -19,7 +19,7 @@
 //   [7] OnRemoved 0x140048bb0   [9] Update  0x140048b90
 //
 // All bodies are gated on BANISHED_LIVE_CROPDISEASE (opt-in; unproven feature, so
-// deliberately NOT in kDefaultOnFlags).
+// deliberately NOT in the default-on table).
 
 #include "DiseaseComponent.h"
 #include <cstdint>

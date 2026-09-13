@@ -11,7 +11,7 @@
 // Original: 0x140055ad0 (114 instructions)
 
 #include "Component/spawncomponent_funcs.h"
-#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
+#include "Component/component_factory_base.h"   // ComponentFactory::the live gate
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -656,7 +656,7 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-// Live bring-up (Phase 1, env BANISHED_LIVE_SPAWN or global BANISHED_LIVE_COMPONENTS).
+// Live bring-up (Phase 1, env BANISHED_LIVE_SPAWN or global the global live-components switch).
 // All four recipe steps wired:
 //   * slot 4 (+0x20 Startup) -> SpawnComponent_Startup — sizes the +0x28 per-entry
 //     timer array from the SpawnDescription at spawn (ComponentEntity_StartupComponents).

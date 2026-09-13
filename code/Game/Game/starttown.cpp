@@ -19,13 +19,14 @@
 // the a3300 call site, 0x14009761d).
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "perf_terrain.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Component/ambientenvironmentcomponent_funcs.h"  // InitRegion (ambient biome region/pos)
 #include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMesh (mesh-precise picking)
 #include "Component/storagecomponent_funcs.h"   // StorageComponent_Draw (citizen carry-capacity init)
-#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
+#include "Component/component_factory_base.h"   // ComponentFactory::the live gate
 #include "Component/spawncomponent_funcs.h"     // SpawnComponent_InitialSpawn (5cc0 seed)
 #include "stress_harness.h"                     // BANISHED_STRESS targets (standalone/)
 #include <chrono>
@@ -830,7 +831,7 @@ static void StartTown_RunOnCreatePass(void* entityV) {
             comp = *slot;
             if (!comp) continue;
             vt = *(uintptr_t*)comp;
-            // BANISHED_LIVE_RESIDENCE_REGISTRY — GRADUATED to kDefaultOnFlags 2026-08-15
+            // BANISHED_LIVE_RESIDENCE_REGISTRY — GRADUATED to the default-on table 2026-08-15
             // (`=0` is now the kill-switch). See the A/B in component_factory_base.cpp:
             // this one erased list silently disabled every move-out, and therefore every
             // second-generation marriage, in the whole project.
@@ -974,7 +975,7 @@ static bool StartTown_InstantBuildPath() { return true; }
 static int BuildDemoIndex() {
     static int idx = -2;
     if (idx == -2) {
-        const char* e = std::getenv("BANISHED_BUILD_DEMO_INDEX");
+        const char* e = Opt().buildDemoIndex;
         // Default -1 = NO forced demo foundation: leaves g_pConstructionDemoSite null so
         // BuildComponent_DemoGateSkip drives any player-placed foundation organically
         // instead. A start-town building is force-completed into the demo only when an
@@ -995,7 +996,7 @@ static bool g_demoHouseAssigned = false;
 static bool BuildDemoWantsHouse() {
     static int en = -1;
     if (en < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_DEMO_HOUSE");
+        const char* e = Opt().buildDemoHouse;
         en = (e && e[0] && e[0] != '0') ? 1 : 0;
     }
     return en == 1;
@@ -1256,7 +1257,7 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
     // and the river). Offsets are per template at rotation 0, which is all we place.
     // BANISHED_STRESS_ALLOW_POCKETS=1 reproduces the old walled-in layout (the
     // population-collapse / teardown-corruption repro town).
-    static const bool allowPockets = [] { const char* e = std::getenv("BANISHED_STRESS_ALLOW_POCKETS");
+    static const bool allowPockets = [] { const char* e = Opt().stressAllowPockets;
                                           return e && e[0] && e[0] != '0'; }();
     struct DoorOff { const char* path; int dx, dy; };
     std::vector<DoorOff> doorOffs;
@@ -1322,7 +1323,7 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
     std::vector<uint8_t> reachB(cells, 0);
     // One-time kind-grid dump for offline layout analysis (standalone_kindmap.txt: one
     // row per y, one base-36 kind digit per cell; '#' = occupied by a footprint).
-    static const bool dumpKinds = [] { const char* e = std::getenv("BANISHED_STRESS_KINDMAP");
+    static const bool dumpKinds = [] { const char* e = Opt().stressKindMap;
                                        return e && e[0] && e[0] != '0'; }();
     if (kindTiles && dumpKinds) {
         if (FILE* km = std::fopen("standalone_kindmap.txt", "w")) {
@@ -2094,7 +2095,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     // piles, the tracker or the production panel use BANISHED_TOOL_HARNESS=pasture (a real
     // tool-placed pasture: same rig then drops on schedule and the panel counts up).
     {
-        const char* pe = std::getenv("BANISHED_BUILD_DEMO_PASTURE");
+        const char* pe = Opt().buildDemoPasture;
         if (pe && pe[0] && pe[0] != '0') {
             void* ptmpl = ResolveTemplateByPath("Template\\Pasture.rsc");
             int pw = 0, ph = 0;
@@ -2162,9 +2163,9 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     // exactly what OrchardUI::Slot9 -> Slot11 does, so leaving it unset is the correct
     // starting state for testing rather than something to pre-fill.
     // Value: 1/on = template-default footprint, "WxH" (e.g. "10x8") overrides.
-    // Test-only, opt-in, NOT in kDefaultOnFlags; byte-unchanged when unset.
+    // Test-only, opt-in, NOT in the default-on table; byte-unchanged when unset.
     {
-        const char* oe = std::getenv("BANISHED_BUILD_DEMO_ORCHARD");
+        const char* oe = Opt().buildDemoOrchard;
         if (oe && oe[0] && oe[0] != '0') {
             void* otmpl = ResolveTemplateByPath("Template\\Orchard.rsc");
             int ow = 0, oh = 0;
@@ -2238,10 +2239,10 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     // fallback. Point coords are world-space; tile = (int)(coord + mapSize/2).
     //
     // Value: 1/on = template-default footprint (probe-observed 12x11), "WxH" overrides.
-    // Test-only, opt-in, NOT in kDefaultOnFlags; byte-unchanged when unset. Every failure
+    // Test-only, opt-in, NOT in the default-on table; byte-unchanged when unset. Every failure
     // branch prints, so a silent log means this never ran rather than that it succeeded.
     {
-        const char* te = std::getenv("BANISHED_BUILD_DEMO_TRADINGPOST");
+        const char* te = Opt().buildDemoTradingPost;
         if (te && te[0] && te[0] != '0') {
             void* ttmpl = ResolveTemplateByPath("Template\\TradingPost.rsc");
             int tw = 0, th = 0;
@@ -2749,16 +2750,15 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     // — spawning the building alone leaves the component inert.
     //
     // Value: 1/on = template-default footprint, "WxH" (e.g. "10x8") overrides.
-    // Test-only, opt-in, NOT in kDefaultOnFlags; byte-unchanged when unset.
+    // Test-only, opt-in, NOT in the default-on table; byte-unchanged when unset.
     {
         // The ring scan the pasture/orchard blocks above each open-code. Returns
         // false (and says so) when nothing fits, so a silent log means "never ran".
         // The workability predicate it applies per candidate is the file-scope
         // ST_SiteIsWorkable above (hoisted so the deferred hunter-lodge placement
         // applies the identical test).
-        auto ringPlace = [&](const char* envVar, const char* tmplPath, const char* tag,
+        auto ringPlace = [&](const char* ev, const char* tmplPath, const char* tag,
                              int fallbackW, int fallbackH) {
-            const char* ev = std::getenv(envVar);
             if (!ev || !ev[0] || ev[0] == '0') return;
 
             void* tmpl = ResolveTemplateByPath(tmplPath);
@@ -2778,8 +2778,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                 if (w <= 0 || h <= 0) { w = fallbackW; h = fallbackH; }
             }
             if (!tmpl) {
-                fprintf(stderr, "[startTown::%s] %s set but %s did not resolve; "
-                        "nothing spawned\n", tag, envVar, tmplPath);
+                fprintf(stderr, "[startTown::%s] requested (=%s) but %s did not resolve; "
+                        "nothing spawned\n", tag, ev, tmplPath);
                 fflush(stderr);
                 return;
             }
@@ -2830,7 +2830,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             fflush(stderr);
         };
 
-        ringPlace("BANISHED_BUILD_DEMO_CROPFIELD", "Template\\CropField.rsc",
+        ringPlace(Opt().buildDemoCropField, "Template\\CropField.rsc",
                   "cropfield", 8, 8);
 
         // ── the four NON-food workplaces that carry the panel work checkbox ────────
@@ -2840,17 +2840,17 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // instance in the world there is literally nothing to measure. All four are
         // ordinary placed structures with an authored CreatePlacedDescription, so the
         // generic ring scan handles them and the fallback footprints are never used.
-        ringPlace("BANISHED_BUILD_DEMO_FORESTERLODGE", "Template\\ForesterLodge.rsc",
+        ringPlace(Opt().buildDemoForesterLodge, "Template\\ForesterLodge.rsc",
                   "foresterlodge", 6, 6);
-        ringPlace("BANISHED_BUILD_DEMO_MARKET", "Template\\Market.rsc",
+        ringPlace(Opt().buildDemoMarket, "Template\\Market.rsc",
                   "market", 10, 10);
-        ringPlace("BANISHED_BUILD_DEMO_SCHOOLHOUSE", "Template\\SchoolHouse.rsc",
+        ringPlace(Opt().buildDemoSchoolHouse, "Template\\SchoolHouse.rsc",
                   "schoolhouse", 6, 6);
         // Tavern is the ConsumeProduceComponent carrier (wheat -> ale). If the probe
         // reports ConsumeProduceComponent NOT PLACED with a tavern in the world, the
         // component lives on a different template — Tailor/ToolMaker are the next
         // candidates — and the table entry, not the port, is what needs correcting.
-        ringPlace("BANISHED_BUILD_DEMO_TAVERN", "Template\\Tavern.rsc",
+        ringPlace(Opt().buildDemoTavern, "Template\\Tavern.rsc",
                   "tavern", 6, 6);
         // ── the two DISASTER-RESPONSE buildings (disaster wave 2026-08-22) ────────
         // Neither mechanic can be observed end to end without its response building in
@@ -2867,9 +2867,9 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         //                 benefit (it divides the death roll and suspends hunger).
         // Both are ordinary placed structures with an authored CreatePlacedDescription,
         // so the generic ring scan sizes them and the fallbacks are never used.
-        ringPlace("BANISHED_BUILD_DEMO_WELL", "Template\\Well.rsc",
+        ringPlace(Opt().buildDemoWell, "Template\\Well.rsc",
                   "well", 3, 3);
-        ringPlace("BANISHED_BUILD_DEMO_HOSPITAL", "Template\\DoctorHouse.rsc",
+        ringPlace(Opt().buildDemoHospital, "Template\\DoctorHouse.rsc",
                   "hospital", 7, 7);
         // -- the two remaining TOWN SERVICES (town-service wave 2026-08-23) ---------
         // Neither is founded by the autostart town, and neither can be observed at all
@@ -2883,9 +2883,9 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         //              requirement). It registers into *(GameWorld+0xf0)+0x50.
         // Both are ordinary placed structures with an authored CreatePlacedDescription,
         // so the generic ring scan sizes them and the fallbacks are never used.
-        ringPlace("BANISHED_BUILD_DEMO_CEMETERY", "Template\\Cemetery.rsc",
+        ringPlace(Opt().buildDemoCemetery, "Template\\Cemetery.rsc",
                   "cemetery", 8, 8);
-        ringPlace("BANISHED_BUILD_DEMO_CHAPEL", "Template\\Chapel.rsc",
+        ringPlace(Opt().buildDemoChapel, "Template\\Chapel.rsc",
                   "chapel", 8, 8);
         // ── QUARRY (quarry-carve wave 2026-08-26) ────────────────────────────────
         // The pit a quarry digs is a terrain HEIGHTMAP carve applied from two
@@ -2893,7 +2893,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // observed without a quarry in the world, and the autostart town founds none.
         // 21x17 is the authored CreatePlacedDescription footprint — the biggest thing
         // the ring scan places, so give it room by keeping it last in the list.
-        ringPlace("BANISHED_BUILD_DEMO_QUARRY", "Template\\Quarry.rsc",
+        ringPlace(Opt().buildDemoQuarry, "Template\\Quarry.rsc",
                   "quarry", 21, 17);
         // ── HUNTER LODGE — REQUESTED HERE, PLACED LATER. ──
         // Not ring-placed like the crop field, and for a sharper reason than the
@@ -2910,7 +2910,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // So record the request and let StartTown_DeferredSpawn_Tick place it a few
         // hundred frames in, scoring candidates by live animal density.
         {
-            const char* he = std::getenv("BANISHED_BUILD_DEMO_HUNTERLODGE");
+            const char* he = Opt().buildDemoHunterLodge;
             if (he && he[0] && he[0] != '0') {
                 void* htmpl = ResolveTemplateByPath("Template\\HunterLodge.rsc");
                 int hw = 0, hh = 0;
@@ -2963,7 +2963,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // as "well sited".) So score candidates by the accept list itself, exactly as the
         // dock block scores by its terrain mask.
         {
-            const char* ge = std::getenv("BANISHED_BUILD_DEMO_GATHERERHUT");
+            const char* ge = Opt().buildDemoGathererHut;
             if (ge && ge[0] && ge[0] != '0') {
                 void* gtmpl = ResolveTemplateByPath("Template\\GathererShelter.rsc");
                 int gw_ = 0, gh_ = 0;
@@ -3150,7 +3150,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     // predicate slot 21 will later evaluate. That makes the harness agree with the
     // thing under test by construction instead of by luck.
     {
-        const char* fe = std::getenv("BANISHED_BUILD_DEMO_FISHINGDOCK");
+        const char* fe = Opt().buildDemoFishingDock;
         if (fe && fe[0] && fe[0] != '0') {
             void* ftmpl = ResolveTemplateByPath("Template\\FishermansDock.rsc");
             int fw = 0, fh = 0;
@@ -3802,239 +3802,6 @@ extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx);
 // (>=0x100 byte buffer) with a 4-gram Markov name from Game/Names/{Male,Female}.ndb.
 extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap);
 
-// Gate: BANISHED_CITIZEN_VARIANT. Default ON (user-verified: gives per-citizen
-// male/female models instead of every colonist sharing the description's fixed
-// variant); opt out with BANISHED_CITIZEN_VARIANT=0. NB this only varies the mesh
-// variant GROUP (gender). Clothing colour (+0x34) and age/height (+0x40/+0x3c),
-// which the retail deferred init FUN_140117080 also randomizes, are still
-// uniform — that init is guarded off in standalone (housing/animation deps).
-// Give a freshly-instantiated citizen entity its gender mesh variant GROUP
-// (+0x164) via ModelComponent_RandomizeVariant. The original derives this from the
-// citizen's gender (retail variantIdx=(gender==0)?1:0); we pass an explicit index
-// so a founding family's two adults get opposite-gender models (a couple) and kids
-// alternate — matching CitizenComponent_impl_0dd0 — instead of a random pick. Runs
-// before the entity is registered so its OnAdded adds the chosen mesh. Returns the
-// resolved render ModelComponent (for the colour/scale pass) or 0.
-static uintptr_t SetCitizenModelVariant(void* entity, uint32_t tidModel, int variantIdx) {
-    if (!entity || tidModel == 0 ||
-        !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr)
-        return 0;
-    void* mc = FindComponentOnEntity(entity, tidModel);
-    if (!mc) return 0;
-    uintptr_t mcIBP = 0;
-    fn_InternalBasePtr_Ctor(&mcIBP, mc);
-    fn_InternalBasePtr_CheckPtr(&mcIBP);
-    if (!mcIBP) return 0;
-    int chosen = ModelComponent_RandomizeVariant((void*)mcIBP, variantIdx);
-#if defined(_DEBUG)
-    static int s_varLog = 0;
-    if (s_varLog < 12) {
-        ++s_varLog;
-        fprintf(stderr, "[startTown::citizen] variant model=%p variantIdx=%d\n",
-                (void*)mcIBP, chosen);
-        fflush(stderr);
-    }
-#else
-    (void)chosen;
-#endif
-    return mcIBP;
-}
-
-// Per-citizen clothing colour + age-size, applied through the SAME path retail's
-// CitizenComp_SetupAgeMesh uses: the render ModelComponent reached via
-// CitizenComponent+0x278 (character sub-component InternalBasePtr) deref +0x68.
-//   * Colour — retail (Rand()+Rand())&7 into citizen+0x34; a single Rand(rng,8) is
-//     distributionally identical (uniform 0-7). Written as float to mesh+0x140
-//     (= MeshInstance+0x118); GetInstanceTransform (Runtime 0x180101280) packs it
-//     into instance-matrix element [15] where the citizen shader reads it.
-//   * Age size — uniform scale to mesh+0x134/138/13c (= MeshInstance+0x10c/110/114):
-//     grown 1.0 (0x3f800000), child 0.66 (0x3f28f5c3). HARDCODED literals — the
-//     Setup*_Reimpl helpers read the .rdata scale constants via ResolveAddr, which
-//     is NULL in standalone (would collapse everyone to the 1.0 fallback).
-// Runs AFTER RegisterEntity: the citizen+0x278/+0x68 character-model link and the
-// scene mesh instance are only fully wired once OnAdded has run, and writing the
-// instance fields post-OnAdded avoids OnAdded re-initialising them under us.
-// `genderMc` is the ModelComponent SetCitizenModelVariant re-pointed, logged only
-// to confirm it is the same instance this path resolves.
-static void ApplyCitizenColorScale(void* entity, bool isChild, void* rng,
-                                   uintptr_t genderMc, int variantIdx) {
-    if (!entity || !fn_InternalBasePtr_Ctor ||
-        !fn_InternalBasePtr_CheckPtr)
-        return;
-    void* cc = FindComponentOnEntity(entity, TypeId("CitizenComponent"));
-    if (!cc) return;
-    uintptr_t ccIBP = 0;
-    fn_InternalBasePtr_Ctor(&ccIBP, cc);
-    fn_InternalBasePtr_CheckPtr(&ccIBP);
-    uint8_t* citizen = (uint8_t*)ccIBP;
-    if (!citizen) return;
-
-    if (!rng)
-        rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                  ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xd8) : nullptr;
-
-    // Colour index → citizen+0x34 (source of truth) AND the mesh instance slot.
-    int colorIdx = (rng && fn_Random_Rand) ? (int)fn_Random_Rand(rng, 8) : 0;
-    *(int32_t*)(citizen + 0x34) = colorIdx;
-
-    // Age — the REAL driver of the render scale. The per-frame OnUpdate2
-    // (0x1401140f0) re-derives the model scale from age every frame:
-    //   age(+0x3c) <  thresh(desc+0x44) && !dead(+0x208==0) -> SetupElder 0.66 (child)
-    //   age(+0x3c) >= thresh                                 -> SetupYoung 1.0  (adult)
-    // Our deferred citizen init (FUN_140117080) is off, so age is 0 for everyone and
-    // OnUpdate2 shrinks ALL colonists to the child scale. Reproduce the retail
-    // founding-family age draw (CitizenComponent_impl_0dd0) so adults span a real
-    // range and children fall below the threshold:
-    //   adult age = RandFloat*(desc+0x54*0.5 - desc+0x50) + desc+0x50   (DAT_140172114=0.5)
-    //   child age = RandFloat*(desc+0x44)  = uniform [0, threshold)
-    int64_t descP = *(int64_t*)(citizen + 0x288);
-    float thresh  = descP ? *(float*)(descP + 0x44) : 2.0f;
-    float age;
-    if (!descP || !(rng && fn_Random_RandFloat)) {
-        age = isChild ? 0.0f : (thresh + 1.0f);          // fallback
-    } else if (isChild) {
-        age = fn_Random_RandFloat(rng) * thresh;         // [0, threshold)
-    } else {
-        float amin = *(float*)(descP + 0x50);
-        float amax = *(float*)(descP + 0x54);
-        age = fn_Random_RandFloat(rng) * (amax * 0.5f - amin) + amin;
-        if (age < thresh) age = thresh;                  // keep adults adult-sized
-    }
-    *(float*)(citizen + 0x3c) = age;
-    // Guard against an age>=lifespan death check: keep maxAge(+0x40) above age.
-    if (*(float*)(citizen + 0x40) <= age)
-        *(float*)(citizen + 0x40) = age + 100.0f;
-
-    // Resolve the character sub-component (+0x278) then its ModelComponent (+0x68),
-    // exactly like CitizenComp_SetupAgeMesh. Direct colour + matching initial scale
-    // avoid a one-frame pop before OnUpdate2 first runs; OnUpdate2 then keeps the
-    // scale in sync with the age set above.
-    fn_InternalBasePtr_CheckPtr(citizen + 0x278);
-    uintptr_t charIBP = *(uintptr_t*)(citizen + 0x278);
-    uintptr_t mesh = charIBP ? *(uintptr_t*)(charIBP + 0x68) : 0;
-    if (mesh) fn_InternalBasePtr_CheckPtr(&mesh);
-
-    float scale = isChild ? 0.66f : 1.0f;
-    if (mesh) {
-        uint8_t* m = (uint8_t*)mesh;
-        *(float*)(m + 0x134) = scale;
-        *(float*)(m + 0x138) = scale;
-        *(float*)(m + 0x13c) = scale;
-        *(float*)(m + 0x140) = (float)colorIdx;
-    }
-
-    // Gender field (citizen+0x38) + name String (citizen+0x28). The retail deferred
-    // init (FUN_140117080) sets +0x38 = gender (0 = female, nonzero = male) and
-    // assigns a generated name to +0x28; both are read by the CitizenUI dialog
-    // (gender icon, textName). Our variant scheme maps variantIdx 0 -> male model
-    // (retail variantIdx = (gender==0)), so gender = (variantIdx==0) ? 1 : 0 and the
-    // name uses Female.ndb when variantIdx != 0. Done LAST so the colour/age RNG
-    // stream above (user-verified) is unchanged.
-    bool female = (variantIdx != 0);
-    *(int32_t*)(citizen + 0x38) = female ? 0 : 1;
-    // The name at +0x28 is an uninitialized System::String on a standalone citizen
-    // (garbage buffer ptr). Construct a fresh String in place from the generated
-    // C-string — a constructor doesn't release the (garbage) old value, which is the
-    // correct behaviour for uninitialized storage.
-    if (fn_String_Ctor_CStr) {
-        char nameBuf[0x100];
-        if (GenerateCitizenName(rng, female, nameBuf, (int)sizeof(nameBuf))) {
-            fn_String_Ctor_CStr((void*)(citizen + 0x28), nameBuf);
-#if defined(_DEBUG)
-            static int s_nameLog = 0;
-            if (s_nameLog < 12) {
-                ++s_nameLog;
-                fprintf(stderr, "[startTown::citizen] name='%s' female=%d\n",
-                        nameBuf, (int)female);
-                fflush(stderr);
-            }
-#endif
-        }
-    }
-
-#if defined(_DEBUG)
-    static int s_appLog = 0;
-    if (s_appLog < 12) {
-        ++s_appLog;
-        fprintf(stderr, "[startTown::citizen] colorscale citizen=%p mesh=%p same=%d "
-                "colour=%d scale=%.2f age=%.2f thresh=%.2f%s\n",
-                (void*)citizen, (void*)mesh, (int)(mesh && mesh == genderMc),
-                colorIdx, scale, age, thresh, isChild ? " (child)" : "");
-        fflush(stderr);
-    }
-#endif
-}
-
-// ---- Citizen Foundation-F — spawn-cell world transform (FUN_140003870) ------
-// The deferred citizen init (FUN_140117080) calls FUN_140003870 to set each
-// colonist's ModelComponent world transform; with the init guarded off the
-// transform stays zeroed, so a colonist whose mesh is added to the scene (and
-// which never subsequently moves) renders at the world ORIGIN. This reproduces
-// just that one position-setter so founding colonists stand on their spawn cell.
-//
-// FUN_140003870(ModelComponent* model, Vector3* offset, float yaw):
-//   Transform::FromYawPitchOffset(out, &yaw, &pitch=0, offset)   // RDX=yaw,
-//        R8=pitch, R9=offset — Ghidra drops the R9 dispatch-slot arg, so the
-//        decompile shows a zero local instead of `offset`; verified in disasm.
-//   write the 7-float Transform to model+0x148 (pos = +0x158/15c/160),
-//   model+0x168 = yaw, then Geometry::SetTransform(model+0x28, model+0x148).
-// FUN_140117080 always passes yaw=0, so colonists spawn facing +X. We run this
-// BEFORE RegisterEntity (like the structure Foundation-F at SpawnStructures), so
-// ModelComponent::Draw fired by OnAdded performs the Geometry::SetTransform —
-// no separate SetTransform call needed.
-//
-// The spawn cell is the founding-family jitter from sub_1040 (0x1400a1040):
-//   pos = { base.x + RandFloatTol*r, base.y + RandFloatTol*r, base.z }
-// where base = the town-centre world position and r = the spawn jitter radius
-// at startConfig+0x40 (the float just before the citizen ExternalRef at +0x48).
-static void SetCitizenSpawnTransform(void* entity, uint32_t tidModel,
-                                     const float base[3], float jitter, void* rng) {
-    if (!entity || tidModel == 0 ||
-        !fn_Transform_FromYawPitchOffset ||
-        !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr)
-        return;
-    // Guard a garbage jitter radius (the field is read raw from the start config).
-    if (!(jitter == jitter) || jitter < 0.0f || jitter > 1.0e4f) jitter = 0.0f;
-
-    void* mc = FindComponentOnEntity(entity, tidModel);
-    if (!mc) return;
-    uintptr_t mcIBP = 0;
-    fn_InternalBasePtr_Ctor(&mcIBP, mc);
-    fn_InternalBasePtr_CheckPtr(&mcIBP);
-    uint8_t* m = (uint8_t*)mcIBP;
-    if (!m) return;
-
-    // sub_1040 jitter: RandFloatTol() == RandFloat()*2-1 (same approximation the
-    // resource scatter uses). Draw order matches vanilla: first draw -> y, second -> x.
-    auto rtol = [&]() -> float {
-        return (rng && fn_Random_RandFloat) ? fn_Random_RandFloat(rng) * 2.0f - 1.0f : 0.0f;
-    };
-    float jy = rtol() * jitter;
-    float jx = rtol() * jitter;
-    float pos[3] = { base[0] + jx, base[1] + jy, base[2] };
-
-    float yaw = 0.0f, pitch = 0.0f;
-    fn_Transform_FromYawPitchOffset((void*)(m + 0x148), &yaw, &pitch, pos);
-    *(float*)(m + 0x168) = yaw;
-
-#if defined(_DEBUG)
-    static int s_posLog = 0;
-    if (s_posLog < 8) {
-        ++s_posLog;
-        const float* wt = (const float*)(m + 0x158);   // written transform pos
-        fprintf(stderr, "[startTown::citizen] spawnpos model=%p base=(%.1f,%.1f,%.1f) "
-                "jitter=%.2f -> pos=(%.1f,%.1f,%.1f) transform.pos=(%.1f,%.1f,%.1f)\n",
-                (void*)m, base[0], base[1], base[2], jitter, pos[0], pos[1], pos[2],
-                wt[0], wt[1], wt[2]);
-        fflush(stderr);
-    }
-#endif
-}
-
-// Instantiate one colonist entity from the resolved citizen template and register
-// it with the world. Returns the raw entity pointer (for optional later linking)
-// or nullptr. CitizenComponent initialisation (FUN_140117080) is deferred — see
-// the section header; only the spawn-cell transform (Foundation-F) is reproduced.
 // ---- Citizen carry-storage capacity init (BANISHED_LIVE_CITIZEN_CARRY) ----------
 // A citizen's carry StorageComponent has a valid StorageDescription (maxPerSlot +0x24
 // = 100, not area-based) but its capacity (+0x38) stays 0 in standalone: the component's
@@ -4084,41 +3851,13 @@ static void CitizenCarryStorageInit(void* ent) {
     }
 }
 
-// ---- Founding-family links (BANISHED_LIVE_CITIZEN_FAMILY) --------------------
-// The tail of CitizenComponent_impl_0dd0 (0x1400a0dd0) that this spawner replaces:
-// after the two adults are created it cross-links them as spouses, then splices each
-// child into the second adult's family ring:
-//     res18 = sub_1040(..., param_5='\0',   educated);   // gender = (param_5=='\0') = 1
-//     res8  = sub_1040(..., param_5='\x01', educated);   // gender = 0
-//     res18->+0x250 = res8;  res8->+0x250 = res18;       // spouse cross-link
-//     for each child: helper_68a0(res8, &child)          // ring join @0x1400a0fcd
-// Our SpawnOneCitizen replaces sub_1040 (the retail deferred init FUN_140117080 is
-// guarded off in standalone), so it also has to reproduce the gender field the ring
-// and the marriage finder depend on:
-//   [STANDALONE GUARD] CitizenComponent+0x38 (gender) is written by FUN_140117080 from
-//   sub_1040's `(uint)(param_5 == '\0')`. With that init off, +0x38 stayed 0 for every
-//   colonist, which means (a) helper_fe40's `cand->+0x38 != self->+0x38` opposite-gender
-//   test can never pass, so nobody can ever marry, and (b) the Update reproduction gate
-//   `+0x38 == 0` (female) is true for the entire town. Derive it from the mesh variant
-//   the same way retail does in reverse: FUN_1401253d0 gets `(ushort)(gender == 0)`, so
-//   variantIdx 0 <=> gender 1 and variantIdx 1 <=> gender 0.
-// Opt-in: this changes population dynamics (marriages, gendered births), so it is NOT
-// in kDefaultOnFlags.
-static bool FamilyLinksOn() {
-    static int en = -1;
-    if (en < 0) en = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_FAMILY") ? 1 : 0;
-    return en == 1;
-}
-
-// ---- Retail founding spawn (BANISHED_LIVE_FOUNDING_SPAWN) -------------------
-// The faithful port of sub_1040 / impl_0dd0 lives in founding_spawn.cpp. When the flag
-// is on it REPLACES SpawnOneCitizen for the founding cohort: FUN_140117080 reproduces
-// gender / mesh variant / spawn transform / name / colour / age / lifespan / housing,
-// all of which SpawnOneCitizen also does by hand, so running both double-applies them
-// and burns two RNG streams. The family CROSS-LINKS below are part of impl_0dd0 (not of
-// sub_1040) and are unconditional in retail, so the retail path performs them too — the
-// FamilyLinksOn() opt-in only governs the hand-rolled path.
-extern "C" bool  StartTown_FoundingSpawnEnabled();
+// ---- Retail founding spawn -------------------------------------------------
+// The faithful port of sub_1040 / impl_0dd0 lives in founding_spawn.cpp and is the
+// ONLY founding-colonist spawner since 2026-09-13 (the older hand-rolled
+// SpawnOneCitizen path, which reproduced gender / mesh variant / spawn transform /
+// name / colour / age / lifespan by hand and burned a second RNG stream, is gone).
+// The family CROSS-LINKS below are part of impl_0dd0 (not of sub_1040) and are
+// unconditional in retail.
 extern "C" float StartTown_FoundingAdultAge(void* citizenTemplate);
 extern "C" float StartTown_FoundingChildAge(void* citizenTemplate);
 extern "C" void* StartTown_SpawnColonistRetail(uint8_t* startConfig, void* citizenTemplate,
@@ -4136,76 +3875,6 @@ static void EnsureFamilyFuncs() {
     s_familyFuncsResolved = true;
     s_fn_JoinFamily_68a0 = reinterpret_cast<void (*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x1401168a0));
-}
-
-// Resolve the CitizenComponent behind a spawned colonist (entity already CheckPtr'd).
-static uint8_t* StartTown_CitizenComp(void* entity) {
-    if (!entity || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return nullptr;
-    void* cc = FindComponentOnEntity(entity, TypeId("CitizenComponent"));
-    if (!cc) return nullptr;
-    uintptr_t ibp = 0;
-    fn_InternalBasePtr_Ctor(&ibp, cc);
-    fn_InternalBasePtr_CheckPtr(&ibp);
-    return reinterpret_cast<uint8_t*>(ibp);
-}
-
-static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
-                             const float base[3], float jitter, void* rng,
-                             bool isChild, int variantIdx,
-                             uint8_t** outCitizen = nullptr) {
-    if (outCitizen) *outCitizen = nullptr;
-    if (!citizenTemplate) return nullptr;
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
-    void* ent = mem ? fn_EntityFactory_CreateEntity(mem, citizenTemplate) : nullptr;
-    uintptr_t entIBP = 0;
-    fn_InternalBasePtr_Ctor(&entIBP, ent);
-
-    // Per-citizen gender mesh variant + spawn-cell transform — after instantiation
-    // (Serialize ran, +0x166 set) and BEFORE registration (so OnAdded adds the
-    // chosen mesh to the scene at the spawn-cell transform).
-    uintptr_t genderMc = 0;
-    if (ent) {
-        fn_InternalBasePtr_CheckPtr(&entIBP);
-        uint32_t tidModel = TypeId("ModelComponent");
-        genderMc = SetCitizenModelVariant((void*)entIBP, tidModel, variantIdx);
-        SetCitizenSpawnTransform((void*)entIBP, tidModel, base, jitter, rng);
-    }
-
-    int category = *(int32_t*)((uint8_t*)citizenTemplate + TEMPLATE_CATEGORY);
-    fn_EntityList_RegisterEntity(entityList, &entIBP, category);
-
-    // Colour + randomized age (→ age-size) — applied AFTER registration, once
-    // OnAdded has wired the character-model link (citizen+0x278/+0x68) and the
-    // scene mesh instance.
-    if (ent) {
-        fn_InternalBasePtr_CheckPtr(&entIBP);
-        ApplyCitizenColorScale((void*)entIBP, isChild, rng, genderMc, variantIdx);
-
-        // Gender (+0x38) + the CitizenComponent handle the caller needs to build the
-        // family links — see the FamilyLinksOn() note above.
-        //
-        // The gender write is UNGATED. It used to sit inside FamilyLinksOn(), but gender
-        // is not a family-links feature: retail's per-citizen init writes +0x38 for every
-        // colonist, unconditionally, and that initializer is registered and live for every
-        // citizen BORN in game (citizencomponent.cpp -> CitizenComp_DeferredInit_117080).
-        // Only the founding colonists come through this hand-written spawner, so leaving
-        // the write behind an opt-in made the founding town the one cohort with no gender
-        // at all: +0x38 == 0 for all of them, which means (a) helper_fe40's opposite-gender
-        // test `cand->+0x38 != self->+0x38` can never pass, so no founding colonist can ever
-        // marry, and (b) the Update reproduction gate `+0x38 == 0` (female) reads true for
-        // the entire founding generation. What stays gated is the family CROSS-LINKING
-        // (spouse +0x250, child ring) below, which genuinely changes population dynamics.
-        uint8_t* cc = StartTown_CitizenComp((void*)entIBP);
-        if (cc) {
-            *reinterpret_cast<int32_t*>(cc + 0x38) = (variantIdx == 0) ? 1 : 0;
-            if (outCitizen) *outCitizen = cc;
-        }
-    }
-
-    // Give the citizen its carry-storage capacity (StorageComponent OnAdded is inert in
-    // SA) so the citizen can actually pick up/haul materials. Default-OFF (A/B).
-    CitizenCarryStorageInit(ent);
-    return ent;
 }
 
 // ---- Founding-family housing (BANISHED_LIVE_HOUSING) ------------------------
@@ -4637,7 +4306,6 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
     float townBase[3] = { 0.0f, 0.0f, 0.0f };
     if (game && fn_MapGetTerrainPos)
         StartTown_TileToWorld(game, spawnX, spawnY, townBase);
-    const float jitter = *(float*)(startConfig + 0x40);
 
     // Resolve the shared citizen template once (ExternalRef at startConfig+0x48,
     // same {name,gen,template} layout the pool entries use).
@@ -4671,15 +4339,8 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
     // gender/mesh one step out of phase with vanilla for the whole spawn.
     int kidVariant = 1;
 
-    // Retail spawn (founding_spawn.cpp) vs the hand-rolled SpawnOneCitizen — mutually
-    // exclusive, see the extern block above. The family cross-links are impl_0dd0's own
-    // work and are unconditional in retail, so the retail path always performs them.
-    const bool retailSpawn = StartTown_FoundingSpawnEnabled();
-    const bool doLinks     = retailSpawn || FamilyLinksOn();
-    fprintf(stderr, "[startTown::citizen] spawn path = %s (BANISHED_LIVE_FOUNDING_SPAWN), "
-            "familyLinks=%d\n", retailSpawn ? "RETAIL sub_1040" : "hand-rolled SpawnOneCitizen",
-            (int)doLinks);
-    fflush(stderr);
+    // The retail spawner (founding_spawn.cpp) is the only path; the family cross-links
+    // are impl_0dd0's own work and are unconditional in retail.
 
     // One spec per family. The founding families come from the start condition and spawn
     // at the town centre. Under BANISHED_STRESS one extra family is added per stress house
@@ -4725,7 +4386,7 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
         // random adult age, full-size. Matches CitizenComponent_impl_0dd0.
         uint8_t* adultA = nullptr;   // retail local_res18 — variant 0 / gender 1
         uint8_t* adultB = nullptr;   // retail local_res8  — variant 1 / gender 0 (ring host)
-        if (retailSpawn) {
+        {
             // Each adult gets its OWN RandFloat age draw immediately before its spawn —
             // that is one draw in the shared world RNG stream, so it must not be hoisted
             // out of the pair. genderSel '\0' then '\x01', matching impl_0dd0.
@@ -4741,15 +4402,12 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
                 ++spawned; fe.push_back(b);
                 CitizenCarryStorageInit(b);
             }
-        } else {
-            if (void* a = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/0, &adultA)) { ++spawned; fe.push_back(a); }
-            if (void* b = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/1, &adultB)) { ++spawned; fe.push_back(b); }
         }
 
         // Spouse cross-link (impl_0dd0: res18->+0x250 = res8; res8->+0x250 = res18).
         // Retail stores the raw component pointer taken out of the CheckPtr'd IBP.
         int linkedKids = 0;
-        if (doLinks && adultA && adultB) {
+        if (adultA && adultB) {
             *reinterpret_cast<int64_t*>(adultA + 0x250) = reinterpret_cast<int64_t>(adultB);
             *reinterpret_cast<int64_t*>(adultB + 0x250) = reinterpret_cast<int64_t>(adultA);
         }
@@ -4760,7 +4418,7 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
             kids = (int)fn_Random_Rand(rng, maxChildren + 1);
         for (int c = 0; c < kids; ++c) {
             uint8_t* kid = nullptr;
-            if (retailSpawn) {
+            {
                 // kidVariant is retail's bVar12 in the variant encoding: bVar12 true ==
                 // genderSel '\x01' == gender 0 == variantIdx 1. educated is always '\0'
                 // for children in impl_0dd0 (sub_1040 would force it anyway).
@@ -4772,12 +4430,10 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
                     ++spawned; fe.push_back(k);
                     CitizenCarryStorageInit(k);
                 }
-            } else {
-                if (void* k = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/true, /*variantIdx=*/kidVariant, &kid)) { ++spawned; fe.push_back(k); }
             }
             // impl_0dd0 @0x1400a0fcd: helper_68a0(res8, &child) — the child joins the
             // SECOND adult's ring (+0x260 head, child +0x258 host back-ref).
-            if (doLinks && adultB && kid) {
+            if (adultB && kid) {
                 EnsureFamilyFuncs();
                 if (s_fn_JoinFamily_68a0) {
                     int64_t node = reinterpret_cast<int64_t>(kid);
@@ -4791,7 +4447,7 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
         fprintf(stderr, "[startTown::citizen] family[%d] educated=%d maxKids=%d kids=%d "
                 "spouseLink=%d ringKids=%d\n",
                 f, educated, maxChildren, kids,
-                (doLinks && adultA && adultB) ? 1 : 0, linkedKids);
+                (adultA && adultB) ? 1 : 0, linkedKids);
         fflush(stderr);
     }
 

@@ -161,7 +161,7 @@ void FireComponent_InitFuncs() {
 // static-init time: FillTypedVtable re-stubs the table on first construction and
 // would erase them (reference_live_vtable_slot_must_be_wired_in_installlive).
 //
-// GATE: BANISHED_LIVE_FIRE — GRADUATED 2026-08-22, now in kDefaultOnFlags. The
+// GATE: BANISHED_LIVE_FIRE — GRADUATED 2026-08-22, now in the default-on table. The
 // "brand-new lane with no positive soak yet" that used to be written here is no
 // longer true: see the graduation note in component_factory_base.cpp for the two
 // arms that settled it. The var survives as a kill-switch (=0) for A/B runs.

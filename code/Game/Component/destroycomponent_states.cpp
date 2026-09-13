@@ -64,7 +64,7 @@
 // NOW PORTED: sub_c530 contents-scatter (0x14011c530) — reclaimed goods spill as
 // RawMaterial ground piles over the footprint (was: dropped). See below.
 //
-// Default-ON via kDefaultOnFlags (graduated 2026-07-25, upgrade path verified
+// Default-ON via the default-on table (graduated 2026-07-25, upgrade path verified
 // end-to-end); BANISHED_LIVE_DESTROY is now a kill-switch (=0). See
 // destroycomponent.cpp.
 

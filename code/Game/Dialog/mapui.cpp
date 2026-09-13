@@ -11,6 +11,7 @@
 //   +0x48  overlaySpriteSheet (ptr): sprite sheet for overlay
 
 #include "Dialog/ui_panels.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include <cstdint>
 #include <cstdio>
@@ -34,7 +35,7 @@ extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
 void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
                       void** materialOut, char useBlend, const char* elementName) {
     uintptr_t s = (uintptr_t)self;
-    bool trc = std::getenv("BANISHED_MAP_TRACE") != nullptr;
+    bool trc = Opt().mapTrace != nullptr;
     #define MAPTRC(msg) do { if (trc) { printf("[SetupImg] " msg " (elem=%s)\n", elementName); fflush(stdout);} } while(0)
     MAPTRC("enter");
 
@@ -159,7 +160,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
         fn_IsDerivedFrom(rawElem, *g_TypeId_ImageElement)) {
         imageElem = rawElem;
     }
-    if (std::getenv("BANISHED_MAP_TRACE"))
+    if (Opt().mapTrace)
         printf("[SetupImage] elem '%s': raw=%p imageElem=%p mat=%p sheet=%p\n",
                elementName, rawElem, imageElem, *materialOut, *spriteSheetOut);
     uint64_t imageElemPtr = 0;

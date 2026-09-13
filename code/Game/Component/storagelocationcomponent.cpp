@@ -222,7 +222,6 @@ static void StorageLocationComponent_PopulateStateTable() {
 static void** StorageLocationComponent_NodeVtable() { return StorageCtrlDispatch::Vtable(); }
 
 CONTROLLER_LIVE_FACTORY_STATES(StorageLocationComponent, 0x48, 0x82, 0x28, 2,
-                               "BANISHED_LIVE_STORAGECTRL",
                                StorageLocationComponent_NodeVtable,
                                StorageLocationComponent_PopulateStateTable)
 CONTROLLER_INSTALL_SERIALIZE(StorageLocationComponent,

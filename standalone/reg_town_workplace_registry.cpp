@@ -15,7 +15,7 @@
 extern "C" void ResidenceComponent_impl_95a0(int64_t townMgr, void* workplaceRefIBP, uint64_t key); // 0x1400895a0
 extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t professionKey);        // 0x140089470
 
-// BANISHED_LIVE_SEAT_SHUFFLE — OPT-IN (deliberately not in kDefaultOnFlags).
+// BANISHED_LIVE_SEAT_SHUFFLE — OPT-IN (deliberately not in the default-on table).
 //
 // 0x140089470 is FindAvailableBuilding's step 1: a Fisher-Yates shuffle of the
 // candidate building list for one profession. Leaving it unregistered (the state
@@ -28,7 +28,7 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
 // on: the project scar here is explicit — an unflagged change on the default path is
 // an unnoticed behaviour change, and defaults-only must stay testable. A/B it with
 // BANISHED_LIVE_SEAT_SHUFFLE=1 against the unset default before proposing it for
-// kDefaultOnFlags.
+// the default-on table.
 static bool SeatShuffleOn() {
     return Opt().liveSeatShuffle;
 }

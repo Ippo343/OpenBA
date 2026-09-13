@@ -2,6 +2,7 @@
 // Initializes function pointers and global variable addresses from Runtime-x64.dll.
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "resolve.h"
 
 // Implemented in standalone/resolve_standalone.cpp and declared in
@@ -2844,7 +2845,7 @@ bool EngineFuncsInit() {
         const bool isOurPort =
             b && RuntimeExportIsRegistered("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ");
         const bool doesNothing = isRet || isOurPort;
-        const char* env = std::getenv("BANISHED_CHECKPTR_NOP");
+        const char* env = Opt().checkPtrNop;
         const bool forceOff = env && env[0] == '0';
         g_checkPtrIsNop = doesNothing && !forceOff;
 #ifdef BANISHED_CHECKPTR_STATIC_NOP

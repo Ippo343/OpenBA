@@ -42,7 +42,6 @@ extern "C" void TradeUI_SmallSort_ByComponent_16920(void* first, void* last,
                                                     void* ctx);              // 0x140016920
 extern "C" bool TradeUI_NameLess_845d0(void* self, const void* a, const void* b);   // 0x1400845d0
 extern "C" bool TradeUI_ComponentLess_84430(void* ctx, const void* a, const void* b); // 0x140084430
-extern "C" void TradeUI_SortSelfTest();
 extern "C" void TradeUI_GetBuyEntries_59670(void* tradeState, void* outArray); // 0x140059670
 extern "C" int   TradeUI_GetResourcePrice_a520(void* tradeState, void* resourceEntity); // 0x14005a520
 extern "C" void** TradeUI_FindValueDescription_ea80(const void* resourceEntity,
@@ -83,5 +82,4 @@ void RegisterTradeUILeavesBatch() {
 
     // Opt-in (BANISHED_TRADE_SORT_SELFTEST=1), no-op otherwise. Uses no engine
     // functions, so running it this early is safe.
-    TradeUI_SortSelfTest();
 }

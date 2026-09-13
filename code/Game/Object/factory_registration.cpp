@@ -72,7 +72,6 @@ uint32_t GetTypeIdByName(const char* name) {
 
 // The BANISHED_DUMP_SLOT3 inventory this printed was deleted with the flag (ENDGAME C).
 // standalone/menudialogloopt_stubs.cpp still calls it; the stub goes when that call does.
-void DumpSlot3Inventory() {}
 
 
 void ForEachRegistration(RegistrationVisitFn fn, void* ctx) {

@@ -432,7 +432,6 @@ extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void*, uintptr_t*);  //
 static void ConsumeProduceCtrl_PopulateAndWireCmd();
 
 CONTROLLER_LIVE_FACTORY_STATES(ConsumeProduceComponent, 0x70, 0x80, 0x28, 2,
-                               "BANISHED_LIVE_CONSUMEPRODUCE_CMD",
                                RPCtrl_NodeVtable, ConsumeProduceCtrl_PopulateAndWireCmd)
 
 // void*-ABI adapters for the two lifecycle slots. Slot 3 takes the stream; slot 4

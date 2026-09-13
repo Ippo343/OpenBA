@@ -39,7 +39,7 @@
 // For the BANISHED_LIVE_STORAGE eat-message typeid heal in the
 // SendComponentMessage copy-ctor (see Pf_SendComponentMessageCopyCtor_b1d0).
 #include "Object/factory_registration.h"           // ::Object::GetTypeIdByName
-#include "Component/component_factory_base.h"      // ::ComponentFactory::LiveEnabled
+#include "Component/component_factory_base.h"      // ::ComponentFactory::the live gate
 
 namespace {
 // --- Type-ID globals (exe .rdata), resolved lazily once. ---

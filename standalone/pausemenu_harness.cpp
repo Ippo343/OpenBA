@@ -43,7 +43,6 @@
 // code/Game/Dialog/mod_dialog_vtables.cpp -- BANISHED_PAUSEMENU_CLICKS targets
 extern "C" void* ModDialog_LastOpened();
 extern "C" void* ModDetailsDialog_LastOpened();
-extern "C" void  ModProbe_DumpModList(const char* tag);
 
 extern "C" void* EntityUI_OpenPauseMenu(void* entityUI);  // code/Game/Dialog/toolbardialog.cpp
 
@@ -142,8 +141,6 @@ extern "C" void PauseMenuHarness_Tick(void* entityUI, int frameNum) {
             else       { s_clickCursor = nullptr; }
             if (tok[0] == 'w') {
                 std::fprintf(stderr, "[PauseMenu] CLICKS: wait (frame %d)\n", frameNum);
-            } else if (tok[0] == 'p') {
-                ModProbe_DumpModList("clicks");
             } else if (tok[0] == 'd') {
                 void* dlg = ModDetailsDialog_LastOpened();
                 int id = std::atoi(tok + 1);

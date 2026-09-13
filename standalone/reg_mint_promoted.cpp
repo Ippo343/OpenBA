@@ -2374,7 +2374,7 @@ int RtMintRegisterPromotedRows() {
     //           Geometry base ctor on `s+0x28`, then reads back the vtable it
     //           stamped as `baseV` and hands it to StatusIconGeometry_BuildVtable.
     //           The path is gated on BANISHED_LIVE_STATUSICON_DRAW, which is in
-    //           kDefaultOnFlags (component_factory_base.cpp:189) — DEFAULT ON.
+    //           the default-on table (component_factory_base.cpp:189) — DEFAULT ON.
     //        2. code/Game/Component/statusicon_geometry.cpp:341 copies
     //           `i < 12` slots out of that table into the billboard's own.
     //        3. The table is NINE slots. Read from the shipped DLL at

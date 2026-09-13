@@ -23,7 +23,7 @@
 // REGISTRATION-GATED (like reg_component_spawn): when a gate is off, ResolveAddr of that
 // slot stays 0 and every reader keeps its null-guarded skip.
 //
-// c7158 GRADUATED 2026-08-26 — BANISHED_LIVE_CITIZENAI_CITID is in kDefaultOnFlags, so it
+// c7158 GRADUATED 2026-08-26 — BANISHED_LIVE_CITIZENAI_CITID is in the default-on table, so it
 // is ON by default and the env var is now a KILL-SWITCH (=0). A default run is therefore
 // NO LONGER byte-for-byte unchanged at this slot: the ~30 c7158 readers see a real CRC.
 // That is the same CRC several of them already reached by private GetTypeIdByName copies,
@@ -37,7 +37,6 @@
 // A/B those gates separately before graduating either.
 #include "resolve.h"
 #include "Object/factory_registration.h"      // Object::GetTypeIdByName
-#include "Component/component_factory_base.h" // ComponentFactory::LiveEnabled
 #include <cstdint>
 #include <cstdio>
 
@@ -72,17 +71,11 @@ void RegisterCitizenAITypeIds() {
     // has ~30 readers incl. the Serialize IBP-validators (which CLEAR refs on
     // IsDerivedFrom mismatch — verify vtable GetTypeId returns the same CRC as
     // GetTypeIdByName before enabling around save/load) and the child-birth
-    // FindCompByTypeId (citizencomponent.cpp:1906). BANISHED_LIVE_CITIZENAI_TIDS (or
-    // the global BANISHED_LIVE_COMPONENTS, via LiveEnabled) turns on all three.
-    // NOTE: deliberately NOT "BANISHED_LIVE_CITIZENAI" — that flag is default-on for the
-    // handler/statemachine bring-up; reusing it would silently flip the two still-opt-in
-    // fills (c70e8, c42c0) on as well.
-    // _TIDS turns on all three, so setting it also opts INTO the two ungraduated slots.
-    const bool all = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZENAI_TIDS");
-    if (all || ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZENAI_HAPPYID"))
-        RegisterExeAddr(0x1401c42c0, reinterpret_cast<uintptr_t>(&g_tid_HappinessComponent));
-    if (all || ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZENAI_AIID"))
-        RegisterExeAddr(0x1401c70e8, reinterpret_cast<uintptr_t>(&g_tid_CitizenAIComponent));
-    if (all || ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZENAI_CITID"))
-        RegisterExeAddr(0x1401c7158, reinterpret_cast<uintptr_t>(&g_tid_CitizenComponent));
+    // FindCompByTypeId (citizencomponent.cpp:1906).
+    //
+    // ENDGAME C.2 (2026-09-13): c7158 graduated (it had been default-on). The other
+    // two fills (c42c0 HappinessComponent, c70e8 CitizenAIComponent) were opt-in and
+    // OFF on every default run, so they are deleted with their flags rather than
+    // switched on untested; their storage globals stay for when they are brought up.
+    RegisterExeAddr(0x1401c7158, reinterpret_cast<uintptr_t>(&g_tid_CitizenComponent));
 }

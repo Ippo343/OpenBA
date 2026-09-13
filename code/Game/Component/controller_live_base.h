@@ -57,10 +57,9 @@ void** NodeVtable();
 //   Flags     = the _Ctor `OR EAX,0xNN` capability flags written to +0x20
 //   NodeOff   = embedded state-node offset (CreateState's `LEA RAX,[RCX+NodeOff]`)
 //   DefState  = GetDefaultState's constant return (the default state id)
-//   EnvVar    = legacy macro parameter, unused (kept until the invocations are cleaned up)
 //
 // Requires "Object/factory_registration.h" and "Component/component_factory_base.h".
-#define CONTROLLER_LIVE_FACTORY(Name, Size, Flags, NodeOff, DefState, EnvVar)    \
+#define CONTROLLER_LIVE_FACTORY(Name, Size, Flags, NodeOff, DefState)            \
     static uint32_t Name##_LiveGetTypeId(void*) {                               \
         static uint32_t cached = 0;                                             \
         if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);             \
@@ -112,11 +111,10 @@ void** NodeVtable();
 //                  (e.g. ControllerLive::Dispatcher<Tag>::Vtable()).
 //   PopulateFn   : `void(void)` that fills the controller's StateTable once
 //                  (idempotent — replicates <X>Description_Setup's sub_f500/f620).
-// Both run only when the env opt-in is set; default (off) => byte-unchanged inert.
 // Requires "Object/factory_registration.h", "Component/component_factory_base.h"
 // and "Component/controller_state_table.h".
 #define CONTROLLER_LIVE_FACTORY_STATES(Name, Size, Flags, NodeOff, DefState,     \
-                                       EnvVar, NodeVtableFn, PopulateFn)         \
+                                       NodeVtableFn, PopulateFn)                 \
     static uint32_t Name##_LiveGetTypeId(void*) {                               \
         static uint32_t cached = 0;                                             \
         if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);             \

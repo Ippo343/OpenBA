@@ -2,16 +2,15 @@
 // standalone/options.cpp — the ONE place the process reads its environment.
 //
 // See options.h for the inventory and the rules. This file is the only getenv
-// site in standalone/ (env_cache.cpp aside, which IS the getenv wrapper), and
+// site in the whole tree, and
 // OptionsInit() is called from the top of WinMain before anything else looks
 // at a BANISHED_* variable.
 //
-// The stress-town block at the bottom is the one place that writes the
-// environment. It replaces standalone/stress_harness.cpp's old SetIfUnset()
-// calls, which ran mid-boot and were the reason "read the environment once"
-// was not true before. It writes at boot, before any reader, and the writes
-// exist only because ~600 getenv sites in code/ have not been migrated yet;
-// when they have, the _putenv_s half of it goes and the fields alone remain.
+// The stress-town block at the bottom fills the defaults the stress town needs
+// that the caller did not give. It replaces standalone/stress_harness.cpp's old
+// SetIfUnset() calls, which ran mid-boot and were the reason "read the
+// environment once" was not true before. Since ENDGAME C.2/C.4 it writes only
+// struct fields: nothing in the tree reads the environment by name any more.
 // ============================================================================
 #include "options.h"
 
@@ -53,20 +52,15 @@ bool PerfBool(const char* name, bool def) {
 }
 
 // The stress town's defaults: set only what the caller left unset, exactly as
-// stress_harness.cpp's SetIfUnset did. `field` is updated either way so the
-// struct and the environment agree.
-void StressDefault(const char* name, const char* value, const char*& field) {
-    if (Raw(name)) return;                     // the caller's value wins
-    _putenv_s(name, value);                    // TEMPORARY: code/ still reads these by name
-    field = Raw(name);
+// stress_harness.cpp's SetIfUnset did. Since ENDGAME C.2/C.4 nothing reads the
+// environment by name any more, so this sets the FIELD and writes nothing.
+void StressDefault(const char*, const char* value, const char*& field) {
+    if (field) return;                         // the caller's value wins
+    field = value;
 }
 
 void ApplyStressDefaults(Options& o) {
-    char buf[64];
-    if (!Raw("BANISHED_AUTOSTART")) {
-        _putenv_s("BANISHED_AUTOSTART", "1");
-        o.autostart = true;
-    }
+    if (!o.autostart) o.autostart = true;
     StressDefault("BANISHED_MAP_SIZE", "medium", o.mapSize);
     // 31337: the town sits on a 27k-cell connected flat area (seed 12345: 11k, cut up by
     // low mountains and rivers, too small for 333 door-reachable footprints — 2026-09-04).
@@ -74,19 +68,19 @@ void ApplyStressDefaults(Options& o) {
     StressDefault("BANISHED_DIFFICULTY", "easy", o.difficulty);
     StressDefault("BANISHED_CLIMATE", "fair", o.climate);
     StressDefault("BANISHED_FPS_CAP", "off", o.fpsCap);
-    std::snprintf(buf, sizeof(buf), "%d", o.stressSpeed);
-    StressDefault("BANISHED_FORCE_SPEED", buf, o.forceSpeed);
-    std::snprintf(buf, sizeof(buf), "%d", o.stressInterval);
-    StressDefault("BANISHED_SIMPROF", buf, o.simprof);
+    static char speedBuf[64];
+    std::snprintf(speedBuf, sizeof(speedBuf), "%d", o.stressSpeed);
+    StressDefault("BANISHED_FORCE_SPEED", speedBuf, o.forceSpeed);
+    static char profBuf[64];
+    std::snprintf(profBuf, sizeof(profBuf), "%d", o.stressInterval);
+    StressDefault("BANISHED_SIMPROF", profBuf, o.simprof);
     if (o.stressFrames > 0) {
         if (!Raw("BANISHED_PAUSEMENU")) {
-            std::snprintf(buf, sizeof(buf), "%d", o.stressFrames);
-            _putenv_s("BANISHED_PAUSEMENU", buf);
             o.pausemenu = o.stressFrames;
             if (o.pausemenu > 0 && o.pausemenu < 600) o.pausemenu = 600;
         }
-        if (!Raw("BANISHED_PAUSEMENU_QUIT")) { _putenv_s("BANISHED_PAUSEMENU_QUIT", "60"); o.pausemenuQuit = 60; }
-        if (!Raw("BANISHED_PAUSEMENU_BUTTON")) { _putenv_s("BANISHED_PAUSEMENU_BUTTON", "6"); o.pausemenuButton = 6; }
+        if (!Raw("BANISHED_PAUSEMENU_QUIT"))   o.pausemenuQuit   = 60;
+        if (!Raw("BANISHED_PAUSEMENU_BUTTON")) o.pausemenuButton = 6;
     }
     StressDefault("BANISHED_CAMERA_PIN", "town,90", o.cameraPin);
     // The buildings starttown.cpp can only site through their own dedicated blocks
@@ -184,12 +178,7 @@ void OptionsInit() {
     o.cropFieldForceStart  = Raw("BANISHED_CROPFIELD_FORCE_START");
     o.orchardForceStart    = Raw("BANISHED_ORCHARD_FORCE_START");
 
-    // BANISHED_FORCE_CONSTRUCT implies BANISHED_BUILD_SYNC_DELIVERED. That used
-    // to be a mid-run _putenv_s in code/Game/Game/construction_force_harness.cpp,
-    // racing GatherRawMaterials::Execute's own cached read; it is a derived
-    // option now, decided once, here.
     o.forceConstruct     = On("BANISHED_FORCE_CONSTRUCT");
-    o.buildSyncDelivered = o.forceConstruct || On("BANISHED_BUILD_SYNC_DELIVERED");
     {   const char* v = Raw("BANISHED_BUILD_SYNC_LABOR");
         o.buildSyncLabor = !(v && v[0] == '0'); }        // default ON; only "=0" disables
 
@@ -276,6 +265,45 @@ void OptionsInit() {
         o.liveSeatShuffle = v && v[0] != '0'; }
     {   const char* v = Raw("BANISHED_LIVE_TUTORIALINSTANCE_VT");
         o.liveTutorialInstVt = v && v[0] != '0'; }
+
+
+    // ── code/Game readers migrated off getenv (ENDGAME C.2/C.4 close) ────────
+    o.buildDemoForce         = Raw("BANISHED_BUILD_DEMO_FORCE");
+    o.buildDemoFrames        = Raw("BANISHED_BUILD_DEMO_FRAMES");
+    o.buildDemoIndex         = Raw("BANISHED_BUILD_DEMO_INDEX");
+    o.buildDemoHouse         = Raw("BANISHED_BUILD_DEMO_HOUSE");
+    o.buildDemoForesterLodge = Raw("BANISHED_BUILD_DEMO_FORESTERLODGE");
+    o.buildDemoMarket        = Raw("BANISHED_BUILD_DEMO_MARKET");
+    o.buildDemoSchoolHouse   = Raw("BANISHED_BUILD_DEMO_SCHOOLHOUSE");
+    o.buildDemoTavern        = Raw("BANISHED_BUILD_DEMO_TAVERN");
+    o.buildDemoWell          = Raw("BANISHED_BUILD_DEMO_WELL");
+    o.buildDemoHospital      = Raw("BANISHED_BUILD_DEMO_HOSPITAL");
+    o.buildDemoCemetery      = Raw("BANISHED_BUILD_DEMO_CEMETERY");
+    o.buildDemoChapel        = Raw("BANISHED_BUILD_DEMO_CHAPEL");
+    o.buildDemoQuarry        = Raw("BANISHED_BUILD_DEMO_QUARRY");
+    o.stressAllowPockets     = Raw("BANISHED_STRESS_ALLOW_POCKETS");
+    o.stressKindMap          = Raw("BANISHED_STRESS_KINDMAP");
+    o.forceWork              = Raw("BANISHED_FORCE_WORK");
+    o.forceHarvest           = Raw("BANISHED_FORCE_HARVEST");
+    o.forceForesterWork      = Raw("BANISHED_FORCE_FORESTERWORK");
+    o.forceSnow              = Raw("BANISHED_FORCE_SNOW");
+    o.forceDeviceLost        = Raw("BANISHED_FORCE_DEVICE_LOST");
+    o.screenshotAt           = Raw("BANISHED_SCREENSHOT_AT");
+    o.captureIngame          = Raw("BANISHED_CAPTURE_INGAME");
+    o.achIgnoreMods          = Raw("BANISHED_ACH_IGNORE_MODS");
+    o.factoryEnum            = Raw("BANISHED_FACTORY_ENUM");
+    o.fastTrig               = Raw("BANISHED_FAST_TRIG");
+    o.checkPtrNop            = Raw("BANISHED_CHECKPTR_NOP");
+    o.treeGuards             = Raw("BANISHED_TREE_GUARDS");
+    o.treePrefetch           = Raw("BANISHED_TREE_PREFETCH");
+    o.unregCensusFrames      = Int("BANISHED_UNREG_CENSUS", 0);
+    o.mapTrace               = Raw("BANISHED_MAP_TRACE");
+    o.movetickTrace          = Raw("BANISHED_MOVETICK_TRACE");
+    o.plagueTrace            = Raw("BANISHED_PLAGUE_TRACE");
+    o.cropDiseaseTrace       = Raw("BANISHED_CROPDISEASE_TRACE");
+    o.tornadoTrace           = Raw("BANISHED_TORNADO_TRACE");
+    o.serializeTrace         = Raw("BANISHED_SERIALIZE_TRACE");
+    o.selectDiag             = Raw("BANISHED_SELECT_DIAG");
 
     // ── diagnostics ──────────────────────────────────────────────────────────
     {   const char* v = Raw("BANISHED_ALLOC_STATS");

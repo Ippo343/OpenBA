@@ -45,7 +45,6 @@
 
 // code/Game/Component/component_factory_base.cpp — central live-feature gate
 // (default-on table + env kill-switch). Fwd-declared to avoid the include path.
-namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
 
 // Clean reimpls in code/Game/Game/gameupdateloop.cpp. Declared extern "C" there;
 // void* self here is ABI-identical to the real GameUpdateLoop* and avoids
@@ -118,18 +117,15 @@ const char* GUL_GetResourceFilename(void* self) {
     // terminates immediately. Our GameUpdateLoop_Load loads what the world build
     // needs on-demand, so the eager preload is redundant for first-light — with it
     // skipped the world builds (~1480 entities) and GameUpdateLoop::Update ticks
-    // per-frame (verified 2026-06-17). Opt back in (e.g. once FindOrLoad dedup is
-    // fixed and the full preload terminates) with BANISHED_GAME_PRELOAD=1.
-    static int s_preload = -1;
-    if (s_preload < 0) {
-        s_preload = ::ComponentFactory::LiveEnabled("BANISHED_GAME_PRELOAD") ? 1 : 0;
-        printf("[GUL::GetResourceFilename] preload=%s -> returning %s\n",
-               s_preload ? "ON (BANISHED_GAME_PRELOAD)" : "off (default)",
-               s_preload ? "\"Game/Game\" (engine will recursively preload the "
-                           "HUD/dialog/toolbar resource tree)" : "null (skip preload)");
+    // per-frame (verified 2026-06-17). The preload graduated to always-on
+    // 2026-09-13 (it had been default-on via the default-on table since 2026-07-19).
+    static bool s_logged = false;
+    if (!s_logged) {
+        s_logged = true;
+        printf("[GUL::GetResourceFilename] preload ON -> returning \"Game/Game\" "
+               "(engine will recursively preload the HUD/dialog/toolbar resource tree)\n");
         fflush(stdout);
     }
-    if (!s_preload) return nullptr;
     return "Game/Game";
 }
 

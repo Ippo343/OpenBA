@@ -400,7 +400,7 @@ void RegisterUnregLane4TypeIds() {
 // 0x1401c42c0 (HappinessComponent, load=1) and 0x1401c70e8 (CitizenAIComponent) —
 //   ALREADY registered, by reg_citizenai_typeids.cpp:83/85, but behind the opt-in
 //   flags BANISHED_LIVE_CITIZENAI_HAPPYID / _AIID (only the third of that trio,
-//   _CITID, has graduated into kDefaultOnFlags). That is why they still show up in the
+//   _CITID, has graduated into the default-on table). That is why they still show up in the
 //   census as unregistered. Registering them again from here would create a SECOND
 //   storage dword for the same address and silently split the slot depending on init
 //   order — the trap reg_food_typeid.cpp calls out for RadiusDescription. Graduating

@@ -187,7 +187,6 @@ static void MarketLocationComponent_RemoveVSlot(void* self) {
 // per-type vtable on each instance creation, so a one-shot install would be erased
 // by the next component created.
 static void MarketLocationComponent_FinishVtable() {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_MARKETLOC")) return;
     MarketLocationComponent_InertVtable[3] =
         reinterpret_cast<void*>(&MarketLocationComponent_ShutdownVSlot);
     MarketLocationComponent_InertVtable[7] =

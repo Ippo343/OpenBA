@@ -99,7 +99,7 @@ aborts. First run: `[Dx11Seam] 84/84 slots ours, in 12 exe-owned vtables`.
 
 **No per-slot flags.** Every slot is unconditionally ours. While the DLL was
 mapped each registration carried a `BANISHED_DX11_*` name and a `defaultOn` bool,
-following the project's kill-switch convention (`kDefaultOnFlags` in
+following the project's kill-switch convention (`the default-on table` in
 `code/Game/Component/component_factory_base.cpp`): a new slot started opt-in and
 graduated to default-on once verified in-game, after which the var was a `=0`
 kill switch. That convention needs somewhere to fall back *to*. With the original
@@ -519,7 +519,7 @@ serialized:
 4. RenderDoc-diff the frame against the baseline capture. Draw calls, pipeline
    state and render targets must match.
 5. Only then flip the registration to `defaultOn=true` — the env var becomes a
-   `=0` kill switch, per `kDefaultOnFlags` policy.
+   `=0` kill switch, per `the default-on table` policy.
 
 Steps 2–4 required the shipped implementation reachable and are not available
 now. To verify a *change* to an already-ported slot, the current equivalent is to

@@ -31,7 +31,7 @@
 //
 // This is driven by the entity's StateMachineComponent, which links every owner
 // ControllerComponent's embedded state node (at comp+0x28) and ticks it. Opt-in via
-// BANISHED_LIVE_CLEARCTRL (or the global BANISHED_LIVE_COMPONENTS) — default OFF =>
+// BANISHED_LIVE_CLEARCTRL (or the global the global live-components switch) — default OFF =>
 // byte-for-byte unchanged run. Requires the StateMachineComponent to be live
 // (BANISHED_LIVE_STATEMACHINE) so the node is linked and ticked.
 //

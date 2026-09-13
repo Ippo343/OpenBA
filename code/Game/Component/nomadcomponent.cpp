@@ -594,7 +594,6 @@ void NomadComponent_InitFuncs() {
 extern "C" void** NomadCtrl_NodeVtable();
 extern "C" void   NomadCtrl_PopulateTable();
 CONTROLLER_LIVE_FACTORY_STATES(NomadComponent, 0x78, 0x82, 0x58, 0,
-                               "BANISHED_LIVE_IMMIGRATION",
                                NomadCtrl_NodeVtable, NomadCtrl_PopulateTable)
 CONTROLLER_INSTALL_SERIALIZE(NomadComponent, NomadComponent_Shutdown)
 REGISTER_TYPE(NomadComponent, "ControllerComponent",

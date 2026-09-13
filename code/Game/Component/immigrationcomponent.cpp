@@ -256,7 +256,6 @@ void ImmigrationComponent_InitFuncs() {
 extern "C" void** ImmigrationCtrl_NodeVtable();
 extern "C" void   ImmigrationCtrl_PopulateTable();
 CONTROLLER_LIVE_FACTORY_STATES(ImmigrationComponent, 0x68, 0x80, 0x28, 2,
-                               "BANISHED_LIVE_IMMIGRATION",
                                ImmigrationCtrl_NodeVtable, ImmigrationCtrl_PopulateTable)
 CONTROLLER_INSTALL_SERIALIZE(ImmigrationComponent, ImmigrationComponent_Shutdown)
 REGISTER_TYPE(ImmigrationComponent, "ControllerComponent",

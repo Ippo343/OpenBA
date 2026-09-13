@@ -657,7 +657,6 @@ static void BuildComponent_PopulateStateTable() {
 static void** BuildComponent_NodeVtable() { return BuildCtrlDispatch::Vtable(); }
 
 CONTROLLER_LIVE_FACTORY_STATES(BuildComponent, 0x78, 0x83, 0x28, 1,
-                               "BANISHED_LIVE_BUILDCTRL",
                                BuildComponent_NodeVtable,
                                BuildComponent_PopulateStateTable)
 REGISTER_TYPE(BuildComponent, "ControllerComponent",
@@ -672,7 +671,7 @@ static void BuildComponent_OnRemoveVSlot(void* s) {
 // Slot 6 (+0x30) — the real OnAdded broadcast, retail 0x140108d40. See the header block
 // above BuildComponent_DrawReimpl for the slot proof.
 //
-// DEFAULT-ON via kDefaultOnFlags (graduated 2026-07-27); the env var is a kill-switch (=0).
+// DEFAULT-ON via the default-on table (graduated 2026-07-27); the env var is a kill-switch (=0).
 // Wiring it un-dormants the whole body for EVERY build site at registration time rather
 // than lazily at state-8 entry:
 //   * Stage 1/2 fill the mesh (+0x58/+0x60) and picking (+0x68/+0x70) lists from the
@@ -708,7 +707,7 @@ static void BuildComponent_OnAddedVSlot(void* s) {
 // +0x50) and both entity-IBP arrays (+0x60/+0x70) never round-tripped, resetting every
 // construction site to its ctor default on the first post-load tick. Wired
 // here, inside InstallLive (save/load wave 2026-08-27) — like the two OnAdded/OnRemove
-// slots below it rides BANISHED_LIVE_BUILDCTRL, which is DEFAULT-ON (kDefaultOnFlags),
+// slots below it rides BANISHED_LIVE_BUILDCTRL, which is DEFAULT-ON (the default-on table),
 // so on the default path this is effectively unconditional; the two slots below stay
 // individually opt-in on their OWN env vars regardless.
 static void BuildComponent_ShutdownVSlot(void* self, void* stream) {
@@ -728,9 +727,7 @@ static void BuildComponent_InstallMsgSlot() {
     // buildcomponent_state8.cpp removes the site on COMPLETION, so the hole only opens
     // for a site torn down before state 8: a cancelled/demolished foundation leaves a
     // dangling entry that BuilderPool_Tick then walks. Same bug class as the citizen
-    // list; OPT-IN (BANISHED_LIVE_BUILD_ONREMOVE) because, unlike the citizen teardown,
-    // this one has not been exercised against a live cancel-a-foundation repro yet.
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILD_ONREMOVE"))
-        BuildComponent_LiveVtable[7] = reinterpret_cast<void*>(&BuildComponent_OnRemoveVSlot);
+    // list. (Was opt-in until 2026-09-13; graduated with the rest of ENDGAME C.2.)
+    BuildComponent_LiveVtable[7] = reinterpret_cast<void*>(&BuildComponent_OnRemoveVSlot);
 
 }

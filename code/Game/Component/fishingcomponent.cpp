@@ -133,7 +133,7 @@ void FishingComponent_InitFuncs() {
 //   DefState 2 — primary slot 16 (GetDefaultState) is the shared 0x1400026c0 =
 //                `MOV EAX,2; RET`.
 //
-// DEFAULT-ON via kDefaultOnFlags (graduated 2026-08-17); the env var is now a
+// DEFAULT-ON via the default-on table (graduated 2026-08-17); the env var is now a
 // kill-switch (=0). The positive-outcome run the old note asked for: at seed 12345 with
 // the demo dock staffed 4/4 in both arms, OFF left registered(+0x50)=0 rate(+0x54)=0.000
 // and no fish resource type in town storage at all; ON gave registered=1 rate=1.444 and
@@ -164,7 +164,6 @@ extern "C" char  FishingComponent_ProduceTick(void* self, void* time);  // 0x140
 static void FishingCtrl_PopulateAndWireHooks();
 
 CONTROLLER_LIVE_FACTORY_STATES(FishingComponent, 0x58, 0x80, 0x28, 2,
-                               "BANISHED_LIVE_FISHING",
                                RPCtrl_NodeVtable, FishingCtrl_PopulateAndWireHooks)
 
 static void FishingCtrl_PopulateAndWireHooks() {

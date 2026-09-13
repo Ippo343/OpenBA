@@ -141,6 +141,7 @@
 // registered by this file.
 
 #include "dx11_seam.h"
+#include "options.h"
 #include "dx11_backend_access.h"
 
 #include <windows.h>
@@ -615,7 +616,7 @@ static_assert(static_cast<int>(DXGI_FORMAT_B8G8R8A8_UNORM) == 0x57,
 // the half MainLoop::OnVideoError / OnVideoRestart live on.
 //
 // Off unless the env var is set, and `getenv` is process-cached
-// (standalone/env_cache.h), so the read costs nothing per frame.
+// (standalone/options.h), so the read costs nothing per frame.
 // ============================================================
 namespace {
 
@@ -625,7 +626,7 @@ bool ForceDeviceLostThisFrame() {
     static long frame  = 0;
     static bool fired  = false;
     if (wanted == -2) {
-        const char* v = std::getenv("BANISHED_FORCE_DEVICE_LOST");
+        const char* v = Opt().forceDeviceLost;
         wanted = (v && *v) ? std::atoi(v) : -1;
         if (wanted > 0)
             std::fprintf(stderr,

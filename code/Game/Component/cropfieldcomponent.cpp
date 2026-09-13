@@ -644,7 +644,7 @@ static int CropFieldComponent_Slot21Const(void*) { return 3; }
 extern "C" void* ControllerLive_ScalarDeletingDtor(void*, unsigned int);  // slot 18
 static void CropFieldCtrl_Populate();
 
-// DEFAULT-ON via kDefaultOnFlags (graduated 2026-08-17); the env var is now a
+// DEFAULT-ON via the default-on table (graduated 2026-08-17); the env var is now a
 // kill-switch (=0). Positive run at seed 12345: with a crop chosen the field went
 // accepting=1 staffed=2, state 2 -> 1, and a crop resource type appeared in town
 // storage that the flag-off arm never had. Full A/B in component_factory_base.cpp.
@@ -655,7 +655,6 @@ static void CropFieldCtrl_Populate();
 // what sets it (BANISHED_CROPFIELD_FORCE_START=2 emulates the pick).
 
 CONTROLLER_LIVE_FACTORY_STATES(CropFieldComponent, 0x68, 0x80, 0x28, 2,
-                               "BANISHED_LIVE_CROPFIELD",
                                CropFieldCtrl_NodeVtable, CropFieldCtrl_Populate)
 
 static void CropFieldCtrl_Populate() {

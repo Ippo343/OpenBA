@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/citizencomponent_funcs.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -128,7 +129,6 @@ static void CitizenStatusIcon_SetFlag(void* icon, int flagIndex, char value) {
         StatusIcon_Toggle(reinterpret_cast<StatusIconComponent*>(icon), flagIndex, value != 0);
 }
 
-namespace ComponentFactory { bool LiveEnabled(const char* envVar); }  // fwd (full include is further down)
 
 // CitizenComponent_AssignWorkplace(self, workplaceIBP, slotIndex)
 // At 0x140114ca0
@@ -276,11 +276,9 @@ static void EnsureHelpers() {
     // declared and null-checked but never resolved, so the whole marriage block (the
     // `*(pCVar1) = partner; partner->+0x250 = self` pair that establishes the spouse
     // link) silently no-op'd and CitizenComponent+0x250 stayed 0 for every citizen.
-    // Gated opt-in (BANISHED_LIVE_CITIZEN_FAMILY): turning it on changes population
-    // dynamics (marriage -> shared workplace -> births), so it stays A/B until verified.
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_FAMILY"))
-        s_fn_FindPartner = reinterpret_cast<fn_FindPartner_t>(
-            ResolveAddr(Module::Exe, 0x14010fe40));
+    // (Was opt-in as BANISHED_LIVE_CITIZEN_FAMILY; graduated 2026-09-13.)
+    s_fn_FindPartner = reinterpret_cast<fn_FindPartner_t>(
+        ResolveAddr(Module::Exe, 0x14010fe40));
     // See the declaration: this binding was missing entirely.
     s_fn_RandFloat = reinterpret_cast<fn_RandFloat_t>(fn_Random_RandFloat);
     s_fn_CheckStorageCapacity = reinterpret_cast<fn_CheckStorageCapacity_t>(
@@ -2969,7 +2967,7 @@ int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, 
 static bool CareTraceOn() {
     static int en = -1;
     if (en < 0) {
-        const char* e = std::getenv("BANISHED_PLAGUE_TRACE");
+        const char* e = Opt().plagueTrace;
         en = (e && (e[0] == '0' || std::strcmp(e, "false") == 0)) ? 0 : 1;
     }
     return en == 1;

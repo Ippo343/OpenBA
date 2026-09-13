@@ -31,6 +31,7 @@
 // All magic constants are taken verbatim from the exe .rdata (addresses noted).
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstring>
@@ -265,7 +266,7 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
     static int s_pin = -1;
     static float s_pinX = 0, s_pinY = 0, s_pinDist = 40.0f;
     if (s_pin < 0) {
-        const char* e = std::getenv("BANISHED_CAMERA_PIN");
+        const char* e = Opt().cameraPin;
         s_pin = 0;
         if (e && e[0]) {
             float px, py, pd;

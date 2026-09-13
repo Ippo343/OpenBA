@@ -29,6 +29,7 @@
 // are resolved guarded; if one is unavailable the step is skipped.
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "resolve.h"
 #include "Component/controller_state_table.h"
 #include <cstdint>
@@ -37,7 +38,7 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled (default-on gates)
+#include "Component/component_factory_base.h"   // ComponentFactory::the live gate (default-on gates)
 
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
@@ -65,7 +66,7 @@ extern bool g_wpcRosterOnly;
 static int s_bc8_force = -1;
 static bool BC8_DemoForce() {
     if (s_bc8_force < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_DEMO_FORCE");
+        const char* e = Opt().buildDemoForce;
         s_bc8_force = (e && e[0] && e[0] != '0') ? 1 : 0;
     }
     return s_bc8_force == 1;
@@ -415,7 +416,7 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
         // Override with BANISHED_BUILD_DEMO_FRAMES.
         static int rampFrames = -1;
         if (rampFrames < 0) {
-            const char* e = std::getenv("BANISHED_BUILD_DEMO_FRAMES");
+            const char* e = Opt().buildDemoFrames;
             rampFrames = (e && e[0]) ? std::atoi(e) : 600;
             if (rampFrames < 1) rampFrames = 600;
         }

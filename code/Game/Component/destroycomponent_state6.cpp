@@ -58,7 +58,7 @@
 //     null. Our action vtables are partially-filled arrays, not the exe's, so an
 //     unported slot must not be called — retail's are all real functions.
 //
-// DEFAULT-ON via kDefaultOnFlags (graduated 2026-08-23 on a fire soak: 3 buildings
+// DEFAULT-ON via the default-on table (graduated 2026-08-23 on a fire soak: 3 buildings
 // collapsed 2 -> 1 -> 0 over 8 rubble steps, empty crash log). BANISHED_LIVE_DESTROY_COLLAPSE
 // is now a kill-switch (=0) for A/B runs.
 

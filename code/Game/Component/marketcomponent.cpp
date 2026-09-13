@@ -136,7 +136,6 @@ static void MarketComponent_ShutdownVSlot(void* self, void* stream) {
 static void MarketCtrl_PopulateAndWireCmd();
 
 CONTROLLER_LIVE_FACTORY_STATES(MarketComponent, 0x50, 0x80, 0x28, 2,
-                               "BANISHED_LIVE_MARKET_CMD",
                                RPCtrl_NodeVtable, MarketCtrl_PopulateAndWireCmd)
 
 static void MarketCtrl_PopulateAndWireCmd() {

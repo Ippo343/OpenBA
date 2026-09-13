@@ -42,10 +42,6 @@
 
 namespace ObjAudit {
 
-// Master gate: BANISHED_OBJAUDIT set (non-empty, not "0"/"false").
-// Everything below is a cheap no-op when this is false.
-bool Enabled();
-
 // The live InternalFactory (nullptr before the Runtime engine is up).
 void* Factory();
 
@@ -55,19 +51,5 @@ int Count();
 // True when `obj`'s self-index (+0x08) is in range AND table[idx] == obj — i.e.
 // the object is genuinely present in the handle table.
 bool IsRegistered(const void* obj);
-
-// Walk the whole table verifying the `table[i]+0x08 == i` invariant and that each
-// entry is readable. Returns the number of bad entries; logs up to `maxLog` of
-// them (with vtable, so the offending type can be identified via nm).
-int Scan(const char* tag, int maxLog = 8);
-
-// Call immediately BEFORE freeing an Object::Internal-derived object that was NOT
-// put through Object::Internal::~Internal. If the object is still in the table,
-// this is a leak of class (A) above: it records the offending vtable and logs.
-// `what` is a short static label for the call site (e.g. "InertComponent").
-void NoteUnregisteredFree(const void* obj, const char* what);
-
-// Dump the per-vtable tally accumulated by NoteUnregisteredFree.
-void ReportLeaks(const char* tag);
 
 }  // namespace ObjAudit

@@ -8,7 +8,7 @@
 // (reg_animal_serialize.cpp), these TWO slots are wired live into their
 // component vtables unconditionally (see growthcomponent.cpp / spawncomponent.cpp
 // hand-expanded factories) — GrowthComponent is BANISHED_LIVE_GROWTH default-on
-// (kDefaultOnFlags), so its serializer is reachable the moment a save/load
+// (the default-on table), so its serializer is reachable the moment a save/load
 // driver exists, and both fix the same class of bug: a loaded save's
 // component kept the base-Component no-op serialize, so its real per-instance
 // fields (GrowthComponent's resource/model sibling links + growthScale;

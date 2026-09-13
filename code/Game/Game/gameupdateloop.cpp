@@ -18,6 +18,7 @@
 // after loading a tutorial scenario.
 
 #include "sampler.h"
+#include "options.h"
 #include "GameUpdateLoop.h"
 #include "Entity/entitylist_funcs.h"
 #include "Component/component_factory_base.h"
@@ -800,7 +801,7 @@ long long g_profSimIters = 0;
 
 inline bool SimProfOn() {
     if (g_simProfOn < 0) {
-        const char* e = std::getenv("BANISHED_SIMPROF");
+        const char* e = Opt().simprof;
         int n = (e && e[0] && e[0] != '0') ? std::atoi(e) : 0;
         if (e && e[0] && e[0] != '0' && n <= 1) n = 120;   // "1" => default interval
         g_simProfOn = n;
@@ -866,7 +867,7 @@ void SimProfReport(int speedMultiplier, long entCount) {
 int g_forceSpeed = -1;
 inline void ApplyForceSpeed(void* entityUIv) {
     if (g_forceSpeed < 0) {
-        const char* e = std::getenv("BANISHED_FORCE_SPEED");
+        const char* e = Opt().forceSpeed;
         g_forceSpeed = (e && e[0]) ? std::atoi(e) : 0;
     }
     if (g_forceSpeed > 0 && entityUIv) {
@@ -905,8 +906,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
         static int s_unregFrames = 0;
         static int s_unregDumpAt = -1;
         if (s_unregDumpAt < 0) {
-            const char* v = std::getenv("BANISHED_UNREG_CENSUS");
-            int n = (v && v[0]) ? std::atoi(v) : 0;
+            const int n = Opt().unregCensusFrames;
             s_unregDumpAt = (n > 1) ? n : 600;
         }
         if (++s_unregFrames == s_unregDumpAt) DumpUnregCensus();
@@ -943,19 +943,6 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     ApplyForceSpeed(self->m_entityUI);
     StressHarness_UpdateBegin(s_frameNum);   // [STRESS] no-op unless BANISHED_STRESS
     PerfX::BeginFrame(self->m_renderer);      // [PerfX] per-frame frustum + pause flush (no-op unless enabled)
-
-    // [OBJAUDIT] env BANISHED_OBJAUDIT: periodic InternalFactory handle-table integrity
-    // scan (table[i]+0x08 == i for every i) plus the running tally of objects freed while
-    // still registered. A growing `count` with a flat live-object count means stale entries
-    // are accumulating; `bad>0` means the table is already corrupt. Interval 300 frames.
-    if (ObjAudit::Enabled()) {
-        if (s_frameNum % 300 == 0) {
-            char tag[32];
-            std::snprintf(tag, sizeof(tag), "frame%d", s_frameNum);
-            ObjAudit::Scan(tag);
-            ObjAudit::ReportLeaks(tag);
-        }
-    }
 
     // [EVENTS] RETIRED: the BANISHED_LIVE_EVENTS resource-shortage scanner used to
     // run here (a second port of FUN_14008c100 via EventLog_CheckResourceShortages).
@@ -1312,7 +1299,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                 int32_t  savedGate = 0;
                 static int s_ignoreMods = -1;
                 if (s_ignoreMods < 0) {
-                    const char* e = getenv("BANISHED_ACH_IGNORE_MODS");
+                    const char* e = Opt().achIgnoreMods;
                     s_ignoreMods = (e && e[0] && e[0] != '0') ? 1 : 0;
                 }
                 if (s_ignoreMods == 1) {
@@ -1496,9 +1483,6 @@ post_simulation:
         float tx = *(float*)((uintptr_t)playerCtrl + 0x98);
         float ty = *(float*)((uintptr_t)playerCtrl + 0x9c);
         float tz = *(float*)((uintptr_t)playerCtrl + 0xa0);
-        float cx = *(float*)((uintptr_t)playerCtrl + 0x1c);
-        float cy = *(float*)((uintptr_t)playerCtrl + 0x20);
-        float cz = *(float*)((uintptr_t)playerCtrl + 0x24);
         listenerPos[0] = tx + 0.0f;
         listenerPos[1] = ty + 0.0f;
         listenerPos[2] = tz + 0.0f;
@@ -1559,7 +1543,7 @@ post_simulation:
         // BANISHED_CAMERA_PIN (which make framing reproducible run to run) this
         // turns a visual regression into a file two runs can diff.
         {
-            static const char* const ssEnv = std::getenv("BANISHED_SCREENSHOT_AT");
+            static const char* const ssEnv = Opt().screenshotAt;
             static const long ssAt = ssEnv ? std::atol(ssEnv) : -1;
             static long ssFrame = 0;
             static bool ssFired = false;
@@ -1712,7 +1696,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     {
         static int s_capArm = -2;      // -2=unread, -1=disabled, >=0 = countdown to arm
         if (s_capArm == -2) {
-            const char* e = std::getenv("BANISHED_CAPTURE_INGAME");
+            const char* e = Opt().captureIngame;
             s_capArm = (e && e[0]) ? (atoi(e) > 0 ? atoi(e) : 120) : -1;
         }
         if (s_capArm >= 0) {
@@ -1817,7 +1801,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
                 static int s_forceSnow = -1;
                 static float s_snowVal = 0.0f;
                 if (s_forceSnow < 0) {
-                    const char* e = std::getenv("BANISHED_FORCE_SNOW");
+                    const char* e = Opt().forceSnow;
                     s_forceSnow = (e && e[0]) ? 1 : 0;
                     if (s_forceSnow) s_snowVal = (float)atof(e);
                 }
@@ -2191,7 +2175,6 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         }
     }
 
-    const bool kCreateGameDialogs = false;
     // HUD bring-up — the in-game Toolbar (Keystone F). Gated behind the env var
     // BANISHED_LIVE_TOOLBAR (default OFF → the default build stays byte-identical).
     // When set, ToolbarStandalone_Init() (toolbar_vtable_standalone.cpp) builds the
@@ -2328,7 +2311,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
 
     // Create and add AutoSave dialog
     TRACE("[GameUpdateLoop::Startup] creating AutoSave dialog...\n");
-    // BANISHED_LIVE_AUTOSAVE. The whole autosave FEATURE hangs off this dialog:
+    // The whole autosave FEATURE hangs off this dialog:
     // its timer (started by AutoSaveDialog::Slot4 from the Options interval) is the
     // only clock, and its timer-event handler (Slot8 -> Dialog_AutoSaveHandler) is the
     // only caller of SaveLoad::SetOperation(SAVE). While this block was hardcoded off
@@ -2336,10 +2319,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // Uses the ExternalFactory::FindOrLoad fallback like the toolbar/EventNotify,
     // since m_resourceList is empty in standalone. Parented to nothing (retail
     // passes a null parent IBP here too).
-    static int s_autosaveGate = -1;
-    if (s_autosaveGate < 0)
-        s_autosaveGate = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_AUTOSAVE") ? 1 : 0;
-    if (s_autosaveGate) {
+    {
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/AutoSave.rsc");
         void* foundBase = nullptr;
@@ -2501,20 +2481,10 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
     // a small integer landing on half of something live. Bracketing EntityList's
     // shutdown separates "the table was already corrupt when teardown started" from
     // "teardown corrupted it", which no run so far can tell apart.
-    if (ObjAudit::Enabled()) {
-        ObjAudit::Scan("shutdown-enter");
-        ObjAudit::ReportLeaks("shutdown-enter");
-    }
-
     // EntityList shutdown
     TRACE("[GameUpdateLoop::Shutdown] calling EntityList::Shutdown...\n");
     fn_EntityList_Shutdown(self->m_entityList);
     TRACE("[GameUpdateLoop::Shutdown] EntityList::Shutdown done\n");
-
-    if (ObjAudit::Enabled()) {
-        ObjAudit::Scan("post-entitylist");
-        ObjAudit::ReportLeaks("post-entitylist");
-    }
 
     // Remove global scene objects
     TRACE("[GameUpdateLoop::Shutdown] removing global scene objects...\n");

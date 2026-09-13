@@ -7,6 +7,7 @@
 // Add new entries as each reimplemented function needs to call more engine code.
 
 #include <windows.h>
+#include "options.h"
 #include <cstdint>
 
 // ============================================================
@@ -3636,8 +3637,8 @@ inline void* GetLoadingSoundString(void* retStr) {
     // the loading image it selects stays resident and is numbered into the
     // save's reference table, so an unpinned pick shifts every reference id
     // after "Dialog\Loading.rsc:gameLoadN" (tools/resave_gate/).
-    if (const char* pin = std::getenv("BANISHED_MENU_SCENE"))
-        variant = static_cast<unsigned>(std::atoi(pin)) % 12u;
+    if (Opt().menuScene >= 0)
+        variant = static_cast<unsigned>(Opt().menuScene) % 12u;
     fn_String_Format(retStr, "Dialog/Loading.rsc:gameLoad%i", variant);
     return retStr;
 }

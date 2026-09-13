@@ -72,11 +72,12 @@
 // 0.03 months and a spread attempt every 0.125.
 //
 // Opt-in.  BANISHED_LIVE_CROPDISEASE=1 graduates vtable slots 3/4/6/7/9 to the
-// real bodies. Unproven feature => NOT in kDefaultOnFlags. With the gate off the
+// real bodies. Unproven feature => NOT in the default-on table. With the gate off the
 // component stays byte-for-byte the inert component it was before this wave.
 // Trace: BANISHED_CROPDISEASE_TRACE (defaults ON when the feature is live, =0 mutes).
 
 #include "Component/diseasecomponent_funcs.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
@@ -146,7 +147,6 @@ static const float* s_pOne           = nullptr;  // 0x14017214c = 1.0f (g_fUVSca
 static uint32_t s_tidDiseaseComponent = 0;
 
 static bool s_init = false;
-static int  s_live = -1;
 static int  s_trace = -1;
 
 static inline void* RSlot(uintptr_t slotAddr) {
@@ -210,19 +210,10 @@ static inline void CheckPtr(void* p) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p);
 }
 
-bool CDLive() {
-    if (s_live < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_CROPDISEASE");
-        s_live = (e && *e && e[0] != '0' && e[0] != 'f' && e[0] != 'F') ? 1 : 0;
-    }
-    return s_live == 1;
-}
 bool CDTrace() {
     if (s_trace < 0) {
-        const char* e = std::getenv("BANISHED_CROPDISEASE_TRACE");
-        // Default ON while the feature is live: the events are rare (a roll per
-        // field per desc.rollMonths, a kill per killMonths) so volume stays low.
-        s_trace = e ? ((*e && e[0] != '0') ? 1 : 0) : (CDLive() ? 1 : 0);
+        const char* e = Opt().cropDiseaseTrace;
+        s_trace = (e && *e && e[0] != '0') ? 1 : 0;
     }
     return s_trace == 1;
 }
@@ -1013,16 +1004,16 @@ extern "C" void DiseaseComponent_Serialize(DiseaseComponent* self, void* stream)
 void DiseaseComponent_InitFuncs() {
     EnsureInit();
     if (CDTrace()) {
-        printf("[CropDisease] init live=%d monthsPerYear=%.1f secsPerMonth=%.1f "
+        printf("[CropDisease] init monthsPerYear=%.1f secsPerMonth=%.1f "
                "secsPerYear=%.1f one=%.3f tid=%u\n",
-               CDLive() ? 1 : 0, (double)MonthsPerYear(), (double)SecsPerMonth(),
+               (double)MonthsPerYear(), (double)SecsPerMonth(),
                (double)SecsPerYear(), (double)OneF(), s_tidDiseaseComponent);
         fflush(stdout);
     }
 }
 
 // ============================================================
-// Standalone factory — a REAL vtable, gated on BANISHED_LIVE_CROPDISEASE
+// Standalone factory — a REAL vtable (the crop-disease gate graduated 2026-09-13)
 // ============================================================
 // Modelled on COMPONENT_LIVE_FACTORY_SOA but installs five slots (3 Serialize,
 // 4 Startup, 6 OnAdded, 7 OnRemoved, 9 Update) under one gate, because they are
@@ -1062,12 +1053,9 @@ void DiseaseComponent_FinishLiveVtable() {
     // -- a silent stream desync that surfaces as wild objIds on a LATER record.
     // It also made every BANISHED_LIVE_*=0 A/B run change the save-stream shape,
     // so such an A/B could "prove" something that was really a desync.
-    // BANISHED_LIVE_CROPDISEASE is NOT in kDefaultOnFlags, so before this hoist
-    // DiseaseComponent's slot 3 was inert on EVERY default run.
     // See reference_slot3_wrapper_must_resolve_first.
     g_DiseaseComponent_LiveVtable[3] = reinterpret_cast<void*>(&DC_SerializeVSlot);
 
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_CROPDISEASE")) return;
     g_DiseaseComponent_LiveVtable[4] = reinterpret_cast<void*>(&DC_StartupVSlot);
     g_DiseaseComponent_LiveVtable[6] = reinterpret_cast<void*>(&DC_OnAddedVSlot);
     g_DiseaseComponent_LiveVtable[7] = reinterpret_cast<void*>(&DC_OnRemovedVSlot);

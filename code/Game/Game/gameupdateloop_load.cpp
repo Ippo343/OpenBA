@@ -24,7 +24,7 @@
 #include "GameUpdateLoop.h"
 #include "engine_funcs.h"
 #include "resolve.h"
-#include "Component/component_factory_base.h"  // ComponentFactory::LiveEnabled
+#include "Component/component_factory_base.h"  // ComponentFactory::the live gate
 #include <cstdint>
 #include <cstdio>
 #include <cstring>

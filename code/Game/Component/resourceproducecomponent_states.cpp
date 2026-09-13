@@ -143,11 +143,9 @@ static char RP_State13Enter(void* self, void* sm) {
     uintptr_t workCompIbp = 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     if (s_findWork) s_findWork(owner, &workCompIbp);
-    bool posted = false;
     if (s_postWork && workCompIbp != 0 && workIbp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         s_postWork(workCompIbp, 1, 0, &workIbp);
-        posted = true;
     }
 
     // WorkPlaceComponent +0x50 = accepting. Without this the building has workers
@@ -155,7 +153,6 @@ static char RP_State13Enter(void* self, void* sm) {
     uintptr_t wpcIbp = 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     if (s_findWpc) s_findWpc(owner, &wpcIbp);
-    bool accepted = false;
     if (wpcIbp != 0 && s_setAccepting) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
         // wpcIbp ALREADY holds the component pointer: the finder writes it into the
@@ -164,7 +161,6 @@ static char RP_State13Enter(void* self, void* sm) {
         // component's VTABLE pointer as the workplace — which is exactly what
         // crashed here first time round.
         s_setAccepting(wpcIbp, 1);
-        accepted = true;
     }
 
 
@@ -183,13 +179,11 @@ static char RP_State14Enter(void* self, void* /*sm*/) {
     uintptr_t workCompIbp = 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(comp + 0x10));
     if (s_findWork) s_findWork(owner, &workCompIbp);
-    bool released = false;
     if (workCompIbp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         // Same out-param convention as State13Enter: this local is the component.
         if (s_slotOccupied && s_slotRelease && s_slotOccupied(workCompIbp)) {
             s_slotRelease(workCompIbp);
-            released = true;
         }
     }
 
@@ -244,7 +238,7 @@ static void RP_Trans13to3(void* self) {
 }
 
 // ── event 3 on state 13 — 0x14012adf0 — panel PAUSE ───────────────────────────────
-static char RP_Event3Pause(void* self, void* sm) {
+static char RP_Event3Pause(void* /*self*/, void* sm) {
     // Event 0 TOGGLES (13 -> pause, 14 -> resume), so a single stray post closes a
     // producing workplace: state 14 calls SetAccepting(false), which raises the
     // "work is disabled at this location" sign AND evicts the roster. Trace the

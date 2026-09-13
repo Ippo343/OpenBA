@@ -590,7 +590,7 @@ void PopulationComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-// Live bring-up (env BANISHED_LIVE_POPULATION or global BANISHED_LIVE_COMPONENTS).
+// Live bring-up (env BANISHED_LIVE_POPULATION or global the global live-components switch).
 // Slot 4 Startup does the body init retail does at spawn — description at +0x28,
 // habitability grid at +0x38/+0x40, herd grid dim at +0x48 — and, crucially,
 // creates the wild-animal herd entities. Slot 9 Update then has the +0x28 owner

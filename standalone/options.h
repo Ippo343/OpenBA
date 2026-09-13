@@ -4,8 +4,9 @@
 // ENDGAME C.3. Every environment flag the exe honours is a field of the one
 // `Options` struct below, filled ONCE at boot by `OptionsInit()` (called from
 // the top of WinMain, before anything else looks at the environment) and read
-// everywhere else through `Opt()`. Nothing in standalone/ calls getenv outside
-// standalone/options.cpp.
+// everywhere else through `Opt()`. NOTHING in the tree calls getenv outside
+// standalone/options.cpp — code/, runtime/, dx11/, engine/ and standalone/ all
+// read `Opt()`.
 //
 // HOW TO READ THIS FILE. Each field carries a one-line comment naming WHO SETS
 // IT — a Makefile target, a script under tools/, perf/, .vscode/launch.json,
@@ -90,7 +91,6 @@ struct Options {
     const char* cropFieldForceStart  = nullptr;// perf/README.md — "2" = pick a crop AND post the plant command
     const char* orchardForceStart    = nullptr;// perf/README.md — pick a tree type for every orchard
     bool        forceConstruct       = false;  // code/Game/Game/construction_force_harness.cpp [no tool reader]
-    bool        buildSyncDelivered   = false;  //   implied by forceConstruct — this replaces a mid-run _putenv_s
     bool        buildSyncLabor       = true;   //   default ON; only "=0" disables
 
     // ── perf: the stress town (standalone/stress_harness.cpp, perf/README.md) ─
@@ -152,10 +152,53 @@ struct Options {
     bool        noFolLock            = false;  // standalone/res_load_lock.cpp — kill switch for the resource-load lock
     bool        unregCensus          = false;  // tools/unreg_full.py — census of unregistered addresses
 
-    // ── opt-in LIVE_* gates deliberately NOT in kDefaultOnFlags ──────────────
+    // ── opt-in LIVE_* gates deliberately NOT in the default-on table ──────────────
     // (ENDGAME C.2 decides these: graduate with the run that proves them, or delete.)
     bool        liveSeatShuffle      = false;  // standalone/reg_town_workplace_registry.cpp
     bool        liveTutorialInstVt   = false;  // standalone/reg_w2_lane2.cpp
+
+
+    // ── code/Game readers migrated off getenv (ENDGAME C.2/C.4 close) ────────
+    // RAW values, parsed at the reader exactly as the getenv call used to be.
+    // Every one is [no tool reader] unless the comment says otherwise.
+    const char* buildDemoForce       = nullptr;// BANISHED_BUILD_DEMO_FORCE — code/Game/Component/buildcomponent_state8.cpp
+    const char* buildDemoFrames      = nullptr;// BANISHED_BUILD_DEMO_FRAMES — buildcomponent_state8.cpp, construction_force_harness.cpp
+    const char* buildDemoIndex       = nullptr;// BANISHED_BUILD_DEMO_INDEX — code/Game/Game/starttown.cpp
+    const char* buildDemoHouse       = nullptr;// BANISHED_BUILD_DEMO_HOUSE — code/Game/Game/starttown.cpp
+    const char* buildDemoForesterLodge = nullptr;// starttown.cpp ringPlace
+    const char* buildDemoMarket      = nullptr;// starttown.cpp ringPlace
+    const char* buildDemoSchoolHouse = nullptr;// starttown.cpp ringPlace
+    const char* buildDemoTavern      = nullptr;// starttown.cpp ringPlace
+    const char* buildDemoWell        = nullptr;// starttown.cpp ringPlace
+    const char* buildDemoHospital    = nullptr;// starttown.cpp ringPlace (Template\DoctorHouse.rsc)
+    const char* buildDemoCemetery    = nullptr;// starttown.cpp ringPlace
+    const char* buildDemoChapel      = nullptr;// starttown.cpp ringPlace
+    const char* buildDemoQuarry      = nullptr;// starttown.cpp ringPlace — CLAUDE.md camera-pin example
+    const char* stressAllowPockets   = nullptr;// BANISHED_STRESS_ALLOW_POCKETS — starttown.cpp siting
+    const char* stressKindMap        = nullptr;// BANISHED_STRESS_KINDMAP — starttown.cpp siting dump
+    const char* forceWork            = nullptr;// BANISHED_FORCE_WORK — citizenaicomponent.cpp
+    const char* forceHarvest         = nullptr;// BANISHED_FORCE_HARVEST — code/Game/Work/foresterwork.cpp
+    const char* forceForesterWork    = nullptr;// BANISHED_FORCE_FORESTERWORK — forester_force_harness.cpp
+    const char* forceSnow            = nullptr;// BANISHED_FORCE_SNOW — gameupdateloop.cpp
+    const char* forceDeviceLost      = nullptr;// BANISHED_FORCE_DEVICE_LOST — dx11/src/contextdata.cpp
+    const char* screenshotAt         = nullptr;// BANISHED_SCREENSHOT_AT — gameupdateloop.cpp
+    const char* captureIngame        = nullptr;// BANISHED_CAPTURE_INGAME — gameupdateloop.cpp
+    const char* achIgnoreMods        = nullptr;// BANISHED_ACH_IGNORE_MODS — gameupdateloop.cpp achievements
+    const char* factoryEnum          = nullptr;// BANISHED_FACTORY_ENUM — factory_registrations_bulk.cpp
+    const char* fastTrig             = nullptr;// BANISHED_FAST_TRIG — code/Game/Component/character_trig.cpp
+    const char* checkPtrNop          = nullptr;// BANISHED_CHECKPTR_NOP — engine/funcs/engine_funcs.cpp
+    const char* treeGuards           = nullptr;// BANISHED_TREE_GUARDS — code/Game/Entity/entitylist.cpp
+    const char* treePrefetch         = nullptr;// BANISHED_TREE_PREFETCH — code/Game/Entity/entitylist.cpp
+    int         unregCensusFrames    = 0;      //   BANISHED_UNREG_CENSUS=<n> dump frame (gameupdateloop.cpp)
+
+    // ── diagnostic traces still read from code/Game ──────────────────────────
+    const char* mapTrace             = nullptr;// BANISHED_MAP_TRACE — minimap / map UI / tool UI
+    const char* movetickTrace        = nullptr;// BANISHED_MOVETICK_TRACE — charactercomponent.cpp, citizenai_executor.cpp
+    const char* plagueTrace          = nullptr;// BANISHED_PLAGUE_TRACE — citizencomponent.cpp, citizen_updatehealth.cpp
+    const char* cropDiseaseTrace     = nullptr;// BANISHED_CROPDISEASE_TRACE — diseasecomponent.cpp
+    const char* tornadoTrace         = nullptr;// BANISHED_TORNADO_TRACE — tornadocomponent.cpp
+    const char* serializeTrace       = nullptr;// BANISHED_SERIALIZE_TRACE — componententity.cpp
+    const char* selectDiag           = nullptr;// BANISHED_SELECT_DIAG — code/Game/Player/edittool.cpp
 
     // ── diagnostics: allocator / memory ──────────────────────────────────────
     bool        allocStats           = false;  // standalone/alloc_stats.cpp [no tool reader]

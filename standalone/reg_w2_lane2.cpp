@@ -49,7 +49,7 @@
 // BANISHED_LIVE_TUTORIALINSTANCE_VT=1 against a RETAIL-authored tutorial save
 // (BANISHED_AUTOLOAD, not BANISHED_AUTOTUTORIAL — the latter loads a different save).
 // If the retail save round-trips clean with the flag on, promote it to unconditional
-// / kDefaultOnFlags. See the lane-2 report for the other five verdicts.
+// / the default-on table. See the lane-2 report for the other five verdicts.
 
 #include <cstdint>
 #include <cstdio>

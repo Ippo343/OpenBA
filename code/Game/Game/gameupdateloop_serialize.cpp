@@ -44,6 +44,7 @@
 //   0x1400b04d0 (WorldGeometry).
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "resolve.h"
 #include "address_registry.h"
 #include "Object/factory_registration.h"
@@ -981,7 +982,7 @@ static void RoundtripDump(const char* name, const uint8_t* data, uint32_t size) 
 }
 
 extern "C" void GameUpdateLoop_SaveRoundtripCheck(void* self, void* loadedState) {
-    const char* e = std::getenv("BANISHED_SAVE_TEST");
+    const char* e = Opt().saveTest;
     if (!e || _stricmp(e, "roundtrip") != 0) return;
     EnsureResolved();
 

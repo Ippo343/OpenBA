@@ -15,6 +15,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Entity/componententity_funcs.h"
+#include "options.h"
 #include <windows.h>
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -338,7 +339,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
             // progress marker so a stream desync pinpoints the last-good
             // component instead of a wild crash address.
             static int s_trace = -1;
-            if (s_trace < 0) { const char* e = std::getenv("BANISHED_SERIALIZE_TRACE"); s_trace = (e && e[0] && e[0] != '0') ? 1 : 0; }
+            if (s_trace < 0) { const char* e = Opt().serializeTrace; s_trace = (e && e[0] && e[0] != '0') ? 1 : 0; }
             if (s_trace == 1) {
                 fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld/%u begin raw=%p\n",
                         (void*)self, (long long)i, compCount, *(void**)ibpAddr);

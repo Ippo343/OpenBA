@@ -902,7 +902,7 @@ void ParticleComponent_InitFuncs() {
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // Building particle effects (chimney smoke etc). Gated on BANISHED_LIVE_PARTICLE
-// (or global BANISHED_LIVE_COMPONENTS); default (env off) stays inert.
+// (or global the global live-components switch); default (env off) stays inert.
 //
 // Live slot map (retail vtable 0x14015a290):
 //   [4]  +0x20 Startup   (0x140053230) — Setup: create ParticleSystemInstances

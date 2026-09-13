@@ -22,6 +22,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Entity/entitylist_funcs.h"
+#include "options.h"
 #include "perf_experimental.h"   // [PerfX] TREE_SNAPSHOT walk
 #include "sampler.h"
 #include <vector>
@@ -351,7 +352,7 @@ extern "C" void IBPTreeRemove_CppImpl(void* treeRootPtr, void* nodeV) {
 // PERF A/B (2026-09-04): BANISHED_TREE_GUARDS=0 turns the corruption guards into no-ops
 // so their walk cost can be measured against the faithful (unguarded) retail walk.
 static const bool g_treeGuards = [] {
-    const char* e = std::getenv("BANISHED_TREE_GUARDS");
+    const char* e = Opt().treeGuards;
     return !(e && e[0] == '0');
 }();
 static inline bool PtrCorrupt(uintptr_t p) {
@@ -373,7 +374,7 @@ static bool             g_treeCorrupt = false;
 // 2026-09-04 at 800x10: no prefetch 0.25 ms/iter, one level 0.26, two levels 0.27; the
 // extra TreeSuccessor walk costs more than the hidden miss. BANISHED_TREE_PREFETCH=1 enables.
 static const bool       g_treePrefetch = [] {
-    const char* e = std::getenv("BANISHED_TREE_PREFETCH");
+    const char* e = Opt().treePrefetch;
     return e && e[0] == '1';
 }();
 static const char*      g_treeCorruptSite = nullptr;   // which deref tripped
@@ -972,8 +973,6 @@ static void AuditDyingEntity(int64_t entity) {
     if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFFu)
         s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
 
-    uint32_t flags   = *reinterpret_cast<uint32_t*>(entity + 0x40);
-    bool markStillSet = ((flags >> 10) & 1) != 0;
 
     int models = 0, live = 0;
     int   n   = *reinterpret_cast<int*>(entity + 0x38);

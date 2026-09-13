@@ -68,11 +68,6 @@ void  InitInertTyped(void* self, size_t size, uint32_t flags,
 void* MakeInertTyped(size_t size, uint32_t flags,
                      void** vtable, void* getTypeIdFn);
 
-// Live opt-in for COMPONENT_LIVE_FACTORY: true when the component's own env var
-// or the global BANISHED_LIVE_COMPONENTS is set (non-empty, not "0"/"false").
-// Default (neither set) => false => component stays inert (default run unchanged).
-bool LiveEnabled(const char* envVar);
-
 }  // namespace ComponentFactory
 
 // Emits XxxComponent_Factory()/XxxComponent_CreateInPlace() for REGISTER_TYPE.
@@ -143,7 +138,7 @@ bool LiveEnabled(const char* envVar);
 // is initialized (the inert factory zeroes it). Either the Update must early-out
 // on null body fields (GUARD), or use COMPONENT_LIVE_FACTORY_S to also route the
 // Startup slot to a body-init fn. See growthcomponent.cpp for the worked example.
-#define COMPONENT_LIVE_FACTORY(Name, Size, Flags, EnvVar, UpdateFn)            \
+#define COMPONENT_LIVE_FACTORY(Name, Size, Flags, UpdateFn)                    \
     static uint32_t Name##_LiveGetTypeId(void*) {                              \
         static uint32_t cached = 0;                                            \
         if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);            \
@@ -177,7 +172,7 @@ bool LiveEnabled(const char* envVar);
 // to populate a component's body at spawn — so sibling components can read it —
 // WITHOUT running its own (heavy / not-yet-ported) Update. The body-init fn is
 // `void StartupFn(Name* self)`.
-#define COMPONENT_LIVE_FACTORY_STARTUP(Name, Size, Flags, EnvVar, StartupFn)   \
+#define COMPONENT_LIVE_FACTORY_STARTUP(Name, Size, Flags, StartupFn)           \
     static uint32_t Name##_LiveGetTypeId(void*) {                              \
         static uint32_t cached = 0;                                            \
         if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);            \
@@ -211,7 +206,7 @@ bool LiveEnabled(const char* envVar);
 // for components whose Component+0x20 bit 0 is set). Use to run a component's
 // register-with-systems / one-shot setup at spawn WITHOUT running its per-tick
 // Update. The OnAdded fn is `void OnAddedFn(Name* self)`.
-#define COMPONENT_LIVE_FACTORY_ONADDED(Name, Size, Flags, EnvVar, OnAddedFn)   \
+#define COMPONENT_LIVE_FACTORY_ONADDED(Name, Size, Flags, OnAddedFn)           \
     static uint32_t Name##_LiveGetTypeId(void*) {                              \
         static uint32_t cached = 0;                                            \
         if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);            \
@@ -244,7 +239,7 @@ bool LiveEnabled(const char* envVar);
 // index 4 — dispatched by ComponentEntity_StartupComponents at spawn) to a
 // body-init fn `void StartupFn(Name* self)`. Use when the live Update needs the
 // body populated from the entity/description before the first tick.
-#define COMPONENT_LIVE_FACTORY_S(Name, Size, Flags, EnvVar, UpdateFn, StartupFn)\
+#define COMPONENT_LIVE_FACTORY_S(Name, Size, Flags, UpdateFn, StartupFn)        \
     static uint32_t Name##_LiveGetTypeId(void*) {                              \
         static uint32_t cached = 0;                                            \
         if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);            \
@@ -285,7 +280,7 @@ bool LiveEnabled(const char* envVar);
 // Update sets the bit, the post-update consumes it and clears it again. GrowthComponent
 // is the worked example — Update accumulates growth, slot 10 eases the model's visual
 // scale toward it. The PostUpdate fn is `void PostUpdateFn(Name* self)`.
-#define COMPONENT_LIVE_FACTORY_SP(Name, Size, Flags, EnvVar, UpdateFn, StartupFn, \
+#define COMPONENT_LIVE_FACTORY_SP(Name, Size, Flags, UpdateFn, StartupFn,         \
                                   PostUpdateFn)                                   \
     static uint32_t Name##_LiveGetTypeId(void*) {                                 \
         static uint32_t cached = 0;                                               \
@@ -331,8 +326,8 @@ bool LiveEnabled(const char* envVar);
 // slot-6 install has to live in FinishLiveVtable like the others: InitInertTyped
 // re-stubs the shared vtable on every instance creation, so anything installed
 // from a per-instance body would be erased by the next component's creation.
-#define COMPONENT_LIVE_FACTORY_SOA(Name, Size, Flags, EnvVar, UpdateFn,        \
-                                   StartupFn, OnAddedEnvVar, OnAddedFn)        \
+#define COMPONENT_LIVE_FACTORY_SOA(Name, Size, Flags, UpdateFn,               \
+                                   StartupFn, OnAddedFn)                       \
     static uint32_t Name##_LiveGetTypeId(void*) {                              \
         static uint32_t cached = 0;                                            \
         if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);            \

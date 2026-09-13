@@ -13,6 +13,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/mapcomponent_funcs.h"
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -322,7 +323,7 @@ static void MapComponent_PaintMinimapRect(uint8_t* mc, bool clear) {
     uint32_t color = clear ? 0u : *(uint32_t*)((uint8_t*)desc + 0x34);
     MapTerrainClear_Reimpl(minimap, (int)color, x, y, w, h);
 
-    static bool s_trace = std::getenv("BANISHED_MAP_TRACE") != nullptr;
+    static bool s_trace = Opt().mapTrace != nullptr;
     if (s_trace) {
         static int s_count = 0;
         if (++s_count <= 20 || (s_count % 500) == 0)
@@ -485,7 +486,7 @@ static void MapComponent_OnAddedVSlot(void* s) {
     // same standalone accommodation PaintMinimapRect and DetachOccupancy_4750 already make
     // (MapDescription is not in standalone's partial factory tree, so retail's cast yields
     // null and every desc read here would fault).
-    static bool s_trace = std::getenv("BANISHED_MAP_TRACE") != nullptr;
+    static bool s_trace = Opt().mapTrace != nullptr;
     if (s_trace) {
         static int s_n = 0;
         if (++s_n <= 400)
@@ -535,7 +536,7 @@ static void MapComponent_Slot12VSlot(void* s, int msgId) {
     // [diag] BANISHED_MAP_TRACE — this is the only observable point for "the building just
     // became solid". dc20 itself logs nothing on clear ground (it only reports evictions),
     // so without this line a successful solidify is indistinguishable from a no-op.
-    static bool s_trace = std::getenv("BANISHED_MAP_TRACE") != nullptr;
+    static bool s_trace = Opt().mapTrace != nullptr;
     if (s_trace && msgId == 1) {
         uint8_t* mc = reinterpret_cast<uint8_t*>(s);
         bool already = (*(uint32_t*)(mc + 0x20) >> 0x14) & 1;

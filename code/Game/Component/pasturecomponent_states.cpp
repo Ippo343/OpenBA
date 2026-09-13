@@ -365,11 +365,6 @@ extern "C" void Pasture_Reproduce(void* pasture) {
 
         uintptr_t an = static_cast<uintptr_t>(animalIBP);
         uint32_t oldFlags = *reinterpret_cast<uint32_t*>(an + 0x20);
-        // Breed-chain diagnostic: the latch that sets bit 21 requires +0x40!=0
-        // AND flag bit 23 (0x800000, data-driven from the livestock template's
-        // Component flags). Log each animal's state so a soak shows which
-        // precondition fails when births stay at 0.
-        static uint32_t s_breedCheckCalls = 0;
         if ((oldFlags & 0x200000u) == 0) continue;          // not ready to breed
 
         uint32_t newFlags = oldFlags & ~0x200000u;

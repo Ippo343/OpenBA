@@ -485,7 +485,7 @@ void ResidenceComponent_InitFuncs() {
 // Inert-but-valid ResidenceComponent: size 0x60 + Object::Internal base + capability
 // flags +0x20=0x82 (from ResidenceComponent_Ctor) + zeroed body.
 //
-// LIVE bring-up (BANISHED_LIVE_RESIDENCE, default ON via kDefaultOnFlags):
+// LIVE bring-up (BANISHED_LIVE_RESIDENCE, default ON via the default-on table):
 //   * vtable index 4 (+0x20, 0x14012a120, Serialize/Startup) — resizes the resident
 //     array at +0x50 from the description capacity (desc+0x20). Dispatched at spawn
 //     by the ComponentEntity StartupComponents pass (FUN_1400c30a0), gated on entity

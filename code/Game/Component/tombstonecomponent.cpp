@@ -265,13 +265,12 @@ void TombstoneComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-// Live bring-up (Phase 1, env BANISHED_LIVE_TOMBSTONE or global BANISHED_LIVE_COMPONENTS).
+// Live bring-up (Phase 1; graduated unconditional 2026-09-13).
 // Routes vtable slot 4 (+0x20) -> TombstoneComponent_Startup (populates the +0x28
 // random-lifetime timer at spawn, dispatched by ComponentEntity_StartupComponents) and
 // slot 9 (+0x48) -> TombstoneComponent_Update (per-tick countdown, the slot the
 // EntityList bucket round-robin calls — NOT +0x40/slot 8 = empty OnRemove 0x140118a70,
-// verified vs Ghidra vtable 0x14015a980). With the env OFF the factory is byte-identical
-// to the prior COMPONENT_INERT_FACTORY (default run unchanged). The only new exe-helper
+// verified vs Ghidra vtable 0x14015a980). The only new exe-helper
 // registration is the TombstoneDescription type-id global 0x1401c4a68
 // (reg_component_tombstone.cpp); every other helper was already registered.
 #include "Object/factory_registration.h"
@@ -300,12 +299,10 @@ static void TombstoneComponent_FinishLiveVtable() {
     // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
     TombstoneComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&TombstoneComponent_ShutdownVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TOMBSTONE")) {
-        TombstoneComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&TombstoneComponent_StartupVSlot);
-        TombstoneComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&TombstoneComponent_UpdateVSlot);
-    }
+    TombstoneComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&TombstoneComponent_StartupVSlot);
+    TombstoneComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&TombstoneComponent_UpdateVSlot);
 }
 extern "C" void* TombstoneComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x30, 0x88,

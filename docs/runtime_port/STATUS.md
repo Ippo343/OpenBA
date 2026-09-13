@@ -123,6 +123,43 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
     frame 601, Quit clicked at 721), `BANISHED_AUTOQUIT`, and the Load Game dialog
     (`BANISHED_AUTOMENU_BUTTON=2 BANISHED_AUTOMENU_CLICKS=m6`).
 
+- **2026-09-13: C.2 and C.4 are closed — the whole tree is at zero `getenv` and there are
+  no live-feature gates left.** Four directory batches plus a closing pass.
+  - **Gates:** the 38 remaining `kDefaultOnFlags` entries, `LiveEnabled`, `EnvOn` and the
+    `BANISHED_LIVE_COMPONENTS` master read are deleted; the `EnvVar` parameter is gone from
+    every `COMPONENT_LIVE_FACTORY*` / `CONTROLLER_LIVE_FACTORY*` macro and its 14
+    invocations. The twelve flags the batches left undecided were proven in one forced-on
+    run (all twelve set: `sa-run` + pause-menu quit exit 0, empty crash log, resave gate
+    PASS twice, byte-identical to the golden) and graduated: `LIVE_AUTOSAVE`,
+    `LIVE_BUILD_ONREMOVE`, `LIVE_CEMETERY`, `LIVE_CITIZEN_FAMILY`, `LIVE_CROPDISEASE`,
+    `LIVE_FOUNDING_SPAWN`, `LIVE_HAPPINESS`, `LIVE_HEALER`, `LIVE_MARKETLOC`,
+    `LIVE_TOMBSTONE`, plus `CLEAR_FOOTPRINT` and `LIVE_ANIMALS`, whose readers the batches
+    had already removed. Graduating `LIVE_FOUNDING_SPAWN` deleted its off arm: the
+    hand-rolled `SpawnOneCitizen` family loop in `starttown.cpp` and its four helpers
+    (~230 lines) are gone, so the retail `sub_1040` port is now the only founding spawner.
+    Three standalone opt-ins that were OFF on every default run went with their flags
+    (`LIVE_CITIZENAI_TIDS` / `_HAPPYID` / `_AIID`: the `c42c0` and `c70e8` type-id fills).
+  - **`getenv` is zero** in `code/`, `runtime/`, `dx11/`, `engine/` and `standalone/` — the
+    only call sites left are in `standalone/options.cpp`. 69 reads moved onto `Opt()`
+    (code 66, dx11 1, engine 2), with ~40 new typed/raw fields in `options.h`.
+    `standalone/env_cache.{h,cpp}` and the `-include standalone/env_cache.h` in the
+    Makefile are deleted, and `ApplyStressDefaults` no longer writes the environment: it
+    sets the struct fields, so `OptionsInit` is now read-only with respect to the CRT
+    environment block.
+  - **Shims deleted with their call sites:** `MapQuery_FloorTraceOn` (+10 guarded traces),
+    the empty `StartTown_DriveProduction` (and `production_harness.cpp`),
+    `WorkPlaceComponent_ControllerLive`, `ObjAudit::Enabled` and the diagnostic half of
+    `internal_factory_audit` (`Scan`, `ReportLeaks`, `NoteUnregisteredFree`;
+    `IsRegistered`/`Count`/`Factory` stay — they are load-bearing on the free path), and
+    the six empty probe stubs `WorkSchedProbe_Report`, `DumpSlot3Inventory`,
+    `ModProbe_DumpModList`, `ModProbe_StartWatcher`, `TradeUI_PriceProbeReport`,
+    `TradeUI_SortSelfTest`. `Options::buildSyncDelivered` lost its last reader and went too.
+  - Verified on both exes: `standalone-debug` and `standalone-perf` build with exit 0 and no
+    new warnings, and every route exits 0 with an empty `standalone_crash.log` — `sa-run` +
+    pause-menu quit, `BANISHED_AUTOQUIT`, the Load Game dialog
+    (`BANISHED_AUTOMENU_BUTTON=2 BANISHED_AUTOMENU_CLICKS=m6`), and `make sa-stress` on the
+    perf exe (6000 frames, clean self-quit).
+
 ## Cutover gate
 
 `make sa-run` (`make cutover` is the same thing under its legacy name): deploys the debug

@@ -1198,11 +1198,6 @@ static void* WorkPlaceComponent_CreateState(void* self) {            // 0x140004
     return reinterpret_cast<uint8_t*>(self) + 0x28;
 }
 
-// Query used by the retired hook sites (buildcomponent_state8.cpp, starttown.cpp).
-extern "C" bool WorkPlaceComponent_ControllerLive() {
-    return true;   // graduated 2026-09-13 (was BANISHED_LIVE_WPC_CONTROLLER)
-}
-
 
 // ── WPC construction census (UNCONDITIONAL, diagnostic only) ────────────────
 // Every WorkPlaceComponent in the standalone exe is built by the two entry points

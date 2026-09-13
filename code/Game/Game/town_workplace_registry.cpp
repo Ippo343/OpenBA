@@ -168,7 +168,7 @@ extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceC
 // deterministic (always the first registered building with room). Registering it
 // makes seating random, which is retail-correct but is a real, observable change to
 // every seat decision. It is gated in reg_town_workplace_registry.cpp behind
-// BANISHED_LIVE_SEAT_SHUFFLE and is deliberately NOT in kDefaultOnFlags: unproven
+// BANISHED_LIVE_SEAT_SHUFFLE and is deliberately NOT in the default-on table: unproven
 // behaviour starts opt-in, and this one wants an explicit A/B before it graduates.
 // ============================================================
 extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t professionKey) {

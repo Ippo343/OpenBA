@@ -64,14 +64,7 @@ static void Pop_Startup_Thunk(void* self) {
 static void Pop_OnAdd_Thunk(void* self)    { PopulationComponent_OnAdd(self); }
 static void Pop_OnRemove_Thunk(void* self) { PopulationComponent_OnRemove(self); }
 
-static bool HerdWaveEnabled() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_HERD")
-        || ::ComponentFactory::LiveEnabled("BANISHED_LIVE_POPULATION");
-}
-
 void RegisterHerdLive() {
-    if (!HerdWaveEnabled()) return;
-
     // Storage first — the ports below read these through ResolveAddr.
     RegisterExeAddr(0x140172110, reinterpret_cast<uintptr_t>(&g_f_HerdPopulateJitter));
     RegisterExeAddr(0x1401c47c8, reinterpret_cast<uintptr_t>(&g_tid_PopulationDescription));

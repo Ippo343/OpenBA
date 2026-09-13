@@ -42,7 +42,7 @@
 //   +0x5c spawn distance from the map edge (10)
 //   +0x60/+0x64 disease seed written to townMgr+0x1a8 / +0x1a0 on accept
 //
-// Opt-in: BANISHED_LIVE_IMMIGRATION (or BANISHED_LIVE_COMPONENTS). Default off keeps
+// Opt-in: BANISHED_LIVE_IMMIGRATION (or the global live-components switch). Default off keeps
 // the component inert exactly as before this port.
 //
 // Test fixtures (all env-gated, byte-unchanged when unset — NOT retail behaviour):

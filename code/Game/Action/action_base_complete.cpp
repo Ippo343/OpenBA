@@ -203,7 +203,6 @@ static void Ensure8e30() {
 // The BANISHED_WORKSCHED_PROBE erase-outcome probe this reported was deleted with the
 // flag (ENDGAME C). standalone/main.cpp's crash handler still calls this; the stub goes
 // when that call does.
-extern "C" void WorkSchedProbe_Report() {}
 
 
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {

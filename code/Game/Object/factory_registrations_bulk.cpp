@@ -12,6 +12,7 @@
 // and re-run codegen. The per-class file's REGISTER_TYPE takes over.
 
 #include "factory_registration.h"
+#include "options.h"
 #include <cstdio>
 #include <cstdlib>
 
@@ -39,7 +40,7 @@ namespace {
     // points at a unique trampoline that calls this with its typeName.
     void* LogAndReturnNull(const char* typeName) {
         static int s_enum = -1;
-        if (s_enum < 0) { const char* e = getenv("BANISHED_FACTORY_ENUM"); s_enum = (e && *e && e[0] != '0') ? 1 : 0; }
+        if (s_enum < 0) { const char* e = Opt().factoryEnum; s_enum = (e && *e && e[0] != '0') ? 1 : 0; }
         if (s_enum) return FactoryEnumStub(typeName);
         std::fprintf(stderr, "[NullFactory] Hit for type: %s\n", typeName);
         std::fflush(stderr);

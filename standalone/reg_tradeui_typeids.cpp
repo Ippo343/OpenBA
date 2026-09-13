@@ -52,7 +52,6 @@
 // a second reason). Same rule and same reason as reg_citizenai_typeids.cpp.
 #include "resolve.h"
 #include "Object/factory_registration.h"      // Object::GetTypeIdByName
-#include "Component/component_factory_base.h" // ComponentFactory::LiveEnabled
 #include <cstdint>
 #include <cstdio>
 
@@ -117,15 +116,9 @@ extern "C" void FillTypeIdGlobals_tradeui() {
 }
 
 void RegisterTradeUITypeIds() {
-    // BANISHED_LIVE_TRADE_TIDS=1 to enable. Deliberately its own flag rather than a
-    // reuse of any BANISHED_LIVE_TRADE* name the harness sets, so a standard
-    // `make sa-run` cannot flip it on by accident — the mistake reg_citizenai_typeids
-    // calls out for BANISHED_LIVE_CITIZENAI.
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_TRADE_TIDS")) {
-        RegisterExeAddr(0x1401c4b80, reinterpret_cast<uintptr_t>(&g_tid_TradeComponent));
-        RegisterExeAddr(0x1401c4bb8, reinterpret_cast<uintptr_t>(&g_tid_TradeDescription));
-        RegisterExeAddr(0x1401c4bf0, reinterpret_cast<uintptr_t>(&g_tid_ValueDescription));
-        RegisterExeAddr(0x1401c7318, reinterpret_cast<uintptr_t>(&g_tid_ComponentDescription));
-        RegisterExeAddr(0x1401c4020, reinterpret_cast<uintptr_t>(&g_tid_BoatComponent));
-    }
+    RegisterExeAddr(0x1401c4b80, reinterpret_cast<uintptr_t>(&g_tid_TradeComponent));
+    RegisterExeAddr(0x1401c4bb8, reinterpret_cast<uintptr_t>(&g_tid_TradeDescription));
+    RegisterExeAddr(0x1401c4bf0, reinterpret_cast<uintptr_t>(&g_tid_ValueDescription));
+    RegisterExeAddr(0x1401c7318, reinterpret_cast<uintptr_t>(&g_tid_ComponentDescription));
+    RegisterExeAddr(0x1401c4020, reinterpret_cast<uintptr_t>(&g_tid_BoatComponent));
 }

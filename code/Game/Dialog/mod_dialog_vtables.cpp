@@ -47,7 +47,7 @@
 //
 // Gating
 // ------
-// DEFAULT-ON since 2026-09-05 (BANISHED_LIVE_MODDIALOG is in kDefaultOnFlags);
+// DEFAULT-ON since 2026-09-05 (BANISHED_LIVE_MODDIALOG is in the default-on table);
 // set BANISHED_LIVE_MODDIALOG=0 to fall back to the inert no-op slots. Verified
 // unattended with BANISHED_AUTOMENU_BUTTON=7 + BANISHED_AUTOMENU_CLICKS (see
 // standalone/autostart.cpp): build, toggle, reorder, details, cancel-revert,
@@ -442,8 +442,6 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
 // The BANISHED_MOD_PROBE IO::Modification / IO::FileSystem dump was deleted with the
 // flag (ENDGAME C). standalone/reg_mods.cpp and standalone/pausemenu_harness.cpp still
 // call these two entry points; the stubs go when those calls do.
-extern "C" void ModProbe_DumpModList(const char*) {}
-extern "C" void ModProbe_StartWatcher() {}
 
 // ===========================================================================
 // Address-registry entry (called from standalone/reg_mods.cpp)

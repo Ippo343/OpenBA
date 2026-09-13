@@ -15,7 +15,7 @@
 // "?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A" — read out of the exe's
 // own .rdata at 0x1401b8ce8, and an export of Runtime-x64.dll). In standalone the
 // whole element-type-id table lives in standalone/reg_element_typeids.cpp, gated on
-// BANISHED_LIVE_ELEMENT_TIDS. That gate GRADUATED into kDefaultOnFlags 2026-08-22 and is
+// BANISHED_LIVE_ELEMENT_TIDS. That gate GRADUATED into the default-on table 2026-08-22 and is
 // now a kill-switch, so g_TypeId_CheckboxElement is normally POPULATED — but it can still
 // be null when someone A/Bs with BANISHED_LIVE_ELEMENT_TIDS=0, and then
 // FindElementType(root, 0) can never match, leaving +0x30 null for Slot7 to fault on.

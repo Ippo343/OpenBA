@@ -17,6 +17,7 @@
 //
 
 #include <cmath>
+#include "options.h"
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -26,7 +27,7 @@ namespace {
 bool FastTrigOn() {
     static int on = -1;
     if (on < 0) {
-        const char* e = std::getenv("BANISHED_FAST_TRIG");
+        const char* e = Opt().fastTrig;
         on = (e && e[0] == '0') ? 0 : 1;
     }
     return on == 1;

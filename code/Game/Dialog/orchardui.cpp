@@ -18,7 +18,7 @@
 // IsDerivedFrom(elem, *g_TypeId_ProgressElement) before storing it at +0x38.
 // That exe-.rdata slot (0x1401515b8) is filled ONLY by
 // standalone/reg_element_typeids.cpp, which is gated on BANISHED_LIVE_ELEMENT_TIDS
-// and is NOT in kDefaultOnFlags — so on the default path it is null, and
+// and is NOT in the default-on table — so on the default path it is null, and
 // IsDerivedFrom(elem, 0) is always false. That would leave +0x38 null and turn the
 // unguarded `+0x124 = 1.0f` write two lines later into a null-deref crash.
 // See [[reference-gated-element-typeid-disables-controller]] — the same null field

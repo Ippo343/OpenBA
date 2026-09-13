@@ -39,6 +39,7 @@
 //   fog start=1000 end=1001 color(1,1,1,1); clear color 0xff000000 then 0xffff00ff.
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
@@ -177,7 +178,7 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     if (!minimap || !context) return;
     if (!ResolveFuncs()) return;
 
-    static bool s_trace = std::getenv("BANISHED_MAP_TRACE") != nullptr;
+    static bool s_trace = Opt().mapTrace != nullptr;
 
     uint8_t* map = reinterpret_cast<uint8_t*>(minimap);
     int width = *reinterpret_cast<int*>(map + 0x04);

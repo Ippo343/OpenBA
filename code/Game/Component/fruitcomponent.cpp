@@ -253,12 +253,12 @@ void FruitComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Phase 1 inert->live component bring-up) =====
-// ⚠ GRADUATED 2026-08-10: BANISHED_LIVE_FRUIT is now in kDefaultOnFlags, so this component
+// ⚠ GRADUATED 2026-08-10: BANISHED_LIVE_FRUIT is now in the default-on table, so this component
 // is LIVE by default and the env var is only a kill-switch (=0). The line below described
 // the pre-graduation default and is kept for the shape of the opt-in path.
 // By DEFAULT FruitComponent stays inert exactly like every other standalone
 // component (default run byte-for-byte unchanged). Set BANISHED_LIVE_FRUIT=1 (or
-// the global BANISHED_LIVE_COMPONENTS=1) to graduate it to a real per-type vtable:
+// the global the global live-components switch=1) to graduate it to a real per-type vtable:
 //   * slot 4 (+0x20 Startup) -> FruitComponent_Startup  (body-init field28@+0x28)
 //   * slot 9 (+0x48 Update)  -> FruitComponent_Update    (per-tick ripening sim)
 // Size 0x38, capability flags +0x20 = 0x88 (from FruitComponent_Ctor).

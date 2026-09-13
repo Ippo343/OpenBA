@@ -123,7 +123,6 @@ void MapQuery_SampleNormal(void* worldGeomVoid, float worldX, float worldZ, floa
 
 // BANISHED_FLOOR_TRACE is gone (ENDGAME C.2). The symbol stays only until
 // code/Game/Component/floorcomponent.cpp drops its call sites; it is dead.
-bool MapQuery_FloorTraceOn() { return false; }
 
 // ---------------------------------------------------------------------------
 // Picking refine — the flag==0 + cellRec+0x2d>0 branch of the original

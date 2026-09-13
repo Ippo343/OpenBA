@@ -31,7 +31,7 @@
 #include <cstring>
 
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled (default-on gates)
+#include "Component/component_factory_base.h"   // ComponentFactory::the live gate (default-on gates)
 #include "Component/controller_state_table.h"   // ControllerLive::RequestStateTransition
 #include "Component/clearareacomponent_funcs.h" // ClearArea_Finalize8270 (port of ModelComponent_impl_8270)
 

@@ -89,7 +89,7 @@ static void PushElementPair(uintptr_t self, int arrayOffset,
 // misnomer, see standalone/reg_element_typeids.cpp:35).
 //
 // That element-type-id table is registered by reg_element_typeids.cpp, gated on
-// BANISHED_LIVE_ELEMENT_TIDS. That gate GRADUATED into kDefaultOnFlags 2026-08-22, so by
+// BANISHED_LIVE_ELEMENT_TIDS. That gate GRADUATED into the default-on table 2026-08-22, so by
 // default both globals are now POPULATED; they are null only when someone A/Bs with
 // BANISHED_LIVE_ELEMENT_TIDS=0. We resolve PRIVATE copies by name rather than filling
 // g_TypeId_LabelElement / g_TypeId_SpinnerElement, because those globals are

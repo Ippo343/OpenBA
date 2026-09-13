@@ -326,7 +326,6 @@ extern "C" void TradeUI_SmallSort_ByComponent_16920(void* first, void* last,
 
 // The BANISHED_TRADE_SORT_SELFTEST introsort self-test was deleted with the flag
 // (ENDGAME C). standalone/reg_tradeui_leaves.cpp still calls it; the stub goes with it.
-extern "C" void TradeUI_SortSelfTest() {}
 
 
 // 0x1400845d0 / 0x140084430 — the comparators, likewise registered.

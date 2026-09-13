@@ -12,7 +12,6 @@
 // ids / float 0x140172220) are published by reg_component_animal.cpp — not here.
 #include "resolve.h"
 #include "Object/factory_registration.h"      // Object::GetTypeIdByName
-#include "Component/component_factory_base.h" // ComponentFactory::LiveEnabled
 #include "Component/animalcomponent_funcs.h"
 #include <cstdint>
 
@@ -35,10 +34,6 @@
 static uint32_t g_tid_CharacterComponent   = 0;  // 0x1401c7078
 static uint32_t g_tid_CharacterDescription = 0;  // 0x1401c70b0
 
-static bool AnimalUpdateEnabled() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_ANIMAL_UPDATE");
-}
-
 // Idempotent, and safe to call before Object::Factory::Startup has assigned the
 // real CRC ids — it simply leaves the globals at 0 and retries on the next call.
 // animalcomponent.cpp's EnsureHelpers() calls this on the first live animal tick,
@@ -46,7 +41,6 @@ static bool AnimalUpdateEnabled() {
 // is still exported so the integrator CAN add it next to the other
 // FillComponentTypeIdGlobals_* calls for deterministic ordering.
 extern "C" void FillComponentTypeIdGlobals_animal_update() {
-    if (!AnimalUpdateEnabled()) return;
     if (g_tid_CharacterComponent == 0)
         g_tid_CharacterComponent = ::Object::GetTypeIdByName("CharacterComponent");
     if (g_tid_CharacterDescription == 0)
@@ -54,7 +48,6 @@ extern "C" void FillComponentTypeIdGlobals_animal_update() {
 }
 
 void RegisterAnimalUpdateLive() {
-    if (!AnimalUpdateEnabled()) return;
 
     // --- AnimalComponent methods (animalcomponent.cpp) ---
     // 0x140105e20 SetBounds is intentionally NOT registered here: it already has

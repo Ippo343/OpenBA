@@ -43,11 +43,12 @@
 
 
 #include "engine_funcs.h"
+#include "options.h"
 #include "perf_terrain.h"
 #include "resolve.h"
 #include "perf_experimental.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
-#include "component_factory_base.h"        // ::ComponentFactory::LiveEnabled
+#include "component_factory_base.h"        // ::ComponentFactory::the live gate
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -64,7 +65,7 @@ namespace {
 static int  s_mtTrace = -1;            // -1 = unread, 0 = off, 1 = on
 static inline bool MoveTickTraceOn() {
     if (s_mtTrace < 0) {
-        const char* e = std::getenv("BANISHED_MOVETICK_TRACE");
+        const char* e = Opt().movetickTrace;
         s_mtTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
     }
     return s_mtTrace == 1;

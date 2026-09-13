@@ -100,7 +100,6 @@ extern "C" void** TradeUI_FindValueDescription_ea80(const void* resourceEntity,
 
 // The BANISHED_TRADE_PRICE_PROBE invariant probe was deleted with the flag (ENDGAME C).
 // standalone/tool_harness.cpp still calls the report entry point; the stub goes with it.
-extern "C" void TradeUI_PriceProbeReport() {}
 
 
 // ── 0x14005a520 ──────────────────────────────────────────────────────────────

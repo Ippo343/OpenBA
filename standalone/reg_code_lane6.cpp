@@ -38,7 +38,6 @@
 #include "Component/statusiconcomponent_funcs.h"   // StatusIconComponent type
 
 // central live-feature gate (default-on table + env kill-switch)
-namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
 
 // The in-game pause-menu opener (code/Game/Dialog/toolbardialog.cpp). Retail is
 // void(gameSubsys); ours hands the dialog back so an unattended driver can address
@@ -81,14 +80,10 @@ void RegisterCodeLane6Batch() {
     // 0x14011b560 — DecalComponent::Draw (the terrain ground decal: a StorageYard's
     // brown dirt foundation and every other DecalDescription-bearing building).
     // Fully ported as DecalComponent_Draw and installed into DecalComponent's live
-    // vtable slot 6, but ONLY under BANISHED_LIVE_DECAL — so gate the address the
-    // same way. With the flag off, retail's Draw must stay a no-op rather than
-    // becoming reachable by address from somewhere the vtable gate does not cover.
+    // vtable slot 6.
     // decalcomponent.cpp's own s_fn_OriginalDraw = ResolveAddr(0x14011b560) is used
-    // only by a _DEBUG printf; this makes that printf honest too.
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_DECAL")) {
-        RegisterExeAddr(0x14011b560, reinterpret_cast<uintptr_t>(&DecalComponent_Draw));
-    }
+    // only by a _DEBUG printf.
+    RegisterExeAddr(0x14011b560, reinterpret_cast<uintptr_t>(&DecalComponent_Draw));
 
     // 0x14012bbd0 — StatusIconComponent::OnRemove (despite the name it is the icon
     // POSITIONING pass: scene add/remove on the settings visibility byte, then place
@@ -97,12 +92,9 @@ void RegisterCodeLane6Batch() {
     // comment — that comment is STALE: the faithful line-by-line port
     // (StatusIconComponent_OnRemove_Standalone) landed later in the same file and is
     // what the live vtable slot 8 calls. The delegating wrapper it describes has zero
-    // callers. Gated to match the slot-8 install (BANISHED_LIVE_STATUSICON_DRAW), so
-    // an address-reached call cannot outrun the geometry setup that flag performs.
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STATUSICON_DRAW")) {
-        RegisterExeAddr(0x14012bbd0,
-                        reinterpret_cast<uintptr_t>(&StatusIconComponent_OnRemove_Standalone));
-    }
+    // callers.
+    RegisterExeAddr(0x14012bbd0,
+                    reinterpret_cast<uintptr_t>(&StatusIconComponent_OnRemove_Standalone));
 
     // 0x14012db70 — ToolbarDescription::~ToolbarDescription (the cleanup half: destroy
     // the String array at +0x50 and free it, destroy the four Strings at +0x48/+0x40/

@@ -55,7 +55,6 @@ extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param);
 // Map-render bring-up: create + upload the minimap GPU ImageBuffers
 // (gameWorld+0x148 +0x08 terrain / +0x10 overlay) from the raw pixel arrays.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
-extern "C" void TradeUI_PriceProbeReport(void);   // code/Game/Dialog/tradeui_price.cpp
 // Drive a named controller's Slot4 (+0x20 SetupImage) on the just-opened dialog.
 extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName, int slotIndex);
 // Open the in-game "Map" menu dialog (buttonMap id 11 → MapParamsDialog).
@@ -1978,7 +1977,6 @@ void FireTradePanel(void* entityUI) {
     // runs unconditionally at the end of the tradepanel harness rather than on a
     // sample threshold, so that "the panel opened and a520 was never called" prints
     // as an explicit NOT-A-PASS instead of as silence.
-    TradeUI_PriceProbeReport();
 }
 
 // Track A: footprint-clear on placement. Runs ClearAreaComponent_FootprintSweep
