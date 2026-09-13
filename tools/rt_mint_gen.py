@@ -285,6 +285,18 @@ EXTRA_STORAGE_BY_ADDR = {
                      "runtime/src/graphics/graphicsmesh_vtable.cpp SerializeCounter()"),
     0x1801fc6a0: (8, "Graphics::GraphicsMesh 'current mesh' static (GraphicsMesh*), UNEXPORTED - "
                      "runtime/src/graphics/graphicsmesh_vtable.cpp SerializeCurrentMesh()"),
+    # 2026-09-12 render walk: MeshInstance::Update (0x180100800) lazily fills a
+    # 48-entry identity Math::Transform table behind a guard bit, and hands the
+    # table to AnimationState::Update as its rest pose. Both UNEXPORTED, both
+    # read through ResolveAddr in runtime/src/graphics/wave29_lane_slots.cpp,
+    # which declines the whole update when either is null -- DLL-absent that
+    # meant no MeshInstance ever updated and no building or tree drew. Sizes
+    # from the fill loop: 48 entries x 0x1c = 0x540 (0x1801ff310..0x1801ff850);
+    # the guard is the dword just before it (`or eax,1` at 0x180100831).
+    0x1801ff30c: (4, "Graphics::MeshInstance::Update static-init guard (bit 0), UNEXPORTED - "
+                     "runtime/src/graphics/wave29_lane_slots.cpp UpdateInitGuard()"),
+    0x1801ff310: (0x540, "Graphics::MeshInstance::Update 48-entry identity Transform table, UNEXPORTED - "
+                     "runtime/src/graphics/wave29_lane_slots.cpp IdentityTable()"),
 }
 
 # Storage rows whose CORRECT INITIAL VALUE IS KNOWABLE, minted directly.
