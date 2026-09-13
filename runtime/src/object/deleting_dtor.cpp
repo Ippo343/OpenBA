@@ -59,6 +59,21 @@
 //     per-translation-unit copies of `operator delete`, and byte-identical to
 //     the exported `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800c7ad0)
 //     that lane Q already reaches. One constant, not a parameter.
+//
+//     CORRECTED 2026-09-12 (UI text-pipeline batch): "ten" and
+//     "per-translation-unit" were both too small a claim. Many of these are
+//     per-CLASS `operator delete`s with NAMES in the export directory
+//     (`??3<Class>@UI@@SAXPEAX@Z`), and SIXTY of the UI ones were read out of
+//     the shipped DLL and compared byte for byte for
+//     runtime/src/ui/ui_operator_delete.cpp: all sixty are 93 bytes, every
+//     difference between them is inside a RIP-relative displacement, and all
+//     sixty resolve to the same four targets (the allocator singleton,
+//     EnterCriticalSection, MemoryAllocator::Free, LeaveCriticalSection).
+//     So the conclusion this paragraph draws is unchanged and now rests on
+//     seventy measurements rather than ten — but the DESCRIPTION was wrong in
+//     the way reference_grep_cannot_tell_internal_from_unported_export.md is
+//     about, and the dialog_vtable.cpp banner already had to correct it once
+//     for `??3Dialog@UI@@`.
 //   * The ARITY does not vary. Lane Q's correction on `SetSize` — where eight
 //     instantiations took two arguments behind a three-argument typedef — was
 //     checked for here address by address: all 37 read RCX and EDX and nothing
@@ -867,7 +882,203 @@ static const DelDtorSpec kSpecs[] = {
     // Array<String> whose buffer came from the Runtime heap.
     RT_DELDTOR(0x1800361f0, 0x180118370, 0x080, "UI::ImageDescription"),
     RT_DELDTOR(0x1800369e0, 0x1800cb6b0, 0x098, "UI::AnimatedImageDescription"),
-    // 2026-09-12, vtable batch 2 (the UI::*Description second half). Thirteen
+    // MERGE 2026-09-12: batch 9's six rows come FIRST so their indices
+    // (61..66), already baked into their entry points below, are unchanged;
+    // VTABLE BATCH 1's ten were renumbered 67..76 after the merge, exactly as
+    // the kSpecCount comment in deleting_dtor_internal.h demands.
+
+    // 2026-09-12 (VTABLE BATCH 9). Six rows for the object-misc batch, each
+    // read straight from the deleting destructor's own bytes:
+    //   0x180074a10  LEA R9,[0x180111cd0]  MOV EDX,0xd0   ~ComboDialog
+    //     (own body: stamp own vtable, tail into ~DialogInstance -- already
+    //     ported, runtime/src/ui/dialog.cpp)
+    RT_DELDTOR(0x180074a10, 0x180111cd0, 0x0d0, "UI::ComboDialog"),
+    //   0x18003b600  LEA R9,[0x18003b4f0]  MOV EDX,0x20   ~DialogControllerConfig
+    //     (own body: stamp own vtable, tail into ~External -- already ported,
+    //     runtime/src/object/external.cpp)
+    RT_DELDTOR(0x18003b600, 0x18003b4f0, 0x020, "UI::DialogControllerConfig"),
+    //   0x18002c300  LEA R9,[0x1800bcac0]  MOV EDX,0x08   ~ExtensionCompiler
+    //     (own body: stamp own vtable, then Base's -- no members beyond vptr)
+    //     tools/rt_deleting_dtor_verify.py reports this row and the next as BAD
+    //     ("restamps 0x180155a88 but its dtor restamps 0x?"): the reader knows
+    //     one restamp per body and these dtors do TWO (own vtable, then
+    //     ??_7Base@Object@@6B@, 0x1800bcac0 / 0x1800bca90 read 2026-09-12). The
+    //     row matches the bytes; the reader does not know the shape.
+    RT_DELDTOR(0x18002c300, 0x1800bcac0, 0x008, "Object::ExtensionCompiler"),
+    //   0x18002c180  LEA R9,[0x1800bca90]  MOV EDX,0x08   ~ExternalCompiler
+    //     (same shape as ExtensionCompiler above)
+    RT_DELDTOR(0x18002c180, 0x1800bca90, 0x008, "Object::ExternalCompiler"),
+    //   0x180007800  LEA R9,[0x1800076c0]  MOV EDX,0x30   ~ExternalList
+    //     (own body: Array<ExternalPtr<External>>::~Array at +0x20 (0x180009460,
+    //     already ported), then ~External -- already ported)
+    RT_DELDTOR(0x180007800, 0x1800076c0, 0x030, "Object::ExternalList"),
+    //   0x1800245f0  LEA R9,[0x1800a92a0]  MOV EDX,0xc8   ~CompressedCopyFileStream
+    //     (own body: stamp own vtable, tail into ~CompressedFileStream, itself
+    //     an unported export reached by name through the port-aware door)
+    RT_DELDTOR(0x1800245f0, 0x1800a92a0, 0x0c8, "IO::CompressedCopyFileStream"),
+    // Vtable batch 8 (2026-09-12), slot 0 of the four spatial classes' vtables.
+    // Both constants read from each deleting dtor's own bytes:
+    //     0x1800656b0  ~CollisionMesh 0x180065400  MOV EDX,0x70
+    //     0x180064ea0  ~Surface       0x18010ca00  MOV EDX,0x30 (scalar arm only; no vector arm)
+    //     0x1800713b0  ~PointList     0x18010f8e0  MOV EDX,0x50
+    //     0x180072050  ~PickingMesh   0x1801228a0  MOV EDX,0x48
+    // All four destructors are ported in runtime/src/collision2d/, pathfinding/, picking/.
+    // None is a probe subject: each releases owned Array buffers and/or refcounted
+    // Strings, so a fabricated subject would free/decrement garbage.
+    RT_DELDTOR(0x1800656b0, 0x180065400, 0x070, "Collision2D::CollisionMesh"),
+    RT_DELDTOR(0x180064ea0, 0x18010ca00, 0x030, "Collision2D::Surface"),
+    RT_DELDTOR(0x1800713b0, 0x18010f8e0, 0x050, "Pathfinding::PointList"),
+    RT_DELDTOR(0x180072050, 0x1801228a0, 0x048, "Picking::PickingMesh"),
+
+    // 2026-09-12, VTABLE BATCH 1 (the first half of the UI::*Description
+    // family): ten more slot-0 rows, indices 71..80. Each row's two constants
+    // were read from that deleting destructor's OWN bytes -- the `LEA R9` that
+    // names ~Class and the `MOV EDX` that is sizeof(Class) -- never from the
+    // class header, and each was cross-checked against the `Allocate(size, 8)`
+    // in that class's `?CreateNewObject@` (already transcribed in
+    // runtime/src/ui/factory_ui1_tables.inc). All ten agree.
+    //
+    //     0x180040ff0  LEA R9,[0x18010fb20]  MOV EDX,0xb8   BorderDescription
+    //     0x1800481a0  LEA R9,[0x180110bd0]  MOV EDX,0xa0   ButtonDescription
+    //     0x1800489c0  LEA R9,[0x180111620]  MOV EDX,0xa8   CheckDescription
+    //     0x180037eb0  LEA R9,[0x1800cc0d0]  MOV EDX,0x78   ClipRegionDescription
+    //     0x180074e70  LEA R9,[0x180112370]  MOV EDX,0xb8   ComboDescription
+    //     0x180039c00  LEA R9,[0x1800ccff0]  MOV EDX,0x90   ContainerDescription
+    //     0x18003bd90  LEA R9,[0x1800cfb30]  MOV EDX,0xe8   DocumentTextDescription
+    //     0x18003fa20  LEA R9,[0x1800d11f0]  MOV EDX,0x88   EditDescription
+    //     0x1800403a0  LEA R9,[0x1800d1b30]  MOV EDX,0x88   GraphDescription
+    //     0x180042730  LEA R9,[0x1800d2960]  MOV EDX,0xb8   LabelDescription
+    //
+    // None of the ten is a probe subject: every one of these destructors
+    // releases at least one refcounted String, and ~DocumentTextDescription
+    // also destroys four arrays, so running one on a fabricated object would
+    // be a manufactured crash rather than a measurement.
+    RT_DELDTOR(0x180040ff0, 0x18010fb20, 0x0b8, "UI::BorderDescription"),
+    RT_DELDTOR(0x1800481a0, 0x180110bd0, 0x0a0, "UI::ButtonDescription"),
+    RT_DELDTOR(0x1800489c0, 0x180111620, 0x0a8, "UI::CheckDescription"),
+    RT_DELDTOR(0x180037eb0, 0x1800cc0d0, 0x078, "UI::ClipRegionDescription"),
+    RT_DELDTOR(0x180074e70, 0x180112370, 0x0b8, "UI::ComboDescription"),
+    RT_DELDTOR(0x180039c00, 0x1800ccff0, 0x090, "UI::ContainerDescription"),
+    RT_DELDTOR(0x18003bd90, 0x1800cfb30, 0x0e8, "UI::DocumentTextDescription"),
+    RT_DELDTOR(0x18003fa20, 0x1800d11f0, 0x088, "UI::EditDescription"),
+    RT_DELDTOR(0x1800403a0, 0x1800d1b30, 0x088, "UI::GraphDescription"),
+    RT_DELDTOR(0x180042730, 0x1800d2960, 0x0b8, "UI::LabelDescription"),
+
+    // VTABLE BATCH 7 (2026-09-12), appended AFTER batch 8's four rows above --
+    // indices 71-74. Four more classes' slot0, read the same way as every row
+    // above (LEA R9,[~Class] / MOV EDX,sizeof from the deleting dtor's own
+    // bytes, objdump against retail):
+    //   0x1800167f0  LEA R9,[0x1800fb620]  MOV EDX,0x58   Graphics::AnimationGroup
+    //   0x180020a70  LEA R9,[0x1800a51c0]  MOV EDX,0x108  Graphics::ParticleSystem
+    //   0x18000bef0  LEA R9,[0x1800e03b0]  MOV EDX,0x80   Audio::SoundBuffer
+    //   0x180050820  LEA R9,[0x1800e0880]  MOV EDX,0x40   Audio::SoundEffect
+    // None of the four ~Class bodies is ported by this batch; all four reach
+    // the DLL through ResolveAddr, exactly like most of the rows above.
+    RT_DELDTOR(0x1800167f0, 0x1800fb620, 0x058, "Graphics::AnimationGroup"),
+    RT_DELDTOR(0x180020a70, 0x1800a51c0, 0x108, "Graphics::ParticleSystem"),
+    RT_DELDTOR(0x18000bef0, 0x1800e03b0, 0x080, "Audio::SoundBuffer"),
+    RT_DELDTOR(0x180050820, 0x1800e0880, 0x040, "Audio::SoundEffect"),
+    // 2026-09-12, the UI TEXT PIPELINE batch. APPENDED AFTER the batch-8 and
+    // batch-9 rows above at merge time: kSpecs is POSITIONAL and three batches
+    // each started appending at the same index on their own branch, so the
+    // wrapper indices below were re-derived from the merged table, not before.
+    // 2026-09-12, the UI TEXT PIPELINE batch: the four classes of
+    // runtime/src/ui/{font,characterset,cursor,spritecapture_class}.cpp. Each
+    // row's two constants were read from the deleting destructor's OWN bytes
+    // (the `LEA R9` and `MOV EDX` of its array arm), not from the class header:
+    //     0x180032130  LEA R9,[0x1801175a0]  MOV EDX,0x90   UI::Font
+    //     0x1800378a0  LEA R9,[0x1800cb840]  MOV EDX,0x28   UI::CharacterSet
+    //     0x18003b3a0  LEA R9,[0x1800cd1c0]  MOV EDX,0x30   UI::Cursor
+    //     0x18003ccf0  LEA R9,[0x1800d91b0]  MOV EDX,0x58   UI::SpriteCapture
+    // All four destructors are ported and registered in runtime/src/ui/.
+    //
+    // THREE OF THE FOUR INLINE ~Class IN THE SCALAR ARM (CharacterSet, Cursor
+    // and SpriteCapture open-code the restamp, the member release and the
+    // `CALL ??1External`); UI::Font is the one that CALLS it (0x180032181).
+    // That is exactly the split this family handles by calling `~Class` on
+    // BOTH arms, and it cost nothing to check: the inlined code in each of the
+    // three IS the body of the destructor its own array arm names.
+    //
+    // Each also calls its CLASS-SPECIFIC `operator delete` in the scalar arm
+    // (??3Font 0x180031a50, ??3CharacterSet 0x1800374e0, ??3Cursor 0x18003b010,
+    // ??3SpriteCapture 0x18003c8a0) rather than the shared 0x180006a10. All
+    // four are now ported in runtime/src/ui/ui_operator_delete.cpp, which
+    // proves by byte comparison that all sixty UI class operator deletes are
+    // one function — so DeletingDtorCore's single MemFree IS retail's body
+    // here too, as it is for the GroupDescription and Video rows above.
+    //
+    // NOT ADDED to kProbeSubjects, on the UI::ElementDescription row's test:
+    // ~CharacterSet releases a refcounted String, ~SpriteCapture destroys
+    // three Arrays whose buffers came from the Runtime heap, and ~Font does
+    // both. A fabricated subject would decrement a refcount nothing
+    // incremented and free garbage pointers.
+    RT_DELDTOR(0x180032130, 0x1801175a0, 0x090, "UI::Font"),
+    RT_DELDTOR(0x1800378a0, 0x1800cb840, 0x028, "UI::CharacterSet"),
+    RT_DELDTOR(0x18003b3a0, 0x1800cd1c0, 0x030, "UI::Cursor"),
+    RT_DELDTOR(0x18003ccf0, 0x1800d91b0, 0x058, "UI::SpriteCapture"),
+    // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ---------
+    // Slot 0 of the fourteen UI widget vtables ported by
+    // runtime/src/ui/<class>element.cpp. APPENDED, never inserted: the table is
+    // POSITIONAL and kProbeSubjects is a list of INDICES.
+    //
+    // Both constants per row were read out of RETAIL Runtime-x64.dll's own
+    // disassembly at the deleting destructor's address — the `LEA R9,[~Class]`
+    // and the `MOV EDX,sizeof` that the shared `eh vector destructor iterator`
+    // at 0x18007ec98 is handed:
+    //
+    //   0x180043570  LEA R9,[0x1800d32a0]  MOV EDX,0xd0    UI::LayoutElement
+    //   0x180045320  LEA R9,[0x1800d4530]  MOV EDX,0x100   UI::ListElement
+    //   0x180046540  LEA R9,[0x1800d4c40]  MOV EDX,0x100   UI::NumberEditElement
+    //   0x18004ab80  LEA R9,[0x180118ce0]  MOV EDX,0xe8    UI::NumberElement
+    //   0x180047540  LEA R9,[0x1800d5220]  MOV EDX,0xc8    UI::PageElement
+    //   0x180078150  LEA R9,[0x180077ef0]  MOV EDX,0x130   UI::ProgressElement
+    //   0x180047d50  LEA R9,[0x1800d5820]  MOV EDX,0xd8    UI::RadioElement
+    //   0x180044ac0  LEA R9,[0x1800d5d70]  MOV EDX,0xd8    UI::RibbonElement
+    //   0x18003adc0  LEA R9,[0x18011a900]  MOV EDX,0x178   UI::ScrollElement
+    //   0x18004a180  LEA R9,[0x180049ee0]  MOV EDX,0x130   UI::SliderElement
+    //   0x18004b3b0  LEA R9,[0x1800d8640]  MOV EDX,0xc8    UI::SpinnerElement
+    //   0x18004ca90  LEA R9,[0x1800da360]  MOV EDX,0x108   UI::TabElement
+    //   0x180079600  LEA R9,[0x18011e2a0]  MOV EDX,0xf0    UI::TableElement
+    //   0x1800422f0  LEA R9,[0x18011eda0]  MOV EDX,0x100   UI::TextElement
+    //
+    // ALL FOURTEEN ~Class bodies are PORTED by that batch and registered by
+    // name AND address, so ResolveAddr hands each row OUR destructor rather
+    // than the DLL's — these rows add nothing to the cutover surface.
+    //
+    // NOT added to kProbeSubjects: every one of them tail-calls ~Element,
+    // which releases a System::String and destroys the child Array, so running
+    // one on a fabricated object would be a manufactured crash, not a
+    // measurement.
+    //
+    // TWO OF THEM READ "UNREC" IN tools/rt_deleting_dtor_verify.py, AND THAT
+    // IS THE READER, NOT THE ROW. ProgressElement (0x180078150) and
+    // SliderElement (0x18004a180) are the two whose ~Class is a BARE TAIL JUMP
+    // to ~Element with no vtable restamp -- five instructions, e.g.
+    // 0x180077ef0: `MOV [RSP+8],RCX; SUB RSP,0x38; MOV [RSP+0x20],-2;
+    // ADD RSP,0x38; JMP 0x1801161a0`. Inlining that into the scalar branch
+    // leaves a plain `CALL 0x1801161a0` (checked at 0x1800781a1), which is
+    // neither of the reader's two known shapes ("calls the dtor" /
+    // "restamps then inlines"), so it declines to classify. The two constants
+    // it DOES check -- dtor VA and sizeof -- are re-derived and correct for
+    // both rows.
+    RT_DELDTOR(0x180043570, 0x1800d32a0, 0x0d0, "UI::LayoutElement"),
+    RT_DELDTOR(0x180045320, 0x1800d4530, 0x100, "UI::ListElement"),
+    RT_DELDTOR(0x180046540, 0x1800d4c40, 0x100, "UI::NumberEditElement"),
+    RT_DELDTOR(0x18004ab80, 0x180118ce0, 0x0e8, "UI::NumberElement"),
+    RT_DELDTOR(0x180047540, 0x1800d5220, 0x0c8, "UI::PageElement"),
+    RT_DELDTOR(0x180078150, 0x180077ef0, 0x130, "UI::ProgressElement"),
+    RT_DELDTOR(0x180047d50, 0x1800d5820, 0x0d8, "UI::RadioElement"),
+    RT_DELDTOR(0x180044ac0, 0x1800d5d70, 0x0d8, "UI::RibbonElement"),
+    RT_DELDTOR(0x18003adc0, 0x18011a900, 0x178, "UI::ScrollElement"),
+    RT_DELDTOR(0x18004a180, 0x180049ee0, 0x130, "UI::SliderElement"),
+    RT_DELDTOR(0x18004b3b0, 0x1800d8640, 0x0c8, "UI::SpinnerElement"),
+    RT_DELDTOR(0x18004ca90, 0x1800da360, 0x108, "UI::TabElement"),
+    RT_DELDTOR(0x180079600, 0x18011e2a0, 0x0f0, "UI::TableElement"),
+    RT_DELDTOR(0x1800422f0, 0x18011eda0, 0x100, "UI::TextElement"),
+    // 2026-09-12, VTABLE BATCH 2 (the UI::*Description second half), rows
+    // 103..115 -- APPENDED AFTER every row main already had, and the entry
+    // points below were renumbered to match at the merge (the table is
+    // POSITIONAL; see the kSpecCount banner). Thirteen
     // rows, one per class in that batch. Each pair of constants was read out of
     // THAT deleting destructor's own bytes — the `LEA R9,[~Class]` and the
     // `MOV EDX,sizeof` that the eh_vector iterator receives — and not from any
@@ -1263,72 +1474,231 @@ void* RtDelDtor_RenderState(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 56);
 }
 
-// ---------------------------------------------------------------------------
-// 2026-09-12, vtable batch 2. The four rows appended earlier today (indices
-// 57..60: Group/Ribbon/Image/AnimatedImageDescription) landed WITHOUT entry
-// points — the table grew but nothing called DeletingDtorCore for them and
-// nothing registered their addresses, so slot 0 of all four minted vtables was
-// still a trap. Index 58 (UI::RibbonDescription) is in THIS batch's worklist
-// and its entry point is supplied here; 57, 59 and 60 belong to the batch that
-// added them and are deliberately left to it rather than fixed from two
-// branches at once (a duplicate definition on merge helps nobody).
-//
-// UI::RibbonDescription   ~RibbonDescription = 0x1800d5c90  (PORTED, ribbondescription.cpp)
+// Rows 57-60 (2026-09-12): the four UI::*Description classes the cutover boot
+// walked that afternoon. Their table rows landed with the class ports but the
+// wrapper + RegisterRuntimeAddr pair did not, so slot 0 of each minted vtable
+// stayed a trap; wired here by the coordinator when batch 9's merge exposed it.
+void* RtDelDtor_GroupDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 57);
+}
 void* RtDelDtor_RibbonDescription(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 58);
 }
+void* RtDelDtor_ImageDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 59);
+}
+void* RtDelDtor_AnimatedImageDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 60);
+}
 
+// VTABLE BATCH 9 (2026-09-12). Indices 61-66, appended after rows 57-60
+// (wired above, after this batch's merge found them without wrappers).
+// UI::ComboDialog          ~ComboDialog = 0x180111cd0             (PORTED, runtime/src/ui/combodialog.cpp)
+void* RtDelDtor_ComboDialog(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 61);
+}
+// UI::DialogControllerConfig ~DialogControllerConfig = 0x18003b4f0  (PORTED, runtime/src/ui/dialogcontrollerconfig.cpp)
+void* RtDelDtor_DialogControllerConfig(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 62);
+}
+// Object::ExtensionCompiler ~ExtensionCompiler = 0x1800bcac0      (PORTED, runtime/src/object/ext_compilers.cpp)
+void* RtDelDtor_ExtensionCompiler(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 63);
+}
+// Object::ExternalCompiler  ~ExternalCompiler = 0x1800bca90       (PORTED, runtime/src/object/ext_compilers.cpp)
+void* RtDelDtor_ExternalCompiler(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 64);
+}
+// Object::ExternalList      ~ExternalList = 0x1800076c0           (PORTED, runtime/src/object/external_list.cpp)
+void* RtDelDtor_ExternalList(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 65);
+}
+// IO::CompressedCopyFileStream ~CompressedCopyFileStream = 0x1800a92a0 (PORTED, runtime/src/io/compressedcopyfilestream.cpp)
+void* RtDelDtor_CompressedCopyFileStream(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 66);
+}
+// Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
+// Pathfinding::PointList, Picking::PickingMesh. Indices 67-70 (renumbered at
+// the merge: batch 9 took 61-66 on main first).
+void* RtDelDtor_CollisionMesh(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 67);
+}
+void* RtDelDtor_Collision2DSurface(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 68);
+}
+void* RtDelDtor_PointList(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 69);
+}
+void* RtDelDtor_PickingMesh(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 70);
+}
+// UI TEXT PIPELINE batch (2026-09-12). Indices 71-74, counted off the MERGED
+// table rather than assumed: this is the fourth batch to append here today and
+// the previous three each started at the same index on their own branch.
+// UI::Font          ~Font          = 0x1801175a0  (PORTED, runtime/src/ui/font.cpp)
+void* RtDelDtor_Font(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 85);
+}
+// UI::CharacterSet  ~CharacterSet  = 0x1800cb840  (PORTED, runtime/src/ui/characterset.cpp)
+void* RtDelDtor_CharacterSet(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 86);
+}
+// UI::Cursor        ~Cursor        = 0x1800cd1c0  (PORTED, runtime/src/ui/cursor.cpp)
+void* RtDelDtor_Cursor(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 87);
+}
+// UI::SpriteCapture ~SpriteCapture = 0x1800d91b0  (PORTED, runtime/src/ui/spritecapture_class.cpp)
+void* RtDelDtor_SpriteCapture(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 88);
+}
+
+// ---------------------------------------------------------------------------
+// 2026-09-12, VTABLE BATCH 1 -- ten UI::*Description classes, indices 71..80.
+//
+// The indices were RE-DERIVED from the table after merging main twice (batch 9
+// took 61..66, batch 8 took 67..70), not carried over from either append: the
+// merge hazard documented at kSpecCount in deleting_dtor_internal.h is an
+// index collision the static_assert cannot see, and this batch hit it twice.
+//
+// Rows 57..60 (Group/Ribbon/Image/AnimatedImageDescription) are NOT wired here:
+// they were unwired when this batch started and are wired above, on main, by
+// the coordinator. A second wrapper would give one row two owners.
+// ---------------------------------------------------------------------------
+// UI::BorderDescription     ~ = 0x18010fb20   (PORTED, borderdescription.cpp)
+void* RtDelDtor_BorderDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 71);
+}
+// UI::ButtonDescription     ~ = 0x180110bd0   (PORTED, buttondescription.cpp)
+void* RtDelDtor_ButtonDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 72);
+}
+// UI::CheckDescription      ~ = 0x180111620   (PORTED, checkdescription.cpp)
+void* RtDelDtor_CheckDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 73);
+}
+// UI::ClipRegionDescription ~ = 0x1800cc0d0   (PORTED, clipregiondescription.cpp)
+void* RtDelDtor_ClipRegionDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 74);
+}
+// UI::ComboDescription      ~ = 0x180112370   (PORTED, combodescription.cpp)
+void* RtDelDtor_ComboDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 75);
+}
+// UI::ContainerDescription  ~ = 0x1800ccff0   (PORTED, containerdescription.cpp)
+void* RtDelDtor_ContainerDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 76);
+}
+// UI::DocumentTextDescription ~ = 0x1800cfb30 (PORTED, documenttextdescription.cpp)
+void* RtDelDtor_DocumentTextDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 77);
+}
+// UI::EditDescription       ~ = 0x1800d11f0   (PORTED, editdescription.cpp)
+void* RtDelDtor_EditDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 78);
+}
+// UI::GraphDescription      ~ = 0x1800d1b30   (PORTED, graphdescription.cpp)
+void* RtDelDtor_GraphDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 79);
+}
+// UI::LabelDescription      ~ = 0x1800d2960   (PORTED, labeldescription.cpp)
+void* RtDelDtor_LabelDescription(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 80);
+}
+
+// VTABLE BATCH 7 (2026-09-12). Indices 81-84 (renumbered at this merge: batch
+// 8 took 67-70 on main first, concurrently with this batch's own claim on the
+// same range on this branch).
+// Graphics::AnimationGroup  ~AnimationGroup = 0x1800fb620  (NOT ported)
+void* RtDelDtor_AnimationGroup(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 81);
+}
+// Graphics::ParticleSystem  ~ParticleSystem = 0x1800a51c0  (NOT ported)
+void* RtDelDtor_ParticleSystem(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 82);
+}
+// Audio::SoundBuffer        ~SoundBuffer = 0x1800e03b0     (NOT ported)
+void* RtDelDtor_SoundBuffer(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 83);
+}
+// Audio::SoundEffect        ~SoundEffect = 0x1800e0880     (NOT ported)
+void* RtDelDtor_SoundEffect(void* self, unsigned flags) {
+    return DeletingDtorCore(self, flags, 84);
+}
+
+// ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ------------
+// All fourteen ~Class bodies are PORTED (runtime/src/ui/<class>element.cpp).
+void* RtDelDtor_LayoutElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 89); }
+void* RtDelDtor_ListElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, 90); }
+void* RtDelDtor_NumberEditElement(void* self, unsigned flags) { return DeletingDtorCore(self, flags, 91); }
+void* RtDelDtor_NumberElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 92); }
+void* RtDelDtor_PageElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, 93); }
+void* RtDelDtor_ProgressElement(void* self, unsigned flags)   { return DeletingDtorCore(self, flags, 94); }
+void* RtDelDtor_RadioElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, 95); }
+void* RtDelDtor_RibbonElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 96); }
+void* RtDelDtor_ScrollElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 97); }
+void* RtDelDtor_SliderElement(void* self, unsigned flags)     { return DeletingDtorCore(self, flags, 98); }
+void* RtDelDtor_SpinnerElement(void* self, unsigned flags)    { return DeletingDtorCore(self, flags, 99); }
+void* RtDelDtor_TabElement(void* self, unsigned flags)        { return DeletingDtorCore(self, flags, 100); }
+void* RtDelDtor_TableElement(void* self, unsigned flags)      { return DeletingDtorCore(self, flags, 101); }
+void* RtDelDtor_TextElement(void* self, unsigned flags)       { return DeletingDtorCore(self, flags, 102); }
+
+// ---------------------------------------------------------------------------
+// VTABLE BATCH 2 (the UI::*Description second half), table rows 103..115.
+// The indices below were RE-DERIVED after merging main, not carried over
+// from the branch: main had grown the table to 103 rows in the meantime and
+// a stale index dispatches the WRONG destructor with no diagnostic.
+// RtDelDtor_RibbonDescription is NOT here -- main wired it (index 58).
 // UI::LayoutDescription       ~LayoutDescription = 0x1800d3a10
 void* RtDelDtor_LayoutDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 61);
+    return DeletingDtorCore(self, flags, 103);
 }
 // UI::ListDescription         ~ListDescription = 0x1800d4910
 void* RtDelDtor_ListDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 62);
+    return DeletingDtorCore(self, flags, 104);
 }
 // UI::NumberDescription       ~NumberDescription = 0x180118c00
 void* RtDelDtor_NumberDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 63);
+    return DeletingDtorCore(self, flags, 105);
 }
 // UI::NumberEditDescription   ~NumberEditDescription = 0x1800d4fe0
 void* RtDelDtor_NumberEditDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 64);
+    return DeletingDtorCore(self, flags, 106);
 }
 // UI::PageDescription         ~PageDescription = 0x1800d54b0
 void* RtDelDtor_PageDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 65);
+    return DeletingDtorCore(self, flags, 107);
 }
 // UI::ProgressDescription     ~ProgressDescription = 0x18011a080
 void* RtDelDtor_ProgressDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 66);
+    return DeletingDtorCore(self, flags, 108);
 }
 // UI::RadioDescription        ~RadioDescription = 0x1800d5b20
 void* RtDelDtor_RadioDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 67);
+    return DeletingDtorCore(self, flags, 109);
 }
 // UI::ScrollDescription       ~ScrollDescription = 0x18011a5d0
 void* RtDelDtor_ScrollDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 68);
+    return DeletingDtorCore(self, flags, 110);
 }
 // UI::SliderDescription       ~SliderDescription = 0x1800d7a00
 void* RtDelDtor_SliderDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 69);
+    return DeletingDtorCore(self, flags, 111);
 }
 // UI::SpinnerDescription      ~SpinnerDescription = 0x1800d8950
 void* RtDelDtor_SpinnerDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 70);
+    return DeletingDtorCore(self, flags, 112);
 }
 // UI::TabDescription          ~TabDescription = 0x1800da8e0
 void* RtDelDtor_TabDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 71);
+    return DeletingDtorCore(self, flags, 113);
 }
 // UI::TableDescription        ~TableDescription = 0x18011e6f0
 void* RtDelDtor_TableDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 72);
+    return DeletingDtorCore(self, flags, 114);
 }
 // UI::TextDescription         ~TextDescription = 0x18011eae0  (PORTED, textdescription.cpp)
 void* RtDelDtor_TextDescription(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, 73);
+    return DeletingDtorCore(self, flags, 115);
 }
 
 static const int kProbeSubjects[] = { 7, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 42 };
@@ -1433,10 +1803,65 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x18004eb90, (void*)&RtDelDtor_PixelProgram);
     RegisterRuntimeAddr(0x18004b9d0, (void*)&RtDelDtor_RenderState);
 
-    // ---- 2026-09-12, vtable batch 2 (the UI::*Description second half) ----
-    // Plus RibbonDescription, whose ROW landed earlier today with no entry
-    // point; see the comment above its trampoline.
+
+    // VTABLE BATCH 9
+    // Rows 57-60, the UI::*Description four (wrappers above).
+    RegisterRuntimeAddr(0x180046af0, (void*)&RtDelDtor_GroupDescription);
     RegisterRuntimeAddr(0x180044620, (void*)&RtDelDtor_RibbonDescription);
+    RegisterRuntimeAddr(0x1800361f0, (void*)&RtDelDtor_ImageDescription);
+    RegisterRuntimeAddr(0x1800369e0, (void*)&RtDelDtor_AnimatedImageDescription);
+    RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
+    RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
+    RegisterRuntimeAddr(0x18002c300, (void*)&RtDelDtor_ExtensionCompiler);
+    RegisterRuntimeAddr(0x18002c180, (void*)&RtDelDtor_ExternalCompiler);
+    RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
+    RegisterRuntimeAddr(0x1800245f0, (void*)&RtDelDtor_CompressedCopyFileStream);
+    RegisterRuntimeAddr(0x1800656b0, (void*)&RtDelDtor_CollisionMesh);       // vtable batch 8 SPATIAL
+    RegisterRuntimeAddr(0x180064ea0, (void*)&RtDelDtor_Collision2DSurface);  // vtable batch 8 SPATIAL
+    RegisterRuntimeAddr(0x1800713b0, (void*)&RtDelDtor_PointList);           // vtable batch 8 SPATIAL
+    RegisterRuntimeAddr(0x180072050, (void*)&RtDelDtor_PickingMesh);         // vtable batch 8 SPATIAL
+
+    // 2026-09-12 VTABLE BATCH 1 — ten UI::*Description classes, rows 71..80.
+    // Every address a LITERAL, for the reason the banner above gives.
+    RegisterRuntimeAddr(0x180040ff0, (void*)&RtDelDtor_BorderDescription);
+    RegisterRuntimeAddr(0x1800481a0, (void*)&RtDelDtor_ButtonDescription);
+    RegisterRuntimeAddr(0x1800489c0, (void*)&RtDelDtor_CheckDescription);
+    RegisterRuntimeAddr(0x180037eb0, (void*)&RtDelDtor_ClipRegionDescription);
+    RegisterRuntimeAddr(0x180074e70, (void*)&RtDelDtor_ComboDescription);
+    RegisterRuntimeAddr(0x180039c00, (void*)&RtDelDtor_ContainerDescription);
+    RegisterRuntimeAddr(0x18003bd90, (void*)&RtDelDtor_DocumentTextDescription);
+    RegisterRuntimeAddr(0x18003fa20, (void*)&RtDelDtor_EditDescription);
+    RegisterRuntimeAddr(0x1800403a0, (void*)&RtDelDtor_GraphDescription);
+    RegisterRuntimeAddr(0x180042730, (void*)&RtDelDtor_LabelDescription);
+
+    // VTABLE BATCH 7 (2026-09-12).
+    RegisterRuntimeAddr(0x1800167f0, (void*)&RtDelDtor_AnimationGroup);
+    RegisterRuntimeAddr(0x180020a70, (void*)&RtDelDtor_ParticleSystem);
+    RegisterRuntimeAddr(0x18000bef0, (void*)&RtDelDtor_SoundBuffer);
+    RegisterRuntimeAddr(0x180050820, (void*)&RtDelDtor_SoundEffect);
+    // UI TEXT PIPELINE batch, rows 71-74 (wrappers above).
+    RegisterRuntimeAddr(0x180032130, (void*)&RtDelDtor_Font);
+    RegisterRuntimeAddr(0x1800378a0, (void*)&RtDelDtor_CharacterSet);
+    RegisterRuntimeAddr(0x18003b3a0, (void*)&RtDelDtor_Cursor);
+    RegisterRuntimeAddr(0x18003ccf0, (void*)&RtDelDtor_SpriteCapture);
+
+    // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
+    RegisterRuntimeAddr(0x180043570, (void*)&RtDelDtor_LayoutElement);
+    RegisterRuntimeAddr(0x180045320, (void*)&RtDelDtor_ListElement);
+    RegisterRuntimeAddr(0x180046540, (void*)&RtDelDtor_NumberEditElement);
+    RegisterRuntimeAddr(0x18004ab80, (void*)&RtDelDtor_NumberElement);
+    RegisterRuntimeAddr(0x180047540, (void*)&RtDelDtor_PageElement);
+    RegisterRuntimeAddr(0x180078150, (void*)&RtDelDtor_ProgressElement);
+    RegisterRuntimeAddr(0x180047d50, (void*)&RtDelDtor_RadioElement);
+    RegisterRuntimeAddr(0x180044ac0, (void*)&RtDelDtor_RibbonElement);
+    RegisterRuntimeAddr(0x18003adc0, (void*)&RtDelDtor_ScrollElement);
+    RegisterRuntimeAddr(0x18004a180, (void*)&RtDelDtor_SliderElement);
+    RegisterRuntimeAddr(0x18004b3b0, (void*)&RtDelDtor_SpinnerElement);
+    RegisterRuntimeAddr(0x18004ca90, (void*)&RtDelDtor_TabElement);
+    RegisterRuntimeAddr(0x180079600, (void*)&RtDelDtor_TableElement);
+    RegisterRuntimeAddr(0x1800422f0, (void*)&RtDelDtor_TextElement);
+
+    // ---- VTABLE BATCH 2 (the UI::*Description second half), rows 103..115 --
     RegisterRuntimeAddr(0x1800431d0, (void*)&RtDelDtor_LayoutDescription);
     RegisterRuntimeAddr(0x180044ed0, (void*)&RtDelDtor_ListDescription);
     RegisterRuntimeAddr(0x18004a760, (void*)&RtDelDtor_NumberDescription);

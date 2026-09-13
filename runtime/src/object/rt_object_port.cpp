@@ -204,5 +204,14 @@ void RtObjectPortInit() {
     n += RtObjectExternalForceUnloadRegister();
     n += RtObjectInternalFactoryPersistRegister();
 
+    // ---- VTABLE BATCH 9 (2026-09-12) ---------------------------------------
+    // Registered UNCONDITIONALLY, same reasoning as BATCH 5 above.
+    //   ext_compilers.cpp     Object::ExtensionCompiler + Object::ExternalCompiler
+    //   external_list.cpp     Object::ExternalList
+    extern int RtObjectExtCompilersRegister();
+    extern int RtObjectExternalListRegister();
+    n += RtObjectExtCompilersRegister();
+    n += RtObjectExternalListRegister();
+
     printf("[RtPort] Object: %d exports registered\n", n);
 }

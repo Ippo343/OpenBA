@@ -770,67 +770,11 @@ static void CallRetailUpdateContainers(void* self) {
     RT_ORIGINAL_ONCE(Fn, "?UpdateContainers@TabElement@UI@@AEAAXXZ")(self);
 }
 
-void RtTabElementUpdateContainers(void* self) {
-    RT_PREDICT_SITE("UI::TabElement::UpdateContainers");
-
-    if (RT_PREDICT_ON) {
-        RT_PREDICT_ROUND(round) {
-            // Coverage: watch every object the body may write, so a retail
-            // write we did NOT predict is reported instead of ignored.
-            // Predictions alone are only a lower bound.
-            const int32_t tabCount = *reinterpret_cast<int32_t*>(B(self, 0xc0));
-            uint8_t* const data =
-                *reinterpret_cast<uint8_t**>(B(self, TAE::kChildrenData));
-            const int32_t active =
-                *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab));
-
-            for (int32_t i = 0; i < tabCount && i < 32; i++) {
-                uint8_t* c = *reinterpret_cast<uint8_t**>(
-                    data + 0x20 + static_cast<size_t>(i) * 0x10);
-                if (!c) continue;
-                for (uint8_t* p = c; p; p = *reinterpret_cast<uint8_t**>(p + 0x98))
-                    round.Watch(p + 0x34, sizeof(uint32_t), "element._flags");
-
-                // The suppressed vtable call writes the container's geometry.
-                // Declaring it keeps the hole VISIBLE (it prints as excluded=)
-                // rather than letting "not reported" read as "verified".
-                if (i == active) {
-                    round.Exclude(c + 0x60, 0x40,
-                                  "Element::vtbl+0x28 resize -- callee not ported, "
-                                  "so its writes are not predicted");
-                    // AND the active child's OWN FLAG WORD. Found by the first
-                    // real run of this oracle, which reported it as a mismatch:
-                    // pre=0x8000001, ours=0x8000000, retail=0x0. Bit 27 is
-                    // kElementFlagNeedsSizeCalc (Element.h), which the resize
-                    // callee CLEARS once it has recalculated. Our body predicts
-                    // the state at its own last write, which is correct; retail's
-                    // final state is the state after a callee we suppressed.
-                    //
-                    // So this location is not ours to predict WHILE THE CALLEE IS
-                    // SUPPRESSED, and it is excluded rather than fudged. It stops
-                    // being excluded the day vtable slot +0x28 is ported -- and
-                    // until then it prints in the `unverifiable=` column, so the
-                    // hole is counted rather than silent.
-                    //
-                    // NOTE THE ASYMMETRY, because it is the useful part: only the
-                    // ACTIVE child is affected. Every inactive child's flag word,
-                    // and every ancestor's, stays fully compared -- which is where
-                    // the guarded dirty walk this port exists to reproduce lives.
-                    round.Exclude(c + 0x34, sizeof(uint32_t),
-                                  "resize callee (vtbl+0x28) clears NeedsSizeCalc "
-                                  "here; suppressed in predict mode");
-                }
-            }
-
-            TabElement_UpdateContainers_Body(self, round.sink());   // predicts
-            CallRetailUpdateContainers(self);                      // authority
-        }
-        return;
-    }
-
-    RtSink live;
-    TabElement_UpdateContainers_Body(self, live);
-}
+extern "C" void RtUi_TabElement_UpdateContainers(void* self);   // tabelement.cpp
+// The body that lived here was a second copy of ?UpdateContainers@TabElement@UI@@
+// (0x1800d9710); runtime/src/ui/tabelement.cpp owns it since vtable batch 4
+// (2026-09-12), registered with both doors there.
+void RtTabElementUpdateContainers(void* self) { RtUi_TabElement_UpdateContainers(self); }
 
 void TabElement_SetActiveTab(void* self, int32_t tab) {
     RT_DIFF_BEGIN("UI::TabElement::SetActiveTab");
@@ -1223,9 +1167,6 @@ int RtUiWidgetsLayRegister() {
     // its name and its address -- the convention that exists because lane B3
     // registered Element::RemoveChildren by name only and left the tree's one
     // address-door bypass (see the note further down this function).
-    RegisterRuntimeExport("?UpdateContainers@TabElement@UI@@AEAAXXZ",
-                          (void*)&RtTabElementUpdateContainers); ++n;
-    RegisterRuntimeAddr(0x1800d9710, (void*)&RtTabElementUpdateContainers);
     // The live-coverage seam. OPT-IN, and it must be explicitly SET rather than
     // merely left unset -- runtime_detour.h: "Every detour gets an env kill
     // switch at its call site. Nothing goes default-on unproven." With it off,

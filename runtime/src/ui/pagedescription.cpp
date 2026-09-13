@@ -26,13 +26,13 @@
 //     +0x78  int32  _activePage   ctor 0, one kScalarInt, and the argument of
 //                                 the second SetActivePage call at the tail of
 //                                 CreateInstance. THIS ONE HAS A NAME because a
-//                                 second body (SetActivePage, ported below)
-//                                 says what it is; the sibling classes' fields
-//                                 do not and are left as offsets.
+//                                 second body says what it is --
+//                                 ?SetActivePage@PageElement@UI@@, ported in
+//                                 runtime/src/ui/widgets_layout.cpp; the sibling
+//                                 classes' fields do not and are left as offsets.
 //
-// ALSO PORTED HERE: ?SetActivePage@PageElement@UI@@QEAAXH@Z (0x1800d5110), the
-// only non-slot helper CreateInstance calls that nothing in the tree had
-// (grepped across runtime/, standalone/, code/ and engine/ first).
+// NO NON-SLOT HELPER IS PORTED HERE. ?SetActivePage@PageElement@UI@@ was, and
+// was dropped at the merge -- see the note above CreateInstance.
 // ============================================================================
 #include <cstddef>
 #include <cstdint>
@@ -187,56 +187,14 @@ extern "C" bool RtUi_PageDescription_Serialize(void* selfv, void* streamv) {
 }
 
 // ============================================================================
-// ?SetActivePage@PageElement@UI@@QEAAXH@Z   retail 0x1800d5110
+// ?SetActivePage@PageElement@UI@@QEAAXH@Z (0x1800d5110) IS NOT HERE.
 // ============================================================================
-// Ported here because PageDescription::CreateInstance calls it twice and
-// nothing else in the tree had it.
-//
-//   if (page < -1 || page >= _children.size || page == _activePage) return;
-//   _activePage = page;
-//   mark this and every ancestor needs-size-calc
-//   for each child i:
-//       i == page ? CLEAR kElementFlagHidden : SET it
-//       and, ONLY IF THAT BIT ACTUALLY CHANGED, mark the CHILD's chain dirty
-//
-// THE GUARD IS `-2 < page`, i.e. -1 IS A LEGAL ARGUMENT — which is exactly how
-// CreateInstance uses it (it passes -1 first, then the description's value).
-// Reading that as "must be non-negative" would turn the first call into a
-// no-op and leave every page visible.
-//
-// THE "did it change" TEST IS WRITTEN TWICE AND DIFFERENTLY. For the hide arm
-// retail computes `((old|1) ^ old) & 1`; for the show arm it just tests the old
-// bit. Both reduce to "the bit changed", and both are transcribed as written
-// rather than folded, because the two arms are two separate pieces of retail
-// code and only their RESULTS are known to agree.
-extern "C" void RtUi_PageElement_SetActivePage(void* selfv, int32_t page) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-
-    if (page < -1) return;
-    const int32_t count = *reinterpret_cast<const int32_t*>(self + 0xa8);
-    if (page >= count) return;
-    if (page == *reinterpret_cast<const int32_t*>(self + 0xc0)) return;
-
-    *reinterpret_cast<int32_t*>(self + 0xc0) = page;
-    MarkChainDirty(self);
-
-    for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(self + 0xa8); ++i) {
-        uint8_t* const* kids = *reinterpret_cast<uint8_t* const* const*>(self + 0xa0);
-        uint8_t* kid = kids[i];
-        if (kid == nullptr) continue;
-
-        uint32_t& flags = *reinterpret_cast<uint32_t*>(kid + 0x34);
-        const uint32_t old = flags;
-        if (i == page) {
-            flags = old & ~static_cast<uint32_t>(UI::kElementFlagHidden);
-            if ((old & UI::kElementFlagHidden) != 0) MarkChainDirty(kid);
-        } else {
-            flags = old | UI::kElementFlagHidden;
-            if ((((old | UI::kElementFlagHidden) ^ old) & UI::kElementFlagHidden) != 0)
-                MarkChainDirty(kid);
-        }
-    }
-}
+// It was ported in this file and dropped at the merge (2026-09-12):
+// runtime/src/ui/widgets_layout.cpp has owned it since Wave 7 lane E. The grep
+// that missed it looked for a RegisterRuntimeAddr on 0x1800d5110, and that file
+// registers it by NAME only -- which is exactly the shape the duplicate-export
+// scan catches. CreateInstance below calls it by that name.
+// ============================================================================
 
 // ============================================================================
 // ?CreateInstance@PageDescription@UI@@...   retail 0x1800d52b0
@@ -293,9 +251,12 @@ extern "C" void** RtUi_PageDescription_CreateInstance(const void* selfv, void** 
         MarkChainDirty(elem);                                  // 1800d53b1..1800d53c5
     }
 
-    RtUi_PageElement_SetActivePage(elem, -1);                  // 1800d53d4
-    RtUi_PageElement_SetActivePage(
-        elem, *reinterpret_cast<const int32_t*>(self + 0x78)); // 1800d53df
+    using SetActivePageFn = void (*)(void*, int32_t);
+    SetActivePageFn setActivePage =
+        RT_EXPORT_ONCE(SetActivePageFn, "?SetActivePage@PageElement@UI@@QEAAXH@Z");
+    setActivePage(elem, -1);                                   // 1800d53d4
+    setActivePage(elem,
+                  *reinterpret_cast<const int32_t*>(self + 0x78));  // 1800d53df
 
     *ret = elem;                                               // 1800d53e4
     return ret;
@@ -343,10 +304,6 @@ int RtUiPageDescriptionRegister() {
         "?CreateInstance@PageDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
         (void*)&RtUi_PageDescription_CreateInstance);                    ++n;
     RegisterRuntimeAddr(0x1800d52b0ull, (void*)&RtUi_PageDescription_CreateInstance);
-
-    RegisterRuntimeExport("?SetActivePage@PageElement@UI@@QEAAXH@Z",
-                          (void*)&RtUi_PageElement_SetActivePage);       ++n;
-    RegisterRuntimeAddr(0x1800d5110ull, (void*)&RtUi_PageElement_SetActivePage);
 
     return n;
 }

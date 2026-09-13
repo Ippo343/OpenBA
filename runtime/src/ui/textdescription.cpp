@@ -20,14 +20,24 @@
 // keeps as its own function — exported, so it is registered by NAME as well as
 // by address.
 //
+// ??0TextElement@UI@@QEAA@XZ (0x18011eb80) WAS ported here and is not any more:
+// runtime/src/ui/element_bodies_b5.cpp owns it (vtable batch 5), and this file
+// reaches it by its export name so there is exactly one registration per
+// address. `?GetIndexFromName@StringTable@UI@@` went the same way at the same
+// merge -- runtime/src/ui/sprite.cpp has owned it since Wave 9, and the grep
+// that missed it looked for a RegisterRuntimeAddr on 0x180002470 when sprite.cpp
+// registers it by NAME only. A second body under one name is the duplicate the
+// two merge scans exist to catch.
+//
 // THE CONSTRUCTOR IS OUT OF LINE HERE. Unlike Group/Ribbon/Image, whose ctor
 // bodies are inlined into Construct/Reconstruct, TextDescription's is a real
 // function at 0x18011ea20 that both Construct (`JNZ 0x18011ea20`, a TAIL jump)
-// and Reconstruct (`JMP 0x18011ea20`) reach. It is NOT registered separately:
-// it has no export name of its own reachable through the vtable and neither
-// caller is an address door, so it lives here as a plain helper and both slots
-// call it. (factory_ui1.cpp's table-driven pair for this class was checked
-// first — it constructs through the same 0x18011ea20, so nothing is shadowed.)
+// and Reconstruct (`JMP 0x18011ea20`) reach, and it IS exported
+// (??0TextDescription@UI@@QEAA@XZ), so it is registered here by both doors.
+// runtime/src/ui/ui_factory_wave28.cpp carried an inlined copy plus its own
+// registration pair for that address; at the merge (2026-09-12) its Ctor_ became
+// a one-line forwarder to the body below and its two registration lines were
+// deleted, so there is exactly one registration per address.
 //
 // LAYOUT, sizeof 0x90 (`MOV EDX,0x90` at 0x180041e4f, the eh_vector stride in
 // the deleting destructor). `ElementDescription` (0x68) plus:
@@ -65,7 +75,6 @@ void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"
 void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
 void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
 void* VtTextDescription()    { return RT_DATA_SLOT(void*, "??_7TextDescription@UI@@6B@"); }
-void* VtTextElement()        { return RT_DATA_SLOT(void*, "??_7TextElement@UI@@6B@"); }
 const uint8_t* TextDescriptionTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*,
                         "?_typeInfo@TextDescription@UI@@0VBaseTypeInfo@Object@@A");
@@ -291,203 +300,16 @@ extern "C" bool RtUi_TextDescription_Serialize(void* selfv, void* streamv) {
 }
 
 // ============================================================================
-// ??0TextElement@UI@@QEAA@XZ   retail 0x18011eb80
+// THE APPLIER (0x18011ef70) IS NOT HERE.
 // ============================================================================
-// PORTED HERE DELIBERATELY, out of the Element agents' scope, because
-// TextDescription::CreateInstance CALLS it out of line (0x18011f442) rather
-// than inlining it the way the Group/Ribbon/Image siblings inline theirs — so
-// the wall cannot be cleared without it.
-//
-// TextElement is 0x100 bytes (`MOV EDX,0x100` at 0x18011f412). Element's 0xc0
-// plus its own fields, whose store widths are NOT uniform:
-//   0x18011eba8  MOV qword [RBX+0xc0],0
-//   0x18011ebaf  MOV qword [RBX+0xc8],0
-//   0x18011ebb6  MOV qword [RBX+0xd0],0
-//   0x18011ebbd  MOV qword [RBX+0xd8],0
-//   0x18011ebc4  MOV dword [RBX+0xe0],-1
-//   0x18011ebce  MOV word  [RBX+0xe8],0        <- +0xe4 IS NEVER WRITTEN
-//   0x18011ebd5  MOV dword [RBX+0xec],0x64
-//   0x18011ebdf  MOV dword [RBX+0xf0],-1
-//   0x18011ebe9  MOV dword [RBX+0xf4],0
-//   0x18011ebef  MOV qword [RBX+0xf8],0
-// then CacheText(this) (0x18011ec10, already ported —
-// runtime/src/ui/textelement_cachetext.cpp — and reached through ResolveAddr,
-// which is registry-first, so OUR CacheText runs).
-extern "C" void* RtUi_TextElement_Ctor(void* selfv) {
-    uint8_t* e = static_cast<uint8_t*>(selfv);
-
-    using ElementCtorFn = void* (*)(void*);
-    RtAddr<ElementCtorFn>(0x180115e50ull)(e);                  // 18011eb96 ??0Element
-
-    *reinterpret_cast<void**>(e) = VtTextElement();            // 18011eb9c
-    *reinterpret_cast<uint64_t*>(e + 0xc0) = 0;                // 18011eba8
-    *reinterpret_cast<uint64_t*>(e + 0xc8) = 0;                // 18011ebaf
-    *reinterpret_cast<uint64_t*>(e + 0xd0) = 0;                // 18011ebb6
-    *reinterpret_cast<uint64_t*>(e + 0xd8) = 0;                // 18011ebbd
-    *reinterpret_cast<int32_t*>(e + 0xe0)  = -1;               // 18011ebc4  DWORD
-    *reinterpret_cast<uint16_t*>(e + 0xe8) = 0;                // 18011ebce  WORD
-    *reinterpret_cast<int32_t*>(e + 0xec)  = 0x64;             // 18011ebd5
-    *reinterpret_cast<int32_t*>(e + 0xf0)  = -1;               // 18011ebdf
-    *reinterpret_cast<int32_t*>(e + 0xf4)  = 0;                // 18011ebe9
-    *reinterpret_cast<uint64_t*>(e + 0xf8) = 0;                // 18011ebef
-
-    using CacheTextFn = void (*)(void*);
-    RtAddr<CacheTextFn>(0x18011ec10ull)(e);                    // 18011ebf9
-    return e;
-}
-
+// `?CreateInstance@TextDescription@UI@@QEBAXV?$InternalPtr@VTextElement@UI@@@
+// Object@@PEBVDialog@2@@Z` -- the TextElement-returning overload the vtable
+// slot below calls -- is ported and registered by
+// runtime/src/ui/element_bodies_b5.cpp (vtable batch 5, which owns
+// UI::TextElement). This file had a second copy of it; it was dropped at the
+// merge (2026-09-12) so there is one registration per address, and the slot
+// below reaches it through ResolveAddr, which is registry-first.
 // ============================================================================
-// ?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z   0x180002470
-// ============================================================================
-// The one non-slot helper this class's applier calls that nothing else in the
-// tree had ported (grepped across runtime/, standalone/, code/ and engine/
-// before writing it). A linear scan over the table's {name, ?} pairs.
-//
-// Layout it reads: `this+0x20` = the pair array's data pointer, `this+0x28` =
-// its int32 count, stride 0x10 (`puVar10 += 2` on 8-byte units), the name being
-// the FIRST qword of each pair.
-//
-// THE COMPARISON IS NOT strcmp. Retail first compares the two Strings' cached
-// LENGTHS (`*(int*)(data-8)`) and only then walks the bytes, and the byte walk
-// stops at the first NUL on EITHER side. A strcmp here would agree on every
-// input that has no embedded NUL and disagree on the ones that do; the walk is
-// transcribed rather than replaced.
-extern "C" int32_t RtUi_StringTable_GetIndexFromName(const void* selfv, const void* namev) {
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
-    const int32_t  n    = *reinterpret_cast<const int32_t*>(self + 0x28);
-    if (n <= 0) return -1;
-
-    const char* want = *reinterpret_cast<const char* const*>(namev);
-    const uint64_t* pair = *reinterpret_cast<const uint64_t* const*>(self + 0x20);
-
-    const int32_t wantLen = want ? *reinterpret_cast<const int32_t*>(want - 8) : 0;
-
-    for (int32_t i = 0; i < n; ++i, pair += 2) {
-        const char* have = reinterpret_cast<const char*>(pair[0]);
-        const int32_t haveLen = have ? *reinterpret_cast<const int32_t*>(have - 8) : 0;
-        if (haveLen != wantLen) continue;
-
-        // Retail returns the index immediately when the table's entry is empty
-        // and the lengths already matched — an empty `want` therefore matches
-        // the first empty row rather than falling through to the byte walk.
-        if (have == nullptr || *reinterpret_cast<const int32_t*>(have - 8) == 0) return i;
-
-        int32_t diff;
-        if (want == nullptr) {
-            diff = 1;
-        } else {
-            int64_t k = 0;
-            char c = have[0];
-            if (c == want[0]) {
-                const char* w = want;
-                while (c != '\0' && *w != '\0') {
-                    c = have[(w - want) + 1];
-                    ++w;
-                    ++k;
-                    if (c != *w) break;
-                }
-            }
-            // MOVSX, not MOVZX: retail widens these as SIGNED chars (MSVC's
-            // default `char`), so a byte >= 0x80 compares negative. Using
-            // unsigned char here would flip the sign of the difference on
-            // non-ASCII names — and only the SIGN is observable, since the
-            // caller tests `== 0`... except that it is not: the zero test is
-            // the only use, so the sign is in fact NOT observable here. It is
-            // still transcribed as retail has it rather than "simplified",
-            // because nothing guarantees the next caller only tests zero.
-            diff = static_cast<int32_t>(static_cast<signed char>(have[k])) -
-                   static_cast<int32_t>(static_cast<signed char>(want[k]));
-        }
-        if (diff == 0) return i;
-    }
-    return -1;
-}
-
-// ============================================================================
-// ?CreateInstance@TextDescription@UI@@ (the applier)   retail 0x18011ef70
-// ============================================================================
-// `void Apply(const TextDescription* self, InternalPtr<Element>* elemPtr,
-//             const Dialog* dialog)` — R8 (the Dialog) is spilled and NEVER
-// READ, exactly like ImageDescription's applier; the parameter survives only
-// because the virtual's signature is fixed by the base.
-//
-//   local = *elemPtr ; ElementDescription::CreateInstance(self, &local)
-//   e = *elemPtr  (RE-READ)         ; e->+0xc0 = self->_font
-//   tbl = self->+0x70
-//   idx = tbl ? StringTable::GetIndexFromName(tbl, &self->_name) : -1
-//   e = *elemPtr  (RE-READ)         ; e->+0xd8 = tbl ; e->+0xe0 = idx
-//   walk e and every _parent, OR-ing kElementFlagNeedsSizeCalc into +0x34
-//   TextElement::CacheText(e)
-//   e->+0xe8 = self[0x84] ; e->+0xe9 = self[0x85]
-//   e->+0xec = self->+0x88 ; e->+0xf4 = self->+0x80 ; e->+0xf0 = self->+0x8c
-//
-// *** THE SAME TWO DELIBERATE ODDITIES AS ImageDescription's applier. ***
-//
-// 1. `*elemPtr` IS RE-READ from the CALLER's slot before every store (six
-//    times). Folding them would assert nothing can change that slot in
-//    between; retail does not assert it and neither does this.
-//
-// 2. THE INDEX IS STORED AS A QWORD READ FROM A SLOT ONLY A DWORD WAS WRITTEN
-//    TO. 0x18011efba and 0x18011efc0 write `dword [RSP+0x28]`; 0x18011efcb
-//    reads `qword [RSP+0x28]` and 0x18011efd7 stores all eight bytes to
-//    `e->+0xe0`. So `e->+0xe4` receives four bytes of retail's stack residue —
-//    which is also why ??0TextElement never initialises +0xe4. Reproduced with
-//    an uninitialised local rather than "cleaned up" to a 4-byte store: the
-//    WIDTH is what is faithful, the residue value is ours and cannot be theirs.
-//
-// NOTE THE FIELD ORDER AT THE TAIL: +0xec then +0xf4 then +0xf0, from self
-// +0x88, +0x80, +0x8c. It is neither source nor destination order and is
-// transcribed as retail has it.
-extern "C" void RtUi_TextDescription_ApplyToElement(const void* selfv, void** elemPtr,
-                                                    const void* /*dialog*/) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-
-    void* local = *elemPtr;                                    // 18011ef7f / 18011ef8a
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(self, &local);  // 18011ef92
-
-    uint8_t* e = static_cast<uint8_t*>(*elemPtr);              // 18011ef97
-    *reinterpret_cast<void**>(e + 0xc0) =
-        *reinterpret_cast<void* const*>(self + 0x68);          // 18011ef9e
-
-    void* tbl = *reinterpret_cast<void* const*>(self + 0x70);  // 18011efa5
-
-    // See note 2 above: written 4 bytes wide, read 8.
-    uint64_t idxSlot;                                          // [RSP+0x28]
-    if (tbl != nullptr) {                                      // 18011efac
-        const int32_t idx = RtUi_StringTable_GetIndexFromName(tbl, self + 0x78);
-        __builtin_memcpy(&idxSlot, &idx, sizeof idx);          // 18011efba  DWORD store
-    } else {
-        const int32_t minusOne = -1;
-        __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);// 18011efc0  DWORD store
-    }
-
-    e = static_cast<uint8_t*>(*elemPtr);                       // 18011efc8
-    *reinterpret_cast<void**>(e + 0xd8)    = tbl;              // 18011efd0
-    *reinterpret_cast<uint64_t*>(e + 0xe0) = idxSlot;          // 18011efd7  QWORD store
-
-    for (uint8_t* n = e; n != nullptr;                          // 18011efe1..18011eff5
-         n = *reinterpret_cast<uint8_t**>(n + 0x98)) {
-        *reinterpret_cast<uint32_t*>(n + 0x34) |= UI::kElementFlagNeedsSizeCalc;
-    }
-
-    using CacheTextFn = void (*)(void*);
-    RtAddr<CacheTextFn>(0x18011ec10ull)(e);                    // 18011eff7
-
-    e = static_cast<uint8_t*>(*elemPtr);                       // 18011effc
-    e[0xe8] = self[0x84];                                      // 18011f00b
-    e = static_cast<uint8_t*>(*elemPtr);                       // 18011f011
-    e[0xe9] = self[0x85];                                      // 18011f01b
-    e = static_cast<uint8_t*>(*elemPtr);                       // 18011f021
-    *reinterpret_cast<int32_t*>(e + 0xec) =
-        *reinterpret_cast<const int32_t*>(self + 0x88);        // 18011f02a
-    e = static_cast<uint8_t*>(*elemPtr);                       // 18011f030
-    *reinterpret_cast<int32_t*>(e + 0xf4) =
-        *reinterpret_cast<const int32_t*>(self + 0x80);        // 18011f039
-    e = static_cast<uint8_t*>(*elemPtr);                       // 18011f03f
-    *reinterpret_cast<int32_t*>(e + 0xf0) =
-        *reinterpret_cast<const int32_t*>(self + 0x8c);        // 18011f04d
-}
 
 // ============================================================================
 // ?CreateInstance@TextDescription@UI@@...   retail 0x18011f3d0  (vtable slot 8)
@@ -498,18 +320,23 @@ extern "C" void RtUi_TextDescription_ApplyToElement(const void* selfv, void** el
 // the shipped body enters the same critical section at `g_heap+0x640`, calls
 // the same 0x1800c6e60 with (0x100, 8), and leaves it. Calling the wrapper is
 // the same sequence and keeps the one allocator door this tree already has.
-extern "C" void** RtUi_TextDescription_CreateInstance(const void* selfv, void** ret,
+extern "C" void** RtUi_TextDescription_CreateInstanceElement(const void* selfv, void** ret,
                                                       const void* dialog) {
     using MemAllocFn = void* (*)(uint64_t size, int align);
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x100, 8);  // 18011f412 (inlined)
 
     void* elem = nullptr;
     if (raw != nullptr) {                                      // 18011f43d
-        elem = RtUi_TextElement_Ctor(raw);                     // 18011f442 ??0TextElement
+        // ??0TextElement@UI@@QEAA@XZ, ported by
+        // runtime/src/ui/element_bodies_b5.cpp and reached BY NAME so this
+        // file opens no second door onto it.
+        using TextElementCtorFn = void* (*)(void*);
+        elem = RT_EXPORT_ONCE(TextElementCtorFn, "??0TextElement@UI@@QEAA@XZ")(raw);
     }
 
     void* slot = elem;                                         // 18011f44e
-    RtUi_TextDescription_ApplyToElement(selfv, &slot, dialog); // 18011f45e
+    using ApplyFn = void (*)(const void* self, void** elemPtr, const void* dlg);
+    RtAddr<ApplyFn>(0x18011ef70ull)(selfv, &slot, dialog);     // 18011f45e
 
     *ret = elem;                                               // 18011f463
     return ret;
@@ -555,19 +382,8 @@ int RtUiTextDescriptionRegister() {
 
     RegisterRuntimeExport(
         "?CreateInstance@TextDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z",
-        (void*)&RtUi_TextDescription_CreateInstance);                    ++n;
-    RegisterRuntimeAddr(0x18011f3d0ull, (void*)&RtUi_TextDescription_CreateInstance);
-
-    // The applier: exported under the TextElement-returning overload's name.
-    RegisterRuntimeAddr(0x18011ef70ull, (void*)&RtUi_TextDescription_ApplyToElement); ++n;
-
-    RegisterRuntimeExport("??0TextElement@UI@@QEAA@XZ",
-                          (void*)&RtUi_TextElement_Ctor);                ++n;
-    RegisterRuntimeAddr(0x18011eb80ull, (void*)&RtUi_TextElement_Ctor);
-
-    RegisterRuntimeExport("?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z",
-                          (void*)&RtUi_StringTable_GetIndexFromName);    ++n;
-    RegisterRuntimeAddr(0x180002470ull, (void*)&RtUi_StringTable_GetIndexFromName);
+        (void*)&RtUi_TextDescription_CreateInstanceElement);             ++n;
+    RegisterRuntimeAddr(0x18011f3d0ull, (void*)&RtUi_TextDescription_CreateInstanceElement);
 
     return n;
 }

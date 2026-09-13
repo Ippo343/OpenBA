@@ -99,18 +99,33 @@
 
 namespace UI {
 
+// The STRUCT now says what the PROSE above already said. Until the elem_B
+// batch ported the class (runtime/src/ui/numberelement.cpp, 2026-09-12) it
+// stopped at +0xE0 with two anonymous pads and no size assert, i.e. it was a
+// weaker statement than its own banner — `_font`, `_cachedText` and
+// `_showSign` were described in the comment and absent from the type. They are
+// fields now, and the size is asserted, because the ctor (0x180118C70), the
+// dtor (0x180118CE0), ComputeSize (0x180119000), Draw (0x1801191E0) and
+// CacheText (0x1801189F0) were all transcribed against them.
 struct NumberElement {
     Element  base;               // +0x00 .. +0xBF
-    uint8_t  _pad_c0_c8[0x08];   // +0xC0 .. +0xC7 — TextElement territory, not reversed here.
-    int32_t  _mode;               // +0xC8
-    uint8_t  _pad_cc_d8[0x0C];   // +0xCC .. +0xD7 — not reversed by this lane.
-    int32_t  _intValue;           // +0xD8
-    float    _floatValue;         // +0xDC
+    void*    _font;              // +0xC0  ExternalPtr<UI::Font>
+    int32_t  _mode;              // +0xC8
+    uint32_t _padCC;             // +0xCC  never written by the ctor
+    char*    _cachedText;        // +0xD0  owning, refcounted System::String
+    int32_t  _intValue;          // +0xD8
+    float    _floatValue;        // +0xDC
+    uint8_t  _showSign;          // +0xE0
+    uint8_t  _padE1[0x07];       // +0xE1 .. +0xE7  tail padding
 };
 
+static_assert(sizeof(NumberElement) == 0xE8, "CreateNewObject 0x18004A910 allocates 0xE8");
 static_assert(offsetof(NumberElement, base)       == 0x00, "NumberElement::base @ +0x00");
+static_assert(offsetof(NumberElement, _font)      == 0xC0, "NumberElement::_font @ +0xC0");
 static_assert(offsetof(NumberElement, _mode)      == 0xC8, "NumberElement::_mode @ +0xC8");
+static_assert(offsetof(NumberElement, _cachedText)== 0xD0, "NumberElement::_cachedText @ +0xD0");
 static_assert(offsetof(NumberElement, _intValue)  == 0xD8, "NumberElement::_intValue @ +0xD8");
 static_assert(offsetof(NumberElement, _floatValue)== 0xDC, "NumberElement::_floatValue @ +0xDC");
+static_assert(offsetof(NumberElement, _showSign)  == 0xE0, "NumberElement::_showSign @ +0xE0");
 
 } // namespace UI

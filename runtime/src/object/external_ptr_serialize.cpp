@@ -502,6 +502,13 @@ EXTPTR_THUNK(RtObject_ExternalPtrSerialize_RenderState,
 // is not needed: this body only ever compares its type id.
 EXTPTR_THUNK(RtObject_ExternalPtrSerialize_Font,
              "?_typeInfo@Font@UI@@0VBaseTypeInfo@Object@@A")
+// VTABLE BATCH 7 (2026-09-12): 0x1800594a0 — Graphics::AnimationEvent. Reached
+// from Graphics::AnimationGroup::Serialize's per-clip event-list element loop
+// (runtime/src/graphics/vtbatch7_animgroup_particlesystem.cpp), the same
+// 748-byte shared template as every other row here; typeInfo confirmed against
+// the retail export table (pefile) at 0x1801f9978, not assumed.
+EXTPTR_THUNK(RtObject_ExternalPtrSerialize_AnimationEvent,
+             "?_typeInfo@AnimationEvent@Graphics@@0VBaseTypeInfo@Object@@A")
 
 #undef EXTPTR_THUNK
 
@@ -671,6 +678,8 @@ int RtObjectExternalPtrSerializeRegister() {
     RegisterRuntimeAddr(0x180055670, (void*)&RtObject_ExternalPtrSerialize_RenderState);            ++n;
     // vtable batch 2: UI::TextDescription::Serialize CALLs this over +0x68.
     RegisterRuntimeAddr(0x18003f1e0, (void*)&RtObject_ExternalPtrSerialize_Font);                   ++n;
+    // VTABLE BATCH 7 (2026-09-12): AnimationGroup's clip event list.
+    RegisterRuntimeAddr(0x1800594a0, (void*)&RtObject_ExternalPtrSerialize_AnimationEvent);          ++n;
     // array form
     RegisterRuntimeAddr(0x18002f170, (void*)&RtObject_ExternalPtrArraySerialize_External);           ++n;
     RegisterRuntimeAddr(0x180005220, (void*)&RtObject_ExternalPtrArraySerialize_Goal);               ++n;

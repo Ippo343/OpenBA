@@ -58,6 +58,25 @@ def main():
         if r["ported"] == "1":
             ported.add(addr)
 
+    # The minted vtable surface (2026-09-12). At cutover every exported vtable
+    # is rebuilt by standalone/rt_data_mint.cpp from rt_data_mint_tables.inc,
+    # and a slot the registry cannot fill becomes a named trap. Those slot
+    # targets are reachable by definition -- retail dispatches through them --
+    # but the census never names them, so the first closure said "0 to port"
+    # while the gate kept dying one class per boot. Every non-purecall slot
+    # address in the mint table is therefore a root.
+    mint = os.path.join(REPO, "standalone", "rt_data_mint_tables.inc")
+    mint_slots = 0
+    if os.path.exists(mint):
+        import re as _re
+        text = open(mint, encoding="utf-8", errors="ignore").read()
+        slot_re = _re.compile(r'\{ (nullptr|"[^"]*"), 0x([0-9a-fA-F]+)ull, (RT_MINT_\w+) \}')
+        for _name, addr, kind in slot_re.findall(text):
+            if "PURE" in kind:
+                continue
+            roots.add(int(addr, 16))
+            mint_slots += 1
+
     with open(os.path.join(OUT, "roots.txt"), "w") as f:
         f.write("\n".join("%x" % a for a in sorted(roots)) + "\n")
 
@@ -86,7 +105,7 @@ def main():
             source = f"live registry ({live_log})"
     with open(os.path.join(OUT, "ported.txt"), "w") as f:
         f.write("\n".join("%x" % a for a in sorted(ported)) + "\n")
-    print(f"roots={len(roots)} ported={len(ported)} (from {source}) unresolved={len(missing)}")
+    print(f"roots={len(roots)} (incl. {mint_slots} minted vtable slots) ported={len(ported)} (from {source}) unresolved={len(missing)}")
     for m in missing[:20]:
         print("  unresolved:", m)
     print("next: run tools/cutover_closure/CutoverClosure.java in Ghidra (program Runtime-x64.dll)")
