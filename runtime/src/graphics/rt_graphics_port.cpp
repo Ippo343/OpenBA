@@ -91,9 +91,12 @@ void RtGraphicsPortInit() {
     // Registered BEFORE the namespace kill switch and outside every per-lane
     // switch, because DIRECTION.md §2.3 says a port registers unconditionally
     // and this batch adds no environment switch of its own.
+    // NOT inside the printf: the perf build compiles printf to ((void)0)
+    // (standalone/log_strip.h), which silently dropped this whole registration
+    // and left GraphicsMesh::PlatformSerialize unresolved on every perf run.
     {
-        printf("[RtPort] BATCH C: %d graphics leaves registered\n",
-               RtGraphicsBatchCLeavesRegister());
+        const int leaves = RtGraphicsBatchCLeavesRegister();
+        printf("[RtPort] BATCH C: %d graphics leaves registered\n", leaves);
     }
     int n = 0;
     n += RtGraphicsSceneRegister();

@@ -72,16 +72,20 @@ void RtMathPortInit() {
 
     RtMathTransformRegister();  // Lane 2: Matrix/Quaternion/Transform/Transform2/Transform3
 
+    // Hoisted out of the printf: the perf build compiles printf to ((void)0) (standalone/log_strip.h).
+    const int n_mathwave9lanep = RtMathWave9LanePRegister();
     printf("[RtMathPortInit] Wave 9 lane P: %d exports registered (Quaternion::Lerp, "
-           "Transform::AsTransform3)\n", RtMathWave9LanePRegister());
-    printf("[RtMathPortInit] Wave 9 lane GFXR: %d exports registered (Matrix::Inverse)\n",
-           RtMathWave9LaneGfxrRegister());
+           "Transform::AsTransform3)\n", n_mathwave9lanep);
+    // Hoisted out of the printf: the perf build compiles printf to ((void)0) (standalone/log_strip.h).
+    const int n_mathwave9lanegfxr = RtMathWave9LaneGfxrRegister();
+    printf("[RtMathPortInit] Wave 9 lane GFXR: %d exports registered (Matrix::Inverse)\n", n_mathwave9lanegfxr);
 
     // BATCH 4 (Graphics render/cull/sun-camera cluster): Transform3::FromLookAt,
     // runtime/src/math/from_lookat.cpp. Registered unconditionally.
     {
         extern int RtMathFromLookAtRegister();
-        printf("[RtMathPortInit] BATCH 4: %d exports registered (Transform3::FromLookAt)\n",
-               RtMathFromLookAtRegister());
+        // Hoisted out of the printf: the perf build compiles printf to ((void)0) (standalone/log_strip.h).
+        const int n_mathfromlookat = RtMathFromLookAtRegister();
+        printf("[RtMathPortInit] BATCH 4: %d exports registered (Transform3::FromLookAt)\n", n_mathfromlookat);
     }
 }

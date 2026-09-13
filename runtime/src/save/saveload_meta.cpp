@@ -664,11 +664,6 @@ extern "C" void RtSave_SaveLoad_SaveMetaData(SaveLoad* self, void* pixels,
     RtSave_SaveLoad_SaveMetaData_Body(self, pixels, width, height, name, nameMode);
 }
 
-// A3-HOLD: the oracle this summarised compared us with the shipped DLL and is
-// gone. The entry point stays as a no-op only because standalone/main.cpp still
-// calls it.
-extern "C" void RtSaveMetaSummary() {}
-
 // ============================================================================
 // Registration — BOTH doors.
 // ============================================================================

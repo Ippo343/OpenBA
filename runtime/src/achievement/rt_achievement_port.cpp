@@ -64,8 +64,9 @@ void RtAchievementPortInit() {
     // BATCH C — Achievement::GoalList::~GoalList. Unconditional, see
     // DIRECTION.md §2.3.
     {
-        printf("[RtPort] BATCH C: %d achievement leaf registered\n",
-               RtAchBatchCGoalListDtorRegister());
+        // Hoisted out of the printf: the perf build compiles printf to ((void)0) (standalone/log_strip.h).
+        const int n_achbatchcgoallistdtor = RtAchBatchCGoalListDtorRegister();
+        printf("[RtPort] BATCH C: %d achievement leaf registered\n", n_achbatchcgoallistdtor);
     }
     int n = 0;
     n += RtAchGoalRegister();

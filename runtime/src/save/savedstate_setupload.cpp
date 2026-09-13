@@ -217,15 +217,6 @@ SaveBlock* RtSave_SavedState_SetupLoad(SavedState* self, SaveBlock* ret) {
 }
 
 // ============================================================================
-// A3-HOLD: the two per-frame ticks were the screens of a DLL-vs-port oracle.
-// With no DLL they can never compare anything again, so the machinery is gone;
-// these two entry points stay as no-ops only because
-// standalone/saveload_harness.cpp still calls them.
-// ============================================================================
-extern "C" void RtSaveSetupLoadSweepTick(int) {}
-extern "C" void RtSaveEmbeddedStateWatchTick(int) {}
-
-// ============================================================================
 // Registration — BOTH doors.
 //
 // The name door is what the census scanner sees and what our own ported

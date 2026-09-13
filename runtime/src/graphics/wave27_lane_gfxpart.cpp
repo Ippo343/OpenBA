@@ -472,7 +472,7 @@ extern "C" bool RtGraphics_Particle_Serialize(void* selfv, void* streamv) {
 // opacity. A port that copied `m` wholesale and patched only +0x3c would leave
 // AsMatrix's w-row in place and hand the shader a different matrix.
 // ============================================================================
-extern "C" void RtGraphics_ParticleInstance_GetInstanceTransform(
+extern "C" Matrix* RtGraphics_ParticleInstance_GetInstanceTransform(
         void* selfv, Matrix* out, int32_t /*index — ignored, see banner*/,
         float alpha) {
     ++g_piGetInstanceXform;
@@ -506,7 +506,7 @@ extern "C" void RtGraphics_ParticleInstance_GetInstanceTransform(
                                  "-- the returned matrix is UNWRITTEN\n",
                          (void*)quatLerp, (void*)asMatrix);
     }
-    if (!quatLerp || !asMatrix) return;
+    if (!quatLerp || !asMatrix) return out;   // hidden slot back in RAX, unwritten
 
     const float t = alpha;
 
@@ -534,6 +534,10 @@ extern "C" void RtGraphics_ParticleInstance_GetInstanceTransform(
     // ((1 - t) * prevOpacity) + (t * opacity) — retail computes the two products
     // and adds the t-term LAST. Folding it the other way is a different float.
     out->m[15] = ((one - t) * self->_opacityPrev) + (t * self->_opacity);
+    // Hidden return slot: the by-value Matrix's buffer comes in RDX and its
+    // address goes back in RAX. Declared void until 2026-09-13; RAX was garbage
+    // at -O2 and DrawItemList's SetTransform read through it (perf build only).
+    return out;
 }
 
 // ============================================================================

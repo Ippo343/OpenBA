@@ -59,12 +59,14 @@ Mostly deletion. The coupling is centralised; the cost is losing the oracle.
 3. **Delete the raw door.** `RtOriginal`, `RT_ORIGINAL_ONCE`, `ResolveExportRaw*`,
    `ResolveOrdinal`: every call returns null without a DLL, so every branch that only runs on
    a non-null result is dead. Delete the branch, not just the call; where a body reads
-   `if (!g_portOn) return theirs(...)`, keep ours.
+   `if (!g_portOn) return theirs(...)`, keep ours. `[done 2026-09-13, commit 5084c732]`
 4. **Delete the oracle.** runtime/funcs/rt_diff.{cpp,h}, `RT_DIFF_BEGIN/WORK/SCALAR`,
    `RtDiffReport`, every `_probe.cpp` and `_shadow` file, `rt_alloc_swap.cpp`,
    `rt_orphan_probe.cpp`, `rt_selftest.cpp`, the 19 detour/hook installers, the byte-pins
    (`tools/rt_deleting_dtor_verify.py` and the `*_sweep` make targets: `libm-sweep`,
    `libm-tables`, `gfxmat24-*`). A body is left as its non-oracle arm only.
+   `[done 2026-09-13, same commit; also rt_predict (the predictive oracle, RtSink kept as
+   runtime/funcs/rt_sink.h), io/save_trace, the ordinal door, the strict/attend census]`
 5. **Routes that must pass DLL-absent before A is closed** (all exist; run each once):
    `make sa-run` + pause-menu quit; `BANISHED_AUTOQUIT`; `BANISHED_AUTOLOAD=Gate` (the gate);
    the Load Game dialog (`BANISHED_AUTOMENU_BUTTON=2`); the Mods route; `make sa-stress`
@@ -83,6 +85,7 @@ Four tiers. Tier 1 is the same dead code as A.3/A.4 and is done in the same pass
 
 1. **Delete outright**: all 322 `BANISHED_RT_*`. After A the three DIRECTION.md kept
    (`RT_DIFF`, `RT_NO_DLL`, `RT_STRICT`) are dead too. `RtWaveEnabled` goes with them.
+   `[done 2026-09-13 with A.3/A.4: zero BANISHED_RT_ reads in code; runtime/ getenv 133 -> 7]`
 2. **Graduate or kill**: the 87 `kDefaultOnFlags` entries become unconditional code (delete
    the `if (LiveEnabled(...))`, keep the body). The other 24 `LIVE_*` get one line each in
    the batch's diff: graduated (with the run that proved it) or deleted with the feature.

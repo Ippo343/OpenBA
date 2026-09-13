@@ -29,8 +29,9 @@ extern "C" int RtVideoBatchCSetLightRegister();
 void RtVideoPortInit() {
     // BATCH C — Video::Context::SetLight. Unconditional, see DIRECTION.md §2.3.
     {
-        printf("[RtPort] BATCH C: %d video leaf registered\n",
-               RtVideoBatchCSetLightRegister());
+        // Hoisted out of the printf: the perf build compiles printf to ((void)0) (standalone/log_strip.h).
+        const int n_videobatchcsetlight = RtVideoBatchCSetLightRegister();
+        printf("[RtPort] BATCH C: %d video leaf registered\n", n_videobatchcsetlight);
     }
     int n = 0;
     n += RtVideoContextRegister();

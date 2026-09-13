@@ -33,6 +33,53 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
   DLL is ever found mapped. Verified 2026-09-13 with the DLL on disk: sa-run + pause-menu
   quit exit 0, `BANISHED_AUTOQUIT`, and the resave gate PASS.
 
+- **2026-09-13 later: A.3, A.4 and C.1 are done** (commit `5084c732` on `endgame-a3`; five
+  parallel worktree batches by directory plus one serial pass over the shared definitions;
+  493 files, +1.9k/-83k lines). Gone: the raw door (`RtOriginal`, `RT_ORIGINAL_ONCE`,
+  `ResolveExportRaw/OrdinalRaw/RuntimeRaw`, the ordinal door), the diff oracle (`rt_diff`),
+  the predictive oracle (`rt_predict`; `RtSink` survives as `runtime/funcs/rt_sink.h`, the live
+  sink the save/ui bodies are written against), `io/save_trace`, 46 `*_probe.cpp`, the alloc
+  and mint shadows, the 11 detour/hook installers and `hde/`, the byte-pins and `*_sweep`
+  make targets, `tools/attic`, and every `BANISHED_RT_*` read (`runtime/` getenv 133 -> 7).
+  `allocator_lock.cpp` (a byte patch on the DLL's Allocate/Free) is reduced to
+  `standalone/alloc_stats.cpp`.
+  - **Five live dependencies on the raw door were found**, each a call through NULL since
+    A.1 that no gate had caught: `Graphics::Geometry` copy ctor in `graphics/mesh.cpp`
+    (every MeshInstance / EdgeMeshInstance copy), `MemFree` in `ui/sprite.cpp`'s
+    `SpriteSheetAssignString` (every refcount-to-zero string release), `MemAlloc/MemFree`
+    in `system/string.cpp` and `object/internal.cpp` (raw first, registry fallback), and
+    `_beginthreadex` in `system/thread_win.cpp`. All folded to the registry door.
+  - A.5 routes, DLL-absent, all exit 0 with an empty crash log: `make sa-run` +
+    pause-menu quit (town built, App::Quit), `BANISHED_AUTOQUIT`, the Load Game dialog
+    (`BANISHED_AUTOMENU_BUTTON=2`), the Mods route (0 rows, no .pkm installed), and the
+    resave gate PASS (byte-identical to the golden, same as the baseline on `c1fdd7f6`).
+  - **The first `make sa-stress` died in boot with a VCALL-of-0** on `GraphicsMesh`'s minted
+    vtable: `?PlatformSerialize@GraphicsMesh@` was unregistered in the PERF build only.
+    Cause (pre-existing, 2026-09-12): seven registrations were written as
+    `printf("... %d", RtXxxRegister())`, and the perf build compiles `printf` to `((void)0)`
+    (`standalone/log_strip.h`), arguments included. Batch C graphics/achievement/audio/video
+    leaves and three math rows never registered in any perf exe. Hoisted; sweep with
+    `grep -rnPzo '(?s)printf\s*\([^;]*?Rt[A-Za-z0-9_]*Register\s*\(\)[^;]*?\);'` (0).
+  - **Second perf crash, also perf-only and also pre-existing:** with the leaves registered,
+    `Renderer::DrawItemList` faulted in `Context::SetTransform` reading the matrix the
+    geometry's vtable slot 6 (`GetInstanceTransform`, returns `Math::Matrix` BY VALUE) had
+    returned. Our `ParticleInstance::GetInstanceTransform` port (wave27_lane_gfxpart.cpp) was
+    declared `void`: the hidden return slot arrives in RDX and its address must go back in
+    RAX; at -O0 RAX happened to still hold it, at -O2 it was garbage. Now returns the slot.
+    Audit over all 175 registered by-value-returning exports: no other port declared void
+    (address-only registrations not covered). Same debug-exe town ran 1200 frames clean.
+  - `make sa-stress` on the perf exe then completes 6000 frames with a clean quit. Sim cost
+    0.202 ms/iteration vs the 2026-09-05 DLL-present baseline's 0.192 (+5.0%, `ph_postsim`
+    0.069 -> 0.097 ms/frame is most of it); a second run with a compile going on beside it
+    read +10.3%, so the run-to-run noise on this box is of the same size as the delta. The
+    perf gate was deferred to after cutover by the user (Wave 4); recorded, not chased here.
+    A clean A/B needs the machine idle and the baseline re-cut on this build.
+  - The debug exe's stress town (`sa-stress-debug`, 1200 frames) simulates clean but CRASHES
+    IN TEARDOWN after the quit click: READ fault inside `rtalloc::Free` from `MemFree` in
+    `ComponentEntity_Dtor` <- `InternalBasePtr::DeletePtr` <- `EntityList_RemoveEntity` <-
+    `EntityList_Shutdown` <- `GameUpdateLoop_Shutdown`. The normal-size town's pause-menu
+    Quit exits 0; this is the teardown defect already listed above (seen once on 09-13
+    morning), now reproducible with the 800-citizen town on the debug exe.
 - **Serializer gate exists and passes**: `tools/resave_gate/resave_gate.sh Gate` (README
   there). Load a save DLL-absent, serialize the restored world again before the first tick,
   compare the raw bytes against a golden. Golden cut against `Gate.sav`

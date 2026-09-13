@@ -52,8 +52,9 @@ void RtAudioPortInit() {
     // BATCH C — ~SoundBuffer and Device::OnSoundBufferDeleted. Unconditional,
     // see DIRECTION.md §2.3.
     {
-        printf("[RtPort] BATCH C: %d audio leaves registered\n",
-               RtAudioBatchCLeavesRegister());
+        // Hoisted out of the printf: the perf build compiles printf to ((void)0) (standalone/log_strip.h).
+        const int n_audiobatchcleaves = RtAudioBatchCLeavesRegister();
+        printf("[RtPort] BATCH C: %d audio leaves registered\n", n_audiobatchcleaves);
     }
     int n = 0;
     n += RtAudioSceneRegister();
