@@ -465,8 +465,27 @@ extern "C" int RedzoneAlloc_CheckLinks(const char* tag) {
 //          next = block + blockBytes;  user = block + 8.
 // A block is corrupt if blockBytes < 8 or block+blockBytes overruns the range.
 namespace {
+// IsBadReadPtr probes with SEH and costs ~1 us, which made the boundary-tag walk
+// (one call per block, ~1M blocks on the 800-citizen town) take seconds — far too
+// slow for the 1 ms watchdog or a per-step teardown bracket. One VirtualQuery
+// answers for a whole committed region, so the readable window is cached per
+// thread and only re-queried when a probe leaves it. Same answer, ~100x cheaper.
 bool ReadablePtr(const void* p, size_t n) {
-    return p && !IsBadReadPtr(p, n);
+    if (!p || n == 0) return false;
+    static thread_local const uint8_t* s_lo = nullptr;
+    static thread_local const uint8_t* s_hi = nullptr;
+    const uint8_t* b = static_cast<const uint8_t*>(p);
+    if (b >= s_lo && b + n <= s_hi) return true;
+    MEMORY_BASIC_INFORMATION mbi;
+    if (!VirtualQuery(p, &mbi, sizeof(mbi))) { s_lo = s_hi = nullptr; return false; }
+    const DWORD noRead = PAGE_NOACCESS | PAGE_GUARD | PAGE_EXECUTE;
+    if (mbi.State != MEM_COMMIT || (mbi.Protect & noRead) != 0 || mbi.Protect == 0) {
+        s_lo = s_hi = nullptr;
+        return false;
+    }
+    s_lo = static_cast<const uint8_t*>(mbi.BaseAddress);
+    s_hi = s_lo + mbi.RegionSize;
+    return b >= s_lo && b + n <= s_hi;
 }
 
 // Optional secondary output sink for the crash-context heap dump. The crash
@@ -848,8 +867,20 @@ extern "C" void* RedzoneAlloc_FindCorruptBlockNative() {
         if (!start || !end || end <= start) continue;
         uint8_t* p = start;
         int guard = 0;
+        // `IsBadReadPtr` per block made this walk ~2 s on the 800-citizen town,
+        // which is too slow to bracket every teardown step. One VirtualQuery
+        // covers a whole committed region, so the readable limit is advanced in
+        // region-sized jumps instead of probed per block.
+        uint8_t* safeEnd = p;
         while (p < end && ++guard < 4000000) {
-            if (IsBadReadPtr(p, 8)) return p;
+            if (p + 8 > safeEnd) {
+                MEMORY_BASIC_INFORMATION mbi;
+                if (!VirtualQuery(p, &mbi, sizeof(mbi))) return p;
+                if (mbi.State != MEM_COMMIT ||
+                    (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) != 0) return p;
+                safeEnd = static_cast<uint8_t*>(mbi.BaseAddress) + mbi.RegionSize;
+                if (p + 8 > safeEnd) return p;
+            }
             uint64_t blkTag = *reinterpret_cast<uint64_t*>(p);
             size_t blkBytes = (size_t)(blkTag & 0x1ffffffffffULL) * 4;
             if (blkBytes < 8 || p + blkBytes > end) return p;
