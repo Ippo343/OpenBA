@@ -1390,8 +1390,8 @@ void RtUiDialogInstance_ComputeLayout(DialogInstance* self, int32_t x, int32_t y
 //   4. root->Update(time, ui, &topDialog, updateState) (Element vtable slot
 //      7/+0x38, five arguments -- the decompiler shows only four; the fifth,
 //      UpdateState*, is passed on the stack, read from 0x180113ad9's
-//      `MOV [RSP+0x20],RDI`). Then, unless flags bit2 is set (always inside
-//      the root's own bounds): if flags bit3 is set, ask the root's own
+//      `MOV [RSP+0x20],RDI`). Then, unless flags bit2 (mouse passthrough) is
+//      set -- in which case the whole hit block is SKIPPED: if flags bit3 is set, ask the root's own
 //      Contains(x,y,_dialog) [Element vtable slot 9]; otherwise a bounds test
 //      against the root's layout rect. On a miss, skip straight to step 5.
 //      On a hit, push up to three UI events (types 8/9/0xa) for
@@ -1514,9 +1514,18 @@ void RtUiDialogInstance_Update(DialogInstance* self, const void* time,
 
         const int32_t mx2 = *reinterpret_cast<const int32_t*>(updateState + 0x18);
         const int32_t my2 = *reinterpret_cast<const int32_t*>(updateState + 0x1c);
+        // 0x180113b9a: `SHR EAX,2; TEST AL,1; JNZ 0x180113cca` -- a set bit2 jumps
+        // PAST the event pushes and the UpdateState+0x20 store, straight to the
+        // child recursion. Bit2 is the mouse-passthrough flag (Contains() above
+        // returns false on it too); it is NOT "always inside". The port had this
+        // inverted: a passthrough dialog that follows the cursor (the DragTool's
+        // CreateBar cost panel) captured the mouse every frame, UserInterface+0xd9
+        // went to 1, EntityUI's tool tick handed OnKey a zero key, OnKey closed the
+        // panel, and the next frame reopened it -- the drag-tool flashing seen
+        // 2026-09-12.
         bool hit;
         if ((self->_flags >> 2) & 1) {
-            hit = true;
+            hit = false;
         } else if ((self->_flags >> 3) & 1) {
             void** vt = *reinterpret_cast<void***>(root);
             using Fn = bool (*)(uint8_t*, int32_t, int32_t, void*);

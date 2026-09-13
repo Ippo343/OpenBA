@@ -115,6 +115,12 @@ Fixed the same evening, DLL-present: hovering any dialog moved it (the pause men
 cursor) — `DialogInstance::Update` wrote the tooltip-settle mouse position into `_upperLeftX/Y`
 (+0x88) where retail uses +0x90/+0x94; found with a hardware write watchpoint from the
 pause-menu harness plus a scripted mouse (`tools/capture_window.ps1` to look).
+Drag-tool flashing (2026-09-12 late, both builds): `DialogInstance::Update`'s port read
+Element flags bit2 (`NoMouseCapture`, what `Dialog/CreateBar.rsc` sets) as "always hit"; retail
+(0x180113b9a) skips the capture block on it. The cursor-following cost panel captured the mouse
+every frame, UserInterface+0xd9 went to 1, the tool tick passed OnKey key=0, OnKey closed the
+panel, the next frame reopened it. Fixed from the bytes; the autostart + pause-menu-quit route
+still exits 0. Not yet re-driven with an attended drag.
 The unattended Mods route (`BANISHED_AUTOMENU_BUTTON=7 BANISHED_AUTOMENU_CLICKS=1001,5001,d0,
 4001,101,m6 BANISHED_MODAL_ANSWER=1`) runs to Quit, exit 0. It needs at least two `.pkm` in
 `WinData/` (both live in `WinData/_mods_off/` because the achievements harness needs them
