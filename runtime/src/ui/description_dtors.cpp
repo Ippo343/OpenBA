@@ -66,6 +66,12 @@
 //   Array<ExternalPtr<ElementDescription>> destructor at 0x180039440):
 //     0x18003db40, 0x18003da00, 0x18003d8c0, 0x180043a00, 0x180079870,
 //     0x18004cc90, 0x18003e310, 0x18003e0c0
+//
+// THREE OF THIS FILE'S ORIGINAL ROWS ARE GONE, ON PURPOSE (2026-09-12 merge):
+// ??1ComboElement@, ??1DocumentTextElement@ and ??1EditElement@ are owned by
+// runtime/src/ui/{combo,documenttext,edit}element.cpp, the class files that
+// also carry those classes' vtable slots. One address, one owner; the two
+// transcriptions were compared before this one was dropped and they agree.
 // ============================================================================
 #include <cstddef>
 #include <cstdint>
@@ -296,87 +302,6 @@ extern "C" void RtUi_TableDescription_Dtor(void* selfv) {
     TailExternalDtor(p);           // 18011e78c  JMP
 }
 
-// ============================================================================
-// ??1ComboElement@UI@@UEAA@XZ   retail 0x180112490
-// ============================================================================
-// Derives from ButtonElement (final restamp before the tail jump, see the
-// banner). +0x120 holds a DialogInstance-shaped pointer (the open dropdown, if
-// any): `+0x10` off THAT is the owning UserInterface*. When set, retail closes
-// it through `UserInterface::CloseDialog` — the exact `void* tmp = child; ...
-// (ui, &tmp)` calling shape runtime/src/ui/userinterface_close.cpp already
-// documents for CloseDialog's own recursive calls (its lines 383-388).
-extern "C" void RtUi_ComboElement_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ComboElement@UI@@6B@");        // 1801124a6
-
-    uint8_t* dlgInst = *reinterpret_cast<uint8_t**>(p + 0x120);    // 1801124b0
-    if (dlgInst != nullptr) {                                      // 1801124b7
-        void* tmp = dlgInst;                                        // 1801124bc  the by-value InternalPtr
-        void* ui  = *reinterpret_cast<void**>(dlgInst + 0x10);      // 1801124c6
-        using CloseDialogFn = void (*)(void* ui, void** dlgPtr);
-        RtAddr<CloseDialogFn>(0x180120f20ull)(ui, reinterpret_cast<void**>(&tmp)); // 1801124ca, ALREADY PORTED
-    }
-
-    RtAddr<SubDtorFn>(0x180024aa0ull)(p + 0x108);  // 1801124d7, ALREADY PORTED (array.cpp)
-    RtAddr<SubDtorFn>(0x180037310ull)(p + 0xf8);   // 1801124e4, ALREADY PORTED (array.cpp)
-    RtAddr<SubDtorFn>(0x180010ab0ull)(p + 0xe8);   // 1801124f1, ALREADY PORTED (array_destroy.cpp, ListCleanup)
-
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7ButtonElement@UI@@6B@");       // 1801124f7
-    TailElementDtor(p);            // 180112509  JMP 0x1801161a0
-}
-
-// ============================================================================
-// ??1DocumentTextElement@UI@@UEAA@XZ   retail 0x1800cf320
-// ============================================================================
-// Derives directly from Element (single own-vtable stamp, tail straight to
-// ~Element). The first field release addresses +0x198 through a LOCAL that
-// caches the field's address (retail's `LEA RAX,[RCX+0x198]` kept on the
-// stack) rather than re-deriving `RCX+0x198` at the point of use like every
-// other site in this file — same ReleaseStringField operation, just handed
-// the address instead of `(p, off)`.
-extern "C" void RtUi_DocumentTextElement_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7DocumentTextElement@UI@@6B@"); // 1800cf336
-
-    ReleaseStringField(p + 0x198);  // 1800cf340..1800cf372, addressed via a cached local
-    ReleaseStringField(p, 0x168);   // 1800cf372
-
-    RtAddr<SubDtorFn>(0x18003e310ull)(p + 0x158);  // 1800cf3af, unported
-    RtAddr<SubDtorFn>(0x18003e0c0ull)(p + 0x148);  // 1800cf3bc, unported
-    RtAddr<SubDtorFn>(0x18003db40ull)(p + 0x130);  // 1800cf3c9, unported
-    RtAddr<SubDtorFn>(0x18003da00ull)(p + 0x120);  // 1800cf3d6, unported
-    RtAddr<SubDtorFn>(0x18003d8c0ull)(p + 0x110);  // 1800cf3e3, unported
-    RtAddr<SubDtorFn>(0x180037310ull)(p + 0xe8);   // 1800cf3f0, ALREADY PORTED (array.cpp)
-
-    TailElementDtor(p);            // 1800cf3fe  JMP 0x1801161a0
-}
-
-// ============================================================================
-// ??1EditElement@UI@@UEAA@XZ   retail 0x1800d0e50
-// ============================================================================
-// Derives directly from Element. Before releasing its two own String fields,
-// if byte +0xe0 is set, retail decrements a DWORD counter one hop off the
-// `Input::Configuration` singleton (`?_singleton@Configuration@Input@@
-// 0PEAV12@EA`, 0x1801fe768 — the same singleton runtime/src/ui/
-// userinterface_draw.cpp's file-local InputConfigSingleton() reads; that
-// accessor is private to that file, so it is re-resolved here by the same
-// mangled name rather than shared).
-extern "C" void RtUi_EditElement_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = RT_DATA_SLOT(void*, "??_7EditElement@UI@@6B@");         // 1800d0e66
-
-    if (p[0xe0] != 0) {                                                                     // 1800d0e70
-        void* cfg = *RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA");   // 1800d0e79
-        void* counterObj = *reinterpret_cast<void**>(cfg);                                  // 1800d0e80
-        --*reinterpret_cast<int32_t*>(counterObj);                                          // 1800d0e83
-    }
-
-    ReleaseStringField(p, 0xd8);   // 1800d0e85
-    ReleaseStringField(p, 0xc8);   // 1800d0ebb
-
-    TailElementDtor(p);            // 1800d0ef9  JMP 0x1801161a0
-}
-
 
 
 // ============================================================================
@@ -431,14 +356,8 @@ int RtUiDescriptionDtorsRegister() {
     RegisterRuntimeExport("??1TextDescription@UI@@UEAA@XZ", (void*)&RtUi_TextDescription_Dtor); ++n;
     RegisterRuntimeAddr(0x18011eae0ull, (void*)&RtUi_TextDescription_Dtor);
 
-    RegisterRuntimeExport("??1ComboElement@UI@@UEAA@XZ", (void*)&RtUi_ComboElement_Dtor); ++n;
-    RegisterRuntimeAddr(0x180112490ull, (void*)&RtUi_ComboElement_Dtor);
 
-    RegisterRuntimeExport("??1DocumentTextElement@UI@@UEAA@XZ", (void*)&RtUi_DocumentTextElement_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800cf320ull, (void*)&RtUi_DocumentTextElement_Dtor);
 
-    RegisterRuntimeExport("??1EditElement@UI@@UEAA@XZ", (void*)&RtUi_EditElement_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800d0e50ull, (void*)&RtUi_EditElement_Dtor);
 
 
 

@@ -210,6 +210,26 @@ extern int RtUiFactory1Register();         // factory_ui1.cpp (lane FACTUI1)
 // make the whole file worthless (dialog_factory.cpp has been dark since Wave 11).
 extern int RtUiFactory2Register();         // ui_factory_wave28.cpp (FACTUI2)
 
+// 2026-09-12, VTABLE BATCH 3 - the UI::*Element widget runtime, first half.
+// Thirteen classes, one file each (runtime/src/ui/<class>element.cpp), each
+// owning its whole vtable: TypeName/Type, the behavioural slots, both
+// constructors and the destructor. A slot a subclass INHERITS keeps the base
+// class's address and is registered by the base class's file only.
+// No switch of their own: DIRECTION.md section 2 - a port registers
+// unconditionally.
+extern int RtUiImageElementRegister();
+extern int RtUiAnimatedImageElementRegister();
+extern int RtUiBorderElementRegister();
+extern int RtUiButtonElementRegister();
+extern int RtUiCheckElementRegister();
+extern int RtUiClipRegionElementRegister();
+extern int RtUiComboElementRegister();
+extern int RtUiContainerElementRegister();
+extern int RtUiDocumentTextElementRegister();
+extern int RtUiEditElementRegister();
+extern int RtUiGraphElementRegister();
+extern int RtUiGroupElementRegister();
+extern int RtUiLabelElementRegister();
 // ---- CUTOVER VTABLE BATCH 4 "elem_B", 2026-09-12 --------------------------
 // Fourteen UI::*Element widget classes, one file each, every vtable slot plus
 // the ctor and dtor. Registered UNCONDITIONALLY (DIRECTION.md §2: a port
@@ -286,6 +306,19 @@ void RtUiPortInit() {
     n += RtUiStringTableLifecycleDtorRegister();  // same switch (MISC)
     n += RtUiFactory1Register();  // owns BANISHED_RT_UIFACT1 (FACTUI1)
     n += RtUiFactory2Register();          // owns BANISHED_RT_UIFACT2 (FACTUI2)
+    n += RtUiImageElementRegister();          // vtable batch 3 (UI::*Element)
+    n += RtUiAnimatedImageElementRegister();
+    n += RtUiBorderElementRegister();
+    n += RtUiButtonElementRegister();
+    n += RtUiCheckElementRegister();
+    n += RtUiClipRegionElementRegister();
+    n += RtUiComboElementRegister();
+    n += RtUiContainerElementRegister();
+    n += RtUiDocumentTextElementRegister();
+    n += RtUiEditElementRegister();
+    n += RtUiGraphElementRegister();
+    n += RtUiGroupElementRegister();
+    n += RtUiLabelElementRegister();
 
     // ------------------------------------------------------------------
     // 2026-09-12, the UI TEXT PIPELINE batch. No switches: a port registers
