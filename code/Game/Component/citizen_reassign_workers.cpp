@@ -89,16 +89,6 @@ extern bool g_wpcRosterOnly;
 
 namespace {
 
-// ---- trace gate (shares the construction pipeline's BANISHED_BUILD_TRACE) -----
-int s_rw_trace = -1;
-bool RW_Trace() {
-    if (s_rw_trace < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_TRACE");
-        s_rw_trace = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s_rw_trace == 1;
-}
-
 inline void CheckPtr(void* ibpSlot) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibpSlot);
 }
@@ -236,13 +226,9 @@ extern "C" uint64_t Entity_ReassignCost_6c60(int64_t /*param_1*/, void** param_2
 // FUN_1400d62a0 (0x1400d62a0) — town residence re-balancer
 // ===========================================================================
 extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
-    if (RW_Trace()) std::fprintf(stderr, "[BuildTrace] ReassignWorkers: ENTER\n");
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     EnsureResolved();
     if (!s_assignWorkplace || !s_tidResidence) {
-        if (RW_Trace()) std::fprintf(stderr,
-            "[BuildTrace] ReassignWorkers: early-return (aw=%p tidRes=%u)\n",
-            (void*)s_assignWorkplace, s_tidResidence);
         return;
     }
 
@@ -352,9 +338,4 @@ extern "C" void PathGraph_ReassignWorkers(void* ctxV) {
 
         g_wpcRosterOnly = prevRoster;
     }
-
-    if (RW_Trace())
-        std::fprintf(stderr,
-            "[BuildTrace] ReassignWorkers: %zu empty, %zu occupied, %d relocation(s)\n",
-            empties.size(), occupied.size(), relocations);
 }

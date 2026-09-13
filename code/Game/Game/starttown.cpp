@@ -63,23 +63,7 @@ extern "C" void StartTown_SeedStartingResources(void* startConfig);
 // tiles from centerline to dry land, which is what a dock placement needs.
 extern "C" float WorldGen_GetPathHalfWidth(int pathIndex);
 extern "C" float WorldGen_GetPathBankDistance(int pathIndex);
-extern "C" void TownStorage_TraceDump();
 
-static bool LiveStorageEnabled() {
-    static int v = -1;
-    if (v < 0) {
-        v = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGE") ? 1 : 0;
-    }
-    return v == 1;
-}
-static bool StorageTraceOn() {
-    static int v = -1;
-    if (v < 0) {
-        const char* e = getenv("BANISHED_STORAGE_TRACE");
-        v = (e && *e && e[0] != '0') ? 1 : 0;
-    }
-    return v == 1;
-}
 
 static constexpr int   CELL_STRIDE = 0x30;
 static constexpr int   CELL_TYPE   = 0x29;     // tile type byte
@@ -95,10 +79,6 @@ static constexpr float kDeg2Rad    = 3.14159265358979323846f / 180.0f;
 // building registry is brought up. Set in StartTown_SpawnStructures.
 void* g_pForceWorkBuilding = nullptr;
 
-// Phase 4 ASSIGN half: the forester Profession key (= the lodge's WorkPlaceDescription
-// desc+0x20 Profession*) captured in StartTown_SpawnWorkplace, consumed by the deferred
-// StartTown_EmployForesters pass (which seats laborers at the lodge -> citizen+0x238).
-static uint64_t g_foresterProfKey = 0;
 // AssignWorkplace port (brick 4-2) — sets citizen+0x238/+0x240 + rosters. 0x1401163d0.
 extern "C" void CitizenComponent_AssignWorkplace(void* self, void* workplaceIBP, int slotIndex);
 
@@ -108,7 +88,6 @@ extern "C" void CitizenComponent_AssignWorkplace(void* self, void* workplaceIBP,
 // RawMaterialDescription — i.e. exactly the descEntity a CreateRawMaterial action clones.
 // The Phase B production harness (production_harness.cpp, BANISHED_LIVE_PRODUCTION) uses it
 // as a real produced-material description to drive the ported RegisterRawMaterial count.
-void* g_pSampleResourceTemplate = nullptr;
 
 // Owner-entity IBP values of the spawned residence (WoodHouse) buildings, captured by
 // StartTown_RunOnCreatePass when each house's ResidenceComponent::OnCreate fires. Used by
@@ -161,21 +140,13 @@ static void* FindComponentOnEntity(void* entity, uint32_t typeId);
 // MapComponent is inert so Draw never fires and buildings are ABSENT from this array — which
 // is what EditTool's click-pick reads to resolve the entity under the cursor. Without this,
 // clicking a building finds nothing. Mirrors the resource path's identical write (~L1724).
-// Also makes footprints navigation-blocking (faithful). Default ON (opt out BANISHED_LIVE_PICKMAP=0).
-static bool StartTown_PickMapEnabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_PICKMAP");
-        on = (e && (e[0] == '0' || strcmp(e, "false") == 0)) ? 0 : 1;
-    }
-    return on;
-}
+// Also makes footprints navigation-blocking (faithful).
 // Forward decl (defined near the resource-marking pass below).
 static void StartTown_WriteCellType(uint8_t* game, uint8_t* cells, int idx, uint8_t newType);
 
 static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fpW, int fpH,
                                         uintptr_t entIBP, int rot) {
-    if (!StartTown_PickMapEnabled() || !game || !entIBP) return;
+    if (!game || !entIBP) return;
     uint8_t* cells = *(uint8_t**)((uint8_t*)game + 0x80);
     int dim = *(int32_t*)game;
     if (!cells || dim <= 0) return;
@@ -239,13 +210,7 @@ static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fp
                 // Mirror of dc20's BANISHED_LIVE_WALKWAY_DROPCELLS deviation — this path
                 // marks START-TOWN and demo-spawned buildings, so honouring it only in
                 // dc20 would leave those buildings' walkway cells claimed anyway.
-                if (c == '_') {
-                    static int s_fw = -1;
-                    if (s_fw < 0)
-                        s_fw = ::ComponentFactory::LiveEnabled(
-                                   "BANISHED_LIVE_WALKWAY_DROPCELLS") ? 1 : 0;
-                    if (s_fw) occupy = false;
-                }
+                if (c == '_') occupy = false;
             }
 
             if (stampClass) StartTown_WriteCellType((uint8_t*)game, cells, idx, cls);
@@ -289,35 +254,13 @@ static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fp
 // so EditTool falls back to the coarse terrain-cell footprint pick (StartTown_Mark-
 // BuildingCells), which only hits when the ray lands on the ground footprint => the
 // "click-the-middle" pickiness. We drive the faithful registration here for each static
-// start-town building (PickingComponent_RegisterMesh). Default ON; opt out with
-// BANISHED_LIVE_PICKMESH=0. BANISHED_PICKMESH_PROBE=1 additionally dumps the component's
-// fields + scene pointer (the diagnostic that established the SA ground truth).
+// start-town building (PickingComponent_RegisterMesh).
 static uint32_t TypeId(const char* name);
 static void* FindComponentOnEntity(void* entity, uint32_t typeId);
 static void StartTown_PickMeshProbe(void* entity) {
-    static bool s_probe = [](){ const char* e = std::getenv("BANISHED_PICKMESH_PROBE");
-                                return e && e[0] && e[0] != '0'; }();
-    static bool s_enable = [](){ const char* e = std::getenv("BANISHED_LIVE_PICKMESH");
-                                 return !(e && (e[0]=='0' || strcmp(e,"false")==0)); }();
-    if (!entity || (!s_probe && !s_enable)) return;
-    uint32_t tidPick = TypeId("PickingComponent");
-    void* pc = FindComponentOnEntity(entity, tidPick);
-    if (s_probe) {
-        void* scene = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                    ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0x70) : nullptr;
-        fprintf(stderr, "[PickMesh] entity=%p Picking::Scene(gw+0x70)=%p tidPick=%u pc=%p\n",
-                entity, scene, tidPick, pc);
-        if (pc) {
-            uint8_t* p = (uint8_t*)pc;
-            void* f18 = *(void**)(p + 0x18);
-            void* meshTbl = f18 ? *(void**)((uint8_t*)f18 + 0x20) : nullptr;
-            fprintf(stderr, "[PickMesh]   +0x10(owner)=%p +0x18(desc)=%p desc+0x20(tbl)=%p "
-                    "+0x28(pickId)=%d +0x30(userData)=%p\n", *(void**)(p+0x10), f18, meshTbl,
-                    *(int32_t*)(p+0x28), *(void**)(p+0x30));
-        }
-        fflush(stderr);
-    }
-    if (s_enable && pc) PickingComponent_RegisterMesh(pc);
+    if (!entity) return;
+    void* pc = FindComponentOnEntity(entity, TypeId("PickingComponent"));
+    if (pc) PickingComponent_RegisterMesh(pc);
 }
 
 // World-registration for a building entity created at RUNTIME rather than by the
@@ -403,7 +346,6 @@ extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceC
 extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey);
 // workplacecomponent.cpp — true when the WPC live controller (BANISHED_LIVE_WPC_CONTROLLER)
 // is enabled; its state-2 ENTER (edf0) then registers workplaces through the SM itself.
-extern "C" bool WorkPlaceComponent_ControllerLive();
 
 static uint32_t TypeId(const char* name);
 static void* FindComponentOnEntity(void* entity, uint32_t typeId);
@@ -438,7 +380,7 @@ static uint64_t StartTown_ActivateWorkplace(void* entity, bool registerNow,
 
     *reinterpret_cast<uint64_t*>(w + 0x48) = profKey;
     WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), true);
-    const bool doRegister = registerNow || !WorkPlaceComponent_ControllerLive();
+    const bool doRegister = registerNow;   // the controller registers otherwise
     if (doRegister) TownRegistry_RegisterWorkplace(townMgr, wpc);
     fprintf(stderr, "[%s] workplace activate: WPC=%p profKey(desc+0x20)=0x%llx -> seated "
             "+0x48, accepting=1, %s\n", logTag, wpc, (unsigned long long)profKey,
@@ -664,12 +606,6 @@ void TownMgr_AddAvailableAgri(uint8_t* townMgr, void* desc) {
     if (oldArr != dst && oldArr && fn_MemFreeStatic) fn_MemFreeStatic(oldArr);
 }
 
-static bool AgriTraceOn() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_AGRI_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s != 0;
-}
-
 // Seed one agri pool: pick `count` random entries from the `size`-entry pool and
 // dedup-append each resolved description into townMgr+0x120. Faithful to the retail
 // loop (System::Random::Rand(worldRng, size) per pick).
@@ -677,13 +613,11 @@ static bool AgriTraceOn() {
 // the picked template before the availability add. The other two pools pass nullptr and
 // register availability only, exactly as retail does.
 static int SeedAgriPool(uint8_t* sc, uint8_t* townMgr, void* rng,
-                        int poolOff, int sizeOff, int countOff, const char* label,
+                        int poolOff, int sizeOff, int countOff, const char* /*label*/,
                         const float* spawnCentre = nullptr) {
     uint8_t* pool  = *(uint8_t**)(sc + poolOff);
     int      size  = *(int32_t*)(sc + sizeOff);
     int      count = *(int32_t*)(sc + countOff);
-    if (AgriTraceOn())
-        fprintf(stderr, "[AgriSeed] %s: pool=%p size=%d grant=%d\n", label, pool, size, count);
     if (!pool || size <= 0 || count <= 0) return 0;
     int added = 0;
     for (int i = 0; i < count; ++i) {
@@ -691,8 +625,6 @@ static int SeedAgriPool(uint8_t* sc, uint8_t* townMgr, void* rng,
                                                : (uint32_t)(i % size);
         uint8_t* entry = pool + (size_t)idx * POOLENTRY_STRIDE;
         void* tmpl = StartTown_ResolveTemplate(entry);
-        if (AgriTraceOn())
-            fprintf(stderr, "[AgriSeed]   %s[%d] idx=%u tmpl=%p\n", label, i, idx, tmpl);
         if (!tmpl) continue;
         // Retail order: spawn FIRST (0x1400a35dc), then the availability add
         // (0x1400a35e7). Both consume the same resolved template.
@@ -875,7 +807,6 @@ static void* FindDescriptionOnTemplate(void* tmpl, uint32_t typeId) {
 // native tick, which is exactly the bug this omission fixes.
 static void StartTown_RunOnCreatePass(void* entityV) {
     if (!entityV || !fn_InternalBasePtr_CheckPtr) return;
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_RESIDENCE")) return;
 
     static uint32_t s_tidResidence = 0;
     if (s_tidResidence == 0) s_tidResidence = TypeId("ResidenceComponent");
@@ -923,16 +854,8 @@ static void StartTown_RunOnCreatePass(void* entityV) {
             // reference_condition_shaped_comments — a comment stating a current condition
             // rather than an invariant becomes a lie and disguises the gap it creates.
             //
-            // Flag ON: call the init half directly, skipping the erase. Flag off: byte-identical.
-            // Read through LiveEnabled, NOT raw getenv: kDefaultOnFlags is consulted ONLY
-            // inside ComponentFactory::LiveEnabled, so a raw getenv here would make the
-            // table entry a silent no-op — unset would stay OFF while `=0` still worked,
-            // i.e. it would look graduated, pass the kill-switch test, and not be on.
-            static int s_residenceRegistry = -1;
-            if (s_residenceRegistry < 0)
-                s_residenceRegistry =
-                    ::ComponentFactory::LiveEnabled("BANISHED_LIVE_RESIDENCE_REGISTRY") ? 1 : 0;
-            if (s_residenceRegistry) {
+            // Call the init half directly, skipping the erase.
+            {
                 typedef void (*fn_ResidenceInit_t)(void*);
                 uintptr_t initFn = ResolveAddr(Module::Exe, 0x140129ef0);
                 if (initFn) {
@@ -944,9 +867,6 @@ static void StartTown_RunOnCreatePass(void* entityV) {
                     typedef void (*fn_OnCreate_t)(void*);
                     (*(fn_OnCreate_t*)(vt + 0x38))(comp);
                 }
-            } else {
-                typedef void (*fn_OnCreate_t)(void*);
-                (*(fn_OnCreate_t*)(vt + 0x38))(comp);            // ResidenceComponent::OnCreate
             }
             // Capture the house's owner-entity IBP (ResidenceComponent+0x10 — the exact
             // value the original registration uses) for the founding-housing pass. We keep
@@ -974,58 +894,6 @@ static void StartTown_RunOnCreatePass(void* entityV) {
 // here). If profKey is NULL, the registry port (TODO #2) would seed nodes with
 // garbage keys → ProfessionList/Profession.rsc must be wired first. Read-only,
 // never mutates. Gated on BANISHED_PROBE_WORKPLACE_KEY.
-// WAVE 2 helper: read an Object::External's resource filename (base+8 = Filename
-// String*; engine String = char data with int length at ptr-8). Bounded/safe.
-static void ProbeExtFilename(void* ext, char* out, int outcap) {
-    if (outcap <= 0) return;
-    out[0] = '\0';
-    if (!ext) { snprintf(out, outcap, "(null-ext)"); return; }
-    char* str = *reinterpret_cast<char**>(reinterpret_cast<uint8_t*>(ext) + 8);
-    if (!str) { snprintf(out, outcap, "(none)"); return; }
-    int len = *reinterpret_cast<int*>(str - 8);
-    if (len <= 0 || len > 4096) { snprintf(out, outcap, "(badlen=%d)", len); return; }
-    int n = len < outcap - 1 ? len : outcap - 1;
-    for (int i = 0; i < n; ++i) { char c = str[i]; out[i] = (c >= 32 && c < 127) ? c : '?'; }
-    out[n] = '\0';
-}
-
-static void StartTown_ProbeWorkplaceKey(void* entityV) {
-    if (!entityV || !fn_InternalBasePtr_CheckPtr) return;
-    if (!::ComponentFactory::LiveEnabled("BANISHED_PROBE_WORKPLACE_KEY")) return;
-
-    static uint32_t s_tidWork = 0;
-    if (s_tidWork == 0) s_tidWork = TypeId("WorkPlaceComponent");
-    if (s_tidWork == 0) return;
-
-    void* profList = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                   ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xb0) : nullptr;
-
-    uint8_t* ent = (uint8_t*)entityV;
-    int count = *(int32_t*)(ent + ENT_COMP_CNT);
-    uintptr_t arr = *(uintptr_t*)(ent + ENT_COMP_ARR);
-    for (int i = 0; i < count; ++i) {
-        void** slot = (void**)(arr + (uintptr_t)i * 8);
-        fn_InternalBasePtr_CheckPtr(slot);
-        void* comp = *slot;
-        if (!comp) continue;
-        uintptr_t vt = *(uintptr_t*)comp;
-        typedef uint32_t (*fn_GetTypeId_t)(void*);
-        uint32_t tid = (*(fn_GetTypeId_t*)(vt + 0x10))(comp);
-        if (tid != s_tidWork) continue;
-        void* desc    = *(void**)((uint8_t*)comp + 0x18);
-        void* profKey = desc ? *(void**)((uint8_t*)desc + 0x20) : nullptr;
-        uint64_t curKey = *(uint64_t*)((uint8_t*)comp + 0x48);
-        // WAVE 2: the live desc's External filename. Compare to [probe::wpdesc-serialize]
-        // extFile: SAME path => same resource loaded twice (FindOrLoad dedup-key mismatch);
-        // "(none)" => this live desc was factory-created and NEVER loaded (no External
-        // filename) => the duplication is inline/copy, not a second External::Load.
-        char descFile[96]; ProbeExtFilename(desc, descFile, sizeof descFile);
-        fprintf(stderr, "[probe::workplace] comp=%p desc=%p profKey(desc+0x20)=%p "
-                        "compKey(+0x48)=0x%llx professionList(gw+0xb0)=%p descFile='%s'\n",
-                comp, desc, profKey, (unsigned long long)curKey, profList, descFile);
-        fflush(stderr);
-    }
-}
 
 // Economy Brick M-D — bring up the storage on a freshly spawned FULLY-BUILT
 // building (StorageBarn/StorageYard). Mirrors what retail does for the same
@@ -1042,8 +910,8 @@ static void StartTown_ProbeWorkplaceKey(void* entityV) {
 //      2026-07-27: 0x14012d230 is in no vtable). Calling it here is a stand-in for
 //      an SM that never reaches state 2 in this build.
 // Our CopyCtor already wires comp+0x10 (entity) and +0x18 (description).
-static void StartTown_WireStorage(void* entity, int entryIdx) {
-    if (!LiveStorageEnabled() || !entity) return;
+static void StartTown_WireStorage(void* entity, int /*entryIdx*/) {
+    if (!entity) return;
     void* storageComp = FindComponentOnEntity(entity, TypeId("StorageComponent"));
     if (!storageComp) return;                      // not a storage building
     TownStorage_BuildCompleteInit_7ff0(storageComp);
@@ -1062,44 +930,11 @@ static void StartTown_WireStorage(void* entity, int entryIdx) {
     // place every storage building registered TWICE (townMgr+0x00 count 2 -> 4) —
     // retail's d230 does not dedup, so the stand-in has to go, not merely be tolerated.
     //
-    // TIMING IS PART OF THE CONTRACT, and it is why SM_ONADDED is in this condition.
-    // StartTown_SeedStartingResources -> Game_SpawnResources round-robins the starting
-    // stock over the entities in townMgr+0x00, so the registration must already have
-    // happened when it runs. With LAZY linking the SM first ticks a frame later:
-    // measured storageLocs=0 at seed time and placed=0 for all seven masks — a town
-    // whose barn starts empty. With BANISHED_LIVE_SM_ONADDED the chain is linked in
-    // slot 4 and ticked in slot 6 inside RegisterEntity, i.e. still inside the spawn
-    // loop, which is the retail ordering. So: drop the stand-in only when the live
-    // controller can actually beat the seeder to it.
-    const bool storageCtrlLive =
-        ::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGECTRL") &&
-        ::ComponentFactory::LiveEnabled("BANISHED_LIVE_STATEMACHINE");
-    const bool ctrlRegisters =
-        storageCtrlLive && ::ComponentFactory::LiveEnabled("BANISHED_LIVE_SM_ONADDED");
-    // The half-configuration double-registers and there is no faithful way to stop it
-    // (retail's d230 has no dedup): the stand-in below has to run to beat the seeder,
-    // and then the lazily-linked chain enters state 2 a frame later and appends the
-    // same entity again. STORAGECTRL must be paired with SM_ONADDED — say so loudly
-    // rather than let a duplicated town storage list look like a search bug later.
-    if (storageCtrlLive && !ctrlRegisters) {
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            fprintf(stderr, "[StorageSeed] WARN: BANISHED_LIVE_STORAGECTRL without "
-                            "BANISHED_LIVE_SM_ONADDED — every storage building will "
-                            "register TWICE in townMgr+0x00 (stand-in now, state-2 "
-                            "enter on the first tick). Set BANISHED_LIVE_SM_ONADDED=1.\n");
-            fflush(stderr);
-        }
-    }
-    if (slc && !ctrlRegisters) TownRegistry_RegisterStorageLocation(slc);
-    if (StorageTraceOn()) {
-        uint8_t* sc = (uint8_t*)storageComp;
-        fprintf(stderr, "[StorageSeed] struct[%d] entity=%p storage=%p slc=%p "
-                "cap=%d mask=0x%x\n", entryIdx, entity, storageComp, slc,
-                *(int32_t*)(sc + 0x38), *(uint32_t*)(sc + 0x3c));
-        fflush(stderr);
-    }
+    // The StorageLocationComponent controller registers the building itself: its
+    // state-2 ENTER *is* retail's d230, and that happens inside RegisterEntity's
+    // OnAdded pass, i.e. still inside the spawn loop and before
+    // StartTown_SeedStartingResources runs. Nothing to stand in for here.
+    (void)slc;
 }
 
 // NOTE: the resource path now uses StartTown_PlaceResourceCell (the Entity_impl_6540
@@ -1119,14 +954,11 @@ static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
 // Index selectable via BANISHED_BUILD_DEMO_INDEX (default 0 = first structure).
 extern "C" void* g_pConstructionDemoSite;
 extern "C" void* g_pConstructionDemoEntity;   // the demo foundation's OWNER entity (force-harness work-area)
-// Default-ON via kDefaultOnFlags (graduated 2026-07-22); env var is a kill-switch (=0).
-// NOTE: this only enables the demo-foundation CAPABILITY — the actual "leave a start-town
+// The demo-foundation CAPABILITY is always available; the actual "leave a start-town
 // building unbuilt" behaviour still requires the opt-in test sub-gates BuildDemoIndex()>=0
 // or BuildDemoWantsHouse() (both default off), so a normal default run force-completes
 // every start-town building as before.
-static bool BuildDemoEnabled() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILDCTRL");
-}
+static bool BuildDemoEnabled() { return true; }
 
 // Retail's insta-build spawn path (BANISHED_LIVE_SM_ONADDED, opt-in). When on, the
 // founding buildings are spawned exactly as ComponentEntity_impl_1fc0 does it —
@@ -1138,11 +970,7 @@ static bool BuildDemoEnabled() {
 // the +0x52 = 2 stamp, and the +0x48/+0x4c build-bookkeeping stamp.
 // The flag lives on StateMachineComponent because that is the component whose slots it
 // wires; this helper only asks whether the path is available.
-static bool StartTown_InstantBuildPath() {
-    static int on = -1;
-    if (on < 0) on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_SM_ONADDED") ? 1 : 0;
-    return on != 0;
-}
+static bool StartTown_InstantBuildPath() { return true; }
 static int BuildDemoIndex() {
     static int idx = -2;
     if (idx == -2) {
@@ -1173,24 +1001,8 @@ static bool BuildDemoWantsHouse() {
     return en == 1;
 }
 
-// ── BANISHED_EXTRA_HOUSES=N — N extra COMPLETED, EMPTY houses (test scaffolding) ──
-// A move-out (and therefore a marriage) needs a FREE residence. The founding town has
-// none spare, and BUILD_DEMO_HOUSE's single spare starts as a foundation, so marriage
-// throughput is capped by the build pipeline rather than by the marriage logic. This
-// spawns ready-to-occupy copies of the first start-town house so the marriage/move-out
-// path can be exercised on its own. Test-only, default 0 (byte-unchanged when unset).
-static const int kMaxExtraHouses = 32;
+// Chebyshev ring-scan radius used by every demo/deferred placement below.
 static const int kExtraHouseSearchRadius = 40;   // tiles from the cluster centre
-static int ExtraHousesRequested() {
-    static int n = -1;
-    if (n < 0) {
-        const char* e = std::getenv("BANISHED_EXTRA_HOUSES");
-        n = (e && e[0]) ? std::atoi(e) : 0;
-        if (n < 0) n = 0;
-    }
-    return n;
-}
-
 // Defined below (template-by-path resolver used by the demo-pasture block).
 static void* ResolveTemplateByPath(const char* path);
 
@@ -1692,60 +1504,11 @@ static int StartTown_StressSpawnStructures(void* game, int cx, int cy) {
         }
     };
 
-    // ── BANISHED_STRESS_EXCLUDE / BANISHED_STRESS_EXTRA ──────────────────────────
-    // EXCLUDE=<tag,tag,...> drops those entries from the set entirely; EXTRA=<tag>:<n>
-    // places n MORE of that tag per set. Both match the `tag` column of kStressSet.
-    //
-    // Three achievements are ABSTINENCE goals -- Uneducated (300 people, no school),
-    // Isolationist (300, no trading post) and One with Nature (400, no crop field,
-    // orchard or pasture). Their goals do not merely sit unmet in the standard stress
-    // town, they report failed=1 and are unreachable for the life of that world, so no
-    // amount of running the normal town can ever unlock them. EXCLUDE is what makes a
-    // town that can.
-    //
-    // EXTRA exists for the opposite shape: Firefighter wants 40 wells, and reaching it
-    // through --sets 40 would also build 40 quarries and 40 town squares' worth of
-    // everything else, which does not fit on any map.
-    const char* const excl = std::getenv("BANISHED_STRESS_EXCLUDE");
-    auto excluded = [&](const char* tag) -> bool {
-        if (!excl || !excl[0] || !tag) return false;
-        const size_t n = std::strlen(tag);
-        for (const char* c = excl; *c; ) {
-            const char* e = std::strchr(c, ',');
-            const size_t len = e ? (size_t)(e - c) : std::strlen(c);
-            if (len == n && std::strncmp(c, tag, n) == 0) return true;
-            if (!e) break;
-            c = e + 1;
-        }
-        return false;
-    };
-    // EXTRA=<tag>:<n>
-    const char* const extraEnv = std::getenv("BANISHED_STRESS_EXTRA");
-    auto extraFor = [&](const char* tag) -> int {
-        if (!extraEnv || !extraEnv[0] || !tag) return 0;
-        const size_t n = std::strlen(tag);
-        for (const char* c = extraEnv; *c; ) {
-            const char* e = std::strchr(c, ',');
-            const char* colon = std::strchr(c, ':');
-            if (colon && (!e || colon < e) && (size_t)(colon - c) == n &&
-                std::strncmp(c, tag, n) == 0)
-                return std::atoi(colon + 1);
-            if (!e) break;
-            c = e + 1;
-        }
-        return 0;
-    };
-    if (excl && excl[0])
-        fprintf(stderr, "[Stress::place] EXCLUDE='%s'""\n", excl);
-    if (extraEnv && extraEnv[0])
-        fprintf(stderr, "[Stress::place] EXTRA='%s'""\n", extraEnv);
 
     if (sets > 0) place(kStressTownHall);
     for (int s = 0; s < sets; ++s) {
         for (const StressBuilding& b : kStressSet) {
-            if (excluded(b.tag)) continue;
             place(b);
-            for (int k = 0, extra = extraFor(b.tag); k < extra; ++k) place(b);
         }
         placeHouses(perSet);
     }
@@ -2174,7 +1937,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // once more in case any intervening CheckPtr moved it.
         fn_InternalBasePtr_CheckPtr(&entIBP);
         StartTown_RunOnCreatePass((void*)entIBP);
-        StartTown_ProbeWorkplaceKey((void*)entIBP);   // TODO #2 gating diagnostic
 
         // Click-to-select: register this building's footprint in the region-map cell array so
         // EditTool's click-pick (FUN_1400a0280) resolves it under the cursor -> opens its info
@@ -2219,15 +1981,10 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     int demoW0 = 0, demoH0 = 0;
     int clusterMaxEdgeX = spawnX;
 
-    // First residence template + footprint, captured unconditionally (the demo-house path
-    // and BANISHED_EXTRA_HOUSES both spawn copies of it).
-    void* resTmpl = nullptr;
-    int resW0 = 0, resH0 = 0;
-
     // Footprint rects of everything placed, so the extra-house search can avoid overlaps.
-    // Bounded: 8 start structures + 1 demo foundation + kMaxExtraHouses.
+    // Bounded: 8 start structures + 1 demo foundation + slack.
     struct Rect { int x, y, w, h; };
-    Rect occ[8 + 1 + kMaxExtraHouses + 16];
+    Rect occ[8 + 1 + 32 + 16];
     int  occN = 0;
     g_stOccupied.clear();
     auto Occupy = [&](int x, int y, int w, int h) {
@@ -2287,9 +2044,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         if (tileX + fpWx > bbX1) bbX1 = tileX + fpWx;
         if (tileY + fpHy > bbY1) bbY1 = tileY + fpHy;
 
-        if (ent && !resTmpl && FindComponentOnEntity(ent, TypeId("ResidenceComponent"))) {
-            resTmpl = tmpl; resW0 = w0; resH0 = h0;
-        }
         if (BuildDemoEnabled() && BuildDemoWantsHouse() && !g_demoHouseAssigned && ent &&
             FindComponentOnEntity(ent, TypeId("ResidenceComponent"))) {
             demoTmpl = tmpl; demoW0 = w0; demoH0 = h0;
@@ -2313,71 +2067,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         fflush(stderr);
     }
 
-    // ── BANISHED_EXTRA_HOUSES=N — N extra, COMPLETED, EMPTY houses ────────────────────
-    // The founding town is exactly six families in six houses, so nothing is ever spare
-    // and no grown child can move out (a free residence is the precondition for marriage
-    // — see CanFindHousing / candidate state 2). BUILD_DEMO_HOUSE gives exactly one, and
-    // it starts as a FOUNDATION, so it only becomes a move-out target once the build
-    // pipeline finishes it. This spawns N ready-to-occupy houses instead, which decouples
-    // marriage/move-out testing from construction throughput.
-    //
-    // Placement: copies of the first start-town residence, laid at the nearest free
-    // footprints to the cluster's centre (spiral outward, 1-tile gap, no overlap with any
-    // recorded rect). Hugging the cluster matters — the start config only guarantees
-    // buildable/walkable ground around the spawn point, so ranging far afield risks
-    // houses on unreachable terrain.
-    const int extraWanted = ExtraHousesRequested();
-    if (extraWanted > 0 && resTmpl) {
-        const int cx = (bbX0 + bbX1) / 2, cy = (bbY0 + bbY1) / 2;
-        const int n = extraWanted > kMaxExtraHouses ? kMaxExtraHouses : extraWanted;
-        int placedExtra = 0;
-
-        for (int k = 0; k < n; ++k) {
-            int bestX = 0, bestY = 0;
-            bool found = false;
-            // Chebyshev-ring scan outward from the cluster centre; first free rect wins.
-            for (int r = 1; r <= kExtraHouseSearchRadius && !found; ++r) {
-                for (int dy = -r; dy <= r && !found; ++dy) {
-                    for (int dx = -r; dx <= r && !found; ++dx) {
-                        if (dx != -r && dx != r && dy != -r && dy != r) continue;  // ring only
-                        const int tx = cx + dx, ty = cy + dy;
-                        // 1-tile gap on every side so buildings never touch (walk lanes).
-                        bool clash = false;
-                        for (int o = 0; o < occN; ++o) {
-                            if (tx - 1 < occ[o].x + occ[o].w && occ[o].x < tx + resW0 + 1 &&
-                                ty - 1 < occ[o].y + occ[o].h && occ[o].y < ty + resH0 + 1) {
-                                clash = true; break;
-                            }
-                        }
-                        if (!clash) { bestX = tx; bestY = ty; found = true; }
-                    }
-                }
-            }
-            if (!found) {
-                fprintf(stderr, "[startTown::extraHouse] no free footprint within r=%d "
-                        "after %d houses; stopping\n", kExtraHouseSearchRadius, placedExtra);
-                fflush(stderr);
-                break;
-            }
-
-            void* ent = placeStructure(resTmpl, bestX, bestY, 0, resW0, resH0,
-                                       /*isDemoFoundation=*/false, -1);
-            Occupy(bestX, bestY, resW0, resH0);
-            if (ent) { ++spawned; ++placedExtra; }
-            fprintf(stderr, "[startTown::extraHouse] [%d/%d] tile=(%d,%d) fp=%dx%d ent=%p\n",
-                    k + 1, n, bestX, bestY, resW0, resH0, ent);
-            fflush(stderr);
-        }
-
-        fprintf(stderr, "[startTown::extraHouse] placed %d/%d extra completed houses "
-                "(cluster bbox x[%d,%d] y[%d,%d] centre=(%d,%d))\n",
-                placedExtra, n, bbX0, bbX1, bbY0, bbY1, cx, cy);
-        fflush(stderr);
-    } else if (extraWanted > 0) {
-        fprintf(stderr, "[startTown::extraHouse] BANISHED_EXTRA_HOUSES=%d requested but no "
-                "start-town residence template was found; nothing spawned\n", extraWanted);
-        fflush(stderr);
-    }
 
     // ── BANISHED_BUILD_DEMO_PASTURE — one COMPLETED pasture (test scaffolding) ──────
     // CORRECTED 2026-09-06 (lane B closeout): "the fenced-area tool is still unported"
@@ -2643,12 +2332,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     // cell visits at world-build time only, and keeping them here means
                     // each pass reports its own acceptance test rather than inheriting
                     // pass 1's verdict.
-                    int wantPosts = 1;
-                    if (const char* cn = std::getenv("BANISHED_DEMO_TRADINGPOST_COUNT")) {
-                        const int v = std::atoi(cn);
-                        if (v > 0) wantPosts = v;
-                    }
-                    for (int rep = 0; rep < wantPosts; ++rep) {
+                    for (int rep = 0; rep < 1; ++rep) {
                         int bestX = 0, bestY = 0, bestSetback = -1, bestPath = -1, bestPt = -1;
                         // The chosen ORIENTATION, and the footprint extents that go with it.
                         // Every other demo building in this file is placed at rotation 0; the
@@ -2676,17 +2360,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                         long long bestTrueDist = -1;   // the honest distance, for the log
                         bool bestPierOk = false;
                         int  bestPierCell = -1;
-                        // TEST HARNESS, opt-in: BANISHED_TRADINGPOST_PATH=<n> considers only
-                        // polyline n. The retail route builder A*s from polyline 0 to the dock,
-                        // so "nearest to town" siting can (and by default does) put the post on
-                        // a channel the boat never enters — which reads as a broken route
-                        // builder when it is really a broken test fixture. =0 is the setup that
-                        // actually exercises the arrival path. Unset = unchanged behaviour.
-                        int onlyPath = -1;
-                        if (const char* pe = std::getenv("BANISHED_TRADINGPOST_PATH")) {
-                            if (pe[0]) onlyPath = std::atoi(pe);
-                        }
-
                         // ── THE ACCEPTANCE TEST: can a boat actually REACH this dock? ──
                         // Measured 2026-08-22: siting by setback alone produced a post whose
                         // pier landed in an 867-cell POND — water, navigable, and in a
@@ -2804,7 +2477,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                   : "");
 
                         for (int p = 0; p < pathCount; ++p) {
-                            if (onlyPath >= 0 && p != onlyPath) continue;
                             uint8_t* entry = pathArr + (size_t)p * 0x10;
                             const float* pts = *(const float**)entry;
                             const int ptCount = *(int32_t*)(entry + 8);
@@ -2930,8 +2602,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                         // returned 0. A dock the boat cannot reach makes the
                                         // route builder look broken when it is doing exactly
                                         // what it should.
-                                        if (onlyPath >= 0)
-                                            dist = (long long)s * 1000000LL + (ddx * ddx + ddy * ddy);
                                         if (bestDist >= 0 && dist >= bestDist) continue;
                                         bestDist = dist;
                                         bestTrueDist = trueDist;
@@ -3238,17 +2908,10 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // kill radius of 8.0. Nothing was broken — the hunter never got near a deer.
         //
         // So record the request and let StartTown_DeferredSpawn_Tick place it a few
-        // hundred frames in, scoring candidates by live animal density. Set
-        // BANISHED_HUNTERLODGE_AT_START=1 to take the old cluster-centre ring placement
-        // instead (the A/B control for "did density siting actually matter?").
+        // hundred frames in, scoring candidates by live animal density.
         {
             const char* he = std::getenv("BANISHED_BUILD_DEMO_HUNTERLODGE");
-            const char* atStart = std::getenv("BANISHED_HUNTERLODGE_AT_START");
-            const bool wantAtStart = (atStart && atStart[0] && atStart[0] != '0');
-            if (wantAtStart) {
-                ringPlace("BANISHED_BUILD_DEMO_HUNTERLODGE", "Template\\HunterLodge.rsc",
-                          "hunterlodge", 8, 8);
-            } else if (he && he[0] && he[0] != '0') {
+            if (he && he[0] && he[0] != '0') {
                 void* htmpl = ResolveTemplateByPath("Template\\HunterLodge.rsc");
                 int hw = 0, hh = 0;
                 if (const char* xpos = std::strchr(he, 'x')) {   // "WxH" size override
@@ -3280,10 +2943,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     g_deferredLodge.townCx     = cx;
                     g_deferredLodge.townCy     = cy;
                     g_deferredLodge.workRadius = hRadius > 0 ? hRadius : 34;
-                    if (const char* f = std::getenv("BANISHED_HUNTERLODGE_FRAME")) {
-                        int v = std::atoi(f);
-                        if (v > 0) g_deferredLodge.fireFrame = v;
-                    }
                     fprintf(stderr, "[startTown::hunterlodge] DEFERRED to frame %d — fp=%dx%d "
                             "workRadius=%d townCentre=(%d,%d). The animal index at gw+0x88 is "
                             "empty during world build, so density scoring is only meaningful "
@@ -3794,15 +3453,10 @@ extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
 
     // ── Score every candidate footprint by how many animals sit inside the work
     // radius of its centre. Same window/stride as the gatherer hut's resource scan;
-    // BANISHED_HUNTERLODGE_WINDOW widens it, because how far out the deer live is a
-    // property of the map, not a constant (first measured run: the densest site within
-    // 90 tiles held only 17 of 113 animals).
-    int kWindow = 90;
+    // (First measured run: the densest site within 90 tiles held only 17 of 113
+    // animals.)
+    const int kWindow = 90;
     const int kStride = 2;
-    if (const char* wv = std::getenv("BANISHED_HUNTERLODGE_WINDOW")) {
-        int v = std::atoi(wv);
-        if (v > 0) kWindow = v;
-    }
     int bestX = 0, bestY = 0, bestScore = 0;
     long long bestDist = -1;
     bool found = false;
@@ -3950,32 +3604,6 @@ extern "C" void StartTown_DeferredSpawn_Tick(int frameNum) {
     fflush(stderr);
 }
 
-// ============================================================================
-// PHASE A — real PRODUCTION workplace (env BANISHED_LIVE_WORKPLACE, default off).
-//
-// The economy WORK-half stalled because the force-work harness pointed a citizen's
-// workplace (+0x238) at a StorageBarn, but `Entity_FindComponent_Storage` wants a
-// ResidenceComponent worker-ROSTER (c7cf0) on the workplace — which a storage-only
-// building lacks. A producer template (ForesterLodge, the simplest) carries the full
-// set: ResidenceComponent (roster) + WorkPlaceComponent (c80e0) + a RawMaterial/Forester
-// producer + Attendance. KEY LEVER: inert factories still produce VALID instances
-// (correct type-id, valid memory), so spawning the template should let FindStorage
-// resolve the (inert) ResidenceComponent with ZERO component graduation.
-//
-// Phase A: spawn it, place it like an InitialStructure (so its cell + mesh resolve),
-// DUMP its component type-ids to confirm the set, and re-point g_pForceWorkBuilding at
-// it (so BANISHED_FORCE_WORK assigns a citizen here instead of the StorageBarn).
-// Phase B then graduates the producer components → real production.
-// ============================================================================
-static bool WorkplaceEnvOn() {
-    static int en = -1;
-    if (en < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_WORKPLACE");
-        en = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return en == 1;
-}
-
 // Resolve a template by its full "Template\Name.rsc" path (FindOrLoad-by-cstring),
 // mirroring StartTown_ResolveTemplate but without a pool-entry String.
 static void* ResolveTemplateByPath(const char* path) {
@@ -3998,192 +3626,6 @@ extern "C" void* StartTown_ResolveTemplateByPath(const char* path) {
     return ResolveTemplateByPath(path);
 }
 
-static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
-                                     void* game, int spawnX, int spawnY) {
-    (void)startConfig;
-    if (!WorkplaceEnvOn()) return;
-    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
-        !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr || !fn_MemAlloc) return;
-
-    const char* path = "Template\\ForesterLodge.rsc";
-    void* tmpl = ResolveTemplateByPath(path);
-    fprintf(stderr, "[startTown::workplace] resolve \"%s\" -> tmpl=%p\n", path, tmpl);
-    fflush(stderr);
-    if (!tmpl) return;
-
-    const uint32_t tidCreatePlaced   = TypeId("CreatePlacedDescription");
-    const uint32_t tidMapComponent   = TypeId("MapComponent");
-    const uint32_t tidModelComponent = TypeId("ModelComponent");
-
-    // Instantiate + wrap.
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
-    void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
-    if (!ent) { fprintf(stderr, "[startTown::workplace] instantiate failed\n"); fflush(stderr); return; }
-    uintptr_t entIBP = 0;
-    fn_InternalBasePtr_Ctor(&entIBP, ent);
-
-    // Footprint from CreatePlacedDescription (else 4x4).
-    int w0 = 4, h0 = 4;
-    void* placed = FindDescriptionOnTemplate(tmpl, tidCreatePlaced);
-    if (placed) { w0 = *(int32_t*)((uint8_t*)placed + 0x44); h0 = *(int32_t*)((uint8_t*)placed + 0x48); }
-
-    // Place a few tiles to the side of the town centre so it doesn't overlap the
-    // InitialStructure footprints. (Diagnostic placement; exact tile is unimportant.)
-    const int tileX = spawnX + 8, tileY = spawnY;
-    const int fpW = w0, fpH = h0, rot = 0;
-
-    fn_InternalBasePtr_CheckPtr(&entIBP);
-    void* entity = (void*)entIBP;
-
-    // MapComponent grid placement (the cell resolver Entity_impl_7fb0 PATH 2 reads
-    // these packed tile coords to give the workplace a navigable anchor cell).
-    void* mapComp = FindComponentOnEntity(entity, tidMapComponent);
-    if (mapComp) {
-        uintptr_t mapIBP = 0;
-        fn_InternalBasePtr_Ctor(&mapIBP, mapComp);
-        fn_InternalBasePtr_CheckPtr(&mapIBP);
-        uint8_t* mc = (uint8_t*)mapIBP;
-        if (mc) {
-            *(int16_t*)(mc + 0x28) = (int16_t)tileX;
-            *(int16_t*)(mc + 0x2a) = (int16_t)tileY;
-            *(int16_t*)(mc + 0x2c) = (int16_t)fpW;
-            *(int16_t*)(mc + 0x2e) = (int16_t)fpH;
-            *(int32_t*)(mc + 0x30) = rot;
-        }
-    }
-
-    // Foundation-F world transform (footprint-centre terrain position) so the
-    // building's OnAdded places its mesh, not at the world origin.
-    if (game && fn_MapGetTerrainPos && fn_Transform_FromYawPitchOffset) {
-        void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
-        if (modelComp) {
-            uintptr_t mcIBP = 0;
-            fn_InternalBasePtr_Ctor(&mcIBP, modelComp);
-            fn_InternalBasePtr_CheckPtr(&mcIBP);
-            uint8_t* m = (uint8_t*)mcIBP;
-            int dim = *(int32_t*)game;
-            if (m && dim > 0) {
-                const float half = (float)(dim >> 1);
-                int idx1 = dim * tileY + tileX;
-                float in1[3] = { (float)(idx1 % dim) - half, (float)(idx1 / dim) - half, 0.0f };
-                float p1[3] = {0,0,0};
-                fn_MapGetTerrainPos(game, p1, in1, 0, nullptr);
-                int idx2 = (tileY + fpH) * dim + tileX + fpW;
-                float in2[3] = { (float)(idx2 % dim) - half, (float)(idx2 / dim) - half, 0.0f };
-                float p2[3] = {0,0,0};
-                fn_MapGetTerrainPos(game, p2, in2, 0, nullptr);
-                float center[3] = { (p1[0]+p2[0])*0.5f, (p1[1]+p2[1])*0.5f, (p1[2]+p2[2])*0.5f };
-                float yaw = (float)rot, pitch = 0.0f;
-                fn_Transform_FromYawPitchOffset((void*)(m + 0x148), &yaw, &pitch, center);
-                *(float*)(m + 0x168) = yaw;
-            }
-        }
-    }
-
-    // Show the COMPLETED building mesh (last sub-mesh), same as the InitialStructures.
-    {
-        void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
-        if (modelComp) {
-            uintptr_t mIBP = 0;
-            fn_InternalBasePtr_Ctor(&mIBP, modelComp);
-            fn_InternalBasePtr_CheckPtr(&mIBP);
-            uint8_t* m = (uint8_t*)mIBP;
-            void* modelDesc = m ? *(void**)(m + 0x18) : nullptr;
-            void* groupArray = modelDesc ? *(void**)((uint8_t*)modelDesc + 0x20) : nullptr;
-            uint32_t groupCount = modelDesc ? *(uint32_t*)((uint8_t*)modelDesc + 0x28) : 0;
-            if (groupArray && groupCount > 0) {
-                int variantIdx = 0;
-                void* rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-                          ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xd8) : nullptr;
-                if (rng && fn_Random_Rand && groupCount > 1)
-                    variantIdx = (int)fn_Random_Rand(rng, groupCount);
-                int subCount = *(int32_t*)((uint8_t*)groupArray + (int64_t)variantIdx * 0x18 + 0x10);
-                int modelVariant = (subCount > 0) ? subCount - 1 : 0;
-                ApplyResourceModelVariant(entity, tidModelComponent,
-                                          (int16_t)variantIdx, (int16_t)modelVariant);
-            }
-        }
-    }
-
-    // Register with the world entity list (category = template+0x20).
-    int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
-    fn_EntityList_RegisterEntity(entityList, &entIBP, category);
-
-    fn_InternalBasePtr_CheckPtr(&entIBP);
-    StartTown_RunOnCreatePass((void*)entIBP);   // fires ResidenceComponent::OnCreate (LIVE_RESIDENCE)
-    // Click-to-select: mark the workplace footprint in the region-map cell array (see
-    // StartTown_MarkBuildingCells) so EditTool's click-pick resolves it under the cursor.
-    fn_InternalBasePtr_CheckPtr(&entIBP);
-    StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP, rot);
-
-    // ---- THE PHASE A DIAGNOSTIC: dump the component set. --------------------
-    fn_InternalBasePtr_CheckPtr(&entIBP);
-    entity = (void*)entIBP;
-    {
-        uint8_t* e = (uint8_t*)entity;
-        int count = *(int32_t*)(e + ENT_COMP_CNT);
-        uintptr_t arr = *(uintptr_t*)(e + ENT_COMP_ARR);
-        uint32_t tidRes = TypeId("ResidenceComponent");
-        uint32_t tidWP  = TypeId("WorkPlaceComponent");
-        uint32_t tidRaw = TypeId("RawMaterialComponent");
-        uint32_t tidAtt = TypeId("AttendanceComponent");
-        uint32_t tidWork = TypeId("WorkComponent");
-        fprintf(stderr, "[startTown::workplace] component dump (count=%d) want "
-                "Residence=%u WorkPlace=%u RawMat=%u Attend=%u Work=%u\n",
-                count, tidRes, tidWP, tidRaw, tidAtt, tidWork);
-        for (int i = 0; i < count; ++i) {
-            void** slot = (void**)(arr + (uintptr_t)i * 8);
-            fn_InternalBasePtr_CheckPtr(slot);
-            void* comp = *slot;
-            if (!comp) { fprintf(stderr, "[startTown::workplace]   comp[%d] (null)\n", i); continue; }
-            uintptr_t vt = *(uintptr_t*)comp;
-            typedef uint32_t (*gt_t)(void*);
-            uint32_t id = (*(gt_t*)(vt + 0x10))(comp);
-            const char* tag = id==tidRes?" RESIDENCE(roster)":id==tidWP?" WORKPLACE":
-                              id==tidRaw?" RAWMATERIAL":id==tidAtt?" ATTENDANCE":
-                              id==tidWork?" WORK":"";
-            fprintf(stderr, "[startTown::workplace]   comp[%d] tid=%u%s\n", i, id, tag);
-        }
-        fflush(stderr);
-    }
-
-    StartTown_PickMeshProbe(entity);
-
-    // ---- Phase 1 infra: activate the lodge as an employer (seat WPC+0x48 from the
-    // desc, SetAccepting) via the shared StartTown_ActivateWorkplace helper. The lodge
-    // passes registerNow=true even when the WPC live controller would register it on
-    // the first SM tick, because StartTown_EmployForesters queries the townMgr+0x100
-    // BST (FindAvailableBuilding) BEFORE any tick runs; the insert dedups, so the
-    // state-2 enter re-registering later is harmless. Worker ASSIGNMENT itself is the
-    // Phase-5 employ cascade — this only makes the lodge FINDABLE.
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        int64_t townMgr = *(int64_t*)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
-        uint64_t profKey = StartTown_ActivateWorkplace(
-            entity, /*registerNow=*/true, "Phase4Employ");
-        g_foresterProfKey = profKey;   // for the deferred employ pass
-
-        // Verify the reader finds it: FindAvailableBuilding(townMgr, &out, profKey)
-        // returns this lodge entity (worker count < capacity + the WPC+0x50 enable
-        // flag). Proves the townMgr+0x100 registry + reader end-to-end (the FIND half
-        // of producer employment); the ASSIGN half is the ProfessionUI seat cascade.
-        if (townMgr && profKey != 0) {
-            int64_t foundIBP = 0;
-            FindAvailableBuilding(townMgr, &foundIBP, profKey);
-            fprintf(stderr, "[Phase4Employ] FindAvailableBuilding(profKey=0x%llx) -> %p "
-                    "(lodge entity=%p) %s\n",
-                    (unsigned long long)profKey, (void*)foundIBP, entity,
-                    (foundIBP == reinterpret_cast<int64_t>(entity)) ? "MATCH" :
-                    (foundIBP != 0 ? "other-building" : "NOT-FOUND"));
-            fflush(stderr);
-        }
-    }
-
-    // Re-point the force-work harness at this REAL production workplace.
-    g_pForceWorkBuilding = entity;
-    fprintf(stderr, "[startTown::workplace] ForesterLodge spawned tile(%d,%d) fp=%dx%d "
-            "-> g_pForceWorkBuilding=%p\n", tileX, tileY, fpW, fpH, entity);
-    fflush(stderr);
-}
 
 // ============================================================================
 // Town-manager registry passes (ungated).
@@ -4198,9 +3640,7 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
 // registrar, so both lists stayed empty and the town-hall General tab rendered
 // all zeros (0 citizens/adults/children/families/homes, flat hearts/stars).
 //
-// OnAdd is a plain append (no dedup), so the citizen pass keeps a once-guard
-// shared with StartTown_EmployForesters (which needs the same registration and
-// previously did it inline, gated behind BANISHED_LIVE_WORKPLACE).
+// OnAdd is a plain append (no dedup), so the citizen pass keeps a once-guard.
 //
 // [2026-07-26] OnAdd is now ALSO reachable the retail way: CitizenComponent's vtable
 // slot 6 (+0x30) is wired under BANISHED_LIVE_CITIZEN_ONADD, so any citizen that goes
@@ -4245,79 +3685,6 @@ static void StartTown_RegisterTownCitizens() {
 // The former StartTown_RegisterTownResidences manual append was removed: with
 // the real state table wired it would double-register every founding house.
 
-// ============================================================================
-// Phase 4 ASSIGN half (env BANISHED_LIVE_WORKPLACE) — seat laborers at the lodge.
-//
-// The faithful producer-employment flow is player-driven (ProfessionUI worker count
-// -> FindAvailableBuilding -> the cbf0/ca20/c5f0/c4b0 seat cascade). Here we drive the
-// same OUTCOME programmatically (as if the player set the forester worker count to the
-// lodge capacity): pick idle adult laborers and employ them via the ported
-// CitizenComponent::AssignWorkplace (0x1401163d0), which sets citizen+0x238 (workplace)
-// + citizen+0x240 (slot) and rosters the worker. We also set citizen+0x1f0 (profession)
-// to the forester Profession* exactly as the cbf0 cascade does. Once +0x238 is set, a
-// healthy adult's CitizenAI candidate set gains Gather(6/7)/Work(5) and the citizen
-// paths to the lodge. Runs after citizens + founding housing exist. Env-gated + null-
-// guarded; a no-op when no lodge/citizens/key.
-static void StartTown_EmployForesters() {
-    if (!WorkplaceEnvOn()) return;
-    if (g_foresterProfKey == 0 || !g_pForceWorkBuilding) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton || !fn_InternalBasePtr_CheckPtr) return;
-    int64_t townMgr = *reinterpret_cast<int64_t*>(
-        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
-    if (!townMgr) return;
-
-    // Lodge worker capacity (WorkComponent+0x30; FindAvailableBuilding already cached it
-    // via CalcMaxWorkers). Default to the ForesterLodge template _maxWorkerCount=4.
-    void* wc = FindComponentOnEntity(g_pForceWorkBuilding, TypeId("WorkComponent"));
-    int capacity = (wc && *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(wc) + 0x30) > 0)
-                 ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(wc) + 0x30) : 4;
-
-    // --- Brick M-C: drive the REAL ProfessionUI worker-seat cascade instead of the old
-    // +0x1f0/+0x238 field-poke. Two faithful prerequisites the inert standalone citizen
-    // init skips (FUN_140117080 is guarded off, so +0x1f0 stays 0): the founding colonists
-    // must be (1) LABORERS — +0x1f0 = ProfessionList(gw+0xb0)+0x30, the default profession
-    // retail colonists carry — and (2) registered into the town citizen list townMgr+0xa0
-    // via the real registrar CitizenComponent_OnAdd (0x140114000), the list the cascade
-    // strategies scan. Then CitizenEmploy_SeatWorkers runs the exact FindAvailableBuilding
-    // + cbf0->ca20->c5f0->c4b0 fallback dd10 uses per worker, seating each via
-    // +0x1f0=forester + AssignHousing (+0x248 = the lodge's WorkPlaceComponent roster).
-    uint64_t laborerKey = 0;
-    {
-        int64_t profList = *reinterpret_cast<int64_t*>(
-            reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xb0);
-        if (profList) laborerKey = *reinterpret_cast<uint64_t*>(
-            reinterpret_cast<uint8_t*>(profList) + 0x30);
-    }
-    // Register into the real townMgr+0xa0 town-citizen list (shared once-guard;
-    // normally already done by the ungated StartTown_RegisterTownCitizens pass).
-    StartTown_RegisterTownCitizens();
-    int seeded = 0;
-    for (void* c : g_foundingCitizens) {
-        if (!c) continue;
-        int64_t cz   = reinterpret_cast<int64_t>(c);
-        int64_t desc = *reinterpret_cast<int64_t*>(cz + 0x288);
-        bool adult = desc && *reinterpret_cast<float*>(desc + 0x44) <= *reinterpret_cast<float*>(cz + 0x3c);
-        // Seed the laborer profession on idle adults so the cascade's +0x1f0==laborerKey
-        // filter matches them (retail init does this; ours is guarded off).
-        if (laborerKey && adult && *reinterpret_cast<int64_t*>(cz + 0x1f0) == 0)
-            { *reinterpret_cast<uint64_t*>(cz + 0x1f0) = laborerKey; ++seeded; }
-    }
-
-    // The cascade's seat epilogue calls AssignHousing -> the roster attach into the
-    // lodge's WorkPlaceComponent (+0x58/+0x60), whose gameplay-time Scene mesh-visual
-    // toggle deadlocks during this build-time pass — same guard the founding-housing
-    // pass uses (g_wpcRosterOnly).
-    bool prevRosterOnly = g_wpcRosterOnly;
-    g_wpcRosterOnly = true;
-    int seated = CitizenEmploy_SeatWorkers(townMgr, g_foresterProfKey, capacity);
-    g_wpcRosterOnly = prevRosterOnly;
-
-    fprintf(stderr, "[Phase4Employ] M-C cascade: foundingCitizens=%d laborerKey=0x%llx seeded=%d "
-            "-> seated %d/%d forester(s) profKey=0x%llx\n",
-            (int)g_foundingCitizens.size(), (unsigned long long)laborerKey, seeded,
-            seated, capacity, (unsigned long long)g_foresterProfKey);
-    fflush(stderr);
-}
 
 // ---------------------------------------------------------------------------
 // Seed the default "Laborer" profession on founding adults (ungated).
@@ -4327,7 +3694,7 @@ static void StartTown_EmployForesters() {
 // colonist. That initializer is guarded off in standalone, so +0x1f0 stays 0 and the
 // citizen info panel's Job line reads a null profession -> renders blank. This pass
 // reproduces just the laborer seed for the founding colonists WITHOUT the forester-
-// employment gating (StartTown_EmployForesters only runs under BANISHED_LIVE_WORKPLACE).
+// employment gating.
 // Children keep +0x1f0 == 0 (their panel branch uses ProfessionList+0x40 "Student").
 // Idempotent (sets only when +0x1f0 == 0), so it composes with EmployForesters' own
 // seed. Depends on the founding-housing pass having collected g_foundingCitizens and on
@@ -4441,25 +3808,15 @@ extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap);
 // variant GROUP (gender). Clothing colour (+0x34) and age/height (+0x40/+0x3c),
 // which the retail deferred init FUN_140117080 also randomizes, are still
 // uniform — that init is guarded off in standalone (housing/animation deps).
-static bool CitizenVariantOn() {
-    static int en = -1;
-    if (en < 0) {
-        const char* e = std::getenv("BANISHED_CITIZEN_VARIANT");
-        en = (e && (e[0] == '0' || e[0] == '\0')) ? 0 : 1;
-    }
-    return en == 1;
-}
-
 // Give a freshly-instantiated citizen entity its gender mesh variant GROUP
 // (+0x164) via ModelComponent_RandomizeVariant. The original derives this from the
 // citizen's gender (retail variantIdx=(gender==0)?1:0); we pass an explicit index
 // so a founding family's two adults get opposite-gender models (a couple) and kids
 // alternate — matching CitizenComponent_impl_0dd0 — instead of a random pick. Runs
 // before the entity is registered so its OnAdded adds the chosen mesh. Returns the
-// resolved render ModelComponent (for the colour/scale pass) or 0. No-op unless
-// BANISHED_CITIZEN_VARIANT is set (default on).
+// resolved render ModelComponent (for the colour/scale pass) or 0.
 static uintptr_t SetCitizenModelVariant(void* entity, uint32_t tidModel, int variantIdx) {
-    if (!CitizenVariantOn() || !entity || tidModel == 0 ||
+    if (!entity || tidModel == 0 ||
         !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr)
         return 0;
     void* mc = FindComponentOnEntity(entity, tidModel);
@@ -4501,7 +3858,7 @@ static uintptr_t SetCitizenModelVariant(void* entity, uint32_t tidModel, int var
 // to confirm it is the same instance this path resolves.
 static void ApplyCitizenColorScale(void* entity, bool isChild, void* rng,
                                    uintptr_t genderMc, int variantIdx) {
-    if (!CitizenVariantOn() || !entity || !fn_InternalBasePtr_Ctor ||
+    if (!entity || !fn_InternalBasePtr_Ctor ||
         !fn_InternalBasePtr_CheckPtr)
         return;
     void* cc = FindComponentOnEntity(entity, TypeId("CitizenComponent"));
@@ -4630,20 +3987,9 @@ static void ApplyCitizenColorScale(void* entity, bool isChild, void* rng,
 //   pos = { base.x + RandFloatTol*r, base.y + RandFloatTol*r, base.z }
 // where base = the town-centre world position and r = the spawn jitter radius
 // at startConfig+0x40 (the float just before the citizen ExternalRef at +0x48).
-static bool CitizenSpawnPosOn() {
-    // Faithful core behaviour (the structure Foundation-F is likewise
-    // unconditional); default ON, opt out with BANISHED_CITIZEN_SPAWNPOS=0.
-    static int en = -1;
-    if (en < 0) {
-        const char* e = std::getenv("BANISHED_CITIZEN_SPAWNPOS");
-        en = (e && (e[0] == '0' || e[0] == '\0')) ? 0 : 1;
-    }
-    return en == 1;
-}
-
 static void SetCitizenSpawnTransform(void* entity, uint32_t tidModel,
                                      const float base[3], float jitter, void* rng) {
-    if (!CitizenSpawnPosOn() || !entity || tidModel == 0 ||
+    if (!entity || tidModel == 0 ||
         !fn_Transform_FromYawPitchOffset ||
         !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr)
         return;
@@ -4707,13 +4053,7 @@ static void SetCitizenSpawnTransform(void* entity, uint32_t tidModel,
 // left behind and logs it instead of calling Draw again, so "the slot ran" is an
 // observed outcome rather than an assumption.
 static void CitizenCarryStorageInit(void* ent) {
-    static int s_on = -1;
-    static int s_slotLive = -1;
-    if (s_on < 0) {
-        s_on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN_CARRY") ? 1 : 0;
-        s_slotLive = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGE_ONADDED") ? 1 : 0;
-    }
-    if ((s_on != 1 && s_slotLive != 1) || !ent || !fn_InternalBasePtr_CheckPtr) return;
+    if (!ent || !fn_InternalBasePtr_CheckPtr) return;
 
     static bool s_res = false;
     static void* (*s_find6270)(uintptr_t, void*) = nullptr;
@@ -4735,19 +4075,11 @@ static void CitizenCarryStorageInit(void* ent) {
     void* stComp = reinterpret_cast<void*>(stIbp);   // FindComponent writes the component ptr into the IBP
 
     int before = *reinterpret_cast<int*>((uintptr_t)stComp + 0x38);
-    if (s_slotLive == 1) {
-        // Verify-only: slot 6 already ran inside RegisterEntity. Report what it left.
-        if (logThis) { ++s_log;
-            fprintf(stderr, "[CarryInit] VERIFY (slot6 live) citizen storage=%p capacity(+0x38)=%d%s\n",
-                    stComp, before, (before == 0) ? "  <-- STILL ZERO, slot did not run" : "");
-            fflush(stderr);
-        }
-        return;
-    }
-    StorageComponent_Draw(reinterpret_cast<StorageComponent*>(stComp));
-    int after = *reinterpret_cast<int*>((uintptr_t)stComp + 0x38);
+    // Verify-only: StorageComponent slot 6 already ran inside RegisterEntity.
+    // Report what it left.
     if (logThis) { ++s_log;
-        fprintf(stderr, "[CarryInit] citizen storage=%p capacity(+0x38) %d->%d\n", stComp, before, after);
+        fprintf(stderr, "[CarryInit] VERIFY (slot6 live) citizen storage=%p capacity(+0x38)=%d%s\n",
+                stComp, before, (before == 0) ? "  <-- STILL ZERO, slot did not run" : "");
         fflush(stderr);
     }
 }
@@ -4907,14 +4239,6 @@ static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
 // button correctly greys out. The occupied-house mesh visual (residence a710 model-notify
 // 2b70 = an empty no-op even in retail; AmbientEmitter smoke = inert in standalone) is a
 // separate rendering follow-up. Requires BANISHED_LIVE_RESIDENCE (else no houses are captured).
-// Gated on BANISHED_LIVE_HOUSING; default build is a no-op.
-static bool HousingEnvOn() {
-    static int en = -1;
-    if (en < 0) {
-        en = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_HOUSING") ? 1 : 0;
-    }
-    return en == 1;
-}
 
 // Ensure the house's ResidenceComponent (c7cf0) resident-roster array (+0x50/+0x58) is
 // allocated. Retail sizes it in ResidenceComponent::Serialize/Slot14 (0x14012a120):
@@ -4960,7 +4284,6 @@ static bool StartTown_EnsureResidenceRoster(void* resComp) {
 }
 
 static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>>& families) {
-    if (!HousingEnvOn()) return;
     uint32_t tidCitizen = TypeId("CitizenComponent");                  // 0x1401c7158
     fprintf(stderr, "[startTown::housing] families=%zu capturedHouses=%zu tidCitizen=%u\n",
             families.size(), g_foundingHouseIBPs.size(), tidCitizen);
@@ -5106,7 +4429,7 @@ extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum) {
 // factory); with the real residence state table wired (heat-tick bring-up) AddItem would
 // grow/free the node vtable as if it were a slot array → Runtime FreeLocked crash.
 static void StartTown_SeedHouseInventory(int unitsPerHouse) {
-    if (!HousingEnvOn() || g_foundingHouseIBPs.empty()) return;
+    if (g_foundingHouseIBPs.empty()) return;
     void* townMgr = nullptr;
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
         townMgr = *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
@@ -5158,15 +4481,9 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
     // Storage_GetResourceCount (0x14012a9d0) — for the home-food read-back verification.
     typedef int (*fn_GetResCount_t)(int64_t comp);
     fn_GetResCount_t getResCount = reinterpret_cast<fn_GetResCount_t>(ResolveAddr(Module::Exe, 0x14012a9d0));
-    // Firewood stand-in size. Deliberately generous: the point is to take the first winter
-    // OUT of the measurement, not to model a fuel economy. Override with
-    // BANISHED_SEED_FUEL=<n> (0 disables) to A/B the cold death against a real producer
-    // once one exists.
-    int kSeedFuelPerHouse = 400;
-    if (const char* fe = std::getenv("BANISHED_SEED_FUEL")) {
-        int v = std::atoi(fe);
-        if (v >= 0) kSeedFuelPerHouse = v;
-    }
+    // Firewood stand-in size. Deliberately generous: the point is to take the first
+    // winter OUT of the measurement, not to model a fuel economy.
+    const int kSeedFuelPerHouse = 400;
     int seeded = 0, fuelSeeded = 0;
     for (int64_t houseIBP : g_foundingHouseIBPs) {
         if (!houseIBP) continue;
@@ -5196,12 +4513,8 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         // stand-in stopped the cold death, STARVATION became the new wall: a 2026-07-26 soak
         // (seed 12345, FORCE_SPEED=40) held warmth at ~0 and still went 24 -> 3 citizens
         // between frames 6000 and 9000 on hunger alone. Raise this floor to push the food
-        // economy out of the measurement window the same way BANISHED_SEED_FUEL does for
-        // fuel. Neither is a fix; both are missing producers.
-        if (const char* se = std::getenv("BANISHED_SEED_FOOD")) {
-            int v = std::atoi(se);
-            if (v > seedN) seedN = v;
-        }
+        // economy out of the measurement window the same way the firewood stand-in does
+        // for fuel. Neither is a fix; both are missing producers.
         if (seedN > 20000) seedN = 20000;                         // sanity clamp
 
         // Seed the ONE household container (StorageComponent c7e78). Faithful accept gate
@@ -5232,9 +4545,8 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         const int fuelVolume = (fuelTmpl != 0 && (mask & fuelFlags) != 0)
                              ? kSeedFuelPerHouse * (fuelVol > 0 ? fuelVol : 1) : 0;
         const int carryLoad = 100;   // Gather2's per-trip budget (townCap/citCap = 100)
-        // BANISHED_SEED_FOOD_FIRST — GRADUATING to kDefaultOnFlags (verified 2026-07-31:
-        // food lands at default fuel settings, zero CLAMPED lines, house packs 998/1000).
-        // `=0` remains the kill-switch. Read via LiveEnabled so the table entry works.
+        // FOOD FIRST (verified 2026-07-31: food lands at the default fuel settings, zero
+        // CLAMPED lines, house packs 998/1000).
         //
         // Reservation-ordering defect (found 2026-07-31): this budget reserves the full
         // REQUESTED fuel volume (kSeedFuelPerHouse * fuelVol = 400*4 = 1600), but the fuel
@@ -5243,27 +4555,16 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
         // seed `cap - fuelVolume - carryLoad` goes negative => maxFoodUnits == 0. Every
         // house starts with ZERO food, on pure defaults, and the town starves.
         //
-        // Note the knob to turn is the FUEL seed, not the food one: maxFoodUnits is 0
-        // whenever fuelVolume + carryLoad >= cap, so BANISHED_SEED_FOOD=6000, =130 and =1
-        // all clamp to 0 identically. BANISHED_SEED_FUEL=150 is the zero-code workaround.
         //
-        // Since the fuel clamp already takes the remainder, dropping this one subtraction
-        // IS the fix. Flag off => expression byte-identical to before.
-        // Read through LiveEnabled, NOT raw getenv: kDefaultOnFlags is consulted only
-        // inside ComponentFactory::LiveEnabled, so a raw getenv here would make a table
-        // entry a silent no-op — unset would stay OFF while `=0` still worked, i.e. it
-        // would look graduated, pass the kill-switch test, and not actually be on.
-        static int s_foodFirst = -1;
-        if (s_foodFirst < 0)
-            s_foodFirst = ::ComponentFactory::LiveEnabled("BANISHED_SEED_FOOD_FIRST") ? 1 : 0;
-        int foodBudget = cap - carryLoad - (s_foodFirst ? 0 : fuelVolume);
+        // Since the fuel clamp already takes the remainder, dropping the fuel-volume
+        // subtraction IS the fix.
+        int foodBudget = cap - carryLoad;
         if (foodBudget < 0) foodBudget = 0;
         const int maxFoodUnits = foodBudget / (foodVol > 0 ? foodVol : 1);
         // Print in BOTH states so "flag on, nothing changed" is never ambiguous.
-        fprintf(stderr, "[startTown::housing] seed budget: cap=%d carry=%d fuelReserve=%d "
-                "-> foodBudget=%d maxFoodUnits=%d (food-first %s)\n",
-                cap, carryLoad, (s_foodFirst ? 0 : fuelVolume), foodBudget, maxFoodUnits,
-                s_foodFirst ? "ON" : "off");
+        fprintf(stderr, "[startTown::housing] seed budget: cap=%d carry=%d "
+                "-> foodBudget=%d maxFoodUnits=%d (food first)\n",
+                cap, carryLoad, foodBudget, maxFoodUnits);
         fflush(stderr);
         if (seedN > maxFoodUnits) {
             fprintf(stderr, "[startTown::housing] house storage=%p CLAMPED food seed %d -> %d "
@@ -5316,159 +4617,6 @@ static void StartTown_SeedHouseInventory(int unitsPerHouse) {
             fuelSeeded, g_foundingHouseIBPs.size(), kSeedFuelPerHouse,
             (unsigned long long)fuelTmpl, fuelFlags,
             fuelTmpl == 0 ? "  <-- NO fuel raw-material template found (bit 6)" : "");
-    fflush(stderr);
-}
-
-// ── BANISHED_FOOD_TOPUP=<frames> — periodic food abundance (test scaffolding) ──────
-// StartTown_SeedHouseInventory is a ONE-SHOT: it fills each house to the seed budget and
-// nothing ever refills it. Measured 2026-08-15 (seed 12345, FORCE_SPEED=40, 25 citizens):
-// the town eats ~600 units per 1000 frames, so a 1800-unit start stock is gone by frame
-// 5000 and the whole population starves between 6000 and 8000. That die-off dominates
-// EVERY long-run measurement — including the demographic ones — because it kills the
-// cohort before any of them can be observed.
-//
-// It also silently suppresses the life-planning section in CitizenComponent::Update: that
-// whole block (housing / workplace / MARRIAGE) runs only while the citizen's action stack
-// is empty (*(self+0x278)+0x60 == -1). A starving citizen is permanently inside a
-// food-seeking action, so it never marries and never moves out. "Nobody marries" and
-// "everybody starves" are therefore the SAME observation, and the marriage path cannot be
-// judged at all until food is off the table.
-//
-// This refills food on the same faithful path the one-shot seed uses (AddItem 0x14012d000
-// into the house's own StorageComponent) and to the SAME budget, so it cannot overfill:
-// `target` is the seed's own maxFoodUnits, which already reserves the fuel volume and one
-// carry-load of headroom, and we only ever add `target - have`. Nothing else is touched.
-//
-// This is NOT a food economy and is not a fix for one — it is the "enough food" half of
-// the question "given enough food and housing, does the births/deaths cycle sustain a
-// population?". Test-only, opt-in, default 0 (byte-unchanged when unset).
-// extern "C": the call site is a block-scope `extern void` declaration inside
-// GameUpdateLoop_Update, which is itself an extern "C" function — so that declaration
-// inherits C linkage and a C++-mangled definition here does not satisfy it.
-extern "C" void StartTown_FoodTopUp_Tick(int frame) {
-    static int s_period = -1;
-    if (s_period < 0) {
-        const char* e = std::getenv("BANISHED_FOOD_TOPUP");
-        s_period = (e && e[0]) ? std::atoi(e) : 0;
-        if (s_period > 0) {
-            fprintf(stderr, "[FoodTopUp] ENABLED — refilling house food to the seed budget "
-                            "every %d frames (test scaffolding, not a producer)\n", s_period);
-            fflush(stderr);
-        }
-    }
-    if (s_period <= 0 || frame <= 0 || (frame % s_period) != 0) return;
-    if (g_foundingHouseIBPs.empty()) return;
-
-    void* townMgr = nullptr;
-    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
-        townMgr = *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
-    if (!townMgr) return;
-
-    typedef void (*fn_AddItem_t)(int64_t storage, int64_t material, int n);   // 0x14012d000
-    fn_AddItem_t addItem = reinterpret_cast<fn_AddItem_t>(ResolveAddr(Module::Exe, 0x14012d000));
-    typedef int (*fn_GetResCount_t)(int64_t comp);                            // 0x14012a9d0
-    fn_GetResCount_t getResCount =
-        reinterpret_cast<fn_GetResCount_t>(ResolveAddr(Module::Exe, 0x14012a9d0));
-    // StorageComponent::QueryCount — the OCCUPIED VOLUME of the container, the same value
-    // StorageComponent::CanAdd (0x14012cd80) tests against capacity (+0x38). getResCount
-    // above only sums EDIBLE units, so it cannot see firewood; this can.
-    typedef uint32_t (*fn_QueryCount_t)(void* self);                          // 0x14012cf10
-    fn_QueryCount_t queryCount =
-        reinterpret_cast<fn_QueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
-    if (!addItem || !getResCount) return;
-
-    // Same edible-template pick as the one-shot seed (RawMaterialDescription+0x5c bit 5).
-    const uint32_t tidRawMat = TypeId("RawMaterialDescription");
-    const int   tmplCount = *(int32_t*)((uint8_t*)townMgr + 0x118);
-    const int64_t tmplArr = *(int64_t*)((uint8_t*)townMgr + 0x110);
-    int64_t  foodTmpl = 0, fuelTmpl = 0;
-    uint32_t foodFlags = 0, fuelFlags = 0;
-    int      foodVol = 1, fuelVol = 1;
-    for (int t = 0; t < tmplCount && (foodTmpl == 0 || fuelTmpl == 0); ++t) {
-        int64_t tmpl = tmplArr ? *(int64_t*)(tmplArr + (int64_t)t * 8) : 0;
-        void* desc = tmpl ? FindDescriptionOnTemplate(reinterpret_cast<void*>(tmpl), tidRawMat) : nullptr;
-        if (!desc) continue;
-        const uint32_t flags = *(uint32_t*)((uint8_t*)desc + 0x5c);
-        if (foodTmpl == 0 && (flags & 0x20)) { foodTmpl = tmpl; foodFlags = flags; foodVol = *(int32_t*)((uint8_t*)desc + 0x48); }
-        if (fuelTmpl == 0 && (flags & 0x40)) { fuelTmpl = tmpl; fuelFlags = flags; fuelVol = *(int32_t*)((uint8_t*)desc + 0x48); }
-    }
-    if (foodTmpl == 0) return;
-
-    const uint32_t tidStorage   = TypeId("StorageComponent");
-    const uint32_t tidResidence = TypeId("ResidenceComponent");
-    int kSeedFuelPerHouse = 400;
-    if (const char* fe = std::getenv("BANISHED_SEED_FUEL")) {
-        const int v = std::atoi(fe);
-        if (v >= 0) kSeedFuelPerHouse = v;
-    }
-    static int s_foodFirst = -1;
-    if (s_foodFirst < 0)
-        s_foodFirst = ::ComponentFactory::LiveEnabled("BANISHED_SEED_FOOD_FIRST") ? 1 : 0;
-
-    int houses = 0, refilled = 0, unitsAdded = 0, fuelRefilled = 0, fuelAdded = 0;
-    for (int64_t houseIBP : g_foundingHouseIBPs) {
-        if (!houseIBP) continue;
-        void* sc = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidStorage);
-        if (!sc) continue;
-        const uint32_t mask = *(uint32_t*)((uint8_t*)sc + 0x3c);
-        if ((mask & foodFlags) == 0) continue;
-        ++houses;
-
-        // Identical budget to the one-shot seed — see the clamp note there.
-        const int cap = *(int32_t*)((uint8_t*)sc + 0x38);
-        const int fuelVolume = (fuelTmpl != 0 && (mask & fuelFlags) != 0)
-                             ? kSeedFuelPerHouse * (fuelVol > 0 ? fuelVol : 1) : 0;
-        const int carryLoad = 100;
-        // ⚠The top-up ALWAYS reserves the fuel volume, even though the one-shot seed skips
-        // that subtraction under SEED_FOOD_FIRST. Reason: the seed runs once, at a moment
-        // when fuel is added right after it, so "food first" is safe there. Here food is
-        // re-topped every period, and food-first meant food re-claimed the whole budget on
-        // every tick and fuel got exactly ZERO free volume forever — measured: "fuel 0/30
-        // house(s) +0 unit(s)" on every line while the town marched toward freezing. A
-        // sustained town needs BOTH, so both get a share.
-        (void)s_foodFirst;
-        int foodBudget = cap - carryLoad - fuelVolume;
-        if (foodBudget < 0) foodBudget = 0;
-        const int target = foodBudget / (foodVol > 0 ? foodVol : 1);
-        if (target <= 0) continue;
-
-        void* rescomp = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidResidence);
-        const int have = rescomp ? getResCount(reinterpret_cast<int64_t>(rescomp)) : 0;
-        const int add  = target - have;
-        if (add > 0) {
-            addItem(reinterpret_cast<int64_t>(sc), foodTmpl, add);
-            ++refilled;
-            unitsAdded += add;
-        }
-
-        // ── FIREWOOD ───────────────────────────────────────────────────────────────
-        // Measured 2026-08-15, and it is what ended the first successful soak: food alone
-        // is NOT enough to keep a town alive. The residence heat tick burns one fuel unit
-        // per burn interval out of this same StorageComponent, `BANISHED_SEED_FUEL` is a
-        // ONE-SHOT seed, and standalone has no woodcutter — so the reserve simply runs out.
-        // A town that had grown 22 -> 77 over 32000 frames froze SOLID between frames
-        // 32000 and 34000: the last census read warmth(+0x48) avg 13.2 / max 19.0 against
-        // a death threshold of 20.0, i.e. the whole population was one tick from the edge.
-        // Refilling food and not fuel just moves the wall.
-        //
-        // Sized off the container's own occupied volume (QueryCount, the value CanAdd
-        // tests) rather than a unit count, because food and fuel share ONE volume budget —
-        // topping fuel up blind is exactly how the original seed overfilled the house and
-        // made CanAdd refuse every later delivery.
-        if (fuelTmpl != 0 && (mask & fuelFlags) != 0 && queryCount) {
-            const int used = static_cast<int>(queryCount(sc));
-            const int freeVol = cap - carryLoad - used;
-            const int addFuel = (freeVol > 0 ? freeVol : 0) / (fuelVol > 0 ? fuelVol : 1);
-            if (addFuel > 0) {
-                addItem(reinterpret_cast<int64_t>(sc), fuelTmpl, addFuel);
-                ++fuelRefilled;
-                fuelAdded += addFuel;
-            }
-        }
-    }
-    fprintf(stderr, "[FoodTopUp] frame %d: refilled %d/%d house(s) +%d food unit(s); "
-            "fuel %d/%d house(s) +%d unit(s)\n",
-            frame, refilled, houses, unitsAdded, fuelRefilled, houses, fuelAdded);
     fflush(stderr);
 }
 
@@ -5878,13 +5026,9 @@ static void StartTown_WriteCellType(uint8_t* game, uint8_t* cells, int idx, uint
                              (void*)(uintptr_t)newType, nullptr);
 }
 
-// G3 — write the resource entity into its map cell (cell+0x08) so the ForesterWork
-// harvest scan can find it. Default ON; opt out with BANISHED_RES_OCCUPANCY=0. See
-// the long note at the cell+0x08 write below for the dee0/dc20 two-pass rationale.
-static bool g_resOccupancy = []() {
-    const char* e = std::getenv("BANISHED_RES_OCCUPANCY");
-    return !(e && e[0] == '0');   // default ON; only "0" disables
-}();
+// G3 — the resource entity is written into its map cell (cell+0x08) so the
+// ForesterWork harvest scan can find it. See the long note at the cell+0x08 write
+// below for the dee0/dc20 two-pass rationale.
 
 // CreateNaturalResource_impl_dee0 — mark the (w x h) footprint at (tileX,tileY) on
 // the Game cell grid for this natural resource. `ownerEntity` = the spawned
@@ -5956,7 +5100,7 @@ static void StartTown_MarkResourceCellGrid(void* gameVoid, void* ownerEntity, in
             // cannot call the ported sub_41b0/dc20 directly: their IsDerivedFrom(MapDesc)
             // returns FALSE in standalone's partial factory tree -> null-deref (the same
             // landmine documented for FUN_1401253d0); here we trust the linked entity.
-            if (occupied && g_resOccupancy && ownerEntity) {
+            if (occupied && ownerEntity) {
                 uintptr_t entIBP = 0;
                 if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entIBP, ownerEntity);
                 *(uintptr_t*)(cell + 0x08) = entIBP;   // dc20: *(cell+8) = owner entity
@@ -6028,7 +5172,6 @@ extern "C" void StartTown_UnmarkResourceCellGrid(void* gameVoid, void* ownerEnti
     }
 }
 
-static void StartTown_MatureResource(void* nrComp);   // defined below (BANISHED_MATURE_TREES)
 
 // Entity_impl_6540 — write the MapComponent grid cell (tileX/tileY, w=1,h=1) and
 // the jittered ModelComponent world transform. `cellIdx` = dim*y + x.
@@ -6070,8 +5213,7 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
             // comp+0x20 = "occupancy currently written on the grid". The removal path
             // (c2ea0 -> vtable+0x38 -> impl_4750) gates the grid UN-mark on this bit,
             // so it must be set exactly when the collapse above wrote cell+0x08.
-            if (g_resOccupancy)
-                *(uint32_t*)(mc + 0x20) |= 0x100000u;
+            *(uint32_t*)(mc + 0x20) |= 0x100000u;
         }
     }
 
@@ -6086,7 +5228,6 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     if (nrComp) {
         void* desc = *(void**)((uint8_t*)nrComp + 0x18);
         if (desc) jitter = *(float*)((uint8_t*)desc + 0x60);
-        StartTown_MatureResource(nrComp);   // BANISHED_MATURE_TREES: old-growth (harvestable) forest
     }
 
     // terrain position for the cell centre (matches StartTown_TileToWorld).
@@ -6133,25 +5274,13 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress);  // action_b
 
 static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void* rng) {
     if (!entity) return;
-    static const bool s_trace = std::getenv("BANISHED_GROWTH_TRACE") != nullptr;
-    static int s_traced = 0;
     void* gComp = FindComponentOnEntity(entity, tidGrowth);
-    if (s_trace && s_traced < 6) { ++s_traced;
-        fprintf(stderr, "[GrowthInit] ent=%p tid(Growth)=%u FindComponent=%p\n",
-                entity, tidGrowth, gComp);
-        fflush(stderr);
-    }
     if (!gComp || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return;
     uintptr_t gIBP = 0;
     fn_InternalBasePtr_Ctor(&gIBP, gComp);
     fn_InternalBasePtr_CheckPtr(&gIBP);
     uint8_t* s = (uint8_t*)gIBP;
     if (!s) return;
-    if (s_trace && s_traced <= 6) {
-        fprintf(stderr, "[GrowthInit]   siblings +0x28=%p +0x30=%p +0x38=%p\n",
-                *(void**)(s + 0x28), *(void**)(s + 0x30), *(void**)(s + 0x38));
-        fflush(stderr);
-    }
     // Sibling links populated only when GrowthComponent::Startup ran (LIVE build).
     if (!*(void**)(s + 0x28) || !*(void**)(s + 0x30) || !*(void**)(s + 0x38))
         return;   // inert → faithful no-op (matches the rest of the inert spawn path)
@@ -6205,38 +5334,9 @@ static void SeedInitialSpawn(void* ent, uint32_t tidSpawnComp,
                 "entries=%d array=%p\n", withSpawnComp, sc, sd,
                 sd ? *(int32_t*)((uint8_t*)sd + 0x28) : -1,
                 sd ? *(void**)((uint8_t*)sd + 0x20) : nullptr);
-    static const bool s_initialSeed =
-        ::ComponentFactory::LiveEnabled("BANISHED_SPAWN_INITIAL");
-    if (s_initialSeed)
-        SpawnComponent_InitialSpawn(reinterpret_cast<SpawnComponent*>(sc));
+    SpawnComponent_InitialSpawn(reinterpret_cast<SpawnComponent*>(sc));
 }
 
-// progress=1.0). Gated BANISHED_MATURE_TREES (default OFF). `nrComp` is the
-// NaturalResourceComponent already located by the caller (PlaceResourceCell, for jitter).
-static void StartTown_MatureResource(void* nrComp) {
-    static int s_mature = -1;
-    if (s_mature < 0) {
-        const char* e = std::getenv("BANISHED_MATURE_TREES");
-        s_mature = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    if (s_mature != 1 || !nrComp) return;
-    // Represent an OLD-GROWTH, HARVESTABLE tree — the faithful end-state a live GrowthComponent
-    // would reach (its Update->120db0 only writes +0x28 growth; the mature/harvestable state
-    // flags are set by the growth/harvest-marking layer, which is inert in standalone). Three
-    // fields, mirroring what the FORCE_HARVEST harness sets on the found tree:
-    //   +0x28 growth (float) = 1.0  — the forester's maturity threshold (g_fUVScale); the scan
-    //          gate is `growth < threshold -> skip`, so 1.0 passes.
-    //   +0x2c  mature (bool)     = 1 — RemoveNaturalResource::Main derives this from growth, and
-    //          FUN_1401260f0 uses it to pick the MATURE yield field (desc+0x44, not +0x40).
-    //   +0x2d  harvestable (bool)= 1 — FUN_1401260f0's produce gate (`+0x2d==0 -> return`); set
-    //          organically by the (standalone-inert) AnimateNaturalResource cut-sequence step.
-    // Together these let the ORGANIC forester cut sequence run the produce accounting end-to-end
-    // (RegisterRawMaterial -> town stock++). Neither flag affects the forester scan (it gates on
-    // +0x28 growth only), so an all-harvestable starting forest is behaviourally correct.
-    *(float*)((uint8_t*)nrComp + 0x28)   = 1.0f;
-    *(uint8_t*)((uint8_t*)nrComp + 0x2c) = 1;
-    *(uint8_t*)((uint8_t*)nrComp + 0x2d) = 1;
-}
 
 static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                                     int spawnX, int spawnY, int sizeSq) {
@@ -6274,11 +5374,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     const uint32_t tidSpawnComp = TypeId("SpawnComponent");
     int withSpawnComp = 0, withSpawnEntries = 0;
 
-    // DIAG harness: BANISHED_RES_ONLY=<poolIndex> spawns only that pool (isolate trees).
-    static const char* s_onlyEnv = std::getenv("BANISHED_RES_ONLY");
-    const int onlyPool = s_onlyEnv ? atoi(s_onlyEnv) : -1;
-    static const char* s_capEnv = std::getenv("BANISHED_RES_CAP");
-    const int poolCap = s_capEnv ? atoi(s_capEnv) : RES_POOL_CAP;
+    const int poolCap = RES_POOL_CAP;
 
     // FAITHFUL RNG ALIGNMENT (FUN_1400a12b0 prologue). Before the pool loop the
     // original constructs THREE PerlinNoise objects (freq = g_fUVScale on both axes)
@@ -6298,16 +5394,12 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
 
     int spawned = 0;
     for (int e = 0; e < count; ++e) {
-        if (onlyPool >= 0 && e != onlyPool) continue;
         uint8_t* entry = pool + (size_t)e * RES_STRIDE;
         const char* ename = *(char**)entry ? *(char**)entry : "(null)";
         fprintf(stderr, "[startTown::res] begin [%d] name=\"%.48s\"\n", e, ename);
         fflush(stderr);
         void* tmpl = StartTown_ResolveTemplate(entry);
         if (!tmpl) continue;
-        // Capture the first resource template as a produced-material description for the
-        // Phase B production harness (BANISHED_LIVE_PRODUCTION). Diagnostic-only.
-        if (!g_pSampleResourceTemplate) g_pSampleResourceTemplate = tmpl;
         uint8_t* desc = (uint8_t*)FindDescriptionOnTemplate(tmpl, tidNatRes);
         if (!desc) { fprintf(stderr, "[startTown::res] [%d] no NaturalResourceDescription\n", e); fflush(stderr); continue; }
 
@@ -6333,8 +5425,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         // RNG, so the build order decides which seeds each field receives — it must run
         // variant-then-scatter or trees end up with a different distribution than vanilla
         // for a given map seed (and every later pool inherits the RNG offset).
-        static const bool s_noVariant = std::getenv("BANISHED_NO_RES_VARIANT") != nullptr;
-        const bool hasVariants = !s_noVariant && desc[0x48] != 0;
+        const bool hasVariants = desc[0x48] != 0;
         void* modelDesc = hasVariants ? FindDescriptionOnTemplate(tmpl, TypeId("ModelDescription")) : nullptr;
         int   variantCount = modelDesc ? *(int32_t*)((uint8_t*)modelDesc + 0x28) : 0;
         const float vFreqX = *(float*)(desc + 0x4c);
@@ -6405,12 +5496,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 // 0 -> pile -> 0 normally.
                 if (*(void**)(cells + (size_t)idx * CELL_STRIDE)) { ++zoneSkips; continue; }
                 const int dy = y - spawnY, dx = x - spawnX;
-                // Verification harness (env BANISHED_RES_IN_TOWN): allow resources to
-                // scatter into the town site so trees land in front of the start camera
-                // (normally they're excluded from the town disk → only visible at the
-                // map periphery, out of the initial view). Default off = vanilla.
-                static const bool s_noExclude = std::getenv("BANISHED_RES_IN_TOWN") != nullptr;
-                if (!s_noExclude && dy * dy + dx * dx < sizeSq) continue;                      // town exclusion
+                if (dy * dy + dx * dx < sizeSq) continue;   // town exclusion
 
                 // Terrain height + slope from the heightmap sampler.
                 const float center = (float)(dim >> 1) - kCenterBias;
@@ -6460,15 +5546,6 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 // BANISHED_LIVE_GROWTH is on it stages the tree at a random growth value.
                 StartTown_GrowthInitResource(ent, tidGrowth, rng);
 
-                // [A/B HARNESS] BANISHED_SPAWN_INITIAL_PREREG=1 restores the OLD,
-                // WRONG order (seed before register) purely so the crash mechanism
-                // can be re-measured on demand. Never set this outside an A/B run —
-                // it reproduces the Scene::Clean ACCESS_VIOLATION by design.
-                static const bool s_preRegSeed =
-                    std::getenv("BANISHED_SPAWN_INITIAL_PREREG") != nullptr;
-                if (s_preRegSeed) SeedInitialSpawn(ent, tidSpawnComp,
-                                                   withSpawnComp, withSpawnEntries);
-
                 fn_EntityList_RegisterEntity(entityList, &entIBP, category);
 
                 // Wild-food chain diag (see tidSpawnComp above) + the initial
@@ -6489,8 +5566,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 // OnAdded) over the entity's component array — the pass that puts
                 // the parent's ModelComponent into Graphics::Scene. Seeding children
                 // first spawned them into a scene the parent had not yet joined.
-                if (!s_preRegSeed)
-                    SeedInitialSpawn(ent, tidSpawnComp, withSpawnComp, withSpawnEntries);
+                SeedInitialSpawn(ent, tidSpawnComp, withSpawnComp, withSpawnEntries);
 
                 if (ent) { ++spawned; ++poolSpawned; }
                 if (poolSpawned >= poolCap) { capped = true; break; }
@@ -6608,18 +5684,14 @@ static int StartTown_SpawnEnvironment(uint8_t* startConfig, void* world) {
     // Pass 2 — ambient environment volumes on a chunk grid. When ambient audio is
     // live, stamp each volume's biome-sample region + emitter position from its
     // tile (gridX=x, gridY=y, rw=rh=chunk) so biome sampling varies by location and
-    // the emitters aren't all stuck at the world origin. Default (env off) keeps the
-    // original plain spawn+register so the run stays byte-for-byte unchanged.
+    // the emitters aren't all stuck at the world origin.
     void* ambTmpl = StartTown_ResolveTemplate(startConfig + 0x138);
     const int chunk = *(int32_t*)(startConfig + 0x150);
     const int dim   = game ? *(int32_t*)game : 0;
-    const bool ambientLive = ::ComponentFactory::LiveEnabled("BANISHED_AMBIENT_AUDIO");
     if (ambTmpl && chunk > 0 && dim > 0) {
         for (int y = 0; y < dim && n2 < ENV_PASS_CAP; y += chunk)
             for (int x = 0; x < dim && n2 < ENV_PASS_CAP; x += chunk) {
-                bool ok = ambientLive
-                    ? SpawnEnvVolumeAndRegister(ambTmpl, entityList, x, y, chunk)
-                    : SpawnAndRegister(ambTmpl, entityList);
+                bool ok = SpawnEnvVolumeAndRegister(ambTmpl, entityList, x, y, chunk);
                 if (ok) ++n2;
             }
     }
@@ -6663,8 +5735,6 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     // explicit reset game two either dereferences game one's freed object or
     // silently skips the pass entirely.
     g_pForceWorkBuilding      = nullptr;   // a building ENTITY (citizenaicomponent stores an IBP to it)
-    g_pSampleResourceTemplate = nullptr;   // a resource template External*
-    g_foresterProfKey         = 0;         // profession key from the previous town
     g_townCitizensRegistered  = false;     // else game two's citizens are never rostered
     g_demoHouseAssigned       = false;
     g_deferredLodge.wanted    = false;     // .done stays a one-shot WITHIN a town
@@ -6740,11 +5810,6 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
             ns, before, afterStruct);
     fflush(stderr);
 
-    // PHASE A — real production workplace (ForesterLodge), env BANISHED_LIVE_WORKPLACE.
-    // Spawn it before citizens so g_pForceWorkBuilding points at a real producer (not
-    // the StorageBarn) when the BANISHED_FORCE_WORK harness assigns a citizen.
-    StartTown_SpawnWorkplace(sc, entityList, game, spawnX, spawnY);
-
     // CITIZENS (impl_0dd0) — the founding families.
     int nc = StartTown_SpawnCitizens(sc, entityList, game, spawnX, spawnY);
     int afterCitizens = *(int32_t*)((uint8_t*)entityList + 0x10);
@@ -6762,10 +5827,6 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     // townMgr+0x20 via the ResidenceComponent state-2 Enter on the first SM tick
     // (retail flow) — no manual append here anymore.
     StartTown_RegisterTownCitizens();
-
-    // PHASE 4 ASSIGN half — seat laborers at the lodge (env BANISHED_LIVE_WORKPLACE) now
-    // that citizens + founding housing exist. Sets citizen+0x238 -> Gather/Work candidates.
-    StartTown_EmployForesters();
 
     // RESOURCES (impl_a12b0) — perlin scatter of trees/stone/iron across the map,
     // excluding the town site (radius = townSize, sizeSq = size*size).
@@ -6817,7 +5878,7 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     //      resources (wood/stone/iron/fuel/FOOD/herb/tool) into the registered
     //      storage locations (barn/yard, wired in StartTown_WireStorage above).
     // ========================================================================
-    if (LiveStorageEnabled()) {
+    {
         void* townMgr = nullptr;
         if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
             townMgr = *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
@@ -6843,14 +5904,6 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
                 ++registered;
             }
         }
-        if (StorageTraceOn()) {
-            fprintf(stderr, "[StorageSeed] rawmat templates: pool=%d registered=%d "
-                    "townMgr=%p (+0x118 count=%d) storageLocs(+0x08)=%d\n",
-                    rmCount, registered, townMgr,
-                    townMgr ? *(int32_t*)((uint8_t*)townMgr + 0x118) : -1,
-                    townMgr ? *(int32_t*)((uint8_t*)townMgr + 0x08) : -1);
-            fflush(stderr);
-        }
 
         // Game_impl_1f00 — the seven-mask seeding driver (counts at
         // startConfig+0xfc..+0x114).
@@ -6859,36 +5912,15 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
         // then put the resource back the way it was loaded.
         const int foodMult = StressHarness_FoodMult();
         int savedStock[7];
-        // BANISHED_STRESS_STOCK=<a,b,c,d,e,f,g> — set the seven start-stock counts to
-        // ABSOLUTE values instead of scaling them.
-        //
-        // The Ready for Anything achievement wants seven simultaneous stock levels
-        // (2000 fuel, 2000 wood, 500 stone, 500 iron, 200 tools, 200 coats, 30000 food)
-        // and the multiplier cannot produce them: several of the seven start counts are
-        // ZERO in the start condition, and any multiple of zero is zero. That is why
-        // four of its seven goals sat at have=0 in a town holding 4,646 of one resource
-        // and 1,263 of another. A blank entry keeps the loaded value (still x foodMult).
-        const char* stockEnv = std::getenv("BANISHED_STRESS_STOCK");
-        int stockOverride[7];
-        for (int k = 0; k < 7; ++k) stockOverride[k] = -1;
-        if (stockEnv && stockEnv[0]) {
-            const char* c = stockEnv;
-            for (int k = 0; k < 7 && c && *c; ++k) {
-                if (*c != ',') stockOverride[k] = std::atoi(c);
-                const char* e = std::strchr(c, ',');
-                c = e ? e + 1 : nullptr;
-            }
-        }
-        if (foodMult > 1 || stockEnv) {
+        if (foodMult > 1) {
             for (int k = 0; k < 7; ++k) {
                 int* slot = reinterpret_cast<int*>(sc + 0xfc + 4 * k);
                 savedStock[k] = *slot;
-                *slot = (stockOverride[k] >= 0) ? stockOverride[k]
-                                                : savedStock[k] * (foodMult > 1 ? foodMult : 1);
+                *slot = savedStock[k] * foodMult;
             }
-            fprintf(stderr, "[Stress::food] start stock x%d%s: [0]%d->%d [1]%d->%d [2]%d->%d "
+            fprintf(stderr, "[Stress::food] start stock x%d: [0]%d->%d [1]%d->%d [2]%d->%d "
                             "[3]%d->%d [4]%d->%d [5]%d->%d [6]%d->%d\n",
-                    foodMult, stockEnv ? " (+STOCK override)" : "",
+                    foodMult,
                     savedStock[0], *reinterpret_cast<int*>(sc + 0xfc + 0),
                     savedStock[1], *reinterpret_cast<int*>(sc + 0xfc + 4),
                     savedStock[2], *reinterpret_cast<int*>(sc + 0xfc + 8),
@@ -6899,42 +5931,9 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
             fflush(stderr);
         }
         StartTown_SeedStartingResources(sc);
-        if (foodMult > 1 || stockEnv)
+        if (foodMult > 1)
             for (int k = 0; k < 7; ++k) *reinterpret_cast<int*>(sc + 0xfc + 4 * k) = savedStock[k];
 
-        // BANISHED_STRESS_LIMITS=<cat>:<n>,... — set town-hall resource LIMITS
-        // (townMgr+0x170 record <cat>, field +0x08; the number the Town Hall "limit"
-        // spinner edits, defaults 200/200/200/200/50/5000/...). Producers gate on
-        // stock < limit: ForesterWork's cut branch (the town-record capacity test) and
-        // ConsumeProduce's produce threshold (0x1401193a0) both stand down once the
-        // town holds the limit, so a stress town seeded with thousands of logs never
-        // cuts a tree and a quarry stops at 200 stone. A player raises the same number
-        // in the Town Hall; this sets it at founding so a production run measures
-        // production instead of the cap. Category order is the town-hall list:
-        // 0 logs, 1 stone, 2 iron, 3 firewood, 4 coal, 5 food, 6 tools, 7 clothing...
-        if (const char* limEnv = std::getenv("BANISHED_STRESS_LIMITS")) {
-            uintptr_t gw = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
-            uintptr_t townMgr = gw ? *reinterpret_cast<uintptr_t*>(gw + 0xf0) : 0;
-            uintptr_t recs = townMgr ? *reinterpret_cast<uintptr_t*>(townMgr + 0x170) : 0;
-            const int nRecs = townMgr ? *reinterpret_cast<int32_t*>(townMgr + 0x178) : 0;
-            for (const char* c = limEnv; c && *c; ) {
-                const char* e = std::strchr(c, ',');
-                const char* colon = std::strchr(c, ':');
-                if (colon && (!e || colon < e) && recs) {
-                    const int cat = std::atoi(c);
-                    const int val = std::atoi(colon + 1);
-                    if (cat >= 0 && cat < nRecs) {
-                        int32_t* lim = reinterpret_cast<int32_t*>(recs + cat * 0x20 + 0x08);
-                        fprintf(stderr, "[Stress::limits] cat %d limit %d -> %d (stock %d)\n",
-                                cat, *lim, val, *reinterpret_cast<int32_t*>(recs + cat * 0x20));
-                        *lim = val;
-                    }
-                }
-                c = e ? e + 1 : nullptr;
-            }
-            if (!recs) fprintf(stderr, "[Stress::limits] town record table not built yet; ignored\n");
-            fflush(stderr);
-        }
 
         // Founding-house household inventory (BANISHED_LIVE_HOUSING): now that the town
         // raw-material TEMPLATE pool (townMgr+0x110) is populated, seed a small edible-food
@@ -6943,7 +5942,5 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
         // before the template pool exists).
         StartTown_SeedHouseInventory(8);
 
-        // Final state dump (townMgr+0x00 count, per-location capacity/slots).
-        TownStorage_TraceDump();
     }
 }

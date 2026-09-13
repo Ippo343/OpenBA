@@ -33,6 +33,7 @@
 // reads go through ForceWork's VirtualQuery-backed probes.
 
 
+#include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "force_work.h"
@@ -60,20 +61,16 @@ extern "C" bool  BuildStructure_DepsReady();
 // machine uses to transition 1 -> 8.
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);
 
+// The DropOff→CompleteTask executor gap is bridged by Options::buildSyncDelivered,
+// which OptionsInit derives from this same flag (standalone/options.cpp): with
+// BANISHED_FORCE_CONSTRUCT on, GatherRawMaterials::Execute re-syncs delivered from
+// the live site storage. That used to be a mid-run `_putenv_s` here, racing the
+// cached read on the other side; it is decided once, at boot, now.
 static bool ForceConstructEnvOn() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_FORCE_CONSTRUCT");
-        s = (e && e[0] && e[0] != '0') ? 1 : 0;
-        // Bridge the DropOff→CompleteTask executor gap so delivered credits from the live
-        // site storage each Execute (see file header). Set before GatherRawMaterials::Execute
-        // caches its own getenv, so the harness is self-contained.
-        if (s == 1) _putenv_s("BANISHED_BUILD_SYNC_DELIVERED", "1");
-    }
-    return s == 1;
+    return Opt().forceConstruct;
 }
 
-// Build-labor progress bridge (BANISHED_BUILD_SYNC_LABOR, default ON when FORCE_CONSTRUCT).
+// Build-labor progress bridge (runs whenever FORCE_CONSTRUCT drives the site).
 // In retail, BuildComp+0x48 (labor accumulator) is raised by a component message posted when
 // a citizen's timed PerformWork action fires — the same executor node the standalone CitizenAI
 // executor never reaches (the gather half hit the identical gap at DropOff→CompleteTask). So
@@ -83,15 +80,7 @@ static bool ForceConstructEnvOn() {
 // (buildcomponent_state8.cpp) reads +0x48 vs target = matComp[0x30]·bc[0x4c], advances the mesh
 // frames, and requests 8 -> 2 once progress >= target. Ramp paced over BANISHED_BUILD_DEMO_FRAMES
 // (default 600 ≈ 10s) so the rise is watchable.
-static bool BuildSyncLaborOn() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_SYNC_LABOR");
-        s = (e && e[0] == '0') ? 0 : 1;   // default ON; only "=0" disables
-    }
-    return s == 1;
-}
-static void CreditBuildProgress(void* bc, bool trace) {
+static void CreditBuildProgress(void* bc) {
     if (!bc || !ForceWork::Readable(bc, 0x50)) return;
     // target = base build effort (matComp = bc+0x18, +0x30) * build multiplier (bc+0x4c,
     // clamp to retail default 1). Same formula BC8_Target uses. Probe-guarded; fall back to a
@@ -117,15 +106,6 @@ static void CreditBuildProgress(void* bc, bool trace) {
     int p = before + inc;
     if (p > target) p = target;
     *prog = p;
-    if (trace) {
-        static int s_last = -999999;
-        if (p != s_last) {
-            s_last = p;
-            std::fprintf(stderr, "[ForceBuild] progress bridge bc+0x48 %d -> %d / target %d (inc %d)\n",
-                         before, p, target, inc);
-            std::fflush(stderr);
-        }
-    }
 }
 
 // Driver. Called from the CitizenAI UpdateAdapter for ONE force-worked citizen (same hook as
@@ -143,7 +123,6 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
     if (!s_owner) s_owner = citizen;
     if (citizen != s_owner) return false;
 
-    const bool trace = ForceWork::EnvOn("BANISHED_BUILD_TRACE");
 
     // ============================================================================
     // PHASE SWITCH — gather (state 1) until all raw materials are in the site storage,
@@ -170,11 +149,6 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
                        ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(s_buildComp) + 0x4c) : 0;
         if (mult > 0 && BuildComponent_HaveAllMaterials(s_buildComp)) {
             s_buildPhase = 1;
-            if (trace) {
-                fprintf(stderr, "[ForceConstruct] all materials delivered (mult=%d) -> switch to BUILD phase (bc=%p)\n",
-                        mult, s_buildComp);
-                fflush(stderr);
-            }
         }
     }
 
@@ -247,8 +221,7 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
     // Labor-progress bridge: credit BuildComp+0x48 toward target each tick (executor gap —
     // the PerformWork->message that raises +0x48 organically never fires in SA). Run every
     // tick (not only when idle) so completion proceeds even while the citizen is mid-chain.
-    if (BuildSyncLaborOn())
-        CreditBuildProgress(s_buildComp, trace);
+    CreditBuildProgress(s_buildComp);
     return true;
 }
 

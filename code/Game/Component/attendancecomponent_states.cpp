@@ -91,18 +91,6 @@ static void AC_Resolve() {
     s_resolved = true;
 }
 
-// One-shot bring-up trace. Default off; BANISHED_ATTENDANCE_TRACE=1 enables. Reports
-// OUTCOMES (which state ran, whether the post/accept actually happened) — a silent
-// handler and an absent handler must never look the same.
-static bool AC_Trace() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = std::getenv("BANISHED_ATTENDANCE_TRACE");
-        s = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s == 1;
-}
-
 // The town attendance registry: gameWorld+0xf0 is the town object, +0x60 its array
 // base and +0x68 the element count. Both state 2's enter (append) and the component's
 // vtable slot 7 (erase) operate on it, and helper_3db0 below walks it.
@@ -224,7 +212,6 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workIbp, work);
 
     // 3. post it to the citizen work ledger
-    bool posted = false;
     if (s_findWork && s_postWork) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
             reinterpret_cast<void*>(self + 0x10));
@@ -232,11 +219,9 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
         s_findWork(*reinterpret_cast<uintptr_t*>(self + 0x10), &workCompIbp);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
         s_postWork(workCompIbp, 1, '\0', &workIbp);
-        posted = true;
     }
 
     // 4. open the workplace
-    bool accepted = false;
     if (s_findWpc && s_setAccepting) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
             reinterpret_cast<void*>(self + 0x10));
@@ -244,14 +229,8 @@ static char Attendance_State2Enter(void* selfP, void* /*sm*/) {
         s_findWpc(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpcIbp);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
         s_setAccepting(wpcIbp, '\x01');
-        accepted = true;
     }
 
-    if (AC_Trace())
-        std::fprintf(stderr, "[Attendance] State2Enter(OPEN) self=%p work=%p "
-                     "registered=%d posted=%d accepting=%d\n",
-                     selfP, work, town && s_resizeFill ? 1 : 0,
-                     posted ? 1 : 0, accepted ? 1 : 0);
     return 0;
 }
 
@@ -272,7 +251,6 @@ static char Attendance_State3Enter(void* selfP, void* /*sm*/) {
 
     AttendanceComponent_ProcessQueue(selfP);
 
-    bool closed = false;
     if (s_findWpc && s_setAccepting) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
             reinterpret_cast<void*>(self + 0x10));
@@ -280,12 +258,7 @@ static char Attendance_State3Enter(void* selfP, void* /*sm*/) {
         s_findWpc(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpcIbp);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
         s_setAccepting(wpcIbp, '\0');
-        closed = true;
     }
-
-    if (AC_Trace())
-        std::fprintf(stderr, "[Attendance] State3Enter(CLOSED) self=%p drained accepting=0:%d\n",
-                     selfP, closed ? 1 : 0);
     return 0;
 }
 

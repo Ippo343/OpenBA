@@ -98,12 +98,6 @@ static void** s_vtable_Pickup = nullptr;
 typedef void (*fn_PostWork_t)(uintptr_t workComp, uint32_t code, char param3, void* workRef);
 static fn_PostWork_t s_fn_PostWork = nullptr;
 
-// BANISHED_RAWMAT_PICKUP_TRACE — log each posted Pickup work.
-static bool PickupTrace() {
-    static const bool on = [] { const char* e = std::getenv("BANISHED_RAWMAT_PICKUP_TRACE");
-                                return e && e[0] && e[0] != '0'; }();
-    return on;
-}
 
 static bool s_initialized = false;
 
@@ -259,22 +253,6 @@ void RawMaterialComponent_Serialize(RawMaterialComponent* self) {
         uintptr_t gameState = (uintptr_t)*s_pGameState;
         uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
         void* entityChain = *(void**)(*(uintptr_t*)((uintptr_t)self + 0x10) + 0x28);
-        // SECOND attributed deposit channel. The crop/orchard/gatherer harvest path
-        // deposits through 0x140088ef0 with an explicit amount; a raw-material ENTITY
-        // (a fish, a carcass, a cull) instead registers itself here when it joins the
-        // world. Metering both means a zero on one channel cannot be read as "this class
-        // produces nothing" — the mistake that has already cost this wave twice.
-        {
-            static int s_t = -1;
-            if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
-                           s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
-            static long long s_n = 0;
-            ++s_n;
-            if (s_t && (s_n % 10) == 0) {
-                std::fprintf(stderr, "[DepositMeter2] raw-material entities registered: %lld\n", s_n);
-                std::fflush(stderr);
-            }
-        }
         s_fn_RegisterRawMaterial((void*)worldMgr, entityChain);
     }
 }
@@ -377,11 +355,6 @@ void RawMaterialComponent_Draw(RawMaterialComponent* self) {
     // hauls this pile away. This is the pile-pickup trigger.
     if (s_fn_PostWork) {
         s_fn_PostWork(matDescBuf[0], (uint32_t)category, '\x01', (void*)itemRef);
-        if (PickupTrace()) {
-            fprintf(stderr, "[RawMatPickup] posted Pickup work: comp=%p work=%p workComp=%p kind=%u\n",
-                    (void*)self, pickupItemResult, (void*)matDescBuf[0], (uint32_t)category);
-            fflush(stderr);
-        }
     }
 }
 
@@ -553,19 +526,8 @@ static uint32_t RawMaterialComponent_InertGetTypeId(void*) {
 }
 static void* RawMaterialComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
 
-// GRADUATED 2026-07-24 (default-on via kDefaultOnFlags; BANISHED_LIVE_RAWMAT_PICKUP=0
-// is now the kill-switch). Was held opt-in because the haul crashed on execution — that
-// was the InternalFactory removal-lifecycle corruption (freed objects left in the handle
-// table), root-caused and fixed in component_factory_base.cpp + modelcomponent.cpp.
-// Verified live: 4/4 posted Pickup works claimed and dispatched across 5 player demolishes
-// over two sessions, ObjAudit bad=0 / leaks=0 throughout, no crash, no PlayAnimGuard aborts.
-// Routed through LiveEnabled (not a raw getenv) so the kDefaultOnFlags policy applies.
-static bool RawMatPickupLive() {
-    static const bool on = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_RAWMAT_PICKUP");
-    return on;
-}
 static void RawMaterialComponent_OnAddedVSlot(void* s) {
-    if (!s || !RawMatPickupLive()) return;
+    if (!s) return;
     RawMaterialComponent_Draw(reinterpret_cast<RawMaterialComponent*>(s));
 }
 static void RawMaterialComponent_SerVSlot(void* s, void* stream) {

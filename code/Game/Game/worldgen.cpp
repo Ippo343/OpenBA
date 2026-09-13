@@ -591,73 +591,6 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
     // 2. Generate the float heightmap.
     wg_HeightmapPipeline_f390(hf);
 
-    // [WATER-DIAG] one-shot dump of the f390 list counts that feed the water
-    // mesh (BANISHED_WATER_DIAG=1). patches(+0x20) -> b260 phase1 fb00 strips;
-    // features(+0x50) -> b260 phase2 disk-fill; rivers(+0x30) + satellites(+0x40)
-    // are not band-meshed. numSecondary = sizeRow[8] (drives ccf60 path count).
-    if (getenv("BANISHED_WATER_DIAG")) {
-        uint8_t* h = (uint8_t*)hf;
-        int32_t* sr = *(int32_t**)(h + HF_SIZEROW);
-        fprintf(stderr,
-            "[WATER-DIAG] patches(+0x20)=%d rivers(+0x30)=%d satellites(+0x40)=%d "
-            "features(+0x50)=%d numSecondary(sizeRow[8])=%d\n",
-            *(int*)(h + 0x20), *(int*)(h + 0x30), *(int*)(h + 0x40),
-            *(int*)(h + 0x50), sr ? sr[8] : -1);
-        // Always-runs underwater check (post-carve float heightmap). If hmin > -0.75
-        // then NO Phase-2 tarn disk can ever emit, regardless of feature count —
-        // i.e. there is no deep open water to fill, confirming linear-water model.
-        float* fmap = *(float**)(h + HF_HEIGHTMAP);
-        if (fmap) {
-            long under = 0; float hmin = 1e9f, hmax = -1e9f;
-            for (int i = 0; i < N * N; ++i) {
-                float z = fmap[i];
-                if (z < hmin) hmin = z;
-                if (z > hmax) hmax = z;
-                if (z <= -0.75f) ++under;
-            }
-            fprintf(stderr, "[WATER-DIAG] heightmap %dx%d: hmin=%.3f hmax=%.3f "
-                    "underCells(<=-0.75)=%ld/%d\n", N, N, hmin, hmax, under, N * N);
-        }
-        // Satellite-sign check: cd150's listC (+0x38, stride 0xC {x,y,radius})
-        // entries are meant to become POSITIVE radial bumps (mountain peaks) via
-        // the e910/ec50 stamp. If the map instead shows a round PIT at each
-        // satellite, the stamp sign/mask is inverted and those pits are what is
-        // flooding + reading as dark holes. Report the OUTCOME: sample the carved
-        // heightmap at each satellite centre and bucket it.
-        if (fmap) {
-            uint8_t* lc = (uint8_t*)(h + HF_BASINSTAMPS);
-            float* pts = *(float**)lc;
-            int  n = *(int*)(h + 0x40);
-            int peaks = 0, pits = 0, flat = 0, underw = 0, oob = 0;
-            float lo = 1e9f, hi = -1e9f, rawLo = 1e9f, rawHi = -1e9f;
-            for (int i = 0; pts && i < n; ++i) {
-                float sx = pts[i * 3 + 0], sy = pts[i * 3 + 1];
-                if (sx < rawLo) rawLo = sx; if (sx > rawHi) rawHi = sx;
-                if (sy < rawLo) rawLo = sy; if (sy > rawHi) rawHi = sy;
-                int ci = (int)sx, ri = (int)sy;
-                if (ci < 0 || ci >= N || ri < 0 || ri >= N) { ++oob; continue; }
-                float z = fmap[(size_t)ri * N + ci];
-                if (z < lo) lo = z; if (z > hi) hi = z;
-                if (z <= -0.75f) ++underw;
-                if (z > 4.0f) ++peaks; else if (z < 0.0f) ++pits; else ++flat;
-            }
-            fprintf(stderr, "[WATER-DIAG] listC satellites n=%d at-centre height: "
-                    "peaks(>4)=%d pits(<0)=%d flat=%d underwater(<=-0.75)=%d "
-                    "range=[%.2f,%.2f] rawXY=[%.1f,%.1f] oob=%d N=%d\n",
-                    n, peaks, pits, flat, underw,
-                    (double)lo, (double)hi, (double)rawLo, (double)rawHi, oob, N);
-        }
-        // Assumption-free dump: write the carved float heightmap so the terrain can
-        // be inspected directly (round craters? where? how many?) without trusting
-        // any scratch-list layout. BANISHED_WATER_DIAG only.
-        if (fmap) {
-            FILE* fh = fopen("C:/GOG Games/Banished/heightmap_dump.raw", "wb");
-            if (fh) { fwrite(&N, 4, 1, fh); fwrite(fmap, 4, (size_t)N * N, fh); fclose(fh);
-                      fprintf(stderr, "[WATER-DIAG] heightmap dumped: %dx%d floats\n", N, N); }
-        }
-        fflush(stderr);
-    }
-
     // 3. Quantize float -> int16 (x256 fixed-point) into WorldGeom+0xd8.
     {
         float* fmap = *(float**)((uint8_t*)hf + HF_HEIGHTMAP);
@@ -673,37 +606,19 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
     }
 
     // 4. Blend/splat texture -> WorldGeom+0x140. Real cf440 produces the
-    //    rock/grass/AO splat (green grass, rock on slopes/peaks). Set
-    //    BANISHED_FLAT_SPLAT=1 to fall back to the old flat-grey stub for A/B.
-    const char* flat = getenv("BANISHED_FLAT_SPLAT");
-    bool useFlat = flat && flat[0] && flat[0] != '0';
-    *(void**)(w + WG_BLENDTEX) = useFlat ? wg_BlendTexture_cf440_stub(hf)
-                                         : wg_BlendTexture_cf440(hf);
+    //    rock/grass/AO splat (green grass, rock on slopes/peaks).
+    *(void**)(w + WG_BLENDTEX) = wg_BlendTexture_cf440(hf);
 
     // 5. Height-texture upload (+0x148) and 6. base grid mesh (VB+0x100/IB+0x120).
     Reimpl_TradeWork_sub_c780(wg);
     Reimpl_TradeWork_sub_c1e0(wg);
 
-    // 7. b260 water mesh. Two modes:
-    //    * default -> the faithful b260 CONTOUR mesh (rivers
+    // 7. b260 water mesh: the faithful b260 CONTOUR mesh (rivers
     //      flow / lake shore rings; UV follows each water body's centerline).
     //      Builds into VB+0x160/IB+0x180 with per-body ranges at +0x1c0/+0x1d0,
     //      drawn by geometry_draw.cpp modes 0x6000/0x8000. param_2 = hf
     //      (centerlines at hf+0x18, features at hf+0x48).
-    //    * BANISHED_WATER_CONTOUR=0 -> the minimal flat WATER overlay mesh at sea level into the
-    //      same VB+0x160/IB+0x180 (mode 0xA000). BANISHED_NO_WATER=1 disables.
-    {
-        const char* contour = getenv("BANISHED_WATER_CONTOUR");
-        const char* nw = getenv("BANISHED_NO_WATER");
-        bool noWater = (nw && nw[0] && nw[0] != '0');
-        // GRADUATED 2026-08-27: contour mesh default-on; =0 falls back to the
-        // flat stand-in sheet (which floods the quarry pit).
-        if (!(contour && contour[0] == '0')) {
-            WorldGen_BuildContourWaterMesh(wg, hf);
-        } else if (!noWater) {
-            WorldGen_BuildWaterMesh(wg);
-        }
-    }
+    WorldGen_BuildContourWaterMesh(wg, hf);
 
     // 8. Detail-group-C resize + the FEATURE-RECORD APPEND LOOP.
     //
@@ -757,8 +672,6 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
 
         uint8_t* srcBase  = *(uint8_t**)((uint8_t*)hf + HF_PATCHLIST);
         uint8_t* destBase = *(uint8_t**)(w + WG_DETAILGRPC);
-        const char* rt = getenv("BANISHED_RIVER_TRACE");
-        const bool trace = rt && rt[0] && rt[0] != '0';
         int pathsCopied = 0, pointsCopied = 0;
 
         s_pathHalfWidthCount = 0;
@@ -770,9 +683,6 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
             uint8_t* destRec = destBase + (size_t)i * 0x10;
             uint8_t* srcPts  = *(uint8_t**)(srcRec + 0x00);
             const int srcN   = *(int32_t*)(srcRec + 0x08);
-            if (trace)
-                fprintf(stderr, "[worldgen::river]   src[%d] pts=%p n=%d\n",
-                        i, (void*)srcPts, srcN);
             if (!srcPts || srcN <= 0) continue;
 
             // Capture halfWidth from the SOURCE before the narrowing copy drops it.
@@ -861,12 +771,6 @@ extern "C" void WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t
     int32_t* sizeTable = *(int32_t**)(g + GEN_SIZETABLE);
     int32_t* sizeRow   = sizeTable ? (int32_t*)((uint8_t*)sizeTable + (size_t)sizeIdx * 0x44) : nullptr;
     int dim = sizeRow ? sizeRow[0] : 0;
-
-    // Optional reproducible seed (BANISHED_WORLDGEN_SEED=N) — pins the worldgen RNG
-    // so water/feature diagnostics are repeatable across runs.
-    if (const char* se = getenv("BANISHED_WORLDGEN_SEED")) {
-        seed = (uint32_t)strtoul(se, nullptr, 10);
-    }
 
     fprintf(stderr, "[worldgen] BuildTerrain ENTER wg=%p gen=%p sizeIdx=%d seed=%u sizeTable=%p dim=%d\n",
             wg, gen, sizeIdx, seed, (void*)sizeTable, dim);

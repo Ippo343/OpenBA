@@ -61,22 +61,9 @@ static void EnsureHelpers() {
 //   ADD RSP,0x28
 //   RET
 
-static bool CharAnim_TraceOn();
-
 void CharacterComponent_Update(CharacterComponent* self, int64_t deltaTime) {
     EnsureHelpers();
 
-    if (CharAnim_TraceOn()) {
-        static long long calls = 0, idle = 0;
-        ++calls;
-        if (self->data60 < 0) ++idle;
-        if (calls <= 3 || (calls % 20000) == 0) {
-            std::fprintf(stderr, "[ActionTick] CharacterComponent::Update calls=%lld "
-                                 "idle(top<0)=%lld walker=%p\n",
-                         calls, idle, (void*)s_fn_Character_UpdateAnimation);
-            std::fflush(stderr);
-        }
-    }
     if (self->data60 >= 0) {
         if (!s_fn_Character_UpdateAnimation) return;
 
@@ -102,32 +89,10 @@ void CharacterComponent_Update(CharacterComponent* self, int64_t deltaTime) {
 // whose enabled-flag (+0x18) is set, invokes vtable slot +0x30 (Draw/UpdateAnimation)
 // with (node, arrayBase, deltaTime); advances via node+0x10. Non-static for registration.
 // ============================================================
-// ACTION-TICK CENSUS (BANISHED_TRACKER_TRACE=1). Slot +0x30 (an action's Enter) is
-// dispatched ONLY from here, so "Enter never ran" has exactly two shapes: this walk never
-// visits the node, or it visits it with the +0x18 entered-flag still clear. Count both —
-// a silent zero at the Enter site cannot tell them apart.
-static bool CharAnim_TraceOn() {
-    static int t = -1;
-    if (t < 0) { const char* e = std::getenv("BANISHED_TRACKER_TRACE");
-                 t = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return t == 1;
-}
-
 void Character_UpdateAnimation_Reimpl(void* arrayBase, void* ptrRef, int64_t deltaTime) {
     int64_t node = *reinterpret_cast<int64_t*>(ptrRef);
     while (node != 0) {
         fn_InternalBasePtr_CheckPtr(ptrRef);
-        if (CharAnim_TraceOn()) {
-            static long long seen = 0, gated = 0, fired = 0;
-            ++seen;
-            if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(ptrRef) + 0x18) == '\0') ++gated;
-            else ++fired;
-            if (seen <= 3 || (seen % 20000) == 0) {
-                std::fprintf(stderr, "[ActionTick] nodes seen=%lld fired(+0x18 set)=%lld "
-                                     "gated(+0x18 clear)=%lld\n", seen, fired, gated);
-                std::fflush(stderr);
-            }
-        }
         if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(ptrRef) + 0x18) != '\0') {
             fn_InternalBasePtr_CheckPtr(ptrRef);
             int64_t* obj = *reinterpret_cast<int64_t**>(ptrRef);
@@ -228,14 +193,9 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
     // body-init because it only depends on +0x68 (the ModelComponent, just resolved) and the
     // char spatial-hash manager (GameWorld+0x88, seeded earlier in Load), and the effect — a
     // one-time slot allocation returning the render-index — is order-identical. Gated on
-    // BANISHED_LIVE_CHARACTER_MOVETICK so default builds keep +0x40 = -1 and the transform
-    // tail stays dormant (byte-unchanged). Without this, +0x40 stays -1 and the move-tick
-    // early-returns before ever writing the ModelComponent transform.
-    static int mtEn = -1;
-    if (mtEn < 0) {
-        mtEn = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_MOVETICK") ? 1 : 0;
-    }
-    if (mtEn) {
+    // Without this, +0x40 stays -1 and the move-tick early-returns before ever writing
+    // the ModelComponent transform.
+    {
         // PickingComponent (+0x70) is COMPONENT_INERT_FACTORY in standalone: its memory is
         // zeroed, so its pick-id (+0x28) is 0, not the real ctor's -1 "unregistered" sentinel.
         // The citizen is NOT registered in the Picking::Scene here (that scene's object array
@@ -299,19 +259,11 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
 // is a per-frame no-op; it begins executing actions once the CitizenAI state
 // handlers push them.
 //
-// Gated on its OWN env var (separate from BANISHED_LIVE_CHARACTER) so the existing
-// Startup-only behaviour is byte-identical by default: the Update vslot is installed
-// whenever BANISHED_LIVE_CHARACTER is on, but the body no-ops unless
-// BANISHED_LIVE_CHARACTER_MOVETICK is also set.
 // ------------------------------------------------------------------
 extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time);
 
 static void CharacterComponent_UpdateAdapter(CharacterComponent* self, int64_t* time) {
-    static int en = -1;
-    if (en < 0) {
-        en = ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_MOVETICK") ? 1 : 0;
-    }
-    if (!en || !self) return;
+    if (!self) return;
     CharacterComponent_MoveTick_1094c0(reinterpret_cast<uint8_t*>(self), time);
 }
 
@@ -403,23 +355,17 @@ static void CharacterComponent_SerializeVSlot(void* s, void* stream) {
     CharacterComponent_Serialize(s, stream);
 }
 static void CharacterComponent_FinishLiveVtable() {
-    // Save/load wave (2026-08-27): slot 3 is the stream Serialize — wired
-    // unconditionally (not behind a feature env) so save/load round-trips this
-    // component's real state regardless of which other CHARACTER live flags are set.
+    // Save/load wave (2026-08-27): slot 3 is the stream Serialize.
     CharacterComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&CharacterComponent_SerializeVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER")) {
-        CharacterComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&CharacterComponent_StartupVSlot);
-        CharacterComponent_LiveVtable[8] =
-            reinterpret_cast<void*>(&CharacterComponent_MoveTickVSlot);
-    }
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_MOVETICK"))
-        CharacterComponent_LiveVtable[7] =
-            reinterpret_cast<void*>(&CharacterComponent_OnRemoveVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_UPDATE9"))
-        CharacterComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&CharacterComponent_Update9VSlot);
+    CharacterComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&CharacterComponent_StartupVSlot);
+    CharacterComponent_LiveVtable[8] =
+        reinterpret_cast<void*>(&CharacterComponent_MoveTickVSlot);
+    CharacterComponent_LiveVtable[7] =
+        reinterpret_cast<void*>(&CharacterComponent_OnRemoveVSlot);
+    CharacterComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&CharacterComponent_Update9VSlot);
 }
 extern "C" void* CharacterComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x80, 0x8f,

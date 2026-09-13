@@ -76,27 +76,6 @@
 #include <cstdlib>
 
 // ============================================================
-// Env + trace helpers
-// ============================================================
-static bool StorageTraceEnabled() {
-    static int v = -1;
-    if (v < 0) {
-        const char* e = getenv("BANISHED_STORAGE_TRACE");
-        v = (e && *e && e[0] != '0') ? 1 : 0;
-    }
-    return v == 1;
-}
-
-#define STG_TRACE(...)                                              \
-    do {                                                            \
-        if (StorageTraceEnabled()) {                                \
-            fprintf(stderr, "[StorageSeed] " __VA_ARGS__);          \
-            fprintf(stderr, "\n");                                  \
-            fflush(stderr);                                         \
-        }                                                           \
-    } while (0)
-
-// ============================================================
 // Type-ids (raw .rdata preferred, GetTypeIdByName fallback)
 // ============================================================
 static uint32_t Tid(uintptr_t rdataAddr, const char* name) {
@@ -238,8 +217,6 @@ extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp) 
     EnsureFns();
     void* townMgr = TownMgr();
     if (!townMgr || !s_fnGrowAppend8 || !storageLocationComp) {
-        STG_TRACE("RegisterStorageLocation SKIP (townMgr=%p grow=%p comp=%p)",
-                  townMgr, reinterpret_cast<void*>(s_fnGrowAppend8), storageLocationComp);
         return;
     }
     uint64_t entityRef = *reinterpret_cast<uint64_t*>(
@@ -250,19 +227,6 @@ extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp) 
     // tutorial's single starting stockpile came back registered TWICE (count=2, same
     // entity at [0] and [1]), which put goalstoragebarnfinished permanently out of
     // reach — that goal has no `_greaterEqual`, so it needs EXACTLY 3 and saw 4.
-    // Print the RETURN ADDRESS so both appenders are named rather than guessed at.
-    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
-        if (e[0] && e[0] != '0') {
-            fprintf(stderr, "[StoreLoc] APPEND entity=%p count=%d  ret=%p\n",
-                    reinterpret_cast<void*>(entityRef),
-                    *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(townMgr) + 8),
-                    __builtin_return_address(0));
-            fflush(stderr);
-        }
-    }
-    STG_TRACE("RegisterStorageLocation entity=%p -> townMgr+0x00 count=%d",
-              reinterpret_cast<void*>(entityRef),
-              *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(townMgr) + 8));
 }
 
 // ============================================================
@@ -279,8 +243,6 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
     int64_t entity = *reinterpret_cast<int64_t*>(p + 0x10);
     void* storageComp = FindStorageOnEntity(entity);
     if (!storageComp) {
-        STG_TRACE("BuildCompleteInit: no StorageComponent on entity %p",
-                  reinterpret_cast<void*>(entity));
         return;
     }
     int64_t sc = reinterpret_cast<int64_t>(storageComp);
@@ -313,8 +275,6 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
         fn_IsDerivedFrom(descObj, TidStorageDescription()))
         desc = descObj;
     if (!desc) {
-        STG_TRACE("BuildCompleteInit: no StorageDescription on comp %p (desc=%p)",
-                  storageComp, descObj);
         return;  // standalone-inert guard (retail reads *(NULL+0x20))
     }
     uintptr_t d = reinterpret_cast<uintptr_t>(desc);
@@ -346,7 +306,6 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
             tileArea = static_cast<int>(*reinterpret_cast<int16_t*>(mapIBP + 0x2e)) *
                        static_cast<int>(*reinterpret_cast<int16_t*>(mapIBP + 0x2c));
         } else {
-            STG_TRACE("BuildCompleteInit: _areaBasedLimit set but no MapComponent (area=1)");
         }
     }
 
@@ -356,12 +315,6 @@ extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity) {
     *reinterpret_cast<uint32_t*>(sc + 0x3c) = storageFlags;
     *reinterpret_cast<int*>(sc + 0x38) = volumeLimit * tileArea;
 
-    STG_TRACE("BuildCompleteInit comp=%p desc(+0x20 area=%d, +0x21 avail=%d, "
-              "+0x24 vol=%d, +0x28 flags=0x%x) -> cap(+0x38)=%d mask(+0x3c)=0x%x",
-              storageComp,
-              *reinterpret_cast<uint8_t*>(d + 0x20), *reinterpret_cast<uint8_t*>(d + 0x21),
-              volumeLimit, storageFlags,
-              *reinterpret_cast<int*>(sc + 0x38), *reinterpret_cast<uint32_t*>(sc + 0x3c));
 }
 
 // ============================================================
@@ -436,8 +389,6 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
             if (!progress || placed >= count) break;
         }
     }
-    STG_TRACE("SpawnResources mask=0x%x want=%d matchedTemplates=%d placed=%d",
-              mask, count, matchedCount, placed);
     if (matched) fn_MemFreeStatic(matched);
 }
 
@@ -447,7 +398,6 @@ extern "C" void TownStorage_SpawnResources_91660(void* townMgrV, uint32_t mask, 
 extern "C" void StartTown_SeedStartingResources(void* startConfig) {
     void* townMgr = TownMgr();
     if (!startConfig || !townMgr) {
-        STG_TRACE("SeedStartingResources SKIP (config=%p townMgr=%p)", startConfig, townMgr);
         return;
     }
     uint8_t* sc = reinterpret_cast<uint8_t*>(startConfig);
@@ -457,12 +407,6 @@ extern "C" void StartTown_SeedStartingResources(void* startConfig) {
     // best current guesses for the remaining start-resource classes
     // (logs/stone/iron/tools/clothing) — amounts and masks are exe-faithful
     // regardless of naming.
-    STG_TRACE("SeedStartingResources counts: m400=%d m800=%d "
-              "m1000=%d m200=%d food(0x20)=%d firewood(0x40)=%d m4000=%d",
-              *reinterpret_cast<int*>(sc + 0xfc),  *reinterpret_cast<int*>(sc + 0x100),
-              *reinterpret_cast<int*>(sc + 0x104), *reinterpret_cast<int*>(sc + 0x108),
-              *reinterpret_cast<int*>(sc + 0x10c), *reinterpret_cast<int*>(sc + 0x110),
-              *reinterpret_cast<int*>(sc + 0x114));
     TownStorage_SpawnResources_91660(townMgr, 0x400,  *reinterpret_cast<int*>(sc + 0xfc));
     TownStorage_SpawnResources_91660(townMgr, 0x800,  *reinterpret_cast<int*>(sc + 0x100));
     TownStorage_SpawnResources_91660(townMgr, 0x1000, *reinterpret_cast<int*>(sc + 0x104));
@@ -470,48 +414,4 @@ extern "C" void StartTown_SeedStartingResources(void* startConfig) {
     TownStorage_SpawnResources_91660(townMgr, 0x20,   *reinterpret_cast<int*>(sc + 0x10c));
     TownStorage_SpawnResources_91660(townMgr, 0x40,   *reinterpret_cast<int*>(sc + 0x110));
     TownStorage_SpawnResources_91660(townMgr, 0x4000, *reinterpret_cast<int*>(sc + 0x114));
-}
-
-// ============================================================
-// Trace dump — town storage state (called from starttown wiring)
-// ============================================================
-extern "C" void TownStorage_TraceDump() {
-    if (!StorageTraceEnabled()) return;
-    int64_t* townMgr = reinterpret_cast<int64_t*>(TownMgr());
-    if (!townMgr) { STG_TRACE("dump: townMgr NULL"); return; }
-    int locCount = static_cast<int>(townMgr[1]);
-    int tmplCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(townMgr) + 0x118);
-    STG_TRACE("dump: storage-locations(+0x00)=%d rawmat-templates(+0x110)=%d",
-              locCount, tmplCount);
-    for (int i = 0; i < locCount; i++) {
-        int64_t entityRef = *reinterpret_cast<int64_t*>(
-            townMgr[0] + static_cast<int64_t>(i) * 8);
-        CheckPtr(&entityRef);
-        void* storage = FindStorageOnEntity(entityRef);
-        if (!storage) {
-            STG_TRACE("dump: loc[%d] entity=%p (no StorageComponent)", i,
-                      reinterpret_cast<void*>(entityRef));
-            continue;
-        }
-        int64_t sc = reinterpret_cast<int64_t>(storage);
-        int slots = *reinterpret_cast<int*>(sc + 0x30);
-        STG_TRACE("dump: loc[%d] entity=%p storage=%p slots=%d cap(+0x38)=%d "
-                  "mask(+0x3c)=0x%x volumeUsed=%d",
-                  i, reinterpret_cast<void*>(entityRef), storage, slots,
-                  *reinterpret_cast<int*>(sc + 0x38),
-                  *reinterpret_cast<uint32_t*>(sc + 0x3c),
-                  Seed_QueryCount(sc));
-        int64_t arr = *reinterpret_cast<int64_t*>(sc + 0x28);
-        for (int s = 0; s < slots; s++) {
-            int64_t slot = arr + static_cast<int64_t>(s) * 0x10;
-            int64_t mat = *reinterpret_cast<int64_t*>(slot);
-            void* desc = FindRawMatDescOnTemplate(mat);
-            STG_TRACE("dump:   slot[%d] material=%p flags=0x%x unitVol=%d count=%d reserved=%d",
-                      s, reinterpret_cast<void*>(mat),
-                      desc ? *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(desc) + 0x5c) : 0,
-                      desc ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x48) : 0,
-                      *reinterpret_cast<int*>(slot + 0x08),
-                      *reinterpret_cast<int*>(slot + 0x0c));
-        }
-    }
 }

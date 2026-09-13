@@ -148,12 +148,6 @@ long long g_idleBuilderBucketHit = 0;
 long long g_idleBuilderTookWork = 0;
 }
 
-static inline bool TraceOn() {
-    static int s_ts = -1;
-    if (s_ts < 0) { const char* e = getenv("BANISHED_CITIZENAI_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s_ts == 1;
-}
-
 // Forward decls for the helper subtree.
 void          Helper_e360(int64_t* unused, int64_t* rootSlot);                          // 0x14000e360
 void          Helper_sub_8000(void* p1, void* keyHolder, int64_t* srcRootSlot, int64_t* dstRootSlot);   // 0x1400f8000
@@ -535,20 +529,6 @@ uint8_t Helper_sub_7b60(int64_t param_1, void** param_2, int64_t* param_3) {
             vt = *reinterpret_cast<void***>(payload);
             typedef uint32_t (*fn20_t)(int64_t self, int64_t* citizenHolder, int64_t ctxArg);
             uint32_t r = reinterpret_cast<fn20_t>(vt[0x20 / 8])(payload, &citizen, param_1 + 0x130);
-            // 2c-B probe: did the idle claim walk reach the spawned BuildStructure work?
-            if (g_pCropPlantWork && reinterpret_cast<void*>(payload) == g_pCropPlantWork) {
-                const char* ce = getenv("BANISHED_CROPFIELD_TRACE");
-                if (ce && ce[0] && ce[0] != '0')
-                    fprintf(stderr, "[CropWork] CLAIM-WALK reached the PlantArea work=%p "
-                            "Execute ret=%d citizen=%p\n",
-                            g_pCropPlantWork, static_cast<int>(r), reinterpret_cast<void*>(citizen));
-            }
-            if (g_pBuildStructureWork && reinterpret_cast<void*>(payload) == g_pBuildStructureWork) {
-                const char* e = getenv("BANISHED_BUILD_TRACE");
-                if (e && e[0] && e[0] != '0')
-                    fprintf(stderr, "[BuildTrace] 7b60 CLAIM-WALK reached BUILD work=%p Execute ret=%d citizen=%p\n",
-                            g_pBuildStructureWork, static_cast<int>(r), reinterpret_cast<void*>(citizen));
-            }
             if (static_cast<int>(r) == 2) return 1;
             if (static_cast<int>(r) == 1) {
                 CheckPtr(reinterpret_cast<void*>(cur));
@@ -851,11 +831,6 @@ extern "C" uint64_t CitizenAI_State_FindHousing(int64_t param_1) {
     int64_t treeBase = *reinterpret_cast<int64_t*>(GW() + 0x118);
     void* holder = reinterpret_cast<void*>(citizenHolder);
     Helper_7550(treeBase, reinterpret_cast<void**>(&holder));
-    if (TraceOn()) {
-        static int nn = 0;
-        if (nn < 6) { fprintf(stderr, "[FindHousing] self=%p rolled candidate housing search\n",
-                              reinterpret_cast<void*>(param_1)); fflush(stderr); nn++; }
-    }
     return HandlerEpilogue(param_1);
 }
 
@@ -868,11 +843,6 @@ extern "C" uint64_t CitizenAI_State_Idle(int64_t param_1) {
     int64_t treeBase = *reinterpret_cast<int64_t*>(GW() + 0x118);
     void* holder = reinterpret_cast<void*>(citizenHolder);
     Helper_7830(treeBase, reinterpret_cast<void**>(&holder));
-    if (TraceOn()) {
-        static int nn = 0;
-        if (nn < 6) { fprintf(stderr, "[Idle] self=%p ran idle target search\n",
-                              reinterpret_cast<void*>(param_1)); fflush(stderr); nn++; }
-    }
     return HandlerEpilogue(param_1);
 }
 

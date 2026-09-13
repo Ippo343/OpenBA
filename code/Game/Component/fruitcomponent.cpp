@@ -232,32 +232,6 @@ void FruitComponent_Update(FruitComponent* self, int64_t* pDeltaTime) {
     float newRipeness = dtSeconds * effRate * ripeningSpeed * growthFactor + *pRipeness;
     *pRipeness = newRipeness;
 
-    // Phase-1 bring-up verification trace (env BANISHED_FRUIT_TRACE, default off
-    // -> byte-unchanged). Follows ONE FruitComponent across ticks, printing its
-    // accumulating ripeness (self->field30 / +0x30). Confirms the live recipe
-    // end-to-end: Update entered via vtable +0x48, Startup populated field28@+0x28,
-    // and the value advances per tick.
-    {
-        static int s_traceState = -1;   // -1=unchecked, 0=off, 1=on
-        static int s_traceCount = 0;
-        static void* s_lockComp = nullptr;  // follow ONE component across ticks
-        if (s_traceState < 0) {
-            const char* e = std::getenv("BANISHED_FRUIT_TRACE");
-            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_traceState == 1 && s_lockComp == nullptr) s_lockComp = comp;
-        if (s_traceState == 1 && comp == s_lockComp && s_traceCount < 40) {
-            fprintf(stderr,
-                "[FruitTrace] comp=%p resData=%p flag=%d dt=%.5f speed=%.6f "
-                "temp=%.3f delta=%.4f gf=%.4f eff=%.4f -> ripe=%.6f\n",
-                (void*)comp, (void*)resData, (int)self->fruitFlag, dtSeconds,
-                ripeningSpeed, currentTemp, tempDelta, growthFactor, effRate,
-                newRipeness);
-            fflush(stderr);
-            s_traceCount++;
-        }
-    }
-
     // Clamp to [0.0, 1.0]: < 0 -> 0; > g_fUVScale -> exactly 1.0.
     if (*pRipeness < 0.0f)
         *pRipeness = 0.0f;
@@ -317,12 +291,10 @@ static void FruitComponent_SerializeVSlot(void* self, void* stream) {
 static void FruitComponent_FinishLiveVtable() {
     FruitComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&FruitComponent_SerializeVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_FRUIT")) {
-        FruitComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&FruitComponent_StartupVSlot);
-        FruitComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&FruitComponent_UpdateVSlot);
-    }
+    FruitComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&FruitComponent_StartupVSlot);
+    FruitComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&FruitComponent_UpdateVSlot);
 }
 extern "C" void* FruitComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x88,

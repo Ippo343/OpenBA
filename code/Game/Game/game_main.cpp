@@ -50,8 +50,6 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded();
 // working dir (install dir) instead of long absolute "C:\GOG Games\..." strings.
 // Must run AFTER Engine::Startup (FileSystem allocated + SetupDirectories done)
 // and BEFORE the first resource load. See that file's header for rationale.
-namespace Game { extern "C" void FileSystem_MakePathsRelative(); }
-namespace Game { extern "C" void FileSystem_PinDataDir(); }
 
 // Defined in standalone/main.cpp. Walks _firstTypeInfo for each registered
 // type, invokes its factory, validates vtable + ctor-set field defaults.
@@ -445,24 +443,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     // the allocator's arena-GROWTH path (a second MemoryRange, the range-table
     // realloc-and-copy, every multi-range scan) never executes, and 12.75M
     // shadow-verified operations said nothing about it (WAVE9_LANE_E2.md 5.1).
-    //
-    // BANISHED_ARENA_MB shrinks it so ordinary play overflows the first range.
-    // It is a HARNESS KNOB for the allocator shadow oracle, not a tuning
-    // parameter: unset (the default, and every normal run) the call below is
-    // byte-identical to what it has always been. Clamped so a typo cannot make
-    // the engine unbootable.
-    unsigned arenaMB = 0x200;
-    if (const char* e = std::getenv("BANISHED_ARENA_MB")) {
-        unsigned long v = std::strtoul(e, nullptr, 0);
-        if (v >= 4 && v <= 4096) {
-            arenaMB = static_cast<unsigned>(v);
-            printf("[GameMain] BANISHED_ARENA_MB=%u — allocator minRangeSize overridden "
-                   "(retail is 512). Arena growth is EXPECTED in this run.\n", arenaMB);
-        } else {
-            printf("[GameMain] BANISHED_ARENA_MB=%s out of range [4,4096] — ignored, "
-                   "using 512\n", e);
-        }
-    }
+    const unsigned arenaMB = 0x200;
     printf("[GameMain] Engine::Startup(cmdLine=%p, %u, 0, false)...\n", (void*)cmdLine, arenaMB);
     unsigned ok = s_fn_Engine_Startup(&engine, cmdLine, arenaMB, 0, false);
     // Engine::Startup somehow disconnects stdout/stderr from the log files
@@ -564,25 +545,6 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_cleararea();         // ClearAreaComponent (c71c8) + ClearAreaDescription (c7200) — fn_FindComponent_SM was a null-typeid miss game-wide
 
     if (ok != 0) {
-        // Relativize the engine FileSystem resource directories. This was a
-        // CANDIDATE crash mitigation (session 2e) that has been RULED OUT and is
-        // ACTIVELY HARMFUL: with it on, the menu either crashes or stalls (never
-        // draws) — A/B (session 5): FS-rel ON => crash/stall in every run; FS-rel
-        // OFF => menu draws. The real menu-crash fix is the FindOrLoad serialize
-        // lock (InstallFindOrLoadWatch). So this is now DEFAULT OFF; opt IN with
-        // BANISHED_FS_RELATIVE=1 only for path-shortening experiments.
-        {
-            const char* e = getenv("BANISHED_FS_RELATIVE");
-            if (e && *e && e[0] != '0') {
-                printf("[GameMain] BANISHED_FS_RELATIVE set — relativizing FileSystem "
-                       "paths (experimental; known to break the menu)\n");
-                Game::FileSystem_MakePathsRelative();
-            }
-            // Session 4 menu-heap-crash fix-test (env BANISHED_PIN_DATADIR):
-            // pin the dir Strings' refcounts so the data-dir String can't erode
-            // to 0 and get freed-then-AddRef'd. No-op unless the env is set.
-            Game::FileSystem_PinDataDir();
-        }
 
         // Stage 3: allocate + construct + destroy a MainLoop. (No Run yet —
         // that needs an UpdateLoop chain.)

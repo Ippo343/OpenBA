@@ -171,12 +171,6 @@ void* Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
     int* game = GameObj();
     int64_t availAnchorArg = *availPtr;
     uint32_t availCell = s_anchor7fb0 ? (uint32_t)s_anchor7fb0(&availAnchorArg, nullptr) : 0xffffffff;
-    if (availCell == 0xffffffff && std::getenv("BANISHED_DESTROY_TRACE")) {
-        std::fprintf(stderr, "[EmployCrash] Strat_ca20 AVAIL anchor null: availPtr=%p "
-                     "*availPtr=0x%llx profKey=0x%llx\n", (void*)availPtr,
-                     (unsigned long long)availAnchorArg, (unsigned long long)profKey);
-        std::fflush(stderr);
-    }
     int bestDist = 0x7ffffff;
     int64_t best = 0;
     int cnt = *reinterpret_cast<int*>(townMgr + 0xa8);
@@ -191,12 +185,6 @@ void* Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
                 if (*reinterpret_cast<int64_t*>(cz + 0x238) != 0) {
                     int64_t resAnchor = *reinterpret_cast<int64_t*>(cz + 0x238);
                     uint32_t czCell = s_anchor7fb0 ? (uint32_t)s_anchor7fb0(&resAnchor, nullptr) : 0;
-                    if (czCell == 0xffffffff && std::getenv("BANISHED_DESTROY_TRACE")) {
-                        std::fprintf(stderr, "[EmployCrash] Strat_ca20 RESIDENCE anchor null: "
-                                     "cz=0x%llx res(+0x238)=0x%llx\n",
-                                     (unsigned long long)cz, (unsigned long long)resAnchor);
-                        std::fflush(stderr);
-                    }
                     int d = s_calcDist8830 ? s_calcDist8830(game, czCell, availCell) : 0x7ffffff;
                     if (d <= bestDist) { best = cz; bestDist = d; }
                 }
@@ -409,12 +397,6 @@ void* Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey)
     return out;
 }
 
-bool s_traceInit = false, s_trace = false;
-bool Trace() {
-    if (!s_traceInit) { const char* e = std::getenv("BANISHED_EMPLOY_TRACE"); s_trace = e && e[0] && e[0] != '0'; s_traceInit = true; }
-    return s_trace;
-}
-
 } // namespace
 
 // ============================================================================
@@ -531,19 +513,7 @@ extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey
 
         if (seatedCz != 0) {
             ++seated;
-            if (Trace()) {
-                fprintf(stderr, "[EmployCascade] seat #%d citizen=%p prof(+0x1f0)=0x%llx "
-                        "workplace(+0x248)=%p residence(+0x238)=%p avail=%p\n",
-                        seated, reinterpret_cast<void*>(seatedCz),
-                        (unsigned long long)*reinterpret_cast<int64_t*>(seatedCz + 0x1f0),
-                        reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(seatedCz + 0x248)),
-                        reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(seatedCz + 0x238)),
-                        reinterpret_cast<void*>(avail));
-                fflush(stderr);
-            }
         } else {
-            if (Trace()) { fprintf(stderr, "[EmployCascade] seat #%d FAILED (no candidate, avail=%p)\n",
-                                   i, reinterpret_cast<void*>(avail)); fflush(stderr); }
             break;   // no candidate this round -> stop
         }
     }
@@ -607,17 +577,7 @@ extern "C" int CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity,
                 int64_t nullIBP = 0;
                 s_assignWorkplace(reinterpret_cast<void*>(seatedCz), &nullIBP, -1);
             }
-            if (Trace())
-                fprintf(stderr, "[EmployCascade] seatAt #%d citizen=%p prof(+0x1f0)=0x%llx "
-                        "workplace(+0x248)=%p wpCleared(+0x238 %p->%p) avail=%p\n",
-                        seated, reinterpret_cast<void*>(seatedCz),
-                        (unsigned long long)*reinterpret_cast<int64_t*>(seatedCz + 0x1f0),
-                        reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(seatedCz + 0x248)),
-                        reinterpret_cast<void*>(prevWp),
-                        reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(seatedCz + 0x238)),
-                        reinterpret_cast<void*>(availEntity)), fflush(stderr);
         } else {
-            if (Trace()) { fprintf(stderr, "[EmployCascade] seatAt #%d FAILED (no idle laborer)\n", i); fflush(stderr); }
             break;
         }
     }

@@ -1,6 +1,7 @@
 // standalone/perf_terrain.cpp -- see perf_terrain.h.
 #include "perf_terrain.h"
 #include "perf_experimental.h"
+#include "options.h"
 #include <cstdio>
 #include <cstdlib>
 
@@ -38,8 +39,7 @@ uint8_t TerrainGetSlow(const uint8_t* cells, int count, int idx) {
     const uint8_t raw = cells[(size_t)idx * kStride + kTypeOff];
     if (!s_verifyInit) {
         s_verifyInit = 1;
-        const char* e = std::getenv("BANISHED_PERF_TERRAIN_VERIFY");
-        g_terrainVerify = (e && e[0] && e[0] != '0') ? 1 : 0;
+        g_terrainVerify = Opt().perfTerrainVerify ? 1 : 0;
     }
     if (!TerrainSidecar() || !cells || count <= 0 || (unsigned)idx >= (unsigned)count) return raw;
     if (cells != g_terrainSCBase || count != g_terrainSCCount) Rebuild(cells, count);

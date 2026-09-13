@@ -203,19 +203,6 @@ static char StorageLoc_State3Enter(void* data, void* /*sm*/) {
     uint64_t entityRef = *reinterpret_cast<uint64_t*>(
         reinterpret_cast<uintptr_t>(data) + 0x10);
     CemeteryListErase_Reimpl(townMgr, &entityRef);
-    // Counterpart to town_storage_seed.cpp's "[StoreLoc] APPEND". Without an ERASE
-    // line a de-registration that never fires is completely silent: the list just
-    // keeps its entry, and the failure surfaces much later and somewhere else --
-    // either as a tutorial StorageLocation goal that can never equal its target, or
-    // as a null-storage deref in CitizenBehavior_CountResources. Trace both ends.
-    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
-        if (e[0] && e[0] != '0') {
-            fprintf(stderr, "[StoreLoc] ERASE entity=%p count=%d  (StorageLoc_State3Enter)\n",
-                    reinterpret_cast<void*>(entityRef),
-                    *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(townMgr) + 0x08));
-            fflush(stderr);
-        }
-    }
     return 0;
 }
 

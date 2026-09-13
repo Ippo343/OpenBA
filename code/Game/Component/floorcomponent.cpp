@@ -592,12 +592,10 @@ static void FloorComponent_FinishVtable() {
     // Slot 3 is unconditional: serializer wiring is not a feature flag (a base-only
     // slot 3 silently resets floorFlag across a save/load).
     FloorComponent_LiveVtable[3] = reinterpret_cast<void*>(&FloorComponent_SerVSlot);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_FLOOR")) {
-        FloorComponent_LiveVtable[6]  = reinterpret_cast<void*>(&FloorComponent_OnAddedVSlot);
-        FloorComponent_LiveVtable[7]  = reinterpret_cast<void*>(&FloorComponent_OnRemoveVSlot);
-        FloorComponent_LiveVtable[11] = reinterpret_cast<void*>(&FloorComponent_Slot11VSlot);
-        FloorComponent_LiveVtable[12] = reinterpret_cast<void*>(&FloorComponent_Slot12VSlot);
-    }
+    FloorComponent_LiveVtable[6]  = reinterpret_cast<void*>(&FloorComponent_OnAddedVSlot);
+    FloorComponent_LiveVtable[7]  = reinterpret_cast<void*>(&FloorComponent_OnRemoveVSlot);
+    FloorComponent_LiveVtable[11] = reinterpret_cast<void*>(&FloorComponent_Slot11VSlot);
+    FloorComponent_LiveVtable[12] = reinterpret_cast<void*>(&FloorComponent_Slot12VSlot);
 }
 
 static void FloorComponent_InitBody(void* p) {

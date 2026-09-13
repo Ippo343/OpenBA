@@ -90,9 +90,6 @@ void PickingComponent_OnCreate(PickingComponent* self) {
             s_fn_RemoveMesh(pickingScene, (uint32_t)self->pickingId);
             removed = true;
         }
-        if (std::getenv("BANISHED_DESTROY_TRACE"))
-            std::fprintf(stderr, "[PickMesh] OnCreate: meshId=%d removed=%d RemoveMeshFn=%p\n",
-                         (int)self->pickingId, removed, (void*)s_fn_RemoveMesh);
         self->pickingId = -1;
     }
 }
@@ -152,20 +149,9 @@ static void* PC_FindModelComponent(void* entity) {
     return nullptr;
 }
 
-// Master enable for mesh-precise picking registration. Default ON; opt out with
-// BANISHED_LIVE_PICKMESH=0. Centralized here so every caller (start-town spawn,
-// player placement, …) shares one gate.
-static bool PC_PickMeshEnabled() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_LIVE_PICKMESH");
-        on = (e && (e[0] == '0' || strcmp(e, "false") == 0)) ? 0 : 1;
-    }
-    return on != 0;
-}
 
 void PickingComponent_RegisterMesh(void* pc) {
-    if (!pc || !PC_PickMeshEnabled()) return;
+    if (!pc) return;
     PickingComponent_InitFuncs();
     if (!s_addMeshInit) {
         s_fn_AddMesh = (fn_PickingAddMesh_t)ResolveExport(
@@ -292,7 +278,7 @@ uint32_t PC_ModelTypeId() {
 // Used by callers that hold an entity rather than the component (player placement, etc.).
 static uint32_t s_tidPickComponent = 0;
 void PickingComponent_RegisterMeshForEntity(void* entity) {
-    if (!entity || !PC_PickMeshEnabled() || !fn_InternalBasePtr_CheckPtr) return;
+    if (!entity || !fn_InternalBasePtr_CheckPtr) return;
     if (s_tidPickComponent == 0 || s_tidPickComponent == 0xFFFFFFFF)
         s_tidPickComponent = ::Object::GetTypeIdByName("PickingComponent");
     if (s_tidPickComponent == 0) return;
@@ -392,7 +378,6 @@ static void PickingComponent_DetachVSlot(void* s) {
 // Measured 2026-07-28: that is why a placed foundation could not be clicked. Wiring the
 // slot puts the registration back in its retail window and retires the workarounds.
 static void PickingComponent_OnAddedVSlot(void* s) {
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_PICK_ONADDED")) return;
     PickingComponent_RegisterMesh(s);
 }
 static void PickingComponent_SerVSlot(void* s, void* stream) {

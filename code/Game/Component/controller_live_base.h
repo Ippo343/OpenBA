@@ -35,9 +35,6 @@
 // mechanism* end-to-end over a real linked node without needing the full
 // state-type registration — the deep per-controller state behaviour is deferred.
 //
-// Default (env off) => the component stays inert (slots 16/17 not installed, no
-// node vtable written) => byte-for-byte unchanged run, exactly like
-// COMPONENT_INERT_FACTORY.
 
 #include <cstdint>
 #include <cstddef>
@@ -50,9 +47,9 @@ void** NodeVtable();
 
 }  // namespace ControllerLive
 
-// CONTROLLER_LIVE_FACTORY — like COMPONENT_INERT_FACTORY, but when EnvVar (or the
-// global BANISHED_LIVE_COMPONENTS) is set it graduates the per-type vtable's
-// GetDefaultState (slot 16) and CreateState (slot 17) to real implementations and
+// CONTROLLER_LIVE_FACTORY — like COMPONENT_INERT_FACTORY, but it graduates the
+// per-type vtable's GetDefaultState (slot 16) and CreateState (slot 17) to real
+// implementations and
 // installs the shared crash-safe node vtable into the embedded node at
 // `self + NodeOff`, so the entity's StateMachineComponent can link and tick it.
 //
@@ -60,7 +57,7 @@ void** NodeVtable();
 //   Flags     = the _Ctor `OR EAX,0xNN` capability flags written to +0x20
 //   NodeOff   = embedded state-node offset (CreateState's `LEA RAX,[RCX+NodeOff]`)
 //   DefState  = GetDefaultState's constant return (the default state id)
-//   EnvVar    = per-component opt-in env var
+//   EnvVar    = legacy macro parameter, unused (kept until the invocations are cleaned up)
 //
 // Requires "Object/factory_registration.h" and "Component/component_factory_base.h".
 #define CONTROLLER_LIVE_FACTORY(Name, Size, Flags, NodeOff, DefState, EnvVar)    \
@@ -86,7 +83,6 @@ void** NodeVtable();
     }                                                                           \
     static void* Name##_LiveVtable[::ComponentFactory::kInertVtableSlots];      \
     static void Name##_InstallLive(void* mem) {                                \
-        if (!::ComponentFactory::LiveEnabled(EnvVar)) return;                  \
         Name##_LiveVtable[1]  = reinterpret_cast<void*>(&Name##_LiveGetTypeInfo); \
         Name##_LiveVtable[16] = reinterpret_cast<void*>(&Name##_GetDefaultState); \
         Name##_LiveVtable[17] = reinterpret_cast<void*>(&Name##_CreateState);  \
@@ -143,7 +139,6 @@ void** NodeVtable();
     }                                                                           \
     static void* Name##_LiveVtable[::ComponentFactory::kInertVtableSlots];      \
     static void Name##_InstallLive(void* mem) {                                \
-        if (!::ComponentFactory::LiveEnabled(EnvVar)) return;                  \
         Name##_LiveVtable[1]  = reinterpret_cast<void*>(&Name##_LiveGetTypeInfo); \
         Name##_LiveVtable[16] = reinterpret_cast<void*>(&Name##_GetDefaultState); \
         Name##_LiveVtable[17] = reinterpret_cast<void*>(&Name##_CreateState);  \

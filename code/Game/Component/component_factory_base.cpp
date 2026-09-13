@@ -14,17 +14,6 @@ void Component_SerializeReimpl(void* self, void* stream);
 
 namespace {
 
-// Kill-switch for the Object::Internal unregistration below (BANISHED_INTERNAL_UNREG=0
-// restores the old, leaking behavior for an A/B run against the ObjAudit tally).
-bool UnregisterOnFree() {
-    static int cached = -1;
-    if (cached < 0) {
-        const char* v = std::getenv("BANISHED_INTERNAL_UNREG");
-        cached = (v && (std::strcmp(v, "0") == 0 || std::strcmp(v, "false") == 0)) ? 0 : 1;
-    }
-    return cached != 0;
-}
-
 // Shared scalar-deleting destructor (vtable slot +0x00). For a freshly-spawned
 // inert component the body is zeroed (no owned arrays/refs to release), so this
 // only frees the object itself when the deleting flag (bit 0) is set — matching
@@ -43,7 +32,7 @@ bool UnregisterOnFree() {
 // ~Internal would swap-remove through that garbage index — corruption mode (B).
 // Only objects genuinely present in the table are unregistered.
 void* Inert_ScalarDtor(void* self, uint32_t flags) {
-    if (self && UnregisterOnFree() && fn_ObjectInternal_Dtor && ObjAudit::IsRegistered(self)) {
+    if (self && fn_ObjectInternal_Dtor && ObjAudit::IsRegistered(self)) {
         fn_ObjectInternal_Dtor(self);
     } else {
         ObjAudit::NoteUnregisteredFree(self, "InertComponent");
@@ -185,47 +174,8 @@ static bool EnvOn(const char* v) {
 static const char* const kDefaultOnFlags[] = {
     "BANISHED_LIVE_TOOLBAR",
     "BANISHED_GAME_PRELOAD",
-    "BANISHED_LIVE_STATUSICON",
     "BANISHED_LIVE_STATUSICON_DRAW",
-    "BANISHED_LIVE_CITIZEN_STATUSICON",
-    "BANISHED_LIVE_CITIZEN",
-    "BANISHED_LIVE_CITIZEN_UPDATE",
-    "BANISHED_LIVE_CITIZENAI",
-    "BANISHED_LIVE_CHARACTER",
     "BANISHED_LIVE_CHARACTER_MOVETICK",
-    // GRADUATED 2026-08-18 — the action Enter tick (CharacterComponent slot 9 ->
-    // Character_UpdateAnimation -> action vtable +0x30). This is the ONLY dispatcher of
-    // slot +0x30, so with it off HuntAnimal::Enter never ran: the hunter chased deer
-    // forever, never killed, and the hunting cabin's production panel sat at 0 — which
-    // read as "the panel display is dead" rather than "nothing writes to it".
-    // A/B, seed 12345, demo hunter lodge staffed 3/3, ~8 min each arm:
-    //   OFF: [ActionTick] never printed at all (slot 9 not installed), [HuntEnter] census
-    //        never printed (Enter called 0 times), [TrackerUpsert] 0, panel items=0.
-    //   ON : REACHED_KILL=6, [TrackerUpsert] UPSERT=18 NO_TRACKER=0 (venison qty 100/60,
-    //        leather qty 4) all onto the LODGE entity, and ProductionUI list=0 items=2.
-    //   No crash in either arm (standalone_crash.log empty at 459 s).
-    // Its stale-char-slot hazard is covered: CharacterComponent::OnRemove (slot 7) is
-    // installed by BANISHED_LIVE_CHARACTER_MOVETICK, which is default-on above.
-    "BANISHED_LIVE_CHARACTER_UPDATE9",
-    // GRADUATED 2026-08-29 — WorkComponent slot 7 (+0x38, 0x14012e6c0), the removal
-    // hook that cancels the work this component posted (-> eb50 -> Goals::RemoveWork
-    // 0x1400f8e30). Ghidra names it "OnCreate"; it is the REMOVE side, and nothing
-    // installed it, so it had never run once. A raw-material pile posts a Pickup
-    // through its WorkComponent and then dies on RawMaterialComponent::Update's expiry
-    // timer -- with slot 7 empty the Pickup stayed in the goals trees pointing at the
-    // freed pile, and the next save faulted in Work::Serialize (0x1400f7400) deref'ing
-    // the dead target. This was the in-game "crash when saving", reported 2026-08-29.
-    // Pickup::OnComplete returning false is retail-faithful (0x1400f2ec0 does the same),
-    // so CompleteTask never removes a Pickup -- slot 7 is the ONLY route.
-    // A/B, autostart town, probe = BANISHED_WORK_SER_PROBE:
-    //   OFF: every Pickup leaked -- work ids 3..22, one per haul, 0 exceptions; save
-    //        walked one and took an ACCESS_VIOLATION on a 0x1482_00000000 vtable.
-    //   ON : 28 slot-7 cancels (ids 3..31), 0 DANGLING-CREATED, 0 STALE at save,
-    //        SAVE DONE + Auto.sav 4.27 MB, crash log empty.
-    // Paired with the retail ctor seeds (workId=-1, workFlags=0x80000000) the inert
-    // factory was leaving zeroed -- load-bearing, since 0 is a VALID work id and an
-    // unseeded component would cancel work 0 instead of no-oping.
-    "BANISHED_LIVE_WORKCOMP_ONREMOVE",
     // GRADUATED 2026-08-30 — ambient environment/emitter audio (the river, wind,
     // forest, wetland, field and winter beds). Without it a new game registers ZERO
     // 3D sound effects, which is not a quiet town but a silent one: Audio::Scene's
@@ -246,7 +196,6 @@ static const char* const kDefaultOnFlags[] = {
     "BANISHED_LIVE_HOUSING",
     "BANISHED_LIVE_STORAGE",
     "BANISHED_LIVE_REGIONMAP",
-    "BANISHED_LIVE_STORAGEDISPLAY",
     "BANISHED_LIVE_DECAL",
     // GRADUATED 2026-08-29 — walkable floors (dock / bridge decks). Two halves, one flag:
     // FloorComponent slots 6/7/12 register the deck picking mesh into the MAP's
@@ -262,8 +211,6 @@ static const char* const kDefaultOnFlags[] = {
     // on both docks: fishermen stand on the boards and path along them as intended.
     "BANISHED_LIVE_FLOOR",
     "BANISHED_LIVE_TOOLS",
-    "BANISHED_LIVE_PICKING",
-    "BANISHED_LIVE_PARTICLE",
     "BANISHED_SELECTION_OUTLINE",
     "BANISHED_LIVE_EVENTS",
     "BANISHED_LIVE_CITIZEN_CARRY",
@@ -301,107 +248,6 @@ static const char* const kDefaultOnFlags[] = {
     // hunting throughput regresses, re-run that A/B before looking anywhere else.
     "BANISHED_LIVE_ELEMENT_TIDS",
     "BANISHED_LIVE_TRADE_TIDS",
-    "BANISHED_LIVE_TRADE_COMPONENT",
-    // The two controller state machines: TradeComponent's (merchant timer/spawn/dock)
-    // and BoatComponent's own 5-state machine (the hull actually moving along its route).
-    "BANISHED_LIVE_TRADE_CTRL",
-    "BANISHED_LIVE_BOAT_CTRL",
-    // CitizenComponent vtable slot 6 (+0x30, the OnAdded broadcast) -> OnAdd 0x140114000,
-    // the append into the town citizen list townMgr+0xa0. Graduated 2026-07-26: without it
-    // newborns were created, entered the world entity list, and joined no population system
-    // at all — the town could never grow. 21 000-frame soak with it on: 24 -> 35 citizens,
-    // fourteen births, no crash, and it makes StartTown_RegisterTownCitizens redundant
-    // (that pass now reports 0 registered / 24 already done by the broadcast).
-    "BANISHED_LIVE_CITIZEN_ONADD",
-    // GRADUATED 2026-08-22 — tunnel terrain deformation, in two parts.
-    //
-    // The report was "a placed tunnel builds but has no depth at the mouth". The black
-    // overlay a player sees there is DecalComponent (Terrain/TiledDecals/TunnelMaterial),
-    // which was already live; the DEPTH is not a mesh or a sprite at all — it is a real
-    // carve of the terrain heightmap, and nothing was performing it.
-    //
-    // TERRAFORM: TerraformComponent was spawned by COMPONENT_INERT_FACTORY, so every
-    // instance carried the shared stub vtable. Its Shutdown and OnRemove bodies had been
-    // ported by an earlier wave and were unreachable, and the three functions that do the
-    // work had no port at all: 0x140056b50 (walk a TerraformDescription picking mesh,
-    // transform each vertex by the owner's ModelComponent transform at +0x148, write the
-    // heightmap), 0x140057120 (footprint terrain-type 10 -> 6) and 0x140057310 (vtable
-    // slot 12, gated on msg 4). notes/component_goals.md called the component COMPLETE
-    // and decomp/components/audit.md said "OnCreate passthrough"; both were wrong.
-    //
-    // MULTIOBJECT: slot 12 (0x140125490) is the child-entity message FORWARDER — it walks
-    // the child array at +0x48 and dispatches slot 12 on every component of every child.
-    // It was inert too, and that was the actual root cause: Tunnel.rsc's own
-    // `TerraformDescription terraform {}` block is EMPTY. The floor/ceiling picking meshes
-    // live on Template/TunnelStart.rsc — the two MOUTH SEGMENTS. BuildComponent state 8
-    // broadcasts msg 4 through 0x1400c2b70, which walks ONE entity (the master), so
-    // without the forwarder the segments that own the meshes were never told.
-    //
-    // POSITIVE RUN (2026-08-22, user-built tunnel, both flags on, 41 min uptime, empty
-    // standalone_crash.log). Three components received msg 4 where one did before:
-    //   master  FootprintPass rect=(77,122 15x3) converted=21
-    //   mouth A ceiling verts=82 applied=13  floor verts=4 applied=4
-    //   mouth B ceiling verts=82 applied=16  floor verts=4 applied=4
-    // The two 1x1 entities are exactly the ends of the master's 15x3 span. User confirmed
-    // the deformation and shadow render and that citizens path through the tunnel.
-    //
-    // applied < verts is the mask test working, not a partial failure: vertices whose
-    // surrounding cells fail _ceilingModifyBits/_floorModifyBits are skipped by design.
-    //
-    // ⚠ MULTIOBJECT IS AN UNFILTERED RELAY — it forwards EVERY message id to EVERY
-    // component of EVERY child of EVERY multi-part structure (bridges, roads, multi-tile
-    // buildings), not just msg 4 on tunnels. It is faithful to retail 0x140125490, and
-    // components that do not implement slot 12 hold stubs, but it is the widest-reaching
-    // half of this wave. If a multi-part structure starts behaving oddly, kill-switch this
-    // one first (BANISHED_LIVE_MULTIOBJECT=0) before suspecting the terraform half.
-    "BANISHED_LIVE_TERRAFORM",
-    "BANISHED_LIVE_MULTIOBJECT",
-    // GRADUATED 2026-08-27 — quarry pit carve + decal verified together: msg-4 carve at
-    // _initialDepth, Slot15 production re-carve, terrain chunks 119/120 rebuilt with the
-    // carved heights (hmin=-358 = -1.4*256), pit + rock decal both visible on screen.
-    // The final blocker was TerraformComponent_RegionRecalc silently no-oping on a null
-    // s_fn_RegionDirty when no tunnel had initialized terraform's statics.
-    "BANISHED_LIVE_QUARRY",
-    // Organic construction pipeline — verified end-to-end 2026-07-22 (foundation ->
-    // real gather/haul -> real build labor via MsgReceive -> completion -> staffed).
-    // The three were formerly independent opt-ins; graduated together as one feature.
-    "BANISHED_LIVE_BUILDCTRL",     // BuildComponent state machine (foundation->1->8->2)
-    "BANISHED_BUILD_LIVE_HAUL",    // posts gather + build work to the citizen ledger
-    "BANISHED_BUILDER_NATURAL",    // site->profession BST + tick-driven Builder pool
-    // Loose-pile collection — verified 2026-07-24. RawMaterialComponent slot-6 (OnAdded)
-    // self-posts a Pickup work on entity registration; a laborer claims it and dispatches
-    // the haul. Held opt-in only because the haul used to crash on execution — that was the
-    // InternalFactory removal-lifecycle corruption, now fixed (see internal_factory_audit.h).
-    "BANISHED_LIVE_RAWMAT_PICKUP",
-    // DestroyComponent live states — verified end-to-end 2026-07-25 (demolish -> haul-away
-    // -> refund + replacement spawn -> replacement constructed -> correct finished dialog),
-    // for both a genuinely-built house and a start-town house. Held opt-in until now as
-    // "unproven": the removal churn it drives used to corrupt the heap, which was the
-    // InternalFactory lifecycle bug (fixed; see internal_factory_audit.h). The whole
-    // building-upgrade path is dead without it — DestroyComponent installs no vtable slots
-    // and no state table, so the UpgradeUI click pumps a state machine that does not exist.
-    "BANISHED_LIVE_DESTROY",
-    // DestroyComponent state 6 — the COLLAPSE/RUBBLE arm fire and tornado take
-    // (destroycomponent_state6.cpp). Verified 2026-08-23: with 2 houses force-ignited the
-    // fire spread to a third and all 3 walked state-6 enter -> countdown -> rubble steps
-    // (mesh variant 2 -> 1 -> 0, 8 steps over a 4-minute soak) with an empty crash log, no
-    // null-vtable-slot skips in the action-abort walk, and no assert. Held opt-in for
-    // exactly one run: it cancels live citizen actions and empties a live StorageComponent
-    // mid-frame, which is the churn class that has faulted before. Without it the whole
-    // disaster lane is cosmetically dead — a burning building keeps its intact mesh until
-    // the fire's own state machine forces state 7.
-    "BANISHED_LIVE_DESTROY_COLLAPSE",
-    // CitizenComponent::OnRemove (vtable slot 7) — verified end-to-end 2026-07-25 by A/B:
-    // with it OFF, killing 5 citizens leaves all 5 in townMgr+0xa0 and the game takes an
-    // ACCESS_VIOLATION shortly after; with it ON the list drains exactly (22->17, one per
-    // death), a whole-town mass kill drains to 0, and the step-4 family branch runs its
-    // recursive orphan chain to completion (a couple + 3 under-age children: 20->15) with
-    // no spin-guard trip, ObjAudit bad=0 thousands of frames later. The default build
-    // CRASHES on citizen death without this. Two deviations, both forced by our inert
-    // factory rather than chosen: an uninitialised-body guard before HideTool (a zero-filled
-    // body reads scene id 0 where the ctor writes -1, and RemoveObject(scene,0) freezes),
-    // and progress guards on the two ring walks.
-    "BANISHED_LIVE_CITIZEN_ONREMOVE",
     // Residence registry (starttown.cpp:897) — call ResidenceComponent's init half
     // (0x140129ef0) directly instead of dispatching vtable slot 7, whose body calls
     // 0x140002cc0 = ERASE-BY-VALUE. Every house registered into townMgr+0x20 and was
@@ -424,34 +270,6 @@ static const char* const kDefaultOnFlags[] = {
     // value only the live path can produce, which is what makes this a positive run rather
     // than an absence-of-symptom one.
     "BANISHED_LIVE_RESIDENCE_REGISTRY",
-    // WorkPlaceComponent::SetAccepting accepting=false (the pause path: closed indicator,
-    // icon clears, roster eviction) — verified live 2026-07-25 once the real bug was fixed
-    // at source. The three faults it first hit were all BuildUI_Slot9 passing a c8070
-    // WorkComponent instead of the c80e0 WorkPlaceComponent — the finder for c8070 was
-    // named fn_FindComponent_Workplace, since renamed to fn_FindComponent_Work (and the
-    // c80e0 one from fn_FindComponent_BuildState2 to fn_FindComponent_WorkPlace);
-    // with the correct component every operand is a live object.
-    // Two pause clicks evicted real citizens with zero guard trips, and the closed icon
-    // renders above the building and in the dialog status bar. The compensation guards
-    // added while chasing the wrong cause have been removed; one declared deviation remains
-    // (a no-progress break, because an unterminated eviction loop is an in-world freeze).
-    "BANISHED_LIVE_WPC_PAUSE",
-    // WorkPlaceComponent's ctor-body defaults — +0x40 = self and the accepting byte
-    // +0x50 = 1, which retail's WorkPlaceComponent_Ctor (0x14012f2e0) writes
-    // UNCONDITIONALLY. Our port had them inside the controller-gated block, so on the
-    // default path every workplace in the game was born accepting=0 and
-    // FindAvailableBuilding (which requires +0x50 != 0) could never return it.
-    //
-    // Graduated 2026-07-31 on a two-arm release soak, identical seed and settings. The
-    // WPC census shows 8/8 constructions taking the defaults and the sweep flips
-    // accepting=0 -> 8; both arms hold a stable 27-citizen town at frames 1500/3000/4500
-    // with zero guard trips. Both arms then die IDENTICALLY just past 4500 (READ of
-    // 0x140152a90 on the citizen-death teardown, NomadComp_FUN_140103480 <-
-    // CitizenComponent_OnRemove) — a pre-existing default-path crash present with the
-    // flag off, tracked separately, and — as for BANISHED_LIVE_DESTROY below — not a
-    // reason to hold this. The soak was NOT clean; it was A/B-IDENTICAL, which is the
-    // claim being made here.
-    "BANISHED_LIVE_WPC_BORN_ACCEPTING",
     // House-seed reservation ordering (starttown.cpp StartTown_SeedHouseInventory).
     // The food budget reserved the full REQUESTED fuel volume (400 * 4 = 1600) while the
     // fuel clamp ran second and took only what food left (225 units / 900 volume) — so
@@ -471,45 +289,6 @@ static const char* const kDefaultOnFlags[] = {
     // single threshold crossing and must not be used to rank fixes. See
     // reference_banished_seed_pins_worldgen_only.
     "BANISHED_SEED_FOOD_FIRST",
-    // The DestroySM's WorkPlaceComponent transitions — 0x14012f520 (enter the Builder
-    // profession on demolish/upgrade) and 0x14012f670 (leave it) — verified 2026-07-25 on
-    // the forced mid-construction upgrade harness: the staffed demo site logs
-    // "f520 re-seat ... roster=0", i.e. all three seated builders released, and the
-    // FUN_1400f8400 NOT-IMPLEMENTED skip is gone (that re-key is ported and registered now,
-    // citizenai_work_scheduler.cpp CitizenAI_WorkScheduler_Rekey).
-    //
-    // A/B'd against the same scenario with the flag OFF. Both runs reach the upgrade spawn
-    // and both then die the SAME way — a queued DropOffRawMaterial whose +0x38 still names
-    // the demolished subject, its own fields already torn down (resType=0 count=-1). That
-    // crash is the pre-existing removal-lifecycle dangling reference, present with the flag
-    // off, so it is not a reason to hold this. It IS a reason not to call the upgrade path
-    // clean; see notes/CITIZEN_ONREMOVE_BRIEF.md.
-    "BANISHED_LIVE_DESTROY_WORKERS",
-    // BuildComponent's OnAdded broadcast (vtable slot 6 / +0x30, retail 0x140108d40 ->
-    // body 0x140108720) — the one-shot that fills the site's construction mesh list
-    // (+0x58/+0x60) and picking list (+0x68/+0x70) at EntityList_RegisterEntity time and
-    // reads the real build multiplier into +0x4c. Graduated 2026-07-27.
-    //
-    // Held opt-in for two sessions on two concerns, both now settled by measurement:
-    //  * "It un-frames the founding town." It did, and that was OUR gap, not the slot's:
-    //    the start-town spawner never opened retail's instant-build bracket around
-    //    SetModel + RegisterEntity (gw+0xd0 bit 0), which is exactly how retail stops this
-    //    slot from un-framing a pre-built building. Bracket ported; measured 0 resets.
-    //  * "It changes the bridge's build target from x1 to x13, and no build has completed
-    //    with a real multiplier." Wrong attribution: State1Enter (0x140108290) reads +0x4c
-    //    from the SAME MultiObjectComponent finder (0x140004740) and runs AFTER
-    //    registration, so it sets the target for every site that enters state 1 whether
-    //    this slot ran or not. Measured with the flag OFF: bridge sites report
-    //    "costQty=4 mult=15" and "mult=21" — the real span, not 1. The flag is
-    //    target-neutral; there was never an unverified multiplier riding on it.
-    // Positive evidence with it on: 9 slot-6 dispatches, the bridge master's mesh list
-    // filled with all its segments (0 lazy BC8_EnsureMeshList fallbacks), and the organic
-    // demo-house build still completes end-to-end (30/30 credits -> 8->2 -> OneShot +
-    // Finalize), 0-byte crash log.
-    // One visible consequence, faithful to retail: a site registered while the instant bit
-    // is clear has its model un-framed until state 8 gives it construction frame 0 — i.e.
-    // a placed foundation shows no building mesh until construction actually starts.
-    "BANISHED_LIVE_BUILD_ONADDED",
     // StateMachineComponent slot 4 (link the controller chain at Startup) + slot 6
     // (the one-shot Tick inside RegisterEntity) — retail's insta-build engine, and
     // the ordering guarantee the rest of the start town depends on. Graduated
@@ -541,20 +320,6 @@ static const char* const kDefaultOnFlags[] = {
     // baseline. The half-configuration double-registers (2 -> 4, d230 has no dedup)
     // and now warns loudly from StartTown_WireStorage.
     "BANISHED_LIVE_STORAGECTRL",
-    // PickingComponent vtable slot 6 (+0x30, OnAdded — retail 0x140128f50), so the pick
-    // mesh registers inside ComponentEntity_OnAddedPass instead of from a hand-rolled call
-    // after EntityList_RegisterEntity. Graduated 2026-07-28, user-verified in real play.
-    //
-    // The slot is not a nicety — the ORDER is the fix. OnAddedPass dispatches slot 6 in
-    // component ARRAY order, and on a WoodHouse that is Model=[3] Picking=[5] Build=[16].
-    // At [5] the model still carries the placement FOUNDATION DECAL (modelVariant 0), so
-    // OnAdded's `modelVariant < 0` guard passes and the mesh registers; only at [16] does
-    // BuildComponent's own OnAdded un-frame the model to -1 for the build ramp. Our
-    // explicit call ran after RegisterEntity — effectively last — so it ALWAYS saw -1 and
-    // bailed, and a hand-placed building was unclickable (measured: pickingId -1 -> 27).
-    // RegisterMesh now also honours retail's `pickingId(+0x28) < 0` guard, which makes the
-    // legacy explicit calls idempotent no-ops rather than double-registrations.
-    "BANISHED_LIVE_PICK_ONADDED",
     // MapComponent vtable slot 12 (+0x60, the message slot — retail 0x1401243c0, literally
     // `CMP EDX,1 ; JZ 0x1401241b0 ; RET`), i.e. "on message 1, run the occupancy write".
     // Graduated 2026-07-28 alongside the above.
@@ -572,29 +337,6 @@ static const char* const kDefaultOnFlags[] = {
     // the message landed on nothing and no placed building ever registered its cells.
     // Inert unless BANISHED_LIVE_CLEARCTRL is on (nothing else broadcasts event 1).
     "BANISHED_LIVE_MAP_SOLIDIFY",
-    // MapComponent slot 6's other half. Retail slot 6 is MapComponent::Draw (0x140124370) =
-    // `if (MapDescription(mc+0x18)->+0x30) sub_41b0(mc)`, and 41b0 is paint (desc+0x32) AND
-    // occupancy (desc+0x31 == 0) under one bit-0x100000 gate; our port wired only the paint,
-    // so no register-time path ever claimed a cell. desc+0x30 is the "claim at spawn"
-    // switch: natural resources set it and take their tile immediately, buildings leave it
-    // clear and claim their footprint when ClearArea finishes (MAP_SOLIDIFY above).
-    // Proven by the orchard: without it CreateNaturalResource spawns the tree, nothing
-    // writes it into the tile record, and OrchardComponent::OnMessage(0) reads a null out of
-    // *(mapGrid+0x80)[tile]+8. With it, 12/12 orchard slots bind (2026-08-10).
-    "BANISHED_LIVE_MAP_SPAWN_CLAIM",
-    // ZoneComponent vtable slots 6/7 (Draw 0x1401301f0 / OnCreate 0x140130080) -> sub_d360,
-    // the writer of cell+0x00 — the FIRST slot EditTool's cell pick (FUN_1400a0280)
-    // resolves. This is retail's placement-time cell registration: for every non-'.'
-    // footprint cell it writes the owning entity into cell+0x00, notifies the pathfinder
-    // mirror (a6f00 cmd 3), and bumps the '.'-reserve counter at cell+0x28; slot 7 is the
-    // NULL-raster teardown. A WoodHouse carries a ZoneComponent at array index [1], so in
-    // retail a just-placed foundation is cell-pickable immediately (user-verified in the
-    // shipped game) even though it has no pick mesh. Everything below the slots (d360,
-    // a6f00, the 88e20 zone-map insert) was ported AND registered for months; the inert
-    // factory just shipped the stub vtable. Default-on 2026-07-28: A/B on clearplaceover
-    // measured slot0 mine=16/empty=4('.') CELL-PICK OK vs control mine=0 DEAD, trees keep
-    // their +0x08 cells, 0 crash; default and FAB-scenario runs clean.
-    "BANISHED_LIVE_ZONE_RASTER",
     // ⚠ KNOWN DEVIATION FROM RETAIL, deliberately default-on. In dc20 (0x14009dc20) a
     // footprint cell takes the owner entity in the ENTITY raster (cell+0x08) for every mask
     // char except '.' — instruction-verified: `CMP CL,0x2e ; SETNZ BL` at 0x14009ddef, and
@@ -668,36 +410,6 @@ static const char* const kDefaultOnFlags[] = {
     // with the clear chain OFF, so "a tool-placed site over naturals never builds" was
     // never about clearing — it was this.
     "BANISHED_LIVE_INTERACT_ONADD",
-    // ClearAreaComponent + ClearResourceComponent controllers (the state-0 harvest
-    // dispatch, its per-frame done-test, and the state-1/2 finalize). Graduated
-    // 2026-07-31, user-verified in real play: a pasture placed over trees clears and
-    // the build ribbon's resource counter counts up as citizens chop.
-    //
-    // It was left opt-in when the clear wave closed, and two things had been quietly
-    // riding on a flag nobody set:
-    //   * The build ribbon's ClearArea counter reads ClearAreaComponent+0x48, and
-    //     State0Enter is its ONLY writer. Inert controller => +0x48 stayed at its ctor
-    //     zero while the footprint still held N standing resources, and the label
-    //     (snapshot - stillStanding, unclamped in retail too — see buildui.cpp:420-429
-    //     against 0x1400b1a50) rendered as "-9 out of 0". No arithmetic was ever wrong.
-    //   * BANISHED_LIVE_MAP_SOLIDIFY above has been default-on since 2026-07-28 while
-    //     being, by its own comment, "inert unless BANISHED_LIVE_CLEARCTRL is on" —
-    //     ClearArea's state-2 ENTER is the only site in the exe that broadcasts event 1.
-    //     So no placed building was registering its footprint cells at all.
-    // Measured on: 31 [ClearCtrl] traces during the founding-town spawn (zero with it
-    // off), every founding house taking the State0Enter `remaining == 0` short-circuit
-    // exactly as the comment at clearareacomponent_states.cpp:438-442 predicts. That
-    // short-circuit is load-bearing, not vestigial — do not "simplify" it to match
-    // retail's helper_7960 shape without re-running that spawn.
-    "BANISHED_LIVE_CLEARCTRL",
-    // The town hall's nomad-arrival state machine + the nomad walker
-    // (immigrationcomponent_states.cpp / nomadcomponent_states.cpp). Graduated
-    // 2026-09-05 after the Immigrants achievement (Ach27) was awarded natively three
-    // ways: auto-ALLOW through the SM node, the panel's real Allow button, and a
-    // DENY run whose nomads walked back out and were removed (docs/waves/
-    // achievements_wave.md 5.7). Retail's timer puts a group 2..6 in-game years
-    // apart, so a normal run only pays the idle/waiting tick.
-    "BANISHED_LIVE_IMMIGRATION",
     // StorageComponent vtable slot 6 (+0x30, OnAdded — retail 0x14012c640 =
     // StorageComponent::Draw; read straight off the real vtable at 0x140164720, where
     // [3]=0x14012c730 Shutdown and [6]=0x14012c640). Flags 0x81 has bit 0, so
@@ -724,38 +436,6 @@ static const char* const kDefaultOnFlags[] = {
     // (buildings, whose capacity comes from TownStorage_BuildCompleteInit_7ff0 instead —
     // it deliberately does not test that byte). OFF => the same newborn at capacity 0.
     "BANISHED_LIVE_STORAGE_ONADDED",
-    // The orchard trio. OrchardComponent's controller (its 6-state table: 2 idle, 9 plant,
-    // 10 tend, 12 replant, 11 harvest, 20 clear) plus the two components its yield depends
-    // on — GrowthComponent (tree maturity at natRes+0x28) and FruitComponent (ripeness at
-    // fruit+0x30). All three graduate together because none of them produces an observable
-    // result alone: OrchardComponent without growth plants trees that never mature, and
-    // growth without fruit matures trees that never bear.
-    //
-    // Graduated 2026-08-10, the session that closed the last two gaps in the chain. The
-    // whole loop is measured end to end, not inferred:
-    //  * plant   — grid built (count(+0x58)=12), slot histogram 12x state 1, 12 tiles bound
-    //  * tend    — state 10 live, seasonal TendArea post/drop on the real month gate
-    //  * harvest — 12/12 slots picked, msg=1 arriving with ASCENDING slot indices,
-    //              HarvestOrchard executed=12, machine leaves state 11 for state 10
-    //  * YIELD   — 6 piles x 50 reach town STORAGE (a new resType 0 -> 300, measured by
-    //              summing every StorageComponent's inventory, twice on separate runs) and
-    //              then tick DOWN to 285 as the town eats it. Storage was the missing
-    //              measurement for three sessions: counting spawned piles is a different
-    //              question, since a pile nobody hauls is a yield of zero.
-    //  * cut     — the panel's CUT (cmd 3 -> node event 5) drives state 20, which clears
-    //              the footprint and returns to state 9 to REPLANT (9->10->20->9->10)
-    // Zero-byte crash log on every run above.
-    //
-    // ⚠ GROWTH and FRUIT are NOT orchard-only: GrowthComponent in particular is the finder
-    // every runtime-spawned natural resource goes through, so this changes behaviour for
-    // wild trees too. That breadth is the reason they were held opt-in this long; it is
-    // also why they are worth defaulting on now that the resource pipeline they feed is
-    // proven. Each remains a kill-switch (=0) for an A/B run.
-    //
-    // The BANISHED_ORCHARD_* harnesses stay opt-in and are NOT part of this: they are
-    // player stand-ins (WORKERS seats a citizen, GROW fast-forwards maturity, FORCE_START
-    // pokes the master switch, CUT clicks a destructive button), not features.
-    "BANISHED_LIVE_ORCHARD",
     "BANISHED_LIVE_GROWTH",
     "BANISHED_LIVE_FRUIT",
     // Wild-food spawning (SpawnComponent). Three formerly-independent opt-ins that
@@ -777,181 +457,7 @@ static const char* const kDefaultOnFlags[] = {
     // See notes/generation_deviations.md (deviation #4).
     // Each remains a kill-switch (=0) for an A/B run.
     "BANISHED_LIVE_SPAWN",
-    "BANISHED_SPAWN_DOSPAWN",
     "BANISHED_SPAWN_INITIAL",
-    // The panel WORK CHECKBOX on the four non-food workplaces — component vtable slots
-    // 13/14 (CanCommand / Command). Graduated 2026-08-15 on a measured A/B, not on a
-    // quiet run: with the flags off the slot-coverage probe read the inert stub in both
-    // slots on all four classes and every CanCommand id returned 0 (which is exactly what
-    // greys the checkbox every frame via ControlUI_Slot7); with them on, both slots hold
-    // real bodies and each class reports a class-correct, non-zero mask. A click through
-    // slot 14 then CHANGES that mask on all four — Forester 0x01->0x03, Attendance /
-    // ConsumeProduce / Market 0x03->0x01 — so this is "the button works", not merely
-    // "the button is wired". Zero-byte crash log across the run.
-    //
-    // Retail inheritance reproduced exactly, byte-verified from each class vtable:
-    // ConsumeProduce (0x140162a80) and Market (0x140159c40) inherit the ResourceProduce
-    // base pair 0x14012b520/0x14012b5a0 verbatim; Forester (0x140163460) overrides with
-    // 0x14011f920/0x14011f890 because it has TWO toggles (+0x50 plant / +0x51 cut); and
-    // Attendance (0x140158ce0) overrides with 0x140043f10/0x140043e80 because its
-    // checkbox IS the WorkPlaceComponent accepting flag.
-    //
-    // ⚠ ConsumeProduce and Market additionally needed the CONTROLLER_LIVE_FACTORY_STATES
-    // promotion, and wiring 13/14 alone was measurably NOT enough for them: the base
-    // slot 13 derives its mask from the state machine and the base slot 14 posts to the
-    // component's own node, so with slots 16/17 stubbed a click measured 0x02 -> 0x02.
-    "BANISHED_LIVE_CONSUMEPRODUCE_CMD",
-    "BANISHED_LIVE_MARKET_CMD",
-    // ── Forester / Attendance: promoted from "command pair only" to full live
-    //    controllers 2026-08-15, which is why the two flags are renamed rather than
-    //    added. BANISHED_LIVE_FORESTER_CMD / _ATTENDANCE_CMD gated slots 13/14 alone;
-    //    the new gates cover 13/14 AND the state machine, so leaving the old names in
-    //    the table would have silently dropped the command pair back to the inert stub
-    //    (measured: a control run with the new gates unset reports 15/22 and 10/22).
-    //
-    //    Graduated on the same measurement that motivated them. Slot-coverage probe,
-    //    identical seed and demo spawners, gates on vs off:
-    //      Forester    17/22 -> 22/22   (state 13 PRODUCING, workplace accepting=1)
-    //      Attendance  12/22 -> 22/22   (state  2 OPEN,      workplace accepting=1)
-    //    Both classes' state machines now link and tick: Forester runs the SHARED
-    //    ResourceProduce table (2 idle -> 13 producing -> 14 paused) and mints a real
-    //    ForesterWork through slot 18; Attendance runs its OWN two-state table
-    //    (2 open / 3 closed, node at +0x38 not +0x28), registering in the town
-    //    attendance list, minting a LocationWork and posting it to the citizen ledger.
-    //    Four-minute soak with Attendance's per-frame trans38 running every frame on a
-    //    placed school: zero-byte crash log.
-    //
-    //    ⚠ Forester's ctor default is behaviour, not padding: ForesterComponent_Ctor
-    //    writes +0x50 = 0x101 ("plant AND cut both ON"), so its factory is hand-expanded
-    //    rather than using CONTROLLER_LIVE_FACTORY_STATES (whose PopulateFn cannot reach
-    //    the instance). Without that write every lodge would be born with both work
-    //    flags clear.
-    "BANISHED_LIVE_FORESTER",
-    "BANISHED_LIVE_ATTENDANCE",
-    // The four remaining ResourceProduce food classes — graduated 2026-08-17. Held
-    // opt-in long after each was individually verified, which made the DEFAULT build
-    // the broken one: with the inert factory the state node at comp+0x28 is never
-    // installed, so the shared ResourceProduce state machine never runs, slot 18
-    // CreateWork is never called, and NO WORK IS EVER POSTED. Workers seat normally
-    // (roster fills, accepting=1) and then stand around with nothing to claim — the
-    // "we assign workers and nothing gets produced" report. Orchard and Pasture were
-    // already default-on, which is exactly why only these four looked broken.
-    //
-    // A/B at seed 12345, FORCE_SPEED=40, 7200 frames, BANISHED_FOOD_DIAG=1200, demo
-    // buildings placed by BANISHED_BUILD_DEMO_*. Every arm had the buildings staffed
-    // and accepting in BOTH halves, so this measures production, not seating:
-    //
-    //   CropField + Fishing   OFF: dock registered(+0x50)=0 rate(+0x54)=0.000,
-    //                              7 resource types, town food 4441 -> 1755 (pure drain)
-    //                          ON: dock registered=1 rate=1.444, fish resType 161 -> 374
-    //                              (+213), a 9th resType (crops) appears once a crop is
-    //                              chosen, food 4663 -> 3093
-    //   Hunt + Gatherer       OFF: HuntComponent progress(+0x50) pinned at 0 for the whole
-    //                              run, Herbalist GATHERABLE climbing 15 -> 26 (nobody
-    //                              picking), 7 resource types, food 4434 -> 1762
-    //                          ON: progress 0 -> 9.57e16, GATHERABLE drained 15 -> 2,
-    //                              11 resource types (four the OFF arm never had), food
-    //                              4434 -> 2170
-    //
-    // Each ON arm asserts a value only the live path can produce (a non-zero dock rate,
-    // a moving hunt progress, resource types that do not exist otherwise), so these are
-    // positive runs rather than clean ones. No crash log in any ON arm.
-    "BANISHED_LIVE_CROPFIELD",
-    "BANISHED_LIVE_FISHING",
-    "BANISHED_LIVE_HUNTING",
-    "BANISHED_LIVE_GATHERER",
-
-    // ── Workplace profession seat for non-constructed buildings ───────────────────
-    // Seats WorkPlaceComponent+0x48 from the description on a workplace that never
-    // passes through the BuildComponent hand-off. WorkplaceUI_Startup hides the whole
-    // workPlace ribbon (worker up/down spinner AND stop-sign icon) when +0x48 == 0, so
-    // a player-placed crop field or orchard had no worker arrows for its entire life.
-    //
-    // MEASURED 2026-08-18, player-built crop field + orchard:
-    //   OFF: [WorkPlaceUI] 0 shown / 5466 HIDDEN, profession(+0x48)=NULL; the field is
-    //        never staffable ([FoodWorkers] "+0x50=0" for 9500 frames).
-    //   ON:  [ProfKey] SEATED NATURAL for CropFieldComponent AND OrchardComponent
-    //        (both key 0x...778a68 - they share the Farmer profession), ribbon
-    //        2 shown / 0 hidden, arrows visible and the buildings work.
-    // The ON arm asserts a value only the live path produces (a SEATED NATURAL line
-    // and a non-zero +0x48 on an entity with no BuildComponent), so this is a positive
-    // run. Houses/storage keep key 0 - their description declares no profession - and
-    // construction sites are excluded outright, so the Builder hand-off is untouched.
-    "BANISHED_LIVE_SM_BUILT_HOOK",
-
-    // ── The REAL WorkPlaceComponent controller (supersedes the hook above) ────────
-    // Retail wiring, Ghidra-verified against vtable 0x140164d30, ctor 0x14012f2e0 and
-    // the state-table builder 0x14012f3a0: state 0 enter = ee40 -> f520 "become a
-    // Builder workplace", state 2 enter = edf0 "built: leave Builder, re-key to the
-    // description's own profession", state 3 enter = ed60 "demolish: release + erase".
-    //
-    // Graduated 2026-08-20 to fix a REPORTED fault the stand-ins could not fix: the
-    // SM_BUILT_HOOK above fires on the entity's FIRST TICK with no state gate, and a
-    // player-placed crop field has no BuildComponent for its guard to catch. Measured
-    // with BANISHED_SM_STATE_TRACE=1 on a field dragged over trees:
-    //   OFF: [SMState] FIRST TICK CropFieldComponent state(+0x51)=0 immediately
-    //        followed by [SMSeat] ... -> SEATING NOW. The Farmer key is installed at
-    //        state 0 -- while the tile is still being cleared -- and since
-    //        WorkPlaceUI_OnCreate (0x140087080) shows the workPlace ribbon whenever
-    //        +0x48 != 0, the panel offered FARMER worker arrows on a construction
-    //        site. Retail shows the Builder there and the Farmer only at completion.
-    //   ON:  the controller's own node takes the 0 -> 2 transition, so [WPCCtrl]
-    //        "state-0 (construction/f520)" precedes "state-2 (built/edf0)" and the
-    //        natural key appears only on the second -- a value only the live path can
-    //        produce (the stand-in never logs a state-0 enter at all).
-    // Promoting this retires all three stand-ins, each already gated on
-    // WorkPlaceComponent_ControllerLive(): BuildComponent_State8Finalize's explicit
-    // edf0 call, the registration half of StartTown_SpawnStructures, and (added with
-    // this graduation) StateMachineComponent_SeatWorkplaceOnBuilt.
-    "BANISHED_LIVE_WPC_CONTROLLER",
-    // GRADUATED 2026-08-22 — TornadoComponent (slots 3/4/8). Held opt-in as an
-    // "unproven feature" until the particle half existed; with TornadoInstance::Update
-    // ported (commit bb9a1f9) the whole mechanic runs end to end and has been watched
-    // in-game, rendering.
-    // POSITIVE RUN (BANISHED_FORCE_TORNADO=1, FORCE_SPEED=40): spawn -> 129-waypoint
-    // fractal walk -> 340 trees felled over 7274 damage ticks -> "particle finished,
-    // entity queued for destruction", crash log empty. Nothing about that outcome is
-    // reachable with the gate off: the component owns the movement, so the funnel just
-    // sits at its spawn point and damages nothing.
-    //
-    // ⚠ building=0 on all 7274 ticks. NOT evidence the building arm is dead — arm 3
-    // (the (2R+1)^2 cell sweep) is the same code that produced the 340 tree hits and
-    // calls the same counter; the forced path simply walked through forest, not town.
-    // Aim a forced tornado at the town centre before concluding anything either way.
-    // GRADUATED 2026-08-22 — the fire disaster lane itself (FireComponent vtable
-    // slots 3/9/15: the per-frame burn tick, the spread roll, and the water-applied
-    // message). Graduated together with BANISHED_LIVE_WELL below, which is the only
-    // thing that can END a fire; the two were measured as a pair because either one
-    // alone is only half a mechanic.
-    // A/B, seed 12345, 24 extra houses, forced fire every 8000 frames, 12 min per arm,
-    // with NO BANISHED_LIVE_* set in either arm -- the lane had to arm itself from this
-    // table, which is the positive-run requirement and the demonstration in one:
-    //   NO WELL: 27 fires, ALL ended reason=timer-expired, 0 buckets (water search
-    //            missed 7000 of 7000), 48 further ignitions refused being-demolished
-    //            as the fire kept reaching collapsing structures, and the town fell
-    //            41 -> 20 citizens. Spread census caught=65 rolled-no=108 empty=219.
-    //   WELL   : 7 fires, ALL ended reason=buckets-reached-threshold, 700 buckets
-    //            peaking at 100/100, water search found=746 missed=4, and the town
-    //            grew 26 -> 100 monotonically. Spread barely got a chance: 8 attempts.
-    //   standalone_crash.log empty in both arms.
-    // So the mechanic is complete in both directions: fire spreads and destroys a town
-    // that cannot fight it, and the brigade stops every fire in a town that can.
-    "BANISHED_LIVE_FIRE",
-    // GRADUATED 2026-08-22 — WellComponent's controller state machine (state 2 "built"
-    // -> TownManager::RegisterWaterSource). Until this lane existed only the UNregister
-    // half was ported, so townMgr+0xE0/+0x140 were never written and the FireWork spiral
-    // search returned found=0 on every run ever recorded, with wells standing in the town.
-    // A/B, seed 12345, 24 extra houses, forced fire every 8000 frames, ~12 min each arm:
-    //   OFF: 0 registrations, water search found=0 / missed=12000, 0 buckets, all 25 fires
-    //        ended reason=timer-expired, and the town COLLAPSED 46 -> 30 citizens as the
-    //        houses burned (45 further ignitions refused reason=being-demolished).
-    //   ON : 1 registration, found=500 / missed=0, 500 buckets (peaking 100/100), all 5
-    //        fires ended reason=buckets-reached-threshold, town grew 26 -> 99 monotonically.
-    //   standalone_crash.log empty in both arms; no new UNRESOLVED/ABORTED/INCOMPLETE lines.
-    // The two arms are frame-identical through 15000, i.e. the flag changes the fire
-    // outcome and nothing else.
-    "BANISHED_LIVE_WELL",
-    "BANISHED_LIVE_TORNADO",
     // GRADUATED 2026-08-26 — the CitizenComponent type-id .rdata slot DWORD_1401c7158
     // (standalone/reg_citizenai_typeids.cpp). Registration-gated, so with it off the slot
     // is UNRESOLVED and roughly thirty readers take a null-guarded skip; several of them

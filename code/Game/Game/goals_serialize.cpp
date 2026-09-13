@@ -76,23 +76,6 @@
 #include <cstdlib>
 #include <cstring>
 
-// BANISHED_SER_TRACE — count probe for the Goals trees. A load that dies inside
-// one of these is a stream desync; the counts are the cheapest way to see it
-// (a sane save has small counts, a desynced read has garbage ones).
-static bool GoalsTraceOn() {
-    static int s_on = -1;
-    if (s_on < 0) {
-        const char* e = std::getenv("BANISHED_SER_TRACE");
-        s_on = (e && *e && e[0] != '0') ? 1 : 0;
-    }
-    return s_on != 0;
-}
-static void GoalsTrace(const char* what, bool loading, int a, int b) {
-    if (!GoalsTraceOn()) return;
-    fprintf(stderr, "[GoalsSer] %-4s %-12s %d %d\n", loading ? "LOAD" : "SAVE", what, a, b);
-    fflush(stderr);
-}
-
 
 namespace {
 
@@ -411,7 +394,6 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
     if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &count, nullptr);
 
     bool loading = (*reinterpret_cast<int32_t*>(*reinterpret_cast<uint8_t**>(serializer) + 8) == 0);
-    GoalsTrace("d340", loading, count, 0);
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
             // Retail re-reads *param_1 on every iteration — the previous insertion
@@ -506,7 +488,6 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
     for (int32_t s = 0; s < count; ++s, slot += 2) {
         int32_t slotCount = static_cast<int32_t>(slot[1]);
         if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &slotCount, nullptr);
-        GoalsTrace("d060.slot", loading, s, slotCount);
 
         if (loading) {
             for (int32_t i = 0; i < slotCount; ++i) {
@@ -591,7 +572,6 @@ extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializ
     if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &count, nullptr);
 
     bool loading = (*reinterpret_cast<int32_t*>(*reinterpret_cast<uint8_t**>(serializer) + 8) == 0);
-    GoalsTrace("d5f0", loading, count, 0);
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
             // Record layout (retail's local_40/local_38/local_30 triple):

@@ -32,6 +32,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "options.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -66,11 +67,11 @@ int  s_visits   = 0;
 
 void Init() {
     if (s_interval != -2) return;
-    const char* e = std::getenv("BANISHED_TRADE_SELL");
+    const char* e = Opt().tradeSell;
     if (!e || !e[0] || e[0] == '0') { s_interval = -1; return; }
     const int v = std::atoi(e);
     s_interval = (v > 1) ? v : 1200;
-    if (const char* r = std::getenv("BANISHED_TRADE_SELL_PERROW")) s_perRow = std::atoi(r);
+    if (const char* r = Opt().tradeSellPerRow) s_perRow = std::atoi(r);
     std::fprintf(stderr, "[TradeSell] armed: every %d frames, per-row cap %d "
                          "(0 = sell the whole row)\n", s_interval, s_perRow);
     std::fflush(stderr);
@@ -205,7 +206,7 @@ extern "C" void TradeSellHarness_Tick(void* entityUI, int frameNum) {
         // the founding-house food seed uses. It stands in for the hauling, not for the
         // trade: the sale itself still goes through the ported checkout on the next tick.
         int seedQty = 0;
-        if (const char* sq = std::getenv("BANISHED_TRADE_SELL_SEED")) seedQty = std::atoi(sq);
+        if (const char* sq = Opt().tradeSellSeed) seedQty = std::atoi(sq);
         int seeded = 0;
         if (seedQty > 0) {
             // Seed the TRADE stock, not the post's StorageComponent.

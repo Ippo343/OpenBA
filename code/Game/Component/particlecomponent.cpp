@@ -381,14 +381,6 @@ typedef void* (*fn_PCFindComponent_t)(uintptr_t entity, void* retIBP);
 static fn_PCFindComponent_t s_fn_FindComp_Model = nullptr;
 static fn_PCFindComponent_t s_fn_FindComp_Map = nullptr;
 
-// Throttled diagnostic trace (BANISHED_PARTICLE_TRACE)
-static bool PCTraceOn() {
-    static int v = -1;
-    if (v < 0) { const char* e = getenv("BANISHED_PARTICLE_TRACE");
-                 v = (e && *e && e[0] != '0') ? 1 : 0; }
-    return v == 1;
-}
-static int s_pcTraceBudget = 0;
 
 // g_fUVScale is the retail .rdata constant 1.0f. In SA the ResolveAddr for
 // 0x140172234 lands inside an unrelated registered data blob (observed value
@@ -534,13 +526,6 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
     ge->sceneId = -1;
     ge->nodeIdx = (elem[0x10] != 0) ? followIdx : -1;
 
-    if (PCTraceOn() && s_pcTraceBudget < 64) {
-        s_pcTraceBudget++;
-        char* nm = *(char**)(elem + 8);
-        printf("[Particle] place self=%p i=%d name=%s follow=%d pos=(%.1f,%.1f,%.1f) res=%p geo=%p\n",
-               (void*)self, index, nm ? nm : "(null)", ge->nodeIdx, pos[0], pos[1], pos[2], res, ge->geo);
-        fflush(stdout);
-    }
 
     // Prewarm: tick the emitter forward by t0 (elem+0x18) in engine fixed steps
     int64_t t0 = *(int64_t*)(elem + 0x18);
@@ -631,11 +616,6 @@ extern "C" void ParticleComponent_StartEmitter(ParticleComponent* self, int inde
     uint8_t* flagArr = *(uint8_t**)(s + 0x28);
     if (flagArr) flagArr[index] = 1;
 
-    if (PCTraceOn() && s_pcTraceBudget < 96) {
-        s_pcTraceBudget++;
-        printf("[Particle] start self=%p i=%d sceneId=%d\n", (void*)self, index, ge->sceneId);
-        fflush(stdout);
-    }
 }
 
 // ============================================================
@@ -670,12 +650,6 @@ extern "C" void ParticleComponent_Setup(ParticleComponent* self) {
     uintptr_t s = (uintptr_t)self;
     void* desc = GetParticleDesc(self);
     if (!desc) {
-        if (PCTraceOn() && s_pcTraceBudget < 64) {
-            s_pcTraceBudget++;
-            printf("[Particle] setup self=%p: no ParticleDescription (+0x18=%p)\n",
-                   (void*)self, *(void**)(s + 0x18));
-            fflush(stdout);
-        }
         return;
     }
     int n = *(int32_t*)((uintptr_t)desc + 0x30);
@@ -706,12 +680,6 @@ extern "C" void ParticleComponent_Setup(ParticleComponent* self) {
         if (!inst) ++nullInst;
         geoArr[i].geo = inst;
         ParticleComponent_Place(self, i);
-    }
-    if (PCTraceOn() && s_pcTraceBudget < 64) {
-        s_pcTraceBudget++;
-        printf("[Particle] setup self=%p emitters=%d nullResource=%d nullInstance=%d\n",
-               (void*)self, total, nullRes, nullInst);
-        fflush(stdout);
     }
     if (nullRes || nullInst) {
         static int s_pcNullBudget = 0;
@@ -928,15 +896,6 @@ void ParticleComponent_InitFuncs() {
     s_fn_FindComp_Map = reinterpret_cast<fn_PCFindComponent_t>(
         ResolveAddr(Module::Exe, 0x140004680));   // FindComponent(MapComponent)
 
-    if (PCTraceOn()) {
-        printf("[Particle] InitFuncs: nodeIdxFromName=%p nodeToWorld=%p tfMul=%p strEq=%p "
-               "findModel=%p findMap=%p setup=%p descTid=%08x\n",
-               (void*)s_fn_GetNodeIdxFromName, (void*)s_fn_GetNodeToWorld,
-               (void*)s_fn_TransformMul, (void*)s_fn_StringEqStr,
-               (void*)s_fn_FindComp_Model, (void*)s_fn_FindComp_Map,
-               (void*)s_fn_ParticleSetup, PC_DescTypeId());
-        fflush(stdout);
-    }
 
     s_initialized = true;
 }
@@ -1120,14 +1079,12 @@ static void ParticleComponent_FinishLiveVtable() {
     // up short and desynced the stream for every object after it. The count makes
     // the shortfall VARIABLE, which is why it did not look like a fixed offset.
     ParticleComponent_LiveVtable[3]  = reinterpret_cast<void*>(&PC_SerSlot3);
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_PARTICLE")) {
-        ParticleComponent_LiveVtable[4]  = reinterpret_cast<void*>(&PC_StartupVSlot);
-        ParticleComponent_LiveVtable[6]  = reinterpret_cast<void*>(&PC_OnAddedVSlot);
-        ParticleComponent_LiveVtable[7]  = reinterpret_cast<void*>(&PC_OnRemovedVSlot);
-        ParticleComponent_LiveVtable[8]  = reinterpret_cast<void*>(&PC_TickVSlot);
-        ParticleComponent_LiveVtable[11] = reinterpret_cast<void*>(&PC_OnUpdate2VSlot);
-        ParticleComponent_LiveVtable[12] = reinterpret_cast<void*>(&PC_EventVSlot);
-    }
+    ParticleComponent_LiveVtable[4]  = reinterpret_cast<void*>(&PC_StartupVSlot);
+    ParticleComponent_LiveVtable[6]  = reinterpret_cast<void*>(&PC_OnAddedVSlot);
+    ParticleComponent_LiveVtable[7]  = reinterpret_cast<void*>(&PC_OnRemovedVSlot);
+    ParticleComponent_LiveVtable[8]  = reinterpret_cast<void*>(&PC_TickVSlot);
+    ParticleComponent_LiveVtable[11] = reinterpret_cast<void*>(&PC_OnUpdate2VSlot);
+    ParticleComponent_LiveVtable[12] = reinterpret_cast<void*>(&PC_EventVSlot);
 }
 extern "C" void* ParticleComponent_Factory(void) {
     void* p = ::ComponentFactory::MakeInertTyped(0x48, 0xC3,

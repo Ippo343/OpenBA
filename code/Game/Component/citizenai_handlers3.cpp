@@ -134,12 +134,6 @@ static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_Inter
 static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
 static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
 
-static inline bool TraceOn() {
-    static int s_ts = -1;
-    if (s_ts < 0) { const char* e = getenv("BANISHED_CITIZENAI_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s_ts == 1;
-}
-
 // citizen ModelComponent transform (+0x68 of CharacterComponent at citizen+0x278).
 static int64_t CitizenModel(int64_t citizen) {
     CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
@@ -225,11 +219,6 @@ extern "C" uint64_t CitizenAI_State_ElderTransition(int64_t param_1) {
     if (doPush) {
         int64_t holderCitizen = *self;
         if (s_ctor8) s_ctor8(&holderCitizen, reinterpret_cast<uint64_t*>(&holderEntity), dest);
-        if (TraceOn()) {
-            static int n = 0;
-            if (n < 6) { fprintf(stderr, "[ElderTrans] self=%p ENTERED entity=%p\n",
-                                 reinterpret_cast<void*>(param_1), reinterpret_cast<void*>(holderEntity)); fflush(stderr); n++; }
-        }
         return Pushed(self);
     }
 
@@ -348,11 +337,6 @@ extern "C" uint64_t CitizenAI_State_AdultTransition(int64_t param_1) {
                 *reinterpret_cast<int64_t*>(param_1 + 0x40) = stamp;
                 if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&stamp, kCooldown);
                 *reinterpret_cast<int64_t*>(param_1 + 0xb0) = stamp;
-                if (TraceOn()) {
-                    static int n = 0;
-                    if (n < 6) { fprintf(stderr, "[AdultTrans] self=%p -> no target (bail)\n",
-                                         reinterpret_cast<void*>(param_1)); fflush(stderr); n++; }
-                }
                 return static_cast<uint64_t>(stamp) & 0xffffffffffffff00ULL;
             }
         }
@@ -379,11 +363,6 @@ extern "C" uint64_t CitizenAI_State_AdultTransition(int64_t param_1) {
     }
 
     if (s_ctor6) s_ctor6(&holderCitizen, &holderEntity, dest, flag);
-    if (TraceOn()) {
-        static int n = 0;
-        if (n < 6) { fprintf(stderr, "[AdultTrans] self=%p ENTERED entity=%p flag=%d\n",
-                             reinterpret_cast<void*>(param_1), reinterpret_cast<void*>(holderEntity), (int)flag); fflush(stderr); n++; }
-    }
     return Pushed(self);
 }
 
@@ -422,11 +401,6 @@ extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
             int64_t holderCitizen = *self;
             int64_t holderEntity = *reinterpret_cast<int64_t*>(holderCitizen + 0x238);
             if (s_navTo) s_navTo(&holderCitizen, &holderEntity, navDest, 0);
-            if (TraceOn()) {
-                static int n = 0;
-                if (n < 6) { fprintf(stderr, "[Work] self=%p NavigateTo workplace=%p\n",
-                                     reinterpret_cast<void*>(param_1), reinterpret_cast<void*>(holderEntity)); fflush(stderr); n++; }
-            }
             return Pushed(self);
         }
         return valid & 0xffffffffffffff00ULL;  // db20 false -> return 0
@@ -486,11 +460,6 @@ extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
             int64_t holderCitizen = *self;
             int64_t holderEntity = *reinterpret_cast<int64_t*>(holderCitizen + 0x238);
             if (s_navTo) s_navTo(&holderCitizen, &holderEntity, navDest, 0);
-            if (TraceOn()) {
-                static int n = 0;
-                if (n < 6) { fprintf(stderr, "[Work] self=%p no-walkable -> NavigateTo workplace\n",
-                                     reinterpret_cast<void*>(param_1)); fflush(stderr); n++; }
-            }
             return Pushed(self);
         }
     }
@@ -510,11 +479,6 @@ extern "C" uint64_t CitizenAI_State_Work(int64_t param_1) {
     *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;
     *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);
     *reinterpret_cast<int32_t*>(cz + 0xb0) = 0;
-    if (TraceOn()) {
-        static int n = 0;
-        if (n < 6) { fprintf(stderr, "[Work] self=%p WalkTowards (walkable=%d)\n",
-                             reinterpret_cast<void*>(param_1), (int)any); fflush(stderr); n++; }
-    }
     return static_cast<uint64_t>(cz) & 0xffffffffffffff00ULL;
 }
 

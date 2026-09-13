@@ -27,7 +27,6 @@
 // Default builds stay byte-unchanged.
 
 #include "engine_funcs.h"
-#include "Component/component_factory_base.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdlib>
@@ -35,14 +34,10 @@
 #include <cstring>
 
 namespace {
-static bool MoveTickEnabled() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_CHARACTER_MOVETICK");
-}
 constexpr int kMaxLevels = 10;   // cap (4^10 -> ~350K cells per array); maps are <= 1024 tiles
 } // namespace
 
 extern "C" void CharManager_Seed() {
-    if (!MoveTickEnabled()) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton || !fn_MemAlloc) return;
 
     uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);

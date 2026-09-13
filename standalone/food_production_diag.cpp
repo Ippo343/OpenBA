@@ -20,6 +20,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "options.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -34,7 +35,7 @@ bool s_init    = false;
 void Init() {
     if (s_init) return;
     s_init = true;
-    const char* e = std::getenv("BANISHED_FOOD_DIAG");
+    const char* e = Opt().foodDiag;
     if (!e || !e[0] || std::strcmp(e, "0") == 0) { s_period = 0; return; }
     s_period = std::atoi(e);
     if (s_period <= 1) s_period = 600;

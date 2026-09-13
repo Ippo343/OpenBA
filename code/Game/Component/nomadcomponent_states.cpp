@@ -78,11 +78,6 @@ void Resolve() {
 
 uint32_t TidCharacter() { static uint32_t t = 0; if (!t) t = ::Object::ResolveTypeIdByNameLazy("CharacterComponent"); return t; }
 
-bool Trace() {
-    static int v = -1;
-    if (v < 0) { const char* e = std::getenv("BANISHED_NOMAD_TRACE"); v = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0; }
-    return v == 1;
-}
 
 inline uint8_t* GW() { return (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) : nullptr; }
 inline void CheckPtr(void* ibp) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp); }
@@ -138,11 +133,6 @@ extern "C" void Nomad_Remove(void* entityList, void* entityIBP) {
     if (s_MarkRemoval) s_MarkRemoval(reinterpret_cast<void*>(*ibp));
     uint8_t* el = reinterpret_cast<uint8_t*>(entityList);
     if (s_DynArray8) s_DynArray8(el + 0xd0, *reinterpret_cast<int*>(el + 0xd8) + 1, ibp);
-    if (Trace()) {
-        static int n = 0;
-        ++n;
-        if (n <= 3 || (n % 50) == 0) { std::fprintf(stderr, "[NomadCtrl] removed nomad entity %p (#%d)\n", reinterpret_cast<void*>(e), n); std::fflush(stderr); }
-    }
 }
 
 // ============================================================
@@ -167,10 +157,6 @@ extern "C" void Nomad_MoveTo(void* nomadV, float* dest) {
     }
     uint64_t actIBP = 0; MakeIBP(&actIBP, act);
     if (s_Push) s_Push(reinterpret_cast<int64_t*>(chr + 0x48), &actIBP);
-    if (Trace()) {
-        static int n = 0;
-        if (n++ < 6) { std::fprintf(stderr, "[NomadCtrl] MoveTo nomad=%p chr=%p dest=(%.1f,%.1f,%.1f) act=%p\n", nomadV, (void*)chr, dest[0], dest[1], dest[2], act); std::fflush(stderr); }
-    }
 }
 
 // ============================================================
@@ -208,7 +194,6 @@ extern "C" char Nomad_State0_Tick(void* data, void* sm, void* /*time*/) {
                                                 static_cast<int>(*reinterpret_cast<int8_t*>(smc + 0x51)), 6);
         }
     }
-    if (Trace()) { static int n = 0; if (n++ < 6) { std::fprintf(stderr, "[NomadCtrl] nomad=%p ARRIVED at the hall -> state 1\n", data); std::fflush(stderr); } }
     ::ControllerLive::RequestStateTransition(sm, 1);
     return 1;
 }

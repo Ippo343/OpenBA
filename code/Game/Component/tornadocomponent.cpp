@@ -1154,7 +1154,6 @@ void TornadoComponent_FinishLiveVtable() {
     // See reference_slot3_wrapper_must_resolve_first.
     g_TornadoComponent_LiveVtable[3] = reinterpret_cast<void*>(&TC_SerializeVSlot);
 
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_TORNADO")) return;
     g_TornadoComponent_LiveVtable[4] = reinterpret_cast<void*>(&TC_StartupVSlot);
     g_TornadoComponent_LiveVtable[8] = reinterpret_cast<void*>(&TC_UpdateVSlot);
 }

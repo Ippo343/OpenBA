@@ -349,12 +349,6 @@ static void TerraformDeformResolve() {
     if (slot) s_fn_IsDerivedFrom = *reinterpret_cast<fn_IsDerivedFromId_t*>(slot);
 }
 
-// One-shot trace, BANISHED_TRACE_TERRAFORM=1.
-static bool TerraformTraceOn() {
-    static int s = -1;
-    if (s < 0) { const char* e = getenv("BANISHED_TRACE_TERRAFORM"); s = (e && *e && *e != '0') ? 1 : 0; }
-    return s != 0;
-}
 
 // Resolve the component's owning entity (component +0x10 is an InternalBasePtr).
 static void* TerraformOwnerEntity(uintptr_t self) {
@@ -537,13 +531,6 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
         }
     }
 
-    if (TerraformTraceOn()) {
-        fprintf(stderr, "[Terraform] MeshPass self=%p %s mesh=%p verts=%d mask=0x%x "
-                        "applied=%d rec=%d\n",
-                reinterpret_cast<void*>(self), ceiling ? "ceiling" : "floor", mesh,
-                vertCount, modifyBits, applied, self->heightCount);
-        fflush(stderr);
-    }
 }
 
 // ------------------------------------------------------------
@@ -595,11 +582,6 @@ void TerraformComponent_FootprintPass(TerraformComponent* self) {
         }
     }
 
-    if (TerraformTraceOn()) {
-        fprintf(stderr, "[Terraform] FootprintPass self=%p rect=(%d,%d %dx%d) converted=%d\n",
-                reinterpret_cast<void*>(self), x0, y0, w, h, converted);
-        fflush(stderr);
-    }
 }
 
 // ------------------------------------------------------------
@@ -611,11 +593,6 @@ extern "C" void TerraformComponent_Slot12(void* selfV, int msgId) {
     if (msgId != 4 || !selfV) return;
     TerraformComponent_InitFuncs();
     TerraformComponent* self = reinterpret_cast<TerraformComponent*>(selfV);
-    if (TerraformTraceOn()) {
-        fprintf(stderr, "[Terraform] msg 4 -> deform self=%p desc=%p\n",
-                selfV, self->description);
-        fflush(stderr);
-    }
     TerraformComponent_MeshPass(self, /*ceiling=*/true);
     TerraformComponent_MeshPass(self, /*ceiling=*/false);
     TerraformComponent_FootprintPass(self);
@@ -658,7 +635,6 @@ static void TerraformComponent_InstallLive() {
     // body's bytes and desyncs the stream for EVERY object after it.
     // See reference_vtable_slot3_serialize_never_installed.
     TerraformComponent_LiveVtable[3]  = reinterpret_cast<void*>(&TerraformComponent_ShutdownVSlot);
-    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_TERRAFORM")) return;
     TerraformComponent_LiveVtable[7]  = reinterpret_cast<void*>(&TerraformComponent_OnRemoveVSlot);
     TerraformComponent_LiveVtable[12] = reinterpret_cast<void*>(&TerraformComponent_Slot12);
 }

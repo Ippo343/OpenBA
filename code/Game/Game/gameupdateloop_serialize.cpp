@@ -719,163 +719,6 @@ extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
 // 0x140095a90 — master GameUpdateLoop serializer
 // ============================================================
 
-// ---------------------------------------------------------------------------
-// BANISHED_SER_TRACE — stream-cursor probe.
-//
-// A load that dies inside a sub-serializer is almost always a *stream desync*
-// that started in an earlier section: one side wrote N bytes, the other read
-// M. There is no Tell, but there IS ?GetCurrentPos@ on every concrete Stream
-// (vtable slot 5, +0x28): MemoryStream 0x1800ae9c0, CompressedStream
-// 0x1800aa850, FileStream 0x1800aac50 -- all exported. Failing that, dump the
-// head of the stream
-// object at each section boundary — whichever qword advances monotonically is
-// the cursor. Run once saving and once loading with the env var set and diff
-// the two traces: the first section where the cursors stop matching is the
-// section that is wrong.
-// ---------------------------------------------------------------------------
-static bool SerTraceOn() {
-    static int s_on = -1;
-    if (s_on < 0) {
-        const char* e = std::getenv("BANISHED_SER_TRACE");
-        s_on = (e && *e && e[0] != '0') ? 1 : 0;
-    }
-    return s_on != 0;
-}
-
-static void SerTrace(void* stream, const char* stage) {
-    if (!SerTraceOn() || !stream) return;
-    const uint64_t* q = reinterpret_cast<const uint64_t*>(stream);
-    fprintf(stderr, "[SerTrace] %-4s %-22s",
-            IsSaving(stream) ? "SAVE" : "LOAD", stage);
-    for (int i = 0; i < 8; i++) fprintf(stderr, " %016llx", (unsigned long long)q[i]);
-    fprintf(stderr, "\n");
-    fflush(stderr);
-}
-
-// ---------------------------------------------------------------------------
-// BANISHED_HDR_TRACE — per-FIELD cursor probe for the master serializer's header.
-//
-// SerTrace above brackets whole subsystems, which is the right grain for a
-// desync that survives into the entity stream. It is far too coarse for this
-// one: loading the packaged TUTORIAL save (a RETAIL-authored stream, so the
-// bytes are ground truth and only our reader can be wrong) faults on the very
-// first InternalBasePtr in the function — self+0x150, the achievement instance
-// — which sits about a dozen fields into the header, before any subsystem runs.
-//
-// So trace field by field. The cursor is whichever word advances monotonically;
-// the version matters too, because the two `GetVersion(ser) >` tests below add
-// or drop fields, and a stream written at a LOWER version than the 3 we pass to
-// the ctor would have us read fields retail never wrote.
-// ---------------------------------------------------------------------------
-static bool HdrTraceOn() {
-    static int s_on = -1;
-    if (s_on < 0) {
-        const char* e = std::getenv("BANISHED_HDR_TRACE");
-        s_on = (e && *e && e[0] != '0') ? 1 : 0;
-    }
-    return s_on != 0;
-}
-
-static void HdrTrace(void* stream, void* ser, const char* field) {
-    if (!HdrTraceOn() || !stream) return;
-    const uint64_t* q = reinterpret_cast<const uint64_t*>(stream);
-    const uint32_t* d = reinterpret_cast<const uint32_t*>(stream);
-    int ver = ser && g_fn_Serializer_GetVersion ? g_fn_Serializer_GetVersion(ser) : -1;
-    fprintf(stderr, "[HdrTrace] %-4s ver=%d %-20s cur1C=%u  q:",
-            IsSaving(stream) ? "SAVE" : "LOAD", ver, field, d[7]);
-    for (int i = 0; i < 8; i++) fprintf(stderr, " %016llx", (unsigned long long)q[i]);
-    fprintf(stderr, "\n");
-    fflush(stderr);
-}
-
-// Is [p, p+n) committed and readable? (VirtualQuery, so a bad guess at the
-// stream's buffer pointer probes harmlessly instead of faulting.)
-static bool ProbeReadable(const void* p, size_t n) {
-    if (!p) return false;
-    MEMORY_BASIC_INFORMATION mbi;
-    if (!VirtualQuery(p, &mbi, sizeof(mbi))) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
-    const uint8_t* end = (const uint8_t*)mbi.BaseAddress + mbi.RegionSize;
-    return (const uint8_t*)p + n <= end;
-}
-
-// Identify the stream's data buffer and dump the bytes the header was read
-// from. `cur` is the cursor value (stream+0x1C) at the moment the town-name
-// string was about to be read, and `needle` is the name that read produced.
-// The buffer is whichever header qword has `needle` at, or just after, `cur`:
-// that single coincidence pins the buffer pointer AND confirms the cursor is
-// genuinely aligned with retail's bytes rather than merely self-consistent.
-static void StreamProbe(void* stream, uint32_t cur, const char* needle) {
-    const uint8_t* s = (const uint8_t*)stream;
-    fprintf(stderr, "[StreamProbe] stream=%p cur=%u needle=\"%.32s\"\n",
-            stream, cur, needle);
-    fprintf(stderr, "[StreamProbe] header:");
-    for (int i = 0; i < 0x100; i += 8) {
-        if (!ProbeReadable(s + i, 8)) { fprintf(stderr, " <unreadable@%02x>", i); break; }
-        fprintf(stderr, " %02x:%016llx", i, (unsigned long long)*(const uint64_t*)(s + i));
-    }
-    fprintf(stderr, "\n");
-    // Any 32-bit field within a few KB of the cursor is a candidate SIZE. If the
-    // cursor is at or near the end of the data, the reads that follow are coming
-    // out of uninitialised fill (the 0xAA bytes in the faulting objId), and the
-    // stream is TRUNCATED rather than desynced.
-    fprintf(stderr, "[StreamProbe] size candidates (u32 within 64KB of cur=%u):", cur);
-    for (int i = 0; i < 0x100; i += 4) {
-        if (!ProbeReadable(s + i, 4)) break;
-        uint32_t v = *(const uint32_t*)(s + i);
-        if (v >= cur && v < cur + 65536)
-            fprintf(stderr, " %02x:%u(cur%+d)", i, v, (int)(v - cur));
-    }
-    fprintf(stderr, "\n");
-
-    // This is an IO::CompressedMemoryStream: the outer object's cursor is at
-    // +0x1C, and the IO::MemoryStream sub-object holding the actual bytes starts
-    // at +0x68 (io_serializer.h), so base = +0x80 and size = +0x90. Dump that
-    // buffer to disk -- it is the retail-authored save exactly as the engine
-    // handed it to us, which is the only ground truth available for a stream we
-    // did not write.
-    const uint8_t* inner = s + 0x68;
-    if (ProbeReadable(inner + 0x18, 8) && ProbeReadable(inner + 0x28, 4)) {
-        const uint8_t* base = *(const uint8_t* const*)(inner + 0x18);
-        uint32_t       size = *(const uint32_t*)(inner + 0x28);
-        uint32_t       icur = *(const uint32_t*)(inner + 0x24);
-        fprintf(stderr, "[StreamProbe] inner MemoryStream base=%p cursor=%u size=%u\n",
-                (const void*)base, icur, size);
-        if (base && size && size < (64u << 20) && ProbeReadable(base, size)) {
-            FILE* f = fopen("C:/GOG Games/Banished/tutorial_stream_dump.bin", "wb");
-            if (f) {
-                fwrite(base, 1, size, f);
-                fclose(f);
-                fprintf(stderr, "[StreamProbe] wrote %u bytes to "
-                                "tutorial_stream_dump.bin\n", size);
-            }
-        }
-    }
-
-    // Locate the town name in every candidate buffer over a WIDE range -- the
-    // earlier narrow search around `cur` assumed a flat buffer, which is wrong
-    // for a compressed stream. The offset it reports is what matters: if the
-    // name sits at `cur`, the cursor is aligned with retail's bytes.
-    const size_t need = strlen(needle);
-    if (!need) return;
-    for (int i = 0; i < 0x100; i += 8) {
-        if (!ProbeReadable(s + i, 8)) break;
-        const uint8_t* buf = *(const uint8_t* const*)(s + i);
-        if (!ProbeReadable(buf, 4096)) continue;
-        for (long off = 0; off < (4L << 20); off++) {
-            if (!ProbeReadable(buf + off, need)) break;
-            if (memcmp(buf + off, needle, need) != 0) continue;
-            fprintf(stderr, "[StreamProbe] \"%s\" found via header+%02x (%p) at "
-                            "offset %ld = cur%+ld\n",
-                    needle, i, (const void*)buf, off, off - (long)cur);
-            fflush(stderr);
-            break;
-        }
-    }
-    fflush(stderr);
-}
-
 // NOTE: a diagnostic mirror of Object::InternalBasePtr::Serialize used to live
 // here. It established that the achievement IBP at self+0x150 is ABSENT in the
 // tutorial stream (present=0), so retail returns early and that IBP is NOT the
@@ -884,45 +727,6 @@ static void StreamProbe(void* stream, uint32_t cur, const char* needle) {
 // could report the same thing by detouring PersistObject itself, which does not
 // require standing in for any retail code.
 
-// ---------------------------------------------------------------------------
-// BANISHED_SAVE_TIMING - per-section wall clock for the save/load snapshot.
-//
-// The whole snapshot runs SYNCHRONOUSLY on the main thread inside
-// Save::SaveLoad::UpdateSave (Runtime 0x1800c2a80 calls the loop vtable +0x38
-// before it queues the async file write), exactly as retail does - so however
-// long this takes is a hard freeze with the spinner stopped. Retail is fast
-// enough that nobody notices; when ours is not, this says which section owns
-// the time.
-// ---------------------------------------------------------------------------
-static bool SaveTimingOn() {
-    static int s_on = -1;
-    if (s_on < 0) {
-        const char* e = std::getenv("BANISHED_SAVE_TIMING");
-        s_on = (e && *e && e[0] != 0x30) ? 1 : 0;
-    }
-    return s_on != 0;
-}
-
-static long long SerQpc() {
-    LARGE_INTEGER t; QueryPerformanceCounter(&t); return t.QuadPart;
-}
-static double SerQpcMs(long long ticks) {
-    static long long f = 0;
-    if (!f) { LARGE_INTEGER q; QueryPerformanceFrequency(&q); f = q.QuadPart; }
-    return f ? 1000.0 * (double)ticks / (double)f : 0.0;
-}
-
-namespace { long long g_serMark = 0; }
-
-static void SerMark(const char* stage) {
-    if (!SaveTimingOn()) return;
-    long long now = SerQpc();
-    if (g_serMark) {
-        fprintf(stderr, "[SerTiming] %-22s %8.2fms\n", stage, SerQpcMs(now - g_serMark));
-        fflush(stderr);
-    }
-    g_serMark = now;
-}
 extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
                                                void* p3, int* outParam) {
     (void)p3;
@@ -935,14 +739,10 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
             IsSaving(stream) ? "SAVE" : "LOAD", selfVoid, stream);
     fflush(stderr);
 
-    g_serMark = 0;
-    SerMark("enter");
     s_fn_EnableRefMode(extFactory, true);
     uint8_t ser[24];
     g_fn_Serializer_Ctor(ser, stream, 3);
-    HdrTrace(stream, ser, "after-ctor");
     s_fn_SerializeRefTable(extFactory, stream);
-    HdrTrace(stream, ser, "after-reftable");
     // --- Preload every external the save references, with reference mode OFF ---
     //
     // Object::ExternalPtr's serializer (Runtime 0x180052a50) branches on
@@ -964,12 +764,8 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     // restores the same invariant. It is not extra work: every one of these is about
     // to be loaded anyway as the stream resolves its references.
     //
-    // Kill-switch for A/B: BANISHED_PRELOAD_REFS=0.
     {
-        bool preloadOn = true;
-        if (const char* pr = std::getenv("BANISHED_PRELOAD_REFS"))
-            preloadOn = !(pr[0] == '0' && pr[1] == 0);
-        if (preloadOn && !IsSaving(stream) && extFactory) {
+        if (!IsSaving(stream) && extFactory) {
             typedef void* (*FnPathForId_t)(void* self, void* outFilename, unsigned int id);
             typedef void* (*FnFindOrLoad_t)(void* self, void* filename);
             static FnPathForId_t s_pathForId = reinterpret_cast<FnPathForId_t>(
@@ -994,11 +790,6 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
                     s_pathForId(extFactory, fname, (unsigned int)id);
                     if (!fname[0]) continue;
                     void* pl = s_findOrLoad(extFactory, fname);
-                    if (const char* dbg = std::getenv("BANISHED_PRELOAD_DUMP"))
-                        if (dbg[0] && strstr(reinterpret_cast<const char*>(fname[0]), dbg))
-                            fprintf(stderr, "[PreloadRefs] %s id=%d %s\n",
-                                    pl ? "HIT " : "MISS", id,
-                                    reinterpret_cast<const char*>(fname[0]));
                     if (pl) { ++loaded; }
                     else {
                         // Report them: these fail on the lazy path too, so the
@@ -1024,113 +815,27 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
         }
     }
     s_fn_ResetPersist(intFactory, stream);
-    HdrTrace(stream, ser, "after-resetpersist");
-
-    // [PersistMap] BANISHED_PERSIST_TRACE — InternalFactory id-space density.
-    // ResetPersistState sizes the id map to the factory OBJECT COUNT (+8) but
-    // PersistObject indexes it by the object ID. Those are only interchangeable
-    // while the handle table is DENSE (ids in [0,count)). If any live object
-    // carries id >= count, idMap[id] reads out of bounds on BOTH legs -- same
-    // index, different adjacent heap -- so the save leg can see a negative word
-    // ("unseen", write the body) while the load leg sees a non-negative one
-    // ("already seen", return without dispatching slot 3). That is the 71-vs-13
-    // byte asymmetry, produced by identical code over different heap.
-    if (std::getenv("BANISHED_PERSIST_TRACE")) {
-        fprintf(stderr, "[PersistMap] %s count(+8)=%d mapSize(+0x18)=%d\n",
-                IsSaving(stream) ? "SAVE" : "LOAD",
-                *(int*)((uint8_t*)intFactory + 8),
-                *(int*)((uint8_t*)intFactory + 0x18));
-        fflush(stderr);
-    }
 
     if (IsSaving(stream)) {
         s_fn_SaveAllSettings(*(void**)(self + 0x98));
     }
 
     s_fn_CfgSer_194a0((void*)(self + 0x50), ser);
-    HdrTrace(stream, ser, "after-cfg194a0");
     s_fn_CfgSer_19ec0((void*)(self + 0x40), ser);
-    HdrTrace(stream, ser, "after-cfg19ec0");
     s_fn_CfgSer_1a0c0((void*)(self + 0x48), ser);
-    HdrTrace(stream, ser, "after-cfg1a0c0");
 
     g_fn_Serialize_Int(ser, (void*)(self + 0x30), nullptr);
     g_fn_Serialize_Int(ser, (void*)(self + 0x34), nullptr);
-    HdrTrace(stream, ser, "after-int30/34");
     if (g_fn_Serializer_GetVersion(ser) > 0)
         fn_Serializer_Serialize_Uint(ser, (uint32_t*)(self + 0xd0), nullptr);
     if (g_fn_Serializer_GetVersion(ser) > 2)
         g_fn_Serialize_Int(ser, (void*)(self + 0x15c), nullptr);
-    HdrTrace(stream, ser, "after-versioned");
 
     s_fn_Random_Serialize(*(void**)(self + 0xd8), ser);
-    HdrTrace(stream, ser, "after-random");
-    const uint32_t curBeforeString = *(uint32_t*)((uintptr_t)stream + 0x1C);
-    // "the town name came out readable" is only evidence of correct alignment if
-    // the read actually PRODUCED it. If self+0x28 already held this name, the
-    // string proves nothing and the desync could be anywhere upstream.
-    const char* townBefore = *(const char**)(self + 0x28);
-    if (HdrTraceOn()) {
-        fprintf(stderr, "[HdrTrace] LOAD townName BEFORE String_Serialize: \"%.64s\"\n",
-                townBefore ? townBefore : "(null)");
-        fflush(stderr);
-    }
     g_fn_String_Serialize((void*)(self + 0x28), ser);
-    HdrTrace(stream, ser, "after-string28");
     g_fn_Serialize_Bool(ser, (void*)(self + 0x158), nullptr);
-    HdrTrace(stream, ser, "after-bool158");
 
-    // The header fields as VALUES, not just cursor deltas. self+0x28 is the town
-    // name: a readable name proves every field before it landed on the right
-    // bytes, which turns "somewhere in the header" into a two-way bisect. The
-    // ints are printed alongside because a plausible-looking cursor delta can
-    // still be reading the wrong bytes (a struct read as one int advances by 4
-    // either way).
-    if (HdrTraceOn()) {
-        const char* town = *(const char**)(self + 0x28);
-        fprintf(stderr, "[HdrTrace] LOAD values: int30=%d int34=%d uintd0=%u int15c=%d "
-                        "bool158=%d townName=\"%.64s\"\n",
-                *(int*)(self + 0x30), *(int*)(self + 0x34),
-                *(uint32_t*)(self + 0xd0), *(int*)(self + 0x15c),
-                (int)*(uint8_t*)(self + 0x158), town ? town : "(null)");
-        fflush(stderr);
-    }
 
-    // Object::InternalBasePtr::Serialize (Runtime 0x1800c0210) seeds objId and
-    // typeId from the slot's CURRENT value before the stream overwrites them:
-    //     objId  = (*this) ? ((int*)*this)[2] : 0        // obj+0x8
-    //     typeId = (*this) ? vcall(**this + 0x10)() : -1
-    // so an UNINITIALISED slot is read as a live object pointer. Print it: a
-    // 0xAA/0xBB fill pattern here is allocator debug fill, not stream content.
-    if (HdrTraceOn()) {
-        fprintf(stderr, "[HdrTrace] LOAD achIBP self+0x150 raw=%016llx\n",
-                (unsigned long long)*(uint64_t*)(self + 0x150));
-        // Ground truth. The cursor lives at stream+0x1C. That is NOT a
-        // contradiction of io_serializer.h's MemoryStream +0x24: this object
-        // CONTAINS a MemoryStream at +0x68, so that cursor is live here at
-        // +0x8c. They measure different things -- +0x1c is
-        // CompressedStream::_position in the DECOMPRESSED stream, +0x8c is the
-        // embedded MemoryStream::_cursor in the COMPRESSED byte image. Full
-        // layout: runtime/types/io/Stream.h. So the
-        // buffer pointer is one of the qwords in the object header. Find it by
-        // testing which candidate has the town name we just read sitting at the
-        // cursor the string read started from: that pins buffer AND proves
-        // whether the cursor is really where we think it is.
-        // BANISHED_STREAM_DUMP=1 additionally writes the raw save the engine
-        // handed us to tutorial_stream_dump.bin and reports the stream layout
-        // (CompressedMemoryStream; cursor at +0x1C, inner MemoryStream at +0x68,
-        // its base at +0x80 and size at +0x90). Separate flag because its needle
-        // scan VirtualQuery's per byte and takes minutes -- but the dump is what
-        // proved the packaged save arrives COMPLETE (it matched data0.pkg
-        // byte-for-byte), which is what ruled out a truncated read.
-        if (const char* sd = std::getenv("BANISHED_STREAM_DUMP"))
-            if (sd[0] && sd[0] != '0') {
-                const char* t = *(const char**)(self + 0x28);
-                StreamProbe(stream, curBeforeString, t ? t : "");
-            }
-        (void)curBeforeString;
-        fflush(stderr);
-    }
     // NB: a diagnostic stand-in for this call (AchIbpPeek, below) established
     // that the achievement IBP is ABSENT in the tutorial stream (present=0), so
     // retail returns early here and this IBP is NOT the one that faults. Kept
@@ -1143,7 +848,6 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
             *(void**)(self + 0x150) = nullptr;
     }
 
-    HdrTrace(stream, ser, "after-achIBP");
     // Retail calls AchievementManager::Persist UNCONDITIONALLY (0x140095a90).
     // Our `if (s_ppAchMgr && *s_ppAchMgr)` guard is a real deviation: if the
     // manager is null we skip a section retail always writes/reads, which would
@@ -1156,43 +860,19 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     // the PersistObject probe measures the real arguments instead.
     if (s_ppAchMgr && *s_ppAchMgr) {
         s_fn_AchMgr_Persist(*s_ppAchMgr, stream);
-    } else if (HdrTraceOn()) {
-        fprintf(stderr, "[HdrTrace] LOAD !! AchMgr_Persist SKIPPED (s_ppAchMgr=%p "
-                        "*s_ppAchMgr=%p) — retail calls it unconditionally; this "
-                        "desyncs the rest of the stream\n",
-                (void*)s_ppAchMgr, s_ppAchMgr ? *s_ppAchMgr : nullptr);
-        fflush(stderr);
     }
-    HdrTrace(stream, ser, "after-achmgr");
     s_fn_AnimMgr_Serialize(*(void**)(self + 0x68), ser);
-    HdrTrace(stream, ser, "after-animmgr");
     s_fn_AudioScene_Serialize(*(void**)(self + 0x78), ser);
-    HdrTrace(stream, ser, "after-audioscene");
 
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
 
-    SerMark("pre-camera");
-    SerTrace(stream, "pre-camera");
     s_fn_Camera_988c0(*(void**)(self + 0xe0), stream);
-    SerMark("pre-entlist");
-    SerTrace(stream, "pre-entlist");
     s_fn_EntList_c44a0(*(void**)(self + 0xe8), stream);
-    SerMark("pre-geom");
-    SerTrace(stream, "pre-geom");
     s_fn_Geom_b04d0(*(void**)(self + 0x110), stream);
-    SerMark("pre-citlist");
-    SerTrace(stream, "pre-citlist");
     s_fn_CitList_8f760(*(void**)(self + 0xf0), stream, nullptr, outParam);
-    SerMark("pre-grid");
-    SerTrace(stream, "pre-grid");
     s_fn_Grid_9f100(*(void**)(self + 0xf8), stream);
-    SerMark("pre-goals");
-    SerTrace(stream, "pre-goals");
     s_fn_Goals_f9240(*(void**)(self + 0x118), stream, nullptr, outParam);
-    SerMark("post-goals");
-    SerTrace(stream, "post-goals");
     EntityUI_Serialize_102920(*(void**)(self + 0x120), stream);
-    SerMark("reached-entityui");
 
     // Day counter (+0x128): { int day; Time accumulated } — version-0 section.
     {
@@ -1206,15 +886,10 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
 
     if (g_fn_Serializer_GetVersion(ser) > 1)
         EventLog_Serialize_952c0(*(void**)(self + 0x138), stream);
-    SerMark("reached-eventlog");
     WeatherSim_Serialize_93c90(*(void**)(self + 0x130), stream);
-    SerMark("reached-weather");
     Minimap_Serialize_a57f0(*(void**)(self + 0x148), stream);
-    SerMark("reached-minimap");
     EntityList_PostLoad_c4730(*(void**)(self + 0xe8), stream);
-    SerMark("reached-postload");
     s_fn_CitPost_8f580(*(void**)(self + 0xf0));
-    SerMark("reached-citpost");
 
     if (intFactory) s_fn_ClearPersist(intFactory);
     s_fn_EnableRefMode(extFactory, false);
@@ -1254,11 +929,8 @@ extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
     } else {
         s_fn_CMS_Create(cms);
         GameUpdateLoop_Serialize_95a90(self, cms, savedState, outParam);
-        SerMark("reached-serialize-end");
         s_fn_CMS_Close(cms);
-        SerMark("reached-compress-close");
         s_fn_SavedState_Store(savedState, s_fn_CMS_GetMemStream(cms));
-        SerMark("reached-savedstate-store");
     }
     s_fn_CMS_Dtor(cms);
 }

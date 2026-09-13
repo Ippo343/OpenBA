@@ -128,58 +128,6 @@ static void EnsureResolved() {
 }
 
 // ============================================================
-// Candidate-state census (open C) — BANISHED_CANDLIST_CENSUS=<period>
-// ------------------------------------------------------------
-// The measured symptom: with the town's fuel demand real (every house COLD) and
-// the fetch-for-home handlers (ids 6/7) live and registered, the AI-state tally
-// across a whole run was 19x SeekHappiness (id 8) and ZERO entries into 6 or 7.
-// The handlers are not the suspect — the SELECTION is. This census answers the
-// two questions that discriminates between "6/7 never get appended" and "they
-// get appended and lose the priority contest":
-//   * appended[id][prio]  — what BuildCandidateStateList actually offers
-//   * top[id]             — who wins after the shuffle+priority sort
-//   * a per-citizen gate line — the inputs that decide the branch
-// Set the env var to the dump period in calls (any non-numeric truthy value =>
-// kDefaultPeriod). Default off => byte-unchanged.
-// ============================================================
-static const int kCensusDefaultPeriod = 4000;
-
-static int CandCensusPeriod() {
-    static int p = -1;
-    if (p < 0) {
-        const char* e = getenv("BANISHED_CANDLIST_CENSUS");
-        if (!e || !e[0] || e[0] == '0') { p = 0; }
-        else { p = atoi(e); if (p <= 1) p = kCensusDefaultPeriod; }
-    }
-    return p;
-}
-
-// Histograms. Ids run 0..0xf, priorities 0..7 in this function.
-static int  s_censAppended[16][8];
-static int  s_censTop[16];
-static long s_censCalls = 0;
-
-static inline void CensusAppend(int id, int prio) {
-    if (!CandCensusPeriod()) return;
-    if ((unsigned)id < 16 && (unsigned)prio < 8) s_censAppended[id][prio]++;
-}
-
-// Named for the log so the dump reads without a lookup table.
-static const char* CandStateName(int id) {
-    switch (id) {
-        case 0:  return "EatOther";      case 1:  return "DrinkOther";
-        case 2:  return "FindHousing";   case 3:  return "Education";
-        case 4:  return "GrowUp";        case 5:  return "Work";  // sick-only; see header
-        case 6:  return "Gather";        case 7:  return "Gather2";
-        case 8:  return "SeekHappiness"; case 9:  return "Idle";
-        case 10: return "FindWork";      case 0xb: return "Wander";
-        case 0xc: return "Leisure";      case 0xd: return "LongTermPlan";
-        case 0xe: return "Eat";          case 0xf: return "Drink";
-        default: return "?";
-    }
-}
-
-// ============================================================
 // 2. CitizenComponent_HasSufficientResources (0x1401156e0)
 // ------------------------------------------------------------
 // self (CitizenComponent) at +0x238 = workplace IBP. Early-false if zero.
@@ -296,13 +244,9 @@ int CitizenComp_HasSufficientResources2(int64_t self) {
     float threshold = *reinterpret_cast<float*>(lVar1desc + 0xd4);
     // Distribution diagnostic (firewood-evenness): per-house fuel sufficiency
     // inputs — occupied roster rows x CitizenDesc+0xd4 vs fuel units on hand.
-    // Under the census this is also open C's question 2 ("does the fuel demand reach
-    // the candidate list?"), so keep sampling past the first 12 rather than going
-    // quiet exactly when the town starts to run cold.
-    { static int n = 0; static long every = 0;
+    { static int n = 0;
       const bool early = (n < 12);
-      const bool sampled = CandCensusPeriod() && ((++every % CandCensusPeriod()) == 0);
-      if (early || sampled) { if (early) ++n;
+      if (early) { ++n;
         fprintf(stderr, "[HSR2] residence=%llx occupied=%d perOcc=%.1f have=%d -> %s\n",
                 (unsigned long long)local_res8, iVar6, threshold, iVar3,
                 ((float)iVar6 * threshold <= (float)iVar3) ? "sufficient" : "FETCH");
@@ -411,8 +355,6 @@ static void AppendCandidate(int64_t* L, int id, int prio) {
     uint32_t uVar15 = (uint32_t)(*reinterpret_cast<int*>(lb + 8) + 1);  // new count
     if (uVar15 == uVar7) return;                              // (int)+1==same -> overflow
 
-    CensusAppend(id, prio);
-
     int32_t local_38[3] = { id, prio, 0 };
 
     void* pvVar13 = reinterpret_cast<void*>(L[0]);            // old buffer
@@ -464,12 +406,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
     void* self = base + 0x38;                             // sibling CitizenComponent IBP
 
     // Census (open C): which exit the function took. Purely observational.
-    //   1 = early sick-with-care-building single-candidate return
-    //   2 = age/elder block, not-elder arm  (appends 6/7 at prio 4)
-    //   3 = age/elder block, elder arm      (never appends 6/7)
-    //   4 = adult-with-home arm             (appends 6/7 at prio 4 or 6) + idle tail
-    //   5 = param3 short-circuit
-    int censBranch = 0;
 
     // --- Special early branch: SICK (+0x68 = Disease*) with a care building (+0x228) ---
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
@@ -480,8 +416,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         if (*reinterpret_cast<int64_t*>(cz + 0x228) != 0) {
             // Single candidate {5 (Work), 6, 0}, no shuffle/sort (function returns).
             AppendCandidate(outList, 5, 6);
-            censBranch = 1;
-            if (CandCensusPeriod()) { ++s_censCalls; s_censTop[5]++; }
             return;
         }
     }
@@ -555,8 +489,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
 
     // --- param3 short-circuit: skip leisure/age block ---
     if (param3 != '\0') {
-        censBranch = 5;
-        if (CandCensusPeriod()) ++s_censCalls;
         return;
     }
 
@@ -605,7 +537,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         cz = *reinterpret_cast<int64_t*>(self);
         if (*reinterpret_cast<int64_t*>(cz + 0x208) == 0) {
             // not elder: housing/work candidates
-            censBranch = 2;
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             cz = *reinterpret_cast<int64_t*>(self);
             if (*reinterpret_cast<int64_t*>(cz + 0x68) == 0) {
@@ -624,7 +555,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
             // (if hsr2 != 0, original goes to the shuffle/sort tail = LAB_14010f144)
         } else {
             // elder: FindWork (id 10, prio 2) only while healthy (+0x68 == 0)
-            censBranch = 3;
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(self) + 0x68) == 0) {
                 AppendCandidate(outList, 10, 2);
@@ -632,7 +562,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         }
     } else {
         // not grown up yet (age < thresh, elder-flag clear): adult-with-workplace block
-        censBranch = 4;
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
         cz = *reinterpret_cast<int64_t*>(self);
         if (*reinterpret_cast<int64_t*>(cz + 0x238) != 0) {
@@ -710,58 +639,9 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
                 if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeBuf, c172234);
                 int64_t acc = *reinterpret_cast<int64_t*>(base + 0xc8);
                 ltpPrio = (timeBuf < acc) ? 3 : 1;
-                // [test-only] BANISHED_DELIVER_BOOST: skip the Time(300.0) carry-timer
-                // wait so a pile->barn delivery can be observed inside a short test run.
-                // Faithful behaviour (env unset): a carrying citizen Idles until +0xc8
-                // exceeds 300.0 time units, only then does LongTermPlan (deliver) beat
-                // Idle in the priority contest.
-                static int s_delivBoost = -1;
-                if (s_delivBoost < 0) {
-                    const char* e = getenv("BANISHED_DELIVER_BOOST");
-                    s_delivBoost = (e && e[0] && e[0] != '0') ? 1 : 0;
-                }
-                if (s_delivBoost) ltpPrio = 3;
                 AppendCandidate(outList, 0xd, ltpPrio);
             }
 
-            // [diag] BANISHED_DELIVER_TRACE — why a carrying citizen does (or does
-            // not) go put its load in a barn. This is the haul-to-storage gate:
-            //   * 0x140115de0 is MISNAMED "GetHappiness" — its body is
-            //     FindComponent_Storage(self+0x10) -> StorageComponent::QueryCount,
-            //     i.e. the CARRY COUNT. So this gate really reads "am I carrying
-            //     anything?", and carry==0 (or a null carry storage, see the guard
-            //     in CitizenComp_GetHappiness) silently suppresses delivery.
-            //   * Even when it passes, state 0xd only RUNS if it out-prioritises the
-            //     unconditional Idle (id 9, prio 2): prio is 3 once the carry timer
-            //     (+0xc8) exceeds Time(DAT_140172234 = 300.0), else 1 => Idle wins.
-            //     CitizenAIComponent::Update zeroes +0xc8 whenever carry count is 0.
-            // Capped so a per-tick, per-citizen gate cannot flood the log.
-            static int s_delivTrace = -1;
-            if (s_delivTrace < 0) {
-                const char* e = getenv("BANISHED_DELIVER_TRACE");
-                s_delivTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
-            }
-            if (s_delivTrace) {
-                // Cap only the prio-1 "still accumulating" spam; ALWAYS log prio 3,
-                // which is the moment delivery actually wins and the citizen sets off
-                // for a barn -- that is the event worth watching for.
-                static int s_delivLogs = 0;
-                if (happy >= 1 && (ltpPrio >= 3 || s_delivLogs < 40)) {
-                    if (ltpPrio < 3) ++s_delivLogs;
-                    int64_t timeBuf = 0;
-                    float c172234 = s_pf_172234 ? *s_pf_172234 : 0.0f;
-                    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeBuf, c172234);
-                    std::fprintf(stderr,
-                        "[Deliver] citizen=%p carry(115de0)=%d acc(+0xc8)=%lld "
-                        "time(300.0)=%lld -> LongTermPlan(0xd) prio=%d %s\n",
-                        reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(self)),
-                        happy,
-                        (long long)*reinterpret_cast<int64_t*>(base + 0xc8),
-                        (long long)timeBuf, ltpPrio,
-                        ltpPrio >= 3 ? "(beats Idle prio 2)" : "(LOSES to Idle prio 2)");
-                    std::fflush(stderr);
-                }
-            }
         }
     }
 
@@ -799,73 +679,6 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         CitizenAI_SortByPriority(reinterpret_cast<void*>(outList[0]),
                                  *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(outList) + 8));
     }
-
-    // ── Candidate-state census (open C) — see the header block ────────────────────────
-    if (const int period = CandCensusPeriod()) {
-        ++s_censCalls;
-        const int cnt = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(outList) + 8);
-        int32_t* arr = cnt > 0 ? reinterpret_cast<int32_t*>(outList[0]) : nullptr;
-        if (arr && (unsigned)arr[0] < 16) s_censTop[arr[0]]++;
-
-        if ((s_censCalls % period) == 0) {
-            // Per-citizen gate line: the inputs that pick the branch and the
-            // Gather/Gather2 priorities. Read fresh — cz was re-loaded many times.
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
-            int64_t c = *reinterpret_cast<int64_t*>(self);
-            if (c) {
-                int64_t desc = *reinterpret_cast<int64_t*>(c + 0x288);
-                fprintf(stderr,
-                    "[CandCensus] citizen=%p branch=%d workplace(+0x238)=%llx sick(+0x68)=%llx "
-                    "elder(+0x208)=%llx age=%.2f/%.2f happy(+0xac)=%d "
-                    "hunger=%.2f/%.2f warmth=%.2f/%.2f | list:",
-                    reinterpret_cast<void*>(c), censBranch,
-                    (unsigned long long)*reinterpret_cast<int64_t*>(c + 0x238),
-                    (unsigned long long)*reinterpret_cast<int64_t*>(c + 0x68),
-                    (unsigned long long)*reinterpret_cast<int64_t*>(c + 0x208),
-                    *reinterpret_cast<float*>(c + 0x3c),
-                    desc ? *reinterpret_cast<float*>(desc + 0x44) : 0.0f,
-                    *reinterpret_cast<int*>(c + 0xac),
-                    *reinterpret_cast<float*>(c + 0x44),
-                    desc ? *reinterpret_cast<float*>(desc + 0xcc) : 0.0f,
-                    *reinterpret_cast<float*>(c + 0x48),
-                    desc ? *reinterpret_cast<float*>(desc + 0xec) : 0.0f);
-                for (int k = 0; k < cnt && k < 16; ++k)
-                    fprintf(stderr, " %s(%d)/p%d", CandStateName(arr[3*k]), arr[3*k], arr[3*k+1]);
-                fprintf(stderr, "\n");
-            }
-
-            // Aggregate: what was OFFERED (by priority) vs what came out on top.
-            fprintf(stderr, "[CandCensus] --- after %ld calls ---\n", s_censCalls);
-            for (int id = 0; id < 16; ++id) {
-                long tot = 0;
-                for (int p = 0; p < 8; ++p) tot += s_censAppended[id][p];
-                if (tot == 0 && s_censTop[id] == 0) continue;
-                fprintf(stderr, "[CandCensus]   %-14s(%2d) offered=%-8ld top=%-8d by prio:",
-                        CandStateName(id), id, tot, s_censTop[id]);
-                for (int p = 0; p < 8; ++p)
-                    if (s_censAppended[id][p]) fprintf(stderr, " p%d=%d", p, s_censAppended[id][p]);
-                fprintf(stderr, "\n");
-            }
-            fflush(stderr);
-        }
-    }
-
-    // Brick-3a verification trace (env BANISHED_CITIZENAI_TRACE, default off):
-    // reports the prioritized candidate list ONE time so we can confirm the brain
-    // actually selects states (handlers still guarded => no entry yet).
-    {
-        static int s_ts = -1; static int s_n = 0;
-        if (s_ts < 0) { const char* e = getenv("BANISHED_CITIZENAI_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        int cnt = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(outList) + 8);
-        if (s_ts == 1 && s_n < 4 && cnt > 0) {
-            int32_t* arr = reinterpret_cast<int32_t*>(outList[0]);
-            fprintf(stderr, "[CandList] self=%p count=%d : ", selfV, cnt);
-            for (int k = 0; k < cnt && k < 16; k++)
-                fprintf(stderr, "{id=%d prio=%d} ", arr[3*k], arr[3*k+1]);
-            fprintf(stderr, "\n"); fflush(stderr);
-            s_n++;
-        }
-    }
 }
 
 // ============================================================
@@ -884,58 +697,6 @@ typedef uint64_t (*fn_StateHandlerPtr_t)(void* internal);   // case 0xd: (*(self
 
 int CitizenAI_ValidateAndEnterState(void* selfV, int state) {
     uint8_t* base = reinterpret_cast<uint8_t*>(selfV);
-
-    // [BuilderTrace] throughput diagnostic (gated BANISHED_BUILD_TRACE): flag a seated
-    // builder (owner CitizenComponent +0x1f0 == builderMarker = *(*(gw+0xb0)+0x38)) so we
-    // can log which state it actually enters — to see why seated builders don't sustain
-    // build labor (build is claimed only from Idle/id 9 via the 7b60 work-tree walk).
-    static int s_bldrTrace = -1;
-    if (s_bldrTrace < 0) { const char* e = getenv("BANISHED_BUILD_TRACE"); s_bldrTrace = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    void* bt_cit = nullptr;
-    bool  bt_isBuilder = false;
-    if (s_bldrTrace && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-        uintptr_t gw  = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
-        uintptr_t reg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
-        uint64_t marker = reg ? *reinterpret_cast<uint64_t*>(reg + 0x38) : 0;
-        bt_cit = *reinterpret_cast<void**>(base + 0x38);
-        if (marker && bt_cit &&
-            *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(bt_cit) + 0x1f0) == marker)
-            bt_isBuilder = true;
-    }
-    auto bt_logEnter = [&](int r) -> int {
-        if (bt_isBuilder && r) {
-            std::fprintf(stderr, "[BuilderTrace] citizen=%p ENTERED state=%d\n", bt_cit, state);
-            // One-shot field dump per builder (resolve child-vs-adult / workplace / housing).
-            static void* s_dumped[8] = {0,0,0,0,0,0,0,0}; static int s_dn = 0;
-            bool seen = false;
-            for (int i = 0; i < s_dn && i < 8; ++i) if (s_dumped[i] == bt_cit) { seen = true; break; }
-            if (!seen && s_dn < 8) {
-                s_dumped[s_dn++] = bt_cit;
-                uint8_t* c = reinterpret_cast<uint8_t*>(bt_cit);
-                int64_t desc = *reinterpret_cast<int64_t*>(c + 0x288);
-                float age = *reinterpret_cast<float*>(c + 0x3c);
-                float thr = desc ? *reinterpret_cast<float*>(desc + 0x44) : -1.0f;
-                float hunger = *reinterpret_cast<float*>(c + 0x44);
-                float thirst = *reinterpret_cast<float*>(c + 0x48);
-                float hThrC8 = desc ? *reinterpret_cast<float*>(desc + 0xc8) : -1.0f;  // state-0 hunger-other
-                float hThrCC = desc ? *reinterpret_cast<float*>(desc + 0xcc) : -1.0f;  // state-0xe hunger urgent
-                float hsr2Thr = desc ? *reinterpret_cast<float*>(desc + 0xd4) : -1.0f; // HSR2 threshold
-                std::fprintf(stderr, "[BuilderTrace] FIELDS citizen=%p hunger(+0x44)=%.2f thirst(+0x48)=%.2f "
-                             "hThr(desc+0xc8)=%.2f hThrUrg(desc+0xcc)=%.2f hsr2Thr(desc+0xd4)=%.2f age(+0x3c)=%.2f adultThr(desc+0x44)=%.2f\n",
-                             bt_cit, hunger, thirst, hThrC8, hThrCC, hsr2Thr, age, thr);
-                std::fprintf(stderr, "[BuilderTrace] FIELDS2 citizen=%p "
-                             "elder(+0x208)=%p wp(+0x238)=%p house(+0x248)=%p disease(+0x68)=%p care(+0x228)=%p prof(+0x1f0)=0x%llx\n",
-                             bt_cit,
-                             reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x208)),
-                             reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x238)),
-                             reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x248)),
-                             reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x68)),
-                             reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x228)),
-                             (unsigned long long)*reinterpret_cast<int64_t*>(c + 0x1f0));
-            }
-        }
-        return r;
-    };
 
     // Cooldown gate: *(int64*)(self + state*8 + 0x40) < 1
     if (*reinterpret_cast<int64_t*>(base + (int64_t)state * 8 + 0x40) < 1) {
@@ -966,18 +727,18 @@ int CitizenAI_ValidateAndEnterState(void* selfV, int state) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x38);
             void* internal = *reinterpret_cast<void**>(base + 0x38);
             (reinterpret_cast<fn_StateHandlerPtr_t>(fp))(internal);
-            return bt_logEnter(1);   // original returns CONCAT71(.., 1) -> low byte always 1
+            return 1;   // original returns CONCAT71(.., 1) -> low byte always 1
         }
 
         if (state == 0xb) {
             // case 0xb returns a bool in low byte.
             bool r = (bool)(reinterpret_cast<fn_StateHandler_t>(fp))((int64_t)base);
-            return bt_logEnter(r ? 1 : 0);
+            return r ? 1 : 0;
         }
 
         // all other cases: return the handler's low byte directly.
         uint64_t r = (reinterpret_cast<fn_StateHandler_t>(fp))((int64_t)base);
-        return bt_logEnter((int)(r & 0xff));
+        return (int)(r & 0xff);
     }
 
     // default: original returns (uint7)(state>>8)<<8 — low byte is 0.

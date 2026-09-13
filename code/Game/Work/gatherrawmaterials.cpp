@@ -16,6 +16,7 @@
 //   GetTarget (vtable slot 10, 0x1400ec510)
 //
 
+#include "options.h"
 #include "Work/gatherrawmaterials_funcs.h"
 #include "BuildActions.h"
 #include "engine_funcs.h"

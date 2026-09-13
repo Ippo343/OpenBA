@@ -160,11 +160,6 @@ static void HighlightComponent_OnRemovedFromWorld(void* self) {
     if (!scene) return;
     s_fn_Scene_RemoveObject(scene, static_cast<uint32_t>(sceneId));
     *reinterpret_cast<int32_t*>(s + 0x120) = -1;
-    if (std::getenv("BANISHED_DESTROY_TRACE")) {
-        std::fprintf(stderr, "[HighlightComp] removed-from-world: RemoveObject "
-                     "outline sceneId=%d comp=%p\n", sceneId, self);
-        std::fflush(stderr);
-    }
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====

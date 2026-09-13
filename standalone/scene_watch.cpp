@@ -19,6 +19,7 @@
 #include <set>
 #include <string>
 #include "resolve.h"
+#include "options.h"
 #include <windows.h>
 
 namespace {
@@ -26,8 +27,7 @@ namespace {
 bool Enabled() {
     static int on = -1;
     if (on < 0) {
-        const char* e = std::getenv("BANISHED_SCENE_WATCH");
-        on = (e && e[0] && e[0] != '0') ? 1 : 0;
+        on = Opt().sceneWatch ? 1 : 0;
     }
     return on == 1;
 }
@@ -80,8 +80,7 @@ bool Readable(void* p) {
 void SceneWatch_AddTally(const char* who, void* geometry) {
     static int on = -1;
     if (on < 0) {
-        const char* e = std::getenv("BANISHED_SCENE_ADDTALLY");
-        on = (e && e[0] && e[0] != '0') ? 1 : 0;
+        on = Opt().sceneAddTally ? 1 : 0;
     }
     if (!on) return;
 
@@ -196,8 +195,7 @@ namespace {
 bool CensusEnabled() {
     static int on = -1;
     if (on < 0) {
-        const char* e = std::getenv("BANISHED_SCENE_CENSUS");
-        on = (e && e[0] && e[0] != '0') ? 1 : 0;
+        on = Opt().sceneCensus ? 1 : 0;
     }
     return on == 1;
 }
@@ -376,8 +374,7 @@ namespace {
 bool ForceLod0() {
     static int on = -1;
     if (on < 0) {
-        const char* e = std::getenv("BANISHED_FORCE_LOD0");
-        on = (e && e[0] && e[0] != '0') ? 1 : 0;
+        on = Opt().forceLod0 ? 1 : 0;
     }
     return on == 1;
 }
@@ -385,8 +382,7 @@ bool ForceLod0() {
 bool LodEnabled() {
     static int on = -1;
     if (on < 0) {
-        const char* e = std::getenv("BANISHED_LOD_CENSUS");
-        on = (e && e[0] && e[0] != '0') ? 1 : 0;
+        on = Opt().lodCensus ? 1 : 0;
     }
     // BANISHED_FORCE_LOD0 needs the same per-frame walk to do its clamping, so it
     // implies the census; the numbers it prints are wanted for that A/B anyway.

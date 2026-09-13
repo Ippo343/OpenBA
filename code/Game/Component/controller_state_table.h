@@ -151,21 +151,6 @@ struct Dispatcher {
     // slot 0 (+0x00): Step(node /*ignored*/, input) -> index / -1
     static int Step(void* /*node*/, int input) {
         int idx = TableFindIndex(table, input);
-        // One-shot bring-up trace (env BANISHED_SM_TRACE, default off): proves the
-        // REAL dispatcher Step is invoked by StateMachine::Tick and returns real
-        // table indices (vs. the old stub Step that always returned 0).
-        static int s_trace = -1;
-        static int s_n = 0;
-        if (s_trace < 0) {
-            const char* e = std::getenv("BANISHED_SM_TRACE");
-            s_trace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-        }
-        if (s_trace == 1 && s_n < 12) {
-            std::fprintf(stderr, "[SMTrace] Step(input=%d) -> idx=%d  (table.count=%d)\n",
-                         input, idx, table.count);
-            std::fflush(stderr);
-            ++s_n;
-        }
         return idx;
     }
     // node+0x18 holds the controller-data pointer the handler expects.
@@ -329,20 +314,6 @@ inline void RequestStateTransition(void* sm, int desiredStateId) {
     int curIdx = *reinterpret_cast<int8_t*>(s + 0x09);  // re-read after the nested tick
     int desired = desiredStateId;
     int idx = rt(node, curIdx, &desired);
-    // +0x0b is a transition index that is only meaningful RELATIVE TO THE STATE THAT
-    // WAS CURRENT WHEN IT WAS WRITTEN. If Tick ever re-reads the pair after the state
-    // has already changed, the same index selects a different target — e.g. requesting
-    // 13 from state 2 writes idx 0, and idx 0 read from state 13 is the transition to
-    // 14 (PAUSED). Log the pair with the state it was computed against so a stale
-    // re-application is visible.
-    if (std::getenv("BANISHED_SEAT_TRACE")) {
-        std::fprintf(stderr, "[SMReq] sm=%p curIdx=%d want=%d -> idx=%d desired=%d "
-                             "(pending was 0x0a=%d 0x0b=%d)\n",
-                     sm, curIdx, desiredStateId, idx, desired,
-                     (int)*reinterpret_cast<int8_t*>(s + 0x0a),
-                     (int)*reinterpret_cast<int8_t*>(s + 0x0b));
-        std::fflush(stderr);
-    }
     if (idx >= 0) {
         *reinterpret_cast<int8_t*>(s + 0x0b) = static_cast<int8_t>(idx);
         *reinterpret_cast<int8_t*>(s + 0x0a) = static_cast<int8_t>(desired);

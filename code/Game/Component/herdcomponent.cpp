@@ -205,16 +205,6 @@ static void EnsureHerdExtras() {
     s_herdExtraInit = true;
 }
 
-// [Herd] trace gate — cheap, and only reachable when BANISHED_LIVE_HERD is on.
-static bool HerdTraceOn() {
-    static int s = -1;
-    if (s < 0) {
-        const char* e = getenv("BANISHED_HERD_TRACE");
-        s = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s == 1;
-}
-
 // Find a component of `typeId` on a ComponentEntity (list at +0x30, count at +0x38).
 // Mirrors the inlined search loop used throughout these helpers.
 static void* HerdFindComponent(int64_t entity, uint32_t* pTypeId) {
@@ -548,14 +538,6 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
             uint64_t regRef = entRef;
             s_fn_RegisterEntity(entityList, &regRef, *(int*)(descr + 0x20));
         }
-        if (HerdTraceOn()) {
-            fprintf(stderr, "[Herd] AdjustSize spawn: herd=%p count=%d target=%d "
-                    "cell=%d animal=%p wild=%p\n",
-                    (void*)self, *(int*)(self + 0x40), targetSize,
-                    *(int*)(self + 0x4c), (void*)animalRef, (void*)wildRef);
-            fflush(stderr);
-        }
-
         if (*(int*)(self + 0x40) <= countBefore) {
             fprintf(stderr, "[Herd] AdjustSize aborted: member count stuck at %d "
                     "(target %d) — the herd back-link never ran\n",
@@ -697,12 +679,6 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
     // the check every tile computed below would be negative.
     int mapDim = mapDimPtr ? *mapDimPtr : 0;
     if (mapDim <= 0 || *(int*)(self + 0x4c) < 0) {
-        if (HerdTraceOn()) {
-            fprintf(stderr, "[Herd] Populate: herd=%p cell=%d has no grazing tile "
-                    "(+0x4c=%d, mapDim=%d) — herd left empty\n",
-                    (void*)self, *(int*)(self + 0x30), *(int*)(self + 0x4c), mapDim);
-            fflush(stderr);
-        }
         return;
     }
 
@@ -735,12 +711,6 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
                 "(HerdDescription+0x20 is null) — no deer will spawn\n", (void*)self);
         fflush(stderr);
         count = 0;
-    }
-
-    if (HerdTraceOn()) {
-        fprintf(stderr, "[Herd] Populate: herd=%p cell=%d rect=(%d,%d %dx%d) count=%d\n",
-                (void*)self, *(int*)(self + 0x4c), bx, by, bw, bh, count);
-        fflush(stderr);
     }
 
     int spawned = 0;
@@ -833,12 +803,6 @@ void HerdComponent_Populate(int64_t herdComp, int count) {
                  *(float*)((uintptr_t)herdDesc + 0x30)) * (s_f300 ? *s_f300 : 300.0f));
     *(int64_t*)(self + 0x50) = grazeTicks;
     *(char*)(self + 0x48) = 0;
-
-    if (HerdTraceOn()) {
-        fprintf(stderr, "[Herd] Populate done: herd=%p spawned=%d members=%d\n",
-                (void*)self, spawned, *(int*)(self + 0x40));
-        fflush(stderr);
-    }
 }
 
 // ============================================================
@@ -858,11 +822,6 @@ void HerdComponent_OnAdd(void* selfV) {
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, selfV);
     s_fn_DynArray8_ResizeFill(reinterpret_cast<int64_t*>(townMgr + 0xb0),
                               *(int*)(townMgr + 0xb8) + 1, &selfRef);
-    if (HerdTraceOn()) {
-        fprintf(stderr, "[Herd] OnAdd: herd=%p registered, world herd count=%d\n",
-                selfV, *(int*)(townMgr + 0xb8));
-        fflush(stderr);
-    }
 }
 
 // ============================================================
@@ -1058,13 +1017,6 @@ void HerdComponent_Update(HerdComponent* self, int64_t* deltaTime) {
             currentTarget = maxSize;
         }
 
-        if (HerdTraceOn()) {
-            fprintf(stderr, "[Herd] census: herd=%p members=%d target=%d food=%.2f\n",
-                    (void*)self, *reinterpret_cast<int32_t*>(&self->data40),
-                    currentTarget, foodScore);
-            fflush(stderr);
-        }
-
         s_fn_AdjustSize(self, currentTarget);
     }
 
@@ -1185,15 +1137,12 @@ static void HerdComponent_SerializeVSlot(void* self, void* stream) {
     HerdComponent_Serialize(self, stream);
 }
 static void HerdComponent_FinishLiveVtable() {
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_HERD")) {
-        HerdComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&HerdComponent_StartupVSlot);
-        HerdComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&HerdComponent_UpdateVSlot);
-    }
-    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_HERD"))
-        HerdComponent_LiveVtable[6] =
-            reinterpret_cast<void*>(&HerdComponent_OnAddedVSlot);
+    HerdComponent_LiveVtable[4] =
+        reinterpret_cast<void*>(&HerdComponent_StartupVSlot);
+    HerdComponent_LiveVtable[9] =
+        reinterpret_cast<void*>(&HerdComponent_UpdateVSlot);
+    HerdComponent_LiveVtable[6] =
+        reinterpret_cast<void*>(&HerdComponent_OnAddedVSlot);
     HerdComponent_LiveVtable[3] =
         reinterpret_cast<void*>(&HerdComponent_SerializeVSlot);
 }
