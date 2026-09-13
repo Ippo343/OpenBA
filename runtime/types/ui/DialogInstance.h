@@ -98,7 +98,10 @@
 //                            methods iterate exactly this pair.         0x180113320
 //   0x88  _upperLeftX        ?SetUpperLeft@ delta base                  0x180114a60
 //   0x8c  _upperLeftY        ?SetUpperLeft@ delta base                  0x180114a60
-//   0x90  _timerHandle       ctor sets the qword to -1; no ported body
+//   0x90  _hoverMouseX/Y     ctor sets the qword to -1 (both ints -1). ?Update@
+//                      (0x180113980) compares the UpdateState mouse to this pair
+//                      and stores it back, so the pair is "where the mouse was
+//                      last frame while over this dialog" -- the tooltip settle.
 //                            reads it. NAME IS A GUESS, flagged.        0x180114870
 //   0x98  _hovering          ctor sets the byte to 0.                    0x180114870
 //                            NAME PROVEN 2026-09-09 (Wave 10C lane UIF6), not a
@@ -238,7 +241,8 @@ struct DialogInstance {
     Collection::Array<DialogController*> _controllers;  // +0x78..0x87
     int32_t  _upperLeftX;                // +0x88
     int32_t  _upperLeftY;                // +0x8c
-    int64_t  _timerHandle;               // +0x90  ctor: -1. NAME IS A GUESS.
+    int32_t  _hoverMouseX;               // +0x90  ctor: -1. PROVEN by ?Update@ 0x180113a1a
+    int32_t  _hoverMouseY;               // +0x94  ctor: -1. PROVEN by ?Update@ 0x180113a26
     uint8_t  _hovering;                  // +0x98  ctor: 0.  PROVEN by ?IsHovering@
                                          //        (0x1800455a0), a one-line accessor.
     uint8_t  _hole99[7];                 // +0x99  NOT written by the ctor
@@ -263,7 +267,8 @@ static_assert(offsetof(DialogInstance, _timers)      == 0x68, "DialogInstance::_
 static_assert(offsetof(DialogInstance, _controllers) == 0x78, "DialogInstance::_controllers @ +0x78 (GetController)");
 static_assert(offsetof(DialogInstance, _upperLeftX)  == 0x88, "DialogInstance::_upperLeftX @ +0x88");
 static_assert(offsetof(DialogInstance, _upperLeftY)  == 0x8c, "DialogInstance::_upperLeftY @ +0x8c");
-static_assert(offsetof(DialogInstance, _timerHandle) == 0x90, "DialogInstance +0x90 (ctor writes -1)");
+static_assert(offsetof(DialogInstance, _hoverMouseX) == 0x90, "DialogInstance::_hoverMouseX @ +0x90 (Update 0x180113980)");
+static_assert(offsetof(DialogInstance, _hoverMouseY) == 0x94, "DialogInstance::_hoverMouseY @ +0x94 (Update 0x180113980)");
 static_assert(offsetof(DialogInstance, _hovering)    == 0x98, "DialogInstance::_hovering @ +0x98 (IsHovering 0x1800455a0)");
 static_assert(offsetof(DialogInstance, _hoverTime)   == 0xa0, "DialogInstance::_hoverTime @ +0xa0 (EndHover 0x180113d10)");
 static_assert(offsetof(DialogInstance, _userData)    == 0xa8, "DialogInstance::_userData @ +0xa8");

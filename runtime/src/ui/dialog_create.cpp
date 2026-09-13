@@ -803,7 +803,8 @@ void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
     d->_controllers._capacity = 0;                 // +0x84
     d->_upperLeftX = 0;                            // +0x88
     d->_upperLeftY = 0;                            // +0x8c
-    d->_timerHandle = -1;                          // +0x90  a QWORD -1
+    d->_hoverMouseX = -1;                          // +0x90  a QWORD -1 --
+    d->_hoverMouseY = -1;                          // +0x94  both hover ints
     d->_hovering    = 0;                           // +0x98  a single BYTE
     d->_hoverTime   = 0;                           // +0xa0   (+0x99.. left alone)
     d->_userData    = userData;                    // +0xa8
@@ -1142,7 +1143,7 @@ void VerifyCtorShape(RtDiffSite* site) {
         offsetof(DialogInstance, _spriteSheet), "DialogInstance::_spriteSheet"); }
     // `MOV qword ptr [RSI+0x90],-1` -> the qword -1 at +0x90
     { static const uint8_t p[] = { 0x48, 0xc7, 0x86 }; PinDisp(c, p, 3, 4,
-        offsetof(DialogInstance, _timerHandle), "DialogInstance::_timerHandle"); }
+        offsetof(DialogInstance, _hoverMouseX), "DialogInstance::_hoverMouseX (+0x90 qword -1)"); }
     // `MOV qword ptr [RAX+0x90],RSI` -> Element::_dialogParent
     { static const uint8_t p[] = { 0x48, 0x89, 0xb0 }; PinDisp(c, p, 3, 4,
         static_cast<int64_t>(EL::kDialogParent), "Element::_dialogParent"); }

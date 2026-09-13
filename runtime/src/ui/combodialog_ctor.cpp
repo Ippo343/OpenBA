@@ -547,7 +547,8 @@ extern "C" void* RtUi_DialogInstance_CtorFromElement(void* self, void* ui,
     d->_controllers._capacity = 0;                 // +0x84  /
     d->_upperLeftX = 0;                            // +0x88  \ one qword store
     d->_upperLeftY = 0;                            // +0x8c  /
-    d->_timerHandle = -1;                          // +0x90  a QWORD -1
+    d->_hoverMouseX = -1;                          // +0x90  a QWORD -1 --
+    d->_hoverMouseY = -1;                          // +0x94  both hover ints
     d->_hovering    = 0;                           // +0x98  a single BYTE
     d->_hoverTime   = 0;                           // +0xa0   (+0x99.. left alone)
     d->_userData    = userData;                    // +0xa8

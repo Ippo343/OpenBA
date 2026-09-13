@@ -1458,13 +1458,17 @@ void RtUiDialogInstance_Update(DialogInstance* self, const void* time,
             const int32_t mx = *reinterpret_cast<const int32_t*>(us + 0x18);
             const int32_t my = *reinterpret_cast<const int32_t*>(us + 0x1c);
             if (us[0x20] == 0 && RtUiDialogInstance_Contains(self, mx, my)) {
-                if (self->_upperLeftX == mx && self->_upperLeftY == my) {
+                // +0x90/+0x94 (`CMP [RDI+0x90],EAX` at 0x180113a1a), NOT the
+                // upper-left pair at +0x88. Writing +0x88 here moved every
+                // hovered dialog by the mouse delta (the in-game pause menu
+                // followed the cursor, 2026-09-12).
+                if (self->_hoverMouseX == mx && self->_hoverMouseY == my) {
                     self->_hoverTime += timeTicks;
                     if (self->_hoverTime > static_cast<int64_t>(kTooltipDelaySeconds / secondsPerTick))
                         self->_hovering = 1;
                 }
-                self->_upperLeftX = mx;
-                self->_upperLeftY = my;
+                self->_hoverMouseX = mx;
+                self->_hoverMouseY = my;
             }
         } else if (self->_hovering != 0) {
             self->_hovering = 0;
