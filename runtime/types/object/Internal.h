@@ -226,3 +226,187 @@ enum : int {
 };
 
 }  // namespace RtObject
+
+// ============================================================================
+// ENDGAME B.3.1 step 1 -- the REAL classes, under retail's names.
+// ============================================================================
+//
+// `RtObject::InternalBasePtr` above stays declared (B31_RULES step 1: every
+// existing vocabulary keeps working; the POD goes when its last user does --
+// today runtime/src/achievement/goal.cpp:411 and the C shims below).
+//
+// TRIVIALLY COPYABLE AND TRIVIALLY DESTRUCTIBLE, ON PURPOSE AND BY ASSERTION.
+// `Copy` (0x1800062b0) is `mov rax,[rdx]; mov [rcx],rax` -- a bare 8-byte copy,
+// after which the two pointers are ALIASES. There is no refcount anywhere in
+// this family: `InternalFactory::_objects` plus an explicit `new`/`delete` owns
+// every `Internal`, and the {index, generation, typeId} triple exists for SAVE
+// FILES, not for weak-reference safety (SMARTPTR_INVENTORY.md sections 1, 5.2).
+// The `Collection::Array`/`LinkedList` bulk paths move these eight bytes with a
+// plain qword copy, so a user-provided copy ctor or dtor here would be silently
+// bypassed (section 5.4).
+//
+// *** CheckPtr AND AssignId ARE BARE `RET`s IN EVERY BUILD, PROFILE INCLUDED. ***
+// They are transcribed below as empty bodies and MUST STAY EMPTY: retail never
+// validates a stale handle, it relies on explicit clearing at removal time, and
+// adding validation on deref would diverge from every save file and every
+// caller (memory reference_checkptr_is_a_ret_in_every_build; hazard 5.1).
+//
+// RETAIL ADDRESSES (retail / profile):
+//   ??0InternalBasePtr@Object@@QEAA@XZ                 0x1800062c0 / 0x180023900
+//   ??0InternalBasePtr@Object@@QEAA@PEAVInternal@1@@Z  0x1800062a0 / 0x1800238e0
+//   ?Copy@InternalBasePtr@Object@@IEAAXAEBV12@@Z       0x1800062b0 / 0x1800257d0
+//   ?CheckPtr@InternalBasePtr@Object@@IEBAXXZ          0x1800c0290 / 0x18008c5d0
+//   ?AssignId@InternalBasePtr@Object@@IEAAXXZ          0x1800c0280 / 0x18008c5e0
+//   ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ         0x1800c0150 / 0x18008c5a0
+//   ?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z
+//                                                      0x1800c0180 / 0x18008c460
+//   InternalPtr<T> array Serialize (ONE 180-byte body, two instantiations):
+//     0x180009a20 Achievement::AchievementInstance
+//     0x180009fa0 Achievement::GoalInstance
+//   Re-verified 2026-09-13, function-size-bounded, with
+//   tools/extptr_clone_check.py's diff: identical=55 position-only=2 REAL=1,
+//   the one REAL instruction being the `_typeInfo` load. ONE BODY.
+//
+// There is no `Clone` for this family either -- copying IS `Copy`.
+// ============================================================================
+
+#include <new>
+#include <type_traits>
+
+namespace Object {
+
+// Defined in runtime/src/object/internal.cpp, next to the ReaderWriter vtable
+// slots and the `PersistObject` name door it needs -- `IO::Serializer`,
+// `Object::Base` and `InternalFactory` are all still unconverted
+// (SMARTPTR_INVENTORY.md section 4), so the body keeps reaching them exactly as
+// the C body does.
+void InternalBasePtrSerializeBody(RtObject::Internal** self,
+                                  RtObject::SerializerLite& ser);
+// Object::Base::IsDerivedFrom's ancestor walk, reached by name from
+// runtime/src/object/type_system.cpp -- the typed half of InternalPtr<T>.
+bool InternalPtrIsDerivedFrom(const void* obj, uint32_t typeId);
+
+class InternalBasePtr {
+public:
+    // 0x1800062c0 -- one instruction, `mov qword ptr [rcx], 0`.
+    InternalBasePtr() : _ptr(nullptr) {}
+    // 0x1800062a0 -- one instruction, `mov qword ptr [rcx], rdx`.
+    InternalBasePtr(RtObject::Internal* p) : _ptr(p) {}
+
+    // Trivial by construction and by assertion; see the banner.
+    InternalBasePtr(const InternalBasePtr&) = default;
+    InternalBasePtr& operator=(const InternalBasePtr&) = default;
+    ~InternalBasePtr() = default;
+
+    RtObject::Internal* Get() const        { return _ptr; }
+    RtObject::Internal* operator->() const { return _ptr; }
+    RtObject::Internal& operator*()  const { return *_ptr; }
+    explicit operator bool() const { return _ptr != nullptr; }
+    bool operator==(const InternalBasePtr& o) const { return _ptr == o._ptr; }
+    bool operator!=(const InternalBasePtr& o) const { return _ptr != o._ptr; }
+
+    // ?DeletePtr@... 0x1800c0150 --
+    //     p = _ptr; if (p) { p->vtbl[0](p, 1); _ptr = 0; }
+    // Slot 0 with flag 1 is MSVC's scalar deleting destructor: it runs
+    // ~Internal (and therefore InternalFactory's swap-remove) and frees the
+    // block. The raw-vtable call is the one the C body already had; it becomes
+    // a real virtual when Object::Internal is a class (ENDGAME B.3 step 3).
+    void DeletePtr() {
+        RtObject::Internal* p = _ptr;
+        if (p != nullptr) {
+            void** vtbl = *reinterpret_cast<void***>(p);
+            reinterpret_cast<void (*)(RtObject::Internal*, int)>(vtbl[0])(p, 1);
+            _ptr = nullptr;
+        }
+    }
+
+    // ?Serialize@... 0x1800c0180. Writes/reads {present, index, generation,
+    // type} through the ReaderWriter vtable and resolves the triple back
+    // through InternalFactory::PersistObject on load.
+    void Serialize(RtObject::SerializerLite& ser) {
+        InternalBasePtrSerializeBody(&_ptr, ser);
+    }
+
+    // ---- the transitional entry points the C shims call --------------------
+    // `Copy`, `CheckPtr` and `AssignId` are PROTECTED in retail (the `IEAA` /
+    // `IEBA` manglings). The registered C shims are free functions and cannot
+    // reach them, so each gets a one-line static forwarder that disappears with
+    // the shim in step 2. Nothing else may call these.
+    static void Shim_Copy(InternalBasePtr* self, const InternalBasePtr* other) {
+        self->Copy(*other);
+    }
+    static void Shim_CheckPtr(const InternalBasePtr* self) { self->CheckPtr(); }
+    static void Shim_AssignId(InternalBasePtr* self)       { self->AssignId(); }
+
+protected:
+    // ?Copy@... 0x1800062b0 -- `mov rax,[rdx]; mov [rcx],rax`. NOT refcounted.
+    void Copy(const InternalBasePtr& other) { _ptr = other._ptr; }
+
+    // ?CheckPtr@... 0x1800c0290 -- a bare `ret` in retail AND in the profile
+    // build. DO NOT ADD VALIDATION HERE. See the banner.
+    void CheckPtr() const {}
+
+    // ?AssignId@... 0x1800c0280 -- the same three bytes. Likewise empty.
+    void AssignId() {}
+
+    RtObject::Internal* _ptr;   // +0x00
+};
+
+static_assert(sizeof(InternalBasePtr) == 0x08, "Object::InternalBasePtr is 8 bytes");
+static_assert(std::is_trivially_copyable<InternalBasePtr>::value,
+              "Copy (0x1800062b0) is a bare qword move and the array/list bulk "
+              "paths memcpy these; a real copy ctor would be silently skipped");
+static_assert(std::is_trivially_destructible<InternalBasePtr>::value,
+              "no destructor exists in retail; DeletePtr is explicit and manual");
+
+// ============================================================
+// Object::InternalPtr<T> -- retail's TYPED wrapper over the same eight bytes.
+//
+// Single inheritance, no virtuals, so the layout is unchanged (asserted). The
+// only typed operation retail emits is the array Serialize's per-element type
+// check, which is `InternalBasePtr::Serialize` plus one `IsDerivedFrom` against
+// `T::_typeInfo`'s first dword -- ONE body, both instantiations
+// (SMARTPTR_INVENTORY.md section 3). Until `T` is a real C++ class with a
+// `_typeInfo` static (ENDGAME B.3 step 3, decision 4) the type id is supplied
+// by the caller, exactly as the C thunks read it through the name door.
+// ============================================================
+template <class T>
+class InternalPtr : public InternalBasePtr {
+public:
+    InternalPtr() : InternalBasePtr() {}
+    InternalPtr(T* p) : InternalBasePtr(reinterpret_cast<RtObject::Internal*>(p)) {}
+
+    InternalPtr(const InternalPtr&) = default;
+    InternalPtr& operator=(const InternalPtr&) = default;
+    ~InternalPtr() = default;
+
+    // TRANSITIONAL CAST, same reason as ExternalPtr<T>::Serialize: `T` is not a
+    // class deriving from `Object::Internal` in this tree yet, so the downcast
+    // cannot be spelled `static_cast` here. It becomes one in B.3 step 3.
+    T* Get() const        { return reinterpret_cast<T*>(InternalBasePtr::Get()); }
+    T* operator->() const { return Get(); }
+    T& operator*()  const { return *Get(); }
+
+    // 0x180009a20 / 0x180009fa0 -- the one array body, per element.
+    void Serialize(RtObject::SerializerLite& ser, uint32_t typeId) {
+        InternalBasePtr::Serialize(ser);
+        void* obj = InternalBasePtr::Get();
+        if (obj != nullptr && !InternalPtrIsDerivedFrom(obj, typeId))
+            _ptr = nullptr;   // retail nulls the element on total mismatch
+    }
+
+    static void SerializeArray(RtObject::SerializerLite& ser, int count,
+                               InternalPtr* elems, uint32_t typeId) {
+        for (int i = 0; i < count; ++i)
+            elems[i].Serialize(ser, typeId);
+    }
+};
+
+static_assert(sizeof(InternalPtr<RtObject::Internal>) == 0x08,
+              "Object::InternalPtr<T> adds nothing to InternalBasePtr");
+static_assert(std::is_trivially_copyable<InternalPtr<RtObject::Internal> >::value,
+              "the typed wrapper must stay as trivial as its base");
+static_assert(std::is_trivially_destructible<InternalPtr<RtObject::Internal> >::value,
+              "the typed wrapper must stay as trivial as its base");
+
+}  // namespace Object

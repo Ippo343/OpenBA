@@ -365,3 +365,141 @@ static_assert(FactoryTypeNodeOffsets::kLeft          == 0x38, "type-map left");
 static_assert(FactoryTypeNodeOffsets::kRight         == 0x40, "type-map right");
 
 }  // namespace RtObject
+
+// ============================================================================
+// ENDGAME B.3.1 step 1 — the REAL class, under retail's name.
+// ============================================================================
+//
+// `RtObject::ExternalPtr<T>` above stays declared: it is the POD that
+// not-yet-converted structs (Achievement::Goal::_stringTable, ...) and the C
+// bodies still spell, and B31_RULES step 1 keeps every existing vocabulary
+// working. `Object::ExternalPtr<T>` is the same eight bytes with retail's
+// members on them; step 2 moves the callers over one directory at a time and
+// the POD is deleted when its last user is gone.
+//
+// TRIVIALLY COPYABLE AND TRIVIALLY DESTRUCTIBLE, ON PURPOSE AND BY ASSERTION.
+// `Collection::Array<{String, ExternalPtr}>` bulk-moves these eight bytes with
+// a plain qword copy and an explicit "NO refcount touch"
+// (runtime/src/collection/array.cpp:983). A user-provided copy constructor or
+// destructor here would be SILENTLY BYPASSED by every array resize in the
+// engine. There is nothing to run on copy in any case: the pointer owns
+// nothing -- `Object::ExternalFactory`'s two AVL trees own every `External*`
+// (docs/runtime_port/endgame_b/SMARTPTR_INVENTORY.md sections 1, 5.2, 5.4).
+// This is a non-owning view, not a `shared_ptr`.
+//
+// RETAIL ADDRESSES. The only non-trivial member is `Serialize`, and it is ONE
+// 748-byte body emitted 22 times plus ONE 818-byte array body emitted 8 times;
+// the per-T difference is the two `MOV EDX,[rip+?_typeInfo@T@...]` loads and
+// nothing else. Re-verified 2026-09-13 across every registered address with
+// tools/extptr_clone_check.py (bounded to the real function size, because the
+// tool's own "stop at the first RET" cut over-runs a body that ends in a tail
+// JMP and then reports a bogus instruction-count mismatch):
+//   22/22 single-pointer  identical=193  position-only=20  REAL=2
+//    8/8  array           identical=212  position-only=20  REAL=2
+// every REAL pair being the type-info load. ONE BODY, confirmed for the whole
+// family, not just the four the pairwise tool had covered.
+//
+//   single-pointer form, `void Serialize(IO::Serializer&)`, per T:
+//     0x1800042a0 UI::StringTable          0x180038f90 UI::ElementDescription
+//     0x180076610 UI::Dialog               0x180005dc0 Achievement::Goal
+//     0x180004590 UI::SpriteSheet          0x180014520 Graphics::MaterialInstance
+//     0x18005d0f0 Video::ImageBuffer       0x180061100 Graphics::Material
+//     0x180014230 Graphics::GraphicsMesh   0x1800756d0 UI::DialogControllerConfig
+//     0x180051790 Audio::SoundEffect       0x18005b840 Graphics::AnimationGroup
+//     0x180006d10 Achievement::Achievement 0x180055090 Video::VertexLayout
+//     0x1800542a0 Video::VertexProgram     0x180055380 Video::PixelProgram
+//     0x180055670 Video::RenderState       0x18003f1e0 UI::Font
+//     0x1800594a0 Graphics::AnimationEvent 0x180076e90 UI::CharacterSet
+//     0x180052a50 Audio::SoundBuffer       0x18003dc90 Object::ExternalList
+//   array form, `static void SerializeArray(IO::Serializer&, int, ExternalPtr*)`:
+//     0x18002f170 Object::External         0x180005220 Achievement::Goal
+//     0x1800493d0 UI::ElementDescription   0x18005d4a0 Graphics::MaterialInstance
+//     0x1800605e0 Video::VideoProgram      0x18003e710 UI::Font
+//     0x18003eb60 UI::SpriteSheet          0x1800667f0 Collision2D::Surface
+//
+// There is NO `CheckPtr`, NO `AssignId` and NO `Clone` for this family: neither
+// the export table nor any decompiled body defines one, because there is no
+// refcount to check or clone (SMARTPTR_INVENTORY.md section 1).
+// ============================================================================
+
+#include <type_traits>
+
+namespace rt { namespace io { struct Serializer; } }
+
+namespace Object {
+
+// The one shared body, defined in runtime/src/object/external_ptr_serialize.cpp
+// next to the dependency doors it needs (GetPath / FindOrLoad / IsDerivedFrom /
+// GetReferenceId / GetPathForReferenceId / String::Serialize, all still reached
+// through RT_EXPORT_ONCE because none of those classes is converted yet --
+// SMARTPTR_INVENTORY.md section 4). `typeInfo` is this instantiation's
+// `?_typeInfo@T@...` record; its FIRST DWORD is the type id and it is read at
+// call time, as retail does (the id is 0xFFFFFFFF until Factory::Startup).
+void ExternalPtrSerializeBody(RtObject::External** self, rt::io::Serializer& ser,
+                              const void* typeInfo);
+void ExternalPtrSerializeArrayBody(rt::io::Serializer& ser, int count,
+                                   RtObject::External** elems, const void* typeInfo);
+
+template <class T>
+class ExternalPtr {
+public:
+    // Retail emits no out-of-line constructor for this template -- a bare
+    // pointer member is initialised inline at every construction site, and
+    // `ExternalList::Find` (0x1800bf700) writes the not-found case as a single
+    // `*retval = 0` qword store. Zeroing is therefore retail's default.
+    ExternalPtr() : _ptr(nullptr) {}
+    ExternalPtr(T* p) : _ptr(p) {}
+
+    // Copy, assign and destroy are the compiler's, and MUST stay trivial -- see
+    // the banner. Retail had no move (C++03) and a pointer steal would be
+    // observationally identical to a copy here, so none is added.
+    ExternalPtr(const ExternalPtr&) = default;
+    ExternalPtr& operator=(const ExternalPtr&) = default;
+    ~ExternalPtr() = default;
+
+    ExternalPtr& operator=(T* p) { _ptr = p; return *this; }
+
+    T*   Get() const        { return _ptr; }
+    T*   operator->() const { return _ptr; }
+    T&   operator*()  const { return *_ptr; }
+    explicit operator bool() const { return _ptr != nullptr; }
+
+    bool operator==(const ExternalPtr& o) const { return _ptr == o._ptr; }
+    bool operator!=(const ExternalPtr& o) const { return _ptr != o._ptr; }
+
+    // ?Serialize@?$ExternalPtr@...@Object@@QEAAXAEAVSerializer@IO@@@Z -- the one
+    // template body; the only per-T instruction is the `typeInfo` load, which
+    // the caller supplies until `T` is a real C++ class with a `_typeInfo`
+    // static of its own (ENDGAME section B.3 step 3, decision 4).
+    void Serialize(rt::io::Serializer& ser, const void* typeInfo) {
+        // TRANSITIONAL CAST (B31_RULES "not-yet-converted structs"): none of the
+        // 26 `T`s is a C++ class in this tree yet, so the shared body is typed
+        // over `Object::External**`. It goes when `Object::External`'s hierarchy
+        // is converted (ENDGAME section B.3 step 3).
+        ExternalPtrSerializeBody(reinterpret_cast<RtObject::External**>(&_ptr),
+                                 ser, typeInfo);
+    }
+
+    static void SerializeArray(rt::io::Serializer& ser, int count,
+                               ExternalPtr* elems, const void* typeInfo) {
+        ExternalPtrSerializeArrayBody(
+            ser, count, reinterpret_cast<RtObject::External**>(elems), typeInfo);
+    }
+
+    T* _ptr;   // +0x00 -- public: the array bulk-copy paths reach these bytes
+               //         directly and retail's own layout is one bare pointer.
+};
+
+static_assert(sizeof(ExternalPtr<RtObject::External>) == 8,
+              "Object::ExternalPtr<T> is one pointer (ExternalList::Find 0x1800bf700)");
+// ...and for every other T, including one that is only forward-declared, which
+// is what most of the 26 instantiations are in this tree today.
+struct ExternalPtrLayoutProbe;
+static_assert(sizeof(ExternalPtr<ExternalPtrLayoutProbe>) == 8, "...for every T");
+static_assert(std::is_trivially_copyable<ExternalPtr<RtObject::External> >::value,
+              "Array<T>::operator= memcpys these; a real copy ctor would be skipped "
+              "(runtime/src/collection/array.cpp:983)");
+static_assert(std::is_trivially_destructible<ExternalPtr<RtObject::External> >::value,
+              "the array range-destroy never calls one; a real dtor would be skipped");
+
+}  // namespace Object
