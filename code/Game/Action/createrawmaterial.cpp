@@ -345,33 +345,9 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
     g_fn_Serializer_Dtor(ser2);
 }
 
-// ============================================================
-// AbstractImpl (0x1400c6b40)
-// Complex entity creation: looks up RawMaterialDescription, determines yield,
-// allocates new entities, positions them, registers with resource tracker.
-// Returns 0 (action complete).
-// ============================================================
-// Trace gate. BANISHED_PRODUCE_TRACE is the name that describes what this function is
-// (the produce/pile-spawn leaf shared by ConsumeProduce, FishingWork, HarvestOrchard and
-// the animal-slaughter drop path); BANISHED_FORESTER_SCAN_TRACE stays accepted because it
-// is what the existing forester rig sets — and because the forester is NOT even a caller
-// (a chopped tree spawns its pile inline in 0x1401260f0, no CreateRawMaterial action).
-static bool ProduceTraceOn() {
-    static int s = -1;
-    if (s < 0) {
-        const char* a = std::getenv("BANISHED_PRODUCE_TRACE");
-        const char* b = std::getenv("BANISHED_FORESTER_SCAN_TRACE");
-        s = ((a && a[0] && a[0] != '0') || (b && b[0] && b[0] != '0')) ? 1 : 0;
-    }
-    return s == 1;
-}
 
 int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionStack) {
     (void)actionStack;
-    if (ProduceTraceOn()) {
-        fprintf(stderr, "[ORGANIC-PRODUCE] CreateRawMaterial::Main running (self=%p)\n", (void*)self);
-        fflush(stderr);
-    }
     CreateRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
@@ -445,13 +421,6 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
         return 0;
     }
     int maxPerEntity = carrierVolume / unitVolume;
-    if (ProduceTraceOn()) {
-        fprintf(stderr, "[ORGANIC-PRODUCE] batch cap: carrierVolume(+0x40)=%d / "
-                "unitVolume(desc+0x48)=%d = %d per pile; totalItems=%d -> %d pile(s)\n",
-                carrierVolume, unitVolume, maxPerEntity, totalItems,
-                (totalItems + maxPerEntity - 1) / maxPerEntity);
-        fflush(stderr);
-    }
 
     // Spawn loop: create entities for all items
     while (totalItems > 0) {
@@ -538,12 +507,6 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
             *(int32_t*)(compIBP + 0x28) = batchSize;
             *(int64_t*)(compIBP + 0x30) = 0;
 
-            if (ProduceTraceOn()) {
-                fprintf(stderr, "[ORGANIC-PRODUCE]   pile spawned: count=%d at cell %d "
-                        "(%d item(s) still to place)\n",
-                        batchSize, cellIndex, totalItems - batchSize);
-                fflush(stderr);
-            }
 
             // Register raw material with resource tracker
             int64_t sourceIBP = *(int64_t*)(s + 0x30);

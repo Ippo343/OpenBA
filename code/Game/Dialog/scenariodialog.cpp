@@ -446,18 +446,6 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
                         scenarioResIdx, nullIBP);
         printf("[ScenarioDialog::LoadSelected] fn_StartNewGame returned\n");
     } else {
-        // Saved scenario: load the save file first, then start from saved state
-        // This branch had never been exercised before 2026-08-30 (the dialog was
-        // unreachable). It crashed with EXEC-of-0, so report every pointer it needs
-        if (std::getenv("BANISHED_SCENARIO_TRACE"))
-        // and name the null instead of dying on it.
-        fprintf(stderr, "[ScenarioDialog] SAVED branch pointers: saveLoadSgl=%p persistSgl=%p fsSgl=%p SetOperation=%p SetSaveName=%p GetSavePath=%p GetDataDirectory=%p StringAssign=%p GetOperation=%p Update=%p TimeCtor=%p FilenameDtor=%p\n",
-                (void*)g_pSaveLoadSingleton, (void*)g_pPersistenceSingleton,
-                (void*)g_pFileSystemSingleton2,
-                (void*)fn_SaveLoad_SetOperation, (void*)fn_SaveLoad_SetSaveName,
-                (void*)fn_Persistence_GetSavePath, (void*)fn_FileSystem_GetDataDirectory,
-                (void*)fn_String_Assign, (void*)fn_SaveLoad_GetOperation,
-                (void*)fn_SaveLoad_Update, (void*)fn_Time_Ctor_Float, (void*)fn_Filename_Dtor);
         fflush(stderr);
         {
             const char* missing = nullptr;

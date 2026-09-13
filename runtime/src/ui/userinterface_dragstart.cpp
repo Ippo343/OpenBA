@@ -182,32 +182,6 @@ using PlayFn = void (*)(void*, int32_t);
 uint64_t g_beginDragEntries    = 0;
 uint64_t g_beginDragGrabOffset = 0;
 
-// ---------------------------------------------------------------------------
-// POSITIVE CONTROL — BANISHED_DRAG_CONTROL=swap
-//
-// The field oracle in standalone/mouse_inject.cpp reads +0x70/+0x78/+0x80/+0x84
-// back after the call. That is only an instrument
-// if a wrong store would actually MOVE it, and the defect it most needs to see
-// is a TRANSPOSITION of the two int32 grab offsets -- two nearly identical
-// instructions, four bytes apart.
-//
-// This arms exactly that defect on demand. A cell with the control set must
-// DIVERGE from the DLL cell; if it does not, the oracle is blind and its
-// agreement means nothing. Never set in a subject cell.
-//
-// It must be scored on an ASYMMETRIC subject: the toolbar button this lane
-// drags is 40x40, so its centre grab offset is (20,20) and a transposition of
-// (20,20) is (20,20). BANISHED_MOUSE_DRAGSKEW exists to break that symmetry
-// (reference_uniform_population_is_not_a_verification.md).
-// ---------------------------------------------------------------------------
-bool DragControlSwap() {
-    static const bool v = []() {
-        const char* s = std::getenv("BANISHED_DRAG_CONTROL");
-        return s && std::strcmp(s, "swap") == 0;
-    }();
-    return v;
-}
-
 struct DragStartSummary {
     ~DragStartSummary() {
         printf("[RtPort] UI::UserInterface::BeginDragDrop  entries=%llu nonZeroGrabOffset=%llu\n",
@@ -253,9 +227,6 @@ extern "C" void RtUi_UserInterface_BeginDragDrop(UserInterface* self,
     const Element* e2 = static_cast<const Element*>(*elemPtr);         // 0x18011f619  reloaded
     const int32_t  gy = y - e2->_layoutTop;                            // 0x18011f61c  32-bit SUB
     grab[1] = gy;                                                      // 0x18011f61f
-
-    // POSITIVE CONTROL ONLY -- never armed in a subject cell. See DragControlSwap().
-    if (DragControlSwap()) { grab[0] = gy; grab[1] = gx; }
 
     if (gx != x || gy != y) ++g_beginDragGrabOffset;   // effectiveness control only
 

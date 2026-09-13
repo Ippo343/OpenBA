@@ -147,21 +147,6 @@ int Apply() {
     if (g_applied) return g_stats.filled;
     g_applied = true;
 
-    // DEFAULT-ON fidelity fix, with a kill switch — the project's standard
-    // shape for a live feature (kDefaultOnFlags in component_factory_base.cpp).
-    // It exists so the A/B runs on ONE BINARY: with a control that is a
-    // different build, "the tables changed" and "the exe changed" are the same
-    // observation and cannot be told apart.
-    if (const char* e = std::getenv("BANISHED_DLGCTRL_VT")) {
-        if (e[0] == '0' || std::strcmp(e, "false") == 0) {
-            std::fprintf(stderr,
-                "[DlgCtrlVt] DISABLED by BANISHED_DLGCTRL_VT=0 — %d registered "
-                "tables keep their file-local stubs in every inherited slot "
-                "(the pre-Wave-10D behaviour).\n", g_count);
-            g_stats.tables = g_count;
-            return 0;
-        }
-    }
 
     // Resolve the eight base bodies once.
     void* body[11] = { nullptr };
@@ -179,7 +164,6 @@ int Apply() {
     }
 
     g_stats.tables = g_count;
-    const bool trace = std::getenv("BANISHED_DLGCTRL_VT_TRACE") != nullptr;
 
     for (int e = 0; e < g_count; ++e) {
         const Entry& en = g_entries[e];
@@ -205,11 +189,6 @@ int Apply() {
         g_stats.filled       += filled;
         g_stats.keptOverride += kept;
         g_stats.unresolved   += unres;
-        if (trace) {
-            std::fprintf(stderr, "[DlgCtrlVt] %-22s mask=0x%03x filled=%d "
-                         "keptOverride=%d unresolved=%d\n",
-                         en.cls, mask, filled, kept, unres);
-        }
     }
 
     std::fprintf(stderr,

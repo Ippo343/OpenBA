@@ -15,7 +15,7 @@
 #include "Object/internal_factory_audit.h"   // ObjAudit::IsRegistered (stale weak-ref guard)
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>   // std::getenv — used by the seat trace below (also re-included later)
+#include <cstdlib>
 
 // Original FUN_14000d6c0 — FindComponent with type DAT_1401c7008 (guard check only)
 typedef void* (*fn_OrigFindComp_t)(void* entity, void* retval);
@@ -353,12 +353,6 @@ showUpDown:
 
     int workplaceWorkerCount = 0;
     int laborerCount = 0;
-    static int s_censusOn = -1;
-    if (s_censusOn < 0) {
-        const char* e = std::getenv("BANISHED_WP_CITIZEN_CENSUS");
-        s_censusOn = (e && *e && e[0] != '0') ? 1 : 0;
-    }
-    static int s_censusPrinted = 0;
 
     int citizenCount = *(int*)((uintptr_t)citizenList + 0xa8);
     for (int i = 0; i < citizenCount; i++) {
@@ -373,20 +367,6 @@ showUpDown:
         const float citAge = *(float*)((uintptr_t)citizen + 0x3c);
         const float adultAge = *(float*)((uintptr_t)citizenProf + 0x44);
         const uintptr_t gate208 = *(uintptr_t*)((uintptr_t)citizen + 0x208);
-        // One-shot census: laborers=0 out of a full town means this loop rejected
-        // everyone. Print WHICH gate did it (age vs +0x208) plus the profession the
-        // citizen actually carries, so "no laborers" can be told apart from
-        // "everyone was skipped".
-        if (s_censusOn && s_censusPrinted < 12) {
-            ++s_censusPrinted;
-            fprintf(stderr, "[WPCit] #%d cit=%p age=%.2f adultAge=%.2f gate208=%p "
-                    "prof1f0=%p laborProf=%p verdict=%s\n",
-                    s_censusPrinted, (void*)citizen, citAge, adultAge, (void*)gate208,
-                    *(void**)((uintptr_t)citizen + 0x1f0), laborerProf,
-                    (citAge < adultAge) ? "skip:child"
-                        : (gate208 != 0 ? "skip:+0x208" : "counted"));
-            fflush(stderr);
-        }
         if (citAge < adultAge) continue;
         if (gate208 != 0) continue;
 
@@ -674,16 +654,6 @@ void UpdateVisibility(void* self) {
     bool show = workComp != 0 &&
                 *reinterpret_cast<uintptr_t*>(static_cast<uintptr_t>(workComp) + 0x48) != 0;
 
-    if (std::getenv("BANISHED_DIALOG_TRACE")) {
-        static int n = 0;
-        if (n++ < 10) {
-            fprintf(stderr, "[WorkPlaceUI] self=%p workComp=0x%llx prof=0x%llx show=%d\n",
-                    self, (unsigned long long)workComp,
-                    workComp ? (unsigned long long)*reinterpret_cast<uintptr_t*>(
-                        static_cast<uintptr_t>(workComp) + 0x48) : 0ull, show ? 1 : 0);
-            fflush(stderr);
-        }
-    }
 
     fn_Element_SetFlagsOnOff(panelElem, show ? 0u : 1u, show ? 1u : 0u);
 }
@@ -732,11 +702,6 @@ void DumpTree(void* elem, int depth) {
 
 void PopulateCounts(void* self) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    if (std::getenv("BANISHED_DIALOG_TRACE")) {
-        static int dumped = 0;
-        void* pe = *reinterpret_cast<void**>(s + 0x20);
-        if (pe && dumped++ < 1) { fprintf(stderr, "[Tree] === WorkPlaceUI panel dump ===\n"); DumpTree(pe, 0); fflush(stderr); }
-    }
 
     void* panelElem = *reinterpret_cast<void**>(s + 0x20);
     if (!panelElem) return;
@@ -787,12 +752,6 @@ void PopulateCounts(void* self) {
             *reinterpret_cast<uint64_t*>(self + off) = FindElemAsBasePtr(panel, name);
             void* e = *slot;
             if (e && fn_Element_SetElementId) fn_Element_SetElementId(e, id);
-            if (std::getenv("BANISHED_DIALOG_TRACE")) {
-                static int n = 0; if (n++ < 12)
-                    fprintf(stderr, "[WorkPlaceUI] arm %-16s -> %p id(+0x88)=0x%x (%s)\n",
-                            name, e, e ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(e) + 0x88) : 0,
-                            e ? "SET" : "NOT-FOUND"), fflush(stderr);
-            }
         }
     };
     ArmOne::go(s, 0x40, panelElem, "workerCountUp",   0x1450);
@@ -893,12 +852,6 @@ void PopulateCounts(void* self) {
         fn_String_Dtor(fmt);
     }
 
-    if (std::getenv("BANISHED_DIALOG_TRACE")) {
-        static int n = 0;
-        if (n++ < 20)
-            fprintf(stderr, "[WorkPlaceUI] counts prof=%p roster=%u cap=%u elem30=%p elem38=%p\n",
-                    profession, roster, capacity, elem30, elem38), fflush(stderr);
-    }
 }
 
 // ------------------------------------------------------------------
@@ -927,7 +880,7 @@ void PopulateCounts(void* self) {
 // this file computes `wpMaxCount` from WorkComponent+0x30 and drives the two arrows'
 // enable state (up: wpMaxCount < WorkDescription+0x2c _maxWorkerCount; down: wpMaxCount >
 // +0x28 _minWorkerCount, or > 1 on the special profession branch), and W_OnUpdate/W_Startup
-// call it every frame under WorkPlaceUI_FullStartupEnabled(). So the spinner is bounded by
+// call it every frame. So the spinner is bounded by
 // retail's own mechanism — a greyed arrow — not by a clamp bolted onto the handler.
 static void SA_AdjustJobCount(void* self, int delta) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
@@ -1014,20 +967,12 @@ static void SA_AdjustJobCount(void* self, int delta) {
 //
 // So run the full ported Startup. It is a superset: it recomputes the same counts
 // and additionally sets the button enable states.
-static bool WorkPlaceUI_FullStartupEnabled() {
-    // Kill-switch only — this restores retail behaviour that was accidentally
-    // absent, so the default is ON. Set to 0 to A/B against the subset.
-    const char* v = std::getenv("BANISHED_LIVE_WORKPLACE_ASSIGN");
-    return !(v && (v[0] == '0' || v[0] == 'f' || v[0] == 'F'));
-}
-
 void W_OnUpdate(void* self, void* /*time*/) {
     EnsureGlobals();
     if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
     UpdateVisibility(self);
     PopulateCounts(self);
-    if (WorkPlaceUI_FullStartupEnabled())
-        WorkplaceUI_Startup(reinterpret_cast<WorkPlaceUI*>(self));
+    WorkplaceUI_Startup(reinterpret_cast<WorkPlaceUI*>(self));
 }
 
 // idx4 (+0x20): Serialize — retail 0x140087940, the element-discovery pass. Runs once
@@ -1045,8 +990,7 @@ void W_Startup(void* self) {
     if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
     UpdateVisibility(self);
     PopulateCounts(self);
-    if (WorkPlaceUI_FullStartupEnabled())
-        WorkplaceUI_Startup(reinterpret_cast<WorkPlaceUI*>(self));
+    WorkplaceUI_Startup(reinterpret_cast<WorkPlaceUI*>(self));
 }
 
 // idx9 (+0x48): OnRemove — per-building worker up/down spinner. Adds/removes ONE worker of
@@ -1077,12 +1021,6 @@ void W_Startup(void* self) {
 // made left the ? icon up over a fully-staffed building. Measured before: roster 0 -> 4
 // with `icon 0x10 -> 0x10`. After: `icon 0x10 -> 0x0`.
 void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*/) {
-    // Trace only button-command events (msg 0x12); the panel also receives a stream of
-    // hover/enter/leave events on this slot which would otherwise flood the log.
-    if (msg == 0x12 && (std::getenv("BANISHED_BUILD_TRACE") || std::getenv("BANISHED_DIALOG_TRACE"))) {
-        fprintf(stderr, "[WorkPlaceUI] OnRemove cmd self=%p id=0x%x\n", self, id);
-        fflush(stderr);
-    }
     EnsureGlobals();
     if (!self || !Ready() || !SA_DialogEntityAlive(self)) return;
     if (msg != 0x12) return;                        // button click
@@ -1181,13 +1119,6 @@ void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*
         if (fn_CitizenList_RemoveWorker) fn_CitizenList_RemoveWorker(citizenList, profId);
     }
 
-    // Diagnostic: did the click move the site roster? (BUILD_TRACE or DIALOG_TRACE)
-    if (std::getenv("BANISHED_BUILD_TRACE") || std::getenv("BANISHED_DIALOG_TRACE")) {
-        uint32_t rosterAfter = *reinterpret_cast<uint32_t*>(static_cast<uintptr_t>(wpc) + 0x60);
-        fprintf(stderr, "[WorkPlaceUI] OnRemove id=0x%x profId=0x%llx via=%s roster %u->%u\n",
-                id, (unsigned long long)profId, who, rosterBefore, rosterAfter);
-        fflush(stderr);
-    }
 }
 
 struct Init {

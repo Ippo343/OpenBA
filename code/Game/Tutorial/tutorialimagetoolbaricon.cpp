@@ -335,16 +335,6 @@ void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
     if (fn_Sprite_Sprite && spriteName)
         fn_Sprite_Sprite(spriteBuf, spriteSheet, spriteName);
 
-    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
-        if (e[0] && e[0] != '0') {
-            const uint64_t* sp = reinterpret_cast<const uint64_t*>(spriteBuf);
-            fprintf(stderr, "[Tutorial] ToolbarIcon sprite: fnSpriteCtor=%p toolbar=%p "
-                            "sheet=%p name=%p -> {sheet=%p idx=%d}\n",
-                    (void*)fn_Sprite_Sprite, (void*)toolbar, (void*)spriteSheet,
-                    (const void*)spriteName, (void*)sp[0], (int)(uint32_t)sp[1]);
-            fflush(stderr);
-        }
-    }
 
     // 10. Set sprite on the ImageElement
     if (fn_InternalBasePtr_CheckPtr)

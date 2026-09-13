@@ -183,32 +183,6 @@ void StatusIconUI_Startup(StatusIconUI* self) {
         }
     }
 
-    // Per-instance gate diagnostic. Reports the OUTCOME at every exit, including the
-    // paths that SKIP the gate — a trace that only prints when the gate runs cannot
-    // distinguish "gate said show" from "gate never ran", which is exactly the
-    // ambiguity that made the first fix attempt unverifiable.
-    if (std::getenv("BANISHED_DIALOG_TRACE")) {
-        static int s_n = 0;
-        if (s_n < 24) {
-            ++s_n;
-            void* cfg = *(void**)((uintptr_t)self + 0x10);
-            const char* why = "gate ran";
-            if (!cfg)                          why = "SKIP: no config at +0x10 (content mount?)";
-            else if (!s_tidStatusIconUIConfig) why = "SKIP: StatusIconUIConfig tid unresolved";
-            else if (!fn_IsDerivedFrom(cfg, s_tidStatusIconUIConfig))
-                                               why = "SKIP: config not derived from StatusIconUIConfig";
-            else if (*(uint8_t*)((uintptr_t)cfg + 0x20) != 0)
-                                               why = "SKIP: _showOnMainPage=true";
-            fprintf(stderr,
-                "[StatusIconUI] self=%p cfg=%p cfgTid=%u entityUITid=%u showOnMain=%d "
-                "iconsActive=%d icons=%d bits=0x%x  <- %s\n",
-                (void*)self, cfg, s_tidStatusIconUIConfig, s_tidEntityUI,
-                cfg ? (int)*(uint8_t*)((uintptr_t)cfg + 0x20) : -1,
-                (int)iconsActive, *(int*)((uintptr_t)self + 0x38),
-                meshComp ? *(uint32_t*)((uintptr_t)meshComp + 0xF0) : 0u, why);
-            fflush(stderr);
-        }
-    }
 
     // Loop through icon elements, show/hide based on bitfield
     int iconCount = *(int*)((uintptr_t)self + 0x38);
@@ -338,16 +312,6 @@ void EnsureGlobals() {
     // for itself, so filling these globals here would only re-poison it.
     (void)s_dc; (void)s_pt;
 
-    static bool s_logged = false;
-    if (!s_logged && std::getenv("BANISHED_DIALOG_TRACE")) {
-        s_logged = true;
-        // Print the VALUES, not just the pointers: a resolve that returns 0 is the
-        // documented "registered but filled with zero" failure, and a pointer-only log
-        // cannot distinguish it from a good resolve.
-        fprintf(stderr, "[StatusIconUI] globals: CE=%p cfgTid=%u entityUITid=%u\n",
-                (void*)g_TypeId_ComponentEntity, s_tidStatusIconUIConfig, s_tidEntityUI);
-        fflush(stderr);
-    }
 }
 
 // +0x20 setup: cache the "icons" group child elements into self+0x30 (array) / +0x38 (count).

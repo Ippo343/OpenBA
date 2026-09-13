@@ -331,28 +331,8 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
     // ── Plant-search census (BANISHED_PLANTAREA_TRACE) ───────────────────────────
     // Execute runs but never reaches the action ctor, and "found nothing" cannot say
     // which of the five gates is responsible. Count each. Zero cost when unset.
-    static int s_ptrace = -1;
-    if (s_ptrace < 0) {
-        const char* pe = std::getenv("BANISHED_PLANTAREA_TRACE");
-        s_ptrace = (pe && pe[0] && pe[0] != '0') ? 1 : 0;
-    }
-    static long long s_calls = 0, s_maxWorkers = 0, s_noMark = 0,
-                     s_inBst = 0, s_noPass = 0, s_noPath = 0, s_ok = 0;
-    if (s_ptrace) {
-        ++s_calls;
-        if ((s_calls % 10) == 0) {
-            std::fprintf(stderr, "[PlantArea] after %lld Execute calls: maxWorkers=%lld "
-                         "noMark=%lld alreadyInBst=%lld noPassableCell=%lld noPath=%lld "
-                         "ACCEPTED=%lld  (slotCount=%d treeCount=%d cap=%d)\n",
-                         s_calls, s_maxWorkers, s_noMark, s_inBst, s_noPass, s_noPath, s_ok,
-                         (int)((uintptr_t*)self)[0xc], treeCount,
-                         matDescIBP ? *(int*)(matDescIBP + 0x30) : -1);
-            std::fflush(stderr);
-        }
-    }
 
     if (treeCount >= *(int*)(matDescIBP + 0x30)) {
-        if (s_ptrace) ++s_maxWorkers;
         return 1;
     }
 
@@ -383,15 +363,12 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
         for (int i = 0; i < fieldCellCount; i++) {
             char* validityArray = (char*)selfQ[0xb];  // self->field_58
             if (validityArray[i] == 0) {
-                // Cell not available for planting
-                if (s_ptrace) ++s_noMark;
                 continue;
             }
 
             // Check if cell is already assigned (in BST)
             int* bstRoot = (int*)selfQ[9];  // self->field_48
             if (BST_FindInt(bstRoot, i) != nullptr) {
-                if (s_ptrace) ++s_inBst;
                 continue;
             }
 
@@ -438,61 +415,14 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
             // Check pathfinding
             int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, srcCellIdx, citizenGridCell, 0xe0f);
             if (nearestCell < 0) {
-                if (s_ptrace) ++s_noPass;
-                // Retail skips an impassable cell without clearing its mark, so a
-                // permanently blocked cell stalls the field forever. Dump what is
-                // sitting on the cell the first few times to tell "still holds an
-                // uncleared natural resource" from "terrain says impassable".
-                if (s_ptrace) {
-                    static int s_dumped = 0;
-                    if (s_dumped < 12 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
-                        uintptr_t mp = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
-                        uintptr_t gd = mp ? *(uintptr_t*)(mp + 0x80) : 0;
-                        if (gd) {
-                            uintptr_t base = gd + (uintptr_t)srcCellIdx * 0x30;
-                            // Dump a CONTROL cell too — the same field's next cell,
-                            // which plants fine. One rejected cell in isolation says
-                            // nothing; the DIFFERENCE against a working neighbour names
-                            // the bit.
-                            int ctlCell = -1;
-                            if (i + 1 < fieldCellCount) {
-                                fn_InternalBasePtr_CheckPtr(&cropDescIBP);
-                                ctlCell = *(int*)((uintptr_t)(i + 1) * 0x20 +
-                                                  *(uintptr_t*)(cropDescIBP + 0x58));
-                            }
-                            uintptr_t cb = gd + (uintptr_t)ctlCell * 0x30;
-                            std::fprintf(stderr,
-                                "[PlantArea] BLOCKED slot=%d cell=%d entity=%p "
-                                "terrain=0x%02x b2c=0x%02x floor=0x%02x w0=0x%08x "
-                                "w4=0x%08x w28=0x%08x || CONTROL cell=%d terrain=0x%02x "
-                                "b2c=0x%02x floor=0x%02x w0=0x%08x w4=0x%08x w28=0x%08x\n",
-                                i, srcCellIdx, *(void**)(base + 8),
-                                *(uint8_t*)(base + 0x29), *(uint8_t*)(base + 0x2c),
-                                *(uint8_t*)(base + 0x2d), *(uint32_t*)(base + 0x00),
-                                *(uint32_t*)(base + 0x04), *(uint32_t*)(base + 0x28),
-                                ctlCell,
-                                ctlCell < 0 ? 0 : *(uint8_t*)(cb + 0x29),
-                                ctlCell < 0 ? 0 : *(uint8_t*)(cb + 0x2c),
-                                ctlCell < 0 ? 0 : *(uint8_t*)(cb + 0x2d),
-                                ctlCell < 0 ? 0 : *(uint32_t*)(cb + 0x00),
-                                ctlCell < 0 ? 0 : *(uint32_t*)(cb + 0x04),
-                                ctlCell < 0 ? 0 : *(uint32_t*)(cb + 0x28));
-                            std::fflush(stderr);
-                            ++s_dumped;
-                        }
-                    }
-                }
                 continue;
             }
 
             bool canPath = s_fn_Map_CanPathTo(mapGrid, 0xe1f, citizenGridCell, nearestCell);
             if (!canPath) {
-                if (s_ptrace) ++s_noPath;
                 continue;
             }
 
-            // Valid cell found -- create planting action
-            if (s_ptrace) ++s_ok;
             uint32_t typeConstVal = *s_typeConst;
             uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
@@ -590,25 +520,6 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
         // If we had no cells with validity flag set (anyUnplanted still true)
         // we return 1 below
         if (!anyUnplanted) {
-            // Scan found candidates but accepted none. Print which marks survive, so
-            // "the last pair is never offered" can be told from "it is offered and
-            // rejected downstream".
-            if (s_ptrace) {
-                static long long s_fruitless = 0;
-                if ((s_fruitless++ % 200) == 0) {
-                    char buf[256]; int n = 0; int live = 0;
-                    char* va = (char*)selfQ[0xb];
-                    for (int k = 0; k < fieldCellCount; ++k) {
-                        if (!va[k]) continue;
-                        ++live;
-                        if (n < (int)sizeof(buf) - 16)
-                            n += std::snprintf(buf + n, sizeof(buf) - n, " %d", k);
-                    }
-                    std::fprintf(stderr, "[PlantArea] fruitless scan #%lld: %d marks live:%s\n",
-                                 s_fruitless, live, live ? buf : " none");
-                    std::fflush(stderr);
-                }
-            }
             return 1;
         }
     }
@@ -642,10 +553,6 @@ bool PlantArea_Execute_Impl(PlantArea* /*self*/) {
 // reclaims it. Counting the three slots separates "never dispatched" from "runs and
 // does not restore".
 namespace { void PA_SlotHit(const char* which) {
-    static int s_t = -1;
-    if (s_t < 0) { const char* e = std::getenv("BANISHED_PLANTAREA_TRACE");
-                   s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    if (!s_t) return;
     static long long s_complete = 0, s_cancel = 0, s_validate = 0, s_n = 0;
     if (which[0] == 'C') ++s_complete; else if (which[0] == 'X') ++s_cancel; else ++s_validate;
     if ((++s_n % 10) == 0) {
@@ -826,27 +733,6 @@ bool PlantArea_Validate_Impl(PlantArea* self, void* param2) {
 
         uint8_t valid = s_fn_ValidateTask(selfAddr, (uintptr_t)param2, (void*)&ibpData, nullptr);
 
-        // Validate-verdict census. Retail passes a null out-task here too (verified at
-        // 0x1400f3c70), so that is faithful — what matters is the VERDICT. If
-        // Work::CanStartWork (0x1400f7100) reports every task unstartable, Validate
-        // invalidates them all, restores their marks and drops them from the BST every
-        // tick, which is the churn signature we are chasing.
-        {
-            static int s_vtrace = -1;
-            if (s_vtrace < 0) {
-                const char* ve = std::getenv("BANISHED_PLANTAREA_TRACE");
-                s_vtrace = (ve && ve[0] && ve[0] != '0') ? 1 : 0;
-            }
-            static long long s_vOk = 0, s_vBad = 0;
-            if (s_vtrace) {
-                if (valid) ++s_vOk; else ++s_vBad;
-                if (((s_vOk + s_vBad) % 500) == 0) {
-                    std::fprintf(stderr, "[PlantArea] Validate verdicts: startable=%lld "
-                                 "UNSTARTABLE=%lld\n", s_vOk, s_vBad);
-                    std::fflush(stderr);
-                }
-            }
-        }
 
         if (valid == 0) {
             // Invalid -- add to collect list (grow array if needed)

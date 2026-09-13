@@ -89,11 +89,6 @@ void EnsureCalcPathFuncs() {
     s_resolved = (s_tid_DecalDescription != 0 && s_tid_MapDescription != 0);
 }
 
-bool RoadTraceOn() {
-    static int t = -1;
-    if (t < 0) { const char* e = std::getenv("BANISHED_ROAD_TRACE"); t = (e && *e && *e != '0'); }
-    return t != 0;
-}
 
 // Shared component scan: walk the entity's component array (+0x28 ptr / +0x30 count),
 // match GetTypeId (vtable +0x10) against `typeId`, confirm with IsDerivedFrom. This is
@@ -224,12 +219,6 @@ extern "C" void RoadTool_PlaceRoadSegment_9c960(uint32_t* mapGrid, uint32_t cell
     }
 
     if (!work) {
-        // Standalone safety net: retail's ctor cannot fail, so it posts unconditionally.
-        // Here a missing 0x1400e4b50 registration would post a NULL work item and fault
-        // inside the scheduler's AVL insert. Bail loudly instead of corrupting the queue.
-        if (RoadTraceOn())
-            fprintf(stderr, "[Road] segment %u: BuildRoad ctor failed (mem=%p ctor=%p)\n",
-                    cellIdx, mem, (void*)s_fn_BuildRoadCtor);
         return;
     }
 
@@ -304,8 +293,6 @@ extern "C" bool RoadTool_CalcPath_Impl(RoadTool* self, uint32_t startCell, uint3
                                  (int64_t)pathBuf, self->modifierFlag, 1);
     }
     if (pathLen == 0) {
-        if (RoadTraceOn())
-            fprintf(stderr, "[Road] CalcPath: no path %u->%u\n", sc, ec);
         return false;
     }
 
@@ -316,8 +303,6 @@ extern "C" bool RoadTool_CalcPath_Impl(RoadTool* self, uint32_t startCell, uint3
     // The decal the finished road paints, and the MapDescription value each segment gets.
     void* decalComp = FindComponentByTypeId(descEntity, s_tid_DecalDescription);
     if (!decalComp) {
-        if (RoadTraceOn())
-            fprintf(stderr, "[Road] CalcPath: no DecalDescription on descriptor\n");
         return false;
     }
     void* decal = *(void**)(*(uintptr_t*)((uintptr_t)decalComp + 0x28));
@@ -325,8 +310,6 @@ extern "C" bool RoadTool_CalcPath_Impl(RoadTool* self, uint32_t startCell, uint3
     void* mapDesc = nullptr;
     RoadTool_FindMapDescription_6990((void*)descEntity, &mapDesc);
     if (!mapDesc) {
-        if (RoadTraceOn())
-            fprintf(stderr, "[Road] CalcPath: no MapDescription on descriptor\n");
         return false;
     }
     uint32_t mapDescVal = *(uint32_t*)((uintptr_t)mapDesc + 0x20);
@@ -342,18 +325,6 @@ extern "C" bool RoadTool_CalcPath_Impl(RoadTool* self, uint32_t startCell, uint3
                                         (uint64_t)ec, mapDescVal, roadDescExtra);
     }
 
-    // Rebuild the road mesh so the new cells render.
-    // BANISHED_ROAD_NO_MESH=1 skips this purely as a bisect knob for the heap-corruption
-    // hunt (f370 had never executed before road placement landed). Diagnostic only.
-    static int s_noMesh = -1;
-    if (s_noMesh < 0) {
-        const char* e = std::getenv("BANISHED_ROAD_NO_MESH");
-        s_noMesh = (e && *e && *e != '0') ? 1 : 0;
-    }
-    if (s_fn_RoadMeshRebuild && !s_noMesh) s_fn_RoadMeshRebuild(decalMgr, mapGrid);
 
-    if (RoadTraceOn())
-        fprintf(stderr, "[Road] CalcPath: placed %d cells (%u->%u) roadType=%u\n",
-                pathLen, sc, ec, roadType);
     return true;
 }

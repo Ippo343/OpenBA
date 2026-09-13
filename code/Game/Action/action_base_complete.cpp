@@ -34,18 +34,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include "scene_watch.h"
-#include "hw_watch.h"      // HwWatch_Arm — BANISHED_WSWATCH writer hunt (Finding 3)
-#include <windows.h>
 
-static bool ACT_Trace() {
-    static int t = -1;
-    if (t < 0) {
-        const char* e = std::getenv("BANISHED_BUILD_TRACE");
-        t = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return t == 1;
-}
+#include "scene_watch.h"
+#include <windows.h>
 
 namespace {
 
@@ -111,9 +102,6 @@ static void* FindTaskNode(uintptr_t taskMgr, int taskIdx) {
 bool ActCt_TryCompleteTask_8760(void* taskMgr, void* entityRef, int taskIdx,
                                 void* targetRef, uint32_t taskParam) {
     void* node = FindTaskNode(reinterpret_cast<uintptr_t>(taskMgr), taskIdx);
-    if (ACT_Trace())
-        std::fprintf(stderr, "[BuildTrace] TryCompleteTask taskMgr=%p taskIdx=%d taskParam=0x%x -> node=%p\n",
-                     taskMgr, taskIdx, (unsigned)taskParam, node);
     if (node == nullptr) return false;
 
     void* ibp = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(node) + 0x8);
@@ -125,9 +113,6 @@ bool ActCt_TryCompleteTask_8760(void* taskMgr, void* entityRef, int taskIdx,
     typedef uint64_t (*vfn_t)(void* self, void* a, void* b, uint32_t p);
     vfn_t vf = *reinterpret_cast<vfn_t*>(*owner + 0x30);
     uint64_t r = vf(owner, &entityCopy, &targetCopy, taskParam);
-    if (ACT_Trace())
-        std::fprintf(stderr, "[BuildTrace] TryCompleteTask -> owner=%p OnComplete returned 0x%llx\n",
-                     (void*)owner, (unsigned long long)r);
     return (r & 0xff) != 0;
 }
 
@@ -213,181 +198,13 @@ static void Ensure8e30() {
 // present inside a bucket that exists (`test rdx,rdx / je f8f90`), so only the
 // missing-BUCKET case is retail-fatal.
 //
-// This probe changes no behaviour. It counts, per outcome, and reports at exit:
-//   bucketRootNull / bucketNotFound  — retail would have FAULTED here
-//   entryNotFound                    — retail-tolerated, but this is exactly the
-//                                      call that leaves a dangling bucket entry,
-//                                      because step 5 destroys the object anyway
-//   unfiled                          — the healthy path
-// A run with entryNotFound == 0 and both fatal counters 0 says the invariant
-// holds and Finding 3 is NOT this mechanism. Enable with BANISHED_WORKSCHED_PROBE=1.
-// ---------------------------------------------------------------------------
-// A ZERO RESULT MUST PRINT A ZERO, NOT NOTHING. The first version of this probe
-// armed its exit report from inside WsProbeNote, so the all-counters-zero
-// outcome — the single most useful thing it can say, "the erase never no-ops,
-// this whole family is eliminated" — would have produced SILENCE, which is
-// indistinguishable from "the probe is not in this binary". That is the
-// absence-read-as-a-result trap the project has been burned by repeatedly. The
-// report is now armed by WsProbeOn() itself, on the first call, and the enable
-// line is printed there too so the binary self-evidences even if 8e30 never runs.
-static int  s_wsProbe = -1;
-static void WsProbeReport();
-static bool WsProbeOn() {
-    if (s_wsProbe < 0) {
-        const char* e = std::getenv("BANISHED_WORKSCHED_PROBE");
-        s_wsProbe = (e && *e && e[0] != '0') ? 1 : 0;
-        if (s_wsProbe == 1) {
-            std::fprintf(stderr, "[WorkSchedProbe] ARMED (lane N, Finding 3) — counting "
-                                 "profession-bucket erase outcomes in ActCt_TaskCleanup_8e30; "
-                                 "a tally prints at exit even if every counter is zero\n");
-            std::fflush(stderr);
-            std::atexit(&WsProbeReport);
-        }
-    }
-    return s_wsProbe == 1;
-}
-static unsigned long long s_wsCalls        = 0;
-static unsigned long long s_wsBucketNull   = 0;   // retail-fatal
-static unsigned long long s_wsBucketMissed = 0;   // retail-fatal
-static unsigned long long s_wsEntryMissed  = 0;   // dangling-entry event
-static unsigned long long s_wsUnfiled      = 0;   // healthy
-static bool s_wsReported = false;
-static void WsProbeReport() {
-    if (s_wsProbe != 1 || s_wsReported) return;   // idempotent: atexit AND the crash handler
-    s_wsReported = true;
-    const unsigned long long bad = s_wsEntryMissed + s_wsBucketMissed + s_wsBucketNull;
-    std::fprintf(stderr,
-        "[WorkSchedProbe] TALLY  8e30calls=%llu  unfiled=%llu  entryNotFound=%llu  "
-        "bucketNotFound=%llu  bucketRootNull=%llu  ==> %s\n",
-        s_wsCalls, s_wsUnfiled, s_wsEntryMissed, s_wsBucketMissed, s_wsBucketNull,
-        s_wsCalls == 0
-            ? "8e30 NEVER RAN — this cell says NOTHING about the invariant"
-            : (bad == 0
-                ? "INVARIANT HELD on every call: no erase no-opped, so the "
-                  "erase-no-op mechanism is NOT Finding 3 and the scheduler family "
-                  "is eliminated"
-                : "INVARIANT BROKEN — see the per-occurrence lines above; "
-                  "bucketNotFound/bucketRootNull are cases retail 0x1400f8f5e would "
-                  "have FAULTED on, entryNotFound leaves a bucket entry whose work "
-                  "object step 5 destroys anyway"));
-    std::fflush(stderr);
-}
-static void WsProbeNote(unsigned long long* counter, const char* what,
-                        int taskIdx, unsigned long long key) {
-    if (!WsProbeOn()) return;
-    *counter += 1;
-    if (*counter <= 8) {
-        std::fprintf(stderr, "[WorkSchedProbe] %s: taskIdx=%d slot50key=0x%llx\n",
-                     what, taskIdx, key);
-        std::fflush(stderr);
-    }
-}
 } // namespace
 
-// Reachable from standalone/main.cpp's crash handler, which runs after the
-// teardown fault this probe exists to diagnose — see the note there.
-extern "C" void WorkSchedProbe_Report() { WsProbeReport(); }
+// The BANISHED_WORKSCHED_PROBE erase-outcome probe this reported was deleted with the
+// flag (ENDGAME C). standalone/main.cpp's crash handler still calls this; the stub goes
+// when that call does.
+extern "C" void WorkSchedProbe_Report() {}
 
-namespace {
-// ---------------------------------------------------------------------------
-// BANISHED_WSWATCH — find the WRITER of Finding 3's half-overwritten pointer.
-// ---------------------------------------------------------------------------
-// Established, on crashing runs: the engine heap is intact at teardown entry and
-// corrupt by the fault, so the write happens DURING the teardown cascade; the
-// victim is one instruction (`int k = *e` in step 4's entry walk); and the value
-// is a live pointer whose LOW DWORD has been replaced by a small integer
-// (0x…_00000002, 0x…_00000022) with the high half equal to that run's heap
-// prefix. A hardware write watchpoint therefore only has to cover teardown.
-//
-// This does two things, both env-gated and behaviour-preserving until it trips:
-//
-//  (1) VALIDATE the bucket's whole inner tree at the top of step 4, BEFORE any
-//      dereference, and name the SLOT — the address of the field holding the bad
-//      pointer — plus its structural identity (which bucket, which node, which of
-//      root/+0x18/+0x20). Structural identity is what makes a second run able to
-//      arm the same slot, since addresses move run to run.
-//  (2) ARM a debug register on that slot's low dword on first detection, exactly
-//      as entitylist.cpp:498 does for the TreeGuard victim, whose comment records
-//      that the same victim got re-corrupted on later passes and that arming after
-//      the first detection caught the next store with its RIP. If this victim is
-//      likewise re-written, the watchpoint names the writer outright.
-//
-// A slot is judged corrupt only on the observed shape — a non-zero high half with
-// a tiny low half, or a pointer far too small to be heap. A plain null child is
-// normal and is not reported.
-// ---------------------------------------------------------------------------
-bool WsWatchOn() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_WSWATCH");
-        on = (e && *e && e[0] != '0') ? 1 : 0;
-    }
-    return on == 1;
-}
-bool WsPtrLooksCorrupt(uint64_t v) {
-    if (v == 0) return false;                       // an absent child is normal
-    if (v < 0x10000ULL) return true;                // far too small to be heap
-    const uint32_t lo = static_cast<uint32_t>(v);
-    const uint32_t hi = static_cast<uint32_t>(v >> 32);
-    if (hi != 0 && lo < 0x10000u) return true;      // *** the observed shape ***
-    if ((v & 7ULL) != 0) return true;               // node blocks are 8-aligned
-    return false;
-}
-unsigned long long s_wsWatchFound = 0;
-bool s_wsWatchArmed = false;
-
-// Report one bad slot and, once, arm a debug register on its low dword.
-void WsWatchReportSlot(void* slotAddr, uint64_t val, const void* bucket,
-                       uint64_t bucketKey, const void* owningNode, const char* field,
-                       int taskIdx) {
-    ++s_wsWatchFound;
-    std::fprintf(stderr,
-        "[WSWatch] *** CORRUPT LINK *** slot=%p holds 0x%016llx (low dword=0x%x) "
-        "| field=%s owningNode=%p bucket=%p bucketKey=0x%llx | 8e30 call #%llu taskIdx=%d\n",
-        slotAddr, (unsigned long long)val, (unsigned)(uint32_t)val,
-        field, owningNode, bucket, (unsigned long long)bucketKey, s_wsCalls, taskIdx);
-    std::fflush(stderr);
-    if (!s_wsWatchArmed) {
-        s_wsWatchArmed = true;
-        HwWatch_Arm(slotAddr, 4, "Finding3: work-scheduler bucket inner-tree link low dword");
-        std::fprintf(stderr, "[WSWatch] armed a write watchpoint on %p (4 bytes) — if this "
-                             "victim is written again the handler names the writer\n", slotAddr);
-        std::fflush(stderr);
-    }
-}
-
-// Walk the whole inner tree (bounded), checking every link before following it.
-// Returns true when a corrupt link was found.
-bool WsWatchScanInner(void* bucket, uint64_t bucketKey, int taskIdx) {
-    uint8_t* b = reinterpret_cast<uint8_t*>(bucket);
-    uint64_t rootVal = *reinterpret_cast<uint64_t*>(b + 0x08);
-    if (WsPtrLooksCorrupt(rootVal)) {
-        WsWatchReportSlot(b + 0x08, rootVal, bucket, bucketKey, bucket, "bucket+0x08 (inner root)", taskIdx);
-        return true;
-    }
-    // Iterative DFS with an explicit bound: a corrupt tree must never become a hang.
-    void*  stack[256];
-    int    sp = 0;
-    if (rootVal) stack[sp++] = reinterpret_cast<void*>(rootVal);
-    int visited = 0;
-    bool bad = false;
-    while (sp > 0 && ++visited < 4096) {
-        uint8_t* n = reinterpret_cast<uint8_t*>(stack[--sp]);
-        for (int k = 0; k < 2; ++k) {
-            const size_t off = k ? 0x20 : 0x18;
-            uint64_t c = *reinterpret_cast<uint64_t*>(n + off);
-            if (WsPtrLooksCorrupt(c)) {
-                WsWatchReportSlot(n + off, c, bucket, bucketKey, n,
-                                  k ? "node+0x20 (greater)" : "node+0x18 (lesser)", taskIdx);
-                bad = true;
-                continue;   // do not follow it
-            }
-            if (c && sp < 256) stack[sp++] = reinterpret_cast<void*>(c);
-        }
-    }
-    return bad;
-}
-}  // namespace
 
 void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
     Ensure8e30();
@@ -460,9 +277,7 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
         uint64_t* keyPtr = vf50(owner, &keyTmp);
 
         // Walk the +0x120 BST (value@+0, left@+0x20, right@+0x28; entry list at node+0x8).
-        if (WsProbeOn()) s_wsCalls += 1;
         uint64_t* node = *reinterpret_cast<uint64_t**>(self + 0x120);
-        const bool rootWasNull = (node == nullptr);
         if (node != nullptr) {
             while (true) {
                 uint64_t v = *node;
@@ -477,29 +292,10 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
             }
         }
 
-        // PROBE ONLY — see the block above Ensure8e30. Retail faults here instead
-        // of taking either of these two branches; nothing else changes.
-        if (node == nullptr)
-            WsProbeNote(rootWasNull ? &s_wsBucketNull : &s_wsBucketMissed,
-                        rootWasNull ? "bucket tree EMPTY (retail would fault)"
-                                    : "bucket NOT FOUND for the work's own slot50 key "
-                                      "(retail would fault)",
-                        taskIdx, keyPtr ? *keyPtr : 0);
-
-        // BANISHED_WSWATCH: check every link in this bucket's inner tree BEFORE the
-        // walk below dereferences one. Skipping the walk on a bad tree is a change
-        // of behaviour, so it happens only under the env gate — the point is to keep
-        // the process alive past the first detection, because the victim being
-        // re-written is what lets the armed watchpoint name the writer.
-        bool wsTreeBad = false;
-        if (node != nullptr && WsWatchOn())
-            wsTreeBad = WsWatchScanInner(node, keyPtr ? *keyPtr : 0, taskIdx);
-
-        if (node != nullptr && !wsTreeBad) {
+        if (node != nullptr) {
             // entry sub-BST rooted at node[1] (node+0x8); key compared against taskIdx.
             int* e = reinterpret_cast<int*>(node[1]);
             void* entryTreeOwner = reinterpret_cast<void*>(node + 1);  // node+0x8
-            bool unfiled = false;
             while (e != nullptr) {
                 int k = *e;
                 if (taskIdx < k) {
@@ -508,18 +304,9 @@ void ActCt_TaskCleanup_8e30(void* selfV, int taskIdx) {
                     e = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(e) + 0x20);
                 } else {
                     if (s_ca60) s_ca60(entryTreeOwner, e);
-                    unfiled = true;
                     break;
                 }
             }
-            // PROBE ONLY. Retail tolerates this branch, but step 5 below destroys the
-            // work object regardless, so every one of these leaves a bucket entry
-            // pointing at freed memory — the shape of lane N's Finding 3.
-            if (unfiled) { if (WsProbeOn()) s_wsUnfiled += 1; }
-            else WsProbeNote(&s_wsEntryMissed,
-                             "entry NOT in its bucket — step 5 will destroy the work "
-                             "object anyway, leaving a dangling bucket entry",
-                             taskIdx, keyPtr ? *keyPtr : 0);
         }
     }
 
@@ -575,28 +362,6 @@ static float*                s_pUVScale       = nullptr;  // g_fUVScale (DAT_140
 static uint32_t*             s_pTid_FenceDesc = nullptr;  // DAT_1401c7a88
 static uint32_t*             s_pTid_RawMat    = nullptr;  // DAT_1401c7cb8
 static bool                  s_showInit       = false;
-
-// [diag] BANISHED_SHOWTOOL_TRACE support. ReadableU is used ONLY by the probe, never as a
-// guard on the faithful path -- it decides whether the trace prints a value or a 0.
-// It must be a REAL page test, not a range test: the value this open is chasing
-// (0x100000001) passes any plausible range check, so a range-only probe would fault on
-// exactly the pointer it was added to report.
-inline bool ReadableU(uintptr_t a) {
-    if (a < 0x10000 || a >= 0x00007FFFFFFFFFFFULL) return false;
-    MEMORY_BASIC_INFORMATION mbi;
-    if (VirtualQuery(reinterpret_cast<void*>(a), &mbi, sizeof(mbi)) != sizeof(mbi)) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    const DWORD prot = mbi.Protect;
-    if (prot & (PAGE_NOACCESS | PAGE_GUARD)) return false;
-    return (prot & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY |
-                    PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY)) != 0;
-}
-
-inline bool ToolTraceOn() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_SHOWTOOL_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s == 1;
-}
 
 static void EnsureShow() {
     if (s_showInit) return;
@@ -686,33 +451,6 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
     // Reports the value it READ at each step, so a link that is merely null is
     // distinguishable from one holding stream garbage. See
     // [[reference_diagnostics_must_report_outcomes]].
-    if (ToolTraceOn()) {
-        static int n = 0;
-        if (n++ < 24) {
-            const uintptr_t parentP = ReadableU(e + 0x10) ? *reinterpret_cast<uintptr_t*>(e + 0x10) : 0;
-            const uintptr_t chP     = ReadableU(e + 0x278) ? *reinterpret_cast<uintptr_t*>(e + 0x278) : 0;
-            const uintptr_t modelP  = ReadableU(chP + 0x68) ? *reinterpret_cast<uintptr_t*>(chP + 0x68) : 0;
-            const uintptr_t descP   = ReadableU(e + 0x288) ? *reinterpret_cast<uintptr_t*>(e + 0x288) : 0;
-            const uintptr_t arrP    = ReadableU(descP + 0x138) ? *reinterpret_cast<uintptr_t*>(descP + 0x138) : 0;
-            const int32_t   arrCnt  = ReadableU(descP + 0x140) ? *reinterpret_cast<int32_t*>(descP + 0x140) : -1;
-            const int32_t   arrCap  = ReadableU(descP + 0x144) ? *reinterpret_cast<int32_t*>(descP + 0x144) : -1;
-            const uintptr_t elem    = (arrP && toolId >= 0 && ReadableU(arrP + static_cast<uintptr_t>(toolId) * 8))
-                                    ? *reinterpret_cast<uintptr_t*>(arrP + static_cast<uintptr_t>(toolId) * 8) : 0;
-            std::fprintf(stderr,
-                "[ToolTrace] e=%p toolId=%d sceneId=%d | parent=%p flags=%#x | char=%p model=%p mesh(+0xe8)=%p"
-                " | desc=%p arr(+0x138)=%p cnt=%d cap=%d elem[%d]=%p\n",
-                reinterpret_cast<void*>(e), toolId,
-                ReadableU(e + 0x1dc) ? *reinterpret_cast<int32_t*>(e + 0x1dc) : -999,
-                reinterpret_cast<void*>(parentP),
-                ReadableU(parentP + 0x40) ? *reinterpret_cast<uint32_t*>(parentP + 0x40) : 0u,
-                reinterpret_cast<void*>(chP), reinterpret_cast<void*>(modelP),
-                reinterpret_cast<void*>(ReadableU(modelP + 0xe8) ? *reinterpret_cast<uintptr_t*>(modelP + 0xe8) : 0),
-                reinterpret_cast<void*>(descP), reinterpret_cast<void*>(arrP), arrCnt, arrCap,
-                toolId, reinterpret_cast<void*>(elem));
-            std::fflush(stderr);
-        }
-    }
-
     CheckPtr(reinterpret_cast<void*>(e + 0x10));
     uintptr_t parent = *reinterpret_cast<uintptr_t*>(e + 0x10);
     if (((*reinterpret_cast<uint32_t*>(parent + 0x40) >> 10) & 1) != 0) return;  // removed flag

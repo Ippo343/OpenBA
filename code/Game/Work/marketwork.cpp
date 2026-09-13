@@ -101,37 +101,6 @@ static MW_MemAlloc_t                s_fn_MemAlloc = nullptr;
 static MW_MemFree_t                 s_fn_MemFree = nullptr;
 static MW_MemFreeStatic_t           s_fn_MemFreeStatic = nullptr;
 
-// ============================================================
-// BANISHED_MARKETBST_TRACE — execution probe for the MarketWork BST family
-// ============================================================
-// The 12-function BST/erase/serialize family (marketwork_bst_*.cpp) is registered
-// and RESOLVES, but registration is not evidence that anything CALLS it. This probe
-// answers the only question that matters: do slots 6/7/9, Execute and Serialize
-// actually get dispatched, and when they do, does the tree change?
-//
-// It deliberately reports OUTCOMES, not intent: every line prints the tree's node
-// count (MarketWork+0x50) BEFORE and AFTER the helper runs, so a slot that fires but
-// mutates nothing is distinguishable from one that never fired at all. Printing only
-// "Slot6 entered" would have been the classic mistake.
-//
-// Opt-in, test-only. Raw getenv is read ONCE and cached (never per-call — Slot9 runs
-// on the work-scheduler path).
-#include <cstdlib>
-static int s_mwTrace = -1;
-static inline bool MW_Trace() {
-    if (s_mwTrace < 0) {
-        const char* e = std::getenv("BANISHED_MARKETBST_TRACE");
-        s_mwTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return s_mwTrace == 1;
-}
-// Node count lives at MarketWork+0x50 (int32); root pointer at +0x48.
-static inline int  MW_Count(const void* self) {
-    return *(const int32_t*)((uintptr_t)self + 0x50);
-}
-static inline const void* MW_Root(const void* self) {
-    return *(const void* const*)((uintptr_t)self + 0x48);
-}
 
 // Vtable pointers for dtor chain
 //
@@ -289,11 +258,7 @@ bool MarketWork_ResolveFuncs() {
 // mis-named "insert". Verified 2026-08-22 by decompiling 0x1400eff60.
 //
 bool MarketWork_Slot6_Impl(MarketWork* self, void* param2) {
-    const int before = MW_Count(self);
     s_fn_MarketBST_EraseByKey((void*)((uintptr_t)self + 0x48), param2);
-    if (MW_Trace())
-        fprintf(stderr, "[MarketBST] Slot6 EraseByKey self=%p key=%p count %d -> %d root=%p\n",
-                (void*)self, param2, before, MW_Count(self), MW_Root(self));
     return false;
 }
 
@@ -311,11 +276,7 @@ bool MarketWork_Slot6_Impl(MarketWork* self, void* param2) {
 // Verified by decompiling 0x1400eff50 and 0x1400eff60 — both call 0x14002aaa0.
 //
 int MarketWork_Slot7_Impl(MarketWork* self, void* param2) {
-    const int before = MW_Count(self);
     s_fn_MarketBST_EraseByKey((void*)((uintptr_t)self + 0x48), param2);
-    if (MW_Trace())
-        fprintf(stderr, "[MarketBST] Slot7 EraseByKey self=%p key=%p count %d -> %d root=%p\n",
-                (void*)self, param2, before, MW_Count(self), MW_Root(self));
     return 0;
 }
 
@@ -379,15 +340,8 @@ bool MarketWork_Slot9_Impl(MarketWork* self, void* param2) {
     uintptr_t* removeArr = nullptr;
     uint32_t removeCount = 0;
     uint32_t removeCapacity = 0;
-    const int mwCountBefore = MW_Count(self);
 
     if (root == nullptr) {
-        // Traced too: an empty tree still proves the slot is DISPATCHED, which is the
-        // half we could not previously observe. Without this arm a live-but-empty
-        // Slot9 would look identical to a Slot9 nothing ever calls.
-        if (MW_Trace())
-            fprintf(stderr, "[MarketBST] Slot9 Validate self=%p EMPTY tree (count=%d) -> no work\n",
-                    (void*)self, mwCountBefore);
         return true;  // Empty tree -- nothing to validate
     }
 
@@ -488,12 +442,6 @@ bool MarketWork_Slot9_Impl(MarketWork* self, void* param2) {
         }
     }
 
-    if (MW_Trace())
-        fprintf(stderr, "[MarketBST] Slot9 Validate self=%p scannedCount=%d invalid=%u "
-                        "count %d -> %d root=%p%s\n",
-                (void*)self, mwCountBefore, removeCount, mwCountBefore, MW_Count(self),
-                MW_Root(self),
-                removeCount ? "  <-- EraseByNode(ac40) RAN" : "");
 
     fn_MemFreeStatic(removeArr);
     return removeCount == 0;
@@ -554,10 +502,6 @@ void MarketWork_Serialize_Impl(MarketWork* self, void* stream) {
 
     int version = s_fn_Serializer_GetVersion(serializer);
 
-    if (MW_Trace())
-        fprintf(stderr, "[MarketBST] Serialize(slot3) DISPATCHED self=%p version=%d -> %s arm, "
-                        "count=%d\n", (void*)self, version,
-                version == 0 ? "v0 MIGRATE via a9f0" : "v1 via b290", MW_Count(self));
 
     if (version == 0) {
         // OLD format: deserialize into temp simple BST, then migrate
@@ -624,9 +568,6 @@ void MarketWork_Serialize_Impl(MarketWork* self, void* stream) {
     } else {
         // NEW format: call MarketWork_helper_b290 directly
         s_fn_MarketBST_Serialize((void*)(selfAddr + 0x48), serializer);
-        if (MW_Trace())
-            fprintf(stderr, "[MarketBST]   b290 v1 serialize returned, count=%d root=%p\n",
-                    MW_Count(self), MW_Root(self));
     }
 
     s_fn_Serializer_Dtor(serializer);
@@ -1019,9 +960,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
     }
     const int maxHaulers = *reinterpret_cast<int32_t*>(workComp + 0x30);
     if (maxHaulers <= claimed) {
-        if (MW_Trace())
-            fprintf(stderr, "[MarketBST] Execute(slot4) self=%p EXIT=1 gate=FULL "
-                            "claimed=%d max=%d\n", (void*)self, claimed, maxHaulers);
         return 1;
     }
 
@@ -1040,9 +978,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
     if (carried > 0) {
         fn_InternalBasePtr_CheckPtr(citizenHolder);
         s_fn_LongTermPlan(*reinterpret_cast<uintptr_t*>(citizenHolder));
-        if (MW_Trace())
-            fprintf(stderr, "[MarketBST] Execute(slot4) self=%p EXIT=2 gate=CARRYING "
-                            "carried=%d -> LongTermPlan\n", (void*)self, carried);
         return 2;
     }
 
@@ -1150,10 +1085,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         static_cast<float>(*reinterpret_cast<int32_t*>(marketStorageIBP[0] + 0x38));
     const float fill = stocked / capacity;
     if (*reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(marketDesc) + 0x20) <= fill) {
-        if (MW_Trace())
-            fprintf(stderr, "[MarketBST] Execute(slot4) self=%p EXIT=1 gate=STOCKED "
-                            "fill=%.3f threshold=%.3f\n", (void*)self, fill,
-                    *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(marketDesc) + 0x20));
         return 1;
     }
 
@@ -1553,7 +1484,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             // payload here would be wrong. The MemFree(nullptr) that follows at
             // 0x1400f0e51 is retail's deliberate no-op on that always-null pointer,
             // exactly as in the v0 save-migration path in Serialize above.
-            const int ownBefore = MW_Count(self);
             uintptr_t vecDesc[2] = {0, 0};
             s_fn_MarketBST_InsertData(reinterpret_cast<void*>(a + 0x48), &pathSrc,
                                       citizenHolder, vecDesc);
@@ -1561,20 +1491,6 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             vecDesc[0] = 0;
             vecDesc[1] = 0;
 
-            if (MW_Trace())
-                fprintf(stderr,
-                        "[MarketBST] Execute(slot4) self=%p EXIT=2 gate=SURPLUS_SHED "
-                        "rec[%d] mask=0x%08x want=%.3f inMarket=%u keep=%d surplus=%d "
-                        "entryAvail=%d unitSize=%d take=%d | dest=%p destPos=(%.2f,%.2f,%.2f) "
-                        "marketPos=(%.2f,%.2f,%.2f) pathType=%d pathOut=%p | "
-                        "ownBST count %d -> %d root=%p%s\n",
-                        (void*)self, r, rec[r].resourceMask, want, rec[r].inMarket, keep,
-                        surplus, entryAvail, unitSize, take, (void*)(uintptr_t)found,
-                        destPos[0], destPos[1], destPos[2],
-                        marketPos[0], marketPos[1], marketPos[2],
-                        pathType, (void*)pathOut[0],
-                        ownBefore, MW_Count(self), MW_Root(self),
-                        MW_Count(self) == ownBefore ? "  <-- CLAIM DID NOT REGISTER" : "");
 
             MW_Stage2Teardown(treeDesc, &records);
             return 2;
@@ -1938,34 +1854,10 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
                                        *reinterpret_cast<const int32_t*>(ce + 0x08));
             }
 
-            const int ownBefore5 = MW_Count(self);
             s_fn_MarketBST_InsertData(reinterpret_cast<void*>(a + 0x48), pathWinner,
                                       citizenHolder, &carry);
             result = 2;
 
-            if (MW_Trace()) {
-                fprintf(stderr,
-                        "[MarketBST] Execute(slot4) self=%p EXIT=2 gate=FETCH winner=%p "
-                        "idx=%d score=%.4f | takeList=%d carry=%d freeCarryLeft=%d "
-                        "pathType=%d pathOut=%p | ownBST count %d -> %d root=%p%s\n",
-                        (void*)self, (void*)winner, bestIndex, bestScore,
-                        takeList.count, carry.count, carryRemaining,
-                        pathType2, (void*)pathOut2[0],
-                        ownBefore5, MW_Count(self), MW_Root(self),
-                        MW_Count(self) == ownBefore5 ? "  <-- CLAIM DID NOT REGISTER" : "");
-                for (int k = 0; k < carry.count && k < 16; ++k) {
-                    const uint8_t* ce = carry.data + static_cast<int64_t>(k) * 0x10;
-                    fprintf(stderr, "[MarketBST]   carry[%2d] resType=%p count=%d\n", k,
-                            (void*)*reinterpret_cast<const uintptr_t*>(ce + 0x00),
-                            *reinterpret_cast<const int32_t*>(ce + 0x08));
-                }
-            }
-        } else if (MW_Trace()) {
-            fprintf(stderr,
-                    "[MarketBST] Execute(slot4) self=%p EXIT=1 gate=FETCH_EMPTY winner=%p "
-                    "idx=%d score=%.4f | takeList=%d carry=0 (nothing passed the "
-                    "carry/demand caps)\n",
-                    (void*)self, (void*)winner, bestIndex, bestScore, takeList.count);
         }
 
         // 0x1400f1be8/0x1400f1bfe: both S5 arrays are freed here, before the
@@ -1973,50 +1865,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
         // a9f0 copies the payload into the node, it does not take ownership.
         s_fn_MemFree(carry.data);
         s_fn_MemFree(takeList.data);
-    } else if (MW_Trace()) {
-        fprintf(stderr,
-                "[MarketBST] Execute(slot4) self=%p EXIT=1 gate=NO_CANDIDATE "
-                "townEntities=%d (none passed ConsumeProduce==null + the region test, "
-                "or none scored above 0)\n",
-                (void*)self, townEntityCount);
     }
 
-    // --- 0x1400f1c15: the shared epilogue ---------------------------------
-    // Frees the local tree and the demand array, then returns `result`, which is
-    // 1 (examined, declined) or 2 (claimed) and NEVER 0 -- retail has no 0 site
-    // in this function, and the port-only 0 that stood here through stages 1-3 is
-    // now gone.
-    if (MW_Trace()) {
-        const int treeNodes = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(treeDesc) + 8);
-        fprintf(stderr,
-                "[MarketBST] Execute(slot4) self=%p EXIT=%d gate=EPILOGUE "
-                "demandTree nodes=%d root=%p | records=%d cap=%d data=%p | "
-                "marketEntries=%d townEntities=%d townResTypes=%d | "
-                "capacity=%.1f invCapacity=%.6f | sorted=%s | bestIndex=%d bestScore=%.4f | "
-                "ownBST count=%d root=%p\n",
-                (void*)self, result, treeNodes, (void*)treeRoot,
-                records.count, records.capacity, (void*)records.data,
-                marketEntryCount,
-                *reinterpret_cast<int32_t*>(town + 0x08),
-                *reinterpret_cast<int32_t*>(town + 0x118),
-                capacity, invCapacity,
-                records.count > 1 ? "yes(b680)" : "no(count<2)",
-                bestIndex, bestScore,
-                MW_Count(self), MW_Root(self));
-        // ⚠ Printed AFTER the b680 qsort, so record order no longer matches the
-        // MarketDescription entry order. "want" is deliberately NOT re-read from
-        // descEntries here -- that index would be wrong. satisfaction IS the sort
-        // key, so it must read non-decreasing down this list; if it does not, b680
-        // did not run or sorted the wrong field.
-        for (int r = 0; r < records.count && r < 16; ++r) {
-            fprintf(stderr,
-                    "[MarketBST]   rec[%2d] mask=0x%08x | have inMarket=%u inTransit=%u "
-                    "inTown=%u | stockedFrac=%.4f satisfaction=%.4f shortfall=%d\n",
-                    r, rec[r].resourceMask,
-                    rec[r].inMarket, rec[r].inTransit, rec[r].inTown,
-                    rec[r].stockedFrac, rec[r].satisfaction, rec[r].shortfall);
-        }
-    }
 
     MW_Stage2Teardown(treeDesc, &records);
     return result;

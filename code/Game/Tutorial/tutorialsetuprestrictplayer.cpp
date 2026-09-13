@@ -118,13 +118,6 @@ static void TutRestrict_ResolveRefOrLoad(void* ref) {
     }
     *(void**)(r + 0x10) = result;
 
-    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
-        if (e[0] && e[0] != '0') {
-            fprintf(stderr, "[TutRestrict] ref \"%s\" Find=miss FindOrLoad=%p (typed=%p)\n",
-                    name, found, result);
-            fflush(stderr);
-        }
-    }
 }
 
 
@@ -332,22 +325,6 @@ void TutorialSetupRestrictPlayer_Slot8(void* self) {
         *(uint8_t*)(playerCtrl2 + 0xA4) = 1;
     }
 
-    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
-        if (e[0] && e[0] != '0') {
-            int32_t cs = **(int32_t**)(gameWorld + 0xF8);
-            fprintf(stderr,
-                    "[TutRestrict] Apply pc=%p rect=(%d,%d)..(%d,%d) cellSize=%d "
-                    "min=%d max=%d rot=%d object=\"%s\"->%p camera=%p armed=%d\n",
-                    (void*)playerCtrl,
-                    *(int32_t*)(s + 0x20), *(int32_t*)(s + 0x24),
-                    *(int32_t*)(s + 0x28), *(int32_t*)(s + 0x2C), cs,
-                    absMin, absMax, toolFlags,
-                    *(const char* const*)(s + 0x38) ? *(const char* const*)(s + 0x38) : "",
-                    (void*)toolRefPtr, (void*)cameraRefPtr,
-                    (int)*(uint8_t*)(playerCtrl + 0xA4));
-            fflush(stderr);
-        }
-    }
 }
 
 // ============================================================

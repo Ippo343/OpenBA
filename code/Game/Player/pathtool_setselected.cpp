@@ -86,17 +86,6 @@ static void EnsureFns() {
     static uint32_t s_tidHi = 0;
     if (s_tidHi == 0) s_tidHi = ::Object::GetTypeIdByName("HighlightComponent");
     s_pTid_Highlight = &s_tidHi;
-    // Every one of these is called behind an `if (ptr)` with a -1/no-op fallback, so an
-    // unresolved helper degrades silently into a bogus route rather than a crash.
-    if (std::getenv("BANISHED_PATH_TRACE")) {
-        fprintf(stderr, "[PathTrace] RESOLVE c4a0=%p 2e10=%p 8090=%p anchor7fb0=%p "
-                "astar9cfb0=%p listFree21d0=%p avl14c30=%p resolvePos122e20=%p yield=%p "
-                "tidHighlight=%u\n",
-                (void*)s_c4a0, (void*)s_2e10, (void*)s_8090, (void*)s_7fb0,
-                (void*)s_9cfb0, (void*)s_21d0, (void*)s_14c30, (void*)s_122e20,
-                (void*)s_yield, s_tidHi);
-        fflush(stderr);
-    }
     s_init = true;
 }
 
@@ -599,32 +588,6 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
         int qIdx = (int)qr;
         int qId  = (int)(qr >> 32);
         if (qId == 0 || qIdx < 0) {
-            // A NEGATIVE src/dst here is the tell: s_7fb0 (housing -> anchor cell)
-            // returns -1 when unresolved, and Draw turns cell -1 into (col=-1,row=0),
-            // i.e. a marker/line hard against the LEFT edge of the map.
-            if (std::getenv("BANISHED_PATH_TRACE")) {
-                // The gate in 0x14009cfb0 rejects when either endpoint's REGION label
-                // (cell+0x26) is 0, or the two labels differ. Print both endpoints'
-                // terrain type (cell+0x29) and region so a spurious rejection between
-                // two visibly-connected buildings is distinguishable from a real one.
-                int mw = map ? *map : 0;
-                uintptr_t cellArr = map ? *(uintptr_t*)((uintptr_t)map + 0x80) : 0;
-                int tS=-1,rS=-1,tD=-1,rD=-1;
-                if (cellArr) {
-                    uintptr_t rs2 = cellArr + (uintptr_t)(int)srcCell * 0x30;
-                    uintptr_t rd2 = cellArr + (uintptr_t)(int)dstCell * 0x30;
-                    tS = *(uint8_t*)(rs2 + 0x29); rS = *(int16_t*)(rs2 + 0x26);
-                    tD = *(uint8_t*)(rd2 + 0x29); rD = *(int16_t*)(rd2 + 0x26);
-                }
-                fprintf(stderr, "[PathTrace] route[%d] src=%d(%d,%d type=%d rgn=%d) "
-                        "dst=%d(%d,%d type=%d rgn=%d) -> NO QUERY (qIdx=%d qId=%d)%s\n",
-                        r, (int)srcCell, mw?(int)srcCell%mw:-1, mw?(int)srcCell/mw:-1, tS, rS,
-                        (int)dstCell, mw?(int)dstCell%mw:-1, mw?(int)dstCell/mw:-1, tD, rD,
-                        qIdx, qId,
-                        (rS == 0 || rD == 0) ? "  <-- REGION 0 (unlabelled cell)"
-                                             : (rS != rD ? "  <-- REGION MISMATCH" : ""));
-                fflush(stderr);
-            }
             continue;   // no query issued → skip this route
         }
 
@@ -643,12 +606,6 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
             else break;
         }
         if (!ready) {
-            if (std::getenv("BANISHED_PATH_TRACE")) {
-                fprintf(stderr, "[PathTrace] route[%d] src=%d dst=%d qIdx=%d qId=%d "
-                        "A* NEVER PUBLISHED (spin bailed) -> route skipped\n",
-                        r, (int)srcCell, (int)dstCell, qIdx, qId);
-                fflush(stderr);
-            }
             continue;
         }
 
@@ -665,39 +622,6 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
         if (s_21d0) s_21d0((void*)(slot + 8), 0);   // free the slot's cell list
         *(int32_t*)(routeBase + off + 8) = cellCount;  // routeEntry.pathCount
 
-        if (std::getenv("BANISHED_PATH_TRACE")) {
-            // A 2-cell path draws as ONE straight segment from src to dst, which is
-            // exactly the "direct line" symptom. Print the map width too so a cell
-            // index can be read back as (col,row) without guessing.
-            int mw = map ? *map : 0;
-            fprintf(stderr, "[PathTrace] route[%d] src=%d(%d,%d) dst=%d(%d,%d) cells=%d%s\n",
-                    r, (int)srcCell, mw ? (int)srcCell % mw : -1, mw ? (int)srcCell / mw : -1,
-                    (int)dstCell, mw ? (int)dstCell % mw : -1, mw ? (int)dstCell / mw : -1,
-                    cellCount,
-                    cellCount <= 2 ? "  <-- DEGENERATE: draws as one straight line" : "");
-            // Is there actually a building at each endpoint? dstCell comes from the
-            // housing anchor (0x140087fb0) and srcCell from the workplace cell
-            // (0x1400de5d0). The reported symptom is the route "trailing off" into
-            // empty ground, which means an endpoint cell holds NO entity. cell+0x08 is
-            // the ENTITY raster (cell+0x00 is the zone raster — do not confuse them).
-            {
-                uintptr_t cellArr = map ? *(uintptr_t*)((uintptr_t)map + 0x80) : 0;
-                void* eS = cellArr ? *(void**)(cellArr + (uintptr_t)(int)srcCell * 0x30 + 8) : nullptr;
-                void* eD = cellArr ? *(void**)(cellArr + (uintptr_t)(int)dstCell * 0x30 + 8) : nullptr;
-                fprintf(stderr, "[PathTrace]    endpoints: srcEntity=%p dstEntity=%p%s\n",
-                        eS, eD, !eD ? "  <-- dst cell is EMPTY (anchor points at open ground)" : "");
-            }
-            // Dump the cells. A real A* route bends around obstacles; a perfectly
-            // interpolated straight line means we are NOT reading A* output at all
-            // (wrong result slot / wrong stride) — the dots would then land on a
-            // bresenham line between src and dst regardless of terrain.
-            for (int c = 0; c < cellCount && c < 40; c++) {
-                int cell = *(int32_t*)(routeBase + off + 0xc + (int64_t)c * 4);
-                fprintf(stderr, "[PathTrace]    cell[%d]=%d(%d,%d)\n", c, cell,
-                        mw ? cell % mw : -1, mw ? cell / mw : -1);
-            }
-            fflush(stderr);
-        }
 
         // Insert each cell into the point tree; each consecutive pair into the segment tree.
         int pc = *(int32_t*)(*routeArr + off + 8);
@@ -724,13 +648,6 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
                      *(uint64_t*)n);
     }
 
-    if (std::getenv("BANISHED_PATH_TRACE")) {
-        fprintf(stderr, "[PathTrace] SUMMARY routes=%d -> points=%d segs=%d "
-                "(self+0x48=%d self+0x58=%d)\n",
-                routeCount, pointCount, segCount,
-                *(int*)(param_1 + 0x48), *(int*)(param_1 + 0x58));
-        fflush(stderr);
-    }
 
     // --- Free the AVL trees (14c30 recursively frees a subtree). ---
     if (segTree) {

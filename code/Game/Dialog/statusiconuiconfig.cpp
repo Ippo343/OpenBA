@@ -83,13 +83,6 @@ static bool StatusIconUIConfig_Serialize(void* self, void* stream) {
                                reinterpret_cast<uint8_t*>(self) + 0x20),
                            nullptr);
     g_fn_Serializer_Dtor(serializer);
-    if (std::getenv("BANISHED_STATUSICON_TRACE")) {
-        std::fprintf(stderr,
-                     "[StatusIconUIConfig] Serialize: cfg=%p boolFn=%p _showOnMainPage(+0x20)=%d\n",
-                     self, reinterpret_cast<void*>(s_fn_SerializeBool),
-                     (int)*(reinterpret_cast<uint8_t*>(self) + 0x20));
-        std::fflush(stderr);
-    }
     return true;   // retail: MOV AL,1
 }
 

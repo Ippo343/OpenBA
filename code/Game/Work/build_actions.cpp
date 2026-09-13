@@ -100,11 +100,6 @@ void EnsureInit() {
     s_init = true;
 }
 
-int s_trace = -1;
-bool Trace() {
-    if (s_trace < 0) { const char* e = std::getenv("BANISHED_BUILD_TRACE"); s_trace = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s_trace == 1;
-}
 
 inline void  Ctor(void* self, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(self, obj); }
 inline void  CheckPtr(void* p)           { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
@@ -242,8 +237,4 @@ extern "C" void BuildStructure_SetupBuildActions(void* citizenIBPptr, uint32_t p
         if (s_push) s_push(stack, &ibp);
     }
 
-    if (Trace())
-        std::fprintf(stderr, "[BuildTrace] SetupBuildActions: pushed build chain for citizen=%p pos=(%f,%f,%f)\n",
-                     reinterpret_cast<void*>(citizenEntity),
-                     position ? position[0] : 0.0f, position ? position[1] : 0.0f, position ? position[2] : 0.0f);
 }

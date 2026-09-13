@@ -223,14 +223,9 @@ int RemoveAnimal_AbstractImpl_Impl(RemoveAnimal* self, void* actionStack) {
     // no animal" look identical from there. Count at the TOP, before any branch, and
     // report both arms.
     {
-        static int s_t = -1;
-        if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
-                       s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
         static long long s_calls = 0, s_null = 0;
         ++s_calls;
         if (!entityRef) ++s_null;
-        if (s_t && ((s_calls % 5) == 0))
-            std::fprintf(stderr, "[RemoveAnimal] calls=%lld nullEntity=%lld\n", s_calls, s_null);
     }
 
     // Get cleanup manager from game world singleton
@@ -242,38 +237,6 @@ int RemoveAnimal_AbstractImpl_Impl(RemoveAnimal* self, void* actionStack) {
         void* localRef = entityRef;
 
         fn_InternalBasePtr_CheckPtr(&localRef);
-
-        // ONE-SHOT COMPONENT DUMP. The venison yield has to be a component slot 7
-        // ("removed-from-world", vtable +0x38) on this animal: FUN_1400c2ea0 dispatches
-        // +0x38 on every component whose capability flags (+0x20) have bit 1, and every
-        // other candidate is ruled out (HuntComponent slot 21 is the base no-op, the kill
-        // action is a completion predicate, RemoveAnimal only marks). Print each
-        // component's type id, its capability bit and its slot-7 target so the producer
-        // can be identified by ADDRESS rather than by guessing which class owns it.
-        {
-            static bool s_dumped = false;
-            const char* de = std::getenv("BANISHED_CROPFIELD_TRACE");
-            if (!s_dumped && de && de[0] && de[0] != '0') {
-                s_dumped = true;
-                uint8_t* ent = (uint8_t*)localRef;
-                const int n = *(int32_t*)(ent + 0x38);
-                const uintptr_t arr = *(uintptr_t*)(ent + 0x30);
-                std::fprintf(stderr, "[AnimalComps] animal entity=%p has %d components\n",
-                             localRef, n);
-                for (int ci = 0; ci < n && arr; ++ci) {
-                    void* c = *(void**)(arr + (uintptr_t)ci * 8);
-                    if (!c) continue;
-                    uintptr_t vt = *(uintptr_t*)c;
-                    uint32_t tid = (*(uint32_t(**)(void*))(vt + 0x10))(c);
-                    const uint32_t caps = *(uint32_t*)((uint8_t*)c + 0x20);
-                    std::fprintf(stderr, "[AnimalComps]   [%d] comp=%p tid=%u vtable=%p "
-                                 "caps=0x%08X bit1=%d slot7(+0x38)=%p slot6(+0x30)=%p\n",
-                                 ci, c, tid, (void*)vt, caps, (int)((caps >> 1) & 1),
-                                 *(void**)(vt + 0x38), *(void**)(vt + 0x30));
-                }
-                std::fflush(stderr);
-            }
-        }
 
         // Check bit 10 of flags at entity+0x40 (already marked for removal?)
         uint32_t flags = *(uint32_t*)((uint8_t*)localRef + 0x40);

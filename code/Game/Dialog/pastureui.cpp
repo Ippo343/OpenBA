@@ -403,7 +403,6 @@ void* Dtor(void* self, uint32_t flags) {
 }
 
 static void Trace(const char* what, void* self) {
-    if (!std::getenv("BANISHED_DIALOG_TRACE")) return;
     fprintf(stderr, "[PastureUI] %s self=%p\n", what, self);
     fflush(stderr);
 }

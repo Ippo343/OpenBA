@@ -334,27 +334,6 @@ void CitizenUI_Slot7(CitizenUI* self) {
         fn_TextElement_SetParameter(textName, 0, (void*)(ai + 0x28));
 #if defined(_DEBUG)
     {
-        static int s_nameTrace = 0;
-        if (s_nameTrace < 4 && std::getenv("BANISHED_DIALOG_TRACE")) {
-            ++s_nameTrace;
-            const char* nm = okName ? (const char*)*(char**)(ai + 0x28) : "<invalid>";
-            fprintf(stderr, "[CitizenUI::Slot7] textName=%p okString=%d okParam=%d name='%s'"
-                    " -> SetParameter %s\n", textName, (int)okName, (int)okParam,
-                    nm ? nm : "(null)", (okName && okParam) ? "FIRED" : "skipped");
-            // Diagnose empty-rows: are the content text elements' string tables (+0xD8)
-            // and format/param arrays bound? All rows (incl. static labels) render empty
-            // if the content sub-panel's elements never got their strings.
-            void* clo = (void*)*(uint64_t*)(s + 0x68);   // textClothing
-            auto D8 = [](void* e)->void*{ return e ? *(void**)((uintptr_t)e + 0xD8) : nullptr; };
-            auto vis = [](void* e)->uint32_t{ return e ? *(uint32_t*)((uintptr_t)e + 0x34) : 0; };
-            fprintf(stderr, "[CitizenUI::Slot7]   textName: strTbl(+0xD8)=%p flags(+0x34)=0x%x "
-                    "paramCnt(+0xD0)=%d paramArr(+0xC8)=%p | clothing=%p strTbl=%p flags=0x%x\n",
-                    D8(textName), vis(textName),
-                    textName ? *(int*)((uintptr_t)textName + 0xD0) : -1,
-                    textName ? *(void**)((uintptr_t)textName + 0xC8) : nullptr,
-                    clo, D8(clo), vis(clo));
-            fflush(stderr);
-        }
     }
 #endif
 
@@ -803,15 +782,6 @@ void EnsureGlobals() {
     if (!g_TypeId_EditTool)               { s_edit = ::Object::ResolveTypeIdByNameLazy("EditTool");          if (s_edit) g_TypeId_EditTool = &s_edit; }
     if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
 
-    static bool s_logged = false;
-    if (!s_logged && std::getenv("BANISHED_DIALOG_TRACE")) {
-        s_logged = true;
-        fprintf(stderr, "[CitizenUI] globals: CE=%p CD=%p CAI=%p Prof=%p Ext=%p\n",
-                (void*)g_TypeId_ComponentEntity, (void*)g_TypeId_CitizenDescription,
-                (void*)g_TypeId_CitizenComponent_FC, (void*)g_TypeId_CitizenAIComponent,
-                (void*)g_pExternalTypeId);
-        fflush(stderr);
-    }
 }
 
 void W_Slot4(void* self) {

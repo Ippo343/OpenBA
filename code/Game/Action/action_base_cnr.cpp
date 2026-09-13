@@ -280,37 +280,6 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress) {
         *reinterpret_cast<float*>(target + 0x140) = uvScale;
     }
 
-    // [diag] BANISHED_CROPFIELD_TRACE — did the spawn-time scale write land on a real
-    // ModelComponent? +0x28/+0x30/+0x38 are populated by GrowthComponent::Startup; if
-    // this runs BEFORE that, every link here is stale and the visual scale never moves.
-    {
-        static int s_t = -1;
-        if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
-                       s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        static int s_n = 0;
-        if (s_t && s_n++ < 10) {
-            int64_t model = *reinterpret_cast<int64_t*>(s + 0x30);
-            std::fprintf(stderr, "[SetGrowth] self=%p progress=%.3f growthScale(+0x4c)=%.3f "
-                         "growth=%.3f disp(+0x48)=%.3f res=%p model=%p desc=%p cropBranch=%d vec4fn=%p",
-                         (void*)s, progress, *reinterpret_cast<float*>(s + 0x4c), growth,
-                         *reinterpret_cast<float*>(s + 0x48),
-                         (void*)*reinterpret_cast<int64_t*>(s + 0x28), (void*)model,
-                         (void*)*reinterpret_cast<int64_t*>(s + 0x38),
-                         *reinterpret_cast<int64_t*>(s + 0x38)
-                             ? (int)*reinterpret_cast<int8_t*>(*reinterpret_cast<int64_t*>(s + 0x38) + 100)
-                             : -1,
-                         (void*)s_fn_Vec4);
-            if (model)
-                std::fprintf(stderr, " visualScale=(%.3f %.3f %.3f %.3f)",
-                             *reinterpret_cast<float*>(model + 0x134),
-                             *reinterpret_cast<float*>(model + 0x138),
-                             *reinterpret_cast<float*>(model + 0x13c),
-                             *reinterpret_cast<float*>(model + 0x140));
-            std::fprintf(stderr, "\n");
-            std::fflush(stderr);
-        }
-    }
-
     int64_t desc = *reinterpret_cast<int64_t*>(s + 0x38);
     float rf = 0.0f;
     if (fn_Random_RandFloat) {
@@ -519,50 +488,14 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     // ValidateEntityRefs demoted to state 2. This is the only path that removes a
     // natural resource, so counting it (and its harvest flag) says whether something is
     // actively clearing the field's own crops and whether it produces anything.
-    {
-        static int s_t = -1;
-        if (s_t < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
-                       s_t = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        static long long s_harv = 0, s_clear = 0, s_n = 0;
-        if (harvestFlag) ++s_harv; else ++s_clear;
-        if (s_t && ((s_n++ % 10) == 0)) {
-            std::fprintf(stderr, "[RemoveNatRes] harvestFlag=1 -> %lld, harvestFlag=0 (CLEAR) -> %lld\n",
-                         s_harv, s_clear);
-            std::fflush(stderr);
-        }
-    }
     EnsureResolved();
     uintptr_t s = static_cast<uintptr_t>(self);
     uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     int64_t parent = *reinterpret_cast<int64_t*>(s + 0x10);
     int64_t entityList = *reinterpret_cast<int64_t*>(gameWorld + 0xe8);
 
-    // [standalone] Entity-lifecycle gate (BANISHED_PRODUCE_SPAWN_ENTITY, default ON since
-    // economy brick M-B; set =0 to opt out for A/B). The historical fault ("next-frame
-    // EntityList PreUpdate/removal faults in Runtime") was the NULL ComponentEntity vtable —
-    // 0x14015fa78 was unregistered, so InternalBasePtr::DeletePtr's first-ever virtual
-    // dispatch (the scalar dtor) called through NULL. With the vtable materialized
-    // (componententity.cpp g_ComponentEntity_StandaloneVtable) and the removal-side grid
-    // occupancy un-mark wired (mapcomponent.cpp MapComponent_DetachOccupancy_4750), the
-    // full lifecycle — tree removal via the entityList+0xd0 dirty list + ground-pile item
-    // clone/position/register — runs crash-free (soak-verified: 37 organic produces).
-    static int s_spawnItem = -1;
-    if (s_spawnItem < 0) {
-        const char* e = std::getenv("BANISHED_PRODUCE_SPAWN_ENTITY");
-        s_spawnItem = (e && e[0] == '0') ? 0 : 1;
-    }
-
-    // Grid claim for the spawned pile (see the long note at the write below). Default ON,
-    // matching starttown.cpp's BANISHED_RES_OCCUPANCY collapse for worldgen resources;
-    // only "0" disables.
-    static int s_pileAttach = -1;
-    if (s_pileAttach < 0) {
-        const char* e = std::getenv("BANISHED_PILE_GRID_ATTACH");
-        s_pileAttach = (e && e[0] == '0') ? 0 : 1;
-    }
-
     // Detach model from the build queue when not already queued (bit 10 of +0x40).
-    if (s_spawnItem && parent != 0) {
+    if (parent != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&parent);
         if (((*reinterpret_cast<uint32_t*>(parent + 0x40) >> 10) & 1) == 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&parent);
@@ -573,18 +506,7 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
         }
     }
 
-    // [diag] Gate trace for the harvest-yield investigation (BANISHED_FORESTER_SCAN_TRACE).
-    // 1260f0 has three early-outs before the pile spawn; report which one fires.
-    const bool yTrace = std::getenv("BANISHED_FORESTER_SCAN_TRACE") != nullptr;
-
     if (*reinterpret_cast<int8_t*>(s + 0x2d) == 0) {   // not harvestable
-        if (yTrace) {
-            fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNatRes GATE-1 harvestable(+0x2d)=0 -> no yield "
-                            "(nrComp=%p mature(+0x2c)=%d frac(+0x28)=%f)\n",
-                    (void*)s, (int)*reinterpret_cast<int8_t*>(s + 0x2c),
-                    (double)*reinterpret_cast<float*>(s + 0x28));
-            fflush(stderr);
-        }
         return;
     }
 
@@ -592,11 +514,6 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     void* d = (s_pTid_c7b68 && fn_IsDerivedFrom && fn_IsDerivedFrom(desc, *s_pTid_c7b68)) ? desc : nullptr;
     int64_t descArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
     if (descArr == 0) {
-        if (yTrace) {
-            fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNatRes GATE-2 descArr(+0x20)=0 -> no yield "
-                            "(desc=%p isNatResDesc=%d)\n", desc, (int)(d != nullptr));
-            fflush(stderr);
-        }
         return;
     }
 
@@ -616,16 +533,8 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
                     ? reinterpret_cast<void**>(s_fn_GetMeshDesc_6330(descArr, &tmp)) : nullptr;
         amount = pd ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(*pd) + 0x44) : 0;
     }
-    int rawAmount = amount;
     amount = static_cast<int>(static_cast<float>(amount) * frac);
     if (amount <= 0) {
-        if (yTrace) {
-            fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNatRes GATE-3 amount=0 -> no yield "
-                            "(rawAmount=%d frac=%f mature(+0x2c)=%d descArr=%p GetMeshDesc=%p)\n",
-                    rawAmount, (double)frac, (int)*reinterpret_cast<int8_t*>(s + 0x2c),
-                    (void*)descArr, (void*)s_fn_GetMeshDesc_6330);
-            fflush(stderr);
-        }
         return;
     }
 
@@ -646,40 +555,9 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     // consumes. RegisterRawMaterial needs only the citizen/work IBP, the resource description
     // and the yield amount; NOT the spawned physical item entity, so it runs unconditionally.
     int64_t regIBP = *reinterpret_cast<int64_t*>(citizenIBP);
-    if (std::getenv("BANISHED_FORESTER_SCAN_TRACE")) {
-        int64_t descEnt = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
-        fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNatRes harvest: amount=%d cell=%d harvestFlag=%d "
-                        "descEnt=%p RegisterRawMaterial=%p\n",
-                amount, cell, (int)harvestFlag, (void*)descEnt, (void*)s_fn_88ef0);
-        fflush(stderr);
-    }
-    // ATTRIBUTED DEPOSIT METER. This call is the town-stock increment itself, so summing
-    // `amount` here credits food to the harvest that produced it. Net town stock cannot do
-    // that: material 5 is the aggregate Food pool, citizens eat from it continuously, and a
-    // control run with NO food building still showed +700 gross. A monotonic rise in the
-    // pool is therefore NOT evidence that a particular class deposited -- measure at the
-    // source instead of inferring from the total.
-    {
-        static int s_dt = -1;
-        if (s_dt < 0) { const char* e = std::getenv("BANISHED_CROPFIELD_TRACE");
-                        s_dt = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        static long long s_units = 0, s_calls = 0;
-        if (harvestFlag) { s_units += amount; ++s_calls; }
-        if (s_dt && s_calls && (s_calls % 10) == 0)
-            fprintf(stderr, "[DepositMeter] harvest deposits: %lld calls, %lld units "
-                            "(last amount=%d)\n", s_calls, s_units, amount);
-    }
     if (s_fn_88ef0)
         s_fn_88ef0(*reinterpret_cast<int64_t*>(gameWorld + 0xf0), &regIBP, harvestFlag,
                    *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20), amount);
-
-    // ── PHYSICAL ITEM ENTITY (opt-in: BANISHED_PRODUCE_SPAWN_ENTITY) ─────────
-    // Clone/position/register the ground-pile item entity. In standalone the clone is only
-    // partially materialized (inert component factories); once it joins the live world entity
-    // list the next frame's EntityList_PreUpdate → Serialize faults in Runtime-x64.dll. Gate
-    // the whole visual/lifecycle block until entity materialization is live — the stock
-    // accounting above is what the economy loop reads.
-    if (!s_spawnItem) return;
 
     // Query the existing surface tile at the cell (for its material id at +0x24).
     int64_t surfIBP = 0;
@@ -760,7 +638,7 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     // deliberate divergence documented at the starttown.cpp collapse. Bit 0x100000 is set
     // so the removal-side un-mark (MapComponent_DetachOccupancy_4750) stays symmetric and
     // the grid cannot keep pointing at a freed pile.
-    if (s_pileAttach && newIBP != 0) {
+    if (newIBP != 0) {
         uintptr_t mapIBP = 0;
         if (s_fn_FindComp_4680) s_fn_FindComp_4680(newIBP, &mapIBP);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&mapIBP);
@@ -774,20 +652,6 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
             *reinterpret_cast<uintptr_t*>(cells + static_cast<size_t>(cell) * 0x30 + 0x08) = newIBP;
             *reinterpret_cast<uint32_t*>(mc + 0x20) |= 0x100000u;
         }
-    }
-
-    // [diag] Report the cell slots so the claim above is observable: cell+0x08 non-null
-    // means the pile is now visible to tile scans.
-    if (yTrace) {
-        uintptr_t mapGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0xf8);
-        uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(mapGrid + 0x80);
-        uintptr_t rec = cellArr + static_cast<uintptr_t>(cell) * 0x30;
-        fprintf(stderr, "[ORGANIC-PRODUCE] pile REGISTERED cell=%d newEntity=%p | "
-                        "grid cell+0x00=%p cell+0x08=%p (0x08 must == newEntity; null => "
-                        "invisible to tile scans)\n",
-                cell, (void*)newEntity,
-                *reinterpret_cast<void**>(rec + 0x00), *reinterpret_cast<void**>(rec + 0x08));
-        fflush(stderr);
     }
 
     if ((harvestFlag != 0) && (*reinterpret_cast<int64_t*>(citizenIBP) != 0)) {

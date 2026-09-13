@@ -158,21 +158,6 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode)
 {
     uintptr_t pc = (uintptr_t)playerController;
 
-    // This name and Toolbar_ShowGroup_Impl are ONE retail function (0x140102b60);
-    // they were two independent ports until they were collapsed. Both spellings
-    // write +0x20, so a SetEditMode(pc,0) from anywhere clears the toolbar's
-    // active group and tears down the live tool (then reinstalls the default
-    // EditTool from the key-0 node). Log the RETURN ADDRESS so the
-    // actual caller is identifiable instead of guessed at.
-    {
-        static const char* t = getenv("BANISHED_TOOL_TRACE");
-        if (t && t[0] && t[0] != '0') {
-            fprintf(stderr, "[ToolTrace] SETEDITMODE pc=%p mode=%p cur+0x20=%p cur+0x28=%p ret=%p\n",
-                    playerController, (void*)mode, *(void**)(pc + 0x20),
-                    *(void**)(pc + 0x28), __builtin_return_address(0));
-            fflush(stderr);
-        }
-    }
 
     // Forward to the single implementation. int64_t vs uint64_t is a spelling
     // difference only - the field at +0x20 is one 8-byte slot either way.
@@ -507,34 +492,6 @@ void EntityUI_Slot7(EntityUI* self) {
                 if (activePage != 4) {
                     pageIdx = descResult ? *(int*)((uintptr_t)descResult + 0x40) : 2;
                 }
-                // PAGE-4 STICK TEST (BANISHED_PAGE4_TEST=1, test-only). Forces the user
-                // page once -- the same state a click on the production-statistics button
-                // leaves behind -- then reports, per pass, the page this function decided
-                // AND the page the pre-fix code would have written. One run shows both
-                // arms, so 'it sticks now' is measured rather than argued.
-                {
-                    static int s_on = -1;
-                    if (s_on < 0) {
-                        const char* e = std::getenv("BANISHED_PAGE4_TEST");
-                        s_on = (e && e[0] && e[0] != '0') ? 1 : 0;
-                    }
-                    if (s_on == 1 && pagesElem) {
-                        static long long n = 0;
-                        static bool forced = false;
-                        ++n;
-                        if (!forced && n > 120) {
-                            forced = true;
-                            fn_PageElement_SetActivePage(pagesElem, 4);
-                            pageIdx = 4;   // this pass must not overwrite its own force
-                            std::fprintf(stderr, "[Page4Test] forced active page 4\n");
-                        } else if (forced && (n % 30) == 0) {
-                            std::fprintf(stderr,
-                                "[Page4Test] entry activePage=%d -> writing %d (pre-fix would write %d)\n",
-                                activePage, pageIdx, (activePage == 4) ? staleIdx : pageIdx);
-                        }
-                        std::fflush(stderr);
-                    }
-                }
                 fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
             } else {
                 fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
@@ -543,29 +500,6 @@ void EntityUI_Slot7(EntityUI* self) {
         }
     }
 
-    // One-shot page-routing diagnostic (BANISHED_PAGE_TRACE). Dumps every input feeding
-    // the page decision plus the chosen page, so we can see WHICH branch sends an entity
-    // (e.g. the default stockpile) to the under-construction build page (2) instead of its
-    // operational page. Rate-limited to distinct entity pointers so a per-frame Slot7 doesn't
-    // spam the log.
-    {
-        static int pt = -1;
-        if (pt < 0) { const char* e = std::getenv("BANISHED_PAGE_TRACE"); pt = (e && e[0] && e[0] != '0') ? 1 : 0; }
-        if (pt == 1) {
-            static void* s_lastEnt = nullptr;
-            if (entityPtr != s_lastEnt) {
-                s_lastEnt = entityPtr;
-                bool complete = (posComp != 0) ? BuildComplete_Impl((void*)posComp) : false;
-                std::fprintf(stderr,
-                    "[PageTrace] ent=%p buildStateComp(0x1c7d98)=%p state52=%d state50=%d | "
-                    "posComp/BuildComp(0x1c7008)=%p destroyComp=%p smComp(0x1c71c8)=%p | "
-                    "BuildComplete=%d -> pageIdx=%d\n",
-                    entityPtr, buildStateComp, (int)state52, (int)state50,
-                    posComp, destroyComp, smComp, (int)complete, pageIdx);
-                std::fflush(stderr);
-            }
-        }
-    }
 
     void* pagesElemFinal = *(void**)(s + 0x40);
     if (pagesElemFinal) {
@@ -911,14 +845,6 @@ void EnsureGlobals() {
     if (!g_TypeId_MultiObjectComponent)  { s_multi = ::Object::ResolveTypeIdByNameLazy("MultiObjectComponent"); if (s_multi) g_TypeId_MultiObjectComponent = &s_multi; }
     if (!g_TypeId_MapComponent_FC)  { s_mapc  = ::Object::ResolveTypeIdByNameLazy("MapComponent");         if (s_mapc)  g_TypeId_MapComponent_FC = &s_mapc; }
 
-    static bool s_logged = false;
-    if (!s_logged && std::getenv("BANISHED_DIALOG_TRACE")) {
-        s_logged = true;
-        fprintf(stderr, "[EntityUI] globals: CE=%p ToolUI=%p UIDesc=%p\n",
-                (void*)g_TypeId_ComponentEntity, (void*)g_TypeId_ToolUI,
-                (void*)g_TypeId_UIDescription);
-        fflush(stderr);
-    }
 }
 
 void W_Slot4(void* self) {

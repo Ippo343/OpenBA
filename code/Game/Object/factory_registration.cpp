@@ -70,41 +70,10 @@ uint32_t GetTypeIdByName(const char* name) {
 }
 
 
-// BANISHED_DUMP_SLOT3=1 — see header. This wave alone found the base-only
-// fallback shipping silently on Storage, Residence, the whole animal family and
-// 16 audited classes; a text audit keeps missing satellite-file serializers, so
-// this reports the OUTCOME (what the vtable actually holds at runtime).
-void DumpSlot3Inventory() {
-    static const char* e = getenv("BANISHED_DUMP_SLOT3");   // read once (hot caller)
-    if (!e || !*e || *e == '0') return;
-    void* baseSlot = ::ComponentFactory::BaseSerializeSlot();
-    void* stubSlot = ::ComponentFactory::InertStubSlot();
-    int total = 0, baseOnly = 0, typed = 0;
-    std::fprintf(stderr, "[Slot3Dump] BEGIN (base-only probe=%p)\n", baseSlot);
-    for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
-        if (!r->typeName || !r->factoryFn) continue;
-        size_t len = std::strlen(r->typeName);
-        if (len < 9 || std::strcmp(r->typeName + len - 9, "Component") != 0) continue;
-        void* obj = r->factoryFn();
-        if (!obj) {
-            std::fprintf(stderr, "[Slot3Dump] %-32s FACTORY RETURNED NULL\n", r->typeName);
-            continue;
-        }
-        void** vt = *reinterpret_cast<void***>(obj);
-        void* s3 = vt ? vt[3] : nullptr;
-        ++total;
-        if (s3 == baseSlot || s3 == stubSlot || !s3) {
-            ++baseOnly;
-            std::fprintf(stderr, "[Slot3Dump] %-32s slot3=%p BASE-ONLY (state lost on save/load)\n",
-                         r->typeName, s3);
-        } else {
-            ++typed;
-        }
-    }
-    std::fprintf(stderr, "[Slot3Dump] END: %d Component classes, %d typed serializers, %d BASE-ONLY\n",
-                 total, typed, baseOnly);
-    std::fflush(stderr);
-}
+// The BANISHED_DUMP_SLOT3 inventory this printed was deleted with the flag (ENDGAME C).
+// standalone/menudialogloopt_stubs.cpp still calls it; the stub goes when that call does.
+void DumpSlot3Inventory() {}
+
 
 void ForEachRegistration(RegistrationVisitFn fn, void* ctx) {
     if (!fn) return;

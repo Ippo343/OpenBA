@@ -551,25 +551,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
     uint32_t entityGridCell = s_fn_Entity_GetGridCell(entityIBPBuf, nullptr);
 
     float fGrowthVal = *s_fGrowthThreshold;
-    // ── Forage-rejection census (BANISHED_GATHER_TRACE) ──────────────────────────
-    // Slot4 ran 115 times without ever reaching the "valid herb found" branch, so every
-    // candidate cell is being filtered out — but a bare "found nothing" cannot say WHICH
-    // of the eight filters is responsible. Count each rejection reason and dump the
-    // histogram on the way out, so the answer is a number rather than a guess.
-    // Zero-cost when the env var is unset.
-    static int s_gtrace = -1;
-    if (s_gtrace < 0) {
-        const char* ge = std::getenv("BANISHED_GATHER_TRACE");
-        s_gtrace = (ge && ge[0] && ge[0] != '0') ? 1 : 0;
-    }
-    enum { RJ_TERRAIN, RJ_DIST, RJ_NOENT, RJ_NONR, RJ_GROWTH, RJ_TYPE, RJ_FLAGGED,
-           RJ_NOPASS, RJ_NOPATH, RJ_HIT, RJ_COUNT };
-    static const char* const kRjName[RJ_COUNT] = {
-        "terrainMask", "tooFar", "noResourceEntity", "noNatResComp", "growthTooLow",
-        "herbTypeMismatch", "flaggedForRemoval", "noPassableCell", "noPath", "ACCEPTED" };
-    static long long s_rj[RJ_COUNT] = {0};
-    static int s_rjDump = 0;
-#define GATHER_RJ(which) do { if (s_gtrace) ++s_rj[which]; } while (0)
 
 
 
@@ -599,21 +580,18 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
             uint8_t terrainByte = *(uint8_t*)(gridData + (uintptr_t)testCell * 0x30 + 0x29);
             uint32_t terrainBit = 1u << (terrainByte & 0x1f);
             if ((terrainBit & 0x1e0u) != 0) {
-                GATHER_RJ(RJ_TERRAIN);
                 continue;
             }
 
             // Check distance is within 2x workplace radius
             int dist = s_fn_Map_CalcDistance(mapGrid, entityGridCell, testCell);
             if (dist > workplaceRadius * 2) {
-                GATHER_RJ(RJ_DIST);
                 continue;
             }
 
             // Get resource entity at this cell (+8 in cell data)
             uintptr_t resourceEntity = *(uintptr_t*)(gridData + (uintptr_t)testCell * 0x30 + 8);
             if (resourceEntity == 0) {
-                GATHER_RJ(RJ_NOENT);
                 continue;
             }
 
@@ -625,7 +603,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
             s_fn_FindComp_NatRes(resourceEntity, natResCompIBP);
 
             if (*(uintptr_t*)natResCompIBP == 0) {
-                GATHER_RJ(RJ_NONR);
                 continue;
             }
 
@@ -643,7 +620,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                 fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                 float growth = *(float*)(*(uintptr_t*)natResCompIBP2 + 0x28);
                 if (growth < fGrowthVal) {
-                    GATHER_RJ(RJ_GROWTH);
                     continue;
                 }
 
@@ -652,7 +628,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                 uintptr_t resDescRef = *(uintptr_t*)(resourceEntity + 0x28);
                 uintptr_t herbTypeRef = *(uintptr_t*)(herbTypeList + (uintptr_t)herbIdx * 8);
                 if (resDescRef != herbTypeRef) {
-                    GATHER_RJ(RJ_TYPE);
                     continue;
                 }
 
@@ -660,7 +635,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                 fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                 uint32_t flags20 = *(uint32_t*)(*(uintptr_t*)natResCompIBP2 + 0x20);
                 if ((flags20 >> 20) & 1) {
-                    GATHER_RJ(RJ_FLAGGED);
                     continue;
                 }
 
@@ -668,7 +642,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                 int nearestCell = s_fn_Map_FindNearestPassable(
                     mapGrid, testCell, citizenGridCell, 0xe07);
                 if (nearestCell < 0) {
-                    GATHER_RJ(RJ_NOPASS);
                     continue;
                 }
 
@@ -676,7 +649,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                 bool canPath = s_fn_Map_CanPathTo(
                     mapGrid, 0xe1f, nearestCell, citizenGridCell);
                 if (!canPath) {
-                    GATHER_RJ(RJ_NOPATH);
                     continue;
                 }
 
@@ -706,7 +678,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                     0,
                     1);
 
-                GATHER_RJ(RJ_HIT);
                 *(uint32_t*)(selfAddr + 0x58) = 0;
                 AssignWorkToEntity(self, citizenIBP, (int)selfQ[4]);
                 return 2;
@@ -717,14 +688,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
     // -------------------------------------------------------
     // Step 7: No work found — handle failure
     // -------------------------------------------------------
-    if (s_gtrace && (++s_rjDump % 20) == 0) {
-        std::fprintf(stderr, "[GatherTrace] forage rejections after %d failed Slot4 calls "
-                     "(radius=%d maxAttempts=%d):", s_rjDump, workplaceRadius, maxAttempts);
-        for (int i = 0; i < RJ_COUNT; ++i)
-            std::fprintf(stderr, " %s=%lld", kRjName[i], s_rj[i]);
-        std::fprintf(stderr, "\n");
-        std::fflush(stderr);
-    }
     int failCount = (int)selfQ[0xb]; // self->_field58
 
     if (failCount > maxAttempts) {

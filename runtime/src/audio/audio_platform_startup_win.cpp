@@ -92,11 +92,6 @@ inline Fn Slot(void* obj, size_t byteOffset) {
     return reinterpret_cast<Fn>(VtblOf(obj)[byteOffset / sizeof(void*)]);
 }
 
-bool EnvOn(const char* name) {
-    const char* e = std::getenv(name);
-    return e && e[0] && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
-}
-
 // ---------------------------------------------------------------------------
 // 0x180050270 — the unexported helper. `CoCreateInstance` then `Initialize`,
 // storing the interface into `*out` ONLY when both succeed.

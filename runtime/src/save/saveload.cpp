@@ -159,22 +159,6 @@ using RtSaveDetail::SecondsPerTick;
 using RtSaveDetail::ZeroTime;
 using RtSaveDetail::ReleaseStringSlot;
 
-// ---- ~SaveLoad reachability counter (Wave 9 lane SYS2) ---------------------
-// ~SaveLoad has no oracle (see its banner), so the ONE thing that CAN be
-// measured about it is whether it runs at all. `calls=0` on a diffed port is
-// this project's canonical "green line over dead code"
-// (reference_uncalled_port_is_not_verified.md); a destructor gets the same
-// treatment for the same reason, just without the comparison half.
-// BANISHED_SAVELOAD_DTOR_TRACE=1.
-int g_saveLoadDtorCalls = 0;
-bool RtSaveDtorTrace() {
-    static const int on = []() {
-        const char* e = std::getenv("BANISHED_SAVELOAD_DTOR_TRACE");
-        return (e && *e && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }();
-    return on != 0;
-}
-
 // ---- scratch-copy diff helper ----------------------------------------------
 // `ours` and `theirs` are 0x90-byte private copies of the live object; neither
 // call is allowed to allocate, free, or touch anything outside its own copy.
@@ -417,11 +401,6 @@ void RtSave_SaveLoad_Dtor(SaveLoad* self) {
 
     ReleaseStringSlot(reinterpret_cast<const char**>(p + 0x20));
 
-    if (RtSaveDtorTrace()) {
-        std::fprintf(stderr, "[SaveLoadDtor] ran on %p (call #%d)\n",
-                     (void*)self, ++g_saveLoadDtorCalls);
-        std::fflush(stderr);
-    }
 }
 
 // ============================================================================

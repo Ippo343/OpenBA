@@ -90,13 +90,6 @@ uint32_t ProgressElementTypeId() {
 void CropUI_Slot11(CropUI* self, int64_t newType) {
     void* comp = FindComp(self);
 
-    if (std::getenv("BANISHED_DIALOG_TRACE")) {
-        fprintf(stderr, "[CropUI] Slot11 self=%p comp=%p newType=%llx cur(+0x50)=%llx\n",
-                reinterpret_cast<void*>(self), comp, (unsigned long long)newType,
-                comp ? (unsigned long long)*reinterpret_cast<int64_t*>(
-                           reinterpret_cast<uintptr_t>(comp) + 0x50) : 0ull);
-        fflush(stderr);
-    }
 
     // SA guard (retail unguarded): in retail a combo event can only be routed to an
     // entity that has a CropFieldComponent.
@@ -177,13 +170,6 @@ void W_Slot4(void* self) {
     if (*reinterpret_cast<uint64_t*>(s + 0x38))
         *reinterpret_cast<float*>(*reinterpret_cast<uint64_t*>(s + 0x38) + 0x124) = 1.0f;
 
-    if (std::getenv("BANISHED_DIALOG_TRACE")) {
-        void* combo = reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x30));
-        fprintf(stderr, "[CropUI] Slot4 self=%p combo(+0x30)=%p yield(+0x38)=%p rows=%d\n",
-                self, combo, reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x38)),
-                combo ? fn_ComboElement_GetItemCount(combo) : -1);
-        fflush(stderr);
-    }
 }
 
 // idx7 (+0x38) — retail 0x1400b2a50: mean maturity into the yield bar + percent text,

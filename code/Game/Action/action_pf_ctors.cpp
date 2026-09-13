@@ -358,16 +358,8 @@ void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uin
     // CitizenComponent live vtable's GetTypeId (slot 2) returns. msg 0 stays
     // unhealed: a zero-typeid msg 0 is ambiguous (CitizenAIComponent 0x1401c70e8
     // completion lead vs CitizenComponent warm-house), deferred.
-    // Default (env off) => compTypeId unchanged => byte-identical behavior.
-    if (compTypeId == 0 && param_4 == 2 &&
-        ::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGE")) {
+    if (compTypeId == 0 && param_4 == 2) {
         compTypeId = ::Object::GetTypeIdByName("CitizenComponent");
-        static int s_healTrace = 0;
-        if (s_healTrace < 4 && std::getenv("BANISHED_STORAGE_TRACE")) { ++s_healTrace;
-            fprintf(stderr, "[EatMsg] SendCompMsg ctor: healed msg-2 typeid -> CitizenComponent (0x%08x)\n",
-                    compTypeId);
-            fflush(stderr);
-        }
     }
     *reinterpret_cast<uint32_t*>(s + 0x30) = compTypeId;
     *reinterpret_cast<uint32_t*>(s + 0x34) = param_4;

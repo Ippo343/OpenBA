@@ -80,12 +80,6 @@ static fn_CtxEndVerts_t    s_ctxEnd      = nullptr;
 // forces pos.z=0) and sits ~0.06 below the rendered ground, so the faithful grid can read
 // as "above the (sunk) model" — a model-Z / terrain-baseline issue, NOT an overlay bug.
 //
-// EXPERIMENTAL (opt-in) base-anchor: if BANISHED_TOOL_ZLIFT is SET, the grid is re-anchored
-// to the footprint-centre (model base) plane + that lift (world units). This is a knob for
-// a future session to reconcile the model-sink; it is OFF by default so the committed build
-// renders the visible, correct terrain-conforming overlay.
-static bool  OverlayAnchorOn() { static int on = -1; if (on < 0) { const char* e = std::getenv("BANISHED_TOOL_ZLIFT"); on = (e && e[0]) ? 1 : 0; } return on != 0; }
-static float OverlayZLift()     { static float v = 1e30f; if (v > 1e29f) { const char* e = std::getenv("BANISHED_TOOL_ZLIFT"); v = (e && e[0]) ? (float)std::atof(e) : 0.0f; } return v; }
 
 static bool s_init = false;
 static void EnsureFns() {
@@ -252,12 +246,6 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
     // the builder would otherwise leave count>0 with a null base -> null-record deref).
     int count3 = (param_3 && param_3[0]) ? (int)param_3[1] : 0;
     int count4 = (param_4 && param_4[0]) ? (int)param_4[1] : 0;
-    { static int s_on = -1;
-      if (s_on < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_on = (e && e[0] && e[0] != '0') ? 1 : 0; }
-      if (s_on) { static int n = 0; if (n++ < 5)
-        std::fprintf(stderr, "[overlay] ctx=%p count3=%d count4=%d material=%p begin=%p add=%p end=%p b10e0hf=%p\n",
-                     ctx, count3, count4, material, (void*)s_ctxBegin, (void*)s_ctxAddVtx, (void*)s_ctxEnd,
-                     (void*)heightfield), std::fflush(stderr); } }
     bool began = s_ctxBegin ? s_ctxBegin(ctx, (count3 + count4) * 6, 0x18) : false;
     if (!began) return;
 
@@ -318,22 +306,6 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
         }
     }
 
-    // Standalone-only base anchor. The overlay faithfully conforms to the collision
-    // heightmap (verified: b10e0 == the game's own aa20 terrain ray), but the placed
-    // building anchors at Z=0 (sub_da00 forces pos.z=0) and the standalone's rendered
-    // ground sits at ~0 on flat terrain while the collision heightmap carries a small
-    // non-zero baseline — so a pure terrain-conforming grid floats that baseline above
-    // the model. Anchor the grid to the footprint-centre terrain height so it sits flush
-    // with the model base, KEEPING per-cell slope (far tiles still follow real relief).
-    // The original skips this (byte-faithful — there the two heights agree).
-    float baselineZ = 0.0f;
-    if (OverlayAnchorOn() && count3 > 0) {
-        const int32_t* mrec = reinterpret_cast<const int32_t*>(*param_3 + (int64_t)(count3 / 2) * 0x14);
-        float mc[18];
-        PlayerTileRender_TerrainCorners_b10e0(heightfield, mrec[0], mrec[1], mc);
-        baselineZ = mc[2];
-    }
-
     // --- Loop 2: placement tile records (param_3). THE LIVE overlay path. ---
     for (int rIdx = 0; rIdx < count3; rIdx++) {
         const int32_t* rec = reinterpret_cast<const int32_t*>(*param_3 + (int64_t)rIdx * 0x14);
@@ -351,7 +323,6 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
             vtx[0] = corners[k * 3 + 0];
             vtx[1] = corners[k * 3 + 1];
             vtx[2] = corners[k * 3 + 2];
-            if (OverlayAnchorOn()) vtx[2] += OverlayZLift() - baselineZ;  // opt-in base-anchor (see helper)
             vtx[3] = ((vt - half) * sinA + (ut - half) * cosA + half) * uvScale + variantCol;
             vtx[4] = ((vt - half) * cosA - (ut - half) * sinA) + half;
             std::memcpy(&vtx[5], &rec[3], 4);                        // color = rec+0xc

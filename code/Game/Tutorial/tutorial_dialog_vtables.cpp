@@ -140,13 +140,6 @@ void FillNops(void** vt) {
     for (int i = 0; i < kSlots; ++i) vt[i] = reinterpret_cast<void*>(&Nop);
 }
 
-// Opt-in trace for the whole wave (new, unproven feature — kill-switch style
-// default-off per CLAUDE.md's "new unproven features start opt-in").
-bool TutTrace() {
-    static int s = -1;
-    if (s < 0) { const char* e = std::getenv("BANISHED_TUTORIAL_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s != 0;
-}
 
 // ===========================================================================
 // TutorialUI  (UI::DialogController, 0x60)
@@ -182,13 +175,6 @@ void Slot4(void* self) {
     if (*reinterpret_cast<uint64_t*>(s + 0x20) == 0) return;
     if (!fn_FindElement || !fn_String_Ctor_CStr || !fn_Element_SetElementId) return;
     TutorialUI_Serialize(reinterpret_cast<TutorialUI*>(self));
-    if (TutTrace()) {
-        fprintf(stderr, "[TutorialUI] Slot4 self=%p pre=%p post=%p imgTable=%p next=%p quit=%p\n",
-                self, *reinterpret_cast<void**>(s + 0x38), *reinterpret_cast<void**>(s + 0x40),
-                *reinterpret_cast<void**>(s + 0x48), *reinterpret_cast<void**>(s + 0x50),
-                *reinterpret_cast<void**>(s + 0x58));
-        fflush(stderr);
-    }
 }
 
 // Slot7 (+0x38, retail 0x1400E3700): per-frame button visibility toggle. It
@@ -209,10 +195,6 @@ void Slot7(void* self) {
 // main-menu loader chain.
 void Slot9(void* self, void* p2, int eventType, int eventId) {
     if (!self) return;
-    if (TutTrace() && eventType == 0x12) {
-        fprintf(stderr, "[TutorialUI] Slot9 event type=0x%x id=%d\n", eventType, eventId);
-        fflush(stderr);
-    }
     TutorialUI_OnRemove(reinterpret_cast<TutorialUI*>(self), p2, eventType, eventId);
 }
 
@@ -243,7 +225,6 @@ void* Factory() {
     void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
     if (!p) return nullptr;
     Zero(p); *reinterpret_cast<void**>(p) = g_vt;
-    if (TutTrace()) { fprintf(stderr, "[TutorialUI] Factory -> %p\n", p); fflush(stderr); }
     return p;
 }
 void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
@@ -331,7 +312,6 @@ void* Factory() {
     // Retail ctor seeds +0x30 with -1 (see TutorialGoalDialog_OnDestroy). A zero
     // there is a legal index, so the sentinel is load-bearing.
     *reinterpret_cast<uint32_t*>(static_cast<char*>(p) + 0x30) = 0xFFFFFFFFu;
-    if (TutTrace()) { fprintf(stderr, "[TutorialGoalDialog] Factory -> %p\n", p); fflush(stderr); }
     return p;
 }
 void* InPlace(void* m) {
@@ -384,15 +364,6 @@ void Slot8(void* self) {
 }
 void Slot9(void* self) {
     if (!self || !fn_TSD_Slot9Helper || !fn_TSD_OpenDialog) return;
-    // Once per dialog, not once per frame: Slot9 is the per-tick setup re-apply.
-    if (TutTrace()) {
-        static void* s_last = nullptr;
-        if (self != s_last) {
-            s_last = self;
-            fprintf(stderr, "[TutorialSetupDialog] Slot9 activate self=%p\n", self);
-            fflush(stderr);
-        }
-    }
     TutorialSetupDialog_Slot9(self);
 }
 void Slot10(void* self) {
@@ -430,7 +401,6 @@ void* Factory() {
     void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x78, 8);
     if (!p) return nullptr;
     Zero(p); *reinterpret_cast<void**>(p) = g_vt; SeedCtorScalars(p);
-    if (TutTrace()) { fprintf(stderr, "[TutorialSetupDialog] Factory -> %p\n", p); fflush(stderr); }
     return p;
 }
 void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; SeedCtorScalars(m); return m; }
@@ -475,13 +445,6 @@ void Slot4_Startup(void* self) {
     if (!self) return;
     if (!fn_DialogInstance_FindElement || !fn_String_Ctor_CStr || !fn_String_Dtor) return;
     TutorialHighlightDialog_Startup(reinterpret_cast<TutorialHighlightDialog*>(self));
-    if (TutTrace()) {
-        uintptr_t s = reinterpret_cast<uintptr_t>(self);
-        fprintf(stderr, "[TutorialHighlightDialog] Startup self=%p glowGroup=%p glow=%p arrow=%p\n",
-                self, *reinterpret_cast<void**>(s + 0xC0), *reinterpret_cast<void**>(s + 0xC8),
-                *reinterpret_cast<void**>(s + 0xD0));
-        fflush(stderr);
-    }
 }
 
 void Slot6_Draw(void* self) {

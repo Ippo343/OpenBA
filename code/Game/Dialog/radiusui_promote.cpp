@@ -76,10 +76,6 @@ void* Dtor(void* self, uint32_t flags) {
 void W_Slot5(void* self) {
     if (!self) return;
     if (!SA_DialogEntityAlive(self)) {
-        if (std::getenv("BANISHED_DIALOG_TRACE")) {
-            fprintf(stderr, "[RadiusUI] Slot5 SKIP (no live data source) self=%p\n", self);
-            fflush(stderr);
-        }
         return;
     }
     RadiusUI_Slot5(reinterpret_cast<RadiusUI*>(self));

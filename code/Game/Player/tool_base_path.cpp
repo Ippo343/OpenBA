@@ -348,14 +348,12 @@ uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int 
 
     uintptr_t desc = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
     void* retFail = nullptr;  // pIVar4, masked low byte on fail
-    void* dbg_natres = nullptr; int dbg_atwork = -1, dbg_ok = -1;  // BANISHED_REMOVE_TRACE
 
     if ((*reinterpret_cast<uint8_t*>(desc + 0x20) != 0) && (matched != nullptr) &&
         (*reinterpret_cast<int64_t*>(param_2) != 0)) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
         uint64_t ibp88[4] = {0};
         FindComponent_AreaSelf(*reinterpret_cast<uintptr_t*>(param_2), ibp88);
-        dbg_natres = reinterpret_cast<void*>(ibp88[0]);
         if (ibp88[0] != 0) {
             desc = *reinterpret_cast<uintptr_t*>(param_1 + 0x38);
             int compCount = *reinterpret_cast<int*>(desc + 0x30);
@@ -380,7 +378,6 @@ uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int 
                 }
             }
             if (!atWorkBlock && iVar12 == 0) atWorkBlock = true;  // 'if (iVar12 == 0) goto LAB_140104a0f'
-            dbg_atwork = atWorkBlock ? 1 : 0;
 
             bool ok = false;
             if (atWorkBlock) {
@@ -401,22 +398,12 @@ uint64_t PlayerPath_Sub_48a0(uintptr_t param_1, void* param_2, int param_3, int 
                 }
                 ok = all;
             }
-            dbg_ok = ok ? 1 : 0;
 
             // Original cleanup branch (string state) runs on zero locals.
             // local_a0 / local_88 / local_90 are all 0 -> null-safe.
             if (fn_MemFreeStatic) fn_MemFreeStatic(nullptr);
 
             if (ok) return 1;
-        }
-    }
-    if (std::getenv("BANISHED_REMOVE_TRACE") && *reinterpret_cast<int64_t*>(param_2) != 0) {
-        static int s_t48 = 0;
-        if (s_t48 < 24) {
-            fprintf(stderr, "[Sub48a0] FAIL matched=%p natRes=%p atWork=%d ok=%d desc20=%d s7430=%u\n",
-                matched, dbg_natres, dbg_atwork, dbg_ok,
-                (int)*reinterpret_cast<uint8_t*>(desc + 0x20), s_pTid_7430 ? *s_pTid_7430 : 0);
-            fflush(stderr); s_t48++;
         }
     }
     return reinterpret_cast<uint64_t>(retFail) & 0xffffffffffffff00ull;

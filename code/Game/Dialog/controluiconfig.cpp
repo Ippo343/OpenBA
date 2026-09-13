@@ -61,14 +61,6 @@ void EnsureResolved() {
     s_resolved = true;
 }
 
-bool Trace() {
-    static int t = -1;
-    if (t < 0) {
-        const char* e = std::getenv("BANISHED_CONTROLUI_TRACE");
-        t = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return t == 1;
-}
 
 void Init(void* self) {
     if (fn_External_External) fn_External_External(self);
@@ -95,12 +87,6 @@ char Serialize(void* self, void* stream) {
     if (s_fn_Type_Serialize)
         s_fn_Type_Serialize(c + 0x24, serializer);
     g_fn_Serializer_Dtor(serializer);
-    if (Trace()) {
-        std::fprintf(stderr, "[ControlUIConfig] Serialize: cfg=%p cmd(+0x20)=%d targetType(+0x24)=0x%x\n",
-                     self, *reinterpret_cast<int32_t*>(c + 0x20),
-                     *reinterpret_cast<uint32_t*>(c + 0x24));
-        std::fflush(stderr);
-    }
     return 1;
 }
 

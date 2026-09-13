@@ -82,57 +82,6 @@ typedef bool (*ToolTile_f5d0_t)(int* param_1, int col, int row, unsigned int cod
 static ToolTile_f5d0_t s_fn_f5d0 = nullptr;
 static bool s_f5d0Init = false;
 
-// ============================================================
-// Track A refinement #2 — allow SA placement over CLEARABLE resource cells.
-// ============================================================
-// In retail, a building's description clearable-filter (desc+0x50) matches the
-// tree/rock/iron resource descriptions, so f5d0's occupant check passes for those
-// cells and the building's ClearAreaComponent then harvests them. In the standalone
-// exe that filter isn't satisfied, so f5d0 rejects ANY occupied cell and a building
-// can never be anchored over resources — the ClearAreaComponent harvest mechanic can
-// only be exercised via the footprint-override harness, never through normal
-// placement. When BANISHED_CLEAR_PLACE_OVER is set, a cell that f5d0 rejects is
-// re-checked with allowOverlap=1 (f5d0 param_8, which bypasses ONLY the occupant
-// condition — terrain-mask, road flag, and height/slope rejections all still apply);
-// the cell is accepted only if its occupant is a clearable NaturalResourceComponent.
-// Default (env off) => the verified placement behaviour is byte-for-byte unchanged.
-static int s_clearPlaceOver = -1;
-static bool ToolTile_ClearPlaceOver() {
-    if (s_clearPlaceOver < 0) {
-        const char* e = std::getenv("BANISHED_CLEAR_PLACE_OVER");
-        s_clearPlaceOver = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return s_clearPlaceOver == 1;
-}
-// True iff the tile at (col,row) is occupied by an entity carrying a
-// NaturalResourceComponent (type-id 0x1401c7b30) — i.e. a clearable tree/rock/iron.
-static bool ToolTile_CellHasClearableResource(int* grid, int col, int row) {
-    static uint32_t s_tid = 0;
-    if (s_tid == 0) s_tid = ::Object::GetTypeIdByName("NaturalResourceComponent");
-    if (!grid || !s_tid) return false;
-    int width = *grid;
-    if (col < 0 || col >= width || row < 0 || row >= width) return false;
-    uintptr_t tiles = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80);
-    int cell = width * row + col;
-    uintptr_t slot = tiles + static_cast<uintptr_t>(cell) * 0x30 + 8;
-    if (!*reinterpret_cast<void**>(slot)) return false;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(slot));
-    void* occ = *reinterpret_cast<void**>(slot);
-    if (!occ) return false;
-    uintptr_t e = reinterpret_cast<uintptr_t>(occ);
-    int n = *reinterpret_cast<int*>(e + 0x38);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
-    for (int i = 0; i < n && arr; ++i) {
-        void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
-        if (!c) continue;
-        void** vt = *reinterpret_cast<void***>(c);
-        if (!vt || !vt[2]) continue;
-        if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == s_tid)
-            return fn_IsDerivedFrom && fn_IsDerivedFrom(c, s_tid);
-    }
-    return false;
-}
-
 unsigned long long ToolTile_FootprintValidity_d580(
         int* param_1, int param_2, int param_3, int param_4, int param_5,
         unsigned int param_6, long long* param_7, long long* param_8,
@@ -187,86 +136,7 @@ unsigned long long ToolTile_FootprintValidity_d580(
                         ok = s_fn_f5d0(param_1, iVar10, iVar14, param_6, param_9, param_10,
                                        param_11, param_12, bVar13 ? 1 : 0, param_15);
                     }
-                    // Refinement #2: accept a clearable-resource cell that f5d0 rejected
-                    // only on its occupant condition. Retry with allowOverlap=1 (keeps
-                    // terrain/height/slope rejection) and require a NaturalResourceComponent
-                    // occupant, so buildings/water/mountains stay rejected.
-                    if (!ok && s_fn_f5d0 && ToolTile_ClearPlaceOver() &&
-                        s_fn_f5d0(param_1, iVar10, iVar14, param_6, param_9, param_10,
-                                  param_11, /*allowOverlap=*/1, bVar13 ? 1 : 0, param_15) &&
-                        ToolTile_CellHasClearableResource(param_1, iVar10, iVar14)) {
-                        ok = true;
-                    }
                     if (!ok) {
-                        // BANISHED_TOOL_DIAG: name the FIRST cell f5d0 (0x14009F5D0)
-                        // rejected and the three inputs its three conditions read, so
-                        // "the building won't place" points at a condition instead of a
-                        // function. f5d0 rejects when:
-                        //   (a) bit (cell+0x29 & 0x1f) is clear in `code`  — terrain mask
-                        //   (b) cell occupied and its description != param_15 (filter)
-                        //   (c) cell+0x28 != 0 while the '.' road flag is 0
-                        //   (d) height/slope: f3e0 depth < p9, or |height - p11| > p10
-                        // This is the placement HOT PATH: the tool re-validates every
-                        // footprint cell every frame while the ghost is on screen, so an
-                        // unconditional getenv + fprintf here costs frames (measured: the
-                        // game dropped to ~5fps with BANISHED_TOOL_DIAG set). Cache the
-                        // flag once, and print only when the (cell, code) pair CHANGES —
-                        // repeats carry no information.
-                        static int s_diag = -1;
-                        if (s_diag < 0) {
-                            const char* e = std::getenv("BANISHED_TOOL_DIAG");
-                            s_diag = (e && e[0] && e[0] != '0') ? 1 : 0;
-                        }
-                        static int s_lastCol = INT_MIN, s_lastRow = INT_MIN;
-                        static unsigned int s_lastCode = 0xFFFFFFFFu;
-                        if (s_diag == 1 &&
-                            (iVar10 != s_lastCol || iVar14 != s_lastRow || param_6 != s_lastCode)) {
-                          s_lastCol = iVar10; s_lastRow = iVar14; s_lastCode = param_6;
-                          {
-                            int width = param_1 ? *param_1 : 0;
-                            uintptr_t tiles = param_1
-                                ? *reinterpret_cast<uintptr_t*>(
-                                      reinterpret_cast<uintptr_t>(param_1) + 0x20 * 4)
-                                : 0;
-                            uintptr_t cell = tiles
-                                ? tiles + (uintptr_t)(width * iVar14 + iVar10) * 0x30 : 0;
-                            unsigned char t29 = cell ? *reinterpret_cast<unsigned char*>(cell + 0x29) : 0;
-                            unsigned char t28 = cell ? *reinterpret_cast<unsigned char*>(cell + 0x28) : 0;
-                            void* occ = cell ? *reinterpret_cast<void**>(cell) : nullptr;
-                            fprintf(stderr,
-                                "[TileValid] REJECT cell=(%d,%d) code=0x%x terrainType(+0x29)=%u "
-                                "maskBitSet=%d flag(+0x28)=%u roadDot=%d occ=%p filter=%p "
-                                "p9=%.3f p10=%.3f p11=%.3f rot=%d\n",
-                                iVar10, iVar14, param_6, t29,
-                                (int)((param_6 >> (t29 & 0x1f)) & 1), t28, (int)bVar13,
-                                occ, (void*)param_15, param_9, param_10, param_11, param_14);
-                            // The per-cell mask override: `_placeBitmap` (param_8) holds
-                            // ASCII digits indexing `_placeBitArray` (param_7). The -0xc0
-                            // in the index math is just -'0'*4. Dump both sides: a code of
-                            // 0 means either the bitmap char or the array element is wrong.
-                            {
-                                long long bmp = param_8 ? *param_8 : 0;
-                                long long arr = param_7 ? *param_7 : 0;
-                                int cnt = param_7 ? (int)param_7[1] : -1;
-                                int bmpLen = bmp ? *reinterpret_cast<int*>(bmp - 8) : -1;
-                                int ch = (bmp && iVar8 >= 0 && iVar8 < bmpLen)
-                                             ? *reinterpret_cast<char*>(bmp + iVar8) : -1;
-                                fprintf(stderr,
-                                    "[TileValid]   idx=%d bitmapLen=%d bitmapChar='%c'(%d) "
-                                    "arrCount=%d arr=[", iVar8, bmpLen, ch > 31 ? ch : '?', ch, cnt);
-                                for (int k = 0; k < cnt && k < 8 && arr; ++k)
-                                    fprintf(stderr, "%s0x%x", k ? "," : "",
-                                            *reinterpret_cast<unsigned int*>(arr + k * 4));
-                                fprintf(stderr, "] bitmap=\"");
-                                for (int k = 0; k < bmpLen && k < 40; ++k) {
-                                    char bc = *reinterpret_cast<char*>(bmp + k);
-                                    fputc(bc == '\n' ? '/' : bc, stderr);
-                                }
-                                fprintf(stderr, "\"\n");
-                            }
-                            fflush(stderr);
-                          }
-                        }
                         return 0;
                     }
                     iVar10 = iVar10 + 1;
@@ -415,112 +285,12 @@ static void ToolTile_SetPlacedModel(long long modelComp, bool foundation) {
                                      reinterpret_cast<void*>(m + 0x148));
     }
 
-    if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
-        std::fprintf(stderr, "[place-model] modelComp=%p desc=%p groups=%u variantIdx=%d "
-                     "subCount=%d modelVariant=%d (%s) mesh=%p setMesh=%p\n",
-                     (void*)modelComp, modelDesc, groupCount, variantIdx, subCount,
-                     modelVariant, foundation ? "foundation" : "complete", mesh, (void*)s_fn_tileSetMesh);
-        std::fflush(stderr);
-    }
-}
-
-// Organic construction is available when the live BuildComponent state machine is enabled.
-// Default-ON via kDefaultOnFlags (graduated 2026-07-22); env var is a kill-switch (=0).
-static bool ToolTile_OrganicConstruction() {
-    return ::ComponentFactory::LiveEnabled("BANISHED_LIVE_BUILDCTRL");
 }
 
 // (The placement path deliberately performs no occupancy write — see the note at the tail
 // of ValidateCreate_fd650. That belongs to MapComponent slot 12, driven by ClearArea's
 // state-2 event-1 broadcast.)
 
-// Diagnostic for the placed-building click-pick question: report both pick routes for
-// the entity we just created. cellEntity != 0 => EditTool's cell pick resolves it;
-// pickingId >= 0 => the Picking::Scene mesh route registered a mesh. BANISHED_PLACE_PICK_DIAG=1.
-static void ToolTile_ProbePlacedPick(void* entity, int tileX, int tileY) {
-    static bool s_on = [](){ const char* e = std::getenv("BANISHED_PLACE_PICK_DIAG");
-                             return e && e[0] && e[0] != '0'; }();
-    if (!s_on || !entity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
-    int* grid = *reinterpret_cast<int**>(gw + 0xf8);
-
-    // Walk the entity's component array for the Model/Picking/Map trio (entity+0x30 array,
-    // +0x38 count; each slot an IBP) — same shape as PC_FindModelComponent.
-    int modelVariant = -999, pickingId = -999;
-    uint8_t* mapComp = nullptr;
-    // Array INDEX of each: ComponentEntity_OnAddedPass dispatches slot 6 in array order, so
-    // whether PickingComponent sees a framed model (variant 0 = the foundation decal) or an
-    // un-framed one (-1, stamped by BuildComponent's own OnAdded Stage 3) is decided purely
-    // by which index comes first. That ordering is the whole question for the mesh route.
-    int idxModel = -1, idxPick = -1, idxBuild = -1, idxMap = -1, idxZone = -1;
-    uint32_t tidModel = ::Object::GetTypeIdByName("ModelComponent");
-    uint32_t tidPick  = ::Object::GetTypeIdByName("PickingComponent");
-    uint32_t tidMap   = ::Object::GetTypeIdByName("MapComponent");
-    uint32_t tidBuild = ::Object::GetTypeIdByName("BuildComponent");
-    uint32_t tidZone  = ::Object::GetTypeIdByName("ZoneComponent");
-    int count = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(entity) + 0x38);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uint8_t*>(entity) + 0x30);
-    for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
-        void* comp = *slot;
-        if (!comp) continue;
-        typedef uint32_t (*gt_t)(void*);
-        uint32_t tid = (*reinterpret_cast<gt_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
-        if (tid == tidModel) { modelVariant = *reinterpret_cast<int16_t*>(reinterpret_cast<uint8_t*>(comp) + 0x166); idxModel = i; }
-        else if (tid == tidPick) { pickingId = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(comp) + 0x28); idxPick = i; }
-        else if (tid == tidMap) { mapComp = reinterpret_cast<uint8_t*>(comp); idxMap = i; }
-        else if (tid == tidBuild) idxBuild = i;
-        else if (tid == tidZone) idxZone = i;
-    }
-
-    // Sweep the WHOLE footprint, not one corner: dc20 clears '.' cells (the ground in
-    // front of a building) and only stamps '#'/'_' ones, so sampling the rect origin
-    // reads a legitimately-empty cell and libels the fix. Report coverage instead, plus
-    // what else is holding cells (a foreign occupant = the trees this port does not remove).
-    // Both slots: FUN_1400a0280 returns cell+0x00 first and only falls back to cell+0x08,
-    // so a building that is only ever written to +0x08 can be masked by whatever holds +0x00.
-    int fpCells = 0, mine = 0, foreign = 0, empty = 0;
-    int s0_mine = 0, s0_other = 0, s0_empty = 0;
-    if (grid && mapComp) {
-        int dim = *grid;
-        uint8_t* cells = *reinterpret_cast<uint8_t**>(reinterpret_cast<uint8_t*>(grid) + 0x80);
-        int x0 = *reinterpret_cast<int16_t*>(mapComp + 0x28), y0 = *reinterpret_cast<int16_t*>(mapComp + 0x2a);
-        int w  = *reinterpret_cast<int16_t*>(mapComp + 0x2c), h  = *reinterpret_cast<int16_t*>(mapComp + 0x2e);
-        for (int iy = 0; cells && iy < h; ++iy)
-            for (int ix = 0; ix < w; ++ix) {
-                int cx = x0 + ix, cy = y0 + iy;
-                if (cx < 0 || cx >= dim || cy < 0 || cy >= dim) continue;
-                ++fpCells;
-                uint8_t* cell = cells + (size_t)(dim * cy + cx) * 0x30;
-                void* occ0 = *reinterpret_cast<void**>(cell + 0x00);
-                void* occ8 = *reinterpret_cast<void**>(cell + 0x08);
-                if (!occ8) ++empty; else if (occ8 == entity) ++mine; else ++foreign;
-                if (!occ0) ++s0_empty; else if (occ0 == entity) ++s0_mine; else ++s0_other;
-            }
-    }
-
-    // The retail dispatch is MapComponent::Draw -> (gate: MapDescription+0x30) -> 41b0 ->
-    // (gate: desc+0x31) -> dc20. If +0x30 is 0 for a building template, retail NEVER runs
-    // the occupancy write at register time and any call we make to it is a deviation.
-    const uint8_t* mdesc = mapComp ? *reinterpret_cast<const uint8_t* const*>(mapComp + 0x18) : nullptr;
-    std::fprintf(stderr, "[PlacePick] entity=%p tile=(%d,%d) fp=%d cells | slot8: mine=%d foreign=%d empty=%d %s"
-                 " | slot0: mine=%d other=%d empty=%d | modelVariant=%d pickingId=%d %s"
-                 " | mapDesc=%p +0x30(drawGate)=%d +0x31(skipOccupancy)=%d +0x32(minimap)=%d | pickmap=%s\n",
-                 entity, tileX, tileY, fpCells, mine, foreign, empty,
-                 (mine || s0_mine) ? "CELL-PICK OK" : "CELL-PICK DEAD",
-                 s0_mine, s0_other, s0_empty,
-                 modelVariant, pickingId,
-                 (pickingId > 0) ? "MESH-PICK OK" : "MESH-PICK DEAD",
-                 (const void*)mdesc,
-                 mdesc ? mdesc[0x30] : -1, mdesc ? mdesc[0x31] : -1, mdesc ? mdesc[0x32] : -1,
-                 ::ComponentFactory::LiveEnabled("BANISHED_LIVE_MAP_SOLIDIFY") ? "on" : "off");
-    std::fprintf(stderr, "[PlacePick]   component order: Model=[%d] Picking=[%d] Build=[%d] Map=[%d] Zone=[%d] -> "
-                 "Picking %s Build (retail OnAddedPass runs them in this order)\n",
-                 idxModel, idxPick, idxBuild, idxMap, idxZone,
-                 (idxPick >= 0 && idxBuild >= 0) ? (idxPick < idxBuild ? "BEFORE" : "AFTER") : "?");
-    std::fflush(stderr);
-}
 
 unsigned long long ToolTile_ValidateCreate_fd650(
         long long param_1, int param_2, int param_3, int param_4, int param_5,
@@ -638,7 +408,7 @@ unsigned long long ToolTile_ValidateCreate_fd650(
         // any incomplete-model building when no demo foundation is seeded (BuildDemoIndex
         // default = -1). Without the pipeline, force the finished mesh so the placed building
         // renders (the original "no completion flow -> model-less forever" guard).
-        ToolTile_SetPlacedModel(reinterpret_cast<long long>(plVar4), ToolTile_OrganicConstruction());
+        ToolTile_SetPlacedModel(reinterpret_cast<long long>(plVar4), true);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(plVar4 + 2);
         if (s_fn_c2b70) s_fn_c2b70(plVar4[2], 0);
     }
@@ -685,7 +455,6 @@ unsigned long long ToolTile_ValidateCreate_fd650(
     // broadcasts event 1 (`MOV EDX,1; CALL 0x1400c2b70`) and MapComponent's slot 12 turns
     // that into the 41b0 call. See MapComponent_Slot12VSlot (mapcomponent.cpp), which is
     // where the occupancy write belongs.
-    ToolTile_ProbePlacedPick(reinterpret_cast<void*>(local_res8), param_2, param_3);
 
     unsigned long long uVar9 = s_fn_subd960 ? s_fn_subd960(param_1) : 0;
     return (uVar9 & ~0xffULL) | 1ULL;

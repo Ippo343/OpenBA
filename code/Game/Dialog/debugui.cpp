@@ -1298,19 +1298,9 @@ void DebugUI_Slot4(DebugUI* self) {
                 uint8_t spriteBuf[16];
                 fn_Sprite_Default_Ctor(spriteBuf);
                 fn_ComboElement_AddItem(self->diseaseCombo, spriteBuf, textBuf, nullptr);
-                if (std::getenv("BANISHED_DEBUG_PANEL")) {
-                    const char* t = *(const char**)textBuf;
-                    fprintf(stderr, "[DebugUI]   disease[%d] %p text='%s'\n",
-                            i, disease, t ? t : "(null)");
-                }
                 fn_String_Dtor(textBuf);
             }
             fn_ComboElement_SetCurrentItem(self->diseaseCombo, 0);
-            if (std::getenv("BANISHED_DEBUG_PANEL")) {
-                fprintf(stderr, "[DebugUI] diseaseCombo: externalList=%p rows=%d\n",
-                        externalList, resourceCount);
-                fflush(stderr);
-            }
         }
     }
     DebugUI_FindAndSetId(parentElem, "diseaseButton", 0x147);
@@ -1392,12 +1382,6 @@ void DebugUI_Slot4(DebugUI* self) {
                 }
             }
             fn_ComboElement_SetCurrentItem(self->drawCombo, selectedIndex);
-            if (std::getenv("BANISHED_DEBUG_PANEL")) {
-                fprintf(stderr, "[DebugUI] drawCombo (populations): townMgr+0xC0=%p "
-                        "rows=%d selected=%d\n",
-                        (void*)drawableList, drawCount, selectedIndex);
-                fflush(stderr);
-            }
         }
     }
 
@@ -1773,24 +1757,9 @@ void W_Slot4(void* self) {
     if (!self || !g_TypeId_ObjectInternal || !*g_TypeId_ObjectInternal
         || !g_TypeId_DiseaseDescription || !*g_TypeId_DiseaseDescription
         || !g_TypeId_DrawableType || !*g_TypeId_DrawableType) {
-        if (std::getenv("BANISHED_DEBUG_PANEL"))
-            fprintf(stderr, "[DebugUI] Slot4 SKIPPED self=%p ObjInternal=%p Disease=%p Drawable=%p\n",
-                    self, (void*)g_TypeId_ObjectInternal,
-                    (void*)g_TypeId_DiseaseDescription, (void*)g_TypeId_DrawableType);
         return;
     }
     DebugUI_Slot4(reinterpret_cast<DebugUI*>(self));
-    // One-shot confirmation that the promoted controller wired to live game data
-    // (element pointers land in the DebugUI struct fields). Env-gated so the
-    // default build stays quiet.
-    if (std::getenv("BANISHED_DEBUG_PANEL")) {
-        DebugUI* d = reinterpret_cast<DebugUI*>(self);
-        fprintf(stderr, "[DebugUI] Slot4 WIRED self=%p diseaseCombo=%p drawCombo=%p "
-                "comboWeather=%p sliderDay=%p numberFPS=%p\n",
-                self, d->diseaseCombo, d->drawCombo, d->comboWeather,
-                d->sliderDay, d->numberFPS);
-        fflush(stderr);
-    }
 }
 void W_Slot7(void* self) {
     EnsureGlobals();

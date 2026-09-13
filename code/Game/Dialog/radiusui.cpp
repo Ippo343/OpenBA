@@ -85,11 +85,6 @@ void RadiusUI_Slot5(RadiusUI* self) {
     // select an entity whose description has no RadiusDescription. Without this,
     // 0x140055430 reads radiusComp+0x20 off a null pointer.
     if (!buildComp || !radiusComp) {
-        if (std::getenv("BANISHED_DIALOG_TRACE")) {
-            fprintf(stderr, "[RadiusUI] Slot5 BAIL self=%p radiusComp=%p place=%p (comps=%d)\n",
-                    (void*)self, radiusComp, (void*)buildComp, count);
-            fflush(stderr);
-        }
         self->data30 = -1;
         return;
     }
@@ -105,16 +100,6 @@ void RadiusUI_Slot5(RadiusUI* self) {
     // Calculate radius and store display index
     self->data30 = fn_RadiusCalc(radiusComp, tileIndex);
 
-    if (std::getenv("BANISHED_DIALOG_TRACE")) {
-        fprintf(stderr,
-                "[RadiusUI] Slot5 self=%p radiusDesc=%p radius=%d origin=(%d,%d) "
-                "size=(%d,%d) tile=%d -> overlay=%d\n",
-                (void*)self, radiusComp, *(int*)((uintptr_t)radiusComp + 0x28),
-                (int)*(int16_t*)(buildComp + 0x28), (int)*(int16_t*)(buildComp + 0x2a),
-                (int)*(int16_t*)(buildComp + 0x2c), (int)*(int16_t*)(buildComp + 0x2e),
-                tileIndex, self->data30);
-        fflush(stderr);
-    }
 }
 
 // ============================================================
@@ -126,10 +111,6 @@ void RadiusUI_Slot5(RadiusUI* self) {
 // Original: 0x140077600, 28 bytes.
 
 void RadiusUI_Slot6(RadiusUI* self) {
-    if (std::getenv("BANISHED_DIALOG_TRACE")) {
-        fprintf(stderr, "[RadiusUI] Slot6 self=%p overlay=%d\n", (void*)self, self->data30);
-        fflush(stderr);
-    }
     if (self->data30 >= 0) {
         // Game/World singleton +0x110 = RadiusDisplayManager
         void* gameWorld = *g_pGameWorldSingleton;

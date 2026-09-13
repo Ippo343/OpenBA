@@ -18,11 +18,6 @@ constexpr uintptr_t kInternalFactorySingleton = 0x1801fc6d8;
 constexpr int kIdxOff = 0x08;   // Internal::_factoryIndex
 constexpr int kGenOff = 0x0c;   // Internal::_generation
 
-bool EnvOn(const char* name) {
-    const char* v = std::getenv(name);
-    return v && v[0] && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
-}
-
 // Per-vtable tally of "freed while still registered" objects.
 struct LeakBucket {
     const void* vtable;
@@ -38,11 +33,9 @@ uint64_t   g_leakTotal   = 0;
 
 namespace ObjAudit {
 
-bool Enabled() {
-    static int cached = -1;
-    if (cached < 0) cached = EnvOn("BANISHED_OBJAUDIT") ? 1 : 0;
-    return cached != 0;
-}
+// The periodic scan this used to arm went with BANISHED_OBJAUDIT (ENDGAME C).
+// IsRegistered()/NoteUnregisteredFree() below are NOT diagnostics and stay live.
+bool Enabled() { return false; }
 
 void* Factory() {
     // The singleton is created once at engine init and never moves, so the

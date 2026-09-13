@@ -56,14 +56,6 @@ constexpr int       kSlots  = 9;
 
 void* g_vt[kSlots];
 
-bool Trace() {
-    static int t = -1;
-    if (t < 0) {
-        const char* e = std::getenv("BANISHED_LIMIT_TRACE");
-        t = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return t == 1;
-}
 
 void Init(void* self) {
     if (fn_External_External) fn_External_External(self);
@@ -86,11 +78,6 @@ char Serialize(void* self, void* stream) {
     if (fn_Ser_Slot_SerInt_AC8)
         fn_Ser_Slot_SerInt_AC8(serializer, reinterpret_cast<int32_t*>(c + 0x20), nullptr);
     g_fn_Serializer_Dtor(serializer);
-    if (Trace()) {
-        std::fprintf(stderr, "[ResourceLimitUIConfig] Serialize: cfg=%p resourceIndex(+0x20)=%d\n",
-                     self, *reinterpret_cast<int32_t*>(c + 0x20));
-        std::fflush(stderr);
-    }
     return 1;
 }
 

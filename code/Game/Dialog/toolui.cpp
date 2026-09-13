@@ -57,7 +57,6 @@ extern void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
 uint64_t g_uidescEntries = 0, g_uidescFound = 0, g_uidescTab = 0;
 
 extern "C" void UIDescTabCensusDump() {
-    if (!std::getenv("BANISHED_UIDESC_CENSUS")) return;
     fprintf(stderr,
         "[UIDescCensus] controller entries seen=%llu  named-element found=%llu  "
         "TAB PATH (calls AddTab)=%llu%s\n",

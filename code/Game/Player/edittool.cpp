@@ -1118,13 +1118,6 @@ extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
         printf("[EditSel] citizen select entity=%p -> dialog=%p (%s)\n",
                userData, dlg, dlg ? "OPENED" : "no dialog");
         if (dlg) {
-            if (std::getenv("BANISHED_DIALOG_TRACE")) {
-                void* root = *(void**)((uintptr_t)dlg + 0x50);
-                printf("[CitTree] dialog=%p root=%p — element tree:\n", dlg, root);
-                int counter = 0;
-                DumpCitizenElemTree(root, 0, &counter);
-                printf("[CitTree] (%d elements)\n", counter);
-            }
             return 1;
         }
     }

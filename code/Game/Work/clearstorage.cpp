@@ -279,21 +279,6 @@ found_dest_storage:
                                   searchPos, &entityIBP);
 
         if (destEntity == nullptr) {
-            // No destination found, continue to next item. This is the suspected
-            // count=100 stall path: a slot whose resource has no accepting storage
-            // with room -> the item never drains and the citizen is re-assigned
-            // forever. Log the resource identity + flags so the stuck slot is
-            // identifiable across runs (resource flags live at rawMatDesc+0x5c;
-            // FindStorageDestination ANDs them with each storage's accept mask).
-            if (std::getenv("BANISHED_DESTROY_TRACE")) {
-                int rawFlags = rawMatDesc ? *(int*)((uintptr_t)rawMatDesc + 0x5c) : -1;
-                std::fprintf(stderr, "[ClearStorage] NO-DEST: slot=%d resType=%u availCount=%d "
-                             "resourceSize=%d itemEntity=%p rawMatDesc=%p rawFlags(+0x5c)=0x%x "
-                             "(no accepting storage with room)\n",
-                             i, resourceTypeId, availCount, resourceSize,
-                             (void*)itemEntity, rawMatDesc, rawFlags);
-                std::fflush(stderr);
-            }
             continue;
         }
 
@@ -312,8 +297,6 @@ found_dest_storage:
         if (unknownCompIBP == 0) {
             // No position component variant — use positionIBP
             if (positionIBP == 0) {
-                if (std::getenv("BANISHED_DESTROY_TRACE"))
-                    std::fprintf(stderr, "[ClearStorage] EARLY-RET: unknownComp==0 && positionIBP==0 (no dest)\n");
                 return 1;
             }
             dbgBranch = 0;
@@ -331,17 +314,9 @@ found_dest_storage:
             int slotIdx = fn_Storage_FindSlot(unkComp, destCell, (float*)&destPos, workTypeId);
             dbgSlot = slotIdx;
             if (slotIdx < 0) {
-                if (std::getenv("BANISHED_DESTROY_TRACE"))
-                    std::fprintf(stderr, "[ClearStorage] EARLY-RET: FindSlot<0 (destCell=%u searchPos=%.1f,%.1f)\n",
-                                 destCell, searchPos[0], searchPos[1]);
                 return 1;
             }
         }
-        if (std::getenv("BANISHED_DESTROY_TRACE"))
-            std::fprintf(stderr, "[ClearStorage] destPos branch=%d (0=pos/1=slot) slotIdx=%d "
-                         "positionIBP=%p unknownCompIBP=%p destCell=%u destPos=(%.1f,%.1f,%.1f)\n",
-                         dbgBranch, dbgSlot, (void*)positionIBP, (void*)unknownCompIBP,
-                         destCell, destPos[0], destPos[1], destPos[2]);
 
         // Validate the work assignment
         fn_InternalBasePtr_CheckPtr(citizenAI);
@@ -358,16 +333,6 @@ found_dest_storage:
         void* destEntityCopy = destEntity;
         uint32_t pathFlags = (availCount << 8) | 0;  // flags from local_res20[0]
 
-        if (std::getenv("BANISHED_DESTROY_TRACE")) {
-            std::fprintf(stderr, "[ClearStorage] FindPath args: citizen=%p pathType=%d "
-                         "dest=%p work=%p matDesc=%p count=%d src=(%.1f,%.1f,%.1f) "
-                         "dst=(%.1f,%.1f,%.1f)\n",
-                         citizenVal, pathType, destEntity, workEntity,
-                         (void*)itemEntity, availCount,
-                         searchPos[0], searchPos[1], searchPos[2],
-                         destPos[0], destPos[1], destPos[2]);
-            std::fflush(stderr);
-        }
         uint32_t pathResult = 0;
         fn_Pathfinding_FindPath(&pathResult, &citizenVal, pathType, &destEntityCopy,
                                 searchPos, &workEntity, (float*)&destPos,

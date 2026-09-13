@@ -816,35 +816,9 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         FIND_ELEMENT(self->tabOptions,"tabOptions");
         if (self->tabOptions) {
             int lastTab = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[7] : 0;
-            // HARNESS KNOB (Wave 10). BANISHED_OPTIONS_TAB=<n> overrides the
-            // restored tab. This is the only unattended route that reaches OUR
-            // ?SetActiveTab@TabElement@UI@@ -- and through it the newly ported
-            // UpdateContainers -- because a real tab CLICK is handled inside
-            // the DLL and, with no detour installed, never leaves it. The
-            // element, the dialog and the call are all the real ones; only the
-            // tab index is chosen by the harness. Same shape as
-            // BANISHED_CAMERA_PIN: a knob on a real path, not a fake subject.
-            // A COMMA-SEPARATED LIST drives one SetActiveTab per entry, in
-            // order. One switch is barely an exercise -- the predictive
-            // oracle's `changed=` column reported exactly 1 changing
-            // prediction for a single switch, which is a technically-proven
-            // site over an almost-unexercised path. A sequence walks every
-            // tab, so both the show and the hide branch and the guarded dirty
-            // walk all run repeatedly.
-            const char* seq = std::getenv("BANISHED_OPTIONS_TAB");
-            if (seq && *seq) {
-                for (const char* p = seq; *p; ) {
-                    int t = atoi(p);
-                    if (t < 0 || t > 3) t = 0;
-                    fn_TabElement_SetActiveTab(self->tabOptions, t);
-                    while (*p && *p != ',') ++p;
-                    if (*p == ',') ++p;
-                }
-            } else {
-                // Clamp to valid range — options dialog has 4 tabs (0-3)
-                if (lastTab < 0 || lastTab > 3) lastTab = 0;
-                fn_TabElement_SetActiveTab(self->tabOptions, lastTab);
-            }
+            // Clamp to valid range — options dialog has 4 tabs (0-3)
+            if (lastTab < 0 || lastTab > 3) lastTab = 0;
+            fn_TabElement_SetActiveTab(self->tabOptions, lastTab);
         }
     }
 }
@@ -972,9 +946,6 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
             // iter is an InternalBasePtr node: deref +0x0 for object, +0x10 for next
             fn_InternalBasePtr_CheckPtr(iter);
             void* dialog = *(void**)iter;
-            if (std::getenv("BANISHED_AUTOSAVE_TRACE"))
-                fprintf(stderr, "[AutoSave]   walk dialog=%p isA(%u)=%d\n",
-                        dialog, typeId, (int)fn_IsA(dialog, typeId));
             if (fn_IsA(dialog, typeId)) {
                 fn_InternalBasePtr_CheckPtr(iter);
                 void* obj = *(void**)iter;
@@ -1026,7 +997,6 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
     // logic itself is verified correct — see notes: ApplyChangedSettings runs
     // and returns success; the standalone gap is the render backend not
     // recreating the M5 scene targets with the new sample count.
-    static const bool kVidTrace = getenv("BANISHED_OPTIONS_TRACE") != nullptr;
     void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
     void* vidCfg = g_pVideoConfigSingleton ? *g_pVideoConfigSingleton : nullptr;
     if (!vidDev || !vidCfg) return;
@@ -1114,21 +1084,6 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
     bool adapterChanged = (oldAdapter != newAdapter);
     bool needsFullRestart = rendererChanged || adapterChanged;
 
-    if (kVidTrace) {
-    printf("[OptVideo] vidDev=%p vidCfg=%p | rend %d->%d adap %d->%d "
-           "res %dx%d->%dx%d AA %d->%d filt %d->%d fs %d->%d vsync %d->%d "
-           "shRes %d->%d shQ %d->%d reflQ %d->%d\n",
-           vidDev, vidCfg, oldRenderer, newRenderer, oldAdapter, newAdapter,
-           oldWidth, oldHeight, newWidth, newHeight, oldAntialias, newAntialias,
-           oldFilter, newFilter, (int)oldFullscreen, (int)newFullscreen,
-           (int)oldVsync, (int)newVsync, oldShadowRes, newShadowRes,
-           oldShadowQ, newShadowQ, oldReflQ, newReflQ);
-    printf("[OptVideo] fns: ApplyChanged=%p Startup=%p Shutdown=%p ReleaseDyn=%p "
-           "RecreateDyn=%p CfgSave=%p\n",
-           (void*)fn_VideoDevice_ApplyChangedSettings, (void*)fn_VideoDevice_Startup,
-           (void*)fn_VideoDevice_Shutdown, (void*)fn_VideoDevice_ReleaseDynamic,
-           (void*)fn_VideoDevice_RecreateDynamic, (void*)fn_VideoConfig_Save);
-    }
 
     if (!rendererChanged) {
         // Same renderer — check if resolution/antialias/fullscreen match
@@ -1140,13 +1095,11 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
                     oldVsync == newVsync && oldFilter == newFilter &&
                     oldShadowRes == newShadowRes && oldShadowQ == newShadowQ &&
                     oldReflQ == newReflQ) {
-                    if (kVidTrace) printf("[OptVideo] -> NOTHING CHANGED, early return\n");
                     return;  // Nothing changed
                 }
             }
         }
     }
-    if (kVidTrace) printf("[OptVideo] -> applying (needsFullRestart=%d)\n", (int)needsFullRestart);
 
     // A video setting actually changed → arm a RenderDoc capture ~8 frames out
     // so we capture a steady-state frame AFTER the engine's deferred swapchain/
@@ -1198,14 +1151,11 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
             fn_MainLoop_OnVideoRestart(mainLoop);
     }
 
-    if (kVidTrace) printf("[OptVideo] apply result success=%d (path=%s)\n", (int)success,
-           needsFullRestart ? "Startup" : "ApplyChangedSettings");
 
     if (success) {
         // Save the new config
         if (fn_VideoConfig_Save) fn_VideoConfig_Save(vidCfg);
     } else {
-        if (kVidTrace) printf("[OptVideo] -> ROLLBACK (apply returned false)\n");
         // Rollback to old config
         *(int*)((uintptr_t)vidCfg + 0x08) = oldAdapter;
         *(int*)((uintptr_t)vidCfg + 0x0C) = oldWidth;

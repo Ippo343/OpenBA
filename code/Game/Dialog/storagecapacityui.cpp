@@ -177,7 +177,6 @@ bool Ready() {
 }
 
 static void Trace(const char* what, void* self) {
-    if (!std::getenv("BANISHED_DIALOG_TRACE")) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     fprintf(stderr, "[StorageCapacityUI] %s self=%p ready=%d data30(+0x30)=%llx\n",
             what, self, Ready() ? 1 : 0,

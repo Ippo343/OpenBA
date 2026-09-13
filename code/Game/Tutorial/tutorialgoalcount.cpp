@@ -46,42 +46,11 @@ static fn_GetWorkCapacity_t s_fn_GetWorkCapacity = nullptr;
 typedef void* (*fn_CastToSliderElement_t)(void* element);
 static fn_CastToSliderElement_t s_fn_CastToSliderElement = nullptr;
 
-// Type IDs
-// [diag] Case-9 bail reporter. The spinner goal ("set Iron Tools to 120") has FOUR
-// distinct ways to leave with count==0, and they are indistinguishable from the
-// outside: the element path did not resolve, the element is not a SpinnerElement,
-// the spinner is still ACTIVE (being edited -- retail deliberately refuses to read
-// a value mid-edit), or the value accessor is unresolved. Name which one.
-static void Goal9Trace(const char* what, long long v) {
-    static int t = -1;
-    if (t < 0) { const char* e = std::getenv("BANISHED_TUTORIAL_TRACE");
-                 t = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    if (!t) return;
-    static const char* s_last = nullptr;
-    static long long   s_lastV = -1;
-    if (s_last == what && s_lastV == v) return;   // only on change
-    s_last = what; s_lastV = v;
-    fprintf(stderr, "[Goal9] %s (%lld)\n", what, v);
-    fflush(stderr);
-}
-
-static bool Goal7Dump() {
-    static int t = -1;
-    if (t < 0) { const char* e = std::getenv("BANISHED_GOAL7_DUMP");
-                 t = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return t != 0;
-}
-
 static uint32_t* s_TypeId_BuildingDesc = nullptr;      // 0x1401c7318 (cases 0, 7, 10)
 static uint32_t* s_TypeId_ProfessionDesc = nullptr;     // 0x1401c5a98 (cases 1, 3, 6)
 
 static bool s_helpersResolved = false;
 
-// Rate-limiter storage for the trace below, bucketed by goal address.
-static uint64_t s_lastStamp[64] = {};
-
-// Armed by DragPlacementTool on a successful placement — see the probe below.
-volatile int g_GoalBstProbeTicks = 0;
 
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
@@ -353,50 +322,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         if (s_fn_CountBuildingsByType && worldData) {
             count = (int)s_fn_CountBuildingsByType(worldData, typePtr);
         }
-        // Probe the per-description BST itself (BANISHED_TUTORIAL_TRACE). With the
-        // key and the placement's descriptionPtr already proven identical, the only
-        // remaining questions are whether a node for that key exists at all, and if
-        // so what its count word holds. Registration goes into the EntityList at
-        // gw+0xe8 while this count is read from gw+0xf0 +0x160 — retail uses both
-        // too, so an entity that is placed and visible can still be missing here if
-        // whatever propagates between them did not run.
-        {
-            static int s_probe = -1;
-            if (s_probe < 0) {
-                const char* e = std::getenv("BANISHED_TUTORIAL_TRACE");
-                s_probe = (e && e[0] && e[0] != '0') ? 1 : 0;
-            }
-            static uintptr_t s_lastKey = 1;
-            static int s_lastCount = -1;
-            bool windowed = false;
-            if (g_GoalBstProbeTicks > 0) { --g_GoalBstProbeTicks; windowed = true; }
-            if (s_probe && (windowed || typePtr != s_lastKey || count != s_lastCount)) {
-                s_lastKey = typePtr; s_lastCount = count;
-                uintptr_t root = worldData ? *(uintptr_t*)(worldData + 0x160) : 0;
-                int nodes = 0;
-                uintptr_t* found = nullptr;
-                // Full walk, not the ordered search: if the ordered search and a
-                // brute-force walk disagree, the tree is unsorted w.r.t. our key.
-                uintptr_t stack[64]; int sp = 0;
-                if (root) stack[sp++] = root;
-                while (sp > 0 && nodes < 4096) {
-                    uintptr_t* n = (uintptr_t*)stack[--sp];
-                    if (!n) continue;
-                    ++nodes;
-                    if (n[0] == typePtr) found = n;
-                    if (n[4] && sp < 62) stack[sp++] = n[4];
-                    if (n[5] && sp < 62) stack[sp++] = n[5];
-                }
-                fprintf(stderr, "[GoalBST] key=%p root=%p nodes=%d walkFound=%p "
-                                "walkCount=%d searchCount=%d entityList(0xe8)=%p "
-                                "counted(0xf0)=%p\n",
-                        (void*)typePtr, (void*)root, nodes, (void*)found,
-                        found ? (int)found[2] : -1, count,
-                        *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xe8),
-                        (void*)worldData);
-                fflush(stderr);
-            }
-        }
         break;
     }
 
@@ -496,25 +421,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         if (worldData) {
             count = *(int*)(worldData + 0x08);
 
-            static int s_lastDumped = -1;
-            if (count != s_lastDumped) {
-                const char* e = std::getenv("BANISHED_TUTORIAL_TRACE");
-                if (e && e[0] && e[0] != '0') {
-                    s_lastDumped = count;
-                    uintptr_t data = *(uintptr_t*)(worldData + 0x00);
-                    fprintf(stderr, "[StoreLoc] townMgr=%p data=%p count=%d\n",
-                            (void*)worldData, (void*)data, count);
-                    for (int i = 0; i < count && i < 32 && data; ++i) {
-                        uintptr_t ent = *(uintptr_t*)(data + (uintptr_t)i * 8);
-                        uintptr_t desc = 0;
-                        if (ent >= 0x10000 && (ent & 7) == 0)
-                            desc = *(uintptr_t*)(ent + 0x28);
-                        fprintf(stderr, "[StoreLoc]   [%d] entity=%p desc(+0x28)=%p\n",
-                                i, (void*)ent, (void*)desc);
-                    }
-                    fflush(stderr);
-                }
-            }
         }
         break;
     }
@@ -631,62 +537,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             if (storageNode != nullptr) {
                 storageCount = (int)storageNode[1];
             }
-            // [diag] BANISHED_GOAL7_DUMP — a mode-7 goal that reads 0 forever means
-            // the key we search for is not the key the building filed the resource
-            // [diag] BANISHED_GOAL7_DUMP (off by default) — a mode-7 goal that reads
-            // 0 forever means the key we search for is not the key the building filed
-            // the resource under. `want` is the resolved description; `found` null
-            // means the lookup missed, and the key list below then shows what IS
-            // there. This is what caught the wrong-child-offset bug above.
-            if (Goal7Dump() && storageBST) {
-                // Print on CHANGE, not on a fixed budget. The first version used
-                // `budget = 60`, which the previous goal's polling exhausted before
-                // the interesting transition ever happened -- the log then went
-                // silent and looked like "nothing changed".
-                static uintptr_t s_lastB = 0, s_lastWant = 0, s_lastFound = 0;
-                static int       s_lastN = -1;
-                bool changed = (building != s_lastB) || (typePtr != s_lastWant) ||
-                               (reinterpret_cast<uintptr_t>(storageNode) != s_lastFound) ||
-                               (storageCount != s_lastN);
-                if (changed) {
-                    s_lastB = building; s_lastWant = typePtr;
-                    s_lastFound = reinterpret_cast<uintptr_t>(storageNode);
-                    s_lastN = storageCount;
-                    fprintf(stderr, "[Goal7] bld=%p bst=%p want=%p found=%p n=%d",
-                            (void*)building, (void*)storageBST, (void*)typePtr,
-                            (void*)storageNode, storageCount);
-                    // Only when the lookup MISSED: list the keys that ARE present, so
-                    // a key-convention mismatch is visible directly. Children are
-                    // node[3]/node[4], matching TradeOrderBSTFind and retail.
-                    //
-                    // ⚠ An early revision of this probe DID fault while traversing,
-                    // and the cause was never established -- it was a debug probe and
-                    // the offsets were being changed in the same edit, so "which
-                    // version crashed" is not trustworthy evidence about the layout.
-                    // The layout itself is settled independently (see
-                    // TradeOrderBSTFind). Treat this walk as unproven: it is bounded
-                    // and off by default, but if it ever kills a run again, delete it
-                    // rather than reasoning from the crash.
-                    if (!storageNode) {
-                        uintptr_t* stack[64]; int sp = 0, visited = 0;
-                        uintptr_t* node = reinterpret_cast<uintptr_t*>(storageBST);
-                        fprintf(stderr, " | present:");
-                        while ((node || sp > 0) && visited < 24) {
-                            while (node && sp < 64) {
-                                stack[sp++] = node;
-                                node = reinterpret_cast<uintptr_t*>(node[3]);
-                            }
-                            if (sp == 0) break;
-                            node = stack[--sp];
-                            fprintf(stderr, " %p=%d", (void*)node[0], (int)node[1]);
-                            ++visited;
-                            node = reinterpret_cast<uintptr_t*>(node[4]);
-                        }
-                    }
-                    fprintf(stderr, "\n");
-                    fflush(stderr);
-                }
-            }
             total += storageCount;
 
             // Re-read worldData for next iteration (may change)
@@ -766,13 +616,13 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         fn_FindUIElementByPath(foundIBP, (void*)(s + 0x48), nullptr);
 
         uintptr_t element = foundIBP[0];
-        if (!element) { Goal9Trace("element path did NOT resolve", 0); break; }
+        if (!element) { break; }
 
         // Cast to SliderElement (checks IsDerivedFrom SliderElement type)
-        if (!s_fn_CastToSliderElement) { Goal9Trace("CastToSliderElement UNRESOLVED", 0); break; }
+        if (!s_fn_CastToSliderElement) { break; }
         void* slider = s_fn_CastToSliderElement((void*)element);
         uintptr_t sliderIBP = (uintptr_t)slider;
-        if (!sliderIBP) { Goal9Trace("element is NOT a SpinnerElement", (long long)element); break; }
+        if (!sliderIBP) { break; }
 
         // Create IBP and check if active
         if (fn_InternalBasePtr_CheckPtr) {
@@ -781,7 +631,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         if (fn_SpinnerElement_IsActive && fn_SpinnerElement_IsActive((void*)sliderIBP)) {
             // Retail refuses to read a spinner mid-edit. If this never clears, the
             // goal stalls forever with the right number visible on screen.
-            Goal9Trace("spinner is ACTIVE (mid-edit) - value not read", (long long)sliderIBP);
             break;
         }
 
@@ -791,9 +640,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         }
         if (fn_SpinnerElement_GetValue) {
             count = fn_SpinnerElement_GetValue((void*)sliderIBP);
-            Goal9Trace("read spinner value", (long long)count);
-        } else {
-            Goal9Trace("GetValue UNRESOLVED", 0);
         }
         break;
     }
@@ -863,38 +709,6 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
     }
 
 compare:
-    // Diagnostic (BANISHED_TUTORIAL_TRACE): a goal that can never be met is
-    // otherwise completely silent — the tutorial just sits on the step. Print
-    // the resolved description pointer alongside the count, because a null
-    // there (an unresolved ExternalPtr) and a genuinely-absent entity look
-    // identical from the outside. Rate-limited to state changes per goal.
-    {
-        static int s_trace = -1;
-        if (s_trace < 0) {
-            const char* e = std::getenv("BANISHED_TUTORIAL_TRACE");
-            s_trace = (e && e[0] && e[0] != '0') ? 1 : 0;
-        }
-        if (s_trace) {
-            uintptr_t typePtr = *(uintptr_t*)(s + 0x40);
-            // The RAW ExternalPtr and the value the compare actually uses are two
-            // different things: ResolveTypePtr returns 0 whenever its type-id
-            // filter is unregistered, so a healthy-looking `desc` here sat next to
-            // a hard 0 count for the whole life of the Profession bug. Print both.
-            uintptr_t filtered = (mode == 0 || mode == 7 || mode == 10)
-                ? ResolveTypePtr(s, s_TypeId_BuildingDesc)
-                : ResolveTypePtr(s, s_TypeId_ProfessionDesc);
-            uint64_t stamp = ((uint64_t)count << 32) ^ (uint64_t)typePtr;
-            if (stamp != s_lastStamp[s & 0x3F]) {
-                s_lastStamp[s & 0x3F] = stamp;
-                fprintf(stderr, "[GoalCount] mode=%u name=\"%s\" desc=%p filtered=%p "
-                                "count=%d target=%d ge=%d\n",
-                        mode, *(const char* const*)(s + 0x30) ? *(const char* const*)(s + 0x30) : "(null)",
-                        (void*)typePtr, (void*)filtered,
-                        count, *(int32_t*)(s + 0x24), (int)*(uint8_t*)(s + 0x28));
-                fflush(stderr);
-            }
-        }
-    }
 
     // Final comparison: greaterOrEqual ? (count >= target) : (count == target)
     if (*(uint8_t*)(s + 0x28) != 0) {

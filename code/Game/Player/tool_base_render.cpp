@@ -75,25 +75,6 @@ extern "C" int   g_LastSelectStoreIdx;
 
 // Gated diagnostic (BANISHED_OUTLINE_TRACE) — reports where the selection-outline
 // chain reaches/bails; off unless the env is set.
-static int s_outlineTrace = -1;
-static inline bool OTrace() {
-    if (s_outlineTrace < 0) { const char* e = std::getenv("BANISHED_OUTLINE_TRACE");
-                              s_outlineTrace = (e && e[0] && e[0] != '0') ? 1 : 0; }
-    return s_outlineTrace != 0;
-}
-#define OT(...) do { if (OTrace()) { std::fprintf(stderr, "[Outline] " __VA_ARGS__); std::fprintf(stderr, "\n"); } } while(0)
-
-// The whole outline chain is opt-in (BANISHED_SELECTION_OUTLINE) — normally
-// gated by NOT registering the exe addresses (standalone/reg_player_render.cpp).
-// The per-frame follow re-sync (Impl_HighlightFollow) is instead reached by a
-// direct cross-TU call from EditTool_Startup_Impl, so it self-gates on the same
-// env var to stay a no-op on the shipping default path.
-namespace ComponentFactory { bool LiveEnabled(const char* envVar); }
-static int s_outlineEnabled = -1;
-static inline bool OutlineEnabled() {
-    if (s_outlineEnabled < 0) { s_outlineEnabled = ::ComponentFactory::LiveEnabled("BANISHED_SELECTION_OUTLINE") ? 1 : 0; }
-    return s_outlineEnabled != 0;
-}
 
 namespace {
 
@@ -346,7 +327,7 @@ void Impl_b930(int64_t self) {
     int rh = (int)*reinterpret_cast<int16_t*>(rectIBP + 0x2e);
     // Defensive (standalone): a malformed footprint rect would make the tessellation
     // loops runaway and freeze. Real building footprints are small; bail on garbage.
-    if (rw <= 0 || rh <= 0 || rw > 64 || rh > 64) { OT("b930 SKIP bad rect w=%d h=%d", rw, rh); return; }
+    if (rw <= 0 || rh <= 0 || rw > 64 || rh > 64) return;
 
     int g = *mapGrid;
     // origin = terrain-world position of the footprint centre cell
@@ -472,8 +453,6 @@ void Impl_b930(int64_t self) {
     void* obj = *reinterpret_cast<void**>(self + 0x18);
     const uint32_t tidDesc = ResolveTid(0x1401c4448, "HighlightDescription", &s_tid_HighlightDesc);
     void* desc = (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, tidDesc)) ? obj : nullptr;
-    OT("b930 fillVtx=%d fillIdx=%d edgeVtx=%d edgeIdx=%d mesh=%p desc=%p",
-       fillVtx.count, fillIdx.count, edgeVtx.count, edgeIdx.count, mesh, desc);
     if (mesh && desc && fn_EdgeMesh_SetMaterials) {
         void* m0 = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(desc) + 0x30);
         void* m1 = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(desc) + 0x38);
@@ -531,8 +510,6 @@ void Impl_c4a0(int64_t self) {
             *reinterpret_cast<void**>(self + 0xf8) = nullptr;
         }
     }
-    OT("c4a0 self=%p flag11c=%d id120=%d", (void*)self,
-       (int)*reinterpret_cast<char*>(self + 0x11c), *reinterpret_cast<int32_t*>(self + 0x120));
     if (*reinterpret_cast<char*>(self + 0x11c) == 0) return;   // highlight not active
 
     // Look up per-cell prebuilt mesh indices (charComp +0x164/+0x166) + the
@@ -582,15 +559,11 @@ void Impl_c4a0(int64_t self) {
         }
     }
 
-    OT("c4a0 cellIdx=(%d,%d) desc=%p neighbourActive=%d", iVar10, iVar11, desc, (int)neighbourActive);
     // No per-cell mesh (both indices < 0) -> build+submit our own EdgeMesh.
     if (iVar10 < 0 || iVar11 < 0) {
         CheckPtr(reinterpret_cast<void*>(self + 0x10));
         uint64_t footprintIBP = 0;
         void* r = s_4680 ? s_4680(*reinterpret_cast<int64_t*>(self + 0x10), &footprintIBP) : nullptr;
-        void* mat = (r && desc) ? *reinterpret_cast<void**>(reinterpret_cast<int64_t>(desc) + 0x30) : nullptr;
-        OT("c4a0 BUILD-branch r=%p rInner=%p desc+0x30(mat)=%p", r,
-           r ? *reinterpret_cast<void**>(r) : nullptr, mat);
         if (r && *reinterpret_cast<int64_t*>(r) != 0 &&
             desc && *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(desc) + 0x30) != 0) {
             Impl_b930(self);
@@ -606,7 +579,6 @@ void Impl_c4a0(int64_t self) {
             reinterpret_cast<void(*)(void*, void*)>((*reinterpret_cast<void***>(inst))[1])(inst, time);
             if (fn_SceneAddObject)
                 *reinterpret_cast<uint32_t*>(self + 0x120) = fn_SceneAddObject(scene, inst);
-            OT("c4a0 SUBMITTED own EdgeMesh, sceneId=%u", *reinterpret_cast<uint32_t*>(self + 0x120));
             return;
         }
     }
@@ -624,8 +596,6 @@ add_prebuilt:
         // variant range; a fresh/inert description in SA may leave it empty.
         int64_t row = table ? *reinterpret_cast<int64_t*>(table + (int64_t)iVar10 * 0x10) : 0;
         void* cellMesh = row ? *reinterpret_cast<void**>(row + (int64_t)iVar11 * 8) : nullptr;
-        OT("c4a0 PREBUILT-branch variant=(%d,%d) desc=%p table=%p row=%p cellMesh=%p",
-           iVar10, iVar11, desc, (void*)table, (void*)row, cellMesh);
         if (cellMesh == nullptr) return;   // nothing loaded to draw
 
         // The third SetMesh argument is a SOURCE MeshInstance (mangled name:
@@ -663,8 +633,6 @@ add_prebuilt:
         void* srcInst = reinterpret_cast<void*>(charIBP + 0x28);
         void* srcNodes = *reinterpret_cast<void**>(charIBP + 0x28 + 0xf0);
         if (srcNodes == nullptr) {
-            OT("c4a0 PREBUILT source MeshInstance %p has NO node array (+0xf0 null) — "
-               "passing nullptr; retail would fault in EdgeMeshInstance::Draw", srcInst);
             srcInst = nullptr;
         }
         if (fn_EdgeMeshInstance_SetMesh)
@@ -685,16 +653,12 @@ add_prebuilt:
         if (srcInst == nullptr && fn_Geometry_SetTransform) {
             fn_Geometry_SetTransform(reinterpret_cast<void*>(self + 0x28),
                                      reinterpret_cast<void*>(charIBP + 0x148));
-            OT("c4a0 PREBUILT placed outline from ModelComponent+0x148 (no source "
-               "instance to follow)");
         }
         uint8_t time[8];
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
         void* inst = reinterpret_cast<void*>(self + 0x28);
         reinterpret_cast<void(*)(void*, void*)>((*reinterpret_cast<void***>(inst))[1])(inst, time);
         uint32_t id = fn_SceneAddObject ? fn_SceneAddObject(scene, inst) : 0xffffffff;
-        OT("c4a0 PREBUILT SUBMITTED sceneId=%u instVtbl=%p modelXform(charIBP+0x28)=%p",
-           id, *reinterpret_cast<void**>(inst), reinterpret_cast<void*>(charIBP + 0x28));
         uint32_t f0 = *reinterpret_cast<uint32_t*>(self + 0x20);
         *reinterpret_cast<uint32_t*>(self + 0x120) = id;
         uint32_t f1 = f0 | 4;
@@ -836,7 +800,6 @@ void Impl_cb40(int64_t self) {
 // ===========================================================================
 void Impl_c9e0(int64_t self) {
     EnsureFuncs();
-    OT("c9e0 ENTER self=%p selectedEntity=%p", (void*)self, *reinterpret_cast<void**>(self + 0x30));
     Impl_cb40(self);
     if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;
 
@@ -905,7 +868,6 @@ void Impl_c9e0(int64_t self) {
 // ===========================================================================
 void Impl_cc90(int64_t self) {
     EnsureFuncs();
-    OT("cc90 CLEAR-only selectedEntity=%p", *reinterpret_cast<void**>(self + 0x30));
     Impl_cb40(self);   // clear the previous entity's outline; leave dialog/refs alone
 }
 
@@ -935,7 +897,6 @@ void Impl_cc90(int64_t self) {
 // harmless no-op for them.
 // ===========================================================================
 void Impl_HighlightFollow(int64_t self) {
-    if (!OutlineEnabled()) return;
     EnsureFuncs();
     if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;      // nothing selected
     CheckPtr(reinterpret_cast<void*>(self + 0x30));                 // resolve the entity IBP
@@ -980,7 +941,6 @@ void Impl_HighlightFollow(int64_t self) {
                 s_lastKey = key;
             } else if (key != s_lastKey) {
                 s_lastKey = key;
-                OT("variant changed (0x%08x) -> rebuilding outline hi=%p", key, (void*)hi);
                 Impl_c4a0(static_cast<int64_t>(hi));
                 return;   // rebuilt this frame; Update re-syncs on the next one
             }
@@ -996,16 +956,6 @@ void Impl_HighlightFollow(int64_t self) {
     // from the bound MeshInstance (+0xc8 -> +0x84) and Geometry::SetTransform's it.
     reinterpret_cast<void(*)(void*, void*)>((*reinterpret_cast<void***>(inst))[1])(inst, time);
 
-    if (OTrace()) {
-        static long s_n = 0;
-        void* bound = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(inst) + 0xc8);
-        if ((s_n++ % 120) == 0 && bound) {
-            // Transform copied by Update starts at boundMesh+0x84; world pos is the
-            // trailing xyz (+0x94/+0x98/+0x9c). Confirms the outline is re-syncing.
-            float* p = reinterpret_cast<float*>(reinterpret_cast<int64_t>(bound) + 0x94);
-            OT("FOLLOW hi=%p boundMesh=%p pos=(%.3f,%.3f,%.3f)", (void*)hi, bound, p[0], p[1], p[2]);
-        }
-    }
 }
 
 }  // namespace

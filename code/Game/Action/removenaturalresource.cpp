@@ -223,11 +223,6 @@ void RemoveNaturalResource_Serialize_Impl(RemoveNaturalResource* self, void* str
 int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* actionStack) {
     RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
-    if (std::getenv("BANISHED_FORESTER_SCAN_TRACE")) {
-        fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNaturalResource::Main REACHED (self=%p, RemoveNatRes=%p)\n",
-                (void*)self, (void*)s_fn_RemoveNatRes);
-        fflush(stderr);
-    }
     uint8_t* s = (uint8_t*)self;
     void* nrCompIBP = nullptr;
 
@@ -245,13 +240,6 @@ int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* a
     // the action so the citizen isn't wedged. The live-world path (non-null) is unchanged.
     fn_InternalBasePtr_CheckPtr(&nrCompIBP);
     if (nrCompIBP == nullptr) {
-        if (std::getenv("BANISHED_FORESTER_SCAN_TRACE")) {
-            fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNaturalResource: NR-comp null "
-                    "(target +0x28=%p) — cut-sequence target not wired to a tree; skipping "
-                    "produce (crash-safe). Movement keystone reached this point organically.\n",
-                    *(void**)(s + 0x28));
-            fflush(stderr);
-        }
         return 0;
     }
     uintptr_t nrComp = (uintptr_t)nrCompIBP;

@@ -38,22 +38,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-// ============================================================
-// Runtime dispatch slot type ID reader — reads fresh from exe dispatch slot,
-// matching the original asm pattern: MOV RAX,[slot]; MOV EDX,[RAX]
-// This avoids stale cached pointers that may point to wrong data.
-// ============================================================
-// BANISHED_TRADEUI_EVENTDIAG gate; defined next to the event dispatcher below, but
-// used earlier by the row-setup tracing in TradeUI_Serialize.
-static bool TradeEventDiagOn();
-
-static uint32_t ReadDispatchTypeId(uintptr_t ghidraSlotAddr) {
-    uintptr_t slot = ResolveAddr(Module::Exe, ghidraSlotAddr);
-    if (!slot) return 0;
-    void* ptr = *(void**)slot;
-    if (!ptr) return 0;
-    return *(uint32_t*)ptr;
-}
 
 // Dispatch slot addresses for element type IDs used in Serialize inner loops
 #define SLOT_BUTTON_ELEM   0x1401514f8  // ButtonElement / HelpButtonElem
@@ -88,17 +72,13 @@ static void SliderElement_SetMinMax(void* self, int minVal, int maxVal) {
         if (slot) {
             fn_SliderElement_SetMinMax = *(fn_SpinnerElement_SetMinMax_t*)slot;
         }
-        // Kill-switch for an A/B run against the old (no-op) behaviour.
-        const char* off = getenv("BANISHED_LIVE_TRADE_SPINNER_RANGE");
-        bool disabled = (off && (off[0] == '0' || off[0] == 'f' || off[0] == 'F'));
-        if (!fn_SliderElement_SetMinMax && !disabled)
+        if (!fn_SliderElement_SetMinMax)
             fn_SliderElement_SetMinMax = fn_SpinnerElement_SetMinMax;
         // Report the OUTCOME: which pointer we ended up with, or that we have none.
-        fprintf(stderr, "[TradeUI] spinner SetMinMax = %p (slot 0x%llx -> %p, export %p%s)\n",
+        fprintf(stderr, "[TradeUI] spinner SetMinMax = %p (slot 0x%llx -> %p, export %p)\n",
                 (void*)fn_SliderElement_SetMinMax,
                 (unsigned long long)SLOT_SLIDER_SETMINMAX, (void*)slot,
-                (void*)fn_SpinnerElement_SetMinMax,
-                disabled ? ", kill-switch ON" : "");
+                (void*)fn_SpinnerElement_SetMinMax);
         fflush(stderr);
     }
     if (fn_SliderElement_SetMinMax)
@@ -195,23 +175,6 @@ static void* TradeUI_FindTypedElement(void* dialogElem, const char* name, uint32
         if (derived) result = elem;
     }
     uint64_t ibpBuf[1] = {0};
-    fn_InternalBasePtr_Ctor(ibpBuf, result);
-
-    // Outcome diagnostic (BANISHED_TRADEUI_ELEMDIAG=1). Prints all three states
-    // separately, because a null return has two very different causes:
-    //   found=0            -> the name is not in the loaded dialog template
-    //   found!=0 derived=0 -> the element exists but the type-id is wrong/zero
-    // Every one of the 15 phase-1 lookups is dereferenced unguarded further down,
-    // so a silent null here surfaces as an AV several calls later.
-    {
-        static const char* diag = getenv("BANISHED_TRADEUI_ELEMDIAG");
-        if (diag && diag[0] && diag[0] != '0') {
-            fprintf(stderr, "[TradeElem] %-16s found=%p typeId=%u derived=%d result=%p\n",
-                    name, elem, typeId ? *typeId : 0u,
-                    (elem && typeId) ? (int)fn_IsDerivedFrom(elem, *typeId) : -1, result);
-            fflush(stderr);
-        }
-    }
 
     fn_String_Dtor(strBuf);
     return result;
@@ -1057,7 +1020,6 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 // "we tagged what retail tags". One line per family (row 0 only) under
 // BANISHED_TRADEUI_EVENTDIAG; every branch prints, including a MISMATCH.
 static void TradeUI_ReportSpinnerTag(const char* family, int idx, void* spinner, int id) {
-    if (idx != 0 || !TradeEventDiagOn()) return;
     if (!spinner) {
         fprintf(stderr, "[TradeSpinnerTag] %s row0 id=%d spinner=NULL -- nothing tagged\n",
                 family, id);
@@ -1325,18 +1287,6 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_SpinnerElement_SetElementId(*(void**)c0, i + 2000);
         TradeUI_ReportSpinnerTag("storage", i, *(void**)c0, i + 2000);
 
-        // Report WHICH object got the tag, and read the tag back off it. If the elements
-        // that later raise events are different pointers than these, the rows firing the
-        // events are not the rows we tagged (a clone-ordering fault) — which is the
-        // difference between "the write did not happen" and "it happened to the wrong
-        // object", two causes that look identical from the panel.
-        if (TradeEventDiagOn()) {
-            void* tagged = *(void**)c0;
-            fprintf(stderr, "[TradeRow] storage row %d: row=%p label=%p spin=%p num=%p "
-                    "-> tagged %p ud(+0x80)=%lld\n", i, rowElem, e0, e1, e2, tagged,
-                    tagged ? (long long)*(uintptr_t*)((uintptr_t)tagged + 0x80) : -1);
-            fflush(stderr);
-        }
 
         // Build 0x18-byte entry: {e0, e1, e2}
         uint64_t entry[3] = {(uint64_t)e0, (uint64_t)e1, (uint64_t)e2};
@@ -1780,54 +1730,10 @@ void TradeUI_OnCreate(TradeUI* self) {
 // eventType 0x14 IDs, so eventType 0x12 events can also trigger 0x14 handlers
 // if no 0x12 match was found.
 
-// BANISHED_TRADEUI_EVENTDIAG=1 — report every event this dispatcher receives, and
-// whether it landed on a handler. A trade-panel spinner that visibly moves but does
-// not persist has three candidate causes that look identical from the outside:
-//   * the click never reaches slot 9 at all,
-//   * it reaches the dispatcher but falls outside every id range (each range is
-//     [base, base + count), and a count that never got filled makes the range EMPTY,
-//     so the event is silently discarded),
-//   * it reaches the handler and the write is overwritten downstream.
-// Printing the id ALONGSIDE every live range makes the second case legible at a
-// glance, and the explicit discard line below turns "no output" into a real answer
-// instead of an ambiguous silence.
-static bool TradeEventDiagOn() {
-    static int on = -1;
-    if (on < 0) {
-        const char* e = std::getenv("BANISHED_TRADEUI_EVENTDIAG");
-        on = (e && e[0] && e[0] != '0') ? 1 : 0;
-    }
-    return on != 0;
-}
 
 void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
     uintptr_t s = (uintptr_t)self;
 
-    if (TradeEventDiagOn()) {
-        void* tableSell = *(void**)(s + 0xC8);
-        void* tableBuy  = *(void**)(s + 0xD0);
-        // param2 is the element that raised the event. Retail routes spinner changes by
-        // the element's own id, +0x88, tagged via SpinnerElement::SetElementId. Both
-        // +0x80 (user data) and +0x88 are dumped here because an earlier reading had the
-        // tag going into user data; whichever one carries 2000+idx is the field the
-        // framework actually delivers as eventId.
-        // param2 is an InternalBasePtr* (a stack {object, generation} pair), NOT the
-        // element itself — an earlier version of this line read the stack slot directly
-        // and printed garbage. Deref one level to reach the raising element.
-        const void* elem = param2 ? *(void**)param2 : nullptr;
-        long long ud = elem ? (long long)*(uintptr_t*)((uintptr_t)elem + 0x80) : -1;
-        int elemId = elem ? *(int*)((uintptr_t)elem + 0x88) : -1;
-        fprintf(stderr,
-                "[TradeEvt] type=0x%x id=0x%x elem=%p ud(+0x80)=%lld elemId(+0x88)=%d | "
-                "storage[0x7d0,+%d) sell[0xbb8,+%d) "
-                "buy[0xfa0,+%d) order[0x1388,+%d] orderAmt[0x1b58,+%d) purchase[0x1f40,+%d]\n",
-                eventType, eventId, elem, ud, elemId,
-                *(int*)(s + 0x58),
-                tableSell ? *(int*)((uintptr_t)tableSell + 0xC0) : -1,
-                tableBuy  ? *(int*)((uintptr_t)tableBuy  + 0xC0) : -1,
-                *(int*)(s + 0x98), *(int*)(s + 0x98), *(int*)(s + 0xa8));
-        fflush(stderr);
-    }
 
     int switchVal = eventType - 0x12;
     if (switchVal == 0) {
@@ -1934,11 +1840,6 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
             TradeUI_OnOrderAmountSpinner(self, eventId - 0x1b58);
             return;
         }
-    }
-    if (TradeEventDiagOn()) {
-        fprintf(stderr, "[TradeEvt] id=0x%x matched NO spinner range -> event DISCARDED "
-                "(the widget moved on screen but nothing was written)\n", eventId);
-        fflush(stderr);
     }
     return;
 
@@ -2451,17 +2352,6 @@ void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
         *(int*)((uintptr_t)retval + 8) = newVal;
     }
 
-    if (TradeEventDiagOn()) {
-        // Read the value BACK out of the tree node rather than echoing newVal — an echo
-        // of the input proves only that this function ran, which is exactly the mistake
-        // this project keeps re-learning. readback != newVal means the insert did not
-        // take; readback == newVal here but a reverted spinner on screen means the
-        // overwrite happens downstream, in the refresh below.
-        fprintf(stderr, "[TradeStore] idx=%d newVal=%d res=%p insertRetval=%p readback=%d\n",
-                idx, newVal, resourceEntity, retval,
-                retval ? *(int*)((uintptr_t)retval + 8) : -1);
-        fflush(stderr);
-    }
 
     TradeUI_RefreshSellTable(self);
     TradeUI_RefreshDisplay(self, (uint64_t)retval, (uint64_t)newEntry, (int64_t)building);

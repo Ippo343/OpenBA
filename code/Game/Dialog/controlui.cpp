@@ -283,7 +283,6 @@ void* Dtor(void* self, uint32_t flags) {
 // the investigation at the binding path, which was working fine all along. Always print
 // the thing the guard actually tests.
 static void Trace(const char* what, void* self) {
-    if (!std::getenv("BANISHED_CONTROLUI_TRACE")) return;
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
     void* cfg = self ? reinterpret_cast<void*>(*reinterpret_cast<uint64_t*>(s + 0x10)) : nullptr;
     uint32_t wantTid = g_TypeId_ControlComponent ? *g_TypeId_ControlComponent : 0;
@@ -320,7 +319,6 @@ void W_Slot7(void* self) {
     if (!self) return;
     ControlUI_Slot7(reinterpret_cast<ControlUI*>(self));
 
-    if (!std::getenv("BANISHED_CONTROLUI_TRACE")) return;
     static int s_left = 12;
     if (s_left <= 0) return;
     --s_left;

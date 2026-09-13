@@ -385,25 +385,10 @@ void* Dtor(void* self, uint32_t flags) {
 void W_Slot5(void* self) {
     if (!self) return;
     EventLogUI_Slot5(reinterpret_cast<EventLogUI*>(self));
-    if (std::getenv("BANISHED_EVENT_TRACE")) {
-        fprintf(stderr, "[EventLogUI] Slot5 setup ran: displayRowCount(+0x58)=%d notifyCount(+0x78)=%d\n",
-                *(int*)((uintptr_t)self + 0x58), *(int*)((uintptr_t)self + 0x78));
-        fflush(stderr);
-    }
 }
 void W_Slot7(void* self) {
     if (!self) return;
     EventLogUI_Slot7(reinterpret_cast<EventLogUI*>(self));
-    static int s_once = 0;
-    if (!s_once && std::getenv("BANISHED_EVENT_TRACE")) {
-        s_once = 1;
-        void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
-        void* log = gw ? *(void**)((uintptr_t)gw + 0x138) : nullptr;
-        int cnt = log ? *(int*)((uintptr_t)log + 0x20) : -1;
-        fprintf(stderr, "[EventLogUI] Slot7 update ran (first): displayRows(+0x58)=%d eventLogCount=%d\n",
-                *(int*)((uintptr_t)self + 0x58), cnt);
-        fflush(stderr);
-    }
 }
 // (W_OnUpdate removed — idx8 stays inherited, see the vtable note at the top.)
 void W_Slot9(void* self, void* p2, int msg, int id) {

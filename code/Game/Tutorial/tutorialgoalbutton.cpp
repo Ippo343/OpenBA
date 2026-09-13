@@ -145,24 +145,6 @@ void TutorialGoalButton_Cleanup(void* self) {
 int TutorialGoalButton_Check(void* self) {
     uintptr_t s = (uintptr_t)self;
 
-    // One line per distinct goal object: which element is this step waiting for,
-    // and is it the plain "shown" test or the inverted one. A step that never
-    // completes is otherwise indistinguishable from a step with no goal at all.
-    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
-        if (e[0] && e[0] != '0') {
-            static const void* s_seen[16] = {};
-            static int s_n = 0;
-            bool known = false;
-            for (int i = 0; i < s_n; ++i) if (s_seen[i] == self) known = true;
-            if (!known) {
-                if (s_n < 16) s_seen[s_n++] = self;
-                const char* path = *(const char**)(s + 0x20);
-                fprintf(stderr, "[Tutorial] GoalButton waits on \"%s\" invert=%d\n",
-                        path ? path : "(empty)", (int)*(uint8_t*)(s + 0x28));
-                fflush(stderr);
-            }
-        }
-    }
 
     // Find UI element by elementPath (+0x20)
     uintptr_t elementIBP = 0;
@@ -207,21 +189,6 @@ int TutorialGoalButton_Check(void* self) {
     uintptr_t elem = wrappedIBP;
     uint32_t flags = *(uint32_t*)(elem + 0x34);
 
-    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
-        if (e[0] && e[0] != '0') {
-            static uint32_t s_last = 0xFFFFFFFFu;
-            if (flags != s_last) {
-                s_last = flags;
-                fprintf(stderr, "[Tutorial] GoalButton element flags=0x%08X "
-                                "bit22=%d bit23=%d bit24=%d rect=(%d,%d)-(%d,%d)\n",
-                        flags, (int)((flags >> 22) & 1), (int)((flags >> 23) & 1),
-                        (int)((flags >> 24) & 1),
-                        *(int*)(elem + 0x68), *(int*)(elem + 0x6C),
-                        *(int*)(elem + 0x70), *(int*)(elem + 0x74));
-                fflush(stderr);
-            }
-        }
-    }
 
     if (invertCheck) {
         // Bit 23 NOT set = success

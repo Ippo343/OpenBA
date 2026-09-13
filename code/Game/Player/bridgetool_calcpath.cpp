@@ -408,34 +408,6 @@ extern "C" uint64_t BridgeTool_CalcPath_Impl(void* selfPtr, int startCell, int e
             void* segIBP = nullptr;
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&segIBP, seg);
 
-            // BANISHED_MODEL_TRACE — did CtorFromDescription's StartupComponents tail
-            // give this segment's ModelComponent a mesh? A null node array here is the
-            // state EdgeMeshInstance::Draw faults on when the foundation is clicked.
-            {
-                static int s_segTrace = -1;
-                if (s_segTrace < 0) {
-                    const char* e = std::getenv("BANISHED_MODEL_TRACE");
-                    s_segTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
-                }
-                if (s_segTrace) {
-                    void* mc = FindComponentOn(&segIBP, tidModel);
-                    uintptr_t m = reinterpret_cast<uintptr_t>(mc);
-                    uintptr_t md = mc ? *reinterpret_cast<uintptr_t*>(m + 0x18) : 0;
-                    fprintf(stderr, "[ModelTrace] segment tplIdx=%d model=%p comp(%d,%d) "
-                            "nodes@+0xf0=%p | modelDesc=%p desc(+0x30=%d,+0x34=%d) "
-                            "groups@+0x20=%p count@+0x28=%u\n",
-                            tplIdx, mc,
-                            mc ? (int)*reinterpret_cast<int16_t*>(m + 0x164) : -99,
-                            mc ? (int)*reinterpret_cast<int16_t*>(m + 0x166) : -99,
-                            mc ? *reinterpret_cast<void**>(m + 0x28 + 0xf0) : nullptr,
-                            (void*)md,
-                            md ? (int)*reinterpret_cast<int16_t*>(md + 0x30) : -99,
-                            md ? (int)*reinterpret_cast<int16_t*>(md + 0x34) : -99,
-                            md ? *reinterpret_cast<void**>(md + 0x20) : nullptr,
-                            md ? *reinterpret_cast<uint32_t*>(md + 0x28) : 0u);
-                    fflush(stderr);
-                }
-            }
 
             StampCells(FindComponentOn(&segIBP, tidMap), cursorCol, cursorRow, segW, segH, rot);
             float segCentre[3];

@@ -109,15 +109,6 @@ void StatGoal_ResolveExternalPtr(void* externalRef) {
     *reinterpret_cast<int32_t*>(s + 0x08) =
         *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(factory) + 0x08);
 
-    if (const char* e = std::getenv("BANISHED_TUTORIAL_TRACE")) {
-        if (e[0] && e[0] != '0') {
-            const char* name = *reinterpret_cast<const char* const*>(s);
-            fprintf(stderr, "[GoalRef] \"%s\" %s -> %p\n",
-                    name ? name : "(null)",
-                    loaded ? "Find=miss FindOrLoad" : "Find=hit", result);
-            fflush(stderr);
-        }
-    }
 }
 
 // ============================================================

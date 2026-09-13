@@ -15,14 +15,6 @@
 #include <cstdint>
 #include <cstdlib>
 
-// PERF (2026-09-04): this action runs every tick for every tool-carrying citizen and
-// used to call getenv (a linear environ scan + strcmp per entry) four times per call —
-// the sampler showed getenv/strcmp from here inside the EntityList phase.
-static bool CarryTraceOn() {
-    static int on = -1;
-    if (on < 0) on = std::getenv("BANISHED_CARRY_TRACE") ? 1 : 0;
-    return on == 1;
-}
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
 
 // ============================================================
@@ -229,10 +221,6 @@ void ShowTool_Serialize_Impl(void* self, void* stream) {
 static void ShowTool_ShowCarried(void* entityV) {
     uint8_t* e = reinterpret_cast<uint8_t*>(entityV);
 
-    const bool trc = CarryTraceOn();
-    static int s_trcN = 0;
-    if (trc && s_trcN < 60) { ++s_trcN;
-        fprintf(stderr, "[ShowTool] ShowCarried ENTER entity=%p\n", entityV); fflush(stderr); }
 
     // Skip if the entity is flagged for destruction (bit 10 of inner+0x40).
     s_fn_CheckPtr(e + 0x10);
@@ -256,10 +244,10 @@ static void ShowTool_ShowCarried(void* entityV) {
     fn_FindComponent_Storage(*(void**)(e + 0x10), storageIBP);
     s_fn_CheckPtr(storageIBP);
     uintptr_t storageComp = (uintptr_t)storageIBP[0];
-    if (!storageComp) { if (trc && s_trcN<60){++s_trcN; fprintf(stderr,"[ShowTool]  bail: no storageComp\n");fflush(stderr);} return; }
+    if (!storageComp) return;
     int itemCount = *(int*)(storageComp + 0x30);
-    if (itemCount < 1) { if (trc && s_trcN<60){++s_trcN; fprintf(stderr,"[ShowTool]  bail: itemCount<1 (%d)\n",itemCount);fflush(stderr);} return; }
 
+    if (itemCount < 1) return;
     void* bestItem = nullptr;
     int bestCount = 0;
     for (int i = 0; i < itemCount; i++) {
@@ -271,12 +259,10 @@ static void ShowTool_ShowCarried(void* entityV) {
             bestItem = *(void**)(itemArr + (int64_t)i * 0x10);
         }
     }
-    if (!bestItem) { if (trc && s_trcN<60){++s_trcN; fprintf(stderr,"[ShowTool]  bail: no bestItem\n");fflush(stderr);} return; }
 
+    if (!bestItem) return;
     // --- Resolve the display mesh (ModelDescription) + carry-scale (RawMaterial). ---
     void* modelDesc = ShowTool_FindComponentByTid(bestItem, ShowTool_ModelDescTid());
-    if (trc && s_trcN<60){++s_trcN; fprintf(stderr,"[ShowTool]  bestItem=%p count=%d modelTid=%u modelDesc=%p rawTid=%u\n",
-        bestItem, bestCount, ShowTool_ModelDescTid(), modelDesc, ShowTool_RawMatTid());fflush(stderr);}
     if (!modelDesc) return;                       // SA guard: no display model -> nothing shown
     void* rawMat = ShowTool_FindComponentByTid(bestItem, ShowTool_RawMatTid());
     if (!rawMat) return;                          // SA guard
@@ -304,16 +290,6 @@ static void ShowTool_ShowCarried(void* entityV) {
         *(uint32_t*)(e + 0xb8 + 0x120) = 0xffffffff;   // sceneId = -1 (not yet in scene)
     }
 
-    if (CarryTraceOn()) {
-        static int n = 0;
-        if (n++ < 40) {
-            fprintf(stderr, "[ShowTool] carried: item=%p mesh=%llx scale=%.3f nodeReady=%d heldVt=%p defCtor=%p\n",
-                    bestItem, (unsigned long long)mesh, carryScale,
-                    (s_slot_GetNodeIndex && s_slot_GeomAttach) ? 1 : 0,
-                    (void*)heldVt, (void*)s_slot_MI_DefCtor);
-            fflush(stderr);
-        }
-    }
 
     // --- Assign the mesh to the citizen's held-item MeshInstance (entity+0xb8). ---
     if (s_slot_SetMesh) s_slot_SetMesh(e + 0xb8, (void*)mesh);
@@ -358,16 +334,6 @@ static void ShowTool_ShowCarried(void* entityV) {
 
 int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
     (void)actionStack;
-    // Trace the requested toolId up front (a plain field read, no deps) so a run
-    // shows which ShowTool variants reach the executor even when a dep is missing.
-    if (CarryTraceOn()) {
-        static int n0 = 0;
-        if (n0++ < 80) {
-            fprintf(stderr, "[ShowTool] AbstractImpl ENTER toolId=%d resolved=%d\n",
-                    (int)*(uint32_t*)((uint8_t*)self + 0x28), s_showtool_funcs_resolved ? 1 : 0);
-            fflush(stderr);
-        }
-    }
     // Lazy resolve: when this action is built via the exe action-ctor path (not our
     // factory) ShowTool_ResolveFuncs never ran, so s_fn_* are null -> EXEC-of-null when
     // the executor runs it (e.g. a forester's PerformWork cut sequence shows the axe).
@@ -376,10 +342,6 @@ int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
     uint8_t* s = (uint8_t*)self;
     uint32_t toolId = *(uint32_t*)(s + 0x28);
 
-    if (CarryTraceOn()) {
-        static int n = 0;
-        if (n++ < 40) { fprintf(stderr, "[ShowTool] AbstractImpl toolId=%d\n", (int)toolId); fflush(stderr); }
-    }
 
     if (toolId > 10 && toolId != 0xFFFFFFFE) {
         s_fn_CheckPtr(s + 0x20);

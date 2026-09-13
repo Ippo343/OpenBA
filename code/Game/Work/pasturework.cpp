@@ -26,15 +26,6 @@
 #include <cstdlib>
 #include <cstring>
 
-// BANISHED_PASTURE_TRACE — shared with the pasture component traces.
-static bool PW_Trace() {
-    static int t = -1;
-    if (t < 0) {
-        const char* e = std::getenv("BANISHED_PASTURE_TRACE");
-        t = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
-    }
-    return t == 1;
-}
 
 // ============================================================
 // Local function pointers (resolved once by PastureWork_ResolveFuncs)
@@ -397,11 +388,6 @@ bool PastureWork_ResolveFuncs() {
 //
 int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, uint64_t param4) {
     (void)param3; (void)param4;  // unused in original, forwarded by action executor
-    if (PW_Trace()) {
-        std::fprintf(stderr, "[PastureWork] Slot4 claim: work=%p citizen=%p\n",
-                     (void*)self, entityIBP ? *(void**)entityIBP : nullptr);
-        std::fflush(stderr);
-    }
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
     void* citizenIBP = entityIBP;
