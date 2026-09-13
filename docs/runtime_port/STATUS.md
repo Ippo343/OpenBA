@@ -65,24 +65,32 @@ RenderDoc DLL-absent, look at the frame overview and one draw's state, then put 
 count-limited `fprintf` on the silent-drop arms of the body the numbers point at, one gate
 run, remove the trace. Also audited: the 19 `GetFileVersion` ports written as a constant all
 match the DLL bytes now; ports that return through a variable were not covered.
-What is NOT yet triaged: how many of the 651 `RT_ORIGINAL_ONCE`/`RtOriginal<>` sites sit on
-live (non-oracle) paths — the gate found one (`video/buffers.cpp` MemFree).
+Raw-door triage (2026-09-12 late): `BANISHED_RT_STRICT=1` on the gate prints `[RtRawResidue]`,
+the raw-door requests the run actually made. 42 DLL-absent (each once). All but one are oracles,
+probes, byte-pins, hook installers or `if (!g_portOn)` fall-throughs that degrade to our body or
+print "not checked"; the one live dependency was `userinterface_hover.cpp`'s string release in
+BeginToolTip (MemFree through the raw door), now the registry door. The other 600-odd sites were
+not reached by this route; re-run the strict gate on any new route and read the table.
 
 ## DLL-present build
 
 `make sa-run` boots to the in-game world and pause-menu Quit works (re-verified 2026-09-12
 at close, 975 UI exports registered, 135 deleting-dtor rows: `BANISHED_AUTOSTART=1 BANISHED_RT_DIFF=1 BANISHED_PAUSEMENU=600
-BANISHED_PAUSEMENU_QUIT=120`, exit 0, empty crash log). Twelve divergent sites: the ten
-pre-existing negative controls and vtable-identity artefacts, plus two that appeared the
-moment the registry doors were unified and two name-only ports went live by address:
-`UI::SpriteContext::Flush` (SHADOW class, "context DIRTY MASK differs", 52,927 of 57,110
-calls) and `Video::VideoProgram::SetupShaders` (ORACLE class, already flagged by the harness
-as "released pointer replayed", a counter at +0x4). The game renders and quits normally.
-Whether these are oracle artefacts of bodies that now run, or port defects the bypass was
-hiding, is unresolved — the first DLL-present question for the next session.
-Known broken route: the unattended Mods menu example (`BANISHED_AUTOMENU_BUTTON=7
-BANISHED_AUTOMENU_CLICKS=1001,5001,d0,4001,101,m6`) dies with an ACCESS_VIOLATION at
-`ModDialog_ToggleMod_Impl+0x43` reading 0xd0. Upstream null, not yet found.
+BANISHED_PAUSEMENU_QUIT=120`, exit 0, empty crash log). Ten divergent sites, all the
+pre-existing negative controls and vtable-identity artefacts (the `AnimationEvent()` ctor
+oracle still trips the released-pointer detector; make it NO-ORACLE when someone is there).
+The two that appeared when the doors were unified were harness artefacts, resolved 2026-09-12
+late: `SetupShaders` compared four padding bytes of an uninitialised snapshot; `Flush`
+compared the live dirty mask AFTER the real draw had consumed it. Both now 0.
+Fixed the same evening, DLL-present: hovering any dialog moved it (the pause menu followed the
+cursor) — `DialogInstance::Update` wrote the tooltip-settle mouse position into `_upperLeftX/Y`
+(+0x88) where retail uses +0x90/+0x94; found with a hardware write watchpoint from the
+pause-menu harness plus a scripted mouse (`tools/capture_window.ps1` to look).
+The unattended Mods route (`BANISHED_AUTOMENU_BUTTON=7 BANISHED_AUTOMENU_CLICKS=1001,5001,d0,
+4001,101,m6 BANISHED_MODAL_ANSWER=1`) runs to Quit, exit 0. It needs at least two `.pkm` in
+`WinData/` (both live in `WinData/_mods_off/` because the achievements harness needs them
+out); with none, the driver now skips per-row tokens with a `[AutoStart] WARN`. ToggleMod
+was also wrong (read the model and inverted; retail pushes the checkbox's own state).
 
 ## Held back, with reasons
 
