@@ -160,6 +160,11 @@ Runtime-x64.dll; the exe never loads it now. `make sa-run` is the DLL-absent rou
     (`BANISHED_AUTOMENU_BUTTON=2 BANISHED_AUTOMENU_CLICKS=m6`), and `make sa-stress` on the
     perf exe (6000 frames, clean self-quit).
 
+- **2026-09-13: frozen-exe detector.** The boot-state watchdog now carries the main loop's
+  frame counter; a stalled counter publishes `STATE=HUNG` (exit 5 from `tools/boot_state.sh`),
+  writes `standalone_hang.log` with all-thread stacks, and on unattended runs terminates the
+  process with exit code 3 — so a hang costs ~30 s instead of the caller's whole timeout.
+
 ## Cutover gate
 
 `make sa-run` (`make cutover` is the same thing under its legacy name): deploys the debug

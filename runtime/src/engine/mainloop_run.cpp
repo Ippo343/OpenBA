@@ -160,6 +160,11 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(int64_t*);
 
+// standalone/boot_state_watchdog.cpp -- the frozen-exe heartbeat. Declared
+// here rather than including a standalone/ header so runtime/ keeps no
+// dependency on the harness's include path.
+extern "C" void BootState_MarkFrame();
+
 using RtEngine::MainLoop;
 
 namespace {
@@ -314,6 +319,14 @@ extern "C" void RtEngine_MainLoop_Run(MainLoop* self, void* loop) {
         RT_EXPORT_ONCE(FrameFn, "?Frame@MainLoop@Engine@@QEAA_N_N@Z")(self, false);
         self->_frameEndTicks = CurrentTimeTicksViaGlobals();             // +0x70
         self->_frameTime = self->_frameEndTicks - self->_frameStartTicks;  // +0x58
+
+        // NOT RETAIL. The frozen-exe heartbeat: one interlocked increment, and
+        // this is THE place for it -- every loop type (loader, splash, menu
+        // DialogLoopT, GameUpdateLoop) is ticked by the Frame call above, so a
+        // counter that stops moving here means the main thread is wedged.
+        // standalone/boot_state_watchdog.cpp turns that into STATE=HUNG and an
+        // all-thread stack dump instead of a ten-minute caller timeout.
+        BootState_MarkFrame();
     }
 
     // Teardown, 0x1800dd4c0..0x1800dd4dd. Both reads of _currentLoop are fresh,

@@ -340,7 +340,21 @@ tools/boot_state.sh --wait 300   # block until RUNNING; bails INSTANTLY if block
 ```
 
 Exit codes: `0` RUNNING · `1` NOT_RUNNING · `2` BLOCKED_DIALOG · `3` BOOTING ·
-`4` STALE (state file left by a pid that is gone).
+`4` STALE (state file left by a pid that is gone) · `5` HUNG.
+
+**HUNG — the frozen-exe detector.** The state line carries the main loop's frame counter
+(`frame=` / `stale=`), bumped once per iteration of `MainLoop::Run`. When it stops moving
+for 20 s (`RUNNING`) or 45 s (`QUITTING`, i.e. after `Run` returned — teardown renders no
+frames) the watchdog publishes `STATE=HUNG`, logs one `[BootState] HUNG` line to stderr,
+and writes **`standalone_hang.log`** — every thread's stack, main thread marked. On an
+**unattended** run (the `HarnessGuardUnattendedBoot` test) it then terminates itself with
+**exit code 3**; attended runs are only reported, never killed. So **a run that ends with
+exit 3 and a `standalone_hang.log` froze; exit 3 with a `standalone_crash.log` crashed** —
+read the hang log first in the former case. A modal in-game `UI::ShowDialog` pumps its own
+loop and therefore reads as HUNG on an unattended run: that is intended, and its pump will
+be on the main thread's stack in the log (`BANISHED_MODAL_ANSWER` is the answer to it).
+The thresholds live next to the watchdog's `Sleep` and `tools/boot_state.sh` reads them
+out of the source rather than restating them.
 
 **Always poll boot with this rather than `grep -q` on the log** — a `grep`-until-timeout
 loop against a blocked boot burns the entire timeout for nothing. Published every second

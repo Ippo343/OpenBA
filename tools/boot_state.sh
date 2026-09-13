@@ -7,9 +7,17 @@
 # polling for `[HuntScan]` sits there until its timeout expires. Call this instead of
 # assuming a quiet log means "still working".
 #
+# AND THE OTHER HALF: a process whose MAIN THREAD is wedged (teardown after the
+# pause-menu Quit, an unanswered in-game modal) used to read as RUNNING, because the
+# watchdog only proved its own thread was alive. The state line now carries the main
+# loop's FRAME COUNTER and how long it has been stuck (`frame=` / `stale=`), and the
+# watchdog publishes STATE=HUNG once that exceeds the phase budget. On an unattended run
+# the exe then writes standalone_hang.log (all-thread stacks) and terminates itself with
+# EXIT CODE 3, so a hang costs ~30s instead of the caller's whole timeout.
+#
 # USAGE
 #   tools/boot_state.sh              # print one status line
-#   tools/boot_state.sh --wait 300   # block until RUNNING, or fail fast if blocked
+#   tools/boot_state.sh --wait 300   # block until RUNNING, or fail fast if blocked/hung
 #
 # EXIT CODES (so a script can branch without parsing)
 #   0  RUNNING         normal operation
@@ -21,6 +29,13 @@
 #                       (a) its pid is GONE          -- a previous run's leftovers
 #                       (b) its pid is ALIVE but the FILE HAS STOPPED ADVANCING
 #                           -- the watchdog thread is dead while the process lingers
+#   5  HUNG            the watchdog IS publishing, and it is reporting that the main
+#                     loop has not completed a frame for longer than this phase's
+#                     budget. Read standalone_hang.log -- it has every thread's stack,
+#                     with the main thread marked. An unattended run kills itself
+#                     (exit 3) moments after publishing this, so seeing HUNG at all
+#                     usually means an ATTENDED run, where a human may simply be
+#                     sitting in a dialog.
 #
 # (b) IS THE ONE THIS SCRIPT USED TO MISS, AND IT COST A 24-MINUTE OUTAGE.
 # The old script checked pid liveness and NEVER file freshness, so a crashed run
@@ -68,6 +83,27 @@ fi
 PUBLISH_SECS=$(( (PUBLISH_MS + 999) / 1000 ))
 [ "$PUBLISH_SECS" -lt 1 ] && PUBLISH_SECS=1
 
+# ---------------------------------------------------------------------------
+# DERIVE the hang budgets from the same publisher, for the same reason. The
+# watchdog declares them as
+#     const unsigned kHungRunningSec  = <n>;
+#     const unsigned kHungQuittingSec = <n>;
+# and they are printed beside every verdict so a HUNG (or a green) is quotable
+# with the number that produced it.
+# ---------------------------------------------------------------------------
+HUNG_RUN_SECS=""
+HUNG_QUIT_SECS=""
+if [ -f "$WATCHDOG_SRC" ]; then
+    HUNG_RUN_SECS="$(sed -n 's/^ *const unsigned kHungRunningSec *= *\([0-9][0-9]*\);.*/\1/p' "$WATCHDOG_SRC" | head -1)"
+    HUNG_QUIT_SECS="$(sed -n 's/^ *const unsigned kHungQuittingSec *= *\([0-9][0-9]*\);.*/\1/p' "$WATCHDOG_SRC" | head -1)"
+fi
+if [ -n "$HUNG_RUN_SECS" ] && [ -n "$HUNG_QUIT_SECS" ]; then
+    HUNG_SRC="derived: running ${HUNG_RUN_SECS}s / quitting ${HUNG_QUIT_SECS}s"
+else
+    HUNG_RUN_SECS="?"; HUNG_QUIT_SECS="?"
+    HUNG_SRC="UNKNOWN -- could NOT read kHung*Sec from $WATCHDOG_SRC"
+fi
+
 # How many missed heartbeats before we call it dead. A publish is Sleep(interval)
 # PLUS an EnumWindows sweep and a file rewrite, and this machine runs several
 # lanes and a game at once, so a couple of late ticks are normal and must not
@@ -109,11 +145,16 @@ probe_once() {
         return 1
     fi
 
-    local line state pid detail age fresh
+    local line state pid detail age fresh frame stale beat hb
     line="$(cat "$STATE_FILE" 2>/dev/null)"
     state="$(printf '%s' "$line" | sed -n 's/.*STATE=\([A-Z_]*\).*/\1/p')"
     pid="$(printf '%s' "$line" | sed -n 's/.*pid=\([0-9]*\).*/\1/p')"
     detail="$(printf '%s' "$line" | sed -n 's/.*detail=\(.*\)$/\1/p')"
+    # frame=/stale= are the MAIN-LOOP heartbeat, not the file's mtime: the
+    # watchdog thread can be perfectly healthy while the game is frozen, which
+    # is the whole point of them. Absent on a pre-heartbeat build -> "?".
+    frame="$(printf '%s' "$line" | sed -n 's/.*[ =]frame=\([0-9]*\).*/\1/p')"
+    stale="$(printf '%s' "$line" | sed -n 's/.* stale=\([0-9]*\).*/\1/p')"
 
     # A file whose pid is gone describes a previous run. Never report its state as live.
     if [ -n "$pid" ] && ! tasklist 2>/dev/null | grep -q "[^0-9]$pid[^0-9]"; then
@@ -136,7 +177,7 @@ probe_once() {
     # is kept because it is the correct rule for the state the header
     # documents, but nothing in the shipped exe currently produces it.
     case "$state" in
-        BOOTING|RUNNING|BLOCKED_DIALOG)
+        BOOTING|RUNNING|QUITTING|HUNG|BLOCKED_DIALOG)
             age="$(file_age)"
             if [ -n "$age" ] && [ "$age" -gt "$STALE_SECS" ]; then
                 echo "STALE  (file says $state from pid $pid, and that pid is still alive,"
@@ -153,14 +194,31 @@ probe_once() {
     # Print the freshness that was actually applied beside the verdict, so a
     # green is quotable with the thing that made it green.
     fresh="age=${age:-?}s/${STALE_SECS}s"
+    # The heartbeat, printed on EVERY status line: `age` says the watchdog is
+    # alive, `frame`/`stale` say the GAME is. A green with a climbing stale is
+    # the interesting case and must not need a second command to see.
+    beat="frame=${frame:-?} stale=${stale:-?}s/${HUNG_RUN_SECS}s"
 
     case "$state" in
-        RUNNING)        echo "RUNNING  [$fresh] ($line)"; return 0 ;;
+        RUNNING)        echo "RUNNING  [$fresh $beat] ($line)"; return 0 ;;
+        QUITTING)       echo "QUITTING  [$fresh frame=${frame:-?} stale=${stale:-?}s/${HUNG_QUIT_SECS}s] ($line)"
+                        echo "          MainLoop::Run returned; teardown in progress."
+                        return 0 ;;
+        HUNG)           # detail= carries the phase it froze in, which is what picks
+                        # the budget: QUITTING gets the teardown one.
+                        hb="$HUNG_RUN_SECS"
+                        [ "$detail" = "QUITTING" ] && hb="$HUNG_QUIT_SECS"
+                        echo "HUNG  the main loop has not completed a frame for ${stale:-?}s."
+                        echo "      phase: $detail   [frame=${frame:-?} stale=${stale:-?}s/${hb}s; hang budgets $HUNG_SRC]"
+                        echo "      Read standalone_hang.log -- all-thread stacks, main thread marked."
+                        echo "      An UNATTENDED run self-terminates with exit code 3 right after"
+                        echo "      publishing this; seeing it persist means an attended run."
+                        return 5 ;;
         BLOCKED_DIALOG) echo "BLOCKED_DIALOG  a modal dialog is open and boot cannot proceed."
                         echo "                title: $detail"
                         echo "                Click it, or relaunch -- an unattended run will never clear it."
                         return 2 ;;
-        BOOTING)        echo "BOOTING  [$fresh] ($line)"; return 3 ;;
+        BOOTING)        echo "BOOTING  [$fresh $beat] ($line)"; return 3 ;;
         EXITED)         echo "NOT_RUNNING  (clean shutdown: $line)"; return 1 ;;
         *)              echo "NOT_RUNNING  (unrecognised state file: $line)"; return 1 ;;
     esac
@@ -171,8 +229,10 @@ if [ "$WAIT_SECS" -le 0 ]; then
     exit $?
 fi
 
-# --wait: poll until RUNNING, but bail immediately on BLOCKED_DIALOG. Waiting out a modal
-# dialog is exactly the wasted timeout this script exists to prevent.
+# --wait: poll until RUNNING, but bail immediately on BLOCKED_DIALOG, STALE or HUNG.
+# Waiting out a modal dialog -- or a frozen main loop -- is exactly the wasted timeout
+# this script exists to prevent. HUNG never clears on its own either: an unattended run
+# is already killing itself, and an attended one needs a human.
 deadline=$(( $(date +%s) + WAIT_SECS ))
 while :; do
     out="$(probe_once)"; rc=$?
@@ -180,6 +240,7 @@ while :; do
         0) echo "$out"; exit 0 ;;
         2) echo "$out"; exit 2 ;;
         4) echo "$out"; exit 4 ;;
+        5) echo "$out"; exit 5 ;;
     esac
     if [ "$(date +%s)" -ge "$deadline" ]; then
         echo "TIMEOUT after ${WAIT_SECS}s -- last: $out"

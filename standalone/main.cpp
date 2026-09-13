@@ -307,13 +307,21 @@ static void CrashLogf(const char* fmt, ...);
 static void DumpSwapChainState(const char* tag);
 static void CaptureBootFullscreenMode();
 
-// Walk the saved CONTEXT via the x64 unwind tables and print one line per
+// Walk the saved CONTEXT via the x64 unwind tables and emit one line per
 // frame: <module>!<offset>. No symbol names — Banished ships stripped — but
-// module+offset is what we'd paste into Ghidra anyway. Each line goes to
-// the dedicated crash log via CrashLogf, which writes synchronously.
-static void PrintStackTrace(CONTEXT* origCtx) {
-    CrashLogf("Stack trace:\n");
+// module+offset is what we'd paste into Ghidra anyway.
+//
+// THE ONE STACK WALKER IN THE EXE. The crash handler below and the hang
+// detector in boot_state_watchdog.cpp both go through here; the walker takes a
+// line sink instead of writing to the crash log directly so there is exactly
+// one copy of the unwind logic to keep right. The hang path passes a sink that
+// writes to standalone_hang.log, and it walks OTHER threads' contexts, which is
+// why the CONTEXT is copied (RtlVirtualUnwind mutates it) and why nothing here
+// touches a CRT FILE*: the hang dump runs with those threads SUSPENDED, and a
+// suspended thread can be holding the CRT's file lock.
+extern "C" void StandaloneWalkStack(CONTEXT* origCtx, StackLineSink sink, void* user) {
     CONTEXT ctx = *origCtx;
+    char line[256];
 
     for (int frame = 0; frame < 32; frame++) {
         HMODULE mod = nullptr;
@@ -324,13 +332,16 @@ static void PrintStackTrace(CONTEXT* origCtx) {
             GetModuleFileNameA(mod, path, MAX_PATH);
             const char* nm = strrchr(path, '\\');
             uintptr_t off = (uintptr_t)ctx.Rip - (uintptr_t)mod;
-            CrashLogf("  #%-2d %-22s + 0x%-8llX  (RIP=%016llX RSP=%016llX)\n",
-                      frame, nm ? nm + 1 : path, (unsigned long long)off,
-                      (unsigned long long)ctx.Rip, (unsigned long long)ctx.Rsp);
+            snprintf(line, sizeof(line),
+                     "  #%-2d %-22s + 0x%-8llX  (RIP=%016llX RSP=%016llX)\n",
+                     frame, nm ? nm + 1 : path, (unsigned long long)off,
+                     (unsigned long long)ctx.Rip, (unsigned long long)ctx.Rsp);
         } else {
-            CrashLogf("  #%-2d ???                    @ %p          (RSP=%016llX)\n",
-                      frame, (void*)ctx.Rip, (unsigned long long)ctx.Rsp);
+            snprintf(line, sizeof(line),
+                     "  #%-2d ???                    @ %p          (RSP=%016llX)\n",
+                     frame, (void*)ctx.Rip, (unsigned long long)ctx.Rsp);
         }
+        sink(user, line);
 
         DWORD64 imageBase = 0;
         PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(ctx.Rip, &imageBase, nullptr);
@@ -352,6 +363,15 @@ static void PrintStackTrace(CONTEXT* origCtx) {
 
         if (!ctx.Rip) break;
     }
+}
+
+// The crash handler's view of the walker: every line straight to the
+// write-through crash log.
+static void CrashLogStackSink(void*, const char* s) { CrashLogf("%s", s); }
+
+static void PrintStackTrace(CONTEXT* origCtx) {
+    CrashLogf("Stack trace:\n");
+    StandaloneWalkStack(origCtx, &CrashLogStackSink, nullptr);
 }
 
 // Dedicated crash log handle, opened with FILE_FLAG_WRITE_THROUGH so every

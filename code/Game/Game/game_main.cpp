@@ -104,6 +104,11 @@ extern "C" void FillTypeIdGlobals_worktail_serialize();
 // find type-id globals (reg_pipeline_typeids.cpp; storage gated on BANISHED_LIVE_DECAL).
 extern "C" void FillPipelineTypeIds();
 
+// standalone/boot_state_watchdog.cpp -- "MainLoop::Run returned, teardown has
+// begun". Teardown renders no frames, so the hang detector budgets it from
+// this call rather than from the last frame.
+extern "C" void BootState_MarkQuitting();
+
 // Standalone-only chunked driver for MenuDLT::LoadScene. Init runs
 // MenuDialogLoopT_LoadSceneA1 (~10ms — small allocs + one .rsc load) inline
 // and captures the chunked PhaseB iteration state. We invoke this during
@@ -836,6 +841,12 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             printf("[GameMain] Calling MainLoop::Run with %s top "
                                    "loop = %p...\n", topTag, (void*)topLoop);
                             s_fn_MainLoop_Run(ml, topLoop);
+                            // Run has returned: no more frames will ever be
+                            // rendered, so the boot-state watchdog's hang
+                            // detector must switch to its teardown budget here
+                            // or every clean quit would read as HUNG.
+                            // (standalone/boot_state_watchdog.cpp)
+                            BootState_MarkQuitting();
                             printf("[GameMain] MainLoop::Run returned "
                                    "(top loop destroyed by Run; inner loops "
                                    "leak — Update stub returns false on first "
