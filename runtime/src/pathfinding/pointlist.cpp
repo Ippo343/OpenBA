@@ -128,11 +128,20 @@ void ConstructBody(PointList* self) {
     self->_pointsB._data = nullptr; self->_pointsB._size = 0; self->_pointsB._capacity = 0;
 }
 
-// FUN_180071890 -- release every Point's String in [0, count) (this file's ~PointList caller).
+// FUN_180071890 (retail 0x180071890) -- release every Point's String in
+// [0, count). Body B with the String at +0x00 and stride 0x18, the same rule
+// runtime/src/collection/array_destroy.cpp files as kD_Str_18at00; kept here,
+// where its two callers already live, so there is one body per address.
+// REGISTERED as of batch D2 (2026-09-12): retail's 0x180071730 and 0x180071600
+// both reach it by rel32, and at cutover that rel32 will not exist.
 void ReleasePointsRange(Point* data, int count) {
     for (int i = 0; i < count; ++i) {
         RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&data[i].name));
     }
+}
+extern "C" void RtPathfinding_PointArray_ReleaseRange(void* ignoredThis, void* data, int count) {
+    (void)ignoredThis;   // retail spills RCX to the shadow space and never reads it
+    ReleasePointsRange(static_cast<Point*>(data), count);
 }
 
 // FUN_180071730 -- Collection::Array<Point>::SetSize (retail 0x180071730), byte-faithful
@@ -152,8 +161,31 @@ void PointArraySetSize(Collection::Array<Point>* a, int32_t newSize) {
     int32_t copyFrom = (oldData == a->_data) ? oldSize : 0;
     for (int32_t i = copyFrom; i < newSize; ++i) {
         Point* dst = &a->_data[i];
-        if (i < oldSize) *dst = oldData[i];
-        else { dst->name = nullptr; dst->pos[0] = dst->pos[1] = dst->pos[2] = 0.0f; dst->radius = 0.0f; }
+        if (i < oldSize) {
+            // *** NOT a plain struct assignment. *** Retail's copy arm nulls
+            // the destination's String slot, adopts the source's pointer and
+            // BUMPS the shared refcount at [str-4], then copies four plain
+            // dwords. This body used to do `*dst = oldData[i]`, which moved
+            // the pointer WITHOUT the bump -- and since the realloc arm below
+            // then calls ReleasePointsRange over the whole old buffer, every
+            // grow of a named PointList dropped one reference per element and
+            // could free a String the new buffer still points at. Fixed while
+            // registering the address (batch D2, 2026-09-12).
+            const Point* src = &oldData[i];
+            dst->name = nullptr;
+            if (void* s = src->name) {
+                dst->name = s;
+                ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(s) - 4));
+            }
+            dst->pos[0] = src->pos[0];
+            dst->pos[1] = src->pos[1];
+            dst->pos[2] = src->pos[2];
+            dst->radius = src->radius;
+        } else {
+            // retail's else arm: THREE zero qwords over the whole 0x18 stride
+            uint64_t* q = reinterpret_cast<uint64_t*>(dst);
+            q[0] = 0; q[1] = 0; q[2] = 0;
+        }
     }
     if (oldData == a->_data) {
         if (newSize < oldSize) ReleasePointsRange(oldData + newSize, oldSize - newSize);
@@ -163,7 +195,32 @@ void PointArraySetSize(Collection::Array<Point>* a, int32_t newSize) {
     }
 }
 
+// FUN_180071600 (retail 0x180071600) -- `~Array<Point>`: the element destroy
+// above over [0, size), then the plain `~Array` (free the buffer, zero the
+// three header fields). The J2 shape, written here rather than in
+// array_destroy.cpp because its element helper already lives in this file and
+// a second copy of either is exactly the drift this project keeps paying for.
+void PointArrayDtor(Collection::Array<Point>* a) {
+    ReleasePointsRange(a->_data, a->_size);
+    if (a->_data != nullptr) MemFree(a->_data);
+    a->_data = nullptr;
+    a->_size = 0;
+    a->_capacity = 0;
+}
+
 }  // namespace
+
+// ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) -----------------
+// The three `Collection::Array<Pathfinding::Point>` bodies this file has always
+// had and never registered. Retail's signatures exactly, so they can stand at
+// their addresses for any caller.
+extern "C" void RtPathfinding_PointArray_SetSize(void* a, int32_t n) {
+    PointArraySetSize(static_cast<Collection::Array<Point>*>(a), n);
+}
+extern "C" void* RtPathfinding_PointArray_Dtor(void* a) {
+    PointArrayDtor(static_cast<Collection::Array<Point>*>(a));
+    return nullptr;
+}
 
 extern "C" uint32_t RtPathfinding_PointList_Type(const void*) {
     uint32_t v = 0; std::memcpy(&v, PointListTypeInfo(), sizeof v); return v;
@@ -188,8 +245,14 @@ extern "C" void RtPathfinding_PointList_Destruct(void* selfv) { CallSlot0(selfv,
 extern "C" void RtPathfinding_PointList_Dtor(void* selfv) {
     PointList* self = static_cast<PointList*>(selfv);
     *reinterpret_cast<void**>(self) = PointListVTable();
-    PointArraySetSize(&self->_pointsB, 0);
-    PointArraySetSize(&self->_pointsA, 0);
+    // Retail CALLs 0x180071600 (~Array<Point>) on BOTH arrays at 0x18010f904
+    // and 0x18010f90e -- NOT SetSize(0). The difference is load-bearing:
+    // SetSize(0) keeps the buffer (its grow test can never fire with n == 0),
+    // so the old spelling released every Point String and then LEAKED the
+    // array buffer on every PointList teardown. Corrected while registering
+    // 0x180071600 (batch D2, 2026-09-12).
+    PointArrayDtor(&self->_pointsB);
+    PointArrayDtor(&self->_pointsA);
     RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name2));
     RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name1));
     using ExtDtorFn = void (*)(void*);
@@ -265,5 +328,12 @@ int RtPathfindingPointListRegister() {
     RegisterRuntimeAddr  (0x18010f8e0ull,                                  (void*)&RtPathfinding_PointList_Dtor);
     RegisterRuntimeExport("?Serialize@PointList@Pathfinding@@UEAA_NAEAVStream@IO@@@Z", (void*)&RtPathfinding_PointList_Serialize); ++n;
     RegisterRuntimeAddr  (0x18010f6e0ull,                                                    (void*)&RtPathfinding_PointList_Serialize);
+    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
+    // Unexported in both builds, so RegisterRuntimeAddr only. All three halves
+    // of the pair are registered together: at cutover retail's rel32 from
+    // 0x180071730 / 0x180071600 to 0x180071890 will not exist.
+    RegisterRuntimeAddr  (0x180071730ull, (void*)&RtPathfinding_PointArray_SetSize);
+    RegisterRuntimeAddr  (0x180071890ull, (void*)&RtPathfinding_PointArray_ReleaseRange);
+    RegisterRuntimeAddr  (0x180071600ull, (void*)&RtPathfinding_PointArray_Dtor);
     return n;
 }

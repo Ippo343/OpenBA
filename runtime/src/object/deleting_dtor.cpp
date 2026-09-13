@@ -1348,7 +1348,7 @@ void* RtDelDtor_Base(void* self, unsigned flags) {
 void* RtDelDtor_External(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 8);
 }
-// Object::CompiledExternal ~CompiledExternal = 0x1800bb980  (still the DLL's)
+// Object::CompiledExternal ~CompiledExternal = 0x1800bb980  (PORTED, batch D2)
 void* RtDelDtor_CompiledExternal(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, 9);
 }

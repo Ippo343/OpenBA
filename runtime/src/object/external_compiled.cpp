@@ -624,6 +624,32 @@ const External* RtObject_ExternalFactory_FindOrLoad(ExternalFactory* self,
 }  // namespace RtObject
 
 // ============================================================================
+// CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12)
+// ??1CompiledExternal@Object@@UEAA@XZ   retail 0x1800bb980, ordinal 548
+// ============================================================================
+// Seven instructions, all of them shown here:
+//     MOV [RSP+8],RCX / SUB RSP,0x38 / MOV [RSP+0x20],-2   the SEH frame
+//     LEA RAX,[0x180154a30] / MOV [RCX],RAX                re-stamp the vptr
+//     ADD RSP,0x38 / JMP 0x1800bc950                       TAIL-CALL ~External
+// 0x180154a30 is `??_7CompiledExternal@Object@@6B@`, which this tree already
+// reaches by name in five other files, so the slot is taken rather than the
+// literal address.
+//
+// The vptr re-stamp is not redundant tidying and must not be dropped: it is
+// what makes the base destructor dispatch on CompiledExternal's own vtable
+// instead of the derived class's, the same shape every other ported ~Class in
+// this tree has. The DELETING dtor (0x18000b7e0) stays where it is --
+// runtime/src/object/deleting_dtor.cpp row 9 -- and reaches this through
+// ResolveAddr, so this registration is what makes that row stop calling the
+// DLL. Its comment there said "still the DLL's" and is corrected in the same
+// commit.
+extern "C" void RtObject_CompiledExternal_Dtor(void* selfv) {
+    *reinterpret_cast<void**>(selfv) =
+        RT_DATA_SLOT(void*, "??_7CompiledExternal@Object@@6B@");
+    RT_EXPORT_ONCE(void (*)(void*), "??1External@Object@@UEAA@XZ")(selfv);
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 // Global scope, like every other wave's Register function, because
@@ -648,6 +674,11 @@ int RtObjectExternalCompiledRegister() {
         "?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z",
         (void*)&RtObject_ExternalFactory_FindOrLoad); ++n;
     RegisterRuntimeAddr(0x1800bf320, (void*)&RtObject_ExternalFactory_FindOrLoad);
+
+    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) -------------
+    RegisterRuntimeExport("??1CompiledExternal@Object@@UEAA@XZ",
+                          (void*)&RtObject_CompiledExternal_Dtor); ++n;
+    RegisterRuntimeAddr(0x1800bb980, (void*)&RtObject_CompiledExternal_Dtor);
 
     // Opt-in, not a kill switch: RtWaveEnabled returns true when the variable
     // is UNSET, which is right for a port and wrong for a probe -- it would arm

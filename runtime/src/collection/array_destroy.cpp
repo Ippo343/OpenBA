@@ -1502,6 +1502,248 @@ void* RtColl_ArrayAssign_18001b1a0(void* self, const void* src) {
     return a;
 }
 
+
+// ============================================================================
+// CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12)
+// ============================================================================
+//
+// The J2 / J4 half of the unnamed helper bodies at or above 0x1800571b0 (the
+// SetSize and ~Array halves are array.cpp's block of the same name). Owners,
+// from `get_function_callers` in retail Ghidra:
+//   0x1800571b0            Video::VertexProgram::Serialize's parameter array
+//   0x1800664c0/0x180065d40  Collision2D::CollisionMesh::_faces
+//   0x180066b30/0x180066de0  Collision2D::Face's two inner arrays
+//   0x180073ee0/0x180073720  Picking::PickingMesh::_nodes
+//   0x1800741b0/0x180073dc0/0x1800742d0  Picking::SubMesh's four inner arrays
+
+// ---- two more DestroySpec rows --------------------------------------------
+//
+// 0x1800664c0 (Collision2D::Face's range destroy). Read out of its own body:
+// the walk seeds `RBX = base + 0x24` and advances by 0x28, freeing
+// `[RBX-0x0c]` (= +0x18, Face::quads) FIRST and `[RBX-0x1c]` (= +0x08,
+// Face::triples) second, clearing both 16-byte headers. DESCENDING offsets,
+// like every multi-offset row in this file, and asserted as such below.
+// It is NOT kD_InnerArr2_20 (stride 0x20, offsets {0x10, 0x00}).
+constexpr DestroySpec kD_InnerArr2_28 = { "2 inner Arrays @+0x018,+0x008, stride 0x028",
+                                          0x028, 2, { 0x018, 0x008 } };
+static_assert(kD_InnerArr2_28.nOffs == 2, "kD_InnerArr2_28 nOffs");
+static_assert(kD_InnerArr2_28.offs[0] + 16u <= kD_InnerArr2_28.stride, "offs[0]");
+static_assert(kD_InnerArr2_28.offs[1] + 16u <= kD_InnerArr2_28.stride, "offs[1]");
+static_assert(kD_InnerArr2_28.offs[0] > kD_InnerArr2_28.offs[1], "descending");
+
+// 0x180056960 (Video::VertexProgram's parameter range destroy, the CLEAR half
+// of 0x1800571b0's operator=). TWO System::String per element, released at
+// +0x08 FIRST and +0x00 second, `param_2 += 3` qwords -> stride 0x18.
+// It is NOT kD_Str2_10 (stride 0x10) and NOT kD_Str2_20 (stride 0x20): same
+// rule, three different strides, three rows.
+//
+// The address itself is NOT registered here. 0x180056960 and its `~Array`
+// wrapper 0x180056610 are below this batch's 0x1800571b0 floor and belong to
+// the batch working that range; this file needs only the RULE, and reaching
+// the row rather than the address keeps the two batches from landing two
+// bodies for one function.
+constexpr DestroySpec kD_Str2_18 = { "2 Strings @+0x008,+0x000, stride 0x018",
+                                     0x018, 2, { 0x008, 0x000 } };
+static_assert(kD_Str2_18.nOffs == 2, "kD_Str2_18 nOffs");
+static_assert(kD_Str2_18.offs[0] + 8u <= kD_Str2_18.stride, "offs[0]");
+static_assert(kD_Str2_18.offs[1] + 8u <= kD_Str2_18.stride, "offs[1]");
+static_assert(kD_Str2_18.offs[0] > kD_Str2_18.offs[1], "descending");
+
+// ---- 0x1800664c0: a Body-A range destroy ----------------------------------
+#define A_ENTRY(ADDR, SPEC)                                                   \
+    Site g_da_##ADDR = { { "Collection::Array elem-destroy(inner Array) @0x" #ADDR, \
+                           0, 0, false, false }, 0x##ADDR };                  \
+    void RtColl_DestroyInner_##ADDR(void* ignoredThis, void* base, int count) { \
+        (void)ignoredThis;                                                    \
+        DProbeGate();                                                         \
+        const int freed = FreeInnerArraysCounted(                             \
+            static_cast<uint8_t*>(base), count, &SPEC);                       \
+        ReportDestroy(&g_da_##ADDR, &SPEC, count, freed);                     \
+    }
+
+A_ENTRY(1800664c0, kD_InnerArr2_28)   // Collision2D: ~Face's two inner arrays
+
+#undef A_ENTRY
+
+// ---- 0x180073ee0: a THIRD kind of element helper --------------------------
+//
+// Picking::SubMesh's range destroy is neither Body A nor Body B: per element
+// (stride 0x80) it frees FOUR inner `Collection::Array<T>` and THEN releases
+// one System::String, and `DestroySpec` carries at most three offsets. Rather
+// than widen the shared struct for one caller, the loop is written out here in
+// retail's own order, read from the body's seed `RBX = base + 0x7c` and its
+// four `[RBX-0x0c] [RBX-0x1c] [RBX-0x2c] [RBX-0x3c]` slots:
+//
+//     +0x70  _uvs        free buffer, zero both header qwords
+//     +0x60  _triangles  same
+//     +0x50  _normals    same
+//     +0x40  _vertices   same
+//     +0x00  _name       System::String release
+//
+// DESCENDING through the arrays and the String LAST -- the same shape as
+// 0x1800109d0's compound helper, and the reason that one is written out too.
+Site g_da_180073ee0 = { { "Collection::Array elem-destroy(SubMesh) @0x180073ee0",
+                          0, 0, false, false }, 0x180073ee0 };
+static int DestroySubMesh80Counted(uint8_t* base, int count) {
+    if (count <= 0) return 0;                       // TEST R8D,R8D / JLE
+    int touched = 0;
+    const int64_t n = static_cast<int64_t>(count);  // MOVSXD
+    for (int64_t i = 0; i < n; ++i) {
+        uint8_t* e = base + i * 0x80;
+        static const uint32_t kOffs[4] = { 0x70u, 0x60u, 0x50u, 0x40u };
+        for (int k = 0; k < 4; ++k) {
+            uint8_t* slot = e + kOffs[k];
+            void* p = *reinterpret_cast<void**>(slot);
+            if (p) { MemFree(p); ++touched; }
+            *reinterpret_cast<uint64_t*>(slot + 0) = 0;
+            *reinterpret_cast<uint64_t*>(slot + 8) = 0;
+        }
+        ReleaseStringsCore(e, 1, &kD_Str_18at00);   // the String at +0x00
+        if (*reinterpret_cast<void**>(e)) ++touched;
+    }
+    return touched;
+}
+void RtColl_DestroySubMesh_180073ee0(void* ignoredThis, void* base, int count) {
+    (void)ignoredThis;
+    DProbeGate();
+    const int touched = DestroySubMesh80Counted(static_cast<uint8_t*>(base), count);
+    ReportDestroy(&g_da_180073ee0, &kD_Str_18at00, count, touched);
+}
+
+// ---- the two J2 entry points ----------------------------------------------
+// Shape is J2 exactly (`R8D=[RCX+8]; RDX=[RCX]; CALL helper`, then the J1
+// body); only the helper differs.
+Site g_j2_180065d40 = { { "Collection::Array::~Array(+elem) @0x180065d40",
+                          0, 0, false, false }, 0x180065d40 };
+void* RtColl_ArrayDtorElem_180065d40(void* self) {          // ~Array<Face>
+    DProbeGate();
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);
+    const int freed = FreeInnerArraysCounted(a->_data, a->_size, &kD_InnerArr2_28);
+    void* r = ArrayDtorImpl(a);
+    if (RtDiffEnabled()) {
+        RtDiffRegister(&g_j2_180065d40.d);
+        const bool ok = (a->_data == nullptr && a->_size == 0 && a->_capacity == 0);
+        char o[128];
+        std::snprintf(o, sizeof(o), "elems=%d data=%p size=%d cap=%d",
+                      freed, static_cast<void*>(a->_data), a->_size, a->_capacity);
+        RtDiffReport(&g_j2_180065d40.d, ok, o, "data=0000000000000000 size=0 cap=0");
+    }
+    return r;
+}
+
+Site g_j2_180073720 = { { "Collection::Array::~Array(+elem) @0x180073720",
+                          0, 0, false, false }, 0x180073720 };
+void* RtColl_ArrayDtorElem_180073720(void* self) {          // ~Array<SubMesh>
+    DProbeGate();
+    ArrayHdr* a = static_cast<ArrayHdr*>(self);
+    const int touched = DestroySubMesh80Counted(a->_data, a->_size);
+    void* r = ArrayDtorImpl(a);
+    if (RtDiffEnabled()) {
+        RtDiffRegister(&g_j2_180073720.d);
+        const bool ok = (a->_data == nullptr && a->_size == 0 && a->_capacity == 0);
+        char o[128];
+        std::snprintf(o, sizeof(o), "elems=%d data=%p size=%d cap=%d",
+                      touched, static_cast<void*>(a->_data), a->_size, a->_capacity);
+        RtDiffReport(&g_j2_180073720.d, ok, o, "data=0000000000000000 size=0 cap=0");
+    }
+    return r;
+}
+
+// ---- six more J4 (`Array<T>::operator=`) ----------------------------------
+//
+// All six are ArrayAssignCore exactly -- `if (this == &src) return; clear(this);
+// _size = src._size; grow; copy loop; return this` -- and five of the six clear
+// through a J1 body, so `ArrayClearTrivial`. What varies is the element spec,
+// and the four stride-collisions in this group are the reason each row was read
+// out of its OWN body's `MOV EDX,<align>` and its own copy loop:
+//
+//   0x180066b30  stride 8    align 2   one qword move        clear 0x180066cd0
+//   0x180066de0  stride 6    align 2   dword + word          clear 0x180066fa0
+//   0x1800742d0  stride 4    align 2   one dword move        clear 0x180074360
+//   0x180073dc0  stride 0xc  align 2   qword + dword         clear 0x180073e60
+//   0x1800741b0  stride 0xc  align 4   THREE dword moves     clear 0x180074250
+//   0x1800571b0  stride 0x18 align 8   two Strings + 2 ints  clear 0x180056610
+//
+// Note 0x180073dc0 and 0x1800741b0: same stride, different align AND different
+// store widths. Sharing one row between them would hand the allocator the wrong
+// alignment on every Picking triangle-array copy.
+
+// The element operations live in array.cpp (one namespace, two files -- see the
+// A_ENTRY banner). Declared rather than duplicated.
+void AssignD2_6(uint8_t* d, const uint8_t* s);
+void AssignD2_12q(uint8_t* d, const uint8_t* s);
+void Assign12(uint8_t* d, const uint8_t* s);
+void Assign4(uint8_t* d, const uint8_t* s);
+
+// 0x1800571b0's element, read out of its copy loop at 0x180057220..:
+//     +0x00  System::String  zero-then-adopt-then-INC [str-4]
+//     +0x08  System::String  same
+//     +0x10  int32           plain dword
+//     +0x14  int32           plain dword
+// All 0x18 bytes written, so no assign window.
+void AssignVPParam18(uint8_t* d, const uint8_t* s) {
+    void** dp = reinterpret_cast<void**>(d);
+    void* const* sp = reinterpret_cast<void* const*>(s);
+    dp[0] = nullptr;
+    if (void* a = sp[0]) {
+        dp[0] = a;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(a) - 4));
+    }
+    dp[1] = nullptr;
+    if (void* b = sp[1]) {
+        dp[1] = b;
+        ++*(reinterpret_cast<int32_t*>(static_cast<uint8_t*>(b) - 4));
+    }
+    *reinterpret_cast<int32_t*>(d + 0x10) = *reinterpret_cast<const int32_t*>(s + 0x10);
+    *reinterpret_cast<int32_t*>(d + 0x14) = *reinterpret_cast<const int32_t*>(s + 0x14);
+}
+
+// 0x1800571b0's clear is 0x180056610, a J2: `CALL 0x180056960` (Body B,
+// kD_Str2_18) then the J1 body. Written out here rather than resolved by
+// address so the element spec and the clear cannot drift apart -- the same
+// choice ArrayClearMetaEntry20 above made for the same reason.
+void ArrayClearVPParam18(ArrayHdr* a) {
+    ReleaseStringsCounted(a->_data, a->_size, &kD_Str2_18);
+    ArrayDtorImpl(a);
+}
+
+const ArraySpec kAsgnD2_Blk8A2 = {
+    "Array<Quad4>(align 2)", 8, 2, &Assign8, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+const ArraySpec kAsgnD2_Edge6A2 = {
+    "Array<Triple3>", 6, 2, &AssignD2_6, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+const ArraySpec kAsgnD2_U32A2 = {
+    "Array<Picking::UV16>", 4, 2, &Assign4, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+const ArraySpec kAsgnD2_Tri12A2 = {
+    "Array<Picking::Triangle>", 0xc, 2, &AssignD2_12q, nullptr, nullptr, true,
+    0, 0, 0, 0, 0, 0 };
+const ArraySpec kAsgnD2_Vec12A4 = {
+    "Array<Vector3>", 0xc, 4, &Assign12, nullptr, nullptr, true, 0, 0, 0, 0, 0, 0 };
+const ArraySpec kAsgnD2_VPParam18 = {
+    "Array<Video::VertexProgram::Param>", 0x18, 8, &AssignVPParam18, nullptr,
+    nullptr, false,
+    /*assign unwritten*/ 0,    0,
+    /*init   unwritten*/ 0,    0,
+    /*seed zero       */ 0x00, 0x10 };   // both String slots are dereferenced
+
+#define J4_ENTRY(ADDR, SPEC, CLEAR)                                           \
+    Site g_j4_##ADDR = { { "Collection::Array::operator= @0x" #ADDR,           \
+                           0, 0, false, false }, 0x##ADDR };                  \
+    void* RtColl_ArrayAssign_##ADDR(void* self, const void* src) {            \
+        return ArrayAssignCore(static_cast<ArrayHdr*>(self),                  \
+                               static_cast<const ArrayHdr*>(src),             \
+                               &SPEC, &CLEAR, &g_j4_##ADDR);                  \
+    }
+
+J4_ENTRY(180066b30, kAsgnD2_Blk8A2,    ArrayClearTrivial)     // clear 0x180066cd0
+J4_ENTRY(180066de0, kAsgnD2_Edge6A2,   ArrayClearTrivial)     // clear 0x180066fa0
+J4_ENTRY(1800742d0, kAsgnD2_U32A2,     ArrayClearTrivial)     // clear 0x180074360
+J4_ENTRY(180073dc0, kAsgnD2_Tri12A2,   ArrayClearTrivial)     // clear 0x180073e60
+J4_ENTRY(1800741b0, kAsgnD2_Vec12A4,   ArrayClearTrivial)     // clear 0x180074250
+J4_ENTRY(1800571b0, kAsgnD2_VPParam18, ArrayClearVPParam18)   // clear 0x180056610
+
+#undef J4_ENTRY
+
+
 }  // namespace rtcoll
 
 // ============================================================================
@@ -1665,6 +1907,24 @@ void RtCollectionDestroyPortInit() {
     // them will not exist at all.
     RegisterRuntimeAddr(0x18002afc0, (void*)&RtColl_DestroyStrings_18002afc0);
     RegisterRuntimeAddr(0x180029190, (void*)&RtColl_DestroyStrings_180029190);
+
+    // ---- CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12) --------------
+    // Element-destroy helpers, and BOTH halves of each pair: at cutover
+    // retail's rel32 from the ~Array entry point to its helper will not exist,
+    // so registering only one half would leave the other in the DLL
+    // (the 0x1800269a0 note above records the first time that bit).
+    RegisterRuntimeAddr(0x1800664c0, (void*)&RtColl_DestroyInner_1800664c0);
+    RegisterRuntimeAddr(0x180073ee0, (void*)&RtColl_DestroySubMesh_180073ee0);
+    // J2.
+    RegisterRuntimeAddr(0x180065d40, (void*)&RtColl_ArrayDtorElem_180065d40);
+    RegisterRuntimeAddr(0x180073720, (void*)&RtColl_ArrayDtorElem_180073720);
+    // J4.
+    RegisterRuntimeAddr(0x180066b30, (void*)&RtColl_ArrayAssign_180066b30);
+    RegisterRuntimeAddr(0x180066de0, (void*)&RtColl_ArrayAssign_180066de0);
+    RegisterRuntimeAddr(0x1800742d0, (void*)&RtColl_ArrayAssign_1800742d0);
+    RegisterRuntimeAddr(0x180073dc0, (void*)&RtColl_ArrayAssign_180073dc0);
+    RegisterRuntimeAddr(0x1800741b0, (void*)&RtColl_ArrayAssign_1800741b0);
+    RegisterRuntimeAddr(0x1800571b0, (void*)&RtColl_ArrayAssign_1800571b0);
 
     rtcoll::g_dprobePending = RtCollectionDestroyProbeArmed();
 
