@@ -294,14 +294,70 @@ bool RtFatalResolveEnabled() {
 
 } // namespace
 
+// ---------------------------------------------------------------------------
+// The two doors are ONE door (2026-09-12).
+//
+// A port is reached two ways: by mangled name (ResolveExport, and the mint
+// filling vtable slots) and by retail address (ResolveAddr(Module::Runtime),
+// the "address door" every inlined-call site in a ported body uses). Until
+// today the two maps were independent, so a body registered by name only was
+// a NULL address door once the DLL was gone -- the cutover gate found them one
+// boot at a time (Font::Serialize's 0x180077330 was the last). The DLL's own
+// export directory says which name is which address; rt_mint_gen.py emits it
+// as standalone/rt_export_addrs.inc and each Register* call mirrors itself
+// into the other map. An explicit registration always wins over a mirror.
+// ---------------------------------------------------------------------------
+namespace {
+struct RtExportAddr { uintptr_t addr; const char* name; };
+#include "rt_export_addrs.inc"
+
+std::unordered_map<uintptr_t, const char*>& ExportNameByAddr() {
+    static std::unordered_map<uintptr_t, const char*> m;
+    if (m.empty()) {
+        m.reserve(kRtExportAddrCount);
+        for (size_t i = 0; i < kRtExportAddrCount; ++i)
+            m.emplace(kRtExportAddrs[i].addr, kRtExportAddrs[i].name);
+    }
+    return m;
+}
+std::unordered_map<std::string, uintptr_t>& ExportAddrByName() {
+    static std::unordered_map<std::string, uintptr_t> m;
+    if (m.empty()) {
+        m.reserve(kRtExportAddrCount);
+        for (size_t i = 0; i < kRtExportAddrCount; ++i)
+            m.emplace(kRtExportAddrs[i].name, kRtExportAddrs[i].addr);
+    }
+    return m;
+}
+// Which addresses / names were registered EXPLICITLY (not by mirroring), so a
+// later explicit registration can overwrite a mirror but a mirror never
+// overwrites an explicit one.
+std::unordered_map<uintptr_t, bool>& AddrExplicit() { static std::unordered_map<uintptr_t, bool> m; return m; }
+std::unordered_map<std::string, bool>& NameExplicit() { static std::unordered_map<std::string, bool> m; return m; }
+}  // namespace
+
 void RegisterRuntimeExport(const char* mangled_name, void* our_fn) {
     if (!mangled_name || !our_fn) return;
     RtExportReg()[mangled_name] = our_fn;
+    NameExplicit()[mangled_name] = true;
+    auto it = ExportAddrByName().find(mangled_name);
+    if (it != ExportAddrByName().end()) {
+        auto& areg = RtAddrReg();
+        if (!AddrExplicit()[it->second] || areg.find(it->second) == areg.end())
+            areg[it->second] = our_fn;                 // mirror: name -> address door
+    }
 }
 
 void RegisterRuntimeAddr(uintptr_t ghidra_addr, void* our_fn) {
     if (!ghidra_addr || !our_fn) return;
     RtAddrReg()[ghidra_addr] = our_fn;
+    AddrExplicit()[ghidra_addr] = true;
+    auto it = ExportNameByAddr().find(ghidra_addr);
+    if (it != ExportNameByAddr().end()) {
+        auto& nreg = RtExportReg();
+        if (!NameExplicit()[it->second] || nreg.find(it->second) == nreg.end())
+            nreg[it->second] = our_fn;                 // mirror: address -> name door
+    }
 }
 
 void RegisterRuntimeOrdinal(uint16_t ordinal, void* our_fn) {
