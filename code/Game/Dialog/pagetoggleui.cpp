@@ -8,6 +8,7 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
+#include "system/String.h"
 #include <cstdint>
 
 // ---- UI::CheckElement type id -----------------------------------------------
@@ -63,12 +64,10 @@ void PageToggleUI_Slot4(PageToggleUI* self) {
     fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x30), 700);
 
     // Find "pages" element in dialog instance
-    char nameBuf[8] = {};
-    fn_String_Ctor_CStr(nameBuf, "pages");
+    System::String nameStr("pages");
     uint64_t pagesElem = 0;
-    fn_DialogInstance_FindElement((void*)*(uint64_t*)(s + 0x18), &pagesElem, nameBuf);
+    fn_DialogInstance_FindElement((void*)*(uint64_t*)(s + 0x18), &pagesElem, &nameStr);
     *(uint64_t*)(s + 0x38) = pagesElem;
-    fn_String_Dtor(nameBuf);
 
     // If active page is 0 or 4, restore saved page; otherwise reset saved page to 0
     int activePage = fn_PageElement_GetActivePage((void*)*(uint64_t*)(s + 0x38));

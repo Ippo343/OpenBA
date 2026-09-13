@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -152,14 +153,15 @@ void CemeteryUI_Slot7(CemeteryUI* self) {
     *(float*)((uintptr_t)progress + 0x128) = (float)burialCount;
 
     // Set text param 0: burial count
-    uint8_t strBuf[8];
-    fn_String_Format(strBuf, "%i", (unsigned int)burialCount);
-    fn_ProgressElement_SetProgressTextParameter(progress, 0, strBuf);
-    fn_String_Dtor(strBuf);
+    {
+        System::String str = System::String::Format("%i", (unsigned int)burialCount);
+        fn_ProgressElement_SetProgressTextParameter(progress, 0, &str);
+    }
 
     // Set text param 1: max slots
     int maxSlots = *(int*)((uintptr_t)cemetComp + 0x50);
-    fn_String_Format(strBuf, "%i", (unsigned int)maxSlots);
-    fn_ProgressElement_SetProgressTextParameter(progress, 1, strBuf);
-    fn_String_Dtor(strBuf);
+    {
+        System::String str = System::String::Format("%i", (unsigned int)maxSlots);
+        fn_ProgressElement_SetProgressTextParameter(progress, 1, &str);
+    }
 }

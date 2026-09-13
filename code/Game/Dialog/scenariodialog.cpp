@@ -8,6 +8,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
@@ -85,24 +86,20 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
 
     // --- Find "buttonCancel" → set element ID 100, set +0xC0 flag = 8 ---
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "buttonCancel");
+        System::String nameStr("buttonCancel");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         void* cancelBtn = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
         fn_Element_SetElementId(cancelBtn, 100);
         *(uint32_t*)((uintptr_t)cancelBtn + 0xC0) = 8;
     }
 
     // --- Find "buttonOk" → store at +0xD0, set ID 0x65 (101), disable it ---
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "buttonOk");
+        System::String nameStr("buttonOk");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         void* okBtn = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
 
         *(void**)(s + 0xD0) = okBtn;
         fn_Element_SetElementId(okBtn, 0x65);
@@ -122,12 +119,10 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
     // --- Find "tableScenario" element ---
     void* table = nullptr;
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "tableScenario");
+        System::String nameStr("tableScenario");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         table = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // --- Get scenario count and iterate ---
@@ -203,42 +198,34 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
 
         // "imageIcon" → entry[0x10]
         {
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "imageIcon");
+            System::String nameStr("imageIcon");
             uint8_t retBuf[16];
-            fn_FindElement(clonedElem, retBuf, nameStr);
+            fn_FindElement(clonedElem, retBuf, &nameStr);
             *(void**)(entry + 0x10) = *(void**)retBuf;
-            fn_String_Dtor(nameStr);
         }
 
         // "textTitle" → entry[0x18]
         {
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "textTitle");
+            System::String nameStr("textTitle");
             uint8_t retBuf[16];
-            fn_FindElement(clonedElem, retBuf, nameStr);
+            fn_FindElement(clonedElem, retBuf, &nameStr);
             *(void**)(entry + 0x18) = *(void**)retBuf;
-            fn_String_Dtor(nameStr);
         }
 
         // "textDescription" → entry[0x20]
         {
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "textDescription");
+            System::String nameStr("textDescription");
             uint8_t retBuf[16];
-            fn_FindElement(clonedElem, retBuf, nameStr);
+            fn_FindElement(clonedElem, retBuf, &nameStr);
             *(void**)(entry + 0x20) = *(void**)retBuf;
-            fn_String_Dtor(nameStr);
         }
 
         // "selectSave" → entry[0x08]
         {
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "selectSave");
+            System::String nameStr("selectSave");
             uint8_t retBuf[16];
-            fn_FindElement(clonedElem, retBuf, nameStr);
+            fn_FindElement(clonedElem, retBuf, &nameStr);
             *(void**)(entry + 0x08) = *(void**)retBuf;
-            fn_String_Dtor(nameStr);
         }
 
         // Store scenario pointer and resource index
@@ -248,56 +235,49 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         // --- Set icon sprite from scenario ---
         // GetSpriteName returns String (non-trivial return: RCX=this, RDX=retval)
         {
-            uint8_t spriteNameStr[8];
-            fn_Achievement_GetSpriteName(scenario, spriteNameStr);
+            System::String spriteNameStr;
+            fn_Achievement_GetSpriteName(scenario, &spriteNameStr);
 
             // Create UI::Sprite(retval, spriteSheet, spriteName)
             // spriteSheet = *(scenario + 0x38)
             uint64_t spriteSheet = *(uint64_t*)((uintptr_t)scenario + 0x38);
             uint8_t sprite[16];
-            fn_Sprite_Ctor(sprite, spriteSheet, spriteNameStr);
+            fn_Sprite_Ctor(sprite, spriteSheet, &spriteNameStr);
 
             // SetSprite on imageIcon
             void* imageIcon = *(void**)(entry + 0x10);
             fn_ImageElement_SetSprite(imageIcon, sprite);
-
-            // Clean up sprite name string
-            fn_String_Dtor(spriteNameStr);
         }
 
         // --- Set title text from scenario ---
         {
-            uint8_t titleStr[8];
-            fn_Achievement_GetTitle(scenario, titleStr);
+            System::String titleStr;
+            fn_Achievement_GetTitle(scenario, &titleStr);
 
             // Create UI::String(retval, stringTable, titleStr)
             // stringTable = *(scenario + 0x20)
             uint64_t stringTable = *(uint64_t*)((uintptr_t)scenario + 0x20);
             uint8_t uiStr[16];
-            fn_UIString_Ctor(uiStr, stringTable, titleStr);
+            fn_UIString_Ctor(uiStr, stringTable, &titleStr);
 
             // SetText on textTitle
             void* textTitle = *(void**)(entry + 0x18);
             fn_TextElement_SetText(textTitle, uiStr);
-
-            fn_String_Dtor(titleStr);
         }
 
         // --- Set description text from scenario ---
         {
-            uint8_t descStr[8];
-            fn_Achievement_GetDescription(scenario, descStr);
+            System::String descStr;
+            fn_Achievement_GetDescription(scenario, &descStr);
 
             // Create UI::String(retval, stringTable, descStr)
             uint64_t stringTable = *(uint64_t*)((uintptr_t)scenario + 0x20);
             uint8_t uiStr[16];
-            fn_UIString_Ctor(uiStr, stringTable, descStr);
+            fn_UIString_Ctor(uiStr, stringTable, &descStr);
 
             // SetText on textDescription
             void* textDesc = *(void**)(entry + 0x20);
             fn_TextElement_SetText(textDesc, uiStr);
-
-            fn_String_Dtor(descStr);
         }
 
         // --- Push entry to dynamic array at self+0xD8 ---
@@ -392,17 +372,14 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
     uintptr_t entryArray = *(uintptr_t*)(s + 0xD8);
     uintptr_t scenario = *(uintptr_t*)(entryArray + (uintptr_t)selectedIdx * 0x38 + 0x28);
 
-    // Get save name string from scenario+0x88
-    uint8_t saveNameStr[8];
-    fn_String_Ctor_CStr(saveNameStr, "");
-    fn_String_Assign(saveNameStr, (void*)(scenario + 0x88));
+    // Get save name string from scenario+0x88. B.3.1 bridge: raw exe-struct
+    // SystemString fields, not owned here.
+    System::String saveNameStr = *reinterpret_cast<System::String*>(scenario + 0x88);
 
     // Get display name string from scenario+0x58
-    uint8_t displayNameStr[8];
-    fn_String_Ctor_CStr(displayNameStr, "");
-    fn_String_Assign(displayNameStr, (void*)(scenario + 0x58));
+    System::String displayNameStr = *reinterpret_cast<System::String*>(scenario + 0x58);
 
-    uint64_t saveStrPtr = *(uint64_t*)saveNameStr;
+    uint64_t saveStrPtr = (uint64_t)(uintptr_t)saveNameStr._data;
     bool hasSaveState = (saveStrPtr != 0 && *(int*)(saveStrPtr - 8) > 0);
     printf("[ScenarioDialog::LoadSelected] selectedIdx=%d, scenario=%p, hasSaveState=%d, saveStrPtr=%p\n",
            selectedIdx, (void*)scenario, hasSaveState, (void*)saveStrPtr);
@@ -441,7 +418,7 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
 
         // Call original FUN_1400b4540 directly — constructs GameUpdateLoop ->
         // GameLoadDialogLoopT -> LoaderLoop chain and sets next loop.
-        fn_StartNewGame(parentCtrl, displayNameStr, seedVal, terrainSizeVal,
+        fn_StartNewGame(parentCtrl, &displayNameStr, seedVal, terrainSizeVal,
                         disasterOff, mapGen, terrainGen, climateGen,
                         scenarioResIdx, nullIBP);
         printf("[ScenarioDialog::LoadSelected] fn_StartNewGame returned\n");
@@ -456,22 +433,18 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
             else if (!fn_SaveLoad_SetSaveName) missing = "SaveLoad::SetSaveName";
             else if (!fn_Persistence_GetSavePath) missing = "Persistence::GetSavePath";
             else if (!fn_FileSystem_GetDataDirectory) missing = "FileSystem::GetDataDirectory";
-            else if (!fn_String_Assign) missing = "String::operator=";
             else if (!fn_SaveLoad_GetOperation) missing = "SaveLoad::GetOperation";
             else if (!fn_SaveLoad_Update) missing = "SaveLoad::Update";
             else if (!fn_Time_Ctor_Float) missing = "Time::Time(float)";
-            else if (!fn_Filename_Dtor) missing = "Filename::~Filename";
             if (missing) {
                 fprintf(stderr, "[ScenarioDialog] SAVED branch ABORTED - %s is NULL\n", missing);
                 fflush(stderr);
-                fn_String_Dtor(saveNameStr);
-                fn_String_Dtor(displayNameStr);
                 return;
             }
         }
         void* saveLoad = *g_pSaveLoadSingleton;
         fn_SaveLoad_SetOperation(saveLoad, 3, 0);
-        fn_SaveLoad_SetSaveName(saveLoad, saveNameStr, 2);
+        fn_SaveLoad_SetSaveName(saveLoad, &saveNameStr, 2);
 
         // Get save path and set data directory
         // Original flow (from assembly at 0x140077d41-0x140077d96):
@@ -481,14 +454,22 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         //   4. Destroy RSP+0xb0 (GetDataDirectory temp)
         //   5. SaveLoad::Update loop
         //   6. persistence+0x90 = RSP+0xa8 (restore from GetSavePath result)
+        //
+        // Despite the "Filename return buffer" comment this slot's actual runtime
+        // type (per Persistence::GetSavePath's export signature) is System::String;
+        // String and Filename share the exact same 8-byte layout and release
+        // sequence (Filename.h), so this was always safe, just misnamed.
         void* persistence = *g_pPersistenceSingleton;
-        uint8_t savePathBuf[16];  // Filename return buffer (non-trivial return ABI)
-        fn_Persistence_GetSavePath(persistence, savePathBuf);
-        void* fileSystem = *g_pFileSystemSingleton2;
-        uint8_t dataDirBuf[16];  // String return buffer (non-trivial return ABI)
-        void* dataDir = fn_FileSystem_GetDataDirectory(fileSystem, dataDirBuf);
-        fn_String_Assign((void*)(*(uintptr_t*)g_pPersistenceSingleton + 0x90), dataDir);
-        fn_Filename_Dtor(dataDirBuf);  // destroy GetDataDirectory temp (NOT savePathBuf!)
+        System::String savePathBuf;  // kept alive until after the SaveLoad::Update loop
+        fn_Persistence_GetSavePath(persistence, &savePathBuf);
+        // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
+        System::String& persistenceDataDir = *reinterpret_cast<System::String*>(*(uintptr_t*)g_pPersistenceSingleton + 0x90);
+        {
+            void* fileSystem = *g_pFileSystemSingleton2;
+            System::String dataDirBuf;  // destroyed at the end of this block (matches retail's early release)
+            fn_FileSystem_GetDataDirectory(fileSystem, &dataDirBuf);
+            persistenceDataDir = dataDirBuf;
+        }
 
         // Run SaveLoad::Update loop until operation completes
         int operation = fn_SaveLoad_GetOperation(saveLoad);
@@ -507,7 +488,7 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         printf("[ScenarioDialog::LoadSelected] SaveLoad loop done after %d iterations\n", loopCount);
 
         // Restore persistence path from GetSavePath result (matches original at 0x140077df0)
-        fn_String_Assign((void*)(*(uintptr_t*)g_pPersistenceSingleton + 0x90), savePathBuf);
+        persistenceDataDir = savePathBuf;
         // NOT Filename::~Filename, and NOT here. Persistence::GetSavePath returns a
         // System::String (verified in the DLL export table), so destroying its 8-byte
         // result with the Filename dtor read the uninitialised tail of this 16-byte
@@ -528,11 +509,8 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         // Use fn_LoadScenarioFromSave for the complex loop construction
         fn_LoadScenarioFromSave(parentCtrl, savedState,
                                  (void*)(uintptr_t)scenarioResIdx, nullIBP);
-        fn_String_Dtor(savePathBuf);   // retail: String::~String(local_res10)
+        // retail: String::~String(local_res10) — savePathBuf's scope ends here, matching.
     }
-
-    fn_String_Dtor(displayNameStr);
-    fn_String_Dtor(saveNameStr);
 }
 
 // ============================================================

@@ -18,6 +18,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #if defined(_DEBUG)
 #include <cstdio>
@@ -74,12 +75,11 @@ static void* FindCompInDesc(uintptr_t desc, uint32_t typeId) {
 
 // Helper: find element by name via DialogInstance::FindElement, return raw ptr
 static void* FindDialogElem(void* dialogInst, const char* name) {
-    uint8_t nameStr[8], retBuf[16];
-    fn_String_Ctor_CStr(nameStr, name);
+    System::String nameStr(name);
+    uint8_t retBuf[16];
     fn_InternalBasePtr_CheckPtr((void*)&dialogInst);
-    fn_DialogInstance_FindElement(dialogInst, retBuf, nameStr);
+    fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
     void* result = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
     return result;
 }
 
@@ -287,13 +287,11 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
 
     // Find first label element using format "labelBuild%i"
     {
-        uint8_t fmtBuf[16];
-        fn_String_Format(fmtBuf, "labelBuild%i", (uint64_t)*(uint32_t*)(s + 0x48));
+        System::String fmtBuf = System::String::Format("labelBuild%i", (uint64_t)*(uint32_t*)(s + 0x48));
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* retBuf[2] = {0, 0};
-        fn_DialogInstance_FindElement(*(void**)(s + 0x18), retBuf, fmtBuf);
+        fn_DialogInstance_FindElement(*(void**)(s + 0x18), retBuf, &fmtBuf);
         void* labelElem = retBuf[0];
-        fn_String_Dtor(fmtBuf);
 
         while (labelElem) {
             fn_InternalBasePtr_CheckPtr(&labelElem);
@@ -319,11 +317,10 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             *slot = *(uint64_t*)ibpBuf;
 
             // Find next label
-            fn_String_Format(fmtBuf, "labelBuild%i", (uint64_t)newCount);
+            fmtBuf = System::String::Format("labelBuild%i", (uint64_t)newCount);
             fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
-            fn_DialogInstance_FindElement(*(void**)(s + 0x18), retBuf, fmtBuf);
+            fn_DialogInstance_FindElement(*(void**)(s + 0x18), retBuf, &fmtBuf);
             labelElem = retBuf[0];
-            fn_String_Dtor(fmtBuf);
         }
     }
 
@@ -399,11 +396,9 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             }
 
             // Format count as "%i" and set as text parameter 0
-            uint8_t countStr[8];
-            fn_String_Format(countStr, "%i", (uint64_t)*(uint32_t*)countPtr);
+            System::String countStr = System::String::Format("%i", (uint64_t)*(uint32_t*)countPtr);
             fn_InternalBasePtr_CheckPtr((void*)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8));
-            fn_TextElement_SetParameter(label, 0, countStr);
-            fn_String_Dtor(countStr);
+            fn_TextElement_SetParameter(label, 0, &countStr);
 
             // Show the label
             fn_InternalBasePtr_CheckPtr((void*)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8));

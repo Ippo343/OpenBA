@@ -16,22 +16,23 @@
 #include "options.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer
 // ============================================================
 static void* FindElement(void* dialog, const char* name) {
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, name);
+    System::String nameStr(name);
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(dialog, retBuf, nameStr);
+    fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
     void* elem = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
     return elem;
 }
 
@@ -129,8 +130,8 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
                               (void*)((uintptr_t)typed + 0x28));
 
             // Convert UI::String to System::String
-            uint8_t sysStr[8];
-            fn_UIString_ToSystemString(uiStr, sysStr);
+            System::String sysStr;
+            fn_UIString_ToSystemString(uiStr, &sysStr);
 
             fn_InternalBasePtr_CheckPtr(comboFieldPtr);
             void* combo = *comboFieldPtr;
@@ -139,8 +140,7 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
             uint8_t sprite[16];
             fn_Sprite_Ctor(sprite, 0, nullptr);
 
-            fn_ComboElement_AddItem(combo, sprite, sysStr, (void*)(intptr_t)i);
-            fn_String_Dtor(sysStr);
+            fn_ComboElement_AddItem(combo, sprite, &sysStr, (void*)(intptr_t)i);
         }
 
         // Re-fetch count in case it changed (matches original)
@@ -157,45 +157,35 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
 // Loads "Game/Names/Cities.ndb", generates a random town name using the
 // NameDatabase, then checks if it ends in "vill" and appends "e" to make "ville".
 // Original: 0x140099ac0.
-static void* GenerateTownName(void* retStr, void* random, int maxLen) {
+static void GenerateTownName(System::String& retStr, void* random, int maxLen) {
     // Load the city-name database. The IsDerivedFrom type-check retail runs on
     // the result is skipped: the standalone factory tree is incomplete and the
     // walk NULL-faults, while FindOrLoad by exact filename is authoritative
     // (same call shape as citizen_names.cpp's Male.ndb/Female.ndb load).
     void* nameDB = nullptr;
     if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton &&
-        fn_Filename_CtorCStr && fn_ExternalFactory_FindOrLoad && fn_Filename_Dtor) {
-        uint8_t fnBuf[8] = {0};
-        fn_Filename_CtorCStr(fnBuf, "Game/Names/Cities.ndb");
-        nameDB = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnBuf);
-        fn_Filename_Dtor(fnBuf);
+        fn_ExternalFactory_FindOrLoad) {
+        System::Filename fn("Game/Names/Cities.ndb");
+        nameDB = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fn);
     }
 
     // minLen 5 is retail's constant; maxLen is derived from the edit box's
     // _maxLength by the caller. NameDB_GenerateName (0x1400a4b30, registered by
     // standalone/reg_namedb.cpp) constructs the String in retStr even when the
     // database is missing, so retStr is always live for the suffix fix-up below.
-    fn_NameDB_GenerateName(retStr, nameDB, random, 5, maxLen);
+    fn_NameDB_GenerateName(&retStr, nameDB, random, 5, maxLen);
 
     // Retail: a name longer than 4 chars ending in "vill" gets an "e" appended,
     // so the generator's "-vill" stems read as "-ville".
-    uint64_t sp = *(uint64_t*)retStr;
     bool endsVill = false;
-    if (sp != 0 && fn_String_SubString && fn_String_Equals && fn_String_Append) {
-        int slen = *(int*)(sp - 8);          // System::String length lives at ptr-8
-        if (slen > 4) {
-            uint8_t sfx[8] = {0};
-            fn_String_SubString(retStr, sfx, slen - 4, slen - 1);
-            endsVill = fn_String_Equals(sfx, "vill");
-            fn_String_Dtor(sfx);
-        }
+    int slen = retStr.GetLength();
+    if (slen > 4) {
+        System::String sfx = retStr.SubString(slen - 4, slen - 1);
+        endsVill = (sfx == "vill");
     }
     if (endsVill) {
-        uint8_t tmpRet[8] = {0};
-        fn_String_Append(retStr, tmpRet, "e");
-        fn_String_Dtor(tmpRet);
+        retStr += "e";
     }
-    return retStr;
 }
 
 static void GenerateRandomName(void* editNamePtr, void* random) {
@@ -213,22 +203,21 @@ static void GenerateRandomName(void* editNamePtr, void* random) {
     int finalAdj = (int)((uint32_t)longDivAdj >> 31);
     int nameLen = (divResult + finalAdj) * 2;
 
-    uint8_t nameStr[8];
+    System::String nameStr;
     GenerateTownName(nameStr, random, nameLen);
 
     // Mirrors the seed logging below: both halves of the "randomise" row report
     // what they produced, so a dead generator is visible in the log instead of
     // only on screen.
     {
-        uint64_t sp = *(uint64_t*)nameStr;
+        const char* sp = nameStr._data;
         fprintf(stderr, "[NewGameDialog] town name generated: \"%s\" (maxLen=%d)\n",
-                sp ? (const char*)sp : "(empty)", nameLen);
+                sp ? sp : "(empty)", nameLen);
         fflush(stderr);
     }
 
     fn_InternalBasePtr_CheckPtr(editNamePtr);
-    fn_EditElement_SetText_SysStr(*(void**)editNamePtr, nameStr);
-    fn_String_Dtor(nameStr);
+    fn_EditElement_SetText_SysStr(*(void**)editNamePtr, &nameStr);
 }
 
 // ============================================================
@@ -861,9 +850,14 @@ void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t
             // Calls UpdateLoop base ctor, then sets vtable and fields.
             fn_UpdateLoop_Ctor(gameLoop);
             *(void**)gameLoop = (void*)g_GameUpdateLoop_Vtable;
-            // Copy name string to +0x28
-            fn_String_Ctor_CStr((void*)((uintptr_t)gameLoop + 0x28), "");
-            fn_String_Assign((void*)((uintptr_t)gameLoop + 0x28), nameStr);
+            // Copy name string to +0x28 (GameUpdateLoop::name, a raw offset into
+            // freshly-allocated memory — placement-construct then assign).
+            {
+                void* nameField = (void*)((uintptr_t)gameLoop + 0x28);
+                new (nameField) System::String();  // B.3.1 bridge — GameUpdateLoop::name field
+                *reinterpret_cast<System::String*>(nameField) =
+                    *reinterpret_cast<const System::String*>(nameStr);  // B.3.1 bridge
+            }
             *(uint32_t*)((uintptr_t)gameLoop + 0x30) = seed;
             *(uint32_t*)((uintptr_t)gameLoop + 0x34) = terrainSize;
             *(uint64_t*)((uintptr_t)gameLoop + 0x38) = 0;
@@ -900,9 +894,9 @@ void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t
         if (dlLoop) {
             uint8_t delayTime[8];
             fn_Time_Ctor_Float(delayTime, 1.0f);
-            uint8_t loadingStr[8];
-            GetLoadingSoundString(loadingStr);
-            fn_DialogLoaderLoopT_Ctor(dlLoop, loadingStr, pGameLoop, delayTime);
+            System::String loadingStr;
+            GetLoadingSoundString(&loadingStr);
+            fn_DialogLoaderLoopT_Ctor(dlLoop, &loadingStr, pGameLoop, delayTime);
             *(void**)dlLoop = (void*)g_GameLoadDialogLoopT_Vtable;
             *(uint32_t*)((uintptr_t)dlLoop + 0x188) = 0xFF000000;
             *(uint32_t*)((uintptr_t)dlLoop + 0x18C) = 0xFF000000;
@@ -910,7 +904,6 @@ void* StartNewGame_Impl(void* worldSetup, void* nameStr, uint32_t seed, uint32_t
             fn_Random_Default_Ctor((void*)((uintptr_t)dlLoop + 0x194));
             *(uint64_t*)((uintptr_t)dlLoop + 0xB58) = 0;
             *(uint8_t*)((uintptr_t)dlLoop + 0x40) = 0;
-            fn_String_Dtor(loadingStr);
             pDlLoop = dlLoop;
         }
 

@@ -1,5 +1,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstring>
 
@@ -29,103 +31,83 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
 
     // editName → +0xB8
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "editName");
+        System::String nameStr("editName");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         *(void**)(s + 0xB8) = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // numberSeed → +0xC0
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "numberSeed");
+        System::String nameStr("numberSeed");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         *(void**)(s + 0xC0) = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // textCondition → +0xE0
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "textCondition");
+        System::String nameStr("textCondition");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         *(void**)(s + 0xE0) = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // textTerrain → +0xC8
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "textTerrain");
+        System::String nameStr("textTerrain");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         *(void**)(s + 0xC8) = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // textTerrainSize → +0xD0
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "textTerrainSize");
+        System::String nameStr("textTerrainSize");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         *(void**)(s + 0xD0) = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // textClimate → +0xD8
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "textClimate");
+        System::String nameStr("textClimate");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         *(void**)(s + 0xD8) = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // textDisaster → +0xE8
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "textDisaster");
+        System::String nameStr("textDisaster");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         *(void**)(s + 0xE8) = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // --- Find button elements (local vars, not stored on self) ---
     void* buttonNewName = nullptr;
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "buttonNewName");
+        System::String nameStr("buttonNewName");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         buttonNewName = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     void* buttonCancel = nullptr;
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "buttonCancel");
+        System::String nameStr("buttonCancel");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         buttonCancel = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     void* buttonOk = nullptr;
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "buttonOk");
+        System::String nameStr("buttonOk");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         buttonOk = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // Store OK button at +0xF0
@@ -147,11 +129,10 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
 
     // Set map name on editName: FUN_140011f90 copies System::String at gameWorld+0x28
     {
-        uint8_t nameBuf[8];
-        fn_String_Ctor_Copy(nameBuf, (void*)((uintptr_t)gameWorld + 0x28));
+        // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
+        System::String nameBuf(*reinterpret_cast<System::String*>((uintptr_t)gameWorld + 0x28));
         void* editName = *(void**)(s + 0xB8);
-        if (editName) fn_EditElement_SetText_SysStr(editName, nameBuf);
-        fn_String_Dtor(nameBuf);
+        if (editName) fn_EditElement_SetText_SysStr(editName, &nameBuf);
     }
 
     // Set seed on numberSeed
@@ -259,13 +240,14 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
         // buttonOk: save map name to game world (+0x28) and close
         // FUN_14006b690: operator=(gameWorld+0x28, editName+0xC8)
         void* gameWorld = *g_pGameWorldSingleton;
-        void* gameWorldName = (void*)((uintptr_t)gameWorld + 0x28);
+        // B.3.1 bridge: raw exe-struct SystemString fields, not owned here.
+        System::String& gameWorldName = *reinterpret_cast<System::String*>((uintptr_t)gameWorld + 0x28);
 
         // editName element at +0xB8, name String at editName+0xC8
         void* editName = *(void**)(s + 0xB8);
         if (editName) {
-            void* nameStr = (void*)((uintptr_t)editName + 0xC8);
-            fn_String_Assign(gameWorldName, nameStr);
+            System::String& nameStr = *reinterpret_cast<System::String*>((uintptr_t)editName + 0xC8);
+            gameWorldName = nameStr;
         }
 
         // Close dialog
@@ -305,39 +287,33 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
 
             // GenerateTownName — reimpl of FUN_140099ac0
             // Load NameDatabase, generate name, fix "vill" suffix
-            uint8_t nameBuf[8];
+            System::String nameBuf;
             {
-                uint8_t fnBuf[8];
-                fn_Filename_CtorCStr(fnBuf, "Game/Names/Cities.ndb");
-                void* nameDB = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnBuf);
-                fn_Filename_Dtor(fnBuf);
+                System::Filename fnBuf("Game/Names/Cities.ndb");
+                void* nameDB = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &fnBuf);
                 // The IsDerivedFrom type-check retail runs here is skipped, as in
                 // NewGameDialog::GenerateTownName and citizen_names.cpp: the
                 // standalone factory tree is incomplete so the walk NULL-faults,
                 // and *g_TypeId_NameDatabase is itself NULL until something
                 // lazy-resolves it. FindOrLoad by exact filename is authoritative.
 
-                fn_NameDB_GenerateName(nameBuf, nameDB, random, 5, nameLen);
+                fn_NameDB_GenerateName(&nameBuf, nameDB, random, 5, nameLen);
 
-                uint64_t sp = *(uint64_t*)nameBuf;
+                uint64_t sp = (uint64_t)(uintptr_t)nameBuf._data;
                 bool endsVill = false;
                 if (sp != 0) {
                     int slen = *(int*)(sp - 8);
                     if (slen > 4) {
-                        uint8_t sfx[8];
-                        fn_String_SubString(nameBuf, sfx, slen - 4, slen - 1);
-                        endsVill = fn_String_Equals(sfx, "vill");
-                        fn_String_Dtor(sfx);
+                        System::String sfx = nameBuf.SubString(slen - 4, slen - 1);
+                        endsVill = (sfx == "vill");
                     }
                 }
                 if (endsVill) {
-                    uint8_t tmpRet[8];
-                    fn_String_Append(nameBuf, tmpRet, "e");
-                    fn_String_Dtor(tmpRet);
+                    // ret is unused (see recipe's Append note): mutate nameBuf directly.
+                    nameBuf += "e";
                 }
             }
-            fn_EditElement_SetText_SysStr(editName, nameBuf);
-            fn_String_Dtor(nameBuf);
+            fn_EditElement_SetText_SysStr(editName, &nameBuf);
         }
     }
 }

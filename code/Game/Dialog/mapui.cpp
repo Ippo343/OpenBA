@@ -13,6 +13,8 @@
 #include "Dialog/ui_panels.h"
 #include "options.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -67,16 +69,11 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     *materialOut = materialPtr;
 
     // --- Load material resource ---
-    uint8_t filenameBuf[16];
-    if (useBlend == '\0') {
-        fn_String_Ctor_CStr(filenameBuf, "Material/UI/UIMaterialNoBlend.rsc");
-    } else {
-        fn_String_Ctor_CStr(filenameBuf, "Material/UI/UIMaterial.rsc");
-    }
-    fn_Filename_AdjustDelimiters(filenameBuf);
+    System::Filename filenameObj(useBlend == '\0' ? "Material/UI/UIMaterialNoBlend.rsc"
+                                                   : "Material/UI/UIMaterial.rsc");
 
     MAPTRC("material alloc+ctor done");
-    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, &filenameObj);
     void* material = nullptr;
     if (ext) {
         if (g_TypeId_Material && fn_IsDerivedFrom(ext, *g_TypeId_Material)) {
@@ -84,14 +81,11 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
         }
     }
     fn_MaterialInstance_SetMaterial(*materialOut, material);
-    fn_String_Dtor(filenameBuf);
 
     // --- Add ImageBuffer as "diffuse" texture ---
-    uint8_t diffuseStr[8];
-    fn_String_Ctor_CStr(diffuseStr, "diffuse");
+    System::String diffuseStr("diffuse");
     MAPTRC("SetMaterial done, add diffuse texture");
-    fn_MaterialInstance_AddTexture(*materialOut, diffuseStr, imageBuffer);
-    fn_String_Dtor(diffuseStr);
+    fn_MaterialInstance_AddTexture(*materialOut, &diffuseStr, imageBuffer);
 
     MAPTRC("BuildParameters");
     fn_MaterialInstance_BuildParameters(*materialOut);
@@ -117,23 +111,19 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
 
     // Set sprite sheet name/group strings (empty) and dimensions
     uintptr_t ss = (uintptr_t)*spriteSheetOut;
-    uint64_t emptyStr1 = 0, emptyStr2 = 0;
-    fn_String_Assign((void*)(ss + 0x40), &emptyStr1);
-    fn_String_Assign((void*)(ss + 0x38), &emptyStr2);
+    System::String emptyStr1, emptyStr2;
+    *reinterpret_cast<System::String*>(ss + 0x40) = emptyStr1;  // B.3.1 bridge
+    *reinterpret_cast<System::String*>(ss + 0x38) = emptyStr2;  // B.3.1 bridge
     *(int*)(ss + 0x48) = imgW;
     *(int*)(ss + 0x4c) = imgH;
     *(uint8_t*)(ss + 0x50) = 0;
-    fn_String_Dtor(&emptyStr2);
-    fn_String_Dtor(&emptyStr1);
 
     // Add sprite info: empty name, empty group, full image rect
     imgW = fn_ImageBuffer_Width(imageBuffer);
     imgH = fn_ImageBuffer_Height(imageBuffer);
-    uint64_t nameEmpty = 0, groupEmpty = 0;
+    System::String nameEmpty, groupEmpty;
     MAPTRC("AddSpriteInfo");
     fn_SpriteSheet_AddSpriteInfo(*spriteSheetOut, &nameEmpty, &groupEmpty, 0, 0, imgW, imgH);
-    fn_String_Dtor(&nameEmpty);
-    fn_String_Dtor(&groupEmpty);
     MAPTRC("AddSpriteInfo done");
 
     // Set sprite info with UV scale
@@ -143,13 +133,12 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     fn_SpriteSheet_SetSpriteInfo(*spriteSheetOut, 0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);
 
     // --- Find named image element and set sprite ---
-    uint8_t elemNameStr[8];
-    fn_String_Ctor_CStr(elemNameStr, elementName);
+    System::String elemNameStr(elementName);
 
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     void* dialogElem = *(void**)(s + 0x20);
     uint64_t foundElem = 0;
-    fn_FindElement(dialogElem, &foundElem, elemNameStr);
+    fn_FindElement(dialogElem, &foundElem, &elemNameStr);
 
     fn_InternalBasePtr_CheckPtr((void*)&foundElem);
     void* rawElem = (void*)foundElem;
@@ -165,7 +154,6 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
                elementName, rawElem, imageElem, *materialOut, *spriteSheetOut);
     uint64_t imageElemPtr = 0;
     fn_InternalBasePtr_Ctor((void*)&imageElemPtr, imageElem);
-    fn_String_Dtor(elemNameStr);
 
     // Create Sprite from SpriteSheet (index 0) and set on element
     uint8_t spriteBuf[16];

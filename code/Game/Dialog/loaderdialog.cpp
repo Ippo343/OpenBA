@@ -1,5 +1,6 @@
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -13,12 +14,10 @@
 void LoaderDialog_Slot4(LoaderDialog* self) {
     uintptr_t s = (uintptr_t)self;
 
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, "loadingImage");
+    System::String nameStr("loadingImage");
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(self, retBuf, nameStr);
+    fn_DialogInstance_FindElement(self, retBuf, &nameStr);
     *(void**)(s + 0xB8) = *(void**)retBuf;
-    fn_String_Dtor(nameStr);
 }
 
 // LoaderDialog::Slot6 (0x1400B2D00) — Draw

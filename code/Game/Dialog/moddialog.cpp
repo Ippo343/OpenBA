@@ -34,6 +34,8 @@
 #include "options.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -163,17 +165,13 @@ conflict_done:
             uint32_t versionMinor = *(uint32_t*)(m + 0x1C);
 
             // GetVersionString returns a String for the version major (as game build version)
-            uint8_t buildStr[8] = {};
-            fn_Configuration_GetVersionString(buildStr, versionMajor, false);
+            System::String buildStr;
+            fn_Configuration_GetVersionString(&buildStr, versionMajor, false);
 
-            uint8_t formatted[8] = {};
-            fn_String_Format(formatted, "%i (%s)", (uint64_t)versionMinor, *(const char**)buildStr);
+            System::String formatted = System::String::Format("%i (%s)", (uint64_t)versionMinor, buildStr._data);
 
             fn_InternalBasePtr_CheckPtr((void*)(entry + 0x10));
-            fn_TextElement_SetParameter(*(void**)(entry + 0x10), 0, formatted);
-
-            fn_String_Dtor(formatted);
-            fn_String_Dtor(buildStr);
+            fn_TextElement_SetParameter(*(void**)(entry + 0x10), 0, &formatted);
         }
 
         // Set enabled checkbox state: entry+0x28 = checkLoaded, element +0xD8 = enabled byte
@@ -236,44 +234,38 @@ void ModDialog_Slot4(ModDialog* self) {
 
     // --- buttonCancel (id=100, set +0xC0=8) ---
     {
-        uint8_t retbuf[8];
-        fn_String_Ctor_CStr(retbuf, "buttonCancel");
+        System::String retbuf("buttonCancel");
         uint8_t elemBuf[8];
-        fn_DialogInstance_FindElement(self, elemBuf, retbuf);
+        fn_DialogInstance_FindElement(self, elemBuf, &retbuf);
         fn_InternalBasePtr_CheckPtr(elemBuf);
         void* elem = *(void**)elemBuf;
         fn_Element_SetElementId(elem, 100);
         fn_InternalBasePtr_CheckPtr(elemBuf);
         *(uint32_t*)(*(uintptr_t*)elemBuf + 0xC0) = 8;
-        fn_String_Dtor(retbuf);
     }
 
     // --- buttonOk (id=0x65) ---
     uint8_t buttonOkBuf[8] = {};
     {
-        uint8_t retbuf[8];
-        fn_String_Ctor_CStr(retbuf, "buttonOk");
+        System::String retbuf("buttonOk");
         uint8_t elemBuf[8];
-        fn_DialogInstance_FindElement(self, elemBuf, retbuf);
+        fn_DialogInstance_FindElement(self, elemBuf, &retbuf);
         fn_InternalBasePtr_CheckPtr(elemBuf);
         void* elem = *(void**)elemBuf;
         fn_Element_SetElementId(elem, 0x65);
-        fn_String_Dtor(retbuf);
         *(uint64_t*)buttonOkBuf = *(uint64_t*)elemBuf;
     }
     (void)buttonOkBuf;
 
     // --- tableMods: find and store at self+0xC8 ---
     {
-        uint8_t retbuf[8];
-        fn_String_Ctor_CStr(retbuf, "tableMods");
+        System::String retbuf("tableMods");
         uint8_t elemBuf[8];
-        fn_DialogInstance_FindElement(self, elemBuf, retbuf);
+        fn_DialogInstance_FindElement(self, elemBuf, &retbuf);
         fn_InternalBasePtr_CheckPtr(elemBuf);
         void* elem = *(void**)elemBuf;
         // Store InternalPtr at +0xC8
         fn_InternalBasePtr_Ctor((void*)(s + 0xC8), elem);
-        fn_String_Dtor(retbuf);
     }
 
     void* modSingleton = *(void**)g_ppModificationSingleton;
@@ -330,15 +322,13 @@ void ModDialog_Slot4(ModDialog* self) {
         };
 
         for (auto& e : findList) {
-            uint8_t strBuf[8];
-            fn_String_Ctor_CStr(strBuf, e.name);
+            System::String strBuf(e.name);
             fn_InternalBasePtr_CheckPtr(cloneBuf);
             uint8_t retBuf[8];
-            fn_FindElement(clonedElem, retBuf, strBuf);
+            fn_FindElement(clonedElem, retBuf, &strBuf);
             fn_InternalBasePtr_CheckPtr(retBuf);
             void* found = *(void**)retBuf;
             fn_InternalBasePtr_Ctor(e.buf, found);
-            fn_String_Dtor(strBuf);
         }
 
         // Get vtable[0x58] child (Child(0)) of cloned element
@@ -432,25 +422,21 @@ void ModDialog_Slot4(ModDialog* self) {
 
         // Load "Material/UI/UIMaterial.rsc", IsDerivedFrom Material, SetMaterial
         {
-            uint8_t filenameBuf[8];
-            fn_Filename_CtorCStr(filenameBuf, "Material/UI/UIMaterial.rsc");
+            System::Filename filenameBuf("Material/UI/UIMaterial.rsc");
             void* extFactory = *(void**)g_pExternalFactorySingleton;
-            void* ext = fn_ExternalFactory_FindOrLoad(extFactory, filenameBuf);
+            void* ext = fn_ExternalFactory_FindOrLoad(extFactory, &filenameBuf);
             void* material = nullptr;
             if (ext) {
                 bool derived = fn_IsDerivedFrom(ext, g_TypeId_Material ? *g_TypeId_Material : 0);
                 if (derived) material = ext;
             }
             fn_MaterialInstance_SetMaterial(matInst, material);
-            fn_Filename_Dtor(filenameBuf);
         }
 
         // AddTexture("diffuse", imageBuffer)
         {
-            uint8_t strBuf[8];
-            fn_String_Ctor_CStr(strBuf, "diffuse");
-            fn_MaterialInstance_AddTexture(matInst, strBuf, imgBuf);
-            fn_String_Dtor(strBuf);
+            System::String strBuf("diffuse");
+            fn_MaterialInstance_AddTexture(matInst, &strBuf, imgBuf);
         }
 
         fn_MaterialInstance_BuildParameters(matInst);
@@ -466,10 +452,10 @@ void ModDialog_Slot4(ModDialog* self) {
             // Set materialInstance at +0x30
             *(void**)((uintptr_t)sprSheet + 0x30) = matInst;
 
-            // operator= empty strings at +0x38 and +0x40
-            uint64_t emptyStr1 = 0, emptyStr2 = 0;
-            fn_String_Assign((void*)((uintptr_t)sprSheet + 0x40), &emptyStr1);
-            fn_String_Assign((void*)((uintptr_t)sprSheet + 0x38), &emptyStr2);
+            // operator= empty strings at +0x38 and +0x40 (raw SpriteSheet fields; not our struct)
+            System::String emptyStr1, emptyStr2;
+            *reinterpret_cast<System::String*>((uintptr_t)sprSheet + 0x40) = emptyStr1;  // B.3.1 bridge
+            *reinterpret_cast<System::String*>((uintptr_t)sprSheet + 0x38) = emptyStr2;  // B.3.1 bridge
 
             // Set w/h at +0x48/+0x4c to 48 (0x30)
             *(uint32_t*)((uintptr_t)sprSheet + 0x48) = 0x30;
@@ -503,48 +489,39 @@ void ModDialog_Slot4(ModDialog* self) {
 
     // Load "Dialog/Mod.rsc:browser", add as controller with type g_TypeId_BrowserController
     {
-        uint8_t filenameBuf[8];
-        fn_Filename_CtorCStr(filenameBuf, "Dialog/Mod.rsc:browser");
+        System::Filename filenameBuf("Dialog/Mod.rsc:browser");
         void* extFactory = *(void**)g_pExternalFactorySingleton;
-        void* ext = fn_ExternalFactory_FindOrLoad(extFactory, filenameBuf);
+        void* ext = fn_ExternalFactory_FindOrLoad(extFactory, &filenameBuf);
 
         // Pass browser external directly; original has IsDerivedFrom check but the
         // _typeInfo_exref is context-dependent (Ghidra merges refs) and the browser
         // controller IS the right type — passing null would silently break the UI.
         void* browserExt = ext;
 
-        fn_Filename_Dtor(filenameBuf);
-
         // AddController(self, typeId, 0, 0, browserExt, "groupBrowse")
-        uint8_t groupStr[8];
-        fn_String_Ctor_CStr(groupStr, "groupBrowse");
+        System::String groupStr("groupBrowse");
         uint32_t typeId = g_TypeId_BrowserController ? *g_TypeId_BrowserController : 0;
-        fn_DialogInstance_AddController6(self, typeId, 0, 0, browserExt, groupStr);
-        fn_String_Dtor(groupStr);
+        fn_DialogInstance_AddController6(self, typeId, 0, 0, browserExt, &groupStr);
     }
 
     // Hide "buttonBrowse"
     {
-        uint8_t strBuf[8];
-        fn_String_Ctor_CStr(strBuf, "buttonBrowse");
+        System::String strBuf("buttonBrowse");
         uint8_t elemBuf[8];
-        fn_DialogInstance_FindElement(self, elemBuf, strBuf);
+        fn_DialogInstance_FindElement(self, elemBuf, &strBuf);
         fn_InternalBasePtr_CheckPtr(elemBuf);
         void* elem = *(void**)elemBuf;
         fn_Element_Hide(elem, true);
-        fn_String_Dtor(strBuf);
     }
 
     // Hide "groupProgress"
     {
-        uint8_t strBuf[8];
-        fn_String_Ctor_CStr(strBuf, "groupProgress");
+        System::String strBuf("groupProgress");
         uint8_t elemBuf[8];
-        fn_DialogInstance_FindElement(self, elemBuf, strBuf);
+        fn_DialogInstance_FindElement(self, elemBuf, &strBuf);
         fn_InternalBasePtr_CheckPtr(elemBuf);
         void* elem = *(void**)elemBuf;
         fn_Element_Hide(elem, true);
-        fn_String_Dtor(strBuf);
     }
 }
 
@@ -605,13 +582,11 @@ static void ModDialog_ShowDetails_Impl(ModDialog* self, int index) {
     uintptr_t s = (uintptr_t)self;
 
     // Load dialog resource
-    uint8_t filenameBuf[8];
-    fn_Filename_CtorCStr(filenameBuf, "Dialog/ModDetails.rsc");
+    System::Filename filenameBuf("Dialog/ModDetails.rsc");
     void* extFactory = *(void**)g_pExternalFactorySingleton;
-    void* ext = fn_ExternalFactory_FindOrLoad(extFactory, filenameBuf);
+    void* ext = fn_ExternalFactory_FindOrLoad(extFactory, &filenameBuf);
     // IsDerivedFrom check — resource is always valid Dialog if load succeeds
     void* dialog = ext;
-    fn_Filename_Dtor(filenameBuf);
 
     // Allocate ModDetailsDialog (0xC8 = 200 bytes)
     void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
@@ -674,16 +649,11 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
         void* gameWorld = *g_pGameWorldSingleton;
 
         // Load reload dialog resource based on context (menu vs in-game)
-        uint8_t filenameBuf[8];
-        if (gameWorld == nullptr) {
-            fn_Filename_CtorCStr(filenameBuf, "Dialog/Reload.rsc:menu");
-        } else {
-            fn_Filename_CtorCStr(filenameBuf, "Dialog/Reload.rsc:game");
-        }
+        System::Filename filenameBuf(gameWorld == nullptr ? "Dialog/Reload.rsc:menu"
+                                                            : "Dialog/Reload.rsc:game");
         void* extFactory = *(void**)g_pExternalFactorySingleton;
-        void* ext = fn_ExternalFactory_FindOrLoad(extFactory, filenameBuf);
+        void* ext = fn_ExternalFactory_FindOrLoad(extFactory, &filenameBuf);
         void* dialog = ext;  // IsDerivedFrom check always passes for valid .rsc
-        fn_Filename_Dtor(filenameBuf);
 
         // Create ReloadDialog (0xC0 bytes)
         void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);

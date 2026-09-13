@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 #include <cstring>
 
@@ -86,12 +87,10 @@ void GoalDialog_Slot4(GoalDialog* self) {
 
     // Find "buttonOk" and set element ID 100
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "buttonOk");
+        System::String nameStr("buttonOk");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         void* buttonOk = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
         if (buttonOk) fn_Element_SetElementId(buttonOk, 100);
     }
 
@@ -105,12 +104,10 @@ void GoalDialog_Slot4(GoalDialog* self) {
         // Find "tableGoal"
         void* tableGoal = nullptr;
         {
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "tableGoal");
+            System::String nameStr("tableGoal");
             uint8_t retBuf[16];
-            fn_DialogInstance_FindElement(self, retBuf, nameStr);
+            fn_DialogInstance_FindElement(self, retBuf, &nameStr);
             tableGoal = *(void**)retBuf;
-            fn_String_Dtor(nameStr);
         }
 
         int goalCount = fn_GoalList_GetGoalCount(goalList);
@@ -143,32 +140,26 @@ void GoalDialog_Slot4(GoalDialog* self) {
 
             // Find "textGoal"
             {
-                uint8_t nameStr[8];
-                fn_String_Ctor_CStr(nameStr, "textGoal");
+                System::String nameStr("textGoal");
                 uint8_t retBuf[16];
-                fn_FindElement(newElem, retBuf, nameStr);
+                fn_FindElement(newElem, retBuf, &nameStr);
                 textGoal = *(void**)retBuf;
-                fn_String_Dtor(nameStr);
             }
 
             // Find "imageComplete"
             {
-                uint8_t nameStr[8];
-                fn_String_Ctor_CStr(nameStr, "imageComplete");
+                System::String nameStr("imageComplete");
                 uint8_t retBuf[16];
-                fn_FindElement(newElem, retBuf, nameStr);
+                fn_FindElement(newElem, retBuf, &nameStr);
                 imageComplete = *(void**)retBuf;
-                fn_String_Dtor(nameStr);
             }
 
             // Find "imageFail"
             {
-                uint8_t nameStr[8];
-                fn_String_Ctor_CStr(nameStr, "imageFail");
+                System::String nameStr("imageFail");
                 uint8_t retBuf[16];
-                fn_FindElement(newElem, retBuf, nameStr);
+                fn_FindElement(newElem, retBuf, &nameStr);
                 imageFail = *(void**)retBuf;
-                fn_String_Dtor(nameStr);
             }
 
             // Get goal text and set on textGoal element
@@ -182,23 +173,20 @@ void GoalDialog_Slot4(GoalDialog* self) {
                 void* goal = *(void**)((uintptr_t)goalInstPtr + 0x18);
 
                 // Get goal text (non-trivial return: fills retval with System::String)
-                uint8_t textStr[8] = {0};
-                fn_Goal_GetText(goal, textStr);
+                System::String textStr;
+                fn_Goal_GetText(goal, &textStr);
 
                 // Read StringTable from Goal+0x20 (ExternalPtr<StringTable>)
                 uint64_t stringTable = *(uint64_t*)((uintptr_t)goal + 0x20);
 
                 // Construct UI::String from StringTable + text
                 uint8_t uiStr[16] = {0};
-                fn_UIString_Ctor(uiStr, stringTable, textStr);
+                fn_UIString_Ctor(uiStr, stringTable, &textStr);
 
                 // Set text on textGoal element
                 if (textGoal) {
                     fn_TextElement_SetText(textGoal, uiStr);
                 }
-
-                // Clean up the System::String from GetText
-                fn_String_Dtor(textStr);
             }
 
             // Hide both complete and fail images initially
@@ -219,12 +207,10 @@ void GoalDialog_Slot4(GoalDialog* self) {
     // Find "textScenario" element
     void* textScenario = nullptr;
     {
-        uint8_t nameStr[8];
-        fn_String_Ctor_CStr(nameStr, "textScenario");
+        System::String nameStr("textScenario");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
         textScenario = *(void**)retBuf;
-        fn_String_Dtor(nameStr);
     }
 
     // If GoalList has an Achievement at +0x20, set its title on textScenario
@@ -232,27 +218,24 @@ void GoalDialog_Slot4(GoalDialog* self) {
         void* achievement = *(void**)(goalListObj + 0x20);
 
         // Get title string (non-trivial return)
-        uint8_t titleStr[8] = {0};
-        fn_Achievement_GetTitle(achievement, titleStr);
+        System::String titleStr;
+        fn_Achievement_GetTitle(achievement, &titleStr);
 
         // Read StringTable from Achievement+0x20
         uint64_t stringTable = *(uint64_t*)((uintptr_t)achievement + 0x20);
 
         // Construct UI::String from StringTable + title
         uint8_t uiStr[16] = {0};
-        fn_UIString_Ctor(uiStr, stringTable, titleStr);
+        fn_UIString_Ctor(uiStr, stringTable, &titleStr);
 
         // Convert UI::String to System::String for SetParameter
-        uint8_t sysStr[8] = {0};
-        fn_UIString_ToSystemString(uiStr, sysStr);
+        System::String sysStr;
+        fn_UIString_ToSystemString(uiStr, &sysStr);
 
         // Set as parameter 0 on textScenario
         if (textScenario) {
-            fn_TextElement_SetParameter(textScenario, 0, sysStr);
+            fn_TextElement_SetParameter(textScenario, 0, &sysStr);
         }
-
-        fn_String_Dtor(sysStr);
-        fn_String_Dtor(titleStr);
     } else {
         // No achievement/scenario — hide textScenario
         if (textScenario) fn_Element_SetFlagsOnOff(textScenario, 1, 0);

@@ -9,6 +9,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -85,8 +86,6 @@ void AttendanceUI_Slot7(AttendanceUI* self) {
     *(float*)((uintptr_t)progress + 0x128) = (float)currentCount;
 
     // Format count as text and set on progress element
-    uint8_t strBuf[8];
-    fn_String_Format(strBuf, "%d", (unsigned int)currentCount);
-    fn_ProgressElement_SetProgressTextParameter(progress, 0, strBuf);
-    fn_String_Dtor(strBuf);
+    System::String countStr = System::String::Format("%d", (unsigned int)currentCount);
+    fn_ProgressElement_SetProgressTextParameter(progress, 0, &countStr);
 }

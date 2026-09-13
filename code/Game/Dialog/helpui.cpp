@@ -19,6 +19,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // ============================================================
@@ -186,9 +187,11 @@ static void HelpUI_LoadPage(HelpUI* self) {
 //
 // Original: 0x14006a140.
 
-static int HelpUI_FindLinkTarget(uint8_t* searchStr) {
+// Takes ownership of searchStr (by value) and destroys it on return — the RAII
+// destructor at scope exit reproduces retail's manual release on every path.
+static int HelpUI_FindLinkTarget(System::String searchStr) {
     void* extList = GetHelpExternalList();
-    if (!extList) { fn_String_Dtor(searchStr); return -1; }   // standalone guard
+    if (!extList) { return -1; }   // standalone guard
     int count = fn_ExternalList_GetResourceCount(extList);
 
     for (int i = 0; i < count; i++) {
@@ -198,14 +201,12 @@ static int HelpUI_FindLinkTarget(uint8_t* searchStr) {
         bool isStringTable = fn_IsDerivedFrom(entry, *g_TypeId_StringTable);
         if (isStringTable && entry != nullptr) {
             // GetText at index 0 = topic key/name for matching (non-trivial return)
-            uint8_t nameStr[8] = {0};
-            fn_StringTable_GetText(entry, nameStr, 0);
+            System::String nameStr;
+            fn_StringTable_GetText(entry, &nameStr, 0);
 
-            bool match = fn_String_Equal(searchStr, nameStr);
-            fn_String_Dtor(nameStr);
+            bool match = (searchStr == nameStr);
 
             if (match) {
-                fn_String_Dtor(searchStr);
                 return i;
             }
         }
@@ -214,7 +215,6 @@ static int HelpUI_FindLinkTarget(uint8_t* searchStr) {
         count = fn_ExternalList_GetResourceCount(extList);
     }
 
-    fn_String_Dtor(searchStr);
     return -1;
 }
 
@@ -281,23 +281,26 @@ void HelpUI_Slot4(HelpUI* self) {
     if (*(void**)(s + 0x38)) fn_Element_SetElementId(*(void**)(s + 0x38), 0xE75);
 
     // Find "buttonBack" by name -> +0x48, set ID 0xE76
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, "buttonBack");
-    fn_FindElement(dialogElem, retBuf, nameStr);
-    void* backBtn = *(void**)retBuf;
+    void* backBtn;
+    {
+        System::String nameStr("buttonBack");
+        fn_FindElement(dialogElem, retBuf, &nameStr);
+        backBtn = *(void**)retBuf;
+    }
     derived = fn_IsDerivedFrom(backBtn, *g_TypeId_HelpButtonElem);
     fn_InternalBasePtr_Ctor(bpBuf, derived ? backBtn : nullptr);
     *(uint64_t*)(s + 0x48) = *(uint64_t*)bpBuf;
-    fn_String_Dtor(nameStr);
 
     // Find "buttonForward" by name -> +0x50, set ID 0xE77
-    fn_String_Ctor_CStr(nameStr, "buttonForward");
-    fn_FindElement(dialogElem, retBuf, nameStr);
-    void* fwdBtn = *(void**)retBuf;
+    void* fwdBtn;
+    {
+        System::String nameStr("buttonForward");
+        fn_FindElement(dialogElem, retBuf, &nameStr);
+        fwdBtn = *(void**)retBuf;
+    }
     derived = fn_IsDerivedFrom(fwdBtn, *g_TypeId_HelpButtonElem);
     fn_InternalBasePtr_Ctor(bpBuf, derived ? fwdBtn : nullptr);
     *(uint64_t*)(s + 0x50) = *(uint64_t*)bpBuf;
-    fn_String_Dtor(nameStr);
 
     if (*(void**)(s + 0x48)) fn_Element_SetElementId(*(void**)(s + 0x48), 0xE76);
     if (*(void**)(s + 0x50)) fn_Element_SetElementId(*(void**)(s + 0x50), 0xE77);
@@ -315,16 +318,15 @@ void HelpUI_Slot4(HelpUI* self) {
         bool isStringTable = fn_IsDerivedFrom(entry, *g_TypeId_StringTable);
         if (isStringTable && entry != nullptr) {
             // Get topic name (text index 1) — non-trivial return
-            uint8_t topicName[8] = {0};
-            fn_StringTable_GetText(entry, topicName, 1);
+            System::String topicName;
+            fn_StringTable_GetText(entry, &topicName, 1);
 
             // Create default sprite
             uint8_t sprite[32];
             fn_Sprite_Default_Ctor(sprite);
 
             // Add item to combo: (sprite, name, userData=index)
-            fn_ComboElement_AddItem(comboElem, sprite, topicName, (void*)(intptr_t)i);
-            fn_String_Dtor(topicName);
+            fn_ComboElement_AddItem(comboElem, sprite, &topicName, (void*)(intptr_t)i);
         }
 
         // Re-check count each iteration (matches original)
@@ -413,15 +415,12 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
         void* docElem = *(void**)(s + 0x38);
 
         // Get the clicked link's text (non-trivial return)
-        uint8_t linkStr[8] = {0};
-        fn_DocumentTextElement_GetLink(docElem, linkStr, linkIndex);
+        System::String linkStr;
+        fn_DocumentTextElement_GetLink(docElem, &linkStr, linkIndex);
 
-        // Copy the link string for FindLinkTarget (which destroys it)
-        uint8_t searchStr[8] = {0};
-        fn_String_Ctor_Copy(searchStr, linkStr);
-
-        // FindLinkTarget destroys searchStr and returns index or -1
-        int targetIdx = HelpUI_FindLinkTarget(searchStr);
+        // FindLinkTarget takes its own copy (by value) and destroys it; returns
+        // the matching index or -1.
+        int targetIdx = HelpUI_FindLinkTarget(linkStr);
 
         if (targetIdx >= 0) {
             // Save current scroll position to history
@@ -437,7 +436,6 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
             HelpUI_LoadPage(self);
         }
 
-        fn_String_Dtor(linkStr);
         return;
     }
 

@@ -18,7 +18,10 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "system/String.h"
+#include "system/Filename.h"
 #include <cstdint>
+#include <utility>
 
 // ============================================================
 // File-local helper: ModDetails_StringArrayPush (FUN_14006e290)
@@ -31,13 +34,10 @@
 //
 // Original: FUN_14006e290.
 //
-static void ModDetails_StringArrayPush_Impl(void* arrayBasePtr, void* strPtr) {
+static void ModDetails_StringArrayPush_Impl(void* arrayBasePtr, System::String&& str) {
     uintptr_t* base = (uintptr_t*)arrayBasePtr;
-    uintptr_t strData = *(uintptr_t*)strPtr;
-    int strLen = 0;
-    if (strData) {
-        strLen = *(int*)(strData - 8);
-    }
+    uintptr_t strData = (uintptr_t)str._data;
+    int strLen = str.GetLength();
     for (int i = 0; i < strLen; i++) {
         char ch = *(char*)(strData + i);
         // Byte-array push of one element
@@ -62,19 +62,17 @@ static void ModDetails_StringArrayPush_Impl(void* arrayBasePtr, void* strPtr) {
         }
         ((char*)*base)[oldCount] = ch;
     }
-    // Dtor the string (function takes ownership)
-    fn_String_Dtor(strPtr);
+    // `str` is bound by rvalue reference to a caller-owned temporary; the
+    // caller's own scope (see call sites) releases it once this returns.
 }
 
 // ============================================================
 // Helper: find element by name, cast to typed pointer
 // ============================================================
 static void* FindElem(void* dialog, const char* name) {
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, name);
+    System::String nameStr(name);
     uint8_t retval[16];
-    fn_DialogInstance_FindElement(dialog, retval, nameStr);
-    fn_String_Dtor(nameStr);
+    fn_DialogInstance_FindElement(dialog, retval, &nameStr);
     fn_InternalBasePtr_CheckPtr(retval);
     return *(void**)retval;
 }
@@ -126,11 +124,13 @@ static void* BSTNext(void* node) {
 // Helper: search BST for filename match using Filename::operator<
 // ============================================================
 static bool BSTContains(void* root, void* filename) {
+    System::Filename& fnameRef = *reinterpret_cast<System::Filename*>(filename); // B.3.1 bridge
     void* node = root;
     while (node) {
-        if (fn_Filename_Less(filename, node)) {
+        System::Filename& nodeRef = *reinterpret_cast<System::Filename*>(node); // B.3.1 bridge
+        if (fnameRef < nodeRef) {
             node = *(void**)((uintptr_t)node + 0x10); // left
-        } else if (fn_Filename_Less(node, filename)) {
+        } else if (nodeRef < fnameRef) {
             node = *(void**)((uintptr_t)node + 0x18); // right
         } else {
             return true; // equal (neither < nor >)
@@ -194,22 +194,17 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 
     // Path (mod+0x58 = String, dereference to char*)
     {
-        uint8_t pathStr[8];
-        fn_String_Ctor_CStr(pathStr, *(const char**)(m + 0x58));
-        fn_TextElement_SetParameter(textPath, 0, pathStr);
-        fn_String_Dtor(pathStr);
+        System::String pathStr(*(const char**)(m + 0x58));
+        fn_TextElement_SetParameter(textPath, 0, &pathStr);
     }
 
     // Version: "%i (%s)" with version number and version string
     {
-        uint8_t versionStr[8];
-        fn_Configuration_GetVersionString(versionStr, *(uint32_t*)(m + 0x18), false);
-        uint8_t formatted[8];
-        fn_String_Format(formatted, "%i (%s)", (uint64_t)*(uint32_t*)(m + 0x1c),
-                         *(const char**)versionStr);
-        fn_TextElement_SetParameter(textVersion, 0, formatted);
-        fn_String_Dtor(formatted);
-        fn_String_Dtor(versionStr);
+        System::String versionStr;
+        fn_Configuration_GetVersionString(&versionStr, *(uint32_t*)(m + 0x18), false);
+        System::String formatted = System::String::Format("%i (%s)", (uint64_t)*(uint32_t*)(m + 0x1c),
+                         versionStr._data);
+        fn_TextElement_SetParameter(textVersion, 0, &formatted);
     }
 
     // Description (mod+0x10 = String)
@@ -217,8 +212,7 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 
     // --- Build conflict list markup ---
     int conflictCount = *(int*)(m + 0x78);
-    uint8_t conflictResult[8];
-    fn_String_Ctor_CStr(conflictResult, "^jl^f0^c0^lb");
+    System::String conflictResult("^jl^f0^c0^lb");
 
     for (int i = 0; i < conflictCount; i++) {
         void** conflictArray = *(void***)(m + 0x70);
@@ -232,24 +226,18 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
         // Build entry: prefix + name + " ^n[" + path + "]^n"
         const char* modName = *(const char**)cm;
         const char* modPath = *(const char**)(cm + 0x58);
-        uint8_t entry[8];
-        fn_String_Format(entry, "%s%s ^n[%s]^n", (uint64_t)(uintptr_t)prefix,
+        System::String entry = System::String::Format("%s%s ^n[%s]^n", (uint64_t)(uintptr_t)prefix,
                          (uint64_t)(uintptr_t)modName,
                          (uint64_t)(uintptr_t)modPath);
-        uint8_t appendTmp[8] = {};
-        fn_String_AppendStr(conflictResult, appendTmp, entry);   // returns a String copy
-        fn_String_Dtor(appendTmp);
-        fn_String_Dtor(entry);
+        // retail's operator+= returns a copy of the new value that the
+        // original discarded (see the Append note); genuinely unused here.
+        conflictResult += entry;
     }
 
     // Append closing tag
     {
-        uint8_t closeTag[8];
-        fn_String_Ctor_CStr(closeTag, "^le");
-        uint8_t appendTmp[8] = {};
-        fn_String_AppendStr(conflictResult, appendTmp, closeTag);
-        fn_String_Dtor(appendTmp);
-        fn_String_Dtor(closeTag);
+        System::String closeTag("^le");
+        conflictResult += closeTag;
     }
 
     if (conflictCount == 0) {
@@ -258,7 +246,7 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
         fn_Element_SetFlagsOnOff(textConflictList, 1, 0);
     } else {
         // Set conflict list text (DocumentTextElement)
-        fn_DocumentTextElement_SetText(textConflictList, conflictResult);
+        fn_DocumentTextElement_SetText(textConflictList, &conflictResult);
     }
 
     // --- Build resource list ---
@@ -269,9 +257,8 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 
     // Push header
     {
-        uint8_t hdr[8];
-        fn_String_Ctor_CStr(hdr, "^jl^f0^c0^lb");
-        ModDetails_StringArrayPush_Impl(resArray, hdr);
+        System::String hdr("^jl^f0^c0^lb");
+        ModDetails_StringArrayPush_Impl(resArray, std::move(hdr));
     }
 
     // Traverse resource BST in-order
@@ -312,11 +299,11 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 
             // Build entry: prefix + filename + "^n"
             const char* filename = *(const char**)node;
-            uint8_t entryStr[8];
-            fn_String_Format(entryStr, "%s%s^n", (uint64_t)(uintptr_t)prefix,
+            System::String entryStr = System::String::Format("%s%s^n", (uint64_t)(uintptr_t)prefix,
                              (uint64_t)(uintptr_t)filename);
-            ModDetails_StringArrayPush_Impl(resArray, entryStr);
-            // Note: ModDetails_StringArrayPush_Impl takes ownership and dtors strPtr.
+            ModDetails_StringArrayPush_Impl(resArray, std::move(entryStr));
+            // Note: ModDetails_StringArrayPush_Impl reads entryStr in place; it
+            // is released here when this iteration's scope ends.
 
             node = BSTNext(node);
         }
@@ -324,9 +311,8 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 
     // Push footer
     {
-        uint8_t ftr[8];
-        fn_String_Ctor_CStr(ftr, "^le");
-        ModDetails_StringArrayPush_Impl(resArray, ftr);
+        System::String ftr("^le");
+        ModDetails_StringArrayPush_Impl(resArray, std::move(ftr));
     }
 
     // Null-terminate the byte buffer (original code does this inline after last push)
@@ -354,16 +340,12 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
     // Build String from null-terminated buffer, set on textResourceList
     {
         char* data = (char*)*(void**)resArray;
-        uint8_t resultStr[8];
-        fn_String_Ctor_CStr(resultStr, data ? data : "");
-        fn_DocumentTextElement_SetText(textResourceList, resultStr);
-        fn_String_Dtor(resultStr);
+        System::String resultStr(data ? data : "");
+        fn_DocumentTextElement_SetText(textResourceList, &resultStr);
     }
 
     // Free resource array buffer
     fn_MemFreeStatic(*(void**)resArray);
-
-    fn_String_Dtor(conflictResult);
 }
 
 // ============================================================
@@ -377,15 +359,13 @@ static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
     uintptr_t s = (uintptr_t)self;
 
     // Load dialog resource
-    uint8_t filenameBuf[8];
-    fn_Filename_CtorCStr(filenameBuf, rscPath);
+    System::Filename filenameBuf(rscPath);
     void* extFactory = *(void**)g_pExternalFactorySingleton;
-    void* ext = fn_ExternalFactory_FindOrLoad(extFactory, filenameBuf);
+    void* ext = fn_ExternalFactory_FindOrLoad(extFactory, &filenameBuf);
     // IsDerivedFrom check for Dialog type — the resource IS a Dialog if it loads
     // from a .rsc file, so we pass it directly (matches original behavior where
     // the check always succeeds for valid resources).
     void* dialog = ext;
-    fn_Filename_Dtor(filenameBuf);
 
     // Allocate and construct DialogInstance (0xB8 bytes)
     void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);

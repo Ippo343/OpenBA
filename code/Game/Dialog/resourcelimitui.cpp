@@ -13,17 +13,16 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "system/String.h"
 #include <cstdint>
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
-    uint8_t nameBuf[8];
-    fn_String_Ctor_CStr(nameBuf, name);
+    System::String nameStr(name);
 
     uint64_t result = 0;
-    fn_FindElement(dialogElem, &result, nameBuf);
+    fn_FindElement(dialogElem, &result, &nameStr);
 
-    fn_String_Dtor(nameBuf);
     return result;
 }
 
