@@ -27,3 +27,10 @@ UNIT_TREE_SRCS += \
 # only out-of-line body (Serialize) needs the live serializer + factory and is
 # covered by the real run, not by make unit. No tree sources to link.
 UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.2 Array core (tests/unit/array_test.cpp). array.cpp carries
+# `rtcoll::SetSizeCore`, `ArrayDtorImpl` and every `kSpec_*` row the template
+# wraps; the tests drive those, not a copy of them. Its allocator seam falls
+# back to malloc under BANISHED_UNIT_TEST (same seam as string.cpp's), and its
+# by-address doors go through tests/unit/rt_port_stub.cpp's ResolveAddr.
+UNIT_TREE_SRCS += runtime/src/collection/array.cpp runtime/src/collection/array_destroy.cpp

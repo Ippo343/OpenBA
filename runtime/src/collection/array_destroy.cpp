@@ -1261,7 +1261,7 @@ void* RtColl_ArrayCopyCtor_18001c620(void* self, const void* src) {
     return self;                                              // MOV RAX,RCX
 }
 void RtColl_ArrayDtor_18001c650(void* self) {
-    ArrayDtorImpl(static_cast<ArrayHdr*>(self));
+    static_cast<ArrayHdr*>(self)->~Array();   // ENDGAME B.3.2: Array<uint8_t>
 }
 
 // Cutover closure batch 2 (2026-09-12): 0x18001b1a0, `Array<Graphics::

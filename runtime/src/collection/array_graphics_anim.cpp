@@ -367,8 +367,8 @@ using rtcoll::ArrayHdr;
 using namespace rtcoll::gfxanim;
 
 // ---- J1 / J2: ~Array ------------------------------------------------------
-void* Rt_ArrayDtor_18001c480(void* a) { rtcoll::ArrayDtorImpl(static_cast<ArrayHdr*>(a)); return nullptr; }
-void* Rt_ArrayDtor_18001c550(void* a) { rtcoll::ArrayDtorImpl(static_cast<ArrayHdr*>(a)); return nullptr; }
+void* Rt_ArrayDtor_18001c480(void* a) { rtcoll::AsArray<&kSpec_AnimLayer>(a)->~Array(); return nullptr; }
+void* Rt_ArrayDtor_18001c550(void* a) { rtcoll::AsArray<&kSpec_InterpTransform>(a)->~Array(); return nullptr; }
 void* Rt_ArrayDtor_180014090(void* a) { Clear_180014090(static_cast<ArrayHdr*>(a)); return nullptr; }
 void* Rt_ArrayDtor_18005bbb0(void* a) { Clear_18005bbb0(static_cast<ArrayHdr*>(a)); return nullptr; }
 
@@ -387,26 +387,25 @@ void Rt_DestroyInstances_18005c550(void* t, void* base, int n) {
 
 // ---- J3: SetSize ----------------------------------------------------------
 void Rt_SetSize_18005aa30(void* a, int n) {   // Array<GraphicsMesh::Node>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_MeshNode);
+    rtcoll::AsArray<&kSpec_MeshNode>(a)->SetSize(n);
 }
 void Rt_SetSize_18005b1e0(void* a, int n) {   // Array<AnimationState>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_AnimState);
+    rtcoll::AsArray<&kSpec_AnimState>(a)->SetSize(n);
 }
 void Rt_SetSize_18005c8a0(void* a, int n) {   // Array<AnimationState::Layer>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_AnimLayer);
+    rtcoll::AsArray<&kSpec_AnimLayer>(a)->SetSize(n);
 }
 void Rt_SetSize_18005ac50(void* a, int n) {   // Array<InterpolatedState<Transform>>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_InterpTransform);
+    rtcoll::AsArray<&kSpec_InterpTransform>(a)->SetSize(n);
 }
 void Rt_SetSize_18005c3d0(void* a, int n) {   // Array<Instance>, no fill
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_AnimInstance);
+    rtcoll::AsArray<&kSpec_AnimInstance>(a)->SetSize(n);
 }
 // The one THREE-argument row in this batch. Its new elements are copy-assigned
 // from `fill` instead of default-constructed, which is what distinguishes it
 // from 0x18005c3d0 above; the rest of the body is the same instantiation.
 void Rt_SetSize_18005be30(void* a, int n, const void* fill) {
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n,
-                        static_cast<const uint8_t*>(fill), &kSpec_AnimInstance);
+    rtcoll::AsArray<&kSpec_AnimInstance>(a)->SetSizeFill(n, fill);
 }
 
 // ---- J4: operator= --------------------------------------------------------

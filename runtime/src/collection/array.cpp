@@ -114,6 +114,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
@@ -149,22 +150,39 @@ static_assert(offsetof(ArrayHdr, _capacity) == 0x0c, "Array::_capacity @ +0x0c")
 // otherwise freeze a null into this static for the life of the process and take
 // the whole heap down with it. Same contract as RtResolveCached (rt_port.h):
 // cache a hit, retry a miss. A hit costs one load, exactly as before.
+#ifdef BANISHED_UNIT_TEST
+// The host unit test (tests/unit/array_test.cpp) links this file without the
+// address registry, so there is nothing at 0x1800c7a50 to resolve. The tests
+// only need A heap and every allocation they make they also free — the same
+// seam, for the same reason, that runtime/src/system/string.cpp uses.
+// Alignment is honoured by malloc's own 16-byte guarantee: no Array spec in
+// the table asks for more than 8.
+void* MemAlloc(uint64_t bytes, int align) {
+    (void)align;
+    return std::malloc(static_cast<size_t>(bytes));
+}
+#else
 void* MemAlloc(uint64_t bytes, int align) {
     using Fn = void* (*)(uint64_t, int);
     static Fn fn = nullptr;
     if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
     return fn(bytes, align);
 }
+#endif
 
 // `if (p) { Enter; Free(_singleton, p); Leave; }` — the null test is INSIDE
 // 0x1800c7ad0 (`TEST RCX,RCX; JZ ret` is its first instruction), which is why
 // the callers below hand it a possibly-null pointer exactly as retail does.
+#ifdef BANISHED_UNIT_TEST
+void MemFree(void* p) { std::free(p); }   // retail's null test lives in free()
+#else
 void MemFree(void* p) {
     using Fn = void (*)(void*);
     static Fn fn = nullptr;   // retry a miss — see MemAlloc above
     if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
     fn(p);
 }
+#endif
 
 // ============================================================================
 // J1 — Collection::Array<T>::~Array, trivially-destructible T
@@ -2216,20 +2234,21 @@ const ArraySpec kSpec_Rec14 = {                   // 0x180020e90
 // ============================================================================
 namespace rtcoll {
 
+// ENDGAME B.3.2 step 1: this is now one call into
+// `Collection::Array<uint8_t>::~Array`, which is `ArrayDtorImpl` plus the
+// element-destroy step a trivial element does not have. The post-state is the
+// whole observable effect on the object — retail's last two stores are
+// `_data = 0` and one qword covering _size and _capacity — and a WRONG pointer
+// handed to Free is not visible here at all; it is caught by
+// BANISHED_REDZONE=watch, which is why the recommended J1 run pairs the two.
+//
+// The probe-era second `ArrayDtorImpl(a)` and the two snprintf buffers nothing
+// read are gone with the call they annotated. The second call was idempotent
+// (`MemFree(nullptr)` is a no-op inside 0x1800c7ad0), so dropping it changes no
+// state; it was there to format the "ours vs theirs" line of a diff oracle that
+// no longer runs.
 void ArrayDtorSited(ArrayHdr* a) {
-    ArrayDtorImpl(a);
-
-    // Ours writes, and the post-state is the whole observable effect on the
-    // object: retail's last two stores are `_data = 0` and one qword covering
-    // _size and _capacity. A wrong pointer handed to Free is not visible here
-    // and is caught instead by BANISHED_REDZONE=watch, which is why the
-    // recommended J1 run pairs the two.
-    ArrayDtorImpl(a);
-    const bool ok = (a->_data == nullptr && a->_size == 0 && a->_capacity == 0);
-    char ours[96], theirs[96];
-    std::snprintf(ours, sizeof(ours), "data=%p size=%d cap=%d",
-                  static_cast<void*>(a->_data), a->_size, a->_capacity);
-    std::snprintf(theirs, sizeof(theirs), "data=0000000000000000 size=0 cap=0");
+    a->~Array();
 }
 
 // ---------------------------------------------------------------------------
@@ -2512,7 +2531,7 @@ void* RtColl_I32ArrayAssign_18001cdf0(void* dst, const void* src) {
 // --- J3: the two-argument form, `SetSize(this, int n)` ----------------------
 #define J3_ENTRY2(ADDR, SPEC)                                                 \
     void RtColl_ArraySetSize_##ADDR(void* a, int n) {                         \
-        SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &SPEC); \
+        AsArray<&SPEC>(a)->SetSize(n);                                       \
     }
 
 J3_ENTRY2(180008b90, kSpec_Bool)        // Achievement: Array<bool>, tail UNINITIALISED
@@ -2645,8 +2664,7 @@ J3_ENTRY2(180020e90, kSpec_Rec14)        // Graphics: one pool record's inner ar
 // --- J3: the three-argument form, `SetSize(this, int n, const T* fill)` -----
 #define J3_ENTRY3(ADDR, SPEC)                                                 \
     void RtColl_ArraySetSizeFill_##ADDR(void* a, int n, const void* fill) {   \
-        SetSizeCore(static_cast<ArrayHdr*>(a), n,                             \
-                    static_cast<const uint8_t*>(fill), &SPEC);  \
+        AsArray<&SPEC>(a)->SetSizeFill(n, fill);                             \
     }
 
 J3_ENTRY3(180004e30, kSpec_Sprite38)    // UI:       SpriteSheet's 0x38 element [NON-TRIVIAL]
@@ -2753,7 +2771,7 @@ J3_ENTRY3(1800638e0, kSpec_DrawGroup1f0)// Graphics: Renderer::BeginDrawGroup's 
 // It takes ONE argument. Registering it behind the two- or three-argument
 // signature would read a register the caller never set.
 void RtColl_ArraySetSize_18007b960(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 10000, nullptr, &kSpec_I32Neg1);
+    AsArray<&kSpec_I32Neg1>(a)->SetSize(10000);
 }
 
 // WAVE 9 LANE UIF — 0x1800783d0 is `Array<UI::SpriteDraw>::SetSize(0)`, the
@@ -2783,7 +2801,7 @@ void RtColl_ArraySetSize_18007b960(void* a) {
 // reasoning above is ever wrong the two disagree under the diff oracle instead
 // of agreeing by construction.
 void RtColl_ArraySetSize_1800783d0(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SpriteDraw);
+    AsArray<&kSpec_SpriteDraw>(a)->SetSize(0);
 }
 
 // ============================================================================
@@ -2856,7 +2874,7 @@ void RtColl_ArrayReserve_18002fd90(void* a, int n) {
 // ONE argument; a two-argument registration would read a register the caller
 // never set.
 void RtColl_ArraySetSize_180051020(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0x100, nullptr, &kSpec_AudioChannel70);
+    AsArray<&kSpec_AudioChannel70>(a)->SetSize(0x100);
 }
 
 
@@ -2955,11 +2973,11 @@ void RtColl_ArrayRemove_180050e00(void* self, const float* value) {
 // 0x1800783d0 gives: if the "always dead" reasoning is ever wrong for either
 // spec, the two disagree under the diff oracle instead of silently agreeing.
 void RtColl_ArraySetSize_180079c90(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_PtrZero);
+    AsArray<&kSpec_PtrZero>(a)->SetSize(0);
 }
 
 void RtColl_ArraySetSize_180079df0(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Event30);
+    AsArray<&kSpec_Event30>(a)->SetSize(0);
 }
 
 // ---- BATCH 4 (Graphics render/cull/sun-camera cluster) ---------------------
@@ -2974,7 +2992,7 @@ void RtColl_ArraySetSize_180079df0(void* a) {
 // _capacity = 12;` is `(newSize == oldSize + 1 && oldSize != 0) ? n*3 : n`
 // with n folded to 4.
 void RtColl_ArraySetSize_18000c300(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 4, nullptr, &kSpec_Blob8ba0);
+    AsArray<&kSpec_Blob8ba0>(a)->SetSize(4);
 }
 
 // 0x18005f980 — NOT a SetSize at all but a `Reserve(16384)`: SetSize(0x4000)
@@ -3112,8 +3130,7 @@ const ArraySpec kSpec_ModExternal18 = {          // 0x180028cd0
 
 #define J3_ENTRY3(ADDR, SPEC)                                                 \
     void RtColl_ArraySetSizeFill_##ADDR(void* a, int n, const void* fill) {   \
-        SetSizeCore(static_cast<ArrayHdr*>(a), n,                             \
-                    static_cast<const uint8_t*>(fill), &SPEC);  \
+        AsArray<&SPEC>(a)->SetSizeFill(n, fill);                             \
     }
 
 J3_ENTRY3(18002ae20, kSpec_SaveGameInfo)   // IO: Persistence's save-list append
@@ -3138,7 +3155,7 @@ J3_ENTRY3(180028cd0, kSpec_ModExternal18)  // IO: SetupFileSystem's reload list
 // reasons, so if that reading is ever wrong the two disagree under the oracle
 // instead of agreeing by construction.
 void RtColl_ArraySetSize_18002aae0(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_SaveGameInfo);
+    AsArray<&kSpec_SaveGameInfo>(a)->SetSize(0);
 }
 
 
@@ -3166,7 +3183,7 @@ const ArraySpec kSpec_EmitterInstance = {        // 0x180052330
     true, 0, 0, 0, 0, 0, 0 };
 
 void RtColl_ArraySetSize_180052330(void* a, int n) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_EmitterInstance);
+    AsArray<&kSpec_EmitterInstance>(a)->SetSize(n);
 }
 
 
@@ -3451,7 +3468,7 @@ D1_J1_ENTRY(1800527a0)   // Audio:    SoundEffect's Array<Sample>, 0x180052700's
 
 #define D1_J3_ENTRY2(ADDR, SPEC)                                              \
     void RtColl_ArraySetSize_##ADDR(void* a, int n) {                         \
-        SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &SPEC); \
+        AsArray<&SPEC>(a)->SetSize(n);                                       \
     }
 
 D1_J3_ENTRY2(18003e600, kSpec_PtrZero)        // UI: DocumentTextDescription +0xb0
@@ -3468,8 +3485,7 @@ D1_J3_ENTRY2(180052e60, kSpec_SfxSample18)    // Audio: SoundEffect::Buffer::_sa
 
 #define D1_J3_ENTRY3(ADDR, SPEC)                                              \
     void RtColl_ArraySetSizeFill_##ADDR(void* a, int n, const void* fill) {   \
-        SetSizeCore(static_cast<ArrayHdr*>(a), n,                             \
-                    static_cast<const uint8_t*>(fill), &SPEC);  \
+        AsArray<&SPEC>(a)->SetSizeFill(n, fill);                             \
     }
 
 D1_J3_ENTRY3(18003df80, kSpec_DocItem24)      // UI: DocumentTextElement::_items append
@@ -3489,10 +3505,10 @@ D1_J3_ENTRY3(18003e1a0, kSpec_Link18)         // UI: DocumentTextElement::_links
 // it runs 0x18003e3e0 over the old elements, which is how the link table
 // releases its Strings before it is rebuilt.
 void RtColl_ArraySetSize_18003d1c0(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_DocItem24);
+    AsArray<&kSpec_DocItem24>(a)->SetSize(0);
 }
 void RtColl_ArraySetSize_18003d430(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpec_Link18);
+    AsArray<&kSpec_Link18>(a)->SetSize(0);
 }
 
 
@@ -3848,7 +3864,7 @@ const ArraySpec kSpecD2_Emit58 = {                // 0x180061bb0
 // ---- the entry points ------------------------------------------------------
 #define J3_ENTRY2(ADDR, SPEC)                                                 \
     void RtColl_ArraySetSize_##ADDR(void* a, int n) {                         \
-        SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &SPEC); \
+        AsArray<&SPEC>(a)->SetSize(n);                                       \
     }
 
 J3_ENTRY2(180062110, kSpec_Fill8)          // Graphics:    Particle record ptrs
@@ -3873,8 +3889,7 @@ J3_ENTRY2(18007aa40, kSpecD2_SubMesh80)    // Picking:     _nodes   [NON-TRIVIAL
 // because registering it behind the two-argument signature would read a
 // register the caller never set.
 void RtColl_ArraySetSizeFill_180076d10(void* a, int n, const void* fill) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), n,
-                static_cast<const uint8_t*>(fill), &kSpecD2_Glyph10A4);
+    AsArray<&kSpecD2_Glyph10A4>(a)->SetSizeFill(n, fill);
 }
 
 // 0x180076a40 -- the SAME glyph array with the new size folded to the constant
@@ -3892,7 +3907,7 @@ void RtColl_ArraySetSizeFill_180076d10(void* a, int n, const void* fill) {
 // `_size = 0`, so that if this reading is ever wrong the two disagree under the
 // oracle instead of agreeing by construction.
 void RtColl_ArraySetSize_180076a40(void* a) {
-    SetSizeCore(static_cast<ArrayHdr*>(a), 0, nullptr, &kSpecD2_Glyph10A4);
+    AsArray<&kSpecD2_Glyph10A4>(a)->SetSize(0);
 }
 
 // ---- the two element COPY CONSTRUCTORS, at their own addresses -------------

@@ -490,7 +490,9 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     //
     // It IS still a reordering, and it would stop being safe the day one of
     // these globals became something a MemAlloc could touch.
-    rtcoll::ArrayHdr types = { nullptr, 0, 0 };
+    // ENDGAME B.3.2: Collection::Array is a real class; its default ctor is
+    // the same three zero stores this brace-init was.
+    rtcoll::ArrayHdr types;
     const uint32_t ids[10] = {
         TypeIdImageBuffer(),
         TypeIdVertexProgram(),

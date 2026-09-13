@@ -317,14 +317,16 @@ using rtcoll::ArrayHdr;
 using namespace rtcoll::gfxmesh;
 
 void* Rt_ArrayDtor_180013fb0(void* a) {       // ~Array<TriangleList>
-    ArrayHdr* h = static_cast<ArrayHdr*>(a);
-    DestroyTriangleListRange(a, reinterpret_cast<uint8_t*>(h->_data), h->_size);
-    return rtcoll::ArrayDtorImpl(h);
+    // ENDGAME B.3.2: the element destroy is kSpec_TriangleList's own
+    // `destroy` (DestroyTriangleListRange), so ~Array runs exactly the two
+    // steps this body used to spell out. The `this` retail passes the helper
+    // is spilled and never read (the helper's first parameter is unnamed).
+    rtcoll::AsArray<&kSpec_TriangleList>(a)->~Array();
+    return nullptr;
 }
 void* Rt_ArrayDtor_180014160(void* a) {       // ~Array<Array<T>>
-    ArrayHdr* h = static_cast<ArrayHdr*>(a);
-    DestroyInnerArrayRange(a, reinterpret_cast<uint8_t*>(h->_data), h->_size);
-    return rtcoll::ArrayDtorImpl(h);
+    rtcoll::AsArray<&kSpec_InnerArray>(a)->~Array();
+    return nullptr;
 }
 
 // Retail's arity for the two element-destroy helpers, including the `this`
@@ -338,10 +340,10 @@ void Rt_DestroyInnerArrays_180014af0(void* t, void* base, int n) {
 }
 
 void Rt_SetSize_18005d840(void* a, int n) {   // Array<TriangleList>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_TriangleList);
+    rtcoll::AsArray<&kSpec_TriangleList>(a)->SetSize(n);
 }
 void Rt_SetSize_18005cda0(void* a, int n) {   // Array<Array<T>>
-    rtcoll::SetSizeCore(static_cast<ArrayHdr*>(a), n, nullptr, &kSpec_InnerArray);
+    rtcoll::AsArray<&kSpec_InnerArray>(a)->SetSize(n);
 }
 
 void* Rt_TriangleListCtor_1800fefc0(void* p)                  { return TriangleListCtor(p); }

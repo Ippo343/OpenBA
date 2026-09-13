@@ -48,6 +48,8 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <new>           // placement new, for Collection::Array's element ops
+#include <type_traits>   // the traits rtcoll::SpecFor<T> reads
 
 namespace Collection {
 
@@ -147,12 +149,251 @@ static_assert(sizeof(AVLCompare) == 1, "policy struct, never stored");
 //    whole old buffer), and copied by copy-CONSTRUCTION on realloc (the
 //    Array<ModInfo> path bumps the String refcounts at `str-4`).
 // ============================================================
+// ============================================================================
+// ENDGAME B.3.2 step 1 — `Collection::Array<T>`, the real template
+// ============================================================================
+//
+// Everything above is the layout evidence and it is unchanged: the three fields
+// below are still `_data` / `_size` / `_capacity` at +0x00 / +0x08 / +0x0c and
+// every LayoutProbe static_assert at the bottom of this header still holds.
+// What changed on 2026-09-13 is that the class now carries retail's METHODS
+// instead of being a bare header the C bodies poke at.
+//
+// THE TEMPLATE WRAPS THE PORTED BODIES; IT DOES NOT RE-DERIVE THEM.
+// `SetSize` calls `rtcoll::SetSizeCore` and `~Array` calls
+// `rtcoll::ArrayDtorImpl` — the same two bodies, driven by the same
+// `rtcoll::ArraySpec` rows, that the 27 registered addresses have driven since
+// Wave 9 lane Q. COLLECTION_INVENTORY.md §5.3 says why in one line: a body
+// re-derived from Ghidra's C risks re-introducing an argument-count mismatch
+// this port already solved (feedback_ghidra_dropped_args.md).
+//
+// WHICH SPEC DRIVES AN INSTANTIATION — the third template parameter.
+//
+//   * `Array<T>` (the default, `DefaultSpec<T>`) derives its spec from T's type
+//     traits: `byteCopy = is_trivially_copyable<T>`, `destroy == nullptr =
+//     is_trivially_destructible<T>`, `init == nullptr =
+//     is_trivially_default_constructible<T>` (retail's empty `else` arm, i.e.
+//     the new tail is left UNINITIALISED), `assign` = placement copy-construct.
+//     That mapping is not new design: it NAMES what the hand-derived rows
+//     already encode.
+//
+//   * `Array<uint8_t, DefaultAllocator, ExplicitSpec<&kSpec_X>>` keeps a
+//     HAND-DERIVED row. Every one of the registered addresses uses this form,
+//     because a trait cannot express what those rows say: a fill of -1
+//     (kSpec_I32Neg1, 0x18007b960), an identity-Transform init
+//     (kSpec_Transform, 0x180059140), a PARTIAL init that deliberately leaves
+//     bytes of the new element untouched (kSpec_SpriteDraw 0x180078520,
+//     kSpec_SpriteIndexZ 0x1800370c0, kSpec_TableCell10 0x1800799a0,
+//     kSpec_Window 0x180024c10, kSpec_CaptureEntryZ 0x18004ba90,
+//     kSpec_EffectSlot 0x180051390, kSpec_AudioChannel70 0x180051020,
+//     kSpec_Rec14 0x180020e90, kSpec_IdExtPtr10 0x180059930,
+//     kSpec_SfxSample18 0x180052e60, kSpec_MetaEntry20 0x180034010), or a
+//     byteCopy=true row that ALSO carries a destroy — a combination C++ traits
+//     cannot produce at all, since `is_trivially_copyable` implies a trivial
+//     destructor (kSpec_PkgEntry 0x1800298f0, kSpec_StringExt 0x180061480).
+//     Step 1 therefore replaces NO spec: the shims name their row and the
+//     trait-derived form is used only by new typed instantiations (the unit
+//     tests today, converted callers in step 2).
+//
+// WHAT IS DELIBERATELY *NOT* ON THE CLASS
+//   * No `Serialize`. None of the 339 registered rows is one; callers serialize
+//     array contents by iterating (COLLECTION_INVENTORY.md §4, hazard 6).
+//   * No `Sort`. The packfile introsort (0x1800264a0) is one hand-transcribed
+//     algorithm whose tie behaviour is save-observable; it stays a free
+//     function (hazard 7).
+//   * No move constructor / move assignment. `SetSizeCore`'s realloc path is
+//     copy-THEN-destroy-then-free in retail's element order and a move would
+//     change the String/Filename/ExternalPtr refcount sequences the resave gate
+//     observes (hazard 2).
+//   * Copy construction and copy assignment are `= default`, i.e. the SHALLOW
+//     memberwise copy the unconverted tree already relies on when it copies an
+//     overlay struct that embeds an Array. Retail's deep `Array<T>::operator=`
+//     is 0x18001cdf0 / `rtcoll::ArrayAssignCore` (array_destroy.cpp) and stays
+//     reachable under its own address; it becomes this class's `operator=` in
+//     step 2, when the last bitwise copier is gone. They are DEFAULTED rather
+//     than left implicit so that declaring `~Array` does not make every copy a
+//     -Wdeprecated-copy-dtor warning.
+//   * The three fields stay PUBLIC. 419 sites across the tree name
+//     `Collection::Array<...>` and read `_data`/`_size`/`_capacity` directly;
+//     they become private with the last of them (B31_RULES step 2).
+// ============================================================================
+
+}  // namespace Collection  (reopened below; `rtcoll` is a global namespace)
+
+namespace rtcoll {
+
+// The element operations of one instantiation. Retail's `ElemDestroy` really
+// does take an ignored `this` in RCX (array.cpp's ArraySpec banner).
+using ElemAssign  = void (*)(uint8_t* dst, const uint8_t* src);
+using ElemInit    = void (*)(uint8_t* dst);
+using ElemDestroy = void (*)(void* ignoredThis, uint8_t* base, int count);
+
+// MOVED HERE FROM runtime/src/collection/array_internal.h (ENDGAME B.3.2 step
+// 1) so `Collection::Array`'s inline bodies can name it. The per-field
+// commentary — why the written extents are per ARM and not per TYPE, and what
+// the probe seeding range is for — is still in array_internal.h, next to the
+// `kSpec_*` rows it describes.
+struct ArraySpec {
+    const char* name;
+    uint32_t    stride;
+    int         align;
+    ElemAssign  assign;    // never null
+    ElemInit    init;      // null => retail leaves the new tail untouched
+    ElemDestroy destroy;   // null => trivially destructible T
+    bool        byteCopy;  // true when `assign` is a pure byte copy
+
+    uint32_t    assignUnwrittenLo, assignUnwrittenHi;
+    uint32_t    initUnwrittenLo,   initUnwrittenHi;
+
+    uint32_t    seedZeroLo, seedZeroHi;
+};
+
+// ---------------------------------------------------------------------------
+// SpecFor<T> — the trait-derived row
+// ---------------------------------------------------------------------------
+// One `static const ArraySpec` per element type, built at first use. The three
+// element operations are function templates rather than lambdas so that each
+// has a readable name in a crash log.
 template <class T>
-struct Array {
+void TAssign(uint8_t* dst, const uint8_t* src) {
+    // Retail's realloc arm COPY-CONSTRUCTS into the new buffer and destroys the
+    // old elements afterwards; placement copy-construct is that, exactly.
+    new (static_cast<void*>(dst)) T(*reinterpret_cast<const T*>(src));
+}
+template <class T>
+void TInit(uint8_t* dst) {
+    new (static_cast<void*>(dst)) T();
+}
+template <class T>
+void TDestroy(void* /*ignoredThis*/, uint8_t* base, int count) {
+    for (int i = 0; i < count; ++i)
+        reinterpret_cast<T*>(base + static_cast<int64_t>(i) * sizeof(T))->~T();
+}
+
+template <class T>
+const ArraySpec* SpecFor() {
+    static const ArraySpec spec = {
+        "Array<T> (trait-derived)",
+        static_cast<uint32_t>(sizeof(T)),
+        static_cast<int>(alignof(T)),
+        &TAssign<T>,
+        // A trivially default-constructible T reproduces retail's EMPTY else
+        // arm: the new tail is left holding whatever the allocation contained.
+        // Writing `TInit<T>` for a trivial T instead would ZERO the tail — a
+        // different array.
+        std::is_trivially_default_constructible<T>::value ? nullptr : &TInit<T>,
+        std::is_trivially_destructible<T>::value ? nullptr : &TDestroy<T>,
+        std::is_trivially_copyable<T>::value,
+        /*assign unwritten*/ 0, 0,
+        /*init   unwritten*/ 0, 0,
+        /*seed zero       */ 0, 0 };
+    return &spec;
+}
+
+}  // namespace rtcoll
+
+namespace Collection {
+
+// The two spec policies. `DefaultSpec` is the third template argument's
+// default; `ExplicitSpec` names a hand-derived row (see the banner).
+template <class T>
+struct DefaultSpec {
+    static const rtcoll::ArraySpec* Get() { return rtcoll::SpecFor<T>(); }
+};
+template <const rtcoll::ArraySpec* SPEC>
+struct ExplicitSpec {
+    static const rtcoll::ArraySpec* Get() { return SPEC; }
+};
+
+template <class T,
+          class Allocator  = DefaultAllocator,
+          class SpecPolicy = DefaultSpec<T>>
+class Array {
+public:
+    // Retail's ctor is the three zero stores every inlined copy begins with.
+    Array() : _data(nullptr), _size(0), _capacity(0) {}
+    // Shallow, and deliberately so — see the banner.
+    Array(const Array&)            = default;
+    Array& operator=(const Array&) = default;
+
+    // ~Array — 0x18001c750 and its ten twins for a trivial element; the J2
+    // family (array_destroy.cpp) for one with a destroy step. Element destroy
+    // first, then the buffer: that is the order both retail families use.
+    ~Array();
+
+    void SetSize(int newSize);                      // ?SetSize@..@QEAAXH@Z     (2-arg form)
+    void SetSize(int newSize, const T& fill);       // ?SetSize@..@QEAAXHAEBT@Z (3-arg form)
+    // The 3-argument form with an untyped fill, for the instantiations whose
+    // element "type" is a hand-derived spec rather than a C++ type.
+    void SetSizeFill(int newSize, const void* fill);
+
+    // 0x180079c90 — the constant-folded SetSize(0). Buffer and capacity kept.
+    void Clear() { SetSize(0); }
+
+    int GetSize() const     { return _size; }
+    int GetCapacity() const { return _capacity; }
+
+    T&       operator[](int index)       { return _data[index]; }
+    const T& operator[](int index) const { return _data[index]; }
+
+    T*       GetData()       { return _data; }
+    const T* GetData() const { return _data; }
+
+    static const rtcoll::ArraySpec* Spec() { return SpecPolicy::Get(); }
+
+    // PUBLIC during the migration — see the banner.
     T*      _data;       // +0x00: element buffer, or null when capacity == 0
     int32_t _size;       // +0x08: live element count
     int32_t _capacity;   // +0x0c: allocated element count; never shrinks
 };
+
+}  // namespace Collection
+
+// The two ported bodies and the allocator boundary, declared here rather than
+// in array_internal.h so that the class above can call them. Both are defined
+// in runtime/src/collection/array.cpp, unchanged.
+namespace rtcoll {
+
+// The 16-byte container header. `uint8_t` is chosen so `_data` is already the
+// byte cursor every body wants; sizeof(Array<T>) is T-independent.
+using ArrayHdr = Collection::Array<uint8_t>;
+
+void* MemAlloc(uint64_t bytes, int align);
+void  MemFree(void* p);
+
+void* ArrayDtorImpl(ArrayHdr* a);
+void  SetSizeCore(ArrayHdr* a, int newSize, const uint8_t* fill,
+                  const ArraySpec* spec);
+
+}  // namespace rtcoll
+
+namespace Collection {
+
+template <class T, class Allocator, class SpecPolicy>
+inline Array<T, Allocator, SpecPolicy>::~Array() {
+    const rtcoll::ArraySpec* spec = Spec();
+    if (spec->destroy && _size > 0)
+        spec->destroy(nullptr, reinterpret_cast<uint8_t*>(_data), _size);
+    rtcoll::ArrayDtorImpl(reinterpret_cast<rtcoll::ArrayHdr*>(this));
+}
+
+template <class T, class Allocator, class SpecPolicy>
+inline void Array<T, Allocator, SpecPolicy>::SetSize(int newSize) {
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,
+                        nullptr, Spec());
+}
+
+template <class T, class Allocator, class SpecPolicy>
+inline void Array<T, Allocator, SpecPolicy>::SetSize(int newSize, const T& fill) {
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,
+                        reinterpret_cast<const uint8_t*>(&fill), Spec());
+}
+
+template <class T, class Allocator, class SpecPolicy>
+inline void Array<T, Allocator, SpecPolicy>::SetSizeFill(int newSize, const void* fill) {
+    rtcoll::SetSizeCore(reinterpret_cast<rtcoll::ArrayHdr*>(this), newSize,
+                        static_cast<const uint8_t*>(fill), Spec());
+}
 
 // ============================================================
 // Collection::LinkedList<T, Allocator> — doubly linked, head + tail + count.
