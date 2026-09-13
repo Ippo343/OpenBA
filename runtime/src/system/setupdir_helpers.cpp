@@ -31,6 +31,7 @@
 #include <cstddef>
 #include <cstring>
 #include <cstdio>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
@@ -57,51 +58,15 @@ bool SameText(const char* a, const char* b) {
 // ============================================================================
 // ?GetPathDirectory@Filename@System@@QEBA?AV12@XZ          retail 0x1800c6880
 // ============================================================================
-// "Everything up to and INCLUDING the last delimiter", or the null Filename if
-// there is no delimiter (and for a null or empty `this`).
-//
-// The trailing delimiter is kept, and that is load-bearing for this lane:
-// SetupDirectories immediately does `root + "cmd.txt"` and
-// `Format("%s%s%s\\", root, ...)` with no separator of its own, so a
-// GetPathDirectory that stripped the '\' would silently produce
-// "C:\GOG Games\Banishedcmd.txt". It is kept because
-// ?SubString@String@System@@QEBA?AV12@HH@Z takes an INCLUSIVE END, not a
-// count — retail computes `count = (end - start) + 1` (string.cpp's SubString
-// comment) — and retail passes `end = <index of the delimiter>`.
-//
-// The scan itself is a REVERSE walk from `length - 1` testing 0x2F and 0x5C,
-// read from the disassembly (0x1800c68d0-0x1800c68e4); the decompiled C for
-// this loop prints the MOVSXD of the index as a zero extension
-// (reference_ghidra_c_output_vs_disassembly.md), which would have made an
-// empty string walk off the front instead of taking the `JS` at 0x1800c68c6.
+// ENDGAME B.3.1 step 1: THE BODY MOVED to `System::Filename::GetPathDirectory`
+// (runtime/src/system/filename.cpp), where the rest of the class lives. The
+// reason it was written here in the first place — "Wave 2 lane A owns
+// filename.cpp and two lanes must not edit one source" — went with the waves.
+// This is now a one-line shim keeping the name, the signature and the two
+// registry rows below alive; it dies in step 2 with its last caller.
 Filename* RtSystem_Filename_GetPathDirectory(const Filename* self, Filename* ret) {
-
-    const char* d = self->data;
-    if (d == nullptr) {
-        ret->data = nullptr;
-    } else {
-        int i = StringLength(d) - 1;          // `MOV R9D,[RDX-8] ; DEC R9D`
-        while (i >= 0) {                      // `MOVSXD RAX,R9D ; JS`
-            const unsigned char c = static_cast<unsigned char>(d[i]);
-            if (c == '/' || c == '\\') break;
-            --i;
-        }
-        if (i < 0) {
-            ret->data = nullptr;
-        } else {
-            String tmp{nullptr};
-            RtSystem_String_SubString(reinterpret_cast<const String*>(self),
-                                      &tmp, 0, i);
-            ret->data = nullptr;
-            RtString_AdoptInline(reinterpret_cast<String*>(ret), tmp.data);
-            RtSystem_Filename_AdjustDelimiters(ret);
-            RtString_ReleaseInline(&tmp);
-        }
-    }
-
-    // `self` is const and untouched, and the shipped body allocates its own
-    // buffer, so the replay is safe and only the TEXT can be compared (ours
-    // and theirs never share a pointer).
+    new (reinterpret_cast<System::Filename*>(ret))
+        System::Filename(reinterpret_cast<const System::Filename*>(self)->GetPathDirectory());
     return ret;
 }
 

@@ -22,8 +22,17 @@
 // const on `this` and produce independent results, so they are diffed.
 // ============================================================================
 
+// ============================================================================
+// ENDGAME B.3.1 step 1: the bodies below now live on `System::Filename`
+// (runtime/types/system/Filename.h), together with GetPathDirectory, whose body
+// moved here out of setupdir_helpers.cpp. They MOVED — they were not rewritten.
+// The `RtSystem_Filename_*` free functions are one-line shims at the end of the
+// file and die in step 2 (B31_RULES.md).
+// ============================================================================
+
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../types/system/Filename.h"
 #include "../../funcs/rt_port.h"
@@ -31,30 +40,42 @@
 
 namespace RtSystem {
 
-// Retail passes `this` straight into String methods; so do we.
-static inline String* AsString(Filename* f) { return reinterpret_cast<String*>(f); }
-static inline const String* AsString(const Filename* f) {
-    return reinterpret_cast<const String*>(f);
+// The transitional bridge from the POD the tree still uses to the class; one
+// cast, over two types that ARE the same bytes. It goes with the POD.
+static inline System::Filename*       AsSys(Filename* f) {
+    return reinterpret_cast<System::Filename*>(f);
+}
+static inline const System::Filename* AsSys(const Filename* f) {
+    return reinterpret_cast<const System::Filename*>(f);
 }
 
-void RtSystem_Filename_AdjustDelimiters(Filename* self);
+}  // namespace RtSystem
+
+// ############################################################################
+// System::Filename — the class (ENDGAME B.3.1 step 1)
+// ############################################################################
+// `Filename::GetPathExtension`'s body lives in external_path_win.cpp; see the
+// comment on that member below.
+namespace RtObject {
+RtSystem::Filename* RtSystem_Filename_GetPathExtension(const RtSystem::Filename* self,
+                                                       RtSystem::Filename* ret);
+}
+
+namespace System {
+
+using RtSystem::StringLength;
 
 // ============================================================
-// Constructors / destructor — NOT DIFFED
+// Constructors / destructor
 // ============================================================
 
 // ??0Filename@System@@QEAA@XZ  retail 0x180006220
-Filename* RtSystem_Filename_Ctor(Filename* self) {
-    self->data = nullptr;
-    return self;
-}
+Filename::Filename() : _data(nullptr) {}
 
 // ??0Filename@System@@QEAA@PEBD@Z  retail 0x180026cf0
-Filename* RtSystem_Filename_CtorCStr(Filename* self, const char* src) {
-    self->data = nullptr;
-    RtSystem_String_Set(AsString(self), src);
-    RtSystem_Filename_AdjustDelimiters(self);
-    return self;
+Filename::Filename(const char* src) : _data(nullptr) {
+    AsString().Set(src);
+    AdjustDelimiters();
 }
 
 // ??0Filename@System@@QEAA@AEBVString@1@@Z  retail 0x18000c780
@@ -64,11 +85,9 @@ Filename* RtSystem_Filename_CtorCStr(Filename* self, const char* src) {
 // characters too when the path contained forward slashes. That is retail's
 // behaviour and several call sites depend on the resulting Filename and its
 // source String staying identical.
-Filename* RtSystem_Filename_CtorString(Filename* self, const String* src) {
-    self->data = nullptr;
-    RtString_AdoptInline(AsString(self), src->data);
-    RtSystem_Filename_AdjustDelimiters(self);
-    return self;
+Filename::Filename(const String& src) : _data(nullptr) {
+    StringPrivateAccess::Adopt(AsString(), src._data);
+    AdjustDelimiters();
 }
 
 // ??0Filename@System@@QEAA@AEBV01@@Z  retail 0x1800067d0
@@ -78,52 +97,67 @@ Filename* RtSystem_Filename_CtorString(Filename* self, const String* src) {
 // Retail zeroes, then inlines operator=(const Filename&) — which already ends
 // in AdjustDelimiters — and then calls AdjustDelimiters a SECOND time. The
 // second call is idempotent, but it is transcribed rather than folded away.
-Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other) {
-    self->data = nullptr;
-    if (self->data != other->data) {
-        RtString_ReleaseInline(AsString(self));
-        self->data = other->data;
-        if (self->data != nullptr)
-            ++StringRefCount(self->data);
+Filename::Filename(const Filename& other) : _data(nullptr) {
+    if (_data != other._data) {
+        StringPrivateAccess::Release(AsString());
+        _data = other._data;
+        if (_data != nullptr)
+            ++RtSystem::StringRefCount(_data);
     }
-    RtSystem_Filename_AdjustDelimiters(self);
-    RtSystem_Filename_AdjustDelimiters(self);
-    return self;
+    AdjustDelimiters();
+    AdjustDelimiters();
+}
+
+// Not retail's: a pure pointer steal (B31_RULES class rule 4). The source was
+// normalised when it was built, so the AdjustDelimiters the copy ctor runs
+// would find nothing to do.
+Filename::Filename(Filename&& other) noexcept : _data(other._data) {
+    other._data = nullptr;
 }
 
 // ??1Filename@System@@QEAA@XZ  retail 0x180006980
-void RtSystem_Filename_Dtor(Filename* self) {
-    RtString_ReleaseInline(AsString(self));
+Filename::~Filename() {
+    StringPrivateAccess::Release(AsString());
 }
 
 // ============================================================
-// Assignment — NOT DIFFED
+// Assignment
 // ============================================================
 
 // ??4Filename@System@@QEAAAEAV01@AEBV01@@Z  retail 0x180006770
-Filename* RtSystem_Filename_Assign(Filename* self, const Filename* rhs) {
-    if (self->data != rhs->data) {
-        RtString_ReleaseInline(AsString(self));
-        self->data = rhs->data;
-        if (self->data != nullptr)
-            ++StringRefCount(self->data);
+Filename& Filename::operator=(const Filename& rhs) {
+    if (_data != rhs._data) {
+        StringPrivateAccess::Release(AsString());
+        _data = rhs._data;
+        if (_data != nullptr)
+            ++RtSystem::StringRefCount(_data);
     }
-    RtSystem_Filename_AdjustDelimiters(self);
-    return self;
+    AdjustDelimiters();
+    return *this;
 }
 
 // ??4Filename@System@@QEAAAEAV01@AEBVString@1@@Z  retail 0x180026d40
 // Byte-identical to the Filename& overload — the two are separate exports of
 // the same code shape, not a forwarder.
-Filename* RtSystem_Filename_AssignString(Filename* self, const String* rhs) {
-    if (self->data != rhs->data) {
-        RtString_ReleaseInline(AsString(self));
-        self->data = rhs->data;
-        if (self->data != nullptr)
-            ++StringRefCount(self->data);
+Filename& Filename::operator=(const String& rhs) {
+    if (_data != rhs._data) {
+        StringPrivateAccess::Release(AsString());
+        _data = rhs._data;
+        if (_data != nullptr)
+            ++RtSystem::StringRefCount(_data);
     }
-    RtSystem_Filename_AdjustDelimiters(self);
-    return self;
+    AdjustDelimiters();
+    return *this;
+}
+
+// Not retail's: the pointer steal, self-move short-circuited as above.
+Filename& Filename::operator=(Filename&& rhs) noexcept {
+    if (this != &rhs) {
+        StringPrivateAccess::Release(AsString());
+        _data = rhs._data;
+        rhs._data = nullptr;
+    }
+    return *this;
 }
 
 // ============================================================
@@ -154,14 +188,14 @@ static int StriCmpAscii(const char* a, const char* b) {
     }
 }
 
-bool RtSystem_Filename_Less(const Filename* self, const Filename* other) {
+bool Filename::operator<(const Filename& other) const {
     bool ours;
-    if (other->data == nullptr)
+    if (other._data == nullptr)
         ours = false;
-    else if (self->data == nullptr)
+    else if (_data == nullptr)
         ours = true;
     else
-        ours = StriCmpAscii(self->data, other->data) < 0;
+        ours = StriCmpAscii(_data, other._data) < 0;
 
     return ours;
 }
@@ -190,19 +224,19 @@ bool RtSystem_Filename_Less(const Filename* self, const Filename* other) {
 //     re-scan finds nothing, but the loop is what retail wrote.
 // GetLength is re-read from the object on every iteration because the splice
 // replaces the buffer.
-void RtSystem_Filename_AdjustDelimiters(Filename* self) {
+void Filename::AdjustDelimiters() {
     // Phase 1: '/' -> '\\'
     {
         int i = 0;
         int64_t k = 0;
-        int len = RtString_GetLength(AsString(self));
+        int len = AsString().GetLength();
         if (len > 0) {
             do {
-                if (self->data[k] == '/')
-                    self->data[k] = '\\';
+                if (_data[k] == '/')
+                    _data[k] = '\\';
                 ++i;
                 ++k;
-                len = RtString_GetLength(AsString(self));
+                len = AsString().GetLength();
             } while (i < len);
         }
     }
@@ -212,17 +246,17 @@ void RtSystem_Filename_AdjustDelimiters(Filename* self) {
     for (;;) {
         int i = 0;
         int64_t k = 0;
-        if (RtString_GetLength(AsString(self)) - 2 <= 0)
+        if (AsString().GetLength() - 2 <= 0)
             return;
 
-        const char* base = self->data;   // cached once, as retail caches RBP
+        const char* base = _data;   // cached once, as retail caches RBP
         bool collapse = false;
 
         for (;;) {
             bool isDelim = false;
             if (base[k] == '\\') {
                 if (base[k + 1] == '.' && base[k + 2] == '.' && lastDelim >= 1) {
-                    if (i + 3 < RtString_GetLength(AsString(self)) - 1) {
+                    if (i + 3 < AsString().GetLength() - 1) {
                         collapse = true;
                         break;
                     }
@@ -235,26 +269,20 @@ void RtSystem_Filename_AdjustDelimiters(Filename* self) {
                 lastDelim = i;
             ++i;
             ++k;
-            if (i >= RtString_GetLength(AsString(self)) - 2)
+            if (i >= AsString().GetLength() - 2)
                 return;
         }
         if (!collapse)
             return;
 
-        String tail{nullptr};
-        String head{nullptr};
-        String spliced{nullptr};
-
-        RtSystem_String_SubString(AsString(self), &tail, i + 3,
-                                  RtString_GetLength(AsString(self)) - 1);
-        RtSystem_String_SubString(AsString(self), &head, 0, lastDelim - 1);
-        RtSystem_String_Concat(&spliced, &head, &tail);
-        RtSystem_String_Assign(AsString(self), &spliced);
-        RtSystem_Filename_AdjustDelimiters(self);
-
-        RtString_ReleaseInline(&spliced);
-        RtString_ReleaseInline(&head);
-        RtString_ReleaseInline(&tail);
+        String tail    = AsString().SubString(i + 3, AsString().GetLength() - 1);
+        String head    = AsString().SubString(0, lastDelim - 1);
+        String spliced = head + tail;
+        AsString() = spliced;
+        AdjustDelimiters();
+        // The three explicit releases retail wrote out are the three locals'
+        // destructors, and they run in retail's order (spliced, head, tail)
+        // because the declarations are in the reverse of it.
     }
 }
 
@@ -263,17 +291,7 @@ void RtSystem_Filename_AdjustDelimiters(Filename* self) {
 // ============================================================
 
 // Both of these produce a fresh Filename with its own buffer and touch nothing
-// shared, so the original can be run into a private scratch and compared.
-namespace {
-bool SameText(const Filename* a, const Filename* b) {
-    if ((a->data == nullptr) != (b->data == nullptr))
-        return false;
-    if (a->data == nullptr)
-        return true;
-    return StringLength(a->data) == StringLength(b->data) &&
-           std::strcmp(a->data, b->data) == 0;
-}
-}  // namespace
+// shared.
 
 // ?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z  retail 0x1800c6740
 // Returns the leaf, with the extension stripped when `stripExt` is true.
@@ -282,12 +300,11 @@ bool SameText(const Filename* a, const Filename* b) {
 // found at index >= 1, a true flag returns the EMPTY filename rather than the
 // whole leaf. So `GetPathFilename(true)` on an extension-less path yields
 // nothing at all.
-Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret, bool stripExt) {
+Filename Filename::GetPathFilename(bool stripExt) const {
+    Filename ret;
 
-    const char* d = self->data;
-    if (d == nullptr) {
-        ret->data = nullptr;
-    } else {
+    const char* d = _data;
+    if (d != nullptr) {
         int end = StringLength(d) - 1;
 
         // Scan back for the extension dot; i == -1 means none was found.
@@ -303,10 +320,8 @@ Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
         }
         bool done = false;
         if (i < 1) {
-            if (stripExt) {
-                ret->data = nullptr;
-                done = true;
-            }
+            if (stripExt)
+                done = true;         // the NULL Filename; see the comment above
         } else {
             end = i - 1;
         }
@@ -328,21 +343,14 @@ Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
             if (i >= 0)
                 start = i + 1;
 
-            if (end < start) {
-                ret->data = nullptr;
-            } else {
-                String tmp{nullptr};
-                RtSystem_String_SubString(AsString(self), &tmp, start, end);
-                ret->data = nullptr;
-                RtString_AdoptInline(AsString(ret), tmp.data);
-                RtSystem_Filename_AdjustDelimiters(ret);
-                RtString_ReleaseInline(&tmp);
+            if (end >= start) {
+                String tmp = AsString().SubString(start, end);
+                StringPrivateAccess::Adopt(ret.AsString(), tmp._data);
+                ret.AdjustDelimiters();
             }
         }
     }
 
-    // `ret != self`: see the same guard in String::SubString — the oracle must
-    // not be handed an input our own run has already overwritten.
     return ret;
 }
 
@@ -355,12 +363,11 @@ Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret,
 // back UNLESS a '.', '/' or '\\' was seen on the way, in which case the result
 // is empty: an identifier is a bare name, and anything that looks like a path
 // or a file with an extension has no identifier.
-Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret) {
+Filename Filename::GetPathIdentifer() const {
+    Filename ret;
 
-    const char* d = self->data;
-    if (d == nullptr) {
-        ret->data = nullptr;
-    } else {
+    const char* d = _data;
+    if (d != nullptr) {
         bool sawPathChar = false;
         int i = StringLength(d) - 1;
         int64_t k = i;
@@ -381,21 +388,131 @@ Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret
         }
 
         if (i < 0) {
-            if (sawPathChar)
-                ret->data = nullptr;
-            else
-                RtSystem_Filename_CtorCopy(ret, self);
+            if (!sawPathChar)
+                ret = Filename(*this);   // retail's copy ctor, twin AdjustDelimiters and all
         } else {
             const int len = d ? StringLength(d) : 0;
-            String tmp{nullptr};
-            RtSystem_String_SubString(AsString(self), &tmp, i + 1, len - 1);
-            ret->data = nullptr;
-            RtString_AdoptInline(AsString(ret), tmp.data);
-            RtSystem_Filename_AdjustDelimiters(ret);
-            RtString_ReleaseInline(&tmp);
+            String tmp = AsString().SubString(i + 1, len - 1);
+            StringPrivateAccess::Adopt(ret.AsString(), tmp._data);
+            ret.AdjustDelimiters();
         }
     }
 
+    return ret;
+}
+
+// ============================================================================
+// ?GetPathDirectory@Filename@System@@QEBA?AV12@XZ          retail 0x1800c6880
+// ============================================================================
+// MOVED HERE from runtime/src/system/setupdir_helpers.cpp (ENDGAME B.3.1 step 1
+// — that file kept it out of filename.cpp only because Wave 2 lane A owned this
+// file and two lanes must not edit one source; that reason is gone). The
+// `RtSystem_Filename_GetPathDirectory` name and its registry rows stay there,
+// now as a shim.
+//
+// "Everything up to and INCLUDING the last delimiter", or the null Filename if
+// there is no delimiter (and for a null or empty `this`).
+//
+// The trailing delimiter is kept, and that is load-bearing: SetupDirectories
+// immediately does `root + "cmd.txt"` and `Format("%s%s%s\\", root, ...)` with
+// no separator of its own, so a GetPathDirectory that stripped the '\' would
+// silently produce "C:\GOG Games\Banishedcmd.txt". It is kept because SubString
+// takes an INCLUSIVE END, not a count, and retail passes `end = <index of the
+// delimiter>`.
+//
+// The scan itself is a REVERSE walk from `length - 1` testing 0x2F and 0x5C,
+// read from the disassembly (0x1800c68d0-0x1800c68e4); the decompiled C for
+// this loop prints the MOVSXD of the index as a zero extension
+// (reference_ghidra_c_output_vs_disassembly.md), which would have made an
+// empty string walk off the front instead of taking the `JS` at 0x1800c68c6.
+Filename Filename::GetPathDirectory() const {
+    Filename ret;
+
+    const char* d = _data;
+    if (d != nullptr) {
+        int i = StringLength(d) - 1;          // `MOV R9D,[RDX-8] ; DEC R9D`
+        while (i >= 0) {                      // `MOVSXD RAX,R9D ; JS`
+            const unsigned char c = static_cast<unsigned char>(d[i]);
+            if (c == '/' || c == '\\') break;
+            --i;
+        }
+        if (i >= 0) {
+            String tmp = AsString().SubString(0, i);
+            StringPrivateAccess::Adopt(ret.AsString(), tmp._data);
+            ret.AdjustDelimiters();
+        }
+    }
+
+    return ret;
+}
+
+// ?GetPathExtension@Filename@System@@QEBA?AV12@XZ          retail 0x1800c64f0
+//
+// THE BODY IS STILL IN runtime/src/object/external_path_win.cpp and this is a
+// forward to it, not a second transcription (a duplicate would be a silently
+// dead body — reference_grep_for_the_port_before_writing_it.md). That file
+// wraps the body in the `g_pc` path-counter instrumentation its own lane
+// reports, and it is not this batch's file; the body comes here when
+// `Object::ExternalFactory` is converted.
+Filename Filename::GetPathExtension() const {
+    RtSystem::Filename raw{nullptr};
+    RtObject::RtSystem_Filename_GetPathExtension(
+        reinterpret_cast<const RtSystem::Filename*>(this), &raw);
+    Filename out;
+    out._data = raw.data;   // the C body built the value; take it whole, no refcount edit
+    return out;
+}
+
+}  // namespace System
+
+// ############################################################################
+// ENDGAME B.3.1 step 1 — THE SHIMS. THEY DIE IN STEP 2.
+// ############################################################################
+// Same contract as string.cpp's shim block: the pre-conversion signature is
+// kept exactly (hidden return slot included), the registry rows below register
+// THESE, and a shim that produces a value constructs into the caller's raw
+// `ret` slot with placement new rather than assigning to it.
+// ############################################################################
+namespace RtSystem {
+
+Filename* RtSystem_Filename_Ctor(Filename* self) {
+    new (AsSys(self)) System::Filename();
+    return self;
+}
+Filename* RtSystem_Filename_CtorCStr(Filename* self, const char* src) {
+    new (AsSys(self)) System::Filename(src);
+    return self;
+}
+Filename* RtSystem_Filename_CtorString(Filename* self, const String* src) {
+    new (AsSys(self)) System::Filename(*reinterpret_cast<const System::String*>(src));
+    return self;
+}
+Filename* RtSystem_Filename_CtorCopy(Filename* self, const Filename* other) {
+    new (AsSys(self)) System::Filename(*AsSys(other));
+    return self;
+}
+void RtSystem_Filename_Dtor(Filename* self) { AsSys(self)->~Filename(); }
+
+Filename* RtSystem_Filename_Assign(Filename* self, const Filename* rhs) {
+    *AsSys(self) = *AsSys(rhs);
+    return self;
+}
+Filename* RtSystem_Filename_AssignString(Filename* self, const String* rhs) {
+    *AsSys(self) = *reinterpret_cast<const System::String*>(rhs);
+    return self;
+}
+bool RtSystem_Filename_Less(const Filename* self, const Filename* other) {
+    return *AsSys(self) < *AsSys(other);
+}
+void RtSystem_Filename_AdjustDelimiters(Filename* self) {
+    System::FilenamePrivateAccess::AdjustDelimiters(*AsSys(self));
+}
+Filename* RtSystem_Filename_GetPathFilename(const Filename* self, Filename* ret, bool stripExt) {
+    new (AsSys(ret)) System::Filename(AsSys(self)->GetPathFilename(stripExt));
+    return ret;
+}
+Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret) {
+    new (AsSys(ret)) System::Filename(AsSys(self)->GetPathIdentifer());
     return ret;
 }
 
@@ -404,6 +521,7 @@ Filename* RtSystem_Filename_GetPathIdentifer(const Filename* self, Filename* ret
 // ============================================================
 // Registration
 // ============================================================
+#ifndef BANISHED_UNIT_TEST
 int RtSystemFilenameRegister() {
     using namespace RtSystem;
     int n = 0;
@@ -466,3 +584,4 @@ int RtSystemFilenameRegister() {
     printf("[RtPort]   System::Filename: %d exports registered\n", n);
     return n;
 }
+#endif  // BANISHED_UNIT_TEST

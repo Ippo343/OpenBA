@@ -22,15 +22,37 @@
 // System::MemoryAllocator's MemAlloc/MemFree through the registry.
 // ============================================================================
 
+// ============================================================================
+// ENDGAME B.3.1 step 1: the bodies below now live on `System::String`
+// (runtime/types/system/String.h). They MOVED — they were not rewritten — and
+// the hidden return slot went with the DLL boundary that required it. Every
+// `RtSystem_String_*` / `RtString_*` free function in this file is now a
+// one-line shim over the member on the same eight bytes, so that no caller has
+// to move in this commit. THE SHIMS AND THE REGISTRY ROWS DIE IN STEP 2, when
+// the last caller of each is converted (B31_RULES.md).
+// ============================================================================
+
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <new>
 
 #include "../../types/system/String.h"
 #include "../../funcs/rt_port.h"
 #include "string.h"
 
 namespace RtSystem {
+
+// The transitional bridge between the POD the tree still uses and the class.
+// One reinterpret_cast, in one place, over two types that ARE the same bytes
+// (both are `{ char* }`, both static_asserted at 8). It goes with the PODs.
+static inline System::String*       AsSys(String* s) {
+    return reinterpret_cast<System::String*>(s);
+}
+static inline const System::String* AsSys(const String* s) {
+    return reinterpret_cast<const System::String*>(s);
+}
 
 // ============================================================
 // The DLL's allocator
@@ -44,17 +66,32 @@ namespace RtSystem {
 // NOTE: the ...@SAPEAXII@Z ("unsigned, unsigned") spelling of MemAlloc that
 // circulates in this project's notes is NOT an export of Runtime-x64.dll. The
 // only two forms are the _KH (size_t, int) and PEAX ones used here.
+#ifndef BANISHED_UNIT_TEST
 namespace {
 using MemAllocFn = void* (*)(uint64_t, int);
 using MemFreeFn  = void  (*)(void*);
 MemAllocFn g_memAlloc = nullptr;
 MemFreeFn  g_memFree  = nullptr;
 }  // namespace
+#endif
 
 // Registration is all-or-nothing (RegisterAllocatorExports registers MemAlloc
 // and MemFree together), so the two halves can never disagree about whose heap
 // they are on.
 
+#ifdef BANISHED_UNIT_TEST
+// The host unit test (tests/unit, `make unit`) links this file without the
+// registry, so there is no MemoryAllocator to resolve. The class under test
+// only needs A heap, and every allocation it makes it also frees, so malloc is
+// the whole requirement. B31_RULES rule 6 allows exactly this and asks that it
+// be named in the report.
+void* RtMemAlloc(uint64_t size, int align) {
+    (void)align;
+    return std::malloc(static_cast<size_t>(size));
+}
+
+void RtMemFree(void* p) { std::free(p); }
+#else
 void* RtMemAlloc(uint64_t size, int align) {
     if (!g_memAlloc)
         g_memAlloc = reinterpret_cast<MemAllocFn>(
@@ -68,43 +105,63 @@ void RtMemFree(void* p) {
             ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
     g_memFree(p);
 }
+#endif
+
+}  // namespace RtSystem
+
+// ############################################################################
+// System::String — the class (ENDGAME B.3.1 step 1)
+// ############################################################################
+// Every body below is the body the like-named C function in this file had
+// before the conversion, with `self->data` spelled `_data` and the hidden
+// return slot dropped. The `RtSystem_*` names live on as shims at the end of
+// the file.
+// ############################################################################
+namespace System {
+
+using RtSystem::StringLength;
+using RtSystem::StringRefCount;
+using RtSystem::RtMemAlloc;
+using RtSystem::RtMemFree;
+using RtSystem::kStringAllocAlign;
 
 // ============================================================
-// The inlined idioms
+// The inlined idioms (private)
 // ============================================================
 
 // ?SetLength@String@System@@AEAAXH@Z  retail 0x1800c8220
 // Release, then allocate (len+1)+8 bytes; length at block+0, refcount 1 at
 // block+4, data = block+8. Does NOT write a terminator — every caller does.
-void RtString_SetLength(String* self, int len) {
-    RtString_ReleaseInline(self);
+void String::SetLength(int len) {
+    Release();
     int32_t* block = static_cast<int32_t*>(
         RtMemAlloc(static_cast<uint64_t>(static_cast<int64_t>(len) + 1) + 8, kStringAllocAlign));
-    self->data = reinterpret_cast<char*>(block + 2);
+    _data = reinterpret_cast<char*>(block + 2);
     block[0] = len;
     block[1] = 1;
 }
 
-// The release sequence from ?Release@String@System@@AEAAXXZ (0x1800c9870) and
-// ~String (0x180006c80). The asymmetry is retail's: on the freeing branch the
-// object keeps `data - 8`, on the sharing branch it is nulled. See String.h.
-void RtString_ReleaseInline(String* self) {
-    char* d = self->data;
+// ?Release@String@System@@AEAAXXZ  retail 0x1800c9870, and the identical
+// sequence inlined in ~String (0x180006c80). The asymmetry is retail's: on the
+// freeing branch the object keeps `data - 8`, on the sharing branch it is
+// nulled. See String.h — reproduce it, do not tidy it.
+void String::Release() {
+    char* d = _data;
     if (d == nullptr)
         return;
     if (--StringRefCount(d) == 0) {
-        self->data = d - 8;
-        RtMemFree(self->data);
+        _data = d - 8;
+        RtMemFree(_data);
     } else {
-        self->data = nullptr;
+        _data = nullptr;
     }
 }
 
-// The AddRef half of the copy ctor (0x180006cb0). `self->data` must already
-// have been zeroed or released.
-void RtString_AdoptInline(String* self, char* src) {
+// The AddRef half of the copy ctor (0x180006cb0). `_data` must already have
+// been zeroed or released.
+void String::Adopt(char* src) {
     if (src != nullptr) {
-        self->data = src;
+        _data = src;
         ++StringRefCount(src);
     }
 }
@@ -128,7 +185,7 @@ void RtString_AdoptInline(String* self, char* src) {
 // records which way the assumption used to point. Any input with a byte >=
 // 0x80 at the differing index separates the two spellings; the sweep in
 // RtSystem_StrCompareProbe() feeds exactly those (bucket `highBit`).
-int RtString_StrCompare(const char* a, const char* b) {
+int String::StrCompare(const char* a, const char* b) {
     if (a == nullptr)
         return -static_cast<int>(b != nullptr);
     if (b == nullptr)
@@ -152,19 +209,8 @@ int RtString_StrCompare(const char* a, const char* b) {
 }
 
 // ?GetLength@String@System@@QEBAHXZ  retail 0x1800063c0
-int RtString_GetLength(const String* self) {
-    return self->data ? StringLength(self->data) : 0;
-}
-
-// Text comparison used by every diff site in this file that compares two
-// Strings rather than a scalar.
-static bool RtStringSameText(const String* a, const String* b) {
-    if ((a->data == nullptr) != (b->data == nullptr))
-        return false;
-    if (a->data == nullptr)
-        return true;
-    return StringLength(a->data) == StringLength(b->data) &&
-           std::strcmp(a->data, b->data) == 0;
+int String::GetLength() const {
+    return _data ? StringLength(_data) : 0;
 }
 
 // ??HSystem@@YA?AVString@0@AEBV10@0@Z  retail 0x1800c9440
@@ -180,51 +226,48 @@ static bool RtStringSameText(const String* a, const String* b) {
 // AddRef an input buffer (+1) and the release afterwards undoes it (-1); the
 // count can never reach 0 there, because the input itself still holds a
 // reference.
-static String* RtStringConcatImpl(String* ret, const String* lhs, const String* rhs) {
-    const int lhsLen = lhs->data ? StringLength(lhs->data) : 0;
-    const int rhsLen = rhs->data ? StringLength(rhs->data) : 0;
+String operator+(const String& lhs, const String& rhs) {
+    String ret;
+    const int lhsLen = lhs._data ? StringLength(lhs._data) : 0;
+    const int rhsLen = rhs._data ? StringLength(rhs._data) : 0;
 
     // Either side empty (null OR zero stored length): the result ADOPTS the
     // other side's buffer rather than copying it.
-    if (lhs->data == nullptr || lhsLen == 0) {
-        ret->data = nullptr;
-        RtString_AdoptInline(ret, rhs->data);
+    if (lhs._data == nullptr || lhsLen == 0) {
+        StringPrivateAccess::Adopt(ret, rhs._data);
         return ret;
     }
-    if (rhs->data == nullptr || rhsLen == 0) {
-        ret->data = nullptr;
-        RtString_AdoptInline(ret, lhs->data);
+    if (rhs._data == nullptr || rhsLen == 0) {
+        StringPrivateAccess::Adopt(ret, lhs._data);
         return ret;
     }
 
-    String tmp{nullptr};
-    RtString_SetLength(&tmp, lhsLen + rhsLen);
-    char* out = tmp.data;
-    std::memcpy(out, lhs->data, static_cast<size_t>(lhsLen));
-    std::memcpy(out + lhsLen, rhs->data, static_cast<size_t>(rhsLen));
+    String tmp;
+    StringPrivateAccess::SetLength(tmp, lhsLen + rhsLen);
+    char* out = tmp._data;
+    std::memcpy(out, lhs._data, static_cast<size_t>(lhsLen));
+    std::memcpy(out + lhsLen, rhs._data, static_cast<size_t>(rhsLen));
     out[lhsLen + rhsLen] = '\0';
 
     // Retail's move-out: adopt (refcount 1 -> 2), then release the local
     // (2 -> 1). The pair is not a no-op — it is how the buffer changes owner
     // without a copy — so it is written out rather than folded away.
-    ret->data = nullptr;
     if (out != nullptr) {
-        ret->data = out;
+        ret._data = out;
         ++StringRefCount(out);
         if (--StringRefCount(out) == 0) {
-            tmp.data = out - 8;
-            RtMemFree(tmp.data);
+            tmp._data = out - 8;
+            RtMemFree(tmp._data);
         }
     }
-    return ret;
-}
-
-String* RtSystem_String_Concat(String* ret, const String* lhs, const String* rhs) {
-    RtStringConcatImpl(ret, lhs, rhs);
-    // `ret` aliasing an input would mean ours had overwritten the oracle's
-    // input before it ran (WAVE1.md, "the oracle must not corrupt its own
-    // experiment"). A hidden return slot is always a fresh temporary in
-    // practice; the guard says so rather than assuming it.
+    // THE ONE THING THE CLASS HAS TO SAY OUT LOUD: after the pair above,
+    // `tmp._data` and `ret._data` are the same buffer at refcount 1 — the
+    // decrement can never reach 0 here, because the increment just ran. Retail's
+    // local was a POD and simply went out of scope; a real destructor would
+    // release it and free the buffer `ret` has just taken ownership of. The
+    // local is therefore disarmed, which is not a change of behaviour but the
+    // C body's unstated "nobody looks at tmp again" made explicit.
+    tmp._data = nullptr;
     return ret;
 }
 
@@ -233,17 +276,16 @@ String* RtSystem_String_Concat(String* ret, const String* lhs, const String* rhs
 // RDX=lhs, R8=rhs. Note the asymmetry with the String overload: when `lhs` is
 // empty this one Set()s from `rhs` (a COPY), because a C string has no
 // refcounted buffer to adopt.
-static String* RtStringConcatCStrImpl(String* ret, const String* lhs, const char* rhs) {
-    const int lhsLen = lhs->data ? StringLength(lhs->data) : 0;
+String operator+(const String& lhs, const char* rhs) {
+    String ret;
+    const int lhsLen = lhs._data ? StringLength(lhs._data) : 0;
 
-    if (lhs->data == nullptr || lhsLen == 0) {
-        ret->data = nullptr;
-        RtSystem_String_Set(ret, rhs);
+    if (lhs._data == nullptr || lhsLen == 0) {
+        ret.Set(rhs);
         return ret;
     }
     if (rhs == nullptr) {
-        ret->data = nullptr;
-        RtString_AdoptInline(ret, lhs->data);
+        StringPrivateAccess::Adopt(ret, lhs._data);
         return ret;
     }
 
@@ -251,27 +293,22 @@ static String* RtStringConcatCStrImpl(String* ret, const String* lhs, const char
     while (rhs[rhsLen] != '\0')
         ++rhsLen;
 
-    String tmp{nullptr};
-    RtString_SetLength(&tmp, lhsLen + rhsLen);
-    char* out = tmp.data;
-    std::memcpy(out, lhs->data, static_cast<size_t>(lhsLen));
+    String tmp;
+    StringPrivateAccess::SetLength(tmp, lhsLen + rhsLen);
+    char* out = tmp._data;
+    std::memcpy(out, lhs._data, static_cast<size_t>(lhsLen));
     std::memcpy(out + lhsLen, rhs, static_cast<size_t>(rhsLen));
     out[lhsLen + rhsLen] = '\0';
 
-    ret->data = nullptr;
     if (out != nullptr) {
-        ret->data = out;
+        ret._data = out;
         ++StringRefCount(out);
         if (--StringRefCount(out) == 0) {
-            tmp.data = out - 8;
-            RtMemFree(tmp.data);
+            tmp._data = out - 8;
+            RtMemFree(tmp._data);
         }
     }
-    return ret;
-}
-
-String* RtSystem_String_ConcatCStr(String* ret, const String* lhs, const char* rhs) {
-    RtStringConcatCStrImpl(ret, lhs, rhs);
+    tmp._data = nullptr;   // see the String overload above
     return ret;
 }
 
@@ -284,28 +321,27 @@ String* RtSystem_String_ConcatCStr(String* ret, const String* lhs, const char* r
 // and, at refcount 1, a double free.
 
 // ??0String@System@@QEAA@XZ  retail 0x180006760
-String* RtSystem_String_Ctor(String* self) {
-    self->data = nullptr;
-    return self;
-}
+String::String() : _data(nullptr) {}
 
 // ??0String@System@@QEAA@PEBD@Z  retail 0x18000b630
-String* RtSystem_String_CtorCStr(String* self, const char* src) {
-    self->data = nullptr;
-    RtSystem_String_Set(self, src);
-    return self;
+String::String(const char* src) : _data(nullptr) {
+    Set(src);
 }
 
 // ??0String@System@@QEAA@AEBV01@@Z  retail 0x180006cb0
-String* RtSystem_String_CtorCopy(String* self, const String* other) {
-    self->data = nullptr;
-    RtString_AdoptInline(self, other->data);
-    return self;
+String::String(const String& other) : _data(nullptr) {
+    Adopt(other._data);
+}
+
+// Not retail's: the pointer steal (B31_RULES class rule 4). No refcount edit,
+// and the source's destructor becomes a no-op.
+String::String(String&& other) noexcept : _data(other._data) {
+    other._data = nullptr;
 }
 
 // ??1String@System@@QEAA@XZ  retail 0x180006c80
-void RtSystem_String_Dtor(String* self) {
-    RtString_ReleaseInline(self);
+String::~String() {
+    Release();
 }
 
 // ============================================================
@@ -315,35 +351,46 @@ void RtSystem_String_Dtor(String* self) {
 // ??4String@System@@QEAAAEAV01@AEBV01@@Z  retail 0x1800c9810
 // Self-assignment and same-buffer assignment are short-circuited on the
 // POINTER, before the release; that guard is what makes `a = a` safe.
-String* RtSystem_String_Assign(String* self, const String* rhs) {
-    if (self->data != rhs->data) {
-        RtString_ReleaseInline(self);
-        self->data = rhs->data;
-        if (self->data != nullptr)
-            ++StringRefCount(self->data);
+String& String::operator=(const String& rhs) {
+    if (_data != rhs._data) {
+        Release();
+        _data = rhs._data;
+        if (_data != nullptr)
+            ++StringRefCount(_data);
     }
-    return self;
+    return *this;
+}
+
+// Not retail's: the pointer steal. Self-move is short-circuited on the pointer
+// exactly as the copy overload above is.
+String& String::operator=(String&& rhs) noexcept {
+    if (this != &rhs) {
+        Release();
+        _data = rhs._data;
+        rhs._data = nullptr;
+    }
+    return *this;
 }
 
 // ?Set@String@System@@QEAAXPEBD@Z  retail 0x1800c95d0
-void RtSystem_String_Set(String* self, const char* src) {
+void String::Set(const char* src) {
     if (src == nullptr) {
-        RtString_ReleaseInline(self);
+        Release();
         return;
     }
     // Setting to a string that compares equal to the current contents is a
     // no-op: retail does not reallocate, and does not un-share either.
-    if (self->data != nullptr && RtString_StrCompare(self->data, src) == 0)
+    if (_data != nullptr && StrCompare(_data, src) == 0)
         return;
 
     int len = 0;
     while (src[len] != '\0')
         ++len;
-    RtString_SetLength(self, len);
+    SetLength(len);
     // Retail recomputes the length a second time here and inlines StrCopy
     // (0x1800c96c0) with capacity len+1; the two lengths are necessarily
     // equal, so StrCopy's truncation arm is unreachable from Set.
-    std::memcpy(self->data, src, static_cast<size_t>(len) + 1);
+    std::memcpy(_data, src, static_cast<size_t>(len) + 1);
 }
 
 // ??YString@System@@QEAA?AV01@AEBV01@@Z  retail 0x1800c8a90
@@ -356,26 +403,26 @@ void RtSystem_String_Set(String* self, const char* src) {
 // the argument is never re-materialised, exactly the trap WAVE1.md defect 5
 // describes. Transcribed from the listing at 0x1800c8ab6..0x1800c8ac4, which
 // shows RCX=&tmp, RDX=this and R8 passing straight through untouched.
-String* RtSystem_String_AppendAssign(String* self, String* ret, const String* rhs) {
-    String tmp{nullptr};
-    RtSystem_String_Concat(&tmp, self, rhs);
-    RtSystem_String_Set(self, tmp.data);
-    RtString_ReleaseInline(&tmp);
+String String::operator+=(const String& rhs) {
+    String tmp = *this + rhs;
+    Set(tmp._data);
+    StringPrivateAccess::Release(tmp);
+    tmp._data = nullptr;   // the explicit release above is retail's; ~tmp must not repeat it
 
-    ret->data = nullptr;
-    RtString_AdoptInline(ret, self->data);
+    String ret;
+    StringPrivateAccess::Adopt(ret, _data);
     return ret;
 }
 
 // ??YString@System@@QEAA?AV01@PEBD@Z  retail 0x1800c9120
-String* RtSystem_String_AppendAssignCStr(String* self, String* ret, const char* rhs) {
-    String tmp{nullptr};
-    RtSystem_String_ConcatCStr(&tmp, self, rhs);
-    RtSystem_String_Set(self, tmp.data);
-    RtString_ReleaseInline(&tmp);
+String String::operator+=(const char* rhs) {
+    String tmp = *this + rhs;
+    Set(tmp._data);
+    StringPrivateAccess::Release(tmp);
+    tmp._data = nullptr;
 
-    ret->data = nullptr;
-    RtString_AdoptInline(ret, self->data);
+    String ret;
+    StringPrivateAccess::Adopt(ret, _data);
     return ret;
 }
 
@@ -386,9 +433,9 @@ String* RtSystem_String_AppendAssignCStr(String* self, String* ret, const char* 
 // ??8String@System@@QEBA_NAEBV01@@Z  retail 0x1800063d0
 // Compares the STORED lengths first (data[-8]), not strlen; two strings of
 // different stored length are unequal without touching the characters.
-bool RtSystem_String_Equals(const String* self, const String* other) {
-    const char* a = self->data;
-    const char* b = other->data;
+bool String::operator==(const String& other) const {
+    const char* a = _data;
+    const char* b = other._data;
     const int la = a ? StringLength(a) : 0;
     const int lb = b ? StringLength(b) : 0;
 
@@ -396,7 +443,7 @@ bool RtSystem_String_Equals(const String* self, const String* other) {
     if (la != lb)
         ours = false;
     else if (a != nullptr && StringLength(a) != 0)
-        ours = RtString_StrCompare(a, b) == 0;
+        ours = StrCompare(a, b) == 0;
     else
         ours = true;
 
@@ -404,12 +451,12 @@ bool RtSystem_String_Equals(const String* self, const String* other) {
 }
 
 // ??8String@System@@QEBA_NPEBD@Z  retail 0x180053c00
-bool RtSystem_String_EqualsCStr(const String* self, const char* other) {
+bool String::operator==(const char* other) const {
     bool ours;
-    if (self->data == nullptr)
+    if (_data == nullptr)
         ours = (other == nullptr);
     else if (other != nullptr)
-        ours = RtString_StrCompare(self->data, other) == 0;
+        ours = StrCompare(_data, other) == 0;
     else
         ours = false;
 
@@ -420,14 +467,14 @@ bool RtSystem_String_EqualsCStr(const String* self, const char* other) {
 // Null is LESS than everything, including another null: `x < null` is false
 // and `null < null` is false, but `null < x` is true. That asymmetry is the
 // ordering every Collection::Set<String> in the DLL is built on.
-bool RtSystem_String_Less(const String* self, const String* other) {
+bool String::operator<(const String& other) const {
     bool ours;
-    if (other->data == nullptr)
+    if (other._data == nullptr)
         ours = false;
-    else if (self->data == nullptr)
+    else if (_data == nullptr)
         ours = true;
     else
-        ours = RtString_StrCompare(self->data, other->data) < 0;
+        ours = StrCompare(_data, other._data) < 0;
 
     return ours;
 }
@@ -443,20 +490,13 @@ bool RtSystem_String_Less(const String* self, const String* other) {
 // the trailing `data[count] = 0` writes BEHIND the buffer. Both are retail's,
 // and the inclusive-end convention is load-bearing: Filename::AdjustDelimiters
 // and String::FormatParamList both depend on it.
-String* RtSystem_String_SubString(const String* self, String* ret, int start, int end) {
+String String::SubString(int start, int end) const {
     const int count = (end - start) + 1;
-    ret->data = nullptr;
-    RtString_SetLength(ret, count);
+    String ret;
+    StringPrivateAccess::SetLength(ret, count);
     for (int i = 0; i < count; ++i)
-        ret->data[i] = self->data[start + i];
-    ret->data[count] = '\0';
-
-    // The original gets its own freshly allocated buffer; `self` is const and
-    // nothing is shared, so both can run on the same inputs — PROVIDED `ret`
-    // is not `self`. A hidden return slot is always a fresh temporary in
-    // practice, but if it ever were not, ours would have overwritten the input
-    // before theirs ran and the oracle would manufacture a divergence
-    // (WAVE1.md, "the oracle must not corrupt its own experiment").
+        ret._data[i] = _data[start + i];
+    ret._data[count] = '\0';
     return ret;
 }
 
@@ -469,7 +509,7 @@ String* RtSystem_String_SubString(const String* self, String* ret, int start, in
 // loads, named by address; the exponent is applied by repeated multiplication
 // in chunks of 1e20 / 1e8 / 10, which is NOT the same rounding as a single
 // pow10 table lookup — hence the literal transcription.
-float RtSystem_String_ToFloat(const char* s) {
+float String::ToFloat(const char* s) {
     float ours;
     if (s == nullptr) {
         ours = 0.0f;
@@ -573,36 +613,40 @@ float RtSystem_String_ToFloat(const char* s) {
 // ABI: a static returning by memory, so RCX = the hidden return slot and RDX =
 // the format string; the varargs start at R8, whose home slot is where retail
 // points its va_list.
-String* RtSystem_String_Format(String* ret, const char* fmt, ...) {
-    if (fmt == nullptr) {
-        ret->data = nullptr;
+String String::FormatV(const char* fmt, va_list ap) {
+    String ret;
+    if (fmt == nullptr)
         return ret;
-    }
 
     // Retail's buffer is 0x4000 bytes on the stack, filled with _vsnprintf and
     // then hard-terminated at [0x3fff]. _vsnprintf does not terminate on
     // truncation and C99 vsnprintf does; the explicit terminator makes the two
     // agree on the truncated result too, so this is not a divergence.
     char buf[0x4000];
-    va_list ap;
-    va_start(ap, fmt);
     std::vsnprintf(buf, 0x4000, fmt, ap);
-    va_end(ap);
     buf[0x3fff] = '\0';
 
-    String tmp{nullptr};
-    RtSystem_String_Set(&tmp, buf);
+    String tmp;
+    tmp.Set(buf);
 
-    ret->data = nullptr;
-    if (tmp.data != nullptr) {
-        ret->data = tmp.data;
-        ++StringRefCount(tmp.data);
-        if (--StringRefCount(tmp.data) == 0) {
-            char* blk = tmp.data - 8;
-            tmp.data = blk;
+    if (tmp._data != nullptr) {
+        ret._data = tmp._data;
+        ++StringRefCount(tmp._data);
+        if (--StringRefCount(tmp._data) == 0) {
+            char* blk = tmp._data - 8;
+            tmp._data = blk;
             RtMemFree(blk);
         }
     }
+    tmp._data = nullptr;   // see operator+(String, String): retail's local was a POD
+    return ret;
+}
+
+String String::Format(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    String ret = FormatV(fmt, ap);
+    va_end(ap);
     return ret;
 }
 
@@ -625,21 +669,21 @@ void StringArray_SetCountFromEmpty(StringArray* arr, int n) {
     arr->capacity = n;
     arr->data = static_cast<String*>(RtMemAlloc(static_cast<uint64_t>(n) * 8, 8));
     for (int i = 0; i < n; ++i)
-        arr->data[i].data = nullptr;
+        arr->data[i]._data = nullptr;
 }
 
 // retail FUN_180011010 — release every String in a range.
 void StringArray_DestroyRange(String* p, int n) {
     for (int i = 0; i < n; ++i) {
-        char* d = p[i].data;
+        char* d = p[i]._data;
         if (d == nullptr)
             continue;
         if (--StringRefCount(d) == 0) {
-            p[i].data = d - 8;
-            if (p[i].data != nullptr)
-                RtMemFree(p[i].data);
+            p[i]._data = d - 8;
+            if (p[i]._data != nullptr)
+                RtMemFree(p[i]._data);
         } else {
-            p[i].data = nullptr;
+            p[i]._data = nullptr;
         }
     }
 }
@@ -679,7 +723,7 @@ void StringArray_DestroyRange(String* p, int n) {
 // is not a parameter, because the `i + 1 >= len` test (0x1800c8d77
 // `CMP R9D,R8D / JGE`) skips the case. `fmt == nullptr` returns 0 before the
 // strlen.
-int RtSystem_String_FormatParamCount(const char* fmt) {
+int String::FormatParamCount(const char* fmt) {
     int result = 0;
     if (fmt != nullptr) {
         int len = 0;
@@ -692,7 +736,6 @@ int RtSystem_String_FormatParamCount(const char* fmt) {
             if (index > result) result = index;
         }
     }
-    using Fn = int (*)(const char*);
     return result;
 }
 
@@ -722,97 +765,80 @@ int RtSystem_String_FormatParamCount(const char* fmt) {
 //    parameters (`"@1@2"`) that produces `SubString(segStart, i-1)` with
 //    `end < start`, i.e. a zero-length append, rather than skipping the append.
 //    Transcribed as written.
-String* RtSystem_String_FormatParamList(String* ret, const String* fmt, const String* params) {
+String String::FormatParamList(const String& fmt, const String* params) {
+    String ret;
 
-    String work{nullptr};
-    RtString_AdoptInline(&work, fmt->data);          // refcounted copy of fmt
-    ret->data = nullptr;
+    String work;
+    StringPrivateAccess::Adopt(work, fmt._data);      // refcounted copy of fmt
 
-    const int len = (work.data != nullptr) ? StringLength(work.data) : 0;
+    const int len = (work._data != nullptr) ? StringLength(work._data) : 0;
     int segStart = 0;                                 // R8D
     int i = 0;                                        // RDI / ESI
     while (i < len) {
-        const char* base = fmt->data;
+        const char* base = fmt._data;
         const bool isParam = base[i] == '@' && (i + 1) < len &&
                              base[i + 1] >= '0' && base[i + 1] <= '9';
         if (!isParam) { ++i; continue; }
 
         if (i > 0) {
-            String lit{nullptr}, discard{nullptr};
-            RtSystem_String_SubString(&work, &lit, segStart, i - 1);
-            RtSystem_String_AppendAssign(ret, &discard, &lit);
-            RtString_ReleaseInline(&discard);
-            RtString_ReleaseInline(&lit);
+            String lit = work.SubString(segStart, i - 1);
+            ret += lit;                               // the discarded copy is the temporary
         }
 
-        const int digit = static_cast<int>(static_cast<signed char>(fmt->data[i + 1])) - '0';
-        String discard{nullptr};
-        RtSystem_String_AppendAssign(ret, &discard, &params[digit]);
-        RtString_ReleaseInline(&discard);
+        const int digit = static_cast<int>(static_cast<signed char>(fmt._data[i + 1])) - '0';
+        ret += params[digit];
 
         i += 2;
         segStart = i;
     }
 
     if (segStart != i) {                              // trailing literal run
-        String lit{nullptr}, discard{nullptr};
-        RtSystem_String_SubString(&work, &lit, segStart, i - 1);
-        RtSystem_String_AppendAssign(ret, &discard, &lit);
-        RtString_ReleaseInline(&discard);
-        RtString_ReleaseInline(&lit);
+        String lit = work.SubString(segStart, i - 1);
+        ret += lit;
     }
 
-    RtString_ReleaseInline(&work);
-
-    // A real oracle: both inputs are const and our body's only net effect on
-    // them is an AddRef/Release pair that cancels, so the shipped body can be
-    // replayed on the same `fmt`/`params` into an independent result. Guarded
-    // against `ret` aliasing an input for the same reason SubString above is
-    // (reference_oracle_must_snapshot_aliased_inputs.md): if it ever did, ours
-    // would have destroyed the input before theirs ran and the oracle would
-    // manufacture a divergence rather than find one.
+    // `work`'s destructor is the release retail wrote out at 0x1800c8fe0.
     return ret;
 }
 
-String* RtSystem_String_FormatIndexed(String* ret, const char* fmt, ...) {
-    if (fmt == nullptr) {
-        ret->data = nullptr;
+String String::FormatIndexedV(const char* fmt, va_list ap) {
+    String ret;
+    if (fmt == nullptr)
         return ret;
-    }
 
-    // Called DIRECTLY: the callee is in this same translation unit and needs
-    // no resolution at all.
-    const int paramCount = RtSystem_String_FormatParamCount(fmt);
+    const int paramCount = FormatParamCount(fmt);
 
     if (paramCount == 0) {
-        ret->data = nullptr;
-        RtSystem_String_Set(ret, fmt);
+        ret.Set(fmt);
         return ret;
     }
 
     StringArray params{nullptr, 0, 0};
     StringArray_SetCountFromEmpty(&params, paramCount);
 
-    va_list ap;
-    va_start(ap, fmt);
     for (int i = 0; i < paramCount; ++i) {
         // Retail walks the register home slots forward from the format
         // string's; every vararg is a `const char*`.
-        String tmp{nullptr};
-        RtSystem_String_Set(&tmp, va_arg(ap, const char*));
-        RtSystem_String_Assign(&params.data[i], &tmp);
-        RtString_ReleaseInline(&tmp);
+        String tmp;
+        tmp.Set(va_arg(ap, const char*));
+        params.data[i] = tmp;
     }
-    va_end(ap);
 
-    String fmtStr{nullptr};
-    RtSystem_String_Set(&fmtStr, fmt);
-    RtSystem_String_FormatParamList(ret, &fmtStr, params.data);
-    RtString_ReleaseInline(&fmtStr);
+    String fmtStr;
+    fmtStr.Set(fmt);
+    ret = FormatParamList(fmtStr, params.data);
 
     StringArray_DestroyRange(params.data, params.count);
     if (params.data != nullptr)
         RtMemFree(params.data);
+    return ret;
+}
+
+String String::FormatIndexed(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    String ret = FormatIndexedV(fmt, ap);
+    va_end(ap);
     return ret;
 }
 
@@ -832,12 +858,9 @@ String* RtSystem_String_FormatIndexed(String* ret, const char* fmt, ...) {
 // IS the same counter. The shadow below is our own post-condition (the object
 // is either nulled or holds block-8), which is a weaker claim than a diff and
 // is labelled as one.
-void RtSystem_String_Release(String* self) {
-    char* before = self->data;
-    RtString_ReleaseInline(self);
-    const bool ok = (before == nullptr) ? (self->data == nullptr)
-                                        : (self->data == nullptr || self->data == before - 8);
-}
+// The body moved to `String::Release()` in the "inlined idioms" section at the
+// top of this file — it and RtString_ReleaseInline were always the same eleven
+// instructions, and now they are literally the same function.
 
 // ?ToInteger@String@System@@SAHPEBD@Z  retail 0x18003f620
 //
@@ -853,7 +876,7 @@ void RtSystem_String_Release(String* self) {
 //
 // No overflow handling and no errno: past INT_MAX retail simply wraps, and so
 // do we.
-int RtSystem_String_ToInteger(const char* s) {
+int String::ToInteger(const char* s) {
     int result = 0;
     if (s != nullptr) {
         const char* p = s;
@@ -867,7 +890,6 @@ int RtSystem_String_ToInteger(const char* s) {
         }
         result *= sign;
     }
-    using Fn = int (*)(const char*);
     return result;
 }
 
@@ -957,13 +979,13 @@ int Utf8EncodeOne(int32_t cp, char* dst) {
 }  // namespace
 
 // ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c9930
-void RtSystem_String_Serialize(String* self, void* serializerRaw) {
+void String::Serialize(void* serializerRaw) {
     RtSerializer* ser = static_cast<RtSerializer*>(serializerRaw);
     RtEncoding* enc = ser->encoding;
 
     // Length INCLUDING the terminator, with bit 31 as the "UTF-8 payload"
     // flag. On save this is what goes out; on load the call overwrites it.
-    uint32_t n = self->data ? static_cast<uint32_t>(StringLength(self->data) + 1) : 0u;
+    uint32_t n = _data ? static_cast<uint32_t>(StringLength(_data) + 1) : 0u;
     n |= 0x80000000u;
     EncCallUInt(enc, &n);
 
@@ -973,7 +995,7 @@ void RtSystem_String_Serialize(String* self, void* serializerRaw) {
     // Stream +0x08: 0 = loading/decode, non-zero = saving/encode.
     const bool loading = (ser->stream->loadingFlag == 0);
     if (loading && n != 0)
-        RtString_SetLength(self, static_cast<int>(n) - 1);
+        SetLength(static_cast<int>(n) - 1);
 
     if (legacyWide && loading && n != 0) {
         static bool warned = false;
@@ -1000,10 +1022,10 @@ void RtSystem_String_Serialize(String* self, void* serializerRaw) {
             }
         }
 
-        RtString_SetLength(self, total);
-        self->data[total] = '\0';
+        SetLength(total);
+        _data[total] = '\0';
 
-        char* const base = self->data;
+        char* const base = _data;
         char* out = base;
         int written = 0;
         for (uint8_t* p = buf; p < end;) {
@@ -1024,16 +1046,8 @@ void RtSystem_String_Serialize(String* self, void* serializerRaw) {
         return;
     }
 
-    EncCallArr(enc, kEncSerializeCharArr, n, self->data);
+    EncCallArr(enc, kEncSerializeCharArr, n, _data);
 }
-
-}  // namespace RtSystem
-
-
-// ============================================================
-// Registration
-// ============================================================
-namespace RtSystem {
 
 // ============================================================
 // CUTOVER CLOSURE BATCH D2 "helpers-high" (2026-09-12)
@@ -1050,22 +1064,22 @@ namespace RtSystem {
 // [RSP+0x30],AX` with AH already zero) and runs it through String::Set, so the
 // result goes through the normal allocate-and-copy path. Transcribed that way
 // rather than folded, because Set is where the length header is written.
-String* RtSystem_String_ConcatChar(String* ret, const String* lhs, char c) {
-    const int len = RtString_GetLength(lhs);
-    if (lhs->data == nullptr || len == 0) {
+String operator+(const String& lhs, char c) {
+    String ret;
+    const int len = lhs.GetLength();
+    if (lhs._data == nullptr || len == 0) {
         char buf[2];
         buf[0] = c;
         buf[1] = '\0';
-        ret->data = nullptr;
-        RtSystem_String_Set(ret, buf);
+        ret.Set(buf);
         return ret;
     }
 
-    String tmp{nullptr};
-    RtString_SetLength(&tmp, len + 1);
-    std::memcpy(tmp.data, lhs->data, static_cast<size_t>(len));
-    tmp.data[len] = c;
-    tmp.data[len + 1] = '\0';
+    String tmp;
+    StringPrivateAccess::SetLength(tmp, len + 1);
+    std::memcpy(tmp._data, lhs._data, static_cast<size_t>(len));
+    tmp._data[len] = c;
+    tmp._data[len + 1] = '\0';
 
     // Retail's tail, written out rather than expressed as Adopt + Release:
     // it bumps the refcount and then drops it again (the transfer is a copy
@@ -1073,14 +1087,14 @@ String* RtSystem_String_ConcatChar(String* ret, const String* lhs, char c) {
     // release idiom, it does NOT null `tmp.data` on the surviving branch. The
     // local dies immediately either way; the pair is reproduced because a
     // watchpoint on the refcount word sees it.
-    ret->data = nullptr;
-    if (tmp.data != nullptr) {
-        ret->data = tmp.data;
-        int32_t* rc = reinterpret_cast<int32_t*>(tmp.data - 4);
+    if (tmp._data != nullptr) {
+        ret._data = tmp._data;
+        int32_t* rc = reinterpret_cast<int32_t*>(tmp._data - 4);
         ++*rc;
         --*rc;
-        if (*rc == 0) RtMemFree(tmp.data - 8);
+        if (*rc == 0) RtMemFree(tmp._data - 8);
     }
+    tmp._data = nullptr;   // see operator+(String, String): retail's local was a POD
     return ret;
 }
 
@@ -1088,14 +1102,14 @@ String* RtSystem_String_ConcatChar(String* ret, const String* lhs, char c) {
 // MEMBER operator+=(char): RCX=this, RDX=hidden return slot, R8B=c. Same shape
 // as the two AppendAssign overloads above -- concat into a temporary, Set
 // `this` from it, release the temporary, then return a COPY of the new value.
-String* RtSystem_String_AppendAssignChar(String* self, String* ret, char c) {
-    String tmp{nullptr};
-    RtSystem_String_ConcatChar(&tmp, self, c);
-    RtSystem_String_Set(self, tmp.data);
-    RtString_ReleaseInline(&tmp);
+String String::operator+=(char c) {
+    String tmp = *this + c;
+    Set(tmp._data);
+    StringPrivateAccess::Release(tmp);
+    tmp._data = nullptr;
 
-    ret->data = nullptr;
-    RtString_AdoptInline(ret, self->data);
+    String ret;
+    StringPrivateAccess::Adopt(ret, _data);
     return ret;
 }
 
@@ -1115,26 +1129,18 @@ String* RtSystem_String_AppendAssignChar(String* self, String* ret, char c) {
 // is 0 when `data` is null. Nothing is clamped: SubString's inclusive-end
 // convention means an index past the end walks past the terminator, which is
 // retail's behaviour and stays.
-String* RtSystem_String_InsertAt(String* self, String* ret, int index, const String* s) {
-    if (index == 0) {
-        RtSystem_String_Concat(ret, s, self);
-        return ret;
-    }
-    if (index == RtString_GetLength(self)) {
-        RtSystem_String_Concat(ret, self, s);
-        return ret;
-    }
-    String tail{nullptr};
-    String head{nullptr};
-    String tmp{nullptr};
-    RtSystem_String_SubString(self, &tail, index, RtString_GetLength(self) - 1);
-    RtSystem_String_SubString(self, &head, 0, index - 1);
-    RtSystem_String_Concat(&tmp, &head, s);
-    RtSystem_String_Concat(ret, &tmp, &tail);
-    RtString_ReleaseInline(&tmp);
-    RtString_ReleaseInline(&head);
-    RtString_ReleaseInline(&tail);
-    return ret;
+String String::InsertAt(int index, const String& s) {
+    if (index == 0)
+        return s + *this;
+    if (index == GetLength())
+        return *this + s;
+
+    // The three locals are released in retail's order (tmp, head, tail) by
+    // being declared in the reverse of it.
+    String tail = SubString(index, GetLength() - 1);
+    String head = SubString(0, index - 1);
+    String tmp  = head + s;
+    return tmp + tail;
 }
 
 // ?RemoveAt@String@System@@QEBA?AV12@H@Z   retail 0x1800c86b0
@@ -1148,23 +1154,163 @@ String* RtSystem_String_InsertAt(String* self, String* ret, int index, const Str
 //                    tail = this.SubString(index + 1, len - 1)
 //                    ret  = head + tail
 //                    release tail, then head
-String* RtSystem_String_RemoveAt(const String* self, String* ret, int index) {
-    if (index == 0) {
-        RtSystem_String_SubString(self, ret, 1, RtString_GetLength(self) - 1);
-        return ret;
-    }
-    if (index == RtString_GetLength(self)) {
-        RtSystem_String_SubString(self, ret, 0, RtString_GetLength(self) - 2);
-        return ret;
-    }
-    String head{nullptr};
-    String tail{nullptr};
-    RtSystem_String_SubString(self, &head, 0, index - 1);
-    RtSystem_String_SubString(self, &tail, index + 1, RtString_GetLength(self) - 1);
-    RtSystem_String_Concat(ret, &head, &tail);
-    RtString_ReleaseInline(&tail);
-    RtString_ReleaseInline(&head);
+String String::RemoveAt(int index) const {
+    if (index == 0)
+        return SubString(1, GetLength() - 1);
+    if (index == GetLength())
+        return SubString(0, GetLength() - 2);
+
+    String head = SubString(0, index - 1);
+    String tail = SubString(index + 1, GetLength() - 1);
+    return head + tail;
+}
+
+}  // namespace System
+
+// ############################################################################
+// ENDGAME B.3.1 step 1 — THE SHIMS. THEY DIE IN STEP 2.
+// ############################################################################
+// Every name below kept its exact pre-conversion signature — including the
+// hidden return slot, which the callers still pass — and is now one line over
+// the member on the same eight bytes. The `RegisterRuntimeExport` /
+// `RegisterRuntimeAddr` rows at the bottom of the file register THESE, so the
+// registry seam, the `fn_String_*` pointers in engine/funcs/engine_funcs.h and
+// every `RT_EXPORT_ONCE("...String@System@@...")` site keep resolving exactly
+// as before.
+//
+// A caller that reaches a shim hands it RAW BYTES, not a constructed object:
+// the `ret` slot is an uninitialised `RtSystem::String` local. So a shim that
+// produces a value CONSTRUCTS INTO the slot with placement new rather than
+// assigning to it — an assignment would Release() whatever garbage pointer the
+// caller's stack happened to hold.
+//
+// Step 2 deletes each of these when the last caller of it is converted; the
+// grep to run first is in B31_RULES.md ("when a shim ... has zero callers left").
+// ############################################################################
+namespace RtSystem {
+
+// ---- the primitives declared in runtime/src/system/string.h ----------------
+void RtString_SetLength(String* self, int len) {
+    System::StringPrivateAccess::SetLength(*AsSys(self), len);
+}
+void RtString_ReleaseInline(String* self) {
+    System::StringPrivateAccess::Release(*AsSys(self));
+}
+void RtString_AdoptInline(String* self, char* src) {
+    System::StringPrivateAccess::Adopt(*AsSys(self), src);
+}
+int RtString_StrCompare(const char* a, const char* b) {
+    return System::String::StrCompare(a, b);
+}
+int RtString_GetLength(const String* self) { return AsSys(self)->GetLength(); }
+
+// ---- lifecycle -------------------------------------------------------------
+String* RtSystem_String_Ctor(String* self) {
+    new (AsSys(self)) System::String();
+    return self;
+}
+String* RtSystem_String_CtorCStr(String* self, const char* src) {
+    new (AsSys(self)) System::String(src);
+    return self;
+}
+String* RtSystem_String_CtorCopy(String* self, const String* other) {
+    new (AsSys(self)) System::String(*AsSys(other));
+    return self;
+}
+void RtSystem_String_Dtor(String* self) { AsSys(self)->~String(); }
+
+String* RtSystem_String_Assign(String* self, const String* rhs) {
+    *AsSys(self) = *AsSys(rhs);
+    return self;
+}
+void RtSystem_String_Set(String* self, const char* src) { AsSys(self)->Set(src); }
+
+// ---- comparison ------------------------------------------------------------
+bool RtSystem_String_Equals(const String* self, const String* other) {
+    return *AsSys(self) == *AsSys(other);
+}
+bool RtSystem_String_EqualsCStr(const String* self, const char* other) {
+    return *AsSys(self) == other;
+}
+bool RtSystem_String_Less(const String* self, const String* other) {
+    return *AsSys(self) < *AsSys(other);
+}
+
+// ---- concatenation and append ---------------------------------------------
+String* RtSystem_String_Concat(String* ret, const String* lhs, const String* rhs) {
+    new (AsSys(ret)) System::String(*AsSys(lhs) + *AsSys(rhs));
     return ret;
+}
+String* RtSystem_String_ConcatCStr(String* ret, const String* lhs, const char* rhs) {
+    new (AsSys(ret)) System::String(*AsSys(lhs) + rhs);
+    return ret;
+}
+String* RtSystem_String_ConcatChar(String* ret, const String* lhs, char c) {
+    new (AsSys(ret)) System::String(*AsSys(lhs) + c);
+    return ret;
+}
+String* RtSystem_String_AppendAssign(String* self, String* ret, const String* rhs) {
+    new (AsSys(ret)) System::String(*AsSys(self) += *AsSys(rhs));
+    return ret;
+}
+String* RtSystem_String_AppendAssignCStr(String* self, String* ret, const char* rhs) {
+    new (AsSys(ret)) System::String(*AsSys(self) += rhs);
+    return ret;
+}
+String* RtSystem_String_AppendAssignChar(String* self, String* ret, char c) {
+    new (AsSys(ret)) System::String(*AsSys(self) += c);
+    return ret;
+}
+
+// ---- content ---------------------------------------------------------------
+String* RtSystem_String_SubString(const String* self, String* ret, int start, int end) {
+    new (AsSys(ret)) System::String(AsSys(self)->SubString(start, end));
+    return ret;
+}
+String* RtSystem_String_InsertAt(String* self, String* ret, int index, const String* s) {
+    new (AsSys(ret)) System::String(AsSys(self)->InsertAt(index, *AsSys(s)));
+    return ret;
+}
+String* RtSystem_String_RemoveAt(const String* self, String* ret, int index) {
+    new (AsSys(ret)) System::String(AsSys(self)->RemoveAt(index));
+    return ret;
+}
+
+// ---- statics ---------------------------------------------------------------
+float RtSystem_String_ToFloat(const char* s)   { return System::String::ToFloat(s); }
+int   RtSystem_String_ToInteger(const char* s) { return System::String::ToInteger(s); }
+int   RtSystem_String_FormatParamCount(const char* fmt) {
+    return System::String::FormatParamCount(fmt);
+}
+String* RtSystem_String_FormatParamList(String* ret, const String* fmt, const String* params) {
+    new (AsSys(ret)) System::String(
+        System::String::FormatParamList(*AsSys(fmt),
+                                        reinterpret_cast<const System::String*>(params)));
+    return ret;
+}
+String* RtSystem_String_Format(String* ret, const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    new (AsSys(ret)) System::String(System::String::FormatV(fmt, ap));
+    va_end(ap);
+    return ret;
+}
+String* RtSystem_String_FormatIndexed(String* ret, const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    new (AsSys(ret)) System::String(System::String::FormatIndexedV(fmt, ap));
+    va_end(ap);
+    return ret;
+}
+
+// ?Release@String@System@@AEAAXXZ — the private primitive, exported anyway.
+void RtSystem_String_Release(String* self) {
+    System::StringPrivateAccess::Release(*AsSys(self));
+}
+
+// ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z
+void RtSystem_String_Serialize(String* self, void* serializerRaw) {
+    AsSys(self)->Serialize(serializerRaw);
 }
 
 }  // namespace RtSystem
@@ -1174,6 +1320,7 @@ using RtSystem::RtSystem_String_RemoveAt;
 using RtSystem::RtSystem_String_ConcatChar;
 using RtSystem::RtSystem_String_AppendAssignChar;
 
+#ifndef BANISHED_UNIT_TEST
 int RtSystemStringRegister() {
     using namespace RtSystem;
     int n = 0;
@@ -1278,3 +1425,4 @@ int RtSystemStringRegister() {
     printf("[RtPort]   System::String: %d exports registered\n", n);
     return n;
 }
+#endif  // BANISHED_UNIT_TEST
