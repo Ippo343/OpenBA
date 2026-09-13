@@ -141,12 +141,6 @@
 // See §"the open question" in docs/runtime_port/WAVE10E_LANE_DRAG.md for what
 // this lane could and could not establish about which API does.
 //
-//   BANISHED_RT_UIDRAGSTART=0  leaves BeginDragDrop on the DLL.
-//
-// Its own switch rather than lane UIF6's BANISHED_RT_UIHOVER, which owns
-// EndDragDrop, precisely so that a bisect can separate the START of a drag from
-// its END. They are the two halves of one path, and a switch that moved both at
-// once could not tell which half a regression came from.
 // ============================================================================
 
 #include <cstdint>
@@ -192,8 +186,7 @@ uint64_t g_beginDragGrabOffset = 0;
 // POSITIVE CONTROL — BANISHED_DRAG_CONTROL=swap
 //
 // The field oracle in standalone/mouse_inject.cpp reads +0x70/+0x78/+0x80/+0x84
-// back after the call, so running the same script with BANISHED_RT_UIDRAGSTART
-// on and off compares OUR stores against the DLL's. That is only an instrument
+// back after the call. That is only an instrument
 // if a wrong store would actually MOVE it, and the defect it most needs to see
 // is a TRANSPOSITION of the two int32 grab offsets -- two nearly identical
 // instructions, four bytes apart.
@@ -281,11 +274,6 @@ extern "C" void RtUi_UserInterface_BeginDragDrop(UserInterface* self,
 // (reference_census_cannot_see_nonliteral_registrations.md), and a live port
 // that the census reads as unported is how a closed row reads as open.
 int RtUiDragStartRegister() {
-    if (!RtWaveEnabled("BANISHED_RT_UIDRAGSTART")) {
-        printf("[RtPort] BANISHED_RT_UIDRAGSTART=0 -- BeginDragDrop left on the DLL\n");
-        return 0;
-    }
-
     RegisterRuntimeExport("?BeginDragDrop@UserInterface@UI@@QEAAX"
                           "V?$InternalPtr@VDialogInstance@UI@@@Object@@"
                           "V?$InternalPtr@VElement@UI@@@4@HHIPEAX@Z",

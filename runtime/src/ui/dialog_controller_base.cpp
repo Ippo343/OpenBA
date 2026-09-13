@@ -103,7 +103,7 @@
 // ----------------------------------------------------------------------------
 // NO ORACLE, AND WHY THAT IS NOT A HOLDBACK HERE
 // ----------------------------------------------------------------------------
-// `RT_DIFF_BEGIN` is deliberately absent. Seven of these bodies read nothing,
+// No oracle. Seven of these bodies read nothing,
 // write nothing and return nothing — there is no post-state to compare, and a
 // probe over them would report `divergences=0` over work that never happened,
 // which is the green-count-over-nothing shape this project already named
@@ -122,8 +122,7 @@
 // dispatch runs these nine bodies". THAT IS FALSE and it kept a route hunt
 // alive for two waves. A complete grep of the symbol over code/, runtime/,
 // engine/ and standalone/ finds exactly ONE live read — `RtUiDialogController_
-// Dtor` (runtime/src/ui/dialog.cpp) — plus one deliberate `ResolveExportRaw`
-// ORACLE read in the same file. No constructor anywhere stamps it. See
+// Dtor` (runtime/src/ui/dialog.cpp). No constructor anywhere stamps it. See
 // docs/runtime_port/WAVE10E_LANE_FINAL.md for the four independent proofs that
 // the row is permanently unpromotable, including the one that does not depend
 // on reachability at all: the single consumer's stamp is overwritten, unread,
@@ -151,11 +150,7 @@ namespace {
 // reference_probe_needs_an_effectiveness_control.md, and the same reason
 // runtime/src/io/encoding.cpp carries its own ATTENDANCE block.
 //
-// These count ENTRIES, unconditionally, on every build. They are deliberately
-// NOT RtDiff sites: an RtDiff site increments `calls` only from inside a
-// comparison, so a body that ran but never compared prints `calls=0`, which
-// reads as "never ran" and means the opposite
-// (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
+// These count ENTRIES, unconditionally, on every build.
 struct CtrlCounts {
     unsigned long long typeName = 0, type = 0, onCreated = 0, onOpened = 0,
                        onClosed = 0, onUpdateLayout = 0, onUpdate = 0,

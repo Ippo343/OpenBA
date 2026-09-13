@@ -103,16 +103,11 @@
 // without this file changing.
 //
 // ---------------------------------------------------------------------------
-// ONE KILL SWITCH: BANISHED_RT_UISTRTAB (default ON)
+// ORDERING
 // ---------------------------------------------------------------------------
-// DEFAULT-ON, unlike dialog_factory.cpp's opt-in BANISHED_RT_DLGFACTORY. That
-// file is a Wave 11 EXPERIMENT about whether registering a factory redirects
-// the DLL's creation path (its answer: no — the DLL reaches its factories
-// through an in-module function pointer, which is not a door). This file is not
-// that experiment. Its job is to make the minted row's slot 0 hold a real body
-// at RtDataMintInit() time, and a registration that does not happen cannot do
-// that. `RtUiPortInit()` (standalone/resolve_standalone.cpp:333) runs BEFORE
-// `RtDataMintInit()` (:406), which is what makes the ordering work.
+// This file's job is to make the minted row's slot 0 hold a real body at
+// RtDataMintInit() time. `RtUiPortInit()` (standalone/resolve_standalone.cpp
+// :333) runs BEFORE `RtDataMintInit()` (:406), which is what makes it work.
 //
 // WHAT THIS DOES *NOT* CLAIM. Registering these three names does not put our
 // bodies on the DLL's own creation path while the DLL is present — Wave 11 lane
@@ -155,7 +150,6 @@ uint64_t g_newEntries     = 0;
 uint64_t g_inPlaceEntries = 0;
 uint64_t g_newNull        = 0;   // the allocator refused
 uint64_t g_inPlaceNull    = 0;   // retail's own null branch was taken
-uint64_t g_controlFired   = 0;   // effectiveness control, BANISHED_RT_UISTRTAB=2
 
 // ---- `?MemAlloc@System@@YAPEAX_KH@Z` 0x1800c7a50 ---------------------------
 // BY ADDRESS on purpose, and the address is the LOCKED wrapper, not `?Allocate@`
@@ -164,7 +158,7 @@ uint64_t g_controlFired   = 0;   // effectiveness control, BANISHED_RT_UISTRTAB=
 // out-of-line wrapper reproduces it exactly, including the lock order.
 // `ResolveAddr(Module::Runtime, ...)` consults the port registry FIRST
 // (reference_resolveaddr_consults_port_registry_first.md), so this follows the
-// tree — including the allocator port behind BANISHED_RT_ALLOC — without this
+// tree — including the allocator port — without this
 // file changing. Re-resolve on a miss rather than freezing a null: a caller
 // that ran before the allocator's arming path supplied this address would
 // otherwise poison the static for the life of the process.
@@ -201,17 +195,10 @@ void ConstructBody(UiStringTable* self) {
 void StringTableFactoryReport() {
     printf("[RtPort] UI::StringTable factory ATTENDANCE: ctor=%llu "
            "CreateNewObject=%llu (null=%llu) CreateInPlaceObject=%llu "
-           "(null=%llu) control=%llu\n",
+           "(null=%llu)\n",
            (unsigned long long)g_ctorEntries,
            (unsigned long long)g_newEntries, (unsigned long long)g_newNull,
-           (unsigned long long)g_inPlaceEntries, (unsigned long long)g_inPlaceNull,
-           (unsigned long long)g_controlFired);
-    if (g_ctorEntries == g_controlFired) {
-        printf("[RtPort] UI::StringTable factory VERDICT: the ONLY entries were "
-               "the control's own. Nothing in this run reached the port through "
-               "a door -- EXPECTED with the DLL present (Wave 11 lane OBJINT), "
-               "and NOT evidence the body is correct.\n");
-    }
+           (unsigned long long)g_inPlaceEntries, (unsigned long long)g_inPlaceNull);
     fflush(stdout);
 }
 struct FactoryReport { ~FactoryReport() { if (g_ctorEntries) StringTableFactoryReport(); } };
@@ -265,9 +252,6 @@ extern "C" void* RtUiStringTable_CreateNewObject() {
 // Registration
 // ============================================================================
 int RtUiStringTableFactoryRegister() {
-    const char* v = std::getenv("BANISHED_RT_UISTRTAB");
-    if (v && v[0] == '0') return 0;
-
     int n = 0;
     // BOTH doors for each row. The mint tries the NAME first and the ADDRESS
     // second; a name-only registration would leave any by-address consumer on
@@ -284,43 +268,6 @@ int RtUiStringTableFactoryRegister() {
                           (void*)&RtUiStringTable_CreateNewObject);
     RegisterRuntimeAddr(0x180002280, (void*)&RtUiStringTable_CreateNewObject);      ++n;
 
-    // ---- effectiveness control ---------------------------------------------
-    // BANISHED_RT_UISTRTAB=2. IN-PLACE ONLY: it allocates nothing, so it cannot
-    // perturb the arena of the run it is validating, and its subject is
-    // entirely caller-owned. The buffer is 0x30 bytes, the ctor's exact written
-    // extent, so an over-write would land in the redzone rather than silently.
-    //
-    // The object is a stack temporary that is never registered and never
-    // destroyed, deliberately: `??1StringTable@UI@@` frees the entry array and
-    // its refcounted strings, and on a freshly constructed object every one of
-    // those is null; running it would exercise a teardown this control is not
-    // measuring and would put a free on the arena the run is using.
-    //
-    // The control picks a subject the screen actually reads: the attendance
-    // counter and the returned pointer (reference_control_must_pick_a_compared_
-    // subject.md). It is NOT scored on the vptr, which is a DLL pointer here and
-    // a promoted pointer later — a screen on that would report a divergence
-    // that is expected, not a defect.
-    if (v && v[0] == '2') {
-        alignas(8) unsigned char scratch[kStringTableSize];
-        const uint64_t before = g_inPlaceEntries;
-        void* got = RtUiStringTable_CreateInPlaceObject(scratch);
-        const UiStringTable* st = reinterpret_cast<const UiStringTable*>(scratch);
-        const bool zeroed = st->external_08 == nullptr && st->external_10 == nullptr &&
-                            st->external_18 == nullptr && st->data == nullptr &&
-                            st->size == 0 && st->capacity == 0;
-        g_controlFired = (g_inPlaceEntries > before && got == scratch && zeroed) ? 1u : 0u;
-        printf("[RtPort] UI::StringTable CONTROL %s (attendance %llu -> %llu, "
-               "returned %sthe buffer, tail %szeroed, vptr=%p)\n",
-               g_controlFired ? "FIRED" : "*** DID NOT FIRE ***",
-               (unsigned long long)before, (unsigned long long)g_inPlaceEntries,
-               got == scratch ? "" : "NOT ", zeroed ? "" : "NOT ",
-               (void*)st->vptr);
-        if (!g_controlFired)
-            printf("[RtPort] UI::StringTable *** the attendance zeros below prove "
-                   "NOTHING either way.\n");
-        fflush(stdout);
-    }
     return n;
 }
 
@@ -432,8 +379,6 @@ extern "C" int32_t RtUiStringTable_GetFileVersion(const void* /*self*/) {
 // is byte-correct. Stated here rather than left implicit.
 
 int RtUiStringTableAccessorsRegister() {
-    const char* v = std::getenv("BANISHED_RT_UISTRTAB");
-    if (v && v[0] == '0') return 0;
     int n = 0;
     RegisterRuntimeExport("?Type@StringTable@UI@@UEBAIXZ",
                           (void*)&RtUiStringTable_Type);
@@ -451,8 +396,8 @@ int RtUiStringTableAccessorsRegister() {
 // WAVE 26 LANE FACTORY, THIRD PASS — slots 6, 7, 8 of ??_7StringTable@UI@@6B@
 // ============================================================================
 //
-// After the second pass the row read `slots=9 ported=4 TRAP=5` (measured, run E,
-// BANISHED_RT_MINT_SHADOW=1). The five were slot 0 (the deleting destructor),
+// After the second pass the row read `slots=9 ported=4 TRAP=5` (measured, run E).
+// The five were slot 0 (the deleting destructor),
 // Serialize, Reconstruct, Destruct and Construct. Three of those five are
 // transcriptions of things this file already contains, and they are here:
 //
@@ -522,8 +467,6 @@ extern "C" void* RtUiStringTable_Reconstruct(void* self) {
 }
 
 int RtUiStringTableLifecycleRegister() {
-    const char* v = std::getenv("BANISHED_RT_UISTRTAB");
-    if (v && v[0] == '0') return 0;
     int n = 0;
     RegisterRuntimeExport("?Construct@StringTable@UI@@UEAAPEAVExternal@Object@@XZ",
                           (void*)&RtUiStringTable_Construct);
@@ -798,8 +741,6 @@ extern "C" bool RtUiStringTable_Serialize(void* selfV, void* streamV) {
 }
 
 int RtUiStringTableSlotsRegister() {
-    const char* v = std::getenv("BANISHED_RT_UISTRTAB");
-    if (v && v[0] == '0') return 0;
     int n = 0;
     // SLOT 0 IS ADDRESS-ONLY, and that is checked rather than assumed: the
     // retail export directory (pefile, 30 StringTable@UI symbols) contains no

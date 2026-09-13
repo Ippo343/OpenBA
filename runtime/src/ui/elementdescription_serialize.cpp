@@ -123,7 +123,6 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/ElementDescription.h"
-#include "../io/save_trace.h"
 
 using RtUI::ElementDescription;
 using rt::io::Encoding;
@@ -189,58 +188,8 @@ void RecUInt(ReaderWriter* rw, void* v) {
     reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(rw, v, nullptr);
 }
 
-// ---- probe scaffolding (same contract as goal_serialize.cpp) ---------------
-using StreamMemberFn = void (*)(void*, Stream*);
-
-Stream* StreamOf(void* serializer) {
-    return static_cast<Serializer*>(serializer)->stream;
-}
-
-// `Compare` defends against `ours == theirs` by comparing the two function
-// pointers; the adapters below defeat that check, so the equivalent check is
-// made here on the thing that matters — whether the registry hands OUR body
-// back for this name.
-bool PortIsLive(const char* mangled, const void* ours) {
-    void* viaRegistry = ResolveExport(mangled);
-    if (viaRegistry == ours) return true;
-    std::fprintf(stderr,
-                 "[RtSaveTrace] FAIL %s: the port is NOT registered (registry -> %p, "
-                 "ours %p), so this comparison would prove nothing\n",
-                 mangled, viaRegistry, ours);
-    return false;
-}
-
-// `Compare` calls `ours`, which is this very body, and it is not reentrant.
-bool g_probing = false;
-struct ProbeGuard {
-    ProbeGuard() { g_probing = true; }
-    ~ProbeGuard() { g_probing = false; }
-};
-
 const char* const kMangled =
     "?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z";
-
-}  // namespace
-
-// ---- the detour seam (standalone/elementdesc_detour.cpp) -------------------
-//
-// Declared here rather than included, for rt_port.h's reason: the detour header
-// needs <windows.h> and runtime/src/ must stay platform-neutral.
-extern "C" bool  RtUiElementDescSerializeInstallDetour(void* ourFn);
-extern "C" void* RtUiElementDescSerializeTrampoline();
-
-namespace {
-
-// RETAIL's body, for the oracle. Once the detour is installed the RAW export
-// address is OUR function, so `ResolveExportRaw` there would recurse to a stack
-// overflow — the trampoline is the only door to retail's real body, and null
-// from it means no detour, in which case the raw export IS retail's body.
-// ([[reference_detour_machinery_exists_wave7_zero_is_stale]] is this trap.)
-StreamMemberFn RetailBody() {
-    if (void* tramp = RtUiElementDescSerializeTrampoline())
-        return reinterpret_cast<StreamMemberFn>(tramp);
-    return reinterpret_cast<StreamMemberFn>(ResolveExportRaw(kMangled));
-}
 
 }  // namespace
 
@@ -248,25 +197,6 @@ StreamMemberFn RetailBody() {
 // bool UI::ElementDescription::Serialize(IO::Stream&)
 // ============================================================================
 bool RtUi_ElementDescription_Serialize(ElementDescription* self, Stream* stream) {
-    static int probes = 0;
-    if (RtSaveTrace::Enabled() && !g_probing && probes < 16) {
-        ++probes;
-        ProbeGuard guard__;
-        StreamMemberFn theirs = RetailBody();
-        // With the detour installed, `PortIsLive` is not the check that matters
-        // (the registry answer is unchanged) but it still catches the case the
-        // comparison would be vacuous in, so it is kept.
-        if (theirs && PortIsLive(kMangled, (const void*)&RtUi_ElementDescription_Serialize)) {
-            RtSaveTrace::Compare(
-                "UI::ElementDescription::Serialize", self,
-                [](void* obj, void* ser) {
-                    RtUi_ElementDescription_Serialize(
-                        static_cast<ElementDescription*>(obj), StreamOf(ser));
-                },
-                [](void* obj, void* ser) { RetailBody()(obj, StreamOf(ser)); });
-        }
-    }
-
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
@@ -303,11 +233,5 @@ int RtUiElementDescriptionSerializeRegister() {
     int n = 0;
     RegisterRuntimeExport(kMangled, (void*)&RtUi_ElementDescription_Serialize); ++n;
     RegisterRuntimeAddr(0x180116b00, (void*)&RtUi_ElementDescription_Serialize);
-
-    // OPT-IN, and it is a no-op unless BANISHED_RT_ELEMDESCSER_DETOUR is set.
-    // Without it the port has exactly two call sites in the whole tree and
-    // neither fires on a boot, i.e. it is a registered dead port. See the
-    // banner of standalone/elementdesc_detour.cpp.
-    RtUiElementDescSerializeInstallDetour((void*)&RtUi_ElementDescription_Serialize);
     return n;
 }

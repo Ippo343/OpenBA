@@ -132,11 +132,6 @@
 // ---------------------------------------------------------------------------
 // REGISTRATION
 // ---------------------------------------------------------------------------
-// Kill switch `BANISHED_RT_UIFACT1`, **DEFAULT ON**, following
-// `stringtable_factory.cpp` and deliberately NOT `dialog_factory.cpp`, whose
-// opt-in `BANISHED_RT_DLGFACTORY` is why a Wave 11 port contributed nothing to
-// the live count for seventeen waves (WAVE28_KICKOFF.md §2.2 caveat 1).
-//
 // The registration must land BEFORE `RtDataMintInit()`, which is what makes it
 // clear a trap. `RtUiPortInit()` is called at standalone/resolve_standalone.cpp
 // :333 and `RtDataMintInit()` at :406 — READ, in this worktree, not assumed
@@ -218,15 +213,13 @@ uint64_t g_inplace[kSpecCount]  = {};
 uint64_t g_ctor[kSpecCount]     = {};
 uint64_t g_newNull[kSpecCount]  = {};   // the allocator refused
 uint64_t g_ipNull[kSpecCount]   = {};   // retail's own null branch was taken
-uint64_t g_controlFired         = 0;
-uint64_t g_controlRan           = 0;
 
 // ---- `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` 0x1800c7a50 -----------
 // BY ADDRESS on purpose, and the address is the LOCKED wrapper, not
 // `?Allocate@` (0x1800c6e60) which retail calls with the lock already held.
 // `ResolveAddr(Module::Runtime, ...)` consults the port registry FIRST
 // (reference_resolveaddr_consults_port_registry_first.md), so this follows the
-// tree — including the allocator port behind BANISHED_RT_ALLOC — without this
+// tree — including the allocator port — without this
 // file changing. Re-resolve on a miss rather than freezing a null.
 void* MemAllocLocked(uint64_t size, int align) {
     using Fn = void* (*)(uint64_t, int);
@@ -343,116 +336,22 @@ void FactoryUi1Report() {
     uint64_t tn = 0, ti = 0, tc = 0;
     for (int i = 0; i < kSpecCount; ++i) { tn += g_new[i]; ti += g_inplace[i]; tc += g_ctor[i]; }
     printf("[RtPort] UI FACTUI1 ATTENDANCE: CreateNewObject=%llu "
-           "CreateInPlaceObject=%llu ctor=%llu (control fired %llu of %llu)\n",
+           "CreateInPlaceObject=%llu ctor=%llu\n",
            (unsigned long long)tn, (unsigned long long)ti,
-           (unsigned long long)tc,
-           (unsigned long long)g_controlFired, (unsigned long long)g_controlRan);
-    if (tc == g_controlFired) {
-        printf("[RtPort] UI FACTUI1 VERDICT: the ONLY entries were the "
-               "control's own. Nothing in this run reached these ports through "
-               "a door -- EXPECTED with the DLL present (Wave 11 lane OBJINT), "
-               "and NOT evidence any body is correct. THESE ZEROS MEASURE "
-               "NOTHING.\n");
-    }
-    if (std::getenv("BANISHED_RT_UIFACT1_VERBOSE")) {
-        for (int i = 0; i < kSpecCount; ++i)
-            printf("[RtPort]   %-24s new=%llu inplace=%llu ctor=%llu\n",
-                   kSpecs[i].cls, (unsigned long long)g_new[i],
-                   (unsigned long long)g_inplace[i], (unsigned long long)g_ctor[i]);
-    }
+           (unsigned long long)tc);
     fflush(stdout);
 }
 struct Reporter { ~Reporter() { FactoryUi1Report(); } };
 Reporter g_reporter;
 
-// ---------------------------------------------------------------------------
-// EFFECTIVENESS CONTROL — BANISHED_RT_UIFACT1=2
-// ---------------------------------------------------------------------------
-// IN-PLACE ONLY, on a caller-owned stack buffer, so it allocates nothing and
-// cannot perturb the arena of the run it is validating
-// (reference_probe_needs_an_effectiveness_control.md).
-//
-// It is scored on a subject the screen actually reads
-// (reference_control_must_pick_a_compared_subject.md): for each class it
-// prefills the buffer with a poison byte, runs CreateInPlaceObject, and checks
-// that EVERY BYTE THE STORE TABLE CLAIMS TO WRITE actually changed away from
-// poison. That is the claim this file makes and nothing else — it is NOT
-// scored on the vptr value (a DLL pointer today, a minted pointer at cutover,
-// so a screen on it would report an expected disagreement as a defect) and NOT
-// on bytes retail leaves alone (reference_oracle_must_not_compare_unwritten_
-// bytes.md).
-//
-// The 14 Element-derived classes are EXCLUDED from the control and counted
-// separately: their base ctor is `??0Element@UI@@`, which calls
-// `??0Internal@Object@@`, which REGISTERS A HANDLE in
-// `?_singleton@InternalFactory@Object@@` pointing at the scratch buffer. That
-// entry would dangle the moment the buffer left scope, and the control would
-// have corrupted the process to measure itself. The same argument excludes
-// DialogInstance and ComboDialog.
-//
-// The number to read is "fired N of M": M is how many classes the control
-// could reach at all. If M is 0 the control had nothing to bite on and the
-// attendance zeros below still prove nothing either way.
-void RunControl() {
-    alignas(16) unsigned char scratch[0x400];
-    for (int i = 0; i < kSpecCount; ++i) {
-        const Spec& sp = kSpecs[i];
-        if (sp.size == 0 || !sp.ipName) continue;
-        if (sp.baseCtor) continue;        // see the comment above — handle table
-        if (sp.size > sizeof(scratch)) continue;
-        ++g_controlRan;
-        std::memset(scratch, 0xA5, sizeof(scratch));
-        const uint64_t before = g_inplace[i];
-        void* got = DoInPlace(i, scratch);
-        bool ok = (got == scratch) && (g_inplace[i] == before + 1);
-        for (uint16_t k = 0; ok && k < sp.nStores; ++k) {
-            const Store& s = sp.stores[k];
-            bool changed = false;
-            for (int b = 0; b < s.width; ++b)
-                if (scratch[s.off + b] != 0xA5) changed = true;
-            // A store of the poison value itself would read as "not changed";
-            // none of the 27 tables contains 0xA5A5A5A5, so this cannot happen.
-            if (!changed) ok = false;
-        }
-        if (ok) ++g_controlFired;
-        else printf("[RtPort] UI FACTUI1 CONTROL *** %s DID NOT FIRE\n", sp.cls);
-    }
-    printf("[RtPort] UI FACTUI1 CONTROL: fired %llu of %llu reachable classes "
-           "(%d of %d excluded: abstract, or an Element/Internal base ctor that "
-           "would register a handle to the scratch buffer)\n",
-           (unsigned long long)g_controlFired, (unsigned long long)g_controlRan,
-           kSpecCount - (int)g_controlRan, kSpecCount);
-    if (g_controlRan == 0 || g_controlFired != g_controlRan)
-        printf("[RtPort] UI FACTUI1 *** the attendance zeros prove NOTHING "
-               "either way.\n");
-    fflush(stdout);
-}
-
 }  // namespace
 
 // ============================================================================
 // Registration entry point — called unconditionally from RtUiPortInit(), which
-// runs BEFORE RtDataMintInit(). The switch is checked HERE so that this file's
-// switch is the only one that governs it.
+// runs BEFORE RtDataMintInit().
 // ============================================================================
 int RtUiFactory1Register() {
-    const char* v = std::getenv("BANISHED_RT_UIFACT1");
-    if (v && v[0] == '0') {
-        // kSpecCount, not a literal 31. Lane FACTREST sharpened the
-        // accumulate-don't-assert rule into a place to LOOK: **the branch
-        // nothing exercises is where an asserted count survives**, because a
-        // count only goes stale when the thing it counts changes and nobody
-        // changes a branch they never run. This one said "31" and a default run
-        // never executes it, so nothing would ever have contradicted it.
-        printf("[RtPort] BANISHED_RT_UIFACT1=0 -- %d UI factory pairs "
-               "(%d slots) left on the DLL\n",
-               kSpecCount, kSpecCount * 2 - 2);   // -2: Element/DialogInstance
-        return 0;                                 //     slot 1 is FACTREST's
-    }
-
     int n = RegisterAll(std::make_index_sequence<kSpecCount>{});
-
-    if (v && v[0] == '2') RunControl();
 
     printf("[RtPort] UI FACTUI1: %d rows registered across %d classes "
            "(attendance will be 0 with the DLL present -- see the file banner)\n",

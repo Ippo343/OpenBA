@@ -267,50 +267,9 @@ void AddTabBody(void* self, void** ret, void* descA, void* descB, RtSink& out) {
 // ============================================================================
 extern "C" void** RtUi_TabElement_AddTab(void* self, void** ret,
                                          void* descA, void* descB) {
-    RT_PREDICT_SITE("UI::TabElement::AddTab");
-
-    if (!RT_PREDICT_ON) {
-        RtSink live;
-        AddTabBody(self, ret, descA, descB, live);
-        return ret;                                            // 0x1800DA32D
-    }
-
-    {
-        RtPredictRound round(&rt_predict_site__);
-
-        // Coverage: every flag word the dirty walk can reach, plus the tab
-        // count. Predictions alone are only a lower bound; this is what turns
-        // the round into an oracle rather than a spot check.
-        for (uint8_t* p = reinterpret_cast<uint8_t*>(self); p != nullptr;
-             p = *reinterpret_cast<uint8_t**>(p + kParent))
-            round.Watch(p + kFlags, sizeof(uint32_t), "element._flags");
-        round.Watch(B(self, kTabCount), sizeof(uint32_t), "TabElement._tabCount");
-        round.Watch(B(self, TAE::kChildrenData), 0x10, "Element::_children header");
-
-        // The append half. Retail creates and appends two Elements our
-        // suppressed body did not, so the array header moves for reasons no
-        // prediction can model while ElementDescription::CreateInstance is
-        // unported. Declared, so it prints in `excluded=` and "not reported"
-        // can never quietly read as "verified".
-        round.Exclude(B(self, TAE::kChildrenData), 0x10,
-                      "two suppressed CreateInstance calls + two appends; "
-                      "ElementDescription::CreateInstance is not ported");
-
-        AddTabBody(self, ret, descA, descB, round.sink());      // predicts
-
-        // THEIRS. RT_ORIGINAL_ONCE, not RT_EXPORT_ONCE: by the time this runs
-        // our body is registered under this very name, and RT_EXPORT_ONCE would
-        // resolve to ourselves and recurse. There is no detour on 0x1800DA130
-        // (the DLL never calls its own AddTab — see the routing note in the
-        // banner), so the raw export IS retail here.
-        using Fn = void** (*)(void*, void**, void*, void*);
-        RT_ORIGINAL_ONCE(Fn,
-            "?AddTab@TabElement@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@"
-            "V?$ExternalPtr@VElementDescription@UI@@@4@0@Z")(self, ret, descA, descB);
-
-        round.Verify();
-    }
-    return ret;
+    RtSink live;
+    AddTabBody(self, ret, descA, descB, live);
+    return ret;                                            // 0x1800DA32D
 }
 
 // ============================================================================

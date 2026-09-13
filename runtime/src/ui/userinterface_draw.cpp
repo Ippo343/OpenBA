@@ -124,10 +124,6 @@
 // UI would be visibly wrong or absent. That is a functional check, not an
 // oracle, and the lane doc says so in those words.
 //
-// GATE: `BANISHED_RT_UIDRAW` (default ON like every wave switch, `=0` falls back
-// to the DLL). The DETOUR is separately OPT-IN under
-// `BANISHED_RT_UIDRAW_DETOUR`, per runtime_detour.h's rule that nothing patches
-// the shipped DLL default-on unproven.
 // ============================================================================
 
 #include <cstdint>
@@ -232,9 +228,7 @@ constexpr int32_t kSpriteEntryHeight = 0x20;
 // ============================================================================
 // The body. ONE body, two modes — the rt_predict.h contract.
 // ============================================================================
-// `out` is a live sink in a normal frame (every write is a store, every `Call`
-// returns true) and a predicting sink under BANISHED_RT_PREDICT (every write is
-// recorded, every `Call` returns false and the callee does not run).
+// `out` is a live sink: every write is a store, every `Call` returns true.
 //
 // EVERY WRITE INTO `this` OR INTO THE CONTEXT GOES THROUGH `out`. Writes into
 // the SpriteContext, the Camera, the Frustum and the SpriteDraw records do NOT:
@@ -695,73 +689,9 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
     }
 }
 
-// The detour is OPT-IN, not a kill switch: `RtWaveEnabled` is default-ON and
-// that is the wrong default for a code patch into the shipped DLL.
-inline bool DetourOptedIn() {
-    const char* e = std::getenv("BANISHED_RT_UIDRAW_DETOUR");
-    return e && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
-}
-
-} // namespace
-
-// ---------------------------------------------------------------------------
-// The detour seam
-// ---------------------------------------------------------------------------
-extern "C" bool  RtUiUserInterfaceDrawInstallDetour(void* ourFn);
-extern "C" void* RtUiUserInterfaceDrawTrampoline();
-
-namespace {
-
-// Retail's body, through whichever door is correct RIGHT NOW.
-//
-// WITH THE DETOUR IN, THE RAW EXPORT IS NOT RETAIL — it is a jump back into us,
-// so `RT_ORIGINAL_ONCE` here would recurse to a stack overflow rather than give
-// a wrong answer (reference_detour_machinery_exists_wave7_zero_is_stale.md).
-// A null trampoline means "no detour", never "no original".
-void CallRetailDraw(UserInterface* self, void* ctx) {
-    using Fn = void (*)(void*, void*);
-    if (void* tramp = RtUiUserInterfaceDrawTrampoline()) {
-        reinterpret_cast<Fn>(tramp)(self, ctx);
-        return;
-    }
-    RT_ORIGINAL_ONCE(Fn, "?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z")(self, ctx);
-}
-
 } // namespace
 
 extern "C" void RtUi_UserInterface_Draw(UserInterface* self, void* ctx) {
-    RT_PREDICT_SITE("UI::UserInterface::Draw");
-
-    if (RT_PREDICT_ON) {
-        RT_PREDICT_ROUND(round) {
-            uint8_t* const S = reinterpret_cast<uint8_t*>(self);
-            uint8_t* const C = reinterpret_cast<uint8_t*>(ctx);
-
-            // COVERAGE CONTROL. Watch the WHOLE UserInterface, so any byte
-            // retail changes that we neither predicted nor excluded is
-            // REPORTED; predictions on their own are only a lower bound.
-            // `_clipRegion` is the only thing `Draw` writes here, so a non-zero
-            // `unpredicted` on this region is a real finding.
-            round.Watch(self, 0x128, "UI::UserInterface");
-            (void)S;
-
-            // The one context region we fully own and fully predict.
-            round.Watch(C + 0x408, 0x10, "Video::Context::_color");
-
-            // Declared unverifiable rather than silently skipped: we predict
-            // our own bit, but SetCamera (0x800) and Flush (0x400) OR into the
-            // same word while suppressed.
-            round.Exclude(C + 0x10, 4,
-                          "Context::_dirty: SetCamera ORs kDirtyGlobalConstants "
-                          "and Flush ORs kDirtyScissor into this same word while "
-                          "both are suppressed");
-
-            DrawBody(self, ctx, round.sink());   // predicts, writes nothing
-            CallRetailDraw(self, ctx);           // the authority runs for real
-        }
-        return;
-    }
-
     RtSink live;
     DrawBody(self, ctx, live);
 }
@@ -780,9 +710,6 @@ int RtUiDrawRegister() {
     RegisterRuntimeExport("?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z",
                           (void*)&RtUi_UserInterface_Draw); ++count;
     RegisterRuntimeAddr(0x180121890, (void*)&RtUi_UserInterface_Draw);
-
-    if (DetourOptedIn())
-        RtUiUserInterfaceDrawInstallDetour((void*)&RtUi_UserInterface_Draw);
 
     return count;
 }

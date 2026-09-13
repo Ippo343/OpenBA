@@ -192,15 +192,6 @@
 // unconditionally, on every build, and prints them at exit — the idiom from
 // dialog_controller_base.cpp and dialog_settings.cpp.
 //
-// They are deliberately NOT RtDiff `calls` numbers: an RtDiff site increments
-// `calls` only from inside a comparison, so a body that ran and always took the
-// uncompared branch prints `calls=0`, which reads as "never ran" and means the
-// opposite (reference_calls_zero_can_mean_always_took_the_uncovered_branch.md).
-//
-// KILL SWITCH: BANISHED_RT_DLGVTABLE=0 leaves all seven on the DLL. Its own
-// switch rather than lane B's BANISHED_RT_UIDIALOG, because promoting the
-// vtable row is what makes these dispatch at all and the A/B behind that
-// promotion has to be able to move exactly this group.
 // ============================================================================
 
 #include <cstddef>
@@ -212,7 +203,6 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Dialog.h"
 #include "../io/save_trace.h"
-#include "dialog_vptr_trip.h"   // WAVE 10E lane FINAL
 
 // Forward-declared rather than pulled in from standalone/resolve.h, for the
 // reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
@@ -308,9 +298,7 @@ void ConstructInPlace(uint8_t* self) {
     qword(self, 0x08) = nullptr;            // 180038785 (via LEA RAX,[RCX+8])
     qword(self, 0x10) = nullptr;
     qword(self, 0x18) = nullptr;
-    // WAVE 10E lane FINAL: fourth and last consumer of the row in the tree.
-    // Off by default (dialog_vptr_trip.h).
-    qword(self, 0x00) = RtUiDlgTrip::TableOrReal(DialogVtable());  // 180038790
+    qword(self, 0x00) = DialogVtable();  // 180038790
     qword(self, 0x20) = nullptr;            // _spriteSheet
     qword(self, 0x28) = nullptr;            // _spriteName
     dword(self, 0x30) = 0xFFFFFFFFu;        // 1800387a2  _backgroundColor
@@ -345,14 +333,10 @@ constexpr size_t kWrittenHiEnd = 0x88;
 // class's own `_typeInfo` at +0x00.
 extern "C" uint32_t RtUiDialog_Type(const void* self) {
     ++RtUiDlgV::g_counts.type;
-    RT_DIFF_BEGIN("UI::Dialog::Type");
     (void)self;
     uint32_t ours = 0;
     std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoTypeId,
                 sizeof ours);
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(RtUiDlgV::U32ThisFn,
-        "?Type@Dialog@UI@@UEBAIXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -363,13 +347,10 @@ extern "C" uint32_t RtUiDialog_Type(const void* self) {
 // about. Lane SS did the same for `?TypeId@SpriteSheet@UI@@SAIXZ`.
 extern "C" uint32_t RtUiDialog_TypeId() {
     ++RtUiDlgV::g_counts.typeId;
-    RT_DIFF_BEGIN("UI::Dialog::TypeId");
     uint32_t ours = 0;
     std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoTypeId,
                 sizeof ours);
     using Fn = uint32_t (*)();
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?TypeId@Dialog@UI@@SAIXZ")());
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -378,16 +359,10 @@ extern "C" uint32_t RtUiDialog_TypeId() {
 // SAME SHAPE as SpriteSheet's slot 1 (0x180002e50).
 extern "C" const char* RtUiDialog_TypeName(const void* self) {
     ++RtUiDlgV::g_counts.typeName;
-    RT_DIFF_BEGIN("UI::Dialog::TypeName");
     (void)self;
     const char* ours = nullptr;
     std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoName,
                 sizeof ours);
-    RT_DIFF_SCALAR(static_cast<const void*>(ours),
-                   static_cast<const void*>(
-                       RT_ORIGINAL_ONCE(RtUiDlgV::CStrThisFn,
-                           "?TypeName@Dialog@UI@@UEBAPEBDXZ")(self)));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -398,12 +373,8 @@ extern "C" const char* RtUiDialog_TypeName(const void* self) {
 // they are two independent resource formats that both reached version 6.
 extern "C" int RtUiDialog_GetFileVersion(const void* self) {
     ++RtUiDlgV::g_counts.fileVersion;
-    RT_DIFF_BEGIN("UI::Dialog::GetFileVersion");
     (void)self;
     const int ours = 6;
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(RtUiDlgV::IntThisFn,
-        "?GetFileVersion@Dialog@UI@@UEBAHXZ")(self));
-    RT_DIFF_WORK(true);
     return ours;
 }
 
@@ -420,8 +391,6 @@ extern "C" int RtUiDialog_GetFileVersion(const void* self) {
 // the four arrays a Dialog owns.
 extern "C" void RtUiDialog_Destruct(void* self) {
     ++RtUiDlgV::g_counts.destruct;
-    RT_DIFF_BEGIN("UI::Dialog::Destruct");
-    RT_DIFF_WORK(true);
     void** const vt = *reinterpret_cast<void***>(self);
     reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(self, 0);
 }
@@ -432,36 +401,12 @@ extern "C" void RtUiDialog_Destruct(void* self) {
 extern "C" void* RtUiDialog_Construct(void* self) {
     if (!self) {
         ++RtUiDlgV::g_counts.constructNull;
-        RT_DIFF_BEGIN("UI::Dialog::Construct");
-        if (rt_diff_on__) {
-            void* theirs = RT_ORIGINAL_ONCE(RtUiDlgV::PtrThisFn,
-                "?Construct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ")(nullptr);
-            RT_DIFF_SCALAR(static_cast<void*>(nullptr), theirs);
-        }
-        RT_DIFF_WORK(false);          // the null arm does no work, and says so
+          // the null arm does no work, and says so
         return nullptr;
     }
     ++RtUiDlgV::g_counts.construct;
-    RT_DIFF_BEGIN("UI::Dialog::Construct");
     RtUiDlgV::ConstructInPlace(static_cast<uint8_t*>(self));
 
-    if (rt_diff_on__) {
-        // A PRIVATE scratch object, so the shipped body never writes the live
-        // one. Poisoned first, and compared over the TWO written windows rather
-        // than over sizeof — +0x44..+0x47 is written by neither side, and
-        // comparing it reports allocator residue as a divergence.
-        alignas(16) uint8_t theirs[0x88];
-        std::memset(theirs, 0xCD, sizeof theirs);
-        void* const ret = RT_ORIGINAL_ONCE(RtUiDlgV::PtrThisFn,
-            "?Construct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ")(theirs);
-        RT_DIFF_BYTES(self, theirs, RtUiDlgV::kWrittenLoEnd - RtUiDlgV::kWrittenLo);
-        RT_DIFF_BYTES(static_cast<uint8_t*>(self) + RtUiDlgV::kWrittenHi,
-                      theirs + RtUiDlgV::kWrittenHi,
-                      RtUiDlgV::kWrittenHiEnd - RtUiDlgV::kWrittenHi);
-        RT_DIFF_SHADOW(ret == static_cast<void*>(theirs),
-                       "returns this", "returns this");
-        RT_DIFF_WORK(true);
-    }
     return self;
 }
 
@@ -476,8 +421,6 @@ extern "C" void* RtUiDialog_Construct(void* self) {
 // object and cannot be run twice.
 extern "C" void* RtUiDialog_Reconstruct(void* self) {
     ++RtUiDlgV::g_counts.reconstruct;
-    RT_DIFF_BEGIN("UI::Dialog::Reconstruct");
-    RT_DIFF_WORK(true);
     void** const vt = *reinterpret_cast<void***>(self);
     reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(self, 0);
     RtUiDlgV::ConstructInPlace(static_cast<uint8_t*>(self));
@@ -677,43 +620,8 @@ void RecInt(ReaderWriter* rw, int32_t* v) {
     reinterpret_cast<Fn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, v, nullptr);
 }
 
-// ---- probe scaffolding (same contract as spritesheet_vtable.cpp) -----------
-Stream* StreamOf(void* serializer) {
-    return static_cast<Serializer*>(serializer)->stream;
-}
-
-bool g_probing = false;
-struct ProbeGuard {
-    ProbeGuard()  { g_probing = true;  }
-    ~ProbeGuard() { g_probing = false; }
-};
-
 const char* const kSerializeMangled =
     "?Serialize@Dialog@UI@@UEAA_NAEAVStream@IO@@@Z";
-
-// `Compare` defends against `ours == theirs` by comparing function pointers,
-// and the lambda adapters below defeat that check — so the equivalent check is
-// made on the thing that matters: does the registry hand OUR body back? A probe
-// whose ours-side reaches the body BY ADDRESS compares retail with ITSELF
-// (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
-bool PortIsLive(const void* ours) {
-    void* viaRegistry = ResolveExport(kSerializeMangled);
-    if (viaRegistry == ours) return true;
-    std::fprintf(stderr,
-                 "[RtSaveTrace] FAIL %s: the port is NOT registered (registry -> %p, "
-                 "ours %p), so this comparison would prove nothing\n",
-                 kSerializeMangled, viaRegistry, ours);
-    return false;
-}
-
-// No detour is installed on this row, so the RAW export address IS retail's
-// body. (If one is ever added, this must become a trampoline lookup or
-// RT_ORIGINAL_ONCE will recurse into the patched prologue —
-// reference_detour_machinery_exists_wave7_zero_is_stale.md.)
-using StreamMemberFn = void (*)(void*, Stream*);
-StreamMemberFn RetailBody() {
-    return RT_ORIGINAL_ONCE(StreamMemberFn, kSerializeMangled);
-}
 
 }  // namespace
 }  // namespace RtUiDlgV
@@ -721,22 +629,6 @@ StreamMemberFn RetailBody() {
 extern "C" bool RtUiDialog_Serialize(RtUI::Dialog* self, rt::io::Stream* stream) {
     using namespace RtUiDlgV;
     ++RtUiDlgV::g_counts.serialize;
-
-    static int probes = 0;
-    if (RtSaveTrace::Enabled() && !g_probing && probes < 16) {
-        ++probes;
-        ProbeGuard guard__;
-        StreamMemberFn theirs = RetailBody();
-        if (theirs && PortIsLive((const void*)&RtUiDialog_Serialize)) {
-            RtSaveTrace::Compare(
-                "UI::Dialog::Serialize", self,
-                [](void* obj, void* ser) {
-                    RtUiDialog_Serialize(static_cast<RtUI::Dialog*>(obj),
-                                         StreamOf(ser));
-                },
-                [](void* obj, void* ser) { RetailBody()(obj, StreamOf(ser)); });
-        }
-    }
 
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
@@ -810,11 +702,7 @@ extern "C" bool RtUiDialog_Serialize(RtUI::Dialog* self, rt::io::Stream* stream)
 // past the port into the DLL.
 //
 // Slot 0 (0x180038b20) is NOT registered here — it is row 37 of the family in
-// runtime/src/object/deleting_dtor.cpp, registered under BANISHED_RT_DELDTOR.
-// THE COUPLING IS REAL AND IS STATED: `BANISHED_RT_DELDTOR=0` turns slot 0 back
-// into a trap and makes this vtable unsafe to promote. That is not new with
-// this lane — `??_7SpriteSheet@UI@@6B@`, promoted last wave, has exactly the
-// same dependency on exactly the same switch.
+// runtime/src/object/deleting_dtor.cpp.
 // ============================================================================
 int RtUiDialogVtableRegister() {
     int n = 0;

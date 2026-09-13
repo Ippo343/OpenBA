@@ -121,14 +121,6 @@ void TailElementDtor(uint8_t* p) {
 }  // namespace
 
 
-
-
-
-
-
-
-
-
 // ============================================================================
 // THE THIRTEEN UI::*Description ??1 BODIES THAT WERE HERE ARE GONE.
 // ============================================================================
@@ -145,10 +137,6 @@ void TailElementDtor(uint8_t* p) {
 // ============================================================================
 
 
-
-
-
-
 // ============================================================================
 // Registration. Both doors for every row, exactly like groupdescription.cpp:
 // the mangled export name (what the minted vtable and BaseTypeInfo ask for)
@@ -157,20 +145,6 @@ void TailElementDtor(uint8_t* p) {
 // ============================================================================
 int RtUiDescriptionDtorsRegister() {
     int n = 0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
     return n;

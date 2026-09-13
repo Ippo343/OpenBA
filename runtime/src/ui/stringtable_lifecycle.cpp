@@ -80,11 +80,9 @@
 // That is what licenses the one-line body below, and it is worth saying why the
 // licence is narrow.  0x1800c7ad0 re-tests null itself (0x1800c7ad0 `TEST
 // RCX,RCX ; JZ`), so the guard is not lost by delegating; and 0x1800c7ad0 is
-// reached through `ResolveAddr`, registry-first, so if `BANISHED_RT_ALLOC` is
-// armed this free lands in OUR arena and if it is not it lands in retail's --
-// which is exactly what retail's own bytes do, because retail's own bytes call
-// the same allocator singleton at 0x1801fc718.  A heap cannot be half-ours, and
-// this file does not make it so: it adds no allocator decision of its own.
+// reached through `ResolveAddr`, registry-first, so this free lands in our
+// arena -- which is exactly what retail's own bytes do, because retail's own
+// bytes call the same allocator singleton at 0x1801fc718.
 //
 // The one thing NOT claimed: this is a duplicate-body finding about the SHIPPED
 // retail binary and was not re-checked against Runtime-x64-profile.dll.  A
@@ -113,10 +111,6 @@
 // a door while the DLL owns the class.  A green readiness screen is not a route
 // (reference_a_green_readiness_screen_is_not_a_route.md).
 //
-// KILL SWITCH: BANISHED_RT_UISTRTAB, shared with stringtable_factory.cpp,
-// DEFAULT ON.  Deliberately the SAME switch: this is one class and one cutover
-// wall, and a switch that could arm the ctor without the dtor is precisely the
-// half-armed state rt_ui_port.cpp:159 records attempt 28 hitting.
 // ============================================================================
 
 #include <cstdint>
@@ -221,9 +215,6 @@ extern "C" void RtUiStringTable_OperatorDelete(void* p) {
 //  reference_census_cannot_see_nonliteral_registrations.md -- which is also why
 //  each name is spelled as its own string literal here).
 int RtUiStringTableLifecycleDtorRegister() {
-    const char* v = std::getenv("BANISHED_RT_UISTRTAB");
-    if (v && v[0] == '0') return 0;
-
     int n = 0;
     RegisterRuntimeExport("??1StringTable@UI@@UEAA@XZ", (void*)&RtUiStringTable_Dtor);
     RegisterRuntimeAddr(0x18011d8f0ull, (void*)&RtUiStringTable_Dtor);              ++n;

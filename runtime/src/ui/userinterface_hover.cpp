@@ -26,20 +26,6 @@
 // found it was for the bare identifier.
 //
 // ---------------------------------------------------------------------------
-// TWO KILL SWITCHES, ON PURPOSE
-// ---------------------------------------------------------------------------
-//   BANISHED_RT_UIHOVER=0    leaves the three SMALL, NON-ALLOCATING rows on the
-//                            DLL (IsInsideClipRegion, EndDragDrop, EndHover).
-//   BANISHED_RT_UITOOLTIP=0  leaves BeginToolTip on the DLL.
-//
-// They are separate because BeginToolTip is a different RISK CLASS from the
-// other three: it ALLOCATES a 0xc0-byte ToolTipDialog, runs the DLL's
-// DialogInstance constructor on it, STAMPS ??_7ToolTipDialog@UI@@6B@ into the
-// object, and does two rounds of System::String refcount release. The other
-// three only read fields and push a 0x30-byte event record. A bisect must be
-// able to separate them.
-//
-// ---------------------------------------------------------------------------
 // THE ONE ADDRESS DOOR, DECLARED RATHER THAN HIDDEN
 // ---------------------------------------------------------------------------
 // 0x180033690 `Collection::Array<UI::Event>::SetSize(int, const Event*)` and
@@ -189,20 +175,14 @@ static_assert(offsetof(EventRecord, dragData)  == 0x28, "");
 // holding `data - 8`, a dangling pointer, and only the SHARING branch nulls it.
 // String.h says in so many words "Reproduce it; do not tidy it."
 //
-// MemFree is reached with RT_ORIGINAL_ONCE, not ResolveExport. Strings cross
-// the DLL boundary constantly, so their storage MUST go back to
-// Runtime-x64.dll's own allocator even when our allocator port is armed
-// (runtime/types/system/String.h, "THE ALLOCATOR IS NOT OURS").
 // ---------------------------------------------------------------------------
 void ReleaseString(RtSystem::String* s) {
     char* data = s->data;
     if (!data) return;
     if (--RtSystem::StringRefCount(data) == 0) {
         s->data = data - 8;
-        // RT_EXPORT_ONCE, not RT_ORIGINAL_ONCE: this release is LIVE work in
-        // BeginToolTip (0x18012096a / 0x1801209dc), not an oracle. The raw door
-        // resolves NULL with the DLL absent and this would call it (found by the
-        // strict gate's RtRawResidue table, 2026-09-12).
+        // This release is LIVE work in BeginToolTip (0x18012096a /
+        // 0x1801209dc), through the port-registry door.
         RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(s->data);
     } else {
         s->data = nullptr;
@@ -493,120 +473,10 @@ extern "C" void RtUi_UserInterface_BeginToolTip(UserInterface* self,
 // no mouse, so they cannot be exercised by booting. IsInsideClipRegion is
 // different: it is PURE -- twelve instructions, no calls, no writes, reads four
 // ints of its argument -- and for a pure function an INPUT SWEEP against the
-// shipped export beats waiting for a caller
-// (project_pure_functions_verify_by_sweep.md). OURS predicts, THEIRS runs for
-// real, and the two are compared; that is a true differential, unlike an
-// RT_DIFF_SHADOW self-check (reference_shadow_marker_is_not_an_oracle.md).
-//
-// THEIRS is reached with RtOriginal, NEVER ResolveExport: once we register, the
-// latter hands back our own function and the oracle compares ours to ours.
-//
-// THE CONTROL. A sweep that reports 0 divergences proves nothing unless a
-// KNOWN-WRONG body would have been caught, and the control must be a plausible
-// transcription defect on a subject the comparison actually covers
-// (reference_control_must_pick_a_compared_subject.md,
-// reference_probe_needs_an_effectiveness_control.md). The one used here flips
-// the RIGHT edge from inclusive (`x > right` rejects) to exclusive (`x >= right`
-// rejects) -- exactly the mistake a reader of `JG` would make -- and it is only
-// visible on cases that land EXACTLY on a boundary, which is why the case grid
-// is built around the edges rather than sampled at random.
-//
-// Enable with BANISHED_UIF6_SWEEP=1. Off by default: it calls into the DLL and
-// a shipping run has no reason to.
-// ---------------------------------------------------------------------------
-namespace {
-
-using ClipFn = bool (*)(const void* self, int32_t x, int32_t y);
-
-// The deliberately wrong twin. `x > right` becomes `x >= right`.
-bool ClipControlExclusiveRight(const UserInterface* self, int32_t x, int32_t y) {
-    const UI::ClipRegion& c = self->_clipRegion;
-    if (x < c.left)   return false;
-    if (x >= c.right) return false;      // THE INJECTED DEFECT
-    if (y < c.top)    return false;
-    if (y > c.bottom) return false;
-    return true;
-}
-
-void RunClipSweep() {
-    ClipFn theirs = RtOriginal<ClipFn>("?IsInsideClipRegion@UserInterface@UI@@QEBA_NHH@Z");
-    if (!theirs) {
-        printf("[UIF6/sweep] SKIPPED -- the DLL export did not resolve "
-                    "(cutover, or a wrong name). NOT a pass.\n");
-        return;
-    }
-
-    // A full UserInterface, so the callee reads a real +0xfc..+0x10b.
-    alignas(8) uint8_t buf[sizeof(UserInterface)];
-    UserInterface* self = reinterpret_cast<UserInterface*>(buf);
-
-    struct Rect { int32_t l, t, r, b; };
-    static const Rect kRects[] = {
-        {   0,   0, 1279,  719 },   // a normal screen-sized region
-        {   0,   0,    0,    0 },   // degenerate: a single pixel
-        {  10,  20,   30,   40 },   // small, offset
-        { -50, -60,   50,   60 },   // straddles the origin
-        { 100, 100,   50,   50 },   // INVERTED (right < left): admits nothing
-        {  -5,  -5,   -1,   -1 },   // wholly negative
-    };
-    static const int32_t kOffsets[] = { -2, -1, 0, 1, 2 };
-
-    uint64_t cases = 0, mismatches = 0, caught = 0, trueCases = 0;
-
-    for (const Rect& r : kRects) {
-        std::memset(buf, 0xAB, sizeof(buf));    // poison: nothing else may be read
-        self->_clipRegion.left   = r.l;
-        self->_clipRegion.top    = r.t;
-        self->_clipRegion.right  = r.r;
-        self->_clipRegion.bottom = r.b;
-
-        // Probe AROUND every edge, plus the centre and far-away points, so the
-        // inclusive/exclusive boundary is covered from both sides.
-        int32_t xs[16], ys[16];
-        int nx = 0, ny = 0;
-        for (int32_t d : kOffsets) { xs[nx++] = r.l + d; xs[nx++] = r.r + d; }
-        xs[nx++] = (r.l + r.r) / 2;  xs[nx++] = 0x7ffffff;  xs[nx++] = -0x7ffffff;
-        for (int32_t d : kOffsets) { ys[ny++] = r.t + d; ys[ny++] = r.b + d; }
-        ys[ny++] = (r.t + r.b) / 2;  ys[ny++] = 0x7ffffff;  ys[ny++] = -0x7ffffff;
-
-        for (int i = 0; i < nx; ++i) {
-            for (int j = 0; j < ny; ++j) {
-                const bool a = RtUi_UserInterface_IsInsideClipRegion(self, xs[i], ys[j]);
-                const bool b = theirs(self, xs[i], ys[j]);
-                const bool c = ClipControlExclusiveRight(self, xs[i], ys[j]);
-                ++cases;
-                if (a != b) ++mismatches;
-                if (c != b) ++caught;
-                if (b) ++trueCases;
-            }
-        }
-    }
-
-    // The sweep's own entry counter is inflated by these calls; say so rather
-    // than let a reader attribute them to gameplay.
-    printf("[UIF6/sweep] IsInsideClipRegion: cases=%llu  divergences=%llu  "
-                "(effectiveness: %llu cases returned true, so the comparison is "
-                "not trivially satisfied)\n",
-                (unsigned long long)cases, (unsigned long long)mismatches,
-                (unsigned long long)trueCases);
-    printf("[UIF6/sweep] negative control (right edge made EXCLUSIVE): "
-                "caught=%llu of %llu. A zero here would mean the sweep cannot "
-                "discriminate and the divergences=0 above is worthless.\n",
-                (unsigned long long)caught, (unsigned long long)cases);
-    printf("[UIF6/sweep] VERDICT: %s\n",
-                (mismatches == 0 && caught > 0)
-                    ? "PASS -- port agrees with the shipped export on every case, "
-                      "and the control proves the sweep would have caught a defect"
-                    : "FAIL -- read the two lines above");
-    fflush(stdout);
-}
-
-}  // namespace
-
 int RtUiHoverRegister() {
     int n = 0;
 
-    if (RtWaveEnabled("BANISHED_RT_UIHOVER")) {
+    {
         RegisterRuntimeExport("?IsInsideClipRegion@UserInterface@UI@@QEBA_NHH@Z",
                               (void*)&RtUi_UserInterface_IsInsideClipRegion);
         RegisterRuntimeAddr(0x180120830, (void*)&RtUi_UserInterface_IsInsideClipRegion);  ++n;
@@ -618,23 +488,14 @@ int RtUiHoverRegister() {
         RegisterRuntimeExport("?EndHover@DialogInstance@UI@@QEAAXPEAVUserInterface@2@@Z",
                               (void*)&RtUi_DialogInstance_EndHover);
         RegisterRuntimeAddr(0x180113d10, (void*)&RtUi_DialogInstance_EndHover);           ++n;
-    } else {
-        printf("[RtPort] BANISHED_RT_UIHOVER=0 -- IsInsideClipRegion/EndDragDrop/"
-                    "EndHover left on the DLL\n");
     }
 
-    if (RtWaveEnabled("BANISHED_RT_UITOOLTIP")) {
+    {
         RegisterRuntimeExport("?BeginToolTip@UserInterface@UI@@QEAAX"
                               "V?$InternalPtr@VDialogInstance@UI@@@Object@@"
                               "V?$InternalPtr@VElement@UI@@@4@HH@Z",
                               (void*)&RtUi_UserInterface_BeginToolTip);
         RegisterRuntimeAddr(0x180120860, (void*)&RtUi_UserInterface_BeginToolTip);        ++n;
-    } else {
-        printf("[RtPort] BANISHED_RT_UITOOLTIP=0 -- BeginToolTip left on the DLL\n");
-    }
-
-    if (const char* s = std::getenv("BANISHED_UIF6_SWEEP")) {
-        if (std::strcmp(s, "0") != 0) RunClipSweep();
     }
 
     return n;

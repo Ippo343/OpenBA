@@ -23,8 +23,6 @@
 // including the retail quirk lane SHOW found, that `Frame` takes the callback
 // *fn* from +0x90 but its *context* from +0x80 at the same index.
 //
-// Kill switch: BANISHED_RT_UISTANDALONE=0 leaves both on the DLL.
-//
 // Both were confirmed ABSENT from the tree before a line was written, by
 // ADDRESS and by MANGLED NAME across code/, runtime/, engine/ and standalone/.
 // Every hit was a CONSUMER: the two ResolveExport calls in
@@ -178,11 +176,6 @@ extern "C" void RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* ui
 // REGISTRATION — both doors for both rows (see userinterface_hover.cpp).
 // ============================================================================
 int RtUiStandAloneRegister() {
-    if (!RtWaveEnabled("BANISHED_RT_UISTANDALONE")) {
-        printf("[RtPort] BANISHED_RT_UISTANDALONE=0 -- Update/DrawStandAloneUI "
-                    "left on the DLL\n");
-        return 0;
-    }
     int n = 0;
 
     RegisterRuntimeExport("?UpdateStandAloneUI@UserInterface@UI@@CAXAEBVTime@System@@PEAX@Z",

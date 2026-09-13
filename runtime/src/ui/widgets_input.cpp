@@ -31,13 +31,13 @@
 // Two shapes, argued per function in WAVE7_LANE_D.md §2:
 //
 //  (a) REPLAY for the seven pure getters: call ours, call the DLL's own body
-//      on the SAME (unmodified) object, RT_DIFF_SCALAR the results. Safe
+//      on the SAME (unmodified) object and compare the results. Safe
 //      because nothing here writes.
 //
 //  (b) PREFIX REPLAY for the ten mutators: memcpy the live object into a
 //      same-sized LOCAL scratch of this lane's own struct BEFORE our body
 //      runs, run our body on the real object, run the DLL's original on the
-//      scratch copy, and RT_DIFF_BYTES over sizeof(OurStruct). Because both
+//      scratch copy, and byte-compare over sizeof(OurStruct). Because both
 //      copies start byte-identical (a real memcpy of the SAME live bytes, not
 //      a freshly-constructed guess), ANY divergence in that range is a real
 //      behavioural difference regardless of how many of those bytes this lane
@@ -153,10 +153,6 @@ namespace {
 // Every "first child" lookup below uses it exactly as retail does.
 using IsDerivedFromFn = bool (*)(void* self, unsigned typeId);
 IsDerivedFromFn IsDerivedFrom() {
-    // ResolveExport, NOT ResolveExportRaw (changed 2026-09-07, Wave 9 lane R).
-    // Raw skips the port registry on purpose, for the diff oracle; on a LIVE
-    // path it means every "first child" lookup in this file ran the DLL's body
-    // while Wave 3's port of IsDerivedFrom sat registered and unreached.
     static IsDerivedFromFn fn = reinterpret_cast<IsDerivedFromFn>(
         ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
     return fn;
@@ -178,9 +174,6 @@ uint32_t NumberEditElementTypeId() {
 // static). Takes the raw char* a System::String IS at the ABI level in this
 // engine (see EditElement.h), not a String object.
 using ToIntegerFn = int (*)(const char*);
-// ResolveExport, not ResolveExportRaw, since Wave 9 lane B3: String::ToInteger
-// is now ported (runtime/src/system/string.cpp) and the raw door would walk
-// past it into the DLL -- the port-bypass shape WAVE9_LANE_V.md §1c catalogues.
 ToIntegerFn StringToInteger() {
     static ToIntegerFn fn = reinterpret_cast<ToIntegerFn>(
         ResolveExport("?ToInteger@String@System@@SAHPEBD@Z"));
@@ -267,7 +260,6 @@ inline CacheTextFn NumberElementCacheText() { return &RtUi_NumberElement_CacheTe
 // eventually live -- see the registration comment for the hand-over note and
 // for why leaving it unregistered was measured and rejected. Deleting the DOOR
 // is what closes the cutover hole, and that is done either way.
-
 
 
 bool StringNotEqualImpl(const void* lhs, const void* rhs);
@@ -417,10 +409,9 @@ inline void MarkNeedsSizeCalcUpToRoot(Element* self) {
     }
 }
 
-// ---- Mangled names, spelled out again at each registration site rather than
-// reused from these constants: runtime_census.py cannot see through a named
-// constant (reference_census_cannot_see_nonliteral_registrations.md). These
-// exist only for the diff oracle's RT_ORIGINAL_ONCE lookups. ----------------
+// ---- Mangled names, for reference. Each registration site spells its own
+// literal: runtime_census.py cannot see through a named constant
+// (reference_census_cannot_see_nonliteral_registrations.md). ----------------
 const char* const kSpinnerGetMaxValue  = "?GetMaxValue@SpinnerElement@UI@@QEBAHXZ";
 const char* const kSpinnerGetValue     = "?GetValue@SpinnerElement@UI@@QEBAHXZ";
 const char* const kSpinnerIsActive     = "?IsActive@SpinnerElement@UI@@QEBA_NXZ";
@@ -473,7 +464,6 @@ const char* const kProgressSetCurrent  = "?SetCurrentValue@ProgressElement@UI@@Q
 // been a tautology rather than a check. This body is UNVERIFIED; what its
 // diff row establishes is that it ran, and how often.
 void NumberEditElement_SetValue(NumberEditElement* self, int value) {
-    RT_DIFF_BEGIN("UI::NumberEditElement::SetValue [no oracle: SetText mutates the live element]");
 
     int clamped = self->_min;
     if (value >= self->_min) {
@@ -500,7 +490,6 @@ void NumberEditElement_SetValue(NumberEditElement* self, int value) {
     // site therefore claims only that the body RAN, and its calls= column is
     // the number worth reading. Same shape and same honesty as
     // Application::SleepThread in runtime/src/application/application_win.cpp.
-    RT_DIFF_SHADOW(true, "set", "not diffable");
 }
 
 
@@ -627,8 +616,7 @@ inline uint32_t LabelElementTypeId() {
 // runtime/types/ui/TextElement.h, derived from TextElement::SetParameter's own
 // call site at 0x18011e9b0). Factored out because it is the ONE piece of
 // arithmetic in this lane that can be silently wrong in a way no run would
-// notice, and RtUiW2SelfTest() at the bottom of this file exercises it with a
-// negative control that is verified to fire.
+// notice.
 inline void* TextParamSlot(void* textElem, int32_t index) {
     auto* data = *reinterpret_cast<uint8_t**>(
         static_cast<uint8_t*>(textElem) + UI::TextElementOffsets::kParamArrayData);
@@ -647,37 +635,22 @@ inline int32_t TextParamCount(const void* textElem) {
 
 // ---- ?GetMaxValue@SpinnerElement@UI@@QEBAHXZ  0x1800d7cb0 ------------------
 int RtUi_SpinnerElement_GetMaxValue(SpinnerElement* self) {
-    RT_DIFF_BEGIN("UI::SpinnerElement::GetMaxValue");
     NumberEditElement* child = FirstChildAs<NumberEditElement>(&self->base, NumberEditElementTypeId());
     int ours = child->_max;   // NO NULL CHECK — retail has none either.
-    if (rt_diff_on__) {
-        using Fn = int (*)(SpinnerElement*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, kSpinnerGetMaxValue)(self));
-    }
     return ours;
 }
 
 // ---- ?GetValue@SpinnerElement@UI@@QEBAHXZ  0x1800d7cf0 ---------------------
 int RtUi_SpinnerElement_GetValue(SpinnerElement* self) {
-    RT_DIFF_BEGIN("UI::SpinnerElement::GetValue");
     NumberEditElement* child = FirstChildAs<NumberEditElement>(&self->base, NumberEditElementTypeId());
     int ours = StringToInteger()(child->base._text);
-    if (rt_diff_on__) {
-        using Fn = int (*)(SpinnerElement*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, kSpinnerGetValue)(self));
-    }
     return ours;
 }
 
 // ---- ?IsActive@SpinnerElement@UI@@QEBA_NXZ  0x1800d7c30 --------------------
 bool RtUi_SpinnerElement_IsActive(SpinnerElement* self) {
-    RT_DIFF_BEGIN("UI::SpinnerElement::IsActive");
     NumberEditElement* child = FirstChildAs<NumberEditElement>(&self->base, NumberEditElementTypeId());
     bool ours = child->base._flagE0 != 0;
-    if (rt_diff_on__) {
-        using Fn = bool (*)(SpinnerElement*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, kSpinnerIsActive)(self));
-    }
     return ours;
 }
 
@@ -686,61 +659,19 @@ bool RtUi_SpinnerElement_IsActive(SpinnerElement* self) {
 // the same inherited field on both (Element.h +0x88), so no dedicated
 // SpinnerElement field is needed for this.
 void RtUi_SpinnerElement_SetElementId(SpinnerElement* self, int id) {
-    RT_DIFF_BEGIN("UI::SpinnerElement::SetElementId");
-    SpinnerElement replay;
-    std::memcpy(&replay, self, sizeof(SpinnerElement));
 
     NumberEditElement* child = FirstChildAs<NumberEditElement>(&self->base, NumberEditElementTypeId());
     child->base.base._elementId = id;
     self->base._elementId = id;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(SpinnerElement*, int);
-        RT_ORIGINAL_ONCE(Fn, kSpinnerSetElementId)(&replay, id);
-        RT_DIFF_BYTES(self, &replay, sizeof(SpinnerElement));
-    }
 }
 
 // ---- ?SetIncrement@SpinnerElement@UI@@QEAAXH@Z  0x1800d7d30 ----------------
 //
-// *** THE FIRST ADOPTER OF RT_DIFF_REPLAY_PRE/POST (Wave 25 lane SWEEP). ***
-//
-// Wave 24 lane DIFF measured that the invert mode documented at length in
-// rt_diff.h had ZERO adopters tree-wide: `BANISHED_RT_DIFF_INVERT=1` was a flag
-// that changed nothing, and the header's instructions described a conversion
-// nobody had performed. Inert documented machinery is how a future lane loses a
-// day, so the kickoff asked for "adopt or delete".
-//
-// WHY THIS SITE. The invert order exists to expose a body that double-manages
-// an allocation, and the way to prove the machinery works is a site where
-// inverting is KNOWN SAFE. This body writes one int into a field neither side
-// allocates, refcounts or frees, so PRE and POST are equivalent here by
-// construction: whichever order runs, both sides end with `_increment` set and
-// nothing else touched. `SetMinMax` and `SetValue` immediately below are NOT
-// converted -- they go through NumberEditElement::SetValue, which reformats
-// text through a REFCOUNTED buffer, and that is Wave 9 lane M's Finding 1
-// exactly. Converting those would be arming a crash, not adopting a tool.
-//
-// WHAT THIS ADOPTION DOES NOT ESTABLISH: this site did not register on Wave
-// 24's route and did not register on Wave 25 lane SWEEP's either (no menu path
-// reaches a spinner), so the PRE arm is COMPILED and SELECTED but has not been
-// OBSERVED to run. `[RtDiff] INVERT arm: UI::SpinnerElement::SetIncrement` in
-// standalone_error.log under BANISHED_RT_DIFF=1 BANISHED_RT_DIFF_INVERT=1 is
-// the line that would prove it, on a route that touches a spinner.
 void RtUi_SpinnerElement_SetIncrement(SpinnerElement* self, int increment) {
-    RT_DIFF_BEGIN("UI::SpinnerElement::SetIncrement");
-    SpinnerElement replay;
-    std::memcpy(&replay, self, sizeof(SpinnerElement));
-    using Fn = void (*)(SpinnerElement*, int);
-
-    // Exactly one of the two blocks runs. PRE only under INVERT; POST is the
-    // shipped order and is what every unconverted site does.
-    RT_DIFF_REPLAY_PRE  { RT_ORIGINAL_ONCE(Fn, kSpinnerSetIncrement)(&replay, increment); }
 
     self->_increment = increment;
 
-    RT_DIFF_REPLAY_POST { RT_ORIGINAL_ONCE(Fn, kSpinnerSetIncrement)(&replay, increment); }
-    RT_DIFF_BYTES(self, &replay, sizeof(SpinnerElement));
 }
 
 // ---- ?SetMinMax@SpinnerElement@UI@@QEAAXHH@Z  0x1800d7d40 ------------------
@@ -749,9 +680,6 @@ void RtUi_SpinnerElement_SetIncrement(SpinnerElement* self, int increment) {
 // not reimplementing it (that body is held back; see the comment on
 // RealNumberEditElementSetValue above).
 void RtUi_SpinnerElement_SetMinMax(SpinnerElement* self, int minVal, int maxVal) {
-    RT_DIFF_BEGIN("UI::SpinnerElement::SetMinMax");
-    SpinnerElement replay;
-    std::memcpy(&replay, self, sizeof(SpinnerElement));
 
     NumberEditElement* child = FirstChildAs<NumberEditElement>(&self->base, NumberEditElementTypeId());
     child->_min = minVal;
@@ -759,27 +687,14 @@ void RtUi_SpinnerElement_SetMinMax(SpinnerElement* self, int minVal, int maxVal)
     int clamped = StringToInteger()(child->base._text);
     RealNumberEditElementSetValue()(child, clamped);
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(SpinnerElement*, int, int);
-        RT_ORIGINAL_ONCE(Fn, kSpinnerSetMinMax)(&replay, minVal, maxVal);
-        RT_DIFF_BYTES(self, &replay, sizeof(SpinnerElement));
-    }
 }
 
 // ---- ?SetValue@SpinnerElement@UI@@QEAAXH@Z  0x1800d7dc0 --------------------
 void RtUi_SpinnerElement_SetValue(SpinnerElement* self, int value) {
-    RT_DIFF_BEGIN("UI::SpinnerElement::SetValue");
-    SpinnerElement replay;
-    std::memcpy(&replay, self, sizeof(SpinnerElement));
 
     NumberEditElement* child = FirstChildAs<NumberEditElement>(&self->base, NumberEditElementTypeId());
     RealNumberEditElementSetValue()(child, value);
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(SpinnerElement*, int);
-        RT_ORIGINAL_ONCE(Fn, kSpinnerSetValue)(&replay, value);
-        RT_DIFF_BYTES(self, &replay, sizeof(SpinnerElement));
-    }
 }
 
 // ============================================================================
@@ -789,34 +704,19 @@ void RtUi_SpinnerElement_SetValue(SpinnerElement* self, int value) {
 
 // ---- ?GetCurrentItem@ComboElement@UI@@QEBAHXZ  0x180075160 -----------------
 int RtUi_ComboElement_GetCurrentItem(ComboElement* self) {
-    RT_DIFF_BEGIN("UI::ComboElement::GetCurrentItem");
     int ours = self->_currentItem;
-    if (rt_diff_on__) {
-        using Fn = int (*)(ComboElement*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, kComboGetCurrentItem)(self));
-    }
     return ours;
 }
 
 // ---- ?GetItemCount@ComboElement@UI@@QEBAHXZ  0x180075180 -------------------
 int RtUi_ComboElement_GetItemCount(ComboElement* self) {
-    RT_DIFF_BEGIN("UI::ComboElement::GetItemCount");
     int ours = self->_strings._size;
-    if (rt_diff_on__) {
-        using Fn = int (*)(ComboElement*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, kComboGetItemCount)(self));
-    }
     return ours;
 }
 
 // ---- ?GetItemData@ComboElement@UI@@QEBAPEAXH@Z  0x180075170 ----------------
 void* RtUi_ComboElement_GetItemData(ComboElement* self, int index) {
-    RT_DIFF_BEGIN("UI::ComboElement::GetItemData");
     void* ours = self->_userData._data[index];   // NO BOUNDS CHECK — retail has none.
-    if (rt_diff_on__) {
-        using Fn = void* (*)(ComboElement*, int);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, kComboGetItemData)(self, index));
-    }
     return ours;
 }
 
@@ -865,7 +765,6 @@ void* RtUi_ComboElement_GetItemData(ComboElement* self, int index) {
 // which is the strongest thing available here.
 int RtUi_ComboElement_AddItem(ComboElement* self, const void* sprite,
                               const void* str, void* userData) {
-    RT_DIFF_BEGIN("UI::ComboElement::AddItem [no oracle: appends + bumps a refcount]");
 
     const int32_t before = self->_strings._size;
 
@@ -875,28 +774,6 @@ int RtUi_ComboElement_AddItem(ComboElement* self, const void* sprite,
 
     const int ours = self->_strings._size - 1;
 
-    if (rt_diff_on__) {
-        // Independent of this body's own rule: the three arrays must have grown
-        // in lockstep, the returned index must be the pre-call size, and the
-        // two elements whose SOURCE we still hold must have landed. The sprite
-        // is not checked — its 0x10 bytes are copied verbatim by the helper and
-        // comparing them here would only restate that helper's own contract.
-        const bool ok =
-            self->_strings._size  == before + 1 &&
-            self->_sprites._size  == before + 1 &&
-            self->_userData._size == before + 1 &&
-            ours == before &&
-            self->_userData._data[ours] == userData &&
-            self->_strings._data[ours] == *static_cast<void* const*>(str);
-        char oursDesc[128];
-        std::snprintf(oursDesc, sizeof(oursDesc),
-                      "idx=%d sizes=%d/%d/%d", ours, self->_strings._size,
-                      self->_sprites._size, self->_userData._size);
-        char theirsDesc[128];
-        std::snprintf(theirsDesc, sizeof(theirsDesc),
-                      "idx=%d sizes=%d/%d/%d", before, before + 1, before + 1, before + 1);
-        RT_DIFF_SHADOW(ok, oursDesc, theirsDesc);
-    }
     return ours;
 }
 
@@ -926,22 +803,12 @@ int RtUi_ComboElement_AddItem(ComboElement* self, const void* sprite,
 // reference. A replay double-frees. The shadow is the post-condition retail
 // guarantees, which is weaker than a diff and labelled as one.
 void RtUi_ComboElement_RemoveAllItems(ComboElement* self) {
-    RT_DIFF_BEGIN("UI::ComboElement::RemoveAllItems [no oracle: frees three buffers]");
 
     ArrayCleanup_180010ab0()(&self->_strings);
     ArrayCleanup_180037310()(&self->_sprites);
     ArrayCleanup_180024aa0()(&self->_userData);
     self->_currentItem = -1;
 
-    if (rt_diff_on__) {
-        const bool ok =
-            self->_strings._data  == nullptr && self->_strings._size  == 0 &&
-            self->_sprites._data  == nullptr && self->_sprites._size  == 0 &&
-            self->_userData._data == nullptr && self->_userData._size == 0 &&
-            self->_currentItem == -1;
-        RT_DIFF_SHADOW(ok, ok ? "all three emptied, current=-1"
-                              : "NOT emptied", "all three emptied, current=-1");
-    }
 }
 
 // ============================================================================
@@ -951,12 +818,7 @@ void RtUi_ComboElement_RemoveAllItems(ComboElement* self) {
 
 // ---- ?GetValue@NumberEditElement@UI@@QEBAHXZ  0x1800d4b50 ------------------
 int RtUi_NumberEditElement_GetValue(NumberEditElement* self) {
-    RT_DIFF_BEGIN("UI::NumberEditElement::GetValue");
     int ours = StringToInteger()(self->base._text);
-    if (rt_diff_on__) {
-        using Fn = int (*)(NumberEditElement*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, kNumEditGetValue)(self));
-    }
     return ours;
 }
 
@@ -972,10 +834,7 @@ int RtUi_NumberEditElement_GetValue(NumberEditElement* self) {
 // released. Never observed, because this export is not called anywhere in lane
 // M's 10-cell matrix (`calls=` never even registered a site) — a latent heap
 // hazard, removed rather than left armed for the first caller to find.
-// The site stays registered so RtDiffSummary() still lists the function.
 void RtUi_NumberEditElement_SetMinMax(NumberEditElement* self, int minVal, int maxVal) {
-    RT_DIFF_BEGIN("UI::NumberEditElement::SetMinMax [no oracle: replay would double-release _text]");
-    (void)rt_diff_on__;
 
     self->_min = minVal;
     self->_max = maxVal;
@@ -1045,14 +904,10 @@ void RtUi_NumberEditElement_SetMinMax(NumberEditElement* self, int minVal, int m
 // It does — 0x180118D50 and 0x180118DB0 are transcribed field for field below,
 // including retail's `ucomiss`/`jp` NaN behaviour in the float guard (an
 // unordered compare falls through to the write, which `!(a == b)` reproduces).
-// The sites stay REGISTERED so both functions still appear in RtDiffSummary()
-// rather than silently vanishing from the audit.
 // ---------------------------------------------------------------------------
 
 // ---- ?SetValue@NumberElement@UI@@QEAAXH@Z  0x180118d50 ---------------------
 void RtUi_NumberElement_SetValueInt(NumberElement* self, int value) {
-    RT_DIFF_BEGIN("UI::NumberElement::SetValueInt [no oracle: CacheText owns a refcounted String]");
-    (void)rt_diff_on__;   // registered for visibility; no oracle call below.
 
     if (!(self->_mode == 0 && self->_intValue == value)) {
         self->_intValue = value;
@@ -1065,8 +920,6 @@ void RtUi_NumberElement_SetValueInt(NumberElement* self, int value) {
 
 // ---- ?SetValue@NumberElement@UI@@QEAAXM@Z  0x180118db0 ---------------------
 void RtUi_NumberElement_SetValueFloat(NumberElement* self, float value) {
-    RT_DIFF_BEGIN("UI::NumberElement::SetValueFloat [no oracle: CacheText owns a refcounted String]");
-    (void)rt_diff_on__;   // registered for visibility; no oracle call below.
 
     if (!(self->_mode == 1 && self->_floatValue == value)) {
         self->_floatValue = value;
@@ -1096,7 +949,6 @@ void RtUi_NumberElement_SetValueFloat(NumberElement* self, float value) {
 // implementation check; correctness rests on matching the decompile
 // instruction-for-instruction, recorded in WAVE7_LANE_D.md §5.
 void RtUi_EditElement_SetText(EditElement* self, const void* newText) {
-    RT_DIFF_BEGIN("UI::EditElement::SetText");   // registered for visibility in RtDiffSummary(); never reported — no oracle call below.
 
     if (self->_flagE0 == 0) {
         void* thisStr = &self->_text;
@@ -1136,9 +988,6 @@ void RtUi_EditElement_SetText(EditElement* self, const void* newText) {
 // original on the child array a second time (shared with the live object, per
 // the file-level oracle note) is safe.
 void RtUi_RadioElement_SetActiveRadio(RadioElement* self, int index) {
-    RT_DIFF_BEGIN("UI::RadioElement::SetActiveRadio");
-    RadioElement replay;
-    std::memcpy(&replay, self, sizeof(RadioElement));
 
     if (index != self->_activeIndex) {
         self->_activeIndex = index;
@@ -1151,11 +1000,6 @@ void RtUi_RadioElement_SetActiveRadio(RadioElement* self, int index) {
         }
     }
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(RadioElement*, int);
-        RT_ORIGINAL_ONCE(Fn, kRadioSetActiveRadio)(&replay, index);
-        RT_DIFF_BYTES(self, &replay, sizeof(RadioElement));
-    }
 }
 
 // ============================================================================
@@ -1229,7 +1073,6 @@ uint32_t CheckBoxTypeId() {
 }
 
 void RtUi_RadioElement_FindCheckBoxesPrivate(RadioElement* self, void** p) {
-    RT_DIFF_BEGIN("UI::RadioElement::FindCheckBoxes(InternalPtr) [no oracle: appends + recurses]");
 
     const uint32_t typeId = CheckBoxTypeId();          // read BEFORE the vcall
     void* e = *p;
@@ -1254,16 +1097,6 @@ void RtUi_RadioElement_FindCheckBoxesPrivate(RadioElement* self, void** p) {
         RtUi_RadioElement_FindCheckBoxesPrivate(self, &tmp);
     }
 
-    if (rt_diff_on__) {
-        bool ok = true;
-        for (int32_t i = 0; i < self->_checkBoxes._size; ++i)
-            if (self->_checkBoxes._data[i] == nullptr) { ok = false; break; }
-        char oursDesc[96];
-        std::snprintf(oursDesc, sizeof(oursDesc), "%d checkboxes, %s",
-                      self->_checkBoxes._size, ok ? "none null" : "A NULL ENTRY");
-        RT_DIFF_SHADOW(ok, oursDesc, "no null entry");
-        RT_DIFF_WORK(appended);
-    }
 }
 
 // The public overload is six instructions: it puts `this` into a stack slot and
@@ -1278,10 +1111,8 @@ void RtUi_RadioElement_FindCheckBoxesPrivate(RadioElement* self, void** p) {
 // 0x180047c00. Both are registered below, each at its own address, so neither
 // door can pick up the other's body.
 void RtUi_RadioElement_FindCheckBoxes(RadioElement* self) {
-    RT_DIFF_BEGIN("UI::RadioElement::FindCheckBoxes()");
     void* slot = self;
     RtUi_RadioElement_FindCheckBoxesPrivate(self, &slot);
-    RT_DIFF_WORK(true);
 }
 
 // ============================================================================
@@ -1290,38 +1121,17 @@ void RtUi_RadioElement_FindCheckBoxes(RadioElement* self) {
 
 // ---- ?SetMaximumValue@ProgressElement@UI@@QEAAXM@Z  0x180077ec0 -----------
 void RtUi_ProgressElement_SetMaximumValue(ProgressElement* self, float value) {
-    RT_DIFF_BEGIN("UI::ProgressElement::SetMaximumValue");
-    ProgressElement replay;
-    std::memcpy(&replay, self, sizeof(ProgressElement));
 
     self->_maxValue = value;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(ProgressElement*, float);
-        RT_ORIGINAL_ONCE(Fn, kProgressSetMax)(&replay, value);
-        RT_DIFF_BYTES(self, &replay, sizeof(ProgressElement));
-    }
 }
 
 // ---- ?SetCurrentValue@ProgressElement@UI@@QEAAXM@Z  0x180077ed0 -----------
-// SECOND ADOPTER of RT_DIFF_REPLAY_PRE/POST. Same argument as
-// SpinnerElement::SetIncrement above: one float written into a field neither
-// side allocates or frees, so the two orders are equivalent here and the
-// conversion cannot arm a use-after-free. Chosen as the second adopter because
-// it is the replay-shaped site most likely to be reached on a normal route (the
-// loading bar), which is the one that would actually exercise the PRE arm.
 void RtUi_ProgressElement_SetCurrentValue(ProgressElement* self, float value) {
-    RT_DIFF_BEGIN("UI::ProgressElement::SetCurrentValue");
-    ProgressElement replay;
-    std::memcpy(&replay, self, sizeof(ProgressElement));
-    using Fn = void (*)(ProgressElement*, float);
 
-    RT_DIFF_REPLAY_PRE  { RT_ORIGINAL_ONCE(Fn, kProgressSetCurrent)(&replay, value); }
 
     self->_currentValue = value;
 
-    RT_DIFF_REPLAY_POST { RT_ORIGINAL_ONCE(Fn, kProgressSetCurrent)(&replay, value); }
-    RT_DIFF_BYTES(self, &replay, sizeof(ProgressElement));
 }
 
 
@@ -1366,27 +1176,6 @@ void RtUi_ProgressElement_SetCurrentValue(ProgressElement* self, float value) {
 // exactly the argument runtime/src/ui/widgets_layout.cpp's TextElement::
 // SetParameter makes for the identical tail, and it is why lane M's Finding 1
 // says a body of this shape must NOT be prefix-replayed.
-//
-// What is here instead, and what each part is worth:
-//
-//   * RT_DIFF_WORK — the DID-WORK counter WAVE9.md asks for beside `calls=`.
-//     A large `calls=` reads as coverage and is the same trap as `calls=0`
-//     reading as clean, one level up: 12,886 of NumberElement::SetValueInt's
-//     12,896 calls took an early-out. Every body below counts the calls that
-//     REACHED THE ASSIGNMENT, separately from the calls that entered.
-//   * RT_DIFF_SHADOW on a post-condition that is FALSIFIABLE, not a second
-//     spelling of the code above it: after `String::operator=(dst, src)` the
-//     ported body of that function guarantees `dst->data == src->data`
-//     (runtime/src/system/string.cpp:360). That predicate FAILS if the slot
-//     address is computed wrong — the wrong base offset, the wrong element
-//     stride, the wrong index — which is the whole of what this lane could get
-//     wrong that a run would not otherwise notice.
-//   * RtUiW2SelfTest() at the bottom: a positive AND a negative control for
-//     that arithmetic, run once per diff-enabled process, printing ALIVE or
-//     BROKEN. It exists for the reason lane M's released-pointer detector
-//     needed one — a predicate that can no longer fire is indistinguishable
-//     from a predicate that has nothing to report
-//     (reference_probe_needs_an_effectiveness_control.md).
 //
 // The shadow predicate is NOT a substitute for a differential oracle and this
 // lane does not claim it is. It is silent about the dirty-flag walk, about
@@ -1437,7 +1226,6 @@ inline bool SlotSharesBuffer(const void* slot, const void* src) {
 // TextElement's type id, i.e. FirstChildAs<> — the same shape SpinnerElement's
 // seven exports use, and the reason this file already has that helper.
 void RtUi_SliderElement_SetParameter(Element* self, int32_t index, const void* str) {
-    RT_DIFF_BEGIN("UI::SliderElement::SetParameter [no oracle: refcounted String swap on a shared child]");
 
     void* child = FirstChildAs<void>(self, TextElementTypeId());
 
@@ -1446,16 +1234,12 @@ void RtUi_SliderElement_SetParameter(Element* self, int32_t index, const void* s
     // (a successful IsDerivedFrom implies non-null) and is transcribed anyway,
     // because it is what makes this function DIFFER from its Progress sibling
     // below. See that function's header.
-    if (child == nullptr) { RT_DIFF_WORK(false); return; }
-    if (index < 0) { RT_DIFF_WORK(false); return; }
-    if (index >= TextParamCount(child)) { RT_DIFF_WORK(false); return; }
+    if (child == nullptr) {  return; }
+    if (index < 0) {  return; }
+    if (index >= TextParamCount(child)) {  return; }
 
     void* slot = WrappedTextSetParam(child, index, str);
 
-    RT_DIFF_WORK(true);
-    RT_DIFF_SHADOW(SlotSharesBuffer(slot, str),
-                   "param slot shares the source String buffer",
-                   "not diffable (see the header)");
 }
 
 // ---- ?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z
@@ -1490,22 +1274,17 @@ void RtUi_SliderElement_SetParameter(Element* self, int32_t index, const void* s
 // to find is who built a ProgressElement whose first child is not a text
 // widget.
 void RtUi_ProgressElement_SetProgressTextParameter(Element* self, int32_t index, const void* str) {
-    RT_DIFF_BEGIN("UI::ProgressElement::SetProgressTextParameter [no oracle: refcounted String swap on a shared child]");
 
     void* child = FirstChildAs<void>(self, TextElementTypeId());
 
-    if (index < 0) { RT_DIFF_WORK(false); return; }
+    if (index < 0) {  return; }
     // Faithful to 0x180119b6e — see the header. `child` may be null here.
     const int32_t count = *reinterpret_cast<const int32_t*>(
         static_cast<const uint8_t*>(child) + UI::TextElementOffsets::kParamCount);
-    if (index >= count) { RT_DIFF_WORK(false); return; }
+    if (index >= count) {  return; }
 
     void* slot = WrappedTextSetParam(child, index, str);
 
-    RT_DIFF_WORK(true);
-    RT_DIFF_SHADOW(SlotSharesBuffer(slot, str),
-                   "param slot shares the source String buffer",
-                   "not diffable (see the header)");
 }
 
 // ============================================================================
@@ -1542,9 +1321,8 @@ void RtUi_ProgressElement_SetProgressTextParameter(Element* self, int32_t index,
 //      array non-empty and SetCurrentItem never leaves -1 behind; it is not a
 //      check retail performs, so it is not one this port performs.
 void RtUi_ComboElement_UpdateText(ComboElement* self) {
-    RT_DIFF_BEGIN("UI::ComboElement::UpdateText [no oracle: refcounted String swap on a shared child]");
 
-    if (self->_strings._size <= 0) { RT_DIFF_WORK(false); return; }
+    if (self->_strings._size <= 0) {  return; }
 
     const uint32_t labelType = LabelElementTypeId();
 
@@ -1577,8 +1355,8 @@ void RtUi_ComboElement_UpdateText(ComboElement* self) {
     // redundant after an exact-type FindElementType and is transcribed anyway.
     // It is NOT redundant on the short-circuit path above, where `start` was
     // matched on its own virtual Type().
-    if (!IsDerivedFrom()(found, labelType)) { RT_DIFF_WORK(false); return; }
-    if (found == nullptr) { RT_DIFF_WORK(false); return; }
+    if (!IsDerivedFrom()(found, labelType)) {  return; }
+    if (found == nullptr) {  return; }
 
     bool didWork = false;
 
@@ -1591,9 +1369,6 @@ void RtUi_ComboElement_UpdateText(ComboElement* self) {
         StringAssign()(slot, src);
         TextElementCacheText()(found);
         didWork = true;
-        RT_DIFF_SHADOW(SlotSharesBuffer(slot, src),
-                       "label param[0] shares the current item's String buffer",
-                       "not diffable (see the header)");
     }
 
     // ---- the SPRITE half (0x1801122aa-0x180112306) -------------------------
@@ -1623,7 +1398,6 @@ void RtUi_ComboElement_UpdateText(ComboElement* self) {
         }
     }
 
-    RT_DIFF_WORK(didWork);
 }
 
 // ---- ?SetCurrentItem@ComboElement@UI@@QEAAXH@Z  0x180112540 ---------------
@@ -1652,7 +1426,6 @@ void RtUi_ComboElement_UpdateText(ComboElement* self) {
 // leaves -1. Getting this backwards would put the combo on the wrong item
 // silently, so it is called out rather than left to the reader.
 void RtUi_ComboElement_SetCurrentItem(ComboElement* self, int32_t index) {
-    RT_DIFF_BEGIN("UI::ComboElement::SetCurrentItem [no oracle: closes a dialog and rewrites a shared child]");
 
     if (self->_openDialog != nullptr) {
         // The local slot retail builds at [RSP+0x30] and passes by address.
@@ -1663,77 +1436,13 @@ void RtUi_ComboElement_SetCurrentItem(ComboElement* self, int32_t index) {
         self->_openDialog = nullptr;
     }
 
-    if (self->_currentItem == index) { RT_DIFF_WORK(false); return; }
+    if (self->_currentItem == index) {  return; }
 
     const bool inRange = (index >= 0 && index < self->_strings._size);
     self->_currentItem = inRange ? index : 0;
     RtUi_ComboElement_UpdateText(self);
 
-    RT_DIFF_WORK(true);
-    RT_DIFF_SHADOW(self->_currentItem == (inRange ? index : 0),
-                   "current item committed",
-                   "not diffable (see the header)");
 }
-
-// ============================================================================
-// RtUiW2SelfTest — the effectiveness control, with a negative control that
-// IS VERIFIED TO FIRE
-// ============================================================================
-// WHAT IT PROVES, stated narrowly so nobody reads more into a green line than
-// is there: that TextParamSlot()/TextParamCount() address the slot retail
-// addresses, using the offsets in runtime/types/ui/TextElement.h. That is the
-// only arithmetic in this lane that can be wrong in a way no run would notice —
-// a wrong stride or base writes a valid-looking String into the wrong place and
-// the UI simply shows the wrong text.
-//
-// IT PROVES NOTHING ABOUT the dirty-flag walk, about CacheText, about the
-// combo's child search, or about anything past the two offsets it names. It is
-// a control for the arithmetic, not an oracle for the port.
-//
-// WHY A NEGATIVE CONTROL AT ALL. The positive half of this test cannot fail
-// once the offsets are right, so on its own it is a green line that would stay
-// green if the test stopped executing — the shape
-// reference_probe_needs_an_effectiveness_control.md and lane M's released-
-// pointer detector both had to fix the hard way. So the test ALSO runs a
-// deliberately mis-scaled computation (stride 4 instead of 8, the single most
-// plausible way to get this wrong) and REQUIRES it to disagree. If the negative
-// control comes back green, the test says BROKEN and its silence means nothing.
-void RtUiW2SelfTest() {
-    if (!RtDiffEnabled()) return;
-
-    // A synthetic TextElement: 0x120 bytes is past both offsets this lane uses.
-    // Nothing here is a real UI object and nothing is called on it — the test
-    // exercises the ADDRESS ARITHMETIC only, which is why it needs no String,
-    // no allocator and no DLL.
-    alignas(16) uint8_t fake[0x120] = {};
-    alignas(8)  uint8_t params[8 * 8] = {};
-    *reinterpret_cast<uint8_t**>(fake + UI::TextElementOffsets::kParamArrayData) = params;
-    *reinterpret_cast<int32_t*>(fake + UI::TextElementOffsets::kParamCount) = 6;
-
-    const bool posCount = (TextParamCount(fake) == 6);
-    const bool posSlot0 = (TextParamSlot(fake, 0) == static_cast<void*>(params));
-    const bool posSlot3 = (TextParamSlot(fake, 3) == static_cast<void*>(params + 24));
-    const bool positive = posCount && posSlot0 && posSlot3;
-
-    // NEGATIVE CONTROL: the same index under a 4-byte stride. It MUST disagree
-    // with the real computation, and for index 0 it would not (0*4 == 0*8),
-    // which is why it is taken at index 3.
-    const void* misScaled = params + 3 * 4;
-    const bool negativeFired = (TextParamSlot(fake, 3) != misScaled);
-
-    if (positive && negativeFired) {
-        printf("[UIW2 self-test] ALIVE -- TextElement param slot arithmetic agrees with "
-               "TextElement.h (+0x%X data, +0x%X count); the 4-byte-stride negative "
-               "control FIRED.\n",
-               UI::TextElementOffsets::kParamArrayData, UI::TextElementOffsets::kParamCount);
-    } else {
-        printf("[UIW2 self-test] *** BROKEN -- its silence means NOTHING *** "
-               "positive=%d (count=%d slot0=%d slot3=%d) negativeFired=%d\n",
-               (int)positive, (int)posCount, (int)posSlot0, (int)posSlot3,
-               (int)negativeFired);
-    }
-}
-
 
 // ============================================================================
 // WAVE 9 LANE UIW2, PART 2 — the two address doors, ported
@@ -1773,7 +1482,6 @@ namespace {
 // swap and could not be diffed at all (WAVE9_LANE_UIW2.md §4); this one can,
 // so it is.
 bool StringNotEqualImpl(const void* lhsRaw, const void* rhsRaw) {
-    RT_DIFF_BEGIN("System::String::operator!= [ported by lane UIW2 to close address door 0x18003ffe0]");
 
     const char* a = *static_cast<const char* const*>(lhsRaw);
     const char* b = *static_cast<const char* const*>(rhsRaw);
@@ -1791,16 +1499,10 @@ bool StringNotEqualImpl(const void* lhsRaw, const void* rhsRaw) {
     }
     const bool ours = !equal;
 
-    if (rt_diff_on__) {
-        using Fn = bool (*)(const void*, const void*);
-        RT_DIFF_SCALAR(ours,
-                       RT_ORIGINAL_ONCE(Fn, "??9String@System@@QEBA_NAEBV01@@Z")(lhsRaw, rhsRaw));
-    }
     // DID-WORK here means "reached the byte compare", i.e. both operands were
     // non-empty and the same length. Every other path is decided by the lengths
     // alone, and a run where that counter stays 0 has exercised none of
     // StrCompare — which is the half that can be wrong.
-    RT_DIFF_WORK(lenA == lenB && a != nullptr && lenA != 0);
     return ours;
 }
 
@@ -1975,14 +1677,10 @@ int RtUiWidgetsInRegister() {
     // is this lane file's tally of UI exports and this one is a System symbol.
     //
     // Leaving it unregistered was the first plan, on the grounds that
-    // runtime/src/system/string.cpp owns that namespace. The measurement said
-    // otherwise: with the registration absent, the oracle's own
-    // RT_ORIGINAL_ONCE spelling shows up in tools/unsatisfied_export_scan.py as
-    // an unsatisfied name (harmlessly — it is inside a diff guard and is
-    // compiled out at cutover — but it is still a ported body reachable through
-    // neither door). An unregistered port is how `?RemoveChildren@Element@UI@@`
-    // became the tree's only address-door bypass; the convention exists for
-    // that reason and is followed here.
+    // runtime/src/system/string.cpp owns that namespace. An unregistered port
+    // is how `?RemoveChildren@Element@UI@@` became the tree's only
+    // address-door bypass; the convention exists for that reason and is
+    // followed here.
     //
     // FOR WHOEVER PORTS `System::String` NEXT: this registration is the one to
     // grep for before writing a second body
@@ -1993,10 +1691,6 @@ int RtUiWidgetsInRegister() {
     RegisterRuntimeExport("??9String@System@@QEBA_NAEBV01@@Z",
                           (void*)&StringNotEqualImpl);
     RegisterRuntimeAddr(0x18003ffe0, (void*)&StringNotEqualImpl);
-
-    // The arithmetic control for the three bodies above. No-ops unless the diff
-    // harness is on; prints ALIVE or BROKEN, never nothing.
-    RtUiW2SelfTest();
 
     return count;
 }

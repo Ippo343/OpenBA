@@ -191,7 +191,6 @@
 //     ~DialogController's whole body is two instructions (stamp a vtable, tail-
 //     jump to `Object::Internal::~Internal`), and `VerifyDtorThunk` checks both
 //     of the addresses they name.
-//     A shape check appears in `RtDiffSummary()` as one call, not per
 //     invocation — say so when reading the summary rather than concluding the
 //     function was never exercised.
 // ============================================================================
@@ -202,7 +201,6 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "dialog_vptr_trip.h"   // WAVE 10E lane FINAL
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/ElementDescription.h"
@@ -249,7 +247,6 @@ extern "C" int RtUiUifNegCtrl();
 // ResolveAddr, same reasoning and the same "must stay byte-identical to
 // resolve.h's" contract. WAVE 9 LANE UIC needs it for one unexported-by-us edge
 // (`?AdjustUpperLeft@Element@UI@@`, reached through the seam so that
-// BANISHED_RT_UIELEMENT=0 puts it back on the DLL).
 //
 // AND IT IS NOT "ALWAYS THE DLL": ResolveAddr(Module::Runtime, …) consults the
 // port registry FIRST (standalone/resolve_standalone.cpp:471,
@@ -275,7 +272,6 @@ namespace {
 // tools/runtime_census.py cannot see through a NAMED CONSTANT and would
 // under-count the lane, which is how Wave 3's Object count stood at 21/41 when
 // it was really 27/41 (reference_census_cannot_see_nonliteral_registrations.md).
-// These constants exist only for the oracle's RT_ORIGINAL_ONCE lookups.
 // ============================================================================
 const char* const kGetRoot =
     "?GetRoot@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ";
@@ -305,7 +301,7 @@ const char* const kEdCreateInstance =
 
 // The Element helpers the two Find* forwarders tail into. Neither is in this
 // lane's scope; both are exported and both are resolved through the SEAM
-// (ResolveExport, not ResolveExportRaw) so that if lane A registers a port of
+// (ResolveExport) so that if lane A registers a port of
 // either, our forwarder follows it — which is what retail's direct near-CALL
 // into the same DLL would have amounted to.
 const char* const kElementFindElement =
@@ -360,174 +356,6 @@ void ReleaseStringLocal(char*& p) {
 // address read, so it is satisfied at cutover and never caches a null.
 inline void** VideoDeviceSingleton() {
     return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
-}
-
-// ============================================================================
-// (a) The replay oracle
-// ============================================================================
-// File-scope scratch, not stack buffers: the UI runs on one thread (the DLL's
-// DialogInstance tree is created and driven only from Engine::MainLoop's
-// thread), and no ported body below calls another ported body, so a replay can
-// never nest. Both buffers are touched only inside `if (rt_diff_on__)`, so a
-// normal run neither pays for them nor reads them.
-//
-// If UI updates ever become concurrent these must become per-call storage.
-alignas(16) uint8_t g_replayObj[sizeof(DialogInstance)];
-
-// StopTimer's private copy of the timer entries, plus the two fingerprints its
-// comparison is built from. 8 KB holds 341 timers; a real dialog runs a
-// handful. When a dialog somehow exceeds it the call is simply NOT DIFFED —
-// deliberately, rather than reported as a divergence, because "the oracle's
-// buffer was too small" is not a fact about the port. WAVE7_LANE_B.md §4 says
-// so, so that a `calls=` count lower than expected is not read as a stall.
-constexpr size_t kReplayTimerBytes = 8192;
-alignas(16) uint8_t g_replayTimers[kReplayTimerBytes];
-uint8_t g_fpOurs[kDialogInstanceCtorExtent + kReplayTimerBytes];
-uint8_t g_fpTheirs[kDialogInstanceCtorExtent + kReplayTimerBytes];
-
-// WAVE 10 LANE UIF. Defined near the bottom of this file. It is triggered from
-// the FIRST `??0ElementDescription` and NOT from `RtUiDialogRegister()`, for the
-// reason runtime/src/ui/userinterface.cpp measured the hard way: registration
-// runs before `Engine::Startup` creates `System::MemoryAllocator::_singleton`,
-// and any oracle that allocates its own subjects faults there with
-// `WRITE of 0x648` (retail's `EnterCriticalSection(_singleton + 0x640)` on a
-// null singleton).
-void VerifyElementDescriptionCreateInstanceTwin();
-
-inline DialogInstance* ReplaySnapshot(bool on, const DialogInstance* live) {
-    if (!on) return nullptr;
-    std::memcpy(g_replayObj, live, sizeof(DialogInstance));
-    return reinterpret_cast<DialogInstance*>(g_replayObj);
-}
-
-// One pointer comparison, reported through an ordinary diff site. Written out
-// rather than using RT_DIFF_SCALAR because that macro evaluates its OURS
-// argument twice, and every use below would then call the original twice.
-inline void DiffPtr(RtDiffSite* site, const void* ours, const void* theirs) {
-    char a[32], b[32];
-    RtDiffFormat(a, sizeof(a), ours);
-    RtDiffFormat(b, sizeof(b), theirs);
-    RtDiffReport(site, ours == theirs, a, b);
-}
-
-// ============================================================================
-// (c) The shape oracle
-// ============================================================================
-// The three controller-dispatch loops all compile to the same five-instruction
-// core, and the only things that can be wrong about our transcription of one
-// are the three displacements in it:
-//
-//   39 99 <disp32>     CMP  dword ptr [RCX+disp32],EBX     ; the COUNT field
-//   48 8b 46 <disp8>   MOV  RAX,qword ptr [RSI+disp8]      ; the ARRAY field
-//   ff 50 <disp8>      CALL qword ptr [RAX+disp8]          ; the VTABLE SLOT
-//
-// (RSI is the `this` the prologue parked there; RCX still holds it at the CMP.)
-// Get the array or count offset wrong and the loop walks the timer array
-// instead; get the slot wrong and every controller gets a different virtual
-// called with this method's arguments. Decoding all three out of the shipped
-// bytes covers all of it.
-struct LoopShape {
-    bool     ok;
-    uint32_t countOffset;
-    uint32_t arrayOffset;
-    uint32_t slotOffset;
-};
-
-// Find `pattern` (len bytes) in [p, p+span), returning the index or -1.
-int FindBytes(const uint8_t* p, size_t span, const uint8_t* pattern, size_t len) {
-    if (!p) return -1;
-    for (size_t i = 0; i + len <= span; ++i)
-        if (std::memcmp(p + i, pattern, len) == 0) return static_cast<int>(i);
-    return -1;
-}
-
-LoopShape DecodeDispatchLoop(const uint8_t* p) {
-    LoopShape s = { false, 0, 0, 0 };
-    if (!p) return s;
-    // The longest of the three bodies (?OnElementEvent@) reaches its CALL at
-    // +0x8e, so 0xc0 is a comfortable window that still cannot wander into the
-    // next function's body far enough to matter: the three patterns must be
-    // found IN ORDER, each after the previous one.
-    const size_t span = 0xc0;
-
-    // CMP dword ptr [RCX+disp32],EBX — match opcode+modrm, read the disp32.
-    static const uint8_t kCmpOp[2] = { 0x39, 0x99 };
-    const int iCmp = FindBytes(p, span, kCmpOp, sizeof(kCmpOp));
-    if (iCmp < 0) return s;
-    std::memcpy(&s.countOffset, p + iCmp + 2, 4);
-
-    static const uint8_t kMovOp[3] = { 0x48, 0x8b, 0x46 };  // MOV RAX,[RSI+disp8]
-    const int iMov = FindBytes(p + iCmp, span - static_cast<size_t>(iCmp), kMovOp, sizeof(kMovOp));
-    if (iMov < 0) return s;
-    s.arrayOffset = p[iCmp + iMov + 3];
-
-    static const uint8_t kCallOp[2] = { 0xff, 0x50 };       // CALL [RAX+disp8]
-    const size_t base = static_cast<size_t>(iCmp) + static_cast<size_t>(iMov);
-    const int iCall = FindBytes(p + base, span - base, kCallOp, sizeof(kCallOp));
-    if (iCall < 0) return s;
-    s.slotOffset = p[base + static_cast<size_t>(iCall) + 2];
-
-    s.ok = true;
-    return s;
-}
-
-void VerifyDispatchLoop(RtDiffSite* site, const char* mangled, unsigned expectedSlot) {
-    if (!RtDiffEnabled()) return;
-    RtDiffRegister(site);
-
-    const uint8_t* body = static_cast<const uint8_t*>(ResolveExportRaw(mangled));
-    const LoopShape f = DecodeDispatchLoop(body);
-
-    char ours[96], theirs[128];
-    std::snprintf(ours, sizeof(ours), "count+0x%x array+0x%x slot+0x%x",
-                  (unsigned)offsetof(DialogInstance, _controllers._size),
-                  (unsigned)offsetof(DialogInstance, _controllers._data),
-                  expectedSlot);
-    if (!f.ok) {
-        std::snprintf(theirs, sizeof(theirs), "unrecognised loop shape at %p", (const void*)body);
-        RtDiffReport(site, false, ours, theirs);
-        return;
-    }
-    std::snprintf(theirs, sizeof(theirs), "count+0x%x array+0x%x slot+0x%x",
-                  f.countOffset, f.arrayOffset, f.slotOffset);
-    const bool equal =
-        (f.countOffset == offsetof(DialogInstance, _controllers._size)) &&
-        (f.arrayOffset == offsetof(DialogInstance, _controllers._data)) &&
-        (f.slotOffset  == expectedSlot);
-    RtDiffReport(site, equal, ours, theirs);
-}
-
-// ~DialogController is two instructions of substance:
-//   48 8d 05 <rel32>   LEA RAX,[rip+rel32]      ; ??_7DialogController@UI@@6B@
-//   48 89 01           MOV [RCX],RAX
-//   ...
-//   e9 <rel32>         JMP  Object::Internal::~Internal
-// Both targets are exported, so both can be checked by name.
-void VerifyDtorThunk(RtDiffSite* site, const char* mangled,
-                     const void* expectedVtable, const void* expectedTail) {
-    if (!RtDiffEnabled()) return;
-    RtDiffRegister(site);
-
-    const uint8_t* p = static_cast<const uint8_t*>(ResolveExportRaw(mangled));
-    char ours[96], theirs[128];
-    std::snprintf(ours, sizeof(ours), "vtbl=%p tail=%p", expectedVtable, expectedTail);
-
-    static const uint8_t kLea[3] = { 0x48, 0x8d, 0x05 };
-    const int iLea = FindBytes(p, 0x40, kLea, sizeof(kLea));
-    static const uint8_t kJmp[1] = { 0xe9 };
-    const int iJmp = FindBytes(p, 0x40, kJmp, sizeof(kJmp));
-    if (!p || iLea < 0 || iJmp < 0) {
-        std::snprintf(theirs, sizeof(theirs), "unrecognised dtor shape at %p", (const void*)p);
-        RtDiffReport(site, false, ours, theirs);
-        return;
-    }
-    int32_t leaRel = 0, jmpRel = 0;
-    std::memcpy(&leaRel, p + iLea + 3, 4);
-    std::memcpy(&jmpRel, p + iJmp + 1, 4);
-    const void* vtbl = p + iLea + 7 + leaRel;
-    const void* tail = p + iJmp + 5 + jmpRel;
-    std::snprintf(theirs, sizeof(theirs), "vtbl=%p tail=%p", vtbl, tail);
-    RtDiffReport(site, vtbl == expectedVtable && tail == expectedTail, ours, theirs);
 }
 
 // ---- Wave 9 lane Z: the exported DATA slot ?TypeName@ reads ----------------
@@ -597,8 +425,8 @@ inline void MemFreeStatic(void* p) {
 }
 
 // 0x1800325f0 — Collection::LinkedList<T=8>::Clear. UNEXPORTED, so the only
-// door is the address one; port-aware, so `BANISHED_RT_LINKEDLIST=0` still
-// routes this to the DLL exactly as it does that file's other two bodies.
+// door is the address one; port-aware, exactly as that file's other two
+// bodies are.
 inline void ListClear(void* list) {
     static VoidPtrFn fn = nullptr;
     if (!fn) fn = reinterpret_cast<VoidPtrFn>(ResolveAddr(Module::Runtime, 0x1800325f0));
@@ -610,196 +438,6 @@ inline void ListClear(void* list) {
 // already does for the identical tail.
 inline void InternalDtor(void* self) {
     RT_EXPORT_ONCE(VoidPtrFn, "??1Internal@Object@@UEAA@XZ")(self);
-}
-
-// ---- the two shape oracles ------------------------------------------------
-//
-// Both read the SHIPPED instruction stream through a RAW door and compare its
-// literal displacements and relocation targets against what the ports assume.
-// Raw is mandatory here and is not an oversight of the port-aware rule: an
-// oracle that resolved through the registry would read OUR OWN prologue once
-// the port registers and compare the port against itself
-// (WAVE9_LANE_FNHOOK.md found thirteen detour installers doing exactly that).
-// Both are called only from RtUiDialogRegister and only when the oracle is on,
-// so neither is a live call site at cutover.
-
-// Little-endian rel32 at p[+off], resolved against the end of the instruction.
-inline const uint8_t* Rel32Target(const uint8_t* p, int off, int instrLen) {
-    int32_t rel = 0;
-    std::memcpy(&rel, p + off, 4);
-    return p + off + (instrLen - off) + rel;
-}
-
-// ??1DialogInstance@UI@@UEAA@XZ, 0x180114d40. Six values, and for a destructor
-// whose every other operation is a store of zero they ARE the failure surface:
-// the three vtables it stamps, the two functions it calls, and the field it
-// hands to the first of them.
-void VerifyDialogInstanceDtorShape(RtDiffSite* site) {
-    if (!RtDiffEnabled()) return;
-    RtDiffRegister(site);
-
-    // RT_RAW_OK: an ORACLE read of the shipped bytes; guarded by RtDiffEnabled
-    // above and never reached on a normal run.
-    const uint8_t* p = static_cast<const uint8_t*>(
-        ResolveExportRaw("??1DialogInstance@UI@@UEAA@XZ"));
-
-    char ours[224], theirs[224];
-    // RT_RAW_OK: oracle expectations, read raw for the same reason.
-    const void* wantVtDlg  = ResolveExportRaw("??_7DialogInstance@UI@@6B@");
-    const void* wantVtInt  = ResolveExportRaw("??_7Internal@Object@@6B@");
-    const void* wantVtBase = ResolveExportRaw("??_7Base@Object@@6B@");
-    const void* wantClear  = reinterpret_cast<const void*>(ResolveRuntimeRaw(0x1800325f0));
-    const void* wantSetSz  = reinterpret_cast<const void*>(ResolveRuntimeRaw(0x18002fca0));
-    const unsigned wantChildren =
-        static_cast<unsigned>(offsetof(DialogInstance, _children));
-
-    std::snprintf(ours, sizeof(ours), "vt=%p/%p/%p call=%p/%p children+0x%x",
-                  wantVtDlg, wantVtInt, wantVtBase, wantClear, wantSetSz, wantChildren);
-
-    if (!p) {
-        std::snprintf(theirs, sizeof(theirs), "shipped body not resolvable");
-        RtDiffReport(site, false, ours, theirs);
-        return;
-    }
-
-    // Scan the 0x18a-byte body once, collecting the LEA RAX,[rip+d32] targets
-    // (48 8d 05), the direct CALL rel32 targets (e8) and the LEA RCX,[RDI+d8]
-    // (48 8d 4f d8) that computes the argument to the third call.
-    const void* lea[4]  = { nullptr, nullptr, nullptr, nullptr };
-    const void* call[6] = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
-    int nLea = 0, nCall = 0;
-    int childrenDisp = -1;
-    for (size_t i = 0; i + 5 <= 0x190; ++i) {
-        if (p[i] == 0x48 && p[i + 1] == 0x8d && p[i + 2] == 0x05) {
-            if (nLea < 4) lea[nLea++] = Rel32Target(p + i, 3, 7);
-            i += 6;
-        } else if (p[i] == 0x48 && p[i + 1] == 0x8d && p[i + 2] == 0x4f) {
-            if (childrenDisp < 0) childrenDisp = p[i + 3];
-            i += 3;
-        } else if (p[i] == 0xe8) {
-            if (nCall < 6) call[nCall++] = Rel32Target(p + i, 1, 5);
-            i += 4;
-        }
-    }
-
-    std::snprintf(theirs, sizeof(theirs), "vt=%p/%p/%p call=%p/%p children+0x%x",
-                  lea[0], lea[1], lea[2], call[2], call[3],
-                  childrenDisp < 0 ? 0xffffu : static_cast<unsigned>(childrenDisp));
-
-    const bool equal =
-        (nLea >= 3) && (nCall >= 4) &&
-        (lea[0]  == wantVtDlg)  &&
-        (lea[1]  == wantVtInt)  &&
-        (lea[2]  == wantVtBase) &&
-        (call[2] == wantClear)  &&
-        (call[3] == wantSetSz)  &&
-        (childrenDisp >= 0) &&
-        (static_cast<unsigned>(childrenDisp) == wantChildren);
-    RtDiffReport(site, equal, ours, theirs);
-}
-
-// 0x1800325f0 — LinkedList::Clear. Four displacements: the `next` link the walk
-// follows and the three fields it zeroes. Nothing else in that body can be
-// wrong without being wrong loudly.
-void VerifyListClearShape(RtDiffSite* site) {
-    if (!RtDiffEnabled()) return;
-    RtDiffRegister(site);
-
-    using LL = Collection::LinkedList<RtObject::InternalBasePtr>;
-    char ours[160], theirs[160];
-    std::snprintf(ours, sizeof(ours), "next+0x%x tail+0x%x head+0x%x count+0x%x",
-                  0x10u,
-                  (unsigned)offsetof(LL, _tail),
-                  (unsigned)offsetof(LL, _head),
-                  (unsigned)offsetof(LL, _count));
-
-    // RT_RAW_OK: an ORACLE read of the shipped bytes, guarded above.
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(ResolveRuntimeRaw(0x1800325f0));
-    if (!p) {
-        std::snprintf(theirs, sizeof(theirs), "shipped body not resolvable");
-        RtDiffReport(site, false, ours, theirs);
-        return;
-    }
-
-    //   48 8b 7e 10     MOV RDI,[RSI+0x10]        the `next` read, BEFORE the free
-    //   49 89 46 08     MOV [R14+0x8],RAX         tail  = 0
-    //   49 89 06        MOV [R14],RAX             head  = 0
-    //   41 89 46 10     MOV dword [R14+0x10],EAX  count = 0
-    int next = -1, tail = -1, count = -1;
-    bool headSeen = false;
-    for (size_t i = 0; i + 4 <= 0x9a; ++i) {
-        if (p[i] == 0x48 && p[i + 1] == 0x8b && p[i + 2] == 0x7e && next  < 0) next  = p[i + 3];
-        if (p[i] == 0x49 && p[i + 1] == 0x89 && p[i + 2] == 0x46 && tail  < 0) tail  = p[i + 3];
-        if (p[i] == 0x49 && p[i + 1] == 0x89 && p[i + 2] == 0x06)              headSeen = true;
-        if (p[i] == 0x41 && p[i + 1] == 0x89 && p[i + 2] == 0x46 && count < 0) count = p[i + 3];
-    }
-    std::snprintf(theirs, sizeof(theirs), "next+0x%x tail+0x%x head%s count+0x%x",
-                  next < 0 ? 0xffu : (unsigned)next,
-                  tail < 0 ? 0xffu : (unsigned)tail,
-                  headSeen ? "+0x0" : " ABSENT",
-                  count < 0 ? 0xffu : (unsigned)count);
-
-    const bool equal = (next == 0x10) && headSeen &&
-                       (tail  >= 0 && (unsigned)tail  == offsetof(LL, _tail)) &&
-                       (count >= 0 && (unsigned)count == offsetof(LL, _count));
-    RtDiffReport(site, equal, ours, theirs);
-}
-
-// The NEGATIVE CONTROL for both of the above, and it RUNS — a shape checker
-// that cannot be seen to fail is worth nothing, and this wave has already paid
-// for two controls that came back green because they could not fire
-// (WAVE9.md, the Picking negative control, and lane COLL's own). It feeds each
-// decoder a body that is deliberately NOT the one it expects and requires a
-// MISMATCH; if either comes back equal, the decoder is matching on something
-// that is not there and its green verdict above means nothing.
-//
-// The wrong body is `??1DialogController@UI@@UEAA@XZ` for the dtor decoder (a
-// real destructor of the same family, so it exercises the decoder rather than
-// bouncing off a null) and `0x18007a010`, LinkedList::Remove, for the list one
-// (same file, same container, different displacements).
-void VerifyLaneUidControls() {
-    if (!RtDiffEnabled()) return;
-    static RtDiffSite sNeg = { "WAVE9 lane UID shape decoders [negative control]",
-                               0, 0, false, false };
-    RtDiffRegister(&sNeg);
-
-    // RT_RAW_OK: oracle reads, guarded above.
-    const uint8_t* wrongDtor = static_cast<const uint8_t*>(
-        ResolveExportRaw("??1DialogController@UI@@UEAA@XZ"));
-    const uint8_t* wrongList = reinterpret_cast<const uint8_t*>(ResolveRuntimeRaw(0x18007a010));
-
-    bool dtorFired = true, listFired = true;
-
-    if (wrongDtor) {
-        // The DialogController dtor stamps ONE vtable and TAIL-JUMPS (e9, not
-        // e8), so a decoder that really requires three LEAs and four CALLs
-        // cannot match it.
-        int nLea = 0, nCall = 0;
-        for (size_t i = 0; i + 5 <= 0x40; ++i) {
-            if (wrongDtor[i] == 0x48 && wrongDtor[i + 1] == 0x8d && wrongDtor[i + 2] == 0x05) { ++nLea; i += 6; }
-            else if (wrongDtor[i] == 0xe8) { ++nCall; i += 4; }
-        }
-        dtorFired = !(nLea >= 3 && nCall >= 4);
-    }
-    if (wrongList) {
-        int next = -1, count = -1;
-        for (size_t i = 0; i + 4 <= 0x9a; ++i) {
-            if (wrongList[i] == 0x48 && wrongList[i + 1] == 0x8b && wrongList[i + 2] == 0x7e && next < 0)
-                next = wrongList[i + 3];
-            if (wrongList[i] == 0x41 && wrongList[i + 1] == 0x89 && wrongList[i + 2] == 0x46 && count < 0)
-                count = wrongList[i + 3];
-        }
-        // Remove zeroes prev/next and decrements the count through a different
-        // encoding entirely, so the full four-way match must NOT hold.
-        listFired = !(next == 0x10 && count == 0x10);
-    }
-
-    char ours[96], theirs[160];
-    std::snprintf(ours, sizeof(ours), "both decoders REJECT a body that is not theirs");
-    std::snprintf(theirs, sizeof(theirs), "dtor-decoder rejected=%s list-decoder rejected=%s%s",
-                  dtorFired ? "yes" : "NO", listFired ? "yes" : "NO",
-                  (wrongDtor && wrongList) ? "" : "  (a control body was not resolvable)");
-    RtDiffReport(&sNeg, dtorFired && listFired && wrongDtor && wrongList, ours, theirs);
 }
 
 }  // namespace
@@ -840,10 +478,9 @@ void VerifyLaneUidControls() {
 // null there is indistinguishable at the call site from a correct empty
 // override right up until it is called. There is deliberately no oracle: a
 // function with no reads, no writes and no return value has nothing to compare,
-// and `RT_DIFF_BEGIN` is omitted rather than added for the sake of a `calls=`
-// row that could only ever be `divergences=0` over nothing
-// (reference_probe_needs_an_effectiveness_control.md — a green count over work
-// that never happened is the shape to avoid, not to manufacture).
+// and no oracle site is manufactured for the sake of a green count over work
+// that never happened
+// (reference_probe_needs_an_effectiveness_control.md).
 extern "C" void RtUiDialogInstance_Persist(void* /*self*/, void* /*stream*/) {
 }
 
@@ -952,13 +589,7 @@ extern "C" uint32_t RtUiDialogInstance_Type(const void* /*self*/) {
 // Retail 0x180045580, ordinal 2875. Profile build: same one-liner.
 //   MOV RAX,[RCX+0x50] / MOV [RDX],RAX / MOV RAX,RDX / RET
 void** RtUiDialogInstance_GetRoot(DialogInstance* self, void** out) {
-    RT_DIFF_BEGIN("UI::DialogInstance::GetRoot");
     *out = self->_root;
-    if (rt_diff_on__) {
-        void* theirs = nullptr;
-        RT_ORIGINAL_ONCE(PtrOutFn, kGetRoot)(self, &theirs);
-        DiffPtr(&rt_diff_site__, *out, theirs);
-    }
     return out;
 }
 
@@ -975,7 +606,6 @@ void** RtUiDialogInstance_GetRoot(DialogInstance* self, void** out) {
 // final re-index, RDI is the same thing pre-multiplied by 8. Reproduced with
 // one index because the two can never disagree.
 void** RtUiDialogInstance_GetController(DialogInstance* self, void** out, uint32_t typeId) {
-    RT_DIFF_BEGIN("UI::DialogInstance::GetController");
     void* found = nullptr;
     for (int32_t i = 0; i < self->_controllers._size; ++i) {
         DialogController* c = self->_controllers._data[i];
@@ -988,11 +618,6 @@ void** RtUiDialogInstance_GetController(DialogInstance* self, void** out, uint32
         }
     }
     *out = found;
-    if (rt_diff_on__) {
-        void* theirs = nullptr;
-        RT_ORIGINAL_ONCE(PtrOutU32Fn, kGetController)(self, &theirs, typeId);
-        DiffPtr(&rt_diff_site__, *out, theirs);
-    }
     return out;
 }
 
@@ -1003,13 +628,7 @@ void** RtUiDialogInstance_GetController(DialogInstance* self, void** out, uint32
 // guard here would not restore the behaviour, it would skip it. If this faults
 // the dialog has no root element and THAT is the bug.
 void** RtUiDialogInstance_FindElement(DialogInstance* self, void** out, const void* name) {
-    RT_DIFF_BEGIN("UI::DialogInstance::FindElement");
     reinterpret_cast<PtrOutStrFn>(ResolveExport(kElementFindElement))(self->_root, out, name);
-    if (rt_diff_on__) {
-        void* theirs = nullptr;
-        RT_ORIGINAL_ONCE(PtrOutStrFn, kFindElement)(self, &theirs, name);
-        DiffPtr(&rt_diff_site__, *out, theirs);
-    }
     return out;
 }
 
@@ -1017,13 +636,7 @@ void** RtUiDialogInstance_FindElement(DialogInstance* self, void** out, const vo
 // Retail 0x1801140c0, ordinal 2348. The same forwarder against
 // Element::FindElementType. Same absent null check, same reason.
 void** RtUiDialogInstance_FindElementType(DialogInstance* self, void** out, uint32_t typeId) {
-    RT_DIFF_BEGIN("UI::DialogInstance::FindElementType");
     reinterpret_cast<PtrOutU32Fn>(ResolveExport(kElementFindElementType))(self->_root, out, typeId);
-    if (rt_diff_on__) {
-        void* theirs = nullptr;
-        RT_ORIGINAL_ONCE(PtrOutU32Fn, kFindElementType)(self, &theirs, typeId);
-        DiffPtr(&rt_diff_site__, *out, theirs);
-    }
     return out;
 }
 
@@ -1036,15 +649,7 @@ void** RtUiDialogInstance_FindElementType(DialogInstance* self, void** out, uint
 //   OR EDX,[RCX+0x20] / NOT R8D / AND EDX,R8D / MOV [RCX+0x20],EDX / RET
 // so the ON mask is applied FIRST and the OFF mask wins any overlap.
 void RtUiDialogInstance_SetFlagsOnOff(DialogInstance* self, uint32_t on, uint32_t off) {
-    RT_DIFF_BEGIN("UI::DialogInstance::SetFlagsOnOff");
-    DialogInstance* shadow = ReplaySnapshot(rt_diff_on__, self);
-
     self->_flags = (on | self->_flags) & ~off;
-
-    if (rt_diff_on__) {
-        RT_ORIGINAL_ONCE(SetFlagsFn, kSetFlagsOnOff)(shadow, on, off);
-        RT_DIFF_BYTES(self, shadow, kDialogInstanceCtorExtent);
-    }
 }
 
 // ?StopTimer@DialogInstance@UI@@QEAAXH@Z
@@ -1063,29 +668,7 @@ void RtUiDialogInstance_SetFlagsOnOff(DialogInstance* self, uint32_t on, uint32_
 // The shift is a copy-down of three qwords (0x18 bytes) per entry, and the
 // count is decremented ONCE at the end — not per entry.
 void RtUiDialogInstance_StopTimer(DialogInstance* self, int32_t id) {
-    RT_DIFF_BEGIN("UI::DialogInstance::StopTimer");
 
-    // ---- oracle setup: snapshot the object AND redirect its timer array ----
-    DialogInstance* shadow = nullptr;
-    bool diffThisCall = false;
-    if (rt_diff_on__) {
-        const int32_t cap = self->_timers._capacity;
-        const size_t bytes = (cap > 0 ? static_cast<size_t>(cap) : 0u) * sizeof(DialogTimer);
-        if (bytes <= kReplayTimerBytes) {
-            std::memcpy(g_replayObj, self, sizeof(DialogInstance));
-            shadow = reinterpret_cast<DialogInstance*>(g_replayObj);
-            if (self->_timers._data && bytes) {
-                std::memcpy(g_replayTimers, self->_timers._data, bytes);
-                shadow->_timers._data = reinterpret_cast<DialogTimer*>(g_replayTimers);
-            }
-            diffThisCall = true;
-        }
-        // else: this call is not diffed at all. See the note on
-        // kReplayTimerBytes — reporting a divergence here would be a fact about
-        // the oracle's buffer, not about the port.
-    }
-
-    // ---- the port ----------------------------------------------------------
     const int64_t count64 = static_cast<int64_t>(self->_timers._size);
     if (count64 > 0) {
         uint8_t* base = reinterpret_cast<uint8_t*>(self->_timers._data);
@@ -1114,32 +697,6 @@ void RtUiDialogInstance_StopTimer(DialogInstance* self, int32_t id) {
         self->_timers._size -= 1;
     }
 
-    // ---- oracle comparison -------------------------------------------------
-    if (diffThisCall) {
-        RT_ORIGINAL_ONCE(StopTimerFn, kStopTimer)(shadow, id);
-
-        // Fingerprint = the ctor-initialised object prefix with the _timers
-        // data POINTER blanked (we redirected the shadow's on purpose), then
-        // the live timer entries. Comparing the raw pointer would report a
-        // divergence the oracle itself introduced.
-        auto fingerprint = [](uint8_t* dst, const DialogInstance* obj,
-                              const DialogTimer* entries) -> size_t {
-            std::memcpy(dst, obj, kDialogInstanceCtorExtent);
-            std::memset(dst + offsetof(DialogInstance, _timers._data), 0, sizeof(void*));
-            size_t n = kDialogInstanceCtorExtent;
-            const int32_t size = obj->_timers._size;
-            if (entries && size > 0) {
-                size_t bytes = static_cast<size_t>(size) * sizeof(DialogTimer);
-                if (bytes > kReplayTimerBytes) bytes = kReplayTimerBytes;
-                std::memcpy(dst + n, entries, bytes);
-                n += bytes;
-            }
-            return n;
-        };
-        const size_t nOurs   = fingerprint(g_fpOurs,   self,   self->_timers._data);
-        const size_t nTheirs = fingerprint(g_fpTheirs, shadow, shadow->_timers._data);
-        RT_DIFF_BYTES(g_fpOurs, g_fpTheirs, nOurs < nTheirs ? nOurs : nTheirs);
-    }
 }
 
 // ============================================================================
@@ -1573,13 +1130,7 @@ void RtUiDialogInstance_Update(DialogInstance* self, const void* time,
 // (reference_ghidra_c_output_vs_disassembly.md: Ghidra prints a MOVSXD as a
 // zero extension). A negative index reads BEFORE the array, faithfully.
 void** RtUiDialog_GetTemplate(Dialog* self, void** out, int32_t index) {
-    RT_DIFF_BEGIN("UI::Dialog::GetTemplate");
     *out = self->_templates[static_cast<int64_t>(index)];
-    if (rt_diff_on__) {
-        void* theirs = nullptr;
-        RT_ORIGINAL_ONCE(PtrOutI32Fn, kGetTemplate)(self, &theirs, index);
-        DiffPtr(&rt_diff_site__, *out, theirs);
-    }
     return out;
 }
 
@@ -1590,13 +1141,7 @@ void** RtUiDialog_GetTemplate(Dialog* self, void** out, int32_t index) {
 // ?GetContainer@DialogController@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
 // Retail 0x18003b700, ordinal 2508. The same one-liner as GetRoot, at +0x20.
 void** RtUiDialogController_GetContainer(DialogController* self, void** out) {
-    RT_DIFF_BEGIN("UI::DialogController::GetContainer");
     *out = self->_container;
-    if (rt_diff_on__) {
-        void* theirs = nullptr;
-        RT_ORIGINAL_ONCE(PtrOutFn, kGetContainer)(self, &theirs);
-        DiffPtr(&rt_diff_site__, *out, theirs);
-    }
     return out;
 }
 
@@ -1672,7 +1217,7 @@ void RtUiDialogController_Dtor(DialogController* self) {
 //     therefore does what `??1DialogController@UI@@` (60 lines above, Wave 7,
 //     shape-verified) already does for the identical tail: it calls the ONE
 //     body the tree owns, through the seam, so exactly one handle-table mutator
-//     is ever in play and it is whichever one the `BANISHED_RT_OBJECT_TABLE`
+//     is ever in play and it is whichever one the object-table port
 //     tier has armed. Nothing here reimplements the swap-remove, and nothing
 //     here arms a tier that is off.
 //
@@ -1732,15 +1277,10 @@ void RtUiDialogInstance_Dtor(DialogInstance* self) {
     // had real teardown to do, so a dtor reached only on an already-empty
     // dialog cannot inflate it.
     //
-    // THREAD SAFETY, stated rather than assumed: rt_diff.cpp has NO
-    // synchronisation (WAVE9.md §2), so a site here would be a data race if
-    // dialogs were torn down off the main thread. They are not -- every
+    // THREAD SAFETY, stated rather than assumed: every
     // `~DialogInstance` reachable from this tree runs from
     // `UI::UserInterface::Update` / `CleanRemovedDialogs` / `CloseDialog`, all
     // of which are called from `Engine::MainLoop::Frame` on the main thread.
-    RT_DIFF_BEGIN("UI::DialogInstance::~DialogInstance [liveness]");
-    RT_DIFF_WORK(self->_root != nullptr || self->_controllers._size > 0 ||
-                 self->_children._head != nullptr);
 
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
 
@@ -1793,14 +1333,12 @@ void RtUiDialogInstance_Dtor(DialogInstance* self) {
 // Every byte of 0x00..0x67 is written, which is what makes the replay below a
 // full-object oracle rather than a spot check.
 void* RtUiElementDescription_Ctor(ElementDescription* self) {
-    RT_DIFF_BEGIN("UI::ElementDescription::ctor");
 
     static void* const vtblBase = ResolveExport(RtUI::kVtblBase);
     static void* const vtblExt  = ResolveExport(RtUI::kVtblExternal);
     static void* const vtblEd   = ResolveExport(RtUI::kVtblElementDescription);
 
     alignas(16) static uint8_t scratch[sizeof(ElementDescription)];
-    if (rt_diff_on__) std::memcpy(scratch, self, sizeof(ElementDescription));
 
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
     *reinterpret_cast<void**>(p + 0x00) = vtblBase;   // Object::Base
@@ -1820,19 +1358,6 @@ void* RtUiElementDescription_Ctor(ElementDescription* self) {
     *reinterpret_cast<uint64_t*>(p + 0x58) = 0;       // _stringTable
     *reinterpret_cast<uint64_t*>(p + 0x60) = 0;       // _textName
 
-    if (rt_diff_on__) {
-        RT_ORIGINAL_ONCE(CtorFn, kEdCtor)(scratch);
-        RT_DIFF_BYTES(self, scratch, sizeof(ElementDescription));
-
-        // WAVE 10 LANE UIF: `?CreateInstance@ElementDescription` has no live
-        // caller on any route this harness can drive (see its twin's banner),
-        // so its oracle is triggered from here — the earliest live call site in
-        // the class that is guaranteed to be past allocator startup. The flag
-        // is set BEFORE the call because the twin constructs descriptions of
-        // its own and would otherwise re-enter.
-        static bool edTwinDone = false;
-        if (!edTwinDone) { edTwinDone = true; VerifyElementDescriptionCreateInstanceTwin(); }
-    }
     return self;   // MOV RAX,RCX — a ctor returns `this`
 }
 
@@ -1841,9 +1366,7 @@ void* RtUiElementDescription_Ctor(ElementDescription* self) {
 // The constant is the .rsc element-description file version and it is what
 // ?Serialize@ (held back) is written against.
 int32_t RtUiElementDescription_GetFileVersion(const ElementDescription* self) {
-    RT_DIFF_BEGIN("UI::ElementDescription::GetFileVersion");
     const int32_t ours = 4;
-    RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(IntFn, kEdFileVersion)(self));
     return ours;
 }
 
@@ -1933,11 +1456,10 @@ extern "C" uint32_t RtUiElementDescription_Type(const void* /*self*/) {
 // NO ORACLE, for the same reason as `??1Element` and stated for the same
 // reason: a replay would decrement the `_textName` refcount a second time and,
 // where our body already took it to zero, free a block twice and then run
-// `~External` twice over a handle that no longer exists. `RT_DIFF_WORK` records
+// `~External` twice over a handle that no longer exists. The did-work split
 // how many calls actually released a buffer; `calls=` stays 0 because there is
 // no comparison to report. Liveness, not correctness.
 void RtUiElementDescription_Dtor(ElementDescription* self) {
-    RT_DIFF_BEGIN("UI::ElementDescription::~ElementDescription");
     bool didWork = false;
 
     static void* const vtblEd = ResolveExport(RtUI::kVtblElementDescription);
@@ -1959,7 +1481,6 @@ void RtUiElementDescription_Dtor(ElementDescription* self) {
         }
     }
 
-    RT_DIFF_WORK(didWork);
 
     // ~External — a TAIL JMP in retail, a normal call here (the same single
     // deliberate departure `??1Element` makes, for the same reason).
@@ -2044,9 +1565,8 @@ void RtUiElementDescription_Dtor(ElementDescription* self) {
 // rather than hidden, and it is the same disposition every replayed Wave 7
 // dialog getter carries.
 void** RtUiDialog_CreateElement(const Dialog* self, void** ret, void* desc) {
-    RT_DIFF_BEGIN("UI::Dialog::CreateElement");
 
-    if (!desc) { *ret = nullptr; RT_DIFF_WORK(false); return ret; }
+    if (!desc) { *ret = nullptr;  return ret; }
 
     // `String name = desc->GetPath().GetPathIdentifer();`
     // Both temporaries are released before the scan, with a STRONG REFERENCE
@@ -2156,47 +1676,9 @@ void** RtUiDialog_CreateElement(const Dialog* self, void** ret, void* desc) {
     // Release the strong reference taken above (0x180113061..0x180113087).
     if (name) ReleaseStringLocal(name);
 
-    if (rt_diff_on__) {
-        void*  theirsSlot = nullptr;
-        using Fn = void** (*)(const Dialog*, void**, void*);
-        RT_ORIGINAL_ONCE(Fn, kCreateElement)(self, &theirsSlot, desc);
-
-        int distinctFirstBytes = 0;
-        for (uint32_t w : firstByteSeen)
-            for (int b = 0; b < 32; ++b) if (w & (1u << b)) ++distinctFirstBytes;
-
-        // PRINTED UNCONDITIONALLY, not folded into the shadow message.
-        // RT_DIFF_SHADOW only emits its strings on a MISMATCH, so a population
-        // description carried inside it is invisible on exactly the runs where
-        // someone would want to know whether the population could have failed.
-        // This is the same instrument bug the AdjustUpperLeft sweep hit from
-        // the other side (fourteen comparisons reported as `calls=1`): if the
-        // control is only visible when the test fails, it is not a control.
-        //
-        // Capped so a dialog-heavy run cannot bury the log.
-        static int printed = 0;
-        if (printed < 24) {
-            ++printed;
-            std::fprintf(stderr,
-                "[UIC-pop] CreateElement #%d: entries=%d scanned=%d "
-                "reached-the-byte-loop=%d (equal=%d) distinct-first-bytes=%d "
-                "ourName=%s\n",
-                printed, count, nScanned, nTied, nTiedEq, distinctFirstBytes,
-                name ? name : "(null)");
-        }
-
-        char ours[224], their[224];
-        std::snprintf(ours, sizeof(ours),
-                      "ret=%p  [population] entries=%d scanned=%d "
-                      "reached-the-byte-loop=%d (equal=%d) distinct-first-bytes=%d",
-                      *ret, count, nScanned, nTied, nTiedEq, distinctFirstBytes);
-        std::snprintf(their, sizeof(their), "ret=%p", theirsSlot);
-        RT_DIFF_SHADOW(*ret == theirsSlot, ours, their);
-    }
 
     // `worked` is NOT `count > 0`: a scan that never reached the byte loop has
     // not exercised the thing this port can get wrong.
-    RT_DIFF_WORK(nTied > 0);
     return ret;
 }
 
@@ -2253,11 +1735,10 @@ void** RtUiDialog_CreateElement(const Dialog* self, void** ret, void* desc) {
 // carry verification is the enabling port underneath it: every translate this
 // body performs goes through `?AdjustUpperLeft@Element@UI@@`, whose
 // invertibility oracle in runtime/src/ui/element.cpp checks the whole subtree.
-// RT_DIFF_WORK here reports whether the delta was non-zero, so `worked=0` on
+// The did-work split here is whether the delta was non-zero, so a zero on
 // every call means the population never moved a dialog.
 void RtUiDialogInstance_SetUpperLeft(DialogInstance* self, int32_t x, int32_t y,
                                      bool scaled) {
-    RT_DIFF_BEGIN("UI::DialogInstance::SetUpperLeft");
 
     const float scale =
         *reinterpret_cast<const float*>(
@@ -2349,7 +1830,6 @@ void RtUiDialogInstance_SetUpperLeft(DialogInstance* self, int32_t x, int32_t y,
         self->_upperLeftY = y;
     }
 
-    RT_DIFF_WORK(dx != 0 || dy != 0);
 }
 
 // ============================================================================
@@ -2378,7 +1858,7 @@ void RtUiDialogInstance_SetUpperLeft(DialogInstance* self, int32_t x, int32_t y,
 // in fact, allocate anything of its own — but it FREES, twice, through the
 // inlined `System::String` release, and every free in this project sat behind
 // the Wave 2 allocator NO-GO. Wave 10 lane ALLOC retired that gate
-// (docs/runtime_port/WAVE10_LANE_ALLOC.md): `BANISHED_RT_ALLOC=1` arms with the
+// (docs/runtime_port/WAVE10_LANE_ALLOC.md): the allocator port runs with the
 // DLL present, so "our body frees what the DLL's unported code allocated" is
 // one heap either way. This body does not need the flag; it frees through
 // whichever `MemFree` is live.
@@ -2515,7 +1995,7 @@ void DialogTempCtor(uint8_t* p) {
     // WAVE 10E lane FINAL: the stamp is the row's ONLY consumer here, so it is
     // the only place an instrument can ask whether anything ever dispatches
     // through it. Off (the default) `TableOrReal` returns `vtDlg` untouched.
-    *reinterpret_cast<void**>(p + 0x00) = RtUiDlgTrip::TableOrReal(vtDlg);
+    *reinterpret_cast<void**>(p + 0x00) = vtDlg;
     *reinterpret_cast<uint64_t*>(p + 0x20) = 0;   // the inline's 16-byte MOVDQA
     *reinterpret_cast<uint64_t*>(p + 0x28) = 0;   // covers these two together
     *reinterpret_cast<int32_t*>(p + 0x30)  = -1;
@@ -2531,7 +2011,6 @@ void DialogTempCtor(uint8_t* p) {
     *reinterpret_cast<uint64_t*>(p + 0x78) = 0;
     *reinterpret_cast<uint64_t*>(p + 0x80) = 0;
 
-    RtUiDlgTrip::AfterStamp(p);   // no-op unless BANISHED_DLG_VPTR_TRIP=2
 }
 
 void EdCreateInstanceBody(const ElementDescription* self, void** elemPtr) {
@@ -2674,296 +2153,12 @@ uint64_t g_edCiWithTable = 0;      // reached StringTable::GetIndexFromName
 
 } // namespace
 
-// ORACLE: REPLAY, on the ELEMENT, with two things spelled out that a bare
-// "replay" label would hide.
-//
-//  (i) IT IS SKIPPED WHEN `_childDesc` IS NON-NULL, and the count of skipped
-//      calls is REPORTED. Slot 8 of a concrete description CREATES an element;
-//      replaying it would build a second one, leak it, and then report a
-//      "divergence" that is nothing but two different fresh addresses in
-//      `elem->_border`. A replay that manufactures a divergence is worse than
-//      no replay, and a replay whose uncovered fraction is invisible is the
-//      reference_uncalled_port_is_not_verified.md failure one level up. So the
-//      split is printed on every report: `nochild=N child=M table=K`.
-//  (ii) THE STRING REFCOUNTS ARE COMPENSATED, because both bodies run the same
-//      assign against the SAME two String buffers. Ours does (-1 old, +1 new)
-//      on the live element; the DLL's does (-1 old, +1 new) on the scratch copy,
-//      which holds the SAME pointers. Left alone that is a double release of
-//      `old` — and the first of the two could free it out from under the
-//      second. So the oracle takes a reference on `old` BEFORE either body runs
-//      (making the net effect on it exactly -1 across the pair, with the free,
-//      if any, happening at the very end) and drops one reference on the NEW
-//      buffer afterwards. Both are undone before the caller sees anything.
-//
-// +0x54..+0x57 is excluded from the compare — fact (b) above. Both copies are
-// built from the same live snapshot, so every other byte neither body writes is
-// equal by construction rather than by luck
-// (reference_oracle_must_not_compare_unwritten_bytes.md).
 extern "C" void RtUiElementDescription_CreateInstance(const ElementDescription* self,
                                                       void** elemPtr) {
-    RT_DIFF_BEGIN("UI::ElementDescription::CreateInstance");
-
-    const uint8_t* d     = reinterpret_cast<const uint8_t*>(self);
-    const bool hasChild  = (*reinterpret_cast<void* const*>(d + 0x48) != nullptr);
-    const bool hasTable  = (*reinterpret_cast<void* const*>(d + 0x58) != nullptr);
-    if (rt_diff_on__) {
-        if (hasChild) ++g_edCiWithChild; else ++g_edCiNoChild;
-        if (hasTable) ++g_edCiWithTable;
-    }
-
-    const bool replay = rt_diff_on__ && !hasChild && *elemPtr != nullptr;
-
-    char* preRef = nullptr;
-    if (replay) {
-        uint8_t* live = static_cast<uint8_t*>(*elemPtr);
-        std::memcpy(g_edCiScratch, live, sizeof(g_edCiScratch));
-        preRef = *reinterpret_cast<char**>(live + 0x10);
-        if (preRef) ++RtSystem::StringRefCount(preRef);   // note (ii)
-    }
 
     EdCreateInstanceBody(self, elemPtr);
 
-    if (replay) {
-        void* scratchPtr = g_edCiScratch;
-        using Fn = void (*)(const ElementDescription*, void**);
-        RT_ORIGINAL_ONCE(Fn, kEdCreateInstance)(self, &scratchPtr);
-
-        std::memcpy(g_edCiOurs,   *elemPtr,      sizeof(g_edCiOurs));
-        std::memcpy(g_edCiTheirs, g_edCiScratch, sizeof(g_edCiTheirs));
-        std::memset(g_edCiOurs   + 0x54, 0, 4);   // fact (b), indeterminate
-        std::memset(g_edCiTheirs + 0x54, 0, 4);
-
-        char ours[192], them[192];
-        std::snprintf(ours, sizeof(ours),
-                      "population nochild=%llu child=%llu table=%llu",
-                      (unsigned long long)g_edCiNoChild,
-                      (unsigned long long)g_edCiWithChild,
-                      (unsigned long long)g_edCiWithTable);
-        std::snprintf(them, sizeof(them), "%s", ours);
-        RtDiffReport(&rt_diff_site__, true, ours, them);
-        RtDiffReportBytes(&rt_diff_site__, g_edCiOurs, g_edCiTheirs,
-                          sizeof(g_edCiOurs));
-
-        // Undo note (ii): one reference back off the NEW buffer (both bodies
-        // took one), and the pre-reference on `old` has already been consumed
-        // by the DLL's own release.
-        if (char* nw = *reinterpret_cast<char**>(
-                static_cast<uint8_t*>(*elemPtr) + 0x10)) {
-            if (--RtSystem::StringRefCount(nw) == 0) {
-                MemFreeStatic(nw - 8);
-            }
-        }
-    }
-    RT_DIFF_WORK(true);
 }
-
-// ============================================================================
-// THE TWIN-SYNTHETIC ORACLE for ?CreateInstance@ElementDescription
-// ============================================================================
-// THIS EXISTS BECAUSE THE REPLAY ORACLE ABOVE HAS NO POPULATION. Measured, not
-// assumed: a `BANISHED_RT_DIFF=1 BANISHED_AUTOSTART=1` run to the pause menu
-// registers 542 diff sites and `UI::ElementDescription::CreateInstance` is not
-// among them — the body was never entered once. That is
-// reference_uncalled_port_is_not_verified.md exactly, and a `divergences=0`
-// from an absent site is not evidence of anything.
-//
-// THE REASON IS STRUCTURAL, not a gap in the harness. Grepping the tree for the
-// row's callers finds exactly ONE:
-//   code/Game/Component/frustumoutlinedescription.cpp:116 — the exe's
-//   `FrustumOutlineDescription::CreateInstance` override calling its base
-//   through `fn_ElementDescription_CreateInstance`, which reads exe PE-import
-//   slot 0x1401518d0. A FrustumOutlineDescription is not instantiated on any
-//   route this harness can drive. Ghidra reports NO xrefs to 0x180115ad0 at
-//   all — every other caller is a virtual dispatch inside the DLL, which our
-//   registration cannot reach anyway.
-// So there is no run to wait for. The subject has to be built.
-//
-// THE SUBJECTS. One `UI::ElementDescription` per case, built with our own
-// ported constructor on real allocator memory, and TWO zeroed 0xC0-byte
-// `UI::Element`s — ours runs on A, the SHIPPED body on B, and all 0xC0 bytes
-// are compared. Three cases, chosen so each covers a branch the others do not:
-//
-//   case 0  childDesc = null, stringTable = null, userData = null
-//           -> the null-child arm; index = -1; the flags cascade's guard
-//              short-circuits on its FIRST condition (elem+0x40 == 0)
-//   case 1  childDesc = a SYNTHETIC description whose fake vtable slot 8 is a
-//           recorder that writes a known sentinel into the out slot
-//           -> the virtual arm, and `elem->_border` must equal that sentinel
-//   case 2  stringTable = a SYNTHETIC UI::StringTable holding one entry whose
-//           name is a synthetic System::String, `_textName` = that same String,
-//           `_userData` non-null
-//           -> `GetIndexFromName` returns 0, so ALL FOUR guard conditions pass
-//              and `elem->_flags |= 0x90000` actually happens
-//
-// Every case also pre-sets both elements' `_name` to the SAME synthetic String
-// with a refcount of 8, so the String-assign's RELEASE arm runs on both sides
-// (4 releases across the six runs, none of them reaching zero).
-//
-// WHAT THIS ORACLE DOES NOT COVER, stated rather than implied:
-//   * the String-assign's FREEING arm. It cannot be covered by a twin: at
-//     refcount 1 the first body frees the buffer and the second would decrement
-//     freed memory, and giving each side its own buffer makes the post-state
-//     differ by POINTER VALUE and manufactures a divergence
-//     (reference_control_must_pick_a_compared_subject.md). The freeing arm is
-//     three instructions and is the same inline `ReleaseStringLocal` this file
-//     already carries at four other sites.
-//   * the case where `GetPath()` yields a non-empty path. These descriptions
-//     have no path, so `want` is null on both sides. What that costs is the
-//     ASSIGN arm (elem+0x10 = new + incref); the RELEASE arm above is covered.
-//   * the flags cascade's inner parent walk — provably unreachable, fact (c).
-namespace {
-
-struct EdTwinCase {
-    const char* name;
-    void*  desc;
-    void*  elemA;
-    void*  elemB;
-};
-
-// The sentinel the fake child description hands back through the out slot.
-void* const kEdTwinBorder = reinterpret_cast<void*>(static_cast<uintptr_t>(0xB07DE5));
-
-
-// Fake `_childDesc` vtable slot 8 (+0x40): retail's shape is
-// `InternalPtr<Element> slot8(void* out, const Dialog* ctx) const`, returning
-// the out slot in RAX.
-void** EdTwinChildSlot8(void* /*self*/, void** out, void* /*dialog*/) {
-    *out = kEdTwinBorder;
-    return out;
-}
-void* g_edTwinChildVtbl[9] = { nullptr, nullptr, nullptr, nullptr, nullptr,
-                               nullptr, nullptr, nullptr,
-                               reinterpret_cast<void*>(&EdTwinChildSlot8) };
-
-inline void* EdMemAlloc(size_t n, int align) {
-    using Fn = void* (*)(size_t, int);
-    return RT_EXPORT_ONCE(Fn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(n, align);
-}
-
-// A `System::String`: length dword at [p-8], refcount dword at [p-4], bytes at
-// p. runtime/types/system/String.h.
-char* EdMakeString(const char* text, int32_t refs) {
-    const size_t len = std::strlen(text);
-    uint8_t* base = static_cast<uint8_t*>(EdMemAlloc(len + 9, 8));
-    if (!base) return nullptr;
-    *reinterpret_cast<int32_t*>(base + 0) = static_cast<int32_t>(len);
-    *reinterpret_cast<int32_t*>(base + 4) = refs;
-    std::memcpy(base + 8, text, len + 1);
-    return reinterpret_cast<char*>(base + 8);
-}
-
-void VerifyElementDescriptionCreateInstanceTwin() {
-    if (!RtDiffEnabled()) return;
-    static RtDiffSite site = { "UI::ElementDescription::CreateInstance [twin synthetic]" };
-    RtDiffRegister(&site);
-
-    using Fn = void (*)(const ElementDescription*, void**);
-    // RT_RAW_OK: the ORACLE half must reach the SHIPPED body, never our own
-    // registration (WAVE9_LANE_FNHOOK.md's self-comparing detours).
-    Fn theirs = reinterpret_cast<Fn>(ResolveExportRaw(kEdCreateInstance));
-    if (!theirs) {
-        RtDiffReport(&site, false, "twin subjects built",
-                     "shipped ?CreateInstance@ElementDescription not resolvable");
-        return;
-    }
-
-    // The shared name String: refcount 8 so all six release-arm executions stay
-    // in the SHARING branch and nothing is freed under either body.
-    char* shared = EdMakeString("uif_twin", 8);
-
-    // The synthetic StringTable for case 2: {..., data @ +0x20, count @ +0x28}.
-    uint8_t* table = static_cast<uint8_t*>(EdMemAlloc(0x30, 8));
-    char*    key   = EdMakeString("uif_key", 8);
-    StringTableTextEntry* entries =
-        static_cast<StringTableTextEntry*>(EdMemAlloc(sizeof(StringTableTextEntry), 8));
-    bool built = shared && table && key && entries;
-    if (built) {
-        std::memset(table, 0, 0x30);
-        entries[0].name = key;
-        entries[0].text = nullptr;
-        *reinterpret_cast<void**>(table + StringTableOffsets::kData)   = entries;
-        *reinterpret_cast<int32_t*>(table + StringTableOffsets::kCount) = 1;
-    }
-
-    // The fake child description: one qword, its vtable.
-    void** child = static_cast<void**>(EdMemAlloc(8, 8));
-    if (child) *child = g_edTwinChildVtbl;
-    built = built && child;
-
-    int cases = 0, mismatched = 0, borderOk = 0, cascadeRan = 0;
-
-    for (int c = 0; built && c < 3; ++c) {
-        ElementDescription* desc =
-            static_cast<ElementDescription*>(EdMemAlloc(sizeof(ElementDescription), 8));
-        uint8_t* a = static_cast<uint8_t*>(EdMemAlloc(0xC0, 16));
-        uint8_t* b = static_cast<uint8_t*>(EdMemAlloc(0xC0, 16));
-        if (!desc || !a || !b) break;
-
-        RtUiElementDescription_Ctor(desc);        // our own ported ctor
-        uint8_t* d = reinterpret_cast<uint8_t*>(desc);
-        // Distinct, recognisable scalars so a swapped field is visible.
-        *reinterpret_cast<int32_t*>(d + 0x20) = 0x11;   // _x
-        *reinterpret_cast<int32_t*>(d + 0x24) = 0x22;
-        *reinterpret_cast<int32_t*>(d + 0x28) = 0x33;
-        *reinterpret_cast<int32_t*>(d + 0x2c) = 0x44;
-        *reinterpret_cast<int32_t*>(d + 0x30) = 0x55;
-        *reinterpret_cast<int32_t*>(d + 0x34) = 0x66;
-        *reinterpret_cast<int32_t*>(d + 0x38) = 0x77;   // _tabOrder -> elem+0x3c
-        *reinterpret_cast<int32_t*>(d + 0x3c) = 0x88;   // _id       -> elem+0x38
-        *reinterpret_cast<uint32_t*>(d + 0x40) = 0x99;  // _elementType
-        *reinterpret_cast<uint32_t*>(d + 0x44) = 0x0000a000u;   // _flags, OR-ed
-        if (c == 1) *reinterpret_cast<void**>(d + 0x48) = child;
-        if (c == 2) {
-            *reinterpret_cast<void**>(d + 0x50) = reinterpret_cast<void*>(0x1234);
-            *reinterpret_cast<void**>(d + 0x58) = table;
-            *reinterpret_cast<char**>(d + 0x60) = key;
-        }
-
-        std::memset(a, 0, 0xC0);
-        std::memset(b, 0, 0xC0);
-        *reinterpret_cast<char**>(a + 0x10) = shared;   // the release arm
-        *reinterpret_cast<char**>(b + 0x10) = shared;
-
-        void* pa = a;
-        void* pb = b;
-        RtUiElementDescription_CreateInstance(desc, &pa);
-        theirs(desc, &pb);
-
-        // +0x54..+0x57 is the UIString pad retail fills from uninitialised
-        // stack — fact (b). Zeroed on both sides before the compare.
-        std::memset(a + 0x54, 0, 4);
-        std::memset(b + 0x54, 0, 4);
-        if (std::memcmp(a, b, 0xC0) != 0) ++mismatched;
-        if (c == 1 && *reinterpret_cast<void**>(a + 0xb0) == kEdTwinBorder) ++borderOk;
-        if (c == 2 && (*reinterpret_cast<uint32_t*>(a + 0x34) & 0x90000u) == 0x90000u)
-            ++cascadeRan;
-        ++cases;
-
-        char ours[160], them[160];
-        std::snprintf(ours, sizeof(ours), "case %d (%s)", c,
-                      c == 0 ? "no child, no table"
-                             : (c == 1 ? "child virtual" : "table + cascade"));
-        std::snprintf(them, sizeof(them), "%s", ours);
-        RtDiffReport(&site, true, ours, them);
-        RtDiffReportBytes(&site, a, b, 0xC0);
-    }
-
-    // The EFFECTIVENESS CONTROL. A green byte compare over three cases that all
-    // took the same arm would read identically to a real pass, so the two facts
-    // that distinguish the arms are asserted by name:
-    //   border=1  the child virtual actually ran and its sentinel arrived
-    //   cascade=1 all four guard conditions passed and the flags OR happened
-    char ours[224], them[224];
-    std::snprintf(ours, sizeof(ours),
-                  "cases=3 border=1 cascade=1 mismatched=0");
-    std::snprintf(them, sizeof(them),
-                  "cases=%d border=%d cascade=%d mismatched=%d",
-                  cases, borderOk, cascadeRan, mismatched);
-    RtDiffReport(&site, cases == 3 && borderOk == 1 && cascadeRan == 1 &&
-                        mismatched == 0, ours, them);
-}
-
-} // namespace
 
 int RtUiDialogRegister() {
     int n = 0;
@@ -3120,8 +2315,7 @@ int RtUiDialogRegister() {
     // in this wave have measured the wrong exe more than once.
     printf("[RtPort]   WAVE9 LANE UID ARMED -- ~DialogInstance (0x180114d40) + "
                 "LinkedList::Clear (0x1800325f0) + the Array<8>::SetSize address door "
-                "(0x18002fca0). Shape oracles report under BANISHED_RT_DIFF=1; read "
-                "the [negative control] line first.\n");
+                "(0x18002fca0).\n");
 
     // ---- Wave 9 lane UIC: the two rows lane UIF declined at 8 and 11 -------
     // Both names were verified present in the shipped export directory with
@@ -3148,42 +2342,6 @@ int RtUiDialogRegister() {
         "?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z",
         (void*)&RtUiElementDescription_CreateInstance);
     RegisterRuntimeAddr(0x180115ad0, (void*)&RtUiElementDescription_CreateInstance);   ++n;
-
-    // ---- the shape oracle, run once, here ----------------------------------
-    // These four cannot be replayed (running them twice would tick every
-    // controller twice, or swap-remove the object twice). Each check appears in
-    // RtDiffSummary() as a single call — that is one check, not one per
-    // invocation, and WAVE7_LANE_B.md §4 says so explicitly so that a `calls=1`
-    // row is not misread as "barely exercised".
-    {
-        static RtDiffSite sLayout = { "UI::DialogInstance::OnUpdateLayout[shape]",  0, 0, false, false };
-        static RtDiffSite sUpdate = { "UI::DialogInstance::OnUpdate[shape]",        0, 0, false, false };
-        static RtDiffSite sEvent  = { "UI::DialogInstance::OnElementEvent[shape]",  0, 0, false, false };
-        static RtDiffSite sDtor   = { "UI::DialogController::~DialogController[shape]", 0, 0, false, false };
-        VerifyDispatchLoop(&sLayout, "?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ",
-                           RtUI::kControllerVtblOnUpdateLayout);
-        VerifyDispatchLoop(&sUpdate, "?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z",
-                           RtUI::kControllerVtblOnUpdate);
-        VerifyDispatchLoop(&sEvent,
-                           "?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z",
-                           RtUI::kControllerVtblOnElementEvent);
-        VerifyDtorThunk(&sDtor, "??1DialogController@UI@@UEAA@XZ",
-                        // thunk bytes, so it must see the shipped vtable and dies with the oracle.
-                        // RT_RAW_OK: an ORACLE read -- VerifyDtorThunk compares the DLL's own
-                        ResolveExportRaw("??_7DialogController@UI@@6B@"),
-                        ResolveExportRaw("??1Internal@Object@@UEAA@XZ"));
-
-        // ---- Wave 9 lane UID ----------------------------------------------
-        // Two decoders and ONE NEGATIVE CONTROL THAT RUNS. Read the control
-        // line first: if it says a decoder failed to REJECT a body that is not
-        // its own, the two green lines above it mean nothing
-        // (reference_probe_needs_an_effectiveness_control.md).
-        static RtDiffSite sDlgDtor = { "UI::DialogInstance::~DialogInstance[shape]", 0, 0, false, false };
-        static RtDiffSite sLlClear = { "Collection::LinkedList::Clear(0x1800325f0)[shape]", 0, 0, false, false };
-        VerifyDialogInstanceDtorShape(&sDlgDtor);
-        VerifyListClearShape(&sLlClear);
-        VerifyLaneUidControls();
-    }
 
     return n;
 }

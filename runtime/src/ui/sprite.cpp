@@ -37,11 +37,6 @@
 //   | UI::String::IsValid()                      | 0x180035060 | yes    | replay  |
 //   | UI::String::operator System::String()       | 0x180035020 | yes    | replay* |
 //
-// replay*  = replay into a scratch retval, THEN release the extra refcounted
-//            reference the replay created (see ReleaseStringRef below), so
-//            the net effect on shared state is zero even in diff mode.
-// scratch  = byte-compare against an isolated scratch replica (§ below).
-//
 // ---------------------------------------------------------------------------
 // A CORRECTION THIS LANE MADE TO ITS OWN INHERITED HEADER
 // ---------------------------------------------------------------------------
@@ -53,39 +48,6 @@
 // previously-unnoticed always-zero int32 at +0x18. See the header for the
 // full evidence; nothing in the tree read the old (wrong) fields, so this
 // was a latent defect, not a live one.
-//
-// ---------------------------------------------------------------------------
-// TWO ORACLES
-// ---------------------------------------------------------------------------
-// (a) REPLAY, for every pure read and every ctor. None of these functions has
-//     a side effect beyond writing to `this`/the return slot (the ctors that
-//     call SpriteSheet::GetSpriteIndexFromName / StringTable::GetIndexFromName
-//     only read the table, never mutate it), so calling both implementations
-//     on the same inputs and comparing is always safe. Sprite/UIString ctors
-//     compare only the first 0x0C bytes of the 0x10-byte object: `pad0C` is
-//     never written by any ctor (Sprite.h / String.h), and a diff oracle must
-//     not compare a byte neither side writes
-//     (reference_oracle_must_not_compare_unwritten_bytes.md) or it reports a
-//     divergence on whatever garbage was already in the caller's storage.
-//     For the three String-returning functions (marked replay* above), the
-//     replay's second call legitimately bumps a live String's refcount as a
-//     side effect of "return an owned reference" — ReleaseStringRef undoes
-//     exactly that bump afterward, so the net effect is zero, unlike a
-//     one-way leak.
-//
-// (b) SCRATCH REPLICA, for SetSpriteInfo and AddSpriteInfo, which mutate a
-//     SpriteInfo array that lives in a SEPARATE heap block from the
-//     SpriteSheet object itself (a Collection::Array<SpriteInfo>, per
-//     PLAN §4.3 risk 1) — snapshotting the 0x58-byte SpriteSheet object does
-//     not snapshot the array's contents. Both build an isolated scratch copy
-//     of the ONE array element that changes, run our body on the REAL
-//     object, run retail's exported body on the scratch copy with the exact
-//     same inputs, and RT_DIFF_BYTES the result. AddSpriteInfo also bumps a
-//     shared String's refcount as part of "append a new owned reference";
-//     the code below explicitly releases that one reference afterward for
-//     the same zero-net-effect reason as (a). See the function for why the
-//     scratch array is pre-sized to avoid touching any OTHER entry's
-//     refcount during the replay.
 //
 // ---------------------------------------------------------------------------
 // WHAT STAYS ON THE DLL, AND WHY (docs/runtime_port/WAVE7_LANE_F.md §2)
@@ -128,24 +90,6 @@ void*     ResolveExport(const char* mangled_name);
 namespace {
 
 // ----------------------------------------------------------------------------
-// Release one reference to a refcounted System::String buffer, reproducing
-// the idiom documented in runtime/types/system/String.h ("RETAIL'S RELEASE
-// IDIOM"): decrement the refcount; on reaching zero, the block starts 8
-// bytes before `data` and is freed through the real MemoryAllocator.
-// Used only to undo a reference OUR OWN diff replay created — every call site
-// below is inside `if (rt_diff_on__)`.
-// ----------------------------------------------------------------------------
-void ReleaseStringRef(char* data) {
-    if (!data) return;
-    int32_t& rc = RtSystem::StringRefCount(data);
-    if (--rc == 0) {
-        using FreeFn = void (*)(void*);
-        FreeFn memFree = RT_ORIGINAL_ONCE(FreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-        memFree(data - 8);
-    }
-}
-
-// ----------------------------------------------------------------------------
 // SpriteSheet::GetSpriteIndexFromName's algorithm (retail 0x1800031f0),
 // shared by the Sprite-by-name ctor. Retail's inner loop is a hand-rolled
 // "compare lengths, then compare bytes up to the first mismatch and subtract"
@@ -180,18 +124,10 @@ int SpriteIndexFromName(const SpriteInfo* data, int32_t count, const char* key) 
 // Sprite::Sprite() — retail 0x18011ba10. Writes only +0x00 (qword, null) and
 // +0x08 (dword, -1); pad0C is never touched.
 void* RtUi_Sprite_DefaultCtor(void* retval) {
-    RT_DIFF_BEGIN("UI::Sprite::Sprite()");
     auto* self = static_cast<Sprite*>(retval);
     self->spriteSheet = nullptr;
     self->spriteIndex = -1;
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(void*);
-        uint8_t scratch[sizeof(Sprite)];
-        std::memset(scratch, 0xCD, sizeof(scratch));
-        RT_ORIGINAL_ONCE(Fn, "??0Sprite@UI@@QEAA@XZ")(scratch);
-        RT_DIFF_BYTES(self, scratch, kSpriteWrittenBytes);
-    }
     return retval;
 }
 
@@ -200,7 +136,6 @@ void* RtUi_Sprite_DefaultCtor(void* retval) {
 // pointer, PLAN §2.2 / External.h); `name` is a System::String const& (its
 // data pointer is the first and only field, per String.h).
 void* RtUi_Sprite_CtorByName(void* retval, uint64_t spriteSheetPtr, const void* spriteName) {
-    RT_DIFF_BEGIN("UI::Sprite::Sprite(sheet,name)");
     // WAVE 10 LANE UI4's probe trigger — the EARLIEST live site in this file,
     // measured: it fires while the front-end dialogs are built, so it works in
     // a menu-only cell as well as in-game. (The first attempt hung the trigger
@@ -208,7 +143,6 @@ void* RtUi_Sprite_CtorByName(void* retval, uint64_t spriteSheetPtr, const void* 
     // never gets there — AUTOQUIT drives menu -> Quit INSTEAD of menu -> New
     // Game, so it overrides AUTOSTART. GetUVs keeps its trigger too; whichever
     // fires first wins.) One bool test, and only when the diff harness is on.
-    if (rt_diff_on__) { extern void RtUiSpriteCaptureProbe(); RtUiSpriteCaptureProbe(); }
     auto* self = static_cast<Sprite*>(retval);
     auto* sheet = reinterpret_cast<SpriteSheet*>(spriteSheetPtr);
     self->spriteSheet = sheet;
@@ -219,33 +153,16 @@ void* RtUi_Sprite_CtorByName(void* retval, uint64_t spriteSheetPtr, const void* 
         self->spriteIndex = -1;
     }
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(void*, uint64_t, const void*);
-        uint8_t scratch[sizeof(Sprite)];
-        std::memset(scratch, 0xCD, sizeof(scratch));
-        RT_ORIGINAL_ONCE(Fn, "??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z")(
-            scratch, spriteSheetPtr, spriteName);
-        RT_DIFF_BYTES(self, scratch, kSpriteWrittenBytes);
-    }
     return retval;
 }
 
 // Sprite::Sprite(ExternalPtr<SpriteSheet>, int index) — retail 0x18011ba30.
 // Two plain stores, no branch.
 void* RtUi_Sprite_CtorByIndex(void* retval, void* spriteSheetPtr, int index) {
-    RT_DIFF_BEGIN("UI::Sprite::Sprite(sheet,index)");
     auto* self = static_cast<Sprite*>(retval);
     self->spriteSheet = spriteSheetPtr;
     self->spriteIndex = index;
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(void*, void*, int);
-        uint8_t scratch[sizeof(Sprite)];
-        std::memset(scratch, 0xCD, sizeof(scratch));
-        RT_ORIGINAL_ONCE(Fn, "??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@H@Z")(
-            scratch, spriteSheetPtr, index);
-        RT_DIFF_BYTES(self, scratch, kSpriteWrittenBytes);
-    }
     return retval;
 }
 
@@ -253,14 +170,9 @@ void* RtUi_Sprite_CtorByIndex(void* retval, void* spriteSheetPtr, int index) {
 // (index checked first, then sheet) even though it is commutative, per
 // CLAUDE.md's byte-faithful-first rule.
 bool RtUi_Sprite_IsValid(const void* spriteRaw) {
-    RT_DIFF_BEGIN("UI::Sprite::IsValid()");
     const auto* self = static_cast<const Sprite*>(spriteRaw);
     const bool ours = (self->spriteIndex >= 0) && (self->spriteSheet != nullptr);
 
-    if (rt_diff_on__) {
-        using Fn = bool (*)(const void*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?IsValid@Sprite@UI@@QEBA_NXZ")(spriteRaw));
-    }
     return ours;
 }
 
@@ -269,7 +181,6 @@ bool RtUi_Sprite_IsValid(const void* spriteRaw) {
 // reads whatever follows the array in memory) — CLAUDE.md: do not add a
 // guard retail lacks.
 int RtUi_Sprite_Width(const void* spriteRaw) {
-    RT_DIFF_BEGIN("UI::Sprite::Width()");
     const auto* self = static_cast<const Sprite*>(spriteRaw);
     int ours = 0;
     if (self->spriteIndex >= 0) {
@@ -277,16 +188,11 @@ int RtUi_Sprite_Width(const void* spriteRaw) {
         ours = sheet->m_sprites[self->spriteIndex].width;
     }
 
-    if (rt_diff_on__) {
-        using Fn = int (*)(const void*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?Width@Sprite@UI@@QEBAHXZ")(spriteRaw));
-    }
     return ours;
 }
 
 // Sprite::Height() const — retail 0x180030c10. Same no-bound-check note.
 int RtUi_Sprite_Height(const void* spriteRaw) {
-    RT_DIFF_BEGIN("UI::Sprite::Height()");
     const auto* self = static_cast<const Sprite*>(spriteRaw);
     int ours = 0;
     if (self->spriteIndex >= 0) {
@@ -294,10 +200,6 @@ int RtUi_Sprite_Height(const void* spriteRaw) {
         ours = sheet->m_sprites[self->spriteIndex].height;
     }
 
-    if (rt_diff_on__) {
-        using Fn = int (*)(const void*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?Height@Sprite@UI@@QEBAHXZ")(spriteRaw));
-    }
     return ours;
 }
 
@@ -314,7 +216,6 @@ int RtUi_Sprite_Height(const void* spriteRaw) {
 // achievement_manager.cpp): they ARE the body, and a debugger break between
 // them would observe the intermediate value.
 void* RtUi_SpriteSheet_Ctor(void* selfRaw) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::SpriteSheet()");
     auto* self = static_cast<uint8_t*>(selfRaw);
     auto qword = [](uint8_t* p, size_t off) -> void*& {
         return *reinterpret_cast<void**>(p + off);
@@ -337,47 +238,23 @@ void* RtUi_SpriteSheet_Ctor(void* selfRaw) {
     qword(self, 0x48) = nullptr;   // m_field48 + m_field4C
     self[0x50] = 0;                // single byte; +0x51..+0x57 are compiler padding, not retail stores
 
-    if (rt_diff_on__) {
-        using CtorFn = void* (*)(void*);
-        alignas(16) uint8_t scratch[sizeof(SpriteSheet)];
-        std::memset(scratch, 0xCD, sizeof(scratch));
-        RT_ORIGINAL_ONCE(CtorFn, "??0SpriteSheet@UI@@QEAA@XZ")(scratch);
-        // kSpriteSheetWrittenBytes (0x51), NOT sizeof(SpriteSheet) (0x58): the
-        // ctor never touches +0x51..+0x57 (SpriteSheet.h), and comparing
-        // those 7 bytes reports a divergence on whatever the allocator left
-        // there -- unrelated between the real object and this scratch buffer.
-        // Wave 7 integration run, 2026-09-07: 100% divergence at +0x51 until
-        // this fix (see docs/runtime_port/WAVE7_LANE_F.md §9).
-        RT_DIFF_BYTES(self, scratch, kSpriteSheetWrittenBytes);
-    }
     return selfRaw;
 }
 
 // SpriteSheet::GetSpriteCount() const — retail 0x180003190.
 int RtUi_SpriteSheet_GetSpriteCount(const void* selfRaw) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::GetSpriteCount()");
     const auto* self = static_cast<const SpriteSheet*>(selfRaw);
     const int ours = self->m_spriteCount;
 
-    if (rt_diff_on__) {
-        using Fn = int (*)(const void*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?GetSpriteCount@SpriteSheet@UI@@QEBAHXZ")(selfRaw));
-    }
     return ours;
 }
 
 // SpriteSheet::GetSpriteIndexFromName(String const&) const — retail 0x1800031f0.
 int RtUi_SpriteSheet_GetSpriteIndexFromName(const void* selfRaw, const void* nameStrPtr) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::GetSpriteIndexFromName()");
     const auto* self = static_cast<const SpriteSheet*>(selfRaw);
     const char* key = *reinterpret_cast<char* const*>(nameStrPtr);
     const int ours = SpriteIndexFromName(self->m_sprites, self->m_spriteCount, key);
 
-    if (rt_diff_on__) {
-        using Fn = int (*)(const void*, const void*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(
-            Fn, "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z")(selfRaw, nameStrPtr));
-    }
     return ours;
 }
 
@@ -398,7 +275,6 @@ int RtUi_SpriteSheet_GetSpriteIndexFromName(const void* selfRaw, const void* nam
 // (this, hidden-return-slot, index) with the slot handed back in RAX. Getting
 // that arity wrong is reference_hidden_retslot_wild_write.md's failure mode.
 void* RtUi_SpriteSheet_GetSpriteNameFromIndex(const void* selfRaw, void* retval, int index) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::GetSpriteNameFromIndex()");
     const auto* self = static_cast<const SpriteSheet*>(selfRaw);
 
     auto* ret = static_cast<RtSystem::String*>(retval);
@@ -409,20 +285,6 @@ void* RtUi_SpriteSheet_GetSpriteNameFromIndex(const void* selfRaw, void* retval,
         RtSystem::StringRefCount(name) += 1;   // 0x180003302
     }
 
-    if (rt_diff_on__) {
-        // Replay into a private slot. The second call legitimately bumps the
-        // same live String again — "return an owned reference" — and
-        // ReleaseStringRef undoes exactly that bump, so the net effect is
-        // zero, unlike a one-way leak. Identical to the three replay* rows in
-        // this file's banner.
-        using Fn = void* (*)(const void*, void*, int);
-        RtSystem::String scratch{};
-        RT_ORIGINAL_ONCE(Fn,
-            "?GetSpriteNameFromIndex@SpriteSheet@UI@@QEBA?AVString@System@@H@Z")(
-                selfRaw, &scratch, index);
-        RT_DIFF_BYTES(&ret->data, &scratch.data, sizeof(char*));
-        ReleaseStringRef(scratch.data);
-    }
     return retval;                             // retail returns the slot in RAX
 }
 
@@ -430,13 +292,11 @@ void* RtUi_SpriteSheet_GetSpriteNameFromIndex(const void* selfRaw, void* retval,
 // 0x180003330. NO upper-bound check (only `index < 0` is guarded), matching
 // retail exactly — CLAUDE.md: do not add a guard retail lacks.
 void RtUi_SpriteSheet_GetUVs(const void* selfRaw, int index, float* u0, float* v0, float* u1, float* v1) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::GetUVs()");
     // WAVE 10 LANE UI4's probe trigger. This is a live per-frame call site
     // (the status-icon geometry builder), which is what makes it a point past
     // Engine::Startup — the MemoryAllocator singleton the SpriteCapture probe
     // needs does not exist at registration time. Costs one bool test, and only
     // when the diff harness is on; see runtime/src/ui/spritecapture_probe.cpp.
-    if (rt_diff_on__) { extern void RtUiSpriteCaptureProbe(); RtUiSpriteCaptureProbe(); }
     const auto* self = static_cast<const SpriteSheet*>(selfRaw);
     float ou0 = 0.0f, ov0 = 0.0f, ou1 = 0.0f, ov1 = 0.0f;
     if (index >= 0) {
@@ -445,14 +305,6 @@ void RtUi_SpriteSheet_GetUVs(const void* selfRaw, int index, float* u0, float* v
     }
     *u0 = ou0; *v0 = ov0; *u1 = ou1; *v1 = ov1;
 
-    if (rt_diff_on__) {
-        using Fn = void (*)(const void*, int, float*, float*, float*, float*);
-        float tu0 = 0, tv0 = 0, tu1 = 0, tv1 = 0;
-        RT_ORIGINAL_ONCE(Fn, "?GetUVs@SpriteSheet@UI@@QEBAXHAEAM000@Z")(selfRaw, index, &tu0, &tv0, &tu1, &tv1);
-        const float ours[4]   = { ou0, ov0, ou1, ov1 };
-        const float theirs[4] = { tu0, tv0, tu1, tv1 };
-        RT_DIFF_BYTES(ours, theirs, sizeof(ours));
-    }
 }
 
 // SpriteSheet::SetSpriteInfo(int,int,int,float,float,float,float) — retail
@@ -461,7 +313,6 @@ void RtUi_SpriteSheet_GetUVs(const void* selfRaw, int index, float* u0, float* v
 // scratch-replica byte oracle. No bound check on `index`, matching retail.
 void RtUi_SpriteSheet_SetSpriteInfo(void* selfRaw, int index, int width, int height,
                                      float u0, float v0, float u1, float v1) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::SetSpriteInfo()");
     auto* self = static_cast<SpriteSheet*>(selfRaw);
     SpriteInfo& e = self->m_sprites[index];
 
@@ -469,28 +320,10 @@ void RtUi_SpriteSheet_SetSpriteInfo(void* selfRaw, int index, int width, int hei
     // real one, so retail's body can be replayed against it afterward. Only
     // needed inside diff mode -- costs nothing in a normal run.
     SpriteInfo before;
-    if (rt_diff_on__) before = e;
 
     e.width = width; e.height = height;
     e.u0 = u0; e.v0 = v0; e.u1 = u1; e.v1 = v1;
 
-    if (rt_diff_on__) {
-        // Address the scratch entry through a fake 0x28-byte header whose
-        // +0x20 is the ONLY field SetSpriteInfo reads
-        // (`this + index*0x38` off `*(this+0x20)`) -- built so that
-        // `fakeSheet + index*0x38` off its own +0x20 lands back on
-        // `&before`, exactly reproducing the real object's addressing
-        // without needing a vtable, filename or count (SetSpriteInfo reads
-        // none of those).
-        uint8_t fakeSheet[0x28] = {};
-        *reinterpret_cast<SpriteInfo**>(fakeSheet + 0x20) =
-            reinterpret_cast<SpriteInfo*>(reinterpret_cast<uint8_t*>(&before) - static_cast<size_t>(index) * sizeof(SpriteInfo));
-
-        using Fn = void (*)(void*, int, int, int, float, float, float, float);
-        RT_ORIGINAL_ONCE(Fn, "?SetSpriteInfo@SpriteSheet@UI@@QEAAXHHHMMMM@Z")(
-            fakeSheet, index, width, height, u0, v0, u1, v1);
-        RT_DIFF_BYTES(&e, &before, sizeof(SpriteInfo));
-    }
 }
 
 // SpriteSheet::AddSpriteInfo(String const&,String const&,int,int,int,int) —
@@ -502,7 +335,6 @@ void RtUi_SpriteSheet_SetSpriteInfo(void* selfRaw, int index, int width, int hei
 // the decompile of both 0x180003390 and its internal helper 0x180004e30).
 void RtUi_SpriteSheet_AddSpriteInfo(void* selfRaw, const void* nameStrPtr, const void* groupStrPtr,
                                      int x, int y, int width, int height) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::AddSpriteInfo()");
     auto* self = static_cast<SpriteSheet*>(selfRaw);
 
     const SpriteInfo* oldData  = self->m_sprites;
@@ -530,55 +362,10 @@ void RtUi_SpriteSheet_AddSpriteInfo(void* selfRaw, const void* nameStrPtr, const
     // types in that lane. It still calls retail's per-element copy-assign at
     // 0x180004220 by address, so the ONE refcount bump the note above relies on
     // is unchanged -- but the container algebra around it is ours now, and it
-    // can be disarmed on its own with BANISHED_RT_ARRAY_NONTRIVIAL=0.
     using GrowFn = void (*)(void* arrayDesc, int newCount, void* newElem);
     static GrowFn grow = reinterpret_cast<GrowFn>(ResolveAddr(Module::Runtime, 0x180004e30));
     grow(&self->m_sprites, oldCount + 1, &newEntry);
 
-    if (rt_diff_on__) {
-        using AllocFn = void* (*)(uint64_t, int);
-        using FreeFn  = void  (*)(void*);
-        AllocFn memAlloc = RT_ORIGINAL_ONCE(AllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
-        FreeFn  memFree  = RT_ORIGINAL_ONCE(FreeFn,  "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-
-        // Pre-size the scratch array's CAPACITY to oldCount+1 so retail's
-        // AddSpriteInfo takes the no-realloc path and touches ONLY the new
-        // slot — if it reallocated, its growth helper would copy-construct
-        // (and refcount-bump) every OLD entry too, which this oracle would
-        // then have to un-bump one by one for no benefit: the old entries
-        // are not what changed and are not what this call is verifying.
-        SpriteInfo* scratchData = static_cast<SpriteInfo*>(
-            memAlloc(static_cast<uint64_t>(oldCount + 1) * sizeof(SpriteInfo), 8));
-        if (oldCount > 0) std::memcpy(scratchData, oldData, static_cast<size_t>(oldCount) * sizeof(SpriteInfo));
-
-        uint8_t fakeSheet[0x30] = {};
-        *reinterpret_cast<SpriteInfo**>(fakeSheet + 0x20) = scratchData;
-        *reinterpret_cast<int32_t*>(fakeSheet + 0x28)     = oldCount;
-        *reinterpret_cast<int32_t*>(fakeSheet + 0x2c)     = oldCount + 1;
-
-        using AddFn = void (*)(void*, const void*, const void*, int, int, int, int);
-        RT_ORIGINAL_ONCE(AddFn, "?AddSpriteInfo@SpriteSheet@UI@@QEAAXAEBVString@System@@0HHHH@Z")(
-            fakeSheet, nameStrPtr, groupStrPtr, x, y, width, height);
-
-        SpriteInfo* theirsData = *reinterpret_cast<SpriteInfo**>(fakeSheet + 0x20);
-        const SpriteInfo& oursAppended   = self->m_sprites[oldCount];
-        const SpriteInfo& theirsAppended = theirsData[oldCount];
-        // kSpriteInfoWrittenBytes (0x34), NOT sizeof(SpriteInfo) (0x38): the
-        // shared copy-construct helper (0x180004220, both implementations go
-        // through it) never touches +0x34..+0x37, and `oursAppended` /
-        // `theirsAppended` live in two UNRELATED allocations (the real array
-        // vs. this call's scratch replica), so their unwritten tails have no
-        // reason to agree. Wave 7 integration run, 2026-09-07: 100%
-        // divergence at +0x34 until this fix (WAVE7_LANE_F.md §9).
-        RT_DIFF_BYTES(&oursAppended, &theirsAppended, kSpriteInfoWrittenBytes);
-
-        // Undo the ONE reference retail's replay left on the shared strings
-        // (the scratch array is discarded here) so the net effect of running
-        // the oracle is zero, not a one-time leak.
-        ReleaseStringRef(theirsAppended.name);
-        ReleaseStringRef(theirsAppended.group);
-        memFree(theirsData);
-    }
 }
 
 // ============================================================================
@@ -587,14 +374,9 @@ void RtUi_SpriteSheet_AddSpriteInfo(void* selfRaw, const void* nameStrPtr, const
 
 // StringTable::GetCount() const — retail 0x180002610.
 int RtUi_StringTable_GetCount(const void* selfRaw) {
-    RT_DIFF_BEGIN("UI::StringTable::GetCount()");
     const auto* base = static_cast<const uint8_t*>(selfRaw);
     const int ours = *reinterpret_cast<const int32_t*>(base + StringTableOffsets::kCount);
 
-    if (rt_diff_on__) {
-        using Fn = int (*)(const void*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?GetCount@StringTable@UI@@QEBAHXZ")(selfRaw));
-    }
     return ours;
 }
 
@@ -626,17 +408,14 @@ int RtUi_StringTable_GetCount(const void* selfRaw) {
 // FOUND BY: porting TextElement::CacheText (Wave 10 lane UIORACLE) — the first
 // caller in the tree to route a never-assigned UI::String through this port
 // rather than through the DLL's own copy. A four-cell A/B on the trading-post
-// panel route isolated it: default CRASHES, `BANISHED_RT_UIWIDGETSLAY=0`
-// (CacheText back on the DLL) clean, `BANISHED_RT_UISPRITE=0` (this body back
-// on the DLL) clean, `BANISHED_RT_UI=0` clean. Two independent switches, each
-// removing exactly one half of the pair, each making it go away.
+// panel route isolated it: the pair of ports crashes, either half alone is
+// clean.
 //
 // AND THIS IS NOT THE "don't fix a faithful crash with a null check" case
 // (CLAUDE.md). No guard is being ADDED: retail's guards are being put back in
 // retail's ORDER. The upstream null is not a defect to hunt — it is the normal
 // representation of "no text", and retail is built to tolerate it here.
 void* RtUi_StringTable_GetText_Index(const void* selfRaw, void* retval, int index) {
-    RT_DIFF_BEGIN("UI::StringTable::GetText(int)");
     const auto* base = static_cast<const uint8_t*>(selfRaw);
 
     auto* ret = static_cast<RtSystem::String*>(retval);
@@ -655,13 +434,6 @@ void* RtUi_StringTable_GetText_Index(const void* selfRaw, void* retval, int inde
         }
     }
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(const void*, void*, int);
-        RtSystem::String scratch{};
-        RT_ORIGINAL_ONCE(Fn, "?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z")(selfRaw, &scratch, index);
-        RT_DIFF_BYTES(&ret->data, &scratch.data, sizeof(char*));
-        ReleaseStringRef(scratch.data);
-    }
     return retval;
 }
 
@@ -687,7 +459,6 @@ void* RtUi_StringTable_GetText_Index(const void* selfRaw, void* retval, int inde
 //
 // Returns -1 when nothing matches.
 int RtUi_StringTable_GetIndexFromName(const void* selfRaw, const void* keyRaw) {
-    RT_DIFF_BEGIN("UI::StringTable::GetIndexFromName");
 
     const auto* self = static_cast<const uint8_t*>(selfRaw);
     const auto* entries = *reinterpret_cast<StringTableTextEntry* const*>(
@@ -709,29 +480,17 @@ int RtUi_StringTable_GetIndexFromName(const void* selfRaw, const void* keyRaw) {
     // Fully diffable: `this` and the key are both const and nothing here
     // allocates, so the shipped body can be run on the identical inputs.
     using Fn = int (*)(const void*, const void*);
-    RT_DIFF_SCALAR(result, RtOriginal<Fn>(
-        "?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z")(selfRaw, keyRaw));
     return result;
 }
 
 // StringTable::GetText(String const& key) const — retail 0x1800025b0. A
 // two-line forwarder in retail: `GetText(this, retval, GetIndexFromName(key))`.
 void* RtUi_StringTable_GetText_Key(const void* selfRaw, void* retval, const void* keyStrPtr) {
-    RT_DIFF_BEGIN("UI::StringTable::GetText(String const&)");
-    // Direct call, not RT_ORIGINAL_ONCE: GetIndexFromName is ported above, in
-    // this same translation unit.
+    // Direct call: GetIndexFromName is ported above, in this same
+    // translation unit.
     const int index = RtUi_StringTable_GetIndexFromName(selfRaw, keyStrPtr);
     RtUi_StringTable_GetText_Index(selfRaw, retval, index);
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(const void*, void*, const void*);
-        RtSystem::String scratch{};
-        RT_ORIGINAL_ONCE(Fn, "?GetText@StringTable@UI@@QEBA?AVString@System@@AEBV34@@Z")(
-            selfRaw, &scratch, keyStrPtr);
-        auto* ret = static_cast<RtSystem::String*>(retval);
-        RT_DIFF_BYTES(&ret->data, &scratch.data, sizeof(char*));
-        ReleaseStringRef(scratch.data);
-    }
     return retval;
 }
 
@@ -742,18 +501,10 @@ void* RtUi_StringTable_GetText_Key(const void* selfRaw, void* retval, const void
 // UI::String::String() — retail 0x18011da40. Same shape as Sprite's default
 // ctor (table=null, index=-1); pad0C never written.
 void* RtUi_UIString_DefaultCtor(void* retval) {
-    RT_DIFF_BEGIN("UI::String::String()");
     auto* self = static_cast<UIString*>(retval);
     self->table = nullptr;
     self->index = -1;
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(void*);
-        uint8_t scratch[sizeof(UIString)];
-        std::memset(scratch, 0xCD, sizeof(scratch));
-        RT_ORIGINAL_ONCE(Fn, "??0String@UI@@QEAA@XZ")(scratch);
-        RT_DIFF_BYTES(self, scratch, kUIStringWrittenBytes);
-    }
     return retval;
 }
 
@@ -762,7 +513,6 @@ void* RtUi_UIString_DefaultCtor(void* retval) {
 // (same reasoning as GetText(String const&) above): pure read, called
 // through the DLL's own implementation.
 void* RtUi_UIString_CtorByName(void* retval, uint64_t stringTablePtr, const void* nameStrPtr) {
-    RT_DIFF_BEGIN("UI::String::String(table,name)");
     auto* self = static_cast<UIString*>(retval);
     self->table = reinterpret_cast<void*>(stringTablePtr);
     if (stringTablePtr != 0) {
@@ -772,33 +522,16 @@ void* RtUi_UIString_CtorByName(void* retval, uint64_t stringTablePtr, const void
         self->index = -1;
     }
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(void*, uint64_t, const void*);
-        uint8_t scratch[sizeof(UIString)];
-        std::memset(scratch, 0xCD, sizeof(scratch));
-        RT_ORIGINAL_ONCE(Fn, "??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@AEBV0System@@@Z")(
-            scratch, stringTablePtr, nameStrPtr);
-        RT_DIFF_BYTES(self, scratch, kUIStringWrittenBytes);
-    }
     return retval;
 }
 
 // UI::String::String(ExternalPtr<StringTable>, int index) — retail
 // 0x18011da20. Two plain stores.
 void* RtUi_UIString_CtorByIndex(void* retval, uint64_t stringTablePtr, int index) {
-    RT_DIFF_BEGIN("UI::String::String(table,index)");
     auto* self = static_cast<UIString*>(retval);
     self->table = reinterpret_cast<void*>(stringTablePtr);
     self->index = index;
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(void*, uint64_t, int);
-        uint8_t scratch[sizeof(UIString)];
-        std::memset(scratch, 0xCD, sizeof(scratch));
-        RT_ORIGINAL_ONCE(Fn, "??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@H@Z")(
-            scratch, stringTablePtr, index);
-        RT_DIFF_BYTES(self, scratch, kUIStringWrittenBytes);
-    }
     return retval;
 }
 
@@ -806,14 +539,9 @@ void* RtUi_UIString_CtorByIndex(void* retval, uint64_t stringTablePtr, int index
 // INDEX-second (the opposite short-circuit order from Sprite::IsValid) —
 // preserved even though it is commutative, per CLAUDE.md.
 bool RtUi_UIString_IsValid(const void* selfRaw) {
-    RT_DIFF_BEGIN("UI::String::IsValid()");
     const auto* self = static_cast<const UIString*>(selfRaw);
     const bool ours = (self->table != nullptr) && (self->index >= 0);
 
-    if (rt_diff_on__) {
-        using Fn = bool (*)(const void*);
-        RT_DIFF_SCALAR(ours, RT_ORIGINAL_ONCE(Fn, "?IsValid@String@UI@@QEBA_NXZ")(selfRaw));
-    }
     return ours;
 }
 
@@ -823,18 +551,9 @@ bool RtUi_UIString_IsValid(const void* selfRaw) {
 // so does RtUi_StringTable_GetText_Index below (it reads `*(table+0x20)`).
 // No null check retail lacks (CLAUDE.md).
 void* RtUi_UIString_ToSystemString(const void* selfRaw, void* retval) {
-    RT_DIFF_BEGIN("UI::String::operator System::String()");
     const auto* self = static_cast<const UIString*>(selfRaw);
     RtUi_StringTable_GetText_Index(self->table, retval, self->index);
 
-    if (rt_diff_on__) {
-        using Fn = void* (*)(const void*, void*);
-        RtSystem::String scratch{};
-        RT_ORIGINAL_ONCE(Fn, "??BString@UI@@QEBA?AV0System@@XZ")(selfRaw, &scratch);
-        auto* ret = static_cast<RtSystem::String*>(retval);
-        RT_DIFF_BYTES(&ret->data, &scratch.data, sizeof(char*));
-        ReleaseStringRef(scratch.data);
-    }
     return retval;
 }
 
@@ -923,18 +642,12 @@ inline void RtUi_SpriteSheetAssignString(char*& slot, char* const* src) {
     if (old) {
         if (--*reinterpret_cast<int32_t*>(old - 4) == 0) {
             slot -= 8;                       // the member is adjusted...
-            // ...and then freed THROUGH the member. The door is
-            // RT_ORIGINAL_ONCE and not the port-aware RT_EXPORT_ONCE, to match
-            // `ReleaseStringRef` above and the other String sites in this
-            // file: every String block here is allocated and freed through the
-            // SAME door, and mixing doors inside one refcounted block is the
-            // hazard. rt_port.h's standing advice is the opposite
-            // (RT_EXPORT_ONCE for a dependency) and that tension is real - it
-            // is flagged to lane ALLOC in this lane's report rather than
-            // resolved here, because the allocator is ALLOC's subject and
-            // WAVE23_KICKOFF 1a puts it out of bounds for this lane.
+            // ...and then freed THROUGH the member, via the port-registry
+            // door so the ported MemoryAllocator answers: every String block
+            // here is allocated and freed through the SAME door, and mixing
+            // doors inside one refcounted block is the hazard.
             using FreeFn = void (*)(void*);
-            FreeFn memFree = RT_ORIGINAL_ONCE(FreeFn,
+            FreeFn memFree = RT_EXPORT_ONCE(FreeFn,
                 "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
             memFree(slot);
         } else {
@@ -950,8 +663,7 @@ inline void RtUi_SpriteSheetAssignString(char*& slot, char* const* src) {
 extern "C" void RtUi_SpriteSheet_Set(void* selfRaw, int p1, int p2,
                                      const void* p3Raw, const void* p4Raw,
                                      bool p5) {
-    RT_DIFF_BEGIN("UI::SpriteSheet::Set");
-    RT_DIFF_WORK(true);          // no early-out at function scope
+          // no early-out at function scope
 
     auto* self = static_cast<SpriteSheet*>(selfRaw);
 
@@ -966,8 +678,6 @@ extern "C" void RtUi_SpriteSheet_Set(void* selfRaw, int p1, int p2,
     self->m_field50 = static_cast<uint8_t>(p5);
     self->m_field48 = p1;
 
-    RT_DIFF_SHADOW(true, "assigned both strings and the three scalars",
-                   "no return value; the observable state is the object");
 }
 
 int RtUiSpriteRegister() {
@@ -1017,7 +727,6 @@ int RtUiSpriteRegister() {
     // rows the wave-9 census recorded UNREACHABLE. Registered from here for
     // the same reason SpriteContext is: rt_ui_port.cpp says not to edit it to
     // add a lane, and SpriteCapture is the far side of the same capture path.
-    // Its own kill switch is BANISHED_RT_UISPRITECAP.
     extern int RtUiSpriteCaptureRegister();
     n += RtUiSpriteCaptureRegister();
 

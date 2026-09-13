@@ -15,8 +15,8 @@
 // plus ??0TabElement (0x1800da390), ??1TabElement (0x1800da360) and the
 // private `?UpdateContainers@TabElement@UI@@AEAAXXZ` (0x1800d9710), which IS
 // this file's: it is not on the UI non-slot callee list and
-// runtime/types/ui/TabElement.h's note that it is "NOT reimplemented here --
-// called via RT_ORIGINAL_ONCE" was true of Wave 7 lane E and is not any more.
+// runtime/types/ui/TabElement.h's note that it is "NOT reimplemented here"
+// was true of Wave 7 lane E and is not any more.
 //
 // NOT HERE: `?AddTab@TabElement@UI@@` (0x1800da130) — already ported, by
 // runtime/src/ui/tabelement_addtab.cpp. `?SetActiveTab@` (0x18004c890) and

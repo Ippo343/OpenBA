@@ -72,26 +72,13 @@
 //                             for a route (reference_a_green_readiness_screen_
 //                             is_not_a_route.md).
 //
-//   [DlgTrip] foreignDispatch the tripwire lane FINAL already left in the tree
-//                             (dialog_vptr_trip.{h,cpp}). It answers the
-//                             DOWNSTREAM question — did anything dispatch a
-//                             virtual through a table our code stamped.
-//
-// Both are read in the report. The two are not one screen read twice: the first
-// is about entry into our factory, the second about dispatch on objects our
-// code stamped from ANY route, including `??0Dialog@UI@@`, which has been
-// ported and live since Wave 10 lane DLG2.
-//
 // ----------------------------------------------------------------------------
 // ARMING — NONE. BOTH BODIES REGISTER UNCONDITIONALLY. (corrected 2026-09-12)
 // ----------------------------------------------------------------------------
-// This file used to be opt-in behind `BANISHED_RT_DLGFACTORY` (=1 register,
-// =2 also fire an in-place "effectiveness control" on a stack buffer), on the
-// argument below that nothing could reach either body anyway. The cutover boot
-// disproved the premise — the MINTED `?_typeInfo@Dialog@UI@@` reaches it and
-// died on the unported-factory trap when the flag was unset — so the flag and
-// the control are gone. See the note above `RtUiDialogFactoryRegister` for the
-// full correction, and DIRECTION.md section 2.3 for the rule.
+// This file used to be opt-in, on the argument below that nothing could reach
+// either body anyway. The cutover boot disproved the premise — the MINTED
+// `?_typeInfo@Dialog@UI@@` reaches it and died on the unported-factory trap —
+// so the flag and its control are gone. See DIRECTION.md section 2.3.
 //
 // ----------------------------------------------------------------------------
 // THE ABORT-TRAP RISK, ENUMERATED RATHER THAN FOOTNOTED
@@ -100,7 +87,7 @@
 // this probe could reach. The answer is **NONE, and the reason is structural**:
 // the traps (`RtMintTiTrapStub_*` in standalone/rt_data_mint_tables.inc) are
 // only ever loaded into a minted `BaseTypeInfo` row, and a minted row is only
-// installed under `BANISHED_RT_MINT` / `reg_mint_promoted.cpp`. This file
+// installed by `reg_mint_promoted.cpp`. This file
 // registers two FUNCTION symbols and mints no data, promotes no row, and does
 // not touch `_firstTypeInfo`. Row 24's own two traps
 // (`RtMintTiTrapStub_24_0/_24_1`, rt_data_mint_tables.inc:1816-1817) are the
@@ -114,11 +101,7 @@
 // (0x1800c7a50) — lock `_singleton@MemoryAllocator + 0x640`, call
 // `?Allocate@MemoryAllocator@System@@` (0x1800c6e60), unlock. This port reaches
 // it through `ResolveAddr(Module::Runtime, 0x1800c7a50)`, which consults the
-// port registry FIRST, so with `BANISHED_RT_ALLOC=1` our allocator answers and
-// without it the DLL's does. Both are correct, and one heap is used either way.
-// **The allocator gate is on this path but is not a blocker for it**, and this
-// lane leaves `BANISHED_RT_ALLOC` unset so the probe is not measuring two
-// changes at once.
+// port registry FIRST, so our allocator answers. One heap is used either way.
 //
 // `CreateInPlaceObject` allocates NOTHING — it is placement construction on a
 // caller-owned buffer — so the in-place half of the probe is allocator-free.
@@ -273,11 +256,9 @@ FactoryReport g_factoryReport;
 // It was required on 2026-09-12: the cutover boot died with
 //     [RtMint] FATAL: minted BaseTypeInfo::factoryFn is not ported
 //     ?_typeInfo@Dialog@UI@@ slot 0 -> ?CreateNewObject@Dialog@UI@@
-// because this registration was behind `BANISHED_RT_DLGFACTORY`, which the
-// cutover arm does not set. The flag is gone (DIRECTION.md section 2.3: a port
-// registers unconditionally; per-probe flags are removed as files are touched),
-// and with it the in-place "effectiveness control", which existed only to
-// validate an attendance reading the flag also gated.
+// because this registration was behind an opt-in flag the cutover arm did not
+// set. The flag is gone (DIRECTION.md section 2.3: a port registers
+// unconditionally), and with it the in-place "effectiveness control".
 int RtUiDialogFactoryRegister() {
     int n = 0;
     RegisterRuntimeExport("?CreateInPlaceObject@Dialog@UI@@SAPEAVBase@Object@@PEAX@Z",

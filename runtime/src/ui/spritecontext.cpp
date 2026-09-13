@@ -77,12 +77,7 @@
 //     is also null it is a complete no-op.
 //   * `FlushDeferred` with `_deferring` clear returns immediately (0x18011c6ad).
 //
-// On those branches the shipped body is side-effect free and a replay is
-// exact. Each site therefore replays ONLY THERE, declares the mutating branch
-// through `RT_DIFF_WORK` so the report carries an `worked=` count, and the
-// lane doc reads the split as coverage rather than as success. A
-// `divergences=0` here means "0 divergences in the calls the oracle could
-// see", and the `worked=` column is how many it could not.
+// On those branches the shipped body is side-effect free.
 //
 // ONE CASE IS BETTER THAN THAT, and it is the case that matters most:
 // `AddSpriteDraw`'s cull replay is safe even when the two implementations
@@ -129,11 +124,6 @@
 // ----------------------------------------------------------------------------
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-// The RAW door — bypasses the port registry on purpose, so the oracle reaches
-// the SHIPPED body and not our own (the mistake lane FNHOOK found in thirteen
-// detour installers). It returns null at cutover, which is why every call
-// through it below sits inside `if (rt_diff_on__)`.
-uintptr_t ResolveRuntimeRaw(uintptr_t ghidra_addr);
 
 namespace {
 
@@ -331,7 +321,6 @@ void RtUi_SpriteContext_Begin(UI::SpriteContext* self, float scale,
 // cull — and `rot == 0.0f` is false for NaN in C++ too, which reproduces that
 // without a special case.
 void RtUi_SpriteContext_AddSpriteDraw(void* selfRaw, const void* drawRaw) {
-    RT_DIFF_BEGIN("UI::SpriteContext::AddSpriteDraw");
     auto* self = static_cast<SpriteContext*>(selfRaw);
     const auto* d = static_cast<const SpriteDraw*>(drawRaw);
 
@@ -362,7 +351,6 @@ void RtUi_SpriteContext_AddSpriteDraw(void* selfRaw, const void* drawRaw) {
         else if (static_cast<float>(sy) * sc > static_cast<float>(d->y2))              append = false;
         else if (static_cast<float>(d->y1) > static_cast<float>(sy + self->_scissorH) * sc) append = false;
     }
-    RT_DIFF_WORK(append);
 
     if (append) {
         TheArrayAppend()(&self->_draws, self->_draws._size + 1, d);
@@ -383,17 +371,6 @@ void RtUi_SpriteContext_AddSpriteDraw(void* selfRaw, const void* drawRaw) {
     //
     // The verdict is `_draws._size`, because "did the shipped body append"
     // is the whole of what this branch decides.
-    if (rt_diff_on__ && !capture) {
-        static AddSpriteDrawFn theirs = nullptr;
-        if (!theirs)
-            theirs = reinterpret_cast<AddSpriteDrawFn>(ResolveRuntimeRaw(0x18011c890));
-        if (theirs) {
-            const int before = self->_draws._size;
-            theirs(self, d);
-            const bool agreed = (self->_draws._size == before);
-            RT_DIFF_SHADOW(agreed, "culled", agreed ? "culled" : "appended");
-        }
-    }
 }
 
 // ---- 0x18011c6a0  SpriteContext::FlushDeferred (internal) ------------------
@@ -407,11 +384,9 @@ void RtUi_SpriteContext_AddSpriteDraw(void* selfRaw, const void* drawRaw) {
 // than tidied: AddSpriteDraw can reallocate `_draws`, and while it does not
 // touch `_deferred` today, hoisting would bake that in as an assumption.
 void RtUi_SpriteContext_FlushDeferred(void* selfRaw) {
-    RT_DIFF_BEGIN("UI::SpriteContext::FlushDeferred");
     auto* self = static_cast<SpriteContext*>(selfRaw);
 
     const bool deferring = self->_deferring != 0;
-    RT_DIFF_WORK(deferring);
     if (!deferring) {
         // Retail's `CMP byte [RCX+0x38],0 / JZ epilogue` (0x18011c6a6) makes
         // this branch a pure no-op, so a replay of the shipped body is exact.
@@ -424,21 +399,6 @@ void RtUi_SpriteContext_FlushDeferred(void* selfRaw) {
         // compared, because comparing bytes neither side writes is how an
         // oracle reports 100% divergence on unrelated noise
         // (reference_oracle_must_not_compare_unwritten_bytes.md).
-        if (rt_diff_on__) {
-            static FlushDeferredFn theirs = nullptr;
-            if (!theirs)
-                theirs = reinterpret_cast<FlushDeferredFn>(ResolveRuntimeRaw(0x18011c6a0));
-            if (theirs) {
-                const Collection::Array<SpriteDraw> before = self->_deferred;
-                void* const beforeSheet = self->_currentSheet;
-                theirs(self);
-                const bool agreed =
-                    std::memcmp(&before, &self->_deferred, sizeof(before)) == 0 &&
-                    beforeSheet == self->_currentSheet;
-                RT_DIFF_SHADOW(agreed, "no-op (_deferring clear)",
-                               agreed ? "no-op" : "mutated _deferred/_currentSheet");
-            }
-        }
         return;
     }
 
@@ -463,7 +423,6 @@ void RtUi_SpriteContext_FlushDeferred(void* selfRaw) {
 // differs, which is what groups draws into per-sheet batches.
 void RtUi_SpriteContext_AddLine(void* selfRaw, const void* spriteRaw,
                                 int x1, int y1, int x2, int y2, uint32_t color) {
-    RT_DIFF_BEGIN("UI::SpriteContext::AddLine");
     auto* self   = static_cast<SpriteContext*>(selfRaw);
     const auto* sprite = static_cast<const Sprite*>(spriteRaw);
 
@@ -471,14 +430,9 @@ void RtUi_SpriteContext_AddLine(void* selfRaw, const void* spriteRaw,
     // test is `< 0`, not `== -1` — `JL`, a SIGNED branch.
     void* sheet = sprite->spriteSheet;
     const bool queue = (sheet != nullptr) && (sprite->spriteIndex >= 0);
-    RT_DIFF_WORK(queue);
 
     if (!queue) {
         // Retail returns before its first store, so the replay is exact.
-        if (rt_diff_on__) {
-            RT_ORIGINAL_ONCE(AddLineFn, kAddLine)(self, sprite, x1, y1, x2, y2, color);
-            RT_DIFF_SHADOW(true, "early-out (invalid sprite)", "early-out");
-        }
         return;
     }
 
@@ -519,7 +473,6 @@ void RtUi_SpriteContext_AddLine(void* selfRaw, const void* spriteRaw,
 // up — EXCEPT on the unchanged branch. See the note there.
 void* RtUi_SpriteContext_SetScissor_Viewport(void* selfRaw, void* retRaw,
                                              const void* viewportRaw) {
-    RT_DIFF_BEGIN("UI::SpriteContext::SetScissor(Viewport const&)");
     auto* self = static_cast<SpriteContext*>(selfRaw);
     auto* ret  = static_cast<ClipRect*>(retRaw);
     const auto* v = static_cast<const ClipRect*>(viewportRaw);
@@ -532,7 +485,6 @@ void* RtUi_SpriteContext_SetScissor_Viewport(void* selfRaw, void* retRaw,
 
     const bool changed = !(nx == self->_scissorX && ny == self->_scissorY &&
                            nw == self->_scissorW && nh == self->_scissorH);
-    RT_DIFF_WORK(changed);
 
     if (!changed) {
         // 0x18011d0d8..0x18011d0ef. *** RETAIL RETURNS THE RAW FIELDS HERE,
@@ -554,12 +506,6 @@ void* RtUi_SpriteContext_SetScissor_Viewport(void* selfRaw, void* retRaw,
         // shipped body on this branch does not either, so the replay is exact
         // — and it is what proves the hidden-return-slot arity, because it
         // drives the DLL through the typedef the file header argues for.
-        if (rt_diff_on__) {
-            ClipRect theirs;
-            std::memset(&theirs, 0xCD, sizeof(theirs));
-            RT_ORIGINAL_ONCE(SetScissorVpFn, kSetScissorVp)(self, &theirs, v);
-            RT_DIFF_BYTES(ret, &theirs, sizeof(ClipRect));
-        }
         return ret;
     }
 
@@ -611,7 +557,6 @@ void* RtUi_SpriteContext_SetScissor_Viewport(void* selfRaw, void* retRaw,
 // R9D -> +0x04, arg5 -> +0x08, arg6 -> +0x0c.
 void* RtUi_SpriteContext_SetScissor_Ints(void* selfRaw, void* retRaw,
                                          int x, int y, int w, int h) {
-    RT_DIFF_BEGIN("UI::SpriteContext::SetScissor(int,int,int,int)");
     auto* self = static_cast<SpriteContext*>(selfRaw);
 
     ClipRect v;
@@ -620,37 +565,8 @@ void* RtUi_SpriteContext_SetScissor_Ints(void* selfRaw, void* retRaw,
     v.w = w;
     v.h = h;
 
-    // Whether the inner call will take its early-out is decided by exactly the
-    // predicate the inner body uses, so it can be evaluated here WITHOUT
-    // calling anything — which is what makes the replay below safe.
-    //
-    // Computed ONLY when diffing. This forwarder is on the per-frame UI path,
-    // retail's body is nine instructions of stack packing, and duplicating the
-    // inner body's four divides and four compares on every shipped call would
-    // be a real cost paid for a measurement nobody is taking
-    // (rt_diff.h: with BANISHED_RT_DIFF unset the macros must cost nothing).
-    bool changed = false;
-    if (rt_diff_on__) {
-        const float scale = self->_scale;
-        changed = !(ScaleDown(x, scale) == self->_scissorX &&
-                    ScaleDown(y, scale) == self->_scissorY &&
-                    ScaleDown(w, scale) == self->_scissorW &&
-                    ScaleDown(h, scale) == self->_scissorH);
-        RT_DIFF_WORK(changed);
-    }
-
     RtUi_SpriteContext_SetScissor_Viewport(self, retRaw, &v);
 
-    if (rt_diff_on__ && !changed) {
-        // End-to-end: the DLL's own four-int overload, driven through the
-        // six-argument typedef. A missing return slot here would put `x` in
-        // RDX and scribble the Viewport through it; the comparison catches
-        // that instead of the process catching it later.
-        ClipRect theirs;
-        std::memset(&theirs, 0xCD, sizeof(theirs));
-        RT_ORIGINAL_ONCE(SetScissorIntsFn, kSetScissorInts)(self, &theirs, x, y, w, h);
-        RT_DIFF_BYTES(retRaw, &theirs, sizeof(ClipRect));
-    }
     return retRaw;
 }
 
@@ -690,18 +606,6 @@ int RtUiSpriteContextRegister() {
     // door is closed rather than merely documented.
     extern int RtUiSpriteContextFlushRegister();
     n += RtUiSpriteContextFlushRegister();
-
-    // The driven probe (runtime/src/ui/spritecontext_probe.cpp). Must run AFTER
-    // the registrations above, because it drives `AddLine`, which reaches
-    // `AddSpriteDraw` through `ResolveAddr` — with the port unregistered that
-    // would silently exercise the DLL's body on both sides and compare it
-    // against itself.
-    //
-    // It is a no-op unless BOTH `BANISHED_RT_DIFF` and
-    // `BANISHED_RT_SPRITECTX_PROBE` are set, and it prints its own contribution
-    // to every `calls=` counter so a reader can subtract it.
-    extern void RtUiSpriteContextProbe();
-    RtUiSpriteContextProbe();
 
     return n;
 }
